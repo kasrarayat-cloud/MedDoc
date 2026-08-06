@@ -134,7 +134,12 @@ export const GET = withApiHandler<{ id: string }>(
       },
     });
     // 404 on both "not found" AND "not yours" prevents ID enumeration.
-    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    // T6 §4.1c — the author conjunct is GONE; practice membership is the gate.
+    // The read above is practice-scoped (T5), so reaching this line means the
+    // visit is in the caller's practice. SIGNING is the only role-gated action
+    // (SPEC §1.2); tech-creates/doctor-signs requires every member to be able to
+    // prepare work.
+    if (!visit) return apiError('not found', 404);
 
     // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Fire-and-
     // forget; logAudit never throws and pulls userId/IP/UA from session
@@ -199,7 +204,12 @@ export const PATCH = withApiHandler<{ id: string }>(
         patientId: true,
       },
     });
-    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    // T6 §4.1c — the author conjunct is GONE; practice membership is the gate.
+    // The read above is practice-scoped (T5), so reaching this line means the
+    // visit is in the caller's practice. SIGNING is the only role-gated action
+    // (SPEC §1.2); tech-creates/doctor-signs requires every member to be able to
+    // prepare work.
+    if (!visit) return apiError('not found', 404);
 
     if (visit.deletedAt !== null) {
       return NextResponse.json(

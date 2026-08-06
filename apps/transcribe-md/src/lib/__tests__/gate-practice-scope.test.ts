@@ -134,6 +134,71 @@ const SYSTEM_ALLOWLIST: Record<string, number> = {
  */
 const MAX_UNSCOPED_REQUEST_READS = 0;
 
+/**
+ * ⚠️ WRITES — ADDED 2026-08-06, AND THE REASON IS A GAP IN THIS FILE'S OWN COVER.
+ *
+ * SPEC §1.4 says "ONE practice-scoped data accessor. **Every read and write** of
+ * a clinical table goes through it." This guard watched READS ONLY through all
+ * three T5 tranches, so the ratchet reached zero over half the surface the spec
+ * named. The gate passed; it did not cover what was asked.
+ *
+ * That is the second instance of the same class in one day — after
+ * `doctor_edit_patterns` — and both were found by re-reading the criteria rather
+ * than by any check. The lesson is banked in AGENTS.md.
+ *
+ * ⚠️ NO LEAK IS OPEN, AND SAYING SO PRECISELY MATTERS. Every one of these writes
+ * is reached only AFTER a practice-scoped read in the same handler, so an
+ * out-of-practice caller is already refused before the write is attempted. What
+ * they lack is a predicate of their OWN — the "borrowed authorisation" shape T5
+ * itself argued against, one refactor away from being wrong.
+ *
+ * So: a RATCHET, not a wall, exactly as the read side began. 25 is the measured
+ * count across ALL FOUR clinical models, after T6 scoped the two `rescore-em`
+ * updateManys that had no practice predicate at all. A visits-only count is 19;
+ * this guard watches the same model list the read side does. Lower it; never
+ * raise it.
+ */
+const WRITE_METHODS = '(update|updateMany|delete|deleteMany|upsert)';
+const MAX_UNSCOPED_REQUEST_WRITES = 25;
+
+/** Extracts the balanced argument of a call whose `(` is at `open`. */
+function callArg(code: string, open: number): string {
+  let depth = 0;
+  for (let j = open; j < Math.min(code.length, open + 8000); j += 1) {
+    if (code[j] === '(') depth += 1;
+    else if (code[j] === ')') {
+      depth -= 1;
+      if (depth === 0) return code.slice(open + 1, j);
+    }
+  }
+  return code.slice(open + 1, open + 8000);
+}
+
+/**
+ * Request-context clinical WRITES that carry no practice predicate.
+ *
+ * ⚠️ IT READS THE WHOLE CALL, NOT A FIXED WINDOW. The read-side classifier uses
+ * a 400-character look-ahead, and that window produced a FALSE ZERO during T6:
+ * a conjunct was pushed out of range by a comment, and the sweep reported the
+ * site as clean while the code still had it. A balanced-paren scan cannot drift
+ * that way.
+ */
+function clinicalWrites(): string[] {
+  const re = new RegExp(`prisma\\.(${CLINICAL_MODELS.join('|')})\\.${WRITE_METHODS}\\(`, 'g');
+  const out: string[] = [];
+  for (const file of walk('src')) {
+    if (isSystem(file)) continue;
+    const src = readFileSync(file, 'utf8');
+    const code = stripComments(src);
+    for (const m of code.matchAll(re)) {
+      const body = callArg(code, m.index! + m[0].length - 1);
+      if (ACCESSORS.test(body) || /practiceId/.test(body)) continue;
+      out.push(`${file}:${src.slice(0, m.index).split('\n').length}`);
+    }
+  }
+  return out;
+}
+
 function walk(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -554,6 +619,26 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
       byFile(systemDefault),
       'an unfiltered template read appeared that claims to be the system default',
     ).toEqual(SYSTEM_DEFAULT_READS);
+  });
+
+  it('⚠️ THE WRITE RATCHET — unscoped clinical writes never increase', () => {
+    const writes = clinicalWrites();
+    expect(
+      writes.length,
+      `Unscoped request-context clinical WRITES went UP (${writes.length} > ` +
+        `${MAX_UNSCOPED_REQUEST_WRITES}). SPEC §1.4 covers writes as well as ` +
+        `reads. Scope it through src/lib/practice-scope.ts — do NOT raise this.`,
+    ).toBeLessThanOrEqual(MAX_UNSCOPED_REQUEST_WRITES);
+  });
+
+  it('POSITIVE CONTROL — the write scanner SEES an unscoped write, and not a scoped one', () => {
+    const re = new RegExp(`prisma\\.(${CLINICAL_MODELS.join('|')})\\.${WRITE_METHODS}\\(`, 'g');
+    const bare = `await prisma.transcribeVisit.update({ where: { id }, data: {} });`;
+    expect([...stripComments(bare).matchAll(re)].length, 'the write scanner matches nothing').toBe(1);
+    // …and a scoped write is NOT counted, or the ratchet could never fall.
+    const scoped = `await prisma.transcribeVisit.updateMany({ where: visitByIdScope(id, p), data: {} });`;
+    const m = [...stripComments(scoped).matchAll(re)][0];
+    expect(ACCESSORS.test(callArg(stripComments(scoped), m.index! + m[0].length - 1))).toBe(true);
   });
 
   it('POSITIVE CONTROL — the scanner SEES a new unscoped read', () => {

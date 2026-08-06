@@ -396,6 +396,19 @@ enum AuditAction {
   // measured 2026-08-02, before this migration.
   SIGN_BLOCKED_NO_ATTESTATION
 
+  /// T6 — a sign request from a member whose PRACTICE ROLE may not sign (TECH).
+  /// Refused BY NAME, server-side, per SPEC §4.1a: "you may not sign" and "this
+  /// does not exist" are different facts and a clinician deserves the true one.
+  /// Metadata carries the role, never note text.
+  ///
+  /// ⚠️ ADDED TO THE PRISMA ENUM IN THE SAME COMMIT AS THE TS UNION. On
+  /// 2026-08-03 a refusal shipped whose audit row silently did not, because the
+  /// union was updated and the database enum was not. The union is not the
+  /// database — and this edit's first attempt missed this file while landing in
+  /// audit.ts, which is the same failure arriving a second time. An occurrence
+  /// assertion caught it.
+  SIGN_BLOCKED_ROLE_NOT_PERMITTED
+
   // F-8 audit leg (2026-07-02) — deterministic drug-PAIR interaction floor
   // (worker L7c, checkDrugInteractions). RX_DRUG_PAIR_* metadata: { ruleId,
   // primaryDrug, otherDrug, severity, doseMgPerDay? }; the complex-dosing

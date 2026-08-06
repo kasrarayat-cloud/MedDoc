@@ -48,6 +48,13 @@ export default async function NewVisitPage({
     prisma.transcribeVisit.findFirst({
       where: {
         ...visitScope(session.user.practiceId),
+        // ⚠️ THE AUTHOR CONJUNCT STAYS HERE, AND IT IS NOT AN OVERSIGHT.
+        // This read prefills the new-visit form with the specialty the CALLER
+        // last worked in. Its subject is the user, like the personal data
+        // export — widening it would prefill a doctor's form from a colleague's
+        // last visit, which is a worse product, not a wider permission.
+        //
+        // §4.1c retires the conjuncts that gate ACTIONS. This gates a default.
         userId: session.user.id,
         deletedAt: null,
         archivedAt: null,

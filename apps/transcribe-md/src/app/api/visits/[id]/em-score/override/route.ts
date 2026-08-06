@@ -124,7 +124,12 @@ export const POST = withApiHandler<{ id: string }>(
         rxDrafts: true,
       },
     });
-    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    // T6 §4.1c — the author conjunct is GONE; practice membership is the gate.
+    // The read above is practice-scoped (T5), so reaching this line means the
+    // visit is in the caller's practice. SIGNING is the only role-gated action
+    // (SPEC §1.2); tech-creates/doctor-signs requires every member to be able to
+    // prepare work.
+    if (!visit) return apiError('not found', 404);
     if (visit.deletedAt !== null || visit.archivedAt !== null) {
       return apiError('Visit is no longer active.', 400, {
         code: 'VISIT_NOT_ACTIVE',

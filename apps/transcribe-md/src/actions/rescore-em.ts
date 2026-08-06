@@ -72,9 +72,6 @@ export async function rescoreEmAction(visitId: string): Promise<RescoreEmResult>
   const visit = await prisma.transcribeVisit.findFirst({
     where: {
       ...visitByIdScope(visitId, session.user.practiceId),
-      // ACTION, not a read: the author conjunct stays until T6's role
-      // gate decides who else may edit. Widening SEE never widens DO.
-      userId: session.user.id,
       deletedAt: null,
       archivedAt: null,
     },
@@ -110,8 +107,10 @@ export async function rescoreEmAction(visitId: string): Promise<RescoreEmResult>
   if (!emAppliesToSpecialty(visit.specialty)) {
     const cleared = await prisma.transcribeVisit.updateMany({
       where: {
-        id: visitId,
-        userId: session.user.id,
+        // T6 §4.1c — was `userId: session.user.id`. These two updateManys carry
+        // their OWN predicate and never had a practice one, so simply deleting
+        // the author filter would leave an id-only write. Scoped instead.
+        ...visitByIdScope(visitId, session.user.practiceId),
         status: TranscribeVisitStatus.READY,
         soapVersion: visit.soapVersion,
       },
@@ -174,8 +173,8 @@ export async function rescoreEmAction(visitId: string): Promise<RescoreEmResult>
     // sits between the read and this write, and an adopt landing in that window
     // would otherwise have its fresh pending change erased by our stale view.
     where: {
-      id: visitId,
-      userId: session.user.id,
+      // T6 §4.1c — see the sibling above. Scoped, not merely de-authored.
+      ...visitByIdScope(visitId, session.user.practiceId),
       status: TranscribeVisitStatus.READY,
       soapVersion: visit.soapVersion,
     },
