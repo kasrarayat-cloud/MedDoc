@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 import { headers } from 'next/headers';
 
 import prisma from '@meddoc/db';
-import { AuthTokenPurpose, Product, UserRole } from '@prisma/client';
+import { AuthTokenPurpose, PracticeRole, Product, UserRole } from '@prisma/client';
 import { signIn as nextAuthSignIn } from '@/lib/nextauth';
 import { createAuthToken } from '@/lib/auth-tokens';
 import { isEmailDeliveryEnabled } from '@/lib/email-enabled';
@@ -506,6 +506,13 @@ export async function signupAction(
           passwordHash,
           role: UserRole.DOCTOR,
           practiceId: practice.id,
+          // ⚠️ T6 — REQUIRED IN PRACTICE, BY THE DATABASE. A signup mints its own
+          // solo practice one statement above, so the new user owns it by
+          // construction. Without this line the CHECK
+          // `users_active_member_has_practice_role` refuses the row and EVERY
+          // SIGNUP FAILS — the T3 shape, where the one site that mattered was
+          // the real production path rather than the one CI happened to surface.
+          practiceRole: PracticeRole.OWNER,
           products: [Product.TRANSCRIBE_MD],
           emailVerified: nowForVerified,
         },

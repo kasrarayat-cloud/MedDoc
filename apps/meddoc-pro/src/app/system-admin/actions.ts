@@ -214,6 +214,7 @@ export async function createUserAction(formData: FormData): Promise<ActionResult
           role,
           isActive: true,
           practiceId: session.user.practiceId,
+          practiceRole: 'OWNER', // T6: the CHECK requires a role for an active member
         },
       });
 

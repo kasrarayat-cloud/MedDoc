@@ -72,6 +72,7 @@ async function main() {
       specialty: 'Vascular Surgery',
       clinicName: SMOKE_PRACTICE_NAME,
       practiceId: practice.id,
+      practiceRole: 'OWNER', // T6: the CHECK requires a role for an active member
       isActive: true,
     },
   });

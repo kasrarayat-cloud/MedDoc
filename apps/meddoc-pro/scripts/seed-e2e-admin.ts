@@ -55,6 +55,7 @@ async function main() {
       lockedUntil: null,
       failedLoginCount: 0,
       practiceId,
+      practiceRole: 'OWNER', // T6: the CHECK requires a role for an active member
     },
     create: {
       email,
@@ -63,6 +64,7 @@ async function main() {
       role: 'SUPER_ADMIN',
       isActive: true,
       practiceId,
+      practiceRole: 'OWNER', // T6: the CHECK requires a role for an active member
     },
   });
 
