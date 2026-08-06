@@ -66,8 +66,26 @@ import { describe, it, expect } from 'vitest';
 
 import type { PracticeId } from '../practice-scope';
 
-/** Prisma models holding clinical data. */
-const CLINICAL_MODELS = ['transcribeVisit', 'transcribeMdPatient', 'noteTemplate'] as const;
+/**
+ * Prisma models holding clinical data.
+ *
+ * ⚠️ `doctorEditPattern` IS ON THIS LIST BY NAME, and T5's own spec is why:
+ * "the guard must also catch `doctor_edit_patterns` — the table a source grep is
+ * most likely to miss and the one that LEAKS WHOLE NOTES". It stores
+ * `originalSoap` and `editedSoap` as full text, so an unscoped read of it is a
+ * larger disclosure than an unscoped read of a visit row.
+ *
+ * It was missing from the first three tranches. Nothing surfaced it — the reads
+ * happened to be correct, so no test failed and no sweep complained. That is
+ * precisely the shape the spec warned about: a table nobody thinks of is not a
+ * table nobody reads.
+ */
+const CLINICAL_MODELS = [
+  'transcribeVisit',
+  'transcribeMdPatient',
+  'noteTemplate',
+  'doctorEditPattern',
+] as const;
 
 const READ_METHODS =
   '(findMany|findFirst|findUnique|findUniqueOrThrow|count|aggregate|groupBy)';
@@ -235,8 +253,10 @@ function stripComments(src: string): string {
  * only way to reach zero would be to break them. Measured 2026-08-06.
  */
 const PERSONAL_SCOPE: Record<string, number> = {
-  // "Export MY data" — subject of the export IS the user.
-  'src/app/api/settings/export-data/route.ts': 1,
+  // "Export MY data" — subject of the export IS the user. Two reads: the visit
+  // list and the doctor's own edit patterns (full note text — see
+  // CLINICAL_MODELS). Both correctly keyed on the requesting user.
+  'src/app/api/settings/export-data/route.ts': 2,
   // Deletion precondition + the count recorded in the audit row.
   'src/app/api/settings/delete-account/route.ts': 2,
 };
