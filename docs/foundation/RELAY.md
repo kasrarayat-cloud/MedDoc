@@ -529,6 +529,23 @@ TECH removes a capability on a hierarchy nobody stated, and the schema records n
 designation to derive one from. All three hold ZERO visits and ZERO patients
 (positive-controlled against the two that do hold data).
 
+#### PRE-DEPLOY DRY-RUN AGAINST PRODUCTION — read-only, 2026-08-06
+
+The migration's own predicates, evaluated against prod before it ever runs there:
+
+    would become OWNER (active + has a practice) ....... 196
+    stays NULL — deactivated ...........................   0
+    stays NULL — no practice ...........................   0
+    total users ........................................ 196
+
+196 + 0 + 0 = 196, so **no row is underivable and the abort guard will not
+fire**. Every production user takes OWNER of their own practice, which is what
+the ruling intends and what the structure supports — with the 18 multi-member
+rows covered by the stated no-downgrade rule rather than by the premise.
+
+`SIGN_BLOCKED_ROLE_NOT_PERMITTED` is absent from prod's `AuditAction` enum (0),
+so the second migration has work to do and is not a no-op.
+
 #### ⚠️ THE AUDIT-ROW FAILURE, A THIRD TIME — and the narrower lesson
 
 Adding `SIGN_BLOCKED_ROLE_NOT_PERMITTED`:
