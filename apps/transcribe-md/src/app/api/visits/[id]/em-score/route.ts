@@ -26,8 +26,9 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import prisma from '@meddoc/db';
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { visitByIdScope } from '@/lib/practice-scope';
 import { computeEmScore } from '@/lib/em-coding/score';
 import { engineToUiScore } from '@/lib/em-coding/to-ui-score';
 import {
@@ -49,8 +50,8 @@ export const POST = withApiHandler<{ id: string }>(
   async (req, { params }) => {
     const { id: visitId } = await params;
 
-    const session = await auth();
-    const userId = session?.user?.id;
+    const session = await getSession();
+    const userId = session?.user.id;
     const practiceId = session?.user?.practiceId;
     if (!userId || !practiceId) return apiError('unauthorized', 401);
 
@@ -65,8 +66,8 @@ export const POST = withApiHandler<{ id: string }>(
 
     // Ownership check — 404 on any mismatch (consistent with the rest
     // of the visits API; never expose existence of a foreign visit).
-    const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+    const visit = await prisma.transcribeVisit.findFirst({
+      where: visitByIdScope(visitId, session.user.practiceId),
       select: {
         id: true,
         userId: true,

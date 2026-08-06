@@ -33,8 +33,9 @@ import {
 } from '@meddoc/shared/specialties';
 
 import { unacknowledgedEmChange } from '@/lib/em-pending-change';
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { visitByIdScope } from '@/lib/practice-scope';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 import { computeEmScore } from '@/lib/em-coding/score';
 import { engineToUiScore } from '@/lib/em-coding/to-ui-score';
@@ -82,8 +83,8 @@ export const POST = withApiHandler<{ id: string }>(
   async (req, { params }) => {
     const { id: visitId } = await params;
 
-    const session = await auth();
-    const userId = session?.user?.id;
+    const session = await getSession();
+    const userId = session?.user.id;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const practiceId = (session?.user as any)?.practiceId as string | undefined;
     if (!userId || !practiceId) return apiError('unauthorized', 401);
@@ -102,8 +103,8 @@ export const POST = withApiHandler<{ id: string }>(
     }
 
     // Ownership + status gates. 404 on mismatch — never leak existence.
-    const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+    const visit = await prisma.transcribeVisit.findFirst({
+      where: visitByIdScope(visitId, session.user.practiceId),
       select: {
         id: true,
         userId: true,

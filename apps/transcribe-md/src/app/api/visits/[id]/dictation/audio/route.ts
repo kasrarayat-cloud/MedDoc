@@ -9,11 +9,12 @@
 
 import { NextResponse } from 'next/server';
 
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
 import prisma from '@meddoc/db';
 import { downloadAudio } from '@/lib/minio';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { visitByIdScope } from '@/lib/practice-scope';
 import { redactPhi } from '@meddoc/ai';
 import { logAudit } from '@/lib/audit';
 
@@ -25,12 +26,12 @@ export const GET = withApiHandler<{ id: string }>(
   async (_req, { params }) => {
     const { id: visitId } = await params;
 
-    const session = await auth();
-    const userId = session?.user?.id;
+    const session = await getSession();
+    const userId = session?.user.id;
     if (!userId) return apiError('unauthorized', 401);
 
-    const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+    const visit = await prisma.transcribeVisit.findFirst({
+      where: visitByIdScope(visitId, session.user.practiceId),
       select: {
         userId: true,
         dictationAudioKey: true,

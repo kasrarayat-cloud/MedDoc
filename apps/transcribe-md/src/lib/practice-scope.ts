@@ -37,6 +37,31 @@
 import type { Prisma } from '@prisma/client';
 
 /**
+ * ⚠️ THE SILENT-SCOPE-LOSS GUARD, AND WHY A TYPE IS NOT ENOUGH.
+ *
+ * Prisma DROPS a `where` key whose value is `undefined`. So
+ * `{ practiceId: undefined }` is not "match nothing" — it is `{}`, which
+ * matches EVERY TENANT. The single most dangerous failure this file can have
+ * produces no error, no log line and a wider result set.
+ *
+ * `practiceId: string` stops that at compile time for honest callers, and
+ * `getSession()` already returns null rather than a session without a practice.
+ * This is the third line: an `as any`, a widened generic, or a JSON-parsed value
+ * that slips past both still fails LOUDLY here instead of quietly returning
+ * another practice's charts.
+ */
+function requirePractice(practiceId: string): string {
+  if (typeof practiceId !== 'string' || practiceId.length === 0) {
+    throw new Error(
+      'practice-scope: empty practiceId — refusing to build a predicate that ' +
+        'Prisma would treat as "all tenants". The caller must source it from ' +
+        'getSession(), which fails closed.',
+    );
+  }
+  return practiceId;
+}
+
+/**
  * Visits belonging to a practice.
  *
  * ⚠️ SCOPES ON THE COLUMN, NOT THE JOIN. `transcribe_visits.practiceId` exists
@@ -46,12 +71,12 @@ import type { Prisma } from '@prisma/client';
  * writes in a practice that is not their own.
  */
 export function visitScope(practiceId: string): Prisma.TranscribeVisitWhereInput {
-  return { practiceId };
+  return { practiceId: requirePractice(practiceId) };
 }
 
 /** Patients belonging to a practice. Natively practice-scoped since before T3. */
 export function patientScope(practiceId: string): Prisma.TranscribeMdPatientWhereInput {
-  return { practiceId };
+  return { practiceId: requirePractice(practiceId) };
 }
 
 /**
@@ -63,7 +88,7 @@ export function patientScope(practiceId: string): Prisma.TranscribeMdPatientWher
  * callers do not — which is the whole reason the predicate lives in one place.
  */
 export function templateScope(practiceId: string): Prisma.NoteTemplateWhereInput {
-  return { doctor: { practiceId } };
+  return { doctor: { practiceId: requirePractice(practiceId) } };
 }
 
 /**
@@ -79,7 +104,7 @@ export function visitByIdScope(
   visitId: string,
   practiceId: string,
 ): Prisma.TranscribeVisitWhereInput {
-  return { id: visitId, practiceId };
+  return { id: visitId, practiceId: requirePractice(practiceId) };
 }
 
 /**

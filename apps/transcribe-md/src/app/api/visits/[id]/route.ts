@@ -41,7 +41,8 @@ import { TranscribeVisitStatus } from '@prisma/client';
 import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
-import { auth } from '@/lib/nextauth';
+import { visitByIdScope } from '@/lib/practice-scope';
+import { getSession } from '@/lib/auth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { log } from '@/lib/log';
 import { logAudit } from '@/lib/audit';
@@ -70,12 +71,12 @@ export const GET = withApiHandler<{ id: string }>(
   async (_req, { params }) => {
     const { id: visitId } = await params;
 
-    const session = await auth();
-    const userId = session?.user?.id;
+    const session = await getSession();
+    const userId = session?.user.id;
     if (!userId) return apiError('unauthorized', 401);
 
-    const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+    const visit = await prisma.transcribeVisit.findFirst({
+      where: visitByIdScope(visitId, session.user.practiceId),
       select: {
         id: true,
         userId: true,
@@ -154,8 +155,8 @@ export const PATCH = withApiHandler<{ id: string }>(
   async (req, { params }) => {
     const { id: visitId } = await params;
 
-    const session = await auth();
-    const userId = session?.user?.id;
+    const session = await getSession();
+    const userId = session?.user.id;
     if (!userId) return apiError('unauthorized', 401);
 
     const blocked = rateLimitOr429(RATE_LIMITS.VISIT_OPS, userId);
@@ -184,8 +185,8 @@ export const PATCH = withApiHandler<{ id: string }>(
     });
     if (!user) return apiError('user not found', 404);
 
-    const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+    const visit = await prisma.transcribeVisit.findFirst({
+      where: visitByIdScope(visitId, session.user.practiceId),
       select: {
         id: true,
         userId: true,

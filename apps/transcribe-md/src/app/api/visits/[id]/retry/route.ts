@@ -28,7 +28,8 @@ import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
-import { auth } from '@/lib/nextauth';
+import { visitByIdScope } from '@/lib/practice-scope';
+import { getSession } from '@/lib/auth';
 import { enqueueProcessVisit } from '@/lib/queue';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { redactPhi } from '@meddoc/ai';
@@ -72,8 +73,8 @@ export const POST = withApiHandler<{ id: string }>(
   async (_req, { params }) => {
     const { id: visitId } = await params;
 
-    const session = await auth();
-    const userId = session?.user?.id;
+    const session = await getSession();
+    const userId = session?.user.id;
     if (!userId) return apiError('unauthorized', 401);
 
     // T-M18.3 A26: retry is a visit-management op (same cadence as
@@ -83,8 +84,8 @@ export const POST = withApiHandler<{ id: string }>(
     const blocked = rateLimitOr429(RATE_LIMITS.VISIT_OPS, userId);
     if (blocked) return blocked;
 
-    const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+    const visit = await prisma.transcribeVisit.findFirst({
+      where: visitByIdScope(visitId, session.user.practiceId),
       select: {
         soapFinal: true,
         emScoredCode: true,
