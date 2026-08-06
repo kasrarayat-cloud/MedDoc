@@ -142,11 +142,15 @@ export function seedVisitStates(email: string): SeededVisitIds | null {
   // renders the read-only signed SOAP and the "delivered" status banner.
   psql(`
     INSERT INTO transcribe_visits
-      (id, "userId", "patientId", "practiceId", "createdBy", "patientName", specialty, "inputMode", status,
+      (id, "userId", "patientId", "practiceId", "createdBy", "signedBy", "patientName", specialty, "inputMode", status,
        "transcriptText", "soapFinal", "signedSoap", "signedAt", "createdAt", "updatedAt")
     VALUES
       ('${ids.SIGNED}', '${userId}', '${patientId}',
        (SELECT "practiceId" FROM transcribe_md_patients WHERE id = '${patientId}'),
+       '${userId}',
+       -- T4 — this fixture sets signedAt, so it MUST name a signer;
+       -- transcribe_visits_signed_requires_signer refuses it otherwise.
+       -- (No backticks in here: this is inside a JS template literal.)
        '${userId}',
        'A11y Test Patient',
        'Family Medicine', 'audio_upload', 'READY',
