@@ -42,6 +42,30 @@ Three programs, in dependency order:
 
 Three roles: **OWNER**, **CLINICIAN**, **TECH**.
 
+⚠️ **RULED 2026-08-06 — TWO AXES, NEW FIELD; and this resolves a SPEC/DISCOVERY
+conflict that stood from Phase 0.** This section named the three roles on
+2026-08-04. `UserRole` in the database is `DOCTOR / STAFF / ADMIN /
+SUPER_ADMIN`, and DISCOVERY §132 recorded it as an RBAC role. **Nobody diffed the
+two documents**, so the contract said one vocabulary and the database another
+for two days.
+
+The resolution is a **new enum, `PracticeRole`, on the User↔practice edge** —
+`users.practiceRole`, since no membership table exists and a user belongs to
+exactly one practice. Values are never added to `UserRole`: that enum mixes a
+clinical distinction with a platform-privilege one, and has no way at all to say
+*"owns this practice"*. Adding to it would deepen the conflation rather than fix
+it.
+
+`UserRole` survives as the **legacy platform axis and is marked do-not-extend**
+in the schema. `ADMIN`/`SUPER_ADMIN`'s disposition is an **ADMIN-phase item** —
+the platform ADMIN flag replaces them. `DOCTOR`/`STAFF` become non-load-bearing
+once the backfill lands.
+
+⚠️ **`SUPER_ADMIN`'s TENANT-SCOPE BYPASS DIES, FAIL-CLOSED.** No role bypasses
+the practice wall for clinical reads through the app. Platform-operator needs
+route through the ADMIN phase's design, which already rules **zero clinical
+content in admin**.
+
 - **Signing is role-gated, server-side, fail-closed.** The gate lives in the
   server action / route handler, not in the UI, and the default for an
   unrecognised or absent role is *refuse*. The existing precedent is
