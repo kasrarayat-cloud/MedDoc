@@ -36,6 +36,7 @@ import {
 } from '@meddoc/shared/specialties';
 
 import { requireSession } from '@/lib/auth';
+import { visitByIdScope } from '@/lib/practice-scope';
 import { logAudit } from '@/lib/audit';
 import { computeDisplayedEmCode } from '@/lib/em-coding/displayed-level';
 import { unacknowledgedEmChange, type EmChangeCause } from '@/lib/em-pending-change';
@@ -69,7 +70,14 @@ export async function rescoreEmAction(visitId: string): Promise<RescoreEmResult>
   const session = await requireSession();
 
   const visit = await prisma.transcribeVisit.findFirst({
-    where: { id: visitId, userId: session.user.id, deletedAt: null, archivedAt: null },
+    where: {
+      ...visitByIdScope(visitId, session.user.practiceId),
+      // ACTION, not a read: the author conjunct stays until T6's role
+      // gate decides who else may edit. Widening SEE never widens DO.
+      userId: session.user.id,
+      deletedAt: null,
+      archivedAt: null,
+    },
     select: {
       id: true,
       status: true,

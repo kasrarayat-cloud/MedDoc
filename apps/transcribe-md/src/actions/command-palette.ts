@@ -1,6 +1,7 @@
 'use server';
 
 import prisma from '@meddoc/db';
+import { visitScope } from '@/lib/practice-scope';
 import { auth } from '@/lib/nextauth';
 
 export interface RecentVisitItem {
@@ -20,7 +21,7 @@ export async function getRecentVisits(): Promise<RecentVisitItem[]> {
 
   const rows = await prisma.transcribeVisit.findMany({
     where: {
-      userId: session.user.id,
+      ...visitScope(session.user.practiceId),
       deletedAt: null,
       archivedAt: null,
     },

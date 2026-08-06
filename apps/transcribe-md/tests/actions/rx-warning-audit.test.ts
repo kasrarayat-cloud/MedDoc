@@ -24,7 +24,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@meddoc/db', () => ({
   default: {
-    transcribeVisit: { findUnique: mocks.visitFindUnique },
+    // T5: the read is practice-scoped now, so it uses findFirst (findUnique
+    // cannot carry a non-unique predicate). Same mock, same rows.
+    transcribeVisit: { findUnique: mocks.visitFindUnique, findFirst: mocks.visitFindUnique },
     rxWarningOverride: {
       create: mocks.overrideCreate,
       findUnique: mocks.overrideFindUnique,
@@ -66,7 +68,9 @@ function input(overrides: Partial<RecordOverrideInput>): RecordOverrideInput {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getSession.mockResolvedValue({ user: { id: USER } });
+  // getSession() never returns a session without a practice — it fails closed
+  // rather than hand back one the accessor refuses. The fixture matches.
+  mocks.getSession.mockResolvedValue({ user: { id: USER, practiceId: 'prac_1' } });
   mocks.visitFindUnique.mockResolvedValue({ userId: USER, rxDrafts: RX_DRAFTS });
   mocks.overrideCreate.mockResolvedValue({ id: 'ovr-1' });
   mocks.logAudit.mockResolvedValue(undefined);

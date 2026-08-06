@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
+import { visitScope } from '@/lib/practice-scope';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { auth } from '@/lib/nextauth';
 import { logAudit } from '@/lib/audit';
@@ -103,7 +104,7 @@ export default async function VisitsPage({
   const [rows, totalCount] = (await Promise.all([
     prisma.transcribeVisit.findMany({
       where: {
-        userId: session.user.id,
+        ...visitScope(session.user.practiceId),
         deletedAt: null,
         archivedAt: null,
         ...statusFilter,
@@ -124,7 +125,7 @@ export default async function VisitsPage({
     }),
     prisma.transcribeVisit.count({
       where: {
-        userId: session.user.id,
+        ...visitScope(session.user.practiceId),
         deletedAt: null,
         archivedAt: null,
       },

@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import prisma from '@meddoc/db';
+import { visitScope } from '@/lib/practice-scope';
 import { Prisma, type TranscribeVisitStatus } from '@prisma/client';
 import { SPECIALTY_IDS } from '@meddoc/shared/specialties';
 import { requireSession } from '@/lib/auth';
@@ -293,7 +294,7 @@ export async function loadMoreVisitsAction(
   // render.
   const rows = await prisma.transcribeVisit.findMany({
     where: {
-      userId: session.user.id,
+      ...visitScope(session.user.practiceId),
       deletedAt: null,
       ...(includeArchived ? {} : { archivedAt: null }),
       OR: [
@@ -346,7 +347,8 @@ export async function searchInboxAction(
   const q = query.trim().slice(0, 100);
 
   const where: Prisma.TranscribeVisitWhereInput = {
-    userId: session.user.id,
+    // T5 §4.1b — the sign queue is the practice's, not one clinician's.
+    ...visitScope(session.user.practiceId),
     deletedAt: null,
     archivedAt: null,
     status: 'READY',

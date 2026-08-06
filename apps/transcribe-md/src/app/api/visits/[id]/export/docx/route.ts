@@ -6,7 +6,7 @@
 
 import { NextResponse } from 'next/server';
 
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
 import { filenameSlug, formatVisitDate } from '@/lib/visit-export';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { generateVisitDocx } from '@/lib/docx-generator';
@@ -30,11 +30,11 @@ export const GET = withApiHandler<{ id: string }>(
   async (_req, { params }) => {
     const { id: visitId } = await params;
 
-    const session = await auth();
-    const userId = session?.user?.id;
+    const session = await getSession();
+    const userId = session?.user.id;
     if (!userId) return apiError('unauthorized', 401);
 
-    const data = await loadVisitExportData(visitId, userId);
+    const data = await loadVisitExportData(visitId, session.user.practiceId);
     if (!data) return apiError('not found', 404);
 
     let docx: Buffer;

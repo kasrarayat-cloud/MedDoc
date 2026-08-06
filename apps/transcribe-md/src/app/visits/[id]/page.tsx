@@ -34,6 +34,7 @@ import { parseEmPendingChange, unacknowledgedEmChange } from '@/lib/em-pending-c
 import { signGates } from '@/lib/sign-gates';
 import { toStageIdentity, toQueuePosition } from '@/lib/rounds/stage-data';
 import { fetchStageQueueIds } from '@/lib/rounds/stage-queue';
+import { visitByIdScope } from '@/lib/practice-scope';
 import type { RoundsStageData } from '@/lib/rounds/stage-view-model';
 
 export const metadata: Metadata = { title: 'Visit' };
@@ -159,8 +160,8 @@ export default async function VisitPage({
       where: { id: session.user.id },
       select: { name: true, email: true },
     }),
-    prisma.transcribeVisit.findUnique({
-      where: { id },
+    prisma.transcribeVisit.findFirst({
+      where: visitByIdScope(id, session.user.practiceId),
       select: {
         id: true,
         userId: true,
@@ -236,7 +237,15 @@ export default async function VisitPage({
   ];
 
   if (!user) redirect('/login');
-  if (!visit || visit.userId !== session.user.id) notFound();
+  // ⚠️ T5 — THE AUTHOR CHECK IS GONE, AND THE PREDICATE REPLACED IT.
+  // Until 2026-08-06 this read `visit.userId !== session.user.id`, so a
+  // colleague in the same practice got a 404 on a chart they are entitled to
+  // read (§4.1b: read is practice-uniform). The query is now scoped by
+  // practice, so a visit from ANOTHER practice never comes back at all — the
+  // wall moved from an `if` to the WHERE clause, which is the point of T5.
+  //
+  // The ACTIONS on this page are unchanged and still author-only until T6.
+  if (!visit) notFound();
 
   // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Single
   // visit detail page is the highest-volume PHI surface — every doctor
@@ -691,7 +700,8 @@ async function VisitBody(props: VisitBodyProps) {
   // top of the function, so every statement above has already run in order by
   // the time the stage data is assembled.
   const userId = session?.user?.id;
-  const queueIds = userId ? await fetchStageQueueIds(userId) : [];
+  // The practice's day, not one clinician's — see fetchStageQueueIds.
+  const queueIds = userId ? await fetchStageQueueIds(session.user.practiceId) : [];
 
   if (userId) {
     // The stage reads OTHER visits' rows to place this one in the queue.

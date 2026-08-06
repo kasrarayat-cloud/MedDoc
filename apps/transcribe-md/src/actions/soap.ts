@@ -10,6 +10,7 @@ import { seedEmBaselineIfUnset } from '@/lib/em-coding/seed-baseline';
 import { z } from 'zod';
 
 import prisma from '@meddoc/db';
+import { visitByIdScope } from '@/lib/practice-scope';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { requireSession } from '@/lib/auth';
 
@@ -90,8 +91,8 @@ export async function saveSoapDraftAction(
     return { ok: false, error: 'Invalid input.' };
   }
 
-  const visit = await prisma.transcribeVisit.findUnique({
-    where: { id: visitId },
+  const visit = await prisma.transcribeVisit.findFirst({
+    where: visitByIdScope(visitId, session.user.practiceId),
     select: {
       id: true,
       userId: true,
@@ -145,8 +146,8 @@ export async function saveSoapDraftAction(
     if (result.count === 0) {
       // Conflict: another save landed first. Surface current version
       // + text so the client can show a "reload to see latest" prompt.
-      const current = await prisma.transcribeVisit.findUnique({
-        where: { id: visitId },
+      const current = await prisma.transcribeVisit.findFirst({
+        where: visitByIdScope(visitId, session.user.practiceId),
         select: { soapVersion: true, soapFinal: true },
       });
       return {

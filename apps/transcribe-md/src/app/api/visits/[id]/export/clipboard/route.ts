@@ -8,7 +8,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { formatForEhr } from '@/lib/ehr-formatters';
 import { logDelivery, type DeliveryChannel } from '@/lib/deliveries';
@@ -39,8 +39,8 @@ export const POST = withApiHandler<{ id: string }>(
   async (req, { params }) => {
     const { id: visitId } = await params;
 
-    const session = await auth();
-    const userId = session?.user?.id;
+    const session = await getSession();
+    const userId = session?.user.id;
     if (!userId) return apiError('unauthorized', 401);
 
     let body: unknown;
@@ -57,7 +57,7 @@ export const POST = withApiHandler<{ id: string }>(
       );
     }
 
-    const data = await loadVisitExportData(visitId, userId);
+    const data = await loadVisitExportData(visitId, session.user.practiceId);
     // loadVisitExportData returns null for both missing-visit and
     // not-yours; 404 guards against ID enumeration.
     if (!data) return apiError('not found', 404);

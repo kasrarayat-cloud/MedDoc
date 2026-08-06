@@ -8,6 +8,7 @@
 // ============================================================================
 
 import prisma from '@meddoc/db';
+import { visitScope } from '@/lib/practice-scope';
 import { Prisma, type TranscribeVisitStatus } from '@prisma/client';
 import { requireSession } from '@/lib/auth';
 import { fetchPatientsPage } from '@/lib/patients-query';
@@ -115,7 +116,15 @@ export async function searchPatientsAction(
   const counts = ids.length
     ? await prisma.transcribeVisit.groupBy({
         by: ['patientId'],
-        where: { patientId: { in: ids }, deletedAt: null, archivedAt: null },
+        // The ids come from a practice-scoped patient page, but the count
+        // gets its OWN predicate: inheriting scope from an upstream query is
+        // exactly the assumption T5 exists to stop relying on.
+        where: {
+          patientId: { in: ids },
+          ...visitScope(session.user.practiceId),
+          deletedAt: null,
+          archivedAt: null,
+        },
         _count: { _all: true },
       })
     : [];

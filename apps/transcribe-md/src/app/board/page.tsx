@@ -32,6 +32,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
+import { visitScope } from '@/lib/practice-scope';
 import type { Prisma } from '@prisma/client';
 
 import { auth } from '@/lib/nextauth';
@@ -87,7 +88,11 @@ export default async function BoardPage({
   const page = Math.max(1, Number(one(sp.page) ?? '1') || 1);
 
   const where: Prisma.TranscribeVisitWhereInput = {
-    userId: session.user.id,
+    // ⚠️ T5 — THE BOARD IS THE PRACTICE'S DAY NOW (§4.1b). This read was
+    // `userId: session.user.id` until 2026-08-06, which made the Ward Board a
+    // solo inbox wearing a ward's name. The count below shares this const, so
+    // the list and its total can never disagree about scope.
+    ...visitScope(session.user.practiceId),
     deletedAt: null,
     archivedAt: null,
     ...(q

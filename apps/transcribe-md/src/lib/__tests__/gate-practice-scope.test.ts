@@ -30,7 +30,9 @@
 // when it cannot tell, the read counts as unscoped.
 //
 // Ledger: 81 at accessor-landing → 78 once PERSONAL_SCOPE was declared → 60
-// after tranche 1a scoped the by-id API routes.
+// after tranche 1a (by-id API routes) → 22 after tranche 1b finished
+// transcribe_visits. What remains is note_templates and transcribe_md_patients:
+// tranches 2 and 3.
 //
 // ⚠️ FOUR CLASSES OF READ, DISTINGUISHED EXPLICITLY.
 //   REQUEST — a signed-in user asking. Must be practice-scoped. Counted here.
@@ -96,7 +98,7 @@ const SYSTEM_ALLOWLIST: Record<string, number> = {
  * UP, a new clinical read was added without practice scoping, and the fix is to
  * scope it — not to move the line. Measured 2026-08-06.
  */
-const MAX_UNSCOPED_REQUEST_READS = 60;
+const MAX_UNSCOPED_REQUEST_READS = 22;
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -286,10 +288,14 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
     // below trivially true and the gate reports green about nothing. This has
     // happened to a sweep in this repo twice: once returning 0 sites from shell
     // escaping, once flagging 3 false positives from a too-narrow window.
-    const { request, system } = clinicalReads();
-    expect(request.length + system.length, 'the scanner found NO clinical reads').toBeGreaterThan(
-      50,
-    );
+    // ⚠️ COUNTS EVERY BUCKET, and it did not always. The first version summed
+    // request + system only, so as adoption moved reads into `scoped` the total
+    // fell and this test went red for the SUCCESS of the migration — a check
+    // that fails when the thing it guards is working is a check nobody keeps.
+    const { request, system, scoped, personal, commented } = clinicalReads();
+    const total =
+      request.length + system.length + scoped.length + personal.length + commented.length;
+    expect(total, 'the scanner found NO clinical reads').toBeGreaterThan(50);
     expect(system.length, 'no system-context reads found — the worker paths moved').toBeGreaterThan(
       0,
     );
@@ -374,6 +380,34 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
     // never runs through breaking them.
     const { personal } = clinicalReads();
     expect(byFile(personal), 'the personal-scope read map changed').toEqual(PERSONAL_SCOPE);
+  });
+
+  it('⚠️ every accessor call is given a PRACTICE-shaped argument', () => {
+    // ⚠️ WHY A SOURCE RULE AND NOT A TYPE. `practiceId: string` and
+    // `userId: string` are the same type, so `visitByIdScope(visitId, userId)`
+    // compiles clean and scopes the query by a USER id — matching nothing, or
+    // (if the two ever collide) the wrong tenant. That exact mistake was made
+    // while migrating this table: nine call sites of `loadVisitExportData` kept
+    // passing `userId` after the parameter became a practice, and tsc was silent
+    // through all nine.
+    //
+    // A branded type would catch it properly and is the right long-term answer;
+    // it is a wide refactor, so until then the argument must LOOK like a
+    // practice, and anything else fails here where it is cheap to see.
+    const bad: string[] = [];
+    const call = /\b(visitScope|visitByIdScope|patientScope|templateScope)\(([^()]*(?:\([^()]*\))?[^()]*)\)/g;
+    for (const file of walk('src')) {
+      if (file.endsWith('practice-scope.ts')) continue;
+      const code = stripComments(readFileSync(file, 'utf8'));
+      for (const m of code.matchAll(call)) {
+        const args = m[2].split(',').map((a) => a.trim());
+        const practiceArg = m[1] === 'visitByIdScope' ? args[1] : args[0];
+        if (!practiceArg || !/practiceId/i.test(practiceArg)) {
+          bad.push(`${file}: ${m[1]}(… ${practiceArg ?? '<missing>'})`);
+        }
+      }
+    }
+    expect(bad, 'an accessor was handed something that is not a practice id').toEqual([]);
   });
 
   it('POSITIVE CONTROL — the scanner SEES a new unscoped read', () => {

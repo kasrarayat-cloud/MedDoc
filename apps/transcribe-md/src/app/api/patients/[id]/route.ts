@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { NextResponse } from 'next/server';
 
 import prisma from '@meddoc/db';
+import { visitScope } from '@/lib/practice-scope';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { getSession } from '@/lib/auth';
@@ -69,6 +70,7 @@ export const GET = withApiHandler<{ id: string }>(
     const aggregate = await prisma.transcribeVisit.aggregate({
       where: {
         patientId: patient.id,
+        ...visitScope(session.user.practiceId),
         deletedAt: null,
         archivedAt: null,
       },

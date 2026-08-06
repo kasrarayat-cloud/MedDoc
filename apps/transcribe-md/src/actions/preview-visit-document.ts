@@ -22,6 +22,7 @@
 import prisma from '@meddoc/db';
 
 import { requireSession } from '@/lib/auth';
+import { visitByIdScope } from '@/lib/practice-scope';
 import { convertDocxToPdf } from '@/lib/docx-preview/convert';
 import {
   readCachedFill,
@@ -65,7 +66,9 @@ export interface VisitPreviewResult extends Omit<NativePreviewResult, 'reason'> 
  */
 async function styledDocument(
   visitId: string,
-  userId: string,
+  // T5 §4.1b — a READ. Scoped by practice, renamed so the call sites had to
+  // be revisited rather than compiling unchanged on an identical `string`.
+  practiceId: string,
   soapVersion: number,
   /** Carried through so the page can say WHY it is not their own form. */
   note: VisitPreviewMiss | null,
@@ -91,7 +94,7 @@ async function styledDocument(
   }
   let docx: Buffer;
   try {
-    const data = await loadVisitExportData(visitId, userId);
+    const data = await loadVisitExportData(visitId, practiceId);
     if (!data) return miss('not_template_visit');
     docx = await generateVisitDocx(data);
   } catch (err) {
@@ -140,7 +143,13 @@ export async function previewVisitDocumentAction(
     // Mirrors the fill path's own filters (fill-engine's template claim), not
     // just the client's. A server action is a POST endpoint — "the page does
     // not render it for a signed visit" is not an access control.
-    where: { id: visitId, userId: session.user.id, deletedAt: null, archivedAt: null },
+    where: {
+      // READ — §4.1b: practice-uniform. A colleague may preview the
+      // practice's document; the author conjunct is deliberately gone.
+      ...visitByIdScope(visitId, session.user.practiceId),
+      deletedAt: null,
+      archivedAt: null,
+    },
     select: {
       // `status` MUST be selected — the guard below reads it, and Prisma is
       // untyped here, so an absent column reads as `undefined` and silently
@@ -187,7 +196,7 @@ export async function previewVisitDocumentAction(
       // No stored native file (never had one, or the template was deleted).
       // The signed note as a styled document is the honest answer — and it is
       // NOT cached: a signed record's rendering is not a preview.
-      return styledDocument(visitId, session.user.id, visit.soapVersion, null, format, false);
+      return styledDocument(visitId, session.user.practiceId, visit.soapVersion, null, format, false);
     }
     const conv = await convertDocxToPdf(stored.bytes, 'visit.docx');
     return conv.pdf
@@ -240,7 +249,7 @@ export async function previewVisitDocumentAction(
   // now, built from the styled export — the very file they would download.
   // One review surface, one interaction model, whatever the template state.
   if (!compiled || compiled.certificationStatus !== 'CERTIFIED') {
-    return styledDocument(visitId, session.user.id, visit.soapVersion, compiled ? 'not_certified' : null, format);
+    return styledDocument(visitId, session.user.practiceId, visit.soapVersion, compiled ? 'not_certified' : null, format);
   }
 
   let docx: Buffer;
@@ -268,7 +277,7 @@ export async function previewVisitDocumentAction(
   const templateId = visit.noteTemplateId;
   const templateVersion = visit.noteTemplateVersion;
   if (typeof templateId !== 'string' || typeof templateVersion !== 'number') {
-    return styledDocument(visitId, session.user.id, visit.soapVersion, null, format);
+    return styledDocument(visitId, session.user.practiceId, visit.soapVersion, null, format);
   }
 
   try {

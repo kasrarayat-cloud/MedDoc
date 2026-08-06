@@ -551,7 +551,11 @@ export const POST = withApiHandler<{ id: string }>(
         // winning transition — race losers already have a capture in
         // flight from the winner's handler, and the @unique visitId
         // constraint would reject a second insert anyway.
-        void captureEditPattern({ visitId, doctorId: userId });
+        void captureEditPattern({
+          visitId,
+          doctorId: userId,
+          practiceId: session.user.practiceId,
+        });
         // HIPAA audit — one row per successful READY→SIGNED transition.
         // Race losers (updated.count===0) don't re-write; the winner
         // already covered them.
@@ -580,7 +584,7 @@ export const POST = withApiHandler<{ id: string }>(
     // ── Deliver ─────────────────────────────────────────────────────
     // loadVisitExportData reads the freshly-signed row so downstream
     // generators see signedSoap / signedAt set correctly.
-    const data = await loadVisitExportData(visitId, userId);
+    const data = await loadVisitExportData(visitId, session.user.practiceId);
     if (!data) return apiError('visit disappeared after signing', 500);
 
     const clipboardTexts: Record<string, string> = {};

@@ -26,6 +26,7 @@
 // ============================================================================
 
 import prisma from '@meddoc/db';
+import { visitByIdScope } from '@/lib/practice-scope';
 import { embedText, redactPhi } from '@meddoc/ai';
 
 import { charLevenshtein } from './edit-distance';
@@ -36,11 +37,15 @@ const LOG = '[edit-tracking]';
 export async function captureEditPattern(args: {
   visitId: string;
   doctorId: string;
+  /** T5 — passed IN rather than derived here. The doctor lookup below runs
+   *  in the same Promise.all, so deriving it would need a serial round-trip
+   *  just to scope a read the caller has already authorised. */
+  practiceId: string;
 }): Promise<void> {
   try {
     const [visit, doctor] = await Promise.all([
-      prisma.transcribeVisit.findUnique({
-        where: { id: args.visitId },
+      prisma.transcribeVisit.findFirst({
+        where: visitByIdScope(args.visitId, args.practiceId),
         select: { soapL6Original: true, signedSoap: true, userId: true },
       }),
       prisma.user.findUnique({

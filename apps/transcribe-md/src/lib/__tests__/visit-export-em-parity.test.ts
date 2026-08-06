@@ -10,7 +10,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ findUnique: vi.fn() }));
-vi.mock('@meddoc/db', () => ({ default: { transcribeVisit: { findUnique: mocks.findUnique } } }));
+// T5: the loader's read is practice-scoped, so it uses findFirst (findUnique
+// cannot carry a non-unique predicate). Same mock, same rows.
+vi.mock('@meddoc/db', () => ({
+  default: { transcribeVisit: { findFirst: mocks.findUnique, findUnique: mocks.findUnique } },
+}));
 vi.mock('@meddoc/shared/specialties', async (importOriginal) => ({
   // findSpecialty stays stubbed — it only supplies a display label here.
   ...(await importOriginal<typeof import('@meddoc/shared/specialties')>()),
@@ -22,6 +26,8 @@ import { projectDisplayedEmCode, projectEmForDisplay } from '../visit-export';
 import { emAppliesToSpecialty } from '@meddoc/shared/specialties';
 
 const DOCTOR = 'doc1';
+// The loader takes a PRACTICE now, not an author — see visit-export-server.ts.
+const PRACTICE = 'prac1';
 const EM = {
   code: '99213', // the raw L7b suggestion
   description: 'Established, low',
@@ -62,7 +68,7 @@ describe('loadVisitExportData — printed E/M code === confirmed displayed level
     mocks.findUnique.mockResolvedValue(
       row({ cptCodes: { em: { ...EM, code: '99213', signedCode: '99214' } } })
     );
-    const data = await loadVisitExportData('v1', DOCTOR);
+    const data = await loadVisitExportData('v1', PRACTICE);
     expect(data?.em?.code).toBe('99214'); // confirmed, not 99213
   });
 
@@ -70,7 +76,7 @@ describe('loadVisitExportData — printed E/M code === confirmed displayed level
     mocks.findUnique.mockResolvedValue(
       row({ cptCodes: { em: { ...EM, code: '99213', override: { code: '99215' } } } })
     );
-    const data = await loadVisitExportData('v1', DOCTOR);
+    const data = await loadVisitExportData('v1', PRACTICE);
     expect(data?.em?.code).toBe('99215');
   });
 
@@ -78,7 +84,7 @@ describe('loadVisitExportData — printed E/M code === confirmed displayed level
     mocks.findUnique.mockResolvedValue(
       row({ cptCodes: { em: { ...EM, signedCode: '99214', override: { code: '99212' } } } })
     );
-    const data = await loadVisitExportData('v1', DOCTOR);
+    const data = await loadVisitExportData('v1', PRACTICE);
     expect(data?.em?.code).toBe('99214');
   });
 
@@ -86,19 +92,19 @@ describe('loadVisitExportData — printed E/M code === confirmed displayed level
     mocks.findUnique.mockResolvedValue(
       row({ status: 'READY', signedSoap: null, cptCodes: { em: { ...EM, override: { code: '99215' } } } })
     );
-    const data = await loadVisitExportData('v1', DOCTOR);
+    const data = await loadVisitExportData('v1', PRACTICE);
     expect(data?.em?.code).toBe('99215');
   });
 
   it('UNSIGNED, no override → raw code (unchanged behavior)', async () => {
     mocks.findUnique.mockResolvedValue(row({ status: 'READY', signedSoap: null }));
-    const data = await loadVisitExportData('v1', DOCTOR);
+    const data = await loadVisitExportData('v1', PRACTICE);
     expect(data?.em?.code).toBe('99213');
   });
 
   it('a visit with no em block exports em=null (no crash)', async () => {
     mocks.findUnique.mockResolvedValue(row({ cptCodes: { procedures: [] } }));
-    const data = await loadVisitExportData('v1', DOCTOR);
+    const data = await loadVisitExportData('v1', PRACTICE);
     expect(data?.em).toBeNull();
   });
 });

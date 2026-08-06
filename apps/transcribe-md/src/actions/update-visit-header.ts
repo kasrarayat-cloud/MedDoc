@@ -24,6 +24,7 @@
 import prisma from '@meddoc/db';
 
 import { requireSession } from '@/lib/auth';
+import { visitByIdScope, visitScope } from '@/lib/practice-scope';
 import { logAudit } from '@/lib/audit';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 
@@ -57,7 +58,14 @@ export async function updateVisitHeaderAction(
 
   // Ownership is a WHERE clause, never a check after the fact.
   const visit = await prisma.transcribeVisit.findFirst({
-    where: { id: visitId, userId: session.user.id, deletedAt: null, archivedAt: null },
+    where: {
+      ...visitByIdScope(visitId, session.user.practiceId),
+      // ACTION, not a read: the author conjunct stays until T6's role
+      // gate decides who else may edit. Widening SEE never widens DO.
+      userId: session.user.id,
+      deletedAt: null,
+      archivedAt: null,
+    },
     select: {
       id: true,
       signedAt: true,
@@ -130,6 +138,8 @@ export async function updateVisitHeaderAction(
     const otherIds = await prisma.transcribeVisit.findMany({
       where: {
         patientId: visit.patientId,
+        // Its own predicate, not the parent read's scope inherited by habit.
+        ...visitScope(session.user.practiceId),
         id: { not: visit.id },
         signedAt: null,
         deletedAt: null,

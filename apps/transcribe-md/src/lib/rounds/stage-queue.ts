@@ -25,6 +25,8 @@
 
 import prisma from '@meddoc/db';
 
+import { visitScope } from '@/lib/practice-scope';
+
 import { sortLanes, toBoardLane, type BoardLaneInput } from './board-data';
 
 /**
@@ -56,11 +58,24 @@ export function toReviewQueueIds(rows: readonly BoardLaneInput[]): string[] {
  * with `localeCompare` — passing a `Date` through would sort by whatever
  * `localeCompare` does to a coerced object rather than throwing.
  */
-export async function fetchStageQueueIds(userId: string): Promise<string[]> {
+export async function fetchStageQueueIds(practiceId: string): Promise<string[]> {
   const rows = await prisma.transcribeVisit.findMany({
     // Identical scope to the board's, so neither can show a visit the other
     // hides. The search predicate is absent because the queue is not a search.
-    where: { userId, deletedAt: null, archivedAt: null },
+    //
+    // ⚠️ T5 — THIS TOOK A `userId` UNTIL 2026-08-06. The queue is now the
+    // PRACTICE's day, not one clinician's: a doctor stepping into a colleague's
+    // list sees the same "3 of 11" the colleague does. That is the Ward Board
+    // thesis actually being true rather than being a name.
+    //
+    // The parameter was RENAMED rather than widened in place, deliberately —
+    // both are strings, so a caller passing the wrong one would have compiled
+    // silently and returned one person's visits under a practice-shaped name.
+    where: {
+      ...visitScope(practiceId),
+      deletedAt: null,
+      archivedAt: null,
+    },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: STAGE_QUEUE_MAX,
     select: {

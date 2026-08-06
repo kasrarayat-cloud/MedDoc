@@ -18,6 +18,7 @@
 // ============================================================================
 
 import prisma from '@meddoc/db';
+import { visitByIdScope } from '@/lib/practice-scope';
 import { getSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { resolveWarning, mapWorkerSeverity } from '@/lib/rx-warnings';
@@ -79,8 +80,8 @@ export async function recordOverride(
     }
 
     type VisitRow = { userId: string; rxDrafts: unknown } | null;
-    const visit: VisitRow = await prisma.transcribeVisit.findUnique({
-      where: { id: input.visitId },
+    const visit: VisitRow = await prisma.transcribeVisit.findFirst({
+      where: visitByIdScope(input.visitId, session.user.practiceId),
       select: { userId: true, rxDrafts: true },
     });
     if (!visit || visit.userId !== session.user.id) {
