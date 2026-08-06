@@ -251,7 +251,18 @@ Columns added; `POST /api/visits/[id]/sign` records the actual signer.
 three disagreeing signer records (36 / 16 / 16, DISCOVERY §B.7) or state in the
 ledger why they still disagree.
 
-### ⏸ T4 — createdBy / signedBy — **PARTIAL 2026-08-06. Blocked as a DEPENDENCY.**
+### 🟨 T4 — createdBy / signedBy — **PARTIAL; the dependency is DISCHARGED, flips CLOSED on landing**
+
+⚠️ **THE POSITIVE GATE NOW RUNS AND PASSES.** T6's fixture gave alpha-2 a
+CLINICIAN role and `35-sign-role-gate.spec.ts` drives the REAL route: a
+non-author signs a colleague's unsigned visit, 200, and `signedBy ≠ createdBy` —
+which production's 26 visits could never have demonstrated, since signer equals
+author in all 16 signed rows.
+
+T4 stays PARTIAL in this ledger only until T6 lands on `main`; the blocker itself
+is discharged. The original text follows.
+
+### ⏸ T4 (original) — createdBy / signedBy — **PARTIAL 2026-08-06. Blocked as a DEPENDENCY.**
 
 **T4-a LANDED** (PR #529, merge `ee6aabfb`, deployed 2026-08-06). Both columns,
 both derivations stated in the migration header, the author fallback DECLARED as
@@ -487,7 +498,82 @@ The runtime `requirePractice` **stays**: `{ practiceId: undefined }` is `{}` to
 Prisma — **every tenant** — and that is the one failure here that is silent and
 WIDER. A brand stops honest callers, not an `as any`.
 
-### ▶ T6 — roles, and the sign gate that refuses — **OPEN, next**
+### 🟨 T6 — roles, and the sign gate that refuses — **BUILT 2026-08-06, awaiting the landed base**
+
+Built on `feat/teams-t6-roles`, stacked on T5. **Merges only on top of #532**, per
+the standing sequence — nothing here reaches `main` before the base it assumes.
+
+| | |
+|---|---|
+| **`PracticeRole`** | new enum on `users.practiceRole`; `UserRole` marked do-not-extend |
+| **Backfill** | active + has a practice → OWNER. ⚠️ the ruling's premise was measured FALSE; see below |
+| **Constraint** | `users_active_member_has_practice_role`, proven by attempt + positive control |
+| **Bypass** | `canBypassTenantScope` DELETED; `tenantScope` returns a REQUIRED practiceId |
+| **Sign gate** | two branches — cross-practice 404, in-practice wrong role 403 by name |
+| **Conjuncts** | 23 removed, 1 kept and declared |
+| **Fixture** | alpha-1 OWNER · alpha-2 CLINICIAN · **alpha-3 TECH (new seat)** · beta-1 OWNER |
+| **Gates** | `35-sign-role-gate.spec.ts` — positive, negative, unchanged. All green |
+
+#### ⚠️ THE BACKFILL RULING'S PREMISE WAS FALSE — 18 of 196
+
+The ruling reads *"every active user today is the sole member of their personal
+practice."* Measured on production:
+
+    active 196 · sole member 178 · in a MULTI-MEMBER practice 18 · no practice 0
+
+Main Clinic 11 · QA Audit Practice 5 · Test Clinic B 2. Taken literally those 18
+derive NULL and trip the constraint — the migration aborts, correctly and
+uselessly. **Stated rule: they take OWNER too, because a migration must not
+DOWNGRADE anybody.** Every member can do everything today; deriving CLINICIAN or
+TECH removes a capability on a hierarchy nobody stated, and the schema records no
+designation to derive one from. All three hold ZERO visits and ZERO patients
+(positive-controlled against the two that do hold data).
+
+#### ⚠️ THE AUDIT-ROW FAILURE, A THIRD TIME — and the narrower lesson
+
+Adding `SIGN_BLOCKED_ROLE_NOT_PERMITTED`:
+
+1. landed in `audit.ts` only — the schema anchor missed on indentation; caught by
+   an occurrence assertion.
+2. landed in `audit.ts` **and** `schema.prisma` — and still not in the DATABASE,
+   because a Prisma enum **value** needs its own migration. `prisma validate`,
+   `tsc` and 3192 unit tests all passed while the refusal fired correctly with a
+   403 and its audit row silently did not.
+
+The only thing that caught (2) was the E2E **reading the row back**. The app
+logged `invalid input value for enum "AuditAction"` and swallowed it, because
+`logAudit` is deliberately fire-and-forget so an audit failure cannot break a
+clinical action.
+
+> **A FIRE-AND-FORGET WRITER MEANS THE ONLY PROOF AN AUDIT ROW EXISTS IS A TEST
+> THAT READS IT BACK.** Every gate that claims "and the refusal is audited" needs
+> that assertion, or the claim is a comment.
+
+#### ⚠️ PRODUCTION SIGNUP WOULD HAVE BROKEN — the T3 shape again
+
+The CHECK makes a role required for an active member. `src/actions/auth.ts:502`
+did not set one, so **every new signup would have failed on the first request
+after deploy**, with a constraint error naming the CHECK rather than the missing
+column. Swept all **9** user create/upsert sites by ORM method AND by raw SQL
+(none); all 9 now set a role wherever they set a practice.
+
+#### ⚠️ CARRIED OUT OF T6 — clinical WRITES are not accessor-scoped
+
+SPEC §1.4 says *"every read **and write** of a clinical table goes through it"*.
+T5's guard watched READS ONLY, so its ratchet reached zero over half the named
+surface — the coverage-vs-criteria class, second instance in one day.
+
+**Measured: 25 request-context clinical writes carry no practice predicate.**
+**No leak is open** — every one is reached only after a practice-scoped read in
+the same handler — but they lack a predicate of their OWN, the "borrowed
+authorisation" shape T5 itself argued against, one refactor from being wrong.
+
+A **write ratchet at 25** lands with T6 so the class cannot grow. Scoping the 25
+is its own item, and it is not T6's. Two were fixed in T6 because they had no
+practice predicate AND lost their author one (`rescore-em`'s updateManys would
+have become id-only writes).
+
+### T6 (original wording) — roles, and the sign gate that refuses
 OWNER / CLINICIAN / TECH. The sign gate is server-side and fail-closed: an
 unrecognised or absent role refuses.
 **Gate:** a TECH member's `POST /sign` is **refused by the route** — proven with
