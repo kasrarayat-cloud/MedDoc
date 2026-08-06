@@ -21,13 +21,14 @@ vi.mock('@meddoc/shared/specialties', async (importOriginal) => ({
   findSpecialty: (s: string) => ({ label: s, id: s }),
 }));
 
+import { asPracticeId } from '../practice-scope';
 import { loadVisitExportData } from '../visit-export-server';
 import { projectDisplayedEmCode, projectEmForDisplay } from '../visit-export';
 import { emAppliesToSpecialty } from '@meddoc/shared/specialties';
 
 const DOCTOR = 'doc1';
 // The loader takes a PRACTICE now, not an author — see visit-export-server.ts.
-const PRACTICE = 'prac1';
+const PRACTICE = asPracticeId('prac1');
 const EM = {
   code: '99213', // the raw L7b suggestion
   description: 'Established, low',

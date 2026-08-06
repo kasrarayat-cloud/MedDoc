@@ -2,7 +2,7 @@
 
 import prisma from '@meddoc/db';
 import { visitScope } from '@/lib/practice-scope';
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
 
 export interface RecentVisitItem {
   id: string;
@@ -16,8 +16,8 @@ export interface RecentVisitItem {
  *  section in that case. Dates are serialised to ISO strings to stay
  *  RSC-friendly. */
 export async function getRecentVisits(): Promise<RecentVisitItem[]> {
-  const session = await auth();
-  if (!session?.user?.id) return [];
+  const session = await getSession();
+  if (!session) return [];
 
   const rows = await prisma.transcribeVisit.findMany({
     where: {

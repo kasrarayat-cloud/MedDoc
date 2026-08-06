@@ -26,7 +26,7 @@
 // ============================================================================
 
 import prisma from '@meddoc/db';
-import { visitByIdScope } from '@/lib/practice-scope';
+import { visitByIdScope, type PracticeId } from '@/lib/practice-scope';
 import { embedText, redactPhi } from '@meddoc/ai';
 
 import { charLevenshtein } from './edit-distance';
@@ -40,7 +40,7 @@ export async function captureEditPattern(args: {
   /** T5 — passed IN rather than derived here. The doctor lookup below runs
    *  in the same Promise.all, so deriving it would need a serial round-trip
    *  just to scope a read the caller has already authorised. */
-  practiceId: string;
+  practiceId: PracticeId;
 }): Promise<void> {
   try {
     const [visit, doctor] = await Promise.all([

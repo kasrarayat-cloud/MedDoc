@@ -25,7 +25,7 @@
 
 import prisma from '@meddoc/db';
 
-import { visitScope } from '@/lib/practice-scope';
+import { visitScope, type PracticeId } from '@/lib/practice-scope';
 
 import { sortLanes, toBoardLane, type BoardLaneInput } from './board-data';
 
@@ -58,7 +58,7 @@ export function toReviewQueueIds(rows: readonly BoardLaneInput[]): string[] {
  * with `localeCompare` — passing a `Date` through would sort by whatever
  * `localeCompare` does to a coerced object rather than throwing.
  */
-export async function fetchStageQueueIds(practiceId: string): Promise<string[]> {
+export async function fetchStageQueueIds(practiceId: PracticeId): Promise<string[]> {
   const rows = await prisma.transcribeVisit.findMany({
     // Identical scope to the board's, so neither can show a visit the other
     // hides. The search predicate is absent because the queue is not a search.

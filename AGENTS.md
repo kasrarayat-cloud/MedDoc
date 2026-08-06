@@ -324,6 +324,100 @@ request after deploy, with `Argument \`user\` is missing` — an error that does
 not even name the missing column. Finding it took enumerating rather than
 patching what CI happened to surface.
 
+## A check whose TITLE is narrower than what it MEASURES
+
+**Standing rule. Read a check's name as a claim, then go and confirm the
+implementation makes exactly that claim — no wider, no narrower.** The failure is
+not a bug in the logic; the logic is usually correct about something. It is
+correct about the *wrong quantity*, and the name is what stops anyone noticing.
+
+Both reference cases are T5's own ratchet, found within an hour of each other,
+and both would have made the item's CLOSE CONDITION UNREACHABLE:
+
+| The name said | It actually measured | What that cost |
+|---|---|---|
+| "**unscoped** request-context reads" | *every* clinical read, scoped or not | routing a call through the accessor left the number unchanged — **adoption could never lower it** |
+| a count of reads **in code** | reads in code *and in comments* | the accessor's own doc-comment example counted, putting a permanent **floor of 1** under a ratchet whose whole purpose is to reach 0 |
+
+Note what neither one was: neither ever produced a wrong answer *to the question
+it was actually computing*. A test that passes and a test that measures the
+wrong thing look identical from the outside, and a green ratchet that cannot
+move looks exactly like a codebase with nothing left to fix.
+
+Three questions that catch it, and they are cheap:
+
+1. **If the work this check guards SUCCEEDED completely, what number would it
+   print?** If the answer is "the same one", the check is not watching the work.
+   (T5's non-vacuity floor did worse than not move — it went RED for the
+   migration's success, because it summed only the buckets adoption was
+   draining. **A check that fails when the thing it guards starts working is a
+   check nobody keeps.**)
+2. **Name every bucket the scan can sort an item into, and assert the total.**
+   T5 ended with five — unscoped / scoped / personal / system / comment — and
+   the total reconciles against the pre-adoption figure. Anything that doesn't
+   fit a named bucket is the finding.
+3. **Mutate toward SUCCESS, not just toward failure.** Everyone remembers to
+   prove a guard can go red on a regression. Prove it also MOVES when the fix
+   lands — otherwise the ratchet is a decoration.
+
+## A scripted edit PROVES ITS OWN APPLICATION
+
+**Every `.replace()` / `sed` / regex-rewrite pass states the number of
+occurrences it expects and asserts the number it actually changed. A mismatch
+aborts.** Files with `assert count == N` before writing; sweeps by printing
+`expected N / measured N` per file and failing on any zero.
+
+Why: **`.replace()` on a non-match is a silent no-op that returns the original
+string, and the script then reports success.** On 2026-08-06 an edit script
+matched `where: { id: visitId },` at six-space indent against two files that
+use four. The import landed, the **author check was removed**, and the practice
+predicate never applied — leaving `loadVisitExportData` and `nativePdfExport`
+returning **any visit to any authenticated caller**. Every other file in the
+same pass was fine, the script printed a clean table, and `tsc` was silent.
+
+⚠️ **A partial application is more dangerous than a total failure.** A script
+that changes nothing is obvious in the diff. A script that applies half of a
+two-part edit — remove the old guard, fail to add the new one — leaves code that
+compiles, passes review as "the migrated shape", and is wide open. Prefer edits
+that cannot half-apply: assert the occurrence delta, and where the two halves
+must move together, make them one replacement rather than two.
+
+This is the same family as **"a script that prints a number it does not act
+on"** — the output describes an intention, and nobody checks it against the
+effect. Here the number was never printed at all, which is worse.
+
+*Corollary, earned in the same pass:* **a rename does not protect when the types
+are identical.** `loadVisitExportData(visitId, userId)` had its second parameter
+renamed to `practiceId`; **nine call sites kept passing a user id** and `tsc`
+accepted all nine, because both are `string`. It failed closed — a user id
+matches no practice — but the compiler should have caught it and could not.
+Contrast, same commit: `captureEditPattern({ … practiceId })` broke **loudly at
+every call site**, because a required NAMED property cannot be confused with a
+same-typed neighbour. **When changing what a positional parameter MEANS, change
+its shape (named property, branded type), not only its name.**
+
+## The substring trap — fourth sighting, same family
+
+`'practice-scope' in source` — an import-insertion guard — matched the word
+**"practice-scoped"** in a comment written moments earlier, so two imports were
+silently skipped and `tsc` named the missing symbol instead of the real cause.
+
+The family, so the shape is recognisable rather than re-derived each time:
+
+| Sighting | The trap |
+|---|---|
+| `'dashboard'` contains `'board'` | a flag-ON assertion passed on the flag-OFF label — asserted nothing |
+| `backgroundColor` ends in `color` | a matcher-shape census miscounted its own negative control |
+| `'practice-scope' in source` matches `"practice-scoped"` | an idempotence check satisfied by PROSE, so a required import was skipped |
+
+**The rule stands and is now cheap to state: prefer `toBe` over `toContain`
+whenever the expected value is knowable; when a substring genuinely is the right
+shape, check the two candidates are not substrings of each other; and for
+"is this already present" checks, match the EXACT token that would be present —
+`from '@/lib/practice-scope'`, never the bare word.** Prose is not a proxy for
+code, and a file's comments are the one place where the words you are grepping
+for are guaranteed to appear.
+
 ## Multi-session programs have relay ledgers — READ THEM FIRST
 
 A relay ledger is the contract between sessions. It says what is built, what is

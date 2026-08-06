@@ -19,7 +19,7 @@ import { notFound, redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
 import { visitByIdScope } from '@/lib/practice-scope';
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
 import { isSkinBeta } from '@/config/skin-beta';
 import { AppFrame } from '@/components/ui/app-frame';
 import { RecordingClient } from './recording-client';
@@ -33,8 +33,8 @@ export default async function RecordVisitPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const session = await auth();
-  if (!session?.user?.id) redirect('/login');
+  const session = await getSession();
+  if (!session) redirect('/login');
 
   type VisitRow = {
     id: string;

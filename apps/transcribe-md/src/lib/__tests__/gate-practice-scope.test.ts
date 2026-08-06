@@ -52,6 +52,8 @@ import { join } from 'node:path';
 
 import { describe, it, expect } from 'vitest';
 
+import type { PracticeId } from '../practice-scope';
+
 /** Prisma models holding clinical data. */
 const CLINICAL_MODELS = ['transcribeVisit', 'transcribeMdPatient', 'noteTemplate'] as const;
 
@@ -331,14 +333,22 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
     // undefined }` is `{}` — every tenant, silently. This is the one failure in
     // this file that produces no error and a WIDER result set, so it gets a
     // behaviour test rather than a source-grep.
-    const { visitScope, patientScope, templateScope, visitByIdScope } = await import(
+    //
+    // ⚠️ THE CASTS BELOW ARE THE POINT, NOT A CONCESSION. `PracticeId` now makes
+    // the empty string a compile error, so the only way to reach the runtime
+    // guard is to force past the type — which is exactly the case the runtime
+    // guard exists for. A brand stops honest callers; it does not stop an
+    // `as any`, a JSON-parsed value, or JS calling in from an untyped edge. This
+    // test asserts the SECOND line still holds after the first one landed.
+    const { visitScope, patientScope, templateScope, visitByIdScope, asPracticeId } = await import(
       '../practice-scope'
     );
+    const forced = '' as unknown as PracticeId;
     for (const [name, fn] of [
-      ['visitScope', () => visitScope('')],
-      ['patientScope', () => patientScope('')],
-      ['templateScope', () => templateScope('')],
-      ['visitByIdScope', () => visitByIdScope('v1', '')],
+      ['visitScope', () => visitScope(forced)],
+      ['patientScope', () => patientScope(forced)],
+      ['templateScope', () => templateScope(forced)],
+      ['visitByIdScope', () => visitByIdScope('v1', forced)],
     ] as const) {
       expect(fn, `${name} accepted an empty practiceId`).toThrow(/empty practiceId/);
       // `undefined` forced past the type, which is how it would actually arrive.
@@ -348,9 +358,46 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
       ).toThrow();
     }
 
+    // The blessed constructor validates too, so a brand always carries a real id.
+    expect(() => asPracticeId(''), 'asPracticeId minted a brand from nothing').toThrow(
+      /empty practiceId/,
+    );
+
     // POSITIVE CONTROL — a real id still produces the predicate.
-    expect(visitScope('prac_1')).toEqual({ practiceId: 'prac_1' });
-    expect(visitByIdScope('v1', 'prac_1')).toEqual({ id: 'v1', practiceId: 'prac_1' });
+    const p1 = asPracticeId('prac_1');
+    expect(visitScope(p1)).toEqual({ practiceId: 'prac_1' });
+    expect(visitByIdScope('v1', p1)).toEqual({ id: 'v1', practiceId: 'prac_1' });
+  });
+
+  it('⚠️ the BRAND is not cast away outside the session boundary', () => {
+    // ⚠️ THIS REPLACES THE ARGUMENT-SHAPE GUARD, which is retired with this
+    // commit. That guard read every accessor call and required the practice
+    // argument to be spelled like a practice. `PracticeId` now does that job
+    // properly and at compile time — a source rule that duplicates the type
+    // checker is noise, and noise is what gets deleted in a hurry later.
+    //
+    // What a brand CANNOT see is a cast. `visitByIdScope(id, userId as
+    // PracticeId)` compiles, and is precisely the shape someone reaches for when
+    // the compiler is in the way. So the residue gets its own narrow rule: the
+    // casts live at the session boundary and in this file's own forced-value
+    // tests, and nowhere else.
+    const ALLOWED = new Set(['src/lib/practice-scope.ts', 'src/lib/auth.ts']);
+    const offenders: string[] = [];
+    for (const file of walk('src')) {
+      if (ALLOWED.has(file)) continue;
+      const code = stripComments(readFileSync(file, 'utf8'));
+      for (const m of code.matchAll(/as\s+(?:unknown\s+as\s+)?(PracticeId|UserId)\b/g)) {
+        // The forced-value cases in this file are the runtime guard's own proof.
+        if (file.endsWith('gate-practice-scope.test.ts')) continue;
+        offenders.push(`${file}: ${m[0]}`);
+      }
+    }
+    expect(
+      offenders,
+      'a branded id was cast into existence outside the session boundary — mint ' +
+        'it with asPracticeId()/asUserId() at getSession(), or take it as a ' +
+        'parameter already branded',
+    ).toEqual([]);
   });
 
   it('the SYSTEM-context allowlist matches reality, file by file', () => {
@@ -382,33 +429,17 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
     expect(byFile(personal), 'the personal-scope read map changed').toEqual(PERSONAL_SCOPE);
   });
 
-  it('⚠️ every accessor call is given a PRACTICE-shaped argument', () => {
-    // ⚠️ WHY A SOURCE RULE AND NOT A TYPE. `practiceId: string` and
-    // `userId: string` are the same type, so `visitByIdScope(visitId, userId)`
-    // compiles clean and scopes the query by a USER id — matching nothing, or
-    // (if the two ever collide) the wrong tenant. That exact mistake was made
-    // while migrating this table: nine call sites of `loadVisitExportData` kept
-    // passing `userId` after the parameter became a practice, and tsc was silent
-    // through all nine.
-    //
-    // A branded type would catch it properly and is the right long-term answer;
-    // it is a wide refactor, so until then the argument must LOOK like a
-    // practice, and anything else fails here where it is cheap to see.
-    const bad: string[] = [];
-    const call = /\b(visitScope|visitByIdScope|patientScope|templateScope)\(([^()]*(?:\([^()]*\))?[^()]*)\)/g;
-    for (const file of walk('src')) {
-      if (file.endsWith('practice-scope.ts')) continue;
-      const code = stripComments(readFileSync(file, 'utf8'));
-      for (const m of code.matchAll(call)) {
-        const args = m[2].split(',').map((a) => a.trim());
-        const practiceArg = m[1] === 'visitByIdScope' ? args[1] : args[0];
-        if (!practiceArg || !/practiceId/i.test(practiceArg)) {
-          bad.push(`${file}: ${m[1]}(… ${practiceArg ?? '<missing>'})`);
-        }
-      }
-    }
-    expect(bad, 'an accessor was handed something that is not a practice id').toEqual([]);
-  });
+  // ⚠️ RETIRED 2026-08-06 — "every accessor call is given a PRACTICE-shaped
+  // argument". It lived here for one commit and did real work: it caught
+  // `visitByIdScope(… userId)` when nothing else could, because
+  // `practiceId: string` and `userId: string` are the same type and tsc was
+  // silent through nine such call sites.
+  //
+  // `PracticeId`/`UserId` now carry that guarantee at compile time, on every
+  // call, including ones this regex could never parse. A source rule that
+  // duplicates the type checker is noise — and the cost of noise is that the
+  // whole file gets skimmed. It is replaced, not simply deleted, by the
+  // cast-ban above: the one hole a brand cannot see.
 
   it('POSITIVE CONTROL — the scanner SEES a new unscoped read', () => {
     // Proves the ratchet can actually fire. Without this, a regex that matches

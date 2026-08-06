@@ -12,10 +12,36 @@ import { auth } from '@/lib/nextauth';
 import prisma from '@meddoc/db';
 import { AuthError, type Session, type UserRole } from '@meddoc/auth';
 
-export { AuthError };
-export type { Session, UserRole };
+import { asPracticeId, asUserId, type PracticeId, type UserId } from '@/lib/practice-scope';
 
-export async function getSession(): Promise<Session | null> {
+export { AuthError };
+export type { UserRole };
+
+/**
+ * ⚠️ THE SESSION, WITH ITS IDS BRANDED — T5's closing hardening.
+ *
+ * `@meddoc/auth`'s `Session` types both ids as `string`, so `visitScope(userId)`
+ * compiles and scopes a query by the wrong identity. That exact mistake reached
+ * nine call sites of `loadVisitExportData` and `tsc` was silent through all of
+ * them.
+ *
+ * The narrowing lives HERE, in the app, rather than in `@meddoc/auth`, because
+ * this is the boundary the accessor cares about and widening the shared package
+ * would drag every consumer into the change for no benefit of their own.
+ *
+ * `PracticeId`/`UserId` are `string` at runtime — this costs nothing and changes
+ * no behaviour. It is assignment-compatible in the safe direction only.
+ */
+export type ScopedSession = Omit<Session, 'user'> & {
+  user: Omit<Session['user'], 'id' | 'practiceId'> & {
+    id: UserId;
+    practiceId: PracticeId;
+  };
+};
+
+export type { Session };
+
+export async function getSession(): Promise<ScopedSession | null> {
   try {
     const nextAuthSession = await auth();
     if (!nextAuthSession?.user?.id) return null;
@@ -37,13 +63,17 @@ export async function getSession(): Promise<Session | null> {
 
     if (!role || !practiceId) return null;
 
+    // ⚠️ THE ONE PLACE THE BRANDS ARE MINTED. `asPracticeId` refuses an empty
+    // value, so a `PracticeId` anywhere downstream is a real, non-empty practice
+    // — the accessor's runtime guard becomes a boundary check rather than a
+    // last line of defence.
     return {
       user: {
-        id: nextAuthSession.user.id,
+        id: asUserId(nextAuthSession.user.id),
         email: nextAuthSession.user.email ?? '',
         fullName: nextAuthSession.user.name ?? 'Unknown',
         role,
-        practiceId,
+        practiceId: asPracticeId(practiceId),
       },
     };
   } catch {
@@ -51,7 +81,7 @@ export async function getSession(): Promise<Session | null> {
   }
 }
 
-export async function requireSession(): Promise<Session> {
+export async function requireSession(): Promise<ScopedSession> {
   const s = await getSession();
   if (!s) throw new AuthError('UNAUTHENTICATED', 'You must be logged in.');
   return s;

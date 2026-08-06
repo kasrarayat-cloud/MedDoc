@@ -23,8 +23,8 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
-import { visitScope } from '@/lib/practice-scope';
-import { auth } from '@/lib/nextauth';
+import { visitScope, type PracticeId } from '@/lib/practice-scope';
+import { getSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { isSkinBeta } from '@/config/skin-beta';
 import { RoundsNewVisitCta } from '@/components/rounds/new-visit-cta';
@@ -127,8 +127,8 @@ export default async function PatientPage({
   const spRaw = await searchParams;
   const tabParam = Array.isArray(spRaw.tab) ? spRaw.tab[0] : spRaw.tab;
 
-  const session = await auth();
-  if (!session?.user?.id) redirect('/login');
+  const session = await getSession();
+  if (!session) redirect('/login');
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -764,7 +764,7 @@ async function VisitsTab({
   // T5 §4.1b — the tab lists the PRACTICE's visits for this patient, not
   // only the viewer's. Renamed rather than repurposed: both are strings,
   // so keeping the name would compile and quietly mean the wrong thing.
-  practiceId: string;
+  practiceId: PracticeId;
 }) {
   type Row = {
     id: string;
@@ -819,7 +819,7 @@ async function TrashTab({
   // T5 §4.1b — the tab lists the PRACTICE's visits for this patient, not
   // only the viewer's. Renamed rather than repurposed: both are strings,
   // so keeping the name would compile and quietly mean the wrong thing.
-  practiceId: string;
+  practiceId: PracticeId;
 }) {
   type Row = {
     id: string;

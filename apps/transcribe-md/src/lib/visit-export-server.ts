@@ -11,7 +11,7 @@
 // ============================================================================
 
 import prisma from '@meddoc/db';
-import { visitByIdScope } from '@/lib/practice-scope';
+import { visitByIdScope, type PracticeId } from '@/lib/practice-scope';
 import type { TranscribeVisitStatus } from '@prisma/client';
 import { emAppliesToSpecialty, findSpecialty } from '@meddoc/shared/specialties';
 import {
@@ -42,7 +42,7 @@ export async function loadVisitExportData(
   // T5 §4.1b — a READ, so it is scoped by PRACTICE. Renamed from `userId`
   // deliberately: both are strings, and a caller passing the old one would
   // have compiled and silently returned nothing for a colleague's chart.
-  practiceId: string
+  practiceId: PracticeId
 ): Promise<VisitExportData | null> {
   const visit = await prisma.transcribeVisit.findFirst({
     where: visitByIdScope(visitId, practiceId),

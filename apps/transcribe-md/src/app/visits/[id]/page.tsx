@@ -10,7 +10,7 @@ import {
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { AppFrame } from '@/components/ui/app-frame';
 import { type SpecialtyKind } from '@/components/ui/spec-chip';
@@ -84,8 +84,8 @@ export default async function VisitPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const session = await auth();
-  if (!session?.user?.id) redirect('/login');
+  const session = await getSession();
+  if (!session) redirect('/login');
 
   // Round 3 PR-H — A11-P1 Sentry context.
   // PHI guard: visitId is a UUID — safe. NEVER set patient name, MRN,
@@ -602,8 +602,8 @@ async function VisitBody(props: VisitBodyProps) {
   // null` here to keep render at <10ms p95. The trade-off was honest
   // tier display vs page-load speed. Pre-warm gives us both: the
   // deterministic shortcut is gone but the cache hit is just as fast.
-  const session = await auth();
-  const sessionPracticeId = session?.user?.practiceId as string | undefined;
+  const session = await getSession();
+  const sessionPracticeId = session?.user.practiceId;
   // E/M does not apply to an IMAGING REPORT (e.g. ultrasound) — it has no
   // office-visit E/M level. Suppress the on-read coaching score (the pipeline
   // already skips L7b CPT/E&M). The Billing surface shows an explicit

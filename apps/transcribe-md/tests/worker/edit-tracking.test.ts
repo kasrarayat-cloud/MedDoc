@@ -44,6 +44,7 @@ vi.mock('@meddoc/ai', () => ({
 }));
 
 // Import AFTER the mocks so the module picks them up.
+import { asPracticeId } from '@/lib/practice-scope';
 import { captureEditPattern } from '@/lib/edit-tracking';
 
 const ORIGINAL = '## Subjective\n[AI] Patient reports headache.\n';
@@ -76,7 +77,7 @@ describe('captureEditPattern — happy path', () => {
     mockExecuteRaw.mockResolvedValueOnce(1);
 
     await expect(
-      captureEditPattern({ visitId: 'v1', doctorId: 'u1' , practiceId: 'prac_1' })
+      captureEditPattern({ visitId: 'v1', doctorId: 'u1' , practiceId: asPracticeId('prac_1') })
     ).resolves.toBeUndefined();
 
     expect(mockEditCreate).toHaveBeenCalledTimes(1);
@@ -116,7 +117,7 @@ describe('captureEditPattern — happy path', () => {
     });
     mockExecuteRaw.mockResolvedValueOnce(1);
 
-    await captureEditPattern({ visitId: 'v1', doctorId: 'u1' , practiceId: 'prac_1' });
+    await captureEditPattern({ visitId: 'v1', doctorId: 'u1' , practiceId: asPracticeId('prac_1') });
 
     expect(mockEditCreate.mock.calls[0][0].data.editDistance).toBe(0);
   });
@@ -131,7 +132,7 @@ describe('captureEditPattern — skip conditions', () => {
     });
     mockUserFind.mockResolvedValueOnce({ practiceId: 'p1' });
 
-    await captureEditPattern({ visitId: 'v_legacy', doctorId: 'u1' , practiceId: 'prac_1' });
+    await captureEditPattern({ visitId: 'v_legacy', doctorId: 'u1' , practiceId: asPracticeId('prac_1') });
 
     expect(mockEditCreate).not.toHaveBeenCalled();
     expect(mockEmbedText).not.toHaveBeenCalled();
@@ -146,7 +147,7 @@ describe('captureEditPattern — skip conditions', () => {
     });
     mockUserFind.mockResolvedValueOnce({ practiceId: 'p1' });
 
-    await captureEditPattern({ visitId: 'v1', doctorId: 'u1' , practiceId: 'prac_1' });
+    await captureEditPattern({ visitId: 'v1', doctorId: 'u1' , practiceId: asPracticeId('prac_1') });
 
     expect(mockEditCreate).not.toHaveBeenCalled();
     expect(mockEmbedText).not.toHaveBeenCalled();
@@ -156,7 +157,7 @@ describe('captureEditPattern — skip conditions', () => {
     mockVisitFind.mockResolvedValueOnce(null);
     mockUserFind.mockResolvedValueOnce({ practiceId: 'p1' });
 
-    await captureEditPattern({ visitId: 'v_deleted', doctorId: 'u1' , practiceId: 'prac_1' });
+    await captureEditPattern({ visitId: 'v_deleted', doctorId: 'u1' , practiceId: asPracticeId('prac_1') });
 
     expect(mockEditCreate).not.toHaveBeenCalled();
     expect(mockEmbedText).not.toHaveBeenCalled();
@@ -170,7 +171,7 @@ describe('captureEditPattern — skip conditions', () => {
     });
     mockUserFind.mockResolvedValueOnce(null);
 
-    await captureEditPattern({ visitId: 'v1', doctorId: 'u_deleted' , practiceId: 'prac_1' });
+    await captureEditPattern({ visitId: 'v1', doctorId: 'u_deleted' , practiceId: asPracticeId('prac_1') });
 
     expect(mockEditCreate).not.toHaveBeenCalled();
   });
@@ -188,7 +189,7 @@ describe('captureEditPattern — partial failures degrade gracefully', () => {
     mockEmbedText.mockRejectedValueOnce(new Error('openai 503 timeout'));
 
     await expect(
-      captureEditPattern({ visitId: 'v1', doctorId: 'u1' , practiceId: 'prac_1' })
+      captureEditPattern({ visitId: 'v1', doctorId: 'u1' , practiceId: asPracticeId('prac_1') })
     ).resolves.toBeUndefined();
 
     expect(mockEditCreate).toHaveBeenCalledTimes(1);
@@ -211,7 +212,7 @@ describe('captureEditPattern — partial failures degrade gracefully', () => {
     mockExecuteRaw.mockRejectedValueOnce(new Error('pgvector down'));
 
     await expect(
-      captureEditPattern({ visitId: 'v1', doctorId: 'u1' , practiceId: 'prac_1' })
+      captureEditPattern({ visitId: 'v1', doctorId: 'u1' , practiceId: asPracticeId('prac_1') })
     ).resolves.toBeUndefined();
 
     expect(mockEditCreate).toHaveBeenCalledTimes(1);
@@ -230,7 +231,7 @@ describe('captureEditPattern — partial failures degrade gracefully', () => {
 
     // Must not throw — the sign response path depends on this.
     await expect(
-      captureEditPattern({ visitId: 'v1', doctorId: 'u1' , practiceId: 'prac_1' })
+      captureEditPattern({ visitId: 'v1', doctorId: 'u1' , practiceId: asPracticeId('prac_1') })
     ).resolves.toBeUndefined();
 
     expect(mockEmbedText).not.toHaveBeenCalled();
@@ -242,7 +243,7 @@ describe('captureEditPattern — partial failures degrade gracefully', () => {
     mockUserFind.mockResolvedValueOnce({ practiceId: 'p1' });
 
     await expect(
-      captureEditPattern({ visitId: 'v1', doctorId: 'u1' , practiceId: 'prac_1' })
+      captureEditPattern({ visitId: 'v1', doctorId: 'u1' , practiceId: asPracticeId('prac_1') })
     ).resolves.toBeUndefined();
 
     expect(mockEditCreate).not.toHaveBeenCalled();

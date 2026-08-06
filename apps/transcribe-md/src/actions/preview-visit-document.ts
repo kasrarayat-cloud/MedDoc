@@ -22,7 +22,7 @@
 import prisma from '@meddoc/db';
 
 import { requireSession } from '@/lib/auth';
-import { visitByIdScope } from '@/lib/practice-scope';
+import { visitByIdScope, type PracticeId } from '@/lib/practice-scope';
 import { convertDocxToPdf } from '@/lib/docx-preview/convert';
 import {
   readCachedFill,
@@ -68,7 +68,7 @@ async function styledDocument(
   visitId: string,
   // T5 §4.1b — a READ. Scoped by practice, renamed so the call sites had to
   // be revisited rather than compiling unchanged on an identical `string`.
-  practiceId: string,
+  practiceId: PracticeId,
   soapVersion: number,
   /** Carried through so the page can say WHY it is not their own form. */
   note: VisitPreviewMiss | null,

@@ -5,7 +5,7 @@
 // + anchors stored). Deterministic; no AI.
 // ============================================================================
 import prisma from '@meddoc/db';
-import { visitByIdScope } from '@/lib/practice-scope';
+import { visitByIdScope, type PracticeId } from '@/lib/practice-scope';
 import { redactPhi } from '@meddoc/ai';
 
 import { templateNativePdfEnabled } from '@/config/template-native-pdf';
@@ -63,7 +63,7 @@ function coerceAnchors(raw: unknown): PdfFillAnchor[] {
  */
 export async function nativePdfExport(
   visitId: string,
-  practiceId: string,
+  practiceId: PracticeId,
 ): Promise<NativePdfResult> {
   const miss = (reason: NativePdfReason): NativePdfResult => ({ pdf: null, applied: false, reason });
 
