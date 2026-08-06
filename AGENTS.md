@@ -209,6 +209,59 @@ cannot see a missing query param or an unhosted third mount. If this shape
 recurs, the answer is a contract test on the shared component — its accepted
 context, and its mount count — not another sweep.
 
+## A required column is a WRITE-PATH sweep, and the sweep is BY TABLE
+
+**Standing rule for any migration that adds a NOT NULL column, or any constraint
+that makes an existing shape illegal.** Enumerate every write path *before* the
+column lands, not after CI finds them one at a time.
+
+T3 added `practiceId` to `transcribe_visits` and cost **five CI cycles**. Four of
+them were the same mistake at a different altitude:
+
+| I enumerated | It lived in |
+|---|---|
+| `isSkinRounds` — the accessor | `next.config.ts`, reading the raw env var |
+| flag consumers | a hardcoded **destination** in the command palette |
+| three build-block keys | a fourth, `target: builder` |
+| three models' required fields | a fourth model, `User.passwordHash` |
+| `transcribeVisit.create` — the ORM method | `INSERT INTO transcribe_visits` — raw SQL |
+
+Every one is the same shape: **the inventory was taken at the layer I was
+thinking in, and the thing lived one layer down.** The fifth was the worst,
+because raw SQL has no type checker — a required column is invisible there until
+the database refuses the row at runtime.
+
+So the sweep has a fixed shape:
+
+1. **BY TABLE, not by API.** Search the table name, then the ORM method. Both.
+   `grep -rniE 'insert into ["\x27]?<table>'` **and** `<model>.(create|upsert|createMany)`.
+2. **Clone and bulk paths are VERIFIED, not assumed.** `select * from <table>`
+   carries new columns automatically — but confirm the source is the table
+   itself. `INSERT … SELECT` from a narrowed projection does not.
+3. **Type-check is decisive only for TYPED sites.** With the column required,
+   `tsc` 0 errors proves every typed create satisfies it. Payloads typed `any`
+   are invisible to it — read those.
+4. **POSITIVE-CONTROL THE SWEEP'S OWN PATTERN before believing its zero.** Mine
+   lied in both directions inside five minutes: first `0 sites` (shell escaping
+   ate the pattern — a false all-clear that would have ended the search), then
+   `3 MISSING` that were fine (a 40-line window could not see a value set on a
+   spread object defined earlier). A sweep that reports nothing and a sweep that
+   is broken produce the same output.
+5. **Prefer DERIVING the value in the query over threading a parameter.** T3's
+   raw-SQL sites take
+   `(select "practiceId" from transcribe_md_patients where id = …)`.
+   A hand-passed value can only be correct or rejected; a derived one cannot
+   drift.
+6. **The migration ABORTS on any underivable row before `SET NOT NULL`.**
+   `RAISE EXCEPTION` on a non-zero count. A partially-backfilled column that
+   then takes NOT NULL is a migration that half-ran and reported success.
+
+⚠️ **The one that mattered was production code.** `src/actions/visits.ts` is the
+real visit-creation path; it would have failed for every doctor on the first
+request after deploy, with `Argument \`user\` is missing` — an error that does
+not even name the missing column. Finding it took enumerating rather than
+patching what CI happened to surface.
+
 ## Multi-session programs have relay ledgers — READ THEM FIRST
 
 A relay ledger is the contract between sessions. It says what is built, what is

@@ -496,6 +496,19 @@ export const POST = withApiHandler<{ id: string }>(
           status: TranscribeVisitStatus.SIGNED,
           signedSoap: visit.soapFinal,
           signedAt: new Date(),
+          // ⚠️ T4 — THE SIGNER, STAMPED SERVER-SIDE, IN THE SAME STATEMENT AS
+          // THE SIGNATURE. `userId` is `session.user.id` (line ~137), resolved
+          // from the session cookie — it is NEVER read from the request body,
+          // because a client-supplied signer is a client-supplied claim about
+          // who attested to a clinical record.
+          //
+          // Set HERE rather than in a follow-up update, deliberately: this
+          // `updateMany` is one atomic statement, so a row cannot exist in the
+          // window between "signed" and "attributed". The DB CHECK
+          // (`signedAt IS NULL OR signedBy IS NOT NULL`) makes that window
+          // unrepresentable anyway — this is the code side of the same rule, so
+          // the constraint never has to fire in normal operation.
+          signedBy: userId,
           ...(cptWrite !== undefined ? { cptCodes: cptWrite } : {}),
           // E/M visible-confirm: the gate above verified the explicit
           // acknowledgement — MARK (not clear) the record so the row

@@ -196,6 +196,7 @@ jobs:
       - name: Seed the T1 multi-seat fixture (practice isolation)
         run: >
           docker compose -f docker-compose.qa.yml run --rm
+          -e T1_MEMBER_PASSWORD=T1E2eFixtureThrowaway9x
           --entrypoint sh db-migrate
           -c 'cd /app/apps/transcribe-md && npx --no-install tsx scripts/seed-t1-multiseat.ts'
 

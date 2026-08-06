@@ -489,7 +489,7 @@ export function seedReviewDocVisit(
       // until the database refuses the row. The subselect cannot drift from the
       // patient, which is what the composite FK enforces anyway.
       `insert into transcribe_visits
-         (id, "userId", "patientId", "practiceId", specialty, "inputMode", status,
+         (id, "userId", "patientId", "practiceId", "createdBy", "signedBy", specialty, "inputMode", status,
           "signedAt", "signedSoap",
           "chiefComplaint",
           "transcriptText", "soapFinal", "soapVersion",
@@ -500,6 +500,14 @@ export function seedReviewDocVisit(
        values
          ('${visitId}', '${userId}', '${patientId}',
           (select "practiceId" from transcribe_md_patients where id = '${patientId}'),
+          '${userId}',
+          -- T4: signedBy tracks signedAt EXACTLY. This seeder's signature is
+          -- conditional on opts.signed, so the signer must be too. A signer on
+          -- an unsigned visit is a lie; a signature with no signer is refused
+          -- by transcribe_visits_signed_requires_signer.
+          -- (No backticks here: this text lives inside a JS template literal,
+          --  and a backtick would close it. That cost two tsc errors.)
+          ${opts.signed ? `'${userId}'` : 'null'},
           '${imaging ? 'ultrasound' : 'primary-care'}', 'text_notes',
           '${opts.signed ? 'SIGNED' : 'READY'}',
           ${opts.signed ? `'${SIGNED_AT}'::timestamptz` : 'null'},

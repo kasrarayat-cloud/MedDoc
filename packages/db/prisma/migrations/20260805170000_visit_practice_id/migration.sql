@@ -3,6 +3,15 @@
 -- ----------------------------------------------------------------------------
 -- DERIVATION: patient.practiceId. NOT user.practiceId.
 --
+-- ⚠️ RATIFIED AS A WAR-ROOM RULING, 2026-08-05. This is no longer one
+-- migration's choice — it is the project's rule for what a note belongs to:
+--   * THE CHART OWNS THE NOTE.
+--   * The locum case is the discriminator: a doctor from practice B seeing a
+--     patient of practice A creates a note in A.
+--   * The composite FK is the enforcement, not a convention anyone must recall.
+-- Any future column, query or export that needs "which practice is this visit"
+-- derives it the same way. Changing it is a war-room decision, not a refactor.
+--
 -- Both agreed on all 26 production rows when this was written (measured
 -- 2026-08-05: 26 visits, 26 agree, 0 disagree, no nulls). Nothing in the
 -- database kept them agreeing, which is exactly why the choice had to be made

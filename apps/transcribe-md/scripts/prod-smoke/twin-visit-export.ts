@@ -90,6 +90,8 @@ async function main() {
       data: {
         userId: doctorId,
         patientId: patient.id,
+        // T4 — the author.
+        createdBy: doctorId,
         // T3 — from the PATIENT, per the stated derivation. This function
         // created the patient with `practiceId` on the line above, so the value
         // is the same by construction.

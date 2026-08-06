@@ -216,6 +216,10 @@ export async function createVisitAction(formData: FormData): Promise<void> {
       // other value, so a mistake here fails at the database rather than
       // producing a row nobody can see.
       practiceId: patient.practiceId,
+      // T4 — the author, named explicitly. Same value as `userId` today; the
+      // separate column is what lets `userId` mean "owner" later without
+      // rewriting who created the record.
+      createdBy: session.user.id,
       // patientName column stays populated (schema.prisma notes its
       // removal is deferred to a follow-up). Prefer the resolved
       // patient's canonical name over whatever free-text the form
