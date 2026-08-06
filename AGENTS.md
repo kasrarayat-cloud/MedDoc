@@ -472,6 +472,16 @@ made three sessions ago.**
 | **Rounds** — the shipped skin | `docs/rounds/SPEC.md` | `docs/rounds/RELAY.md` |
 | **Foundation** — teams → billing → admin | `docs/foundation/SPEC.md` | `docs/foundation/RELAY.md` |
 
+⚠️ **AND BEFORE DECIDING ANYTHING RULING-SHAPED, GREP
+`docs/foundation/RULINGS.md`.** It is a one-line index of every war-room
+decision — date, verdict, pointer — and it exists because a session
+rediscovered a standing ruling on 2026-08-06 and wrote a fresh argument for a
+question already answered two days earlier. That instance cost nothing; the
+failure mode is not duplicated effort but **CONTRADICTION**, because a session
+that cannot see a ruling can reach the opposite conclusion just as confidently
+and ship it. **Rediscovery is a process smell, not a virtue.** New rulings append
+a row in the same commit that records them in full.
+
 Foundation additionally has `docs/foundation/DISCOVERY.md` — evidence about the
 system as it is today, with seven claims recorded **as corrected** after
 adversarial re-verification. When SPEC and DISCOVERY disagree, that is a

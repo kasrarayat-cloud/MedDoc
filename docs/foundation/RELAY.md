@@ -5,6 +5,10 @@
 
 ---
 
+> ⚠️ **RULINGS INDEX: `docs/foundation/RULINGS.md`** — every war-room decision as
+> one line with a pointer to its full text. **Grep it before deciding anything
+> ruling-shaped.** New rulings append there in the same commit that records them.
+
 ## GATE 0 — ✅ CLEARED 2026-08-04
 
 All five decisions are made and are recorded **verbatim in `SPEC.md` §4**.
