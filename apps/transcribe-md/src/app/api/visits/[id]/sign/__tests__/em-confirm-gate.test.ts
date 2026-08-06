@@ -60,6 +60,9 @@ vi.mock('@meddoc/db', () => {
   const prisma = {
     transcribeVisit: {
       findUnique: mocks.findUnique,
+      // T5: the sign route's reads are practice-scoped, so they use findFirst
+      // (findUnique cannot carry a non-unique predicate). Same mock, same rows.
+      findFirst: mocks.findUnique,
       updateMany: mocks.updateMany,
     },
     rxWarningOverride: { findMany: mocks.rxOverrideFindMany },
@@ -67,6 +70,8 @@ vi.mock('@meddoc/db', () => {
   return { default: prisma, prisma };
 });
 vi.mock('@/lib/nextauth', () => ({ auth: mocks.auth }));
+// T5: the by-id routes now source practiceId from the DB-refreshed session.
+vi.mock('@/lib/auth', () => ({ getSession: mocks.auth }));
 vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
 vi.mock('@/lib/log', () => ({
   log: { warn: mocks.logWarn, info: vi.fn(), error: vi.fn() },

@@ -286,6 +286,50 @@ and leaves only an access-log entry. So signing is role-gated and reading is
 not — the accountability each carries is different, and the permissions follow
 the accountability rather than a uniform "roles restrict everything" instinct.
 
+### 4.1c THE INTERIM POSTURE — SEE widened, DO did not. Ratified 2026-08-06
+
+**Recorded because it is a deliberate, DATED conservatism with a named retirement
+step — not a half-finished migration, and not something for a later session to
+discover and "tidy up".**
+
+> **T5 widened READS to the practice (§4.1b). Every ACTION kept its author
+> conjunct — `userId: session.user.id` — beside the new practice predicate.**
+
+So after tranche 1 a practice member can **open** a colleague's chart, and cannot
+**edit, rescore, rename or sign** it. That is not what §4.1a says the end state
+is. It is what is safe to ship while the roles model does not yet exist: with no
+`role` column consulted at a write path, the only alternatives were to widen
+writes to every member of the practice with nothing to distinguish a TECH from a
+CLINICIAN, or to hold reads back and ship nothing. **The author conjunct is a
+placeholder standing exactly where the role check goes.**
+
+⚠️ **T6 REMOVES THEM, BY THIS RULING, AS SCOPED WORK.** The conjuncts come out
+when — and only when — the sign gate and role model land, so that
+`OWNER`/`CLINICIAN` may act on any unsigned visit in the practice per §4.1a and
+`TECH` is refused by name.
+
+⚠️ **THE LIST IS SWEPT BY BEHAVIOUR, NOT BY ONE SYNTAX — CORRECTED 2026-08-06.**
+This paragraph originally said the sites were "every write path carrying
+`userId: session.user.id` beside a `visitScope`/`visitByIdScope` call, which is
+greppable precisely because the two appear together." **That finds 5. There are
+24.** The author gate has two shapes:
+
+    IN-QUERY CONJUNCT   `...visitByIdScope(…), userId: session.user.id`      5
+    POST-FETCH CHECK    `if (!visit || visit.userId !== userId) → 404`      19
+
+The defining predicate is **"every place authorship gates an action"**, and it is
+swept by that, never by the one shape the author of this sentence happened to
+picture. This is the defect AGENTS.md already names — *naming a class is not
+enumerating it* — committed inside the ruling that names the class. Measured with
+comment stripping and positive controls in both directions; see the T6
+reconnaissance in `docs/foundation/RELAY.md`.
+
+**The reason this is written down rather than left as a TODO:** the failure mode
+is a later reader finding a practice-scoped read next to an author-scoped write,
+concluding the write was *missed* by the migration, and widening it — arriving at
+§4.1a's end state with none of §4.1a's refusals. **A conservatism nobody recorded
+is indistinguishable from an oversight, and gets "fixed".**
+
 ### 4.2 Cross-app redirect users
 
 > **Classify by where clinical data lives — transcribe-md data → normal

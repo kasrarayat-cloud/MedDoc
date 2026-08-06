@@ -9,7 +9,7 @@
 
 import { NextResponse } from 'next/server';
 
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
 import { filenameSlug, formatVisitDate } from '@/lib/visit-export';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { generateVisitPdf } from '@/lib/pdf-generator';
@@ -29,11 +29,11 @@ export const GET = withApiHandler<{ id: string }>(
   async (_req, { params }) => {
     const { id: visitId } = await params;
 
-    const session = await auth();
-    const userId = session?.user?.id;
+    const session = await getSession();
+    const userId = session?.user.id;
     if (!userId) return apiError('unauthorized', 401);
 
-    const data = await loadVisitExportData(visitId, userId);
+    const data = await loadVisitExportData(visitId, session.user.practiceId);
     // 404 covers both "missing" and "not yours" — anti-enumeration.
     if (!data) return apiError('not found', 404);
 
@@ -51,7 +51,7 @@ export const GET = withApiHandler<{ id: string }>(
       // any native-fill error falls back to the styled export, never a 500.
       let nativePdf: Buffer | null = null;
       try {
-        const native = await nativePdfExport(visitId, userId);
+        const native = await nativePdfExport(visitId, session.user.practiceId);
         nativePdf = native.pdf;
         nativeApplied = native.applied;
         nativeReason = native.reason;

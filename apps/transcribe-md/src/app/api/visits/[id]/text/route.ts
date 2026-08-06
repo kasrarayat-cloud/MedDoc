@@ -11,12 +11,13 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { enqueueProcessVisit } from '@/lib/queue';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { visitByIdScope } from '@/lib/practice-scope';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { redactPhi } from '@meddoc/ai';
 import { logAudit } from '@/lib/audit';
@@ -39,8 +40,8 @@ export const POST = withApiHandler<{ id: string }>(
   async (req, { params }) => {
     const { id: visitId } = await params;
 
-    const session = await auth();
-    const userId = session?.user?.id;
+    const session = await getSession();
+    const userId = session?.user.id;
     if (!userId) return apiError('unauthorized', 401);
 
     const blocked = rateLimitOr429(RATE_LIMITS.UPLOAD, userId);
@@ -76,8 +77,8 @@ export const POST = withApiHandler<{ id: string }>(
       return apiError(`text must be ${MIN_CHARS}-${MAX_CHARS} characters`, 400);
     }
 
-    const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+    const visit = await prisma.transcribeVisit.findFirst({
+      where: visitByIdScope(visitId, session.user.practiceId),
       select: {
         id: true,
         userId: true,

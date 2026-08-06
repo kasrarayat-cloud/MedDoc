@@ -38,7 +38,7 @@ import { ZipArchive } from 'archiver';
 import prisma from '@meddoc/db';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { logAudit } from '@/lib/audit';
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { downloadAudio } from '@/lib/minio';
 import { loadVisitExportData } from '@/lib/visit-export-server';
@@ -63,8 +63,8 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
     return apiError('Data export is disabled on this deployment.', 503);
   }
 
-  const session = await auth();
-  const userId = session?.user?.id;
+  const session = await getSession();
+  const userId = session?.user.id;
   if (!userId) return apiError('unauthorized', 401);
 
   const blocked = rateLimitOr429(RATE_LIMITS.SETTINGS, userId);
@@ -165,7 +165,7 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
 
       // Per-visit: JSON metadata + audio blobs + signed PDF.
       for (const v of visits) {
-        const exportData = await loadVisitExportData(v.id, userId);
+        const exportData = await loadVisitExportData(v.id, session.user.practiceId);
         if (exportData) {
           archive.append(JSON.stringify(exportData, null, 2), {
             name: `visits/${v.id}.json`,

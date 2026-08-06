@@ -5,6 +5,7 @@
 // + anchors stored). Deterministic; no AI.
 // ============================================================================
 import prisma from '@meddoc/db';
+import { visitByIdScope, type PracticeId } from '@/lib/practice-scope';
 import { redactPhi } from '@meddoc/ai';
 
 import { templateNativePdfEnabled } from '@/config/template-native-pdf';
@@ -60,13 +61,16 @@ function coerceAnchors(raw: unknown): PdfFillAnchor[] {
  * silent (retiring the fail-open blind spot). `pdf` is null unless `reason` is
  * `'true'`.
  */
-export async function nativePdfExport(visitId: string, userId: string): Promise<NativePdfResult> {
+export async function nativePdfExport(
+  visitId: string,
+  practiceId: PracticeId,
+): Promise<NativePdfResult> {
   const miss = (reason: NativePdfReason): NativePdfResult => ({ pdf: null, applied: false, reason });
 
   if (!templateNativePdfEnabled()) return miss('flag_off');
 
-  const visit = await prisma.transcribeVisit.findUnique({
-    where: { id: visitId },
+  const visit = await prisma.transcribeVisit.findFirst({
+    where: visitByIdScope(visitId, practiceId),
     select: {
       userId: true,
       patientName: true,
@@ -80,7 +84,7 @@ export async function nativePdfExport(visitId: string, userId: string): Promise<
     },
   });
   // No visit / not the owner / no custom template → native simply does not apply.
-  if (!visit || visit.userId !== userId || !visit.noteTemplate) return miss('not_certified');
+  if (!visit || !visit.noteTemplate) return miss('not_certified');
 
   const sp = ((visit.noteTemplate.styleProfile ?? {}) as Record<string, unknown>) || {};
   if (sp.pdfNativeCertified !== true) return miss('not_certified');

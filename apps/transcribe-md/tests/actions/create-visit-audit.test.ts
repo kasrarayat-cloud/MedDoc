@@ -63,18 +63,20 @@ beforeEach(() => {
   mocks.requireSession.mockResolvedValue({
     user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
   });
-  // The patientId path: resolvePatient calls findUnique with practice
-  // scope; we return a row that passes the scope check.
-  mocks.patientFindUnique.mockResolvedValue({
+  // ⚠️ BOTH BRANCHES OF resolvePatient NOW USE findFirst. The by-id path moved
+  // off findUnique in T5 tranche 3, because findUnique cannot carry a
+  // non-unique predicate and the practice filter belongs IN the query. So the
+  // findFirst mock has to return the FULL row — the post-fetch scope check
+  // reads `practiceId` and `deletedAt`, and a partial row fails it as
+  // "Invalid patient", which is what four of these tests reported.
+  const patientRow = {
     id: FAKE_PATIENT,
     name: 'QA Test Patient',
     practiceId: FAKE_PRACTICE,
     deletedAt: null,
-  });
-  mocks.patientFindFirst.mockResolvedValue({
-    id: FAKE_PATIENT,
-    name: 'QA Test Patient',
-  });
+  };
+  mocks.patientFindUnique.mockResolvedValue(patientRow);
+  mocks.patientFindFirst.mockResolvedValue(patientRow);
   mocks.visitCreate.mockResolvedValue({ id: FAKE_VISIT });
 });
 

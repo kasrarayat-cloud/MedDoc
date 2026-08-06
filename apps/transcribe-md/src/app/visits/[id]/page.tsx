@@ -10,7 +10,7 @@ import {
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { AppFrame } from '@/components/ui/app-frame';
 import { type SpecialtyKind } from '@/components/ui/spec-chip';
@@ -34,6 +34,7 @@ import { parseEmPendingChange, unacknowledgedEmChange } from '@/lib/em-pending-c
 import { signGates } from '@/lib/sign-gates';
 import { toStageIdentity, toQueuePosition } from '@/lib/rounds/stage-data';
 import { fetchStageQueueIds } from '@/lib/rounds/stage-queue';
+import { visitByIdScope } from '@/lib/practice-scope';
 import type { RoundsStageData } from '@/lib/rounds/stage-view-model';
 
 export const metadata: Metadata = { title: 'Visit' };
@@ -83,8 +84,8 @@ export default async function VisitPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const session = await auth();
-  if (!session?.user?.id) redirect('/login');
+  const session = await getSession();
+  if (!session) redirect('/login');
 
   // Round 3 PR-H — A11-P1 Sentry context.
   // PHI guard: visitId is a UUID — safe. NEVER set patient name, MRN,
@@ -159,8 +160,8 @@ export default async function VisitPage({
       where: { id: session.user.id },
       select: { name: true, email: true },
     }),
-    prisma.transcribeVisit.findUnique({
-      where: { id },
+    prisma.transcribeVisit.findFirst({
+      where: visitByIdScope(id, session.user.practiceId),
       select: {
         id: true,
         userId: true,
@@ -236,7 +237,15 @@ export default async function VisitPage({
   ];
 
   if (!user) redirect('/login');
-  if (!visit || visit.userId !== session.user.id) notFound();
+  // ⚠️ T5 — THE AUTHOR CHECK IS GONE, AND THE PREDICATE REPLACED IT.
+  // Until 2026-08-06 this read `visit.userId !== session.user.id`, so a
+  // colleague in the same practice got a 404 on a chart they are entitled to
+  // read (§4.1b: read is practice-uniform). The query is now scoped by
+  // practice, so a visit from ANOTHER practice never comes back at all — the
+  // wall moved from an `if` to the WHERE clause, which is the point of T5.
+  //
+  // The ACTIONS on this page are unchanged and still author-only until T6.
+  if (!visit) notFound();
 
   // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004). Single
   // visit detail page is the highest-volume PHI surface — every doctor
@@ -593,8 +602,8 @@ async function VisitBody(props: VisitBodyProps) {
   // null` here to keep render at <10ms p95. The trade-off was honest
   // tier display vs page-load speed. Pre-warm gives us both: the
   // deterministic shortcut is gone but the cache hit is just as fast.
-  const session = await auth();
-  const sessionPracticeId = session?.user?.practiceId as string | undefined;
+  const session = await getSession();
+  const sessionPracticeId = session?.user.practiceId;
   // E/M does not apply to an IMAGING REPORT (e.g. ultrasound) — it has no
   // office-visit E/M level. Suppress the on-read coaching score (the pipeline
   // already skips L7b CPT/E&M). The Billing surface shows an explicit
@@ -691,7 +700,8 @@ async function VisitBody(props: VisitBodyProps) {
   // top of the function, so every statement above has already run in order by
   // the time the stage data is assembled.
   const userId = session?.user?.id;
-  const queueIds = userId ? await fetchStageQueueIds(userId) : [];
+  // The practice's day, not one clinician's — see fetchStageQueueIds.
+  const queueIds = userId ? await fetchStageQueueIds(session.user.practiceId) : [];
 
   if (userId) {
     // The stage reads OTHER visits' rows to place this one in the queue.

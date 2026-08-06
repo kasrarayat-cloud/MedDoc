@@ -36,6 +36,81 @@
 
 import type { Prisma } from '@prisma/client';
 
+// ============================================================================
+// BRANDED IDS — T5's closing hardening.
+// ----------------------------------------------------------------------------
+// ⚠️ THE BUG THESE EXIST TO MAKE IMPOSSIBLE, stated exactly.
+// `loadVisitExportData(visitId, userId)` had its second parameter renamed to
+// `practiceId`. NINE call sites kept passing a user id. `tsc` accepted all nine,
+// because `practiceId: string` and `userId: string` are the same type. It failed
+// CLOSED — a user id matches no practice, so exports returned not-found — but
+// the next rename of this shape might not, and a tenancy predicate built from
+// the wrong id is the failure this whole file exists to prevent.
+//
+// A brand is a compile-time-only marker: `PracticeId` IS a `string` at runtime
+// and flows into Prisma's `where` unchanged, but a plain `string` is NOT
+// assignable to it. So the mistake stops being a silent success.
+//
+// ⚠️ SCOPE IS THE ACCESSOR SURFACE AND ITS CALLERS — deliberately not a
+// repo-wide crusade. The brands are applied at ONE place, `getSession()`, which
+// is the single point where an untyped string becomes an identity in this app.
+// Every existing call site inherits them with no edit, which is why this is a
+// small commit rather than a 52-site sweep.
+// ============================================================================
+
+declare const BRAND: unique symbol;
+
+/** A practice id, as produced by `getSession()`. Never a user id. */
+export type PracticeId = string & { readonly [BRAND]: 'PracticeId' };
+
+/** A user id, as produced by `getSession()`. Never a practice id. */
+export type UserId = string & { readonly [BRAND]: 'UserId' };
+
+/**
+ * ⚠️ THE ONLY BLESSED WAY TO MINT A `PracticeId`, and it belongs to the session
+ * boundary alone. Calling it anywhere else re-opens the hole: a brand is only
+ * worth what its constructor's discipline is worth.
+ *
+ * It validates rather than merely asserting, so the brand carries a real
+ * guarantee — a `PracticeId` is never empty.
+ */
+export function asPracticeId(value: string): PracticeId {
+  return requirePractice(value) as PracticeId;
+}
+
+/** The same, for user ids. See `asPracticeId` — mint at the session boundary. */
+export function asUserId(value: string): UserId {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error('practice-scope: empty userId');
+  }
+  return value as UserId;
+}
+
+/**
+ * ⚠️ THE SILENT-SCOPE-LOSS GUARD, AND WHY A TYPE IS NOT ENOUGH.
+ *
+ * Prisma DROPS a `where` key whose value is `undefined`. So
+ * `{ practiceId: undefined }` is not "match nothing" — it is `{}`, which
+ * matches EVERY TENANT. The single most dangerous failure this file can have
+ * produces no error, no log line and a wider result set.
+ *
+ * `practiceId: string` stops that at compile time for honest callers, and
+ * `getSession()` already returns null rather than a session without a practice.
+ * This is the third line: an `as any`, a widened generic, or a JSON-parsed value
+ * that slips past both still fails LOUDLY here instead of quietly returning
+ * another practice's charts.
+ */
+function requirePractice(practiceId: string): string {
+  if (typeof practiceId !== 'string' || practiceId.length === 0) {
+    throw new Error(
+      'practice-scope: empty practiceId — refusing to build a predicate that ' +
+        'Prisma would treat as "all tenants". The caller must source it from ' +
+        'getSession(), which fails closed.',
+    );
+  }
+  return practiceId;
+}
+
 /**
  * Visits belonging to a practice.
  *
@@ -45,13 +120,13 @@ import type { Prisma } from '@prisma/client';
  * different question, and one that gives the wrong answer the moment a locum
  * writes in a practice that is not their own.
  */
-export function visitScope(practiceId: string): Prisma.TranscribeVisitWhereInput {
-  return { practiceId };
+export function visitScope(practiceId: PracticeId): Prisma.TranscribeVisitWhereInput {
+  return { practiceId: requirePractice(practiceId) };
 }
 
 /** Patients belonging to a practice. Natively practice-scoped since before T3. */
-export function patientScope(practiceId: string): Prisma.TranscribeMdPatientWhereInput {
-  return { practiceId };
+export function patientScope(practiceId: PracticeId): Prisma.TranscribeMdPatientWhereInput {
+  return { practiceId: requirePractice(practiceId) };
 }
 
 /**
@@ -62,8 +137,8 @@ export function patientScope(practiceId: string): Prisma.TranscribeMdPatientWher
  * hidden: if templates ever gain the column, this function changes and its
  * callers do not — which is the whole reason the predicate lives in one place.
  */
-export function templateScope(practiceId: string): Prisma.NoteTemplateWhereInput {
-  return { doctor: { practiceId } };
+export function templateScope(practiceId: PracticeId): Prisma.NoteTemplateWhereInput {
+  return { doctor: { practiceId: requirePractice(practiceId) } };
 }
 
 /**
@@ -77,9 +152,9 @@ export function templateScope(practiceId: string): Prisma.NoteTemplateWhereInput
  */
 export function visitByIdScope(
   visitId: string,
-  practiceId: string,
+  practiceId: PracticeId,
 ): Prisma.TranscribeVisitWhereInput {
-  return { id: visitId, practiceId };
+  return { id: visitId, practiceId: requirePractice(practiceId) };
 }
 
 /**

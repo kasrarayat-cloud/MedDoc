@@ -12,7 +12,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
 import { formatVisitDate } from '@/lib/visit-export';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { generateVisitPdf } from '@/lib/pdf-generator';
@@ -37,8 +37,8 @@ export const POST = withApiHandler<{ id: string }>(
   async (req, { params }) => {
     const { id: visitId } = await params;
 
-    const session = await auth();
-    const userId = session?.user?.id;
+    const session = await getSession();
+    const userId = session?.user.id;
     const sessionEmail = session?.user?.email;
     if (!userId || !sessionEmail) return apiError('unauthorized', 401);
 
@@ -85,7 +85,7 @@ export const POST = withApiHandler<{ id: string }>(
       );
     }
 
-    const data = await loadVisitExportData(visitId, userId);
+    const data = await loadVisitExportData(visitId, session.user.practiceId);
     if (!data) return apiError('not found', 404);
 
     if (!process.env.RESEND_API_KEY) {

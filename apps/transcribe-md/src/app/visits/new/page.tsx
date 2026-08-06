@@ -10,7 +10,8 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
-import { auth } from '@/lib/nextauth';
+import { visitScope } from '@/lib/practice-scope';
+import { getSession } from '@/lib/auth';
 import { isSkinBeta } from '@/config/skin-beta';
 import { AppFrame } from '@/components/ui/app-frame';
 import { Ic } from '@/components/ui/icon';
@@ -29,8 +30,8 @@ export default async function NewVisitPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const session = await auth();
-  if (!session?.user?.id) redirect('/login');
+  const session = await getSession();
+  if (!session) redirect('/login');
 
   type MinimalUser = {
     name: string | null;
@@ -46,6 +47,7 @@ export default async function NewVisitPage({
     }),
     prisma.transcribeVisit.findFirst({
       where: {
+        ...visitScope(session.user.practiceId),
         userId: session.user.id,
         deletedAt: null,
         archivedAt: null,

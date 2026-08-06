@@ -18,7 +18,8 @@ import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
-import { auth } from '@/lib/nextauth';
+import { visitByIdScope } from '@/lib/practice-scope';
+import { getSession } from '@/lib/auth';
 import { isSkinBeta } from '@/config/skin-beta';
 import { AppFrame } from '@/components/ui/app-frame';
 import { RecordingClient } from './recording-client';
@@ -32,8 +33,8 @@ export default async function RecordVisitPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const session = await auth();
-  if (!session?.user?.id) redirect('/login');
+  const session = await getSession();
+  if (!session) redirect('/login');
 
   type VisitRow = {
     id: string;
@@ -42,8 +43,8 @@ export default async function RecordVisitPage({
     patient: { name: string } | null;
     specialty: string;
   };
-  const visit: VisitRow | null = await prisma.transcribeVisit.findUnique({
-    where: { id },
+  const visit: VisitRow | null = await prisma.transcribeVisit.findFirst({
+    where: visitByIdScope(id, session.user.practiceId),
     select: {
       id: true,
       userId: true,

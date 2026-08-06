@@ -26,7 +26,8 @@ import { z } from 'zod';
 
 import prisma from '@meddoc/db';
 import { apiError, withApiHandler } from '@/lib/api-error';
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
+import { visitByIdScope } from '@/lib/practice-scope';
 import { logAudit } from '@/lib/audit';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 
@@ -48,8 +49,8 @@ export const POST = withApiHandler<{ id: string }>(
   async (req, { params }) => {
     const { id: visitId } = await params;
 
-    const session = await auth();
-    const userId = session?.user?.id;
+    const session = await getSession();
+    const userId = session?.user.id;
     if (!userId) return apiError('unauthorized', 401);
 
     const blocked = rateLimitOr429(RATE_LIMITS.SETTINGS, userId);
@@ -66,7 +67,8 @@ export const POST = withApiHandler<{ id: string }>(
 
     // Ownership gate. Cheap targeted select — this route never needs the note.
     const visit = await prisma.transcribeVisit.findFirst({
-      where: { id: visitId, userId },
+      // READ — §4.1b: practice-uniform.
+      where: visitByIdScope(visitId, session.user.practiceId),
       select: { id: true, signedAt: true },
     });
     if (!visit) return apiError('not found', 404);

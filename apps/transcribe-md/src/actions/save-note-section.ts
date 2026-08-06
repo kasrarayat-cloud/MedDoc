@@ -22,6 +22,7 @@
 import prisma from '@meddoc/db';
 
 import { requireSession } from '@/lib/auth';
+import { visitByIdScope } from '@/lib/practice-scope';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 import { spliceNoteSection } from '@/lib/splice-note-section';
 
@@ -50,7 +51,14 @@ export async function saveNoteSectionAction(
   const session = await requireSession();
 
   const visit = await prisma.transcribeVisit.findFirst({
-    where: { id: visitId, userId: session.user.id, deletedAt: null, archivedAt: null },
+    where: {
+      ...visitByIdScope(visitId, session.user.practiceId),
+      // ACTION, not a read: the author conjunct stays until T6's role
+      // gate decides who else may edit. Widening SEE never widens DO.
+      userId: session.user.id,
+      deletedAt: null,
+      archivedAt: null,
+    },
     select: { soapFinal: true, soapVersion: true },
   });
   if (!visit?.soapFinal) return { ok: false, error: 'Visit not found.' };

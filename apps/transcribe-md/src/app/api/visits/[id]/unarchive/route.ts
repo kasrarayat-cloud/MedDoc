@@ -14,7 +14,8 @@ import { NextResponse } from 'next/server';
 import prisma from '@meddoc/db';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
-import { auth } from '@/lib/nextauth';
+import { visitByIdScope } from '@/lib/practice-scope';
+import { getSession } from '@/lib/auth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { log } from '@/lib/log';
 import { logAudit } from '@/lib/audit';
@@ -27,15 +28,15 @@ export const POST = withApiHandler<{ id: string }>(
   async (_req, { params }) => {
     const { id: visitId } = await params;
 
-    const session = await auth();
-    const userId = session?.user?.id;
+    const session = await getSession();
+    const userId = session?.user.id;
     if (!userId) return apiError('unauthorized', 401);
 
     const blocked = rateLimitOr429(RATE_LIMITS.VISIT_OPS, userId);
     if (blocked) return blocked;
 
-    const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+    const visit = await prisma.transcribeVisit.findFirst({
+      where: visitByIdScope(visitId, session.user.practiceId),
       select: {
         id: true,
         userId: true,

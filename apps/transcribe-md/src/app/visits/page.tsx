@@ -12,8 +12,9 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
+import { visitScope } from '@/lib/practice-scope';
 import { TranscribeVisitStatus } from '@prisma/client';
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { AppFrame } from '@/components/ui/app-frame';
 import { RoundsNewVisitCta } from '@/components/rounds/new-visit-cta';
@@ -62,8 +63,8 @@ export default async function VisitsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const session = await auth();
-  if (!session?.user?.id) redirect('/login');
+  const session = await getSession();
+  if (!session) redirect('/login');
 
   const sp = await searchParams;
   const filterParam = Array.isArray(sp.filter) ? sp.filter[0] : sp.filter;
@@ -103,7 +104,7 @@ export default async function VisitsPage({
   const [rows, totalCount] = (await Promise.all([
     prisma.transcribeVisit.findMany({
       where: {
-        userId: session.user.id,
+        ...visitScope(session.user.practiceId),
         deletedAt: null,
         archivedAt: null,
         ...statusFilter,
@@ -124,7 +125,7 @@ export default async function VisitsPage({
     }),
     prisma.transcribeVisit.count({
       where: {
-        userId: session.user.id,
+        ...visitScope(session.user.practiceId),
         deletedAt: null,
         archivedAt: null,
       },

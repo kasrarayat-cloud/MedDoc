@@ -28,6 +28,7 @@ vi.mock('@meddoc/db', () => ({
   default: {
     transcribeVisit: {
       findUnique: mocks.visitFindUnique,
+      findFirst: mocks.visitFindUnique,
       update: mocks.visitUpdate,
     },
     user: { findUnique: mocks.userFindUnique },
@@ -36,6 +37,8 @@ vi.mock('@meddoc/db', () => ({
 }));
 
 vi.mock('@/lib/nextauth', () => ({ auth: mocks.auth }));
+// T5: the by-id routes now source practiceId from the DB-refreshed session.
+vi.mock('@/lib/auth', () => ({ getSession: mocks.auth }));
 
 vi.mock('@/lib/rate-limit', () => ({
   RATE_LIMITS: { VISIT_OPS: { bucket: 'visit-ops', limit: 30, windowMs: 3_600_000 } },
@@ -47,6 +50,9 @@ vi.mock('@/lib/log', () => ({ log: { info: vi.fn(), error: vi.fn(), warn: vi.fn(
 import { GET, PATCH } from '@/app/api/visits/[id]/route';
 
 const FAKE_USER_ID = 'user_owner_1';
+// T5: getSession() never returns a session without a practice — it fails closed
+// rather than hand back one the accessor would refuse. The fixture matches.
+const FAKE_PRACTICE_ID = 'prac_owner_1';
 const FAKE_VISIT_ID = 'cmoqn96fe001501l543vfe1u2';
 
 function makeReq(method: string, body?: unknown) {
@@ -69,7 +75,7 @@ beforeEach(() => {
 
 describe('GET /api/visits/[id]', () => {
   it('returns 200 + visit JSON for the owner', async () => {
-    mocks.auth.mockResolvedValue({ user: { id: FAKE_USER_ID } });
+    mocks.auth.mockResolvedValue({ user: { id: FAKE_USER_ID, practiceId: FAKE_PRACTICE_ID } });
     mocks.visitFindUnique.mockResolvedValue({
       id: FAKE_VISIT_ID,
       userId: FAKE_USER_ID,
@@ -97,11 +103,22 @@ describe('GET /api/visits/[id]', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { visit: { id: string; status: string } };
     expect(body.visit.id).toBe(FAKE_VISIT_ID);
+
+    // ⚠️ T5 — THE PREDICATE REACHED THE QUERY, not just the session.
+    // Without this the route could drop `practiceId` entirely and every test
+    // above would still pass, because the mock returns a row regardless of what
+    // it is asked for. Asserting on the mock's ARGUMENT is the only way to see
+    // the tenancy filter at all.
+    expect(mocks.visitFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: FAKE_VISIT_ID, practiceId: FAKE_PRACTICE_ID }),
+      }),
+    );
     expect(body.visit.status).toBe('READY');
   });
 
   it('returns 404 for a foreign visit (anti-enumeration: same code as not-found)', async () => {
-    mocks.auth.mockResolvedValue({ user: { id: FAKE_USER_ID } });
+    mocks.auth.mockResolvedValue({ user: { id: FAKE_USER_ID, practiceId: FAKE_PRACTICE_ID } });
     mocks.visitFindUnique.mockResolvedValue({
       id: FAKE_VISIT_ID,
       userId: 'user_owner_2', // different owner
@@ -118,7 +135,7 @@ describe('GET /api/visits/[id]', () => {
   });
 
   it('returns 404 when the visit row does not exist', async () => {
-    mocks.auth.mockResolvedValue({ user: { id: FAKE_USER_ID } });
+    mocks.auth.mockResolvedValue({ user: { id: FAKE_USER_ID, practiceId: FAKE_PRACTICE_ID } });
     mocks.visitFindUnique.mockResolvedValue(null);
 
     const res = await GET(makeReq('GET'), ctx);
@@ -136,7 +153,7 @@ describe('GET /api/visits/[id]', () => {
 
 describe('PATCH /api/visits/[id] (regression)', () => {
   it('updates the chief complaint of a draft visit', async () => {
-    mocks.auth.mockResolvedValue({ user: { id: FAKE_USER_ID } });
+    mocks.auth.mockResolvedValue({ user: { id: FAKE_USER_ID, practiceId: FAKE_PRACTICE_ID } });
     mocks.userFindUnique.mockResolvedValue({ practiceId: 'practice_1' });
     mocks.visitFindUnique.mockResolvedValue({
       id: FAKE_VISIT_ID,

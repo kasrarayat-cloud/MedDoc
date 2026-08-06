@@ -33,9 +33,10 @@ import { PassThrough, Readable } from 'node:stream';
 import { ZipArchive } from 'archiver';
 
 import prisma from '@meddoc/db';
+import { patientScope, visitScope } from '@/lib/practice-scope';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { logAudit } from '@/lib/audit';
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { downloadAudio } from '@/lib/minio';
 import { loadVisitExportData } from '@/lib/visit-export-server';
@@ -50,8 +51,8 @@ export const maxDuration = 300;
 export const GET = withApiHandler<{ id: string }>(
   'api:patients:export',
   async (_req, { params }) => {
-    const session = await auth();
-    const userId = session?.user?.id;
+    const session = await getSession();
+    const userId = session?.user.id;
     if (!userId) return apiError('unauthorized', 401);
 
     const blocked = rateLimitOr429(RATE_LIMITS.SETTINGS, userId);
@@ -68,7 +69,7 @@ export const GET = withApiHandler<{ id: string }>(
     if (!user) return apiError('user not found', 404);
 
     const patient = await prisma.transcribeMdPatient.findUnique({
-      where: { id: patientId },
+      where: { id: patientId, ...patientScope(user.practiceId) },
       select: {
         id: true,
         practiceId: true,
@@ -86,7 +87,9 @@ export const GET = withApiHandler<{ id: string }>(
     const visits = await prisma.transcribeVisit.findMany({
       where: {
         patientId,
-        userId,
+        // READ — §4.1b: the patient's chart is the PRACTICE's, so an export
+        // of it carries every visit on that chart, not only the viewer's.
+        ...visitScope(user.practiceId),
         deletedAt: null,
         archivedAt: null,
       },
@@ -152,7 +155,7 @@ export const GET = withApiHandler<{ id: string }>(
         );
 
         for (const v of visits) {
-          const exportData = await loadVisitExportData(v.id, userId);
+          const exportData = await loadVisitExportData(v.id, session.user.practiceId);
           if (exportData) {
             archive.append(JSON.stringify(exportData, null, 2), {
               name: `visits/${v.id}.json`,

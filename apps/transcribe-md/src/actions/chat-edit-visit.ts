@@ -35,6 +35,7 @@ import { modelClient, wrapAsData } from '@meddoc/ai';
 
 import { logAudit } from '@/lib/audit';
 import { requireSession } from '@/lib/auth';
+import { visitByIdScope } from '@/lib/practice-scope';
 import { CHAT_EDIT_SYSTEM } from '@/lib/chat-edit/prompt';
 import { ChatReplySchema, type ChatIntent } from '@/lib/chat-edit/intent';
 
@@ -104,7 +105,9 @@ export async function chatEditVisitAction(
 
   const visit = await prisma.transcribeVisit.findFirst({
     where: {
-      id: visitId,
+      ...visitByIdScope(visitId, session.user.practiceId),
+      // ACTION, not a read: the author conjunct stays until T6's role gate
+      // decides who else may edit. Widening SEE never widens DO.
       userId: session.user.id,
       deletedAt: null,
       archivedAt: null,

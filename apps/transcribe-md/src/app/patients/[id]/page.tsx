@@ -23,7 +23,8 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
 import prisma from '@meddoc/db';
-import { auth } from '@/lib/nextauth';
+import { patientScope, type PracticeId, visitScope } from '@/lib/practice-scope';
+import { getSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { isSkinBeta } from '@/config/skin-beta';
 import { RoundsNewVisitCta } from '@/components/rounds/new-visit-cta';
@@ -126,8 +127,8 @@ export default async function PatientPage({
   const spRaw = await searchParams;
   const tabParam = Array.isArray(spRaw.tab) ? spRaw.tab[0] : spRaw.tab;
 
-  const session = await auth();
-  if (!session?.user?.id) redirect('/login');
+  const session = await getSession();
+  if (!session) redirect('/login');
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -149,8 +150,10 @@ export default async function PatientPage({
     updatedAt: Date;
   };
 
-  const patient: PatientRow | null = await prisma.transcribeMdPatient.findUnique({
-    where: { id },
+  // The predicate, not a post-fetch comparison. Same refusal, one layer down,
+  // where it cannot be forgotten by the next person editing this page.
+  const patient: PatientRow | null = await prisma.transcribeMdPatient.findFirst({
+    where: { id, ...patientScope(session.user.practiceId) },
     select: {
       id: true,
       practiceId: true,
@@ -184,7 +187,7 @@ export default async function PatientPage({
       prisma.transcribeVisit.count({
         where: {
           patientId: id,
-          userId: user.id,
+          ...visitScope(session.user.practiceId),
           deletedAt: null,
           archivedAt: null,
         },
@@ -192,21 +195,21 @@ export default async function PatientPage({
       prisma.transcribeVisit.count({
         where: {
           patientId: id,
-          userId: user.id,
+          ...visitScope(session.user.practiceId),
           deletedAt: { not: null },
         },
       }),
       prisma.transcribeVisit.count({
         where: {
           patientId: id,
-          userId: user.id,
+          ...visitScope(session.user.practiceId),
           status: 'SIGNED',
         },
       }),
       prisma.transcribeVisit.count({
         where: {
           patientId: id,
-          userId: user.id,
+          ...visitScope(session.user.practiceId),
           deletedAt: null,
           createdAt: { gte: startOfMonth },
         },
@@ -214,7 +217,7 @@ export default async function PatientPage({
       prisma.transcribeVisit.findFirst({
         where: {
           patientId: id,
-          userId: user.id,
+          ...visitScope(session.user.practiceId),
           deletedAt: null,
           archivedAt: null,
         },
@@ -443,7 +446,7 @@ export default async function PatientPage({
           {activeCount === 0 ? (
             <VisitsEmpty deleted={isDeleted} patientId={patient.id} />
           ) : (
-            <VisitsTab patientId={patient.id} userId={user.id} />
+            <VisitsTab patientId={patient.id} practiceId={session.user.practiceId} />
           )}
         </section>
 
@@ -461,7 +464,7 @@ export default async function PatientPage({
                 {trashCount}
               </span>
             </div>
-            <TrashTab patientId={patient.id} userId={user.id} />
+            <TrashTab patientId={patient.id} practiceId={session.user.practiceId} />
           </section>
         )}
       </AppFrame>
@@ -532,11 +535,11 @@ export default async function PatientPage({
         (activeCount === 0 ? (
           <VisitsEmpty deleted={isDeleted} patientId={patient.id} />
         ) : (
-          <VisitsTab patientId={patient.id} userId={user.id} />
+          <VisitsTab patientId={patient.id} practiceId={session.user.practiceId} />
         ))}
 
       {activeTab === 'trash' && (
-        <TrashTab patientId={patient.id} userId={user.id} />
+        <TrashTab patientId={patient.id} practiceId={session.user.practiceId} />
       )}
 
       {activeTab === 'notes' && (
@@ -757,10 +760,13 @@ function TabBar({
 
 async function VisitsTab({
   patientId,
-  userId,
+  practiceId,
 }: {
   patientId: string;
-  userId: string;
+  // T5 §4.1b — the tab lists the PRACTICE's visits for this patient, not
+  // only the viewer's. Renamed rather than repurposed: both are strings,
+  // so keeping the name would compile and quietly mean the wrong thing.
+  practiceId: PracticeId;
 }) {
   type Row = {
     id: string;
@@ -775,7 +781,7 @@ async function VisitsTab({
   const rows: Row[] = await prisma.transcribeVisit.findMany({
     where: {
       patientId,
-      userId,
+      ...visitScope(practiceId),
       deletedAt: null,
       archivedAt: null,
     },
@@ -809,10 +815,13 @@ async function VisitsTab({
 
 async function TrashTab({
   patientId,
-  userId,
+  practiceId,
 }: {
   patientId: string;
-  userId: string;
+  // T5 §4.1b — the tab lists the PRACTICE's visits for this patient, not
+  // only the viewer's. Renamed rather than repurposed: both are strings,
+  // so keeping the name would compile and quietly mean the wrong thing.
+  practiceId: PracticeId;
 }) {
   type Row = {
     id: string;
@@ -825,7 +834,7 @@ async function TrashTab({
   const rows: Row[] = await prisma.transcribeVisit.findMany({
     where: {
       patientId,
-      userId,
+      ...visitScope(practiceId),
       deletedAt: { not: null },
     },
     orderBy: [{ deletedAt: 'desc' }, { id: 'desc' }],

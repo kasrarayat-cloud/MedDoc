@@ -42,7 +42,7 @@ import { z } from 'zod';
 
 import prisma from '@meddoc/db';
 import { Prisma, TranscribeVisitStatus } from '@prisma/client';
-import { auth } from '@/lib/nextauth';
+import { getSession } from '@/lib/auth';
 import { formatVisitDate } from '@/lib/visit-export';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { computeDisplayedEmCode } from '@/lib/em-coding/displayed-level';
@@ -56,6 +56,7 @@ import {
 import { captureEditPattern } from '@/lib/edit-tracking';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { visitByIdScope } from '@/lib/practice-scope';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
 import { logAudit } from '@/lib/audit';
@@ -133,8 +134,8 @@ export const POST = withApiHandler<{ id: string }>(
   async (req, { params }) => {
     const { id: visitId } = await params;
 
-    const session = await auth();
-    const userId = session?.user?.id;
+    const session = await getSession();
+    const userId = session?.user.id;
     const sessionEmail = session?.user?.email;
     if (!userId || !sessionEmail) return apiError('unauthorized', 401);
 
@@ -187,8 +188,8 @@ export const POST = withApiHandler<{ id: string }>(
     // ── Sign ────────────────────────────────────────────────────────
     // Use an atomic updateMany with a status guard so two concurrent
     // submissions can't both "win" and double-sign.
-    const visit = await prisma.transcribeVisit.findUnique({
-      where: { id: visitId },
+    const visit = await prisma.transcribeVisit.findFirst({
+      where: visitByIdScope(visitId, session.user.practiceId),
       select: {
         id: true,
         userId: true,
@@ -532,8 +533,8 @@ export const POST = withApiHandler<{ id: string }>(
 
       if (updated.count === 0) {
         // Another concurrent request got there first. Re-read.
-        const refreshed = await prisma.transcribeVisit.findUnique({
-          where: { id: visitId },
+        const refreshed = await prisma.transcribeVisit.findFirst({
+          where: visitByIdScope(visitId, session.user.practiceId),
           select: { signedAt: true, status: true },
         });
         if (refreshed?.status !== TranscribeVisitStatus.SIGNED) {
@@ -541,8 +542,8 @@ export const POST = withApiHandler<{ id: string }>(
         }
         signedAt = refreshed.signedAt;
       } else {
-        const refreshed = await prisma.transcribeVisit.findUnique({
-          where: { id: visitId },
+        const refreshed = await prisma.transcribeVisit.findFirst({
+          where: visitByIdScope(visitId, session.user.practiceId),
           select: { signedAt: true },
         });
         signedAt = refreshed?.signedAt ?? new Date();
@@ -550,7 +551,11 @@ export const POST = withApiHandler<{ id: string }>(
         // winning transition — race losers already have a capture in
         // flight from the winner's handler, and the @unique visitId
         // constraint would reject a second insert anyway.
-        void captureEditPattern({ visitId, doctorId: userId });
+        void captureEditPattern({
+          visitId,
+          doctorId: userId,
+          practiceId: session.user.practiceId,
+        });
         // HIPAA audit — one row per successful READY→SIGNED transition.
         // Race losers (updated.count===0) don't re-write; the winner
         // already covered them.
@@ -579,7 +584,7 @@ export const POST = withApiHandler<{ id: string }>(
     // ── Deliver ─────────────────────────────────────────────────────
     // loadVisitExportData reads the freshly-signed row so downstream
     // generators see signedSoap / signedAt set correctly.
-    const data = await loadVisitExportData(visitId, userId);
+    const data = await loadVisitExportData(visitId, session.user.practiceId);
     if (!data) return apiError('visit disappeared after signing', 500);
 
     const clipboardTexts: Record<string, string> = {};

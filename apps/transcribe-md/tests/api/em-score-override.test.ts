@@ -28,12 +28,15 @@ vi.mock('@meddoc/db', () => ({
   default: {
     transcribeVisit: {
       findUnique: mocks.visitFindUnique,
+      findFirst: mocks.visitFindUnique,
       update: mocks.visitUpdate,
     },
   },
 }));
 
 vi.mock('@/lib/nextauth', () => ({ auth: mocks.auth }));
+// T5: the by-id routes now source practiceId from the DB-refreshed session.
+vi.mock('@/lib/auth', () => ({ getSession: mocks.auth }));
 vi.mock('@/lib/log', () => ({
   log: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }));
