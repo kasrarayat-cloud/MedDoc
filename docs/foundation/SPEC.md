@@ -306,9 +306,23 @@ placeholder standing exactly where the role check goes.**
 ⚠️ **T6 REMOVES THEM, BY THIS RULING, AS SCOPED WORK.** The conjuncts come out
 when — and only when — the sign gate and role model land, so that
 `OWNER`/`CLINICIAN` may act on any unsigned visit in the practice per §4.1a and
-`TECH` is refused by name. The list is not kept by memory: it is every write path
-carrying `userId: session.user.id` **beside** a `visitScope`/`visitByIdScope`
-call, which is greppable precisely because the two appear together.
+`TECH` is refused by name.
+
+⚠️ **THE LIST IS SWEPT BY BEHAVIOUR, NOT BY ONE SYNTAX — CORRECTED 2026-08-06.**
+This paragraph originally said the sites were "every write path carrying
+`userId: session.user.id` beside a `visitScope`/`visitByIdScope` call, which is
+greppable precisely because the two appear together." **That finds 5. There are
+24.** The author gate has two shapes:
+
+    IN-QUERY CONJUNCT   `...visitByIdScope(…), userId: session.user.id`      5
+    POST-FETCH CHECK    `if (!visit || visit.userId !== userId) → 404`      19
+
+The defining predicate is **"every place authorship gates an action"**, and it is
+swept by that, never by the one shape the author of this sentence happened to
+picture. This is the defect AGENTS.md already names — *naming a class is not
+enumerating it* — committed inside the ruling that names the class. Measured with
+comment stripping and positive controls in both directions; see the T6
+reconnaissance in `docs/foundation/RELAY.md`.
 
 **The reason this is written down rather than left as a TODO:** the failure mode
 is a later reader finding a practice-scoped read next to an author-scoped write,

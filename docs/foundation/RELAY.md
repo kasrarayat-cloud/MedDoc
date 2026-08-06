@@ -516,6 +516,112 @@ existing.
    MISSED, widens it, and arrives at §4.1a's end state with none of §4.1a's
    refusals. **A conservatism nobody recorded is indistinguishable from an
    oversight, and gets "fixed".**
+#### 📐 T6 RECONNAISSANCE — measured 2026-08-06, READ-ONLY, before any code
+
+Measured the way T5's 101-site table was, and like that one it **changes the
+build order**. Four findings; the first is a war-room question, not a session
+one.
+
+##### ⚠️ 1. THE ROLE ENUM ALREADY EXISTS, AND IT IS A DIFFERENT VOCABULARY
+
+`UserRole` is **`DOCTOR / STAFF / ADMIN / SUPER_ADMIN`**. T6's spec says
+**`OWNER / CLINICIAN / TECH`**. These are not the same axis: the existing enum
+mixes a *clinical* distinction (DOCTOR vs STAFF) with a *platform-privilege* one
+(ADMIN, SUPER_ADMIN — the latter explicitly documented as bypassing tenant
+scoping).
+
+    production   DOCTOR 190 · ADMIN 3 · SUPER_ADMIN 2 · STAFF 1   (196, all active)
+    source       41 sites read UserRole / compare a role
+    schema       @default(STAFF), indexed, on `users`
+
+**This is ruling-shaped and is NOT decided here.** Three options, with the
+consequence of each:
+
+| | what it means | cost |
+|---|---|---|
+| **MAP** onto the existing enum | DOCTOR→CLINICIAN, STAFF→TECH, ADMIN→OWNER | no migration; but SUPER_ADMIN has no TEAMS meaning and ADMIN currently means *practice-scoped platform admin*, not *practice owner* |
+| **ADD** a second column | `practiceRole` beside `role` | two role systems to keep consistent — the shape that rots |
+| **REPLACE** the enum | one vocabulary | a migration over 196 live rows and 41 read sites, and `SUPER_ADMIN`'s tenant-bypass must survive it |
+
+⚠️ **`SUPER_ADMIN` bypasses tenant scoping by design.** Whatever is chosen must
+say what happens to that bypass under a practice-role model, because T5 just made
+every clinical read practice-scoped and 2 live accounts are documented as
+crossing that boundary. That interaction is not optional to answer.
+
+##### ⚠️ 2. §4.1c's STATED GREP IS INCOMPLETE — 24 SITES, NOT 5
+
+§4.1c says the conjunct list "is every write path carrying `userId:
+session.user.id` **beside** a `visitScope`/`visitByIdScope` call, which is
+greppable precisely because the two appear together."
+
+**That finds 5. There are 24.** The author gate has TWO shapes:
+
+    IN-QUERY CONJUNCT   `...visitByIdScope(…), userId: session.user.id`      5
+    POST-FETCH CHECK    `if (!visit || visit.userId !== userId) → 404`      19
+
+I wrote that ruling, and it is **the same defect AGENTS.md already names: naming
+a class is not enumerating it.** The defining predicate is *"every place
+authorship gates an action"*, and it must be swept by BEHAVIOUR, not by the one
+syntax I happened to picture. §4.1c is corrected accordingly — the count and both
+shapes are now stated there.
+
+⚠️ **The first sweep returned 25 and one was a FALSE POSITIVE — it matched my own
+comment** in `visits/[id]/page.tsx` explaining that the check had been removed.
+Re-run with comment stripping and positive controls in both directions (real
+code matches, commented-out code does not): **24**.
+
+##### 3. THERE IS NO MEMBERSHIP TABLE — one user, one practice
+
+`User.practiceId` is a single FK. There is no join table, so "membership" is a
+column, and a user cannot belong to two practices. **T6 does not need to build a
+membership model**; it needs a role on the existing edge.
+
+Signup creates practice + user together in one transaction
+(`actions/auth.ts:493-502`, `name: 'Solo — …'`). That is the single write site
+where a new member's practice and role are decided.
+
+`InviteCode` today carries **neither practice nor role** — `codeHash`, `label`,
+`maxUses`, `usedCount`, `expiresAt`, `revokedAt`. Consumed at
+`lib/signup-invite.ts` (1 read + 1 transactional `updateMany`). **T8's "invites
+carry practice + role" is therefore two nullable columns and one branch in the
+signup transaction** — small, and it is the piece that makes a second seat
+reachable without an operator writing SQL.
+
+##### ⚠️ 4. THE T1 FIXTURE SEEDS EVERY MEMBER AS `STAFF`
+
+`upsertMember` never sets `role`, so all three take the schema default.
+
+    t1-alpha-1  STAFF      t1-alpha-2  STAFF      t1-beta-1  STAFF
+
+**T4's positive gate — a non-owner member signs, `signedBy ≠ createdBy` — cannot
+pass against this fixture even after T6 lands**, because under §4.1a a
+non-clinical role is refused by name. The fixture must gain roles in the same
+change as the gate, with alpha-2 a CLINICIAN, or T4 stays PARTIAL for a reason
+that has nothing to do with T4.
+
+##### The sign gate's insertion point
+
+`src/app/api/visits/[id]/sign/route.ts:209` —
+`if (!visit || visit.userId !== userId) return apiError('not found', 404);`
+
+That single line is both the author conjunct §4.1c retires **and** the place the
+role refusal goes. ⚠️ They are not interchangeable: the author check 404s (correct
+for enumeration resistance), and §4.1a requires TECH to be **refused by name**,
+not 404'd — *"you may not sign" and "this does not exist" are different facts and
+a clinician deserves the true one.* So the replacement is two branches, not one:
+practice-scope miss → 404; in-practice but wrong role → a named refusal with an
+audit row.
+
+##### PROPOSED BUILD ORDER, changed by the above
+
+1. **The vocabulary ruling** — blocking, war-room. Nothing else can be built
+   against a role model whose names are undecided.
+2. Role on the user edge + the T1 fixture seeding roles (same change — see 4).
+3. The sign gate: two branches, TECH refused by name, audit row.
+4. T4's positive gate through the real route → **T4 PARTIAL → CLOSED**.
+5. Author-conjunct removal across **24** sites, swept by behaviour (see 2).
+6. T8's invite columns + the signup branch.
+
 4. **T4's positive gate finally runs through the real route** — a non-owner
    member signs and `signedBy ≠ createdBy` — flipping **T4 PARTIAL → CLOSED**.
    The T1 fixture gains roles here, so its second member is a CLINICIAN, which
