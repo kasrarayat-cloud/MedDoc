@@ -498,6 +498,37 @@ The runtime `requirePractice` **stays**: `{ practiceId: undefined }` is `{}` to
 Prisma — **every tenant** — and that is the one failure here that is silent and
 WIDER. A brand stops honest callers, not an `as any`.
 
+### ⚠️ #531's MERGE-COMMIT CITATION IS 2 OF 4 — a PLATFORM limitation, stated
+
+`main@3f656fb3` (PR #531, T5's accessor + guard):
+
+| Workflow | Merge-commit result |
+|---|---|
+| `CI` | ✅ **success** — run `31118255254` (incl. `unit tests`, `test`, `npm audit`, `dev-dep advisories`) |
+| `a11y-ci` | ✅ **success** — run `31118255287` |
+| `e2e` | ⚠️ **NEVER DISPATCHED** — run `31118255417`, `queued` since 16:00 UTC |
+| `secrets-scan` | ⚠️ **NEVER DISPATCHED** — run `31118255265`, `queued` since 16:00 UTC |
+
+**The two are zombie runs from the GitHub incident of 2026-08-06** (status page:
+partial → major outage, ~16:00–23:00 UTC). They cannot be recovered: `gh run
+cancel` reports *"Cannot cancel a workflow run that is completed"* while the run
+list still reports `queued`, and `gh run rerun` reports *"cannot be rerun; its
+workflow file may be broken"*. They will not complete and cannot be replaced on
+that SHA.
+
+**A PR-head green is NOT substituted for them**, per the standing rule.
+
+What IS true, stated narrowly:
+
+- `CI` — which carries the unit suite — **passed on the merge commit itself**.
+- #531 changed **three files: `practice-scope.ts` (a new module NO runtime path
+  imported), its unit test, and SPEC prose.** There is no code path an E2E or a
+  secret scan could exercise differently, because there is no code path at all.
+- **#532's merge commit CONTAINS #531's changes** and gets a full four-workflow
+  run. That is a stronger statement than re-running #531's would have been: the
+  same code, verified on a later merge commit, by workflows that actually
+  dispatched.
+
 ### 🟨 T6 — roles, and the sign gate that refuses — **BUILT 2026-08-06, awaiting the landed base**
 
 Built on `feat/teams-t6-roles`, stacked on T5. **Merges only on top of #532**, per
