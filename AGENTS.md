@@ -360,6 +360,48 @@ Three questions that catch it, and they are cheap:
    prove a guard can go red on a regression. Prove it also MOVES when the fix
    lands — otherwise the ratchet is a decoration.
 
+## A gate's WATCHED SET is diffed against the spec's NAMED set
+
+**Sibling of the section above, not a duplicate — and the difference is the
+whole point. That one measures the wrong QUANTITY over the right universe. This
+one measures the right quantity over the WRONG UNIVERSE.** A check can be
+flawless at counting a set that does not contain the thing you were asked to
+protect, and its zero is then perfectly true and completely worthless.
+
+> **Before any gate's zero is believed, diff what it WATCHES against what the
+> item's acceptance criteria NAME.**
+
+**Reference case — `doctor_edit_patterns`, 2026-08-06.** T5's spec said, in as
+many words: *"the guard must also catch `doctor_edit_patterns` (DISCOVERY §B.4),
+which is the table a source grep is most likely to miss and the one that LEAKS
+WHOLE NOTES."* The table was absent from the guard's `CLINICAL_MODELS` through
+all three adoption tranches, so **the ratchet reached zero having never looked at
+it** — and `doctor_edit_patterns` stores `originalSoap` and `editedSoap` as full
+text, making an unscoped read of it a LARGER disclosure than an unscoped read of
+a visit row.
+
+⚠️ **NOTHING WOULD EVER HAVE SURFACED IT.** Both of its reads happen to be
+correct. No test failed. No sweep complained. There is no observable difference
+between "the guard watched it and found nothing" and "the guard never watched
+it" — which is precisely why the spec named the table by hand instead of trusting
+whoever built the model list.
+
+It was found by **re-reading the item's own acceptance criteria while writing the
+close-out row** — not by any check, and after the gate had already been declared
+met. So the discipline is a step, not an instinct:
+
+1. **List what the gate watches.** Literally: the model list, the path globs, the
+   route set, the table names. If you cannot enumerate it, that is the finding.
+2. **List what the spec names.** Its acceptance criteria, its DISCOVERY
+   references, the tables and surfaces it calls out by hand.
+3. **Diff the two, in writing, before claiming the gate is met.** Anything the
+   spec names and the gate does not watch is an open item, however green the run
+   was.
+
+**"The gate passing is not the gate covering what was asked."** A spec is a
+checklist, and the most confident-looking zero in a programme is the one produced
+over a universe nobody re-checked.
+
 ## A scripted edit PROVES ITS OWN APPLICATION
 
 **Every `.replace()` / `sed` / regex-rewrite pass states the number of
