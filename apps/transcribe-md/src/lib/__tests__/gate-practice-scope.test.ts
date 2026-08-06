@@ -1,40 +1,52 @@
 // ============================================================================
 // T5 — the guard that keeps the practice-scoped accessor the ONLY way in.
 // ----------------------------------------------------------------------------
-// ⚠️ THIS IS A RATCHET, NOT A WALL, AND THAT IS DELIBERATE.
-// There were 81 request-context clinical reads when the accessor landed. A guard
-// that demanded zero on day one would be red for the whole migration, and a
-// permanently-red gate is a gate everyone learns to ignore — which is worse than
-// no gate, because it looks like coverage.
+// ⚠️ THIS IS A WALL. IT WAS A RATCHET, AND IT REACHED ZERO ON 2026-08-06.
 //
-// So it pins the CURRENT number and forbids it from growing. New code cannot add
-// an unscoped clinical read; adoption lowers the ceiling commit by commit. The
-// number only ever goes down, and the day it reaches zero this becomes a wall
-// with no further work.
+// It landed as a ratchet on purpose: 81 request-context clinical reads predated
+// the accessor, and a guard demanding zero on day one would have been red for
+// the whole migration. A permanently-red gate is one everyone learns to ignore,
+// which is worse than no gate because it looks like coverage.
 //
-// ⚠️ WHY THE GUARD LANDS BEFORE THE ADOPTION. If 81 call sites were migrated
-// first and the guard added last, the guard's first run would be a bug report
-// against work already declared done — and every site missed would be found one
-// CI cycle at a time. That is the exact failure T3 and T4 paid five cycles for.
-// Landing the guard first makes every unmigrated site fail LOUDLY from the first
-// commit.
+// The ledger, each step lowered in the SAME COMMIT as the code that earned it,
+// so the number in the guard and the number in the codebase never disagreed:
+//
+//     81  the accessor lands (the guard before the adoption, deliberately)
+//     78  PERSONAL_SCOPE declared — reads whose SUBJECT is the user
+//     60  tranche 1a — the by-id API routes, no authorization change
+//     22  tranche 1b — transcribe_visits finished, reads widened to the practice
+//     10  tranche 2  — note_templates RULED doctor-scoped, not migrated
+//      0  tranche 3  — transcribe_md_patients
+//
+// ⚠️ WHAT THE ZERO MEANS, STATED NARROWLY. Every request-context read of a
+// clinical model either carries the accessor's predicate or sits in a bucket
+// that is declared BY FILE AND COUNT and checked in both directions. It does
+// NOT mean the app is free of tenancy bugs; it means there is no longer a read
+// that nobody has looked at.
+//
+// ⚠️ AND THE RATCHET IS NOT DELETED, WHICH MATTERS. `MAX_UNSCOPED_REQUEST_READS`
+// stays, at 0. The assertion is unchanged — `toBeLessThanOrEqual` — so the same
+// line that used to say "do not grow" now says "do not exist". Rewriting it into
+// a different shape at the moment it reached zero would have thrown away the one
+// thing that makes the zero trustworthy: it is the SAME measurement that has
+// been running, lowered, since the first commit.
+//
+// ⚠️ WHY THE GUARD LANDED BEFORE THE ADOPTION. If 81 call sites were migrated
+// first and the guard added last, its first run would have been a bug report
+// against work already declared done, and every missed site would surface one CI
+// cycle at a time. That is what T3 and T4 paid five cycles for.
 //
 // ⚠️ THE COUNT IS OF **UNSCOPED** READS, WHICH IS NOT WHAT IT FIRST MEASURED.
 // The first version counted every `prisma.<clinical>.<read>(` call in request
 // context — so routing a call through the accessor left the number UNCHANGED and
 // adoption could never lower it. The name said "unscoped"; the implementation
-// said "all". Same family of defect as the comment-matching bug above: a check
-// whose title is narrower than what it actually measures. A read now counts as
-// SCOPED when an accessor appears in its own argument or in the 40 lines above
-// it (where a `where` const is usually built), and the classifier FAILS SAFE —
-// when it cannot tell, the read counts as unscoped.
+// said "all". A read counts as SCOPED when an accessor appears in its own
+// argument or in the 40 lines above it (where a `where` const is usually built),
+// and the classifier FAILS SAFE — when it cannot tell, the read counts as
+// unscoped. A false "unscoped" costs a second look; a false "scoped" is a leak
+// reported as progress.
 //
-// Ledger: 81 at accessor-landing → 78 once PERSONAL_SCOPE was declared → 60
-// after tranche 1a (by-id API routes) → 22 after tranche 1b finished
-// transcribe_visits. What remains is note_templates and transcribe_md_patients:
-// tranches 2 and 3.
-//
-// ⚠️ FOUR CLASSES OF READ, DISTINGUISHED EXPLICITLY.
+// ⚠️ SEVEN CLASSES OF READ, EVERY ONE DECLARED.
 //   REQUEST — a signed-in user asking. Must be practice-scoped. Counted here.
 //   SYSTEM  — the worker on a queued job, a retention sweep. No acting user, so
 //             no practice to scope BY; forcing one would mean INVENTING a
@@ -94,13 +106,15 @@ const SYSTEM_ALLOWLIST: Record<string, number> = {
 };
 
 /**
- * ⚠️ THE RATCHET. Lower this as sites migrate; never raise it.
+ * ⚠️ ZERO. THIS IS NOW A WALL — reached 2026-08-06, tranche 3.
  *
- * Raising it is always the wrong fix: if this test fails because the number went
- * UP, a new clinical read was added without practice scoping, and the fix is to
- * scope it — not to move the line. Measured 2026-08-06.
+ * Raising it is always the wrong fix, and at zero it is not even a judgement
+ * call: if this fails, a clinical read was added that no signed-in user's
+ * practice bounds. Scope it through `src/lib/practice-scope.ts`, or declare it
+ * in the bucket that genuinely describes it — SYSTEM, PERSONAL, DOCTOR or
+ * SYSTEM_DEFAULT — where somebody can disagree with you in the diff.
  */
-const MAX_UNSCOPED_REQUEST_READS = 10;
+const MAX_UNSCOPED_REQUEST_READS = 0;
 
 function walk(dir: string): string[] {
   const out: string[] = [];
