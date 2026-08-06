@@ -250,6 +250,42 @@ independent of identity and stay exactly as they are.
 CLINICIAN — which is what finally makes T4's positive gate passable. Until then
 T4 is PARTIAL by dependency, not by omission (`docs/foundation/RELAY.md`).
 
+### 4.1b WHO MAY READ — governance ruling, 2026-08-06
+
+**Recorded beside the signing ruling (§4.1a) because the two are asked together
+and answered differently, and the difference is the point.**
+
+> **Read is PRACTICE-UNIFORM in v1. OWNER, CLINICIAN and TECH all read the
+> practice's clinical data. Role boundaries live on ACTIONS, not on visibility.**
+
+Rationale, recorded verbatim so a later reader does not have to reconstruct it:
+
+- **Shared patient visibility is Teams' purpose.** A practice whose members
+  cannot see each other's charts is not a practice; it is several solo accounts
+  sharing a login page.
+- **Standard care-team access, with the wall at the PRACTICE boundary.** That
+  wall is the one that matters and it is enforced structurally — the composite
+  FK (T3) and the accessor (T5) — not by convention.
+- **No assignment model exists to hang a narrower TECH scope on.** A tech
+  reading a same-patient prior note is the WORKFLOW, not a leak. Inventing a
+  filter with nothing to filter BY would be a guess wearing a permission's
+  clothes.
+
+⚠️ **NAMED FUTURE HOOK, so this is a decision and not an omission:** narrowing
+TECH's read scope is **its own designed item** — assignment plus a worklist — if
+a pilot practice asks for it. It is never a bolted-on filter over a model that
+was not built for it.
+
+**Both hold regardless:** every read stays **accessor-walled** (T5) and
+**audit-logged**. Widening who can SEE does not widen who can DO — §4.1a's
+signing rules are untouched, and TECH remains refused by name at the sign route.
+
+⚠️ **CONTRAST WITH §4.1a, because the asymmetry is deliberate.** Signing is an
+attested act with a named signer and a permanent audit row; reading is silent
+and leaves only an access-log entry. So signing is role-gated and reading is
+not — the accountability each carries is different, and the permissions follow
+the accountability rather than a uniform "roles restrict everything" instinct.
+
 ### 4.2 Cross-app redirect users
 
 > **Classify by where clinical data lives — transcribe-md data → normal
