@@ -534,6 +534,15 @@ scoping).
     source       41 sites read UserRole / compare a role
     schema       @default(STAFF), indexed, on `users`
 
+⚠️ **AND THIS IS A SPEC-vs-DISCOVERY CONFLICT, WHICH THE SPEC HEADER SAYS IS A
+FINDING, NOT A TYPO.** SPEC §1.2 named the three roles in Phase 0 — *"Three
+roles: OWNER, CLINICIAN, TECH"* — and DISCOVERY recorded the existing gate as
+*"an RBAC role, not a platform entitlement"* (§132). **Neither document was ever
+diffed against the other**, so the contract has said one vocabulary and the
+database another since 2026-08-04, and the first person to notice is the one
+who has to build against both. That is the watched-set / named-set class again,
+one level up: at the DOCUMENT layer rather than inside a check.
+
 **This is ruling-shaped and is NOT decided here.** Three options, with the
 consequence of each:
 
