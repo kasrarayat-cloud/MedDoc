@@ -23,6 +23,26 @@
 # a one-off script that forgets the flag is a normal mistake; it should cost an
 # auth error, not a vendor bill and a synthetic transcript leaving the box.
 #
+# ⚠️ A CHECK THAT CRIES WOLF IS HOW THE REAL SIGNAL GETS IGNORED.
+#
+# This script spent an unknown period reporting "🔴 REAL CALLS ARE POSSIBLE"
+# about a stack that was STOPPED. The guard used `docker inspect`, which
+# succeeds for a stopped container — it tests EXISTENCE, not running state — so
+# every container sailed past it, `docker exec` returned empty for every
+# variable, and an empty `MOCK_AI_CALLS` was reported as a live vendor risk.
+# Measured 2026-08-07, QA `Exited (143)` since a reboot. It also let the script
+# contradict itself inside one run: "This stack can reach a real vendor"
+# followed immediately by "The stack cannot reach a vendor".
+#
+# The cost of that is not a wasted minute. It is that the next person to see a
+# 🔴 here assumes the stack is merely off — and this is the check that caught
+# 298 real Anthropic calls. A red that is usually meaningless is worse than no
+# red at all.
+#
+# So: a STOPPED stack is "calls impossible — PASS, with a stated note about what
+# was NOT verified". RED is reserved for a RUNNING stack that can reach a
+# vendor. The two arms below reach their own verdicts and never share a message.
+#
 # READ-ONLY. Never mutates anything.
 #
 # Usage:  bash scripts/check-qa-mock-posture.sh
@@ -46,10 +66,24 @@ KEYS="ANTHROPIC_API_KEY DEEPGRAM_API_KEY OPENAI_API_KEY RESEND_API_KEY"
 
 fail=0
 checked=0
+stopped=0
+absent=0
 
 for c in $CONTAINERS; do
-  if ! docker inspect "$c" >/dev/null 2>&1; then
-    echo "⚠️  $c is not running — cannot check"
+  # ⚠️ `docker inspect` SUCCEEDS FOR A STOPPED CONTAINER — it tests EXISTENCE,
+  # not running state. That was this script's own bug: on 2026-08-07 the QA
+  # stack was `Exited (143)` since a reboot, every container sailed past this
+  # guard, `docker exec` then returned empty for every variable, and empty
+  # MOCK_AI_CALLS printed as "🔴 REAL CALLS ARE POSSIBLE" — about containers
+  # that were not running and could call nobody.
+  if ! docker ps --format '{{.Names}}' | grep -qx "$c"; then
+    if docker inspect "$c" >/dev/null 2>&1; then
+      echo "⚪ $c is STOPPED — it cannot reach a vendor (see the verdict below)"
+      stopped=$((stopped + 1))
+    else
+      echo "⚪ $c does not exist on this host"
+      absent=$((absent + 1))
+    fi
     continue
   fi
   checked=$((checked + 1))
@@ -80,7 +114,22 @@ for c in $CONTAINERS; do
 done
 
 if [ "$checked" = "0" ]; then
-  echo "⚠️  QA stack is not running — nothing to check"
+  echo
+  if [ "$stopped" != "0" ]; then
+    # ⚠️ A STOPPED STACK IS A PASS FOR THIS ARM, AND SAYING SO IS THE WHOLE
+    # POINT. The question is "can this stack reach a vendor?" — for a stopped
+    # container the answer is a definitive NO, not "cannot tell". Reporting RED
+    # here is how the check taught people to ignore it.
+    echo "🟢 QA cannot reach a vendor — the stack is STOPPED ($stopped container(s))."
+    echo "   ⚪ NOTE: this is a pass about CAPABILITY, not about configuration."
+    echo "      The flag manifest could not be compared, so nothing here says the"
+    echo "      stack will come up correctly. Re-run after starting it, BEFORE"
+    echo "      trusting any pack run against it:"
+    echo "        docker compose -f docker-compose.qa.yml up -d --force-recreate \\"
+    echo "          --no-deps transcribe-md transcribe-md-worker"
+    exit 0
+  fi
+  echo "🟡 no QA containers exist on this host — no verdict."
   exit 2
 fi
 
@@ -175,7 +224,13 @@ EOF
     wname=${want%%=*}
     if ! printf '%s\n' "$present" | grep -qxF "$want"; then
       got=$(docker exec "$c" printenv "$wname" 2>/dev/null || echo "")
-      echo "🔴 $c: $wname is ${got:+$got}${got:-(unset)}, manifest expects ${want#*=}"
+      # ⚠️ `${got:-(unset)}` ALONE. The earlier form was
+      # `${got:+$got}${got:-(unset)}`, which prints the value TWICE for any
+      # non-empty value — `:+` yields it, and `:-` also yields it, because the
+      # default only fires when the variable is empty. Observed as
+      # "MOCK_AI_CALLS is falsefalse". Harmless to the verdict, corrosive to a
+      # report nobody can quite trust.
+      echo "🔴 $c: $wname is ${got:-(unset)}, manifest expects ${want#*=}"
       manifest_fail=1
     fi
   done <<EOF
@@ -212,9 +267,19 @@ if [ "$vendor_broken" != "0" ]; then
   echo "   the shared .env — that is how this broke before."
 fi
 if [ "$manifest_broken" != "0" ]; then
-  echo "🔴 FLAG MANIFEST BROKEN. The stack cannot reach a vendor, but it is NOT"
-  echo "   running the fixture configuration it declares — so any pack run against"
-  echo "   it is certifying something other than production."
+  # ⚠️ THIS ARM MUST NOT ASSERT ANYTHING ABOUT THE OTHER ONE. It used to open
+  # with "The stack cannot reach a vendor, but…" — a clause that is only true
+  # when the vendor arm PASSED. When both arms fail, the script printed "This
+  # stack can reach a real vendor" and "The stack cannot reach a vendor" three
+  # lines apart, in the same run. Two arms, two verdicts, and neither speaks
+  # for the other.
+  echo "🔴 FLAG MANIFEST BROKEN. This stack is NOT running the fixture"
+  echo "   configuration it declares — so any pack run against it is certifying"
+  echo "   something other than production."
+  if [ "$vendor_broken" = "0" ]; then
+    echo "   (Vendor reachability is SEVERED — that arm passed. This is a"
+    echo "    configuration fault, not an exposure.)"
+  fi
 fi
 echo "   Recreate BOTH services (a partial \`up -d\` is what splits the env):"
 echo "     docker compose -f docker-compose.qa.yml up -d --force-recreate \\"

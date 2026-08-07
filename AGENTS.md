@@ -858,7 +858,30 @@ bash scripts/check-qa-mock-posture.sh         # READ-ONLY. 0 = severed, 1 = LIVE
 bash scripts/check-minio-encrypted-mount.sh   # READ-ONLY. 0 = encrypted, 1 = DRIFT, 2 = can't tell
 bash scripts/check-pg-encrypted-mount.sh      # READ-ONLY. 0 = encrypted, 1 = DRIFT, 2 = can't tell
 bash scripts/check-ingress-tls.sh             # READ-ONLY. 0 = all SNIs OK, 1 = 502ing, 2 = can't tell
+bash scripts/check-bind-mount-agreement.sh    # READ-ONLY. 0 = agrees, 1 = DIVERGED, 2 = can't tell
 ```
+
+**A FILE BIND-MOUNT BINDS THE INODE, NOT THE PATH**, and three of this repo's
+config files are bind-mounted into running containers out of the working tree:
+`Caddyfile` (caddy), `infra/postgres-backup/postscript.sh` and
+`infra/backup-offsite-sync.sh` (postgres-backup). Enumerated 2026-08-07 by two
+independent methods that agreed — `docker inspect` over every container, running
+and stopped, and the compose files.
+
+Any editor that writes-then-renames — `git checkout` included — creates a NEW
+inode, and the container keeps the ORPHANED original. Forever, and silently:
+the host shows the edit, the container does not, `caddy reload` says *"config is
+unchanged"*, **`caddy validate` says "Valid configuration" about the OLD file**,
+and `docker compose up -d` declines because no config hash changed. Only
+`--force-recreate` re-resolves the bind. **Assert the applied count INSIDE the
+container, never on the host.**
+
+The check has two arms because they answer different questions: **content**
+(is it running what the repo says — RED) and **inode** (will the next edit even
+land — a note, not a fault, since a branch switch re-arms it). It also carries a
+**census arm** comparing the hand-kept watch-list against the binds that
+actually exist, because hand-kept lists are wrong eventually and a bind nobody
+listed is a bind nothing watches.
 
 **A HEALTHY CONTAINER SAYS NOTHING ABOUT WHETHER ANYONE CAN REACH IT**, and that
 sentence is a six-hour total outage on 2026-08-07. Every public hostname —
