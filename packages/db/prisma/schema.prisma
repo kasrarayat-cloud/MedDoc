@@ -579,6 +579,8 @@ model Practice {
   // Template Twin native-DOCX (additive back-relations; no column change).
   templateTwinSources TemplateTwinSourceArtifact[]
   templateTwinFills   TemplateTwinFillManifest[]
+  /// T8 — invites that admit into this practice.
+  inviteCodes         InviteCode[]
 
   @@index([slug])
   @@map("practices")
@@ -2955,10 +2957,24 @@ model InviteCode {
   /// Set to revoke immediately, without deleting the audit trail of its use.
   revokedAt DateTime?
 
+  // === TEAMS T8 — an invite mints a MEMBER, not just a user ===
+  /// The practice a redeemer JOINS. **NULL = the legacy behaviour**: signup mints
+  /// a fresh solo practice, exactly as it did before T8. Nullable because every
+  /// existing row predates this and none of them can be given a practice
+  /// retroactively without inventing one.
+  practiceId   String?
+  practice     Practice?     @relation(fields: [practiceId], references: [id])
+  /// The role the redeemer joins WITH. Paired with `practiceId` by a CHECK: both
+  /// or neither. A practice without a role would fall to the schema default and
+  /// silently mint an OWNER of somebody else's clinic.
+  practiceRole PracticeRole?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([revokedAt, expiresAt])
+  /// T8 — the admin surface lists a practice's outstanding invites.
+  @@index([practiceId])
   @@map("invite_codes")
 }
 

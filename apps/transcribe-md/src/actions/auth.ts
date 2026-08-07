@@ -490,15 +490,32 @@ export async function signupAction(
   let createdUserId: string | null = null;
   try {
     await prisma.$transaction(async (tx: typeof prisma) => {
-      const practice = await tx.practice.create({
-        data: {
-          name: `Solo — ${parsed.data.name}`,
-          // Random slug keeps it URL-safe and avoids a collision with
-          // future "real" practice slugs. TranscribeMD UI never shows
-          // the slug to the user.
-          slug: `solo-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`,
-        },
-      });
+      // ⚠️ T8 — AN INVITE MAY ADMIT INTO AN EXISTING PRACTICE.
+      //
+      // `membership` is non-null only when the code carries BOTH a practice and
+      // a role; the database refuses them apart, so this branch cannot admit
+      // somebody to a clinic without saying what they may do there.
+      //
+      // NULL is the LEGACY contract and it is unchanged: mint a fresh solo
+      // practice and make the redeemer its OWNER. Every invite issued before T8
+      // is in that state, and none were backfilled — there is no practice they
+      // were "meant" to point at, so inventing one would be a guess wearing a
+      // migration's authority.
+      const membership = invite.source === 'db' ? invite.membership : null;
+      const practice = membership
+        ? await tx.practice.findUniqueOrThrow({
+            where: { id: membership.practiceId },
+            select: { id: true },
+          })
+        : await tx.practice.create({
+            data: {
+              name: `Solo — ${parsed.data.name}`,
+              // Random slug keeps it URL-safe and avoids a collision with
+              // future "real" practice slugs. TranscribeMD UI never shows
+              // the slug to the user.
+              slug: `solo-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`,
+            },
+          });
       const user = await tx.user.create({
         data: {
           email: emailLower,
@@ -512,7 +529,14 @@ export async function signupAction(
           // `users_active_member_has_practice_role` refuses the row and EVERY
           // SIGNUP FAILS — the T3 shape, where the one site that mattered was
           // the real production path rather than the one CI happened to surface.
-          practiceRole: PracticeRole.OWNER,
+          // ⚠️ T8 — THE INVITE'S ROLE WINS, and OWNER is only the fallback for
+          // the solo-practice path. Defaulting to OWNER here would have made
+          // every invited CLINICIAN or TECH an owner of the clinic they joined,
+          // which is the failure the both-or-neither CHECK exists to prevent —
+          // and it would have been invisible, because the account would work.
+          practiceRole: membership
+            ? (membership.practiceRole as PracticeRole)
+            : PracticeRole.OWNER,
           products: [Product.TRANSCRIBE_MD],
           emailVerified: nowForVerified,
         },
