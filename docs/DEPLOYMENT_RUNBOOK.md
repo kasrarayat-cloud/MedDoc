@@ -675,6 +675,46 @@ docker compose logs --tail 50 meddoc-pro
 docker compose restart caddy meddoc-pro
 ```
 
+### 5.1a `502` with every container HEALTHY — the nginx→Caddy handshake
+
+**Check this one FIRST when the containers look fine**, because §5.1's remedy
+does not apply and its logs are clean. Symptom on 2026-08-07: `/login` 502 on
+every request while the app answered 200 to a direct container probe.
+
+```bash
+bash scripts/check-ingress-tls.sh      # READ-ONLY. 0 = OK, 1 = FAILS, 2 = can't tell
+```
+
+nginx re-encrypts to Caddy with `proxy_ssl_name $host`. If Caddy has no
+certificate for that SNI it aborts with `tlsv1 alert internal error` (alert 80)
+and nginx returns 502. Confirm in the host's `/var/log/nginx/error.log`:
+
+    SSL_do_handshake() failed (… alert number 80) while SSL handshaking to
+    upstream, upstream: "https://127.0.0.1:8443/login"
+
+⚠️ **IT WILL LOOK INTERMITTENT AND PATH-SPECIFIC. IT IS NEITHER.** nginx reuses
+upstream TLS sessions, so requests on an already-resumed session keep working
+alongside 502s in the same second. Judge it with a **fresh handshake per SNI**
+(what the script does), never with a `curl` sweep.
+
+**Fix:** every site block in `./Caddyfile` carries `tls internal`. Public ACME
+cannot succeed on this hop — nginx owns :80 and :443, so `http-01` 404s and
+`tls-alpn-01` gets "no application protocol". Do **not** try to restore publicly
+trusted certs here; the public cert is nginx's (§5.6) and is unaffected.
+
+⚠️ **A FILE BIND-MOUNT BINDS THE INODE.** Editing `./Caddyfile` with anything
+that writes-then-renames does not reach the container, `caddy reload` reports
+`config is unchanged`, and **`caddy validate` greens the OLD file**. Verify the
+container agrees, then force-recreate — `up -d` alone will not, since no
+compose config hash changed:
+
+```bash
+docker exec meddoc-pro-caddy-1 grep -c '^    tls internal$' /etc/caddy/Caddyfile   # expect 4
+docker compose up -d --no-deps --force-recreate caddy
+```
+
+Full write-up: `docs/qa-reports/ingress-tls-outage-20260807.md`.
+
 ### 5.2 Pipeline stuck — visit shows "transcribing" forever
 
 ```bash

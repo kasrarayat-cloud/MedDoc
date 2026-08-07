@@ -93,14 +93,52 @@
 # ==========================================================================
 
 # ─── quillmd.com + www.quillmd.com — Marketing site ───────────────────────
+# ─── WHY EVERY BLOCK BELOW CARRIES `tls internal` ─────────────────────────
+# Caddy is NOT the public edge. Host nginx owns :80/:443 and terminates the
+# real Let's Encrypt cert; Caddy is an INTERNAL hop on 127.0.0.1:8443 that
+# nginx reaches with `proxy_ssl_verify off` (/etc/nginx/sites-enabled/quillmd).
+# So the certificate on this hop is never seen by a browser and never needs to
+# be publicly trusted — `tls internal` (Caddy's own CA) is the correct issuer.
+#
+# ⚠️ AND PUBLIC ACME CANNOT SUCCEED HERE, WHICH IS WHY THIS IS NOT COSMETIC.
+# Both challenge types are structurally blocked by the topology:
+#   tls-alpn-01 → nginx owns :443, so the ALPN handshake never reaches Caddy
+#                 ("remote error: tls: no application protocol")
+#   http-01     → nginx owns :80 and serves /.well-known/acme-challenge from
+#                 /var/www/certbot, so Caddy's token 404s
+# Caddy therefore retried forever, fell back to acme-STAGING, and renewed
+# nothing.
+#
+# ⚠️ HOW THAT BECAME AN OUTAGE — 2026-08-07, ~6 hours, ALL public hostnames.
+# The expired certs were still being served FROM CADDY'S IN-MEMORY CACHE, so
+# nothing looked wrong (nginx does not verify them). certmagic's storage clean
+# removed them from disk on 2026-08-06; the 08:31 reboot dropped the memory
+# cache, and Caddy came back with NO certificate for quillmd.com,
+# www.quillmd.com or app.quillmd.com. Every fresh handshake got
+# `tlsv1 alert internal error` (alert 80) and nginx answered 502. Requests on
+# already-resumed TLS sessions kept working, which is why containers were
+# healthy and the failure looked intermittent.
+#
+# This fix is the follow-up filed at docs/qa-reports/site-down-20260603.md §9.5
+# and never executed — recorded there as 🟢 "Caddy ACME noise". It was not
+# noise: the certs it was failing to renew are the ones this hop serves.
+# docs/DEPLOYMENT_RUNBOOK.md §5.6 has asserted "its own internal certs" since
+# then; this is the line that makes that sentence true.
+#
+# DO NOT remove `tls internal` to "restore real certificates". Public certs on
+# this hop are unobtainable while nginx owns the ports, and a browser never
+# sees them. The public cert is nginx's, at
+# /etc/letsencrypt/live/quillmd.com/fullchain.pem — renewed by certbot (§5.6).
+
 # Apex + www both served from the same block so visitors land on the same
-# content regardless of whether they type the `www.` prefix. Caddy auto-
-# issues separate certs for each hostname.
+# content regardless of whether they type the `www.` prefix.
 quillmd.com, www.quillmd.com {
     log {
         output stdout
         format console
     }
+
+    tls internal
 
     import security_headers_mode_b
 
@@ -118,6 +156,8 @@ app.quillmd.com {
         output stdout
         format console
     }
+
+    tls internal
 
     import security_headers_mode_b
 
@@ -152,6 +192,8 @@ admin.quillmd.com {
         output stdout
         format console
     }
+
+    tls internal
 
     import security_headers_mode_b
 
@@ -252,6 +294,8 @@ pro.quillmd.com {
         output stdout
         format console
     }
+
+    tls internal
 
     import security_headers_mode_b
 
