@@ -25,6 +25,7 @@
 // ============================================================================
 
 import prisma from '@meddoc/db';
+import type { TransactionClient } from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 
 import { deleteAudioObject } from '@/lib/minio';
@@ -68,7 +69,7 @@ async function purgeTargets(
   const ids = targets.map((t) => t.id);
   let deleted = 0;
   try {
-    const result = await prisma.$transaction(async (tx: typeof prisma) => {
+    const result = await prisma.$transaction(async (tx: TransactionClient) => {
       await tx.aiCall.deleteMany({ where: { visitId: { in: ids } } });
       const d = await tx.transcribeVisit.deleteMany({
         where: { id: { in: ids } },

@@ -222,12 +222,27 @@ export class ScopedWriteMissError extends Error {
  * themselves — must NOT use this; they call `updateMany` directly and keep their
  * own reasoning, which is visible in the diff rather than hidden behind a helper.
  */
-export async function scopedUpdate(
-  model: { updateMany: (args: { where: unknown; data: unknown }) => Promise<{ count: number }> },
+// ⚠️ F-TYPE 2026-08-07 — GENERIC, NOT `unknown`, AND NOT `any`.
+// This took `model: { updateMany: (args: { where: unknown; data: unknown }) => … }`.
+// `unknown` is the TOP type, so under `strictFunctionTypes` that parameter is
+// CONTRAVARIANT and a real Prisma delegate — whose `updateMany` accepts a
+// narrow, model-specific args type — is not assignable to it. With the shared
+// client typed, all 13 call sites reddened at once with
+// "Argument of type 'TranscribeVisitDelegate<…>' is not assignable".
+//
+// The lazy fix is `args: any`, which would restore silence everywhere. Making
+// it generic instead means `where` and `data` are inferred FROM THE DELEGATE,
+// so the practice predicate and the update payload are now type-checked at
+// every call site — which is the entire point of typing the client.
+export async function scopedUpdate<
+  TWhere,
+  TData,
+>(
+  model: { updateMany: (args: { where: TWhere; data: TData }) => Promise<{ count: number }> },
   modelName: string,
   id: string,
-  where: unknown,
-  data: unknown,
+  where: TWhere,
+  data: TData,
 ): Promise<void> {
   const res = await model.updateMany({ where, data });
   if (res.count === 0) throw new ScopedWriteMissError(modelName, id);

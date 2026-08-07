@@ -1087,7 +1087,56 @@ residue. **A zero that needs a caveat is not a wall.**
   green against that fixture, and would have stayed green if the predicate
   matched nothing at all.
 
-### ▶ F-TYPE — type the shared Prisma client — **ORDERED: after TEAMS closes, BEFORE any BILLING build**
+### ✅ F-TYPE — type the shared Prisma client — **CLOSED 2026-08-07 · 42 → 0**
+
+`packages/db/src/index.ts` is typed. `tsc -p apps/transcribe-md` reports **0
+errors**; 3194 unit tests pass. **No `any`-casts, no `as unknown as`, no
+`@ts-expect-error`** — verified by an adversarial pass over every diff.
+
+#### 27 OF 42 WERE THREE DECISIONS, NOT 27 EDITS
+
+| | n | the decision |
+|---|---|---|
+| `tx: typeof prisma` | **10 sites / 14 errors** | → `TransactionClient`, exported from `@meddoc/db` |
+| `scopedUpdate`'s `model` param | **13 errors** | `{ where: unknown }` → **generic** |
+| bare `null` into a Json column | **3** | → `Prisma.JsonNull`, measured on QA |
+
+The middle one is worth stating: `unknown` is the TOP type, so under
+`strictFunctionTypes` that parameter is CONTRAVARIANT and **no real Prisma
+delegate is assignable to it**. The lazy fix is `args: any`, which restores the
+silence everywhere. Making it generic instead means `where` and `data` are now
+inferred from the delegate and **type-checked at all 13 call sites** — the
+practice predicate and the update payload included.
+
+#### ⚠️ TWO LATENT BUGS, BOTH INVISIBLE UNTIL THE CLIENT WAS TYPED
+
+**1. `worker.ts` read a column it never selected — the DATE OF PROCEDURE was
+always blank.** `visitDate: visit.createdAt` where the `findUnique` select never
+requested `createdAt`. At runtime it was `undefined`; `visitDateToIso` returns
+`null` for that on its first line; `withProcedureDateFact` is then a documented
+no-op. **So every fill manifest the worker produced left the DATE OF PROCEDURE
+control empty** — a feature written, wired, commented and never once fed. Nothing
+threw, because every link in the chain is legitimately null-tolerant. The sibling
+export paths (`visit-export-server.ts:148`, `pdf-native/export.ts:110`) pass a
+real date, which is how we know the intent. Dormant in production today only
+because the fill step short-circuits on `not_certified_twin`.
+
+**2. `/patients` was the one clinical page with no `isActive` check.** Fixing the
+three `PracticeId` brand errors there could not be done by casting — a brand is
+minted only at `getSession()`, and `gate-practice-scope` bans the cast by name —
+so the page now sources the practice from the mint point like every sibling
+clinical page (`/board`, `/visits`, `/visits/[id]`, `/visits/new`,
+`/visits/[id]/record`) already did. **That is a real authorization change, not a
+type change**, and it is recorded as such: a deactivated user could previously
+load the patient roster from this page. Every delta is fail-closed.
+
+⚠️ **THE SECOND ONE WAS CAUGHT BY THE VERIFIER, NOT THE AUTHOR'S SUMMARY.** The
+fix was reported as behaviour-changing, honestly — but its justification named
+only legacy pre-T-M2 JWTs, while `validateSession()` also **fails open on DB
+errors**, so the reachable set is wider than claimed. A behaviour change inside a
+typing pass has to be named at its true width or it rides in as a type fix.
+
+### F-TYPE (original wording) — type the shared Prisma client — **ORDERED: after TEAMS closes, BEFORE any BILLING build**
 
 ⚠️ **BILLING IS WALL-TO-WALL NEW PRISMA WRITES AND DOES NOT GET BUILT ON A
 PLACEBO.** `packages/db/src/index.ts` declares `const prisma: any`, so **no
@@ -1163,6 +1212,34 @@ reset at `:332` is always overwritten before processing ends, so there is no
 surviving evidence of what a bare `null` lands as. Write it through the typed
 client on QA and read back which of the two it produced, **then** choose. An
 assumed answer here is a latent bug in either direction.
+
+#### ✅ DETERMINED ON QA 2026-08-07 — AND THE INTUITIVE ANSWER IS THE WRONG ONE
+
+Each variant written through the real client against `meddoc_qa_test`, then read
+back from the column:
+
+| written | `IS NULL` | `= 'null'::jsonb` | verdict |
+|---|---|---|---|
+| bare `null` | false | **true** | lands as **JSON `null`** |
+| `Prisma.DbNull` | **true** | false | SQL NULL |
+| `Prisma.JsonNull` | false | **true** | **identical to bare null** |
+
+**So bare `null` has always had `JsonNull` semantics, and `DbNull` — the obvious
+reading of the word "null" — would have silently changed what the clinical
+worker stores.** Chosen: `Prisma.JsonNull`, because it preserves the stored bytes
+exactly.
+
+Also measured, because "equivalent" was worth checking rather than asserting:
+both variants read back into JS as `null`, so the one consumer
+(`codes-tab.tsx:924`, `?? {}`) yields `{}` either way and cannot tell them apart.
+The choice is therefore safe in both directions — `JsonNull` is simply the one
+that changes nothing.
+
+⚠️ **THIS TABLE IS RECORDED HERE BECAUSE A REVIEWER CAUGHT THAT IT EXISTED
+NOWHERE ELSE.** The first version of the fix carried the measurement only in a
+code comment written by the same change that relied on it — which is evidence
+citing itself. Production could not corroborate it (every visit holds a real
+object), so the QA run is the only witness and it belongs in the ledger.
 
 Tractable in one or two tranches rather than a sprawl. **Each revealed error is
 either a latent bug or a missing annotation and gets CLASSIFIED, not
