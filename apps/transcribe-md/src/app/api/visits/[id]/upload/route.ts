@@ -26,7 +26,7 @@ import {
 import { enqueueProcessVisit } from '@/lib/queue';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
-import { visitByIdScope } from '@/lib/practice-scope';
+import { visitByIdScope, scopedUpdate } from '@/lib/practice-scope';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { redactPhi } from '@meddoc/ai';
 import { logAudit } from '@/lib/audit';
@@ -266,9 +266,12 @@ export const POST = withApiHandler<{ id: string }>(
 
     // Persist upload metadata + flip back to QUEUED (covers the "retry
     // after FAILED" path) before enqueuing the worker job.
-    await prisma.transcribeVisit.update({
-      where: { id: visitId },
-      data: {
+    await scopedUpdate(
+      prisma.transcribeVisit,
+      'transcribeVisit',
+      visitId,
+      visitByIdScope(visitId, session.user.practiceId),
+      {
         audioKey: objectKey,
         audioMimeType: mimeType.split(';')[0]!.trim(),
         // Round 3 PR-J — record the actual byte count, not the
@@ -283,7 +286,7 @@ export const POST = withApiHandler<{ id: string }>(
         processingFinishedAt: null,
         processingCostCents: null,
       },
-    });
+    );
 
     // T-M18.2 A9: if this was a re-upload (FAILED → new upload), the
     // old audioKey is now orphaned in MinIO. Best-effort delete so

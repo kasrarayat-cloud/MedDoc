@@ -1,18 +1,18 @@
-'use server';
+"use server";
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath } from "next/cache";
 import {
   emAppliesToSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
-} from '@meddoc/shared/specialties';
-import { seedEmBaselineIfUnset } from '@/lib/em-coding/seed-baseline';
-import { z } from 'zod';
+} from "@meddoc/shared/specialties";
+import { seedEmBaselineIfUnset } from "@/lib/em-coding/seed-baseline";
+import { z } from "zod";
 
-import prisma from '@meddoc/db';
-import { visitByIdScope } from '@/lib/practice-scope';
-import { TranscribeVisitStatus } from '@prisma/client';
-import { requireSession } from '@/lib/auth';
+import prisma from "@meddoc/db";
+import { visitByIdScope, ScopedWriteMissError } from "@/lib/practice-scope";
+import { TranscribeVisitStatus } from "@prisma/client";
+import { requireSession } from "@/lib/auth";
 
 const SaveSoapSchema = z.object({
   visitId: z.string().min(1),
@@ -83,12 +83,12 @@ export interface SaveSoapResult {
 export async function saveSoapDraftAction(
   visitId: string,
   text: string,
-  expectedVersion?: number
+  expectedVersion?: number,
 ): Promise<SaveSoapResult> {
   const session = await requireSession();
   const parsed = SaveSoapSchema.safeParse({ visitId, text, expectedVersion });
   if (!parsed.success) {
-    return { ok: false, error: 'Invalid input.' };
+    return { ok: false, error: "Invalid input." };
   }
 
   const visit = await prisma.transcribeVisit.findFirst({
@@ -111,24 +111,24 @@ export async function saveSoapDraftAction(
     },
   });
   // T6 §4.1c — the author conjunct is GONE; practice membership is the gate.
-    // The read above is practice-scoped (T5), so reaching this line means the
-    // visit is in the caller's practice. SIGNING is the only role-gated action
-    // (SPEC §1.2); tech-creates/doctor-signs requires every member to be able to
-    // prepare work.
-    if (!visit) {
-    return { ok: false, error: 'Visit not found.' };
+  // The read above is practice-scoped (T5), so reaching this line means the
+  // visit is in the caller's practice. SIGNING is the only role-gated action
+  // (SPEC §1.2); tech-creates/doctor-signs requires every member to be able to
+  // prepare work.
+  if (!visit) {
+    return { ok: false, error: "Visit not found." };
   }
   // T-M17.3: reject writes on trashed / archived visits. The UI
   // already hides these from the default dashboard but a stale tab
   // could still fire this action.
   if (visit.deletedAt !== null || visit.archivedAt !== null) {
-    return { ok: false, error: 'Visit is no longer active. Restore it first.' };
+    return { ok: false, error: "Visit is no longer active. Restore it first." };
   }
   if (visit.status === TranscribeVisitStatus.SIGNED) {
-    return { ok: false, error: 'Signed notes cannot be edited.' };
+    return { ok: false, error: "Signed notes cannot be edited." };
   }
   if (visit.status !== TranscribeVisitStatus.READY) {
-    return { ok: false, error: 'Note is still processing.' };
+    return { ok: false, error: "Note is still processing." };
   }
 
   // Round 3 PR-E (A09-P0-003) — optimistic-concurrency path.
@@ -137,7 +137,10 @@ export async function saveSoapDraftAction(
   // expectedVersion succeeds; the other returns count=0.
   if (parsed.data.expectedVersion !== undefined) {
     const result = await prisma.transcribeVisit.updateMany({
-      where: { id: visitId, soapVersion: parsed.data.expectedVersion },
+      where: {
+            ...visitByIdScope(visitId, session.user.practiceId),
+            soapVersion: parsed.data.expectedVersion,
+          },
       data: {
         soapFinal: parsed.data.text,
         // THE NOTE CHANGED. Every editing surface funnels here — the inline
@@ -157,45 +160,70 @@ export async function saveSoapDraftAction(
       });
       return {
         ok: false,
-        error: 'conflict',
+        error: "conflict",
         conflict: {
           currentVersion: current?.soapVersion ?? -1,
-          currentText: current?.soapFinal ?? '',
+          currentText: current?.soapFinal ?? "",
         },
       };
     }
     // Seed the E/M baseline from the PRE-EDIT note — AFTER the write, as adopt
-  // does. `visit.soapFinal` is still the pre-edit text here (it was read
-  // above), and scoring can be an LLM round-trip: inside the read→write window
-  // of the soapVersion check it widened the race on the AUTOSAVE path and
-  // produced spurious "the note changed in another tab" conflicts.
-  // Page view seeds it for most visits, but not for a doctor whose first
-  // action is an edit — and for them the first re-score would find no
-  // baseline, conclude nothing had moved, and clear the gate.
-  await seedEmBaselineIfUnset({
-    visitId,
-    priorSoap: visit.soapFinal,
-    currentScoredCode: visit.emScoredCode,
-    signals: { icdCodes: visit.icdCodes, rxDrafts: visit.rxDrafts, cptCodes: visit.cptCodes },
-    ctx: { practiceId: visit.user?.practiceId, userId: session.user.id },
-    applies: emAppliesToSpecialty(visit.specialty),
-  });
+    // does. `visit.soapFinal` is still the pre-edit text here (it was read
+    // above), and scoring can be an LLM round-trip: inside the read→write window
+    // of the soapVersion check it widened the race on the AUTOSAVE path and
+    // produced spurious "the note changed in another tab" conflicts.
+    // Page view seeds it for most visits, but not for a doctor whose first
+    // action is an edit — and for them the first re-score would find no
+    // baseline, conclude nothing had moved, and clear the gate.
+    await seedEmBaselineIfUnset({
+      visitId,
+      priorSoap: visit.soapFinal,
+      currentScoredCode: visit.emScoredCode,
+      signals: {
+        icdCodes: visit.icdCodes,
+        rxDrafts: visit.rxDrafts,
+        cptCodes: visit.cptCodes,
+      },
+      ctx: { practiceId: visit.user?.practiceId, userId: session.user.id },
+      applies: emAppliesToSpecialty(visit.specialty),
+    });
 
-  revalidatePath(`/visits/${visitId}`);
+    revalidatePath(`/visits/${visitId}`);
     return { ok: true, newVersion: parsed.data.expectedVersion + 1 };
   }
 
   // Legacy fallback (no expectedVersion supplied) — last-write-wins.
   // Still bumps soapVersion so a subsequent expectedVersion-aware
   // call sees the right value.
-  const updated = await prisma.transcribeVisit.update({
-    where: { id: visitId },
-    data: {
-      soapFinal: parsed.data.text,
-      emStale: true,
-      soapVersion: { increment: 1 },
-    },
-    select: { soapVersion: true },
+  // ⚠️ T5-W — TRANSACTIONAL updateMany + re-read, and the transaction is
+  // LOAD-BEARING here rather than decorative.
+  //
+  // `soapVersion: { increment: 1 }` means the value the caller must be told is
+  // not knowable from the input — it is whatever the increment produced. A
+  // re-read OUTSIDE a transaction could observe a DIFFERENT writer's increment
+  // and report a version this call never wrote, which is precisely the
+  // read-after-write window the optimistic `expectedVersion` path above exists
+  // to close. So the write and the read share one transaction.
+  //
+  // The alternative treatment — keep `update` and argue the preceding
+  // practice-scoped read authorises it — was available and NOT taken here: this
+  // is the last-write-wins fallback, which by definition has no version guard,
+  // so it is the one path where borrowed authorisation has the least to lean on.
+  const updated = await prisma.$transaction(async (tx: typeof prisma) => {
+    const res = await tx.transcribeVisit.updateMany({
+      where: visitByIdScope(visitId, session.user.practiceId),
+      data: {
+        soapFinal: parsed.data.text,
+        emStale: true,
+        soapVersion: { increment: 1 },
+      },
+    });
+    if (res.count === 0)
+      throw new ScopedWriteMissError("transcribeVisit", visitId);
+    return tx.transcribeVisit.findFirstOrThrow({
+      where: visitByIdScope(visitId, session.user.practiceId),
+      select: { soapVersion: true },
+    });
   });
 
   revalidatePath(`/visits/${visitId}`);
@@ -233,4 +261,3 @@ export async function saveSoapDraftAction(
 //
 // Logged in the Q1 fix-pack. If speaker attribution needs correcting again, the
 // place for it is before the pipeline runs, not after the note exists.
-

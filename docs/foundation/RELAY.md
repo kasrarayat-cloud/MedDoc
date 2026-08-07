@@ -999,6 +999,73 @@ This is the same defect family as a vacuous assertion, arriving through a
 runtime API rather than a test: `{ count: 0 }` is a *successful call* that did
 nothing.
 
+### ✅ T5-W — the write-scope debt — **CLOSED 2026-08-07**
+
+SPEC §1.4 names *"every read **and write** of a clinical table"*. T5's guard
+watched reads only, so its wall reached zero over half the named surface — the
+coverage-vs-criteria class, found by re-reading the criteria rather than by any
+check.
+
+#### THE LEDGER — each step lowered in the SAME COMMIT as the code
+
+| | count | what happened |
+|---|---|---|
+| T5-W opens | **25** | the gap the read guard never watched |
+| tranche 1a | **12** | 13 mechanical `update`→`updateMany` via `scopedUpdate` |
+| classifier | **9** | doctor-scope LEARNED as a sanctioned narrower scope |
+| return-row | **6** | the 3 sites take transactional re-reads |
+| the rest | **0** | optimistic-concurrency sites + the last two template writes |
+| **the flip** | **wall** | its own commit, `23b2168e` |
+
+#### ⚠️ NO LEAK WAS EVER OPEN — the honest framing, recorded verbatim
+
+> **Every one of the 25 was reached only after a practice-scoped read in the same
+> handler. What they lacked was a predicate of their OWN: the borrowed
+> authorisation T5 argued against, one refactor from being wrong. This unit
+> removed the borrowing; it did not close an active hole, and the difference
+> matters when someone reads this ledger later.**
+
+#### ⚠️ DOCTOR-SCOPE IS A RULING, NOT A FOOTNOTE — recorded verbatim
+
+> **Doctor-scoped writes count as SCOPED because `doctorId` is strictly narrower
+> than a practice predicate — a ruling about what the scope MEANS (GATE 0.3), not
+> a footnote excusing what the guard misses. `userId` is explicitly NOT accepted,
+> with a control proving it, because that is ownership wearing tenancy's
+> clothes.**
+
+The zero is therefore genuine, with no carried-exception bucket holding the
+residue. **A zero that needs a caveat is not a wall.**
+
+#### THE WALL BITES — proof, recorded verbatim
+
+> **A single unscoped `prisma.transcribeVisit.update({ where: { id }, … })`
+> dropped into `src/lib/` reds it: `went UP (1 > 0)`. Removed; 15 passed. That is
+> the mutation that matters at zero — every earlier tranche proved the ratchet
+> could MOVE; this proves the wall can BITE, which is a different question and
+> the only one still open once the number stops falling.**
+
+#### What the tranches found
+
+- **`update` → `updateMany` DELETES AN ERROR SIGNAL.** `update` throws P2025 on a
+  miss; `updateMany` returns `{ count: 0 }`. `scopedUpdate()` restores it — a
+  function, not a convention, because a convention here is a hand-kept list
+  across thirteen sites. It takes the PREDICATE, not an id plus a practice: the
+  three models do not share a scoping shape.
+- **Two sites already HELD the tenant and did not apply it.**
+  `em-coding/seed-baseline.ts` took `ctx.practiceId` and used it only for the
+  audit row; `visits/[id]/page.tsx` had `sessionPracticeId` in scope and handed
+  it to `computeEmScore` two lines above the unscoped write.
+- **`certify.ts`'s unscoped fallback was DELETED, not scoped.** Its second branch
+  wrote by id alone and was unreachable because every caller supplies `doctorId`
+  — and **an unreachable unscoped write is one refactor from reachable.**
+- **The bulk rename** (`update-visit-header.ts`) spreads across every unsigned
+  visit for a patient, with no id to be unique on: the site where a missing
+  predicate would have touched the most rows.
+- **The POSITIVE half of the attempt-proof caught a bad fixture on first run** —
+  `archive` refuses a non-signed visit. A refusal-only proof would have been
+  green against that fixture, and would have stayed green if the predicate
+  matched nothing at all.
+
 ### T7 — the remaining tables gain `practiceId`
 `visit_deliveries`, `doctor_edit_patterns`, `rx_warning_overrides`, the four
 unscoped `template_twin_*` tables, `account_deletions`, and `note_templates`

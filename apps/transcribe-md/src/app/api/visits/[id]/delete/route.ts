@@ -30,7 +30,7 @@ import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
-import { visitByIdScope } from '@/lib/practice-scope';
+import { visitByIdScope, scopedUpdate } from '@/lib/practice-scope';
 import { getSession } from '@/lib/auth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { deleteAudioObject } from '@/lib/minio';
@@ -190,10 +190,13 @@ export const POST = withApiHandler<{ id: string }>(
 
     // SOFT delete path — everything else (PROCESSING / REVIEW / READY,
     // or QUEUED-with-input).
-    await prisma.transcribeVisit.update({
-      where: { id: visit.id },
-      data: { deletedAt: new Date() },
-    });
+    await scopedUpdate(
+      prisma.transcribeVisit,
+      'transcribeVisit',
+      visit.id,
+      visitByIdScope(visit.id, session.user.practiceId),
+      { deletedAt: new Date() },
+    );
     log.info('api:visits:delete', 'soft-deleted', {
       userId,
       visitId,

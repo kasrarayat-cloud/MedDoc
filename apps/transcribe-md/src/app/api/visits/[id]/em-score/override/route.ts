@@ -35,7 +35,7 @@ import {
 import { unacknowledgedEmChange } from '@/lib/em-pending-change';
 import { getSession } from '@/lib/auth';
 import { apiError, withApiHandler } from '@/lib/api-error';
-import { visitByIdScope } from '@/lib/practice-scope';
+import { visitByIdScope, scopedUpdate } from '@/lib/practice-scope';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 import { computeEmScore } from '@/lib/em-coding/score';
 import { engineToUiScore } from '@/lib/em-coding/to-ui-score';
@@ -239,9 +239,12 @@ export const POST = withApiHandler<{ id: string }>(
     const from = alreadyPending?.from ?? displayedBefore;
     const moved = from !== null && from !== parsed.data.overrideToCode;
 
-    await prisma.transcribeVisit.update({
-      where: { id: visitId },
-      data: {
+    await scopedUpdate(
+      prisma.transcribeVisit,
+      'transcribeVisit',
+      visitId,
+      visitByIdScope(visitId, session.user.practiceId),
+      {
         cptCodes: nextCpt,
         ...(moved
           ? {
@@ -269,7 +272,7 @@ export const POST = withApiHandler<{ id: string }>(
               }
             : {}),
       },
-    });
+    );
 
     // The override CHANGES THE DOCUMENT, so the cached rendering of it is now
     // wrong. The E/M level is printed into the exported DOCX/PDF, and the

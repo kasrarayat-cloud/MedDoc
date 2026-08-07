@@ -29,6 +29,11 @@ vi.mock('@meddoc/db', () => ({
       findUnique: mocks.visitFindUnique,
       findFirst: mocks.visitFindUnique,
       update: mocks.visitUpdate,
+      // T5-W: the route's write is now a practice-scoped updateMany, which
+      // returns { count } rather than the row. Same mock so the existing
+      // argument assertions still see the call; count 1 so scopedUpdate does
+      // not throw its miss error.
+      updateMany: mocks.visitUpdate,
     },
   },
 }));
@@ -206,7 +211,7 @@ describe('POST /api/visits/[id]/em-score/apply-additions', () => {
       user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
     });
     mocks.visitFindUnique.mockResolvedValue(READY_VISIT);
-    mocks.visitUpdate.mockResolvedValue({});
+    mocks.visitUpdate.mockResolvedValue({ count: 1 });
 
     const res = await POST(
       makeReq({
@@ -268,7 +273,7 @@ describe('POST /api/visits/[id]/em-score/apply-additions', () => {
       user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
     });
     mocks.visitFindUnique.mockResolvedValue(READY_VISIT);
-    mocks.visitUpdate.mockResolvedValue({});
+    mocks.visitUpdate.mockResolvedValue({ count: 1 });
 
     await POST(
       makeReq({

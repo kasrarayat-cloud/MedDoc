@@ -14,7 +14,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@meddoc/db';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
-import { visitByIdScope } from '@/lib/practice-scope';
+import { visitByIdScope, scopedUpdate } from '@/lib/practice-scope';
 import { getSession } from '@/lib/auth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { log } from '@/lib/log';
@@ -65,10 +65,13 @@ export const POST = withApiHandler<{ id: string }>(
       return NextResponse.json({ ok: true, alreadyActive: true });
     }
 
-    await prisma.transcribeVisit.update({
-      where: { id: visit.id },
-      data: { archivedAt: null },
-    });
+    await scopedUpdate(
+      prisma.transcribeVisit,
+      'transcribeVisit',
+      visit.id,
+      visitByIdScope(visit.id, session.user.practiceId),
+      { archivedAt: null },
+    );
     log.info('api:visits:unarchive', 'unarchived', { userId, visitId });
     void logAudit({
       action: 'VISIT_UNARCHIVED',

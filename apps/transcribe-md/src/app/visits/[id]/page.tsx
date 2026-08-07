@@ -658,6 +658,10 @@ async function VisitBody(props: VisitBodyProps) {
         await prisma.transcribeVisit.updateMany({
           where: {
             id: props.visitId,
+            // ⚠️ T5-W — `sessionPracticeId` is already in scope and was handed to
+            // computeEmScore above; the WRITE beside it went unscoped. Same shape
+            // as seed-baseline: a tenant the code holds and the statement omits.
+            ...(sessionPracticeId ? { practiceId: sessionPracticeId } : {}),
             status: TranscribeVisitStatus.READY,
             emScoredCode: null,
           },

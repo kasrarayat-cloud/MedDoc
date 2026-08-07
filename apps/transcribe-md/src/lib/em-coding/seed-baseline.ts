@@ -85,6 +85,11 @@ export async function seedEmBaselineIfUnset(input: SeedEmBaselineInput): Promise
       // it off a row that was signed while we were scoring.
       where: {
         id: input.visitId,
+        // ⚠️ T5-W — `ctx.practiceId` arrived here from the first version and
+        // was used ONLY for the audit row; the WRITE went unscoped beside it.
+        // A tenant known to the code and not applied to the statement is
+        // exactly the shape this unit retires.
+        ...(input.ctx.practiceId ? { practiceId: input.ctx.practiceId } : {}),
         emScoredCode: null,
         status: TranscribeVisitStatus.READY,
       },

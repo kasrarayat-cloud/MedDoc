@@ -30,6 +30,11 @@ vi.mock('@meddoc/db', () => ({
       findUnique: mocks.visitFindUnique,
       findFirst: mocks.visitFindUnique,
       update: mocks.visitUpdate,
+      // T5-W: the route's write is now a practice-scoped updateMany, which
+      // returns { count } rather than the row. Same mock so the existing
+      // argument assertions still see the call; count 1 so scopedUpdate does
+      // not throw its miss error.
+      updateMany: mocks.visitUpdate,
     },
   },
 }));
@@ -224,7 +229,7 @@ describe('POST /api/visits/[id]/em-score/override', () => {
       user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
     });
     mocks.visitFindUnique.mockResolvedValue(READY_VISIT);
-    mocks.visitUpdate.mockResolvedValue({});
+    mocks.visitUpdate.mockResolvedValue({ count: 1 });
 
     const res = await POST(
       makeReq({
@@ -279,7 +284,7 @@ describe('POST /api/visits/[id]/em-score/override', () => {
         em: { previous: 'data' },
       },
     });
-    mocks.visitUpdate.mockResolvedValue({});
+    mocks.visitUpdate.mockResolvedValue({ count: 1 });
 
     const res = await POST(makeReq({ overrideToCode: '99214', reason: 'Level reflects the documented exam.' }), ctx);
     expect(res.status).toBe(200);
@@ -299,7 +304,7 @@ describe('POST /api/visits/[id]/em-score/override', () => {
       user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
     });
     mocks.visitFindUnique.mockResolvedValue(READY_VISIT);
-    mocks.visitUpdate.mockResolvedValue({});
+    mocks.visitUpdate.mockResolvedValue({ count: 1 });
 
     const res = await POST(makeReq({ overrideToCode: '99214', reason: 'Level reflects the documented exam.' }), ctx);
     expect(res.status).toBe(200);
@@ -353,7 +358,7 @@ describe('POST /api/visits/[id]/em-score/override', () => {
       cptCodes: { em: { code: '99213' } },
       emPendingChange: null,
     });
-    mocks.visitUpdate.mockResolvedValue({});
+    mocks.visitUpdate.mockResolvedValue({ count: 1 });
 
     const res = await POST(
       makeReq({ overrideToCode: '99215', reason: 'Time and complexity documented.' }),
@@ -408,7 +413,7 @@ describe('POST /api/visits/[id]/em-score/override', () => {
       user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
     });
     mocks.visitFindUnique.mockResolvedValue(READY_VISIT);
-    mocks.visitUpdate.mockResolvedValue({});
+    mocks.visitUpdate.mockResolvedValue({ count: 1 });
 
     const res = await POST(
       makeReq({ overrideToCode: '99214', reason: 'Exam and MDM documented at this level.' }),
@@ -444,7 +449,7 @@ describe('POST /api/visits/[id]/em-score/override', () => {
         to: '99215',
       },
     });
-    mocks.visitUpdate.mockResolvedValue({});
+    mocks.visitUpdate.mockResolvedValue({ count: 1 });
 
     const res = await POST(
       makeReq({ overrideToCode: '99213', reason: 'On reflection the original level was right.' }),

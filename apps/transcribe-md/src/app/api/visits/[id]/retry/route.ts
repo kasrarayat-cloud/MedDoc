@@ -28,7 +28,7 @@ import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
-import { visitByIdScope } from '@/lib/practice-scope';
+import { visitByIdScope, scopedUpdate } from '@/lib/practice-scope';
 import { getSession } from '@/lib/auth';
 import { enqueueProcessVisit } from '@/lib/queue';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
@@ -182,9 +182,12 @@ export const POST = withApiHandler<{ id: string }>(
     // A READY retry is already covered by the page view and by the save path,
     // both of which see a complete visit.
     try {
-      await prisma.transcribeVisit.update({
-        where: { id: visit.id },
-        data: {
+      await scopedUpdate(
+        prisma.transcribeVisit,
+        'transcribeVisit',
+        visit.id,
+        visitByIdScope(visit.id, session.user.practiceId),
+        {
           status: TranscribeVisitStatus.QUEUED,
           needsReview: false,
           reviewReason: null,
@@ -199,7 +202,7 @@ export const POST = withApiHandler<{ id: string }>(
           // reachable from a review-time retry.)
           emStale: true,
         },
-      });
+      );
       await enqueueProcessVisit(visitId, userId, { retry: true });
       void logAudit({
         action: 'VISIT_RETRY',

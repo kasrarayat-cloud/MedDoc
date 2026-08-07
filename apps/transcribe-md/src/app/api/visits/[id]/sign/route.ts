@@ -539,7 +539,7 @@ export const POST = withApiHandler<{ id: string }>(
       }
       const updated = await prisma.transcribeVisit.updateMany({
         where: {
-          id: visitId,
+          ...visitByIdScope(visitId, session.user.practiceId),
           status: TranscribeVisitStatus.READY,
         },
         data: {

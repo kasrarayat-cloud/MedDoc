@@ -146,20 +146,42 @@ const MAX_UNSCOPED_REQUEST_READS = 0;
  * `doctor_edit_patterns` — and both were found by re-reading the criteria rather
  * than by any check. The lesson is banked in AGENTS.md.
  *
- * ⚠️ NO LEAK IS OPEN, AND SAYING SO PRECISELY MATTERS. Every one of these writes
+ * ⚠️ THIS IS NOW A WALL. IT REACHED ZERO ON 2026-08-07.
+ *
+ * Ledger, each step lowered in the SAME COMMIT as the code that earned it:
+ *
+ *     25  T5-W opens — the gap SPEC §1.4 named and the read guard never watched
+ *     12  tranche 1a — 13 mechanical update→updateMany, via `scopedUpdate`
+ *      9  the classifier LEARNS doctor-scope as a sanctioned narrower scope
+ *      6  the 3 return-row sites take transactional re-reads
+ *      0  the optimistic-concurrency sites + the last two template writes
+ *
+ * ⚠️ THE ZERO IS GENUINE, NOT ZERO-WITH-ASTERISKS. There is no carried-exception
+ * bucket holding the residue. Doctor-scoped writes count as SCOPED because
+ * `doctorId` is strictly narrower than a practice predicate (GATE 0.3) — a
+ * ruling about what the scope MEANS, not a footnote excusing what it misses.
+ * `userId` is explicitly NOT accepted, with a control proving it.
+ *
+ * ⚠️ NO LEAK WAS EVER OPEN, AND SAYING SO PRECISELY MATTERS. Every one of these writes
  * is reached only AFTER a practice-scoped read in the same handler, so an
  * out-of-practice caller is already refused before the write is attempted. What
  * they lack is a predicate of their OWN — the "borrowed authorisation" shape T5
  * itself argued against, one refactor away from being wrong.
  *
- * So: a RATCHET, not a wall, exactly as the read side began. 25 is the measured
+ * Ledger: 25 at T5-W's start → 12 after tranche 1a (13 mechanical
+ * update→updateMany conversions) → 9 once the classifier LEARNED doctor-scope
+ * as a sanctioned narrower scope (3 sites: carry-forward ×2, the
+ * note-template-lifecycle deleteMany) → 6 after the three return-row sites
+ * took transactional re-reads.
+ *
+ * It BEGAN as a ratchet, exactly as the read side did. 25 was the measured
  * count across ALL FOUR clinical models, after T6 scoped the two `rescore-em`
  * updateManys that had no practice predicate at all. A visits-only count is 19;
  * this guard watches the same model list the read side does. Lower it; never
  * raise it.
  */
 const WRITE_METHODS = '(update|updateMany|delete|deleteMany|upsert)';
-const MAX_UNSCOPED_REQUEST_WRITES = 25;
+const MAX_UNSCOPED_REQUEST_WRITES = 0;
 
 /** Extracts the balanced argument of a call whose `(` is at `open`. */
 function callArg(code: string, open: number): string {
@@ -183,6 +205,30 @@ function callArg(code: string, open: number): string {
  * site as clean while the code still had it. A balanced-paren scan cannot drift
  * that way.
  */
+/**
+ * ⚠️ DOCTOR SCOPE IS A SANCTIONED SCOPE, NOT AN EXCEPTION — ruled 2026-08-07.
+ *
+ * GATE 0.3 / SPEC §4.3 rule `note_templates` PER-DOCTOR in TEAMS v1. A
+ * `doctorId` predicate is **strictly narrower** than a practice predicate: a
+ * doctor can only ever reach their own rows, so a doctor-scoped write cannot
+ * cross a practice boundary. Scoping those by practice would WIDEN them.
+ *
+ * So the classifier RECOGNISES it as scoped rather than carrying it as a
+ * declared exception. This matters for what the wall's zero MEANS: the close
+ * condition is **zero unscoped clinical writes**, with doctor-scope counted as
+ * scoped — never zero-with-asterisks, where a footnote quietly holds the
+ * residue. A zero that needs a caveat is not a wall.
+ *
+ * ⚠️ AND IT IS DELIBERATELY NARROW. Only a literal `doctorId` conjunct counts.
+ * `userId` does NOT — that is ownership wearing tenancy's clothes, the exact
+ * confusion T5 existed to retire, and it isolates tenants today only because
+ * every practice has one member.
+ *
+ * Reference cases: `pdf-native/carry-forward.ts` ×2 — `markPendingPreview` and
+ * the certification carry-forward, both `{ id, doctorId }`.
+ */
+const DOCTOR_SCOPED_WRITE = /\bdoctorId\b/;
+
 function clinicalWrites(): string[] {
   const re = new RegExp(`prisma\\.(${CLINICAL_MODELS.join('|')})\\.${WRITE_METHODS}\\(`, 'g');
   const out: string[] = [];
@@ -193,6 +239,7 @@ function clinicalWrites(): string[] {
     for (const m of code.matchAll(re)) {
       const body = callArg(code, m.index! + m[0].length - 1);
       if (ACCESSORS.test(body) || /practiceId/.test(body)) continue;
+      if (DOCTOR_SCOPED_WRITE.test(body)) continue; // narrower than practice — see above
       out.push(`${file}:${src.slice(0, m.index).split('\n').length}`);
     }
   }
@@ -626,9 +673,27 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
     expect(
       writes.length,
       `Unscoped request-context clinical WRITES went UP (${writes.length} > ` +
-        `${MAX_UNSCOPED_REQUEST_WRITES}). SPEC §1.4 covers writes as well as ` +
-        `reads. Scope it through src/lib/practice-scope.ts — do NOT raise this.`,
+        `${MAX_UNSCOPED_REQUEST_WRITES}). At ZERO this is not a judgement call: ` +
+        `a clinical write was added that no signed-in user's practice bounds, ` +
+        `and a cross-practice WRITE puts a false entry in another tenant's ` +
+        `chart. Scope it through src/lib/practice-scope.ts (or doctorId, which ` +
+        `is narrower) — do NOT raise this number.`,
     ).toBeLessThanOrEqual(MAX_UNSCOPED_REQUEST_WRITES);
+  });
+
+  it('⚠️ DOCTOR-SCOPE COUNTS AS SCOPED — but `userId` NEVER does', () => {
+    // The ruling: doctorId is STRICTLY NARROWER than a practice predicate
+    // (GATE 0.3), so a doctor-scoped write cannot cross a practice boundary and
+    // the wall's zero counts it as scoped. The danger is the classifier being
+    // TOO generous — `userId` is ownership wearing tenancy's clothes, and it
+    // isolates tenants today only because every practice has one member.
+    expect(DOCTOR_SCOPED_WRITE.test('where: { id, doctorId }')).toBe(true);
+    expect(
+      DOCTOR_SCOPED_WRITE.test('where: { id, userId }'),
+      'userId counted as a scope — that is ownership, not tenancy, and T5 ' +
+        'existed to retire the confusion',
+    ).toBe(false);
+    expect(DOCTOR_SCOPED_WRITE.test('where: { id }')).toBe(false);
   });
 
   it('POSITIVE CONTROL — the write scanner SEES an unscoped write, and not a scoped one', () => {

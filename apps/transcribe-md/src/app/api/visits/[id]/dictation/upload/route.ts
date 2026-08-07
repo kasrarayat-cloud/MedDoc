@@ -22,7 +22,7 @@ import { putAudioStream } from '@/lib/minio';
 import { enqueueProcessVisit } from '@/lib/queue';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
-import { visitByIdScope } from '@/lib/practice-scope';
+import { visitByIdScope, scopedUpdate } from '@/lib/practice-scope';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { redactPhi } from '@meddoc/ai';
 import { logAudit } from '@/lib/audit';
@@ -237,9 +237,12 @@ export const POST = withApiHandler<{ id: string }>(
       );
     }
 
-    await prisma.transcribeVisit.update({
-      where: { id: visitId },
-      data: {
+    await scopedUpdate(
+      prisma.transcribeVisit,
+      'transcribeVisit',
+      visitId,
+      visitByIdScope(visitId, session.user.practiceId),
+      {
         dictationAudioKey: objectKey,
         audioMimeType: mimeType,
         audioUploadedAt: new Date(),
@@ -250,7 +253,7 @@ export const POST = withApiHandler<{ id: string }>(
         processingFinishedAt: null,
         processingCostCents: null,
       },
-    });
+    );
 
     void logAudit({
       action: 'AUDIO_UPLOADED',
