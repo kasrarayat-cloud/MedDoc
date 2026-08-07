@@ -434,6 +434,58 @@ the merge commit did, so its citation covers the same code *plus* the stray, and
 it certifies the thing that actually ships rather than its parent. Wait for it in
 full; do not deploy the parent's evidence.
 
+## EVIDENCE IS ONLY EVIDENCE ON THE TREE IT DESCRIBES
+
+**Every verification chain guards on the state transition it assumes — a rebase's
+or merge's exit code, a clean `git status` — BEFORE its numbers count.**
+Measurements taken mid-rebase, mid-merge or on a dirty tree are **fabricated by
+accident**: they are real outputs of a real command describing a tree that does
+not and will not exist.
+
+> **The mechanism is almost always an `&&` chain that does not guard the
+> transition.** `git rebase … | tail -1` swallows the failure, the next command
+> runs anyway, and its numbers look exactly like success.
+
+⚠️ **REFERENCE CASE, 2026-08-07.** A rebase reported *"Could not apply"*, the
+chain continued, and `tsc`/`vitest` printed **"0 errors / 3194 passed" from a
+half-merged tree with conflict markers in it.** The push that followed was
+harmless — during a rebase the branch ref still points at the original commits,
+so the remote received the un-rebased branch — but the EVIDENCE was worthless
+while looking authoritative. Re-measured after resolving: the same numbers, now
+meaning something.
+
+The shape that prevents it:
+
+    git rebase origin/main || { echo "REBASE CONFLICT — stop"; exit 1; }
+    git status --porcelain | grep -q . && { echo "DIRTY — stop"; exit 1; }
+    # only now do measurements count
+
+**And when it happens, say so.** Numbers printed from a broken tree must be
+withdrawn explicitly, not quietly re-run — a reader who saw the first pair has no
+way to know the second replaced them.
+
+## LEDGER AND SCHEMA CONFLICTS RESOLVE AS UNIONS
+
+**Unless one side is provably wrong, a conflict in `RELAY.md`, `RULINGS.md`,
+`SPEC.md` or `schema.prisma` is a UNION, not a choice.** These files accumulate;
+they do not supersede. "Resolve by taking theirs" silently drops a landed item's
+ledger row or a landed migration's relation — and the loss is invisible, because
+the file still parses and the tests still pass.
+
+⚠️ **REFERENCE CASES, 2026-08-07 — both from one rebase:**
+
+| Conflict | Wrong resolution | Correct |
+|---|---|---|
+| `model Practice` — T8's `inviteCodes` vs T7's nine back-relations | either side alone | **both**; each has a migration already applied |
+| `RELAY.md` — T5-W's CLOSED row vs F-TYPE's ordering | either side alone | **both**; one records finished work, the other schedules work |
+
+Taking "theirs" on the second would have deleted the ledger row of an item that
+was **already merged and deployed** — and nothing would have failed.
+
+**The tell:** if both sides describe things that ACTUALLY HAPPENED (a migration
+that ran, an item that closed), the answer is always both. A conflict is only a
+choice when the two sides make incompatible CLAIMS about the same fact.
+
 ## A DEPLOY DECLARES ITS EXPECTED DELTA BEFORE IT RUNS
 
 **Standing part of the deploy standard — `docs/DEPLOYMENT_RUNBOOK.md` §2.5.**
