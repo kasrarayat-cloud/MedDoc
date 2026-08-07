@@ -1486,6 +1486,115 @@ refuses. Audit row per issuance.
 
 Depends on TEAMS: the wallet is per-practice.
 
+### 📐 BILLING RECONNAISSANCE — measured 2026-08-07, READ-ONLY, before any code
+
+Run in the T6 shape, and like T6 it **changes the build order**. 104 clauses from
+`RELAY` §B and `DISCOVERY` §C/§D were re-measured against the code and the
+production database:
+
+    CONFIRMED 44 · DRIFTED 23 · REFUTED 34 · UNVERIFIABLE 3
+
+**55% of the inherited claims did not survive as written**, and six verdicts that
+came back CONFIRMED were **overturned on adversarial challenge** — so the
+challenge pass earned its place too.
+
+#### ⚠️ FOUR THINGS THAT CHANGE WHAT GETS BUILT FIRST
+
+**1. B1 AND B4 HAVE NO GATE ON QA TODAY, AND THE FAILURE IS SILENT.**
+Both gates say "prove a usage row exists on QA". The mock short-circuits
+(`model-client.ts:77`/`:140`, `deepgram-batch.ts:195`) sit **above**
+`logApiUsage` (`anthropic.ts:433`/`:580`, `deepgram-batch.ts:375`), so a QA
+pipeline run emits **zero** usage events for every stage — which is
+indistinguishable from a meter that is broken. `04b:1004` and `llm-mdm.ts:394`
+short-circuit inside themselves, so merely relocating the meter does not fix
+those two. **THE MOCK BOUNDARY IS A NEW ITEM AND IT BLOCKS B1 AND B4.** It is
+not in the ledger; it is now.
+
+**2. `response._request_id` IS NON-ENUMERABLE — the silent-no-op class, exactly.**
+`@anthropic-ai/sdk/src/internal/parse.ts:86-89` attaches it with
+`Object.defineProperty(..., { enumerable: false })`. So `{...response}`,
+`Object.assign` and `JSON.stringify` **all drop it with no error**, `undefined`
+reaches the builder, and `ctx.requestId ?? randomUUID()` mints a fresh UUID. B1
+would look implemented and measure nothing. It must be read by direct property
+access and proven by a test that **reads the row back**.
+
+**3. B1 IS TWO TABLES WITH DIFFERENT COSTS, AND "DEEPGRAM FIRST" IS THE WRONG
+PRIORITY.** `api_usage_events.requestId` exists (`schema.prisma:2583`, NOT NULL)
+— that half is a value change at **five** builders (not the three DISCOVERY
+names: `api-usage.ts:160, 179, 247, 273, 291`). **`ai_calls` has no requestId
+column at all**, so B1's gate needs an ADD COLUMN migration there. And by volume:
+Anthropic is **1091 of 1312** prod usage rows (83%), Deepgram is **2** (0.15%).
+Deepgram is cheapest to build and smallest to gain.
+
+**4. F-TYPE IS A HARD PREDECESSOR OF B5, BY THE LEDGER'S OWN ORDERING.** BILLING
+is wall-to-wall new Prisma writes; on an untyped client every
+`ledgerEntry.create({ … })` — `balanceAfter` and the micro-dollar amount included
+— compiles unchecked. **Do not start B5 before F-TYPE lands.**
+
+#### ⚠️ CORRECTIONS TO CLAIMS THAT WOULD HAVE MISDIRECTED THE WORK
+
+| claim on record | measured |
+|---|---|
+| Deepgram id "already parsed … read at `:342`" | `:112` is a **type declaration**; `:342` reads `metadata.duration`. `request_id` is read at **no** line |
+| the id is "discarded" | **durably stored** in `transcribe_visits.transcriptRaw` (jsonb) via `01-transcribe.ts:272/287` — wrong column, and a PHI-bearing one |
+| no Anthropic request-id extraction exists | one **does**, on the error path — `anthropic.ts:108-115`, tested — and is reusable |
+| "five Anthropic failure branches" | **nine**, across **three** files; `llm-mdm.ts:526` writes to **neither** table and is invisible to §C.3's own query |
+| "`logApiUsage` has exactly two call sites" | **eight** |
+| the `llm-mdm` judge is unmetered | **already metered** — `llm-mdm.ts:476`, 111 `judge` rows in prod |
+
+⚠️ **B2's GATE AS WRITTEN WOULD PASS WITH BOTH HOLES OPEN.** "Force a
+`SCHEMA_FAIL` and a Deepgram timeout" tests two branches out of nine. The gate is
+**one forced failure per ENUMERATED branch**, counted against the list — the
+LIST-IS-THE-DRIVER shape, where a sentence ("exactly two call sites") stood in
+for an enumeration.
+
+#### ⚠️ A LIVE RATE DISAGREEMENT NOBODY HAD FLAGGED — and it is a real bug now
+
+`api-usage.ts:61` prices OpenAI embeddings at **$0.13/M**; `pricing.ts:170` sets
+**$0.02/M**. **6.5× apart, and BOTH are live on the same call**: `embed.ts:95`
+prices `ai_calls.costUsdCents` from one and `embed.ts:129` prices
+`api_usage_events.totalCostUsd` from the other. This is verbatim the defect the
+comment at `api-usage.ts:36-43` claims was resolved for Deepgram. **The two
+tables disagree about the cost of the same event, today.**
+
+#### PRODUCTION DATA VALIDATES THE MICRO-DOLLAR RULING — it was not a preference
+
+    costUsdCents = 0 ......... 98 of 1085 priced rows (9.0%)
+    min(unitCostUsd) ......... 0.000003   ← 3 micro-dollars
+
+**Real Anthropic calls that cost money are stored as zero**, because a cent is
+too coarse to hold them. GATE 0.4's integer micro-dollar is measured, not
+stylistic.
+
+#### ⚠️ TWO VERIFICATION TRAPS, BOTH OF WHICH WOULD PRODUCE A FALSE RESULT
+
+- **`stripe@22.0.2` and `@stripe/stripe-js@9.2.0` are still in this host's
+  `node_modules` as EXTRANEOUS** — unreferenced by any `package.json`, absent
+  from the lockfile, and **absent from all five running containers**. Any B6/B7
+  check of the form "prove Stripe is not present" that runs on the host will
+  REFUTE while production is genuinely clean. Assert against the **containers or
+  the lockfile**, never host `node_modules` — and reap them first.
+- A stale gitignored build artifact (`apps/meddoc-pro/.next/standalone/…`, dated
+  2026-06-14) still declares both packages. Nothing runs it; it is a second place
+  a future sweep gets a hit and re-adjudicates. Same shape as *"a history purge
+  does not clear the filesystem"*: the source removal landed, the residue did not.
+
+#### OTHER ORDERING CORRECTIONS
+
+- **B8's stated `A2` dependency is misidentified — drop it.** A2 delivers a nav
+  entry and an audit viewer; `/admin/queues` has never had a write path. B8's
+  real predecessor is **B5**, unconditionally: there is no wallet, ledger, balance
+  or price table in production to gate against.
+- **B3 cannot complete as one item.** Two of the three Deepgram rates are
+  seedable today with `published` provenance; `nova-3-medical` — **the model that
+  actually runs by default** (`deepgram-batch.ts:23`) — is disqualified from that
+  seed by SPEC §4.5 and needs an `invoice` or `console` figure nobody has.
+  ⚠️ **That is an OWNER/vendor action and it must start in parallel, now**, or B3
+  stalls at 2/3 and B6 inherits a rate the price table refused to certify.
+- **B8 must be proven on QA.** `failureCategory` is **100% NULL** across all 26
+  production visits and there is not one FAILED visit — the classifier B8 would
+  reuse has never produced a persisted value in production.
+
 ### B1 — capture the vendor request id
 Deepgram first — it is **already parsed and discarded**
 (`deepgram-batch.ts:108-115`, read at `:342`), so it is the cheapest fix in the
