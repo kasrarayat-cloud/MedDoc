@@ -152,6 +152,10 @@ async function seedClinicalData(
       data: {
         name: `${TAG} ${label} Template`,
         doctorId: userId,
+        // ⚠️ T7 — REQUIRED WITH doctorId by the biconditional
+        // `note_templates_practice_iff_doctor`. tsc cannot see this: the
+        // shared prisma client is `any`, so no Prisma argument is checked.
+        practiceId,
         sections: [
           { key: 'subjective', label: 'Subjective' },
           { key: 'objective', label: 'Objective' },

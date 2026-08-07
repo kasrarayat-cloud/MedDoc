@@ -344,6 +344,9 @@ export async function createTemplateTwinDraft(
         data: {
           id: noteTemplateId,
           doctorId: input.actor.userId,
+          // T7 — the biconditional `note_templates_practice_iff_doctor` pairs these
+          // two. tsc cannot see it: the shared prisma client is `any`.
+          practiceId: input.actor.practiceId,
           name: bridgedName,
           encounterType: null,
           sections: bridgedSections,
