@@ -40,6 +40,11 @@ export const T1_BETA_SLUG = 't1-beta';
 export const T1_ALPHA_1_EMAIL = 't1-alpha-1@t1.invalid';
 export const T1_ALPHA_2_EMAIL = 't1-alpha-2@t1.invalid';
 export const T1_BETA_1_EMAIL = 't1-beta-1@t1.invalid';
+/** ⚠️ T6 — the TECH seat. The negative half of the sign gate needs a member who
+ *  is legitimately IN the practice and legitimately may NOT sign; without one,
+ *  "TECH is refused by name" can only be tested by mutating a role at runtime,
+ *  which proves the branch fires and not that the fixture can reach it. */
+export const T1_ALPHA_3_EMAIL = 't1-alpha-3@t1.invalid';
 
 /** Marks every row this seed writes, so cleanup can key on it and a human
  *  reading the table can tell fixture from clinical data at a glance. */
@@ -53,7 +58,19 @@ async function upsertPractice(slug: string, name: string) {
   });
 }
 
-async function upsertMember(email: string, name: string, practiceId: string) {
+async function upsertMember(
+  email: string,
+  name: string,
+  practiceId: string,
+  // ⚠️ T6 — THE ROLE IS AN ARGUMENT, NOT A DEFAULT, AND THAT IS THE POINT.
+  // Before this the fixture seeded three members and never set `practiceRole`,
+  // so all three took the schema default and T4's positive gate — "a non-owner
+  // member signs, signedBy ≠ createdBy" — could not pass EVEN AFTER T6 landed:
+  // §4.1a refuses a non-clinical role by name, so the gate would have failed for
+  // a reason that has nothing to do with T4. Measured before building; see the
+  // T6 reconnaissance in docs/foundation/RELAY.md.
+  practiceRole: 'OWNER' | 'CLINICIAN' | 'TECH',
+) {
   // ⚠️ `passwordHash` and `updatedAt` ARE REQUIRED and the first version of this
   // omitted both. I extracted required fields for the three clinical models and
   // never ran the same extraction over `User` — the third partial-inspection
@@ -83,11 +100,12 @@ async function upsertMember(email: string, name: string, practiceId: string) {
   const NEVER_A_VALID_HASH = await bcrypt.hash(password, 12);
   return prisma.user.upsert({
     where: { email },
-    update: { practiceId },
+    update: { practiceId, practiceRole },
     create: {
       email,
       name,
       practiceId,
+      practiceRole,
       passwordHash: NEVER_A_VALID_HASH,
       emailVerified: new Date(),
       products: ['TRANSCRIBE_MD'] as const,
@@ -198,9 +216,15 @@ async function main() {
   // made the upsert key different every run — so `upsert` never matched and each
   // invocation created NEW members. Alpha reached 4 members after two runs while
   // the seed cheerfully reported 2. An upsert whose key is random is an insert.
-  const a1 = await upsertMember(T1_ALPHA_1_EMAIL, 'T1 Alpha One', alpha.id);
-  const a2 = await upsertMember(T1_ALPHA_2_EMAIL, 'T1 Alpha Two', alpha.id);
-  const b1 = await upsertMember(T1_BETA_1_EMAIL, 'T1 Beta One', beta.id);
+  // alpha-1 OWNS the practice and authors the visits.
+  const a1 = await upsertMember(T1_ALPHA_1_EMAIL, 'T1 Alpha One', alpha.id, 'OWNER');
+  // ⚠️ alpha-2 is a CLINICIAN, not an owner. This is what makes T4's positive
+  // gate meaningful: a NON-OWNER signs a colleague's visit, so signedBy and
+  // createdBy differ for a reason the production data has never produced.
+  const a2 = await upsertMember(T1_ALPHA_2_EMAIL, 'T1 Alpha Two', alpha.id, 'CLINICIAN');
+  // The TECH seat — in the practice, reads everything (§4.1b), signs nothing.
+  await upsertMember(T1_ALPHA_3_EMAIL, 'T1 Alpha Three', alpha.id, 'TECH');
+  const b1 = await upsertMember(T1_BETA_1_EMAIL, 'T1 Beta One', beta.id, 'OWNER');
 
   await seedClinicalData(a1.id, alpha.id, 'A1', 4);
   await seedClinicalData(a2.id, alpha.id, 'A2', 2);
@@ -223,8 +247,33 @@ async function main() {
     `[t1] alpha=${T1_ALPHA_SLUG} members=${alphaMembers} visits=${alphaVisits} · ` +
       `beta=${T1_BETA_SLUG} members=${betaMembers} visits=${betaVisits}`,
   );
-  if (alphaMembers < 2) {
-    throw new Error(`[t1] alpha has ${alphaMembers} member(s) — T4's gate needs a NON-OWNER to sign`);
+  if (alphaMembers < 3) {
+    throw new Error(
+      `[t1] alpha has ${alphaMembers} member(s) — T6's gates need an OWNER, a CLINICIAN and a TECH`,
+    );
+  }
+
+  // ⚠️ THE ROLES ARE ASSERTED, NOT ASSUMED. `upsert` with `update: { … }` is
+  // easy to get wrong in a way that silently leaves an existing row's role
+  // stale — and a stale role turns the sign gates into tests of the wrong
+  // member. MEASURED from the database, like the counts above.
+  const roles: Array<{ email: string; practiceRole: string | null }> = await prisma.user.findMany({
+    where: { practiceId: alpha.id },
+    select: { email: true, practiceRole: true },
+    orderBy: { email: 'asc' },
+  });
+  const shape = roles.map((r) => `${r.email}=${r.practiceRole}`).join(' ');
+  console.log(`[t1] alpha roles: ${shape}`);
+  const want: Record<string, string> = {
+    [T1_ALPHA_1_EMAIL]: 'OWNER',
+    [T1_ALPHA_2_EMAIL]: 'CLINICIAN',
+    [T1_ALPHA_3_EMAIL]: 'TECH',
+  };
+  for (const [email, expected] of Object.entries(want)) {
+    const got = roles.find((r) => r.email === email)?.practiceRole ?? null;
+    if (got !== expected) {
+      throw new Error(`[t1] ${email} has practiceRole=${got}, expected ${expected}`);
+    }
   }
   if (alphaVisits === 0 || betaVisits === 0) {
     throw new Error('[t1] a side has zero visits — the isolation gate would be vacuous');

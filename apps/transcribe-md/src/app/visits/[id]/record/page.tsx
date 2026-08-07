@@ -53,7 +53,12 @@ export default async function RecordVisitPage({
       specialty: true,
     },
   });
-  if (!visit || visit.userId !== session.user.id) notFound();
+  // T6 §4.1c — the author conjunct is GONE; practice membership is the gate.
+    // The read above is practice-scoped (T5), so reaching this line means the
+    // visit is in the caller's practice. SIGNING is the only role-gated action
+    // (SPEC §1.2); tech-creates/doctor-signs requires every member to be able to
+    // prepare work.
+    if (!visit) notFound();
 
   // Only QUEUED visits are eligible for recording. Anything further
   // along the pipeline sends the doctor to the regular visit page.

@@ -63,6 +63,7 @@ async function main() {
         passwordHash,
         role: u.role,
         practiceId: u.practiceId,
+        practiceRole: 'OWNER', // T6: the CHECK requires a role for an active member
         isActive: true,
         lockedUntil: null,
         failedLoginCount: 0,
@@ -74,6 +75,7 @@ async function main() {
         passwordHash,
         role: u.role,
         practiceId: u.practiceId,
+        practiceRole: 'OWNER', // T6: the CHECK requires a role for an active member
         isActive: true,
       },
     });
@@ -107,6 +109,7 @@ async function main() {
       passwordHash,
       role: 'DOCTOR',
       practiceId: PRACTICE_A_ID,
+      practiceRole: 'OWNER', // T6: the CHECK requires a role for an active member
       isActive: true,
       lockedUntil: null,
       failedLoginCount: 0,
@@ -118,6 +121,7 @@ async function main() {
       passwordHash,
       role: 'DOCTOR',
       practiceId: PRACTICE_A_ID,
+      practiceRole: 'OWNER', // T6: the CHECK requires a role for an active member
       isActive: true,
     },
   });
@@ -130,6 +134,7 @@ async function main() {
         firstName: p.firstName,
         lastName: p.lastName,
         practiceId: p.practiceId,
+        practiceRole: 'OWNER', // T6: the CHECK requires a role for an active member
         createdById: p.createdById,
         assignedDoctorId: p.assignedDoctorId,
         status: 'ACTIVE',
@@ -142,6 +147,7 @@ async function main() {
         birthYear: 1980,
         mrn: `MRN-${p.id}`,
         practiceId: p.practiceId,
+        practiceRole: 'OWNER', // T6: the CHECK requires a role for an active member
         createdById: p.createdById,
         assignedDoctorId: p.assignedDoctorId,
         status: 'ACTIVE',
@@ -194,6 +200,7 @@ async function main() {
         id: a.id,
         patientId: a.patientId,
         practiceId: a.practiceId,
+        practiceRole: 'OWNER', // T6: the CHECK requires a role for an active member
         allergen: a.allergen,
         severity: a.severity,
       },
@@ -215,6 +222,7 @@ async function main() {
         id: m.id,
         patientId: m.patientId,
         practiceId: m.practiceId,
+        practiceRole: 'OWNER', // T6: the CHECK requires a role for an active member
         name: m.name,
         dosage: m.dosage,
         frequency: m.frequency,

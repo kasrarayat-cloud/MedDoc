@@ -215,6 +215,11 @@ export type AuditAction =
   // walked around entirely. A gate nothing enforces is one alternate path away
   // from not existing; this row is what makes the refusal auditable.
   | 'SIGN_BLOCKED_NO_ATTESTATION'
+  // SIGN_BLOCKED_ROLE_NOT_PERMITTED: a sign request from a practice member whose
+  // PracticeRole may not sign (TECH). Refused by name per SPEC §4.1a. The value
+  // is added to the Prisma AuditAction enum in the SAME commit — a TS union
+  // alone compiles and then fails at the database.
+  | 'SIGN_BLOCKED_ROLE_NOT_PERMITTED'
   // F-8 audit leg (2026-07-02) — deterministic drug-pair floor (L7c).
   // RX_DRUG_PAIR_* metadata: { ruleId, primaryDrug, otherDrug, severity,
   // doseMgPerDay? }. RX_COMPLEX_DOSING_VERIFY_INDIVIDUALLY carries the

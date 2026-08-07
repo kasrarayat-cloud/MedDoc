@@ -152,14 +152,17 @@ describe('POST /api/visits/[id]/em-score/apply-additions', () => {
     expect(res.status).toBe(400);
   });
 
-  it('404 when the visit belongs to a different user', async () => {
+  // ⚠️ REWRITTEN FOR T6 — this asserted OWNERSHIP, which §4.1b retired.
+  // A colleague's visit in the same practice is now legitimately reachable
+  // (read is practice-uniform; only SIGNING is role-gated). The property worth
+  // asserting is the PRACTICE boundary, and that is enforced in the QUERY —
+  // the route reads `where: { id, practiceId }`, so an out-of-practice visit
+  // never comes back. The mock returns null, which is what the database does.
+  it('404 for a visit in ANOTHER PRACTICE', async () => {
     mocks.auth.mockResolvedValue({
       user: { id: FAKE_USER, practiceId: FAKE_PRACTICE },
     });
-    mocks.visitFindUnique.mockResolvedValue({
-      ...READY_VISIT,
-      userId: 'someone_else',
-    });
+    mocks.visitFindUnique.mockResolvedValue(null);
     const res = await POST(
       makeReq({ additions: [{ criterionId: 'hpi.elements', text: 'X' }] }),
       ctx,

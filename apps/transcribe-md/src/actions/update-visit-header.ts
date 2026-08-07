@@ -60,9 +60,6 @@ export async function updateVisitHeaderAction(
   const visit = await prisma.transcribeVisit.findFirst({
     where: {
       ...visitByIdScope(visitId, session.user.practiceId),
-      // ACTION, not a read: the author conjunct stays until T6's role
-      // gate decides who else may edit. Widening SEE never widens DO.
-      userId: session.user.id,
       deletedAt: null,
       archivedAt: null,
     },

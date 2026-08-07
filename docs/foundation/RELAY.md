@@ -251,7 +251,18 @@ Columns added; `POST /api/visits/[id]/sign` records the actual signer.
 three disagreeing signer records (36 / 16 / 16, DISCOVERY §B.7) or state in the
 ledger why they still disagree.
 
-### ⏸ T4 — createdBy / signedBy — **PARTIAL 2026-08-06. Blocked as a DEPENDENCY.**
+### 🟨 T4 — createdBy / signedBy — **PARTIAL; the dependency is DISCHARGED, flips CLOSED on landing**
+
+⚠️ **THE POSITIVE GATE NOW RUNS AND PASSES.** T6's fixture gave alpha-2 a
+CLINICIAN role and `35-sign-role-gate.spec.ts` drives the REAL route: a
+non-author signs a colleague's unsigned visit, 200, and `signedBy ≠ createdBy` —
+which production's 26 visits could never have demonstrated, since signer equals
+author in all 16 signed rows.
+
+T4 stays PARTIAL in this ledger only until T6 lands on `main`; the blocker itself
+is discharged. The original text follows.
+
+### ⏸ T4 (original) — createdBy / signedBy — **PARTIAL 2026-08-06. Blocked as a DEPENDENCY.**
 
 **T4-a LANDED** (PR #529, merge `ee6aabfb`, deployed 2026-08-06). Both columns,
 both derivations stated in the migration header, the author fallback DECLARED as
@@ -487,7 +498,186 @@ The runtime `requirePractice` **stays**: `{ practiceId: undefined }` is `{}` to
 Prisma — **every tenant** — and that is the one failure here that is silent and
 WIDER. A brand stops honest callers, not an `as any`.
 
-### ▶ T6 — roles, and the sign gate that refuses — **OPEN, next**
+### 🟩 T5 ADOPTION IS LIVE IN PRODUCTION — 2026-08-07T00:26Z
+
+**`main@74ca2ef2`** (PR #532). Full four-workflow citation on the MERGE COMMIT:
+
+| Workflow | Run | Result |
+|---|---|---|
+| `CI` | `31132137862` | ✅ success |
+| `e2e` | `31132137861` | ✅ success |
+| `a11y-ci` | `31132137976` | ✅ success |
+| `secrets-scan` | `31132137898` | ✅ success |
+
+Deployed with `scripts/deploy-prod.sh`; log at
+`docs/deploy-logs/deploy-20260807T002618Z.log`. Rollback tags
+**`:pre-t5adopt-20260806`** cut against the RUNNING image ids
+(`ef2845ffb584` / `2bda2b058f26`) and verified to resolve to them — not to a tag
+string.
+
+#### THE POST-DEPLOY CHECK WAS A COMPARISON, AND THE DIFF IS TWO LINES
+
+A baseline was captured BEFORE the deploy so the check could be a diff rather
+than an assertion in isolation. The entire difference:
+
+    -  transcribe-md         sha256:ef2845ffb584…
+    -  transcribe-md-worker  sha256:2bda2b058f26…
+    +  transcribe-md         sha256:221106902 46a…
+    +  transcribe-md-worker  sha256:133036c0a08a…
+
+**Nothing else moved.** Containers 9/9 identical, migrations 87/87 identical,
+co-tenants identical (307/410/404/200), and the clinical counts byte-identical:
+
+    26 visits · 15 patients · 16 signed · 10 539 audit rows
+
+That last line is the point of the exercise. A code-only deploy that changed a
+clinical count would be the finding, and the only way to know is to have written
+the numbers down first.
+
+Standing checks green: imaging E/M invariant (0 of 15), migrations asserted
+87 in repo / 87 applied, both encrypted mounts.
+
+#### ⚠️ `/board` RETURNS 200 UNAUTHENTICATED — PRE-EXISTING, NOT THIS DEPLOY
+
+Found while verifying: `/board` answers **200** to an unauthenticated request
+where `/visits` and `/patients` answer **307**. Investigated rather than waved
+past, because a 200 on a clinical route is the right thing to be alarmed by.
+
+- **No data is exposed.** 0 hits for `patientName`, `chiefComplaint` or any
+  cuid-shaped id; the body is a shell carrying "Sign in".
+- **The redirect DOES fire** — `NEXT_REDIRECT` is present in the RSC payload.
+  The page streams, so the shell flushes before the guard throws and Next can no
+  longer send a 307; the client performs the redirect instead.
+- ⚠️ **ATTRIBUTED, NOT ASSUMED.** The pre-deploy image was started from the
+  rollback tag on the compose network and probed: **`/board` 200, `/visits` 307**
+  — identical. This predates T5 adoption and is not a regression.
+
+Carried as an open cosmetic/architectural item, not a security one.
+
+### ⚠️ #531's MERGE-COMMIT CITATION IS 2 OF 4 — a PLATFORM limitation, stated
+
+`main@3f656fb3` (PR #531, T5's accessor + guard):
+
+| Workflow | Merge-commit result |
+|---|---|
+| `CI` | ✅ **success** — run `31118255254` (incl. `unit tests`, `test`, `npm audit`, `dev-dep advisories`) |
+| `a11y-ci` | ✅ **success** — run `31118255287` |
+| `e2e` | ⚠️ **NEVER DISPATCHED** — run `31118255417`, `queued` since 16:00 UTC |
+| `secrets-scan` | ⚠️ **NEVER DISPATCHED** — run `31118255265`, `queued` since 16:00 UTC |
+
+**The two are zombie runs from the GitHub incident of 2026-08-06** (status page:
+partial → major outage, ~16:00–23:00 UTC). They cannot be recovered: `gh run
+cancel` reports *"Cannot cancel a workflow run that is completed"* while the run
+list still reports `queued`, and `gh run rerun` reports *"cannot be rerun; its
+workflow file may be broken"*. They will not complete and cannot be replaced on
+that SHA.
+
+**A PR-head green is NOT substituted for them**, per the standing rule.
+
+What IS true, stated narrowly:
+
+- `CI` — which carries the unit suite — **passed on the merge commit itself**.
+- #531 changed **three files: `practice-scope.ts` (a new module NO runtime path
+  imported), its unit test, and SPEC prose.** There is no code path an E2E or a
+  secret scan could exercise differently, because there is no code path at all.
+- **#532's merge commit CONTAINS #531's changes** and gets a full four-workflow
+  run. That is a stronger statement than re-running #531's would have been: the
+  same code, verified on a later merge commit, by workflows that actually
+  dispatched.
+
+### 🟨 T6 — roles, and the sign gate that refuses — **BUILT 2026-08-06, awaiting the landed base**
+
+Built on `feat/teams-t6-roles`, stacked on T5. **Merges only on top of #532**, per
+the standing sequence — nothing here reaches `main` before the base it assumes.
+
+| | |
+|---|---|
+| **`PracticeRole`** | new enum on `users.practiceRole`; `UserRole` marked do-not-extend |
+| **Backfill** | active + has a practice → OWNER. ⚠️ the ruling's premise was measured FALSE; see below |
+| **Constraint** | `users_active_member_has_practice_role`, proven by attempt + positive control |
+| **Bypass** | `canBypassTenantScope` DELETED; `tenantScope` returns a REQUIRED practiceId |
+| **Sign gate** | two branches — cross-practice 404, in-practice wrong role 403 by name |
+| **Conjuncts** | 23 removed, 1 kept and declared |
+| **Fixture** | alpha-1 OWNER · alpha-2 CLINICIAN · **alpha-3 TECH (new seat)** · beta-1 OWNER |
+| **Gates** | `35-sign-role-gate.spec.ts` — positive, negative, unchanged. All green |
+
+#### ⚠️ THE BACKFILL RULING'S PREMISE WAS FALSE — 18 of 196
+
+The ruling reads *"every active user today is the sole member of their personal
+practice."* Measured on production:
+
+    active 196 · sole member 178 · in a MULTI-MEMBER practice 18 · no practice 0
+
+Main Clinic 11 · QA Audit Practice 5 · Test Clinic B 2. Taken literally those 18
+derive NULL and trip the constraint — the migration aborts, correctly and
+uselessly. **Stated rule: they take OWNER too, because a migration must not
+DOWNGRADE anybody.** Every member can do everything today; deriving CLINICIAN or
+TECH removes a capability on a hierarchy nobody stated, and the schema records no
+designation to derive one from. All three hold ZERO visits and ZERO patients
+(positive-controlled against the two that do hold data).
+
+#### PRE-DEPLOY DRY-RUN AGAINST PRODUCTION — read-only, 2026-08-06
+
+The migration's own predicates, evaluated against prod before it ever runs there:
+
+    would become OWNER (active + has a practice) ....... 196
+    stays NULL — deactivated ...........................   0
+    stays NULL — no practice ...........................   0
+    total users ........................................ 196
+
+196 + 0 + 0 = 196, so **no row is underivable and the abort guard will not
+fire**. Every production user takes OWNER of their own practice, which is what
+the ruling intends and what the structure supports — with the 18 multi-member
+rows covered by the stated no-downgrade rule rather than by the premise.
+
+`SIGN_BLOCKED_ROLE_NOT_PERMITTED` is absent from prod's `AuditAction` enum (0),
+so the second migration has work to do and is not a no-op.
+
+#### ⚠️ THE AUDIT-ROW FAILURE, A THIRD TIME — and the narrower lesson
+
+Adding `SIGN_BLOCKED_ROLE_NOT_PERMITTED`:
+
+1. landed in `audit.ts` only — the schema anchor missed on indentation; caught by
+   an occurrence assertion.
+2. landed in `audit.ts` **and** `schema.prisma` — and still not in the DATABASE,
+   because a Prisma enum **value** needs its own migration. `prisma validate`,
+   `tsc` and 3192 unit tests all passed while the refusal fired correctly with a
+   403 and its audit row silently did not.
+
+The only thing that caught (2) was the E2E **reading the row back**. The app
+logged `invalid input value for enum "AuditAction"` and swallowed it, because
+`logAudit` is deliberately fire-and-forget so an audit failure cannot break a
+clinical action.
+
+> **A FIRE-AND-FORGET WRITER MEANS THE ONLY PROOF AN AUDIT ROW EXISTS IS A TEST
+> THAT READS IT BACK.** Every gate that claims "and the refusal is audited" needs
+> that assertion, or the claim is a comment.
+
+#### ⚠️ PRODUCTION SIGNUP WOULD HAVE BROKEN — the T3 shape again
+
+The CHECK makes a role required for an active member. `src/actions/auth.ts:502`
+did not set one, so **every new signup would have failed on the first request
+after deploy**, with a constraint error naming the CHECK rather than the missing
+column. Swept all **9** user create/upsert sites by ORM method AND by raw SQL
+(none); all 9 now set a role wherever they set a practice.
+
+#### ⚠️ CARRIED OUT OF T6 — clinical WRITES are not accessor-scoped
+
+SPEC §1.4 says *"every read **and write** of a clinical table goes through it"*.
+T5's guard watched READS ONLY, so its ratchet reached zero over half the named
+surface — the coverage-vs-criteria class, second instance in one day.
+
+**Measured: 25 request-context clinical writes carry no practice predicate.**
+**No leak is open** — every one is reached only after a practice-scoped read in
+the same handler — but they lack a predicate of their OWN, the "borrowed
+authorisation" shape T5 itself argued against, one refactor from being wrong.
+
+A **write ratchet at 25** lands with T6 so the class cannot grow. Scoping the 25
+is its own item, and it is not T6's. Two were fixed in T6 because they had no
+practice predicate AND lost their author one (`rescore-em`'s updateManys would
+have become id-only writes).
+
+### T6 (original wording) — roles, and the sign gate that refuses
 OWNER / CLINICIAN / TECH. The sign gate is server-side and fail-closed: an
 unrecognised or absent role refuses.
 **Gate:** a TECH member's `POST /sign` is **refused by the route** — proven with
@@ -635,6 +825,100 @@ audit row.
    member signs and `signedBy ≠ createdBy` — flipping **T4 PARTIAL → CLOSED**.
    The T1 fixture gains roles here, so its second member is a CLINICIAN, which
    is what makes that gate passable at all.
+
+### ▶ T5-W — the write-scope debt — **ORDERED, immediately after T6 lands**
+
+The 25 request-context clinical WRITES adopt the accessor **exactly as the reads
+did**. This is T5's other half, not a polish item: SPEC §1.4 names *"every read
+**and write** of a clinical table"*, and T5's guard watched reads only.
+
+⚠️ **PRIORITY, RECORDED AS RULED: a cross-practice WRITE MUTATES ANOTHER
+TENANT'S CHART.** A leaked read is a disclosure; a leaked write is a false entry
+in someone else's medical record, and it is the kind of error that is discovered
+by a clinician reading a note that says something they did not write. **This does
+not linger behind BILLING.**
+
+**No leak is open today** — every one of the 25 is reached only after a
+practice-scoped read in the same handler. What they lack is a predicate of their
+OWN: the "borrowed authorisation" shape T5 itself argued against, one refactor
+from being wrong. The write ratchet at **25** ships with T6 so the class cannot
+grow while this is outstanding.
+
+The shape, mirroring T5 exactly:
+
+1. **BY-TABLE TRANCHES.** `transcribe_visits` first, then `note_templates`, then
+   `transcribe_md_patients` — same order, same reasoning.
+2. **The ratchet is lowered in the SAME COMMIT as the code.** The number in the
+   guard and the number in the codebase never disagree. 25 → 0.
+3. **The flip to a wall is its own cited event**, as the read side's was.
+4. **ATTEMPT-PROOFS IN BOTH DIRECTIONS**, per tranche: a cross-practice write is
+   REFUSED, and a same-practice write SUCCEEDS. The second half is not optional —
+   without it a predicate that matches nothing would pass the first.
+5. **TRANSACTIONAL, per canon.** Every write a gate is supposed to refuse runs
+   inside `BEGIN … ROLLBACK`, so the attempt is observable and never
+   consequential — the rule earned on 2026-08-05 when a mutation proof nulled 21
+   signers.
+
+#### 📐 T5-W RECONNAISSANCE — measured 2026-08-07, READ-ONLY
+
+    25 unscoped clinical writes
+      by model   transcribeVisit 19 · noteTemplate 4 · transcribeMdPatient 2
+      by method  update 18 · updateMany 6 · deleteMany 1
+
+⚠️ **THE STRUCTURAL OBSTACLE, AND IT IS THE WRITE-SIDE TWIN OF T5's.** Eighteen
+are `update({ where: { id } })`, and **Prisma's `update` requires a UNIQUE
+where** — a `practiceId` conjunct cannot simply be added, exactly as `findUnique`
+could not carry one on the read side. There the answer was `findUnique →
+findFirst`. Here it is `update → updateMany`, which is **not a free swap**:
+`updateMany` returns `{ count }` instead of the row.
+
+So the 18 split, and the split decides the work:
+
+| | count | treatment |
+|---|---|---|
+| `update`, return **discarded** | **15** | mechanical → `updateMany` + the predicate |
+| `update`, return **USED** | **3** | `updateMany` + an explicit re-read, or keep `update` behind a verified-scoped read and say so |
+| `updateMany` already | 6 | add the predicate; no shape change |
+| `deleteMany` | 1 | add the predicate |
+
+The three that use their row: `api/patients/[id]/route.ts:216`,
+`api/visits/[id]/route.ts:313`, `actions/soap.ts:191` — all assign to `updated`
+and read it afterwards.
+
+⚠️ **PRE-AUTHORIZED 2026-08-07 — EITHER TREATMENT, PER SITE, DECLARED IN THE
+COMMIT.** Each of the three may take:
+
+- **`updateMany` + a re-read INSIDE THE SAME TRANSACTION** — the re-read must be
+  transactional or it reintroduces the read-after-write window the `updateMany`
+  was chosen to close, and `soap.ts` already carries an optimistic
+  `soapVersion` guard whose whole purpose is that window; or
+- **a STATED EXCEPTION** — keep `update`, with the reasoning in place: the write
+  is preceded by a practice-scoped read of the same id in the same handler, and
+  that fact is what authorises it.
+
+The exception is legitimate and it is also exactly the "borrowed authorisation"
+shape this unit exists to retire, so **an exception must say why the borrowing is
+sound HERE**, not merely that it is convenient. Site by site, in the commit, not
+as a blanket policy.
+
+One write is not by id at all: `update-visit-header.ts:153` is a BULK
+`updateMany` over `{ patientId, signedAt: null }` — a rename spreading across a
+patient's unsigned visits. It has no id to be unique on and is the clearest case
+for the accessor.
+
+⚠️ **THE COUNT-0 TRAP GOVERNS ALL 25 — ruled 2026-08-07.** A scoped `updateMany`
+whose predicate matches nothing returns `{ count: 0 }` — no error, no exception —
+and several call sites already treat `count === 0` as *"a concurrent write won"*.
+**A wrong predicate would therefore wear the benign-race costume**, and the
+symptom is a save that silently does nothing on a chart the user can see.
+
+> **EVERY converted site's attempt-proof includes the POSITIVE direction.** Not
+> the refusing tranche's — every site's. A refusal-only proof is satisfied by a
+> predicate that matches nothing, which is the failure it was meant to exclude.
+
+This is the same defect family as a vacuous assertion, arriving through a
+runtime API rather than a test: `{ count: 0 }` is a *successful call* that did
+nothing.
 
 ### T7 — the remaining tables gain `practiceId`
 `visit_deliveries`, `doctor_edit_patterns`, `rx_warning_overrides`, the four

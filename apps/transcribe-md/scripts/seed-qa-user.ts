@@ -65,6 +65,11 @@ export function buildUserUpsertPayload(args: {
       emailVerified: new Date(),
       products: ['TRANSCRIBE_MD'] as const,
       practiceId: PRACTICE_ID,
+      // ⚠️ T6 — the CHECK `users_active_member_has_practice_role` requires a
+      // role for an ACTIVE member. Both branches set isActive: true, so both
+      // need it; a create-only fix would pass the first run and fail every
+      // re-seed, which is the harder failure to read.
+      practiceRole: 'OWNER' as const,
       specialty: 'family-medicine',
       timeZone: 'America/Los_Angeles',
     },
@@ -77,6 +82,11 @@ export function buildUserUpsertPayload(args: {
       emailVerified: new Date(),
       products: ['TRANSCRIBE_MD'] as const,
       practiceId: PRACTICE_ID,
+      // ⚠️ T6 — the CHECK `users_active_member_has_practice_role` requires a
+      // role for an ACTIVE member. Both branches set isActive: true, so both
+      // need it; a create-only fix would pass the first run and fail every
+      // re-seed, which is the harder failure to read.
+      practiceRole: 'OWNER' as const,
       specialty: 'family-medicine',
       timeZone: 'America/Los_Angeles',
     },

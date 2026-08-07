@@ -1,0 +1,31 @@
+-- ===========================================================================
+-- T6 — the AuditAction value for the role refusal.
+-- ---------------------------------------------------------------------------
+-- ⚠️ THIS FILE EXISTS BECAUSE THE SAME MISTAKE HAPPENED A THIRD TIME.
+--
+-- On 2026-08-03 a sign refusal shipped whose audit row silently did not, because
+-- the TypeScript union was updated and the Prisma enum was not. AGENTS.md
+-- records it as "the TS union is not the database".
+--
+-- Today, adding `SIGN_BLOCKED_ROLE_NOT_PERMITTED`:
+--
+--   attempt 1  landed in `audit.ts` ONLY — the schema.prisma edit's anchor
+--              missed on indentation. Caught by an occurrence assertion.
+--   attempt 2  landed in BOTH `audit.ts` and `schema.prisma`… and still not in
+--              the DATABASE, because a Prisma enum VALUE needs its own
+--              migration. `prisma validate` passed. `tsc` passed. The unit
+--              suite passed. The refusal fired correctly with a 403.
+--
+-- The only thing that caught attempt 2 was the E2E asserting the AUDIT ROW
+-- rather than the refusal. The app logged
+-- `invalid input value for enum "AuditAction"` and swallowed it, because
+-- `logAudit` is deliberately fire-and-forget so an audit failure cannot break a
+-- clinical action.
+--
+-- ⚠️ SO THE LESSON IS NARROWER THAN "REMEMBER THE MIGRATION": a fire-and-forget
+-- writer means the ONLY proof an audit row exists is a test that reads it back.
+-- Every gate that claims "and the refusal is audited" needs that assertion, or
+-- the claim is a comment.
+-- ===========================================================================
+
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'SIGN_BLOCKED_ROLE_NOT_PERMITTED';

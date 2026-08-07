@@ -106,9 +106,8 @@ export async function chatEditVisitAction(
   const visit = await prisma.transcribeVisit.findFirst({
     where: {
       ...visitByIdScope(visitId, session.user.practiceId),
-      // ACTION, not a read: the author conjunct stays until T6's role gate
-      // decides who else may edit. Widening SEE never widens DO.
-      userId: session.user.id,
+      // T6 §4.1c — the author conjunct is GONE. Practice membership is the
+      // gate; SIGNING is the only role-gated action (SPEC §1.2).
       deletedAt: null,
       archivedAt: null,
     },

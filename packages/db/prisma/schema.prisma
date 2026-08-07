@@ -31,6 +31,23 @@ datasource db {
 /// - DOCTOR: full clinical access (view/edit patient notes, generate docs)
 /// - ADMIN:  user management, audit log access, billing, no direct clinical edits
 /// - STAFF:  scheduling, intake, limited PHI access
+/// The member's role WITHIN a practice — TEAMS T6, ruled 2026-08-06.
+///
+/// ⚠️ A SEPARATE ENUM FROM `UserRole`, DELIBERATELY. `UserRole` mixes a clinical
+/// distinction with a platform-privilege one and has no way to say "owns this
+/// practice"; adding values to it would deepen that conflation rather than fix
+/// it. Two axes, two enums, and the legacy one is marked do-not-extend.
+enum PracticeRole {
+  /// Signs, and administers the practice. The backfill's only output.
+  OWNER
+  /// Signs. May act on any UNSIGNED visit in the practice (SPEC §4.1a).
+  CLINICIAN
+  /// Prepares work; REFUSED BY NAME at the sign route, server-side, fail-closed.
+  /// Reads the practice's clinical data like anyone else (SPEC §4.1b) — the role
+  /// boundary is on ACTIONS, not on visibility.
+  TECH
+}
+
 enum UserRole {
   DOCTOR
   STAFF
@@ -379,6 +396,19 @@ enum AuditAction {
   // measured 2026-08-02, before this migration.
   SIGN_BLOCKED_NO_ATTESTATION
 
+  /// T6 — a sign request from a member whose PRACTICE ROLE may not sign (TECH).
+  /// Refused BY NAME, server-side, per SPEC §4.1a: "you may not sign" and "this
+  /// does not exist" are different facts and a clinician deserves the true one.
+  /// Metadata carries the role, never note text.
+  ///
+  /// ⚠️ ADDED TO THE PRISMA ENUM IN THE SAME COMMIT AS THE TS UNION. On
+  /// 2026-08-03 a refusal shipped whose audit row silently did not, because the
+  /// union was updated and the database enum was not. The union is not the
+  /// database — and this edit's first attempt missed this file while landing in
+  /// audit.ts, which is the same failure arriving a second time. An occurrence
+  /// assertion caught it.
+  SIGN_BLOCKED_ROLE_NOT_PERMITTED
+
   // F-8 audit leg (2026-07-02) — deterministic drug-PAIR interaction floor
   // (worker L7c, checkDrugInteractions). RX_DRUG_PAIR_* metadata: { ruleId,
   // primaryDrug, otherDrug, severity, doseMgPerDay? }; the complex-dosing
@@ -576,7 +606,29 @@ model User {
   passwordHash String
 
   // === RBAC ===
+  /// ⚠️ LEGACY PLATFORM AXIS — DO NOT EXTEND. Ruled 2026-08-06 (RULINGS.md).
+  /// This enum conflates a CLINICAL distinction (DOCTOR/STAFF) with a
+  /// PLATFORM-PRIVILEGE one (ADMIN/SUPER_ADMIN), and cannot express ownership of
+  /// a practice at all. The practice axis is `practiceRole` below.
+  ///
+  /// Never add a value here. ADMIN/SUPER_ADMIN's disposition is an ADMIN-phase
+  /// item — the platform ADMIN flag replaces them. DOCTOR/STAFF become
+  /// non-load-bearing once the practiceRole backfill lands.
   role UserRole @default(STAFF)
+
+  // === The PRACTICE axis (TEAMS T6) ===
+  /// The member's role WITHIN their practice. Separate from `role` above by
+  /// ruling: two axes, never one enum.
+  ///
+  /// ⚠️ NULLABLE ON PURPOSE, AND THE DATABASE CONSTRAINT SAYS WHEN.
+  /// `users_active_member_has_practice_role` requires a value for any ACTIVE
+  /// user who has a practice. Deactivated rows and practice-less rows carry
+  /// NULL — a deactivated account has no role in a practice, and a sentinel
+  /// there would be a claim nobody made.
+  ///
+  /// Real CLINICIAN/TECH assignments arrive only via T8 invites carrying a role.
+  /// The backfill mints OWNER and nothing else — see the migration header.
+  practiceRole PracticeRole?
 
   // === Clinician profile (app-redesign-v1) ===
   // Doctor-facing profile fields the Settings UI writes to. `clinicName`
@@ -690,8 +742,8 @@ model User {
   transcribeVisits       TranscribeVisit[]
   /// T4 back-relations. Named because TranscribeVisit now points at User three
   /// ways — owner, creator, signer — and Prisma cannot disambiguate unnamed ones.
-  visitsCreated        TranscribeVisit[] @relation("VisitCreatedBy")
-  visitsSigned         TranscribeVisit[] @relation("VisitSignedBy")
+  visitsCreated          TranscribeVisit[]   @relation("VisitCreatedBy")
+  visitsSigned           TranscribeVisit[]   @relation("VisitSignedBy")
   userSessions           UserSession[]
   // T-M14.1: per-doctor edit tracking (one row per signed visit).
   doctorEditPatterns     DoctorEditPattern[]
@@ -726,6 +778,8 @@ model User {
   @@index([practiceId])
   @@index([role])
   @@index([isActive])
+  /// T6 — the sign gate reads one of these per request.
+  @@index([practiceId, practiceRole])
   @@map("users")
 }
 
@@ -1689,7 +1743,6 @@ model TranscribeMdPatient {
   /// first — soft-delete is the expected path).
   transcribeVisits TranscribeVisit[]
 
-  @@index([practiceId, deletedAt])
   /// ⚠️ T3 — THE TARGET OF TranscribeVisit's COMPOSITE FK. `id` alone is already
   /// unique (it is the PK), so this adds no uniqueness. It exists because
   /// Postgres will not accept a composite foreign key unless the referenced
@@ -1697,6 +1750,7 @@ model TranscribeMdPatient {
   /// practice differs from its patient's UNREPRESENTABLE rather than merely
   /// discouraged. Removing this line silently removes that guarantee.
   @@unique([id, practiceId])
+  @@index([practiceId, deletedAt])
   // Trigram GIN index for fuzzy name search is added by the migration
   // SQL directly (Prisma doesn't natively express `USING gin (LOWER(name)
   // gin_trgm_ops)`). See migration 20260420_*_add_transcribe_md_patients.
@@ -1729,8 +1783,8 @@ model TranscribeVisit {
   /// T4 — who CREATED this visit. Same value as `userId` today; the separate
   /// column is what lets `userId` come to mean "owner" without rewriting the
   /// record of who made it.
-  createdBy String
-  creator   User   @relation("VisitCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  createdBy  String
+  creator    User     @relation("VisitCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
 
   /// T4 — who SIGNED it. NULL until signed, and NULL is honest: an unsigned
   /// visit has no signer and a sentinel would be a lie about attestation.

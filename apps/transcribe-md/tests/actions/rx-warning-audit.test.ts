@@ -113,10 +113,25 @@ describe('recordOverride — correlation guard (fix/rx-override-gate-correlation
     expect(mocks.overrideCreate).not.toHaveBeenCalled();
   });
 
-  it('still rejects a non-owner before any warning resolution (defense in depth)', async () => {
-    mocks.visitFindUnique.mockResolvedValueOnce({ userId: 'someone-else', rxDrafts: RX_DRAFTS });
+  // ⚠️ REWRITTEN FOR T6 — this asserted OWNERSHIP ("a non-owner is rejected"),
+  // which §4.1b retired: a colleague in the same practice may legitimately
+  // resolve an Rx warning on a shared chart, because only SIGNING is
+  // role-gated. What must still be refused is a visit in ANOTHER PRACTICE, and
+  // that is enforced by the query's practice predicate rather than by a branch
+  // — so the row simply does not come back.
+  it('still refuses when the visit is not in the caller\'s practice', async () => {
+    mocks.visitFindUnique.mockResolvedValueOnce(null);
     const result = await recordOverride(input({}));
     expect(result.ok).toBe(false);
     expect(mocks.overrideCreate).not.toHaveBeenCalled();
+  });
+
+  it('a COLLEAGUE in the same practice may now resolve the warning', async () => {
+    // The positive half — without it the change above is only a deletion, and
+    // nothing proves the widening actually happened.
+    mocks.visitFindUnique.mockResolvedValueOnce({ userId: 'a-colleague', rxDrafts: RX_DRAFTS });
+    const result = await recordOverride(input({}));
+    expect(result.ok, 'a same-practice colleague was refused').toBe(true);
+    expect(mocks.overrideCreate).toHaveBeenCalled();
   });
 });

@@ -22,6 +22,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   findUnique: vi.fn(),
+  userFindUnique: vi.fn(),
   updateMany: vi.fn(),
   rxOverrideFindMany: vi.fn(),
   auth: vi.fn(),
@@ -65,6 +66,9 @@ vi.mock('@meddoc/db', () => {
       findFirst: mocks.findUnique,
       updateMany: mocks.updateMany,
     },
+    // T6: the sign gate reads the SIGNER's practice role. Without this the
+    // route throws before any gate under test runs, and 13 specs report 500.
+    user: { findUnique: mocks.userFindUnique },
     rxWarningOverride: { findMany: mocks.rxOverrideFindMany },
   };
   return { default: prisma, prisma };
@@ -155,6 +159,9 @@ beforeEach(() => {
   mocks.auth.mockResolvedValue({
     user: { id: DOCTOR, email: 'doc@test.dev', practiceId: 'p1' },
   });
+  // A CLINICIAN by default — these specs test the attestation/E-M gates, not
+  // the role gate, so the role must not be what refuses them.
+  mocks.userFindUnique.mockResolvedValue({ practiceRole: 'CLINICIAN' });
   mocks.findUnique.mockResolvedValue(visitRow());
   mocks.updateMany.mockResolvedValue({ count: 1 });
   mocks.rxOverrideFindMany.mockResolvedValue([]);

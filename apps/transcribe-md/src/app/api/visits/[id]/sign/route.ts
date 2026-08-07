@@ -206,7 +206,56 @@ export const POST = withApiHandler<{ id: string }>(
         specialty: true,
       },
     });
-    if (!visit || visit.userId !== userId) return apiError('not found', 404);
+    // ═══ THE SIGN GATE — TWO BRANCHES, AND THEY ARE NOT INTERCHANGEABLE ═══
+    //
+    // ⚠️ 1. CROSS-PRACTICE → 404, SILENT. The read above is practice-scoped
+    // (T5), so a visit in another practice simply does not come back. 404 is
+    // deliberate here: "not found" and "not yours" must be indistinguishable, or
+    // the response becomes an id-enumeration oracle for other practices' charts.
+    if (!visit) return apiError('not found', 404);
+    //
+    // ⚠️ 2. IN-PRACTICE, WRONG ROLE → REFUSED BY NAME. SPEC §4.1a: "you may not
+    // sign" and "this does not exist" are different facts, and a clinician
+    // deserves the true one. A TECH looking at a visit they legitimately SEE
+    // (§4.1b — read is practice-uniform) gets a real explanation, not a lie
+    // about the record existing. There is no enumeration risk: they can already
+    // see it.
+    //
+    // Fail-closed on an ABSENT or UNRECOGNISED role, not just on TECH. A member
+    // whose practiceRole is somehow null refuses too — the database CHECK makes
+    // that unreachable for an active member, and this does not rely on it.
+    const signer = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { practiceRole: true },
+    });
+    if (signer?.practiceRole !== 'OWNER' && signer?.practiceRole !== 'CLINICIAN') {
+      // The refusal is audited. R1's lesson: a gate nothing records is one path
+      // away from not existing.
+      void logAudit({
+        action: 'SIGN_BLOCKED_ROLE_NOT_PERMITTED',
+        targetType: 'TranscribeVisit',
+        targetId: visitId,
+        // Structured only — the role and the fact of refusal. Never note text.
+        metadata: { practiceRole: signer?.practiceRole ?? null },
+      });
+      return NextResponse.json(
+        {
+          error:
+            signer?.practiceRole === 'TECH'
+              ? 'Your role cannot sign clinical notes. Ask a clinician in your practice to sign this visit.'
+              : 'Your account does not have a role that can sign clinical notes.',
+          code: 'ROLE_MAY_NOT_SIGN',
+        },
+        { status: 403 }
+      );
+    }
+    //
+    // ⚠️ 3. AUTHORSHIP IS NO LONGER A GATE — §4.1c retired, per §4.1a.
+    // This line used to read `|| visit.userId !== userId`. OWNER and CLINICIAN
+    // may sign any UNSIGNED visit in their practice: the target workflow is
+    // tech-creates, doctor-signs, and the locum principle carries through — the
+    // chart owns the note, the signer owns the signature. `signedBy` is stamped
+    // server-side below, so who signed is recorded rather than assumed.
     // T-M17.3: never silently sign a trashed / archived visit. Archived
     // SIGNED visits cannot be re-signed via this route — the operator
     // must unarchive first (dedicated flow, not in T-M17.3 scope).

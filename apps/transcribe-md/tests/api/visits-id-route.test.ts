@@ -117,21 +117,33 @@ describe('GET /api/visits/[id]', () => {
     expect(body.visit.status).toBe('READY');
   });
 
-  it('returns 404 for a foreign visit (anti-enumeration: same code as not-found)', async () => {
+  // ⚠️ REWRITTEN FOR T6, AND THE OLD ASSERTION WAS MEASURING OWNERSHIP.
+  // It used to hand back a visit with `userId: 'user_owner_2'` and require a
+  // 404 — which tested that a COLLEAGUE's visit was hidden. Under §4.1b that is
+  // no longer true and should not be: read is practice-uniform, and the route
+  // now returns it. The anti-enumeration property the test's name claims is
+  // about the PRACTICE boundary, and that is what it asserts now.
+  //
+  // The tenancy refusal happens in the QUERY, not in a branch: the route reads
+  // `where: { id, practiceId }`, so a visit in another practice never comes
+  // back at all. The mock therefore returns null — which is exactly what the
+  // database would do.
+  it('returns 404 for a visit in ANOTHER PRACTICE (anti-enumeration)', async () => {
     mocks.auth.mockResolvedValue({ user: { id: FAKE_USER_ID, practiceId: FAKE_PRACTICE_ID } });
-    mocks.visitFindUnique.mockResolvedValue({
-      id: FAKE_VISIT_ID,
-      userId: 'user_owner_2', // different owner
-      patientId: 'pat_2',
-      patientName: 'Other',
-      specialty: 'primary-care',
-      chiefComplaint: 'x',
-      inputMode: 'audio_upload',
-      status: TranscribeVisitStatus.READY,
-    });
+    mocks.visitFindUnique.mockResolvedValue(null);
 
     const res = await GET(makeReq('GET'), ctx);
     expect(res.status).toBe(404);
+
+    // ⚠️ WITHOUT THIS THE TEST IS THE SAME AS "the row does not exist" BELOW.
+    // Both mock null, so the 404 alone proves nothing about tenancy. Asserting
+    // the practice predicate reached the query is what makes this test about
+    // the PRACTICE boundary rather than about an empty result.
+    expect(mocks.visitFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ practiceId: FAKE_PRACTICE_ID }),
+      }),
+    );
   });
 
   it('returns 404 when the visit row does not exist', async () => {

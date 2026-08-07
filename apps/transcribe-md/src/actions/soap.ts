@@ -110,7 +110,12 @@ export async function saveSoapDraftAction(
       user: { select: { practiceId: true } },
     },
   });
-  if (!visit || visit.userId !== session.user.id) {
+  // T6 §4.1c — the author conjunct is GONE; practice membership is the gate.
+    // The read above is practice-scoped (T5), so reaching this line means the
+    // visit is in the caller's practice. SIGNING is the only role-gated action
+    // (SPEC §1.2); tech-creates/doctor-signs requires every member to be able to
+    // prepare work.
+    if (!visit) {
     return { ok: false, error: 'Visit not found.' };
   }
   // T-M17.3: reject writes on trashed / archived visits. The UI
