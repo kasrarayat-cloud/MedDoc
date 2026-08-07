@@ -498,6 +498,62 @@ The runtime `requirePractice` **stays**: `{ practiceId: undefined }` is `{}` to
 Prisma — **every tenant** — and that is the one failure here that is silent and
 WIDER. A brand stops honest callers, not an `as any`.
 
+### 🟩 T5 ADOPTION IS LIVE IN PRODUCTION — 2026-08-07T00:26Z
+
+**`main@74ca2ef2`** (PR #532). Full four-workflow citation on the MERGE COMMIT:
+
+| Workflow | Run | Result |
+|---|---|---|
+| `CI` | `31132137862` | ✅ success |
+| `e2e` | `31132137861` | ✅ success |
+| `a11y-ci` | `31132137976` | ✅ success |
+| `secrets-scan` | `31132137898` | ✅ success |
+
+Deployed with `scripts/deploy-prod.sh`; log at
+`docs/deploy-logs/deploy-20260807T002618Z.log`. Rollback tags
+**`:pre-t5adopt-20260806`** cut against the RUNNING image ids
+(`ef2845ffb584` / `2bda2b058f26`) and verified to resolve to them — not to a tag
+string.
+
+#### THE POST-DEPLOY CHECK WAS A COMPARISON, AND THE DIFF IS TWO LINES
+
+A baseline was captured BEFORE the deploy so the check could be a diff rather
+than an assertion in isolation. The entire difference:
+
+    -  transcribe-md         sha256:ef2845ffb584…
+    -  transcribe-md-worker  sha256:2bda2b058f26…
+    +  transcribe-md         sha256:221106902 46a…
+    +  transcribe-md-worker  sha256:133036c0a08a…
+
+**Nothing else moved.** Containers 9/9 identical, migrations 87/87 identical,
+co-tenants identical (307/410/404/200), and the clinical counts byte-identical:
+
+    26 visits · 15 patients · 16 signed · 10 539 audit rows
+
+That last line is the point of the exercise. A code-only deploy that changed a
+clinical count would be the finding, and the only way to know is to have written
+the numbers down first.
+
+Standing checks green: imaging E/M invariant (0 of 15), migrations asserted
+87 in repo / 87 applied, both encrypted mounts.
+
+#### ⚠️ `/board` RETURNS 200 UNAUTHENTICATED — PRE-EXISTING, NOT THIS DEPLOY
+
+Found while verifying: `/board` answers **200** to an unauthenticated request
+where `/visits` and `/patients` answer **307**. Investigated rather than waved
+past, because a 200 on a clinical route is the right thing to be alarmed by.
+
+- **No data is exposed.** 0 hits for `patientName`, `chiefComplaint` or any
+  cuid-shaped id; the body is a shell carrying "Sign in".
+- **The redirect DOES fire** — `NEXT_REDIRECT` is present in the RSC payload.
+  The page streams, so the shell flushes before the guard throws and Next can no
+  longer send a 307; the client performs the redirect instead.
+- ⚠️ **ATTRIBUTED, NOT ASSUMED.** The pre-deploy image was started from the
+  rollback tag on the compose network and probed: **`/board` 200, `/visits` 307**
+  — identical. This predates T5 adoption and is not a regression.
+
+Carried as an open cosmetic/architectural item, not a security one.
+
 ### ⚠️ #531's MERGE-COMMIT CITATION IS 2 OF 4 — a PLATFORM limitation, stated
 
 `main@3f656fb3` (PR #531, T5's accessor + guard):
