@@ -25,6 +25,13 @@
 
 BEGIN;
 
+-- ⚠️ THE NO-DELETION PROOF PINS ITS OWN BASELINE, INSIDE THE TRANSACTION.
+-- An earlier draft hardcoded `196`. That is a number copied from a document,
+-- and it goes stale the moment somebody signs up — the same "derive it, never
+-- thread it" rule T3's raw-SQL sites take. Captured here, compared at the end.
+CREATE TEMP TABLE _gate0_baseline ON COMMIT DROP AS
+  SELECT count(*)::int AS users_before FROM users;
+
 DO $$
 DECLARE
   target      int;
@@ -76,7 +83,21 @@ UPDATE users u
 
 -- One audit row per account. §164.312(b): the deactivation is an access-affecting
 -- administrative act and must be attributable to the ruling that authorised it.
-INSERT INTO audit_logs (id, action, "targetType", "targetId", metadata, "timestamp", "practiceIdSnapshot")
+--
+-- ⚠️ BOTH `practiceId` AND `practiceIdSnapshot` ARE SET, AND THE OMISSION OF THE
+-- FIRST WAS A REAL DEFECT — corrected 2026-08-07 before this ever ran.
+-- Under T2's fail-closed rule a NULL `practiceId` MEANS SOMETHING: "this row's
+-- tenant could not be resolved". Measured on production, 10546 of 10560 rows
+-- carry both; only 8 are snapshot-only and 6 are system rows with neither. These
+-- twelve are trivially resolvable — `u."practiceId"` is already in this SELECT —
+-- so writing the snapshot alone would have filed twelve perfectly-attributable
+-- rows into the bucket reserved for attribution FAILURES, and quietly eroded the
+-- one signal T2 exists to make trustworthy. Nothing would have errored.
+--
+-- `userId` stays NULL deliberately: the actor here is a war-room RULING, not a
+-- logged-in human, and inventing a user to satisfy the column would be a false
+-- claim about who acted. The `ruling` key in `metadata` is the attribution.
+INSERT INTO audit_logs (id, action, "targetType", "targetId", metadata, "timestamp", "practiceId", "practiceIdSnapshot")
 SELECT
   'gate0-' || substr(md5(u.id || '-gate0-deactivation'), 1, 20),
   'USER_DEACTIVATED'::"AuditAction",
@@ -86,9 +107,11 @@ SELECT
     'ruling', 'GATE 0.1 (SPEC §4.1) — veto lapsed, owner-confirmed 2026-08-05',
     'reason', 'MEDDOC_PRO-only account; excluded from the TEAMS backfill',
     'rowsRetained', true,
-    'clinicalDataOwned', false
+    'clinicalDataOwned', false,
+    'actor', 'ruling — no session user; see SPEC §4.1'
   ),
   now(),
+  u."practiceId",
   u."practiceId"
 FROM users u
 WHERE u.products @> ARRAY['MEDDOC_PRO']::"Product"[]
@@ -98,8 +121,11 @@ WHERE u.products @> ARRAY['MEDDOC_PRO']::"Product"[]
 -- the failure mode this whole file is shaped against.
 DO $$
 DECLARE
-  still_active int;
-  audited      int;
+  still_active   int;
+  audited        int;
+  unattributed   int;
+  deactivated    int;
+  users_total    int;
 BEGIN
   SELECT count(*) INTO still_active
     FROM users u
@@ -112,14 +138,41 @@ BEGIN
    WHERE action = 'USER_DEACTIVATED'::"AuditAction"
      AND metadata->>'ruling' LIKE 'GATE 0.1%';
 
+  -- ⚠️ THE ROW COUNT IS NOT THE CLAIM. "12 audit rows exist" is satisfied by 12
+  -- rows that say nothing useful; the claim is that each one is ATTRIBUTED.
+  SELECT count(*) INTO unattributed
+    FROM audit_logs
+   WHERE metadata->>'ruling' LIKE 'GATE 0.1%'
+     AND ("practiceId" IS NULL OR "practiceIdSnapshot" IS NULL OR "targetId" IS NULL);
+
+  SELECT count(*) INTO deactivated
+    FROM users u
+   WHERE u.products @> ARRAY['MEDDOC_PRO']::"Product"[]
+     AND NOT (u.products && ARRAY['TRANSCRIBE_MD']::"Product"[])
+     AND u."isActive" = false;
+
+  SELECT users_before INTO users_total FROM _gate0_baseline;
+
   IF still_active > 0 THEN
     RAISE EXCEPTION '[gate0] % accounts are still active after the update. Rolling back.', still_active;
   END IF;
   IF audited <> 12 THEN
     RAISE EXCEPTION '[gate0] % audit rows written, expected 12. Rolling back — a deactivation without its trail is not done.', audited;
   END IF;
+  IF unattributed > 0 THEN
+    RAISE EXCEPTION '[gate0] % audit rows are missing practiceId/snapshot/targetId. Rolling back — an unattributed audit row is the state T2 exists to prevent.', unattributed;
+  END IF;
+  IF deactivated <> 12 THEN
+    RAISE EXCEPTION '[gate0] % deactivated, expected 12. Rolling back.', deactivated;
+  END IF;
+  -- NO DELETION. The ruling says rows are retained; prove it rather than assert it.
+  IF (SELECT count(*) FROM users) <> users_total THEN
+    RAISE EXCEPTION '[gate0] users total moved % → % — a row was created or DELETED. Rolling back.',
+      users_total, (SELECT count(*) FROM users);
+  END IF;
 
-  RAISE NOTICE '[gate0] 12 deactivated, 12 audit rows, 0 still active, 0 rows deleted';
+  RAISE NOTICE '[gate0] 12 deactivated · 12 audit rows, all attributed · 0 still active · users % → %, 0 deleted',
+    users_total, (SELECT count(*) FROM users);
 END $$;
 
 COMMIT;
