@@ -577,10 +577,17 @@ model Practice {
   apiUsageEvents       ApiUsageEvent[]
 
   // Template Twin native-DOCX (additive back-relations; no column change).
-  templateTwinSources TemplateTwinSourceArtifact[]
-  templateTwinFills   TemplateTwinFillManifest[]
+  templateTwinSources          TemplateTwinSourceArtifact[]
+  templateTwinFills            TemplateTwinFillManifest[]
   /// T8 — invites that admit into this practice.
-  inviteCodes         InviteCode[]
+  inviteCodes                  InviteCode[]
+  visitDeliveries              VisitDelivery[]
+  doctorEditPatterns           DoctorEditPattern[]
+  rxWarningOverrides           RxWarningOverride[]
+  templateTwinCompiledVersions TemplateTwinCompiledVersion[]
+  templateTwinFieldDefinitions TemplateTwinFieldDefinition[]
+  templateTwinSemanticMappings TemplateTwinSemanticMapping[]
+  templateTwinCertifications   TemplateTwinCertification[]
 
   @@index([slug])
   @@map("practices")
@@ -934,7 +941,12 @@ model AccountDeletion {
   /// where this is in the past.
   purgeAt DateTime
 
+  /// T7 — NULLABLE like audit_logs (S4c): a deletion record outlives the
+  /// account, so this is the practice AT DELETION TIME, not a live FK.
+  practiceId String?
+
   @@index([purgeAt])
+  @@index([practiceId])
   @@map("account_deletions")
 }
 
@@ -2149,7 +2161,11 @@ model VisitDelivery {
 
   createdAt DateTime @default(now())
 
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
   @@index([visitId])
+  @@index([practiceId])
   @@map("visit_deliveries")
 }
 
@@ -2208,8 +2224,14 @@ model DoctorEditPattern {
 
   createdAt DateTime @default(now())
 
+  /// T7 — derives from the VISIT, not the doctor: the chart owns the note.
+  /// This table stores originalSoap/editedSoap as full text.
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
   @@index([doctorId, createdAt])
   @@index([doctorId, editDistance])
+  @@index([practiceId])
   @@map("doctor_edit_patterns")
 }
 
@@ -2314,8 +2336,15 @@ model NoteTemplate {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// ⚠️ T7 — NULLABLE, and the database enforces a BICONDITIONAL:
+  /// `note_templates_practice_iff_doctor` — a template has a practice IFF it has
+  /// a doctor. Prisma cannot express that; see the migration header. Ruled
+  /// 2026-08-07: the sentinel-practice alternative was rejected.
+  practiceId String?
+
   @@index([doctorId, status])
   @@index([isSystemDefault])
+  @@index([practiceId])
   /// ⚠️ TWO UNIQUE INDEXES ON THIS TABLE EXIST IN POSTGRES AND CANNOT BE
   /// DECLARED HERE. Prisma has no syntax for PARTIAL indexes, and both are
   /// partial:
@@ -2438,6 +2467,9 @@ model RxWarningOverride {
 
   overriddenAt DateTime @default(now()) @db.Timestamptz(6)
 
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
   /// Round 3 PR-E (A09-P0-001) — same (visit, warning) pair can be
   /// re-clicked by an anxious doctor or a flaky network retry; this
   /// constraint keeps that idempotent (one row per real warning). The
@@ -2450,6 +2482,7 @@ model RxWarningOverride {
   @@unique([visitId, warningId], name: "rx_warning_overrides_visit_warning_unique", map: "rx_warning_overrides_visitId_warningId_key")
   @@index([visitId])
   @@index([overriddenBy])
+  @@index([practiceId])
   @@map("rx_warning_overrides")
 }
 
@@ -2774,11 +2807,15 @@ model TemplateTwinCompiledVersion {
   certification TemplateTwinCertification?
   fills         TemplateTwinFillManifest[]
 
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
   /// Multiple immutable NoteTemplate versions may reuse the same immutable
   /// source package when a physician explicitly forks only the semantic
   /// mapping. noteTemplateId remains the one-to-one version boundary.
   @@index([sourceArtifactId, compilerVersion])
   @@index([certificationStatus, compiledAt])
+  @@index([practiceId])
   @@map("template_twin_compiled_versions")
 }
 
@@ -2803,9 +2840,13 @@ model TemplateTwinFieldDefinition {
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
   @@unique([compiledVersionId, fieldId])
   @@index([compiledVersionId, displayOrder])
   @@index([compiledVersionId, detectionStatus])
+  @@index([practiceId])
   @@map("template_twin_field_definitions")
 }
 
@@ -2840,7 +2881,11 @@ model TemplateTwinSemanticMapping {
   createdAt    DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
 
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
   @@index([mappingStatus, updatedAt])
+  @@index([practiceId])
   @@map("template_twin_semantic_mappings")
 }
 
@@ -2860,7 +2905,11 @@ model TemplateTwinCertification {
   testOutputSha256        String   @db.Char(64)
   certifiedAt             DateTime @default(now()) @db.Timestamptz(6)
 
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id])
+
   @@index([certifiedById, certifiedAt])
+  @@index([practiceId])
   @@map("template_twin_certifications")
 }
 

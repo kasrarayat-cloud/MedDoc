@@ -137,6 +137,9 @@ export async function recordOverride(
           headline: input.headline,
           reason: trimmedReason,
           overriddenBy: session.user.id,
+          // T7 — the practice this override belongs to. The read above is
+          // already scoped by it, so this cannot disagree with the visit.
+          practiceId: session.user.practiceId,
         },
         select: { id: true },
       });

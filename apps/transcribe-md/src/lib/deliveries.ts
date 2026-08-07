@@ -24,6 +24,11 @@ export interface LogDeliveryInput {
   channel: DeliveryChannel;
   destination?: string | null;
   sizeBytes?: number | null;
+  /** ⚠️ T7 — REQUIRED. Callers already hold it (every export route resolves a
+   *  practice-scoped visit first). Passed rather than derived because this
+   *  writer is fire-and-forget: a derivation query here could fail as silently
+   *  as the insert it feeds. */
+  practiceId: string;
 }
 
 export function logDelivery(input: LogDeliveryInput): void {
@@ -31,6 +36,13 @@ export function logDelivery(input: LogDeliveryInput): void {
     .create({
       data: {
         visitId: input.visitId,
+        // ⚠️ T7 — REQUIRED, AND THIS WRITER IS FIRE-AND-FORGET. Without it every
+        // delivery log would fail SILENTLY (`void … .catch()` swallows it) and
+        // the export would still look successful. tsc cannot help here: the
+        // shared prisma client is typed `any`, so no Prisma argument in this
+        // codebase is type-checked. Found by enumerating the table, not by the
+        // compiler.
+        practiceId: input.practiceId,
         channel: input.channel,
         destination: input.destination ?? null,
         sizeBytes: input.sizeBytes ?? null,

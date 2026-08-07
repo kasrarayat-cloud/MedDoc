@@ -128,6 +128,12 @@ function fieldCreateInput(
   ir: TemplateDocIR,
   mappings: readonly SemanticMapping[],
   proposedByModel: string | null,
+  // ⚠️ T7 — THREADED THROUGH THE NESTED CREATES. `fields.create` and its own
+  // `mapping.create` are two more rows in the twin chain, and the migration
+  // derives both from source_artifacts.practiceId. tsc surfaced the field level
+  // only because this file imports concrete Prisma types — the shared client is
+  // `any`, so nothing here is checked by default.
+  practiceId: string,
 ) {
   const mappingById = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
   return ir.fields.map((field) => {
@@ -139,6 +145,7 @@ function fieldCreateInput(
       );
     }
     return {
+      practiceId,
       fieldId: field.fieldId,
       displayOrder: field.displayOrder,
       originalLabel: field.originalLabel,
@@ -151,6 +158,7 @@ function fieldCreateInput(
       required: field.required,
       mapping: {
         create: {
+          practiceId,
           // The classification is decided at PROPOSAL time from the compiler's
           // own label. If it is not written here the row defaults to
           // 'extraction', and a field nobody dictates looks like a field the
@@ -368,6 +376,10 @@ export async function createTemplateTwinDraft(
           id: compiledVersionId,
           sourceArtifactId,
           noteTemplateId,
+          // T7 — derived in the migration from source_artifacts.practiceId; the
+          // same value, one layer up. The actor's practice IS the artifact's:
+          // the artifact was created from this actor two statements above.
+          practiceId: input.actor.practiceId,
           compilerVersion: ir.compilerVersion,
           irSchemaVersion: ir.irSchemaVersion,
           compiledDocumentIr: asJson(ir),
@@ -378,7 +390,7 @@ export async function createTemplateTwinDraft(
             ir.stats.blockingUnsupported > 0 ? 'UNSUPPORTED' : 'NEEDS_CONFIRMATION',
           blockingUnsupportedCount: ir.stats.blockingUnsupported,
           fields: {
-            create: fieldCreateInput(ir, mappings, proposedByModel),
+            create: fieldCreateInput(ir, mappings, proposedByModel, input.actor.practiceId),
           },
         },
       });

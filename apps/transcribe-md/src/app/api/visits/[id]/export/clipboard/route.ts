@@ -66,6 +66,7 @@ export const POST = withApiHandler<{ id: string }>(
 
     logDelivery({
       visitId,
+      practiceId: session.user.practiceId,
       channel: CHANNEL_BY_FORMAT[parsed.data.format],
       sizeBytes: Buffer.byteLength(text, 'utf8'),
     });
