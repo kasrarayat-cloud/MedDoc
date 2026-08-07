@@ -776,7 +776,52 @@ bash scripts/assert-migrations-applied.sh     # READ-ONLY. 0 = all applied, 1 = 
 bash scripts/check-qa-mock-posture.sh         # READ-ONLY. 0 = severed, 1 = LIVE KEYS, 2 = stack down
 bash scripts/check-minio-encrypted-mount.sh   # READ-ONLY. 0 = encrypted, 1 = DRIFT, 2 = can't tell
 bash scripts/check-pg-encrypted-mount.sh      # READ-ONLY. 0 = encrypted, 1 = DRIFT, 2 = can't tell
+bash scripts/check-ingress-tls.sh             # READ-ONLY. 0 = all SNIs OK, 1 = 502ing, 2 = can't tell
 ```
+
+**A HEALTHY CONTAINER SAYS NOTHING ABOUT WHETHER ANYONE CAN REACH IT**, and that
+sentence is a six-hour total outage on 2026-08-07. Every public hostname —
+`app.quillmd.com` included — returned 502 while all twenty containers reported
+healthy, migrations were 90/90, and every check above was green. They were green
+correctly: **none of them looks at the ingress hop.**
+
+nginx re-encrypts to Caddy on `127.0.0.1:8443` with `proxy_ssl_verify off`. That
+flag is what made the failure unobservable: because nginx does not verify the
+upstream certificate, an **expired** cert there works perfectly, so Caddy served
+expired certs from its in-memory cache for weeks with nothing anywhere
+complaining. A storage clean removed them from disk, a reboot dropped the cache,
+and Caddy came back holding no certificate at all.
+
+⚠️ **AND IT WILL PRESENT AS INTERMITTENT AND PATH-SPECIFIC WHEN IT IS NEITHER.**
+nginx reuses upstream TLS sessions, so requests riding an already-resumed session
+kept returning 200/307 in the *same second* that fresh ones returned 502 — which
+is why the first read of the symptom was wrong. **Only a fresh handshake per SNI
+answers the question**; a `curl` sweep measures your own session cache. The check
+above forces one, and runs a bogus-SNI negative control first so that a probe
+which cannot discriminate reports `2` instead of a green.
+
+The fix was **filed 65 days earlier and priced by how annoying it was**, not by
+what it was a symptom of: `docs/qa-reports/site-down-20260603.md` §9.5 recorded
+"add `tls internal` to the quillmd Caddy blocks" as a 🟢 item titled *"Caddy ACME
+noise"*. Meanwhile `DEPLOYMENT_RUNBOOK.md` §5.6 asserted the hop already used
+"its own internal certs" — **a sentence that was false for two months**, read by
+everyone as a description of the running system rather than of the intent.
+
+> **A follow-up whose priority came from the loudness of the symptom rather than
+> from what the symptom is a symptom OF is a defect with a due date nobody wrote
+> down. And a document that states an intended state in the present tense will be
+> read as evidence — so it has to be a check, or it is a wish.**
+
+⚠️ **A FILE BIND-MOUNT BINDS THE INODE.** `docker-compose.yml` binds
+`./Caddyfile` — a *file*. An editor that writes-then-renames replaces the inode,
+so the container keeps the orphaned original: the host shows the edit, the
+container does not, `caddy reload` says `config is unchanged`, and **`caddy
+validate` returns `Valid configuration` because it validated the OLD file.**
+Rewriting in place does not help once the swap has happened, and `up -d` declines
+because no compose config hash changed. `--force-recreate` is what re-resolves
+the bind — and it is the better proof anyway, since it exercises the cold start
+that is the failure mode. **Assert the applied count inside the CONTAINER, never
+on the host.**
 
 **A mountpoint directory exists whether or not anything is mounted on it**, and
 that sentence is the whole of a four-hour plaintext window on 2026-07-29. MinIO's
