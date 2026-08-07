@@ -770,6 +770,45 @@ audit row.
    The T1 fixture gains roles here, so its second member is a CLINICIAN, which
    is what makes that gate passable at all.
 
+### ▶ T5-W — the write-scope debt — **ORDERED, immediately after T6 lands**
+
+The 25 request-context clinical WRITES adopt the accessor **exactly as the reads
+did**. This is T5's other half, not a polish item: SPEC §1.4 names *"every read
+**and write** of a clinical table"*, and T5's guard watched reads only.
+
+⚠️ **PRIORITY, RECORDED AS RULED: a cross-practice WRITE MUTATES ANOTHER
+TENANT'S CHART.** A leaked read is a disclosure; a leaked write is a false entry
+in someone else's medical record, and it is the kind of error that is discovered
+by a clinician reading a note that says something they did not write. **This does
+not linger behind BILLING.**
+
+**No leak is open today** — every one of the 25 is reached only after a
+practice-scoped read in the same handler. What they lack is a predicate of their
+OWN: the "borrowed authorisation" shape T5 itself argued against, one refactor
+from being wrong. The write ratchet at **25** ships with T6 so the class cannot
+grow while this is outstanding.
+
+The shape, mirroring T5 exactly:
+
+1. **BY-TABLE TRANCHES.** `transcribe_visits` first, then `note_templates`, then
+   `transcribe_md_patients` — same order, same reasoning.
+2. **The ratchet is lowered in the SAME COMMIT as the code.** The number in the
+   guard and the number in the codebase never disagree. 25 → 0.
+3. **The flip to a wall is its own cited event**, as the read side's was.
+4. **ATTEMPT-PROOFS IN BOTH DIRECTIONS**, per tranche: a cross-practice write is
+   REFUSED, and a same-practice write SUCCEEDS. The second half is not optional —
+   without it a predicate that matches nothing would pass the first.
+5. **TRANSACTIONAL, per canon.** Every write a gate is supposed to refuse runs
+   inside `BEGIN … ROLLBACK`, so the attempt is observable and never
+   consequential — the rule earned on 2026-08-05 when a mutation proof nulled 21
+   signers.
+
+⚠️ **AND THE `updateMany` SHAPE IS THE ONE TO WATCH.** A scoped `updateMany`
+whose predicate matches nothing returns `{ count: 0 }` — no error, no exception,
+and several call sites already treat `count === 0` as "a concurrent write won".
+A wrong predicate would therefore read as a benign race rather than as a refusal.
+The attempt-proof's positive half is what distinguishes them.
+
 ### T7 — the remaining tables gain `practiceId`
 `visit_deliveries`, `doctor_edit_patterns`, `rx_warning_overrides`, the four
 unscoped `template_twin_*` tables, `account_deletions`, and `note_templates`
