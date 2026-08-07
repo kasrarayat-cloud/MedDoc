@@ -200,6 +200,55 @@ versioned). The first attempt at the failed deploy was run as
 the two sections that would have shown the no-op. **The record of a deploy must
 outlive the terminal.**
 
+### 2.5 ⚠️ DECLARE THE EXPECTED DELTA BEFORE YOU DEPLOY — standing rule
+
+**Every deploy captures a baseline first, and every MIGRATION-CARRYING deploy
+additionally writes down its EXPECTED DELTA: what must change, and what must
+NOT. The post-deploy check is then judged against that declaration.**
+
+For a code-only deploy the declaration is one line — **"nothing but the image
+ids"** — and it is still written down, because that is what makes any other
+movement a finding rather than a discussion.
+
+#### Why this is a rule and not a nicety
+
+A post-deploy check written AFTER the deploy is unfalsifiable. Every number has
+a story available to it, and a migration deploy supplies a ready-made excuse for
+*any* movement at all — "well, the migration touched that table". Declaring the
+delta first removes the excuse: the comparison has exactly one correct answer,
+fixed before the evidence existed.
+
+It is the same discipline as *no evidence before the event*, pointed the other
+way: **say what the deploy will change, then check whether it changed only
+that.**
+
+#### The shape
+
+Capture the baseline, then a table with three columns' worth of intent:
+
+| | expected |
+|---|---|
+| migrations applied | `N → N+k`, with **k stated** |
+| new columns / enum values | named, and their before-count (usually 0) |
+| image ids | change |
+| **clinical row counts** | **UNCHANGED — visits · patients · signed · users** |
+| containers · co-tenants | unchanged |
+
+Then `diff` the post-deploy capture against the baseline and read every line
+against the declaration. **A difference that is not in the table is the
+finding**, whatever its explanation sounds like afterwards.
+
+⚠️ **The clinical-count row is the one that matters and it is never omitted.** A
+deploy that moves a visit, patient or signature count has done something nobody
+asked it to, and the only way to know is to have written the numbers down while
+they were still true.
+
+#### Worked example — T5's adoption deploy, 2026-08-07
+
+Declaration: *nothing but image ids.* Result: the whole diff was two image
+digests; containers 9/9, migrations 87/87, co-tenants identical, and
+**26 visits · 15 patients · 16 signed · 10 539 audit rows** byte-identical.
+
 ### 2.4 Manual equivalent, if you must
 
 ```bash

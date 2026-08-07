@@ -402,6 +402,26 @@ met. So the discipline is a step, not an instinct:
 checklist, and the most confident-looking zero in a programme is the one produced
 over a universe nobody re-checked.
 
+## A DEPLOY DECLARES ITS EXPECTED DELTA BEFORE IT RUNS
+
+**Standing part of the deploy standard — `docs/DEPLOYMENT_RUNBOOK.md` §2.5.**
+Capture a baseline first; for a migration-carrying deploy also write down what
+MUST change and what must NOT; judge the post-deploy comparison against that
+declaration. A code-only deploy's declaration is one line: **"nothing but the
+image ids."**
+
+**A post-deploy check written afterwards is unfalsifiable.** Every number has a
+story available to it, and a migration supplies a ready-made excuse for *any*
+movement — *"the migration touched that table"*. Declaring first removes the
+excuse: the comparison has one correct answer, fixed before the evidence existed.
+Same discipline as *no evidence before the event*, pointed the other way.
+
+**A difference that is not in the declaration is THE FINDING**, whatever its
+explanation sounds like after the fact. And the clinical-count row is never
+omitted — a deploy that moves a visit, patient or signature count has done
+something nobody asked for, and the only way to know is to have written the
+numbers down while they were still true.
+
 ## A CONSTRAINT IS SWEPT BY ITS PREDICATE, NEVER BY THE ORM METHOD
 
 **Standing rule for every CHECK, NOT NULL, unique or FK you add.** The universe
