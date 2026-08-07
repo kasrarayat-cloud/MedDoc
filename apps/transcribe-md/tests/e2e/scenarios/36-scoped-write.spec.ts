@@ -139,10 +139,30 @@ test.describe('T5-W — the scoped write refuses the wrong tenant AND serves the
     // race would make the test flaky in exchange for no extra information.
     const src = execSync('cat src/lib/practice-scope.ts', { encoding: 'utf8' });
     expect(src).toMatch(/if \(res\.count === 0\) throw new ScopedWriteMissError/);
+
+    // ⚠️ THIS ASSERTED `where: unknown` AND BROKE ON A STRICTLY BETTER SIGNATURE.
+    // F-TYPE made `scopedUpdate` GENERIC — `where: TWhere` — because `unknown`
+    // is the TOP type and therefore CONTRAVARIANT in that position, so once the
+    // shared Prisma client was typed no real delegate was assignable to it. The
+    // generic version still takes the predicate as a parameter; it additionally
+    // type-checks it. The guard failed a change that improved exactly the
+    // property it exists to protect.
+    //
+    // The lesson is the house one: **assert the PROPERTY, not the spelling.**
+    // The property is "the CALLER supplies the predicate" — because
+    // note_templates scope through `doctorId` and the other two through a
+    // column, so a helper that built its own would be wrong for one of them.
+    // Both directions are checked, because the positive alone would pass on a
+    // helper that took a predicate AND then ignored it.
     expect(
       src,
-      'scopedUpdate builds its own predicate — it must take one, because ' +
-        'note_templates scope through doctor and the other two through a column',
-    ).toMatch(/scopedUpdate\([\s\S]{0,300}where: unknown/);
+      'scopedUpdate must TAKE the predicate — the caller knows whether this ' +
+        'model scopes through a column or through doctorId',
+    ).toMatch(/export async function scopedUpdate[\s\S]{0,400}\n\s+where: \w+,/);
+    expect(
+      src.slice(src.indexOf('export async function scopedUpdate')),
+      'scopedUpdate must NOT construct a practice predicate of its own — that ' +
+        'is the caller\'s decision and getting it wrong is silent',
+    ).not.toMatch(/scopedUpdate[\s\S]{0,600}practiceId:\s*\w/);
   });
 });
