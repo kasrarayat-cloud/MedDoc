@@ -155,7 +155,8 @@ const MAX_UNSCOPED_REQUEST_READS = 0;
  * Ledger: 25 at T5-W's start → 12 after tranche 1a (13 mechanical
  * update→updateMany conversions) → 9 once the classifier LEARNED doctor-scope
  * as a sanctioned narrower scope (3 sites: carry-forward ×2, the
- * note-template-lifecycle deleteMany).
+ * note-template-lifecycle deleteMany) → 6 after the three return-row sites
+ * took transactional re-reads.
  *
  * So: a RATCHET, not a wall, exactly as the read side began. 25 was the measured
  * count across ALL FOUR clinical models, after T6 scoped the two `rescore-em`
@@ -164,7 +165,7 @@ const MAX_UNSCOPED_REQUEST_READS = 0;
  * raise it.
  */
 const WRITE_METHODS = '(update|updateMany|delete|deleteMany|upsert)';
-const MAX_UNSCOPED_REQUEST_WRITES = 9;
+const MAX_UNSCOPED_REQUEST_WRITES = 6;
 
 /** Extracts the balanced argument of a call whose `(` is at `open`. */
 function callArg(code: string, open: number): string {

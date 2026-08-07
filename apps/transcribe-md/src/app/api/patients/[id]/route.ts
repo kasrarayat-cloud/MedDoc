@@ -11,25 +11,31 @@
 // so a hard drop while visits exist would fail anyway.
 // ============================================================================
 
-import { z } from 'zod';
-import { NextResponse } from 'next/server';
+import { z } from "zod";
+import { NextResponse } from "next/server";
 
-import prisma from '@meddoc/db';
-import { patientScope, visitScope, type PracticeId, scopedUpdate } from '@/lib/practice-scope';
+import prisma from "@meddoc/db";
+import {
+  patientScope,
+  visitScope,
+  type PracticeId,
+  scopedUpdate,
+  ScopedWriteMissError,
+} from "@/lib/practice-scope";
 
-import { apiError, withApiHandler } from '@/lib/api-error';
-import { getSession } from '@/lib/auth';
-import { ProblemListSchema } from '@/lib/problem-list';
-import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
-import { logAudit } from '@/lib/audit';
+import { apiError, withApiHandler } from "@/lib/api-error";
+import { getSession } from "@/lib/auth";
+import { ProblemListSchema } from "@/lib/problem-list";
+import { RATE_LIMITS, rateLimitOr429 } from "@/lib/rate-limit";
+import { logAudit } from "@/lib/audit";
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 async function loadPatientForSession(
   id: string,
   practiceId: PracticeId,
-  { includeDeleted = false }: { includeDeleted?: boolean } = {}
+  { includeDeleted = false }: { includeDeleted?: boolean } = {},
 ) {
   const patient = await prisma.transcribeMdPatient.findUnique({
     where: { id, ...patientScope(practiceId) },
@@ -53,17 +59,17 @@ async function loadPatientForSession(
 }
 
 export const GET = withApiHandler<{ id: string }>(
-  'api:patients:get',
+  "api:patients:get",
   async (_req, { params }) => {
     const session = await getSession();
-    if (!session) return apiError('unauthorized', 401);
+    if (!session) return apiError("unauthorized", 401);
 
     const blocked = rateLimitOr429(RATE_LIMITS.PATIENT_READ, session.user.id);
     if (blocked) return blocked;
 
     const { id } = await params;
     const patient = await loadPatientForSession(id, session.user.practiceId);
-    if (!patient) return apiError('not found', 404);
+    if (!patient) return apiError("not found", 404);
 
     // Attach visit count + last-visit-at so the detail page doesn't
     // need a second round-trip.
@@ -80,10 +86,10 @@ export const GET = withApiHandler<{ id: string }>(
 
     // Round 3 PR-C — §164.312(b) PHI-read audit (A05-P0-004).
     void logAudit({
-      action: 'VIEWED_PATIENT_FILE',
+      action: "VIEWED_PATIENT_FILE",
       targetId: patient.id,
-      targetType: 'TranscribeMdPatient',
-      metadata: { source: 'api:GET /api/patients/[id]' },
+      targetType: "TranscribeMdPatient",
+      metadata: { source: "api:GET /api/patients/[id]" },
     });
 
     return NextResponse.json({
@@ -101,7 +107,7 @@ export const GET = withApiHandler<{ id: string }>(
         lastVisitAt: aggregate._max.createdAt,
       },
     });
-  }
+  },
 );
 
 const UpdateBodySchema = z.object({
@@ -114,7 +120,7 @@ const UpdateBodySchema = z.object({
         .string()
         .min(1)
         .refine((s) => !Number.isNaN(Date.parse(s)), {
-          message: 'Invalid date',
+          message: "Invalid date",
         }),
       z.null(),
     ])
@@ -149,31 +155,31 @@ const UpdateBodySchema = z.object({
 });
 
 export const PATCH = withApiHandler<{ id: string }>(
-  'api:patients:update',
+  "api:patients:update",
   async (req, { params }) => {
     const session = await getSession();
-    if (!session) return apiError('unauthorized', 401);
+    if (!session) return apiError("unauthorized", 401);
 
     const blocked = rateLimitOr429(RATE_LIMITS.PATIENT_OPS, session.user.id);
     if (blocked) return blocked;
 
     const { id } = await params;
     const existing = await loadPatientForSession(id, session.user.practiceId);
-    if (!existing) return apiError('not found', 404);
+    if (!existing) return apiError("not found", 404);
 
     let body: unknown;
     try {
       body = await req.json();
     } catch {
-      return apiError('invalid JSON body', 400);
+      return apiError("invalid JSON body", 400);
     }
     const parsed = UpdateBodySchema.safeParse(body);
     if (!parsed.success) {
       const first = parsed.error.issues[0];
-      const field = first?.path.join('.') || '_form';
+      const field = first?.path.join(".") || "_form";
       return NextResponse.json(
-        { error: first?.message || 'invalid payload', field },
-        { status: 400 }
+        { error: first?.message || "invalid payload", field },
+        { status: 400 },
       );
     }
 
@@ -208,29 +214,41 @@ export const PATCH = withApiHandler<{ id: string }>(
 
     if (Object.keys(data).length === 0) {
       return NextResponse.json(
-        { error: 'No fields to update.', field: '_form' },
-        { status: 400 }
+        { error: "No fields to update.", field: "_form" },
+        { status: 400 },
       );
     }
 
-    const updated = await prisma.transcribeMdPatient.update({
-      where: { id: existing.id },
-      data,
-      select: {
-        id: true,
-        name: true,
-        dateOfBirth: true,
-        externalId: true,
-        mrn: true,
-        insurance: true,
-        problemList: true,
-        updatedAt: true,
-      },
+    // ⚠️ T5-W — TRANSACTIONAL updateMany + re-read. The alternative treatment
+    // (keep `update`, argue the preceding practice-scoped read authorises it)
+    // was available and NOT taken: the borrowing is sound only while nothing
+    // between the read and the write can move the row, and asserting that is
+    // harder than removing the assumption. One transaction costs one query.
+    const updated = await prisma.$transaction(async (tx: typeof prisma) => {
+      const res = await tx.transcribeMdPatient.updateMany({
+        where: { id: existing.id, ...patientScope(session.user.practiceId) },
+        data,
+      });
+      if (res.count === 0)
+        throw new ScopedWriteMissError("transcribeMdPatient", existing.id);
+      return tx.transcribeMdPatient.findFirstOrThrow({
+        where: { id: existing.id, ...patientScope(session.user.practiceId) },
+        select: {
+          id: true,
+          name: true,
+          dateOfBirth: true,
+          externalId: true,
+          mrn: true,
+          insurance: true,
+          problemList: true,
+          updatedAt: true,
+        },
+      });
     });
 
     void logAudit({
-      action: 'TM_PATIENT_UPDATED',
-      targetType: 'TranscribeMdPatient',
+      action: "TM_PATIENT_UPDATED",
+      targetType: "TranscribeMdPatient",
       targetId: updated.id,
       metadata: {
         changedFields: Object.keys(data),
@@ -238,14 +256,14 @@ export const PATCH = withApiHandler<{ id: string }>(
     });
 
     return NextResponse.json({ patient: updated });
-  }
+  },
 );
 
 export const DELETE = withApiHandler<{ id: string }>(
-  'api:patients:delete',
+  "api:patients:delete",
   async (_req, { params }) => {
     const session = await getSession();
-    if (!session) return apiError('unauthorized', 401);
+    if (!session) return apiError("unauthorized", 401);
 
     const blocked = rateLimitOr429(RATE_LIMITS.PATIENT_OPS, session.user.id);
     if (blocked) return blocked;
@@ -256,7 +274,7 @@ export const DELETE = withApiHandler<{ id: string }>(
     const existing = await loadPatientForSession(id, session.user.practiceId, {
       includeDeleted: true,
     });
-    if (!existing) return apiError('not found', 404);
+    if (!existing) return apiError("not found", 404);
 
     if (existing.deletedAt !== null) {
       return NextResponse.json({ ok: true, alreadyDeleted: true });
@@ -264,19 +282,19 @@ export const DELETE = withApiHandler<{ id: string }>(
 
     await scopedUpdate(
       prisma.transcribeMdPatient,
-      'transcribeMdPatient',
+      "transcribeMdPatient",
       existing.id,
       { id: existing.id, ...patientScope(session.user.practiceId) },
       { deletedAt: new Date() },
     );
 
     void logAudit({
-      action: 'TM_PATIENT_DELETED',
-      targetType: 'TranscribeMdPatient',
+      action: "TM_PATIENT_DELETED",
+      targetType: "TranscribeMdPatient",
       targetId: existing.id,
-      metadata: { mode: 'soft' },
+      metadata: { mode: "soft" },
     });
 
     return NextResponse.json({ ok: true });
-  }
+  },
 );

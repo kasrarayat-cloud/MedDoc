@@ -18,23 +18,33 @@ import { TranscribeVisitStatus } from '@prisma/client';
 const mocks = vi.hoisted(() => ({
   visitFindUnique: vi.fn(),
   visitUpdate: vi.fn(),
+  visitUpdateMany: vi.fn(),
   userFindUnique: vi.fn(),
   patientFindUnique: vi.fn(),
   auth: vi.fn(),
   rateLimitOr429: vi.fn(),
 }));
 
-vi.mock('@meddoc/db', () => ({
-  default: {
+vi.mock('@meddoc/db', () => {
+  // ⚠️ T5-W: PATCH now does updateMany + a re-read INSIDE a transaction, so the
+  // mock needs $transaction as well as the two methods. `$transaction` runs the
+  // callback against this same object — the point under test is the PREDICATE
+  // the route builds, not Prisma's isolation, and a fake that swallowed the
+  // callback would make the assertions below vacuous.
+  const prisma: Record<string, unknown> = {
     transcribeVisit: {
       findUnique: mocks.visitFindUnique,
       findFirst: mocks.visitFindUnique,
+      findFirstOrThrow: mocks.visitUpdate,
+      updateMany: mocks.visitUpdateMany,
       update: mocks.visitUpdate,
     },
     user: { findUnique: mocks.userFindUnique },
     transcribeMdPatient: { findUnique: mocks.patientFindUnique },
-  },
-}));
+  };
+  prisma.$transaction = (fn: (tx: unknown) => unknown) => fn(prisma);
+  return { default: prisma };
+});
 
 vi.mock('@/lib/nextauth', () => ({ auth: mocks.auth }));
 // T5: the by-id routes now source practiceId from the DB-refreshed session.
@@ -178,6 +188,8 @@ describe('PATCH /api/visits/[id] (regression)', () => {
       archivedAt: null,
       patientId: 'pat_1',
     });
+    // The scoped write must MATCH — count 0 is the no-op scopedUpdate refuses.
+    mocks.visitUpdateMany.mockResolvedValue({ count: 1 });
     mocks.visitUpdate.mockResolvedValue({
       id: FAKE_VISIT_ID,
       patientId: 'pat_1',
