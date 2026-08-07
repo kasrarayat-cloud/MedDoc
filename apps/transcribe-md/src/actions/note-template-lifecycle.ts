@@ -143,6 +143,9 @@ export async function saveNoteTemplateAction(
       const created = await tx.noteTemplate.create({
         data: {
           doctorId,
+          // T7 — the biconditional `note_templates_practice_iff_doctor` pairs these
+          // two. tsc cannot see it: the shared prisma client is `any`.
+          practiceId: session.user.practiceId,
           name,
           encounterType,
           sections: cleanSections,
@@ -256,6 +259,9 @@ export async function duplicateNoteTemplateAction(id: string): Promise<SimpleRes
   const created = await prisma.noteTemplate.create({
     data: {
       doctorId,
+      // T7 — the biconditional `note_templates_practice_iff_doctor` pairs these
+      // two. tsc cannot see it: the shared prisma client is `any`.
+      practiceId: session.user.practiceId,
       name: `${row.name} (copy)`.slice(0, 120),
       encounterType: row.encounterType,
       sections: row.sections as Prisma.InputJsonValue,

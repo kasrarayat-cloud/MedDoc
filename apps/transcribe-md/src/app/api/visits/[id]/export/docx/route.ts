@@ -79,6 +79,7 @@ export const GET = withApiHandler<{ id: string }>(
 
     logDelivery({
       visitId,
+      practiceId: session.user.practiceId,
       channel: 'docx',
       sizeBytes: docx.byteLength,
     });

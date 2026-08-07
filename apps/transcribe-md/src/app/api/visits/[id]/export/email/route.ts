@@ -112,6 +112,7 @@ export const POST = withApiHandler<{ id: string }>(
       });
       logDelivery({
         visitId,
+        practiceId: session.user.practiceId,
         channel: 'email',
         destination: toEmail,
         sizeBytes: pdf.byteLength,

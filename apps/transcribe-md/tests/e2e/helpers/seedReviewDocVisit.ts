@@ -473,10 +473,12 @@ export function seedReviewDocVisit(
     if (imaging) {
       psql(
         `insert into note_templates
-           (id, "doctorId", name, sections, version, status, "isSystemDefault",
+           (id, "doctorId", "practiceId", name, sections, version, status, "isSystemDefault",
             "createdAt", "updatedAt")
          values
-           ('${templateId}', '${userId}', 'E2E Venous Duplex Report',
+           ('${templateId}', '${userId}',
+            (select "practiceId" from users where id = '${userId}'),
+            'E2E Venous Duplex Report',
             '${j(IMAGING_TEMPLATE_SECTIONS)}'::jsonb, 1, 'active', false,
             now(), now())
          on conflict (id) do nothing`,
@@ -550,10 +552,12 @@ export function seedReviewDocVisit(
     if (opts.withCriticalOverride) {
       psql(
         `insert into rx_warning_overrides
-           (id, "visitId", "rxLineNumber", "warningId", severity, headline,
+           (id, "visitId", "practiceId", "rxLineNumber", "warningId", severity, headline,
             reason, "overriddenBy", "overriddenAt")
          values
-           ('${`ovr_${stamp}`.padEnd(25, '0').slice(0, 25)}', '${visitId}', 1, 'rx-warning-0',
+           ('${`ovr_${stamp}`.padEnd(25, '0').slice(0, 25)}', '${visitId}',
+            (select "practiceId" from transcribe_visits where id = '${visitId}'),
+            1, 'rx-warning-0',
             'critical', 'NSAID with heart failure',
             'Benefit outweighs risk; monitoring renal function weekly and patient counselled.',
             '${userId}', '${OVERRIDDEN_AT}'::timestamptz)

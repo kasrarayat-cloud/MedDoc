@@ -92,6 +92,10 @@ export async function captureEditPattern(args: {
       data: {
         visitId: args.visitId,
         doctorId: args.doctorId,
+        // ⚠️ T7 — from the CALLER's practice, which the sign route already
+        // resolves. Derived in the migration from the VISIT (the chart owns the
+        // note); the same source, one layer up.
+        practiceId: args.practiceId,
         originalSoap: original,
         editedSoap: edited,
         editDistance,

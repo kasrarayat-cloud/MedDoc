@@ -76,6 +76,7 @@ export const GET = withApiHandler<{ id: string }>(
 
     logDelivery({
       visitId,
+      practiceId: session.user.practiceId,
       channel: 'pdf',
       sizeBytes: pdf.byteLength,
     });

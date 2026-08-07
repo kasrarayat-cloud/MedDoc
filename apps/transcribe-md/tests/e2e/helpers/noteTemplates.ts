@@ -176,8 +176,11 @@ export function seedActiveTemplate(
   // psql via stdin so the shell never sees it either.
   psql(
     `INSERT INTO note_templates ` +
-      `(id, "doctorId", name, "encounterType", sections, "styleProfile", version, status, "isSystemDefault", "createdAt", "updatedAt") ` +
-      `VALUES (${lit(id)}, ${lit(doctorId)}, ${lit(opts.name)}, ${enc}, ` +
+      `(id, "doctorId", "practiceId", name, "encounterType", sections, "styleProfile", version, status, "isSystemDefault", "createdAt", "updatedAt") ` +
+      // ⚠️ T7 — `practiceId` DERIVED in the statement, not threaded. The
+      // biconditional CHECK requires it wherever doctorId is set, and a derived
+      // value cannot disagree with the doctor it came from.
+      `VALUES (${lit(id)}, ${lit(doctorId)}, (SELECT "practiceId" FROM users WHERE id = ${lit(doctorId)}), ${lit(opts.name)}, ${enc}, ` +
       `$json$${sections}$json$::jsonb, $json$${style}$json$::jsonb, ${opts.version ?? 1}, 'active', false, now(), now());`,
   );
   return id;
