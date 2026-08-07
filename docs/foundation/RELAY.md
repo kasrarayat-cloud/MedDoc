@@ -803,6 +803,37 @@ The shape, mirroring T5 exactly:
    consequential — the rule earned on 2026-08-05 when a mutation proof nulled 21
    signers.
 
+#### 📐 T5-W RECONNAISSANCE — measured 2026-08-07, READ-ONLY
+
+    25 unscoped clinical writes
+      by model   transcribeVisit 19 · noteTemplate 4 · transcribeMdPatient 2
+      by method  update 18 · updateMany 6 · deleteMany 1
+
+⚠️ **THE STRUCTURAL OBSTACLE, AND IT IS THE WRITE-SIDE TWIN OF T5's.** Eighteen
+are `update({ where: { id } })`, and **Prisma's `update` requires a UNIQUE
+where** — a `practiceId` conjunct cannot simply be added, exactly as `findUnique`
+could not carry one on the read side. There the answer was `findUnique →
+findFirst`. Here it is `update → updateMany`, which is **not a free swap**:
+`updateMany` returns `{ count }` instead of the row.
+
+So the 18 split, and the split decides the work:
+
+| | count | treatment |
+|---|---|---|
+| `update`, return **discarded** | **15** | mechanical → `updateMany` + the predicate |
+| `update`, return **USED** | **3** | `updateMany` + an explicit re-read, or keep `update` behind a verified-scoped read and say so |
+| `updateMany` already | 6 | add the predicate; no shape change |
+| `deleteMany` | 1 | add the predicate |
+
+The three that use their row: `api/patients/[id]/route.ts:216`,
+`api/visits/[id]/route.ts:313`, `actions/soap.ts:191` — all assign to `updated`
+and read it afterwards.
+
+One write is not by id at all: `update-visit-header.ts:153` is a BULK
+`updateMany` over `{ patientId, signedAt: null }` — a rename spreading across a
+patient's unsigned visits. It has no id to be unique on and is the clearest case
+for the accessor.
+
 ⚠️ **AND THE `updateMany` SHAPE IS THE ONE TO WATCH.** A scoped `updateMany`
 whose predicate matches nothing returns `{ count: 0 }` — no error, no exception,
 and several call sites already treat `count === 0` as "a concurrent write won".
