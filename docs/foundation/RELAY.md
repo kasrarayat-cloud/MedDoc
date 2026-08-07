@@ -1136,6 +1136,33 @@ Written before any migration runs, which is the point of the gate.
 
 #### 1. `worker.ts:983` read-after-write — ⚠️ RACE CONFIRMED BY CONSTRUCTION
 
+⚠️ **MECHANISM CONFIRMED 2026-08-07 — it is not a timing question at all.**
+`logAiCall` (`packages/ai/src/log.ts:34`) is
+`void prisma.aiCall.create(…).catch(…)`. It **returns `void`**, so no caller can
+await it and no amount of fan-out latency makes it deterministic. The
+`findMany` at `worker.ts:983` sums whatever has landed; an in-flight write is
+simply not counted.
+
+Phase 0 recorded this as UNSURE and declined to guess, which was right. The
+answer is now structural rather than probabilistic: **the race is real, by
+construction.**
+
+⚠️ **AND IT IS WORSE THAN A RACE, WHICH THE EXISTING VERDICT DOES NOT YET SAY.**
+A fire-and-forget write can also be **LOST OUTRIGHT** — a failed insert reaches
+only `console.error`, and the sum is computed as though the call never happened.
+For observability that is noise. For BILLING it is an undercharge with **no row
+anywhere to reconcile against**: the vendor invoice will carry a call our ledger
+has never heard of.
+
+So B1/B4's brief is narrower than "await the writes": the cost for a visit must
+be **accumulated in memory from the values already in hand**, not re-read from a
+table that a dropped insert can silently under-report. Recorded here so the
+BILLING item inherits the reason, not just the assignment.
+
+*(The catch DOES log loudly — `[ai] AiCall write failed:` — so this is a
+tripwire-present case, not a silent one. F-TYPE's hardening pass should confirm
+the same is true of every other `void … .catch()` writer.)*
+
 Phase 0 left this UNSURE and said so. It is no longer unsure, and the answer did
 not need a reproduction:
 

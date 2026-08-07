@@ -107,14 +107,25 @@ else
   TEST_WARNING_ID="pr-e-smoke-warn-$(date +%s)-$$"
   TEST_REASON='pr-e smoke test reason >= 10 chars'
 
+  # ⚠️ T7 — `practiceId` is NOT NULL as of 20260807060000_t7_tenancy, and it is
+  # DERIVED from the visit rather than threaded in. A hand-passed value can only
+  # be correct or rejected; a derived one cannot drift (AGENTS.md, the by-table
+  # sweep's rule 6 — the same shape T3's raw-SQL sites take).
+  #
+  # Found by the T7 by-table write-path sweep, not by any test run: this file is
+  # referenced by no CI workflow and no npm script, so a raw INSERT here is
+  # invisible to `tsc` AND to every gate. Without this, BOTH inserts below would
+  # fail with a not-null violation (23502) and the assertion — which looks for
+  # 23505 — would report "duplicate insert unexpectedly succeeded", naming the
+  # wrong cause entirely.
   "${PSQL[@]}" "
-    INSERT INTO rx_warning_overrides (id, \"visitId\", \"rxLineNumber\", \"warningId\", severity, headline, reason, \"overriddenBy\")
-    VALUES ('${TEST_WARNING_ID}-1', '${VISIT_ID}', 1, '${TEST_WARNING_ID}', 'critical', 'h', '${TEST_REASON}', '${USER_ID}')
+    INSERT INTO rx_warning_overrides (id, \"visitId\", \"practiceId\", \"rxLineNumber\", \"warningId\", severity, headline, reason, \"overriddenBy\")
+    VALUES ('${TEST_WARNING_ID}-1', '${VISIT_ID}', (SELECT \"practiceId\" FROM transcribe_visits WHERE id='${VISIT_ID}'), 1, '${TEST_WARNING_ID}', 'critical', 'h', '${TEST_REASON}', '${USER_ID}')
   " >/dev/null
 
   DUP_RESULT=$("${PSQL[@]}" "
-    INSERT INTO rx_warning_overrides (id, \"visitId\", \"rxLineNumber\", \"warningId\", severity, headline, reason, \"overriddenBy\")
-    VALUES ('${TEST_WARNING_ID}-2', '${VISIT_ID}', 1, '${TEST_WARNING_ID}', 'critical', 'h', '${TEST_REASON}', '${USER_ID}')
+    INSERT INTO rx_warning_overrides (id, \"visitId\", \"practiceId\", \"rxLineNumber\", \"warningId\", severity, headline, reason, \"overriddenBy\")
+    VALUES ('${TEST_WARNING_ID}-2', '${VISIT_ID}', (SELECT \"practiceId\" FROM transcribe_visits WHERE id='${VISIT_ID}'), 1, '${TEST_WARNING_ID}', 'critical', 'h', '${TEST_REASON}', '${USER_ID}')
   " 2>&1 | head -1 || true)
 
   if echo "$DUP_RESULT" | grep -qE "duplicate key value|23505|unique constraint"; then
