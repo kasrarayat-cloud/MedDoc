@@ -60,9 +60,25 @@ export function envInviteCodeHashes(): string[] {
     .map((c) => hashInviteCode(c));
 }
 
+/**
+ * The membership an invite admits into. **NULL means the LEGACY contract**: mint
+ * a fresh solo practice and make the redeemer its OWNER, exactly as every signup
+ * did before T8.
+ *
+ * ⚠️ The two fields travel TOGETHER because the database refuses them apart
+ * (`invite_codes_practice_and_role_together`). A practice without a role would
+ * let the redeemer fall to the application's default for a new signup — OWNER —
+ * handing an owner's rights over somebody else's clinic to anyone holding the
+ * code.
+ */
+export type InviteMembership = {
+  practiceId: string;
+  practiceRole: 'OWNER' | 'CLINICIAN' | 'TECH';
+};
+
 export type InviteCheck =
-  | { ok: true; source: 'env' }
-  | { ok: true; source: 'db'; inviteCodeId: string }
+  | { ok: true; source: 'env'; membership?: undefined }
+  | { ok: true; source: 'db'; inviteCodeId: string; membership: InviteMembership | null }
   | { ok: false; reason: 'missing' | 'invalid' | 'expired' | 'revoked' | 'exhausted' };
 
 /**
@@ -90,6 +106,10 @@ export async function checkInviteCode(rawCode: string): Promise<InviteCheck> {
       usedCount: true,
       expiresAt: true,
       revokedAt: true,
+      // T8 — the membership this code admits into. Both or neither, enforced by
+      // `invite_codes_practice_and_role_together`.
+      practiceId: true,
+      practiceRole: true,
     },
   });
   if (!row) return { ok: false, reason: 'invalid' };
@@ -99,7 +119,19 @@ export async function checkInviteCode(rawCode: string): Promise<InviteCheck> {
   }
   if (row.usedCount >= row.maxUses) return { ok: false, reason: 'exhausted' };
 
-  return { ok: true, source: 'db', inviteCodeId: row.id };
+  return {
+    ok: true,
+    source: 'db',
+    inviteCodeId: row.id,
+    // ⚠️ NULL HERE IS THE LEGACY CONTRACT, NOT AN ABSENCE TO PATCH.
+    // A code with no practice mints a fresh solo practice, exactly as every
+    // signup did before T8. The migration header states it; this is where the
+    // caller reads it.
+    membership:
+      row.practiceId && row.practiceRole
+        ? { practiceId: row.practiceId, practiceRole: row.practiceRole }
+        : null,
+  };
 }
 
 /**

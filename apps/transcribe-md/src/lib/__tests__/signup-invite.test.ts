@@ -85,6 +85,28 @@ describe('an invited signup is admitted', () => {
     expect(await checkInviteCode('  pilot-alpha  ')).toEqual({ ok: true, source: 'env' });
   });
 
+  it('⚠️ T8 — a code carrying practice + role returns the membership', async () => {
+    mocks.findUnique.mockResolvedValue({
+      id: 'inv2',
+      maxUses: 1,
+      usedCount: 0,
+      expiresAt: null,
+      revokedAt: null,
+      practiceId: 'prac_alpha',
+      practiceRole: 'CLINICIAN',
+    });
+    expect(await checkInviteCode('REAL')).toEqual({
+      ok: true,
+      source: 'db',
+      inviteCodeId: 'inv2',
+      // ⚠️ THE ROLE TRAVELS. Returning the practice and dropping the role would
+      // let signup fall to its own default — OWNER — handing owner's rights over
+      // someone else's clinic to anyone holding the code. The DB refuses the
+      // pair apart; this asserts the read does not separate them either.
+      membership: { practiceId: 'prac_alpha', practiceRole: 'CLINICIAN' },
+    });
+  });
+
   it('a live DB code is accepted', async () => {
     mocks.findUnique.mockResolvedValue({
       id: 'inv1',
@@ -92,9 +114,14 @@ describe('an invited signup is admitted', () => {
       usedCount: 2,
       expiresAt: null,
       revokedAt: null,
+      // T8 — the pre-T8 shape: no practice, no role. NULL is the LEGACY
+      // contract (mint a solo practice, OWNER), not an absence to patch.
+      practiceId: null,
+      practiceRole: null,
     });
     expect(await checkInviteCode('REAL')).toEqual({
       ok: true,
+      membership: null,
       source: 'db',
       inviteCodeId: 'inv1',
     });
