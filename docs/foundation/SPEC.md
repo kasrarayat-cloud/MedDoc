@@ -101,16 +101,41 @@ content in admin**.
 
 The stated end state: **no clinical row without a `practiceId` after migration.**
 
-Two named exclusions, both of which must be written into the migration rather
-than discovered by whoever runs it:
+⚠️ **THREE NAMED EXCLUSIONS — each with its REASON, ruled 2026-08-07.** A
+reason-less exclusion is a hole with a label on it: the next person cannot tell a
+deliberate carve-out from an oversight somebody stopped arguing about. All three
+are written into the migration rather than discovered by whoever runs it:
 
-- `audit_logs.practiceId` is **deliberately nullable** (S4c — an audit row must
-  outlive the practice it describes). It is excluded by name, with the S4c
-  reasoning cited, so that a future tidy-up does not "fix" it and re-break
-  account deletion.
-- `note_templates` has two platform-global rows with `doctorId = NULL`. Either
-  the rule carries an explicit carve-out for platform-global templates, or
-  those two rows get a sentinel practice. A blanket `NOT NULL` breaks them.
+- **`audit_logs.practiceId` — SYSTEM ROWS WITH NO ACTOR.** Deliberately nullable
+  (S4c: an audit row must outlive the practice it describes). Excluded by name
+  with the S4c reasoning cited, so a future tidy-up cannot "fix" it and re-break
+  account deletion. Measured 2026-08-07: the residual NULLs are 6
+  `EM_LEVEL_CHANGED` rows with **no user and no practice** — system-generated,
+  nothing to snapshot.
+- **`api_usage_events` — THE SAME CLASS.** Telemetry emitted without an acting
+  user; 271 NULL rows at Phase 0.
+- `note_templates` has two platform-global rows with `doctorId = NULL`.
+
+  ⚠️ **RULED 2026-08-07 — NULLABLE + A BICONDITIONAL CHECK.** This section
+  originally offered two options and chose neither; the choice is now made.
+
+      (doctorId IS NULL     AND practiceId IS NULL)
+   OR (doctorId IS NOT NULL AND practiceId IS NOT NULL)
+
+  **A template has a practice IF AND ONLY IF it has a doctor.** The forward
+  direction closes the derivation gap — a doctor-owned template always has a
+  practice to derive from. The reverse is the half that is easy to omit and
+  worth stating: it forbids an **orphaned tenancy claim on platform content**, a
+  row that says it belongs to a practice while belonging to nobody.
+
+  **The sentinel practice is REJECTED**, for the record and with the reason: an
+  invented tenant that every practice-scoped query must learn to ignore is the
+  hand-kept-list failure mode expressed in schema. It is the same objection T5
+  made to forcing system reads through a practice predicate — an invented tenant
+  is worse than an honest absence.
+
+  A blanket `NOT NULL` breaks these two rows, which is why neither option was
+  "just add the column".
 
 ---
 

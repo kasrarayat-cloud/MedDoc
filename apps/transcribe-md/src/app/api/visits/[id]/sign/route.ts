@@ -654,10 +654,10 @@ export const POST = withApiHandler<{ id: string }>(
           // will log again when they fetch. Two rows is fine; it
           // reflects intent + completion.
           pdfDownloadUrl = `/api/visits/${visitId}/export/pdf`;
-          logDelivery({ visitId, channel });
+          logDelivery({ visitId, practiceId: session.user.practiceId, channel });
         } else if (dest === 'docx') {
           docxDownloadUrl = `/api/visits/${visitId}/export/docx`;
-          logDelivery({ visitId, channel });
+          logDelivery({ visitId, practiceId: session.user.practiceId, channel });
         } else if (dest === 'email') {
           if (!process.env.RESEND_API_KEY) {
             deliveryErrors[dest] =
@@ -680,6 +680,7 @@ export const POST = withApiHandler<{ id: string }>(
           emailQueued = true;
           logDelivery({
             visitId,
+            practiceId: session.user.practiceId,
             channel,
             destination: to,
             sizeBytes: pdf.byteLength,
@@ -691,6 +692,7 @@ export const POST = withApiHandler<{ id: string }>(
           clipboardTexts[dest] = text;
           logDelivery({
             visitId,
+            practiceId: session.user.practiceId,
             channel,
             sizeBytes: Buffer.byteLength(text, 'utf8'),
           });

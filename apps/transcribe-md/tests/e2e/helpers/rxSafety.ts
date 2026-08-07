@@ -80,8 +80,12 @@ export function seedFabricatedCriticalOverride(
   const id = `fab-${visitId}-${warningId}`;
   psql(
     `INSERT INTO rx_warning_overrides ` +
-      `(id, "visitId", "rxLineNumber", "warningId", severity, headline, reason, "overriddenBy", "overriddenAt") ` +
-      `SELECT ${lit(id)}, ${lit(visitId)}, 1, ${lit(warningId)}, 'critical', ` +
+      `(id, "visitId", "practiceId", "rxLineNumber", "warningId", severity, headline, reason, "overriddenBy", "overriddenAt") ` +
+      // ⚠️ T7 — `v."practiceId"` comes from the SAME row the rest of the values
+      // do. This is already an INSERT…SELECT from the visit, so the tenant is
+      // derived rather than passed: it cannot disagree with the visit it
+      // belongs to.
+      `SELECT ${lit(id)}, ${lit(visitId)}, v."practiceId", 1, ${lit(warningId)}, 'critical', ` +
       `'fabricated', 'fabricated inflation row — must not clear the gate', ` +
       `v."userId", NOW() FROM transcribe_visits v WHERE v.id = ${lit(visitId)};`,
   );

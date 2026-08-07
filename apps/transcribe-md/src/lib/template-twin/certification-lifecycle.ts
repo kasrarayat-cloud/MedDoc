@@ -827,6 +827,9 @@ export async function certifyAndActivateTemplateTwin(input: {
       });
       await tx.templateTwinCertification.create({
         data: {
+          // T7 — the twin chain's practice, derived in the migration from
+          // source_artifacts via compiled_versions.
+          practiceId: input.actor.practiceId,
           compiledVersionId: compiled.id,
           certifiedById: input.actor.userId,
           compiledStructureSha256: ir.structureSha256,

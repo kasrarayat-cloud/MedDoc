@@ -1066,6 +1066,47 @@ residue. **A zero that needs a caveat is not a wall.**
   green against that fixture, and would have stayed green if the predicate
   matched nothing at all.
 
+### ▶ F-TYPE — type the shared Prisma client — **ORDERED: after TEAMS closes, BEFORE any BILLING build**
+
+⚠️ **BILLING IS WALL-TO-WALL NEW PRISMA WRITES AND DOES NOT GET BUILT ON A
+PLACEBO.** `packages/db/src/index.ts` declares `const prisma: any`, so **no
+Prisma argument anywhere in this codebase is type-checked**. T7 proved the cost:
+a change touching 15 write sites produced 2 tsc errors, and the one that mattered
+(`logDelivery`, fire-and-forget) would have failed silently on every export.
+
+#### 📐 RECONNAISSANCE — measured 2026-08-07, read-only
+
+**The `any` is DELIBERATE, not accidental**, and that matters for the fix:
+
+    const { PrismaClient } = require('@prisma/client') as { PrismaClient: any };
+
+A CommonJS `require` with an explicit cast and two eslint-disables, carried in
+by the monorepo refactor ("lifted verbatim from `apps/meddoc-pro/src/lib/db.ts`").
+So F-TYPE's first job is finding **why** the `require` was needed — generated-client
+resolution across the workspace boundary is the likely reason and must be
+CONFIRMED, not assumed.
+
+**THE REVEALED SURFACE, MEASURED BY TYPING IT AND COUNTING:**
+
+    24 errors across ~12 files
+       worker.ts 3 · patients/page.tsx 3 · patients/[id]/export 3
+       stale-visits 2 · visits/[id] 2 · visits/[id]/delete 2 · patients/[id] 2 · …
+
+Tractable in one or two tranches rather than a sprawl. **Each revealed error is
+either a latent bug or a missing annotation and gets CLASSIFIED, not
+bulk-suppressed.** No `any`-casts to reach green; a site that genuinely cannot be
+typed takes a declared, commented exception.
+
+#### FIRE-AND-FORGET HARDENING RIDES WITH IT
+
+Every `void … .catch()` writer's catch must **LOG LOUDLY WITH CONTEXT**. A
+swallowed exception on a clinical write path is the silent-success class in its
+purest form — `logDelivery` is the reference case, where the export reported
+success while its audit row never wrote.
+
+The read-back canon remains the proof standard; **the loud catch is the tripwire
+between proofs.**
+
 ### T7 — the remaining tables gain `practiceId`
 `visit_deliveries`, `doctor_edit_patterns`, `rx_warning_overrides`, the four
 unscoped `template_twin_*` tables, `account_deletions`, and `note_templates`

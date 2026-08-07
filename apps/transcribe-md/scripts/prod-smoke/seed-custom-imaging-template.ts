@@ -100,6 +100,8 @@ async function main() {
 
   const data = {
     doctorId: user.id,
+    // T7 — the biconditional pairs these two.
+    practiceId: user.practiceId,
     name: TEMPLATE_NAME,
     // Null so it resolves for the imaging encounter the way the real one does.
     encounterType: null,
