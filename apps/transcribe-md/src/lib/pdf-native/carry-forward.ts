@@ -148,8 +148,11 @@ export async function carryForwardPdfCertification(input: {
 
   const priorSp = sp(prior.styleProfile);
   await putTemplateCanvas(input.newTemplateId, canvas);
-  await prisma.noteTemplate.update({
-    where: { id: input.newTemplateId },
+  // ⚠️ T5-W — DOCTOR-scoped, like its sibling above. GATE 0.3 rules
+  // note_templates per-doctor in v1, and `doctorId` is strictly narrower than a
+  // practice predicate, so this is a scope and not an exception.
+  const carried = await prisma.noteTemplate.updateMany({
+    where: { id: input.newTemplateId, doctorId: input.doctorId },
     data: {
       styleProfile: {
         ...styleProfile,
@@ -164,5 +167,9 @@ export async function carryForwardPdfCertification(input: {
       } as never,
     },
   });
+  // `update` threw on a miss; `updateMany` does not. Preserve the signal.
+  if (carried.count === 0) {
+    throw new ScopedWriteMissError('noteTemplate', input.newTemplateId);
+  }
   return { carried: true, fromTemplateId: prior.id, anchors: anchors.length };
 }

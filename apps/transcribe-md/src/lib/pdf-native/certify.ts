@@ -33,7 +33,7 @@ export function anchorSpecsFor(
 
 async function loadTemplateShape(
   templateId: string,
-  doctorId?: string
+  doctorId: string
 ): Promise<{
   sections: NoteTemplateSection[];
   headerFields: NoteTemplateHeaderField[];
@@ -42,7 +42,12 @@ async function loadTemplateShape(
   // Scope by doctorId when provided (defense-in-depth — the action already checks
   // ownership, but the library must not be a way to touch another doctor's row).
   const row = await prisma.noteTemplate.findFirstOrThrow({
-    where: doctorId ? { id: templateId, doctorId } : { id: templateId },
+    // ⚠️ T5-W — the UNSCOPED FALLBACK IS GONE. `doctorId` was optional and the
+    // `: { id: templateId }` branch wrote to a template by id alone. Every
+    // caller already supplies it (certify-pdf-template.ts takes it from the
+    // session), so the branch was unreachable — and an unreachable unscoped
+    // write is one refactor from being reachable.
+    where: { id: templateId, doctorId },
     select: { sections: true, styleProfile: true },
   });
   const styleProfile = ((row.styleProfile ?? {}) as Record<string, unknown>) || {};
@@ -56,11 +61,16 @@ async function loadTemplateShape(
 /** Scoped styleProfile write (updateMany so a doctorId filter applies). */
 async function writeStyleProfile(
   templateId: string,
-  doctorId: string | undefined,
+  doctorId: string,
   styleProfile: Record<string, unknown>
 ): Promise<void> {
   await prisma.noteTemplate.updateMany({
-    where: doctorId ? { id: templateId, doctorId } : { id: templateId },
+    // ⚠️ T5-W — the UNSCOPED FALLBACK IS GONE. `doctorId` was optional and the
+    // `: { id: templateId }` branch wrote to a template by id alone. Every
+    // caller already supplies it (certify-pdf-template.ts takes it from the
+    // session), so the branch was unreachable — and an unreachable unscoped
+    // write is one refactor from being reachable.
+    where: { id: templateId, doctorId },
     data: { styleProfile: styleProfile as never },
   });
 }
@@ -73,7 +83,7 @@ export async function certifyPdfTemplate(input: {
   templateId: string;
   pdfBytes: Buffer;
   /** When set, all reads/writes are scoped to this doctor's own row. */
-  doctorId?: string;
+  doctorId: string;
 }): Promise<{ anchors: PdfFillAnchor[]; missing: string[]; headerFields: NoteTemplateHeaderField[] }> {
   const { sections, headerFields: existingHeader, styleProfile } = await loadTemplateShape(
     input.templateId,

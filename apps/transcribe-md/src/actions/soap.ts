@@ -137,7 +137,10 @@ export async function saveSoapDraftAction(
   // expectedVersion succeeds; the other returns count=0.
   if (parsed.data.expectedVersion !== undefined) {
     const result = await prisma.transcribeVisit.updateMany({
-      where: { id: visitId, soapVersion: parsed.data.expectedVersion },
+      where: {
+            ...visitByIdScope(visitId, session.user.practiceId),
+            soapVersion: parsed.data.expectedVersion,
+          },
       data: {
         soapFinal: parsed.data.text,
         // THE NOTE CHANGED. Every editing surface funnels here — the inline

@@ -156,6 +156,10 @@ export async function updateVisitHeaderAction(
     await prisma.transcribeVisit.updateMany({
       where: {
         patientId: visit.patientId,
+        // ⚠️ T5-W — a BULK write with no id to be unique on: this rename spreads
+        // across every unsigned visit for the patient. The clearest case for the
+        // accessor in the unit, and where a missing predicate touches most rows.
+        ...visitScope(session.user.practiceId),
         signedAt: null,
         deletedAt: null,
         archivedAt: null,

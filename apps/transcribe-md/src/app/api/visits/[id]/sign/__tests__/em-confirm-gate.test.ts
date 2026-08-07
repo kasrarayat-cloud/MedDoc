@@ -293,6 +293,11 @@ describe('sign gate — explicit acknowledgement signs + leaves the trail', () =
     const args = mocks.updateMany.mock.calls[0][0];
     expect(args.where).toEqual({
       id: VISIT,
+      // ⚠️ T5-W — the sign write is practice-scoped now. This assertion uses
+      // toEqual on purpose: an objectContaining would have passed silently while
+      // the tenancy predicate was absent, which is the whole failure the scoping
+      // exists to prevent.
+      practiceId: 'p1',
       status: TranscribeVisitStatus.READY,
     });
     expect(args.data.status).toBe(TranscribeVisitStatus.SIGNED);
