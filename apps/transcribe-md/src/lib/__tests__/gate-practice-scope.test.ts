@@ -146,7 +146,23 @@ const MAX_UNSCOPED_REQUEST_READS = 0;
  * `doctor_edit_patterns` — and both were found by re-reading the criteria rather
  * than by any check. The lesson is banked in AGENTS.md.
  *
- * ⚠️ NO LEAK IS OPEN, AND SAYING SO PRECISELY MATTERS. Every one of these writes
+ * ⚠️ THIS IS NOW A WALL. IT REACHED ZERO ON 2026-08-07.
+ *
+ * Ledger, each step lowered in the SAME COMMIT as the code that earned it:
+ *
+ *     25  T5-W opens — the gap SPEC §1.4 named and the read guard never watched
+ *     12  tranche 1a — 13 mechanical update→updateMany, via `scopedUpdate`
+ *      9  the classifier LEARNS doctor-scope as a sanctioned narrower scope
+ *      6  the 3 return-row sites take transactional re-reads
+ *      0  the optimistic-concurrency sites + the last two template writes
+ *
+ * ⚠️ THE ZERO IS GENUINE, NOT ZERO-WITH-ASTERISKS. There is no carried-exception
+ * bucket holding the residue. Doctor-scoped writes count as SCOPED because
+ * `doctorId` is strictly narrower than a practice predicate (GATE 0.3) — a
+ * ruling about what the scope MEANS, not a footnote excusing what it misses.
+ * `userId` is explicitly NOT accepted, with a control proving it.
+ *
+ * ⚠️ NO LEAK WAS EVER OPEN, AND SAYING SO PRECISELY MATTERS. Every one of these writes
  * is reached only AFTER a practice-scoped read in the same handler, so an
  * out-of-practice caller is already refused before the write is attempted. What
  * they lack is a predicate of their OWN — the "borrowed authorisation" shape T5
@@ -158,14 +174,14 @@ const MAX_UNSCOPED_REQUEST_READS = 0;
  * note-template-lifecycle deleteMany) → 6 after the three return-row sites
  * took transactional re-reads.
  *
- * So: a RATCHET, not a wall, exactly as the read side began. 25 was the measured
+ * It BEGAN as a ratchet, exactly as the read side did. 25 was the measured
  * count across ALL FOUR clinical models, after T6 scoped the two `rescore-em`
  * updateManys that had no practice predicate at all. A visits-only count is 19;
  * this guard watches the same model list the read side does. Lower it; never
  * raise it.
  */
 const WRITE_METHODS = '(update|updateMany|delete|deleteMany|upsert)';
-const MAX_UNSCOPED_REQUEST_WRITES = 6;
+const MAX_UNSCOPED_REQUEST_WRITES = 0;
 
 /** Extracts the balanced argument of a call whose `(` is at `open`. */
 function callArg(code: string, open: number): string {
@@ -657,8 +673,11 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
     expect(
       writes.length,
       `Unscoped request-context clinical WRITES went UP (${writes.length} > ` +
-        `${MAX_UNSCOPED_REQUEST_WRITES}). SPEC §1.4 covers writes as well as ` +
-        `reads. Scope it through src/lib/practice-scope.ts — do NOT raise this.`,
+        `${MAX_UNSCOPED_REQUEST_WRITES}). At ZERO this is not a judgement call: ` +
+        `a clinical write was added that no signed-in user's practice bounds, ` +
+        `and a cross-practice WRITE puts a false entry in another tenant's ` +
+        `chart. Scope it through src/lib/practice-scope.ts (or doctorId, which ` +
+        `is narrower) — do NOT raise this number.`,
     ).toBeLessThanOrEqual(MAX_UNSCOPED_REQUEST_WRITES);
   });
 
