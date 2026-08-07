@@ -829,16 +829,40 @@ The three that use their row: `api/patients/[id]/route.ts:216`,
 `api/visits/[id]/route.ts:313`, `actions/soap.ts:191` — all assign to `updated`
 and read it afterwards.
 
+⚠️ **PRE-AUTHORIZED 2026-08-07 — EITHER TREATMENT, PER SITE, DECLARED IN THE
+COMMIT.** Each of the three may take:
+
+- **`updateMany` + a re-read INSIDE THE SAME TRANSACTION** — the re-read must be
+  transactional or it reintroduces the read-after-write window the `updateMany`
+  was chosen to close, and `soap.ts` already carries an optimistic
+  `soapVersion` guard whose whole purpose is that window; or
+- **a STATED EXCEPTION** — keep `update`, with the reasoning in place: the write
+  is preceded by a practice-scoped read of the same id in the same handler, and
+  that fact is what authorises it.
+
+The exception is legitimate and it is also exactly the "borrowed authorisation"
+shape this unit exists to retire, so **an exception must say why the borrowing is
+sound HERE**, not merely that it is convenient. Site by site, in the commit, not
+as a blanket policy.
+
 One write is not by id at all: `update-visit-header.ts:153` is a BULK
 `updateMany` over `{ patientId, signedAt: null }` — a rename spreading across a
 patient's unsigned visits. It has no id to be unique on and is the clearest case
 for the accessor.
 
-⚠️ **AND THE `updateMany` SHAPE IS THE ONE TO WATCH.** A scoped `updateMany`
-whose predicate matches nothing returns `{ count: 0 }` — no error, no exception,
-and several call sites already treat `count === 0` as "a concurrent write won".
-A wrong predicate would therefore read as a benign race rather than as a refusal.
-The attempt-proof's positive half is what distinguishes them.
+⚠️ **THE COUNT-0 TRAP GOVERNS ALL 25 — ruled 2026-08-07.** A scoped `updateMany`
+whose predicate matches nothing returns `{ count: 0 }` — no error, no exception —
+and several call sites already treat `count === 0` as *"a concurrent write won"*.
+**A wrong predicate would therefore wear the benign-race costume**, and the
+symptom is a save that silently does nothing on a chart the user can see.
+
+> **EVERY converted site's attempt-proof includes the POSITIVE direction.** Not
+> the refusing tranche's — every site's. A refusal-only proof is satisfied by a
+> predicate that matches nothing, which is the failure it was meant to exclude.
+
+This is the same defect family as a vacuous assertion, arriving through a
+runtime API rather than a test: `{ count: 0 }` is a *successful call* that did
+nothing.
 
 ### T7 — the remaining tables gain `practiceId`
 `visit_deliveries`, `doctor_edit_patterns`, `rx_warning_overrides`, the four
