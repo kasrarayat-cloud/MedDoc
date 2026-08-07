@@ -914,7 +914,32 @@ bash scripts/check-qa-mock-posture.sh         # READ-ONLY. 0 = severed, 1 = LIVE
 bash scripts/check-minio-encrypted-mount.sh   # READ-ONLY. 0 = encrypted, 1 = DRIFT, 2 = can't tell
 bash scripts/check-pg-encrypted-mount.sh      # READ-ONLY. 0 = encrypted, 1 = DRIFT, 2 = can't tell
 bash scripts/check-ingress-tls.sh             # READ-ONLY. 0 = all SNIs OK, 1 = 502ing, 2 = can't tell
+bash scripts/check-composite-fk.sh            # READ-ONLY. 0 = intact, 1 = ABSENT/RESHAPED, 2 = can't tell
 ```
+
+⚠️ **PRISMA OFFERS THE DELETION OF T3's TENANCY WALL AS TIDYING, AND THAT IS WHY
+THE COMPOSITE FK HAS A GUARD.** `transcribe_visits_patientId_practiceId_fkey`
+references `(patientId, practiceId) → transcribe_md_patients(id, practiceId)`,
+which is what makes a visit whose practice differs from its patient's
+**unrepresentable**. Prisma has no syntax for a composite FK, so the model
+renders a SIMPLE one and `prisma migrate diff` reports a permanent difference
+whose generated script says `DROP CONSTRAINT …patientId_practiceId_fkey` and adds
+a single-column replacement. It reads like closing drift; it removes the wall,
+because a simple FK checks only that the practice **exists** — which every wrong
+practice id also satisfies. **Never apply that hunk.**
+
+The guard checks **by name AND by definition**, and the difference is not
+pedantry: mutation-proved on a throwaway database, a same-named single-column FK
+passes a name-only check and fails this one. It also carries an opt-in
+behavioural arm (`--attempt`) that is **fail-closed off any database without a
+qa/test marker**, so F3's read-only-on-production default holds.
+
+⚠️ **AND THE BEHAVIOURAL ARM SATISFIES EVERY UNRELATED `NOT NULL` FIRST.** An
+earlier attempt-proof "passed" because `specialty NOT NULL` rejected the row
+before the FK was ever consulted — proving nothing about the FK. **A refusal is
+evidence only when you know WHAT refused**, so the arm matches the constraint
+name in `SQLERRM` and pairs it with a positive control that inserts the same row
+correctly scoped.
 
 **A HEALTHY CONTAINER SAYS NOTHING ABOUT WHETHER ANYONE CAN REACH IT**, and that
 sentence is a six-hour total outage on 2026-08-07. Every public hostname —
