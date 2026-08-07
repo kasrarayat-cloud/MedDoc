@@ -1793,6 +1793,32 @@ model TranscribeVisit {
   /// NOTHING kept them agreeing — hence the explicit choice, and the composite
   /// FK below that makes the alternative unrepresentable.
   practiceId String
+  /// ⚠️ THIS RELATION IS A LIE THE DATABASE DOES NOT TELL, AND IT IS DELIBERATE.
+  /// Prisma renders it as a SIMPLE FK on `practiceId`. Postgres holds a
+  /// COMPOSITE one instead, and there is no Prisma syntax for a composite FK:
+  ///
+  ///   transcribe_visits_patientId_practiceId_fkey
+  ///     FOREIGN KEY ("patientId", "practiceId")
+  ///     REFERENCES transcribe_md_patients(id, "practiceId")
+  ///     ON UPDATE CASCADE ON DELETE RESTRICT
+  ///
+  /// That composite is what makes a visit whose practice differs from its
+  /// patient's UNREPRESENTABLE — not discouraged, unrepresentable. A simple
+  /// `practiceId → practices(id)` FK checks only that the practice EXISTS, which
+  /// every wrong value also satisfies.
+  ///
+  /// ⚠️ SO `prisma migrate diff` REPORTS A DIFFERENCE HERE, PERMANENTLY, AND
+  /// APPLYING IT WOULD DELETE T3's ENTIRE GUARANTEE. Measured 2026-08-07 against
+  /// a database with every migration applied, the generated script says:
+  ///
+  ///   ALTER TABLE "transcribe_visits" DROP CONSTRAINT "transcribe_visits_patientId_practiceId_fkey";
+  ///   ALTER TABLE "transcribe_visits" ADD  CONSTRAINT "transcribe_visits_practiceId_fkey" …
+  ///
+  /// It reads like tidying drift. It is the removal of the only thing standing
+  /// between a mis-derived write and a note filed under the wrong tenant.
+  /// **NEVER apply that hunk.** This is the same class as the T4-b ruling, where
+  /// the prescribed drift "fix" would have broken production: check what the
+  /// constraint actually SAYS before declaring you are merely writing it down.
   practice   Practice @relation(fields: [practiceId], references: [id])
   /// T4 — who CREATED this visit. Same value as `userId` today; the separate
   /// column is what lets `userId` come to mean "owner" without rewriting the
@@ -2808,14 +2834,14 @@ model TemplateTwinCompiledVersion {
   fills         TemplateTwinFillManifest[]
 
   practiceId String
-  practice   Practice @relation(fields: [practiceId], references: [id])
+  practice   Practice @relation(fields: [practiceId], references: [id], map: "twin_compiled_versions_practiceId_fkey")
 
   /// Multiple immutable NoteTemplate versions may reuse the same immutable
   /// source package when a physician explicitly forks only the semantic
   /// mapping. noteTemplateId remains the one-to-one version boundary.
   @@index([sourceArtifactId, compilerVersion])
   @@index([certificationStatus, compiledAt])
-  @@index([practiceId])
+  @@index([practiceId], map: "twin_compiled_versions_practiceId_idx")
   @@map("template_twin_compiled_versions")
 }
 
@@ -2841,12 +2867,12 @@ model TemplateTwinFieldDefinition {
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   practiceId String
-  practice   Practice @relation(fields: [practiceId], references: [id])
+  practice   Practice @relation(fields: [practiceId], references: [id], map: "twin_field_definitions_practiceId_fkey")
 
   @@unique([compiledVersionId, fieldId])
   @@index([compiledVersionId, displayOrder])
   @@index([compiledVersionId, detectionStatus])
-  @@index([practiceId])
+  @@index([practiceId], map: "twin_field_definitions_practiceId_idx")
   @@map("template_twin_field_definitions")
 }
 
@@ -2882,10 +2908,10 @@ model TemplateTwinSemanticMapping {
   updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
 
   practiceId String
-  practice   Practice @relation(fields: [practiceId], references: [id])
+  practice   Practice @relation(fields: [practiceId], references: [id], map: "twin_semantic_mappings_practiceId_fkey")
 
   @@index([mappingStatus, updatedAt])
-  @@index([practiceId])
+  @@index([practiceId], map: "twin_semantic_mappings_practiceId_idx")
   @@map("template_twin_semantic_mappings")
 }
 
@@ -2906,10 +2932,10 @@ model TemplateTwinCertification {
   certifiedAt             DateTime @default(now()) @db.Timestamptz(6)
 
   practiceId String
-  practice   Practice @relation(fields: [practiceId], references: [id])
+  practice   Practice @relation(fields: [practiceId], references: [id], map: "twin_certifications_practiceId_fkey")
 
   @@index([certifiedById, certifiedAt])
-  @@index([practiceId])
+  @@index([practiceId], map: "twin_certifications_practiceId_idx")
   @@map("template_twin_certifications")
 }
 
