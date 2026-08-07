@@ -162,22 +162,43 @@ from.
 demonstrated by mutation, not asserted. Without the red, T1 is not done.
 **Blocks:** every item below.
 
-### T2 — close the audit fail-open — 🟩 **DONE 2026-08-04** (code) / ⏸ repair pending
+### T2 — close the audit fail-open — ✅ **FULLY DONE 2026-08-04** (code AND repair)
 The code half shipped ahead of TEAMS as part of the security block:
 `?? 'clinic_main'` is gone, `signOut` threads the practice by traversal,
 `gate-audit-attribution-failclosed` is proven red against four mutations, and
 `AUDIT_ATTRIBUTION_CORRECTED` shipped **with its Prisma migration**.
 
-**Still to run, deliberately not run yet:**
-`npx tsx scripts/repair-audit-attribution.ts --apply` against production. It is
-read-only by default and it **never updates or deletes** — it appends one
-correction per wrong row. Holding it until the migration is applied to prod
-(the enum label must exist first, or every insert is rejected — silently, per
-`535d30d9`).
+⚠️ **THE REPAIR HAS ALREADY RUN. THIS SECTION SAID OTHERWISE FOR THREE DAYS AND
+WAS WRONG — CORRECTED 2026-08-07 AGAINST THE DATABASE.**
 
-Still owed in TEAMS proper: backfill `practiceIdSnapshot` on the 38 rows that
-predate the column, and name `audit_logs` as an S4c exclusion in the same
-commit that writes the fail-closed rule.
+It read *"Still to run, deliberately not run yet: `npx tsx
+scripts/repair-audit-attribution.ts --apply`"*. Measured on production:
+
+    AUDIT_ATTRIBUTION_CORRECTED rows ......... 71
+    all written .............................. 2026-08-04
+    distinct targetIds ....................... 71   (one per wrong row)
+    originals still carrying 'clinic_main' ... 65   ← append-only honoured
+
+Those figures match the SECURITY BLOCK ledger row exactly — *"71 corrections
+APPENDED (65+6), originals still 65 and still wrong"*. **The repair ran the same
+day this paragraph claimed it was being held**, as part of A.3; the section was
+written before that and never updated.
+
+⚠️ **AND THE COST OF BELIEVING IT WOULD HAVE BEEN REAL.** A session inheriting
+"still to run" re-runs the script — and because it **appends** rather than
+updates, a second run does not no-op. It writes **71 duplicate corrections**
+against rows that are already corrected, permanently, into the one table whose
+value is that it can be trusted. The append-only property that makes the repair
+safe to run *once* is exactly what makes it unsafe to run *twice*.
+
+> **A ledger row and a section that disagree are not a formatting problem. One
+> of them is telling a future session to do something to production.** The
+> database settles it; neither document does.
+
+Still owed in TEAMS proper — **both since discharged**: the `practiceIdSnapshot`
+backfill (done, see the exit gate §2) and naming `audit_logs` as an S4c
+exclusion (done by **T7**, SPEC §1.5, which names all three exclusions with
+their reasons).
 
 ### ✅ T3 — `practiceId` on `transcribe_visits` — DONE 2026-08-05
 
@@ -1086,11 +1107,62 @@ So F-TYPE's first job is finding **why** the `require` was needed — generated-
 resolution across the workspace boundary is the likely reason and must be
 CONFIRMED, not assumed.
 
-**THE REVEALED SURFACE, MEASURED BY TYPING IT AND COUNTING:**
+#### ✅ ANSWERED 2026-08-07 — THERE IS NO LIVE REASON. IT IS INHERITED.
 
-    24 errors across ~12 files
-       worker.ts 3 · patients/page.tsx 3 · patients/[id]/export 3
-       stale-visits 2 · visits/[id] 2 · visits/[id]/delete 2 · patients/[id] 2 · …
+The hypothesis was tested rather than reasoned about. A typed import placed
+in-tree resolves and type-checks:
+
+    import { PrismaClient } from '@prisma/client';
+    c.transcribeVisit.create({ data: { __definitelyNotAField: 1 } })
+    → error TS2353: … does not exist in type 'TranscribeVisitCreateInput'
+
+**The positive control is the point**: the generated types are REAL, not a
+permissive stub — a bogus field errors by name, while a legitimate
+`findMany({ where: { practiceId } })` passes clean. CI already runs
+`npm run db:generate` before every typecheck step (`test.yml:89`, `:302`, the
+latter with a comment saying exactly why). So the `require` is a **legacy
+artifact**, and the file's own header says so.
+
+#### ⚠️ THE SURFACE WAS MEASURED WRONG — 42 ERRORS / 25 FILES, NOT 24 / ~12
+
+Re-measured by typing the client and running `tsc -p apps/transcribe-md`:
+
+    42 errors across 25 files
+       patients/[id] 5 · worker.ts 3 · patients/page.tsx 3 · visits/[id] 3
+       visits/[id]/delete 3 · patients/[id]/export 3 · stale-visits 2 · …
+
+It also reaches **outside `apps/transcribe-md/src/`** — `packages/auth/src/user-session.ts`
+and two `scripts/` files — which the original figure did not contemplate.
+
+#### ⚠️ AND 42 ERRORS ARE NOT 42 DECISIONS. THE SHAPE DECIDES THE WORK.
+
+| class | n | treatment |
+|---|---|---|
+| `$transaction(async (tx: typeof prisma) => …)` | **~16** | **ONE architectural fix** |
+| `PracticeId` brand violations | 5 | READ EACH — possible real bugs |
+| `StringFilter` reaching a scalar field | 4 | read each |
+| bare `null` into a Json column | 3 | **likely real bugs** |
+| misc (string→union, `string \| null`→`string`) | ~14 | annotations |
+
+**The largest class is a single decision, and it is mis-diagnosed as sixteen.**
+Typed, `typeof prisma` is the full `PrismaClient`, which is not assignable to
+`Omit<PrismaClient, '$connect'|'$disconnect'|'$on'|'$use'|'$extends'>`. TypeScript
+then falls back to the ARRAY overload of `$transaction` and infers `any[]` —
+which is where *"'soapVersion' does not exist on type 'any[]'"* (`soap.ts:230`)
+and *"'any[]' is not assignable to 'number'"* (`stale-visits.ts:78`) come from.
+Those read like data-shape bugs and are not: **the runtime behaviour is already
+correct.** ⚠️ **RULED: type the parameter as Prisma's own transaction-client
+shape, everywhere, in ONE commit — never `typeof prisma`.**
+
+⚠️ **THE `confidenceScores` NULL CLUSTER IS DECIDED ON QA, NOT BY REASONING.**
+`worker.ts:332` and `:1094` write bare `null` to a Json column; Prisma's types
+demand `Prisma.DbNull` (SQL NULL) or `Prisma.JsonNull` (JSON `null`), and the
+two are different values with different query semantics. **Production data
+cannot settle it** — measured, all 26 visits hold a real object, because the
+reset at `:332` is always overwritten before processing ends, so there is no
+surviving evidence of what a bare `null` lands as. Write it through the typed
+client on QA and read back which of the two it produced, **then** choose. An
+assumed answer here is a latent bug in either direction.
 
 Tractable in one or two tranches rather than a sprawl. **Each revealed error is
 either a latent bug or a missing annotation and gets CLASSIFIED, not
@@ -1107,7 +1179,82 @@ success while its audit row never wrote.
 The read-back canon remains the proof standard; **the loud catch is the tripwire
 between proofs.**
 
-### T7 — the remaining tables gain `practiceId`
+### 🟩 T7 IS LIVE IN PRODUCTION — 2026-08-07T16:22Z
+
+PR #537 → merge **`f1765832`**, with a full four-workflow citation on the merge
+commit:
+
+| Workflow | Run |
+|---|---|
+| `CI` | ✅ `31190074510` |
+| `e2e` | ✅ `31190074567` |
+| `a11y-ci` | ✅ `31190074469` |
+| `secrets-scan` | ✅ `31190074491` |
+
+Deployed from **`main@141fe70b`** — which carries T7 plus the ingress fix (#539)
+— itself fully cited (`CI 31193775929` · `e2e 31193775871` ·
+`a11y-ci 31193775992` · `secrets-scan 31193775991`). The tree was asserted clean
+at that SHA **before** any measurement was taken. Log
+`docs/deploy-logs/deploy-20260807T162243Z.log`; rollback
+**`:pre-t7-20260807`**, cut against the RUNNING ids and digest-verified to
+resolve to them, negative-controlled against `:pre-t6roles-20260807`.
+
+⚠️ **BEFORE THIS SESSION THE LIVE IMAGES CARRIED NO ROLLBACK TAG AT ALL.**
+Deploy (a) landed at 06:02 and its session died before cutting one. A rollback
+between 06:02 and 16:22 had no target. Cut and verified before deploying.
+
+#### THE DECLARED DELTA, AND THE CORRECTION IT CONTAINED
+
+Declared before running (runbook §2.5). ⚠️ **The brief said "84 rows
+backfilled". That number is wrong in a way the post-deploy check could never
+have caught**, because a migration supplies a ready-made excuse for any figure:
+
+    84 rows GAIN the column      62 + 16 + 6
+    82 rows RECEIVE a value      62 + 16 + 4
+     2 stay NULL BY DESIGN       the platform-global note_templates
+
+Measured after: **gained 84 · valued 82**, exactly. Everything else held —
+migrations 90 → 91, both image ids changed (`a9280a7594b3 → 11791f54c3f8`,
+`cc913dd3f3a5 → 02d06a803137`), and **26 visits · 15 patients · 16 signed ·
+197 practices · 196 users byte-identical**, co-tenants `307/404/200/200/410`,
+all five standing checks green.
+
+#### THE BICONDITIONAL BITES — proven by attempt, inside a rollback
+
+    UPDATE note_templates SET "practiceId"='x' WHERE "doctorId" IS NULL;
+    → ERROR: violates check constraint "note_templates_practice_iff_doctor"
+
+That is the **reverse** half — the one the migration header calls easy to omit.
+It forbids an orphaned tenancy claim on platform content. The attempt ran inside
+`BEGIN … ROLLBACK`, so it is observable and was never consequential.
+
+#### ⚠️ PRE-DEPLOY: THE MIGRATION WAS DRY-RUN AGAINST PRODUCTION, READ-ONLY
+
+Every abort guard evaluated **0**, each with a positive control proving the join
+traverses (62 and 16 derivable). So no `RAISE EXCEPTION` could fire, and the
+migration could not half-apply. The full chain was also applied to a **throwaway
+shadow database** — 90 of 91 (the one failure being a `GRANT` migration naming
+the absent `meddoc` role), which is where the index-name drift below was found.
+
+#### ⚠️ CARRIED OUT OF T7 — index-name drift, 8 objects, NOT a blocker
+
+The four twin tables' new objects are named `twin_*_practiceId_idx` / `_fkey`
+while the models are `@@map`'d to `template_twin_*` and declare a bare
+`@@index([practiceId])`. Prisma therefore derives `template_twin_*` names.
+Measured on the shadow DB, and the convention is unambiguous in the same
+database: `template_twin_fill_manifests_practiceId_status_updatedAt_idx` and
+`template_twin_source_artifacts_practiceId_createdAt_idx` both carry the full
+prefix, and **the other five T7 indexes match Prisma's convention exactly** — so
+the four twin ones are the outliers, not the rule.
+
+Functionally identical; drift against the standing **UNDECLARED-PLAIN = 0**
+expectation, and it will surface later as a spurious rename migration.
+**RULED 2026-08-07: the SCHEMA gains explicit `map:` names matching the
+database's ACTUAL objects. Never rename a live database object for a
+convention's sake** — that is a needless migration over a working index.
+Schema-only; rides before BILLING.
+
+### T7 (original wording) — the remaining tables gain `practiceId`
 `visit_deliveries`, `doctor_edit_patterns`, `rx_warning_overrides`, the four
 unscoped `template_twin_*` tables, `account_deletions`, and `note_templates`
 with the platform-global carve-out.
@@ -1249,6 +1396,82 @@ Also measured: **all 12 own zero clinical rows**, so deactivation costs nothing
 clinically and remains reversible — which is what made the window meaningful.
 
 **T7 may now exclude these rows.** The veto is closed.
+
+#### ✅ EXECUTED 2026-08-07T16:35Z — 12 deactivated, 12 ATTRIBUTED audit rows, 0 deleted
+
+Run **after** the T7 migration, because SPEC §4.1 closes the veto window when
+the TEAMS migration runs — not before. `scripts/execute-gate0-deactivation.sql`,
+transactional, per the standing shape for owner-ruled production mutations.
+
+**Population RE-DERIVED at execution time**, never copied from the ruling:
+
+    MEDDOC_PRO-only ......... 12   (active 12 · already off 0)
+    own clinical data ....... 0    (positive control: 2 users overall own visits)
+    pre-existing gate0 rows . 0    (the script is not idempotent, by design)
+
+Verified **independently of the script's own success message**:
+
+    deactivated ............................ 12
+    active ................................. 184
+    users total ............................ 196   ← 0 DELETED
+    deactivated OUTSIDE the ruling ......... 0     ← the control that matters
+    audit rows ............................. 12
+      with practiceId / snapshot / targetId  12 / 12 / 12
+      NULL actor, by design .................12
+    rows retained: stamped 12 · attributed-to-ruling 12 · role kept 12 · email kept 12
+    clinical: 26 visits · 15 patients · 16 signed · 197 practices — UNTOUCHED
+
+⚠️ **THE SCRIPT SHIPPED WITH A DEFECT AND IT WAS FOUND BY READING, NOT BY
+RUNNING.** Its audit INSERT set `practiceIdSnapshot` and **not** `practiceId`.
+Under T2's fail-closed rule a NULL `practiceId` *means something* — "this row's
+tenant could not be resolved". Measured: 10546 of 10560 rows carry both. These
+twelve are trivially resolvable (`u."practiceId"` was already in the SELECT), so
+the script would have filed twelve perfectly-attributable rows into the bucket
+reserved for attribution FAILURES, eroding the one signal T2 exists to make
+trustworthy. **Nothing would have errored.**
+
+Fixed before execution, and the guard now refuses the defect: dropping
+`practiceId` from the INSERT again aborts with *"12 audit rows are missing
+practiceId/snapshot/targetId"*. Two further corrections rode with it — the
+pre-COMMIT block asserted a row COUNT and called it attribution (it now asserts
+the attribution), and the no-deletion proof hardcoded `196`, a number copied
+from a document and stale the moment somebody signs up (it now pins its own
+baseline in a TEMP table inside the transaction).
+
+**Rehearsed before executing**, per the standing shape: the whole script with
+`COMMIT` → `ROLLBACK` against production (`UPDATE 12 / INSERT 0 12`, all guards
+passing), residue then verified byte-identical to baseline; and three abort
+guards each proven to fire by mutating a **copy** of the source, never the
+database — the rule earned on 2026-08-05 when a mutation proof nulled 21
+signers.
+
+---
+
+### ✅ TEAMS — CLOSED END-TO-END, 2026-08-07
+
+Every item T1 → T8 is live in production, and all four exit-gate rows carry a
+written verdict:
+
+| | |
+|---|---|
+| T1 fixture · T2 audit fail-open · T3 visit tenancy · T4 attribution | 🟩 live |
+| T5 read accessor · T5-W write accessor · T6 roles + sign gate | 🟩 live |
+| T7 the remaining nine tables · T8 invites carry practice + role | 🟩 live |
+| exit gate 1 `worker.ts:983` | verdict recorded — accepted, **assigned to B1/B4** |
+| exit gate 2 `practiceIdSnapshot` | done — 6 unresolvable NULL, 10554 set |
+| exit gate 3 `audit_logs` S4c | discharged by T7 — SPEC §1.5 names all three exclusions **with reasons** |
+| exit gate 4 the 12 accounts | **executed** — see above |
+
+**What the close does NOT claim.** The practice wall is now structural for every
+clinical table, and no read or write reaches one without a predicate. It does
+**not** mean the tenancy model has been exercised by real multi-seat use: every
+production practice holding clinical data is still SOLO, so the widening remains
+a no-op in production **by construction**, and every behavioural proof lives on
+the T1 fixture. That is a good deploy posture and a poor test posture, and it is
+why F1 exists.
+
+**Next: F-TYPE, then BILLING** — in that order, because BILLING is wall-to-wall
+new Prisma writes and does not get built on a placebo.
 
 ---
 
