@@ -251,7 +251,34 @@ Columns added; `POST /api/visits/[id]/sign` records the actual signer.
 three disagreeing signer records (36 / 16 / 16, DISCOVERY §B.7) or state in the
 ledger why they still disagree.
 
-### 🟨 T4 — createdBy / signedBy — **PARTIAL; the dependency is DISCHARGED, flips CLOSED on landing**
+### ✅ T4 — createdBy / signedBy — **CLOSED 2026-08-07**
+
+**Both halves of the gate now run.**
+
+- **NEGATIVE** — `33-visit-attribution.spec.ts`: a signature without a signer is
+  refused by `transcribe_visits_signed_requires_signer`, with a positive control
+  proving the constraint discriminates on signed-ness rather than rejecting
+  every write. Landed 2026-08-06.
+- **POSITIVE** — `35-sign-role-gate.spec.ts`: **a CLINICIAN signs a COLLEAGUE's
+  unsigned visit through the real route, 200, and `signedBy ≠ createdBy`.**
+
+⚠️ **THE POSITIVE HALF WAS BLOCKED FOR A REASON, AND THE REASON WAS DISCHARGED
+RATHER THAN WAIVED.** T4 was declared PARTIAL on 2026-08-06 because proving
+attribution needs a NON-AUTHOR to sign through the route — *"simulating it with
+a direct UPDATE would prove the columns CAN differ and say nothing about whether
+the ROUTE stamps the right person."* That required T5's practice-scoped read
+(so the colleague can reach the visit at all) and T6's role model (so a
+non-author is permitted to sign). Both landed; the gate passes.
+
+Production could never have demonstrated it: all 16 signed visits have
+signer == author, which is not evidence the attribution works — it is evidence
+the data has never exercised it.
+
+**Citation:** PR #533, merge `94ed44b7`, deployed from `main@00673b51` with a
+full four-workflow citation (`CI` 31138836546 · `e2e` 31138836535 · `a11y-ci`
+31138836556 · `secrets-scan` 31138836526).
+
+### T4 (superseded) — the PARTIAL row
 
 ⚠️ **THE POSITIVE GATE NOW RUNS AND PASSES.** T6's fixture gave alpha-2 a
 CLINICIAN role and `35-sign-role-gate.spec.ts` drives the REAL route: a
@@ -585,7 +612,59 @@ What IS true, stated narrowly:
   same code, verified on a later merge commit, by workflows that actually
   dispatched.
 
-### 🟨 T6 — roles, and the sign gate that refuses — **BUILT 2026-08-06, awaiting the landed base**
+### 🟩 T6 IS LIVE IN PRODUCTION — 2026-08-07T02:24Z
+
+PR #533 → merge `94ed44b7`. Deployed from **`main@00673b51`**, which carries the
+merge plus two docs files, with a full four-workflow citation on **the commit
+that actually deployed**:
+
+| Workflow | Run |
+|---|---|
+| `CI` | ✅ `31138836546` |
+| `e2e` | ✅ `31138836535` |
+| `a11y-ci` | ✅ `31138836556` |
+| `secrets-scan` | ✅ `31138836526` |
+
+Log `docs/deploy-logs/deploy-20260807T022441Z.log`; rollback tags
+**`:pre-t6roles-20260807`**, digest-verified against the running ids.
+
+#### THE EXPECTED DELTA WAS DECLARED FIRST, AND THE DIFF MATCHES IT EXACTLY
+
+Declared before running (runbook §2.5): migrations 87 → 89 · `users.practiceRole`
+0 → 1 · both image ids change · **clinical counts UNCHANGED**. The diff:
+
+    image ids     22110690246a → 92bda14187f9 · 133036c0a08a → 61e81fa0c962
+    migrations    87 → 89
+    practiceRole  0 → 1
+    (nothing else)
+
+26 visits · 15 patients · 16 signed · 196 users — identical. Containers 9/9,
+co-tenants 307/410/404/200.
+
+#### THE THREE-LAYER VERIFICATION — the lesson checking itself
+
+| Layer | Result |
+|---|---|
+| backfill | **196 OWNER**, 0 underivable (active + practice + no role) |
+| constraint | `users_active_member_has_practice_role` **live** |
+| ⚠️ **`pg_enum`** | **`SIGN_BLOCKED_ROLE_NOT_PERMITTED` present** |
+
+The third row is the whole point. `schema.prisma` and the TS union both passed
+on 2026-08-06 while the database enum was empty, and the refusal fired correctly
+with a 403 while its audit row silently did not. **The database is the only layer
+whose answer counts**, so it is the one that gets asked.
+
+#### PRODUCTION HOLDS NO TECH USER, AND THAT IS CORRECT
+
+Zero CLINICIAN and zero TECH rows: every prod user is the OWNER of their own
+solo practice, exactly as the backfill intends. So the **behavioural**
+three-direction proof lives in CI/QA where the TECH seat exists, and prod gets
+**structural verification only — no mutation, no synthetic sign.** A role gate
+cannot be exercised against a population that has only one role, and inventing
+one in production to watch it refuse would be editing a live account to make a
+test feel complete.
+
+### T6 (superseded) — the BUILT row
 
 Built on `feat/teams-t6-roles`, stacked on T5. **Merges only on top of #532**, per
 the standing sequence — nothing here reaches `main` before the base it assumes.
