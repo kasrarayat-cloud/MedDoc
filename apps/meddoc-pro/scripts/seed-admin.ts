@@ -35,6 +35,9 @@ async function main() {
       passwordHash,
       role: 'DOCTOR',
       isActive: true,
+      // No practiceId is set here, so the T6 CHECK is satisfied by the
+      // practice-less branch. Stated rather than left to inference: if this
+      // seed ever gains a practice, it needs a practiceRole in the same edit.
     },
   });
 

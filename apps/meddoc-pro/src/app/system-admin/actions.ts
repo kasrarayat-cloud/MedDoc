@@ -89,9 +89,29 @@ export async function activateUserAction(userId: string): Promise<ActionResult> 
     if (guardErr) return guardErr;
 
     if (await isDatabaseHealthy()) {
+      // ⚠️ T6 — REACTIVATION MUST RESTORE A PRACTICE ROLE, or the CHECK
+      // `users_active_member_has_practice_role` refuses the update. The case is
+      // narrow and real: a user deactivated BEFORE the backfill carries a
+      // practice with a NULL role, because the backfill deliberately skipped
+      // deactivated rows. Reactivating them would fail with a constraint error
+      // that names the CHECK and not the cause.
+      //
+      // OWNER is the same no-downgrade default the backfill used: reactivation
+      // restores what the account had, and narrower roles arrive via invites.
+      const target = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { practiceId: true, practiceRole: true },
+      });
       await prisma.user.update({
         where: { id: userId },
-        data: { isActive: true, deactivatedAt: null, deactivatedBy: null },
+        data: {
+          isActive: true,
+          deactivatedAt: null,
+          deactivatedBy: null,
+          ...(target?.practiceId && !target.practiceRole
+            ? { practiceRole: 'OWNER' as const }
+            : {}),
+        },
       });
     } else {
       updateMockUser(userId, { isActive: true });
