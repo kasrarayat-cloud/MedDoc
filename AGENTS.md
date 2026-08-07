@@ -402,6 +402,38 @@ met. So the discipline is a step, not an instinct:
 checklist, and the most confident-looking zero in a programme is the one produced
 over a universe nobody re-checked.
 
+## NOTHING REACHES `main` OUTSIDE A PR — DOCS INCLUDED
+
+**`main` is what deploys. A commit that arrives outside the gate is a commit
+nothing verified**, and "it's only documentation" is the reasoning that makes the
+exception, every time.
+
+⚠️ **AND THE COST IS NOT HYPOTHETICAL, IT IS IMMEDIATE.** On 2026-08-07 a
+docs-only commit was pushed straight to `main` while the merge-commit citation
+for the deploy was still running. GitHub cancels in-flight runs on a new push to
+the same branch, so the push **destroyed the citation it was waiting for** —
+`CI`, `e2e` and `a11y-ci` all went `cancelled` — and restarted the clock by
+~45 minutes. The commit was two markdown files.
+
+The second cost is subtler and worse: for a few minutes `main` carried a commit
+with no citation at all, and a deploy taken in that window would have shipped
+something no gate had seen. The content being harmless is luck, not a property
+of the process.
+
+#### THE RECOVERY PATTERN, when it happens anyway
+
+**Do NOT re-run the cancelled past.** The cancelled runs describe an ancestor
+commit, and re-running them proves something about a tree that is no longer
+`main`.
+
+> **Cite the DESCENDANT — a full citation on the exact commit that will
+> deploy.**
+
+That is strictly stricter than what was lost: the new head contains everything
+the merge commit did, so its citation covers the same code *plus* the stray, and
+it certifies the thing that actually ships rather than its parent. Wait for it in
+full; do not deploy the parent's evidence.
+
 ## A DEPLOY DECLARES ITS EXPECTED DELTA BEFORE IT RUNS
 
 **Standing part of the deploy standard — `docs/DEPLOYMENT_RUNBOOK.md` §2.5.**
