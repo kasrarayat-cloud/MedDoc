@@ -24,7 +24,7 @@
 import prisma from '@meddoc/db';
 
 import { requireSession } from '@/lib/auth';
-import { visitByIdScope, visitScope } from '@/lib/practice-scope';
+import { visitByIdScope, visitScope, scopedUpdate } from '@/lib/practice-scope';
 import { logAudit } from '@/lib/audit';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 
@@ -84,10 +84,13 @@ export async function updateVisitHeaderAction(
   if (field === 'chief_complaint') {
     const before = visit.chiefComplaint ?? '';
     if (before === value) return { ok: false, error: 'That is already what it says.' };
-    await prisma.transcribeVisit.update({
-      where: { id: visit.id },
-      data: { chiefComplaint: value },
-    });
+    await scopedUpdate(
+      prisma.transcribeVisit,
+      'transcribeVisit',
+      visit.id,
+      visitByIdScope(visit.id, session.user.practiceId),
+      { chiefComplaint: value },
+    );
     void logAudit({
       action: 'EDITED_NOTE',
       targetType: 'TranscribeVisit',
@@ -203,10 +206,13 @@ export async function updateVisitHeaderAction(
   } else {
     // No linked patient record — the visit's own denormalised name is all there
     // is, so it is the whole of the correction.
-    await prisma.transcribeVisit.update({
-      where: { id: visit.id },
-      data: { patientName: value },
-    });
+    await scopedUpdate(
+      prisma.transcribeVisit,
+      'transcribeVisit',
+      visit.id,
+      visitByIdScope(visit.id, session.user.practiceId),
+      { patientName: value },
+    );
   }
 
   void logAudit({

@@ -29,7 +29,7 @@ import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import { getSession } from '@/lib/auth';
 import { apiError, withApiHandler } from '@/lib/api-error';
-import { visitByIdScope } from '@/lib/practice-scope';
+import { visitByIdScope, scopedUpdate } from '@/lib/practice-scope';
 import { computeEmScore } from '@/lib/em-coding/score';
 import { engineToUiScore } from '@/lib/em-coding/to-ui-score';
 import { extractIcdRows, extractRxRows } from '@/lib/em-coding/displayed-level';
@@ -198,9 +198,12 @@ export const POST = withApiHandler<{ id: string }>(
       applies: emAppliesToSpecialty(visit.specialty),
     });
 
-    await prisma.transcribeVisit.update({
-      where: { id: visitId },
-      data: {
+    await scopedUpdate(
+      prisma.transcribeVisit,
+      'transcribeVisit',
+      visitId,
+      visitByIdScope(visitId, session.user.practiceId),
+      {
         soapDraft: merge.newSoap,
         soapFinal: merge.newSoap,
         // This route rewrites the note, so it must move the version with it.
@@ -212,7 +215,7 @@ export const POST = withApiHandler<{ id: string }>(
         // The additions changed the note; the level must be revalidated.
         emStale: true,
       },
-    });
+    );
     void invalidateVisitFills(visitId);
 
     // Audit row. Metadata carries the from→to code pair + per-criterion

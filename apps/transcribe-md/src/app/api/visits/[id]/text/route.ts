@@ -17,7 +17,7 @@ import { TranscribeVisitStatus } from '@prisma/client';
 import { enqueueProcessVisit } from '@/lib/queue';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
-import { visitByIdScope } from '@/lib/practice-scope';
+import { visitByIdScope, scopedUpdate } from '@/lib/practice-scope';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { redactPhi } from '@meddoc/ai';
 import { logAudit } from '@/lib/audit';
@@ -112,9 +112,12 @@ export const POST = withApiHandler<{ id: string }>(
       return apiError('visit is already processing or finalized', 409);
     }
 
-    await prisma.transcribeVisit.update({
-      where: { id: visitId },
-      data: {
+    await scopedUpdate(
+      prisma.transcribeVisit,
+      'transcribeVisit',
+      visitId,
+      visitByIdScope(visitId, session.user.practiceId),
+      {
         rawTextInput: parsed.data.text,
         status: TranscribeVisitStatus.QUEUED,
         needsReview: false,
@@ -123,7 +126,7 @@ export const POST = withApiHandler<{ id: string }>(
         processingFinishedAt: null,
         processingCostCents: null,
       },
-    });
+    );
 
     try {
       await enqueueProcessVisit(visitId, userId);

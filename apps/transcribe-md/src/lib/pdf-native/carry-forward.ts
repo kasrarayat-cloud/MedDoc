@@ -28,6 +28,7 @@
 // there. Follow-up: thread the raw PDF through save to hash the new canvas here.
 // ============================================================================
 import prisma from '@meddoc/db';
+import { ScopedWriteMissError } from '@/lib/practice-scope';
 import { getDocumentProxy } from 'unpdf';
 
 import { extractPdfAnchors } from './anchors';
@@ -57,12 +58,19 @@ const sp = (v: unknown): Record<string, unknown> => (v ?? {}) as Record<string, 
 
 async function markPendingPreview(
   templateId: string,
+  doctorId: string,
   styleProfile: Record<string, unknown>
 ): Promise<void> {
-  await prisma.noteTemplate.update({
-    where: { id: templateId },
+  // ⚠️ T5-W — DOCTOR-scoped, NOT practice-scoped. GATE 0.3 / SPEC §4.3 rule
+  // note_templates per-doctor in TEAMS v1, and `doctorId` is STRICTLY NARROWER
+  // than a practice predicate — scoping this by practice would WIDEN it. The
+  // write takes the same predicate its reads take.
+  const res = await prisma.noteTemplate.updateMany({
+    where: { id: templateId, doctorId },
     data: { styleProfile: { ...styleProfile, pdfNativePendingPreview: true } as never },
   });
+  // `update` threw on a miss; `updateMany` does not. Preserve the signal.
+  if (res.count === 0) throw new ScopedWriteMissError('noteTemplate', templateId);
 }
 
 /**
@@ -114,13 +122,13 @@ export async function carryForwardPdfCertification(input: {
     (p) => sp(p.styleProfile).pdfNativeStructureHash === newStructure
   );
   if (!prior) {
-    await markPendingPreview(input.newTemplateId, styleProfile);
+    await markPendingPreview(input.newTemplateId, input.doctorId, styleProfile);
     return { carried: false, reason: 'structure_changed' };
   }
 
   const canvas = await getTemplateCanvas(prior.id);
   if (!canvas) {
-    await markPendingPreview(input.newTemplateId, styleProfile);
+    await markPendingPreview(input.newTemplateId, input.doctorId, styleProfile);
     return { carried: false, reason: 'no_canvas' };
   }
 
@@ -134,7 +142,7 @@ export async function carryForwardPdfCertification(input: {
   const anchored = new Set(anchors.map((a) => a.key));
   const missing = specs.filter((s) => !anchored.has(s.key));
   if (missing.length > 0) {
-    await markPendingPreview(input.newTemplateId, styleProfile);
+    await markPendingPreview(input.newTemplateId, input.doctorId, styleProfile);
     return { carried: false, reason: 'anchors_missing' };
   }
 

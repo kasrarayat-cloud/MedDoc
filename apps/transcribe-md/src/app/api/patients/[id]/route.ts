@@ -15,7 +15,7 @@ import { z } from 'zod';
 import { NextResponse } from 'next/server';
 
 import prisma from '@meddoc/db';
-import { patientScope, visitScope, type PracticeId } from '@/lib/practice-scope';
+import { patientScope, visitScope, type PracticeId, scopedUpdate } from '@/lib/practice-scope';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { getSession } from '@/lib/auth';
@@ -262,10 +262,13 @@ export const DELETE = withApiHandler<{ id: string }>(
       return NextResponse.json({ ok: true, alreadyDeleted: true });
     }
 
-    await prisma.transcribeMdPatient.update({
-      where: { id: existing.id },
-      data: { deletedAt: new Date() },
-    });
+    await scopedUpdate(
+      prisma.transcribeMdPatient,
+      'transcribeMdPatient',
+      existing.id,
+      { id: existing.id, ...patientScope(session.user.practiceId) },
+      { deletedAt: new Date() },
+    );
 
     void logAudit({
       action: 'TM_PATIENT_DELETED',

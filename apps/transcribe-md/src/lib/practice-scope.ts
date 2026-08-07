@@ -170,3 +170,65 @@ export function visitByIdScope(
  *     const visit = await prisma.transcribeVisit.findUnique({ where: { id } });
  */
 export const SYSTEM_READ = 'SYSTEM_READ' as const;
+
+// ============================================================================
+// SCOPED WRITES — T5-W.
+// ----------------------------------------------------------------------------
+// ⚠️ `update` → `updateMany` IS NOT A FREE SWAP, AND THE DIFFERENCE IS AN ERROR
+// SIGNAL.
+//
+// Prisma's `update` requires a UNIQUE `where`, so a practice predicate cannot be
+// added to it — the same wall `findUnique` hit on the read side, where the answer
+// was `findFirst`. Here the answer is `updateMany`. But:
+//
+//     update      no row matches  →  THROWS P2025
+//     updateMany  no row matches  →  RETURNS { count: 0 }, silently
+//
+// So converting a site and discarding the result DELETES an error that used to
+// be raised. The failure it deletes is not theoretical: several call sites in
+// this codebase already read `count === 0` as "a concurrent write won", so a
+// wrong predicate would wear the benign-race costume and the symptom in
+// production would be **a save that silently does nothing on a chart the user is
+// looking at**.
+//
+// `scopedUpdate` restores the signal. It is a function rather than a convention
+// because a convention is a hand-kept list, and this one would be kept by
+// fifteen call sites — put the behaviour where it cannot be forgotten.
+// ============================================================================
+
+/** Thrown when a practice-scoped write matched no row. Mirrors `update`'s P2025. */
+export class ScopedWriteMissError extends Error {
+  constructor(model: string, id: string) {
+    super(
+      `${model}: scoped update matched no row for id=${id}. Either the row left ` +
+        `the practice between the read and the write, or the predicate is wrong. ` +
+        `Refusing to report a write that did not happen.`,
+    );
+    this.name = 'ScopedWriteMissError';
+  }
+}
+
+/**
+ * A practice-scoped `updateMany` that behaves like `update` on a miss.
+ *
+ * ⚠️ IT TAKES THE PREDICATE, NOT AN ID PLUS A PRACTICE. The three clinical
+ * models do not share one scoping shape — visits and patients carry a
+ * `practiceId` column, `note_templates` scopes through `doctor: { practiceId }`
+ * — so a helper that built the predicate itself would be right for two models
+ * and quietly wrong for the third. The caller passes the accessor's output.
+ *
+ * ⚠️ IT THROWS ON `count === 0` ON PURPOSE. Callers that genuinely want to
+ * tolerate a miss — the optimistic-concurrency sites that inspect `count`
+ * themselves — must NOT use this; they call `updateMany` directly and keep their
+ * own reasoning, which is visible in the diff rather than hidden behind a helper.
+ */
+export async function scopedUpdate(
+  model: { updateMany: (args: { where: unknown; data: unknown }) => Promise<{ count: number }> },
+  modelName: string,
+  id: string,
+  where: unknown,
+  data: unknown,
+): Promise<void> {
+  const res = await model.updateMany({ where, data });
+  if (res.count === 0) throw new ScopedWriteMissError(modelName, id);
+}

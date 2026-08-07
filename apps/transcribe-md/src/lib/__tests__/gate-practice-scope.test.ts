@@ -152,14 +152,23 @@ const MAX_UNSCOPED_REQUEST_READS = 0;
  * they lack is a predicate of their OWN — the "borrowed authorisation" shape T5
  * itself argued against, one refactor away from being wrong.
  *
- * So: a RATCHET, not a wall, exactly as the read side began. 25 is the measured
+ * ⚠️ 25 → 12 in T5-W tranche 1a (13 mechanical update→updateMany conversions).
+ * TWO of the remaining 12 — `pdf-native/carry-forward.ts` — are already CORRECTLY
+ * scoped, by DOCTOR rather than by practice (GATE 0.3: note_templates are
+ * per-doctor in v1, and doctorId is strictly narrower than a practice
+ * predicate). This classifier looks for a PRACTICE predicate, so it counts them.
+ * They get a declared bucket when the template tranche lands, exactly as the
+ * read side's DOCTOR_SCOPE did — the count stays honest in the meantime rather
+ * than being quietly adjusted.
+ *
+ * So: a RATCHET, not a wall, exactly as the read side began. 25 was the measured
  * count across ALL FOUR clinical models, after T6 scoped the two `rescore-em`
  * updateManys that had no practice predicate at all. A visits-only count is 19;
  * this guard watches the same model list the read side does. Lower it; never
  * raise it.
  */
 const WRITE_METHODS = '(update|updateMany|delete|deleteMany|upsert)';
-const MAX_UNSCOPED_REQUEST_WRITES = 25;
+const MAX_UNSCOPED_REQUEST_WRITES = 12;
 
 /** Extracts the balanced argument of a call whose `(` is at `open`. */
 function callArg(code: string, open: number): string {
