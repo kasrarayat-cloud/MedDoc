@@ -57,8 +57,44 @@ export async function getSession(): Promise<ScopedSession | null> {
       if (!dbUser || !dbUser.isActive) return null;
       if (!role && dbUser.role) role = dbUser.role as UserRole;
       if (dbUser.practiceId) practiceId = dbUser.practiceId;
-    } catch {
-      // DB unreachable — fall through with JWT-claimed values.
+    } catch (err) {
+      // ⚠️ THIS IS A FAIL-OPEN, AND IT USED TO BE COMPLETELY SILENT.
+      //
+      // The line above — `if (!dbUser || !dbUser.isActive) return null` — is the
+      // ONLY `isActive` check on this path. When the lookup throws, it never
+      // executes, and the session is rebuilt from JWT-claimed `role` and
+      // `practiceId`. So a DEACTIVATED, suspended, soft-deleted or
+      // force-logged-out account continues to be served, bounded only by the
+      // JWT's 8-hour maxAge.
+      //
+      // It does NOT require the database to be down. `PRISMA_POOL_MAX=10` with a
+      // 20s pool timeout makes failures PER-QUERY under load — this lookup can
+      // time out while the clinical queries that follow it succeed, which is
+      // exactly the shape that admits a request rather than breaking it.
+      //
+      // ⚠️ THE BEHAVIOUR IS DELIBERATELY UNCHANGED HERE. Failing closed would
+      // sign a clinician out mid-dictation on a transient blip, and that
+      // trade-off is a war-room ruling, not a code decision — it is pending.
+      // What ships now is the ability to KNOW. Previously this was `catch {}`
+      // with a comment: if it had ever fired, in production, for any account, no
+      // artefact anywhere would show it.
+      //
+      // ⚠️ AND IT IS A LOG, NOT AN AUDIT ROW, ON PURPOSE. An audit row writes to
+      // the same database that just failed, so the one condition it exists to
+      // record is the condition in which it is least likely to land. A row that
+      // reliably fails to write during the event it describes is worse than a
+      // log — it reads as coverage. `SESSION_FAILOPEN` is greppable; alert on it.
+      console.error(
+        '[auth] SESSION_FAILOPEN: user lookup failed — isActive/role/practiceId ' +
+          'NOT verified against the database; serving JWT-claimed values. ' +
+          'A revoked or deactivated account is admitted while this persists.',
+        {
+          userId: nextAuthSession.user.id,
+          hadRoleClaim: Boolean(role),
+          hadPracticeClaim: Boolean(practiceId),
+          error: err instanceof Error ? err.message : String(err),
+        }
+      );
     }
 
     if (!role || !practiceId) return null;

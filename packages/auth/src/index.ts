@@ -244,7 +244,26 @@ export const authConfig: NextAuthConfig = {
         } catch (err) {
           // Fail OPEN on DB errors — don't kick users off for a transient
           // outage; the row will be re-validated on the next request.
-          console.error('[auth] UserSession validate failed:', err);
+          //
+          // ⚠️ THE OLD MESSAGE NAMED THE OPERATION, NOT THE CONSEQUENCE.
+          // "UserSession validate failed" reads as a background-write hiccup.
+          // What actually happens is that EVERY revocation gate on this path is
+          // skipped for this request: session revoked by a newer login, session
+          // expired, `isActive === false`, `suspendedAt`, `softDeletedAt`, and
+          // `forceLogoutAt` (user-session.ts:124-135). The JWT survives and the
+          // request proceeds.
+          //
+          // Behaviour deliberately unchanged — the availability-vs-revocation
+          // trade-off is a pending war-room ruling. This makes it OBSERVABLE, so
+          // the ruling can be made against evidence rather than speculation.
+          // Same greppable token as the other fail-open in
+          // `apps/transcribe-md/src/lib/auth.ts`, so one alert covers both.
+          console.error(
+            '[auth] SESSION_FAILOPEN: validateSession threw — revocation, ' +
+              'expiry, isActive, suspendedAt, softDeletedAt and forceLogoutAt ' +
+              'were ALL skipped for this request; the JWT was honoured.',
+            { sessionId, error: err instanceof Error ? err.message : String(err) }
+          );
         }
       }
       // Legacy tokens (minted before T-M2) have no sessionId — they pass
