@@ -14,6 +14,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 
 import prisma from '@meddoc/db';
+import type { TransactionClient } from '@meddoc/db';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { auth } from '@/lib/nextauth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
@@ -97,7 +98,7 @@ export const POST = withApiHandler(
       // If the current sessionToken is unavailable (legacy JWT from
       // before T-M2 single-session tracking), revoke everything —
       // forcing one re-login is safer than ambiguity.
-      await prisma.$transaction(async (tx: typeof prisma) => {
+      await prisma.$transaction(async (tx: TransactionClient) => {
         await tx.user.update({
           where: { id: userId },
           data: {

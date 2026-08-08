@@ -27,6 +27,7 @@
 import { NextResponse } from 'next/server';
 
 import prisma from '@meddoc/db';
+import type { TransactionClient } from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
@@ -87,7 +88,7 @@ export const POST = withApiHandler<{ id: string }>(
     // ── Already-trashed + ?permanent=1 → HARD purge now ──
     if (visit.deletedAt !== null && permanent) {
       try {
-        await prisma.$transaction(async (tx: typeof prisma) => {
+        await prisma.$transaction(async (tx: TransactionClient) => {
           await tx.aiCall.deleteMany({ where: { visitId } });
           await tx.transcribeVisit.delete({ where: { id: visitId } });
         });
@@ -144,7 +145,7 @@ export const POST = withApiHandler<{ id: string }>(
       // If either step fails, both roll back and the row stays visible
       // — the doctor can retry the click.
       try {
-        await prisma.$transaction(async (tx: typeof prisma) => {
+        await prisma.$transaction(async (tx: TransactionClient) => {
           await tx.aiCall.deleteMany({ where: { visitId } });
           await tx.transcribeVisit.delete({ where: { id: visitId } });
         });

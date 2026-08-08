@@ -21,7 +21,7 @@ import 'dotenv/config';
 import './worker-sentry';
 import { captureWorkerException } from './worker-sentry';
 import { Worker, type Job } from 'bullmq';
-import prisma from '@meddoc/db';
+import prisma, { Prisma } from '@meddoc/db';
 import { evidenceAnchorsEnabled } from './worker/evidence-anchors-flag';
 import { ANCHOR_GENERATION_ADDENDUM } from './worker/layers/04b-anchor-verify';
 import { TranscribeVisitStatus } from '@prisma/client';
@@ -245,6 +245,37 @@ async function laneHasSuggestions(visitId: string): Promise<boolean> {
   return Array.isArray(claims) && claims.length > 0;
 }
 
+/** Runtime proof that a value may be handed to a Prisma `Json` column.
+ *
+ *  F-TYPE 2026-08-07. `sanitizeConfidenceScores` already GUARANTEES this — it
+ *  returns the output of a `JSON.parse(JSON.stringify(...))` round-trip, or
+ *  null (FIND-P1-012). Its TYPE cannot say so: `LayerStatus.metadata` is
+ *  `z.unknown()`, and `unknown` is not assignable to `Prisma.InputJsonValue`.
+ *
+ *  So the fact is re-established by CHECKING rather than by asserting it away
+ *  with a cast — a cast here would restore exactly the silence the typed
+ *  Prisma client was introduced to remove. The false branch is unreachable
+ *  under the sanitizer's contract; should that contract ever drift, this
+ *  degrades the same way a sanitizer null already does (warn + write JSON
+ *  null) instead of throwing at the database.
+ *
+ *  ⚠️ This helper is a SCOPE WORKAROUND, not the preferred fix. The right
+ *  repair is to narrow `metadata` in `worker/confidence-scores.ts` from
+ *  `z.unknown()` to a JSON schema, at which point delete this and assign
+ *  `safeConfidenceScores` directly. */
+function isJsonInput(value: unknown): value is Prisma.InputJsonValue {
+  if (value === null) return false;
+  if (typeof value === 'string') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value === 'boolean') return true;
+  if (typeof value !== 'object') return false;
+  // `Object.values` on a bare object widens to unknown[] without a cast.
+  const members: unknown[] = Array.isArray(value) ? value : Object.values(value);
+  return members.every(
+    (m) => m === null || m === undefined || isJsonInput(m)
+  );
+}
+
 async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
   const { visitId } = job.data;
 
@@ -268,6 +299,14 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       specialty: true,
       inputMode: true,
       interpreterMode: true,
+      // F-TYPE 2026-08-07 — LATENT BUG, fixed. `createdAt` was READ at the
+      // Template Twin fill step below (`visitDate: visit.createdAt`) but was
+      // never SELECTED here, so the property was `undefined` at runtime. The
+      // parameter is optional (`visitDate?: Date | string | null`), so nothing
+      // threw: `visitDateToIso(undefined)` returns null and the DATE OF
+      // PROCEDURE control was silently left blank on every worker-produced
+      // fill manifest. Untyped Prisma is why it was invisible.
+      createdAt: true,
       // Per-visit template pick (req: end template×dictation collisions). When a
       // doctor chose a specific format on the new-visit form, it is written here
       // at create time and HONORED below over active-template resolution. NULL for
@@ -329,7 +368,22 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       // naturally re-runs only those. confidenceScores IS still
       // cleared because it's rebuilt from scratch in the roll-up
       // below, and stale failed entries would otherwise leak through.
-      confidenceScores: null,
+      //
+      // ⚠️ `Prisma.JsonNull`, NOT `Prisma.DbNull`, AND THE CHOICE WAS MEASURED
+      // RATHER THAN REASONED. A bare `null` — what this line used to be — lands
+      // in Postgres as the JSONB value `null`, not as SQL NULL. Determined on
+      // QA by writing each variant through the client and reading back:
+      //
+      //     bare null        → sql_null=false  json_null=true
+      //     Prisma.DbNull    → sql_null=TRUE   json_null=false
+      //     Prisma.JsonNull  → sql_null=false  json_null=true   ← identical
+      //
+      // So `JsonNull` preserves the stored bytes exactly and `DbNull` would
+      // silently change them. Production could not settle this: every visit
+      // there holds a real object, because this reset is always overwritten
+      // before processing ends. `DbNull` is the intuitive reading of "null"
+      // and it is the wrong one.
+      confidenceScores: Prisma.JsonNull,
     },
   });
 
@@ -1091,7 +1145,15 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         status: TranscribeVisitStatus.READY,
         processingFinishedAt: new Date(),
         processingCostCents: totalCents,
-        confidenceScores: safeConfidenceScores as unknown as object | null,
+        // F-TYPE 2026-08-07 — was `safeConfidenceScores as unknown as object |
+        // null`. Behaviour is unchanged: `Prisma.JsonNull` writes the JSON null
+        // that a bare `null` already produced here, and it matches what the
+        // attempt-start reset above (search `confidenceScores IS still cleared`)
+        // writes to this same column — see the measurement table there.
+        // `Prisma.DbNull` (SQL NULL) would NOT be equivalent.
+        confidenceScores: isJsonInput(safeConfidenceScores)
+          ? safeConfidenceScores
+          : Prisma.JsonNull,
         // Persist the FINAL note. L6 wrote soapFinal earlier; for an imaging
         // report it has since been reconciled (symmetric measurement tables +
         // recovered values), so re-persist it here so the review UI, styled

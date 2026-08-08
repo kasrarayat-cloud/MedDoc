@@ -34,6 +34,7 @@ import bcrypt from 'bcryptjs';
 
 import prisma from '@meddoc/db';
 
+import type { TransactionClient } from '@meddoc/db';
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { auth } from '@/lib/nextauth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
@@ -160,7 +161,7 @@ export const POST = withApiHandler('api:settings:delete-account', async (req) =>
 
   // ── Atomic destructive path ─────────────────────────────────────
   try {
-    await prisma.$transaction(async (tx: typeof prisma) => {
+    await prisma.$transaction(async (tx: TransactionClient) => {
       await tx.accountDeletion.create({
         data: {
           userId: user.id,

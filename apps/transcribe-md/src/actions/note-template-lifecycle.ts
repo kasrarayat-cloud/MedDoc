@@ -129,7 +129,12 @@ export async function saveNoteTemplateAction(
       }
 
       // 2. Write the target row.
-      const status = activate ? 'active' : 'draft';
+      // Annotated, not inferred: a bare `const status = …` has a WIDENING
+      // literal type, so `{ …, status }` below infers the property as plain
+      // `string` and the action's declared `status: 'draft' | 'active'` no
+      // longer accepts it. The annotation pins the union; the runtime value is
+      // unchanged.
+      const status: 'draft' | 'active' = activate ? 'active' : 'draft';
       if (existing && existing.status !== 'active') {
         // draft / inactive → update in place (not a live row)
         const updated = await tx.noteTemplate.update({

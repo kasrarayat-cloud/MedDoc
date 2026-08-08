@@ -118,9 +118,18 @@ async function main() {
   // The real source bytes, so the probe exercises render + roundtrip too rather
   // than stopping one step short of the thing being certified.
   const { createTemplateTwinArtifactStore } = await import('@/lib/template-twin/storage');
+  // `objectKey` is nullable ONLY for QUARANTINED artifacts, which never acquire a
+  // compiled version — create-draft.ts writes the stored key and the compiled row in
+  // one transaction. Refuse explicitly, the way fill-engine.ts:361 and
+  // synthetic-test.ts:209 do: a null reaching the store today still fails closed, but
+  // as a misleading "artifact not found" from the key parser.
+  const objectKey = compiled.sourceArtifact.objectKey;
+  if (!objectKey) {
+    throw new Error(`compiled=${compiled.id}: source artifact has no objectKey (quarantined?)`);
+  }
   const source = await createTemplateTwinArtifactStore().readSourceArtifact({
     practiceId: compiled.sourceArtifact.practiceId,
-    objectKey: compiled.sourceArtifact.objectKey,
+    objectKey,
     expectedSha256: compiled.sourceArtifact.sha256,
     expectedSizeBytes: compiled.sourceArtifact.sizeBytes,
   });
