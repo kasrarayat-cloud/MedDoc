@@ -76,6 +76,16 @@ backups/
 # the full transcript there, never piped through `tail`) but are not versioned:
 # they are an operational record of one host, not source. See runbook §2.
 docs/deploy-logs/
+
+# The FOUNDATION runner's per-session transcripts (scripts/foundation-loop.sh).
+# Same reasoning as the deploy logs — an operational record of one host, not
+# source. ⚠️ AND NOT VERSIONING THEM IS LOAD-BEARING, not tidiness: the runner
+# writes this file as its FIRST act, so without this rule every loop session
+# after the first opens on a dirty tree — and MASTER.md STEP 0.2 tells that
+# session to reconcile the tree "before anything else". The loop would spend
+# each run triaging its own exhaust. `logs/.gitkeep` keeps the directory.
+docs/foundation/logs/*.log
+
 .design-preview-phase-6.html
 
 # Phase 5 exploration dead-ends (kept on disk for reference, not in repo).
