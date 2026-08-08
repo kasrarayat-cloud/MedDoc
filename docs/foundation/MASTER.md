@@ -151,6 +151,40 @@ Stop and report. Do not work around any of these.
 
 ---
 
+## CLOSE-OUT — your final block LISTS THE SCRATCH. Every time.
+
+**Ruled 2026-08-08.** You cannot reap — `shred` and `rm -rf` are denied to you,
+deliberately, because an unattended destroyer is the wrong risk. The reaping is
+done afterwards by a supervised session. **That hand-off only works if you say
+what you made.**
+
+So the last block before your marker lists **every scratch, backup, evidence or
+temp path this launch created**, by absolute path:
+
+- files written outside `docs/` that are not part of a commit
+- backup copies made for mutation proofs (`*.bak`, scratch copies of sources)
+- downloaded CI artefacts, browser downloads, `.playwright-mcp/` output
+- evidence trees, worktrees, directory snapshots
+- anything under `/tmp` you created
+
+If there is genuinely nothing, say **"scratch: none"** — explicitly. Silence is
+indistinguishable from forgetting, and the supervised session has no way to tell
+those apart.
+
+⚠️ **This is not bookkeeping.** The first run of this model found a plaintext
+password in an untracked evidence tree that **still authenticated against
+production 97 days later**. Had the reaping run before the reading, that tree
+would be gone and the credential would still be live with nothing recording it.
+**A shredder cannot be asked what it ate** — so the list is the only thing
+standing between "cleaned up" and "destroyed the evidence of an open incident".
+
+Corollary, and it is a real constraint on your choices: **do not create scratch
+you cannot justify.** If a step needs an artefact you cannot reap — a downloaded
+CI log, a database dump — prefer deferring the step and saying so. Un-reapable
+scratch in the git tree is worse than a deferred triage.
+
+---
+
 ## ⚠️ THE FINAL LINE — a machine reads this
 
 **Your response MUST end with a line containing EXACTLY ONE of these markers and
