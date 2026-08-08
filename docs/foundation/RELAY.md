@@ -1087,7 +1087,73 @@ residue. **A zero that needs a caveat is not a wall.**
   green against that fixture, and would have stayed green if the predicate
   matched nothing at all.
 
+### 🟩 F-TYPE + AUTH OBSERVABILITY ARE LIVE IN PRODUCTION — 2026-08-08T01:08Z
+
+Deploy (c) from **`main@a2a0ee0c`** — #543 (F-TYPE) · #544 (auth observability)
+· #545 (nanoid HIGH advisory) · #546 (BILLING recon). Code-only, no migration.
+Full four-workflow citation on the deploying commit: `CI 31230015630` ·
+`e2e 31230015647` · `a11y-ci 31230015621` · `secrets-scan 31230015622`. Log
+`docs/deploy-logs/deploy-20260808T010802Z.log`; rollback
+**`:pre-ftype-20260808`**, digest-verified against the running ids and
+negative-controlled.
+
+The whole diff was two image ids (`11791f54c3f8 → df8b00ba5a0e`,
+`02d06a803137 → bfbf9c2497c1`) and two uptimes. Migrations 91 — **asserted, not
+read off "no pending"**. Clinical **26 · 15 · 16 · 197**, users **196 / active
+184**, co-tenants `307/404/200/200/410`, all four SNI issuers Caddy Local
+Authority. Standing checks green.
+
+#### ⚠️ THE WAR ROOM'S DECLARED PREMISE WAS FALSE, AND §2.5 IS WHAT CAUGHT IT
+
+Recorded here as visibly as the `@@unique` premise was, because it is the same
+class: **an instruction that was reasonable, specific, and wrong about the
+system.**
+
+The brief said to declare *"DATE OF PROCEDURE populates on newly generated notes
+from this deploy forward."* Measured **before** running:
+
+    template_twin_certifications      prod 0   ·   QA 10
+    template_twin_compiled_versions   prod 0   ·   QA 45
+
+`worker.ts`'s `visitDate` feeds **only** the Template Twin fill step, and
+`template-twin-fill-step.ts:80` returns `skipped / not_certified_twin` before any
+fill. Every production visit takes that branch, by the documented parked state —
+there is no door in. **So the deploy changes no production document at all.** The
+fix is LATENT until a twin is certified, which is a separate parked decision.
+
+Declaring "the date now populates" and verifying it on QA would have produced a
+green tick and a false sentence about the environment the declaration was about.
+**Declaring first is what made the premise checkable at all** — after the fact,
+"we verified it on QA" would have sounded like completion.
+
+#### ⚠️ HOW TO READ `SESSION_FAILOPEN` — ENDORSED, AND BOTH INSTINCTS ARE WRONG
+
+- **Seeing it is not a regression this deploy caused.** The fail-open behaviour is
+  unchanged; it was previously SILENT. A line means it was already happening and
+  nothing could see it.
+- **Not seeing it proves nothing.** The first post-deploy window was **69
+  seconds** with 0 lines — that means the database was healthy for 69 seconds.
+
+> **The check reports a COUNT and its WINDOW. A zero is never reported as a
+> result.** The grace-window ruling's retry budget is sized from the ACCUMULATED
+> count, not from one quiet evening.
+
+Positive-controlled: the same matcher finds `Ready in` in those logs, so the zero
+is a real zero for that window and nothing wider.
+
 ### ✅ F-TYPE — type the shared Prisma client — **CLOSED 2026-08-07 · 42 → 0**
+
+⚠️ **ONE PROOF REMAINS OPEN, AND IT IS NAMED RATHER THAN QUIETLY DROPPED.** The
+DATE OF PROCEDURE fix is proven in the SHIPPED ARTIFACT with a negative control —
+`createdAt: true` is present in the deployed worker and **absent from
+`:pre-ftype-20260808`** — and the mechanism is traced end to end. What does not
+yet exist is **a generated document showing the date**.
+
+It cannot be produced in production (0 certifications, every visit short-circuits)
+and it needs the by-hand twin flow on QA — upload → compile → fill → native
+export. **OWED as its own bounded act**, run fresh: one document, the date
+visible. This is the read-back canon applied to a document instead of a row, and
+an artifact grep is not a substitute for it.
 
 `packages/db/src/index.ts` is typed. `tsc -p apps/transcribe-md` reports **0
 errors**; 3194 unit tests pass. **No `any`-casts, no `as unknown as`, no
@@ -1558,6 +1624,62 @@ practice with that role, and one minted for a practice that no longer exists
 refuses. Audit row per issuance.
 
 ---
+
+### ▶ AUTH FAIL-CLOSED — ruled 2026-08-08, implementation is its own item
+
+**RULED: `validateSession` fails CLOSED.** One bounded immediate retry on a DB
+error, then refuse with **temporarily-unavailable (503-class)** semantics.
+**Never a 401.**
+
+⚠️ **THE 401-vs-503 DISTINCTION IS THE WHOLE RULING, NOT A DETAIL.** A 401 is a
+statement about the CREDENTIAL — it tells the client its session is invalid, and
+every client responds by discarding it and sending the user to /login. On a
+transient pool timeout that converts a two-second blip into a re-login for every
+clinician holding a session, which is precisely the outcome the old fail-open
+existed to avoid. A 503 is a statement about the SERVER: the credential is
+untouched, the client retries, the session survives. **Fail-closed and
+sign-everyone-out are not the same posture**, and conflating them is why this
+looked like a trade-off with no good side.
+
+#### What was true before the ruling
+
+Two fail-open points, both now instrumented (#544) and both behaviourally
+unchanged pending this implementation:
+
+| | what a DB error skipped |
+|---|---|
+| `getSession`'s inner catch (`lib/auth.ts`) | **`isActive`** — the check never ran; role and practiceId fell through from the JWT |
+| `validateSession` (`packages/auth/src/index.ts`) | session revoked, session expired, `isActive`, `suspendedAt`, `softDeletedAt`, `forceLogoutAt` |
+
+Bounded by the JWT's 8-hour `maxAge`. And it never needed the database to be
+down: `PRISMA_POOL_MAX=10` with a 20s pool timeout makes failures **per-query**,
+so this lookup can time out while the clinical queries after it succeed.
+
+#### The implementation item — scope
+
+1. **ENUMERATE the call sites.** Both catches, plus anything else that swallows a
+   DB error on an auth path. By behaviour — "every place a failed auth read is
+   caught" — not by grepping the two files already known.
+2. **ATTEMPT-PROOF BOTH DIRECTIONS, plus the retry itself:**
+   - error path → refuses **after** the retry (not before — a retry that never
+     runs is the silent no-op class)
+   - healthy path → admits, with no retry and no alarm
+   - **the retry provably retries** — assert the call count, or "one bounded
+     retry" is a comment
+3. **SIZE IT FIRST.** Read the `SESSION_FAILOPEN` counts #544 is now producing
+   before choosing the retry budget. Picking a timeout without knowing how often
+   the path fires is guessing dressed as engineering.
+4. ⚠️ **The 503 must not be swallowed into a generic error boundary that renders
+   a login link.** The user-visible outcome is "try again in a moment", not "you
+   are signed out" — otherwise the 401 behaviour arrives through the UI instead
+   of the status code.
+
+#### ⚠️ #544's FIRES test asserts the CURRENT (fail-open) behaviour
+
+`auth-failopen-observability.test.ts` asserts the session is **still served** when
+the lookup throws — deliberately, so that applying this ruling without updating
+that file fails loudly instead of drifting. **That assertion is expected to flip
+as part of this item**, and its flip is the signal the ruling landed.
 
 ## Phase BILLING
 
