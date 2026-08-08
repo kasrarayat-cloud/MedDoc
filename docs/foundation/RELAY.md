@@ -2065,6 +2065,29 @@ The arm now **inserts one `vendor` and one `mock` row inside the transaction it
 counts**, so both buckets are occupied by construction and the arithmetic runs on
 known data. Non-vacuous by construction instead of by luck.
 
+#### ⚠️ THE CHECK IS **NOT** IN THE COMPOSITE-FK CLASS — measured, not assumed
+
+The obvious worry about adding a raw `ADD CONSTRAINT` here is T3's trap:
+`prisma migrate diff` reports the composite FK as a permanent difference and
+offers `DROP CONSTRAINT …patientId_practiceId_fkey` as tidying, which silently
+removes the tenancy wall. So the same question was put to the tool rather than
+reasoned about:
+
+    prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script
+
+`api_usage_events_units_source_domain` **does not appear in the output at all** —
+neither dropped nor added. Prisma has no CHECK concept, so it is blind to them in
+BOTH directions: it cannot express the constraint, and equally it never proposes
+to delete one. **A CHECK is therefore SAFER than the composite FK, not the same
+risk** — the FK is dangerous precisely because Prisma *can* see it and sees it
+wrongly.
+
+The same run re-confirmed the known residue, which is expected and guarded:
+the composite FK drop/replace pair is still offered (that is what
+`check-composite-fk.sh` exists for), plus the two documented FK re-shapes and one
+index rename. **`unitsSource` itself is absent from the diff**, which is the
+positive signal that the schema edit and the migration agree.
+
 #### Found on the way past — the substring trap, fifth sighting
 
 `api-usage.ts:164` read *"the fail-open the column exists to **prpriced**"* — an
