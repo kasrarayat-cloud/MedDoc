@@ -1,3 +1,10 @@
+// @vitest-environment node
+// ⚠️ B0 — PINNED TO NODE. These exercise server-side parsing, but inherited the
+// app suite jsdom default. Since B0 the mock runs BELOW getClient(), so the
+// Anthropic SDK is constructed even under mock — and it refuses to load in a
+// browser-like environment. The env pin is the honest fix: nothing here touches
+// the DOM, and the alternative (skipping client construction under mock) would
+// collapse the two-condition doctrine to one.
 // ============================================================================
 // parseNoteToTemplate under MOCK_AI_CALLS — fixture validation (full-qa F7).
 // ----------------------------------------------------------------------------
@@ -25,6 +32,12 @@ const prevFlag = process.env.MOCK_TEMPLATE_PHI_FLAG;
 
 beforeEach(() => {
   process.env.MOCK_AI_CALLS = 'true';
+    // ⚠️ B0 — MOCK MODE REQUIRES A KEY, DELIBERATELY. `getClient()` stays the
+    // first statement of the Anthropic wrappers and OUTSIDE their try, so the
+    // two-condition doctrine holds: the FLAG stops the call, and the DUMMY
+    // CREDENTIAL is what survives a code path that forgets the flag. A mock
+    // that runs with no key at all is one condition, not two.
+    process.env.ANTHROPIC_API_KEY = 'test-dummy-never-valid';
   delete process.env.MOCK_TEMPLATE_PHI_FLAG;
 });
 afterEach(() => {

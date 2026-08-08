@@ -2591,10 +2591,34 @@ model ApiUsageEvent {
   /// new field a provider exposes.
   metadata  Json?
 
+  /// B0 — WHERE THIS ROW'S UNITS CAME FROM. `vendor` | `mock`.
+  ///
+  /// `vendor` — a real vendor was called and reported these numbers.
+  /// `mock`   — a mocked run. No vendor was called; units are fixture-derived
+  ///            and the money columns are ZERO, because zero is the true cost.
+  ///
+  /// ⚠️ NULLABLE **ONLY UNTIL THE FOLLOW-UP MIGRATION**, and deliberately so.
+  /// `deploy-prod.sh` applies migrations at step 3 and recreates the app and
+  /// worker at step 6. A NOT NULL column with no default would, in that window,
+  /// forbid a row the STILL-RUNNING previous image is writing — breaking the
+  /// meter during the deploy meant to fix it. So: this migration adds it
+  /// nullable and backfills; a LATER one, after the writing code is live
+  /// everywhere, backfills the window's stragglers and sets NOT NULL.
+  ///
+  /// ⚠️ AND IT WILL NEVER TAKE A DEFAULT. A provenance column whose default is
+  /// the TRUSTED value is fail-open: any writer that has not heard of it
+  /// silently claims a real vendor reported these numbers. The TypeScript side
+  /// already makes it required (`UsageEvent.unitsSource`), so a new writer
+  /// fails to compile rather than lying quietly.
+  unitsSource String?
+
   @@index([userId, timestamp])
   @@index([practiceId, timestamp])
   @@index([provider, timestamp])
   @@index([timestamp])
+  /// Every reconciliation and rollup filters on this, so it is indexed WITH
+  /// time — the queries are always "vendor rows in a period".
+  @@index([unitsSource, timestamp])
   @@map("api_usage_events")
 }
 

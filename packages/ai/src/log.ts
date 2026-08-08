@@ -4,9 +4,27 @@
 // Fire-and-forget writes to the AiCall table. A failed log must never
 // block the caller — metrics failing is not worse than the caller
 // failing. We do log to console.error so ops sees a DB outage.
+//
+// ⚠️ `ai_calls` IS A REAL-VENDOR-CALLS-ONLY TABLE. RULED 2026-08-08 (B0 Q1).
+//
+//     A ROW HERE MEANS A REAL VENDOR WAS CALLED.
+//     MOCK RUNS WRITE NOTHING, BY DESIGN.
+//
+// B0 moved the mock boundary down to the vendor call so that METERING
+// (`api_usage_events`) happens under mock — that is what makes B1/B4 gateable.
+// This table deliberately did NOT follow. One discriminator, on one table:
+// `api_usage_events.unitsSource`. Adding a second here would mean two
+// provenance concepts to keep consistent, which is the shape that rots.
+//
+// ⚠️ THE SUPPRESSION LIVES HERE, ON THE WRITER, NOT ON ITS CALLERS.
+// `anthropic.ts` alone has TEN call sites, and `llm-mdm.ts` has another. A
+// per-caller `if (!isMockEnabled())` would be a hand-kept list, and hand-kept
+// lists are wrong eventually — the R3.4 lesson: put the behaviour where it
+// cannot be forgotten, so every present AND FUTURE caller inherits it.
 // ============================================================================
 
 import prisma from '@meddoc/db';
+import { isMockEnabled } from './mock';
 import type { AiLogContext, ModelProvider } from './types';
 
 export interface AiCallLogInput extends AiLogContext {
@@ -31,6 +49,9 @@ export interface AiCallLogInput extends AiLogContext {
 }
 
 export function logAiCall(input: AiCallLogInput): void {
+  // See the header: a row here asserts a real vendor was called. Under mock no
+  // vendor was called, so there is nothing truthful to write.
+  if (isMockEnabled()) return;
   void prisma.aiCall
     .create({
       data: {

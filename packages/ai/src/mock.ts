@@ -26,6 +26,7 @@
 //   silent fallback to "something" would let future tests drift.
 // ============================================================================
 
+import Anthropic from '@anthropic-ai/sdk';
 import type { ZodType } from 'zod';
 import type { AnthropicCompleteTextResult } from './anthropic';
 import type {
@@ -403,45 +404,129 @@ function mockChatEdit(user: string): unknown {
   };
 }
 
+/**
+ * ⚠️ B0 — THE MOCK BOUNDARY MOVED HERE, BELOW THE METER.
+ *
+ * Before B0 the mock short-circuited the whole STAGE at `model-client.ts`, so a
+ * mocked pipeline run never reached `logApiUsage` and emitted ZERO usage events.
+ * Zero events is indistinguishable from a broken meter — which is the failure
+ * this function exists to kill.
+ *
+ * Now the mock substitutes only the VENDOR CALL: this returns a real
+ * `Anthropic.Messages.Message`, and everything below it — fence-stripping,
+ * `JSON.parse`, `extractUsage`, the Zod gate, `logApiUsage` — runs for real,
+ * against a real Message shape. **Mock the vendor call, never the stage.**
+ *
+ * ⚠️ THE FIXTURES ARE RETURNED RAW, NOT PRE-PARSED. `mockComplete` used to hand
+ * back `schema.parse(fixture)`, which skipped the parsing path entirely. Feeding
+ * the raw fixture through the real parser is the point: a fixture that would
+ * fail Zod in production now fails in QA too, instead of being waved through by
+ * the mock.
+ */
+export function buildMockMessage(args: {
+  purpose: ModelCallPurpose;
+  kind: 'tool' | 'text' | 'completeText';
+  toolName?: string;
+  user?: string;
+  model: string;
+}): Anthropic.Messages.Message {
+  const base = {
+    id: `msg_mock_${args.purpose}`,
+    type: 'message' as const,
+    role: 'assistant' as const,
+    model: args.model,
+    stop_reason: 'end_turn' as const,
+    stop_sequence: null,
+    // ⚠️ These token counts are FIXTURE VALUES, not measurements. They exist so
+    // the usage row has a shape; the row is marked `unitsSource: 'mock'` and its
+    // money columns are zero, which is what makes it honest. Nothing may read
+    // these as a quantity — see UnitsSource.
+    usage: { input_tokens: 1, output_tokens: 1 } as Anthropic.Messages.Usage,
+  };
+
+  if (args.kind === 'completeText') {
+    const fixture = MOCK_COMPLETE_TEXT_FIXTURES[args.purpose];
+    if (fixture === undefined) {
+      throw new Error(
+        `[MOCK_AI_CALLS] no completeText() fixture for purpose=${args.purpose}.`
+      );
+    }
+    return { ...base, content: [{ type: 'text', text: fixture.text, citations: [] }] } as unknown as Anthropic.Messages.Message;
+  }
+
+  const raw = rawCompleteFixture(args.purpose, args.user);
+  if (args.kind === 'tool') {
+    return {
+      ...base,
+      stop_reason: 'tool_use' as const,
+      content: [
+        {
+          type: 'tool_use',
+          id: 'toolu_mock',
+          name: args.toolName ?? 'respond',
+          input: raw,
+        },
+      ],
+    } as unknown as Anthropic.Messages.Message;
+  }
+  return {
+    ...base,
+    content: [{ type: 'text', text: JSON.stringify(raw), citations: [] }],
+  } as unknown as Anthropic.Messages.Message;
+}
+
+/**
+ * The RAW fixture for a `complete()` purpose — the same selection logic
+ * `mockComplete` uses, minus the `schema.parse`. Kept as one function so the
+ * env-flag branches (PHI scan, Rx warnings, chat-edit content-awareness) cannot
+ * drift between the two callers.
+ *
+ * ⚠️ THE CONTENT-SENSITIVITY OF THESE BRANCHES IS A CONTRACT, NOT AN
+ * IMPLEMENTATION DETAIL — RULED 2026-08-08. `tm_chat_edit` reads the user's
+ * message, and the E/M movement gates depend on the judge's mock varying with
+ * its input. **A constant mock is a regression, not a simplification.**
+ */
+function rawCompleteFixture(purpose: ModelCallPurpose, user?: string): unknown {
+  if (purpose === 'tm_chat_edit') return mockChatEdit(user ?? '');
+  if (purpose === 'tm_template_phi_scan' && process.env.MOCK_TEMPLATE_PHI_FLAG === 'true') {
+    return MOCK_TEMPLATE_PHI_SCAN_FLAGGED;
+  }
+  if (purpose === 'tm_rx_drafting' && process.env.MOCK_RX_WARNINGS === 'true') {
+    return MOCK_RX_DRAFTING_WITH_WARNINGS;
+  }
+  const fixture = MOCK_COMPLETE_FIXTURES[purpose];
+  if (fixture === undefined) {
+    throw new Error(
+      `[MOCK_AI_CALLS] no complete() fixture for purpose=${purpose}. ` +
+        `Add one to packages/ai/src/mock.ts before enabling this purpose in tests.`
+    );
+  }
+  return fixture;
+}
+
+/**
+ * ⚠️ B0 — NOW A THIN WRAPPER OVER `rawCompleteFixture`, DELIBERATELY.
+ *
+ * The production path no longer calls this: it goes through `buildMockMessage`
+ * → `rawCompleteFixture` → the REAL parser. This function survives because
+ * `mock-chat-edit.test.ts` exercises the content-aware fixture selection
+ * directly, which is worth keeping.
+ *
+ * But it MUST NOT hold a second copy of the selection logic. A tested function
+ * that production has stopped calling, sitting beside an untested one that
+ * production does call, is worse than no test: the suite stays green while the
+ * live path drifts. Both now read the same `rawCompleteFixture`, so a test of
+ * this function is a test of what production selects.
+ */
 export function mockComplete<T>(args: {
   purpose: ModelCallPurpose;
   schema: ZodType<T>;
   /** The rendered user content. Only tm_chat_edit reads it. */
   user?: string;
 }): T {
-  if (args.purpose === 'tm_chat_edit') {
-    return args.schema.parse(mockChatEdit(args.user ?? ''));
-  }
-  // Note-format PHI gate: opt into the FLAGGED scan result (the reject path)
-  // via env. The mock keys on `purpose` only and can't see the input, so a
-  // content-aware "this note has PHI" branch isn't possible; the env flag is
-  // the deterministic knob. Unset (the default) returns the clean fixture.
-  if (
-    args.purpose === 'tm_template_phi_scan' &&
-    process.env.MOCK_TEMPLATE_PHI_FLAG === 'true'
-  ) {
-    return args.schema.parse(MOCK_TEMPLATE_PHI_SCAN_FLAGGED);
-  }
-  // Rx & clinical-safety (Layer 7c): opt into a populated draft (prescriptions +
-  // critical/major/minor warnings) via env, so the Rx warnings rail + sign-time
-  // override gate are exercisable under MOCK. Default (unset) returns the empty
-  // fixture so visits sign without an Rx block.
-  if (
-    args.purpose === 'tm_rx_drafting' &&
-    process.env.MOCK_RX_WARNINGS === 'true'
-  ) {
-    return args.schema.parse(MOCK_RX_DRAFTING_WITH_WARNINGS);
-  }
-  const fixture = MOCK_COMPLETE_FIXTURES[args.purpose];
-  if (fixture === undefined) {
-    throw new Error(
-      `[MOCK_AI_CALLS] no complete() fixture for purpose=${args.purpose}. ` +
-        `Add one to packages/ai/src/mock.ts before enabling this purpose in tests.`
-    );
-  }
-  // schema.parse() backfills .default() clauses so fixtures above
-  // don't need to spell out every optional array/object.
-  return args.schema.parse(fixture);
+  // schema.parse() backfills .default() clauses so fixtures don't need to
+  // spell out every optional array/object.
+  return args.schema.parse(rawCompleteFixture(args.purpose, args.user));
 }
 
 export function mockCompleteText(args: {

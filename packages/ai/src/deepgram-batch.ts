@@ -375,6 +375,8 @@ async function deepgramBatchTranscribeOnce(
   logApiUsage(
     buildDeepgramUsage(
       {
+        // B0: a REAL vendor call — see UnitsSource.
+        unitsSource: 'vendor',
         userId: args.userId ?? null,
         practiceId: args.practiceId,
         visitId: args.visitId ?? null,

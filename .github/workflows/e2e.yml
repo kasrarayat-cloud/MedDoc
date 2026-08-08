@@ -261,6 +261,14 @@ jobs:
           timeout --signal=TERM --kill-after=30s 7m \
           docker compose -f docker-compose.qa.yml run --rm -T \
             -e MOCK_AI_CALLS=true \
+            `# ⚠️ B0 — A KEY IS REQUIRED UNDER MOCK, DELIBERATELY. Since the mock` \
+            `# boundary moved BELOW the meter, getClient() runs even when mocked —` \
+            `# it stays the first statement and outside the try, so the path is` \
+            `# fail-closed. That keeps TWO conditions: the flag stops the call, and` \
+            `# this dummy credential is what survives a code path that forgets the` \
+            `# flag. Without it the PHI scan fails closed and the seed dies with` \
+            `# TemplateTwinPhiScanUnavailableError. Same value as docker-compose.qa.yml:290.` \
+            -e ANTHROPIC_API_KEY=qa-dummy-anthropic-key-never-valid \
             -e AUTH_SECRET=qa-throwaway-secret-not-used-in-prod-000000000000000= \
             -e NEXTAUTH_SECRET=qa-throwaway-secret-not-used-in-prod-000000000000000= \
             -e AUTH_TRUST_HOST=true \

@@ -259,7 +259,10 @@ async function whisperBatchTranscribeOnce(
   });
 
   // logApiUsage is fire-and-forget (returns void) — no .catch needed.
-  logApiUsage(buildWhisperUsage(args, durationSec));
+  // B0: `args` is the caller's context, so provenance is spread on explicitly
+  // rather than added to WhisperBatchArgs — a transcription argument bag should
+  // not have to carry a billing concept.
+  logApiUsage(buildWhisperUsage({ ...args, unitsSource: 'vendor' }, durationSec));
 
   return {
     provider: 'whisper',
