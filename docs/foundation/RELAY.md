@@ -2240,3 +2240,31 @@ with the run-01 log present on disk.
 **Both findings are the same shape** — the loop's own scaffolding, landed in
 PR #550 and never executed once before being relied upon. This session is the
 first thing that ever ran it.
+
+### 🟡 `nightly-tests` is RED and has been for one night — TRIAGED, NOT RESOLVED
+
+Recorded so it does not decay into "probably fine" by repetition, which is the
+documented fate of an unanswered question here.
+
+| | |
+|---|---|
+| run | `31236791228`, scheduled, 2026-08-08T03:15Z on `2c6a9d03` |
+| job | `smoke + e2e` — `bash tests/automated/run-all.sh --smoke --e2e` |
+| shape | failed in **1m56s**, so it died early rather than on a slow assertion. The step itself reports ✓ and the separate *"Fail the job if any suite failed"* step is what reds — the suite writes a result file the job reads afterwards |
+| tracker | issue **#548**, opened automatically; detail is in artefact `meddoc-report-31236791228`, which this session could not open |
+| history | `2026-08-06` ✅ · `2026-08-07` ✅ · `2026-08-08` ❌ — **one night old, not chronic** |
+
+**It is NOT one of the four required workflows**, so it gates nothing and did not
+block B0-a or PR #550. That is the reason it is a 🟡 and not a stop — and it is
+also exactly the reason it will be ignored, so the pricing is written against the
+asset rather than the symptom: **the nightly is the only scheduled full
+smoke+e2e**, and a program about to start writing money code is the wrong moment
+to lose the one signal that runs without anybody asking it to.
+
+**Not chased here** — it is outside B0-a and outside this session's item, and
+chasing it would be scope creep. **Owed: open the artefact and name the failing
+suite before the next BILLING item starts.** Two candidates worth checking first,
+both already recorded elsewhere: the known parallel-worker login race
+(`--workers=1` reruns), and the dead production `OPENAI_API_KEY` — though note
+the chat-editor eval step was *skipped*, not failed, so the second is a weaker
+fit than it first looks.
