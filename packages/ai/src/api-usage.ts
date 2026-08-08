@@ -161,7 +161,7 @@ export function logApiUsage(event: UsageEvent): void {
           modelName: priced.modelName ?? null,
           metadata: priced.metadata ?? null,
           // No `?? 'vendor'`. The type makes this required; defaulting it here
-          // would reintroduce the fail-open the column exists to prpriced.
+          // would reintroduce the fail-open the column exists to prevent.
           unitsSource: priced.unitsSource,
         },
       });

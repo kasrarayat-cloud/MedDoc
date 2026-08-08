@@ -1836,7 +1836,14 @@ exposed it. Recorded because it is the canon's own rule catching the canon's own
 author mid-verification: **a clean sweep and a broken sweep produce identical
 output**, and the only difference is whether you controlled it.
 
-#### ⚠️ WHAT IS STILL OWED — STEP 2 OF THE MIGRATION
+#### ⚠️ WHAT IS STILL OWED — STEP 2 OF THE MIGRATION — ✅ **DISCHARGED by B0-b, 2026-08-08**
+
+> **Step 2 is written and gated — see the B0-b row below.** This section is left
+> in place because its REASONING (why the split was necessary at all) is the part
+> worth keeping; only its "unwritten" status is stale. Recorded explicitly rather
+> than edited away, because a section that says "still owed" about work that has
+> landed is the T2 failure — there, a stale paragraph told a future session to
+> re-run an append-only repair that would have written 71 duplicate corrections.
 
 `unitsSource` is **nullable in the database and required only in TypeScript**.
 The `SET NOT NULL` migration is deliberately not in this deploy — between
@@ -1942,6 +1949,141 @@ since the boundary moved below the meter, `getClient()` runs under mock — it
 stays the first statement and outside the `try`, so the path is fail-closed. The
 flag stops the call; the dummy credential is what survives a path that forgets
 the flag. A mock that runs with no key at all is **one** condition, not two.
+
+---
+
+### ✅ B0-b — `unitsSource` SET NOT NULL — the build row, 2026-08-08
+
+**The step-2 debt B0-a recorded against itself.** B0-a shipped the column
+nullable in the database and required only in TypeScript, deliberately and for
+exactly one deploy; its own row said *"Step 2 is the next B-lane item and it is
+unwritten."* This is that item. From here the database refuses what the type
+refuses.
+
+| | |
+|---|---|
+| migration | `20260808230000_b0_units_source_not_null` — **STEP 2 OF TWO** |
+| gate | `apps/transcribe-md/tests/e2e/scenarios/38-usage-provenance.spec.ts`, five arms |
+| guarantees | `SET NOT NULL` · `api_usage_events_units_source_domain` CHECK · **still NO DEFAULT** |
+
+#### THE WRITE-PATH SWEEP — by TABLE, and the one writer `tsc` cannot see
+
+Swept by the standing rule rather than by whatever the type checker surfaced:
+
+    raw SQL   grep -rniE 'insert into "?api_usage_events'   → 0 sites
+    ORM       apiUsageEvent.(create|upsert|createMany)      → 1 site
+                packages/ai/src/api-usage.ts:143
+
+The raw-SQL **zero was positive-controlled** — the identical pattern against
+`transcribe_visits` returns **7** real inserts — so it is an empty set and not a
+broken pattern. Every other reference to the table in the tree is a `SELECT`
+(the `/admin/usage` rollups).
+
+⚠️ **AND THE ONE WRITER IS INVISIBLE TO `tsc`.** It is
+`(prisma as any).apiUsageEvent.create(...)`; the shared client is untyped at
+that call, so a green type-check proves nothing whatsoever about this insert.
+It was read by hand. B0-a's "eight call sites named by the compiler" were
+callers of `logApiUsage(event: UsageEvent)` — one layer up, which is exactly the
+layer a future writer can step around. This is the canon's *"type-check is
+decisive only for TYPED sites"* arriving with the `any` already in place.
+
+#### ⚠️ THE DOMAIN CHECK IS AN ADDITION BEYOND THE LITERAL TWO-STEP RULING
+
+Recorded as one so it can be stripped on sight rather than discovered later.
+The ruling named *"nullable + backfill to `vendor`, then NOT NULL"*. **NOT NULL
+alone still permits any TEXT**, so it does not actually discharge this item's own
+framing — *"the database's guarantee is weaker than the type's"* — because the
+type says `'vendor' | 'mock'` and NOT NULL says "some string".
+
+It matters for money, not tidiness. The rollups filter
+`WHERE "unitsSource" = 'vendor'` and B6 computes charge over exactly those rows.
+A row carrying `'Vendor'` satisfies NOT NULL, reads correctly to a human, and
+matches **neither** bucket: it does not error anywhere, it simply stops being
+money — an **undercharge no test can see**. The mirror case, a mock row counted
+as vendor, charges a doctor for a call that never happened.
+
+**COST, STATED:** a third provenance value later needs a migration to widen the
+CHECK. That is deliberate, and it is the AuditAction lesson — the database is
+the only layer whose answer counts, so it is the layer that holds the domain.
+
+#### GATE — FIVE ARMS, AND THE MUTATION MATRIX IS THE PROOF
+
+| arm | asserts |
+|---|---|
+| SHAPE | `is_nullable='NO'` **and `column_default` is `<none>`** |
+| NO-NULL | an insert omitting the provenance is REFUSED |
+| NO-JUNK | `'Vendor'` is refused **by constraint name** |
+| CONTROL | the SAME row with `'vendor'` — and with `'mock'` — is ACCEPTED |
+| BUCKETS | every row is in a named bucket and they sum to the total |
+
+Clean run **5/5**. Each mutation named its expected victim **before** it ran:
+
+| mutation | predicted | measured |
+|---|---|---|
+| `DROP CONSTRAINT …units_source_domain` | NO-JUNK reds | **NO-JUNK only**, 4 green |
+| `ALTER COLUMN … DROP NOT NULL` | SHAPE + NO-NULL red | **both**, 3 green |
+| `ALTER COLUMN … SET DEFAULT 'vendor'` | SHAPE reds | **SHAPE only**, 4 green |
+
+⚠️ **THE THIRD MUTATION IS THE ONE WORTH KEEPING, AND IT EXPOSED WHY THE
+NO-DEFAULT ASSERTION MUST BE ITS OWN ARM.** Under `SET DEFAULT 'vendor'` the
+**NO-NULL arm stayed GREEN** — a default only fills an *omitted* column, and the
+probe passes NULL explicitly, so the NULL-refusal test is **structurally blind to
+a default**. A default is precisely the fail-open the ruling forbids: it would
+satisfy NOT NULL perfectly while letting any writer that never heard of the
+column silently assert a real vendor reported those numbers. Only the SHAPE arm
+sees it. A gate asserting "NOT NULL" alone would have called that state healthy.
+
+⚠️ **EVERY PROBE RUNS IN `BEGIN … ROLLBACK`, AND THE MUTATION RUN PROVED WHY.**
+During M1 the off-domain insert **succeeded** — that is what reddened the arm —
+and the table still held **977 rows, 0 off-domain** afterwards. Bare inserts
+would have left junk rows in the table the money code reads, with the constraint
+dropped and nothing to catch them. This is the recorded scar tissue from the
+`transcribe_visits_signed_requires_signer` incident, working.
+
+#### THE MIGRATION EXERCISED ITS OWN BACKFILL ON REAL DATA
+
+QA was **one migration behind** (91 of 92) and held **977 usage rows predating
+the column**, so applying both steps there ran step 1's backfill for real rather
+than over an empty table: 977 → all `vendor`, 0 NULL, then `SET NOT NULL` and the
+CHECK. Migrate exit 0, 93 migrations found.
+
+**The straggler backfill is factually correct, not a convenience.** Any row still
+NULL was written by a pre-B0-a image, and in that code the mock short-circuits
+sat ABOVE the meter — nothing under `MOCK_AI_CALLS` ever reached `logApiUsage`.
+A pre-B0-a usage row is a real vendor call by construction.
+
+#### ⚠️ THE GATE'S NON-VACUITY WOULD HAVE RED IN CI, AND ONLY LOCAL LUCK HID IT
+
+The census arm first asserted `total > 0` against whatever was in the table.
+That passes on this long-lived QA stack (**977 rows**) and would have **failed in
+CI**, where `e2e.yml` tears the stack down with `down -v` and **nothing seeds
+`api_usage_events`** — the three seeders cover users, the T1 multi-seat fixture
+and the certified twin. Any rows present at that point would be incidental
+output of whichever pipeline specs happened to run first: a race, not a fixture.
+
+The arm now **inserts one `vendor` and one `mock` row inside the transaction it
+counts**, so both buckets are occupied by construction and the arithmetic runs on
+known data. Non-vacuous by construction instead of by luck.
+
+#### Found on the way past — the substring trap, fifth sighting
+
+`api-usage.ts:164` read *"the fail-open the column exists to **prpriced**"* — an
+`event` → `priced` rename that matched inside the word **pr·event·**. Cosmetic:
+it is a comment, and the sweep confirmed the same rename damaged nothing else
+(every other `priced` occurrence is the legitimate local). Fixed here. Logged
+because it is the exact family AGENTS.md already names, arriving in the file this
+item was already opening.
+
+#### WHAT B0-b DOES NOT CLAIM
+
+- **It does not prove the meter in production.** `api_usage_events`' newest
+  production row is **2026-08-05 14:43Z** — no usage row has been written since
+  B0-a deployed, so the live meter remains unobserved. Proving it needs a real
+  pipeline run, and **a real doctor's visit is never a smoke target.**
+- **It does not close B1 or B4.** No vendor request id is captured and no
+  per-stage `UsageEvent` coverage exists.
+- **It says nothing about whether the one writer is CORRECT** — only that the
+  database now refuses a row that lies by omission.
 
 ---
 
