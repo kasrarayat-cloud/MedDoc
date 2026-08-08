@@ -17,11 +17,6 @@ import {
   type AnthropicCompleteTextResult,
 } from './anthropic';
 import { ModelOutputMalformedError } from './errors';
-import {
-  isMockEnabled,
-  mockComplete,
-  mockCompleteText,
-} from './mock';
 import type { AiLogContext, ModelProvider } from './types';
 
 export type * from './types';
@@ -72,17 +67,18 @@ export interface CompleteTextArgs extends AiLogContext {
 
 export const modelClient = {
   async complete<T>(args: CompleteArgs<T>): Promise<T> {
-    // T-M10: MOCK_AI_CALLS short-circuit. See packages/ai/src/mock.ts
-    // for the contract. No-op unless the env flag is true.
-    if (isMockEnabled()) {
-      // `user` is passed so a fixture can be CONTENT-AWARE. Every fixture
-      // before this keyed on `purpose` alone, which is fine for a pipeline
-      // layer whose input is a transcript — but the chat editor's whole job is
-      // to turn what the doctor typed into an intent, and a fixture that
-      // cannot see the message can only ever return one canned intent. See the
-      // tm_chat_edit branch in mock.ts.
-      return mockComplete({ purpose: args.purpose, schema: args.schema, user: args.user });
-    }
+    // ⚠️ B0 — THE STAGE-LEVEL MOCK SHORT-CIRCUIT WAS DELETED HERE.
+    //
+    // It used to return a fixture from this point, which meant a mocked run
+    // never reached `logApiUsage` in anthropic.ts and the whole pipeline
+    // emitted ZERO usage events. Zero events is indistinguishable from a
+    // broken meter, so B1 and B4 had no gate at all.
+    //
+    // The mock now lives at the VENDOR CALL (`createMessage` in anthropic.ts).
+    // Everything between here and there — retries, schema validation, token
+    // extraction, metering — runs for real under mock, which is what makes a
+    // usage event observable in QA. Content-awareness is preserved: the user
+    // content reaches the fixture through `createMessage`'s ctx.
     if (args.provider !== 'anthropic') {
       throw new Error(
         `complete() with provider=${args.provider} is not wired yet — M2 only uses Anthropic.`
@@ -136,10 +132,8 @@ export const modelClient = {
    * of the AiCall row this call already wrote.
    */
   async completeText(args: CompleteTextArgs): Promise<AnthropicCompleteTextResult> {
-    // T-M10: MOCK_AI_CALLS short-circuit. See packages/ai/src/mock.ts.
-    if (isMockEnabled()) {
-      return mockCompleteText({ purpose: args.purpose });
-    }
+    // ⚠️ B0 — stage-level short-circuit deleted; see the note in complete().
+    // The mock is at the vendor call now, so this path meters under mock.
     if (args.provider !== 'anthropic') {
       throw new Error(
         `completeText() with provider=${args.provider} is not wired yet — T-M4 only uses Anthropic.`

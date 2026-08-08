@@ -504,45 +504,29 @@ function rawCompleteFixture(purpose: ModelCallPurpose, user?: string): unknown {
   return fixture;
 }
 
+/**
+ * ⚠️ B0 — NOW A THIN WRAPPER OVER `rawCompleteFixture`, DELIBERATELY.
+ *
+ * The production path no longer calls this: it goes through `buildMockMessage`
+ * → `rawCompleteFixture` → the REAL parser. This function survives because
+ * `mock-chat-edit.test.ts` exercises the content-aware fixture selection
+ * directly, which is worth keeping.
+ *
+ * But it MUST NOT hold a second copy of the selection logic. A tested function
+ * that production has stopped calling, sitting beside an untested one that
+ * production does call, is worse than no test: the suite stays green while the
+ * live path drifts. Both now read the same `rawCompleteFixture`, so a test of
+ * this function is a test of what production selects.
+ */
 export function mockComplete<T>(args: {
   purpose: ModelCallPurpose;
   schema: ZodType<T>;
   /** The rendered user content. Only tm_chat_edit reads it. */
   user?: string;
 }): T {
-  if (args.purpose === 'tm_chat_edit') {
-    return args.schema.parse(mockChatEdit(args.user ?? ''));
-  }
-  // Note-format PHI gate: opt into the FLAGGED scan result (the reject path)
-  // via env. The mock keys on `purpose` only and can't see the input, so a
-  // content-aware "this note has PHI" branch isn't possible; the env flag is
-  // the deterministic knob. Unset (the default) returns the clean fixture.
-  if (
-    args.purpose === 'tm_template_phi_scan' &&
-    process.env.MOCK_TEMPLATE_PHI_FLAG === 'true'
-  ) {
-    return args.schema.parse(MOCK_TEMPLATE_PHI_SCAN_FLAGGED);
-  }
-  // Rx & clinical-safety (Layer 7c): opt into a populated draft (prescriptions +
-  // critical/major/minor warnings) via env, so the Rx warnings rail + sign-time
-  // override gate are exercisable under MOCK. Default (unset) returns the empty
-  // fixture so visits sign without an Rx block.
-  if (
-    args.purpose === 'tm_rx_drafting' &&
-    process.env.MOCK_RX_WARNINGS === 'true'
-  ) {
-    return args.schema.parse(MOCK_RX_DRAFTING_WITH_WARNINGS);
-  }
-  const fixture = MOCK_COMPLETE_FIXTURES[args.purpose];
-  if (fixture === undefined) {
-    throw new Error(
-      `[MOCK_AI_CALLS] no complete() fixture for purpose=${args.purpose}. ` +
-        `Add one to packages/ai/src/mock.ts before enabling this purpose in tests.`
-    );
-  }
-  // schema.parse() backfills .default() clauses so fixtures above
-  // don't need to spell out every optional array/object.
-  return args.schema.parse(fixture);
+  // schema.parse() backfills .default() clauses so fixtures don't need to
+  // spell out every optional array/object.
+  return args.schema.parse(rawCompleteFixture(args.purpose, args.user));
 }
 
 export function mockCompleteText(args: {
