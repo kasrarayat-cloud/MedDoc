@@ -192,3 +192,44 @@ disposition made rotation a release blocker with nothing in the repo recording i
 > **Read what you are about to destroy. The sweep that finds nothing and the
 > sweep that never looked produce the same output — and a shredder cannot be
 > asked what it ate.**
+
+
+---
+
+## 6. The collision guard — proved by ARRANGEMENT
+
+The runner patch (`<date>-<launch>-runNN.log`, plus a refusal to open a log that
+already exists) shipped with **one arm proven and one not**. Filename divergence
+was demonstrated by two real dry launches. The refusal branch was not: reaching
+it needs a *predictable* `LAUNCH`, and the first attempt to get one ran a
+**modified copy** of the script from `scripts/` — which permissions declined,
+correctly, because that is the "write a script, then run it" shape the ten-script
+enumeration exists to prevent.
+
+**It was then proved without any exception, by arranging the state rather than
+changing the code.**
+
+A `git worktree` of the same commit gives a **byte-identical** `foundation-loop.sh`
+(verified: `cmp` equal, one distinct sha256) with its own `docs/foundation/logs/`,
+so the live launch's log could not be touched. `docs/foundation/logs/*.log` is
+gitignored, so pre-created files do not dirty the tree and cannot pre-empt the
+guard under test with a *different* refusal.
+
+The arrangement: pre-create one candidate log per second across a 240-second UTC
+window. `LAUNCH` is `date -u +%H%M%S`, so whichever second the loop starts in, the
+name it computes **already exists**.
+
+| arm | arranged? | outcome |
+|---|---|---|
+| control | no | passed the guard, created its log, reached the session, halted `SESSION ERROR` |
+| positive | yes | `LOG COLLISION — …-232113-run01.log already exists; refusing to append two launches into one file` |
+
+The control is what makes the positive mean anything: without it, a refusal could
+have come from the dirty-tree guard, a stale STOP file, or a broken script. And
+the positive arm printed **no `session 01` line at all** — the guard fires before
+`claude` is ever invoked, which is the placement that matters, since a guard that
+fired *after* starting a session would already have written to the colliding file.
+
+> **A guard that has never been observed refusing is a comment with an `if` in
+> front of it.** The route to proving this one was blocked twice; the answer was
+> not a permission exception, it was a different arrangement.
