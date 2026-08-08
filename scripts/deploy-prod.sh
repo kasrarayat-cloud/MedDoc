@@ -46,6 +46,56 @@ echo "branch: $(git branch --show-current)"
 echo "log:    $LOG"
 echo
 
+# ============================================================================
+# STEP 0 — THE DECLARATION GATE. §2.5, ENFORCED.
+# ----------------------------------------------------------------------------
+# ⚠️ A STATED INVARIANT IS A WISH UNTIL SOMETHING ASSERTS IT, and §2.5 was a
+# wish: "declare the expected delta before the deploy runs" lived in the runbook
+# and in a human's discipline. That was survivable while a person typed this
+# command. It is not survivable now that an unattended loop can.
+#
+# So the deploy REFUSES without a declaration for THIS commit, and prints it into
+# the transcript. The point is not the file — it is the ORDER. A post-deploy
+# check written afterwards is unfalsifiable: every number has a story available
+# to it, and a migration supplies a ready-made excuse for any movement ("the
+# migration touched that table"). A declaration that exists BEFORE the evidence
+# has exactly one correct answer.
+#
+# The post-deploy comparison reads THE SAME FILE, so the thing being judged
+# against cannot be rewritten to fit what happened.
+#
+# Convention:  docs/foundation/deploys/<UTC-date>-<short-sha>.md
+# ============================================================================
+DEPLOY_SHA="$(git rev-parse --short HEAD)"
+DECL_DIR="docs/foundation/deploys"
+DECL="$DECL_DIR/$(date -u +%Y%m%d)-${DEPLOY_SHA}.md"
+
+echo "=== 0. DECLARATION GATE (§2.5, enforced) ==="
+if [ ! -f "$DECL" ]; then
+  echo "🔴 REFUSING TO DEPLOY — no delta declaration for this commit."
+  echo
+  echo "   expected: $DECL"
+  echo
+  echo "   §2.5 requires the expected delta to be written down BEFORE the deploy"
+  echo "   runs. Afterwards it is unfalsifiable — every number has a story, and a"
+  echo "   migration supplies an excuse for any movement."
+  echo
+  echo "   Write it, then re-run. It must state:"
+  echo "     · the BASELINE (captured now, before anything changes)"
+  echo "     · what MUST change"
+  echo "     · what MUST NOT change — clinical counts are never omitted"
+  echo "     · what would make the post-deploy check FAIL"
+  echo
+  echo "   Nothing has been built, migrated or recreated. Production is untouched."
+  exit 1
+fi
+
+echo "declaration: $DECL"
+echo "─────────────────────────────────────────────────────────────────────"
+cat "$DECL"
+echo "─────────────────────────────────────────────────────────────────────"
+echo
+
 if [ "${1:-}" != "--skip-backup" ]; then
   echo "=== 1. pre-deploy backup ==="
   BACKUP="backups/pre_deploy_${TS}.sql.gz"
@@ -102,4 +152,16 @@ sleep 30
 docker compose ps --format '{{.Service}}\t{{.State}}\t{{.Status}}' | grep -E 'transcribe-md|gotenberg'
 echo "app /api/health: $(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://app.quillmd.com/api/health)"
 echo
+echo "=== 8. JUDGE AGAINST THE DECLARATION ==="
+# ⚠️ THE SAME FILE, RE-READ. Not a fresh summary written now — the document that
+# existed before any of this happened. A difference that is not in it is THE
+# FINDING, whatever its explanation sounds like after the fact.
+echo "declaration: $DECL"
+echo "─────────────────────────────────────────────────────────────────────"
+cat "$DECL"
+echo "─────────────────────────────────────────────────────────────────────"
+echo "⚠️ Compare the post-deploy state above against THIS declaration."
+echo "   A movement it does not name is a finding, not an explanation."
+echo
+
 echo "=== deploy complete — full log at $LOG ==="
