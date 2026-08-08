@@ -2390,3 +2390,48 @@ both already recorded elsewhere: the known parallel-worker login race
 (`--workers=1` reruns), and the dead production `OPENAI_API_KEY` — though note
 the chat-editor eval step was *skipped*, not failed, so the second is a weaker
 fit than it first looks.
+
+#### ⚠️ TRIAGE ADVANCED 2026-08-08 — and the row above was WRONG about the mechanism
+
+Corrected against the job log (`gh api …/actions/jobs/93050682579/logs`), not
+against the run summary. **The row above says the suite step "reports ✓" and that
+a later step is what reds. It does not.** The log is explicit:
+
+    ▶ smoke / health
+    ▶ smoke / auth-flow
+    ▶ e2e (Playwright)
+    → json:  tests/automated/reports/2026-08-08-03-16.json
+    → html:  tests/automated/reports/2026-08-08-03-16.html
+    ##[error]Process completed with exit code 1.
+
+**The `Run smoke + e2e` step itself exits 1.** It only *renders* as ✓ in the run
+summary because it carries `continue-on-error`, which is what lets the later
+steps key on `steps.run.outcome == 'failure'` to open the issue. The `exit 1`
+step at the end is a re-raise, not the detector. **The summary's tick was read as
+the step's verdict, and it is a rendering artefact** — the same shape as a check
+whose title is narrower than what it measures.
+
+**One candidate REFUTED, cheaply.** The env dump shows `TEST_APP_PASSWORD:` with
+an empty value, which reads as a missing secret and would explain a login
+failure. It is **blank in the 2026-08-07 GREEN run too** (job `92768257543`,
+line 389) — GitHub redacts secret values in env dumps. Not the cause; do not
+spend a session on it.
+
+**Narrowed.** Both smoke legs print their banner and the failure lands after the
+Playwright banner: e2e ran 03:16:36 → 03:17:25 (**49s**) versus the green run's
+04:18:50 → 04:19:18 (**28s**). So the failing leg is **e2e (Playwright)**, and no
+per-test detail reaches stdout — the suite writes only the JSON and HTML.
+
+**STILL OWED, and it is one command.** The artefact is live and unexpired
+(`meddoc-report-31236791228`, 2.4 MB, artifact id `9015694199`, 28 files,
+14-day retention from 2026-08-08 — **it expires 2026-08-22**).
+
+    gh run download 31236791228 -n meddoc-report-31236791228 -D <scratch>
+    # then read 2026-08-08-03-16.json for the failing test names
+
+⚠️ **Not done here, deliberately, and the reason is a real constraint on the
+loop.** The session sandbox confines writes to `/opt/meddoc-pro`, so the download
+would land **inside the git tree**, and `rm`/`shred` are denied — the loop cannot
+reap what it creates. Un-reapable scratch in the repository is a worse outcome
+than a deferred triage, so it is deferred **with a deadline attached**: after
+2026-08-22 the artefact is gone and this becomes unanswerable.
