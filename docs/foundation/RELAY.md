@@ -1559,6 +1559,62 @@ refuses. Audit row per issuance.
 
 ---
 
+### ▶ AUTH FAIL-CLOSED — ruled 2026-08-08, implementation is its own item
+
+**RULED: `validateSession` fails CLOSED.** One bounded immediate retry on a DB
+error, then refuse with **temporarily-unavailable (503-class)** semantics.
+**Never a 401.**
+
+⚠️ **THE 401-vs-503 DISTINCTION IS THE WHOLE RULING, NOT A DETAIL.** A 401 is a
+statement about the CREDENTIAL — it tells the client its session is invalid, and
+every client responds by discarding it and sending the user to /login. On a
+transient pool timeout that converts a two-second blip into a re-login for every
+clinician holding a session, which is precisely the outcome the old fail-open
+existed to avoid. A 503 is a statement about the SERVER: the credential is
+untouched, the client retries, the session survives. **Fail-closed and
+sign-everyone-out are not the same posture**, and conflating them is why this
+looked like a trade-off with no good side.
+
+#### What was true before the ruling
+
+Two fail-open points, both now instrumented (#544) and both behaviourally
+unchanged pending this implementation:
+
+| | what a DB error skipped |
+|---|---|
+| `getSession`'s inner catch (`lib/auth.ts`) | **`isActive`** — the check never ran; role and practiceId fell through from the JWT |
+| `validateSession` (`packages/auth/src/index.ts`) | session revoked, session expired, `isActive`, `suspendedAt`, `softDeletedAt`, `forceLogoutAt` |
+
+Bounded by the JWT's 8-hour `maxAge`. And it never needed the database to be
+down: `PRISMA_POOL_MAX=10` with a 20s pool timeout makes failures **per-query**,
+so this lookup can time out while the clinical queries after it succeed.
+
+#### The implementation item — scope
+
+1. **ENUMERATE the call sites.** Both catches, plus anything else that swallows a
+   DB error on an auth path. By behaviour — "every place a failed auth read is
+   caught" — not by grepping the two files already known.
+2. **ATTEMPT-PROOF BOTH DIRECTIONS, plus the retry itself:**
+   - error path → refuses **after** the retry (not before — a retry that never
+     runs is the silent no-op class)
+   - healthy path → admits, with no retry and no alarm
+   - **the retry provably retries** — assert the call count, or "one bounded
+     retry" is a comment
+3. **SIZE IT FIRST.** Read the `SESSION_FAILOPEN` counts #544 is now producing
+   before choosing the retry budget. Picking a timeout without knowing how often
+   the path fires is guessing dressed as engineering.
+4. ⚠️ **The 503 must not be swallowed into a generic error boundary that renders
+   a login link.** The user-visible outcome is "try again in a moment", not "you
+   are signed out" — otherwise the 401 behaviour arrives through the UI instead
+   of the status code.
+
+#### ⚠️ #544's FIRES test asserts the CURRENT (fail-open) behaviour
+
+`auth-failopen-observability.test.ts` asserts the session is **still served** when
+the lookup throws — deliberately, so that applying this ruling without updating
+that file fails loudly instead of drifting. **That assertion is expected to flip
+as part of this item**, and its flip is the signal the ruling landed.
+
 ## Phase BILLING
 
 Depends on TEAMS: the wallet is per-practice.
