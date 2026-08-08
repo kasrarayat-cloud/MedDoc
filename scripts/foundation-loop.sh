@@ -58,6 +58,19 @@ STOP_FILE="docs/foundation/STOP"
 LEDGER="docs/foundation/RELAY.md"
 LOG_DIR="docs/foundation/logs"
 DATE="$(date -u +%Y%m%d)"
+# ⚠️ A LOG FILENAME MUST IDENTIFY A LAUNCH, NOT JUST A DAY.
+# The first version named logs `<date>-runNN.log`. The counter resets to 01 on
+# every launch, so a SECOND launch on the same day reopened run01.log and
+# APPENDED to it — two different launches' sessions interleaved in one file,
+# each distinguishable only by reading the `started :` banners. That happened on
+# 2026-08-08: run01.log holds a 15:42 session and an 18:23 session, and the
+# filename says nothing about either.
+#
+# The launch timestamp fixes it without breaking what runNN MEANS. Scanning for
+# the next free runNN would also avoid the collision, but it makes the counter
+# monotonic forever and erases where one launch ends and the next begins —
+# "session 3" would stop meaning "the third session of this run".
+LAUNCH="$(date -u +%H%M%S)"
 
 mkdir -p "$LOG_DIR"
 
@@ -115,7 +128,15 @@ halt_reason=""
 
 for (( n=1; n<=MAX_SESSIONS; n++ )); do
   RUN=$(printf '%02d' "$n")
-  LOG="$LOG_DIR/${DATE}-run${RUN}.log"
+  LOG="$LOG_DIR/${DATE}-${LAUNCH}-run${RUN}.log"
+
+  # ⚠️ AND THE NAME IS ASSERTED, NOT TRUSTED. A filename scheme that silently
+  # appends is exactly what this replaced, so the loop refuses to open a log
+  # that already exists rather than quietly concatenating two launches again.
+  if [ -e "$LOG" ]; then
+    halt_reason="LOG COLLISION — $LOG already exists; refusing to append two launches into one file"
+    break
+  fi
 
   # ── KILL SWITCH 1 — checked FIRST, so a human always wins the race ────────
   if [ -f "$STOP_FILE" ]; then
