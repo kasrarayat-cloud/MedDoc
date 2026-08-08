@@ -10,6 +10,7 @@ import { seedEmBaselineIfUnset } from "@/lib/em-coding/seed-baseline";
 import { z } from "zod";
 
 import prisma from "@meddoc/db";
+import type { TransactionClient } from '@meddoc/db';
 import { visitByIdScope, ScopedWriteMissError } from "@/lib/practice-scope";
 import { TranscribeVisitStatus } from "@prisma/client";
 import { requireSession } from "@/lib/auth";
@@ -209,7 +210,7 @@ export async function saveSoapDraftAction(
   // practice-scoped read authorises it — was available and NOT taken here: this
   // is the last-write-wins fallback, which by definition has no version guard,
   // so it is the one path where borrowed authorisation has the least to lean on.
-  const updated = await prisma.$transaction(async (tx: typeof prisma) => {
+  const updated = await prisma.$transaction(async (tx: TransactionClient) => {
     const res = await tx.transcribeVisit.updateMany({
       where: visitByIdScope(visitId, session.user.practiceId),
       data: {

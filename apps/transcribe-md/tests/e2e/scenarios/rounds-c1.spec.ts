@@ -329,6 +329,33 @@ test.describe('Rounds C1 — auth to tokens, flag-ON', () => {
     enableMfaPromptOnly(mfa.email);
 
     await page.goto('/login');
+
+    // ⚠️ ASSERT WE ARE ACTUALLY ON THE LOGIN FORM BEFORE TOUCHING IT.
+    // Root-caused 2026-08-07 after this line cost THREE CI re-runs in one day on
+    // diffs that could not reach it. The symptom was always
+    // `locator.fill: Timeout 15000ms exceeded — waiting for getByLabel('Email')`,
+    // which reads as a slow render and is not one.
+    //
+    // `login/page.tsx:20` does `const session = await auth(); if
+    // (session?.user?.id) redirect(...)` — **/login REDIRECTS AN AUTHENTICATED
+    // USER AWAY**. `signupFreshUser` above leaves this browser signed IN, and
+    // `clearCookies()` is what is supposed to undo that. When the session
+    // survives the clear, the navigation lands on the recovery route, where no
+    // Email field exists — so the locator waits out its full timeout for an
+    // element that is not merely late, it is on another page.
+    //
+    // The label is `htmlFor="email"` → `id="email"`, a SERVER-RENDERED
+    // association, so hydration was never the cause here — worth stating,
+    // because the pre-hydration family is the obvious suspect for this file and
+    // is the wrong one for this line.
+    //
+    // This turns a 15s silent timeout into an immediate, diagnostic failure.
+    await expect(
+      page.locator('#email'),
+      'not on the login form — /login redirected us, so the signup session ' +
+        'survived clearCookies(). This is the flake; it is not a slow render.',
+    ).toBeVisible({ timeout: 10_000 });
+
     await page.getByLabel('Email').fill(mfa.email);
     await page.getByLabel('Password', { exact: true }).fill(TEST_PASSWORD);
     await page.getByRole('button', { name: /^sign in$/i }).click();

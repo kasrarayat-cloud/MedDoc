@@ -37,6 +37,7 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 
 import prisma from "@meddoc/db";
+import type { TransactionClient } from '@meddoc/db';
 import { TranscribeVisitStatus } from "@prisma/client";
 import { SPECIALTY_IDS } from "@meddoc/shared/specialties";
 
@@ -257,10 +258,17 @@ export const PATCH = withApiHandler<{ id: string }>(
       parsed.data.patientId !== undefined &&
       parsed.data.patientId !== visit.patientId
     ) {
+      // ⚠️ SPREAD FIRST, `id` LAST — and this is a type fact, not a style one.
+      // `patientScope()` is declared as a whole `TranscribeMdPatientWhereInput`,
+      // whose `id` is `StringFilter | string`. Spread AFTER the literal `id`, TS
+      // unions the two and the result no longer satisfies the unique `where`'s
+      // `id: string`. At runtime the fragment carries only `practiceId`, so the
+      // key order is behaviourally irrelevant — putting the explicit `id` last
+      // just lets the compiler see what was always true.
       const newPatient = await prisma.transcribeMdPatient.findUnique({
         where: {
-          id: parsed.data.patientId,
           ...patientScope(session.user.practiceId),
+          id: parsed.data.patientId,
         },
         select: { id: true, name: true, practiceId: true, deletedAt: true },
       });
@@ -294,10 +302,11 @@ export const PATCH = withApiHandler<{ id: string }>(
       // Denormalised legacy column; keep it in sync with the FK so
       // anywhere that still reads `visit.patientName` agrees with
       // the linked patient's name.
+      // Spread first, `id` last — see the note on the validation read above.
       const newPatient = await prisma.transcribeMdPatient.findUnique({
         where: {
-          id: parsed.data.patientId,
           ...patientScope(session.user.practiceId),
+          id: parsed.data.patientId,
         },
         select: { name: true },
       });
@@ -325,7 +334,7 @@ export const PATCH = withApiHandler<{ id: string }>(
     // was available and NOT taken: the borrowing is sound only while nothing
     // between the read and the write can move the row, and asserting that is
     // harder than removing the assumption. One transaction costs one query.
-    const updated = await prisma.$transaction(async (tx: typeof prisma) => {
+    const updated = await prisma.$transaction(async (tx: TransactionClient) => {
       const res = await tx.transcribeVisit.updateMany({
         where: visitByIdScope(visit.id, session.user.practiceId),
         data,

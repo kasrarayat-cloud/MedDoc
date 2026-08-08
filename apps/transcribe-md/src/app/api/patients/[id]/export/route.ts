@@ -60,16 +60,36 @@ export const GET = withApiHandler<{ id: string }>(
 
     const { id: patientId } = await params;
 
-    // Resolve the caller's practiceId so we can gate the patient
-    // lookup on it. Cheaper than pulling the full session helper.
+    // ⚠️ F-TYPE 2026-08-07 — THE TENANCY PREDICATE IS BUILT FROM THE SESSION,
+    // NOT FROM A SECOND `user` READ.
+    //
+    // `PracticeId` is branded and minted at exactly one place, `getSession()`.
+    // The `user.practiceId` this route used to pass is a plain `string` off a
+    // re-read of the SAME ROW `getSession()` already refreshed on this request
+    // (`auth.ts` sets `practiceId = dbUser.practiceId` from
+    // `user.findUnique({ where: { id: session.user.id } })`), so the two values
+    // are the same column of the same row and nothing observable changes — the
+    // brand was simply absent on this path. Sourcing it from the session is
+    // what makes it a `PracticeId` honestly rather than by cast.
+    const practiceId = session.user.practiceId;
+
+    // Kept for its own sake: a 404 when the caller's user row has gone away
+    // between the session read and now. It no longer supplies the practice.
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { practiceId: true },
     });
     if (!user) return apiError('user not found', 404);
 
-    const patient = await prisma.transcribeMdPatient.findUnique({
-      where: { id: patientId, ...patientScope(user.practiceId) },
+    // ⚠️ `findFirst`, not `findUnique`. Spreading a `…WhereInput` (whose
+    // `id` is `string | StringFilter`) into a `…WhereUniqueInput` (whose `id`
+    // must be a bare `string`) widens `id` past the unique key's type. The
+    // query itself is unchanged — Prisma's extended where-unique accepted the
+    // `practiceId` conjunct and emitted the same predicate — and `findFirst`
+    // is the shape `practice-scope.ts` documents for a scoped read, and the
+    // one the sibling `patients/[id]/page.tsx` already uses.
+    const patient = await prisma.transcribeMdPatient.findFirst({
+      where: { id: patientId, ...patientScope(practiceId) },
       select: {
         id: true,
         practiceId: true,
@@ -80,7 +100,7 @@ export const GET = withApiHandler<{ id: string }>(
         createdAt: true,
       },
     });
-    if (!patient || patient.practiceId !== user.practiceId) {
+    if (!patient || patient.practiceId !== practiceId) {
       return apiError('not found', 404);
     }
 
@@ -89,7 +109,7 @@ export const GET = withApiHandler<{ id: string }>(
         patientId,
         // READ — §4.1b: the patient's chart is the PRACTICE's, so an export
         // of it carries every visit on that chart, not only the viewer's.
-        ...visitScope(user.practiceId),
+        ...visitScope(practiceId),
         deletedAt: null,
         archivedAt: null,
       },

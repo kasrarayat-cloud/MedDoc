@@ -14,7 +14,8 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
 
-import prisma from "@meddoc/db";
+import prisma, { Prisma } from "@meddoc/db";
+import type { TransactionClient } from '@meddoc/db';
 import {
   patientScope,
   visitScope,
@@ -38,7 +39,13 @@ async function loadPatientForSession(
   { includeDeleted = false }: { includeDeleted?: boolean } = {},
 ) {
   const patient = await prisma.transcribeMdPatient.findUnique({
-    where: { id, ...patientScope(practiceId) },
+    // ⚠️ SPREAD FIRST, `id` LAST — and it is a typing fact, not a style choice.
+    // `patientScope()` returns a `WhereInput`, whose `id` is `string |
+    // StringFilter`. Spreading it OVER `{ id }` unions the two, and
+    // `WhereUniqueInput.id` is a bare `string`. Ordering it this way lets the
+    // literal's own `id: string` win. Same object at runtime — `patientScope`
+    // only ever returns `{ practiceId }`, so nothing is overwritten either way.
+    where: { ...patientScope(practiceId), id },
     select: {
       id: true,
       practiceId: true,
@@ -192,7 +199,10 @@ export const PATCH = withApiHandler<{ id: string }>(
       externalId?: string | null;
       mrn?: string | null;
       insurance?: string | null;
-      problemList?: unknown;
+      // `problemList` is a Json? column, and Prisma will not take a bare `null`
+      // for one — clearing it is spelled `Prisma.JsonNull` (JSON null, what this
+      // route has always written) as distinct from `Prisma.DbNull` (SQL NULL).
+      problemList?: Prisma.NullableJsonNullValueInput | Prisma.InputJsonValue;
     } = {};
     if (parsed.data.name !== undefined) data.name = parsed.data.name;
     if (parsed.data.dateOfBirth !== undefined) {
@@ -209,7 +219,10 @@ export const PATCH = withApiHandler<{ id: string }>(
       data.insurance = parsed.data.insurance;
     }
     if (parsed.data.problemList !== undefined) {
-      data.problemList = parsed.data.problemList;
+      data.problemList =
+        parsed.data.problemList === null
+          ? Prisma.JsonNull
+          : parsed.data.problemList;
     }
 
     if (Object.keys(data).length === 0) {
@@ -224,7 +237,7 @@ export const PATCH = withApiHandler<{ id: string }>(
     // was available and NOT taken: the borrowing is sound only while nothing
     // between the read and the write can move the row, and asserting that is
     // harder than removing the assumption. One transaction costs one query.
-    const updated = await prisma.$transaction(async (tx: typeof prisma) => {
+    const updated = await prisma.$transaction(async (tx: TransactionClient) => {
       const res = await tx.transcribeMdPatient.updateMany({
         where: { id: existing.id, ...patientScope(session.user.practiceId) },
         data,

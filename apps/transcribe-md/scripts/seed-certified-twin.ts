@@ -58,7 +58,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { prisma } from '@meddoc/db';
+import { Prisma, prisma } from '@meddoc/db';
 
 const say = (s: string) => console.log(`[twin-seed] ${s}`);
 const sha256 = (b: Uint8Array | string) =>
@@ -456,10 +456,28 @@ async function main() {
   //
   // Loud on purpose. Left silent, a wrong fixture is read as truth by every
   // walk and spec that touches it, and the thing they then prove is the bug.
+  //
+  // `emPendingChange` is a Json column, so its `not` takes a JSON-null token
+  // rather than a bare `null` — the shared client was `any`, so this argument
+  // was never checked. MEASURED ON QA before changing it: bare `null` and
+  // `Prisma.JsonNull` compile to the SAME sql (`"emPendingChange"::jsonb <>
+  // 'null'`); `Prisma.DbNull` compiles to `IS NOT NULL` instead. `JsonNull` is
+  // therefore the behaviour-preserving token and is what is written here.
+  //
+  // The two only diverge on a row holding the JSON null LITERAL, which is not
+  // a state this system can reach: every clear-path writer
+  // (`em-score/override/route.ts:270`, `actions/rescore-em.ts:198`) sets
+  // `Prisma.DbNull`, i.e. sql NULL, and QA holds zero such rows. And on the
+  // question this guard asks — does an imaging visit carry an E/M delta — a
+  // literal `null` carries none, so excluding it is right either way.
   const emArtifacts = await prisma.transcribeVisit.findMany({
     where: {
       specialty: 'ultrasound',
-      OR: [{ emScoredCode: { not: null } }, { emPendingChange: { not: null } }],
+      OR: [
+        // String? column — a bare `null` is the correct filter here.
+        { emScoredCode: { not: null } },
+        { emPendingChange: { not: Prisma.JsonNull } },
+      ],
     },
     select: { id: true, emScoredCode: true },
   });

@@ -23,6 +23,7 @@
 // ============================================================================
 
 import prisma from '@meddoc/db';
+import type { TransactionClient } from '@meddoc/db';
 import { randomUUID, createHash } from 'node:crypto';
 
 /** Default TTL for the UserSession row (not the JWT). The JWT's own
@@ -56,7 +57,7 @@ export interface RecordSessionLoginInput {
 export async function recordSessionLogin(input: RecordSessionLoginInput) {
   const ttl = input.ttlMs ?? DEFAULT_USER_SESSION_TTL_MS;
   const expiresAt = new Date(Date.now() + ttl);
-  return prisma.$transaction(async (tx: typeof prisma) => {
+  return prisma.$transaction(async (tx: TransactionClient) => {
     await tx.userSession.deleteMany({ where: { userId: input.userId } });
     return tx.userSession.create({
       data: {

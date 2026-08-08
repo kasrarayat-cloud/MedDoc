@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import { headers } from 'next/headers';
 
 import prisma from '@meddoc/db';
+import type { TransactionClient } from '@meddoc/db';
 import { AuthTokenPurpose, PracticeRole, Product, UserRole } from '@prisma/client';
 import { signIn as nextAuthSignIn } from '@/lib/nextauth';
 import { createAuthToken } from '@/lib/auth-tokens';
@@ -489,7 +490,7 @@ export async function signupAction(
   // Practice rows if the User insert fails.
   let createdUserId: string | null = null;
   try {
-    await prisma.$transaction(async (tx: typeof prisma) => {
+    await prisma.$transaction(async (tx: TransactionClient) => {
       // ⚠️ T8 — AN INVITE MAY ADMIT INTO AN EXISTING PRACTICE.
       //
       // `membership` is non-null only when the code carries BOTH a practice and
