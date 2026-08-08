@@ -1794,7 +1794,74 @@ stylistic.
   production visits and there is not one FAILED visit — the classifier B8 would
   reuse has never produced a persisted value in production.
 
-### ✅ B0-a — the mock boundary moves BELOW the meter — **MERGED 2026-08-08, NOT DEPLOYED**
+### 🟩 B0-a IS LIVE IN PRODUCTION — 2026-08-08T18:40Z
+
+Deployed from `main` @ **`87327db6`** by `bash scripts/deploy-prod.sh`, under a
+delta declaration written before the run: `docs/foundation/deploys/20260808-87327db6.md`.
+Log `docs/deploy-logs/deploy-20260808T182917Z.log`. Rollback tags
+**`:pre-b0a-20260808`**, cut against the RUNNING ids `df8b00ba5a0e` / `bfbf9c2497c1`
+and digest-verified before the deploy started.
+
+**Citation: 4 of 4 on the deployed commit.** `CI` · `e2e` · `a11y-ci` ·
+`secrets-scan` are all `completed/success` on `87327db6` (push, 17:41:06Z). That
+also **discharges the descendant citation owed** after `9a56293f`'s `e2e` was
+cancelled — `87327db6` contains `cbb7b087`, which is itself 4-of-4 green. The
+debt recorded below is paid; it is left in place because the mechanism is worth
+keeping.
+
+#### The declaration was judged line by line, and nothing moved that was not declared
+
+| declared | measured |
+|---|---|
+| migrations **91 → 92**, k=1, named | **92**, and the applied name is `20260808020000_b0_units_source` |
+| `unitsSource` present, **TEXT NULLABLE, NO DEFAULT** | `unitsSource｜text｜is_nullable=YES｜default=(none)` |
+| index `api_usage_events_unitsSource_timestamp_idx` | present |
+| **1312** rows backfilled to `vendor`, **0** NULL | `vendor｜1312` — the only group; zero NULLs |
+| image ids **both change** | app `df8b00ba…` → `fc79b961…` · worker `bfbf9c24…` → `124f88fa…` |
+| clinical **UNCHANGED** | visits **26** · patients **15** · signed **16** · users **196** — byte-identical |
+| `api_usage_events` **1312**, `ai_calls` **1122** | **1312** · **1122** — unchanged, as a column-add must be |
+| containers 9/9 healthy · co-tenants unchanged | 9/9 healthy · app 307 · admin 404 · quillmd 200 · www 200 · pro 410 |
+
+`audit_logs` was declared as *may rise* and did **not** — 10586 → 10586.
+
+**Structural verification that the new code is actually running**, not merely a
+new digest: `unitsSource` is present in the worker image across all ten expected
+sources (`packages/ai/src/{api-usage,anthropic,log,mock,embed,deepgram-batch,whisper-batch}.ts`
+plus the gate and two app files) and in the app image's built Next chunks.
+
+⚠️ **AND THE FIRST GREP FOR IT RETURNED ZERO — from a broken search, not an
+empty image.** `grep -rl … /app --include='*.ts'` over the whole tree returned
+nothing; the positive control (`grep -c` against `api-usage.ts` = **5**) is what
+exposed it. Recorded because it is the canon's own rule catching the canon's own
+author mid-verification: **a clean sweep and a broken sweep produce identical
+output**, and the only difference is whether you controlled it.
+
+#### ⚠️ WHAT IS STILL OWED — STEP 2 OF THE MIGRATION
+
+`unitsSource` is **nullable in the database and required only in TypeScript**.
+The `SET NOT NULL` migration is deliberately not in this deploy — between
+`deploy-prod.sh`'s step 3 (migrate) and step 6 (recreate) the previous image was
+still serving and still writing usage rows it had never heard of the column for,
+and a NOT NULL with no default would have failed every one of those inserts
+*quietly*, because `logApiUsage` is fire-and-forget. That window is now closed:
+the writing code is live everywhere. **Step 2 is the next B-lane item and it is
+unwritten.** Until it lands the database's guarantee is weaker than the type's,
+and a writer that reaches the table off the typed path can still insert a NULL
+provenance.
+
+#### What this deploy does NOT claim
+
+- **The meter is not proven in production.** Every arm of B0-a's evidence is a
+  unit gate plus the QA E2E seed, and this deploy adds only structural proof that
+  the code is resident. No production pipeline run has been observed emitting a
+  row since. Proving it would mean running a real visit, and **a real doctor's
+  visit is never a smoke target.**
+- **B1 and B4 are not closed.** The blocker they named is removed. No vendor
+  request id is captured and no per-stage `UsageEvent` coverage exists.
+
+---
+
+### ✅ B0-a — the mock boundary moves BELOW the meter — the build row
 
 **This row was written one session late.** B0-a merged as `9a56293f` (PR #549)
 and `RELAY.md` was never updated, so for one session the three `B0` rows in
@@ -2032,7 +2099,7 @@ already demonstrates.** Read the sections. Repricing this table is its own item.
 
 | Item | Status | Merge SHA | CI run | Notes |
 |---|---|---|---|---|
-| **B0-a** | ✅ **MERGED 2026-08-08 · NOT DEPLOYED** | **`9a56293f`** (PR #549) | **3 of 4** — `CI` · `a11y-ci` · `secrets-scan` `completed/success`; **`e2e` `cancelled`**, killed by PR #550's merge 17 min later. Recovery per canon: the full citation is owed on the descendant **`cbb7b087`** | The mock boundary sits BELOW the meter — a mocked run now METERS. Migration `20260808020000_b0_units_source` is **STEP 1 OF TWO** and is **unapplied in production** (prod 91 / repo 92); `unitsSource` does not exist in the prod database and its 1312 rows are un-backfilled. **Step 2 (`SET NOT NULL`) is owed and unwritten.** Does not close B1 or B4 — it removes the blocker they named. Full section above. |
+| **B0-a** | 🟩 **LIVE IN PRODUCTION 2026-08-08T18:40Z** | build **`9a56293f`** (PR #549) · deployed from `main` @ **`87327db6`** | **4 of 4 on the deployed commit** — `CI` · `e2e` · `a11y-ci` · `secrets-scan` all `completed/success` on `87327db6`. This **discharges** the descendant citation owed after `9a56293f`'s `e2e` was cancelled by PR #550's merge | The mock boundary sits BELOW the meter — a mocked run now METERS. Migration `20260808020000_b0_units_source` applied: **91 → 92**, `unitsSource` present as **TEXT NULLABLE with NO DEFAULT**, all **1312** rows backfilled to `vendor`, **0** NULL. Clinical counts byte-identical (26 · 15 · 16 · 196); `api_usage_events` 1312 and `ai_calls` 1122 unmoved. Declaration `docs/foundation/deploys/20260808-87327db6.md`, written first and judged against; log `deploy-20260808T182917Z.log`; rollback **`:pre-b0a-20260808`** cut against RUNNING ids and digest-verified. ⚠️ **Step 2 (`SET NOT NULL`) is owed and unwritten — the next B-lane item.** Does not close B1 or B4, and **does not prove the meter in production**. Full section above. |
 | **SECURITY BLOCK** | 🟩 **LIVE IN PRODUCTION 2026-08-04** | **`a0b8775f`** (PR #518) | `CI` · `e2e` · `secrets-scan` all `completed/success`; tree identity proven — branch head `7a038e27` and merge `a0b8775f` share tree `1f3c68e1` | **A.1** pro.quillmd.com **410 on every path, GET and POST**, container `exited (143)`; app/admin/quillmd/www/staging unchanged, 5 co-tenant hostnames unchanged incl. their 3 pre-existing failures, 16 non-meddoc containers untouched. ⚠️ *"disable only its own vhost"* was impossible — one file carries all five hostnames, and `sites-enabled/dealhunter` (`server_name … _;`, first in the glob) is the de-facto default, so an **unnamed** host falls through to a **co-tenant**. Explicit 410 block; `:80` keeps the name so ACME still answers (verified 404-on-probe, not 301/410). ⚠️ Found a **shadow vhost being loaded** — `quillmd.bak-20260725`, a regular file in `sites-enabled/`, carrying the **pre-S2 spoofable `X-Forwarded-For`**, inert only by glob order; removing the name from the live file would have **promoted it**. Evicted. Credentials **shared, not separable**: `DATABASE_URL` byte-identical across three containers, and Postgres has **one** login role, SUPERUSER — container-stop **is** the control; least-privilege roles → TEAMS hygiene. **A.2** Stripe out of the worker; root cause is `Dockerfile.worker:62` copying the whole workspace-root `node_modules`, **not** standalone tracing; 9 of 28 CRM deps ride along, 7 named for A6; lockfile 1187→1185, **sharp intact 28→28**. **A.3** fail-open closed; **71 corrections APPENDED** (65+6), originals **still 65 and still wrong**, total 10153→10224 (+71 exactly), 71/71 `targetId`s resolve. Deploy log `deploy-20260804T034655Z.log`; rollback tags **`:pre-secblock-20260804`** cut against RUNNING ids `cdfa16cc599b` / `1526b97cf960` / `2d05d22572ba`. Post-deploy verifier PASS with positive controls on every zero. |
 | **Phase 0** | ✅ **DONE 2026-08-04** | **`c36eeda1`** (PR #517) | `CI` · `e2e` · `secrets-scan` all `completed/success` | `SPEC.md` + `DISCOVERY.md` + `RELAY.md`. READ-ONLY on prod: no schema change, no deletion, no billing code, no row written. 28 agents, 5 areas, **7 claims corrected** (6 DRIFTED, 1 REFUTED) — all recorded in DISCOVERY as corrected. Vendor prices verified live against four vendors' own pages, dated. |
 | GATE 0 | ✅ **CLEARED 2026-08-04** | — | — | Five rulings, recorded verbatim in `SPEC.md` §4. |
@@ -2143,10 +2210,30 @@ either way; do not leave it as a third silent gap.
 
 ## Found on the way past — 2026-08-08, on the loop's FIRST unattended run
 
-### ⛔ THE LOOP CANNOT RUN ITS OWN SCRIPTS — `Bash(bash scripts/:*)` DOES NOT GRANT
+### ✅ THE LOOP CANNOT RUN ITS OWN SCRIPTS — **RESOLVED 2026-08-08, VERIFIED ON THE NEXT LOOP START**
 
-**Status: OWNER ACTION. The loop is blocked on this, and no session can fix it
-from the inside.**
+**Status: CLOSED.** The exact-match fix landed (PR #551, commits `42b20d3a` and
+`b28c7fc2`) and **this session is the verification the finding demanded.** All
+eight standing checks ran as `bash scripts/<name>.sh`, and
+`bash scripts/deploy-prod.sh` ran and shipped B0-a — the first item this
+programme has deployed from inside the loop.
+
+The old note said *"do not assume the first fix worked — the failure mode of this
+whole class is a grant that reads as present and is not."* It worked, and it was
+checked rather than assumed. The ten entries are enumerated, not wildcarded, for
+the reason recorded below: `scripts/` is session-writable, so a wildcard would
+grant "write a script, then run it".
+
+⚠️ **Two refusals remain, and both are CORRECT — do not file them as gaps.**
+`rm`/`rmdir` and `shred` are denied, so the loop still **cannot reap its own
+scratch**; it reports paths instead. And `.claude/settings.json` is unwritable
+from inside a session, which is the property that makes the allowlist an
+allowlist. The original finding follows.
+
+#### The original finding, as recorded
+
+**Status at the time: OWNER ACTION. The loop is blocked on this, and no session
+can fix it from the inside.**
 
 `scripts/foundation-loop.sh:142` deliberately passes **no**
 `--dangerously-skip-permissions`, running instead inside the committed allowlist
@@ -2223,6 +2310,41 @@ already-granted interpreter (`npm run <script>`, since `Bash(npm:*)` is honoured
 rather than through `bash`. **Do not assume the first fix worked** — the failure
 mode of this whole class is a grant that reads as present and is not.
 
+### ✅ THE §2.5 DECLARATION GATE REFUSED ITS FIRST REAL DEPLOY — and was right to
+
+Recorded because a guard's first live exercise is the only moment you learn
+whether it guards anything, and this one was landed in PR #550 and had never run.
+
+I wrote the delta declaration **before** the deploy, exactly as §2.5 requires —
+baseline, must-change, must-not-change, clinical counts and all — and put it at
+`docs/deploy-declarations/b0a-20260808.md`. The gate refused:
+
+    🔴 REFUSING TO DEPLOY — no delta declaration for this commit.
+       expected: docs/foundation/deploys/20260808-87327db6.md
+       Nothing has been built, migrated or recreated. Production is untouched.
+
+**The content was right and the location was wrong, and the gate cannot tell the
+difference — which is the point.** Step 8 re-reads *that* path to judge the
+outcome, so a declaration anywhere else is a declaration nothing will ever be
+compared against. It would have read as diligence and functioned as decoration.
+
+Two things worth keeping:
+
+- **It failed CLOSED and said so.** "Nothing has been built, migrated or
+  recreated" is the sentence that makes a refusal safe to hit — no half-deploy to
+  reason about, no partial migration.
+- ⚠️ **The refusal was nearly invisible, and the cause is in the canon.** The
+  first run was `bash scripts/deploy-prod.sh 2>&1 | tail -80`, and the pipe
+  returned **`tail`'s** exit code — so a 🔴 refusal reported **exit 0**. That is
+  the *"`&&` chain that does not guard the transition"* family wearing a pipe:
+  the script's own verdict was discarded by the thing printing it. The re-run
+  dropped the pipe. **Never pipe a gated command into a formatter and read the
+  pipeline's status as the command's.**
+
+The misplaced file could not be deleted (`rm` is denied to the loop, correctly),
+so it was overwritten with a pointer to the real declaration. **`docs/deploy-declarations/`
+is not a convention, is referenced by nothing, and should be reaped.**
+
 ### ✅ The runner's own log dirtied the tree it tells the next session to clean
 
 **Fixed here.** `scripts/foundation-loop.sh` writes
@@ -2268,3 +2390,48 @@ both already recorded elsewhere: the known parallel-worker login race
 (`--workers=1` reruns), and the dead production `OPENAI_API_KEY` — though note
 the chat-editor eval step was *skipped*, not failed, so the second is a weaker
 fit than it first looks.
+
+#### ⚠️ TRIAGE ADVANCED 2026-08-08 — and the row above was WRONG about the mechanism
+
+Corrected against the job log (`gh api …/actions/jobs/93050682579/logs`), not
+against the run summary. **The row above says the suite step "reports ✓" and that
+a later step is what reds. It does not.** The log is explicit:
+
+    ▶ smoke / health
+    ▶ smoke / auth-flow
+    ▶ e2e (Playwright)
+    → json:  tests/automated/reports/2026-08-08-03-16.json
+    → html:  tests/automated/reports/2026-08-08-03-16.html
+    ##[error]Process completed with exit code 1.
+
+**The `Run smoke + e2e` step itself exits 1.** It only *renders* as ✓ in the run
+summary because it carries `continue-on-error`, which is what lets the later
+steps key on `steps.run.outcome == 'failure'` to open the issue. The `exit 1`
+step at the end is a re-raise, not the detector. **The summary's tick was read as
+the step's verdict, and it is a rendering artefact** — the same shape as a check
+whose title is narrower than what it measures.
+
+**One candidate REFUTED, cheaply.** The env dump shows `TEST_APP_PASSWORD:` with
+an empty value, which reads as a missing secret and would explain a login
+failure. It is **blank in the 2026-08-07 GREEN run too** (job `92768257543`,
+line 389) — GitHub redacts secret values in env dumps. Not the cause; do not
+spend a session on it.
+
+**Narrowed.** Both smoke legs print their banner and the failure lands after the
+Playwright banner: e2e ran 03:16:36 → 03:17:25 (**49s**) versus the green run's
+04:18:50 → 04:19:18 (**28s**). So the failing leg is **e2e (Playwright)**, and no
+per-test detail reaches stdout — the suite writes only the JSON and HTML.
+
+**STILL OWED, and it is one command.** The artefact is live and unexpired
+(`meddoc-report-31236791228`, 2.4 MB, artifact id `9015694199`, 28 files,
+14-day retention from 2026-08-08 — **it expires 2026-08-22**).
+
+    gh run download 31236791228 -n meddoc-report-31236791228 -D <scratch>
+    # then read 2026-08-08-03-16.json for the failing test names
+
+⚠️ **Not done here, deliberately, and the reason is a real constraint on the
+loop.** The session sandbox confines writes to `/opt/meddoc-pro`, so the download
+would land **inside the git tree**, and `rm`/`shred` are denied — the loop cannot
+reap what it creates. Un-reapable scratch in the repository is a worse outcome
+than a deferred triage, so it is deferred **with a deadline attached**: after
+2026-08-22 the artefact is gone and this becomes unanswerable.
