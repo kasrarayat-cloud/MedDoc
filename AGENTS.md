@@ -914,9 +914,33 @@ bash scripts/check-qa-mock-posture.sh         # READ-ONLY. 0 = severed, 1 = LIVE
 bash scripts/check-minio-encrypted-mount.sh   # READ-ONLY. 0 = encrypted, 1 = DRIFT, 2 = can't tell
 bash scripts/check-pg-encrypted-mount.sh      # READ-ONLY. 0 = encrypted, 1 = DRIFT, 2 = can't tell
 bash scripts/check-ingress-tls.sh             # READ-ONLY. 0 = all SNIs OK, 1 = 502ing, 2 = can't tell
+bash scripts/check-composite-fk.sh            # READ-ONLY. 0 = intact, 1 = ABSENT/RESHAPED, 2 = can't tell
 bash scripts/check-bind-mount-agreement.sh    # READ-ONLY. 0 = agrees, 1 = DIVERGED, 2 = can't tell
 ```
 
+⚠️ **PRISMA OFFERS THE DELETION OF T3's TENANCY WALL AS TIDYING, AND THAT IS WHY
+THE COMPOSITE FK HAS A GUARD.** `transcribe_visits_patientId_practiceId_fkey`
+references `(patientId, practiceId) → transcribe_md_patients(id, practiceId)`,
+which is what makes a visit whose practice differs from its patient's
+**unrepresentable**. Prisma has no syntax for a composite FK, so the model
+renders a SIMPLE one and `prisma migrate diff` reports a permanent difference
+whose generated script says `DROP CONSTRAINT …patientId_practiceId_fkey` and adds
+a single-column replacement. It reads like closing drift; it removes the wall,
+because a simple FK checks only that the practice **exists** — which every wrong
+practice id also satisfies. **Never apply that hunk.**
+
+The guard checks **by name AND by definition**, and the difference is not
+pedantry: mutation-proved on a throwaway database, a same-named single-column FK
+passes a name-only check and fails this one. It also carries an opt-in
+behavioural arm (`--attempt`) that is **fail-closed off any database without a
+qa/test marker**, so F3's read-only-on-production default holds.
+
+⚠️ **AND THE BEHAVIOURAL ARM SATISFIES EVERY UNRELATED `NOT NULL` FIRST.** An
+earlier attempt-proof "passed" because `specialty NOT NULL` rejected the row
+before the FK was ever consulted — proving nothing about the FK. **A refusal is
+evidence only when you know WHAT refused**, so the arm matches the constraint
+name in `SQLERRM` and pairs it with a positive control that inserts the same row
+correctly scoped.
 **A FILE BIND-MOUNT BINDS THE INODE, NOT THE PATH**, and three of this repo's
 config files are bind-mounted into running containers out of the working tree:
 `Caddyfile` (caddy), `infra/postgres-backup/postscript.sh` and
@@ -938,7 +962,6 @@ land — a note, not a fault, since a branch switch re-arms it). It also carries
 **census arm** comparing the hand-kept watch-list against the binds that
 actually exist, because hand-kept lists are wrong eventually and a bind nobody
 listed is a bind nothing watches.
-
 **A HEALTHY CONTAINER SAYS NOTHING ABOUT WHETHER ANYONE CAN REACH IT**, and that
 sentence is a six-hour total outage on 2026-08-07. Every public hostname —
 `app.quillmd.com` included — returned 502 while all twenty containers reported
@@ -972,16 +995,11 @@ everyone as a description of the running system rather than of the intent.
 > down. And a document that states an intended state in the present tense will be
 > read as evidence — so it has to be a check, or it is a wish.**
 
-⚠️ **A FILE BIND-MOUNT BINDS THE INODE.** `docker-compose.yml` binds
-`./Caddyfile` — a *file*. An editor that writes-then-renames replaces the inode,
-so the container keeps the orphaned original: the host shows the edit, the
-container does not, `caddy reload` says `config is unchanged`, and **`caddy
-validate` returns `Valid configuration` because it validated the OLD file.**
-Rewriting in place does not help once the swap has happened, and `up -d` declines
-because no compose config hash changed. `--force-recreate` is what re-resolves
-the bind — and it is the better proof anyway, since it exercises the cold start
-that is the failure mode. **Assert the applied count inside the CONTAINER, never
-on the host.**
+⚠️ **The Caddyfile is one member of the bind-mount class** — the inode trap that
+made this fix fail to reach the container is described once, with the whole
+class and its guard, above (`check-bind-mount-agreement.sh`). `--force-recreate`
+is what re-resolves the bind, and it is the better proof anyway: it exercises
+the cold start that is the failure mode.
 
 **A mountpoint directory exists whether or not anything is mounted on it**, and
 that sentence is the whole of a four-hour plaintext window on 2026-07-29. MinIO's
