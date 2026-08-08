@@ -81,6 +81,35 @@ if [ -f "$STOP_FILE" ]; then
   exit 2
 fi
 
+# ============================================================================
+# STARTUP GUARD — the loop refuses to begin from an ambiguous state.
+# ----------------------------------------------------------------------------
+# ⚠️ A DIRTY TREE AT LOOP START IS SOMEBODY'S UNFINISHED WORK, and the loop has
+# no way to tell a half-applied edit from a deliberate one. MASTER.md tells each
+# SESSION to reconstruct a dirty tree — that is right for state a previous
+# session left mid-queue. It is wrong for state that was already there when the
+# loop was lit, because nothing in the loop's history explains it.
+#
+# Checked ONCE, before session 1. Between sessions a branch and even a dirty tree
+# are normal: a session legitimately ends with a PR open and CI running, and the
+# next session's STEP 0 is what resolves it.
+# ============================================================================
+START_BRANCH="$(git branch --show-current 2>/dev/null)"
+if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+  echo "🔴 REFUSING TO START — the working tree is dirty."
+  git status --porcelain | sed 's/^/     /'
+  echo
+  echo "   The loop cannot tell a half-applied edit from a deliberate one, and it"
+  echo "   is about to run sessions that can deploy. Commit, stash or revert first."
+  exit 2
+fi
+if [ "$START_BRANCH" != "main" ]; then
+  echo "⚠️  starting on '$START_BRANCH', not main."
+  echo "   The queue is executed against main; a feature branch means the loop's"
+  echo "   own sessions would commit to it. Continuing, but say so loudly."
+  echo
+fi
+
 prev_ledger_hash=""
 halt_reason=""
 
