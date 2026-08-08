@@ -1087,7 +1087,73 @@ residue. **A zero that needs a caveat is not a wall.**
   green against that fixture, and would have stayed green if the predicate
   matched nothing at all.
 
+### 🟩 F-TYPE + AUTH OBSERVABILITY ARE LIVE IN PRODUCTION — 2026-08-08T01:08Z
+
+Deploy (c) from **`main@a2a0ee0c`** — #543 (F-TYPE) · #544 (auth observability)
+· #545 (nanoid HIGH advisory) · #546 (BILLING recon). Code-only, no migration.
+Full four-workflow citation on the deploying commit: `CI 31230015630` ·
+`e2e 31230015647` · `a11y-ci 31230015621` · `secrets-scan 31230015622`. Log
+`docs/deploy-logs/deploy-20260808T010802Z.log`; rollback
+**`:pre-ftype-20260808`**, digest-verified against the running ids and
+negative-controlled.
+
+The whole diff was two image ids (`11791f54c3f8 → df8b00ba5a0e`,
+`02d06a803137 → bfbf9c2497c1`) and two uptimes. Migrations 91 — **asserted, not
+read off "no pending"**. Clinical **26 · 15 · 16 · 197**, users **196 / active
+184**, co-tenants `307/404/200/200/410`, all four SNI issuers Caddy Local
+Authority. Standing checks green.
+
+#### ⚠️ THE WAR ROOM'S DECLARED PREMISE WAS FALSE, AND §2.5 IS WHAT CAUGHT IT
+
+Recorded here as visibly as the `@@unique` premise was, because it is the same
+class: **an instruction that was reasonable, specific, and wrong about the
+system.**
+
+The brief said to declare *"DATE OF PROCEDURE populates on newly generated notes
+from this deploy forward."* Measured **before** running:
+
+    template_twin_certifications      prod 0   ·   QA 10
+    template_twin_compiled_versions   prod 0   ·   QA 45
+
+`worker.ts`'s `visitDate` feeds **only** the Template Twin fill step, and
+`template-twin-fill-step.ts:80` returns `skipped / not_certified_twin` before any
+fill. Every production visit takes that branch, by the documented parked state —
+there is no door in. **So the deploy changes no production document at all.** The
+fix is LATENT until a twin is certified, which is a separate parked decision.
+
+Declaring "the date now populates" and verifying it on QA would have produced a
+green tick and a false sentence about the environment the declaration was about.
+**Declaring first is what made the premise checkable at all** — after the fact,
+"we verified it on QA" would have sounded like completion.
+
+#### ⚠️ HOW TO READ `SESSION_FAILOPEN` — ENDORSED, AND BOTH INSTINCTS ARE WRONG
+
+- **Seeing it is not a regression this deploy caused.** The fail-open behaviour is
+  unchanged; it was previously SILENT. A line means it was already happening and
+  nothing could see it.
+- **Not seeing it proves nothing.** The first post-deploy window was **69
+  seconds** with 0 lines — that means the database was healthy for 69 seconds.
+
+> **The check reports a COUNT and its WINDOW. A zero is never reported as a
+> result.** The grace-window ruling's retry budget is sized from the ACCUMULATED
+> count, not from one quiet evening.
+
+Positive-controlled: the same matcher finds `Ready in` in those logs, so the zero
+is a real zero for that window and nothing wider.
+
 ### ✅ F-TYPE — type the shared Prisma client — **CLOSED 2026-08-07 · 42 → 0**
+
+⚠️ **ONE PROOF REMAINS OPEN, AND IT IS NAMED RATHER THAN QUIETLY DROPPED.** The
+DATE OF PROCEDURE fix is proven in the SHIPPED ARTIFACT with a negative control —
+`createdAt: true` is present in the deployed worker and **absent from
+`:pre-ftype-20260808`** — and the mechanism is traced end to end. What does not
+yet exist is **a generated document showing the date**.
+
+It cannot be produced in production (0 certifications, every visit short-circuits)
+and it needs the by-hand twin flow on QA — upload → compile → fill → native
+export. **OWED as its own bounded act**, run fresh: one document, the date
+visible. This is the read-back canon applied to a document instead of a row, and
+an artifact grep is not a substitute for it.
 
 `packages/db/src/index.ts` is typed. `tsc -p apps/transcribe-md` reports **0
 errors**; 3194 unit tests pass. **No `any`-casts, no `as unknown as`, no
