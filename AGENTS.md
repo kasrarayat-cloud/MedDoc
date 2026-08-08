@@ -676,6 +676,65 @@ three places, and each layer looks sufficient from the one above it:
    correct: a failed audit must not refuse a doctor's sign. The cure is a test,
    not a stricter runtime.
 
+## "RESTORE FROM GIT" AND "RESTORE FROM BACKUP" ARE NOT THE SAME OPERATION
+
+**Standing rule for every mutation proof.** Before the FIRST mutation, copy
+**every file the proof will touch** to scratch, and assert the copies exist. The
+restore step then reads from those copies — never from git.
+
+> **`git checkout -- <file>` restores the file to HEAD. On a dirty tree that
+> DELETES uncommitted work, silently and unrecoverably.**
+
+⚠️ **REFERENCE CASE, 2026-08-08 — B0-a, mid-proof.** Three files were backed up
+to scratch and restored from there. A fourth, `anthropic.ts`, carried the
+session's entire uncommitted rewire and was restored with
+`git checkout -- packages/ai/src/anthropic.ts`. It reverted to HEAD; three
+rewired call sites and two markers vanished. Nothing errored — the command
+succeeded, which is exactly what it was asked to do.
+
+The tell that it happened at all was a test count: the suite went from 4 passed
+to 3 failed on a "restore" step. **Had the mutation under test been one that
+leaves the suite green, the loss would have been silent** and the branch would
+have been committed missing its own feature.
+
+Two things generalise:
+
+1. **The backup list is the file list, not the interesting files.** The three
+   backed up were the ones the mutations targeted. The one lost was merely *the
+   file being tested* — not obviously part of the proof, and the only one that
+   mattered.
+2. **Assert the backups before mutating**, the same way a scripted edit asserts
+   its occurrence count. A restore that reads a file that was never written is
+   a second silent failure stacked on the first.
+
+## WAR-ROOM RULINGS ARE RECORDED BY THE RECEIVING SESSION, IN ITS FIRST COMMIT
+
+**A ruling that exists only in a session transcript is not a ruling.** The
+session that receives one writes its row into `docs/foundation/RULINGS.md` in the
+first commit it makes — before building anything that depends on it.
+
+> **AND NO BRIEF'S CLAIM ABOUT RULINGS STATE IS TRUSTED. GREP IT.**
+> "They're all there" is a claim about a file, and claims about files are
+> verified here like every other claim.
+
+⚠️ **REFERENCE CASE, 2026-08-08.** A brief instructed: *"per the recorded rulings
+(grep RULINGS.md, they're all there)."* They were not. Four rulings had been made
+in the war room — mocked `ai_calls` suppression, the provenance-default rule,
+usage rows mirroring calls, the content-sensitive mock — and **none had been
+written down**. Only an unrelated fifth was present.
+
+The instruction was right to say *grep it*, and the grep is what found the gap.
+Had the session built from its memory of the conversation instead, the code would
+have encoded four decisions with no durable record — and the next session,
+finding nothing in `RULINGS.md`, could have reached the opposite conclusion just
+as confidently. **That is the CONTRADICTION failure the file exists to prevent,
+arriving through the one channel nobody guards: the ruling that was made
+correctly and simply never landed.**
+
+The rule is therefore about the RECEIVING end, deliberately. The war room states
+the ruling; the session that acts on it is the one that must leave the artifact,
+because it is the one holding the evidence that the ruling was made.
+
 ## A scripted edit PROVES ITS OWN APPLICATION
 
 **Every `.replace()` / `sed` / regex-rewrite pass states the number of
