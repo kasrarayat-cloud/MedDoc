@@ -76,7 +76,28 @@ export type Provider =
 
 export type UnitType = 'minutes' | 'tokens_in' | 'tokens_out' | 'emails';
 
+/**
+ * Where this row's UNITS came from. **RULED 2026-08-08 (B0).**
+ *
+ * `vendor` — a real vendor was called and reported these numbers.
+ * `mock`   — a mocked run. NO vendor was called; the units are fixture-derived
+ *            and the money columns are zero, because zero is the TRUE cost.
+ *
+ * ⚠️ **REQUIRED, WITH NO DEFAULT, ON PURPOSE.** A provenance column whose
+ * default is the TRUSTED value is fail-open: every future writer that has never
+ * heard of it silently produces a row claiming a real vendor reported these
+ * numbers. Making it required means a new writer either states its provenance or
+ * fails to compile — which is the only version of this that stays true.
+ *
+ * ⚠️ **AND IT IS A COLUMN, NOT A `metadata` KEY.** Every rollup and every
+ * reconciliation query has to be able to exclude mock rows in a `WHERE`, and a
+ * JSON key is exactly the thing a future query author never learns about.
+ */
+export type UnitsSource = 'vendor' | 'mock';
+
 export interface UsageEvent {
+  /** See {@link UnitsSource}. Required — no default, by ruling. */
+  unitsSource: UnitsSource;
   userId?: string | null;
   practiceId?: string | null;
   provider: Provider;
@@ -126,6 +147,9 @@ export function logApiUsage(event: UsageEvent): void {
           requestId: event.requestId,
           modelName: event.modelName ?? null,
           metadata: event.metadata ?? null,
+          // No `?? 'vendor'`. The type makes this required; defaulting it here
+          // would reintroduce the fail-open the column exists to prevent.
+          unitsSource: event.unitsSource,
         },
       });
     } catch (err) {
@@ -148,6 +172,15 @@ interface BaseCtx {
   visitId?: string | null;
   requestId?: string;
   metadata?: Record<string, unknown> | null;
+  /**
+   * ⚠️ REQUIRED on every builder's ctx — see {@link UnitsSource}.
+   *
+   * It lives on BaseCtx rather than on each builder's argument list so that a
+   * NEW builder inherits the obligation instead of having to remember it. A
+   * per-builder parameter is a hand-kept list, and hand-kept lists are wrong
+   * eventually.
+   */
+  unitsSource: UnitsSource;
 }
 
 export function buildDeepgramUsage(

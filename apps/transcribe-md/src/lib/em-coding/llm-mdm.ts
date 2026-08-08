@@ -476,6 +476,8 @@ async function callClaudeMdm(args: JudgeMdmArgs): Promise<MdmJudgement | null> {
       logApiUsage(
         buildAnthropicUsage(
           {
+            // B0: a REAL vendor call — see UnitsSource.
+            unitsSource: 'vendor',
             userId: aiLogContext.userId,
             practiceId: aiLogContext.practiceId,
             visitId: aiLogContext.visitId,

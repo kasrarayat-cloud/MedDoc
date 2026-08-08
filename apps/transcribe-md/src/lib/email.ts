@@ -189,7 +189,11 @@ export async function sendVisitPdfEmail(
   }
   logApiUsage(
     buildResendUsage(
-      { metadata: { kind: 'visit_pdf', visitId: args.visitId } },
+      {
+        metadata: { kind: 'visit_pdf', visitId: args.visitId },
+        // B0: a REAL vendor call — see UnitsSource.
+        unitsSource: 'vendor',
+      },
       1
     )
   );
@@ -338,7 +342,11 @@ async function sendOne(args: {
   // operator-facing diagnostics.
   logApiUsage(
     buildResendUsage(
-      { metadata: { kind: 'transactional', subject: args.subject } },
+      {
+        metadata: { kind: 'transactional', subject: args.subject },
+        // B0: a REAL vendor call — see UnitsSource.
+        unitsSource: 'vendor',
+      },
       1
     )
   );

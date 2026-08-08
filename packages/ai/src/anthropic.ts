@@ -13,8 +13,9 @@ import { hashPrompt } from './prompt-hash';
 import { logAiCall } from './log';
 import { claudeCostCents } from './pricing';
 import { ModelOutputMalformedError, AnthropicRefusalError } from './errors';
-import type { AiLogContext } from './types';
+import type { AiLogContext, ModelCallPurpose } from './types';
 import { logApiUsage, buildAnthropicUsage } from './api-usage';
+import { isMockEnabled, buildMockMessage } from './mock';
 
 let clientSingleton: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -25,6 +26,43 @@ function getClient(): Anthropic {
   }
   clientSingleton = new Anthropic({ apiKey });
   return clientSingleton;
+}
+
+/**
+ * ⚠️ B0 — THE MOCK BOUNDARY. Mock the VENDOR CALL, never the stage.
+ *
+ * Every caller below goes through this instead of `client.messages.create`
+ * directly. Under `MOCK_AI_CALLS` it returns a fixture-built `Message`; the
+ * parsing, validation, `extractUsage` and `logApiUsage` beneath it all run for
+ * real, so a mocked QA pipeline EMITS USAGE EVENTS. That is what makes B1 and
+ * B4 gateable at all — before B0 a mocked run produced zero events, which is
+ * indistinguishable from a broken meter.
+ *
+ * ⚠️ `client` IS PASSED IN, ALREADY CONSTRUCTED, ON PURPOSE. `getClient()`
+ * stays the FIRST statement of both public functions and OUTSIDE their `try` —
+ * unchanged by B0. Moving it below this seam would have let a mocked run
+ * proceed without `ANTHROPIC_API_KEY`, which sounds convenient and is the
+ * two-condition doctrine collapsing to one: the flag stops the call, and the
+ * dummy credential is what survives a code path that forgets the flag. It would
+ * also have moved a throw from outside the `try` to inside it, turning a
+ * fail-closed path fail-open — a production behaviour change smuggled into a QA
+ * fix.
+ */
+async function createMessage(
+  client: Anthropic,
+  params: Anthropic.Messages.MessageCreateParamsNonStreaming,
+  ctx: { purpose: ModelCallPurpose; kind: 'tool' | 'text' | 'completeText'; toolName?: string; user?: string }
+): Promise<Anthropic.Messages.Message> {
+  if (isMockEnabled()) {
+    return buildMockMessage({
+      purpose: ctx.purpose,
+      kind: ctx.kind,
+      toolName: ctx.toolName,
+      user: ctx.user,
+      model: params.model,
+    });
+  }
+  return client.messages.create(params);
 }
 
 /** T-M17.1: cap persisted response bodies so a pathological 100 KB
@@ -433,6 +471,8 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
     logApiUsage(
       buildAnthropicUsage(
         {
+          // B0: a REAL vendor call — see UnitsSource.
+          unitsSource: 'vendor',
           userId: args.userId ?? null,
           practiceId: args.practiceId,
           visitId: args.visitId ?? null,
@@ -580,6 +620,8 @@ export async function anthropicCompleteText(
     logApiUsage(
       buildAnthropicUsage(
         {
+          // B0: a REAL vendor call — see UnitsSource.
+          unitsSource: 'vendor',
           userId: args.userId ?? null,
           practiceId: args.practiceId,
           visitId: args.visitId ?? null,
