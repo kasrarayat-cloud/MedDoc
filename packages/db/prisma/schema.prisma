@@ -2597,20 +2597,35 @@ model ApiUsageEvent {
   /// `mock`   — a mocked run. No vendor was called; units are fixture-derived
   ///            and the money columns are ZERO, because zero is the true cost.
   ///
-  /// ⚠️ NULLABLE **ONLY UNTIL THE FOLLOW-UP MIGRATION**, and deliberately so.
+  /// ⚠️ REQUIRED SINCE STEP 2 — `20260808230000_b0_units_source_not_null`.
+  /// It was nullable for exactly one deploy, and deliberately so:
   /// `deploy-prod.sh` applies migrations at step 3 and recreates the app and
-  /// worker at step 6. A NOT NULL column with no default would, in that window,
-  /// forbid a row the STILL-RUNNING previous image is writing — breaking the
-  /// meter during the deploy meant to fix it. So: this migration adds it
-  /// nullable and backfills; a LATER one, after the writing code is live
-  /// everywhere, backfills the window's stragglers and sets NOT NULL.
+  /// worker at step 6, so a NOT NULL column with no default would, in that
+  /// window, forbid a row the STILL-RUNNING previous image was writing —
+  /// breaking the meter during the deploy meant to fix it. Step 1 added it
+  /// nullable and backfilled; step 2 landed once the writing code was live
+  /// everywhere (B0-a, production 2026-08-08T18:40Z).
   ///
   /// ⚠️ AND IT WILL NEVER TAKE A DEFAULT. A provenance column whose default is
   /// the TRUSTED value is fail-open: any writer that has not heard of it
   /// silently claims a real vendor reported these numbers. The TypeScript side
   /// already makes it required (`UsageEvent.unitsSource`), so a new writer
-  /// fails to compile rather than lying quietly.
-  unitsSource String?
+  /// fails to compile rather than lying quietly — and now also fails to insert.
+  ///
+  /// ⚠️ A CHECK CONSTRAINT PRISMA CANNOT EXPRESS GUARDS THE DOMAIN.
+  /// Declared here because a raw `ADD CONSTRAINT` that the schema does not
+  /// mention is drift, and drift is invisible until something trips over it:
+  ///
+  ///     api_usage_events_units_source_domain
+  ///       CHECK ("unitsSource" IN ('vendor', 'mock'))
+  ///
+  /// NOT NULL alone still permits any TEXT, and the rollups filter
+  /// `WHERE "unitsSource" = 'vendor'`. A row carrying 'Vendor' or 'real' would
+  /// land in NEITHER bucket — counted as neither vendor nor mock, erroring
+  /// nowhere, and simply absent from the money. A naive "fix" that widens this
+  /// to free text to make some future writer compile would restore exactly that
+  /// silence; widening the DOMAIN is a migration and a ruling, not a schema tidy.
+  unitsSource String
 
   @@index([userId, timestamp])
   @@index([practiceId, timestamp])
