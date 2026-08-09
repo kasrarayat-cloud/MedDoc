@@ -111,25 +111,95 @@ each taken to its gate. For every item:
 
 ---
 
-## STOP-CONDITIONS
+## HALTING IS THE LAST RESORT, NOT THE FIRST ANSWER
 
-Stop and report. Do not work around any of these.
+**Ruled 2026-08-09.** The loop runs unattended for a whole night. A halt at 02:00
+costs every remaining hour, so a session that halts on something it could have
+healed, ruled provisionally, or parked has destroyed more value than the blocker
+did.
 
-| | |
+The order is fixed: **HEAL → RULE PROVISIONALLY → PARK → and only then HALT.**
+
+### 1. SELF-HEAL — a halt is a diagnosis you have not finished
+
+Before any halt, classify the blocker and **attempt to cure it**:
+
+| blocker | the cure |
 |---|---|
-| **unreachable gate** | a required check cannot go green after genuine attempts — never override, never re-run a fourth time without a named mechanism |
-| **ruling-shaped decision** | not already in `RULINGS.md` (grep first). Bring the finding and a recommendation |
-| **owner boundary** | see below |
-| **clean session end** | the queue is exhausted, or the next item needs something you do not have |
+| CI / harness / flake failure | root-cause per canon — **name the mechanism**, don't re-run and hope. Bounded: **3 genuine attempts**, each trying something different |
+| infra fault — stale watchers, `gh` staleness, rate limits, QA stack down, disk slack | fix per the recorded patterns; they are in `AGENTS.md` and the runbooks |
+| a red required gate | genuine fix attempts under rule 7 — *say what would make it fail, then make it fail* |
+| NO-PROGRESS | **try a different decomposition of the same item ONCE** before halting. The same plan attempted twice is not a second attempt |
 
-### OWNER BOUNDARY — halt, never proceed
+⚠️ **A re-run is not an attempt.** Three re-runs of an identical command is one
+attempt made three times, and the canon already forbids the fourth. An attempt
+changes something and says what.
 
-- **Stripe live mode, real money, or anything that moves funds.** TEST MODE ONLY.
-- **Published ToS / pricing / legal text.** Draft-and-flag; never publish.
+**The halt log MUST name what was tried.** A halt that says *"blocked"* is
+indistinguishable from a halt that says *"I did not look"*.
+
+### 2. PROVISIONAL RULINGS — decide it yourself, and leave the receipt
+
+A ruling-shaped question **no longer halts** when **ALL FOUR** hold:
+
+1. **Reversible IN THE ALLOWED DIRECTION.** Tighten-later is reversible; a gate
+   only ever gains requirements. **Loosen-later is NOT** — if being wrong means
+   weakening a constraint that already shipped, halt instead.
+2. **Inside the money envelope** (below).
+3. **No production clinical mutation** beyond the sanctioned patterns.
+4. **Does not contradict `RULINGS.md`. GREP IT FIRST.**
+   ⚠️ **A contradiction is a HARD HALT, never a provisional ruling.** Two
+   sessions confidently reaching opposite conclusions is the exact failure the
+   file exists to prevent, and it is worse than stopping.
+
+The decision lands in `RULINGS.md` in the **same commit as the work**, marked
+**`PROVISIONAL`**, carrying: the alternatives considered, the reasoning, and the
+**reversal path** — what to change and what else unwinds if the war room says no.
+
+⚠️ **A PROVISIONAL RULING IS NOT A STANDING RULING.** It is this loop's own
+decision awaiting review. You may build on one — but if you do, **say so in the
+morning report**, because reversing it also unwinds everything built on it. An
+undeclared chain of provisional rulings is how a night's work becomes
+un-reviewable in a single sentence from the war room.
+
+### 3. PARK — the owner is asleep; the queue is not
+
+Anything that genuinely needs a person — **an exhausted balance, a vendor's
+answer, a legal or pricing question** — is **PARKED**, not halted:
+
+- record it in `RELAY.md` with the reason and what would unpark it
+- **move to the next RELAY item that does not depend on it**
+- do not re-attempt a parked item every session; it will not resolve overnight
+
+**The loop halts only when NOTHING in the RELAY can proceed.**
+
+### 4. MONEY ENVELOPE
+
+**Pre-approved:** sanctioned smokes on the **synthetic** account under standing
+rules, and Anthropic **balance probes**. Nothing else. Beyond that envelope:
+**park, do not spend.**
+
+⚠️ **An exhausted balance is a PARK, and it is also a hard stop for the
+pipeline** — never a degraded run. A visit dying mid-pipeline leaves a stuck
+chart and partial rows.
+
+---
+
+## ⛔ HARD HALTS — the un-guessables. Stop, and say so.
+
+These do not heal, do not get a provisional ruling, and do not get parked-and-
+worked-around. **Stop the session and report.**
+
+- **Stripe live mode, anything charging a real card, anything moving funds.**
+  TEST MODE ONLY.
+- **ToS / pricing / legal text going public.** Draft-and-flag; never publish.
 - **Contacting a vendor or any third party** on the company's behalf.
-- **Deleting or rewriting production clinical data**, or any history rewrite.
-- **Anything that mutates a real doctor's visit.** A real visit is never a smoke
-  target — not to take a screenshot, not "just this once".
+- **Production clinical mutation beyond the sanctioned patterns** — deleting or
+  rewriting clinical data, any history rewrite. **A real doctor's visit is never
+  a smoke target.** Not for a screenshot, not "just this once".
+- **Contradicting a standing ruling in `RULINGS.md`.**
+- **Catastrophic state that you cannot self-cure** — production down, data at
+  risk. Diagnose, report, stop. Do not experiment on a burning system.
 
 ---
 
@@ -209,6 +279,46 @@ scratch in the git tree is worse than a deferred triage.
 
 ---
 
+## ☕ THE MORNING REPORT — the last thing before your marker
+
+**Every session ends with this block. Not just the last one** — you cannot know
+which session is last, and a hard halt at 03:00 must not lose the night's record.
+
+**It is CUMULATIVE for the whole run, and you reconstruct it FROM DISK** — not
+from memory, and not from what this session happens to have done:
+
+- `RULINGS.md` — every row marked **`PROVISIONAL`**
+- `RELAY.md` — every item marked **`PARKED`**
+- `docs/foundation/logs/` — the earlier sessions of this run
+- `git log` — what actually landed
+
+```
+## ☕ MORNING REPORT — <UTC date>, sessions <n> of <budget>
+
+### SHIPPED
+item · merge SHA · citation (4 of 4, by run id) · deployed? · §2.5 declaration judged N of N
+
+### PROVISIONAL RULINGS — the war room's batch review list
+what was decided · the alternatives · why this one · the REVERSAL PATH
+⚠️ and what ELSE unwinds if it is reversed (the dependency chain)
+
+### PARKED — needs a person
+item · why · what would unpark it
+
+### HALTED / NOT DONE
+what stopped, what was TRIED to cure it, and what remains owed
+
+### SCRATCH
+every path this run created (the close-out contract below)
+```
+
+**Write it so it can be read with coffee, not decoded.** The owner has been
+asleep; this block is the whole night in one place. A number without its
+declaration, or a "shipped" without its citation, is not a report — it is a
+claim.
+
+---
+
 ## ⚠️ THE FINAL LINE — a machine reads this
 
 **Your response MUST end with a line containing EXACTLY ONE of these markers and
@@ -225,11 +335,16 @@ PHASE CLOSED
 
 | marker | meaning |
 |---|---|
-| `CONTINUE` | real progress was made and the next item is ready to start |
-| `STOP-CONDITION` | an unreachable gate or a blocked item — the reason is in the body |
-| `RULING NEEDED` | a ruling-shaped decision not in `RULINGS.md`; the recommendation is in the body |
-| `OWNER ACTION` | an owner-boundary item is next; the request is in the body |
+| `CONTINUE` | real progress was made and the next item is ready to start — **this now covers a session that healed a blocker, ruled provisionally, or parked an item and moved on** |
+| `STOP-CONDITION` | a blocker that **survived honest cure attempts**, and the log names what was tried. Nothing else in the RELAY could proceed either |
+| `RULING NEEDED` | ⚠️ **now narrow: a ruling-shaped decision that FAILS the provisional test** — irreversible in the allowed direction, outside the money envelope, or **contradicting `RULINGS.md`**. Bring the finding and a recommendation |
+| `OWNER ACTION` | a **hard halt** item is next — see the list above |
 | `PHASE CLOSED` | the phase is complete end-to-end and the ledger says so |
+
+⚠️ **`STOP-CONDITION` AND `RULING NEEDED` BOTH END THE NIGHT.** The runner does
+not relight on them and never will — a relight that could resurrect a
+deliberately stopped run would make every kill switch advisory. So before you
+emit either, be sure the answer is not *heal*, *rule provisionally*, or *park*.
 
 ⚠️ **`CONTINUE` IS A CLAIM ABOUT PROGRESS, NOT ABOUT EFFORT.** If the session
 produced no landed change, no gate, and no ledger update, the honest marker is
