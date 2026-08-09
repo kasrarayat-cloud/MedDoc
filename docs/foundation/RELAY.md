@@ -2176,6 +2176,54 @@ item was already opening.
 
 ---
 
+### 🟩 B1-a IS LIVE IN PRODUCTION — 2026-08-09T02:39Z
+
+Deployed from `main` @ **`0257c77d`** by `bash scripts/deploy-prod.sh`, under a
+delta declaration written before the run:
+`docs/foundation/deploys/20260809-0257c77d.md`. Log
+`docs/deploy-logs/deploy-20260809T023737Z.log`. Rollback tags
+**`:pre-b1a-20260809`**, cut against the **RUNNING** ids
+`e127943edacd` / `09886c6b26da` and digest-verified before the deploy proceeded.
+
+**Citation — 4 of 4 on the MERGE COMMIT `0257c77d`:**
+`CI` `31289161308` · `e2e` `31289161291` · `a11y-ci` `31289161336` ·
+`secrets-scan` `31289161295`, all `completed/success`.
+
+#### THE DECLARATION, JUDGED LINE BY LINE — 13 of 13
+
+| # | declared | measured | |
+|---|---|---|---|
+| 1 | migrations 93 → **94** | **94**, `assert-migrations-applied` 🟢 94/94 | ✅ |
+| 2 | `ai_calls.requestId` absent → present, `text` / nullable / **no default** | `text`, `is_nullable=YES`, `default=(none)` | ✅ |
+| 3 | both image ids move | `e127943e→e781cd52`, `09886c6b→fec3c43d` | ✅ |
+| 4 | `transcribe_visits` **26** | 26 | ✅ |
+| 5 | `transcribe_md_patients` **15** | 15 | ✅ |
+| 6 | visits with `signedAt` **16** | 16 | ✅ |
+| 7 | `users` **196** | 196 | ✅ |
+| 8 | `ai_calls` rows **1122** | 1122 | ✅ |
+| 9 | `api_usage_events` **1312** | 1312 | ✅ |
+| 10 | every historical `requestId` **NULL** | total 1122 / **null 1122** / non-null **0** | ✅ |
+| 11 | `unitsSource` census **vendor 1312** | `vendor\|1312`, no other bucket | ✅ |
+| 12 | co-tenants 307 · 404 · 200 · 200 · 410 | identical | ✅ |
+| 13 | 9 of 9 healthy | 9 of 9 healthy | ✅ |
+
+⚠️ **Rows 8 and 10 are deliberately BOTH present and they are not the same
+claim.** The count staying at 1122 says no row was ADDED; every historical value
+being NULL says no row was MODIFIED. A backfill would satisfy row 8 and violate
+row 10 — and a backfill is precisely what must not have happened, because no id
+can be invented for a call that finished months ago.
+
+⚠️ **The declaration gate refused the first attempt, correctly, and the fix was
+bookkeeping rather than a bypass.** `deploy-prod.sh` names the required file
+`<UTC-date>-<short-sha>.md` for the commit being deployed, and that SHA does not
+exist until the merge does. The content was authored at ~01:2xZ and **committed
+to `main` at `8100e402`** — before the merge, and long before any deploy evidence
+existed — then renamed to `20260809-0257c77d.md`. `git show 8100e402` is the
+check that no number moved. The baseline was **re-derived at execution time**
+(02:36Z) rather than trusted from the file, and came back identical.
+
+---
+
 ### ✅ B1-a — the vendor's request id reaches the meter — the build row, 2026-08-09
 
 **Built on `feat/b1a-vendor-request-id`, commit `5e6a27c6`.** B1 splits, and the
