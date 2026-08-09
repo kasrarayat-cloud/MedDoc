@@ -17,8 +17,15 @@
 #                     `touch docs/foundation/STOP` from anywhere kills the loop
 #                     before the next session begins. It is checked FIRST, so a
 #                     human always wins the race against the next launch.
-#   2. SESSION CAP    default 6 per launch. A bounded blast radius: whatever goes
-#                     wrong, it goes wrong at most six times before a human sees.
+#   2. TOTAL BUDGET   default 24 sessions per RUN (MAX_SESSIONS=6 is now only a
+#                     BATCH size — on CONTINUE-at-cap the runner relights itself
+#                     with a fresh launch stamp). The blast radius is still
+#                     bounded, just at the night rather than the batch: whatever
+#                     goes wrong goes wrong at most 24 times before a human sees.
+#                     ⚠️ Relighting happens ONLY on CONTINUE-at-cap. Every other
+#                     exit — marker, session error, no-progress, log collision,
+#                     STOP file — ends the whole run. A relight can never
+#                     resurrect a run that something deliberately stopped.
 #   3. MARKER         anything but CONTINUE halts, with the marker as the reason.
 #   4. NO-PROGRESS    RELAY.md unchanged across two consecutive sessions → halt
 #                     with NO-PROGRESS. This is the one that catches a session
@@ -53,11 +60,21 @@ set -uo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 MAX_SESSIONS="${MAX_SESSIONS:-6}"
+# ⚠️ THE CAP IS A BATCH SIZE; **TOTAL_BUDGET** IS THE NIGHT'S REAL BOUND.
+# On CONTINUE-at-cap the runner relights itself with a fresh launch stamp rather
+# than stopping, up to TOTAL_BUDGET sessions. The cap therefore no longer ends
+# the run — it only decides how often the log rolls over. Every other kill switch
+# is unchanged and still ends everything.
+TOTAL_BUDGET="${TOTAL_BUDGET:-24}"
 PROMPT_FILE="docs/foundation/MASTER.md"
 STOP_FILE="docs/foundation/STOP"
 LEDGER="docs/foundation/RELAY.md"
 LOG_DIR="docs/foundation/logs"
-DATE="$(date -u +%Y%m%d)"
+# ⚠️ DATE AND LAUNCH ARE COMPUTED PER BATCH, NOT ONCE — AN OVERNIGHT RUN CROSSES
+# MIDNIGHT. Computed once at start, every log written after 00:00Z would carry
+# the PREVIOUS day's date: the filenames would still be unique (the launch stamp
+# differs) and still be WRONG, which is the worse failure — a wrong label is
+# read, an absent one is noticed.
 # ⚠️ A LOG FILENAME MUST IDENTIFY A LAUNCH, NOT JUST A DAY.
 # The first version named logs `<date>-runNN.log`. The counter resets to 01 on
 # every launch, so a SECOND launch on the same day reopened run01.log and
@@ -70,7 +87,6 @@ DATE="$(date -u +%Y%m%d)"
 # the next free runNN would also avoid the collision, but it makes the counter
 # monotonic forever and erases where one launch ends and the next begins —
 # "session 3" would stop meaning "the third session of this run".
-LAUNCH="$(date -u +%H%M%S)"
 
 mkdir -p "$LOG_DIR"
 
@@ -123,12 +139,50 @@ if [ "$START_BRANCH" != "main" ]; then
   echo
 fi
 
+# ⚠️ `prev_ledger_hash` LIVES OUTSIDE THE BATCH LOOP, DELIBERATELY. The
+# no-progress switch watches the whole night, not each batch: resetting it per
+# batch would let a stalled loop relight forever, since the switch needs two
+# CONSECUTIVE unchanged sessions and a reset makes every batch's first session
+# look like a fresh start. The one kill switch that catches "busy but landing
+# nothing" must not be the one the relight silently disarms.
 prev_ledger_hash=""
-halt_reason=""
+overall_halt=""
+sessions_used=0
+batch=0
 
-for (( n=1; n<=MAX_SESSIONS; n++ )); do
+while : ; do
+  # ── STOP WINS THE RACE AT THE BATCH BOUNDARY TOO ─────────────────────────
+  # Checked here as well as before each session, so a human who creates the file
+  # during the last session of a batch is never overtaken by the relight.
+  if [ -f "$STOP_FILE" ]; then
+    overall_halt="STOP FILE — $STOP_FILE appeared before batch $((batch + 1))"
+    break
+  fi
+  if [ "$sessions_used" -ge "$TOTAL_BUDGET" ]; then
+    overall_halt="BUDGET EXHAUSTED — $sessions_used of $TOTAL_BUDGET sessions used"
+    break
+  fi
+
+  batch=$(( batch + 1 ))
+  DATE="$(date -u +%Y%m%d)"
+  LAUNCH="$(date -u +%H%M%S)"
+  halt_reason=""
+
+  # Never start more sessions than the budget has left.
+  batch_size="$MAX_SESSIONS"
+  remaining=$(( TOTAL_BUDGET - sessions_used ))
+  [ "$batch_size" -gt "$remaining" ] && batch_size="$remaining"
+
+for (( n=1; n<=batch_size; n++ )); do
   RUN=$(printf '%02d' "$n")
-  LOG="$LOG_DIR/${DATE}-${LAUNCH}-run${RUN}.log"
+  # ⚠️ THE BATCH ORDINAL IS PART OF THE NAME, NOT DECORATION. A wall-clock stamp
+  # alone is not unique: two batches that both finish inside one second compute
+  # the SAME `LAUNCH`, and the collision guard below then turns a legitimate
+  # relight into a halt. Found by the stub proof on 2026-08-09 — batch 2 collided
+  # with batch 1 and ended the run at 2 of 5 sessions. Real sessions take tens of
+  # minutes so it would not have bitten tonight, which is exactly why it had to
+  # be caught by a test rather than waited for.
+  LOG="$LOG_DIR/${DATE}-${LAUNCH}-b${batch}-run${RUN}.log"
 
   # ⚠️ AND THE NAME IS ASSERTED, NOT TRUSTED. A filename scheme that silently
   # appends is exactly what this replaced, so the loop refuses to open a log
@@ -177,6 +231,9 @@ for (( n=1; n<=MAX_SESSIONS; n++ )); do
   SESSION_OUT="$(mktemp)"
   claude -p "$(cat "$PROMPT_FILE")" > "$SESSION_OUT" 2>&1
   rc=$?
+  # Counted here, not on success: a session that errored still SPENT a session,
+  # and a budget that only counts the happy path is not a bound on anything.
+  sessions_used=$(( sessions_used + 1 ))
 
   cat "$SESSION_OUT" >> "$LOG"
   echo "" >> "$LOG"
@@ -222,7 +279,20 @@ for (( n=1; n<=MAX_SESSIONS; n++ )); do
   prev_ledger_hash="$ledger_before"
 done
 
-[ -z "$halt_reason" ] && halt_reason="SESSION CAP — completed $MAX_SESSIONS session(s)"
+  # ── BATCH BOUNDARY — RELIGHT, or carry the halt outward ──────────────────
+  # Reaching the cap with no halt_reason means every session in the batch ended
+  # on CONTINUE. That is the ONLY condition that relights: every other exit —
+  # marker, session error, no-progress, log collision, STOP — propagates and
+  # ends the night. The relight cannot resurrect a run that something stopped.
+  if [ -n "$halt_reason" ]; then
+    overall_halt="$halt_reason"
+    break
+  fi
+  echo "[loop] batch $batch reached the cap on CONTINUE — relighting (${sessions_used}/${TOTAL_BUDGET} sessions used)"
+done
+
+[ -z "$overall_halt" ] && overall_halt="BUDGET EXHAUSTED — $sessions_used of $TOTAL_BUDGET sessions used"
+halt_reason="$overall_halt"
 
 # ⚠️ THE HALT BANNER GOES IN THE LAST LOG THAT ACTUALLY RAN.
 # The first version computed the filename from the loop counter, so halting
