@@ -3799,3 +3799,40 @@ session is told to look before treating a refusal as a finding. Two gaps worth
 closing together: the entry above, and a row in that table saying
 `.claude/settings.json` is deliberately un-editable and that a new check ships
 with an owner action attached.
+
+---
+
+## Found on the way past — 2026-08-09, taking B2's deploy baseline
+
+### ⛔ THE 44 FAILED-BUT-BILLED ROWS ARE NOW 42. THE EVIDENCE IS PERISHING WHILE WE DECIDE.
+
+DISCOVERY §C.3 measured **44** rows matching `success = false AND inputTokens > 0`
+in `ai_calls` on **2026-08-04**. Measured again for B2's §2.5 baseline on
+**2026-08-09**: **42**.
+
+    2026-08-04 ....... 44
+    2026-08-09 ....... 42        net −2 in five days
+
+`ai_calls` rows are created by vendor calls and removed by exactly four
+production deleters. **Nothing else can lower the count** — so a net −2 means at
+least two calls' worth of billing evidence was destroyed by the product working
+normally, during the five days this programme spent deciding what to do about it.
+
+⚠️ **THIS IS §C.4's ARGUMENT ARRIVING AS DATA, NOT AS REASONING.** The case for
+`api_usage_events` being the billing source was written as a hypothetical — *"a
+doctor deleting a visit erases their own bill."* It is not hypothetical. The
+table demonstrably does not retain its rows, and the measurement above is the
+proof, taken by accident while capturing a baseline for something else.
+
+**And it prices a decision nobody has made yet.** Those 42 rows are the ONLY
+record of those charges; they live exclusively in the perishable table; and the
+population is shrinking on its own. The backfill into `api_usage_events` is a
+production write and needs its own ruling under the standing shape for
+owner-ruled prod mutations (ruling 59) — **but its window is closing whether or
+not the ruling is sought**, and that fact belongs in the ask rather than in a
+post-mortem.
+
+⚠️ **THE FIGURE TO MIGRATE IS WHATEVER THE COUNT IS AT EXECUTION TIME.** Never
+44, never 42 copied out of this row. Ruling 59 says re-derive the population at
+execution time and never copy it from the ruling; this is exactly the case that
+rule exists for, and the drift from 44 is the demonstration.
