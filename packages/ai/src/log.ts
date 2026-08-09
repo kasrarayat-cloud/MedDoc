@@ -46,6 +46,18 @@ export interface AiCallLogInput extends AiLogContext {
   errorCode?: string | null;
   /** T-M17.1: raw model response body on failed calls, capped upstream. */
   errorDetails?: string | null;
+  /**
+   * B1-a — the VENDOR's own correlation id, verbatim, or null/undefined when
+   * the vendor did not supply one.
+   *
+   * ⚠️ NEVER pass a `randomUUID()` here. This table is real-vendor-only, so a
+   * non-null value is read as "the vendor said this". An absent id is recorded
+   * as NULL on purpose — see the schema comment on `AiCall.requestId`.
+   *
+   * Read it with `readAnthropicRequestId` / `readDeepgramRequestId`; Anthropic's
+   * is non-enumerable and any spread of the response silently loses it.
+   */
+  requestId?: string | null;
 }
 
 export function logAiCall(input: AiCallLogInput): void {
@@ -70,6 +82,9 @@ export function logAiCall(input: AiCallLogInput): void {
         success: input.success,
         errorCode: input.errorCode ?? null,
         errorDetails: input.errorDetails ?? null,
+        // No fabricated fallback. `?? randomUUID()` here would make an absent
+        // vendor id indistinguishable from a real one for every future reader.
+        requestId: input.requestId ?? null,
       },
     })
     .catch((err: unknown) => {

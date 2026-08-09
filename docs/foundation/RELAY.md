@@ -2176,13 +2176,139 @@ item was already opening.
 
 ---
 
-### B1 — capture the vendor request id
-Deepgram first — it is **already parsed and discarded**
-(`deepgram-batch.ts:108-115`, read at `:342`), so it is the cheapest fix in the
-program. Then Anthropic's `response._request_id`, which is read nowhere.
-**Gate:** every success row carries a **vendor** id, not a `randomUUID()`;
-a replayed write is deduped; the schema comment that already claims this
-becomes true.
+### ✅ B1-a — the vendor's request id reaches the meter — the build row, 2026-08-09
+
+**Built on `feat/b1a-vendor-request-id`, commit `5e6a27c6`.** B1 splits, and the
+split is not a convenience — the second half is ruling-blocked (below).
+
+#### WHAT LANDED
+
+| | |
+|---|---|
+| migration | `20260809010000_b1a_ai_calls_request_id` — `ai_calls.requestId TEXT NULL`. **93 → 94** |
+| reader | `packages/ai/src/vendor-request-id.ts` — `readAnthropicRequestId` / `readDeepgramRequestId`, both returning `null` rather than inventing |
+| wiring | 3 Anthropic `createMessage` results + the Deepgram success path, into **both** `logAiCall` and `logApiUsage` |
+| gate | `vendor-request-id.test.ts`, 10 arms, **3 mutations each naming its victim first** |
+| unit suite | 3211 passed / 4 skipped, 260 files — unchanged in count from B0-b's 3194 + this file's 10 + 7 |
+
+#### ⚠️ THE RECON WAS RIGHT ABOUT THE TRAP AND THE TRAP IS WORSE THAN STATED
+
+`_request_id` is attached with `enumerable: false` — **verified against the
+INSTALLED SDK (0.85.0, `internal/parse.js:55`)**, not against the recon's claim.
+Two things the recon did not say:
+
+1. **The value is `response.headers.get('request-id')`, and `get` returns `null`
+   for an absent header.** So a genuinely successful vendor call can carry no id
+   at all. That is why every column fed from this is NULLABLE and why nothing
+   fabricates a substitute — "the vendor was called" and "the vendor told us its
+   id" are two different facts.
+2. **PR #421 proposes 0.85.0 → 0.115.0.** The property is SDK-internal. The unit
+   test pins the shape, so the bump should surface there before it surfaces in
+   the meter.
+
+**The negative control is the arm that justifies the file.** `readAnthropicRequestId`
+is four lines and would pass its happy path written as a spread. So the suite
+asserts the counterfactual directly: the *same object*, spread / `Object.assign`
+/ `JSON.parse(JSON.stringify(…))`, returns `null` in all three, and the direct
+read on the original still returns the id — so the nulls are the copies' fault
+and not a broken matcher.
+
+#### THE WRITE-PATH SWEEP, BY TABLE
+
+    raw SQL   grep -rniE 'insert into "?ai_calls'   → 0 sites
+    ORM       aiCall.(create|upsert|createMany)     → 1 site (log.ts:55)
+
+**The zero was positive-controlled** — the same pattern against
+`transcribe_visits` returns 7 real inserts, so it is an empty set and not shell
+escaping eating the pattern. The single writer has **19 call sites** across 5
+files; the list is the driver and every entry is dispositioned:
+
+| site group | count | disposition |
+|---|---|---|
+| `anthropic.ts` success paths | 2 | **wired** |
+| `anthropic.ts` failure paths | 8 | **deferred to B2** — that item IS "wire the failure paths"; the id is already extracted there (`:146-155`) and reusable |
+| `deepgram-batch.ts` success | 1 | **wired** |
+| `deepgram-batch.ts` failure | 2 | **deferred to B2**, same reason |
+| `embed.ts` (3), `whisper-batch.ts` (2), `llm-mdm.ts` (1) | 6 | **deferred, named** — OpenAI-family writers; not in B1-a's Anthropic+Deepgram scope (recon §3: Anthropic is 1091 of 1312 prod rows, Deepgram 2) |
+
+None was left to "the errors stopped appearing".
+
+#### PROVING IT CAN GO RED — 3 mutations, each asserted APPLIED before running
+
+| mutation | expected victim | result |
+|---|---|---|
+| reader reads off `{ ...response }` | happy path + the negative control's back-assertion | **2 failed** ✅ |
+| drop `requestId` from the create payload | both wiring arms | **2 failed** ✅ |
+| delete `if (isMockEnabled()) return` | the suppression arm | **1 failed** ✅ |
+
+⚠️ **The tree was COMMITTED before the first mutation, deliberately.** The
+standing rule is to back up to scratch because `git checkout --` on a dirty tree
+destroys uncommitted work — and the entire item was uncommitted. Committing
+first makes `git checkout --` the *correct* restore, and creates **no scratch to
+reap**. Tree verified clean and back at `5e6a27c6` after each restore.
+
+#### ⚠️ WHAT B1-a DOES NOT CLAIM — read this before believing the gate
+
+- **It does not close B1.** The `?? randomUUID()` fallback in all five usage
+  builders is UNTOUCHED. B1-a threads the real id in where the vendor supplies
+  one; it does not remove the fabrication in the residual case.
+- **It does not prove capture from a REAL vendor response, end to end.** It
+  cannot: `logAiCall` returns early under mock (B0 Q1), so a mocked QA pipeline
+  writes **zero** `ai_calls` rows, and a real vendor call is the one thing QA
+  exists not to make. What IS proven is every link either side of the network —
+  an SDK-shaped response in, the id out, into the create payload — plus the DDL
+  applying on QA inside `BEGIN … ROLLBACK` (nullable, no default, confirmed by
+  `information_schema`). **The unproven link is named, not papered over.**
+- **It does not dedup a replayed write.** That half of B1's stated gate belongs
+  to B1-b.
+- **It says nothing about `transcriptRaw`.** Deepgram's id has been durably
+  stored all along — in `transcribe_visits.transcriptRaw`, a PHI-bearing jsonb
+  column, unqueryable for billing. B1-a reads it into a real column; it does not
+  remove it from there.
+
+---
+
+### ▶ B1-b — the fabrication fallback, and dedup — **RULING NEEDED, blocked**
+
+The remaining half of B1's gate: *"every success row carries a vendor id, not a
+`randomUUID()`; a replayed write is deduped."*
+
+**Why it could not be decided in-session.** `ai_calls` was decidable without a
+ruling and that is exactly what makes `api_usage_events` undecidable:
+
+| | `ai_calls` | `api_usage_events` |
+|---|---|---|
+| mocked runs | writes nothing (B0 Q1) | **meters, by design** (B0-a) |
+| `requestId` | **NULLABLE** — added by B1-a | **NOT NULL**, 1312 rows |
+| a non-null id means | a vendor said it, **by construction** | nothing — could be vendor, could be `randomUUID()` |
+
+So on `api_usage_events` an absent vendor id has nowhere honest to go. **This is
+the `unitsSource` problem again, one column over**: a `?? randomUUID()` on a
+`vendor` row is a default that asserts the trusted value, which the standing
+ruling of 2026-08-08 forbids — but that ruling settles the PRINCIPLE and not the
+MECHANISM, and a reasonable person could pick any of these:
+
+1. **make the column nullable** — NULL means "vendor gave none". Cleanest
+   semantics; a schema change on a NOT NULL column with 1312 rows.
+2. **a reserved sentinel** — e.g. `vendor-id-absent:<uuid>`. No schema change,
+   greppable, countable; a magic string every future reader must know.
+3. **keep `randomUUID()` for `mock` rows only, and refuse a `vendor` row without
+   one** — strongest guarantee, but it makes a telemetry write able to *lose* a
+   billable event, which B5/B6 would then under-charge.
+
+**RECOMMENDATION: (1), and SIZE IT FIRST.** B1-a is what makes the sizing
+possible — once deployed, `ai_calls.requestId IS NULL` on Anthropic/Deepgram
+success rows counts exactly how often a real vendor call yields no id. If that
+count is zero over a real week, (3) is safe and strictly best; if it is not,
+(1) is the honest shape and (3) would have been discarding revenue. **Picking
+before measuring is guessing dressed as engineering** — the same discipline the
+AUTH item wrote down for its retry budget.
+
+**Dedup is downstream of that choice** and is not independently rulable: the key
+can only be `requestId` if `requestId` is trustworthy. Note B0 Q2 already
+constrains it — L4b's k=3 ensemble emits **3** rows with **3** distinct vendor
+ids, so a unique index on `requestId` is compatible with the ensemble and would
+NOT collapse it.
 
 ### B2 — wire the failure paths into the durable table
 Close DISCOVERY §C.3: the five Anthropic failure branches and both Deepgram

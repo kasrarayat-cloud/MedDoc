@@ -11,6 +11,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { hashPrompt } from './prompt-hash';
 import { logAiCall } from './log';
+import { readAnthropicRequestId } from './vendor-request-id';
 import { claudeCostCents } from './pricing';
 import { ModelOutputMalformedError, AnthropicRefusalError } from './errors';
 import type { AiLogContext, ModelCallPurpose } from './types';
@@ -233,6 +234,11 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
     let unfenced: string;
     let usage: ReturnType<typeof extractUsage>;
     let latencyMs: number;
+    // B1-a — the vendor's own id for whichever branch actually ran. Declared
+    // beside `usage` and set in BOTH branches for the same reason `usage` is:
+    // the log sites below are shared, so a value set in only one branch would
+    // be silently null for every call that took the other.
+    let vendorRequestId: string | null = null;
 
     if (useToolUse) {
       // Convert Zod → JSON Schema via Zod v4's built-in. Cast through
@@ -265,6 +271,9 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
 
       latencyMs = Date.now() - started;
       usage = extractUsage(response.usage);
+      // Direct property access — `_request_id` is non-enumerable, so it must be
+      // read off `response` itself and never off a copy. See vendor-request-id.ts.
+      vendorRequestId = readAnthropicRequestId(response);
 
       // Q1 #09.1: the model declined (content-policy / safety). A refusal
       // is deterministic for the same input — log the token-spending call
@@ -364,6 +373,7 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         .trim();
 
       usage = extractUsage(response.usage);
+      vendorRequestId = readAnthropicRequestId(response);
 
       // Q1 #09.1: refusal → AI_REFUSAL + PERMANENT (see tool branch above).
       if ((response.stop_reason as string | null) === 'refusal') {
@@ -474,6 +484,7 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         usage.cacheCreationInputTokens,
       ),
       success: true,
+      requestId: vendorRequestId,
     });
 
     logApiUsage(
@@ -486,6 +497,10 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
           userId: args.userId ?? null,
           practiceId: args.practiceId,
           visitId: args.visitId ?? null,
+          // B1-a: the vendor's id when it gave one. `?? undefined` — NOT
+          // `?? randomUUID()` — so the builder's existing fallback still owns
+          // the absent case. Narrowing that is B1-b and it needs a ruling.
+          requestId: vendorRequestId ?? undefined,
           metadata: { purpose: args.purpose, latencyMs },
         },
         usage.inputTokens,
@@ -579,6 +594,9 @@ export async function anthropicCompleteText(
     );
 
     const latencyMs = Date.now() - started;
+    // B1-a — read off `response` itself; `_request_id` is non-enumerable and a
+    // spread copy silently drops it. See vendor-request-id.ts.
+    const vendorRequestId = readAnthropicRequestId(response);
 
     const text = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
@@ -629,6 +647,7 @@ export async function anthropicCompleteText(
         usage.cacheCreationInputTokens,
       ),
       success: true,
+      requestId: vendorRequestId,
     });
 
     logApiUsage(
@@ -641,6 +660,9 @@ export async function anthropicCompleteText(
           userId: args.userId ?? null,
           practiceId: args.practiceId,
           visitId: args.visitId ?? null,
+          // B1-a: see the twin block in anthropicComplete — `?? undefined`,
+          // never `?? randomUUID()`.
+          requestId: vendorRequestId ?? undefined,
           metadata: { purpose: args.purpose, latencyMs },
         },
         usage.inputTokens,

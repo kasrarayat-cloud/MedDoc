@@ -1,0 +1,56 @@
+-- ===========================================================================
+-- B1-a — `ai_calls.requestId`: the vendor's own correlation id gets a column.
+-- ---------------------------------------------------------------------------
+-- B1's gate is "every success row carries a VENDOR id, not a randomUUID()".
+-- Half of that gate had nowhere to land: `api_usage_events.requestId` exists
+-- (NOT NULL, schema.prisma:2583) but `ai_calls` had no such column at all, so
+-- the request id of a real vendor call was not merely wrong — it was
+-- unrepresentable.
+--
+-- ⚠️ NULLABLE, NO DEFAULT, AND NOT A TWO-STEP.
+-- The `unitsSource` migration pair (20260808020000 / 20260808230000) went
+-- nullable-then-NOT-NULL because that column is an obligation every writer must
+-- discharge. This one is the opposite: NULL is a MEANINGFUL VALUE here, so
+-- there is no step 2 to owe and none is implied.
+--
+--   1. 1122 existing rows predate the column and no backfill can invent an id
+--      for a call that finished months ago;
+--   2. Anthropic's id is `response.headers.get('request-id')`, and `get`
+--      returns null for an absent header — a call can succeed and carry no id;
+--   3. `embed.ts` / `whisper-batch.ts` write here and are not wired in B1-a
+--      (enumerated and deferred — see the RELAY row), so their rows are
+--      legitimately NULL today.
+--
+-- NULL therefore reads as "the vendor did not tell us", which is true and
+-- useful. A DEFAULT of any kind, or a fabricated UUID, would convert that
+-- honest absence into an assertion — the exact fail-open ruled against on
+-- 2026-08-08 ("A provenance column's DEFAULT must never be the TRUSTED value").
+--
+-- ⚠️ WHAT MAKES A NON-NULL VALUE HERE TRUSTWORTHY IS THE TABLE, NOT THE COLUMN.
+-- `ai_calls` is REAL-VENDOR-CALLS-ONLY (B0 Q1; `logAiCall` returns early under
+-- mock), so any id present here came from a vendor. `api_usage_events` cannot
+-- make that claim — it meters mocked runs by design and its `requestId` is NOT
+-- NULL with a `randomUUID()` fallback still in place. Reconciling those two is
+-- B1-b, which is ruling-blocked and deliberately NOT attempted here.
+--
+-- ── THE WRITE-PATH SWEEP, BY TABLE ────────────────────────────────────────
+-- Per the standing rule, swept by TABLE and not by whatever `tsc` surfaced:
+--
+--     raw SQL   grep -rniE 'insert into "?ai_calls'          → 0 sites
+--     ORM       aiCall.(create|upsert|createMany)            → 1 site
+--                 packages/ai/src/log.ts:55
+--
+-- The raw-SQL zero was POSITIVE-CONTROLLED: the same pattern against
+-- `transcribe_visits` returns 7 real inserts, so the zero is an empty set and
+-- not shell escaping eating the pattern.
+--
+-- The single ORM writer has 19 CALL SITES across 5 files. That list is the
+-- driver, and every entry is accounted for in the RELAY row — wired, or
+-- deferred WITH ITS REASON. None was left to "the errors stopped appearing".
+--
+-- Adding a NULLABLE column cannot break an existing writer, so this migration
+-- is safe ahead of the code that populates it; the deploy order is not load-
+-- bearing in either direction.
+-- ===========================================================================
+
+ALTER TABLE "ai_calls" ADD COLUMN "requestId" TEXT;
