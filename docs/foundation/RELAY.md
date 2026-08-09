@@ -2895,3 +2895,98 @@ would land **inside the git tree**, and `rm`/`shred` are denied — the loop can
 reap what it creates. Un-reapable scratch in the repository is a worse outcome
 than a deferred triage, so it is deferred **with a deadline attached**: after
 2026-08-22 the artefact is gone and this becomes unanswerable.
+
+
+---
+
+## Found on the way past — 2026-08-09, scoping the sanctioned smoke
+
+### ⛔ B1-a CAPTURES THE VENDOR REQUEST ID IN `anthropic.ts` AND NOWHERE ELSE
+
+**This blocks the sanctioned smoke. Do not run it until this is resolved one way
+or the other — the run would spend real money on the shared production balance
+and return a number that is FALSE.**
+
+B1-a's gate is *"every success row carries a **vendor** id, not a
+`randomUUID()`."* It watched `packages/ai/src/anthropic.ts`, where all ten
+`logAiCall` sites thread the id correctly. Three other vendor callers do not:
+
+| caller | `logAiCall` sites | passes `requestId` |
+|---|---|---|
+| `packages/ai/src/anthropic.ts` | 10 | **10** |
+| `packages/ai/src/deepgram-batch.ts` | 3 | 1 (success path only) |
+| `apps/transcribe-md/src/lib/em-coding/llm-mdm.ts` — **judge** | 1 | **0** |
+| `packages/ai/src/embed.ts` — **tm_embed** | 3 | **0** |
+| `packages/ai/src/whisper-batch.ts` | 3 | **0** |
+
+`llm-mdm.ts:363` constructs its own `new Anthropic(...)` and calls
+`client.messages.create(...)` at `:422`, deliberately bypassing the shared
+wrapper so it can attach `cache_control` — the shared `CompleteTextArgs.system`
+is typed `string` and cache control needs content blocks. Its `logAiCall` at
+`:457` passes no `requestId`, and `log.ts` writes `requestId ?? null`. The SDK
+response **does** carry `_request_id`; nothing on that path reads it.
+
+⚠️ **WHY THIS IS NOT MERELY INCOMPLETE COVERAGE — IT FABRICATES THE MEASUREMENT.**
+Per `vendor-request-id.ts`'s own header, a NULL is *indistinguishable* from
+"the vendor supplied no id". That is the exact quantity the B1-b ruling
+(2026-08-09) says to size before deciding whether `vendor ⇒ id` can be strict.
+A smoke run today would record our own missing capture as the vendor's silence.
+
+**And the contamination is not confined to one path.** `worker.ts` fires
+`judgeMdm` as an unconditional pre-warm, so a full visit run is affected too:
+roughly **18% of a visit's ~13–14 calls are structurally NULL** before
+Anthropic's actual header behaviour is measured at all.
+
+⚠️ **The nominated "minimal path" was the WORST available choice.** Recon
+proposed `POST /api/visits/[id]/em-score` → `judgeMdm` as the smallest unit that
+writes one `ai_calls` row and one `api_usage_events` row. It is correct about the
+row counts and it is the single Anthropic path in the system that structurally
+**cannot** produce the deliverable.
+
+**This is the watched-set-vs-named-set defect, at the write layer:** B1-a's gate
+watched `anthropic.ts`; the ruling named *"real calls"*. The gate passed
+truthfully over a universe that did not contain most of the question.
+
+#### Two resolutions; the first is recommended
+
+1. **Thread `readAnthropicRequestId(response)` into the three callers** — it
+   mirrors `anthropic.ts:276/487` and is a small change per file. Then one smoke
+   run yields a clean number.
+2. **Pre-register in writing that the metric EXCLUDES `purpose IN ('judge',
+   'tm_embed')`**, with expected-NULL declared per purpose before the run.
+   Honest, but it measures less and leaves the defect shipped.
+
+⚠️ **The telemetry rows are PERMANENT — no deleter of `api_usage_events` exists
+anywhere in the tree.** So a contaminated run pollutes the sizing sample forever
+unless every future analysis is timestamp-bounded. That asymmetry is why this is
+worth fixing before measuring rather than after.
+
+### What the same pass CLEARED, so nobody re-derives it
+
+- **The smoke fixture is well isolated.** `smoke-doctor@smoke.quillmd.invalid`,
+  sole member of `quillmd-smoke-practice`, **currently at baseline: 0 patients,
+  0 visits**. `assertIsSmokeFixture()` checks email **and** slug. Production's
+  25 visits all belong to two real doctors' practices; none is reachable.
+- **Cleanup does NOT destroy the evidence.** `ai_calls` has one FK
+  (`practiceId → practices`); neither telemetry table references
+  `transcribe_visits`, and no deleter of `api_usage_events` exists in application
+  code. Empirically: 454 of the fixture's `ai_calls` are already orphaned and
+  have survived 15+ days. The feared contradiction is not real.
+
+### ⛔ Two hard stops, both operator-shaped
+
+- **NEVER invoke `runStaleVisitCleanup()` by hand as a cleanup shortcut.** Sweep 2
+  is **not practice-scoped** — `WHERE deletedAt < now-15d` across *all* practices,
+  and it deletes `ai_calls` with the visits. It is a no-op today only because
+  trash happens to be empty, which is a fact about today and not a property.
+- **A call made with a wrong `practiceId` spends real money and writes NEITHER
+  telemetry row** — both writes swallow their errors. Use the real fixture id.
+
+### Still undecided, and it needs a person
+
+**The Anthropic balance is not discoverable read-only.** There is no balance API;
+the only method this repo ever had was a live completion probe, and that check no
+longer exists in preflight. Last known-good is 2026-08-05. Against three prior
+mid-run exhaustions, *"the key worked four days ago"* is weak evidence — so
+spending one probe call is a decision to take explicitly, not an assumption to
+make silently.
