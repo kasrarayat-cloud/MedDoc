@@ -231,6 +231,14 @@ async function whisperBatchTranscribeOnce(
       { timeout: args.timeoutMs ?? 5 * 60 * 1000 }
     )) as unknown as WhisperBatchResponse;
   } catch (err) {
+    // ── B2 — NO USAGE ROW HERE. The SDK threw, so there is no `response` and
+    // therefore no `response.duration` — the ONLY source of billable seconds on
+    // this path. Whisper bills by audio duration as the vendor measured it, and
+    // the local file's byte length is not that number. Writing a locally
+    // computed duration into `audioSeconds` on a `unitsSource: 'vendor'` row
+    // would put an ESTIMATE where the schema promises a vendor observation,
+    // which is the provenance-confusion class B0 exists to prevent.
+    // Declared by file and count in B2's gate, not waived.
     void logAiCall({
       ...args,
       provider: 'openai',

@@ -100,6 +100,66 @@ function extractUsage(u: Anthropic.Messages.Usage): NormalizedUsage {
   };
 }
 
+/**
+ * B2 — A FAILED CALL THAT SPENT THE VENDOR'S TOKENS IS STILL A BILLED CALL.
+ *
+ * Every branch below this comment that reaches a real `response` has the
+ * vendor's OWN reported usage in hand: Anthropic counted those tokens and will
+ * invoice them whether or not we liked the payload. Before B2 those branches
+ * wrote `ai_calls` and stopped, so the durable meter never saw them —
+ * **44 real calls worth ~$1.53 in production, ~4% of all Anthropic calls**
+ * (DISCOVERY §C.3). That is HOLE 1, and this function is the whole of its fix
+ * on this file's six qualifying branches.
+ *
+ * ⚠️ **IT IS A HELPER BECAUSE SIX CALL SITES CANNOT BE KEPT IN AGREEMENT BY
+ * HAND.** The failure branches differ only in their `errorCode`; everything
+ * else — the provenance marker, the mock seam, the pricing dispatcher, the id
+ * — must be identical to the SUCCESS path or the two disagree about the same
+ * call. A per-branch copy is the hand-kept-list failure mode with six entries.
+ *
+ * ⚠️ **`unitsSource` MIRRORS THE SUCCESS PATH EXACTLY**, mock seam included. A
+ * mocked run's failure is not a vendor failure, and the writer zeroes a mock
+ * row's money and id (`api-usage.ts`) so the CHECK constraint and this caller
+ * cannot disagree.
+ *
+ * ⚠️ **THE OUTCOME GOES IN `metadata`, NOT A COLUMN — and that is not an
+ * oversight of the B0 ruling, it is its reasoning applied.** `unitsSource` is a
+ * column because every rollup must be able to EXCLUDE mock rows in a `WHERE`.
+ * These rows are the opposite case: a failed-but-billed call is real money and
+ * every rollup must INCLUDE it. Nothing filters on `outcome`, so nothing needs
+ * to learn about it — and if B6 ever does need that `WHERE`, promoting it to a
+ * column is a strict addition. See RULINGS.md, the B2 row.
+ */
+function logFailedAnthropicUsage(
+  ctx: AiLogContext & { model: string },
+  usage: NormalizedUsage,
+  vendorRequestId: string | null,
+  latencyMs: number,
+  errorCode: string,
+): void {
+  logApiUsage(
+    buildAnthropicUsage(
+      {
+        unitsSource: isMockEnabled() ? 'mock' : 'vendor',
+        userId: ctx.userId ?? null,
+        practiceId: ctx.practiceId,
+        visitId: ctx.visitId ?? null,
+        requestId: vendorRequestId,
+        // `outcome` is what distinguishes this row from the success path's.
+        // `errorCode` matches the `ai_calls` row written immediately above it,
+        // so the two tables can be reconciled per call.
+        metadata: { purpose: ctx.purpose, latencyMs, outcome: 'failed', errorCode },
+      },
+      usage.inputTokens,
+      usage.outputTokens,
+      ctx.model,
+      ctx.purpose,
+      usage.cacheReadInputTokens,
+      usage.cacheCreationInputTokens,
+    ),
+  );
+}
+
 /** Q2 follow-up — Anthropic deprecated `temperature` on the Opus 4
  *  family (4.7 returns 400 invalid_request_error("`temperature` is
  *  deprecated for this model.")). The Mythos-class Fable 5 family does
@@ -299,7 +359,12 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
           ),
           success: false,
           errorCode: 'AI_REFUSAL',
+          // B2 — the vendor answered, so the id exists. It was read at the top
+          // of this branch and was being dropped here purely because the row
+          // says `success: false`.
+          requestId: vendorRequestId,
         });
+        logFailedAnthropicUsage(args, usage, vendorRequestId, latencyMs, 'AI_REFUSAL');
         throw new AnthropicRefusalError(args.model, args.purpose);
       }
 
@@ -331,7 +396,10 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
           success: false,
           errorCode: 'JSON_PARSE_FAIL',
           errorDetails: capErrorDetails(unfenced),
+          // B2 — see the refusal branch above. The vendor answered and billed.
+          requestId: vendorRequestId,
         });
+        logFailedAnthropicUsage(args, usage, vendorRequestId, latencyMs, 'JSON_PARSE_FAIL');
         throw new Error(
           'Anthropic response was not valid JSON: tool_use block missing',
         );
@@ -395,7 +463,10 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
           ),
           success: false,
           errorCode: 'AI_REFUSAL',
+          // B2 — the vendor answered, so the id exists (read at :376).
+          requestId: vendorRequestId,
         });
+        logFailedAnthropicUsage(args, usage, vendorRequestId, latencyMs, 'AI_REFUSAL');
         throw new AnthropicRefusalError(args.model, args.purpose);
       }
 
@@ -421,7 +492,10 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
           success: false,
           errorCode: 'JSON_PARSE_FAIL',
           errorDetails: capErrorDetails(unfenced),
+          // B2 — the vendor answered, so the id exists (read at :376).
+          requestId: vendorRequestId,
         });
+        logFailedAnthropicUsage(args, usage, vendorRequestId, latencyMs, 'JSON_PARSE_FAIL');
         // FIND-P1-010 (2026-05-14): typed error replaces the prior
         // generic `Error('Anthropic response was not valid JSON: ...')`.
         // The error class carries the truncated body + parseError; the
@@ -457,7 +531,11 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         errorDetails: capErrorDetails(
           `${unfenced}\n\n--- Zod errors ---\n${JSON.stringify(schemaResult.error.issues, null, 2)}`
         ),
+        // B2 — set by whichever of the two branches above ran; both read it off
+        // their own `response` before reaching here.
+        requestId: vendorRequestId,
       });
+      logFailedAnthropicUsage(args, usage, vendorRequestId, latencyMs, 'SCHEMA_FAIL');
       const err = new Error('SCHEMA_FAIL') as Error & {
         rawOutput?: string;
         zodErrors?: unknown;
@@ -534,6 +612,21 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
         // — don't double-log a spurious ANTHROPICREFUSALERROR row here.
         !(err instanceof AnthropicRefusalError))
     ) {
+      // ── B2 — NO USAGE ROW HERE, AND THAT IS THE HONEST ANSWER. 1 OF 2.
+      //
+      // This catch handles network / 429 / auth / SDK-throw. There is no
+      // `response` in scope and therefore NO VENDOR-REPORTED USAGE: Anthropic
+      // either never saw the request or rejected it before counting tokens.
+      //
+      // Writing a row here would mean inventing its units. `unitCount`,
+      // `unitCostUsd` and `totalCostUsd` are NOT NULL, so the row could only be
+      // zeroes — and a zero-cost `unitsSource: 'vendor'` row is a POSITIVE
+      // CLAIM that a real vendor reported zero, which is the same fail-open
+      // shape as a minted request id. The absence of a row is the true record.
+      //
+      // ⚠️ It is declared in this item's gate BY FILE AND COUNT, not waived. If
+      // a future SDK surfaces billed usage on a thrown error, this becomes a
+      // wired branch and the gate's declaration must drop by one.
       logAiCall({
         ...args,
         provider: 'anthropic',
@@ -627,7 +720,10 @@ export async function anthropicCompleteText(
         ),
         success: false,
         errorCode: 'AI_REFUSAL',
+        // B2 — the vendor answered, so the id exists (read at :600).
+        requestId: vendorRequestId,
       });
+      logFailedAnthropicUsage(args, usage, vendorRequestId, latencyMs, 'AI_REFUSAL');
       throw new AnthropicRefusalError(args.model, args.purpose);
     }
 
@@ -688,6 +784,9 @@ export async function anthropicCompleteText(
     // Q1 #09.1 (SF-1): the refusal branch already logged AI_REFUSAL above —
     // don't double-log a spurious ANTHROPICREFUSALERROR row here.
     if (!(err instanceof AnthropicRefusalError)) {
+      // ── B2 — NO USAGE ROW HERE. 2 OF 2. Identical reasoning to the twin
+      // catch in `anthropicComplete` above: no `response`, so no
+      // vendor-reported usage, so a row could only be invented zeroes.
       logAiCall({
         ...args,
         provider: 'anthropic',

@@ -115,6 +115,30 @@ export async function embedText(args: EmbedTextArgs): Promise<EmbedTextResult> {
         // real correlation id for a call that really happened.
         requestId: readOpenAIRequestId(response),
       });
+      // ── B2 — AND THE DURABLE ROW, FOR THE REASON THE COMMENT ABOVE ALREADY
+      // GIVES. This is the clearest case in the whole enumeration: OpenAI ran
+      // the embedding, counted `response.usage.total_tokens`, returned an id
+      // and will invoice it. Our own dimension check is what failed. Before B2
+      // the tokens reached `ai_calls` and the meter never saw them.
+      logApiUsage(
+        buildOpenAIEmbedUsage(
+          {
+            unitsSource: 'vendor',
+            userId: args.userId ?? null,
+            practiceId: args.practiceId,
+            visitId: args.visitId ?? null,
+            requestId: readOpenAIRequestId(response),
+            metadata: {
+              purpose: args.purpose,
+              latencyMs,
+              outcome: 'failed',
+              errorCode: 'EMBED_DIM_MISMATCH',
+            },
+          },
+          inputTokens,
+          model
+        )
+      );
       throw new Error(
         `OpenAI embedding returned ${embedding?.length ?? 0} dims, expected ${EMBED_DIMENSION}.`
       );
@@ -162,6 +186,12 @@ export async function embedText(args: EmbedTextArgs): Promise<EmbedTextResult> {
     const latencyMs = Date.now() - started;
     // EMBED_DIM_MISMATCH already logged above. Any other error (network,
     // 429, auth) gets a row here.
+    //
+    // ── B2 — NO USAGE ROW HERE. The SDK threw, so no `response` exists and
+    // OpenAI reported no tokens. `response.usage.total_tokens` is the only
+    // source of units on this path and it is unreachable; a row could only
+    // carry invented zeroes, which would read as "the vendor reported zero".
+    // Declared by file and count in B2's gate, not waived.
     if (!(err instanceof Error) || err.message.indexOf('expected ' + EMBED_DIMENSION) === -1) {
       logAiCall({
         ...args,

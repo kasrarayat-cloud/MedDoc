@@ -304,6 +304,18 @@ async function deepgramBatchTranscribeOnce(
     // Deepgram's id lives in the BODY (`metadata.request_id`), unlike Anthropic
     // and OpenAI which expose it as a non-enumerable property on a parsed SDK
     // response. This caller uses raw `fetch`, so there is no SDK to populate one.
+    //
+    // ── B2 — NO USAGE ROW HERE, AND B2's GATE TEXT ASKED FOR ONE. STATED.
+    //
+    // The RELAY's wording is *"the Deepgram failure rows carry `audioSeconds`"*,
+    // and it was written on 2026-08-04 — four days before `unitsSource` existed.
+    // Under the B0 provenance doctrine it can no longer be executed literally on
+    // this path: billable seconds come from `raw.metadata.duration`, which is
+    // DEEPGRAM'S OWN measurement, and on this branch there is no response at all
+    // — on a TIMEOUT the request may never have reached Deepgram. The audio's
+    // local duration is a different quantity from the vendor's, and writing it
+    // into `audioSeconds` on a `vendor` row would assert an observation nobody
+    // made. See RULINGS.md, the B2 row, for the decision and its reversal path.
     logAiCall({
       ...args,
       provider: 'deepgram',
@@ -345,6 +357,22 @@ async function deepgramBatchTranscribeOnce(
     // into B2 here would buy nothing this ruling asked for and would leave B2
     // half-done under another item's name. Recorded in RELAY.md as B2's input,
     // with the header named, so B2 does not have to rediscover it.
+    //
+    // ── B2 — NO USAGE ROW HERE EITHER, FOR A DIFFERENT REASON THAN SITE 1.
+    //
+    // Deepgram ANSWERED, so unlike the fetch-threw site a correlation id really
+    // does exist (in the `dg-request-id` header). But a non-2xx means Deepgram
+    // did not transcribe: there is no `metadata.duration`, and an error body is
+    // not the batch schema. So there are still NO VENDOR-REPORTED SECONDS, and
+    // a usage row would have to invent its units.
+    //
+    // ⚠️ THE ID WITHOUT THE UNITS IS NOT ENOUGH. `unitCount`, `unitCostUsd` and
+    // `totalCostUsd` are NOT NULL — a row here could only be zeroes wearing the
+    // `vendor` marker, i.e. a positive claim that Deepgram reported nothing
+    // billable. Whether Deepgram in fact bills for a failed request is exactly
+    // the question an INVOICE answers and this code cannot; B3 is already
+    // blocked on an invoice figure for `nova-3-medical`. Recorded there so one
+    // vendor conversation settles both. Declared in B2's gate, not waived.
     logAiCall({
       ...args,
       provider: 'deepgram',
