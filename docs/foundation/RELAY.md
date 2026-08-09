@@ -3528,6 +3528,38 @@ unrelated `NOT NULL` refused first and the proof established nothing. Census
   so `embed.ts` and `whisper-batch.ts` remain unit-proven only.
 - **It does not close B1 or B4.**
 
+#### ⚠️ FINDING — `clean.ts` REAPS ROWS, NOT OBJECTS
+
+The smoke's audio survived the clean:
+`transcribe-md-audio/…/cmsm4y2ro00010hqogjeg1x2v/b1b-smoke.mp3`, 2.9 MiB, still
+present afterwards. **Not PHI** — TTS synthesized from the committed `VS1`
+script. **Reported, not deleted**: an undeclared production write is the side
+effect the standing rule forbids, and ruling 70 says the loop lists while a
+supervised session destroys.
+
+**Priced by the asset, not the symptom.** As residue it is trivial. The shape is
+not: *a cleanup routine whose name promises completeness, silently scoped to one
+storage layer.* Here the audio is synthetic; the same gap around a real visit
+would leave a patient's **voice recording** behind after something reported
+success. ⚠️ **Whether the APPLICATION's visit-deletion path reaps audio is a
+different code path, was NOT examined, and must not be inferred from this** — but
+it is worth its own cheap check.
+
+#### ⚠️ A DELIBERATE RUN CANCELLATION, STATED AS THE RULE REQUIRES
+
+Ruling 74 allows a push over in-flight runs provided the cancellation is named.
+Three runs on `57406a15` were cancelled **2m39s** after starting, to add the
+production-refusal proof above.
+
+**The arithmetic is the justification, and it generalises:** the cost of
+cancelling is the time already *elapsed*, not the run's length. Cancelling at
+2m39s cost under three minutes; waiting for the four runs and then pushing the
+same paragraph would have cost a second full cycle (~40 min). **The cheapest
+moment to add something is immediately after a push, not after the runs finish**
+— which is the opposite of the instinct the rule is usually invoked to correct.
+The rule is about not destroying evidence *unknowingly*; it is not a prohibition
+on ever pushing.
+
 #### Carried to B4, both from this run
 
 - ⚠️ **A single-visit sample does NOT contain every stage.** `tm_embed` was

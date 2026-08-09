@@ -273,6 +273,35 @@ the id.
 Census before and after both attempts: **`vendor | 1325 | 0`** — identical. No
 row was changed, no constraint was touched, and nothing was dropped or re-added.
 
+### ⚠️ FINDING — `clean.ts` DOES NOT REAP OBJECT STORAGE
+
+`clean.ts`'s header says it deletes *"every clinical row the smoke doctor
+produced"*, and it does exactly that — **rows**. The uploaded audio is not a row,
+and it survives:
+
+    local/transcribe-md-audio/cmrzqiarg0001pd872t815b12/cmsm4y2ro00010hqogjeg1x2v/b1b-smoke.mp3
+    2.9 MiB, 2026-08-09 18:27:59 UTC — still present AFTER a clean run
+
+**This object is not PHI.** It is TTS audio synthesized from `VS1`, a script
+committed in `cross-input-mode/scenarios.ts` — a synthetic patient that has never
+existed. Left in place deliberately rather than deleted: **a production write
+that no declaration covered is exactly the kind of side effect the standing rule
+forbids**, and ruling 70's model is that the loop LISTS and a supervised session
+destroys. The path is therefore reported, not reaped.
+
+⚠️ **Price this by the asset, not by the symptom.** As a smoke artifact it is
+2.9 MiB of residue that accumulates one file per run — trivial. What makes it
+worth writing down is the *shape*: **a cleanup routine whose name promises
+completeness, silently scoped to one storage layer.** The fixture's audio is
+synthetic; the same gap in any routine that reaps a real visit would leave a
+patient's **voice recording** in object storage after something reported success.
+
+**Not asserted here:** whether the application's own visit-deletion path reaps
+audio. That is a different code path from this fixture script, it was not
+examined, and it must not be inferred from this finding — a claim about
+`clean.ts` is not a claim about the product. **It is worth its own check**, and
+that check is cheap.
+
 ### Cleanup, as ruled
 
 `clean.ts` only — `cleaned visits=1 patients=1 templates=0`. Fixture verified
