@@ -1952,6 +1952,72 @@ the flag. A mock that runs with no key at all is **one** condition, not two.
 
 ---
 
+### 🟩 B0-b IS LIVE IN PRODUCTION — 2026-08-09T00:03Z
+
+Deployed from `main` @ **`079b9205`** (PR #554) by `bash scripts/deploy-prod.sh`,
+under a delta declaration written before the run:
+`docs/foundation/deploys/20260808-079b9205.md`. Log
+`docs/deploy-logs/deploy-20260808T235928Z.log`. Rollback tags
+**`:pre-b0b-20260808`**, cut against the RUNNING ids `fc79b9618dd2` /
+`124f88fa7493` and **digest-verified to resolve to them**, not to a tag string,
+before the deploy started.
+
+**Citation: 4 of 4 on the MERGE COMMIT** — not on the PR head:
+
+| Workflow | Run |
+|---|---|
+| `CI` | ✅ `31283708499` |
+| `e2e` | ✅ `31283708484` |
+| `a11y-ci` | ✅ `31283708503` |
+| `secrets-scan` | ✅ `31283708494` |
+
+#### THE DECLARATION WAS JUDGED LINE BY LINE, AND NOTHING MOVED THAT WAS NOT DECLARED
+
+| declared | measured |
+|---|---|
+| migrations **92 → 93**, k=1, named | **93**, applied name `20260808230000_b0_units_source_not_null` |
+| `is_nullable` **YES → NO** | `nullable=NO` |
+| CHECK **absent → present** | `api_usage_events_units_source_domain = CHECK ("unitsSource" = ANY (ARRAY['vendor','mock']))` |
+| **DEFAULT still `(none)`** | `default=(none)` |
+| image ids **both** change | app `fc79b961…` → `e127943e…` · worker `124f88fa…` → `09886c6b…` |
+| `api_usage_events` **1312** | **1312** |
+| NULL **0** · off-domain **0** | **0** · **0** |
+| census **vendor 1312 / mock 0** | `vendor｜1312`, the only group |
+| `ai_calls` **1122** | **1122** |
+| clinical **UNCHANGED** | visits **26** · patients **15** · signed **16** · users **196** |
+| containers 9/9 · co-tenants | 9/9 healthy · 307 · 404 · 200 · 200 · 410 |
+
+`audit_logs` was declared as *may rise, a fall is a finding*: **10591 → 10591**.
+
+Standing checks green after the deploy: migrations 93/93, imaging E/M invariant,
+composite FK, ingress TLS, both encrypted mounts.
+
+#### ⚠️ THE STRUCTURAL VERIFICATION HERE IS THE DATABASE, AND SAYING SO IS THE POINT
+
+B0-a proved its code was resident by grepping the shipped image for a new symbol.
+**That move does not transfer to this item, and pretending it did would be
+theatre.** B0-b's only source change outside tests and docs is a **comment**
+(`prpriced` → `prevent`) plus dropping a `?` in `schema.prisma`. There is no new
+runtime symbol to find, so an image grep would prove nothing it could not also
+prove about the previous build.
+
+The substance of this deploy is the **migration**, and it was verified where it
+lives: `is_nullable`, `column_default`, `pg_constraint` and the row census read
+directly out of the production database, against numbers written down before the
+deploy existed. An honest structural check names the layer that carries the
+change.
+
+#### WHAT THIS DEPLOY DOES NOT CLAIM
+
+- **The meter is still unproven in production.** `api_usage_events`' newest row
+  is **2026-08-05 14:43Z**, unchanged by this deploy — no usage row has been
+  written since B0-a shipped. The guarantee is now enforced; **nothing has yet
+  exercised it in production**, and it will not be exercised until a real
+  pipeline runs. A real doctor's visit is never a smoke target.
+- **B1 and B4 remain open.** No vendor request id, no per-stage coverage.
+
+---
+
 ### ✅ B0-b — `unitsSource` SET NOT NULL — the build row, 2026-08-08
 
 **The step-2 debt B0-a recorded against itself.** B0-a shipped the column
@@ -2264,6 +2330,7 @@ already demonstrates.** Read the sections. Repricing this table is its own item.
 
 | Item | Status | Merge SHA | CI run | Notes |
 |---|---|---|---|---|
+| **B0-b** | 🟩 **LIVE IN PRODUCTION 2026-08-09T00:03Z** | **`079b9205`** (PR #554) | **4 of 4 on the MERGE COMMIT** — `CI` `31283708499` · `e2e` `31283708484` · `a11y-ci` `31283708503` · `secrets-scan` `31283708494` | Step 2 of the `unitsSource` migration, the debt B0-a recorded against itself. `SET NOT NULL` + `api_usage_events_units_source_domain` CHECK, **still NO DEFAULT**. Migration `20260808230000_b0_units_source_not_null`: **92 → 93**, `is_nullable` YES → NO, `default=(none)`, **1312** rows / **0** NULL / **0** off-domain, census `vendor 1312`. Clinical byte-identical (26 · 15 · 16 · 196); `ai_calls` 1122 and `audit_logs` 10591 unmoved. Declaration `docs/foundation/deploys/20260808-079b9205.md` written first and judged line by line; log `deploy-20260808T235928Z.log`; rollback **`:pre-b0b-20260808`** digest-verified against RUNNING ids. Sweep was BY TABLE: 0 raw-SQL inserts (positive-controlled — the same pattern finds 7 on `transcribe_visits`), 1 ORM writer, and that writer is `(prisma as any)` so **`tsc` cannot see it**. Gate `38-usage-provenance.spec.ts`, 5 arms, 3 mutations each naming its victim first. ⚠️ **Does NOT prove the meter in production** — newest usage row is still 2026-08-05. Does not close B1/B4. Full section above. |
 | **B0-a** | 🟩 **LIVE IN PRODUCTION 2026-08-08T18:40Z** | build **`9a56293f`** (PR #549) · deployed from `main` @ **`87327db6`** | **4 of 4 on the deployed commit** — `CI` · `e2e` · `a11y-ci` · `secrets-scan` all `completed/success` on `87327db6`. This **discharges** the descendant citation owed after `9a56293f`'s `e2e` was cancelled by PR #550's merge | The mock boundary sits BELOW the meter — a mocked run now METERS. Migration `20260808020000_b0_units_source` applied: **91 → 92**, `unitsSource` present as **TEXT NULLABLE with NO DEFAULT**, all **1312** rows backfilled to `vendor`, **0** NULL. Clinical counts byte-identical (26 · 15 · 16 · 196); `api_usage_events` 1312 and `ai_calls` 1122 unmoved. Declaration `docs/foundation/deploys/20260808-87327db6.md`, written first and judged against; log `deploy-20260808T182917Z.log`; rollback **`:pre-b0a-20260808`** cut against RUNNING ids and digest-verified. ⚠️ **Step 2 (`SET NOT NULL`) is owed and unwritten — the next B-lane item.** Does not close B1 or B4, and **does not prove the meter in production**. Full section above. |
 | **SECURITY BLOCK** | 🟩 **LIVE IN PRODUCTION 2026-08-04** | **`a0b8775f`** (PR #518) | `CI` · `e2e` · `secrets-scan` all `completed/success`; tree identity proven — branch head `7a038e27` and merge `a0b8775f` share tree `1f3c68e1` | **A.1** pro.quillmd.com **410 on every path, GET and POST**, container `exited (143)`; app/admin/quillmd/www/staging unchanged, 5 co-tenant hostnames unchanged incl. their 3 pre-existing failures, 16 non-meddoc containers untouched. ⚠️ *"disable only its own vhost"* was impossible — one file carries all five hostnames, and `sites-enabled/dealhunter` (`server_name … _;`, first in the glob) is the de-facto default, so an **unnamed** host falls through to a **co-tenant**. Explicit 410 block; `:80` keeps the name so ACME still answers (verified 404-on-probe, not 301/410). ⚠️ Found a **shadow vhost being loaded** — `quillmd.bak-20260725`, a regular file in `sites-enabled/`, carrying the **pre-S2 spoofable `X-Forwarded-For`**, inert only by glob order; removing the name from the live file would have **promoted it**. Evicted. Credentials **shared, not separable**: `DATABASE_URL` byte-identical across three containers, and Postgres has **one** login role, SUPERUSER — container-stop **is** the control; least-privilege roles → TEAMS hygiene. **A.2** Stripe out of the worker; root cause is `Dockerfile.worker:62` copying the whole workspace-root `node_modules`, **not** standalone tracing; 9 of 28 CRM deps ride along, 7 named for A6; lockfile 1187→1185, **sharp intact 28→28**. **A.3** fail-open closed; **71 corrections APPENDED** (65+6), originals **still 65 and still wrong**, total 10153→10224 (+71 exactly), 71/71 `targetId`s resolve. Deploy log `deploy-20260804T034655Z.log`; rollback tags **`:pre-secblock-20260804`** cut against RUNNING ids `cdfa16cc599b` / `1526b97cf960` / `2d05d22572ba`. Post-deploy verifier PASS with positive controls on every zero. |
 | **Phase 0** | ✅ **DONE 2026-08-04** | **`c36eeda1`** (PR #517) | `CI` · `e2e` · `secrets-scan` all `completed/success` | `SPEC.md` + `DISCOVERY.md` + `RELAY.md`. READ-ONLY on prod: no schema change, no deletion, no billing code, no row written. 28 agents, 5 areas, **7 claims corrected** (6 DRIFTED, 1 REFUTED) — all recorded in DISCOVERY as corrected. Vendor prices verified live against four vendors' own pages, dated. |
