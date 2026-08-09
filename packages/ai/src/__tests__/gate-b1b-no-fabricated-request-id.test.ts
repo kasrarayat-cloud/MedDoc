@@ -329,7 +329,15 @@ describe('B1-b step 2 — the meter never invents a request id', () => {
       total += c.total;
     }
     // The reconciled figure, stated so a change to it is deliberate.
-    expect(total, 'the total usage-site count moved').toBe(8);
+    //
+    // 8 → 10 on 2026-08-09 (B2): the six anthropic failure branches meter
+    // through one shared helper (one site) and embed.ts's dim-mismatch branch
+    // meters directly (one site). ⚠️ NOTE WHAT DID **NOT** MOVE — `withoutId`
+    // stayed at its declaration, because both new sites pass a real vendor id
+    // rather than minting one. That is this gate doing its job across an item
+    // it was not written for: B2 added writers, and the no-fabrication ratchet
+    // held without being touched.
+    expect(total, 'the total usage-site count moved').toBe(10);
   });
 
   it('USAGE_CALLERS covers every file in the tree that calls logApiUsage', () => {

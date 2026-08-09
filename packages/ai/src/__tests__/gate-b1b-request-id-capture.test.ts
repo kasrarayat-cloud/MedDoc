@@ -76,12 +76,25 @@ const CALLERS = [
  */
 const FAILURE_NO_ID_DECLARED: Record<string, { count: number; why: string }> = {
   'packages/ai/src/anthropic.ts': {
-    count: 8,
+    count: 2,
     why:
-      'The id IS captured on these paths — into `errorDetails` via ' +
-      'anthropicErrorDetailsJson(err), which reads err.request_id / the ' +
-      "`request-id` header. It lands in a JSON blob rather than the queryable " +
-      'column. Moving it to the column is B2, not step 1.',
+      '⚠️ 8 → 2 on 2026-08-09 (B2). The six branches that hold a real ' +
+      '`response` now pass `requestId` to the queryable column, so only the ' +
+      'TWO OUTER CATCHES remain. On those the SDK threw and there is no ' +
+      'response object: the id is reachable only as `err.request_id` / the ' +
+      '`request-id` header, which `anthropicErrorDetailsJson(err)` already ' +
+      'captures into the `errorDetails` JSON blob. Promoting THAT to the ' +
+      'column is a separate shape (an error-path reader, not a response ' +
+      'reader) and is not claimed by B2 — B2 wires the DURABLE METER, and ' +
+      'these two branches have no units to meter either.',
+  },
+  'apps/transcribe-md/src/lib/em-coding/llm-mdm.ts': {
+    count: 1,
+    why:
+      'NEW on 2026-08-09 (B2). The judge catch previously wrote to NEITHER ' +
+      'table; B2 gives it an `ai_calls` telemetry row. No id: `withTimeout` ' +
+      'races the SDK, so on the branch that matters there is no response and ' +
+      'no `err.request_id` to read.',
   },
   'packages/ai/src/deepgram-batch.ts': {
     count: 2,
@@ -302,7 +315,12 @@ describe('the total reconciles — nothing falls between the buckets', () => {
     }
     // The census measured 2026-08-09. A change to this number is not a
     // failure — it is a prompt to re-read the buckets and update it knowingly.
-    expect(grand).toBe(19);
+    //
+    // 19 → 20 on 2026-08-09 (B2). `llm-mdm.ts`'s judge catch gained an
+    // `ai_calls` row; before B2 that branch wrote to NEITHER table, so a failed
+    // judge was invisible to both meters. The prompt worked as designed: this
+    // assertion is what surfaced the change for a deliberate re-read.
+    expect(grand).toBe(20);
   });
 });
 

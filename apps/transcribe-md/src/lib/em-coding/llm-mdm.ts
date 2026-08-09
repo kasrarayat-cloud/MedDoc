@@ -547,6 +547,33 @@ async function callClaudeMdm(args: JudgeMdmArgs): Promise<MdmJudgement | null> {
         attempt,
         error: msg,
       });
+      // ── B2 — THIS BRANCH USED TO WRITE TO NEITHER TABLE.
+      //
+      // Every other failure path in the codebase leaves an `ai_calls` row; this
+      // one left a `log.warn` and nothing else, so a failed judge was invisible
+      // to both meters AND to §C.3's own diagnostic query (which reads
+      // `ai_calls`). `worker.ts` pre-warms `judgeMdm` on every visit, so this is
+      // not a rare path. The row is TELEMETRY — it carries no tokens, because
+      // there are none to carry.
+      logAiCall({
+        ...aiLogContext,
+        provider: 'anthropic',
+        model: MODEL,
+        promptHash,
+        latencyMs: Date.now() - started,
+        success: false,
+        errorCode: err instanceof Error ? err.name.toUpperCase() : 'UNKNOWN',
+      });
+      // ⚠️ AND NO USAGE ROW, DELIBERATELY — with a caveat worth writing down.
+      //
+      // `withTimeout` RACES the SDK promise; it does not abort the HTTP request.
+      // So on the timeout branch Anthropic may well finish the call and bill it,
+      // and we will never see the response that would tell us the token counts.
+      // That is a REAL, STRUCTURAL CEILING on meter accuracy, not an omission
+      // this item can close: the units do not exist on our side of the wire.
+      // Inventing them is the one thing that would make it worse. Recorded in
+      // RELAY.md as a known under-count with the only instrument that can size
+      // it — a vendor invoice, which B3 already needs.
       // Network/5xx/timeout — bail without retry. The deterministic
       // fallback is the contract per rubric §4.3.
       return null;

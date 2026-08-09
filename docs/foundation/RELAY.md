@@ -3624,3 +3624,178 @@ through.**
 MASTER.md's own text still reads `gh run list --commit <sha>`, and `<sha>` is
 where the ambiguity lives. Correcting that wording is its own item; recorded here
 because a finding that lives only in a transcript is not a finding.
+
+---
+
+### ✅ B2 — the failure paths reach the durable meter — the BUILD row, 2026-08-09
+
+**Build and gate only. NOT DEPLOYED — no production behaviour has changed yet**,
+and the 44 historical rows this closes the gap for are **not backfilled** (see
+WHAT THIS DOES NOT CLAIM). Ruling row: RULINGS.md, the B2 entry, marked
+**PROVISIONAL**.
+
+#### THE ENUMERATION — 14 branches, and the list is the driver
+
+The universe was written down **before** the scan, because "catch blocks" and
+"`logApiUsage` call sites" are both the wrong set. The predicate is:
+
+> every site that logs a **FAILED** vendor call **AND** holds the vendor's **own
+> reported units** at that point.
+
+The second conjunct decides the row and is observable in source: a failure site
+carrying `inputTokens:` / `costUsdCents:` had a real `response` in hand.
+
+| # | branch | units? | disposition |
+|---|---|---|---|
+| 1 | `anthropic.ts` tool-mode `AI_REFUSAL` | ✅ | **WIRED** |
+| 2 | `anthropic.ts` tool-mode `JSON_PARSE_FAIL` (no tool_use block) | ✅ | **WIRED** |
+| 3 | `anthropic.ts` text-mode `AI_REFUSAL` | ✅ | **WIRED** |
+| 4 | `anthropic.ts` text-mode `JSON_PARSE_FAIL` | ✅ | **WIRED** |
+| 5 | `anthropic.ts` `SCHEMA_FAIL` | ✅ | **WIRED** |
+| 6 | `anthropic.ts` `completeText` `AI_REFUSAL` | ✅ | **WIRED** |
+| 7 | `embed.ts` `EMBED_DIM_MISMATCH` | ✅ | **WIRED** |
+| 8 | `anthropic.ts` outer catch (`anthropicComplete`) | ❌ | no row — stated in place |
+| 9 | `anthropic.ts` outer catch (`anthropicCompleteText`) | ❌ | no row — stated in place |
+| 10 | `embed.ts` outer catch | ❌ | no row — stated in place |
+| 11 | `whisper-batch.ts` SDK threw | ❌ | no row — stated in place |
+| 12 | `deepgram-batch.ts` `fetch` threw | ❌ | no row — stated in place |
+| 13 | `deepgram-batch.ts` `!res.ok` | ❌ | no row — stated in place |
+| 14 | `llm-mdm.ts` judge catch | ❌ | no row — **and it gained the `ai_calls` row it never had** |
+
+Each of the seven wired branches also now passes the **vendor request id** to
+the queryable column — it was already in scope and was being dropped purely
+because the row said `success: false`.
+
+#### ⚠️ BRANCH 14 WROTE TO NEITHER TABLE, AND THAT IS WHY §C.3's OWN QUERY COULD NOT SEE IT
+
+`llm-mdm.ts`'s judge catch left a `log.warn` and nothing else. DISCOVERY's
+diagnostic for this hole is a query against `ai_calls` — so **the branch was
+invisible to the very instrument used to size the hole**, and `worker.ts`
+pre-warms `judgeMdm` on every visit, making it the opposite of a rare path. It
+now writes an `ai_calls` telemetry row. It writes no usage row, for the reason
+below.
+
+#### ⚠️ A STRUCTURAL CEILING, NAMED RATHER THAN PAPERED OVER
+
+`withTimeout` **races** the SDK promise; it does not abort the HTTP request. So
+on a timeout Anthropic may finish and bill the call while its token counts never
+reach this process. **No code change can recover units that are on the other
+side of the wire.** Sizing it needs a vendor invoice — which **B3 already needs**
+for `nova-3-medical`, so one vendor conversation settles both. Recorded as a
+known under-count rather than closed.
+
+#### ⚠️ B2's GATE TEXT WAS CORRECTED, NOT QUIETLY DROPPED
+
+The item says *"the Deepgram failure rows carry `audioSeconds`."* Written
+2026-08-04 — **four days before `unitsSource` existed** — and it cannot be
+executed literally under the provenance doctrine: billable seconds are
+`raw.metadata.duration`, Deepgram's own measurement, and neither failure branch
+has one. The local audio length is a **different quantity**, and writing it into
+a `vendor` row would assert an observation nobody made. Full reasoning and the
+reversal path: RULINGS.md, the B2 row.
+
+#### THE GATE — TWO ARMS, because neither is sufficient
+
+**`gate-b2-failure-paths-metered.test.ts`** — the census (13 tests). Every
+failure site lands in exactly one of `BILLED_METERED` / `BILLED_UNMETERED` /
+`NO_UNITS`; the three sum to the per-file failure count; the programme totals
+assert **14 branches, 7 billed, 7 no-units**.
+
+**`gate-b2-failure-paths-behavioural.test.ts`** — the behaviour (11 tests).
+Every enumerated branch is actually **driven**, and the row's payload asserted:
+tokens, `unitsSource`, the real request id, `metadata.outcome`, and that the
+money is **> 0** rather than zeroed.
+
+⚠️ **The census alone is a grep** — it cannot see a wired call passing the wrong
+tokens or a fabricated id. **The behavioural arm alone is a hand-kept list of
+eight tests** — it cannot see a fifteenth branch appearing in a file nobody
+wrote a test for, which is precisely how B1-a's gate came to be green over a
+universe missing four callers.
+
+⚠️ **THE NEGATIVE CASES ASSERT THE BRANCH WAS REACHED BEFORE BELIEVING ITS
+SILENCE.** "No usage row" is the easiest assertion in the world to satisfy by
+accident — a test that drives nothing at all passes it. Each no-units test
+asserts the `ai_calls` row **was** written in the same breath.
+
+**Mutation-proven on two files**, and what was observed is what is recorded:
+
+    remove logFailedAnthropicUsage from SCHEMA_FAIL → anthropic.ts failure site #4;  BILLED_METERED 5, expected 6
+    remove the logApiUsage block from embed.ts      → embed.ts failure site #0;      BILLED_METERED 0, expected 1
+
+⚠️ **The embed mutation doubles as a REAL-FILE positive control of the pairing
+window.** `embed.ts` keeps a `logApiUsage(...)` on its success path further down
+the same function; an unbounded search would have let that one satisfy the
+failure site and gone **green on a genuinely broken tree**. It reported the
+offender instead.
+
+**Not claimed:** that the ratchet was watched going red-with-seven on the pre-B2
+tree. Each wiring was mutated away individually and the count moved by exactly
+one each time — the same mechanism at unit scale, and stated as the narrower
+observation it is.
+
+#### THE OTHER TWO GATES MOVED, AND THAT IS THEM WORKING
+
+B2 was not written against them; they caught it.
+
+| gate | moved | why |
+|---|---|---|
+| `gate-b1b-request-id-capture` | `anthropic.ts` FAILURE_NO_ID **8 → 2**; census **19 → 20** | six branches now capture the id; branch 14 added a site |
+| `gate-b1b-no-fabricated-request-id` | usage sites **8 → 10**, `withoutId` **unchanged** | B2 added two writers and the no-fabrication ratchet held **without being touched** |
+
+#### §C.4 — THE DURABILITY INVERSION IS SETTLED
+
+**`api_usage_events` is the billing source.** `ai_calls` is hard-deleted by four
+production paths, so choosing it would mean **a doctor deleting a visit erases
+their own bill**. Measured this session:
+
+    deleters of ai_calls ............ 5  (4 production + 1 e2e cleanup)
+    deleters of api_usage_events .... 0
+    FKs on api_usage_events ......... 2, both ON DELETE SET NULL
+    FK on api_usage_events.visitId .. NONE — a visit delete cannot cascade a billing row
+
+The no-deleter property was **already load-bearing before anyone wrote it down**
+— ruling 77 had to state it as a guard *note* on `runStaleVisitCleanup`, i.e. an
+obligation inferred from a goal. It is now
+`scripts/check-billing-source-no-deleter.sh`, two arms:
+
+1. **explicit deleters**, ORM and raw SQL, **positive-controlled against
+   `ai_calls`** — if the control returns 0 the pattern is broken and the script
+   reports `2`/can't-tell rather than a green;
+2. **FK cascades**, read from `pg_constraint`, **which no grep can ever see**.
+
+⚠️ **THE SCRIPT COULD NOT BE EXECUTED THIS SESSION** — see the owner action
+below. Both arms were verified **inline** with granted commands (control 5,
+target 0, two FKs both `SET NULL`), so the logic is measured; the script as a
+single unit is not yet exercised.
+
+#### WHAT THIS DOES NOT CLAIM
+
+- **Not deployed.** No production row has changed shape.
+- **The 44 historical rows are NOT backfilled.** They remain in `ai_calls` only.
+  A backfill is a production write and needs its own ruling under the standing
+  shape for owner-ruled prod mutations (ruling 59); B2 stops the bleeding, it
+  does not repair the past.
+- **Not proven against a live vendor.** Every assertion is in-process against an
+  SDK-shaped fixture. The live proof would be a smoke that forces a real
+  refusal, which is not something a sanctioned smoke can reliably provoke.
+- **The seven no-units branches are declared, not waived** — each with its
+  reason, in the gate and at the code.
+- **`audioSeconds` on Deepgram failures is not delivered**, deliberately. See
+  above.
+
+**Local:** `packages/ai` **468/468** · `tsc --noEmit` clean on `transcribe-md`.
+
+#### ⚠️ OWNER ACTION — the new check cannot be run by the loop
+
+`.claude/settings.json` enumerates the runnable scripts by name and **`Edit` on
+that file is DENIED to the loop** — correctly: a session that can widen its own
+permissions has none. So `check-billing-source-no-deleter.sh` ships unrunnable
+by the unattended queue until a supervised session adds:
+
+    "Bash(bash scripts/check-billing-source-no-deleter.sh:*)",
+
+⚠️ **This refusal is NOT in MASTER.md's permissions table**, which is where a
+session is told to look before treating a refusal as a finding. Two gaps worth
+closing together: the entry above, and a row in that table saying
+`.claude/settings.json` is deliberately un-editable and that a new check ships
+with an owner action attached.
