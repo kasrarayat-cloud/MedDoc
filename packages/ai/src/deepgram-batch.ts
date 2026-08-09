@@ -13,6 +13,7 @@
 // ============================================================================
 
 import { logAiCall } from './log';
+import { readDeepgramRequestId } from './vendor-request-id';
 import { isMockEnabled, mockDeepgramBatch } from './mock';
 import { deepgramBatchCostCents } from './pricing';
 import { withRetry, type RetryAttemptInfo } from './retry';
@@ -362,6 +363,13 @@ async function deepgramBatchTranscribeOnce(
           ? (metaObj.detected_language as string)
           : undefined;
 
+  // B1-a — Deepgram's own correlation id. It was ALREADY here, in `raw`, and
+  // already durable: the whole response is persisted to
+  // `transcribe_visits.transcriptRaw` (jsonb). So the id has been stored this
+  // entire time in a PHI-bearing column nobody can bill from. Reading it into
+  // a queryable column is B1-a; getting it OUT of `transcriptRaw` is not.
+  const vendorRequestId = readDeepgramRequestId(raw);
+
   logAiCall({
     ...args,
     provider: 'deepgram',
@@ -370,6 +378,7 @@ async function deepgramBatchTranscribeOnce(
     latencyMs,
     costUsdCents: deepgramBatchCostCents(durationSec),
     success: true,
+    requestId: vendorRequestId,
   });
 
   logApiUsage(
@@ -380,6 +389,8 @@ async function deepgramBatchTranscribeOnce(
         userId: args.userId ?? null,
         practiceId: args.practiceId,
         visitId: args.visitId ?? null,
+        // B1-a: `?? undefined`, never `?? randomUUID()` — see anthropic.ts.
+        requestId: vendorRequestId ?? undefined,
         metadata: { purpose: args.purpose, latencyMs, model },
       },
       durationSec

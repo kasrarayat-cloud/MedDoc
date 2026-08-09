@@ -1636,6 +1636,31 @@ model AiCall {
   /// transcribe_visits columns). Not surfaced in UI; psql-only.
   errorDetails String? @db.Text
 
+  /// B1-a — THE VENDOR'S OWN CORRELATION ID for this call, verbatim.
+  ///
+  /// Anthropic: `response._request_id` (the `request-id` response header).
+  /// Deepgram:  `metadata.request_id`.
+  ///
+  /// ⚠️ NULLABLE, AND IT WILL STAY NULLABLE. Three distinct reasons, none of
+  /// which a backfill can remove:
+  ///   1. the 1122 rows that predate the column have no id and never will;
+  ///   2. Anthropic's value is `headers.get('request-id')`, which is `null`
+  ///      when the header is absent — a call can genuinely succeed without one;
+  ///   3. not every provider that writes here supplies an id at all.
+  ///
+  /// ⚠️ AND IT IS NEVER FABRICATED. NULL means "the vendor did not tell us",
+  /// which is a fact worth storing; a `randomUUID()` here would be
+  /// indistinguishable from a real vendor id one row later, which is the
+  /// fail-open shape ruled against on 2026-08-08 ("A provenance column's
+  /// DEFAULT must never be the TRUSTED value").
+  ///
+  /// Unambiguous BY CONSTRUCTION on this table specifically: `ai_calls` is a
+  /// REAL-VENDOR-CALLS-ONLY table (B0 Q1, `log.ts` header), so a non-null value
+  /// here is always a real vendor's id. `api_usage_events.requestId` does NOT
+  /// have that property — it is NOT NULL, it carries mock rows, and it still
+  /// falls back to `randomUUID()`. Closing that is B1-b and it needs a ruling.
+  requestId String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([practiceId, purpose, createdAt])
