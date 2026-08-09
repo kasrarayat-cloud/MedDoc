@@ -2990,3 +2990,49 @@ longer exists in preflight. Last known-good is 2026-08-05. Against three prior
 mid-run exhaustions, *"the key worked four days ago"* is weak evidence — so
 spending one probe call is a decision to take explicitly, not an assumption to
 make silently.
+
+
+---
+
+### B1-b — THE ORDERED SEQUENCE, ruled 2026-08-09
+
+**Work these in order. The order is the ruling, not a preference** — each step
+exists to make the next one's evidence mean something.
+
+1. **CLOSE THE CAPTURE GAP FIRST.** Thread `readAnthropicRequestId` into
+   `llm-mdm.ts`, `embed.ts` and `whisper-batch.ts`, mirroring
+   `anthropic.ts:276/487`. Include `deepgram-batch.ts`'s remaining two sites
+   **if they are the same shape**; if they are not, **state that vendor's id
+   semantics explicitly** rather than leaving the difference unexplained.
+   ⚠️ Measure-with-exclusions was offered and **declined**: it measures less and
+   ships the defect.
+
+2. **THEN ruling 1a's migration** — `requestId` nullable, plus the CHECK in its
+   **safe direction** (`requestId IS NOT NULL ⇒ unitsSource = 'vendor'`). All
+   1312 existing rows already satisfy it, so it is a no-op on current data.
+
+3. **THEN the balance probe** — one call, authorised. ⚠️ **Exhausted balance is
+   an OWNER ACTION halt, never a degraded run.** A visit dying mid-pipeline on an
+   empty balance leaves a stuck chart and partial rows; waiting is strictly
+   better.
+
+4. **THEN ONE clean smoke** on the synthetic account, standing rules in full:
+   reset to baseline afterwards **via `clean.ts` only**, audit rows left in
+   place. Report **sizing numbers PER PURPOSE** — a single blended figure hides
+   exactly the per-path variation this whole sequence exists to expose.
+
+**One act, three items discharged:** 1b's sizing, *the meter is unproven in
+production*, and B1-a's capture proven on a live call.
+
+⚠️ **Guarantee a NOVEL `soapText`.** An identical body returns a 7-day cached
+judgement and makes **zero** vendor calls — so a `200` is not evidence that a
+call happened. Check the `em_mdm_cache:` keys or vary the input.
+
+⚠️ **Declare the expected delta BEFORE the first write** (§2.5), and the
+clinical-count row is never omitted: prod-wide `patients=15 / visits=25 /
+signed=16` **unchanged**, smoke `ai_calls 487→487+N`, `api_usage_events
+451→451+N`, `audit_logs 974→974+M` and **never down**. Any movement outside the
+declaration is THE FINDING, whatever its explanation sounds like afterwards.
+
+**Abort guards:** any movement in prod-wide patient/visit/signed counts, or the
+fixture's `audit_logs` count decreasing at any point → stop and investigate.
