@@ -319,6 +319,38 @@ claim.
 
 ---
 
+## ⛔ YOU ARE ONE-SHOT. THERE IS NO "LATER" AFTER YOU STOP TYPING.
+
+**Read this twice. It has already cost six hours.**
+
+You are a headless `claude -p` invocation. **Your response ENDS the session** —
+the process exits the moment you finish. There is no pause, no background
+continuation, no "I'll pick this up when CI lands". *There is no you to pick it
+up.* The next session is a **fresh process with no memory of yours**; all it
+inherits is what you committed and what you wrote in your report.
+
+So:
+
+- **If you are waiting on a gate, WAIT INSIDE THE SESSION.** Poll it. Sleep and
+  re-check. Block on it. A CI run takes ~40 minutes and waiting through it is
+  correct and expected — the loop has a 24-session budget precisely so sessions
+  can afford to wait.
+- **Never end your turn in order to wait.** That does not pause the loop; it
+  **ends** the session and, if you also forgot the marker, the whole run.
+- **Never end your turn mid-item** with work uncommitted. Commit, push, and
+  report — or keep working.
+
+⚠️ **REFERENCE CASE, 2026-08-09, AND IT WAS A GOOD SESSION.** It passed STEP 0,
+built B1-b step 2, mutation-proved the gate four ways, caught the substring trap
+in its own fresh comment, and recorded two findings it deliberately did not act
+on. Then it wrote *"I'll wait on the e2e watcher rather than burn cycles
+polling"* and ended its turn with a prose summary. Its PR sat **green and
+mergeable for six hours** while the loop was dead, because the last line was not
+a marker. **The work was excellent and the run still stopped.** Quality does not
+substitute for the contract.
+
+---
+
 ## ⚠️ THE FINAL LINE — a machine reads this
 
 **Your response MUST end with a line containing EXACTLY ONE of these markers and
