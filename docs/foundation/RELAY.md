@@ -3806,6 +3806,12 @@ with an owner action attached.
 
 ### ⛔ THE 44 FAILED-BUT-BILLED ROWS ARE NOW 42. THE EVIDENCE IS PERISHING WHILE WE DECIDE.
 
+> ✅ **ANSWERED 2026-08-09 BY RULING 79 — THE BACKFILL IS DECLINED.** The
+> measurement and the reasoning below STAND and are why the ruling was sought.
+> **The execution directive at the end of this section is RETRACTED** — see the
+> amendment appended to it. Preserved rather than deleted, per the ledger-union
+> rule: this section records something that actually happened.
+
 DISCOVERY §C.3 measured **44** rows matching `success = false AND inputTokens > 0`
 in `ai_calls` on **2026-08-04**. Measured again for B2's §2.5 baseline on
 **2026-08-09**: **42**.
@@ -3832,7 +3838,23 @@ owner-ruled prod mutations (ruling 59) — **but its window is closing whether o
 not the ruling is sought**, and that fact belongs in the ask rather than in a
 post-mortem.
 
-⚠️ **THE FIGURE TO MIGRATE IS WHATEVER THE COUNT IS AT EXECUTION TIME.** Never
+⚠️ ~~**THE FIGURE TO MIGRATE IS WHATEVER THE COUNT IS AT EXECUTION TIME.** Never
 44, never 42 copied out of this row. Ruling 59 says re-derive the population at
 execution time and never copy it from the ruling; this is exactly the case that
-rule exists for, and the drift from 44 is the demonstration.
+rule exists for, and the drift from 44 is the demonstration.~~
+
+> ⛔ **RETRACTED 2026-08-09 BY RULING 79. THERE IS NO MIGRATION TO EXECUTE.** The
+> struck paragraph above is a live instruction for a production write that the
+> ruling forbids: legacy `ai_calls` charges are **never inserted** into
+> `api_usage_events`, because a row minted now would claim a provenance regime
+> that postdates its own call. **The instruction is withdrawn; the measurement
+> above is not** — the 44 → 42 attrition is what priced the decision, and ruling
+> 59's re-derive-at-execution-time discipline remains correct for every mutation
+> that *is* ordered.
+>
+> **The evidence was preserved the other way, and that ask is now closed:**
+> `docs/qa-reports/failed-but-billed-ai-calls-extract-20260809.md` snapshots all
+> 42 surviving rows (cost-accounting fields only — `errorDetails` is excluded as
+> may-contain-PHI and is non-null on 42 of 42). ⚠️ **The rows keep perishing and
+> nothing here stops that**, by design: the four deleters are correct behaviour.
+> The extract is a copy taken before the originals go, not a rescue.
