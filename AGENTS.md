@@ -493,14 +493,19 @@ The shape that prevents it:
 withdrawn explicitly, not quietly re-run — a reader who saw the first pair has no
 way to know the second replaced them.
 
-## A PUSH IS CHECKED FOR IN-FLIGHT RUNS **BY COMMIT**, BEFORE IT HAPPENS
+## A PUSH IS CHECKED FOR IN-FLIGHT RUNS **BY COMMIT *AND* BY BRANCH**, BEFORE IT HAPPENS
 
 **GitHub cancels in-flight runs when a new commit lands on the same branch.**
 That is not a bug to work around, it is the mechanic — so a push is a decision
 about somebody's evidence, and it must be made deliberately.
 
-> **Before pushing to any branch with required runs: `gh run list --commit <sha>`.
-> Then either WAIT, or state in the log that the cancellation is deliberate.**
+> **Before pushing to any branch with required runs, take BOTH views:**
+>
+>     gh run list --commit "$(git rev-parse HEAD)"                    # full 40 chars
+>     gh run list --branch "$(git rev-parse --abbrev-ref HEAD)"
+>
+> **Believe a zero only when BOTH are empty.** Then either WAIT, or state in the
+> log that the cancellation is deliberate.
 
 ⚠️ **FOURTH OCCURRENCE — AND THE SECOND OF THE *PR-BRANCH* SHAPE IN NINETEEN
 HOURS.** The third is why this is a RULE and not a lesson; the fourth is why the
@@ -517,12 +522,48 @@ Note the second one especially: it arrived through a **legitimate PR merge**, no
 a stray push. "Nothing reaches `main` outside a PR" does not protect you here —
 the merge *is* the push.
 
-⚠️ **AND THE OBVIOUS TOOL FOR THIS CHECK LIES.** `gh pr checks` reported
-`pending` for a run that was already `completed/success` (2026-08-09). A
-pre-push check that trusts it will wait for nothing, or worse, believe a citation
-is incomplete when it is done — **stale in the direction that costs a run.**
-`gh run list --commit <sha>` is the reliable view, and the one a citation must be
-taken from.
+⚠️ **AND EVERY OBVIOUS TOOL FOR THIS CHECK LIES — THREE OF THEM NOW, ALL IN THE
+DIRECTION THAT COSTS A RUN.**
+
+| surface | lies how |
+|---|---|
+| `gh pr checks` | reports `pending` for a run already `completed/success` — waits for nothing, or calls a finished citation incomplete |
+| `gh run list --commit <SHORT-sha>` | returns **`[]`** for **ANY** abbreviated SHA, whatever the runs are doing — exit 0, no warning, no *"ambiguous"* |
+| `gh run list --commit <FULL-sha>` | returns **`[]`** in the propagation window right after a push, while the runs exist and sit `pending` |
+
+⚠️ **THE THIRD ONE DEFEATS THE FIX THE SECOND ONE PRESCRIBED.** Measured seconds
+apart on the same full SHA (RELAY, 2026-08-09): `--commit` returned `[]`,
+`--branch` returned three runs `pending` on that very SHA, and moments later
+`--commit` returned four. **And its window is exactly when the check gets run** —
+the rule exists to stop a push destroying somebody else's evidence, and the
+moment that risk is highest is immediately after *they* pushed, which is
+precisely when `--commit` under-reports. A session queries, sees `[]`, pushes,
+and destroys four queued runs while its audit trail shows the check was
+performed correctly.
+
+⚠️ **AND IT IS INTERMITTENT — WHICH IS THE TRAP SET FOR WHOEVER TESTS IT NEXT.**
+A deliberate reproduction attempt, made on the very commit that added this
+paragraph, **did NOT observe the divergence**: polling both views every 3s across
+a PR open, they agreed at every sample — `--commit 0 / --branch 0`, then
+`--commit 4 / --branch 4`. **That is not a refutation and must not be read as
+one.** A race sampled coarsely is a race missed, and the window depends on queue
+conditions that vary run to run. Two consequences, and the second is the
+important one: a clean two-view check is **not a guarantee** either, and **one
+tidy test is not grounds to delete this rule.** The two-view form is strictly
+better than one view, and that is the entire claim being made for it.
+
+⚠️ **AND NO POSITIVE CONTROL CATCHES IT** — which is why it survived a rule that
+already demanded one. The standing control asks whether the instrument works;
+this instrument works perfectly. It is answering, correctly, about a set the
+server has not finished populating. **That makes it the WATCHED-SET failure, not
+the broken-instrument failure: the right question asked of the wrong universe,
+a few seconds too early.** The two sections above name both shapes; this is the
+one where the check is flawless and the universe is wrong.
+
+> **THE RULE, TIGHTENED TWICE, AND THE SECOND TIGHTENING IS THE LOAD-BEARING
+> ONE: TAKE TWO VIEWS.** `--branch` is the view that is right first. A citation
+> is still taken from `--commit`, because that is what binds evidence to a SHA —
+> but **a zero from `--commit` is not a fact until `--branch` agrees.**
 
 ⚠️ **AND IT APPLIES TO A PR BRANCH EXACTLY AS IT APPLIES TO `main` — INCLUDING
 WHEN THE ONLY RUNS YOU CAN CANCEL ARE YOUR OWN.** The third and fourth rows above
@@ -565,11 +606,9 @@ cheap.**
 
 **The cheap habit that avoids all of it: BATCH.** Most of these cost a cycle
 because two pushes were made minutes apart where one would have done. And when a
-second push genuinely must happen, the pre-push check is taken with the **full
-40-character SHA** from `git rev-parse HEAD`: `gh run list --commit <short-sha>`
-returns `[]` for **ANY** abbreviated SHA, whatever the runs are doing — exit 0, no
-warning, no "ambiguous" — so an in-flight run is indistinguishable from an
-all-clear.
+second push genuinely must happen, it is gated by the **two-view check at the top
+of this section** — both views, the full 40-character SHA, and a zero believed
+only when both are empty.
 
 ## LEDGER AND SCHEMA CONFLICTS RESOLVE AS UNIONS
 
