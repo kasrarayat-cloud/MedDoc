@@ -127,4 +127,122 @@ Whatever its explanation sounds like after the fact.
 *Written after the run. Everything above predates it; `git log` on this file is
 the check on that claim.*
 
-<!-- RESULTS APPENDED BELOW -->
+**Ran 2026-08-09T18:4xZ. Visit `cmsm4y2ro00010hqogjeg1x2v`, reached `READY`.**
+13 AI calls, 13 meter rows, **$0.49**. Cleaned to baseline immediately after.
+
+### THE DECLARATION, JUDGED — 15 of 15
+
+| # | declared | measured | |
+|---|---|---|---|
+| 1 | smoke patients 0 → **1** | 1 | ✅ |
+| 2 | smoke visits 0 → **1** | 1 | ✅ |
+| 3 | smoke `ai_calls` 487 → 487+N, N>0 | **500** (N = **13**) | ✅ |
+| 4 | smoke `api_usage_events` 451 → 451+M, M>0 | **464** (M = **13**) | ✅ |
+| 5 | `audit_logs` may rise, never falls | 10 616 → **10 619**; smoke user 974 → **977** | ✅ |
+| 6 | non-smoke patients **15** | 15 | ✅ |
+| 7 | non-smoke visits **25** | 25 | ✅ |
+| 8 | non-smoke signed **16** | 16 | ✅ |
+| 9 | smoke-user `audit_logs` ≥ 974 | 977 | ✅ |
+| 10 | every new `ai_calls` row in the smoke practice | total 1112 → 1125 (+13); **non-smoke 625 → 625** | ✅ |
+| 11 | every new `api_usage_events` row in the smoke practice | global 1312 → 1325 (+13); smoke +13 | ✅ |
+| 12 | no new row with `unitsSource <> 'vendor'` | global census `vendor\|1325\|0` — **no other bucket exists** | ✅ |
+| 13 | nothing violates `…_request_id_requires_vendor` | 0 rows with a NULL id; all `vendor` | ✅ |
+| 14 | `ai_calls.requestId` **by purpose** | below | ✅ |
+| 15 | `api_usage_events.requestId` **by operation** | below | ✅ |
+
+⚠️ **Row 10 is the abort guard that mattered, and it was checked twice** — inside
+the script before and after the run, and again in SQL afterwards. Non-smoke
+`ai_calls` sat at **625 both times**. No real clinician's practice was touched by
+anything this smoke did.
+
+### ROW 14 — THE DELIVERABLE. `ai_calls.requestId` BY PURPOSE
+
+| purpose | provider | calls | **id present** | id NULL |
+|---|---|---|---|---|
+| `judge` | anthropic | 1 | **1** | 0 |
+| `tm_anchor_entailment` | anthropic | 3 | **3** | 0 |
+| `tm_cpt_coding` | anthropic | 1 | **1** | 0 |
+| `tm_critique` | anthropic | 1 | **1** | 0 |
+| `tm_entities` | anthropic | 1 | **1** | 0 |
+| `tm_icd_coding` | anthropic | 1 | **1** | 0 |
+| `tm_patient_summary` | anthropic | 1 | **1** | 0 |
+| `tm_referrals` | anthropic | 1 | **1** | 0 |
+| `tm_rx_drafting` | anthropic | 1 | **1** | 0 |
+| `tm_soap_draft` | anthropic | 1 | **1** | 0 |
+| `tm_transcribe` | **deepgram** | 1 | **1** | 0 |
+| **total** | | **13** | **13** | **0** |
+
+`api_usage_events` is identical row-for-row (13 rows, 13 ids, 0 NULL, every row
+`unitsSource='vendor'`), with one naming difference recorded as a finding below.
+
+### WHAT THIS ANSWERS, AND WHAT IT EXPLICITLY DOES NOT
+
+**Three owed items are discharged:**
+
+1. **The meter is no longer unproven in production.** 13 real vendor calls
+   produced 13 `api_usage_events` rows, every one `unitsSource='vendor'`, priced
+   at **$0.4865** against `ai_calls`' **$0.49**.
+2. **B1-a's capture is proven on live calls** — every purpose carries a real
+   vendor id.
+3. ⚠️ **Step 1's fix is proven in production on the path that motivated it.**
+   `judge` — the purpose the ledger recorded as *structurally NULL*, and the one
+   `worker.ts` pre-warms on every visit — came back **1 of 1 present**. Before
+   step 1 this row would have been NULL, and the sizing number would have
+   recorded our own omission as the vendor's silence.
+
+**And ruling 68 is confirmed by observation rather than by argument:**
+`tm_anchor_entailment` produced **3 calls and 3 meter rows** — L4b's k=3 ensemble
+emitting one row per CALL, exactly as the ruling said, not one per stage.
+
+⚠️ **THIS DOES NOT SETTLE RULING 72(b), AND MUST NOT BE READ AS SETTLING IT.**
+The result is **13 of 13, zero NULL** — a perfect score for `vendor ⇒ id` — and
+that is precisely the shape of evidence most likely to be over-read. It is **one
+visit, one specialty, one input mode, all happy-path**. The declaration said so
+before the number existed, deliberately:
+
+> *a single run that shows 100% present does NOT by itself justify shipping the
+> strict form — it is one sample, and step (b) is explicitly a measurement
+> question.*
+
+**Tightening stays the allowed direction, so there is no cost to waiting and an
+unwalkable-back cost to guessing.** What this run establishes is that the
+biconditional is *plausible* and that the instrument now measures the right
+thing. What it does not establish is the **failure-path** behaviour — and
+`ai_calls` still writes NULL on every failure path by design (declared in step 1,
+unchanged; that is B2). **Every call in this sample succeeded (13 of 13 `ok`), so
+this run contains exactly zero evidence about the case the constraint would have
+to survive.**
+
+### Found on the way past
+
+- ⚠️ **`tm_embed` PRODUCED NO ROWS AT ALL.** The ledger's step-2 note predicted
+  `embed.ts` would meter on a real run (it short-circuits above `logApiUsage`
+  only in MOCK mode). This visit produced **no embedding call on either table**.
+  So step 1's threading in `embed.ts` is **still unproven on a live call**, and
+  **B4's per-stage coverage gate cannot assume this stage appears in a
+  single-visit sample.** Whether the stage is conditional or simply did not
+  trigger for this input is not determined here.
+- ⚠️ **`whisper-batch.ts` NEVER RAN EITHER** — Deepgram served the transcription
+  (`tm_transcribe`). Step 1 touched three files; **this smoke proves one of them
+  live** (`llm-mdm.ts`). The other two are proven only at unit level. Recorded
+  because "the capture gap is CLOSED" is true of the code and, in production,
+  demonstrated for one of three callers.
+- ⚠️ **THE SAME CALL IS NAMED DIFFERENTLY IN THE TWO TABLES.** The transcription
+  is `ai_calls.purpose = 'tm_transcribe'` and
+  `api_usage_events.operation = 'transcribe_realtime'`. Every other stage matches
+  exactly. **B4's gate is *per-stage coverage with expected call counts*, so a
+  gate that joins the two tables by stage name will silently mis-pair this one**
+  — one table reporting a stage the other appears to lack. It is a naming
+  divergence, not a data defect, and it is cheapest to fix in the gate's mapping
+  rather than by renaming a column with history behind it.
+- **Cleanup preserves the evidence — now measured, not argued.** After
+  `clean.ts`: patients **0**, visits **0**, and `ai_calls` **500** /
+  `api_usage_events` **464** / `audit_logs` **977** all intact. The ledger
+  asserted this from the FK layout; it is now an observation.
+
+### Cleanup, as ruled
+
+`clean.ts` only — `cleaned visits=1 patients=1 templates=0`. Fixture verified
+back at **0 patients / 0 visits**. Audit rows left in place. `runStaleVisitCleanup()`
+was **not** invoked, and must never be used as a cleanup shortcut: it is not
+practice-scoped.

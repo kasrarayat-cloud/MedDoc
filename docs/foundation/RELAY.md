@@ -3451,6 +3451,78 @@ scenario 38 **9 of 9 on QA**. The unit count moving by exactly 10 under
 
 ---
 
+### ✅ B1-b STEPS 3 + 4 — the balance probe and the sanctioned smoke — 2026-08-09
+
+**The B1-b ordered sequence is now COMPLETE end to end: 1 → 2 → 3 → 4.**
+Full report, with the declaration committed *before* the run:
+`docs/qa-reports/b1b-step4-smoke-20260809.md`.
+
+**Step 3 — the balance probe.** One authorised call,
+`claude-haiku-4-5-20251001`, `max_tokens: 1`. **HTTP 200** — the balance is NOT
+exhausted, so the sequence proceeded rather than parking. Issued via
+`docker compose exec` so the key was read from the container's own environment
+and never entered a shell command or any output.
+
+**Step 4 — ONE clean smoke**, visit `cmsm4y2ro00010hqogjeg1x2v` on the synthetic
+fixture, `READY`, **13 calls / 13 meter rows / $0.49**, cleaned to baseline.
+**15 of 15 declared rows judged ✅**, including the abort guard on the real
+clinicians' counts — checked before, during and after: **15 / 25 / 16 unmoved**,
+non-smoke `ai_calls` **625 both sides**.
+
+#### THE DELIVERABLE — `requestId` by purpose, on REAL vendor calls
+
+**13 of 13 present. Zero NULL.** Across `judge`, `tm_anchor_entailment` (×3),
+`tm_cpt_coding`, `tm_critique`, `tm_entities`, `tm_icd_coding`,
+`tm_patient_summary`, `tm_referrals`, `tm_rx_drafting`, `tm_soap_draft`
+(anthropic) and `tm_transcribe` (deepgram). `api_usage_events` mirrors it
+row-for-row, every row `unitsSource='vendor'`.
+
+**Three owed items discharged in one act**, exactly as ruling 73 intended: 1b's
+sizing · *the meter is unproven in production* · B1-a's capture proven live.
+
+⚠️ **AND STEP 1's FIX IS PROVEN IN PRODUCTION ON THE PATH THAT MOTIVATED IT.**
+`judge` — recorded as *structurally NULL*, and pre-warmed by `worker.ts` on every
+visit — returned **1 of 1 present**. Run before step 1 landed, this smoke would
+have recorded our own missing capture as the vendor's silence, permanently:
+`api_usage_events` has no deleter anywhere in the tree.
+
+**Ruling 68 confirmed by observation:** `tm_anchor_entailment` produced **3 calls
+and 3 meter rows** — one row per CALL for L4b's k=3 ensemble, not one per stage.
+
+#### ⛔ 72(b) IS STILL OPEN. A PERFECT SCORE IS NOT A MEASUREMENT.
+
+**13 of 13 is the shape of evidence most likely to be over-read, and the
+declaration said so before the number existed.** It is one visit, one specialty,
+one input mode, and **13 of 13 calls SUCCEEDED** — so this sample contains
+**exactly zero evidence about failure paths**, which still write NULL by design
+(that is B2). The constraint would have to survive precisely the case not
+sampled.
+
+**Tightening remains the allowed direction**, so waiting costs nothing and
+guessing cannot be walked back. 72(b) stays open and still owed a real
+measurement.
+
+#### What this does NOT claim
+
+- **Step 1 is proven live for ONE of its three callers.** `tm_embed` produced no
+  rows at all and `whisper-batch.ts` never ran (Deepgram served transcription),
+  so `embed.ts` and `whisper-batch.ts` remain unit-proven only.
+- **It does not close B1 or B4.**
+
+#### Carried to B4, both from this run
+
+- ⚠️ **A single-visit sample does NOT contain every stage.** `tm_embed` was
+  absent. B4's gate is *per-stage coverage with expected call counts* — it must
+  not assume one visit exercises the full stage set.
+- ⚠️ **The same call is NAMED DIFFERENTLY in the two tables.**
+  `ai_calls.purpose='tm_transcribe'` vs
+  `api_usage_events.operation='transcribe_realtime'`; every other stage matches.
+  **A B4 gate that joins the two tables by stage name will silently mis-pair
+  this one.** Fix it in the gate's mapping, not by renaming a column with history
+  behind it.
+
+---
+
 ## Found on the way past — 2026-08-09, deploying B1-b
 
 ### ⛔ `gh run list --commit <SHORT-SHA>` RETURNS `[]` — THE MANDATORY PRE-PUSH CHECK CAN LIE ALL-CLEAR
