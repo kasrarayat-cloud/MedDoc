@@ -3039,6 +3039,88 @@ fixture's `audit_logs` count decreasing at any point → stop and investigate.
 
 ---
 
+### 🟩 B1-b STEPS 1 + 2 ARE LIVE IN PRODUCTION — 2026-08-09T18:18Z
+
+Deployed from `main` @ **`d4e33c22`** by `bash scripts/deploy-prod.sh`, under a
+delta declaration written before the run:
+`docs/foundation/deploys/20260809-d4e33c22.md`. Log
+`docs/deploy-logs/deploy-20260809T181441Z.log`. Rollback tags
+**`:pre-b1b-20260809`**, cut against the **RUNNING** ids `e781cd52035f` /
+`fec3c43dfb61` and digest-verified (`docker inspect --format '{{.Id}}'` returned
+exactly the running ids) before the deploy proceeded. No pre-existing `pre-b1b-*`
+tag was overwritten.
+
+**Citation — 4 of 4 on `d4e33c22`, all `completed/success`:**
+`CI` `31326376721` · `e2e` `31326376718` · `a11y-ci` `31326376757` ·
+`secrets-scan` `31326376712`.
+
+⚠️ **The citation is on the DESCENDANT, deliberately.** `c7dbaf48` — the merge
+commit that actually carries step 2 — holds only a **partial** citation: one
+`secrets-scan` success plus a `startup_failure` with an empty workflow name.
+`d4e33c22` contains everything `c7dbaf48` did plus PR #566, and carries a full
+4 of 4. Per the recovery pattern in `AGENTS.md`, citing the descendant is
+strictly stricter than citing the parent — it covers the same code *plus* the
+later commit, and certifies the tree that actually shipped.
+
+**Both steps shipped in one deploy because neither had ever reached production.**
+`assert-migrations-applied.sh` exited **1** at STEP 0 naming
+`20260809100000_b1b_request_id_nullable` — the RED that opened this session. It
+now exits 0: *95 in repo, 95 rows recorded.*
+
+#### THE DECLARATION, JUDGED LINE BY LINE — 17 of 17
+
+| # | declared | measured | |
+|---|---|---|---|
+| 1 | migrations 94 → **95** | **95**, `assert-migrations-applied` 🟢 95/95 | ✅ |
+| 2 | `requestId` `is_nullable` `NO` → **`YES`** | `text`, `is_nullable=YES`, `default=(none)` | ✅ |
+| 3 | CHECKs on `api_usage_events` 1 → **2** | `…_request_id_requires_vendor` + `…_units_source_domain` | ✅ |
+| 4 | both image ids move | `e781cd52→63889833`, `fec3c43d→685a6c10` | ✅ |
+| 5 | `transcribe_visits` **25** | 25 | ✅ |
+| 6 | `transcribe_md_patients` **15** | 15 | ✅ |
+| 7 | visits with `signedAt` **16** | 16 | ✅ |
+| 8 | `users` **196** | 196 | ✅ |
+| 9 | `api_usage_events` rows **1312** | 1312 | ✅ |
+| 10 | `requestId` NULL count **0** — all 1312 still populated | `vendor\|1312\|0` | ✅ |
+| 11 | `unitsSource` census **vendor 1312**, 0 NULL | `vendor\|1312`, no other bucket | ✅ |
+| 12 | `…_units_source_domain` still present | present | ✅ |
+| 13 | `ai_calls` rows **1112** | 1112 | ✅ |
+| 14 | `ai_calls.requestId` **1112 NULL / 0 present** | `1112\|0` | ✅ |
+| 15 | `gotenberg` image id **unchanged** | `2d05d225…acd45`, identical | ✅ |
+| 16 | co-tenants 307 · 404 · 200 · 200 · 410 | identical | ✅ |
+| 17 | 9 of 9 healthy | 9 of 9 healthy | ✅ |
+
+⚠️ **Row 10 is the INVERSE of B1-a's row 10, and that is the point.** B1-a added
+a column and declared every historical value must stay **NULL**. This migration
+makes a populated column *nullable* and declares every historical value must stay
+**NON-NULL**. Both encode the same rule — *a deploy changes what is POSSIBLE,
+never what is RECORDED* — and in this direction the dangerous outcome is a
+historical vendor id being cleared, which would destroy the very correlation data
+B1-a exists to collect.
+
+⚠️ **Row 14 pins the quantity the NEXT step moves.** Steps 3–4 exist to produce
+real `ai_calls.requestId` values. Pinning it at 1112 NULL / 0 present *before*
+the smoke is what makes the smoke's numbers attributable to the smoke rather than
+to this deploy — without that row the two are indistinguishable afterwards.
+
+**The migration's abort guard passed silently, as declared.** It refuses if any
+row carries an id on a non-vendor provenance; the pre-deploy census said zero
+such rows, and no `[b1b-step2]` exception was raised.
+
+#### THE CRON CAVEAT THIS DECLARATION HONOURED
+
+Baseline captured **18:13Z**, judged **18:18Z** — spanning neither the `0 3 * * *`
+stale-visit sweep nor the `0 4 * * *` retention sweep, and the declaration said so
+before the deploy ran.
+
+⚠️ **And the baseline itself shows why that clause now exists.** B1-a's
+declaration pinned `transcribe_visits=26` / `ai_calls=1122` at 02:36Z. This
+session's STEP 0 measured **25** and **1112**. That difference is the documented
+03:00Z sweep purging one soft-deleted visit and its 10 `AiCall` rows — *named in
+the declaration up front* rather than discovered afterwards as an anomaly. This
+is the first deploy to use the clause the previous session wrote.
+
+---
+
 ### ✅ B1-b STEP 1 — the capture gap is CLOSED — 2026-08-09
 
 **Step 1 of the ordered sequence only.** Steps 2 (the migration), 3 (the balance
@@ -3366,3 +3448,56 @@ kind; the count is what surfaced it.
 passed / 4 skipped · `tsc --noEmit` clean · `prisma validate` clean · E2E
 scenario 38 **9 of 9 on QA**. The unit count moving by exactly 10 under
 `test:unit -w transcribe-md` is the evidence that CI runs the new gate.
+
+---
+
+## Found on the way past — 2026-08-09, deploying B1-b
+
+### ⛔ `gh run list --commit <SHORT-SHA>` RETURNS `[]` — THE MANDATORY PRE-PUSH CHECK CAN LIE ALL-CLEAR
+
+**This is the check MASTER.md made a MUST yesterday (ruling 74, after the third
+push-cancels-in-flight incident), and the form a person naturally types is the
+form that silently answers nothing.**
+
+Measured this session, both directions, within a minute:
+
+    gh run list --commit d4e33c22                                  → []
+    gh run list --commit d4e33c220ff6555420bd4c3ec843ed4517cb8e69  → 4 runs, all success
+
+`git log --oneline` prints short SHAs, `git rev-parse --short HEAD` returns one,
+and every ledger row in this file cites them — so the abbreviated form is the one
+that comes to hand. It does not error, does not warn, and does not say
+"ambiguous". **It returns an empty list, which is exactly what "no runs in
+flight" looks like.**
+
+⚠️ **THE FAILURE IS IN THE DANGEROUS DIRECTION.** The rule's whole purpose is to
+stop a push from cancelling somebody's evidence. A pre-push check run with a short
+SHA reports *nothing in flight* for a commit with four runs executing, and the
+push proceeds — destroying the citation the check existed to protect, while
+appearing to have been performed. The audit trail would show the check was run.
+
+And it is the **same family as the one already recorded against `gh pr checks`**
+(reported `pending` for a run already `completed/success`). Two different `gh`
+surfaces, two different lies, both in the direction that costs a run:
+
+| surface | lies how |
+|---|---|
+| `gh pr checks` | reports `pending` for a completed run — waits for nothing, or under-reports a citation |
+| `gh run list --commit <short>` | reports **`[]`** for a commit with runs — an all-clear that authorises the cancelling push |
+
+**The rule, tightened:** the pre-push check and every citation take the **full
+40-character SHA**, from `git rev-parse HEAD` — never `--short`, never a SHA
+copied out of `git log --oneline` or out of a ledger row in this file.
+
+⚠️ **AND A ZERO FROM THIS COMMAND IS POSITIVE-CONTROLLED BEFORE IT IS BELIEVED.**
+The canon's standing rule applies verbatim here — *a broken check and a clean
+system produce identical output*. The control is free: re-run against a commit
+known to have runs (`gh run list --branch main --limit 5` names several) and
+confirm the command can return non-empty at all. This session's `[]` was caught
+only because two consecutive commits both returned empty, which was implausible
+enough to check — **one plausible empty result would have passed straight
+through.**
+
+MASTER.md's own text still reads `gh run list --commit <sha>`, and `<sha>` is
+where the ambiguity lives. Correcting that wording is its own item; recorded here
+because a finding that lives only in a transcript is not a finding.
