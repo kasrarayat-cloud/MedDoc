@@ -502,13 +502,16 @@ about somebody's evidence, and it must be made deliberately.
 > **Before pushing to any branch with required runs: `gh run list --commit <sha>`.
 > Then either WAIT, or state in the log that the cancellation is deliberate.**
 
-⚠️ **THIRD OCCURRENCE, WHICH IS WHY IT IS NOW A RULE AND NOT A LESSON.**
+⚠️ **FOURTH OCCURRENCE — AND THE SECOND OF THE *PR-BRANCH* SHAPE IN NINETEEN
+HOURS.** The third is why this is a RULE and not a lesson; the fourth is why the
+rule needed its BLAST RADIUS explained.
 
 | when | what was destroyed |
 |---|---|
 | 2026-08-07 | a docs-only push to `main` cancelled the merge-commit citation it was waiting for — `CI`, `e2e` and `a11y-ci` all `cancelled`, ~45 minutes lost, and for a few minutes `main` carried a commit no gate had seen |
 | 2026-08-08 | merging one PR seventeen minutes after another cancelled the first's `e2e`, leaving a **3-of-4** citation on a deployed commit |
 | 2026-08-09 | a feature-branch push mid-run cancelled three runs and restarted the clock |
+| 2026-08-09 | **the same shape 19h later, again on a PR branch** — PR #568's docs commit, pushed 2m45s after the PR opened, cancelled `CI`, `a11y-ci` and `e2e`; only `secrets-scan` escaped, having finished 2m12s earlier |
 
 Note the second one especially: it arrived through a **legitimate PR merge**, not
 a stray push. "Nothing reaches `main` outside a PR" does not protect you here —
@@ -521,8 +524,52 @@ is incomplete when it is done — **stale in the direction that costs a run.**
 `gh run list --commit <sha>` is the reliable view, and the one a citation must be
 taken from.
 
+⚠️ **AND IT APPLIES TO A PR BRANCH EXACTLY AS IT APPLIES TO `main` — INCLUDING
+WHEN THE ONLY RUNS YOU CAN CANCEL ARE YOUR OWN.** The third and fourth rows above
+are the same shape nineteen hours apart — #557 on `feat/b1a-vendor-request-id`,
+then #568 — and that is the argument: **the class recurred within a day of the
+rule being written down.**
+
+**Reference case, 2026-08-09 — PR #568.** The PR opened at `20:28:09Z` and four
+runs were created at `20:28:12Z`. The docs commit was pushed at `20:30:54Z` —
+**2m45s after the PR opened** — and cancelled three of them: `CI` at 2m58s,
+`a11y-ci` at 3m04s, `e2e` at 3m07s. Only `secrets-scan` survived, and only
+because it had already succeeded at `20:28:42Z`.
+
+⚠️ **AND "JUST BATCH IT" WAS NOT AVAILABLE HERE — WHICH IS THE PART WORTH
+LEARNING.** The docs commit **did not exist** when the PR was pushed: it was
+authored at `20:30:22Z`, two minutes *into* the run it went on to cancel. So the
+habit that would have prevented this is not *combine two commits already sitting
+there*; it is **hold the first push until the session's remaining commits are
+written**. That is the harder rule, and it is the one this case actually teaches.
+
+⚠️ **THE BLAST RADIUS IS YOUR OWN RUNS, WHICH IS EXACTLY WHY IT FEELS HARMLESS.**
+Every workflow groups per-ref under its own prefix (`ci-`, `e2e-`, `a11y-`,
+`secrets-scan-`) with `cancel-in-progress: true`, so one push cancels your
+in-flight run of **each** of them — and only yours. Nobody else is inconvenienced,
+nothing turns red, and the habit therefore never gets corrected by consequence.
+
+**The recovery was CORRECT and is not what is being corrected.** The citation was
+taken on the descendant, which contains everything the parent did, so nothing was
+certified that no gate had seen. **The cancellation was avoidable; the response
+to it was right.**
+
+**Price the class by its worst instance, not its cheapest.** #568 discarded
+**~9 runner-minutes across three concurrent runs** (2m58s + 3m04s + 3m07s) and
+re-ran four jobs that had already passed, because the second commit landed about
+three minutes of wall clock into the run. The identical mistake at minute forty
+discards the whole gate — the 2026-08-07 row above, at ~45 minutes of wall clock.
+**The cost is set by HOW LATE the second push lands; the habit is identical
+either way, so do not read the cheap instances as evidence that the class is
+cheap.**
+
 **The cheap habit that avoids all of it: BATCH.** Most of these cost a cycle
-because two pushes were made minutes apart where one would have done.
+because two pushes were made minutes apart where one would have done. And when a
+second push genuinely must happen, the pre-push check is taken with the **full
+40-character SHA** from `git rev-parse HEAD`: `gh run list --commit <short-sha>`
+returns `[]` for **ANY** abbreviated SHA, whatever the runs are doing — exit 0, no
+warning, no "ambiguous" — so an in-flight run is indistinguishable from an
+all-clear.
 
 ## LEDGER AND SCHEMA CONFLICTS RESOLVE AS UNIONS
 
