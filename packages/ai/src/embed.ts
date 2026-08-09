@@ -17,6 +17,7 @@
 import OpenAI from 'openai';
 
 import { logAiCall } from './log';
+import { readOpenAIRequestId } from './vendor-request-id';
 import { isMockEnabled, mockEmbed } from './mock';
 import { openaiEmbedSmallCostCents } from './pricing';
 import { hashPrompt } from './prompt-hash';
@@ -107,6 +108,12 @@ export async function embedText(args: EmbedTextArgs): Promise<EmbedTextResult> {
         costUsdCents: costCents,
         success: false,
         errorCode: 'EMBED_DIM_MISMATCH',
+        // B1-b step 1. ⚠️ `success: false`, and it STILL carries a vendor id —
+        // deliberately. The vendor call SUCCEEDED here; we rejected its payload
+        // for the wrong dimension count. The id exists, we were billed for it,
+        // and dropping it because our own column says `false` would discard a
+        // real correlation id for a call that really happened.
+        requestId: readOpenAIRequestId(response),
       });
       throw new Error(
         `OpenAI embedding returned ${embedding?.length ?? 0} dims, expected ${EMBED_DIMENSION}.`
@@ -123,6 +130,9 @@ export async function embedText(args: EmbedTextArgs): Promise<EmbedTextResult> {
       outputTokens: 0,
       costUsdCents: costCents,
       success: true,
+      // B1-b step 1 — `tm_embed`, one of the three callers B1-a's gate did not
+      // watch. OpenAI, not Anthropic; see readOpenAIRequestId's header.
+      requestId: readOpenAIRequestId(response),
     });
 
     logApiUsage(

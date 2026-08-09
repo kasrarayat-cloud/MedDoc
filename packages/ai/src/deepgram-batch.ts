@@ -291,6 +291,19 @@ async function deepgramBatchTranscribeOnce(
   } catch (err) {
     clearTimeout(timer);
     const latencyMs = Date.now() - started;
+    // ── B1-b step 1 — DEEPGRAM ID SEMANTICS, SITE 1 OF 2. STATED, NOT SKIPPED.
+    // The ruling said to include the two remaining sites "if they are the same
+    // shape; if they are not, state that vendor's id semantics explicitly."
+    // They are not, and the two differ from each other:
+    //
+    //   THIS SITE — `fetch` itself threw (timeout / DNS / connection reset).
+    //   There is NO response object in scope, and on a TIMEOUT the request may
+    //   never have reached Deepgram at all. `requestId` is therefore genuinely
+    //   absent, not merely uncaptured, and NULL here is the honest value.
+    //
+    // Deepgram's id lives in the BODY (`metadata.request_id`), unlike Anthropic
+    // and OpenAI which expose it as a non-enumerable property on a parsed SDK
+    // response. This caller uses raw `fetch`, so there is no SDK to populate one.
     logAiCall({
       ...args,
       provider: 'deepgram',
@@ -316,6 +329,22 @@ async function deepgramBatchTranscribeOnce(
     } catch {
       body = '(body read failed)';
     }
+    // ── B1-b step 1 — DEEPGRAM ID SEMANTICS, SITE 2 OF 2.
+    //
+    //   THIS SITE — Deepgram ANSWERED, with a non-2xx. A response exists, and
+    //   an id very likely exists WITH it — but not where `readDeepgramRequestId`
+    //   looks. That reader parses `metadata.request_id` out of a JSON body, and
+    //   an error body is read as TEXT two lines above (deliberately, and capped
+    //   at 500 chars) because Deepgram's error bodies are not the batch schema.
+    //   The id on this path is carried by the `dg-request-id` RESPONSE HEADER.
+    //
+    // ⚠️ CAPTURING IT IS DELIBERATELY NOT DONE HERE. Reading a header is a new
+    // third id-source shape, and the failure paths are B2's item by name ("wire
+    // the failure paths into the durable table"). Step 1's job is to stop the
+    // SIZING being fabricated, and the sizing counts SUCCESS rows — so widening
+    // into B2 here would buy nothing this ruling asked for and would leave B2
+    // half-done under another item's name. Recorded in RELAY.md as B2's input,
+    // with the header named, so B2 does not have to rediscover it.
     logAiCall({
       ...args,
       provider: 'deepgram',

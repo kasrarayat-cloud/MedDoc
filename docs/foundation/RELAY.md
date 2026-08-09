@@ -3036,3 +3036,145 @@ declaration is THE FINDING, whatever its explanation sounds like afterwards.
 
 **Abort guards:** any movement in prod-wide patient/visit/signed counts, or the
 fixture's `audit_logs` count decreasing at any point → stop and investigate.
+
+---
+
+### ✅ B1-b STEP 1 — the capture gap is CLOSED — 2026-08-09
+
+**Step 1 of the ordered sequence only.** Steps 2 (the migration), 3 (the balance
+probe) and 4 (the smoke) are NOT done and are not claimed. What is true now is
+that a smoke run would no longer record our own omission as the vendor's silence.
+
+#### THE LIST, WORKED ENTRY BY ENTRY — 19 sites, all accounted for
+
+The ledger handed me a 5-row table. I re-derived it rather than trust it, and it
+was right about the shape and wrong in two places:
+
+| caller | sites | ledger said | measured |
+|---|---|---|---|
+| `packages/ai/src/anthropic.ts` | 10 | 10 pass | **2 pass** — the other 8 are FAILURE paths |
+| `packages/ai/src/deepgram-batch.ts` | 3 | 1 | 1 ✅ |
+| `packages/ai/src/embed.ts` | 3 | 0 | 0 ✅ |
+| `packages/ai/src/whisper-batch.ts` | **2** | 3 | 0 ✅ (count was 3, is 2) |
+| `…/em-coding/llm-mdm.ts` | 1 | 0 | 0 ✅ |
+
+⚠️ **"10 of 10" was not wrong so much as measuring a different quantity.**
+`anthropic.ts`'s 8 failure sites DO capture the id — into `errorDetails` via
+`anthropicErrorDetailsJson(err)`, a JSON blob, not the queryable column. For the
+B1-b sizing that distinction is the whole question, and a row that reads "10/10"
+invites the next reader to conclude the column is populated on failures. It is
+not, anywhere.
+
+**Threaded (4 sites):** `llm-mdm.ts` success · `embed.ts` success ·
+`embed.ts` EMBED_DIM_MISMATCH · `whisper-batch.ts` success.
+
+⚠️ **`embed.ts`'s EMBED_DIM_MISMATCH carries an id despite `success: false`, and
+that is deliberate.** The VENDOR call succeeded there; we rejected its payload
+for the wrong dimension count. We were billed for it. Dropping the id because our
+own column says `false` would discard a real correlation id for a call that
+really happened.
+
+#### ⚠️ THE RULING NAMED THE WRONG READER FOR TWO OF THE THREE FILES
+
+Ruling 75 says *"thread `readAnthropicRequestId` into `llm-mdm.ts`, `embed.ts`
+and `whisper-batch.ts`."* **`embed.ts` and `whisper-batch.ts` are OPENAI
+callers** — `provider: 'openai'` at every site.
+
+The function would have WORKED, which is what makes this worth writing down:
+openai 6.34.0 uses the identical non-enumerable `defineProperty` trick, so the
+happy path would have passed and nobody would have looked again. What it would
+have cost is the evidence — `vendor-request-id.ts`'s header pins
+`@anthropic-ai/sdk 0.85.0 internal/parse.js:55`, and that citation says nothing
+about OpenAI. One shared function would have carried two vendors' SDK internals
+under one vendor's proof.
+
+Executed as a sibling **`readOpenAIRequestId`**, verified against the installed
+`openai 6.34.0`, `internal/parse.js:55` — same shape, header **`x-request-id`**
+rather than Anthropic's bare `request-id`. Both readers keep the never-fabricate
+contract. Ruling 75 amended in place with the corrected premise, this commit.
+
+#### DEEPGRAM'S TWO FAILURE SITES ARE NOT THE SAME SHAPE — stated, per the ruling
+
+The ruling required inclusion *"if they are the same shape"*, and an explicit
+statement of the vendor's id semantics if not. They are not, **and they differ
+from each other**:
+
+| site | what exists | disposition |
+|---|---|---|
+| `fetch` threw | **no response at all**; on a TIMEOUT the request may never have reached Deepgram | NULL is the honest value, not a gap |
+| `!res.ok` | Deepgram ANSWERED; the id is in the **`dg-request-id` response header** | capturable, **left to B2** |
+
+Deepgram's id lives in the BODY (`metadata.request_id`), unlike Anthropic and
+OpenAI which expose it as a property on a parsed SDK response — this caller uses
+raw `fetch`, so there is no SDK to populate one. Both sites carry the reasoning
+in place, at the code.
+
+#### FAILURE PATHS ARE B2's, AND B2 NOW HAS ITS INPUTS MEASURED
+
+Deliberately **not** widened into here — B2 is *"wire the failure paths into the
+durable table"* by name, and half-doing it under step 1's name is how an item
+gets marked done twice. What B2 no longer has to rediscover:
+
+- `deepgram-batch.ts` `!res.ok` → **`dg-request-id` response header**
+- `embed.ts` / `whisper-batch.ts` outer catch → **`APIError.requestID`**
+  (openai 6.34.0 `core/error.js:14`)
+- `anthropic.ts` × 8 → already captured, but into `errorDetails` JSON; the work
+  is moving it to the column (`@anthropic-ai/sdk` `core/error.js:14` is the same
+  shape)
+
+#### THE GATE — and why it is a RECONCILIATION, not a grep
+
+`packages/ai/src/__tests__/gate-b1b-request-id-capture.test.ts`, 12 tests.
+
+B1-a's gate was green and truthful over a universe that did not contain the
+question. So this one buckets **every** `logAiCall` site in **every** vendor
+caller — SUCCESS_CAPTURES / SUCCESS_NO_ID / FAILURE_CAPTURES / FAILURE_NO_ID —
+asserts the four sum to a per-file census (19 total), holds SUCCESS_NO_ID at
+**0**, and declares each FAILURE_NO_ID count BY FILE with its reason.
+
+⚠️ **The assertion that would actually have caught B1-a's gap is the last one:
+`CALLERS` is re-derived from the tree and diffed against the hand-kept list.**
+Every other test is exact about the five files it was handed; only that one asks
+whether five is the right number. **It fired on its first run** — reporting
+`packages/ai/src/log.ts`, which turned out to be the `logAiCall` *declaration*,
+not a caller. Fixed by skipping declarations; left unfixed it would also have
+inflated the census by one.
+
+**Mutation-proven**, by removing the four `requestId:` lines **and leaving their
+comments in place**:
+
+    SUCCESS_NO_ID           []  →  embed.ts · whisper-batch.ts · llm-mdm.ts
+    embed.ts FAILURE_NO_ID   1  →  2
+    "every caller has a capturing success site"  →  red on embed.ts
+
+⚠️ **Leaving the comments in was the point.** This fix wrote the word
+`requestId` into prose sitting directly on top of sites that deliberately pass
+none — the substring trap that has bitten this repo four times. The sites still
+classified as NO_ID, so the comment stripper is positive-controlled **against the
+real files**, not only against its fixture.
+
+⚠️ **`cp` and `mkdir` are DENIED to this session and are NOT in MASTER.md's
+permissions table** — a finding, recorded below. The mutation proof therefore
+used the Edit tool to mutate and restore, which never touches git and **asserts
+its own occurrence** (a failed restore errors rather than silently no-op'ing).
+That is strictly safer here than the prescribed scratch-copy: the tree carried
+this session's uncommitted work, and `git checkout --` is the documented way to
+destroy exactly that (B0-a, 2026-08-08). **No scratch was created.**
+
+#### WHAT THIS DOES NOT CLAIM
+
+- **Not proven on a live vendor call.** Every assertion is source-level or
+  against an SDK-shaped fixture. The live proof is step 4's smoke, and it is the
+  reason step 4 exists.
+- **`api_usage_events` is untouched.** Its `requestId` is still NOT NULL across
+  1312 rows; that is step 2's migration, and this change writes only to
+  `ai_calls`.
+- **Failure paths still write NULL** into the column, on every caller. Declared,
+  not fixed.
+- **`whisper-batch.ts`'s capture is unexercised in practice** — the pipeline runs
+  Deepgram; Whisper is the fallback. Correct, and rarely reached.
+
+**Local:** `packages/ai` 449/449 · `transcribe-md` 3228 passed / 4 skipped ·
+`tsc --noEmit` clean. Confirmed the gate runs under the app's vitest config —
+the exact command CI's `unit tests` job uses (`test:unit -w transcribe-md`), via
+its `packages/*/src/**` include glob. A gate CI does not run is decoration.

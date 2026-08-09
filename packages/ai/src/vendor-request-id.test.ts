@@ -26,7 +26,11 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { readAnthropicRequestId, readDeepgramRequestId } from './vendor-request-id';
+import {
+  readAnthropicRequestId,
+  readDeepgramRequestId,
+  readOpenAIRequestId,
+} from './vendor-request-id';
 
 /** Build a response the way the Anthropic SDK does — non-enumerable. */
 function sdkResponse(requestId: string | null): Record<string, unknown> {
@@ -81,6 +85,67 @@ describe('readAnthropicRequestId', () => {
     // Present but the wrong type, and present but empty — both are "no id".
     expect(readAnthropicRequestId({ _request_id: 42 })).toBeNull();
     expect(readAnthropicRequestId({ _request_id: '' })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// B1-b step 1 — the SAME TRAP, second vendor.
+// ---------------------------------------------------------------------------
+// ⚠️ The ruling said to thread `readAnthropicRequestId` into embed.ts and
+// whisper-batch.ts. Both are OPENAI callers (`provider: 'openai'`), so that
+// would have pointed a function named for one vendor at another vendor's SDK
+// internals, with a header comment pinning evidence that did not cover it.
+//
+// The trap is real on this SDK too, and is pinned here independently — openai
+// 6.34.0 `internal/parse.js:55` uses the same non-enumerable defineProperty,
+// off the `x-request-id` header rather than Anthropic's bare `request-id`.
+
+/** Build a response the way the OpenAI SDK does — non-enumerable. */
+function openaiResponse(requestId: string | null): Record<string, unknown> {
+  const value: Record<string, unknown> = {
+    data: [{ embedding: [0.1, 0.2] }],
+    usage: { total_tokens: 12 },
+  };
+  return Object.defineProperty(value, '_request_id', {
+    value: requestId,
+    enumerable: false,
+  });
+}
+
+describe('readOpenAIRequestId', () => {
+  it('reads the vendor id off a real SDK-shaped response', () => {
+    expect(readOpenAIRequestId(openaiResponse('req_abc123'))).toBe('req_abc123');
+  });
+
+  it('NEGATIVE CONTROL: a spread copy loses the id here too', () => {
+    const response = openaiResponse('req_abc123');
+    expect(readOpenAIRequestId({ ...response })).toBeNull();
+    expect(readOpenAIRequestId(Object.assign({}, response))).toBeNull();
+    expect(readOpenAIRequestId(JSON.parse(JSON.stringify(response)))).toBeNull();
+    // ...and the original still reads, so the nulls are the copies' fault.
+    expect(readOpenAIRequestId(response)).toBe('req_abc123');
+  });
+
+  it('survives the `as unknown as T` cast whisper-batch.ts applies', () => {
+    // whisper-batch casts the SDK response through `as unknown as
+    // WhisperBatchResponse`. That is a TYPE-level operation on the SAME object,
+    // so the non-enumerable property must survive it. Pinned because a future
+    // refactor to a structural copy would silently break capture.
+    const response = openaiResponse('req_whisper_1') as unknown as { text: string };
+    expect(readOpenAIRequestId(response)).toBe('req_whisper_1');
+  });
+
+  it('returns null — never a fabricated id — when the vendor sent no header', () => {
+    expect(readOpenAIRequestId(openaiResponse(null))).toBeNull();
+  });
+
+  it('returns null for junk input rather than throwing', () => {
+    expect(readOpenAIRequestId(null)).toBeNull();
+    expect(readOpenAIRequestId(undefined)).toBeNull();
+    expect(readOpenAIRequestId('a string')).toBeNull();
+    expect(readOpenAIRequestId({})).toBeNull();
+    expect(readOpenAIRequestId({ _request_id: 42 })).toBeNull();
+    expect(readOpenAIRequestId({ _request_id: '' })).toBeNull();
   });
 });
 
