@@ -490,6 +490,12 @@ async function callClaudeMdm(args: JudgeMdmArgs): Promise<MdmJudgement | null> {
             userId: aiLogContext.userId,
             practiceId: aiLogContext.practiceId,
             visitId: aiLogContext.visitId,
+            // B1-b step 2 — the SAME id the `logAiCall` directly above records.
+            // Step 1 threaded it into `ai_calls` only, so this row minted a UUID
+            // and the two tables disagreed about one call. `worker.ts` pre-warms
+            // judgeMdm on every visit, which makes this the highest-volume of
+            // the three sites that were still fabricating.
+            requestId: readAnthropicRequestId(response),
             metadata: { purpose, latencyMs, cacheControl: 'ephemeral' },
           },
           response.usage.input_tokens,

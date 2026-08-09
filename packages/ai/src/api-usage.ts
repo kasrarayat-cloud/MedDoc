@@ -20,7 +20,12 @@
 // do NOT back-rewrite historical rows.
 // ============================================================================
 
-import { randomUUID } from 'node:crypto';
+// ⚠️ `randomUUID` USED TO BE IMPORTED HERE, AND ITS ABSENCE IS THE POINT.
+// Every builder below once ended `requestId: ctx.requestId ?? randomUUID()`.
+// B1-b step 2 removed all five; if a future edit reaches for a UUID to satisfy
+// this column, read {@link UsageEvent.requestId} first — the column is nullable
+// precisely so that nothing has to invent a value for it, and the database now
+// refuses an invented one on any non-vendor row.
 
 import prisma from '@meddoc/db';
 
@@ -115,7 +120,22 @@ export interface UsageEvent {
   unitCostUsd: number;
   totalCostUsd: number;
   visitId?: string | null;
-  requestId: string;
+  /**
+   * THE VENDOR'S OWN CORRELATION ID for this call, verbatim — or `null`/absent
+   * when the vendor did not supply one. **NEVER FABRICATED.**
+   *
+   * ⚠️ **B1-b step 2 CHANGED THIS FROM `string` TO OPTIONAL, AND THE OLD SHAPE
+   * IS WHY.** It used to be required, and every builder satisfied that with
+   * `ctx.requestId ?? randomUUID()`. The column was therefore 100% populated
+   * and 0% trustworthy — a minted UUID and a real vendor id are the same shape,
+   * so one row later nothing could tell them apart. Making it required did not
+   * produce ids; it produced *indistinguishable* ids, which is worse than the
+   * NULL it was avoiding.
+   *
+   * The database now agrees: `requestId IS NOT NULL ⇒ unitsSource = 'vendor'`
+   * (`api_usage_events_request_id_requires_vendor`).
+   */
+  requestId?: string | null;
   modelName?: string;
   metadata?: Record<string, unknown> | null;
 }
@@ -133,9 +153,21 @@ export function logApiUsage(event: UsageEvent): void {
   // exist today and a sixth will not remember. It is also defence in depth —
   // a naive `SUM(totalCostUsd)` written by someone who never heard of
   // `unitsSource` still cannot over-charge.
+  //
+  // ⚠️ B1-b STEP 2 — AND A MOCK ROW CARRIES NO REQUEST ID, FOR THE SAME REASON.
+  // No vendor was called, so no vendor gave us an id, so any value here would
+  // be one we invented. The database refuses it outright
+  // (`requestId IS NOT NULL ⇒ unitsSource = 'vendor'`) — and because this
+  // writer is fire-and-forget, that refusal would be SWALLOWED: the row would
+  // simply not exist, no test would fail, and B0-a's guarantee that a mocked
+  // run meters would quietly stop being true. Zeroing it here means the writer
+  // and the constraint cannot disagree.
+  //
+  // Enforced HERE rather than in each builder, for the reason directly above:
+  // five builders exist today and a sixth will not remember.
   const priced: UsageEvent =
     event.unitsSource === 'mock'
-      ? { ...event, unitCostUsd: 0, totalCostUsd: 0 }
+      ? { ...event, unitCostUsd: 0, totalCostUsd: 0, requestId: null }
       : event;
   setImmediate(async () => {
     try {
@@ -157,7 +189,10 @@ export function logApiUsage(event: UsageEvent): void {
           unitCostUsd: priced.unitCostUsd,
           totalCostUsd: priced.totalCostUsd,
           visitId: priced.visitId ?? null,
-          requestId: priced.requestId,
+          // No `?? randomUUID()`. See {@link UsageEvent.requestId} — a minted
+          // id is indistinguishable from a real one afterwards, which is the
+          // whole defect B1-b closes.
+          requestId: priced.requestId ?? null,
           modelName: priced.modelName ?? null,
           metadata: priced.metadata ?? null,
           // No `?? 'vendor'`. The type makes this required; defaulting it here
@@ -183,7 +218,16 @@ interface BaseCtx {
   userId?: string | null;
   practiceId?: string | null;
   visitId?: string | null;
-  requestId?: string;
+  /**
+   * The vendor's own id, or `null`/absent when it gave none. See
+   * {@link UsageEvent.requestId} — NEVER fabricated.
+   *
+   * `| null` so a caller holding a `string | null` from `readAnthropicRequestId`
+   * / `readOpenAIRequestId` can pass it STRAIGHT THROUGH. The older `?? undefined`
+   * dance at the call sites existed only to feed the builder's UUID fallback,
+   * and that fallback is gone.
+   */
+  requestId?: string | null;
   metadata?: Record<string, unknown> | null;
   /**
    * ⚠️ REQUIRED on every builder's ctx — see {@link UnitsSource}.
@@ -203,7 +247,7 @@ export function buildDeepgramUsage(
   const minutes = audioSeconds / 60;
   return {
     ...ctx,
-    requestId: ctx.requestId ?? randomUUID(),
+    requestId: ctx.requestId ?? null,
     provider: 'deepgram',
     operation: 'transcribe_realtime',
     audioSeconds,
@@ -222,7 +266,7 @@ export function buildWhisperUsage(
   const minutes = audioSeconds / 60;
   return {
     ...ctx,
-    requestId: ctx.requestId ?? randomUUID(),
+    requestId: ctx.requestId ?? null,
     provider: 'whisper',
     operation: 'transcribe_batch',
     audioSeconds,
@@ -290,7 +334,7 @@ export function buildAnthropicUsage(
         cacheWriteUsd;
   return {
     ...ctx,
-    requestId: ctx.requestId ?? randomUUID(),
+    requestId: ctx.requestId ?? null,
     provider: 'anthropic',
     operation,
     inputTokens,
@@ -316,7 +360,7 @@ export function buildOpenAIEmbedUsage(
 ): UsageEvent {
   return {
     ...ctx,
-    requestId: ctx.requestId ?? randomUUID(),
+    requestId: ctx.requestId ?? null,
     provider: 'openai',
     operation: 'embed',
     inputTokens: tokens,
@@ -334,7 +378,7 @@ export function buildResendUsage(
 ): UsageEvent {
   return {
     ...ctx,
-    requestId: ctx.requestId ?? randomUUID(),
+    requestId: ctx.requestId ?? null,
     provider: 'resend',
     operation: 'email_send',
     emailCount,

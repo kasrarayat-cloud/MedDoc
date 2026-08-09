@@ -418,8 +418,10 @@ async function deepgramBatchTranscribeOnce(
         userId: args.userId ?? null,
         practiceId: args.practiceId,
         visitId: args.visitId ?? null,
-        // B1-a: `?? undefined`, never `?? randomUUID()` — see anthropic.ts.
-        requestId: vendorRequestId ?? undefined,
+        // B1-a captured it; B1-b step 2 lets it through unchanged — the
+        // builder's `randomUUID()` fallback is gone, so `null` now reaches the
+        // column and means the vendor gave no id. See anthropic.ts.
+        requestId: vendorRequestId,
         metadata: { purpose: args.purpose, latencyMs, model },
       },
       durationSec

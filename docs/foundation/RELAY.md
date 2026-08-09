@@ -3178,3 +3178,191 @@ destroy exactly that (B0-a, 2026-08-08). **No scratch was created.**
 `tsc --noEmit` clean. Confirmed the gate runs under the app's vitest config —
 the exact command CI's `unit tests` job uses (`test:unit -w transcribe-md`), via
 its `packages/*/src/**` include glob. A gate CI does not run is decoration.
+
+#### ⚠️ STEP 1's CITATION WAS CANCELLED, AND IS DISCHARGED BY ITS DESCENDANT
+
+**Fourth occurrence of push-cancels-in-flight, and the second to arrive through a
+legitimate PR merge rather than a stray push.** Recorded here because the ledger
+row for step 1 carried no citation at all, and an uncited commit on `main` is
+exactly what the rule exists to prevent.
+
+| commit | what it is | citation |
+|---|---|---|
+| `aaaf9faa` | PR #564 — B1-b step 1 | **all four `cancelled`** — `CI` 31303870752 · `e2e` 31303870769 · `a11y-ci` 31303870758 · `secrets-scan` 31303870792 |
+| `cf738620` | PR #563 — the loop's self-driving contract, merged minutes later | **4 of 4 `completed/success`** — `CI` 31303882816 · `e2e` 31303882823 · `a11y-ci` 31303882815 · `secrets-scan` 31303882837 |
+
+`git merge-base --is-ancestor aaaf9faa cf738620` **holds**, so the green citation
+covers step 1's code *plus* the loop change, on the commit that is actually
+`main`. Per the recovery pattern this is **strictly stricter** than what was
+lost, and no re-run of the cancelled past is owed. **The debt is discharged; do
+not re-open it.**
+
+---
+
+### ✅ B1-b STEP 2 — `requestId` goes nullable, and nothing invents one — 2026-08-09
+
+**Step 2 of the ordered sequence only.** Steps 3 (the balance probe) and 4 (the
+smoke) are NOT done and are not claimed.
+
+Executes ruling 72(a) — the migration — **plus the writer change that ruling
+implies and that a migration alone would have broken**. The two ship together
+for a reason given below.
+
+#### WHAT WAS ACTUALLY WRONG, IN THE SCHEMA'S OWN WORDS
+
+`schema.prisma` had named all three defects since B1-a and left them open:
+
+> `api_usage_events.requestId` does NOT have that property — **it is NOT NULL,
+> it carries mock rows, and it still falls back to `randomUUID()`.** Closing that
+> is B1-b and it needs a ruling.
+
+The column was **100% populated and 0% trustworthy**. `NOT NULL` did not produce
+ids; it produced *indistinguishable* ids — a minted UUID and a real vendor
+correlation id are the same shape, so one row later nothing could tell them
+apart. A ratchet counting "rows with a requestId" would have read 100% and meant
+nothing. All three are closed here.
+
+#### THE LIST, WORKED ENTRY BY ENTRY
+
+Swept **BY TABLE**, positive-controlled, and every entry carries its disposition:
+
+| # | entry | disposition |
+|---|---|---|
+| 1 | migration — `DROP NOT NULL` + CHECK | `20260809100000_b1b_request_id_nullable`, abort guard **before** the constraint, catalog read-back **after** it |
+| 2 | `schema.prisma` — the column | `requestId String?` + the CHECK declared in place (Prisma cannot express it; an undeclared `ADD CONSTRAINT` is drift) |
+| 3 | `schema.prisma` — `ai_calls.requestId`'s comment | it asserted the defect as PRESENT; now false, rewritten to say how the property was obtained differently |
+| 4 | `api-usage.ts` — 5 builders | `?? randomUUID()` → `?? null`. **Expected 5, measured 5, verified 0 remaining** |
+| 5 | `api-usage.ts` — the writer | mock ⇒ `requestId: null`, beside the money-zeroing, same reasoning |
+| 6 | `api-usage.ts` — the type | `requestId?: string \| null`, so a `string \| null` from the readers passes straight through |
+| 7 | `anthropic.ts` ×2, `deepgram-batch.ts` ×1 | `?? undefined` → bare passthrough; the dance existed only to feed the removed fallback |
+| 8 | `embed.ts`, `whisper-batch.ts`, `llm-mdm.ts` | **were minting on every call** — threaded the real id, mirroring what step 1 did for `ai_calls` |
+| 9 | raw-SQL writer — `38-usage-provenance.spec.ts` | fixture reshaped; see the attribution finding below |
+| 10 | `email.ts` ×2 (Resend) | **NOT APPLICABLE, declared with reason** — Resend returns a *message* id, not a call correlation id. See the open question below |
+
+**Entry 8 is the one a symptom-led fix would have missed.** Step 1 threaded those
+three files' ids into `logAiCall` and **explicitly declared `api_usage_events`
+out of scope** — correctly. So one real vendor call was writing two tables with
+two different "correlation ids", exactly one of them real, and `llm-mdm.ts` is
+the highest-volume of the three because `worker.ts` pre-warms `judgeMdm` on every
+visit. Nothing was in an error state.
+
+#### ⚠️ WHY THE MIGRATION AND THE WRITER COULD NOT SHIP SEPARATELY
+
+Had the CHECK landed while the builders still minted, **every mock row would
+have been refused by the database and dropped in silence.** `logApiUsage` is
+fire-and-forget: it catches its own write error and `console.warn`s. No test
+fails, no surface goes red, and B0-a's guarantee — that a mocked run meters —
+quietly stops being true. This is the fire-and-forget class from `AGENTS.md`
+arriving at a constraint instead of an enum, so the gate **reads the row back**
+rather than trusting the call's status.
+
+#### PROVEN ON QA — the whole truth table, every write rolled back
+
+Migration applied to `meddoc_qa_test`; its own catalog read-back fired.
+
+| provenance | id | result |
+|---|---|---|
+| `mock` | present | **REFUSED**, by name — `api_usage_events_request_id_requires_vendor` |
+| `vendor` | present | accepted |
+| `vendor` | NULL | accepted — **the converse is deliberately not asserted** (ruling 72(b)) |
+| `mock` | NULL | accepted — B0-a keeps metering |
+
+977 rows before and after; every probe inside `BEGIN … ROLLBACK`, per canon.
+The QA `_prisma_migrations` row was recorded so the stack's ledger and its schema
+agree.
+
+#### ⚠️ THE NEW CHECK BROKE AN EXISTING GATE'S ATTRIBUTION — measured, not guessed
+
+`38-usage-provenance.spec.ts` built every fixture row with a literal
+`'b0gate-req'`. Its NO-JUNK arm asserts a refusal **by constraint name** so the
+refusal is attributable to exactly one cause — and a `'Vendor'` row carrying an
+id now violates **two** constraints. Postgres reports whichever it evaluates
+first, and it was measured on QA:
+
+    ERROR: … violates check constraint "api_usage_events_request_id_requires_vendor"
+
+That is **not** the name the arm asserts. Left alone it would have gone red in
+CI, pointing at a constraint the arm was never about. Fixed by making `requestId`
+**default to NULL** in the fixture so each arm opts IN to an id — the value that
+cannot trip the new CHECK is the one you get by not thinking about it.
+
+#### THE GATE
+
+`packages/ai/src/__tests__/gate-b1b-no-fabricated-request-id.test.ts`, 10 tests,
+plus 4 new arms on the E2E spec (9 of 9 pass on QA).
+
+It does not count populated rows — that number was 100% while the defect was
+live. It asserts behaviour in **both directions** (a builder hardcoded to `null`
+would satisfy "never fabricates" and destroy every real id), the writer's
+mock⇒NULL, a comment-stripped source arm, and a **census** whose file list is
+re-derived from the tree and diffed against the hand-kept one.
+
+**Mutation-proven, four ways, each naming its victim:**
+
+    builder fabrication restored      → NO FABRICATION red on buildOpenAIEmbedUsage
+    writer's mock⇒null removed        → MOCK ROW CARRIES NO ID red
+    llm-mdm's threading reverted      → census red, naming the file and the count
+    email.ts dropped from the list    → watched-set arm red, naming the file
+
+The third is the one that matters: it proves the census **watches the sites this
+item fixed**, so the gate moves when the work lands rather than merely failing on
+a regression.
+
+#### ⚠️ FIFTH SIGHTING OF THE SUBSTRING TRAP — and it was mine, within the hour
+
+`grep -c 'ctx.requestId ?? randomUUID()'` reported **6** code sites. There were
+**5**. The sixth was a doc comment *I had written minutes earlier* explaining the
+fabrication being removed. Had I trusted the 6 and scripted against it, the
+occurrence assertion would have failed and I would have gone looking for a site
+that does not exist; had I trusted a naive `'randomUUID' in source` guard, it
+would fail forever on the documentation of its own fix.
+
+`api-usage.ts` now says `randomUUID` three times in prose deliberately, and the
+gate's stripper is **positive-controlled against that real file** — raw contains
+the token, stripped does not. Prose is not a proxy for code, and a file's
+comments are where the words you grep for are guaranteed to appear.
+
+Also caught by an occurrence assertion in the same pass: a `replace_all` over two
+call sites replaced **one**, because the two carried different comments and my
+anchor included one of them. A partial application that compiles is the dangerous
+kind; the count is what surfaced it.
+
+#### WHAT THIS DOES NOT CLAIM
+
+- **Not deployed.** Production holds 94 applied migrations against the repo's 95.
+  Prod's code and schema are consistent with each other — both pre-step-2.
+- **Not proven on a live vendor call.** Every arm is source-level, unit-level, or
+  a QA database probe. The live proof is step 4's smoke.
+- **The converse is unmeasured and unasserted.** `vendor ⇒ id` is ruling 72(b)
+  and needs step 4's numbers. An arm pins the absence so a later tidy-up cannot
+  ship the guess.
+- **Failure paths still write NULL** into `ai_calls.requestId` on every caller.
+  Declared in step 1, unchanged here — that is B2.
+- **It does not close B1 or B4**, and it does not prove the meter in production.
+
+#### Found on the way past
+
+- **⚠️ THE MOCK BOUNDARY MOVED BELOW THE METER FOR ANTHROPIC ONLY.** B0-a's
+  "what it does not claim" section never said so. `deepgram-batch.ts:197` and
+  `embed.ts:72` still short-circuit **above** `logApiUsage`, so a mocked run
+  emits **zero** usage events for transcription and embedding. Not a defect
+  today — `unitsSource: 'vendor'` is hardcoded at both, and correctly, because
+  the mock never reaches them. **But it is load-bearing for B4**, whose gate is
+  *per-stage coverage with expected call counts*: a QA/mock run structurally
+  cannot produce those stages, so B4 must either exclude them by name or run
+  against real calls. Left for B4 rather than widened into here.
+- **⚠️ GATE 0.5 SAYS RESEND IS NOT METERED; `email.ts` METERS IT.** Two
+  `logApiUsage(buildResendUsage(…))` sites write `api_usage_events` rows with
+  `unitsSource: 'vendor'`. They predate the ruling. Whether GATE 0.5 governs
+  telemetry rows or only the billable price table is **not decided here** — it is
+  a B3/B5 question and deciding it silently while touching the same file is how
+  two parts of a system end up built to incompatible readings of one ruling.
+- **The long-lived QA stack is behind `main`.** `20260809010000_b1a_ai_calls_request_id`
+  is neither applied nor recorded there (`ai_calls.requestId` does not exist).
+  CI's `e2e` builds a fresh database per run, so no citation is affected. Pre-
+  existing; not created by this item.
+
+**Local:** `packages/ai` 459/459 (449 + this gate's 10) · `transcribe-md` 3238
+passed / 4 skipped · `tsc --noEmit` clean · `prisma validate` clean · E2E
+scenario 38 **9 of 9 on QA**. The unit count moving by exactly 10 under
+`test:unit -w transcribe-md` is the evidence that CI runs the new gate.
