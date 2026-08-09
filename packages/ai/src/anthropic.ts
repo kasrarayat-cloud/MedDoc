@@ -497,10 +497,11 @@ export async function anthropicComplete<T>(args: AnthropicCompleteArgs<T>): Prom
           userId: args.userId ?? null,
           practiceId: args.practiceId,
           visitId: args.visitId ?? null,
-          // B1-a: the vendor's id when it gave one. `?? undefined` — NOT
-          // `?? randomUUID()` — so the builder's existing fallback still owns
-          // the absent case. Narrowing that is B1-b and it needs a ruling.
-          requestId: vendorRequestId ?? undefined,
+          // B1-a captured it; B1-b step 2 lets it through UNCHANGED. The old
+          // `?? undefined` existed only to hand the absent case to the builder's
+          // `randomUUID()` fallback — that fallback is gone, so `null` now
+          // reaches the column and means what it says: the vendor gave no id.
+          requestId: vendorRequestId,
           metadata: { purpose: args.purpose, latencyMs },
         },
         usage.inputTokens,
@@ -660,9 +661,9 @@ export async function anthropicCompleteText(
           userId: args.userId ?? null,
           practiceId: args.practiceId,
           visitId: args.visitId ?? null,
-          // B1-a: see the twin block in anthropicComplete — `?? undefined`,
-          // never `?? randomUUID()`.
-          requestId: vendorRequestId ?? undefined,
+          // B1-a captured it; B1-b step 2 lets it through unchanged — see the
+          // twin block in anthropicComplete. `null` now reaches the column.
+          requestId: vendorRequestId,
           metadata: { purpose: args.purpose, latencyMs },
         },
         usage.inputTokens,

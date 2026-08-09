@@ -61,13 +61,28 @@ const num = (sql: string) => Number.parseInt(trySql(sql).out.trim(), 10);
  *  the provenance. `userId`/`practiceId`/`visitId` stay NULL — they are
  *  nullable and FK-bearing, and a tenancy error here would be a second reason
  *  for a refusal we are trying to attribute to exactly one cause. */
-const ROW = (unitsSource: string | null) => `
+/**
+ * ⚠️ `requestId` DEFAULTS TO NULL, AND THE DEFAULT IS LOAD-BEARING — B1-b step 2.
+ *
+ * It used to be the literal `'b0gate-req'` on every row. Once
+ * `api_usage_events_request_id_requires_vendor` exists
+ * (`requestId IS NOT NULL ⇒ unitsSource = 'vendor'`), an id on a NON-vendor row
+ * is a second, independent reason for the insert to be refused — and Postgres
+ * reports whichever constraint it happens to evaluate first. The NO-JUNK arm
+ * below asserts a refusal BY CONSTRAINT NAME precisely so the refusal is
+ * attributable to one cause; leaving the id on would have made that arm pass or
+ * fail on constraint-evaluation order, which is not a property of this codebase.
+ *
+ * So NULL is the default and each arm opts IN to an id. The value that cannot
+ * trip the new CHECK is the one you get by not thinking about it.
+ */
+const ROW = (unitsSource: string | null, requestId: string | null = null) => `
   INSERT INTO api_usage_events
     ("id", "provider", "operation", "unitCount", "unitType",
      "unitCostUsd", "totalCostUsd", "requestId", "unitsSource")
   VALUES
-    ('b0gate-${unitsSource ?? 'null'}', 'anthropic', 'gate-probe', 1, 'tokens_in',
-     0, 0, 'b0gate-req', ${unitsSource === null ? 'NULL' : `'${unitsSource}'`});
+    ('b0gate-${unitsSource ?? 'null'}-${requestId ?? 'noreq'}', 'anthropic', 'gate-probe', 1, 'tokens_in',
+     0, 0, ${requestId === null ? 'NULL' : `'${requestId}'`}, ${unitsSource === null ? 'NULL' : `'${unitsSource}'`});
 `;
 
 test.describe('B0 step 2 — usage provenance is required at the database', () => {
@@ -135,6 +150,70 @@ test.describe('B0 step 2 — usage provenance is required at the database', () =
     // And the mock arm, so the domain is proven to admit BOTH ruled values
     // rather than having quietly collapsed to a single one.
     expect(trySql(`BEGIN; ${ROW('mock')} ROLLBACK;`).ok, "'mock' was refused").toBe(true);
+  });
+
+  // ─── B1-b step 2 ────────────────────────────────────────────────────────
+  // `requestId IS NOT NULL ⇒ unitsSource = 'vendor'`. An id present means a
+  // real vendor gave us one.
+
+  test('SHAPE — requestId is NULLABLE', () => {
+    const nullable = trySql(
+      `SELECT is_nullable FROM information_schema.columns
+        WHERE table_name='api_usage_events' AND column_name='requestId';`,
+    ).out.trim();
+    expect(
+      nullable,
+      'requestId is still NOT NULL — B1-b step 2 has not been applied to this ' +
+        'database. While it is NOT NULL every writer must supply SOMETHING, and ' +
+        'the only thing an honest writer has to supply is a fabrication',
+    ).toBe('YES');
+  });
+
+  test('NO-FABRICATION — an id on a MOCK row is REFUSED by constraint name', () => {
+    // The defect this closes, stated as the row that used to be written every
+    // time: a mocked run produced `unitsSource='mock'` alongside a
+    // `randomUUID()`. Nothing was in an error state, and one row later that
+    // UUID was indistinguishable from a real vendor correlation id.
+    const r = trySql(`BEGIN; ${ROW('mock', 'fabricated-uuid')} ROLLBACK;`);
+    expect(
+      r.ok,
+      'a MOCK row carrying a request id was accepted — an invented id is now ' +
+        'indistinguishable from a real vendor one, which is the provenance ' +
+        'confusion the whole unitsSource programme exists to prevent',
+    ).toBe(false);
+    // By NAME. A typo, a missing column or a dead connection all fail too.
+    expect(r.out).toContain('api_usage_events_request_id_requires_vendor');
+  });
+
+  test('CONTROL — the same id on a VENDOR row is ACCEPTED', () => {
+    // Without this, the refusal above proves only that some insert fails. It
+    // also pins the constraint's DIRECTION: step (a) of the ruling ties an id
+    // to vendor provenance, it does not forbid ids.
+    const r = trySql(`BEGIN; ${ROW('vendor', 'real-vendor-id')} ROLLBACK;`);
+    expect(
+      r.ok,
+      'a vendor row carrying a request id was refused — the constraint is ' +
+        'stricter than the ruling, which named the SAFE direction only: ' +
+        r.out,
+    ).toBe(true);
+  });
+
+  test('THE CONVERSE IS NOT ASSERTED — a VENDOR row with NO id is ACCEPTED', () => {
+    // ⚠️ THIS ARM EXISTS TO PIN AN ABSENCE, WHICH IS THE EASIEST THING FOR A
+    // LATER EDIT TO "FIX". `vendor ⇒ id` — the full biconditional — is step (b)
+    // of the 2026-08-09 ruling and is decided by MEASUREMENT that has not been
+    // taken: how often a real vendor call genuinely yields no id. Someone
+    // tidying the constraint into a symmetrical-looking biconditional would
+    // ship that guess, and would break every real call where Anthropic omits
+    // the `request-id` header. If this arm ever needs to change, it needs a
+    // ruling first, not a migration first.
+    const r = trySql(`BEGIN; ${ROW('vendor', null)} ROLLBACK;`);
+    expect(
+      r.ok,
+      'a vendor row with a NULL request id was refused — the converse has been ' +
+        'asserted somewhere, and it was explicitly deferred to measurement: ' +
+        r.out,
+    ).toBe(true);
   });
 
   test('BUCKETS — every row is in a named bucket, and they sum to the total', () => {

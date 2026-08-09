@@ -46,6 +46,8 @@ import { dirname, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { stripComments } from './helpers/strip-comments';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 /** packages/ai/src/__tests__ → repo root */
 const ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -106,54 +108,10 @@ const FAILURE_NO_ID_DECLARED: Record<string, { count: number; why: string }> = {
 // Source utilities
 // ---------------------------------------------------------------------------
 
-/**
- * Strip `//` and block comments, quote-aware.
- *
- * Quote awareness is the whole point: `deepgram-batch.ts` builds an https URL,
- * and a stripper that cut at the first `//` would truncate real code and then
- * silently under-count call sites — a false all-clear.
- */
-export function stripComments(src: string): string {
-  let out = '';
-  let i = 0;
-  type State = 'code' | 'line' | 'block' | 'sq' | 'dq' | 'tpl';
-  let state: State = 'code';
-
-  while (i < src.length) {
-    const c = src[i];
-    const next = src[i + 1];
-
-    if (state === 'code') {
-      if (c === '/' && next === '/') { state = 'line'; i += 2; continue; }
-      if (c === '/' && next === '*') { state = 'block'; i += 2; continue; }
-      if (c === "'") state = 'sq';
-      else if (c === '"') state = 'dq';
-      else if (c === '`') state = 'tpl';
-      out += c; i++; continue;
-    }
-
-    if (state === 'line') {
-      if (c === '\n') { state = 'code'; out += c; }
-      i++; continue;
-    }
-
-    if (state === 'block') {
-      if (c === '*' && next === '/') { state = 'code'; i += 2; continue; }
-      // Keep newlines so line numbers survive for error messages.
-      if (c === '\n') out += c;
-      i++; continue;
-    }
-
-    // Inside a string literal: copy verbatim, honour escapes.
-    out += c;
-    if (c === '\\') { out += src[i + 1] ?? ''; i += 2; continue; }
-    if (state === 'sq' && c === "'") state = 'code';
-    else if (state === 'dq' && c === '"') state = 'code';
-    else if (state === 'tpl' && c === '`') state = 'code';
-    i++;
-  }
-  return out;
-}
+// ⚠️ `stripComments` MOVED to ./helpers/strip-comments when B1-b step 2's gate
+// needed it. It is re-exported here so this file's own history and any external
+// import keep working; the implementation and the reasoning live in the helper.
+export { stripComments } from './helpers/strip-comments';
 
 /** Extract the balanced `(...)` argument text of every `logAiCall(` call. */
 function logAiCallSites(cleaned: string): string[] {

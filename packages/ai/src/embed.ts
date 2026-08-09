@@ -143,6 +143,13 @@ export async function embedText(args: EmbedTextArgs): Promise<EmbedTextResult> {
           userId: args.userId ?? null,
           practiceId: args.practiceId,
           visitId: args.visitId ?? null,
+          // B1-b step 2 — the SAME id this call's `logAiCall` above records.
+          // Step 1 threaded it into `ai_calls` and declared `api_usage_events`
+          // out of scope, so until now this row minted a UUID instead: one real
+          // call, two tables, two different "correlation ids", exactly one of
+          // them real. Passed straight through — `| null` is the honest value
+          // when OpenAI sends no `x-request-id`.
+          requestId: readOpenAIRequestId(response),
           metadata: { purpose: args.purpose, latencyMs },
         },
         inputTokens,

@@ -267,7 +267,18 @@ async function whisperBatchTranscribeOnce(
   // B0: `args` is the caller's context, so provenance is spread on explicitly
   // rather than added to WhisperBatchArgs — a transcription argument bag should
   // not have to carry a billing concept.
-  logApiUsage(buildWhisperUsage({ ...args, unitsSource: 'vendor' }, durationSec));
+  //
+  // B1-b step 2 — and the SAME id the `logAiCall` directly above records, for
+  // the same reason: step 1 stopped at `ai_calls`, so this row used to mint a
+  // UUID and the two tables disagreed about one call's correlation id. Read off
+  // `response` again rather than off the spread — `_request_id` is
+  // non-enumerable and `{ ...args }` would not carry it even if it were there.
+  logApiUsage(
+    buildWhisperUsage(
+      { ...args, unitsSource: 'vendor', requestId: readOpenAIRequestId(response) },
+      durationSec,
+    ),
+  );
 
   return {
     provider: 'whisper',

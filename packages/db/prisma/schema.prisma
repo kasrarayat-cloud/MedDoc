@@ -1656,9 +1656,15 @@ model AiCall {
   ///
   /// Unambiguous BY CONSTRUCTION on this table specifically: `ai_calls` is a
   /// REAL-VENDOR-CALLS-ONLY table (B0 Q1, `log.ts` header), so a non-null value
-  /// here is always a real vendor's id. `api_usage_events.requestId` does NOT
-  /// have that property — it is NOT NULL, it carries mock rows, and it still
-  /// falls back to `randomUUID()`. Closing that is B1-b and it needs a ruling.
+  /// here is always a real vendor's id.
+  ///
+  /// ⚠️ `api_usage_events.requestId` NOW HAS THE SAME PROPERTY, by a different
+  /// route — B1-b step 2 (`20260809100000_b1b_request_id_nullable`). It could
+  /// not inherit this table's construction argument, because it DOES carry mock
+  /// rows; instead a CHECK ties the id to the provenance
+  /// (`requestId IS NOT NULL ⇒ unitsSource = 'vendor'`) and the builders no
+  /// longer mint. Both tables now answer "is this a real vendor id?" with yes,
+  /// and neither answers it by convention.
   requestId String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
@@ -2603,9 +2609,39 @@ model ApiUsageEvent {
 
   // ── Context ──
   visitId   String?
-  /// Correlation ID — matches X-Request-Id headers / job IDs so a
-  /// single user action can be traced across multiple usage events.
-  requestId String
+  /// THE VENDOR'S OWN CORRELATION ID for this call, verbatim — or NULL.
+  ///
+  /// ⚠️ NULLABLE SINCE B1-b STEP 2 (`20260809100000_b1b_request_id_nullable`),
+  /// and it was NOT NULL for the wrong reason. The column's original brief was
+  /// "correlation id — matches X-Request-Id headers / job IDs", and every
+  /// builder honoured NOT NULL with `ctx.requestId ?? randomUUID()`. So the
+  /// column was 100% populated and 0% trustworthy: a minted UUID and a real
+  /// vendor id are the same shape, so one row later nothing could tell them
+  /// apart. That is not merely lost information — it is manufactured
+  /// information, and it is the fail-open shape ruled against on 2026-08-08
+  /// ("A provenance column's DEFAULT must never be the TRUSTED value").
+  ///
+  /// NULL now means "the vendor did not tell us", which is a fact worth
+  /// storing. Nothing in the write path invents a substitute.
+  ///
+  /// ⚠️ A CHECK CONSTRAINT PRISMA CANNOT EXPRESS TIES IT TO THE PROVENANCE.
+  /// Declared here because a raw `ADD CONSTRAINT` the schema does not mention
+  /// is drift, and drift is invisible until something trips over it:
+  ///
+  ///     api_usage_events_request_id_requires_vendor
+  ///       CHECK ("requestId" IS NULL OR "unitsSource" = 'vendor')
+  ///
+  /// Read as an implication: `requestId IS NOT NULL ⇒ unitsSource = 'vendor'`.
+  /// AN ID PRESENT MEANS A REAL VENDOR GAVE US ONE. Mock rows carry NULL.
+  ///
+  /// ⚠️ THE CONVERSE IS NOT ASSERTED, DELIBERATELY. Whether `vendor ⇒ id` can
+  /// be strict is step (b) of the 2026-08-09 ruling and depends on MEASURING
+  /// how often a real call yields no id. Tightening later is always available —
+  /// a gate only ever gains requirements — so the unmeasured half stays open
+  /// rather than being guessed in the one direction that cannot be walked back.
+  /// A naive "fix" that completes the biconditional to make the constraint look
+  /// symmetrical would ship exactly that guess.
+  requestId String?
 
   // ── Provider metadata ──
   /// Concrete model name — "claude-sonnet-4-6", "nova-3-medical",
