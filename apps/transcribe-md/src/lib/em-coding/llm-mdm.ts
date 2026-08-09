@@ -37,6 +37,7 @@ import {
   logApiUsage,
   buildAnthropicUsage,
   claudeCostCents,
+  readAnthropicRequestId,
 } from '@meddoc/ai';
 import { getRedis, isRedisReady } from '@/lib/redis';
 import { log } from '@/lib/log';
@@ -472,6 +473,14 @@ async function callClaudeMdm(args: JudgeMdmArgs): Promise<MdmJudgement | null> {
           cacheCreation,
         ),
         success: true,
+        // B1-b step 1. This caller builds its own `new Anthropic(...)` to attach
+        // cache_control, so it never passed through anthropic.ts's capture — and
+        // B1-a's gate only watched that file. `worker.ts` pre-warms judgeMdm on
+        // every visit, so this one omission made ~18% of a visit's vendor calls
+        // structurally NULL, which the sizing would have read as the VENDOR's
+        // silence rather than ours. Read direct off `response`; see
+        // vendor-request-id.ts for why a spread would return null here.
+        requestId: readAnthropicRequestId(response),
       });
       logApiUsage(
         buildAnthropicUsage(

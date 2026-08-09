@@ -59,6 +59,38 @@ export function readAnthropicRequestId(response: unknown): string | null {
 }
 
 /**
+ * OpenAI: lift `_request_id` off an SDK response.
+ *
+ * ⚠️ SAME TRAP, SECOND VENDOR, DIFFERENT HEADER — which is exactly why this is
+ * its own function rather than a call to `readAnthropicRequestId`. The body is
+ * identical today. The EVIDENCE behind it is not, and a shared function would
+ * have one header comment pinning one SDK while silently carrying two.
+ *
+ * Verified against the INSTALLED SDK (openai 6.34.0), `internal/parse.js:55`:
+ *
+ *     Object.defineProperty(value, '_request_id', {
+ *       value: response.headers.get('x-request-id'),
+ *       enumerable: false,
+ *     });
+ *
+ * Note the header is `x-request-id` here and bare `request-id` at Anthropic.
+ * Neither function reads a header directly — both read the property the SDK
+ * has already populated — but the difference is recorded because the day one
+ * SDK changes its header is the day these stop being interchangeable, and a
+ * reader who found them merged would have no way to notice.
+ *
+ * B1-b step 1. Returns the vendor's id, or `null` when the vendor did not
+ * supply one. NEVER fabricates — same contract as the Anthropic reader.
+ */
+export function readOpenAIRequestId(response: unknown): string | null {
+  if (!response || typeof response !== 'object') return null;
+  // Direct property access — non-enumerable, see the header. Do NOT refactor
+  // this into a destructure off a copied object; the copy loses it silently.
+  const id = (response as { _request_id?: unknown })._request_id;
+  return typeof id === 'string' && id.length > 0 ? id : null;
+}
+
+/**
  * Deepgram: lift `metadata.request_id` off a batch response.
  *
  * Plain enumerable JSON — no defineProperty trap here. It is read through this

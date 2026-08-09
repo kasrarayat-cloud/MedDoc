@@ -23,6 +23,7 @@
 import OpenAI from 'openai';
 
 import { logAiCall } from './log';
+import { readOpenAIRequestId } from './vendor-request-id';
 import { PRICING } from './api-usage';
 import { withRetry, type RetryAttemptInfo } from './retry';
 import type { AiLogContext } from './types';
@@ -256,6 +257,10 @@ async function whisperBatchTranscribeOnce(
     latencyMs: Date.now() - t0,
     success: true,
     costUsdCents: costCents,
+    // B1-b step 1 — the third unwatched caller. `response` is cast through
+    // `as unknown as WhisperBatchResponse`, which is a TYPE-level operation and
+    // leaves the SDK's non-enumerable `_request_id` on the same object.
+    requestId: readOpenAIRequestId(response),
   });
 
   // logApiUsage is fire-and-forget (returns void) — no .catch needed.

@@ -53,6 +53,7 @@ export { logAiCall, redactPhi } from './log';
 export {
   readAnthropicRequestId,
   readDeepgramRequestId,
+  readOpenAIRequestId,
 } from './vendor-request-id';
 // FIND-P1-006/-007/-008/-009 (2026-05-14) — shared transient-error
 // retry helper with full-jitter backoff + Retry-After parsing.
