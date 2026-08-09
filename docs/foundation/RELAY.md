@@ -2769,6 +2769,60 @@ with the run-01 log present on disk.
 PR #550 and never executed once before being relied upon. This session is the
 first thing that ever ran it.
 
+### ⚠️ A CLINICAL-COUNT DECLARATION IS TRUE AT AN INSTANT, AND 03:00 UTC MOVES IT
+
+**Found 2026-08-09, 47 minutes after B1-a's deploy was judged green on all 13
+declaration rows. Nobody was looking for it.**
+
+A re-run of the standing checks during close-out reported
+`0 of **14** imaging visits` where STEP 0 had reported `0 of **15**`. Chased
+rather than explained, because a difference the declaration does not name is the
+finding:
+
+| quantity | at 02:36 and 02:39 (declared, judged ✅) | at 03:26 |
+|---|---|---|
+| `transcribe_visits` | **26** | **25** |
+| `ai_calls` | **1122** | **1112** |
+| `specialty='ultrasound'` | 15 | 14 |
+
+**It was not the deploy.** The worker's own log names the mechanism exactly:
+
+    03:00:00.140Z  cleanup:expired-trash  found:1 deleted:1 olderThanDays:15
+
+The T-M17.3 stale-visit cron (`0 3 * * *`, UTC) purged one visit that a user had
+soft-deleted more than 15 days earlier — the documented trash-retention contract
+working as designed. `ai_calls` fell by 10 because the sweep deletes a visit's
+`AiCall` rows in the SAME transaction (`stale-visits.ts:73-77`). There is no
+audit row because the sweep is a system job with no actor, consistent with
+`audit_logs` being a named S4c exclusion.
+
+⚠️ **THE GENERALISABLE PART, AND IT IS A GAP IN §2.5 ITSELF.**
+The declaration's closing rule is *"a difference not in this table IS THE
+FINDING, whatever its explanation sounds like afterwards."* That rule is right,
+and this system contains a **scheduled job that legitimately moves the exact
+counts the declaration pins** — `0 3 * * *` for the visit sweeps, `0 4 * * *` for
+the 90-day retention sweep. A deploy judged at 02:55 and re-checked at 03:05
+would show a clinical count moving for an entirely correct reason, and the rule
+as written classifies that as a finding.
+
+The failure mode is the dangerous direction, not the noisy one: **once "the cron
+did it" becomes an available explanation, it is available for a movement the cron
+did NOT cause.** That is precisely the ready-made excuse §2.5 exists to remove.
+
+**So a declaration states the INSTANT its baseline was taken and names the cron
+windows it does not span.** B1-a's was captured 02:36, judged 02:39, and spans
+neither sweep — that is why its 13 green rows still stand. Had it straddled
+03:00, the honest declaration would have said so up front and pinned the
+`found/deleted` counts from the worker log instead of the raw table count.
+
+**Not fixed here** — changing the declaration template is its own item, and
+`docs/foundation/deploys/README.md` is where it would land. Recorded now because
+a finding that lives only in a transcript is not a finding, and because the next
+session to deploy near 03:00 UTC will otherwise re-derive this from scratch or,
+worse, wave a real movement past.
+
+---
+
 ### 🟡 `nightly-tests` is RED and has been for one night — TRIAGED, NOT RESOLVED
 
 Recorded so it does not decay into "probably fine" by repetition, which is the
