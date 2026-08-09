@@ -3502,6 +3502,25 @@ sampled.
 guessing cannot be walked back. 72(b) stays open and still owed a real
 measurement.
 
+#### ⚠️ AND THE CHECK IS NOW PROVEN TO **REFUSE** IN PRODUCTION
+
+Step 2 mutation-proved the constraint **on QA**; on production it had only been
+*seen in the catalog*. The smoke could not settle it — all 13 rows were
+`(vendor, id present)`, which the CHECK **accepts**, so a fully green smoke is
+exactly as consistent with a constraint that refuses nothing.
+
+Proven per the canon's sanctioned form, each attempt in its own transaction and
+never committed:
+
+    positive control  mock + id NULL   → UPDATE 1  (legal; the write path works)
+    the refusal       mock + id KEPT   → ERROR … "api_usage_events_request_id_requires_vendor"
+
+**Attribution was established before the attempt**: `…_units_source_domain`
+permits `'mock'`, so the only constraint the flip can violate is the one under
+test — avoiding the trap recorded against the composite-FK arm, where an
+unrelated `NOT NULL` refused first and the proof established nothing. Census
+`vendor | 1325 | 0` before and after, identical.
+
 #### What this does NOT claim
 
 - **Step 1 is proven live for ONE of its three callers.** `tm_embed` produced no

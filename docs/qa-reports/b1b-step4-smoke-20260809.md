@@ -240,6 +240,39 @@ to survive.**
   `api_usage_events` **464** / `audit_logs` **977** all intact. The ledger
   asserted this from the FK layout; it is now an observation.
 
+### ⚠️ THE CHECK IS NOW PROVEN TO REFUSE **IN PRODUCTION**, NOT MERELY PRESENT
+
+Step 2 mutation-proved the constraint **on QA**. On production it had only ever
+been *observed in the catalog* — and a constraint that exists is not the same
+claim as a constraint that refuses. The smoke could not settle it either: all 13
+rows were `(vendor, id present)`, which the CHECK accepts, **so a fully green
+smoke is exactly as consistent with a constraint that refuses nothing.**
+
+Proven here, per the canon's sanctioned form — *any write inside a gate that a
+constraint is supposed to refuse belongs in `BEGIN … ROLLBACK`, so the attempt is
+observable and never consequential*:
+
+| attempt (each in its own transaction, never committed) | result |
+|---|---|
+| **positive control** — flip a row to `mock` **and** NULL its id | **`UPDATE 1`** — legal, and the write path works |
+| **the refusal** — flip the same row to `mock`, **keeping** its id | **`ERROR: violates check constraint "api_usage_events_request_id_requires_vendor"`** |
+
+**Attribution was established BEFORE the attempt, not inferred after it.**
+`api_usage_events_units_source_domain` is `unitsSource = ANY('vendor','mock')` —
+so `'mock'` is legal to that constraint, and the only constraint the flip can
+violate is the one under test. This is the trap the canon records against the
+composite-FK proof, where an unrelated `NOT NULL` refused the row first and the
+"proof" established nothing: **a refusal is evidence only when you know WHAT
+refused.**
+
+**The positive control is what makes the refusal mean something.** Without it, an
+`ERROR` is equally consistent with a table that rejects every write. With it, the
+only difference between the accepted row and the rejected one is the presence of
+the id.
+
+Census before and after both attempts: **`vendor | 1325 | 0`** — identical. No
+row was changed, no constraint was touched, and nothing was dropped or re-added.
+
 ### Cleanup, as ruled
 
 `clean.ts` only — `cleaned visits=1 patients=1 templates=0`. Fixture verified
