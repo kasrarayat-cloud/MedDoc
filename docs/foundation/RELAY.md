@@ -3858,3 +3858,63 @@ rule exists for, and the drift from 44 is the demonstration.~~
 > may-contain-PHI and is non-null on 42 of 42). ⚠️ **The rows keep perishing and
 > nothing here stops that**, by design: the four deleters are correct behaviour.
 > The extract is a copy taken before the originals go, not a rescue.
+
+### ⛔ `gh run list --commit <FULL-SHA>` ALSO RETURNS `[]` FOR RUNS THAT EXIST BUT ARE `pending`
+
+**A second, independent way the mandatory pre-push check answers "nothing in
+flight" when something is.** Yesterday's finding was the SHORT sha; this one
+happens with the full 40-character sha, which is the fix that finding
+prescribed.
+
+Measured this session, seconds apart, both with the full SHA:
+
+    gh run list --commit 1bb6b8fd4cc39c1a3079324f408e06fe3c941e3a   → []
+    gh run list --branch feat/b2-failure-paths-metered              → 3 runs on that SHA, status "pending"
+    gh run list --commit 1bb6b8fd4cc39c1a3079324f408e06fe3c941e3a   → 4 runs        (moments later)
+
+So there is a propagation window, immediately after a push, in which the runs
+**exist and are queued** but the `--commit` view has not caught up. `--branch`
+saw them the whole time.
+
+⚠️ **THE FAILURE IS AGAIN IN THE DANGEROUS DIRECTION, AND THE WINDOW IS EXACTLY
+WHEN THE CHECK GETS RUN.** The rule exists to stop a push cancelling somebody
+else's evidence — and the moment that risk is highest is right after *they*
+pushed, which is precisely the window in which `--commit` under-reports. A
+session that queries, sees `[]`, and pushes destroys four queued runs while its
+audit trail shows the check was performed correctly.
+
+**The rule, tightened again:** a `[]` from `--commit` is believed **only** when
+`gh run list --branch <branch>` also shows nothing for that SHA. Two views, and
+the branch view is the one that is right first. The existing positive-control
+requirement stands and would NOT have caught this on its own — the command was
+working perfectly; it was answering about a set the server had not yet
+populated.
+
+⚠️ **AND THIS SESSION'S OWN ACCOUNT OF THE #568 PUSH WAS CORRECTED AGAINST THE
+RECORD BY RULING 79'S COMMIT — READ THAT, NOT THIS SESSION'S FIRST TELLING.**
+The push cancelled **THREE** runs, not one; and **"just batch it" was NOT
+available**, because the docs commit was authored at **20:30:22Z — two minutes
+INTO the run it cancelled.** The session logged the cancellation as deliberate,
+which was the honest half; it then reached for the batching lesson, which did
+not apply and quietly made the mistake sound more avoidable than it was.
+
+**The rule that DOES apply: hold the first push until the session's remaining
+commits are written.** Batching is only available to work that already exists.
+It is also the SECOND occurrence of this shape in nineteen hours (#557 was the
+first), and the by-commit check applies to **PR branches**, not only to `main`.
+
+### 🟡 THE §2.5 DECLARATION GATE'S FILENAME CONVENTION IS NOT WHERE A SESSION LOOKS
+
+`deploy-prod.sh` refused this deploy — correctly — because the declaration was
+written as `docs/foundation/deploys/b2-declaration-20260809.md` and the gate
+requires `<UTC-date>-<short-sha>.md`. **The gate did its job**; the convention is
+recorded only at `deploy-prod.sh:67` and in the existing filenames, neither of
+which a session reads before writing the document.
+
+Cost was one refused deploy and a second PR cycle. **Nothing was built, migrated
+or recreated** — the gate refuses before any of that, which is the property worth
+noting: the failure mode was expensive in minutes and free in risk.
+
+Worth a line in MASTER.md's deploy paragraph naming the path and the format, so
+the declaration is written once. Recorded rather than fixed here — MASTER.md is
+the loop's own brief and editing it mid-run is its own change.
