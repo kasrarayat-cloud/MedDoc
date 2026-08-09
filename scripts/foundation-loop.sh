@@ -149,6 +149,9 @@ prev_ledger_hash=""
 overall_halt=""
 sessions_used=0
 batch=0
+# Marker-recovery budget for the WHOLE run, not per batch — a contract broken
+# repeatedly is a signal, and resetting it per batch would hide exactly that.
+recoveries_used=0
 
 while : ; do
   # ── STOP WINS THE RACE AT THE BATCH BOUNDARY TOO ─────────────────────────
@@ -248,8 +251,54 @@ for (( n=1; n<=batch_size; n++ )); do
   # The LAST non-empty line, stripped. Anything but CONTINUE halts; so does an
   # unreadable one, because "I could not tell" must never mean "carry on".
   marker="$(grep -vE '^\s*$' "$SESSION_OUT" | tail -1 | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-  rm -f "$SESSION_OUT"
   echo "[loop] marker: '$marker'" | tee -a "$LOG"
+
+  # ── MARKER RECOVERY — classify the session's OWN OUTPUT, never guess ──────
+  # ⚠️ WHY THIS EXISTS. On 2026-08-09 a session did excellent work — STEP 0
+  # passed, B1-b step 2 built, the gate mutation-proved four ways — then ended
+  # its turn with a prose summary saying it would "wait on the e2e watcher".
+  # There is no waiting: a headless session ENDS when its response ends. Its PR
+  # sat green and mergeable for SIX HOURS while the loop was dead, because the
+  # last line was not a marker. The work was excellent and the run still stopped.
+  #
+  # The cure is NOT to loosen the contract — an unreadable answer must never mean
+  # "carry on". It is to ask a fresh session to READ what the dead one actually
+  # produced and classify it. That is evidence, not a guess: the same judgement a
+  # human makes reading the log. If it cannot tell, it says STOP-CONDITION and we
+  # halt exactly as before.
+  #
+  # Bounded at 2 per run. A third means the contract is systematically broken,
+  # and papering over that with a classifier is how a loop stops being auditable.
+  case "$marker" in
+    CONTINUE|STOP-CONDITION|"RULING NEEDED"|"OWNER ACTION"|"PHASE CLOSED") : ;;
+    *)
+      if [ "$recoveries_used" -ge 2 ]; then
+        echo "[loop] marker unreadable and recovery budget spent ($recoveries_used) — halting" | tee -a "$LOG"
+      else
+        recoveries_used=$(( recoveries_used + 1 ))
+        echo "[loop] marker unreadable — RECOVERY $recoveries_used/2: classifying the session's own output" | tee -a "$LOG"
+        RECOVERED="$(claude -p "$(printf '%s\n\n----- SESSION OUTPUT BEGINS -----\n%s\n----- SESSION OUTPUT ENDS -----\n' \
+'A FOUNDATION session just finished but failed to end with its required marker line. Below is its COMPLETE output. Read it and decide which single marker honestly describes what it achieved.
+
+CONTINUE       real progress was made and the next item is ready to start
+STOP-CONDITION a blocker survived cure attempts, or the session could not proceed
+RULING NEEDED  a ruling-shaped decision it could not make itself
+OWNER ACTION   a hard-halt item is next
+PHASE CLOSED   the phase is complete end-to-end
+
+Judge ONLY from what the output says. Do not infer beyond it. If you genuinely cannot tell, answer STOP-CONDITION — halting is the safe error.
+
+Reply with EXACTLY ONE of those markers and NOTHING else: no punctuation, no explanation, no code fence.' "$(cat "$SESSION_OUT")")" 2>/dev/null | grep -vE '^\s*$' | tail -1 | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+        case "$RECOVERED" in
+          CONTINUE|STOP-CONDITION|"RULING NEEDED"|"OWNER ACTION"|"PHASE CLOSED")
+            echo "[loop] RECOVERED marker: '$RECOVERED' (classified from the session's output, not asserted by it)" | tee -a "$LOG"
+            marker="$RECOVERED" ;;
+          *)
+            echo "[loop] recovery FAILED — classifier returned '$RECOVERED'; halting on the original unreadable answer" | tee -a "$LOG" ;;
+        esac
+      fi ;;
+  esac
+  rm -f "$SESSION_OUT"
 
   case "$marker" in
     CONTINUE) : ;;
