@@ -151,6 +151,30 @@ Stop and report. Do not work around any of these.
 
 ---
 
+## BEFORE ANY PUSH — CHECK IN-FLIGHT RUNS **BY COMMIT**. This is a MUST.
+
+**Ruled 2026-08-09, after the third occurrence.** A push cancels in-flight runs
+on the same branch. That makes every push a decision about somebody's evidence —
+sometimes your own citation, sometimes another session's.
+
+    gh run list --commit <sha>      # BEFORE you push. Every time.
+
+Then do one of exactly two things:
+
+1. **WAIT** for the runs to complete, or
+2. **PUSH ANYWAY AND SAY SO** — state in your report that the cancellation was
+   deliberate and why. A named cost is a decision; an unnamed one is an accident.
+
+⚠️ **DO NOT USE `gh pr checks` FOR THIS.** It is recorded in `AGENTS.md` as
+unreliable: it reported `pending` for a run already `completed/success`. A
+pre-push check built on it waits for nothing, and a **citation** built on it can
+be wrong. `gh run list --commit <sha>` is the view that a citation is taken from.
+
+**And batching removes the problem entirely.** Every occurrence so far cost a
+cycle because two pushes happened minutes apart where one would have done.
+
+---
+
 ## CLOSE-OUT — your final block LISTS THE SCRATCH. Every time.
 
 **Ruled 2026-08-08.** You cannot reap — `shred` and `rm -rf` are denied to you,

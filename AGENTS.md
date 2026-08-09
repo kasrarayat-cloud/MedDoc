@@ -493,6 +493,37 @@ The shape that prevents it:
 withdrawn explicitly, not quietly re-run — a reader who saw the first pair has no
 way to know the second replaced them.
 
+## A PUSH IS CHECKED FOR IN-FLIGHT RUNS **BY COMMIT**, BEFORE IT HAPPENS
+
+**GitHub cancels in-flight runs when a new commit lands on the same branch.**
+That is not a bug to work around, it is the mechanic — so a push is a decision
+about somebody's evidence, and it must be made deliberately.
+
+> **Before pushing to any branch with required runs: `gh run list --commit <sha>`.
+> Then either WAIT, or state in the log that the cancellation is deliberate.**
+
+⚠️ **THIRD OCCURRENCE, WHICH IS WHY IT IS NOW A RULE AND NOT A LESSON.**
+
+| when | what was destroyed |
+|---|---|
+| 2026-08-07 | a docs-only push to `main` cancelled the merge-commit citation it was waiting for — `CI`, `e2e` and `a11y-ci` all `cancelled`, ~45 minutes lost, and for a few minutes `main` carried a commit no gate had seen |
+| 2026-08-08 | merging one PR seventeen minutes after another cancelled the first's `e2e`, leaving a **3-of-4** citation on a deployed commit |
+| 2026-08-09 | a feature-branch push mid-run cancelled three runs and restarted the clock |
+
+Note the second one especially: it arrived through a **legitimate PR merge**, not
+a stray push. "Nothing reaches `main` outside a PR" does not protect you here —
+the merge *is* the push.
+
+⚠️ **AND THE OBVIOUS TOOL FOR THIS CHECK LIES.** `gh pr checks` reported
+`pending` for a run that was already `completed/success` (2026-08-09). A
+pre-push check that trusts it will wait for nothing, or worse, believe a citation
+is incomplete when it is done — **stale in the direction that costs a run.**
+`gh run list --commit <sha>` is the reliable view, and the one a citation must be
+taken from.
+
+**The cheap habit that avoids all of it: BATCH.** Most of these cost a cycle
+because two pushes were made minutes apart where one would have done.
+
 ## LEDGER AND SCHEMA CONFLICTS RESOLVE AS UNIONS
 
 **Unless one side is provably wrong, a conflict in `RELAY.md`, `RULINGS.md`,
