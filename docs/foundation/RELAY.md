@@ -4544,6 +4544,86 @@ Session 03's findings 1 and 2 are **unchanged and still owed a person**:
 
 ---
 
+## 🟩 B4 STEP 1 IS LIVE IN PRODUCTION — 2026-08-10T12:59Z
+
+Deployed from `main` @ **`c8a55986`** by `bash scripts/deploy-prod.sh`, under a
+delta declaration written before the run:
+`docs/foundation/deploys/20260810-c8a55986.md`. Log
+`docs/deploy-logs/deploy-20260810T125411Z.log`. Rollback tags
+**`:pre-b4s1-20260810`**, cut against the RUNNING ids `ac34bf1c7718` /
+`7944e7a1ff00` and verified before the deploy started.
+
+**Citation: 4 of 4 on the MERGE COMMIT `c8a55986`**, produced by
+`check-citation.sh` and not typed — every line `a1`, so nothing was re-run:
+
+    · `CI`           31387144318 a1
+    · `e2e`          31387144306 a1
+    · `a11y-ci`      31387143818 a1
+    · `secrets-scan` 31387143766 a1
+
+The PR-head citation on `17c6553b` was also 4 of 4 and is recorded in the
+declaration for provenance; **it was not substituted for the merge-commit one,
+and the deploy did not start until the merge-commit runs were green.**
+
+### THE DECLARATION, JUDGED — 12 of 12 ROWS, AND THE ONE-LINE READING HELD
+
+The declared reading was *"nothing moves but the image ids"*. That is exactly
+what happened.
+
+| quantity | declared | measured after | verdict |
+|---|---|---|---|
+| `transcribe_visits` | 25 unmoved | **25** | ✅ |
+| signed visits | 17 unmoved | **17** | ✅ |
+| `transcribe_md_patients` | 16 unmoved | **16** | ✅ |
+| `users` · `practices` | 196 · 197 | **196 · 197** | ✅ |
+| `api_usage_events` | 1325 | **1325** | ✅ the row that mattered most |
+| `ai_calls` | 1126 | **1126** | ✅ |
+| `price_rates` | 44 unmoved | **44** | ✅ |
+| applied migrations | 96 → 96 | **96** | ✅ code-only, as declared |
+| `audit_logs` | deploy writes ZERO | **10690 → 10690** | ✅ |
+| app image id | MUST change | `ac34bf1c7718` → `78a863205cc7` | ✅ |
+| worker image id | MUST change | `7944e7a1ff00` → `b7d5f8fb4883` | ✅ |
+| co-tenants | 307 · 404 · 200 · 200 · 410 | **307 · 404 · 200 · 200 · 410** | ✅ |
+
+**The baseline was captured twice** — 12:53:04Z and 12:54:06Z, immediately before
+the run — and both readings were identical, so the comparison is against a
+stationary baseline rather than a drifting one.
+
+`db-migrate` reported *"96 migrations found / No pending migrations to apply"*,
+which for a code-only deploy is the declared outcome rather than the warning it
+would be otherwise. Standing checks after: **all nine green**, including
+`assert-migrations-applied` **both bare and `--qa`** at 96/96. 9 of 9 containers
+healthy.
+
+### THE CODE IS IN THE SHIPPED IMAGE — STRUCTURAL, NOT ASSUMED
+
+Verified inside the running worker container, not on the host:
+
+- `mockEmbedResponse` present in `/app/packages/ai/src/embed.ts` and `mock.ts`.
+- ⚠️ `transcribe_realtime` still returns **2 hits** in the shipped
+  `api-usage.ts` — **both are the doc comment explaining the removed literal.**
+  The executable form, `operation: 'transcribe_realtime'`, returns **0**.
+
+That distinction is the substring trap again, and it is recorded because the
+naive grep would have read as *"the fix did not ship"*. Match the executable
+token, never the bare word — a file's comments are where the word you are
+grepping for is guaranteed to appear.
+
+### WHAT THIS DEPLOY DOES NOT CLAIM
+
+- **It does not make `tm_embed` work.** That path still fails on a dead vendor
+  credential; the zero `openai` rows in `api_usage_events` remains a CORRECT
+  reading. Parked for the owner.
+- **It does not prove the audio pipeline in production.** Production has no audio
+  visits; the proof is the unit gate, and the QA per-stage run is step 2.
+- **It shipped no behaviour change to any production path.** Everything B4 step 1
+  alters is reachable only under `MOCK_AI_CALLS`, which production never sets —
+  `mockRes ?? await fetch(...)` with `mockRes = null` **is** the original call.
+  The only production-visible difference is the CONTENT of a future Deepgram
+  usage row, and prod has produced 3 in its entire history.
+
+---
+
 ## ✅ B4 STEP 1 — the mock boundary reaches EVERY vendor, and the Deepgram labels stop lying — 2026-08-10
 
 **B4's gate is *"one full QA pipeline run produces one event per stage, counted
