@@ -274,6 +274,17 @@ for wf in "${REQUIRED[@]}"; do
   fi
 done
 
+# ⚠️ A cancelled or failed-to-start run whose workflow ALSO has a success on this
+# SHA is SUPERSEDED NOISE, not a cannot-tell: the requirement is satisfied by the
+# green one. Only the ones leaving their workflow without a green can withhold a
+# citation. Without this the normal push-cancels-then-reruns pattern would make
+# every such commit un-citable.
+CANS_LIVE=(); for e in "${CANS[@]:-}"; do [ -n "$e" ] || continue; w="${e%% *}"; [ -n "${WF_GREEN[$w]:-}" ] || CANS_LIVE+=("$e"); done
+STARTS_LIVE=(); for e in "${STARTS[@]:-}"; do [ -n "$e" ] || continue; w="${e%% *}"; [ -n "${WF_GREEN[$w]:-}" ] || STARTS_LIVE+=("$e"); done
+SUP=$(( CANC + STARTC - ${#CANS_LIVE[@]} - ${#STARTS_LIVE[@]} ))
+[ "$SUP" -gt 0 ] && note "   · note — $SUP cancelled/startup-failed run(s) are superseded by a success of the same workflow on this commit"
+
+
 # ── VERDICTS. Findings (1) and cannot-tells (2) never merge. ───────────────
 [ "$FOREIGNC" -gt 0 ] && { fail "FOREIGN HEAD — runs listed under $SHA report another head_sha:"; printf '     %s\n' "${FOREIGNS[@]}"; }
 [ ${#SUBS[@]}   -gt 0 ] && { fail "SUBSTITUTION — the row claims run id(s) belonging to another commit:"; printf '     %s\n' "${SUBS[@]}"
@@ -285,16 +296,6 @@ done
 [ "$REDC"    -gt 0 ] && { fail "REQUIRED WORKFLOW FAILED:"; printf '     %s\n' "${REDS[@]}"; }
 [ ${#STARTS_LIVE[@]} -gt 0 ] && { fail "REQUIRED WORKFLOW FAILED TO START (startup_failure), with no success to supersede it:"; printf '     %s\n' "${STARTS_LIVE[@]}"
                           note "   The workflow file did not parse, so the gate never ran at all."; }
-# ⚠️ A cancelled or failed-to-start run whose workflow ALSO has a success on this
-# SHA is SUPERSEDED NOISE, not a cannot-tell: the requirement is satisfied by the
-# green one. Only the ones leaving their workflow without a green can withhold a
-# citation. Without this the normal push-cancels-then-reruns pattern would make
-# every such commit un-citable.
-CANS_LIVE=(); for e in "${CANS[@]:-}"; do [ -n "$e" ] || continue; w="${e%% *}"; [ -n "${WF_GREEN[$w]:-}" ] || CANS_LIVE+=("$e"); done
-STARTS_LIVE=(); for e in "${STARTS[@]:-}"; do [ -n "$e" ] || continue; w="${e%% *}"; [ -n "${WF_GREEN[$w]:-}" ] || STARTS_LIVE+=("$e"); done
-SUP=$(( CANC + STARTC - ${#CANS_LIVE[@]} - ${#STARTS_LIVE[@]} ))
-[ "$SUP" -gt 0 ] && note "   · note — $SUP cancelled/startup-failed run(s) are superseded by a success of the same workflow on this commit"
-
 [ "$UNREADC" -gt 0 ] && cant "UNREADABLE RUN(S) — no workflow name, so they cannot be excluded from
      the required set. A nameless run is GitHub's marker for a workflow file that
      failed to parse, which is how a REQUIRED gate silently never runs:
