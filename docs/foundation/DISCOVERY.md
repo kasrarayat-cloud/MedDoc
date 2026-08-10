@@ -812,6 +812,37 @@ the row must record which one actually ran.
 **Verdict against the code:** `PRICING.whisper = 0.006` — correct.
 `DEFAULT_OPENAI_EMBED_SMALL_CENTS_PER_M = 2` (= $0.02/M) — correct.
 
+⚠️ **CORRECTION, 2026-08-10 (B3) — THAT VERDICT CHECKED ONE OF TWO SURFACES,
+AND THE OTHER ONE IS WRONG BY 6.5×.** The embedding rate lives in two places and
+they disagree:
+
+| surface | rate | |
+|---|---|---|
+| `pricing.ts:170` `DEFAULT_OPENAI_EMBED_SMALL_CENTS_PER_M = 2` | **$0.02 / 1M** | correct, and the one this section checked |
+| `api-usage.ts:66` `openai_embedding: 0.13` | **$0.13 / 1M** | **unsourced — matches no figure OpenAI publishes** |
+
+`api-usage.ts:369-370` uses its own constant, so an `api_usage_events` embed row
+would be priced at 6.5× the published rate — **and ruling 78(b) makes
+`api_usage_events` the billing source**, so the durable side is the wrong side.
+
+**This is the same shape as the Deepgram finding three paragraphs above**
+(§D.2: two surfaces disagreed, `$0.0043` vs `$0.0145`, and the code unified on
+the wrong one). The reason it was missed here is that a verdict was written
+against the constant somebody happened to look at, and *"correct"* is a claim
+about a rate, not about a file.
+
+**Impact today is exactly zero, and the reason is itself a finding:** the embed
+usage builder has **no caller** — `logEmbedUsage` / `operation: 'embed'` appears
+only at its own definition. Measured on production: **0** rows in
+`api_usage_events` with `operation='embed'`, against **37**
+`text-embedding-3-small` rows in `ai_calls`. So embeds are metered in the
+observability table and **not in the billing table at all**, which is a B4
+coverage gap independent of the rate.
+
+Corrected in the price table (`20260810011500_b3_price_table`, $0.02/M with the
+published URL and read-date). **Neither in-code constant is patched** — SPEC
+§4.5, the same reasoning that leaves the Deepgram default alone.
+
 ⚠ **No price exists in the code for any OpenAI *chat* model.** Per the standing
 rule, OpenAI is Doc Editor + CRM only and the clinical pipeline is all
 Anthropic — so this is correctly out of the clinical meter. But if Doc Editor

@@ -4020,3 +4020,222 @@ noting: the failure mode was expensive in minutes and free in risk.
 Worth a line in MASTER.md's deploy paragraph naming the path and the format, so
 the declaration is written once. Recorded rather than fixed here — MASTER.md is
 the loop's own brief and editing it mid-run is its own change.
+
+---
+
+## 🟨 B3 IS BUILT — the versioned price table. 2 of 3 Deepgram rates, and it says so.
+
+**Branch `feat/b3-price-table`, commit `17afb6c7`.** Not deployed at the time of
+writing; the citation and the §2.5 declaration are recorded below as they land.
+
+### What shipped
+
+`price_rates` — one vendor rate, for one period, with the source it came from.
+**44 rows**, seeded from DISCOVERY §D as read on **2026-08-04**, every one
+carrying its URL and its read-date.
+
+| provider | rows | what |
+|---|---|---|
+| anthropic | 40 | 8 model-periods × 5 unit types |
+| deepgram | 2 | `nova-3` pre-recorded + streaming |
+| openai | 2 | `whisper-1`, `text-embedding-3-small` |
+
+A rate is **never edited**. A change CLOSES the incumbent (`effectiveTo`) and
+INSERTS its successor — which is the entire reason history stays stable, and the
+property B3's gate proves.
+
+### THE GATE, AND WHY THE ITEM'S OWN WORDING WOULD NOT HAVE BEEN ENOUGH
+
+RELAY's gate for B3 reads: *"re-pricing a historical row does not change it — the
+snapshot is proven by changing a rate and re-running."*
+
+⚠️ **A lookup that always returned the same constant would pass that sentence.**
+So every versioning assertion runs the period-correct lookup **and the obvious
+wrong implementation** (`ORDER BY effectiveFrom DESC LIMIT 1`) side by side, and
+asserts they **disagree** after the rate change. Measured, on a real published
+rate change rather than an invented one — Sonnet 5's introductory rate ends
+2026-08-31:
+
+| priced at | versioned | latest-wins counterfactual |
+|---|---|---|
+| 2026-08-15 | **2 000 000** | 9 000 000 |
+| 2026-09-15 | **3 000 000** | 9 000 000 |
+| 2026-11-15 | 9 000 000 | 9 000 000 |
+
+The two historical prices do not move; the new rate does apply to calls made
+under it, so the table is not merely frozen. **If both columns ever agree, the
+fixture cannot tell a versioned table from an unversioned one and the gate is
+decoration.**
+
+### THE THREE CONSTRAINTS ARE THE POINT — and all are mutation-proven
+
+Twelve refusals were attempted on a **throwaway database**, each inside
+`BEGIN … ROLLBACK`, and **every one named the right constraint** — a refusal is
+evidence only when you know WHAT refused:
+
+| attempt | refused by |
+|---|---|
+| a second `nova-3` pre-recorded rate over the same open period | `price_rates_no_overlap` |
+| a period straddling the Sonnet 5 handover | `price_rates_no_overlap` |
+| `published` with no `sourceUrl` / no `sourceReadAt` (2 shapes) | `price_rates_published_needs_source` |
+| tokens priced per 1; audio priced per 1 000 000; an undeclared unit | `price_rates_unit_quantity_matches_type` |
+| an undeclared provider / delivery mode / provenance (`'announcement'`) | the three vocabulary CHECKs |
+| a period that ends before it begins; a negative rate | `price_rates_period_ordered`, `..._rate_non_negative` |
+
+**And the guards are not over-strict** — five positive controls were accepted:
+the `nova-3-medical` row arriving with `invoice` provenance, a `console`
+provenance row with no url, the same model+unit under a different delivery mode,
+a zero rate, and a **close-then-succeed handover at the same instant**.
+
+⚠️ **One positive control was REFUSED and the refusal was correct — my label was
+wrong.** The case described as *"a new version abutting an existing one"* left the
+incumbent row still OPEN (`effectiveTo` NULL, so its range runs to infinity),
+which genuinely overlaps. The properly-shaped version of the same intent — close
+the incumbent, then insert the successor at that instant — was accepted.
+Recorded rather than quietly re-run, because a reader who saw the first result
+has no way to know the second replaced it.
+
+### THE SEED PROVES ITS OWN APPLICATION, and that was proven able to go RED
+
+The migration ends in a `DO` block asserting `total=44 / anthropic=40 /
+deepgram=2 / openai=2`, that every row is `published` with url + read-date, and
+that **`nova-3-medical` is absent**. Both arms were mutation-proven on a
+throwaway database, and each mutation's application was asserted before its
+result was believed:
+
+- deleting one row → `total=43 (want 44) … openai=1 (want 2)`, exit 3.
+- **a count-preserving SWAP** of the streaming row for a `nova-3-medical` one →
+  `nova-3-medical must NOT be seeded here`. ⚠️ Worth noting because the first
+  attempt at this proof — *adding* a medical row — was **shadowed by the count
+  arm** and never reached the medical arm at all. An arm that only fires behind
+  another arm is an arm nobody has tested.
+
+### FOUR CORRECTIONS, AND THE FOURTH WAS NOT ON THE LIST
+
+1. **Deepgram is $0.0077/min, not the in-code $0.0145** (~3.4× over).
+2. **Anthropic has TWO cache-write classes**, 1.25× and 2×, seeded as separate
+   `cache_write_5m` / `cache_write_1h` rows. `pricing.ts:claudeCostCents`
+   collapses them into a single 1.25× — right today only because the one caching
+   call site uses ephemeral 5m (DISCOVERY §C.8).
+3. **Three Deepgram rates are owed, not one.** Two seeded; see the park below.
+4. ⚠️ **FOUND ON THE WAY PAST — the embedding rate disagrees with itself by
+   6.5×, and the DURABLE side holds the wrong number.** `api-usage.ts:66` prices
+   `text-embedding-3-small` at **$0.13/M**; `pricing.ts:170` prices it at
+   **$0.02/M**, which is what OpenAI publishes. Ruling 78(b) makes
+   `api_usage_events` the billing source, so the meter's own table is the one
+   carrying the unsourced figure. **DISCOVERY §D.3 verified only `pricing.ts`
+   and declared the rate "correct"** — a true statement about one of two
+   surfaces, which is the same shape as the Deepgram case sitting three
+   paragraphs above it in the same document. **Impact today is exactly zero, for
+   a reason worth writing down: the embed usage builder has NO CALLER**
+   (`api-usage.ts:365`, grepped), so no embed row has ever reached
+   `api_usage_events` — measured, **0** rows with `operation='embed'`, against
+   **37** `text-embedding-3-small` rows in `ai_calls`. That absence is itself a
+   B4 coverage gap.
+
+**Neither in-code surface is patched.** SPEC §4.5 is explicit: changing them now
+would silently re-base a year of historical `ai_calls` comparisons for no
+benefit. The table supersedes them in B4/B6.
+
+### WHAT B3 DOES NOT CLAIM
+
+- **Nothing is billed from this table.** No code prices money through it; the
+  meter still reads `pricing.ts` / `PRICING`. Repointing it is B4/B6.
+- **It is 2 of 3 Deepgram rates.** `nova-3-medical` — the model that actually
+  runs by default — is **absent on purpose**, and its absence is *asserted* by
+  the migration so a later edit cannot quietly seed it from the undated post.
+- **It does not claim any rate is CORRECT against the vendor.** A unit test
+  cannot read deepgram.com. It claims each rate is present, integral, in-period,
+  and carries a source somebody can go and check.
+- **`api_usage_events` gains no snapshot column here.** SPEC §2.2 wants the usage
+  row to record which price version priced it; that column arrives **with its
+  writer**, in B4/B6. A column nothing writes is the half-shipped shape.
+- **A lookup before 2026-08-04 returns `null`.** The seed starts at the READ-DATE
+  because that is the day we know the rates held. Costs nothing — ruling 79 puts
+  the meter's provenance regime at B0-a (2026-08-08).
+
+### A MISSING RATE IS `null`, NEVER ZERO
+
+`claudeCostCents` returns **0** for a model it does not recognise
+(`pricing.ts:131`), so an unpriced model **silently bills nothing** — DISCOVERY
+§D.3 names it. `rateAt` returns `null` and there is no `?? 0` in the path. This
+is a requirement on B4/B6, not a detail: whoever wires the meter must decide what
+a refusal means, and must not reach for a zero.
+
+### THE WATCHED SET — diffed, not assumed
+
+⚠️ **A price table is the artefact where coverage fails invisibly.** A rate keyed
+on `claude-opus-4.8` instead of `claude-opus-4-8` matches nothing, errors
+nothing, and a table that prices *no* model reports the same zero missing rates
+as a complete one — if you only ask the table about itself.
+
+So the model list is scanned from **source**, not from the table: the three
+shapes a model id reaches a vendor through (`process.env.X || 'id'`,
+`DEFAULT_*_MODEL = 'id'`, `model: 'id'`), across `packages/ai/src` and
+`apps/transcribe-md/src`, tests excluded. The scanner is positive-controlled
+against the two live defaults, and **mutation-proven**: misspelling
+`claude-sonnet-4-6` across all five of its rows reddens the gate and names the
+**seven** files that emit it.
+
+`KNOWINGLY_UNPRICED` has exactly one entry — `nova-3-medical`, with its reason —
+and a third assertion keeps the park list from going stale: every entry must
+still be emittable **and** still unpriced, so a park row for a model that has
+since been priced fails rather than lingering as a comment.
+
+### PARKED — `nova-3-medical`, and now the TIER too
+
+**The trigger is unchanged: the vendor answers.**
+`docs/foundation/B3-deepgram-rate-request.md` is written and staged; sending it
+is an owner action.
+
+⚠️ **A SECOND QUESTION JOINED IT WHILE SEEDING.** Deepgram publishes both
+pay-as-you-go and Growth-tier rates ($0.0077 / $0.0065 pre-recorded), and
+**nothing in DISCOVERY establishes which tier this account is on.** The seed uses
+PAYG and says so in the row's `note`. That is the higher number, so a wrong guess
+**over**-states cost — and with `charge = cost × 3 / 2` an over-stated cost
+over-bills a doctor, which is the direction that matters. The request now asks
+for the tier by name. **One vendor conversation still settles everything:** this
+tier, the `nova-3-medical` rate, ruling 78(a)'s failed-request question, and
+B2's `withTimeout` under-count all point at the same invoice.
+
+### Verification performed
+
+| | |
+|---|---|
+| unit suite | **3288 passed**, 4 skipped, 265 files — the suite CI runs |
+| B3 gate | **26 passed**; 3 mutations, reddening 1, 1 and 6 assertions respectively |
+| typecheck | `tsc --noEmit` on `apps/transcribe-md` — **0 errors** |
+| migration, standalone | applies to an empty database; 44 rows; all `DO`-block assertions pass |
+| migration, **in sequence** | **all 96 migrations applied in order** to a fresh database, B3 last, 44 rows present. A standalone apply does not prove this |
+| schema drift | `prisma migrate diff --from-empty --to-schema` generates a `CREATE TABLE` **byte-identical** to the migration's, and the same index name. **UNDECLARED-PLAIN = 0** for this table; the EXCLUDE and the six CHECKs are the permitted inexpressible residue and are declared beside the model |
+| production | **untouched.** No write, and no read beyond the census figures quoted above |
+
+### 🟠 FOUND ON THE WAY PAST — THE QA STACK IS A MIGRATION BEHIND PRODUCTION
+
+Measured while looking for somewhere to apply the migration in sequence:
+
+```
+repo migrations (before B3)        95
+prod  _prisma_migrations           95      OK
+QA    _prisma_migrations           94      MISSING 20260809010000_b1a_ai_calls_request_id
+```
+
+**QA is where behavioural proofs live** precisely because production's population
+cannot exercise them — so a QA whose schema is not production's can prove
+something about a database nobody runs. B1-a's `ai_calls.requestId` is absent
+there.
+
+⚠️ **AND NOTHING WATCHES IT.** `scripts/assert-migrations-applied.sh` is
+**prod-scoped**; it returned 🟢 `95 in repo, 95 rows recorded` in this session's
+STEP 0 while QA sat one behind. That is the watched-set failure in its cleanest
+form — the check is flawless over a universe that does not contain the thing that
+was wrong.
+
+Also measured: the QA **image** is older still — `/app/packages/db/prisma/migrations`
+inside `meddoc-qa-transcribe-md-1` stops at `20260807060000_t7_tenancy`, so the
+container predates B0 entirely while its database has B0 applied.
+
+**Not fixed here** — bringing QA up needs a rebuild, which is its own change and
+not B3's. Recorded with its evidence. The cheap durable fix is a `PG_CONTAINER` /
+`PG_DB`-parameterised second arm on `assert-migrations-applied.sh`, so the QA
+stack is watched by the same script that already watches prod.
