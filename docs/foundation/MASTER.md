@@ -52,6 +52,23 @@ the fact.** Where they disagree, that is a finding, not a typo.
 7. **Open PRs** and their check states. Land what is green before starting new
    work — a branch that ships and never merges is the failure branch-cadence
    exists to prevent.
+8. **OPEN AUTO-FILED ISSUES** — `gh issue list --state open`. Enumerate them,
+   classify each as **KNOWN** (already triaged, with the pointer) or **NEW**, and
+   ⚠️ **every NEW one becomes a named finding in this session's report.**
+
+   ⚠️ **THIS EXISTS BECAUSE AN ALARM RANG CORRECTLY FOR THREE NIGHTS AND NOBODY
+   HEARD IT.** `nightly-tests` auto-filed #548, #559 and #577 on 2026-08-08, -09
+   and -10. The failing cell was a **deliberate tripwire** whose own comment said
+   *"if it starts failing, that is a real signal about A5, not noise"* — and it
+   was reporting, precisely, that GATE 0.1 had deactivated the account it logs in
+   as. Three sessions passed STEP 0 without opening the issues, and one recorded
+   two wrong candidates without opening the artefact. **The detector worked; the
+   channel it rang into was one nobody read.**
+
+   **An alarm must land in front of eyes within ONE session, never three
+   nights.** An auto-filed issue is a finding that has already been written down
+   for you — the cheapest one available — and skipping it is how a real signal
+   decays into background.
 
 ---
 
@@ -74,6 +91,8 @@ down here so nobody rediscovers them one halted session at a time.
 | `shred -u -n 3 -z …` | **denied on purpose** — destructive, and an unattended session should not be unlinking files | ⚠️ **you cannot do close-out reaping.** Report the scratch PATHS in your session report and let the owner reap. Never work around this |
 | `docker system df` · `image prune` · `builder prune` | not granted / prune denied | report the need. Disk reclamation is an owner action |
 | `dmesg` | not granted | `docker logs` for container-level evidence |
+| `crontab -l` | **not granted to the loop** — but it WORKS for a supervised session, and the answer matters: this host's crontab installs `run-all.sh --smoke --e2e` at 02:00 against **production** (`tests/automated/setup-cron.sh`) | ask a supervised session, or read the per-night JSON it leaves in `tests/automated/reports/` — same evidence, no permission needed |
+| `ls /etc/cron.d/` | **granted** as a bare `ls`; it is the COMPOUND form (`for`, `sudo`, `$(…)`) that is refused | `ls -la /etc/cron.d/` on its own line. Contents as of 2026-08-10: `certbot`, `e2scrub_all`, `sysstat` — nothing MedDoc, so this is a dead end and need not be re-checked |
 
 `cd`, `echo` and `printf` **are** granted, so `cd apps/transcribe-md && npx …`
 works. Note the compound rule that makes those safe: a command joined by `&&`,
@@ -323,6 +342,22 @@ cycle because two pushes happened minutes apart where one would have done.
 
 ---
 
+## PICKUP — the standing lines, so they stop being re-decided
+
+**Every session opens by doing these. They are not judgement calls and they do
+not need re-deriving each night.**
+
+- **The deploy logs accumulate, and that is EXPECTED, not a defect.**
+  `deploy-prod.sh` writes one per deploy into `docs/deploy-logs/`; `shred` is
+  denied to this loop **on purpose**, so they can only ever be cleared by a
+  supervised session. **List them in your report** — do not treat their presence
+  as a finding, do not re-litigate whether they should be there, and do not try
+  to work around the refusal. The extracted, durable record is the committed
+  declaration under `docs/foundation/deploys/`; the raw log is the machine's
+  leftover.
+- Same for anything else the permissions table marks **denied on purpose**:
+  report the path, name the owner action, move on.
+
 ## CLOSE-OUT — your final block LISTS THE SCRATCH. Every time.
 
 **Ruled 2026-08-08.** You cannot reap — `shred` and `rm -rf` are denied to you,
@@ -379,6 +414,10 @@ item · merge SHA · citation (4 of 4, by run id) · deployed? · §2.5 declarat
 ### PROVISIONAL RULINGS — the war room's batch review list
 what was decided · the alternatives · why this one · the REVERSAL PATH
 ⚠️ and what ELSE unwinds if it is reversed (the dependency chain)
+
+### AUTO-FILED ISSUES
+every open one, KNOWN (with its pointer) or NEW — and every NEW one written out
+here as a finding, not merely counted
 
 ### PARKED — needs a person
 item · why · what would unpark it
