@@ -1131,6 +1131,7 @@ COLUMN, and no sweep of the filesystem will find them.
 ```bash
 bash scripts/check-imaging-em-artifacts.sh    # READ-ONLY. 0 = clean, 1 = found, 2 = off-host
 bash scripts/assert-migrations-applied.sh     # READ-ONLY. 0 = all applied, 1 = UNAPPLIED, 2 = off-host
+bash scripts/assert-migrations-applied.sh --qa # READ-ONLY. same, against the QA stack
 bash scripts/check-qa-mock-posture.sh         # READ-ONLY. 0 = severed, 1 = LIVE KEYS, 2 = stack down
 bash scripts/check-minio-encrypted-mount.sh   # READ-ONLY. 0 = encrypted, 1 = DRIFT, 2 = can't tell
 bash scripts/check-pg-encrypted-mount.sh      # READ-ONLY. 0 = encrypted, 1 = DRIFT, 2 = can't tell
@@ -1138,6 +1139,24 @@ bash scripts/check-ingress-tls.sh             # READ-ONLY. 0 = all SNIs OK, 1 = 
 bash scripts/check-composite-fk.sh            # READ-ONLY. 0 = intact, 1 = ABSENT/RESHAPED, 2 = can't tell
 bash scripts/check-bind-mount-agreement.sh    # READ-ONLY. 0 = agrees, 1 = DIVERGED, 2 = can't tell
 ```
+
+⚠️ **`--qa` IS A SEPARATE LINE BECAUSE A CAPABILITY NOBODY INVOKES IS
+INDISTINGUISHABLE FROM ONE THAT DOES NOT EXIST.** `assert-migrations-applied.sh`
+has accepted `[container] [db]` since it was written, so pointing it at QA never
+needed a line of code — and for three months nothing ever did. The standing
+check ran bare, bare means production, and the QA stack drifted **two**
+migrations behind (`b1a_ai_calls_request_id`, `b3_price_table`) with every
+session reporting `assert-migrations-applied 🟢`. The instrument was never
+broken and never wrong; it was simply never aimed at half of what its green was
+read to cover. **That green was true and worthless** — the watched-set failure,
+arriving through a parameter default rather than a model list.
+
+⚠️ **AND THE BARE INVOCATION STAYS PROD-ONLY, DELIBERATELY.**
+`scripts/deploy-prod.sh:118` gates the production deploy on it. Folding QA into
+that call would let a stale synthetic container **block shipping** — so the QA
+arm is a flag, and the two callers keep their two different questions. *Diff the
+callers before you widen a shared thing;* the widening that reads as obviously
+harmless is the one with a deploy gate on the other end.
 
 ⚠️ **PRISMA OFFERS THE DELETION OF T3's TENANCY WALL AS TIDYING, AND THAT IS WHY
 THE COMPOSITE FK HAS A GUARD.** `transcribe_visits_patientId_practiceId_fkey`

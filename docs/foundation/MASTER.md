@@ -41,6 +41,9 @@ the fact.** Where they disagree, that is a finding, not a typo.
 5. **Standing checks**, all of them; a non-zero exit is triaged before work
    begins, not after:
    `check-imaging-em-artifacts` · `assert-migrations-applied` ·
+   **`assert-migrations-applied --qa`** (the bare call is PRODUCTION ONLY — the
+   QA stack sat two migrations behind while every session reported this check
+   green) ·
    `check-qa-mock-posture` · `check-minio-encrypted-mount` ·
    `check-pg-encrypted-mount` · `check-ingress-tls` ·
    `check-bind-mount-agreement` · `check-composite-fk`

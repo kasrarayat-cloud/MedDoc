@@ -4277,6 +4277,68 @@ not B3's. Recorded with its evidence. The cheap durable fix is a `PG_CONTAINER` 
 `PG_DB`-parameterised second arm on `assert-migrations-applied.sh`, so the QA
 stack is watched by the same script that already watches prod.
 
+#### ✅ CLOSED 2026-08-10 — and the prescribed fix was NOT the fix
+
+**The drift had grown to TWO** by the time it was taken up —
+`b1a_ai_calls_request_id` **and** `b3_price_table`, the second landed by the very
+session that recorded this finding. A drift nobody watches does not hold still.
+
+⚠️ **THE PRESCRIPTION ABOVE WAS WRONG, AND CHECKING BEAT BUILDING.**
+`assert-migrations-applied.sh` has accepted **`[container] [db]` since the day it
+was written** — line 36 of its own header says so. No parameterisation was
+needed and none was written. What was missing was never a capability; it was an
+**invocation**. STEP 0.5 called it bare, bare means production, and so the QA
+stack was never once looked at. **A capability nobody invokes is
+indistinguishable from one that does not exist** — and this is the watched-set
+failure arriving through a *parameter default*, which is a quieter door than a
+model list.
+
+Had the prescription been followed literally, the session would have added a
+second way to do something the script already did, and the standing check would
+*still* have been aimed only at production.
+
+⚠️ **THE BARE INVOCATION IS UNCHANGED, AND THAT IS THE LOAD-BEARING DECISION.**
+`scripts/deploy-prod.sh:118` gates the **production deploy** on the bare call.
+Folding QA into it would let a stale synthetic container **block shipping** —
+so the QA coordinates went behind an explicit `--qa` flag and the two callers
+keep their two different questions. Found by enumerating callers *before*
+widening a shared thing, per AGENTS.md; the widening that reads as obviously
+harmless was the one with a deploy gate on the far end.
+
+**What shipped**
+
+| | |
+|---|---|
+| `assert-migrations-applied.sh --qa` | QA coordinates ON the component (`meddoc-qa-postgres-1` / `meddoc_qa_test`), not in a runbook line a reader must remember |
+| bare invocation | **byte-identical in behaviour** — prod only, `0/1/2` as before |
+| `MASTER.md` STEP 0.5 · `AGENTS.md` | the QA arm is now *invoked*, which was the whole defect |
+
+**Proven in both directions, which is the point** — a check that only ever goes
+red is a decoration:
+
+```
+A  bare          → 🟢 96/96 prod                 exit 0   (deploy contract intact)
+B  --qa (before) → 🔴 2 UNAPPLIED on QA          exit 1   (the real drift, unfaked)
+C  positional    → 🔴 same 2                     exit 1   (backwards compatible)
+D  --qa <stray>  → ⚠️  refuses the argument       exit 2   (no silent ignore)
+E  bad container → ⚠️  not present                exit 2
+F  --qa (after)  → 🟢 96/96 QA                    exit 0   ← IT MOVED WHEN THE WORK SUCCEEDED
+```
+
+**And the stack was actually brought up, not just watched.** QA's *image* was
+older than its database — 92 migration dirs, stopping at `t7_tenancy`, predating
+B0-a through B3. `db-migrate`, `transcribe-md` and `transcribe-md-worker` were
+rebuilt and recreated; the image now carries **96**, and the database **96**.
+
+⚠️ **`check-qa-mock-posture.sh` WAS RE-RUN AFTER THE RECREATE, NOT BEFORE.** It
+reads the **running containers** (rule F4), so a rebuild is exactly the event
+that could have re-inherited a real key from the shared `.env`. Still 🟢 —
+`MOCK_AI_CALLS=true` and all three vendor keys dummies, in the live containers.
+
+**What this does NOT claim.** It does not prove any B4 gate, and it does not make
+QA a proof of production. It removes one excuse: **B4's audio path can now be
+exercised against a QA stack whose schema is production's.**
+
 ### 🟠 FOUND ON THE WAY PAST — SOMETHING ON THIS HOST AUTHENTICATES TO PRODUCTION ON A SCHEDULE, AND ONE OF ITS LOGINS FAILS
 
 Surfaced by the §2.5 baseline, which is exactly what that discipline is for: a

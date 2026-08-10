@@ -34,15 +34,48 @@
 # READ-ONLY. Never mutates anything.
 #
 # Usage:  bash scripts/assert-migrations-applied.sh [container] [db]
+#         bash scripts/assert-migrations-applied.sh --qa
 # Exit:   0 = all repo migrations applied · 1 = SOME UNAPPLIED · 2 = cannot check
 #
 # Invoke with `bash scripts/...` — this repo sets core.fileMode=false, so the
 # executable bit is not tracked and `./scripts/...` gives "Permission denied".
+#
+# ── WHY `--qa` EXISTS, AND WHY IT IS A FLAG RATHER THAN A SECOND DEFAULT ────
+# 2026-08-10. This script has ALWAYS accepted [container] [db], so pointing it
+# at QA needed no code — and in three months nothing ever did. STEP 0.5 invokes
+# it bare, so the standing check watched production and only production, while
+# the QA stack drifted TWO migrations behind unnoticed
+# (`b1a_ai_calls_request_id`, `b3_price_table`). That is the WATCHED-SET failure
+# in its cleanest form: the instrument was never broken and never wrong — it was
+# simply never aimed at half of what it was believed to cover. A capability
+# nobody invokes is indistinguishable from one that does not exist.
+#
+# ⚠️ IT IS A FLAG, NOT AN ADDITION TO THE BARE INVOCATION, AND THE REASON IS A
+# CALLER. `scripts/deploy-prod.sh:118` gates the PRODUCTION DEPLOY on the bare
+# call. Folding QA into that call would mean a stale QA container could BLOCK A
+# PRODUCTION DEPLOY — a hard coupling between the synthetic stack and shipping,
+# which is both wrong and the kind of thing discovered at the worst moment. The
+# bare invocation's meaning is therefore unchanged and deliberately narrow:
+# "is PRODUCTION fully migrated?"
+#
+# The QA coordinates live HERE rather than in a runbook line because a
+# hand-kept invocation in prose is a hand-kept list, and those go stale.
 # ============================================================================
 set -uo pipefail
 
-CONTAINER="${1:-meddoc-pro-postgres-1}"
-DB="${2:-meddoc}"
+if [ "${1:-}" = "--qa" ]; then
+  if [ $# -gt 1 ]; then
+    echo "⚠️  cannot check — --qa takes no further arguments (got: ${*:2})"
+    exit 2
+  fi
+  # The qa/test marker in the db name is the same one @meddoc/db/guard keys on.
+  CONTAINER="meddoc-qa-postgres-1"
+  DB="meddoc_qa_test"
+  echo "target: QA stack ($CONTAINER/$DB)"
+else
+  CONTAINER="${1:-meddoc-pro-postgres-1}"
+  DB="${2:-meddoc}"
+fi
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MIGRATIONS_DIR="$REPO_DIR/packages/db/prisma/migrations"
 
