@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Manrope, IBM_Plex_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import { FinalLanding } from '@/components/landing-final/FinalLanding';
 import './final-landing.css';
 
@@ -21,15 +21,27 @@ import './final-landing.css';
 // Inter/JetBrains pair (used by every subpage) is untouched.
 // ============================================================================
 
-const body = Manrope({
-  subsets: ['latin'],
+// ⚠️ SELF-HOSTED — see ./fonts/README.md. `next/font/google` fetches from
+// Google DURING the build and fails as a `Module not found` on an internal
+// turbopack path, which reads as a code defect rather than a network one.
+//
+// Manrope is a VARIABLE font (one file, whole range). IBM Plex Mono is NOT —
+// its 400/500/600 are three distinct files, so it is declared as three faces.
+// Getting that backwards ships a page whose bold monospace silently falls back.
+const body = localFont({
+  src: './fonts/manrope-latin.woff2',
+  weight: '200 800',
+  style: 'normal',
   variable: '--font-body',
   display: 'swap',
 });
 
-const mono = IBM_Plex_Mono({
-  weight: ['400', '500', '600'],
-  subsets: ['latin'],
+const mono = localFont({
+  src: [
+    { path: './fonts/ibm-plex-mono-latin-400.woff2', weight: '400', style: 'normal' },
+    { path: './fonts/ibm-plex-mono-latin-500.woff2', weight: '500', style: 'normal' },
+    { path: './fonts/ibm-plex-mono-latin-600.woff2', weight: '600', style: 'normal' },
+  ],
   variable: '--font-mono',
   display: 'swap',
 });

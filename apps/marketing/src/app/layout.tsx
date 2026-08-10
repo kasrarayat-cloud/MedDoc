@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
 import './landing.css';
 
@@ -8,16 +8,29 @@ import './landing.css';
 // JetBrains Mono for IDs / timestamps / keyboard hints. The variable
 // names (`--font-sans` / `--font-mono`) line up with the @theme block in
 // globals.css and the .qm-lin-* utility classes.
-const sans = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+// ⚠️ SELF-HOSTED, NOT `next/font/google` — AND THAT IS THE POINT.
+// That loader fetches font CSS from Google's servers DURING `next build`. When
+// the fetch fails the build does not say "network": it emits CSS pointing at
+// `@vercel/turbopack-next/internal/font/google/font`, which does not resolve,
+// and dies with `Module not found` inside this file. Two main-side builds died
+// that way on 2026-08-10 while the same tree built green minutes earlier.
+// See AGENTS.md, "an external fault does not spend the cure budget".
+//
+// These are VARIABLE fonts: one file per style covering the whole weight range,
+// declared with a weight RANGE rather than as discrete faces. Provenance,
+// licence and the exact ranges: ./fonts/README.md.
+const sans = localFont({
+  src: './fonts/inter-latin.woff2',
+  weight: '400 700',
+  style: 'normal',
   variable: '--font-sans',
   display: 'swap',
 });
 
-const mono = JetBrains_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500'],
+const mono = localFont({
+  src: './fonts/jetbrains-mono-latin.woff2',
+  weight: '400 500',
+  style: 'normal',
   variable: '--font-mono',
   display: 'swap',
 });
