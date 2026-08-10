@@ -4318,3 +4318,72 @@ MASTER.md's known-constraints table**, and the sandbox restricts `ls` to
    and 2026-08-08; 2026-08-07 was the last success). That is a required-adjacent
    signal that has been red for two days with nothing in the ledger about it.
    **Not investigated here** — out of B3's scope, and named rather than absorbed.
+
+### 🟠 FOUND ON THE WAY PAST — A RUN ID IS NOT A FULL CITATION. **THE ATTEMPT NUMBER IS PART OF IT.**
+
+This is the useful half of an otherwise unremarkable flake, and it applies to
+**every citation this programme has ever taken.**
+
+**What happened.** At 02:53Z, `CI` on `main` @ **`6247aa33`** — the owner's PR
+#574, `.claude/settings.json` only — **failed**. First CI failure on `main` in
+twelve runs. At 03:20Z it was re-run and **succeeded on attempt 2**.
+
+**What `gh` says about it now:**
+
+```
+$ gh run list --branch main
+CI  completed/success  6247aa33            <- run id 31351013424
+```
+
+⚠️ **THE RUN ID IS UNCHANGED AND THE FAILURE IS INVISIBLE.** A re-run does not
+mint a new id; it increments `run_attempt` on the same one. So a citation
+recorded the way this ledger records them — four workflow names, four run ids —
+**cannot distinguish "green" from "green on the second try."** The only view that
+can:
+
+```
+$ gh api repos/<owner>/<repo>/actions/runs/<id> --jq .run_attempt
+2
+```
+
+**Applied immediately to this session's own claim, rather than left as advice:**
+all four of B3's merge-commit runs on `748ec09a` were checked and are
+**`attempt=1`**. The citation in this section is clean, and now *known* to be
+clean rather than assumed.
+
+**Recommendation, not executed here:** a citation should record
+`<name> <run-id> a<attempt>`. That is a change to how MASTER.md defines a
+citation, and MASTER.md is the loop's own brief — editing it mid-run is its own
+change (the same reasoning session 02 applied to the §2.5 filename note).
+
+#### The flake itself — mechanism named, deliberately NOT re-run by me
+
+**All 3288 tests passed** (265 files). The job failed *after* them on:
+
+```
+EnvironmentTeardownError: [vitest-worker]: Closing rpc while "onUserConsoleLog" was pending
+  This error originated in "src/lib/note-template-parse/__tests__/parse-note-to-template.mock.test.ts"
+```
+
+reported twice as `Unhandled Rejection`, exit 1. Vitest's worker RPC channel
+closes while a console-log message is still in flight; that test deliberately
+emits console output (`[signup] create failed`, `[waitlist] write failed`). It is
+timing-sensitive, so it is likelier on a loaded shared runner. **Not a product
+defect.**
+
+⚠️ **THE ATTRIBUTION IS DECISIVE, AND WORTH STATING BECAUSE THE OBVIOUS SUSPECT
+WAS MINE.** B3 had just landed, and its gate test is a new file in the same
+worker pool that imports `price-table.ts`, which imports the prisma client at
+module load. That is a plausible way to shift teardown timing. **It is
+nonetheless ruled out by the run history:** `748ec09a` — which contains *all* of
+B3's code, including that import — passed the identical suite 52 minutes earlier,
+and `6247aa33` differs from it by **`.claude/settings.json` alone**, five lines,
+in a file no test reads. **There was no code delta between the green run and the
+red one**, so no code change can explain it.
+
+**I did not re-run it** — canon forbids re-run-and-hope, and the owner's re-run
+is what produced the attempt-2 evidence above. **Nothing is changed here:** one
+occurrence in twelve is not a pattern, and editing shared vitest config
+(`teardownTimeout`, `pool`) to chase a first-occurrence flake is a larger risk
+than the flake. **If it recurs, the fix is the test's console emission or the
+teardown timeout — not another re-run.**
