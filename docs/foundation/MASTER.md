@@ -101,7 +101,12 @@ each taken to its gate. For every item:
 - build it, gate it, and **cite the merge commit by SHA across all four
   workflows** (`CI` · `e2e` · `a11y-ci` · `secrets-scan`) — a PR-head green is
   never substituted for a merge-commit one
-- deploy under **§2.5** with the declared delta written down FIRST, rollback tags
+- deploy under **§2.5** with the declared delta written down FIRST — at
+  **`docs/foundation/deploys/<UTC-date>-<short-sha>.md`** (e.g.
+  `20260809-ac9a46cd.md`). ⚠️ **`deploy-prod.sh` REFUSES any other filename**, so
+  a declaration written under a descriptive name costs a refused deploy and a
+  second PR cycle; it refuses *before* it builds, migrates or recreates anything,
+  which makes that failure expensive in minutes and free in risk — rollback tags
   cut against the RUNNING image ids and digest-verified, and the post-deploy
   comparison judged against the declaration
 - **update `RELAY.md` in the same change** — status, citation, and what the item
@@ -221,13 +226,24 @@ worked-around. **Stop the session and report.**
 
 ---
 
-## BEFORE ANY PUSH — CHECK IN-FLIGHT RUNS **BY COMMIT**. This is a MUST.
+## BEFORE ANY PUSH — CHECK IN-FLIGHT RUNS IN **TWO VIEWS**. This is a MUST.
 
 **Ruled 2026-08-09, after the third occurrence.** A push cancels in-flight runs
 on the same branch. That makes every push a decision about somebody's evidence —
 sometimes your own citation, sometimes another session's.
 
-    gh run list --commit <sha>      # BEFORE you push. Every time.
+    gh run list --commit "$(git rev-parse HEAD)"                  # full 40 chars
+    gh run list --branch "$(git rev-parse --abbrev-ref HEAD)"     # the one right first
+
+**BELIEVE A ZERO ONLY WHEN BOTH ARE EMPTY.** `--commit` lies twice: `[]` for any
+ABBREVIATED sha, and `[]` for the FULL sha during the propagation window right
+after a push, while the runs exist and sit `pending`. That window is exactly when
+this check gets run — right after somebody else pushed — so a single-view check
+reports all-clear and the push destroys four queued runs with the audit trail
+showing the check was performed. ⚠️ **No positive control catches it**: the
+command is not broken, it is answering correctly about a set the server has not
+finished populating. It is also **intermittent**, so one clean test is not
+grounds to drop the second view.
 
 Then do one of exactly two things:
 
@@ -238,7 +254,9 @@ Then do one of exactly two things:
 ⚠️ **DO NOT USE `gh pr checks` FOR THIS.** It is recorded in `AGENTS.md` as
 unreliable: it reported `pending` for a run already `completed/success`. A
 pre-push check built on it waits for nothing, and a **citation** built on it can
-be wrong. `gh run list --commit <sha>` is the view that a citation is taken from.
+be wrong. That view — `gh run list --commit <FULL-sha>` — is where a citation is taken
+from, because it binds evidence to a SHA. But a **zero** from it is not a fact
+until `--branch` agrees.
 
 **And batching removes the problem entirely.** Every occurrence so far cost a
 cycle because two pushes happened minutes apart where one would have done.
