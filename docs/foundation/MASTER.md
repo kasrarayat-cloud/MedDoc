@@ -20,9 +20,18 @@ the fact.** Where they disagree, that is a finding, not a typo.
 3. Read `docs/foundation/SPEC.md`, `RELAY.md`, `RULINGS.md`, and `AGENTS.md`.
    ⚠️ **Grep `RULINGS.md` before ANY ruling-shaped decision.** Rediscovery is a
    process smell; contradiction is the failure it precedes.
-4. **Verify the previous session's citation actually exists** — the merge commit
-   named in the ledger, all four workflows, by run id. A ledger row asserting a
-   citation is not a citation.
+4. **Verify the previous session's citation actually exists** — and verify it
+   WITH THE CHECKER, not by eye:
+
+       bash scripts/check-citation.sh <FULL-40-CHAR-SHA> --expect <id>,<id>,<id>,<id>
+
+   Resolve the ledger's short SHA first (`git rev-parse <short>`); the checker
+   refuses an abbreviation on purpose. `--expect` is the arm that matters here:
+   it takes the ids the ROW claims and asks GitHub what commit each belongs to,
+   which is the only direction that can see a substitution. A ledger row
+   asserting a citation is not a citation.
+   ⚠️ Its exit codes are the usual three — `0` cited, `1` FINDING, `2` cannot
+   tell — and `2` includes *still running*, which means WAIT, not accuse.
 5. **Standing checks**, all of them; a non-zero exit is triaged before work
    begins, not after:
    `check-imaging-em-artifacts` · `assert-migrations-applied` ·
@@ -100,7 +109,17 @@ each taken to its gate. For every item:
 
 - build it, gate it, and **cite the merge commit by SHA across all four
   workflows** (`CI` · `e2e` · `a11y-ci` · `secrets-scan`) — a PR-head green is
-  never substituted for a merge-commit one
+  never substituted for a merge-commit one.
+  ⚠️ **THE CITATION ROW IS PRODUCED BY THE CHECKER, NEVER TYPED.** Run
+  `bash scripts/check-citation.sh <FULL-40-CHAR-SHA>` on the MERGE commit and
+  paste the block it emits. Hand-written rows have failed three ways already:
+  session 02 cited a merge commit with the PR head's four run ids; an
+  abbreviated SHA makes `gh run list --commit` return `[]` with exit 0; and a
+  run id alone hides a re-run, because a re-run increments `run_attempt` on the
+  SAME id rather than minting a new one. The checker's block carries the full
+  40 characters and `a<attempt>` on every line, so none of the three can recur
+  silently. **If it emits `a2` or higher, the row must say WHY it was re-run** —
+  canon forbids re-run-and-hope, so an unexplained re-run is its own finding.
 - deploy under **§2.5** with the declared delta written down FIRST — at
   **`docs/foundation/deploys/<UTC-date>-<short-sha>.md`** (e.g.
   `20260809-ac9a46cd.md`). ⚠️ **`deploy-prod.sh` REFUSES any other filename**, so
