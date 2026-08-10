@@ -464,6 +464,29 @@ statement about your detectors, and detectors have coverage. The list is the
 contract; the detectors are a convenience.
 
 ## EVIDENCE IS ONLY EVIDENCE ON THE TREE IT DESCRIBES
+### A count inherited from another report, then incremented by assumption
+
+**Same family, arriving through arithmetic instead of a command.** A number
+carried forward from somebody else's write-up is inherited evidence: it
+described *their* tree at *their* moment. Adding to it without re-measuring
+manufactures a figure that was never observed by anyone.
+
+> **"A count carried forward from another session's report and then incremented
+> by assumption is a fabricated number, however small the increment."**
+> — FOUNDATION session 04, 2026-08-10, catching it in its own draft
+
+The instance: a row was drafted saying `nightly-tests` had failed **four**
+nights and filed a **fourth** issue. The previous session's report had already
+counted the 08-10 run; this one assumed a new failure had appeared overnight and
+added one. Re-measured before committing —
+`gh run list --workflow nightly-tests.yml` gives **3** failures after 3
+successes, and `gh issue list` gives exactly **three** issues.
+
+⚠️ **It was caught in the drafting, not by a check, and nothing would have
+caught it later** — a plausible count in a ledger row is indistinguishable from a
+measured one once it is committed. **Re-measure any number you did not observe
+yourself, in the same pass that you write it down.**
+
 
 **Every verification chain guards on the state transition it assumes — a rebase's
 or merge's exit code, a clean `git status` — BEFORE its numbers count.**
@@ -609,6 +632,71 @@ because two pushes were made minutes apart where one would have done. And when a
 second push genuinely must happen, it is gated by the **two-view check at the top
 of this section** — both views, the full 40-character SHA, and a zero believed
 only when both are empty.
+
+## A MERGE IS A PUSH — WAIT FOR THE MERGE COMMIT, OR DECLARE THE BATCH IN ADVANCE
+
+**Ratified 2026-08-10, and it supersedes "batch and declare at merge time".**
+The push-side rule above is about *your* stray push. It does not reach the case
+where one actor merges a QUEUE of legitimately separate PRs back to back — there
+is no stray push to avoid and nothing to batch into one.
+
+> **After merging, WAIT for the merge commit's runs before merging the next PR.
+> Or DECLARE THE BATCH IN ADVANCE — in the log, BEFORE the first merge — so any
+> other actor waiting on a run can be accounted for.**
+>
+> **"Declared at merge time" is not a declaration. It is a narration.**
+
+The descendant-citation recovery stays the cure when it happens anyway; it is
+not a licence to plan around.
+
+⚠️ **REFERENCE CASE — FOUND BY THE FOUNDATION LOOP'S SESSION 04, AUDITING
+SOMEBODY ELSE'S MERGES WHILE WAITING ON ITS OWN GATE.** Three pairs inside two
+hours, each merged about four seconds apart:
+
+| pair | merged | what died |
+|---|---|---|
+| #576 → #578 | `05:15:24Z` → `05:15:28Z` | #576's **four** runs, cancelled at 5–7s |
+| #580 → #581 | `06:52:42Z` → `06:52:46Z` | #580's `e2e`, cancelled at 7s |
+| #583 → #584 | `07:26:06Z` → `07:26:10Z` | #583's four runs — **and `afabbaf1`'s `e2e` at 34 minutes** |
+
+**The third row is the argument.** Session 04 had read the two views, seen
+`afabbaf1`'s runs in flight, and **deliberately chosen to wait** — exactly as the
+rule prescribes — specifically so that green would discharge #580's cancelled
+`e2e`. The next pair cancelled that run at **33m39s**. *The rule was followed
+correctly by one party and defeated by another*, which is why it has to be a
+**merge-side** habit and not only a push-side one.
+
+Everything was discharged: `51751c0e` came back 4 of 4 and contains all four
+PRs. **But it worked by luck of ordering, not by design** — and a recovery you
+cannot schedule is not a plan.
+
+## AN EXEMPTION'S REASON IS PROSE, AND PROSE DECAYS SILENTLY
+
+**A gate can keep an exemption PRESENT. It cannot keep it HONEST.**
+
+An exclusion list — exempted files, allowlisted paths, "known acceptable"
+findings — carries two things: an entry, and a REASON. A check can assert the
+entry still exists and still matches the shape it was written for. It cannot
+assert the reason is still true, because the reason is a sentence about code
+somewhere else.
+
+> **Re-read an exemption's justification BY HAND whenever the code it describes
+> is touched.** Nothing else will.
+
+⚠️ **REFERENCE CASE, 2026-08-10 — B4 vs the metering gate.**
+`gate-mock-suite-stubs-the-db.test.ts` exempted `embed-mock.test.ts` with the
+reason *"embed.ts:72 returns mockEmbed() under mock, ABOVE the logApiUsage calls
+at :123/:162 — the meter is never reached."* True when written. **B4 moved that
+mock boundary below the meter, and the sentence became false** — while the gate's
+stale-exemption arm stayed green, because the file still existed and still named
+the flag. Both of the things it checks remained true.
+
+The removal was caught by the session doing B4, reading the exemption because it
+was touching the code it describes — not by any check. This is the watched-set
+rule (§"A gate's WATCHED SET is diffed against the spec's NAMED set") pointed at
+an EXCLUSION list instead of an inclusion one, and it is the more dangerous
+direction: an exclusion that goes stale removes coverage silently, and the gate
+keeps reporting zero.
 
 ## LEDGER AND SCHEMA CONFLICTS RESOLVE AS UNIONS
 
