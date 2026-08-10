@@ -33,10 +33,28 @@ vi.mock('resend', () => ({
     emails = { send: mocks.send };
   },
 }));
-vi.mock('../api-usage', () => ({
-  logApiUsage: vi.fn(),
-  buildResendUsage: vi.fn(() => ({})),
-}));
+// ⚠️ THIS MOCK USED TO NAME `../api-usage`, WHICH DOES NOT EXIST.
+// `email.ts:19` imports `logApiUsage` from `@meddoc/ai` — the module lives at
+// packages/ai/src/api-usage.ts — so the old specifier resolved to nothing and
+// silently did nothing. Vitest does not complain about a mock whose specifier
+// matches no module, so the real meter ran on every test in this file and its
+// `setImmediate` write to Postgres failed (the unit CI job leaves DATABASE_URL
+// unset on purpose), emitting `console.warn` from api-usage.ts:204 AFTER this
+// file had finished. Ten such warns per run, and each can lose the race with
+// vitest's worker-RPC teardown and fail the whole suite with
+// `EnvironmentTeardownError` while every test passes.
+//
+// Stubbing the DB seam is the fix used by the others in this class
+// (gate-b0-mock-boundary.test.ts:39-55): the meter still runs, its write
+// resolves in-process, nothing outlives the file. Nothing here asserted on the
+// meter, so no assertion changes.
+vi.mock('@meddoc/db', () => {
+  const client = {
+    apiUsageEvent: { create: (a: unknown) => Promise.resolve(a) },
+    aiCall: { create: (a: unknown) => Promise.resolve(a) },
+  };
+  return { __esModule: true, default: client, prisma: client };
+});
 
 import {
   sendVisitPdfEmail,
