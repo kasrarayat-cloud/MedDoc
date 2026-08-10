@@ -168,6 +168,47 @@ export const MOCK_TEMPLATE_PHI_SCAN_FLAGGED = {
   anyUncertain: true,
 } as const;
 
+// L5 self-critique — the POPULATED `tm_critique` variant. Returned by
+// mockComplete() when MOCK_CRITIQUE_ISSUES=true.
+//
+// ⚠️ WHY THIS EXISTS, AND IT IS B4's OWN GATE THAT DEMANDED IT.
+// The default fixture is `issues: []`, and it stays that way — every spec that
+// signs a visit depends on nothing being flagged. But `06-polish.ts:186` takes
+// a PASSTHROUGH branch when the critique yields nothing auto-patchable: the
+// draft becomes the final note and **no model call is made**. So under the
+// default fixture L6 never calls, L6b (nested in L6's call branch) never runs,
+// and `tm_polish` + `tm_polish_gate` cannot be COUNTED on any mocked run.
+//
+//     A STAGE THAT NEVER RUNS AND A STAGE WHOSE METER IS BROKEN BOTH
+//     PRODUCE ZERO EVENTS.
+//
+// That is the same sentence B4 steps 1–3 were each written under, arriving one
+// layer up: not a missing meter this time, but a missing *invocation*. The
+// remedy is symmetrical to MOCK_RX_WARNINGS and MOCK_TEMPLATE_PHI_FLAG — an
+// env-selected variant, default OFF, so the stage becomes reachable without
+// changing what every other suite sees.
+//
+// ⚠️ THE `suggested_fix` IS DELIBERATELY A *REMOVAL*. `isAdditiveFix`
+// (06-polish.ts:127) defers any fix that would need content the draft lacks, and
+// a deferred fix is not a fixable one — so an "add …" phrasing here would leave
+// `fixable.length === 0` and change nothing. One MINOR issue only: nothing
+// gates signing, so the visits other suites drive are unaffected even if this
+// variant is ever switched on for them.
+export const MOCK_CRITIQUE_WITH_ISSUES = {
+  issues: [
+    {
+      severity: 'minor',
+      location: 'Assessment',
+      description:
+        '[MOCK] The assessment repeats the wheeze finding already stated in the objective section.',
+      suggested_fix:
+        '[MOCK] Remove the duplicated wheeze sentence from the assessment and keep the objective one.',
+    },
+  ],
+  overall_quality: 'high',
+  safe_to_sign_without_review: true,
+} as const;
+
 // Rx & clinical-safety (Layer 7c) — the POPULATED tm_rx_drafting variant.
 // Returned by mockComplete() when MOCK_RX_WARNINGS=true so the Rx warnings rail,
 // the critical-override flow, and the sign-time override GATE are testable under
@@ -569,6 +610,12 @@ function rawCompleteFixture(purpose: ModelCallPurpose, user?: string): unknown {
   }
   if (purpose === 'tm_rx_drafting' && process.env.MOCK_RX_WARNINGS === 'true') {
     return MOCK_RX_DRAFTING_WITH_WARNINGS;
+  }
+  // B4's closing gate — without this, L6 always takes its passthrough branch
+  // under MOCK and `tm_polish`/`tm_polish_gate` are uncountable. See the
+  // fixture's own header for why the default stays empty.
+  if (purpose === 'tm_critique' && process.env.MOCK_CRITIQUE_ISSUES === 'true') {
+    return MOCK_CRITIQUE_WITH_ISSUES;
   }
   const fixture = MOCK_COMPLETE_FIXTURES[purpose];
   if (fixture === undefined) {

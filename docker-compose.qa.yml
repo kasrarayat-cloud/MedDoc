@@ -265,6 +265,10 @@ services:
       # L7c runs in the WORKER; set here on the app too for symmetry (harmless —
       # the app never calls tm_rx_drafting). Only honored under MOCK_AI_CALLS.
       MOCK_RX_WARNINGS: "${MOCK_RX_WARNINGS:-}"
+      # Symmetry with the worker, same as the line above — the app runs neither
+      # L4b nor L5/L6. See the worker service for why both of these exist.
+      TRANSCRIBE_MD_EVIDENCE_ANCHORS: "true"
+      MOCK_CRITIQUE_ISSUES: "${MOCK_CRITIQUE_ISSUES:-}"
       # Real keys are injected via shell env ONLY for model evals (never committed);
       # default mock-key-qa keeps the standard MOCK qa/CI flow self-contained.
       # ⚠️ CREDENTIALS ARE SEVERED, NOT DEFAULTED — the second half of the
@@ -358,6 +362,28 @@ services:
       # MOCK_RX_WARNINGS=true for the rx-safety pass so new visits get the
       # populated tm_rx_drafting fixture (critical + major + minor warnings).
       MOCK_RX_WARNINGS: "${MOCK_RX_WARNINGS:-}"
+      # ⚠️ PRODUCTION-SHAPED, AND UNTIL 2026-08-10 IT WAS NOT. Production's
+      # worker carries TRANSCRIBE_MD_EVIDENCE_ANCHORS=true — verified by
+      # reading the RUNNING container, not the compose file — and this stack
+      # never set it. So L4b, the per-claim entailment verifier, has NEVER run
+      # on QA: `evidence-anchors-flag.ts:9` defaults it OFF, the worker logged
+      # `enabled:false` at every boot, and `tm_anchor_entailment` had zero rows
+      # here while production held 231.
+      #
+      # Found by B4's coverage run, which could not COUNT a stage that never
+      # RAN. The stated intent of this file is that QA be production-shaped;
+      # this line is that intent made true, declared rather than inherited so a
+      # future .env cannot quietly flip it.
+      #
+      # Inert on SOAP content under MOCK: the flag appends an anchoring block to
+      # L4's system prompt, and a mocked L4 returns a fixture regardless.
+      TRANSCRIBE_MD_EVIDENCE_ANCHORS: "true"
+      # B4's closing gate. Default empty (off) so every other suite keeps the
+      # `issues: []` critique it relies on. With it set, L5 returns ONE MINOR
+      # issue, which is what makes L6 call its model instead of taking the
+      # passthrough at 06-polish.ts:186 — the only way `tm_polish` and
+      # `tm_polish_gate` can be counted on a mocked run.
+      MOCK_CRITIQUE_ISSUES: "${MOCK_CRITIQUE_ISSUES:-}"
       # Real keys are injected via shell env ONLY for model evals (never committed);
       # default mock-key-qa keeps the standard MOCK qa/CI flow self-contained.
       # ⚠️ CREDENTIALS ARE SEVERED, NOT DEFAULTED — the second half of the

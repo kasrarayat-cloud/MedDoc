@@ -284,14 +284,27 @@ export function buildDeepgramUsage(
 
 export function buildWhisperUsage(
   ctx: BaseCtx,
-  audioSeconds: number
+  audioSeconds: number,
+  // ⚠️ B4's CLOSING STEP — `operation` IS THE CALLER'S PURPOSE, NOT A CONSTANT.
+  // This used to be hardcoded `'transcribe_batch'`, which is the same defect
+  // B4 step 1 removed from the Deepgram builder and the same one the item's own
+  // wording names: *"real operation instead of the hardcoded
+  // 'transcribe_realtime'"*. Whisper is the cross-provider fallback and its
+  // caller's purpose is `tm_transcribe` — so a rollup grouped by `operation`
+  // would have filed the fallback under a label no stage uses, and B4's
+  // coverage gate could never have matched it to a stage.
+  //
+  // No historical cost: production holds ZERO rows with either label from this
+  // builder, because the fallback is gated OFF pending a BAA
+  // (`TRANSCRIBE_MD_WHISPER_FALLBACK_ENABLED=false`).
+  operation: string
 ): UsageEvent {
   const minutes = audioSeconds / 60;
   return {
     ...ctx,
     requestId: ctx.requestId ?? null,
     provider: 'whisper',
-    operation: 'transcribe_batch',
+    operation,
     audioSeconds,
     unitCount: minutes,
     unitType: 'minutes',
@@ -379,13 +392,28 @@ export function buildAnthropicUsage(
 export function buildOpenAIEmbedUsage(
   ctx: BaseCtx,
   tokens: number,
-  modelName: string
+  modelName: string,
+  // ⚠️ B4's CLOSING STEP — AND THIS ONE WAS FOUND BY THE GATE, NOT BY READING.
+  // Hardcoded `'embed'` while every caller's purpose is `tm_embed`. The first
+  // full QA coverage run reported `unenumerated operation 'embed' metered
+  // against this run's visits` — a stage that was metering correctly, under a
+  // name no stage list could ever contain.
+  //
+  // ⚠️ AND IT EXPLAINS A NUMBER ALREADY IN THE LEDGER. B4 step 1 recorded
+  // *"`api_usage_events`: zero openai rows, ever"* for `tm_embed`. True — and
+  // it would have stayed true even after the credential is fixed, because the
+  // rows would have arrived labelled `embed`. The zero was going to survive its
+  // own cure.
+  //
+  // No historical cost: production holds ZERO rows from this builder under
+  // either label (the prod OpenAI credential has been dead since 2026-07-02).
+  operation: string
 ): UsageEvent {
   return {
     ...ctx,
     requestId: ctx.requestId ?? null,
     provider: 'openai',
-    operation: 'embed',
+    operation,
     inputTokens: tokens,
     unitCount: tokens,
     unitType: 'tokens_in',

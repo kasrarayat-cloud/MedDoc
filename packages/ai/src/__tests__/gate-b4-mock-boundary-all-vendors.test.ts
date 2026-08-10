@@ -264,7 +264,14 @@ describe('B4 — the mock boundary sits BELOW the meter for every vendor', () =>
     expect(usageWrites).toHaveLength(1);
     const row = usageWrites[0];
     expect(row.provider).toBe('openai');
-    expect(row.operation).toBe('embed');
+    // ⚠️ WAS `'embed'`, AND THAT ASSERTION WAS PINNING THE DEFECT IN PLACE.
+    // `buildOpenAIEmbedUsage` hardcoded the literal while every caller's
+    // purpose is `tm_embed`, so the stage metered correctly under a name no
+    // stage list could ever match — and this arm, written one step earlier,
+    // asserted the wrong label as though it were the contract. B4's closing
+    // step threads the caller's purpose through; the operation is now the
+    // purpose, here as it already is for Deepgram.
+    expect(row.operation).toBe('tm_embed');
     expect(row.unitsSource).toBe('mock');
     expect(row.inputTokens).toBe(1);
     // No `_request_id` on the fixture response, and none invented.

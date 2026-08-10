@@ -154,14 +154,20 @@ describe('B1-b step 2 — the meter never invents a request id', () => {
   // and so the count below can be asserted against the module's real exports.
   const BUILDERS = [
     { name: 'buildDeepgramUsage', call: (m: any, ctx: any) => m.buildDeepgramUsage(ctx, 60) },
-    { name: 'buildWhisperUsage', call: (m: any, ctx: any) => m.buildWhisperUsage(ctx, 60) },
+    // B4's closing step gave whisper + embed the caller's real purpose instead
+    // of a builder-side constant, so both now take an `operation` argument.
+    {
+      name: 'buildWhisperUsage',
+      call: (m: any, ctx: any) => m.buildWhisperUsage(ctx, 60, 'tm_transcribe'),
+    },
     {
       name: 'buildAnthropicUsage',
       call: (m: any, ctx: any) => m.buildAnthropicUsage(ctx, 100, 50, 'claude-sonnet-4-6'),
     },
     {
       name: 'buildOpenAIEmbedUsage',
-      call: (m: any, ctx: any) => m.buildOpenAIEmbedUsage(ctx, 100, 'text-embedding-3-small'),
+      call: (m: any, ctx: any) =>
+        m.buildOpenAIEmbedUsage(ctx, 100, 'text-embedding-3-small', 'tm_embed'),
     },
     { name: 'buildResendUsage', call: (m: any, ctx: any) => m.buildResendUsage(ctx, 1) },
   ] as const;

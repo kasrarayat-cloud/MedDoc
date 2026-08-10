@@ -285,6 +285,9 @@ async function whisperBatchTranscribeOnce(
     buildWhisperUsage(
       { ...args, unitsSource: 'vendor', requestId: readOpenAIRequestId(response) },
       durationSec,
+      // B4's closing step — the caller's real purpose (`tm_transcribe` on the
+      // fallback path), never a builder-side constant.
+      args.purpose,
     ),
   );
 

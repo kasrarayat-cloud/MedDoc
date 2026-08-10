@@ -5368,3 +5368,292 @@ have **no rows at all** on QA. Combined with the step-2 recon's warning that
 gate's expected-count table has to be keyed by input mode, and the run has to
 exercise **audio_upload** — which B4's own text already demands, because
 production is 100% `text_notes` and cannot prove it.
+
+---
+
+## ✅ B4 CLOSING STEP — the stage list becomes a thing, and one full mocked run is counted against it — 2026-08-10
+
+**Session 08.** B4's gate reads, verbatim: *"one full QA pipeline run produces
+one event per stage, **counted against the enumerated stage list**, not
+eyeballed. The audio path must be exercised on QA."* Steps 1–3 each removed a
+stage that **could not** be counted. This is the run, and the list.
+
+**14 of 15 stages COUNTED. One UNPROVEN, named, with its mechanism established
+and its closure recipe written down.** That distinction is the item's main
+deliverable and is explained below — it is not a hedge.
+
+### The sentence has two halves and they need two machines
+
+| half | where it lives | why it cannot live in the other |
+|---|---|---|
+| **the LIST** | `src/lib/billing/pipeline-stages.ts` + `__tests__/gate-b4-stage-enumeration.test.ts` — **CI, every push** | pure source; needs no stack |
+| **the RUN** | `scripts/qa/b4-stage-coverage.ts` — the isolated `meddoc-qa` stack | needs a worker, a queue, a bucket and a database |
+
+⚠️ **THE LIST IS THE HALF THAT ROTS, AND A RUN AGAINST A STALE LIST IS THE
+`doctor_edit_patterns` FAILURE AGAIN** — a gate flawless at counting a universe
+that does not contain what it was asked to protect. So the census diffs both
+directions: every enumerated stage's named source really declares that purpose,
+and every purpose assignment in `apps/transcribe-md/src` lands in a named bucket
+— pipeline / declared-non-pipeline / **UNCLASSIFIED** — with the buckets summing
+to the total.
+
+### ⚠️ THE MATCHER WAS `purpose: '…'` FOR TWENTY MINUTES AND IT COULD NOT SEE `judge`
+
+The first census was written around `grep "purpose: '"`. It found 22 sites and
+looked complete. **`llm-mdm.ts:439` writes `const purpose = 'judge' as const;`**
+— a different shape, one line above the object that spreads it — so the census
+would have reconciled cleanly over **14 of 15** stages while the fifteenth, the
+one B4 step 3 had finished four hours earlier, was invisible.
+
+Caught by reading the file rather than by any check. The matcher is now
+`/\bpurpose\s*[:=]\s*'…'/` and **the const shape is a named positive control**,
+because a matcher's zero and a matcher that cannot see are the same output.
+
+### ⚠️ AND THE PROSE CONTROL I WROTE FOR IT WAS VACUOUS — MUTATION M3 IS WHAT SAID SO
+
+The first version of *"does NOT see a purpose that appears only in PROSE"* was
+asserted against the real `pipeline-stages.ts`, on the reasoning that a file
+naming every operation in its comments is the natural haystack. **Deleting
+`stripComments` from the extractor left all 34 tests GREEN.**
+
+The control was measuring nothing: that file's prose says
+`tm_anchor_entailment`, but it never says `purpose: 'tm_anchor_entailment'`, and
+the **MATCHER** is what the stripper has to defeat — not the operation name. A
+check whose title is wider than what it measures, in a file whose header
+lectures about exactly that.
+
+Now split in two, and the second half is the honest one:
+
+- the extractor's discrimination is controlled on a **fixture** — same string,
+  stripped and unstripped, zero vs two matches;
+- a second arm **asserts the equality on the real tree**: stripping changes
+  NOTHING today, because no non-test file under `apps/transcribe-md/src` writes
+  `purpose: 'x'` in a comment. The only file in the app that does is the gate's
+  own header, and `walk()` skips `__tests__`.
+
+> **Recording the equality is what stops a future reader believing M3's green
+> means the stripper is decoration.** It means the haystack is currently clean,
+> and the day somebody documents a call site the way this repo documents
+> everything, it stops being.
+
+### THE RUN — three visits, one per input mode, on images built from this tree
+
+QA was rebuilt from `16cadf50` + this change and recreated with
+`--force-recreate` before anything was measured. The driver creates one visit
+per mode, uploads the committed 1 044-byte `silence-3sec.mp3` for the two audio
+modes, enqueues through the production `enqueueProcessVisit`, polls to terminal,
+then exercises `tm_embed` and counts `api_usage_events` **scoped to its own
+visit ids**.
+
+⚠️ **SCOPED, BECAUSE QA's EXISTING POPULATION IS ENTIRELY PRE-REGIME** — 977
+rows, every one `unitsSource='vendor'`, newest 2026-07-28, which are the rows
+from the 298-real-calls incident. A gate measuring the population would report
+`mock = 0` for every stage and read as *"the meters are all broken"*. Confirmed
+at run time: the script prints the baseline before it creates anything.
+
+Final run, all three visits `READY`:
+
+```
+text_notes       12 stages · voice_dictation 13 · audio_upload 14
+tm_transcribe ✔ (dictation + upload)   tm_speaker_roles ✔ (upload only)
+tm_entities ✔  tm_soap_draft ✔  tm_critique ✔  tm_polish ✔  tm_polish_gate ✔
+tm_icd_coding ✔ tm_cpt_coding ✔ tm_rx_drafting ✔ tm_referrals ✔ tm_patient_summary ✔
+judge ✔        tm_embed ✔ (out of band)        tm_anchor_entailment — UNPROVEN
+```
+
+### ⚠️ THE FIRST RUN REPORTED EIGHT FINDINGS AND SIX OF THEM WERE MY TABLE, NOT THE METER
+
+That is the gate working. Each is recorded because each corrected something.
+
+**1. `tm_polish` and `tm_polish_gate` are `{0,1}`, not `exactlyOne`.**
+`06-polish.ts:186` takes a **passthrough** branch when the critique found
+nothing auto-patchable: the draft becomes the final note and **no model call is
+made**. No call, no meter — the same shape as `tm_anchor_entailment`, and *no
+work is not a suppressed call*.
+
+Measured on production's DURABLE table, not `ai_calls`: of **82** visits
+carrying a `tm_soap_draft`, exactly **28** carry a `tm_polish`, one each.
+**Fifty-four took the passthrough.** A gate demanding one would have reported a
+metering hole on two thirds of production.
+
+**2. AND THE TWO ARE COUPLED, WHICH A PER-STAGE COUNT CANNOT SEE.** L6b sits
+inside L6's model-call branch, so it can only fire on a visit that polished. The
+visit sets are **identical** — 28 and 28, full outer join returning **zero**
+asymmetric rows. Two `{0,1}` stages firing on *different* visits would satisfy
+every per-stage assertion and every total; `COUPLED_STAGES` is asserted
+per-visit by the run for exactly that reason.
+
+**3. ⛔ `tm_embed`'s meter rows were labelled `embed`, and the stage list could
+never have matched them.** `buildOpenAIEmbedUsage` hardcoded
+`operation: 'embed'` while every caller's purpose is `tm_embed`. The run
+reported it as `unenumerated operation 'embed' metered against this run's
+visits` — a stage metering **correctly**, under a name no enumeration can hold.
+
+> ⚠️ **AND IT EXPLAINS A NUMBER ALREADY IN THIS LEDGER.** B4 step 1 recorded
+> *"`api_usage_events`: zero openai rows, ever"* for `tm_embed`. True — and it
+> would have stayed true **after** the dead OpenAI credential is replaced,
+> because the rows would arrive labelled `embed`. **The zero was going to
+> survive its own cure.**
+
+Fixed exactly as step 1 fixed Deepgram: `operation` is a **required parameter**
+taking the caller's purpose. Swept by the predicate rather than by the symptom —
+`grep "operation: '"` in `api-usage.ts` returns three literals, and all three
+are dispositioned:
+
+| builder | literal | disposition |
+|---|---|---|
+| `buildOpenAIEmbedUsage` | `'embed'` | **FIXED** — takes `args.purpose` |
+| `buildWhisperUsage` | `'transcribe_batch'` | **FIXED** — same defect, same fix; the cross-provider fallback's purpose is `tm_transcribe` |
+| `buildResendUsage` | `'email_send'` | **LEFT, deliberately.** Its ctx carries no purpose at all — Resend is not a model call, GATE 0.5 rules it not metered, and 219 historical rows carry that label |
+
+**No history moves.** Production holds **zero** rows from either fixed builder
+under either label — whisper is gated off pending a BAA, and the OpenAI
+credential has been dead since 2026-07-02.
+
+⚠️ **AND B4 STEP 1's OWN GATE WAS PINNING THE DEFECT.**
+`gate-b4-mock-boundary-all-vendors.test.ts:267` asserted
+`expect(row.operation).toBe('embed')` — the wrong label written down as the
+contract, one step earlier, by a session that had no reason to doubt it.
+
+### 🟠 FOUND ON THE WAY PAST — QA HAS **NEVER** RUN L4b, AND PRODUCTION ALWAYS HAS
+
+Not looked for. `tm_anchor_entailment` came back zero on all three modes even
+after the polish corrections, so the flag was read **in the running containers**:
+
+```
+meddoc-pro-transcribe-md-worker-1   TRANSCRIBE_MD_EVIDENCE_ANCHORS=true
+docker-compose.qa.yml               (absent — evidence-anchors-flag.ts:9 defaults OFF)
+```
+
+The QA worker has logged `{"flag":"TRANSCRIBE_MD_EVIDENCE_ANCHORS","enabled":false}`
+at **every boot since the stack existed**. So **L4b — the per-claim entailment
+verifier, a fail-closed clinical safety layer — has never executed on QA**,
+while production has 231 of its usage rows. The step-3 recon recorded
+`tm_anchor_entailment` as *"absent from QA entirely"* and did not establish why;
+this is why.
+
+⚠️ **THE FILE'S OWN STATED INTENT WAS THE THING BEING VIOLATED.**
+`docker-compose.qa.yml` says, in as many words, *"The build args mirror
+production's deliberately: QA must be production-SHAPED, and 'the pack is green'
+and 'the shipped product works' have to be one statement."* A **runtime** flag
+that production sets and QA does not is that promise failing on the axis the
+sentence does not mention. Set to `"true"` here, **declared rather than
+inherited**, so a future `.env` cannot quietly flip it. Inert on SOAP content
+under mock: the flag appends an anchoring block to L4's system prompt, and a
+mocked L4 returns a fixture regardless.
+
+### ⚠️ COUNTED vs MERELY PERMITTED — THE ARM THAT STOPS THIS GATE BEING A DECORATION
+
+Correcting the polish rows to `{0,1}` made the run green and **proved less than
+before**. Three stages now have expectations that ADMIT ZERO for good reasons —
+and a run in which they never fire satisfies every assertion while saying
+nothing about them.
+
+> **A STAGE OBSERVED AT ZERO EVERYWHERE IS INDISTINGUISHABLE FROM A STAGE WHOSE
+> METER WAS DELETED.**
+
+B4's gate says *"one event per stage"*, not *"no contradiction per stage"*. So
+the run classifies every enumerated stage as **COUNTED** (observed ≥1 somewhere)
+or **UNPROVEN**, and exits **2 — can't tell**, never 0, while any stage is
+unproven. Same three-code convention as every other check in `scripts/`.
+
+**This is the `tm_polish` correction's own antidote.** Without it, the honest
+fix to finding 1 would have quietly turned a red gate into a permanently
+unfalsifiable green.
+
+### CLOSING TWO OF THE THREE — an env-selected fixture, default OFF
+
+`MOCK_CRITIQUE_ISSUES=true` swaps the empty `tm_critique` fixture for one
+carrying a **single MINOR** issue, mirroring the established `MOCK_RX_WARNINGS`
+and `MOCK_TEMPLATE_PHI_FLAG` variants. With it, L6 calls its model instead of
+passing through, and `tm_polish` + `tm_polish_gate` are counted **1 on every
+mode**.
+
+Two details are load-bearing and both are asserted:
+
+- **MINOR, not critical** — a critical issue gates signing and would break every
+  suite that signs a visit. The default stays `issues: []` for the same reason.
+- **the `suggested_fix` is a REMOVAL** — `isAdditiveFix` (`06-polish.ts:127`)
+  DEFERS any fix needing content the draft lacks, and a deferred fix is not a
+  fixable one. **An "add …" phrasing would have left `fixable.length === 0`, L6
+  would still have passed through, and the whole mechanism would have been an
+  elaborate no-op that looked correct.**
+
+Carried on a committed overlay, `docker-compose.qa.b4-coverage.yml`, rather than
+a shell env prefix — the prefix form is not in the FOUNDATION loop's allowlist,
+and **a procedure the unattended loop cannot execute is a procedure that will
+not be re-run**.
+
+### ⛔ THE ONE THAT IS STILL UNPROVEN, AND EXACTLY WHY
+
+**`tm_anchor_entailment`.** Turning the flag on makes L4b *run*; it does not
+give it anything to verify. Two conditions, and only one is a flag:
+
+1. `TRANSCRIBE_MD_EVIDENCE_ANCHORS=true` — **now fixed**.
+2. L4's draft must CARRY anchors (`⟦A:…⟧`, `ANCHOR_BLOCK_RE`). Under mock L4
+   returns a fixture, and **`mock.ts` contains ZERO anchor markers** (measured:
+   `grep -c '⟦A:' mock.ts` → `0`). So `deterministicStage` puts every line in
+   the exempt bucket, `toEntail` is empty, and `entailmentStage` returns at
+   `04b-anchor-verify.ts:999` before any call.
+
+That return is **correct** — ruling 82(d) keeps it deliberately, and production's
+`{0,3}` distribution depends on it. The stage is correctly silent, not broken.
+
+**THE CLOSURE, written down so the next session does not re-derive it:** an
+anchored `tm_soap_draft` mock variant selected by its own env flag, exactly as
+`MOCK_CRITIQUE_ISSUES` selects the populated critique. Not attempted here — the
+SOAP fixture is read by many suites and the variant needs its own blast-radius
+argument, which is a session's work, not a footnote.
+
+### ⚠️ FOUND ON THE WAY PAST — THE GATE PRINTED A GREEN VERDICT AND THEN NEVER EXITED
+
+Three `meddoc-qa-db-migrate-run-*` containers were still `Up` **thirty-five
+minutes** after their scripts had printed complete output, including a 🟢.
+`enqueueProcessVisit` opens a BullMQ Redis connection that holds the event loop
+open forever; `prisma.$disconnect()` in the `finally` does not touch it.
+
+> **A SCRIPT THAT FINISHES BUT NEVER EXITS READS AS A HANG — and worse, its
+> EXIT CODE is its entire contract with any caller.**
+
+A gate that cannot return 0/1/2 cannot be run by CI, by a wrapper, or by the
+unattended loop, which means it would have been run exactly once, by hand, by
+the session that wrote it. Fixed: close the queue, then `process.exit()` on the
+computed code as the backstop. Recorded because the first three runs *looked
+fine* — the output was complete and the verdict was correct.
+
+### Mutation proof — four, each naming its victim first, each asserted APPLIED
+
+| # | mutation | must go red | did |
+|---|---|---|---|
+| **M1** | the list forgets `tm_polish_gate` (its `operation` renamed to a real-but-wrong one) | LIST→SOURCE **and** the unclassified bucket | ✅ 3 arms |
+| **M3** | `stripComments` deleted from the extractor | the prose control | ✅ 1 arm — **after** the control was rewritten; the FIRST version stayed green, which is the finding above |
+| **M4** | the matcher narrowed to `purpose:` only — the naive grep | the `judge` control, LIST→SOURCE for `judge`, and the site count | ✅ 3 arms |
+| **M5** | `tm_transcribe` made universal (`text_notes` added) | the input-mode arm | ✅ 1 arm |
+
+Every mutation was `grep -c`-asserted present before running, and every restore
+came **from the scratch backup, never from git** — the working tree carries
+untracked new files and `git checkout --` would have deleted them.
+
+### ⛔ WHAT THIS DOES **NOT** CLAIM
+
+- **It does not close B4.** Fourteen of fifteen stages are counted;
+  `tm_anchor_entailment` is UNPROVEN on a mocked run and the coverage script
+  exits **2**, not 0, while that is true.
+- **It proves nothing about production's meters.** The run is `unitsSource='mock'`
+  end to end. What it proves is that every enumerated stage *reaches* the meter
+  on the code production runs — which is the only claim a mocked run can make.
+- **`tm_embed` is exercised at its own function boundary, not through the sign
+  route.** The driver writes `signedSoap` and calls `captureEditPattern` with
+  the three arguments `sign/route.ts:603` passes. It never touches
+  `signedAt`/`signedBy`, so no signature is fabricated and the
+  `signed_requires_signer` constraint is never in play. **That the sign route
+  calls this function is the sign route's tests' business.**
+- **It does not price anything.** No row's money columns are asserted; B3's
+  `price_rates` is still unwired, per ruling 80(e).
+- **The census cannot see a purpose passed positionally.** Its matcher is an
+  ASSIGNMENT (`purpose:` / `purpose =`). A future call site handing a bare
+  string to a helper would be invisible to it — named here rather than left as
+  an assumed completeness.
+- **`email_send` is untouched and unenumerated.** 219 production rows, GATE 0.5
+  rules Resend not metered, and any B5/B9 rollup still has to decide what it
+  includes — carried from step 2, still open.
