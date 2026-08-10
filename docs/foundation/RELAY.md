@@ -4023,10 +4023,46 @@ the loop's own brief and editing it mid-run is its own change.
 
 ---
 
-## 🟨 B3 IS BUILT — the versioned price table. 2 of 3 Deepgram rates, and it says so.
+## 🟩 B3 IS LIVE IN PRODUCTION — 2026-08-10T02:48Z. 2 of 3 Deepgram rates, and it says so.
 
-**Branch `feat/b3-price-table`, commit `17afb6c7`.** Not deployed at the time of
-writing; the citation and the §2.5 declaration are recorded below as they land.
+Deployed from `main` @ **`748ec09a`** by `bash scripts/deploy-prod.sh`, under a
+delta declaration written before the run:
+`docs/foundation/deploys/20260810-748ec09a.md`. Log
+`docs/deploy-logs/deploy-20260810T024833Z.log`. Rollback tags
+**`:pre-b3-20260810`**, cut against the RUNNING ids `09d4b56410b7` /
+`d1f6870ded64` and verified before the deploy started.
+
+**Citation: 4 of 4 on the MERGE COMMIT `748ec09a`** — `CI` **31348665086** ·
+`e2e` **31348665113** · `a11y-ci` **31348665105** · `secrets-scan`
+**31348665103**. The PR-head citation on `918196a2` was 4 of 4 as well and is
+recorded in the declaration for provenance; **it was not substituted for the
+merge-commit one, and the deploy did not start until the merge-commit runs were
+green.**
+
+**§2.5 declaration judged: 20 of 20 rows.** The one-line reading declared in
+advance — *"one new table with 44 rows, one new extension, one migration, two new
+image ids, and nothing else at all"* — is exactly what happened. Clinical counts
+byte-identical (25 · 16 · 15 · 196 · 197); `api_usage_events` **1325** and
+`ai_calls` **1125** unmoved, which is the row that matters most here because B3
+adds no writer.
+
+⚠️ **ONE DECLARED ROW'S WORDING WAS WRONG AND IS CORRECTED IN THE JUDGEMENT, NOT
+SMOOTHED OVER.** §4 said `audit_logs` may rise *"only by rows a **human** caused"*.
+It rose 10619 → 10626 **before** the deploy, and no human caused it: seven
+read-only rows at 02:00:15–02:00:32Z from two SYNTHETIC accounts. The substance
+held — pre-deploy re-measure 10626, post-deploy 10626, so **the deploy wrote zero
+audit rows** — but the predicate should have read *"activity outside this
+deploy"*. See the finding below; the source of that traffic is **not
+established**.
+
+⚠️ **PREVIOUS-SESSION CITATION REPAIRED WHILE PASSING.** Session 02's ledger cited
+B2's judgement row (PR #572) with runs `313432915xx` — those are on `4d39493d`,
+the **PR head**, not on the merge commit `0e04a759`. The merge-commit runs existed
+and were still in flight at STEP 0; they are now all `completed/success`:
+`CI` **31345214465** · `e2e` **31345214463** · `a11y-ci` **31345214442** ·
+`secrets-scan` **31345214444** on `0e04a759`. **The deployed commit `274a4925`
+was always correctly cited** — this affects only the docs-only judgement row that
+followed it.
 
 ### What shipped
 
@@ -4204,6 +4240,7 @@ B2's `withTimeout` under-count all point at the same invoice.
 |---|---|
 | unit suite | **3288 passed**, 4 skipped, 265 files — the suite CI runs |
 | B3 gate | **26 passed**; 3 mutations, reddening 1, 1 and 6 assertions respectively |
+| **the rates themselves, checked independently of my transcription** | Every seeded Anthropic row reproduces DISCOVERY §D.1 **and satisfies the vendor's own stated multipliers** — `cache_write_5m = 1.25 × input`, `cache_write_1h = 2 × input`, `cache_read = 0.1 × input` — computed in SQL across all **8** model-periods, `ok` on 24 of 24. ⚠️ Worth doing because *"I typed the numbers off the table correctly"* is the one claim in this item that no test can make, and the multiplier relation is an arithmetic check that does not depend on my eyes |
 | typecheck | `tsc --noEmit` on `apps/transcribe-md` — **0 errors** |
 | migration, standalone | applies to an empty database; 44 rows; all `DO`-block assertions pass |
 | migration, **in sequence** | **all 96 migrations applied in order** to a fresh database, B3 last, 44 rows present. A standalone apply does not prove this |
@@ -4239,3 +4276,45 @@ container predates B0 entirely while its database has B0 applied.
 not B3's. Recorded with its evidence. The cheap durable fix is a `PG_CONTAINER` /
 `PG_DB`-parameterised second arm on `assert-migrations-applied.sh`, so the QA
 stack is watched by the same script that already watches prod.
+
+### 🟠 FOUND ON THE WAY PAST — SOMETHING ON THIS HOST AUTHENTICATES TO PRODUCTION ON A SCHEDULE, AND ONE OF ITS LOGINS FAILS
+
+Surfaced by the §2.5 baseline, which is exactly what that discipline is for: a
+number moved, and the declaration made it a question instead of a shrug.
+
+Between the baseline (01:15Z) and the pre-deploy re-measure (02:47Z),
+`audit_logs` went **10619 → 10626**. The seven rows:
+
+```
+02:00:32Z  LOGIN_FAILED       success=f   qa-bundle@quillmd.local
+02:00:29Z  VIEWED_VISIT_LIST  success=t   qa-bundle@quillmd.local   (x2)
+02:00:29Z  LOGIN_SUCCESS      success=t   qa-bundle@quillmd.local
+02:00:15Z  VIEWED_VISIT_LIST  success=t   qa-tmd@quillmd.local      (x2)
+02:00:15Z  LOGIN_SUCCESS      success=t   qa-tmd@quillmd.local
+```
+
+All read-only, both accounts synthetic, and the unmoved clinical counts confirm
+nothing was written. **This is not a PHI event and it did not affect the deploy.**
+
+⚠️ **WHAT IS NOT ESTABLISHED IS WHERE IT CAME FROM.** The obvious candidate is
+`nightly-tests.yml` — cron `0 2 * * *`, and it targets
+`TEST_APP_URL=https://app.quillmd.com`, i.e. **production**. But `gh run list
+--workflow nightly-tests.yml` shows **no run for 2026-08-10**, and a full
+`gh run list` shows **no GitHub workflow at all** in that window (nearest:
+02:01:50Z for this merge commit, 02:10:12Z for PR #574). So the traffic came from
+**the host**, not from CI.
+
+**I could not enumerate host cron, and both refusals are findings in their own
+right** — see the session log: `crontab -l` is not granted and is **not in
+MASTER.md's known-constraints table**, and the sandbox restricts `ls` to
+`/opt/meddoc-pro` so `/etc/cron.d` is unreadable.
+
+**Two things for a person:**
+
+1. **The `LOGIN_FAILED`.** A scheduled process that authenticates to production
+   and fails one of its logins is either a broken smoke nobody reads or an
+   unowned job. Either way it has been failing quietly.
+2. ⚠️ **The last two `nightly-tests` runs both `completed/failure`** (2026-08-09
+   and 2026-08-08; 2026-08-07 was the last success). That is a required-adjacent
+   signal that has been red for two days with nothing in the ledger about it.
+   **Not investigated here** — out of B3's scope, and named rather than absorbed.
