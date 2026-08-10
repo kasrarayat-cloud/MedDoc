@@ -22,6 +22,17 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# ⚠️ REGISTRY-BLIP RETRY BUDGET — npm defaults to 2 retries / 60s ceiling.
+# On 2026-08-10 three independent builds on three branches died inside twelve
+# minutes on `npm error code ECONNRESET` during `npm ci`, after 18 of 18 green
+# e2e runs. Zero test failures — nothing ever installed. Declared at WORKFLOW
+# level so every job and every future npm invocation inherits it, rather than as
+# flags on each command, which is a hand-kept list.
+env:
+  NPM_CONFIG_FETCH_RETRIES: "5"
+  NPM_CONFIG_FETCH_RETRY_MINTIMEOUT: "20000"
+  NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "120000"
+
 jobs:
   test:
     runs-on: ubuntu-latest

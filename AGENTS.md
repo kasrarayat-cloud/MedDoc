@@ -888,6 +888,51 @@ every call site**, because a required NAMED property cannot be confused with a
 same-typed neighbour. **When changing what a positional parameter MEANS, change
 its shape (named property, branded type), not only its name.**
 
+## PROSE IS NEVER A SHELL ARGUMENT
+
+**Any command carrying human prose — a PR body, a review comment, a commit
+message, issue text — is passed by `--body-file`, `-F`, or stdin. NEVER as a
+quoted argument.** Backticks in prose are command substitutions waiting for a
+shell, and prose is exactly where backticks live: every time you write
+`` `npm ci` `` to name a command, you have written an instruction to run it.
+
+⚠️ **REFERENCE CASE, 2026-08-10 — AND IT RAN.** A PR description was passed as
+`gh pr create --body "…"` inside double quotes. The body named commands the way
+this file does, in backticks. Bash evaluated them:
+
+- `` `npm ci` `` **executed, to completion, in the FOUNDATION loop's live
+  working tree** — `exit 0`, `info ok`, `node_modules` rewritten while an
+  unattended session was mid-item.
+- `` `landing-monolith/deploy/deploy-staging.sh` `` — a path named in a
+  *sentence* — was **invoked as a command**. It failed with `Permission denied`
+  only because that file is not executable. **That is luck, not a control.**
+
+The tree survived: the lockfile was unchanged, so `npm ci` reinstalled exactly
+what was locked, `sharp` and its six `@img` binaries came back, and the five
+workspace symlinks were intact. None of that was by design. A prose mention of
+a *deploy* script came one file-mode bit away from running it.
+
+**The rule is mechanical, so obey it mechanically:** write the body to a file,
+pass the path. `gh pr create --body-file`, `gh pr comment --body-file`,
+`gh pr edit --body-file`, `git commit -F`. If a heredoc is unavoidable, quote
+the delimiter (`<<'MSG'`) so the shell expands nothing.
+
+### And a reassurance check needs a POSITIVE CONTROL like any other
+
+The same incident, second half. Asked whether the accidental `npm ci` had
+touched anything, the first check was
+`find node_modules -newermt '30 minutes ago'` → **0**, read as an all-clear.
+It was wrong. `stat -c '%y'` on the same directory said `06:20:48`, one minute
+earlier — the install had rewritten it.
+
+**A check run to prove nothing happened is the one most likely to be believed
+without scrutiny, and the least likely to be controlled.** It is the emptiness
+test from §"positive-control every zero", arriving at the moment you most want
+a clean answer. Before believing an all-clear: run the same matcher against
+something you KNOW is present, or answer with a second, independent tool. Two
+tools disagreeing is a finding; one tool agreeing with your hope is not
+evidence.
+
 ## The substring trap — fourth sighting, same family
 
 `'practice-scope' in source` — an import-insertion guard — matched the word

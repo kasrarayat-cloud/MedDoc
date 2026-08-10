@@ -33,6 +33,28 @@
 // universe vitest runs, and a new exposed file fails the gate instead of
 // reddening CI at random weeks later.
 //
+// ⚠️ AND HERE IS EXACTLY WHAT THIS GATE DOES **NOT** COVER. Say it plainly,
+// because the first version of this file implied completeness it did not have.
+// Arm 1's universe is "test files that set MOCK_AI_CALLS". That is a PROXY, not
+// the predicate. The predicate is "can reach logApiUsage", and a file can do
+// that without ever naming the flag: `email-no-phi.test.ts` reaches the meter
+// through `../email` and emitted TEN real metering writes per CI run while this
+// gate reported 0 EXPOSED — truthfully, over a universe that did not contain
+// them. That is the "right quantity, wrong universe" defect this repo has
+// written down, occurring inside the gate written to prevent its sibling.
+//
+// Import-reachability was tried as a replacement universe and REJECTED: it
+// reports 45 exposed files where the measured number is 1, because importing
+// `@meddoc/ai` pulls in `whisper-batch.ts` whether or not the test ever calls
+// it. A gate with 44 false positives is not kept.
+//
+// So arm 5 attacks the ACTUAL bug instead, exactly and with no false positives:
+// **a `vi.mock()` whose specifier resolves to no module at all.** That is what
+// `email-no-phi.test.ts` had — `vi.mock('../api-usage')` where no such file
+// exists, because the real module is `@meddoc/ai`. Vitest does not warn about
+// it. Across 268 test files and 197 file-resolvable specifiers there was
+// exactly ONE, and it was the one causing the flake.
+//
 // ⚠️ IT ALSO ASSERTS AN INVARIANT THE WORKFLOW ALREADY CLAIMED.
 // `.github/workflows/test.yml` states the suite "mocks @meddoc/db + @meddoc/ai
 // and runs fully on a bare runner". Nothing asserted that, and two files
@@ -40,7 +62,7 @@
 // ============================================================================
 
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { join, relative, sep, dirname, resolve } from 'node:path';
 
 import { describe, it, expect } from 'vitest';
 
@@ -194,5 +216,58 @@ describe('every mocked-vendor test prevents the real metering write', () => {
       process.env.${N_FLAG} = 'true';
     `;
     expect(classify('some/prose.mock.test.ts', strip(proseOnly))).toBe('EXPOSED');
+  });
+  // ── ARM 5 ── EVERY MOCK ACTUALLY MOCKS SOMETHING ─────────────────────────
+  it('NO DEAD vi.mock — every file-resolvable specifier resolves to a module', () => {
+    // A vi.mock naming a module that does not exist is a silent no-op: vitest
+    // raises nothing, the test passes, and the code it meant to neutralise runs
+    // for real. Only specifiers that SHOULD resolve to a file are checked —
+    // relative paths and the @meddoc/* workspace aliases. A bare package name
+    // ('resend', 'next/navigation') legitimately resolves in node_modules and
+    // is out of scope here.
+    const dead: string[] = [];
+    let checked = 0;
+    for (const rel of suiteFiles()) {
+      const code = strip(readFileSync(join(ROOT, rel), 'utf8'));
+      for (const m of code.matchAll(/vi\.mock\(\s*['"]([^'"]+)['"]/g)) {
+        const spec = m[1];
+        let base: string | null = null;
+        if (spec.startsWith('.')) base = resolve(dirname(join(ROOT, rel)), spec);
+        else if (spec.startsWith('@meddoc/')) {
+          const [, pkg, ...rest] = spec.split('/');
+          base = join(ROOT, 'packages', pkg, 'src', ...rest);
+        } else if (spec.startsWith('@/')) {
+          // vitest.config.ts aliases '@' -> apps/transcribe-md/src. Omitting it
+          // dropped ~90 of the 197 file-resolvable specifiers from this arm —
+          // a universe narrower than the one it claimed to cover, which is the
+          // very defect the header above is about. Caught by reconciling the
+          // count against an independent scan, not by reading the code.
+          base = join(ROOT, 'apps', 'transcribe-md', 'src', spec.slice(2));
+        }
+        if (base === null) continue; // a real npm package — not our business
+        checked++;
+        const found = [base, `${base}.ts`, `${base}.tsx`, join(base, 'index.ts')].some(existsSync);
+        if (!found) dead.push(`${rel}  ->  vi.mock('${spec}')`);
+      }
+    }
+    // Non-vacuity: if the matcher found no specifiers at all, its zero is empty.
+    expect(checked, 'no file-resolvable vi.mock specifiers found — the matcher is broken')
+      .toBeGreaterThan(150);
+    expect(
+      dead,
+      'these vi.mock() calls name a module that does not exist, so they mock NOTHING\n' +
+        'and the real implementation runs. Point them at the module the code under\n' +
+        'test actually imports:\n  ' + dead.join('\n  '),
+    ).toEqual([]);
+  });
+
+  it('POSITIVE CONTROL — the dead-mock matcher fires on a known-bad specifier', () => {
+    // Mutate toward failure: the exact shape email-no-phi.test.ts carried.
+    const base = join(ROOT, 'apps/transcribe-md/src/lib/__tests__', '../api-usage');
+    const found = [base, `${base}.ts`, `${base}.tsx`, join(base, 'index.ts')].some(existsSync);
+    expect(found, "'../api-usage' must NOT resolve — if it ever does, this control is dead").toBe(false);
+    // Mutate toward success: the specifier that replaced it does resolve.
+    const good = join(ROOT, 'packages', 'ai', 'src', 'api-usage');
+    expect([good, `${good}.ts`].some(existsSync)).toBe(true);
   });
 });

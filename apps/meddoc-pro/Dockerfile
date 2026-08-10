@@ -15,6 +15,20 @@ COPY packages/db/package.json ./packages/db/package.json
 COPY packages/auth/package.json ./packages/auth/package.json
 COPY packages/types/package.json ./packages/types/package.json
 COPY packages/ai/package.json ./packages/ai/package.json
+# ⚠️ npm's DEFAULTS ARE 2 RETRIES AND A 60s CEILING, WHICH A REGISTRY BLIP
+# OUTLASTS. On 2026-08-10, after 18 of 18 consecutive green e2e runs, THREE
+# independent image builds on three different branches all died inside twelve
+# minutes on `npm error code ECONNRESET` / `network aborted` during `npm ci`.
+# Zero test failures in any of them — the image simply never built, so the gate
+# could not report on the code at all.
+#
+# Set as NPM_CONFIG_* ON THE STAGE, not as flags on the one command below, so
+# any npm invocation added to this stage later inherits it rather than having to
+# remember. A per-command flag list is a hand-kept list, and hand-kept lists are
+# wrong eventually.
+ENV NPM_CONFIG_FETCH_RETRIES=5 \
+    NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
+    NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000
 RUN npm ci --omit=dev
 
 # ── Stage 2: Build ──
@@ -29,6 +43,10 @@ COPY packages/db/package.json ./packages/db/package.json
 COPY packages/auth/package.json ./packages/auth/package.json
 COPY packages/types/package.json ./packages/types/package.json
 COPY packages/ai/package.json ./packages/ai/package.json
+# Registry-blip retry budget — see the note on the first install stage above.
+ENV NPM_CONFIG_FETCH_RETRIES=5 \
+    NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
+    NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000
 RUN npm ci
 
 # Copy the rest of the source

@@ -14,6 +14,13 @@
 # =============================================================================
 set -euo pipefail
 
+# ⚠️ REGISTRY-BLIP RETRY BUDGET — npm defaults to 2 retries / 60s ceiling, which
+# an npm-registry blip outlasts (2026-08-10: three builds, one mechanism, twelve
+# minutes). Exported once here so every npm command in this script inherits it.
+export NPM_CONFIG_FETCH_RETRIES=5
+export NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000
+export NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000
+
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 WEBROOT="/var/www/quillmd-staging"
 HOST="staging.quillmd.com"
