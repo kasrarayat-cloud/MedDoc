@@ -4656,9 +4656,28 @@ Measured while enumerating stages, not looked for:
 
 `OPENAI_API_KEY` **is set** in the worker (`sk-proj…`, 164 chars), so this is not
 an unset-credential fault; `errorCode='ERROR'` is `err.name.toUpperCase()` on a
-generic `Error`, consistent with a 401/429 from the vendor. The key was recorded
-dead (401) on 2026-07-02 in the custom-template QA notes, and the first failed
-embed here is 2026-07-07.
+generic `Error`, consistent with a 401/429 from the vendor.
+
+⚠️ **AND IT WAS DIAGNOSED 39 DAYS AGO, WITH A NAMED OWNER ACTION.**
+`docs/qa-reports/audio-path-verification-20260702T155110Z.md:54` says, in bold:
+
+> the current prod `OPENAI_API_KEY` is dead (401), which also breaks the Doc
+> Editor evals today. **Kasra: rotate/replace the key.**
+
+That is **2026-07-02**. The first failed `tm_embed` is **2026-07-07**. The key is
+still dead today.
+
+⚠️ **THIS IS THE PRICED-BY-THE-SYMPTOM CLASS AGAIN, AND THE PARALLEL TO THE
+65-DAY 🟢 IS EXACT.** The 07-02 report priced the item by the loudest thing it
+could see — *"breaks the Doc Editor evals"*, a dev-tooling annoyance — when the
+asset behind the symptom was **a vendor credential two product features depend
+on**. The second feature was never named, because on 07-02 it had not started
+failing yet: `tm_embed` only began five days later. So the follow-up was filed
+against the wrong noun, and every reader since has triaged it as an eval problem.
+
+Renamed after the asset, per canon: **`prod OpenAI credential is dead — kills
+tm_embed AND the Doc Editor evals`**. Nothing else about the item changes; the
+name is what decides whether it gets picked up.
 
 **The meter is CORRECT to hold no row** — no vendor units were ever reported, and
 B2 ruled a branch meters iff it holds vendor-reported units. So this is not a
