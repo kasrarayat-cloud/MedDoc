@@ -167,6 +167,36 @@ Before any halt, classify the blocker and **attempt to cure it**:
 attempt made three times, and the canon already forbids the fourth. An attempt
 changes something and says what.
 
+#### ⚠️ AN EXTERNAL FAULT DOES NOT SPEND THE ATTEMPT BUDGET
+
+**Ruled 2026-08-10.** When the diagnosis names an **EXTERNAL** mechanism — a
+registry outage, a GitHub incident, a vendor 5xx — and names it **from
+evidence** rather than from a guess, that fault is **not yours to cure and must
+not consume a genuine attempt.** Instead:
+
+1. **PARK the gated item**, with the incident named in the ledger row: the
+   mechanism, the evidence, and the runs that showed it.
+2. **Switch to work the fault does not gate** — ledger rows, recon, DISCOVERY
+   verification, docs, anything with no CI dependency.
+3. **Re-probe on a bounded backoff**, and say in the log what you probed and
+   what it said.
+4. **`STOP-CONDITION` only if the fault PERSISTS *and* nothing else in the queue
+   can proceed.** Both conditions, not either.
+
+⚠️ **THE EVIDENCE BAR IS THE WHOLE CLAUSE.** "External" is a finding, not an
+excuse: name the mechanism, quote the error, and show it striking work that is
+not yours — different branches, different commits, a clean run history before
+it. Absent that, it is your bug and the budget applies.
+
+**Reference case — the ECONNRESET wave of 2026-08-10.** Three independent image
+builds on three different branches died inside **twelve minutes** on
+`npm error code ECONNRESET` during `npm ci`, with **zero test failures**, after
+**18 of 18** consecutive green `e2e` runs. One of the three was this loop's own
+item. A session spending three cures on npmjs and then emitting
+`STOP-CONDITION` would have ended a night with **nine hours of budget left** —
+and the runner does not relight on that marker. That false negative is what this
+clause exists to prevent.
+
 **The halt log MUST name what was tried.** A halt that says *"blocked"* is
 indistinguishable from a halt that says *"I did not look"*.
 
