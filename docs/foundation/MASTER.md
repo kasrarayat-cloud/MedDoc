@@ -52,6 +52,23 @@ the fact.** Where they disagree, that is a finding, not a typo.
 7. **Open PRs** and their check states. Land what is green before starting new
    work — a branch that ships and never merges is the failure branch-cadence
    exists to prevent.
+8. **OPEN AUTO-FILED ISSUES** — `gh issue list --state open`. Enumerate them,
+   classify each as **KNOWN** (already triaged, with the pointer) or **NEW**, and
+   ⚠️ **every NEW one becomes a named finding in this session's report.**
+
+   ⚠️ **THIS EXISTS BECAUSE AN ALARM RANG CORRECTLY FOR THREE NIGHTS AND NOBODY
+   HEARD IT.** `nightly-tests` auto-filed #548, #559 and #577 on 2026-08-08, -09
+   and -10. The failing cell was a **deliberate tripwire** whose own comment said
+   *"if it starts failing, that is a real signal about A5, not noise"* — and it
+   was reporting, precisely, that GATE 0.1 had deactivated the account it logs in
+   as. Three sessions passed STEP 0 without opening the issues, and one recorded
+   two wrong candidates without opening the artefact. **The detector worked; the
+   channel it rang into was one nobody read.**
+
+   **An alarm must land in front of eyes within ONE session, never three
+   nights.** An auto-filed issue is a finding that has already been written down
+   for you — the cheapest one available — and skipping it is how a real signal
+   decays into background.
 
 ---
 
@@ -397,6 +414,10 @@ item · merge SHA · citation (4 of 4, by run id) · deployed? · §2.5 declarat
 ### PROVISIONAL RULINGS — the war room's batch review list
 what was decided · the alternatives · why this one · the REVERSAL PATH
 ⚠️ and what ELSE unwinds if it is reversed (the dependency chain)
+
+### AUTO-FILED ISSUES
+every open one, KNOWN (with its pointer) or NEW — and every NEW one written out
+here as a finding, not merely counted
 
 ### PARKED — needs a person
 item · why · what would unpark it

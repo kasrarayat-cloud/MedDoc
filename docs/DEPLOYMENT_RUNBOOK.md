@@ -1273,6 +1273,29 @@ A dedicated worker-liveness probe is a future milestone; until then
 the "completed jobs per hour == 0 for 1+ hour" heuristic is a good
 proxy for "worker stuck".
 
+## 6.3 The 02:00 smoke suite runs on TWO channels — deliberately
+
+`tests/automated/run-all.sh --smoke --e2e` is executed **twice every night at
+02:00 UTC, against the same production target**, by two independent schedulers:
+
+| channel | where | installed by |
+|---|---|---|
+| GitHub Actions | `.github/workflows/nightly-tests.yml` (`cron: '0 2 * * *'`) | committed workflow |
+| this host's crontab | `0 2 * * * bash tests/automated/run-all.sh --smoke --e2e` | `tests/automated/setup-cron.sh` |
+
+**This duplication is intentional and stays.** Host-side coverage survives a
+GitHub outage, which this programme has needed **twice**; and the host channel
+leaves per-night JSON + HTML in `tests/automated/reports/`, which is readable
+immediately and needs no artefact download and no extra production
+authentication. That local report is what diagnosed the 2026-08-08→10 failures.
+
+⚠️ **SO A DOUBLE FAILURE READS AS ONE FAULT, NOT TWO.** When both channels go
+red on the same night, that is **one suite failing twice** — do not triage it as
+two independent incidents, and do not conclude from "it fails in CI *and* on the
+host" that the cause is environmental. It is the same tests, the same target and
+the same credentials. Diff `tests/automated/reports/<date>-02-00.json` against
+the last green night first; the suite/test that flips is the answer.
+
 ## 7. Host memory baseline (T-M16.4 diagnosis)
 
 The T-M15 audit flagged swap usage at 1.9 GB on a 1.8 GB-RAM host;

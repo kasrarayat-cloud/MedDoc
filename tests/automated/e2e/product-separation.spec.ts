@@ -141,7 +141,46 @@ test.describe('Product separation — app.quillmd.com (TranscribeMD)', () => {
     await expectTmdSuccess(page);
   });
 
-  test('PRO-only user → cross-app redirect to MedDoc Pro', async ({ page }) => {
+  // ⚠️ RETIRED 2026-08-10, DECLARED — THIS TRIPWIRE FIRED, WAS READ, AND WAS
+  // ROUTED. Left live it would fire nightly into an auto-filed issue queue and
+  // convert its own signal back into noise.
+  //
+  // It was armed on purpose (see the note below the next describe block, written
+  // 2026-08-04): "If it starts failing, that is a real signal about A5, not
+  // noise." It started failing, and this is that signal being spent rather than
+  // repeated.
+  //
+  // WHAT IT CAUGHT, with the evidence:
+  //   · `qa-pro@quillmd.local` (PRO_ONLY, line 32; SPEC.md:251 names it as one
+  //     of the twelve) was set isActive=false by GATE 0.1 —
+  //     scripts/execute-gate0-deactivation.sql, executed 2026-08-07T16:35Z,
+  //     12 deactivated / 12 attributed audit rows / 0 deleted (RELAY.md:1543).
+  //   · actions/auth.ts:208 gates the redirect on `!!entitlementUser?.isActive`,
+  //     so with the row deactivated the branch at :227-241 is never entered and
+  //     the "Go to MedDoc Pro" link never renders. NO CODE CHANGED — nextauth.ts
+  //     and middleware.ts are byte-identical to the last green night.
+  //   · Three consecutive red nights: 2026-08-08, -09, -10 (02:00 UTC), on BOTH
+  //     channels, auto-filing issues #548, #559, #577. Last green 2026-08-07,
+  //     ~14h before the deactivation. No run in between.
+  //   · THE DISCRIMINATOR: of the four accounts this spec logs in as, exactly
+  //     ONE matches GATE 0.1's predicate; of the six live cells, exactly ONE
+  //     failed. One-to-one — which is what makes it a proof and not a
+  //     coincidence. A broken site, deploy or shared credential takes more cells.
+  //
+  // WHY NOT A REPLACEMENT CREDENTIAL. Ruled 2026-08-10: a deactivated credential
+  // is replaced only when the capability it exercises STILL EXISTS. Here the
+  // capability is itself retired — pro.quillmd.com answers 410, its container is
+  // stopped, and item A6 deletes the code. Minting a new active MEDDOC_PRO-only
+  // account would recreate in production exactly the class GATE 0.1 deliberately
+  // removed, to make green a test asserting a capability that no longer exists.
+  //
+  // THE RETIREMENT COMPLETES IN A5 (docs/foundation/RELAY.md, "legacy rewire"),
+  // whose blocker list already names this: "the `auth.ts:229` cross-app redirect
+  // (with decision 0.1/0.2 applied) → the nightly smoke assertions". A5 deletes
+  // the branch and this cell together. Skipped rather than deleted here for the
+  // same reason the pro-side block was: the specification stays visible for the
+  // PR that should be reading it.
+  test.skip('PRO-only user → cross-app redirect to MedDoc Pro', async ({ page }) => {
     await tmdLogin(page, PRO_ONLY.email, PASSWORD);
     await expectCrossAppRedirectToPro(page);
   });
