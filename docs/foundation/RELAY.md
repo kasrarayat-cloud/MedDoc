@@ -3627,12 +3627,110 @@ because a finding that lives only in a transcript is not a finding.
 
 ---
 
+### 🟩 B2 IS LIVE IN PRODUCTION — 2026-08-09T23:18Z
+
+Deployed from `main` @ **`274a4925`** by `bash scripts/deploy-prod.sh`.
+Log: `docs/deploy-logs/deploy-20260809T231810Z.log`.
+Declaration: `docs/foundation/deploys/20260809-274a4925.md`.
+
+| commit | what | citation |
+|---|---|---|
+| `ac9a46cd` | PR #568 — B2's code and gates | **4 of 4** — `CI` 31335894849 · `e2e` 31335894841 · `a11y-ci` 31335894852 · `secrets-scan` 31335894836 |
+| `d500b542` | PR #570 — declaration + findings | **4 of 4** — `CI` 31339752406 · `e2e` 31339752405 · `a11y-ci` 31339752415 · `secrets-scan` 31339752413 |
+
+#### THE DECLARATION, JUDGED — 12 of 12 ROWS
+
+**Every row held, and nothing moved except the image ids** — which is exactly
+what §5 declared the most likely correct outcome to be.
+
+| declared | before | after | verdict |
+|---|---|---|---|
+| `transcribe_visits` | 25 | **25** | ✅ unchanged |
+| …signed | 16 | **16** | ✅ unchanged |
+| `transcribe_md_patients` | 15 | **15** | ✅ unchanged |
+| applied migrations | 95 | **95** | ✅ unchanged (B2 carries none) |
+| `api_usage_events` | 1325 | **1325** | ✅ unchanged |
+| …`unitsSource='mock'` | 0 | **0** | ✅ the mock seam did not leak |
+| `sum(totalCostUsd)` | $26.3556 | **$26.3556** | ✅ no row rewritten |
+| `ai_calls` | 1125 | **1125** | ✅ unchanged |
+| `metadata->>'outcome'='failed'` rows | 0 | **0** | ✅ **the declared expected reading** |
+| app image | `6388983335e1` | **`09d4b56410b7`** | ✅ declared change |
+| worker image | `685a6c10bd15` | **`d1f6870ded64`** | ✅ declared change |
+| co-tenants | 307·404·200·200·410 | **307·404·200·200·410** | ✅ unchanged |
+
+⚠️ **THE ZERO IS THE DECLARED SUCCESS, NOT A DISAPPOINTMENT — AND THAT IS ONLY
+CREDIBLE BECAUSE IT WAS WRITTEN DOWN FIRST.** §5 stated in advance that a jump in
+`outcome='failed'` rows immediately after deploy would be a FINDING rather than a
+success, because the wired branches fire only on a real vendor failure and
+production is quiet. Had the number jumped, the declaration is what would have
+stopped it being read as "B2 works". The behaviour is proven by the gate; the
+deploy proves only that the code shipped without disturbing anything.
+
+#### THE CODE IS IN THE SHIPPED IMAGES — STRUCTURAL, NOT ASSUMED
+
+A green deploy says the containers restarted, not that they carry the change.
+
+    worker  packages/ai/src/anthropic.ts   logFailedAnthropicUsage × 7
+                                           (1 declaration + 6 call sites —
+                                            cross-checks the enumeration)
+            packages/ai/src/embed.ts       outcome: 'failed' × 1
+    app     .next/server/chunks            outcome:"failed" × 7
+
+⚠️ **The app container needed a different probe, and the first one silently
+found nothing.** It ships a Next.js standalone build, so `packages/ai` is bundled
+and `logFailedAnthropicUsage` — a LOCAL function name — is minified away. Grepping
+for it returned zero, which is indistinguishable from "the code did not ship".
+The marker that works is the **string literal** `outcome:"failed"`, which
+survives minification and **did not exist anywhere before B2**. Same lesson as the
+`NEXT_PUBLIC_*` bundle grep in AGENTS.md: probe for something that survives the
+build, and positive-control the probe before believing its zero.
+
+#### STANDING CHECKS, POST-DEPLOY
+
+`assert-migrations-applied` 🟢 95/95 · `check-composite-fk` 🟢 · all nine
+containers healthy · co-tenants unchanged.
+
+#### ⛔ THIS DEPLOY RAN ON A 3-OF-4 CITATION. THE FOURTH LANDED GREEN AFTERWARDS.
+
+**Stated because it is exactly the shape recorded against 2026-08-08, and it was
+mine.** At `23:18Z`, when `deploy-prod.sh` ran, `274a4925` had `CI`, `a11y-ci`
+and `secrets-scan` green and **`e2e` still `in_progress`**. `e2e` (31341501998)
+completed `success` at ~`00:05Z`, so the deployed commit now carries a full
+4-of-4 — but **that was luck, not process.**
+
+⚠️ **THE PRE-MERGE CHECK WAS RUN AND WAS NOT THE RIGHT CHECK.** `main` was
+correctly queried for in-flight runs *before* merging #570 — and it was clean.
+What was never done is the query **after** the merge, against the **new head the
+merge created**, which is the commit that actually deploys. The rule as written
+says to check before *pushing*; the gap is that a merge PRODUCES a commit whose
+citation does not exist yet, and the deploy is a *separate* act minutes later.
+
+**The rule that would have caught it:** `deploy-prod.sh` takes `HEAD`, so the
+citation must be re-verified **on `HEAD`, immediately before the deploy** — not
+inherited from the pre-merge check on the parent. A 3-of-4 is not a citation, and
+`e2e` is the arm most likely to catch a runtime regression in exactly the code
+this item changed.
+
+**Worth making mechanical rather than remembered:** the declaration gate already
+refuses a deploy without a `<date>-<short-sha>.md`; the same gate could refuse a
+`HEAD` whose four runs are not all `success`. That is a strictly-tightening
+change, it needs no judgement at deploy time, and it would have blocked this
+deploy for the ~45 minutes the citation still had to run. Recorded as a proposal,
+not built — `deploy-prod.sh` is the production deploy path and changing it is its
+own item with its own gate.
+
+---
+
 ### ✅ B2 — the failure paths reach the durable meter — the BUILD row, 2026-08-09
 
-**Build and gate only. NOT DEPLOYED — no production behaviour has changed yet**,
-and the 44 historical rows this closes the gap for are **not backfilled** (see
-WHAT THIS DOES NOT CLAIM). Ruling row: RULINGS.md, the B2 entry, marked
-**PROVISIONAL**.
+**The build row.** ✅ **DEPLOYED 2026-08-09T23:18Z** — see the LIVE section
+directly above for the judged declaration. The 42 surviving historical rows are
+**not backfilled and never will be**: ruling 79 declined it and preserved them by
+extract instead. Ruling row: RULINGS.md, the B2 entry, marked **PROVISIONAL**.
+
+⚠️ **This row said "the 44 historical rows" when written. The figure was 42 at
+that moment** and the difference is itself a finding — see "THE EVIDENCE IS
+PERISHING" below.
 
 #### THE ENUMERATION — 14 branches, and the list is the driver
 
@@ -3770,11 +3868,15 @@ single unit is not yet exercised.
 
 #### WHAT THIS DOES NOT CLAIM
 
-- **Not deployed.** No production row has changed shape.
-- **The 44 historical rows are NOT backfilled.** They remain in `ai_calls` only.
-  A backfill is a production write and needs its own ruling under the standing
-  shape for owner-ruled prod mutations (ruling 59); B2 stops the bleeding, it
-  does not repair the past.
+- ~~**Not deployed.** No production row has changed shape.~~ **Superseded — B2
+  went live 2026-08-09T23:18Z, 12 of 12 declared rows judged.** True when written.
+- **The historical rows are NOT backfilled** — and, since ruling 79, never will
+  be. B2 stops the bleeding; it does not repair the past, and repairing it was
+  DECLINED because a row minted now would claim a provenance regime that
+  postdates its own call. They were preserved by extract instead
+  (`docs/qa-reports/failed-but-billed-ai-calls-extract-20260809.md`).
+  ⚠️ **The figure written here was "44"; it was 42 when written** — see "THE
+  EVIDENCE IS PERISHING".
 - **Not proven against a live vendor.** Every assertion is in-process against an
   SDK-shaped fixture. The live proof would be a smoke that forces a real
   refusal, which is not something a sanctioned smoke can reliably provoke.
