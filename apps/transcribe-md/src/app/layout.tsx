@@ -1,13 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
-import {
-  Bricolage_Grotesque,
-  Figtree,
-  Inter,
-  JetBrains_Mono,
-  Source_Serif_4,
-} from 'next/font/google';
+import localFont from 'next/font/local';
 
 import { auth } from '@/lib/nextauth';
 import { CommandPalette } from '@/components/command-palette';
@@ -21,16 +15,29 @@ import './rounds-tokens.css';
 // IDs, codes, timestamps, and keyboard hints. The variable names line up
 // with `--font-sans` / `--font-mono` consumed by the @theme block in
 // globals.css and the ported .qm-lin-* utility classes.
-const sans = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
+// ⚠️ SELF-HOSTED, NOT `next/font/google` — AND THAT IS THE POINT.
+// That loader fetches font CSS from Google's servers DURING `next build`. When
+// the fetch fails the build does not say "network": it emits CSS pointing at
+// `@vercel/turbopack-next/internal/font/google/font`, which does not resolve,
+// and dies with `Module not found` inside this file. Two main-side builds died
+// that way on 2026-08-10 while the same tree built green minutes earlier.
+// See AGENTS.md, "an external fault does not spend the cure budget".
+//
+// These are VARIABLE fonts: one file per style covering the whole weight range,
+// declared with a weight RANGE rather than as discrete faces. Provenance,
+// licence and the exact ranges: ./fonts/README.md.
+const sans = localFont({
+  src: './fonts/inter-latin.woff2',
+  weight: '400 700',
+  style: 'normal',
   variable: '--font-sans',
   display: 'swap',
   fallback: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
 });
-const mono = JetBrains_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500'],
+const mono = localFont({
+  src: './fonts/jetbrains-mono-latin.woff2',
+  weight: '400 500',
+  style: 'normal',
   variable: '--font-mono',
   display: 'swap',
   fallback: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
@@ -45,24 +52,35 @@ const mono = JetBrains_Mono({
 // Source Serif 4 carries ALL clinical prose, including the default paper
 // template — see docs/design-tokens.md. Clinical prose is read differently from
 // interface text and the typeface is the cue.
-const roundsDisplay = Bricolage_Grotesque({
-  subsets: ['latin'],
-  weight: ['500', '600', '700'],
+const roundsDisplay = localFont({
+  src: './fonts/bricolage-grotesque-latin.woff2',
+  weight: '500 700',
+  style: 'normal',
   variable: '--font-rounds-display',
   display: 'swap',
   fallback: ['system-ui', 'sans-serif'],
 });
-const roundsUi = Figtree({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
+const roundsUi = localFont({
+  src: './fonts/figtree-latin.woff2',
+  weight: '400 600',
+  style: 'normal',
   variable: '--font-rounds-ui',
   display: 'swap',
   fallback: ['system-ui', 'sans-serif'],
 });
-const roundsClinical = Source_Serif_4({
-  subsets: ['latin'],
-  weight: ['400', '600'],
-  style: ['normal', 'italic'],
+const roundsClinical = localFont({
+  src: [
+    {
+      path: './fonts/source-serif-4-latin.woff2',
+      weight: '400 600',
+      style: 'normal',
+    },
+    {
+      path: './fonts/source-serif-4-latin-italic.woff2',
+      weight: '400 600',
+      style: 'italic',
+    },
+  ],
   variable: '--font-rounds-clinical',
   display: 'swap',
   fallback: ['Georgia', 'Times New Roman', 'serif'],
