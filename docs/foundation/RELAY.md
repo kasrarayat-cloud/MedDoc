@@ -4878,3 +4878,184 @@ stage"* is not a property of a visit — it is a property of **a visit of a give
 input mode**, and the gate needs the mode in its expected-count table. This is
 the same trap as the single-visit sample that lacked `tm_embed` (carried out of
 B1-b step 4): one visit never exercises the full stage set.
+
+---
+
+## ✅ STEP 0.4 — the citation `635bf819` was owed, and here it is
+
+Session 05 shipped B4 step 1's §2.5 judgement (PR #587) and stated its citation
+in the morning report, but the merge landed after the ledger row was written —
+so the row was owed to this session by design. Verified **with the checker**,
+`--expect` armed against the ids the report claimed, which is the only direction
+that can see a substitution:
+
+**Citation — 4 of 4 on `635bf8194990a52ea52c147876c1113f8d425a1b`:**
+   · `CI` 31394489107 a1
+   · `e2e` 31394489007 a1
+   · `a11y-ci` 31394489173 a1
+   · `secrets-scan` 31394489193 a1
+
+All `a1` — no re-runs, nothing to explain.
+
+---
+
+## ✅ B4 STEP 2 — the stage that could not be counted, and the production invariant that says what to count — 2026-08-10
+
+### The finding: B4's gate was STILL unsatisfiable, one layer above where step 1 looked
+
+Step 1 removed two mock boundaries that sat above `logApiUsage`, inside the
+vendor clients. **`tm_anchor_entailment` had the same defect in a different
+place** — not in a vendor client but in the LAYER, at `04b-anchor-verify.ts`,
+where `entailmentStage` returned all-entailed under `MOCK_AI_CALLS` before
+`entailmentPass`, therefore before `modelClient`, therefore before the meter.
+
+    ZERO USAGE EVENTS LOOKS EXACTLY LIKE A WORKING METER THAT FOUND
+    NOTHING TO RECORD.
+
+⚠️ **AND THE REPO ALREADY KNEW, IN WRITING — FOR THE SECOND TIME IN TWO
+SESSIONS.** Step 1's defect was carried as a written exemption in its own
+mock-boundary gate. This one was carried as a written exemption in the fixture:
+
+> `// Anchored-generation entailment verifier — UNREACHABLE in practice: the`
+> `// verifier short-circuits to all-entailed under MOCK_AI_CALLS before any`
+> `// model call (04b-anchor-verify.ts). Defensive fixture only`
+
+**A comment explaining why something cannot be measured is a finding, not a
+caveat.** Both times the sentence was accurate, both times it was filed as
+context, and both times it was describing the exact reason an item's close
+condition was unreachable. That is now twice; it is a class, not a coincidence.
+
+⚠️ **NO UNIT TEST COULD EVER HAVE SEEN IT.** Every test in
+`04b-anchor-verify.test.ts` calls `delete process.env.MOCK_AI_CALLS` in its
+`beforeEach` — correctly, so their stubs are reached. The short-circuit was
+therefore live on exactly the path no unit test takes, and dead on every path
+one does. `modelClient.completeText` already carries B0's note that the
+stage-level short-circuit was deleted *there*; 04b kept a private copy of it.
+
+### What shipped
+
+- **`04b-anchor-verify.ts`** — the stage-level short-circuit is deleted. The
+  k=3 ensemble now runs as three MOCKED calls, and each one meters
+  (`unitsSource='mock'`, `requestId` NULL per ruling 72a).
+- **`packages/ai/src/mock.ts`** — one selection function,
+  `completeTextFixture(purpose, user)`, read by BOTH `buildMockMessage` (the
+  production path) and `mockCompleteText` (the test-facing helper). The
+  `tm_anchor_entailment` branch is **content-sensitive** per ruling 69: it
+  returns one entailed verdict per claim the prompt actually names.
+- **Gate** `packages/ai/src/__tests__/gate-b4-anchor-entailment-meters.test.ts`
+  — 7 arms; plus 2 arms in `04b-anchor-verify.test.ts` that set
+  `MOCK_AI_CALLS` on purpose.
+
+**Behaviour is unchanged and that is the point.** All three lenses agree, every
+claim clears the ≥2 majority, and `entailedIdx` is the same set the
+short-circuit returned by hand. What changed is that three usage rows now
+exist. `tsc` 0 errors; **3313 passed / 4 skipped** in the app suite, **532** in
+`packages/ai`.
+
+### Mutation proof — four, each naming its victim first
+
+| mutation | asserted | measured |
+|---|---|---|
+| **M1** — restore the stage-level short-circuit | 1 occurrence | **RED**, `expected 3 calls, got 0` — the number the meter used to see |
+| **M2** — make the fixture CONSTANT again | 1 occurrence | **4 RED** (ANSWERS · ECHOES · ANCHORED · ONE) |
+| **M3** — unanchor the claim regex to `/CLAIM (\d+):/g` | 1 occurrence | **1 RED**, exactly the ANCHORED arm |
+| **M4** — let `mockCompleteText` read the fixture table directly | 1 occurrence | **4 RED** — the B0 drift shape, caught |
+
+⚠️ **M2 IS THE ONE THAT DISCRIMINATES.** The two METER arms stayed GREEN under
+it, correctly — metering does not depend on fixture content — so the file is not
+seven arms all testing one thing. And **every mutation was applied and reverted
+by an inverse string swap with an occurrence assertion on BOTH legs**, never by
+`git checkout --`: the tree was dirty throughout, and session 05 lost work to
+exactly that command on exactly that reasoning.
+
+### 📐 THE MECHANISM SESSION 05 LEFT OPEN — now established, and it is not what the naive reading says
+
+The recon recorded `tm_anchor_entailment 231` against `tm_soap_draft 102`, noted
+that `3 × 102 = 306`, and said in as many words that **the mechanism for the gap
+was NOT established**. It is now, and the answer is a much stronger invariant
+than a multiplier:
+
+```sql
+SELECT n_calls, count(*) FROM (
+  SELECT "visitId", count(*) AS n_calls FROM ai_calls
+   WHERE purpose='tm_anchor_entailment' GROUP BY "visitId") s
+GROUP BY n_calls;
+--  3 | 73
+```
+
+**Every visit that carries the stage carries EXACTLY 3 calls. There is no 1, no
+2, no 6.** So:
+
+- **the granularity is one L4b invocation per visit** — a visit is never
+  verified twice, which the "per INVOCATION, not per visit" warning left open;
+- **there is no partial-ensemble case** — `entailmentPass` errors do not reduce
+  the call count, they only change the votes;
+- **the gap is entirely visits that never reach the verifier** with a claim —
+  `claims.length === 0` returns before the ensemble, and that return is correct
+  and stays. **No work is not a suppressed call.**
+
+⚠️ **SO THE GATE ASSERTS A DISTRIBUTION, NOT A PRODUCT.** The expected value is
+`n ∈ {0, 3}` per visit — checkable, and it cannot be satisfied by a coincidence
+the way `3 × visits` can. A gate hardcoding the product would have been wrong in
+the direction that reads as a metering hole, exactly as the recon warned.
+
+### ⚠️ AND THE RECON'S OWN NUMBERS NO LONGER REPRODUCE — WHICH IS THE FINDING
+
+Measured today, ~2 hours after session 05 measured them:
+
+| purpose | session 05 | now | Δ |
+|---|---|---|---|
+| `tm_anchor_entailment` | 231 | **219** | **−12** |
+| `tm_soap_draft` | 102 | **96** | **−6** |
+
+`api_usage_events` did **not** move: it still holds 231 and 102. **`ai_calls`
+lost rows and the usage table did not** — which is ruling 78(b)'s reasoning
+happening in front of us rather than in the abstract. `ai_calls` is hard-deleted
+by four production paths; `api_usage_events` has no deleter, which is why it is
+the billing source.
+
+> **A COUNT TAKEN FROM `ai_calls` HAS A SHELF LIFE. No B4 gate may take its
+> expected numbers from that table** — not because the numbers are wrong, but
+> because they are *true and perishable*, and a gate that re-derives them will
+> disagree with the one that wrote them down for reasons that have nothing to do
+> with the meter.
+
+The per-visit distribution above is stated as an INVARIANT (`{0,3}`) precisely
+so it survives deletion: losing a visit removes 3 calls and 1 group, and the
+shape is unchanged.
+
+### ⛔ WHAT THIS DOES **NOT** CLAIM
+
+- **It does not close B4.** The per-stage count over a full QA run is not run
+  here. This removes the second-to-last construction blocker.
+- **⚠️ `judge` STILL CANNOT METER UNDER MOCK, AND IT IS NOT FIXED HERE.**
+  `llm-mdm.ts:395` returns `null` before the call — the same shape — but the
+  remedy is **not** the same and must not be assumed to be. `judge` **bypasses
+  `modelClient` entirely** and speaks to the Anthropic SDK directly, so there is
+  no meter beneath it to fall below; wiring one is a real change to the E/M
+  path. And its `null` return is **deliberate and documented**: `judgeMdm`
+  routes `null` to a deterministic fallback, so the mock yields a real MDM level
+  with `llmJudged: false`, which is *true*. Ruling 69 makes that content
+  sensitivity load-bearing for the E/M movement gates. **Fabricating a
+  judgement to make the meter tick would be a mock that lies about its own
+  provenance** — strictly worse than a stage that does not meter. → carried as
+  **B4 step 3**, named, not silently inherited.
+- **It proves nothing about production.** Production's L4b path was already
+  metering; this only makes QA able to.
+- **It does not touch money.** Mock rows carry zero cost columns.
+
+### Carried to B4 step 3
+
+1. **`judge` is 1-to-many per visit, NOT one-per-visit.** Measured today:
+   58 visits with 1, 12 with 2, 2 with 3, one with 6, **one with 13**. E/M can
+   be re-scored, and `callClaudeMdm` retries once on a parse failure. **A gate
+   asserting one `judge` event per visit will be wrong**, and the tail is long
+   enough that a small sample will not reveal it.
+2. **The two-label obligation from ruling 81 still stands** — the per-stage join
+   must accept `transcribe_realtime` (3 legacy rows) *and* `tm_transcribe`.
+3. **`email_send` holds 219 `api_usage_events` rows** while GATE 0.5 rules
+   Resend **not metered**. The last one is dated **2026-08-03** and the ruling
+   is dated **2026-08-04**, so nothing has been written since the ruling and the
+   *current* posture is consistent. But the history is there and any rollup over
+   past months will pick it up. **Not adjudicated here** — flagged as an input
+   to B5/B9, where a rollup first has to decide what it includes.

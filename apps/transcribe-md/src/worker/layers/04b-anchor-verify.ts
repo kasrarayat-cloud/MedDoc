@@ -998,16 +998,31 @@ async function entailmentStage(
 ): Promise<{ entailedIdx: Set<number>; errored: boolean; passErrors: number }> {
   if (claims.length === 0)
     return { entailedIdx: new Set(), errored: false, passErrors: 0 };
-  // MOCK short-circuit: under MOCK_AI_CALLS the mock "model" approves —
-  // mirrors every other mock fixture; reject/fail-closed paths are covered
-  // by deterministic unit tests, never by the MOCK e2e flow.
-  if (process.env.MOCK_AI_CALLS === 'true') {
-    return {
-      entailedIdx: new Set(claims.map((c) => c.index)),
-      errored: false,
-      passErrors: 0,
-    };
-  }
+  // ⚠️ THE MOCK SHORT-CIRCUIT THAT USED TO SIT HERE IS GONE — B4 STEP 2.
+  //
+  // It returned all-entailed under MOCK_AI_CALLS *before* `entailmentPass`,
+  // which means before `modelClient`, which means before `logApiUsage`. That
+  // is the identical defect B4 step 1 removed from `deepgram-batch.ts` and
+  // `embed.ts`, arriving one layer higher: a mock boundary ABOVE the meter.
+  //
+  // The consequence was not a wrong number, it was NO number. A mocked QA run
+  // emitted zero usage events for this stage, and B4's gate — "one full QA
+  // pipeline run produces one event per stage, counted against the enumerated
+  // stage list" — was therefore unsatisfiable for `tm_anchor_entailment` by
+  // construction. Zero usage events looks exactly like a working meter that
+  // found nothing to record.
+  //
+  // ⚠️ BEHAVIOUR IS UNCHANGED, AND THAT IS THE POINT. The three passes below
+  // now run as three MOCKED calls; the content-sensitive fixture returns an
+  // entailed verdict for every claim the prompt names, so all three lenses
+  // agree, every claim clears the ≥2 majority, and `entailedIdx` is the same
+  // set the short-circuit returned by hand. What changed is that three usage
+  // rows now exist, marked `unitsSource='mock'` — which is what makes the
+  // stage countable.
+  //
+  // The `claims.length === 0` return above still short-circuits, and must:
+  // no claims is no work, not a suppressed call. Production agrees — 73 of 73
+  // visits carrying this stage carry EXACTLY 3 calls, never 1, 2 or 6.
   const user = claims
     .map((c, k) =>
       [
