@@ -3178,3 +3178,142 @@ model WaitlistEntry {
   @@index([invitedAt, createdAt])
   @@map("waitlist_entries")
 }
+
+// ============================================================================
+// BILLING — the versioned price table (FOUNDATION B3)
+// ============================================================================
+
+/// ONE VENDOR RATE, FOR ONE PERIOD, WITH THE SOURCE IT CAME FROM.
+///
+/// This table is the answer to SPEC §2.2's *"a versioned price-table snapshot —
+/// the row records which price table priced it, so a later rate change never
+/// re-prices history."* A rate is never edited: a change CLOSES the current row
+/// (`effectiveTo`) and INSERTS a new one. That is what makes the history stable,
+/// and it is the property B3's gate proves.
+///
+/// ⚠️ **NOTHING IS BILLED FROM THIS TABLE YET.** B3 lands the table, its seed and
+/// its lookup. The meter still prices rows from `packages/ai/src/pricing.ts` and
+/// `api-usage.ts`'s `PRICING` constant; repointing it is B4/B6. Both in-code
+/// surfaces are left ALONE deliberately — SPEC §4.5: changing them now would
+/// silently re-base a year of historical `ai_calls` comparisons for no benefit.
+///
+/// ⚠️ **A MISSING RATE IS A REFUSAL, NEVER A ZERO.** `claudeCostCents` returns 0
+/// for an unknown model (`pricing.ts:131`), which is why an unpriced model bills
+/// nothing instead of erroring — DISCOVERY §D.3 names it. The lookup over this
+/// table returns `null` and its callers must handle it; see `price-table.ts`.
+model PriceRate {
+  id String @id @default(cuid())
+
+  /// Vendor, lowercase: "anthropic" | "deepgram" | "openai".
+  /// Text rather than an enum so a new vendor is a row, not a migration —
+  /// same reasoning as `ApiUsageEvent.provider`, which this must match.
+  provider String
+
+  /// THE VENDOR'S OWN MODEL ID, VERBATIM, exactly as the meter records it in
+  /// `ApiUsageEvent.modelName` — "claude-opus-4-8", "nova-3-medical",
+  /// "text-embedding-3-small". A rate keyed on a name the meter never emits is
+  /// a rate nothing can ever find.
+  modelName String
+
+  /// Whether the vendor charges this rate for a pre-recorded or a live call.
+  /// Closed vocabulary, NOT NULL: "pre_recorded" | "streaming" | "not_applicable".
+  ///
+  /// ⚠️ NOT NULLABLE ON PURPOSE, and the reason is the exclusion constraint
+  /// below. `NULL = NULL` is UNKNOWN in SQL, so two Anthropic rows carrying a
+  /// NULL here would NOT collide and the overlap guard would silently pass. A
+  /// column that is part of a uniqueness key cannot be nullable and still guard.
+  deliveryMode String
+
+  /// What is being counted, closed vocabulary — see the CHECK in the migration:
+  ///   tokens_input · tokens_output · cache_write_5m · cache_write_1h ·
+  ///   cache_read · audio_minutes
+  ///
+  /// ⚠️ **TWO CACHE-WRITE CLASSES, NOT ONE.** The vendor publishes 1.25× (5
+  /// minute) and 2× (1 hour) and the code collapses them into a single 1.25×
+  /// (`pricing.ts:claudeCostCents`). That is correct only because the one
+  /// caching call site uses ephemeral 5m (DISCOVERY §C.8). It is one config
+  /// change away from being a 60% under-charge, so the table splits them.
+  unitType String
+
+  /// THE RATE, AS AN EXACT RATIONAL: `rateMicroUsd` micro-dollars per
+  /// `unitQuantity` units of `unitType`. Both integers, so no float ever
+  /// touches a price — GATE 0.4, integer micro-dollars ledger-wide.
+  ///
+  /// ⚠️ **WHY A DENOMINATOR COLUMN AND NOT ONE CANONICAL SCALE.** A single
+  /// scale cannot hold both families exactly. Per-token in micro-dollars is
+  /// fractional ($0.10/MTok = 0.1 µ$/token); a uniform per-1M denominator makes
+  /// the audio rates unreadable ($0.0077/min = 7 700 000 000 µ$ per 1M minutes,
+  /// where one misplaced zero is a 10× billing error). Per-second audio is not
+  /// even exact — $0.0077/60 repeats. So the denominator is explicit and the
+  /// row reads as the vendor states it: "5000000 µ$ per 1000000 tokens_input"
+  /// is $5/MTok by inspection.
+  ///
+  /// ⚠️ It is redundant with `unitType` AND THE DATABASE KEEPS IT THAT WAY — a
+  /// CHECK pins each `unitType` to its one legal `unitQuantity`. Redundancy that
+  /// cannot drift is not the hazard AGENTS.md's derive-don't-thread rule warns
+  /// about; a hand-passed value that CAN drift is.
+  rateMicroUsd BigInt
+  unitQuantity BigInt
+
+  /// Inclusive start of the period this rate applies to.
+  ///
+  /// ⚠️ **THE SEED USES THE READ-DATE, NOT "FOREVER", AND THAT IS THE HONEST
+  /// CLAIM.** We know these rates held on 2026-08-04 because we read them that
+  /// day; we do NOT know when they took effect. A lookup before the earliest
+  /// row therefore finds nothing and the caller refuses — which is correct, and
+  /// costs nothing, because ruling 79 puts the meter's provenance regime at
+  /// B0-a (2026-08-08) and B9's reconciliation scope with it.
+  effectiveFrom DateTime  @db.Timestamptz(6)
+
+  /// Exclusive end, or NULL for "still in effect". A rate change CLOSES the old
+  /// row here and inserts a new one — it never UPDATEs `rateMicroUsd`.
+  effectiveTo   DateTime? @db.Timestamptz(6)
+
+  /// WHERE THE NUMBER CAME FROM — SPEC §4.5, a required column and not a
+  /// comment: "published" | "invoice" | "console".
+  ///
+  /// ⚠️ **NO DEFAULT, DELIBERATELY.** Ruling 67: a provenance column's default
+  /// must never be the trusted value. A writer that has never heard of this
+  /// column must fail, not silently assert a source.
+  provenance String
+
+  /// Required when `provenance = 'published'`, by CHECK — a published rate
+  /// without a URL and a read-date is a guess with a decimal point.
+  sourceUrl    String?
+  sourceReadAt DateTime? @db.Timestamptz(6)
+
+  /// Anything a reader needs that the columns cannot carry — e.g. that the
+  /// vendor published a DATE and the period boundary was taken at 00:00Z.
+  note String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  /// The lookup's exact predicate: key + "in effect at this instant".
+  @@index([provider, modelName, unitType, deliveryMode, effectiveFrom])
+
+  /// ⚠️ THREE CONSTRAINTS ON THIS TABLE ARE INEXPRESSIBLE IN PRISMA and are
+  /// declared here so the drift enumeration can see them (AGENTS.md rule 7).
+  /// Their real DDL is in `20260810..._b3_price_table/migration.sql`:
+  ///
+  ///   price_rates_no_overlap        EXCLUDE USING gist (
+  ///       provider WITH =, "modelName" WITH =, "unitType" WITH =,
+  ///       "deliveryMode" WITH =,
+  ///       tstzrange("effectiveFrom", "effectiveTo") WITH &&)
+  ///     — an EXCLUDE constraint; Prisma has no syntax for one. THIS is what
+  ///       makes "two rates in effect at the same instant" unrepresentable, the
+  ///       way T3's composite FK makes a cross-tenant visit unrepresentable.
+  ///       Needs the `btree_gist` extension, created by the same migration.
+  ///
+  ///   price_rates_published_needs_source  CHECK (
+  ///       provenance <> 'published'
+  ///       OR ("sourceUrl" IS NOT NULL AND "sourceReadAt" IS NOT NULL))
+  ///
+  ///   price_rates_unit_quantity_matches_type  CHECK (
+  ///       ("unitType" IN ('tokens_input','tokens_output','cache_write_5m',
+  ///                       'cache_write_1h','cache_read') AND "unitQuantity" = 1000000)
+  ///       OR ("unitType" = 'audio_minutes' AND "unitQuantity" = 1))
+  ///     — a naive "fix" that drops this to let a new unit type through would
+  ///       not close drift, it would let a rate mean something nobody declared.
+  ///       A new unit type is a migration, and that refusal is the feature.
+  @@map("price_rates")
+}

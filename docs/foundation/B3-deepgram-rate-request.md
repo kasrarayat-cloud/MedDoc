@@ -80,6 +80,12 @@ price table, in B3, with provenance** — which is what this request unblocks.
 >    punctuation, paragraphs and smart-format on the same call.
 > 3. Whether that rate is billed per audio-minute or per **rounded** unit, and if
 >    rounded, to what increment.
+> 4. **Which pricing tier our account is on** — pay-as-you-go or Growth — and the
+>    date it took effect. We also send `nova-3` general on some calls and need to
+>    record the right figure for that model too.
+> 5. Whether a request that **fails** — a non-2xx response, or a connection we
+>    drop mid-transfer after you have received the audio — is billed, and if so
+>    on what basis.
 >
 > Our usage to date is negligible (single-digit calls), so we may not have an
 > invoice line item to read it from — a console figure or a written confirmation
@@ -95,6 +101,27 @@ price table, in B3, with provenance** — which is what this request unblocks.
 | must carry | a **date** the rate took effect |
 | must specify | **pre-recorded**, `nova-3-medical` (not streaming, not plain `nova-3`) |
 | rounding | per-minute vs per-rounded-unit, and the increment |
+| tier | pay-as-you-go or Growth, **by name** |
+| failures | whether a failed request is billed |
+
+⚠️ **QUESTIONS 4 AND 5 WERE ADDED 2026-08-10, WHILE B3 SEEDED THE TABLE.** Both
+are open items that this same conversation closes, and neither was visible when
+the request was first drafted:
+
+- **Q4, the tier.** The two `nova-3` rates B3 *could* seed with `published`
+  provenance are the **pay-as-you-go** figures, and nothing in DISCOVERY
+  establishes which tier this account is on. Growth is ~16% cheaper
+  ($0.0065 vs $0.0077 pre-recorded). PAYG is the higher number, so the guess
+  errs toward **over**-stating cost — and with `charge = cost × 3 / 2` an
+  over-stated cost **over-bills a doctor**. The rows carry the assumption in
+  their `note` column, and the price table's own close-and-insert mechanism is
+  how the correction lands.
+- **Q5, failed requests.** Ruling 78(a) decided that a failure branch meters
+  **iff it holds vendor-reported units**, and recorded that the reversal path is
+  *"a vendor INVOICE saying whether failed requests are billed"*. That is this
+  question. B2's known `withTimeout` under-count needs the same answer.
+
+**Three items, one conversation.** That is the argument for sending it.
 
 ⚠️ **Question 3 is not padding.** If Deepgram rounds each request up to a whole
 minute or a 15-second block, then a per-second computation of ours will
