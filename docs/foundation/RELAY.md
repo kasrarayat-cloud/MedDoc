@@ -5241,3 +5241,130 @@ month"*. Flagged, not answered.
 - **It does not resolve the `withTimeout` under-count** recorded in ruling 78 —
   a timed-out judge call may be billed by Anthropic while its tokens never
   reach this process. Structural, and only an invoice can size it.
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `870413c134f21a92f31e3073a9579cd364a5dcf0`:**
+   · `CI` 31423059629 a1
+   · `e2e` 31423059647 **a2**
+   · `a11y-ci` 31423059768 a1
+   · `secrets-scan` 31423059717 a1
+
+PR **#591**, merged from `feat/b4-step3-judge-meters` (branch retired on merge).
+The PR head `fde6153a` was 4 of 4 on its own; the merge-commit citation above is
+the one that counts.
+
+#### ⚠️ WHY `e2e` IS `a2` — the checker demands a reason, and here it is
+
+Attempt 1 **failed**, on `16-account-settings.spec.ts:38` — *"the profile panel
+never showed its saved chip — updateProfileAction did not return ok"* — after
+its own retry, with **91 passed / 1 failed / 1 skipped**. Nothing in the failure
+touches metering, E/M, or any file this item changed.
+
+**The re-run was not re-run-and-hope. The flake was DEMONSTRATED first:**
+
+    git rev-parse 870413c1^{tree} fde6153a^{tree}
+    ee415940a039fc3b09a56d079e4bc1558b52be2d
+    ee415940a039fc3b09a56d079e4bc1558b52be2d
+
+**The merge commit and the PR head have BYTE-IDENTICAL TREES.** `e2e` on that
+exact tree had already passed on `fde6153a` (run 31417054897). Same code, two
+runs, two outcomes — which is the definition of non-determinism, established by
+evidence rather than asserted from the failure's appearance.
+
+⚠️ **AND IT IS A RECORDED FLAKE WITH A NAMED MECHANISM** —
+`docs/rounds/RELAY.md:791`: *"`16-account-settings` flake — the submit can still
+beat the client tree. Needs a hydration-PROVING wait, not a network condition."*
+
+### ⚠️ FOUND ON THE WAY PAST — THE PRESCRIBED FIX FOR THAT FLAKE IS **ALREADY APPLIED**, AND IT RECURRED ANYWAY
+
+This is the part worth carrying forward, and it is **new information**, not a
+restatement of the known flake.
+
+The recorded remedy was *"a hydration-PROVING wait, not a network condition"*,
+and `16-account-settings.spec.ts:74` **already does exactly that** — it waits on
+`#profile form[data-hydrated="true"]`, an attribute set from an effect body,
+which cannot run during SSR. That marker replaced `networkidle` on 2026-08-05
+precisely because `networkidle` *"narrows the window without closing it"*.
+
+So the spec's own comment block documents a fix that has now **failed in the
+field**. The hydration wait passed; the save still did not report `ok` within
+10s.
+
+> **A remedy that is recorded as sufficient, and is applied, and is still
+> failing, is a WORSE state than an open flake** — because the file reads as
+> solved and the next reader will spend their first hour re-deriving that the
+> marker is present.
+
+**Not fixed here, and deliberately so.** The recorded mechanism is now excluded
+by evidence, which means the real one is unidentified — and guessing a second
+remedy on top of a disproven first is how a flake becomes folklore. The
+candidates the next investigator should separate:
+
+1. `updateProfileAction` genuinely exceeding 10s under full-suite load (the
+   assertion's own timeout is the thing being measured, not the app);
+2. the action returning not-ok for a reason the spec cannot see, because it
+   asserts a chip rather than the action's result;
+3. hydration completing while the `useActionState` dispatcher is not yet bound —
+   i.e. `data-hydrated` is a *necessary* marker that is still not *sufficient*.
+
+⚠️ **(3) would make the marker the same class of proxy as the two it replaced**,
+and the spec's own history — rail buttons (1-in-10), then `networkidle` (2 in one
+run) — is a list of proxies each believed sufficient until it wasn't. **The
+instrument to settle it is the failure's own trace/screenshot artifacts**, which
+this session deliberately did not download (un-reapable scratch, per the
+close-out contract).
+
+**Owed as its own item.** It is not B4's, it costs a merge-commit re-run every
+time it fires, and it has now burned one.
+
+### 📐 B4's CLOSING STEP — RECON MEASURED 2026-08-10, READ-ONLY, so the next session does not re-derive it
+
+Three facts about the closing gate (*"one full QA pipeline run produces one
+event per stage, counted against the enumerated stage list"*), established while
+waiting on CI. **None of these is acted on here.**
+
+#### 1. `judge` is ≥1 PER VISIT under mock, not exactly 1 — and this item is why
+
+`judgeMdm` has **two** production callers, and under mock **both** meter:
+
+| caller | when |
+|---|---|
+| `worker.ts:944` | pre-warm, fires on **every** visit (soft-fail wrapper) |
+| `score.ts:142` | the E/M score path, at page render |
+
+The pre-warm exists to populate `em_mdm_cache:` so the render hits a warm cache.
+⚠️ **But nothing writes that cache under mock** — `writeCache` is reached only
+when the LLM returns a judgement, and the mock path returns `null` by design. So
+the render's call is **always a cache miss under mock**, and now meters too.
+
+**A closing gate asserting `judge == 1` per visit will be wrong.** It is `>= 1`,
+and production already agrees for a different reason (58 visits with 1, 12 with
+2, one with 13 — re-scoring plus the parse-failure retry).
+
+#### 2. QA's `api_usage_events` CANNOT serve as the gate's baseline — it is entirely pre-regime
+
+Measured on the live QA stack (`meddoc-qa-postgres-1` / `meddoc_qa_test`):
+
+```
+total 977 rows · earliest 2026-07-24 01:57Z · latest 2026-07-28 22:48Z
+unitsSource='mock' → 0
+```
+
+**Every QA row is `vendor`, and the newest is 2026-07-28** — the date of the 298
+real-Anthropic-calls incident. These ARE those rows. Nothing has metered on QA
+since, so **no mocked pipeline run has ever produced a usage event there**, and
+B0-a's regime (2026-08-08) is entirely absent from that database.
+
+⚠️ **The closing gate therefore needs a FRESH mocked QA run and must not measure
+the existing population** — which would report `mock = 0` for every stage and
+read as "the meters are all broken".
+
+#### 3. Three stages are ABSENT from QA entirely
+
+`tm_transcribe` / `transcribe_realtime`, `tm_anchor_entailment` and `tm_embed`
+have **no rows at all** on QA. Combined with the step-2 recon's warning that
+`tm_speaker_roles` and `tm_transcribe` are **input-mode-dependent**, the closing
+gate's expected-count table has to be keyed by input mode, and the run has to
+exercise **audio_upload** — which B4's own text already demands, because
+production is 100% `text_notes` and cannot prove it.
