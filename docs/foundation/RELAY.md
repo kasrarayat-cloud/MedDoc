@@ -4339,6 +4339,26 @@ that could have re-inherited a real key from the shared `.env`. Still 🟢 —
 QA a proof of production. It removes one excuse: **B4's audio path can now be
 exercised against a QA stack whose schema is production's.**
 
+**Citation — 4 of 4 on `2017adff3e41fe52f4d0471fddd859a59942a3ec`** (PR #582),
+produced by `check-citation.sh`, not typed:
+
+    · `CI`           31369243875 a1
+    · `e2e`          31369243845 a1
+    · `a11y-ci`      31369243857 a1
+    · `secrets-scan` 31369243847 a1
+
+**NOT DEPLOYED, and no §2.5 declaration is owed.** The change is a host script
+and three markdown files; nothing reaches a shipped image, so there is no delta
+to declare and nothing to roll back. The QA stack rebuild is not a deploy — the
+prod stack was untouched throughout and its co-tenant statuses are unchanged
+(`app` 307 · `admin` 404 · `quillmd` 200 · `www` 200 · `pro` 410).
+
+⚠️ **The PR head carried `e2e` on `a2` and the merge commit did not.** The head's
+first `e2e` died on `npm error code ECONNRESET` during `npm ci` in the worker
+image build — an **external fault**, not a product defect, on a branch that
+changes no code the build compiles. Named rather than absorbed, and fixed
+independently by #583 while this PR was in flight.
+
 ### 🟠 FOUND ON THE WAY PAST — SOMETHING ON THIS HOST AUTHENTICATES TO PRODUCTION ON A SCHEDULE, AND ONE OF ITS LOGINS FAILS
 
 Surfaced by the §2.5 baseline, which is exactly what that discipline is for: a
@@ -4449,3 +4469,75 @@ occurrence in twelve is not a pattern, and editing shared vitest config
 (`teardownTimeout`, `pool`) to chase a first-occurrence flake is a larger risk
 than the flake. **If it recurs, the fix is the test's console emission or the
 teardown timeout — not another re-run.**
+
+---
+
+## Found on the way past — 2026-08-10, session 04
+
+### ⛔ THE MERGE-CANCELS-EVIDENCE CLASS FIRED **THREE TIMES IN ONE MORNING**, AND EVERY PAIR WAS **FOUR SECONDS** APART
+
+AGENTS.md already carries this class at four occurrences and prices it *"by its
+worst instance, not its cheapest."* Three more landed inside two hours, all
+observed live while this session was waiting on gates:
+
+| pair | merged | what died |
+|---|---|---|
+| #576 → #578 | `05:15:24Z` → `05:15:28Z` | #576's **four** runs, all `cancelled` at 5–7s |
+| #580 → #581 | `06:52:42Z` → `06:52:46Z` | #580's `e2e`, `cancelled` at 7s |
+| #583 → #584 | `07:26:06Z` → `07:26:10Z` | #583's **four** runs — *and* `afabbaf1`'s `e2e` at 34 min |
+
+⚠️ **THE FOUR-SECOND SPACING IS THE WHOLE FINDING.** These are not two sessions
+racing; that is one actor merging a queue back to back. The canon's existing
+advice — *batch, and check two views before pushing* — **does not reach this
+case**, because the second merge is not a stray push and there is nothing to
+batch: they are two legitimately separate PRs. **The applicable habit is
+different: after merging, WAIT for the merge commit's runs before merging the
+next PR**, or accept in writing that the first PR will carry no citation of its
+own.
+
+⚠️ **AND THE THIRD ROW COST A CITATION THAT WAS BEING DELIBERATELY WAITED FOR.**
+This session read the two views, saw #581's runs in flight on `afabbaf1`, and
+**chose to wait rather than merge** — precisely as the rule prescribes, and
+specifically so that `afabbaf1`'s green would discharge #580's cancelled `e2e`.
+The #583/#584 pair then cancelled that very run at 34 minutes. **The rule was
+followed correctly by one party and defeated by another**, which is the argument
+for making it a merge-side habit rather than a push-side one.
+
+**Discharged, not lost:** `51751c0e` (#584) completed **4 of 4 green**, and it
+contains #580, #581 and #583, so the descendant carries them all. That is the
+recovery pattern working — but it works by luck of ordering, not by design.
+
+### 🟠 `npm ci` DIED ON `ECONNRESET` TWICE IN TWO HOURS — FIXED INDEPENDENTLY MID-SESSION
+
+`e2e` failed on PR #579 (`04:19Z`) and again on PR #582 (`06:15Z`), both
+`npm error code ECONNRESET` / `network aborted` inside the **worker image build**
+(`Dockerfile.worker`, `npm ci`), on branches that change no code the build
+compiles. **An external fault, named rather than absorbed** — the only available
+cure is a re-run, and each one costs a ~40-minute gate cycle.
+
+**Already fixed, by #583** (`fix/npm-ci-registry-retries`), which landed while
+#582 was in flight and gave every `npm ci` a retry budget that outlasts a
+registry blip. Recorded here so the two failures above are explained rather than
+remembered as flakes, and so the fix is attributable if it ever regresses.
+
+### 🟠 STILL OPEN, AND NOT RE-ATTEMPTED HERE
+
+Session 03's findings 1 and 2 are **unchanged and still owed a person**:
+
+- **Something on this host authenticates to production on a schedule and one of
+  its logins FAILS.** Not investigated — `crontab -l` is still not granted and
+  the sandbox still blocks `/etc/cron.d`. Both refusals remain absent from
+  MASTER.md's table.
+- **`nightly-tests` has failed three consecutive nights** — 2026-08-08, -09 and
+  -10 — auto-filing **#548, #559, #577**, all still open. Last success
+  **2026-08-07**. It targets **production**. Deliberately not triaged here: its
+  detail lives in a downloadable artefact, which is scratch this session cannot
+  reap.
+
+  ⚠️ **A first draft of this row said FOUR nights and a fourth issue.** It was
+  wrong: session 03 had already counted the 08-10 run, and this session assumed
+  a new failure had appeared overnight without querying. **Re-measured before
+  committing** — `gh run list --workflow nightly-tests.yml` gives 3 failures
+  after 3 successes, and `gh issue list` gives exactly three issues. A count
+  carried forward from another session's report and then incremented by
+  assumption is a fabricated number, however small the increment.
