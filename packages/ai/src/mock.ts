@@ -280,10 +280,24 @@ const MOCK_COMPLETE_TEXT_FIXTURES: Partial<
     inputTokens: 1,
     outputTokens: 1,
   },
-  // Anchored-generation entailment verifier — UNREACHABLE in practice: the
-  // verifier short-circuits to all-entailed under MOCK_AI_CALLS before any
-  // model call (04b-anchor-verify.ts). Defensive fixture only, and it
-  // deliberately fails CLOSED (empty verdicts → demote) if ever consumed.
+  // ⚠️ Anchored-generation entailment verifier — REACHABLE SINCE B4 STEP 2,
+  // and this static entry is now the FAIL-CLOSED FALLBACK, not the answer.
+  //
+  // Until 2026-08-10 this fixture was labelled "UNREACHABLE in practice"
+  // because `entailmentStage` short-circuited to all-entailed ABOVE the model
+  // call. That short-circuit was the same defect B4 step 1 removed from
+  // Deepgram and embed, one layer up: it sat above the meter, so
+  // `tm_anchor_entailment` could not emit a usage event under MOCK and B4's
+  // gate ("one event per stage") was unsatisfiable for it BY CONSTRUCTION.
+  //
+  // The short-circuit is gone. The three ensemble passes now run as three
+  // mocked calls, exactly as production runs three real ones, and each one
+  // meters. Behaviour is preserved because the CONTENT-SENSITIVE branch in
+  // `completeTextFixture` returns an entailed verdict per claim — see there.
+  //
+  // This static text is what a caller gets when it supplies NO user content
+  // (there is no production path that does). Empty verdicts → every claim
+  // demoted → fail CLOSED, which is the correct direction for a verifier.
   tm_anchor_entailment: {
     text: '{"verdicts":[]}',
     inputTokens: 1,
@@ -292,6 +306,60 @@ const MOCK_COMPLETE_TEXT_FIXTURES: Partial<
   // tm_patient_summary lives in MOCK_COMPLETE_FIXTURES (L7e uses
   // modelClient.complete(), not completeText).
 };
+
+/**
+ * Every `CLAIM <n>:` index the entailment prompt actually carries.
+ *
+ * ⚠️ ANCHORED AND EXACT, deliberately. The prompt built by
+ * `04b-anchor-verify.ts` is a block per claim —
+ *
+ *     CLAIM 0: <text>
+ *     CITED SPAN(S): …
+ *     CONTEXT: …
+ *
+ * — so the token that identifies a claim is `CLAIM <digits>:` at the START of
+ * a line. A bare `.includes('CLAIM')` would also match the word inside a
+ * claim's own text or a context line, which is the substring trap AGENTS.md
+ * records four sightings of. The indices are READ, never assumed to be
+ * `0..n-1`: `entailmentPass` requires exactly one verdict per claim number it
+ * asked about, so echoing back the numbers found is the only form that cannot
+ * drift from the prompt.
+ */
+function entailmentClaimIndices(user: string): number[] {
+  return [...user.matchAll(/^CLAIM (\d+):/gm)].map((m) => Number(m[1]));
+}
+
+/**
+ * The ONE selection function for `completeText` fixtures.
+ *
+ * ⚠️ IT IS ONE FUNCTION ON PURPOSE — the same reason `rawCompleteFixture` is.
+ * B0 recorded the shape: a tested helper that production has stopped calling,
+ * sitting beside an untested one that production DOES call, is worse than no
+ * test, because the suite stays green while the live path drifts. Production
+ * reaches fixtures through `anthropic.ts` → `buildMockMessage`; tests reach
+ * them through `mockCompleteText`. Both now read this.
+ */
+function completeTextFixture(
+  purpose: ModelCallPurpose,
+  user?: string
+): AnthropicCompleteTextResult {
+  const fixture = MOCK_COMPLETE_TEXT_FIXTURES[purpose];
+  if (fixture === undefined) {
+    throw new Error(
+      `[MOCK_AI_CALLS] no completeText() fixture for purpose=${purpose}.`
+    );
+  }
+  // CONTENT-SENSITIVE, per ruling 69: a constant mock here would be a
+  // regression, not a simplification. A fixed verdict list cannot answer a
+  // prompt whose claim count varies, and `entailmentPass` treats a missing or
+  // duplicated verdict as not-entailed — so a static answer would silently
+  // demote every claim beyond the ones it happened to name.
+  if (purpose === 'tm_anchor_entailment' && user !== undefined) {
+    const verdicts = entailmentClaimIndices(user).map((i) => ({ i, entailed: true }));
+    return { ...fixture, text: JSON.stringify({ verdicts }) };
+  }
+  return fixture;
+}
 
 // ---------------------------------------------------------------------------
 // Deepgram fixture — one canned "conversation" with two speakers so
@@ -445,12 +513,7 @@ export function buildMockMessage(args: {
   };
 
   if (args.kind === 'completeText') {
-    const fixture = MOCK_COMPLETE_TEXT_FIXTURES[args.purpose];
-    if (fixture === undefined) {
-      throw new Error(
-        `[MOCK_AI_CALLS] no completeText() fixture for purpose=${args.purpose}.`
-      );
-    }
+    const fixture = completeTextFixture(args.purpose, args.user);
     return { ...base, content: [{ type: 'text', text: fixture.text, citations: [] }] } as unknown as Anthropic.Messages.Message;
   }
 
@@ -531,14 +594,10 @@ export function mockComplete<T>(args: {
 
 export function mockCompleteText(args: {
   purpose: ModelCallPurpose;
+  /** The rendered user content. Only tm_anchor_entailment reads it. */
+  user?: string;
 }): AnthropicCompleteTextResult {
-  const fixture = MOCK_COMPLETE_TEXT_FIXTURES[args.purpose];
-  if (fixture === undefined) {
-    throw new Error(
-      `[MOCK_AI_CALLS] no completeText() fixture for purpose=${args.purpose}.`
-    );
-  }
-  return fixture;
+  return completeTextFixture(args.purpose, args.user);
 }
 
 export function mockDeepgramBatch(): DeepgramBatchResult {

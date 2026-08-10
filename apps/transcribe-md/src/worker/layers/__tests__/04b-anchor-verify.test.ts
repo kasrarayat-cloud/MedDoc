@@ -20,7 +20,7 @@
 // behavior is measured by the pre-registered n=30 protocol run.
 // ============================================================================
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   modelCompleteText: vi.fn(),
@@ -1004,5 +1004,65 @@ describe('structure-aware exemptions — tables + option-sets (pre-registered pa
     });
     expect(r.body).not.toContain('severe sepsis');
     expect(r.suggestions[0].reason).toBe('no_anchor');
+  });
+});
+
+// ============================================================================
+// B4 STEP 2 — the stage-level MOCK short-circuit is GONE, and the stage still
+// behaves identically.
+// ----------------------------------------------------------------------------
+// Until 2026-08-10 `entailmentStage` returned all-entailed under
+// MOCK_AI_CALLS *before* any model call. That is a mock boundary ABOVE the
+// meter — the defect B4 step 1 removed from Deepgram and embed — and it made
+// B4's own gate ("one usage event per stage") unsatisfiable for
+// `tm_anchor_entailment` by construction.
+//
+// ⚠️ EVERY OTHER TEST IN THIS FILE DELETES `MOCK_AI_CALLS` IN `beforeEach`,
+// WHICH IS EXACTLY WHY NOTHING HERE EVER SAW IT. The short-circuit was live
+// only on the path no unit test takes. These two arms are the ones that set
+// the flag on purpose.
+// ============================================================================
+describe('B4 step 2 — under MOCK_AI_CALLS the ensemble RUNS rather than being skipped', () => {
+  // The same supported claim the "MUST pass" canary uses: anchored, in the
+  // transcript, and entailment-approved — so it REACHES the verifier instead
+  // of being demoted deterministically before any model call.
+  const ANCHORED =
+    '## Subjective\nNo prior diagnosis of migraines. ⟦A:"have I told you you have had migraines in the past? No. No."⟧';
+
+  afterEach(() => {
+    delete process.env.MOCK_AI_CALLS;
+  });
+
+  it('issues the k=3 ensemble instead of short-circuiting above the meter', async () => {
+    process.env.MOCK_AI_CALLS = 'true';
+    entailAll();
+    await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: ANCHORED,
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+
+    // ⚠️ THE MUTATION THAT MAKES THIS RED IS RESTORING THE SHORT-CIRCUIT:
+    // it drives this to 0, which is the number the meter used to see.
+    expect(mocks.modelCompleteText).toHaveBeenCalledTimes(3);
+    expect(
+      mocks.modelCompleteText.mock.calls.every(
+        (c: unknown[]) => (c[0] as { purpose?: string })?.purpose === 'tm_anchor_entailment'
+      )
+    ).toBe(true);
+  });
+
+  it('and a claim with NO claims still issues nothing — no work is not a suppressed call', async () => {
+    process.env.MOCK_AI_CALLS = 'true';
+    entailAll();
+    // A body the claim extractor finds nothing judgeable in. Production agrees
+    // this is the real zero: 73 of 73 visits carrying the stage carry exactly
+    // 3 calls, so the distribution is {0, 3} and nothing between.
+    await runAnchorVerify({
+      ...IDS,
+      anchoredDraft: '## Vitals\n| BP | [not documented] |',
+      roleLabeledTranscript: TRANSCRIPT,
+    });
+    expect(mocks.modelCompleteText).not.toHaveBeenCalled();
   });
 });
