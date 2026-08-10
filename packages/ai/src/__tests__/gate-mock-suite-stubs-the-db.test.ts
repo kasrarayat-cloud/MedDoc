@@ -126,8 +126,23 @@ const RE_USAGE = /vi\.mock\('(\.\.\/)*api-usage'/;
 const EXEMPT: Record<string, string> = {
   'apps/transcribe-md/src/lib/em-coding/__tests__/gate-mock-ai-honored.test.ts':
     'a static source-grep gate: it readFileSync-s sources and asserts on their text, and never invokes the pipeline.',
-  'apps/transcribe-md/tests/worker/embed-mock.test.ts':
-    'embed.ts:72 returns mockEmbed() under mock, ABOVE the logApiUsage calls at :123/:162 — the meter is never reached.',
+  // ⚠️ REMOVED BY B4, AND THE REMOVAL IS THE POINT.
+  //
+  //   'apps/transcribe-md/tests/worker/embed-mock.test.ts':
+  //     'embed.ts:72 returns mockEmbed() under mock, ABOVE the logApiUsage
+  //      calls at :123/:162 — the meter is never reached.'
+  //
+  // That sentence was TRUE when written and became FALSE the moment B4 moved
+  // embed.ts's mock boundary below the meter. The file now stubs `@meddoc/db`
+  // and classifies as `mocks-db` on its own merits.
+  //
+  // ⚠️ NOTHING HERE COULD HAVE CAUGHT THAT. The stale-exemption arm below
+  // verifies an exempted file still EXISTS and still names the flag — both of
+  // which stayed true. It cannot check whether the REASON is still true,
+  // because the reason is prose. An exemption's justification is exactly the
+  // kind of claim that decays silently, so it is re-read by hand whenever the
+  // code it describes is touched — the same discipline the watched-set rule
+  // asks for, applied to an exclusion list instead of a model list.
   // NOT exempted, deliberately: packages/ai/src/__tests__/mock-chat-edit.test.ts
   // names MOCK_AI_CALLS only in a COMMENT, so stripped source puts it out of
   // scope entirely and an exemption for it would be permanently stale. That is

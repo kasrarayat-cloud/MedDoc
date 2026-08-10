@@ -240,22 +240,45 @@ interface BaseCtx {
   unitsSource: UnitsSource;
 }
 
+/**
+ * ⚠️ B4 — `modelName` AND `operation` ARE REQUIRED PARAMETERS, NOT DEFAULTS.
+ *
+ * Both used to be literals in this function body: every Deepgram row said
+ * `nova-3-medical` / `transcribe_realtime` whatever had actually been called.
+ * `transcribe_realtime` was the worse of the two — **no streaming call site
+ * exists on this stack**, so the label was a literal wearing an observation's
+ * clothes (DISCOVERY §C.7, and the B3 seed comment says so in as many words).
+ *
+ * They are REQUIRED rather than defaulted for the reason ruling 67 gives about
+ * provenance defaults: a default is what lets a future caller silently
+ * re-assert a fact it never checked. With no default, a new call site cannot
+ * compile without naming both.
+ *
+ * ⚠️ WHAT THIS DOES NOT FIX, STATED SO IT IS NOT MISTAKEN FOR FIXED:
+ * `unitCostUsd` / `totalCostUsd` below still price EVERY Deepgram model at
+ * `PRICING.deepgram_nova3_medical`. So a row can now name `nova-3` honestly and
+ * still be priced at the medical rate. Wiring these to B3's `price_rates` — and
+ * deciding what a `null` rate means at the meter — is B4/B6's, per ruling 80(c).
+ * The label fix does not touch the money, and does not claim to.
+ */
 export function buildDeepgramUsage(
   ctx: BaseCtx,
-  audioSeconds: number
+  audioSeconds: number,
+  modelName: string,
+  operation: string
 ): UsageEvent {
   const minutes = audioSeconds / 60;
   return {
     ...ctx,
     requestId: ctx.requestId ?? null,
     provider: 'deepgram',
-    operation: 'transcribe_realtime',
+    operation,
     audioSeconds,
     unitCount: minutes,
     unitType: 'minutes',
     unitCostUsd: PRICING.deepgram_nova3_medical,
     totalCostUsd: minutes * PRICING.deepgram_nova3_medical,
-    modelName: 'nova-3-medical',
+    modelName,
   };
 }
 

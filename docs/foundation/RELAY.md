@@ -4541,3 +4541,260 @@ Session 03's findings 1 and 2 are **unchanged and still owed a person**:
   after 3 successes, and `gh issue list` gives exactly three issues. A count
   carried forward from another session's report and then incremented by
   assumption is a fabricated number, however small the increment.
+
+---
+
+## ✅ B4 STEP 1 — the mock boundary reaches EVERY vendor, and the Deepgram labels stop lying — 2026-08-10
+
+**B4's gate is *"one full QA pipeline run produces one event per stage, counted
+against the enumerated stage list"*. Before this change that gate was
+unsatisfiable for three stages, by construction.** B0-a moved the mock boundary
+below the meter for `anthropic.ts` and fixed ONE vendor; `deepgram-batch.ts` and
+`embed.ts` kept their short-circuits ABOVE `logApiUsage`.
+
+⚠️ **AND IT WAS ALREADY WRITTEN DOWN, AS AN EXEMPTION.**
+`gate-mock-suite-stubs-the-db.test.ts` carried, in prose:
+
+> `embed.ts:72` returns `mockEmbed()` under mock, ABOVE the `logApiUsage` calls
+> at `:123`/`:162` — **the meter is never reached.**
+
+That is the defect, recorded accurately, and lived with. A good example of the
+class: the sentence was true when written, nothing ever re-read it against the
+item that needed it, and no check could — an exemption's *reason* is prose.
+
+### WHY IT MATTERS MORE THAN "a mock does not meter"
+
+Every production visit is `text_notes`, so **the audio path is unexercised in
+production** — RELAY's own B4 text says production cannot be the proof. QA was
+therefore the only place L1/L1b could ever be metered, and QA was exactly where
+the meter was blind. The gate would have returned *"no audio events"*, which
+reads as nothing-to-record rather than nothing-is-wired: the same
+zero-is-indistinguishable failure B0-a exists to kill.
+
+### WHAT LANDED
+
+| file | change |
+|---|---|
+| `deepgram-batch.ts` | the fixture is handed back as a `Response`, so `res.ok`, `res.json()`, duration extraction and the meter are the **same lines** on both paths |
+| `embed.ts` | same shape; `mockEmbedResponse()` returns a vendor-shaped response, `getClient()` stays inside the non-mock arm so a mocked run needs no credential |
+| `api-usage.ts` | `buildDeepgramUsage` gains **required** `modelName` + `operation` |
+| `embed-mock.test.ts` | stubs `@meddoc/db` — it now reaches the meter |
+| `gate-mock-suite-stubs-the-db.test.ts` | the stale exemption removed, with the reason it could not have been caught automatically |
+
+**A `Response`, rather than a mock-only metering branch, is the load-bearing
+choice.** A parallel branch is a gate that can pass while production's real path
+stays broken; identity of code is what makes a QA run evidence about production.
+
+### THE GATE — 9 arms, and the mutation matrix
+
+`packages/ai/src/__tests__/gate-b4-mock-boundary-all-vendors.test.ts`
+
+| mutation | applied? | result |
+|---|---|---|
+| **M1** — restore Deepgram's pre-B4 early return | asserted 1 occurrence | **5 of 9 RED** (every Deepgram mock arm) |
+| **M2** — drop the call-site `mocked ? null :` id guard | asserted 1 occurrence | ⚠️ **STAYED GREEN — see below** |
+| **M2b** — remove the WRITER's mock-row `requestId` normalisation | asserted 1 occurrence | **1 RED**, `expected 'mock-deepgram-request' to be null` |
+| **M3/M4** — restore both label literals | asserted 2 occurrences | **3 RED** (all LABELLED arms) |
+| **M5** — restore embed's pre-B4 early return | asserted 1 occurrence | **2 RED** (both embed arms) |
+| **M6** — hardcode `unitsSource: 'mock'` | asserted 1 occurrence | **1 RED** (the REAL arm — the both-directions proof) |
+
+Every mutation asserted its own application before its result was believed, and
+every one was restored with the restoration verified.
+
+Unit suite: **3304 passed / 4 skipped**, before and after.
+
+### ⚠️ M2 IS THE FINDING — A GATE ARM WHOSE TITLE WAS NARROWER THAN WHAT IT MEASURED
+
+The arm was titled *"the CALL SITE refuses the fixture's id"*, and
+`deepgram-batch.ts` carried a `mocked ? null : …` guard to match. **Removing that
+guard left the arm GREEN.**
+
+The cause: `logApiUsage` **already** normalises every mock row to
+`requestId: null` (`api-usage.ts:168-171`), and B1-b step 2 put it on the WRITER
+for the reason that applies verbatim here — *"five builders exist today and a
+sixth will not remember."* So the arm was never watching the call site. It was
+watching the writer, and only its NAME said otherwise.
+
+Two corrections, both taken:
+
+1. **The redundant call-site guard is REMOVED.** A per-caller copy of a
+   writer-side invariant is the hand-kept list that rule exists to prevent — and
+   worse, it made `deepgram-batch.ts` *look* like the thing keeping the row legal
+   when it was not. Anyone later "simplifying" the writer would have found a
+   green suite.
+2. **The arm is re-titled for what it measures** — the END-TO-END property: an id
+   IS available upstream and the row that lands still carries NULL. That is worth
+   guarding, because it is what keeps mocked Deepgram rows legal at all. Its live
+   mutation is M2b, on the writer.
+
+**Neither the arm nor the guard was wrong about anything; they were correct about
+the wrong subject.** It was found only because the mutation was run — which is
+the entire argument for running them.
+
+### THE FIXTURE KEEPS ITS `request_id`, ON PURPOSE
+
+`MOCK_DEEPGRAM_BATCH.metadata.request_id` is `'mock-deepgram-request'`. Deleting
+it would make the arm above **vacuous** rather than passing for a good reason, so
+the gate opens with a **negative control** asserting the fixture still supplies
+one. Fixture and test now name each other.
+
+Why it matters: a mock row carrying an id violates
+`api_usage_events_request_id_requires_vendor`, and because `logApiUsage` is
+fire-and-forget the violation is **swallowed** — the row simply never exists. The
+audio stage would go missing from a QA run with every line of code looking
+correct.
+
+### ⚠️ FOUND ON THE WAY PAST — `tm_embed` HAS NEVER SUCCEEDED IN PRODUCTION
+
+Measured while enumerating stages, not looked for:
+
+| table | `tm_embed` / openai |
+|---|---|
+| `ai_calls` | **38 calls, 2026-07-07 → 2026-08-10, `success=false` on ALL 38**, `errorCode='ERROR'` |
+| `api_usage_events` | **zero `openai` rows, ever** |
+| `doctor_edit_patterns` | 17 rows, **0 carry an embedding** (17 signed visits) |
+
+`OPENAI_API_KEY` **is set** in the worker (`sk-proj…`, 164 chars), so this is not
+an unset-credential fault; `errorCode='ERROR'` is `err.name.toUpperCase()` on a
+generic `Error`, consistent with a 401/429 from the vendor.
+
+⚠️ **AND IT WAS DIAGNOSED 39 DAYS AGO, WITH A NAMED OWNER ACTION.**
+`docs/qa-reports/audio-path-verification-20260702T155110Z.md:54` says, in bold:
+
+> the current prod `OPENAI_API_KEY` is dead (401), which also breaks the Doc
+> Editor evals today. **Kasra: rotate/replace the key.**
+
+That is **2026-07-02**. The first failed `tm_embed` is **2026-07-07**. The key is
+still dead today.
+
+⚠️ **THIS IS THE PRICED-BY-THE-SYMPTOM CLASS AGAIN, AND THE PARALLEL TO THE
+65-DAY 🟢 IS EXACT.** The 07-02 report priced the item by the loudest thing it
+could see — *"breaks the Doc Editor evals"*, a dev-tooling annoyance — when the
+asset behind the symptom was **a vendor credential two product features depend
+on**. The second feature was never named, because on 07-02 it had not started
+failing yet: `tm_embed` only began five days later. So the follow-up was filed
+against the wrong noun, and every reader since has triaged it as an eval problem.
+
+Renamed after the asset, per canon: **`prod OpenAI credential is dead — kills
+tm_embed AND the Doc Editor evals`**. Nothing else about the item changes; the
+name is what decides whether it gets picked up.
+
+**The meter is CORRECT to hold no row** — no vendor units were ever reported, and
+B2 ruled a branch meters iff it holds vendor-reported units. So this is not a
+metering defect. It is a **product feature silently dead for 34 days**: the
+per-doctor edit-pattern capture writes its row and stores a NULL vector every
+time, and nothing anywhere is in an error state.
+
+⚠️ **DELIBERATELY NOT ACTED ON. PARKED — owner action.** Establishing whether the
+key is expired, unfunded or revoked needs either a vendor call or the vendor's
+console. The first is outside the money envelope (which pre-approves **Anthropic**
+balance probes only); the second needs a person. **What would unpark it:** the
+owner confirming the key's status, or authorising one minimal OpenAI probe.
+
+⚠️ **AND IT CHANGES WHAT B4 STEP 2 CAN CLAIM.** A full QA run will now meter
+`tm_embed` (the fixture path works), but **production will keep showing zero
+`tm_embed` meter rows until the key is fixed** — and that zero will be CORRECT. A
+step-2 gate that reads production and expects a row per stage would fail on a
+true statement about a broken vendor credential. The stage list must carry this,
+or the gate reports a metering bug that does not exist.
+
+### ⚠️ THE RESTORE THAT ATE ITS OWN CORRECTION — new costume for a known class
+
+Canon says *"restore from git" and "restore from backup" are not the same
+operation*. `mkdir`, `cp` and writes to `/tmp` are all **denied** to this session
+(finding below), so the scratch-copy form was unavailable and the work was
+**committed first** instead — a strictly stronger backup, and the right call.
+
+**Then the M2 finding arrived and `deepgram-batch.ts` was edited again, after the
+commit, without re-staging.** The next `git checkout -- <file>` — restoring from
+the index — silently reverted that correction along with the mutation. Detected
+by grepping for the guard afterwards; re-applied; verified.
+
+> **A commit is a backup of what was COMMITTED. The moment you edit past it, the
+> backup is stale and the "restore" is a partial revert.** The protection was
+> genuinely sound when established and expired with no signal. Re-stage after
+> every correction, or verify the file's *intended* content after every restore —
+> not merely that the mutation is gone.
+
+⚠️ **And the verification of that repair tripped the SUBSTRING TRAP, in a comment
+written minutes earlier.** `grep -c "mocked ? null"` returned **1** after the fix
+— because the new explanatory comment *quotes the removed guard*. The all-clear
+needed the executable token, `const vendorRequestId = mocked ? null`, which
+returns 0. Exactly the case AGENTS.md names: *a file's comments are the one place
+where the words you are grepping for are guaranteed to appear.*
+
+### ⚠️ PERMISSION REFUSALS NOT IN MASTER.md's TABLE — three, all this session
+
+Per MASTER.md: a refusal not in the table is a finding, with the command and what
+it was establishing.
+
+| command | establishing | granted re-formulation? |
+|---|---|---|
+| `mkdir -p /tmp/b4-mutation-backup` | scratch dir for the mutation backups | **none found** — commit-first was used instead |
+| `cp <7 files> /tmp/…` | the canon-mandated pre-mutation backup | **none found** — same |
+| `Write` to `/tmp/b4-commit-msg.txt` | commit message via `-F` (prose-is-never-a-shell-argument) | **yes** — `git commit -F -` with a quoted heredoc (`<<'MSG'`), which canon names as an accepted form |
+
+The first two matter more than they look: they make the canon's **prescribed**
+mutation-proof procedure unavailable to the unattended loop, which is what forced
+the commit-first substitute and, indirectly, produced the stale-backup finding
+above. Recommend adding `mkdir -p /tmp/*` and `cp` to the allowlist, or recording
+commit-first as the sanctioned form for this session class.
+
+### WHAT THIS DOES NOT CLAIM
+
+- **It does not price anything.** Every Deepgram row is still priced at
+  `PRICING.deepgram_nova3_medical` whatever model it names. Ruling 80(c)'s
+  `null`-rate decision is still owed by B4/B6.
+- **It does not run the per-stage count.** That is B4 step 2. This change makes
+  it possible; it does not perform it.
+- **It proves nothing on QA.** The proof here is the unit gate. No QA pipeline
+  run was executed for this step.
+- **It changes no historical row**, and it does not claim `tm_embed` works in
+  production — it demonstrably does not.
+- **`whisper-batch.ts` was NOT given a mock boundary**, stated rather than
+  silently skipped: under `MOCK_AI_CALLS` the Deepgram fixture always succeeds,
+  so the Whisper fallback is unreachable. If a future change makes the mocked
+  Deepgram path fail, Whisper becomes reachable **and would call the real
+  vendor**. Named here as B4 step 2's input.
+- **The `operation` label split is now B4 step 2's problem** — see ruling 81: the
+  per-stage join must accept BOTH `transcribe_realtime` (3 legacy prod rows) and
+  `tm_transcribe` (everything after this change).
+
+### 📐 B4 STEP 2 RECONNAISSANCE — measured 2026-08-10, READ-ONLY, before any code
+
+The stage universe, enumerated from the sources rather than from a `worker.ts`
+call-site scan (which DISCOVERY §C.1 warns misses the nested layers):
+
+| # | purpose | file | notes |
+|---|---|---|---|
+| 1 | `tm_transcribe` | `01-transcribe.ts:128` **and** `01b-transcribe-dictation.ts:109` | **two files, one label** — audio_upload vs voice_dictation, mutually exclusive per visit |
+| 2 | `tm_speaker_roles` | `02-speaker-roles.ts:234` | audio_upload only |
+| 3 | `tm_entities` | `03-extract-entities.ts:638` | |
+| 4 | `tm_soap_draft` | `04-generate-soap.ts:241` | |
+| 5 | `tm_anchor_entailment` | `04b-anchor-verify.ts:965` | **nested in L4**, k=3 — see below |
+| 6 | `tm_critique` | `05-self-critique.ts:214` | |
+| 7 | `tm_polish` | `06-polish.ts:293` | |
+| 8 | `tm_polish_gate` | `06b-polish-fidelity-gate.ts:237` | **nested in L6** |
+| 9–13 | `tm_icd_coding` · `tm_cpt_coding` · `tm_rx_drafting` · `tm_referrals` · `tm_patient_summary` | `07a`–`07e` | parallel fan-out |
+| 14 | `judge` | `lib/em-coding/llm-mdm.ts:400` | bypasses `modelClient` entirely |
+| 15 | `tm_embed` | sign-time hook, not a worker layer | **dead in prod — see the finding above** |
+
+⚠️ **THE EXPECTED COUNT FOR `tm_anchor_entailment` IS NOT "3 PER VISIT", AND
+RULING 68's WORDING COULD BE READ THAT WAY.** `04b-anchor-verify.ts:1023-1028`
+fans out over `ENSEMBLE_LENSES` — 3 lenses, 3 calls — **per INVOCATION of L4b**,
+not per visit. Production bears that out and refutes the naive reading:
+
+    tm_anchor_entailment  231        tm_soap_draft  102
+
+3 × 102 would be **306**, not 231. **The mechanism for the difference is NOT
+established here** — it could be visits that skip L4b, a different invocation
+granularity, or both — and it must be derived from the code path before the gate
+asserts a number. **A gate that hardcodes `3 × visits` will be wrong**, and wrong
+in the direction that reads as a metering hole.
+
+⚠️ **`tm_speaker_roles` AND `tm_transcribe` ARE INPUT-MODE-DEPENDENT.** L2 runs
+only for `audio_upload`; L1 vs L1b is decided by input mode. So *"one event per
+stage"* is not a property of a visit — it is a property of **a visit of a given
+input mode**, and the gate needs the mode in its expected-count table. This is
+the same trap as the single-visit sample that lacked `tm_embed` (carried out of
+B1-b step 4): one visit never exercises the full stage set.
