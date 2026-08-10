@@ -337,7 +337,20 @@ describe('B1-b step 2 — the meter never invents a request id', () => {
     // rather than minting one. That is this gate doing its job across an item
     // it was not written for: B2 added writers, and the no-fabrication ratchet
     // held without being touched.
-    expect(total, 'the total usage-site count moved').toBe(10);
+    //
+    // 10 → 11 on 2026-08-10 (B4 step 3): `llm-mdm.ts` gained a MOCK-path meter,
+    // so the `judge` stage can be counted on a mocked QA run instead of
+    // emitting zero events. ⚠️ AND AGAIN `withoutId` DID NOT MOVE. The new site
+    // passes `requestId: null` EXPLICITLY — a mock row may never carry an id
+    // (ruling 72a), and writing the field rather than omitting it is what keeps
+    // it in the `withId` bucket and out of `NO_ID_DECLARED`. That distinction is
+    // the point of the two buckets: "passes no id" and "passes null on purpose"
+    // are different facts, and only the first is a hole that needs declaring.
+    //
+    // ⚠️ THIS GATE CAUGHT B4 STEP 3 UNPROMPTED, which is the second time it has
+    // reported an item it was not written for. It is doing exactly what the
+    // header claims and should not be softened.
+    expect(total, 'the total usage-site count moved').toBe(11);
   });
 
   it('USAGE_CALLERS covers every file in the tree that calls logApiUsage', () => {

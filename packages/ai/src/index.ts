@@ -118,3 +118,9 @@ export {
   type Provider as ApiUsageProvider,
   type UsageEvent as ApiUsageEvent,
 } from './api-usage';
+// B4 step 3 — the mock seam, exported for the ONE production path that cannot
+// go through `modelClient`. `llm-mdm.ts` builds its own Anthropic client to
+// attach `cache_control` blocks the shared `CompleteTextArgs.system: string`
+// cannot express, so it must read the flag and mark its own usage row. Every
+// other caller gets both for free from `anthropic.ts`.
+export { isMockEnabled, MOCK_FIXTURE_USAGE } from './mock';

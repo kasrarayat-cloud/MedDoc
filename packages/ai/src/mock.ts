@@ -491,6 +491,22 @@ function mockChatEdit(user: string): unknown {
  * fail Zod in production now fails in QA too, instead of being waved through by
  * the mock.
  */
+/**
+ * ⚠️ THE FIXTURE TOKEN COUNTS — FIXTURE VALUES, NOT MEASUREMENTS.
+ *
+ * They exist so a mocked call's usage row has a SHAPE. The row is marked
+ * `unitsSource: 'mock'` and `logApiUsage` zeroes its money columns, which is
+ * what makes it honest. **Nothing may read these as a quantity** — see
+ * {@link UnitsSource}.
+ *
+ * ⚠️ IT IS A SHARED CONSTANT BECAUSE THERE ARE NOW TWO MOCK METERS, AND A
+ * SECOND COPY IS A THING THAT DRIFTS. `buildMockMessage` is one; B4 step 3's
+ * `callClaudeMdm` is the other, and it cannot use `buildMockMessage` because
+ * it must NOT produce a parseable judgement (ruling 82). They agree on the
+ * fixture's shape here, once, or they disagree in production later.
+ */
+export const MOCK_FIXTURE_USAGE = { input_tokens: 1, output_tokens: 1 } as const;
+
 export function buildMockMessage(args: {
   purpose: ModelCallPurpose;
   kind: 'tool' | 'text' | 'completeText';
@@ -505,11 +521,8 @@ export function buildMockMessage(args: {
     model: args.model,
     stop_reason: 'end_turn' as const,
     stop_sequence: null,
-    // ⚠️ These token counts are FIXTURE VALUES, not measurements. They exist so
-    // the usage row has a shape; the row is marked `unitsSource: 'mock'` and its
-    // money columns are zero, which is what makes it honest. Nothing may read
-    // these as a quantity — see UnitsSource.
-    usage: { input_tokens: 1, output_tokens: 1 } as Anthropic.Messages.Usage,
+    // See MOCK_FIXTURE_USAGE — fixture values, never measurements.
+    usage: { ...MOCK_FIXTURE_USAGE } as Anthropic.Messages.Usage,
   };
 
   if (args.kind === 'completeText') {

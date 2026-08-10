@@ -38,6 +38,10 @@ import {
   buildAnthropicUsage,
   claudeCostCents,
   readAnthropicRequestId,
+  // B4 step 3 — the mocked judge call still meters. See the block in
+  // `callClaudeMdm`; the shared constant is what stops the two mock meters
+  // drifting apart.
+  MOCK_FIXTURE_USAGE,
 } from '@meddoc/ai';
 import { getRedis, isRedisReady } from '@/lib/redis';
 import { log } from '@/lib/log';
@@ -392,11 +396,46 @@ async function callClaudeMdm(args: JudgeMdmArgs): Promise<MdmJudgement | null> {
   // `llmJudged: false` — which is true, and which the E/M fixtures can assert.
   // A fabricated judgement here would have been a mock that lies about its own
   // provenance.
-  if (process.env.MOCK_AI_CALLS === 'true') {
-    return null;
-  }
-
-  const userPrompt = args.soap.trim();
+  //
+  // ── B4 STEP 3, 2026-08-10 — AND IT NOW METERS ON THE WAY OUT ─────────────
+  //
+  // The `null` above is still exactly right and is NOT what changed. What was
+  // wrong is that returning it emitted ZERO `api_usage_events` rows, so B4's
+  // gate — "one full QA pipeline run produces one event per stage" — was
+  // UNSATISFIABLE for `judge` by construction. Same defect ruling 81 removed
+  // from Deepgram and embed, and ruling 82 from `tm_anchor_entailment`.
+  //
+  //     ZERO USAGE EVENTS LOOKS EXACTLY LIKE A WORKING METER THAT FOUND
+  //     NOTHING TO RECORD.
+  //
+  // ⚠️ THE TWO FACTS ARE SEPARABLE, AND SEPARATING THEM IS THE WHOLE ITEM.
+  // "A judge call was made" and "the LLM produced a judgement" are different
+  // claims. We record the first and decline the second. Ruling 82 forbids
+  // fabricating a judgement to make the meter tick — so nothing here builds a
+  // parseable `MdmJudgement`, and `llmJudged: false` stays TRUE downstream.
+  //
+  // ⚠️ WHY THIS SITE AND NOT THE SHARED SEAM. Every other mocked Anthropic
+  // path gets its meter free from `anthropic.ts`. This file builds its own
+  // client (see the header: `CompleteTextArgs.system` is typed `string` and
+  // cache_control needs content blocks), so it is the ONE path that has to
+  // mark its own row. It reads `MOCK_FIXTURE_USAGE` rather than its own
+  // literal so the two mock meters cannot drift apart.
+  //
+  // ⚠️ NO `logAiCall` HERE, AND NOT BY OMISSION. `ai_calls` is a
+  // REAL-VENDOR-CALLS-ONLY table (ruling 66) and `log.ts` already enforces
+  // that centrally — `logAiCall` returns early under the flag. Calling it
+  // would be a no-op; not calling it is the honest shape.
+  //
+  // ⚠️ `unitsSource: 'mock'` IS THE ONLY DISCRIMINATOR, DELIBERATELY. Ruling
+  // 66 is "ONE discriminator on ONE table" — a `mocked: true` metadata key
+  // would be a second one that every rollup would have to learn about. The
+  // writer zeroes the money columns and NULLs `requestId` off this marker
+  // alone; see `logApiUsage`.
+  //
+  // ⚠️ AND THE GUARD STAYS ABOVE `args.soap.trim()`. `gate-mock-ai-honored`
+  // asserts that POSITION — a flag read below the prompt-building line is not
+  // a short-circuit, because the request would already exist. Metering does
+  // not need the prompt, so nothing here reaches for it.
   const purpose = 'judge' as const;
   const aiLogContext = {
     practiceId: args.practiceId,
@@ -404,6 +443,34 @@ async function callClaudeMdm(args: JudgeMdmArgs): Promise<MdmJudgement | null> {
     userId: args.userId ?? null,
     purpose,
   };
+
+  if (process.env.MOCK_AI_CALLS === 'true') {
+    logApiUsage(
+      buildAnthropicUsage(
+        {
+          unitsSource: 'mock',
+          userId: aiLogContext.userId,
+          practiceId: aiLogContext.practiceId,
+          visitId: aiLogContext.visitId,
+          // Never minted. `requestId IS NOT NULL ⇒ unitsSource = 'vendor'`
+          // (ruling 72a) — and because `logApiUsage` is fire-and-forget, a
+          // violation would be SWALLOWED and the stage would silently return
+          // to zero events with every line here looking correct.
+          requestId: null,
+          // No `latencyMs`, no `cacheControl` — neither happened. The real
+          // path records both because both are observations there.
+          metadata: { purpose },
+        },
+        MOCK_FIXTURE_USAGE.input_tokens,
+        MOCK_FIXTURE_USAGE.output_tokens,
+        MODEL,
+        purpose,
+      ),
+    );
+    return null;
+  }
+
+  const userPrompt = args.soap.trim();
 
   // Attempt 1 — standard prompt.
   let attempt: 'first' | 'retry' = 'first';

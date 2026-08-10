@@ -5097,3 +5097,147 @@ reads *"nothing but the image ids"* — which would have been true, and would ha
 proved nothing about this change, because the behaviour it alters is not
 reachable from any production code path. The next B-lane deploy carries it.
 **`main` is ahead of production by this commit, deliberately and knowingly.**
+
+---
+
+## ✅ B4 STEP 3 — the judge stage can be counted, and the meter still refuses to invent a judgement — 2026-08-10
+
+**Session 07.** `judge` was the last enumerated stage that could not be counted
+on a mocked run. It is now counted. Ruling **83** (PROVISIONAL) records the
+decision; this section records the work and what it does not claim.
+
+### The finding, and why step 2 deliberately did not fix it
+
+`callClaudeMdm` returned `null` under `MOCK_AI_CALLS` **before any meter ran**,
+so a mocked QA run emitted **zero** `api_usage_events` rows for `judge`, and
+B4's gate — *"one full QA pipeline run produces one event per stage"* — was
+unsatisfiable for it **by construction**.
+
+    ZERO USAGE EVENTS LOOKS EXACTLY LIKE A WORKING METER THAT FOUND
+    NOTHING TO RECORD.
+
+That is the same sentence steps 1 and 2 were written under. ⚠️ **But the fix is
+NOT the same, which is precisely why ruling 82 refused to extend itself here.**
+Every other mocked Anthropic path meters because `anthropic.ts` hands back a
+fixture `Message` and the real pipeline runs over it. Doing that here means
+producing a parseable `MdmJudgement` — and `judgeMdm` would then report
+**`llmJudged: true` for a judgement no LLM produced.**
+
+**So the two claims were separated.** *"A judge call was made"* and *"the LLM
+produced a judgement"* are different facts, and only the first is metered:
+
+| | before | after |
+|---|---|---|
+| `api_usage_events` row under mock | **none** | **one**, `operation='judge'`, `unitsSource='mock'`, `requestId=null`, money zeroed |
+| `ai_calls` row under mock | none | none (unchanged — `log.ts` suppresses centrally) |
+| return value | `null` | `null` |
+| `llmJudged` downstream | `false` | `false` |
+| a `judge` fixture in `mock.ts` | none | **still none** |
+
+Nothing outside the meter changed. The deterministic fallback still runs and
+still produces the same level from the same input.
+
+### What landed
+
+- **`llm-mdm.ts`** — the mock branch builds the log context, emits ONE usage
+  row, and returns `null`. It stays **above `args.soap.trim()`**, because
+  `gate-mock-ai-honored` asserts that POSITION: a flag read below the
+  prompt-building line is not a short-circuit, the request would already exist.
+- **`mock.ts`** — `MOCK_FIXTURE_USAGE` extracted as a shared constant;
+  `buildMockMessage` now spreads it instead of carrying its own literal.
+- **`index.ts`** — `isMockEnabled` and `MOCK_FIXTURE_USAGE` exported, for the
+  one production path that cannot inherit `anthropic.ts`'s meter.
+- **`gate-b4-judge-meters.test.ts`** — 7 arms, mutation-proved below.
+- **`gate-b1b-no-fabricated-request-id.test.ts`** — census total 10 → 11.
+
+### ⚠️ THE `gate-b1b` CENSUS CAUGHT THIS ITEM UNPROMPTED — SECOND TIME
+
+The bucket-sum arm went red on `expected 11 to be 10` without anyone pointing
+it at this change. **`withoutId` did NOT move**, correctly: the new site passes
+`requestId: null` **explicitly**, which keeps it in the `withId` bucket and out
+of `NO_ID_DECLARED`. *"Passes no id"* and *"passes null on purpose"* are
+different facts and the two buckets exist to keep them apart.
+
+It is the second item that gate has reported without being written for it (B2
+was the first). **It should not be softened.**
+
+### Mutation proof — five, each naming its victim first
+
+Every file the proof touched was copied to scratch **before the first
+mutation** and restored from those copies, never from git — the working tree
+held uncommitted work, and `git checkout --` would have eaten it.
+
+| # | mutation | predicted victim | observed |
+|---|---|---|---|
+| M1 | delete the `logApiUsage` call | EMITS, ONE-SOURCE, COUNTS | **3 red**, the four provenance/absence arms stayed green |
+| M2 | `unitsSource: 'mock'` → `'vendor'` | MARKED | **red** — `expected 'vendor' to be 'mock'` |
+| M3 | return a fabricated `MdmJudgement` | HONEST | **red** — `llmJudged is true under mock — a judgement was fabricated` |
+| M4 | `buildMockMessage` back to its own literal | ONE-SOURCE | **red** — the two mock meters can now drift |
+| M5 | make a cache HIT emit a row | CACHED | **red** — `a cache hit emitted a usage event — that meters a call nobody made` |
+
+**M3 is the one that matters.** It is the forbidden fix — the one ruling 82
+named — and the gate refuses it by name.
+
+Restores verified byte-identical with `diff`, not assumed.
+
+### ⚠️ THE GATE'S OWN NON-VACUITY ARM MADE A LIVE VENDOR CALL
+
+Found by the full suite, not by the arm's author. The first draft proved
+non-vacuity by deleting `MOCK_AI_CALLS` and calling `judgeMdm` with the dummy
+`ANTHROPIC_API_KEY` still set — so the flag-OFF branch **built a real client and
+issued a real HTTPS request to api.anthropic.com**, twice (the retry), against a
+30-second timeout.
+
+It passed in isolation and **failed intermittently under full-suite load**,
+which is the only reason it was caught. ⚠️ **That is this item's own defect
+reintroduced inside its own gate** — a network round-trip wearing a unit test's
+clothes, in the file whose subject is "a code path that reaches a vendor from a
+stack that promises it cannot".
+
+Fixed by removing the credential too, so `getAnthropicClient()` throws **before
+any socket opens**. The two-condition doctrine is not only for production code:
+the flag is one condition, the credential is the other, and a test that keeps
+the credential is relying on the flag alone.
+
+Full suite re-run twice after the fix: **3320 passed, 4 skipped**, stable.
+
+### ⚠️ FOUND ON THE WAY PAST — A JUDGEMENT CACHE EXISTS, AND RULING 69 READS AS THOUGH IT DOES NOT
+
+`llm-mdm.ts` has carried a **Redis judgement cache** since Phase 5.2 —
+`em_mdm_cache:`, SHA-256 of the normalised SOAP, **7-day TTL**, with a 20%
+drift bypass. Ruling 69 says, in as many words, *"NO judgement cache ships in
+B0 (proposal scope-creep); if ever wanted it arrives as its own ruled item."*
+
+**Both are true and they are about different things** — 69 declined a *new*
+cache proposed in B0's design; the existing one predates it. But a reader
+greping `RULINGS.md` for "cache" finds a sentence that reads as *there is no
+judgement cache*, and there is one, in production, today.
+
+**Not silently reconciled.** What 69 got exactly right is the metering answer,
+and the shipped cache already obeys it: a hit returns before `callClaudeMdm`,
+so no vendor call, no cost, **no usage event**. That is now asserted (arm
+CACHED) rather than left to be rediscovered.
+
+⚠️ **It cannot confound a mocked QA run.** `writeCache` is only reached when the
+LLM returns a judgement, and under mock it never does — so the cache is
+**always cold under `MOCK_AI_CALLS`**, and the per-stage count is unaffected.
+Checked, not assumed; it was the first thing that could have made this item's
+numbers unreproducible.
+
+**Owed to B5/B9, not to this item:** a rollup that counts `judge` calls against
+a doctor's bill has to decide what a 7-day cache means for *"calls made this
+month"*. Flagged, not answered.
+
+### ⛔ WHAT THIS DOES **NOT** CLAIM
+
+- **It does not close B4.** The per-stage count over a full QA pipeline run is
+  still not run. This removes the LAST *construction* blocker; the gate itself
+  is B4's closing step.
+- **It proves nothing about production.** Production's judge path already
+  metered — `MOCK_AI_CALLS=false` in both containers, so the new branch is
+  unreachable there. Everything this item changes lives on the QA/CI path.
+- **It does not touch money.** Mock rows carry zero cost columns, zeroed by the
+  writer, not by this call site.
+- **It does not resolve the `withTimeout` under-count** recorded in ruling 78 —
+  a timed-out judge call may be billed by Anthropic while its tokens never
+  reach this process. Structural, and only an invoice can size it.
