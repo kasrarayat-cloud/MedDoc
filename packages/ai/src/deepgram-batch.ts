@@ -193,13 +193,32 @@ export async function deepgramBatchTranscribe(
 async function deepgramBatchTranscribeOnce(
   args: DeepgramBatchArgs
 ): Promise<DeepgramBatchResult> {
-  // T-M10: MOCK_AI_CALLS short-circuit. See packages/ai/src/mock.ts.
-  if (isMockEnabled()) {
-    return mockDeepgramBatch();
-  }
+  // ── B4 — THE MOCK BOUNDARY MOVES BELOW THE METER. Mirrors B0-a's treatment
+  // of `anthropic.ts`, for the same reason and with the same shape.
+  //
+  // This function used to `return mockDeepgramBatch()` RIGHT HERE — above the
+  // `logApiUsage` at the bottom. So under `MOCK_AI_CALLS` the audio stages
+  // (L1 / L1b) produced NO usage row at all, and B4's gate — *"one full QA
+  // pipeline run produces one event per stage"* — could never see them. The
+  // audio path is unexercised in production (every prod visit is `text_notes`),
+  // so QA is the ONLY place it can be proven, and QA is exactly where the meter
+  // was blind.
+  //
+  // The fixture now supplies the RESPONSE, and every line below — duration
+  // extraction, `logAiCall`, the meter — runs for real, on the same code
+  // production runs. That identity is the whole point: a gate that exercises a
+  // separate mock-only metering path proves something about the mock.
+  //
+  // `unitsSource: 'mock'` is what distinguishes the row (ruling 66), and
+  // `logAiCall` suppresses itself under mock (log.ts:66), so `ai_calls` stays
+  // REAL-VENDOR-CALLS-ONLY exactly as that ruling requires.
+  const mocked = isMockEnabled();
 
+  // Read, but only ENFORCED off the mock path — a mocked run must not depend on
+  // a vendor credential being present. (On QA one is set, as a dummy; the point
+  // is that the code does not require it.)
   const apiKey = process.env.DEEPGRAM_API_KEY;
-  if (!apiKey) {
+  if (!mocked && !apiKey) {
     throw new Error('DEEPGRAM_API_KEY is not set.');
   }
 
@@ -269,25 +288,43 @@ async function deepgramBatchTranscribeOnce(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
+  // ── B4 — the fixture wears an HTTP RESPONSE's shape, deliberately.
+  //
+  // Handing the mock back as a `Response` means `res.ok`, `res.json()`, the
+  // duration extraction, `readDeepgramRequestId` and the meter below are the
+  // SAME LINES on both paths — not a parallel mock-only branch that a gate
+  // could pass while production's real branch stayed broken. It costs one
+  // stringify/parse round trip per mocked call and buys code identity.
+  //
+  // `??` short-circuits, so `fetch` is never invoked when this is non-null.
+  const mockRes = mocked
+    ? new Response(JSON.stringify(mockDeepgramBatch().raw), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    : null;
+
   let res: Response;
   try {
     // Node 22's fetch accepts Buffer and ReadableStream at runtime.
     // TS 5.6 narrowed BlobPart/BodyInit; cast to BodyInit — Node does
     // the right thing at runtime. For the streaming path we pass
     // `duplex: 'half'` (required by Node fetch when body is a stream).
-    res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Token ${apiKey}`,
-        'Content-Type': args.mimeType,
-        'Content-Length': String(sizeBytes),
-      },
-      body,
-      signal: controller.signal,
-      ...(isStreamed
-        ? ({ duplex: 'half' } as { duplex: 'half' })
-        : {}),
-    });
+    res =
+      mockRes ??
+      (await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Token ${apiKey}`,
+          'Content-Type': args.mimeType,
+          'Content-Length': String(sizeBytes),
+        },
+        body,
+        signal: controller.signal,
+        ...(isStreamed
+          ? ({ duplex: 'half' } as { duplex: 'half' })
+          : {}),
+      }));
   } catch (err) {
     clearTimeout(timer);
     const latencyMs = Date.now() - started;
@@ -425,7 +462,21 @@ async function deepgramBatchTranscribeOnce(
   // `transcribe_visits.transcriptRaw` (jsonb). So the id has been stored this
   // entire time in a PHI-bearing column nobody can bill from. Reading it into
   // a queryable column is B1-a; getting it OUT of `transcriptRaw` is not.
-  const vendorRequestId = readDeepgramRequestId(raw);
+  // ⚠️ B4 — AND UNDER MOCK IT IS NOT READ AT ALL. THIS IS THE SHARP EDGE.
+  //
+  // `MOCK_DEEPGRAM_BATCH.metadata.request_id` is `'mock-deepgram-request'` —
+  // the fixture DOES supply an id. Passing it through would build a row with
+  // `unitsSource='mock'` AND a non-null `requestId`, which violates
+  // `api_usage_events_request_id_requires_vendor` (B1-b, ruling 72a: *only
+  // vendor rows may ever carry an id*). And because `logApiUsage` is
+  // fire-and-forget, that violation would not throw anywhere a caller can see
+  // it — every mocked Deepgram row would be SILENTLY DROPPED, and the QA gate
+  // this whole change exists to enable would report the audio stage missing
+  // while the code looked correct.
+  //
+  // The fixture keeps its id ON PURPOSE. It is the negative control: the mock
+  // offers an id and the code must refuse it. The gate asserts exactly that.
+  const vendorRequestId = mocked ? null : readDeepgramRequestId(raw);
 
   logAiCall({
     ...args,
@@ -441,8 +492,10 @@ async function deepgramBatchTranscribeOnce(
   logApiUsage(
     buildDeepgramUsage(
       {
-        // B0: a REAL vendor call — see UnitsSource.
-        unitsSource: 'vendor',
+        // B0 / B4: `vendor` only when a vendor was actually called. Under mock
+        // the units come from the fixture, and the marker says so — the same
+        // discriminator `anthropic.ts` uses at :143/:574/:756.
+        unitsSource: mocked ? 'mock' : 'vendor',
         userId: args.userId ?? null,
         practiceId: args.practiceId,
         visitId: args.visitId ?? null,
@@ -452,7 +505,15 @@ async function deepgramBatchTranscribeOnce(
         requestId: vendorRequestId,
         metadata: { purpose: args.purpose, latencyMs, model },
       },
-      durationSec
+      durationSec,
+      // B4 — the model that was actually requested, not the literal
+      // `nova-3-medical`. `model` is `args.model ?? DEEPGRAM_MODEL ?? default`,
+      // so an env override or a per-call override now reaches the meter.
+      model,
+      // B4 — and the operation is this call's PURPOSE, which is what every
+      // Anthropic row already carries. It replaces `transcribe_realtime`, a
+      // label for a streaming path that does not exist on this stack.
+      args.purpose
     )
   );
 

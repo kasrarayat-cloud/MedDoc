@@ -574,14 +574,44 @@ const MOCK_EMBED_FIXTURES: Partial<Record<ModelCallPurpose, EmbedTextResult>> =
     },
   };
 
-export function mockEmbed(args: {
-  purpose: ModelCallPurpose;
-}): EmbedTextResult {
-  const fixture = MOCK_EMBED_FIXTURES[args.purpose];
+/**
+ * The subset of an OpenAI embeddings response that `embedText` actually reads.
+ * Structural on purpose — it is not the SDK type, and it must not be: this
+ * fixture has to be constructible without the SDK, while still satisfying
+ * every property the real code path touches.
+ */
+export interface MockEmbedResponse {
+  data: { embedding: number[] }[];
+  usage: { total_tokens: number };
+}
+
+/**
+ * ⚠️ B4 — THIS RETURNS A VENDOR-SHAPED **RESPONSE**, NOT A FINISHED RESULT.
+ *
+ * It replaced `mockEmbed()`, which returned the finished `EmbedTextResult` and
+ * was therefore consumed ABOVE `embed.ts`'s two `logApiUsage` calls — so a
+ * mocked run emitted no usage row for `tm_embed` at all, and the repository's
+ * own mock-boundary gate carried that fact as a written exemption.
+ *
+ * Returning the response instead lets the dimension check, `readOpenAIRequestId`
+ * and the meter all run for real, which is the B0-a shape.
+ *
+ * ⚠️ It carries NO `_request_id`, and that is the correct fixture. The reader
+ * returns `null` for a missing one, `null` is what a mock row must store
+ * (ruling 72a), and a fabricated id here would be silently rejected by
+ * `api_usage_events_request_id_requires_vendor`.
+ */
+export function mockEmbedResponse(
+  purpose: ModelCallPurpose
+): MockEmbedResponse {
+  const fixture = MOCK_EMBED_FIXTURES[purpose];
   if (fixture === undefined) {
     throw new Error(
-      `[MOCK_AI_CALLS] no embedText() fixture for purpose=${args.purpose}.`
+      `[MOCK_AI_CALLS] no embedText() fixture for purpose=${purpose}.`
     );
   }
-  return fixture;
+  return {
+    data: [{ embedding: fixture.embedding }],
+    usage: { total_tokens: fixture.inputTokens },
+  };
 }

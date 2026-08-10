@@ -18,7 +18,7 @@ import OpenAI from 'openai';
 
 import { logAiCall } from './log';
 import { readOpenAIRequestId } from './vendor-request-id';
-import { isMockEnabled, mockEmbed } from './mock';
+import { isMockEnabled, mockEmbedResponse } from './mock';
 import { openaiEmbedSmallCostCents } from './pricing';
 import { hashPrompt } from './prompt-hash';
 import type { AiLogContext } from './types';
@@ -66,14 +66,20 @@ export interface EmbedTextResult {
  *  Caller inserts the vector into doctor_edit_patterns.embedding via
  *  raw SQL (Prisma's Unsupported() field doesn't round-trip natively). */
 export async function embedText(args: EmbedTextArgs): Promise<EmbedTextResult> {
-  // T-M10 contract: MOCK_AI_CALLS short-circuits. Skip provider call,
-  // skip logAiCall, return fixture. Fixture length is EMBED_DIMENSION
-  // so the raw SQL INSERT doesn't blow up on a vector-dimension check.
-  if (isMockEnabled()) {
-    return mockEmbed({ purpose: args.purpose });
-  }
-
-  const client = getClient();
+  // ── B4 — THE MOCK BOUNDARY MOVES BELOW THE METER, as it did for
+  // `anthropic.ts` in B0-a and for `deepgram-batch.ts` in this same change.
+  //
+  // This used to `return mockEmbed({ purpose })` right here — above the two
+  // `logApiUsage` calls below — so a mocked run emitted NO usage row for
+  // `tm_embed`. That was not a suspicion: `gate-mock-suite-stubs-the-db.test.ts`
+  // carried it as a written EXEMPTION ("the meter is never reached"), which is
+  // this defect recorded accurately and lived with.
+  //
+  // Now the fixture supplies the RESPONSE and the dimension check, the vendor-id
+  // read and the meter all run for real. `logAiCall` still suppresses itself
+  // under mock (log.ts:66), so `ai_calls` stays real-vendor-only per ruling 66;
+  // `unitsSource: 'mock'` is what marks the usage row.
+  const mocked = isMockEnabled();
   const model = embedModel();
   // Hash the embed input the same way prompt hashing does for other
   // AiCall rows — keeps the promptHash column meaningful across call
@@ -82,14 +88,18 @@ export async function embedText(args: EmbedTextArgs): Promise<EmbedTextResult> {
   const started = Date.now();
 
   try {
-    const response = await client.embeddings.create({
-      model,
-      input: args.text,
-      // Explicit dimensions — safe when the model supports it (small
-      // defaults to 1536 anyway, but pinning avoids surprises if the
-      // default ever changes upstream).
-      dimensions: EMBED_DIMENSION,
-    });
+    // `getClient()` throws without OPENAI_API_KEY, so it stays INSIDE the
+    // non-mock arm: a mocked run must not require a vendor credential.
+    const response = mocked
+      ? mockEmbedResponse(args.purpose)
+      : await getClient().embeddings.create({
+          model,
+          input: args.text,
+          // Explicit dimensions — safe when the model supports it (small
+          // defaults to 1536 anyway, but pinning avoids surprises if the
+          // default ever changes upstream).
+          dimensions: EMBED_DIMENSION,
+        });
 
     const latencyMs = Date.now() - started;
     const inputTokens = response.usage.total_tokens;
@@ -123,7 +133,8 @@ export async function embedText(args: EmbedTextArgs): Promise<EmbedTextResult> {
       logApiUsage(
         buildOpenAIEmbedUsage(
           {
-            unitsSource: 'vendor',
+            // B4: `vendor` only when a vendor was actually called.
+            unitsSource: mocked ? 'mock' : 'vendor',
             userId: args.userId ?? null,
             practiceId: args.practiceId,
             visitId: args.visitId ?? null,
@@ -162,8 +173,8 @@ export async function embedText(args: EmbedTextArgs): Promise<EmbedTextResult> {
     logApiUsage(
       buildOpenAIEmbedUsage(
         {
-          // B0: a REAL vendor call — see UnitsSource.
-          unitsSource: 'vendor',
+          // B0 / B4: a real vendor call says `vendor`; a mocked one says so.
+          unitsSource: mocked ? 'mock' : 'vendor',
           userId: args.userId ?? null,
           practiceId: args.practiceId,
           visitId: args.visitId ?? null,
