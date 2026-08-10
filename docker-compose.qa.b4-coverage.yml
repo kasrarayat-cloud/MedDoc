@@ -1,0 +1,49 @@
+# ============================================================================
+# B4's CLOSING GATE — the overlay that makes the polish stages REACHABLE.
+# ----------------------------------------------------------------------------
+# Use with the QA stack, never alone:
+#
+#   QA="docker compose -f docker-compose.qa.yml -f docker-compose.qa.b4-coverage.yml"
+#   $QA up -d --force-recreate --wait transcribe-md transcribe-md-worker
+#   docker compose -f docker-compose.qa.yml run --rm \
+#     -e REDIS_URL=redis://redis:6379 \
+#     -e MINIO_ENDPOINT=minio:9000 -e MINIO_ACCESS_KEY=qa_minio \
+#     -e MINIO_SECRET_KEY=qa_minio_pw -e MINIO_USE_SSL=false \
+#     -e TRANSCRIBE_MD_MINIO_BUCKET=transcribe-md-audio \
+#     -e MOCK_AI_CALLS=true -e OPENAI_API_KEY=mock-key-qa \
+#     -e ANTHROPIC_API_KEY=mock-key-qa -e DEEPGRAM_API_KEY=mock-key-qa \
+#     --entrypoint sh db-migrate \
+#     -c 'cd /app/apps/transcribe-md && npx tsx scripts/qa/b4-stage-coverage.ts'
+#
+#   # restore the stack's normal posture afterwards
+#   docker compose -f docker-compose.qa.yml up -d --force-recreate --wait \
+#     transcribe-md transcribe-md-worker
+#
+# ⚠️ WHY AN OVERLAY RATHER THAN AN ENV PREFIX. `MOCK_CRITIQUE_ISSUES=true docker
+# compose …` is a shell incantation that lives in somebody's terminal history
+# and nowhere else; this file is the same instruction as a reviewable artifact.
+# It is also the only form the FOUNDATION loop can run — an inline `VAR=x cmd`
+# prefix is not in its allowlist, and a procedure the unattended loop cannot
+# execute is a procedure that will not be re-run.
+#
+# ⚠️ AND IT IS DELIBERATELY NOT THE DEFAULT. With it on, L5 returns one MINOR
+# issue, which is what makes L6 call its model instead of taking the passthrough
+# at `06-polish.ts:186`. Every other suite depends on the empty critique — a
+# variant that leaked into the default would change what several of them see
+# while every one still passed, right up until one didn't.
+#
+# Note what is NOT here: `TRANSCRIBE_MD_EVIDENCE_ANCHORS`. That one is set
+# unconditionally in `docker-compose.qa.yml` because production sets it, and QA
+# is supposed to be production-shaped. It was missing for as long as this stack
+# has existed, which is why `tm_anchor_entailment` had zero rows on QA and 231
+# in production.
+name: meddoc-qa
+
+services:
+  transcribe-md:
+    environment:
+      MOCK_CRITIQUE_ISSUES: "true"
+
+  transcribe-md-worker:
+    environment:
+      MOCK_CRITIQUE_ISSUES: "true"

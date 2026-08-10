@@ -147,7 +147,11 @@ export async function embedText(args: EmbedTextArgs): Promise<EmbedTextResult> {
             },
           },
           inputTokens,
-          model
+          model,
+          // B4's closing step — the operation IS the purpose. Hardcoding
+          // `'embed'` here filed a `tm_embed` call under a label the stage list
+          // could never match.
+          args.purpose
         )
       );
       throw new Error(
@@ -188,7 +192,9 @@ export async function embedText(args: EmbedTextArgs): Promise<EmbedTextResult> {
           metadata: { purpose: args.purpose, latencyMs },
         },
         inputTokens,
-        model
+        model,
+        // B4's closing step — see the sibling call above.
+        args.purpose
       )
     );
 
