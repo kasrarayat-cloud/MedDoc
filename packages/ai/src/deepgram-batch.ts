@@ -462,21 +462,28 @@ async function deepgramBatchTranscribeOnce(
   // `transcribe_visits.transcriptRaw` (jsonb). So the id has been stored this
   // entire time in a PHI-bearing column nobody can bill from. Reading it into
   // a queryable column is B1-a; getting it OUT of `transcriptRaw` is not.
-  // ⚠️ B4 — AND UNDER MOCK IT IS NOT READ AT ALL. THIS IS THE SHARP EDGE.
+  // ⚠️ B4 — READ UNCONDITIONALLY, AND THE MOCK CASE IS **NOT** GUARDED HERE.
+  // That is deliberate, and it is a correction of this change's own first draft.
   //
-  // `MOCK_DEEPGRAM_BATCH.metadata.request_id` is `'mock-deepgram-request'` —
-  // the fixture DOES supply an id. Passing it through would build a row with
-  // `unitsSource='mock'` AND a non-null `requestId`, which violates
-  // `api_usage_events_request_id_requires_vendor` (B1-b, ruling 72a: *only
-  // vendor rows may ever carry an id*). And because `logApiUsage` is
-  // fire-and-forget, that violation would not throw anywhere a caller can see
-  // it — every mocked Deepgram row would be SILENTLY DROPPED, and the QA gate
-  // this whole change exists to enable would report the audio stage missing
-  // while the code looked correct.
+  // `MOCK_DEEPGRAM_BATCH.metadata.request_id` is `'mock-deepgram-request'`, so
+  // under mock this line really does produce an id — and a row carrying an id
+  // with `unitsSource='mock'` violates `api_usage_events_request_id_requires_
+  // vendor` (B1-b, ruling 72a). Since `logApiUsage` is fire-and-forget, that
+  // violation would be SWALLOWED and the row would simply never exist.
   //
-  // The fixture keeps its id ON PURPOSE. It is the negative control: the mock
-  // offers an id and the code must refuse it. The gate asserts exactly that.
-  const vendorRequestId = mocked ? null : readDeepgramRequestId(raw);
+  // The first draft added `mocked ? null : …` right here. **A mutation proof
+  // showed the gate stayed GREEN with that guard removed** — because
+  // `logApiUsage` ALREADY normalises every mock row to `requestId: null`
+  // (`api-usage.ts:168-171`), and B1-b put it on the WRITER for exactly the
+  // reason that applies here: *"five builders exist today and a sixth will not
+  // remember."* A per-call-site copy of a writer-side invariant is the
+  // hand-kept list that rule exists to prevent, and it made this file look like
+  // the thing keeping the row legal when it was not.
+  //
+  // So the guard is gone and the writer keeps the obligation. What the gate
+  // asserts is the END-TO-END property, which is the one worth protecting: an
+  // id IS available upstream and the row that lands still carries NULL.
+  const vendorRequestId = readDeepgramRequestId(raw);
 
   logAiCall({
     ...args,

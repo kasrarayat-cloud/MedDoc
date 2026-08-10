@@ -129,10 +129,27 @@ describe('B4 — the mock boundary sits BELOW the meter for every vendor', () =>
     expect(aiCallWrites).toHaveLength(0);
   });
 
-  it('REFUSES — the mock row carries requestId NULL, though the fixture supplies one', async () => {
+  // ⚠️ THIS ARM IS TITLED FOR WHAT IT MEASURES, AFTER A MUTATION PROVED THE
+  // FIRST TITLE WRONG.
+  //
+  // It was called "the CALL SITE refuses the fixture's id", and
+  // `deepgram-batch.ts` had a `mocked ? null : …` guard to match. Removing that
+  // guard left this arm GREEN — because `logApiUsage` already normalises every
+  // mock row to `requestId: null` (api-usage.ts:168-171, B1-b step 2). The arm
+  // was never watching the call site; it was watching the writer, and its name
+  // was the only thing saying otherwise.
+  //
+  // The redundant guard has been removed and the title now names the real
+  // subject: the END-TO-END path. An id IS available upstream, and the row that
+  // lands still carries NULL. That is worth a gate — it is what keeps mocked
+  // Deepgram rows legal, and therefore what keeps a mocked QA run able to meter
+  // the audio stage at all. Its live mutation is on the WRITER's normalisation,
+  // not on this file.
+  it('NORMALISED END-TO-END — an id is available upstream and the row still lands NULL', async () => {
     // NEGATIVE CONTROL FIRST: prove the fixture really does offer an id, so a
     // future fixture edit that removes it turns this arm RED rather than
-    // quietly making it vacuous.
+    // quietly making it vacuous. Without this, "requestId is null" would also
+    // pass on a fixture that never had one — which proves nothing.
     const { mockDeepgramBatch } = await import('../mock');
     expect(mockDeepgramBatch().raw.metadata?.request_id).toBe(
       'mock-deepgram-request'
