@@ -4759,3 +4759,42 @@ commit-first as the sanctioned form for this session class.
 - **The `operation` label split is now B4 step 2's problem** — see ruling 81: the
   per-stage join must accept BOTH `transcribe_realtime` (3 legacy prod rows) and
   `tm_transcribe` (everything after this change).
+
+### 📐 B4 STEP 2 RECONNAISSANCE — measured 2026-08-10, READ-ONLY, before any code
+
+The stage universe, enumerated from the sources rather than from a `worker.ts`
+call-site scan (which DISCOVERY §C.1 warns misses the nested layers):
+
+| # | purpose | file | notes |
+|---|---|---|---|
+| 1 | `tm_transcribe` | `01-transcribe.ts:128` **and** `01b-transcribe-dictation.ts:109` | **two files, one label** — audio_upload vs voice_dictation, mutually exclusive per visit |
+| 2 | `tm_speaker_roles` | `02-speaker-roles.ts:234` | audio_upload only |
+| 3 | `tm_entities` | `03-extract-entities.ts:638` | |
+| 4 | `tm_soap_draft` | `04-generate-soap.ts:241` | |
+| 5 | `tm_anchor_entailment` | `04b-anchor-verify.ts:965` | **nested in L4**, k=3 — see below |
+| 6 | `tm_critique` | `05-self-critique.ts:214` | |
+| 7 | `tm_polish` | `06-polish.ts:293` | |
+| 8 | `tm_polish_gate` | `06b-polish-fidelity-gate.ts:237` | **nested in L6** |
+| 9–13 | `tm_icd_coding` · `tm_cpt_coding` · `tm_rx_drafting` · `tm_referrals` · `tm_patient_summary` | `07a`–`07e` | parallel fan-out |
+| 14 | `judge` | `lib/em-coding/llm-mdm.ts:400` | bypasses `modelClient` entirely |
+| 15 | `tm_embed` | sign-time hook, not a worker layer | **dead in prod — see the finding above** |
+
+⚠️ **THE EXPECTED COUNT FOR `tm_anchor_entailment` IS NOT "3 PER VISIT", AND
+RULING 68's WORDING COULD BE READ THAT WAY.** `04b-anchor-verify.ts:1023-1028`
+fans out over `ENSEMBLE_LENSES` — 3 lenses, 3 calls — **per INVOCATION of L4b**,
+not per visit. Production bears that out and refutes the naive reading:
+
+    tm_anchor_entailment  231        tm_soap_draft  102
+
+3 × 102 would be **306**, not 231. **The mechanism for the difference is NOT
+established here** — it could be visits that skip L4b, a different invocation
+granularity, or both — and it must be derived from the code path before the gate
+asserts a number. **A gate that hardcodes `3 × visits` will be wrong**, and wrong
+in the direction that reads as a metering hole.
+
+⚠️ **`tm_speaker_roles` AND `tm_transcribe` ARE INPUT-MODE-DEPENDENT.** L2 runs
+only for `audio_upload`; L1 vs L1b is decided by input mode. So *"one event per
+stage"* is not a property of a visit — it is a property of **a visit of a given
+input mode**, and the gate needs the mode in its expected-count table. This is
+the same trap as the single-visit sample that lacked `tm_embed` (carried out of
+B1-b step 4): one visit never exercises the full stage set.
