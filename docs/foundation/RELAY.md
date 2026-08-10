@@ -5059,3 +5059,41 @@ shape is unchanged.
    *current* posture is consistent. But the history is there and any rollup over
    past months will pick it up. **Not adjudicated here** — flagged as an input
    to B5/B9, where a rollup first has to decide what it includes.
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `8307a1d696d812cf83d752e68850ba365c3c6f00`:**
+   · `CI` 31403803982 a1
+   · `e2e` 31403803965 a1
+   · `a11y-ci` 31403803913 a1
+   · `secrets-scan` 31403803941 a1
+
+All `a1` — no re-runs, nothing to explain. PR **#588**, merged from
+`feat/b4-step2-anchor-entailment-meters` (branch retired on merge). The PR head
+`1bd8801d` was also 4 of 4; the merge-commit citation above is the one that
+counts.
+
+### ⚠️ NOT DEPLOYED THIS SESSION — a decision, stated, with its evidence
+
+**This change is provably inert in production**, so it ships with the next
+deploy that has a reason of its own rather than earning one here.
+
+The deleted branch was `process.env.MOCK_AI_CALLS === 'true'`. Measured in the
+**running containers**, not in the compose file — the distinction that mattered
+on 2026-07-28, when the file read safe and the containers did not:
+
+```
+meddoc-pro-transcribe-md-1         MOCK_AI_CALLS=false
+meddoc-pro-transcribe-md-worker-1  MOCK_AI_CALLS=false
+```
+
+Explicitly `false`, not merely absent, in both. So the short-circuit never fired
+in production and its removal changes nothing there; `mock.ts` is reachable only
+under the same flag. **Everything this item changes lives on the QA/CI path.**
+
+⚠️ **This is a departure from the per-item deploy rhythm and is called out
+rather than left as an omission.** A §2.5 declaration for a code-only deploy
+reads *"nothing but the image ids"* — which would have been true, and would have
+proved nothing about this change, because the behaviour it alters is not
+reachable from any production code path. The next B-lane deploy carries it.
+**`main` is ahead of production by this commit, deliberately and knowingly.**
