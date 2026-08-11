@@ -152,6 +152,9 @@ batch=0
 # Marker-recovery budget for the WHOLE run, not per batch — a contract broken
 # repeatedly is a signal, and resetting it per batch would hide exactly that.
 recoveries_used=0
+# Sessions that finished with no morning report — a RECORD defect, reported in
+# the halt banner and read by the next session's STEP 0. Never a halt on its own.
+reports_missing=""
 
 while : ; do
   # ── STOP WINS THE RACE AT THE BATCH BOUNDARY TOO ─────────────────────────
@@ -241,6 +244,38 @@ for (( n=1; n<=batch_size; n++ )); do
   cat "$SESSION_OUT" >> "$LOG"
   echo "" >> "$LOG"
   echo "[loop] session $RUN exited rc=$rc at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$LOG"
+
+  # ── REPORT TRIPWIRE ────────────────────────────────────────────────────────
+  # ⚠️ A SESSION'S FINAL MESSAGE IS THE ONLY ONE `claude -p` EMITS. A session
+  # that writes its morning report and is then WOKEN AGAIN — by its own leftover
+  # watcher, say — answers the wake-up, and that short answer becomes the whole
+  # log. The work is fine, the marker is fine, the gates are green, and the
+  # night is simply not in the record.
+  #
+  # It has happened TWICE, identically, both from a leftover watcher of the
+  # session's own: batch 1 session 01 (2026-08-09, losing its SCRATCH LIST) and
+  # batch 2 session 02 (2026-08-10, after landing B4's closing step and its
+  # citation). 16 and 17 lines where their siblings run 43 to 82, each ending
+  # "the morning report above stands" — where "above" was a turn nobody kept.
+  # The first was spotted by the NEXT session and written down; nothing turned
+  # it into a check, so it recurred a day later. Hence this.
+  #
+  # This does NOT halt. A missing report is a record defect, not a reason to
+  # stop a run that is otherwise landing work. It is flagged HERE, in the halt
+  # banner, and read by the next session's STEP 0 — because an alarm nobody is
+  # obliged to read is how three red nights became background.
+  report_lines="$(grep -cvE '^[[:space:]]*$' "$SESSION_OUT" 2>/dev/null || echo 0)"
+  if ! grep -q 'MORNING REPORT' "$SESSION_OUT" 2>/dev/null; then
+    reports_missing="$reports_missing $RUN"
+    {
+      echo ""
+      echo "[loop] ⚠️ REPORT-MISSING — session $RUN produced no morning report"
+      echo "       ($report_lines non-empty lines; no 'MORNING REPORT' header)."
+      echo "       Its final message was the only one captured. If it was woken"
+      echo "       after reporting, the report is GONE — reconstruct from git log,"
+      echo "       RELAY.md and the PRs, and name it in the next report."
+    } | tee -a "$LOG"
+  fi
 
   if [ "$rc" -ne 0 ]; then
     halt_reason="SESSION ERROR — session $RUN exited rc=$rc"
@@ -355,6 +390,7 @@ FINAL="$(ls -1t "$LOG_DIR"/*.log 2>/dev/null | head -1)"
   echo "════════════════════════════════════════════════════════════════"
   echo "LOOP HALTED : $halt_reason"
   echo "at          : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  [ -n "$reports_missing" ] && echo "REPORT-MISSING:$reports_missing  ← these sessions' nights are NOT in the record"
   echo "commit      : $(git rev-parse --short HEAD 2>/dev/null)"
   echo "════════════════════════════════════════════════════════════════"
 } | tee -a "$FINAL"
