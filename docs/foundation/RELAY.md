@@ -6642,3 +6642,114 @@ fault is the correct response and matches how the ECONNRESET wave was handled.
 **What is missing is that nobody wrote down that it happened or why** — and a
 green `a2` with no note beside it is indistinguishable from re-run-and-hope.
 That is the gap this section closes, one session late.
+
+---
+
+## 🟩 B5 IS LIVE IN PRODUCTION — `50b02832`, 2026-08-11T09:09Z
+
+| | |
+|---|---|
+| deployed commit | `50b02832352e849fd4c46d61384ba332a8492a04` |
+| declaration | `docs/foundation/deploys/20260811-50b02832.md` — **written 08:25Z, 44 minutes BEFORE the deploy ran** |
+| deploy log | `docs/deploy-logs/deploy-20260811T090504Z.log` |
+| pre-deploy dump | `backups/pre_deploy_20260811T090504Z.sql.gz` (792 KB) |
+| rollback tag | **`:pre-b5-20260811`** — app `d29b852d8d9b` / worker `c18d9dbf1092` ⚠️ **cut LATE — see below** |
+| app image | `d29b852d8d9b` → **`5483ff331dd7`** |
+| worker image | `c18d9dbf1092` → **`7aabd4cc69c6`** |
+| migration | `20260811070000_b5_ledger_entries` applied; **96 → 97**, asserted by the deploy itself |
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `50b02832352e849fd4c46d61384ba332a8492a04`:**
+   · `CI` 31472938418 a1
+   · `e2e` 31472938365 a1
+   · `a11y-ci` 31472938459 a1
+   · `secrets-scan` 31472938517 a1
+
+All `a1` — no re-runs, nothing to explain. `e2e` passed first attempt in 41m30s.
+
+### THE DECLARATION, JUDGED — 28 of 28 ASSERTIONS, EVERY ONE AS DECLARED
+
+**What must change**
+
+| declared | measured | |
+|---|---|---|
+| `_prisma_migrations` 96 → 97 | **97** | ✓ |
+| …and the new row is `20260811070000_b5_ledger_entries` | that exact name, from the deploy log | ✓ |
+| `ledger_entries` comes into existence | present | ✓ |
+| …and is **EMPTY** | **0 rows** | ✓ |
+| exactly 4 triggers, all `tgenabled='O'` | **4** | ✓ |
+| exactly 5 named CHECK constraints | **5** | ✓ |
+| exactly 3 indexes | **3** | ✓ |
+| FK is **ON DELETE SET NULL** | `FOREIGN KEY ("practiceId") REFERENCES practices(id) ON UPDATE CASCADE ON DELETE SET NULL` | ✓ |
+| app image id moves | `d29b852d8d9b` → `5483ff331dd7` | ✓ |
+| worker image id moves | `c18d9dbf1092` → `7aabd4cc69c6` | ✓ |
+
+**What must NOT change** — the half a migration supplies an excuse for
+
+| declared | measured | |
+|---|---|---|
+| `transcribe_visits` 25 | 25 | ✓ |
+| … `signedAt IS NOT NULL` 17 | 17 | ✓ |
+| … `deletedAt IS NOT NULL` 0 | 0 | ✓ |
+| `transcribe_md_patients` 16 | 16 | ✓ |
+| **`api_usage_events` 1325** | **1325** | ✓ |
+| **`ai_calls` 1126** | **1126** | ✓ |
+| `users` 196 | 196 | ✓ |
+| `practices` 197 | 197 | ✓ |
+| `note_templates` 6 | 6 | ✓ |
+| `price_rates` 44 | 44 | ✓ |
+| `audit_logs` ≥ 10704 | 10704 | ✓ |
+| `marketing` image UNCHANGED | `e9568d07d057` | ✓ |
+| `gotenberg` image UNCHANGED | `2d05d22572ba` | ✓ |
+| co-tenants `307/404/200/200/410` | identical | ✓ |
+| `MOCK_AI_CALLS=false` — app | false | ✓ |
+| `MOCK_AI_CALLS=false` — worker | false | ✓ |
+| composite FK still correctly shaped | references BOTH columns on both sides | ✓ |
+| no OTHER table gains a trigger | **0** non-internal triggers on any table but `ledger_entries` | ✓ |
+
+`app /api/health` **200**. Both containers `Up … (healthy)`.
+
+⚠️ **THE CLINICAL COUNTS WERE ALSO TAKEN BETWEEN THE MIGRATION AND THE
+RECREATE**, not only at the end — 25 · 17 · 16 · 1325 · 1126 · 196 · 197,
+already byte-identical. So "the migration moved nothing" is measured
+**separately** from "the deploy moved nothing", and a movement caused by either
+one could not have hidden behind the other.
+
+### ⚠️ ONE DEVIATION FROM MY OWN DECLARATION, AND IT IS A PROCESS MISS, NOT A STATE MISS
+
+The declaration says **"Tag before recreating"**. I did not. `deploy-prod.sh`
+does **not** cut rollback tags — that is a manual step the session performs —
+and I read the previous session's tag table as evidence that it was automatic.
+It is not.
+
+**The tag was cut ~4 minutes AFTER the recreate**, and it is correct: both
+pre-deploy images were still present as **dangling** images
+(`d29b852d8d9b` 01:49:26, `c18d9dbf1092` 01:48:13), so
+`:pre-b5-20260811` points at exactly the ids the declaration's baseline recorded
+as running. Verified by id match against the baseline, not by assumption.
+
+⚠️ **BUT IT SURVIVED ON LUCK, AND THE LUCK IS NAMEABLE.** A dangling image is
+precisely what `docker image prune` deletes. For those four minutes the rollback
+path for this deploy did not exist, and any prune — including the one preflight
+Check 2 is designed to run automatically when the cache is large — would have
+destroyed it silently. The recovery would then have been
+`:pre-selfhostfonts-20260811`, one generation further back, which reverts the
+**fonts** work as well: a rollback strictly larger than the change it undoes.
+
+**The rule, so it is not re-derived:** *the rollback tag is cut against the
+RUNNING container ids BEFORE `deploy-prod.sh` is invoked, because the script
+does not do it and the images it would name become collectable the moment the
+new build takes `:latest`.*
+
+### WHAT IS LIVE, AND WHAT IS NOT
+
+**Live:** an empty, append-only, self-deriving `ledger_entries` with 4 triggers
+and 5 CHECKs, on production.
+
+**NOT live — and this is the whole point of B5 shipping this way:** any billing
+behaviour. Nothing reads or writes the table. `charge = cost × 3 / 2` and the
+prod-only writer are **B6**; top-ups **B7**; the fail-closed balance block
+**B8**. The deploy's own prediction — *"beyond the image ids and the new empty
+table, nothing about the running system's behaviour should differ at all"* —
+held on every one of the 18 must-not-change assertions.
