@@ -5965,3 +5965,98 @@ else. **That is the thing to mutation-prove**, not the presence of the fixture.
 
 **Not attempted here.** This session's item was the owed deploy; this is recon
 left deliberately as recon.
+
+---
+
+## ✅ B4's LAST STAGE IS CLOSED — THE ANCHORED DRAFT, AND ITS SPANS ARE DERIVED — 2026-08-11
+
+**Session 04, batch 2.** The closing step (ruling 86) named this and did not
+attempt it: *"an anchored `tm_soap_draft` variant on the same env-selected
+pattern — named, not attempted, because that fixture is read by many suites and
+needs its own blast-radius argument."* Session 03 measured that argument. This
+session built the variant.
+
+### THE DEFECT, RESTATED PRECISELY — A ZERO THAT WAS BOTH CORRECT AND USELESS
+
+`tm_anchor_entailment` needs two conditions and only one was ever fixable by a
+flag. `TRANSCRIBE_MD_EVIDENCE_ANCHORS=true` was fixed on QA by the closing step.
+The second is that L4's draft must actually CARRY anchors — and under mock it did
+not, so `deterministicStage` swept every line into the exempt bucket, `toEntail`
+was empty, and `entailmentStage` returned at `04b-anchor-verify.ts:999` before
+any model call.
+
+That zero is **correct** (ruling 82(d) — no work is not a suppressed call) and
+the stage's expectation is `{0,3}`, so the zero **also satisfies it**. The
+coverage run was therefore green on a stage it had never once observed working,
+which is exactly the condition ruling 85(a)'s UNPROVEN arm exists to name.
+
+### WHAT LANDED
+
+| | |
+|---|---|
+| flag | `MOCK_SOAP_ANCHORS=true`, **default OFF** — the `MOCK_CRITIQUE_ISSUES` / `MOCK_RX_WARNINGS` / `MOCK_TEMPLATE_PHI_FLAG` shape |
+| wiring | `docker-compose.qa.b4-coverage.yml`, both services — a committed overlay, not a shell env prefix the loop cannot run |
+| fixture | `MOCK_SOAP_TEXT_ANCHORED` + `MOCK_SOAP_TEXT_ANCHORED_STRIPPED` (`tm_polish`) |
+| derivation | `MOCK_TRANSCRIPT_UTTERANCES` — one exported constant read by `MOCK_DEEPGRAM_BATCH` **and** every anchor |
+| export | `ENSEMBLE_LENSES` from `04b-anchor-verify.ts` |
+| gate | `apps/transcribe-md/src/worker/layers/__tests__/gate-b4-anchored-draft-entails.test.ts`, 5 arms |
+
+⚠️ **THE SPANS ARE DERIVED, NOT COPIED, AND THAT IS THE LOAD-BEARING DECISION.**
+An anchor survives `deterministicStage` only if its span is a LITERAL substring
+of the normalized transcript. A hand-copied quote stops matching the moment
+somebody edits an utterance — and **every way this fixture can break degrades to
+a legal zero**: `anchor_not_in_transcript`, a digit the span cannot support, the
+flag not arriving. None of those is red anywhere; the stage simply returns to
+UNPROVEN, which is a signal nobody is obliged to read. So the two utterances are
+one constant and the drift is **unrepresentable rather than unlikely**.
+
+⚠️ **AND IT IS A DIFFERENT NOTE, NOT THE DEFAULT WITH ANCHORS BOLTED ON.**
+`MOCK_SOAP_TEXT` asserts `BP 120/80, HR 72`; the mock transcript contains no exam
+at all, so those digits are unanchorable **by construction**
+(`digits_unsupported`) — which is precisely what the verifier exists to catch.
+The anchored variant says only what its two utterances say and marks Objective
+`[not documented]`, which `isExemptLine` exempts. `tm_polish` returns the
+anchor-stripped SAME note under the flag, so L6's output equals its input and L6b
+is never handed a "polished" note sharing no text with the draft it polished.
+
+`ENSEMBLE_LENSES` is exported because **the `{0,3}` expectation's 3 IS that
+array's length.** A gate asserting a literal 3 would stay green if somebody added
+a fourth lens while the meter under-counted.
+
+### THE MUTATION PROOF — SAID FIRST, THEN MADE TO FAIL
+
+Backups taken to scratch **before** the first mutation and restored **from those
+copies, never from git** (AGENTS.md: `git checkout --` on a dirty tree deletes
+uncommitted work). The work was also committed first, so a restore error could
+not have cost it.
+
+| mutation | predicted red | measured |
+|---|---|---|
+| **M1** — one derived span replaced by a hand-copied literal that no longer matches (the exact drift the derivation prevents) | DERIVED, CLAIMS+CLEAN | **2 failed / 3 passed** — DERIVED, CLAIMS+CLEAN ✓ |
+| **M2** — `soapAnchorsEnabled()` hard-false (the flag stops reaching the fixture) | DERIVED, CLAIMS+CLEAN, ENSEMBLE+MARKED | **3 failed / 2 passed** — all three ✓ |
+
+Each mutation script asserted `expected 1 / measured 1` occurrences before
+writing, and aborted otherwise. Both restores verified by `git status` clean
+against the commit; the suite re-run green (5 of 5) afterwards.
+
+⚠️ **AND THE MOVEMENT DIRECTION IS PROVEN TOO, NOT ONLY THE FAILURE DIRECTION.**
+`OFF` asserts the unanchored default at **0 claims, 0 rows** and `CLAIMS`/
+`ENSEMBLE` assert the anchored variant at **3 claims, 3 rows** — so the pair
+shows the gate MOVES when the fix lands, which is the arm ruling 85(a) and
+AGENTS.md both say decorative ratchets lack. In both mutations `OFF` and
+`CONTROL` stayed green, correctly: they describe behaviour the mutations did not
+touch.
+
+### ⚠️ WHAT THIS DOES **NOT** CLAIM
+
+**The QA coverage RUN has not been executed in this session.** What landed is the
+fixture, the overlay wiring and the CI-side gate; `tm_anchor_entailment` is
+proven **countable** by a unit gate that drives the real mock seam and the real
+`runAnchorVerify`. The end-to-end recount that flips the stage from UNPROVEN to
+COUNTED inside `scripts/qa/b4-stage-coverage.ts` is **the next step and is owed**.
+Stated here rather than implied, because a fixture that makes a stage countable
+and a run that has counted it are different facts, and B4's gate text asks for
+the second.
+
+Local: **3367 passed / 4 skipped**, `tsc` **0 errors**. Neither closes an item —
+the merge-commit citation does.
