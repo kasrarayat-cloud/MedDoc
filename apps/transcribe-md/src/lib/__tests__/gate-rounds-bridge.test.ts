@@ -233,16 +233,69 @@ function tokenValue(name: string): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * A SURFACE'S CODE, WITH COMMENTS REMOVED — and every scan below reads THIS.
+ *
+ * ⚠️ THE SUBSTRING FAMILY, SIXTH SIGHTING, AND THIS ONE IS THE WATCHED-SET
+ * SHAPE: the matcher was flawless and its universe was wrong. CSS never reads a
+ * comment, so a `--color-linear-*` name appearing in prose is not a surface
+ * using that name — but the raw-text scan could not tell the two apart.
+ *
+ * It was found the way the family always is: a comment written to WARN about a
+ * token tripped the guard that bans it. B7 step 2's error-message comment
+ * explains why it does not use an invented red and why it does not use the
+ * danger token either; naming both made this gate report both as live usages,
+ * one of them undeclared and one of them failing AA. The code was correct and
+ * the gate was red about the explanation of why it was correct.
+ *
+ * Fixed HERE rather than by rewording the comment, for the reason AGENTS.md
+ * gives about hand-kept lists: rewording fixes one comment, and the next author
+ * who documents a colour decision hits it again. `commentsStrippedControl`
+ * below proves an ACTIVE usage still trips — a stripper that ate everything
+ * would make every assertion in this file vacuous.
+ */
+function surfaceCode(path: string): string {
+  return readFileSync(path, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^[^\n]*?\/\/[^\n]*$/gm, (line) => line.slice(0, line.indexOf('//')));
+}
+
 describe('C1 host bridge', () => {
   const files = surfaceFiles();
   const readNames = new Set<string>();
   for (const f of files) {
-    for (const m of readFileSync(f, 'utf8').match(LINEAR) ?? []) readNames.add(m);
+    for (const m of surfaceCode(f).match(LINEAR) ?? []) readNames.add(m);
   }
   const body = bridgeBody();
   const declaredInBridge = new Set(
     [...body.matchAll(/^\s*(--color-linear-[a-zA-Z0-9-]+)\s*:/gm)].map((m) => m[1]),
   );
+
+  it('POSITIVE CONTROL — comment stripping does not blind the scan', () => {
+    // ⚠️ THE ONE THAT MATTERS. `surfaceCode` exists so a token named in PROSE
+    // stops counting as a usage. A stripper that ate too much would make every
+    // assertion in this file vacuous while staying green — the same output as a
+    // clean codebase. So both directions are asserted on literals:
+    const sample = [
+      "const a = { color: 'var(--color-linear-coral)' }; // uses --color-linear-red",
+      '/* a block comment naming --color-linear-danger */',
+      "const b = { background: 'var(--color-linear-sage)' };",
+    ].join('\n');
+    const stripped = sample
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^[^\n]*?\/\/[^\n]*$/gm, (line) => line.slice(0, line.indexOf('//')));
+
+    // ACTIVE usages survive — the scan can still see real code.
+    expect(stripped).toContain('--color-linear-coral');
+    expect(stripped).toContain('--color-linear-sage');
+    // Names that exist ONLY in prose are gone.
+    expect(stripped).not.toContain('--color-linear-red');
+    expect(stripped).not.toContain('--color-linear-danger');
+
+    // And against the real tree: the surfaces still read plenty of names, so
+    // the stripper has not emptied the corpus it is applied to.
+    expect(readNames.size, 'comment stripping emptied the read-name set').toBeGreaterThan(10);
+  });
 
   it('the traversal finds surfaces — positive control', () => {
     // Without this, a broken walk() returns [] and EVERY assertion below passes
@@ -289,7 +342,7 @@ describe('C1 host bridge', () => {
     for (const f of files) {
       // Every foreground counts. There is no skin fork left to exempt one — see
       // the retirement note above `foregroundSites`.
-      for (const site of foregroundSites(readFileSync(f, 'utf8'))) foreground.add(site.name);
+      for (const site of foregroundSites(surfaceCode(f))) foreground.add(site.name);
     }
     expect(foreground.size, 'no foreground usages found — the matcher is broken').toBeGreaterThan(3);
 
@@ -334,7 +387,7 @@ describe('C1 host bridge', () => {
 
     for (const [name, debt] of entries) {
       const fg = files.reduce(
-        (n, f) => n + foregroundSites(readFileSync(f, 'utf8')).filter((s2) => s2.name === name).length,
+        (n, f) => n + foregroundSites(surfaceCode(f)).filter((s2) => s2.name === name).length,
         0,
       );
       expect(

@@ -480,6 +480,27 @@ enum AuditAction {
   CHECKOUT_TOPUP_CREDITED
   CHECKOUT_TOPUP_REFUSED
   CHECKOUT_TOPUP_DUPLICATE
+
+  /// B7 step 2 (2026-08-11) — the OUTBOUND half. Emitted by
+  /// `api/stripe/checkout/route.ts`, which IS authenticated and therefore
+  /// carries a real `userId` on every row.
+  ///
+  ///   CHECKOUT_SESSION_CREATED — Stripe returned a hosted Checkout URL.
+  ///     Metadata: { stripeSessionId, amountCents, bucket }. The session id is
+  ///     the join key to the eventual `topup` ledger row, whose
+  ///     `idempotencyKey` is derived from that same id.
+  ///   CHECKOUT_SESSION_REFUSED — nothing was created. Metadata carries the
+  ///     named reason and the secret key's MODE — a classification, never the
+  ///     credential.
+  ///
+  /// ⚠️ Refusals ARE audited here, unlike the webhook's. That is not an
+  /// inconsistency: ruling 91(b) suspends the convention only because the
+  /// webhook is unauthenticated, and this route is not.
+  ///
+  /// ⚠️ AND BOTH NEED THEIR MIGRATION —
+  /// `20260811190000_b7_checkout_session_audit_actions`.
+  CHECKOUT_SESSION_CREATED
+  CHECKOUT_SESSION_REFUSED
 }
 
 /// Document lifecycle status

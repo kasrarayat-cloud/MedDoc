@@ -252,7 +252,26 @@ export type AuditAction =
   // and the rejection discarded.
   | 'CHECKOUT_TOPUP_CREDITED'
   | 'CHECKOUT_TOPUP_REFUSED'
-  | 'CHECKOUT_TOPUP_DUPLICATE';
+  | 'CHECKOUT_TOPUP_DUPLICATE'
+  // B7 step 2 (2026-08-11) — the OUTBOUND half, written by
+  // `api/stripe/checkout/route.ts`. ⚠️ Unlike the three above, this route IS
+  // authenticated, so both labels carry a real `userId` and the refusal rate is
+  // bounded by a logged-in user's rate limit rather than by an anonymous
+  // caller — which is why refusals ARE audited here and deliberately are not in
+  // the webhook (ruling 91(b)).
+  //
+  //   CHECKOUT_SESSION_CREATED — Stripe returned a hosted Checkout URL.
+  //     Metadata: { stripeSessionId, amountCents, bucket }. The session id is
+  //     recorded because it is what `topupIdempotencyKey` derives the eventual
+  //     ledger row's key from, so this row and that row join without either
+  //     side dereferencing anything.
+  //   CHECKOUT_SESSION_REFUSED — no session was created. Metadata carries the
+  //     named reason and the KEY MODE — the classification, never the key.
+  //
+  // ⚠️ BOTH ALSO NEED THE PRISMA ENUM **AND** A MIGRATION
+  // (`20260811190000_b7_checkout_session_audit_actions`).
+  | 'CHECKOUT_SESSION_CREATED'
+  | 'CHECKOUT_SESSION_REFUSED';
 
 export interface AuditLogInput {
   action: AuditAction;
