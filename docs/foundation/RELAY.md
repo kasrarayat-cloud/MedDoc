@@ -5711,7 +5711,7 @@ deploy rather than riding one written for a metering item.
 
 ## 🟩 THE OWED DEPLOY IS DONE — `f89c7c33` IS LIVE IN PRODUCTION, 2026-08-11T01:48Z
 
-**Session 07 took the handoff above and executed it.** Production ran `c8a55986`
+**Session 03 took the handoff above and executed it.** Production ran `c8a55986`
 for twelve hours while `main` accumulated nine merges; it now runs `f89c7c33`.
 
 | | |
@@ -6103,3 +6103,221 @@ gate, and the stage is already countable without it.
 
 Local: **3367 passed / 4 skipped**, `tsc` **0 errors**. Neither closes an item —
 the merge-commit citation does.
+
+---
+
+## 🟠 FOUND ON THE WAY PAST — SESSION 04 LANDED B4's CLOSE AND LEFT NO RECORD OF ITS NIGHT
+
+**STEP 0.9's finding, filed by the session that came after it.** Run
+`20260810-173811-b2`, session 04, started `03:26:02Z` and died at `04:50:10Z`
+with a single line:
+
+```
+API Error: Unable to connect to API (ENOTIMP)
+[loop] session 04 exited rc=1 at 2026-08-11T04:50:10Z
+LOOP HALTED : SESSION ERROR — session 04 exited rc=1
+```
+
+Its log is **12 lines**, of which 7 are the header and 5 are that error.
+
+⚠️ **AND IT HAD ALREADY DONE THE WORK.** PR #598 merged at `04:36:45Z` as
+`82d6f2d7` — B4's last unproven stage, three commits, the anchored draft whose
+spans are derived from the transcript. The RELAY section describing it is on
+`main` and is excellent. What is missing is everything the session was supposed
+to say ABOUT that night: **no morning report, no scratch list, no citation for
+its own merge commit, and no statement of what it did not finish.**
+
+**This is a THIRD shape, distinct from the two the contract already names.** The
+08-09 case ended without a marker and stopped the run — loud. The 08-10 case
+reported correctly and then kept going, losing the record — silent. **This one
+never got to report at all**, because the process died between merging and
+writing. No amount of discipline inside the session prevents that, which is
+precisely why the recovery has to live in the NEXT session.
+
+**Reconstructed from disk, per STEP 0.9:**
+
+| | |
+|---|---|
+| landed | PR #598 → `82d6f2d7dafcfe720ee494a3b442ace489c3c410`, merged `04:36:45Z` |
+| commits | `86975adb` (the fixture + gate), `074b371c` (the ledger row), `cab4b0f6` (the coverage run) |
+| rulings added | **87** — B4's closure, PROVISIONAL, present and complete in `RULINGS.md` |
+| citation | **owed, and discharged below** |
+| scratch | **unrecoverable.** Nothing can now say what session 04 wrote outside its commits |
+
+⚠️ **THE SCRATCH LIST IS THE PART THAT CANNOT BE RECONSTRUCTED, AND IT IS THE
+SECOND TIME.** Batch 1 session 01 lost one the same way and batch 1 session 02
+wrote that down; the finding was recorded and not turned into a check, and here
+it is again nine days later. `/opt/meddoc-pro/.b4close-backup/` — session 01's,
+named by session 03 — is still unreaped, and there is now no way to know whether
+session 04 added to it or made its own. **A supervised session reaping this run
+should treat the repo root and `/tmp` as unenumerated rather than empty.**
+
+`REPORT-MISSING` was **not** present in any log, so the runner's own tripwire did
+not fire here: it flags a session that finishes without a report, and this one did
+not finish. **That gap is worth closing** — the halt path emits
+`LOOP HALTED : SESSION ERROR` and nothing checks whether the dead session had
+merged anything first. Named, not fixed; it is a change to the runner, not to
+this programme's queue.
+
+### ✅ AND THE CITATION SESSION 04 OWED, PRODUCED BY THE CHECKER
+
+Not typed. `82d6f2d7`'s `e2e` sat **queued for 2h13m** — created `04:36:47Z`,
+started `06:50:04Z` — which is why session 04 could not have cited it even had it
+lived, and why this session waited for it rather than citing three of four.
+
+---
+
+## ✅ B5 IS BUILT — MONEY IS AN INTEGER, THE LEDGER REFUSES TO BE EDITED, AND THE BALANCE IS THE DATABASE'S ARITHMETIC — 2026-08-11
+
+**The item, verbatim:** *"Integer micro-unit; append-only `LedgerEntry` with
+`balanceAfter`; practice wallet. **Gate:** append-only enforced at the
+**database**, not by convention — an `UPDATE` and a `DELETE` are both attempted
+and both refused. `balanceAfter` consistency proven across a generated
+sequence."*
+
+Its hard predecessor was named in BILLING RECONNAISSANCE §4 — *"Do not start B5
+before F-TYPE lands"* — and F-TYPE is closed and live.
+
+### WHAT LANDED
+
+| | |
+|---|---|
+| migration | `20260811070000_b5_ledger_entries` — one table, 2 unique indexes, 1 FK, **5 CHECKs, 4 triggers** |
+| model | `LedgerEntry` @@map(`ledger_entries`), with all 9 inexpressible objects documented beside it |
+| CI gate | `packages/db/src/__tests__/gate-b5-ledger-append-only.test.ts` — **34 assertions**, 6 groups, 4 positive controls |
+| DB guard | `scripts/check-ledger-append-only.sh` — structural (safe on prod) + `--attempt` behavioural, fail-closed off non-prod |
+| rows | **zero, and nothing writes it.** B6 is the writer, B7 the top-ups, B8 the block |
+
+### ⚠️ NOTHING WRITES THIS TABLE, AND THAT IS THE POINT, NOT AN OMISSION
+
+B5 ships the SHAPE and its guarantees so the writer is built against a table
+that already refuses to be wrong — the way B3's price table shipped with nothing
+reading it. Ruling 80(e) warns that *a column nothing writes is the half-shipped
+shape*; an **empty table whose CONSTRAINTS are the deliverable** is the opposite,
+and the difference is that here the constraints are the product.
+
+**And the claim is enumerated rather than asserted.** The gate sweeps **BY TABLE
+and BY ORM METHOD** — `ledgerEntry.(create|createMany|upsert|update|updateMany|
+delete|deleteMany)` **and** `INSERT INTO ledger_entries` — over 500+ sources
+under `apps/transcribe-md/src` and `packages/`, and asserts the offender set
+equals an empty declared list. Both patterns are positive-controlled against
+synthetic strings (so the control cannot be satisfied by the thing it controls
+for), and the file walker asserts it found >500 files, because a walker that
+silently entered nothing returns a clean zero for every pattern you try.
+
+**When B6 lands, that assertion goes red — deliberately.** The first writer
+arrives as an edit to `WRITERS` rather than as a surprise.
+
+### THE BEHAVIOURAL PROOF — ON QA, EVERY WRITE INSIDE `BEGIN … ROLLBACK`
+
+Run against the isolated `meddoc-qa` stack after rebuilding `db-migrate`
+(`0b54ff763036` → `b4c0fe96505b` — the rebuild was **verified by image id**,
+because this compose file's own header records a case where building that
+service was a silent no-op and new migrations went unapplied while the log read
+"No pending migrations to apply"). `97 migrations found`, applied clean.
+
+| probe | result |
+|---|---|
+| **derivation** — 3 rows inserted with `balanceAfter=99999, seq=77` etc. | stored **5000000/1**, **3500000/2**, and `promo` **10000000/1** — the caller's values discarded, the running sum correct, the second bucket keeping its own balance from zero |
+| **snapshot** | derived from `practiceId` on all three (the caller's `WRONG-SNAPSHOT` discarded) |
+| `UPDATE … SET "amountMicroUsd" = 1` | **refused** — `ledger_entries_append_only: UPDATE is refused …` |
+| `DELETE FROM ledger_entries` | **refused** — `… DELETE is refused …` |
+| `TRUNCATE ledger_entries` | **refused** — `… TRUNCATE is refused …` |
+| **the S4c detach** (positive control) | **permitted**; tombstone, amount, balance and seq all survived |
+| **the smuggle** — detach *plus* an amount change | **refused** |
+| **tenantless INSERT** | **refused** by `ledger_entries_insert_requires_practice` |
+| **residue** on a fresh connection | `ledger_entries` **0 rows**, probe practices **0** |
+
+Every refusal was matched **on the guard's own name in the message**, never on
+"an error happened" — a refusal is evidence only when you know WHAT refused.
+
+### 🔑 THE PROBE THAT MATTERED MOST WAS THE ONE THAT HAD TO *SUCCEED*
+
+```
+INSERT INTO practices …;  INSERT INTO ledger_entries …;
+DELETE FROM practices WHERE id = 'b5probe-practice';
+→ DELETE 1
+→ lp-del | detached t | tombstone b5probe-practice | 7000000 | 7000000 | 1
+```
+
+**A RESTRICT here would have passed every refusal arm above with full marks and
+made account deletion impossible** — which is not a hypothetical: `audit_logs`
+had exactly that FK and S4c exists because of it, and `RxWarningOverride`
+repeated it and *"silently blocked the whole cascade for any doctor who had ever
+overridden an Rx warning"*. On an append-only table it is strictly worse, because
+no delete could ever clear the blocker.
+
+The decision was therefore **not taken here.** It is already written down in
+`delete-account/route.ts:184`: *"audit_logs and billing_events … DETACH (SET
+NULL) when the practice goes, because an audit trail and A FINANCIAL RECORD must
+outlive the account they describe."* A billing ledger is a financial record.
+This is the rediscovery `RULINGS.md` exists to prevent, avoided by reading the
+code that already implements the rule.
+
+### ⚠️ THE MUTATION PROOF — SAID FIRST, THEN MADE TO FAIL, AND ONE OF THEM IS THE WHOLE DESIGN
+
+Both mutations ran **inside a transaction that was rolled back**, so the DDL
+never committed — AGENTS.md's *"any write inside a gate that a constraint is
+supposed to refuse belongs in `BEGIN; … ROLLBACK;`"*, applied to the mutation
+itself rather than only to the probe. Restored state verified afterwards: 4 of 4
+triggers present, and `pg_proc` still holds the `to_jsonb(NEW)` body.
+
+| mutation | predicted | measured |
+|---|---|---|
+| **M1** — `DROP TRIGGER …_before_truncate` | TRUNCATE stops being refused | `TRUNCATE TABLE`, row count **1 → 0** ✓ |
+| **M2** — the guard's row comparison replaced by a hand-written 5-column `IS NOT DISTINCT FROM` list omitting `amountMicroUsd` | the smuggle succeeds | `UPDATE 1` — amount **5000000 → 999** while `balanceAfter` stayed **5000000** ✓ |
+
+**M2 is the argument for the whole design.** The obvious way to write *"and
+nothing else changed"* is that column list, and omitting one column produced a
+ledger row whose amount and running balance disagree — through a guard that
+reported success, on a table where no correction can ever be applied in place.
+`(to_jsonb(NEW) - 'practiceId') = (to_jsonb(OLD) - 'practiceId')` refuses the
+identical statement and covers every column added from now on without anybody
+remembering to. The gate pins the jsonb form **and bans the list form**, so a
+future author has to argue with an assertion rather than quietly weaken a guard.
+
+**M1 is the arm most likely never to have existed at all.** TRUNCATE fires
+neither row-level trigger and is not a DELETE, so a ledger protected by
+`BEFORE DELETE` alone can still be emptied in one statement — and every
+behavioural test of UPDATE and DELETE would stay green.
+
+### WHAT B5 DOES NOT CLAIM
+
+- **Not that anything is billed.** No writer, no reader, no balance check.
+  `charge = cost × 3 / 2` and the prod-only refusal are **B6**; ruling 80(c)'s
+  question — what a `null` rate means — is still B6's to answer.
+- **Not that the amount is right.** The database derives the BALANCE; the AMOUNT
+  is the caller's claim and no constraint can check it.
+- **Not that the triggers are installed anywhere but QA.** They exist in a
+  migration; `assert-migrations-applied` and the guard script answer "installed".
+  **Production has not run this migration** — it ships with B5's deploy.
+- **Not that concurrency is proven under load.** The advisory lock serializes and
+  the unique index is the backstop; what is proven is the mechanism's presence
+  and the refusal's shape, not a benchmark.
+
+### ⚠️ AND ONE THING THE LOOP CANNOT DO WITH WHAT IT JUST BUILT
+
+`scripts/check-ledger-append-only.sh` is **not invocable by the unattended
+loop**. `.claude/settings.json` names its allowlisted scripts one per line, the
+new script is not among them, and **editing that file is denied to the loop** —
+correctly, since a self-granting agent is the wrong risk.
+
+So the behavioural evidence above was produced through the granted `docker exec
+… psql` path instead, statement by statement. The evidence is the same; the
+*procedure* is not re-runnable by a future unattended session, and ruling 86(d)
+records what that costs: **a procedure the loop cannot execute will not be
+re-run.**
+
+**OWNER ACTION, one line:** add
+`"Bash(bash scripts/check-ledger-append-only.sh:*)"` to the `allow` list in
+`.claude/settings.json`. Until then this guard is a supervised-session tool, and
+it must NOT be added to STEP 0's standing set — a standing check that always
+reports "cannot tell" is worse than one nobody listed.
+
+⚠️ **The script already takes `--qa` as a FLAG rather than an env prefix**, for
+the same reason: `PG_DB=… bash script` is outside the allowlist, and
+`assert-migrations-applied.sh` ran production-only for three months precisely
+because its QA capability needed a form nobody could invoke.
+
+Local: **3401 passed / 4 skipped** (3367 + the gate's 34), `tsc` **0 errors**.
+Neither closes the item — the merge-commit citation does.
