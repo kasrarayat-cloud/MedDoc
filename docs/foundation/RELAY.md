@@ -6047,16 +6047,59 @@ AGENTS.md both say decorative ratchets lack. In both mutations `OFF` and
 `CONTROL` stayed green, correctly: they describe behaviour the mutations did not
 touch.
 
-### ⚠️ WHAT THIS DOES **NOT** CLAIM
+### 🟢 AND THE COVERAGE RUN WAS EXECUTED — **15 of 15 COUNTED, 0 UNPROVEN**
 
-**The QA coverage RUN has not been executed in this session.** What landed is the
-fixture, the overlay wiring and the CI-side gate; `tm_anchor_entailment` is
-proven **countable** by a unit gate that drives the real mock seam and the real
-`runAnchorVerify`. The end-to-end recount that flips the stage from UNPROVEN to
-COUNTED inside `scripts/qa/b4-stage-coverage.ts` is **the next step and is owed**.
-Stated here rather than implied, because a fixture that makes a stage countable
-and a run that has counted it are different facts, and B4's gate text asks for
-the second.
+Run on the isolated `meddoc-qa` stack, 2026-08-11T03:49Z, against images rebuilt
+from this branch. The four flags were verified **inside the live worker** before
+the run — `MOCK_SOAP_ANCHORS=true MOCK_CRITIQUE_ISSUES=true
+TRANSCRIBE_MD_EVIDENCE_ANCHORS=true MOCK_AI_CALLS=true` — because a compose file
+is a claim and the container is the fact.
+
+```
+[b4-coverage] visits: 3   usage rows scoped to them: 43
+[b4-coverage] stages enumerated: 15   COUNTED: 15   UNPROVEN: 0
+[b4-coverage] 🟢 all 15 enumerated stages were COUNTED
+```
+
+Three visits, all `READY`. `tm_anchor_entailment` by mode:
+
+| mode | count | |
+|---|---|---|
+| `text_notes` | **0** | permitted — see below |
+| `voice_dictation` | **3** | ✓ |
+| `audio_upload` | **3** | ✓ |
+
+Both 3s are the ensemble, and the coupled invariant held on every mode
+(`tm_polish=1 ≡ tm_polish_gate=1`). **The stage that had never once been observed
+working is now observed at 3, twice.**
+
+### ⚠️ NAMED, BECAUSE THE RUN MEASURED IT AND A SUMMARY WOULD HIDE IT: `text_notes` IS STILL A PERMITTED ZERO
+
+The total is non-zero so the run is honestly green — but the stage is COUNTED on
+**two of the three** modes, not three, and the reason is structural rather than
+incidental.
+
+The fixture's spans are derived from the **mock transcript**. `voice_dictation`
+inherits it because L1b transcribes through Deepgram too (`worker.ts:554`), so
+its `contextText` is the same two utterances. **`text_notes` does not**: its
+`contextText` is `visit.rawTextInput`, which the coverage script supplies itself
+(`SCRIPT_TEXT` — a cough-and-wheeze script). No anchor derived from the Deepgram
+fixture can be a literal substring of it, so every claim demotes
+`anchor_not_in_transcript` and the stage returns a legal 0.
+
+⚠️ **THIS WAS PREDICTED AS AFFECTING TWO MODES AND MEASURED AS AFFECTING ONE.**
+The prediction was that only `audio_upload` would count; the run showed
+`voice_dictation` counting as well, for the reason above. **Recorded as measured,
+not as predicted** — the guess was pessimistic in a way no reasoning here would
+have corrected, and the coverage run is the instrument that settled it.
+
+**The cure, if it is ever wanted, is a content-sensitive fixture** that derives
+its anchor from the transcript **in the prompt it was handed**, rather than from
+a module constant — the `tm_chat_edit` / `tm_anchor_entailment` shape (rulings
+69, 82(b)). A claim whose text IS its span passes the deterministic gauntlet on
+any transcript, so it would count on all three modes. **Named, not attempted** —
+it parses a prompt, which is its own blast-radius question and deserves its own
+gate, and the stage is already countable without it.
 
 Local: **3367 passed / 4 skipped**, `tsc` **0 errors**. Neither closes an item —
 the merge-commit citation does.
