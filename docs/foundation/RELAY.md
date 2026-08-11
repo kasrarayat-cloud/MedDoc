@@ -5657,3 +5657,52 @@ untracked new files and `git checkout --` would have deleted them.
 - **`email_send` is untouched and unenumerated.** 219 production rows, GATE 0.5
   rules Resend not metered, and any B5/B9 rollup still has to decide what it
   includes — carried from step 2, still open.
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `32706453ee975a0c1f1dd92671e38d6936b3e78a`:**
+   · `CI` 31442955526 a1
+   · `e2e` 31442955517 a1
+   · `a11y-ci` 31442955554 a1
+   · `secrets-scan` 31442955510 a1
+
+All `a1` — **no re-runs, nothing to explain**, and the `e2e` that has flaked
+twice this week passed first attempt at 43m11s on the merge commit and 42m17s on
+the PR head. PR **#594**, merged from `feat/b4-close-stage-coverage` (branch
+retired on merge).
+
+⚠️ **THE `e2e` GREEN IS THE LOAD-BEARING ONE HERE, NOT A FORMALITY.** This change
+turns `TRANSCRIBE_MD_EVIDENCE_ANCHORS` **on for the whole QA stack**, and the
+`e2e` job builds and drives that stack — eleven packs, thirteen image recreates,
+every Rounds surface, the document surfaces and the flag-gated fixture packs. L4b
+now runs in all of them, for the first time ever. That is the only instrument
+that could have shown the posture change breaking something, and it is why the
+change was made in the same PR rather than "verified" by reasoning about it.
+
+### ⚠️ NOT DEPLOYED THIS SESSION — the same decision step 2 made, restated with its evidence
+
+**Provably inert in production**, path by path:
+
+| what changed | why production cannot see it |
+|---|---|
+| `buildOpenAIEmbedUsage` operation label | every prod embed call FAILS on the dead credential, so no row is written under either label |
+| `buildWhisperUsage` operation label | the cross-provider fallback is gated OFF pending a BAA (`isWhisperFallbackEnabled` → false) |
+| `mock.ts` critique variant | reachable only under `MOCK_AI_CALLS`, and **both prod containers declare `false`** — read in the running containers, not the compose file |
+| `docker-compose.qa.yml`, the overlay, the coverage script | the QA stack and nothing else |
+| `pipeline-stages.ts` + its gate | a list and a test; no runtime path imports them |
+
+⚠️ **SO `main` IS NOW AHEAD OF PRODUCTION BY FOUR MERGES, DELIBERATELY, AND THE
+NEXT DEPLOY CARRIES ALL FOUR.** Named here so the next session's §2.5 declaration
+is written against the right diff rather than against this item alone:
+
+| merge | production reachability |
+|---|---|
+| B4 step 2 (`8307a1d6`) | inert — mock-path only |
+| B4 step 3 (`870413c1`) | inert — mock-path only |
+| **self-hosted fonts (`a8bf9307`)** | ⚠️ **NOT inert.** It changes the shipped bundle and removes the build's last reach to Google. This is the one with a reason of its own, and it is what the next deploy is actually FOR |
+| B4 closing step (`32706453`) | inert — the table above |
+
+**A code-only deploy's declaration is one line — "nothing but the image ids" —
+and it would be true for three of these four and unfalsifiable for the fourth.**
+The fonts change deserves a declaration that names the bundle, so it gets its own
+deploy rather than riding one written for a metering item.
