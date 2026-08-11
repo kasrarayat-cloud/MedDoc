@@ -7635,3 +7635,144 @@ The `$10` promo grant writes a `grant` row per practice. In production that is
 None of that is an argument for never doing it — it is an argument for doing it
 as its own item with its own declaration, rather than as the tail of a UI change.
 **Carried as B7 step 3, unchanged in scope.**
+
+---
+
+## 🟩 B7 STEP 2 IS LIVE IN PRODUCTION — `626badad`, 2026-08-11T20:02Z
+
+| | |
+|---|---|
+| deployed commit | `626badad9975b6eb0e18d4deb7c66bf3b8784140` |
+| declaration | `docs/foundation/deploys/20260811-626badad.md` — **written 19:12Z, 50 minutes BEFORE the deploy ran** |
+| deploy log | `docs/deploy-logs/deploy-20260811T200247Z.log` |
+| rollback tag | **`:pre-b7s2-20260811`** — app `c14397e8ae1a` / worker `aec2badfd693`, **cut BEFORE `deploy-prod.sh` ran**, verified by id match |
+| app image | `c14397e8ae1a` → **`0063e011f2c4`** |
+| worker image | `aec2badfd693` → **`0b23d43de9a4`** |
+| migration | `20260811190000_b7_checkout_session_audit_actions`; **99 → 100**, asserted by the deploy itself |
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `626badad9975b6eb0e18d4deb7c66bf3b8784140`:**
+   · `CI` 31526520356 a1
+   · `e2e` 31526520317 a1
+   · `a11y-ci` 31526520371 a1
+   · `secrets-scan` 31526520337 a1
+
+All `a1` — no re-runs, nothing to explain.
+
+### THE DECLARATION, JUDGED — 23 of 23, EVERY ONE AS DECLARED
+
+**What must change**
+
+| # | declared | measured | |
+|---|---|---|---|
+| 1 | `_prisma_migrations` 99 → 100 | **100** | ✓ |
+| 2 | the new row is `20260811190000_b7_checkout_session_audit_actions` | that exact name, newest | ✓ |
+| 3 | `AuditAction` labels 141 → 143 | **143** | ✓ |
+| 4 | `CHECKOUT_SESSION_*` in `pg_enum` 0 → 2 | `CHECKOUT_SESSION_CREATED`, `CHECKOUT_SESSION_REFUSED` | ✓ |
+| 5 | app image id moves | `c14397e8ae1a` → `0063e011f2c4` | ✓ |
+| 6 | worker image id moves | `aec2badfd693` → `0b23d43de9a4` | ✓ |
+| 7 | **`POST /api/stripe/checkout` NOT 404 and NOT 400** | **401** | ✓ |
+
+**What must NOT change**
+
+| # | declared | measured | |
+|---|---|---|---|
+| 8 | **`ledger_entries` 0 rows** | **0** | ✓ |
+| 9 | `transcribe_visits` 25 | 25 | ✓ |
+| 10 | … `signedAt IS NOT NULL` 17 | 17 | ✓ |
+| 11 | `transcribe_md_patients` 16 | 16 | ✓ |
+| 12 | `api_usage_events` 1325 | 1325 | ✓ |
+| 13 | `ai_calls` 1126 | 1126 | ✓ |
+| 14 | `users` 196 | 196 | ✓ |
+| 15 | `practices` 197 | 197 | ✓ |
+| 16 | `price_rates` 44 | 44 | ✓ |
+| 17 | `audit_logs` rows with a `CHECKOUT_%` action 0 | **0** | ✓ |
+| 18 | 4 triggers on `ledger_entries`, all `tgenabled='O'` | 4 / 4 enabled | ✓ |
+| 19 | 6 CHECK constraints on `ledger_entries` | 6 | ✓ |
+| 20 | `POST /api/stripe/webhook` still 503 | **503** | ✓ |
+| 21 | `GET /settings` 200, and no settings content unauthenticated | 200, **NONE** of the markers | ✓ |
+| 22 | 9 of 9 containers healthy | 9 of 9 | ✓ |
+| 23 | co-tenants `307/404/200/200/410` | exactly that | ✓ |
+
+### ⚠️ ASSERTION 7 CAME BACK **401**, AND THAT IS WHY IT WAS DECLARED AS A PAIR
+
+Step 1's equivalent assertion was a flat *"503 is the pass"*. Writing the same
+sentence for this route would have been **wrong**, and the declaration says so
+in advance rather than explaining it afterwards.
+
+The two routes order their checks differently, and deliberately:
+
+| | first check | an unauthenticated probe gets |
+|---|---|---|
+| `/api/stripe/webhook` | is a webhook secret configured? | **503** |
+| `/api/stripe/checkout` | **is there a session?** | **401** |
+
+The checkout route authenticates first, so an anonymous probe never reaches the
+configuration check. **The declared pass condition was therefore `401 OR 503`,
+with the finding stated as `NOT 404 and NOT 400`** — 404 would mean the route
+did not ship, and **400 would mean a Stripe secret key exists in production**,
+because 400 is what a *configured* environment returns for a bad amount or an
+unclassifiable key.
+
+⚠️ **Both 401 and 503 have a comfortable story available to them after the fact.
+That is exactly the class §2.5 exists to close**, so the pair and its finding
+condition were fixed in writing 50 minutes before the probe ran.
+
+### AND THE DECISIVE STRUCTURAL FACT — MEASURED IN THE CONTAINER, NOT THE COMPOSE FILE
+
+**`no STRIPE_* variable at all`** in both `meddoc-pro-transcribe-md-1` and
+`meddoc-pro-transcribe-md-worker-1`, read with `printenv` **inside the running
+containers**. `check-qa-mock-posture.sh`'s header records why the compose file is
+not evidence: a `${VAR:-default}` inherits the shared `.env`, so a file can read
+safe while the container is not.
+
+**Positive-controlled**: the same `printenv` returned **55** variables including
+`NODE_ENV` and `DATABASE_URL`, so the empty `STRIPE_*` result is a fact about the
+environment rather than about a command that read nothing. An emptiness test on a
+set whose size was never established is this project's named recurring defect.
+
+That fact is what makes assertion 7's 401 sufficient. The route is authenticated,
+so it cannot be probed past its first check — but the configuration it *would*
+check is provably absent one layer down.
+
+### WHAT IS LIVE, AND WHAT IS NOT
+
+**Live:** two permanent `AuditAction` labels, an authenticated route that refuses
+every anonymous caller at 401 and would refuse every authenticated one at 503,
+and a settings page whose billing section is **byte-identical to yesterday's**
+because the door only renders when a key is present and there is none.
+
+**NOT live:** any billing behaviour whatsoever. `ledger_entries` still holds
+**0 rows**. No Stripe account, secret key or webhook secret exists in any
+environment. **No Checkout Session has ever been created, by anything, anywhere.**
+The `$10` promo grant is still unwritten. The deploy's own prediction — *"two new
+labels on a Postgres enum, plus an HTTP route that refuses, and a settings page
+byte-identical to today's"* — held on all 16 must-not-change assertions.
+
+### ⚠️ THE MIGRATION CANNOT BE ROLLED BACK, AND THAT WAS DECLARED IN ADVANCE
+
+Postgres has no `ALTER TYPE … DROP VALUE`. `CHECKOUT_SESSION_CREATED` and
+`CHECKOUT_SESSION_REFUSED` are permanent from the moment this deploy applied.
+Rolling the IMAGE back (`:pre-b7s2-20260811`) removes the route and the door and
+leaves two unused enum labels behind, which cost nothing. Named in the
+declaration's Rollback section before the deploy rather than discovered during
+one.
+
+### QA WAS ONE MIGRATION BEHIND, AND THE `--qa` ARM IS WHAT SAID SO
+
+Immediately after the deploy, `assert-migrations-applied.sh --qa` went **RED**:
+`100 in repo, 99 recorded`, naming `20260811190000_b7_checkout_session_audit_actions`.
+
+That is the ordinary post-deploy asymmetry rather than a fault — but it is
+**exactly the drift that accumulated invisibly for three months** while every
+session ran the bare invocation and reported the check green. AGENTS.md's note on
+that is the reason the arm is now a standing STEP 0 line.
+
+Cleared in the same session, per the QA compose file's own instructions: build
+`db-migrate` **from the QA compose** (which does have a `build:` section, unlike
+the service note's warning about the *no-build* case), then
+`run --rm db-migrate migrate deploy`, then **re-assert**. Prod and QA are both
+**100 of 100**, and `check-qa-mock-posture.sh` is still 🟢 afterwards — the QA
+stack remains vendor-severed with its literal dummy keys, which is what makes
+B7's refusal path walkable there.
