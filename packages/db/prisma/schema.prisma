@@ -588,6 +588,10 @@ model Practice {
   templateTwinFieldDefinitions TemplateTwinFieldDefinition[]
   templateTwinSemanticMappings TemplateTwinSemanticMapping[]
   templateTwinCertifications   TemplateTwinCertification[]
+  /// B5 — the practice wallet. Append-only; detaches (SetNull) rather than
+  /// cascading when this practice is deleted, because a financial record must
+  /// outlive the account it describes.
+  ledgerEntries                LedgerEntry[]
 
   @@index([slug])
   @@map("practices")
@@ -3316,4 +3320,145 @@ model PriceRate {
   ///       not close drift, it would let a rate mean something nobody declared.
   ///       A new unit type is a migration, and that refusal is the feature.
   @@map("price_rates")
+}
+
+// ============================================================================
+// LEDGER ENTRY — B5. The practice wallet, append-only, integer micro-dollars.
+// ============================================================================
+// SPEC §2.1: append-only `LedgerEntry` with kinds grant/topup/usage/refund/
+// adjustment and a `balanceAfter` on every row; the balance is a property of
+// the PRACTICE, not the user. GATE 0.4 / SPEC §4.4: integer micro-dollars
+// ledger-wide, no float anywhere.
+//
+// ⚠️ NOTHING WRITES THIS TABLE YET, AND THAT IS DELIBERATE. The application
+// writer is B6 (`charge = cost × 3 / 2`, prod-only), top-ups are B7, and the
+// fail-closed balance block is B8. B5 ships the SHAPE and its guarantees so
+// that the writer is built against a table that already refuses to be wrong.
+//
+// ⚠️ APPEND-ONLY IS ENFORCED BY TRIGGERS, NOT BY CONVENTION, AND TRIGGERS ARE
+// INVISIBLE TO PRISMA. Everything below that matters is in
+// `20260811070000_b5_ledger_entries/migration.sql`. Read it before changing
+// anything here — `prisma migrate dev` will not recreate any of it.
+// ============================================================================
+model LedgerEntry {
+  id String @id @default(cuid())
+
+  /// NULLABLE + SetNull — the S4c financial-record rule, the same pair
+  /// `AuditLog` uses. `delete-account/route.ts:184` states it: an audit trail
+  /// and a financial record must OUTLIVE the account they describe.
+  ///
+  /// ⚠️ A RESTRICT here would make account deletion impossible, which is the
+  /// bug S4c was created to fix and which `RxWarningOverride`'s RESTRICT
+  /// repeated. On an APPEND-ONLY table it is strictly worse: there is no delete
+  /// that could ever clear the blocker.
+  ///
+  /// ⚠️ NULL IS NOT A LEGAL INSERT VALUE. The insert trigger refuses it. The
+  /// column is nullable solely so a later practice deletion can detach the row.
+  practiceId String?
+  practice   Practice? @relation(fields: [practiceId], references: [id], onDelete: SetNull)
+
+  /// Tombstone carrying no FK — survives the practice row, so "whose money was
+  /// this" stays answerable after a deletion. NOT NULL, unlike `AuditLog`'s,
+  /// because this table has no legacy population to accommodate: a ledger row
+  /// with no tenant is unreconcilable (B9), so it is unrepresentable.
+  /// Derived by the trigger from `practiceId`; a caller cannot set it.
+  practiceIdSnapshot String
+
+  /// Which balance this row moves: "paid" | "promo". CHECK-pinned.
+  ///
+  /// ⚠️ TWO SEPARATE RUNNING BALANCES, NOT ONE NUMBER WITH A NOTE — SPEC §2.4.
+  /// It is here in B5 rather than in B7 with the promo grant because an
+  /// APPEND-ONLY TABLE CANNOT BE RETROFITTED: adding it later needs either a
+  /// DEFAULT (the fail-open provenance shape ruling 67 forbids) or a backfill
+  /// UPDATE (the one operation this table exists to refuse).
+  bucket String
+
+  /// "grant" | "topup" | "usage" | "refund" | "adjustment" — SPEC §2.1,
+  /// CHECK-pinned. A new kind is a migration, and that refusal is the feature.
+  kind String
+
+  /// SIGNED micro-dollars. The balance is the running sum, so a debit is a
+  /// negative amount rather than a positive number with a direction flag.
+  ///
+  /// Sign is CHECK-constrained for `usage` (<= 0), `topup` (> 0) and `grant`
+  /// (> 0) only. `refund` and `adjustment` are deliberately unconstrained —
+  /// nothing in SPEC settles whether a refund credits the wallet or debits it,
+  /// and guessing would mean WEAKENING a shipped constraint if wrong. Adding a
+  /// rule later is the allowed direction.
+  amountMicroUsd BigInt
+
+  /// THE RUNNING BALANCE AFTER THIS ROW, and THE SEQUENCE POSITION.
+  ///
+  /// ⚠️ BOTH ARE DATABASE-OWNED. `ledger_entries_derive()` computes them from
+  /// the previous row and OVERWRITES whatever the caller sent — it does not
+  /// validate a caller-supplied value, it ignores it. AGENTS.md: a hand-passed
+  /// value can drift, a derived one cannot, and on an append-only table a wrong
+  /// balance can never be corrected in place.
+  ///
+  /// The `@default(0)` exists only so a Prisma caller need not send a value it
+  /// is not allowed to choose. It is never the value that lands.
+  ///
+  /// ⚠️ AND IF THE DERIVE TRIGGER IS EVER LOST, THE TABLE BECOMES UNWRITABLE
+  /// RATHER THAN QUIETLY WRONG — measured, not reasoned. With the trigger
+  /// dropped inside a rolled-back transaction, the insert was REFUSED:
+  ///
+  ///     ERROR: new row for relation "ledger_entries" violates check
+  ///            constraint "ledger_entries_seq_positive"
+  ///
+  /// because `seq` defaults to 0 and the CHECK requires > 0. So a regenerated
+  /// migration that drops the triggers does not produce a ledger of zeroes —
+  /// it produces a ledger nothing can write to, which is the direction a
+  /// money table should fail in. The migration's own header understates this;
+  /// this is the measured behaviour.
+  balanceAfter BigInt @default(0)
+  seq          BigInt @default(0)
+
+  /// Optional, GLOBALLY unique. Idempotency matters MORE on an append-only
+  /// table than on a mutable one: a duplicate row can never be deleted.
+  /// NULLs are distinct in a btree unique, so keyless rows never collide.
+  idempotencyKey String? @unique
+
+  note String?
+
+  /// ⚠️ ORDER BY `seq`, NEVER BY `createdAt`. This defaults to
+  /// CURRENT_TIMESTAMP, which is TRANSACTION START time — two rows written in
+  /// one transaction share it exactly. `seq` is the ledger's order.
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  /// The (practice, bucket) sequence. Also the index the derive trigger reads
+  /// and the one `ON DELETE SET NULL` needs when a practice is deleted.
+  @@unique([practiceId, bucket, seq])
+
+  /// ⚠️ FIVE CHECK CONSTRAINTS AND FOUR TRIGGERS ON THIS TABLE ARE INEXPRESSIBLE
+  /// IN PRISMA and are declared here so the drift enumeration can see them
+  /// (AGENTS.md rule 7). Their real DDL is in
+  /// `20260811070000_b5_ledger_entries/migration.sql`:
+  ///
+  ///   ledger_entries_bucket_vocabulary   CHECK (bucket IN ('paid','promo'))
+  ///   ledger_entries_kind_vocabulary     CHECK (kind IN ('grant','topup',
+  ///                                        'usage','refund','adjustment'))
+  ///   ledger_entries_kind_sign           CHECK — usage <= 0, topup > 0,
+  ///                                        grant > 0; refund/adjustment free
+  ///   ledger_entries_seq_positive        CHECK (seq > 0) — a 0 means the
+  ///                                        derive trigger did not run
+  ///   ledger_entries_snapshot_agrees     CHECK ("practiceId" IS NULL
+  ///                                        OR "practiceId" = "practiceIdSnapshot")
+  ///
+  ///   ledger_entries_derive_before_insert          derives seq + balanceAfter
+  ///                                        + practiceIdSnapshot, under a
+  ///                                        per-(practice,bucket) advisory lock
+  ///   ledger_entries_append_only_before_update     refuses every UPDATE except
+  ///                                        the S4c detach (practiceId NOT NULL
+  ///                                        → NULL, every other column compared
+  ///                                        wholesale as jsonb)
+  ///   ledger_entries_append_only_before_delete     refuses DELETE
+  ///   ledger_entries_append_only_before_truncate   refuses TRUNCATE — a
+  ///                                        STATEMENT-level trigger, because
+  ///                                        TRUNCATE fires neither row trigger
+  ///
+  /// ⚠️ A NAIVE "fix" that drops any of them to let a new bucket, kind or
+  /// correction through does not close drift — it removes the guarantee. A new
+  /// value is a migration. And `prisma migrate dev` will never regenerate the
+  /// triggers: they exist only in that migration file.
+  @@map("ledger_entries")
 }
