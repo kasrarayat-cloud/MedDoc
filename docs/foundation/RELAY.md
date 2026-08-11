@@ -7295,3 +7295,104 @@ Lockfile delta **measured on both sides of the install**, not assumed:
 
 Closure is **A6**, which deletes `apps/meddoc-pro` and takes the other seven CRM
 packages with it. Named so it is a checked outcome rather than a hoped-for one.
+
+---
+
+## 🟩 B7 STEP 1 IS LIVE IN PRODUCTION — `2a102890`, 2026-08-11T16:31Z
+
+| | |
+|---|---|
+| deployed commit | `2a1028906b16077fc7495708646135114935589c` |
+| declaration | `docs/foundation/deploys/20260811-2a102890.md` — **written 15:44Z, 45 minutes BEFORE the deploy ran** |
+| deploy log | `docs/deploy-logs/deploy-20260811T162936Z.log` |
+| rollback tag | **`:pre-b7-20260811`** — app `c6c9ec2edce7` / worker `0c5a78e163e4`, **cut BEFORE `deploy-prod.sh` ran**, verified by id match |
+| app image | `c6c9ec2edce7` → **`c14397e8ae1a`** |
+| worker image | `0c5a78e163e4` → **`aec2badfd693`** |
+| migration | `20260811160000_b7_checkout_audit_actions`; **98 → 99**, asserted by the deploy itself |
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `2a1028906b16077fc7495708646135114935589c`:**
+   · `CI` 31508472169 a1
+   · `e2e` 31508472220 a1
+   · `a11y-ci` 31508472226 a1
+   · `secrets-scan` 31508472196 a1
+
+All `a1` — no re-runs, nothing to explain. (The checker also listed five
+dependabot `npm_and_yarn` runs as `extra`; they are not required workflows and
+form no part of the citation.)
+
+### THE DECLARATION, JUDGED — 22 of 22, EVERY ONE AS DECLARED
+
+**What must change**
+
+| # | declared | measured | |
+|---|---|---|---|
+| 1 | `_prisma_migrations` 98 → 99 | **99** | ✓ |
+| 2 | the new row is `20260811160000_b7_checkout_audit_actions` | that exact name, newest | ✓ |
+| 3 | `AuditAction` labels 138 → 141 | **141** | ✓ |
+| 4 | the three labels in `pg_enum` | `CHECKOUT_TOPUP_CREDITED`, `…_DUPLICATE`, `…_REFUSED` | ✓ |
+| 5 | app image id moves | `c6c9ec2edce7` → `c14397e8ae1a` | ✓ |
+| 6 | worker image id moves | `0c5a78e163e4` → `aec2badfd693` | ✓ |
+| 7 | **`POST /api/stripe/webhook` 404 → 503** | **503** | ✓ |
+
+**What must NOT change**
+
+| # | declared | measured | |
+|---|---|---|---|
+| 8 | **`ledger_entries` 0 rows** | **0** | ✓ |
+| 9 | `transcribe_visits` 25 | 25 | ✓ |
+| 10 | … `signedAt IS NOT NULL` 17 | 17 | ✓ |
+| 11 | `transcribe_md_patients` 16 | 16 | ✓ |
+| 12 | `api_usage_events` 1325 | 1325 | ✓ |
+| 13 | `ai_calls` 1126 | 1126 | ✓ |
+| 14 | `users` 196 | 196 | ✓ |
+| 15 | `practices` 197 | 197 | ✓ |
+| 16 | `price_rates` 44 | 44 | ✓ |
+| 17 | **`audit_logs` rows with a `CHECKOUT_%` action 0** | **0** | ✓ |
+| 18 | 4 triggers on `ledger_entries`, all `tgenabled='O'` | 4 / 4 enabled | ✓ |
+| 19 | 6 CHECK constraints on `ledger_entries` | 6 | ✓ |
+| 20 | composite FK present | `check-composite-fk` 🟢 | ✓ |
+| 21 | 9 of 9 containers healthy | 9 of 9 | ✓ |
+| 22 | co-tenants `307/404/200/200/410` | exactly that | ✓ |
+
+### ⚠️ ASSERTION 7 IS THE ONE WORTH READING TWICE — **503 IS THE PASS**
+
+`POST https://app.quillmd.com/api/stripe/webhook` returned **404 before the
+deploy and 503 after it**. That single number is the whole safety argument for
+shipping an unauthenticated, internet-reachable payment endpoint ahead of any
+Stripe account:
+
+- **503 means the route exists and refused before reading the body.** The first
+  statement checks `STRIPE_WEBHOOK_SECRET`, and it is unset in production.
+- **A 200 or a 400 would have been the finding** — either would mean a webhook
+  secret is configured in production, which nothing in this programme has
+  authorised.
+
+DISCOVERY §E.1 measured no `STRIPE` entry in any of the twelve `.env*` files on
+disk. This assertion is what turned that measurement into a statement about the
+**running container**, which is where the two have diverged before.
+
+⚠️ Probed with **no `stripe-signature` header and an empty body** — a request
+that can have no effect whatever the secret is, and one any internet caller can
+already make.
+
+### WHAT IS LIVE, AND WHAT IS NOT
+
+**Live:** three permanent `AuditAction` labels, and a route that refuses
+everything.
+
+**NOT live:** any billing behaviour whatsoever. `ledger_entries` still holds
+**0 rows**; no Stripe account, secret key or webhook secret exists in any
+environment; there is no way to CREATE a Checkout Session (B7 step 2); and the
+`$10` promo grant is unwritten. The deploy's own prediction — *"three new labels
+on a Postgres enum, plus an HTTP route that returns 503 to every request"* — held
+on all 15 must-not-change assertions.
+
+### ⚠️ THE MIGRATION CANNOT BE ROLLED BACK, AND THAT WAS DECLARED IN ADVANCE
+
+Postgres has no `ALTER TYPE … DROP VALUE`. The three labels are permanent from
+the moment this deploy applied. Rolling the IMAGE back (`:pre-b7-20260811`)
+removes the route and leaves three unused enum labels behind, which cost
+nothing. Named in the declaration's Rollback section before the deploy rather
+than discovered during one.
