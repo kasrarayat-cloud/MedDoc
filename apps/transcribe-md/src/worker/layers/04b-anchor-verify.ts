@@ -916,7 +916,12 @@ const ENTAILMENT_SYSTEM = [
 // whole stage (verifier_failed). Single-verdict run-to-run wobble was the
 // measured residual escape path (gate runs 1–3: 4–5 register-inference
 // claims each passed the single verdict).
-const ENSEMBLE_LENSES: readonly string[] = [
+// EXPORTED for B4's closing gate. The stage's per-visit expectation is `{0,3}`
+// and the 3 is THIS LENGTH, not a constant anybody chose twice: one usage event
+// per lens per invocation. A gate asserting a literal 3 would keep passing if
+// somebody added a fourth lens and the meter then under-counted; asserting
+// against the array is the same claim with no hand-kept copy of the number.
+export const ENSEMBLE_LENSES: readonly string[] = [
   '', // pass 1 — the base rules, unmodified posture
   [
     '',

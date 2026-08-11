@@ -299,6 +299,70 @@ const MOCK_SOAP_TEXT = [
   '[MOCK] Hydration, OTC analgesics PRN. Return if headache worsens or new neuro symptoms.',
 ].join('\n');
 
+// ---------------------------------------------------------------------------
+// B4's CLOSING STEP — THE ANCHORED DRAFT, AND WHY ITS SPANS ARE DERIVED.
+// ---------------------------------------------------------------------------
+// `tm_anchor_entailment` was the one enumerated stage a mocked QA run could not
+// COUNT. Two conditions have to hold and only one was fixable by a flag:
+// `TRANSCRIBE_MD_EVIDENCE_ANCHORS=true` (fixed in `docker-compose.qa.yml`), and
+// L4's draft must actually CARRY anchors. It did not — `grep -c '⟦A:' mock.ts`
+// was 0 — so `deterministicStage` swept every line into the exempt bucket,
+// `toEntail` was empty, and `entailmentStage` returned before any model call.
+// That zero is CORRECT (ruling 82(d): no work is not a suppressed call) and it
+// is also unfalsifiable, which is why the coverage run reports the stage
+// UNPROVEN rather than green.
+//
+// ⚠️ THE SPANS ARE DERIVED FROM THE TRANSCRIPT FIXTURE, NOT COPIED FROM IT.
+// An anchor only survives `deterministicStage` if its span is a LITERAL
+// substring of the normalized transcript; a hand-copied quote silently stops
+// matching the moment somebody edits an utterance, and the failure mode is the
+// stage going quietly back to zero — which its own expectation PERMITS. So the
+// two utterances below are the single source for both `MOCK_DEEPGRAM_BATCH`
+// and every anchor here, and the drift is unrepresentable rather than merely
+// unlikely. (AGENTS.md: prefer DERIVING the value over threading a copy.)
+//
+// ⚠️ AND IT IS A DIFFERENT NOTE, NOT `MOCK_SOAP_TEXT` WITH ANCHORS BOLTED ON.
+// The default fixture asserts vitals — `BP 120/80, HR 72` — and the mock
+// transcript contains no exam at all, so those digits are unanchorable by
+// construction (`digits_unsupported`). A draft whose content its own transcript
+// cannot support is exactly what the verifier exists to catch; the anchored
+// variant therefore says only what the two utterances say, and marks the
+// Objective section `[not documented]`, which `isExemptLine` exempts.
+export const MOCK_TRANSCRIPT_UTTERANCES = {
+  doctor: '[MOCK] Hi, how are you feeling today?',
+  patient: '[MOCK] My head has been aching for three days.',
+} as const;
+
+const MOCK_SOAP_TEXT_ANCHORED = [
+  '## Subjective',
+  `[MOCK] Patient reports head aching for three days. ⟦A:"${MOCK_TRANSCRIPT_UTTERANCES.patient}"⟧`,
+  '',
+  '## Objective',
+  '[not documented]',
+  '',
+  '## Assessment',
+  `[MOCK] Headache. ⟦A:"${MOCK_TRANSCRIPT_UTTERANCES.patient}"⟧`,
+  '',
+  '## Plan',
+  `[MOCK] Discussed how the patient is feeling today. ⟦A:"${MOCK_TRANSCRIPT_UTTERANCES.doctor}"⟧`,
+].join('\n');
+
+/** The anchored variant with every `⟦A:…⟧` removed — what 04b composes as the
+ *  note body once the claims clear the verifier. `tm_polish` returns THIS under
+ *  the flag so L6's output equals its input: the polish stage still makes its
+ *  model call (and still meters), but it cannot hand L6b a note that shares no
+ *  text with the draft it was supposed to be polishing. */
+const MOCK_SOAP_TEXT_ANCHORED_STRIPPED = MOCK_SOAP_TEXT_ANCHORED.replace(
+  /\s*⟦A:[\s\S]*?⟧/g,
+  ''
+);
+
+/** B4's closing gate — DEFAULT OFF, the `MOCK_CRITIQUE_ISSUES` shape.
+ *  On only under `docker-compose.qa.b4-coverage.yml`. */
+function soapAnchorsEnabled(): boolean {
+  return process.env.MOCK_SOAP_ANCHORS === 'true';
+}
+
 const MOCK_COMPLETE_TEXT_FIXTURES: Partial<
   Record<ModelCallPurpose, AnthropicCompleteTextResult>
 > = {
@@ -399,6 +463,15 @@ function completeTextFixture(
     const verdicts = entailmentClaimIndices(user).map((i) => ({ i, entailed: true }));
     return { ...fixture, text: JSON.stringify({ verdicts }) };
   }
+  // B4's closing gate — without this, L4's mocked draft carries no `⟦A:…⟧`, so
+  // `toEntail` is empty and `tm_anchor_entailment` is uncountable. See the
+  // fixture's own header for why the default stays unanchored.
+  if (purpose === 'tm_soap_draft' && soapAnchorsEnabled()) {
+    return { ...fixture, text: MOCK_SOAP_TEXT_ANCHORED };
+  }
+  if (purpose === 'tm_polish' && soapAnchorsEnabled()) {
+    return { ...fixture, text: MOCK_SOAP_TEXT_ANCHORED_STRIPPED };
+  }
   return fixture;
 }
 
@@ -413,8 +486,7 @@ const MOCK_DEEPGRAM_BATCH: DeepgramBatchResponse = {
       {
         alternatives: [
           {
-            transcript:
-              '[MOCK] Hi, how are you feeling today? [MOCK] My head has been aching for three days.',
+            transcript: `${MOCK_TRANSCRIPT_UTTERANCES.doctor} ${MOCK_TRANSCRIPT_UTTERANCES.patient}`,
             confidence: 0.95,
             words: [],
           },
@@ -427,7 +499,7 @@ const MOCK_DEEPGRAM_BATCH: DeepgramBatchResponse = {
         end: 2.0,
         confidence: 0.95,
         channel: 0,
-        transcript: '[MOCK] Hi, how are you feeling today?',
+        transcript: MOCK_TRANSCRIPT_UTTERANCES.doctor,
         words: [],
         speaker: 0,
       },
@@ -436,7 +508,7 @@ const MOCK_DEEPGRAM_BATCH: DeepgramBatchResponse = {
         end: 3.5,
         confidence: 0.93,
         channel: 0,
-        transcript: '[MOCK] My head has been aching for three days.',
+        transcript: MOCK_TRANSCRIPT_UTTERANCES.patient,
         words: [],
         speaker: 1,
       },
