@@ -6461,3 +6461,35 @@ allowlist is guessed is the hand-kept-list failure in a new file extension.
 design-reference and QA-auditor capture paths, and add the same
 READ-IT-THEN-ADJUDICATE row to the allowlist table in `AGENTS.md`. Until then,
 **the rule about screenshots is enforced by nothing but attention.**
+
+### ⚠️ AND THE PUSH THAT CARRIED THIS FINDING CANCELLED THREE OF ITS OWN RUNS, DELIBERATELY
+
+Recorded because AGENTS.md requires a cancellation to be a **named decision**
+rather than an accident, and because this is the #568 shape with the session on
+the wrong side of it.
+
+| | |
+|---|---|
+| cancelled | `CI` `31468976163`, `a11y-ci` `31468976112`, `e2e` `31468976098` — all at **3m37s** |
+| survived | `secrets-scan` `31468976193`, completed success at 29s |
+| cost | **~11 runner-minutes**, and the citation clock restarted |
+
+**The two-view check was taken first and both views agreed** (three
+`in_progress`, one `completed`), so this was a decision with the numbers in
+front of it, not a zero believed too early.
+
+⚠️ **THE HABIT THAT WOULD HAVE PREVENTED IT IS THE HARDER ONE, AND IT IS THE ONE
+#568 ALREADY NAMED.** The finding above did not exist when the PR was pushed —
+it was found minutes later, while enumerating scratch for the close-out. So the
+cure is not *"batch two commits that are already sitting there"*; it is **hold
+the first push until the session's remaining work — including the close-out
+enumeration — is done.** This session pushed at the moment the item was green,
+which felt like the right moment and was not.
+
+**Pushing now was nevertheless the cheaper of the two available options**, and
+the arithmetic is the whole reason it was taken at 3m37s rather than deferred:
+waiting for the three runs, then pushing, then waiting again would have cost
+**~85 minutes** of wall clock against **~45**. AGENTS.md's own pricing rule —
+*"the cost is set by HOW LATE the second push lands"* — cuts toward pushing
+immediately once the decision to push at all is made. **The mistake was the
+early first push; the response to it was the cheap one.**
