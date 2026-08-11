@@ -6231,6 +6231,31 @@ service was a silent no-op and new migrations went unapplied while the log read
 Every refusal was matched **on the guard's own name in the message**, never on
 "an error happened" — a refusal is evidence only when you know WHAT refused.
 
+### ⚠️ "ACROSS A GENERATED SEQUENCE" IS THE GATE'S OWN WORDING, AND THREE ROWS IS NOT ONE
+
+The item says `balanceAfter` consistency is proven **across a generated
+sequence**. The derivation probe above is three rows. That is the watched-set
+failure in miniature — a real proof of a smaller claim than the criterion names
+— so the criterion was executed literally:
+
+```
+INSERT … SELECT FROM generate_series(1,200)   -- mixed topup/usage, signed
+→ INSERT 0 200
+→ rows 200 | min_seq 1 | max_seq 200 | distinct_seq 200
+→ rows where balanceAfter disagrees with the running sum: 0
+```
+
+**Gapless, unique, and every row's `balanceAfter` equal to the running sum of
+every `amountMicroUsd` before it**, over 200 rows the database numbered and
+totalled itself — the caller supplied neither column.
+
+⚠️ **AND THE ZERO IS POSITIVE-CONTROLLED, because a zero from a broken query and
+a zero from a correct ledger are the same output.** The identical query run
+against a deliberately wrong expectation (`running + 1`) returned **200**. The
+comparison discriminates; the 0 means something.
+
+Both runs inside `BEGIN … ROLLBACK`; the table is back to 0 rows.
+
 ### 🔑 THE PROBE THAT MATTERED MOST WAS THE ONE THAT HAD TO *SUCCEED*
 
 ```
@@ -6280,6 +6305,47 @@ future author has to argue with an assertion rather than quietly weaken a guard.
 neither row-level trigger and is not a DELETE, so a ledger protected by
 `BEFORE DELETE` alone can still be emptied in one statement — and every
 behavioural test of UPDATE and DELETE would stay green.
+
+**And the CI gate was mutated too, because a database proof says nothing about
+whether the CHECK-IN-CI can see a regression.** Both mutations were made to the
+SOURCE and restored by the exact inverse edit — **no backup file was created and
+none was needed**, because the work was committed first and the restore is
+verified by `git status --porcelain` returning empty, not by trusting the edit:
+
+| mutation | predicted red | measured |
+|---|---|---|
+| **M3** — the `BEFORE TRUNCATE` trigger deleted from the migration | the trigger-set assertions fail | **4 failed / 30 passed** — the timing test, the exact-four test, the drift-record diff, **and the positive control that counts the objects before diffing them** ✓ |
+| **M4** — the jsonb comparison replaced by a two-column `IS NOT DISTINCT FROM` list | the un-decayable-comparison assertions fail | **2 failed / 32 passed** — both the "uses jsonb" and the "does NOT fall back to a column list" arms ✓ |
+
+Restored: `git status --porcelain` empty, gate back to **34 of 34**.
+
+⚠️ **M3's fourth failure is the one worth noting: the positive control failed
+too, and that is correct behaviour.** It asserts the object-scanning regex found
+9 objects before the diff below trusts it. With one deleted it found 8 and said
+so — so the control cannot be satisfied by a tree that is missing the very thing
+it is counting, which is the failure mode a positive control exists to have.
+
+### THE DRIFT ENUMERATION — `UNDECLARED-PLAIN = 0`, MEASURED ON THE DATABASE
+
+AGENTS.md rule 7's standing expectation, checked against `pg_indexes` and
+`pg_constraint` on QA after the migration applied — not against the migration
+file, which is a claim about what should exist:
+
+| object | declared where |
+|---|---|
+| `ledger_entries_pkey` | `@id` |
+| `ledger_entries_idempotencyKey_key` | `idempotencyKey String? @unique` |
+| `ledger_entries_practiceId_bucket_seq_key` | `@@unique([practiceId, bucket, seq])` |
+
+**Three indexes, three declarations, zero undeclared plain indexes.** The names
+were written to match Prisma's own convention exactly, so the schema and the
+hand-written migration cannot disagree about them.
+
+The permitted residue is the 5 CHECKs and the 4 triggers, every one **named in
+the model's comment block** — and the CI gate does not take that on trust: it
+extracts the object names from the migration by regex, positive-controls the
+count, and asserts each one appears in `schema.prisma`. A constraint added later
+without its documentation fails a test rather than becoming invisible drift.
 
 ### WHAT B5 DOES NOT CLAIM
 
