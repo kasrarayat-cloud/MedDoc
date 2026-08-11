@@ -6982,3 +6982,122 @@ carries the weaker gate.
 the first push happened before the close-out enumeration was done, so a finding
 that arrives during verification necessarily lands mid-run. *Hold the first push
 until the session's remaining work is written* is the habit; I did not.
+
+---
+
+## 🟩 B6 IS LIVE IN PRODUCTION — `f1c6dfde`, 2026-08-11T12:39Z
+
+| | |
+|---|---|
+| deployed commit | `f1c6dfdeff2ade97e98b62850a3dac240f628dc9` |
+| declaration | `docs/foundation/deploys/20260811-f1c6dfde.md` — **written 11:58Z, 41 minutes BEFORE the deploy ran** |
+| deploy log | `docs/deploy-logs/deploy-20260811T123844Z.log` |
+| rollback tag | **`:pre-b6-20260811`** — app `5483ff331dd7` / worker `7aabd4cc69c6`, **cut BEFORE `deploy-prod.sh` ran**, verified by id match |
+| app image | `5483ff331dd7` → **`c6c9ec2edce7`** |
+| worker image | `7aabd4cc69c6` → **`0c5a78e163e4`** |
+| migration | `20260811103000_b6_ledger_pricing_snapshot`; **97 → 98**, asserted by the deploy itself |
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `f1c6dfdeff2ade97e98b62850a3dac240f628dc9`:**
+   · `CI` 31488664560 a1
+   · `e2e` 31488664518 a1
+   · `a11y-ci` 31488664506 a1
+   · `secrets-scan` 31488664520 a1
+
+All `a1` — no re-runs, nothing to explain.
+
+### THE DECLARATION, JUDGED — 21 of 21, EVERY ONE AS DECLARED
+
+**What must change**
+
+| # | declared | measured | |
+|---|---|---|---|
+| 1 | `_prisma_migrations` 97 → 98 | **98** | ✓ |
+| 2 | the new row is `20260811103000_b6_ledger_pricing_snapshot` | that exact name | ✓ |
+| 3 | `ledger_entries.pricing` exists, `jsonb`, nullable | `pricing / jsonb / YES` | ✓ |
+| 4 | `ledger_entries_usage_has_pricing` exists | present | ✓ |
+| 5 | CHECKs on `ledger_entries` 5 → 6 | **6** | ✓ |
+| 6 | app image id moves | `5483ff331dd7` → `c6c9ec2edce7` | ✓ |
+| 7 | worker image id moves | `7aabd4cc69c6` → `0c5a78e163e4` | ✓ |
+
+**What must NOT change**
+
+| # | declared | measured | |
+|---|---|---|---|
+| 8 | **`ledger_entries` 0 rows** | **0** | ✓ |
+| 9 | `transcribe_visits` 25 | 25 | ✓ |
+| 10 | … `signedAt IS NOT NULL` 17 | 17 | ✓ |
+| 11 | `transcribe_md_patients` 16 | 16 | ✓ |
+| 12 | `api_usage_events` 1325 | 1325 | ✓ |
+| 13 | `ai_calls` 1126 | 1126 | ✓ |
+| 14 | `users` 196 | 196 | ✓ |
+| 15 | `practices` 197 | 197 | ✓ |
+| 16 | `price_rates` 44 | 44 | ✓ |
+| 17 | 4 triggers, all `tgenabled='O'` | 4 / 4 enabled | ✓ |
+| 18 | 3 indexes | 3 | ✓ |
+| 19 | composite FK present | `check-composite-fk` 🟢 | ✓ |
+| 20 | 9 of 9 containers healthy | 9 of 9 | ✓ |
+| 21 | co-tenants `307/404/200/200/410` | exactly that | ✓ |
+
+**Assertion 8 was the one that mattered** — B6 introduces the first writer this
+table has ever had, and a row appearing would be a defect that had *already
+become permanent*, the table being append-only. It stayed 0, which is what
+ruling 90(e) predicted and what keeps ruling 90(d)'s retrofit window open.
+
+### ⚠️ THE ROLLBACK TAG WAS CUT FIRST THIS TIME, AND THAT IS A CORRECTION
+
+Session 01 recorded cutting B5's tag **late**, noting it survived on luck: a
+dangling image is exactly what `docker image prune` removes and preflight runs
+one automatically, so that deploy had no rollback path for four minutes.
+`deploy-prod.sh` still does not cut tags. So the declaration named the two
+`docker tag` commands explicitly, and they ran **before** the deploy — verified
+by id match against the running containers, not by the tag existing.
+
+### WHAT IS LIVE, AND WHAT IS NOT
+
+**Live:** a `pricing` column and a conditional CHECK on an empty
+`ledger_entries`, and `packages/ai`'s charge rule and prod-only writer, compiled
+into the image.
+
+**NOT live:** any billing behaviour whatsoever. **Nothing calls the writer** —
+ruling 90(e) — so `ledger_entries` still holds **0 rows** and the deploy's own
+prediction (*"beyond the image ids, one migration row, one column and one CHECK,
+nothing about the running system's behaviour should differ at all"*) held on all
+14 must-not-change assertions. Top-ups are **B7**; the fail-closed balance block
+and **the writer's call site** are **B8**.
+
+---
+
+## ✅ THE CITATION OWED FOR `7b88cf06` — PRODUCED BY THE CHECKER
+
+Session 01 closed with *"`7b88cf06`'s citation (PR #600) — owed to the next
+session, per the established lag."* Verified as STEP 0.4 of session 02 and
+recorded here rather than deferred again.
+
+**Citation — 4 of 4 on `7b88cf06e69a5de4451ce130540a24a2417c47b4`:**
+   · `CI` 31479674193 a1
+   · `e2e` 31479674185 a1
+   · `a11y-ci` 31479674191 a1
+   · `secrets-scan` 31479674174 a1
+
+⚠️ **It was `2`/still-running for the first ~2h20m of this session** — `e2e`
+completed at 11:52Z having started at 09:52Z. That is a WAIT, not a finding, and
+the checker withheld the block correctly throughout. **The lag exists because a
+docs PR's own merge-commit `e2e` outlives the session that opened it**, which is
+structural and not anybody's oversight.
+
+### ⚠️ CORRECTION TO THE M8 ROW ABOVE — THE CANCELLED RUN WAS 41m12s, NOT "~39 MINUTES"
+
+The M8 section states the cancelled `e2e` was *"~39 minutes in"*. That figure was
+an estimate written before the run finished dying. **Measured afterwards:
+`31482462518` started `10:29:54Z` and ended `11:11:06Z` — 41m12s**, against a
+median `e2e` of ~41m. So it was cancelled within roughly a minute of completing,
+not two minutes short of it.
+
+The decision stands — the required checks had to re-run on the new head before
+merging regardless — but **the price was at the expensive end of the class, not
+the cheap end**, and AGENTS.md is explicit that the cost is set by how late the
+second push lands. Recorded because a number I estimated and did not re-measure
+is exactly the shape the FOUNDATION canon calls a fabricated figure, and the
+correction is cheaper than the precedent.
