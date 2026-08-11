@@ -7101,3 +7101,197 @@ the cheap end**, and AGENTS.md is explicit that the cost is set by how late the
 second push lands. Recorded because a number I estimated and did not re-measure
 is exactly the shape the FOUNDATION canon calls a fabricated figure, and the
 correction is cheaper than the precedent.
+
+---
+
+## ✅ B7 STEP 1 IS BUILT — THE WEBHOOK, AND AN INBOUND EVENT'S MODE IS HALF THE GUARD — 2026-08-11
+
+**Session 03 of run `20260811-065857-b1`.** B7's gate has four clauses and this
+step lands all four, plus the fail-closed arm that makes the route safe to ship
+ahead of any Stripe account. **Nothing is billed, nothing is charged, and no
+Stripe account, secret key or webhook secret exists in any environment.**
+
+### WHAT SHIPPED
+
+| | |
+|---|---|
+| the decision, PURE | `apps/transcribe-md/src/lib/billing/stripe-topup.ts` |
+| the effect | `apps/transcribe-md/src/app/api/stripe/webhook/route.ts` |
+| the enum's third layer | `20260811160000_b7_checkout_audit_actions` — three `ALTER TYPE … ADD VALUE` |
+| the gate | `gate-b7-webhook-topup.test.ts` — 26 arms |
+| a NEW standing gate | `gate-audit-enum-migration.test.ts` — the layer that has silently failed three times |
+| QA posture | `STRIPE_WEBHOOK_SECRET` joins `check-qa-mock-posture.sh`'s `KEYS` |
+| QA compose | both Stripe secrets as **literal** dummies, in both services |
+
+The split is B6's, for B6's reason: a writer that refuses in some environments
+"can never be watched WRITING by any test we are allowed to run", so the
+DECISION is separated from the EFFECT and proven exhaustively from object
+literals, anywhere.
+
+### THE ONE THAT MATTERS — `assertProdDatabase()` WOULD HAVE BEEN FAIL-OPEN HERE
+
+SPEC §2.4 says *"prod-only billing writer — the writer asserts it is in
+production and refuses otherwise"*, and B6's `commitVisitCharge` does exactly
+that. **Applied to an INBOUND event that carries its own `livemode` flag, that
+clause guards half the question:**
+
+> A **TEST-mode** `checkout.session.completed` delivered to `app.quillmd.com`
+> satisfies `assertProdDatabase()` completely — and credits a real practice's
+> real wallet with money **nobody paid**, on a table that cannot delete it.
+
+That is reachable *today*: Stripe is TEST MODE ONLY on this programme, so a
+test-mode event is the only kind that can currently exist. So the rule is a
+two-sided match, ruling 90(c)'s shape pointed at an inbound fact:
+
+| database | event | |
+|---|---|---|
+| production | `livemode: true` | credit |
+| non-production | `livemode: false` | credit |
+| `staging`, unset, unparseable | either | **refuse — `undeterminable_environment`** |
+| production | `livemode: false` | **refuse — nobody paid for it** |
+| non-production | `livemode: true` | **refuse — the record would be lost** |
+
+Ruling 91(a), **PROVISIONAL**, recorded with the divergence stated rather than
+buried. The reversal is to AND `assertProdDatabase()` on top, which only ever
+makes it stricter.
+
+### THE GATE, MUTATION-PROVED — 8 OF 8, EACH BY A NAMED TEST
+
+Backups to scratch **before** the first mutation and restored from those copies,
+never `git checkout --` (the 2026-08-08 lesson: on a dirty tree that reverts to
+HEAD and destroys the session's uncommitted work). Every mutation asserted its
+own occurrence count before its result was believed. Baseline green first, and
+green again afterwards with all four files verified byte-identical.
+
+| | mutation | caught by |
+|---|---|---|
+| M1 | `req.text()` → `JSON.stringify(await req.json())` | the `req.text()` arm |
+| M2 | a `logAudit` call moved ABOVE `constructEvent` | *nothing touches the database before the signature has verified* |
+| M3 | `practiceId:` removed from one `logAudit` call | *userId and practiceId are passed to every logAudit call* |
+| M4 | `checkProdDb(…).ok` → `!checkNonProdDb(…).ok` | *an UNIDENTIFIABLE database refuses in BOTH modes* |
+| M5 | `visitId` added to the metadata allowlist | *ANY metadata key outside the allowlist* |
+| M6 | the credit negated (`-decision.amountMicroUsd`) | *the ledger row is a POSITIVE topup* |
+| M7 | an enum label added with no migration | *EVERY label in schema.prisma is created by some migration* |
+| M8 | B7's OWN migration statement deleted | the same arm, **plus** *B7's own three labels are creatable* |
+
+⚠️ **M4 FIRST REPORTED "GATE IS BLIND", AND THE GATE WAS FINE.** The harness
+ran each mutation against a NAME-FILTERED test, and the filter named the
+prod-plus-test-mode arm — which the negation genuinely does not change, because
+`checkNonProdDb('meddoc')` is not-ok either way. The negation leaks on the
+*unidentifiable* cases (`staging` negates to "this is production, write"), and
+that arm caught it immediately once the filter was dropped. **The harness had
+the defect its own subject is designed against: a check whose title was narrower
+than what it measured.** Every mutation now runs against the whole gate file and
+the run prints which test caught it.
+
+### TWO OTHER ITEMS' GATES WENT RED, AND BOTH WERE RIGHT
+
+**B5's writer census.** `gate-b5-ledger-append-only.test.ts` asserts the set of
+files that write `ledger_entries` equals a hand-declared list, so that "the
+first writer arrives as a DELIBERATE edit rather than as a surprise". B7 is the
+second writer and is declared, with the shape of its refusal written beside it —
+including *why* it is not `assertProdDatabase()`.
+
+**B6's compose sweep, and it is the substring trap for the fourth time.**
+`gate-b6-charge-prod-only.test.ts` asserts no compose file contains
+`${STRIPE_SECRET_KEY:-…}`. B7 added the variables as literal dummies **and a
+comment warning against the interpolation form** — and the warning tripped the
+guard against the thing it warns about. AGENTS.md's own summary of the class:
+*"a file's comments are the one place where the words you are grepping for are
+guaranteed to appear."* Fixed on the GUARD, not by rewording the warning: the
+scan now strips `#` comment lines, which is strictly more correct (a `${VAR:-…}`
+inside a comment interpolates nothing), and carries a new control proving the
+stripper neither blanks the file nor lets an ACTIVE interpolation through. The
+arm now covers `STRIPE_WEBHOOK_SECRET` too.
+
+⚠️ **It bit twice more in the same hour, in my own shell**: a
+`grep -c '\${STRIPE' docker-compose.qa.yml` returned 2 and both hits were that
+same comment.
+
+### THE NEW STANDING GATE — THE THIRD LAYER, CHECKED AT LAST
+
+`gate-audit-action-parity.test.ts` compares the TS union against
+`schema.prisma`. It is correct and it is not sufficient, because
+**`schema.prisma` is not the database either** — a Prisma enum VALUE needs its
+own `ALTER TYPE` migration. That gap is where the bug lived twice: on
+2026-08-06 attempt 2 landed in BOTH source files and still not in Postgres,
+passing `prisma validate`, `tsc` and **3192 unit tests**, while the app logged
+`invalid input value for enum "AuditAction"` and swallowed it.
+
+`gate-audit-enum-migration.test.ts` closes it as a SOURCE comparison, so it
+fails in the unit suite instead of in an E2E that queries `audit_logs`. It
+parses per-statement up to the semicolon and strips SQL comments, because both
+statement forms occur here — including a MULTI-LINE `ALTER TYPE "AuditAction"`
+in two migrations that a line-oriented matcher would miss while reporting clean.
+
+⚠️ **AND ITS MULTI-LINE POSITIVE CONTROL WAS WRONG WHEN FIRST WRITTEN.** It
+asserted `SPEAKER_ROLE_REASSIGNED`, which the SINGLE-line form also creates — so
+the assertion named the multi-line arm and would have passed without exercising
+it. Corrected to `AI_REFUSAL`, verified against the two files that actually use
+that form. Same class as M4 above, twice in one session.
+
+⚠️ **WHAT IT DOES NOT CLAIM:** that any migration has been APPLIED. That is
+`assert-migrations-applied.sh`, and the two together are what the claim needs.
+
+### PROVEN ON QA, AND WHAT IS DELIBERATELY NOT
+
+`pg_enum` on `meddoc_qa_test` after applying the migration — **not**
+`prisma validate`, which is the check that has passed through this defect twice:
+
+```
+CHECKOUT_TOPUP_CREDITED
+CHECKOUT_TOPUP_DUPLICATE
+CHECKOUT_TOPUP_REFUSED
+```
+
+QA is **99 of 99** migrations. Production is 98 of 98 and stays there until the
+deploy — the normal pre-deploy asymmetry.
+
+⚠️ **THE CREDITED PATH IS NOT PROVEN END TO END, AND THAT IS A CHOICE.**
+Proving it means appending a `topup` row to QA's append-only `ledger_entries`,
+which permanently ends the zero-row state rulings 89(e) and 90(d) deliberately
+preserved — that emptiness is what lets a future column land without a
+fail-open DEFAULT or a backfill UPDATE. The REFUSED path is proven end to end
+instead (below), which exercises the security-critical half — the signature —
+and the Postgres enum. **The credit is proven at unit level only.** An
+unverified step named honestly is worth more than a green tick bought by
+poisoning an invariant another ruling depends on.
+
+### WHAT THIS STEP DOES **NOT** CLAIM
+
+- **Nothing is billed.** `ledger_entries` holds **0 rows** in both environments.
+- **No Stripe account exists**, and no `STRIPE_SECRET_KEY` or
+  `STRIPE_WEBHOOK_SECRET` is set in production — so the route **503s on every
+  request** as shipped. That is the fail-closed arm, and it is why this can ship
+  ahead of the account.
+- **There is no way to CREATE a Checkout Session yet** — that is B7 step 2,
+  along with the settings-page door (`settings/page.tsx:895-905` still carries
+  the disabled placeholder).
+- **The `$10` promo grant is not built.** `bucket = 'promo'` exists in B5's
+  schema and nothing writes it.
+- **`pricing` stays NULL on a topup**, permitted by the CONDITIONAL
+  `ledger_entries_usage_has_pricing` CHECK — ruling 90(d): a top-up is money
+  arriving, not money computed.
+
+### THE STRIPE SDK IS BACK IN THE CLINICAL WORKER — MEASURED, NOT WAVED AT
+
+`Dockerfile.worker:62` copies the entire workspace-root `node_modules`, so a
+dependency of the WEB app reaches the worker. DISCOVERY §E.2 measured this class
+and the SECURITY BLOCK removed the two Stripe entries on 2026-08-04.
+
+**No standing ruling forbids re-adding it — `RULINGS.md` grepped, absent** — and
+§E.2's own words were that the nine CRM packages ship *"for no reason"*, which
+stops being true once the SDK is load-bearing. Taken rather than hand-rolling
+HMAC because `constructEvent` also does the replay-tolerance window and the
+constant-time compare.
+
+Lockfile delta **measured on both sides of the install**, not assumed:
+
+| | before | after |
+|---|---|---|
+| lockfile packages | 1167 | **1168** (exactly one entry, `node_modules/stripe`) |
+| `sharp`/`@img` subtree | 29 | **29** — the known `npm update` splice trap, positive-controlled |
+| `npm audit` findings | 6 (4 moderate, 2 high) | **6, none through `stripe`** |
+
+Closure is **A6**, which deletes `apps/meddoc-pro` and takes the other seven CRM
+packages with it. Named so it is a checked outcome rather than a hoped-for one.

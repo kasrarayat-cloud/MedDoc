@@ -294,6 +294,25 @@ services:
       ANTHROPIC_API_KEY: "qa-dummy-anthropic-key-never-valid"
       DEEPGRAM_API_KEY: "qa-dummy-deepgram-key-never-valid"
       OPENAI_API_KEY: "qa-dummy-openai-key-never-valid"
+      # B7 — STRIPE. LITERAL DUMMIES, and the literalness is the whole point.
+      #
+      # ⚠️ NEVER `${STRIPE_SECRET_KEY:-sk_test_…}` HERE. `:-` applies only when
+      # the variable is UNSET, and compose interpolation reads the project
+      # `.env` whether or not this file declares an `env_file` — which is
+      # exactly how `${MOCK_AI_CALLS:-true}` and `${ANTHROPIC_API_KEY:-mock-key-qa}`
+      # inherited PRODUCTION values for weeks and cost 298 real Anthropic calls
+      # from the stack whose header promised it could reach nothing.
+      #
+      # ⚠️ AND STRIPE IS TEST MODE ONLY ON THIS PROGRAMME — a hard-halt item at
+      # the top of the FOUNDATION master prompt. A dummy that is not even
+      # `sk_test_`-shaped is deliberate: it cannot be mistaken for a working
+      # test key, so nothing here can quietly start succeeding.
+      STRIPE_SECRET_KEY: "qa-dummy-stripe-secret-never-valid"
+      # The webhook's fail-closed arm keys on this being TRUTHY. A dummy leaves
+      # `api/stripe/webhook` ACTIVE and rejecting every signature, which is the
+      # posture closest to production; an empty value would make it 503 and the
+      # verification path would never run on QA at all.
+      STRIPE_WEBHOOK_SECRET: "qa-dummy-stripe-webhook-secret-never-valid"
       # RESEND IS THE EXCEPTION: EMPTY, not a dummy.
       #
       # A dummy is stronger than absence for a vendor the code will call
@@ -409,6 +428,25 @@ services:
       ANTHROPIC_API_KEY: "qa-dummy-anthropic-key-never-valid"
       DEEPGRAM_API_KEY: "qa-dummy-deepgram-key-never-valid"
       OPENAI_API_KEY: "qa-dummy-openai-key-never-valid"
+      # B7 — STRIPE. LITERAL DUMMIES, and the literalness is the whole point.
+      #
+      # ⚠️ NEVER `${STRIPE_SECRET_KEY:-sk_test_…}` HERE. `:-` applies only when
+      # the variable is UNSET, and compose interpolation reads the project
+      # `.env` whether or not this file declares an `env_file` — which is
+      # exactly how `${MOCK_AI_CALLS:-true}` and `${ANTHROPIC_API_KEY:-mock-key-qa}`
+      # inherited PRODUCTION values for weeks and cost 298 real Anthropic calls
+      # from the stack whose header promised it could reach nothing.
+      #
+      # ⚠️ AND STRIPE IS TEST MODE ONLY ON THIS PROGRAMME — a hard-halt item at
+      # the top of the FOUNDATION master prompt. A dummy that is not even
+      # `sk_test_`-shaped is deliberate: it cannot be mistaken for a working
+      # test key, so nothing here can quietly start succeeding.
+      STRIPE_SECRET_KEY: "qa-dummy-stripe-secret-never-valid"
+      # The webhook's fail-closed arm keys on this being TRUTHY. A dummy leaves
+      # `api/stripe/webhook` ACTIVE and rejecting every signature, which is the
+      # posture closest to production; an empty value would make it 503 and the
+      # verification path would never run on QA at all.
+      STRIPE_WEBHOOK_SECRET: "qa-dummy-stripe-webhook-secret-never-valid"
       # RESEND IS THE EXCEPTION: EMPTY, not a dummy.
       #
       # A dummy is stronger than absence for a vendor the code will call

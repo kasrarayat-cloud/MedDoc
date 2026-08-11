@@ -383,17 +383,68 @@ describe('B6 (7) — the second of F4s two conditions', () => {
     expect(composeFiles).toContain('docker-compose.qa.b4-coverage.yml');
   });
 
-  it('no compose file introduces a ${STRIPE_SECRET_KEY:-…} default', () => {
+  // ⚠️ COMMENTS ARE STRIPPED BEFORE THE SCAN, AND B7 IS WHY.
+  //
+  // This arm read the RAW file text until 2026-08-11. B7 added the Stripe
+  // variables to `docker-compose.qa.yml` as literal dummies and wrote a warning
+  // comment above them saying, in as many words, "NEVER
+  // `${STRIPE_SECRET_KEY:-sk_test_…}` HERE" — and THE WARNING TRIPPED THE GUARD
+  // AGAINST THE THING IT WARNS ABOUT. The file was correct; the prose was the
+  // violation.
+  //
+  // That is the substring family in AGENTS.md, whose own summary says it best:
+  // "a file's comments are the one place where the words you are grepping for
+  // are guaranteed to appear." Same shape as `'practice-scope' in source`
+  // matching the word "practice-scoped" in a comment written moments earlier.
+  //
+  // Stripping is strictly MORE correct, not a relaxation: a `${VAR:-…}` inside
+  // a `#` comment is inert YAML and interpolates nothing. The positive control
+  // below runs against a synthetic string, so it is unaffected by the stripping
+  // and still proves the matcher fires.
+  const withoutComments = (yaml: string) =>
+    yaml
+      .split('\n')
+      .map((l) => (l.trimStart().startsWith('#') ? '' : l))
+      .join('\n');
+
+  it('no compose file introduces a ${STRIPE_*:-…} default', () => {
     // The `:-` form inherits the PRODUCTION value from the shared .env — the
     // exact mechanism that put 298 real Anthropic calls through the "isolated"
-    // QA stack. Checked now, while the answer is trivially zero, so that B7
-    // adding the variable has to argue with this line.
+    // QA stack.
+    //
+    // ⚠️ BOTH SECRETS, NOT ONE. B7 introduces `STRIPE_WEBHOOK_SECRET`, which is
+    // what makes an inbound event BELIEVED — a different capability from the
+    // secret key's outbound spend, and equally not something a QA stack may
+    // inherit from production.
     for (const f of composeFiles) {
-      const text = readFileSync(join(ROOT, f), 'utf8');
+      const text = withoutComments(readFileSync(join(ROOT, f), 'utf8'));
       expect(text, `${f} inherits STRIPE_SECRET_KEY from the shared .env`).not.toMatch(
         /\$\{STRIPE_SECRET_KEY:-/,
       );
+      expect(text, `${f} inherits STRIPE_WEBHOOK_SECRET from the shared .env`).not.toMatch(
+        /\$\{STRIPE_WEBHOOK_SECRET:-/,
+      );
     }
+  });
+
+  it('the comment stripper does not blank the file (positive control)', () => {
+    // If `withoutComments` returned '' the sweep above would pass over nothing
+    // at all — an emptiness defect wearing a bug-fix's clothes. Every compose
+    // file must still carry substantive YAML after stripping.
+    for (const f of composeFiles) {
+      const stripped = withoutComments(readFileSync(join(ROOT, f), 'utf8'));
+      expect(stripped, `${f} was blanked by comment stripping`).toMatch(/^\s*services:/m);
+    }
+    // And it DOES remove a commented-out interpolation, which is the whole
+    // reason it exists.
+    expect(withoutComments('  # NEVER ${STRIPE_SECRET_KEY:-sk_test_x}')).not.toMatch(
+      /\$\{STRIPE_SECRET_KEY:-/,
+    );
+    // ⚠️ while an ACTIVE one on a real YAML line survives it — otherwise the
+    // stripper would have quietly disabled the guard rather than fixed it.
+    expect(withoutComments('  STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-sk_test_x}"')).toMatch(
+      /\$\{STRIPE_SECRET_KEY:-/,
+    );
   });
 
   it('the matcher can actually fire (positive control)', () => {

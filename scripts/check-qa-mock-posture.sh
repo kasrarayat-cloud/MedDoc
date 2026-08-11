@@ -81,7 +81,14 @@ CONTAINERS="meddoc-qa-transcribe-md-1 meddoc-qa-transcribe-md-worker-1"
 # ⚠️ AND THE GUARDRAIL IS ABSOLUTE: Stripe is TEST MODE ONLY on this programme.
 # A live `sk_live_…` reaching any container is not a configuration slip, it is
 # the hard-halt item at the top of the FOUNDATION master prompt.
-KEYS="ANTHROPIC_API_KEY DEEPGRAM_API_KEY OPENAI_API_KEY RESEND_API_KEY STRIPE_SECRET_KEY"
+# ⚠️ B7 ADDS `STRIPE_WEBHOOK_SECRET`, AND IT IS A SECOND SECRET, NOT A DETAIL.
+# The Stripe SECRET key spends money outbound; the WEBHOOK secret is what makes
+# an inbound event believed. A real one on the QA stack would let a live-mode
+# Stripe delivery be accepted there — and `api/stripe/webhook` refuses that by
+# mode, but the mode guard is code and this list is the second condition F4
+# demands. "Incapable" needs both: the code path AND credentials that are not
+# real. Same reasoning that put STRIPE_SECRET_KEY here before any code read it.
+KEYS="ANTHROPIC_API_KEY DEEPGRAM_API_KEY OPENAI_API_KEY RESEND_API_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET"
 
 fail=0
 checked=0

@@ -236,7 +236,23 @@ export type AuditAction =
   // determinable: boolean, basis } — ids and a basis string, never PHI.
   // `determinable: false` is a real outcome and is recorded as such rather
   // than guessed at.
-  | 'AUDIT_ATTRIBUTION_CORRECTED';
+  | 'AUDIT_ATTRIBUTION_CORRECTED'
+  // B7 (2026-08-11) — Stripe Hosted Checkout top-ups, written by
+  // `api/stripe/webhook/route.ts`. That handler has NO SESSION, so it passes
+  // `userId` and `practiceId` explicitly (DISCOVERY §E.6) — a refusal whose
+  // practice is genuinely unknown passes `null` and lands UNATTRIBUTED rather
+  // than guessing. Metadata is Stripe ids, integer amounts and a named refusal
+  // reason: no email, no name, no line-item description, and never a visit or
+  // patient id (§E.5 — a visit id dereferences to a named patient in one hop).
+  //
+  // ⚠️ ALL THREE ALSO EXIST IN THE PRISMA ENUM **AND** IN A MIGRATION
+  // (`20260811160000_b7_checkout_audit_actions`). Three layers, and the third
+  // is the one that has silently failed twice: `prisma validate` and `tsc` are
+  // both happy without it, and `logAudit` is void-ed, so the insert is rejected
+  // and the rejection discarded.
+  | 'CHECKOUT_TOPUP_CREDITED'
+  | 'CHECKOUT_TOPUP_REFUSED'
+  | 'CHECKOUT_TOPUP_DUPLICATE';
 
 export interface AuditLogInput {
   action: AuditAction;
