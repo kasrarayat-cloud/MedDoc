@@ -6387,3 +6387,77 @@ because its QA capability needed a form nobody could invoke.
 
 Local: **3401 passed / 4 skipped** (3367 + the gate's 34), `tsc` **0 errors**.
 Neither closes the item — the merge-commit citation does.
+
+---
+
+## 🟠 FOUND ON THE WAY PAST — A RENDERED CLINICAL NOTE IS A TRACKED IMAGE, AND THE GUARD ONLY WATCHES `.docx`/`.pdf`
+
+**Found while enumerating this session's scratch, which is the only reason
+anybody looked at the repo root.**
+
+`/opt/meddoc-pro/` holds **161 tracked `.jpeg` files** — `audit-*.jpeg`,
+`ax-*.jpeg`, `ax2-*.jpeg`, `billing-*.jpeg` — all dated 2026-07-25, none
+gitignored, all in every clone.
+
+### THE FILES THEMSELVES ARE CLEAN, AND THAT WAS ESTABLISHED BY READING THEM
+
+Per AGENTS.md's standing pattern (*READ IT, THEN ADJUDICATE, THEN WRITE THE
+DECISION DOWN*) — not by filename, which has already been rejected as evidence
+once in this programme:
+
+| read | content |
+|---|---|
+| `audit-patients-list.jpeg` | an 11-patient list: **QA Pediatric Test · QA Test Patient · Kasratest · tets_1 · Test · Bobby · Joe** — the synthetic QA population, under the **"QA Interaction Auditor"** account |
+| `billing-desktop-note.jpeg` | a **fully rendered SOAP note** — chief complaint, HPI, ROS — for **"QA Test Patient"**, the standard synthetic fixture (hypertension + low back pain) |
+
+**Verdict: non-PHI, by OWNERSHIP and by CONTENT.** These are the
+`qa-interaction-auditor` agent's captures of the synthetic population. **They are
+not strays and must survive any future sweep.**
+
+### THE FINDING IS THE GAP THEY REVEAL, NOT THE FILES
+
+`scripts/hooks/pre-commit` blocks added **`.docx` and `.pdf`** outside the
+fixture allowlist. **It says nothing about images** — the whole watched set is
+one `case` arm at **`scripts/hooks/pre-commit:44`**:
+
+```sh
+*.docx|*.pdf|*.DOCX|*.PDF) ;;
+```
+
+AGENTS.md's actual rule is broader than the guard that enforces it:
+
+> *"Nothing that renders a patient's note belongs in the repository at all — not
+> as evidence, not as a QA artifact, not 'just this once'."*
+
+A screenshot renders a patient's note **more** directly than a `.docx` does: no
+unzip, no parse, just open it. And the class is entirely unguarded — a
+`.png`/`.jpeg` of a real doctor's signed note would be committed with no
+murmur, by a hook that would have refused the identical content as a PDF.
+
+**The precedent prices it.** `docs/qa-reports/twin-real-visit-20260726.docx` cost
+a full `git filter-repo` rewrite, a force-push over a protected branch, 22 scratch
+clones deleted, two dependabot branches deleted — and **293 permanent
+`refs/pull/*` refs needing GitHub Support**. The second purge, on files 85 days
+old, was *"~200x the work of the first for the same two files' worth of
+content"*. **The cost of a tracked clinical file is not fixed; it compounds** —
+and these are already 17 days old and in every clone.
+
+⚠️ **AND THIS IS THE WATCHED-SET SHAPE, NOT A MISSING RULE.** The rule is
+written and correct. What is missing is that *the check watches a narrower set
+than the rule names* — AGENTS.md's own **"a gate's WATCHED SET is diffed against
+the spec's NAMED set"**, pointed at the pre-commit hook. Nothing would ever
+surface it: both existing arms work perfectly, no test fails, and a clean run of
+the hook is indistinguishable from a hook that never looked at images.
+
+### DISPOSITION — NAMED, NOT BOLTED ON
+
+**Not fixed here, deliberately.** The naive fix — block added `.jpeg`/`.png` —
+would refuse the design-reference workflow this repo actively uses (161 files at
+the root, plus `_design-references/redesign-2026/`'s 136 PNGs), so it needs a
+designed allowlist rather than a one-line addition. An image guard whose
+allowlist is guessed is the hand-kept-list failure in a new file extension.
+
+**The item:** extend the hook's guard to images with an allowlist covering the
+design-reference and QA-auditor capture paths, and add the same
+READ-IT-THEN-ADJUDICATE row to the allowlist table in `AGENTS.md`. Until then,
+**the rule about screenshots is enforced by nothing but attention.**
