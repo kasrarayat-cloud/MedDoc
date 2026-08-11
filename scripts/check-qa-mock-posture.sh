@@ -62,7 +62,26 @@ set -uo pipefail
 CONTAINERS="meddoc-qa-transcribe-md-1 meddoc-qa-transcribe-md-worker-1"
 # Every vendor credential the codebase reads. Keep in step with the compose file
 # — a key that is unset today is one .env line away from being real.
-KEYS="ANTHROPIC_API_KEY DEEPGRAM_API_KEY OPENAI_API_KEY RESEND_API_KEY"
+#
+# ⚠️ `STRIPE_SECRET_KEY` IS HERE BEFORE ANY CODE READS IT, AND THAT IS THE POINT.
+# SPEC §2.4 and RELAY B6 both require it to join this list "in the same change
+# that introduces it". B6 introduces the billing writer; B7 introduces the
+# Stripe caller. Waiting for the caller would mean the first commit that can
+# spend money is also the first commit this check watches — and the whole reason
+# this script exists is that a `${VAR:-default}` in docker-compose.qa.yml
+# inherits the PRODUCTION value from the shared .env, silently, for weeks.
+#
+# There is no Stripe entry in docker-compose.qa.yml today (verified: zero
+# matches for `stripe` across every compose file), so this arm reports the key
+# UNSET rather than dummy. That is the correct reading and it is stronger than a
+# dummy: nothing to leak because nothing is there. It becomes load-bearing the
+# moment B7 adds the variable, which is exactly when nobody will be thinking
+# about this file.
+#
+# ⚠️ AND THE GUARDRAIL IS ABSOLUTE: Stripe is TEST MODE ONLY on this programme.
+# A live `sk_live_…` reaching any container is not a configuration slip, it is
+# the hard-halt item at the top of the FOUNDATION master prompt.
+KEYS="ANTHROPIC_API_KEY DEEPGRAM_API_KEY OPENAI_API_KEY RESEND_API_KEY STRIPE_SECRET_KEY"
 
 fail=0
 checked=0

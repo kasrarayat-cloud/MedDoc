@@ -1,6 +1,24 @@
 {
   "compilerOptions": {
-    "target": "ES2017",
+    // ⚠️ B6 2026-08-11: ES2017 -> ES2020, and the ONLY reason is BigInt
+    // LITERALS. ES2017 rejects `1n` with TS2737 regardless of `lib`, which
+    // already lists esnext — so the BigInt *type* resolved and the *syntax*
+    // did not. B3's `price-table.ts` is written entirely in BigInt literals
+    // (GATE 0.4: integer micro-dollars, no float touches a price) and had
+    // therefore NEVER compiled under this config. Nobody saw it because
+    // nothing in either app imported the file, so `tsc` never pulled it into
+    // the programme at all — a green typecheck over a programme that does not
+    // contain your file.
+    //
+    // SAFE BECAUSE `noEmit: true`: with no emit, `target` only decides which
+    // syntax the checker accepts and which default libs load — and `lib` is
+    // set explicitly below, so it does not shift. No runtime output changes;
+    // Next/SWC has always compiled these files with its own target.
+    //
+    // ES2020 and NOT higher, deliberately: ES2022 switches on
+    // `useDefineForClassFields`, which changes class-field semantics at
+    // runtime. That is a behavioural change nobody asked for.
+    "target": "ES2020",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,

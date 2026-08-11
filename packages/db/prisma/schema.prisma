@@ -3420,6 +3420,24 @@ model LedgerEntry {
 
   note String?
 
+  /// B6 / SPEC §2.2 — THE VERSIONED PRICE SNAPSHOT: which `price_rates` rows
+  /// priced this charge, the pre-multiplier cost, and the per-component
+  /// breakdown, "so a later rate change never re-prices history".
+  ///
+  /// NULL for the kinds that are not the output of a pricing computation —
+  /// `grant` and `topup` are money arriving, not money computed. NOT NULL for
+  /// `usage`, enforced by `ledger_entries_usage_has_pricing` because a charge
+  /// that cannot say what priced it is unreconcilable by B9 and uncorrectable
+  /// by anything, the table being append-only.
+  ///
+  /// ⚠️ IT LANDED IN B6 BECAUSE THE TABLE WAS STILL EMPTY. Ruling 89(e)'s
+  /// argument for shipping `bucket` early applies here verbatim and was not
+  /// made for this column in B5: an append-only table cannot be retrofitted,
+  /// because the retrofit needs either a DEFAULT (fail-open) or a backfill
+  /// UPDATE (the one operation this table refuses). Zero rows is what made it
+  /// free. `20260811103000_b6_ledger_pricing_snapshot/migration.sql`.
+  pricing Json?
+
   /// ⚠️ ORDER BY `seq`, NEVER BY `createdAt`. This defaults to
   /// CURRENT_TIMESTAMP, which is TRANSACTION START time — two rows written in
   /// one transaction share it exactly. `seq` is the ledger's order.
@@ -3443,6 +3461,8 @@ model LedgerEntry {
   ///                                        derive trigger did not run
   ///   ledger_entries_snapshot_agrees     CHECK ("practiceId" IS NULL
   ///                                        OR "practiceId" = "practiceIdSnapshot")
+  ///   ledger_entries_usage_has_pricing   CHECK ("kind" <> 'usage'
+  ///                                        OR "pricing" IS NOT NULL) — B6
   ///
   ///   ledger_entries_derive_before_insert          derives seq + balanceAfter
   ///                                        + practiceIdSnapshot, under a
