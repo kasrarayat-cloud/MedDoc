@@ -3397,6 +3397,19 @@ model LedgerEntry {
   ///
   /// The `@default(0)` exists only so a Prisma caller need not send a value it
   /// is not allowed to choose. It is never the value that lands.
+  ///
+  /// ⚠️ AND IF THE DERIVE TRIGGER IS EVER LOST, THE TABLE BECOMES UNWRITABLE
+  /// RATHER THAN QUIETLY WRONG — measured, not reasoned. With the trigger
+  /// dropped inside a rolled-back transaction, the insert was REFUSED:
+  ///
+  ///     ERROR: new row for relation "ledger_entries" violates check
+  ///            constraint "ledger_entries_seq_positive"
+  ///
+  /// because `seq` defaults to 0 and the CHECK requires > 0. So a regenerated
+  /// migration that drops the triggers does not produce a ledger of zeroes —
+  /// it produces a ledger nothing can write to, which is the direction a
+  /// money table should fail in. The migration's own header understates this;
+  /// this is the measured behaviour.
   balanceAfter BigInt @default(0)
   seq          BigInt @default(0)
 

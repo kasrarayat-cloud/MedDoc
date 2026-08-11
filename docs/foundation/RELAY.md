@@ -6493,3 +6493,152 @@ waiting for the three runs, then pushing, then waiting again would have cost
 *"the cost is set by HOW LATE the second push lands"* — cuts toward pushing
 immediately once the decision to push at all is made. **The mistake was the
 early first push; the response to it was the cheap one.**
+
+### THE WATCHED-SET DIFF B5 FORCES, PERFORMED AND ANSWERED
+
+`scripts/check-billing-source-no-deleter.sh` watches **`api_usage_events`** and
+nothing else. B5 introduces a second money table — the **wallet** — so the
+question the canon requires is whether the guard's watched set is now narrower
+than what it is for.
+
+**Answer: no widening needed, and the reason is mechanism, not scope.**
+
+| that guard's arm | how `ledger_entries` is covered |
+|---|---|
+| **arm 1** — no ORM or raw-SQL deleter, by grep | a **`BEFORE DELETE` trigger**, which refuses the delete however it is spelled. A grep can be evaded by a spelling it does not match; a trigger cannot |
+| **arm 2** — no FK cascades a delete (*"which no grep can see"*) | the only FK is `practiceId → practices` and it is **SET NULL** (verified on `pg_constraint`, not on the migration file). And a cascade would fire the same row trigger and be refused, so the property is fail-closed rather than dependent on the FK's action staying right |
+
+The grep guard exists because `api_usage_events` has no enforcement of its own —
+its no-deleter property is an **absence of code**, which is exactly the thing
+that decays silently. `ledger_entries`'s is a **presence of a trigger**, and the
+guard for *that* is `check-ledger-append-only.sh`, whose whole first arm is
+"are the four triggers still there and still enabled".
+
+⚠️ **So the two tables have different guards for the same property, on purpose,
+and neither is a substitute for the other.** Recorded here rather than left
+implicit, because the next reader's obvious move is to add `ledger_entries` to
+the deleter script's table list — and that would produce a second green that
+proves less than the one already there.
+
+## 🟠 FOUND ON THE WAY PAST — `check-composite-fk.sh`'s BEHAVIOURAL ARM IS UNREACHABLE BY THE LOOP, FOR THE SAME REASON `--qa` HAD TO EXIST
+
+Found by trying it, while B5 was building the same capability next door.
+
+```
+$ bash scripts/check-composite-fk.sh --attempt
+✔ structural: transcribe_visits_patientId_practiceId_fkey references BOTH columns
+🟡 refusing --attempt against 'meddoc' — that is a production database name.
+```
+
+The script's own header says *"Add `--attempt` on a qa/test database for the
+behavioural proof"*, and **the only way to aim it at one is an env prefix**
+(`PG_CONTAINER=… PG_DB=… bash …`) **which is outside the FOUNDATION loop's
+allowlist.** So from an unattended session `--attempt` targets production, and
+production correctly refuses it. The arm can never run.
+
+⚠️ **THIS IS THE `assert-migrations-applied` FAILURE, EXACTLY, AND IT IS THE
+SECOND SIGHTING IN ONE DAY.** That script accepted `[container] [db]` since it
+was written and **nothing ever passed them for three months**, while the QA
+stack drifted two migrations behind and every session reported the check green.
+The cure there was a `--qa` flag — a form the loop can actually type. AGENTS.md
+records the lesson in one sentence: **a capability nobody invokes is
+indistinguishable from one that does not exist.**
+
+**What is lost here is not hypothetical.** That behavioural arm is the one that
+was *mutation-proved on a throwaway database to show a same-named single-column
+FK passes a name-only check and fails this one* — i.e. it is the arm that
+distinguishes T3's tenancy wall from a convincing impostor of it. The structural
+arm, which is all the loop can run, is precisely the check that mutation
+defeated.
+
+**The item, and it is now two scripts wide:** give `check-composite-fk.sh` the
+same `--qa` flag B5 gave `check-ledger-append-only.sh`, and sweep the other
+guards for env-only targeting. The predicate is *"a script whose documented
+capability is reachable only through an env prefix"* — statable, therefore
+greppable, therefore not a memory exercise.
+
+⚠️ **AND THE ALLOWLIST ENTRY ALONE WOULD NOT HAVE FIXED IT.** Adding the script
+to `.claude/settings.json` — the owner action B5 already needs — makes it
+runnable, not aimable. **Two different gaps that both present as "the check is
+green and means nothing".**
+
+---
+
+## ✅ THE CITATION SESSION 04 OWED — `82d6f2d7`, 4 OF 4, AND THE `a2` EXPLAINED
+
+Produced by `check-citation.sh`, not typed.
+
+**Citation — 4 of 4 on `82d6f2d7dafcfe720ee494a3b442ace489c3c410`:**
+   · `CI` 31459025779 a1
+   · `e2e` 31459025756 **a2**
+   · `a11y-ci` 31459025761 a1
+   · `secrets-scan` 31459025753 a1
+
+### ⚠️ `e2e` IS ON ATTEMPT 2, AND THE CHECKER IS RIGHT TO DEMAND A REASON
+
+The canon forbids re-run-and-hope, so an unexplained `a>1` is a finding of its
+own. **This session did not perform the re-run** — here is what the record says,
+measured rather than assumed:
+
+| | |
+|---|---|
+| attempt 1 | created `04:36:47Z`, **FAILED** `05:09:07Z` (32m20s) |
+| attempt 2 | started `06:50:04Z`, **success** `07:34:32Z` (44m28s) |
+| session 04 | died `04:50:10Z` — **19 minutes BEFORE attempt 1 failed** |
+| this session | started `06:58:57Z` — **8 minutes AFTER attempt 2 began** |
+
+So the re-run falls in the gap between two sessions and **neither of them did
+it**. `triggering_actor` is `kasrarayat-cloud`, which is the account both the
+loop and the owner use, so the field cannot distinguish them.
+
+### THE MECHANISM, NAMED FROM THE LOG RATHER THAN GUESSED
+
+Attempt 1's single failing step was **"Build flag-ON image for the document
+preview"**:
+
+```
+#17 [builder 11/14] RUN npm ci
+#17 38.44 npm error code EEXIST
+#17 38.44 npm error syscall open
+#17 38.44 npm error path /root/.npm/_cacache/tmp/14352194
+#17 38.44 npm error EEXIST: file already exists, open '/root/.npm/_cacache/tmp/14352194'
+#17 ERROR: process "/bin/sh -c npm ci" did not complete successfully: exit code: 239
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm ci" did not complete successfully
+```
+
+**An npm CACHE COLLISION — a tmp file in `_cacache` that already existed — not a
+network failure.**
+
+⚠️ **AND THAT MAKES IT A SECOND, DISTINCT CLASS FROM THE ONE AGENTS.md ALREADY
+RECORDS, WHICH IS THE WHOLE POINT OF WRITING IT DOWN.** The canon's
+external-reach section names `npm ci → ECONNRESET` and says it was **retried**,
+via `NPM_CONFIG_FETCH_RETRIES=5` across 16 sites (#583). **That mitigation does
+not touch this failure**: `EEXIST` on a local cache path is not a fetch that can
+be retried, so the shipped cure is aimed at a neighbouring problem.
+
+| reach | error | the shipped mitigation |
+|---|---|---|
+| npm registry | `ECONNRESET` — says the word | `NPM_CONFIG_FETCH_RETRIES=5` ✔ |
+| `next/font/google` | a bogus `Module not found` | removed, self-hosted ✔ |
+| **npm local cache** | **`EEXIST` on `_cacache/tmp/<n>`** | **none — and fetch-retries cannot help** |
+
+The `_cacache/tmp/<n>` name is derived per-process, so a collision points at a
+**shared or reused cache across concurrent builds on one runner**, not at the
+registry. Whether that is a buildx cache mount reused between the workflow's
+parallel image builds is the thing to establish next; this session did not,
+because it is not B5's item and the finding is worth more filed accurately than
+diagnosed hastily.
+
+**Two other lines appear in the same log and are NOT claimed as causes** — a
+`the twin seed HUNG (killed at 7m)` error annotation at `04:46:05Z` and a
+Playwright `toHaveURL` expect failure at `04:54:21Z`. The job's only step with
+`conclusion: failure` was the build, and Playwright retries assertions, so
+naming either would be reading a symptom as a diagnosis.
+
+### WHAT THIS DOES NOT CLAIM
+
+That the re-run was wrong. Re-running a build that died on an infrastructure
+fault is the correct response and matches how the ECONNRESET wave was handled.
+**What is missing is that nobody wrote down that it happened or why** — and a
+green `a2` with no note beside it is indistinguishable from re-run-and-hope.
+That is the gap this section closes, one session late.
