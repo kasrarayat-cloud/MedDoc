@@ -1,0 +1,50 @@
+-- ===========================================================================
+-- FOUNDATION B7 STEP 2 — THE `CHECKOUT_SESSION_*` AuditAction VALUES.
+-- ---------------------------------------------------------------------------
+-- Step 1 shipped the three INBOUND labels (`CHECKOUT_TOPUP_*`) in
+-- `20260811160000_b7_checkout_audit_actions`. These two are the OUTBOUND half:
+-- the route that asks Stripe to take money, and its refusals.
+--
+-- ⚠️ THE THIRD LAYER AGAIN, AND THE ONLY ONE THE DATABASE READS. A new label
+-- needs THREE edits and each layer looks sufficient from the one above it:
+--
+--   the TypeScript union in `lib/audit.ts`   → `tsc` is happy without this file
+--   the Prisma enum in `schema.prisma`       → `prisma validate` is happy too
+--   THIS FILE                                → the enum Postgres actually holds
+--
+-- `logAudit` is deliberately fire-and-forget (an audit write must never refuse
+-- a clinical action), so a label present only in TypeScript produces
+-- `invalid input value for enum "AuditAction"` in the log and nothing anywhere
+-- else. That has shipped three times: `535d30d9` on 2026-08-03, and twice on
+-- 2026-08-06 — the second of those passing `prisma validate`, `tsc` and 3192
+-- unit tests.
+--
+-- Step 1's `gate-audit-enum-migration.test.ts` compares `schema.prisma`'s
+-- labels against the labels reachable through this migration directory, so the
+-- omission is now caught by a test rather than by production.
+--
+-- ---------------------------------------------------------------------------
+-- WHY TWO LABELS AND NOT ONE
+-- ---------------------------------------------------------------------------
+-- ⚠️ Postgres has no `ALTER TYPE … DROP VALUE`, so every label added here is
+-- permanent. Two is the considered number: "a doctor was sent to Stripe" and
+-- "a doctor asked and we declined" are the two questions an operator asks of
+-- this route, and B9's reconciliation needs the first as a join key against
+-- Stripe's own session list. Collapsing them into one label with the outcome in
+-- metadata would be cheaper today and unqueryable forever.
+--
+-- The REFUSED label is deliberately shared across every refusal reason rather
+-- than split per reason; the reason lives in `errorCode` and in metadata, which
+-- are queryable columns, and the set of reasons is expected to grow.
+-- ===========================================================================
+
+-- Stripe returned a hosted Checkout URL and the doctor was sent to it. The
+-- `targetId` is the Stripe session id, which is the same id
+-- `topupIdempotencyKey` derives the eventual ledger row's key from.
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'CHECKOUT_SESSION_CREATED';
+
+-- No session was created. Emitted for an unconfigured system, a key whose mode
+-- cannot be classified, a mode/environment mismatch, a session with no
+-- practice, an amount outside the offered denominations, and a failed call to
+-- Stripe. The named reason is in `errorCode`.
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'CHECKOUT_SESSION_REFUSED';

@@ -33,6 +33,7 @@ import {
 import { AppFrame } from '@/components/ui/app-frame';
 import { Ic } from '@/components/ui/icon';
 import { LocalTime } from '@/components/ui/local-time';
+import { BillingTopupPanel } from './billing-topup-panel';
 import { ProfileForm } from './profile-form';
 import { SessionPanel } from './session-panel';
 import { DeleteAccountDialog } from './delete-account-dialog';
@@ -135,6 +136,24 @@ export default async function SettingsPage({
 } = {}) {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
+
+  // ── B7 step 2 — IS THERE A DOOR? ────────────────────────────────────────
+  // ⚠️ PRESENT, NOT VALID, AND THE DIFFERENCE IS DELIBERATE. The panel renders
+  // whenever a `STRIPE_SECRET_KEY` exists at all, including one whose mode
+  // `classifyStripeSecretKey` cannot recognise. The route then refuses that key
+  // BY NAME (`unrecognised_key_mode`) without any network call.
+  //
+  // Gating on VALIDITY instead would be tidier and would make this path
+  // unreachable everywhere we are allowed to test: production has no key at all
+  // (so nothing renders, and today's UI is byte-identical), and the QA stack
+  // declares the literal dummy `qa-dummy-stripe-secret-never-valid`. Rendering
+  // on presence is therefore what makes the whole door → route → refusal → audit
+  // row path exercisable end to end on QA with no Stripe account and no network.
+  // The only environment that can show a button whose key is unusable is the one
+  // built to be walked.
+  //
+  // Read on the SERVER. The key never reaches the client; only this boolean does.
+  const topupConfigured = (process.env.STRIPE_SECRET_KEY ?? '').trim().length > 0;
 
   type UserRow = {
     name: string | null;
@@ -893,21 +912,26 @@ export default async function SettingsPage({
                   maxWidth: 400,
                 }}
               >
-                Billing is handled for you during the pilot. When self-serve
-                billing opens, this is where it will live. Trial usage + invoices will appear here.
+                {topupConfigured
+                  ? 'Add credit to your practice wallet. Payment is handled by Stripe — no card details reach QuillMD.'
+                  : 'Billing is handled for you during the pilot. When self-serve billing opens, this is where it will live. Trial usage + invoices will appear here.'}
               </p>
-              <button
-                type="button"
-                disabled
-                className="qm-lin-btn"
-                title="Coming soon"
-                style={{
-                  opacity: 0.45,
-                  cursor: 'not-allowed',
-                }}
-              >
-                Manage billing
-              </button>
+              {topupConfigured ? (
+                <BillingTopupPanel />
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="qm-lin-btn"
+                  title="Coming soon"
+                  style={{
+                    opacity: 0.45,
+                    cursor: 'not-allowed',
+                  }}
+                >
+                  Manage billing
+                </button>
+              )}
             </div>
           </Section>
 

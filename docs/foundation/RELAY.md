@@ -7396,3 +7396,242 @@ the moment this deploy applied. Rolling the IMAGE back (`:pre-b7-20260811`)
 removes the route and leaves three unused enum labels behind, which cost
 nothing. Named in the declaration's Rollback section before the deploy rather
 than discovered during one.
+
+---
+
+## 📌 THE CITATION SESSION 03 OWED FORWARD — `433afe2c`, PR #605
+
+Session 03 took a full citation on its own docs merge and recorded it in its log
+rather than here, naming this as the next session's STEP 0 line. Re-verified
+with the checker before being written down — **not copied from the log** — using
+`--expect`, which is the only direction that can see a substitution:
+
+```
+bash scripts/check-citation.sh 433afe2cca0618da6f2aa41e72b36de09ec85163 \
+  --expect 31516996435,31516996523,31516996431,31516996529
+```
+
+**Citation — 4 of 4 on `433afe2cca0618da6f2aa41e72b36de09ec85163`:**
+   · `CI` 31516996435 a1
+   · `e2e` 31516996523 a1
+   · `a11y-ci` 31516996431 a1
+   · `secrets-scan` 31516996529 a1
+
+🟢 CITATION COMPLETE. All `a1` — no re-runs, nothing to explain.
+
+---
+
+## ✅ B7 STEP 2 IS BUILT — THE DOOR, AND THE PAYING PARTY IS NEVER THE BODY'S — 2026-08-11
+
+**Session 04 of run `20260811-065857-b1`.** Step 1 built the INBOUND half: the
+webhook that credits a wallet when Stripe says a session was paid. This is the
+OUTBOUND half — the only thing in the system that may ask Stripe to take money —
+plus the settings-page door step 1 recorded as missing by line number.
+
+| what | where |
+|---|---|
+| the pure decision | `apps/transcribe-md/src/lib/billing/stripe-checkout.ts` |
+| the route | `apps/transcribe-md/src/app/api/stripe/checkout/route.ts` |
+| the door | `apps/transcribe-md/src/app/settings/billing-topup-panel.tsx` + `settings/page.tsx` |
+| the gate | `src/lib/billing/__tests__/gate-b7-checkout-session.test.ts` |
+| the migration | `20260811190000_b7_checkout_session_audit_actions` — 2 labels |
+
+### THE ONE THAT MATTERS — WHAT MAKES STEP 1's ALLOWLIST MEAN ANYTHING
+
+Step 1's metadata allowlist is enforced on the INBOUND event, and its own header
+says what that can and cannot catch: *"what this actually catches is OUR OWN
+session-creation code (B7 step 2) putting something forbidden there — a
+regression, not an attacker."*
+
+**This is that code.** Stripe echoes back whatever metadata a session was created
+with, so if this half read `practiceId` out of a request body, the inbound
+allowlist would be validating a value an anonymous caller chose — and DISCOVERY
+§E.5's concern (a visit id dereferences to a named patient in ONE hop) would
+arrive through the front door with a valid Stripe signature on it.
+
+So the route accepts **one** value from the body — `amountCents` — and nothing
+else. `practiceId` and `userId` are read off the authenticated session. The
+metadata is CONSTRUCTED from those two and its keys checked against step 1's
+`ALLOWED_METADATA_KEYS`, **imported rather than restated**: two literals would
+both stay green while drifting apart.
+
+⚠️ **AND THE CONTRACT BETWEEN THE TWO HALVES IS ASSERTED BY FEEDING ONE INTO THE
+OTHER.** The halves are separated by Stripe — this code writes metadata, Stripe
+stores it, step 1's code reads it back days later — so there is no type between
+them and no test that runs both. The gate builds the event Stripe *would*
+deliver for the session this decision describes and requires `decideTopup` to
+credit it, with a positive control (one extra key) proving the round trip can
+fail. A drift between the two halves would otherwise be discovered by a doctor
+who had already paid.
+
+### THE MODE RULE, OUTBOUND — RULING 91(a) POINTED THE OTHER WAY
+
+Ruling 91(a) settled the inbound rule: an event's `livemode` must match the
+database, both confirmed positively, anything unidentifiable refusing BOTH ways.
+The outbound question has the same two facts, so it takes the same shape — the
+mode here being carried by the SECRET KEY:
+
+|  | LIVE key | TEST key | unclassifiable | absent |
+|---|---|---|---|---|
+| **production db** | create | refuse | refuse | refuse |
+| **non-prod db** | **refuse** | create | refuse | refuse |
+| **`staging` / unset** | refuse | refuse | refuse | refuse |
+
+⚠️ **THE DANGEROUS DIRECTION IS NOT THE SAME ONE AS THE WEBHOOK'S.** Inbound, the
+reachable-today hazard was `prod + test event` — a credit nobody paid for.
+Outbound it is **`non-prod + LIVE key`: a QA or staging box that can charge a
+real card**, which is a FOUNDATION hard-halt item by name. That is why a key
+whose prefix classifies as neither is refused rather than tried.
+
+⚠️ **AND THE UNRECOGNISED ARM IS WHAT MAKES THIS WALKABLE ON QA.** The QA compose
+declares the literal `STRIPE_SECRET_KEY: "qa-dummy-stripe-secret-never-valid"`.
+It matches neither `sk_test_` nor `sk_live_`, so it classifies `unrecognised` and
+is refused **before any SDK call** — the door renders, the route runs, the
+refusal is named, the audit row lands, and no network, Stripe account or test key
+is involved anywhere. B7's gate asks for exactly that ("tests use
+`generateTestHeaderString` with no network and no Stripe account"), and the QA
+dummy is asserted **by its literal value** in the gate so nobody helpfully
+replaces it with a real-looking `sk_test_` string.
+
+### THE AMOUNT IS AN ALLOWLIST, AND IT IS DELIBERATELY NOT A PRICING DECISION
+
+`TOPUP_DENOMINATIONS_CENTS = [2500, 5000, 10000, 25000]` — $25 / $50 / $100 /
+$250. The caller sends one of these or is refused by name; there is no path by
+which an arbitrary integer becomes a charge.
+
+⚠️ **PRICING IS A HARD HALT ON THIS PROGRAMME, SO THE SHAPE OF THIS LIST IS THE
+POINT.** Every denomination buys credit at **FACE VALUE** — $50 buys 50 000 000
+micro-dollars, one to one, via step 1's `centsToMicroUsd`. **No discount, no
+bonus, no volume tier**, because each of those *would* be a pricing claim and
+none is authorised. The price of the service is settled elsewhere and unchanged:
+GATE 0.4's `cost × 3 / 2`, applied when usage is metered (B6), not when money is
+added. The gate asserts the face-value property directly (`cents % 100 === 0`,
+plus the exact array) so a bonus cannot be added quietly.
+
+A BOUND (`min <= cents <= max`) was the alternative and is worse for the same
+reason a denylist was worse in step 1: it admits every value in between, so the
+set of charges that can reach Stripe is defined by arithmetic rather than by a
+diff somebody reviewed.
+
+### THE DOOR RENDERS ON **PRESENCE** OF A KEY, NOT ON VALIDITY
+
+`settings/page.tsx` reads `process.env.STRIPE_SECRET_KEY` on the SERVER and
+renders the panel when it is non-empty — including a key whose mode cannot be
+classified.
+
+Gating on VALIDITY would be tidier and would make the path unreachable in every
+environment we are allowed to test: **production has no key at all** (so nothing
+renders and today's UI is byte-identical), and QA has the deliberate dummy. So
+presence is what makes the whole door → route → refusal → audit-row path
+walkable. The only environment that can display a button whose key is unusable is
+the one built to be walked.
+
+⚠️ **AND PRODUCTION'S BILLING SECTION IS UNCHANGED.** With no key, the old
+disabled *"Manage billing"* placeholder and its pilot copy still render, byte for
+byte. The gate asserts that branch explicitly, because the deploy declaration's
+*"nothing but the image ids"* depends on it.
+
+### THE GATE, AND WHAT WAS MADE TO FAIL
+
+**10 of 10 mutations caught, each by a NAMED test.** The harness runs the WHOLE
+gate per mutation and prints which test caught it — session 03 recorded why: its
+own harness reported "GATE IS BLIND" for a healthy gate because each mutation ran
+against a name-filtered subset naming an arm the mutation does not change.
+
+| | mutation | caught by |
+|---|---|---|
+| M1 | an unclassifiable key silently treated as TEST | the QA-dummy literal case |
+| M2 | the mode rule uses `!checkNonProdDb` instead of `checkProdDb` | the UNIDENTIFIABLE-database case |
+| M3 | the amount allowlist becomes a BOUND | the between-two-denominations case |
+| M4 | the metadata gains a key the allowlist lacks | the create cases + the round trip |
+| M5 | the paying practice is read from the REQUEST BODY | the source ordering |
+| M6 | the return URL derives from a caller-controlled `Host` | the return-URL source |
+| M7 | metadata is rebuilt inline at the Stripe call site | the call-site source |
+| M8 | the door is gated on validity, so QA can never walk it | the door source |
+| M9 | the panel sends a practice id with the amount | the panel source |
+| M10 | a denomination gains a BONUS | the face-value assertion |
+
+⚠️ **AND THE `tsc` POSITIVE CONTROL IS A SEPARATE STEP, BECAUSE EXIT 0 PROVES THE
+WRONG THING.** `tsc --noEmit` exiting 0 proves every file *in the project*
+type-checks and says nothing about whether a given file *is* in the project — an
+excluded file produces identical silence. Each of the three new sources was
+poisoned with a deliberate type error in turn; all three made `tsc` exit 2 **and
+name their own path**. Session 03's version of this control matched the injected
+identifier and briefly reported two healthy files as never-type-checked; `tsc`
+reports `path(line,col): error`, so the path is the matcher.
+
+### FOUND ON THE WAY PAST — THE SUBSTRING FAMILY, SIXTH SIGHTING, AND IT IS THE **WATCHED-SET** SHAPE
+
+`gate-rounds-bridge.test.ts` caught two real defects in this work and then a
+third thing that was not a defect at all.
+
+1. **Real.** The first draft of the error message used `--color-linear-red`,
+   which is **undeclared**. An undeclared token falls to `transparent` with no
+   error — the message would simply not have been there.
+2. **Real, and the better catch.** The second draft reached for the DANGER token,
+   which IS declared and bridges to `--rounds-critical` at **3.33:1** — below AA
+   on a Rounds surface. The gate derives its foreground set FROM USAGE, so
+   writing that name as a `color:` anywhere is what put it in scope. Fixed by
+   adopting the house pair (`--color-linear-coral` + the `qm-rounds-error`
+   class), which is where the Rounds host owns the treatment instead of this
+   caller.
+3. **NOT real — and this is the finding.** With the code correct, the gate stayed
+   RED, because the **comment explaining why neither of the first two tokens was
+   used names both of them.** The scan read raw source, so a token appearing in
+   PROSE counted as a surface using it.
+
+⚠️ **THAT THIRD ONE IS THE WATCHED-SET FAILURE, NOT A BROKEN MATCHER.** The
+matcher worked perfectly; CSS never reads a comment, so its universe simply
+included text that cannot be a usage. **Fixed ON THE GUARD** — a `surfaceCode()`
+helper strips comments before every scan — rather than by rewording the comment,
+because rewording fixes one comment and the next author documenting a colour
+decision hits it again. This is session 03's precedent from the day before, where
+a compose sweep tripped on its own warning and was fixed by stripping `#` lines.
+
+**Both directions are controlled**, because a stripper that ate too much would
+make every assertion in that file vacuous while staying green:
+
+- a unit control on literals — active `var(--color-linear-*)` usages survive,
+  names that exist only in prose do not, and the real tree's read-name set stays
+  above 10;
+- an end-to-end probe (`.b7s2-bridge-probe.py`) that puts an **ACTIVE** bad token
+  into the panel and runs the whole gate: **both arms still go RED** — the
+  undeclared name on arm 1, the AA failure on arm 2 — and the gate returns green
+  on restore.
+
+### WHAT THIS STEP DOES **NOT** CLAIM
+
+- **Nothing is billed, and nothing can be.** `ledger_entries` holds **0 rows** in
+  both environments. No Stripe account, secret key or webhook secret exists
+  anywhere, so production's route refuses with `not_configured` (503) and QA's
+  with `unrecognised_key_mode` (400).
+- **No Checkout Session has ever been created**, by anything, in any
+  environment. The CREATE path is proven at unit level and by source; the
+  REFUSAL path is what runs end to end.
+- **The `$10` promo grant is still unwritten** — `bucket = 'promo'` exists in
+  B5's schema and nothing writes it. That is B7 step 3, and see below for why it
+  did not ride with this one.
+- **The webhook's CREDITED path remains unproven end to end**, unchanged from
+  step 1 and for the same reason: proving it appends a `topup` row to QA's
+  append-only ledger and permanently ends the zero-row state rulings 89(e) and
+  90(d) preserve.
+
+### ⚠️ WHY B7 STEP 3 DID NOT RIDE WITH THIS — NAMED, NOT FORGOTTEN
+
+The `$10` promo grant writes a `grant` row per practice. In production that is
+**197 rows into an append-only table**, and it therefore:
+
+- **ends the zero-row state on purpose**, closing the window rulings 89(e) and
+  90(d) both rely on — an append-only table cannot take a new column later
+  without either a fail-open DEFAULT or a backfill UPDATE, and *"the table is
+  empty"* is the whole reason B5's `bucket` and B6's `pricing` were free;
+- is a **ruled production mutation** in the sense of ruling 59, so it needs that
+  shape in full: population re-derived at execution time, every abort guard
+  proven to fire, transactional with verification before COMMIT;
+- **grants credit before anything can spend it.** B8 is where balance is
+  assessed and where the fail-closed block lives; a wallet that cannot be
+  debited and cannot be blocked is a number nobody can act on.
+
+None of that is an argument for never doing it — it is an argument for doing it
+as its own item with its own declaration, rather than as the tail of a UI change.
+**Carried as B7 step 3, unchanged in scope.**
