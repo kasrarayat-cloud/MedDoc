@@ -22,7 +22,7 @@
 // being the only true statement about B6.
 // ============================================================================
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -362,14 +362,46 @@ describe('B6 (7) — the second of F4s two conditions', () => {
     expect(keysLine).toContain('STRIPE_SECRET_KEY');
   });
 
+  // ⚠️ THE COMPOSE FILES ARE ENUMERATED BY GLOB, NOT HAND-LISTED, AND THIS ARM
+  // WAS WRITTEN THE WRONG WAY FIRST. The original named
+  // `docker-compose.yml` and `docker-compose.qa.yml` — and there are THREE:
+  // `docker-compose.qa.b4-coverage.yml` is a QA overlay that ruling 86(d) added
+  // and that a two-entry list does not watch. The gate's clause says "the QA
+  // compose entry"; a hand-kept list of two was already one short of what the
+  // spec names, four days after the third file appeared.
+  //
+  // That is AGENTS.md's watched-set rule pointed at this gate's own coverage:
+  // "a per-caller list is kept complete by hand, and hand-kept lists are wrong
+  // eventually." The glob cannot go stale, and the count assertion below is
+  // what stops a broken glob reporting a clean zero over nothing.
+  const composeFiles = readdirSync(ROOT).filter((f) => /^docker-compose.*\.ya?ml$/.test(f));
+
+  it('found every compose file before checking them (positive control)', () => {
+    expect(composeFiles.length).toBeGreaterThanOrEqual(3);
+    expect(composeFiles).toContain('docker-compose.yml');
+    expect(composeFiles).toContain('docker-compose.qa.yml');
+    expect(composeFiles).toContain('docker-compose.qa.b4-coverage.yml');
+  });
+
   it('no compose file introduces a ${STRIPE_SECRET_KEY:-…} default', () => {
     // The `:-` form inherits the PRODUCTION value from the shared .env — the
     // exact mechanism that put 298 real Anthropic calls through the "isolated"
     // QA stack. Checked now, while the answer is trivially zero, so that B7
     // adding the variable has to argue with this line.
-    for (const f of ['docker-compose.yml', 'docker-compose.qa.yml']) {
+    for (const f of composeFiles) {
       const text = readFileSync(join(ROOT, f), 'utf8');
-      expect(text).not.toMatch(/\$\{STRIPE_SECRET_KEY:-/);
+      expect(text, `${f} inherits STRIPE_SECRET_KEY from the shared .env`).not.toMatch(
+        /\$\{STRIPE_SECRET_KEY:-/,
+      );
     }
+  });
+
+  it('the matcher can actually fire (positive control)', () => {
+    // A regex that matched nothing would make the sweep above pass over any
+    // file at all. Proven against a synthetic string, so this control cannot be
+    // satisfied by the thing it is controlling for.
+    expect('STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-sk_test_x}"').toMatch(
+      /\$\{STRIPE_SECRET_KEY:-/,
+    );
   });
 });

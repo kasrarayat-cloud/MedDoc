@@ -6936,3 +6936,49 @@ occurrence should find this row rather than start from zero. `tsc` is clean and
 - **Ruling 80(d)'s PAYG assumption is untouched** — if the Deepgram tier is
   wrong, the over-statement it causes is now multiplied by 3/2 wherever a
   Deepgram rate does apply.
+
+### ⚠️ M8 — I FOUND THIS GATE'S OWN WATCHED SET WAS ONE FILE SHORT, BEFORE MERGING IT
+
+The clause reads *"the QA compose entry does not use `${STRIPE_SECRET_KEY:-…}`"*.
+I wrote the arm as a hand-kept list of two — `docker-compose.yml` and
+`docker-compose.qa.yml`. **There are three.**
+`docker-compose.qa.b4-coverage.yml` is a QA overlay ruling 86(d) added four days
+ago, and a `${STRIPE_SECRET_KEY:-…}` placed in it would have sailed past the
+gate that exists to forbid exactly that.
+
+Found by positive-controlling an unrelated zero: the claim *"zero matches for
+`stripe` across every compose file"* was checked with the same matcher against a
+token known to be present (`MOCK_AI_CALLS` → 4 files), and the control's output
+listed a **third** compose file the arm was not reading.
+
+**The arm now enumerates by glob** — `/^docker-compose.*\.ya?ml$/` over the repo
+root, with a count assertion so a broken glob cannot report a clean zero over
+nothing, and a matcher control so the regex cannot be vacuous.
+
+| # | mutation | victim arm | |
+|---|---|---|---|
+| M8 | `${STRIPE_SECRET_KEY:-sk_test_qa}` appended to **`docker-compose.qa.b4-coverage.yml`** | 7 "no compose file introduces a default" | **RED**, naming the file |
+
+⚠️ **THE POINT IS NOT THAT M8 IS RED. It is that M8 would have been GREEN on the
+version I nearly shipped**, and nothing would ever have said so — this is
+AGENTS.md's watched-set rule arriving inside the gate written to satisfy a
+clause that names the universe explicitly. A hand-kept list was already stale
+four days after the third file appeared, by an author who had read all three
+that morning.
+
+### ⚠️ AND THE PUSH CARRYING M8 CANCELLED THIS PR's `e2e`, DELIBERATELY
+
+`e2e` `31482462518` was ~39 minutes in when the fix was pushed; `CI`, `a11y-ci`
+and `secrets-scan` had already passed. **Declared, not accidental.**
+
+The alternative was to let it finish and merge a gate I had already proved
+incomplete, then file a follow-up — which trades ~40 minutes of wall clock for
+merging a known hole in the exact clause B6's gate names. It is the wrong trade:
+the required checks would have to be re-run on the new head before merging
+anyway, so the follow-up costs the same cycle **plus** a window in which `main`
+carries the weaker gate.
+
+**The avoidable part is upstream of the choice**, and it is #568's lesson again:
+the first push happened before the close-out enumeration was done, so a finding
+that arrives during verification necessarily lands mid-run. *Hold the first push
+until the session's remaining work is written* is the habit; I did not.
