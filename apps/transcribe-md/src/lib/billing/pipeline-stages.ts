@@ -121,7 +121,15 @@ export const PIPELINE_STAGES: readonly PipelineStage[] = [
     // ⚠️ MEASURED, NOT ASSUMED — and the naive reading is wrong.
     // `04b-anchor-verify.ts:1023-1028` fans out over 3 ENSEMBLE_LENSES per
     // INVOCATION. Production's per-visit distribution is 3 for every visit
-    // that carries the stage at all, and nothing else: `{3: 73}`. Visits with
+    // that carries the stage at all, and nothing else: **`{3: 77}` on
+    // `api_usage_events`**, measured 2026-08-10.
+    //
+    // ⚠️ THE TABLE IS PART OF THE CLAIM. B4 step 2 recorded `{3: 73}` from
+    // `ai_calls` — true then, and PERISHABLE: that table has four production
+    // deleters and its own ledger row says a count taken from it has a shelf
+    // life. The durable table gives 77 for the same invariant. The SHAPE is
+    // what survives either way, which is exactly why the expectation is a set
+    // and not a product. Visits with
     // no anchored claims return before the ensemble (`claims.length === 0`)
     // and produce ZERO — which is correct, and is the whole gap between
     // `3 × visits` and the observed total. NO WORK IS NOT A SUPPRESSED CALL.

@@ -80,9 +80,15 @@ const APP_SRC = resolve(ROOT, 'apps/transcribe-md/src');
 // ---------------------------------------------------------------------------
 // THE MATCHER — a purpose ASSIGNMENT, in either shape the tree actually uses.
 // ---------------------------------------------------------------------------
-// `purpose: 'x'`  — the object-literal shape, 21 sites.
+// `purpose: 'x'`  — the object-literal shape, 22 sites.
 // `purpose = 'x'` — the const shape, 1 site (`llm-mdm.ts`), and the one a
 //                   naive grep misses.
+//
+// ⚠️ 22 was RE-MEASURED, not carried. The first version of this comment said
+// 21 — a number nobody had run a command for. It reconciles: 22 + 1 = 23 =
+// 16 pipeline sites (the stage table's `sources`, `tm_transcribe` contributing
+// two) + 7 declared non-pipeline. `AGENTS.md`: a count you did not observe
+// yourself is fabricated by arithmetic, however small the error.
 const PURPOSE_ASSIGNMENT = /\bpurpose\s*[:=]\s*'([a-z0-9_]+)'/g;
 
 interface Occurrence {
