@@ -69,6 +69,13 @@ the fact.** Where they disagree, that is a finding, not a typo.
    nights.** An auto-filed issue is a finding that has already been written down
    for you — the cheapest one available — and skipping it is how a real signal
    decays into background.
+9. **THE PREVIOUS SESSION'S LOG — grep it for `REPORT-MISSING`.** The runner
+   flags any session that finished without a morning report. If the flag is
+   there, that session's night is **not in the record**: reconstruct what you
+   can from `git log`, `RELAY.md` and the open/merged PRs, and **name it as a
+   finding in your own report** — including which session it was and what it
+   landed. A lost report is a hole somebody has to fill within one session, not
+   an archaeology project three days later.
 
 ---
 
@@ -465,6 +472,66 @@ polling"* and ended its turn with a prose summary. Its PR sat **green and
 mergeable for six hours** while the loop was dead, because the last line was not
 a marker. **The work was excellent and the run still stopped.** Quality does not
 substitute for the contract.
+
+### ⚠️ AND THE INVERSE, 2026-08-10 — A SESSION THAT REPORTED, THEN KEPT GOING
+
+**YOUR FINAL MESSAGE IS YOUR ONLY MESSAGE.** `claude -p` emits the FINAL
+assistant message and nothing else. Every earlier turn — however careful, however
+complete — is discarded when the process exits.
+
+> **So the final message is ALWAYS self-contained: the COMPLETE morning report,
+> then the marker. Every time.**
+>
+> **If you are woken again after you have already reported, RE-EMIT THE WHOLE
+> REPORT as your new final message.** Never a delta. Never *"as above"*, never
+> *"the report stands"*, never *"nothing has changed since my close-out."*
+> **A duplicated paragraph is the cheap direction; a silent loss is the
+> expensive one.**
+
+**IT HAS HAPPENED TWICE, AND THE FIRST TIME WAS NOTICED AND NOT ACTED ON.**
+
+| when | session | what was lost |
+|---|---|---|
+| 2026-08-09 | batch 1, session 01 | its whole report — **including the scratch list**, which it names in the surviving four lines |
+| 2026-08-10 | batch 2, session 02 | its whole report, after landing B4's closing step and citation (#594, #595) |
+
+Both have the identical shape. Both wrote a full morning report. Both were then
+woken by **a leftover watcher of their own**, pointed at a run they had already
+observed and acted on. Both read the wake-up correctly, judged there was no new
+information — and said so in a handful of lines ending *"the morning report
+above stands."*
+
+**"Above" was an earlier turn. The log kept only the handful of lines.** 16 and
+17 lines, where their siblings run 43 to 82.
+
+⚠️ **THE FIRST LOSS WAS SPOTTED THE NEXT DAY AND SURVIVED ANYWAY.** Batch 1
+session 02 wrote, in its own report: *"session 01's log references a scratch
+list that is not in its log file — so B1-b's paths may be unrecorded."* That is
+the defect, correctly identified, in the record — and nothing changed, so it
+recurred twenty-four hours later. **A finding that is written down and not
+turned into a check is a finding that will be written down again.**
+
+Nothing failed either time: the work was right, the marker was right, the gates
+were green. There is simply a hole in the war-room record where a session's
+night should be — and one of those holes is a scratch inventory nobody can now
+reconstruct.
+
+⚠️ **NOTE THE PAIR.** The 08-09 case above is a session that ended WITHOUT a
+marker and stopped the run — loud, and it cost hours. This one is a session that
+reported CORRECTLY and then kept going — silent, and it cost the record. **The
+contract fails in both directions, and only one of them announces itself.**
+
+### THE MORNING REPORT IS YOUR LAST ACT — COLLECT YOUR WATCHERS FIRST
+
+**Before you write the report, collect or kill every background watcher, poll and
+pending wait YOU started.** Nothing a session set running should be able to wake
+it after it has reported.
+
+This is the hygiene half of the rule above, and it removes the trigger rather
+than mitigating it: the 2026-08-10 loss was caused by a watcher on a PR whose
+result the session had *already acted on*. Waiting on a gate is correct and
+expected — see the whole section above. Leaving the waiter armed once you no
+longer need its answer is what turns a finished session into a woken one.
 
 ---
 
