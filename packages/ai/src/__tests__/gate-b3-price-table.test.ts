@@ -182,6 +182,8 @@ function row(
   effectiveTo: string | null,
 ): PriceRateRow {
   return {
+    // B6 made `id` required — the ledger row snapshots WHICH rate priced it.
+    id: `rate_${effectiveFrom}_${rateMicroUsd}`,
     provider: 'anthropic',
     modelName: 'claude-sonnet-5',
     deliveryMode: 'not_applicable',

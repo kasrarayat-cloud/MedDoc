@@ -334,7 +334,18 @@ describe('B5 (6b) — nothing writes the ledger yet, and that is enumerated rath
   // as a DELIBERATE edit here rather than as a surprise. When you add one:
   // append its path to WRITERS below, in the same commit as the writer, and
   // make sure it comes with the prod-only refusal B6 requires.
-  const WRITERS: string[] = [];
+  // ⚠️ B6 LANDED THE FIRST WRITER, AND THIS LIST GOING FROM [] TO ONE ENTRY IS
+  // THE ASSERTION DOING ITS JOB — not a regression, and not a rubber stamp
+  // either. The entry is here because a human edited it in the same commit as
+  // the writer, which is precisely what B5 asked for: the first writer arrives
+  // as a deliberate declaration rather than as a surprise.
+  //
+  // The two conditions B5 attached to that arrival are both met and both
+  // checked elsewhere, by name: `commitVisitCharge` calls `assertProdDatabase()`
+  // as its FIRST statement (gate-b6, arms 4 and 5, including a demonstrated
+  // refusal against the live QA database), and it writes `kind: 'usage'` with a
+  // negative amount, which the `ledger_entries_kind_sign` CHECK also enforces.
+  const WRITERS: string[] = ['packages/ai/src/billing-charge.ts'];
 
   function sourceFiles(dir: string, acc: string[] = []): string[] {
     let entries: string[];

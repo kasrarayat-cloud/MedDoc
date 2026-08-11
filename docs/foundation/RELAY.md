@@ -6753,3 +6753,232 @@ prod-only writer are **B6**; top-ups **B7**; the fail-closed balance block
 **B8**. The deploy's own prediction — *"beyond the image ids and the new empty
 table, nothing about the running system's behaviour should differ at all"* —
 held on every one of the 18 must-not-change assertions.
+
+---
+
+## ✅ B6 IS BUILT — THE CHARGE IS INTEGER ARITHMETIC, AND THE WRITER REFUSES OFF PRODUCTION — 2026-08-11
+
+**RELAY B6's gate, verbatim:** *"the writer **refuses on the live QA stack**,
+demonstrated, not asserted (F4). `STRIPE_SECRET_KEY` is added to
+`scripts/check-qa-mock-posture.sh` `KEYS` in the same commit, and the QA compose
+entry does **not** use `${STRIPE_SECRET_KEY:-…}`. Rounding rule stated and tested
+at the boundary."*
+
+All four met. The design decisions are **ruling 90 (PROVISIONAL)**; this row is
+the evidence.
+
+### WHAT LANDED
+
+| | |
+|---|---|
+| `packages/ai/src/price-table.ts` | `chargeMicroUsd(cost) = divRoundHalfUp(cost × 3n, 2n)`, beside B3's exact arithmetic |
+| `packages/ai/src/billing-charge.ts` | the pure decision core + the prod-only committer — **the first writer of `ledger_entries`** |
+| `packages/db/src/db-guard.ts` | `checkProdDb` / `assertProdDatabase` — the fail-closed mirror, **not** a negation |
+| `20260811103000_b6_ledger_pricing_snapshot` | `pricing` jsonb + `ledger_entries_usage_has_pricing` |
+| `scripts/check-qa-mock-posture.sh` | `STRIPE_SECRET_KEY` joins `KEYS`, ahead of its caller |
+| `scripts/qa/b6-writer-refuses-on-qa.ts` | the F4 demonstration, against the live QA container's own `DATABASE_URL` |
+| `gate-b6-charge-prod-only.test.ts` | 27 assertions in 7 arms |
+| B5's `WRITERS` list | `[]` → one entry, **by hand, as B5 asked** |
+
+### THE GATE'S FOUR CLAUSES, EACH WITH ITS EVIDENCE
+
+**1. "Refuses on the live QA stack, demonstrated, not asserted."**
+
+    live QA target, read from the container: host=postgres database=meddoc_qa_test
+       ✔ positive control: the guard ACCEPTS database=meddoc
+       ✔ the writer REFUSED, and the guard is what refused:
+         [db-guard] FAIL-CLOSED: database "meddoc_qa_test" carries a
+         qa/test/e2e/ci marker — this is not production
+    🟢 F4 met — the billing writer refuses on the live QA stack.
+
+The URL is read from the **running container**, never from a literal — the whole
+failure class here is a config that reads safe and is not, so the only evidence
+worth having comes from the live process environment. And a refusal is evidence
+only when you know WHAT refused: the script matches the guard's own message
+rather than the fact of an exception, and runs the accept-production control
+first, because a missing import would also "refuse".
+
+**2. `STRIPE_SECRET_KEY` in `KEYS`** — done, and it reports **unset** on both QA
+containers, which is stronger than a dummy: nothing to leak because nothing is
+there.
+
+**3. No `${STRIPE_SECRET_KEY:-…}` in any compose file** — measured: **zero**
+matches for `stripe` across every `*.yml` in the tree. The gate asserts the
+absence so B7 has to argue with it.
+
+**4. Rounding at the boundary** — every ODD cost is a boundary case, because
+`cost × 3 / 2` lands exactly on `.5` for all of them and nowhere else.
+`0→0, 1→2, 2→3, 3→5, 4→6, 5→8`.
+
+### ⚠️ THE ASSERTION THAT DISTINGUISHES `× 3 / 2` FROM `* 1.5`, AND WHY THE OBVIOUS TEST DOES NOT
+
+Below 2^53 the two implementations agree on **every** input. A boundary test
+using small numbers passes against the float form and proves nothing about SPEC
+§4.4's rule — which names `* 1.5` as the thing it exists to forbid. So the gate
+asserts at `2^53 + 1` micro-dollars, where `Math.round(Number(cost) * 1.5)`
+loses the low bit and returns a different number. **Mutation-proved: swapping in
+the float form reds this arm and only this arm.**
+
+### THE MUTATION MATRIX — SAID FIRST, THEN MADE TO FAIL
+
+Each names its victim arm before running, asserts the occurrence count **before**
+writing (a `.replace()` on a non-match is a silent no-op that reports success),
+and restores from git — safe because the tree was committed clean first, which
+the driver asserts rather than assumes.
+
+| # | mutation | victim arm | |
+|---|---|---|---|
+| M1 | `checkProdDb` becomes `!checkNonProdDb().ok` | 5.1 "not the negation" | **RED** |
+| M2 | charge per component, then sum | 2 "one rounding step" | **RED** |
+| M3 | `BigInt(Math.round(Number(c) * 1.5))` | 1 "above the float-safe range" | **RED** |
+| M4 | charge the priced part, skip the unpriced | 3.2 "refuses the WHOLE visit" | **RED** |
+| M5 | `resend` added to `BILLABLE_PROVIDERS` | 4 "GATE 0.5" | **RED** |
+| M6 | `assertProdDatabase()` moved below the pricing | 5.5 "FIRST statement" | **RED** |
+
+`tree after restore: CLEAN`.
+
+**M7 — the database arm, on QA, every write inside `BEGIN … ROLLBACK`.** The
+positive control ran FIRST: a `usage` row **with** pricing was accepted and the
+trigger derived `balanceAfter=-1500, seq=1`. The same row with NULL pricing was
+refused, naming the constraint:
+
+    ERROR: new row for relation "ledger_entries" violates check constraint
+           "ledger_entries_usage_has_pricing"
+
+And the CHECK is **conditional, not a blanket NOT NULL** — proved in its own
+transaction, because the first had aborted: `topup` and `grant` with NULL
+`pricing` both accepted, each bucket running its own sequence from 1.
+`rows_after_rollback = 0` on both.
+
+### 🟠 FOUND ON THE WAY PAST — TWO FILES THAT WERE NEVER TYPE-CHECKED, AND WHAT THAT WAS HIDING
+
+**This was found by positive-controlling a green, and it is the session's most
+useful finding.** `tsc --noEmit` returned clean on the new writer, including a
+Prisma `create` — the exact site AGENTS.md warns is invisible when the client is
+`any`. The client is **not** `any` here (F-TYPE fixed that), so the green looked
+decisive. It was not:
+
+> **A deliberately bogus Prisma field added to `commitVisitCharge`'s
+> `create({ data })` produced ZERO errors.**
+
+`tsc` walks the import graph from the app's entry points. **Nothing in either app
+imported `billing-charge.ts` or `price-table.ts`, so neither was in the
+programme at all** — confirmed by `tsc --listFiles`, which named neither. B3's
+price table has been in that position since it shipped.
+
+That is the emptiness failure wearing a new costume. AGENTS.md's rule reads
+*"type-check is decisive only for TYPED sites"*; here the site was fully typed
+and merely **unreachable**, and a green typecheck over a programme that does not
+contain your file is indistinguishable from a green typecheck over one that
+does.
+
+**Exporting both from `packages/ai/src/index.ts` put them in the programme, and
+the same bogus field then errored by name** (`TS2353 … 'bogusFieldThatCannotExist'
+does not exist in type LedgerEntryCreateInput`). The coverage fix immediately
+surfaced two real defects that had been hidden behind it:
+
+1. ⚠️ **B3's `price-table.ts` has NEVER COMPILED under this repo's tsconfig.**
+   `target: ES2017` rejects BigInt literals with `TS2737` regardless of `lib`,
+   which already lists `esnext` — so the BigInt *type* resolved and the *syntax*
+   did not. The file is written entirely in BigInt literals, because GATE 0.4
+   requires that no float touch a price. **Raised to ES2020** — safe under
+   `noEmit`, where `target` only decides which syntax the checker accepts and
+   `lib` is set explicitly so it does not shift. **Not higher, deliberately:**
+   ES2022 switches on `useDefineForClassFields`, a runtime behaviour change
+   nobody asked for. `marketing` type-checks clean on the new target too.
+2. **The Prisma client was stale** and did not know `ledger_entries.pricing`.
+   Regenerated.
+
+### ⚠️ AND A SEAM DEFECT IN B5, NAMED RATHER THAN PATCHED FROM INSIDE B6
+
+`LedgerEntry.practiceIdSnapshot` is derived by the trigger
+(`NEW."practiceIdSnapshot" := NEW."practiceId"`, unconditional), exactly like
+`balanceAfter` and `seq` — **but Prisma's generated type REQUIRES it**, because
+it has no `@default`. B5 gave the other two an `@default(0)` for precisely this
+reason, in its own words: *"so a Prisma caller need not send a value it is not
+allowed to choose."* The third derived column did not get the same treatment, so
+every Prisma caller must supply a value the database discards.
+
+B6 sends `practiceIdSnapshot: args.practiceId` — the same variable it sends as
+`practiceId`, in the same object, so the pair cannot drift. **It is recorded
+here rather than fixed** because changing a B5 column's default is B5's design,
+not B6's, and the current state is safe with one source.
+
+⚠️ Note the caller value is **silently replaced, not rejected**: the trigger
+overwrites before `ledger_entries_snapshot_agrees` is evaluated, so that CHECK
+can never see a disagreeing caller value. Anyone reading the CHECK as protection
+against a wrong caller is reading it wrong.
+
+### ⚠️ ONE BUILD FAILURE I COULD NOT ATTRIBUTE, REPORTED RATHER THAN EXPLAINED
+
+The first `docker compose -f docker-compose.qa.yml build db-migrate` failed at
+`npm run build -w transcribe-md` / `next build`. The second succeeded and the
+third hit cache. **I did not capture the underlying error** — only the npm
+wrapper lines — so I cannot say whether it was the `ECONNRESET` /
+`next/font/google` family AGENTS.md records or something else. It is named here
+because *"it worked the second time"* is not a diagnosis, and because a future
+occurrence should find this row rather than start from zero. `tsc` is clean and
+3428 unit tests pass; CI's own build on the PR is the authoritative signal.
+
+### WHAT B6 DOES **NOT** CLAIM
+
+- **Nothing is charged, anywhere.** The writer has no call site — ruling 90(e).
+  `ledger_entries` still holds **0 rows** in production and on QA.
+- **The writer has never been observed WRITING**, and cannot be by any test we
+  are allowed to run: F4 requires it to refuse everywhere except production.
+  That is why the arithmetic lives in a separate pure function that IS fully
+  exercised. Ruling 86(a)'s antidote, applied before the fact.
+- **The demonstration script's 🔴 branch is unexercised, deliberately** — see
+  ruling 90's closing note. Exercising it would write an undeletable row into
+  QA's ledger.
+- **The `nova-3-medical` rate is still PARKED**, so production's audio remains
+  unpriceable. B6 does not change that and must not be read as pricing it.
+- **Ruling 80(d)'s PAYG assumption is untouched** — if the Deepgram tier is
+  wrong, the over-statement it causes is now multiplied by 3/2 wherever a
+  Deepgram rate does apply.
+
+### ⚠️ M8 — I FOUND THIS GATE'S OWN WATCHED SET WAS ONE FILE SHORT, BEFORE MERGING IT
+
+The clause reads *"the QA compose entry does not use `${STRIPE_SECRET_KEY:-…}`"*.
+I wrote the arm as a hand-kept list of two — `docker-compose.yml` and
+`docker-compose.qa.yml`. **There are three.**
+`docker-compose.qa.b4-coverage.yml` is a QA overlay ruling 86(d) added four days
+ago, and a `${STRIPE_SECRET_KEY:-…}` placed in it would have sailed past the
+gate that exists to forbid exactly that.
+
+Found by positive-controlling an unrelated zero: the claim *"zero matches for
+`stripe` across every compose file"* was checked with the same matcher against a
+token known to be present (`MOCK_AI_CALLS` → 4 files), and the control's output
+listed a **third** compose file the arm was not reading.
+
+**The arm now enumerates by glob** — `/^docker-compose.*\.ya?ml$/` over the repo
+root, with a count assertion so a broken glob cannot report a clean zero over
+nothing, and a matcher control so the regex cannot be vacuous.
+
+| # | mutation | victim arm | |
+|---|---|---|---|
+| M8 | `${STRIPE_SECRET_KEY:-sk_test_qa}` appended to **`docker-compose.qa.b4-coverage.yml`** | 7 "no compose file introduces a default" | **RED**, naming the file |
+
+⚠️ **THE POINT IS NOT THAT M8 IS RED. It is that M8 would have been GREEN on the
+version I nearly shipped**, and nothing would ever have said so — this is
+AGENTS.md's watched-set rule arriving inside the gate written to satisfy a
+clause that names the universe explicitly. A hand-kept list was already stale
+four days after the third file appeared, by an author who had read all three
+that morning.
+
+### ⚠️ AND THE PUSH CARRYING M8 CANCELLED THIS PR's `e2e`, DELIBERATELY
+
+`e2e` `31482462518` was ~39 minutes in when the fix was pushed; `CI`, `a11y-ci`
+and `secrets-scan` had already passed. **Declared, not accidental.**
+
+The alternative was to let it finish and merge a gate I had already proved
+incomplete, then file a follow-up — which trades ~40 minutes of wall clock for
+merging a known hole in the exact clause B6's gate names. It is the wrong trade:
+the required checks would have to be re-run on the new head before merging
+anyway, so the follow-up costs the same cycle **plus** a window in which `main`
+carries the weaker gate.
+
+**The avoidable part is upstream of the choice**, and it is #568's lesson again:
+the first push happened before the close-out enumeration was done, so a finding
+that arrives during verification necessarily lands mid-run. *Hold the first push
+until the session's remaining work is written* is the habit; I did not.

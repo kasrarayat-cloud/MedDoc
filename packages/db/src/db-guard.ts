@@ -107,3 +107,89 @@ export function assertNonProdDbName(database: string, host?: string): void {
   const res = checkNonProdDb(database, host);
   if (!res.ok) fail(res.reason!);
 }
+
+// ============================================================================
+// THE OTHER DIRECTION — B6. Is this POSITIVELY the production database?
+// ----------------------------------------------------------------------------
+// SPEC §2.4: "Prod-only billing writer — refuses in QA/mock. The writer asserts
+// it is in production and refuses otherwise." RELAY F4 adds that "incapable"
+// needs TWO conditions: the code gate, and credentials that are not real.
+// This is the code gate.
+//
+// ⚠️ IT IS NOT `!checkNonProdDb(...).ok`, AND THAT IS THE WHOLE POINT.
+//
+// The negation READS like the mirror and is a fail-OPEN. `checkNonProdDb`
+// returns not-ok for five genuinely different situations, and only ONE of them
+// is "this is production":
+//
+//     DATABASE_URL unset          → not-ok  → negation says PRODUCTION → writes
+//     DATABASE_URL unparseable    → not-ok  → negation says PRODUCTION → writes
+//     name has no qa/test marker  → not-ok  → negation says PRODUCTION → writes
+//     name is the prod host       → not-ok  → negation says PRODUCTION → writes
+//     name is `meddoc`            → not-ok  → negation says PRODUCTION → correct
+//
+// Four of the five are "we cannot tell", and a billing writer that charges
+// money whenever it cannot tell where it is pointing is the fail-open shape
+// this programme has now closed three times (a defaulted provenance column,
+// a minted request id, `claudeCostCents` returning 0 for an unknown model).
+// Both directions must demand POSITIVE confirmation of the thing they permit,
+// which means two independent checks rather than one and its negation.
+//
+// So: the ONLY thing that confirms production is the production database name.
+// Anything else — unset, unparseable, a marker name, an unfamiliar name —
+// refuses. The two functions are therefore NOT complements: a database called
+// `staging` is confirmed by neither, and is refused by both. That gap is
+// deliberate. It is the set "we do not know", and both guards decline it.
+// ============================================================================
+
+/** PURE core check, the mirror-in-intent of {@link checkNonProdDb} — but not
+ *  its negation. Returns `{ok:true}` only when the name IS a known production
+ *  database name. Everything else, including anything unrecognised, is refused
+ *  with the reason. */
+export function checkProdDb(database: string, host?: string): GuardResult {
+  const db = (database ?? '').trim().toLowerCase();
+  const h = (host ?? '').trim().toLowerCase();
+  if (!db) return { ok: false, reason: 'no database name present' };
+  // A qa/test/e2e/ci marker is checked FIRST and named explicitly, so the
+  // refusal a QA run sees says why it is a QA run rather than the generic
+  // "not a production name". Same evidence, a message somebody can act on.
+  if (QA_MARKER.test(db))
+    return {
+      ok: false,
+      reason: `database "${db}" carries a qa/test/e2e/ci marker — this is not production`,
+    };
+  if (!PROD_DB_NAMES.has(db))
+    return {
+      ok: false,
+      reason: `database "${db}" is not a known production database name — cannot positively confirm production`,
+    };
+  return { ok: true, target: { host: h, database: db } };
+}
+
+function failNotProd(detail: string): never {
+  throw new Error(
+    `[db-guard] FAIL-CLOSED: ${detail}\n` +
+      `  Refusing to run the BILLING WRITER outside production.\n` +
+      `  SPEC §2.4: the writer asserts it is in production and refuses otherwise.\n` +
+      `  This is not a bug and it is not something to work around — a charge\n` +
+      `  written against a QA practice is a charge nobody can delete, because\n` +
+      `  ledger_entries is append-only by trigger.`
+  );
+}
+
+/** Guard for the billing writer. Throws unless DATABASE_URL positively names
+ *  the production database. Returns the parsed target on success. */
+export function assertProdDatabase(
+  databaseUrl: string | undefined = process.env.DATABASE_URL
+): DbTarget {
+  if (!databaseUrl || !databaseUrl.trim()) failNotProd('DATABASE_URL is not set');
+  let target: DbTarget;
+  try {
+    target = describeDbTarget(databaseUrl);
+  } catch {
+    failNotProd('DATABASE_URL is not a parseable postgres connection string');
+  }
+  const res = checkProdDb(target.database, target.host);
+  if (!res.ok) failNotProd(res.reason!);
+  return target;
+}

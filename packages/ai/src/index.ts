@@ -131,3 +131,47 @@ export { isMockEnabled, MOCK_FIXTURE_USAGE } from './mock';
 // if its span is a literal substring of the transcript, and a copy that drifts
 // puts the stage silently back to a zero its own expectation permits.
 export { MOCK_TRANSCRIPT_UTTERANCES } from './mock';
+// B3 — the versioned price table reader, and B6 — the charge rule and the
+// prod-only ledger writer.
+//
+// ⚠️ THESE ARE EXPORTED HERE FOR A REASON THAT IS NOT CONVENIENCE: WITHOUT IT
+// NEITHER FILE IS TYPE-CHECKED AT ALL. `tsc` walks the import graph from the
+// app's entry points, so a module that nothing in the app imports is simply not
+// in the programme — and both of these were in exactly that position. Measured,
+// not assumed: `tsc --listFiles` did not name either file, and a deliberately
+// bogus Prisma field added to `commitVisitCharge`'s `create({ data })` produced
+// ZERO errors. The gate tests import them, but vitest is not a type-checker.
+//
+// That is the AGENTS.md rule arriving in a new costume — "type-check is
+// decisive only for TYPED sites" — where the site is fully typed and merely
+// unreachable. A green `tsc` over a programme that does not contain your file
+// is the emptiness failure, and it looks exactly like a clean build.
+export {
+  BILLABLE_PROVIDERS,
+  commitVisitCharge,
+  componentsOf,
+  deliveryModeFor,
+  priceUsageRows,
+  visitChargeKey,
+  type ChargeableUsageRow,
+  type ChargeDecision,
+  type CommitResult,
+  type PricedComponent,
+  type UnpricedComponent,
+} from './billing-charge';
+export {
+  chargeMicroUsd,
+  costMicroUsd,
+  divRoundHalfUp,
+  rateAt,
+  selectRate,
+  tokens,
+  UNIT_QUANTITY,
+  type AnyUnitType,
+  type DeliveryMode,
+  type PriceProvenance,
+  type PriceProvider,
+  type PriceRateRow,
+  type PriceUnitType,
+  type Quantity,
+} from './price-table';

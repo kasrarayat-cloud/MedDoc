@@ -83,6 +83,12 @@ export type PriceProvenance = 'published' | 'invoice' | 'console';
 /** The subset of a `price_rates` row this module needs. Kept structural so the
  *  pure selector can be exercised without a database. */
 export interface PriceRateRow {
+  /** ⚠️ REQUIRED SINCE B6, because the ledger row records WHICH rate priced it
+   *  (SPEC §2.2 — "the row records which price table priced it, so a later rate
+   *  change never re-prices history"). A snapshot that carried the rate's VALUE
+   *  and not its identity could not be traced back to the period it came from,
+   *  which is the half of the requirement that matters for B9. */
+  id: string;
   provider: string;
   modelName: string;
   deliveryMode: string;
@@ -216,4 +222,31 @@ export function costMicroUsd(quantity: Quantity, rate: PriceRateRow): bigint {
     quantity.numerator * rate.rateMicroUsd,
     quantity.denominator * rate.unitQuantity,
   );
+}
+
+/**
+ * B6 — WHAT WE CHARGE FOR A COST. SPEC §2.2 / GATE 0.4:
+ *
+ *     charge_micro = round_half_up( cost_micro × 3 / 2 )
+ *
+ * ⚠️ `× 3 / 2`, IN THAT ORDER, IN INTEGER ARITHMETIC — **never `* 1.5`**.
+ * SPEC §4.4 names the float form as the thing this rule exists to forbid, and
+ * the reason is not pedantry: `1.5` is exactly representable in binary64, but
+ * `cost * 1.5` is a Number, so any cost above 2^53 micro-dollars silently loses
+ * precision and every intermediate stays a float from then on. The micro-dollar
+ * unit exists so the ledger never holds a value that was once a float.
+ *
+ * ⚠️ AND IT ROUNDS ONCE, AT THE END, ON THE TOTAL — never per component.
+ * `chargeMicroUsd(a) + chargeMicroUsd(b)` is NOT `chargeMicroUsd(a + b)`:
+ * with a=1 and b=1 the first gives 2+2=4 and the second gives 3. Summing
+ * per-component charges introduces a half-micro-dollar bias per component, and
+ * it biases UPWARD — i.e. it over-bills, growing with the number of pipeline
+ * stages. {@link priceUsageRows} therefore sums COSTS and charges once, and the
+ * gate asserts that specific inequality so nobody "simplifies" it back.
+ *
+ * Half-up at the micro-dollar is inherited from {@link divRoundHalfUp}. Cent
+ * rounding is a DISPLAY concern and appears nowhere in this path.
+ */
+export function chargeMicroUsd(costMicro: bigint): bigint {
+  return divRoundHalfUp(costMicro * 3n, 2n);
 }
