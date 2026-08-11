@@ -124,3 +124,10 @@ export {
 // cannot express, so it must read the flag and mark its own usage row. Every
 // other caller gets both for free from `anthropic.ts`.
 export { isMockEnabled, MOCK_FIXTURE_USAGE } from './mock';
+// B4 closing step — the two utterances the mock transcript is built from, and
+// the single source the anchored-draft fixture's `⟦A:…⟧` spans are derived
+// from. Exported so a gate can build the SAME role-labeled transcript L3 builds
+// instead of hardcoding a copy: an anchor only survives `deterministicStage`
+// if its span is a literal substring of the transcript, and a copy that drifts
+// puts the stage silently back to a zero its own expectation permits.
+export { MOCK_TRANSCRIPT_UTTERANCES } from './mock';

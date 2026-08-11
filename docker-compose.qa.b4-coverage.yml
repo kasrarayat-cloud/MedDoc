@@ -32,6 +32,17 @@
 # variant that leaked into the default would change what several of them see
 # while every one still passed, right up until one didn't.
 #
+# `MOCK_SOAP_ANCHORS` is the SECOND variant, same shape and same reasoning, and
+# it is what closes `tm_anchor_entailment` — the one stage the closing step left
+# UNPROVEN. With it on, L4's draft carries `⟦A:…⟧` anchors whose spans are
+# derived from the mock transcript, so `deterministicStage` produces claims,
+# `entailmentStage` runs its 3-lens ensemble, and the stage is COUNTED at 3
+# instead of sitting at a permitted-but-unfalsifiable 0. It also swaps
+# `tm_polish`'s fixture to the anchor-stripped SAME note, so L6's output equals
+# its input and L6b is never handed a "polished" note that shares no text with
+# the draft. Default off for the reason above: sixteen source files read
+# `tm_soap_draft`, and every one of them expects the unanchored fixture.
+#
 # Note what is NOT here: `TRANSCRIBE_MD_EVIDENCE_ANCHORS`. That one is set
 # unconditionally in `docker-compose.qa.yml` because production sets it, and QA
 # is supposed to be production-shaped. It was missing for as long as this stack
@@ -43,7 +54,9 @@ services:
   transcribe-md:
     environment:
       MOCK_CRITIQUE_ISSUES: "true"
+      MOCK_SOAP_ANCHORS: "true"
 
   transcribe-md-worker:
     environment:
       MOCK_CRITIQUE_ISSUES: "true"
+      MOCK_SOAP_ANCHORS: "true"
