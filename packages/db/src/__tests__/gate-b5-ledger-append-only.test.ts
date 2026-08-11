@@ -345,7 +345,38 @@ describe('B5 (6b) — nothing writes the ledger yet, and that is enumerated rath
   // as its FIRST statement (gate-b6, arms 4 and 5, including a demonstrated
   // refusal against the live QA database), and it writes `kind: 'usage'` with a
   // negative amount, which the `ledger_entries_kind_sign` CHECK also enforces.
-  const WRITERS: string[] = ['packages/ai/src/billing-charge.ts'];
+  //
+  // ⚠️ B7 ADDS THE SECOND WRITER, AND ITS REFUSAL IS A DIFFERENT SHAPE FROM
+  // B6's — DELIBERATELY, AND IT IS **STRICTER**, NOT LOOSER.
+  //
+  // `api/stripe/webhook/route.ts` does NOT call `assertProdDatabase()`. It
+  // requires the event's `livemode` flag to MATCH the database's identity:
+  // production credits only a LIVE event, a non-production database credits
+  // only a TEST event, and anything unidentifiable (`staging`, unset,
+  // unparseable) refuses both ways. Two positive confirmations, ruling 90(c)'s
+  // rule applied to an inbound fact instead of an outbound one.
+  //
+  // SPEC §2.4 says "prod-only billing writer — the writer asserts it is in
+  // production and refuses otherwise", so this is a stated divergence rather
+  // than an oversight. The reason it is a divergence UPWARD:
+  //
+  //   `assertProdDatabase()` ALONE WOULD ACCEPT A **TEST-MODE** STRIPE EVENT
+  //   ON PRODUCTION. It looks at the database and never at the event, so a
+  //   test webhook pointed at app.quillmd.com would credit a real practice's
+  //   real wallet with money nobody paid — on an append-only table, forever.
+  //
+  // The SPEC clause was written for B6's OUTBOUND charge, where the only thing
+  // to confirm is where we are. An INBOUND event carries its own mode, so the
+  // guard has to read both or it is guarding half the question. Recorded as a
+  // PROVISIONAL ruling; the reversal is to AND `assertProdDatabase()` on top,
+  // which only ever makes it stricter.
+  //
+  // B5's other condition is met unchanged: the row is `kind: 'topup'` with a
+  // POSITIVE amount, which `ledger_entries_kind_sign` also enforces.
+  const WRITERS: string[] = [
+    'apps/transcribe-md/src/app/api/stripe/webhook/route.ts',
+    'packages/ai/src/billing-charge.ts',
+  ];
 
   function sourceFiles(dir: string, acc: string[] = []): string[] {
     let entries: string[];
