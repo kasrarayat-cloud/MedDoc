@@ -5706,3 +5706,262 @@ is written against the right diff rather than against this item alone:
 and it would be true for three of these four and unfalsifiable for the fourth.**
 The fonts change deserves a declaration that names the bundle, so it gets its own
 deploy rather than riding one written for a metering item.
+
+---
+
+## 🟩 THE OWED DEPLOY IS DONE — `f89c7c33` IS LIVE IN PRODUCTION, 2026-08-11T01:48Z
+
+**Session 07 took the handoff above and executed it.** Production ran `c8a55986`
+for twelve hours while `main` accumulated nine merges; it now runs `f89c7c33`.
+
+| | |
+|---|---|
+| deployed commit | `f89c7c333b2921c3a063d5484382eec1e5d32a5b` |
+| declaration | `docs/foundation/deploys/20260811-f89c7c33.md` |
+| deploy log | `docs/deploy-logs/deploy-20260811T014641Z.log` |
+| rollback tag | **`:pre-selfhostfonts-20260811`** — app `78a863205cc7` / worker `b7d5f8fb4883` / gotenberg `2d05d22572ba`, each verified against the RUNNING container's digest at tag time |
+| app image | `78a863205cc7` → **`d29b852d8d9b`** |
+| worker image | `b7d5f8fb4883` → **`c18d9dbf1092`** |
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `f89c7c333b2921c3a063d5484382eec1e5d32a5b`:**
+   · `CI` 31447965593 a1
+   · `e2e` 31447965599 a1
+   · `a11y-ci` 31447965588 a1
+   · `secrets-scan` 31447965608 a1
+
+All `a1` — no re-runs, nothing to explain. `e2e` passed first attempt in 42m38s.
+
+⚠️ **THIS IS A DESCENDANT CITATION AND THAT IS WHY IT IS THE RIGHT ONE.** The
+previous session cited `32706453` (PR #594) and then a docs PR (#595) landed on
+top. Deploying `32706453`'s evidence would have certified the parent of what
+actually ships. `f89c7c33` contains everything the four substantive merges did
+**plus** the docs commit, so its citation covers strictly more.
+
+### THE DECLARATION, JUDGED — 21 of 21 ROWS, EVERY ONE AS DECLARED
+
+| declared | measured | |
+|---|---|---|
+| app image id moves | `78a863205cc7` → `d29b852d8d9b` | ✓ |
+| worker image id moves | `b7d5f8fb4883` → `c18d9dbf1092` | ✓ |
+| **font assets 32 → exactly 8** | **8** | ✓ |
+| six committed byte sizes, exact | 41344 · 20156 · 48256 · 31432 · 50824 · 51516 — all six | ✓ |
+| six expected filename stems | `bricolage_grotesque_latin` · `figtree_latin` · `inter_latin` · `jetbrains_mono_latin` · `source_serif_4_latin` · `source_serif_4_latin_italic` | ✓ |
+| `transcribe_visits` 25 | 25 | ✓ |
+| … `signedAt IS NOT NULL` 17 | 17 | ✓ |
+| … `deletedAt IS NOT NULL` 0 | 0 | ✓ |
+| `transcribe_md_patients` 16 | 16 | ✓ |
+| **`api_usage_events` 1325** | **1325** | ✓ |
+| `ai_calls` 1126 | 1126 | ✓ |
+| `users` 196 | 196 | ✓ |
+| `practices` 197 | 197 | ✓ |
+| `note_templates` 6 | 6 | ✓ |
+| `price_rates` 44 | 44 | ✓ |
+| `marketing` image id UNCHANGED | `e9568d07d057` | ✓ |
+| `gotenberg` image id UNCHANGED | `2d05d22572ba` | ✓ |
+| migrations 96 of 96 | 96 of 96 | ✓ |
+| co-tenants `307/404/200/200/410` | identical | ✓ |
+| `MOCK_AI_CALLS=false` both containers | false, both | ✓ |
+| `app /api/health` 200 | 200 | ✓ |
+
+### ⚠️ THE FONT PREDICTION WAS POSITIVE-CONTROLLED BEFORE THE DEPLOY, NOT AFTER
+
+The declaration could have said *"the bundle changes"* and been unfalsifiable.
+Instead it named **8 files and six exact byte counts** — and then, before the
+deploy ran, checked that prediction against an **equivalent build**: the QA image
+`5d9c8679df6d`, built 2026-08-10T22:33Z from a tree already containing
+`a8bf9307`. It held 8 files with those six exact sizes.
+
+That matters because of what it rules out. A post-deploy count of 8 is consistent
+with both *"the fix landed"* and *"I guessed how `next/font/local` behaves and
+got lucky"*. Having observed it on an equivalent build first, the only remaining
+question was whether the production build agreed — and it did, down to identical
+content hashes.
+
+**The mechanism, for the record:** `next/font/google` fetched every subset of
+every family (latin, latin-ext, cyrillic, greek…), so six families produced
+**thirty** files. `next/font/local` copies the six declared latin files verbatim.
+32 → 8 is that difference, and it is why the byte sizes match the committed
+files exactly.
+
+### ⚠️ THE INERTNESS OF THE FOUR METERING MERGES WAS RE-VERIFIED, NOT INHERITED
+
+Two prior sessions declared B4 steps 2/3/closing inert in production. That is a
+claim about a tree and a configuration, so it was re-checked here before shipping
+it:
+
+- **`llm-mdm.ts` (step 3)** — the entire diff sits inside
+  `if (process.env.MOCK_AI_CALLS === 'true')` and still `return null`. Read the
+  diff, not the summary.
+- **`04b-anchor-verify.ts` (step 2)** — the change is a **pure deletion** of the
+  mock short-circuit plus a comment. `entailmentStage`'s live path is untouched.
+  This one mattered most to check: **L4b genuinely runs in production**
+  (`TRANSCRIBE_MD_EVIDENCE_ANCHORS=true` on both containers), so "mock-path only"
+  needed to be true of a file on a live path.
+- **`MOCK_AI_CALLS=false`** read from the **running containers**, before and
+  after — not from the compose file.
+- **`isWhisperFallbackEnabled()`** is `=== 'true'` fail-closed and the env var is
+  absent from the worker, so `buildWhisperUsage`'s new required parameter is
+  unreachable.
+
+**And the declaration made it falsifiable rather than argued:** the
+`api_usage_events = 1325` arm is exactly the test. A recreate-and-settle is when
+a mis-wired meter would fire; the count did not move by one.
+
+### WHAT THIS DEPLOY DOES NOT CLAIM
+
+- **It proves no meter works in production.** Nothing here made a vendor call.
+  The four metering merges ship unexercised, deliberately.
+- **It does not close B4.** `tm_anchor_entailment` is still UNPROVEN on a mocked
+  run; the coverage script still exits 2. See the recon below.
+- **The marketing half of the fonts fix did NOT ship.** `deploy-prod.sh` never
+  builds `marketing`, so `quillmd.com` still runs a 13-day-old image. This is not
+  a defect and not a runtime exposure — `next/font/google` self-hosts at build
+  time too (`node_modules/next/dist/docs/01-app/01-getting-started/13-fonts.md`:
+  *"no requests are sent to Google by the browser"*), so marketing was never
+  fetching fonts from Google at runtime and still is not. What lands whenever
+  marketing is next rebuilt is the removal of the **build's** reach.
+- **No clinical flow was exercised.** Verification was structural throughout, per
+  ruling 56 — container health, image ids, migration count, asset bytes inside
+  the image, DOM-free HTTP status, and DB counts. No visit was touched.
+
+---
+
+## 🟠 FOUND ON THE WAY PAST — "THE BUILD'S LAST REACH TO GOOGLE" IS NOT ACCURATE, AND ONE OF THE SURVIVORS IS COMPILED BY A REQUIRED GATE
+
+The handoff table above says `a8bf9307` *"removes the build's last reach to
+Google"*. **It removes it from every build any gate or deploy performs — which is
+the part that matters — but the repository still holds SEVEN live
+`next/font/google` imports.** Recording it because AGENTS.md's own rule for this
+class says the sweep is **by import**, and the disposition of each import is
+exactly what a future reader will need when the masked
+`turbopack-next/internal/font/google/font` error appears in a file nobody touched.
+
+**The list, worked entry by entry** — `grep -rn "next/font/google"` over
+`*.ts,*.tsx,*.js,*.jsx`, excluding `node_modules`: **ten hits, three of which are
+now comments.**
+
+| site | disposition |
+|---|---|
+| `apps/marketing/src/app/page.tsx:24` | ✅ **COMMENT** — migrated |
+| `apps/marketing/src/app/layout.tsx:11` | ✅ **COMMENT** — migrated |
+| `apps/transcribe-md/src/app/layout.tsx:18` | ✅ **COMMENT** — migrated |
+| **`apps/meddoc-pro/src/app/layout.tsx:2`** | ⚠️ **LIVE** — `import { Inter } from "next/font/google"`. Built by **no** deploy step and **no** image build, but see below |
+| `landing-monolith/app/layout.tsx:2` | ⚠️ **LIVE** — `Anton, Manrope, IBM_Plex_Mono` |
+| `landing-monolith/app/heroes/layout.tsx:1` | ⚠️ **LIVE** — `Newsreader` |
+| `landing-monolith/app/structures/layout.tsx:1` | ⚠️ **LIVE** — `Newsreader` |
+| `landing-monolith/app/concepts/(app)/layout.tsx:2` | ⚠️ **LIVE** |
+| `landing-monolith/app/concepts/soap/layout.tsx:1` | ⚠️ **LIVE** |
+| `landing-monolith/app/concepts/soap-v2/layout.tsx:1` | ⚠️ **LIVE** |
+
+**The six `landing-monolith` ones are genuinely out of scope**, two ways over:
+zero hits for `landing-monolith` in `.github/workflows/`, and the directory is
+**excluded from the docker build context** by `.dockerignore`. It is staging-only.
+
+⚠️ **`apps/meddoc-pro` IS THE ONE WORTH KNOWING ABOUT, AND IT IS NOT REACHED BY
+ANY *IMAGE* BUILD — IT IS REACHED BY `CI`.** Every image build in the programme
+is service-scoped and none names it:
+
+- `deploy-prod.sh` builds `db-migrate`, `transcribe-md-worker`, `transcribe-md`,
+  `gotenberg`.
+- `e2e.yml:176/179` builds `transcribe-md transcribe-md-worker` and `db-migrate`.
+- `a11y.yml:201` runs `npm run build -w transcribe-md`.
+
+But `test.yml`'s `test` job runs `npm run test:all`, which the root
+`package.json` resolves to `-w meddoc-pro`, whose `playwright.config.ts` starts a
+**Next dev server** for that app. A dev server compiles the root layout on first
+request, and `next/font/google` resolves by fetching at compile time — so the
+**required `CI` workflow retains a build-time dependency on Google's font
+servers**, in a decommissioned app, behind an error message that names
+`layout.tsx` rather than the network.
+
+⚠️ **Stated precisely about what was and was not observed:** the import, the
+workspace resolution and the dev-server config are read from the files cited. The
+compile-time *fetch* is the documented mechanism (AGENTS.md's own incident
+paragraph, plus the Next docs above) — **it was not observed on the wire here**,
+which would need network tracing inside a CI run. Confirming it cheaply: the
+failure signature is the masked turbopack error, and the tell AGENTS.md already
+records is byte-identical trees passing and failing minutes apart.
+
+**Recommended disposition: route to A5, do not patch here.** A5 retires
+`apps/meddoc-pro`, and ruling 83 already settled this exact shape — when the
+capability is itself being retired, the fix belongs to the retiring item rather
+than to a repair that manufactures a passing assertion about something on its way
+out. **Nothing is being proposed for the six `landing-monolith` files**; they are
+correctly out of every gate.
+
+---
+
+## 🟠 FOUND ON THE WAY PAST — UNREAPED SESSION SCRATCH SITS INSIDE THE DOCKER BUILD CONTEXT
+
+`.b4close-backup/` — the previous session's mutation-proof backups, which it
+correctly listed and could not reap (`shred` is denied to the loop by ruling 70)
+— is at the repository **root** and is **not** matched by any `.dockerignore`
+rule. It holds `.ts` copies of `pipeline-stages.ts`, `gate.test.ts` and
+`b4-stage-coverage.ts`, plus a `pr-body` and two `commit-msg` files.
+
+So `COPY . .` shipped it into the **builder layer** of the image this deploy
+built.
+
+✅ **It does NOT reach the final image — verified, not assumed.**
+`ls -d /app/.b4close-backup` inside the running `transcribe-md` container returns
+**ABSENT**. Multi-stage kept it out, exactly as `.dockerignore`'s own note
+records for `secrets/`.
+
+**So the severity is builder-layer weight and hygiene, not exposure** — and the
+files are non-clinical source copies, so nothing PHI-shaped is involved. It is
+recorded because the *class* is worse than this instance: the loop is required to
+leave scratch behind for a supervised session, that scratch lands at the repo
+root by convention, and the root is the build context. A session that backed up
+something sensitive would ship it into a builder layer with nothing reporting it.
+
+**Recommended, and deliberately NOT bundled into this deploy-judgement PR:** a
+`.dockerignore` entry for the session-scratch convention. It is a build-config
+change that deserves its own gate cycle rather than riding a docs PR, and the
+verified-absent result means it is not urgent.
+
+---
+
+## 📐 B4's LAST OPEN STAGE — RECON MEASURED 2026-08-11, READ-ONLY, INCLUDING THE BLAST-RADIUS ARGUMENT THE CLOSING STEP ASKED FOR
+
+B4's closing step left `tm_anchor_entailment` **UNPROVEN** and named the closure
+*"an anchored `tm_soap_draft` variant on the same env-selected pattern"* —
+**named, not attempted**, because *"that fixture is read by many suites and needs
+its own blast-radius argument."* Here is that argument, so the next session does
+not re-derive it.
+
+**The mechanism, confirmed:** `grep -c '⟦A:' packages/ai/src/mock.ts` → **0**. A
+mocked L4 emits no anchors, so `claims.length === 0` and `entailmentStage`
+returns at `04b-anchor-verify.ts:999` before any model call. Ruling 82(d) says
+that early return is correct and must stay — no work is not a suppressed call.
+
+**The pattern is already established three times over, in one file.**
+`mock.ts:608–617` dispatches on `purpose` + an env var:
+
+| existing variant | flag |
+|---|---|
+| `tm_template_phi_scan` | `MOCK_TEMPLATE_PHI_FLAG` |
+| `tm_rx_drafting` | `MOCK_RX_WARNINGS` |
+| `tm_critique` | `MOCK_CRITIQUE_ISSUES` |
+
+A fourth on `tm_soap_draft` is the same shape, and `tm_soap_draft`'s fixture is
+declared at `mock.ts:305`.
+
+⚠️ **THE BLAST RADIUS OF *ADDING* IT IS ZERO, AND THE CLOSING STEP'S WORRY WAS
+AIMED AT A DIFFERENT OPERATION.** Sixteen source files reference
+`tm_soap_draft` (five eval scripts, nine tests, `04-generate-soap.ts`,
+`preview-note-template.ts`, `pipeline-stages.ts`, `types.ts`). **Every one of them
+is unaffected by a DEFAULT-OFF variant** — which is precisely what
+`MOCK_CRITIQUE_ISSUES` demonstrated in the closing step itself. The concern is
+valid only for *changing the default fixture*, which is not what the pattern does.
+
+**Where the real risk sits, so it is not mistaken for the fixture:** the anchored
+draft must emit anchors that `04b`'s parser actually recognises, and the three
+entailment lenses must then agree. If they do not, claims get demoted and the
+**mocked pipeline's OUTPUT changes** — but only in runs that set the new flag,
+which is the coverage overlay (`docker-compose.qa.b4-coverage.yml`) and nothing
+else. **That is the thing to mutation-prove**, not the presence of the fixture.
+
+**Not attempted here.** This session's item was the owed deploy; this is recon
+left deliberately as recon.
