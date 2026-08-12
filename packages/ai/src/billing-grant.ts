@@ -142,9 +142,23 @@ export function promoGrantKey(practiceId: string): string {
   return `grant:promo:practice:${practiceId}`;
 }
 
-/** What happened to one practice's grant. */
+/** What happened to one practice's grant.
+ *
+ * ⚠️ `balanceAfter` AND `seq` ARE READ BACK OFF THE CREATED ROW, NOT COMPUTED
+ * HERE (B7 step 3c). The derive trigger owns both; a caller that wanted to
+ * audit "the balance became X" and calculated X itself would be recording its
+ * own belief, and the one number nobody can check is the one everybody trusts.
+ * The `CHECKOUT_TOPUP_CREDITED` row does exactly this for the same reason. */
 export type GrantResult =
-  | { granted: true; ledgerEntryId: string; amountMicroUsd: bigint }
+  | {
+      granted: true;
+      ledgerEntryId: string;
+      amountMicroUsd: bigint;
+      balanceAfter: bigint;
+      /** `BigInt` in the schema, not `Int` — read off the model, not assumed
+       *  from the fact that a sequence position looks small. */
+      seq: bigint;
+    }
   /** The practice already holds its promo grant. NOT an error — this is the
    *  idempotency key doing its job, and the backfill counts these separately
    *  from the rows it wrote so a re-run is legible rather than silent. */
@@ -202,13 +216,18 @@ export async function grantPromoCredit(
         idempotencyKey: promoGrantKey(practiceId),
         note: `SPEC §2.4 promo grant — $${(PROMO_GRANT_MICRO_USD / 1_000_000n).toString()}`,
       },
-      select: { id: true },
+      // ⚠️ `balanceAfter` and `seq` are selected because the AUDIT ROW carries
+      // them (ruling #99's "one audit row per grant"). They are whatever the
+      // derive trigger computed — this statement sent neither.
+      select: { id: true, balanceAfter: true, seq: true },
     });
 
     return {
       granted: true,
       ledgerEntryId: created.id,
       amountMicroUsd: PROMO_GRANT_MICRO_USD,
+      balanceAfter: created.balanceAfter,
+      seq: created.seq,
     };
   } catch (err) {
     // ⚠️ ONLY THE UNIQUE VIOLATION IS ABSORBED, AND ONLY ON *THIS* KEY.

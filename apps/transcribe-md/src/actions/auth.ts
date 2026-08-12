@@ -61,6 +61,8 @@ import {
   consumeDbInviteCode,
 } from '@/lib/signup-invite';
 import { logAudit } from '@/lib/audit';
+// B7 step 3c, door 1 of 3 — see the call site inside the signup transaction.
+import { grantPromoCredit } from '@meddoc/ai';
 import { recoveryHref } from '@/lib/recovery-href';
 
 export interface FormErrorState {
@@ -489,6 +491,19 @@ export async function signupAction(
   // Synthetic Practice + User in one transaction so we don't orphan
   // Practice rows if the User insert fails.
   let createdUserId: string | null = null;
+  // ⚠️ B7 step 3c — CAPTURED INSIDE THE TRANSACTION, AUDITED AFTER IT COMMITS.
+  // Writing the audit row inside the closure would record a grant that a later
+  // statement in the same transaction can still roll back — the invite-race
+  // throw below does exactly that. An audit row for a grant that does not exist
+  // is worse than no row: it is a false record on the one table an operator
+  // trusts to say what happened. `logAudit` is fire-and-forget, so it also
+  // cannot participate in the rollback even if it were called here.
+  let grantForAudit: {
+    practiceId: string;
+    amountMicroUsd: bigint;
+    balanceAfter: bigint;
+    seq: bigint;
+  } | null = null;
   try {
     await prisma.$transaction(async (tx: TransactionClient) => {
       // ⚠️ T8 — AN INVITE MAY ADMIT INTO AN EXISTING PRACTICE.
@@ -554,6 +569,40 @@ export async function signupAction(
         const spent = await consumeDbInviteCode(tx, invite.inviteCodeId);
         if (!spent) throw new Error('INVITE_EXHAUSTED_RACE');
       }
+
+      // ⚠️ B7 STEP 3c, DOOR 1 OF 3 — THE PROMO GRANT IS PART OF BECOMING A
+      // PRACTICE, NOT AN EVENT THAT HAPPENED ONCE IN A BACKFILL.
+      //
+      // Without this, a practice created after the backfill holds no `grant`
+      // row, so `readPracticeBalance` reports spendable 0, so `decideAdmission`
+      // returns `insufficient_balance`, so `admitVisitOrThrow` throws — and the
+      // FIRST VISIT OF EVERY NEW SIGNUP fails the moment `BILLING_ENFORCED` is
+      // turned on. `billing-grant.ts`'s header records that chain in full; the
+      // discovery channel would have been a real doctor's first recording.
+      //
+      // ⚠️ IT RUNS ON BOTH BRANCHES, AND THE KEY IS WHY THAT IS SAFE RATHER
+      // THAN SLOPPY. `practice` above is either freshly minted (solo signup) or
+      // an EXISTING practice a T8 invite admits into. The second already holds
+      // its grant — from the backfill, or from its own signup — and
+      // `promoGrantKey` carries no occasion, so the global unique on
+      // `idempotencyKey` refuses the duplicate IN THE DATABASE and this returns
+      // `already_granted`. Branching on `membership` here would produce the
+      // same outcome by reasoning instead of by construction, and would be one
+      // more place for the two paths to drift apart.
+      //
+      // ⚠️ AND IT TAKES `tx`, DELIBERATELY. A grant that fails rolls the
+      // practice and the user back with it. The alternative — granting after
+      // the commit — can leave a practice that exists and is not funded, which
+      // is precisely the state this step exists to make impossible.
+      const grant = await grantPromoCredit(practice.id, tx);
+      if (grant.granted) {
+        grantForAudit = {
+          practiceId: practice.id,
+          amountMicroUsd: grant.amountMicroUsd,
+          balanceAfter: grant.balanceAfter,
+          seq: grant.seq,
+        };
+      }
     });
   } catch (err) {
     console.error('[signup] create failed:', err);
@@ -567,6 +616,39 @@ export async function signupAction(
         name: parsed.data.name,
       },
     };
+  }
+
+  // ⚠️ B7 step 3c — ONE AUDIT ROW PER GRANT (ruling #99), emitted only now that
+  // the transaction has COMMITTED. `grantForAudit` is null when the practice
+  // already held its promo (a T8 invite into an existing clinic): that is the
+  // ABSENCE of an event, and the schema comment records why it gets no row.
+  //
+  // Fire-and-forget like every other `logAudit` call — a failed audit write
+  // must never fail a signup. That is also why the label needs its Postgres
+  // migration and not merely the TypeScript union: without it the insert is
+  // rejected and the rejection is discarded with no error anywhere.
+  if (grantForAudit) {
+    const g: {
+      practiceId: string;
+      amountMicroUsd: bigint;
+      balanceAfter: bigint;
+      seq: bigint;
+    } = grantForAudit;
+    void logAudit({
+      action: 'PROMO_GRANT_CREDITED',
+      targetType: 'Practice',
+      targetId: g.practiceId,
+      practiceId: g.practiceId,
+      userId: createdUserId ?? undefined,
+      metadata: {
+        door: 'signup',
+        bucket: 'promo',
+        // BigInt is not JSON-serialisable; the metadata column is JSON.
+        amountMicroUsd: g.amountMicroUsd.toString(),
+        balanceAfter: g.balanceAfter.toString(),
+        seq: g.seq.toString(),
+      },
+    });
   }
 
   // T-M16.2: verification-gate branch — mint token + send email,

@@ -5,7 +5,8 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./billing-grant": "./src/billing-grant.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.85.0",

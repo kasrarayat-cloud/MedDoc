@@ -374,11 +374,29 @@ describe('B7 step 3b — the writer ships UNWIRED, enumerated rather than claime
   // retire the inertness assertion silently — the list would be non-empty and
   // nobody could tell which kind of caller made it so.
   //
-  // PRODUCTION wiring. Still empty, and that is step 3b's scope claim intact.
-  // Step 3c's two call sites, named in advance so the diff is legible:
-  //   · apps/transcribe-md/src/actions/auth.ts   — every practice from now on
-  //   · the backfill script                      — every practice that exists
-  const CALLERS: string[] = [];
+  // PRODUCTION wiring.
+  //
+  // ⚠️ STEP 3c LANDED (2026-08-12) AND THIS LIST IS NO LONGER EMPTY. Step 3b's
+  // "nothing calls this yet" claim is now HISTORY, not an invariant — this arm
+  // did exactly the job its header describes: the wiring arrived as a
+  // deliberate edit here, in the same commit as the call sites, and the suite
+  // went red until it was made.
+  //
+  // ⚠️ AND STEP 3c HAS **THREE** DOORS, NOT THE TWO NAMED ABOVE IN ADVANCE.
+  // Ruling #99 added the reactivation grant, which is what dissolved the
+  // 175-vs-197 population choice: a practice whose members are all deactivated
+  // is funded when somebody returns, rather than pre-minted into limbo on a
+  // table that refuses deletes. The third door is therefore a caller, and the
+  // file walker below had to be widened to `apps/meddoc-pro` to see it — see
+  // the note on `sourceFiles`.
+  const CALLERS: string[] = [
+    // door 1 — every practice from now on, inside the signup transaction
+    'apps/transcribe-md/src/actions/auth.ts',
+    // door 2 — every practice that already exists (one-shot, guarded)
+    'apps/transcribe-md/scripts/backfill-promo-grants.ts',
+    // door 3 — a practice whose members were all deactivated, funded on return
+    'apps/meddoc-pro/src/app/system-admin/actions.ts',
+  ];
 
   // HAND-RUN PROOFS. Not reachable from the worker, any route, or any job —
   // they have their own `main()` and run only under `docker exec` against the
@@ -411,9 +429,22 @@ describe('B7 step 3b — the writer ships UNWIRED, enumerated rather than claime
     return acc;
   }
 
+  // ⚠️ `apps/meddoc-pro` WAS ADDED BY STEP 3c, AND ITS ABSENCE WAS A
+  // WATCHED-SET HOLE — the census would have reported a clean, correct-looking
+  // count over a universe that could not contain door 3. That is AGENTS.md's
+  // "a gate's WATCHED SET is diffed against the spec's NAMED set": the check
+  // was flawless at counting a set which did not include the thing it was
+  // being trusted to find. Nothing would ever have surfaced it, because the
+  // omission and a genuine zero produce identical output.
+  //
+  // meddoc-pro is DECOMMISSIONED — its container has been exited for over a
+  // week, `pro.quillmd.com` serves 410, and CI neither typechecks nor builds
+  // it. This scan is therefore the ONLY thing in CI that reads that file, which
+  // makes including it more important rather than less.
   const files = [
     ...sourceFiles(join(ROOT, 'apps/transcribe-md/src')),
     ...sourceFiles(join(ROOT, 'apps/transcribe-md/scripts')),
+    ...sourceFiles(join(ROOT, 'apps/meddoc-pro/src')),
     ...sourceFiles(join(ROOT, 'packages')),
     ...sourceFiles(join(ROOT, 'scripts')),
   ];
@@ -446,13 +477,25 @@ describe('B7 step 3b — the writer ships UNWIRED, enumerated rather than claime
     expect(callSites()).toEqual([...CALLERS, ...PROOF_CALLERS].sort());
   });
 
-  it('the writer is still UNWIRED in production — step 3b’s scope claim', () => {
-    // ⚠️ THE ARM THE LEDGER ROW ACTUALLY CITES. Kept separate from the census
-    // above so that adding a proof can never be mistaken for wiring the writer,
-    // and so the day this list stops being empty it is a deliberate, visible
-    // edit rather than a line appended to a mixed list.
+  it('the writer is wired to EXACTLY the three ruled doors, and nothing else', () => {
+    // ⚠️ THE ARM THE LEDGER ROW ACTUALLY CITES, AND ITS TITLE CHANGED WITH ITS
+    // MEANING. Until 2026-08-12 it read "the writer is still UNWIRED in
+    // production" and asserted `CALLERS` was empty. Step 3c wired all three
+    // doors, so that sentence became false — and a check whose title outlives
+    // its claim is the defect AGENTS.md names at length: the assertion stays
+    // correct about a quantity nobody wanted, and the NAME is what stops anyone
+    // noticing. Retitled rather than deleted, because the property worth
+    // pinning did not disappear — it INVERTED. "Nothing calls this" became
+    // "exactly these three call it".
+    //
+    // Kept separate from the census above so that adding a hand-run proof can
+    // never be mistaken for wiring the writer.
+    //
+    // ⚠️ SORTED ON BOTH SIDES. `callSites()` returns sorted paths; `CALLERS` is
+    // written in DOOR order because that is how a human reads it. Comparing the
+    // two directly made this arm fail on presentation rather than on substance.
     const production = callSites().filter((f) => !PROOF_CALLERS.includes(f));
-    expect(production).toEqual(CALLERS);
+    expect(production).toEqual([...CALLERS].sort());
   });
 
   it('every declared proof caller really is a proof, and really exists', () => {
