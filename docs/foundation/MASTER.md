@@ -46,7 +46,11 @@ the fact.** Where they disagree, that is a finding, not a typo.
    green) ·
    `check-qa-mock-posture` · `check-minio-encrypted-mount` ·
    `check-pg-encrypted-mount` · `check-ingress-tls` ·
-   `check-bind-mount-agreement` · `check-composite-fk`
+   `check-bind-mount-agreement` · `check-composite-fk` ·
+   **`check-hooks-installed`** — ⚠️ hooks do NOT travel with a clone. The
+   pre-commit clinical-document guard and the pre-push in-flight-runs guard are
+   both INERT in a clone that never ran `npm install`, and no other check can
+   see it. A guard nobody asserted is a guard that is off.
 6. **Co-tenants**: `app` 307 · `admin` 404 · `quillmd` 200 · `www` 200 ·
    `pro` 410. A change here is a finding even if nothing else moved.
 7. **Open PRs** and their check states. Land what is green before starting new

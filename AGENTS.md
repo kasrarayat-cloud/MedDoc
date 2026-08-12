@@ -554,6 +554,7 @@ DIRECTION THAT COSTS A RUN.**
 | `gh run list --commit <SHORT-sha>` | returns **`[]`** for **ANY** abbreviated SHA, whatever the runs are doing — exit 0, no warning, no *"ambiguous"* |
 | `gh run list --commit <FULL-sha>` | returns **`[]`** in the propagation window right after a push, while the runs exist and sit `pending` |
 | `gh pr edit --body-file` | **fails outright, exit 1**, on `GraphQL: Projects (classic) is being deprecated … (repository.pullRequest.projectCards)` — this `gh` build queries a sunset field on every `pr edit`. ⚠️ **It prints as a deprecation NOTICE and reads like a warning; the edit does not happen.** Verified 2026-08-12: two attempts, body unchanged both times. **Use the REST API instead** — `gh api repos/<owner>/<repo>/pulls/<n> -X PATCH -F body=@<file>` (exit 0), which also keeps prose out of the shell. **Then re-read the body and confirm**: a correction you believe landed and did not is worse than one you never attempted |
+| `gh pr merge --delete-branch` | **NOT ATOMIC — the merge succeeds and the branch deletions can half-fail, reporting only one of them.** Verified 2026-08-12 on PR #621: it merged, printed `failed to delete local branch … used by worktree`, and left the **remote** branch alive too — a failure it never mentioned. ⚠️ **Reading that error as "only the local one failed" leaves a merged branch on origin forever.** Retire with `bash scripts/retire-branch.sh <branch>`, which checks both sides and refuses to claim a success it did not earn — or delete each side by hand and CONFIRM with `git ls-remote --heads origin <branch>` |
 
 ⚠️ **THE THIRD ONE DEFEATS THE FIX THE SECOND ONE PRESCRIBED.** Measured seconds
 apart on the same full SHA (RELAY, 2026-08-09): `--commit` returned `[]`,
@@ -633,6 +634,52 @@ because two pushes were made minutes apart where one would have done. And when a
 second push genuinely must happen, it is gated by the **two-view check at the top
 of this section** — both views, the full 40-character SHA, and a zero believed
 only when both are empty.
+
+### THE RULE IS NOW A HOOK, BECAUSE FIVE OCCURRENCES SAID IT HAD TO BE
+
+**Ratified 2026-08-12.** Everything above stayed true and kept not reaching
+behaviour — the fifth instance was a session amending and force-pushing three
+minutes into its own run, cancelling `CI`, `e2e` and `a11y-ci`. **A rule that
+does not change what happens becomes mechanism**, the same move the §2.5
+declaration made.
+
+`scripts/hooks/pre-push` takes BOTH views on every pushed ref's current remote
+head and **refuses** while any run there is not `completed`.
+
+- ⚠️ **IT IS FAIL-CLOSED ON CANNOT-TELL.** No `gh`, an unauthenticated `gh`, a
+  failed query, or a remote sha that is not 40 characters all REFUSE. A broken
+  instrument and a quiet branch produce the same zero, so the hook
+  **positive-controls first** — it confirms the runs API answers for this
+  repository at all before believing any zero it returns.
+- **The legitimate override is a DECLARATION, not a bypass** — the batching
+  rule's own path:
+
+      DECLARE_CANCELLATION="merging #618 and #619 as one batch; #618's e2e is
+      mine and I am discarding it knowingly" git push …
+
+  The reason is echoed to stderr, which IS the log for an unattended session.
+  ⚠️ **A bare `1`, `true` or `yes` is REFUSED, as is anything under 12
+  characters.** A declaration wearing a token's clothes is a bypass, and an
+  audit trail's "why" is somebody's words or nothing.
+- ⚠️ **HOOKS DO NOT TRAVEL WITH A CLONE.** `core.hooksPath` is set by the root
+  `prepare` script on `npm install`; a clone that never installed carries the
+  hook FILES and runs none of them, and nothing anywhere would say so. That is
+  why STEP 0 asserts it rather than assuming it —
+  `bash scripts/check-hooks-installed.sh`. **A stated invariant is a wish until
+  something asserts it.**
+- ⚠️ **AND `core.fileMode` IS `false` IN THIS REPO, SO A HOOK CAN BE COMMITTED
+  INERT.** git then ignores the on-disk executable bit entirely: `chmod +x`
+  succeeds, `ls -l` shows `rwxr-xr-x`, and the file still enters the index as
+  **`100644`** — which git will not execute as a hook. It is invisible in the
+  diff and the commit reports it as `create mode 100644` in one line nobody
+  reads. **Caught on this very commit.** Set the bit in the INDEX:
+
+      git update-index --chmod=+x scripts/hooks/<hook>
+      git ls-files -s scripts/hooks/            # 100755, or it does not run
+
+  ⚠️ **The repo's `.sh` scripts are deliberately `100644`** — they are invoked as
+  `bash scripts/x.sh` and never need the bit. **Hooks are the exception, because
+  git execs them directly.**
 
 ## A MERGE IS A PUSH — WAIT FOR THE MERGE COMMIT, OR DECLARE THE BATCH IN ADVANCE
 
@@ -988,6 +1035,38 @@ The rule is therefore about the RECEIVING end, deliberately. The war room states
 the ruling; the session that acts on it is the one that must leave the artifact,
 because it is the one holding the evidence that the ruling was made.
 
+## LANDING INTO A LIVE LOOP — PREFER THE STOP FILE, AND OWN THE COST IF YOU DO NOT
+
+**Standing 2026-08-12.** The FOUNDATION loop runs unattended and continuously,
+so there is no idle window to wait for. A supervised session landing an owner
+ruling therefore has two honest options, and the preferred one is cheap.
+
+> **PREFER: `touch docs/foundation/STOP` → land at the batch boundary →
+> `rm docs/foundation/STOP` and relight.** It costs one session's latency.
+
+**Mid-cycle landing stays legal — and it carries the conflict it causes.**
+
+⚠️ **REFERENCE CASE, 2026-08-12, and the cost fell on somebody else's work.** A
+supervised session merged an owner-ruling PR while loop session 03 was mid-item.
+Session 03's citation branch had forked before that merge and both had appended
+to the end of `RELAY.md`, so the loop hit a conflict, resolved it correctly as a
+union, and paid for a fresh `e2e`. **Nothing was lost and the resolution was
+right** — which is exactly why the habit has to be written down rather than
+rediscovered: a cost that lands on another actor and comes out fine is the kind
+nobody corrects.
+
+Two things that make either choice survivable:
+
+1. **`RELAY.md` and `RULINGS.md` conflicts resolve as UNIONS** — see that
+   section. Both sides describe things that actually happened. ⚠️ **Verify the
+   union by `git diff --numstat` showing 0 REMOVED**, not by reading the merged
+   file: a section that survived and a section that was re-added look identical,
+   and only the removal count distinguishes a union from a silent overwrite.
+2. **The STOP file halts the whole RUN, not one session.** A relight is
+   `tmux new -d -s foundation 'bash scripts/foundation-loop.sh'` and the session
+   budget starts over — say so in the log, or the next reader counts a budget
+   that has already reset.
+
 ## A scripted edit PROVES ITS OWN APPLICATION
 
 **Every `.replace()` / `sed` / regex-rewrite pass states the number of
@@ -1274,6 +1353,7 @@ bash scripts/check-pg-encrypted-mount.sh      # READ-ONLY. 0 = encrypted, 1 = DR
 bash scripts/check-ingress-tls.sh             # READ-ONLY. 0 = all SNIs OK, 1 = 502ing, 2 = can't tell
 bash scripts/check-composite-fk.sh            # READ-ONLY. 0 = intact, 1 = ABSENT/RESHAPED, 2 = can't tell
 bash scripts/check-bind-mount-agreement.sh    # READ-ONLY. 0 = agrees, 1 = DIVERGED, 2 = can't tell
+bash scripts/check-hooks-installed.sh         # READ-ONLY. 0 = hooks live, 1 = INERT, 2 = can't tell
 ```
 
 ⚠️ **`--qa` IS A SEPARATE LINE BECAUSE A CAPABILITY NOBODY INVOKES IS

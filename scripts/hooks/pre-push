@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# ============================================================================
+# Refuse a push that would cancel somebody's in-flight required runs.
+# ----------------------------------------------------------------------------
+# WHY THIS EXISTS
+#
+# GitHub cancels in-flight runs when a new commit lands on the same ref — every
+# workflow here groups per-ref with `cancel-in-progress: true`. That is the
+# mechanic, not a bug, so a push is a decision about somebody's evidence.
+#
+# AGENTS.md has carried the two-view rule since 2026-08-09 and the class kept
+# recurring anyway — five times, the last on 2026-08-12 when a session amended
+# and force-pushed three minutes into its own run and cancelled `CI`, `e2e` and
+# `a11y-ci`. A rule that does not reach behaviour becomes mechanism. This is
+# that move, the same one the §2.5 gate made.
+#
+# WHAT IT DOES: for every ref being pushed, takes BOTH views of the runs on the
+# ref's CURRENT remote head — `--commit` and `--branch` — and refuses if either
+# shows a run that is not `completed`.
+#
+# ⚠️ BOTH VIEWS, DELIBERATELY, AND NEITHER IS REDUNDANT. `--commit` under-reports
+# in the propagation window right after a push (measured: `[]` from --commit while
+# --branch showed three runs pending on that very SHA, seconds apart) — and that
+# window is exactly when this hook runs. `--branch` is the view that is right
+# first. A zero is believed only when both agree.
+#
+# ⚠️ A ZERO IS POSITIVE-CONTROLLED. A broken or unauthenticated `gh` returns the
+# same empty list as a quiet branch, so the hook first confirms the runs API
+# answers for this repo at all. If it cannot tell, it REFUSES — "cannot tell" is
+# not "clear", and this repo's posture is fail-closed.
+#
+# Install: automatic. `npm install` runs the root `prepare` script, which sets
+# core.hooksPath. Hooks do not travel with a clone, so FOUNDATION STEP 0 asserts
+# this file is live rather than assuming it:
+#     bash scripts/check-hooks-installed.sh
+#
+# ⚠️ THE LEGITIMATE OVERRIDE IS A DECLARATION, NOT A BYPASS. The batching rule
+# allows a deliberate cancellation when it is DECLARED in the log first:
+#
+#     DECLARE_CANCELLATION="merging #618 and #619 as one batch; #618's e2e is
+#     mine and I am discarding it knowingly" git push …
+#
+# The reason is echoed to stderr — which IS the log for an unattended session,
+# whose output the loop captures — and it must be prose. A bare `1`/`true`/`yes`
+# is refused: a declaration wearing a token's clothes is a bypass, and an audit
+# trail's "why" is somebody's words or nothing.
+# ============================================================================
+
+set -uo pipefail
+
+ZERO=0000000000000000000000000000000000000000
+REMOTE="${1:-origin}"
+
+# ── the override, checked once, before any network call ─────────────────────
+DECL="${DECLARE_CANCELLATION:-}"
+if [ -n "$DECL" ]; then
+  case "${DECL,,}" in
+    1|true|yes|y|on|force|skip)
+      echo "pre-push: REFUSED — DECLARE_CANCELLATION must be a REASON, not '$DECL'." >&2
+      echo "          An audit trail's why is somebody's words or nothing." >&2
+      exit 1 ;;
+  esac
+  if [ "${#DECL}" -lt 12 ]; then
+    echo "pre-push: REFUSED — DECLARE_CANCELLATION is ${#DECL} chars; a declaration is prose." >&2
+    exit 1
+  fi
+fi
+
+command -v gh >/dev/null 2>&1 || {
+  echo "pre-push: REFUSED — cannot tell: 'gh' is not on PATH, so in-flight runs" >&2
+  echo "          cannot be checked. This is a CANNOT-TELL, not an all-clear." >&2
+  echo "          Install gh, or declare: DECLARE_CANCELLATION=\"<reason>\" git push …" >&2
+  exit 1
+}
+
+# ── positive control: does the runs API answer for this repo at all? ────────
+# Without this, a broken gh and a quiet branch produce the same zero.
+control=$(gh run list --limit 1 --json databaseId --jq 'length' 2>/dev/null)
+if [ "${control:-0}" -lt 1 ]; then
+  echo "pre-push: REFUSED — cannot tell: the runs API returned nothing for this" >&2
+  echo "          repository, so a zero from it proves nothing (positive control" >&2
+  echo "          failed). Check 'gh auth status'." >&2
+  exit 1
+fi
+
+busy_total=0
+report=""
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "${remote_ref:-}" ] && continue
+  case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac   # branches only
+  [ "$remote_sha" = "$ZERO" ] && continue                      # new branch: nothing to cancel
+
+  branch="${remote_ref#refs/heads/}"
+
+  # ⚠️ FULL 40 CHARS OR NOTHING — `gh run list --commit <SHORT-sha>` returns []
+  # for ANY abbreviation, exit 0, no warning. That is a false all-clear.
+  if [ "${#remote_sha}" -ne 40 ]; then
+    echo "pre-push: REFUSED — cannot tell: remote sha '$remote_sha' is not 40 chars." >&2
+    exit 1
+  fi
+
+  by_commit=$(gh run list --commit "$remote_sha" --limit 20 --json status \
+                --jq '[.[]|select(.status!="completed")]|length' 2>/dev/null)
+  by_branch=$(gh run list --branch "$branch" --limit 20 --json status \
+                --jq '[.[]|select(.status!="completed")]|length' 2>/dev/null)
+
+  if [ -z "${by_commit:-}" ] || [ -z "${by_branch:-}" ]; then
+    echo "pre-push: REFUSED — cannot tell: a runs query failed for '$branch'." >&2
+    exit 1
+  fi
+
+  if [ "$by_commit" -gt 0 ] || [ "$by_branch" -gt 0 ]; then
+    busy_total=$(( busy_total + by_commit + by_branch ))
+    report="${report}    · ${branch} @ ${remote_sha:0:8} — in flight: --commit ${by_commit}, --branch ${by_branch}"$'\n'
+  fi
+done
+
+if [ "$busy_total" -eq 0 ]; then
+  exit 0
+fi
+
+if [ -n "$DECL" ]; then
+  {
+    echo "═══════════════════════════════════════════════════════════════════"
+    echo "DECLARED CANCELLATION — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "  remote : $REMOTE"
+    echo "  runs this push will cancel:"
+    printf '%s' "$report"
+    echo "  declared reason:"
+    echo "    $DECL"
+    echo "═══════════════════════════════════════════════════════════════════"
+  } >&2
+  exit 0
+fi
+
+{
+  echo ""
+  echo "🔴 pre-push REFUSED — this push would cancel runs that are in flight."
+  echo ""
+  printf '%s' "$report"
+  echo ""
+  echo "  GitHub cancels in-flight runs on a new push to the same ref. Those runs"
+  echo "  are somebody's evidence — possibly a citation being waited on."
+  echo ""
+  echo "  Either WAIT for them, or BATCH this commit with the next one (the cheap"
+  echo "  habit that avoids nearly all of these), or declare the cancellation:"
+  echo ""
+  echo "      DECLARE_CANCELLATION=\"why this is deliberate\" git push …"
+  echo ""
+} >&2
+exit 1
