@@ -7929,3 +7929,155 @@ it is not. Recorded as ruling **#94(e)**.
 one change and in that order"*.** That constrains the WIRING change — nothing is
 wired here, so neither the debit nor the block is live, and step 2 remains free
 to land both together.
+
+---
+
+## 🟩 B8 STEP 1 IS LIVE IN PRODUCTION — `dbb584a4`, 2026-08-12T01:10Z
+
+| | |
+|---|---|
+| deployed commit | `dbb584a4469f39f1eb74c3649e1c56c83ac364f2` |
+| declaration | `docs/foundation/deploys/20260812-dbb584a4.md` — **written 00:45Z, 25 minutes BEFORE the deploy ran** |
+| deploy log | `docs/deploy-logs/deploy-20260812T011004Z.log` |
+| rollback tag | **`:pre-b8s1-20260812`** — app `0063e011f2c4` / worker `0b23d43de9a4`, **cut BEFORE `deploy-prod.sh` ran**, verified by id match |
+| app image | `0063e011f2c4` → **`fa219f877a58`** |
+| worker image | `0b23d43de9a4` → **`daa21860f140`** |
+| migration | **none** — 100 → 100, asserted by the deploy itself |
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `dbb584a4469f39f1eb74c3649e1c56c83ac364f2`:**
+   · `CI` 31550128629 a1
+   · `e2e` 31550128531 a1
+   · `a11y-ci` 31550128489 a1
+   · `secrets-scan` 31550128504 a1
+
+All `a1` — no re-runs on the merge commit, nothing to explain. ⚠️ **The PR HEAD's
+`e2e` was re-run once and that is recorded below**; it does not enter this
+citation, which is merge-commit-scoped by construction.
+
+### THE DECLARATION, JUDGED — 17 of 17, EVERY ONE AS DECLARED
+
+**What must change** — the whole list was two rows.
+
+| # | declared | measured | |
+|---|---|---|---|
+| 1 | app image id moves from `0063e011f2c4` | `fa219f877a58` | ✓ |
+| 2 | worker image id moves from `0b23d43de9a4` | `daa21860f140` | ✓ |
+
+**What must NOT change**
+
+| # | declared | measured | |
+|---|---|---|---|
+| 3 | `_prisma_migrations` 100 | 100 | ✓ |
+| 4 | **`ledger_entries` 0 rows** | **0** | ✓ |
+| 5 | `transcribe_visits` 25 | 25 | ✓ |
+| 6 | … `signedAt IS NOT NULL` 17 | 17 | ✓ |
+| 7 | `transcribe_md_patients` 16 | 16 | ✓ |
+| 8 | `api_usage_events` 1325 | 1325 | ✓ |
+| 9 | `ai_calls` 1126 | 1126 | ✓ |
+| 10 | `users` 196 | 196 | ✓ |
+| 11 | `practices` 197 | 197 | ✓ |
+| 12 | `price_rates` 44 | 44 | ✓ |
+| 13 | `audit_logs` with `CHECKOUT_%` 0 | 0 | ✓ |
+| 14 | `POST /api/stripe/webhook` still 503 | **503** | ✓ |
+| 15 | `POST /api/stripe/checkout` still 401 | **401** | ✓ |
+| 16 | 9 of 9 containers healthy | 9 of 9 | ✓ |
+| 17 | co-tenants `307/404/200/200/410` | exactly that | ✓ |
+
+### WHAT IS LIVE, AND WHAT IS NOT
+
+**Live:** two exported functions compiled into the image, reachable from
+`@meddoc/ai`'s barrel and called by nothing.
+
+**NOT live:** any blocking behaviour whatsoever. No caller exists, so a doctor's
+visit runs exactly as it did yesterday. `ledger_entries` still holds **0 rows**,
+which is assertion 4 and the one that carries the item — rulings 89(e), 90(d) and
+94(e) all depend on that state.
+
+### ⚠️ THE BASELINE SCRIPT LIED FIRST, AND A POSITIVE CONTROL IS WHAT CAUGHT IT
+
+The first baseline attempt nested its SQL inside two layers of double quotes
+under `shell=True`. The shell ate it, `psql` received nothing, and the script
+**printed an empty DB section as a result**. Every must-not-change figure in this
+declaration would have been written from no measurement at all.
+
+The rewrite passes the SQL as an argv element and runs
+`SELECT 'control', 1` against its known answer first. **That control earned
+itself immediately**: attempt two failed with `role "postgres" does not exist` —
+the production role is `meddoc` — which the silent version would have rendered
+as another blank section, indistinguishable from the first.
+
+Two blank sections in a row, both of which would have read as "the tables are
+empty" on a deploy whose headline assertion is *a table being empty*.
+
+### ⚠️ THE PR HEAD's `e2e` WENT RED, AND IT WAS NOT `logoutViaMenu`
+
+`e2e` on the PR head failed on **`16-account-settings.spec.ts:38`** — *"account:
+profile edit persists across reload"* — with
+`the profile panel never showed its saved chip — updateProfileAction did not
+return ok`, on **both** attempts.
+
+**Diagnosed before re-running, not after.** Three independent lines, and the
+first is decisive:
+
+1. **REACHABILITY.** `src/actions/profile.ts` imports `next/cache`, `zod`,
+   `@meddoc/db`, `@meddoc/shared/specialties` and `@/lib/auth`. It does **not**
+   import `@meddoc/ai`, directly or through `@/lib/auth`. This commit's only
+   non-doc, non-test change is a new file plus five export lines in
+   `packages/ai/src/index.ts` — **not in that path's import graph at all.**
+2. **THE TEST'S OWN HEADER SAYS IT.** It documents this exact symptom as an
+   already-root-caused hydration race: *"reproducible 1-in-8 flake"*, where a
+   pre-hydration click submits as a native form POST so `state` stays `null` and
+   the chip never renders. The mitigation is a `networkidle` wait measured at
+   **12/12** — which does not establish a rate below roughly 8%.
+3. **HISTORY.** Eight consecutive main-lineage `e2e` successes preceded it.
+
+⚠️ **Playwright's `retry #1` is NOT a second draw** — it runs in the same job on
+the same runner, so a slow runner biases both attempts identically. A fresh run
+is a draw. One re-run was taken **with the mechanism named in advance**, and it
+came back green on the identical commit: **`e2e` red then green on the same
+tree** is the tree-identity check in its strongest available form, and it rules
+out the code.
+
+**Filed as its own issue rather than absorbed into this item**, because the
+mitigation's 12/12 is not proof and the next session should not re-derive this.
+
+### ⚠️ AND SESSION 04's UNATTRIBUTED `e2e` FAILURES ARE NOW ATTRIBUTED
+
+Session 04 recorded *"five dependabot `e2e` failures in a 12-minute window at
+15:42–15:54Z; logs unreadable, so not attributed either way."*
+
+They are attributable through the jobs API rather than the logs: all five failed
+at the step **`Install Playwright chromium`**, before a single test executed.
+That is the *external reach in the build* class AGENTS.md already names — a
+download step, not a test failure — and it means **those five say nothing about
+any tree** and do not corroborate the `16-account-settings` flake above.
+
+### ⚠️ AND MY OWN CI POLLER PRODUCED A CLEAN-LOOKING LIE FOR NINE MINUTES
+
+The first poller asked `gh run list --json` for a field named `attempt`, which
+does not exist. `gh` wrote the error to **stderr** and exited non-zero; the
+script captured only **stdout**, and `json.loads("" or "[]")` produced `[]`. It
+printed *"no runs visible yet"* **thirteen times across nine minutes** while four
+runs were in flight.
+
+⚠️ **THE DANGEROUS PART IS NOT THE BUG, IT IS THE EXPLANATION THAT WAS WAITING.**
+AGENTS.md documents a REAL `gh run list --commit` defect with precisely this
+signature — `[]` during the propagation window on a full SHA. Adopting it would
+have produced a session report *corroborating a recorded canon entry with
+evidence that was actually my own broken script*, which is worse than the
+original bug: it would have made a genuine defect look better-evidenced than it
+is. Two wrong mechanisms were reached for before the right one — a merge-ref
+hypothesis (refuted: the run's `headSha` is byte-identical to the branch head)
+and propagation lag (refuted: the plain non-`--json` call answered correctly at
+the same moment).
+
+The fix is the general one: **a non-zero exit or unparseable output is an ERROR,
+never an empty set.** It earned itself on its first run by catching a genuine
+transient — `tls: failed to verify certificate` from `api.github.com` — which the
+silent version would have reported as *"no runs visible yet"*.
+
+**A broken check and a clean system produce identical output**, and this is the
+third instrument in this one session to demonstrate it (the poller, the baseline
+script, and arm 6's comment-stripper).
