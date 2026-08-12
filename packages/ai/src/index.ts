@@ -160,6 +160,17 @@ export {
   type UnpricedComponent,
 } from './billing-charge';
 export {
+  decideAdmission,
+  readPracticeBalance,
+  LEDGER_BUCKETS,
+  SPENDABLE_BUCKETS,
+  type AdmissionDecision,
+  type AdmissionRefusal,
+  type BalanceRead,
+  type BalanceUnreadable,
+  type LedgerBucket,
+} from './billing-balance';
+export {
   chargeMicroUsd,
   costMicroUsd,
   divRoundHalfUp,
