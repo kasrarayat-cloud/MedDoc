@@ -42,6 +42,7 @@ import type { ComponentType, ReactNode } from 'react';
 import {
   AlertTriangle,
   Cloud,
+  CreditCard,
   FileText,
   FileX,
   Mic,
@@ -98,6 +99,9 @@ export type FailedLayerHint =
   | 'automation'
   | 'audio_input_invalid'
   | 'transcript_input_invalid'
+  /** B8 — admission refused the visit on money, before the pipeline started.
+   *  Nothing about the recording or the notes is wrong. */
+  | 'billing_admission'
   | null;
 
 const PHRASE_TO_LAYER: ReadonlyArray<readonly [RegExp, FailedLayerHint]> = [
@@ -115,6 +119,28 @@ export function detectFailedLayer(
   inputMode: VisitFailedInputMode | string | null | undefined,
 ): FailedLayerHint {
   if (!reviewReason) return null;
+
+  // ── B8 — CHECKED FIRST, AND THE ORDER MATTERS ────────────────────────────
+  // A billing refusal is written by `buildUserFacingFailureReason`'s own
+  // branch, so it never contains "Processing failed during ..." and cannot
+  // match PHRASE_TO_LAYER. It is checked ahead of everything so that a future
+  // rewording of the billing copy cannot accidentally fall through into the
+  // audio-corrupt catch-all, which is the state this branch was added to fix.
+  //
+  // ⚠️ MATCHED ON A PHRASE THIS CODEBASE OWNS, not on a stray word. AGENTS.md
+  // records four sightings of the substring trap — including a matcher that hit
+  // its own explanatory comment. "credit" alone would match a clinical note
+  // mentioning it; these three phrases are written by exactly one function.
+  if (
+    /out of processing credit/i.test(reviewReason) ||
+    /credit that can’t be applied|credit that can't be applied/i.test(reviewReason) ||
+    /couldn’t verify this practice’s billing balance|couldn't verify this practice's billing balance/i.test(
+      reviewReason,
+    )
+  ) {
+    return 'billing_admission';
+  }
+
   // PipelineRejectError shapes — these are input-data rejections, not
   // mid-pipeline LLM failures. The phrase pattern doesn't match.
   if (/recording is \d/i.test(reviewReason)) return 'audio_input_invalid';
@@ -141,6 +167,34 @@ export function failureCopyFor(args: {
   const layer = detectFailedLayer(args.reviewReason, args.inputMode);
   const inputMode = args.inputMode;
   const isText = inputMode === 'text_notes';
+
+  // ── B8 — BILLING, BEFORE THE CATEGORY BRANCHES ───────────────────────
+  // ⚠️ ABOVE THE `permanent` / `transient` SPLIT ON PURPOSE. A billing refusal
+  // arrives as BOTH: `insufficient_balance` is permanent and
+  // `balance_unreadable` is transient (ruling 95(d)). Putting the branch inside
+  // either one would leave the other falling through to copy about audio —
+  // which is the defect this fixes, half-fixed.
+  //
+  // The CTA is a retry and NOT a `ctaHref` to /visits/new: re-recording is
+  // exactly the wrong action here, and the permanent arm's default is to send
+  // the doctor off to create a replacement visit. The work is fine; the wallet
+  // is the thing to change, and once it changes THIS visit can proceed.
+  //
+  // `body` is a fallback only — `visit-failed-view.tsx:130` renders
+  // `{reason ?? copy.body}`, and the worker's reviewReason is more specific
+  // (it distinguishes all three refusals). This is what shows if that string is
+  // ever missing.
+  if (layer === 'billing_admission') {
+    return {
+      Icon: CreditCard,
+      headline: 'Processing paused — billing',
+      body:
+        'This visit wasn’t started because the practice’s processing credit couldn’t cover it. ' +
+        'Your recording is saved and is not the problem.',
+      ctaLabel: 'Try again',
+      hint: 'Add credit to the practice, then retry — the recording is still here.',
+    };
+  }
 
   // ── Permanent: the input is wrong; same input will fail again ────────
   if (args.failureCategory === 'permanent') {

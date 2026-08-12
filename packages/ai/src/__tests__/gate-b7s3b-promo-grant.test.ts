@@ -27,7 +27,7 @@
 // ============================================================================
 
 import { readFileSync } from 'node:fs';
-import { readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -58,9 +58,57 @@ function stubClient(onCreate: (args: any) => any) {
   };
 }
 
-/** A Prisma unique-violation, as the driver reports one. */
+/**
+ * A Prisma unique-violation in the `meta.target` shape.
+ *
+ * ⚠️ THIS COMMENT USED TO SAY "as the driver reports one", AND THAT WAS THE
+ * DEFECT. It is Prisma's DOCUMENTED shape, and it is not what this repo's
+ * driver emits. Under Prisma 7.9.0 with `@prisma/adapter-pg` a real P2002
+ * carries `meta = { modelName, driverAdapterError }` and **no `target` at
+ * all** — so every arm below passed while `grantPromoCredit` threw on every
+ * real second grant.
+ *
+ * Nothing could have caught it here: a stub is a statement of what its author
+ * believes the driver emits, and it agrees with the matcher because the same
+ * person wrote both. It took a real collision against a real Postgres — the B8
+ * QA behavioural proof, 2026-08-12 — to disagree.
+ *
+ * Kept, because a driver may legitimately produce it and the matcher reads both.
+ * See {@link p2002Measured} for the shape actually observed.
+ */
 const p2002 = (target: string[] | string) =>
   Object.assign(new Error('Unique constraint failed'), { code: 'P2002', meta: { target } });
+
+/**
+ * THE SHAPE THIS REPO'S DRIVER ACTUALLY EMITS — transcribed from a real
+ * collision on the QA stack, 2026-08-12, `ledger_entries_idempotencyKey_key`.
+ *
+ * ⚠️ THE QUOTE CHARACTERS ARE REAL AND ARE THE POINT. The adapter reports
+ * `'"idempotencyKey"'`, with the double quotes Postgres uses to quote the
+ * identifier — so even code reading the right place fails a bare
+ * `=== 'idempotencyKey'`. Reproduced here verbatim rather than tidied, because
+ * a fixture cleaned up to look reasonable is how the original defect survived.
+ */
+const p2002Measured = (fields: string[]) =>
+  Object.assign(
+    new Error('\nInvalid `prisma.ledgerEntry.create()` invocation:\n\n\nUnique constraint failed on the fields: (`"idempotencyKey"`)'),
+    {
+      code: 'P2002',
+      meta: {
+        modelName: 'LedgerEntry',
+        driverAdapterError: {
+          name: 'DriverAdapterError',
+          cause: {
+            originalCode: '23505',
+            originalMessage:
+              'duplicate key value violates unique constraint "ledger_entries_idempotencyKey_key"',
+            kind: 'UniqueConstraintViolation',
+            constraint: { fields },
+          },
+        },
+      },
+    },
+  );
 
 // ---------------------------------------------------------------------------
 // ARM 1 — THE ROW. What a grant IS, asserted against the database's own CHECKs.
@@ -198,6 +246,44 @@ describe('a second grant is refused, and only the right refusal is absorbed', ()
     });
   });
 
+  // ⚠️ THE ARM THAT WOULD HAVE CAUGHT THE REAL DEFECT. Everything above stubs
+  // `meta.target`; this stubs what the driver was measured to emit. Without it
+  // the two arms above are a closed loop between a stub and a matcher.
+  it('reports already_granted on the shape THIS DRIVER emits (measured, quotes and all)', async () => {
+    const { client } = stubClient(() => {
+      throw p2002Measured(['"idempotencyKey"']);
+    });
+    expect(await grantPromoCredit('prac_1', client)).toEqual({
+      granted: false,
+      reason: 'already_granted',
+    });
+  });
+
+  // ⚠️ AND THE SAME SHAPE MUST STILL REFUSE TO ABSORB THE WRONG INDEX. The
+  // negative control below covers the `meta.target` form; this covers the
+  // measured one, because a matcher can be right about one location and
+  // over-broad in the other.
+  it('THROWS on the (practiceId,bucket,seq) unique in the MEASURED shape too', async () => {
+    const { client } = stubClient(() => {
+      throw p2002Measured(['"practiceId"', '"bucket"', '"seq"']);
+    });
+    await expect(grantPromoCredit('prac_1', client)).rejects.toMatchObject({ code: 'P2002' });
+  });
+
+  // ⚠️ A COLLISION NOBODY CAN IDENTIFY IS RETHROWN, NOT ABSORBED. If a future
+  // driver reports neither location, "cannot tell" must fail closed: absorbing
+  // an unidentified unique violation would record a practice as funded when the
+  // row that failed was something else, permanently, on an append-only table.
+  it('THROWS when the collision cannot be identified at all', async () => {
+    const { client } = stubClient(() => {
+      throw Object.assign(new Error('Unique constraint failed'), {
+        code: 'P2002',
+        meta: { modelName: 'LedgerEntry' },
+      });
+    });
+    await expect(grantPromoCredit('prac_1', client)).rejects.toMatchObject({ code: 'P2002' });
+  });
+
   // ⚠️ THE NEGATIVE CONTROL, AND IT IS THE ONE THAT MATTERS MOST.
   it('THROWS on the (practiceId,bucket,seq) unique — a lost derive lock is not "already granted"', async () => {
     // Ruling 89(d) makes this index the structural backstop for a lost advisory
@@ -280,7 +366,28 @@ describe('B7 step 3b — the writer ships UNWIRED, enumerated rather than claime
   // Step 3c's two call sites, named in advance so the diff is legible:
   //   · apps/transcribe-md/src/actions/auth.ts   — every practice from now on
   //   · the backfill script                      — every practice that exists
+  // ⚠️ TWO LISTS, NOT ONE, AND THE SPLIT IS WHAT KEEPS THE CLAIM CHECKABLE.
+  // B7 step 3b's ledger row uses this census to justify NOT DEPLOYING: "a
+  // deploy would ship code that cannot execute". That claim is about
+  // PRODUCTION reachability. A hand-run QA proof is a caller in the grep's
+  // sense and not in the claim's sense, so folding it into one list would
+  // retire the inertness assertion silently — the list would be non-empty and
+  // nobody could tell which kind of caller made it so.
+  //
+  // PRODUCTION wiring. Still empty, and that is step 3b's scope claim intact.
+  // Step 3c's two call sites, named in advance so the diff is legible:
+  //   · apps/transcribe-md/src/actions/auth.ts   — every practice from now on
+  //   · the backfill script                      — every practice that exists
   const CALLERS: string[] = [];
+
+  // HAND-RUN PROOFS. Not reachable from the worker, any route, or any job —
+  // they have their own `main()` and run only under `docker exec` against the
+  // isolated QA stack. Every entry must live under a `scripts/qa/` path, which
+  // is asserted below rather than trusted, so this list cannot quietly become a
+  // place to park a real call site.
+  const PROOF_CALLERS: string[] = [
+    'apps/transcribe-md/scripts/qa/b8-admission-on-qa.ts',
+  ];
 
   function sourceFiles(dir: string, acc: string[] = []): string[] {
     let entries: string[];
@@ -318,15 +425,49 @@ describe('B7 step 3b — the writer ships UNWIRED, enumerated rather than claime
     expect(files.some((f) => f.endsWith('billing-grant.ts'))).toBe(true);
   });
 
-  it('nothing outside the writer and this gate calls grantPromoCredit', () => {
+  /** Every call site in the tree, as repo-relative paths. */
+  function callSites(): string[] {
     const call = /\bgrantPromoCredit\s*\(/;
-    const offenders = files.filter((f) => {
-      if (f.includes('__tests__') || f.endsWith('billing-grant.ts')) return false;
-      // `index.ts` re-exports the symbol; a re-export is not a call site.
-      if (f.endsWith(join('packages', 'ai', 'src', 'index.ts'))) return false;
-      return call.test(readFileSync(f, 'utf8'));
-    });
-    expect(offenders.map((f) => f.slice(ROOT.length + 1)).sort()).toEqual(CALLERS);
+    return files
+      .filter((f) => {
+        if (f.includes('__tests__') || f.endsWith('billing-grant.ts')) return false;
+        // `index.ts` re-exports the symbol; a re-export is not a call site.
+        if (f.endsWith(join('packages', 'ai', 'src', 'index.ts'))) return false;
+        return call.test(readFileSync(f, 'utf8'));
+      })
+      .map((f) => f.slice(ROOT.length + 1))
+      .sort();
+  }
+
+  it('nothing outside the writer and this gate calls grantPromoCredit', () => {
+    // The whole census reconciles: every caller is accounted for as either
+    // production wiring or a hand-run proof, and anything that is neither is
+    // the finding.
+    expect(callSites()).toEqual([...CALLERS, ...PROOF_CALLERS].sort());
+  });
+
+  it('the writer is still UNWIRED in production — step 3b’s scope claim', () => {
+    // ⚠️ THE ARM THE LEDGER ROW ACTUALLY CITES. Kept separate from the census
+    // above so that adding a proof can never be mistaken for wiring the writer,
+    // and so the day this list stops being empty it is a deliberate, visible
+    // edit rather than a line appended to a mixed list.
+    const production = callSites().filter((f) => !PROOF_CALLERS.includes(f));
+    expect(production).toEqual(CALLERS);
+  });
+
+  it('every declared proof caller really is a proof, and really exists', () => {
+    // ⚠️ AN EXEMPTION'S REASON IS PROSE, AND PROSE DECAYS SILENTLY (AGENTS.md).
+    // The reason PROOF_CALLERS is safe is "these are hand-run scripts under
+    // scripts/qa/, not reachable from the worker". Both halves are asserted:
+    // the path shape, so a production file cannot be parked here; and
+    // existence, so a stale entry cannot keep excusing a caller that moved.
+    for (const p of PROOF_CALLERS) {
+      expect(p).toMatch(/(^|\/)scripts\/qa\/[^/]+\.ts$/);
+      expect(existsSync(join(ROOT, p))).toBe(true);
+      // It must actually call the writer — otherwise the entry is dead and is
+      // silently widening the exemption for nothing.
+      expect(/\bgrantPromoCredit\s*\(/.test(readFileSync(join(ROOT, p), 'utf8'))).toBe(true);
+    }
   });
 
   it('the census pattern can actually find a call (positive control)', () => {

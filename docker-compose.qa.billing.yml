@@ -1,0 +1,52 @@
+# ============================================================================
+# QA OVERLAY — TURN THE B8 MONEY SEAM ON, FOR THE BEHAVIOURAL PROOF ONLY
+# ----------------------------------------------------------------------------
+# `docker-compose.qa.yml` does not mention `BILLING_ENFORCED` anywhere, and that
+# is correct: the QA stack's default posture must match production's, and
+# production has the flag OFF. `billingEnforced()` requires the exact string
+# "true", so an absent variable is inert — see `billing-pipeline.ts`, which
+# chose `=== 'true'` over `!== 'false'` specifically so an unset variable cannot
+# mean ENFORCED.
+#
+# ⚠️ SO THIS IS AN OVERLAY AND NOT AN EDIT TO THE BASE FILE. Setting the flag in
+# `docker-compose.qa.yml` would enforce billing on every QA run forever — and
+# with QA's `ledger_entries` at 0 rows, that is a total outage of the QA stack:
+# every e2e visit would be refused at admission. The e2e packs would go red on a
+# money gate nobody asked them to exercise.
+#
+# ⚠️ AND IT IS A LITERAL, NEVER `${BILLING_ENFORCED:-...}`. The base file's own
+# header records what interpolation cost this stack: `${MOCK_AI_CALLS:-true}`
+# and `${ANTHROPIC_API_KEY:-mock-key-qa}` inherited PRODUCTION values from the
+# shared `.env` for weeks, because `:-` applies only when a variable is UNSET
+# and production sets both. A billing flag read from the environment would be
+# the same trap on the one variable whose wrong value stops every visit.
+#
+# ============================================================================
+# USAGE — and the flag is verified IN THE CONTAINER, never from this file
+# ----------------------------------------------------------------------------
+#   # on
+#   docker compose -p meddoc-qa -f docker-compose.qa.yml -f docker-compose.qa.billing.yml \
+#     up -d --force-recreate transcribe-md-worker
+#   docker exec meddoc-qa-transcribe-md-worker-1 printenv BILLING_ENFORCED   # -> true
+#
+#   # the proof
+#   docker exec meddoc-qa-transcribe-md-worker-1 \
+#     npx tsx scripts/qa/b8-admission-on-qa.ts
+#
+#   # off again — the stack's resting posture is FLAG ABSENT
+#   docker compose -p meddoc-qa -f docker-compose.qa.yml \
+#     up -d --force-recreate transcribe-md-worker
+#   docker exec meddoc-qa-transcribe-md-worker-1 printenv BILLING_ENFORCED   # -> exit 1
+#
+# ⚠️ `--force-recreate` IS REQUIRED, NOT PREFERRED. An `environment:` change
+# does alter the config hash so a plain `up -d` would normally recreate — but
+# AGENTS.md records the class where it does not (the bind-mount inode trap), and
+# the restore direction REMOVES a variable rather than changing one. The check
+# that matters is `printenv` in the running container either way: this file is a
+# statement of intent, and only the container is a statement of fact.
+# ============================================================================
+
+services:
+  transcribe-md-worker:
+    environment:
+      BILLING_ENFORCED: "true"
