@@ -18,6 +18,12 @@
 # ref's CURRENT remote head — `--commit` and `--branch` — and refuses if either
 # shows a run that is not `completed`.
 #
+# ⚠️ IT MECHANIZES THE **PUSH** SIDE ONLY, AND THAT IS SAID HERE SO THE NAME DOES
+# NOT READ WIDER THAN THE WATCHED SET. `gh pr merge` merges SERVER-SIDE and never
+# invokes a client hook, so the MERGE-side class — AGENTS.md's "A MERGE IS A PUSH"
+# — is guarded by `scripts/merge-pr.sh`, not by this file. Two doors, two guards,
+# one shared check in `scripts/lib/inflight.sh`.
+#
 # ⚠️ BOTH VIEWS, DELIBERATELY, AND NEITHER IS REDUNDANT. `--commit` under-reports
 # in the propagation window right after a push (measured: `[]` from --commit while
 # --branch showed three runs pending on that very SHA, seconds apart) — and that
@@ -51,37 +57,24 @@ set -uo pipefail
 ZERO=0000000000000000000000000000000000000000
 REMOTE="${1:-origin}"
 
-# ── the override, checked once, before any network call ─────────────────────
+# ⚠️ THE SHARED CHECK IS SOURCED, AND ITS ABSENCE IS FAIL-CLOSED. A hook that
+# silently skipped its own logic because a file moved would be worse than no hook.
+# ⚠️ ANCHORED TO THIS SCRIPT, NOT TO `git rev-parse --show-toplevel` AND NOT TO
+# cwd. The first version used --show-toplevel and resolved against whatever repo
+# the CALLER was standing in — in a worktree that is a different tree, so the lib
+# was never found and the hook refused every push while looking like it worked.
+LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" 2>/dev/null && pwd)/inflight.sh"
+if [ ! -r "$LIB" ]; then
+  echo "pre-push: REFUSED — cannot tell: $LIB is missing or unreadable." >&2
+  exit 1
+fi
+# shellcheck source=../lib/inflight.sh
+. "$LIB"
+
 DECL="${DECLARE_CANCELLATION:-}"
-if [ -n "$DECL" ]; then
-  case "${DECL,,}" in
-    1|true|yes|y|on|force|skip)
-      echo "pre-push: REFUSED — DECLARE_CANCELLATION must be a REASON, not '$DECL'." >&2
-      echo "          An audit trail's why is somebody's words or nothing." >&2
-      exit 1 ;;
-  esac
-  if [ "${#DECL}" -lt 12 ]; then
-    echo "pre-push: REFUSED — DECLARE_CANCELLATION is ${#DECL} chars; a declaration is prose." >&2
-    exit 1
-  fi
-fi
-
-command -v gh >/dev/null 2>&1 || {
-  echo "pre-push: REFUSED — cannot tell: 'gh' is not on PATH, so in-flight runs" >&2
-  echo "          cannot be checked. This is a CANNOT-TELL, not an all-clear." >&2
-  echo "          Install gh, or declare: DECLARE_CANCELLATION=\"<reason>\" git push …" >&2
-  exit 1
-}
-
-# ── positive control: does the runs API answer for this repo at all? ────────
-# Without this, a broken gh and a quiet branch produce the same zero.
-control=$(gh run list --limit 1 --json databaseId --jq 'length' 2>/dev/null)
-if [ "${control:-0}" -lt 1 ]; then
-  echo "pre-push: REFUSED — cannot tell: the runs API returned nothing for this" >&2
-  echo "          repository, so a zero from it proves nothing (positive control" >&2
-  echo "          failed). Check 'gh auth status'." >&2
-  exit 1
-fi
+inflight_declaration_ok "$DECL" || { echo "pre-push: (DECLARE_CANCELLATION)" >&2; exit 1; }
+inflight_require_gh       || { echo "pre-push: refusing. Declare with DECLARE_CANCELLATION=\"<reason>\"." >&2; exit 1; }
+inflight_positive_control || { echo "pre-push: refusing." >&2; exit 1; }
 
 busy_total=0
 report=""
@@ -93,22 +86,9 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
   branch="${remote_ref#refs/heads/}"
 
-  # ⚠️ FULL 40 CHARS OR NOTHING — `gh run list --commit <SHORT-sha>` returns []
-  # for ANY abbreviation, exit 0, no warning. That is a false all-clear.
-  if [ "${#remote_sha}" -ne 40 ]; then
-    echo "pre-push: REFUSED — cannot tell: remote sha '$remote_sha' is not 40 chars." >&2
-    exit 1
-  fi
-
-  by_commit=$(gh run list --commit "$remote_sha" --limit 20 --json status \
-                --jq '[.[]|select(.status!="completed")]|length' 2>/dev/null)
-  by_branch=$(gh run list --branch "$branch" --limit 20 --json status \
-                --jq '[.[]|select(.status!="completed")]|length' 2>/dev/null)
-
-  if [ -z "${by_commit:-}" ] || [ -z "${by_branch:-}" ]; then
-    echo "pre-push: REFUSED — cannot tell: a runs query failed for '$branch'." >&2
-    exit 1
-  fi
+  inflight_count "$branch" "$remote_sha" || { echo "pre-push: refusing." >&2; exit 1; }
+  by_commit=$INFLIGHT_BY_COMMIT
+  by_branch=$INFLIGHT_BY_BRANCH
 
   if [ "$by_commit" -gt 0 ] || [ "$by_branch" -gt 0 ]; then
     busy_total=$(( busy_total + by_commit + by_branch ))

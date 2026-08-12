@@ -360,6 +360,18 @@ Three questions that catch it, and they are cheap:
    prove a guard can go red on a regression. Prove it also MOVES when the fix
    lands — otherwise the ratchet is a decoration.
 
+   ⚠️ **REFERENCE CASE, 2026-08-12 — AND IT WAS FOUND BY THE HAPPY-PATH CONTROL,
+   WHICH IS THE HALF EVERYBODY SKIPS.** `scripts/retire-branch.sh` passed **9 of
+   9** refusal tests — trunk refs, rollback shapes, wildcards, an unmerged branch
+   left provably untouched. Then the positive control ran: on a branch that was
+   checked out it printed *"left in place"* and then **`🟢 retired`, exit 0**. A
+   false success, in the script written to stop exactly that, **invisible to
+   every refusal test because refusals were never the broken half.** Fixed to
+   exit `2` and to earn the green line.
+
+   **A guard proven only in the RED direction is half-proven, and it is the
+   cheaper half.**
+
 ## A gate's WATCHED SET is diffed against the spec's NAMED set
 
 **Sibling of the section above, not a duplicate — and the difference is the
@@ -646,6 +658,14 @@ declaration made.
 `scripts/hooks/pre-push` takes BOTH views on every pushed ref's current remote
 head and **refuses** while any run there is not `completed`.
 
+⚠️ **IT MECHANIZES THE PUSH SIDE ONLY — SAID HERE SO THE NAME DOES NOT READ WIDER
+THAN THE WATCHED SET.** `gh pr merge` merges SERVER-SIDE and never invokes a
+client hook, so a merge is invisible to this file. The **MERGE** side — the next
+section, which has the worse record of the two — is guarded by
+`scripts/merge-pr.sh`. Two doors, two guards, **one shared check** in
+`scripts/lib/inflight.sh`, because a second copy of that logic would drift from
+the first the day either is fixed.
+
 - ⚠️ **IT IS FAIL-CLOSED ON CANNOT-TELL.** No `gh`, an unauthenticated `gh`, a
   failed query, or a remote sha that is not 40 characters all REFUSE. A broken
   instrument and a quiet branch produce the same zero, so the hook
@@ -667,19 +687,10 @@ head and **refuses** while any run there is not `completed`.
   why STEP 0 asserts it rather than assuming it —
   `bash scripts/check-hooks-installed.sh`. **A stated invariant is a wish until
   something asserts it.**
-- ⚠️ **AND `core.fileMode` IS `false` IN THIS REPO, SO A HOOK CAN BE COMMITTED
-  INERT.** git then ignores the on-disk executable bit entirely: `chmod +x`
-  succeeds, `ls -l` shows `rwxr-xr-x`, and the file still enters the index as
-  **`100644`** — which git will not execute as a hook. It is invisible in the
-  diff and the commit reports it as `create mode 100644` in one line nobody
-  reads. **Caught on this very commit.** Set the bit in the INDEX:
-
-      git update-index --chmod=+x scripts/hooks/<hook>
-      git ls-files -s scripts/hooks/            # 100755, or it does not run
-
-  ⚠️ **The repo's `.sh` scripts are deliberately `100644`** — they are invoked as
-  `bash scripts/x.sh` and never need the bit. **Hooks are the exception, because
-  git execs them directly.**
+- ⚠️ **A HOOK CAN BE COMMITTED INERT — `core.fileMode` is `false` here.** Set the
+  bit in the INDEX (`git update-index --chmod=+x`), and verify with
+  `git ls-files -s scripts/hooks/`. Full trap in §"A scripted edit PROVES ITS OWN
+  APPLICATION" — it is that class, not a hook-specific quirk.
 
 ## A MERGE IS A PUSH — WAIT FOR THE MERGE COMMIT, OR DECLARE THE BATCH IN ADVANCE
 
@@ -696,6 +707,35 @@ is no stray push to avoid and nothing to batch into one.
 
 The descendant-citation recovery stays the cure when it happens anyway; it is
 not a licence to plan around.
+
+### THE MERGE SIDE IS NOW MECHANIZED TOO — `scripts/merge-pr.sh`
+
+**Ratified 2026-08-12.** The pre-push hook cannot see a merge: `gh pr merge`
+merges server-side and never invokes a client hook. So the rule above stayed
+rule-only while the PUSH side became mechanism — and **this side has the worse
+record of the two** (a 3-of-4 citation on a deployed commit; a run killed at
+33m39s that another session was deliberately waiting for).
+
+> **`gh pr merge` is DENIED. `bash scripts/merge-pr.sh <pr>` is the only door.**
+
+It takes the same two views — the shared check in `scripts/lib/inflight.sh`, not
+a second copy — on the **PR's own base branch**, read from the PR rather than
+assumed to be `main`, and refuses while anything there is running. The declared
+batch is the legitimate override:
+
+    DECLARE_CANCELLATION="merging #618 and #619 as one declared batch;
+    the cancelled e2e is mine" bash scripts/merge-pr.sh 619
+
+⚠️ **AND IT RE-READS THE PR AFTERWARDS RATHER THAN TRUSTING THE EXIT CODE.**
+`gh pr merge --delete-branch` is already on record reporting one failure while
+silently leaving another, so the wrapper only prints green when the PR actually
+says `MERGED`. **Every refusal arm was proved to refuse BEFORE attempting the
+merge**, asserted by recording whether `gh pr merge` was invoked at all.
+
+⚠️ **Same honest limit as `retire-branch.sh`:** a deny matches the command the
+agent RUNS, not what a script it runs does internally, so the wrapper is a hole
+in its own deny by construction. Conservative on purpose; widening it is a
+war-room question.
 
 ⚠️ **REFERENCE CASE — FOUND BY THE FOUNDATION LOOP'S SESSION 04, AUDITING
 SOMEBODY ELSE'S MERGES WHILE WAITING ON ITS OWN GATE.** Three pairs inside two
@@ -1092,6 +1132,27 @@ must move together, make them one replacement rather than two.
 This is the same family as **"a script that prints a number it does not act
 on"** — the output describes an intention, and nobody checks it against the
 effect. Here the number was never printed at all, which is worse.
+
+### ⚠️ AND THE SAME SHAPE OUTSIDE `.replace()`: AN OPERATION THAT SUCCEEDS AND DOES NOT LAND
+
+**`core.fileMode` is `false` in this repository**, so git ignores the on-disk
+executable bit entirely. `chmod +x` **succeeds**, `ls -l` shows `rwxrwxr-x`, and
+the file still enters the index as **`100644`** — which git will not exec as a
+hook. Every instrument agreed with the intention and none measured the effect.
+
+⚠️ **REFERENCE CASE, 2026-08-12: `scripts/hooks/pre-push` was committed INERT** —
+the mechanization built that same day to stop a recurring class, shipped as a
+file git would never run. **The only tell was `create mode 100644` in one line of
+commit output**, and it was legible solely because the sibling `pre-commit` reads
+`100755`. Nothing else would have said so until a clone failed to run it.
+
+    git update-index --chmod=+x scripts/hooks/<hook>
+    git ls-files -s scripts/hooks/          # 100755, or it does not run
+
+⚠️ **The repo's `.sh` scripts are deliberately `100644`** — invoked as
+`bash scripts/x.sh`, they never need the bit. **Hooks are the exception, because
+git execs them directly.** So "make everything executable" is the wrong repair;
+the rule is *set the bit where the executor is git itself.*
 
 *Corollary, earned in the same pass:* **a rename does not protect when the types
 are identical.** `loadVisitExportData(visitId, userId)` had its second parameter
