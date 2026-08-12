@@ -373,9 +373,33 @@ describe('B5 (6b) — nothing writes the ledger yet, and that is enumerated rath
   //
   // B5's other condition is met unchanged: the row is `kind: 'topup'` with a
   // POSITIVE amount, which `ledger_entries_kind_sign` also enforces.
+  //
+  // ⚠️ B7 step 3b ADDS THE THIRD WRITER, AND ITS REFUSAL SHAPE IS A THIRD ONE
+  // AGAIN — IT HAS NONE, DELIBERATELY.
+  //
+  // `billing-grant.ts` does NOT call `assertProdDatabase()` and does NOT read a
+  // Stripe mode. B6's writer is prod-only because a CHARGE is a claim against a
+  // customer, and writing one outside production records money owed by somebody
+  // who owes nothing. A GRANT is our own money going out: on QA it says a
+  // synthetic practice was given synthetic credit, which is true there and
+  // reconciles to nothing outside it.
+  //
+  // And the cost of the stricter choice is already measured in this programme —
+  // B6's header records that prod-only made its writer unprovable anywhere a
+  // test may run, and `readPracticeBalance` was deliberately NOT made prod-only
+  // for that reason. The QA behavioural proof of B8's ADMIT half is unwalkable
+  // without a `grant` row on QA, so a prod-only grant writer would make a named
+  // owed item permanently impossible while looking like the careful choice.
+  //
+  // The environment guard belongs on the BACKFILL — a one-shot act against a
+  // known population — and B7 step 3c carries it.
+  //
+  // B5's other condition is met unchanged: the row is `kind: 'grant'` with a
+  // POSITIVE amount, which `ledger_entries_kind_sign` enforces.
   const WRITERS: string[] = [
     'apps/transcribe-md/src/app/api/stripe/webhook/route.ts',
     'packages/ai/src/billing-charge.ts',
+    'packages/ai/src/billing-grant.ts',
   ];
 
   function sourceFiles(dir: string, acc: string[] = []): string[] {
