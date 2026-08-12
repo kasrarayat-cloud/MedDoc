@@ -325,6 +325,20 @@ sometimes your own citation, sometimes another session's.
     gh run list --commit "$(git rev-parse HEAD)"                  # full 40 chars
     gh run list --branch "$(git rev-parse --abbrev-ref HEAD)"     # the one right first
 
+⚠️ **AS OF 2026-08-12 BOTH DOORS ARE MECHANIZED, AND ONE OF THEM CHANGES A
+COMMAND YOU ALREADY USE:**
+
+| door | guard | what you type |
+|---|---|---|
+| push | `scripts/hooks/pre-push` — automatic, refuses | `git push` (unchanged) |
+| **merge** | `scripts/merge-pr.sh` — **`gh pr merge` is DENIED** | `bash scripts/merge-pr.sh <pr>` |
+
+**`gh pr merge` will be refused by permissions.** That is not a bug to route
+around and not a halt — use the wrapper. It performs this same two-view check on
+the PR's base branch and then merges. The declared-batch override on either door
+is `DECLARE_CANCELLATION="<prose reason>"`, and a bare `1`/`true`/`yes` is
+refused: a declaration wearing a token's clothes is a bypass.
+
 **BELIEVE A ZERO ONLY WHEN BOTH ARE EMPTY.** `--commit` lies twice: `[]` for any
 ABBREVIATED sha, and `[]` for the FULL sha during the propagation window right
 after a push, while the runs exist and sit `pending`. That window is exactly when
@@ -395,6 +409,25 @@ production 97 days later**. Had the reaping run before the reading, that tree
 would be gone and the credential would still be live with nothing recording it.
 **A shredder cannot be asked what it ate** — so the list is the only thing
 standing between "cleaned up" and "destroyed the evidence of an open incident".
+
+⚠️ **AND NAME IT SO THE LAUNCH GUARD STAYS MEANINGFUL. Standing 2026-08-12.**
+All session scratch and probes at the repo root use the **declared** patterns —
+`.b<N>-*`, `.t<N>-*`, `.a<N>-*` — which `.gitignore` already covers:
+
+    .b8-probe.ts        ✅ ignored          .b8probe.ts    ❌ NOT ignored
+
+⚠️ **THE DASH IS LOAD-BEARING AND THAT IS THE WHOLE TRAP.** The patterns are
+`.b[0-9]*-*`; a name with no `-` after the digit **does not match**. On
+2026-08-12 three probes were named `.b8probe.js` / `.b8probe.ts` /
+`.b8errshape.ts`, stayed untracked, and **the loop's own launch guard then
+refused to relight** — *"REFUSING TO START — the working tree is dirty"* — because
+`git status --porcelain` counts untracked files. Scratch this loop **cannot
+reap** had made the loop **unstartable**. Ninety-one correctly-named siblings sat
+beside them, ignored, causing nothing.
+
+**An untracked file outside those patterns at close-out is a DEFECT your report
+must name**, by path. The guard then sees only UNEXPLAINED dirt, which is its
+entire purpose — no weakening of it, and no more self-blocking relights.
 
 Corollary, and it is a real constraint on your choices: **do not create scratch
 you cannot justify.** If a step needs an artefact you cannot reap — a downloaded
