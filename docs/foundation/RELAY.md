@@ -9481,6 +9481,93 @@ right twice: re-reading on the daemon is what found it.**
   later, owner-gated decision. The worker's admission seam is present and inert.
 - **B8's defect-1 fix is deployed but unobservable**, precisely because the flag
   is off.
+## ✅ THE MERGE SIDE IS MECHANIZED, AND SCRATCH GETS A NAME — 2026-08-12
+
+**Recorded by the session that received the rulings, in its first commit.**
+Ruling **#101**; #100(b) is corrected in place.
+
+### THE CORRECTION FIRST, BECAUSE IT IS THE PART A MECHANISM CANNOT REPLACE
+
+#100(b) said the push rule became a hook — *"fifth occurrence, last one."*
+**`gh pr merge` merges server-side and never invokes a client hook**, so the hook
+mechanized the **PUSH** side only, and *"last one"* meant last of that shape.
+AGENTS.md's separate **MERGE** section stayed rule-only — with the worse record
+of the two.
+
+⚠️ **The owner required BOTH the sentence and the mechanism, and that is the
+instructive part.** Mechanism alone leaves a ruling whose title outruns its
+coverage for as long as anyone reads it. The sentence alone leaves the
+worse-recorded class unguarded. **A gate whose name outruns its watched set is
+the failure §"A gate's WATCHED SET" exists to catch, and it is no less that when
+it is ours.**
+
+### THE TWO DOORS
+
+| door | guard | what you type |
+|---|---|---|
+| push | `scripts/hooks/pre-push` — automatic | `git push` (unchanged) |
+| **merge** | `scripts/merge-pr.sh` — **`gh pr merge` now DENIED** | `bash scripts/merge-pr.sh <pr>` |
+
+**The check is FACTORED, not duplicated** — `scripts/lib/inflight.sh`, sourced by
+both, **fail-closed if absent**. A second copy would drift from the first the day
+either is fixed.
+
+The wrapper reads the **PR's own base branch** rather than assuming `main`:
+checking the wrong ref's runs would be the watched-set failure in miniature. It
+re-reads the PR afterwards and prints green **only** when it actually says
+`MERGED` — `gh pr merge --delete-branch` is already on record reporting one
+failure while silently leaving another.
+
+### EVIDENCE — deterministic, so no expectation depends on live CI
+
+- **pre-push: 13 of 13** after the refactor, including both single-view arms
+  proved INDEPENDENTLY (`--commit` alone refuses; `--branch` alone refuses) and
+  the lib-missing fail-closed arm.
+- **merge-pr: 11 of 11**, and **every refusal arm asserts `gh pr merge` was never
+  invoked at all** — a guard that refuses *after* attempting is a different and
+  worse guard.
+- **The false-green arm is explicit**: `gh` exits 0, the PR still reads `OPEN`,
+  the wrapper exits **1** and prints no green.
+
+### ⚠️ THE REFACTOR BROKE THE HOOK AND MY OWN MATRIX SAID "ok"
+
+Anchoring the shared lib with `git rev-parse --show-toplevel` resolved against
+the **caller's** repo — from a worktree the lib was never found, so the hook
+**refused every push**. Test T1 reported `ok` anyway: its expectation was
+`refuse`, and a hook that refuses everything satisfies it.
+
+> **A test whose expectation is a constant will agree with a broken instrument.**
+
+Fixed by anchoring to `${BASH_SOURCE[0]}`, and the whole matrix rebuilt so every
+expectation is derived from a stub rather than from what CI happened to be doing.
+**Three of the twelve original tests had been passing for the wrong reason.**
+
+### SCRATCH GETS A NAME — and the relight coupling dissolves
+
+Root scratch uses the declared patterns `.b<N>-*` / `.t<N>-*` / `.a<N>-*`.
+
+⚠️ **THE DASH IS LOAD-BEARING.** The ignore patterns are `.b[0-9]*-*`, so:
+
+    .b8-probe.ts   ✅ ignored          .b8probe.ts   ❌ NOT ignored
+
+On 2026-08-12 three probes were named without the dash, stayed untracked, and the
+loop's launch guard **refused to relight** — *"REFUSING TO START — the working
+tree is dirty"*. **Scratch the loop cannot reap had made the loop unstartable**,
+while **91** correctly-named siblings sat ignored beside them causing nothing.
+
+An untracked file outside those patterns at close-out is now **a defect the
+report must name**. The guard is not weakened — it is left seeing only
+UNEXPLAINED dirt, which is its entire purpose.
+
+### HANDS OFF — the queue is session 01's, per #99's forced order
+
+1. Deploy debt — §2.5 declaration written BEFORE it runs.
+2. QA rehearsal of the grant script, abort guards **proven to fire**.
+3. The backfill declaration — `+N` rows for a re-derived `N`, promo sum exactly
+   `N × $10.00`, zero paid-balance movement, zero clinical-table movement.
+4. The 175 rows + the `auth.ts` wiring + the third door, together.
+
+⚠️ **`BILLING_ENFORCED` stays OFF throughout.**
 ## 🚧 B7 STEP 3c — THE THREE DOORS ARE BUILT; THE BACKFILL IS NOT RUN — 2026-08-12
 
 Ruling #99 authorized the promo grant in full and #100 ratified the forced
