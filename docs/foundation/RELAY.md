@@ -9260,6 +9260,25 @@ which offsets the balance and then lives beside the grant forever. **This is the
 first item in the programme whose central act cannot be reverted** — which is
 precisely why it required an owner and could never have been a provisional ruling.
 
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `148754ff15b1566345beab7cbf2316190c8cb68c`:**
+   · `CI` 31614612058 a1
+   · `e2e` 31614612061 a1
+   · `a11y-ci` 31614612057 a1
+   · `secrets-scan` 31614612069 a1
+
+All `a1` — no re-runs on the PR head or the merge commit. PR **#621**, branch
+retired. The PR head (`bd7b1f17`) was also 4 of 4 first time (`CI` 31610614810 ·
+`e2e` 31610613269 · `a11y-ci` 31610613395 · `secrets-scan` 31610613109).
+
+⚠️ **LANDED MID-CYCLE, AND IT COST LOOP SESSION 03 A CONFLICT.** Session 03's
+citation branch had forked before this merge and both had appended to the end of
+this file. It resolved correctly as a union — verified `46 added / 0 removed`,
+and this section byte-identical across both refs by sha256 — and paid for a
+fresh `e2e`. **That cost is why the STOP-file landing pattern is now standing
+(ruling #100(e)), and why the NEXT owner-ruling landing used it.**
+
 ## ✅ RATIFICATIONS + THREE MECHANIZATIONS — THE PUSH RULE STOPS BEING A RULE — 2026-08-12
 
 **Recorded by the session that received the rulings, in its first commit.**
@@ -9350,3 +9369,27 @@ Session 04 takes them in this order and not another:
 
 ⚠️ **`BILLING_ENFORCED` stays OFF throughout.** The owner authorized funding
 wallets, not billing anyone.
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `159a826bbf90d66440c5deabd6adae930a6ca986`:**
+   · `CI` 31627204885 a1
+   · `e2e` 31627204890 a1
+   · `a11y-ci` 31627204940 a1
+   · `secrets-scan` 31627204878 a1
+
+All `a1`. PR **#623**; the PR head (`37748bb2`) was also 4 of 4 first time
+(`CI` 31623589418 · `e2e` 31623589435 · `a11y-ci` 31623589563 ·
+`secrets-scan` 31623589464). Branch retired **by `scripts/retire-branch.sh`** —
+the wrapper's first real remote-arm use, both sides confirmed gone.
+
+### ⚠️ THE LOOP WAS HALTED FOR THIS ONE, AND THE BUDGET RESET
+
+`docs/foundation/STOP` was placed at 17:26Z; the loop halted cleanly at
+**18:06:40Z, before session 04**, and this item landed inside that window with no
+conflict and nobody's runs cancelled. **The contrast with the row above is the
+argument for the pattern.**
+
+⚠️ **A HALT ENDS THE RUN, SO THE RELIGHT STARTS A NEW BUDGET.** The halted run had
+used **9 of 24** sessions. The relit loop counts from **zero**, not from 15 — do
+not read the next run's "session 01 of 6" as continuing this one.
