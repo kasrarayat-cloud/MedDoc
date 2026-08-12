@@ -74,7 +74,17 @@ export type AuditAction =
   | 'PHI_EXTRACTED_FROM_VOICE'
   // Phase 19 — h16-audit-gap-realtime
   | 'REALTIME_SESSION_STARTED'
-  | 'REALTIME_SESSION_ENDED';
+  | 'REALTIME_SESSION_ENDED'
+  // B7 step 3c (2026-08-12) — a `grant` row was appended to `ledger_entries`.
+  // Written from THIS app by the REACTIVATION door in
+  // `system-admin/actions.ts`: the `update` that sets `isActive: true`.
+  //
+  // ⚠️ THE SAME LABEL IS DECLARED IN transcribe-md's MIRROR OF THIS UNION, and
+  // in `schema.prisma`, and in a migration
+  // (`20260812200000_b7s3c_promo_grant_audit_action`). One Postgres enum, two
+  // TypeScript mirrors — adding a label to one app's union does not make it
+  // writable from the other, and neither makes it writable at all.
+  | 'PROMO_GRANT_CREDITED';
 
 export interface AuditLogInput {
   action: AuditAction;
