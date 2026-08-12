@@ -8573,3 +8573,110 @@ existing `Json` column, spending none of the budget.
 that fits inside it costs nothing at any row count. Only a genuinely new COLUMN
 is gated by the zero-row state, and none is proposed.
 
+
+---
+
+## 🟩 B7 STEP 3a IS LIVE IN PRODUCTION — `d2702a9c`, 2026-08-12T09:26Z
+
+| | |
+|---|---|
+| deployed commit | `d2702a9ce5bfb805b92b0bd64e629838dc52b416` |
+| declaration | `docs/foundation/deploys/20260812-d2702a9c.md` — **written 08:35Z, 45 minutes BEFORE the deploy ran** |
+| deploy log | `docs/deploy-logs/deploy-20260812T092055Z.log` |
+| rollback tag | **`:pre-b7s3a-20260812`** — app `135784a005d7` / worker `c72c02e027a9`, **cut BEFORE `deploy-prod.sh` ran**, verified by id match against the running containers |
+| app image | `135784a005d7` → **`906ce01500ca`** |
+| worker image | `c72c02e027a9` → **`af65d5c9d562`** |
+| migration | **none** — 100 → 100, asserted by the deploy itself |
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `d2702a9ce5bfb805b92b0bd64e629838dc52b416`:**
+   · `CI` 31579224269 a1
+   · `e2e` 31579224256 a1
+   · `a11y-ci` 31579224239 a1
+   · `secrets-scan` 31579224287 a1
+
+All `a1` — no re-runs on the PR head or the merge commit, so there is nothing to
+explain. The PR head (`8b7f41a5`) was also 4 of 4 first time.
+
+### THE DECLARATION, JUDGED — 21 of 21, EVERY ONE AS DECLARED
+
+**What must change**
+
+| # | declared | measured | |
+|---|---|---|---|
+| 1 | app image moves from `135784a005d7` | `906ce01500ca` | ✓ |
+| 2 | worker image moves from `c72c02e027a9` | `af65d5c9d562` | ✓ |
+
+**What must NOT change**
+
+| # | declared | measured | |
+|---|---|---|---|
+| 3 | `_prisma_migrations` 100 | 100 | ✓ |
+| 4 | **`ledger_entries` 0** | **0** | ✓ |
+| 5 | `transcribe_visits` 25 | 25 | ✓ |
+| 6 | … signed 17 | 17 | ✓ |
+| 7 | … `FAILED` 0 — the flag-leak canary | 0 | ✓ |
+| 8 | `transcribe_md_patients` 16 | 16 | ✓ |
+| 9 | `api_usage_events` 1325 | 1325 | ✓ |
+| 10 | `ai_calls` 1126 | 1126 | ✓ |
+| 11 | `users` 196 | 196 | ✓ |
+| 12 | `practices` 197 | 197 | ✓ |
+| 13 | `price_rates` 44 | 44 | ✓ |
+| 14 | `audit_logs` `CHECKOUT_%` 0 | 0 | ✓ |
+| 15 | `audit_logs` `BILLING_%` 0 | 0 | ✓ |
+| 16 | webhook 503 | 503 | ✓ |
+| 17 | checkout 401 | 401 | ✓ |
+| 18 | containers 9 of 9 | 9 of 9 | ✓ |
+| 19 | co-tenants `307/404/200/200/410` | `307/404/200/200/410` | ✓ |
+| 20 | `BILLING_ENFORCED` unset in the LIVE containers | **unset in both** (`printenv` exit 1) | ✓ |
+| 21 | QA `ledger_entries` 0 | 0 | ✓ |
+
+**Nothing moved that was not declared.** `audit_logs` was deliberately not
+declared as a total (ordinary traffic writes it); rows 14–15 are its falsifiable
+form and both held.
+
+### WHAT IS LIVE, AND WHAT IS NOT
+
+**Live:** `commitVisitCharge` now opens a transaction, takes
+`ledger_entries_derive()`'s own advisory lock per bucket in `DRAW_ORDER`, reads
+the wallet through the same reader admission uses, and appends one `usage` row
+per bucket drawn. `SPENDABLE_BUCKETS` is `{paid, promo}`, derived.
+
+**NOT live:** any of it, in effect. `BILLING_ENFORCED` is OFF, so neither seam
+executes — and **even with the flag on, this code writes the row B6 wrote**,
+because every wallet is `{0, 0}` and the split degenerates to a single `paid`
+draw. Row 4 and row 21 are the assertions that carry that claim.
+
+### ⚠️ ONE OPERATIONAL PROPERTY THIS CHANGE INTRODUCES — NAMED, NOT TUNED
+
+`commitVisitCharge` is now an **interactive Prisma transaction**, and Prisma's
+default `timeout` for one is **5s**. A charge that waits on a contended
+per-(practice, bucket) advisory lock longer than that aborts; `chargeVisitUsage`
+absorbs the throw and reports `charged: 'failed'`, loudly. **No clinical
+outcome is affected** — the debit never throws upward, by ruling 95(e).
+
+It is **not tuned**, deliberately. Raising the timeout holds locks longer, and
+the honest input is a contention distribution nobody has: 193 of 196 users are
+alone in their practice, so same-practice concurrency is close to hypothetical
+today. Inventing a number from that would be indistinguishable, later, from a
+measured one — the same argument ruling 94(d) made for not estimating a
+per-visit cost. **It arrives when B9 gives a real month**, and it is written down
+here so the day a `charged: 'failed'` cluster appears, this is the first thing to
+check rather than the last.
+
+### WHAT IS OWED, UNCHANGED
+
+- **The QA behavioural proof of B8.** Still not discharged. ⚠️ It is now
+  BROADER than B8 step 2 left it: my change makes a promo-funded wallet ADMIT,
+  so the proof should walk both directions. **The refusal half needs no ledger
+  rows** — an empty QA wallet is its natural state, which is why RELAY calls it
+  cheap. The admit half WOULD need a `grant` row on QA, which ends that stack's
+  zero-row state; that is a decision, not a detail.
+  Prep done this session: the QA worker's `environment:` block is **hardcoded**
+  (no `${VAR:-}`), so `BILLING_ENFORCED` needs an overlay file, and `e2e.yml`
+  already demonstrates the recreate pattern.
+- **The debit's success path has never executed, in any environment.**
+- **B7 step 3** — the grant. Now genuinely unblocked rather than merely unparked.
+- **B8 step 3** — the failure path's charge, inseparable from the auto-credit.
+
