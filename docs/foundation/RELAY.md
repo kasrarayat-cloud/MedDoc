@@ -9095,3 +9095,34 @@ condition that stops being true when the flag is enabled.
 
 **The flag must not be enabled before this deploys.**
 
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `5a16e161ee3dfd6689f63ae79458e0855a57d3ba`:**
+   · `CI` 31610395178 a1
+   · `e2e` 31610395120 a1
+   · `a11y-ci` 31610395139 a1
+   · `secrets-scan` 31610395140 a1
+
+All `a1` — no re-runs, so there is nothing to explain. The PR head
+(`094f5355`) was also 4 of 4 first time (`CI` 31606655110 · `e2e` 31606655104 ·
+`a11y-ci` 31606655121 · `secrets-scan` 31606655119). PR **#620**, branch retired
+on merge.
+
+⚠️ **AND THREE RUNS ON AN EARLIER PUSH WERE CANCELLED DELIBERATELY — SAID HERE
+RATHER THAN LEFT IN THE RUN LIST FOR SOMEBODY TO FIND.** The first push
+(`e508fc82`) drew four runs; **1m36s later** this row's own QA-ledger count was
+found to be wrong — it said "1 row on QA" when the session had left **3**, one
+per proof run — and the correction was pushed as an amend, cancelling `CI`,
+`e2e` and `a11y-ci` at 1m36s (`secrets-scan` had already finished at 31s).
+
+**Both views were taken before that push and agreed**, so this was a decision and
+not an accident. The trade: ~5 discarded runner-minutes against a wrong number
+reaching a cited, merged commit — where, per the standing rule, *a plausible
+count is indistinguishable from a measured one once it is committed.* AGENTS.md
+prices this class by **how late** the second push lands; 1m36s is the cheap end,
+and the alternative was a full ~45-minute cycle to reach the same tree.
+
+**The lesson is the batching one, again:** the count was wrong because it was
+written from one run's output while the session had run the proof three times.
+Re-querying before committing is what caught it — no check would have.
+

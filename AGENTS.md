@@ -553,6 +553,7 @@ DIRECTION THAT COSTS A RUN.**
 | `gh pr checks` | reports `pending` for a run already `completed/success` — waits for nothing, or calls a finished citation incomplete |
 | `gh run list --commit <SHORT-sha>` | returns **`[]`** for **ANY** abbreviated SHA, whatever the runs are doing — exit 0, no warning, no *"ambiguous"* |
 | `gh run list --commit <FULL-sha>` | returns **`[]`** in the propagation window right after a push, while the runs exist and sit `pending` |
+| `gh pr edit --body-file` | **fails outright, exit 1**, on `GraphQL: Projects (classic) is being deprecated … (repository.pullRequest.projectCards)` — this `gh` build queries a sunset field on every `pr edit`. ⚠️ **It prints as a deprecation NOTICE and reads like a warning; the edit does not happen.** Verified 2026-08-12: two attempts, body unchanged both times. **Use the REST API instead** — `gh api repos/<owner>/<repo>/pulls/<n> -X PATCH -F body=@<file>` (exit 0), which also keeps prose out of the shell. **Then re-read the body and confirm**: a correction you believe landed and did not is worse than one you never attempted |
 
 ⚠️ **THE THIRD ONE DEFEATS THE FIX THE SECOND ONE PRESCRIBED.** Measured seconds
 apart on the same full SHA (RELAY, 2026-08-09): `--commit` returned `[]`,
