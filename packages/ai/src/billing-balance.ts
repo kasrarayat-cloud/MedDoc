@@ -76,59 +76,53 @@
 // anybody remembering which seam they are standing at.
 //
 // ============================================================================
-// ⚠️ ADMISSION IS JUDGED ON THE **SPENDABLE** BALANCE, NOT THE TOTAL
+// ⚠️ ADMISSION IS JUDGED ON THE **SPENDABLE** BALANCE, AND B7 step 3a CHANGED
+//    WHICH BUCKETS THOSE ARE
 // ----------------------------------------------------------------------------
-// SPEC §2.4 requires "two buckets, not one number with a note", and B6's writer
-// took the second half of that seriously: `commitVisitCharge` hard-codes
-// `bucket: 'paid'`, with the comment "usage always draws on `paid`; the `promo`
-// bucket is granted and drawn separately, and B7 owns that split". B7's three
-// steps did not take it, so the split is genuinely unowned today.
+// This file shipped with `SPENDABLE_BUCKETS = ['paid']`, and that was CORRECT
+// for the system as it then stood: B6's writer hard-coded `bucket: 'paid'`, so
+// admitting on `promo + paid` would have been a fail-open — a practice holding
+// $10 promo and $0 paid would be admitted on a total of $10, debited against an
+// empty `paid`, and the $10 nobody could reach would still be sitting there.
 //
-// That makes admitting on `promo + paid` a FAIL-OPEN, and the reasoning is
-// worth following because the naive form looks generous rather than broken:
+// ⚠️ AND THE COST OF THAT CHOICE TURNED OUT TO BE THE ITEM AFTER IT. With
+// `promo` unspendable, B7 step 3's $10 grant funds nobody: every practice moves
+// from `insufficient_balance` to `credit_not_spendable` and the total clinical
+// outage is unchanged. B7 step 3a closed that by giving the debit a DRAW ORDER
+// — promo first, then paid — which is the "day a step teaches the writer to
+// draw promo first" this comment used to anticipate.
 //
-//     a practice holding $10 promo and $0 paid would be ADMITTED on a total of
-//     $10, and then debited against `paid` — which is empty. It goes negative,
-//     the work happens, and the $10 nobody can reach is still sitting there.
+// So the set is no longer a judgement made here. It is DERIVED from
+// {@link DRAW_ORDER} in `billing-buckets.ts`, and a bucket is spendable exactly
+// when the debit can draw on it. The mirror this file used to keep by hand —
+// and the source-reading test that policed it — are gone, because the
+// relationship is now an identity rather than an agreement.
 //
-// The block would have blocked nothing, and the promo grant would be a number
-// that can never be spent. So admission reads the set of buckets the DEBIT can
-// actually reach, {@link SPENDABLE_BUCKETS}, and the day a step teaches the
-// writer to draw promo first, admission and debit change together at one named
-// constant rather than in two files that must be remembered at once.
+// ⚠️ `credit_not_spendable` STAYS, AND IS DELIBERATELY UNREACHABLE TODAY.
+// With `SPENDABLE_BUCKETS == LEDGER_BUCKETS` no real balance read can produce
+// it. Deleting the branch would be a LOOSENING that is hard to reverse: the day
+// a third bucket lands that the writer cannot draw on, this is the refusal that
+// names it instead of folding it into `insufficient_balance`. It is derived
+// from the two sums rather than from the word "promo", so it needs no edit to
+// keep working. The gate drives it directly, and says in its own comment that
+// it is proving a structurally-unreachable branch on purpose.
 //
-// ⚠️ AND THE COST OF THIS CHOICE IS PAID LOUDLY, ON PURPOSE. A promo-only
-// practice is refused work it could arguably pay for. That is the fail-CLOSED
-// direction, and it is reported as its own reason — `credit_not_spendable` —
-// rather than folded into `insufficient_balance`. B6 made the same trade for an
-// unpriceable visit and gave the reason: charging nothing and NAMING it is "the
-// only one where being wrong is VISIBLE". A refusal that says "you have money I
-// cannot spend" is a bug report; the same refusal called "insufficient balance"
-// is a lie that reconciles.
+// B6 made the same trade for an unpriceable visit and gave the reason: naming a
+// refusal is "the only one where being wrong is VISIBLE". A refusal that says
+// "you have money I cannot spend" is a bug report; the same refusal called
+// "insufficient balance" is a lie that reconciles.
 // ============================================================================
 
 import prisma from '@meddoc/db';
 
-/**
- * The `bucket` vocabulary, pinned in the database by
- * `ledger_entries_bucket_vocabulary`. A new bucket is a migration, and that
- * refusal is the feature (B5's schema comment).
- */
-export type LedgerBucket = 'paid' | 'promo';
+import { LEDGER_BUCKETS, SPENDABLE_BUCKETS, type LedgerBucket } from './billing-buckets';
 
-/** Both buckets, in the order a report should read them. */
-export const LEDGER_BUCKETS: readonly LedgerBucket[] = ['paid', 'promo'];
-
-/**
- * THE BUCKETS A DEBIT CAN ACTUALLY REACH — see the header.
- *
- * ⚠️ THIS IS NOT A PREFERENCE, IT IS A MIRROR OF `commitVisitCharge`. B6 writes
- * `bucket: 'paid'` as a literal. If that literal changes and this constant does
- * not, admission starts judging money the debit cannot touch (fail-open) or
- * refusing money it can (a needless block). The gate asserts the two agree by
- * reading B6's source, because no type can see a string literal in another file.
- */
-export const SPENDABLE_BUCKETS: readonly LedgerBucket[] = ['paid'];
+// Re-exported so every existing importer — and the gates that assert on these
+// names — keeps reading them from the file that USES them. The definitions live
+// in `billing-buckets.ts` because the writer needs them too, and a shared
+// constant that both sides import is the whole point of that file.
+export { LEDGER_BUCKETS, SPENDABLE_BUCKETS, DRAW_ORDER } from './billing-buckets';
+export type { LedgerBucket } from './billing-buckets';
 
 /** Why a balance could not be established. Neither value is a balance of 0. */
 export type BalanceUnreadable =
@@ -157,6 +151,18 @@ interface BucketRow {
   bucket: string;
   sum_micro: string;
   latest_balance: string;
+}
+
+/**
+ * The only thing {@link readPracticeBalance} needs of a client — so a Prisma
+ * TRANSACTION client satisfies it without this file importing Prisma's
+ * transaction type. Ruling 88 (F-TYPE) forbids typing a transaction callback as
+ * `typeof prisma`; naming the one method used avoids the question entirely and
+ * keeps the stubbed client in the gate honest, since it must provide exactly
+ * this and nothing else.
+ */
+export interface BalanceQueryClient {
+  $queryRawUnsafe<T>(query: string, ...values: unknown[]): Promise<T>;
 }
 
 /**
@@ -199,11 +205,23 @@ const BUCKET_BALANCE_SQL = `
  * stops returning text — produces "we do not know", and the caller's only legal
  * response to that is to block. There is no error here that should be recovered
  * into a number.
+ *
+ * ⚠️ `client` EXISTS SO THE DEBIT CAN READ INSIDE ITS OWN TRANSACTION, and it is
+ * a parameter rather than a second query on purpose. B7 step 3a needs the
+ * per-bucket balance to split a charge, and it needs it under the same advisory
+ * locks it is about to insert under. Writing a second, subtly different balance
+ * query there would have given the system two answers to one question — the
+ * shape ruling 04b(c) forbids: "a tested helper production has stopped calling,
+ * beside an untested one it does call, is worse than no test". One query, two
+ * callers, and the two-way agreement check applies to both.
  */
-export async function readPracticeBalance(practiceId: string): Promise<BalanceRead> {
+export async function readPracticeBalance(
+  practiceId: string,
+  client: BalanceQueryClient = prisma,
+): Promise<BalanceRead> {
   let rows: BucketRow[];
   try {
-    rows = await prisma.$queryRawUnsafe<BucketRow[]>(BUCKET_BALANCE_SQL, practiceId);
+    rows = await client.$queryRawUnsafe<BucketRow[]>(BUCKET_BALANCE_SQL, practiceId);
   } catch (err) {
     return {
       ok: false,
@@ -312,7 +330,8 @@ export function decideAdmission(read: BalanceRead): AdmissionDecision {
       detail:
         `spendable balance is ${read.spendableMicroUsd} micro-USD across ` +
         `{${SPENDABLE_BUCKETS.join(', ')}}, but the practice holds ${unspendable} micro-USD in ` +
-        `bucket(s) no debit path can draw on — commitVisitCharge writes bucket:'paid' only`,
+        `bucket(s) no debit path can draw on — commitVisitCharge iterates DRAW_ORDER, ` +
+        `and a bucket outside it can be granted but never spent`,
     };
   }
 

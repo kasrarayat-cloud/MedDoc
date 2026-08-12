@@ -43,6 +43,7 @@ import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  DRAW_ORDER,
   LEDGER_BUCKETS,
   SPENDABLE_BUCKETS,
   decideAdmission,
@@ -89,12 +90,28 @@ function bucketRow(bucket: string, micro: string, derived = micro) {
   return { bucket, sum_micro: micro, latest_balance: derived };
 }
 
-/** A successful read, for driving the pure half without the database. */
+/**
+ * A successful read, for driving the pure half without the database.
+ *
+ * ⚠️ `spendableMicroUsd` IS DERIVED FROM `SPENDABLE_BUCKETS`, NOT HARDCODED.
+ * It used to say `spendableMicroUsd: paid`. That was true when `paid` was the
+ * only spendable bucket, and it silently became a LIE when B7 step 3a made
+ * `promo` spendable: this helper kept manufacturing a `BalanceRead` that
+ * `readPracticeBalance` can no longer produce, so every arm below went on
+ * asserting the OLD behaviour against an impossible input — green, and
+ * measuring nothing about the shipped reader.
+ *
+ * A fixture that states a derived field by hand is a second implementation of
+ * the thing under test, and it does not get updated when the first one changes.
+ */
 function read(paid: bigint, promo: bigint): BalanceRead {
+  const byBucket = { paid, promo };
+  let spendableMicroUsd = 0n;
+  for (const b of SPENDABLE_BUCKETS) spendableMicroUsd += byBucket[b];
   return {
     ok: true,
-    byBucket: { paid, promo },
-    spendableMicroUsd: paid,
+    byBucket,
+    spendableMicroUsd,
     totalMicroUsd: paid + promo,
   };
 }
@@ -223,35 +240,63 @@ describe('SUM and the derive trigger must agree, or the balance is unknown', () 
 // ---------------------------------------------------------------------------
 
 describe('admission judges the buckets a DEBIT can reach', () => {
-  it('promo-only is BLOCKED — admitting on the total would be the fail-open', () => {
-    // $10 promo, $0 paid. Admitting here would let the work run and then debit
-    // `paid` (B6 writes `bucket: 'paid'`), driving it negative while the $10
-    // nobody can reach sits untouched. The block would have blocked nothing.
+  it('promo-only is now ADMITTED — B7 step 3a made the debit able to draw it', () => {
+    // ⚠️ THIS ARM IS THE INVERSE OF WHAT IT ASSERTED UNTIL B7 step 3a, AND THE
+    // INVERSION IS THE POINT OF THE ITEM. It used to read "promo-only is
+    // BLOCKED", and that was correct while `commitVisitCharge` hard-coded
+    // `bucket: 'paid'`: admitting would have let the work run and then debited
+    // an empty `paid`, driving it negative while the $10 sat untouched.
+    //
+    // The debit now iterates `DRAW_ORDER` and draws `promo` FIRST, so the same
+    // wallet is genuinely spendable. Had this arm not been flipped deliberately,
+    // B7 step 3's $10 grant would have funded nobody — every practice refused
+    // `credit_not_spendable` instead of `insufficient_balance`, with the total
+    // clinical outage unchanged.
     const d = decideAdmission(read(0n, 10_000_000n));
-    expect(d.admit).toBe(false);
+    expect(d.admit).toBe(true);
+    expect(d.admit && d.spendableMicroUsd).toBe(10_000_000n);
   });
 
-  it('and it is reported as `credit_not_spendable`, NOT `insufficient_balance`', () => {
-    // The refusal that says "you have money I cannot spend" is a bug report.
-    // The same refusal called "insufficient balance" is a lie that reconciles.
-    const d = decideAdmission(read(0n, 10_000_000n));
+  it('promo DOES top up a short paid balance — the two are one spendable sum', () => {
+    // An overdrawn `paid` (ruling 89(e) makes that a legal state) plus promo
+    // that covers it is a practice which can pay for the next visit.
+    const d = decideAdmission(read(-1n, 10_000_000n));
+    expect(d.admit).toBe(true);
+    expect(d.admit && d.spendableMicroUsd).toBe(9_999_999n);
+  });
+
+  it('and the sum can still be non-positive — promo does not admit by existing', () => {
+    // The fail-open worth naming: "the practice holds promo" is not the test.
+    // $1 of promo against a $2 overdraft is still an empty wallet.
+    const d = decideAdmission(read(-2_000_000n, 1_000_000n));
+    expect(d.admit).toBe(false);
+    expect(!d.admit && d.reason).toBe('insufficient_balance');
+  });
+
+  it('a genuinely empty wallet is `insufficient_balance`', () => {
+    const d = decideAdmission(read(0n, 0n));
+    expect(!d.admit && d.reason).toBe('insufficient_balance');
+  });
+
+  it('`credit_not_spendable` SURVIVES, and is proven on a hand-built read', () => {
+    // ⚠️ THIS BRANCH IS STRUCTURALLY UNREACHABLE TODAY AND IS TESTED ANYWAY.
+    // With `SPENDABLE_BUCKETS == LEDGER_BUCKETS`, no real `readPracticeBalance`
+    // result can have `total > spendable`, so `read()` above cannot construct
+    // one — this arm builds the shape by hand on purpose.
+    //
+    // Deleting the branch instead would be a LOOSENING that is hard to reverse:
+    // the day a third bucket lands that the writer cannot draw on, this is the
+    // refusal that NAMES it rather than folding it into `insufficient_balance`.
+    // It is derived from the two sums rather than from the word "promo", so it
+    // needs no edit to keep working.
+    const d = decideAdmission({
+      ok: true,
+      byBucket: { paid: 0n, promo: 0n },
+      spendableMicroUsd: 0n,
+      totalMicroUsd: 10_000_000n,
+    });
     expect(!d.admit && d.reason).toBe('credit_not_spendable');
     expect(!d.admit && d.detail).toContain('10000000');
-  });
-
-  it('promo does NOT top up a short paid balance either', () => {
-    const d = decideAdmission(read(-1n, 10_000_000n));
-    expect(d.admit).toBe(false);
-    expect(!d.admit && d.reason).toBe('credit_not_spendable');
-  });
-
-  it('the two refusals are distinguishable — a genuinely empty wallet is the other one', () => {
-    expect(
-      (() => {
-        const d = decideAdmission(read(0n, 0n));
-        return !d.admit && d.reason;
-      })(),
-    ).toBe('insufficient_balance');
   });
 });
 
@@ -259,19 +304,43 @@ describe('admission judges the buckets a DEBIT can reach', () => {
 // ARM 5 — the cross-file agreement no type can see.
 // ---------------------------------------------------------------------------
 
-describe('SPENDABLE_BUCKETS mirrors what the debit actually writes', () => {
-  it('`commitVisitCharge` writes exactly the buckets admission judges', () => {
-    // ⚠️ THIS IS A SOURCE ASSERTION BECAUSE NOTHING ELSE CAN MAKE IT.
-    // B6 writes `bucket: 'paid'` as a STRING LITERAL in another file. No type
-    // checker relates it to this file's constant, so if a future step teaches
-    // the writer to draw `promo` first and does not update SPENDABLE_BUCKETS,
-    // admission silently starts judging money the debit no longer draws on —
-    // and every behavioural test here stays green, because they are all driven
-    // from this file's own constant.
-    const written = [...chargeSrc().matchAll(/bucket:\s*'([a-z]+)'/g)].map((m) => m[1]);
-    expect(written.length, 'no `bucket:` literal found in billing-charge.ts — the matcher is stale')
-      .toBeGreaterThan(0);
-    expect([...new Set(written)].sort()).toEqual([...SPENDABLE_BUCKETS].sort());
+describe('SPENDABLE_BUCKETS is DERIVED from the draw order, not mirrored', () => {
+  it('the writer names NO bucket literal — the drift is unrepresentable now', () => {
+    // ⚠️ THIS ARM REPLACES A MIRROR, AND THE REPLACEMENT IS THE STRONGER CLAIM.
+    // It used to read the `bucket: 'paid'` literal out of `billing-charge.ts`
+    // and assert it equalled this file's constant — a hand-kept agreement
+    // between two files, policed by a regex. AGENTS.md: "a per-caller list is
+    // kept complete by hand, and hand-kept lists are wrong eventually. Put the
+    // behaviour where it cannot be forgotten."
+    //
+    // B7 step 3a did that: `DRAW_ORDER` is the one fact, the writer ITERATES it,
+    // and `SPENDABLE_BUCKETS` is derived from it. So the assertion is no longer
+    // "the two agree" — it is "there is nothing left to disagree WITH".
+    const literals = [...chargeSrc().matchAll(/^\s*bucket:\s*'([a-z]+)'/gm)].map((m) => m[1]);
+    expect(
+      literals,
+      'billing-charge.ts names a bucket literal again — the writer must iterate DRAW_ORDER',
+    ).toEqual([]);
+    expect(chargeSrc()).toContain('bucket: draw.bucket');
+  });
+
+  it('the matcher that found nothing CAN find something — the positive control', () => {
+    // ⚠️ WITHOUT THIS, THE ARM ABOVE PASSES IF THE REGEX IS SIMPLY WRONG.
+    // An empty result and a broken pattern are the same output, and this file
+    // has already shipped one assertion that went vacuous when its anchor moved.
+    const canary = "      bucket: 'paid',\n      kind: 'usage',";
+    const found = [...canary.matchAll(/^\s*bucket:\s*'([a-z]+)'/gm)].map((m) => m[1]);
+    expect(found).toEqual(['paid']);
+  });
+
+  it('SPENDABLE_BUCKETS and DRAW_ORDER are the same set, by identity', () => {
+    expect([...SPENDABLE_BUCKETS].sort()).toEqual([...DRAW_ORDER].sort());
+  });
+
+  it('every drawable bucket is in the database vocabulary', () => {
+    // A draw order naming a bucket the CHECK forbids would fail at INSERT, in
+    // production, on the first split — long after any test could see it.
+    for (const b of DRAW_ORDER) expect(LEDGER_BUCKETS).toContain(b);
   });
 
   it('the vocabulary matches the database CHECK', () => {

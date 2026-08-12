@@ -65,6 +65,8 @@
 import { assertProdDatabase } from '@meddoc/db/guard';
 import prisma from '@meddoc/db';
 
+import { readPracticeBalance } from './billing-balance';
+import { DRAW_ORDER, splitCharge, type BucketDraw, type LedgerBucket } from './billing-buckets';
 import {
   audioSeconds as audioQuantity,
   chargeMicroUsd,
@@ -342,16 +344,29 @@ export async function priceUsageRows(
 // THE EFFECT — the only thing here that writes, and it refuses off production
 // ---------------------------------------------------------------------------
 
-/** The idempotency key for a visit's usage charge. GLOBALLY unique in the
- *  database (`ledger_entries.idempotencyKey`), so a second attempt is refused
- *  by the unique index rather than by a check-then-write race.
+/** The idempotency key for a visit's usage charge IN ONE BUCKET. GLOBALLY
+ *  unique in the database (`ledger_entries.idempotencyKey`), so a second
+ *  attempt is refused by the unique index rather than by a check-then-write
+ *  race.
+ *
+ *  ⚠️ IT IS KEYED PER (VISIT, BUCKET) SINCE B7 step 3a, AND IT HAD TO BE. A
+ *  charge can now split across two buckets, so a visit produces up to two rows;
+ *  one key for both would make the SECOND insert collide with the first and the
+ *  whole transaction roll back — a visit that could pay would record nothing.
+ *  The bucket is part of the identity of the row, so it is part of the key.
+ *
+ *  ⚠️ AND THE SPLIT IS STILL IDEMPOTENT AS A WHOLE, which is the property that
+ *  matters: a retry re-derives the same draws from the same balances only if
+ *  nothing landed, and if anything landed the balance has moved and the first
+ *  colliding key aborts the retry. Partial double-charging is not reachable
+ *  because both rows are written in ONE transaction — see the writer.
  *
  *  ⚠️ IDEMPOTENCY MATTERS MORE HERE THAN ANYWHERE. On a mutable table a double
  *  charge is an UPDATE away from fixed. On this one it can only be offset by an
  *  `adjustment` row, so the duplicate and its correction both live in the
  *  ledger forever. */
-export function visitChargeKey(visitId: string): string {
-  return `usage:visit:${visitId}`;
+export function visitChargeKey(visitId: string, bucket: LedgerBucket): string {
+  return `usage:visit:${visitId}:${bucket}`;
 }
 
 export interface CommitVisitChargeArgs {
@@ -360,9 +375,33 @@ export interface CommitVisitChargeArgs {
   rows: readonly ChargeableUsageRow[];
 }
 
+/** The refusal arm of {@link ChargeDecision}, on its own.
+ *
+ *  ⚠️ THIS EXISTS TO CLOSE A DEFECT B8 step 2 FOUND AND WORKED AROUND. Its
+ *  caller had to narrow rather than cast because `CommitResult`'s `written:
+ *  false` arm typed `decision` as the WHOLE union, "including the `charge: true`
+ *  branch that cannot occur there — B6 under-specifies the pair". It no longer
+ *  can: the type now says what was always true. */
+export type DeclinedChargeDecision = Extract<ChargeDecision, { charge: false }>;
+
+/**
+ * ⚠️ `written: false` NOW CARRIES A `reason`, AND THE TWO REFUSALS ARE
+ * GENUINELY DIFFERENT EVENTS. `not_chargeable` is a PRICING answer — B9 must
+ * not chase it, the arithmetic declined. `balance_unreadable` is an
+ * INFRASTRUCTURE fault: the visit was chargeable, we could not read the wallet
+ * to decide which bucket to draw from, and revenue was lost. Collapsing them
+ * into one arm would hide an outage inside a pricing statistic.
+ */
 export type CommitResult =
-  | { written: true; ledgerEntryId: string; chargeMicroUsd: bigint }
-  | { written: false; decision: ChargeDecision };
+  | {
+      written: true;
+      /** One id per bucket drawn — up to `DRAW_ORDER.length`, never zero. */
+      ledgerEntryIds: readonly string[];
+      draws: readonly BucketDraw[];
+      chargeMicroUsd: bigint;
+    }
+  | { written: false; reason: 'not_chargeable'; decision: DeclinedChargeDecision }
+  | { written: false; reason: 'balance_unreadable'; detail: string };
 
 /**
  * APPEND ONE `usage` ROW FOR A VISIT — PRODUCTION ONLY.
@@ -387,59 +426,134 @@ export async function commitVisitCharge(args: CommitVisitChargeArgs): Promise<Co
   assertProdDatabase();
 
   const decision = await priceUsageRows(args.rows);
-  if (!decision.charge) return { written: false, decision };
+  if (!decision.charge) return { written: false, reason: 'not_chargeable', decision };
 
-  const created = await prisma.ledgerEntry.create({
-    data: {
-      practiceId: args.practiceId,
-      // ⚠️ DERIVED BY THE TRIGGER TOO — `NEW."practiceIdSnapshot" :=
-      // NEW."practiceId"`, unconditionally — so whatever is sent here is
-      // discarded, exactly like `balanceAfter` and `seq`. It is sent anyway
-      // because Prisma's generated type REQUIRES it: B5 gave those two an
-      // `@default(0)` precisely "so a Prisma caller need not send a value it is
-      // not allowed to choose", and the third derived column did not get the
-      // same treatment. A seam defect, recorded in the ledger rather than
-      // patched from inside B6.
-      //
-      // It is safe HERE because both fields read the SAME variable in the same
-      // statement, so the pair cannot drift — AGENTS.md's "prefer deriving the
-      // value over threading a parameter", satisfied by having exactly one
-      // source. A caller that passed a different id would have it silently
-      // replaced, NOT rejected: the trigger overwrites before
-      // `ledger_entries_snapshot_agrees` is evaluated, so that CHECK can never
-      // see a disagreeing caller value.
-      practiceIdSnapshot: args.practiceId,
-      // SPEC §2.4 — two buckets. Usage always draws on `paid`; the `promo`
-      // bucket is granted and drawn separately, and B7 owns that split.
-      bucket: 'paid',
-      kind: 'usage',
-      amountMicroUsd: -decision.chargeMicroUsd,
-      idempotencyKey: visitChargeKey(args.visitId),
-      // SPEC §2.2's versioned snapshot: WHICH rates priced this, and what the
-      // pre-multiplier cost was. Stored so a later rate change can never
-      // re-price history and so B9 can explain the number line by line.
-      pricing: {
-        visitId: args.visitId,
-        costMicroUsd: decision.costMicroUsd.toString(),
-        chargeMicroUsd: decision.chargeMicroUsd.toString(),
-        multiplier: '3/2',
-        components: decision.priced.map((p) => ({
-          usageEventId: p.usageEventId,
-          provider: p.provider,
-          modelName: p.modelName,
-          unitType: p.unitType,
-          deliveryMode: p.deliveryMode,
-          rateId: p.rateId,
-          costMicroUsd: p.costMicroUsd.toString(),
-        })),
-      },
-    },
-    select: { id: true },
+  return prisma.$transaction(async (tx): Promise<CommitResult> => {
+    // ── THE LOCKS. Taken here, in DRAW_ORDER, before the balance is read. ────
+    //
+    // ⚠️ WITHOUT THIS THE SPLIT IS A READ-THEN-WRITE RACE, and the derive
+    // trigger does NOT close it. That trigger takes the same advisory lock, but
+    // it takes it per ROW at INSERT time — long after this function has already
+    // decided how much promo was available. Two concurrent visits for one
+    // practice would both read $10 promo and both draw $10, and the ledger
+    // would record $20 of a $10 grant.
+    //
+    // ⚠️ THE KEY SHAPE IS COPIED FROM `ledger_entries_derive()` ON PURPOSE —
+    // `hashtext('ledger_entries'), hashtext(practiceId || ':' || bucket)`. A
+    // DIFFERENT key would take a different lock and serialise nothing while
+    // looking exactly like this code does. Advisory locks are re-entrant within
+    // a transaction, so the trigger re-taking it below is free.
+    //
+    // ⚠️ AND THE ORDER IS WHY THERE IS NO DEADLOCK. Every writer that touches
+    // more than one bucket takes them in DRAW_ORDER; a grant takes `promo`
+    // alone and a top-up takes `paid` alone. No cycle exists, and a future
+    // multi-bucket writer inherits the property by iterating the same constant.
+    for (const bucket of DRAW_ORDER) {
+      await tx.$executeRawUnsafe(
+        `SELECT pg_advisory_xact_lock(hashtext('ledger_entries'), hashtext($1))`,
+        `${args.practiceId}:${bucket}`,
+      );
+    }
+
+    // ── THE BALANCE. Same reader as admission, inside this transaction. ──────
+    //
+    // ⚠️ AND IF IT CANNOT BE READ, NOTHING IS WRITTEN. The alternative —
+    // falling back to "put it all on `paid`" — is the tempting one and it is
+    // wrong in the direction that costs the DOCTOR: it spends their money while
+    // promo we granted them sits unused, and on an append-only table that is
+    // fixable only by an `adjustment` row somebody has to notice is owed.
+    // Refusing loses OUR revenue instead, loudly and queryably, and B9's whole
+    // job is finding a usage event with no ledger row. Between an error that
+    // costs us money and one that costs a doctor money, we take ours.
+    const read = await readPracticeBalance(args.practiceId, tx);
+    if (!read.ok) {
+      return {
+        written: false,
+        reason: 'balance_unreadable',
+        detail: `cannot split a charge without a balance (${read.reason}): ${read.detail}`,
+      };
+    }
+
+    const draws = splitCharge(decision.chargeMicroUsd, read.byBucket);
+    const ledgerEntryIds: string[] = [];
+
+    for (const draw of draws) {
+      const created = await tx.ledgerEntry.create({
+        data: {
+          practiceId: args.practiceId,
+          // ⚠️ DERIVED BY THE TRIGGER TOO — `NEW."practiceIdSnapshot" :=
+          // NEW."practiceId"`, unconditionally — so whatever is sent here is
+          // discarded, exactly like `balanceAfter` and `seq`. It is sent anyway
+          // because Prisma's generated type REQUIRES it: B5 gave those two an
+          // `@default(0)` precisely "so a Prisma caller need not send a value it
+          // is not allowed to choose", and the third derived column did not get
+          // the same treatment. A seam defect, recorded in the ledger rather
+          // than patched from inside B6.
+          //
+          // It is safe HERE because both fields read the SAME variable in the
+          // same statement, so the pair cannot drift — AGENTS.md's "prefer
+          // deriving the value over threading a parameter", satisfied by having
+          // exactly one source. A caller that passed a different id would have
+          // it silently replaced, NOT rejected: the trigger overwrites before
+          // `ledger_entries_snapshot_agrees` is evaluated, so that CHECK can
+          // never see a disagreeing caller value.
+          practiceIdSnapshot: args.practiceId,
+          // SPEC §2.4 — two buckets, drawn in `DRAW_ORDER`. NOT a literal: the
+          // one place the order is written down is `billing-buckets.ts`, and
+          // `SPENDABLE_BUCKETS` is derived from the same constant, so admission
+          // and the debit cannot disagree about which money is reachable.
+          bucket: draw.bucket,
+          kind: 'usage',
+          // ⚠️ NEGATED HERE, PER DRAW. `splitCharge` returns POSITIVE
+          // magnitudes; `ledger_entries_kind_sign` CHECKs `usage <= 0`. The sign
+          // belongs next to the row that carries it, and the CHECK is the
+          // backstop for the day this line is edited.
+          amountMicroUsd: -draw.amountMicroUsd,
+          idempotencyKey: visitChargeKey(args.visitId, draw.bucket),
+          // SPEC §2.2's versioned snapshot: WHICH rates priced this, and what
+          // the pre-multiplier cost was. Stored so a later rate change can never
+          // re-price history and so B9 can explain the number line by line.
+          //
+          // ⚠️ THE SNAPSHOT IS THE WHOLE VISIT'S, ON EVERY ROW, AND THAT IS
+          // DELIBERATE. The components priced ONE charge; the split is a
+          // settlement decision taken afterwards and is not a property of any
+          // rate. Apportioning the components across buckets would invent a
+          // per-component bucket attribution the pricing never made. So each row
+          // carries the full derivation plus `draw`, which says what THIS row
+          // settled — and B9 sums `draw.amountMicroUsd` across a visit's rows to
+          // get back to `chargeMicroUsd`, rather than summing `components`
+          // twice. The `visitId` is what joins them.
+          pricing: {
+            visitId: args.visitId,
+            costMicroUsd: decision.costMicroUsd.toString(),
+            chargeMicroUsd: decision.chargeMicroUsd.toString(),
+            multiplier: '3/2',
+            draw: {
+              bucket: draw.bucket,
+              amountMicroUsd: draw.amountMicroUsd.toString(),
+              ofBuckets: draws.length,
+            },
+            components: decision.priced.map((p) => ({
+              usageEventId: p.usageEventId,
+              provider: p.provider,
+              modelName: p.modelName,
+              unitType: p.unitType,
+              deliveryMode: p.deliveryMode,
+              rateId: p.rateId,
+              costMicroUsd: p.costMicroUsd.toString(),
+            })),
+          },
+        },
+        select: { id: true },
+      });
+      ledgerEntryIds.push(created.id);
+    }
+
+    return {
+      written: true,
+      ledgerEntryIds,
+      draws,
+      chargeMicroUsd: decision.chargeMicroUsd,
+    };
   });
-
-  return {
-    written: true,
-    ledgerEntryId: created.id,
-    chargeMicroUsd: decision.chargeMicroUsd,
-  };
 }

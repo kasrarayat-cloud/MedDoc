@@ -152,8 +152,9 @@ export async function admitVisitOrThrow(args: {
 export type ChargeOutcome =
   /** The seam is not in effect. Nothing was read and nothing was written. */
   | { charged: 'skipped_not_enforced' }
-  /** A ledger row was appended. */
-  | { charged: 'written'; ledgerEntryId: string; chargeMicroUsd: bigint }
+  /** Ledger rows were appended — one per bucket drawn (B7 step 3a), never
+   *  zero. Plural because a charge can settle across `promo` and `paid`. */
+  | { charged: 'written'; ledgerEntryIds: readonly string[]; chargeMicroUsd: bigint }
   /** Priced, and the decision was not to charge — an unpriceable component, or
    *  nothing billable at all. B6's ruling 90(a). */
   | { charged: 'declined'; reason: string }
@@ -198,18 +199,28 @@ export async function chargeVisitUsage(args: {
     if (result.written) {
       return {
         charged: 'written',
-        ledgerEntryId: result.ledgerEntryId,
+        ledgerEntryIds: result.ledgerEntryIds,
         chargeMicroUsd: result.chargeMicroUsd,
       };
     }
-    // ⚠️ NARROWED, NOT CAST. `CommitResult`'s `written: false` arm types
-    // `decision` as the WHOLE `ChargeDecision` union, including the `charge:
-    // true` branch that cannot occur there — B6 under-specifies the pair. A
-    // `as` would paper over that and would keep working if the relationship
-    // ever changed; narrowing means the day it changes, this stops compiling.
-    const { decision } = result;
-    if (!decision.charge) return { charged: 'declined', reason: decision.reason };
-    return { charged: 'declined', reason: 'not_written_despite_charge_decision' };
+    // ⚠️ THE NARROWING THAT USED TO LIVE HERE IS GONE, BECAUSE THE TYPE NOW
+    // SAYS WHAT WAS ALWAYS TRUE. B8 step 2 wrote: "`CommitResult`'s `written:
+    // false` arm types `decision` as the WHOLE `ChargeDecision` union, including
+    // the `charge: true` branch that cannot occur there — B6 under-specifies the
+    // pair", and narrowed rather than casting so the day it changed this would
+    // stop compiling. B7 step 3a is that day: the arm is now
+    // `DeclinedChargeDecision` and carries a `reason` discriminator, so the
+    // impossible branch is unrepresentable instead of merely unreached.
+    //
+    // ⚠️ AND `balance_unreadable` IS `failed`, NOT `declined`. `declined` is a
+    // pricing statement B9 must not chase; this is an infrastructure fault that
+    // lost revenue on a chargeable visit, and filing it as a decline would hide
+    // an outage inside a pricing statistic — the same distinction ruling 95(d)
+    // drew between `balance_unreadable` and an empty wallet at admission.
+    if (result.reason === 'balance_unreadable') {
+      return { charged: 'failed', detail: result.detail };
+    }
+    return { charged: 'declined', reason: result.decision.reason };
   } catch (err) {
     return {
       charged: 'failed',
