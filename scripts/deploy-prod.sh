@@ -70,31 +70,30 @@ DEPLOY_SHA="$(git rev-parse --short HEAD)"
 DECL_DIR="docs/foundation/deploys"
 DECL="$DECL_DIR/$(date -u +%Y%m%d)-${DEPLOY_SHA}.md"
 
-echo "=== 0. DECLARATION GATE (§2.5, enforced) ==="
-if [ ! -f "$DECL" ]; then
-  echo "🔴 REFUSING TO DEPLOY — no delta declaration for this commit."
-  echo
-  echo "   expected: $DECL"
-  echo
-  echo "   §2.5 requires the expected delta to be written down BEFORE the deploy"
-  echo "   runs. Afterwards it is unfalsifiable — every number has a story, and a"
-  echo "   migration supplies an excuse for any movement."
-  echo
-  echo "   Write it, then re-run. It must state:"
-  echo "     · the BASELINE (captured now, before anything changes)"
-  echo "     · what MUST change"
-  echo "     · what MUST NOT change — clinical counts are never omitted"
-  echo "     · what would make the post-deploy check FAIL"
-  echo
-  echo "   Nothing has been built, migrated or recreated. Production is untouched."
+# ⚠️ THE GATE IS SOURCED, NOT CARRIED. `scripts/lib/declaration.sh` is shared
+# with `scripts/run-ruled-mutation.sh`; a second copy would drift from the first.
+# Its absence is fail-closed — a deploy that silently skipped its own gate is
+# worse than one that refuses.
+DECL_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" 2>/dev/null && pwd)/declaration.sh"
+if [ ! -r "$DECL_LIB" ]; then
+  echo "🔴 REFUSING TO DEPLOY — $DECL_LIB is missing or unreadable."
+  echo "   Production is untouched."
   exit 1
 fi
+# shellcheck source=lib/declaration.sh
+. "$DECL_LIB"
 
-echo "declaration: $DECL"
-echo "─────────────────────────────────────────────────────────────────────"
-cat "$DECL"
-echo "─────────────────────────────────────────────────────────────────────"
-echo
+# ⚠️ MODE IS `present`, NOT `strict`, AND THAT ASYMMETRY IS DELIBERATE. A ruled
+# MUTATION must have its declaration COMMITTED before it runs, because nothing
+# can undo an append-only row and the commit timestamp is the only durable proof
+# of order. A deploy is answerable by a rollback, and requiring a commit here
+# would refuse every deploy whose author lands the declaration in the same PR —
+# a real habit. So the deploy records provenance loudly and does not refuse on it.
+# Strictness proportional to reversibility; ruling #96(b)'s logic.
+declaration_gate "$DECL" present "deploy declaration" || {
+  echo "   Nothing has been built, migrated or recreated. Production is untouched."
+  exit 1
+}
 
 if [ "${1:-}" != "--skip-backup" ]; then
   echo "=== 1. pre-deploy backup ==="

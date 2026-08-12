@@ -9568,3 +9568,78 @@ UNEXPLAINED dirt, which is its entire purpose.
 4. The 175 rows + the `auth.ts` wiring + the third door, together.
 
 ⚠️ **`BILLING_ENFORCED` stays OFF throughout.**
+
+## ✅ THE DECLARATION GATE REACHES THE MUTATION PATH — 2026-08-12
+
+**Recorded by the session that received the ruling, in its first commit.**
+Ruling **#102**. Ordered by the owner as item 2, and shaped by what item 1 found.
+
+### ITEM 1 FIRST — THE FORENSIC CHECK, AND IT FOUND THE ORDER VIOLATED
+
+| | |
+|---|---|
+| first `grant` row | **2026-08-12T22:50:16Z** |
+| declaration's only commit | **2026-08-12T22:52:13Z** |
+| delta | **+1m57s — the declaration entered the record AFTER the act** |
+
+⚠️ **AND THE ROWS ARE IMPECCABLE — 8 of 8 declared quantities matched exactly:**
+175 rows over 175 distinct practices · promo sum **$1,750.00** · 175 audit rows
+with 175 distinct targets · paid bucket 0 · clinical **25 · 17 · 16** unmoved ·
+197 practices · flag unset · no practice granted twice.
+
+The file states *"Written 2026-08-12T22:50Z, BEFORE the backfill runs"* and
+carries a 22:47Z baseline holding pre-execution values. **Nothing suggests bad
+faith, and the finding stands anyway.** §2.5 buys exactly one thing — that the
+answer was fixed while the outcome was still unknown — and a declaration whose
+only durable timestamp postdates the act cannot deliver it. **An honest
+declaration and a back-written one are indistinguishable in that record**, which
+is the state §2.5 exists to prevent.
+
+### ITEM 2 — WHAT THE FINDING CHANGED ABOUT THE FIX
+
+The brief said *refuse without the declaration file*. The finding says that is
+not enough: **a file can be written one second before the act.** So the mutation
+gate requires the declaration to be **TRACKED, UNMODIFIED and COMMITTED**, and
+the runner prints its commit timestamp beside its own start timestamp — the two
+**bracket** the act, in the units the rows carry, for whoever checks later.
+
+| path | script | declaration must be |
+|---|---|---|
+| deploy — reversible, a rollback exists | `deploy-prod.sh` | **present**; provenance printed, uncommitted warns loudly |
+| ruled mutation — irreversible | **`run-ruled-mutation.sh`** | **tracked, unmodified, COMMITTED** |
+
+⚠️ **THE ASYMMETRY IS RULING #96(b) AGAIN.** Strictness proportional to
+reversibility. Making the deploy path strict would refuse every deploy whose
+author lands the declaration in the same PR — a real habit — halting the
+programme to fix the weaker case. **`deploy-prod.sh`'s inline gate is DELETED,
+not mirrored**: both call `scripts/lib/declaration.sh`.
+
+### GUARD D — AND WHERE IT SITS IS THE POINT
+
+`backfill-promo-grants.ts` now aborts a `--target=prod --commit` run that did not
+come through the door. ⚠️ **It was first written after
+`assertTargetMatchesDatabase`, which would have made it unprovable without
+pointing at production.** Moved ahead of every connection: it now refuses
+against a bogus `DATABASE_URL`, **reaching the database zero times**. QA
+`--commit` is deliberately exempt — those rows a stack reset erases, and taxing
+the rehearsal would tax the step that killed three defects here.
+
+### EVIDENCE
+
+- **runner: 10 of 10**, every refusal asserting the command never ran.
+- **GUARD D: 4 of 4** — refuses without the door and names it; passes with it and
+  lets GUARD 1 speak; dry runs unaffected; QA skip announced.
+- **the bracket proof, measured end to end**: declaration committed `23:23:12Z`,
+  mutation started `23:23:34Z`, **delta +22s — provable by arithmetic.**
+
+### ⚠️ TWO OF MY OWN INSTRUMENTS LIED FIRST, BOTH TOWARD A FALSE PASS
+
+- **`tsc` in a worktree with no `node_modules`** printed npx's *"install
+  typescript"* notice and **exit 0** — which reads exactly like a clean
+  typecheck. Re-run against a linked tree with a version check as the positive
+  control: 5.9.3, clean, and only then believed.
+- **A test harness word-split its command string**, so two arms returned `127`
+  while the runner was behaving perfectly.
+
+**Both were caught by asking what the output would look like if the tool had not
+run at all** — §"positive-control every zero", pointed at my own bench.
