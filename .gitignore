@@ -175,3 +175,23 @@ apps/transcribe-md/chat-*.png
 # ANTHROPIC_API_KEY from the shell (docker-compose.qa.yml); there is no reason
 # for a key to be written to a file in the repo at all.
 docker-compose.*key*.yml
+
+# FOUNDATION session scratch, written to the repo root as `.<item>-<purpose>`
+# (.b6-mutate.py, .b7s2-wait.py, .a1-probe.py …).
+#
+# This dirt is EXPLAINED by contract, not accidental: MASTER.md's CLOSE-OUT makes
+# every session list its scratch by absolute path before its marker, under
+# "SCRATCH — I cannot reap; this is for a supervised session", and a supervised
+# session reaps it at pickup. It is declared when it is created and removed by a
+# person who read the declaration.
+#
+# The loop's startup guard refuses to launch on a non-empty `git status
+# --porcelain`, and it exists to catch dirt NOBODY declared — a half-applied edit
+# that compiles, a stray file from a session that died. Leaving declared scratch
+# visible does not make that guard stricter, it makes it noisier: the one signal
+# it has gets buried under files the programme deliberately left behind. Ignoring
+# them sharpens the signal rather than weakening it — whatever the guard reports
+# after this is, by construction, something nobody explained.
+.b[0-9]*-*
+.t[0-9]*-*
+.a[0-9]*-*
