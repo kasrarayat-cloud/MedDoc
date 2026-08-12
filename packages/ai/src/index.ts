@@ -156,20 +156,31 @@ export {
   type ChargeableUsageRow,
   type ChargeDecision,
   type CommitResult,
+  type DeclinedChargeDecision,
   type PricedComponent,
   type UnpricedComponent,
 } from './billing-charge';
 export {
   decideAdmission,
   readPracticeBalance,
-  LEDGER_BUCKETS,
-  SPENDABLE_BUCKETS,
   type AdmissionDecision,
   type AdmissionRefusal,
+  type BalanceQueryClient,
   type BalanceRead,
   type BalanceUnreadable,
-  type LedgerBucket,
 } from './billing-balance';
+// B7 step 3a — the draw order, and everything derived from it. Exported from
+// the file that DEFINES them rather than through `billing-balance`'s
+// compatibility re-export, so a reader following the import lands on the header
+// that explains why the order is what it is.
+export {
+  DRAW_ORDER,
+  LEDGER_BUCKETS,
+  SPENDABLE_BUCKETS,
+  splitCharge,
+  type BucketDraw,
+  type LedgerBucket,
+} from './billing-buckets';
 // B8 step 2 — the pipeline seam. The same reason as the block above applies
 // with more force: `billing-usage-source.ts` is the file whose whole job is a
 // column-name mapping (`timestamp` → `createdAt`), and that is precisely the

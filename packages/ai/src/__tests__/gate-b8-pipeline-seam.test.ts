@@ -361,16 +361,28 @@ describe('arm 6 — with the flag ON, admission refuses and says WHY', () => {
     await expect(admitVisitOrThrow({ practiceId: 'p1' })).resolves.toBeUndefined();
   });
 
-  it('a promo-only wallet is refused under its OWN reason', async () => {
-    // Ruling 94(a): never folded into `insufficient_balance`. A refusal saying
-    // "you have money I cannot spend" is a bug report; the same refusal called
-    // "insufficient balance" is a lie that reconciles.
+  it('a promo-only wallet is now ADMITTED — B7 step 3a, end to end', async () => {
+    // ⚠️ DELIBERATELY INVERTED. Until B7 step 3a this asserted a refusal under
+    // `credit_not_spendable`, and that was right while the debit could only
+    // reach `paid`. The whole point of step 3a is that this wallet is spendable:
+    // if this arm still refused, B7 step 3's $10 grant would fund nobody.
+    //
+    // This is the FULL path — the stubbed `$queryRawUnsafe` through
+    // `readPracticeBalance` and `decideAdmission` — not the pure decision alone,
+    // so it also proves the reader now sums `promo` into `spendableMicroUsd`.
     balanceRows = [{ bucket: 'promo', sum_micro: '10000000', latest_balance: '10000000' }];
+    await expect(admitVisitOrThrow({ practiceId: 'p1' })).resolves.toBeUndefined();
+  });
+
+  it('an EMPTY wallet still refuses — the inversion did not open the gate', async () => {
+    // The control for the arm above. Widening the spendable set must not have
+    // turned admission into "always admit"; zero still blocks.
+    balanceRows = [];
     try {
       await admitVisitOrThrow({ practiceId: 'p1' });
-      expect.unreachable('admission should have refused');
+      expect.unreachable('admission should have refused an empty wallet');
     } catch (err) {
-      expect((err as BillingAdmissionError).reason).toBe('credit_not_spendable');
+      expect((err as BillingAdmissionError).reason).toBe('insufficient_balance');
     }
   });
 });

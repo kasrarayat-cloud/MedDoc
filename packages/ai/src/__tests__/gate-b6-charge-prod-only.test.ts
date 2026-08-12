@@ -320,14 +320,29 @@ describe('B6 (6) — the row the writer builds', () => {
   const src = readFileSync(join(ROOT, 'packages/ai/src/billing-charge.ts'), 'utf8');
 
   it('writes a NEGATIVE amount, matching ledger_entries_kind_sign', () => {
-    expect(src).toContain('amountMicroUsd: -decision.chargeMicroUsd');
+    // B7 step 3a: the amount is now PER DRAW, because one charge can settle
+    // across `promo` and `paid`. `splitCharge` returns positive magnitudes and
+    // the negation lives next to the row that carries the sign.
+    expect(src).toContain('amountMicroUsd: -draw.amountMicroUsd');
     expect(src).toContain("kind: 'usage'");
   });
 
   it('does NOT send balanceAfter or seq — ruling 89(d) says they are ignored', () => {
     // A caller-supplied value is not validated, it is silently discarded. So
     // sending one is a way to believe something false about the row.
-    const create = src.slice(src.indexOf('prisma.ledgerEntry.create'));
+    //
+    // ⚠️ THE ANCHOR IS ASSERTED BEFORE THE SLICE, AND THAT IS NOT DECORATION.
+    // This arm previously sliced on `prisma.ledgerEntry.create`. B7 step 3a
+    // moved the write inside a transaction (`tx.ledgerEntry.create`), so
+    // `indexOf` returned -1, `slice(-1)` returned the file's LAST CHARACTER, and
+    // both `not.toMatch` assertions passed against a one-character string. The
+    // arm went VACUOUS and stayed green — it did not appear in the failure list
+    // that drove this change, and nothing would ever have surfaced it.
+    // AGENTS.md: a broken check and a clean system produce identical output.
+    const anchor = src.indexOf('ledgerEntry.create');
+    expect(anchor, 'the `ledgerEntry.create` anchor is gone — this arm is measuring nothing')
+      .toBeGreaterThan(-1);
+    const create = src.slice(anchor);
     expect(create).not.toMatch(/\bbalanceAfter\s*:/);
     expect(create).not.toMatch(/\bseq\s*:/);
   });
@@ -337,9 +352,16 @@ describe('B6 (6) — the row the writer builds', () => {
     expect(src).toContain('pricing:');
   });
 
-  it('keys idempotency on the visit, so a retry cannot double-charge', () => {
-    expect(visitChargeKey('abc')).toBe('usage:visit:abc');
-    expect(src).toContain('idempotencyKey: visitChargeKey(args.visitId)');
+  it('keys idempotency on the visit AND BUCKET, so a retry cannot double-charge', () => {
+    // B7 step 3a: per (visit, bucket). A split visit writes two rows in one
+    // transaction, and one key for both would make the second collide with the
+    // first — rolling back a charge the practice could actually pay.
+    expect(visitChargeKey('abc', 'paid')).toBe('usage:visit:abc:paid');
+    expect(visitChargeKey('abc', 'promo')).toBe('usage:visit:abc:promo');
+    // ⚠️ AND THE TWO KEYS MUST DIFFER. A key that ignored its bucket argument
+    // would satisfy "returns a string" and collide on every split.
+    expect(visitChargeKey('abc', 'paid')).not.toBe(visitChargeKey('abc', 'promo'));
+    expect(src).toContain('idempotencyKey: visitChargeKey(args.visitId, draw.bucket)');
   });
 
   it('the money never becomes a Number anywhere in this module', () => {

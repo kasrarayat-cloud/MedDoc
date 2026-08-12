@@ -8435,3 +8435,141 @@ That proof is cheap on QA — the stack's `ledger_entries` is also empty, so a
 zero-balance refusal is its natural state — and it is **a precondition of
 enabling the flag**, not of landing this code. Named here so the next session
 does not have to re-derive that it is missing.
+
+---
+
+## ✅ B7 STEP 3a IS BUILT — THE PROMO DRAW ORDER, AND WHY IT HAD TO COME FIRST — 2026-08-12
+
+**Item:** an INSERTED half-step, ahead of B7 step 3's grant. Ruling **#96**.
+
+### THE FINDING THAT CREATED THIS ITEM
+
+The queue said B7 step 3 was next and ruling #95 said it "is what makes turning
+the flag on possible". **It is not, on its own** — and the check that shows it is
+one line of the shipped code:
+
+```
+SPENDABLE_BUCKETS = ['paid']          # billing-balance.ts, B8 step 1
+bucket: 'paid'                        # billing-charge.ts, B6
+```
+
+Grant $10 of `promo` to 197 practices, turn `BILLING_ENFORCED` on, and ruling
+94(a) refuses **every one of them** under `credit_not_spendable` instead of
+`insufficient_balance`. **The reason string changes. The total clinical outage
+does not.**
+
+⚠️ **EVERY STEP THAT PRODUCED THIS WAS INDIVIDUALLY RIGHT.** B6 hard-coded
+`'paid'` and said B7 owned the split. B7's three steps did not take it. B8 step 1
+read the literal correctly and concluded — correctly — that admission must judge
+`paid` alone, because admitting on the total would have been a fail-open. The
+defect is in the JOIN, and it is invisible from inside any one of them.
+
+**It was found by reading the item's premise against the code before building
+it**, which is the watched-set discipline pointed at a queue entry rather than at
+a gate: *what does this item CLAIM, and is the claim true of the system as it
+stands?*
+
+### WHY THIS HALF GOES FIRST — REVERSIBILITY DECIDES THE ORDER
+
+| | this half | B7 step 3 |
+|---|---|---|
+| what it is | one constant + a loop | **197 rows** into an append-only table |
+| in effect today | no — `BILLING_ENFORCED` is OFF | permanently, the moment it commits |
+| reversal | revert `DRAW_ORDER` | **impossible** — only offsettable by `adjustment` rows that live beside them forever |
+
+So the reversible half lands first and the irreversible half lands only once its
+premise is true. **This is not a re-scoping of B7 step 3** — its scope is
+unchanged. It gained a prerequisite that was previously unnamed.
+
+⚠️ **AND IT IS NOT A CONTRADICTION OF RULING 94(a), IT IS THE PATH 94(a) WROTE
+DOWN.** That ruling's own reversal clause reads: *"the honest version of that
+reversal teaches the WRITER to draw promo first, at which point the gate's
+cross-file arm forces both to move together."* Executed exactly there.
+
+### WHAT LANDED
+
+| file | what |
+|---|---|
+| `packages/ai/src/billing-buckets.ts` | **NEW.** `DRAW_ORDER` (the single fact), `SPENDABLE_BUCKETS` derived from it, and the pure `splitCharge` |
+| `packages/ai/src/billing-charge.ts` | the writer iterates `DRAW_ORDER` inside a transaction, under `ledger_entries_derive()`'s own advisory lock key; `visitChargeKey` is now per (visit, bucket); `CommitResult` gained a `reason` discriminator |
+| `packages/ai/src/billing-balance.ts` | consumes the shared constant; `readPracticeBalance` takes an optional client so the debit reads inside its transaction |
+| `packages/ai/src/billing-pipeline.ts` | `ledgerEntryIds` plural; `balance_unreadable` reports as `failed`, not `declined` |
+| `packages/ai/src/__tests__/gate-b7s3a-promo-draw-order.test.ts` | **NEW.** 20 arms |
+
+### THE HAND-KEPT MIRROR IS DELETED, NOT RE-POINTED
+
+94(a) could only assert the cross-file agreement with a regex, because `'paid'`
+was a literal in another file. It is now an identity: the writer iterates
+`DRAW_ORDER` and `SPENDABLE_BUCKETS` is derived from it. The gate asserts the
+**stronger** property in its place — `billing-charge.ts` contains **no `bucket:`
+literal at all** — with a positive control proving the matcher can still find one
+in a canary. AGENTS.md: put the behaviour where it cannot be forgotten.
+
+### MUTATION-PROVED — SIX, EACH DECLARED BEFORE IT RAN
+
+| | mutation | declared | observed |
+|---|---|---|---|
+| M1 | `DRAW_ORDER` reversed to `['paid','promo']` | promo-first, overrun and inertness arms red | **6 red** |
+| M2 | `splitCharge` caps the last bucket, dropping the overrun | conservation + overrun red | **3 red** |
+| M3 | advisory-lock loop deleted | the three lock arms red | **3 red** |
+| M4 | `SPENDABLE_BUCKETS` pinned back to `['paid']` | identity + behavioural admit arms red | **6 red**, across all three gates incl. the end-to-end pipeline arm |
+| M5 | lock key drops the bucket (`practiceId` alone) | the lock-KEY arm red | **1 red** |
+| M6 | unreadable balance falls back to all-on-`paid` | the refusal arm red | **1 red** |
+
+⚠️ **AND THE MUTATION TOWARD *SUCCESS* WAS OBSERVED TOO, NOT ONLY TOWARD
+FAILURE.** AGENTS.md requires proving a ratchet MOVES when the fix lands. It did,
+live: the change reddened **4** existing arms, and each was flipped deliberately
+and went green. A gate that could not have gone red before the change would have
+been a decoration.
+
+### ⚠️ TWO VACUOUS ASSERTIONS FOUND IN THE EXISTING GATES — NEITHER WAS IN THE FAILURE LIST
+
+Both were **green** while measuring nothing. Neither would ever have surfaced.
+
+1. **`gate-b6`'s `balanceAfter`/`seq` arm sliced on `prisma.ledgerEntry.create`.**
+   This change moved the write to `tx.ledgerEntry.create`, so `indexOf` returned
+   `-1`, **`slice(-1)` returned the file's last character**, and both
+   `not.toMatch` assertions passed against a one-character string. Fixed by
+   asserting the anchor **before** the slice.
+
+2. **`gate-b8-balance`'s `read()` fixture hardcoded `spendableMicroUsd: paid`.**
+   True when `paid` was the only spendable bucket; a lie afterwards. Every arm in
+   that describe block was asserting the OLD behaviour against an input
+   `readPracticeBalance` can no longer produce. Fixed by deriving it from
+   `SPENDABLE_BUCKETS`.
+
+**A fixture that states a derived field by hand is a second implementation of
+the thing under test, and it does not get updated when the first one changes.**
+
+### WHAT THIS STEP DOES **NOT** CLAIM
+
+- **Nothing is billed, and nothing can be.** `BILLING_ENFORCED` is OFF and
+  `ledger_entries` holds **0 rows** in both environments.
+- **The split has never executed against a real ledger, in any environment.**
+  `commitVisitCharge` refuses off production (F4, ruling 90(c)); with 0 rows
+  everywhere, the split degenerates to the single `paid` row B6 already wrote.
+  What is proven is the arithmetic, the ordering and the wiring.
+- **The QA behavioural proof of B8 is still owed** — unchanged from B8 step 2,
+  and still a precondition of turning the flag on.
+- **B7 step 3 is still the grant, unchanged in scope.** It is now unblocked
+  rather than merely unparked.
+
+### ⚠️ THE B9 COLUMN QUESTION, ASKED BEFORE THE ZERO-ROW BUDGET IS SPENT
+
+B8 step 2's ledger row required that anything B9 wants on `ledger_entries` be
+argued for **before** the grant ends the zero-row state. Asked and answered here,
+because this is the last item before that happens:
+
+**No new column is needed.** B9 reconciles our ledger against the vendors'
+invoices, and every input already exists — `pricing` carries the rate ids and the
+per-component costs for `usage`; `note` carries the Stripe session and event ids
+for `topup`; `practiceIdSnapshot` survives a practice deletion; `seq` orders the
+ledger. The one thing this item ADDED to the JSON is `pricing.draw`
+(`bucket`, `amountMicroUsd`, `ofBuckets`), so a split visit's rows can be summed
+back to one charge without double-counting `components` — and it went into the
+existing `Json` column, spending none of the budget.
+
+⚠️ **`pricing` IS `Json?` AND THAT IS WHAT MAKES THIS CHEAP.** A future B9 field
+that fits inside it costs nothing at any row count. Only a genuinely new COLUMN
+is gated by the zero-row state, and none is proposed.
+
