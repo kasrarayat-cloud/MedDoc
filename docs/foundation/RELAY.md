@@ -8836,6 +8836,11 @@ and are named here so they are argued rather than assumed:
 
 **Recorded as PARKED pending the owner on question 2** — see the morning report.
 
+⚠️ **SUPERSEDED 2026-08-12 — BOTH QUESTIONS ARE ANSWERED AND 3c IS UNPARKED.** The owner authorized
+the execution in full, and answered the population question with a **third door** rather than a choice
+between the two arms named above. Ruling **#99**; §"B7 STEP 3c IS UNPARKED" at the end of this file.
+**Both options as posed here are superseded — do not work from them.**
+
 ### Citation — produced by `check-citation.sh`, not typed
 
 **Citation — 4 of 4 on `1a83389a7e9c54235d795bf2d76f9f4ab755301b`:**
@@ -9095,3 +9100,116 @@ condition that stops being true when the flag is enabled.
 
 **The flag must not be enabled before this deploys.**
 
+## 🔓 B7 STEP 3c IS UNPARKED — THE OWNER'S AUTHORIZATION, VERBATIM — 2026-08-12
+
+**Recorded by the session that received it, in its first commit**, per the
+standing rule that a ruling existing only in a transcript is not a ruling.
+Nothing in this section was decided by a session. Ruling **#99** carries the
+reasoning; this carries what an executing session has to DO.
+
+### THE AUTHORIZATION
+
+> *"Ruling #96 is RATIFIED as standing — promo drawn before paid is the designed
+> refund-safety order; remove the PROVISIONAL flag and record the ratification.
+> With its reversal path discharged, B7 step 3c is AUTHORIZED IN FULL — the
+> auth.ts wiring AND the backfill — as the owner's explicit written confirmation,
+> recorded verbatim in RULINGS.md and RELAY.md. Execution per the house shape for
+> ruled production mutations (GATE 0.1 precedent): rehearse the same script on QA
+> first; population re-derived at execution time, never copied from this text;
+> abort-on-mismatch guards proven to fire before being trusted; idempotent —
+> exactly one PROMO_GRANT row per practice, a re-run refuses; amount in integer
+> micro-dollars from the ruled constant; balanceAfter computed by the ledger's own
+> arithmetic; one audit row per grant; the §2.5 declaration states the expected
+> delta BEFORE running — +N ledger rows where N is the re-derived practice count,
+> promo sum exactly N × $10.00, zero paid-balance movement, zero clinical-table
+> movement. The wiring and the backfill land together so no signup-timing gap
+> opens between the two populations."*
+
+**#96's PROVISIONAL flag is removed in the same commit as this section.** #97 is
+**not** ratified — it was not named, and inferring a second ratification from the
+first is the contradiction the rulings file exists to stop.
+
+### THE POPULATION — 175, AND WHY THAT IS NOT THE 175 THIS FILE OFFERED
+
+> *"Backfill scope: 175 — active-member practices only — WITH the structural
+> completion that dissolves option 1's cost: the reactivation path grants the
+> promo exactly as the signup path does. The one-PROMO_GRANT-row-per-practice
+> invariant (unique, CHECK-enforced) makes the grant idempotent across all three
+> doors — signup, backfill, reactivation — so a practice is funded exactly once no
+> matter which door it walks through, and a double-grant is unrepresentable rather
+> than discouraged. Record the exclusion's anatomy in the ruling: 16 of the 22 are
+> structurally dead (zero members — no reactivation exists to fund), and the
+> remaining 6 with only-deactivated members are covered by the reactivation grant
+> the moment anyone returns. This is the T6 reactivation precedent applied to
+> money: the no-downgrade principle pointed at the wallet — a returning account
+> arrives with everything its class entitles it to, minted at arrival, never
+> pre-minted into limbo on a table that refuses deletes."*
+
+**The anatomy, and it reconciles exactly:**
+
+| class | count | disposition |
+|---|---|---|
+| active member | **175** | backfilled |
+| members, all deactivated | 6 | **funded at reactivation**, by the third door |
+| no members at all | 16 | structurally dead — no reactivation exists to fund |
+| **total** | **197** | |
+
+⚠️ **THE TWO-WAY CHOICE THIS FILE POSED WAS THE WRONG FRAME, AND BOTH ITS ARMS
+WERE WORSE THAN THE ANSWER.** The 175 arm was priced with *"a reactivated account
+arrives unfunded, which is the reactivation-shaped defect T6's CHECK sweep already
+found once"*; the 197 arm with $220 of permanent undrawable credit. **The cost of
+175 was never a property of 175 — it was a property of there being only two
+doors.**
+
+### WHAT 3c NOW IS — THREE DOORS, NOT TWO
+
+| door | site | when |
+|---|---|---|
+| signup | `auth.ts:511`, inside the signup transaction | every new practice |
+| backfill | the one-shot script, environment-guarded | once, on the re-derived 175 |
+| **reactivation** | **new scope** — the `update` that sets `isActive: true` | whenever a dead practice returns |
+
+⚠️ **THE THIRD DOOR IS SWEPT BY ITS PREDICATE, NEVER BY THE ORM VERB.** T6's CHECK
+sweep is the precedent and the warning: **24** user write sites, **15 of them
+`update`**, and a `create`-shaped sweep cannot see a single one. The predicate here
+is *"a practice with an active member has a promo grant"*, falsified by exactly the
+write T6 already mapped.
+
+### THE ORDER, AND IT IS FORCED
+
+1. **The deploy debt clears first.** `main` carries B7 step 3b + #98's three
+   fixes; **defect 1 is a fix to code that IS deployed**, inert only while
+   `BILLING_ENFORCED` is off. ⚠️ **And #98's defect 2 is the hard precondition:**
+   the idempotency matcher was inoperative until the #98 fix (PR #620), so a backfill
+   against code without it **aborts partway** and a racing signup **rolls back a doctor's
+   registration**.
+2. **The QA rehearsal**, with every abort-on-mismatch guard **proven to fire**
+   before it is trusted, and the happy path proven on synthetics.
+3. **The §2.5 declaration, written BEFORE execution**, in the owner's terms:
+   `+N` ledger rows for a re-derived `N`; promo sum exactly `N × $10.00`; **zero**
+   paid-balance movement; **zero** clinical-table movement.
+4. **Execute** — transactional, population re-derived at execution time and never
+   copied from this text, one audit row per grant, verification before `COMMIT`.
+
+### WHAT IS STILL NOT AUTHORIZED
+
+- **`BILLING_ENFORCED` stays OFF.** This funds wallets; it does not bill anybody.
+  Enabling the flag is a separate, later decision and is **not** granted here.
+- **#97 remains PROVISIONAL.** Its (b) *reason* for shipping the writer unwired is
+  spent — #96 is no longer provisional, and the wiring is now authorized — but
+  (a) and (c)–(e) still await the war room.
+- **A new `AuditAction` value is required and does not exist.** Enumerated:
+  `CHECKOUT_TOPUP_CREDITED`/`_REFUSED`/`_DUPLICATE`, and nothing for a grant. That
+  is **three** edits — TS union, Prisma enum, **and its own `ALTER TYPE … ADD
+  VALUE` migration** — and only the third is checked by the database. **Assert the
+  row back by action and target**; three prior instances in this repo passed
+  `tsc`, `prisma validate` and the whole unit suite while the write threw into a
+  swallowed fire-and-forget.
+
+### ⚠️ THE ONE-WAY DOOR, STATED PLAINLY
+
+`ledger_entries` refuses DELETE and UPDATE by design. **~175 grant rows are
+permanent.** The only instrument afterwards is an `adjustment` row per practice,
+which offsets the balance and then lives beside the grant forever. **This is the
+first item in the programme whose central act cannot be reverted** — which is
+precisely why it required an owner and could never have been a provisional ruling.
