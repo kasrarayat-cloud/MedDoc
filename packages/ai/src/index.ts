@@ -170,6 +170,21 @@ export {
   type BalanceUnreadable,
   type LedgerBucket,
 } from './billing-balance';
+// B8 step 2 — the pipeline seam. The same reason as the block above applies
+// with more force: `billing-usage-source.ts` is the file whose whole job is a
+// column-name mapping (`timestamp` → `createdAt`), and that is precisely the
+// class of defect `tsc` catches and nothing else does — but only if the file is
+// in the programme at all.
+export {
+  admitVisitOrThrow,
+  billingEnforced,
+  chargeVisitUsage,
+  BillingAdmissionError,
+  BILLING_ENFORCED_ENV,
+  type ChargeOutcome,
+} from './billing-pipeline';
+export { loadVisitChargeableUsage } from './billing-usage-source';
+export { drainApiUsage, pendingApiUsageWrites } from './api-usage';
 export {
   chargeMicroUsd,
   costMicroUsd,

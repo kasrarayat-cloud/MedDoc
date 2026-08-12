@@ -5,7 +5,7 @@ import {
   categorizeError,
   _resetProviderFailuresForTesting,
 } from './error-categorize';
-import { AnthropicRefusalError } from '@meddoc/ai';
+import { AnthropicRefusalError, BillingAdmissionError } from '@meddoc/ai';
 
 beforeEach(() => {
   _resetProviderFailuresForTesting();
@@ -257,5 +257,71 @@ describe('categorizeError — provider_down', () => {
       'Anthropic response was not valid JSON: Unexpected token'
     );
     expect(categorizeError(err)).toBe('permanent');
+  });
+});
+
+// ============================================================================
+// B8 step 2 — A BILLING ADMISSION REFUSAL CARRIES ITS OWN RETRY CATEGORY
+// ----------------------------------------------------------------------------
+// The two refusals are different events and must not be filed as one:
+//
+//   insufficient_balance / credit_not_spendable → the practice is out of money.
+//                                                 Retrying cannot change it.
+//   balance_unreadable                          → OUR database was unreachable,
+//                                                 or the ledger disagreed with
+//                                                 itself. The practice may be
+//                                                 perfectly solvent.
+//
+// Filing the second under the first tells a paid-up doctor they are out of
+// credit because our pool was exhausted — and it is the half of B8 that the
+// auto-credit exists to compensate, so a fault misfiled as a balance problem is
+// a fault the credit will never find.
+// ============================================================================
+
+describe('categorizeError — B8 billing admission', () => {
+  it('an empty wallet is permanent — retry cannot add money', () => {
+    expect(
+      categorizeError(new BillingAdmissionError('insufficient_balance', 'x'))
+    ).toBe('permanent');
+    expect(
+      categorizeError(new BillingAdmissionError('credit_not_spendable', 'x'))
+    ).toBe('permanent');
+  });
+
+  it('an unreadable balance is TRANSIENT — our fault, not the practice being empty', () => {
+    expect(
+      categorizeError(new BillingAdmissionError('balance_unreadable', 'x'))
+    ).toBe('transient');
+  });
+
+  it('stays permanent even when the DETAIL contains transient words', () => {
+    // The whole reason the category travels as a property. Without the
+    // structural arm running first, `isLikelyTransient` would match these and
+    // spend BullMQ's retry budget on a balance that cannot move.
+    const err = new BillingAdmissionError(
+      'insufficient_balance',
+      'socket hang up / network error / fetch failed'
+    );
+    expect(categorizeError(err)).toBe('permanent');
+  });
+
+  it('NEGATIVE CONTROL — a look-alike MESSAGE gets no billing semantics', () => {
+    // AGENTS.md records four sightings of the substring trap, one of them a
+    // matcher that hit its own explanatory comment. An ordinary error that
+    // merely quotes a refusal must not be classified as one.
+    const impostor = new Error(
+      'billing admission refused (insufficient_balance): not really'
+    );
+    expect(categorizeError(impostor)).toBe('transient');
+  });
+
+  it('NEGATIVE CONTROL — the class name alone does not force permanent', () => {
+    // The category is what decides, so a same-named error carrying the
+    // transient category is transient. This is what makes the arm structural
+    // rather than a second name check wearing a property's clothes.
+    const named = new Error('anything') as Error & { retryCategory?: string };
+    named.name = 'BillingAdmissionError';
+    named.retryCategory = 'transient';
+    expect(categorizeError(named)).toBe('transient');
   });
 });

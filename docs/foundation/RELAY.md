@@ -8081,3 +8081,237 @@ silent version would have reported as *"no runs visible yet"*.
 **A broken check and a clean system produce identical output**, and this is the
 third instrument in this one session to demonstrate it (the poller, the baseline
 script, and arm 6's comment-stripper).
+
+---
+
+## ✅ B8 STEP 2 IS BUILT — THE PIPELINE SEAM, AND IT SHIPS INERT — 2026-08-12
+
+**Item:** B8's second half — the call site. Ruling 90(e): *"B8 is where money is
+assessed, so the debit and the block belong in ONE CHANGE AND IN THAT ORDER"*,
+and, on the hazard it moved here by name, *"whoever wires this must solve the
+ordering, and CANNOT DO IT BY ACCIDENT."*
+
+### WHAT LANDED
+
+| | |
+|---|---|
+| `packages/ai/src/api-usage.ts` | `drainApiUsage()` + `pendingApiUsageWrites()` — the fire-and-forget meter becomes *observable* without becoming blocking |
+| `packages/ai/src/billing-usage-source.ts` | `loadVisitChargeableUsage` — drains, then reads, then maps `timestamp` → `createdAt` |
+| `packages/ai/src/billing-pipeline.ts` | `admitVisitOrThrow` / `chargeVisitUsage` / `billingEnforced` / `BillingAdmissionError` |
+| `apps/transcribe-md/src/worker.ts` | the two seams, at the two correct points in `processVisit` |
+| `apps/transcribe-md/src/worker/error-categorize.ts` | one structural arm — a refusal classifies itself |
+| `packages/ai/src/__tests__/gate-b8-pipeline-seam.test.ts` | 19 assertions across 8 arms |
+| `apps/transcribe-md/src/worker/error-categorize.test.ts` | 5 more, in the suite that owns the classifier |
+
+No migration. No schema change. **`ledger_entries` is untouched and still holds
+0 rows in both environments** — and with the flag off it will stay that way,
+which is the point.
+
+### ⚠️ THE ONE THAT MATTERS — WIRING THIS ON TODAY IS A TOTAL CLINICAL OUTAGE
+
+`ledger_entries` holds **0 rows in production**, deliberately: rulings 89(e),
+90(d) and 94(e) each spent design budget keeping it empty, and B7 step 3's promo
+grant — the only thing that would put money in a wallet — is PARKED behind this
+very item by ruling 94(e).
+
+So enabling the block does not "turn on billing". It means:
+
+> every practice has a spendable balance of 0 → `decideAdmission` returns
+> `insufficient_balance` for every one of them → **EVERY VISIT IN PRODUCTION
+> FAILS, for every doctor, immediately.**
+
+A fail-closed money gate whose default is ON is normally the right posture.
+Here it is an outage, **because the gate is correct and the wallets are empty**.
+That is an ordering problem, not a design flaw in the gate, and a flag is what
+lets the debit and the block land together — as 90(e) requires — without the
+landing being the moment they take effect.
+
+**The sequence the flag holds open:**
+
+1. this item lands and deploys, **INERT** ← we are here
+2. **B7 step 3** grants the promo credit (197 `grant` rows)
+3. `BILLING_ENFORCED=true`, and the block starts blocking
+
+⚠️ **The debit is behind the SAME flag as the block, and that is not tidiness.**
+Charging while not blocking is a coherent posture and it is the wrong one here:
+`ledger_entries` is APPEND-ONLY, so a debit against an unfunded practice drives
+it negative with no way to remove the row — only to offset it with an
+`adjustment`. Charging before anyone can be funded manufactures a debt nobody
+agreed to, permanently, and ends the zero-row state three rulings depend on.
+
+### ⚠️ THE RACE RULING 90(e) NAMED — CLOSED, AND NOT WITH A SLEEP
+
+`logApiUsage` returns before its row exists (`setImmediate`), so a caller that
+reads `api_usage_events` at pipeline end sees fewer rows than the visit
+consumed. **The failure is silent and always an UNDER-charge** — no error, no
+missing visit, just a smaller number in a table that can only be corrected by an
+`adjustment` row.
+
+Three things about the fix are deliberate:
+
+- **The meter stays fire-and-forget.** Awaiting the write would put a database
+  round-trip in every vendor call's hot path, which is exactly what the
+  `setImmediate` exists to prevent. The pending set becomes *observable*
+  instead, so one caller can wait while every other caller keeps not waiting.
+- **`await sleep(50)` would have looked identical on every test.** It drains
+  this queue in practice today and guarantees nothing: green locally, green in
+  CI, under-charging on the one loaded night a write takes 60ms. A promise you
+  can await is a fact; a delay you tuned is a hope.
+- **The drain lives INSIDE the loader, not at the call site.** A caller that
+  must remember to drain first is a hand-kept list of one, and forgetting it
+  produces a slightly small number rather than an error. There is now no way to
+  obtain these rows without having waited.
+
+### ⚠️ AND A SECOND, QUIETER DEFECT: `createdAt` IS NOT A COLUMN
+
+`ChargeableUsageRow` declares `createdAt: Date`. **The column is `timestamp`** —
+`ApiUsageEvent.timestamp`, no `@map`. A loader that did the obvious thing —
+
+```ts
+const rows = await prisma.apiUsageEvent.findMany({ where: { visitId } });
+return commitVisitCharge({ ..., rows });
+```
+
+— hands `priceUsageRows` a row whose `createdAt` is `undefined`, and that field
+is load-bearing: `billing-charge.ts:294` passes it as `at` to the rate lookup,
+which is how `effectiveFrom` picks the period. Every component would come back
+`no_rate_for_key_at_instant` and the whole visit would decline as `unpriced` —
+**a charge of nothing, reported as a pricing gap, for a reason that has nothing
+to do with pricing.**
+
+`tsc` catches it — **mutation-proved**: replacing the mapping produces
+`TS2322 … Property 'createdAt' is missing`. But only where the client is typed,
+and this repo reaches for `(prisma as any)` in several places, `api-usage.ts:175`
+among them. The mapping is written out field by field for that reason.
+
+### ⚠️ AN UNREADABLE BALANCE IS A SYSTEM FAULT, NOT AN EMPTY WALLET
+
+SPEC §2.4 says *"if the balance cannot be read, block"*, and step 1 obeys it.
+But refusing is half a decision — the visit still has to be RECORDED as
+something, and the two refusals are not the same event:
+
+| refusal | who is at fault | retry |
+|---|---|---|
+| `insufficient_balance` / `credit_not_spendable` | the practice is out of money | **permanent** |
+| `balance_unreadable` | **our** database, or a ledger disagreeing with itself | **transient** |
+
+Filing the second under the first tells a paid-up doctor they are out of credit
+because our pool was exhausted, and puts that in their account's story. It is
+also the half of B8 the auto-credit exists to compensate — **a fault misfiled as
+a balance problem is a fault the credit will never find.**
+
+The category travels as a **typed property**, never a message substring:
+`categorizeError` is otherwise a regex over message text, and AGENTS.md records
+four sightings of the substring trap. Negative-controlled both ways — a
+look-alike message gets no billing semantics, and the class name alone does not
+force `permanent`.
+
+### THE SEAMS FAIL IN OPPOSITE DIRECTIONS, ON PURPOSE
+
+- **`admitVisitOrThrow` THROWS.** A boolean return has to be checked, and a
+  caller that forgets proceeds to spend money — the silent direction.
+- **`chargeVisitUsage` NEVER throws.** It runs after a finished clinical note
+  exists. Throwing would take a READY visit and fail it, **destroying a
+  doctor's completed work over a billing write.** The money we could not record
+  is lost rather than the note, and the loss is loud (`charged: 'failed'`,
+  logged). Same trade `logApiUsage` and `logAudit` already make here.
+
+### WHAT WAS MUTATION-PROVED
+
+| # | mutation | result |
+|---|---|---|
+| M1 | drop the `timestamp` → `createdAt` mapping | **`tsc` RED** — TS2322 |
+| M2 | remove `drainApiUsage()` from the loader | **3 arms RED** |
+| M3 | move `markSettled()` out of `finally` | **GREEN** — see below |
+| M4 | M3 *and* remove the broad `catch` | **whole file RED** (drain hangs) |
+| M5 | remove the structural arm from `categorizeError` | **2 arms RED** |
+
+⚠️ **M3 IS REPORTED AS GREEN BECAUSE IT WAS GREEN.** The `finally` is redundant
+with today's broad `catch`; it is not what makes the current code correct. It is
+what keeps it correct the day somebody narrows that catch to a specific error
+type — a change that would otherwise convert a swallowed warning into a
+permanently hung pipeline, with **nothing failing at the moment of the edit**.
+Stated rather than counted as a fifth proof.
+
+### ⚠️ AND THE GATE CAUGHT ITSELF — TITLE NARROWER THAN MEASUREMENT
+
+Arm 9's first assertion was written as `src.includes('unitsSource:')` under the
+title *"the query filters on visitId only"*. It **went red on its first run
+against correct code**: `unitsSource:` appears three times legitimately — the
+row interface, the `select`, and the mapping. **Selecting a column is not
+filtering on it**, and the check's name said *filters* while its body measured
+*mentions*.
+
+That is AGENTS.md's *"a check whose TITLE is narrower than what it MEASURES"*,
+caught in this file's own first execution. The honest form counts `where:`
+clauses (exactly one) and asserts no comparison against the ruled values.
+
+### WHAT IS BUILT, AND WHAT IS NOT
+
+**Built:** both seams, wired at the two correct points in `processVisit`, with
+the ordering hazard closed.
+
+**NOT built, and NAMED rather than left to be discovered:**
+
+- **The failure path does not charge.** A visit that dies at L5 has already paid
+  for L1–L4 and nothing records it. Charging there is inseparable from B8's
+  other half — *"system faults credit back via DLQ classification"* — because
+  the two decide the same question from opposite ends, and building the debit
+  without the credit would **bill doctors for our outages**. Carried as B8 step 3.
+- **The debit's success path has never executed, in any environment.**
+  `commitVisitCharge` refuses off production by ruling 90(c), so the gate proves
+  only that the refusal is absorbed rather than thrown. Unprovable anywhere a
+  test may run, and it stays that way until the flag is turned on in production.
+
+### FINDINGS THIS ITEM DID NOT GO LOOKING FOR
+
+1. **Template calls are billable and belong to no visit — so a per-visit debit
+   can never charge them.** `tm_template_parse` (35 rows), `tm_template_phi_scan`
+   (29) and `tm_template_synthetic_phi_scan` (2) are **anthropic** — inside
+   `BILLABLE_PROVIDERS` — and 100% `visitId IS NULL`, correctly, because they run
+   at template UPLOAD. Every one is real money this seam structurally cannot
+   reach. Not a bug in the wiring; a gap in what "a visit's usage" can mean.
+   Whether they are billed at all is a product question, and B9 will surface them
+   as an unreconciled remainder if nothing does.
+2. **A historical attribution hole, now closed.** `tm_soap_draft` is
+   `visitId IS NULL` on **20 of 102** rows and `tm_entities` on **3 of 82** — all
+   between 2026-07-02 and 2026-07-26, against attributed rows running to
+   2026-08-09. Since 2026-07-27 the only unattributed anthropic rows are the 8
+   template ones above, so **live per-visit attribution is 100%**. Recorded
+   because a future reader querying lifetime totals will find a 20% hole in the
+   dominant stage and reasonably conclude the meter is broken.
+3. **`CommitResult` under-specifies its own pair.** The `written: false` arm
+   types `decision` as the WHOLE `ChargeDecision` union, including the
+   `charge: true` branch that cannot occur there. Narrowed rather than cast at
+   the one caller, so the day the relationship changes it stops compiling.
+4. **`mkdir` and `cp` are not granted to the loop, and they are not in
+   MASTER.md's permissions table.** AGENTS.md's mutation-proof rule requires
+   copying every file to scratch *before* the first mutation and restoring from
+   the copy — that procedure is **not executable by this loop**. The substitute
+   used here is Edit-mutate / Edit-restore, which is byte-exact because the prior
+   text is in context, and which never touches git. Worth a table row.
+
+### 🔓 B7 STEP 3 IS UNPARKED — ITS TRIGGER WAS NAMED, AND IT IS NOW MET
+
+Ruling 94(e) parked the promo grant *"until B8 knows its own schema"*, and the
+reason was specific rather than general: an append-only table cannot take a
+later column without a fail-open DEFAULT or a backfill UPDATE, so **the zero-row
+state was a budget being held open for B8.**
+
+**B8 step 2 spent none of it.** No column, no CHECK, no migration: admission
+only reads, the debit uses B6's existing `pricing` column, and a refusal records
+itself through `failureCategory`, which is already `String?` and needed no enum
+value — so it is not even the three-edit `AuditAction` hazard.
+
+The budget was not needed. **B7 step 3 is the next item**, and it is the thing
+that makes turning `BILLING_ENFORCED` on possible at all. Its scope is unchanged
+from the description at *"Carried as B7 step 3"* above — a ruled production
+mutation in the sense of ruling 59, needing the population re-derived at
+execution time, every abort guard proven to fire, and verification inside the
+transaction before COMMIT.
+
+⚠️ **Note what unparking does NOT mean.** The grant ends the zero-row state
+permanently, so it is the last moment any append-only column can be added for
+free. Anything B9 will want on `ledger_entries` should be argued for **before**
+that item runs, not after — and "B9 has not been designed yet" is a reason to
+check, not a reason to assume it wants nothing.

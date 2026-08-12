@@ -140,9 +140,74 @@ export interface UsageEvent {
   metadata?: Record<string, unknown> | null;
 }
 
+// ---------------------------------------------------------------------------
+// ⚠️ B8 step 2 — THE IN-FLIGHT SET, AND WHY A DRAIN IS THE ONLY HONEST FIX
+// ---------------------------------------------------------------------------
+// `logApiUsage` returns BEFORE its row exists. That is deliberate and stays —
+// a slow Postgres write must never extend a doctor's request. The cost is a
+// read-after-write race that ruling 90(e) named and assigned to B8 in as many
+// words: "a caller that reads `api_usage_events` at pipeline end inherits
+// exactly the `worker.ts:983` race... whoever wires this must solve the
+// ordering, and cannot do it by accident."
+//
+// B8 step 2 is that caller. It reads a visit's usage rows to price them, and a
+// row still sitting in a `setImmediate` queue is a row it will not see — so the
+// visit is charged for less than it consumed. **The failure is SILENT and it is
+// always an UNDER-charge**, which is the direction nobody notices: no error, no
+// missing visit, just a smaller number in an append-only ledger that can only
+// be corrected by an `adjustment` row.
+//
+// ⚠️ THE FIX IS NOT "AWAIT THE WRITE". Making `logApiUsage` awaitable would put
+// a database round-trip in every vendor call's hot path — the exact thing the
+// `setImmediate` exists to prevent — and B6's header is explicit that the
+// fire-and-forget shape is correct. The fix is to make the pending set
+// OBSERVABLE, so one caller that genuinely needs the rows can wait for them
+// while every other caller keeps not waiting.
+//
+// ⚠️ AND A SLEEP WOULD HAVE LOOKED IDENTICAL ON EVERY TEST. `await sleep(50)`
+// drains this queue in practice today and is not a guarantee about anything: it
+// passes locally, passes in CI, and under-charges on the one loaded night when
+// a write takes 60ms. A promise you can await is a fact; a delay you tuned is a
+// hope, and the two are indistinguishable from a green suite.
+const inFlightUsageWrites = new Set<Promise<void>>();
+
+/**
+ * WAIT UNTIL EVERY `logApiUsage` CALL MADE SO FAR HAS FINISHED ITS WRITE.
+ *
+ * Resolves when the pending set is empty. **Never rejects** — each write
+ * already swallows its own error, so a drain reports "nothing is still in
+ * flight", never "every write succeeded". Those are different claims and only
+ * the first one is available here.
+ *
+ * ⚠️ THE LOOP IS NOT DEFENSIVE PADDING. `Promise.all` is taken over a SNAPSHOT,
+ * so a `logApiUsage` call that lands while the drain is awaiting would not be
+ * covered by it. Re-checking until the set is empty closes that, and it is the
+ * realistic case rather than a theoretical one: the pipeline's last stage can
+ * still be metering when the finalize step begins draining.
+ */
+export async function drainApiUsage(): Promise<void> {
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const pending = [...inFlightUsageWrites];
+    if (pending.length === 0) return;
+    await Promise.all(pending);
+  }
+}
+
+/** How many usage writes have not yet settled. Exported for the gate, which
+ *  needs to observe the set being non-empty BEFORE the drain to prove the
+ *  drain had something to do — a drain over an empty set proves nothing, and
+ *  is exactly what a broken instrument would also report. */
+export function pendingApiUsageWrites(): number {
+  return inFlightUsageWrites.size;
+}
+
 /** Fire-and-forget: schedules the row write via setImmediate so the
  *  caller's promise chain never waits on it. Errors are caught and
- *  logged at warn — the audit story for usage is "best-effort". */
+ *  logged at warn — the audit story for usage is "best-effort".
+ *
+ *  ⚠️ Still returns `void` and still does not block. {@link drainApiUsage} is
+ *  how a caller that needs the rows waits for them; nothing else changed. */
 export function logApiUsage(event: UsageEvent): void {
   // ⚠️ B0 — A MOCK ROW'S MONEY COLUMNS ARE ZERO, AND ZERO IS THE TRUE COST.
   // No vendor was called, so no money was spent. Pricing the fixture units with
@@ -169,6 +234,17 @@ export function logApiUsage(event: UsageEvent): void {
     event.unitsSource === 'mock'
       ? { ...event, unitCostUsd: 0, totalCostUsd: 0, requestId: null }
       : event;
+  // The settle promise is registered BEFORE `setImmediate` schedules anything,
+  // so there is no window in which a write is pending and the set is empty. A
+  // drain that started between the two would otherwise return immediately and
+  // report an all-clear over a queue it never saw.
+  let markSettled!: () => void;
+  const settled = new Promise<void>((resolve) => {
+    markSettled = resolve;
+  });
+  inFlightUsageWrites.add(settled);
+  void settled.then(() => inFlightUsageWrites.delete(settled));
+
   setImmediate(async () => {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -205,6 +281,22 @@ export function logApiUsage(event: UsageEvent): void {
         '[api-usage] failed to log:',
         err instanceof Error ? err.message : err
       );
+    } finally {
+      // ⚠️ `finally`, NOT the end of `try`. A write that threw is still a write
+      // that is no longer in flight; leaving it registered would make
+      // `drainApiUsage` hang forever the first time Postgres refused a row —
+      // converting a best-effort meter into a pipeline halt, which is the exact
+      // inversion the fire-and-forget shape exists to prevent.
+      //
+      // ⚠️ AND IT IS REDUNDANT TODAY — SAID PLAINLY, BECAUSE THE MUTATION SAID
+      // SO. Moving this call to after the `try/catch` leaves the gate GREEN,
+      // because the catch above is broad and `console.warn` does not throw. It
+      // goes red only when the catch is removed as well. So `finally` is not
+      // what makes the current code correct; it is what keeps it correct the
+      // day somebody narrows that catch to a specific error type — a change
+      // that would otherwise convert a swallowed warning into a permanently
+      // hung pipeline, with nothing failing at the moment of the edit.
+      markSettled();
     }
   });
 }

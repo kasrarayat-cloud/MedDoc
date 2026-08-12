@@ -229,6 +229,32 @@ function isLikelyTransient(msg: string, status: number | undefined): boolean {
   );
 }
 
+/**
+ * B8 step 2 — a billing admission refusal's OWN classification, or `null` if
+ * this is not one.
+ *
+ * ⚠️ THE NAME IS MATCHED WITH `===` ON THE WHOLE TOKEN, NOT SEARCHED FOR. This
+ * module keeps `@meddoc/ai` out of its import graph on purpose — its header
+ * calls it a pure module and the worker's error path must not acquire a
+ * dependency on the billing package to classify an error. A structural read of
+ * `name` + `retryCategory` gets the same answer with no import, and the exact
+ * comparison means no other error class can back into this arm by having a
+ * similar name.
+ *
+ * ⚠️ AN UNRECOGNISED CATEGORY FALLS TO `transient`, AND THE ASYMMETRY IS
+ * DELIBERATE. Admission runs BEFORE the first vendor call, so a retry it did
+ * not need costs no vendor money and is bounded by BullMQ's finite attempt
+ * budget. A wrong `permanent`, by contrast, fails a solvent doctor's visit
+ * outright on the first attempt. The cheap error is the one to make.
+ */
+function billingRetryCategory(err: unknown): ErrorCategory | null {
+  if (!(err instanceof Error) || err.name !== 'BillingAdmissionError') {
+    return null;
+  }
+  const category = (err as Error & { retryCategory?: unknown }).retryCategory;
+  return category === 'permanent' ? 'permanent' : 'transient';
+}
+
 /** Categorize a caught error into transient / permanent / provider_down.
  *  Side effect: records the timestamp of this error against its
  *  provider so subsequent calls within PROVIDER_WINDOW_MS can detect
@@ -236,6 +262,22 @@ function isLikelyTransient(msg: string, status: number | undefined): boolean {
 export function categorizeError(err: unknown): ErrorCategory {
   const msg = getMessage(err);
   const status = getStatus(err);
+
+  // B8 step 2 — FIRST, AND STRUCTURAL. A billing admission refusal already
+  // KNOWS whether retrying could change the answer, so it says so on the error
+  // rather than leaving this module to infer it from prose:
+  //
+  //   insufficient_balance / credit_not_spendable → permanent (no money)
+  //   balance_unreadable                          → transient (OUR fault)
+  //
+  // ⚠️ IT IS READ AS A PROPERTY, NEVER MATCHED AS TEXT. Every other arm below
+  // is a regex over a message, and AGENTS.md records four sightings of the
+  // substring trap — one of them a matcher that hit its own comment. A refusal
+  // whose message happens to contain "timeout" or "network" must not become
+  // transient, and a wallet-empty refusal that a future edit rewords must not
+  // silently start burning BullMQ's retry budget on a balance that cannot move.
+  const billingCategory = billingRetryCategory(err);
+  if (billingCategory) return billingCategory;
 
   // Permanent first — a Zod / format error doesn't get to be
   // "transient" just because it happens to also include the word
