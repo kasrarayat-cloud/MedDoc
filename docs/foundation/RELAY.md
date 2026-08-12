@@ -8680,3 +8680,159 @@ check rather than the last.
 - **B7 step 3** — the grant. Now genuinely unblocked rather than merely unparked.
 - **B8 step 3** — the failure path's charge, inseparable from the auto-credit.
 
+---
+
+## ✅ B7 STEP 3b IS BUILT — THE GRANT WRITER, AND THE POPULATION THAT STOPS BEING THE POPULATION — 2026-08-12
+
+**Status: BUILT, gated, UNWIRED. Nothing calls it. `ledger_entries` still holds
+0 rows in both environments.** Ruling **#97**, PROVISIONAL.
+
+### THE FINDING THAT CREATED THIS ITEM
+
+B7 step 3 is recorded, in this ledger, as **"197 rows into an append-only
+table"** — one `grant` row per practice that exists today. That is a **one-shot
+backfill**, and it says nothing about a practice created tomorrow.
+
+There is exactly **ONE** production path that creates a practice. Enumerated
+three ways rather than claimed — by ORM method, by raw SQL, and by table, with a
+positive control on each matcher:
+
+| sweep | hits | disposition |
+|---|---|---|
+| `.practice.(create\|upsert\|createMany)` | 7 | **1 production** (`auth.ts:511`, the signup transaction) · 3 QA/E2E seeds · 1 prod-smoke provisioner (synthetic) · 2 `meddoc-pro` seeds (legacy, A6 retires) |
+| `insert into practices` (raw) | 1 | the 2026-04-12 tenancy migration — historical |
+| positive control (`.user.(create\|upsert\|createMany)`) | 9 | the matcher form finds writes |
+
+And `auth.ts:511` writes **no ledger row**, because nothing anywhere writes a
+`grant` row: the only two `ledger_entries` writers in the tree are the Stripe
+webhook (`topup`) and `commitVisitCharge` (`usage`) — B5's own WRITERS census,
+re-run.
+
+So with the backfill done and `BILLING_ENFORCED` turned on:
+
+    a practice created after the backfill holds 0 rows
+      → readPracticeBalance reports spendable 0
+      → decideAdmission returns `insufficient_balance`
+      → admitVisitOrThrow THROWS
+      → the first visit of every new signup FAILS.
+
+⚠️ **THIS IS RULING #96(a)'s SHAPE, ONE LINK FURTHER DOWN THE CHAIN.** There the
+grant funded nobody because no debit path could reach `promo`. Here it funds
+nobody who arrives after it runs. Both times **every step was individually right
+and the defect lived in the JOIN** — which is the second time in two days that
+the join between two correct billing steps has been the thing that was broken.
+
+⚠️ **AND THE DISCOVERY CHANNEL IS THE WORST ONE AVAILABLE.** It is invisible in
+every environment: both hold 0 ledger rows, the flag is OFF, and no test can see
+a practice that does not exist yet. The first observation would have been a
+pilot doctor's very first visit failing.
+
+### THE POPULATION, MEASURED — AND IT IS NOT 197
+
+Read-only against production, and it belongs in this ledger because step 3c must
+re-derive it at execution time rather than copy it from here:
+
+| | practices |
+|---|---|
+| total | **197** |
+| with ≥1 ACTIVE member | **175** |
+| with members, all INACTIVE | **6** |
+| with **no members at all** | **16** |
+| with any visit, ever | **2** |
+
+All 16 memberless practices are QA/test leftovers from 2026-04-30 → 2026-05-04
+(`Solo — QA MergePrep Doctor`, `Bug Test Doctor`, `Dr. Sarah Chen`,
+`Dr. Smoke Tester`), orphaned by the 2026-06-15 prod data wipe, which cleared
+clinical rows and preserved users and practices.
+
+**So a blanket 197-row grant writes $220 of permanent, undrawable credit into 22
+practices nobody can log into.** That is not a reason to halt and it is not
+this step's decision — it is step 3c's, and it is recorded here so 3c argues it
+rather than rediscovers it.
+
+### WHAT LANDED
+
+| file | what |
+|---|---|
+| `packages/ai/src/billing-grant.ts` | **NEW.** `PROMO_GRANT_MICRO_USD` (SPEC §2.4's $10, a constant), `promoGrantKey` (one per practice, no occasion), `grantPromoCredit` (the writer), and a collision matcher that reads the unique's TARGET rather than its SQLSTATE |
+| `packages/ai/src/index.ts` | exports the three, so step 3c's call sites — in another package and in a script — are a small diff |
+| `gate-b7s3b-promo-grant.test.ts` | **NEW**, 22 arms |
+| `gate-b5-ledger-append-only.test.ts` | `billing-grant.ts` appended to `WRITERS`, with the reason — B5's census is what forces a new ledger writer to arrive as a deliberate edit |
+
+### IT SHIPS UNWIRED, AND THAT IS 90(e)'s PRECEDENT WITH A STRONGER REASON
+
+Ruling 90(e) shipped `commitVisitCharge` complete and with no call site. The
+same argument holds here, plus one more: **the ruling that makes these rows
+coherent — #96, promo drawn before paid — is PROVISIONAL and less than a day
+old**, and #96's own reversal path says *"B7 step 3 must NOT be executed if this
+is reversed."* Wiring either call site tonight would build an **unremovable**
+artifact on a decision the war room has not yet seen.
+
+Step 3c's two call sites are named in advance, in the gate's census comment:
+`auth.ts` (every practice from now on) and the backfill (every practice that
+exists). **Neither is taken.**
+
+### MUTATION-PROVED — NINE, EACH DECLARED BEFORE IT RAN
+
+| # | mutation | declared | measured |
+|---|---|---|---|
+| M1 | grant amount → $1 | ARM1 + ARM5 red | **2 red** ✓ |
+| M2 | `bucket` → `'paid'` | ARM1 red; **ARM2 stays GREEN** | **1 red**, ARM2 green ✓ |
+| M3 | amount negated | ARM1 red | **1 red** ✓ |
+| M4 | collision matches SQLSTATE only | ARM4 seq-control red | **1 red** ✓ |
+| M5 | catch absorbs every error | ARM4 ×3 red | **3 red** ✓ |
+| M6 | add `assertProdDatabase()` | ARM6 red | **ARM6 red + 9 collateral** ⚠ |
+| M7 | key gains a date | ARM3 red | **1 red** ✓ |
+| M8 | an undeclared call site | ARM7 census red | **1 red**, names the file ✓ |
+| M9 | walker roots → nonexistent | **positive control** red | **1 red**, census green ✓ |
+
+⚠️ **M2 IS DECLARED TO LEAVE ARM2 GREEN, AND THAT IS THE POINT.** ARM2's
+property is *"we do not grant into an unspendable bucket"*, not *"the bucket is
+promo"* — and `paid` is spendable. A gate that reddened there would be asserting
+the wrong quantity under a name that sounded right.
+
+⚠️ **M6 WAS DECLARED IMPRECISELY AND IS RECORDED AS SUCH.** The declared arm
+(ARM6) did go red. The other nine reds are a `ReferenceError` from an unimported
+symbol, not a property of the guard — so the matrix is 8 exact and 1 over-broad,
+which is stated rather than rounded up.
+
+⚠️ **M9 IS THE ONE THAT MATTERS MOST.** With the file set emptied, the **census
+arm stayed GREEN** — it found zero offenders over a set it never entered — and
+only the positive control failed. A clean sweep and a broken sweep produce
+identical output, and this is the measurement that says so on this file.
+
+**Every mutation was restored and the restore VERIFIED byte-exact** — `git
+status --porcelain` empty after the last, and each intermediate restore
+confirmed by `git diff --numstat` showing only the next mutation's line.
+
+### WHAT THIS STEP DOES **NOT** CLAIM
+
+- **No `grant` row has ever been written, in any environment.** The writer's
+  behaviour is proven against a stub client — which is only possible because of
+  ruling #97(c) — and nothing has touched a real ledger.
+- **Nothing is billed and nothing can be.** `BILLING_ENFORCED` is OFF;
+  `ledger_entries` is 0 rows in production and on QA.
+- **The forward hole is not CLOSED, it is FOUND and made closable.** `auth.ts`
+  is unchanged. Until step 3c wires it, a new practice still starts unfunded —
+  which is harmless while the flag is off and is a total outage for that doctor
+  the moment it is not.
+- **The QA behavioural proof of B8 is still owed.** This step makes its ADMIT
+  half *possible* (ruling #97(c)) and does not perform it.
+
+### B7 STEP 3c — WHAT IS OWED, AND THE TWO QUESTIONS IT MUST ANSWER FIRST
+
+3c is the **irreversible** half: it wires `auth.ts`, writes the backfill, and
+executes it. It is **not started**, and two of its decisions are ruling-shaped
+and are named here so they are argued rather than assumed:
+
+1. **WHO gets the backfill.** 175 with an active member, or all 197? The 22
+   nobody can log into take permanent, undrawable credit; excluding them means a
+   reactivated account arrives unfunded, which is the reactivation-shaped defect
+   T6's CHECK sweep already found once.
+2. **WHETHER the execution is this loop's to perform.** It writes ~200
+   irreversible rows into a financial table on production. The house precedent
+   for a ruled production mutation — `execute-gate0-deactivation.sql` — carried
+   an **explicit owner confirmation in writing**.
+
+**Recorded as PARKED pending the owner on question 2** — see the morning report.
+
