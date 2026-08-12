@@ -188,6 +188,34 @@ async function main() {
   console.log(`  grant      : ${PROMO_GRANT_MICRO_USD} micro-USD each`);
   console.log('='.repeat(74));
 
+  // ---- GUARD 0 — the audit label exists IN THIS DATABASE -------------------
+  //
+  // ⚠️ ASKED BEFORE ANY ROW IS WRITTEN, BECAUSE THE ROWS CANNOT BE TAKEN BACK.
+  // Ruling #99 requires one audit row per grant. `logAudit` is fire-and-forget,
+  // so a label missing from the Postgres enum produces `invalid input value for
+  // enum "AuditAction"` on stderr and NOTHING else — the grants land, the actor
+  // record does not, and the script would otherwise report success.
+  //
+  // ⚠️ AND IT IS ASKED OF `pg_enum`, NOT OF `schema.prisma`. Three layers, and
+  // only this one is the database: `tsc` passes without the Prisma enum,
+  // `prisma validate` passes without the migration. This repo has shipped that
+  // gap three times. Measured here rather than assumed.
+  const labelRows = await prisma.$queryRaw<{ ok: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM pg_enum e
+      JOIN pg_type t ON t.oid = e.enumtypid
+      WHERE t.typname = 'AuditAction' AND e.enumlabel = 'PROMO_GRANT_CREDITED'
+    ) AS ok`;
+  if (!labelRows[0]?.ok) {
+    throw new Error(
+      `GUARD 0 ABORT: this database's AuditAction enum has no 'PROMO_GRANT_CREDITED'.\n` +
+        `  Apply migration 20260812200000_b7s3c_promo_grant_audit_action first.\n` +
+        `  Refusing to write grants whose audit rows would be silently discarded —\n` +
+        `  the grants are irreversible and the actor record would be missing forever.`,
+    );
+  }
+  console.log('\nGUARD 0 — AuditAction.PROMO_GRANT_CREDITED present in pg_enum ✔');
+
   // ---- BASELINE, captured before anything changes -------------------------
   const population = await derivePopulation(prisma);
   const beforePaid = await bucketSum(prisma, 'paid');
@@ -221,6 +249,9 @@ async function main() {
     balanceAfter: bigint;
     seq: bigint;
   }[] = [];
+  /** How many of the population already held a grant, counted by the
+   *  pre-filter rather than by absorbed collisions — see the note at the
+   *  pre-filter for why that distinction is load-bearing. */
   let already = 0;
 
   const ROLLBACK = Symbol('dry-run rollback');
@@ -242,18 +273,59 @@ async function main() {
           );
         }
 
-        for (const practiceId of inTx) {
+        // ⚠️ PRE-FILTER. THE COLLISION MUST NEVER HAPPEN INSIDE THIS
+        // TRANSACTION, AND `already_granted` IS NOT A SAFE WAY TO DISCOVER IT.
+        //
+        // The first draft simply called `grantPromoCredit` for all 175 and let
+        // the idempotency key absorb the duplicates. The QA rehearsal killed it
+        // on the first already-funded practice:
+        //
+        //     duplicate key value violates unique constraint …
+        //     current transaction is aborted, commands ignored
+        //
+        // A unique violation aborts the WHOLE Postgres transaction, so the
+        // second practice onwards cannot be written and `COMMIT` becomes a
+        // silent `ROLLBACK`. On production's first run there are no grants to
+        // collide with and it would have "worked" — and every RE-RUN would have
+        // died, which is exactly the idempotency ruling #99 demanded.
+        //
+        // Reading which keys already exist and inserting only the rest makes
+        // the common path collision-free. A racing signup can still collide;
+        // then this transaction aborts and writes NOTHING, and the next run
+        // succeeds because the pre-filter now sees that practice as funded.
+        // Idempotent at the RUN level, which is the level that matters here.
+        const existing = await tx.ledgerEntry.findMany({
+          where: { idempotencyKey: { in: inTx.map(promoGrantKey) } },
+          select: { idempotencyKey: true },
+        });
+        const funded = new Set(
+          existing.map((r: { idempotencyKey: string | null }) => r.idempotencyKey),
+        );
+        already = funded.size;
+
+        const toGrant = inTx.filter((id) => !funded.has(promoGrantKey(id)));
+        console.log(
+          `\n  ${inTx.length} in population · ${already} already funded · ${toGrant.length} to write`,
+        );
+
+        for (const practiceId of toGrant) {
           const res = await grantPromoCredit(practiceId, tx);
-          if (res.granted) {
-            granted.push({
-              practiceId,
-              amountMicroUsd: res.amountMicroUsd,
-              balanceAfter: res.balanceAfter,
-              seq: res.seq,
-            });
-          } else {
-            already += 1;
+          if (!res.granted) {
+            // Unreachable via the pre-filter; reaching it means a concurrent
+            // writer beat us, and the transaction is now poisoned regardless.
+            // Fail loudly rather than report a tidy skip.
+            throw new Error(
+              `GUARD 8 ABORT: ${practiceId} was granted concurrently. The transaction ` +
+                `is aborted and nothing will be written. Re-run — the pre-filter will ` +
+                `see it as funded.`,
+            );
           }
+          granted.push({
+            practiceId,
+            amountMicroUsd: res.amountMicroUsd,
+            balanceAfter: res.balanceAfter,
+            seq: res.seq,
+          });
         }
 
         // ---- GUARD 4 — verify BEFORE COMMIT, inside the transaction --------
@@ -354,8 +426,55 @@ async function main() {
   const finalPromo = await bucketSum(prisma, 'promo');
   console.log(`\n🟢 COMMITTED — ${granted.length} grant(s), ${already} pre-existing.`);
   console.log(`   promo sum ${beforePromo} → ${finalPromo} (delta ${finalPromo - beforePromo})`);
-  console.log(`   audit rows issued: ${granted.length}`);
+
+  // ⚠️ THE AUDIT ROWS ARE READ BACK, NEVER COUNTED FROM THE CALLS MADE.
+  //
+  // The first version printed `audit rows issued: ${granted.length}` — a count
+  // of `logAudit` CALLS — and on the QA rehearsal it cheerfully reported 11
+  // while writing ZERO, because the Postgres enum did not yet hold
+  // `PROMO_GRANT_CREDITED`. `logAudit` is fire-and-forget by design (an audit
+  // write must never refuse a clinical action), so the rejection went to stderr
+  // and the script declared success.
+  //
+  // That is both of AGENTS.md's named defects at once: "a script that prints a
+  // number it does not act on", and "a fire-and-forget writer is proved only by
+  // a test that reads it back". The number below is a measurement.
+  const auditRows = await prisma.auditLog.count({
+    where: {
+      action: 'PROMO_GRANT_CREDITED' as never,
+      targetId: { in: granted.map((g) => g.practiceId) },
+    },
+  });
+  if (auditRows === granted.length) {
+    console.log(`   audit rows VERIFIED: ${auditRows} of ${granted.length}`);
+  } else {
+    // Not fatal — the money is correctly recorded in `ledger_entries`, which is
+    // the authoritative table, and re-running writes no further grants. But it
+    // must be LOUD: ruling #99 required one audit row per grant.
+    console.log(
+      `\n🔴 AUDIT SHORTFALL — ${auditRows} rows for ${granted.length} grants.\n` +
+        `   The grants are committed and correct; the ACTOR RECORD is incomplete.\n` +
+        `   Most likely cause: the 'PROMO_GRANT_CREDITED' value is not in this\n` +
+        `   database's AuditAction enum — a Prisma enum VALUE needs its own\n` +
+        `   ALTER TYPE migration, and 'prisma validate' and 'tsc' both pass\n` +
+        `   without it. Check pg_enum, not the schema file.`,
+    );
+  }
   await prisma.$disconnect();
+
+  // ⚠️ EXIT EXPLICITLY. `logAudit` fans every row out to the admin SSE stream
+  // inside a `setImmediate`, which opens a Redis handle this script never
+  // closes — so the process COMPLETES ITS WORK AND THEN SITS THERE, with the
+  // event loop held open by a socket it does not own.
+  //
+  // Observed on the QA rehearsal: the grants committed, the audit rows landed,
+  // the verification printed, and the process still had to be killed. That is
+  // the worst possible shape for a ONE-SHOT IRREVERSIBLE operation — an
+  // operator watching a "hang" after an unknown amount of work has committed
+  // will reach for Ctrl-C or a re-run, on exactly the script where guessing is
+  // most expensive. Everything above this line is committed and verified, so
+  // exiting here loses nothing.
+  process.exit(0);
 }
 
 main().catch(async (err) => {

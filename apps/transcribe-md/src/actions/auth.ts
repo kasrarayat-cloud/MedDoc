@@ -580,28 +580,50 @@ export async function signupAction(
       // turned on. `billing-grant.ts`'s header records that chain in full; the
       // discovery channel would have been a real doctor's first recording.
       //
-      // ⚠️ IT RUNS ON BOTH BRANCHES, AND THE KEY IS WHY THAT IS SAFE RATHER
-      // THAN SLOPPY. `practice` above is either freshly minted (solo signup) or
-      // an EXISTING practice a T8 invite admits into. The second already holds
-      // its grant — from the backfill, or from its own signup — and
-      // `promoGrantKey` carries no occasion, so the global unique on
-      // `idempotencyKey` refuses the duplicate IN THE DATABASE and this returns
-      // `already_granted`. Branching on `membership` here would produce the
-      // same outcome by reasoning instead of by construction, and would be one
-      // more place for the two paths to drift apart.
+      // ⚠️ IT RUNS ONLY ON THE **CREATE** BRANCH, AND THAT IS A CORRECTNESS
+      // REQUIREMENT RATHER THAN AN OPTIMISATION. A practice minted three
+      // statements ago CANNOT already hold a grant, so this insert cannot
+      // collide — which is the only way a grant is safe inside a transaction
+      // that has to survive.
+      //
+      // ⚠️ THE FIRST VERSION RAN ON BOTH BRANCHES AND WOULD HAVE SILENTLY
+      // DESTROYED SIGNUPS. The reasoning was that a T8 invite into an already
+      // funded practice would collide on the global unique, be absorbed by
+      // `grantPromoCredit`, and return `already_granted` — true of the
+      // JavaScript, and worthless, because **a unique violation aborts the
+      // whole Postgres transaction**. Catching the error in application code
+      // does not recover it. Measured on QA, 2026-08-12:
+      //
+      //     INSERT … duplicate key value violates unique constraint
+      //     SELECT  … current transaction is aborted, commands ignored
+      //     COMMIT  → **ROLLBACK**
+      //
+      // Postgres converts `COMMIT` on an aborted transaction into `ROLLBACK`
+      // and raises NOTHING. So the closure would return normally, Prisma would
+      // commit, the database would roll back, and **the doctor's account would
+      // silently not exist** — on the one path where an invited pilot doctor
+      // signs up. It is the exact class `billing-grant.ts`'s own header warns
+      // about: a stubbed error is a statement about what the author believes,
+      // and only a real Postgres can disagree. It did, in the QA rehearsal
+      // ruling #99 required before execution.
+      //
+      // The invite branch needs no grant: that practice already exists, so it
+      // was either funded by the backfill or deliberately excluded from it.
       //
       // ⚠️ AND IT TAKES `tx`, DELIBERATELY. A grant that fails rolls the
       // practice and the user back with it. The alternative — granting after
       // the commit — can leave a practice that exists and is not funded, which
       // is precisely the state this step exists to make impossible.
-      const grant = await grantPromoCredit(practice.id, tx);
-      if (grant.granted) {
-        grantForAudit = {
-          practiceId: practice.id,
-          amountMicroUsd: grant.amountMicroUsd,
-          balanceAfter: grant.balanceAfter,
-          seq: grant.seq,
-        };
+      if (!membership) {
+        const grant = await grantPromoCredit(practice.id, tx);
+        if (grant.granted) {
+          grantForAudit = {
+            practiceId: practice.id,
+            amountMicroUsd: grant.amountMicroUsd,
+            balanceAfter: grant.balanceAfter,
+            seq: grant.seq,
+          };
+        }
       }
     });
   } catch (err) {

@@ -174,6 +174,38 @@ describe('B7 step 3c — the door census', () => {
     expect(src).toMatch(/grantPromoCredit\s*\(/);
   });
 
+  it('THE SIGNUP GRANT IS GUARDED BY `!membership` — a collision inside that transaction is fatal', () => {
+    // ⚠️ THIS ARM EXISTS BECAUSE THE FIRST DRAFT OMITTED THE GUARD AND WOULD
+    // HAVE SILENTLY DESTROYED SIGNUPS. Granting on the invite branch can
+    // collide with the practice's existing grant; a unique violation aborts the
+    // WHOLE Postgres transaction; and `COMMIT` on an aborted transaction is
+    // converted to `ROLLBACK` with no error raised. Measured on QA 2026-08-12.
+    //
+    // So the invited doctor's account would silently not exist. Nothing in the
+    // unit suite could see it — a mocked client cannot abort — which is why the
+    // guard is pinned HERE, at the source, rather than trusted to a test that
+    // stubs the very failure mode in question.
+    const src = stripComments(read(SIGNUP_DOOR));
+    expect(
+      src,
+      'the signup grant is no longer guarded by !membership — an invite into an ' +
+        'already-funded practice will collide, poison the transaction, and roll ' +
+        'the account back silently',
+    ).toMatch(/if\s*\(\s*!membership\s*\)\s*\{[\s\S]{0,400}?grantPromoCredit\(/);
+  });
+
+  it('the backfill PRE-FILTERS rather than absorbing collisions in its transaction', () => {
+    // Same defect, same transaction semantics, the other door. The backfill
+    // must read which keys exist and insert only the rest; relying on
+    // `already_granted` dies on the first funded practice and makes every
+    // re-run fail — the opposite of the idempotency ruling #99 required.
+    const src = stripComments(read(BACKFILL_DOOR));
+    expect(src, 'the backfill no longer pre-filters already-funded practices').toMatch(
+      /findMany\([\s\S]{0,200}idempotencyKey/,
+    );
+    expect(src, 'the backfill must not treat a collision as a tidy skip').toMatch(/GUARD 8 ABORT/);
+  });
+
   it('the signup door grants INSIDE the transaction and audits OUTSIDE it', () => {
     // Ordering, not presence. A grant outside the transaction can leave a
     // practice that exists and is unfunded; an audit inside it can record a

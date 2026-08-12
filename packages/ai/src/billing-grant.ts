@@ -197,9 +197,42 @@ const UNIQUE_VIOLATION = 'P2002';
  * already states the invariant this preserves — "a grant takes `promo` alone
  * and a top-up takes `paid` alone. No cycle exists."
  *
- * @param client the transaction client when a caller has one (the signup path
- *   MUST pass its `tx`, so a grant that fails rolls the practice back with it
- *   rather than leaving a practice nobody funded); defaults to `prisma`.
+ * ⚠️⚠️ **`already_granted` IS ONLY SURVIVABLE IF THIS CALL OWNS ITS
+ * TRANSACTION. READ THIS BEFORE PASSING A `tx`.**
+ *
+ * A unique violation **aborts the entire Postgres transaction**. Catching the
+ * `P2002` here returns a tidy `already_granted` to the caller and does NOT
+ * un-poison anything: every later statement fails with *"current transaction is
+ * aborted"*, and — the part that bites — **`COMMIT` on an aborted transaction is
+ * silently converted to `ROLLBACK`, with no error raised.**
+ *
+ * Measured on QA, 2026-08-12, in `BEGIN … ROLLBACK`:
+ *
+ *     INSERT …  duplicate key value violates unique constraint
+ *     SELECT …  current transaction is aborted, commands ignored
+ *     COMMIT →  ROLLBACK
+ *
+ * So a caller that passes a shared `tx` and treats `already_granted` as "fine,
+ * carry on" will have **its own unrelated work silently discarded**. That is
+ * not hypothetical: B7 step 3c's first draft did it on the signup path, where
+ * it would have destroyed the account of every invited doctor joining an
+ * already-funded practice — and the unit gate could not see it, because a
+ * mocked client cannot abort.
+ *
+ * **THE RULE, THEREFORE:**
+ *
+ *   · pass a `tx` ONLY when a collision is IMPOSSIBLE by construction — e.g.
+ *     the practice was created inside that same transaction, so nothing could
+ *     have granted it yet. `already_granted` is then unreachable, and the `tx`
+ *     buys the property you actually want: a failed grant rolls the practice
+ *     back with it.
+ *   · where a collision IS possible — a backfill, a reactivation, any
+ *     idempotent re-run — either PRE-FILTER the already-granted practices out,
+ *     or call with the default client so the collision aborts only its own
+ *     implicit transaction.
+ *
+ * @param client the transaction client when a caller has one, subject to the
+ *   rule above; defaults to `prisma`.
  */
 export async function grantPromoCredit(
   practiceId: string,
