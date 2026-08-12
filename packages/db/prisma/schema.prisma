@@ -501,6 +501,27 @@ enum AuditAction {
   /// `20260811190000_b7_checkout_session_audit_actions`.
   CHECKOUT_SESSION_CREATED
   CHECKOUT_SESSION_REFUSED
+
+  /// B7 step 3c (2026-08-12) — a `grant` row was appended to `ledger_entries`.
+  /// Ruling #99 requires one audit row per grant. Emitted by ALL THREE doors —
+  /// the signup transaction (`actions/auth.ts`), the one-shot backfill, and the
+  /// reactivation path (`meddoc-pro/system-admin/actions.ts`) — with the door
+  /// named in metadata, so "which door funded this practice" is a query rather
+  /// than an inference.
+  ///
+  /// Metadata: { practiceId, amountMicroUsd, bucket, balanceAfter, seq, door }.
+  /// `balanceAfter` and `seq` are read BACK off the row the derive trigger
+  /// wrote — never the caller's opinion of what the balance became.
+  ///
+  /// ⚠️ THERE IS NO `_DUPLICATE` SIBLING, DELIBERATELY. `already_granted` is the
+  /// ABSENCE of an event: no money moved and nothing changed, so a row would be
+  /// write amplification on every backfill re-run and every reactivation of an
+  /// already-funded practice. `CHECKOUT_TOPUP_DUPLICATE` exists because there
+  /// the duplicate is a message Stripe SENT US; nobody sends us a grant.
+  ///
+  /// ⚠️ AND IT NEEDS ITS MIGRATION —
+  /// `20260812200000_b7s3c_promo_grant_audit_action`.
+  PROMO_GRANT_CREDITED
 }
 
 /// Document lifecycle status

@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   sendEmailVerification: vi.fn(),
   sendAccountExists: vi.fn(),
   signIn: vi.fn(),
+  grantPromoCredit: vi.fn(),
 }));
 
 vi.mock('@meddoc/db', () => ({
@@ -42,6 +43,8 @@ vi.mock('@meddoc/db', () => ({
     waitlistEntry: { upsert: mocks.waitlistUpsert },
   },
 }));
+// B7 step 3c, door 1 of 3 — the signup transaction now grants the $10 promo.
+vi.mock('@meddoc/ai', () => ({ grantPromoCredit: mocks.grantPromoCredit }));
 vi.mock('next/headers', () => ({ headers: vi.fn(async () => new Map()) }));
 vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
 vi.mock('@/lib/rate-limit', () => ({
@@ -85,6 +88,13 @@ beforeEach(() => {
     await fn({ practice: { create: async () => ({ id: 'p1' }) }, user: { create: async () => ({ id: 'u1' }) }, inviteCode: { updateMany: mocks.inviteUpdateMany } });
   });
   mocks.inviteUpdateMany.mockResolvedValue({ count: 1 });
+  mocks.grantPromoCredit.mockResolvedValue({
+    granted: true,
+    ledgerEntryId: 'le1',
+    amountMicroUsd: 10_000_000n,
+    balanceAfter: 10_000_000n,
+    seq: 1n,
+  });
   mocks.createAuthToken.mockResolvedValue({ raw: 'tok' });
   process.env.SIGNUP_INVITE_CODES = 'PILOT-ALPHA';
 });
@@ -124,6 +134,89 @@ describe('1. uninvited signup is refused, and NOTHING is written', () => {
     // without a code could still probe. It must not even get that far.
     await signupAction({ ok: false, errors: {} } as never, signupForm('NOPE'));
     expect(mocks.userFindUnique).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// B7 STEP 3c — DOOR 1: A SIGNUP FUNDS ITS PRACTICE, OR IT DOES NOT HAPPEN.
+// ----------------------------------------------------------------------------
+// ⚠️ THESE ARMS EXIST BECAUSE THE WIRING BROKE THIS FILE, AND THE BREAKAGE WAS
+// THE USEFUL PART. `mocks.transaction`'s fake client had no `ledgerEntry`, so
+// the grant threw, the signup's own catch swallowed it into `ok: false`, and
+// "creates the account" went red — a test written about invite codes correctly
+// detecting a change to the money path. Repairing it by teaching the mock to
+// grant would have restored green and asserted nothing; these arms are what
+// make the repair carry its weight.
+// ============================================================================
+describe('2b. the signup grants the $10 promo — B7 step 3c, door 1', () => {
+  it('grants exactly once, for the practice the signup just minted', async () => {
+    await signupAction({ ok: false, errors: {} } as never, signupForm('PILOT-ALPHA'));
+    expect(mocks.grantPromoCredit).toHaveBeenCalledOnce();
+    expect(mocks.grantPromoCredit.mock.calls[0][0]).toBe('p1');
+  });
+
+  it('passes the TRANSACTION CLIENT, not the global prisma', async () => {
+    // ⚠️ THE WHOLE SAFETY PROPERTY IS IN THE SECOND ARGUMENT. With `tx`, a
+    // failed grant rolls the practice and user back with it. With the global
+    // client, the grant is a separate transaction — and a failure leaves a
+    // practice that exists, works, and is funded by nobody. Both spellings
+    // typecheck and both look correct in review.
+    await signupAction({ ok: false, errors: {} } as never, signupForm('PILOT-ALPHA'));
+    const [, client] = mocks.grantPromoCredit.mock.calls[0];
+    expect(client, 'the grant was not given the transaction client').toBeDefined();
+    // It is the object the $transaction mock handed the callback — identified
+    // by a member only that fake carries.
+    expect((client as { practice?: unknown }).practice).toBeDefined();
+  });
+
+  it('A FAILED GRANT CREATES NO ACCOUNT', async () => {
+    // The inverse of the arm above, and the reason it matters. If the grant
+    // throws, the signup must fail — not succeed with an unfunded practice.
+    mocks.grantPromoCredit.mockRejectedValueOnce(new Error('ledger refused'));
+    const res = await signupAction({ ok: false, errors: {} } as never, signupForm('PILOT-ALPHA'));
+    expect(res?.ok, 'an unfundable signup reported success').toBe(false);
+  });
+
+  it('audits the grant — and NOT when the practice already had one', async () => {
+    // `already_granted` is the absence of an event (a T8 invite into an
+    // existing, already-funded clinic). No row, deliberately — see the schema
+    // comment on PROMO_GRANT_CREDITED.
+    await signupAction({ ok: false, errors: {} } as never, signupForm('PILOT-ALPHA'));
+    expect(
+      mocks.logAudit.mock.calls.find((c) => c[0]?.action === 'PROMO_GRANT_CREDITED'),
+      'a grant was written with no audit row',
+    ).toBeTruthy();
+
+    vi.clearAllMocks();
+    mocks.checkRateLimit.mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    mocks.userFindUnique.mockResolvedValue(null);
+    mocks.inviteFindUnique.mockResolvedValue(null);
+    mocks.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<void>) => {
+      await fn({
+        practice: { create: async () => ({ id: 'p1' }) },
+        user: { create: async () => ({ id: 'u1' }) },
+        inviteCode: { updateMany: mocks.inviteUpdateMany },
+      });
+    });
+    mocks.grantPromoCredit.mockResolvedValue({ granted: false, reason: 'already_granted' });
+
+    await signupAction({ ok: false, errors: {} } as never, signupForm('PILOT-ALPHA'));
+    expect(
+      mocks.logAudit.mock.calls.find((c) => c[0]?.action === 'PROMO_GRANT_CREDITED'),
+      'audited a grant that never happened',
+    ).toBeUndefined();
+  });
+
+  it('the audit row carries no PHI and no raw BigInt', async () => {
+    await signupAction({ ok: false, errors: {} } as never, signupForm('PILOT-ALPHA'));
+    const call = mocks.logAudit.mock.calls.find((c) => c[0]?.action === 'PROMO_GRANT_CREDITED');
+    const json = JSON.stringify(call?.[0]);
+    // A grant is a fact about a wallet. The doctor's address is not part of it.
+    expect(json).not.toContain('new.doctor@example.com');
+    expect(json).not.toContain('New Doctor');
+    // JSON.stringify throws on a bigint — that it serialised at all is the
+    // assertion. The metadata column is JSON.
+    expect(json).toContain('10000000');
   });
 });
 

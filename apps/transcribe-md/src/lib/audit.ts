@@ -271,7 +271,22 @@ export type AuditAction =
   // ⚠️ BOTH ALSO NEED THE PRISMA ENUM **AND** A MIGRATION
   // (`20260811190000_b7_checkout_session_audit_actions`).
   | 'CHECKOUT_SESSION_CREATED'
-  | 'CHECKOUT_SESSION_REFUSED';
+  | 'CHECKOUT_SESSION_REFUSED'
+  // B7 step 3c (2026-08-12) — a `grant` row was appended to `ledger_entries`.
+  // Ruling #99 requires one audit row per grant. Written here by the SIGNUP
+  // door (`actions/auth.ts`) and by the BACKFILL; the third door (reactivation)
+  // lives in meddoc-pro and writes the same label through that app's mirror of
+  // this union.
+  //
+  // Metadata: { practiceId, amountMicroUsd, bucket, balanceAfter, seq, door }.
+  // `balanceAfter` and `seq` come off the created row, not from the caller.
+  //
+  // ⚠️ NO `_DUPLICATE` SIBLING. `already_granted` is the absence of an event —
+  // see the schema comment for why that differs from CHECKOUT_TOPUP_DUPLICATE.
+  //
+  // ⚠️ AND IT NEEDS THE PRISMA ENUM **AND** A MIGRATION
+  // (`20260812200000_b7s3c_promo_grant_audit_action`).
+  | 'PROMO_GRANT_CREDITED';
 
 export interface AuditLogInput {
   action: AuditAction;
