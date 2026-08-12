@@ -8315,3 +8315,123 @@ permanently, so it is the last moment any append-only column can be added for
 free. Anything B9 will want on `ledger_entries` should be argued for **before**
 that item runs, not after — and "B9 has not been designed yet" is a reason to
 check, not a reason to assume it wants nothing.
+
+---
+
+## 🟩 B8 STEP 2 IS LIVE IN PRODUCTION — `b4738ad8`, 2026-08-12T06:00Z
+
+| | |
+|---|---|
+| deployed commit | `b4738ad86c15b1f4a33f70b0d9a837049f4f9d6a` |
+| declaration | `docs/foundation/deploys/20260812-b4738ad8.md` — **written 05:14Z, 40 minutes BEFORE the deploy ran** |
+| deploy log | `docs/deploy-logs/deploy-20260812T055458Z.log` |
+| rollback tag | **`:pre-b8s2-20260812`** — app `fa219f877a58` / worker `daa21860f140`, **cut BEFORE `deploy-prod.sh` ran**, verified by id match against the running containers |
+| app image | `fa219f877a58` → **`135784a005d7`** |
+| worker image | `daa21860f140` → **`c72c02e027a9`** |
+| migration | **none** — 100 → 100, asserted by the deploy itself |
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `b4738ad86c15b1f4a33f70b0d9a837049f4f9d6a`:**
+   · `CI` 31565843507 a1
+   · `e2e` 31565843786 a1
+   · `a11y-ci` 31565843508 a1
+   · `secrets-scan` 31565843512 a1
+
+All `a1` — no re-runs anywhere, on the PR head or the merge commit, so there is
+nothing to explain. The PR head was also 4 of 4 first time; `e2e` took 41m18s
+and the `16-account-settings` flake of issue #610 did **not** recur.
+
+### THE DECLARATION, JUDGED — 19 of 19, EVERY ONE AS DECLARED
+
+**What must change**
+
+| # | declared | measured | |
+|---|---|---|---|
+| 1 | app image moves from `fa219f877a58` | `135784a005d7` | ✓ |
+| 2 | worker image moves from `daa21860f140` | `c72c02e027a9` | ✓ |
+
+**What must NOT change**
+
+| # | declared | measured | |
+|---|---|---|---|
+| 3 | `_prisma_migrations` 100 | 100 | ✓ |
+| 4 | **`ledger_entries` 0** | **0** | ✓ |
+| 5 | `transcribe_visits` 25 | 25 | ✓ |
+| 6 | … `signedAt IS NOT NULL` 17 | 17 | ✓ |
+| 7 | … `status = 'FAILED'` 0 | **0** | ✓ |
+| 8 | `transcribe_md_patients` 16 | 16 | ✓ |
+| 9 | `api_usage_events` 1325 | 1325 | ✓ |
+| 10 | `ai_calls` 1126 | 1126 | ✓ |
+| 11 | `users` 196 | 196 | ✓ |
+| 12 | `practices` 197 | 197 | ✓ |
+| 13 | `price_rates` 44 | 44 | ✓ |
+| 14 | `audit_logs` with `CHECKOUT_%` 0 | 0 | ✓ |
+| 15 | `POST /api/stripe/webhook` 503 | 503 | ✓ |
+| 16 | `POST /api/stripe/checkout` 401 | 401 | ✓ |
+| 17 | 9 of 9 containers healthy | 9 of 9 | ✓ |
+| 18 | co-tenants `307/404/200/200/410` | exactly that | ✓ |
+| 19 | **`BILLING_ENFORCED` unset in the LIVE containers** | **absent from both**, positive-controlled | ✓ |
+
+### ⚠️ `audit_logs` MOVED +16, AND IT WAS EXCLUDED IN ADVANCE — WITH ITS REASON
+
+10731 → 10747. The declaration deliberately did **not** carry `audit_logs` as a
+must-not-change total, because ordinary traffic writes to it, and declared the
+falsifiable form instead: **no row from a billing or checkout action** (row 14).
+
+Enumerated rather than assumed. All 16 are human traffic between **05:24Z and
+05:26Z — half an hour BEFORE the deploy started at 05:54Z**:
+
+`ADMIN_API_ACCESS` 5 · `LOGIN_SUCCESS` 3 · `MFA_CHALLENGE_PASSED` 2 ·
+`ADMIN_DASHBOARD_ACCESS` 2 · `VIEWED_VISIT_LIST` 2 · `VIEWED_SETTINGS` 1 ·
+`VIEWED_PATIENT_LIST` 1. That sums to exactly 16, and nothing in it is
+billing-shaped.
+
+⚠️ **It also means another actor was signed in during this session** — an admin
+login at 05:24Z, not this loop. Recorded because a session that assumes it is
+alone will attribute somebody else's movement to itself.
+
+### ⚠️ AND THE QUERY THAT INVESTIGATED IT LIED FIRST
+
+The first breakdown query used a **30-minute** window and returned **zero rows**
+— against a count that had provably moved by 16. Two wrong explanations were
+available and both were plausible: the wrong column name (an earlier query in
+this same session had already failed on `createdAt`, which `api_usage_events`
+does not have either) and an empty set.
+
+It was neither. **The window was narrower than the measurement interval** —
+baseline at 05:14Z, measurement at 06:05Z, a 51-minute gap being asked about
+over 30 minutes. The contradiction is what caught it: *a zero that disagrees
+with a number you already measured is a broken query, not a clean answer.*
+Widened to 90 minutes, all 16 appeared at once.
+
+### WHAT IS LIVE, AND WHAT IS NOT
+
+**Live:** the two seams compiled into the worker image and called on every
+visit — `admitVisitOrThrow` before the first vendor call, `chargeVisitUsage`
+after READY. Both return immediately, because `billingEnforced()` is false.
+
+**NOT live:** any billing behaviour whatsoever. No balance is read, no ledger
+row is written, no visit is blocked. `ledger_entries` still holds **0 rows**,
+which is assertion 4 and the one that carries the item — rulings 89(e), 90(d)
+and 94(e) all depend on that state, and B7 step 3 is the item that will
+deliberately end it.
+
+⚠️ **THE FLAG IS THE ONLY THING BETWEEN THIS CODE AND A TOTAL CLINICAL OUTAGE**,
+and that is not hyperbole about a hypothetical: with 0 rows in `ledger_entries`,
+turning `BILLING_ENFORCED=true` today refuses every visit for every doctor.
+Row 19 exists so that fact is checked in the containers rather than assumed from
+the compose file, and row 7 exists so the symptom is checked too.
+
+### ⚠️ OWED BEFORE THE FLAG IS EVER TURNED ON — THE QA BEHAVIOURAL PROOF
+
+RELAY requires *"B8 must be proven on QA"*, and this item does **not** discharge
+it. What exists is a unit-level gate over the decision logic plus a type-checked
+wiring; what does not exist is a visit walked end to end through the real worker
+with the flag on, watching admission refuse and the visit land FAILED with a
+`transient`/`permanent` category.
+
+That proof is cheap on QA — the stack's `ledger_entries` is also empty, so a
+zero-balance refusal is its natural state — and it is **a precondition of
+enabling the flag**, not of landing this code. Named here so the next session
+does not have to re-derive that it is missing.
