@@ -8836,3 +8836,45 @@ and are named here so they are argued rather than assumed:
 
 **Recorded as PARKED pending the owner on question 2** — see the morning report.
 
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `1a83389a7e9c54235d795bf2d76f9f4ab755301b`:**
+   · `CI` 31595557683 a1
+   · `e2e` 31595557794 a1
+   · `a11y-ci` 31595557666 a1
+   · `secrets-scan` 31595557659 a1
+
+All `a1` — no re-runs on the PR head or the merge commit, so there is nothing to
+explain. The PR head (`e845b394`) was also 4 of 4 first time
+(`CI` 31591999107 · `e2e` 31591998983 · `a11y-ci` 31591999133 ·
+`secrets-scan` 31591998982). PR **#618**, branch retired on merge.
+
+⚠️ **NOTE FOR THE RECORD — issue #610's profile-chip flake did NOT fire on
+either run.** Both `e2e` runs passed with no retry, which is worth writing down
+precisely because the previous session's citation was green only *on retry #1*
+and observed that "green and clean have stopped being the same thing for that
+spec". These two were clean. That is one observation, not a trend, and it does
+not close #610.
+
+### ⚠️ NOT DEPLOYED, AND THE REASON IS THE ITEM'S OWN CLAIM
+
+Every prior B-step deployed on the day it merged. **This one deliberately did
+not**, and it is recorded here rather than left as a gap somebody has to notice:
+
+`grantPromoCredit` has **no call site** — asserted by the gate's census arm,
+with a positive control proving the census can see one (M8 named the file). So a
+deploy would ship code that cannot execute, and §2.5's declaration would read
+"nothing but the image ids" with nothing behind it that could have moved a
+number anyway.
+
+⚠️ **AND THE CENSUS IS THE STRONGER EVIDENCE OF INERTNESS, NOT THE WEAKER.** A
+post-deploy comparison shows that nothing moved *on one production run*; the
+census shows that nothing *can* call the writer at all. Deferring the deploy
+therefore costs no proof.
+
+**What it does cost is the prod == `main` invariant**, and that is the honest
+entry on the other side of the ledger. `main` now carries one inert commit
+production does not. **The next item that deploys must carry this one with it**,
+and its declaration must say so — a two-change deploy whose declaration names
+only the second change is exactly the shape §2.5 exists to prevent.
+
