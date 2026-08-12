@@ -181,6 +181,16 @@ export {
   type BucketDraw,
   type LedgerBucket,
 } from './billing-buckets';
+// B7 step 3b — the promo grant writer. It ships UNWIRED (ruling 90(e)'s
+// precedent) and is exported anyway, because the two call sites step 3c takes
+// live in another package (`auth.ts`) and in a script — so an unexported writer
+// would make step 3c a bigger diff than the decision it executes.
+export {
+  grantPromoCredit,
+  promoGrantKey,
+  PROMO_GRANT_MICRO_USD,
+  type GrantResult,
+} from './billing-grant';
 // B8 step 2 — the pipeline seam. The same reason as the block above applies
 // with more force: `billing-usage-source.ts` is the file whose whole job is a
 // column-name mapping (`timestamp` → `createdAt`), and that is precisely the
