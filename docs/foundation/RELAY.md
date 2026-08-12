@@ -8878,3 +8878,220 @@ production does not. **The next item that deploys must carry this one with it**,
 and its declaration must say so — a two-change deploy whose declaration names
 only the second change is exactly the shape §2.5 exists to prevent.
 
+---
+
+## ✅ B8's QA BEHAVIOURAL PROOF IS DONE — AND IT FOUND THREE SHIPPED DEFECTS ON ITS FIRST RUN — 2026-08-12
+
+**Item:** the debt RELAY has carried across **four** items — B8 step 1, B8 step 2,
+B7 step 3a and B7 step 3b — each naming it and none discharging it. Ruling **#98**,
+PROVISIONAL.
+
+**Status: PROVEN, both directions, through the real worker.** `ledger_entries`
+holds **0 rows in production** (re-verified after this work) and **3 rows on QA**,
+deliberately — see #98(a).
+
+⚠️ **THREE, NOT ONE, AND THE FIRST DRAFT OF THIS ROW SAID ONE.** The proof ran
+three times — once before the fixes, once after, once after the harness's own
+matcher was corrected — and each run creates its **own** `b8-proof-*` practice
+and grants it once. So the session left three grant rows on three practices, not
+one. The draft number was true of a single run and false of the session, and it
+was caught by re-querying rather than by any check. *Re-measure any number you
+did not observe yourself, in the same pass you write it down.*
+
+Each row carries `balanceAfter = 10000000` rather than 10/20/30 — an incidental
+confirmation that `ledger_entries_derive()` scopes its running total per
+(practice, bucket) and not per table.
+
+    cmsq5ozvu00002wmjvxy8nftj  b8-proof-b8proof-9b67a630
+    cmsq63l1800002kp7w9ldgqtv  b8-proof-b8proof-57bb7a85
+    cmsq65b3w00002dmtpdl08wu3  b8-proof-b8proof-8e805699
+
+### WHAT WAS OWED, IN RELAY'S OWN WORDS
+
+> *"What exists is a unit-level gate over the decision logic plus a type-checked
+> wiring; what does not exist is a visit walked end to end through the real
+> worker with the flag on, watching admission refuse and the visit land FAILED
+> with a `transient`/`permanent` category."* — B8 step 2
+>
+> *"It is now BROADER than B8 step 2 left it: my change makes a promo-funded
+> wallet ADMIT, so the proof should walk both directions."* — B7 step 3a
+
+### ⚠️ RELAY CALLED THIS PROOF "CHEAP". IT WAS NOT, AND THE REASON IS A FINDING
+
+B8 step 2's row says *"that proof is cheap on QA — the stack's `ledger_entries`
+is also empty, so a zero-balance refusal is its natural state."* That sentence is
+**true about the database and false about the code.**
+
+**The QA worker image was built 2026-08-11 03:46Z and contained NONE of the
+billing programme** — zero of the six `billing-*.ts` files, and `worker.ts` with
+**0** occurrences of `admitVisitOrThrow`. B5's ledger migration is timestamped
+`20260811070000`, so the image predates the table itself.
+
+⚠️ **AND `assert-migrations-applied --qa` WAS GREEN THROUGHOUT, CORRECTLY.**
+The mechanism defeats a check this programme added specifically to stop QA
+drifting: **`db-migrate:qa` is rebuilt (20:09Z on 08-11) while the app and worker
+images are not.** So the schema check reads the migration runner's work and says
+QA is current; the *code* was a day and a half behind, and nothing watches it.
+The app image (`14:54Z`) and the worker image (`03:46Z`) were **eleven hours
+apart from each other** — the stack was not even internally consistent.
+
+> **A green `--qa` migrations check says the QA DATABASE is current. It says
+> nothing about the QA IMAGES, and the two drift independently.** This is the
+> watched-set failure arriving one layer out from where AGENTS.md already
+> records it.
+
+The worker image was rebuilt as part of this item. **The QA app image is still
+stale and is NOT fixed here** — named below.
+
+### THE PROOF
+
+`apps/transcribe-md/scripts/qa/b8-admission-on-qa.ts`, run inside the QA worker
+container with `docker-compose.qa.billing.yml` supplying `BILLING_ENFORCED=true`.
+Not a unit test: it creates a practice, a user, a patient and two visits, and
+enqueues real `process_visit` jobs on the real BullMQ queue.
+
+**The two arms are the same visit shape from the same function and differ in
+exactly one fact — whether the practice holds a `grant` row.** A visit can land
+FAILED for a dozen reasons; only the pair makes the wallet the variable.
+
+| | ARM 1 — unfunded | ARM 2 — funded |
+|---|---|---|
+| terminal state | **FAILED** in 4s | **READY** in 2s |
+| `failureCategory` | **`permanent`** | null |
+| `processingStartedAt` | **NULL** | set |
+
+`processingStartedAt IS NULL` is the structural discriminator: admission runs
+before the status update that stamps it, so **nothing that fails later can
+imitate it.** ⚠️ `ai_calls` is deliberately NOT used for this — under
+`MOCK_AI_CALLS` the mocked path suppresses those rows by ruling, so "zero vendor
+rows" is the state of every QA visit and the check could never go red.
+
+ARM 2 also observes the claim `billing-pipeline.ts` makes and no unit test can:
+`commitVisitCharge` **really refused** (prod-only, ruling 90(c)) and the visit
+**reached READY anyway** — *"no billing failure is worth a clinical outcome"*,
+measured rather than stubbed.
+
+### ⚠️ DEFECT 1 — ADMISSION THREW OUTSIDE THE `try`. IN DEPLOYED CODE.
+
+`admitVisitOrThrow` was called at `worker.ts:368`. The `try` opened at **:421**.
+The call site's own comment read *"so it joins the existing catch below"* — it
+joined nothing, by fifty-three lines.
+
+**Measured, first run:** the refusal fired correctly and logged its exact reason
+three times (once per BullMQ attempt), and the visit sat at **`status=QUEUED`,
+`failureCategory=NULL`, `reviewReason=NULL`** for the four minutes the harness
+waited. **Not FAILED. Not categorised.**
+
+⚠️ **THIS IS WORSE THAN THE OUTAGE THE FLAG EXISTS TO GUARD.** #95(a) reasons
+about turning the flag on early as *"every visit FAILS, for every doctor,
+immediately"* — loud and diagnosable. The reality would have been every refused
+visit **hanging at QUEUED** until the 15-minute stuck-visit watchdog force-failed
+it as `transient` — filing an out-of-money refusal as a server blip, which is the
+exact misfiling ruling 95(d) drew its distinction to prevent, and which B8 step
+3's auto-credit would then try to refund.
+
+**Nothing could have caught it.** `gate-b8-pipeline-seam.test.ts` proves the
+throw; `error-categorize.test.ts` proves the classification. **The join between
+them was never exercised, because no unit test runs `processVisit`.** Ruling
+#96(a)'s shape for the third time in this programme.
+
+**Fixed** by opening the `try` above the admission call. The ordering the
+original comment argued for is preserved — admission still runs after input
+validation and before the status update, so a refused visit never acquires
+`processingStartedAt`.
+
+### ⚠️ DEFECT 2 — THE IDEMPOTENCY MATCHER READ A FIELD THIS DRIVER DOES NOT SET
+
+`isPromoGrantCollision` matched on `err.meta.target`. Under **Prisma 7.9.0 with
+`@prisma/adapter-pg`** a real P2002 carries `meta = { modelName,
+driverAdapterError }` and **no `target` at all**. Measured, not inferred:
+
+    meta.target                                → undefined
+    meta.driverAdapterError.cause.constraint   → { fields: ['"idempotencyKey"'] }
+    meta.driverAdapterError.cause.originalCode → "23505"
+
+⚠️ **NOTE THE QUOTE CHARACTERS** — the adapter reports `'"idempotencyKey"'`, so
+even code reading the right place fails a bare `=== 'idempotencyKey'`.
+
+So ruling **#97(d)'s idempotency was inoperative**: every second grant THREW
+instead of returning `already_granted`. **B7 step 3c's backfill would have
+aborted mid-run, and the signup/backfill interleaving #97(d) was written to
+handle would have rolled back a doctor's registration.**
+
+**Fixed** by reading both locations, normalising the quotes, and matching the
+field OR the index name **exactly** — `ledger_entries_practiceId_bucket_seq_key`
+must never be absorbed (ruling 89(d)). **"Cannot tell" now RETHROWS**, fail-closed.
+
+### ⚠️ DEFECT 3 — THE REFUSAL TOLD THE DOCTOR THEIR AUDIO WAS CORRUPT
+
+Once defect 1 was fixed the refusal reached `buildUserFacingFailureReason`, which
+had no billing branch. At `currentLayer='init'` with `category='permanent'` it
+produced, verbatim:
+
+> *"Processing failed during setup. The audio file may be corrupt or in an
+> unsupported format — please re-upload to try again."*
+
+`visit-failed-view.tsx:130` renders that string to the doctor (`{reason ??
+copy.body}`). Every clause is false for a practice out of credit, and the
+instruction is **actively harmful**: re-uploading costs the work again and fails
+identically, permanently. It is the mirror of the misfiling 95(d) already forbade
+— that one refuses to tell a paid-up doctor they are out of credit; this told an
+out-of-credit doctor their recording was broken.
+
+**Fixed at both layers** — the worker's stored `reviewReason` (three distinct
+strings, one per refusal reason) and the UI's headline/CTA, which otherwise still
+said *"Couldn't process this audio"* and pointed at **Upload new audio**.
+
+### ⚠️ AND THE PROOF'S OWN CHECK WAS WRONG FIRST — SUBSTRING TRAP, FIFTH SIGHTING
+
+The negative assertion was written as `/corrupt|unsupported format|re-upload/i`.
+The fixed copy says, deliberately, **"re-uploading will not help"** — the clause
+that exists to stop the doctor wasting the work. **The bare token matched it, and
+the check went RED for the fix SUCCEEDING.**
+
+Both families at once: the substring trap (`'dashboard'` contains `'board'`), and
+*"a check that fails when the thing it guards starts working is a check nobody
+keeps."* The matcher now names the misleading CLAIM, and **carries both controls
+in the run** — it must fire on the verbatim pre-fix string and stay quiet on the
+fixed one.
+
+### GATE
+
+Nine assertions across three arms, plus two instrument controls (the balance
+reader reads 0 → 10,000,000, so ARM 1's zero is a measurement) and the two copy
+controls. **Final run: exit 0.**
+
+Unit suite **3,601 passed / 4 skipped**. Three mutations, each declared, applied
+and restored:
+
+    M1  collidedFields reads only meta.target   → the MEASURED-shape arm reds, ALONE
+    M2  absorb any P2002                        → BOTH (practiceId,bucket,seq) arms red
+    M3  "cannot tell" fails OPEN                → the unidentifiable-collision arm reds
+
+⚠️ **M1 IS THE ONE THAT MATTERS: it reds exactly one arm, and the two
+pre-existing `meta.target` arms stay GREEN against the broken code.** That is the
+closed loop between a stub and a matcher, demonstrated rather than asserted.
+
+### WHAT THIS ITEM DOES **NOT** CLAIM
+
+- **The debit's SUCCESS path has still never executed, in any environment.** ARM
+  2 proves a READY visit SURVIVES the debit failing — not that a debit can
+  succeed. Unchanged from B8 step 2, and it stays that way until the flag is on
+  in production.
+- **Nothing was deployed.** These fixes are on `main` only; see below.
+- **The QA APP image is still stale** (2026-08-11 14:54Z). Only the worker was
+  rebuilt. Nothing in this item needed the app, but the drift is real and now
+  named.
+- **`BILLING_ENFORCED` is OFF everywhere**, and the QA stack was restored to
+  flag-absent with `printenv` confirming it in the container.
+
+### ⚠️ THE DEPLOY DEBT NOW COVERS FOUR CHANGES, NOT ONE
+
+B7 step 3b's row says *"the next item that deploys must carry this one with
+it."* That is now **B7 step 3b + this item's three fixes**, and the §2.5
+declaration must name all of them. **Defect 1 is a fix to code that IS deployed**
+— it is inert today only because `BILLING_ENFORCED` is off, which is exactly the
+condition that stops being true when the flag is enabled.
+
+**The flag must not be enabled before this deploys.**
+

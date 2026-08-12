@@ -1293,6 +1293,46 @@ arm is a flag, and the two callers keep their two different questions. *Diff the
 callers before you widen a shared thing;* the widening that reads as obviously
 harmless is the one with a deploy gate on the other end.
 
+⚠️ **AND THE `--qa` GREEN COVERS THE DATABASE, NOT THE IMAGES — THE SAME FAILURE
+ONE LAYER OUT, AND THE FIX FOR THE FIRST ONE IS WHAT HIDES IT.**
+
+> **A green `--qa` migrations check says the QA DATABASE is current. It says
+> nothing about the QA IMAGES, and the two drift independently.**
+
+**Reference case, 2026-08-12 — B8's QA behavioural proof.** The QA worker image
+was built `2026-08-11 03:46Z` and contained **none of the B5–B8 billing
+programme**: zero of the six `packages/ai/src/billing-*.ts` files, and a
+`worker.ts` with **0** occurrences of `admitVisitOrThrow`. B5's ledger migration
+is timestamped `20260811070000` — *the image predated the table it was supposed
+to exercise.* Meanwhile `assert-migrations-applied --qa` reported **100 of 100,
+🟢**, and reported it correctly.
+
+**The mechanism is the part to remember, because it is not carelessness.**
+`db-migrate:qa` is a separate image with a separate build, and it gets rebuilt
+whenever migrations are applied (`20:09Z` that day). The app and worker images do
+not. So the migration runner is always fresh, the schema check reads *its* work,
+and the services rot behind a green check that was added **specifically to stop
+QA drifting.** The two service images were also **eleven hours apart from each
+other** (`app 14:54Z`, `worker 03:46Z`) — the stack was not internally consistent
+either, and nothing said so.
+
+⚠️ **THE COST IS PAID BY WHOEVER TRUSTS THE STACK NEXT.** RELAY had recorded that
+B8's proof would be *"cheap on QA — the stack's `ledger_entries` is also empty,
+so a zero-balance refusal is its natural state."* True about the database, false
+about the code: the flag could not do anything, because the seam it gates was not
+in the image. A session that flipped the flag, saw every visit sail through, and
+concluded *"admission does not block"* would have been reading a stale binary and
+would have had a green schema check agreeing with it.
+
+**So: before believing anything behavioural about QA, check the IMAGE, not only
+the migrations.** `docker images | grep ':qa'` for the build dates, and confirm
+the symbol you are about to exercise is actually present:
+
+    docker exec meddoc-qa-transcribe-md-worker-1 sh -c 'ls /app/packages/ai/src | grep billing'
+    docker exec meddoc-qa-transcribe-md-worker-1 grep -c admitVisitOrThrow /app/apps/transcribe-md/src/worker.ts
+
+A zero there is the finding, and it is invisible to every standing check.
+
 ⚠️ **PRISMA OFFERS THE DELETION OF T3's TENANCY WALL AS TIDYING, AND THAT IS WHY
 THE COMPOSITE FK HAS A GUARD.** `transcribe_visits_patientId_practiceId_fkey`
 references `(patientId, practiceId) → transcribe_md_patients(id, practiceId)`,

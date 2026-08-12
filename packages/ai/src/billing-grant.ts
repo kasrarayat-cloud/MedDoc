@@ -223,23 +223,104 @@ export async function grantPromoCredit(
   }
 }
 
+/** The one column whose collision means "this practice already has its promo". */
+const IDEMPOTENCY_FIELD = 'idempotencyKey';
+
+/** …and the index that enforces it, because the driver sometimes reports the
+ *  CONSTRAINT NAME where it otherwise reports the field list. Verified against
+ *  `pg_indexes` on 2026-08-12, not assumed from the Prisma model name. */
+const IDEMPOTENCY_INDEX = 'ledger_entries_idempotencyKey_key';
+
+/**
+ * Does one reported identifier name the promo-grant unique — in EITHER of the
+ * two shapes a driver may use?
+ *
+ * ⚠️ EQUALITY, NOT `includes`. The other unique on this table is
+ * `ledger_entries_practiceId_bucket_seq_key`, and ruling 89(d) makes its
+ * violation the structural signal that the derive trigger's advisory lock was
+ * lost. Substring matching is how that loud fault becomes a quiet
+ * "already_granted" — and AGENTS.md records five sightings of exactly that trap,
+ * one of them in this session's own harness.
+ */
+function namesTheIdempotencyIndex(identifier: string): boolean {
+  return identifier === IDEMPOTENCY_FIELD || identifier === IDEMPOTENCY_INDEX;
+}
+
+/**
+ * WHICH COLUMNS DID THE UNIQUE INDEX REFUSE ON? — or `null` for "cannot tell".
+ *
+ * ⚠️ THIS FUNCTION EXISTS BECAUSE THE ORIGINAL MATCHER READ A FIELD THAT IS NOT
+ * THERE, AND NOTHING COULD SEE IT. B7 step 3b matched on `err.meta.target`,
+ * which is Prisma's documented location and is what the unit gate stubs. Under
+ * the driver this repo actually runs — Prisma 7.9.0 with `@prisma/adapter-pg` —
+ * a real `P2002` carries `meta = { modelName, driverAdapterError }` and **no
+ * `target` at all**. So `fields` was always `[]`, `.some(...)` was always false,
+ * and `grantPromoCredit` THREW on every second grant instead of returning
+ * `already_granted`.
+ *
+ * Measured on the live QA stack 2026-08-12, not inferred:
+ *
+ *     meta.target                                   → undefined
+ *     meta.driverAdapterError.cause.originalCode    → "23505"
+ *     meta.driverAdapterError.cause.constraint      → { fields: ['"idempotencyKey"'] }
+ *
+ * ⚠️ NOTE THE EMBEDDED QUOTE CHARACTERS. The adapter reports `"idempotencyKey"`
+ * WITH the double quotes Postgres uses to quote the identifier, so even code
+ * reading the right place would fail a `=== 'idempotencyKey'` comparison. They
+ * are stripped here, once, rather than at each comparison.
+ *
+ * ⚠️ AND THE FAILURE WAS INVISIBLE TO EVERY TEST, BY CONSTRUCTION. A stubbed
+ * error object is a statement about what the author believes the driver emits.
+ * It agrees with the matcher because the same person wrote both. Only a real
+ * collision against a real Postgres can disagree — which is exactly what the B8
+ * QA behavioural proof did on its first run.
+ *
+ * BOTH sources are read, so this keeps working if a future Prisma restores
+ * `meta.target` or the adapter is swapped.
+ */
+function collidedFields(err: unknown): string[] | null {
+  if (typeof err !== 'object' || err === null) return null;
+  const e = err as {
+    meta?: {
+      target?: unknown;
+      driverAdapterError?: { cause?: { constraint?: { fields?: unknown } } };
+    };
+  };
+
+  const raw: unknown =
+    e.meta?.driverAdapterError?.cause?.constraint?.fields ?? e.meta?.target;
+
+  const list = Array.isArray(raw) ? raw.map(String) : typeof raw === 'string' ? [raw] : null;
+  if (list === null || list.length === 0) return null;
+
+  return list.map((f) => f.replace(/"/g, ''));
+}
+
 /**
  * Is this error the promo-grant unique index refusing a second grant?
  *
- * ⚠️ THE TARGET IS CHECKED, NOT JUST THE CODE. `idempotencyKey` is GLOBALLY
- * unique, so a `P2002` on this table could in principle come from another key
- * shape entirely; and `ledger_entries` also carries `UNIQUE(practiceId, bucket,
- * seq)`, whose violation means the derive trigger's lock was lost — a loud
- * structural fault that must NEVER be reported as "already granted". Reading
- * the code alone would convert that into a silent success.
+ * ⚠️ THE CONSTRAINT IS IDENTIFIED, NOT JUST THE CODE. `idempotencyKey` is
+ * GLOBALLY unique, so a `P2002` on this table could in principle come from
+ * another key shape entirely; and `ledger_entries` also carries
+ * `UNIQUE(practiceId, bucket, seq)`, whose violation means the derive trigger's
+ * lock was lost — a loud structural fault that must NEVER be reported as
+ * "already granted". Reading the code alone would convert that into a silent
+ * success.
+ *
+ * ⚠️ AND "CANNOT TELL" RETHROWS. If neither source yields a field list, this
+ * returns false and the error propagates. That is the fail-closed direction:
+ * the cost of rethrowing a genuine duplicate is a loud, diagnosable error on a
+ * re-run, while the cost of absorbing an unidentified collision is a practice
+ * silently recorded as funded when the row that failed was something else
+ * entirely. On an append-only ledger only the second one is unrecoverable.
  */
 function isPromoGrantCollision(err: unknown, practiceId: string): boolean {
   if (typeof err !== 'object' || err === null) return false;
-  const e = err as { code?: unknown; meta?: { target?: unknown } };
+  const e = err as { code?: unknown };
   if (e.code !== UNIQUE_VIOLATION) return false;
 
-  const target = e.meta?.target;
-  const fields = Array.isArray(target) ? target.map(String) : typeof target === 'string' ? [target] : [];
+  const fields = collidedFields(err);
+  if (fields === null) return false;
 
   // The `practiceId` argument is unused for matching on purpose: the driver
   // reports the CONSTRAINT, not the value. It stays in the signature so the
@@ -247,5 +328,12 @@ function isPromoGrantCollision(err: unknown, practiceId: string): boolean {
   // does need the value has it.
   void practiceId;
 
-  return fields.some((f) => f === 'idempotencyKey' || f.includes('idempotencyKey'));
+  // EXACT SET, not `.some(...)`. The index is single-column, so the only report
+  // that means "already granted" is a list of exactly one identifier naming it
+  // — either the field `idempotencyKey` or the index
+  // `ledger_entries_idempotencyKey_key`. A composite unique that merely
+  // CONTAINED this column would be a different constraint with different
+  // meaning, and `.some` would quietly absorb it; the (practiceId, bucket, seq)
+  // violation fails on length here before the name is even considered.
+  return fields.length === 1 && namesTheIdempotencyIndex(fields[0]);
 }

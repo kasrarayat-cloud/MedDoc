@@ -362,63 +362,96 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
   // transcription branch a few lines down, and admission that runs after the
   // spend has not blocked anything.
   //
-  // It THROWS on refusal (see `admitVisitOrThrow`), so it joins the existing
-  // catch below: `categorizeError` reads the error's own `retryCategory`, and
-  // the FAILED branch records it like any other pipeline failure.
-  await admitVisitOrThrow({ practiceId });
-
-  // text_notes skips TRANSCRIBING — nothing to transcribe.
-  const initialStatus =
-    visit.inputMode === 'text_notes'
-      ? TranscribeVisitStatus.EXTRACTING
-      : TranscribeVisitStatus.TRANSCRIBING;
-
-  await prisma.transcribeVisit.update({
-    where: { id: visitId },
-    data: {
-      status: initialStatus,
-      processingStartedAt: startedAt,
-      needsReview: false,
-      reviewReason: null,
-      // T-M13: previously cleared the five L7 columns here so a retry
-      // wouldn't carry stale 'failed' entries. With per-layer resume
-      // (below), successful L7 outputs are a CHECKPOINT — wiping them
-      // would defeat resumability. Failed L7 layers are nulled by the
-      // per-task catch (clearAutomationColumn) so the skip check
-      // naturally re-runs only those. confidenceScores IS still
-      // cleared because it's rebuilt from scratch in the roll-up
-      // below, and stale failed entries would otherwise leak through.
-      //
-      // ⚠️ `Prisma.JsonNull`, NOT `Prisma.DbNull`, AND THE CHOICE WAS MEASURED
-      // RATHER THAN REASONED. A bare `null` — what this line used to be — lands
-      // in Postgres as the JSONB value `null`, not as SQL NULL. Determined on
-      // QA by writing each variant through the client and reading back:
-      //
-      //     bare null        → sql_null=false  json_null=true
-      //     Prisma.DbNull    → sql_null=TRUE   json_null=false
-      //     Prisma.JsonNull  → sql_null=false  json_null=true   ← identical
-      //
-      // So `JsonNull` preserves the stored bytes exactly and `DbNull` would
-      // silently change them. Production could not settle this: every visit
-      // there holds a real object, because this reset is always overwritten
-      // before processing ends. `DbNull` is the intuitive reading of "null"
-      // and it is the wrong one.
-      confidenceScores: Prisma.JsonNull,
-    },
-  });
-
-  // T-M13 — load the per-layer checkpoint state BEFORE the sequential
-  // stage. On attempt 1 (and after a user-triggered upload reset)
-  // every column is null and the skip checks all return false, so
-  // behavior matches the pre-T-M13 happy path. On BullMQ retry
-  // (attempt > 1) whatever L1-L6 already succeeded is preserved in
-  // columns — the checks below short-circuit those and the retry
-  // resumes at the first non-populated layer.
-  const attempt = job.attemptsMade + 1;
-  const resumeState = await loadResumeState(visitId, job.attemptsMade);
-  const skipped: PipelineLayer[] = [];
-
+  // ⚠️ THE `try` OPENS HERE, ABOVE THE ADMISSION CALL, AND IT DID NOT USED TO.
+  // B8 step 2 wrote at this spot: "It THROWS on refusal, so it JOINS THE
+  // EXISTING CATCH BELOW: `categorizeError` reads the error's own
+  // `retryCategory`, and the FAILED branch records it like any other pipeline
+  // failure." Every clause of that was true about the catch and false about
+  // this call — the `try` began FIFTY-THREE LINES FURTHER DOWN, so a refusal
+  // unwound straight out of `processVisit` past no handler at all.
+  //
+  // Measured on QA 2026-08-12 with `BILLING_ENFORCED=true`, by
+  // `scripts/qa/b8-admission-on-qa.ts`: the refusal fired correctly and logged
+  // its exact reason three times (once per BullMQ attempt), and the visit sat
+  // at **status=QUEUED, failureCategory=NULL, reviewReason=NULL** for the four
+  // minutes the harness waited. Not FAILED. Not categorised. A stuck chart.
+  //
+  // ⚠️ WHY NOTHING CAUGHT IT: both halves were tested and both halves passed.
+  // `gate-b8-pipeline-seam.test.ts` proves `admitVisitOrThrow` throws;
+  // `error-categorize.test.ts` proves `categorizeError` maps the error to
+  // permanent/transient. THE JOIN BETWEEN THEM WAS NEVER EXERCISED, because no
+  // unit test runs `processVisit`. Ruling #96(a)'s shape for the third time in
+  // this programme: two individually-correct billing steps, and the defect
+  // living in the seam between them.
+  //
+  // ⚠️ AND THE FAILURE WAS STRICTLY WORSE THAN THE OUTAGE THE FLAG GUARDS.
+  // `billing-pipeline.ts`'s header reasons about turning the flag on early as
+  // "EVERY VISIT IN PRODUCTION FAILS, for every doctor, immediately" — loud,
+  // diagnosable, and bounded by the flag. What actually happened is quieter and
+  // worse: every refused visit hangs at QUEUED until the 15-minute stuck-visit
+  // watchdog force-fails it as `transient` — filing an out-of-money refusal
+  // under "server blip", which is the exact misfiling ruling 95(d) drew the
+  // `balance_unreadable` distinction to prevent, and which B8 step 3's
+  // auto-credit would then try to refund.
+  //
+  // The ordering the original comment argued for is PRESERVED: admission still
+  // runs after input validation and before the status update below, so a
+  // refused visit never acquires `processingStartedAt` and never claims to have
+  // started. Only the handler boundary moved.
   try {
+    await admitVisitOrThrow({ practiceId });
+
+    // text_notes skips TRANSCRIBING — nothing to transcribe.
+    const initialStatus =
+      visit.inputMode === 'text_notes'
+        ? TranscribeVisitStatus.EXTRACTING
+        : TranscribeVisitStatus.TRANSCRIBING;
+
+    await prisma.transcribeVisit.update({
+      where: { id: visitId },
+      data: {
+        status: initialStatus,
+        processingStartedAt: startedAt,
+        needsReview: false,
+        reviewReason: null,
+        // T-M13: previously cleared the five L7 columns here so a retry
+        // wouldn't carry stale 'failed' entries. With per-layer resume
+        // (below), successful L7 outputs are a CHECKPOINT — wiping them
+        // would defeat resumability. Failed L7 layers are nulled by the
+        // per-task catch (clearAutomationColumn) so the skip check
+        // naturally re-runs only those. confidenceScores IS still
+        // cleared because it's rebuilt from scratch in the roll-up
+        // below, and stale failed entries would otherwise leak through.
+        //
+        // ⚠️ `Prisma.JsonNull`, NOT `Prisma.DbNull`, AND THE CHOICE WAS MEASURED
+        // RATHER THAN REASONED. A bare `null` — what this line used to be — lands
+        // in Postgres as the JSONB value `null`, not as SQL NULL. Determined on
+        // QA by writing each variant through the client and reading back:
+        //
+        //     bare null        → sql_null=false  json_null=true
+        //     Prisma.DbNull    → sql_null=TRUE   json_null=false
+        //     Prisma.JsonNull  → sql_null=false  json_null=true   ← identical
+        //
+        // So `JsonNull` preserves the stored bytes exactly and `DbNull` would
+        // silently change them. Production could not settle this: every visit
+        // there holds a real object, because this reset is always overwritten
+        // before processing ends. `DbNull` is the intuitive reading of "null"
+        // and it is the wrong one.
+        confidenceScores: Prisma.JsonNull,
+      },
+    });
+
+    // T-M13 — load the per-layer checkpoint state BEFORE the sequential
+    // stage. On attempt 1 (and after a user-triggered upload reset)
+    // every column is null and the skip checks all return false, so
+    // behavior matches the pre-T-M13 happy path. On BullMQ retry
+    // (attempt > 1) whatever L1-L6 already succeeded is preserved in
+    // columns — the checks below short-circuit those and the retry
+    // resumes at the first non-populated layer.
+    const attempt = job.attemptsMade + 1;
+    const resumeState = await loadResumeState(visitId, job.attemptsMade);
+    const skipped: PipelineLayer[] = [];
+
     // -------------------------------------------------------------------
     // Per-mode input stage — produces (entities, contextText).
     // -------------------------------------------------------------------
@@ -1405,6 +1438,46 @@ function buildUserFacingFailureReason(
   // Give the doctor an accurate, actionable banner.
   if (err instanceof Error && err.name === 'AnthropicRefusalError') {
     return 'Processing was declined by the AI provider’s safety system for this visit’s content. This is not an audio problem — please review the recording/notes, and if the content is clinically appropriate, contact support.';
+  }
+
+  // ── B8 — A BILLING REFUSAL IS NOT AN AUDIO PROBLEM EITHER ────────────────
+  // ⚠️ THE SAME DEFECT THE BRANCH ABOVE EXISTS TO FIX, ARRIVING AGAIN THROUGH A
+  // NEW ERROR CLASS. Admission refuses at `currentLayer='init'` with
+  // `category='permanent'`, so without this branch the fall-through below
+  // produces, verbatim:
+  //
+  //     "Processing failed during setup. The audio file may be corrupt or in
+  //      an unsupported format — please re-upload to try again."
+  //
+  // Every clause of that is false for a practice that is out of credit, and the
+  // instruction is actively harmful: re-uploading costs the doctor the work
+  // again and fails identically, permanently, because the wallet is what is
+  // empty. `visit-failed-view.tsx:130` renders this string as the banner body
+  // (`{reason ?? copy.body}`), so it is what the doctor reads, not an ops note.
+  //
+  // ⚠️ AND IT IS THE MIRROR OF THE MISFILING RULING 95(d) ALREADY FORBADE.
+  // `billing-pipeline.ts`'s header refuses to file a system fault under
+  // "insufficient balance" because that "would tell a paid-up doctor they are
+  // out of credit". This is the same lie pointed the other way — telling an
+  // out-of-credit doctor their audio is corrupt — and the fix is symmetrical.
+  //
+  // Read structurally off the error, never by matching its message.
+  if (err instanceof Error && err.name === 'BillingAdmissionError') {
+    const reason = (err as Error & { reason?: unknown }).reason;
+    // OUR fault, and it may clear on its own — `categorizeError` already makes
+    // this one `transient`, so the CTA below is a retry rather than a dead end.
+    if (reason === 'balance_unreadable') {
+      return 'We couldn’t verify this practice’s billing balance, so processing was held rather than started. This is a problem on our side, not with your recording — please try again in a few minutes, and contact support if it persists.';
+    }
+    // The practice holds money no debit path can draw on. Deliberately NOT
+    // folded into the copy below: `billing-balance.ts` keeps this refusal
+    // separate precisely because naming it makes a configuration bug visible,
+    // and "you are out of credit" said to a funded practice is a lie that
+    // reconciles.
+    if (reason === 'credit_not_spendable') {
+      return 'This practice holds credit that can’t be applied to new visits, so processing was not started. Your recording is saved and is not the problem — please contact support so we can release the balance.';
+    }
+    return 'This practice is out of processing credit, so this visit was not started. Your recording is saved and is not the problem — re-uploading will not help. Add credit to the practice, then retry this visit.';
   }
 
   const phraseByLayer: Record<string, string> = {
