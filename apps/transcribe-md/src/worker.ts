@@ -27,6 +27,9 @@ import { ANCHOR_GENERATION_ADDENDUM } from './worker/layers/04b-anchor-verify';
 import { TranscribeVisitStatus } from '@prisma/client';
 import type { DeepgramBatchResponse, DeepgramUtterance } from '@meddoc/ai';
 import { redactPhi } from '@meddoc/ai';
+// B8 step 2 — the money seam. Both are no-ops unless `BILLING_ENFORCED=true`;
+// see `billing-pipeline.ts` for why it ships off and what turns it on.
+import { admitVisitOrThrow, chargeVisitUsage } from '@meddoc/ai';
 import { log } from '@/lib/log';
 import { shouldMarkVisitFailed } from './worker/retry-decision';
 import {
@@ -346,6 +349,23 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
   } else {
     throw new Error(`Unknown inputMode: ${visit.inputMode}`);
   }
+
+  // ── B8 step 2 — ADMISSION ────────────────────────────────────────────────
+  // SPEC §2.4: "insufficient balance blocks the work; if the balance cannot be
+  // read, block". A no-op unless `BILLING_ENFORCED=true`.
+  //
+  // ⚠️ PLACED AFTER INPUT VALIDATION AND BEFORE THE FIRST VENDOR CALL, AND BOTH
+  // HALVES OF THAT ARE DELIBERATE. After validation, so a visit with no audio
+  // key fails naming the missing audio rather than the wallet — the balance is
+  // irrelevant to work that was never going to run. Before the status update
+  // and everything below it, because the first billable call is in the
+  // transcription branch a few lines down, and admission that runs after the
+  // spend has not blocked anything.
+  //
+  // It THROWS on refusal (see `admitVisitOrThrow`), so it joins the existing
+  // catch below: `categorizeError` reads the error's own `retryCategory`, and
+  // the FAILED branch records it like any other pipeline failure.
+  await admitVisitOrThrow({ practiceId });
 
   // text_notes skips TRANSCRIBING — nothing to transcribe.
   const initialStatus =
@@ -1168,6 +1188,33 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // rejection banner, L6 unfixable-criticals, the 02.8 allergy flag)
     // whenever the L7 fan-out was clean, so the doctor never saw it.
     await applyAdditiveReviewState(visitId, incomplete);
+
+    // ── B8 step 2 — THE DEBIT ────────────────────────────────────────────────
+    // A no-op unless `BILLING_ENFORCED=true`. Runs AFTER the visit is READY and
+    // after the review state is applied, so nothing about the clinical outcome
+    // depends on it — and it never throws (see `chargeVisitUsage`), because a
+    // billing write must not be able to fail a finished note.
+    //
+    // ⚠️ ONLY THE SUCCESS PATH CHARGES TODAY, AND THAT IS A NAMED GAP RATHER
+    // THAN AN OVERSIGHT. A visit that fails at L5 has already paid for L1–L4,
+    // and nothing here records it. Charging on the failure path is inseparable
+    // from B8's other half — "system faults credit back via DLQ classification"
+    // — because the two decide the same question from opposite ends, and
+    // building the debit without the credit would bill doctors for our outages.
+    // Carried as B8 step 3.
+    const charge = await chargeVisitUsage({ practiceId, visitId });
+    if (charge.charged === 'failed') {
+      // Loud, because this is money we consumed and did not record. Nothing
+      // else in the system will notice until B9 reconciles.
+      console.warn(
+        `[transcribe-md-worker] usage charge FAILED to record visit=${visitId}: ${charge.detail}`
+      );
+    } else if (charge.charged !== 'skipped_not_enforced') {
+      log.info('transcribe-md-worker', 'usage charge', {
+        visitId,
+        outcome: charge.charged,
+      });
+    }
 
     // T-M13 summary line — logs only when at least one layer was
     // skipped, so happy-path first attempts stay quiet.
