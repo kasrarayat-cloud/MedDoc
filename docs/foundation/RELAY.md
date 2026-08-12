@@ -9393,3 +9393,91 @@ argument for the pattern.**
 ⚠️ **A HALT ENDS THE RUN, SO THE RELIGHT STARTS A NEW BUDGET.** The halted run had
 used **9 of 24** sessions. The relit loop counts from **zero**, not from 15 — do
 not read the next run's "session 01 of 6" as continuing this one.
+
+---
+
+## ✅ THE DEPLOY DEBT IS CLEARED — `2f028788` IS LIVE — 2026-08-12
+
+**Ruling #99's step 1 of 4, and the hard precondition for everything after it.**
+`main` had carried undeployed code since `d2702a9c` (B7 step 3a, 09:20Z).
+
+### WHAT SHIPPED — enumerated from the diff, not from a remembered count
+
+`git diff --stat d2702a9c..2f028788 -- ':!docs' ':!*.md'` gives 12 files; five
+reach the running image:
+
+| file | what it is |
+|---|---|
+| `apps/transcribe-md/src/worker.ts` (+179/−53) | B8 defects 1 & 3 — the admission refusal reaches the right branch, and its stored `reviewReason` stops telling an out-of-credit doctor their audio is corrupt |
+| `apps/transcribe-md/src/app/visits/[id]/visit-failed-copy.ts` (new) | the user-facing half of defect 3 |
+| `packages/ai/src/billing-grant.ts` (new) | B7 step 3b's grant writer — **ships INERT** |
+| `packages/ai/src/index.ts` | its exports |
+| `apps/transcribe-md/scripts/qa/b8-admission-on-qa.ts` (new) | a hand-run QA proof, reachable from nothing in prod |
+
+⚠️ **DEFECT 1 IS A FIX TO CODE THAT WAS ALREADY DEPLOYED**, inert only because
+`BILLING_ENFORCED` is off — which is exactly the condition that stops being true
+when the flag is enabled. That is why this was a precondition and not a tidy-up.
+
+### §2.5 — DECLARED FIRST, JUDGED **10 OF 10**
+
+Declaration written at **20:07Z**, before anything ran:
+`docs/foundation/deploys/20260812-2f028788.md`. Deploy log
+`docs/deploy-logs/deploy-20260812T202721Z.log`.
+
+**What MUST change:** the image ids, and nothing else. App `906ce015…` →
+**`7d6ca3aa6052`**; worker `af65d5c9…` → **`1d7ad2799d8c`**.
+
+**What MUST NOT change — none of it did:** migrations 100/100 · `ledger_entries`
+**0** · visits 25 · signed 17 · patients 16 · practices 197 · active-member
+practices 175 · co-tenants `307 · 404 · 200 · 200 · 410` · `BILLING_ENFORCED`
+unset in BOTH containers (`printenv` exit 1). Both count reads
+positive-controlled (`select 'control', 1` → `control|1`).
+
+**Not one of the six declared failure conditions fired.** `ledger_entries` is
+still **0** — the writer shipped and remains callable by nothing, which is what
+makes step 3c's backfill declaration meaningful.
+
+Step 3 printed *"100 migrations found / No pending migrations to apply"* — the
+message the runbook says never to read as proof — and step 4's independent
+`assert-migrations-applied.sh` is what established it. `app /api/health` **200**,
+both containers healthy at 30s.
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `2f028788a2ae0f61205a450918f4471da456a294`:**
+   · `CI` 31634047560 a1
+   · `e2e` 31634047704 a1
+   · `a11y-ci` 31634047638 a1
+   · `secrets-scan` 31634047661 a1
+
+All `a1` — no re-runs, so there is nothing to explain. **Taken BEFORE the deploy
+ran**, not after: the commit was gated first and deployed second. `e2e` was still
+in flight at session open and was waited out inside the session (~44 min).
+
+**Rollback:** `:pre-b7s3b-b8-20260812`, cut against the RUNNING image ids
+(`906ce01500ca` / `af65d5c9d562`) before anything was recreated, and verified to
+resolve on the daemon.
+
+### ⚠️ FINDING — THE RUNBOOK'S ROLLBACK TABLE SAID "FOUR GENERATIONS". THERE ARE 28.
+
+`DEPLOYMENT_RUNBOOK.md` §3 carries a warning, added 2026-08-04, that the table
+had drifted from two generations to four and that **"the count is a fact to
+re-read on the daemon, not a policy to remember."** Re-reading it while adding
+this deploy's row gives **28** `meddoc-pro-transcribe-md:pre-*` tags (28 worker,
+6 gotenberg) — the FOUNDATION programme cut one per item and **none of them
+reached the table**.
+
+So its *"one step back"* row, `:pre-fret3-20260805`, is about **twenty** steps
+back. The ordinals are left as written rather than renumbered — a list that goes
+stale weekly goes stale silently if renumbering is the maintenance — and the
+correction plus this deploy's row are recorded in place. **The paragraph was
+right twice: re-reading on the daemon is what found it.**
+
+### WHAT THIS DEPLOY DOES **NOT** CLAIM
+
+- **The grant writer has still never executed in any environment.** Shipping is
+  not running.
+- **`BILLING_ENFORCED` was not enabled**, and enabling it remains a separate,
+  later, owner-gated decision. The worker's admission seam is present and inert.
+- **B8's defect-1 fix is deployed but unobservable**, precisely because the flag
+  is off.

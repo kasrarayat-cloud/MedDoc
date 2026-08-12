@@ -330,8 +330,24 @@ the exact failure the paragraph above warns about, committed by the person who
 wrote the warning. **FOUR generations are kept today**, and the count is a fact
 to re-read on the daemon, not a policy to remember.
 
+⚠️ **RE-READ ON THE DAEMON 2026-08-12, AND "FOUR" IS NOW BADLY WRONG: THERE ARE
+28 APP GENERATIONS.** `docker images | grep ':pre-'` returns 28 distinct
+`meddoc-pro-transcribe-md:pre-*` tags (28 matching worker tags, 6 gotenberg).
+The FOUNDATION programme cut one per item — `pre-teams1`, `pre-t4a` … `pre-b8s2`
+— and none of them reached this table.
+
+**So the paragraph above was right twice over: the count is a fact to re-read on
+the daemon, and re-reading it is what found this.** The ordinal labels in the
+rows below (*"one step back"*, *"two steps back"* …) were true when written and
+describe distance from a production that no longer exists — `:pre-fret3-20260805`
+is roughly **twenty** steps back today, not one. They are left as written rather
+than renumbered, because renumbering a list that goes stale weekly is how it
+goes stale silently; the ordinal is now part of the row's HISTORY, and the
+daemon is the authority on distance.
+
 | Tag | What it restores | Image IDs (verified on the daemon) |
 |---|---|---|
+| `:pre-b7s3b-b8-20260812` | **the true one step back (2026-08-12 20:27Z)** — production immediately BEFORE the B7 step 3b + B8 debt deploy. Restores the app and worker that predate B8's three defect fixes and B7 step 3b's promo-grant writer. ⚠️ Rolling back to it **re-arms B8 defect 3**, whose worker tells a practice that is out of credit that its *"audio file may be corrupt … please re-upload"* — an instruction that costs the doctor the work again and fails identically. Inert while `BILLING_ENFORCED` is off, which it is in both directions | app `906ce01500ca` / worker `af65d5c9d562` (both verified against the RUNNING containers at tag time) |
 | `:pre-fret3-20260805` | **one step back** — production immediately BEFORE the old-skin retirement. ⚠️ **THIS TAG IS NOW THE ONLY PLACE THE OLD SKIN EXISTS.** F-ret.3 deleted the flag-OFF arm from the source, so `main` cannot build it and no flag can select it. The legacy dashboard, the pre-Rounds 404, the `qm-lin-btn` auth chrome and the C3 patients grid live in these IMAGE LAYERS and nowhere else. Treat the tag accordingly: it is not a convenience, it is the artifact | app `69a55c75b2ee` / worker `079e9900d8fc` (both verified against the RUNNING containers at tag time) |
 | `:pre-repairhardening-20260804` | **two steps back** — before the second 2026-08-04 deploy. Restores the worker image whose `repair-audit-attribution.ts` still carries the pre-adjudication predicate. ⚠️ Rolling back to it re-arms a script that would "correct" a CORRECT row | app `faafefd5f683` / worker `a63d1841e5c1` / gotenberg `2d05d22572ba` |
 | `:pre-secblock-20260804` | **three steps back** — production immediately BEFORE the security block: Stripe still in the clinical worker, the `?? 'clinic_main'` audit fail-open still live, no account menu (no sign-out anywhere but Settings) | app `cdfa16cc599b` / worker `1526b97cf960` / gotenberg `2d05d22572ba` |
