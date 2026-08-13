@@ -29,10 +29,10 @@
 // Its sibling `b8-admission-on-qa.ts` refuses WITHOUT the flag. This one
 // refuses WITH it, and the asymmetry is the point rather than an inconsistency.
 //
-// The central claim of B8 step 3 — provisional ruling #103(c) — is that the
+// The central claim of B8 step 3 — provisional ruling #104(c) — is that the
 // observation runs UNFLAGGED. A run with the flag on cannot distinguish "the
 // seam runs unconditionally" from "the seam runs because the flag is on", and
-// the second is the thing #103(c) would be wrong about. So the posture under
+// the second is the thing #104(c) would be wrong about. So the posture under
 // which the claim is falsifiable is the flag ABSENT, and that is the posture
 // this file demands.
 //
@@ -470,8 +470,8 @@ async function main(): Promise<Verdict> {
       }
     }
   } else {
-    // ══ ARMS 1 & 2 — THE UNFLAGGED CLAIM, WHICH IS RULING #103(c) ═══════════
-    // ⚠️ THESE ARE THE ARMS THAT COULD NOT EXIST IF #103(c) WERE WRONG. With
+    // ══ ARMS 1 & 2 — THE UNFLAGGED CLAIM, WHICH IS RULING #104(c) ═══════════
+    // ⚠️ THESE ARE THE ARMS THAT COULD NOT EXIST IF #104(c) WERE WRONG. With
     // the flag absent, `billingEnforced()` is false and every OTHER B8 seam is
     // inert. If a `failure cost` line appears anyway, the observation ran
     // unconditionally — which is the claim, measured rather than asserted.

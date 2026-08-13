@@ -68,6 +68,7 @@ MAX_SESSIONS="${MAX_SESSIONS:-6}"
 TOTAL_BUDGET="${TOTAL_BUDGET:-24}"
 PROMPT_FILE="docs/foundation/MASTER.md"
 STOP_FILE="docs/foundation/STOP"
+INBOX_FILE="docs/foundation/INBOX.md"
 LEDGER="docs/foundation/RELAY.md"
 LOG_DIR="docs/foundation/logs"
 # ⚠️ DATE AND LAUNCH ARE COMPUTED PER BATCH, NOT ONCE — AN OVERNIGHT RUN CROSSES
@@ -215,6 +216,35 @@ for (( n=1; n<=batch_size; n++ )); do
     echo "ledger  : ${ledger_before:0:12}"
     echo "════════════════════════════════════════════════════════════════"
   } >> "$LOG"
+
+  # ── INBOX — operational notices, DELIVERED MECHANICALLY ───────────────────
+  # ⚠️ PRINTED INTO THE SESSION LOG BEFORE THE SESSION STARTS, so receipt cannot
+  # be skipped and needs no new read-discipline from anybody. It exists because
+  # there was NO inter-session channel at all: a session is a fresh process with
+  # no memory, and anything written after its STEP 0 was invisible to it — a
+  # supervised session could not tell a running one that `main` had moved.
+  #
+  # ⚠️ OPERATIONAL NOTICES ONLY. A ruling never travels this way; `RULINGS.md` is
+  # the single source of truth and an inbox that can carry a decision is a second
+  # one. The constraint is stated in the file's own header, which is printed with
+  # every delivery so it cannot drift out of sight.
+  #
+  # ⚠️ FAIL-OPEN, DELIBERATELY. Missing, unreadable, or holding no entries: it
+  # prints nothing and never blocks a launch. An inbox that could stop the
+  # programme would be a worse bug than the problem it solves.
+  #
+  # "Holding no entries" is COUNTED, not assumed — entries are
+  # `### <ISO8601> — <title>` headings, so a file carrying only its own header
+  # prints nothing, and a prose `### heading` does not trip it.
+  if [ -r "$INBOX_FILE" ] && grep -qE '^### [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$INBOX_FILE" 2>/dev/null; then
+    {
+      echo "──────────────── INBOX — operational notices ────────────────"
+      cat "$INBOX_FILE"
+      echo "──────────────── end INBOX ────────────────"
+      echo
+    } >> "$LOG"
+    echo "[loop] inbox: $(grep -cE '^### [0-9]{4}' "$INBOX_FILE") entr(y|ies) delivered → $LOG"
+  fi
 
   echo "[loop] session $RUN/$MAX_SESSIONS → $LOG"
 

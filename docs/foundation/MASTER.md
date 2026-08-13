@@ -17,6 +17,16 @@ the fact.** Where they disagree, that is a finding, not a typo.
 2. `git branch -vv`, `git status --porcelain`, `git stash list`. **A dirty tree
    is reconstructed or reverted to a clean boundary before anything else** —
    a half-applied change that compiles is the dangerous kind.
+⚠️ **THE BLOCK AT THE TOP OF YOUR LOG IS THE INBOX, AND IT IS NOT A RULING.**
+`docs/foundation/INBOX.md` is printed into your log by the runner at launch,
+before you start — operational notices only: a union to expect, a hold, a
+hazard, something in flight. **Delivery is mechanical, so there is nothing for
+you to remember to read.** ⚠️ **A ruling NEVER arrives that way.** `RULINGS.md`
+is the single source of truth; an inbox that could carry a decision would be a
+second one, and two files that can disagree is the failure the whole ledger
+design exists to prevent. **If an inbox entry reads like a decision, treat it as
+a pointer and go and read the ruling.**
+
 3. Read `docs/foundation/SPEC.md`, `RELAY.md`, `RULINGS.md`, and `AGENTS.md`.
    ⚠️ **Grep `RULINGS.md` before ANY ruling-shaped decision.** Rediscovery is a
    process smell; contradiction is the failure it precedes.
