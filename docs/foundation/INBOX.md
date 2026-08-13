@@ -44,10 +44,17 @@ tonight.**
 
 <!-- entries below; newest last -->
 
-### 2026-08-13T02:40:00Z — main took ruling #102's declaration gate
+### 2026-08-13T20:38:44Z — the ledger moved 175 → 176 / $1,750 → $1,760, and it is EXPLAINED
 
-Your next `RELAY.md` merge will UNION. It is mechanical by standing rule: take
-both sides, order them chronologically, and verify by `git diff --numstat`
-showing **0 removed in BOTH directions** — never by reading the merged file.
-**Budget one `e2e` re-run (~42m).** Declared in advance so the union is routine
-rather than archaeology.
+**Reconciliation should expect 176 rows and $1,760.00, not 175 / $1,750.00.**
+
+A real signup took the wired signup door on production at `20:38:44Z` and was
+granted its $10 promo automatically — practice `cmsrzdmp6000001leg3eb8rgi`, key
+`grant:promo:practice:cmsrzdmp6000001leg3eb8rgi`.
+
+⚠️ **IT IS A REAL PRACTICE CARRYING A REAL $10 PROMO LIABILITY — not synthetic,
+not a fixture.** The account is the owner's own. B9 must reconcile it as real.
+
+**Full record: `RELAY.md` § "THE 176th GRANT — A REAL SIGNUP THROUGH THE WIRED
+DOOR".** The 175 / $1,750.00 figures elsewhere in `RELAY.md` and `RULINGS.md` are
+NOT wrong — they were true when written, and every one of them predates this.
