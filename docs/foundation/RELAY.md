@@ -10429,3 +10429,54 @@ its script incrementally. Landing this while the loop runs can make the running
 process misread the tail of the file when it eventually exits. **The change is
 inert until a relight in any case** — the running loop parsed its own body long
 ago. **Correct sequence: land, then relight at a boundary.**
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `b958994cec72ffe480e918d1f91c4ffd20806384`:**
+   · `CI` 31684933842 a1
+   · `e2e` 31684933897 a1
+   · `a11y-ci` 31684933867 a1
+   · `secrets-scan` 31684933890 a1
+
+All `a1` — no re-runs, so there is nothing to explain. PR **#635**, branch
+retired via `scripts/retire-branch.sh` (both sides confirmed).
+
+⚠️ **THE PR HEAD WAS GATED TWICE, AND THE SECOND GATE WAS NOT OPTIONAL.** The
+first head (`526e634a`) came back 4 of 4 at `07:24:55Z`. PR **#633** then landed
+on `main` while that gate ran, so the branch went `CONFLICTING` on `RELAY.md`
+and had to take a union merge — which is a new tree, and a citation only ever
+describes the tree it was taken on. `499d0f65` was re-gated 4 of 4, and this row
+cites the MERGE commit of that.
+
+⚠️ **AND THE MERGE WAS DELIBERATELY DELAYED — THE MERGE-SIDE RULE, HONOURED FROM
+THE OTHER SIDE FOR ONCE.** #633's own merge-commit `e2e` was in flight on `main`
+at **37m54s** when this PR came green. Merging then would have cancelled it at
+the same altitude as the 2026-08-12 reference case (a run killed at 33m39s that
+another session was deliberately waiting for). Waited; it completed 4 of 4 at
+**44m16s**; then merged. **Nothing was destroyed, and that is the point of the
+rule rather than a lucky outcome.**
+
+⚠️ **AND `retire-branch.sh` REFUSED TO CLAIM A SUCCESS IT HAD NOT EARNED**, which
+is its own 2026-08-12 positive-control fix working in the field: the branch was
+still checked out, so it retired the REMOTE side, reported `🟡 PARTIALLY
+retired`, and exited **2**. Switched to `main`, re-ran, both sides confirmed.
+The pre-fix version of that script would have printed `🟢 retired` and exited 0.
+
+### 🚧 STILL NOT DEPLOYED — AND THE SHA THE DECLARATION NEEDS IS NOW KNOWN
+
+`main` carries B8 step 3 **and** DEFECT 1's fix at `b958994c`; production carries
+neither.
+
+The next act is the §2.5 declaration, and it is unblocked in the one way it was
+not before: ruling **#102** requires it **tracked, unmodified and COMMITTED**
+before the mutation runs, and `deploy-prod.sh` refuses any filename but
+`docs/foundation/deploys/<UTC-date>-<short-sha>.md`. That short SHA could not
+exist until this merge landed. **It is `b958994c`** — so the declaration is
+`docs/foundation/deploys/20260813-b958994c.md`, written and landed as its own PR
+*before* the deploy session begins.
+
+⚠️ **IF ANYTHING ELSE LANDS ON `main` FIRST, THE NAME CHANGES.** The declaration
+is named for the commit that will actually deploy, not for this one. A
+declaration written against a superseded SHA is refused by the gate — which is
+the gate working, but it costs a PR cycle, so write it against `git rev-parse
+--short HEAD` at the moment the deploy session opens.
