@@ -11,11 +11,22 @@
 // and the mutations at the bottom were RUN. Two of them are the ones that
 // matter and neither is a "does it go red on nonsense" check:
 //
-//   M1  order the classifier's arms the obvious way — category first, then the
-//       admission name — and every `balance_unreadable` refusal (which carries
-//       `retryCategory: 'transient'`) lands in the `ours` pool. The pool whose
-//       SIZE is the input to a future pricing decision, inflated with visits
-//       that spent nothing. Reddens A3.
+//   M1a order the classifier's arms the obvious way — category first, then the
+//       admission name. Reddens A3, and ⚠️ ONLY ITS SECOND HALF: a `permanent`
+//       refusal (an empty wallet) becomes `input`, blaming the doctor's
+//       recording. A `transient` one still resolves correctly, because the
+//       permanent check simply does not match it.
+//       ⚠️ THIS IS RECORDED BECAUSE THE FIRST DRAFT OF THIS COMMENT CLAIMED
+//       M1a PROVED THE `balance_unreadable` CASE, AND RUNNING IT SHOWED IT DOES
+//       NOT. The claim was about a mutation nobody had executed yet; the
+//       mutation that actually tests it is M1b. Saying what would make the
+//       check fail is not the same as making it fail, and the gap between them
+//       is exactly where an overstated claim survives.
+//   M1b delete the admission arm entirely, leaving category as the only input.
+//       THIS is the shape that files every `balance_unreadable` refusal (which
+//       carries `retryCategory: 'transient'`) into the `ours` pool — the pool
+//       whose SIZE is the input to a future pricing decision, inflated with
+//       visits that spent nothing. Reddens A3 **and** B1.
 //   M2  let the module reach a ledger writer at all. Reddens S1, which is a
 //       SOURCE assertion rather than a behavioural one — see its own note for
 //       why a behavioural test cannot state this property.

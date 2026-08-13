@@ -9935,11 +9935,22 @@ does not exist.**
 
 **1. THE ADMISSION ARM IS FIRST, AND THE ORDERING IS LOAD-BEARING.** A
 `balance_unreadable` refusal carries `retryCategory: 'transient'`, so it reaches
-the classifier as `category: 'transient'`. A category-first implementation —
-the obvious one — files **every unreadable-balance refusal into the `ours`
-pool**, which is the pool whose SIZE is the input to the future pricing
-decision. It would not be wrong by a little; it would inflate the measurement
-with visits that spent nothing. Mutation **M1** reddens gate arm A3.
+the classifier as `category: 'transient'`. An implementation that consults the
+category alone files **every unreadable-balance refusal into the `ours` pool** —
+the pool whose SIZE is the input to the future pricing decision — inflating the
+measurement with visits that spent nothing. Mutation **M1b** reddens A3 **and**
+B1.
+
+⚠️ **AND THE FIRST DRAFT OF THIS ROW CLAIMED SOMETHING THE MUTATION DID NOT
+SHOW.** It said the *category-first ordering* (M1a) proved that case. Running it
+showed otherwise: under category-first, a `transient` admission refusal still
+resolves to `not_started`, because the `permanent` check does not match it —
+M1a reddens only A3's **second** half, the empty-wallet refusal being blamed on
+the doctor's recording. Both mutations are real and both were run; only M1b
+proves the pool-inflation claim. **The overstatement survived writing, review
+and a passing gate, and died the moment the mutation was actually executed** —
+which is the whole distance between *saying* what would make a check fail and
+*making* it fail.
 
 **2. ⚠️ IT RUNS UNFLAGGED, AND THIS IS THE TRAP THE ITEM NEARLY FELL INTO.** The
 obvious shape gates it behind `BILLING_ENFORCED` like its two sibling seams.
