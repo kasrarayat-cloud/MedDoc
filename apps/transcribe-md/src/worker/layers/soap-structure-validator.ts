@@ -65,6 +65,38 @@ const REQUIRED_SECTIONS = [
   'Plan',
 ] as const;
 
+/**
+ * The ONE matcher for "does this text carry a `## <label>` heading?".
+ *
+ * Escapes the label — a custom template's heading is arbitrary text and may
+ * contain regex metacharacters (e.g. the IOV template's "DIAMETER AND REFLUX
+ * TIME — ** Right Leg **"), which would otherwise throw "Invalid regular
+ * expression". `(?!\w)` replaces `\b` so a label ending in punctuation (`*`,
+ * `)`) still matches cleanly.
+ *
+ * ⚠️ EXPORTED SO THE COMPOSER USES THIS ONE AND NOT A SECOND COPY. `composeNote`
+ * has to answer the same question — which block is this section's? — and a
+ * second implementation would agree with this one right up until the day either
+ * was fixed. Same reasoning as the canonical choice-marker regex in
+ * `section-assembly.ts`: the third copy is the one that drifts.
+ *
+ * ⚠️ ITS LENIENCE IS DELIBERATE AND BOTH CALLERS WANT IT. `##\s*` and `(?!\w)`
+ * mean `## TECHNIQUE` also matches `## TECHNIQUE AND METHOD` (a following space
+ * is not `\w`) but NOT `## TECHNIQUES`. For the validator that is the presence
+ * check it was written as; for the composer it is the safe direction, because
+ * the near-miss block is the one that would otherwise survive beside the
+ * assembled section carrying a paraphrase of the same paragraph.
+ *
+ * ⚠️ RETURNS A FRESH RegExp PER CALL, DELIBERATELY. It carries no `/g`, so
+ * `lastIndex` is not in play today — but a shared instance is exactly how that
+ * becomes a bug later, and a caller's result must never depend on who called
+ * before it.
+ */
+export function headingMatcher(label: string): RegExp {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`##\\s*${escaped}(?!\\w)`, 'i');
+}
+
 /** Validate the markdown-shape output emitted by L4 (SOAP draft) or L6
  *  (polished SOAP). NEVER throws. Returns a structured result the
  *  caller maps to {persist + audit + needsReview} or {persist only}.
@@ -121,16 +153,7 @@ export function validateSoapStructure(
   // between `##` and the section name. The `\\b` (word boundary) on
   // the section name prevents partial matches like
   // `## Subjective findings present in HPI`.
-  const missing = requiredSections.filter((section) => {
-    // Escape the section label — a custom template's heading is arbitrary text
-    // and may contain regex metacharacters (e.g. the IOV template's
-    // "DIAMETER AND REFLUX TIME — ** Right Leg **"), which would otherwise
-    // throw "Invalid regular expression". `(?!\w)` replaces `\b` so a label
-    // ending in punctuation (`*`, `)`) still matches cleanly.
-    const escaped = section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp(`##\\s*${escaped}(?!\\w)`, 'i');
-    return !re.test(text);
-  });
+  const missing = requiredSections.filter((section) => !headingMatcher(section).test(text));
 
   if (missing.length > 0) {
     return {

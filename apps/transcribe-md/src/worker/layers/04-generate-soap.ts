@@ -30,6 +30,12 @@ import {
   templateHasChoiceSlots,
   type ResolvedNoteTemplate,
 } from '../note-templates/build-soap-prompt';
+import {
+  composeNote,
+  generatedSections,
+  staticSections,
+} from '../note-templates/assemble-note';
+import { extractSlotFills } from '../note-templates/slot-fill-protocol';
 import { buildTemplateScaffold } from '../note-templates/template-scaffold';
 import { applyContextDefaults } from '@/lib/note-template-context';
 import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-template';
@@ -123,6 +129,39 @@ export async function runLayer4GenerateSoap(
       resolvedTemplate.styleProfile?.contextDefaults ?? null
     ),
   };
+
+  // ── THE EXPECTED SETS, DECLARED BEFORE THE CALL (ruling #106(e)) ─────────
+  //
+  // ⚠️ WRITTEN DOWN HERE, ABOVE THE MODEL CALL, ON PURPOSE. The structure gate
+  // used to measure ONE set — every section label — against ONE text. Assembly
+  // splits that in two: the model is answerable for the sections it writes, and
+  // the composed document is answerable for all of them. A gate re-scoped after
+  // the fact is a gate that can be quietly narrowed to whatever passed, which is
+  // the failure this programme has already paid for twice. So the partition is
+  // computed first and RECONCILED against the undivided set below; a label that
+  // belongs to neither half, or to both, is a defect in the split and not in the
+  // note.
+  const statics = staticSections(template.sections);
+  const assembling = statics.length > 0;
+  const allSectionLabels = requiredSectionLabels(template);
+  const generatedLabels = generatedSections(template.sections).map((x) => x.label);
+  const staticLabels = statics.map((x) => x.label);
+  if (
+    assembling &&
+    (generatedLabels.length + staticLabels.length !== allSectionLabels.length ||
+      new Set([...generatedLabels, ...staticLabels]).size !== allSectionLabels.length)
+  ) {
+    // Not a throw: a template whose labels collide must still produce a note.
+    // It IS logged loudly, because every downstream count derived from this
+    // split is then describing a set nobody can name.
+    log.warn('l4:assembly', 'section partition does not reconcile', {
+      visitId: input.visitId,
+      templateId: template.id,
+      all: allSectionLabels.length,
+      generated: generatedLabels.length,
+      static: staticLabels.length,
+    });
+  }
 
   // Round 3 PR-J — A07-P0 prompt-injection delimiter.
   // The transcript is user-supplied (whatever the doctor + patient
@@ -247,7 +286,23 @@ export async function runLayer4GenerateSoap(
     temperature: 0.2,
   });
 
-  let text = rawText;
+  // ── SLOT VALUES OFF THE WIRE (ruling #106(a)) ────────────────────────────
+  //
+  // The protocol block is removed from the note BEFORE anything else reads it:
+  // a downstream layer that saw it would treat JSON as clinical prose. When the
+  // template has no statics this is a no-op by construction — `rawText` passes
+  // through untouched and no parse is attempted, so the plain-SOAP path cannot
+  // be changed by a protocol it never speaks.
+  //
+  // ⚠️ A MISSING OR MALFORMED BLOCK IS NOT AN ERROR HERE. It yields no fills,
+  // every slot renders the form's visible empty marker, and the doctor's fixed
+  // prose is emitted regardless. Fail-closed produces a note with visible holes;
+  // it never produces a note with invented values, and never one missing the
+  // doctor's paragraph.
+  const extraction = assembling
+    ? extractSlotFills(rawText)
+    : { text: rawText, fills: {}, error: null };
+  let text = extraction.text;
   // Flag OFF → {} so the persisted shape is byte-identical to the pre-anchor
   // path (test-pinned). Flag ON → set unconditionally inside the branch.
   let suggestedClaimsWrite: { suggestedClaims?: Prisma.InputJsonValue | typeof Prisma.DbNull } = {};
@@ -333,9 +388,43 @@ export async function runLayer4GenerateSoap(
   // into a specific spacing/casing. On fail we DON'T crash: write the
   // raw output (doctor can fix it manually), flip needsReview, emit
   // a MODEL_OUTPUT_VALIDATION_FAIL audit row for forensics.
-  // Validate against THIS template's required sections. System default →
-  // the 4 SOAP headers → identical to the prior fixed check.
-  const validation = validateSoapStructure(text, requiredSectionLabels(template));
+  // ── GATE A — the MODEL's output, measured against what the MODEL was asked
+  // for. When nothing is assembled, `generatedLabels` IS `allSectionLabels`, so
+  // this is the original single check on the original text, unchanged: system
+  // default → the 4 SOAP headers → identical to the prior fixed check.
+  const modelValidation = validateSoapStructure(text, generatedLabels);
+
+  // ── COMPOSE — the doctor's own bytes, stitched around the model's values.
+  // Returns its input unchanged when `assembling` is false.
+  const composed = composeNote(text, template.sections, extraction.fills);
+  text = composed.text;
+  if (assembling) {
+    log.info('l4:assembly', 'composed static sections', {
+      visitId: input.visitId,
+      templateId: template.id,
+      staticSections: statics.length,
+      replaced: composed.replaced,
+      inserted: composed.inserted,
+      duplicatesDropped: composed.duplicatesDropped,
+      unfilled: composed.unfilled,
+      // An out-of-menu value the model proposed and the assembler refused. This
+      // is the ONLY place that number exists: a fill refused silently would be
+      // indistinguishable from a slot the transcript never supported, and the
+      // two mean very different things about the model.
+      rejected: composed.rejected,
+      slotBlock: extraction.error ?? 'ok',
+    });
+  }
+
+  // ── GATE B — the COMPOSED document, measured against EVERY section. Only when
+  // something was composed; otherwise it is the identical call on the identical
+  // text, and running it twice would put two audit rows on one fault.
+  const composedValidation = assembling
+    ? validateSoapStructure(text, allSectionLabels)
+    : modelValidation;
+  // Gate A first: a model that did not write its OWN sections is the more
+  // specific fault, and composition cannot repair it.
+  const validation = modelValidation.ok ? composedValidation : modelValidation;
   if (!validation.ok) {
     void logAudit({
       action: 'MODEL_OUTPUT_VALIDATION_FAIL',
@@ -349,6 +438,11 @@ export async function runLayer4GenerateSoap(
         reason: validation.reason,
         outputLength: validation.outputLength,
         missingSections: validation.missingSections,
+        // Which half of the split failed. Omitted entirely when nothing was
+        // assembled, so a plain-SOAP row keeps exactly today's shape.
+        ...(assembling
+          ? { scope: modelValidation.ok ? 'composed' : 'generated' }
+          : {}),
         // NO raw output — PHI surface. Just the structural fail-class.
       },
     });
