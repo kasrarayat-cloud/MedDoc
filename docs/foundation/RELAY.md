@@ -9568,3 +9568,315 @@ UNEXPLAINED dirt, which is its entire purpose.
 4. The 175 rows + the `auth.ts` wiring + the third door, together.
 
 ⚠️ **`BILLING_ENFORCED` stays OFF throughout.**
+## 🚧 B7 STEP 3c — THE THREE DOORS ARE BUILT; THE BACKFILL IS NOT RUN — 2026-08-12
+
+Ruling #99 authorized the promo grant in full and #100 ratified the forced
+order. This session took the first two steps of that order and stopped where the
+order says to stop.
+
+### WHAT LANDED
+
+The CODE for all three doors, plus the backfill script. **No grant row was
+written in any environment.** `BILLING_ENFORCED` remains OFF everywhere.
+
+| # | door | site | fires |
+|---|---|---|---|
+| 1 | signup | `apps/transcribe-md/src/actions/auth.ts` | every new practice, inside the transaction, taking `tx` |
+| 2 | backfill | `apps/transcribe-md/scripts/backfill-promo-grants.ts` | once, on the re-derived population, `--commit` required |
+| 3 | reactivation | `apps/meddoc-pro/src/app/system-admin/actions.ts` | the `update` that sets `isActive: true` |
+
+Door 1 runs on **both** signup branches. A T8 invite into an existing clinic
+returns `already_granted` by construction rather than by a `membership` branch —
+and that yields a property worth naming: **an invite into a DORMANT practice
+funds it**, because the practice acquires an active member and the key has never
+been spent. That is the same event door 3 exists to catch, arriving through the
+signup door.
+
+### RULING #100's UNIQUE-vs-CHECK VERIFICATION — DISCHARGED, WITH THE DERIVATION CITED
+
+The key is `grant:promo:practice:${practiceId}`. It is **occasion-free** — a pure
+function of the practice id, carrying no date, run id or attempt number — so
+"this practice has been granted its promo" can be true at most once, and the
+**GLOBAL unique on `ledger_entries.idempotencyKey`** makes a second grant
+*unrepresentable* across all three doors rather than merely discouraged.
+
+**Therefore the global unique IS the constraint and no CHECK was added**, which
+is exactly the branch #100 specified. Two gate arms pin it, one of which fails
+if the key ever acquires a digit the practice id did not supply.
+
+### THE AUDIT LABEL WAS THREE EDITS — AND FOUR HERE
+
+`PROMO_GRANT_CREDITED`: the Prisma enum, its own `ALTER TYPE … ADD VALUE`
+migration (`20260812200000_b7s3c_promo_grant_audit_action`), **and both per-app
+TypeScript unions**. transcribe-md and meddoc-pro each mirror the one Postgres
+enum and step 3c writes the label from both apps — adding it to one union does
+not make it writable from the other, and neither makes it writable at all.
+
+No `_DUPLICATE` sibling, deliberately: `already_granted` is the ABSENCE of an
+event. `CHECKOUT_TOPUP_DUPLICATE` exists because there the duplicate is a
+message Stripe SENT US; nobody sends us a grant.
+
+### PROVEN, NOT ASSERTED
+
+Three mutations, each backed up to scratch first and restored byte-identically
+(`md5sum` verified — **not** `git checkout --`, on a tree carrying the whole
+uncommitted item):
+
+    M1  strip the grant from the reactivation door   → the 2 census arms red, ALONE
+    M2  put an occasion in the idempotency key       → both occasion-free arms red
+    M3  move the signup audit inside the transaction → the ordering arm red
+
+⚠️ **M3 IS THE ONE THAT EARNED ITS KEEP, BECAUSE IT DID NOT FAIL ON THE FIRST
+ATTEMPT.** The ordering arm was titled *"audits OUTSIDE the transaction"* and
+measured *"the audit appears after the grant CALL"* — true of the correct code
+**and** of the mutation, which sat two lines below the grant. A check correct
+about the wrong quantity, with its NAME the thing stopping anyone noticing:
+AGENTS.md's narrower-title class, found in this gate's own first draft, by the
+only instrument that could find it. Re-anchored to the transaction's END.
+
+### TWO EXISTING GATES WENT RED, BOTH CORRECTLY
+
+- **`gate-b7s3b-promo-grant.test.ts`** pinned step 3b's *"nothing calls this
+  yet"* and detected the wiring exactly as its header promised. `CALLERS` is now
+  the three doors and the arm's **title inverted with its meaning** rather than
+  being deleted. ⚠️ **Its file walker never scanned `apps/meddoc-pro`**, so it
+  could not have contained door 3 — a watched-set hole that would have reported
+  a clean, correct-looking count over a universe missing the thing it was
+  trusted to find. Closed.
+- **`signup-gate.test.ts`**'s transaction mock had no `ledgerEntry`, so the grant
+  threw and signup swallowed it into `ok:false`. Repaired **with coverage**, not
+  silenced: five arms, including that the grant receives the **transaction
+  client** and that **a failed grant creates no account**.
+
+    transcribe-md  3620 passed / 4 skipped
+    packages/ai     671 passed
+    tsc --noEmit    clean · prisma validate clean
+
+### ⚠️ FINDING — DOOR 3 IS CORRECT, UNREACHABLE, AND SCHEDULED FOR DELETION
+
+Three facts, none of which contradict ruling #99, and together they matter:
+
+1. **`apps/meddoc-pro` is decommissioned.** Container `Exited (143) 8 days ago`;
+   `pro.quillmd.com` serves **410**; CI neither typechecks nor builds it (it is
+   excluded from the audit workspaces by name).
+2. **It is the ONLY reactivation write in the tree.** Swept by predicate: the
+   live app never writes `isActive` at all — suspension there is modelled by
+   `suspendedAt`. So there is no reachable reactivation path in production.
+3. ⚠️ **RELAY item A6 DELETES `apps/meddoc-pro/`.** When A6 lands, door 3 is
+   deleted with it, and A6's gate list — co-tenant status, `app`/`admin`
+   unchanged, the rollback-tag table — says nothing about the promo grant.
+
+**Consequence for #99's population reasoning.** The 6 all-deactivated practices
+were excluded on the stated grounds that *"the reactivation grant covers them
+the moment anyone returns"*. That is structurally sound and has **no live path
+today**, and after A6 it will have no path at all unless a reactivation
+capability is rebuilt in the live app and carries the grant with it.
+
+**Not acted on. The population stays 175, exactly as ruled** — the alternative
+would be funding 6 practices the owner explicitly excluded, on a table that
+refuses deletes. Recommended for the war room: **add "the reactivation promo
+grant has a home in the live app" to A6's preconditions.** Recorded rather than
+edited into A6, because another item's gate is not this session's to change.
+
+The door is wired anyway, because that is where the falsifying write lives, and
+the new gate reads its source — which is now the **only** thing in CI that does.
+
+### ⚠️ THE QA REHEARSAL KILLED THREE DEFECTS — AND THIS IS WHY #99 PUT IT IN THE ORDER
+
+Ruling #99 required a rehearsal *"with every abort-on-mismatch guard proven to
+fire"* BEFORE the production backfill. It found three defects in code that had
+already passed `tsc`, `prisma validate` and the whole unit suite. One of them
+would have silently destroyed pilot doctors' accounts.
+
+**DEFECT 1 — a unique violation poisons the whole Postgres transaction, and
+`COMMIT` then becomes a silent `ROLLBACK`.** The first draft leaned on
+`grantPromoCredit`'s `P2002` absorb: signup granted on BOTH branches, and the
+backfill granted for all 175 and let the idempotency key skip duplicates. Both
+are true of the JavaScript and worthless — **catching the error does not
+un-poison the transaction.** Measured on QA, inside `BEGIN … ROLLBACK`:
+
+    INSERT …  duplicate key value violates unique constraint
+    SELECT …  current transaction is aborted, commands ignored
+    COMMIT →  ROLLBACK          <-- no error raised
+
+The backfill died on the first already-funded practice. ⚠️ **The signup door was
+worse and invisible: an invited doctor joining an already-funded practice would
+absorb the collision, return normally, and have their ACCOUNT SILENTLY ROLLED
+BACK.** On production's first run there is nothing to collide with, so it would
+have *"worked"* — and every re-run would have failed, which is the exact
+opposite of the idempotency #99 demanded.
+
+Fixed three ways: signup grants only on the create branch (`!membership`), where
+a practice minted three statements earlier cannot already hold a grant, so the
+insert cannot collide; the backfill **pre-filters** on existing keys and inserts
+only the rest; and `grantPromoCredit`'s doc now states the constraint that makes
+its absorb valid — **pass a `tx` only when a collision is impossible by
+construction.** Two new gate arms pin both, mutation-proved (M4: remove
+`!membership` → the arm reds, alone).
+
+**DEFECT 2 — the script reported `audit rows issued: 11` while writing zero.**
+The committing rehearsal printed 🟢 COMMITTED and a count of `logAudit` *calls*.
+The database had rejected every one:
+
+    invalid input value for enum "AuditAction": "PROMO_GRANT_CREDITED"
+
+`logAudit` is fire-and-forget by design, so the rejection went to stderr and the
+script declared success — *"a script that prints a number it does not act on"*
+meeting *"a fire-and-forget writer is proved only by a test that reads it back"*,
+both already in AGENTS.md. The count is now **read back from `audit_logs`** by
+action and target, and **GUARD 0 asks `pg_enum`** — not `schema.prisma` — before
+any row is written, and refuses. Positive-controlled: the real label returns `t`,
+a fabricated one returns `f`, so its pass is a measurement rather than an
+assumption.
+
+⚠️ **That guard is a PRODUCTION PRECONDITION.** Without the migration applied
+first, 175 irreversible grants would land with **no actor record at all**.
+
+**DEFECT 3 — the script completed its work and never exited.** `logAudit` fans
+each row to the admin SSE stream inside a `setImmediate`, opening a Redis handle
+the script never closes. The grants committed, the audit rows landed, the
+verification printed — and the process still had to be killed. **The worst shape
+for a one-shot irreversible operation**, where a "hang" invites a Ctrl-C or a
+re-run. Now exits explicitly once everything is committed.
+
+### THE REHEARSAL RESULT, IN FULL — QA (`meddoc_qa_test`)
+
+| arm | result |
+|---|---|
+| guards proven to FIRE | G1 (`--target=prod` on a qa db) · missing `--target` · missing `--expect` · G2 (wrong count, **and again on a genuinely moved population** 14 → 15) |
+| dry run | 14 pop · 3 funded · 11 to write · guards 3–7 pass · rolled back, **verified 0 written** |
+| commit | 11 grants · promo 30M → 140M = **exactly 14 × $10.00** |
+| re-run (idempotency) | **0 written, delta 0** — "a re-run refuses" |
+| audit row | proven end-to-end: 1 row, action `PROMO_GRANT_CREDITED`, target `Practice`, metadata `{door, bucket, balanceAfter, seq}` — **no PHI**, BigInts as strings |
+
+**Nothing was run against production.** The QA stack's worker and `db-migrate`
+images were rebuilt from this branch; the QA app image remains stale (2026-08-11
+14:54Z) and is unchanged by this.
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `a580afcdd3dba957bc9a2d7b97a9306d7e2173ed`:**
+   · `CI` 31645118603 a1
+   · `e2e` 31645118550 a1
+   · `a11y-ci` 31645118633 a1
+   · `secrets-scan` 31645118580 a1
+
+All `a1` — no re-runs anywhere. PR **#625**; the PR head (`47713d09`) was also
+4 of 4 first time (`CI` 31639919619 · `e2e` 31639919676 · `a11y-ci` 31639919594 ·
+`secrets-scan` 31639919570). Branch retired by `scripts/retire-branch.sh`, both
+sides confirmed.
+
+⚠️ **NOTHING WAS CANCELLED TO GET HERE.** `main` carried three in-flight runs on
+`43713355` when this session opened. Merging #625 would have killed them at the
+~40-minute mark — the reference case in AGENTS.md's *a merge is a push* section.
+Both views were taken, the merge waited them out, and `43713355` is itself
+**4 of 4** (`CI` 31641790401 a1 · `e2e` 31641790433 a1 · `a11y-ci` 31641790664 a1
+· `secrets-scan` 31641790353 a1) — session 01's owed citation, discharged.
+
+---
+
+## ✅ B7 STEP 3c IS **LIVE AND EXECUTED** — 175 WALLETS FUNDED — 2026-08-12
+
+**Ruling #99's forced order, completed.** Session 01 took steps 1–2 (deploy debt,
+QA rehearsal); this session took steps 3–4 (declaration, execution).
+
+### THE DEPLOY — `a580afcd`, declaration judged **11 of 11**
+
+Declared at `docs/foundation/deploys/20260812-a580afcd.md`, written **22:01:50Z,
+before the deploy ran**; deployed 22:44Z by `scripts/deploy-prod.sh`.
+
+| MUST change | result |
+|---|---|
+| both image ids move | ✔ app `7d6ca3aa`→`2c30f254`, worker `1d7ad279`→`45be9594` |
+| migrations 100 → 101 | ✔ exactly `20260812200000_b7s3c_promo_grant_audit_action` |
+| `AuditAction` gains `PROMO_GRANT_CREDITED` | ✔ `f` → **`t`** in `pg_enum` |
+
+| MUST NOT change | result |
+|---|---|
+| `ledger_entries` · promo · paid | ✔ 0 · 0 · 0 |
+| `PROMO_GRANT_CREDITED` audit rows | ✔ 0 |
+| clinical `visits · signed · patients` | ✔ 25 · 17 · 16 |
+| practices total / active-member | ✔ 197 / 175 |
+| `BILLING_ENFORCED` | ✔ unset in both containers |
+| co-tenants | ✔ `307 · 404 · 200 · 200 · 410` |
+
+**None of the nine declared failure conditions fired.**
+
+⚠️ **FINDING, AND IT IS MINE — `deploy-prod.sh` DOES NOT CUT THE ROLLBACK TAG.**
+My declaration's ROLLBACK section asserted the tag would be *"cut against the
+running image ids before anything is recreated, per the runbook"*. That is a
+**manual runbook step**; the script never does it, and I had assumed it did. The
+deploy therefore ran with **no rollback tag for this generation** — the newest
+`pre-*` tag was `:pre-b7s3b-b8-20260812`, which points two generations back.
+
+Cured immediately and verifiably: the pre-deploy images were still resolvable, so
+`:pre-b7s3c-20260812` was cut on both and **digest-verified** to
+`sha256:7d6ca3aa…` and `sha256:1d7ad279…` — the exact ids that were running.
+
+**The lesson generalises past this tag.** A declaration is a set of claims, and a
+claim about *a step somebody else's script performs* is inherited evidence — the
+same class as a count carried forward from another report. **Assert it, or do it
+yourself.** Nothing would have surfaced this until a rollback was needed, which
+is precisely when nobody has time to discover that the tag two generations back
+is the only one there is.
+
+### THE BACKFILL — declaration judged **8 of 8**, and it is IRREVERSIBLE
+
+Declared at `docs/foundation/deploys/20260812-b7s3c-backfill-declaration.md`,
+written **22:50Z, before the run**. Population **175**, measured twice by this
+session (22:01:50Z and 22:47Z) and **never copied from this file** — then
+re-derived a third time by the script itself at execution.
+
+| # | declared | measured after |
+|---|---|---|
+| 1 | `ledger_entries` 0 → **175** | **175** ✔ |
+| 2 | promo sum 0 → **1_750_000_000** micro-USD (175 × $10.00 exactly) | **1750000000** ✔ |
+| 3 | `PROMO_GRANT_CREDITED` audit rows 0 → **175** | **175**, read back from `audit_logs` ✔ |
+| 4 | paid sum stays **0** | **0** ✔ |
+| 5 | clinical stays **25 · 17 · 16** | **25 · 17 · 16** ✔ |
+| 6 | practices stay **197 / 175** | **197 / 175** ✔ |
+| 7 | `BILLING_ENFORCED` stays unset | unset ✔ |
+| 8 | at most one grant per practice | `max_grants_per_practice` = **1** ✔ |
+
+**Stronger than the declaration asked, and deliberately so** — counts can match
+while the *sets* differ, so the granted set was diffed against the population in
+**both directions**: `active_practices_WITHOUT_grant = 0` and
+`granted_practices_NOT_active = 0`. Every promo row carries the identical
+`10000000` (`distinct_amounts = 1`), so the sum cannot be right by cancellation.
+
+**The sequence, in order:**
+
+1. **DRY RUN** — `--target=prod --expect=175`, no `--commit`. GUARD 0 ✔ ·
+   population 175 · 0 funded · 175 to write · guards 3–7 pass · rolled back. Then
+   **independently verified 0 rows written** — the script's own "nothing was
+   written" is a claim, and the table is the fact.
+2. **COMMIT** — 175 grants · promo 0 → 1750000000 · **audit rows VERIFIED 175 of
+   175** · **exit 0** (defect 3's hang is gone).
+3. **IDEMPOTENCY, PROVEN ON PRODUCTION** — a second dry run reports
+   `175 already funded · 0 to write · delta 0`. *"A re-run refuses"*, demonstrated
+   on the real population rather than argued from the key's shape.
+
+**The audit rows carry no PHI**: keys are `seq · door · bucket · balanceAfter ·
+amountMicroUsd`, `targetType = Practice`. A grant is a fact about a wallet; the
+doctor's identity is not part of it.
+
+⚠️ **AND IT CANNOT BE UNDONE.** `ledger_entries` refuses DELETE and UPDATE. The
+175 rows are permanent; the only instrument now is an `adjustment` row per
+practice, which offsets the balance and lives beside the grant forever. This was
+the first item in the programme whose central act is one-way, which is exactly
+why it required an owner's written authorization and could never have been a
+provisional ruling.
+
+### WHAT THIS DOES **NOT** CLAIM
+
+- **It does not bill anybody.** `BILLING_ENFORCED` is unset in both containers,
+  verified before and after. Enabling it is a separate, later, un-granted
+  decision.
+- **It does not fund the 22 excluded practices** — 16 structurally dead, 6
+  all-deactivated. Ruled, not overlooked.
+- **It says nothing about door 3 being REACHABLE.** The finding above stands
+  unchanged: `apps/meddoc-pro` is decommissioned and RELAY item **A6 deletes it**,
+  taking the only reactivation write in the tree with it. The recommendation for
+  the war room is unchanged — add *"the reactivation promo grant has a home in the
+  live app"* to A6's preconditions.
+- **It does not re-open #97**, which remains PROVISIONAL.
