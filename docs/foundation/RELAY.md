@@ -10660,3 +10660,38 @@ REASON.** Early in STEP 0 I ran `gh run list --commit 9d1a8b4ec99b…` and got `
 because `--branch main` was run beside it and disagreed. **The two-view rule
 covers this failure too, and it is worth naming separately: the documented trap
 is an abbreviated SHA, but a MISTYPED full SHA fails identically and silently.**
+
+### ⚠️ AND THIS CITATION PR'S OWN `e2e` WENT RED ON ISSUE #631 — ZERO CODE DELTA
+
+**PR #638 changes one file: this one, prose only.** Its first `e2e`
+(31701631200) failed at `13:12Z` on `rounds-c1.spec.ts:313`, on the initial
+attempt **and** on retry #1:
+
+    TimeoutError: locator.fill: Timeout 15000ms exceeded.
+    Error: not on the login form — /login redirected us, so the signup session
+           survived clearCookies(). This is the flake; it is not a slow render.
+
+That is **issue #631 exactly** — same spec, same line, same assertion, same
+self-diagnosis. It was auto-filed 2026-08-13T00:10Z against PR #629 and was
+classified KNOWN in session 04's report and again in mine.
+
+⚠️ **THIS SIGHTING IS WORTH MORE THAN THE FIRST, WHICH IS WHY IT IS IN THE LEDGER
+AND NOT ONLY ON THE ISSUE.** #629 left open the possibility that something in
+that branch contributed. **A prose-only diff closes it**: there is no code delta,
+so the failure cannot be a regression in anything the PR touched — it is a
+property of the test and the fixture. It has now also survived its own retry in
+**two of two** sightings, which rules out a timing wobble at the margin: the
+session state is genuinely still present when `/login` is requested.
+
+**Recorded on the issue** (comment `5280919196`) with three candidate mechanisms
+in order of cheapness — a non-cookie store `clearCookies()` never touches, a
+path/domain-scoped cookie it misses, or an in-flight signup request re-setting
+the cookie after the clear — and one instruction: **do not raise the 15 s
+timeout.** The test says it is not a slow render and both retries agree; a
+timeout bump would convert a legible failure into an illegible one.
+
+**Not fixed here.** It is a test-fixture defect in the Rounds C1 pack, not
+FOUNDATION work, and inventing a fix inside a citation PR would put an unrelated
+code change behind a docs review. ⚠️ **And the re-gate was taken by pushing this
+paragraph rather than by re-running the red job** — so the head that merges is
+gated fresh, and no run in this row's citation carries an unexplained `a2`.
