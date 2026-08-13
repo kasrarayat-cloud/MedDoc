@@ -10186,3 +10186,65 @@ migrations check.
 declaration to be **tracked, unmodified and COMMITTED** before the mutation
 runs, so the declaration is its own PR cycle and must be written and landed
 *before* the deploy session begins — not during it.
+
+## ✅ THE INBOX — AN INTER-SESSION CHANNEL THAT DID NOT EXIST — 2026-08-13
+
+**Recorded by the session that received the ruling, in its first commit.**
+Ruling **#103**.
+
+### THE FINDING THAT PRODUCED IT
+
+A brief directed a notice to *"the loop's inbox path (the mechanism MASTER.md
+names for inter-session notes)"*. **Grepped: there was none.** MASTER.md names
+no such mechanism, `docs/foundation/` held no such file, and
+`foundation-loop.sh` read nothing but `STOP`.
+
+⚠️ **AND THE HARDER HALF — A RUNNING SESSION CANNOT BE REACHED AT ALL.**
+MASTER.md's own words: *"a fresh process with no memory."* Anything written
+after its STEP 0 is invisible to it. A supervised session could not tell a
+running one that `main` had moved. **The gap surfaced only when somebody tried
+to use a channel everyone assumed existed.**
+
+### WHAT IT IS
+
+| property | choice |
+|---|---|
+| delivery | **mechanical** — the RUNNER prints it into the session log at launch |
+| scope | ⛔ **operational notices ONLY** |
+| failure mode | **fail-open** — missing / unreadable / empty prints nothing, never blocks |
+| lifecycle | append-only from the supervised side; **retired to `inbox-archive/`, never deleted** |
+
+**A channel that depends on being read is a channel that is off** — the same
+reasoning that put the pre-commit hook behind `core.hooksPath` rather than
+behind a setup instruction.
+
+### ⛔ THE CLAUSE THAT MATTERS — A RULING NEVER TRAVELS THIS WAY
+
+`RULINGS.md` is the single source of truth. **An inbox that can carry a decision
+is a SECOND one.** The failure is not that somebody reads the wrong file — it is
+that **two files can disagree**, and a session finding a decision here has no way
+to know whether `RULINGS.md` contradicts it. That is the CONTRADICTION failure
+the whole ledger design exists to prevent, arriving through a convenience.
+
+The constraint sits in the file's own header **and is printed with every
+delivery**, so it cannot drift out of sight.
+
+### EVIDENCE — the REAL runner, not a reimplementation of it
+
+Three launches of `foundation-loop.sh` itself against a stubbed session:
+
+- **an entry printed into a real log**, in order — banner, inbox, session —
+  carrying the entry **and** the hard-constraint header
+- **a header-only inbox printed nothing**
+- **no inbox at all still launched a session** (fail-open)
+
+Six standalone arms besides, including an unreadable file and a prose `###`
+heading — both silent. Restore taken from a scratch backup, byte-identical.
+
+### ⚠️ A HAZARD, RECORDED RATHER THAN DISCOVERED LATER
+
+**`foundation-loop.sh` is being executed by a live bash process**, which reads
+its script incrementally. Landing this while the loop runs can make the running
+process misread the tail of the file when it eventually exits. **The change is
+inert until a relight in any case** — the running loop parsed its own body long
+ago. **Correct sequence: land, then relight at a boundary.**
