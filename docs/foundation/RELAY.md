@@ -11245,3 +11245,198 @@ As always, and it is the accepted regress: the merge that carries THIS paragraph
 cannot be cited by the session that writes it. The programme carries exactly one
 uncited head, never more. STEP 0.4 of the next session discharges it with
 `bash scripts/check-citation.sh <FULL-40-CHAR-SHA>`.
+
+---
+
+## ✅ B8 step 3c is LIVE — `0c0ed5fe` DEPLOYED, DECLARATION JUDGED **14 of 14** — 2026-08-13
+
+Batch b2 session 02. The item built and gated by session 01 is now the code
+production runs. **The deploy was the whole of the planned work; everything else
+below is a finding it walked into.**
+
+### THE DEPLOY
+
+**Deployed:** `0c0ed5fee3be642e6ce95052e09d779d4bd5f461` (merge of PR #642),
+20:22:44Z → 20:27:05Z, `bash scripts/deploy-prod.sh`, exit 0.
+**Previously deployed:** `9d1a8b4e`.
+**Declaration:** `docs/foundation/deploys/20260813-0c0ed5fe.md`, written
+**19:42Z**, forty minutes before the act.
+
+**MUST CHANGE — 4 of 4:**
+
+| # | declared | measured |
+|---|---|---|
+| 1 | both image ids move | app `faadc7ddbaad` → `fdee78e104f8`; worker `cf32b5c624be` → `312ae6511983` |
+| 2 | `unrecoverable.ts` becomes present in the worker image | absent → **present** |
+| 3 | `shouldDiscardPermanentJob` in the running `worker.ts` | **0 → 2** |
+| 4 | `observeFailedVisitUsage` survives | **3**, unchanged — step 3's seam is intact |
+
+**MUST NOT CHANGE — 10 of 10:** migrations **101**; `ledger_entries` **175** with
+the `grant` bucket at 175 rows / 1 750 000 000 micro-USD and **no second bucket**;
+billing audit rows exactly `PROMO_GRANT_CREDITED = 175`; visits **25** · signed
+**17** · patients **16**; `FAILED` **0** and `failureCategory` non-NULL **0**; DLQ
+`wait` **1** and id counter **2**; practices **197**; `BILLING_ENFORCED` **unset**
+in both containers; co-tenants **307 · 404 · 200 · 200 · 410**;
+`api_usage_events` **1325**, no jump.
+
+⚠️ **`audit_logs` TOTAL DID NOT MOVE EITHER — 10951 before and after.** The
+declaration deliberately left the total uncontrolled (only the billing-labelled
+subset was), so this is tighter than required and is recorded as such, not
+claimed as a passed row.
+
+**Rollback:** `:pre-b8s3c-20260813` on app / worker / gotenberg, cut **before**
+the deploy and digest-verified against the RUNNING containers at tag time —
+app `faadc7ddbaad`, worker `cf32b5c624be`, gotenberg `2d05d22572ba`. No
+migration, so the rollback is a clean inverse. ⚠️ `deploy-prod.sh` has **no
+tagging step**; this was the manual pre-step runbook §3.1 requires, and a
+promotion that forgets it leaves no rollback target at all.
+
+⚠️ **THE DECLARATION IS UNCOMMITTED AT THE MOMENT OF THE ACT, AND THAT IS
+STRUCTURAL — SEE FINDING 3.** The gate reported `present` with its loud warning.
+What IS provable: the deploy transcript records `sha256 33831a49fe61c799…`, and
+the file committed here hashes to
+`33831a49fe61c799a0415610768a1d6f014fdf98ab716d1463e03a1bd940e22c`.
+**Byte-identical to what the gate read.** The ORDER still rests on the transcript;
+the CONTENT no longer does.
+
+### ⚠️ FINDING 1 — "PRODUCTION HAS NEVER HELD A FAILED VISIT" IS FALSE OF THE HISTORY
+
+**This programme has been repeating a claim about a table that has been pruned.**
+The `9d1a8b4e` declaration put it in as many words — *"Production has never held a
+single FAILED visit. That is the evidence base ruling #104(a) refused to price a
+charging policy from"* — and it is true of `transcribe_visits` today and **false
+of what happened.**
+
+Found by reading production's DLQ for a baseline row, which nobody had done
+before: it is **not empty.** One entry in `bull:dlq-permanent-failures:wait`, id
+counter **2**. Job `transcribe-md--visit-cmsduyhcd000601mmzwh85cfj-29763326`,
+name `permanent-failure`, timestamp `1785799620387` = **2026-08-03 23:27:00Z**.
+
+Its visit is gone — `id like 'cmsduyhcd%'` returns **0 rows**. **Its audit trail
+is not:**
+
+    VISIT_CREATED                 success=true    2026-08-03 23:26:13Z
+    VIEWED_VISIT                  success=true    2026-08-03 23:26:13Z
+    VIEWED_VISIT                  success=true    2026-08-03 23:26:14Z
+    ANCHOR_FLAGS_RECORDED         success=true    2026-08-03 23:26:26Z
+    VISIT_AUTOMATION_INCOMPLETE   success=FALSE   2026-08-03 23:26:45Z
+
+**Fifteen seconds** between that failure row and the DLQ entry. Two independent
+stores, one event. So production reached the permanent branch **once, ten days
+ago**, the dead-letter worked, and the visit row later vanished while the audit
+rows detached and survived — exactly as the deletable-accounts design intends.
+
+> ⚠️ **`transcribe_visits` IS NOT A DURABLE RECORD OF WHAT HAPPENED.
+> `audit_logs` IS.** Any population argument in this programme built on visit
+> rows is measuring a set that deletion silently shrinks.
+
+**What this does and does not overturn.** The *quiet-deploy* expectation stands —
+one permanent failure in ten days will not recur inside a five-minute window, and
+it did not. **Ruling #104(a)'s empty-evidence-base premise does not stand as
+stated** and should be re-derived from `audit_logs` before it is leaned on again.
+Not re-derived here: it is the war room's ruling, not this session's to revise.
+
+**The orphan is left in place.** A Redis mutation on production is a deliberate
+ruled act, not a side effect of a deploy, and nothing is broken by its presence.
+
+### ⚠️ FINDING 2 — THE `e2e` "60% ELEVATION" IS NOT REAL, AND TWO SESSIONS CORROBORATED EACH OTHER
+
+Session 06 recorded three `e2e` runs at 1h13m / ~1h05m / ~1h10m against the ~42m
+cited all week and deliberately did not diagnose it. Session 01 then reported it
+**"confirmed by a second session, independently"** — `bf367b5c` at
+`17:00:21Z → 18:12Z (~72m)` and the merge commit at `18:00Z → 18:52Z (~52m)` —
+and priced roughly two of its four hours against it.
+
+**Measured here at JOB level, which is the evidence neither session pulled:**
+
+| run | job started | job completed | actual |
+|---|---|---|---|
+| `bf367b5c` — `31723528905` | `17:00:25Z` | **`17:43:11Z`** | **42m46s**, not ~72m |
+| `e71504b6` — `31729849943` | `18:15:49Z` | **`18:51:59Z`** | **36m10s**, not ~52m |
+
+**Both cited figures are wrong**, and in the same direction. The distribution over
+the **last 81 successful `e2e` runs**: min **36m**, max **72m**, and **76 of 81
+sit between 36 and 46 minutes** (median 42–43). Exactly **five** exceed 50m —
+51, 60, 61, 61, 72.
+
+    ~42m is still the baseline. There is a THIN TAIL, not a new floor.
+
+This session's own gate is the control: `0c0ed5fe`'s `e2e` ran `19:36Z → 20:22Z`,
+**46 minutes**.
+
+⚠️ **THE MECHANISM IS ONE AGENTS.md ALREADY NAMES.** Session 06 saw a real tail
+event. Session 01 inherited the *expectation*, measured loosely, and its numbers
+agreed — so a report and the session reading it **corroborated each other about a
+system-wide slowdown the run data does not contain**. That is *"no evidence before
+the event"* arriving as arithmetic: the second measurement was not independent of
+the first, because the first told it what to expect. The cure is the one already
+written down — **check an independent fact.** Here that fact is
+`gh run view <id> --json jobs`, and it is one command.
+
+**Both prior rows stay in the ledger; nothing is rewritten.** They record what
+those sessions observed. This row records what the runs say.
+
+### ⚠️ FINDING 3 — A COMMITTED DEPLOY DECLARATION IS STRUCTURALLY IMPOSSIBLE, AND THIS LEDGER'S PLAN FOR IT CANNOT WORK
+
+B8 step 3's row planned this deploy's provenance in as many words:
+
+> *"the short SHA is the MERGE commit's, which does not exist until this PR lands.
+> **So the declaration is necessarily its own PR cycle, after this one merges and
+> before the deploy session begins.**"*
+
+**That plan cannot be executed.** `deploy-prod.sh:69` derives the filename from
+`git rev-parse --short HEAD`, so the declaration must be named for the commit that
+is HEAD *when the deploy runs*. Landing it through a PR **moves HEAD to that PR's
+own merge commit**, and the gate then looks for a different filename and refuses.
+The regress has no fixed point: every PR that lands a declaration invalidates it.
+
+So a deploy declaration can only ever be `present`, never `strict` — **not by
+choice, and not because a deploy is reversible, but because the naming convention
+forecloses it.** Ruling #96(b)'s reversibility argument is a good reason for the
+`present` default; it is not the reason `strict` is currently unreachable, and the
+two have been reading as the same thing.
+
+**Not fixed tonight, deliberately.** The obvious repair — let the gate accept a
+declaration named for any ANCESTOR of HEAD, or take an explicit `--declaration`
+path as `run-ruled-mutation.sh` already does — **widens what a shipped gate
+accepts.** That fails the provisional-ruling test's first condition (reversible in
+the allowed direction: a gate may only ever gain requirements), so it goes to the
+war room rather than into tonight's diff.
+
+**Recommendation for the batch review:** take the `--declaration <path>` form,
+matching `run-ruled-mutation.sh`. It is the narrower change — the gate keeps every
+requirement it has and merely stops deriving the path — and it makes `strict`
+reachable for deploys that want it without weakening the default.
+
+### ⚠️ FINDING 4 — THE PREFLIGHT'S OOM CHECK IS A FALSE ALL-CLEAR
+
+`preflight-health-check` Check 5 greps `journalctl -k` for OOM kills. It returned
+**no output**, which reads as *"no kills in 24 hours"*. Positive-controlled:
+`journalctl -k --since '24 hours ago' | wc -l` returns **4 lines**, all of them
+the *"you are not seeing messages from other users and the system"* hint. **The
+journal is unreadable by this user and `dmesg` is not granted**, so the check has
+no haystack and returns zero for every needle you try.
+
+Recorded as **SKIPPED**, per the skill's own fallback clause — never as a pass.
+Report: `docs/preflight-reports/preflight-20260813T194453Z.md`, verdict 🟢 GO on
+the other five checks. Indirect evidence offered there, and not as a substitute:
+`RestartCount` **0** on app, worker, postgres and caddy.
+
+### WHAT THIS DEPLOY DOES **NOT** CLAIM
+
+- **It does not demonstrate the discard.** Production's permanent branch was
+  reached once in ten days and not during the window. The behavioural proof is
+  session 01's QA walk (jobs 413–419) and this deploy **inherits** it.
+- **It says nothing about `BILLING_ENFORCED`.** B8 step 3b remains a hard
+  precondition, untouched.
+- **The QA APP image is still stale** — re-measured here: `2026-08-11 14:54Z`,
+  ~2 days behind, while the QA worker is current at `2026-08-13 17:29Z` and
+  `db-migrate:qa` is `2026-08-12 20:44Z`. Unchanged, still open.
+- **The stale `failureCategory='permanent'` on a recovered READY visit** (session
+  01's finding 3) is untouched.
+
+### ⚠️ THIS ROW'S OWN MERGE COMMIT IS OWED FORWARD
+
+The accepted regress, as always. The merge carrying this paragraph cannot be cited
+by the session that writes it. STEP 0.4 of the next session discharges it with
+`bash scripts/check-citation.sh <FULL-40-CHAR-SHA>`.
