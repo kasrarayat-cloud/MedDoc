@@ -10186,3 +10186,181 @@ migrations check.
 declaration to be **tracked, unmodified and COMMITTED** before the mutation
 runs, so the declaration is its own PR cycle and must be written and landed
 *before* the deploy session begins — not during it.
+
+---
+
+## B8 step 3's QA BEHAVIOURAL PROOF — ✅ DONE, AND IT FOUND TWO DEFECTS
+
+**Item:** the debt B8 step 3 handed forward in as many words — *"this item's
+seam runs UNFLAGGED, and it has never executed against a real database in any
+environment … the unit gate proves it cannot throw and cannot hang. THAT IS NOT
+THE SAME AS HAVING RUN."*
+
+It has now run. Three arms, on the live `meddoc-qa` stack, through the real
+worker process, against real BullMQ jobs.
+
+### ⚠️ FIRST, THE PRECONDITION — AND THE STALE-IMAGE TRAP CAUGHT A SECOND TIME
+
+Before anything else: **the QA worker image did not contain this item.**
+`billing-failure.ts` was absent from `/app/packages/ai/src` (6 of the 7 billing
+files present) and `worker.ts` held **0** occurrences of `observeFailedVisitUsage`
+— while holding 3 of `admitVisitOrThrow`, so the image stopped exactly at B8
+step 2. `assert-migrations-applied --qa` was **101/101 🟢** throughout, correctly.
+
+This is the 2026-08-12 row repeating one item later, which is the argument for
+its being written down: **a green `--qa` migrations check says the QA DATABASE
+is current and says nothing about the QA IMAGES.** The image was rebuilt, and
+the rebuild was **positive-controlled rather than assumed** — the symbol count
+moved `0 → 3` and the billing-file count `6 → 7`. A build that succeeds and
+ships the old tree prints the same "Built" line as one that works.
+
+### THE PROOF — three arms, two postures, and the posture is itself the claim
+
+`apps/transcribe-md/scripts/qa/b8-failure-cost-on-qa.ts` (in-container: creates,
+drives, asserts the DATABASE) + `scripts/qa/b8-failure-cost-log-assert.py` (on
+the host: asserts the LOG). **The split is forced, not stylistic** — the product
+of this item is a `log.info` line on the worker's stdout, and the harness runs
+under `docker exec` as a SIBLING process, which does not share that stream.
+
+⚠️ **THE HARNESS WRITES ITS EXPECTATIONS TO A MANIFEST BEFORE ANY LOG IS READ.**
+That ordering is the whole value of the split: it is §2.5's "declare the delta
+first" applied to an assertion. A single script that read the log and then
+decided what it should have said would be unfalsifiable.
+
+⚠️ **AND IT REFUSES TO RUN WITH `BILLING_ENFORCED=true` FOR ARMS 1–2**, which is
+the opposite of its sibling `b8-admission-on-qa.ts` and is the point rather than
+an inconsistency. Ruling **#103(c)** claims the observation runs UNFLAGGED; a
+run with the flag on cannot distinguish *"the seam runs unconditionally"* from
+*"the seam runs because the flag is on"*, and the second is the thing #103(c)
+would be wrong about. **The falsifiable posture is flag ABSENT**, and arms 1–2
+demand it. Verified in the container: `printenv BILLING_ENFORCED` exits 1.
+
+| arm | posture | what really happened | observation |
+|---|---|---|---|
+| 1 — empty meter | flag ABSENT | `audio_upload` visit, audio key resolving to no MinIO object → real L1 failure, `category=transient` | `unpriceable` / `nothing_billable`, `accountability=ours` |
+| 2 — priced | flag ABSENT | same shape + one seeded `unitsSource='vendor'` usage row | **`wouldChargeMicroUsd=10500`**, `componentCount=2`, `charged=false` |
+| 3 — not_started | flag ON | unfunded practice → `BillingAdmissionError`, `processingStartedAt` **NULL** | `not_started`, `wouldChargeMicroUsd="0"`, meter never read |
+
+**ARM 2 is the one that proves the machinery.** `10500` is not pinned — it is
+derived at run time from the live `price_rates` rows (`claude-sonnet-5`,
+1000 in × 2 + 500 out × 10, then B6's ×1.5) and compared against what the real
+pricer returned. A hardcoded figure would go red the day a rate is re-versioned,
+which is both a maintenance trap and a check failing for the wrong reason. So
+this exercises `loadVisitChargeableUsage`'s `timestamp` → `createdAt` mapping,
+`priceUsageRows`' rate lookup and the margin — end to end, on real rows, for the
+first time anywhere.
+
+⚠️ **THE SEEDED ROW IS DISCLOSED, NOT BURIED.** Under `MOCK_AI_CALLS` every row
+the pipeline writes is `unitsSource: 'mock'` and ruling 66 makes the pricer skip
+exactly those — so on QA the `priced` arm is **unreachable through the pipeline,
+by design, forever**, because the stack is *required* to be incapable of
+reaching a vendor. The honest options were to seed the row or to leave the arm
+unproven and say so. What seeding does NOT prove is that the pipeline emits
+vendor rows in this shape; that is B4's territory and is not claimed here.
+
+**THE CENTRAL CLAIM HELD IN BOTH POSTURES: `ledger_entries` 0 → 0.** Captured
+before the first arm, re-read after the last. A failed visit is free, measured
+rather than asserted — and on an APPEND-ONLY table this is the assertion with
+the most expensive failure mode, since a mistaken debit could only be offset,
+never removed.
+
+### ⚠️ DEFECT 1 — THE OBSERVATION RAN ONCE PER **ATTEMPT**, NOT ONCE PER VISIT
+
+**Measured, first run of ARM 3: THREE `failure cost` lines for ONE visit**, one
+per BullMQ attempt.
+
+`shouldFailNow` is `isFinalAttempt || category === 'permanent'`, so a
+**permanent** failure enters the terminal branch on *every* attempt — the
+re-throw still hands the error to BullMQ and nothing discards the job.
+Unguarded, the observation reported the same visit's cost up to `attempts` times.
+
+**It charges nothing either way, so this is a MEASUREMENT defect and not a money
+one** — the ledger was 0 → 0 throughout. But the number it inflates is exactly
+the one that will price the decision to enable `BILLING_ENFORCED`, and it
+inflates it in the direction that makes failures look more expensive than they
+are. A B9 rollup summing these lines would have triple-counted every permanent
+failure.
+
+⚠️ **AND THE FIRST FIX WAS ALSO WRONG, WHICH IS THE PART WORTH KEEPING.**
+`isFinalAttempt || attemptsMade === 0` reads like *"the first one or the last
+one"* and is exactly-**TWICE** for a permanent failure: both disjuncts fire, on
+different attempts. Re-running the proof measured **2 lines, 15s apart** — the
+fix had halved the defect and looked like a cure.
+
+    unguarded                              → 3 lines
+    isFinalAttempt || attemptsMade === 0   → 2 lines
+    shouldObserveFailureCost               → 1
+
+**It was caught only because the proof was RE-RUN rather than assumed to work** —
+AGENTS.md's *"mutate toward SUCCESS, not just toward failure"*, and this was the
+half that was broken. The count moving 3 → 2 → 1 is the positive control.
+
+**Now `shouldObserveFailureCost` in `worker/retry-decision.ts`, with unit
+coverage.** Extracted rather than left inline for the same reason
+`shouldMarkVisitFailed` was extracted: **no unit test runs `processVisit`**
+(ruling #96(a)'s standing gap), so an inline predicate is provable only on QA by
+whoever remembers to look. Six cases, mutation-proved in both directions — a
+substring mutation (`category.includes('permanent')`) and a silencing mutation
+(`attemptsMade === 0` alone) each redden it.
+
+⚠️ **THE PREDICATE UNDERSTATES A PERMANENT FAILURE'S COST TODAY, DELIBERATELY.**
+`isFinalAttempt` alone is also exactly-once AND would observe after every retry,
+so it would see more spend. It was rejected because it **breaks silently the day
+DEFECT 2 is fixed**: with permanent failures no longer retried, `attemptsMade` is
+0 and `isFinalAttempt` is false, so the measurement would simply stop running,
+with nothing going red. That is AGENTS.md's *"a check that fails when the thing
+it guards starts working"*. This predicate measures the INTENDED semantics; the
+gap is DEFECT 2's, and fixing that closes it rather than opening one.
+
+### ⚠️ DEFECT 2 — CARRIED AS **B8 step 3c**: "fail-fast" DOES NOT FAIL FAST
+
+The worker logs, verbatim, `permanent failure, fail-fast (skipping BullMQ
+retries)` — and then BullMQ retries. Observed at `attemptsMade` 0 and 1 of 3,
+five seconds apart, on the admission-refusal arm.
+
+**The sentence describes an intent and is read as a description of behaviour** —
+AGENTS.md's *"a stated invariant is a WISH until something asserts it"*, arriving
+in a log message rather than in a runbook. The visit's FAILED status IS persisted
+early, so the doctor-facing half of the intent is met; what does not happen is
+the skipping.
+
+⚠️ **AND THE COST IS NOT COSMETIC, BY THE CATEGORIZER'S OWN DEFINITION.**
+`permanent` means *"retrying is futile — nothing on our side is broken"*. The
+code retries anyway, and with per-layer resume (`resume-state.ts`) each retry
+re-runs the failing layer. **A permanent failure that occurs after spend
+therefore re-spends on attempts the system has already classified as useless.**
+
+**Bounded honestly: this is INFERRED, not measured.** ARM 3's failure is an
+admission refusal, which happens before the first vendor call, so nothing was
+re-spent in what was actually observed. The mechanism is read from
+`resume-state.ts` and the categorizer; a post-spend permanent failure has not
+been walked. **That measurement is what B8 step 3c owes**, alongside the fix.
+
+**NOT FIXED HERE, deliberately** — making the message true means discarding the
+job, which is a change to clinical retry semantics and is not this item's to
+make. It is a sibling of B8 step 3b: both inflate the same number in the same
+direction, through different doors.
+
+### WHAT THIS ITEM DOES **NOT** CLAIM
+
+- **It does not prove the pipeline emits vendor usage rows.** ARM 2's row was
+  seeded. B4 owns that claim.
+- **It does not measure a post-spend permanent failure.** DEFECT 2's re-spend is
+  argued from the code, not walked. Owed to 3c.
+- **It says nothing new about `BILLING_ENFORCED` being safe to enable.** B8 step
+  3b remains a hard precondition and is untouched here.
+- **The QA APP image is still stale.** Only the worker was rebuilt — that is the
+  image this item's seam lives in. Unchanged from B8 step 2's row, still open.
+- **Production has not run this code.** Still not deployed; see below.
+
+### 🚧 STILL NOT DEPLOYED — AND THE NEXT SESSION INHERITS A CHANGED DEPLOY
+
+`main` will carry step 3 **plus DEFECT 1's fix**; production carries neither.
+
+The deploy remains the next act, and ruling **#102** governs it: the §2.5
+declaration must be **tracked, unmodified and COMMITTED** before the mutation
+runs. The declaration is named `docs/foundation/deploys/<UTC-date>-<short-sha>.md`
+and `deploy-prod.sh` **refuses any other filename** — and the short SHA is the
+MERGE commit's, which does not exist until this PR lands. **So the declaration
+is necessarily its own PR cycle, after this one merges and before the deploy
+session begins.** It cannot be pre-landed here.

@@ -39,7 +39,10 @@ import {
   type FailedVisitObservation,
 } from '@meddoc/ai';
 import { log } from '@/lib/log';
-import { shouldMarkVisitFailed } from './worker/retry-decision';
+import {
+  shouldMarkVisitFailed,
+  shouldObserveFailureCost,
+} from './worker/retry-decision';
 import {
   categorizeError,
   type ErrorCategory,
@@ -1409,12 +1412,54 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // deterministic enough to assert. It cannot throw — the seam absorbs its
     // own errors, because replacing a real pipeline error with a billing one as
     // the job's proximate cause would destroy the diagnosis of this failure.
-    const failureCost = await observeFailedVisitUsage({
-      visitId,
-      category,
-      errorName: err instanceof Error ? err.name : null,
-    });
-    logFailedVisitCost(visitId, currentLayer, failureCost);
+    // ⚠️ ONCE PER VISIT, NOT ONCE PER ATTEMPT — AND THE GUARD IS NOT DECORATIVE.
+    // Measured on QA 2026-08-13 by `scripts/qa/b8-failure-cost-on-qa.ts`: an
+    // admission-refused visit produced **THREE** `failure cost` lines, one per
+    // BullMQ attempt, 5s apart. `shouldFailNow` is `isFinalAttempt || category
+    // === 'permanent'`, so a PERMANENT failure enters this branch on EVERY
+    // attempt — the re-throw below still hands the error to BullMQ and nothing
+    // discards the job.
+    //
+    // Unguarded, the observation therefore reports the same visit's cost up to
+    // `attempts` times. It charges nothing either way (the ledger was 0 → 0
+    // across both postures of the proof), so this is a MEASUREMENT defect, not
+    // a money one — but the number it inflates is precisely the one that will
+    // price the decision to enable `BILLING_ENFORCED`, and it inflates it in
+    // the direction that makes failures look more expensive than they are.
+    //
+    // ⚠️ THE PREDICATE IS "FIRST ENTRY INTO THIS BRANCH", AND THE OBVIOUS WAY
+    // TO WRITE IT IS WRONG. The first attempt at this guard read
+    // `isFinalAttempt || attemptsMade === 0`, which reads like "the first one
+    // or the last one" and is exactly-TWICE for a permanent failure: the branch
+    // is entered at attemptsMade 0 (first disjunct) AND again at attemptsMade 2
+    // (second disjunct). Re-running the QA proof measured 2 lines, 15s apart,
+    // for one visit — the fix halved the defect and did not remove it.
+    //
+    // Caught only because the proof was re-run rather than assumed to work:
+    // AGENTS.md's "mutate toward SUCCESS, not just toward failure" — a guard
+    // proven only in the red direction is half-proven, and this is the half
+    // that was broken.
+    //
+    // We are already inside `shouldFailNow = isFinalAttempt || permanent`, so
+    // a non-permanent category here is necessarily the final attempt. That
+    // makes the correct form a single question about the permanent case:
+    //
+    //   permanent  → entered on every attempt; want only attemptsMade === 0
+    //   otherwise  → entered once, on the final attempt; want it
+    //
+    // ⚠️ THE RETRIES THEMSELVES ARE NOT FIXED HERE, AND THAT IS DELIBERATE —
+    // see RELAY's B8 step 3c. The line logged immediately above this one says
+    // "permanent failure, fail-fast (skipping BullMQ retries)" and it is FALSE:
+    // the retries happen. Making it true means discarding the job, which is a
+    // change to clinical retry semantics and is not this item's to make.
+    if (shouldObserveFailureCost(category, attemptsMade)) {
+      const failureCost = await observeFailedVisitUsage({
+        visitId,
+        category,
+        errorName: err instanceof Error ? err.name : null,
+      });
+      logFailedVisitCost(visitId, currentLayer, failureCost);
+    }
 
     // Best-effort admin alert. notifyAdminOnFailure swallows every
     // failure path internally — a misconfigured Resend account must
