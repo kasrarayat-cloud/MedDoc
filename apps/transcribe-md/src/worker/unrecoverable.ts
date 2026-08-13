@@ -87,3 +87,35 @@ export function asUnrecoverable(err: unknown): UnrecoverableError {
   }
   return marker;
 }
+
+/**
+ * Is this the marker — i.e. did BullMQ stop retrying because of it?
+ *
+ * ⚠️ THIS EXISTS BECAUSE A SECOND CONSUMER KEYS ON THE ATTEMPT COUNT, AND THE
+ * DISCARD MOVED IT UNDER THAT CONSUMER'S FEET. `worker.ts`'s `failed` handler
+ * dead-letters when `attemptsMade >= opts.attempts`. A discarded job ends at
+ * `attemptsMade = 1` of 3, so `1 >= 3` is FALSE and it is never dead-lettered.
+ *
+ * MEASURED on QA before this function existed: jobs `413` (pre-fix permanent,
+ * 3 attempts) and `415`/`416` (transient, 3 attempts) all reached
+ * `bull:dlq-permanent-failures`; job `414` — the discarded one — did NOT.
+ * **Every insufficient-balance refusal would have vanished from `/admin/queues`,
+ * which B8's own gate calls load-bearing for money.**
+ *
+ * ⚠️ AND NO TEST AND NO PART OF THE QA WALK SAW IT. The walk measured what it
+ * set out to measure — the attempt count — and the attempt count was right. This
+ * was found by asking who ELSE reads `attemptsMade`, which is AGENTS.md's
+ * *"diff the callers BEFORE you replace them"* pointed at a value rather than a
+ * component. The predicate that changed was mine; the consumer that broke was
+ * somebody else's, three hundred lines away, and nothing connected them.
+ *
+ * The recognition lives HERE, beside the thing it recognises, so a future
+ * consumer inherits it instead of re-deriving bullmq's disjunction — the
+ * "put the behaviour where it cannot be forgotten" half of that same rule.
+ */
+export function isUnrecoverableMarker(err: unknown): boolean {
+  return (
+    err instanceof UnrecoverableError ||
+    (err as { name?: unknown } | null | undefined)?.name === 'UnrecoverableError'
+  );
+}

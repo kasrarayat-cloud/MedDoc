@@ -11099,4 +11099,73 @@ Three mutations, each red, each restored from a **scratch copy** rather than
 **M3 is the one worth remembering** — see the bullmq section above. It is a
 mutation whose headline test stayed green.
 
+### ⚠️ THE FIX BROKE THE DLQ, SILENTLY — I FOUND IT BY DIFFING THE CONSUMERS OF A VALUE I CHANGED
+
+**This is the most useful thing in the item, and it is a defect I introduced.**
+
+`worker.ts`'s `failed` handler dead-letters on
+`job.attemptsMade >= job.opts.attempts`. That is a correct test of *"the retry
+budget is exhausted"* — for exactly as long as exhaustion is the ONLY way a job
+can stop. **A discarded permanent failure ends at `attemptsMade = 1` of 3, so
+`1 >= 3` is false and it never reaches `/admin/queues`.**
+
+Measured, on `bull:dlq-permanent-failures`:
+
+| job | image | category | `atm` | in the DLQ? |
+|---|---|---|---|---|
+| `413` | pre-fix | permanent | 3 | yes |
+| `414` | **discard only** | permanent | 1 | ⚠️ **NO** |
+| `415` `416` | discard only | transient | 3 | yes |
+| `417` | **discard + DLQ fix** | permanent | **1** | **yes** |
+| `418` `419` | discard + DLQ fix | transient | **3** | yes |
+
+**B8's own gate text says *"this makes `/admin/queues` load-bearing for money"*.
+Every insufficient-balance refusal would have vanished from it** — the one page
+an operator has for exactly this, and the failures that disappear are the money
+ones.
+
+⚠️ **NOTHING WOULD HAVE CAUGHT IT.** No test failed. **The QA walk did not catch
+it either, and that is the part worth internalising: the walk measured the
+attempt count, and the attempt count was correct.** An instrument aimed at the
+thing you changed cannot see what a *different* consumer of that value does. It
+was found by asking *who else reads `attemptsMade`* — AGENTS.md's **"diff the
+callers BEFORE you replace them"**, pointed at a VALUE rather than at a
+component, and the answer was three hundred lines away in a different file.
+
+The repair follows that section's own prescription — **put the behaviour where it
+cannot be forgotten.** `isUnrecoverableMarker` lives beside the thing it
+recognises in `unrecoverable.ts`, so bullmq's disjunction has ONE definition and
+a future consumer inherits it instead of re-deriving it; `shouldDeadLetter` is a
+pure predicate written against *"this job will not run again"* rather than
+*"the budget is exhausted"*. **Those were the same sentence until today.** That
+is the title-narrower-than-the-measurement class arriving inverted: a condition
+whose name was narrower than what it now needs to mean.
+
+    M4  `return attemptsMade >= attempts`  → 1 red: the discarded-job case
+
+⚠️ **AND THE OVER-BROADENING CONTROL RAN TOO**, because `wasDiscarded || …` is
+one careless edit away from dead-lettering every intermediate attempt — three DLQ
+rows per failed visit and an operator's queue filling with jobs that are still
+running. Asserted in the unit gate at `attemptsMade` 0, 1 and 2, and observed on
+QA: job `418` failed **3** times and produced exactly **one** DLQ entry.
+
+### ⚠️ AND I MISREAD MY OWN TOOLCHAIN TWICE, BOTH TOWARD A FALSE GREEN
+
+Recorded because both were silent and both were mine:
+
+1. **A count taken before the thing being counted had finished** — the first grep
+   of the pre-fix run returned **1** failure line, which is the POST-fix answer.
+   The retries had not happened yet. Re-counted once settled: **3**.
+2. **`tsc --noEmit` run from the repository ROOT rather than from
+   `apps/transcribe-md`.** There is no tsconfig at the root, so `tsc` printed its
+   USAGE TEXT and exited — and a `| tail` of that looks like a compiler that
+   found nothing to complain about. **A help screen and a clean typecheck are
+   the same shape through a pipe.** Re-run from the app directory: 0 errors, for
+   real this time. The working directory had changed under an earlier
+   `cd /opt/meddoc-pro && …`, which no output anywhere announced.
+
+Both are the same family as the standing rule on positive controls: **an
+instrument that produces a clean-looking answer while measuring nothing is
+indistinguishable from a clean system.**
+
 ### Citation — produced by `check-citation.sh`, not typed

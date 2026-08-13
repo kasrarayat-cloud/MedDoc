@@ -40,11 +40,15 @@ import {
 } from '@meddoc/ai';
 import { log } from '@/lib/log';
 import {
+  shouldDeadLetter,
   shouldDiscardPermanentJob,
   shouldMarkVisitFailed,
   shouldObserveFailureCost,
 } from './worker/retry-decision';
-import { asUnrecoverable } from './worker/unrecoverable';
+import {
+  asUnrecoverable,
+  isUnrecoverableMarker,
+} from './worker/unrecoverable';
 import {
   categorizeError,
   type ErrorCategory,
@@ -2020,18 +2024,32 @@ async function main() {
       `[transcribe-md-worker] job ${job?.id} visit ${job?.data.visitId} FAILED:`,
       redactPhi(err instanceof Error ? err.message : err)
     );
-    // PR-L: when the retry budget is exhausted, ship the job to the
-    // DLQ so an operator can see + decide via /admin/queues. The
-    // `failed` event fires AFTER each failed attempt — only enqueue
-    // when the FINAL attempt failed (attemptsMade equals the
-    // configured ceiling). Best-effort: if Redis is unhappy we log +
-    // drop rather than crash the worker (the next failure will retry
-    // the DLQ enqueue too).
+    // PR-L: when the job will not run again, ship it to the DLQ so an
+    // operator can see + decide via /admin/queues. The `failed` event
+    // fires AFTER each failed attempt. Best-effort: if Redis is unhappy
+    // we log + drop rather than crash the worker (the next failure will
+    // retry the DLQ enqueue too).
+    //
+    // ⚠️ B8 step 3c — THIS CONDITION USED TO BE `attemptsMade >= opts.attempts`
+    // AND THE DISCARD BROKE IT SILENTLY. A discarded permanent failure ends at
+    // `attemptsMade = 1` of 3, so `1 >= 3` is false and it never reached the
+    // DLQ. Measured on QA: jobs 413/415/416 landed in
+    // `bull:dlq-permanent-failures`; the discarded 414 did not — every
+    // insufficient-balance refusal would have vanished from the one page B8's
+    // gate calls load-bearing for money.
+    //
+    // "The retry budget is exhausted" and "this job will not run again" were
+    // the same sentence until a job could stop for a second reason. They are
+    // not now, and `shouldDeadLetter` is written against the second one.
     if (
       job &&
       typeof job.attemptsMade === 'number' &&
       typeof job.opts?.attempts === 'number' &&
-      job.attemptsMade >= job.opts.attempts
+      shouldDeadLetter(
+        job.attemptsMade,
+        job.opts.attempts,
+        isUnrecoverableMarker(err)
+      )
     ) {
       void enqueueDlq({
         originalQueue: QUEUE_NAME,

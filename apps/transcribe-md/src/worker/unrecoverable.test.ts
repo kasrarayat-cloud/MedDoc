@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { UnrecoverableError } from 'bullmq';
 
-import { asUnrecoverable } from './unrecoverable';
+import { asUnrecoverable, isUnrecoverableMarker } from './unrecoverable';
 
 // ============================================================================
 // B8 step 3c — the marker that makes "fail-fast" true
@@ -97,5 +97,49 @@ describe('asUnrecoverable', () => {
     expect(asUnrecoverable(null).message).toBe('');
     expect(asUnrecoverable(undefined).message).toBe('');
     expect(bullmqWouldStopRetrying(asUnrecoverable(null))).toBe(true);
+  });
+});
+
+// ============================================================================
+// `isUnrecoverableMarker` — the recognition the DLQ path needs
+// ----------------------------------------------------------------------------
+// ⚠️ IT IS VALIDATED AGAINST THE TRANSCRIBED ORACLE, NOT ASSERTED ALONE. If this
+// suite only checked `isUnrecoverableMarker` against cases I chose, it would be
+// a matcher agreeing with its author. Every case below is asserted to AGREE with
+// `bullmqWouldStopRetrying`, which was copied from bullmq's source — so the
+// helper is pinned to what bullmq actually does, and a future edit that drifts
+// from bullmq's disjunction reddens here rather than silently changing which
+// jobs an operator can see.
+// ============================================================================
+describe('isUnrecoverableMarker', () => {
+  const cases: Array<[string, unknown]> = [
+    ['the marker this module builds', asUnrecoverable(new Error('boom'))],
+    ['a bare UnrecoverableError', new UnrecoverableError('boom')],
+    ['a plain Error', new Error('boom')],
+    ['a TypeError', new TypeError('boom')],
+    ['null', null],
+    ['undefined', undefined],
+    ['a string', 'not an error at all'],
+    ['an object wearing the name', { name: 'UnrecoverableError' }],
+  ];
+
+  it.each(cases)('agrees with bullmq’s own predicate on %s', (_label, value) => {
+    expect(isUnrecoverableMarker(value)).toBe(bullmqWouldStopRetrying(value));
+  });
+
+  // The two that matter for the DLQ, stated plainly so the intent survives a
+  // refactor of the table above.
+  it('recognises a discarded job', () => {
+    expect(isUnrecoverableMarker(asUnrecoverable(new Error('boom')))).toBe(true);
+  });
+
+  it('does NOT recognise an ordinary failure — the DLQ must not change for those', () => {
+    expect(isUnrecoverableMarker(new Error('boom'))).toBe(false);
+  });
+
+  it('does not throw on null, undefined or a non-object', () => {
+    expect(isUnrecoverableMarker(null)).toBe(false);
+    expect(isUnrecoverableMarker(undefined)).toBe(false);
+    expect(isUnrecoverableMarker('boom')).toBe(false);
   });
 });

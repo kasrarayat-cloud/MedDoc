@@ -154,3 +154,46 @@ export function shouldDiscardPermanentJob(
 ): boolean {
   return category === 'permanent' && persistOk;
 }
+
+/**
+ * B8 step 3c — has this job reached the end of the line, so it belongs in the
+ * DLQ an operator reads?
+ *
+ * ⚠️ THIS PREDICATE EXISTS BECAUSE THE DISCARD BROKE THE OLD ONE, AND THE BREAK
+ * WAS SILENT. `worker.ts`'s `failed` handler dead-lettered on
+ * `attemptsMade >= opts.attempts` — a perfectly correct test of *"the retry
+ * budget is exhausted"* right up until a job could stop for a different reason.
+ * A discarded permanent failure ends at `attemptsMade = 1` of 3, so the old test
+ * says `1 >= 3` → false, and the job quietly never reaches `/admin/queues`.
+ *
+ * MEASURED, not reasoned about — QA, 2026-08-13, `bull:dlq-permanent-failures`:
+ *
+ *     413  pre-fix   permanent  3 attempts  → IN the DLQ
+ *     415  with fix  transient  3 attempts  → IN the DLQ
+ *     416  with fix  transient  3 attempts  → IN the DLQ
+ *     414  with fix  permanent  1 attempt   → **ABSENT**
+ *
+ * B8's own gate text says *"this makes `/admin/queues` load-bearing for money"*.
+ * Losing every insufficient-balance refusal from it is the opposite of that.
+ *
+ * ⚠️ THE NAME OF THE OLD CONDITION WAS THE PROBLEM, WHICH IS THE LESSON.
+ * *"The retry budget is exhausted"* and *"this job will not run again"* were the
+ * same sentence for as long as exhaustion was the only way to stop. They are not
+ * the same sentence any more, and the code was written against the narrower one
+ * — AGENTS.md's *"a check whose TITLE is narrower than what it MEASURES"*,
+ * arriving in the inverse direction: a check whose title was narrower than what
+ * it needed to measure.
+ *
+ * @param attemptsMade   BullMQ's 0-indexed counter as recorded on the failure
+ * @param attempts       the allowance from `job.opts.attempts`
+ * @param wasDiscarded   whether the job carried the unrecoverable marker; get
+ *                       this from `isUnrecoverableMarker`, never by re-deriving
+ *                       bullmq's disjunction at the call site
+ */
+export function shouldDeadLetter(
+  attemptsMade: number,
+  attempts: number,
+  wasDiscarded: boolean
+): boolean {
+  return wasDiscarded || attemptsMade >= attempts;
+}

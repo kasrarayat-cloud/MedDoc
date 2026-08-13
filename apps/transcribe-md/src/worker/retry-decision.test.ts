@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import {
+  shouldDeadLetter,
   shouldDiscardPermanentJob,
   shouldMarkVisitFailed,
   shouldObserveFailureCost,
@@ -149,5 +150,58 @@ describe('shouldDiscardPermanentJob', () => {
   it('does not treat a category that merely contains "permanent" as permanent', () => {
     expect(shouldDiscardPermanentJob('semi-permanent', true)).toBe(false);
     expect(shouldDiscardPermanentJob('permanently_gone', true)).toBe(false);
+  });
+});
+
+// ============================================================================
+// B8 step 3c — a DISCARDED job still reaches the DLQ
+// ----------------------------------------------------------------------------
+// ⚠️ THIS SUITE EXISTS BECAUSE THE DISCARD BROKE THE DLQ AND NOTHING SAID SO.
+// The `failed` handler dead-lettered on `attemptsMade >= opts.attempts`, which
+// was a correct test of "the retry budget is exhausted" for as long as
+// exhaustion was the ONLY way a job could stop. A discarded permanent failure
+// ends at 1 of 3, so the old condition read `1 >= 3` → false.
+//
+// MEASURED on QA, `bull:dlq-permanent-failures`:
+//
+//   413  pre-fix   permanent  3 attempts  → IN
+//   415  with fix  transient  3 attempts  → IN
+//   416  with fix  transient  3 attempts  → IN
+//   414  with fix  permanent  1 attempt   → **ABSENT**
+//
+// Every insufficient-balance refusal would have disappeared from /admin/queues,
+// which B8's gate calls load-bearing for money. No test saw it; the QA walk did
+// not see it either, because it measured the attempt count and the attempt count
+// was correct. It was found by asking who else READS that value.
+// ============================================================================
+describe('shouldDeadLetter', () => {
+  // The regression, stated as the thing that must not come back.
+  it('dead-letters a DISCARDED job even though its budget is not exhausted', () => {
+    expect(shouldDeadLetter(1, 3, true)).toBe(true);
+  });
+
+  // The original behaviour, which must survive unchanged.
+  it('dead-letters an exhausted job that was not discarded', () => {
+    expect(shouldDeadLetter(3, 3, false)).toBe(true);
+  });
+
+  // ⚠️ THE NEGATIVE CONTROL. A predicate that returned `true` for everything
+  // would satisfy both cases above and would dead-letter every intermediate
+  // attempt — three DLQ rows per failed visit, and an operator's queue view
+  // filling with jobs that are still running.
+  it('does NOT dead-letter a job that still has attempts left', () => {
+    expect(shouldDeadLetter(0, 3, false)).toBe(false);
+    expect(shouldDeadLetter(1, 3, false)).toBe(false);
+    expect(shouldDeadLetter(2, 3, false)).toBe(false);
+  });
+
+  // A single-attempt queue (the cleanup queue is attempts=1) still terminates.
+  it('dead-letters a single-attempt job on its only failure', () => {
+    expect(shouldDeadLetter(1, 1, false)).toBe(true);
+  });
+
+  // Defensive: a job that somehow over-ran its allowance is still terminal.
+  it('dead-letters when attemptsMade exceeds the allowance', () => {
+    expect(shouldDeadLetter(4, 3, false)).toBe(true);
   });
 });
