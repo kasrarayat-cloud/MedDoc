@@ -11169,3 +11169,79 @@ instrument that produces a clean-looking answer while measuring nothing is
 indistinguishable from a clean system.**
 
 ### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `e71504b6ad535dbfae1b77f4afffb7c27e021373`:**
+   · `CI` 31729849986 a1
+   · `e2e` 31729849943 a1
+   · `a11y-ci` 31729849981 a1
+   · `secrets-scan` 31729849920 a1
+
+All `a1` — no re-runs, so there is nothing to explain. PR **#641**, branch
+retired via `scripts/retire-branch.sh`, **both sides confirmed**.
+
+⚠️ **ONE CANCELLATION, AND IT WAS MINE AND DELIBERATE.** The first head
+(`f85740a5`) went **3 of 4** — `CI`, `a11y-ci` and `secrets-scan` green, `e2e`
+**cancelled by me at ~19 minutes** the moment the DLQ regression above was found.
+It was cancelled with `gh run cancel` BEFORE the push rather than being killed by
+it, so the branch view was empty when the push happened and no other actor's
+evidence was touched. **Certifying a head I already knew to be defective is the
+waste; the run was the cheaper thing to spend.** Recorded here because the
+standing rule asks for a named decision rather than a silent one.
+
+⚠️ **NO `RELAY.md` UNION AROSE, AND THE INBOX NOTICE IS STILL UNCONSUMED.**
+`main` did not move between the branch point (`bf367b5c`) and the merge, so the
+declared union did not happen for this item either — the second session in a row
+to report that. The 2026-08-13T02:40Z notice **stands for whoever merges next**;
+it was declared against ruling #102's landing, and nothing here consumed it.
+
+### THE OWED-FORWARD CITATION FROM SESSION 06 — DISCHARGED
+
+`bf367b5c` carried this programme's one uncited head at the start of this
+session. Its `e2e` was still running at STEP 0 (`🟡 STILL RUNNING`, correctly not
+a finding) and was waited out inside the session:
+
+**Citation — 4 of 4 on `bf367b5cad097769511c69d14231de186cfbd658`:**
+   · `CI` 31723529022 a1
+   · `e2e` 31723528905 a1
+   · `a11y-ci` 31723528806 a1
+   · `secrets-scan` 31723528817 a1
+
+Session 06's own citation (`af5fbc5a`) was additionally re-verified **with
+`--expect`**, which is the only direction that can see a substitution: 4 of 4,
+every claimed run id belonging to that commit.
+
+### ⚠️ `e2e` WALL-CLOCK — THE 60% INCREASE IS CONFIRMED BY A SECOND SESSION
+
+Session 06 recorded three `e2e` runs at 1h13m / ~1h05m / ~1h10m against the ~42m
+this ledger cited all week, and deliberately did not diagnose it. **Measured
+again here, independently:** `bf367b5c` ran `17:00:21Z → 18:12Z` (~72m) and the
+merge commit `18:00Z → 18:52Z` (~52m). So the elevation is real and persists
+across sessions, and it is **variable** rather than a fixed new floor. Still not
+diagnosed — the runner's step timings were not pulled, and attributing it without
+them would be a guess. **It cost this session roughly two hours of the four spent
+waiting on gates**, which is the reason it keeps being written down.
+
+### THREE THINGS MEASURED ON THE WAY PAST
+
+1. **Production carries B8 step 3 AND DEFECT 1's fix, and NOT 3c** — measured in
+   the running container, not inherited: `shouldObserveFailureCost` **2**
+   occurrences, `shouldDiscardPermanentJob` **0**. So the `fail-fast` line is
+   still false in production today, and will be until this ships.
+2. **The self-heal is a database fact, not a log inference.** Queried directly:
+   `cmsrs6yuo…` is **`READY`** — the visit that was refused for an empty wallet
+   and completed on its retry. Its two controls, unfunded throughout, are
+   `FAILED`.
+3. ⚠️ **AND THAT READY ROW STILL CARRIES `failureCategory = 'permanent'`.** A
+   visit that recovered keeps the marker of the failure it recovered from.
+   Harmless today — nothing reads `failureCategory` on a READY visit — but it is
+   a stale field that a future rollup over failure categories would count as a
+   failure that succeeded. **Not fixed here; named so it is not rediscovered.**
+   Note the fix makes it *rarer*, not impossible: a transient failure that
+   succeeds on retry leaves the same residue.
+
+### ⚠️ THIS ROW'S OWN MERGE COMMIT IS OWED FORWARD
+
+As always, and it is the accepted regress: the merge that carries THIS paragraph
+cannot be cited by the session that writes it. The programme carries exactly one
+uncited head, never more. STEP 0.4 of the next session discharges it with
+`bash scripts/check-citation.sh <FULL-40-CHAR-SHA>`.
