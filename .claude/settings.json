@@ -83,6 +83,7 @@
       "Bash(bash scripts/check-hooks-installed.sh:*)",
       "Bash(bash scripts/retire-branch.sh:*)",
       "Bash(bash scripts/merge-pr.sh:*)",
+      "Bash(bash scripts/run-ruled-mutation.sh:*)",
       "Bash(bash scripts/deploy-prod.sh:*)",
       "Bash(cd:*)",
       "Bash(echo:*)",

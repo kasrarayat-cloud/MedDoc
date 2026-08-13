@@ -305,6 +305,13 @@ worked-around. **Stop the session and report.**
 - **No real money moves without the owner's explicit word.**
 - **Production is deployed only by `bash scripts/deploy-prod.sh`.** Never a bare
   `docker compose up -d` against prod, never a hand-run migration.
+- **An irreversible production mutation runs only through
+  `bash scripts/run-ruled-mutation.sh --declaration <path> -- <command…>`.** It
+  refuses unless the §2.5 declaration is **committed** — a file on disk can be
+  written one second before the act, and afterwards nothing tells that apart
+  from one composed once the outcome was known. ⚠️ **The 2026-08-12 backfill is
+  why: 175 permanent rows at `22:50:16Z`, declaration committed `22:52:13Z`.**
+  Every declared number matched; the ORDER was simply not in the record.
 - **Co-tenants are untouchable.** Other projects share this host; their
   containers, vhosts and ports are not yours.
 - **`pre-*` rollback tags are sacred.** Never deleted, never re-pointed.
