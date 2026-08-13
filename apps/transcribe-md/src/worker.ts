@@ -29,7 +29,15 @@ import type { DeepgramBatchResponse, DeepgramUtterance } from '@meddoc/ai';
 import { redactPhi } from '@meddoc/ai';
 // B8 step 2 — the money seam. Both are no-ops unless `BILLING_ENFORCED=true`;
 // see `billing-pipeline.ts` for why it ships off and what turns it on.
-import { admitVisitOrThrow, chargeVisitUsage } from '@meddoc/ai';
+// B8 step 3 — `observeFailedVisitUsage` is the odd one out and is NOT flagged:
+// it writes nothing anywhere, and it exists to inform the decision to enable
+// the flag. See its header.
+import {
+  admitVisitOrThrow,
+  chargeVisitUsage,
+  observeFailedVisitUsage,
+  type FailedVisitObservation,
+} from '@meddoc/ai';
 import { log } from '@/lib/log';
 import { shouldMarkVisitFailed } from './worker/retry-decision';
 import {
@@ -1228,13 +1236,34 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // depends on it — and it never throws (see `chargeVisitUsage`), because a
     // billing write must not be able to fail a finished note.
     //
-    // ⚠️ ONLY THE SUCCESS PATH CHARGES TODAY, AND THAT IS A NAMED GAP RATHER
-    // THAN AN OVERSIGHT. A visit that fails at L5 has already paid for L1–L4,
-    // and nothing here records it. Charging on the failure path is inseparable
-    // from B8's other half — "system faults credit back via DLQ classification"
-    // — because the two decide the same question from opposite ends, and
-    // building the debit without the credit would bill doctors for our outages.
-    // Carried as B8 step 3.
+    // ⚠️ ONLY THE SUCCESS PATH CHARGES, AND AFTER B8 STEP 3 THAT IS THE SETTLED
+    // STATE RATHER THAN A GAP. The failure path is FREE and is measured instead
+    // — see `billing-failure.ts` and the observation in the catch below. A
+    // charging policy for failures needs a month of that measurement first;
+    // production has never held a single FAILED visit to price one from.
+    //
+    // ⚠️ ⚠️ BUT THIS LINE HAS A DEFECT OF ITS OWN THAT B8 STEP 3 DID NOT FIX,
+    // AND IT IS THE SAME SENTENCE POINTED AT THE SUCCESS PATH — "we would bill
+    // doctors for our outages". `loadVisitChargeableUsage(visitId)` selects
+    // EVERY usage row for the visit with NO ATTEMPT FILTER, so a visit that
+    // eventually succeeds after a retry is charged for the re-run work too.
+    //
+    // ⚠️ SCOPED CAREFULLY, BECAUSE THE OBVIOUS READING OVERSTATES IT. This is
+    // NOT "all attempts' whole-pipeline spend": per-layer resume above
+    // (`isLayerComplete`) skips every layer whose output already persisted, so
+    // L1–L4 are not re-spent when the failure was at L5. The over-charge is
+    // every attempt of the layers that actually RE-RAN — principally the
+    // failing layer, bounded by BullMQ's attempt budget. A visit that failed
+    // twice at L5 on OUR transient faults pays 3× for L5.
+    //
+    // Smaller than it first looks, and still the doctor paying for our blips,
+    // silently, into an append-only table.
+    //
+    // It is inert today only because `BILLING_ENFORCED` is off, which is
+    // precisely the condition that stops being true when the flag is enabled.
+    // Fixing it needs attempt attribution on `api_usage_events` (there is no
+    // `attempt` column today), which is a schema decision and its own item.
+    // **Carried as B8 step 3b, and it BLOCKS enabling the flag.**
     const charge = await chargeVisitUsage({ practiceId, visitId });
     if (charge.charged === 'failed') {
       // Loud, because this is money we consumed and did not record. Nothing
@@ -1361,6 +1390,32 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
       practiceId: visit.user?.practiceId ?? null,
     });
 
+    // ── B8 step 3 — WHAT DID THIS FAILURE COST US, AND WHOSE FAULT WAS IT? ──
+    // ⚠️ IT CHARGES NOTHING. There is no ledger write in `billing-failure.ts`
+    // and no path from here to one — a failed visit is FREE, and that is the
+    // item's central decision rather than a gap in it. The reasoning is in that
+    // file's header: production has never held a single FAILED visit, so a
+    // charging policy would be chosen from zero observations, and on an
+    // APPEND-ONLY ledger charging is the direction that cannot be walked back.
+    // This produces the measurement that decision is waiting on.
+    //
+    // ⚠️ AND IT IS NOT BEHIND `BILLING_ENFORCED`, ON PURPOSE. Its whole job is
+    // to inform the decision to turn that flag ON; gated behind the same flag
+    // it would produce nothing until the flip it is meant to advise had already
+    // happened. It is safe unflagged because it writes nothing anywhere.
+    //
+    // Awaited rather than fire-and-forget: it writes nothing, so there is no
+    // row a later test could read back, and awaiting is what makes the outcome
+    // deterministic enough to assert. It cannot throw — the seam absorbs its
+    // own errors, because replacing a real pipeline error with a billing one as
+    // the job's proximate cause would destroy the diagnosis of this failure.
+    const failureCost = await observeFailedVisitUsage({
+      visitId,
+      category,
+      errorName: err instanceof Error ? err.name : null,
+    });
+    logFailedVisitCost(visitId, currentLayer, failureCost);
+
     // Best-effort admin alert. notifyAdminOnFailure swallows every
     // failure path internally — a misconfigured Resend account must
     // never mask the underlying pipeline error in Sentry.
@@ -1403,6 +1458,77 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
 
     throw err;
   }
+}
+
+/**
+ * B8 step 3 — emit what a failed visit cost us, and whose fault it was.
+ *
+ * ⚠️ THIS IS THE ONLY PLACE THE OBSERVATION GOES, WHICH IS THE ITEM'S POINT.
+ * It is a log line, not a ledger row: the number is being MEASURED, not
+ * charged. When a month of these exists, the decision `billing-failure.ts`
+ * defers — whether an `input`-accountable failure should ever be billed — can
+ * be made from data instead of from a guess.
+ *
+ * ⚠️ THE `ours` TOTAL IS THE ONE THAT MATTERS AND IT IS DELIBERATELY THE EASY
+ * ONE TO SUM. It is the money our own blips and outages burned; if it dwarfs
+ * the `input` total then charging for failures was never the interesting
+ * question and this item's refusal to charge was the whole answer.
+ *
+ * PHI-safe: ids, an enum, an integer and a fixed reason string. The `failed`
+ * arm's detail is a caught error's message, so it is scrubbed like every other
+ * error text this worker emits.
+ */
+function logFailedVisitCost(
+  visitId: string,
+  layer: string,
+  observation: FailedVisitObservation
+): void {
+  if (observation.observed === 'failed') {
+    // Loud, and deliberately not silent: this is the measurement itself
+    // failing, so the absence of a cost line below is explained rather than
+    // looking like a free failure.
+    console.warn(
+      `[transcribe-md-worker] failure-cost observation FAILED visit=${visitId}: ${redactPhi(
+        observation.detail
+      )}`
+    );
+    return;
+  }
+  if (observation.observed === 'not_started') {
+    log.info('transcribe-md-worker', 'failure cost', {
+      visitId,
+      layer,
+      accountability: observation.accountability,
+      // Named rather than omitted — "no meter read" and "meter read as zero"
+      // are different facts and a reader must not have to infer which.
+      // ⚠️ A STRING, like every other arm's. The priced arms must emit
+      // `.toString()` because JSON cannot serialise a bigint, so a bare `0`
+      // here would give one log key two types and break any consumer that
+      // parses the field rather than eyeballing it.
+      wouldChargeMicroUsd: '0',
+      note: 'admission refused before any vendor call',
+    });
+    return;
+  }
+  if (observation.observed === 'priced') {
+    log.info('transcribe-md-worker', 'failure cost', {
+      visitId,
+      layer,
+      accountability: observation.accountability,
+      wouldChargeMicroUsd: observation.wouldChargeMicroUsd.toString(),
+      componentCount: observation.componentCount,
+      charged: false,
+    });
+    return;
+  }
+  log.info('transcribe-md-worker', 'failure cost', {
+    visitId,
+    layer,
+    accountability: observation.accountability,
+    unpriceable: observation.reason,
+    pricedSoFarMicroUsd: observation.pricedSoFarMicroUsd.toString(),
+    charged: false,
+  });
 }
 
 /** Maps `currentLayer` (the worker's pipeline tracker — 'L1', 'L2',
