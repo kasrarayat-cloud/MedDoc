@@ -19,6 +19,18 @@ The deploy prints the declaration into its transcript at step 0 and **re-reads
 the same file** at step 8, so the thing being judged against cannot be quietly
 rewritten to fit what happened.
 
+## Two gates, two strictnesses
+
+| path | script | the declaration must be |
+|---|---|---|
+| deploy (reversible — a rollback exists) | `deploy-prod.sh` | **present**; provenance printed, uncommitted warns loudly |
+| ruled mutation (irreversible) | `run-ruled-mutation.sh` | **tracked, unmodified and COMMITTED** |
+
+⚠️ **The asymmetry is deliberate**: strictness proportional to reversibility. And
+the stricter half exists because *"the file exists"* never proved *"the file
+existed first"* — see the B7 step 3c reference case in AGENTS.md §"A DEPLOY
+DECLARES ITS EXPECTED DELTA BEFORE IT RUNS".
+
 ## What it must contain
 
 - **BASELINE** — captured now, before anything changes.

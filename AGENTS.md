@@ -919,6 +919,37 @@ MUST change and what must NOT; judge the post-deploy comparison against that
 declaration. A code-only deploy's declaration is one line: **"nothing but the
 image ids."**
 
+### ⚠️ AND A RULED MUTATION GETS THE SAME GATE — STRICTER, BECAUSE IT CANNOT BE UNDONE
+
+**Standing 2026-08-12.** `deploy-prod.sh` has refused to run without a
+declaration since 2026-08-11. Ruled MUTATIONS had no such gate: the order lived
+in a ruling and in whoever was executing.
+
+> **`bash scripts/run-ruled-mutation.sh --declaration <path> -- <command…>` is
+> the only door to an irreversible production act.**
+
+⚠️ **AND "THE FILE EXISTS" IS NOT "THE FILE EXISTED FIRST" — WHICH IS THE WHOLE
+FINDING.** The deploy gate asserted `[ -f "$DECL" ]`, and a file can be written
+one second before the act. **Reference case, B7 step 3c's backfill: 175
+irreversible rows landed at `22:50:16Z`; the declaration's only commit is
+`22:52:13Z` — one minute fifty-seven seconds LATER.** All eight declared
+quantities matched exactly and nothing suggests bad faith. **The record simply
+cannot distinguish an honest declaration from one composed once the outcome was
+known** — and that distinction was the entire product §2.5 was buying.
+
+So the mutation gate requires the declaration to be **TRACKED, UNMODIFIED and
+COMMITTED**. The act has not happened yet, so its commit timestamp provably
+precedes the rows, and the runner prints both into the transcript — the commit
+time and the start time bracket the act in the units the rows carry.
+
+⚠️ **THE DEPLOY PATH IS DELIBERATELY LEFT AT `present`, NOT `strict`.** Strictness
+is proportional to reversibility — ruling #96(b)'s logic. A deploy is answerable
+by a rollback; requiring a commit there would refuse every deploy whose author
+lands the declaration in the same PR, which is a real habit and would halt the
+programme to fix the weaker case. The deploy records provenance **loudly** and
+does not refuse on it. **Both call the same `scripts/lib/declaration.sh`** — one
+implementation, two strictnesses, because a second copy drifts from the first.
+
 **A post-deploy check written afterwards is unfalsifiable.** Every number has a
 story available to it, and a migration supplies a ready-made excuse for *any*
 movement — *"the migration touched that table"*. Declaring first removes the

@@ -177,6 +177,49 @@ async function clinicalCounts(client: TransactionClient | typeof prisma) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+
+  // ---- GUARD D — THIS RAN THROUGH THE RULED-MUTATION DOOR ------------------
+  //
+  // ⚠️ ASKED FIRST, BECAUSE IT IS THE ONLY GUARD ABOUT *ORDER* RATHER THAN
+  // STATE. §2.5 requires the expected delta declared BEFORE the act. Until
+  // 2026-08-12 that was a rule and a habit, and the record shows what a habit
+  // buys: this backfill's own 175 irreversible rows landed at 22:50:16Z and the
+  // declaration's only commit is 22:52:13Z — one minute fifty-seven seconds
+  // LATER. All eight declared quantities matched exactly and nothing suggests
+  // bad faith. THE RECORD SIMPLY CANNOT TELL an honest declaration from one
+  // composed after the outcome was known, and that distinction was the entire
+  // product §2.5 was buying.
+  //
+  // `scripts/run-ruled-mutation.sh` exports these after proving the declaration
+  // is tracked, unmodified and COMMITTED. Because this process has not written
+  // anything yet, that commit timestamp provably precedes the rows.
+  //
+  // ⚠️ PROD ONLY, DELIBERATELY. A QA rehearsal writes rows a stack reset can
+  // erase, and requiring a committed declaration for every rehearsal would tax
+  // the very step that killed three defects here. Strictness proportional to
+  // reversibility — ruling #96(b)'s logic, applied again.
+  if (args.commit && args.target === 'prod') {
+    const decl = process.env.RULED_MUTATION_DECLARATION;
+    const declCommit = process.env.RULED_MUTATION_DECL_COMMIT;
+    if (!decl || !declCommit) {
+      throw new Error(
+        'GUARD D ABORT: this is an irreversible production mutation and it was not\n' +
+          'invoked through the ruled-mutation door, so nothing proves its declaration\n' +
+          'existed BEFORE it ran.\n\n' +
+          '  bash scripts/run-ruled-mutation.sh \\\n' +
+          '    --declaration docs/foundation/deploys/<file>.md \\\n' +
+          '    -- npx tsx apps/transcribe-md/scripts/backfill-promo-grants.ts \\\n' +
+          '       --target=prod --expect=<N> --commit\n\n' +
+          'The declaration must be COMMITTED first. A file on disk can be written one\n' +
+          'second before the act; a commit cannot be, because this has not run yet.\n' +
+          'Nothing has been written.',
+      );
+    }
+    console.log(`GUARD D — declaration ${decl} @ ${declCommit.slice(0, 12)}, committed before this ran ✔`);
+  } else if (args.commit) {
+    console.log('GUARD D — skipped: --target=qa, whose rows a stack reset can erase.');
+  }
+
   const where = assertTargetMatchesDatabase(args.target);
 
   console.log('='.repeat(74));
