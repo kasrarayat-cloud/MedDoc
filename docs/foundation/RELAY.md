@@ -10627,3 +10627,71 @@ only imports are `loadVisitChargeableUsage` (a read) and `priceUsageRows` — **
 `commitVisitCharge` — and `priceUsageRows`'s body awaits only a rate lookup.
 ⚠️ **Positive-controlled**: the identical matcher returns **22** on
 `billing-charge.ts`, so the zero is a measurement and not a broken pattern.
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `f5f753d77c6a7c67cbfcf29d9b9b619b799f8231`:**
+   · `CI` 31698632428 a1
+   · `e2e` 31698632429 a1
+   · `a11y-ci` 31698632453 a1
+   · `secrets-scan` 31698632491 a1
+
+All `a1` — no re-runs, so there is nothing to explain. PR **#637**, branch
+retired via `scripts/retire-branch.sh`, **both sides confirmed** (`🟢 retired`,
+exit 0 — it was not checked out this time, unlike session 04's run).
+
+The PR head (`095b2c92`) was also 4 of 4 first time — `CI` 31695427620 ·
+`e2e` 31695427794 · `a11y-ci` 31695427608 · `secrets-scan` 31695427639. No union
+merge was needed: `main` did not move while the gate ran, so unlike the two rows
+above there is only one tree to describe.
+
+⚠️ **THE `--commit` PROPAGATION RACE REPRODUCED AGAIN, ON THIS VERY PR.** Seconds
+after opening it, `gh run list --commit 095b2c92…` (full 40 characters) returned
+**`[]`** while `gh run list --branch deploy/b8s3-declaration` returned **four**
+runs already queued. That is the third recorded sighting and it is the reason the
+in-flight rule takes TWO views: a session trusting the `--commit` zero would have
+read "nothing in flight" at the exact moment four of its own runs existed.
+
+⚠️ **AND ONE OF MY OWN QUERIES LIED IN THE SAME DIRECTION, FOR A DIFFERENT
+REASON.** Early in STEP 0 I ran `gh run list --commit 9d1a8b4ec99b…` and got `[]`
+— and the SHA was **typed from memory rather than measured**. The real head was
+`9d1a8b4ef0fa…`. A wrong-but-well-formed SHA returns an empty list with **exit
+0** and no complaint, which is indistinguishable from a quiet branch. Caught only
+because `--branch main` was run beside it and disagreed. **The two-view rule
+covers this failure too, and it is worth naming separately: the documented trap
+is an abbreviated SHA, but a MISTYPED full SHA fails identically and silently.**
+
+### ⚠️ AND THIS CITATION PR'S OWN `e2e` WENT RED ON ISSUE #631 — ZERO CODE DELTA
+
+**PR #638 changes one file: this one, prose only.** Its first `e2e`
+(31701631200) failed at `13:12Z` on `rounds-c1.spec.ts:313`, on the initial
+attempt **and** on retry #1:
+
+    TimeoutError: locator.fill: Timeout 15000ms exceeded.
+    Error: not on the login form — /login redirected us, so the signup session
+           survived clearCookies(). This is the flake; it is not a slow render.
+
+That is **issue #631 exactly** — same spec, same line, same assertion, same
+self-diagnosis. It was auto-filed 2026-08-13T00:10Z against PR #629 and was
+classified KNOWN in session 04's report and again in mine.
+
+⚠️ **THIS SIGHTING IS WORTH MORE THAN THE FIRST, WHICH IS WHY IT IS IN THE LEDGER
+AND NOT ONLY ON THE ISSUE.** #629 left open the possibility that something in
+that branch contributed. **A prose-only diff closes it**: there is no code delta,
+so the failure cannot be a regression in anything the PR touched — it is a
+property of the test and the fixture. It has now also survived its own retry in
+**two of two** sightings, which rules out a timing wobble at the margin: the
+session state is genuinely still present when `/login` is requested.
+
+**Recorded on the issue** (comment `5280919196`) with three candidate mechanisms
+in order of cheapness — a non-cookie store `clearCookies()` never touches, a
+path/domain-scoped cookie it misses, or an in-flight signup request re-setting
+the cookie after the clear — and one instruction: **do not raise the 15 s
+timeout.** The test says it is not a slow render and both retries agree; a
+timeout bump would convert a legible failure into an illegible one.
+
+**Not fixed here.** It is a test-fixture defect in the Rounds C1 pack, not
+FOUNDATION work, and inventing a fix inside a citation PR would put an unrelated
+code change behind a docs review. ⚠️ **And the re-gate was taken by pushing this
+paragraph rather than by re-running the red job** — so the head that merges is
+gated fresh, and no run in this row's citation carries an unexplained `a2`.
