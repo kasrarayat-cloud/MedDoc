@@ -1245,10 +1245,18 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // ⚠️ ⚠️ BUT THIS LINE HAS A DEFECT OF ITS OWN THAT B8 STEP 3 DID NOT FIX,
     // AND IT IS THE SAME SENTENCE POINTED AT THE SUCCESS PATH — "we would bill
     // doctors for our outages". `loadVisitChargeableUsage(visitId)` selects
-    // EVERY usage row for the visit with no attempt filter, and BullMQ retries
-    // re-run the pipeline. So a visit that failed twice on OUR transient faults
-    // and succeeded on the third attempt is charged for all three attempts'
-    // vendor spend — the doctor pays for our two blips, on the success path,
+    // EVERY usage row for the visit with NO ATTEMPT FILTER, so a visit that
+    // eventually succeeds after a retry is charged for the re-run work too.
+    //
+    // ⚠️ SCOPED CAREFULLY, BECAUSE THE OBVIOUS READING OVERSTATES IT. This is
+    // NOT "all attempts' whole-pipeline spend": per-layer resume above
+    // (`isLayerComplete`) skips every layer whose output already persisted, so
+    // L1–L4 are not re-spent when the failure was at L5. The over-charge is
+    // every attempt of the layers that actually RE-RAN — principally the
+    // failing layer, bounded by BullMQ's attempt budget. A visit that failed
+    // twice at L5 on OUR transient faults pays 3× for L5.
+    //
+    // Smaller than it first looks, and still the doctor paying for our blips,
     // silently, into an append-only table.
     //
     // It is inert today only because `BILLING_ENFORCED` is off, which is

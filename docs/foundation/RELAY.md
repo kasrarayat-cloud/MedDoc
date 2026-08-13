@@ -9978,16 +9978,31 @@ proving the stripper did not eat the file.
 ### ⚠️ THE FINDING IS BIGGER THAN THE ITEM — B8 STEP 3b, AND IT BLOCKS THE FLAG
 
 `loadVisitChargeableUsage(visitId)` selects **every** usage row for a visit,
-with **no attempt filter**, and BullMQ retries re-run the pipeline. So:
+with **no attempt filter**, and BullMQ re-runs the job on a transient fault. So
+a visit that eventually succeeds is charged for the re-run work too.
 
-> a visit that failed twice on **our** transient faults and succeeded on the
-> third attempt is charged for **all three attempts'** vendor spend.
+⚠️ **AND THE FIRST DRAFT OF THIS ROW OVERSTATED IT — CORRECTED BEFORE SHIPPING,
+BY READING THE CODE INSTEAD OF ASSUMING IT.** The draft said such a visit is
+charged for *"all three attempts' vendor spend"*. **It is not.** The worker has
+**per-layer resume** (`resume-state.ts` → `isLayerComplete`): a retry skips
+every layer whose output already persisted, so L1–L4 are not re-spent when the
+failure was at L5. The true over-charge is:
 
-That is *"bill doctors for our outages"* — the exact sentence this item exists
-to prevent — arriving on the **SUCCESS path**, through the door the item was not
+> **every attempt of the layers that actually RE-RAN** — principally the
+> failing layer, repeated up to BullMQ's attempt budget. Not the pipeline.
+
+So a visit that failed twice at L5 on **our** transient faults pays **3× for
+L5**, not 3× for everything. That is smaller than first claimed and it is still
+*"bill doctors for our outages"* — the exact sentence this item exists to
+prevent — arriving on the **SUCCESS path**, through the door the item was not
 watching, **in code that is already deployed** (`b4738ad8`). It is inert today
 only because `BILLING_ENFORCED` is off, which is precisely the condition that
 stops being true when somebody enables it.
+
+**The magnitude was wrong; the class and the disposition are unchanged.** The
+severity claim was a guess about a mechanism I had not read, and the correction
+came from reading `resume-state.ts` — which is the whole difference between a
+finding and an assertion.
 
 **It cannot be fixed here.** There is no `attempt` column on `api_usage_events`,
 so attributing usage to an attempt is a schema decision and its own item.
