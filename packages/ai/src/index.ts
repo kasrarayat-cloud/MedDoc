@@ -131,6 +131,18 @@ export { isMockEnabled, MOCK_FIXTURE_USAGE } from './mock';
 // if its span is a literal substring of the transcript, and a copy that drifts
 // puts the stage silently back to a zero its own expectation permits.
 export { MOCK_TRANSCRIPT_UTTERANCES } from './mock';
+// #106(a) — the slot-values sentinels the mocked `tm_soap_draft` speaks.
+// ⚠️ EXPORTED SO THE APP CAN PIN THEM AGAINST ITS OWN COPY. `packages/ai`
+// cannot import from `apps/transcribe-md`, so the protocol's tokens exist in
+// two places; `slot-fill-protocol.test.ts` imports both and asserts equality,
+// which turns a silent drift (the mock quietly stops recognising the prompt and
+// every slot goes unfilled, indistinguishable from a transcript that said
+// nothing) into a failing test.
+export {
+  MOCK_SLOT_VALUES_OPEN,
+  MOCK_SLOT_VALUES_CLOSE,
+  MOCK_SYSTEM_COMPOSED_MARKER,
+} from './mock';
 // B3 — the versioned price table reader, and B6 — the charge rule and the
 // prod-only ledger writer.
 //
