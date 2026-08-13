@@ -1493,7 +1493,11 @@ function logFailedVisitCost(
       accountability: observation.accountability,
       // Named rather than omitted — "no meter read" and "meter read as zero"
       // are different facts and a reader must not have to infer which.
-      wouldChargeMicroUsd: 0,
+      // ⚠️ A STRING, like every other arm's. The priced arms must emit
+      // `.toString()` because JSON cannot serialise a bigint, so a bare `0`
+      // here would give one log key two types and break any consumer that
+      // parses the field rather than eyeballing it.
+      wouldChargeMicroUsd: '0',
       note: 'admission refused before any vendor call',
     });
     return;

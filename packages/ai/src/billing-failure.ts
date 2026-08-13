@@ -141,6 +141,53 @@ export type FailureAccountability =
 const ADMISSION_ERROR_NAME = 'BillingAdmissionError';
 
 /**
+ * HOW LONG THE OBSERVATION MAY TAKE BEFORE IT GIVES UP.
+ *
+ * ⚠️ THIS EXISTS BECAUSE THIS ITEM MAKES `drainApiUsage()` RUN IN PRODUCTION
+ * FOR THE FIRST TIME, AND IT IS A `while (true)` LOOP. The success path reaches
+ * the same drain through the same loader — but only behind `BILLING_ENFORCED`,
+ * which has never been on, so that code has never actually executed against a
+ * production database. This module runs UNFLAGGED, so it is the first caller
+ * that really will.
+ *
+ * The loop terminates in theory: it awaits the pending set, and every pending
+ * promise settles because the fire-and-forget writer catches its own errors. On
+ * a FAILED visit the pipeline has stopped, so no new writes are being issued
+ * and the second pass finds the set empty. That is an argument, and an argument
+ * is not a bound.
+ *
+ * ⚠️ AND THE FAILURE MODE IT WOULD HAVE IS THE EXPENSIVE ONE. This runs inside
+ * the worker's FAILED branch, before the visit's terminal state has been
+ * re-thrown to BullMQ. A hang here is a **stuck chart** — which is precisely
+ * the shape of B8 step 2's DEFECT 1 (ruling #98(b)): a refusal that fired
+ * correctly and left the visit at `status=QUEUED` until the 15-minute watchdog
+ * force-failed it. A measurement must not be able to cause the outage class it
+ * is measuring.
+ *
+ * 10s is generous for a drain plus one indexed read plus a pricing pass, and
+ * short next to the watchdog it must never reach.
+ */
+const OBSERVATION_TIMEOUT_MS = 10_000;
+
+/** Reject after {@link OBSERVATION_TIMEOUT_MS}. ⚠️ The timer is ALWAYS cleared:
+ *  an un-cleared `setTimeout` keeps the Node event loop alive, and this worker
+ *  has already been bitten by exactly that (a QA harness that finished and
+ *  never exited, B4's closing step). `unref()` alone would be enough in the
+ *  worker and is not enough in a test runner, so the `finally` does it. */
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const bound = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`failure-cost observation exceeded ${ms}ms`)),
+      ms,
+    );
+  });
+  return Promise.race([work, bound]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  }) as Promise<T>;
+}
+
+/**
  * CLASSIFY A TERMINAL PIPELINE FAILURE.
  *
  * PURE — no database, no clock, no environment. Takes the category the worker
@@ -225,8 +272,16 @@ export async function observeFailedVisitUsage(args: {
   }
 
   try {
-    const rows = await loadVisitChargeableUsage(args.visitId);
-    const decision = await priceUsageRows(rows);
+    // Bounded — see {@link OBSERVATION_TIMEOUT_MS}. A timeout lands in the
+    // `failed` arm below like any other error, so the caller's handling is
+    // identical and there is no second path to get wrong.
+    const decision = await withTimeout(
+      (async () => {
+        const rows = await loadVisitChargeableUsage(args.visitId);
+        return priceUsageRows(rows);
+      })(),
+      OBSERVATION_TIMEOUT_MS,
+    );
 
     if (decision.charge) {
       return {

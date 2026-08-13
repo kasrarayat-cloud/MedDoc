@@ -173,6 +173,35 @@ describe('B — the observation measures and does not act', () => {
     expect(out).toEqual({ observed: 'failed', detail: 'postgres is gone' });
   });
 
+  // FAILS IF: the observation can hang. It makes `drainApiUsage()` — a
+  // `while (true)` loop — run in production for the first time, on the path
+  // where a hang is a STUCK CHART (ruling #98(b)'s defect 1). A measurement
+  // must not be able to cause the outage class it is measuring.
+  //
+  // ⚠️ FAKE TIMERS, because a real 10s wait in a unit suite is a 10s wait.
+  it('B3b — a hanging load is bounded, not awaited forever', async () => {
+    vi.useFakeTimers();
+    try {
+      // Never settles — the shape a wedged drain would have.
+      loadVisitChargeableUsage.mockReturnValue(new Promise(() => {}));
+      const pending = observeFailedVisitUsage({
+        visitId: 'v1',
+        category: 'transient',
+        errorName: 'Error',
+      });
+      await vi.advanceTimersByTimeAsync(10_001);
+      const out = await pending;
+      expect(out.observed).toBe('failed');
+      // Names the bound rather than merely failing, so a timeout is
+      // distinguishable in the logs from a database error.
+      expect(
+        (out as { observed: 'failed'; detail: string }).detail
+      ).toContain('exceeded 10000ms');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // ⚠️ THE POSITIVE CONTROL — the half everybody skips.
   // FAILS IF: the module stops producing a number at all. A gate made only of
   // the arms above passes identically against a module that returns a constant
