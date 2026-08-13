@@ -10695,3 +10695,200 @@ FOUNDATION work, and inventing a fix inside a citation PR would put an unrelated
 code change behind a docs review. ⚠️ **And the re-gate was taken by pushing this
 paragraph rather than by re-running the red job** — so the head that merges is
 gated fresh, and no run in this row's citation carries an unexplained `a2`.
+
+---
+
+## ✅ THE CITATION SESSION 05 OWED FORWARD — `656093c7`, PR #638
+
+Session 05 closed with #638's merge-commit runs still in flight and said so
+rather than citing a PR head. They are discharged here, produced by the checker.
+
+**Citation — 4 of 4 on `656093c72ef13c1ddb03bd2666b3ee3b0942e9ea`:**
+   · `CI` 31708106121 a1
+   · `e2e` 31708106106 a1
+   · `a11y-ci` 31708106124 a1
+   · `secrets-scan` 31708106100 a1
+
+All `a1` — no re-runs, so there is nothing to explain. The run took **1h13m**
+against a typical ~42m, sitting a long time on the `rounds-c1` step where issue
+#631 lives; it went green on its own and no job was re-run.
+
+⚠️ **AND STEP 0 CAUGHT ME COMMITTING THE EXACT ERROR SESSION 05 HAD JUST
+DOCUMENTED.** My first citation call passed a 40-character SHA I had **typed**
+rather than resolved, and the checker answered `🟡 NO SUCH COMMIT — cannot tell`.
+Session 05's finding 4 is that a mistyped full-length SHA makes
+`gh run list --commit` return `[]` with **exit 0**; the checker refuses to make
+that mistake quietly, which is the whole argument for citations being produced by
+it rather than typed. The correct SHA came from `git rev-parse`.
+
+---
+
+## 📐 B8 STEP 3b — RECON MEASURED 2026-08-13, READ-ONLY, AND IT CORRECTS THE ITEM'S OWN FRAMING
+
+**Item:** the finding B8 step 2 carried forward — *"`loadVisitChargeableUsage(visitId)`
+selects **every** usage row for a visit, with **no attempt filter**, and BullMQ
+re-runs the job on a transient fault. So a visit that eventually succeeds is
+charged for the re-run work too."* It is recorded as a **hard precondition of
+enabling `BILLING_ENFORCED`**.
+
+Run in the BILLING-recon shape: measured against the code and the production
+database before any code is written. **No production write of any kind.** Four
+things came back that change what gets built, and two of them narrow the item.
+
+### THE INSTRUMENT, AND ITS POSITIVE CONTROL
+
+Every figure below groups `api_usage_events` by `("visitId", metadata->>'purpose')`
+over the 1017 visit-scoped rows across 82 visits that production holds.
+
+⚠️ **THE POSITIVE CONTROL IS BUILT INTO THE SAME QUERY, WHICH IS WHY THE ZEROS
+BELOW ARE MEASUREMENTS.** The identical grouping returns **3.00** rows/visit for
+`tm_anchor_entailment` and **1.42** for `judge`. A matcher that could not
+discriminate would have returned a flat 1.00 everywhere, which is exactly what a
+broken instrument and a clean system have in common.
+
+### ⚠️ FINDING 1 — THE RETRY OVER-CHARGE HAS **ZERO INSTANCES IN PRODUCTION**, EVER
+
+Every once-per-visit pipeline purpose is **exactly** 1.00 rows/visit — `rows`
+equals `count(distinct visitId)`, so the maximum per visit is 1, not merely the
+mean:
+
+    tm_soap_draft 82/82 · tm_icd_coding 79/79 · tm_patient_summary 79/79
+    tm_critique 79/79 · tm_entities 79/79 · tm_referrals 79/79
+    tm_rx_drafting 79/79 · tm_cpt_coding 43/43 · tm_polish 28/28
+    tm_polish_gate 28/28 · transcribe_realtime 3/3
+
+A BullMQ retry re-runs the failing layer, that layer calls the vendor again, and
+the call is metered — so a re-run leaves a duplicate row **by construction**.
+There are none. **No metered layer has ever re-run in production.**
+
+That does not make the defect imaginary: the code genuinely has no attempt
+filter and the mechanism is real. It prices the item. **This is a latent defect
+with an empty population, not a live over-charge** — and the population is empty
+today only because production has never had a transient mid-pipeline fault.
+
+### ⚠️ FINDING 2 — DOUBLE-**CHARGING** IS NOT REACHABLE, AND THE ITEM'S NAME INVITES THE WRONG READING
+
+`visitChargeKey` is `usage:visit:<visitId>:<bucket>`, **globally unique** in
+`ledger_entries.idempotencyKey`. A second charge attempt for the same visit is
+refused by the unique index, not by a check-then-write race.
+
+So *"charged for the re-run work too"* means **one debit that is too large**, and
+never two debits. That distinction is worth writing down because the two have
+different remedies on an append-only table, and the phrase "retry over-charge"
+reads like the second one.
+
+**Nothing is at risk today, and it is measured rather than assumed:**
+
+    ledger_entries by key prefix →  grant 175 · usage 0
+
+**No visit has ever been charged, in any environment.**
+
+### ⚠️ FINDING 3 — THE ACCUMULATION DOOR IS WIDER THAN RETRIES, AND THE SECOND DOOR IS A **PAGE RENDER**
+
+`judge` is the one pipeline purpose that is not 1.00, and the reason is not
+retries. `judgeMdm` is imported at `worker.ts:1010` — and `llm-mdm` is **also**
+reachable from a request path: `em-coding/displayed-level.ts` imports `./score`,
+and `score.ts` calls `judgeMdm` directly (`score.ts:23`). So **rendering a visit
+can add a metered row to that visit's chargeable set.**
+
+⚠️ **NOT ON EVERY RENDER — `judgeMdm` caches, and the claim is bounded to what
+was measured.** What the rows show is that the cache is missed often enough to
+produce real calls on four separate dates for one visit. The mechanism is "a
+request path can meter against a visit id", not "every page view bills".
+
+Measured, on the visit with the widest spread — one full pipeline run, then five
+`judge`-only calls on four later dates:
+
+    2026-06-15 17:00–17:01   full pipeline (13 rows, every purpose once)
+    2026-07-07 18:29, 18:30  judge ×2
+    2026-07-16 23:47         judge ×2
+    2026-07-26 00:51         judge ×1
+
+Per-visit row spread across all 82:
+
+    within 10 min (one run) .... 77
+    10 min – 1 day .............  1
+    over 1 day .................  4
+
+`loadVisitChargeableUsage` filters by `visitId` alone — no attempt, **no run, no
+time bound** — so anything sharing that visit id is in the set. The retry framing
+named one door; this is a second, and it is open in production now.
+
+### ⚠️ FINDING 4 — THE INVERSE, AND IT IS THE ONE B9 INHERITS
+
+Because the key is per-visit and the charge is computed **once, at pipeline
+end**, every row written *after* that moment is **never charged at all**. The
+five late-accruing visits above are free, permanently.
+
+**So the same missing filter fails in BOTH directions**, and only one of them was
+on the ledger: an over-charge inside the single debit (unmeasurable today,
+Finding 1) and a **silent under-charge** for all post-charge usage (present
+today, five visits). Under-charge is the direction nobody notices — no error, no
+missing visit, just a smaller number in an append-only table. It is B9's
+unreconciled remainder and should be named there rather than discovered.
+
+### ⚠️ AND THE CHEAP FIX IS WRONG — WHICH IS THE MOST USEFUL THING HERE
+
+The attractive shape avoids a migration entirely: filter the loader by
+`timestamp >= visit.processingStartedAt`, deriving the run boundary instead of
+threading a parameter — exactly AGENTS.md rule 6's preference.
+
+**It under-charges, and it does so silently.** `processingStartedAt` is written
+inside `processVisit` at `worker.ts:425`, so it is **overwritten on every
+attempt**. Filtering by it therefore yields *only the final attempt's* rows — and
+under per-layer resume the earlier attempts' completed layers are the ones whose
+output the visit actually KEPT. That work is legitimately chargeable and would
+vanish from the charge.
+
+    all rows                          → over-charges (re-run layers counted twice)
+    timestamp >= processingStartedAt  → UNDER-charges (kept layers dropped)
+    one execution per layer, the one whose output was kept   ← the real predicate
+
+**The correct set is neither "every row" nor "the last attempt's rows".** It is
+*one execution per layer — the execution whose output was kept* — which is a
+statement about resume state, not about time. Nothing in `api_usage_events`
+records which layer a row belongs to, so this is a **schema decision** and it is
+its own item, exactly as B8 step 2 said.
+
+⚠️ **AND THE THREADING COST IS REAL.** There is no `AsyncLocalStorage` in this
+codebase; context reaches the meter explicitly through `AiLogContext`
+(`userId`/`practiceId`/`visitId`/`purpose`), threaded call by call. Adding
+`attempt` or `layer` means touching every vendor call site — the hand-threaded
+shape AGENTS.md warns about, and a site that forgets produces a slightly wrong
+number rather than an error.
+
+### RECOMMENDATION — AND IT IS NOT "BUILD IT NOW"
+
+The item stays a hard precondition of `BILLING_ENFORCED`; **nothing here weakens
+that.** But its priority should be set by what it is a symptom of, and the
+measurement changes the picture:
+
+1. **It blocks the flag and only the flag.** Zero instances, zero charges, flag
+   off. There is no live harm to race.
+2. **Its real content is a schema question** — *what identifies the execution
+   whose output was kept* — and answering it wrong in either direction is a
+   money error on an append-only table.
+3. **Finding 4 should be carried into B9 now**, independently, because it is
+   present in production today and B9 is where an unreconciled remainder becomes
+   visible.
+
+**PARKED, with the trigger written down: the war room answers the layer-identity
+question, or `BILLING_ENFORCED` is scheduled — whichever comes first.** This is a
+park rather than a build because building it means guessing a schema, and
+AGENTS.md's standing preference is that an unmeasured half stays open rather than
+being guessed in the direction that cannot be walked back.
+
+### WHAT THIS RECON DOES **NOT** CLAIM
+
+- **It does not prove the over-charge cannot happen.** The mechanism is real and
+  unfixed; only its production population is empty. A single transient
+  mid-pipeline fault creates the first instance.
+- **It does not measure a retry.** Production has never had one of the shape that
+  would show here, so Finding 1 is an absence, and an absence is evidence only
+  because the same query demonstrably finds multiples elsewhere.
+- **It says nothing about `BILLING_ENFORCED` being safe to enable.** It says the
+  opposite is still true: B8 step 3b is untouched and remains a precondition.
+- **It does not touch B8 step 3c** — the false "fail-fast" log line and its
+  inferred re-spend. Still owed, still unmeasured.
+- **It is scoped to `api_usage_events`.** `ai_calls` was not measured; it is a
+  different table with a different write path and is not what the charge reads.
