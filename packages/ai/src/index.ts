@@ -205,6 +205,17 @@ export {
   type ChargeOutcome,
 } from './billing-pipeline';
 export { loadVisitChargeableUsage } from './billing-usage-source';
+// B8 step 3 — the failure path. ⚠️ THIS MODULE CHARGES NOTHING, deliberately and
+// by construction; it prices what a failed visit consumed and classifies whose
+// fault it was. Exported here for the same reason as the block above — a file
+// outside the programme is a file `tsc` never checks against its callers.
+export {
+  classifyFailureAccountability,
+  observeFailedVisitUsage,
+  type FailureAccountability,
+  type FailedVisitObservation,
+  type WorkerErrorCategory,
+} from './billing-failure';
 export { drainApiUsage, pendingApiUsageWrites } from './api-usage';
 export {
   chargeMicroUsd,

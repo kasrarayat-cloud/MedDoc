@@ -9880,3 +9880,122 @@ provisional ruling.
   the war room is unchanged — add *"the reactivation promo grant has a home in the
   live app"* to A6's preconditions.
 - **It does not re-open #97**, which remains PROVISIONAL.
+
+---
+
+## ✅ B8 STEP 3 IS BUILT — A FAILED VISIT IS **FREE**, AND THE ITEM SHIPS THE MEASUREMENT INSTEAD OF THE CHARGE — 2026-08-13
+
+**Status: BUILT, gated, and it writes nothing anywhere.** Ruling **#103**,
+PROVISIONAL. `ledger_entries` holds **0 rows in production**, unchanged and
+unchangeable by this item — there is no ledger write in it.
+
+### THE ITEM AS CARRIED, AND THE ANSWER IT GOT
+
+B8 step 2 carried this forward in these words:
+
+> *"The failure path does not charge. A visit that dies at L5 has already paid
+> for L1–L4 and nothing records it. Charging there is inseparable from B8's
+> other half — 'system faults credit back via DLQ classification' — because the
+> two decide the same question from opposite ends, and building the debit
+> without the credit would BILL DOCTORS FOR OUR OUTAGES."*
+
+**The delivered answer is narrower than the item's name, deliberately: a failed
+visit is FREE.** No debit, no credit, no row. What ships instead is the
+measurement the charging decision is waiting on, plus the classifier the credit
+half would need whenever a debit does appear.
+
+⚠️ **AND THAT DISCHARGES THE ITEM'S OWN STATED FEAR COMPLETELY.** A failure path
+that bills nobody for anything cannot bill anybody for an outage. **The
+auto-credit that was inseparable from the debit is inseparable from a debit that
+does not exist.**
+
+### WHY NOT CHARGE — TWO STANDING ARGUMENTS, NOT A PREFERENCE
+
+1. **There is nothing to price the decision with.** `failureCategory` is 100%
+   NULL across every production visit and production has never held a single
+   FAILED visit. A charging policy chosen from that is ruling **#100(b)**'s
+   *"guessing dressed as engineering"* — and that ruling refused to ship a
+   strict constraint on a **13-of-13** sample. This is a sample of nought.
+2. **Charging cannot be walked back.** `ledger_entries` is APPEND-ONLY: a debit
+   against a doctor for a visit that produced no note can only ever be offset by
+   an `adjustment` row that then lives beside it forever. Not-charging tightens
+   into charging the day a month of data says what the number is. **Tightening
+   is the allowed direction.**
+
+### WHAT IS BUILT
+
+| piece | what it does |
+|---|---|
+| `classifyFailureAccountability` | pure, structural. `permanent` → `input`; `transient`/`provider_down` → `ours`; `BillingAdmissionError` → `not_started` |
+| `observeFailedVisitUsage` | prices the consumed usage with the **success path's own loader**, returns what would have been charged, and charges nobody |
+| `logFailedVisitCost` (worker) | the only destination — a log line, PHI-safe: ids, an enum, an integer, a fixed reason |
+| `gate-b8-failure-accountability.test.ts` | 9 arms, 4 groups, each naming what would make it fail |
+
+### THREE DECISIONS WORTH THE LEDGER'S SPACE
+
+**1. THE ADMISSION ARM IS FIRST, AND THE ORDERING IS LOAD-BEARING.** A
+`balance_unreadable` refusal carries `retryCategory: 'transient'`, so it reaches
+the classifier as `category: 'transient'`. A category-first implementation —
+the obvious one — files **every unreadable-balance refusal into the `ours`
+pool**, which is the pool whose SIZE is the input to the future pricing
+decision. It would not be wrong by a little; it would inflate the measurement
+with visits that spent nothing. Mutation **M1** reddens gate arm A3.
+
+**2. ⚠️ IT RUNS UNFLAGGED, AND THIS IS THE TRAP THE ITEM NEARLY FELL INTO.** The
+obvious shape gates it behind `BILLING_ENFORCED` like its two sibling seams.
+That is wrong by AGENTS.md's own test — *"if the work this check guards
+SUCCEEDED completely, what number would it print?"* The observation exists to
+**inform the decision to turn that flag ON**; behind the same flag it produces
+nothing until the flip it is meant to advise has already happened. **A close
+condition that cannot be reached.** It is safe unflagged because there is
+nothing to be unsafe with: no ledger row, no money, no clinical state, no
+mutation. It cannot throw — replacing a real pipeline error with a billing one
+as the job's proximate cause would destroy the diagnosis of the failure it is
+describing.
+
+**3. THE "IT CANNOT CHARGE" ASSERTION IS A SOURCE READ, AND THAT IS NOT
+LAZINESS.** The property is *"there is NO input for which this module writes a
+ledger row"* — a universal over all inputs, which no finite set of behavioural
+cases can establish. A behavioural gate would assert the four cases write
+nothing and pass against a module with a fifth, charging branch. The absence of
+the import is the fact that makes the universal true, so the absence is what is
+asserted — with comments stripped first (the header discusses `commitVisitCharge`
+at length, and a matcher reading it would be satisfied by PROSE — the substring
+trap arriving inside the file written to avoid it) and a positive control
+proving the stripper did not eat the file.
+
+### ⚠️ THE FINDING IS BIGGER THAN THE ITEM — B8 STEP 3b, AND IT BLOCKS THE FLAG
+
+`loadVisitChargeableUsage(visitId)` selects **every** usage row for a visit,
+with **no attempt filter**, and BullMQ retries re-run the pipeline. So:
+
+> a visit that failed twice on **our** transient faults and succeeded on the
+> third attempt is charged for **all three attempts'** vendor spend.
+
+That is *"bill doctors for our outages"* — the exact sentence this item exists
+to prevent — arriving on the **SUCCESS path**, through the door the item was not
+watching, **in code that is already deployed** (`b4738ad8`). It is inert today
+only because `BILLING_ENFORCED` is off, which is precisely the condition that
+stops being true when somebody enables it.
+
+**It cannot be fixed here.** There is no `attempt` column on `api_usage_events`,
+so attributing usage to an attempt is a schema decision and its own item.
+
+⚠️ **CARRIED AS B8 STEP 3b, AND IT IS A HARD PRECONDITION OF ENABLING
+`BILLING_ENFORCED`.** The flag's remaining sequence is no longer *grant →
+enable*; it is *grant → fix the retry over-charge → enable*.
+
+### WHAT THIS ITEM DOES **NOT** CLAIM
+
+- **It does not charge anything, anywhere, ever.** That is the point, not a
+  limitation — but it means B9 inherits every failed visit's cost as an
+  unreconciled remainder, deliberately, and will surface it as one.
+- **The number is a FLOOR, not a total.** It is what we RECORDED, never provably
+  what we SPENT: a usage write Postgres refused leaves no trace by the time this
+  runs (the loader's own header says so).
+- **It does not build the auto-credit.** With no debit there is nothing to
+  credit; the credit's real customer is now B8 step 3b's over-charge case.
+- **The debit's success path has STILL never executed, in any environment.**
+  Unchanged by this item.
+- **It says nothing about `BILLING_ENFORCED` being safe to enable** — see the
+  finding above, which says the opposite.
