@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assembleSection,
   EMPTY_SLOT_MARKER,
+  findStaticDivergence,
   rejoinVerbatim,
   sectionSlots,
   segmentSection,
@@ -199,5 +200,55 @@ describe('#106(f) — a PARTLY dictated carrier keeps its line and marks the gap
     // the two undictated segments are visibly empty, not silently blank
     expect(out.text.split(EMPTY_SLOT_MARKER)).toHaveLength(3);
     expect(out.unfilled).toBe(2);
+  });
+});
+
+describe('findStaticDivergence — the L6b arm (#106(g))', () => {
+  const assembled = TECHNIQUE.replace(
+    '{{one of: deep and superficial | superficial}}',
+    'deep and superficial'
+  );
+  const regions = [{ sectionKey: 'technique', label: 'TECHNIQUE', text: assembled }];
+
+  it('passes when the polisher left the static region alone', () => {
+    const polished = `HISTORY\nSome polished prose.\n\nTECHNIQUE\n${assembled}\n\nIMPRESSION\nTidied.`;
+    expect(findStaticDivergence(polished, regions)).toEqual([]);
+  });
+
+  it('⚠️ TRIPWIRE THROUGH L6: catches the exact live defect — 500 ms -> 0.5 s', () => {
+    const polished = assembled.replace('500 milliseconds', '0.5 seconds');
+    const out = findStaticDivergence(polished, regions);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toEqual({ sectionKey: 'technique', label: 'TECHNIQUE' });
+  });
+
+  it('catches a change a similarity measure would call harmless', () => {
+    // one word reordered; every content term still present
+    const polished = assembled.replace(
+      'was performed in the upright position',
+      'was performed with the patient upright'
+    );
+    expect(findStaticDivergence(polished, regions)).toHaveLength(1);
+  });
+
+  it('catches silent deletion of the whole region', () => {
+    expect(findStaticDivergence('HISTORY\nonly this.', regions)).toHaveLength(1);
+  });
+
+  it('is not fooled by the region appearing with different whitespace', () => {
+    const polished = assembled.replace('500 milliseconds', '500  milliseconds');
+    expect(findStaticDivergence(polished, regions)).toHaveLength(1);
+  });
+
+  it('ignores an empty region rather than failing every note', () => {
+    expect(findStaticDivergence('anything', [{ sectionKey: 'k', label: 'L', text: '   ' }])).toEqual([]);
+  });
+
+  it('reports EVERY diverged region, not just the first', () => {
+    const two = [
+      ...regions,
+      { sectionKey: 'impression', label: 'IMPRESSION', text: 'Clinical correlation is required.' },
+    ];
+    expect(findStaticDivergence('nothing here', two)).toHaveLength(2);
   });
 });

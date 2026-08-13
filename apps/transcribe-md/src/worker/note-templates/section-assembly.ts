@@ -229,3 +229,45 @@ export function assembleSection(
 
   return { text: kept.join('\n'), droppedLines, unfilled, rejected };
 }
+
+// ---------------------------------------------------------------------------
+// STATIC-REGION DIVERGENCE — the L6b arm (ruling #106(g)).
+// ---------------------------------------------------------------------------
+
+/** An `always_include` section as CODE ASSEMBLED IT. `text` is the exact byte
+ *  sequence that must survive every later hand on the note. */
+export interface StaticRegion {
+  sectionKey: string;
+  label: string;
+  text: string;
+}
+
+/**
+ * Which assembled static regions are no longer present, byte-for-byte, in the
+ * text under test.
+ *
+ * ⚠️ THIS IS A CONTAINMENT ASSERTION AGAINST BYTES CODE PRODUCED — NOT A DIFF,
+ * and deliberately so. A heuristic diff has to DECIDE whether a change is
+ * meaningful, and "0.5 seconds" for "500 milliseconds" is exactly the change a
+ * similarity measure calls harmless. We know the precise bytes we assembled, so
+ * the only honest question is whether they are still there.
+ *
+ * ⚠️ IT GUARDS THE OUTPUT, NOT THE WIRING (#106(g)(2)). It runs on the final
+ * text whatever produced it — L6's polish today, L5's applied fixes, and any
+ * future path that touches the note after assembly. A check that watched only
+ * the polisher would go quiet the moment somebody added a seventh layer.
+ *
+ * ⚠️ WHY IT EXISTS AT ALL: `04-generate-soap` is not the only place the note
+ * meets a model. `06-polish.ts` calls `completeText` and rewrites the WHOLE
+ * note, so statics protected at L4 were still re-writable at L6. Protecting
+ * them once and calling it done would have shipped a fix that LOOKS right and
+ * still paraphrases the doctor's paragraph.
+ */
+export function findStaticDivergence(
+  finalText: string,
+  regions: readonly StaticRegion[]
+): { sectionKey: string; label: string }[] {
+  return regions
+    .filter((r) => r.text.trim().length > 0 && !finalText.includes(r.text))
+    .map((r) => ({ sectionKey: r.sectionKey, label: r.label }));
+}
