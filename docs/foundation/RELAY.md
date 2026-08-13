@@ -11588,3 +11588,122 @@ technologist names. Never committed, never quoted verbatim beyond minimal
 structural tokens, **CI fixtures are sanitized equivalents** with the same
 structural features and no real names, bytes in protected storage only. The
 distinctive token `500 milliseconds` is the permitted verbatim tripwire.
+
+## RC-1 + RC-3 — THE STATICS ARE ASSEMBLED, AND THE FALLBACK IS AUDIBLE — 2026-08-13
+
+> **Supervised session, landing into a HALTED loop (`docs/foundation/STOP` down
+> since 21:43Z). Queue head #106. RC-2 is NOT in this branch — see the tail.**
+
+### WHAT SHIPPED, IN THE RULING'S OWN ORDER
+
+**(a) text fidelity FIRST — it repairs every doctor including the owner's
+CURRENT template, with no re-upload.** `always_include` content never reaches
+the model: it returns slot VALUES and code stitches the doctor's bytes around
+them. The parser's forced `scaffold_confirm` is gone for the two section kinds
+that are whole fixed blocks, and 7 stored sections across 4 templates are
+reclassified by migration.
+
+**(c) the loud fallback.** A visit that got the generic layout when it should
+not have now says so, in a banner naming the cause.
+
+**(b) the twin door — NOT DONE. Named, not attempted.** See "HALTED".
+
+### THE FIVE COMMITS, AND WHY THE PAIR IS ONE OF THEM
+
+| commit | what |
+|---|---|
+| `0065eaa9` | the MOCK speaks slot values, content-aware; `tm_polish` becomes an echo |
+| `90ea1da7` | **THE ATOMIC PAIR** — prompt reshaped + assembler wired at the seam |
+| `0272dbac` | the L6b static-region arm wired (#106(g)) |
+| `cdc29e0b` | the classifier, both persist paths, and the reclassification migration |
+| `9e2395c9` | RC-3 — the generic fallback goes loud |
+
+The pair is ONE commit deliberately: there is no intermediate state where the
+model produces scaffolds while the assembler expects values, or the reverse.
+Either half alone is a broken product.
+
+### ⚠️ RULING #106(g) WAS CITED EVERYWHERE AND RECORDED NOWHERE
+
+`#106(g)` is named in PR #645's code (`section-assembly.ts`, twice), in its
+tests, in commit `158fad19`'s message, and in this session's brief. `RULINGS.md`
+grepped clean for `(g)` across the whole file. **Nothing would ever have
+surfaced it** — the code compiles, the tests pass, and a citation to a ruling
+nobody can find reads exactly like a citation to one they can. Found by doing
+what the canon requires (*no brief's claim about rulings state is trusted; grep
+it*) and recorded in this session's own commit.
+
+### ⚠️ THE MIGRATION IS NARROWER THAN #106(a)'s LETTER, AND THAT IS A FINDING
+
+#106(a) says fixed prose defaults to `always_include`. Applying that to every
+prose section would be **worse than the defect**. Measured on the real imaging
+templates, `defaultText` is two different things:
+
+| kind | example | assembling it |
+|---|---|---|
+| a WHOLE FIXED BLOCK | the scan-protocol paragraph; the `LABEL: <slot>` field header | **is the fix** |
+| a SCAFFOLD THE MODEL EXTENDS | the per-leg FINDINGS stub, the per-side IMPRESSION stub | **deletes the visit's clinical findings** and leaves an empty skeleton |
+
+The second would satisfy every static-fidelity check in this programme — the
+doctor's bytes preserved perfectly, the patient's gone — and would do it
+silently. Nothing in the schema distinguishes them, so the rollout is an
+allowlist of the two kinds that were READ and confirmed: `technique` and
+`exam_metadata`. **The general rule needs the doctor-facing designation #106(a)
+already names as future work.**
+
+### THE NUMBERS, MEASURED — AND ONE OF MY OWN QUERIES LIED FIRST
+
+Production, read-only. 7 templates, 40 sections, **0 `always_include` anywhere**.
+
+⚠️ **My first bucket query reported `scaffold_confirm = 4, prose = 0,
+structured = 0` for a template and I read it as "every candidate is
+structured".** The buckets did not reconcile — 0 + 0 ≠ 4 — and I had not
+checked. The cause: `s->'structure'` is jsonb `null`, not SQL NULL, so both
+arms evaluated to NULL and neither counted. Re-measured per section: **none of
+those sections is structured at all.** Had I believed it, the migration would
+have been a no-op and the owner's template would not have been repaired. *Name
+every bucket the scan can sort an item into, and assert the total.*
+
+Dry-run inside `BEGIN … ROLLBACK` on production: **7 sections flipped across 4
+templates**, all four guards passed, post-rollback verified back to 0
+`always_include` / 40 sections.
+
+### ⚠️ THE FIRST GUARD CONTROL WAS WORTHLESS, AND IT LOOKED FINE
+
+Widening the migration's predicate to include structured sections produced **no
+abort** — because no structured section is `scaffold_confirm`, so the widened
+set still could not reach the forbidden state. **A control that cannot produce
+the state proves nothing about the guard.** Re-run after forcing a structured
+section into `scaffold_confirm` inside the same transaction, G1 fired by name.
+G2 and G4 likewise. **G3 is NOT independently proven** — the dropped-section
+control was refused by G2 first, because an ordinal shift makes every text
+comparison mismatch.
+
+### MUTATION PROOFS — BOTH DIRECTIONS
+
+| # | mutation | result |
+|---|---|---|
+| M1 | the assembler disabled | 12 red |
+| M2 | the prompt un-reshaped (statics injected again) | 3 red, incl. *"the fixed paragraph is ABSENT from the system prompt"* |
+| M3 | the slot-values directive made unconditional | 2 red, incl. **the L4 golden** — #106(e) at pipeline level |
+| M4 | the L6b arm removed | **5 red, 4 STILL GREEN** — the happy-path control, the zero-static inertness case, the no-model-call case, and the fidelity verdict keeping its own reason |
+
+M4's green four is the load-bearing half: it says these tests discriminate
+rather than fail together.
+
+### ⚠️ A NULL-CASE TEST CAUGHT A REAL BUG IN MY OWN DETECTOR
+
+RC-3's detector told a doctor who had **deliberately picked "Standard SOAP"**
+that their activated format had not been applied. False, and precisely the false
+alarm that teaches a clinician to ignore the banner that matters. Caught by the
+arm asserting SILENCE, not by review.
+
+### STATE AT WRITING
+
+- `main` = `42a26aa2` (#645 merged, 4 of 4 on `158fad19`).
+- ⚠️ **`main`'s PREVIOUS head `9258e0cc` carries a FAILED `e2e`** — a docs-only
+  merge, two unrelated specs (`16-account-settings`, `35-sign-role-gate`). The
+  same app code passed 4 of 4 on `158fad19` twenty minutes later, so it is the
+  known flake class (#603), not a regression. Recorded because a deploy must
+  cite its own commit and not inherit that one's.
+- Unit suite **292 files / 3790 tests green** from `apps/transcribe-md`;
+  `tsc --noEmit` 0 errors.
