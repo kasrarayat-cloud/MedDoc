@@ -11440,3 +11440,73 @@ the other five checks. Indirect evidence offered there, and not as a substitute:
 The accepted regress, as always. The merge carrying this paragraph cannot be cited
 by the session that writes it. STEP 0.4 of the next session discharges it with
 `bash scripts/check-citation.sh <FULL-40-CHAR-SHA>`.
+
+## 📌 THE 176th GRANT — A REAL SIGNUP THROUGH THE WIRED DOOR — 2026-08-13
+
+**APPEND, NOT A CORRECTION.** Every `175 rows / $1,750.00` figure in this file and
+in `RULINGS.md` was **true when written** and none of them is edited. This entry
+explains a delta that arrived afterwards.
+
+| | recorded by the backfill | production now |
+|---|---|---|
+| `ledger_entries` | **175** | **176** |
+| promo sum | **$1,750.00** | **$1,760.00** |
+| distinct practices funded | 175 | 176 |
+
+### WHAT HAPPENED
+
+A real signup completed on production at **`2026-08-13T20:38:44Z`** and the wired
+signup door granted its promo automatically, in the same transaction:
+
+    practice   cmsrzdmp6000001leg3eb8rgi
+    key        grant:promo:practice:cmsrzdmp6000001leg3eb8rgi
+    kind/bucket  grant / promo        amount  $10.00
+    written    2026-08-13T20:38:44Z   — same second as the practice row
+
+**Every 175/$1,750 assertion in this file predates it.** The backfill ran
+`2026-08-12T22:50:16Z`; this is 21h 48m later.
+
+### ⚠️ IT IS A REAL PRACTICE WITH A REAL $10 PROMO LIABILITY — NOT SYNTHETIC
+
+The account is **the owner's own** (`ultrasound@westmedical.com`, created by
+Kasra). The address is undeliverable and the practice holds no clinical data, but
+**B9 must reconcile this as a real practice carrying a real $10 liability**, not
+as a fixture to be filtered out. A reconciliation that treats it as synthetic
+would be understating what we have granted.
+
+⚠️ **AND ITS EMAIL VERIFICATION WAS SET BY HAND**, on the owner's explicit
+instruction, because the address cannot receive mail: a guarded single-row
+transaction against `users.emailVerified`, with an abort-on-mismatch guard proved
+by re-running it (the second run refused rather than re-stamping) and a
+`USER_UPDATED` audit row read back from `audit_logs`. Delta was +1 audit row and
+nothing else; clinical counts unmoved.
+
+### THIS IS THE FIRST PRODUCTION EVIDENCE THE SIGNUP DOOR WORKS
+
+⚠️ **AND IT ARRIVED BY ACCIDENT, NOT BY A TEST — WHICH IS THE PART WORTH KEEPING.**
+
+Ruling **#97(a)** found the hole: *"with the backfill done and `BILLING_ENFORCED`
+on, a practice created afterwards holds 0 rows → `insufficient_balance` →
+`admitVisitOrThrow` THROWS, and the first visit of every new signup fails."* It
+also recorded that the discovery channel was the worst available — invisible in
+every environment *"until a real doctor signs up and records their first visit."*
+
+The wiring was authorized in **#99(a)** (*"the auth.ts wiring AND the backfill"*)
+and shipped in B7 step 3c. **This signup is the first time a real practice has
+been created on production since that wiring deployed, and the grant fired
+correctly:** one row, right bucket, right amount, occasion-free key.
+
+⚠️ **CITATION CORRECTED IN PASSING:** the door exercised here is the **SIGNUP**
+door of **#99(a)**, closing **#97(a)**'s hole. **#99(c) is the REACTIVATION
+door** — the third door, still unexercised in production, and still owed a proof.
+The two are easy to conflate and a wrong cross-reference is the index-level
+contradiction `RULINGS.md`'s own preamble warns about.
+
+### WHAT IS STILL NOT PROVEN
+
+- **The reactivation door (#99(c)) has never fired in production.** Nothing has
+  been reactivated since it shipped.
+- **`BILLING_ENFORCED` is still OFF**, so no balance has ever been *spent* — this
+  proves a grant is written, not that it can be drawn.
+- **No visit has been recorded on this practice**, so the admission path this
+  grant exists to satisfy is still unexercised end to end in production.
