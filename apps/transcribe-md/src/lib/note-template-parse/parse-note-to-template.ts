@@ -48,6 +48,7 @@ import {
   firstClinicalHeadingIndex,
 } from './reconcile-markers';
 import { extractHeaderFields } from './header-fields';
+import { classifyDefaultTextMode } from '@/worker/note-templates/classify-default-text-mode';
 
 // TRANSCRIBE_MD_CLINICAL_MODEL — eval override (feat/fable5-eval); unset → default unchanged.
 const MODEL = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-opus-4-8';
@@ -263,9 +264,18 @@ export async function parseNoteToTemplate(
     },
   });
 
-  // ── 2. Build the draft. FORCE defaultTextMode: a parsed default is always
-  //    scaffold_confirm (doctor must confirm), never always_include. ──
-  const sections: NoteTemplateSection[] = [...llm.sections]
+  // ── 2. Build the draft, then classify.
+  //
+  // ⚠️ IT USED TO FORCE `scaffold_confirm` ON EVERY PARSED DEFAULT, and that
+  // was the parser defect underneath ruling #106(a): confirm-gating hands the
+  // text to the model as something to reproduce, and a model asked to reproduce
+  // prose normalises it. `classifyDefaultTextMode` is the ONE definition, shared
+  // with the reviewed-template persist path and mirrored by the reclassification
+  // migration — three places that must agree, so they read one function.
+  //
+  // The classifier's family test is a property of the WHOLE template, so the
+  // sections are shaped first and classified in a second pass.
+  const shaped: NoteTemplateSection[] = [...llm.sections]
     .sort((a, b) => a.order - b.order)
     .map((s, i) => ({
       key: s.key,
@@ -274,9 +284,13 @@ export async function parseNoteToTemplate(
       formatHint: s.formatHint,
       styleInstructions: s.styleInstructions,
       defaultText: s.defaultText,
-      defaultTextMode: s.defaultText ? 'scaffold_confirm' : 'omit_unless_supported',
+      defaultTextMode: 'omit_unless_supported' as const,
       structure: sanitizeStructure(s.structure ?? null),
     }));
+  const sections: NoteTemplateSection[] = shaped.map((s) => ({
+    ...s,
+    defaultTextMode: classifyDefaultTextMode(s, shaped),
+  }));
 
   // ── 2b. Drop administrative chrome (letterhead / demographics / signature)
   //    DETERMINISTICALLY — regardless of LLM run-to-run variance — BEFORE the
