@@ -11510,3 +11510,81 @@ contradiction `RULINGS.md`'s own preamble warns about.
   proves a grant is written, not that it can be drawn.
 - **No visit has been recorded on this practice**, so the admission path this
   grant exists to satisfy is still unexercised end to end in production.
+
+## 🔴 QUEUE HEAD — CUSTOM-TEMPLATE FIDELITY IS BROKEN IN PRODUCTION — 2026-08-13
+
+> **THIS ITEM IS THE HEAD OF THE QUEUE. The billing tail resumes behind it.**
+> Owner priority. Ruling **#106**; acceptance is SPEC **§4.3a**.
+
+A real customer blank form was uploaded through Settings → My Note Format,
+activated, and a real transcription run. **The generic imaging layout came back
+instead** — logo absent, title rewritten, the fixed TECHNIQUE paragraph
+paraphrased (`500 milliseconds` → `0.5 seconds`), per-leg structure flattened.
+
+This is the product's core promise failing on the product's core use case.
+
+### THE DIAGNOSIS — MEASURED, AND IT OVERTURNED THE PRIME SUSPECT
+
+The standing expectation was the `not_certified_twin` fallback. Measured on
+production, read-only:
+
+| # | measured | means |
+|---|---|---|
+| i | **`500 milliseconds` IS in `note_templates.sections`**; `0.5 seconds` is not | extraction is INNOCENT — the loss is at RENDER time |
+| ii | the visit **bound** his template (`noteTemplateId` set, v=1) | selection WORKS |
+| iii | all **six** twin tables: **0 rows** in production | the twin never engaged |
+| iv | `note_templates` has **no storage-key column** | ⚠️ **the uploaded `.docx` is DISCARDED after extraction** |
+
+**(iii) has a two-layer cause:** `docxToText`'s flag-ON path is a **security fork
+only** — its own comment says the returned text is *"identical to the flag-OFF
+path"* — and `create-draft.ts`, the only writer of source artifacts, is reachable
+only through a certification UI that renders `null` in production.
+
+⚠️ **(iv) IS THE ONE WITH A CONSEQUENCE NOBODY CAN UNDO: his logo and letterhead
+stopped existing at upload.** They are recoverable from nothing we hold. The
+visual half of his form needs a **re-upload after the fix lands** — recorded as
+the owner action at the END of this item, not a precondition.
+
+### ⚠️ TWO DIAGNOSTIC INSTRUMENTS LIED FIRST, BOTH CAUGHT BY CONTROLS
+
+- A `.next` grep put `TEMPLATE_NATIVE_DOCX` in **0 chunks** and looked like a
+  dead flag. The control put `SETTINGS_SIMPLE_ROW` at **0 too** — and that one
+  demonstrably works, because **Next inlines the VALUE and substitutes the name
+  away**. The flag is fine. *The AGENTS.md rule is to grep for the READ
+  surviving, not for the name.*
+- `defaultTextMode` appeared absent from `packages/ai` and looked write-only. It
+  is **consumed**, in `build-soap-prompt.ts`.
+
+**Neither would have been caught by re-reading the output. Both needed a control.**
+
+### THE FIX, IN THE ORDER IT HELPS SOONEST
+
+1. **RC-1 — statics are ASSEMBLED, not generated.** `always_include` never
+   reaches the model; it emits **slot values only** and code stitches verbatim
+   bytes around the fills. Parser stops forcing `scaffold_confirm`; fixed prose
+   defaults to `always_include`. Existing templates reclassified by re-parse,
+   counts declared. ⚠️ **This repairs every doctor — including the owner's
+   CURRENT template — with no re-upload.**
+2. **RC-3 — the fallback goes loud.** Bound template renders through its own
+   path or fails into a visible needs-review state naming why. The generic
+   lookalike becomes unreachable for a doctor with an activated form.
+3. **RC-2 — the file is kept and the twin door is reachable.** Storage key on
+   `note_templates`, original `.docx` persisted **before** extraction at clinical
+   storage class, compile-on-upload feeding the twin tables. **Reachability
+   proven by ATTEMPT** — the entire defect is that a door nobody could open was
+   believed to be open.
+
+### THIS ITEM ABSORBS THE LONG-OWED QA GENERATED-DOCUMENT PROOF
+
+The by-hand twin flow — upload → compile → activate → fill → export on QA, one
+document shown end to end, **DATE OF PROCEDURE finally exercised on the twin
+path** — is executed as part of this item's proof. **It is exactly the walk that
+would have caught this**, which is the argument for never having deferred it.
+
+### ⚠️ TEMPLATE CONTENTS ARE CUSTOMER-CONFIDENTIAL — SPEC §4.3a(e)
+
+The uploaded form carries clinic addresses, a referring-physician roster and
+technologist names. Never committed, never quoted verbatim beyond minimal
+structural tokens, **CI fixtures are sanitized equivalents** with the same
+structural features and no real names, bytes in protected storage only. The
+distinctive token `500 milliseconds` is the permitted verbatim tripwire.
