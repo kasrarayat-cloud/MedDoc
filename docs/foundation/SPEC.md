@@ -407,6 +407,69 @@ from §1.5; that part is unchanged.
 **Post-TEAMS, flag-gated:** a practice-shared template library. Filed, not
 scheduled.
 
+### 4.3a THE CUSTOM-TEMPLATE FIDELITY CONTRACT — owner ruling, 2026-08-13
+
+> **When a doctor uploads a blank form and activates it, the note they get back
+> is THEIR FORM. This is the product's core promise, and it is an acceptance
+> criterion, not an aspiration.**
+
+Recorded after a real customer form was uploaded, a real transcription run, and
+the **generic imaging layout** came back instead — logo absent, title rewritten,
+the fixed TECHNIQUE paragraph paraphrased (`500 milliseconds` → `0.5 seconds`),
+per-leg structure flattened. Ruling **#106** carries the diagnosis and the
+design decisions; this is what "fixed" means.
+
+#### (a) STATIC REGIONS ARE SACRED — AND THEY ARE ASSEMBLED, NOT GENERATED
+
+Letterhead, logo, title, section headings and fixed paragraphs render
+**BYTE-VERBATIM** from the doctor's file. Never paraphrased, never normalised,
+never "improved". **`500 milliseconds` stays `500 milliseconds`.**
+
+⚠️ **THE MECHANISM IS THE RULING, NOT A STRICTER PROMPT.** `always_include`
+content **never passes through the model at all**. The model produces **slot
+values only**; the document is composed by code, stitching stored verbatim bytes
+around those fills deterministically. *A model cannot paraphrase text it never
+receives as writable.* This is "deterministic fills are never AI", pointed at
+statics.
+
+#### (b) SLOTS FILL FAIL-CLOSED
+
+`Choose an item` / blank fields are **fillable slots**, filled only from
+transcript facts under the full evidence rails (`factSatisfiesMapping`
+untouched). No evidence → **the form's own empty convention** (`—` or blank).
+**Never invented.** Laterality stamped per the standing anchored rules.
+
+#### (c) STRUCTURE PRESERVED
+
+Per-leg subsections, per-side numbered IMPRESSION, the doctor's field order —
+the compiled twin mirrors the document's skeleton, and **BOTH exports (PDF and
+Word) carry it, with parity at 1440**.
+
+#### (d) THE FALLBACK IS LOUD, NEVER A LOOKALIKE
+
+The generic layout is for doctors with **no uploaded form**. A visit bound to an
+activated template either renders through **that template's path** or fails into
+a **visible "your form needs review" state naming why**. ⚠️ **Silently rendering
+the generic lookalike is the defect this clause exists to forbid** — it is
+indistinguishable, to the doctor, from the product simply not working.
+
+#### (e) TEMPLATE CONTENTS ARE CUSTOMER-CONFIDENTIAL BUSINESS DATA
+
+An uploaded form carries clinic addresses, referring-physician rosters and
+technologist names. **It is not PHI and it is handled with PHI-adjacent
+discipline:**
+
+- **never committed** to the repository, in any form;
+- **never quoted verbatim** in reports, issues, ledger rows or commit messages
+  beyond **minimal structural tokens**;
+- **CI fixtures are SANITIZED equivalents** carrying the same structural
+  features — logo image, dropdown slots, a fixed paragraph, per-leg sections —
+  and no real clinic, physician or technologist names. A distinctive token such
+  as **`500 milliseconds`** is permitted, and is the verbatim tripwire the gate
+  asserts end to end;
+- **template bytes live in protected object storage only**, at the same storage
+  class as clinical files.
+
 ### 4.4 Money
 
 > **Integer MICRO-DOLLARS ledger-wide; charge = cost_micro × 3 / 2 in integer
