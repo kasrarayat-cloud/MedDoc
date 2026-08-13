@@ -25,6 +25,9 @@ import {
   requiredSectionLabels,
   type ResolvedNoteTemplate,
 } from '../note-templates/build-soap-prompt';
+import { findStaticDivergence } from '../note-templates/section-assembly';
+import { staticRegionsFromNote } from '../note-templates/assemble-note';
+import { noteStaticDivergence } from '../note-templates/static-divergence-counter';
 import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-template';
 
 // TRANSCRIBE_MD_CLINICAL_MODEL — eval override (feat/fable5-eval); unset → default unchanged.
@@ -182,6 +185,10 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
   // audit row gives operators a grep target for prompt regressions.
   let polishValidationFailReason: string | null = null;
   let polishRejected = false;
+  /** Section labels whose ASSEMBLED bytes did not survive the polisher. Drives
+   *  a doctor-facing reason that NAMES the section, per #106(g)(4) — "polish
+   *  was rejected" tells a clinician nothing they can act on. */
+  let divergedStaticLabels: string[] = [];
 
   if (fixable.length === 0) {
     // Nothing to auto-patch — the draft itself is our final note.
@@ -347,6 +354,62 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
       }
     }
 
+    // ── L6b STATIC-REGION ARM (ruling #106(g)) ────────────────────────────
+    //
+    // ⚠️ THE VERIFIER ABOVE CANNOT SEE THIS CLASS, AND THAT IS WHY THIS EXISTS.
+    // Its whole contract is "no NEW clinical content relative to the draft", and
+    // `500 milliseconds` → `0.5 seconds` adds nothing, removes nothing and flips
+    // no negation — the verifier's own rules call it rewording and let it
+    // through, correctly, for the question it was asked. The doctor's form is a
+    // different question: those bytes are not a phrasing choice, they are the
+    // product's promise (SPEC §4.3a(a)).
+    //
+    // ⚠️ IT RIDES THE FIDELITY GATE'S EXISTING FALLBACK RATHER THAN INVENTING A
+    // SECOND ONE — one rejection path, one audit action, one review-banner
+    // composition. A parallel mechanism would drift from the first the day
+    // either was fixed.
+    //
+    // ⚠️ THE REGIONS ARE READ FROM THE DRAFT, not passed down from L4, because
+    // L4 is skippable on resume — see `staticRegionsFromNote`. A no-op returning
+    // `[]` for every template with no `always_include` sections, which today is
+    // all of them, so this is inert until the reclassification lands.
+    if (!polishRejected && soapFinal.trim().length > 0) {
+      const regions = staticRegionsFromNote(input.soapDraft, template.sections);
+      const diverged = findStaticDivergence(soapFinal, regions);
+      if (diverged.length > 0) {
+        polishRejected = true;
+        divergedStaticLabels = diverged.map((d) => d.label);
+        soapFinal = input.soapDraft;
+        const total = noteStaticDivergence(template.id);
+        void logAudit({
+          action: 'L6_FABRICATION_REJECTED',
+          targetType: 'transcribe_visit',
+          targetId: input.visitId,
+          userId: input.userId,
+          practiceId: input.practiceId,
+          success: false,
+          metadata: {
+            layer: 'L6',
+            // THE NAMED REASON. Distinct from the verifier's `gateError`
+            // values so the two classes can never be summed by accident.
+            gateError: 'static_region_diverged',
+            // Section KEYS, not text — a label is the doctor's own heading and
+            // is structural; the section body never leaves the note.
+            divergedSections: diverged.map((d) => d.sectionKey),
+            divergedCount: diverged.length,
+            regionsChecked: regions.length,
+            // The durable per-template count lives in these rows; the in-process
+            // counter is the live signal. Written on EVERY such row so the
+            // group-by has something to group on.
+            noteTemplateId: template.id,
+            noteTemplateVersion: template.version,
+            templateDivergenceCount: total,
+            fellBackToDraft: true,
+          },
+        });
+      }
+    }
+
     // FIND-P1-016 — same validator L4 uses, now scoped to the resolved
     // template's required sections. Fail → keep raw output, flag the
     // validation reason so the reviewReason calculation below includes it
@@ -380,9 +443,15 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
   // validation-fail reason prepends so the operator/clinician sees the
   // most urgent issue first. (Rejection and validation-fail are mutually
   // exclusive — validation is skipped on the gate-fallback path.)
-  const polishRejectedReason = polishRejected
-    ? 'Auto-polish was rejected by the fabrication gate and not applied — the auditor-flagged fixes remain unapplied; review the draft.'
-    : null;
+  const polishRejectedReason = !polishRejected
+    ? null
+    : divergedStaticLabels.length > 0
+      ? // NAMES THE SECTION, deliberately. A clinician who is told "polish was
+        // rejected" learns nothing actionable; one who is told the polisher
+        // tried to reword TECHNIQUE knows exactly where to look and that the
+        // wording they are seeing is their own.
+        `Auto-polish tried to reword text that comes from your own form (${divergedStaticLabels.join(', ')}) and was not applied — the note keeps your template's exact wording. The auditor-flagged fixes remain unapplied; review the draft.`
+      : 'Auto-polish was rejected by the fabrication gate and not applied — the auditor-flagged fixes remain unapplied; review the draft.';
   const prefixReason = polishRejectedReason ?? polishValidationFailReason;
   // Survival tuning: deferred additive fixes still reach the doctor — their
   // content usually sits in the suggestions lane (adopt flow), so point there.
