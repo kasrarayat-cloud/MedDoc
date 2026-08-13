@@ -68,8 +68,23 @@
 -- ===========================================================================
 
 -- Snapshot BEFORE, so the guards compare against something rather than against
--- an expectation. A temp table dies with the transaction.
-CREATE TEMP TABLE _rc1_before ON COMMIT DROP AS
+-- an expectation.
+--
+-- ⚠️ NO `ON COMMIT DROP`, AND THE OMISSION IS A BUG FIX. It was there, and it
+-- made this migration's guards depend on the CALLER supplying a transaction.
+-- `prisma migrate deploy` does supply one, so it would have worked — but psql
+-- commits each statement on its own, which drops an ON COMMIT DROP table
+-- immediately, and the guards then failed with `relation "_rc1_before" does not
+-- exist` AFTER the UPDATE had already committed. A migration that half-ran and
+-- reported success is the exact shape AGENTS.md's abort rule exists to prevent.
+--
+-- ⚠️ AND THE PRODUCTION DRY-RUN COULD NOT HAVE FOUND IT: that run was wrapped in
+-- `BEGIN … ROLLBACK` precisely so it could never commit, which is the one
+-- condition under which the old form works. It was found by applying the file
+-- to the QA database for real. *A rehearsal that supplies what the real run
+-- does not is not a rehearsal of the real run.*
+DROP TABLE IF EXISTS _rc1_before;
+CREATE TEMP TABLE _rc1_before AS
 SELECT t.id AS template_id,
        e.ord,
        e.s->>'key'             AS section_key,
@@ -175,3 +190,6 @@ BEGIN
   -- the number the §2.5 declaration is judged against.
   RAISE NOTICE 'RC-1: % section(s) flipped to always_include across % template(s)', flipped, templates;
 END $$;
+
+-- Explicit, so the snapshot does not outlive the migration in either world.
+DROP TABLE IF EXISTS _rc1_before;
