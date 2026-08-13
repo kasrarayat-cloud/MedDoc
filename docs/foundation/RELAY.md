@@ -10892,3 +10892,49 @@ being guessed in the direction that cannot be walked back.
   inferred re-spend. Still owed, still unmeasured.
 - **It is scoped to `api_usage_events`.** `ai_calls` was not measured; it is a
   different table with a different write path and is not what the charge reads.
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `af5fbc5a190a8e715c7756277d35d57084c3438d`:**
+   · `CI` 31715809745 a1
+   · `e2e` 31715809732 a1
+   · `a11y-ci` 31715809728 a1
+   · `secrets-scan` 31715809730 a1
+
+All `a1` — no re-runs, so there is nothing to explain. PR **#639**, branch
+retired via `scripts/retire-branch.sh`, **both sides confirmed**.
+
+⚠️ **AND `retire-branch.sh` EARNED ITS FALSE-SUCCESS FIX AGAIN, ON ITS FIRST
+CALL.** Run while the branch was still checked out, it deleted the REMOTE, then
+printed `🟡 … is PARTIALLY retired — see above. Not claiming success.` and exited
+non-zero. That is the exact positive-control case recorded in `AGENTS.md`
+("**a guard proven only in the RED direction is half-proven**"): before the fix
+it printed *"left in place"* and then `🟢 retired`, exit 0. Switching to `main`
+and re-running retired the local side and returned `🟢`, honestly.
+
+The PR head (`3e55af21`) was also 4 of 4 first time — `CI` 31711920639 ·
+`e2e` 31711920628 · `a11y-ci` 31711920609 · `secrets-scan` 31711920650. No union
+merge was needed: `main` did not move while the gate ran, so the inbox's declared
+`RELAY.md` union did not arise on this item. **The notice stands for whoever
+merges next** — it was declared against ruling #102's landing, not against this
+PR, and nothing here consumed it.
+
+⚠️ **`e2e` IS RUNNING LONG, AND IT IS A NOTE RATHER THAN A FINDING.** Three
+consecutive `e2e` runs this session took **1h13m** (`656093c7`), **~1h05m**
+(`3e55af21`) and **~1h10m** (`af5fbc5a`) against the ~42m this ledger has been
+citing all week. All three went green, all three on the first attempt, and no job
+was re-run — so nothing is failing and no gate was weakened. Recorded because a
+**60% wall-clock increase across every run** is the shape that quietly halves a
+night's session budget, and the first session to be squeezed by it should find
+the measurement already written down rather than discover it as a surprise. Not
+diagnosed here: the runner's own step timings were not pulled, and attributing it
+without them would be a guess.
+
+### ⚠️ THIS ROW'S OWN MERGE COMMIT IS OWED FORWARD
+
+The citation above is for the merge that carried the recon. **The merge that
+carries THIS paragraph cannot be cited by the session that writes it** — the
+commit does not exist until it lands. That is the standing regress and it is
+accepted: the programme always carries exactly one uncited head, never more.
+STEP 0.4 of the next session discharges it with
+`bash scripts/check-citation.sh <FULL-40-CHAR-SHA>`.
