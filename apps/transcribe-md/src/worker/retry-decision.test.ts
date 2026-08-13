@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 
-import { shouldMarkVisitFailed, shouldObserveFailureCost } from './retry-decision';
+import {
+  shouldDiscardPermanentJob,
+  shouldMarkVisitFailed,
+  shouldObserveFailureCost,
+} from './retry-decision';
 
 describe('shouldMarkVisitFailed', () => {
   // Our production queue config is attempts=3, so these three cases
@@ -94,5 +98,56 @@ describe('shouldObserveFailureCost', () => {
   it('does not treat a category that merely contains "permanent" as permanent', () => {
     expect(shouldObserveFailureCost('semi-permanent', 1)).toBe(true);
     expect(shouldObserveFailureCost('permanently_gone', 1)).toBe(true);
+  });
+});
+
+// ============================================================================
+// B8 step 3c — a permanent failure is DISCARDED, so "fail-fast" stops lying
+// ----------------------------------------------------------------------------
+// The worker has logged `permanent failure, fail-fast (skipping BullMQ
+// retries)` since T-M23.A and retried anyway. Measured on QA 2026-08-13: three
+// attempts, five seconds apart, each logging the line that says it is skipping
+// them.
+//
+// ⚠️ THE `persistOk` HALF IS THE ONE A NARROWING FIX WOULD GET WRONG, AND IT IS
+// THE HALF WITH THE CLINICAL COST. Discarding on a failed FAILED-state write
+// leaves the visit in a NON-TERMINAL status — the doctor sees a spinner until
+// the 15-minute stuck-visit watchdog force-fails it. The database blip is not
+// the permanent error and must still be retried.
+// ============================================================================
+describe('shouldDiscardPermanentJob', () => {
+  // The defect, stated as the thing that must come back true.
+  it('discards a permanent failure once its FAILED state is persisted', () => {
+    expect(shouldDiscardPermanentJob('permanent', true)).toBe(true);
+  });
+
+  // ⚠️ THE POSITIVE CONTROL FOR THE OTHER DIRECTION. A predicate that returned
+  // `true` for everything would satisfy the case above and would silently stop
+  // retrying transient failures — a provider blip becoming a failed visit, and
+  // the single most expensive way to get this wrong.
+  it('does NOT discard a transient failure — BullMQ must still retry it', () => {
+    expect(shouldDiscardPermanentJob('transient', true)).toBe(false);
+  });
+
+  it('does NOT discard a provider_down failure — the outage may clear', () => {
+    expect(shouldDiscardPermanentJob('provider_down', true)).toBe(false);
+  });
+
+  // The clinical half: a stuck non-terminal visit is worse than a wasted retry.
+  it('does NOT discard when the FAILED-state write failed, even if permanent', () => {
+    expect(shouldDiscardPermanentJob('permanent', false)).toBe(false);
+  });
+
+  it('does not discard a transient failure with a failed persist either', () => {
+    expect(shouldDiscardPermanentJob('transient', false)).toBe(false);
+  });
+
+  // ⚠️ THE SUBSTRING TRAP — AGENTS.md records four sightings. The category is
+  // compared with `===` on the whole token. A category that merely CONTAINS
+  // "permanent" must not inherit the discard, or a future category name would
+  // silently stop being retried.
+  it('does not treat a category that merely contains "permanent" as permanent', () => {
+    expect(shouldDiscardPermanentJob('semi-permanent', true)).toBe(false);
+    expect(shouldDiscardPermanentJob('permanently_gone', true)).toBe(false);
   });
 });

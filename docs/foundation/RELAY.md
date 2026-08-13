@@ -10938,3 +10938,165 @@ commit does not exist until it lands. That is the standing regress and it is
 accepted: the programme always carries exactly one uncited head, never more.
 STEP 0.4 of the next session discharges it with
 `bash scripts/check-citation.sh <FULL-40-CHAR-SHA>`.
+
+---
+
+## ✅ B8 STEP 3c — "fail-fast" WAS A WISH FOR THREE MONTHS; IT IS NOW A DESCRIPTION — 2026-08-13
+
+**The item as carried:** *"the false 'fail-fast' log line and its inferred
+re-spend. Still owed a walked measurement."* Both halves are answered below, and
+one of them is answered NEGATIVELY — the re-spend still cannot be walked, and
+the reason is structural rather than a gap in anybody's harness.
+
+### WHAT WAS WRONG
+
+`worker.ts` has logged, verbatim, `permanent failure, fail-fast (skipping BullMQ
+retries)` since T-M23.A — and then re-thrown, which hands the error straight back
+to BullMQ. **Nothing anywhere discarded the job.** The comment beside the line
+states the intent in as many words (*"burning two more BullMQ attempts is just
+two more Anthropic / Deepgram calls for the same outcome"*), so this was never an
+idle sentence: it was a design that was never implemented, reading as a
+description of behaviour to everyone who met it.
+
+AGENTS.md names the class exactly — **a stated invariant is a WISH until
+something asserts it** — and this is that class arriving in a log message rather
+than in a runbook.
+
+### WHAT IS BUILT
+
+- **`worker/unrecoverable.ts`** — converts the caught error into the marker
+  BullMQ reads as *do not retry*, preserving the original message, stack and
+  `cause` so the DLQ entry an operator opens is unchanged apart from the name.
+- **`shouldDiscardPermanentJob(category, persistOk)`** in
+  `worker/retry-decision.ts` — the pure predicate, unit-gated.
+- **`scripts/qa/b8-permanent-discard-on-qa.ts`** — the behavioural instrument,
+  which reads BullMQ's own counter rather than a log line.
+
+### ⚠️ BULLMQ CHECKS TWO THINGS, AND THE NATURAL IMPLEMENTATION SATISFIES ONE
+
+`Job.shouldRetryJob` (bullmq 5.76.6, `job.js:486`) reads
+
+    !(err instanceof UnrecoverableError || err.name == 'UnrecoverableError')
+
+a **disjunction**, and both halves are load-bearing here for different reasons.
+`instanceof` fails across two copies of the package — **and there ARE two in this
+tree**, `node_modules/bullmq` and
+`apps/transcribe-md/.next/standalone/node_modules/bullmq` — with no error
+anywhere when it does. `err.name` is a plain string comparison, immune to that.
+
+⚠️ **AND SUBCLASSING — THE OBVIOUS WAY TO WRITE THIS — SILENTLY BREAKS THE
+SECOND HALF.** `UnrecoverableError`'s constructor is
+`this.name = this.constructor.name`, so `class PermanentFailureError extends
+UnrecoverableError` gets `name === 'PermanentFailureError'` and the string arm
+stops matching, leaving the class relying on exactly the arm the dual-copy layout
+defeats. **Mutation M3 demonstrated this and demonstrated the shape of the
+danger**: writing it as a subclass reddened **only** the name-arm assertion — the
+headline *"bullmq will NOT retry this"* test stayed GREEN, because `instanceof`
+holds in the single-copy test environment. A half-failure that CI would have
+called a pass.
+
+### THE MEASUREMENT — BULLMQ'S OWN COUNTER, NOT A LOG LINE
+
+The `failure cost` line is now guarded to once-per-visit (#104 / DEFECT 1), so
+counting it can no longer distinguish one attempt from three — **the guard that
+fixed one defect blinded the obvious instrument for this one.** `attemptsMade` in
+Redis is the ground truth.
+
+| job | image | category | `atm` | in `delayed` | in `failed` |
+|---|---|---|---|---|---|
+| `413` | pre-fix | permanent | **3 of 3** | — | yes |
+| `414` | **with fix** | permanent | **1 of 3** | **no** | yes |
+| `415` | with fix | transient | **3 of 3** | — | yes |
+| `416` | with fix | transient | **3 of 3** | — | yes |
+
+⚠️ **ROWS 415/416 ARE THE ARM THAT MAKES ROW 414 MEAN ANYTHING, AND THEY RAN ON
+THE SAME BINARY.** Without them, `atm=1` is indistinguishable from a worker that
+stopped retrying *everything* — which is the single most expensive way to get
+this wrong, and it is the direction a careless fix takes. Corroborating log
+counts on the pre-fix visit: **3** catch-block executions, **3** queue `FAILED`
+events, **2** `fail-fast` lines (attempts 0 and 1; not 2, which is
+`isFinalAttempt`). Post-fix: **1** of each.
+
+⚠️ **AND I MISREAD MY OWN INSTRUMENT FIRST — MEASURED TOO EARLY.** The initial
+grep of the pre-fix run returned **1** failure line and I nearly recorded it. The
+retries had not happened yet: backoff is 5s then 10s, and I had counted ~90s
+after enqueue but had run the grep against a log window that predated attempts 2
+and 3. Re-counted once settled: 3. **A count taken before the thing being counted
+has finished is not a small error — it read as the POST-fix answer on the PRE-fix
+image**, i.e. it would have reported the defect as already absent. The instrument
+in `b8-permanent-discard-on-qa.ts` therefore polls the job to a terminal state and
+refuses to answer while it is `delayed`, rather than sleeping a guessed constant.
+
+### ⚠️ FINDING — A "PERMANENT" FAILURE SELF-HEALED IN FRONT OF ME, AND IT IS THE COST OF THIS FIX
+
+Observed live, not reasoned about. `b8-admission-on-qa.ts` ARM 1's refused visit
+`cmsrs6yuo…` failed at `17:17:37Z` on an empty wallet; ARM 2 funded **the same
+practice** seconds later; the retry at `17:17:42Z` was **admitted and ran the
+pipeline to completion** — `attemptsMade=2`, `visit completed`.
+
+So `insufficient_balance`, which `error-categorize.ts` classifies permanent
+because *"a retry cannot change an empty wallet"*, **had its wallet changed
+between attempts.** That capability is what this item removes.
+
+**Priced, and it does not change the decision.** The window is BullMQ's backoff,
+~15 seconds. A doctor topping up a practice wallet inside fifteen seconds is not
+a production capability — B7's Stripe Checkout is a hosted flow measured in
+minutes — and the doctor-facing copy already names the explicit path (*"Add
+credit to the practice, then retry this visit"*). **A deliberate retry button
+beats a fifteen-second race nobody documented.**
+
+⚠️ **IT IS ALSO A LIMIT ON `b8-admission-on-qa.ts` THAT NOBODY HAD WRITTEN
+DOWN.** Every assertion that harness makes about ARM 1 was TRUE when it made it —
+and the visit did not stay FAILED, because ARM 2 funds the practice ARM 1 was
+starved of. Its conclusion is time-limited in a way its output does not say.
+**Not a defect in its verdict; a defect in how long that verdict lasts.** After
+this fix the visit stays FAILED, so the harness becomes more honest by accident.
+
+### ⚠️ WHAT THIS ITEM DOES **NOT** CLAIM — THE RE-SPEND IS STILL NOT WALKED
+
+RELAY inferred that a post-spend permanent failure re-spends on retry. **That
+remains INFERRED, and on QA it is UNWALKABLE — which is the useful part.**
+
+Worked as a list rather than asserted as a class:
+
+| permanent door | position relative to the meter | reachable on QA? |
+|---|---|---|
+| `ModelOutputMalformedError` | BELOW — the vendor's response is metered, then parsed | **no** — under `MOCK_AI_CALLS` the response is a fixture, valid by construction |
+| `ZodError` | BELOW, same seam | **no**, same reason |
+| `AnthropicRefusalError` | BELOW, same seam | **no**, same reason |
+| `PipelineRejectError` | ABOVE every meter on the dictation path; immediately after a **checkpointed** layer on the audio path | yes — **but its retry re-spends nothing**, because L1's `transcriptRaw` is populated so L1 is skipped |
+| `BillingAdmissionError/insufficient_balance` | before the first vendor call | yes — **pre-spend**, which is the arm used above |
+
+So the mock's own correctness is what closes the door: **every permanent error
+that could sit below a meter is opened by the VENDOR's response, and the QA stack
+is REQUIRED to be incapable of producing one.** Manufacturing it would mean
+injecting a fault I wrote, which proves what I believe rather than what the
+pipeline does — ruling #98(b).
+
+**The fix makes the distinction moot in the direction that matters: with one
+attempt there is no second execution of anything, spent or unspent.** The
+unmeasured quantity is now the size of a historical over-charge on a population
+that is empty (B8 step 3b measured zero instances in production, ever), not a
+live exposure.
+
+Also not claimed: **nothing here is deployed.** Production carries neither this
+nor B8 step 3's DEFECT 1 fix at the time of writing beyond what `9d1a8b4e`
+shipped; the deploy is a separate act under §2.5 with its own declaration.
+
+### THE GATE
+
+`tsc --noEmit` 0 errors · **3653 unit tests pass, 4 skipped** · the two new
+suites are **27 assertions** across `retry-decision.test.ts` and
+`unrecoverable.test.ts`.
+
+Three mutations, each red, each restored from a **scratch copy** rather than
+`git checkout` (AGENTS.md: on a dirty tree that deletes uncommitted work):
+
+    M1  `return persistOk`              → 3 red: transient, provider_down, substring
+    M2  `return category === 'permanent'` → 1 red: the failed-persist case
+    M3  write the marker as a subclass   → 1 red: the `name` arm ONLY
+
+**M3 is the one worth remembering** — see the bullmq section above. It is a
+mutation whose headline test stayed green.
+
+### Citation — produced by `check-citation.sh`, not typed

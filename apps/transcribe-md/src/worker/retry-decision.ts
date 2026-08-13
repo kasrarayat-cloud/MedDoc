@@ -75,19 +75,24 @@ export function shouldMarkVisitFailed(
  * observes a permanent failure on its FIRST attempt and therefore MISSES
  * whatever attempts 2..n re-spend.
  *
- * That understatement is real and is accepted, for one reason: `isFinalAttempt`
+ * That understatement was real and was accepted, for one reason: `isFinalAttempt`
  * BREAKS SILENTLY THE DAY B8 step 3c IS FIXED. 3c's fix is to stop retrying
- * permanent failures at all (the log already claims "fail-fast (skipping BullMQ
- * retries)" and is lying). Under that fix `attemptsMade` is 0 and
+ * permanent failures at all (the log already claimed "fail-fast (skipping BullMQ
+ * retries)" and was lying). Under that fix `attemptsMade` is 0 and
  * `isFinalAttempt` is false, so the observation would simply never run again —
  * a measurement silently switched off by an unrelated correctness fix, with
  * nothing anywhere going red. That is the class AGENTS.md names as "a check
  * that fails when the thing it guards starts working", and it is worse than a
  * known, bounded understatement.
  *
- * So this predicate measures the INTENDED semantics — a permanent failure runs
- * once — and the gap between that and today's behaviour is 3c's, not this
- * function's. Fixing 3c closes the gap rather than opening one.
+ * ⚠️ **3c HAS SINCE LANDED — see `shouldDiscardPermanentJob` below — AND THE
+ * PREDICTION HELD.** A permanent failure now enters the branch exactly once, at
+ * `attemptsMade === 0`, so this predicate describes the behaviour instead of
+ * compensating for it, and the understatement above is closed: there are no
+ * attempts 2..n left to miss. `isFinalAttempt` would today be UNREACHABLE for a
+ * permanent failure and the measurement would be gone. This is the reference
+ * case for that rule, recorded because both halves were written before the
+ * outcome was known.
  *
  * @param category      the worker's own `ErrorCategory` for this failure
  * @param attemptsMade  BullMQ's 0-indexed attempt counter
@@ -97,4 +102,55 @@ export function shouldObserveFailureCost(
   attemptsMade: number
 ): boolean {
   return category !== 'permanent' || attemptsMade === 0;
+}
+
+/**
+ * B8 step 3c — should this failure be handed back to BullMQ for RETRY, or
+ * discarded so the job stops here?
+ *
+ * ⚠️ THIS CLOSES A THREE-MONTH GAP BETWEEN A LOG LINE AND THE BEHAVIOUR IT
+ * DESCRIBES. `worker.ts` logs `permanent failure, fail-fast (skipping BullMQ
+ * retries)` and then re-throws, which hands the error straight back to BullMQ;
+ * nothing anywhere discarded the job. Measured on QA 2026-08-13: THREE attempts,
+ * five seconds apart, every one of them logging the line that says it is
+ * skipping them.
+ *
+ * The claim was never idle. `categorizeError` defines `permanent` as *"retrying
+ * is futile — the same input fails the same way"*, and with per-layer resume
+ * (`resume-state.ts`) a retry re-runs every layer whose checkpoint column is
+ * still null. So a permanent failure that happens BELOW a meter and ABOVE that
+ * layer's checkpoint write re-spends vendor money on attempts the system has
+ * already classified as useless.
+ *
+ * ⚠️ `persistOk` IS IN THE PREDICATE, NOT LEFT TO THE CALLER'S ORDERING, AND
+ * THAT IS DELIBERATE. A retry is still wanted when the FAILED-state write
+ * itself failed: that write is a database blip, not the permanent error, and
+ * dropping the job there leaves the visit stuck in a non-terminal status until
+ * the 15-minute stuck-visit watchdog force-fails it. `worker.ts` also throws
+ * `persistErr` before reaching here, so today the parameter is redundant at the
+ * only call site — it is stated anyway because AGENTS.md has already recorded
+ * the cost of a predicate whose correctness depends on a precondition the
+ * caller happens to maintain (`shouldObserveFailureCost`'s own header). A
+ * self-sufficient predicate cannot be broken by moving its call.
+ *
+ * ⚠️ WHAT IS LOST, NAMED RATHER THAN DISCOVERED. Today a MIS-classified
+ * permanent failure can self-heal: the visit is marked FAILED on attempt 1
+ * (`shouldFailNow` fires immediately), then attempt 2 or 3 can still complete
+ * and flip it to READY. After this change it cannot. The exposure is bounded to
+ * the one permanent class whose recurrence is genuinely stochastic —
+ * `ModelOutputMalformedError`, where the model returned non-JSON — and
+ * `error-categorize.ts:167-173` already argues on the record that a BullMQ
+ * retry does not help there, because the only retry-context that ever helped
+ * lives INSIDE the model-client loop and has already burned its budget. Every
+ * other permanent door (empty transcript, unsupported format, a 4xx on the
+ * wire, an empty wallet) is deterministic on the same input by construction.
+ *
+ * @param category  the worker's own `ErrorCategory` for this failure
+ * @param persistOk whether the FAILED-state write succeeded
+ */
+export function shouldDiscardPermanentJob(
+  category: string,
+  persistOk: boolean
+): boolean {
+  return category === 'permanent' && persistOk;
 }

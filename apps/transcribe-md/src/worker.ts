@@ -40,9 +40,11 @@ import {
 } from '@meddoc/ai';
 import { log } from '@/lib/log';
 import {
+  shouldDiscardPermanentJob,
   shouldMarkVisitFailed,
   shouldObserveFailureCost,
 } from './worker/retry-decision';
+import { asUnrecoverable } from './worker/unrecoverable';
 import {
   categorizeError,
   type ErrorCategory,
@@ -1447,11 +1449,20 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     //   permanent  → entered on every attempt; want only attemptsMade === 0
     //   otherwise  → entered once, on the final attempt; want it
     //
-    // ⚠️ THE RETRIES THEMSELVES ARE NOT FIXED HERE, AND THAT IS DELIBERATE —
-    // see RELAY's B8 step 3c. The line logged immediately above this one says
-    // "permanent failure, fail-fast (skipping BullMQ retries)" and it is FALSE:
-    // the retries happen. Making it true means discarding the job, which is a
-    // change to clinical retry semantics and is not this item's to make.
+    // ⚠️ B8 step 3c HAS SINCE FIXED THE RETRIES, AND THIS GUARD IS STILL LOAD-
+    // BEARING — WHICH IS THE WHOLE REASON IT WAS WRITTEN THIS WAY. With the
+    // discard below in place a permanent failure enters this branch exactly
+    // once, at `attemptsMade === 0`, so the predicate is now describing the
+    // behaviour rather than compensating for it. Its header already predicted
+    // this: the obvious alternative, `isFinalAttempt` alone, would have gone
+    // SILENT the day 3c landed — `attemptsMade` is 0 and `isFinalAttempt` is
+    // false, so the observation would simply never run again, with nothing
+    // anywhere going red. AGENTS.md's *"a check that fails when the thing it
+    // guards starts working"*. Do not "simplify" this to `isFinalAttempt`.
+    //
+    // The guard is also what keeps the seam correct if the discard is ever
+    // reverted — the reversal path in RULINGS restores the retries and this
+    // predicate keeps the measurement at one line per visit either way.
     if (shouldObserveFailureCost(category, attemptsMade)) {
       const failureCost = await observeFailedVisitUsage({
         visitId,
@@ -1499,6 +1510,26 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // failure; the original error is already in Sentry.
     if (!persistOk) {
       throw persistErr;
+    }
+
+    // ── B8 step 3c — AND NOW THE LOG LINE ABOVE IS TRUE ────────────────────
+    // `permanent failure, fail-fast (skipping BullMQ retries)` has been emitted
+    // since T-M23.A and the retries happened anyway — a bare `throw err` hands
+    // the error back to BullMQ, which retries it up to `attempts`. Measured on
+    // QA 2026-08-13: three attempts, five seconds apart, each one logging that
+    // it was skipping them.
+    //
+    // The marker is what BullMQ reads to stop; see `unrecoverable.ts` for why
+    // it satisfies BOTH arms of bullmq's check and why subclassing would
+    // silently satisfy only one.
+    //
+    // ⚠️ IT IS BELOW THE `persistErr` THROW ON PURPOSE. A failed FAILED-state
+    // write is a database blip, not the permanent error, and it MUST still be
+    // retried — otherwise the visit sits in a non-terminal status until the
+    // 15-minute watchdog force-fails it. The predicate carries `persistOk`
+    // anyway so it cannot be broken by moving this call.
+    if (shouldDiscardPermanentJob(category, persistOk)) {
+      throw asUnrecoverable(err);
     }
 
     throw err;
