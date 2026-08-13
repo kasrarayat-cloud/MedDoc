@@ -10480,3 +10480,150 @@ is named for the commit that will actually deploy, not for this one. A
 declaration written against a superseded SHA is refused by the gate — which is
 the gate working, but it costs a PR cycle, so write it against `git rev-parse
 --short HEAD` at the moment the deploy session opens.
+
+---
+
+## ✅ B8 STEP 3 IS **LIVE IN PRODUCTION** — `9d1a8b4e`, DECLARATION JUDGED **12 OF 12** — 2026-08-13
+
+**The deploy debt carried by the two rows above is CLEARED.** Production ran
+`a580afcd` (B7 step 3c) and now runs `9d1a8b4e`, which carries B8 step 3, DEFECT
+1's fix, the QA behavioural proof and the inbox mechanism.
+
+### THE DEPLOY
+
+| | |
+|---|---|
+| commit | `9d1a8b4ef0fa309913c4818096063765fa009317` (merge of PR #636) |
+| declaration | `docs/foundation/deploys/20260813-9d1a8b4e.md` |
+| deploy log | `docs/deploy-logs/deploy-20260813T111841Z.log` |
+| rollback | `:pre-b8s3-20260813` — app `2c30f254656d` / worker `45be95940528` / gotenberg `2d05d22572ba`, all **digest-verified against the RUNNING containers** before anything was rebuilt |
+| migration | **none.** Code-only; `101 → 101`, asserted by step 4 |
+
+**Judged 12 of 12.** Three MUST-CHANGE, nine MUST-NOT-CHANGE:
+
+| # | declared | measured |
+|---|---|---|
+| 1 | both image ids move | app `2c30f254…` → **`faadc7dd…`**, worker `45be9594…` → **`cf32b5c6…`** |
+| 2 | worker gains `billing-failure.ts` | **6 → 7** billing files |
+| 3 | `observeFailedVisitUsage` present in the shipped `worker.ts` | **0 → 3** occurrences |
+| 4 | migrations 101 | **101** |
+| 5 | `ledger_entries` 175, promo 175 rows / 1 750 000 000 µUSD, paid 0 rows | **unmoved, all three** |
+| 6 | billing audit rows `PROMO_GRANT_CREDITED = 175`, no new label | **175, no new label** |
+| 7 | visits 25 · signed 17 · patients 16 | **25 · 17 · 16** |
+| 8 | `FAILED` 0, `failureCategory` non-NULL 0 | **0 / 0** |
+| 9 | practices 197 | **197** |
+| 10 | `BILLING_ENFORCED` unset in both containers | **unset / unset** |
+| 11 | co-tenants `307 · 404 · 200 · 200 · 410` | **unchanged** |
+| 12 | `api_usage_events` no unexplained jump | **1325 → 1325** |
+
+### ⚠️ THE ONE NUMBER THAT MOVED, AND WHY PINNING THE SUBSET IS WHAT SAVED IT
+
+`audit_logs` went **10949 → 10951**. The declaration **predicted this shape and
+refused to pin the total**, deliberately: the billing-labelled SUBSET is the
+quantity this deploy could affect, and pinning the total would manufacture a
+finding on the first member of the public who touches the site during the window.
+
+The two rows were read rather than assumed:
+
+    SIGNUP_REJECTED_NO_INVITE  success=f  2026-08-13 11:01:42Z
+    WAITLIST_JOINED            success=t  2026-08-13 11:02:03Z
+
+**Both PRECEDE the deploy by ~17 minutes** (it started `11:18:41Z`), so they are
+not merely explainable — they are chronologically incapable of having been caused
+by it. Somebody tried to sign up without an invite, was correctly refused
+(signup has been invite-only since 2026-07-28) and joined the waitlist.
+
+⚠️ **THIS IS THE ROW THAT WOULD HAVE BEEN A FALSE FINDING**, and it is worth the
+space because the near-miss is instructive: an earlier draft of the declaration
+said *"`audit_logs` gains no billing rows"*, which is **not a check** — with no
+pre-count, any post-deploy figure has a story available to it, which is the exact
+property §2.5 exists to remove, reappearing INSIDE a §2.5 document. It was
+rewritten before the deploy to pin `PROMO_GRANT_CREDITED = 175` and to say in as
+many words that the total may drift. **A declaration that pins the wrong quantity
+fails in both directions** — it either cries wolf or it sleeps through the thing
+it was watching for.
+
+### ⚠️ FINDING — THE DECLARATION GATE'S PROVENANCE PROBE IS **HEAD-RELATIVE**, SO IT CANNOT SEE A BRANCH COMMIT
+
+**Found by doing the thing the gate is supposed to reward.** Ruling #102(a)'s
+whole finding was that a declaration's ORDER was unprovable. So this session
+committed and **pushed** the declaration BEFORE deploying, to give it a durable
+server-side timestamp. The gate then printed:
+
+    tracked     : yes   modified-vs-HEAD: YES
+    committed   : -  at -
+
+    ⚠️  the declaration is not committed as it stands.
+
+**The warning is wrong about the fact, and right about what it can see.**
+`scripts/lib/declaration.sh` reads provenance with `git log -1 -- "$decl"`, which
+walks from **HEAD**. The deploy necessarily runs with HEAD on `main` (see the
+structural constraint below), and the declaration's commit is on a branch, so the
+probe finds nothing. Measured, both ways, on the deploying tree:
+
+    git log -1 --format=%h        -- <decl>   → (empty)
+    git log -1 --all --format=%h  -- <decl>   → 72fbb188  2026-08-13T10:46:40Z
+
+So the order IS provable from git — `72fbb188` at `10:46:40Z`, deploy started
+`11:18:41Z`, **delta +32m** — and the gate is the one instrument that cannot say
+so. The file's `sha256` printed by the gate (`3a64a39a…`) is byte-identical to
+the committed blob, which is what ties the two together for a later reader.
+
+⚠️ **AND THE OBVIOUS FIX IS A LOOSENING, WHICH IS WHY IT IS NOT MADE HERE.**
+Adding `--all` would make `csha` non-empty for a branch-committed file — and in
+**`strict`** mode the refusal is `[ -z "$csha" ]`, so the same one-word change
+would make the RULED-MUTATION gate **accept a declaration it currently refuses**.
+That is loosen-later on a gate guarding irreversible acts, which fails MASTER's
+provisional-ruling test on its first clause. **Recommended to the war room, not
+taken:** either (a) `--all` in `present` mode only, or (b) print an additional
+`also-found-on-other-refs` line that never participates in the strict decision.
+Option (b) is purely additive and cannot weaken anything.
+
+### ⚠️ AND THE STRUCTURAL CONSTRAINT BEHIND ALL OF IT, WRITTEN DOWN ONCE
+
+`deploy-prod.sh` derives `DECL` from `git rev-parse --short HEAD` **at deploy
+time**. A declaration is therefore named after the commit being deployed — so
+committing it to `main` produces a new HEAD, which changes the required filename,
+which the gate then refuses.
+
+> **A deploy declaration is STRUCTURALLY INCAPABLE of being committed to `main`
+> before its own deploy.** Not by habit — by construction.
+
+`declaration.sh`'s header explains the `present`/`strict` asymmetry only by *"it
+would refuse every deploy whose author lands the declaration in the same PR — a
+real habit"*. Both reasons are true; **only this one is unavoidable**, and it is
+the stronger argument for keeping the deploy path at `present`. The branch-commit
+pattern used here is the closest available approximation to `strict` on a path
+that cannot have it, and it costs one push that starts no CI (`e2e` triggers on
+`pull_request` and `push` to `main` only, so a branch push is free).
+
+### WHAT THIS DEPLOY DOES **NOT** CLAIM
+
+- ⚠️ **It does not prove the seam works.** The declaration said so IN ADVANCE:
+  the observation runs only inside the worker's FAILED branch and production has
+  held **zero** FAILED visits, ever, so **the absence of a `failure cost` line is
+  evidence of nothing at all.** That was written down before the deploy precisely
+  because the transcript was going to be quiet, and a quiet transcript is the
+  easiest thing in the world to read as success. **The behavioural proof lives on
+  QA** (session 04, three arms, `ledger_entries` 0 → 0 in both postures). This
+  deploy inherits that proof and does not re-establish it.
+- **What it DOES establish is narrower and real:** shipping the first
+  **unflagged** billing seam to production moved no money, no clinical row and no
+  co-tenant. Every prior B-lane seam was inert behind `BILLING_ENFORCED`; this one
+  is not, so the MUST-NOT-CHANGE table is a genuine claim rather than a formality.
+- **`BILLING_ENFORCED` remains OFF and is still BLOCKED** by B8 step 3b (the
+  success path's retry over-charge). Nothing here touches that.
+- **B8 step 3c is untouched** — the false "fail-fast" log line and the futile
+  re-spend it implies.
+- **The QA APP image is still stale** (2026-08-11 14:54Z; the worker was rebuilt
+  2026-08-13 07:14Z). Re-measured this session, unchanged from session 04's row.
+
+### INDEPENDENT VERIFICATION OF THE CENTRAL CLAIM
+
+*A failed visit is free* rests on `billing-failure.ts` having no write path, which
+this session re-checked rather than inherited. `grep -nE 'ledger|commitVisitCharge|\.create\(|\.update\(|\.upsert\(|INSERT|prisma\.'`
+returns **3 hits, all in comments**; excluding comment lines returns **0**. Its
+only imports are `loadVisitChargeableUsage` (a read) and `priceUsageRows` — **not**
+`commitVisitCharge` — and `priceUsageRows`'s body awaits only a rate lookup.
+⚠️ **Positive-controlled**: the identical matcher returns **22** on
+`billing-charge.ts`, so the zero is a measurement and not a broken pattern.
