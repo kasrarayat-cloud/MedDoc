@@ -10123,3 +10123,66 @@ enable*; it is *grant → fix the retry over-charge → enable*.
   Unchanged by this item.
 - **It says nothing about `BILLING_ENFORCED` being safe to enable** — see the
   finding above, which says the opposite.
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `5146c88791401e9e1b8bd6813c12eb8a26c01715`:**
+   · `CI` 31667779971 a1
+   · `e2e` 31667779924 a1
+   · `a11y-ci` 31667779929 a1
+   · `secrets-scan` 31667779927 a1
+
+All `a1` — no re-runs, so there is nothing to explain. PR **#632**, branch
+retired on merge via `scripts/retire-branch.sh` (both sides confirmed).
+
+⚠️ **The PR head was gated TWICE and the first gate was discarded deliberately.**
+`b87a033b` came back 4 of 4 — and then, reviewing my own change while it ran, I
+found that this item makes `drainApiUsage()` (a `while (true)` loop) execute in
+production for the first time, because the success path's only caller is behind
+a flag that has never been on. Gating code without that bound would have
+certified the wrong tree, so the bound was added and the tree re-gated at
+`0e938bee`, then again at `0b2f8473` after the union merge with #630.
+
+⚠️ **AND THE DECLARED-CANCELLATION OVERRIDE TURNED OUT TO BE UNREACHABLE BY THIS
+LOOP — a finding about the mechanization itself, not about this item.** The
+pre-push hook prescribes `DECLARE_CANCELLATION="…" git push`. **No env-var-prefix
+form is grantable**: `VAR=x git push`, `env VAR=x git push` and an `export` in a
+prior call all fail (a compound command needs every part granted, and shell
+state does not persist between calls). So the loop's ONLY legal path when it
+must re-push is to WAIT for the in-flight runs — which is what happened here,
+costing ~40 minutes of otherwise-avoidable waiting on a gate whose result was
+already known to be superseded. **The override exists for exactly this case and
+the unattended session it governs cannot use it.** Nothing was destroyed, which
+is the good outcome; the cost was time, and it will recur every time.
+
+### 🚧 NOT DEPLOYED — AND THE REASON IS THE ITEM'S OWN SHAPE
+
+**`main` now carries this item; production does not.** That is a deliberate
+stop, not an omission, and it is owed to the next session.
+
+⚠️ **THIS ITEM'S SEAM RUNS UNFLAGGED, AND IT HAS NEVER EXECUTED AGAINST A REAL
+DATABASE IN ANY ENVIRONMENT.** Every sibling seam in B8 ships inert behind
+`BILLING_ENFORCED`, so a deploy of one is provably a no-op. This one is not: it
+runs on **every** production failure the moment it lands, doing a drain, an
+indexed read and a pricing pass on a path where a hang is a stuck chart.
+
+The unit gate proves it cannot throw and cannot hang (B3/B3b, both mutation-
+proved). **That is not the same as having run.** B8's own QA behavioural proof
+found **three shipped defects on its first run**, all invisible to 3,601 unit
+tests, and ruling #98(b) recorded why: *a stub is a statement of what its author
+believes, and it agrees with the matcher because the same person wrote both.*
+Every mock in this item's gate was written by me, including the one standing in
+for the loader whose real behaviour is the whole risk.
+
+**So the next item is the QA behavioural proof of `observeFailedVisitUsage`, and
+the deploy comes after it** — walk a visit to a real FAILED state on the
+`meddoc-qa` stack and read the `failure cost` line back, both accountability
+directions. ⚠️ **And check the QA IMAGE first, not only the migrations**: the
+2026-08-12 row records the app and worker images being eleven hours apart and
+predating the code they were supposed to exercise, behind a green `--qa`
+migrations check.
+
+⚠️ **The deploy also now inherits #630's gate.** Ruling #102 requires a §2.5
+declaration to be **tracked, unmodified and COMMITTED** before the mutation
+runs, so the declaration is its own PR cycle and must be written and landed
+*before* the deploy session begins — not during it.
