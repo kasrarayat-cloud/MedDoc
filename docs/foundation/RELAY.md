@@ -10627,3 +10627,36 @@ only imports are `loadVisitChargeableUsage` (a read) and `priceUsageRows` — **
 `commitVisitCharge` — and `priceUsageRows`'s body awaits only a rate lookup.
 ⚠️ **Positive-controlled**: the identical matcher returns **22** on
 `billing-charge.ts`, so the zero is a measurement and not a broken pattern.
+
+### Citation — produced by `check-citation.sh`, not typed
+
+**Citation — 4 of 4 on `f5f753d77c6a7c67cbfcf29d9b9b619b799f8231`:**
+   · `CI` 31698632428 a1
+   · `e2e` 31698632429 a1
+   · `a11y-ci` 31698632453 a1
+   · `secrets-scan` 31698632491 a1
+
+All `a1` — no re-runs, so there is nothing to explain. PR **#637**, branch
+retired via `scripts/retire-branch.sh`, **both sides confirmed** (`🟢 retired`,
+exit 0 — it was not checked out this time, unlike session 04's run).
+
+The PR head (`095b2c92`) was also 4 of 4 first time — `CI` 31695427620 ·
+`e2e` 31695427794 · `a11y-ci` 31695427608 · `secrets-scan` 31695427639. No union
+merge was needed: `main` did not move while the gate ran, so unlike the two rows
+above there is only one tree to describe.
+
+⚠️ **THE `--commit` PROPAGATION RACE REPRODUCED AGAIN, ON THIS VERY PR.** Seconds
+after opening it, `gh run list --commit 095b2c92…` (full 40 characters) returned
+**`[]`** while `gh run list --branch deploy/b8s3-declaration` returned **four**
+runs already queued. That is the third recorded sighting and it is the reason the
+in-flight rule takes TWO views: a session trusting the `--commit` zero would have
+read "nothing in flight" at the exact moment four of its own runs existed.
+
+⚠️ **AND ONE OF MY OWN QUERIES LIED IN THE SAME DIRECTION, FOR A DIFFERENT
+REASON.** Early in STEP 0 I ran `gh run list --commit 9d1a8b4ec99b…` and got `[]`
+— and the SHA was **typed from memory rather than measured**. The real head was
+`9d1a8b4ef0fa…`. A wrong-but-well-formed SHA returns an empty list with **exit
+0** and no complaint, which is indistinguishable from a quiet branch. Caught only
+because `--branch main` was run beside it and disagreed. **The two-view rule
+covers this failure too, and it is worth naming separately: the documented trap
+is an abbreviated SHA, but a MISTYPED full SHA fails identically and silently.**
