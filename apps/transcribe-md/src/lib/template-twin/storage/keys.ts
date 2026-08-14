@@ -116,11 +116,25 @@ export interface CreateUploadArtifactKeyInput {
 /**
  * `practices/<practiceId>/template-twin/uploads/<uploadId>/<sha256>.docx`
  *
- * Eight segments, like its siblings, so `parseTemplateTwinArtifactKey` keeps one
- * shape to reason about. The `uploadId` segment is repeated as the artifact-id
- * position because an upload IS its own artifact: there is nothing else to
- * disambiguate it by, and a second random id would suggest a grouping that does
- * not exist.
+ * ⚠️ SEVEN segments, not eight — and an earlier version of this comment claimed
+ * eight while the code produced seven, which is exactly the defect it caused.
+ * `parseTemplateTwinArtifactKey` rejected EVERY upload key, so nothing could
+ * have been bound through the tenant guard. The comment asserted an invariant
+ * the line below it did not have, and no test compared them.
+ *
+ * Seven is correct: `sources` carries a lineage AND a version, `outputs` a visit
+ * AND a manifest digest, and an upload has NEITHER — no template exists yet,
+ * which is the entire reason this kind was added. The parser now takes its
+ * length per category rather than flatly.
+ *
+ * The `uploadId` is repeated in the artifact-id position because an upload IS
+ * its own artifact; a second random id would suggest a grouping that does not
+ * exist. The parser REQUIRES the two to be equal, which is what stops a crafted
+ * key smuggling an unrelated id through the second position.
+ *
+ * ⚠️ Round-tripped against the parser for all three kinds by
+ * `ownership.test.ts` — a key shape and its parser are one contract in two
+ * files, and this pair has already drifted once.
  */
 export function createUploadArtifactKey({
   practiceId,

@@ -5,9 +5,12 @@ import {
   assertTenantOwnedArtifactKey,
   createOutputArtifactKey,
   createSourceArtifactKey,
+  createUploadArtifactKey,
   isTemplateTwinRecordOwner,
+  isTenantOwnedArtifactKey,
   parseTemplateTwinArtifactKey,
   TemplateTwinArtifactNotFoundError,
+  type TemplateTwinArtifactKind,
 } from '..';
 
 const SHA_A = 'a'.repeat(64);
@@ -110,5 +113,97 @@ describe('Template Twin record ownership', () => {
         uploadedById: 'doctor_2',
       })
     ).toThrow(TemplateTwinArtifactNotFoundError);
+  });
+});
+
+// ============================================================================
+// ⚠️ THE KEY BUILDERS AND THE PARSER ARE ONE CONTRACT IN TWO FILES — AND THIS
+// PAIR HAS ALREADY DRIFTED ONCE.
+// ----------------------------------------------------------------------------
+// RC-2's `upload` kind shipped with a builder producing SEVEN segments and a
+// parser demanding EIGHT. Every legitimately generated upload key parsed to
+// `null`, so nothing could pass the tenant guard — and the builder's own doc
+// comment asserted "eight segments, like its siblings" while the line beneath it
+// produced seven.
+//
+// Nothing caught it because nothing compared the two. `tsc` cannot: both sides
+// are strings. The existing tests exercised the parser against HAND-WRITTEN
+// keys, which is a test of the parser against the test author's idea of the
+// shape — not against the builder.
+//
+// ⚠️ SO THIS ENUMERATES THE KINDS. A fourth artifact kind added later cannot be
+// merged without round-tripping, because the list below is the kind union and a
+// missing entry is a missing case rather than a silently untested one.
+// ============================================================================
+const PRACTICE = 'prac_round_trip';
+
+const BUILDERS: Record<TemplateTwinArtifactKind, () => string> = {
+  source: () =>
+    createSourceArtifactKey({
+      practiceId: PRACTICE,
+      lineageId: 'lin_1',
+      templateVersion: 3,
+      sha256: SHA_A,
+      idFactory: () => 'art_1',
+    }),
+  output: () =>
+    createOutputArtifactKey({
+      practiceId: PRACTICE,
+      visitId: 'vis_1',
+      manifestSha256: SHA_B,
+      outputSha256: SHA_A,
+      idFactory: () => 'art_1',
+    }),
+  upload: () =>
+    createUploadArtifactKey({ practiceId: PRACTICE, uploadId: 'up_1', sha256: SHA_A }),
+};
+
+describe('⚠️ every builder round-trips through the parser', () => {
+  const kinds = Object.keys(BUILDERS) as TemplateTwinArtifactKind[];
+
+  // Non-vacuity: if the union grows and this map does not, the count is wrong
+  // and somebody has added a kind without a round-trip.
+  it('covers every kind in the union', () => {
+    expect(kinds.sort()).toEqual(['output', 'source', 'upload']);
+  });
+
+  it.each(kinds)('%s: the built key parses, with its own kind and practice', (kind) => {
+    const key = BUILDERS[kind]();
+    const parsed = parseTemplateTwinArtifactKey(key);
+    expect(parsed, `${kind} key did not parse: ${key}`).not.toBeNull();
+    expect(parsed!.kind).toBe(kind);
+    expect(parsed!.practiceId).toBe(PRACTICE);
+    expect(parsed!.sha256).toBe(SHA_A);
+  });
+
+  it.each(kinds)('%s: it belongs to ITS practice and to no other', (kind) => {
+    const key = BUILDERS[kind]();
+    expect(isTenantOwnedArtifactKey({ objectKey: key, practiceId: PRACTICE, kind })).toBe(true);
+    expect(isTenantOwnedArtifactKey({ objectKey: key, practiceId: 'prac_other', kind })).toBe(false);
+  });
+
+  it.each(kinds)('%s: it is not mistaken for a DIFFERENT kind', (kind) => {
+    const key = BUILDERS[kind]();
+    for (const other of kinds.filter((k) => k !== kind)) {
+      expect(
+        isTenantOwnedArtifactKey({ objectKey: key, practiceId: PRACTICE, kind: other }),
+        `${kind} key validated as ${other}`
+      ).toBe(false);
+    }
+  });
+});
+
+describe('⚠️ the upload shape refuses what it must', () => {
+  it('rejects a key whose two id segments DISAGREE — the smuggling case', () => {
+    const good = createUploadArtifactKey({ practiceId: PRACTICE, uploadId: 'up_1', sha256: SHA_A });
+    const tampered = good.replace('/up_1/up_1/', '/up_1/up_2/');
+    expect(tampered).not.toBe(good);
+    expect(parseTemplateTwinArtifactKey(tampered)).toBeNull();
+  });
+
+  it('rejects an upload key padded to the source length', () => {
+    const good = createUploadArtifactKey({ practiceId: PRACTICE, uploadId: 'up_1', sha256: SHA_A });
+    const padded = good.replace('/uploads/', '/uploads/extra/');
+    expect(parseTemplateTwinArtifactKey(padded)).toBeNull();
   });
 });
