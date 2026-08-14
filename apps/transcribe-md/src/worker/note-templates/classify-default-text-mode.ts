@@ -93,5 +93,19 @@ export function classifyDefaultTextMode(
   if (section.structure) return 'scaffold_confirm';
   if (!FIXED_BLOCK_SECTION_KEYS.has(section.key)) return 'scaffold_confirm';
   if (!isSlotBearingFamily(allSections)) return 'scaffold_confirm';
+  // ⚠️ A FIELD BLOCK IS A FIXED BLOCK ONLY WHEN ITS FIELDS ARE SLOTS, and this
+  // clause was added after the allowlist's own premise was found false on a
+  // real row. `exam_metadata` is justified above as "every line is
+  // `LABEL: <slot>`; there is no free prose for a model to add" — but one
+  // production template's is SEVEN LINES WITH ZERO SLOTS, labels awaiting
+  // values the model fills as text. Assembling that one freezes seven fields at
+  // the blank form's bytes forever: the scaffold-the-model-extends class this
+  // function exists to exclude, wearing the right key.
+  //
+  // A protocol paragraph is fixed prose whether or not it carries a slot, so
+  // `technique` needs no such test. Mirrored exactly in the migration.
+  if (section.key === 'exam_metadata' && !text.includes('{{one of:')) {
+    return 'scaffold_confirm';
+  }
   return 'always_include';
 }

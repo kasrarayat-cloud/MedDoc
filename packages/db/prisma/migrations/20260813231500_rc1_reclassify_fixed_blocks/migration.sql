@@ -5,191 +5,155 @@
 -- WHAT THIS REPAIRS, AND FOR WHOM
 --
 -- A doctor uploaded a blank form, activated it, and the fixed TECHNIQUE
--- paragraph came back paraphrased — `500 milliseconds` as `0.5 seconds`. The
+-- paragraph came back with `500 milliseconds` rendered as `0.5 seconds`. The
 -- bytes were never lost; they sit verbatim in `note_templates.sections`. They
--- were lost at RENDER time, because a `scaffold_confirm` default is injected
--- INTO THE PROMPT as text to reproduce, and a model asked to reproduce prose
--- normalises it.
+-- were lost on the way INTO the prompt.
 --
 -- `always_include` sections no longer reach the model at all: the model returns
 -- slot VALUES and code stitches the doctor's own bytes around them. So flipping
--- the mode is what moves an existing template onto the assembled path —
--- WITHOUT a re-upload, which is why this runs first among the three fixes.
+-- the mode is what moves an existing template onto the assembled path — WITHOUT
+-- a re-upload, which is why it runs first among the three fixes.
 --
 -- ---------------------------------------------------------------------------
--- WHY IT IS NARROW, AND WHY THE NARROWNESS IS A SAFETY PROPERTY
+-- ⚠️ IT IS ONE `DO` BLOCK, AND THAT IS A BUG FIX, NOT A STYLE CHOICE
+-- ---------------------------------------------------------------------------
+-- The first version was `UPDATE …;` followed by a separate `DO $$` guard block.
+-- psql commits each statement on its own, so the UPDATE COMMITTED BEFORE THE
+-- GUARDS RAN: the abort announced the fault and kept the damage, and with
+-- default settings psql still exited 0. `prisma migrate deploy` wraps each
+-- migration in a transaction, so it would have shipped working and stayed
+-- latent until somebody applied the file by hand — which this programme does,
+-- to QA, routinely.
+--
+-- A single `DO` block is a single statement. An exception inside it unwinds
+-- everything it did, in every caller, with no enclosing transaction required.
+--
+-- ---------------------------------------------------------------------------
+-- ⚠️ AND THE WRITE CANNOT DAMAGE WHAT IT DOES NOT TOUCH — BY CONSTRUCTION
+-- ---------------------------------------------------------------------------
+-- The first version rebuilt the whole `sections` array with `jsonb_agg` and
+-- then CHECKED that nothing was lost. Two of those checks were sound and one
+-- was not: `EXCEPT ALL` is one-directional, so a section GAINED at the end —
+-- exactly what a botched aggregate produces — passed every guard and reported
+-- the expected figure.
+--
+-- This version writes `jsonb_set(sections, ARRAY[idx,'defaultTextMode'], …)`
+-- per matching element. One scalar changes. Order, count, keys, labels and
+-- every byte of `defaultText` are untouchable, so the class those guards
+-- existed to catch is no longer representable. That is strictly better than a
+-- check: a check has to be right about a failure, and this cannot fail.
+--
+-- ---------------------------------------------------------------------------
+-- WHY THE PREDICATE IS AN ALLOWLIST, AND WHY IT IS NARROWER THAN IT LOOKS
 -- ---------------------------------------------------------------------------
 -- ⚠️ `defaultText` IS TWO DIFFERENT THINGS AND THE SCHEMA CANNOT TELL THEM
 -- APART. Measured on the real imaging templates:
 --
---   * a WHOLE FIXED BLOCK — the scan-protocol paragraph; the label:value field
---     header. The section IS its default text. Assembling it is the fix.
+--   * a WHOLE FIXED BLOCK — the scan-protocol paragraph; a `LABEL: {{slot}}`
+--     field header. The section IS its default text. Assembling it is the fix.
 --   * a SCAFFOLD THE MODEL EXTENDS — a per-leg FINDINGS stub, a per-side
 --     IMPRESSION stub. The visit's real content is written AROUND it.
 --
--- ⚠️ FLIPPING THE SECOND KIND WOULD REPLACE THE VISIT'S CLINICAL FINDINGS WITH
--- AN EMPTY SKELETON — while satisfying every static-fidelity check this
--- programme has, because the doctor's bytes would be preserved perfectly and
--- only the patient's would be gone. A worse failure than the one being fixed,
--- and a silent one. So the predicate is an ALLOWLIST of the two section kinds
--- that were READ and confirmed to be whole fixed blocks, mirroring
--- `classify-default-text-mode.ts` exactly. That file is the source; this is its
--- copy for rows that already exist, and the pair is named in both directions.
+-- Flipping the second kind REPLACES THE VISIT'S CLINICAL FINDINGS WITH AN EMPTY
+-- SKELETON while satisfying every static-fidelity check in this programme: the
+-- doctor's bytes preserved perfectly, the patient's gone. So the predicate is
+-- an allowlist of the two kinds that were READ and confirmed, mirroring
+-- `classify-default-text-mode.ts` exactly.
 --
--- ---------------------------------------------------------------------------
--- THE GUARDS ARE PREDICATE-SHAPED, NOT COUNT-SHAPED — deliberately
--- ---------------------------------------------------------------------------
--- ⚠️ A MIGRATION THAT ABORTS ON AN ABSOLUTE COUNT IS A MIGRATION THAT REFUSES
--- TO RUN ON QA. Production's figures (templates touched, sections flipped) are
--- DECLARED IN THE DEPLOY DECLARATION under §2.5, where they are checked against
--- the run. What is asserted HERE is what must be true in every environment:
+-- ⚠️ `exam_metadata` ADDITIONALLY REQUIRES AT LEAST ONE SLOT, and that clause
+-- was added after an adversarial pass found the premise false on one real row.
+-- The allowlist justifies that key as "every line is `LABEL: <slot>`; there is
+-- no free prose for a model to add" — but one production template's
+-- `exam_metadata` is SEVEN LINES WITH ZERO SLOTS, labels awaiting values the
+-- model fills as text. Flipping that one freezes seven fields at the blank
+-- form's bytes forever, which is the very class this predicate exists to
+-- exclude. A field block is a fixed block only when its fields are SLOTS.
+-- (A protocol paragraph is fixed prose whether or not it carries one, so
+-- `technique` has no such requirement.)
 --
---   G1  no STRUCTURED section ends up `always_include`      (data integrity)
---   G2  not one byte of `defaultText` changed anywhere      (this is a mode
---                                                            migration, and a
---                                                            migration that
---                                                            edited a doctor's
---                                                            prose while fixing
---                                                            prose-fidelity
---                                                            would be beyond
---                                                            irony)
---   G3  no section was added, removed or reordered
---   G4  every mode change is `scaffold_confirm` → `always_include`; nothing
---       else moved, in either direction
+-- ⚠️ `btrim(x, E' \t\n\r\f\v')`, NOT BARE `btrim`. Postgres `btrim/1` strips
+-- SPACES ONLY, so `E'\n'` reads as non-empty while JS `.trim()` calls it empty
+-- — a demonstrated disagreement between two implementations whose whole purpose
+-- is to agree. Latent today (no persist path stores untrimmed text) and fixed
+-- anyway, because the pair is only worth having if it is exact.
 --
--- ⚠️ G2 AND G3 EXIST BECAUSE THE UPDATE REBUILDS THE WHOLE `sections` ARRAY.
--- `jsonb_agg` is an easy way to lose an element's order or a key's value, and
--- neither loss raises anything by itself.
---
--- RE-RUNNABLE: applying it twice is a no-op — the second pass matches nothing,
--- because the predicate requires `scaffold_confirm`. It writes no new
--- information, so #106's reversal path ("re-runnable from stored sections")
--- holds.
+-- RE-RUNNABLE: the predicate requires `scaffold_confirm`, so a second pass
+-- matches nothing and writes nothing at all.
 -- ===========================================================================
-
--- Snapshot BEFORE, so the guards compare against something rather than against
--- an expectation.
---
--- ⚠️ NO `ON COMMIT DROP`, AND THE OMISSION IS A BUG FIX. It was there, and it
--- made this migration's guards depend on the CALLER supplying a transaction.
--- `prisma migrate deploy` does supply one, so it would have worked — but psql
--- commits each statement on its own, which drops an ON COMMIT DROP table
--- immediately, and the guards then failed with `relation "_rc1_before" does not
--- exist` AFTER the UPDATE had already committed. A migration that half-ran and
--- reported success is the exact shape AGENTS.md's abort rule exists to prevent.
---
--- ⚠️ AND THE PRODUCTION DRY-RUN COULD NOT HAVE FOUND IT: that run was wrapped in
--- `BEGIN … ROLLBACK` precisely so it could never commit, which is the one
--- condition under which the old form works. It was found by applying the file
--- to the QA database for real. *A rehearsal that supplies what the real run
--- does not is not a rehearsal of the real run.*
-DROP TABLE IF EXISTS _rc1_before;
-CREATE TEMP TABLE _rc1_before AS
-SELECT t.id AS template_id,
-       e.ord,
-       e.s->>'key'             AS section_key,
-       e.s->>'defaultTextMode' AS mode,
-       e.s->>'defaultText'     AS default_text
-FROM note_templates t,
-     LATERAL jsonb_array_elements(t.sections) WITH ORDINALITY AS e(s, ord);
-
-UPDATE note_templates t
-SET sections = sub.new_sections
-FROM (
-  SELECT t2.id,
-         jsonb_agg(
-           CASE
-             WHEN e.s->>'defaultTextMode' = 'scaffold_confirm'
-              AND e.s->>'key' IN ('technique', 'exam_metadata')
-              AND COALESCE(btrim(e.s->>'defaultText'), '') <> ''
-              AND (e.s->'structure' IS NULL OR jsonb_typeof(e.s->'structure') = 'null')
-             THEN jsonb_set(e.s, '{defaultTextMode}', '"always_include"')
-             ELSE e.s
-           END
-           ORDER BY e.ord
-         ) AS new_sections
-  FROM note_templates t2,
-       LATERAL jsonb_array_elements(t2.sections) WITH ORDINALITY AS e(s, ord)
-  -- The FAMILY clause: slot-bearing / imaging only. Plain SOAP keeps today's
-  -- classification and therefore today's byte-identical prompts (#106(e)).
-  WHERE EXISTS (
-    SELECT 1
-    FROM jsonb_array_elements(t2.sections) f
-    WHERE f->>'defaultText' LIKE '%{{one of:%'
-       OR f->>'defaultText' LIKE '%500 milliseconds%'
-  )
-  GROUP BY t2.id
-) sub
-WHERE t.id = sub.id;
 
 DO $$
 DECLARE
   bad_structured int;
-  bad_text       int;
-  bad_shape      int;
-  bad_move       int;
-  flipped        int;
-  templates      int;
+  bad_mode       int;
+  r              record;
+  flipped        int := 0;
+  touched        text[] := '{}';
 BEGIN
-  -- G1 — no structured section may be `always_include`.
+  -- ── PRE-FLIGHT. Before any write, so an abort PREVENTS rather than reports.
+  --
+  -- G1 — nothing anywhere may already hold a structured `always_include`. That
+  -- is an illegal state for the render path (`staticSections` ignores it), so
+  -- finding one means something else wrote a mode this codebase does not
+  -- honour, and this migration must not add to it.
   SELECT count(*) INTO bad_structured
   FROM note_templates t, LATERAL jsonb_array_elements(t.sections) s
   WHERE s->>'defaultTextMode' = 'always_include'
     AND s->'structure' IS NOT NULL
     AND jsonb_typeof(s->'structure') <> 'null';
   IF bad_structured > 0 THEN
-    RAISE EXCEPTION 'RC-1 ABORT: % structured section(s) carry always_include — a table is a fill surface, not a static region', bad_structured;
+    RAISE EXCEPTION 'RC-1 ABORT (pre-flight): % structured section(s) already carry always_include — a table is a fill surface, not a static region. Nothing has been written.', bad_structured;
   END IF;
 
-  -- G2 — not one byte of defaultText moved.
-  SELECT count(*) INTO bad_text
-  FROM _rc1_before b
-  JOIN (
-    SELECT t.id AS template_id, e.ord, e.s->>'defaultText' AS default_text
-    FROM note_templates t, LATERAL jsonb_array_elements(t.sections) WITH ORDINALITY AS e(s, ord)
-  ) a ON a.template_id = b.template_id AND a.ord = b.ord
-  WHERE a.default_text IS DISTINCT FROM b.default_text;
-  IF bad_text > 0 THEN
-    RAISE EXCEPTION 'RC-1 ABORT: % section(s) had defaultText altered — this migration changes MODE only', bad_text;
+  -- G2 — every mode in the table is one this migration understands. An unknown
+  -- value means the vocabulary moved and this predicate is reasoning about a
+  -- world that no longer exists.
+  SELECT count(*) INTO bad_mode
+  FROM note_templates t, LATERAL jsonb_array_elements(t.sections) s
+  WHERE s->>'defaultTextMode' NOT IN
+        ('always_include', 'scaffold_confirm', 'omit_unless_supported');
+  IF bad_mode > 0 THEN
+    RAISE EXCEPTION 'RC-1 ABORT (pre-flight): % section(s) carry an unrecognised defaultTextMode. Nothing has been written.', bad_mode;
   END IF;
 
-  -- G3 — same sections, same order, same count.
-  SELECT count(*) INTO bad_shape
-  FROM (
-    SELECT template_id, ord, section_key FROM _rc1_before
-    EXCEPT ALL
-    SELECT t.id, e.ord, e.s->>'key'
-    FROM note_templates t, LATERAL jsonb_array_elements(t.sections) WITH ORDINALITY AS e(s, ord)
-  ) d;
-  IF bad_shape > 0 THEN
-    RAISE EXCEPTION 'RC-1 ABORT: % section(s) added, removed or reordered', bad_shape;
-  END IF;
+  -- ── THE WRITE. One scalar per matching element; nothing else is expressible.
+  FOR r IN
+    SELECT t.id AS template_id, (e.ord - 1) AS idx
+    FROM note_templates t,
+         LATERAL jsonb_array_elements(t.sections) WITH ORDINALITY AS e(s, ord)
+    WHERE e.s->>'defaultTextMode' = 'scaffold_confirm'
+      AND COALESCE(btrim(e.s->>'defaultText', E' \t\n\r\f\v'), '') <> ''
+      AND (e.s->'structure' IS NULL OR jsonb_typeof(e.s->'structure') = 'null')
+      AND (
+        e.s->>'key' = 'technique'
+        OR (e.s->>'key' = 'exam_metadata' AND e.s->>'defaultText' LIKE '%{{one of:%')
+      )
+      -- The FAMILY clause: slot-bearing / imaging only. Plain SOAP keeps
+      -- today's classification and therefore today's byte-identical prompts.
+      AND EXISTS (
+        SELECT 1 FROM jsonb_array_elements(t.sections) f
+        WHERE f->>'defaultText' LIKE '%{{one of:%'
+           OR f->>'defaultText' LIKE '%500 milliseconds%'
+      )
+  LOOP
+    UPDATE note_templates
+       SET sections = jsonb_set(
+             sections,
+             ARRAY[r.idx::text, 'defaultTextMode'],
+             '"always_include"'::jsonb
+           )
+     WHERE id = r.template_id;
+    flipped := flipped + 1;
+    -- ⚠️ TEMPLATES TOUCHED BY *THIS RUN*, not templates that happen to hold an
+    -- always_include section. The first version counted the latter and reported
+    -- `0 section(s) flipped across 44 template(s)` on a re-run — a figure that
+    -- describes the database rather than the act, in a line the §2.5
+    -- declaration is judged against.
+    IF NOT (r.template_id = ANY(touched)) THEN
+      touched := touched || r.template_id;
+    END IF;
+  END LOOP;
 
-  -- G4 — every move is scaffold_confirm -> always_include, and nothing else.
-  SELECT count(*) INTO bad_move
-  FROM _rc1_before b
-  JOIN (
-    SELECT t.id AS template_id, e.ord, e.s->>'defaultTextMode' AS mode
-    FROM note_templates t, LATERAL jsonb_array_elements(t.sections) WITH ORDINALITY AS e(s, ord)
-  ) a ON a.template_id = b.template_id AND a.ord = b.ord
-  WHERE a.mode IS DISTINCT FROM b.mode
-    AND NOT (b.mode = 'scaffold_confirm' AND a.mode = 'always_include');
-  IF bad_move > 0 THEN
-    RAISE EXCEPTION 'RC-1 ABORT: % section(s) changed mode in an unexpected direction', bad_move;
-  END IF;
-
-  SELECT count(*), count(DISTINCT a.template_id) INTO flipped, templates
-  FROM _rc1_before b
-  JOIN (
-    SELECT t.id AS template_id, e.ord, e.s->>'defaultTextMode' AS mode
-    FROM note_templates t, LATERAL jsonb_array_elements(t.sections) WITH ORDINALITY AS e(s, ord)
-  ) a ON a.template_id = b.template_id AND a.ord = b.ord
-  WHERE b.mode = 'scaffold_confirm' AND a.mode = 'always_include';
-
-  -- NOT an assertion — an observation, printed so the deploy transcript carries
-  -- the number the §2.5 declaration is judged against.
-  RAISE NOTICE 'RC-1: % section(s) flipped to always_include across % template(s)', flipped, templates;
+  -- An observation, not an assertion: the deploy transcript carries the number
+  -- the §2.5 declaration is judged against.
+  RAISE NOTICE 'RC-1: % section(s) flipped to always_include across % template(s)', flipped, coalesce(array_length(touched, 1), 0);
 END $$;
-
--- Explicit, so the snapshot does not outlive the migration in either world.
-DROP TABLE IF EXISTS _rc1_before;
