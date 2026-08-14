@@ -319,6 +319,29 @@ const GLOBAL_RULES: string[] = [
     '  an allergy) are NOT linked into one causal statement unless the',
     '  transcript links them.',
   ].join('\n'),
+  // ── NEVER EDITORIALIZE ABOUT THE TEMPLATE OR THE TRANSCRIPT ───────────
+  // ⚠️ POSITION IS LOAD-BEARING: THIS MUST NOT BE THE LAST ELEMENT.
+  // `ultrasound-report-template.ts` builds its own rule set as
+  // `SOAP_SAFETY.globalRules.slice(0, -1)` — dropping exactly the SOAP output
+  // line below and replacing it with imaging framing. A rule appended AFTER
+  // that line would be silently dropped for every imaging report, and the
+  // clause would reach primary care only. Adding a rule here means adding it
+  // BEFORE the output line, always.
+  [
+    '- Write the note and nothing else. Never address the reader, the',
+    '  template, or your own process. Do not say a section could not be',
+    '  completed, that the dictation did not match the template, that',
+    '  information was missing, or that a heading did not apply. A section',
+    '  with no evidence is left EMPTY or marked "[not documented]" — those',
+    '  are the only two ways to say nothing was found.',
+  ].join('\n'),
+  [
+    '- A mismatch between this template and the dictation is NOT yours to',
+    '  explain. If the transcript does not support a heading, leave it',
+    '  empty and continue. The application detects the mismatch and tells',
+    '  the clinician; a sentence about it inside the note is an editorial',
+    '  aside in a medical record, and it will be signed.',
+  ].join('\n'),
   '- Output ONLY the SOAP note markdown. No preamble, no postscript.',
 ];
 

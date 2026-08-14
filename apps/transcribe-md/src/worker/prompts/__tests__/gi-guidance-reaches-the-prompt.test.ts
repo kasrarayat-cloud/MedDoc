@@ -30,6 +30,9 @@ import {
   buildSoapSystemPrompt,
   type ResolvedNoteTemplate,
 } from '@/worker/note-templates/build-soap-prompt';
+import { buildUltrasoundSystemPrompt } from '@/worker/note-templates/build-ultrasound-prompt';
+import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '@/worker/note-templates/system-default-template';
+import { ULTRASOUND_REPORT_TEMPLATE } from '@/worker/note-templates/ultrasound-report-template';
 
 const GI = 'gastroenterology';
 
@@ -148,5 +151,100 @@ describe('GI guidance — it SURVIVES into the L4 system prompt', () => {
     // this is the assertion that notices.
     expect(specialtyGuidance(GI)).toBe(SPECIALTY_GUIDANCE[GI]);
     expect(specialtyGuidance(GI).length).toBeGreaterThan(1200);
+  });
+});
+
+// ============================================================================
+// THE NEVER-EDITORIALIZE CLAUSE — asserted as a CLAUSE, in BOTH prompt routes.
+// ----------------------------------------------------------------------------
+// ⚠️ THE LIVE EVIDENCE. Production visit `cmssgh1w7000r01no7g394xpj`
+// (gastroenterology, READY, unsigned) failed L4 structure validation with SIX
+// operative-note headings absent — PROCEDURE, PREOPERATIVE DIAGNOSIS,
+// POSTOPERATIVE FINDINGS, CONSENT, DESCRIPTION OF PROCEDURE, RECOMMENDATIONS.
+// An office-visit dictation against an operative-note template.
+//
+// ⚠️ AND THE MODEL DID NOT EDITORIALIZE — measured, seven probe shapes, all
+// false, positive-controlled. It went QUIET rather than explaining itself. So
+// this clause guards a defect that has NOT occurred in production, and that is
+// said out loud rather than implied: it is cheap, its failure mode is silent,
+// and a paragraph of meta-commentary inside a signed medical record cannot be
+// un-signed. It is not tonight's evidence and must not be cited as such.
+//
+// ⚠️ ASSERTED AS A CLAUSE, NEVER A BYTE SNAPSHOT. A snapshot of the preamble
+// would redden on every unrelated wording change and teach the next reader to
+// re-bless it without reading — which is how a safety assertion becomes a
+// formality. These match the COMMITMENT.
+// ============================================================================
+describe('the never-editorialize clause reaches BOTH prompt routes', () => {
+  // ⚠️ THE MATRIX IS THE POINT. `04-generate-soap.ts` selects between two
+  // DIFFERENT builders on `emAppliesToSpecialty`, and the two draw their rules
+  // from different templates. Proving one proves ONE — the wrong-universe
+  // failure this repo has already paid for on a signed imaging report.
+  const ROUTES = [
+    {
+      name: 'SOAP / gastroenterology',
+      prompt: buildSoapSystemPrompt(GI_OP_NOTE, {
+        specialty: GI,
+        audioQualityAlert: null,
+        interpreterAlert: null,
+        specialtyGuidanceText: specialtyGuidance(GI),
+      }),
+    },
+    {
+      name: 'ULTRASOUND / imaging',
+      prompt: buildUltrasoundSystemPrompt(
+        ULTRASOUND_REPORT_TEMPLATE as unknown as ResolvedNoteTemplate,
+        {
+          specialty: 'ultrasound',
+          audioQualityAlert: null,
+          interpreterAlert: null,
+          specialtyGuidanceText: null,
+        },
+      ),
+    },
+  ];
+
+  it.each(ROUTES)('$name — the prompt forbids addressing the reader', ({ prompt }) => {
+    expect(prompt).toMatch(/Never address the reader/i);
+    expect(prompt).toMatch(/Write the note and nothing else/i);
+  });
+
+  it.each(ROUTES)('$name — it names the EMPTY / [not documented] alternatives', ({ prompt }) => {
+    // The clause is only actionable if it says what to do INSTEAD. "Don't
+    // explain" without an alternative is an instruction with no landing place.
+    expect(prompt).toMatch(/left EMPTY or marked "\[not documented\]"/i);
+  });
+
+  it.each(ROUTES)('$name — it forbids explaining a template mismatch specifically', ({ prompt }) => {
+    // ⚠️ MATCHED WITHIN A LINE, NOT ACROSS ONE. These rules are authored as
+    // arrays of pre-wrapped strings joined with '\n', so a phrase that reads
+    // continuously in the source ("an editorial aside in a medical record")
+    // is split by a newline and two spaces in the built prompt. My first
+    // version of this assertion spanned the wrap and reddened against a prompt
+    // that carried the clause correctly — a FALSE RED, and the mirror of the
+    // substring traps this repo already documents.
+    expect(prompt).toMatch(/mismatch between this template and the dictation/i);
+    expect(prompt).toMatch(/is NOT yours to/i);
+    expect(prompt).toMatch(/inside the note is an editorial/i);
+  });
+
+  it('⚠️ POSITION — the clause is NOT last, or imaging silently loses it', () => {
+    // `ultrasound-report-template.ts` builds its rules as
+    // `SOAP_SAFETY.globalRules.slice(0, -1)`, dropping exactly the SOAP output
+    // line. A rule appended AFTER that line reaches primary care and NOT
+    // imaging — the per-specialty gap, arriving through an array index.
+    const rules = SYSTEM_DEFAULT_NOTE_TEMPLATE.styleProfile.globalRules;
+    expect(rules[rules.length - 1]).toMatch(/^- Output ONLY the SOAP note markdown/);
+    const idx = rules.findIndex((r) => /Never address the reader/i.test(r));
+    expect(idx, 'the clause is missing entirely').toBeGreaterThanOrEqual(0);
+    expect(idx, 'the clause is LAST — imaging will not receive it').toBeLessThan(rules.length - 1);
+  });
+
+  it('NON-VACUITY — the two routes really are different prompts', () => {
+    // Without this, both entries could be the same builder and the matrix
+    // would prove one thing twice.
+    expect(ROUTES[0].prompt).not.toBe(ROUTES[1].prompt);
+    expect(ROUTES[0].prompt).toMatch(/SOAP/i);
+    expect(ROUTES[1].prompt).toMatch(/ultrasound|imaging|sonograph/i);
   });
 });

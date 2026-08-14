@@ -261,9 +261,22 @@ describe('runLayer4GenerateSoap — FIND-P1-015 validator-fail path', () => {
     const updateArgs = mocks.prismaUpdate.mock.calls[0][0];
     expect(updateArgs.data.soapDraft).toBe(''); // raw output persisted
     expect(updateArgs.data.needsReview).toBe(true);
+    // ⚠️ RETARGETED, NOT RELAXED. This pinned "SOAP draft didn't match expected
+    // markdown structure" — true, in the system's own vocabulary, and nearly
+    // useless to a clinician. The banner now names what the doctor can act on.
+    // ⚠️ THE EMPTY-OUTPUT CLASS BLAMES THE MODEL, NOT THE CLINICIAN. The
+    // validator sets `missingSections` to ALL required sections here — not
+    // because the dictation failed to support them, but because the model
+    // returned nothing. My first version of this banner said "4 sections had
+    // no content the dictation supported" and pointed the doctor at the
+    // Note-format picker to fix a template that is not broken. This test is
+    // what caught it.
     expect(updateArgs.data.reviewReason).toMatch(
-      /SOAP draft didn't match expected markdown structure/
+      /generation failure, not a problem with your template or your dictation/i
     );
+    expect(updateArgs.data.reviewReason).not.toMatch(/expected markdown structure/i);
+    // …and it never prints a zero count in front of a clinician.
+    expect(updateArgs.data.reviewReason).not.toMatch(/\b0 sections?\b/);
 
     expect(mocks.logAudit).toHaveBeenCalledTimes(1);
     const auditArgs = mocks.logAudit.mock.calls[0][0];

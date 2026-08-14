@@ -23,6 +23,7 @@ import {
   type AudioConfidenceStats,
 } from './audio-confidence';
 import { validateSoapStructure } from './soap-structure-validator';
+import { structureMismatchReason } from './structure-mismatch-reason';
 import {
   buildSoapSystemPrompt,
   buildSoapUserPrompt,
@@ -498,8 +499,19 @@ export async function runLayer4GenerateSoap(
         soapDraft: text,
         ...suggestedClaimsWrite,
         needsReview: true,
-        reviewReason:
-          'SOAP draft didn\'t match expected markdown structure — manual review required.',
+        // ⚠️ THE BANNER NAMES THE MISMATCH. It used to read "SOAP draft didn't
+        // match expected markdown structure — manual review required." — true,
+        // in the system's own vocabulary, and nearly useless to a clinician.
+        // The validator already knew the missing headings AND that the template
+        // is a different KIND of document from the dictation; the doctor was
+        // told neither. Written against a real production visit that failed
+        // with six operative-note headings absent on an office-visit dictation.
+        // Headings and counts only — never a value, never a line of the note.
+        reviewReason: structureMismatchReason(
+          validation.missingSections,
+          template.sections.map((sec) => sec.label),
+          validation.reason,
+        ),
         // Phase 1 provenance — which template + version generated this note.
         noteTemplateId: template.id,
         noteTemplateVersion: template.version,
