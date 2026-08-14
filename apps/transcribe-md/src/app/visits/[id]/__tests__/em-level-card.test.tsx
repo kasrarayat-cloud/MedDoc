@@ -12,11 +12,65 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
+import { readFileSync } from 'node:fs';
+
 import { EmLevelCard } from '../em-level-card';
 
 const noop = async () => ({ ok: true });
 
 describe('EmLevelCard', () => {
+  // ── R4b — THE ROUNDS BRIDGE IS ON THE COMPONENT ─────────────────────────
+  //
+  // ⚠️ THE DEFECT WAS FOUND BY THE OWNER, BY HAND, ON A COLONOSCOPY OP-NOTE.
+  // `.qm-rdoc-gate` paints its background from `--color-linear-amber`, and
+  // `[data-skin='rounds'] .qm-rounds-host` redeclares that token (with 29
+  // others). A mount outside the host therefore keeps the LEGACY amber and
+  // renders as a cream panel on a dark Rounds route.
+  //
+  // The assertion is on the COMPONENT deliberately. R3.4 fixed exactly this
+  // class by wrapping ONE of `RxTab`'s three mounts and verifying it there —
+  // correctly, and incompletely; the other two rendered the cream panel for two
+  // rounds. A per-caller list is kept complete by hand and hand-kept lists are
+  // wrong eventually, so the treatment lives where it cannot be forgotten and
+  // this test watches it there.
+  it('carries qm-rounds-host itself, so every mount inherits the retint', () => {
+    render(<EmLevelCard level="99213" disabled={false} onAdjust={noop} />);
+    const card = screen.getByTestId('review-doc-em-level');
+    expect(
+      card.classList.contains('qm-rounds-host'),
+      'the E/M level card lost its Rounds bridge — it will paint legacy amber ' +
+        'on a dark route, which is the cream-panel defect the owner found',
+    ).toBe(true);
+    // …and still the quiet gate frame: the bridge retints, it does not restyle.
+    expect(card.classList.contains('qm-rdoc-gate')).toBe(true);
+    expect(card.classList.contains('qm-rdoc-gate-quiet')).toBe(true);
+  });
+
+  it('NO CALLER supplies the bridge — it is not a per-caller list', () => {
+    // If a caller ever wraps this card in its own `qm-rounds-host`, the
+    // treatment has moved back to a hand-kept list and the next mount will be
+    // the one nobody remembers. Read the one production caller and require it
+    // to add nothing.
+    const view = readFileSync('src/app/visits/[id]/review-document-view.tsx', 'utf8');
+    const code = view.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+    // NON-VACUITY: the stripper must leave the mount behind.
+    expect(code).toContain('<EmLevelCard');
+
+    // ⚠️ THE WINDOW LOOKS BOTH WAYS, AND THE FIRST VERSION DID NOT. It sliced
+    // 400 chars FORWARD from `<EmLevelCard`, so a wrapper — which is the actual
+    // shape of the regression, `<div className="qm-rounds-host"><EmLevelCard` —
+    // sat entirely BEFORE the window and passed. Mutation-proved: wrapping the
+    // mount left this test 12/12 green until the window was widened backwards.
+    // A one-directional window cannot see a parent.
+    const at = code.indexOf('<EmLevelCard');
+    const around = code.slice(Math.max(0, at - 400), at + 400);
+    expect(
+      around,
+      'a caller supplies the Rounds bridge — the treatment has moved back to a ' +
+        'hand-kept per-caller list, and the next mount is the one nobody remembers',
+    ).not.toContain('qm-rounds-host');
+  });
+
   it('renders NOTHING when there is no level — an imaging report has none', () => {
     // The null-guard is the whole reason an ultrasound visit does not show an
     // office code here. Asserted by rendering, not by grepping for the `if`.
