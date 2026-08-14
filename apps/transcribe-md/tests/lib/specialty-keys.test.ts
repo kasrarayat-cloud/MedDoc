@@ -91,6 +91,7 @@ describe('normalizeSpecialty — canonical mapping', () => {
     // the enumeration above cannot see it: normalizeSpecialty('Colon Clinic')
     // misses the map, returns 'unspecified', and 'unspecified' IS a valid
     // SpecialtyKey — so the row passes while the variant does nothing.
+    expect(Object.keys(SPECIALTY_VARIANTS).length).toBeGreaterThan(16); // non-vacuity
     const unreachable = Object.keys(SPECIALTY_VARIANTS).filter(
       (k) => k !== k.trim().toLowerCase(),
     );

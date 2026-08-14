@@ -242,12 +242,19 @@ describe('SPECIALTY_KEYTERMS bundle invariants', () => {
     // entry (kebab -> snake), the bridge MUST land on that one. Ids with no
     // such key are the exemption list's business, not this arm's.
     const mistargeted: string[] = [];
+    let checked = 0;
     for (const spec of SPECIALTIES) {
       const expected = spec.id.replace(/-/g, '_');
       if (!(SPECIALTY_KEYS as readonly string[]).includes(expected)) continue;
+      checked += 1;
       const actual = normalizeSpecialty(spec.id);
       if (actual !== expected) mistargeted.push(`${spec.id} -> ${actual} (expected ${expected})`);
     }
+    // ⚠ NON-VACUITY. Every id here is SKIPPED unless its kebab->snake form is a
+    // real SPECIALTY_KEYS entry. If that convention ever drifts, EVERY id would
+    // be skipped and this arm would pass having checked nothing — a green that
+    // means "the loop ran zero times". Assert the count, not just the result.
+    expect(checked, 'identity arm checked ZERO ids — the kebab->snake convention drifted').toBeGreaterThanOrEqual(10);
     expect(
       mistargeted,
       `the ASR bridge points these catalog ids at the WRONG specialty: ${mistargeted.join('; ')}`,
@@ -268,6 +275,8 @@ describe('SPECIALTY_KEYTERMS bundle invariants', () => {
     // would stay green forever. Three adversarial lenses found that
     // independently on 2026-08-14. Reading BOTH keys makes a partial fix
     // visible, which is the case a human is actually most likely to land.
+    // non-vacuity: an emptied exemption list must not read as "nothing stale"
+    expect(Object.keys(NO_BUNDLE_EXPECTED).length).toBeGreaterThan(0);
     const stale: string[] = [];
     for (const id of Object.keys(NO_BUNDLE_EXPECTED)) {
       if (id === 'unspecified') continue; // legitimately empty forever
