@@ -11888,3 +11888,134 @@ rewrite restored → 4 red, both routes), each proved on a gate that runs a
 **not-reclassified** template through **both** builders — the population the
 one-liner exists for. Suite 294 files / 3813 green with anchors OFF; anchors ON
 carries only #108's 8.
+
+---
+
+## GASTROENTEROLOGY — A NEW SPECIALTY, ADDITIVE BY CONSTRUCTION — 2026-08-14
+
+**Owner priority override:** GI ships NEXT, immediately after RC-1, ahead of
+RC-2 / R4b / R5 which each step back one slot. STOP stays down throughout.
+
+⚠️ **CONCURRENCY NOTE, RECORDED BECAUSE IT SHAPED THE WORK.** RC-1 was merged
+and deployed by a DIFFERENT live session (`meddoc-pro-46`, PID 1878997) which
+was 2h35m into it and holding the context. This session found HEAD moving under
+it mid-orientation, established ownership, and **yielded RC-1 rather than
+racing** — two sessions interleaving one §2.5 deploy is not a recoverable
+mistake. GI was built in an isolated `git worktree` so the shared checkout the
+other session was deploying from stayed clean. The de-confliction is the reason
+several findings below are attributed across both sessions.
+
+### 1 · THE ENUM QUESTION — ANSWERED BY THE DATABASE, AND THE ANSWER IS "NO ENUM"
+
+The brief assumed a possible `pg_enum`. Measured on production `meddoc`: **18
+enum types exist, none is a specialty**; `transcribe_visits.specialty` is
+`text NOT NULL`; `users.specialty`, `note_templates.specialtyBaseline`,
+`account_deletions.specialty` are nullable `text`; **zero CHECK constraints**
+mention specialty.
+
+> **NO MIGRATION. The three-layer lesson collapses to code layers.**
+
+The enforcement point is not the database — it is
+`packages/shared/src/specialties.ts`, whose catalog drives `z.enum(SPECIALTY_IDS)`
+at every API edge. Appending one row widens the TS union, the Zod validator and
+all four pickers at once. **A §2.5 migration declaration would have been ceremony
+over an act that does not occur**, and saying so is the finding.
+
+⚠️ `schema.prisma:2420-2421` points `specialtyBaseline` at `specialty-keys.ts`
+(the ASR taxonomy) as though it were the catalog. That stale comment is the
+ORIGIN of the brief's own premise. Corrected in the catalog header.
+
+### 2 · ONE PREDICATE, THREE CONSEQUENCES — WHY GI IS FREE WHERE IT MATTERS
+
+`emAppliesToSpecialty('gastroenterology') === true`, therefore: **E/M ON** (brief
+item 3, structurally, no edit), **`buildSoapSystemPrompt`** not the imaging
+builder, and **specialty guidance applied**. All three from one existing call at
+`04-generate-soap.ts:94-95`.
+
+⚠️ **AND THAT COUPLING IS THE TRAP IN THE OWNER'S OWN OPEN ITEM.** The predicate
+is NAMED for E/M and USED as the report-shape switch. The obvious future
+one-liner — *"a GI procedure note has no office-visit E/M level"* — would
+**silently move GI operative notes to the ultrasound prompt builder**. Written
+into `docs/backlog/gi-open-items-20260814.md` GI-OPEN-1 with the file:line, since
+whoever picks that item up will otherwise do exactly that. Found by
+`meddoc-pro-46` in RC-1's adversarial pass; re-verified here.
+
+**Structure still comes from the doctor's template, verified at the resolver.**
+The real GI operative-note templates in production carry `encounterType = NULL`,
+i.e. they are the doctor's CATCH-ALL. A GI visit misses the exact-match arm and
+falls to that same catch-all — **the template that resolves today resolves after
+GI ships**. The specialty tunes the prompt; it never touches the layout.
+
+### 3 · THE LAYER THAT WOULD HAVE HALF-SHIPPED, AND THE TWO GATES THAT LIED
+
+`normalizeSpecialty('gastroenterology')` would have returned `'unspecified'`,
+whose bundle **exists and is empty** — real key, real lookup, zero terms, no
+error. Both gates that should have caught it were fake:
+
+| gate | title claims | body did |
+|---|---|---|
+| `deepgram-keyterm-builder.test.ts` | "every canonical specialty has a bundle" | **4 literal keys** vs 15 bundles |
+| `specialty-keys.test.ts` | "every variant maps to a value" | walked a hardcoded **16-string** array |
+
+Both now ENUMERATE. Added the check neither performed: a **cross-catalog gate**
+(every `SPECIALTIES` id resolves to a NON-EMPTY bundle or carries a NAMED
+exemption), because both existing gates watched the vocabulary module's internal
+consistency and never compared it to the product catalog — the watched-set
+failure. `ultrasound` sits on the exemption list with its reason and a pointer,
+plus an **ANTI-STALE ARM** that goes RED the moment a bundle lands, so the
+exemption cannot outlive its justification.
+
+**Mutation-proved in both directions, and the counter-proof is the argument:**
+same mutation (GI key present, bundle absent) — **OLD gate PASSES, NEW gate
+FAILS**. M4 is the mutate-toward-SUCCESS control: the gate MOVES when the guarded
+thing is fixed.
+
+### 4 · A CEILING THAT IS A PROXY, AND THE FIRST SPECIALTY THAT BROKE IT
+
+A 30-term GI bundle **passed** the documented "≤30 terms" rule and **tripped the
+budget enforcer**: 143 estimated tokens against 111 for the heaviest existing
+bundle (`ceil(len/3.5)`, 450 shared with core + safety floor). GI is the first
+specialty whose vocabulary is mostly multi-word anatomy — `endoscopic mucosal
+resection` costs 8 tokens, `omeprazole` costs 3 — so **the proxy and the
+constraint diverge here for the first time**. Caught by the B1 regression guard,
+which enumerates every specialty and asserts `budgetEnforced === false`. Retuned
+to 24 terms / 103 tokens with the arithmetic written into the file. Unfixed,
+Deepgram would have silently trimmed GI terms at runtime.
+
+### 5 · CPT — RECORDED, NOT BUILT, AND IT HAS A PRECEDENT
+
+All eight GI endoscopy codes (45378/45380/45385/45390, 43235/43239, G0105/G0121)
+are **ABSENT** from `cpt-allowlist.ts` — positive-controlled against 99213/99214,
+which are present. `07b-cpt-coding.ts:295-312` DROPS them and writes only a
+fire-and-forget audit row; **the doctor sees a correctly dictated code simply
+vanish.** `cpt-allowlist.ts:374-377` records Cardiology hitting this exact
+failure in 2026-07: *"a correctly-coded echo read as an invalid one."*
+
+Deferred per the owner's instruction. Recorded with the evidence, and flagged
+upward that the fix is a data append with a precedent in the same file.
+
+### 6 · EVIDENCE
+
+Flags read from the RUNNING containers: `NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true`,
+`TRANSCRIBE_MD_EVIDENCE_ANCHORS=true`, `MOCK_AI_CALLS=false`.
+`tsc` 0 errors. Suite anchors-ON: **3808 passed / 8 failed**, and the 8 are
+#108's inherited set — **proved** by restoring all 8 changed files to pristine
+HEAD content, confirming `git diff --name-only` EMPTY, and re-running to the
+identical 8.
+
+⚠️ **The first baseline attempt was CONTAMINATED and an assertion caught it.**
+Scratch backups were taken AFTER the first two edits, so "restore from backup"
+restored this session's own work. The tell was a hunch-written line —
+`GI present in baseline? (expect 0)` printed **1**. **The
+backup-before-first-mutation rule has an ORDERING requirement that is easy to
+satisfy late and impossible to detect afterwards.**
+
+### 7 · NOT DONE, NAMED
+
+- **The QA walk has not run.** It requires QA images rebuilt from this branch:
+  `transcribe-md:qa` is 2026-08-11, worker `:qa` 2026-08-13 — neither contains
+  GI, so a walk would read green and prove nothing (the B8 shape). The rebuild
+  was **deliberately held** while the peer session ran its production deploy on
+  the same host.
+- **QA is one migration behind** — `20260813231500_rc1_reclassify_fixed_blocks`,
+  which is RC-1's, not GI's. `assert-migrations-applied.sh --qa` exits 1.

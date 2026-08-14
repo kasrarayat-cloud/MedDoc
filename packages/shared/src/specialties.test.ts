@@ -100,13 +100,13 @@ describe('SPECIALTIES catalog', () => {
     expect(findSpecialty('vascular-surgery').label).toBe('Vascular Surgery');
   });
 
-  it('catalog row count is 14 (1 unspecified + 13 clinical incl. flag-gated ultrasound)', () => {
+  it('catalog row count is 15 (1 unspecified + 14 clinical incl. flag-gated ultrasound)', () => {
     // Guard so catalog growth is a deliberate test-update. NOTE: marketing now
     // derives its count from visibleSpecialties({forVisitCreate:true}) (flag-
     // aware), so Ultrasound is in the raw catalog (14/13) but is NOT shown
     // publicly until NEXT_PUBLIC_ULTRASOUND_SPECIALTY is on.
-    expect(SPECIALTIES).toHaveLength(14);
-    expect(SPECIALTIES_FOR_VISIT_CREATE).toHaveLength(13);
+    expect(SPECIALTIES).toHaveLength(15);
+    expect(SPECIALTIES_FOR_VISIT_CREATE).toHaveLength(14);
   });
 });
 

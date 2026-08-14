@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   normalizeSpecialty,
   SPECIALTY_KEYS,
+  SPECIALTY_VARIANTS,
 } from '@/lib/specialty-keys';
 
 describe('normalizeSpecialty — canonical mapping', () => {
@@ -65,15 +66,21 @@ describe('normalizeSpecialty — canonical mapping', () => {
   it('every variant maps to a value in SPECIALTY_KEYS', () => {
     // Defensive: catches a future variant added to the map but
     // pointing at a key not in the SPECIALTY_KEYS tuple.
+    // ⚠ THIS USED TO WALK A HARDCODED 16-STRING `examples` ARRAY rather
+    // than SPECIALTY_VARIANTS itself, so a variant added to the map and
+    // not to the array was unchecked — the title claimed "every variant"
+    // and the body checked sixteen. It now enumerates the map.
+    // (2026-08-14, GI onboarding.)
     const allKeys = new Set<string>(SPECIALTY_KEYS);
-    const examples = [
-      'orthopedics', 'Orthopedics', 'bariatric-surgery', 'primary-care',
-      'cardiology', 'ob-gyn', 'urgent-care', 'pain-management',
-      'pediatrics', 'vascular-surgery', 'dermatology', 'weight-management',
-      'endocrinology', 'functional-medicine', 'psychiatry', 'unknown-foo',
-    ];
-    for (const ex of examples) {
-      expect(allKeys.has(normalizeSpecialty(ex))).toBe(true);
+    const variants = Object.keys(SPECIALTY_VARIANTS);
+    expect(variants.length).toBeGreaterThan(16); // non-vacuity
+    for (const v of variants) {
+      expect(
+        allKeys.has(normalizeSpecialty(v)),
+        `variant '${v}' -> '${normalizeSpecialty(v)}' which is not in SPECIALTY_KEYS`,
+      ).toBe(true);
     }
+    // and the unknown case still falls through to the sentinel
+    expect(normalizeSpecialty('unknown-foo')).toBe('unspecified');
   });
 });

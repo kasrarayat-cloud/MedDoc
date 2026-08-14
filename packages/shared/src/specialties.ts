@@ -9,14 +9,54 @@
 //   - apps/transcribe-md/src/worker/prompts/specialty-guidance.ts
 //     (templateId here MUST have a matching SPECIALTY_GUIDANCE entry
 //     OR fall through to the generic prompt)
-//   - apps/marketing/src/components/home/Specialties.tsx
+//   - apps/transcribe-md/src/app/visits/[id]/edit-draft-dialog.tsx
+//   - apps/transcribe-md/src/app/settings/note-format/template-review-editor.tsx
 //
-// Adding a specialty: append a row, add the matching guidance text in
-// the worker, ship in one PR. Removing one: drop the row, audit the
-// users.specialty column for the value, write a migration if any rows
-// hold it. The catalog drives Zod validation so unknown ids are
-// rejected at the API edge — DB rows can only contain values that
-// exist here.
+// ⚠ apps/marketing/src/components/home/Specialties.tsx WAS listed here and
+// DOES NOT EXIST (checked 2026-08-14 with a positive control). Nothing under
+// apps/marketing/src imports this catalog; adding a row moves no public count.
+//
+// ── ADDING A SPECIALTY: EIGHT LAYERS, NOT TWO ──────────────────────────────
+// This instruction used to read "append a row, add the matching guidance text
+// in the worker, ship in one PR." That is 2 of the 8 layers below, and it is
+// the first sentence anyone adding a specialty reads — the GI rollout on
+// 2026-08-14 nearly shipped without ASR vocabulary because of it.
+//
+//   1. THIS FILE — append a row (NEVER insert or reorder: two call sites
+//      depend on catalog ORDER, full-visit-flow.spec.ts:48 selectOption
+//      {index:1} and visits/new/page.tsx pickerSpecialties[0]).
+//      templateId MUST equal id — specialties.test.ts enforces it.
+//      SPECIALTY_IDS / the Zod enum / all four pickers derive from here.
+//   2. specialty-guidance.ts — a SPECIALTY_GUIDANCE entry keyed by
+//      templateId. Two coverage gates go red without it. Keep it
+//      CONTENT-ONLY: under the template-fidelity contract the doctor's
+//      template owns the section structure, not the guidance string.
+//   3. specialty-keys.ts SPECIALTY_KEYS — the ASR taxonomy (snake_case).
+//   4. specialty-keys.ts SPECIALTY_VARIANTS — the kebab→snake bridge.
+//      WITHOUT IT step 3 is unreachable: normalizeSpecialty() returns
+//      'unspecified', whose bundle EXISTS and is EMPTY, so the specialty
+//      transcribes with ZERO vocabulary and nothing errors.
+//   5. deepgram-vocabulary.ts SPECIALTY_KEYTERMS — the bundle. Size it by
+//      TOKENS (ceil(len/3.5), 450 shared budget), not by the 30-term rule;
+//      a multi-word specialty passes the term ceiling and trips the budget.
+//   6. CODING DATA — packages/ai/src/data/cpt-allowlist.ts and
+//      icd10-allowlist.ts. 07b DROPS any code not in the allowlist and only
+//      writes a fire-and-forget audit row, so the doctor sees a correctly
+//      dictated code simply vanish. Cardiology shipped with this defect in
+//      2026-07; gastroenterology carries it as a named open item
+//      (docs/backlog/gi-open-items-20260814.md).
+//   7. THE DECLARED-SET TESTS — specialty-catalog.test.ts (id snapshot) and
+//      specialties.test.ts (row count). Both are meant to go red; update
+//      them deliberately.
+//   8. ASK WHETHER IT NEEDS AN E2E ROUTE — seedReviewDocVisit.ts
+//      REVIEW_DOC_CLASSES is a hand-kept two-member matrix. An ordinary
+//      office-visit specialty needs no new member; one that produces a
+//      different NOTE SHAPE does, and proving one shape proves one shape.
+//
+// Removing one: drop the row, audit the users.specialty AND
+// transcribe_visits.specialty columns for the value, write a migration if any
+// rows hold it. The catalog drives Zod validation so unknown ids are rejected
+// at the API edge — DB rows can only contain values that exist here.
 // ============================================================================
 
 export const SPECIALTIES = [
@@ -33,6 +73,7 @@ export const SPECIALTIES = [
   { id: 'weight-management', label: 'Weight Management', templateId: 'weight-management' },
   { id: 'bariatric-surgery', label: 'Bariatric Surgery', templateId: 'bariatric-surgery' },
   { id: 'vascular-surgery', label: 'Vascular Surgery', templateId: 'vascular-surgery' },
+  { id: 'gastroenterology', label: 'Gastroenterology', templateId: 'gastroenterology' },
   // Ultrasound is an IMAGING-REPORT specialty, NOT a SOAP clinic visit: its
   // templateId routes L4 to the ultrasound report generator (Exam/Indication/
   // Technique/Comparison/Findings/Impression), not the SOAP scaffold. Kept in

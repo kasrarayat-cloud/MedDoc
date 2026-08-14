@@ -21,13 +21,22 @@ import { SPECIALTY_GUIDANCE } from '@/worker/prompts/specialty-guidance';
 describe('SPECIALTIES catalog', () => {
   it('exposes a stable id list (snapshot)', () => {
     // Adding/removing a specialty here is intentional — update this
-    // snapshot to match. The marketing pill list + "N specialty
-    // templates" headline (apps/marketing Specialties.tsx + HowItWorks.tsx)
-    // derive from visibleSpecialties({forVisitCreate:true}) — flag-gated
-    // specialties (Ultrasound) only appear publicly when their flag is on,
-    // so the catalog can carry Ultrasound without changing the public count
-    // while the flag is OFF. packages/shared specialties.test.ts ("catalog
-    // row count") is the count tripwire; both are enforced by the CI unit gate.
+    // snapshot to match.
+    //
+    // ⚠ CORRECTED 2026-08-14: this note used to say the marketing pill list
+    // and the "N specialty templates" headline derive from
+    // visibleSpecialties({forVisitCreate:true}) via apps/marketing
+    // Specialties.tsx + HowItWorks.tsx. NEITHER FILE EXISTS any more, and
+    // nothing under apps/marketing/src imports the catalog — positive-
+    // controlled, 34 files there match /export/, so the traversal was real
+    // and the zero is real. Adding a catalog row therefore moves NO public-
+    // facing count. The code moved and the sentence stayed true-looking.
+    //
+    // Ultrasound remains flag-gated for the PICKER only
+    // (NEXT_PUBLIC_ULTRASOUND_SPECIALTY, measured ON in the running
+    // production containers 2026-08-14). packages/shared
+    // specialties.test.ts ("catalog row count") is the count tripwire; both
+    // are enforced by the CI unit gate.
     expect(SPECIALTY_IDS).toEqual([
       'unspecified',
       'primary-care',
@@ -42,6 +51,7 @@ describe('SPECIALTIES catalog', () => {
       'weight-management',
       'bariatric-surgery',
       'vascular-surgery',
+      'gastroenterology',
       'ultrasound',
     ]);
   });

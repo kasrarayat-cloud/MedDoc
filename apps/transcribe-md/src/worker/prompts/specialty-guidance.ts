@@ -288,6 +288,81 @@ export const SPECIALTY_GUIDANCE: Record<string, string> = {
   // section requirements (Body Composition, Behavioral Counseling) on top
   // of the standard SOAP shell, plus GLP-1 safety screening that the L5
   // critique downstream uses to flag missing items.
+  // Gastroenterology — onboarded 2026-08-14 for the GI pilot. GI dictation
+  // arrives in TWO shapes (clinic office visit, and procedure / operative
+  // note) and the same doctor produces both on the same day, so the entry
+  // branches on the shape rather than assuming one.
+  //
+  // ⚠ DELIBERATELY CONTENT-ONLY, NOT LAYOUT-PRESCRIBING. Older entries
+  // here ('weight-management' says "Include a 'Body Composition'
+  // subsection", 'bariatric-surgery' says "First line of HPI MUST be...")
+  // predate the template-fidelity contract. Under that contract the
+  // DOCTOR'S TEMPLATE owns the section structure and the specialty tunes
+  // only WHAT IS CAPTURED. A GI operative-note template carries its own
+  // sections; guidance that invented headings would fight it. So every
+  // line below says what to document, never what heading to create.
+  gastroenterology:
+    "GI dictations arrive in two shapes. Decide which one this transcript " +
+    "is before drafting. Let the template's own sections stand — the " +
+    "guidance below governs WHAT IS CAPTURED, never which headings " +
+    "exist.\n" +
+    "\n" +
+    "  SHAPE = OFFICE VISIT (clinic consult, follow-up, pre-procedure):\n" +
+    "Screen for alarm features and document each one that was addressed " +
+    "EVEN WHEN NEGATIVE — absence of an alarm feature is a documented " +
+    "clinical finding, not an omission: dysphagia, odynophagia, overt " +
+    "bleeding (hematemesis, melena, hematochezia), unintentional weight " +
+    "loss, persistent vomiting, iron-deficiency anemia, and family " +
+    "history of colorectal cancer or IBD. For reflux capture symptom " +
+    "frequency, nocturnal symptoms, and the PPI regimen INCLUDING dose " +
+    "timing relative to meals (pre-meal dosing is the common failure " +
+    "point, so 'omeprazole 20 mg daily' without timing is incomplete). " +
+    "For IBD capture disease type AND extent (UC: proctitis / left-sided " +
+    "/ extensive; Crohn's: ileal / colonic / ileocolonic, and perianal " +
+    "involvement separately), current therapy class, steroid exposure " +
+    "with any taper, and infection screening if it was discussed. For " +
+    "liver disease capture etiology, fibrosis assessment with the method " +
+    "used (elastography value, biopsy stage), varices and HCC " +
+    "surveillance status and interval. For functional disorders record " +
+    "the subtype only if the clinician named it (IBS-C / IBS-D / IBS-M); " +
+    "do not classify on the model's own reading of the symptoms. Record " +
+    "the last colonoscopy DATE, what it showed, and the interval that " +
+    "was recommended together with the reason driving it — an interval " +
+    "without its indication cannot be verified later.\n" +
+    "\n" +
+    "  SHAPE = PROCEDURE / OPERATIVE NOTE (colonoscopy, EGD, flexible " +
+    "sigmoidoscopy, ERCP, EUS):\n" +
+    "Capture the indication as dictated and keep screening / surveillance " +
+    "/ diagnostic / therapeutic distinct — they are different indications " +
+    "with different downstream consequences and they are routinely " +
+    "conflated. Document sedation and, if stated, who administered it. " +
+    "Record bowel-preparation quality using the scale the endoscopist " +
+    "used, per segment when given (e.g. Boston Bowel Prep Scale); an " +
+    "inadequate prep changes the follow-up interval, so prep quality and " +
+    "the stated interval must BOTH appear. Document the extent reached " +
+    "with the landmark that proves it (appendiceal orifice, ileocecal " +
+    "valve, terminal ileum intubation), withdrawal time if stated, and " +
+    "rectal retroflexion if performed. Report findings by segment " +
+    "(rectum, sigmoid, descending, splenic flexure, transverse, hepatic " +
+    "flexure, ascending, cecum, terminal ileum) with size in millimetres " +
+    "and morphology as described. For each therapeutic manoeuvre record " +
+    "the technique and its completeness: polypectomy method (cold " +
+    "forceps, cold snare, hot snare, EMR), whether resection was complete, " +
+    "whether the specimen was retrieved, and hemostasis measures with " +
+    "counts (clips placed, APC, injection). State complications " +
+    "explicitly INCLUDING their absence. List specimens sent to pathology " +
+    "and how they were labelled.\n" +
+    "\n" +
+    "⚠ SAFETY, BOTH SHAPES — NEVER INVENT ANY OF THE FOLLOWING. Do not " +
+    "state an endoscopic finding, a pathology result, or a surveillance " +
+    "interval that was not dictated. A surveillance interval usually " +
+    "depends on histology that is not back yet: if the clinician said " +
+    "the interval is pending pathology, document exactly that and do NOT " +
+    "supply a number. These fields drive cancer-screening decisions and a " +
+    "plausible fabricated interval is a patient-safety event, not a " +
+    "formatting nicety. Keep what the PATIENT reported distinct from what " +
+    "the ENDOSCOPIST observed.",
+
   'weight-management':
     "Include a 'Body Composition' subsection in Objective documenting: " +
     "current weight, BMI (calculate if height available), waist " +
