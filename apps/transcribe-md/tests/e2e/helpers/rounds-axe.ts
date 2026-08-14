@@ -237,8 +237,30 @@ export async function runAxe(page: Page): Promise<AxeRun> {
 
     // Is a modal standing? Visible, not merely present — a closed dialog is
     // still in the DOM in several of these components.
+    //
+    // ⚠️ `offsetParent` IS ALWAYS NULL FOR `position: fixed`, AND THAT MADE THIS
+    // DETECTOR BLIND TO THE ONE MODAL THAT MATTERS MOST. The gate flow is
+    // `role="dialog" aria-modal="true"` on `position: fixed; inset: 0`
+    // (`rounds-tokens.css`), so it never satisfied either arm — and every
+    // `modalStates` this harness ever counted came from the override modal
+    // alone, which is NOT fixed.
+    //
+    // Nothing said so, because the count was non-zero and the trap assertion
+    // passed. Owner ruling #109 deleted the override modal, `modalStates` went
+    // to 0, and the non-vacuity guard on the next line surfaced a detector bug
+    // that had been there the whole time. The focus-trap check now covers the
+    // gate flow — the primary modal of the entire surface — for the first time.
+    //
+    // `checkVisibility()` handles fixed, transformed and clipped elements;
+    // the rect fallback is for engines without it.
     const dialogs = [...document.querySelectorAll('[role="dialog"],[role="alertdialog"]')].filter(
-      (d) => (d as HTMLElement).offsetParent !== null || d.getAttribute('data-state') === 'open',
+      (d) => {
+        if (d.getAttribute('data-state') === 'open') return true;
+        const el = d as HTMLElement & { checkVisibility?: () => boolean };
+        if (typeof el.checkVisibility === 'function') return el.checkVisibility();
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      },
     );
     const openDialog = dialogs[0] ?? null;
     const modal = {

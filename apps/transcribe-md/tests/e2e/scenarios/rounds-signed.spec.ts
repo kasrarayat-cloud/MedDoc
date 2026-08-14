@@ -68,6 +68,12 @@ test.describe('Rounds Screen 4 — signed & locked', () => {
     return null;
   }
 
+  // ⚠️ TAKES ITS PAGE, and the COMPANION control below is why. A second
+  // `signupFreshUser` on an already-authenticated page never reaches the signup
+  // form — `/signup` has no 'Invite code' field for a logged-in user, and the
+  // failure surfaces 15s later as `locator.fill timeout`, which reads as a
+  // broken form rather than a wrong session. So the companion drives a page
+  // from a FRESH BROWSER CONTEXT, and this helper stays page-agnostic.
   async function openSigned(
     page: import('@playwright/test').Page,
     tag: string,
@@ -266,6 +272,7 @@ test.describe('Rounds Screen 4 — signed & locked', () => {
 
   test('THE COMPANION — an imaging visit carrying office E/M gets NO trail card', async ({
     page,
+    browser,
   }) => {
     // ⚠️ THE TEST ABOVE PROVES NOTHING ON ITS OWN, and neither did anything
     // else on this screen. `page.tsx` suppresses the trail's E/M card with
@@ -313,16 +320,30 @@ test.describe('Rounds Screen 4 — signed & locked', () => {
     // the claim it supports: identical seed, PRIMARY-CARE instead of imaging.
     // The card must render there. If it does not, the absence above is a fact
     // about a broken card rather than about the specialty.
-    const control = await openSigned(page, 'signed-4c-ctl', {
-      emPending: true,
-      emAcknowledged: true,
-    });
-    test.skip(!control, 'psql seeding unavailable');
-    await expect(
-      page.getByTestId('rounds-signed-trail-em'),
-      'the E/M card did not render on a NON-imaging visit with the same seed — ' +
-        'the imaging absence above proves nothing',
-    ).toBeVisible();
+    //
+    // ⚠️ A FRESH CONTEXT, NOT THIS PAGE. `signupFreshUser` needs a logged-OUT
+    // browser; reusing `page` here timed out for 15s inside `locator.fill`
+    // waiting for an 'Invite code' field that a signed-in user is never shown.
+    // The symptom named the form and the cause was the session — so the second
+    // visit gets its own cookie jar, and the context is closed in a `finally`
+    // so a failed assertion cannot leak a browser context into the rest of the
+    // pack.
+    const ctx = await browser.newContext();
+    try {
+      const ctlPage = await ctx.newPage();
+      const control = await openSigned(ctlPage, 'signed-4c-ctl', {
+        emPending: true,
+        emAcknowledged: true,
+      });
+      test.skip(!control, 'psql seeding unavailable');
+      await expect(
+        ctlPage.getByTestId('rounds-signed-trail-em'),
+        'the E/M card did not render on a NON-imaging visit with the same seed — ' +
+          'the imaging absence above proves nothing',
+      ).toBeVisible();
+    } finally {
+      await ctx.close();
+    }
   });
 
   // ── 5. The paper and the footer ─────────────────────────────────────────
