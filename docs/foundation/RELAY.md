@@ -12158,3 +12158,63 @@ exemption's own text invites.
 > partial one.**
 
 Being carried into `AGENTS.md` canon by the RC-1 session, jointly attributed.
+
+---
+
+## GI IS LIVE — `83d22d01` DEPLOYED AND JUDGED 17 OF 17 — 2026-08-14
+
+**Deploy `2026-08-14T04:15:00Z`, exit 0.** Log:
+`docs/deploy-logs/deploy-20260814T041500Z.log`. Declaration:
+`docs/foundation/deploys/20260814-83d22d01.md`, written and placed BEFORE the
+act, baseline measured at `03:33:49Z` with **nothing carried forward**.
+
+**Cited 5 of 5 on `83d22d01`** — `CI` · `e2e` · `a11y-ci` · `secrets-scan` ·
+`nightly-tests`, verified in BOTH `--commit` and `--branch` views and re-checked
+independently of the waiter that was watching for it.
+
+⚠️ **RE-MEASURING THE BASELINE WAS NOT A FORMALITY.** Against the `833a6f2d`
+declaration one hour earlier: visits **35 → 39**, signed **24 → 25**, patients
+**24 → 29**, `bariatric-surgery` **16 → 20**, templates **9 → 10**. A live
+practice, mid-shift. Carrying forward an hour-old baseline would have produced
+five wrong numbers and a comparison with no correct answer.
+
+### THE JUDGEMENT — 17 of 17
+
+**5 MUST CHANGE, all moved:** app image `ac3423a3…` → `fbc94a51…`; worker
+`4bd4f52f…` → `be825830…`; `gastroenterology` in the SHIPPED worker's
+`specialties.ts` **0 → 2**; `SPECIALTY_GUIDANCE.gastroenterology` absent →
+present; the GI vocabulary bundle absent → **24 terms**. All four content checks
+run INSIDE the running container, not inferred from an image id.
+
+**12 MUST NOT CHANGE, all held:** visits **39** · signed **25** · patients
+**29** · templates **10** · users **198** · migrations **102** (no migration in
+this deploy) · specialty distribution `bariatric-surgery` 20 / `primary-care` 2
+/ `ultrasound` 17 · `gastroenterology` visits **0** · both production flags
+unchanged in the running containers · co-tenants 307 / 200 / 404 / 410 · 9 of 9
+healthy, `RestartCount` 0.
+
+> **Rows 12 and 13 were the real test and they are why they were declared:** a
+> specialty rollout that moved an existing visit's specialty, or produced a
+> `gastroenterology` visit before any doctor had picked one, would have done
+> something nobody asked for. Neither moved.
+
+**Structural, in the shipped bundle with both controls:** `Gastroenterology`
+inlined in **4** client chunks — the same count as `Vascular Surgery`
+(positive control) — and `Hepatology` in **0** (negative control: the
+speculative variant the adversarial pass had removed). `/login` 200,
+`/visits/new` 307 auth-redirect, no 5xx. **No patient record was touched.**
+
+**All nine standing checks green**, including `check-imaging-em-artifacts`
+(0 of 17 imaging visits carry an office E/M code) and
+`check-bind-mount-agreement`.
+
+**Rollback:** `:pre-gi-20260814` on both images, tagged from the RUNNING
+digests rather than `:latest`, and verified to resolve to exactly those digests.
+
+### WHAT SHIPPED KNOWINGLY
+
+GI procedure CPT codes are still dropped by `07b` — **pre-existing, attribution
+to this diff refuted by three independent adjudicators**. The owner has PULLED
+THE FIX FORWARD as GI's rider, its own PR immediately after this deploy. An
+office E/M level will appear on GI procedure notes; deliberate, with
+per-encounter suppression a named open item and its trap recorded.
