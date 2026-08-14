@@ -195,3 +195,9 @@ docker-compose.*key*.yml
 .b[0-9]*-*
 .t[0-9]*-*
 .a[0-9]*-*
+
+# ⚠️ THE LOOP HALT SWITCH IS LOCAL, NEVER TRACKED. A committed STOP halts the
+# FOUNDATION loop in every clone and on every future checkout — and it arrives
+# through `git add -A` in a session that had it sitting untracked, which is
+# exactly how it reached `main` in c86f0a9e on 2026-08-14.
+docs/foundation/STOP
