@@ -11707,3 +11707,116 @@ arm asserting SILENCE, not by review.
   cite its own commit and not inherit that one's.
 - Unit suite **292 files / 3790 tests green** from `apps/transcribe-md`;
   `tsc --noEmit` 0 errors.
+
+## RC-1 + RC-3 — WHAT THE ADVERSARIAL PASS FOUND — 2026-08-14
+
+> **The branch was proven, pushed, and one command from merge. An adversarial
+> pass over the finished diff found FIFTEEN defects, two of which would have
+> deleted clinical content from a signed imaging report. The PR was converted to
+> draft rather than merged.**
+
+### THE TWO THAT MATTERED, BOTH VERIFIED AGAINST PRODUCTION BEFORE BEING BELIEVED
+
+**(1) The imaging route never spoke the contract — and it is the ONLY route.**
+`04-generate-soap` picks its prompt builder by report type. RC-1 taught
+`buildSoapSystemPrompt`; `buildUltrasoundSystemPrompt` carried its own copy of
+the section renderer and learned nothing. `composeNote` ran regardless.
+
+Measured: **all 7 production visits** bound to the 4 templates the migration
+flips carry `specialty='ultrasound'`, and `NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true`
+in the live worker. So on **100%** of the affected rows the model would have
+written the section correctly and had its answer overwritten with an unfilled
+form — SIDE OF EXAM and the indication replaced by an em dash. Both structure
+gates pass on that output.
+
+**(2) Anchors ON put the protocol block back into the note.**
+`runAnchorVerify` was handed the UN-stripped output and rebuilds the note from
+what it is given. `TRANSCRIBE_MD_EVIDENCE_ANCHORS=true` in production — so raw
+JSON, including a value the assembler had *refused*, would have reached
+`soapDraft`, L5, the review surface and a signable note. **The branch's own test
+goes red in that universe**, which is how it was confirmed.
+
+### ⚠️ AND THE DIAGNOSIS OF #106 IS WRONG — RECORDED AS RULING #107
+
+`normalizeRefluxTimeUnit`, applied by the imaging builder to `defaultText`
+before the prompt is built, turns the doctor's `500 milliseconds` into
+`0.5 seconds`. **The prompt said `0.5 seconds`; the model reproduced it
+faithfully.** The paraphrase #106 attributes to the model was ours,
+deterministic, on every imaging visit.
+
+Assembly still fixes it — for a better reason than the one recorded, because
+bytes that never reach the model cannot be rewritten by anything on the way
+there. But a stricter prompt would have fixed nothing, and **the reported
+symptom has a one-line fix independent of the entire RC-1 mechanism**.
+
+### THE GATES WERE FLAWLESS OVER A UNIVERSE PRODUCTION DOES NOT USE — TWICE
+
+| the proof used | production uses |
+|---|---|
+| `specialty: 'primary-care'` → the SOAP builder | `ultrasound` → the imaging builder |
+| `TRANSCRIBE_MD_EVIDENCE_ANCHORS` unset | **`true`** |
+
+⚠️ **And the QA fixture was imaging-SHAPED** — `## EXAM`, `SIDE OF EXAM: —`, the
+`500 milliseconds` tripwire — which is exactly what made fifteen green arms
+*read* as an imaging proof. **A well-chosen fixture disguises a wrong universe.**
+That is the watched-set rule with a new and nastier face: the check was not
+merely aimed at the wrong set, it *looked* aimed at the right one.
+
+### THE OTHER THIRTEEN, IN ONE LINE EACH
+
+- The lenient heading matcher (the validator's PRESENCE check, used for
+  IDENTITY) deleted a section headed `## TECHNIQUE NOTES FOR THIS STUDY`
+  carrying a dictated limitation.
+- `extractSlotFills` took `lastIndexOf(OPEN)`, so a model that answered
+  correctly and then MENTIONED the block in prose had every value discarded and
+  its JSON left in the clinical note.
+- `findStaticDivergence` was containment-only: a polisher that EMPTIED the
+  doctor's section and appended its text to Findings passed clean — and L6's own
+  preamble licenses exactly that ("reword, REORGANIZE, and reformat").
+- On a resumed run the arm made the model's paraphrase the sacred bytes and told
+  the clinician "the note keeps your template's exact wording" about a note
+  saying `0.5 seconds`.
+- An empty polish skipped the arm entirely and was persisted to `soapFinal` AND
+  `soapL6Original`.
+- **The migration's guards reported and did not prevent**: no `BEGIN`/`COMMIT`,
+  so under psql the UPDATE committed before the guard block ran.
+- G3 (`EXCEPT ALL`) was blind to a section being ADDED — the exact failure a
+  botched `jsonb_agg` produces.
+- `btrim` strips spaces only; JS `.trim()` does not — a demonstrated
+  disagreement in a pair whose whole purpose is to agree.
+- The allowlist's premise for `exam_metadata` is FALSE on a real row: one
+  template's is 7 lines with ZERO slots, and flipping it freezes 7 fields
+  forever. **The declared figure moves 7 → 6.**
+- The mock's anchors branches shadowed both new functions; under the b4-coverage
+  overlay the L6b arm would reject EVERY visit and climb the counter that is
+  #106(g)(4)'s live signal.
+- The QA walk's ARM 0 measured a hand-seeded row, so it could not tell "the
+  migration flipped it" from "somebody seeded it flipped" — **and the report
+  claimed the script re-created those rows, which it did not.**
+- RC-3's custom→custom arm was unreachable given `worker.ts`'s gating.
+- ⚠️ **`l4-golden-prompt` and `04-generate-soap` have been RED on `main` in the
+  shipped configuration** (anchors ON) — confirmed in a detached worktree at
+  `42a26aa2`. Pre-existing, not this branch's, and nobody saw it because CI runs
+  the flag off. **The golden gate that guards the L4 prompt does not run in the
+  universe production uses.**
+
+### THE FIX CARRIES A GUARD FOR THE CLASS, NOT JUST THE INSTANCE
+
+Composition is now gated on **the prompt this run actually sent** carrying the
+contract — not on the template alone. A third builder added later trips a loud
+refusal and falls back to today's behaviour instead of deleting a patient's
+findings. Mutation **M5** (builder un-taught) reddens 8 assertions and leaves
+**4 green**, including *"the model's dictated FINDINGS survive byte-for-byte"* —
+the guard doing exactly its job.
+
+### STATE
+
+Re-walked on QA in the production universe (imaging route, anchors ON, migration
+applied by the walk from the file): **16 of 16**. Suite 293 files / 3804 tests
+green with anchors OFF; with anchors ON, the 8 pre-existing `main` failures and
+no others. Production re-measured: **6 sections across 4 templates**, prod
+verified back to 0 `always_include` after every dry-run.
+
+**Not deployed.** The declaration is written and the rollback tags are cut, but
+the diagnosis that motivated the item changed tonight, and a deploy decided on a
+corrected diagnosis is the owner's call, not a session's.
