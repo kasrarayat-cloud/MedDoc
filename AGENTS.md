@@ -763,6 +763,98 @@ This is the positive-control rule with a free control already in hand: any sweep
 that contains at least one must-exist row carries its own tripwire, and a
 must-not-appear table without one cannot tell absence from blindness.
 
+## AN OVER-PERMISSION FIX'S DECLARATION ASSERTS **ABSENCE** ROWS
+
+**Standing 2026-08-14. Contributed by the GI session; verified here against
+`main` before it was written down.**
+
+Most §2.5 declarations assert what must APPEAR after a deploy. That is the right
+shape for a change that ADDS a capability. It is the wrong shape — and a
+dangerous one — for a fix to something that was **too permissive**.
+
+> **A presence-only declaration cannot detect over-admission. "Is the new code
+> shipped?" passes just as happily on the broken version.**
+
+⚠️ **REFERENCE CASE — two non-billable ICD-10 headers on the accepted side of a
+billing floor.** A GI cohort's first draft added `'K21.0'` and `'K22.7'`. Both
+are subcategory HEADERS, not submittable codes: FY2023 expanded `K21.0` into
+`K21.00`/`K21.01`, FY2017 expanded `K22.7` into `K22.70`/`K22.71x`. Measured
+against the real module at the time:
+
+    isValidIcd10('K21.0')   true    ← a non-submittable code ADMITTED
+    isValidIcd10('K21.00')  false   ← the code a chart maps to, still DROPPED
+
+So the fix for *"GI codes get dropped"* **failed at its own purpose and created
+False Claims Act exposure at the same time**, in the file whose header names that
+exact risk. Verified on `main` after the fix: `K21.0` and `K22.7` absent,
+`K21.00`, `K21.01`, `K22.70` present.
+
+⚠️ **AND THE TELL WAS INSIDE THE AUTHOR'S OWN DIFF — "THE EVIDENCE WAS IN THE
+ARTIFACT I AUTHORED".** The comment written beside `'K22.7'` was the official
+title of **`K22.70`**. The correct code had been written down, in prose, on the
+same line as the wrong one.
+
+The declaration therefore carried a row asserting `'K21.0'` must still read
+**0** in the shipped validator — and the guard
+(`icd10-allowlist-gastroenterology.test.ts`) refuses both headers **paired with
+an arm asserting the billable children ARE allowed**, because refusing both
+would be a stricter floor and a worse product. Mutation-proved: re-admitting
+`K21.0` reddens naming it.
+
+## TEXT PRESENCE IS NOT MEMBERSHIP
+
+**Standing 2026-08-14. Same night, same file, and the verification PASSED while
+the module did not even parse.**
+
+> **`grep` answers a question about a FILE. Membership is a question about a
+> DATA STRUCTURE. They agree right up until they don't.**
+
+⚠️ **REFERENCE CASE.** A 33-code block was inserted anchored on the
+`export const ICD10_ALLOWLIST` declaration rather than on the array's closing
+`];`, so the codes landed **outside the array literal** — dangling statements
+after the close. The file did not parse. **And the author's verification
+reported success anyway:**
+
+    grep -o "'K63.5'" file | wc -l   ->  1     "0 of 33 missing"
+
+The text was in the file. The value was not in the Set.
+
+⚠️ **THE PARSER CAUGHT IT, NOT THE CHECK — which is the part that should worry
+you.** Had the block landed somewhere syntactically legal but semantically
+wrong, the grep would still have reported 33 of 33 and nothing else would have
+objected.
+
+**So allowlist and registry verification asserts THROUGH the structure** —
+`ICD10_ALLOWLIST.has()`, `isValidIcd10()` — never through the file text. The
+guard on `main` carries **14** membership assertions and **zero** file-text
+assertions, plus a non-vacuity row (`expect(all.length).toBe(38)`) so a cohort
+that collapsed to nothing cannot satisfy every filter while checking nothing.
+
+## SPLIT-FAMILY COVERAGE PINS **BOTH** DIRECTIONS
+
+**Standing 2026-08-14.** When a fix adds the missing half of a pair, asserting
+only the half you added lets a future edit remove the half that was already
+there — **reproducing the original defect inverted**, and a one-sided test
+cannot see it.
+
+⚠️ **REFERENCE CASE — four split families, each with exactly one member
+present** before the cohort that fixed them:
+
+| already there | was missing | the pair |
+|---|---|---|
+| `K21.9` | `K21.00` | GERD without vs WITH esophagitis |
+| `K58.0` | `K58.1` | IBS-D vs IBS-C |
+| `K57.30` | `K57.32` | diverticulosis vs diverticulitis |
+| `Z12.11` | `K63.5` | the screening ENCOUNTER vs the FINDING it screens for |
+
+A clinician documenting the other half had the code silently dropped, with only
+a fire-and-forget audit row to show for it.
+
+The guard iterates the pairs and asserts **both** members, with the failure
+message naming which side went — *"K21.9 (the side that was already there)"*.
+Mutation-proved by deleting the side that was **already** present, which is
+precisely the direction a new-side-only test is blind to.
+
 ## THE LIST IS THE DRIVER, NOT THE CONTEXT
 
 **When a sweep produces an enumeration, the fixing pass ITERATES THE LIST.** Each
@@ -913,6 +1005,39 @@ server has not finished populating. **That makes it the WATCHED-SET failure, not
 the broken-instrument failure: the right question asked of the wrong universe,
 a few seconds too early.** The two sections above name both shapes; this is the
 one where the check is flawless and the universe is wrong.
+
+### ⚠️ AND THE GENERAL FORM: AN IDENTIFIER IS QUERIED IN ITS **FULL** FORM, EVERYWHERE
+
+**Standing 2026-08-14. This entry began as a `gh` quirk and it is not one.**
+
+> **A lookup keyed on an ABBREVIATED identifier can return "no matches" instead
+> of "ambiguous", with exit 0. Abbreviation is a display convenience; it is
+> never a query key.**
+
+`gh run list --commit` is the instance this repo has paid for, and the table
+above records it. The generalisation is the addition: **any** interface that
+accepts a shortened id — a SHA prefix, a truncated container id, a partial
+image digest, a name without its namespace — may resolve it, or may silently
+resolve nothing, and the two outcomes are indistinguishable from the exit code.
+
+⚠️ **REPRODUCED LIVE BY BOTH SESSIONS ON THE SAME NIGHT, and mine sat directly
+on a deploy gate.** Waiting for `main`'s merge-commit citation before deploying
+R5, I polled `gh run list --commit 636e69a3` — the short form. It returned `[]`,
+my `until` loop read that as "nothing in flight", and **it exited while three
+required checks were still running.** Measured seconds apart on the same commit:
+
+    --commit SHORT : 0 runs
+    --commit FULL  : 4 runs
+    --branch main  : 4 runs
+
+All three commands exit 0. **What caught it was the two-view rule above** — the
+`--branch` view disagreed, in the same output, and the disagreement was the only
+signal. A single-view check would have deployed a commit whose gate had not
+finished looking at it.
+
+**So the two rules compose, and neither is sufficient alone:** take two views,
+AND query with the full 40 characters. The two-view habit catches a lying
+instrument; the full identifier stops you creating one.
 
 > **THE RULE, TIGHTENED TWICE, AND THE SECOND TIGHTENING IS THE LOAD-BEARING
 > ONE: TAKE TWO VIEWS.** `--branch` is the view that is right first. A citation
