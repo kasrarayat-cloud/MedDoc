@@ -32,6 +32,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Check, FileSignature, RefreshCw } from 'lucide-react';
 
+import { PrescriptionsCard } from './prescriptions-card';
+
 import { spokenBody } from '@/lib/spoken-body';
 import { parseNoteSections, type NoteSection } from '@/lib/parse-note-sections';
 import { emChangeEq } from '@/lib/suggestion-labels';
@@ -62,7 +64,17 @@ export interface ReviewDocumentViewProps {
     afterLabel: (label: string) => React.ReactNode,
   ) => React.ReactNode;
   // ⚠️ `rxGateNode`, `rxBlocking` and `rxHasWarnings` were REMOVED here with
-  // the prescription-safety surface (owner ruling #109).
+  // the prescription-safety surface (owner ruling #109) and replaced by the raw
+  // column below.
+  //
+  // THE SHAPE IS DELIBERATE: the caller supplies DATA, this component decides
+  // RENDERING. The old arrangement handed in a fully-built `rxGateNode`, which
+  // is a per-caller decision and therefore a hand-kept list — the R3.4 lesson.
+  // There is one mount of this component today; when there is a second it
+  // inherits the card instead of having to remember it.
+  /** The raw `rxDrafts` jsonb. Prescriptions only — warnings are not rendered
+   *  anywhere any more, by ruling. */
+  rxDrafts?: unknown;
   /** Unacknowledged E/M level change ({from,to}) or null. */
   emPendingChange: { from: string; to: string } | null;
   /** The note changed since the level was scored — the sign route refuses while
@@ -246,6 +258,13 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
             </>
           );
         })()}
+
+        {/* ── WHAT WAS PRESCRIBED ─────────────────────────────────────────
+            NOT a gate and not a blocker — it holds up nothing and offers no
+            control. It is here because the EXPORT prints these medications
+            into the signed PDF, DOCX and clipboard, and a doctor must not sign
+            a record containing a medication list they were never shown. */}
+        <PrescriptionsCard rx={props.rxDrafts} />
 
         {/* ── INLINE GATES ───────────────────────────────────────────────
             At the position they belong to, one card per item, never a count. */}

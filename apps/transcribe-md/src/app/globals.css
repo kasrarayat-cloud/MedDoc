@@ -6178,6 +6178,23 @@ body {
 }
 /* A prescription list with no warning is not an alarm. Same card, no amber. */
 .qm-rdoc-gate-quiet { border-color: var(--color-linear-border); }
+
+/* The drafted medication list — read-only (owner ruling #109 restore).
+   Deliberately quiet: it uses the `-quiet` gate frame, no amber and no glyph,
+   because a routine refill must not read like an interaction. */
+.qm-rx-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.qm-rx-item { padding: 8px 0; border-bottom: 1px solid var(--color-linear-border); }
+.qm-rx-item:last-child { border-bottom: 0; padding-bottom: 0; }
+.qm-rx-name { font-size: 13.5px; font-weight: 600; color: var(--color-linear-text); }
+.qm-rx-sig { margin-top: 2px; font-size: 12.5px; color: var(--color-linear-text-2); line-height: 1.5; }
+.qm-rx-meta {
+  margin-top: 4px;
+  display: flex;
+  gap: 14px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--color-linear-text-3);
+}
 .qm-rdoc-gate-quiet .qm-rdoc-gate-head { color: var(--color-linear-text-3); }
 /* The Word view is scaled to the container by fitDocxToWidth (see
    native-document-preview.tsx). The transform needs a stable box to scale

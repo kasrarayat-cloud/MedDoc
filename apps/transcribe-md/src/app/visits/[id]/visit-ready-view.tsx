@@ -938,6 +938,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               afterSection={afterSection}
             />
           )}
+          rxDrafts={props.rxDrafts}
           emPendingChange={pendingEmChange}
           // STALENESS ONLY MEANS SOMETHING IF THERE IS A LEVEL.
           //
