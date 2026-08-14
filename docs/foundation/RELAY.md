@@ -12031,11 +12031,21 @@ resolved; anchors ON; **E/M 99212**; attestation gate enforced; SIGNED with
 attribution; PDF exported then shredded; audit rows READ BACK including
 `VISIT_SIGNED` and `EXPORT_PDF_DOWNLOADED`.
 
-⚠️ **AND WHAT IT DID NOT PROVE IS WRITTEN DOWN.** `MOCK_AI` ignores the prompt,
-so the walk cannot show the GI guidance reached the model — the note body is a
-canned headache SOAP. That half is closed in the SUITE by a new gate that builds
-the real L4 prompt and asserts the safety clause and the doctor's own headings
-both survive into it. **A walk proves plumbing; a prompt gate proves prompts.**
+⚠️ **AND WHAT IT DID NOT PROVE IS WRITTEN DOWN — WITH THE RIGHT REASON, WHICH IS
+NARROWER THAN THE ONE FIRST WRITTEN HERE.** The walk could not show the GI
+guidance reached the model. **Not** because "the mock ignores the prompt" — that
+generalisation was too broad and a peer refuted it. The mock is CONTENT-SENSITIVE
+(`mock.ts:673-682`), gated on the prompt carrying the slot-values contract, and
+answers from the transcript when it is present. It could not here because a GI
+operative-note template has **no slots**, so no contract is emitted and the
+constant branch is taken. Pinned as an assertion, not left as prose.
+
+That half is closed in the SUITE by a gate that builds the real L4 prompt and
+asserts the safety clause and the doctor's own headings both survive into it.
+
+> **A walk proves plumbing; a prompt gate proves prompts — and a CONTENT-AWARE
+> mock moves exactly one piece of plumbing, the prompt→answer contract, inside
+> the walk's reach. It moves nothing else.**
 
 **THE ADVERSARIAL PASS FOUND SIX DEFECTS IN THIS DIFF AND FOUR WERE IN THE GATES
 WRITTEN AN HOUR EARLIER TO PREVENT EXACTLY THAT CLASS.** 5 lenses, 19 agents,

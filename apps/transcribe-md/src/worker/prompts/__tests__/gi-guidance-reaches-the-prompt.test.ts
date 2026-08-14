@@ -121,6 +121,26 @@ describe('GI guidance — it SURVIVES into the L4 system prompt', () => {
     expect(prompt).toContain('Do NOT invent clinical findings');
   });
 
+  it('carries NO slot-values contract — which is WHY the mocked QA walk could not read it', () => {
+    // ⚠ PRECISION, CORRECTED 2026-08-14 after a peer challenged an over-broad
+    // claim of mine. It is NOT true that "MOCK_AI ignores the prompt". The mock
+    // is CONTENT-SENSITIVE, gated at packages/ai/src/mock.ts:673-682 on
+    //     purpose === 'tm_soap_draft' && system.includes(MOCK_SLOT_VALUES_OPEN)
+    // When a prompt carries the slot contract the mock PARSES it and answers
+    // from the transcript — so a mocked walk CAN prove the prompt→answer
+    // contract for slot inventory.
+    //
+    // It could not here, and this assertion says why: a GI operative-note
+    // template has no `{{one of:` menus, so nothing is assembled, so the built
+    // prompt carries no slot contract, so the mock takes the CONSTANT branch
+    // and returns a canned note that reflects no part of this prompt.
+    //
+    // Pinning it makes the walk's limit a checked fact instead of a sentence
+    // in a report. If GI ever gains a slot-carrying template this goes RED,
+    // and that is the correct moment to re-read what the walk proves.
+    expect(prompt).not.toContain('<<<SLOT_VALUES');
+  });
+
   it('resolves through specialtyGuidance() by ID — the runtime lookup path', () => {
     // 04-generate-soap.ts:100 calls specialtyGuidance(input.specialty) with the
     // catalog ID. The coverage gates assert by templateId. Those agree only

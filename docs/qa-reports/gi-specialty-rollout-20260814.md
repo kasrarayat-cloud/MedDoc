@@ -279,10 +279,24 @@ migration, applied by this session's hand.
 
 ### ⚠️ WHAT THE WALK DID NOT PROVE, STATED PLAINLY
 
-**It did not prove the GI guidance reached the model.** `MOCK_AI` returns a
-canned tension-headache SOAP note; it ignores the transcript, the template and
-the prompt. `ai_calls` stores a `promptHash`, not the prompt. So the note body
-says nothing about GI, and neither does the mocked walk about prompt content.
+**It did not prove the GI guidance reached the model.** The note body came back
+as a canned tension-headache SOAP note, and `ai_calls` stores a `promptHash`
+rather than the prompt.
+
+⚠️ **AND THE REASON IS NARROWER THAN "THE MOCK IGNORES THE PROMPT" — I HAD THAT
+TOO BROAD AND A PEER CORRECTED IT.** The mock is **content-sensitive**, gated at
+`packages/ai/src/mock.ts:673-682` on
+`purpose === 'tm_soap_draft' && system.includes(MOCK_SLOT_VALUES_OPEN)`. When a
+prompt carries the slot-values contract the mock **parses it and answers from
+the transcript** — so a mocked walk *can* prove the prompt→answer contract for
+slot inventory, and RC-1's walk did exactly that on the imaging route.
+
+It could not here for a specific, checkable reason: **a GI operative-note
+template has no `{{one of:` menus**, so nothing is assembled, so the built prompt
+carries no slot contract, so the mock takes the CONSTANT branch. That is now
+pinned as an assertion (`expect(prompt).not.toContain('<<<SLOT_VALUES')`) rather
+than left as a sentence — if GI ever gains a slot-carrying template it goes RED,
+which is the correct moment to re-read what the walk proves.
 
 That gap is closed **in the suite instead**, by
 `gi-guidance-reaches-the-prompt.test.ts`, which builds the real L4 system prompt
