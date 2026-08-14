@@ -235,10 +235,21 @@ export function renderStructureDirective(
       'spelling.',
     ].join('\n');
   }
-  // Reconcile reflux-time column headers to SECONDS so a bare seconds value
-  // (e.g. "3.4") is not rendered under a milliseconds header (unit mismatch).
-  // No-op for every non-reflux header (e.g. "DIAMETER (mm)" is untouched).
-  const cols = structure.columns.map(normalizeRefluxTimeUnit);
+  // ⚠️ THE DOCTOR'S COLUMN HEADERS, VERBATIM. This used to run them through
+  // `normalizeRefluxTimeUnit`, rewriting `REFLUX TIME (ms)` to
+  // `REFLUX TIME (seconds)` — the doctor's own header, edited to match a
+  // convention we prefer.
+  //
+  // That is the same defect as ruling #107, one layer over: a header is
+  // doctor-AUTHORED template text, and SPEC §4.3a(a) says such text is "never
+  // paraphrased, never normalised, never 'improved'". The unit concern is real
+  // — a bare seconds value under a milliseconds header IS a mismatch — but the
+  // remedy belongs in what we ASK FOR, not in what the doctor wrote. See
+  // `CELL_DISCIPLINE` below, which now states the convention explicitly.
+  //
+  // ⚠️ THE FUNCTION IS NOT DELETED. Its application to DICTATED or MODEL values
+  // is a separate question, recorded as one and untouched tonight.
+  const cols = [...structure.columns];
   const header = `| ${cols.join(' | ')} |`;
   const separator = `| ${cols.map(() => '---').join(' | ')} |`;
   // Cell-value discipline shared by both table shapes: a numeric column cell
@@ -246,13 +257,24 @@ export function renderStructureDirective(
   // and a STATED-normal segment gets a clean "—" marker — never a prose phrase.
   const CELL_DISCIPLINE = [
     'A cell holds ONLY the BARE value: when a column header ends in a unit',
-    '(e.g. "DIAMETER (mm)", "REFLUX TIME (seconds)"), write just the number',
+    // The example names the unit the DOCTOR's header uses, not one we prefer —
+    // an instruction that silently models a rewritten header teaches the
+    // rewrite. (It also stopped a test asserting the header is verbatim from
+    // tripping on this very line: prose is where the token you are grepping for
+    // is guaranteed to appear.)
+    '(e.g. "DIAMETER (mm)", "REFLUX TIME (ms)"), write just the number',
     'the transcript dictated (e.g. "6.2") — never repeat the unit word and',
     'never write a unit the header does not name. Never put a phrase or a',
     'sentence in a cell.',
     'When the transcript EXPLICITLY reports a segment as normal/absent (e.g.',
     '"no reflux", "competent"), put "—" in that numeric cell — reserve',
     '"[not documented]" for a segment that was NOT assessed.',
+    // Stated, not applied — see the header note above. This replaces an edit to
+    // the doctor's own column header with an instruction about the value.
+    'REFLUX / REVERSE-FLOW TIME IS WRITTEN IN SECONDS AS DICTATED (e.g. "3.4"),',
+    'whatever unit the column header or the protocol prose uses to state the',
+    'threshold. Never convert a dictated value, and never restate a header or',
+    'a protocol sentence to match the cell.',
   ];
   if (structure.rowLabels && structure.rowLabels.length > 0) {
     // HOW MANY VALUE CELLS DOES A ROW HAVE?

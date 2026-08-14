@@ -411,11 +411,25 @@ export async function parseNoteToTemplate(
   //    No-op when the LLM preserved the header markers, or the note has none
   //    (SOAP / scaffold-free templates) → byte-identical. ──
   const reconciled = reconcileHeaderMarkers(noteText, gated.template.sections, headerBoundaryIdx);
+  // ⚠️ RE-CLASSIFY AFTER RECONCILIATION, AND THE ORDER IS THE BUG.
+  // `appendMarkerLine` hardcodes `scaffold_confirm` on any section it touches,
+  // and both reconciliation passes run AFTER step 2's classification — so a
+  // `technique` or `exam_metadata` that had just been classified as a fixed
+  // block was silently downgraded the moment a dropped dropdown was restored
+  // into it. On the owner's RE-UPLOAD path, that is the fix undoing itself.
+  //
+  // Re-deriving is right rather than teaching `appendMarkerLine` the rule: it
+  // legitimately CHANGES `defaultText`, and the mode is a function OF that
+  // text. Anything that edits the text re-earns its classification.
+  const classified: NoteTemplateSection[] = reconciled.map((sec) => ({
+    ...sec,
+    defaultTextMode: classifyDefaultTextMode(sec, reconciled),
+  }));
   return {
     ...gated,
     template: {
       ...gated.template,
-      sections: reconciled,
+      sections: classified,
       // Header fields ride in styleProfile alongside contextDefaults (export-only
       // config; note-gen ignores them). Labels were PHI-scanned deterministically
       // in extractHeaderFields; they carry no patient values.
