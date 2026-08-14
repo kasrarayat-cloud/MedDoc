@@ -234,11 +234,21 @@ describe('SPECIALTY_KEYTERMS bundle invariants', () => {
     // direction that REMOVES coverage: once a bundle lands, the exemption
     // keeps the specialty out of the gate forever. So a stale exemption
     // is itself a failure.
+    // ⚠ LOOK UP BY THE CATALOG ID **AND** THROUGH normalizeSpecialty.
+    // Checking only the normalised key made this arm UNABLE TO FIRE for the
+    // exact case it was written for. 'ultrasound' has no SPECIALTY_VARIANTS
+    // entry, so normalizeSpecialty('ultrasound') === 'unspecified', whose
+    // bundle is empty — meaning someone could add a real `ultrasound: [...]`
+    // bundle (the FIRST edit the exemption's own text invites) and this arm
+    // would stay green forever. Three adversarial lenses found that
+    // independently on 2026-08-14. Reading BOTH keys makes a partial fix
+    // visible, which is the case a human is actually most likely to land.
     const stale: string[] = [];
     for (const id of Object.keys(NO_BUNDLE_EXPECTED)) {
       if (id === 'unspecified') continue; // legitimately empty forever
-      const terms = SPECIALTY_KEYTERMS[normalizeSpecialty(id)] ?? [];
-      if (terms.length > 0) stale.push(id);
+      const direct = SPECIALTY_KEYTERMS[id] ?? [];
+      const viaNormalise = SPECIALTY_KEYTERMS[normalizeSpecialty(id)] ?? [];
+      if (direct.length > 0 || viaNormalise.length > 0) stale.push(id);
     }
     expect(
       stale,

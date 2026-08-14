@@ -83,4 +83,20 @@ describe('normalizeSpecialty — canonical mapping', () => {
     // and the unknown case still falls through to the sentinel
     expect(normalizeSpecialty('unknown-foo')).toBe('unspecified');
   });
+
+  it('every variant KEY is reachable — lowercase and trimmed', () => {
+    // normalizeSpecialty lowercases and trims its INPUT before the lookup
+    // (specialty-keys.ts), so a variant stored under a mixed-case or padded
+    // key can never be hit. It is dead config that reads as coverage, and
+    // the enumeration above cannot see it: normalizeSpecialty('Colon Clinic')
+    // misses the map, returns 'unspecified', and 'unspecified' IS a valid
+    // SpecialtyKey — so the row passes while the variant does nothing.
+    const unreachable = Object.keys(SPECIALTY_VARIANTS).filter(
+      (k) => k !== k.trim().toLowerCase(),
+    );
+    expect(
+      unreachable,
+      `these variant keys can never match (normalizeSpecialty lowercases+trims first): ${unreachable.join(', ')}`,
+    ).toEqual([]);
+  });
 });

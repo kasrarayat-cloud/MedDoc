@@ -156,7 +156,6 @@ export const SPECIALTY_VARIANTS: Record<string, SpecialtyKey> = {
   'digestive-health': 'gastroenterology',
   'digestive_health': 'gastroenterology',
   'digestive health': 'gastroenterology',
-  'hepatology': 'gastroenterology',
 
   // Psychiatry — antidepressant + antipsychotic confused-name density
   // (the Celexa/Celebrex/Cerebyx/Zyprexa cluster from ISMP).

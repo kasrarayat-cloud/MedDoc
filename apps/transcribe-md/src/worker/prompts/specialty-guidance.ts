@@ -349,9 +349,14 @@ export const SPECIALTY_GUIDANCE: Record<string, string> = {
     "the technique and its completeness: polypectomy method (cold " +
     "forceps, cold snare, hot snare, EMR), whether resection was complete, " +
     "whether the specimen was retrieved, and hemostasis measures with " +
-    "counts (clips placed, APC, injection). State complications " +
-    "explicitly INCLUDING their absence. List specimens sent to pathology " +
-    "and how they were labelled.\n" +
+    "counts (clips placed, APC, injection). WHEN THE DICTATION ADDRESSES " +
+    "complications, record them — including an explicit statement that " +
+    "there were none, which is a documented clinical finding. IF THE " +
+    "DICTATION IS SILENT ON COMPLICATIONS, SAY NOTHING: do not write " +
+    "\"no complications\" on the model's own authority. An unsaid " +
+    "absence is not a negative finding, and an operative note that " +
+    "asserts one nobody dictated is a fabricated clinical claim. List " +
+    "specimens sent to pathology and how they were labelled.\n" +
     "\n" +
     "⚠ SAFETY, BOTH SHAPES — NEVER INVENT ANY OF THE FOLLOWING. Do not " +
     "state an endoscopic finding, a pathology result, or a surveillance " +
