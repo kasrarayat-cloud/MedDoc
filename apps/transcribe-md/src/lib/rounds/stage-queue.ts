@@ -86,10 +86,6 @@ export async function fetchStageQueueIds(practiceId: PracticeId): Promise<string
       createdAt: true,
       signedAt: true,
       audioDurationSec: true,
-      // Required, not incidental: `sortLanes` puts critical lanes first, and
-      // `criticalCount` is derived from this column. Omitting it would order
-      // the queue differently from the board while looking correct.
-      rxDrafts: true,
       patient: { select: { name: true } },
     },
   });
@@ -106,7 +102,6 @@ export async function fetchStageQueueIds(practiceId: PracticeId): Promise<string
     createdAt: Date;
     signedAt: Date | null;
     audioDurationSec: number | null;
-    rxDrafts: unknown;
     patient: { name: string } | null;
   };
 
@@ -120,7 +115,6 @@ export async function fetchStageQueueIds(practiceId: PracticeId): Promise<string
       createdAt: v.createdAt.toISOString(),
       signedAt: v.signedAt?.toISOString() ?? null,
       audioDurationSec: v.audioDurationSec,
-      rxDrafts: v.rxDrafts,
     }))
   );
 }

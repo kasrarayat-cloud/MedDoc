@@ -241,7 +241,8 @@ test('R3.0 — the legacy-island census', async ({ page }, testInfo) => {
   // also named the prescription-safety rail as unreachable, on the reasoning
   // that it needs `MOCK_RX_WARNINGS`. It does not — `seedReviewDocVisit` writes
   // `rxDrafts`, so the rail renders on the ordinary fixture and the DOM arm
-  // enumerated 30+ `qm-lin-rx-*` classes from it. A boundary statement that
+  // enumerated 30+ `qm-lin-rx-*` classes from it (that surface was deleted by
+  // owner ruling #109; the census boundary argument is unaffected). A boundary statement that
   // over-claims what a check cannot see is the same defect as one that
   // over-claims what it can.
   //

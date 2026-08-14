@@ -198,8 +198,11 @@ test.describe('Rounds — axe across every surface, flag-ON', () => {
       // ⚠️ A FRESH VISIT PER WIDTH. Clearing Gate 1 writes a REAL
       // RxWarningOverride row, so reusing one fixture across both widths meant
       // the second pass found "Overridden" where it expected "Override" and
-      // timed out. The walk mutates its own fixture — every repetition of it
-      // needs its own.
+      // timed out. The walk USED to mutate its own fixture by clearing the Rx
+      // gate; ruling #109 removed that, so the per-width fixture is no longer
+      // strictly required — it is KEPT because a shared fixture across widths
+      // would re-introduce exactly that coupling the moment any step here
+      // mutates again.
       const gateVisit = requireSeed(
         seedReviewDocVisit(email, { idSalt: `g${width}` }),
         `gate-walk@${width}`,
@@ -208,25 +211,14 @@ test.describe('Rounds — axe across every surface, flag-ON', () => {
       await page.goto(`/visits/${gateVisit!.visitId}`);
       await page.getByTestId('rounds-review-sign').click();
       await expect(page.getByTestId('rounds-gate-flow')).toBeVisible();
-      record('gates:rx-blocked', width, await runAxe(page));
-      await shoot(page, 'gates:rx-blocked', width);
-
-      const host = page.getByTestId('rounds-gate-host-rx');
-      await host.getByRole('button', { name: /override/i }).first().click();
-      const dialog = page
-        .locator('[role="dialog"]')
-        .filter({ has: page.locator('#override-reason') });
-      record('gates:override-modal', width, await runAxe(page));
-      await shoot(page, 'gates:override-modal', width);
-      await dialog
-        .locator('#override-reason')
-        .fill('Benefit outweighs risk; monitoring renal function weekly and patient counselled.');
-      await dialog.getByRole('button', { name: /confirm override/i }).click();
-      await expect(host).toContainText(/overridden/i);
-      record('gates:rx-cleared', width, await runAxe(page));
-      await shoot(page, 'gates:rx-cleared', width);
-
-      await page.getByTestId('rounds-gate-next').click();
+      // ⚠️ THREE AXE SURFACES WENT WITH THE Rx GATE — owner ruling #109:
+      // `gates:rx-blocked`, `gates:override-modal` and `gates:rx-cleared`. The
+      // override modal was the flow's only authored form CONTROL other than the
+      // attestation checkbox, so this is a genuine REDUCTION in a11y coverage,
+      // recorded here rather than left to be inferred from a shrinking surface
+      // list. It is not a gap to fill: the surfaces do not exist.
+      //
+      // The flow now opens ON the E/M step, so that is what gets measured.
       await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute('data-step', 'em');
       record('gates:em', width, await runAxe(page));
       await shoot(page, 'gates:em', width);
@@ -252,19 +244,14 @@ test.describe('Rounds — axe across every surface, flag-ON', () => {
       await page.goto(`/visits/${attestVisit!.visitId}`);
       await page.getByTestId('rounds-review-sign').click();
       await expect(page.getByTestId('rounds-gate-flow')).toBeVisible();
-      const attestHost = page.getByTestId('rounds-gate-host-rx');
-      await attestHost.getByRole('button', { name: /override/i }).first().click();
-      const attestDialog = page
-        .locator('[role="dialog"]')
-        .filter({ has: page.locator('#override-reason') });
-      await attestDialog
-        .locator('#override-reason')
-        .fill('Benefit outweighs risk; monitoring renal function weekly and patient counselled.');
-      await attestDialog.getByRole('button', { name: /confirm override/i }).click();
-      await expect(attestHost).toContainText(/overridden/i);
-      await page.getByTestId('rounds-gate-next').click();
-      await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute('data-step', 'em');
-      await page.getByTestId('rounds-gate-next').click();
+      // ⚠️ NO `next` AT ALL, and the first correction of this was still wrong.
+      // With `emPending:false` and the Rx gate gone (#109) NOTHING is
+      // outstanding, and `firstOpenStep`'s documented behaviour in that case is
+      // to open on the LAST gate — so the flow is already ON the attestation
+      // and there is no `rounds-gate-next` to click. My first pass removed one
+      // `next` of two; the second one then timed out against a button the last
+      // step does not render, reporting a broken flow instead of a walk that
+      // had already arrived.
       await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute(
         'data-step',
         'attestation',

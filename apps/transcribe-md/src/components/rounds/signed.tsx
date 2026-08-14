@@ -11,12 +11,14 @@
 // gates must have been cleared" — that reasoning would put a green tick on a
 // step nothing recorded. Every card here is backed by a column:
 //
-//   • "Critical interaction overridden"  ← real RxWarningOverride rows, each
-//     with a server-validated reason, a signer and a timestamp, each correlated
-//     against the visit's persisted warnings before it could be written, and
-//     each compared against `signedAt` so "before signing" means it.
 //   • "Documentation level confirmed"    ← `emPendingChange.acknowledgedAt`,
 //     stamped by the winning READY→SIGNED transition.
+//
+// (A "Critical interaction overridden" card stood first in this list until
+// owner ruling #109 deleted the surface that produced the rows. The rule it
+// illustrated is unchanged and is why the card left cleanly: it was backed by
+// a column, so when the column stopped being written the card stopped being
+// drawn — rather than degrading into an inference.)
 //
 // AND THERE IS NO "ATTESTED" CARD. Attestation is never persisted: the sign body
 // schema has no such field, there is no column and no audit action, and
@@ -97,16 +99,15 @@ export function RoundsSigned({
   children,
   onContinue,
 }: RoundsSignedProps) {
+  // ⚠️ THE CRITICAL-INTERACTION CARD WAS REMOVED HERE — owner ruling #109,
+  // with the surface it reported on. It rendered only when
+  // `criticalOverridesBeforeSign > 0`, and production has **0 override rows
+  // across all 25 signed visits**, so it has never once drawn. That measurement
+  // is the reason it went rather than being kept "for the historical record":
+  // there is no historical record for it to preserve. If overrides ever come
+  // back, this card comes back with them — the trail's rule is unchanged, that
+  // a card is drawn only when a persisted fact can prove it.
   const cards: { id: string; label: string }[] = [];
-  if (trail.criticalOverridesBeforeSign > 0) {
-    cards.push({
-      id: 'rx',
-      label:
-        trail.criticalOverridesBeforeSign === 1
-          ? '1 critical interaction overridden, with a recorded reason'
-          : `${trail.criticalOverridesBeforeSign} critical interactions overridden, each with a recorded reason`,
-    });
-  }
   if (trail.emAcknowledgedAt) {
     cards.push({ id: 'em', label: 'Documentation level change confirmed' });
   }

@@ -224,7 +224,11 @@ describe('the inline panels are gone from the review page', () => {
   });
 
   it('the gate stack and Sign survive — they were never part of the panels', () => {
-    expect(src).toContain('review-doc-rx-gate');
+    // ⚠️ `review-doc-rx-gate` LEFT THIS LIST under owner ruling #109, and its
+    // ABSENCE is asserted in the scroll-target test below rather than simply
+    // dropped here. The distinction matters: this test guards against a gate
+    // being lost to a REFACTOR, and a deliberate deletion must not be able to
+    // hide inside that guard going quiet.
     expect(src).toContain('review-doc-em-stale-gate');
     expect(src).toContain('review-doc-em-gate');
     expect(src).toContain('review-doc-em-rescore');
@@ -499,24 +503,32 @@ describe('speaker reassignment is gone — no route with zero callers', () => {
 });
 
 describe('no dangling chat intents', () => {
-  it('scroll_to lost `codes` with the panel it pointed at', () => {
+  it('scroll_to lost `codes` with the panel it pointed at, and `rx_gate` with its surface', () => {
     const src = read(INTENT);
     const decl = src.slice(src.indexOf('ScrollIntentSchema'), src.indexOf('RefuseIntentSchema'));
-    expect(decl).toContain("'rx_gate'");
     expect(decl).toContain("'em_gate'");
     expect(decl).toContain("'document'");
     expect(decl).not.toContain("'codes'");
+    // ⚠️ THIRD APPLICATION OF THE SAME RULE — owner ruling #109. A `scroll_to`
+    // whose anchor is absent does not fail loudly: querySelector returns null,
+    // scrollIntoView is never reached, and the chat reports a navigation over a
+    // page that never moved. So the target leaves the union with the surface.
+    expect(decl).not.toContain("'rx_gate'");
   });
 
   it('every scroll target still resolves to a real anchor', () => {
-    // The union is only honest if each member has something to scroll to. Two
-    // resolve by testid in the handler; the third by data-chat-target.
+    // The union is only honest if each member has something to scroll to. One
+    // resolves by testid in the handler; the other by data-chat-target.
     const ready = read(READY_VIEW);
     const review = read(REVIEW_DOC);
-    expect(ready).toContain('review-doc-rx-gate');
     expect(ready).toContain('visit-document');
     expect(review).toContain('data-chat-target="em_gate"');
     expect(review).not.toContain('data-chat-target="codes"');
+    // The anchor went with the target that pointed at it — BOTH halves, so a
+    // half-applied removal (union narrowed, anchor left; or anchor removed,
+    // union left) fails here rather than at runtime.
+    expect(ready).not.toContain('review-doc-rx-gate');
+    expect(review).not.toContain('review-doc-rx-gate');
   });
 
   it('the PROMPT stops advertising targets and tools that no longer exist', () => {
@@ -528,6 +540,14 @@ describe('no dangling chat intents', () => {
     expect(src).not.toContain('listed_suggestions');
     expect(src).not.toContain('suggestions the outstanding');
     expect(src).not.toContain('target `codes`');
+    // ⚠️ `rx_gate` WAS MISSING FROM THIS LIST, and a mutation proved the gap:
+    // re-adding the prompt's `rx_gate  the prescription-safety card` line while
+    // leaving `ScrollIntentSchema` narrowed — the natural half-applied removal —
+    // left 1491 tests green. The consequence is not cosmetic: per `intent.ts`,
+    // an out-of-union target makes `safeParse` reject the ENTIRE reply, so the
+    // model would be told about an anchor whose use silently kills a clinical
+    // chat turn. The schema half was already guarded; this is the other half.
+    expect(src).not.toContain('rx_gate');
   });
 
   it('"show billing" is a CANNOT, not a refusal', () => {

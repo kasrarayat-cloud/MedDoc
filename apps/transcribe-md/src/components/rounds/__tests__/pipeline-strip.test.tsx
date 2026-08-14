@@ -27,10 +27,6 @@ const stateOf = (n: number) =>
  *  cannot be produced by the production path proves nothing about it. */
 const gatesFor = (over: Parameters<typeof signGates>[0]) => signGates(over);
 
-const RX_ONE_CRITICAL = {
-  warnings: [{ severity: 'critical', rx_drug: 'warfarin', message: 'interaction' }],
-};
-
 describe('node positioning', () => {
   it('READY marks stages 1-4 done and stage 5 CURRENT — not done', () => {
     // completedStageCount('READY') is 5, which would tick every node including
@@ -122,10 +118,8 @@ describe('the padlocked Signed node', () => {
 
   it('names WHICH gates are outstanding in the accessible name', () => {
     const set = gatesFor({
-      rxDrafts: RX_ONE_CRITICAL,
-      overriddenWarningIds: [],
       specialty: 'primary-care',
-      emPendingChange: null,
+      emPendingChange: { from: '99213', to: '99214', cause: 'note_edited', at: '2026-07-30T00:00:00Z' },
     });
     render(
       <RoundsPipelineStrip status="READY" gates={set.gates} n={set.n} />
@@ -133,14 +127,12 @@ describe('the padlocked Signed node', () => {
     const name = screen
       .getByTestId('rounds-strip-signed')
       .getAttribute('aria-label')!;
-    expect(name).toContain('critical interaction');
+    expect(name).toContain('documentation level');
     expect(name).toContain('attestation');
   });
 
   it('a satisfied gate is not named as a blocker', () => {
     const set = gatesFor({
-      rxDrafts: RX_ONE_CRITICAL,
-      overriddenWarningIds: ['rx-warning-0'],
       specialty: 'primary-care',
       emPendingChange: null,
       attested: true,
@@ -149,7 +141,7 @@ describe('the padlocked Signed node', () => {
     const name = screen
       .getByTestId('rounds-strip-signed')
       .getAttribute('aria-label')!;
-    expect(name).not.toContain('critical interaction');
+    expect(name).not.toContain('documentation level');
     expect(name).not.toContain('attestation');
     expect(set.n).toBe(0);
   });
@@ -167,8 +159,6 @@ describe('imaging never grows an E/M term', () => {
 
   it('the strip says nothing about a documentation level', () => {
     const set = gatesFor({
-      rxDrafts: null,
-      overriddenWarningIds: [],
       specialty: 'ultrasound',
       emPendingChange: null,
     });
@@ -185,8 +175,6 @@ describe('imaging never grows an E/M term', () => {
     // Without this, the test above passes against a strip that never names any
     // gate at all.
     const set = gatesFor({
-      rxDrafts: null,
-      overriddenWarningIds: [],
       specialty: 'primary-care',
       emPendingChange: {
         from: '99213',
@@ -203,8 +191,6 @@ describe('imaging never grows an E/M term', () => {
 
   it('an imaging visit holding office E/M state is NAMED, not silently zeroed', () => {
     const set = gatesFor({
-      rxDrafts: null,
-      overriddenWarningIds: [],
       specialty: 'ultrasound',
       emPendingChange: {
         from: '99213',

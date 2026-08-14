@@ -11,6 +11,8 @@
 //     anything in there is invented.
 // ============================================================================
 
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 
@@ -30,8 +32,6 @@ const identity = toStageIdentity({
 const QUEUE = ['v1', 'v2', 'v3'];
 
 const clean = signGates({
-  rxDrafts: null,
-  overriddenWarningIds: [],
   specialty: 'primary-care',
   emPendingChange: null,
 });
@@ -158,34 +158,47 @@ describe('the vitals slot is reserved and EMPTY', () => {
   });
 });
 
-describe('the critical band', () => {
-  it('appears only when a critical interaction is unresolved, and says where it clears', () => {
-    renderStage({ criticalUnresolved: 2 });
-    const band = screen.getByTestId('rounds-critical-band');
-    expect(band.textContent).toContain('2 critical interactions');
-    expect(band.textContent).toContain('Gate 1');
-  });
-
-  it('singularises', () => {
-    renderStage({ criticalUnresolved: 1 });
-    expect(screen.getByTestId('rounds-critical-band').textContent).toContain(
-      '1 critical interaction —'
-    );
-  });
-
-  it('NEGATIVE CONTROL — absent when nothing is unresolved', () => {
-    renderStage({ criticalUnresolved: 0 });
+describe('THE CRITICAL BAND IS GONE — owner ruling #109', () => {
+  // Replaces three tests that asserted the band appeared, singularised, and
+  // stayed away at zero. The band pointed at "Gate 1", which no longer exists,
+  // so the POSITIVE control is now that nothing draws it under any input.
+  it('never draws, and no stage text names an interaction', () => {
+    renderStage({});
     expect(screen.queryByTestId('rounds-critical-band')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/critical interaction/i);
+    // …and it does not merely fail to mention Gate 1 — there is no Gate 1.
+    expect(document.body.textContent).not.toMatch(/Gate 1/);
+  });
+
+  it('the COMPONENT cannot draw it — not merely this caller', () => {
+    // ⚠️ THE RENDER ASSERTION ABOVE IS NOT ENOUGH, AND A MUTATION PROVED IT.
+    // `criticalUnresolved` was an OPTIONAL prop defaulting to 0, so
+    // `renderStage({})` drew no band on `origin/main` either. Reinstating the
+    // whole band block in `stage.tsx` — the exact half-applied removal where
+    // the component keeps the code and only the caller stops passing the prop
+    // — left this file 32/32 green, 1491 tests green, and tsc at 0 errors.
+    //
+    // A doctor would then see "1 critical interaction — you'll clear it at
+    // Gate 1" pointing at a gate that no longer exists. So the deletion is
+    // asserted at the SOURCE, where it cannot hide behind a default.
+    const src = readFileSync('src/components/rounds/stage.tsx', 'utf8');
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+
+    // NON-VACUITY: the stripper must leave the component behind. A regex that
+    // ate the file would satisfy every absence below by finding nothing.
+    expect(code).toContain('qm-rounds-sheet');
+
+    expect(code).not.toContain('criticalUnresolved');
+    expect(code).not.toContain('qm-rounds-critical-band');
+    expect(code).not.toContain('rounds-critical-band');
   });
 });
 
 describe('the action rail', () => {
   it('the primary carries the same count as the padlock', () => {
     const blocked = signGates({
-      rxDrafts: { warnings: [{ severity: 'critical', rx_drug: 'w', message: 'm' }] },
-      overriddenWarningIds: [],
       specialty: 'primary-care',
-      emPendingChange: null,
+      emPendingChange: { from: '99213', to: '99214', cause: 'note_edited', at: '2026-07-30T00:00:00Z' },
     });
     renderStage({ gates: blocked.gates, n: blocked.n });
     const btn = screen.getByTestId('rounds-review-sign');

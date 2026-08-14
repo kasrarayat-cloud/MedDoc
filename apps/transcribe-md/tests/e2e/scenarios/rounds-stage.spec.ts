@@ -27,6 +27,8 @@ import { cleanupTestUsers } from '../helpers/cleanup';
 import {
   seedReviewDocVisit,
   findImagingEmArtifacts,
+  seededRxDraftCount,
+  seededRxDraftJson,
   type ReviewDocClass,
 } from '../helpers/seedReviewDocVisit';
 import { signupFreshUser } from '../helpers/signup';
@@ -158,43 +160,44 @@ test.describe('Rounds Screen 2 — the stage', () => {
       n!,
     );
 
-    // The primary-care fixture: 1 unmet critical Rx + 1 unacknowledged E/M
-    // change + attestation. Attestation is ALWAYS counted and is never
-    // server-enforced — a clean visit still reads 1. Do not "fix" this number
-    // by dropping attestation; it is a real term in the contract with the
-    // doctor and sign-gates.ts marks it `serverEnforced: false` for exactly
-    // this reconciliation.
-    expect(n).toBe('3');
+    // The primary-care fixture: 1 unacknowledged E/M change + attestation.
+    // (It also carries an unmet critical Rx warning, which contributed a third
+    // term until owner ruling #109 deleted that gate — the WARNING is still
+    // extracted and persisted, it simply no longer gates.) Attestation is
+    // ALWAYS counted and is never server-enforced — a clean visit still reads
+    // 1. Do not "fix" this number by dropping attestation; it is a real term in
+    // the contract with the doctor and sign-gates.ts marks it
+    // `serverEnforced: false` for exactly this reconciliation.
+    expect(n).toBe('2');
   });
 
   // ── 4. The number is live, not a frozen server render ────────────────────
-  test('clearing the Rx gate moves BOTH counts', async ({ page }) => {
+  test('confirming the E/M level moves BOTH counts', async ({ page }) => {
+    // ⚠️ RETARGETED FROM THE Rx GATE (owner ruling #109). What this test is for
+    // is unchanged and still has a subject: N must be LIVE — both readers move
+    // together on an in-session clear, rather than staying at whatever the
+    // server rendered. E/M is now the only in-session signal there is.
+    //
+    // The critical BAND went with the surface it pointed at, so its absence is
+    // asserted rather than its disappearance-on-clear.
     const seeded = await open(page, 'stage-4');
     test.skip(!seeded, 'psql seeding unavailable');
 
-    await expect(page.getByTestId('rounds-critical-band')).toBeVisible();
+    await expect(page.getByTestId('rounds-critical-band')).toHaveCount(0);
 
-    const gate = page.getByTestId('review-doc-rx-gate');
-    await gate.getByRole('button', { name: /override/i }).first().click();
-    const dialog = page.getByRole('dialog');
-    await dialog
-      .locator('textarea')
-      .fill('Benefit outweighs risk; monitoring renal function weekly and patient counselled.');
-    await dialog.getByRole('button', { name: /confirm override/i }).click();
-    await expect(gate).toContainText(/overridden/i);
+    await page.getByTestId('review-doc-em-confirm').click();
+    await expect(page.getByTestId('review-doc-em-confirm')).toContainText(/confirmed/i);
 
-    // Both readers move together, and the band goes with them — the band and
-    // the padlock disagreeing is the specific contradiction the single
-    // derivation exists to prevent.
+    // Both readers move together — the two disagreeing is the specific
+    // contradiction the single derivation exists to prevent.
     await expect(page.getByTestId('rounds-strip-signed')).toHaveAttribute(
       'data-blockers',
-      '2',
+      '1',
     );
     await expect(page.getByTestId('rounds-review-sign')).toHaveAttribute(
       'data-blockers',
-      '2',
+      '1',
     );
-    await expect(page.getByTestId('rounds-critical-band')).toHaveCount(0);
   });
 
   // ── 5. The invariant: imaging has no E/M gate, anywhere ──────────────────
@@ -470,64 +473,58 @@ test.describe('Rounds Screen 2 — the stage', () => {
     expect((await gateScrolls())[0].drawerOpen).toBe(false);
   });
 
-  // ── R4.1 — THE Rx SURFACE IS ROUNDS-TREATED ON EVERY PATH ────────────────
-  test('R4.1 — the Rx surface renders hosted, on the owner\'s own fixture', async ({
+  // ── R5 — THE Rx SURFACE IS GONE ON EVERY PATH, INCLUDING THE HARD ONE ────
+  test('R5 — no Rx surface on the owner\'s own fixture (owner ruling #109)', async ({
     page,
   }) => {
-    // ⚠️ THE GUARD FOR A CLASS THE CENSUS CANNOT SEE. R3.4 hosted ONE of three
-    // `RxTab` mounts and verified it on the stage — correctly, and
-    // incompletely. The owner then found the cream panel on a path that walk
-    // never rendered: an ULTRASOUND visit whose plan orders anticoagulation.
-    //
-    // Two things had to be true for that to hide:
+    // ⚠️ THIS FIXTURE IS THE POINT, AND IT IS INHERITED RATHER THAN INVENTED.
+    // R4.1 built it to catch a cream Rx panel the owner found by hand and every
+    // automated environment missed: an ULTRASOUND visit whose plan orders
+    // anticoagulation. Two things had made that unreachable —
     //   · the imaging fixture wrote `rxDrafts: null`, so no seeded imaging
     //     visit could show an Rx surface at all;
     //   · QA runs MOCK_AI, whose pipeline writes no rxDrafts either — measured:
     //     every visit in the QA database had `rxDrafts IS NULL`.
-    // So the panel was unrenderable in every automated environment, and a route
-    // walk reported it clean because it was never on screen. This test RENDERS
-    // the state rather than walking to it.
+    // `imagingWithRx` exists solely to force the state into being.
+    //
+    // R4.1 asserted the panel was HOSTED. Ruling #109 deleted it, so the same
+    // fixture now asserts it is ABSENT — on the one path where a leftover
+    // mount would be hardest to see, which is exactly why this test is
+    // retargeted rather than deleted.
     const seeded = await open(page, 'stage-r41', {
       specialtyClass: 'imaging',
       imagingWithRx: true,
     });
     test.skip(!seeded, 'psql seeding unavailable');
+    // `test.skip` throws, so anything past it has a seed — tsc cannot see that.
+    const visitId = seeded!.visitId;
 
-    // NON-VACUITY FIRST: an Rx surface must actually be on screen, or every
-    // assertion below is about an element that is not there.
-    const anyRx = page.locator('[class*="qm-lin-rx-"]').first();
-    await expect(
-      anyRx,
-      'no Rx surface rendered — the fixture no longer produces one, and this ' +
-        'test would pass by measuring nothing',
-    ).toBeVisible();
+    // POSITIVE CONTROL FIRST — the page rendered and this visit really does
+    // carry Rx data. Without it, every absence below would hold on a blank
+    // page or on a fixture that quietly stopped producing prescriptions.
+    await expect(page.getByTestId('rounds-sheet')).toBeVisible();
+    const rxRows = seededRxDraftCount(visitId);
+    expect(
+      rxRows,
+      'the fixture stopped writing rxDrafts — the absences below would be ' +
+        'vacuous, and this is the one path where that matters most',
+    ).toBeGreaterThan(0);
 
-    // THE ASSERTION: hosted, on this path, without a per-caller wrapper.
-    const hosted = await page.evaluate(() => {
-      const el = document.querySelector('[class*="qm-lin-rx-"]') as HTMLElement | null;
-      return el ? !!el.closest('.qm-rounds-host') : null;
-    });
-    expect(
-      hosted,
-      'the Rx surface is not inside a qm-rounds-host — a legacy cream panel is ' +
-        'rendering on a Rounds route, which is the R4 defect',
-    ).toBe(true);
+    // THE ASSERTION: nothing of the surface renders, on this path.
+    await expect(page.locator('[class*="qm-lin-rx-"]')).toHaveCount(0);
+    await expect(page.locator('[class*="qm-warn"]')).toHaveCount(0);
+    await expect(page.getByTestId('review-doc-rx-gate')).toHaveCount(0);
+    await expect(page.getByText('Prescription safety')).toHaveCount(0);
 
-    // ⚠️ AND THE CLINICAL BEHAVIOUR IS UNCHANGED, which is the half a reskin
-    // must never quietly cost. Both advisory classes on this fixture are
-    // CORRECT and must survive un-softened: the plan orders anticoagulation
-    // without naming an agent, so the prescription is `unclear` and the
-    // advisory says so. A reskin that "cleaned up" either would be a clinical
-    // regression wearing new paint.
-    const body = await page.locator('body').innerText();
+    // ⚠️ AND THE EXTRACTED CONTENT IS STILL IN THE ROW. Ruling #109 deleted the
+    // SURFACE and explicitly left the data; the advisory this fixture was built
+    // around — the plan orders anticoagulation without naming an agent, so the
+    // prescription is `unclear` — must still be produced. It is simply no
+    // longer displayed here.
     expect(
-      /unclear/i.test(body),
-      'the unclear action disappeared — the agent is genuinely unspecified and ' +
-        'the surface must keep saying so',
-    ).toBe(true);
-    expect(
-      /agent not specified/i.test(body),
-      'the advisory text was softened or dropped',
+      /unclear/i.test(seededRxDraftJson(visitId)),
+      'the unclear action disappeared from rxDrafts — the agent is genuinely ' +
+        'unspecified and EXTRACTION was not in scope of ruling #109',
     ).toBe(true);
   });
 

@@ -6,9 +6,10 @@
 //
 //  1. GATED ON THE WRONG THING. `NODE_ENV === 'production'` is the obvious
 //     gate and it is wrong for anything a test must reach, because the QA
-//     stack RUNS a production build. Measured: `/dev/rx-warnings` returns 404
+//     stack RUNS a production build. Measured: `/dev/rx-warnings` returned 404
 //     on QA against a `/login` control at 200. A NODE_ENV-gated preview route
-//     is a door onto nothing.
+//     is a door onto nothing. ⚠️ That route was deleted by owner ruling #109 —
+//     the measurement stands as the reason for this gate, but is historical.
 //
 //  2. REACHABLE IN PRODUCTION. The inverse failure, and the worse one: a route
 //     that renders synthetic failure states on a production host is

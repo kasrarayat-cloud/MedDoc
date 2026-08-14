@@ -36,7 +36,6 @@ function hrefWith(
 export function RoundsBoardChrome({
   clinicianName,
   progress,
-  criticalTally,
   filter,
   query,
   page,
@@ -48,7 +47,6 @@ export function RoundsBoardChrome({
 }: {
   clinicianName: string;
   progress: { signed: number; toReview: number; live: number; total: number };
-  criticalTally: number;
   filter: BoardFilter;
   query: string;
   page: number;
@@ -93,30 +91,11 @@ export function RoundsBoardChrome({
           current item, which is a bug the moment the component renders
           anywhere else — the shared one derives it from the path. */}
       <RoundsTopBar userName={clinicianName}>
-        {/* Critical tally. Rendered ONLY when there is something to tally — a
-            permanent "0 critical" badge trains the eye to ignore the place
-            criticals appear. */}
-        {criticalTally > 0 ? (
-          <Link
-            href={hrefWith(params, { filter: 'critical', page: undefined })}
-            data-testid="rounds-critical-tally"
-            style={{
-              fontFamily: 'var(--rounds-font-mono)',
-              fontSize: 11.5,
-              // C2: the LABEL takes the on-dark variant, the BORDER keeps the
-              // true red. Same token, two roles — which is the whole reason
-              // this palette carries `-text` siblings.
-              color: 'var(--rounds-critical-on-dark)',
-              border: '1px solid var(--rounds-critical)',
-              borderRadius: 999,
-              padding: '3px 10px',
-              textDecoration: 'none',
-            }}
-          >
-            {criticalTally} critical
-          </Link>
-        ) : null}
-
+        {/* ⚠️ THE CRITICAL TALLY WAS REMOVED HERE — owner ruling #109, with the
+            prescription-safety surface. It linked to `?filter=critical`, which
+            no longer exists either; `resolveFilter` falls an unknown value back
+            to `active`, so an old bookmark lands on the default board rather
+            than an error. */}
         <RoundsDayMeter progress={progress} pct={pct} />
 
         {/* 2026-08-04 — the clinician's name used to be an inline-styled span

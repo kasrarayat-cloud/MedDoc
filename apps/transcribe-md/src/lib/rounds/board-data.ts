@@ -10,7 +10,6 @@
 // What is real, and where it comes from:
 //   patientName, status, specialty, createdAt, signedAt, audioDurationSec
 //                                            → transcribe_visits columns
-//   criticalCount, topInteraction            → rxDrafts.warnings[] (Json)
 //   stage / failure stage                    → lib/rounds/stages.ts
 //
 // What is NOT available, and is parked rather than faked:
@@ -22,16 +21,6 @@
 
 import { stageOf, failureStageOf, type RoundsStage } from './stages';
 
-/** Worker severity band. Only 'critical' gates signing — see lib/rx-warnings. */
-type WorkerSeverity = 'critical' | 'moderate' | 'info' | string;
-
-interface RxWarningShape {
-  severity?: WorkerSeverity;
-  message?: string;
-  drugA?: string;
-  drugB?: string;
-}
-
 export interface BoardLaneInput {
   id: string;
   patientName: string | null;
@@ -41,8 +30,6 @@ export interface BoardLaneInput {
   createdAt: string;
   signedAt: string | null;
   audioDurationSec: number | null;
-  /** The raw `rxDrafts` Json column, whatever shape it is in. */
-  rxDrafts?: unknown;
   /** Last status before FAILED, when the caller can supply it. */
   lastKnownStatus?: string | null;
 }
@@ -68,43 +55,16 @@ export interface BoardLane {
   runTo: number;
   /** For a failed lane: where the red stub stops. */
   failedAt: RoundsStage | null;
-  /** Critical Rx warnings outstanding on this visit. Drives the red border,
-   *  the ⚠, and the tinted lane row. */
-  criticalCount: number;
-  /** ONE line, the top interaction, for the critical card. Null when there is
-   *  no critical warning or the payload carries no readable message — a blank
-   *  is honest, an invented summary is not. */
-  topInteraction: string | null;
+  // ⚠️ `criticalCount` and `topInteraction` were REMOVED here with the
+  // prescription-safety surface (owner ruling #109). They drove the board's red
+  // border, its row tint, the `critical` filter arm, the critical-first sort and
+  // the header tally — every one of which pointed the doctor at a gate that no
+  // longer exists.
   createdAt: string;
   signedAt: string | null;
   audioDurationSec: number | null;
 }
 
-/** Pull critical warnings out of the rxDrafts Json, tolerantly. It is model
- *  output persisted as Json, so a malformed payload must yield "no criticals"
- *  rather than throw and take the whole board down. */
-export function criticalWarningsOf(rxDrafts: unknown): RxWarningShape[] {
-  if (!rxDrafts || typeof rxDrafts !== 'object') return [];
-  const w = (rxDrafts as { warnings?: unknown }).warnings;
-  if (!Array.isArray(w)) return [];
-  return w.filter(
-    (x): x is RxWarningShape =>
-      !!x && typeof x === 'object' && (x as RxWarningShape).severity === 'critical',
-  );
-}
-
-/** The one-line interaction shown on a critical card. Prefers the drug pair,
- *  because that is what a clinician recognises fastest; falls back to the
- *  message; returns null rather than composing something from nothing. */
-export function topInteractionLine(warnings: RxWarningShape[]): string | null {
-  const first = warnings[0];
-  if (!first) return null;
-  const a = first.drugA?.trim();
-  const b = first.drugB?.trim();
-  if (a && b) return `${a} + ${b}`;
-  const m = first.message?.trim();
-  return m || null;
-}
 
 function kindOf(status: string, signedAt: string | null): LaneKind {
   if (status === 'SIGNED' || signedAt) return 'signed';
@@ -118,7 +78,6 @@ function kindOf(status: string, signedAt: string | null): LaneKind {
 }
 
 export function toBoardLane(v: BoardLaneInput): BoardLane {
-  const criticals = criticalWarningsOf(v.rxDrafts);
   const kind = kindOf(v.status, v.signedAt);
   const stage = stageOf(v.status);
 
@@ -139,8 +98,6 @@ export function toBoardLane(v: BoardLaneInput): BoardLane {
           ? failureStageOf(v.lastKnownStatus).n
           : (stage?.n ?? 0),
     failedAt: kind === 'failed' ? failureStageOf(v.lastKnownStatus) : null,
-    criticalCount: criticals.length,
-    topInteraction: topInteractionLine(criticals),
     createdAt: v.createdAt,
     signedAt: v.signedAt,
     audioDurationSec: v.audioDurationSec,
@@ -158,7 +115,6 @@ export type BoardFilter =
   | 'signed'
   | 'soap'
   | 'ultrasound'
-  | 'critical'
   | 'failed';
 
 /** Filter predicate. Kept pure and exported so the unit tests exercise the same
@@ -177,8 +133,6 @@ export function laneMatchesFilter(
       return lane.kind === 'signed';
     case 'failed':
       return lane.kind === 'failed';
-    case 'critical':
-      return lane.criticalCount > 0;
     case 'ultrasound':
       return isImaging(lane.specialty);
     case 'soap':
@@ -190,19 +144,17 @@ export function laneMatchesFilter(
 }
 
 /**
- * Board order. Critical first, then the rest by recency.
+ * Board order: most recent first.
  *
- * Critical-first is not decoration: it is the one ordering rule a clinician
- * would ask for, and burying a red lane under twelve routine ones on a busy day
- * is how an interaction gets missed.
+ * ⚠️ CRITICAL-FIRST WAS REMOVED HERE with the prescription-safety surface
+ * (owner ruling #109). The note that stood here argued the ordering was "not
+ * decoration" — that burying a red lane under twelve routine ones is how an
+ * interaction gets missed — and that argument was sound about a board whose red
+ * lanes led somewhere. They no longer do, so ordering by them would sort the
+ * board on a signal the doctor can no longer act on.
  */
 export function sortLanes(lanes: BoardLane[]): BoardLane[] {
-  return [...lanes].sort((a, b) => {
-    if (a.criticalCount > 0 !== b.criticalCount > 0) {
-      return a.criticalCount > 0 ? -1 : 1;
-    }
-    return b.createdAt.localeCompare(a.createdAt);
-  });
+  return [...lanes].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 /** Day-progress meter: signed · to review · live. Derived, never stored. */

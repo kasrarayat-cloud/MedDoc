@@ -21,32 +21,17 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   blockerCount,
   signGates,
-  unmetCriticalWarnings,
   type SignGateInput,
+  type SignGateId,
 } from '../sign-gates';
 
 const PRIMARY = 'primary-care';
 const IMAGING = 'ultrasound';
 
-/** Two critical warnings and one non-critical, in the shape L7c persists. */
-const RX_TWO_CRITICAL = {
-  warnings: [
-    { severity: 'critical', rx_drug: 'warfarin', message: 'interaction' },
-    { severity: 'major', rx_drug: 'aspirin', message: 'advisory' },
-    { severity: 'critical', rx_drug: 'amiodarone', message: 'interaction' },
-  ],
-};
-
-/** Positional ids for the two critical warnings above (indices 0 and 2). */
-const CRIT_A = 'rx-warning-0';
-const CRIT_B = 'rx-warning-2';
-
 const PENDING_EM = { from: '99213', to: '99214', cause: 'note_edited', at: '2026-07-30T00:00:00Z' };
 
 function input(over: Partial<SignGateInput> = {}): SignGateInput {
   return {
-    rxDrafts: null,
-    overriddenWarningIds: [],
     specialty: PRIMARY,
     emPendingChange: null,
     ...over,
@@ -67,69 +52,11 @@ afterEach(() => {
   else process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY = priorFlag;
 });
 
-// ── Rx ────────────────────────────────────────────────────────────────────
-describe('critical Rx coverage', () => {
-  it('counts every critical warning without an override', () => {
-    const g = gate(input({ rxDrafts: RX_TWO_CRITICAL }), 'rx');
-    expect(g?.unresolved).toBe(2);
-  });
-
-  it('a real override id clears exactly one', () => {
-    const g = gate(
-      input({ rxDrafts: RX_TWO_CRITICAL, overriddenWarningIds: [CRIT_A] }),
-      'rx'
-    );
-    expect(g?.unresolved).toBe(1);
-  });
-
-  it('a FABRICATED override id clears nothing', () => {
-    for (const fake of ['x1', 'rx-warning-abc', 'rx-warning-99', CRIT_A + ' ']) {
-      const g = gate(
-        input({ rxDrafts: RX_TWO_CRITICAL, overriddenWarningIds: [fake] }),
-        'rx'
-      );
-      expect(g?.unresolved, `fabricated id ${fake}`).toBe(2);
-    }
-  });
-
-  it('NEGATIVE CONTROL — the same shape with a REAL id does clear it', () => {
-    // Without this, the test above passes against a function that never
-    // clears anything at all.
-    const g = gate(
-      input({ rxDrafts: RX_TWO_CRITICAL, overriddenWarningIds: [CRIT_A, CRIT_B] }),
-      'rx'
-    );
-    expect(g?.unresolved).toBe(0);
-  });
-
-  it('is ABSENT when the visit has no critical warnings', () => {
-    expect(gateIds(input({ rxDrafts: { warnings: [{ severity: 'major' }] } })))
-      .not.toContain('rx');
-  });
-
-  it('NEGATIVE CONTROL — present when it does have one', () => {
-    expect(gateIds(input({ rxDrafts: RX_TWO_CRITICAL }))).toContain('rx');
-  });
-
-  it('non-critical warnings never count', () => {
-    const g = gate(input({ rxDrafts: RX_TWO_CRITICAL }), 'rx');
-    // three warnings persisted, only two are critical
-    expect(g?.unresolved).toBe(2);
-  });
-
-  it('unmetCriticalWarnings returns the refs the 422 body is built from', () => {
-    const unmet = unmetCriticalWarnings(RX_TWO_CRITICAL, [CRIT_A]);
-    expect(unmet.map((r) => r.id)).toEqual([CRIT_B]);
-    expect(unmet[0]?.warning.rx_drug).toBe('amiodarone');
-  });
-
-  it('tolerates a malformed rxDrafts blob', () => {
-    for (const blob of [null, undefined, {}, { warnings: 'nope' }, 42]) {
-      expect(() => signGates(input({ rxDrafts: blob }))).not.toThrow();
-      expect(gateIds(input({ rxDrafts: blob }))).not.toContain('rx');
-    }
-  });
-});
+// ⚠️ THE `critical Rx coverage` DESCRIBE WAS REMOVED HERE — owner ruling #109
+// retired the gate. It proved the thing worth remembering if the gate ever
+// returns: coverage was keyed on REAL positional ids, so a fabricated or
+// duplicated override id cleared nothing. That property is what made the gate
+// meaningful, and it is the property to rebuild first.
 
 // ── E/M ───────────────────────────────────────────────────────────────────
 describe('E/M applicability — the one switch', () => {
@@ -242,8 +169,7 @@ describe('attestation', () => {
     expect(route).toContain("action: 'SIGN_BLOCKED_NO_ATTESTATION'");
   });
 
-  it('NEGATIVE CONTROL — the other gates ARE server-enforced', () => {
-    expect(gate(input({ rxDrafts: RX_TWO_CRITICAL }), 'rx')?.serverEnforced).toBe(true);
+  it('NEGATIVE CONTROL — the other gate IS server-enforced', () => {
     expect(gate(input(), 'em')?.serverEnforced).toBe(true);
   });
 
@@ -255,59 +181,44 @@ describe('attestation', () => {
 // ── N ─────────────────────────────────────────────────────────────────────
 describe('N — the number on the padlocked Signed node', () => {
   it('sums every applicable unresolved gate', () => {
-    // 2 unmet critical Rx + 1 unconfirmed E/M + 1 attestation
-    const set = signGates(
-      input({ rxDrafts: RX_TWO_CRITICAL, emPendingChange: PENDING_EM })
-    );
-    expect(set.n).toBe(4);
+    // 1 unconfirmed E/M + 1 attestation
+    const set = signGates(input({ emPendingChange: PENDING_EM }));
+    expect(set.n).toBe(2);
   });
 
   it('ticks down as each gate clears', () => {
-    const base = { rxDrafts: RX_TWO_CRITICAL, emPendingChange: PENDING_EM };
-    expect(signGates(input(base)).n).toBe(4);
-    expect(signGates(input({ ...base, overriddenWarningIds: [CRIT_A] })).n).toBe(3);
+    const base = { emPendingChange: PENDING_EM };
+    expect(signGates(input(base)).n).toBe(2);
     expect(
-      signGates(input({ ...base, overriddenWarningIds: [CRIT_A, CRIT_B] })).n
-    ).toBe(2);
-    expect(
-      signGates(
-        input({ ...base, overriddenWarningIds: [CRIT_A, CRIT_B], emConfirmedThisSession: true })
-      ).n
+      signGates(input({ ...base, emConfirmedThisSession: true })).n
     ).toBe(1);
     expect(
       signGates(
-        input({
-          ...base,
-          overriddenWarningIds: [CRIT_A, CRIT_B],
-          emConfirmedThisSession: true,
-          attested: true,
-        })
+        input({ ...base, emConfirmedThisSession: true, attested: true })
       ).n
     ).toBe(0);
   });
 
   it('an imaging visit never carries the E/M term', () => {
-    const common = { rxDrafts: RX_TWO_CRITICAL, emPendingChange: null };
+    const common = { emPendingChange: null };
     const care = signGates(input({ ...common, specialty: PRIMARY })).n;
     const imaging = signGates(input({ ...common, specialty: IMAGING })).n;
-    // both 2 unmet Rx + 1 attestation; primary-care's E/M gate is satisfied
-    // (nothing pending) so the totals match here — the difference is that
-    // imaging has no gate to satisfy in the first place.
-    expect(care).toBe(3);
-    expect(imaging).toBe(3);
+    // Both 1 attestation; primary-care's E/M gate is satisfied (nothing
+    // pending) so the totals match here — the difference is that imaging has
+    // no gate to satisfy in the first place.
+    expect(care).toBe(1);
+    expect(imaging).toBe(1);
     expect(gateIds(input({ ...common, specialty: IMAGING }))).toEqual([
-      'rx',
       'attestation',
     ]);
     expect(gateIds(input({ ...common, specialty: PRIMARY }))).toEqual([
-      'rx',
       'em',
       'attestation',
     ]);
   });
 
   it('an unconfirmed E/M change is worth exactly one, and imaging cannot have it', () => {
-    const withPending = { rxDrafts: null, emPendingChange: PENDING_EM };
+    const withPending = { emPendingChange: PENDING_EM };
     expect(signGates(input({ ...withPending, specialty: PRIMARY })).n).toBe(2);
     expect(signGates(input({ ...withPending, specialty: IMAGING })).n).toBe(1);
   });
@@ -316,18 +227,14 @@ describe('N — the number on the padlocked Signed node', () => {
     expect(blockerCount([])).toBe(0);
     expect(
       blockerCount([
-        { id: 'rx', unresolved: 3, serverEnforced: true },
+        { id: 'em', unresolved: 3, serverEnforced: true },
         { id: 'attestation', unresolved: 1, serverEnforced: false },
       ])
     ).toBe(4);
   });
 
   it('gate order is the order Screen 3 presents them', () => {
-    expect(gateIds(input({ rxDrafts: RX_TWO_CRITICAL }))).toEqual([
-      'rx',
-      'em',
-      'attestation',
-    ]);
+    expect(gateIds(input())).toEqual(['em', 'attestation']);
   });
 });
 
@@ -398,9 +305,47 @@ describe('THE B2 RULING — the E/M gate exists always, counts only when the ser
 
     // Each one names a refusal code in the route. A gate whose enforcement is
     // asserted here but absent there is the exact drift this test exists for.
-    const route = readFileSync('src/app/api/visits/[id]/sign/route.ts', 'utf8');
-    for (const code of ['OVERRIDE_REQUIRED', 'EM_CHANGE_UNACKNOWLEDGED', 'ATTESTATION_REQUIRED']) {
-      expect(route, `${code} is not refused by the route`).toContain(code);
+    //
+    // ⚠️ TWO DEFECTS WERE FIXED HERE AT ONCE, BOTH FOUND BY REFUTATION, AND
+    // BOTH ARE THIS REPO'S OWN NAMED CLASSES.
+    //
+    //  1. THE LIST WAS HAND-KEPT. It was frozen at three codes while the loop
+    //     above iterates the LIVE gate set. Ruling #109 took the gate set to
+    //     two and the list stayed at three, so the test demanded a refusal code
+    //     for a gate that no longer exists. The list is now DERIVED from the
+    //     same `set.gates` the loop uses — one source, so it cannot go stale
+    //     again. ("A gate's WATCHED SET is diffed against the spec's NAMED
+    //     set", arriving through a stale constant.)
+    //
+    //  2. IT MATCHED AGAINST PROSE. `OVERRIDE_REQUIRED` still occurs EXACTLY
+    //     ONCE in the route — inside the comment recording the gate's removal.
+    //     So the assertion passed on the strength of a sentence describing the
+    //     absence of the very thing it claims to verify, and rewording that
+    //     comment would have turned the suite red for a documentation edit.
+    //     Comments are stripped first, exactly as `gate-flow.test.tsx` does.
+    const CODE_FOR: Record<SignGateId, string> = {
+      em: 'EM_CHANGE_UNACKNOWLEDGED',
+      attestation: 'ATTESTATION_REQUIRED',
+    };
+    const routeSrc = readFileSync('src/app/api/visits/[id]/sign/route.ts', 'utf8');
+    const routeCode = routeSrc
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/^\s*\/\/.*$/gm, ' ');
+
+    // NON-VACUITY: the stripper must not have eaten the file. Without this, a
+    // regex that removed everything would pass every assertion below by
+    // finding nothing to contradict — and this test would be measuring a blank
+    // string.
+    expect(routeCode).toContain('export const POST = withApiHandler');
+
+    for (const g of set.gates) {
+      expect(routeCode, `${g.id} is not refused by the route`).toContain(CODE_FOR[g.id]);
     }
+
+    // …and the retired code is gone from the CODE, while surviving in the
+    // prose that explains its removal. Both halves asserted, because a bare
+    // `not.toContain` over the raw file would fail on the comment.
+    expect(routeCode).not.toContain('OVERRIDE_REQUIRED');
+    expect(routeSrc).toContain('OVERRIDE_REQUIRED');
   });
 });

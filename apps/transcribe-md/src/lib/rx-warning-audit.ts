@@ -3,18 +3,29 @@
 // ============================================================================
 // Rx warning override audit (DESIGN_SPEC §4.1 critical · override audit).
 // ----------------------------------------------------------------------------
-// A doctor can sign past a critical Rx warning only via the
-// <OverrideConfirmModal> — which submits a typed reason through this
-// action. One row per override in `rx_warning_overrides`.
+// ⚠️ THIS ACTION HAS NO CALLER IN PRODUCTION, AND THAT IS DELIBERATE — owner
+// ruling #109 deleted the prescription-safety surface, and <OverrideConfirmModal>
+// (its only caller) went with it. The ruling scoped the deletion to the SURFACE
+// and the GATE; extraction, persistence and this audit trail survive, and the
+// DISPOSITION of the data is explicitly left open.
+//
+// So this is retained-on-purpose, not forgotten. Do not delete it as dead code
+// without re-reading that ruling: `rx_warning_overrides` rows, the validation
+// against the visit's own persisted warnings, and the audit row are the parts
+// that would be expensive to rebuild, and they are all here.
+//
+// What it did: a doctor could sign past a critical Rx warning only via
+// <OverrideConfirmModal>, which submitted a typed reason through this action.
+// One row per override in `rx_warning_overrides`.
 //
 // Contract: returns a discriminated union so the caller never has to
 // catch. All failure paths (unauth, bad input, not-your-visit,
 // transient DB) resolve to `{ ok: false, error }` with a copy-ready
 // message. Nothing throws.
 //
-// Dev preview route (/dev/rx-warnings) passes visitId="dev-preview"
-// so the modal flow can be exercised without writing to the DB; this
-// action short-circuits for that sentinel.
+// The `dev-preview` sentinel short-circuit below served /dev/rx-warnings,
+// which was deleted with the card it previewed. The branch is kept with the
+// rest of this module for the same reason.
 // ============================================================================
 
 import prisma from '@meddoc/db';

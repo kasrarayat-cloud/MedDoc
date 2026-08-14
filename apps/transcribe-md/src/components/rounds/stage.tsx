@@ -42,8 +42,6 @@ export interface RoundsStageProps {
   gates: readonly SignGate[];
   n: number;
   emArtifact?: boolean;
-  /** Unresolved CRITICAL Rx count, for the band across the sheet's top. */
-  criticalUnresolved?: number;
   /** The existing paper component. */
   children: React.ReactNode;
   /** The existing `<ChatEditorPanel>`, dropped into the drawer. */
@@ -111,7 +109,6 @@ export function RoundsStage({
   gates,
   n,
   emArtifact = false,
-  criticalUnresolved = 0,
   children,
   chat,
   visitActions,
@@ -190,20 +187,11 @@ export function RoundsStage({
             parent. Introducing a nearer landmark ancestor is how a sticky
             control silently stops sticking. */}
         <div className="qm-rounds-sheet-wrap">
-          {criticalUnresolved > 0 ? (
-            // Across the TOP of the card, and it names where it gets cleared —
-            // a warning that does not say what to do about it is decoration.
-            <div
-              className="qm-rounds-critical-band"
-              data-testid="rounds-critical-band"
-              role="status"
-            >
-              {criticalUnresolved === 1
-                ? '1 critical interaction — you’ll clear it at Gate 1'
-                : `${criticalUnresolved} critical interactions — you’ll clear them at Gate 1`}
-            </div>
-          ) : null}
-
+          {/* ⚠️ THE CRITICAL-INTERACTION BAND WAS REMOVED HERE — owner ruling
+              #109, with the surface it pointed at. It read "N critical
+              interactions — you'll clear them at Gate 1", and Gate 1 no longer
+              exists. A band naming a destination that was deleted is worse than
+              no band: it is an instruction the doctor cannot follow. */}
           {/* THE SHEET. The existing paper component, restyled. */}
           <div className="rounds-paper qm-rounds-sheet" data-testid="rounds-sheet">
             {children}

@@ -5,7 +5,7 @@
 // ----------------------------------------------------------------------------
 // Built from the locked concept at staging.quillmd.com/concepts/soap-v2?v=2.
 // Replaces BOTH the C3 review drawer AND the side coding rail: the note and
-// every secondary surface (Review / Rx / Billing / Codes / Extras / Input)
+// every secondary surface (Review / Billing / Codes / Extras / Input)
 // each live on their OWN full-width tab, so nothing is ever beside the note —
 // no side-by-side collision at any screen size.
 //
@@ -16,12 +16,10 @@
 //   3. a persistent bottom Sign bar that names + jumps to the top blocker.
 //
 // SKIN-ONLY: this is a presentational shell. The note (SoapEditor, chromeless),
-// the gate-bearing children (SuggestionsLane, RxTab, BillingCardC3, CodesTab …)
+// the gate-bearing children (SuggestionsLane, BillingCardC3, CodesTab …)
 // and the ONE Sign action (SignAndSendModal — with the E/M confirm gate intact)
 // are all passed in / reused byte-for-byte. The two fail-closed sign gates keep
 // their authoritative server enforcement:
-//   • critical-Rx override — server POST /sign → 422. VISIBLE half here: the
-//     Sign trigger is disabled until `rxResolved` (mirrors criticalWarningRefs).
 //   • E/M confirm-before-sign — lives INSIDE SignAndSendModal (Sign & Deliver
 //     disabled until confirmed). We only surface it on the readiness meter /
 //     Billing tab; the modal stays untouched.
@@ -45,17 +43,13 @@ export interface V2Tab {
 
 export interface ReviewTabsV2Props {
   tabs: V2Tab[];
-  /** Whether the visit carries any critical Rx warning at all (drives the
-   *  readiness pip + the bottom-bar gate copy). */
-  rxCritical: boolean;
-  /** Live: every critical Rx warning has an override (mirrors the server gate).
-   *  Disables the Sign trigger until true — the VISIBLE half of the Rx gate. */
-  rxResolved: boolean;
+  // ⚠️ `rxCritical`, `rxResolved` and `rxTabKey` were REMOVED here with the
+  // prescription-safety surface (owner ruling #109). They drove the readiness
+  // pip, the bottom-bar gate copy and the disabled Sign trigger — the VISIBLE
+  // half of a server gate that no longer exists either.
   /** Unacknowledged E/M level change ({from,to}) — surfaced as an "at sign"
    *  readiness item; the actual confirm happens inside SignAndSendModal. */
   pendingEmChange: { from: string; to: string } | null;
-  /** Tab key to jump to when the Rx blocker is tapped from the bottom bar. */
-  rxTabKey: string;
   /** Tab key of the review/suggestions lane — the "Review now" jump target from
    *  the set-aside advisory. Undefined when the lane isn't shown. */
   reviewTabKey?: string;
@@ -113,23 +107,20 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
     [active, props.tabs]
   );
 
-  // ── Readiness model — honest two-stage gate. Rx is a PRE-SIGN gate (clears
-  //    on the Rx tab → enables the Sign trigger); E/M is an AT-SIGN gate
-  //    (confirmed inside SignAndSendModal). Both stay visible. ──
+  // ── Readiness model — ONE stage since ruling #109. E/M is an AT-SIGN gate
+  //    (confirmed inside SignAndSendModal). The PRE-SIGN stage was the Rx one,
+  //    and it went with its surface; nothing else was pre-sign, so the two-stage
+  //    shape is gone rather than left with an empty first stage. ──
   const items: { label: string; done: boolean; atSign?: boolean }[] = [];
-  if (props.rxCritical) items.push({ label: 'Rx safety', done: props.rxResolved });
   if (props.pendingEmChange) items.push({ label: 'Coding confirm', done: false, atSign: true });
   const total = items.length;
   const cleared = items.filter((it) => it.done).length;
-  const rxBlocking = props.rxCritical && !props.rxResolved;
 
   const readyText = props.signed
     ? 'This note is signed'
     : total === 0
       ? 'Ready to sign'
-      : rxBlocking
-        ? 'Resolve the critical interaction to sign'
-        : props.pendingEmChange
+      : props.pendingEmChange
           ? `Ready — you'll confirm the ${props.pendingEmChange.from} → ${props.pendingEmChange.to} coding change as you sign`
           : 'Ready to sign';
 
@@ -148,7 +139,7 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
                 : `Sign readiness: ${cleared} of ${total} checks cleared`
             }
           >
-            <span className={`qm-c3-rev2-dot ${rxBlocking ? 'warn' : 'ok'}`} aria-hidden />
+            <span className="qm-c3-rev2-dot ok" aria-hidden />
             <span className="qm-c3-rev2-ready-text">
               {total === 0 ? 'Ready to sign' : `${cleared} of ${total} checks cleared`}
             </span>
@@ -218,18 +209,6 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
               <Lock className="h-3.5 w-3.5 flex-none" aria-hidden style={{ color: 'var(--color-linear-sage-bright)' }} />
               <span className="qm-c3-rev2-sign-msg">{readyText}</span>
             </div>
-          ) : rxBlocking ? (
-            <button
-              type="button"
-              className="qm-c3-rev2-sign-status qm-c3-rev2-jump qm-tap-44"
-              onClick={() => setActive(props.rxTabKey)}
-              aria-label="Resolve the critical interaction — go to the Rx tab"
-            >
-              <span className="qm-c3-rev2-dot warn" aria-hidden />
-              <span className="qm-c3-rev2-sign-msg">
-                {readyText} <span className="qm-c3-rev2-go" aria-hidden>→</span>
-              </span>
-            </button>
           ) : (
             <div className="qm-c3-rev2-sign-status">
               <span className="qm-c3-rev2-dot ok" aria-hidden />
@@ -258,10 +237,11 @@ export function ReviewTabsV2(props: ReviewTabsV2Props) {
                   triggerLabel="Sign & Send"
                   triggerIcon={<Lock className="h-3.5 w-3.5" aria-hidden />}
                   emPendingChange={props.pendingEmChange}
-                  // VISIBLE half of the critical-Rx gate — can't open the sign
-                  // flow until every critical interaction is overridden. The
-                  // server POST /sign → 422 remains the authoritative enforcement.
-                  disabled={rxBlocking}
+                  // ⚠️ `disabled={rxBlocking}` stood here — the VISIBLE half of
+                  // the critical-Rx gate. Both halves went together under owner
+                  // ruling #109, so nothing disables this trigger now. It is NOT
+                  // that the visible half was dropped and a server refusal left
+                  // behind: `POST /sign` no longer refuses on Rx either.
                   controlledOpen={signOpen}
                   onControlledOpenChange={requestSignOpen}
                 />

@@ -3,13 +3,14 @@
 // ----------------------------------------------------------------------------
 // ⚠️ A BUILD FLAG, NOT `NODE_ENV`, AND THE DIFFERENCE IS THE WHOLE POINT.
 //
-// The obvious gate for a dev-only route is `NODE_ENV === 'production'`, which
-// is what `/dev/rx-warnings` uses. It is wrong for anything a TEST needs to
-// reach, because the QA stack runs a production build. Measured rather than
-// reasoned, on the running stack:
+// The obvious gate for a dev-only route is `NODE_ENV === 'production'`. It is
+// wrong for anything a TEST needs to reach, because the QA stack runs a
+// production build. Measured rather than reasoned, on the running stack —
+// ⚠️ and HISTORICAL: the route it was measured against, `/dev/rx-warnings`, was
+// deleted by owner ruling #109, so this cannot be re-run as written:
 //
 //   · the QA container reports `NODE_ENV=production`
-//   · `/dev/rx-warnings` returns 404 on QA — against a `/login` control
+//   · `/dev/rx-warnings` returned 404 on QA — against a `/login` control
 //     returning 200, so the traversal was real
 //   · zero E2E specs reference any `/dev/` route
 //

@@ -121,7 +121,8 @@ export async function openSignFlow(page: Page): Promise<void> {
  * otherwise has now cost two repairs. `openSignFlow` waits for
  * `rounds-gate-attest` (line 95). On a visit with an OUTSTANDING BLOCKER the
  * flow opens on that blocker's step and never presents the attestation, so the
- * helper can only time out — 24-rx-clinical-safety hit exactly that, and
+ * helper can only time out — the old 24-rx-clinical-safety hit exactly that
+ * (that spec was replaced under owner ruling #109), and
  * `review-document.spec.ts` has four more tests of the same shape: their whole
  * subject is the surface REFUSING to reach a signature.
  *
@@ -162,7 +163,10 @@ export async function openGateFlow(page: Page): Promise<void> {
  */
 export async function expectGateStep(
   page: Page,
-  step: 'rx' | 'em' | 'attestation',
+  // `'rx'` left this union with the gate (owner ruling #109). Keeping it would
+  // compile and then time out for 10s against a `data-step` that can never
+  // hold it, reporting a broken flow instead of a bad argument.
+  step: 'em' | 'attestation',
 ): Promise<void> {
   await expect(
     page.getByTestId('rounds-gate-flow'),

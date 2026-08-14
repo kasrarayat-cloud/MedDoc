@@ -50,14 +50,14 @@ describe('createDeferredScroll', () => {
     const sched = manualScheduler();
     const d = createDeferredScroll(scrollTo, sched.schedule);
 
-    d.record('rx_gate');
+    d.record('em_gate');
     d.flush();
 
     expect(scrollTo).not.toHaveBeenCalled();
     expect(sched.depth()).toBe(1);
 
     sched.runAll();
-    expect(scrollTo).toHaveBeenCalledExactlyOnceWith('rx_gate');
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith('em_gate');
   });
 
   it('flushing with nothing pending schedules nothing at all', () => {
@@ -109,7 +109,19 @@ describe('createDeferredScroll', () => {
     const sched = manualScheduler();
     const d = createDeferredScroll(scrollTo, sched.schedule);
 
-    d.record('rx_gate');
+    // ⚠️ THE TWO TARGETS MUST DIFFER OR THIS PROVES NOTHING. The mechanical
+    // substitution of `em_gate` for `rx_gate` (ruling #109) briefly made both
+    // records identical — at which point the assertion held whether the FIRST
+    // or the LAST won.
+    //
+    // CORRECTION, from the adversarial pass: an earlier version of this note
+    // said `document` was "the union's other surviving member". There is no
+    // union here — `record(target: string)` takes a plain string, and
+    // `rx_gate` was never constrained by `ScrollIntentSchema` at this layer.
+    // The fix is right and the reason was wrong, which is worse than saying
+    // nothing: the next reader would have gone looking for a type that does
+    // not exist. Two DISTINCT strings are all this needs.
+    d.record('document');
     d.record('em_gate');
     d.flush();
     sched.runAll();
@@ -159,15 +171,16 @@ describe('createDeferredScroll', () => {
     const sched = manualScheduler();
     const d = createDeferredScroll(scrollTo, sched.schedule);
 
-    d.record('rx_gate');
-    d.flush();
-    sched.runAll();
-
     d.record('em_gate');
     d.flush();
     sched.runAll();
 
-    expect(scrollTo).toHaveBeenNthCalledWith(1, 'rx_gate');
-    expect(scrollTo).toHaveBeenNthCalledWith(2, 'em_gate');
+    // Distinct on purpose — same reason as above.
+    d.record('document');
+    d.flush();
+    sched.runAll();
+
+    expect(scrollTo).toHaveBeenNthCalledWith(1, 'em_gate');
+    expect(scrollTo).toHaveBeenNthCalledWith(2, 'document');
   });
 });

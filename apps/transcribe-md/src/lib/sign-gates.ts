@@ -59,9 +59,32 @@
 import { emAppliesToSpecialty } from '@meddoc/shared/specialties';
 
 import { unacknowledgedEmChange } from './em-pending-change';
-import { criticalWarningRefs } from './rx-warnings';
 
-export type SignGateId = 'rx' | 'em' | 'attestation';
+/**
+ * ⚠️ `'rx'` WAS REMOVED FROM THIS UNION BY OWNER RULING #109, AND THE UNION IS
+ * WHY THE REMOVAL COULD BE ENUMERATED AT ALL.
+ *
+ * The Prescription Safety SURFACE was deleted — the tab, the advisory rail, the
+ * ADD RX affordance — and the gate came out WITH the face, deliberately, in the
+ * same change. **A doctor blocked by a warning with no surface is the
+ * invisible-refusal class we never ship**: a 422 they cannot act on, pointing at
+ * a screen that no longer exists.
+ *
+ * ⚠️ GATES ONLY SHED REQUIREMENTS BY OWNER RULING. This is one (#109). The E/M
+ * and attestation gates are UNTOUCHED — their packs re-run with expected sets
+ * re-declared, and the retired rx arms carry notes rather than vanishing.
+ *
+ * ⚠️ AND THE OTHER DEFINITION DIED IN THE SAME COMMIT. `sign/route.ts` carried
+ * its own independent coverage check. Removing one and not the other produces
+ * the exact failure this ruling forbids, in its purest form: no surface, no gate
+ * chip, and the server still refusing.
+ *
+ * PIPELINE EXTRACTION IS UNTOUCHED: `lib/rx-warnings.ts`, L7c's drafting and
+ * `rx-warning-audit.ts` all survive. The owner removed the panel that DISPLAYS
+ * prescriptions, not the layer that produces them, and that data path's
+ * disposition is its own later decision.
+ */
+export type SignGateId = 'em' | 'attestation';
 
 export interface SignGate {
   id: SignGateId;
@@ -89,14 +112,13 @@ export interface SignGate {
 }
 
 export interface SignGateInput {
-  /** The raw `TranscribeVisit.rxDrafts` jsonb. Shape-checked downstream. */
-  rxDrafts: unknown;
-  /**
-   * `warningId`s that already carry a persisted `RxWarningOverride` row with
-   * `severity: 'critical'`. The server keys coverage on these same real ids —
-   * a fabricated id clears nothing, here or there.
-   */
-  overriddenWarningIds: readonly string[];
+  // ⚠️ `rxDrafts` and `overriddenWarningIds` WERE REMOVED HERE (#109), and the
+  // removal is what let `tsc` enumerate the callers rather than a hand-kept
+  // list. They fed the retired Rx gate and nothing else in this module reads
+  // them. Leaving them as accepted-but-ignored inputs would have been the
+  // quieter change and a worse one: every caller would keep computing and
+  // passing an override set for a gate that no longer exists, and the next
+  // reader would have no way to tell live plumbing from dead.
   /**
    * The RAW `specialty` column off Prisma — an **id**, never a display label.
    * `findSpecialty('Ultrasound').id` is `'unspecified'`: quietly the wrong
@@ -132,46 +154,23 @@ export interface SignGateSet {
   emArtifact: boolean;
 }
 
-/**
- * Unmet critical Rx warnings: every persisted critical warning without a
- * matching override, keyed by real id.
- *
- * Exported so `POST /sign` can adopt it and the two cannot diverge — the
- * inline version there predates this module and is otherwise a second copy of
- * an identity that has already been got wrong once (the override-count
- * inflation bypass, fix/rx-override-gate-correlation).
- */
-export function unmetCriticalWarnings(
-  rxDrafts: unknown,
-  overriddenWarningIds: readonly string[]
-): ReturnType<typeof criticalWarningRefs> {
-  const covered = new Set(overriddenWarningIds);
-  return criticalWarningRefs(rxDrafts).filter((ref) => !covered.has(ref.id));
-}
 
 /**
  * The gates that apply to this visit, and how many things each still needs.
  *
- * Order is the order the doctor meets them in Screen 3: Rx, then E/M, then
- * attestation. Screen 2's strip renders the same order.
+ * Order is the order the doctor meets them in Screen 3: E/M, then attestation.
+ * Screen 2's strip renders the same order.
+ *
+ * ⚠️ Rx used to be FIRST. Its removal leaves the surviving order intact — and
+ * that is worth stating because `sign/route.ts` records what happened when the
+ * order last moved: attestation sat first, "jumped the queue", and a visit with
+ * a moved E/M level answered ATTESTATION_REQUIRED instead of naming the level.
+ * Removing the head of a list is safe in a way that reordering its tail is not.
  */
 export function signGates(input: SignGateInput): SignGateSet {
   const gates: SignGate[] = [];
 
-  // ── Gate 1 — critical Rx ────────────────────────────────────────────────
-  // Present whenever the visit HAS critical warnings. A visit with none has no
-  // Rx gate to clear, which is not the same as having cleared one.
-  const criticalCount = criticalWarningRefs(input.rxDrafts).length;
-  if (criticalCount > 0) {
-    gates.push({
-      id: 'rx',
-      unresolved: unmetCriticalWarnings(input.rxDrafts, input.overriddenWarningIds)
-        .length,
-      serverEnforced: true,
-    });
-  }
-
-  // ── Gate 2 — E/M ────────────────────────────────────────────────────────
+  // ── Gate 1 — E/M ────────────────────────────────────────────────────────
   // THE ONE SWITCH decides whether this gate exists at all. Never re-type the
   // conjunction; it has been spelled wrong before and the failure was silent.
   const emApplies = emAppliesToSpecialty(input.specialty);
@@ -231,7 +230,7 @@ export function signGates(input: SignGateInput): SignGateSet {
     emArtifact = true;
   }
 
-  // ── Gate 3 — attestation ────────────────────────────────────────────────
+  // ── Gate 2 — attestation ────────────────────────────────────────────────
   // Always applicable, and SERVER-ENFORCED since 2026-08-02. See the header.
   gates.push({
     id: 'attestation',

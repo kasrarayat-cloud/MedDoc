@@ -14,17 +14,15 @@
 // from outside, by two different mechanisms — and which mechanism a gate uses
 // is a fact about its STATE, not about its clinical weight:
 //
-//   · `rx` and `em` are ADOPTED — their live DOM is borrowed out of the paper
-//     (`ADOPTED_SLOTS`, below). Both hold lazily-seeded local React state with
-//     no `router.refresh()` behind it — `RxTab`'s `overriddenIds` and
-//     `ReviewDocumentView`'s `emConfirmed` — so a flow that RE-MOUNTED them
-//     would silently un-clear a gate: the doctor sent back to re-justify a
-//     warning already written to `rx_warning_overrides`, and the blocker count
-//     ticking back up. Stepping forward and back is the *normal* interaction
-//     here, so that is not an edge case. Moving the node touches React's tree
-//     not at all; a portal would not do, because `createPortal(node, host)` and
-//     a bare node are different element TYPES to React and flipping between
-//     them remounts.
+//   · `em` is ADOPTED — its live DOM is borrowed out of the paper
+//     (`ADOPTED_SLOTS`, below). It holds lazily-seeded local React state with
+//     no `router.refresh()` behind it — `ReviewDocumentView`'s `emConfirmed` —
+//     so a flow that RE-MOUNTED it would silently un-clear a gate and tick the
+//     blocker count back up. Stepping forward and back is the *normal*
+//     interaction here, so that is not an edge case. Moving the node touches
+//     React's tree not at all; a portal would not do, because
+//     `createPortal(node, host)` and a bare node are different element TYPES to
+//     React and flipping between them remounts.
 //
 //   · the SIGN BAR is an ordinary React child (`signbar`), passed in by the
 //     route wiring. ⚠️ R2 CHANGED THIS, and the old arrangement is why the
@@ -63,17 +61,18 @@ import { GATE_HEADING, gateLabel } from '@/lib/rounds/gate-labels';
  * reads this comment too, and a guard that trips on its own explanation is a
  * defect this repo has paid for twice.)
  *
- * Membership here says something different: these two slots hold lazily-seeded
- * local React state (`RxTab.overriddenIds`, `ReviewDocumentView.emConfirmed`)
- * that a remount would silently un-clear — so their live DOM is borrowed rather
- * than re-rendered. `attestation` was in this set until R2, which is what kept a
+ * Membership here says something different: this slot holds lazily-seeded
+ * local React state (`ReviewDocumentView.emConfirmed`) that a remount would
+ * silently un-clear — so its live DOM is borrowed rather than re-rendered.
+ * `rx` was in this set until ruling #109 deleted the surface it borrowed from.
+ * `attestation` was in this set until R2, which is what kept a
  * second sign control permanently mounted on the stage: the node had to exist
  * down there for the effect to come and fetch it. Its bar holds no state, so it
  * is now an ordinary React child (`signbar`) and adopts nothing.
  *
  * Adding an id here means that gate's UI is rendered elsewhere and moved in.
  */
-const ADOPTED_SLOTS: ReadonlySet<SignGateId> = new Set<SignGateId>(['rx', 'em']);
+const ADOPTED_SLOTS: ReadonlySet<SignGateId> = new Set<SignGateId>(['em']);
 
 export interface RoundsGateFlowProps {
   open: boolean;
@@ -174,8 +173,8 @@ export function RoundsGateFlow({
   //
   // Why not a portal: `createPortal(node, host)` and a bare `node` are
   // different element types to React, so flipping between them unmounts and
-  // remounts the subtree — which reset `RxTab.overriddenIds` to the stale
-  // server prop and un-cleared a gate the doctor had already justified.
+  // remounts the subtree — which reset the adopted gate's local state to the
+  // stale server prop and un-cleared a gate the doctor had already cleared.
   // Changing a portal's container remounts for the same reason. Moving the DOM
   // node touches React's tree not at all: it keeps rendering into the same
   // wrapper and never learns it has moved.
@@ -192,9 +191,9 @@ export function RoundsGateFlow({
   // fetch it. It now arrives as `signbar`, an ordinary React node rendered
   // below, and the paper does not render one at all.
   //
-  // Adoption survives for `rx` and `em` because those two genuinely need it —
-  // both hold lazily-seeded local state (`RxTab.overriddenIds`,
-  // `ReviewDocumentView.emConfirmed`) that a remount would silently un-clear.
+  // Adoption survives for `em` because it genuinely needs it — it holds
+  // lazily-seeded local state (`ReviewDocumentView.emConfirmed`) that a
+  // remount would silently un-clear.
   // The sign bar held no state, so it never needed moving; it only needed a
   // home. See `review-sign-bar.tsx`.
   useEffect(() => {
@@ -311,7 +310,7 @@ export function RoundsGateFlow({
         {active && active.id === 'attestation' && !emArtifact ? (
           <div className="qm-rounds-gateflow-attest">
             {/* ONLY WHAT APPLIED. The rows come from the gate array, so a visit
-                that never had an Rx gate shows no Rx row — a fabricated
+                that never had an E/M gate shows no E/M row — a fabricated
                 "cleared" row for a gate that never existed would be a claim
                 about work nobody did. */}
             <ul className="qm-rounds-gateflow-summary" data-testid="rounds-gate-summary">

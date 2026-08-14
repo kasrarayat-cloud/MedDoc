@@ -7,7 +7,6 @@
 //
 //   - a card sits in the column its lane is actually at
 //   - each of the five lane kinds gets its own treatment
-//   - a critical lane tints the ROW, not just the card
 //   - RETRY exists on failed lanes and NOWHERE else
 //   - the empty state is an invitation, not a shrug
 // ============================================================================
@@ -102,36 +101,18 @@ describe('lane kinds each get their own treatment', () => {
   });
 });
 
-describe('critical lanes are findable', () => {
-  const criticalLane = lane({
-    rxDrafts: {
-      warnings: [{ severity: 'critical', drugA: 'warfarin', drugB: 'amiodarone' }],
-    },
-  });
-
-  it('marks the card AND names the interaction on one line', () => {
-    render(<RoundsBoard lanes={[criticalLane]} />);
+describe('THE SURFACE IS GONE — owner ruling #109', () => {
+  // Replaces `critical lanes are findable` (3 tests: the data-critical marker,
+  // the accessible name, and "no readable payload composes no line"). This is
+  // the positive control for the DELETION — proving the marker is absent is
+  // worth more than deleting the tests that asserted it was present, because a
+  // half-applied removal leaves the attribute behind on a board nothing tints.
+  it('no lane advertises a critical interaction any more', () => {
+    render(<RoundsBoard lanes={[lane({})]} />);
     const card = screen.getByTestId('rounds-lane-card-v1');
-    expect(card.getAttribute('data-critical')).toBe('true');
-    expect(screen.getByText('warfarin + amiodarone')).toBeTruthy();
-  });
-
-  it('the accessible name says critical — not colour alone', () => {
-    // A red border is invisible to a screen reader and to a greyscale printout.
-    render(<RoundsBoard lanes={[criticalLane]} />);
-    expect(
-      screen.getByRole('link', { name: /critical interaction/i }),
-    ).toBeTruthy();
-  });
-
-  it('a critical with NO readable payload shows no line rather than a made-up one', () => {
-    render(
-      <RoundsBoard lanes={[lane({ rxDrafts: { warnings: [{ severity: 'critical' }] } })]} />,
-    );
-    const card = screen.getByTestId('rounds-lane-card-v1');
-    expect(card.getAttribute('data-critical')).toBe('true');
-    // Nothing invented to fill the space.
-    expect(card.textContent).not.toMatch(/interaction|warning|check/i);
+    expect(card.getAttribute('data-critical')).toBeNull();
+    expect(card.textContent).not.toMatch(/interaction/i);
+    expect(screen.queryByRole('link', { name: /critical/i })).toBeNull();
   });
 });
 
@@ -209,12 +190,29 @@ describe('the matrix actually positions', () => {
 });
 
 describe('the legend explains every marker it uses', () => {
-  it('names all five', () => {
+  it('names all four', () => {
     render(<RoundsBoard lanes={[lane({})]} />);
     const legend = screen.getByTestId('rounds-board-legend');
-    for (const label of ['Ready', 'Recording', 'Processing', 'Critical', 'Signed']) {
+    for (const label of ['Ready', 'Recording', 'Processing', 'Signed']) {
       expect(within(legend).getByText(label)).toBeTruthy();
     }
+  });
+
+  // ⚠️ AND THE OTHER DIRECTION, WHICH IS WHY THIS TEST'S TITLE WAS FALSE WHILE
+  // IT PASSED. It asserted the legend NAMES five markers and never asserted the
+  // legend names nothing it cannot draw. Owner ruling #109 removed every
+  // producer of the red-bordered lane — the border, the ⚠ glyph, the
+  // interaction line, the row tint, `criticalCount`, the `critical` filter —
+  // and the legend kept advertising it. `tsc` could not see it: `items` is
+  // typed `{ key: string }`, not `BoardFilter`.
+  //
+  // "Explains every marker it USES" is a claim in both directions. Now it is
+  // tested in both.
+  it('and names NOTHING it can no longer draw', () => {
+    render(<RoundsBoard lanes={[lane({})]} />);
+    const legend = screen.getByTestId('rounds-board-legend');
+    expect(within(legend).queryByText('Critical')).toBeNull();
+    expect(legend.textContent).not.toMatch(/critical|interaction/i);
   });
 });
 

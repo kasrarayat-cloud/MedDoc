@@ -3,13 +3,19 @@
 // ----------------------------------------------------------------------------
 // ⚠️ GATED ON A BUILD FLAG, NOT ON `NODE_ENV`, AND THAT IS THE ITEM.
 //
-// The obvious gate is `if (NODE_ENV === 'production') notFound()`, which is
-// what `/dev/rx-warnings` uses. It is wrong for anything a TEST must reach: the
-// QA stack runs a production build, so a NODE_ENV-gated route 404s exactly
-// where Gate C's sweep runs. Measured on the running stack — `/dev/rx-warnings`
-// returns 404 on QA against a `/login` control at 200, and no E2E references
-// any `/dev/` route. The first draft of this route used NODE_ENV and would
-// have been a door onto nothing.
+// The obvious gate is `if (NODE_ENV === 'production') notFound()`. It is wrong
+// for anything a TEST must reach: the QA stack runs a production build, so a
+// NODE_ENV-gated route 404s exactly where Gate C's sweep runs.
+//
+// ⚠️ THE EVIDENCE IS HISTORICAL AND NO LONGER RE-RUNNABLE. It was measured on
+// the running stack against `/dev/rx-warnings`, which used that gate: it
+// returned 404 on QA against a `/login` control at 200, and no E2E referenced
+// any `/dev/` route. That route was DELETED by owner ruling #109 along with the
+// card it previewed. The measurement is kept because it is why THIS route is
+// gated the way it is — but it cannot be reproduced, and a reader who goes
+// looking for the route should know that rather than conclude the note is
+// wrong. The first draft of this route used NODE_ENV and would have been a
+// door onto nothing.
 //
 // WHY THE ROUTE EXISTS AT ALL — narrowed from the plan's claim, by checking:
 //   · both 404s are ALREADY reachable by navigation (a bad URL renders the

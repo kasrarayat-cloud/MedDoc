@@ -47,7 +47,7 @@ export const EditSectionIntentSchema = z.object({
  *  asks anyway the schema rejects the whole reply. */
 export const ScrollIntentSchema = z.object({
   kind: z.literal('scroll_to'),
-  target: z.enum(['rx_gate', 'em_gate', 'document']),
+  target: z.enum(['em_gate', 'document']),
 });
 
 /** The model believes this is out of scope. Carried explicitly so a refusal is

@@ -137,8 +137,7 @@ export default defineConfig({
         '**/rounds-legacy-census.spec.ts',
         '**/a11y.spec.ts',
         '**/23-note-format-phi-parse-reject.spec.ts',
-        '**/24-rx-clinical-safety.spec.ts',
-        '**/25-rx-override-correlation.spec.ts',
+        '**/24-rx-surface-deleted.spec.ts',
         '**/28-marketing-smoke.spec.ts',
         // Real-model eval specs (real tokens) — NEVER in the default/CI run.
         '**/*.eval.spec.ts',
@@ -172,15 +171,17 @@ export default defineConfig({
     {
       // Rx clinical-safety (scenarios 24 + 25). Runs ONLY via
       // `--project=rx-safety`, against an app started with MOCK_RX_WARNINGS=true
-      // (the populated tm_rx_drafting fixture with a critical warning). Kept out
-      // of the default run so that critical warning never blocks the other
-      // specs' sign flows. Scenario 25 is the per-warning-correlation regression
-      // (fix/rx-override-gate-correlation) and shares the same app env.
+      // (the populated tm_rx_drafting fixture with a critical warning).
+      //
+      // ⚠️ THE PROJECT SURVIVED OWNER RULING #109 ON PURPOSE. It existed to keep
+      // that critical warning out of the other specs' sign flows, and the gate it
+      // fed is gone — but the FIXTURE is now the interesting case rather than the
+      // obstacle: a visit carrying a real critical warning must render none of the
+      // deleted surface AND must still sign. Scenarios 24 and 25 (the 422 gate and
+      // the per-warning-correlation regression) were replaced by one spec that
+      // asserts both sides of the ruling's boundary.
       name: 'rx-safety',
-      testMatch: [
-        '**/24-rx-clinical-safety.spec.ts',
-        '**/25-rx-override-correlation.spec.ts',
-      ],
+      testMatch: ['**/24-rx-surface-deleted.spec.ts'],
       use: { ...devices['Desktop Chrome'] },
     },
     {

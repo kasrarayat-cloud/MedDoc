@@ -35,7 +35,7 @@
 //      (`visit-ready-view.tsx:1153`). There is no footer on the stage at all.
 //      The bar named the NEXT blocker; three surfaces now do, each narrower and
 //      each asserted where it belongs:
-//        · `rounds-critical-band`     — the stage banner, names the Rx blocker
+//        · `rounds-critical-band`     — RETIRED with the Rx surface (#109)
 //        · `rounds-gate-lock`         — inside the flow, names the blocker AND
 //                                       its count for the step being shown
 //        · `review-doc-em-stale-gate` — "Documentation level needs re-checking"
@@ -182,25 +182,9 @@ test.describe('pre-sign review as the document', () => {
     return seeded;
   }
 
-  async function clearRxGate(page: import('@playwright/test').Page) {
-    const gate = page.getByTestId('review-doc-rx-gate');
-    await gate.getByRole('button', { name: /override/i }).first().click();
-    // ⚠️ NOT `getByRole('dialog')`. This helper is now also called with the gate
-    // flow OPEN — the flow adopts the Rx gate's live DOM into its step host — and
-    // `gate-flow.tsx:228` carries `role="dialog"` itself. Two dialogs at once
-    // makes the role query strict-mode ambiguous, and the failure would read as
-    // "the override modal has no textarea" rather than as a locator fault. The
-    // override modal's identity is its own confirm control, which is defined
-    // once (`override-confirm-modal.tsx`).
-    const dialog = page
-      .locator('.qm-lin-spotlight-panel')
-      .filter({ has: page.getByRole('button', { name: /confirm override/i }) });
-    await dialog
-      .locator('textarea')
-      .fill('Benefit outweighs risk; monitoring renal function weekly and patient counselled.');
-    await dialog.getByRole('button', { name: /confirm override/i }).click();
-    await expect(gate).toContainText(/overridden/i);
-  }
+  // ⚠️ `clearRxGate` WAS REMOVED HERE — owner ruling #109 deleted the gate it
+  // cleared. Six tests called it; each now either drops the step (the Rx
+  // blocker is gone, so E/M is the first) or asserts the gate's absence.
 
   test('renders the document, not the tab strip', async ({ page }) => {
     test.skip(!(await open(page, 'rdoc-1')), 'psql seeding unavailable');
@@ -243,54 +227,40 @@ test.describe('pre-sign review as the document', () => {
   });
 
 
-  test('the critical-Rx card blocks signing until a typed override is recorded', async ({ page }) => {
+  test('NO prescription card, and no critical band — owner ruling #109', async ({ page }) => {
+    // ⚠️ REPLACES 'the critical-Rx card blocks signing until a typed override is
+    // recorded'. That test's subject was deleted; its SHAPE is preserved,
+    // because what it really proved is that this surface names its blockers
+    // honestly and never presents a signature in front of one. That property is
+    // now carried by the E/M half, asserted below on the same fixture.
     test.skip(!(await open(page, 'rdoc-7')), 'psql seeding unavailable');
-    const gate = page.getByTestId('review-doc-rx-gate');
-    await expect(gate).toBeVisible();
 
-    // WAS: `expect(BAR).toContainText('prescription')`. The stage has no footer
-    // bar; the blocker is named across the top of the paper instead, and it says
-    // where it gets cleared. Exact text with the count — "prescription" as a
-    // substring would have passed on any wording that merely mentioned one.
-    await expect(page.getByTestId('rounds-critical-band')).toHaveText(
-      '1 critical interaction — you’ll clear it at Gate 1',
-    );
-    // WAS: `expect(sign).toBeDisabled()`. Stronger now — there is no sign
-    // control to disable until the gates in front of it are clear.
+    await expect(page.getByTestId('review-doc-rx-gate')).toHaveCount(0);
+    await expect(page.getByTestId('rounds-critical-band')).toHaveCount(0);
+    await expect(page.locator('[class*="qm-lin-rx"]')).toHaveCount(0);
+    await expect(page.locator('[class*="qm-warn"]')).toHaveCount(0);
+
+    // There is no sign control while a gate is still in front of it.
     await expect(page.getByTestId('review-doc-signbar')).toHaveCount(0);
 
     // ⚠️ `openGateFlow`, NOT `openSignFlow`. This visit is deliberately blocked,
     // so the flow opens ON the blocker and never presents the attestation —
     // a helper that waits for one can only time out (helpers/sign.ts:95).
+    //
+    // POSITIVE CONTROL for every zero above: the surface DOES still block, and
+    // it blocks on the E/M level, which is now the first gate.
     await openGateFlow(page);
-    await expectGateStep(page, 'rx');
-    await expect(page.getByTestId('rounds-gate-lock')).toContainText(
-      '1 critical interaction outstanding',
-    );
-    await expect(page.getByTestId('rounds-gate-next')).toBeDisabled();
-    await expectSignatureUnreachable(page);
-
-    await clearRxGate(page);
-
-    // The step clears in place and the flow advances — but signing does NOT
-    // become possible, because the E/M level is ALSO pending. The surface names
-    // the NEXT blocker rather than pretending the note is ready, which is
-    // exactly what the bar's second assertion pinned.
-    await expect(page.getByTestId('rounds-gate-lock')).toHaveCount(0);
-    await expect(page.getByTestId('rounds-gate-next')).toBeEnabled();
-    await page.getByTestId('rounds-gate-next').click();
     await expectGateStep(page, 'em');
     await expect(page.getByTestId('rounds-gate-lock')).toContainText(
       '1 documentation level outstanding',
     );
+    await expect(page.getByTestId('rounds-gate-next')).toBeDisabled();
     await expectSignatureUnreachable(page);
   });
 
   test('the E/M card blocks signing until the level is confirmed', async ({ page }) => {
     test.skip(!(await open(page, 'rdoc-8')), 'psql seeding unavailable');
-    // Clear the Rx blocker first so E/M is the only thing left holding the bar.
-    await clearRxGate(page);
-
+    // ⚠️ No Rx blocker to clear first — ruling #109 — so E/M is the first gate.
     const em = page.getByTestId('review-doc-em-gate');
     await expect(em).toBeVisible();
     await expect(em).toContainText('99214');
@@ -324,7 +294,6 @@ test.describe('pre-sign review as the document', () => {
     page,
   }) => {
     test.skip(!(await open(page, 'rdoc-11')), 'psql seeding unavailable');
-    await clearRxGate(page);
 
     // Clear the seeded change first, so what follows is provably caused by the
     // adjustment and not left over from the fixture.
@@ -431,7 +400,6 @@ test.describe('pre-sign review as the document', () => {
       !(await open(page, 'rdoc-12', { emStale: true, emPending: false })),
       'psql seeding unavailable',
     );
-    await clearRxGate(page);
 
     const row = page.getByTestId('review-doc-em-level');
     await expect(row).toBeVisible();
@@ -483,10 +451,9 @@ test.describe('pre-sign review as the document', () => {
 
   test('sign delivers the file', async ({ page }) => {
     test.skip(!(await open(page, 'rdoc-10')), 'psql seeding unavailable');
-    // Clear both gates, then sign with DOCX selected and assert the download
+    // Clear the gate, then sign with DOCX selected and assert the download
     // actually starts — "signed" without a file is the failure this surface
-    // exists to make impossible.
-    await clearRxGate(page);
+    // exists to make impossible. (There were two gates until ruling #109.)
     await page.getByTestId('review-doc-em-confirm').click();
 
     // ⚠️ `openSignFlow` FITS HERE and does not fit four tests above: both gates
@@ -585,16 +552,20 @@ test.describe('pre-sign review as the document', () => {
         }
       });
 
-      test(`the prescription gate is ${cls.hasRxGate ? 'PRESENT' : 'ABSENT'}`, async ({ page }) => {
+      test('the prescription gate is ABSENT — on every specialty (#109)', async ({ page }) => {
         test.skip(
           !(await open(page, `mx-rx-${cls.key}`, { specialtyClass: cls.key })),
           'psql seeding unavailable',
         );
-        // Gone, not present-and-empty: an imaging study with no medications drew
-        // a "Prescription safety" heading over an empty panel once.
-        await expect(page.getByTestId('review-doc-rx-gate')).toHaveCount(
-          cls.hasRxGate ? 1 : 0,
-        );
+        // ⚠️ THIS ROW USED TO BE A MATRIX ARM (`cls.hasRxGate ? 1 : 0`). Owner
+        // ruling #109 collapsed it to a constant: the gate is gone for every
+        // specialty, including the one that used to have it. Kept inside the
+        // per-specialty loop deliberately — a single test on one specialty
+        // would not notice the surface surviving on another, which is exactly
+        // how the R4 cream panel hid.
+        await expect(page.getByTestId('review-doc-rx-gate')).toHaveCount(0);
+        // POSITIVE CONTROL — this specialty's page rendered at all.
+        await expect(page.getByTestId('review-document-view')).toBeVisible();
       });
 
       test(`a stale note ${cls.emApplies ? 'asks for a re-check' : 'asks for NOTHING'}`, async ({
@@ -610,10 +581,9 @@ test.describe('pre-sign review as the document', () => {
         });
         test.skip(!seeded, 'psql seeding unavailable');
 
-        // The bar names the NEXT blocker, so an unresolved prescription warning
-        // outranks the level and the bar never reaches it. Clear Rx first where
-        // it exists, or this asserts the wrong sentence.
-        if (cls.hasRxGate) await clearRxGate(page);
+        // The bar names the NEXT blocker. An unresolved prescription warning
+        // used to outrank the level and had to be cleared first; ruling #109
+        // removed that gate, so the level is now the first thing named.
 
         if (cls.emApplies) {
           await expect(page.getByTestId('review-doc-em-stale-gate')).toBeVisible();
