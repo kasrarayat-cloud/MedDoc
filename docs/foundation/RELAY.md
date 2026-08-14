@@ -12436,3 +12436,78 @@ only thing that distinguished them.
 either deploy them separately so each declaration gates its own act, or write a
 declaration that names the FULL diff being shipped. "I deployed `main`" is not
 the same claim as "I judged what I deployed".
+
+## RC-2 — THE FILE IS KEPT AND THE DOOR IS OPEN — 2026-08-14
+
+**PR #658.** Parts 1–3 plus the long-owed QA generated-document walk. Closes the
+item's own acceptance criterion — *"reachability proven by ATTEMPT"* — and it
+had to be by attempt, because every artefact describing this feature already
+read as though the door were open.
+
+**The defect was never the compiler.** It works, and did. Its only caller was
+`template-twin-certify.ts`, reached from `NativeTemplateManager`, which renders
+**null** under `NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true`. Production's zero
+compiled versions were not a gate refusing — **nothing could knock.**
+AGENTS.md already recorded the symptom (*"there is therefore no door in"*)
+without anyone reading it as a bug to fix.
+
+**What shipped:** `saveNoteTemplateAction` compiles the kept `.docx` after the
+template row is written, **ATTACHED** to the doctor's own template via a new
+`attachToNoteTemplateId` on the EXISTING draft function — never a second
+implementation. Attaching also makes the bridge dead weight and it is skipped:
+the ordinary upload path has already parsed the document, by the parser the
+doctor's own note uses, so the bridge's documented fallback to SOAP headings the
+document does not contain simply stops existing on this path.
+
+**QA walk — 17 of 17**, `scripts/qa/rc2-twin-door-on-qa.ts`, against
+`meddoc_qa_test` with images and schema rebuilt from the branch:
+
+    upload (52,884 B stored BEFORE extraction) → digest VERIFIED on read-back
+      → compile: 80 fields, 0 blocking → bound to the DOCTOR'S OWN template
+      → 1 template for the practice, no shadow → 80 field rows
+      → NEEDS_CONFIRMATION → both audit rows present
+
+⚠️ **UNCERTIFIED IS THE PASSING RESULT.** The arm asserts the twin is NOT
+certified. A walk that "succeeded" by certifying 80 unconfirmed mappings would
+have proved the opposite of what RC-2 is for, and `MAPPINGS_NOT_READY` stays
+strict.
+
+⚠️ **THE STACK IT WAS ABOUT TO BE PROVED ON CONTAINED NONE OF IT.** Measured
+before starting, with a positive control that returned 2: `compile-on-upload`
+**0 hits**, `sourceObjectKey` **0 hits**, and `note_templates` had no `source*`
+columns at all. The B8 lesson held exactly — a green `--qa` migrations check
+says nothing about the images. Rebuilt, re-migrated, re-verified by symbol.
+
+⚠️ **AND THE FIRST PROBE OF THAT STACK WAS ITSELF BROKEN**, in the same shape
+the R5 row above records: grepping `/app/apps/transcribe-md/src` returned 0 for
+the needle **and 0 for the positive control**, because the QA app image ships a
+standalone build with no source tree. Two zeroes with opposite meanings.
+
+**Mutation-proved in both shapes**, each asserting its own application first:
+door shut → 2 unit arms red; **wired but MINTING** → 1 unit arm red and 3 QA
+arms red, while the compile-quality arms stayed GREEN. That last detail is the
+one to carry: **the shadow-template defect does not look like a broken compiler.
+It looks like a working one.**
+
+### Found while doing it, and NOT fixed here
+
+- ⚠️ **The branch was RED before this work.** `note-template-source-ref.test.ts`
+  carried three pre-existing `tsc` errors from RC-2's own earlier commits. Fixed
+  by TYPING the mock, never by deleting the assertion it guards.
+- ⚠️ **`.dockerignore` line 11 is a bare `node_modules`, which matches ONLY at
+  the context root.** Nested workspace `node_modules` are not ignored, so the
+  prod image build copies host `node_modules` over the installed ones. Proved by
+  the build failing on a git worktree, where the nested path is a SYMLINK and
+  Docker cannot replace a directory with a file — in `/opt/meddoc-pro` they are
+  real directories, so it fails silently instead of loudly. **`**/node_modules`
+  is the fix and it belongs in its own change**, not smuggled into a QA walk:
+  it alters how every production image is built.
+
+### Still open in the item
+
+The **fill → export** leg (DATE OF PROCEDURE on the twin path) requires a
+CERTIFIED compiled version, which requires confirming 80 mappings through the
+physician confirmation flow. That flow is the parked INTEGRATE work, and the
+gate is not weakened to reach it. **Named honestly rather than ticked**: an
+unverified step named is worth more than a green bought by loosening
+`MAPPINGS_NOT_READY`.
