@@ -6,6 +6,8 @@
 // GIVEN TO ONE OF ITS THREE MOUNTS.
 //
 // Two defects, one lesson. R3.4 hosted ONE of `RxTab`'s three mount sites and
+// (`RxTab` itself was deleted by owner ruling #109; the LESSON is why this
+// comment survives it —)
 // verified it there — correctly, and incompletely; the other two rendered the
 // legacy panel on a Rounds route for two rounds. AGENTS.md § "Shared
 // components" records the cure: put the behaviour ON the component, and where

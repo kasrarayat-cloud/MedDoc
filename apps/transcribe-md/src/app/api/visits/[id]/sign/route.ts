@@ -60,7 +60,6 @@ import { visitByIdScope } from '@/lib/practice-scope';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
 import { logAudit } from '@/lib/audit';
-import { criticalWarningRefs } from '@/lib/rx-warnings';
 import { unacknowledgedEmChange, type EmChangeCause } from '@/lib/em-pending-change';
 
 export const runtime = 'nodejs';
@@ -278,65 +277,31 @@ export const POST = withApiHandler<{ id: string }>(
       return apiError('visit has no SOAP to sign', 409);
     }
 
-    // F5-1 + fix/rx-override-gate-correlation: Critical Rx warnings require a
-    // PER-WARNING override before sign. Pre-F5-1 the endpoint accepted the
-    // transition without checking (the override modal was UI-only, so direct/
-    // scripted callers bypassed it). F5-1 added a server gate but compared a
-    // BARE COUNT of severity='critical' override rows against the critical-
-    // warning count — which a caller could satisfy by minting fabricated/
-    // duplicate 'critical' rows. The gate now clears the READY→SIGNED
-    // transition ONLY when EVERY persisted critical warning has a matching
-    // override keyed by its REAL id (rx-warning-<index>). recordOverride
-    // validates the id+severity against rxDrafts on write; this coverage check
-    // is the second line of defence at sign time. Already-SIGNED visits skip
-    // the gate; it fires on the READY → SIGNED transition only.
-    if (visit.status === TranscribeVisitStatus.READY) {
-      const criticalRefs = criticalWarningRefs(visit.rxDrafts);
-      if (criticalRefs.length > 0) {
-        const overrideRows = await prisma.rxWarningOverride.findMany({
-          where: { visitId, severity: 'critical' },
-          select: { warningId: true },
-        });
-        const overriddenIds = new Set(
-          overrideRows.map((o: { warningId: string }) => o.warningId)
-        );
-        const unmet = criticalRefs.filter((ref) => !overriddenIds.has(ref.id));
-        if (unmet.length > 0) {
-          log.warn('api:visits:sign', 'override required', {
-            userId,
-            visitId,
-            criticalCount: criticalRefs.length,
-            overriddenCount: overriddenIds.size,
-            unmetCount: unmet.length,
-          });
-          void logAudit({
-            action: 'RX_SIGN_BLOCKED_NO_OVERRIDE',
-            targetType: 'TranscribeVisit',
-            targetId: visitId,
-            success: false,
-            errorCode: 'OVERRIDE_REQUIRED',
-            metadata: {
-              criticalCount: criticalRefs.length,
-              overriddenCount: overriddenIds.size,
-              unmetCount: unmet.length,
-            },
-          });
-          return NextResponse.json(
-            {
-              error: 'Critical Rx warnings require an override before signing.',
-              code: 'OVERRIDE_REQUIRED',
-              warnings: unmet.map((ref) => ({
-                severity: 'critical',
-                drug: ref.warning.rx_drug ?? '',
-                message: ref.warning.message ?? '',
-                warningId: ref.id,
-              })),
-            },
-            { status: 422 }
-          );
-        }
-      }
-    }
+    // ⚠️ THE CRITICAL-Rx SIGN GATE WAS REMOVED HERE — OWNER RULING #109,
+    // 2026-08-14. Do not reinstate it as a bug fix; it is a deliberate product
+    // decision, and it is recorded at the point of removal precisely so the
+    // next reader does not "restore" it.
+    //
+    // What stood here: on the READY -> SIGNED transition, every persisted
+    // critical Rx warning had to carry an `RxWarningOverride` row keyed by its
+    // real `rx-warning-<index>` id, or the route returned 422 OVERRIDE_REQUIRED
+    // and wrote an `RX_SIGN_BLOCKED_NO_OVERRIDE` audit row.
+    //
+    // The ruling deletes the surface that DISPLAYED prescription safety. A
+    // server-side refusal whose only remedy lived on a deleted surface is not a
+    // safety net — it is an unclearable block: no door in, and every affected
+    // doctor stuck at 422 with nothing to click. So the gate comes out WITH the
+    // face, in the same commit, by design.
+    //
+    // ⚠️ THIS IS A REAL REDUCTION IN WHAT THE SERVER REFUSES, and it is declared
+    // as such in the PR body and the §2.5 delta rather than described as a
+    // cleanup. Extraction, persistence and the `RxWarningOverride` audit trail
+    // are all untouched (`07c-rx-drafting.ts`, `rx-warnings.ts`,
+    // `rx-warning-audit.ts`): the data keeps being produced and stored, and its
+    // disposition is an OPEN question the ruling deliberately left open. The
+    // `RX_SIGN_BLOCKED_NO_OVERRIDE` AuditAction value stays in the Postgres enum
+    // — historical rows reference it, and an enum value is not removable by the
+    // same edit that stops writing it.
 
     // ── E/M visible-confirm gate (prod smoke #311) ─────────────────────
     // Adopting/dismissing an AI suggestion that changed the computed E/M

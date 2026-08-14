@@ -3,7 +3,7 @@
 // ----------------------------------------------------------------------------
 // A board that shows a confident wrong number is worse than one that admits a
 // gap, because a clinician will believe it. These pin the honesty rules:
-// a missing patient name stays missing, a malformed rxDrafts payload yields NO
+// a missing patient name stays missing, an unknown filter falls back, and NO
 // criticals rather than throwing, and a critical card with no readable message
 // renders a blank line rather than a composed one.
 //
@@ -14,11 +14,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  criticalWarningsOf,
   dayProgress,
   laneMatchesFilter,
   sortLanes,
-  topInteractionLine,
   toBoardLane,
   type BoardLane,
 } from '../board-data';
@@ -48,30 +46,12 @@ describe('nothing is invented', () => {
     expect(l.patientLabel).toBe('MRN-4471');
   });
 
-  it('a MALFORMED rxDrafts yields no criticals rather than throwing', () => {
-    // It is model output persisted as Json. A bad payload must not take the
-    // whole board down.
-    for (const bad of [null, undefined, 'nonsense', 42, {}, { warnings: 'no' }]) {
-      expect(() => criticalWarningsOf(bad)).not.toThrow();
-      expect(criticalWarningsOf(bad)).toEqual([]);
-    }
-  });
-
-  it('a critical with no readable message renders NO line, not a composed one', () => {
-    expect(topInteractionLine([{ severity: 'critical' }])).toBeNull();
-    expect(topInteractionLine([])).toBeNull();
-  });
-
-  it('prefers the drug pair, because that is what is recognised fastest', () => {
-    expect(
-      topInteractionLine([{ severity: 'critical', drugA: 'warfarin', drugB: 'amiodarone', message: 'x' }]),
-    ).toBe('warfarin + amiodarone');
-  });
-
-  it('only CRITICAL warnings count — moderate ones are not board-level', () => {
-    const rx = { warnings: [{ severity: 'moderate' }, { severity: 'info' }, { severity: 'critical' }] };
-    expect(criticalWarningsOf(rx)).toHaveLength(1);
-  });
+  // ⚠️ Four tests covering `criticalWarningsOf` / `topInteractionLine` were
+  // REMOVED here with the prescription-safety surface (owner ruling #109).
+  // They proved the board tolerated a malformed `rxDrafts` blob rather than
+  // taking the whole board down, and composed no interaction line it could not
+  // read off the payload. Both properties belong with the helpers, and both
+  // went with them.
 });
 
 describe('lane kind and run length', () => {
@@ -113,18 +93,16 @@ describe('filters', () => {
     toBoardLane({ ...base, id: 'signed', status: 'SIGNED', signedAt: '2026-07-29T08:00:00.000Z' }),
     toBoardLane({ ...base, id: 'failed', status: 'FAILED' }),
     toBoardLane({ ...base, id: 'us', specialty: 'ultrasound' }),
-    toBoardLane({ ...base, id: 'crit', rxDrafts: { warnings: [{ severity: 'critical', drugA: 'a', drugB: 'b' }] } }),
   ];
   const ids = (f: Parameters<typeof laneMatchesFilter>[1]) =>
     lanes.filter((l) => laneMatchesFilter(l, f, isImaging)).map((l) => l.id).sort();
 
   it('active excludes signed AND failed', () => {
-    expect(ids('active')).toEqual(['crit', 'ready', 'us']);
+    expect(ids('active')).toEqual(['ready', 'us']);
   });
-  it('signed / failed / critical / ultrasound each select their own', () => {
+  it('signed / failed / ultrasound each select their own', () => {
     expect(ids('signed')).toEqual(['signed']);
     expect(ids('failed')).toEqual(['failed']);
-    expect(ids('critical')).toEqual(['crit']);
     expect(ids('ultrasound')).toEqual(['us']);
   });
   it('SOAP means "not imaging", so a NEW specialty is included for free', () => {
@@ -135,23 +113,11 @@ describe('filters', () => {
   });
 });
 
-describe('ordering is clinical, not cosmetic', () => {
-  it('CRITICAL lanes sort first, ahead of newer routine ones', () => {
-    // Burying a red lane under twelve routine ones on a busy day is how an
-    // interaction gets missed.
-    const lanes: BoardLane[] = [
-      toBoardLane({ ...base, id: 'newest', createdAt: '2026-07-29T12:00:00.000Z' }),
-      toBoardLane({
-        ...base,
-        id: 'critical-older',
-        createdAt: '2026-07-29T07:00:00.000Z',
-        rxDrafts: { warnings: [{ severity: 'critical', drugA: 'warfarin', drugB: 'amiodarone' }] },
-      }),
-    ];
-    expect(sortLanes(lanes).map((l) => l.id)).toEqual(['critical-older', 'newest']);
-  });
-
-  it('within a band, newest first', () => {
+describe('ordering', () => {
+  // ⚠️ 'CRITICAL lanes sort first' was REMOVED here — the critical-first band
+  // went with the prescription-safety surface (owner ruling #109), so the
+  // order is now newest-first with no bands at all.
+  it('newest first', () => {
     const lanes = [
       toBoardLane({ ...base, id: 'old', createdAt: '2026-07-29T07:00:00.000Z' }),
       toBoardLane({ ...base, id: 'new', createdAt: '2026-07-29T11:00:00.000Z' }),

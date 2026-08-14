@@ -62,7 +62,6 @@ const FILTERS: BoardFilter[] = [
   'signed',
   'soap',
   'ultrasound',
-  'critical',
   'failed',
 ];
 
@@ -122,7 +121,6 @@ export default async function BoardPage({
         audioDurationSec: true,
         // The board's critical treatment derives from real warnings — see
         // criticalWarningsOf(). Selected here so the lane never has to guess.
-        rxDrafts: true,
         patient: { select: { name: true } },
       },
     }),
@@ -167,7 +165,6 @@ export default async function BoardPage({
     createdAt: Date;
     signedAt: Date | null;
     audioDurationSec: number | null;
-    rxDrafts: unknown;
     patient: { name: string } | null;
   };
 
@@ -181,7 +178,6 @@ export default async function BoardPage({
       createdAt: v.createdAt.toISOString(),
       signedAt: v.signedAt?.toISOString() ?? null,
       audioDurationSec: v.audioDurationSec,
-      rxDrafts: v.rxDrafts,
     }),
   );
 
@@ -189,14 +185,12 @@ export default async function BoardPage({
     allLanes.filter((l) => laneMatchesFilter(l, filter, isImaging)),
   );
   const progress = dayProgress(allLanes);
-  const criticalTally = allLanes.filter((l) => l.criticalCount > 0).length;
   const nextReview = lanes.find((l) => l.kind === 'ready') ?? null;
 
   return (
     <RoundsBoardChrome
       clinicianName={session.user.fullName ?? session.user.email ?? 'Clinician'}
       progress={progress}
-      criticalTally={criticalTally}
       filter={filter}
       query={q}
       page={page}

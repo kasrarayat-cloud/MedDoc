@@ -4,7 +4,7 @@
 // VisitReadyView — visit-detail body for READY/SIGNED states.
 // ----------------------------------------------------------------------------
 // Phase 5.1 V3 Split Pane edition. The horizontal tab bar drives the
-// SOAP / Transcript / Codes / Rx / Extras / Pipeline panels; the SOAP
+// SOAP / Transcript / Codes / Extras / Pipeline panels; the SOAP
 // and Transcript tabs each render their own V3 split-pane (sections |
 // sources rail, and turns | audio rail respectively). For audio_upload
 // visits we route to the new TranscriptTab; voice_dictation and
@@ -20,7 +20,6 @@ import {
   MessageSquare as MessageSquareIcon,
   Layers as LayersIcon,
   Stethoscope,
-  Pill,
   Sparkles,
   ChevronDown,
   Lock,
@@ -28,7 +27,6 @@ import {
 
 import { cn } from '@/lib/cn';
 import { isSkinBeta } from '@/config/skin-beta';
-import { criticalWarningRefs } from '@/lib/rx-warnings';
 import { placeholderSections } from '@/lib/parse-note-sections';
 import { ReviewTabsV2, type V2Tab } from './review-tabs-v2';
 // UX simplification pack (B) — flag-gated signed-visit document view.
@@ -41,7 +39,6 @@ import { RoundsGateFlow } from '@/components/rounds/gate-flow';
 import { RoundsSigned } from '@/components/rounds/signed';
 import type { SignGateId } from '@/lib/sign-gates';
 import {
-  applyRxResolved,
   firstBlockingGateTarget,
   applyGateOverlay,
   firstOpenStep,
@@ -55,7 +52,6 @@ import { extractIcdRows } from '@/lib/em-coding/icd-rows';
 import { BillingCardC3 } from './billing-card-c3';
 import { SoapEditor } from './soap-editor';
 import { CodesTab, codesTabHasWarnings } from './codes-tab';
-import { RxTab, rxTabHasContent, rxTabWarningLevel } from './rx-tab';
 import { ExtrasTab, extrasTabHasFlag } from './extras-tab';
 import { CopySectionButton } from './copy-section-button';
 import { TranscriptTab, utterancesToSources } from './transcript-tab';
@@ -64,7 +60,6 @@ import type { VisitExportData, CptEm } from '@/lib/visit-export';
 import {
   sectionSoap,
   sectionCodes,
-  sectionRx,
   sectionExtras,
 } from '@/lib/ehr-formatters';
 import { formatLocalDateTime } from '@/lib/format-time';
@@ -81,8 +76,9 @@ import {
 
 type VisitReadyViewTheme = 'legacy' | 'clinician';
 
-// T-M6: six tabs — SOAP, Transcript/Input, Codes, Rx, Extras, Pipeline.
-type TabKey = 'soap' | 'transcript' | 'codes' | 'rx' | 'extras' | 'pipeline';
+// T-M6: five tabs — SOAP, Transcript/Input, Codes, Extras, Pipeline.
+// (`rx` retired with the prescription-safety surface — owner ruling #109.)
+type TabKey = 'soap' | 'transcript' | 'codes' | 'extras' | 'pipeline';
 
 export interface Utterance {
   speaker?: number;
@@ -116,9 +112,6 @@ function resolveChatTarget(target: string): Element | null {
   // audit-only and there is no card to scroll to. It was removed from the
   // intent union rather than left resolving to nothing, which would be that
   // same lie in a new place.
-  if (target === 'rx_gate') {
-    return document.querySelector('[data-testid="review-doc-rx-gate"]');
-  }
   if (target === 'document') {
     return document.querySelector('[data-testid="visit-document"]');
   }
@@ -189,11 +182,9 @@ export interface VisitReadyViewProps {
   /** T-M6 automation-layer outputs. */
   icdCodes: unknown;
   cptCodes: unknown;
+  /** Still read: the EXPORT path prints the medication list. Owner ruling #109
+   *  deleted the surface that displayed prescription SAFETY, not the data. */
   rxDrafts: unknown;
-  /** Round 4 critical-Rx-override fix: warningIds with existing
-   *  RxWarningOverride rows. Threaded into RxTab → RxWarningsRail so
-   *  ✓ Overridden chips persist across reload. */
-  rxOverriddenWarningIds: string[];
   referrals: unknown;
   patientSummary: string | null;
   confidenceScores: unknown;
@@ -436,31 +427,13 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     setEmLevel((prev) => r.code ?? prev);
   }, [props.visitId]);
 
-  // V2 review (skin-only, flag-gated) — live mirror of the server's fail-closed
-  // critical-Rx sign gate, so the V2 shell can disable the Sign trigger until
-  // every critical interaction is overridden (the VISIBLE half; POST /sign 422
-  // remains the enforcement). Seeded from the persisted override rows using the
-  // SAME criticalWarningRefs identity the sign route validates, then kept live
-  // by RxTab's onResolvedChange. Computed unconditionally (hooks rule); only the
-  // flag-ON branch consumes it.
-  const initialRxResolved = useMemo(
-    () =>
-      criticalWarningRefs(props.rxDrafts).every((ref) =>
-        (props.rxOverriddenWarningIds ?? []).includes(ref.id)
-      ),
-    [props.rxDrafts, props.rxOverriddenWarningIds]
-  );
-  const [rxResolved, setRxResolved] = useState(initialRxResolved);
-
   // ── ROUNDS, Screen 2 ─────────────────────────────────────────────────────
   // Computed unconditionally (hooks rule); only the stage branches consume it.
   const router = useRouter();
 
-  // ── Screen 3's three in-session signals ──────────────────────────────────
-  // `applyRxResolved`'s own comment asked for exactly this widening. A COUNT,
-  // not a boolean, so 2-of-3-overridden is expressible; `undefined` means "no
-  // signal yet", which is not the same as zero.
-  const [rxUnresolved, setRxUnresolved] = useState<number | undefined>(undefined);
+  // ── Screen 3's in-session signals ────────────────────────────────────────
+  // (The Rx count was the third; it went with the surface that produced it —
+  // owner ruling #109.)
   const [emConfirmedSession, setEmConfirmedSession] = useState(false);
   const [attested, setAttested] = useState(false);
   const [flowOpen, setFlowOpen] = useState(false);
@@ -469,14 +442,11 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     () =>
       props.rounds
         ? applyGateOverlay(props.rounds, {
-            // Prefer the exact count when RxTab has reported one; fall back to
-            // the older boolean so the value is never invented.
-            rxUnresolved: rxUnresolved ?? (rxResolved ? 0 : undefined),
             emConfirmed: emConfirmedSession,
             attested,
           })
         : null,
-    [props.rounds, rxUnresolved, rxResolved, emConfirmedSession, attested]
+    [props.rounds, emConfirmedSession, attested]
   );
   // THE DATA IS THE CONDITION. `rounds` is computed server-side in `VisitBody`
   // and arrives null when there is no view model to render, so a wiring mistake
@@ -578,18 +548,14 @@ export function VisitReadyView(props: VisitReadyViewProps) {
 
   // Per-tab warning badges driven by confidenceScores + wire-data.
   const codesWarn = codesTabHasWarnings(props.confidenceScores);
-  const rxWarn = rxTabWarningLevel(props.rxDrafts);
-  /** Anything to show at all — medications or warnings. Distinct from rxWarn,
-   *  which is what makes a gate fire. */
-  const rxHasContent = rxTabHasContent(props.rxDrafts);
   const extrasWarn = extrasTabHasFlag(
     props.confidenceScores,
     Boolean(props.patientSummary)
   );
 
   // Synthesize the minimum VisitExportData shape the section-copy
-  // helpers need. sectionSoap / sectionCodes / sectionRx /
-  // sectionExtras don't touch patient header or clinician info, so
+  // helpers need. sectionSoap / sectionCodes / sectionExtras
+  // don't touch patient header or clinician info, so
   // the placeholder fields below are never read.
   const sectionData = buildSectionData(props);
 
@@ -635,10 +601,10 @@ export function VisitReadyView(props: VisitReadyViewProps) {
   // ONE Sign action moves into ReviewTabsV2's persistent bottom bar (the SAME
   // SignAndSendModal, with the E/M confirm gate intact). Every tab child is the
   // SAME gate-bearing component the legacy tabs render; only the container
-  // changes. No sign / Rx / E/M / audit logic is touched. Both sign gates keep
-  // firing — critical-Rx (server POST /sign 422; visible half = Sign trigger
-  // disabled until rxResolved) and E/M confirm (inside SignAndSendModal). Flag
-  // OFF → the legacy tabs below run verbatim.
+  // changes. No sign / E/M / audit logic is touched. The E/M confirm gate keeps
+  // firing (inside SignAndSendModal). Flag OFF → the legacy tabs below run
+  // verbatim. (The critical-Rx gate that stood beside it was deleted with its
+  // surface — owner ruling #109.)
   if (isSkinBeta()) {
     const isSigned = props.readonly || props.signedAt !== null;
     // The verifier is audit-only — nothing is ever staged for Accept/Dismiss.
@@ -666,15 +632,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       ) : (
         <RawTextInputView text={props.rawTextInput} />
       );
-
-    const rxBadge: V2Tab['badge'] =
-      rxWarn === 'critical'
-        ? rxResolved
-          ? { tone: 'ok', text: '✓' }
-          : { tone: 'danger', text: '!' }
-        : rxWarn === 'any'
-          ? { tone: 'warn', text: '!' }
-          : null;
 
     // Tabs — each child is the SAME gate-bearing component the legacy tabs
     // render; only the container is the V2 full-width tab strip. Built with
@@ -708,20 +665,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             />
           </div>
         </>
-      ),
-    });
-    tabs.push({
-      key: 'rx',
-      label: 'Rx',
-      badge: rxBadge,
-      node: (
-        <RxTab
-          rx={props.rxDrafts}
-          visitId={props.visitId}
-          readonly={props.readonly}
-          initialOverriddenIds={props.rxOverriddenWarningIds}
-          onResolvedChange={setRxResolved}
-        />
       ),
     });
     tabs.push({
@@ -829,19 +772,18 @@ export function VisitReadyView(props: VisitReadyViewProps) {
     // ── UX simplification pack (B): a SIGNED note is a finished record, so it
     //    renders as ONE scrolling document instead of six tabs. Flag-gated and
     //    scoped to signed/readonly ONLY — the unsigned path below keeps
-    //    ReviewTabsV2 verbatim, because that is where the critical-Rx and E/M
-    //    gates live and those are frozen.
+    //    ReviewTabsV2 verbatim, because that is where the E/M gate lives and
+    //    it is frozen.
     //
     //    The nodes are pulled straight out of the tab list that was just built,
     //    so the note and the transcript render byte-for-byte what the tabs
     //    render. Only the container changes.
     // 3b. PRE-SIGN REVIEW AS THE DOCUMENT — flag NEXT_PUBLIC_REVIEW_DOC_VIEW.
     //     The other half of the linearisation, for UNSIGNED visits. The gates
-    //     are NOT moved: RxTab is handed to the document verbatim (same
-    //     override modal, same recordOverride, one button per warning), the E/M
-    //     confirmation inside SignAndSendModal stays exactly where it is and
-    //     stays the enforcement, and POST /sign is untouched. What changes is
-    //     that a blocker can no longer hide behind a tab nobody opened.
+    //     are NOT moved: the E/M confirmation inside SignAndSendModal stays
+    //     exactly where it is and stays the enforcement, and POST /sign is
+    //     untouched. What changes is that a blocker can no longer hide behind a
+    //     tab nobody opened.
     if (isReviewDocView() && !isSigned) {
       // HOISTED — so the Rounds branch below composes the SAME nodes instead of
       // building second copies of them.
@@ -996,51 +938,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               afterSection={afterSection}
             />
           )}
-          rxGateNode={
-            // PRESCRIPTIONS **OR** WARNINGS. Warnings alone was the old
-            // condition, which meant a visit with medications and no
-            // interaction had nowhere to show them; and an imaging study with
-            // neither still drew a "Prescription safety" heading over an empty
-            // panel. The GATE behaviour is untouched — it keys on
-            // `rxBlocking`, below, exactly as before.
-            /* ⚠️ R3.4 — HOSTED, AND THE SEMANTICS ARE UNTOUCHED BY CONSTRUCTION.
-               The prescription-safety surface is ~79 `qm-lin-rx-*` rules in
-               `globals.css`, all painted from `--color-linear-*`, and the
-               census counted 30+ of its classes on the stage plus legacy SAGE
-               on `-ghost-sm` and `-tag`. `.qm-rounds-host` redeclares all 22 of
-               those custom properties on a scoped class, so the whole family
-               retints at once.
-
-               THE POINT OF DOING IT THIS WAY IS THAT IT CANNOT CHANGE
-               BEHAVIOUR. The brief requires advisory/ack/gate semantics
-               byte-identical and the sign-block E2Es unchanged in meaning — a
-               wrapper adds one div and touches no conditional, no handler and
-               no class the gate keys on. `rxBlocking` still decides, `RxTab`
-               still owns the override flow, and every `data-testid` the packs
-               use is where it was. Rewriting 79 rules by hand is the version of
-               this change that could silently move a gate. */
-            /* ⚠️ R4.1 REMOVED THE WRAPPER THAT USED TO BE HERE. R3.4 hosted
-               this ONE mount and there are three; the host now lives on
-               `RxTab` itself, so every path inherits it and the list cannot go
-               stale again. Leaving both would double-apply the bridge —
-               harmless in CSS, but it would put the "which one is real"
-               question back into the file. */
-            rxHasContent ? (
-              <RxTab
-                rx={props.rxDrafts}
-                visitId={props.visitId}
-                readonly={props.readonly}
-                initialOverriddenIds={props.rxOverriddenWarningIds}
-                onResolvedChange={setRxResolved}
-                // The same fact as a COUNT, for the gate flow's partial
-                // credit. Only on the stage, so the off-stage render does not
-                // gain a state update it has no consumer for.
-                onUnresolvedChange={roundsActive ? setRxUnresolved : undefined}
-              />
-            ) : null
-          }
-          rxBlocking={!rxResolved}
-          rxHasWarnings={rxWarn !== null}
           emPendingChange={pendingEmChange}
           // STALENESS ONLY MEANS SOMETHING IF THERE IS A LEVEL.
           //
@@ -1085,7 +982,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
              failed removals all tried to conditionally unmount a node that
              `gate-flow` was physically relocating with `appendChild`; the cure
              was to stop relocating it, which was available because — unlike the
-             Rx and E/M slots — this bar holds no local state.
+             E/M slot — this bar holds no local state.
              `signGateBlockers` STAYS. It is now the single source of `blocked`
              for the re-homed bar rather than a reconciliation between two
              controls, so a gate added to `sign-gates.ts` still lands in the
@@ -1117,7 +1014,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               gates={roundsView.gates}
               n={roundsView.n}
               emArtifact={roundsView.emArtifact}
-              criticalUnresolved={roundsView.criticalUnresolved}
               chat={chatPanel}
               /* R2 — the lifecycle overflow, into the stage header. Composed
                  server-side in `page.tsx` and passed straight through. */
@@ -1205,7 +1101,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
       // so the summary row can never disagree with the exported document.
       const emBlob = (props.cptCodes as { em?: CptEm } | null | undefined)?.em ?? null;
       const displayedEm = projectDisplayedEmCode(emBlob, true, !props.emNotApplicable);
-      const overrodeCount = props.rxOverriddenWarningIds?.length ?? 0;
 
       // Hoisted so the Rounds branch composes the SAME element instead of a
       // second copy. One signed renderer, exactly as the unsigned path keeps
@@ -1246,12 +1141,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               icd: extractIcdRows(props.icdCodes),
               emCode: displayedEm,
               emNotApplicable: !!props.emNotApplicable,
-              // Shown ONLY when an override was actually recorded — otherwise
-              // the row would assert "no overrides" on every ordinary note.
-              rxOverrideNote:
-                overrodeCount > 0
-                  ? `${overrodeCount} critical interaction${overrodeCount === 1 ? '' : 's'} overridden before signing`
-                  : null,
             }}
           />
       );
@@ -1319,10 +1208,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
         )}
         <ReviewTabsV2
           tabs={tabs}
-          rxCritical={rxWarn === 'critical'}
-          rxResolved={rxResolved}
           pendingEmChange={pendingEmChange}
-          rxTabKey="rx"
           reviewTabKey="review"
           visitId={props.visitId}
           doctorEmail={props.doctorEmail}
@@ -1363,7 +1249,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
         showPipelineTab={props.showPipelineTab}
         warnings={{
           codes: codesWarn ? 'any' : null,
-          rx: rxWarn,
           extras: extrasWarn ? 'any' : null,
         }}
       />
@@ -1442,24 +1327,6 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               icd={props.icdCodes}
               cpt={props.cptCodes}
               readonly={props.readonly}
-            />
-          </div>
-        )}
-        {tab === 'rx' && (
-          <div className="space-y-3">
-            <div className="flex justify-end">
-              <CopySectionButton
-                visitId={props.visitId}
-                text={sectionRx(sectionData)}
-                label="Copy Rx"
-                section="Prescriptions"
-              />
-            </div>
-            <RxTab
-              rx={props.rxDrafts}
-              visitId={props.visitId}
-              readonly={props.readonly}
-              initialOverriddenIds={props.rxOverriddenWarningIds}
             />
           </div>
         )}
@@ -1730,7 +1597,6 @@ function Tabs({
   showPipelineTab: boolean;
   warnings: {
     codes: 'critical' | 'any' | null;
-    rx: 'critical' | 'any' | null;
     extras: 'critical' | 'any' | null;
   };
 }) {
@@ -1738,7 +1604,6 @@ function Tabs({
     { key: 'soap', label: 'SOAP Note', icon: <FileTextIcon className="h-3.5 w-3.5" aria-hidden /> },
     { key: 'transcript', label: secondTabLabel, icon: <MessageSquareIcon className="h-3.5 w-3.5" aria-hidden /> },
     { key: 'codes', label: 'Codes', icon: <Stethoscope className="h-3.5 w-3.5" aria-hidden />, warning: warnings.codes },
-    { key: 'rx', label: 'Rx', icon: <Pill className="h-3.5 w-3.5" aria-hidden />, warning: warnings.rx },
     { key: 'extras', label: 'Extras', icon: <Sparkles className="h-3.5 w-3.5" aria-hidden />, warning: warnings.extras },
     ...(showPipelineTab
       ? [{ key: 'pipeline' as const, label: 'Pipeline', icon: <LayersIcon className="h-3.5 w-3.5" aria-hidden /> }]

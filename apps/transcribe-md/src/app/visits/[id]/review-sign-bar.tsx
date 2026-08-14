@@ -27,11 +27,10 @@
 // (`review-document-view` → 0). That is a real architectural conflict.
 //
 // The cure is not better conditional unmounting. It is to stop moving the node:
-//   · The DOM adoption in `gate-flow.tsx` now covers `rx` and `em` ONLY, which
-//     are the slots that genuinely need it — both hold lazily-seeded local
-//     React state (`RxTab.overriddenIds`, `ReviewDocumentView.emConfirmed`) that
-//     a remount would silently un-clear, sending a doctor back to re-justify a
-//     warning already written to `rx_warning_overrides`.
+//   · The DOM adoption in `gate-flow.tsx` now covers `em` ONLY, which is the
+//     slot that genuinely needs it — it holds lazily-seeded local React state
+//     (`ReviewDocumentView.emConfirmed`) that a remount would silently
+//     un-clear.
 //   · THIS bar holds no such state. Every input is a prop, so it can be
 //     rendered by whoever owns the surface it belongs to, and mounting or
 //     unmounting it costs nothing. It is passed into the gate flow as a React
@@ -64,7 +63,6 @@ export interface ReviewSignBarProps {
   /** Anything outstanding. Computed by the caller so there is one number. */
   blocked: boolean;
   /** Named reasons, for the status line. Only used by the `footer` variant. */
-  rxBlocking?: boolean;
   emBlocking?: boolean;
   emStale?: boolean;
   onRescoreEm?: () => void | Promise<void>;
@@ -89,7 +87,6 @@ export function ReviewSignBar({
   emPendingChange,
   attested,
   blocked,
-  rxBlocking = false,
   emBlocking = false,
   emStale = false,
   onRescoreEm,
@@ -142,20 +139,21 @@ export function ReviewSignBar({
                 style={{ color: 'var(--color-linear-amber)' }}
               />
               <span className="qm-c3-rev2-sign-msg" data-testid="review-doc-bar-msg">
-                {/* ⚠️ NAME THE REASON THAT ACTUALLY APPLIES. This used to be a
-                    two-way `rxBlocking ? … : 'Confirm the documentation level
-                    above'`, which was safe only while `blocked` meant exactly
-                    rx-or-E/M. Feeding the rail's gate count in broke that
-                    assumption immediately: an IMAGING visit — where `emApplies`
-                    is false and no E/M surface may appear anywhere — started
-                    printing "Confirm the documentation level above" because its
-                    one open gate was the attestation. The imaging pack caught
-                    it. E/M is named only when E/M is genuinely the blocker. */}
-                {rxBlocking
-                  ? 'Resolve the prescription warning above'
-                  : emBlocking
-                    ? 'Confirm the documentation level above'
-                    : 'Open Review & sign to clear the remaining steps'}
+                {/* ⚠️ NAME THE REASON THAT ACTUALLY APPLIES, AND KEEP THE
+                    FALLBACK. This was once a two-way `rx ? … : 'Confirm the
+                    documentation level above'`, which was safe only while
+                    `blocked` meant exactly rx-or-E/M. Feeding the rail's gate
+                    count in broke that assumption immediately: an IMAGING visit
+                    — where `emApplies` is false and no E/M surface may appear
+                    anywhere — started printing "Confirm the documentation level
+                    above" because its one open gate was the attestation. The
+                    imaging pack caught it. The Rx arm is gone with its surface
+                    (ruling #109); the generic arm STAYS, because `blocked` is
+                    still fed by the rail's count and can be true for a gate this
+                    line does not name. */}
+                {emBlocking
+                  ? 'Confirm the documentation level above'
+                  : 'Open Review & sign to clear the remaining steps'}
               </span>
             </>
           ) : emStale ? (

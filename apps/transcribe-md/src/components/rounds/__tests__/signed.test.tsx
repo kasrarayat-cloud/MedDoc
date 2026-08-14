@@ -37,7 +37,6 @@ const EMPTY_QUEUE: StageQueuePosition = {
 };
 
 const NO_TRAIL: SignedTrail = {
-  criticalOverridesBeforeSign: 0,
   emAcknowledgedAt: null,
 };
 
@@ -62,39 +61,30 @@ function renderSigned(
 
 describe('the safety trail shows ONLY what applied', () => {
   it('renders NO trail at all when nothing was recorded', () => {
-    // Not an empty box, not "no safety steps" — nothing. A visit with no
-    // critical interaction and no level change had no safety step to log, and
-    // the screen must not imply it looked and found none.
+    // Not an empty box, not "no safety steps" — nothing. A visit with no level
+    // change had no safety step to log, and the screen must not imply it looked
+    // and found none.
     renderSigned();
     expect(screen.queryByTestId('rounds-signed-trail')).toBeNull();
-    expect(screen.queryByTestId('rounds-signed-trail-rx')).toBeNull();
     expect(screen.queryByTestId('rounds-signed-trail-em')).toBeNull();
-  });
-
-  it('renders the Rx card ONLY from a real override count', () => {
-    renderSigned({ trail: { criticalOverridesBeforeSign: 2, emAcknowledgedAt: null } });
-    expect(screen.getByTestId('rounds-signed-trail-rx').textContent).toMatch(
-      /2 critical interactions overridden, each with a recorded reason/
-    );
-    expect(screen.queryByTestId('rounds-signed-trail-em')).toBeNull();
-  });
-
-  it('singularises rather than printing "1 interactions"', () => {
-    renderSigned({ trail: { criticalOverridesBeforeSign: 1, emAcknowledgedAt: null } });
-    expect(screen.getByTestId('rounds-signed-trail-rx').textContent).toMatch(
-      /1 critical interaction overridden, with a recorded reason/
-    );
   });
 
   it('renders the E/M card ONLY from a real acknowledgement timestamp', () => {
     renderSigned({
-      trail: {
-        criticalOverridesBeforeSign: 0,
-        emAcknowledgedAt: '2026-07-30T11:59:00.000Z',
-      },
+      trail: { emAcknowledgedAt: '2026-07-30T11:59:00.000Z' },
     });
     expect(screen.getByTestId('rounds-signed-trail-em')).toBeTruthy();
+  });
+
+  // ⚠️ POSITIVE CONTROL FOR THE DELETION — owner ruling #109. Two tests that
+  // asserted the Rx trail card RENDERED (from a real override count, and
+  // singularised) were removed; this one asserts it can no longer render at
+  // all. Deleting the positive assertions alone would leave nothing watching a
+  // half-applied removal.
+  it('NEVER renders an Rx card — the surface that produced the rows is gone', () => {
+    renderSigned({ trail: { emAcknowledgedAt: '2026-07-30T11:59:00.000Z' } });
     expect(screen.queryByTestId('rounds-signed-trail-rx')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/interaction/i);
   });
 
   it('NEVER renders an attestation card — nothing persists it', () => {
@@ -119,12 +109,9 @@ describe('the safety trail shows ONLY what applied', () => {
 
   it('NEGATIVE CONTROL — the trail CAN render, so the absences above mean something', () => {
     renderSigned({
-      trail: {
-        criticalOverridesBeforeSign: 1,
-        emAcknowledgedAt: '2026-07-30T11:00:00.000Z',
-      },
+      trail: { emAcknowledgedAt: '2026-07-30T11:00:00.000Z' },
     });
-    expect(screen.getByTestId('rounds-signed-trail').children).toHaveLength(2);
+    expect(screen.getByTestId('rounds-signed-trail').children).toHaveLength(1);
   });
 });
 

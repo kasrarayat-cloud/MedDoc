@@ -50,14 +50,14 @@ describe('createDeferredScroll', () => {
     const sched = manualScheduler();
     const d = createDeferredScroll(scrollTo, sched.schedule);
 
-    d.record('rx_gate');
+    d.record('em_gate');
     d.flush();
 
     expect(scrollTo).not.toHaveBeenCalled();
     expect(sched.depth()).toBe(1);
 
     sched.runAll();
-    expect(scrollTo).toHaveBeenCalledExactlyOnceWith('rx_gate');
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith('em_gate');
   });
 
   it('flushing with nothing pending schedules nothing at all', () => {
@@ -109,7 +109,12 @@ describe('createDeferredScroll', () => {
     const sched = manualScheduler();
     const d = createDeferredScroll(scrollTo, sched.schedule);
 
-    d.record('rx_gate');
+    // ⚠️ THE TWO TARGETS MUST DIFFER OR THIS PROVES NOTHING. Ruling #109 took
+    // `rx_gate` out of the union, and the mechanical substitution to `em_gate`
+    // briefly made both records identical — at which point the assertion held
+    // whether the FIRST or the LAST won. `document` is the union's other
+    // surviving member, so the discrimination is restored rather than faked.
+    d.record('document');
     d.record('em_gate');
     d.flush();
     sched.runAll();
@@ -159,15 +164,16 @@ describe('createDeferredScroll', () => {
     const sched = manualScheduler();
     const d = createDeferredScroll(scrollTo, sched.schedule);
 
-    d.record('rx_gate');
-    d.flush();
-    sched.runAll();
-
     d.record('em_gate');
     d.flush();
     sched.runAll();
 
-    expect(scrollTo).toHaveBeenNthCalledWith(1, 'rx_gate');
-    expect(scrollTo).toHaveBeenNthCalledWith(2, 'em_gate');
+    // Distinct on purpose — same reason as above.
+    d.record('document');
+    d.flush();
+    sched.runAll();
+
+    expect(scrollTo).toHaveBeenNthCalledWith(1, 'em_gate');
+    expect(scrollTo).toHaveBeenNthCalledWith(2, 'document');
   });
 });

@@ -10,9 +10,10 @@
 // So: render the thing being signed. Top to bottom, one column, and put every
 // decision at the place in the page where it actually applies.
 //
-//   • A critical-Rx warning and an E/M level change render as their own cards,
-//     inline, one per item. Never collapsed into a count, never bulk-cleared,
-//     and never behind a disclosure.
+//   • An E/M level change renders as its own card, inline, one per item. Never
+//     collapsed into a count, never bulk-cleared, and never behind a
+//     disclosure. (A critical-Rx card stood beside it until owner ruling #109
+//     deleted the prescription-safety surface.)
 //   • Everything that blocks the signature says so where the signature is.
 //
 // NO SUGGESTION LANE. The anchored verifier is AUDIT-ONLY: it still runs and
@@ -22,8 +23,7 @@
 // per-section slot survives as a no-op because both renderers take it and a
 // future non-suggestion annotation belongs there — it simply never draws.
 //
-// WHAT THIS COMPONENT DOES NOT DO: decide anything clinical. The Rx override is
-// RxWarningsRail → OverrideConfirmModal → recordOverride. Signing is
+// WHAT THIS COMPONENT DOES NOT DO: decide anything clinical. Signing is
 // SignAndSendModal → the existing sign route. The E/M confirmation inside that
 // modal is untouched and remains the enforcement — the inline cards here stand
 // in front of it, never around it.
@@ -61,16 +61,8 @@ export interface ReviewDocumentViewProps {
   renderDocument?: (
     afterLabel: (label: string) => React.ReactNode,
   ) => React.ReactNode;
-  /** The critical-Rx gate, rendered inline and unchanged. Null when the visit
-   *  has no warnings at all, in which case no Rx row is drawn. */
-  rxGateNode: React.ReactNode;
-  /** True while any critical warning is still un-overridden. Mirrors the value
-   *  the tabbed view computes from criticalWarningRefs — the same identity the
-   *  sign route validates. */
-  rxBlocking: boolean;
-  /** Whether the Rx panel has an actual WARNING, as opposed to just
-   *  medications. Drives the alarm styling only; the gate keys on rxBlocking. */
-  rxHasWarnings: boolean;
+  // ⚠️ `rxGateNode`, `rxBlocking` and `rxHasWarnings` were REMOVED here with
+  // the prescription-safety surface (owner ruling #109).
   /** Unacknowledged E/M level change ({from,to}) or null. */
   emPendingChange: { from: string; to: string } | null;
   /** The note changed since the level was scored — the sign route refuses while
@@ -94,13 +86,11 @@ export interface ReviewDocumentViewProps {
    * inline exactly as today. Absent ⇒ everything renders inline and this file's
    * output is byte-identical to before.
    *
-   * ⚠️ A PORTAL, NOT A SECOND MOUNT, AND THAT IS THE WHOLE POINT. Both
-   * cleared-gate states on this surface are lazily-seeded LOCAL state with no
-   * `router.refresh()` behind them — `RxTab`'s `overriddenIds`, and
-   * `emConfirmed` below. A sequential flow that re-mounted or duplicated these
-   * sections would silently revert a cleared override: the doctor would be
-   * asked to re-justify a warning already persisted, and the blocker count
-   * would tick back up. A portal keeps the subtree's position in the React
+   * ⚠️ A PORTAL, NOT A SECOND MOUNT, AND THAT IS THE WHOLE POINT. The
+   * cleared-gate state on this surface is lazily-seeded LOCAL state with no
+   * `router.refresh()` behind it — `emConfirmed` below. A sequential flow that
+   * re-mounted or duplicated these sections would silently revert a cleared
+   * gate and tick the blocker count back up. A portal keeps the subtree's position in the React
    * tree — so the state survives — and changes only where the DOM lands.
    *
    * It also keeps exactly ONE `data-chat-target` anchor per gate. Two would
@@ -128,7 +118,7 @@ export interface ReviewDocumentViewProps {
    *     this bar      "Reviewed"    Sign & Download   disabled=false
    *
    * The rail's N counts every applicable gate including `attestation`; this
-   * bar's `blocked` was `rxBlocking || emBlocking` with no `attested` term. So
+   * bar's `blocked` was the Rx and E/M terms with no `attested` term. So
    * the enabled button signed straight past the attestation — and
    * `sign-gates.ts` marks that gate `serverEnforced: false`, so nothing behind
    * it caught the bypass.
@@ -194,8 +184,8 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
   // ⚠️ THIS WAS A PORTAL AND THE PORTAL WAS THE BUG. `createPortal(node, host)`
   // and a bare `node` are different element TYPES to React, so every time a
   // step deactivated and its host vanished, the subtree unmounted and
-  // remounted — resetting `RxTab.overriddenIds` to the stale server prop and
-  // asking the doctor to re-justify a warning already persisted. That is
+  // remounted — resetting the adopted gate's local state to the stale server
+  // prop and asking the doctor to redo work already persisted. That is
   // exactly the defect the portal was chosen to prevent, reintroduced by the
   // portal itself. Changing a portal's container remounts too, so "one host per
   // step" could not fix it either.
@@ -203,7 +193,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
   // Moving a DOM node with appendChild does not touch React's tree at all:
   // React keeps rendering into the same wrapper and never learns it sits
   // somewhere else. State survives because nothing unmounted.
-  const slot = (id: 'rx' | 'em' | 'signbar', node: React.ReactNode) => (
+  const slot = (id: 'em' | 'signbar', node: React.ReactNode) => (
     <div data-gate-slot={id}>{node}</div>
   );
 
@@ -211,8 +201,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
 
   const emBlocking = props.emPendingChange != null && !emConfirmed;
   // Every gate the rail counts, not a hand-maintained subset of them.
-  const blocked =
-    props.rxBlocking || emBlocking || (props.signGateBlockers ?? 0) > 0;
+  const blocked = emBlocking || (props.signGateBlockers ?? 0) > 0;
 
   async function rescore() {
     if (!props.onRescoreEm) return;
@@ -261,27 +250,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
         {/* ── INLINE GATES ───────────────────────────────────────────────
             At the position they belong to, one card per item, never a count. */}
 
-        {/* THE ALARM IS FOR A WARNING, NOT FOR A PRESCRIPTION.
-            Widening this panel to render whenever there are medications was
-            right — a doctor must be able to see what they prescribed — but it
-            brought the amber triangle and the words "Prescription safety" with
-            it, so a visit with a routine refill and nothing wrong looked
-            exactly like a visit with an interaction. The card is BYTE-IDENTICAL
-            when a warning exists; without one it is a quiet list. */}
-        {props.rxGateNode && slot('rx', (
-          <section
-            className={`qm-rdoc-gate${props.rxHasWarnings ? '' : ' qm-rdoc-gate-quiet'}`}
-            data-testid="review-doc-rx-gate"
-            data-rx-warnings={props.rxHasWarnings ? 'true' : 'false'}
-          >
-            <div className="qm-rdoc-gate-head">
-              {props.rxHasWarnings && <AlertTriangle className="h-3.5 w-3.5" aria-hidden />}
-              <span>{props.rxHasWarnings ? 'Prescription safety' : 'Prescriptions'}</span>
-            </div>
-            <div className="qm-rdoc-gate-body">{props.rxGateNode}</div>
-          </section>
-        ))}
-
+        
         {/* ── THE LEVEL, AND THE RIGHT TO DISAGREE WITH IT ────────────────
             Calm and first, because it is not a blocker — the two cards below
             are, and they belong nearest the signature they hold up. This one
@@ -442,7 +411,6 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
               emPendingChange={props.emPendingChange}
               attested={props.attested}
               blocked={blocked}
-              rxBlocking={props.rxBlocking}
               emBlocking={emBlocking}
               emStale={props.emStale}
               onRescoreEm={props.onRescoreEm}

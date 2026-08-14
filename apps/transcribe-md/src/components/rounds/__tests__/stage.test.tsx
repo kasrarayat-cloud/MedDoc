@@ -30,8 +30,6 @@ const identity = toStageIdentity({
 const QUEUE = ['v1', 'v2', 'v3'];
 
 const clean = signGates({
-  rxDrafts: null,
-  overriddenWarningIds: [],
   specialty: 'primary-care',
   emPendingChange: null,
 });
@@ -158,34 +156,24 @@ describe('the vitals slot is reserved and EMPTY', () => {
   });
 });
 
-describe('the critical band', () => {
-  it('appears only when a critical interaction is unresolved, and says where it clears', () => {
-    renderStage({ criticalUnresolved: 2 });
-    const band = screen.getByTestId('rounds-critical-band');
-    expect(band.textContent).toContain('2 critical interactions');
-    expect(band.textContent).toContain('Gate 1');
-  });
-
-  it('singularises', () => {
-    renderStage({ criticalUnresolved: 1 });
-    expect(screen.getByTestId('rounds-critical-band').textContent).toContain(
-      '1 critical interaction —'
-    );
-  });
-
-  it('NEGATIVE CONTROL — absent when nothing is unresolved', () => {
-    renderStage({ criticalUnresolved: 0 });
+describe('THE CRITICAL BAND IS GONE — owner ruling #109', () => {
+  // Replaces three tests that asserted the band appeared, singularised, and
+  // stayed away at zero. The band pointed at "Gate 1", which no longer exists,
+  // so the POSITIVE control is now that nothing draws it under any input.
+  it('never draws, and no stage text names an interaction', () => {
+    renderStage({});
     expect(screen.queryByTestId('rounds-critical-band')).toBeNull();
+    expect(document.body.textContent).not.toMatch(/critical interaction/i);
+    // …and it does not merely fail to mention Gate 1 — there is no Gate 1.
+    expect(document.body.textContent).not.toMatch(/Gate 1/);
   });
 });
 
 describe('the action rail', () => {
   it('the primary carries the same count as the padlock', () => {
     const blocked = signGates({
-      rxDrafts: { warnings: [{ severity: 'critical', rx_drug: 'w', message: 'm' }] },
-      overriddenWarningIds: [],
       specialty: 'primary-care',
-      emPendingChange: null,
+      emPendingChange: { from: '99213', to: '99214', cause: 'note_edited', at: '2026-07-30T00:00:00Z' },
     });
     renderStage({ gates: blocked.gates, n: blocked.n });
     const btn = screen.getByTestId('rounds-review-sign');

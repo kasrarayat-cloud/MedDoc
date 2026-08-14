@@ -26,7 +26,7 @@ describe('the intent union', () => {
         value: '6.8',
       },
       { kind: 'edit_header', field: 'patient_name', value: 'Jane Doe' },
-      { kind: 'scroll_to', target: 'rx_gate' },
+      { kind: 'scroll_to', target: 'em_gate' },
       { kind: 'answer' },
       { kind: 'cannot', what: 'change the letterhead', where: 'Settings › My Note Format' },
       { kind: 'refuse', because: 'That is not part of this visit.' },
@@ -52,13 +52,21 @@ describe('the intent union', () => {
       // scrollIntoView is never reached — so the chat reports "Took you to
       // codes" over a page that never moved.
       { kind: 'scroll_to', target: 'codes' },
+      // …and `rx_gate`, retired with the prescription-safety surface itself
+      // (owner ruling #109). Same rule, THIRD application, and the third time
+      // is why the rule is written into the union rather than remembered: the
+      // card stopped rendering, so the target had to stop existing. Leaving it
+      // would have the model emit a navigation the resolver answers with null,
+      // and the chat say "Took you to the prescription-safety card" over a
+      // page that never moved AND a card that no longer exists.
+      { kind: 'scroll_to', target: 'rx_gate' },
     ]) {
       expect(ChatIntentSchema.safeParse(intent).success, JSON.stringify(intent)).toBe(false);
     }
   });
 
   it('every surviving scroll target is one the page can actually satisfy', () => {
-    for (const target of ['rx_gate', 'em_gate', 'document']) {
+    for (const target of ['em_gate', 'document']) {
       expect(ChatIntentSchema.safeParse({ kind: 'scroll_to', target }).success, target).toBe(true);
     }
   });
@@ -161,8 +169,14 @@ describe('the dispatcher', () => {
 describe('the system prompt', () => {
   it('states the scope guard and the gate rule', () => {
     expect(CHAT_EDIT_SYSTEM).toMatch(/SCOPE/);
-    expect(CHAT_EDIT_SYSTEM).toMatch(/never override|cannot override/i);
-    expect(CHAT_EDIT_SYSTEM).toMatch(/sign/i);
+    // ⚠️ RETARGETED, NOT RELAXED. This matched /never override|cannot override/
+    // — the prescription-safety clause, deleted with its surface by owner
+    // ruling #109. Dropping the line would have left the test asserting SCOPE
+    // and the word "sign", which the prompt contains many times for unrelated
+    // reasons; it must still name every gate the model may NOT clear, and the
+    // surviving pair is the E/M confirm and the signature itself.
+    expect(CHAT_EDIT_SYSTEM).toMatch(/cannot confirm an E\/M level change/i);
+    expect(CHAT_EDIT_SYSTEM).toMatch(/or sign the\s+note/i);
   });
 
   it('requires the reply to name what was done', () => {

@@ -31,7 +31,7 @@
 //     payloads, same per-claim identity check; bulk-accept is a loop over the
 //     SAME per-claim call, so the audit records individual adoptions exactly
 //     as it does today
-//   • the critical-Rx override gate (RxWarningsRail → OverrideConfirmModal →
+//   • the critical-Rx override gate (RETIRED — owner ruling #109; was
 //     recordOverride) — rendered inline, unchanged, one card per warning,
 //     never bulk-able
 //   • the E/M confirm-before-sign gate — SignAndSendModal keeps its own

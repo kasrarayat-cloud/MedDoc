@@ -124,11 +124,9 @@ export function cardEntranceDelayMs(index: number): number {
 }
 
 function LaneCard({ lane, index }: { lane: BoardLane; index: number }) {
-  const critical = lane.criticalCount > 0;
-
-  const border = critical
-    ? `1px solid var(--rounds-critical)`
-    : lane.kind === 'failed'
+  // ⚠️ The `critical` border, the interaction line and the row tint were
+  // REMOVED here with the prescription-safety surface (owner ruling #109).
+  const border = lane.kind === 'failed'
       ? `1px dashed var(--rounds-critical)`
       : lane.kind === 'processing' || lane.kind === 'recording'
         ? `1px dashed var(--rounds-line-2)`
@@ -160,8 +158,7 @@ function LaneCard({ lane, index }: { lane: BoardLane; index: number }) {
       href={`/visits/${lane.id}`}
       data-testid={`rounds-lane-card-${lane.id}`}
       data-lane-kind={lane.kind}
-      data-critical={critical ? 'true' : 'false'}
-      aria-label={`${lane.patientLabel}, ${lane.kind}${critical ? ', critical interaction' : ''}`}
+      aria-label={`${lane.patientLabel}, ${lane.kind}`}
       /* R2. Hover lift, pressed, focus-visible and the entrance live in
          `rounds-tokens.css` — a pseudo-class cannot be expressed inline, which
          is why this element gained a class rather than more `style` keys. The
@@ -183,18 +180,6 @@ function LaneCard({ lane, index }: { lane: BoardLane; index: number }) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {critical ? (
-          // The glyph is part of the text, not an icon-only signal — a screen
-          // reader gets "warning" in the label above, and a greyscale printout
-          // still shows it.
-          // C2: takes the on-dark variant, on this file's OWN argument. The
-          // comment above says the glyph "is part of the text, not an icon-only
-          // signal" — and text takes the text token. At 2.72:1 it was under
-          // even the 3:1 bar a decorative graphic would get.
-          <span aria-hidden style={{ color: 'var(--rounds-critical-on-dark)' }}>
-            ⚠
-          </span>
-        ) : null}
         <span
           style={{
             fontFamily: 'var(--rounds-font-ui)',
@@ -286,28 +271,6 @@ function LaneCard({ lane, index }: { lane: BoardLane; index: number }) {
         </span>
       </div>
 
-      {/* ONE line, and only when there is a real one to show. A critical card
-          with nothing readable in the payload renders no line rather than a
-          composed summary. */}
-      {critical && lane.topInteraction ? (
-        <div
-          style={{
-            marginTop: 4,
-            fontFamily: 'var(--rounds-font-mono)',
-            fontSize: 11,
-            // Text on a card that may be dark → the AA-safe variant.
-            color:
-              lane.kind === 'ready'
-                ? 'var(--rounds-critical)'
-                : 'var(--rounds-critical-on-dark)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {lane.topInteraction}
-        </div>
-      ) : null}
     </Link>
   );
 }
@@ -432,12 +395,7 @@ export function RoundsBoard({ lanes }: { lanes: BoardLane[] }) {
               data-testid={`rounds-lane-${lane.id}`}
               style={{
                 position: 'relative',
-                // The critical lane ROW tints, not just the card — it is what
-                // makes a red lane findable while scanning a long board.
-                background:
-                  lane.criticalCount > 0
-                    ? 'rgba(201,58,46,.06)'
-                    : 'transparent',
+                background: 'transparent',
                 borderRadius: 'var(--rounds-radius-sm)',
                 padding: '8px 4px',
               }}

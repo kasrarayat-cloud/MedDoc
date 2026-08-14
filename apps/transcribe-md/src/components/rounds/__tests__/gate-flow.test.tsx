@@ -15,11 +15,6 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import type { SignGate } from '@/lib/sign-gates';
 import { RoundsGateFlow } from '../gate-flow';
 
-const RX = (unresolved: number): SignGate => ({
-  id: 'rx',
-  unresolved,
-  serverEnforced: true,
-});
 const EM = (unresolved: number): SignGate => ({
   id: 'em',
   unresolved,
@@ -40,7 +35,7 @@ const ATTEST = (unresolved = 1): SignGate => ({
 function renderFlow(
   over: Partial<React.ComponentProps<typeof RoundsGateFlow>> = {}
 ) {
-  const gates = over.gates ?? [RX(1), EM(1), ATTEST()];
+  const gates = over.gates ?? [EM(1), ATTEST()];
   return render(
     <RoundsGateFlow
       open
@@ -62,10 +57,11 @@ describe('the steps ARE the gate array', () => {
   it('renders one step per applicable gate, in the server’s order', () => {
     renderFlow();
     const steps = screen.getByTestId('rounds-gate-steps');
-    expect(steps.children).toHaveLength(3);
-    expect(screen.getByTestId('rounds-gate-step-rx')).toBeTruthy();
+    expect(steps.children).toHaveLength(2);
     expect(screen.getByTestId('rounds-gate-step-em')).toBeTruthy();
     expect(screen.getByTestId('rounds-gate-step-attestation')).toBeTruthy();
+    // …and the retired gate draws no step (owner ruling #109).
+    expect(screen.queryByTestId('rounds-gate-step-rx')).toBeNull();
   });
 
   it('AN IMAGING VISIT HAS NO E/M STEP — absent, not disabled, not empty', () => {
@@ -84,9 +80,8 @@ describe('the steps ARE the gate array', () => {
   it('only the ACTIVE step gets a host — the others stay where they are', () => {
     // One host at a time, because the live gate is a single DOM subtree that
     // gets ADOPTED into it. Two hosts would be two homes for one node.
-    renderFlow({ step: 'rx' });
-    expect(screen.getByTestId('rounds-gate-host-rx')).toBeTruthy();
-    expect(screen.queryByTestId('rounds-gate-host-em')).toBeNull();
+    renderFlow({ step: 'em' });
+    expect(screen.getByTestId('rounds-gate-host-em')).toBeTruthy();
     expect(screen.queryByTestId('rounds-gate-host-attestation')).toBeNull();
   });
 
@@ -94,8 +89,8 @@ describe('the steps ARE the gate array', () => {
     // Empty in isolation: the real gate is adopted in from the paper at
     // runtime. If this component ever grows its own override button or level
     // card, the gate logic has a second home and the two will drift.
-    const { container } = renderFlow({ step: 'rx' });
-    expect(screen.getByTestId('rounds-gate-host-rx').childNodes).toHaveLength(0);
+    const { container } = renderFlow({ step: 'em' });
+    expect(screen.getByTestId('rounds-gate-host-em').childNodes).toHaveLength(0);
     expect(container.querySelector('textarea')).toBeNull();
     expect(container.querySelector('[data-testid^="review-doc-"]')).toBeNull();
   });
@@ -156,14 +151,14 @@ describe('Gate 2 on a QUIET visit — never dropped, never counted', () => {
 
 describe('locked until clear', () => {
   it('shows the lock and disables Next while the step still blocks', () => {
-    renderFlow({ gates: [RX(2), ATTEST()], step: 'rx' });
+    renderFlow({ gates: [EM(2), ATTEST()], step: 'em' });
     expect(screen.getByTestId('rounds-gate-lock')).toBeTruthy();
     expect(screen.getByTestId('rounds-gate-next')).toHaveProperty('disabled', true);
   });
 
   it('NEGATIVE CONTROL — a cleared step advances', () => {
     const onStepChange = vi.fn();
-    renderFlow({ gates: [RX(0), ATTEST()], step: 'rx', onStepChange });
+    renderFlow({ gates: [EM(0), ATTEST()], step: 'em', onStepChange });
 
     expect(screen.queryByTestId('rounds-gate-lock')).toBeNull();
     const next = screen.getByTestId('rounds-gate-next');
@@ -174,7 +169,7 @@ describe('locked until clear', () => {
 
   it('a blocked step cannot advance even if the button is clicked', () => {
     const onStepChange = vi.fn();
-    renderFlow({ gates: [RX(1), ATTEST()], step: 'rx', onStepChange });
+    renderFlow({ gates: [EM(1), ATTEST()], step: 'em', onStepChange });
     fireEvent.click(screen.getByTestId('rounds-gate-next'));
     expect(onStepChange).not.toHaveBeenCalled();
   });
@@ -184,9 +179,9 @@ describe('the attestation step', () => {
   it('summarises ONLY the gates that applied', () => {
     // A "cleared" row for a gate that never existed is a claim about work
     // nobody did.
-    renderFlow({ gates: [RX(0), ATTEST()], step: 'attestation' });
-    expect(screen.getByTestId('rounds-gate-summary-rx')).toBeTruthy();
-    expect(screen.queryByTestId('rounds-gate-summary-em')).toBeNull();
+    renderFlow({ gates: [EM(0), ATTEST()], step: 'attestation' });
+    expect(screen.getByTestId('rounds-gate-summary-em')).toBeTruthy();
+    expect(screen.queryByTestId('rounds-gate-summary-rx')).toBeNull();
     // Attestation does not summarise itself — it is the step you are on.
     expect(screen.queryByTestId('rounds-gate-summary-attestation')).toBeNull();
   });
@@ -289,20 +284,31 @@ describe('the imaging E/M anomaly', () => {
     expect(screen.queryByTestId('rounds-gate-host-attestation')).toBeNull();
   });
 
-  it('⚠️ R2 — the adoption host exists for the two gates that ADOPT, and only those', () => {
-    // The effect looks up `[data-gate-slot="rx"|"em"]` and nothing else. A host
+  it('⚠️ R2 — the adoption host exists for the ONE gate that ADOPTS, and only that', () => {
+    // The effect looks up `[data-gate-slot="em"]` and nothing else. A host
     // rendered for a step that never adopts is a landmark advertising a
     // mechanism it does not participate in — which is how the next reader
-    // concludes the adoption still covers three slots. Caught by the E2E pack
-    // when the markup had not followed the effect.
-    for (const g of [RX(1), EM(1)]) {
-      const { unmount } = renderFlow({ gates: [g], step: g.id });
-      expect(
-        screen.getByTestId(`rounds-gate-host-${g.id}`),
-        `${g.id} lost its adoption host — its live gate has nowhere to land`,
-      ).toBeTruthy();
-      unmount();
-    }
+    // concludes the adoption covers more slots than it does. Caught by the E2E
+    // pack when the markup had not followed the effect.
+    //
+    // ⚠️ `rx` LEFT THIS SET with its surface (owner ruling #109), so the set is
+    // now a single member — and the "and only that" half is asserted below
+    // rather than implied by the title. It was never tested while the set had
+    // two members: the loop proved the adopters HAD hosts and nothing proved
+    // the non-adopters did not.
+    const { unmount } = renderFlow({ gates: [EM(1)], step: 'em' });
+    expect(
+      screen.getByTestId('rounds-gate-host-em'),
+      'em lost its adoption host — its live gate has nowhere to land',
+    ).toBeTruthy();
+    unmount();
+
+    renderFlow({ gates: [ATTEST()], step: 'attestation' });
+    expect(
+      screen.queryByTestId('rounds-gate-host-attestation'),
+      'attestation adopts nothing, so a host for it advertises a mechanism it does not use',
+    ).toBeNull();
+    expect(screen.queryByTestId('rounds-gate-host-rx')).toBeNull();
   });
 });
 
@@ -371,9 +377,11 @@ describe('it does not know what a specialty is, and must not learn', () => {
     // The ban itself is UNCHANGED; it now applies to code, which is all it ever
     // meant to cover.
     const code = SRC.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
-    expect(code).not.toContain("=== 'rx'");
+    // ⚠️ The `'rx'` arms were REMOVED with the gate (owner ruling #109). A ban
+    // on comparing against an id the union can no longer express is decoration
+    // — it cannot fail, and a passing assertion that cannot fail is exactly
+    // what this file's own NON-VACUITY control below exists to catch.
     expect(code).not.toContain("=== 'em'");
-    expect(code).not.toContain('=== "rx"');
     expect(code).not.toContain('=== "em"');
 
     // NON-VACUITY: stripping is what makes this test weaker if it goes wrong.

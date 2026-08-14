@@ -7,7 +7,6 @@
 //
 //   - a card sits in the column its lane is actually at
 //   - each of the five lane kinds gets its own treatment
-//   - a critical lane tints the ROW, not just the card
 //   - RETRY exists on failed lanes and NOWHERE else
 //   - the empty state is an invitation, not a shrug
 // ============================================================================
@@ -102,36 +101,18 @@ describe('lane kinds each get their own treatment', () => {
   });
 });
 
-describe('critical lanes are findable', () => {
-  const criticalLane = lane({
-    rxDrafts: {
-      warnings: [{ severity: 'critical', drugA: 'warfarin', drugB: 'amiodarone' }],
-    },
-  });
-
-  it('marks the card AND names the interaction on one line', () => {
-    render(<RoundsBoard lanes={[criticalLane]} />);
+describe('THE SURFACE IS GONE — owner ruling #109', () => {
+  // Replaces `critical lanes are findable` (3 tests: the data-critical marker,
+  // the accessible name, and "no readable payload composes no line"). This is
+  // the positive control for the DELETION — proving the marker is absent is
+  // worth more than deleting the tests that asserted it was present, because a
+  // half-applied removal leaves the attribute behind on a board nothing tints.
+  it('no lane advertises a critical interaction any more', () => {
+    render(<RoundsBoard lanes={[lane({})]} />);
     const card = screen.getByTestId('rounds-lane-card-v1');
-    expect(card.getAttribute('data-critical')).toBe('true');
-    expect(screen.getByText('warfarin + amiodarone')).toBeTruthy();
-  });
-
-  it('the accessible name says critical — not colour alone', () => {
-    // A red border is invisible to a screen reader and to a greyscale printout.
-    render(<RoundsBoard lanes={[criticalLane]} />);
-    expect(
-      screen.getByRole('link', { name: /critical interaction/i }),
-    ).toBeTruthy();
-  });
-
-  it('a critical with NO readable payload shows no line rather than a made-up one', () => {
-    render(
-      <RoundsBoard lanes={[lane({ rxDrafts: { warnings: [{ severity: 'critical' }] } })]} />,
-    );
-    const card = screen.getByTestId('rounds-lane-card-v1');
-    expect(card.getAttribute('data-critical')).toBe('true');
-    // Nothing invented to fill the space.
-    expect(card.textContent).not.toMatch(/interaction|warning|check/i);
+    expect(card.getAttribute('data-critical')).toBeNull();
+    expect(card.textContent).not.toMatch(/interaction/i);
+    expect(screen.queryByRole('link', { name: /critical/i })).toBeNull();
   });
 });
 

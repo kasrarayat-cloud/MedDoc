@@ -42,9 +42,6 @@ export interface SignedSummary {
   /** True when E/M is suppressed for this specialty — we then say so rather
    *  than rendering an empty slot the doctor has to interpret. */
   emNotApplicable: boolean;
-  /** Present ONLY when a critical-Rx override was actually recorded. Absent
-   *  otherwise — an empty "no overrides" row would be noise on most notes. */
-  rxOverrideNote: string | null;
 }
 
 export interface SignedDocumentViewProps {
@@ -72,8 +69,7 @@ export function SignedDocumentView(props: SignedDocumentViewProps) {
 
   const hasIcd = summary.icd.length > 0;
   const hasEm = summary.emCode !== null || summary.emNotApplicable;
-  const hasRx = !!summary.rxOverrideNote;
-  const hasAnySummary = hasIcd || hasEm || hasRx;
+  const hasAnySummary = hasIcd || hasEm;
 
   return (
     <div className="qm-ux-doc" data-testid="signed-document-view">
@@ -85,7 +81,7 @@ export function SignedDocumentView(props: SignedDocumentViewProps) {
           whenever the file cannot be produced. */}
       <article className="qm-ux-doc-note">{props.documentNode ?? props.noteNode}</article>
 
-      {/* One slim summary row. Everything the Codes / Billing / Rx tabs carried
+      {/* One slim summary row. Everything the Codes / Billing tabs carried
           for a SIGNED note, in a single glance-able strip. */}
       {hasAnySummary && (
         <section className="qm-ux-doc-summary" aria-label="Coding summary">
@@ -116,12 +112,6 @@ export function SignedDocumentView(props: SignedDocumentViewProps) {
             </div>
           )}
 
-          {hasRx && (
-            <div className="qm-ux-sum-item qm-ux-sum-rx">
-              <span className="qm-ux-sum-key">RX OVERRIDE</span>
-              <span className="qm-ux-sum-val">{summary.rxOverrideNote}</span>
-            </div>
-          )}
         </section>
       )}
 

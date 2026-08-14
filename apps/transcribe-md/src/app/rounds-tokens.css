@@ -813,15 +813,6 @@ body[data-skin='rounds'] {
     0 4px 14px -6px rgba(25, 30, 38, 0.16);
 }
 
-[data-skin='rounds'] .qm-rounds-critical-band {
-  margin-bottom: -1px;
-  padding: 8px 14px;
-  border-radius: var(--rounds-radius-md) var(--rounds-radius-md) 0 0;
-  background: var(--rounds-critical);
-  color: #fff;
-  font-family: var(--rounds-font-ui);
-  font-size: 13px;
-}
 
 [data-skin='rounds'] .qm-rounds-peek {
   position: sticky;
@@ -1063,7 +1054,7 @@ body[data-skin='rounds'] {
 
    Chrome only. Every clinical control inside this layer arrives by PORTAL from
    the read-only paper and keeps its own markup, so nothing here restyles
-   `.qm-warn-*`, `#override-reason`, `.qm-rdoc-gate*` or the sign bar in place —
+   `.qm-rdoc-gate*` or the sign bar in place —
    the flag-OFF packs select those DOM contracts and a global rule would reach
    them on every build. Skinning, where it happens at all, descends from
    `.qm-rounds-gateflow`.
@@ -2684,56 +2675,12 @@ body[data-skin='rounds'] {
   }
 }
 
-/* ── R3.4 — THE PRESCRIPTION-SAFETY SURFACE ──────────────────────────────────
- * `.qm-rounds-host` on the wrapper retints all ~79 `qm-lin-rx-*` rules at once,
- * because every one of them paints from `--color-linear-*`. What the bridge
- * CANNOT do is change type or express advisory level on the status palette —
- * those are the two things this block adds, and nothing here touches a
- * conditional, a handler or a class the gate keys on.
- *
- * ⚠️ SEMANTICS ARE BYTE-IDENTICAL BY CONSTRUCTION, not by inspection. The brief
- * requires the advisory/ack/gate behaviour untouched and the sign-block E2Es
- * unchanged in meaning; a stylesheet cannot move a gate, and the wrapper adds
- * one div. `rxBlocking` still decides. */
-
-/* Kickers are LOOKED UP, not read — the rail's title, the pane heads, the
- * severity group labels and the drug tags all become mono per the type rule. */
-[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-rail-title,
-[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-pane-title,
-[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-rail-group-l,
-[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-tag,
-[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-id {
-  font-family: var(--rounds-font-mono);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-/* ── ADVISORY LEVELS ON THE STATUS PALETTE ───────────────────────────────────
- * CRITICAL takes the on-dark red; the panel ground is a stage surface, and this
- * file records that `--rounds-critical` as small text on surface-2 is 2.72:1.
- * The fill keeps the true red for borders and dots, exactly as the board does. */
-[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-rail-group-l-critical {
-  color: var(--rounds-critical-on-dark);
-}
-
-[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-warn-tally {
-  font-family: var(--rounds-font-mono);
-  color: var(--rounds-em-text);
-}
-
-/* ⚠️ THE TWO CONTROLS THE CENSUS'S COMPOSITE ARM CAUGHT. `-ghost-sm` ("+ Add
- * Rx") and `-tag` ("Continue") carried legacy SAGE, and only as a composite
- * value — a box-shadow/border blend the exact-match arm could not see. The
- * bridge retints their `--color-linear-*` reads; these two lines take the
- * remaining hard-coded accent onto the Rounds one. */
-[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-ghost-sm-sage {
-  color: var(--rounds-accent-text);
-  border-color: var(--rounds-line-2);
-}
-
-[data-skin='rounds'] .qm-rounds-rx .qm-lin-rx-tag-active {
-  color: var(--rounds-accent-text);
-}
+/* ── R3.4's PRESCRIPTION-SAFETY BRIDGE WAS REMOVED HERE ─────────────────────
+ * Owner ruling #109 deleted the surface. This block retinted the ~79
+ * `qm-lin-rx-*` rules for the Rounds skin (kicker type, advisory levels on the
+ * status palette, and the two controls whose legacy SAGE only showed up as a
+ * composite value); all of them went with the surface, so the bridge has
+ * nothing left to bridge. */
 
 /* ── R3.2 — VISIT-ROW STATUS AS A TREATMENT ──────────────────────────────────
  * `VisitList` renders the visit history on `/patients/[id]` AND the whole of

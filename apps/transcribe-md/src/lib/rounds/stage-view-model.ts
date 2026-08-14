@@ -41,16 +41,6 @@ export interface RoundsStageData {
   n: number;
   emArtifact: boolean;
   /**
-   * Unmet critical Rx warnings, for the band across the sheet.
-   *
-   * READ OFF THE GATE SET, never derived a second time. It is the same number
-   * as the rx gate's `unresolved`, and two derivations of one number is the
-   * exact defect `sign-gates.ts` was written to prevent for N. If they ever
-   * disagree, the band and the padlock contradict each other on the same
-   * screen.
-   */
-  criticalUnresolved: number;
-  /**
    * Screen 4's safety trail — ONLY what a persisted fact can prove.
    *
    * Each field is a real column read, not an inference from "the visit is
@@ -73,22 +63,6 @@ export interface RoundsStageData {
 
 export interface SignedTrail {
   /**
-   * CRITICAL Rx overrides recorded at or before the signature.
-   *
-   * Counted from real `RxWarningOverride` rows, each of which carries a
-   * server-validated reason, a signer and a timestamp, and each correlated
-   * against the visit's persisted warnings before it could be written.
-   *
-   * Filtered on severity in the READER, never in the query — that array is also
-   * the coverage input to `signGates`, and narrowing it there would narrow the
-   * gate. And compared against `signedAt` rather than assumed: `recordOverride`
-   * guards ownership, not visit status, so nothing structurally prevents a row
-   * postdating the signature. A card that says "before signing" must mean it.
-   *
-   * 0 ⇒ no card. The visit had no critical interaction to clear.
-   */
-  criticalOverridesBeforeSign: number;
-  /**
    * When an E/M change was acknowledged, off the RAW `emPendingChange` column,
    * stamped by the winning READY→SIGNED transition.
    *
@@ -104,39 +78,18 @@ export interface SignedTrail {
   emAcknowledgedAt: string | null;
 }
 
-/**
- * The single live overlay B1 has a signal for.
- *
- * `RxTab.onResolvedChange` reports one boolean — `allCriticalResolved` — and
- * nothing finer. So this can zero the Rx term when every critical warning is
- * cleared in-session, and it cannot do partial credit.
- *
- * THE RESIDUAL IS NAMED RATHER THAN HIDDEN: on partial Rx resolution, and after
- * an in-session E/M confirm (which is private to `ReviewDocumentView`), N
- * OVER-STATES by up to one. The error direction is always "more blockers than
- * the server will enforce" — never a promise the server then breaks, which is
- * the direction that would make the number worse than no number. B2 owns
- * closing it, by widening the channel rather than by guessing here.
- */
-export function applyRxResolved(
-  data: RoundsStageData,
-  rxResolved: boolean
-): RoundsStageData {
-  // The narrow case of applyGateOverlay, kept because B1's callers and tests
-  // speak in this shape. `undefined` means "no in-session signal", which is
-  // different from 0 and must not collapse into it.
-  return applyGateOverlay(data, { rxUnresolved: rxResolved ? 0 : undefined });
-}
 
 /**
  * Every in-session signal the gate flow can supply, applied at once.
  *
- * THIS IS THE WIDENING `applyRxResolved` ASKED FOR. Its residual was named
- * rather than hidden: one boolean could not express partial Rx progress, and
- * nothing carried the in-session E/M confirm or the attestation checkbox, so N
- * over-stated by up to one on both. Screen 3 owns all three signals, so it can
- * now report them — and the error direction stays the safe one, because every
- * term still comes from the gate set the server's own primitives produced.
+ * Every in-session signal Screen 3 can supply, applied at once. Nothing carried
+ * the in-session E/M confirm or the attestation checkbox before this, so N
+ * over-stated by up to one on both. The error direction stays the safe one,
+ * because every term still comes from the gate set the server's own primitives
+ * produced.
+ *
+ * ⚠️ The Rx term was REMOVED here by owner ruling #109 along with the surface
+ * that produced its signal — not because the residual it named was closed.
  *
  * A field left `undefined` means "no signal", NOT "zero". Passing 0 for an
  * unknown would clear a blocker nobody cleared.
@@ -144,8 +97,6 @@ export function applyRxResolved(
 export function applyGateOverlay(
   data: RoundsStageData,
   overlay: {
-    /** Unmet critical Rx warnings, counted — partial credit is the point. */
-    rxUnresolved?: number;
     /** The doctor confirmed the level in this session. */
     emConfirmed?: boolean;
     /** The attestation checkbox. UI-only, exactly as the gate says. */
@@ -156,17 +107,13 @@ export function applyGateOverlay(
   // `useMemo` whose result is passed to the stage, so returning a fresh object
   // for a no-op overlay would hand every consumer a new identity on every
   // recompute for no reason. B1's tests pin this with `toBe`.
-  const touchesNothing =
-    overlay.rxUnresolved === undefined && !overlay.emConfirmed && !overlay.attested;
+  const touchesNothing = !overlay.emConfirmed && !overlay.attested;
   if (touchesNothing) return data;
 
   // Map, never filter. A gate that applies stays present at zero — "this visit
-  // has no Rx gate" and "this visit's Rx gate is clear" are different claims
+  // has no E/M gate" and "this visit's E/M gate is clear" are different claims
   // and the strip draws them differently.
   const gates = data.gates.map((g) => {
-    if (g.id === 'rx' && overlay.rxUnresolved !== undefined) {
-      return { ...g, unresolved: Math.max(0, overlay.rxUnresolved) };
-    }
     if (g.id === 'em' && overlay.emConfirmed) return { ...g, unresolved: 0 };
     if (g.id === 'attestation' && overlay.attested) return { ...g, unresolved: 0 };
     return g;
@@ -176,9 +123,6 @@ export function applyGateOverlay(
     ...data,
     gates,
     n: blockerCount(gates),
-    // OFF THE GATE SET, always. Two derivations of one number is what makes the
-    // critical band and the padlock contradict each other on one screen.
-    criticalUnresolved: gates.find((g) => g.id === 'rx')?.unresolved ?? 0,
   };
 }
 
@@ -212,9 +156,8 @@ export function firstOpenStep(gates: readonly SignGate[]): SignGateId | null {
  */
 export function firstBlockingGateTarget(
   gates: readonly SignGate[]
-): 'rx_gate' | 'em_gate' | null {
-  const TARGETS: Partial<Record<SignGateId, 'rx_gate' | 'em_gate'>> = {
-    rx: 'rx_gate',
+): 'em_gate' | null {
+  const TARGETS: Partial<Record<SignGateId, 'em_gate'>> = {
     em: 'em_gate',
   };
 

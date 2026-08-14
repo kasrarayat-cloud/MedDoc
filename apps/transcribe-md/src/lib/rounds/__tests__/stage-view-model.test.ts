@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 import type { SignGate } from '@/lib/sign-gates';
 import {
   applyGateOverlay,
-  applyRxResolved,
   firstBlockingGateTarget,
   firstOpenStep,
   type RoundsStageData,
@@ -31,16 +30,10 @@ function data(gates: SignGate[]): RoundsStageData {
     gates,
     n: gates.reduce((s, g) => s + g.unresolved, 0),
     emArtifact: false,
-    criticalUnresolved: gates.find((g) => g.id === 'rx')?.unresolved ?? 0,
-    trail: { criticalOverridesBeforeSign: 0, emAcknowledgedAt: null },
+    trail: { emAcknowledgedAt: null },
   };
 }
 
-const RX = (unresolved: number): SignGate => ({
-  id: 'rx',
-  unresolved,
-  serverEnforced: true,
-});
 const EM = (unresolved: number): SignGate => ({
   id: 'em',
   unresolved,
@@ -52,57 +45,16 @@ const ATTEST: SignGate = {
   serverEnforced: false,
 };
 
-describe('applyRxResolved', () => {
-  it('is the identity when nothing has been resolved', () => {
-    const d = data([RX(2), EM(1), ATTEST]);
-    expect(applyRxResolved(d, false)).toBe(d);
-  });
-
-  it('zeroes the Rx term and RECOUNTS n from the gates', () => {
-    const out = applyRxResolved(data([RX(2), EM(1), ATTEST]), true);
-
-    expect(out.gates.find((g) => g.id === 'rx')?.unresolved).toBe(0);
-    expect(out.n).toBe(2); // em 1 + attestation 1
-  });
-
-  it('KEEPS the rx gate present at zero — absent and clear are different claims', () => {
-    // "This visit has no prescriptions" and "this visit's interactions are all
-    // cleared" must not render the same. Filtering instead of mapping would
-    // make an all-clear visit indistinguishable from one that never had a
-    // gate, and the strip draws those differently.
-    const out = applyRxResolved(data([RX(2), ATTEST]), true);
-    expect(out.gates.map((g) => g.id)).toEqual(['rx', 'attestation']);
-  });
-
-  it('never invents a gate it was not given', () => {
-    const out = applyRxResolved(data([ATTEST]), true);
-    expect(out.gates.map((g) => g.id)).toEqual(['attestation']);
-    expect(out.n).toBe(1);
-  });
-
-  it('keeps criticalUnresolved equal to the rx gate — one number, one source', () => {
-    // The band across the sheet and the padlock's N must never disagree. They
-    // do if anyone derives this a second time.
-    for (const resolved of [false, true]) {
-      const out = applyRxResolved(data([RX(3), EM(1), ATTEST]), resolved);
-      expect(out.criticalUnresolved).toBe(
-        out.gates.find((g) => g.id === 'rx')?.unresolved
-      );
-    }
-  });
-
-  it('does not mutate its input', () => {
-    const d = data([RX(2), ATTEST]);
-    applyRxResolved(d, true);
-    expect(d.gates.find((g) => g.id === 'rx')?.unresolved).toBe(2);
-    expect(d.n).toBe(3);
-  });
-});
+// ⚠️ THE `applyRxResolved` DESCRIBE WAS REMOVED HERE — owner ruling #109 took
+// the function with the surface that fed it. Seven tests went; the properties
+// they pinned are all still pinned by `applyGateOverlay` below, which is what
+// `applyRxResolved` was the narrow case of: identity on no signal, recount from
+// the gates, keep a cleared gate PRESENT at zero, invent nothing, no mutation.
 
 describe('firstBlockingGateTarget', () => {
   it('returns the first server-enforced gate that still blocks, in order', () => {
-    expect(firstBlockingGateTarget([RX(1), EM(1), ATTEST])).toBe('rx_gate');
-    expect(firstBlockingGateTarget([RX(0), EM(1), ATTEST])).toBe('em_gate');
+    expect(firstBlockingGateTarget([EM(1), ATTEST])).toBe('em_gate');
+    expect(firstBlockingGateTarget([EM(0), ATTEST])).toBeNull();
   });
 
   it('NEVER returns attestation — it has no control to scroll to in B1', () => {
@@ -111,96 +63,69 @@ describe('firstBlockingGateTarget', () => {
     // to nothing while reporting a successful navigation is the exact lie the
     // deferred-scroll seam exists to prevent.
     expect(firstBlockingGateTarget([ATTEST])).toBeNull();
-    expect(firstBlockingGateTarget([RX(0), EM(0), ATTEST])).toBeNull();
+    expect(firstBlockingGateTarget([EM(0), ATTEST])).toBeNull();
   });
 
   it('ignores a gate that applies but is already clear', () => {
-    expect(firstBlockingGateTarget([RX(0), ATTEST])).toBeNull();
+    expect(firstBlockingGateTarget([EM(0), ATTEST])).toBeNull();
   });
 
   it('NEGATIVE CONTROL — it is capable of returning each target', () => {
     // Without this, "always null" would pass every assertion above except two,
     // and a refactor that broke the lookup table would look like a stricter
     // gate rather than a dead one.
-    expect(firstBlockingGateTarget([RX(1)])).toBe('rx_gate');
     expect(firstBlockingGateTarget([EM(1)])).toBe('em_gate');
     expect(firstBlockingGateTarget([])).toBeNull();
   });
 });
 
-describe('applyGateOverlay — the widening applyRxResolved asked for', () => {
-  it('takes a COUNT, so partial Rx progress is expressible', () => {
-    // The residual `applyRxResolved` named: one boolean could not say "2 of 3
-    // overridden", so N over-stated until the very last critical cleared.
-    const out = applyGateOverlay(data([RX(3), EM(1), ATTEST]), { rxUnresolved: 1 });
-    expect(out.gates.find((g) => g.id === 'rx')?.unresolved).toBe(1);
-    expect(out.n).toBe(3); // rx 1 + em 1 + attestation 1
-    expect(out.criticalUnresolved).toBe(1);
-  });
-
-  it('UNDEFINED IS NOT ZERO — an absent signal clears nothing', () => {
-    // Passing 0 for "I do not know yet" would clear a blocker nobody cleared,
-    // which is the one direction this module must never fail in.
-    const d = data([RX(2), ATTEST]);
-    expect(applyGateOverlay(d, {}).n).toBe(3);
-    expect(applyGateOverlay(d, { rxUnresolved: undefined }).n).toBe(3);
-    expect(applyGateOverlay(d, { rxUnresolved: 0 }).n).toBe(1);
-  });
-
+describe('applyGateOverlay', () => {
   it('returns the SAME OBJECT when no term applies', () => {
     // The result feeds a useMemo whose identity is handed to the stage; a fresh
     // object for a no-op overlay hands every consumer a new identity for
     // nothing.
-    const d = data([RX(2), ATTEST]);
+    const d = data([EM(1), ATTEST]);
     expect(applyGateOverlay(d, {})).toBe(d);
     expect(applyGateOverlay(d, { emConfirmed: false, attested: false })).toBe(d);
   });
 
   it('zeroes the E/M and attestation terms independently', () => {
-    const d = data([RX(1), EM(1), ATTEST]);
-    expect(applyGateOverlay(d, { emConfirmed: true }).n).toBe(2);
-    expect(applyGateOverlay(d, { attested: true }).n).toBe(2);
-    expect(
-      applyGateOverlay(d, { rxUnresolved: 0, emConfirmed: true, attested: true }).n
-    ).toBe(0);
+    const d = data([EM(1), ATTEST]);
+    expect(applyGateOverlay(d, { emConfirmed: true }).n).toBe(1);
+    expect(applyGateOverlay(d, { attested: true }).n).toBe(1);
+    expect(applyGateOverlay(d, { emConfirmed: true, attested: true }).n).toBe(0);
   });
 
   it('never removes a gate, and never invents one', () => {
-    const out = applyGateOverlay(data([RX(2), EM(1), ATTEST]), {
-      rxUnresolved: 0,
+    // "This visit has no E/M gate" and "this visit's E/M gate is clear" are
+    // different claims and the strip draws them differently, so a cleared gate
+    // stays PRESENT at zero. Filtering instead of mapping would collapse them.
+    const out = applyGateOverlay(data([EM(1), ATTEST]), {
       emConfirmed: true,
       attested: true,
     });
-    expect(out.gates.map((g) => g.id)).toEqual(['rx', 'em', 'attestation']);
+    expect(out.gates.map((g) => g.id)).toEqual(['em', 'attestation']);
   });
 
-  it('clamps a negative count rather than crediting it', () => {
-    const out = applyGateOverlay(data([RX(1), ATTEST]), { rxUnresolved: -5 });
-    expect(out.gates.find((g) => g.id === 'rx')?.unresolved).toBe(0);
-    expect(out.n).toBe(1);
-  });
-
-  it('keeps criticalUnresolved equal to the rx gate — one number, one source', () => {
-    for (const c of [0, 1, 4]) {
-      const out = applyGateOverlay(data([RX(4), ATTEST]), { rxUnresolved: c });
-      expect(out.criticalUnresolved).toBe(
-        out.gates.find((g) => g.id === 'rx')?.unresolved
-      );
-    }
+  it('does not mutate its input', () => {
+    const d = data([EM(1), ATTEST]);
+    applyGateOverlay(d, { emConfirmed: true, attested: true });
+    expect(d.gates.find((g) => g.id === 'em')?.unresolved).toBe(1);
+    expect(d.n).toBe(2);
   });
 });
 
 describe('firstOpenStep', () => {
   it('is the first gate that still blocks', () => {
-    expect(firstOpenStep([RX(1), EM(1), ATTEST])).toBe('rx');
-    expect(firstOpenStep([RX(0), EM(1), ATTEST])).toBe('em');
+    expect(firstOpenStep([EM(1), ATTEST])).toBe('em');
+    expect(firstOpenStep([EM(0), ATTEST])).toBe('attestation');
   });
 
   it('NEVER NULL on a non-empty set — with nothing outstanding it is the LAST gate', () => {
     // A flow that opened on "nothing" would be a full-screen dialog with no
     // content and no way forward. The last gate is where the signature is
     // taken, so that is the honest destination.
-    expect(firstOpenStep([RX(0), EM(0), { ...ATTEST, unresolved: 0 }])).toBe(
+    expect(firstOpenStep([EM(0), { ...ATTEST, unresolved: 0 }])).toBe(
       'attestation'
     );
   });

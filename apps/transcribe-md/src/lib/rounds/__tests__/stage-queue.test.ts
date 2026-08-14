@@ -12,12 +12,6 @@ import { describe, expect, it } from 'vitest';
 import { sortLanes, toBoardLane, type BoardLaneInput } from '../board-data';
 import { toReviewQueueIds } from '../stage-queue';
 
-const CRITICAL_RX = {
-  warnings: [
-    { id: 'w1', severity: 'critical', message: 'Interaction' },
-  ],
-};
-
 function row(over: Partial<BoardLaneInput> & { id: string }): BoardLaneInput {
   return {
     patientName: 'A Patient',
@@ -56,18 +50,17 @@ describe('toReviewQueueIds', () => {
     expect(ids).toEqual(['genuine']);
   });
 
-  it('puts critical visits first, then newest first — the board’s own order', () => {
+  it('puts newest first — the board’s own order', () => {
+    // ⚠️ Critical-first was the first band until owner ruling #109 removed the
+    // prescription-safety surface. The CONTRACT below is what mattered and it
+    // is unchanged: this queue must not reimplement the board's sort.
     const ids = toReviewQueueIds([
       row({ id: 'old', createdAt: '2026-07-28T09:00:00.000Z' }),
       row({ id: 'new', createdAt: '2026-07-30T09:00:00.000Z' }),
-      row({
-        id: 'critical-old',
-        createdAt: '2026-07-27T09:00:00.000Z',
-        rxDrafts: CRITICAL_RX,
-      }),
+      row({ id: 'older', createdAt: '2026-07-27T09:00:00.000Z' }),
     ]);
 
-    expect(ids).toEqual(['critical-old', 'new', 'old']);
+    expect(ids).toEqual(['new', 'old', 'older']);
   });
 
   it('IS the board’s ordering, not a copy of it that agrees today', () => {
@@ -78,7 +71,7 @@ describe('toReviewQueueIds', () => {
     // still be two implementations of one promise.
     const rows = [
       row({ id: 'a', createdAt: '2026-07-28T09:00:00.000Z' }),
-      row({ id: 'b', createdAt: '2026-07-30T09:00:00.000Z', rxDrafts: CRITICAL_RX }),
+      row({ id: 'b', createdAt: '2026-07-30T09:00:00.000Z' }),
       row({ id: 'c', createdAt: '2026-07-29T09:00:00.000Z' }),
       row({ id: 'd', status: 'FAILED' }),
     ];

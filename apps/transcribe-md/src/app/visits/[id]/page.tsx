@@ -151,11 +151,7 @@ export default async function VisitPage({
     confidenceScores: unknown;
   };
 
-  // Round 4 critical-Rx-override fix: pull existing override rows so
-  // the rail can hydrate with ✓ Overridden chips on already-acknowledged
-  // warnings. Visit-scoped + persisted, so reload + cross-tab don't
-  // lose the doctor's progress through multiple critical warnings.
-  const [user, visit, rxOverrides] = (await Promise.all([
+  const [user, visit] = (await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: { name: true, email: true },
@@ -217,24 +213,7 @@ export default async function VisitPage({
         confidenceScores: true,
       },
     }),
-    prisma.rxWarningOverride.findMany({
-      // ⚠️ THE `where` IS DELIBERATELY UNNARROWED. This same array populates
-      // `rxOverriddenWarningIds`, which is the COVERAGE INPUT to `signGates`
-      // and mirrors what `POST /sign` validates. Adding `severity: 'critical'`
-      // here to serve Screen 4's trail card would silently narrow the gate's
-      // notion of what has been overridden. Select more; filter in the reader.
-      where: { visitId: id },
-      select: {
-        warningId: true,
-        severity: true,
-        overriddenAt: true,
-      },
-    }),
-  ])) as [
-    UserRow | null,
-    VisitRow | null,
-    Array<{ warningId: string; severity: string; overriddenAt: Date }>,
-  ];
+  ])) as [UserRow | null, VisitRow | null];
 
   if (!user) redirect('/login');
   // ⚠️ T5 — THE AUTHOR CHECK IS GONE, AND THE PREDICATE REPLACED IT.
@@ -350,7 +329,6 @@ export default async function VisitPage({
           icdCodes={visit.icdCodes}
           cptCodes={visit.cptCodes}
           rxDrafts={visit.rxDrafts}
-          rxOverriddenWarningIds={rxOverrides.map((o) => o.warningId)}
           referrals={visit.referrals}
           emPendingChange={visit.emPendingChange}
           emStale={visit.emStale}
@@ -363,7 +341,6 @@ export default async function VisitPage({
           createdAt={visit.createdAt}
           // The Rounds identity header renders it as the reason line.
           chiefComplaint={visit.chiefComplaint}
-          rxOverrides={rxOverrides}
           /* R2 — into the STAGE HEADER, not the page foot. See below. */
           visitActions={lifecycleActions}
         />
@@ -442,11 +419,9 @@ interface VisitBodyProps {
   processingCostCents: number | null;
   icdCodes: unknown;
   cptCodes: unknown;
+  /** Still read: the EXPORT path prints the medication list. Owner ruling #109
+   *  deleted the surface that displayed prescription SAFETY, not the data. */
   rxDrafts: unknown;
-  /** Round 4 critical-Rx-override fix: warningIds with existing
-   *  RxWarningOverride rows. Hydrates the rail's ✓ Overridden chips
-   *  on initial paint so reload + cross-tab persistence works. */
-  rxOverriddenWarningIds: string[];
   referrals: unknown;
   /** E/M visible-confirm (prod smoke #311) — pending-change jsonb (coerced
    *  via unacknowledgedEmChange before reaching VisitReadyView). */
@@ -470,10 +445,6 @@ interface VisitBodyProps {
   createdAt: Date;
   /** The reason line on the Rounds identity header. Display only. */
   chiefComplaint: string | null;
-  /** The persisted override rows, for Screen 4's safety trail. `severity` is
-   *  filtered by the READER, never by the query — the same rows are the sign
-   *  gate's coverage input. */
-  rxOverrides: { warningId: string; severity: string; overriddenAt: Date }[];
   /**
    * R2 — the lifecycle actions (archive / delete / edit draft), for the STAGE
    * HEADER's quiet overflow.
@@ -722,8 +693,6 @@ async function VisitBody(props: VisitBodyProps) {
   }
 
   const gateSet = signGates({
-    rxDrafts: props.rxDrafts,
-    overriddenWarningIds: props.rxOverriddenWarningIds,
     specialty: props.specialtyId,
     emPendingChange: props.emPendingChange,
     emStale: props.emStale,
@@ -749,25 +718,8 @@ async function VisitBody(props: VisitBodyProps) {
     gates: gateSet.gates,
     n: gateSet.n,
     emArtifact: gateSet.emArtifact,
-    // OFF THE SAME GATE SET. Deriving it a second time from
-    // `unmetCriticalWarnings` would put two computations of one number on
-    // one screen, and the band would eventually contradict the padlock.
-    criticalUnresolved:
-      gateSet.gates.find((g) => g.id === 'rx')?.unresolved ?? 0,
     // ── Screen 4's safety trail — only what a column can prove ──────────
     trail: {
-      // Severity filtered HERE, not in the query: the same rows populate
-      // `rxOverriddenWarningIds`, which is the sign gate's coverage input.
-      // And compared against the signature rather than assumed — the override
-      // route guards ownership, not visit status, so a row CAN postdate a
-      // signature and "overridden before signing" has to mean it.
-      criticalOverridesBeforeSign: props.signedAt
-        ? props.rxOverrides.filter(
-            (o) =>
-              o.severity === 'critical' &&
-              o.overriddenAt.getTime() <= props.signedAt!.getTime()
-          ).length
-        : 0,
       // The RAW column, not the coerced display pair — that one is null on
       // every signed visit by construction, because the coercion returns null
       // once the change has been acknowledged.
@@ -800,7 +752,6 @@ async function VisitBody(props: VisitBodyProps) {
       icdCodes={props.icdCodes}
       cptCodes={props.cptCodes}
       rxDrafts={props.rxDrafts}
-      rxOverriddenWarningIds={props.rxOverriddenWarningIds}
       referrals={props.referrals}
       // Hybrid anchored generation — lane claims (strictly coerced; null
       // when absent/malformed so the lane simply doesn't render).
