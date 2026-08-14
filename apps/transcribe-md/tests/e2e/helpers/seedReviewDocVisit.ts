@@ -280,17 +280,15 @@ export const REVIEW_DOC_CLASSES = [
     label: 'an office visit',
     /** E/M applies: level row, Adjust, confirm gate and stale gate all exist. */
     emApplies: true,
-    /** The fixture carries a critical Rx interaction, so the Rx gate blocks. */
-    hasRxGate: true,
+    /** ⚠️ `hasRxGate` WAS REMOVED FROM THIS MATRIX — owner ruling #109. The
+     *  fixture still carries a critical Rx interaction (extraction was not in
+     *  scope); it simply no longer gates anything, so there is no per-specialty
+     *  arm left to switch on. */
   },
   {
     key: 'imaging' as const,
     label: 'an imaging report',
     emApplies: false,
-    // A venous duplex has no medications. The Rx gate is absent because there
-    // is nothing to prescribe, which is itself worth pinning: the panel must be
-    // GONE, not present-and-empty.
-    hasRxGate: false,
   },
 ] as const;
 
@@ -606,6 +604,29 @@ export function findImagingEmArtifacts(): string[] {
 /** One read-only value from the QA database. Exported so a spec can assert the
  *  fixture is in the state it claims to be — an "artifact suppressed" test proves
  *  nothing unless the artifact was demonstrably there. */
+/**
+ * How many prescriptions the seeded visit's `rxDrafts` actually carries.
+ *
+ * ⚠️ EXISTS AS A NON-VACUITY CONTROL, not as a feature check. Owner ruling #109
+ * deleted the prescription-safety SURFACE and deliberately kept extraction, so
+ * the R5 stage test asserts a page full of ABSENCES — and a fixture that
+ * quietly stopped writing `rxDrafts` would satisfy every one of them while
+ * proving nothing. This is the assertion that the state under test exists.
+ */
+export function seededRxDraftCount(visitId: string): number {
+  const out = psql(
+    `select coalesce(jsonb_array_length("rxDrafts"->'prescriptions'), 0) ` +
+      `from transcribe_visits where id = '${visitId}'`,
+  );
+  return Number.parseInt(out, 10) || 0;
+}
+
+/** The raw `rxDrafts` json, for asserting the EXTRACTED content survives the
+ *  surface's deletion (ruling #109 kept the data). */
+export function seededRxDraftJson(visitId: string): string {
+  return psql(`select coalesce("rxDrafts"::text, '') from transcribe_visits where id = '${visitId}'`);
+}
+
 export function psqlOne(sql: string): string {
   return psql(sql);
 }

@@ -36,9 +36,6 @@ import {
 import { signupFreshUser } from '../helpers/signup';
 import { docxGeometry, hasFamily, pdfGeometry } from '../helpers/exportGeometry';
 
-const OVERRIDE_REASON =
-  'Benefit outweighs risk; monitoring renal function weekly and patient counselled.';
-
 test.describe('Rounds Screen 3 — the gates', () => {
   test.beforeAll(() => {
     const dirty = findImagingEmArtifacts();
@@ -94,21 +91,19 @@ test.describe('Rounds Screen 3 — the gates', () => {
     return null;
   }
 
-  /** Clear Gate 1 the way a doctor does: the real per-warning override, with
-   *  its free-text clinical reason, writing a real RX_OVERRIDE_RECORDED row. */
-  async function clearGate1(page: import('@playwright/test').Page) {
-    const host = page.getByTestId('rounds-gate-host-rx');
-    await host.getByRole('button', { name: /override/i }).first().click();
-    // SCOPED BY ITS OWN TEXTAREA, not by role. The gate flow is itself a
-    // role="dialog" and the portaled gate inside it contains the word
-    // "Override", so getByRole('dialog') matches two elements and a text filter
-    // matches both. The reason field is the one thing only this modal has.
-    const dialog = page
-      .locator('[role="dialog"]')
-      .filter({ has: page.locator('#override-reason') });
-    await dialog.locator('#override-reason').fill(OVERRIDE_REASON);
-    await dialog.getByRole('button', { name: /confirm override/i }).click();
-    await expect(host).toContainText(/overridden/i);
+  /** Clear the E/M gate the way a doctor does — the real confirm control on the
+   *  portaled level card.
+   *
+   *  ⚠️ THIS REPLACED `clearGate1`, WHICH CLEARED THE Rx GATE (owner ruling
+   *  #109). The pack's central property is unchanged and still has a subject:
+   *  `em` is now the ONLY adopted slot, and it is adopted for exactly the
+   *  reason Rx was — `ReviewDocumentView.emConfirmed` is lazily-seeded local
+   *  React state with no `router.refresh()` behind it, so a flow that remounted
+   *  it would silently un-clear a gate the doctor had already cleared. */
+  async function clearEmGate(page: import('@playwright/test').Page) {
+    const host = page.getByTestId('rounds-gate-host-em');
+    await host.getByTestId('review-doc-em-confirm').click();
+    await expect(host.getByTestId('review-doc-em-confirm')).toContainText(/confirmed/i);
   }
 
   // ── 1. The image is the right image, and the flow is reachable ───────────
@@ -119,35 +114,33 @@ test.describe('Rounds Screen 3 — the gates', () => {
     await expect(page.locator('html')).toHaveAttribute('data-skin', 'rounds');
     const dlg = page.getByTestId('rounds-gate-flow');
     await expect(dlg).toHaveAttribute('aria-modal', 'true');
-    // It opens on the first thing that actually blocks — the Rx gate on this
-    // fixture, not step 1 by position.
-    await expect(dlg).toHaveAttribute('data-step', 'rx');
+    // It opens on the first thing that actually blocks — the E/M gate on this
+    // fixture (it seeds a pending level change), not step 1 by position.
+    await expect(dlg).toHaveAttribute('data-step', 'em');
   });
 
-  // ── 2. Gate 1 keeps the REAL mechanism ──────────────────────────────────
-  test('Gate 1 is the existing per-warning override, typed reason and all', async ({
-    page,
-  }) => {
+  // ── 2. THE Rx GATE IS GONE FROM THE FLOW ────────────────────────────────
+  test('there is no Rx step, host or gate anywhere in the flow', async ({ page }) => {
+    // Replaces 'Gate 1 is the existing per-warning override, typed reason and
+    // all' — owner ruling #109 deleted that gate with its surface. The
+    // replacement is an ABSENCE proof rather than a deletion, because the
+    // failure that would otherwise ship is a HALF-applied removal: the step
+    // chrome left behind, hosting nothing, with a Next button the doctor cannot
+    // enable and no override control to enable it with.
     const seeded = await openFlow(page, 'gates-2');
     test.skip(!seeded, 'psql seeding unavailable');
 
-    // The gate arrives by PORTAL — the same section, the same testid, inside
-    // the step host. Not a re-implementation.
-    const host = page.getByTestId('rounds-gate-host-rx');
-    await expect(host.getByTestId('review-doc-rx-gate')).toHaveCount(1);
-    // And there is still exactly one of it in the whole document.
-    await expect(page.getByTestId('review-doc-rx-gate')).toHaveCount(1);
+    await expect(page.getByTestId('rounds-gate-step-rx')).toHaveCount(0);
+    await expect(page.getByTestId('rounds-gate-host-rx')).toHaveCount(0);
+    await expect(page.getByTestId('review-doc-rx-gate')).toHaveCount(0);
+    await expect(page.getByTestId('rounds-gate-summary-rx')).toHaveCount(0);
+    await expect(page.locator('#override-reason')).toHaveCount(0);
 
-    // Blocked until the real override is recorded.
-    await expect(page.getByTestId('rounds-gate-lock')).toBeVisible();
-    await expect(page.getByTestId('rounds-gate-next')).toBeDisabled();
-
-    // A FREE-TEXT CLINICAL REASON — there is no literal token to type. The
-    // `> OVERRIDE` in the spec is a prompt aesthetic, not a gate condition, and
-    // requiring a typed token would be a NEW condition on signing.
-    await clearGate1(page);
-    await expect(page.getByTestId('rounds-gate-lock')).toHaveCount(0);
-    await expect(page.getByTestId('rounds-gate-next')).toBeEnabled();
+    // POSITIVE CONTROL — the flow rendered and has real steps. Five zeroes
+    // against a flow that never opened look identical to five zeroes against a
+    // working one.
+    await expect(page.getByTestId('rounds-gate-step-em')).toBeVisible();
+    await expect(page.getByTestId('rounds-gate-step-attestation')).toBeVisible();
   });
 
   // ── THE THIRD REFUSAL CLASS — the attestation is a SERVER term ──────────
@@ -190,37 +183,39 @@ test.describe('Rounds Screen 3 — the gates', () => {
 
   // ── 3. THE TEST THIS PACK EXISTS FOR ────────────────────────────────────
   test('stepping BACK does not un-clear a gate', async ({ page }) => {
-    // If the flow re-mounted its gates instead of portaling them, RxTab's
-    // `overriddenIds` would reset to its seeded value and the doctor would be
-    // asked to re-justify a warning already in rx_warning_overrides. The count
-    // would climb back up too. Nothing about that failure is visible without a
-    // browser, and stepping back is the normal interaction, not an edge case.
+    // If the flow re-mounted its gates instead of portaling them,
+    // `ReviewDocumentView.emConfirmed` would reset to its seeded value and the
+    // doctor would be asked to re-confirm a level change they had already
+    // confirmed. The count would climb back up too. Nothing about that failure
+    // is visible without a browser, and stepping back is the normal
+    // interaction, not an edge case.
     //
-    // Seeded emPending:false so the E/M step does not block — this test is
-    // about the Rx gate surviving navigation, and a blocked step in the middle
-    // would stop the walk for an unrelated reason.
-    const seeded = await openFlow(page, 'gates-3', { emPending: false });
+    // ⚠️ RETARGETED FROM THE Rx GATE (owner ruling #109) — and the property is
+    // NOT weakened by the move. `em` is the only slot that still adopts, and it
+    // adopts for precisely the reason Rx did: lazily-seeded local state with no
+    // `router.refresh()` behind it. The subject changed; the failure mode is
+    // the same one.
+    const seeded = await openFlow(page, 'gates-3');
     test.skip(!seeded, 'psql seeding unavailable');
 
-    await clearGate1(page);
+    await clearEmGate(page);
     const cleared = await page
       .getByTestId('rounds-gate-n')
       .getAttribute('data-blockers');
 
-    // Forward to the end, then all the way back.
-    await page.getByTestId('rounds-gate-next').click();
-    await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute('data-step', 'em');
+    // Forward to the end, then back.
     await page.getByTestId('rounds-gate-next').click();
     await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute(
       'data-step',
       'attestation',
     );
     await page.getByTestId('rounds-gate-back').click();
-    await page.getByTestId('rounds-gate-back').click();
-    await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute('data-step', 'rx');
+    await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute('data-step', 'em');
 
-    // Still overridden, still not blocking, still the same count.
-    await expect(page.getByTestId('rounds-gate-host-rx')).toContainText(/overridden/i);
+    // Still confirmed, still not blocking, still the same count.
+    await expect(
+      page.getByTestId('rounds-gate-host-em').getByTestId('review-doc-em-confirm'),
+    ).toContainText(/confirmed/i);
     await expect(page.getByTestId('rounds-gate-lock')).toHaveCount(0);
     await expect(page.getByTestId('rounds-gate-n')).toHaveAttribute(
       'data-blockers',
@@ -238,12 +233,18 @@ test.describe('Rounds Screen 3 — the gates', () => {
     const seeded = await openFlow(page, 'gates-4', { emPending: false });
     test.skip(!seeded, 'psql seeding unavailable');
 
-    // It is not where the flow opened, precisely BECAUSE it does not block.
-    await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute('data-step', 'rx');
+    // ⚠️ WITH Rx GONE (ruling #109) A QUIET VISIT HAS NOTHING BLOCKING BEFORE
+    // ATTESTATION, so the flow opens on the LAST gate rather than on E/M — that
+    // is `firstOpenStep`'s documented behaviour ("with nothing outstanding it
+    // is the last gate"), not a regression. The E/M step must still be PRESENT
+    // and reachable, which is what this test is actually for.
+    await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute(
+      'data-step',
+      'attestation',
+    );
     await expect(page.getByTestId('rounds-gate-step-em')).toBeVisible();
 
-    await clearGate1(page);
-    await page.getByTestId('rounds-gate-next').click();
+    await page.getByTestId('rounds-gate-back').click();
     await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute('data-step', 'em');
 
     // Present, hosting the level card, and not in the way.
@@ -259,9 +260,7 @@ test.describe('Rounds Screen 3 — the gates', () => {
     const seeded = await openFlow(page, 'gates-5');
     test.skip(!seeded, 'psql seeding unavailable');
 
-    // Clear Rx first so E/M becomes the open step.
-    await clearGate1(page);
-    await page.getByTestId('rounds-gate-next').click();
+    // E/M is now the FIRST blocking step — Rx no longer precedes it.
     await expect(page.getByTestId('rounds-gate-flow')).toHaveAttribute(
       'data-step',
       'em',
@@ -326,8 +325,9 @@ test.describe('Rounds Screen 3 — the gates', () => {
       'attestation',
     );
 
-    // The imaging fixture has no medications, so there is no Rx row to claim
-    // was cleared. A fabricated row would be a claim about work nobody did.
+    // No Rx row — the gate was deleted entirely by owner ruling #109, so the
+    // summary cannot claim work nobody did (and could not before either: the
+    // imaging fixture carries no medications).
     await expect(page.getByTestId('rounds-gate-summary-rx')).toHaveCount(0);
 
     // ⚠️ R2 — THE BAR IS NO LONGER ADOPTED, IT IS RENDERED HERE.
@@ -338,9 +338,9 @@ test.describe('Rounds Screen 3 — the gates', () => {
     // exist down there for the flow to come and fetch it.
     // The bar is now an ordinary React child of the attestation step
     // (`signbar` prop), so it lives in `rounds-gate-signbar-host`, and the
-    // paper renders none. Adoption survives for `rx` and `em` ONLY, which are
-    // the slots that genuinely need it — they hold local state a remount would
-    // silently un-clear.
+    // paper renders none. Adoption survives for `em` ONLY (ruling #109 removed
+    // `rx`), the slot that genuinely needs it — it holds local state a remount
+    // would silently un-clear.
     await expect(
       page.getByTestId('rounds-gate-signbar-host').getByTestId('review-doc-signbar'),
     ).toHaveCount(1);

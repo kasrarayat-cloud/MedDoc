@@ -310,14 +310,19 @@ test.describe('the visit page is the document', () => {
   // exercised is still covered by the tap-to-edit test below, which drives the
   // SAME re-fill through an edit.
 
-  test('both gates still render, and signing is still reachable', async ({ page }) => {
+  test('the E/M gate still renders, and signing is still reachable', async ({ page }) => {
     test.setTimeout(300_000);
     await page.setViewportSize({ width: 1400, height: 1000 });
     await openVisit(page);
     await page.getByTestId('visit-document').waitFor({ state: 'visible', timeout: 120_000 });
 
-    // The Rx gate is the SAME component, in the same place in the flow.
-    await expect(page.getByTestId('review-doc-rx-gate')).toBeVisible();
+    // ⚠️ WAS 'the Rx gate is the SAME component, in the same place in the flow'.
+    // Owner ruling #109 deleted it; the assertion is inverted rather than
+    // dropped, because this test's title says "BOTH gates still render" and a
+    // silently-removed line would leave the title lying.
+    await expect(page.getByTestId('review-doc-rx-gate')).toHaveCount(0);
+    // The E/M gate is the one that still renders here.
+    await expect(page.getByTestId('review-doc-em-gate')).toBeVisible();
     // WAS: `expect(getByRole('button', /sign & download/i)).toBeVisible()` —
     // "the pinned bar is untouched". The bar is not pinned to this surface any
     // more and there is nothing to pin: the signature is Gate 3's child. The
@@ -705,8 +710,9 @@ test.describe('the visit page is the document', () => {
     await page.goto(`/visits/${STYLED_VISIT_ID}`);
     await page.getByTestId('visit-document').waitFor({ state: 'visible', timeout: 120_000 });
 
-    // No medications and no warnings on this visit, so there is nothing for a
-    // prescription-safety heading to be about. It used to draw anyway.
+    // Nothing for a prescription-safety heading to be about — this visit has no
+    // medications and no warnings, and it used to draw anyway. Since owner
+    // ruling #109 the heading cannot draw on ANY visit.
     await expect(page.getByTestId('review-doc-rx-gate')).toHaveCount(0);
     const body = await page.locator('body').innerText();
     expect(body).not.toContain('Prescription safety');
@@ -759,8 +765,10 @@ test.describe('the visit page is the document', () => {
     // …including the whole-blob click-to-edit on the styled-note fallback.
     await expect(page.locator('[data-edit-affordance]')).toHaveCount(0);
 
-    // STILL HERE, and these three are the whole interaction model:
-    await expect(page.getByTestId('review-doc-rx-gate')).toBeVisible();
+    // STILL HERE, and these are the whole interaction model. (The Rx gate was
+    // the first of three until owner ruling #109 deleted it — asserted absent
+    // below with the other retired surfaces.)
+    await expect(page.getByTestId('review-doc-rx-gate')).toHaveCount(0);
     // ⚠️ RE-POINTED: the editor is behind the drawer now. This opens it, proves
     // the editor is really there, and closes it again — the drawer's scrim is a
     // <body> portal, and the gate/signature assertions below need the stage back.
@@ -811,7 +819,11 @@ test.describe('the visit page is the document', () => {
       // the converter down, what matters is that the signature is still
       // REACHABLE and still becomes LIVE, not merely that a button is painted.
       await expectSignatureReachable(page);
-      await expect(page.getByTestId('review-doc-rx-gate')).toBeVisible();
+      await expect(page.getByTestId('review-doc-rx-gate')).toHaveCount(0);
+      // POSITIVE CONTROL — the surface rendered; the zero above is about a
+      // deleted gate, not about a page that failed to load with the converter
+      // down, which is precisely what this test is stressing.
+      await expect(page.getByTestId('review-doc-em-gate')).toBeVisible();
       expect(visitDocManifestCount()).toBe(0);
     } finally {
       converter('start');

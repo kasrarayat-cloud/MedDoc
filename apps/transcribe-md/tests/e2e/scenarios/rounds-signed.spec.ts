@@ -183,20 +183,30 @@ test.describe('Rounds Screen 4 — signed & locked', () => {
     await expect(page.getByTestId('rounds-signed-trail-em')).toHaveCount(0);
   });
 
-  test('the Rx card appears ONLY when a real override row exists', async ({ page }) => {
-    // Same signed visit, one difference: a persisted RxWarningOverride with a
-    // reason and a timestamp before the signature. If the trail were inferred
-    // rather than read, this test and the one above could not both pass.
+  test('the Rx card NEVER appears — even with a real override row (ruling #109)', async ({
+    page,
+  }) => {
+    // ⚠️ THE INVERSE OF THE TEST IT REPLACES, AND DELIBERATELY THE STRONGEST
+    // FORM. The old test proved the card rendered only from a persisted
+    // `RxWarningOverride` row. Owner ruling #109 deleted the card, so this
+    // seeds that row ANYWAY — the one input that used to make it appear — and
+    // requires the card to stay absent. Asserting the absence on a visit with
+    // no override row would prove nothing: it would hold on any signed visit.
+    //
+    // Production has 0 override rows across all 25 signed visits, so this state
+    // exists nowhere but here; the seeder is the only way to ask the question.
     const seeded = await openSigned(page, 'signed-3b', {
       emPending: false,
       withCriticalOverride: true,
     });
     test.skip(!seeded, 'psql seeding unavailable');
 
-    await expect(page.getByTestId('rounds-signed-trail-rx')).toContainText(
-      /critical interaction overridden, with a recorded reason/i,
-    );
-    await expect(page.getByTestId('rounds-signed-trail-em')).toHaveCount(0);
+    await expect(page.getByTestId('rounds-signed-trail-rx')).toHaveCount(0);
+    await expect(page.getByTestId('rounds-signed')).not.toContainText(/interaction/i);
+    // …and with nothing else to show, the trail itself does not stand.
+    await expect(page.getByTestId('rounds-signed-trail')).toHaveCount(0);
+    // POSITIVE CONTROL — the signed screen rendered at all.
+    await expect(page.getByTestId('rounds-signed')).toBeVisible();
   });
 
   test('the E/M card appears ONLY when the change was acknowledged', async ({ page }) => {
@@ -218,8 +228,8 @@ test.describe('Rounds Screen 4 — signed & locked', () => {
     });
     test.skip(!seeded, 'psql seeding unavailable');
 
-    // Both other cards ARE present, so this is not passing on an empty trail.
-    await expect(page.getByTestId('rounds-signed-trail-rx')).toBeVisible();
+    // The E/M card IS present, so this is not passing on an empty trail.
+    // (The Rx card was the other half of this control until ruling #109.)
     await expect(page.getByTestId('rounds-signed-trail-em')).toBeVisible();
     await expect(page.getByTestId('rounds-signed-trail-attestation')).toHaveCount(0);
     await expect(page.getByTestId('rounds-signed')).not.toContainText(/attest/i);
@@ -281,12 +291,16 @@ test.describe('Rounds Screen 4 — signed & locked', () => {
     });
     test.skip(!seeded, 'psql seeding unavailable');
 
-    // NOT VACUOUS: the Rx card IS rendered from its own persisted row, so the
-    // trail is standing and populated — the E/M card's absence is a decision,
-    // not an empty screen.
-    await expect(page.getByTestId('rounds-signed-trail')).toBeVisible();
-    await expect(page.getByTestId('rounds-signed-trail-rx')).toBeVisible();
-
+    // ⚠️ THE NON-VACUITY CONTROL MOVED, AND SAYING SO IS THE POINT. It used to
+    // be the Rx card: seeded from its own persisted row, it kept the trail
+    // standing so the E/M card's absence read as a decision rather than an
+    // empty screen. Ruling #109 deleted that card, and with it the only other
+    // thing this trail can hold — so on imaging the trail is now empty, and
+    // "no E/M card" would be true of any blank screen.
+    //
+    // The control is therefore a COMPANION VISIT rather than a companion card:
+    // same seed, same acknowledged E/M change, specialty the ONLY difference.
+    // If the card fails to render there too, the absence here means nothing.
     await expect(page.getByTestId('rounds-signed-trail-em')).toHaveCount(0);
     // Scoped over the WHOLE screen, not one section — the card's text lives
     // outside the lock banner.
@@ -294,6 +308,21 @@ test.describe('Rounds Screen 4 — signed & locked', () => {
       /documentation level/i,
     );
     await expect(page.getByTestId('rounds-signed-em')).toHaveCount(0);
+
+    // THE COMPANION, IN THE SAME TEST so it cannot be skipped independently of
+    // the claim it supports: identical seed, PRIMARY-CARE instead of imaging.
+    // The card must render there. If it does not, the absence above is a fact
+    // about a broken card rather than about the specialty.
+    const control = await openSigned(page, 'signed-4c-ctl', {
+      emPending: true,
+      emAcknowledged: true,
+    });
+    test.skip(!control, 'psql seeding unavailable');
+    await expect(
+      page.getByTestId('rounds-signed-trail-em'),
+      'the E/M card did not render on a NON-imaging visit with the same seed — ' +
+        'the imaging absence above proves nothing',
+    ).toBeVisible();
   });
 
   // ── 5. The paper and the footer ─────────────────────────────────────────

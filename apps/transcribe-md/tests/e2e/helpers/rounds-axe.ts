@@ -67,8 +67,9 @@ export interface AxeEntry {
    *  authors, which is the element class axe most exists to catch.
    *
    *  THE RULE: the nearest ancestor-or-self carrying ANY class decides. Every
-   *  composed component brings its own classes (`.qm-lin-rx-row`,
-   *  `.qm-warn-override-btn`, `.cell > .l`), so it answers for itself; a bare
+   *  composed component brings its own classes (`.cell > .l`, and — until owner
+   *  ruling #109 deleted the surface — `.qm-lin-rx-row` and
+   *  `.qm-warn-override-btn`), so it answers for itself; a bare
    *  element resolves to the Rounds container that placed it. Not
    *  `closest('[data-testid^="rounds-"]')` — the paper renders INSIDE
    *  `rounds-stage`, so that would claim every inherited violation on the
@@ -290,7 +291,10 @@ export async function runAxe(page: Page): Promise<AxeRun> {
  * But the Rounds screens COMPOSE existing components — the Rx card, the warnings
  * rail, the paper — and those carry their own pre-existing violations that
  * failed here on the first run: `.qm-lin-rx-row` (nested-interactive),
- * `.qm-warn-override-btn`, `.qm-lin-rx-rail-group-n`, `.cell > .l`. Those are
+ * `.qm-warn-override-btn`, `.qm-lin-rx-rail-group-n`, `.cell > .l`. ⚠️ The first
+ * three no longer exist — owner ruling #109 deleted that surface — so only
+ * `.cell > .l` remains reachable. The record is kept because it is the EVIDENCE
+ * for how this helper is shaped, not a live inventory. Those are
  * real, and they are not this item's to fix: they are on the flag-OFF surface
  * too, unchanged, and a reskin that silently rewrote them would be changing the
  * shipped product under cover of a skin.
