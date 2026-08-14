@@ -118,6 +118,30 @@ export const ReviewedTemplateSchema = z
       .default(null),
     sections: z.array(ReviewedSectionSchema).min(1, 'Keep at least one section').max(40),
     styleProfile: ReviewedStyleProfileSchema,
+    /**
+     * RC-2 (#106(b)) — a reference to the doctor's ORIGINAL uploaded `.docx`,
+     * returned by `extractNoteFileAction` and carried back here unchanged.
+     *
+     * ⚠️ CLIENT-SUPPLIED, THEREFORE UNTRUSTED. Shape only is validated here; the
+     * key is checked against the CALLER'S OWN PRACTICE in
+     * `saveNoteTemplateAction` BEFORE anything is written. A doctor who edited
+     * this payload could otherwise point their row at another practice's file.
+     *
+     * ⚠️ IT IS ORIGIN PROVENANCE, NOT A LIVE MIRROR. It records which file this
+     * template was parsed FROM. A doctor who later edits the sections has not
+     * changed that fact, so the ref survives the edit — the parsed text drifts
+     * from the file and the origin does not.
+     *
+     * Absent for paste-created templates and for any upload whose bytes could
+     * not be stored. Absence means "we do not have the file", never "the file
+     * is elsewhere".
+     */
+    source: z
+      .object({
+        objectKey: z.string().min(1).max(512),
+        sha256: z.string().regex(/^[a-f0-9]{64}$/, 'source.sha256 must be lowercase hex'),
+      })
+      .optional(),
   })
   .strict();
 

@@ -10,6 +10,7 @@ export {
   type StoredTemplateTwinArtifact,
   type StoreOutputArtifactInput,
   type StoreSourceArtifactInput,
+  type StoreUploadArtifactInput,
   type TemplateTwinArtifactStore,
   type TemplateTwinObjectClient,
   type TemplateTwinObjectClientFactory,
@@ -18,6 +19,7 @@ export {
 export {
   createOutputArtifactKey,
   createSourceArtifactKey,
+  createUploadArtifactKey,
   DEFAULT_TEMPLATE_TWIN_BUCKET,
   DOCX_MIME_TYPE,
   InvalidTemplateTwinStorageInputError,

@@ -28,6 +28,7 @@ import { revalidatePath } from 'next/cache';
 
 import prisma from '@meddoc/db';
 import { requireSession } from '@/lib/auth';
+import { isTenantOwnedArtifactKey } from '@/lib/template-twin/storage';
 import { applyPhiGate } from '@/lib/note-template-parse/phi-gate';
 import {
   ReviewedTemplateSchema,
@@ -104,15 +105,87 @@ export async function saveNoteTemplateAction(
 
   // Ownership pre-check (scoped) so we never create a version off another
   // doctor's row, and so we know the existing status/version.
-  let existing: { id: string; status: string; version: number } | null = null;
+  let existing: {
+    id: string;
+    status: string;
+    version: number;
+    sourceObjectKey: string | null;
+    sourceSha256: string | null;
+  } | null = null;
   if (inputId) {
     existing = await prisma.noteTemplate.findFirst({
       where: { id: inputId, doctorId },
-      select: { id: true, status: true, version: true },
+      // ⚠️ THE SOURCE REF IS SELECTED SERVER-SIDE, AND DELIBERATELY NOT ROUND-
+      // TRIPPED THROUGH THE CLIENT. `getNoteTemplateForEditAction` still does
+      // NOT return it, on purpose: sending a storage key to the browser so it
+      // can hand it back would widen the untrusted surface for no benefit, when
+      // the server already has the row. An edit preserves the ref from HERE.
+      select: {
+        id: true,
+        status: true,
+        version: true,
+        sourceObjectKey: true,
+        sourceSha256: true,
+      },
     });
     if (!existing) {
       return { ok: false, error: "That template doesn't exist or isn't yours to edit." };
     }
+  }
+
+  // ── THE SOURCE REF, RESOLVED AND VALIDATED BEFORE ANY WRITE ──────────────
+  //
+  // ⚠️ IT IS VALIDATED HERE, ABOVE THE `try`, BECAUSE THE `catch` BELOW IS BARE.
+  // Every throw inside that block becomes "Could not save the template just now
+  // — please try again", which is indistinguishable from a transient database
+  // error for the doctor AND for whoever debugs it. A refusal to trust a
+  // storage key is a SECURITY decision and must say so in its own words.
+  //
+  // ⚠️ AN EDIT PRESERVES THE EXISTING REF AND IGNORES THE CLIENT'S.
+  // The governing rule: an edit must never silently destroy or fabricate the
+  // source ref. Update-in-place preserves it because Prisma leaves unnamed
+  // fields alone — but a version bump CREATES A NEW ROW, and a new row with no
+  // source columns is exactly the silent destruction: the doctor edits a
+  // section, a version is minted, and the only pointer to their letterhead is
+  // gone. So the prior row's ref is carried forward explicitly, from the server,
+  // and the client cannot influence it on an edit.
+  //
+  // It is ORIGIN provenance, not a claim the current sections still match the
+  // file byte-for-byte. The doctor edited the parsed text; the file it was
+  // parsed from is unchanged.
+  let sourceRef: { objectKey: string; sha256: string } | null = null;
+  // ⚠️ NEW UPLOAD, not merely 'has a source'. A version bump CARRIES the ref
+  // forward (see below), so keying compile-on-upload off `sourceRef` alone
+  // would re-compile the same bytes on every subsequent edit — a fresh twin
+  // lineage per keystroke-save, none of them asked for. The twin is compiled
+  // once, for the request that actually brought the file.
+  let isNewUpload = false;
+  if (existing) {
+    sourceRef =
+      existing.sourceObjectKey && existing.sourceSha256
+        ? { objectKey: existing.sourceObjectKey, sha256: existing.sourceSha256 }
+        : null;
+  } else if (parsed.data.source) {
+    const claimed = parsed.data.source;
+    // ⚠️ THE KEY IS CLIENT-SUPPLIED. Without this, a doctor who edited the
+    // payload could point their template at ANOTHER PRACTICE'S file, and the
+    // twin/native-export path would later read it.
+    if (
+      !isTenantOwnedArtifactKey({
+        objectKey: claimed.objectKey,
+        practiceId: session.user.practiceId,
+        kind: 'upload',
+      })
+    ) {
+      return {
+        ok: false,
+        error:
+          'That upload reference is not valid for your practice. Re-upload the ' +
+          'file and try again.',
+      };
+    }
+    sourceRef = { objectKey: claimed.objectKey, sha256: claimed.sha256 };
+    isNewUpload = true;
   }
 
   try {
@@ -137,6 +210,13 @@ export async function saveNoteTemplateAction(
       const status: 'draft' | 'active' = activate ? 'active' : 'draft';
       if (existing && existing.status !== 'active') {
         // draft / inactive → update in place (not a live row)
+        // ⚠️ `sourceObjectKey` / `sourceSha256` ARE ABSENT FROM `data` ON
+        // PURPOSE, AND THAT IS PRESERVATION RATHER THAN OVERSIGHT. Prisma
+        // leaves unnamed fields untouched, so an in-place edit keeps the ref.
+        // Naming them here with `sourceRef` would be equivalent today and would
+        // become a silent NULLing the moment somebody spread a partial object
+        // into it — the omission is the safer shape, so it is documented as a
+        // decision instead of read as a gap.
         const updated = await tx.noteTemplate.update({
           where: { id: existing.id },
           data: { name, encounterType, sections: cleanSections, styleProfile, status },
@@ -158,11 +238,82 @@ export async function saveNoteTemplateAction(
           version: existing ? existing.version + 1 : 1,
           status,
           isSystemDefault: false,
+          // Carried forward on a version bump, set once on a new template, and
+          // NULL when there is no file — never invented. See the block above.
+          sourceObjectKey: sourceRef?.objectKey ?? null,
+          sourceSha256: sourceRef?.sha256 ?? null,
         },
         select: { id: true },
       });
       return { id: created.id, status };
     });
+
+    // ── RC-2 (#106(b)) — COMPILE ON UPLOAD. THE DOOR. ─────────────────────
+    //
+    // ⚠️ THIS IS THE WHOLE ITEM. The twin compiler has existed and worked for
+    // months; its ONLY caller was `template-twin-certify.ts`, reached from
+    // `NativeTemplateManager`, which renders **null** in production because
+    // `NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true`. So prod holds zero compiled
+    // versions — not because the gate refused, but because nothing could knock.
+    // AGENTS.md records the symptom ("there is therefore no door in"); this is
+    // the door.
+    //
+    // It ATTACHES to the template just written rather than minting one, so the
+    // doctor ends up with their template, not their template and a shadow.
+    //
+    // ⚠️ IT CAN NEVER FAIL THE SAVE. Same contract as the PDF carry-forward
+    // below: the transaction is already committed, the doctor's note format is
+    // already theirs, and the twin is a PARKED capability. A compile failure
+    // must cost a log line, never the doctor's upload. But it is NOT
+    // fire-and-forget — it is awaited and its outcome recorded, because a side
+    // effect nothing reads back is a comment (AGENTS.md, the fire-and-forget
+    // rule), and `attemptedTwinCompile` is what the reachability test asserts.
+    let twinCompile: 'skipped' | 'compiled' | 'failed' = 'skipped';
+    if (isNewUpload && sourceRef) {
+      try {
+        const [{ createTemplateTwinDraft }, { createTemplateTwinArtifactStore }] =
+          await Promise.all([
+            import('@/lib/template-twin/create-draft'),
+            import('@/lib/template-twin/storage'),
+          ]);
+        const store = createTemplateTwinArtifactStore();
+        // ⚠️ THE DIGEST IS REQUIRED BY THE READ, AND THAT IS THE POINT OF
+        // HAVING STORED IT. A key alone cannot prove the object still holds
+        // what was uploaded; `readUploadArtifact` verifies against this and
+        // refuses a mismatch, so the twin can never be compiled from bytes
+        // that are not the doctor's file.
+        const bytes = await store.readUploadArtifact({
+          objectKey: sourceRef.objectKey,
+          practiceId: session.user.practiceId,
+          expectedSha256: sourceRef.sha256,
+        });
+        const compiled = await createTemplateTwinDraft({
+          source: new Uint8Array(bytes),
+          actor: {
+            userId: doctorId,
+            userEmail: session.user.email,
+            practiceId: session.user.practiceId,
+          },
+          attachToNoteTemplateId: result.id,
+        });
+        twinCompile = 'compiled';
+        console.info(
+          `[template-twin:compile-on-upload] template=${result.id} ` +
+            `fields=${compiled.fieldCount} blocking=${compiled.blockingUnsupportedCount} ` +
+            `fallbackMappings=${compiled.usedFallbackMappings}`,
+        );
+      } catch (error) {
+        // Loud, and non-fatal. The `.docx` itself is already kept (RC-2 part 1),
+        // so a failed compile loses nothing that was not already recoverable —
+        // which is precisely why part 1 had to land before this.
+        twinCompile = 'failed';
+        console.warn(
+          `[template-twin:compile-on-upload] template=${result.id} FAILED — ` +
+            'the upload is saved and the source .docx is kept; the twin was not ' +
+            `compiled: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
 
     // Durable PDF-native cert — a re-upload/re-activation of the SAME flat-PDF
     // form mints a new id; carry a prior cert forward so native export never
@@ -257,7 +408,15 @@ export async function duplicateNoteTemplateAction(id: string): Promise<SimpleRes
 
   const row = await prisma.noteTemplate.findFirst({
     where: { id, doctorId },
-    select: { name: true, encounterType: true, sections: true, styleProfile: true, specialtyBaseline: true },
+    select: {
+      name: true,
+      encounterType: true,
+      sections: true,
+      styleProfile: true,
+      specialtyBaseline: true,
+      sourceObjectKey: true,
+      sourceSha256: true,
+    },
   });
   if (!row) return { ok: false, error: "That template doesn't exist or isn't yours." };
 
@@ -275,6 +434,26 @@ export async function duplicateNoteTemplateAction(id: string): Promise<SimpleRes
       version: 1,
       status: 'draft',
       isSystemDefault: false,
+      // ── RC-2 (#106(b)) — THE DUPLICATE CARRIES THE SAME SOURCE REF ────────
+      //
+      // ⚠️ SHARED ORIGIN: TWO ROWS, ONE FILE. The choice is between recording
+      // the provenance that is TRUE and recording none, and a duplicate's
+      // origin genuinely IS the file the original was parsed from — the doctor
+      // copied a template to diverge from it, they did not acquire a new
+      // document. Writing NULL here would DESTROY provenance the copy has
+      // legitimately earned; minting anything else would FABRICATE one it has
+      // not. Neither is available under the governing rule.
+      //
+      // Safe because the object is IMMUTABLE and CONTENT-ADDRESSED — its sha is
+      // in its own key — so two rows referencing it cannot disagree about what
+      // it contains, and nothing is double-stored.
+      //
+      // ⚠️ CONSEQUENCE THE REAPER MUST HONOUR, STATED HERE BECAUSE THIS IS
+      // WHERE THE SECOND REFERENCE IS CREATED: an unreferenced-object sweep
+      // must COUNT references, never assume one. Deleting the object when the
+      // first row goes would silently strip the letterhead from the copy.
+      sourceObjectKey: row.sourceObjectKey,
+      sourceSha256: row.sourceSha256,
     },
     select: { id: true },
   });

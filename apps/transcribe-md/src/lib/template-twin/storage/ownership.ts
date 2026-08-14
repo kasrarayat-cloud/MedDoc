@@ -28,8 +28,19 @@ export function parseTemplateTwinArtifactKey(
 
   const parts = objectKey.split('/');
   if (parts.some((part) => part === '.' || part === '..')) return null;
+  // ⚠️ LENGTH IS PER-CATEGORY, NOT GLOBAL, AND THIS USED TO BE A FLAT `!== 8`.
+  // `sources` and `outputs` carry a lineage+version or a visit+manifest, so they
+  // are eight segments. An `upload` has NEITHER — no template exists yet, which
+  // is the whole reason that kind was added — so it is SEVEN, and a flat check
+  // rejected every legitimately generated upload key.
+  //
+  // The alternative was padding the upload key with a segment that means
+  // nothing, to satisfy a number. A key shape should describe what the thing IS;
+  // inventing a `v1` for something with no versions would have made the key lie
+  // to every future reader in order to keep one comparison simple.
+  const expectedLength = parts[3] === 'uploads' ? 7 : 8;
   if (
-    parts.length !== 8 ||
+    parts.length !== expectedLength ||
     parts[0] !== 'practices' ||
     parts[2] !== 'template-twin'
   ) {
@@ -39,7 +50,7 @@ export function parseTemplateTwinArtifactKey(
   try {
     const practiceId = assertOpaqueId(parts[1] ?? '', 'practiceId');
     const category = parts[3];
-    const filename = parts[7] ?? '';
+    const filename = parts[expectedLength - 1] ?? '';
     if (!filename.endsWith('.docx')) return null;
     const sha256 = assertSha256(filename.slice(0, -5));
 
@@ -48,6 +59,16 @@ export function parseTemplateTwinArtifactKey(
       if (!/^v[1-9][0-9]*$/.test(parts[5] ?? '')) return null;
       assertOpaqueId(parts[6] ?? '', 'artifactId');
       return { practiceId, kind: 'source', sha256 };
+    }
+
+    if (category === 'uploads') {
+      // Both id segments are the uploadId — an upload IS its own artifact, so
+      // a second random id would suggest a grouping that does not exist.
+      // Requiring them EQUAL is what stops a crafted key smuggling an
+      // unrelated id through the second position.
+      const uploadId = assertOpaqueId(parts[4] ?? '', 'uploadId');
+      if (parts[5] !== uploadId) return null;
+      return { practiceId, kind: 'upload', sha256 };
     }
 
     if (category === 'outputs') {

@@ -14,7 +14,7 @@
 // router.refresh() to pull fresh data.
 // ============================================================================
 
-import { useRef, useState, useTransition } from 'react';
+import { useCallback, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -129,6 +129,30 @@ export function NoteFormatManager({
    *  dropped the bytes, which is exactly why a second "Set up native export"
    *  upload existed at all. Kept in memory only — never persisted here. */
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  /** RC-2 (#106(b)) — the reference to the doctor's ORIGINAL uploaded .docx,
+   *  returned by extractNoteFileAction and carried to the save unchanged.
+   *  Cleared wherever `pendingFile` is, so a ref can never outlive the upload
+   *  it describes and attach itself to the next one. */
+  const [pendingSource, setPendingSource] = useState<
+    { objectKey: string; sha256: string } | null
+  >(null);
+
+  /**
+   * Drop the pending upload — the File AND its source ref, together, always.
+   *
+   * ⚠️ ONE FUNCTION BECAUSE A HAND-KEPT LIST OF CLEAR-SITES IS WRONG
+   * EVENTUALLY. There are six places that abandon an upload (extract failure,
+   * parse failure, cancel, a fresh paste, save success, certify success). Pair
+   * them by hand and the day somebody adds a seventh, a ref outlives the file
+   * it describes and attaches itself to the NEXT upload — pointing a new
+   * template at the previous document. Putting the pairing in one place is the
+   * same cure as hosting a component: it cannot be forgotten because there is
+   * nothing to remember.
+   */
+  const clearPendingUpload = useCallback(() => {
+    setPendingFile(null);
+    setPendingSource(null);
+  }, []);
   const { stages, step, reset: resetStages } = useStages(true);
   const [sample, setSample] = useState<NativePreviewResult | null>(null);
   const [sampleMarkdown, setSampleMarkdown] = useState<string | null>(null);
@@ -298,6 +322,10 @@ export function NoteFormatManager({
     return {
       name: model.name.trim() || 'My note format',
       encounterType,
+      // RC-2 — carried verbatim; the server validates it against the caller's
+      // own practice before anything is written. Omitted entirely when absent,
+      // because the schema is .strict() and `undefined` is not a value here.
+      ...(pendingSource ? { source: pendingSource } : {}),
       sections: model.sections.map((s, i) => ({
         key: s.key,
         label: s.label.trim() || 'Section',
@@ -385,7 +413,7 @@ export function NoteFormatManager({
             ? 'New matching visits will be written in this format and exported on your own page.'
             : 'New matching visits will be written in this format.',
         });
-        setPendingFile(null);
+        clearPendingUpload();
         setActivatedId(null);
         refreshHome();
       } catch (err) {
@@ -406,7 +434,7 @@ export function NoteFormatManager({
         toast.success('Native export is set up', {
           description: 'Exports will use your own page.',
         });
-        setPendingFile(null);
+        clearPendingUpload();
         setActivatedId(null);
         refreshHome();
       }
@@ -438,7 +466,7 @@ export function NoteFormatManager({
     // Paste path: there is genuinely no file, so the "Reading your form" stage
     // is skipped rather than shown-and-instantly-completed, and there are no
     // PDF bytes to certify against.
-    setPendingFile(null);
+    clearPendingUpload();
     setActivatedId(null);
     setCertError(null);
     setSample(null);
@@ -476,18 +504,21 @@ export function NoteFormatManager({
         const ex = await extractNoteFileAction(fd);
         if (!ex.ok) {
           toast.error('Could not read that file', { description: ex.error });
-          setPendingFile(null);
+          clearPendingUpload();
           setView('entry');
           return;
         }
         // Stage 1 done — the file really has been read at this point.
         step('read', 'done');
+        // Absent when the bytes could not be kept (storage down, or a
+        // non-.docx). Absence means "we do not have the file" — never invented.
+        setPendingSource(ex.source ?? null);
         setPasteText(ex.text);
         // runParse opens its own transition + owns its own error recovery (also
         // to 'entry'); this catch only covers the extract action itself.
         runParse(ex.text, file);
       } catch (err) {
-        setPendingFile(null);
+        clearPendingUpload();
         handleActionError(err, 'entry');
       }
     });
@@ -587,6 +618,10 @@ export function NoteFormatManager({
       <TemplateReviewEditor
         initial={review.model}
         parseFlags={review.flags}
+        // RC-2 — the SECOND save caller. Threading the ref only through the
+        // confirm card would lose the file for every doctor who takes the
+        // Advanced route, i.e. the one that offers more control.
+        source={pendingSource}
         onCancel={() => setView(hasTemplates ? 'home' : 'entry')}
         onSaved={() => refreshHome()}
       />
@@ -613,7 +648,7 @@ export function NoteFormatManager({
         onRetryCert={onRetryCert}
         onAdvanced={onAdvanced}
         onCancel={() => {
-          setPendingFile(null);
+          clearPendingUpload();
           setActivatedId(null);
           setCertError(null);
           setView(hasTemplates ? 'home' : 'entry');

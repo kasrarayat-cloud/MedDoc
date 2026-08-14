@@ -33,6 +33,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import prisma from '@meddoc/db';
+import { emAppliesToSpecialty } from '@meddoc/shared/specialties';
 import { runLayer4GenerateSoap } from '../../apps/transcribe-md/src/worker/layers/04-generate-soap';
 import { runLayer6Polish } from '../../apps/transcribe-md/src/worker/layers/06-polish';
 import { normalizeTemplate } from '../../apps/transcribe-md/src/worker/note-templates/build-soap-prompt';
@@ -234,7 +235,41 @@ async function main(): Promise<number> {
     console.error(`REFUSED: database "${dbName || '(unparseable)'}" carries no qa/test marker. This walk WRITES.`);
     return 2;
   }
-  console.log(`RC-1 QA walk — database=${dbName}\n`);
+  console.log(`RC-1 QA walk — database=${dbName}`);
+
+  // ── ARM -1 — THE WALK ASSERTS ITS OWN UNIVERSE ───────────────────────────
+  //
+  // ⚠️ THIS EXISTS BECAUSE THE FIRST VERSION OF THIS WALK READ 15 OF 15 AND
+  // PROVED ALMOST NOTHING. It ran `specialty: 'primary-care'` with the anchors
+  // flag unset — the SOAP builder, in a configuration production does not use —
+  // against an imaging-SHAPED fixture that made the green arms read as an
+  // imaging proof. The universe was stated in a comment and a constant, and a
+  // comment cannot fail.
+  //
+  // ⚠️ IT MEASURES THE ROUTING DECISION, NOT A PROXY FOR IT. Asserting
+  // `SPECIALTY === 'ultrasound'` would restate the constant. `emAppliesToSpecialty`
+  // is the predicate `04-generate-soap.ts:94` actually branches on, so this
+  // fails if the specialty changes, if the ultrasound flag is off, or if the
+  // predicate itself is rewired — the three ways the route can silently move.
+  //
+  // ⚠️ AND IT PRINTS ON SUCCESS, NOT ONLY ON REFUSAL. A precondition that is
+  // silent when satisfied leaves the next reader trusting it because it did not
+  // complain — and "it did not complain" is what a broken instrument also does.
+  const routesToImaging = !emAppliesToSpecialty(SPECIALTY);
+  const anchorsOn = (process.env.TRANSCRIBE_MD_EVIDENCE_ANCHORS ?? '').toLowerCase() === 'true';
+  console.log(
+    `  universe: specialty=${SPECIALTY} routesToImagingBuilder=${routesToImaging} ` +
+      `anchors=${anchorsOn} ultrasoundFlag=${process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY ?? '(unset)'}`
+  );
+  if (!routesToImaging || !anchorsOn) {
+    console.error(
+      'REFUSED: this walk only means something in the PRODUCTION universe — the ' +
+        'imaging prompt builder and TRANSCRIBE_MD_EVIDENCE_ANCHORS=true. ' +
+        `Measured: routesToImagingBuilder=${routesToImaging}, anchors=${anchorsOn}.`
+    );
+    return 2;
+  }
+  console.log('');
 
   // ── ARM 0 — SEED PRE-MIGRATION, RUN THE MIGRATION, MEASURE THE MOVE ──────
   await seedPreMigration();

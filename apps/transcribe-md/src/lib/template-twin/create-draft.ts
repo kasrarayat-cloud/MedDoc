@@ -9,6 +9,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import type { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
+import { asPracticeId, templateScope } from '@/lib/practice-scope';
 import { extractNoteTextFromUpload } from '@/lib/note-template-parse/extract-note-text';
 import { parseNoteToTemplate } from '@/lib/note-template-parse/parse-note-to-template';
 
@@ -37,6 +38,7 @@ export class TemplateTwinDraftError extends Error {
   readonly code:
     | 'NO_FILLABLE_FIELDS'
     | 'SYSTEM_TEMPLATE_MISSING'
+    | 'ATTACH_TARGET_NOT_FOUND'
     | 'PERSISTENCE_FAILED';
 
   constructor(code: TemplateTwinDraftError['code'], message: string, cause?: unknown) {
@@ -54,6 +56,29 @@ export interface CreateTemplateTwinDraftInput {
     practiceId: string;
   };
   storage?: TemplateTwinArtifactStore;
+  /**
+   * RC-2 — ATTACH to the note template the doctor just created, instead of
+   * minting a second one.
+   *
+   * ⚠️ THIS IS WHAT MAKES THE DOOR REACHABLE. Without it the only caller is
+   * `template-twin-certify.ts`, reached from `NativeTemplateManager`, which
+   * renders **null** in production (`NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true`) —
+   * so the compile path existed and nothing on earth could invoke it. Wiring
+   * the ordinary Settings → My Note Format upload to this function would
+   * otherwise create a DUPLICATE template beside the doctor's own.
+   *
+   * ⚠️ AND IT MAKES THE BRIDGE DEAD WEIGHT, DELIBERATELY. The bridge below
+   * exists only to synthesise sections for the orphan template this function
+   * used to mint. When attaching, the ordinary upload path has ALREADY parsed
+   * the document into sections — better, and by the parser the doctor's own
+   * note actually uses — so the bridge is skipped entirely rather than run and
+   * discarded. Skipping it also removes its fallback, which is the failure mode
+   * it was written to survive.
+   *
+   * The id is verified against the ACTOR'S OWN PRACTICE before anything is
+   * written. A caller cannot bind a compiled version to another tenant's row.
+   */
+  attachToNoteTemplateId?: string;
 }
 
 export interface CreateTemplateTwinDraftResult {
@@ -246,15 +271,49 @@ export async function createTemplateTwinDraft(
     usedFallbackMappings = true;
   }
 
-  const systemDefault = await prisma.noteTemplate.findFirst({
-    where: { isSystemDefault: true },
-    select: {
-      sections: true,
-      styleProfile: true,
-      specialtyBaseline: true,
-    },
-  });
-  if (!systemDefault) {
+  // ── ATTACH, or MINT ───────────────────────────────────────────────────────
+  // When attaching, the target must exist AND belong to this actor's practice.
+  // Read it BEFORE any write: binding a compiled version to another tenant's
+  // template would be a cross-practice disclosure, and the composite tenancy FK
+  // does not cover this edge because both rows would carry the CALLER's practice.
+  let attachedTemplateId: string | null = null;
+  if (input.attachToNoteTemplateId) {
+    // ⚠️ THROUGH THE ACCESSOR, NOT BY HAND. A literal
+    // `practiceId: input.actor.practiceId` here is correct today and is still
+    // the wrong shape: T5's point is that the tenancy predicate lives in ONE
+    // place, so `note_templates`' ruled scope cannot drift between call sites.
+    // The gate caught this as a second SYSTEM-context read in a file allowlisted
+    // for exactly one — the system-default lookup, which is a genuinely
+    // tenant-less query. This one is not.
+    const target = await prisma.noteTemplate.findFirst({
+      where: {
+        id: input.attachToNoteTemplateId,
+        ...templateScope(asPracticeId(input.actor.practiceId)),
+      },
+      select: { id: true },
+    });
+    if (!target) {
+      throw new TemplateTwinDraftError(
+        'ATTACH_TARGET_NOT_FOUND',
+        'That note template does not exist in your practice.',
+      );
+    }
+    attachedTemplateId = target.id;
+  }
+
+  // The system default and the bridge below are needed ONLY to synthesise the
+  // orphan template. Attaching skips both — see `attachToNoteTemplateId`.
+  const systemDefault = attachedTemplateId
+    ? null
+    : await prisma.noteTemplate.findFirst({
+        where: { isSystemDefault: true },
+        select: {
+          sections: true,
+          styleProfile: true,
+          specialtyBaseline: true,
+        },
+      });
+  if (!attachedTemplateId && !systemDefault) {
     throw new TemplateTwinDraftError(
       'SYSTEM_TEMPLATE_MISSING',
       'The standard note-format fallback is unavailable.',
@@ -283,12 +342,14 @@ export async function createTemplateTwinDraft(
   // system-default sections so the draft still exists and the source artifact
   // is still preserved — but we record why, so the Settings card can say the
   // twin is running on fallback structure instead of pretending it is fine.
-  let bridgedSections: Prisma.InputJsonValue = systemDefault.sections as Prisma.InputJsonValue;
-  let bridgedStyle: Prisma.InputJsonValue = systemDefault.styleProfile as Prisma.InputJsonValue;
+  let bridgedSections: Prisma.InputJsonValue =
+    (systemDefault?.sections ?? []) as Prisma.InputJsonValue;
+  let bridgedStyle: Prisma.InputJsonValue =
+    (systemDefault?.styleProfile ?? {}) as Prisma.InputJsonValue;
   let bridgedName = 'Original Word template';
   let bridgeFallbackReason: string | null = null;
 
-  try {
+  if (!attachedTemplateId) try {
     const extracted = await extractNoteTextFromUpload(
       input.source,
       'template.docx',
@@ -309,7 +370,7 @@ export async function createTemplateTwinDraft(
       } else {
         bridgedSections = parsed.template.sections as unknown as Prisma.InputJsonValue;
         bridgedStyle = (parsed.template.styleProfile ??
-          systemDefault.styleProfile) as unknown as Prisma.InputJsonValue;
+          systemDefault?.styleProfile) as unknown as Prisma.InputJsonValue;
         bridgedName = parsed.template.name?.trim() || bridgedName;
       }
     }
@@ -327,7 +388,7 @@ export async function createTemplateTwinDraft(
   }
 
   const lineageId = randomUUID();
-  const noteTemplateId = randomUUID();
+  const noteTemplateId = attachedTemplateId ?? randomUUID();
   const sourceArtifactId = randomUUID();
   const compiledVersionId = randomUUID();
   const artifactStore = input.storage ?? createTemplateTwinArtifactStore();
@@ -340,7 +401,7 @@ export async function createTemplateTwinDraft(
 
   try {
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      await tx.noteTemplate.create({
+      if (!attachedTemplateId) await tx.noteTemplate.create({
         data: {
           id: noteTemplateId,
           doctorId: input.actor.userId,
@@ -351,7 +412,7 @@ export async function createTemplateTwinDraft(
           encounterType: null,
           sections: bridgedSections,
           styleProfile: bridgedStyle,
-          specialtyBaseline: systemDefault.specialtyBaseline,
+          specialtyBaseline: systemDefault!.specialtyBaseline,
           version: 1,
           status: 'draft',
           isSystemDefault: false,
