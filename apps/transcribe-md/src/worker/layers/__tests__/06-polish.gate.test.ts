@@ -353,7 +353,8 @@ describe('L6b gate — FAIL-CLOSED on every gate failure', () => {
     expect(result.polishRejected).toBe(false);
     // FIND-P1-016 policy: raw output persisted + flagged for review.
     expect(result.needsReview).toBe(true);
-    expect(result.reviewReason).toMatch(/didn't match expected markdown structure/);
+    // Retargeted with the retired vocabulary — see 06-polish.test.ts.
+    expect(result.reviewReason).toMatch(/could not be found in this note|different headings from your template|generation failure/i);
   });
 
   it('gate fallback SKIPS structure validation (draft already L4-validated) — single audit row', async () => {

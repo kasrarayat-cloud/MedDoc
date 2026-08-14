@@ -34,7 +34,11 @@ vi.mock('@meddoc/ai', async () => {
   };
 });
 vi.mock('@meddoc/db', () => ({
-  default: { transcribeVisit: { update: mocks.prismaUpdate } },
+  default: {
+    // ⚠️ `$executeRaw` — L4 and L6 write review state through
+    // `applyAdditiveReviewState`, which is SQL-side so the concat is atomic.
+    // Without it here the helper throws and the failure reads as a layer bug.
+    $executeRaw: vi.fn().mockResolvedValue(1), transcribeVisit: { update: mocks.prismaUpdate } },
 }));
 vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
 

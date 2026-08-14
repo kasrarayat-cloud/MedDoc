@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   modelCompleteText: vi.fn(),
   prismaUpdate: vi.fn(),
   logAudit: vi.fn(),
+  applyAdditiveReviewState: vi.fn(),
 }));
 
 vi.mock('@meddoc/ai', async () => {
@@ -43,6 +44,22 @@ vi.mock('@meddoc/db', () => ({
 }));
 
 vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
+
+// ⚠️ L4 NO LONGER WRITES REVIEW STATE THROUGH `transcribeVisit.update`.
+// It routes through the same additive helper L6 uses, because the plain update
+// REPLACED `reviewReason` and deleted review reasons set earlier in the
+// pipeline — the allergy-conflict warning among them, which `worker.ts` writes
+// with a COALESCE specifically so it could not be clobbered.
+//
+// MOCKING THE HELPER IS LEGITIMATE HERE and only here: these are L4 unit tests
+// and the question is WHAT L4 ASKS FOR. That the helper is genuinely additive
+// is proved elsewhere and not by a mock —
+// `l4-review-state-additive.test.ts` reads its SQL, and an attempt-proof ran
+// the real statement against Postgres inside BEGIN/ROLLBACK (allergy survives,
+// banner lands, allergy first; the plain UPDATE deletes it).
+vi.mock('@/worker/finalize-review-state', () => ({
+  applyAdditiveReviewState: mocks.applyAdditiveReviewState,
+}));
 
 import {
   runLayer4GenerateSoap,
@@ -115,6 +132,7 @@ function makeStats(overrides: Partial<AudioConfidenceStats> = {}): AudioConfiden
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.prismaUpdate.mockResolvedValue({ id: FAKE_VISIT });
+  mocks.applyAdditiveReviewState.mockResolvedValue(undefined);
   mocks.logAudit.mockResolvedValue(undefined);
 });
 
@@ -238,10 +256,11 @@ describe('runLayer4GenerateSoap — happy path Prisma + return shape', () => {
 
     expect(mocks.prismaUpdate).toHaveBeenCalledTimes(1);
     const updateArgs = mocks.prismaUpdate.mock.calls[0][0];
+    const reviewArgs = mocks.applyAdditiveReviewState.mock.calls[0]?.[1] ?? {};
     expect(updateArgs.where).toEqual({ id: FAKE_VISIT });
     expect(updateArgs.data.soapDraft).toBe(GOOD_SOAP);
-    expect(updateArgs.data.needsReview).toBeUndefined();
-    expect(updateArgs.data.reviewReason).toBeUndefined();
+    expect(reviewArgs.needsReview).toBeUndefined();
+    expect(reviewArgs.reviewReason).toBeUndefined();
 
     // Validator passed → NO MODEL_OUTPUT_VALIDATION_FAIL audit row.
     expect(mocks.logAudit).not.toHaveBeenCalled();
@@ -259,8 +278,9 @@ describe('runLayer4GenerateSoap — FIND-P1-015 validator-fail path', () => {
 
     expect(mocks.prismaUpdate).toHaveBeenCalledTimes(1);
     const updateArgs = mocks.prismaUpdate.mock.calls[0][0];
+    const reviewArgs = mocks.applyAdditiveReviewState.mock.calls[0]?.[1] ?? {};
     expect(updateArgs.data.soapDraft).toBe(''); // raw output persisted
-    expect(updateArgs.data.needsReview).toBe(true);
+    expect(reviewArgs.needsReview).toBe(true);
     // ⚠️ RETARGETED, NOT RELAXED. This pinned "SOAP draft didn't match expected
     // markdown structure" — true, in the system's own vocabulary, and nearly
     // useless to a clinician. The banner now names what the doctor can act on.
@@ -271,12 +291,12 @@ describe('runLayer4GenerateSoap — FIND-P1-015 validator-fail path', () => {
     // no content the dictation supported" and pointed the doctor at the
     // Note-format picker to fix a template that is not broken. This test is
     // what caught it.
-    expect(updateArgs.data.reviewReason).toMatch(
+    expect(reviewArgs.reviewReason).toMatch(
       /generation failure, not a problem with your template or your dictation/i
     );
-    expect(updateArgs.data.reviewReason).not.toMatch(/expected markdown structure/i);
+    expect(reviewArgs.reviewReason).not.toMatch(/expected markdown structure/i);
     // …and it never prints a zero count in front of a clinician.
-    expect(updateArgs.data.reviewReason).not.toMatch(/\b0 sections?\b/);
+    expect(reviewArgs.reviewReason).not.toMatch(/\b0 sections?\b/);
 
     expect(mocks.logAudit).toHaveBeenCalledTimes(1);
     const auditArgs = mocks.logAudit.mock.calls[0][0];
@@ -309,8 +329,10 @@ describe('runLayer4GenerateSoap — FIND-P1-015 validator-fail path', () => {
     await runLayer4GenerateSoap(makeInput());
 
     const updateArgs = mocks.prismaUpdate.mock.calls[0][0];
+
+    const reviewArgs = mocks.applyAdditiveReviewState.mock.calls[0]?.[1] ?? {};
     expect(updateArgs.data.soapDraft).toBe(jsonBody);
-    expect(updateArgs.data.needsReview).toBe(true);
+    expect(reviewArgs.needsReview).toBe(true);
 
     const auditArgs = mocks.logAudit.mock.calls[0][0];
     expect(auditArgs.metadata.reason).toBe(
@@ -336,8 +358,10 @@ Clinical reasoning here.`;
     expect(auditArgs.metadata.missingSections).toEqual(['Plan']);
 
     const updateArgs = mocks.prismaUpdate.mock.calls[0][0];
+
+    const reviewArgs = mocks.applyAdditiveReviewState.mock.calls[0]?.[1] ?? {};
     expect(updateArgs.data.soapDraft).toBe(incompleteSoap);
-    expect(updateArgs.data.needsReview).toBe(true);
+    expect(reviewArgs.needsReview).toBe(true);
   });
 
   it('audit metadata never carries raw output content (PHI guard)', async () => {
@@ -467,6 +491,7 @@ Patient here for medication follow-up.
     mocks.modelCompleteText.mockResolvedValueOnce({ text: GOOD_SOAP });
     await runLayer4GenerateSoap(makeInput());
     const updateArgs = mocks.prismaUpdate.mock.calls[0][0];
+    const reviewArgs = mocks.applyAdditiveReviewState.mock.calls[0]?.[1] ?? {};
     expect(updateArgs.data.noteTemplateId).toBe('tmpl_system_default_soap');
     expect(updateArgs.data.noteTemplateVersion).toBe(1);
   });
@@ -490,8 +515,9 @@ Patient here for medication follow-up.
     // Provenance from the custom template; output validated against ITS
     // sections (CUSTOM_OUTPUT has both → passes → no needsReview).
     const updateArgs = mocks.prismaUpdate.mock.calls[0][0];
+    const reviewArgs = mocks.applyAdditiveReviewState.mock.calls[0]?.[1] ?? {};
     expect(updateArgs.data.noteTemplateId).toBe('tmpl_custom_x');
     expect(updateArgs.data.noteTemplateVersion).toBe(7);
-    expect(updateArgs.data.needsReview).toBeUndefined();
+    expect(reviewArgs.needsReview).toBeUndefined();
   });
 });

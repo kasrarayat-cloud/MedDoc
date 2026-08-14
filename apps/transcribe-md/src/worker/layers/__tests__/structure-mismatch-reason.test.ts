@@ -30,10 +30,13 @@ describe('the banner names the mismatch, the sections, and where to fix it', () 
   // not a content problem at all (see the describe below).
   const reason = structureMismatchReason(SIX, OP_TEMPLATE);
 
-  it('names every missing section BY NAME', () => {
-    // The validator knew all six. Printing a count and withholding the names
-    // is the defect this replaces.
-    for (const s of SIX) expect(reason).toContain(s);
+  it('names the missing sections BY NAME, up to the bound', () => {
+    // The validator knew all six; printing only a count was the defect this
+    // replaces. ⚠️ BUT THE LIST IS BOUNDED — the doctor needs the diagnosis,
+    // not the census — so six become "five, and 1 more". The named ones must
+    // be named, and the remainder must be COUNTED rather than dropped.
+    for (const s of SIX.slice(0, 5)) expect(reason).toContain(s);
+    expect(reason).toMatch(/and 1 more/);
   });
 
   it('states the COUNT, and the count matches the list', () => {
@@ -228,5 +231,45 @@ describe('templateKind is not confidently BACKWARDS on office templates', () => 
       'PREOPERATIVE DIAGNOSIS', 'POSTOPERATIVE DIAGNOSIS', 'DESCRIPTION OF PROCEDURE',
       'SPECIMENS', 'ESTIMATED BLOOD LOSS',
     ])).toBe('operative');
+  });
+});
+
+describe('the banner is BOUNDED — the diagnosis, not the census', () => {
+  // ⚠️ `reviewReason` is `@db.Text` and every render site interpolates it raw
+  // with no clamp, so the worst case from the save schema (40 sections × 120
+  // chars) is ~5,100 characters of amber above the note. Naming a few and
+  // counting the rest is the same information at a glance.
+  const many = Array.from({ length: 20 }, (_, i) => `SECTION_${i + 1}`);
+  const required = [...many, 'KEPT_ONE'];
+
+  it('names the first few and counts the rest', () => {
+    const r = structureMismatchReason(many, required, 'missing SOAP sections: …');
+    expect(r).toContain('SECTION_1');
+    expect(r).toContain('SECTION_5');
+    expect(r).toMatch(/and 15 more/);
+    expect(r).not.toContain('SECTION_20');
+  });
+
+  it('the arithmetic is right — named + remainder === total', () => {
+    const r = structureMismatchReason(many, required, 'missing SOAP sections: …');
+    const m = r.match(/and (\d+) more/);
+    expect(m).toBeTruthy();
+    const named = many.filter((s) => r.includes(s)).length;
+    expect(named + Number(m![1])).toBe(many.length);
+  });
+
+  it('a SHORT list is printed in full — no "and 0 more"', () => {
+    const r = structureMismatchReason(['A', 'B'], ['A', 'B', 'C'], 'missing SOAP sections: …');
+    expect(r).toContain('A, B');
+    expect(r).not.toMatch(/and \d+ more/);
+  });
+
+  it('stays comfortably under the old worst case', () => {
+    const r = structureMismatchReason(
+      Array.from({ length: 40 }, (_, i) => 'X'.repeat(120) + i),
+      Array.from({ length: 41 }, (_, i) => 'X'.repeat(120) + i),
+      'missing SOAP sections: …',
+    );
+    expect(r.length).toBeLessThan(1000);
   });
 });

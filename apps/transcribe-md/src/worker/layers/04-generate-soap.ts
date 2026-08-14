@@ -23,6 +23,7 @@ import {
   type AudioConfidenceStats,
 } from './audio-confidence';
 import { validateSoapStructure } from './soap-structure-validator';
+import { applyAdditiveReviewState } from '@/worker/finalize-review-state';
 import { structureMismatchReason } from './structure-mismatch-reason';
 import {
   buildSoapSystemPrompt,
@@ -493,29 +494,52 @@ export async function runLayer4GenerateSoap(
         // NO raw output — PHI surface. Just the structural fail-class.
       },
     });
+    // ⚠️ THE REVIEW STATE IS WRITTEN ADDITIVELY, THROUGH THE SAME HELPER L6
+    // USES — never a second implementation, because two copies drift the day
+    // either is fixed.
+    //
+    // FOUND BY AN ADVERSARIAL PASS, and it is the SILENTLY-DESTROYED-SIGNAL
+    // class. This was a plain `update`, i.e. a REPLACE, and two review reasons
+    // are set BEFORE L4 runs:
+    //
+    //   · `worker.ts` — "Conflicting allergy statements were detected in this
+    //     visit — verify the allergy list before signing." Written with a
+    //     COALESCE **specifically so it could not be clobbered**; the plain
+    //     update clobbered it anyway.
+    //   · `detectTemplateFallback` — "Your note format could not be loaded, so
+    //     this note was written in the standard layout instead of your own
+    //     form." Destroying it makes the banner's own "Your template …" and
+    //     its Settings link a dead end: the template is not theirs and Settings
+    //     already holds the right one.
+    //
+    // A SAFETY WARNING DELETED BY A FORMATTING BANNER. Pre-existing — L4 has
+    // always replaced here and this change only altered the string — but the
+    // cure is the pattern L6 was already migrated to (#315 obs#1).
     await prisma.transcribeVisit.update({
       where: { id: input.visitId },
       data: {
         soapDraft: text,
         ...suggestedClaimsWrite,
-        needsReview: true,
-        // ⚠️ THE BANNER NAMES THE MISMATCH. It used to read "SOAP draft didn't
-        // match expected markdown structure — manual review required." — true,
-        // in the system's own vocabulary, and nearly useless to a clinician.
-        // The validator already knew the missing headings AND that the template
-        // is a different KIND of document from the dictation; the doctor was
-        // told neither. Written against a real production visit that failed
-        // with six operative-note headings absent on an office-visit dictation.
-        // Headings and counts only — never a value, never a line of the note.
-        reviewReason: structureMismatchReason(
-          validation.missingSections,
-          template.sections.map((sec) => sec.label),
-          validation.reason,
-        ),
         // Phase 1 provenance — which template + version generated this note.
         noteTemplateId: template.id,
         noteTemplateVersion: template.version,
       },
+    });
+    await applyAdditiveReviewState(input.visitId, {
+      needsReview: true,
+      // ⚠️ THE BANNER NAMES THE MISMATCH. It used to read "SOAP draft didn't
+      // match expected markdown structure — manual review required." — true, in
+      // the system's own vocabulary, and nearly useless to a clinician. The
+      // validator already knew the missing headings AND that the template is a
+      // different KIND of document from the dictation; the doctor was told
+      // neither. Written against a real production visit that failed with six
+      // operative-note headings absent on an office-visit dictation.
+      // Headings and counts only — never a value, never a line of the note.
+      reviewReason: structureMismatchReason(
+        validation.missingSections,
+        template.sections.map((sec) => sec.label),
+        validation.reason,
+      ),
     });
     return text;
   }
@@ -528,25 +552,27 @@ export async function runLayer4GenerateSoap(
   // the provenance fix in 04b a section can no longer be emptied by a class of
   // false positive, but if it ever were, a banner pointing at an empty review
   // lane would send them looking for cards that are not there.
-  const anchorReview =
-    filledEmptySections.length > 0
-      ? {
-          needsReview: true,
-          reviewReason: `Anchored verification moved all drafted content out of ${filledEmptySections.length} section(s) — ${filledEmptySections.join(', ')} — to the review suggestions. Review and adopt before signing.`,
-        }
-      : {};
-
   await prisma.transcribeVisit.update({
     where: { id: input.visitId },
     data: {
       soapDraft: text,
       ...suggestedClaimsWrite,
-      ...anchorReview,
       // Phase 1 provenance — which template + version generated this note.
       noteTemplateId: template.id,
       noteTemplateVersion: template.version,
     },
   });
+
+  // ⚠️ ADDITIVE, same helper, same reason as the structure-fail path above:
+  // this used to ride the plain `update` as `...anchorReview` and replaced any
+  // review reason set earlier in the pipeline — the allergy-conflict warning
+  // among them. It is a no-op when there is nothing to add.
+  if (filledEmptySections.length > 0) {
+    await applyAdditiveReviewState(input.visitId, {
+      needsReview: true,
+      reviewReason: `Anchored verification moved all drafted content out of ${filledEmptySections.length} section(s) — ${filledEmptySections.join(', ')} — to the review suggestions. Review and adopt before signing.`,
+    });
+  }
 
   return text;
 }

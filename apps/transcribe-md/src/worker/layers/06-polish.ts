@@ -11,6 +11,7 @@ import { modelClient } from '@meddoc/ai';
 import prisma from '@meddoc/db';
 import { logAudit } from '@/lib/audit';
 import { applyAdditiveReviewState } from '@/worker/finalize-review-state';
+import { structureMismatchReason } from './structure-mismatch-reason';
 import {
   findNovelContentTerms,
   runPolishFidelityGate,
@@ -471,7 +472,20 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
             // NO raw output — PHI surface.
           },
         });
-        polishValidationFailReason = `Polish output didn't match expected markdown structure — manual review required (${validation.reason}).`;
+        // ⚠️ RETIRED VOCABULARY. This said "Polish output didn't match expected
+        // markdown structure — manual review required (…)" — the system-facing
+        // phrasing the L4 banner was rewritten to replace, landing immediately
+        // after it on the very visits that change targets, and calling
+        // operative-note headings "SOAP sections".
+        //
+        // Same measured-claim discipline as the new banner: it says the
+        // headings could not be found, never that the content was unsupported,
+        // because heading presence is all `validateSoapStructure` measures.
+        polishValidationFailReason = structureMismatchReason(
+          validation.missingSections,
+          requiredSections,
+          validation.reason,
+        );
       }
     }
   }

@@ -108,7 +108,18 @@ export function structureMismatchReason(
   }
   const missing = missingSections.filter((s) => typeof s === 'string' && s.trim() !== '');
   const n = missing.length;
-  const list = missing.join(', ');
+
+  // ⚠️ BOUNDED — THE DOCTOR NEEDS THE DIAGNOSIS, NOT THE CENSUS. `reviewReason`
+  // is `@db.Text` and every render site interpolates it raw with no clamp, so
+  // the worst case from the save schema (40 sections × 120-char labels) is
+  // ~5,100 characters of amber above the note. Naming a few and counting the
+  // rest is the same information at a glance; a wall of headings is the same
+  // information nobody reads.
+  const NAMED = 5;
+  const list =
+    n <= NAMED
+      ? missing.join(', ')
+      : `${missing.slice(0, NAMED).join(', ')}, and ${n - NAMED} more`;
 
   if (n === 0) {
     // Structure failed for a reason other than absent headings (empty output,
