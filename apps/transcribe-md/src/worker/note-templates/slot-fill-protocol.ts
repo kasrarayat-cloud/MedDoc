@@ -160,22 +160,43 @@ function narrowSection(raw: unknown): Record<string, string> {
  * model did, and a note with visible holes beats no note at all.
  */
 export function extractSlotFills(rawText: string): ExtractedSlotFills {
-  const open = rawText.lastIndexOf(SLOT_VALUES_OPEN);
-  if (open === -1) return { text: rawText, fills: {}, error: 'slot_block_absent' };
-  const bodyStart = open + SLOT_VALUES_OPEN.length;
-  const close = rawText.indexOf(SLOT_VALUES_CLOSE, bodyStart);
-  // An unterminated block is still REMOVED from the note: whatever follows the
-  // sentinel is protocol, not prose, and leaving it in would print JSON into a
-  // clinical document.
-  const body = close === -1 ? rawText.slice(bodyStart) : rawText.slice(bodyStart, close);
-  const text =
-    close === -1
-      ? rawText.slice(0, open)
-      : rawText.slice(0, open) + rawText.slice(close + SLOT_VALUES_CLOSE.length);
-  const cleaned = text.replace(/\s+$/, '');
-  if (close === -1) {
+  // ⚠️ EVERY SENTINEL-BEARING REGION IS REMOVED, AND THE LAST *COMPLETE* PAIR IS
+  // THE ANSWER. An earlier version took `lastIndexOf(OPEN)` and searched
+  // forward for a close — so a model that answered correctly and then MENTIONED
+  // the block in prose ("the <<<SLOT_VALUES block above carries the values")
+  // was read as an unterminated block: every correctly-supplied value was
+  // discarded, every slot rendered `—`, and the earlier, valid JSON was left
+  // sitting in the clinical note. Both L4 gates passed on that output.
+  //
+  // So: scan pairs left to right, keep the last COMPLETE one as the answer, and
+  // strip the span from the first sentinel onward — whatever follows an opening
+  // sentinel is protocol, not prose, and a clinical document must not carry it.
+  const first = rawText.indexOf(SLOT_VALUES_OPEN);
+  if (first === -1) return { text: rawText, fills: {}, error: 'slot_block_absent' };
+
+  let lastBody: string | null = null;
+  let cursor = first;
+  let tail = -1; // index just past the last complete pair
+  while (cursor !== -1) {
+    const bodyStart = cursor + SLOT_VALUES_OPEN.length;
+    const close = rawText.indexOf(SLOT_VALUES_CLOSE, bodyStart);
+    if (close === -1) break;
+    lastBody = rawText.slice(bodyStart, close);
+    tail = close + SLOT_VALUES_CLOSE.length;
+    cursor = rawText.indexOf(SLOT_VALUES_OPEN, tail);
+  }
+
+  // The note is everything before the FIRST sentinel, plus anything after the
+  // LAST complete pair that does not itself open a new region.
+  const after = tail === -1 ? '' : rawText.slice(tail);
+  const afterClean =
+    after.indexOf(SLOT_VALUES_OPEN) === -1 ? after : after.slice(0, after.indexOf(SLOT_VALUES_OPEN));
+  const cleaned = (rawText.slice(0, first) + afterClean).replace(/\s+$/, '');
+
+  if (lastBody === null) {
     return { text: cleaned, fills: {}, error: 'slot_block_unterminated' };
   }
+  const body = lastBody;
   let parsed: unknown;
   try {
     parsed = JSON.parse(body.trim());

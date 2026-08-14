@@ -210,14 +210,41 @@ describe('findStaticDivergence — the L6b arm (#106(g))', () => {
   );
   const regions = [{ sectionKey: 'technique', label: 'TECHNIQUE', text: assembled }];
 
+  // ⚠️ THE FIXTURES CARRY `## ` HEADINGS NOW, AND THE ORIGINALS DID NOT.
+  // When this file was written the check was pure containment, so a bare
+  // `TECHNIQUE` line was as good as a heading. The check is POSITIONAL now —
+  // the region must still sit under ITS OWN heading — because containment was
+  // blind to a polisher that EMPTIED the doctor's section and appended its text
+  // to the bottom of another one. A clinical note is `## `-headed markdown
+  // everywhere else in this pipeline (the structure validator, the UI parser,
+  // `splitBlocks`), so the old fixture was modelling a note shape production
+  // never produces.
+  const note = (body: string) =>
+    `## HISTORY\nSome polished prose.\n\n${body}\n\n## IMPRESSION\nTidied.`;
+
   it('passes when the polisher left the static region alone', () => {
-    const polished = `HISTORY\nSome polished prose.\n\nTECHNIQUE\n${assembled}\n\nIMPRESSION\nTidied.`;
-    expect(findStaticDivergence(polished, regions)).toEqual([]);
+    expect(findStaticDivergence(note(`## TECHNIQUE\n${assembled}`), regions)).toEqual([]);
+  });
+
+  // ⚠️ THE CASE CONTAINMENT COULD NOT SEE — and L6's own preamble licenses it
+  // ("you may reword, REORGANIZE, and reformat"). Every byte is still in the
+  // document and `validateSoapStructure` finds every heading, so nothing else
+  // in the pipeline objects.
+  it('⚠️ catches a RELOCATED region — section emptied, text moved elsewhere', () => {
+    const relocated = `## HISTORY\nSome prose.\n\n## TECHNIQUE\n\n## FINDINGS\nTidied. ${assembled}`;
+    expect(findStaticDivergence(relocated, regions)).toHaveLength(1);
+  });
+
+  it('⚠️ catches the region surviving under a heading the model invented', () => {
+    const moved = `## HISTORY\nx.\n\n## APPENDIX\n${assembled}`;
+    expect(findStaticDivergence(moved, regions)).toHaveLength(1);
   });
 
   it('⚠️ TRIPWIRE THROUGH L6: catches the exact live defect — 500 ms -> 0.5 s', () => {
-    const polished = assembled.replace('500 milliseconds', '0.5 seconds');
-    const out = findStaticDivergence(polished, regions);
+    const out = findStaticDivergence(
+      note(`## TECHNIQUE\n${assembled.replace('500 milliseconds', '0.5 seconds')}`),
+      regions
+    );
     expect(out).toHaveLength(1);
     expect(out[0]).toEqual({ sectionKey: 'technique', label: 'TECHNIQUE' });
   });
@@ -228,16 +255,16 @@ describe('findStaticDivergence — the L6b arm (#106(g))', () => {
       'was performed in the upright position',
       'was performed with the patient upright'
     );
-    expect(findStaticDivergence(polished, regions)).toHaveLength(1);
+    expect(findStaticDivergence(note(`## TECHNIQUE\n${polished}`), regions)).toHaveLength(1);
   });
 
   it('catches silent deletion of the whole region', () => {
-    expect(findStaticDivergence('HISTORY\nonly this.', regions)).toHaveLength(1);
+    expect(findStaticDivergence('## HISTORY\nonly this.', regions)).toHaveLength(1);
   });
 
   it('is not fooled by the region appearing with different whitespace', () => {
     const polished = assembled.replace('500 milliseconds', '500  milliseconds');
-    expect(findStaticDivergence(polished, regions)).toHaveLength(1);
+    expect(findStaticDivergence(note(`## TECHNIQUE\n${polished}`), regions)).toHaveLength(1);
   });
 
   it('ignores an empty region rather than failing every note', () => {
@@ -249,6 +276,6 @@ describe('findStaticDivergence — the L6b arm (#106(g))', () => {
       ...regions,
       { sectionKey: 'impression', label: 'IMPRESSION', text: 'Clinical correlation is required.' },
     ];
-    expect(findStaticDivergence('nothing here', two)).toHaveLength(2);
+    expect(findStaticDivergence('## HISTORY\nnothing here', two)).toHaveLength(2);
   });
 });

@@ -373,7 +373,15 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
     // L4 is skippable on resume — see `staticRegionsFromNote`. A no-op returning
     // `[]` for every template with no `always_include` sections, which today is
     // all of them, so this is inert until the reclassification lands.
-    if (!polishRejected && soapFinal.trim().length > 0) {
+    // ⚠️ NO `soapFinal.trim().length > 0` GUARD HERE, DELIBERATELY, AND THE
+    // OMISSION IS A FIX. The fidelity gate above is exempt on empty output
+    // because empty output "cannot carry an addition" — true for the ADDITION
+    // question and invalid for the SURVIVAL question this arm asks. A polisher
+    // returning "\n \n" skipped both gates, `polishRejected` stayed false, and
+    // that value was written to soapFinal AND soapL6Original, taking the
+    // doctor's assembled sections with it. An empty note contains no region, so
+    // the arm now rejects it and the draft is served.
+    if (!polishRejected) {
       const regions = staticRegionsFromNote(input.soapDraft, template.sections);
       const diverged = findStaticDivergence(soapFinal, regions);
       if (diverged.length > 0) {

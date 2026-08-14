@@ -230,6 +230,64 @@ export function assembleSection(
   return { text: kept.join('\n'), droppedLines, unfilled, rejected };
 }
 
+export interface Block {
+  /** The heading text without the leading `## `, or null for a preamble block
+   *  that precedes the first heading. */
+  heading: string | null;
+  /** The block's full text INCLUDING its heading line. */
+  text: string;
+}
+
+/** Split markdown into `##`-headed blocks. A leading block with no heading (the
+ *  model's preamble, if any) is preserved as `heading: null` — this module
+ *  never decides that content is worthless. */
+export function splitBlocks(markdown: string): Block[] {
+  // An empty draft has no blocks at all — not one empty preamble block. The
+  // difference shows up as a stray leading newline in the composed note, which
+  // is the kind of drift a byte-identity gate is supposed to catch and a reader
+  // never would.
+  if (markdown.length === 0) return [];
+  const lines = markdown.split('\n');
+  const out: Block[] = [];
+  let current: Block | null = null;
+  for (const line of lines) {
+    const m = /^##\s+(\S.*)$/.exec(line);
+    if (m) {
+      if (current) out.push(current);
+      current = { heading: m[1]!.trim(), text: line };
+    } else if (current) {
+      current.text += `\n${line}`;
+    } else {
+      current = { heading: null, text: line };
+    }
+  }
+  if (current) out.push(current);
+  return out;
+}
+
+/**
+ * Is this block THIS section's? EXACT, after collapsing whitespace and case.
+ *
+ * ⚠️ DELIBERATELY NOT the validator's `headingMatcher`. That one is a PRESENCE
+ * check and is lenient by design — `## TECHNIQUE` matches `## TECHNIQUE NOTES
+ * FOR THIS STUDY`. Presence and identity are different questions, and using the
+ * presence matcher for identity overwrote a section carrying a dictated
+ * limitation with the doctor's boilerplate.
+ */
+export function headingIs(heading: string | null, label: string): boolean {
+  if (heading === null) return false;
+  const norm = (x: string) => x.trim().replace(/\s+/g, ' ').toLowerCase();
+  return norm(heading) === norm(label);
+}
+
+/** The body of the block headed `label`, trimmed, or null when absent. */
+export function sectionBody(text: string, label: string): string | null {
+  const block = splitBlocks(text).find((b) => headingIs(b.heading, label));
+  if (block === undefined) return null;
+  const nl = block.text.indexOf('\n');
+  return (nl === -1 ? '' : block.text.slice(nl + 1)).trim();
+}
+
 // ---------------------------------------------------------------------------
 // STATIC-REGION DIVERGENCE — the L6b arm (ruling #106(g)).
 // ---------------------------------------------------------------------------
@@ -268,6 +326,21 @@ export function findStaticDivergence(
   regions: readonly StaticRegion[]
 ): { sectionKey: string; label: string }[] {
   return regions
-    .filter((r) => r.text.trim().length > 0 && !finalText.includes(r.text))
+    .filter((r) => {
+      if (r.text.trim().length === 0) return false;
+      // ⚠️ POSITIONAL, NOT CONTAINMENT — AND THE CHANGE IS A BUG FIX. A plain
+      // `finalText.includes(r.text)` is position-blind, so a polisher that
+      // EMPTIED the doctor's section and appended its paragraph to the bottom
+      // of another one produced a clean verdict: the bytes were still in the
+      // document. `validateSoapStructure` also passes, because every heading is
+      // present. The doctor gets a form whose protocol section is blank and
+      // whose text sits under Findings, with no banner and no audit row.
+      //
+      // Not exotic: L6's own immutable preamble licenses "reword, REORGANIZE,
+      // and reformat". The region must therefore still be under ITS OWN
+      // heading, byte-for-byte.
+      const body = sectionBody(finalText, r.label);
+      return body === null || !body.includes(r.text);
+    })
     .map((r) => ({ sectionKey: r.sectionKey, label: r.label }));
 }

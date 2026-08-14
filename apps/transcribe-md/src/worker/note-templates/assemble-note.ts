@@ -24,12 +24,19 @@
 
 import {
   assembleSection,
+  headingIs,
   segmentSection,
+  splitBlocks,
   type AssembleOptions,
   type AssemblyLine,
   type StaticRegion,
 } from './section-assembly';
-import { headingMatcher } from '../layers/soap-structure-validator';
+
+// ⚠️ RE-EXPORTED, NOT RE-IMPLEMENTED. `splitBlocks` and `headingIs` moved DOWN
+// into `section-assembly.ts` so `findStaticDivergence` could become positional
+// without importing this module (which imports it — a cycle). One definition,
+// two consumers.
+export { headingIs, splitBlocks, type Block } from './section-assembly';
 import type { NoteTemplateSection } from './system-default-template';
 
 /**
@@ -85,41 +92,6 @@ export function segmentStaticSections(
     section,
     lines: segmentSection(section.defaultText ?? ''),
   }));
-}
-
-export interface Block {
-  /** The heading text without the leading `## `, or null for a preamble block
-   *  that precedes the first heading. */
-  heading: string | null;
-  /** The block's full text INCLUDING its heading line. */
-  text: string;
-}
-
-/** Split markdown into `##`-headed blocks. A leading block with no heading (the
- *  model's preamble, if any) is preserved as `heading: null` — this module
- *  never decides that content is worthless. */
-export function splitBlocks(markdown: string): Block[] {
-  // An empty draft has no blocks at all — not one empty preamble block. The
-  // difference shows up as a stray leading newline in the composed note, which
-  // is the kind of drift a byte-identity gate is supposed to catch and a reader
-  // never would.
-  if (markdown.length === 0) return [];
-  const lines = markdown.split('\n');
-  const out: Block[] = [];
-  let current: Block | null = null;
-  for (const line of lines) {
-    const m = /^##\s+(\S.*)$/.exec(line);
-    if (m) {
-      if (current) out.push(current);
-      current = { heading: m[1]!.trim(), text: line };
-    } else if (current) {
-      current.text += `\n${line}`;
-    } else {
-      current = { heading: null, text: line };
-    }
-  }
-  if (current) out.push(current);
-  return out;
 }
 
 export interface ComposeResult {
@@ -204,16 +176,26 @@ export function composeNote(
     // and fires on every visit. Pinned by a round-trip test.
     regions.push({ sectionKey: section.key, label: section.label, text: body.trim() });
 
-    // ⚠️ THE LENIENT MATCHER IS THE RIGHT ONE HERE, AND THE REASON IS NOT
-    // "reuse". It also matches a heading that merely STARTS with the label
-    // ("## TECHNIQUE AND METHOD"), which for a REPLACEMENT is the safe
-    // direction: that block would otherwise survive beside the assembled one,
-    // leaving two versions of the doctor's paragraph in the document with one
-    // of them paraphrased — the original defect, inside its own fix. Exact
-    // matching would be safer only if the model's version were worth keeping,
-    // and for a section it was told not to write, it is not.
-    const re = headingMatcher(section.label);
-    const at = blocks.findIndex((b) => b.heading !== null && re.test(`## ${b.heading}`));
+    // ⚠️ EXACT HEADING EQUALITY, AND THIS REVERSES AN EARLIER DECISION IN THIS
+    // FILE. It used the LENIENT `headingMatcher` — the validator's presence
+    // check — on the argument that a near-miss block would otherwise survive
+    // beside the assembled one carrying a paraphrase. That argument was wrong,
+    // and an adversarial pass produced the counterexample:
+    //
+    //     ## TECHNIQUE NOTES FOR THIS STUDY
+    //     Augmentation was limited by patient pain; the study was terminated early.
+    //
+    // `##\s*TECHNIQUE(?!\w)` matches that heading — a following space is not
+    // `\w` — so a DIFFERENT section, carrying a dictated limitation, was
+    // overwritten by the doctor's boilerplate and counted as a duplicate.
+    // Deleting the visit's own clinical content is strictly worse than leaving
+    // a visible duplicate a clinician can see and resolve.
+    //
+    // The validator keeps the lenient matcher: it asks "is a section like this
+    // present?", which is a different question from "is this block THIS
+    // section?". Two questions, two matchers — stated here so the divergence is
+    // deliberate rather than discovered.
+    const at = blocks.findIndex((b) => headingIs(b.heading, section.label));
     if (at !== -1) {
       blocks[at] = { heading: section.label, text: blockText };
       replaced += 1;
@@ -225,7 +207,7 @@ export function composeNote(
       // assembled version of that exact heading has taken its place.
       for (let i = blocks.length - 1; i > at; i--) {
         const b = blocks[i]!;
-        if (b.heading !== null && re.test(`## ${b.heading}`)) {
+        if (headingIs(b.heading, section.label)) {
           blocks.splice(i, 1);
           duplicatesDropped += 1;
         }
@@ -241,8 +223,7 @@ export function composeNote(
     let insertAt = blocks.length;
     for (let i = myIdx - 1; i >= 0; i--) {
       const prev = ordered[i]!;
-      const prevRe = headingMatcher(prev.label);
-      const found = blocks.findIndex((b) => b.heading !== null && prevRe.test(`## ${b.heading}`));
+      const found = blocks.findIndex((b) => headingIs(b.heading, prev.label));
       if (found !== -1) {
         insertAt = found + 1;
         break;
@@ -251,8 +232,7 @@ export function composeNote(
     if (insertAt === blocks.length) {
       for (let i = myIdx + 1; i < ordered.length; i++) {
         const next = ordered[i]!;
-        const nextRe = headingMatcher(next.label);
-        const found = blocks.findIndex((b) => b.heading !== null && nextRe.test(`## ${b.heading}`));
+        const found = blocks.findIndex((b) => headingIs(b.heading, next.label));
         if (found !== -1) {
           insertAt = found;
           break;
@@ -303,13 +283,31 @@ export function staticRegionsFromNote(
   const blocks = splitBlocks(note);
   const out: StaticRegion[] = [];
   for (const section of statics) {
-    const re = headingMatcher(section.label);
-    const block = blocks.find((b) => b.heading !== null && re.test(`## ${b.heading}`));
+    const block = blocks.find((b) => headingIs(b.heading, section.label));
     if (block === undefined) continue;
     const nl = block.text.indexOf('\n');
     const body = nl === -1 ? '' : block.text.slice(nl + 1);
     const trimmed = body.trim();
     if (trimmed.length === 0) continue;
+    // ⚠️ ONLY A BLOCK THAT CODE ACTUALLY ASSEMBLED IS GUARDED, AND THIS TEST IS
+    // WHAT MAKES THE GUARD HONEST ON A RESUMED RUN. `worker.ts` resumes a
+    // retried visit from `resumeState.soapDraft`, which on a visit drafted
+    // before this shipped is the OLD scaffold output — the model's own prose.
+    // Without this check the arm would take that paraphrase as the sacred
+    // bytes, reject a polish that endangered nothing, and tell the clinician
+    // "the note keeps your template's exact wording" about a note that says
+    // `0.5 seconds`. A false assurance is worse than the generic message it
+    // replaced.
+    //
+    // An assembled block contains every literal span of its template text by
+    // construction; a pre-assembly draft does not. Short spans are ignored —
+    // a two-character fragment between slots proves nothing.
+    const literals = segmentSection(section.defaultText ?? '')
+      .flatMap((l) => l.segments)
+      .filter((seg) => seg.kind === 'literal')
+      .map((seg) => (seg as { text: string }).text.trim())
+      .filter((t) => t.length >= 8);
+    if (literals.length > 0 && !literals.every((t) => trimmed.includes(t))) continue;
     out.push({ sectionKey: section.key, label: section.label, text: trimmed });
   }
   return out;
