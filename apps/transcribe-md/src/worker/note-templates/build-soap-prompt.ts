@@ -314,9 +314,33 @@ export function renderStructureDirective(
   ].join('\n');
 }
 
-function renderSectionBody(
+/**
+ * Render one section's body — THE ONE IMPLEMENTATION, shared by both builders.
+ *
+ * ⚠️ IT IS EXPORTED BECAUSE A SECOND COPY ALMOST SHIPPED A CLINICAL DEFECT.
+ * `build-ultrasound-prompt.ts` carried its own near-identical copy, and RC-1's
+ * static-aware treatment was added to THIS one only. Every production visit
+ * bound to the templates the reclassification migration touches takes the
+ * IMAGING route — so the model would have been handed the doctor's bytes as
+ * scaffold while `composeNote` composed as though it had not been, replacing
+ * the model's dictated values (side of exam, indication) with an em dash on a
+ * signed imaging report. Silently: both structure gates pass.
+ *
+ * That is AGENTS.md's "shared components — diff the callers BEFORE you replace
+ * them" in its second recorded shape: the treatment was put on ONE caller and
+ * verified there, correctly and incompletely. The cure the canon prescribes is
+ * the one applied here — put the behaviour where it cannot be forgotten, on the
+ * thing both callers already share.
+ *
+ * `styleInstructionsFallback` is the only remaining difference between the two
+ * routes: the imaging builder uses `||` so an EMPTY-STRING styleInstructions
+ * falls back to the format hint, which the built-in ultrasound template relies
+ * on. A parameter, not a fork.
+ */
+export function renderSectionBody(
   s: NoteTemplateSection,
-  staticLines: ReadonlyMap<string, AssemblyLine[]>
+  staticLines: ReadonlyMap<string, AssemblyLine[]>,
+  opts: { emptyStyleInstructionsFallBack?: boolean } = {}
 ): string[] {
   // ⚠️ A STATIC SECTION'S BODY IS A REQUEST, NOT A SCAFFOLD (ruling #106(a)).
   // The doctor's bytes are not in this prompt at all — not as text to
@@ -330,7 +354,11 @@ function renderSectionBody(
     return renderStaticSectionRequest(s, lines);
   }
   const out: string[] = [];
-  out.push(s.styleInstructions ?? formatHintDirective(s.formatHint));
+  out.push(
+    (opts.emptyStyleInstructionsFallBack
+      ? s.styleInstructions || null
+      : s.styleInstructions) ?? formatHintDirective(s.formatHint)
+  );
   if (s.structure) {
     out.push(renderStructureDirective(s.structure));
   }
@@ -362,6 +390,15 @@ export interface BuildSystemPromptOpts {
   specialtyGuidanceText: string | null;
 }
 
+/** The segmented static sections, keyed for the renderer. ONE derivation, so
+ *  the slot ids a prompt names are the ids `composeNote` fills — whichever
+ *  builder wrote the prompt. */
+export function staticLinesByKey(
+  sections: readonly NoteTemplateSection[]
+): Map<string, AssemblyLine[]> {
+  return new Map(segmentStaticSections(sections).map((x) => [x.section.key, x.lines]));
+}
+
 /**
  * Build the L4 SYSTEM prompt from a resolved template. Element order mirrors
  * the pre-Phase-1 L4 array exactly; for the system default this is byte-
@@ -377,9 +414,7 @@ export function buildSoapSystemPrompt(
   // `segmentStaticSections`. The slot ids this prompt names and the slot ids
   // `composeNote` fills are produced by the same function over the same text —
   // two derivations would agree until the day one of them was fixed.
-  const staticLines = new Map<string, AssemblyLine[]>(
-    segmentStaticSections(sections).map((x) => [x.section.key, x.lines])
-  );
+  const staticLines = staticLinesByKey(sections);
   const generativeSlots = hasGenerativeChoiceSlots(sections);
 
   const lines: (string | null | undefined)[] = [

@@ -15,12 +15,13 @@
 import { delimiterSystemSuffix } from '@meddoc/ai';
 import type { ResolvedNoteTemplate, BuildSystemPromptOpts } from './build-soap-prompt';
 import {
-  renderStructureDirective,
-  normalizeRefluxTimeUnit,
-  SCAFFOLD_CONFIRM_MARKER,
+  renderSectionBody,
+  staticLinesByKey,
   CHOICE_SLOT_DIRECTIVE,
-  templateHasChoiceSlots,
+  hasGenerativeChoiceSlots,
 } from './build-soap-prompt';
+import { SLOT_VALUES_DIRECTIVE } from './slot-fill-protocol';
+import { staticSections } from './assemble-note';
 import type { NoteTemplateSection } from './system-default-template';
 import { ULTRASOUND_REPORT_TEMPLATE } from './ultrasound-report-template';
 
@@ -32,41 +33,39 @@ import { ULTRASOUND_REPORT_TEMPLATE } from './ultrasound-report-template';
  *  (A custom template's styleProfile carries tense/tone, not globalRules.) */
 const IMAGING_SAFETY = ULTRASOUND_REPORT_TEMPLATE.styleProfile;
 
-/** Render one section's body. The BUILT-IN ultrasound template carries only
- *  styleInstructions and no default text — for it this is byte-identical to
- *  before. A CUSTOM imaging template (a doctor's own report) may also carry
- *  table/option `structure` and marker-bearing scaffold `defaultText`; emit
- *  those the same way the SOAP builder does so the custom report is filled
- *  from its own fields. */
-function renderSectionBody(s: NoteTemplateSection): string[] {
-  const out: string[] = [];
-  // `||` (not `??`) preserves the built-in template's prior behavior: an
-  // empty-string styleInstructions falls back to the format-hint directive.
-  out.push(s.styleInstructions || formatHintDirective(s.formatHint));
-  if (s.structure) out.push(renderStructureDirective(s.structure));
-  if (s.defaultText) {
-    // Reconcile a milliseconds reflux threshold in scaffold prose (e.g. the
-    // Technique line "reflux lasting more than 500 milliseconds") to seconds,
-    // to match the seconds-based reflux column + how reflux is dictated.
-    // No-op for any prose without a reflux/ms threshold.
-    const defaultText = normalizeRefluxTimeUnit(s.defaultText);
-    if (s.defaultTextMode === 'always_include') out.push(defaultText);
-    else if (s.defaultTextMode === 'scaffold_confirm')
-      out.push(`${defaultText}\n${SCAFFOLD_CONFIRM_MARKER}`);
-  }
-  return out;
-}
+// ⚠️ THIS FILE NO LONGER HAS ITS OWN `renderSectionBody`, AND THE DELETION IS
+// THE FIX FOR A CLINICAL DEFECT. It carried a near-identical copy of the SOAP
+// builder's, so RC-1's static-aware treatment — added to that one — never
+// reached this route. Every production visit bound to a reclassified template
+// is an IMAGING visit, so the model would have been handed the doctor's bytes
+// as scaffold while `composeNote` composed as though it had not been, replacing
+// dictated values (side of exam, indication) with an em dash on a signed
+// report, silently. Both structure gates pass on that output.
+//
+// ⚠️ AND THE COPY CARRIED THE ROOT CAUSE OF #106 ITSELF.
+//
+//     normalizeRefluxTimeUnit("… reflux as lasting more than 500 milliseconds …")
+//       → "… reflux as lasting more than 0.5 seconds …"
+//
+// It was applied to `defaultText` before the prompt was built, so the PROMPT
+// said `0.5 seconds` and the model reproduced it faithfully. **The paraphrase
+// the ruling attributes to the model was written by this code**, deterministic
+// on every imaging visit. Ruling #106's diagnosis is corrected on that point.
+//
+// The unit concern behind it was real — a bare seconds value under a
+// milliseconds header is a mismatch — but the remedy edited the doctor's
+// sentence, which SPEC §4.3a(a) forbids in as many words ("never normalised,
+// never 'improved'. `500 milliseconds` stays `500 milliseconds`"). The column
+// headers are still reconciled inside `renderStructureDirective`, where the
+// unit actually lives, and the convention is now STATED to the model instead of
+// applied to the doctor's prose.
+const REFLUX_UNIT_NOTE = [
+  'REFLUX TIME UNITS. Where a table column asks for a reflux or reverse-flow',
+  'time, write the value in SECONDS as dictated (e.g. "3.4") — whatever unit the',
+  'protocol prose above uses to state the threshold. Never convert a dictated',
+  'value, and never rewrite the protocol prose to match the column.',
+].join('\n');
 
-function formatHintDirective(formatHint: string): string {
-  switch (formatHint) {
-    case 'numbered':
-      return 'Write this section as a numbered list.';
-    case 'bullets':
-      return 'Write this section as a bulleted list.';
-    default:
-      return 'Write this section as prose.';
-  }
-}
 
 /**
  * Build the ultrasound report SYSTEM prompt from the resolved ultrasound
@@ -81,6 +80,16 @@ export function buildUltrasoundSystemPrompt(
 ): string {
   const sections = [...template.sections].sort((a, b) => a.order - b.order);
 
+  const staticLines = staticLinesByKey(sections);
+  const generativeSlots = hasGenerativeChoiceSlots(sections);
+  // A reflux/reverse-flow TIME column anywhere in the template. The unit note
+  // is about a table cell, so it is emitted only when a table asks for one.
+  const hasRefluxTimeColumn = sections.some((s) =>
+    (s.structure?.kind === 'table' ? s.structure.columns : []).some((c) =>
+      /\b(reflux|reverse[-\s]?flow)\b/i.test(c)
+    )
+  );
+
   const lines: (string | null | undefined)[] = [
     // Imaging-report preamble (NOT the SOAP "writing a SOAP note" preamble).
     IMAGING_SAFETY.preamble,
@@ -93,7 +102,14 @@ export function buildUltrasoundSystemPrompt(
     // Report section structure.
     'Structure the report with these markdown headings exactly:',
     '',
-    ...sections.flatMap((s) => [`## ${s.label}`, ...renderSectionBody(s), '']),
+    ...sections.flatMap((s) => [
+      `## ${s.label}`,
+      // `emptyStyleInstructionsFallBack` preserves this route's prior
+      // behaviour: an EMPTY-STRING styleInstructions falls back to the format
+      // hint, which the built-in ultrasound template relies on.
+      ...renderSectionBody(s, staticLines, { emptyStyleInstructionsFallBack: true }),
+      '',
+    ]),
     // Anti-hallucination + measurement/laterality rules (from the ultrasound
     // styleProfile — reuses the SOAP safety rules verbatim + imaging discipline).
     'Critical rules:',
@@ -101,8 +117,17 @@ export function buildUltrasoundSystemPrompt(
     // Choice-slot directive — only for a custom template that actually has
     // `{{one of}}` menus; the built-in ultrasound template has none, so its
     // prompt is byte-identical to before.
-    templateHasChoiceSlots(sections) ? '' : null,
-    templateHasChoiceSlots(sections) ? CHOICE_SLOT_DIRECTIVE : null,
+    generativeSlots ? '' : null,
+    generativeSlots ? CHOICE_SLOT_DIRECTIVE : null,
+    // ⚠️ THE SAME CONTRACT THE SOAP ROUTE EMITS, ON THE ROUTE THAT ACTUALLY
+    // CARRIES IT IN PRODUCTION. Both entries are null when the template has no
+    // assembled statics, so the built-in ultrasound template's prompt — and
+    // every custom imaging template until the reclassification — is unchanged.
+    staticLines.size > 0 ? '' : null,
+    staticLines.size > 0 ? SLOT_VALUES_DIRECTIVE : null,
+    // Stated, not applied: see REFLUX_UNIT_NOTE. Only when a table asks for one.
+    hasRefluxTimeColumn ? '' : null,
+    hasRefluxTimeColumn ? REFLUX_UNIT_NOTE : null,
     // Instruction-as-data boundary (unchanged mechanism).
     delimiterSystemSuffix('transcript'),
   ];
