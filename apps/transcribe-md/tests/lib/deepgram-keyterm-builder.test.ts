@@ -10,6 +10,8 @@ import {
   CORE_KEYTERMS,
   SPECIALTY_KEYTERMS,
 } from '@/lib/deepgram-vocabulary';
+import { normalizeSpecialty, SPECIALTY_KEYS } from '@/lib/specialty-keys';
+import { SPECIALTIES } from '@meddoc/shared/specialties';
 
 describe('buildKeytermsForVisit — composition', () => {
   it('returns core + specialty terms layered + deduped', () => {
@@ -173,13 +175,119 @@ describe('buildKeytermsForVisit — composition', () => {
 
 describe('SPECIALTY_KEYTERMS bundle invariants', () => {
   it('every canonical specialty has a bundle', () => {
-    // Every key in SPECIALTY_KEYS has an entry in SPECIALTY_KEYTERMS.
-    // Unspecified is a special case (empty bundle) and should still
-    // be present so the builder's lookup never returns undefined.
-    expect(SPECIALTY_KEYTERMS.unspecified).toBeDefined();
-    expect(SPECIALTY_KEYTERMS.bariatric_surgery).toBeDefined();
-    expect(SPECIALTY_KEYTERMS.ob_gyn).toBeDefined();
-    expect(SPECIALTY_KEYTERMS.cardiology).toBeDefined();
+    // ⚠ THIS TEST USED TO NAME FOUR KEYS BY HAND (unspecified,
+    // bariatric_surgery, ob_gyn, cardiology) while its own comment
+    // claimed "every key in SPECIALTY_KEYS". Fifteen bundles existed;
+    // four were checked. A key added without a bundle did not redden
+    // it — which is the exact half-ship this test's title promises to
+    // prevent. It now ENUMERATES. (2026-08-14, GI onboarding.)
+    expect(SPECIALTY_KEYS.length).toBeGreaterThan(4); // non-vacuity
+    for (const k of SPECIALTY_KEYS) {
+      expect(
+        SPECIALTY_KEYTERMS[k],
+        `SPECIALTY_KEYS has '${k}' but SPECIALTY_KEYTERMS has no bundle for it`,
+      ).toBeDefined();
+    }
+  });
+
+  // ── THE CROSS-CATALOG GATE ────────────────────────────────────────────
+  // Neither of the two vocabulary gates compared this module to the
+  // PRODUCT catalog in packages/shared. Both watched the vocabulary
+  // module's internal consistency, so a specialty the product offers but
+  // the vocabulary has never heard of was invisible to both — the
+  // watched-set failure. `ultrasound` is exactly that: a shipped,
+  // flag-ON catalog row with no SPECIALTY_KEYS entry, so every one of
+  // its production visits transcribes with ZERO specialty vocabulary,
+  // silently, because SPECIALTY_KEYTERMS.unspecified EXISTS and is EMPTY.
+  //
+  // A specialty may be exempt, but only BY NAME and WITH A REASON.
+  const NO_BUNDLE_EXPECTED: Record<string, string> = {
+    unspecified:
+      'the "profile not set yet" sentinel, not a clinical category — an ' +
+      'empty bundle is correct and the builder relies on it being present',
+    ultrasound:
+      'IMAGING-REPORT specialty with no vocabulary bundle as of 2026-08-14. ' +
+      'This is a KNOWN GAP, not a decision that no bundle is wanted: all ' +
+      'production ultrasound visits transcribe with no specialty keyterms. ' +
+      'Adding one changes L1 keyterms for live visits, so it carries its own ' +
+      'proof obligation and is tracked as its own item. REMOVE THIS ENTRY ' +
+      'when that bundle lands — the arm below fails if it is left here.',
+  };
+
+  it('every product-catalog specialty resolves to a NON-EMPTY bundle (or is a named exemption)', () => {
+    expect(SPECIALTIES.length).toBeGreaterThan(1); // non-vacuity
+    const unexplained: string[] = [];
+    for (const spec of SPECIALTIES) {
+      if (spec.id in NO_BUNDLE_EXPECTED) continue;
+      const terms = SPECIALTY_KEYTERMS[normalizeSpecialty(spec.id)] ?? [];
+      if (terms.length === 0) unexplained.push(spec.id);
+    }
+    expect(
+      unexplained,
+      `catalog specialties with no vocabulary: ${unexplained.join(', ')} — ` +
+        'add a bundle, or add a named entry to NO_BUNDLE_EXPECTED saying why',
+    ).toEqual([]);
+  });
+
+  it('a catalog id resolves to ITS OWN key, not merely to a non-empty one', () => {
+    // ⚠ THE GATE ABOVE ASKS "IS THERE VOCABULARY?", NOT "IS IT THE RIGHT
+    // VOCABULARY?". An adversarial pass on 2026-08-14 mistargeted the bridge
+    // — `'gastroenterology': 'psychiatry'` in SPECIALTY_VARIANTS, a
+    // single-token, type-valid typo — and EVERY gate this change added
+    // reported green. GI visits would have transcribed with 29 psychiatry
+    // terms and none of the 24 GI ones, silently, because the id still
+    // resolved to a real key with a non-empty bundle.
+    //
+    // So: where a catalog id has an obvious corresponding SPECIALTY_KEYS
+    // entry (kebab -> snake), the bridge MUST land on that one. Ids with no
+    // such key are the exemption list's business, not this arm's.
+    const mistargeted: string[] = [];
+    let checked = 0;
+    for (const spec of SPECIALTIES) {
+      const expected = spec.id.replace(/-/g, '_');
+      if (!(SPECIALTY_KEYS as readonly string[]).includes(expected)) continue;
+      checked += 1;
+      const actual = normalizeSpecialty(spec.id);
+      if (actual !== expected) mistargeted.push(`${spec.id} -> ${actual} (expected ${expected})`);
+    }
+    // ⚠ NON-VACUITY. Every id here is SKIPPED unless its kebab->snake form is a
+    // real SPECIALTY_KEYS entry. If that convention ever drifts, EVERY id would
+    // be skipped and this arm would pass having checked nothing — a green that
+    // means "the loop ran zero times". Assert the count, not just the result.
+    expect(checked, 'identity arm checked ZERO ids — the kebab->snake convention drifted').toBeGreaterThanOrEqual(10);
+    expect(
+      mistargeted,
+      `the ASR bridge points these catalog ids at the WRONG specialty: ${mistargeted.join('; ')}`,
+    ).toEqual([]);
+  });
+
+  it('every exemption is still NECESSARY (an exemption that gained a bundle must be removed)', () => {
+    // The anti-stale arm. An exclusion list goes wrong silently in the
+    // direction that REMOVES coverage: once a bundle lands, the exemption
+    // keeps the specialty out of the gate forever. So a stale exemption
+    // is itself a failure.
+    // ⚠ LOOK UP BY THE CATALOG ID **AND** THROUGH normalizeSpecialty.
+    // Checking only the normalised key made this arm UNABLE TO FIRE for the
+    // exact case it was written for. 'ultrasound' has no SPECIALTY_VARIANTS
+    // entry, so normalizeSpecialty('ultrasound') === 'unspecified', whose
+    // bundle is empty — meaning someone could add a real `ultrasound: [...]`
+    // bundle (the FIRST edit the exemption's own text invites) and this arm
+    // would stay green forever. Three adversarial lenses found that
+    // independently on 2026-08-14. Reading BOTH keys makes a partial fix
+    // visible, which is the case a human is actually most likely to land.
+    // non-vacuity: an emptied exemption list must not read as "nothing stale"
+    expect(Object.keys(NO_BUNDLE_EXPECTED).length).toBeGreaterThan(0);
+    const stale: string[] = [];
+    for (const id of Object.keys(NO_BUNDLE_EXPECTED)) {
+      if (id === 'unspecified') continue; // legitimately empty forever
+      const direct = SPECIALTY_KEYTERMS[id] ?? [];
+      const viaNormalise = SPECIALTY_KEYTERMS[normalizeSpecialty(id)] ?? [];
+      if (direct.length > 0 || viaNormalise.length > 0) stale.push(id);
+    }
+    expect(
+      stale,
+      `these now HAVE a bundle and must be dropped from NO_BUNDLE_EXPECTED: ${stale.join(', ')}`,
+    ).toEqual([]);
   });
 
   it('bariatric / weight-management / endocrinology all include GLP-1 brands', () => {

@@ -29,6 +29,7 @@ export const SPECIALTY_KEYS = [
   'pain_management',
   'pediatrics',
   'vascular_surgery',
+  'gastroenterology',
   'endocrinology',
   'functional_medicine',
   'psychiatry',
@@ -40,7 +41,7 @@ export type SpecialtyKey = (typeof SPECIALTY_KEYS)[number];
 /** Variant strings observed in production → canonical key. Add
  *  defensively — the column is free-text and new variants land
  *  occasionally. */
-const SPECIALTY_VARIANTS: Record<string, SpecialtyKey> = {
+export const SPECIALTY_VARIANTS: Record<string, SpecialtyKey> = {
   // Bariatric surgery
   'bariatric-surgery': 'bariatric_surgery',
   'bariatric_surgery': 'bariatric_surgery',
@@ -143,6 +144,18 @@ const SPECIALTY_VARIANTS: Record<string, SpecialtyKey> = {
   'integrative-medicine': 'functional_medicine',
   'integrative_medicine': 'functional_medicine',
   'integrative medicine': 'functional_medicine',
+
+  // Gastroenterology — added 2026-08-14 with the GI catalog row. Without
+  // this bridge normalizeSpecialty('gastroenterology') returns
+  // 'unspecified', whose bundle EXISTS and is EMPTY — so the miss is
+  // silent: a real key, a real lookup, zero terms, no error.
+  'gastroenterology': 'gastroenterology',
+  'gastroenterologist': 'gastroenterology',
+  'gastro': 'gastroenterology',
+  'gi': 'gastroenterology',
+  'digestive-health': 'gastroenterology',
+  'digestive_health': 'gastroenterology',
+  'digestive health': 'gastroenterology',
 
   // Psychiatry — antidepressant + antipsychotic confused-name density
   // (the Celexa/Celebrex/Cerebyx/Zyprexa cluster from ISMP).

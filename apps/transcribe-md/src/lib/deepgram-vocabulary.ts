@@ -1097,5 +1097,68 @@ export const SPECIALTY_KEYTERMS: Record<string, readonly string[]> = {
   // ─── Unspecified — empty bundle ───────────────────────────────
   // Practice didn't tag a specialty, or the tag didn't match any
   // canonical key. Visit uses CORE_KEYTERMS only.
+  // ─── Gastroenterology ─────────────────────────────────────────
+  // Added 2026-08-14 with the GI catalog row.
+  //
+  // ⚠ SIZED BY TOKENS, NOT BY TERM COUNT — AND THE DIFFERENCE BIT.
+  // The per-bundle rule everyone reads is "<= 30 terms". The rule that
+  // actually binds is DEFAULT_TOKEN_BUDGET = 450 shared across core +
+  // safety floor + specialty, with estimateTokens = ceil(len / 3.5).
+  // A 30-term GI draft PASSED the term ceiling and came to 143 tokens
+  // against a 111-token heaviest-existing bundle (dermatology), which
+  // tripped the budget enforcer and would have SILENTLY TRIMMED GI terms
+  // at runtime. GI is the first specialty whose vocabulary is mostly
+  // multi-word anatomy ('endoscopic mucosal resection' costs 8 tokens;
+  // 'omeprazole' costs 3), so the proxy and the constraint diverge here
+  // for the first time. Caught by the B1 regression guard in
+  // tests/lib/confused-drug-names.test.ts, which enumerates EVERY
+  // specialty and asserts budgetEnforced === false.
+  //
+  // This bundle: 24 terms / 103 estimated tokens.
+  // If you add a term, re-measure the TOKENS. The term count will lie.
+  //
+  // Priority order for what earned a slot: (1) mis-transcription changes
+  // a DRUG, (2) the organism/condition name IS the diagnosis, (3) what
+  // was actually DONE in the procedure, (4) landmarks that PROVE the
+  // extent reached and the pathology words that drive the surveillance
+  // interval. Dropped at the budget, recorded so it is not re-derived:
+  // esophagogastroduodenoscopy (kept as 'EGD', 1 token vs 8), argon
+  // plasma coagulation, eosinophilic esophagitis, esophageal varices,
+  // Barrett esophagus, sphincterotomy, ustekinumab, esomeprazole,
+  // sucralfate, adalimumab, lactulose, linaclotide, ursodiol,
+  // pancrelipase, cold snare, hemostasis clip, adenomatous, melena,
+  // hepatic/splenic flexure, hepatic encephalopathy, elastography,
+  // choledocholithiasis. Upper-GI and hepatology coverage is deliberately
+  // thin: the pilot's reference dictations are colonoscopy op-notes and
+  // reflux clinic visits, and the reflux DRUGS are all still here. If the
+  // pilot shows one of the dropped terms being mis-transcribed, SWAP —
+  // do not append.
+  gastroenterology: [
+    'omeprazole',
+    'pantoprazole',
+    'famotidine',
+    'mesalamine',
+    'budesonide',
+    'azathioprine',
+    'infliximab',
+    'vedolizumab',
+    'rifaximin',
+    'Helicobacter pylori',
+    'ulcerative colitis',
+    "Crohn's disease",
+    'diverticulosis',
+    'colonoscopy',
+    'EGD',
+    'polypectomy',
+    'endoscopic mucosal resection',
+    'retroflexion',
+    'ileocecal valve',
+    'appendiceal orifice',
+    'terminal ileum',
+    'sessile serrated lesion',
+    'tubular adenoma',
+    'hematochezia',
+  ],
+
   unspecified: [],
 };
