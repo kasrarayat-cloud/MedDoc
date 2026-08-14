@@ -118,6 +118,21 @@ function toEditable(s: NoteTemplateSection): EditableSection {
 export interface TemplateReviewEditorProps {
   initial: TemplateReviewModel;
   parseFlags?: string[];
+  /**
+   * RC-2 (#106(b)) — the reference to the doctor's ORIGINAL uploaded .docx,
+   * when this editor was opened on a fresh upload.
+   *
+   * ⚠️ THIS PROP EXISTS BECAUSE THERE ARE TWO SAVE CALLERS, NOT ONE. The confirm
+   * card and this editor build their payloads INDEPENDENTLY, so threading the
+   * ref through the confirm path alone would leave every Advanced-path save
+   * silently dropping it — the doctor takes the one route that offers more
+   * control and loses their file for it. That is R3.4's "coverage assumed"
+   * shape: wire one caller, verify it there, correctly and incompletely.
+   *
+   * Optional and absent on an EDIT of an existing template, where the server
+   * carries the ref forward from the stored row and never trusts the client.
+   */
+  source?: { objectKey: string; sha256: string } | null;
   onCancel: () => void;
   onSaved: (status: 'draft' | 'active') => void;
 }
@@ -125,6 +140,7 @@ export interface TemplateReviewEditorProps {
 export function TemplateReviewEditor({
   initial,
   parseFlags = [],
+  source = null,
   onCancel,
   onSaved,
 }: TemplateReviewEditorProps) {
@@ -221,6 +237,10 @@ export function TemplateReviewEditor({
     // no _uid/_open. order is re-derived from position.
     return {
       ...(initial.id ? { id: initial.id } : {}),
+      // Carried verbatim; the server validates it against the caller's own
+      // practice before any write. Omitted when absent — the schema is
+      // .strict() and  is not a value here.
+      ...(source ? { source } : {}),
       name: name.trim(),
       encounterType: encounterType ? encounterType : null,
       sections: sections.map((s, i) => ({
