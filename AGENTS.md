@@ -1737,6 +1737,47 @@ This is the same family as **"a script that prints a number it does not act
 on"** — the output describes an intention, and nobody checks it against the
 effect. Here the number was never printed at all, which is worse.
 
+### ⚠️ AND ITS SIBLING: A MUTATION PROOF ASSERTS ITS **OWN** APPLICATION
+
+**Standing 2026-08-14.** The rule above is about an edit you MEANT to keep. This
+is the same defect in the edit you mean to THROW AWAY — and it is more
+dangerous, because the whole point of that edit is to produce a test result you
+will then believe.
+
+> **An unapplied mutation yields a green that proves nothing — and it is
+> indistinguishable from a guard that works.**
+
+⚠️ **REFERENCE CASE — F3's proof, and I nearly recorded it as evidence.** The
+mutation was meant to restore a plain `prisma.update` in place of the additive
+review-state writer, to show the new guard would catch the shape that had
+shipped. The anchor did not match, the script's assertion threw, **the file was
+never touched** — and the suite then ran against UNMUTATED code and printed
+`7 passed`. Read quickly, that is a guard confirming the fix. It is a guard
+confirming nothing at all, on a proof that never happened.
+
+Note what did work: the script's own `assert` fired, exactly as the entry above
+requires. What was missing was the next step — **reading that failure as
+invalidating the run that followed it.** The traceback and the green scrolled
+past in the same output.
+
+**The shape that prevents it, and it is one line:**
+
+    open(p,'w').write(mutated)
+    print('  mutation applied:', MARKER in open(p).read())   # ← before believing anything
+
+Then re-run, and treat a `False` there as terminating the proof.
+
+**Two corollaries, both earned the same night:**
+
+- **MUTATE TOWARD THE REAL SHAPE.** A second F3-adjacent mutation *did* apply
+  and still proved nothing, because it planted a marker as a COMMENT and the
+  guard correctly strips comments before matching. A mutation aimed at the wrong
+  form produces a green as empty as one that never landed.
+- **A PROOF'S OUTPUT IS READ AS A WHOLE.** "Assertion error" followed by
+  "N passed" is not a pass; it is a proof that aborted and a suite that ran
+  anyway. If a mutation step can fail without stopping the run, it will
+  eventually.
+
 ### ⚠️ AND THE SAME SHAPE OUTSIDE `.replace()`: AN OPERATION THAT SUCCEEDS AND DOES NOT LAND
 
 **`core.fileMode` is `false` in this repository**, so git ignores the on-disk
