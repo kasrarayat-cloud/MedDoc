@@ -14,6 +14,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { readFileSync } from 'node:fs';
 
+import { enclosingOpenTags } from './jsx-enclosing';
+
 import { EmLevelCard } from '../em-level-card';
 
 const noop = async () => ({ ok: true });
@@ -62,13 +64,17 @@ describe('EmLevelCard', () => {
     // sat entirely BEFORE the window and passed. Mutation-proved: wrapping the
     // mount left this test 12/12 green until the window was widened backwards.
     // A one-directional window cannot see a parent.
+    // ⚠️ ANCESTORS, NOT A CHARACTER WINDOW. This arm used to slice ±400 chars
+    // around the mount. That heuristic cannot tell a WRAPPER from a NEIGHBOUR,
+    // and on 2026-08-14 it reported a wrapper that does not exist the moment
+    // `review-document-view` gained two inline gate panels that correctly carry
+    // their own bridge. Proximity in source is not parenthood; the tag stack is.
     const at = code.indexOf('<EmLevelCard');
-    const around = code.slice(Math.max(0, at - 400), at + 400);
     expect(
-      around,
+      enclosingOpenTags(code, at),
       'a caller supplies the Rounds bridge — the treatment has moved back to a ' +
         'hand-kept per-caller list, and the next mount is the one nobody remembers',
-    ).not.toContain('qm-rounds-host');
+    ).not.toContainEqual(expect.stringContaining('qm-rounds-host'));
   });
 
   it('renders NOTHING when there is no level — an imaging report has none', () => {

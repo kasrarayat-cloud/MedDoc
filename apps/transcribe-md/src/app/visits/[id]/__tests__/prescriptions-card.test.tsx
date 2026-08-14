@@ -11,8 +11,12 @@
 // test below is about that, not about a card being pretty.
 // ============================================================================
 
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
+
+import { enclosingOpenTags } from './jsx-enclosing';
 
 import {
   PrescriptionsCard,
@@ -138,5 +142,56 @@ describe('the drafted medication list is SHOWN, because the export prints it', (
     const card = screen.getByTestId('review-doc-prescriptions');
     expect(card.textContent).toContain('—');
     expect(card.textContent).not.toMatch(/Qty 0|Refills 0/);
+  });
+});
+
+// ============================================================================
+// THE ROUNDS BRIDGE — the same both-directions guard `EmLevelCard` carries.
+//
+// ⚠️ THIS CARD IS THE REASON THE GUARD HAD TO BECOME A CENSUS. It was born
+// during R5, AFTER R4b enumerated the `.qm-rdoc-gate` family and fixed the one
+// member that existed. It then shipped unhosted and rendered CREAM directly
+// above the panel R4b had just made dark — found by the owner in a screenshot,
+// not by any check. The class-wide derivation lives in
+// `src/lib/__tests__/gate-rdoc-gate-hosts.test.ts`; these two arms pin THIS
+// component's half of the contract at the point somebody would edit it.
+// ============================================================================
+describe('PrescriptionsCard — the Rounds bridge', () => {
+  it('carries qm-rounds-host itself, so every mount inherits the retint', () => {
+    render(<PrescriptionsCard rx={ONE_RX} />);
+    const card = screen.getByTestId('review-doc-prescriptions');
+    expect(
+      card.classList.contains('qm-rounds-host'),
+      'the medication list lost its Rounds bridge — it will paint legacy amber ' +
+        'and render as a cream panel on a dark route, which is exactly what the ' +
+        'owner found beside the E/M card',
+    ).toBe(true);
+    // …and still the quiet gate frame: the bridge retints, it does not restyle.
+    expect(card.classList.contains('qm-rdoc-gate')).toBe(true);
+    expect(card.classList.contains('qm-rdoc-gate-quiet')).toBe(true);
+  });
+
+  it('NO CALLER supplies the bridge — it is not a per-caller list', () => {
+    const view = readFileSync('src/app/visits/[id]/review-document-view.tsx', 'utf8');
+    const code = view.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+    // NON-VACUITY: the comment stripper must leave the mount behind.
+    expect(code).toContain('<PrescriptionsCard');
+
+    // ⚠️ THE WINDOW LOOKS BOTH WAYS. A one-directional window cannot see a
+    // PARENT, and a wrapper — `<div className="qm-rounds-host">
+    // <PrescriptionsCard` — is the actual shape of the regression. The
+    // EmLevelCard arm shipped forward-only first and stayed green through
+    // exactly that mutation until it was widened backwards.
+    // ⚠️ ANCESTORS, NOT A CHARACTER WINDOW. This arm used to slice ±400 chars
+    // around the mount. That heuristic cannot tell a WRAPPER from a NEIGHBOUR,
+    // and on 2026-08-14 it reported a wrapper that does not exist the moment
+    // `review-document-view` gained two inline gate panels that correctly carry
+    // their own bridge. Proximity in source is not parenthood; the tag stack is.
+    const at = code.indexOf('<PrescriptionsCard');
+    expect(
+      enclosingOpenTags(code, at),
+      'a caller supplies the Rounds bridge — the treatment has moved back to a ' +
+        'hand-kept per-caller list, and the next mount is the one nobody remembers',
+    ).not.toContainEqual(expect.stringContaining('qm-rounds-host'));
   });
 });
