@@ -409,15 +409,62 @@ const STARTER_CPT_CODES: ReadonlyArray<string> = [
   '64494', // Same — second level
   '27096', // Injection, sacroiliac joint, with image guidance
 
+  // === Gastroenterology (2026-08-14, GI pilot rider to PR #648) ===
+  // ⚠️ THE THIRD TIME THIS EXACT FAILURE HAS BEEN FILED. Read the Cardiology
+  // block above: "a pilot specialty whose commonest procedures were absent, so
+  // the 07b validator dropped them and emitted CODING_COACH_REJECTED_INVALID_CPT
+  // — a correctly-coded echo read as an invalid one." A GI doctor went live on
+  // 2026-08-14 with an active colonoscopy operative-note template, and every one
+  // of the codes below was measured ABSENT (positive-controlled against 99213
+  // and 93306, both present). 07b would have dropped a correctly dictated
+  // colonoscopy code and written only a fire-and-forget audit row — the doctor
+  // shown nothing at all.
+  //
+  // The gap is PRE-EXISTING, not caused by adding the specialty: three
+  // independent adjudicators reproduced the mechanism and refuted the
+  // attribution. Adding the catalog row did not make it worse; it put a doctor
+  // in front of it. That is why this landed as a rider the same night rather
+  // than as a backlog row.
+  //
+  // Screening vs diagnostic is a REAL distinction here, not a formality: a
+  // screening colonoscopy that finds and removes a polyp converts to a
+  // therapeutic code, and G0105/G0121 exist so the screening BENEFIT is billed
+  // correctly. Both are HCPCS Level II — see the note on the export below,
+  // which this block makes newly inaccurate and therefore corrects.
+  '45378', // Colonoscopy, flexible; diagnostic, with or without collection specimen
+  '45380', // Colonoscopy with biopsy, single or multiple
+  '45384', // Colonoscopy with removal of lesion(s) by hot biopsy forceps
+  '45385', // Colonoscopy with removal of lesion(s) by snare technique
+  '45388', // Colonoscopy with ablation of lesion(s)
+  '45390', // Colonoscopy with endoscopic mucosal resection
+  '45330', // Sigmoidoscopy, flexible; diagnostic
+  '45331', // Sigmoidoscopy, flexible; with biopsy, single or multiple
+  '44388', // Colonoscopy through stoma; diagnostic
+  '43235', // Esophagogastroduodenoscopy (EGD), diagnostic
+  '43239', // EGD with biopsy, single or multiple
+  '43248', // EGD with insertion of guide wire, dilation of esophagus
+  '43450', // Dilation of esophagus, by unguided sound or bougie
+  '91110', // Capsule endoscopy, esophagus through ileum
+  'G0105', // Colorectal cancer screening; colonoscopy on individual at high risk
+  'G0121', // Colorectal cancer screening; colonoscopy on individual NOT at high risk
+
   // === Modifiers (tracked separately from codes) ===
   // These are appended to a CPT code (e.g. "99213-25"). The validator
   // accepts a code with or without a trailing "-NN" modifier.
   // See isValidCpt() below — modifier suffix is stripped before lookup.
 ];
 
-/** Allowlist set — strings preserved as documented (CPT codes are
- *  always five digits; some HCPCS Level II add a letter prefix like
- *  J3490 — those aren't included in this starter set). */
+/** Allowlist set — strings preserved as documented. CPT codes are always five
+ *  digits; some HCPCS Level II add a letter prefix.
+ *
+ *  ⚠️ CORRECTED 2026-08-14: this note used to say letter-prefixed HCPCS codes
+ *  "aren't included in this starter set". They are now — `G0105` and `G0121`,
+ *  the colorectal-cancer screening codes, landed with the gastroenterology
+ *  block. `isValidCpt` never had a shape restriction (it uppercases, strips a
+ *  "-NN" modifier, and does a set lookup), so nothing needed changing to
+ *  support them — but the sentence describing the file's CONTENTS became false
+ *  the moment they were added, and a reader deciding whether a G-code "can" go
+ *  here would have been told no by a comment rather than by the code. */
 export const CPT_ALLOWLIST: ReadonlySet<string> = new Set(
   STARTER_CPT_CODES.map((c) => c.trim().toUpperCase())
 );

@@ -23,6 +23,17 @@ const AUDIT_GAPS: Record<string, readonly string[]> = {
   'pediatrics (pilot)': ['96110', '99188', '92551'],
   'ob-gyn': ['59025', '76801', '76802'],
   'pain management': ['64483', '27096', '64493'],
+  // Added 2026-08-14 as GI's rider. NOT a Q1-audit gap — a gap found the night
+  // the specialty shipped, by an adversarial pass that executed isValidCpt
+  // against the real module and got FALSE for all sixteen. Same shape as the
+  // cardiology row above, three specialties later.
+  'gastroenterology (pilot)': [
+    '45378', '45380', '45384', '45385', '45388', '45390',
+    '45330', '45331', '44388',
+    '43235', '43239', '43248', '43450',
+    '91110',
+    'G0105', 'G0121',
+  ],
 };
 
 describe('CPT allowlist — the Q1 audit gaps are closed', () => {
@@ -42,6 +53,30 @@ describe('CPT allowlist — the Q1 audit gaps are closed', () => {
     for (const code of Object.values(AUDIT_GAPS).flat()) {
       expect(isValidCpt(code), `${code} rejected by isValidCpt`).toBe(true);
       expect(isValidCpt(`${code}-26`), `${code}-26 rejected`).toBe(true);
+    }
+  });
+
+  it('the HCPCS screening codes survive the real validator — first letter-prefixed entries', () => {
+    // ⚠ G0105/G0121 are the first HCPCS Level II codes in this file, and the
+    // export's own comment used to say letter-prefixed codes were not included.
+    // isValidCpt has no shape check — it uppercases, strips a "-NN" modifier and
+    // does a Set lookup — so they work. Asserting it rather than assuming it,
+    // because "the comment said they don't belong here" is exactly the kind of
+    // prose that outlives its truth.
+    expect(isValidCpt('G0105')).toBe(true);
+    expect(isValidCpt('G0121')).toBe(true);
+    expect(isValidCpt('g0105'), 'lowercase must normalise').toBe(true);
+    expect(isValidCpt('G0105-33'), 'modifier suffix must still strip').toBe(true);
+    // and the fail-closed direction still holds for an unlisted G-code
+    expect(isValidCpt('G0499'), 'an unlisted HCPCS code must still be refused').toBe(false);
+  });
+
+  it('a screening colonoscopy that becomes therapeutic is codeable end to end', () => {
+    // The clinical path that motivated the rider: patient arrives for screening
+    // (G0121), a polyp is found and snared (45385), specimen to pathology. If
+    // either code is dropped the encounter is unbillable as performed.
+    for (const c of ['G0121', '45385', '45380']) {
+      expect(isValidCpt(c), `${c} would be dropped by 07b`).toBe(true);
     }
   });
 
