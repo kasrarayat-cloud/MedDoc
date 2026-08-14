@@ -229,6 +229,31 @@ describe('SPECIALTY_KEYTERMS bundle invariants', () => {
     ).toEqual([]);
   });
 
+  it('a catalog id resolves to ITS OWN key, not merely to a non-empty one', () => {
+    // ⚠ THE GATE ABOVE ASKS "IS THERE VOCABULARY?", NOT "IS IT THE RIGHT
+    // VOCABULARY?". An adversarial pass on 2026-08-14 mistargeted the bridge
+    // — `'gastroenterology': 'psychiatry'` in SPECIALTY_VARIANTS, a
+    // single-token, type-valid typo — and EVERY gate this change added
+    // reported green. GI visits would have transcribed with 29 psychiatry
+    // terms and none of the 24 GI ones, silently, because the id still
+    // resolved to a real key with a non-empty bundle.
+    //
+    // So: where a catalog id has an obvious corresponding SPECIALTY_KEYS
+    // entry (kebab -> snake), the bridge MUST land on that one. Ids with no
+    // such key are the exemption list's business, not this arm's.
+    const mistargeted: string[] = [];
+    for (const spec of SPECIALTIES) {
+      const expected = spec.id.replace(/-/g, '_');
+      if (!(SPECIALTY_KEYS as readonly string[]).includes(expected)) continue;
+      const actual = normalizeSpecialty(spec.id);
+      if (actual !== expected) mistargeted.push(`${spec.id} -> ${actual} (expected ${expected})`);
+    }
+    expect(
+      mistargeted,
+      `the ASR bridge points these catalog ids at the WRONG specialty: ${mistargeted.join('; ')}`,
+    ).toEqual([]);
+  });
+
   it('every exemption is still NECESSARY (an exemption that gained a bundle must be removed)', () => {
     // The anti-stale arm. An exclusion list goes wrong silently in the
     // direction that REMOVES coverage: once a bundle lands, the exemption

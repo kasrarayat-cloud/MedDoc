@@ -152,6 +152,29 @@ procedure code by hand.
 precedent in the same file — so if this is to be pulled forward, it is cheap.
 That is a judgement for the owner; it is recorded here rather than decided here.
 
+### Widened by the adversarial pass, 2026-08-14 — measured, and it is worse than eight codes
+
+An independent lens executed `isValidCpt` against the real module. ALL of these
+return **false**:
+
+    45378 45380 45384 45385 45330 45331   (colonoscopy / sigmoidoscopy)
+    43235 43239 43248 43450                (EGD / dilation)
+    44388 91035 91110                      (stoma endoscopy, pH study, capsule)
+
+⚠️ **AND THE ICD SIDE IS THE SAME SHAPE.** `07a-icd-coding.ts:447` applies
+`isValidIcd10` and drops what fails. Measured absent: **K63.5** (colonic polyp —
+the single commonest colonoscopy diagnosis there is), D12.x, K50.90, K51.90,
+K64.0, K92.1, B96.81. So on a screening colonoscopy that finds a polyp, BOTH the
+procedure code and the diagnosis code are dropped.
+
+**ADJUDICATION NOTE, recorded because it changes who owns this.** Three
+independent adjudicators confirmed the MECHANISM and REFUTED the attribution:
+this is **pre-existing behaviour, not introduced by the GI change**. Adding the
+catalog row does not make it worse for anyone who exists today — there are zero
+GI production visits until the pilot doctor creates one. What the GI change does
+is put a doctor in front of it. That is the trigger, and it is why the trigger
+below is "the first pilot colonoscopy" rather than a date.
+
 Also partial: `packages/ai/src/data/icd10-allowlist.ts` GI coverage. Partial
 coverage is worse than none because it looks like coverage exists.
 `packages/ai/src/__tests__/cpt-allowlist-coverage.test.ts:21` carries a
