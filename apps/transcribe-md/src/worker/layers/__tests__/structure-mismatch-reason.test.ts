@@ -25,6 +25,9 @@ const OP_TEMPLATE = [...SIX, 'INDICATIONS:', 'ANESTHESIA:'];
 const SOAP_TEMPLATE = ['Subjective', 'Objective', 'Assessment', 'Plan'];
 
 describe('the banner names the mismatch, the sections, and where to fix it', () => {
+  // ⚠️ SIX OF EIGHT — a PARTIAL miss, deliberately. When EVERY section is
+  // absent the banner takes the shape-failure branch instead, because that is
+  // not a content problem at all (see the describe below).
   const reason = structureMismatchReason(SIX, OP_TEMPLATE);
 
   it('names every missing section BY NAME', () => {
@@ -37,12 +40,24 @@ describe('the banner names the mismatch, the sections, and where to fix it', () 
     // ⚠️ Derived from the array, never a separate tally. "six sections" beside
     // a list of five is the contradiction a reader stops trusting the whole
     // banner over.
-    expect(reason).toMatch(/\b6 sections\b/);
+    expect(reason).toMatch(/\b6 of your template's sections\b/);
     expect(SIX).toHaveLength(6);
   });
 
   it('names the DOCUMENT KIND — the half a clinician can act on fastest', () => {
     expect(reason).toMatch(/OPERATIVE \/ PROCEDURE note/i);
+  });
+
+  it('⚠️ CLAIMS ONLY WHAT WAS MEASURED — "not found", never "unsupported"', () => {
+    // THE CORRECTION THAT MATTERS MOST IN THIS FILE. `validateSoapStructure`
+    // asks only whether the text contains `## <label>`. It NEVER measures
+    // whether the dictation supported anything. The first draft reported that
+    // heading-presence result as a CONTENT-PROVENANCE verdict — "N sections had
+    // no content the dictation supported" — a claim the validator cannot make,
+    // about a note sitting directly below the banner.
+    expect(reason).toMatch(/could not be found in this note/i);
+    expect(reason).not.toMatch(/the dictation supported/i);
+    expect(reason).toMatch(/may be present under a different heading/i);
   });
 
   it('points at the Note-format picker, by its real path', () => {
@@ -65,7 +80,7 @@ describe('it degrades honestly rather than lying', () => {
     const r = structureMismatchReason(['Objective'], SOAP_TEMPLATE);
     expect(r).toMatch(/OFFICE-VISIT note/i);
     expect(r).toContain('Objective');
-    expect(r).toMatch(/\b1 section\b/);   // singular, not "1 sections"
+    expect(r).toMatch(/\b1 of your template's section\b/);   // singular
   });
 
   it('an UNRECOGNISED template still lists the sections', () => {
@@ -88,7 +103,7 @@ describe('it degrades honestly rather than lying', () => {
 
   it('ignores blank entries rather than printing empty names', () => {
     const r = structureMismatchReason(['PROCEDURE:', '', '   '], OP_TEMPLATE);
-    expect(r).toMatch(/\b1 section\b/);
+    expect(r).toMatch(/\b1 of your template's section\b/);
   });
 });
 
@@ -121,7 +136,11 @@ describe('a MODEL failure is not blamed on the clinician', () => {
   // output-too-short, and a JSON-shaped envelope. Without the reason, the
   // banner reads "N sections had no content the dictation supported" and sends
   // the doctor to change a template that is fine.
-  const OP = ['PROCEDURE:', 'PREOPERATIVE DIAGNOSIS:'];
+  // ⚠️ PARTIAL, not total. A total miss is a SHAPE failure and takes its own
+  // branch, so these rows must leave at least one section found or they would
+  // be testing the wrong arm — which is exactly what they did on first write.
+  const OP = ['PROCEDURE:', 'PREOPERATIVE DIAGNOSIS:', 'CONSENT:'];
+  const MISSING_SOME = ['PROCEDURE:'];
 
   it.each([
     ['empty output'],
@@ -137,15 +156,77 @@ describe('a MODEL failure is not blamed on the clinician', () => {
   it('NEGATIVE CONTROL — a REAL missing-sections failure still blames neither, but does point at the template', () => {
     // Without this, "always say generation failure" would pass every row above
     // and destroy the whole point of the banner.
-    const r = structureMismatchReason(OP, OP, 'missing SOAP sections: PROCEDURE:');
+    const r = structureMismatchReason(MISSING_SOME, OP, 'missing SOAP sections: PROCEDURE:');
     expect(r).not.toMatch(/generation failure/i);
     expect(r).toMatch(/Settings › My Note Format/);
     expect(r).toContain('PROCEDURE:');
   });
 
   it('an ABSENT reason degrades to the section-listing form', () => {
-    const r = structureMismatchReason(OP, OP);
+    const r = structureMismatchReason(MISSING_SOME, OP);
     expect(r).toContain('PROCEDURE:');
     expect(r).not.toMatch(/generation failure/i);
+  });
+});
+
+describe('⚠️ EVERY SECTION MISSING IS A SHAPE FAILURE, NOT A CONTENT ONE', () => {
+  // THE DEMONSTRATED DEFECT, kept as a test because it is the worst thing this
+  // banner could do. The model files a COMPLETE operative dictation under
+  // Subjective/Objective/Assessment/Plan — a documented behaviour (`06-polish`
+  // records "the model 'helpfully' reverts a sparse custom note back to SOAP").
+  // Every clinical fact is present. All eight template headings are absent.
+  //
+  // The first draft told the doctor: "8 sections had no content the dictation
+  // supported … change it in Settings › My Note Format." Affirmatively FALSE,
+  // about a note directly below it, prescribing that they discard a correct
+  // template. WORSE than the vague sentence it replaced.
+  const OP8 = [
+    'PREOPERATIVE DIAGNOSIS', 'POSTOPERATIVE DIAGNOSIS', 'PROCEDURE', 'ANESTHESIA',
+    'ESTIMATED BLOOD LOSS', 'SPECIMENS', 'DESCRIPTION OF PROCEDURE', 'RECOMMENDATIONS',
+  ];
+
+  it('says the HEADINGS differ, and does NOT claim the content is absent', () => {
+    const r = structureMismatchReason(OP8, OP8, `missing SOAP sections: ${OP8.join(', ')}`);
+    expect(r).toMatch(/different headings from your template/i);
+    expect(r).toMatch(/may all be present under other headings/i);
+    expect(r).not.toMatch(/the dictation supported/i);
+    expect(r).not.toMatch(/did not fill it/i);
+  });
+
+  it('does NOT tell the doctor to change a template that may be correct', () => {
+    const r = structureMismatchReason(OP8, OP8, `missing SOAP sections: ${OP8.join(', ')}`);
+    expect(r).not.toMatch(/Settings › My Note Format/);
+  });
+
+  it('NEGATIVE CONTROL — a PARTIAL miss still lists sections and offers Settings', () => {
+    // Without this, routing everything to the shape branch would pass the two
+    // arms above and destroy the banner's whole purpose.
+    const r = structureMismatchReason(OP8.slice(0, 3), OP8, 'missing SOAP sections: …');
+    expect(r).toMatch(/could not be found in this note/i);
+    expect(r).toContain('Settings › My Note Format');
+  });
+});
+
+describe('templateKind is not confidently BACKWARDS on office templates', () => {
+  // ⚠️ FOUR REAL-WORLD OFFICE TEMPLATES read `operative` in the first draft,
+  // because `op >= 2` was tested BEFORE `office >= 3` and operative markers
+  // matched by substring while office markers matched exactly — the weaker,
+  // looser signal beating the stronger, stricter one. The doctor was told
+  // their routine office form was an operative note: the exact INVERSE of the
+  // production case this was written for.
+  const SOAP = ['SUBJECTIVE', 'OBJECTIVE', 'ASSESSMENT', 'PLAN'];
+  it.each([
+    ['post-op office follow-up', [...SOAP, 'POSTOPERATIVE DIAGNOSIS', 'POSTOPERATIVE FINDINGS']],
+    ['derm office with excision', [...SOAP, 'SPECIMENS SENT', 'ESTIMATED BLOOD LOSS']],
+    ['pre-op H&P (office)', [...SOAP, 'PREOPERATIVE DIAGNOSIS', 'PLANNED PROCEDURE']],
+  ])('%s is NOT called operative', (_label, headings) => {
+    expect(templateKind(headings)).not.toBe('operative');
+  });
+
+  it('NEGATIVE CONTROL — a genuine operative note is still detected', () => {
+    expect(templateKind([
+      'PREOPERATIVE DIAGNOSIS', 'POSTOPERATIVE DIAGNOSIS', 'DESCRIPTION OF PROCEDURE',
+      'SPECIMENS', 'ESTIMATED BLOOD LOSS',
+    ])).toBe('operative');
   });
 });

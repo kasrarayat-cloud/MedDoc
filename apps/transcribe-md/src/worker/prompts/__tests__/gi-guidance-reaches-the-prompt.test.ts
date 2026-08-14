@@ -23,6 +23,8 @@
 // a snapshot would go red on every wording change and get re-baselined.
 // ============================================================================
 
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import { SPECIALTY_GUIDANCE, specialtyGuidance } from '../specialty-guidance';
@@ -175,6 +177,23 @@ describe('GI guidance — it SURVIVES into the L4 system prompt', () => {
 // re-bless it without reading — which is how a safety assertion becomes a
 // formality. These match the COMMITMENT.
 // ============================================================================
+/**
+ * Collapse newlines + indentation so an assertion can match a phrase the way a
+ * READER sees it.
+ *
+ * ⚠️ THIS EXISTS BECAUSE THE SAME BUG BIT THREE ASSERTIONS IN A ROW. These
+ * rules are authored as arrays of pre-wrapped strings joined with '\n', so a
+ * phrase that reads continuously in the source — "an editorial aside in a
+ * medical record", "Never delete a heading" — is split by a newline and two
+ * spaces in the built prompt. Every one of those was a FALSE RED against a
+ * prompt that carried the clause correctly.
+ *
+ * Hand-picking a fragment that happens to fit inside one line "fixes" each
+ * instance and leaves the trap armed for the next person. Normalising once is
+ * the durable form.
+ */
+const flat = (s: string): string => s.replace(/\s+/g, ' ');
+
 describe('the never-editorialize clause reaches BOTH prompt routes', () => {
   // ⚠️ THE MATRIX IS THE POINT. `04-generate-soap.ts` selects between two
   // DIFFERENT builders on `emAppliesToSpecialty`, and the two draw their rules
@@ -205,14 +224,34 @@ describe('the never-editorialize clause reaches BOTH prompt routes', () => {
   ];
 
   it.each(ROUTES)('$name — the prompt forbids addressing the reader', ({ prompt }) => {
-    expect(prompt).toMatch(/Never address the reader/i);
-    expect(prompt).toMatch(/Write the note and nothing else/i);
+    expect(flat(prompt)).toMatch(/Never address the reader/i);
+    expect(flat(prompt)).toMatch(/Write the note and nothing else/i);
   });
 
-  it.each(ROUTES)('$name — it names the EMPTY / [not documented] alternatives', ({ prompt }) => {
-    // The clause is only actionable if it says what to do INSTEAD. "Don't
-    // explain" without an alternative is an instruction with no landing place.
-    expect(prompt).toMatch(/left EMPTY or marked "\[not documented\]"/i);
+  it.each(ROUTES)('$name — it says KEEP THE HEADING, never delete it', ({ prompt }) => {
+    // ⚠️ THE FIRST DRAFT SAID "left EMPTY" WITHOUT SAYING "keep the heading",
+    // and an adversarial pass showed both readings are harmful: dropping the
+    // heading fires the mismatch banner at the doctor, and leaving a bare
+    // heading reproduces the recorded empty-Assessment blocker — which
+    // `backfillEmptySections` DELIBERATELY cannot repair, because it only
+    // restores sections that LOST content to demotion, never ones the model
+    // never filled. L6's own wording already said it correctly.
+    expect(flat(prompt)).toMatch(/KEEP THE HEADING and leave its body empty/);
+    expect(flat(prompt)).toMatch(/Never delete a heading/i);
+  });
+
+  it.each(ROUTES)('$name — "not documented" stays CLINICAL CONTENT, not commentary', ({ prompt }) => {
+    // ⚠️ THE CONTRADICTION THE FIRST DRAFT CREATED. It forbade saying
+    // information was missing and capped the vocabulary at two forms. The same
+    // built prompt already MANDATES four other sentences by name — globalRules
+    // "If no exam occurred, the Objective section says so", `write exactly:
+    // "Formal exam not documented in this encounter."`, the ROS single line,
+    // and on imaging `write exactly: "No prior study available for
+    // comparison."` plus "[laterality not specified]". No precedence rule
+    // exists anywhere to break the tie, so the model was given conflicting
+    // instructions and would obey neither reliably.
+    expect(flat(prompt)).toMatch(/Recording that a finding was not documented is clinical content/i);
+    expect(flat(prompt)).not.toMatch(/only two ways to say nothing was found/i);
   });
 
   it.each(ROUTES)('$name — it forbids explaining a template mismatch specifically', ({ prompt }) => {
@@ -223,9 +262,8 @@ describe('the never-editorialize clause reaches BOTH prompt routes', () => {
     // version of this assertion spanned the wrap and reddened against a prompt
     // that carried the clause correctly — a FALSE RED, and the mirror of the
     // substring traps this repo already documents.
-    expect(prompt).toMatch(/mismatch between this template and the dictation/i);
-    expect(prompt).toMatch(/is NOT yours to/i);
-    expect(prompt).toMatch(/inside the note is an editorial/i);
+    expect(flat(prompt)).toMatch(/mismatch between this template and the dictation is NOT yours to explain/i);
+    expect(flat(prompt)).toMatch(/an editorial remark in a medical record/i);
   });
 
   it('⚠️ POSITION — the clause is NOT last, or imaging silently loses it', () => {
@@ -246,5 +284,61 @@ describe('the never-editorialize clause reaches BOTH prompt routes', () => {
     expect(ROUTES[0].prompt).not.toBe(ROUTES[1].prompt);
     expect(ROUTES[0].prompt).toMatch(/SOAP/i);
     expect(ROUTES[1].prompt).toMatch(/ultrasound|imaging|sonograph/i);
+  });
+});
+
+// ============================================================================
+// ⚠️ THE THIRD MODEL CALL — L6, which writes the SIGNED note.
+// ----------------------------------------------------------------------------
+// THE GATE ABOVE WATCHED TWO BUILDERS AND THERE ARE THREE PROMPTS THAT PRODUCE
+// NOTE TEXT. `tm_polish` rewrites the note wholesale whenever L5 finds a
+// fixable issue, and `runLayer6Polish` returns `soapFinal`, which `sign/route`
+// writes to `signedSoap`. A clause that governs only L4's `soapDraft` does not
+// govern what the doctor signs.
+//
+// Found by an adversarial pass, not by this file — which is the point worth
+// keeping: the watched set was "the builders I had just edited", and the
+// universe was "every prompt that writes note text". That is this repo's own
+// watched-set failure, committed by the person who wrote the entry about it.
+//
+// ⚠️ AND L6'S OWN ANTI-COMMENTARY SENTENCE WAS FLAG-GATED OFF FOR EXACTLY THE
+// ROUTES THAT MATTER. It lived inside `emitStructureLock`, which is
+// `!template.isSystemDefault` — so it was absent for the system default AND for
+// imaging, because an imaging visit reaches L6 carrying the SOAP system default
+// (L4 swaps the ultrasound template in internally and never reflects it back).
+// The rule is now emitted unconditionally, which is what these arms pin.
+// ============================================================================
+describe('the clause reaches L6 — the prompt that writes the SIGNED note', () => {
+  const L6_SRC = readFileSync('src/worker/layers/06-polish.ts', 'utf8');
+  const code = L6_SRC.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+
+  it('NON-VACUITY — the stripper left the prompt builder behind', () => {
+    expect(code).toContain("'Rules:'");
+  });
+
+  it('L6 forbids addressing the reader and describing its own process', () => {
+    expect(code).toMatch(/Never address the reader and never describe your own process/);
+  });
+
+  it('⚠️ UNGATED — it is NOT inside the emitStructureLock branch', () => {
+    // The whole defect: the only anti-commentary sentence L6 had was gated to
+    // non-default templates, so the system default and every imaging report
+    // were polished by a model told nothing about commentary.
+    const lockAt = code.indexOf('emitStructureLock');
+    const clauseAt = code.indexOf('Never address the reader');
+    expect(lockAt, 'emitStructureLock not found — this arm is measuring nothing').toBeGreaterThan(0);
+    expect(clauseAt, 'the clause is not in L6 at all').toBeGreaterThan(0);
+    // The gated array closes before `'Rules:'`; the clause must sit after it.
+    const rulesAt = code.indexOf("'Rules:'");
+    expect(clauseAt).toBeLessThan(rulesAt);
+    expect(code.slice(clauseAt, rulesAt)).not.toContain('emitStructureLock');
+  });
+
+  it('it PRESERVES "not documented" as clinical content, not commentary', () => {
+    // ⚠️ THE DISTINCTION THE FIRST DRAFT COLLAPSED. Saying a finding was not
+    // documented is required by `globalRules[7]` and by two "write exactly"
+    // section directives. Forbidding it would have put the prompt in
+    // contradiction with itself.
+    expect(code).toMatch(/not documented is clinical content/);
   });
 });

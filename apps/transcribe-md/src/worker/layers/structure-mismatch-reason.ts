@@ -53,11 +53,25 @@ export type TemplateKind = 'operative' | 'office' | 'unknown';
 export function templateKind(requiredHeadings: readonly string[]): TemplateKind {
   const lower = requiredHeadings.map((h) => h.toLowerCase().replace(/[:#]/g, '').trim());
   const op = OPERATIVE_MARKERS.filter((m) => lower.some((h) => h.includes(m))).length;
-  const office = OFFICE_MARKERS.filter((m) => lower.some((h) => h === m)).length;
-  // Two markers, not one: a single "plan" heading appears on operative notes
-  // too, and one match is a coincidence rather than a shape.
-  if (op >= 2) return 'operative';
-  if (office >= 3) return 'office';
+  const office = OFFICE_MARKERS.filter((m) => lower.some((h) => h.includes(m))).length;
+
+  // ⚠️ OFFICE IS TESTED FIRST, AND BOTH SIDES MATCH BY SUBSTRING. The first
+  // version tested `op >= 2` BEFORE `office >= 3`, and matched operative
+  // markers by `includes` while matching office markers by `===`. The weaker,
+  // looser signal therefore beat the stronger, stricter one, and the function
+  // was CONFIDENTLY BACKWARDS on a whole family of real templates:
+  //
+  //   post-op office follow-up  S/O/A/P + POSTOPERATIVE DIAGNOSIS/FINDINGS
+  //   derm office w/ excision   S/O/A/P + SPECIMENS SENT + EST. BLOOD LOSS
+  //   pre-op H&P (office)       S/O/A/P + PREOPERATIVE DIAGNOSIS
+  //   surgical consult (office) …+ DESCRIPTION OF PROCEDURE DISCUSSED
+  //
+  // Four exact office markers lost to two substring hits, and the doctor was
+  // told their routine office form was an operative note — the exact INVERSE
+  // of the production case this was written for. A full SOAP skeleton is the
+  // stronger claim: an operative note does not carry all four.
+  if (office >= 4) return 'office';
+  if (op >= 2 && office < 3) return 'operative';
   return 'unknown';
 }
 
@@ -105,18 +119,49 @@ export function structureMismatchReason(
     );
   }
 
-  const kind = templateKind(requiredHeadings);
   const noun = n === 1 ? 'section' : 'sections';
+  const required = requiredHeadings.filter((h) => typeof h === 'string' && h.trim() !== '');
+
+  // ⚠️ EVERY SECTION MISSING IS A SHAPE FAILURE, NOT A CONTENT ONE — and this
+  // is the correction that matters most in this file.
+  //
+  // `soap-structure-validator.ts` only asks whether the text contains
+  // `## <label>`. It NEVER measures whether the dictation supported anything.
+  // The first version of this banner reported that heading-presence result as
+  // a CONTENT-PROVENANCE verdict — "N sections had no content the dictation
+  // supported" — which is a claim the validator cannot make.
+  //
+  // The demonstrated failure: the model files a COMPLETE operative dictation
+  // under Subjective/Objective/Assessment/Plan (a documented behaviour — see
+  // `06-polish.ts`, "the model 'helpfully' reverts a sparse custom note back
+  // to SOAP"). Every fact is present. All eight template headings are absent.
+  // The doctor read: "8 sections had no content the dictation supported …
+  // change it in Settings › My Note Format" — affirmatively FALSE, about a
+  // note sitting directly below it, prescribing that they discard a template
+  // that is correct. Worse than the vague sentence it replaced.
+  if (required.length > 0 && n >= required.length) {
+    return (
+      'This note came back with different headings from your template — none ' +
+      `of its ${required.length} sections were found. The information may all ` +
+      'be present under other headings, so read the note itself before ' +
+      'signing rather than assuming anything is missing.'
+    );
+  }
+
+  const kind = templateKind(requiredHeadings);
   const head =
     kind === 'operative'
-      ? 'Your template is an OPERATIVE / PROCEDURE note, and this dictation did not fill it. '
+      ? 'Your template is an OPERATIVE / PROCEDURE note. '
       : kind === 'office'
-        ? 'Your template is an OFFICE-VISIT note, and this dictation did not fill it. '
+        ? 'Your template is an OFFICE-VISIT note. '
         : '';
 
+  // ⚠️ "NOT FOUND IN THIS NOTE" IS WHAT WAS MEASURED. Not "unsupported by the
+  // dictation", which was never checked.
   return (
-    `${head}${n} ${noun} had no content the dictation supported: ${list}. ` +
-    'Review the note before signing — and if this is the wrong template for ' +
-    'this encounter, change it in Settings › My Note Format.'
+    `${head}${n} of your template's ${noun} could not be found in this note: ` +
+    `${list}. The content may be present under a different heading — check ` +
+    'the note before signing. If this is the wrong template for this ' +
+    'encounter, change it in Settings › My Note Format.'
   );
 }

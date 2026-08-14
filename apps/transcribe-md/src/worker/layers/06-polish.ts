@@ -249,6 +249,36 @@ export async function runLayer6Polish(input: Layer6Input): Promise<Layer6Output>
             '',
           ]
         : []),
+      // ⚠️ UNGATED, DELIBERATELY — THE ANTI-COMMENTARY RULE IS NOT A
+      // STRUCTURE-LOCK CONCERN. The block above carries the only sentence in
+      // this prompt forbidding commentary ("do NOT add any explanation,
+      // apology, or commentary about skipping it"), and it is gated on
+      // `emitStructureLock`, i.e. non-default templates only.
+      //
+      // ⚠️ SO IT WAS ABSENT FOR THE SYSTEM DEFAULT **AND FOR IMAGING** — and
+      // imaging is the worse half: per the note at the top of this module, an
+      // imaging visit reaches L6 with `noteTemplate` = the SOAP system default
+      // (L4 swaps the ultrasound template in internally and never reflects it
+      // back), so `isSystemDefault` is TRUE and the lock does not emit.
+      //
+      // ⚠️ AND L6 IS THE LAYER THAT WRITES THE SIGNED NOTE. `runLayer6Polish`
+      // returns `soapFinal`, and `sign/route.ts` writes `signedSoap` from it.
+      // The never-editorialize clause added to L4's `globalRules` governs
+      // `soapDraft`; L6 rewrites the note wholesale whenever there is a fixable
+      // issue, from a prompt that never carried it. Found by an adversarial
+      // pass — the survival gate's watched set was the two L4 builders, and
+      // `tm_polish` is a THIRD model call that writes note text.
+      //
+      // `stripModelPreamble` is not a substitute: it strips only text BEFORE
+      // the first heading, so an aside inside a section survives, and the L6b
+      // fidelity gate classifies additions of CLINICAL content — a process
+      // aside is neither an addition nor a meaning change.
+      'Never address the reader and never describe your own process. Do not',
+      'comment on the template, on the dictation, or on why a section reads as',
+      'it does. Recording that a finding was not documented is clinical content',
+      'and must be preserved; a sentence about what you could or could not do',
+      'is commentary and does not belong in a medical record.',
+      '',
       'Rules:',
       '- Preserve all clinical content that the auditor did not flag.',
       '- Apply each "suggested_fix" as closely as possible, using only',

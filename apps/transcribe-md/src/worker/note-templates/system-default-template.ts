@@ -319,28 +319,44 @@ const GLOBAL_RULES: string[] = [
     '  an allergy) are NOT linked into one causal statement unless the',
     '  transcript links them.',
   ].join('\n'),
-  // ── NEVER EDITORIALIZE ABOUT THE TEMPLATE OR THE TRANSCRIPT ───────────
+  // ── NEVER EDITORIALIZE ABOUT THE TEMPLATE OR YOUR OWN PROCESS ─────────
   // ⚠️ POSITION IS LOAD-BEARING: THIS MUST NOT BE THE LAST ELEMENT.
-  // `ultrasound-report-template.ts` builds its own rule set as
+  // `ultrasound-report-template.ts` builds its rules as
   // `SOAP_SAFETY.globalRules.slice(0, -1)` — dropping exactly the SOAP output
-  // line below and replacing it with imaging framing. A rule appended AFTER
-  // that line would be silently dropped for every imaging report, and the
-  // clause would reach primary care only. Adding a rule here means adding it
-  // BEFORE the output line, always.
+  // line below. A rule appended AFTER it reaches primary care and NOT imaging.
+  //
+  // ⚠️ AND THE SCOPE IS META-COMMENTARY, NOT ABSENCE. The first draft of this
+  // clause said "do not say information was missing" and capped the vocabulary
+  // at "EMPTY or [not documented] — those are the only two ways". An
+  // adversarial pass showed that contradicts THREE instructions in the same
+  // built prompt:
+  //   · globalRules[7]      "If no exam occurred, the Objective section says so"
+  //   · the Objective directive  write exactly: "Formal exam not documented…"
+  //   · the ROS directive        the single line "ROS not formally documented…"
+  // and, on the imaging route, `write exactly: "No prior study available for
+  // comparison."` plus `"[laterality not specified]"`. Four mandated sentences
+  // the cap forbade, with no precedence rule anywhere to break the tie.
+  //
+  // Saying a finding was not documented is CLINICAL CONTENT and is required.
+  // What is forbidden is commentary about the TEMPLATE, the DICTATION, or the
+  // model's own process. Those are different things and the first draft
+  // conflated them.
   [
-    '- Write the note and nothing else. Never address the reader, the',
-    '  template, or your own process. Do not say a section could not be',
-    '  completed, that the dictation did not match the template, that',
-    '  information was missing, or that a heading did not apply. A section',
-    '  with no evidence is left EMPTY or marked "[not documented]" — those',
-    '  are the only two ways to say nothing was found.',
+    '- Write the note and nothing else. Never address the reader and never',
+    '  describe your own process. Do not comment on the template, on how well',
+    '  the dictation matched it, or on why a section came out as it did.',
+    '  Recording that a finding was not documented is clinical content and is',
+    '  expected — "Formal exam not documented in this encounter" is the note',
+    '  doing its job. "This section could not be completed from the dictation',
+    '  provided" is commentary, and does not belong in a medical record.',
   ].join('\n'),
   [
     '- A mismatch between this template and the dictation is NOT yours to',
-    '  explain. If the transcript does not support a heading, leave it',
-    '  empty and continue. The application detects the mismatch and tells',
-    '  the clinician; a sentence about it inside the note is an editorial',
-    '  aside in a medical record, and it will be signed.',
+    '  explain. If the transcript does not support a heading, KEEP THE HEADING',
+    '  and leave its body empty, or write "[not documented]". Never delete a',
+    '  heading and never write a sentence about the mismatch — the application',
+    '  detects it and tells the clinician. An aside about it inside the note is',
+    '  an editorial remark in a medical record, and it will be signed.',
   ].join('\n'),
   '- Output ONLY the SOAP note markdown. No preamble, no postscript.',
 ];

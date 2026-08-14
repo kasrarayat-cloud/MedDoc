@@ -78,17 +78,19 @@ Critical rules:
   inhaler on hand". Two separately-mentioned facts (a hospitalisation;
   an allergy) are NOT linked into one causal statement unless the
   transcript links them.
-- Write the note and nothing else. Never address the reader, the
-  template, or your own process. Do not say a section could not be
-  completed, that the dictation did not match the template, that
-  information was missing, or that a heading did not apply. A section
-  with no evidence is left EMPTY or marked "[not documented]" — those
-  are the only two ways to say nothing was found.
+- Write the note and nothing else. Never address the reader and never
+  describe your own process. Do not comment on the template, on how well
+  the dictation matched it, or on why a section came out as it did.
+  Recording that a finding was not documented is clinical content and is
+  expected — "Formal exam not documented in this encounter" is the note
+  doing its job. "This section could not be completed from the dictation
+  provided" is commentary, and does not belong in a medical record.
 - A mismatch between this template and the dictation is NOT yours to
-  explain. If the transcript does not support a heading, leave it
-  empty and continue. The application detects the mismatch and tells
-  the clinician; a sentence about it inside the note is an editorial
-  aside in a medical record, and it will be signed.
+  explain. If the transcript does not support a heading, KEEP THE HEADING
+  and leave its body empty, or write "[not documented]". Never delete a
+  heading and never write a sentence about the mismatch — the application
+  detects it and tells the clinician. An aside about it inside the note is
+  an editorial remark in a medical record, and it will be signed.
 - Output ONLY the SOAP note markdown. No preamble, no postscript.
 
 Specialty guidance (primary-care):
