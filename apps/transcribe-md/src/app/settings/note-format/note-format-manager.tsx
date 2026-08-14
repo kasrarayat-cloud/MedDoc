@@ -150,7 +150,7 @@ export function NoteFormatManager({
    * nothing to remember.
    */
   const clearPendingUpload = useCallback(() => {
-    clearPendingUpload();
+    setPendingFile(null);
     setPendingSource(null);
   }, []);
   const { stages, step, reset: resetStages } = useStages(true);
