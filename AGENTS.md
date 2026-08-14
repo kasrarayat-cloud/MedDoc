@@ -738,6 +738,31 @@ the zero to appear**, and only then did the non-vacuity guard fire.
 said the override modal was NOT `position: fixed`. It is; the inline style is
 just not in its class. Verified rather than assumed, on the second pass.
 
+### ⚠️ TWO ZEROES WITH OPPOSITE MEANINGS IS **ONE BROKEN INSTRUMENT**, NOT TWO FINDINGS
+
+**Contributed by the GI session, 2026-08-14, and it is the cheapest reading of a
+broken probe there is.** Verifying R5 in production, it grepped the running APP
+container for two source files and got:
+
+    rx-tab.tsx            0   ← must be GONE      ✔ looks like a pass
+    prescriptions-card.tsx 0   ← must EXIST        ✘ looks like a failure
+
+Read as two results, that is "the deletion worked and the restore did not" — a
+plausible, alarming, and entirely false conclusion. Read as one, it is obvious:
+**a probe that answers 0 to a question whose true answer is 1 is not measuring.**
+The app image ships a BUILT Next application, not a source tree, so neither path
+ever resolved. Re-run against the worker with a traversal control (50 `.tsx`
+files found), the real answers appeared: the deleted files 0, the restored card
+1, `OVERRIDE_REQUIRED` 0 against a live control of 4.
+
+> **When a sweep returns zeroes for things that MUST be absent AND zeroes for
+> things that MUST be present, stop reading the results and check the
+> instrument. The contradiction is the finding.**
+
+This is the positive-control rule with a free control already in hand: any sweep
+that contains at least one must-exist row carries its own tripwire, and a
+must-not-appear table without one cannot tell absence from blindness.
+
 ## THE LIST IS THE DRIVER, NOT THE CONTEXT
 
 **When a sweep produces an enumeration, the fixing pass ITERATES THE LIST.** Each
@@ -1293,11 +1318,48 @@ programme to fix the weaker case. The deploy records provenance **loudly** and
 does not refuse on it. **Both call the same `scripts/lib/declaration.sh`** — one
 implementation, two strictnesses, because a second copy drifts from the first.
 
+⚠️ **AND FILE THE EVIDENCE WHERE GIT WILL TAKE IT: `docs/deploy-reports/` IS
+TRACKED, `docs/deploy-logs/` IS GITIGNORED.** The two names are one word apart
+in meaning and opposite in behaviour. Both sessions hit this on 2026-08-14 from
+different directions — one had `git add` refuse (loudly, and caught), the other
+had a `cp` into a citation PR silently contribute nothing (caught only by
+reading what the commit actually contained, rather than trusting `git add -A`).
+**A verification written to the ignored path looks committed and is invisible**,
+which is the worst of both: the work was done and the record does not exist.
+
 **A post-deploy check written afterwards is unfalsifiable.** Every number has a
 story available to it, and a migration supplies a ready-made excuse for *any*
 movement — *"the migration touched that table"*. Declaring first removes the
 excuse: the comparison has one correct answer, fixed before the evidence existed.
 Same discipline as *no evidence before the event*, pointed the other way.
+
+### ⚠️ A DECLARATION IS BOUND TO A **CHANGE**. A DEPLOY SHIPS A **TREE**.
+
+**Standing 2026-08-14, and neither session could have found it alone.**
+
+> **When two changes reach `main` before either ships, the deploy discharges only
+> the declaration whose author ran the comparison. The other is silently left
+> unjudged unless somebody notices.**
+
+**REFERENCE CASE.** R5 merged as `636e69a3`. The GI session then deployed
+`2b527509` and judged it **16 of 16** — against its own declaration, which
+covered an ICD-10 allowlist change. `636e69a3` is an ancestor, so **R5 went to
+production inside that deploy.** Correct behaviour: they deployed `main`, which
+is what `main` is for. But the payload was strictly larger than the
+declaration's scope, and **not one of those sixteen rows could have detected an
+R5 regression.** "16 of 16" was a true sentence doing misleading work.
+
+**THE HABIT:** when more than one change is queued, either deploy them
+separately so each declaration gates its own act, or write a declaration naming
+the **FULL DIFF** being shipped. ⚠️ ***"I deployed `main`" is not the same claim
+as "I judged what I deployed."***
+
+**AND IF IT HAPPENS ANYWAY, THE UNJUDGED DECLARATION IS STILL WORTH RUNNING.**
+R5's comparison was performed after the fact and every declared quantity
+matched. The declaration's commit timestamp provably preceded the rows, so the
+answer could not have been tuned to the outcome — that half of §2.5's product
+survives. What is lost is the GATE, not the evidence, and saying which half you
+have is the whole discipline.
 
 **A difference that is not in the declaration is THE FINDING**, whatever its
 explanation sounds like after the fact. And the clinical-count row is never
