@@ -462,6 +462,14 @@ export const MOCK_SLOT_VALUES_CLOSE = 'SLOT_VALUES>>>';
  *  heading. Duplicated and pinned by the same test as the sentinels. */
 export const MOCK_SYSTEM_COMPOSED_MARKER = 'SYSTEM-COMPOSED SECTION';
 
+/** A verbatim span of the transcript, for an anchor that must survive the
+ *  deterministic stage. Falls back to a token the stage will reject rather than
+ *  inventing one — a fabricated anchor is worse than a demoted line. */
+function firstSpan(user: string): string {
+  const m = /[A-Za-z][A-Za-z ,'-]{14,60}/.exec(user);
+  return (m?.[0] ?? 'no transcript span').replace(/"/g, '');
+}
+
 export interface MockSlotSection {
   sectionKey: string;
   slots: { id: string; options: string[] }[];
@@ -539,7 +547,11 @@ export function parseGeneratedHeadings(system: string): string[] {
  * with a value that is on no menu — the refusal arm. Without it, "the assembler
  * refuses an out-of-menu value" is a claim about a branch nothing reaches.
  */
-export function mockSoapDraftWithSlots(system: string, user: string): string {
+export function mockSoapDraftWithSlots(
+  system: string,
+  user: string,
+  anchored = false
+): string {
   const inventory = parseSlotInventory(system);
   const headings = parseGeneratedHeadings(system);
   const haystack = user.toLowerCase();
@@ -559,8 +571,15 @@ export function mockSoapDraftWithSlots(system: string, user: string): string {
     fills[section.sectionKey] = picked;
   }
 
+  // Under MOCK_SOAP_ANCHORS each generated line carries an anchor whose span is
+  // a literal substring of the transcript — the same discipline
+  // MOCK_SOAP_TEXT_ANCHORED follows, so `deterministicStage` keeps it and
+  // `tm_anchor_entailment` stays countable for B4's gate.
+  const anchor = anchored ? ` ⟦A:"${firstSpan(user)}"⟧` : '';
   const body = headings.length > 0
-    ? headings.map((h) => `## ${h}\n[MOCK] ${h} recorded for this encounter.`).join('\n\n')
+    ? headings
+        .map((h) => `## ${h}\n[MOCK] ${h} recorded for this encounter.${anchor}`)
+        .join('\n\n')
     : '[MOCK] no generated sections in this template.';
 
   return [
@@ -637,25 +656,48 @@ function completeTextFixture(
   // B4's closing gate — without this, L4's mocked draft carries no `⟦A:…⟧`, so
   // `toEntail` is empty and `tm_anchor_entailment` is uncountable. See the
   // fixture's own header for why the default stays unanchored.
-  if (purpose === 'tm_soap_draft' && soapAnchorsEnabled()) {
-    return { ...fixture, text: MOCK_SOAP_TEXT_ANCHORED };
-  }
-  if (purpose === 'tm_polish' && soapAnchorsEnabled()) {
-    return { ...fixture, text: MOCK_SOAP_TEXT_ANCHORED_STRIPPED };
-  }
+  // ⚠️ THE CONTRACT BRANCH COMES FIRST, AND THE ORDER IS A BUG FIX. The anchors
+  // branches below used to return before these, so under
+  // `docker-compose.qa.b4-coverage.yml` — which sets MOCK_SOAP_ANCHORS *and*
+  // MOCK_CRITIQUE_ISSUES, the combination that makes L6 call its model — a
+  // static-bearing template got a draft with NO slot block (every slot `—`) and
+  // a "polish" sharing no text with it. The L6b arm then rejected EVERY visit,
+  // climbing the per-template counter that is #106(g)(4)'s live signal, on a
+  // pure artefact of fixture selection. That overlay's own header asserts the
+  // opposite in as many words.
+  //
   // CONTENT-SENSITIVE, ruling #106(a). Gated on the PROMPT carrying the
-  // slot-values contract, not on a template id or an env flag: the branch fires
-  // exactly when the thing it answers is present, so a template with no
-  // assembled statics keeps the constant fixture byte-for-byte.
+  // slot-values contract — not on a template id, not on an env flag — so the
+  // branch fires exactly when the thing it answers is present, and a template
+  // with no assembled statics keeps the constant fixture byte-for-byte.
   if (
     purpose === 'tm_soap_draft' &&
     system !== undefined &&
     system.includes(MOCK_SLOT_VALUES_OPEN)
   ) {
-    return { ...fixture, text: mockSoapDraftWithSlots(system, user ?? '') };
+    return {
+      ...fixture,
+      text: mockSoapDraftWithSlots(system, user ?? '', soapAnchorsEnabled()),
+    };
   }
   if (purpose === 'tm_polish' && user !== undefined) {
-    return { ...fixture, text: mockPolishEcho(user, fixture.text) };
+    // Under anchors the echo is stripped, which is what the anchored constant
+    // existed to express — L6's output equals its input — reached by echoing
+    // the real draft instead of substituting a different note for it.
+    const echoed = mockPolishEcho(
+      user,
+      soapAnchorsEnabled() ? MOCK_SOAP_TEXT_ANCHORED_STRIPPED : fixture.text
+    );
+    return {
+      ...fixture,
+      text: soapAnchorsEnabled() ? echoed.replace(/\s*⟦A:[\s\S]*?⟧/g, '') : echoed,
+    };
+  }
+  if (purpose === 'tm_soap_draft' && soapAnchorsEnabled()) {
+    return { ...fixture, text: MOCK_SOAP_TEXT_ANCHORED };
+  }
+  if (purpose === 'tm_polish' && soapAnchorsEnabled()) {
+    return { ...fixture, text: MOCK_SOAP_TEXT_ANCHORED_STRIPPED };
   }
   return fixture;
 }

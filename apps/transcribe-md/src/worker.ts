@@ -777,9 +777,21 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // The applicable-template probe runs ONLY when the generic layout won and
     // nothing else already explains it — one cheap count on the path where the
     // answer might be "you have a form and did not get it".
-    if (noteTemplate.isSystemDefault || templateResolutionFailed) {
+    {
+      // ⚠️ THE DETECTOR IS CALLED UNCONDITIONALLY, AND THE EARLIER GATE MADE ONE
+      // OF ITS ARMS UNREACHABLE. It used to run only when the GENERIC layout
+      // won — but "the visit named format A and format B produced the note" is
+      // a substitution the doctor never asked for and neither template is the
+      // system default, so that arm could never fire. A stale pick falling
+      // through to a DIFFERENT custom template is exactly the case
+      // `resolveActiveTemplate`'s fallbacks produce.
+      //
+      // The detector returns null in the overwhelmingly common case, so calling
+      // it always costs nothing. Only the PROBE — one count query — stays
+      // gated, to the path where the answer might be "you have a form and did
+      // not get it".
       let hasApplicableActiveTemplate = false;
-      if (!templateResolutionFailed) {
+      if (!templateResolutionFailed && noteTemplate.isSystemDefault) {
         try {
           hasApplicableActiveTemplate =
             (await prisma.noteTemplate.count({

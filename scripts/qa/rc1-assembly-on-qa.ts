@@ -29,6 +29,9 @@
 // Exit:  0 = every arm passed · 1 = FINDING · 2 = cannot tell
 // ============================================================================
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import prisma from '@meddoc/db';
 import { runLayer4GenerateSoap } from '../../apps/transcribe-md/src/worker/layers/04-generate-soap';
 import { runLayer6Polish } from '../../apps/transcribe-md/src/worker/layers/06-polish';
@@ -38,6 +41,70 @@ import { staticDivergenceCount } from '../../apps/transcribe-md/src/worker/note-
 const TPL_ID = 'qa_rc1_tpl';
 const VISIT_ID = 'qa_rc1_visit';
 const TRIPWIRE = '500 milliseconds';
+const DOCTOR_ID = 'cmrya5nwb00000tmhmszo5pnn';
+const PATIENT_ID = 'qa_pt_01';
+
+/**
+ * ⚠️ `ultrasound`, NOT `primary-care`, AND THE SPECIALTY IS THE WHOLE POINT.
+ *
+ * The first version of this walk used `primary-care`, which routes L4 through
+ * `buildSoapSystemPrompt`. **Every production visit bound to a reclassified
+ * template is an IMAGING visit** and routes through
+ * `buildUltrasoundSystemPrompt` — a second builder that did not carry the
+ * slot-values contract. So fifteen green arms were measured on the one path
+ * production never takes, against an imaging-shaped fixture that made them read
+ * as an imaging proof. The gate was flawless over a universe containing none of
+ * the rows it was written for.
+ */
+const SPECIALTY = 'ultrasound';
+
+/** The fixture, in its PRE-migration shape. SANITIZED per SPEC §4.3a(e): the
+ *  structural twin of the real customer form — a fixed protocol paragraph
+ *  carrying one dropdown, a `LABEL: <slot>` field block, a per-leg scaffold the
+ *  model extends — with no real clinic, physician or technologist names. */
+const SECTIONS = [
+  {
+    key: 'exam_metadata',
+    label: 'EXAM',
+    order: 1,
+    formatHint: 'prose',
+    styleInstructions: 'Field block.',
+    defaultText: 'SIDE OF EXAM: {{one of: right | left}}\nMACHINE: [not documented]',
+    defaultTextMode: 'scaffold_confirm',
+    structure: null,
+  },
+  {
+    key: 'technique',
+    label: 'TECHNIQUE',
+    order: 2,
+    formatHint: 'prose',
+    styleInstructions: 'Protocol paragraph.',
+    defaultText:
+      'A duplex Doppler color flow ultrasound study was performed in the upright position, documenting the condition of the {{one of: deep and superficial | superficial}} venous systems of the extremity. This study documents reflux as lasting more than 500 milliseconds in either the saphenous veins or the perforator veins.',
+    defaultTextMode: 'scaffold_confirm',
+    structure: null,
+  },
+  {
+    key: 'findings',
+    label: 'FINDINGS',
+    order: 3,
+    formatHint: 'prose',
+    styleInstructions: 'Per leg.',
+    defaultText: 'Right Leg:\nThe {{one of: great saphenous vein | small saphenous vein}} was assessed.',
+    defaultTextMode: 'scaffold_confirm',
+    structure: null,
+  },
+  {
+    key: 'impression',
+    label: 'IMPRESSION',
+    order: 4,
+    formatHint: 'numbered',
+    styleInstructions: 'Numbered.',
+    defaultText: null,
+    defaultTextMode: 'omit_unless_supported',
+    structure: null,
+  },
+];
 
 /**
  * The transcript.
@@ -117,6 +184,43 @@ async function runL6(): Promise<{ polishRejected: boolean; soapFinal: string; re
   return { polishRejected: out.polishRejected, soapFinal: out.soapFinal, reviewReason: out.reviewReason };
 }
 
+const MIGRATION = path.join(
+  process.cwd(),
+  '../../packages/db/prisma/migrations/20260813231500_rc1_reclassify_fixed_blocks/migration.sql'
+);
+
+/**
+ * Seed the fixture in its PRE-migration shape, then run the real migration.
+ *
+ * ⚠️ THE WALK USED TO ASSERT A HAND-SEEDED ROW. ARM 0 is titled "the migration
+ * moved the fixed blocks" and its whole measurement was reading modes that were
+ * already in the database — so it could not distinguish "the migration flipped
+ * it" from "somebody seeded it flipped", and the 15-of-15 verdict could not be
+ * re-earned from the repository. The report even claimed the script re-created
+ * these rows; it did not. Now it does, and the migration is applied HERE, from
+ * the file, so ARM 0 measures an act rather than a state.
+ *
+ * The migration is one `DO` block — one statement — which is what makes it
+ * runnable through `$executeRawUnsafe` at all.
+ */
+async function seedPreMigration(): Promise<void> {
+  await prisma.$executeRawUnsafe(`DELETE FROM transcribe_visits WHERE id = '${VISIT_ID}'`);
+  await prisma.$executeRawUnsafe(`DELETE FROM note_templates WHERE id = '${TPL_ID}'`);
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO note_templates (id, "doctorId", name, "encounterType", sections, "styleProfile", version, status, "isSystemDefault", "createdAt", "updatedAt", "practiceId")
+    VALUES ('${TPL_ID}', '${DOCTOR_ID}', 'RC-1 walk — sanitized venous duplex', 'ultrasound',
+      $$${JSON.stringify(SECTIONS)}$$::jsonb,
+      '{"tense":"past","tone":"clinical","abbreviations":"expand"}'::jsonb,
+      1, 'active', false, now(), now(),
+      (SELECT "practiceId" FROM users WHERE id = '${DOCTOR_ID}'))`);
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO transcribe_visits (id, "userId", specialty, "inputMode", status, "createdAt", "updatedAt", "needsReview", "patientId", "manualRetryCount", "soapVersion", "interpreterMode", "emStale", "practiceId", "createdBy", "noteTemplateId")
+    VALUES ('${VISIT_ID}', '${DOCTOR_ID}', '${SPECIALTY}', 'text_note', 'DRAFTING', now(), now(), false,
+      '${PATIENT_ID}', 0, 1, false, false,
+      (SELECT "practiceId" FROM transcribe_md_patients WHERE id = '${PATIENT_ID}'),
+      '${DOCTOR_ID}', '${TPL_ID}')`);
+}
+
 async function main(): Promise<number> {
   const url = process.env.DATABASE_URL ?? '';
   const dbName = (() => {
@@ -132,12 +236,25 @@ async function main(): Promise<number> {
   }
   console.log(`RC-1 QA walk — database=${dbName}\n`);
 
-  // ── ARM 0 — the stored template is in the ASSEMBLED shape ────────────────
-  const row = await prisma.noteTemplate.findUniqueOrThrow({ where: { id: TPL_ID } });
-  const sections = row.sections as { key: string; defaultTextMode: string }[];
-  const modes = Object.fromEntries(sections.map((s) => [s.key, s.defaultTextMode]));
+  // ── ARM 0 — SEED PRE-MIGRATION, RUN THE MIGRATION, MEASURE THE MOVE ──────
+  await seedPreMigration();
+  const readModes = async () => {
+    const row = await prisma.noteTemplate.findUniqueOrThrow({ where: { id: TPL_ID } });
+    const secs = row.sections as { key: string; defaultTextMode: string }[];
+    return Object.fromEntries(secs.map((x) => [x.key, x.defaultTextMode])) as Record<string, string>;
+  };
+  const before = await readModes();
   check(
-    'ARM 0 · the migration moved the fixed blocks and left the scaffold alone',
+    'ARM 0a · PRE-CONDITION — the fixture starts where a real upload leaves it',
+    before.technique === 'scaffold_confirm' &&
+      before.exam_metadata === 'scaffold_confirm' &&
+      before.findings === 'scaffold_confirm',
+    `technique=${before.technique} exam_metadata=${before.exam_metadata} findings=${before.findings}`
+  );
+  await prisma.$executeRawUnsafe(readFileSync(MIGRATION, 'utf8'));
+  const modes = await readModes();
+  check(
+    'ARM 0b · the MIGRATION moved the fixed blocks and left the scaffold alone',
     modes.technique === 'always_include' &&
       modes.exam_metadata === 'always_include' &&
       modes.findings === 'scaffold_confirm',
@@ -186,7 +303,7 @@ async function main(): Promise<number> {
 
   // ── ARM 3 — L6 RED: the polisher normalises, and the arm refuses ─────────
   process.env.MOCK_POLISH_PARAPHRASE = 'true';
-  const before = staticDivergenceCount(TPL_ID);
+  const counterBefore = staticDivergenceCount(TPL_ID);
   const r = await runL6();
   const a3 = await soap();
   check('ARM 3 · the polish is REJECTED', r.polishRejected, `polishRejected=${r.polishRejected}`);
@@ -202,8 +319,8 @@ async function main(): Promise<number> {
   );
   check(
     'ARM 3 · the per-template counter moved',
-    staticDivergenceCount(TPL_ID) === before + 1,
-    `${before} → ${staticDivergenceCount(TPL_ID)}`
+    staticDivergenceCount(TPL_ID) === counterBefore + 1,
+    `${counterBefore} → ${staticDivergenceCount(TPL_ID)}`
   );
   // ⚠️ READ THE ROW BACK. logAudit is fire-and-forget by design, so asserting
   // the call asserts the call. Poll: the write is detached.
