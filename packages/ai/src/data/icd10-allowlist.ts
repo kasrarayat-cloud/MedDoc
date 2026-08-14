@@ -818,8 +818,8 @@ const STARTER_ICD10_CODES: ReadonlyArray<string> = [
   // ⚠️ AND THE PRIOR COVERAGE WAS PARTIAL, WHICH IS WORSE THAN ABSENT, because
   // partial looks like coverage. Measured before this block:
   //     PRESENT Z12.11 (screening encounter)  ABSENT K63.5 (colonic polyp)
-  //     PRESENT K21.9  (GERD w/o esophagitis) ABSENT K21.0 (GERD WITH it)
-  //     PRESENT K58.0  (IBS-C)                ABSENT K58.1/.2/.9
+  //     PRESENT K21.9  (GERD w/o esophagitis) ABSENT K21.00/K21.01 (WITH it)
+  //     PRESENT K58.0  (IBS-D)                ABSENT K58.1/.2/.3/.9
   //     PRESENT K57.30 (diverticulosis)       ABSENT K57.32 (diverticulitis)
   // It covered the encounter billed for SCREENING and not the finding screening
   // exists to detect, and in three families exactly one sibling. Every entry
@@ -853,17 +853,32 @@ const STARTER_ICD10_CODES: ReadonlyArray<string> = [
   'K64.9',     // Unspecified haemorrhoids
 
   // -- Upper GI / EGD
-  'K21.0',     // GERD WITH esophagitis (K21.9, without, was already present)
-  'K22.7',     // Barrett oesophagus without dysplasia
+  // ⚠️ K21.0 ITSELF IS NOT BILLABLE — FY2023 expanded it into these two and
+  // left the 4-character code a subcategory HEADER. Admitting the header
+  // would put a non-submittable code on the accepted side of the billing
+  // floor while the codes a chart actually maps to stayed dropped.
+  'K21.00',    // GERD with esophagitis, without bleeding
+  'K21.01',    // GERD with esophagitis, with bleeding
+  // ⚠️ K22.7 ITSELF IS NOT BILLABLE — a subcategory header since FY2017. The
+  // comment originally written here ('without dysplasia') is the title of
+  // K22.70, which is the code that was meant.
+  'K22.70',    // Barrett esophagus without dysplasia
+  'K22.710',   // Barrett esophagus with low grade dysplasia
+  'K22.711',   // Barrett esophagus with high grade dysplasia
+  'K22.719',   // Barrett esophagus with dysplasia, unspecified
   'K20.0',     // Eosinophilic oesophagitis
   'B96.81',    // Helicobacter pylori as the cause of diseases classified elsewhere
   'K29.70',    // Gastritis, unspecified, without bleeding
   'K31.89',    // Other diseases of stomach and duodenum
 
   // -- Functional, and the siblings of families already half-covered
-  'K58.1',     // Irritable bowel syndrome with diarrhoea (IBS-D)
+  // ⚠️ K58.0 IS IBS-D AND K58.1 IS IBS-C. An earlier draft of this block had
+  // them inverted in three places, while line 47 of this same file already
+  // said 'K58.0 // IBS with diarrhea'. The file contradicted the comment.
+  'K58.1',     // Irritable bowel syndrome with constipation (IBS-C)
   'K58.2',     // Mixed irritable bowel syndrome (IBS-M)
-  'K58.9',     // Irritable bowel syndrome without diarrhoea, unspecified
+  'K58.3',     // Other irritable bowel syndrome
+  'K58.9',     // Irritable bowel syndrome, unspecified
   'K57.32',    // Diverticulitis of large intestine without perforation or abscess without bleeding
   'R19.7',     // Diarrhoea, unspecified
 
