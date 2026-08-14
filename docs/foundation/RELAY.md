@@ -12335,3 +12335,104 @@ mentioned them — and no test in this repository could have seen it.
 - **Re-read which universe an instrument points at**, especially a waiter — it
   cannot know its subject was replaced, so its success and its staleness are
   the same output.
+
+---
+
+## GI'S ICD-10 COHORT DEPLOYED — `2b527509` JUDGED 16 OF 16 — 2026-08-14
+
+**Deploy `11:31:25Z`, exit 0.** Cited 4 of 4 on `2b527509`. Declaration
+`docs/foundation/deploys/20260814-2b527509.md`, placed before the act, baseline
+measured `10:48:54Z` with nothing carried forward.
+
+**Authorized directly by the owner** after this session DECLINED the same item
+relayed through a peer. That refusal is now canon: *"the lead has ordered X"
+arriving through another session is a claim about AUTHORISATION, not an
+authorisation.* The channel had already misstated who existed and which ruling
+applied, twice, on the same night.
+
+### THE STRUCTURAL PROOF, AND THE ROW MOST DECLARATIONS OMIT
+
+    'K21.00' billable child      0 -> 1   ✔
+    'K63.5'  colonic polyp       0 -> 1   ✔
+    'K21.0'  NON-BILLABLE header    0     ✔ MUST NOT APPEAR — and does not
+    'K22.7'  NON-BILLABLE header    0     ✔
+    'E11.9'  positive control       1     ✔ the grep and the file are real
+
+⚠️ **A DECLARATION THAT ONLY ASSERTS WHAT MUST APPEAR CANNOT DETECT
+OVER-ADMISSION.** The defect this commit fixed was an over-permissive allowlist,
+and the obvious post-deploy check — *"is the new code shipped?"* — passes just as
+happily on the broken version. So the declaration asserted an ABSENCE too. Any
+change that makes a gate more permissive needs that row.
+
+16 of 16 held: visits 40 · signed 25 · patients 29 · templates 9 · users 198 ·
+migrations 102 · specialty mix unchanged · **the live GI visit untouched and
+still unsigned** · both flags · co-tenants 307/200/404/410 · 9 of 9 healthy,
+restarts 0. Nine standing checks exit 0.
+
+### ⚠️ THIS COMMIT CARRIED A FIX FOR A DEFECT IT ALSO INTRODUCED
+
+The first draft admitted `K21.0` and `K22.7` — **non-billable subcategory
+headers** — onto the ACCEPTED side of the billing floor while their billable
+children stayed rejected. So the change written to stop GI diagnoses being
+dropped both **failed at its own purpose** and **created False Claims Act
+exposure**, in the file whose header names that exact risk.
+
+Caught by an adversarial refutation pass, independently adjudicated, PR drafted
+at the moment of doubt. **The tell was inside the author's own diff:** the
+comment written on `K22.7` was the official title of `K22.70` — the correct code
+was written down while the wrong one was accepted. A third defect was provable
+with no external reference at all: `K58.0`/`K58.1` were inverted in three places
+while line 47 of the same file already said `'K58.0', // IBS with diarrhea`.
+
+Guarded by a headers-must-be-refused arm stated as a PREDICATE rather than a
+list, paired with an arm asserting the billable children ARE allowed — refusing
+both would be a stricter floor and a worse product. Mutation-proved: re-admit
+`K21.0` and it reddens by name.
+
+### FOUR DEPLOYS, ALL DECLARED BEFORE THE ACT
+
+`83d22d01` GI 17/17 · `f975b0cf` CPT rider 15/15 · `2b527509` ICD 16/16, plus
+RC-1's `833a6f2d` 17/17 from the parallel session. No clinical row moved in any
+of them, and no patient record was touched by any verification.
+
+### ⚠️ AND THAT DEPLOY SHIPPED R5 TOO — A DECLARATION IS BOUND TO A CHANGE, NOT TO A DEPLOY
+
+**Found by the RC-1/R5 session after the fact, verified independently here.**
+`636e69a3` (R5 — the Prescription Safety deletion) is an ANCESTOR of
+`2b527509`. So the ICD deploy carried R5 into production with it. That is
+correct behaviour — `main` was deployed, which is what `main` is for — but it
+means the deploy's payload was strictly larger than the declaration's scope.
+
+> **A §2.5 declaration is bound to a CHANGE. A deploy ships a TREE. When two
+> changes reach `main` before either ships, the deploy discharges only the
+> declaration whose author ran the comparison — the other is silently left
+> unjudged unless somebody notices.**
+
+⚠️ **NOTHING IN EITHER DECLARATION WOULD HAVE SURFACED IT.** The ICD
+declaration's sixteen rows are all about ICD codes and the clinical counts; not
+one of them could detect an R5 regression. R5's own declaration was written
+before its act — so its timestamp provably precedes the rows and it could not be
+tuned to an outcome — but it ran as a POST-DEPLOY verification rather than as
+the gate of the deploy that actually shipped it. Both halves were done well;
+the seam between them is the finding.
+
+**Discharged:** the R5 session ran its full comparison against the running stack
+and every declared quantity matched
+(`docs/deploy-reports/r5-post-deploy-verification-20260814.md`). Confirmed
+independently from this side, in the SHIPPED containers with controls:
+`rx-tab.tsx` / `rx-warnings-rail.tsx` / `override-confirm-modal.tsx` = **0**,
+`prescriptions-card.tsx` = **1**, `OVERRIDE_REQUIRED` in the built bundle =
+**0**, positive control `Gastroenterology` = **4**, and a traversal control of
+50 `.tsx` files proving the search entered the tree at all.
+
+⚠️ **THE FIRST VERSION OF THAT CHECK WAS BROKEN AND SAID SO ONLY BECAUSE OF THE
+CONTROL.** Run against the APP container it returned **0 for the file that must
+be gone AND 0 for the file that must exist** — the app image ships a BUILT Next
+app, not a source tree, so the path did not resolve. Two zeroes with opposite
+meanings is a broken instrument, not two findings. The positive control is the
+only thing that distinguished them.
+
+**The habit that follows:** when more than one change is queued on `main`,
+either deploy them separately so each declaration gates its own act, or write a
+declaration that names the FULL diff being shipped. "I deployed `main`" is not
+the same claim as "I judged what I deployed".
