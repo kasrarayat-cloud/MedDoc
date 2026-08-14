@@ -12218,3 +12218,120 @@ to this diff refuted by three independent adjudicators**. The owner has PULLED
 THE FIX FORWARD as GI's rider, its own PR immediately after this deploy. An
 office E/M level will appear on GI procedure notes; deliberate, with
 per-encounter suppression a named open item and its trap recorded.
+
+---
+
+## GI'S CPT RIDER DEPLOYED — `f975b0cf` JUDGED 15 OF 15 — 2026-08-14
+
+**Deploy `06:30:19Z`, exit 0.** Cited 4 of 4 on `f975b0cf`, both views.
+Declaration `docs/foundation/deploys/20260814-f975b0cf.md`, written and placed
+BEFORE the act, baseline re-measured at `05:49:32Z` with nothing carried forward.
+
+**The owner's named proof, with BOTH controls:** `'45378'` in the SHIPPED
+validator **0 → 1**; positive control `'99213'` = 1 (the grep and the file are
+real); negative control `'45999'` = 0 (it is not matching everything). Run
+inside the running container, not inferred from an image id.
+
+**12 MUST NOT CHANGE, all held** — visits 40 · signed 25 · patients 29 ·
+templates 9 · users 198 · migrations 102 · specialty mix unchanged
+(`gastroenterology` 1) · **the live GI visit still UNSIGNED and untouched** ·
+both flags · co-tenants 307/200/404/410 · 9 of 9 healthy, restarts 0. All nine
+standing checks green.
+
+⚠️ **ROW 12 EXISTED BECAUSE THE BASELINE HAD CHANGED UNDER US.** Between GI's
+deploy and the rider's, a REAL GI visit appeared — created `04:37:17Z`, twenty
+minutes after GI went live, organic pilot activity. An hour earlier the clinical
+rows were abstract. **A deploy that changes a doctor's unsigned note's state has
+done something nobody asked for**, so it was declared before it could be
+explained afterwards.
+
+### THE ICD HALF IS THE ONE THAT DREW BLOOD, AND IT SHIPPED UNFIXED
+
+That live visit's audit trail carries `CODING_COACH_REJECTED_INVALID_ICD` and
+**zero** `CODING_COACH_REJECTED_INVALID_CPT` — the dictation proposed no
+procedure code, consistent with an office visit rather than a colonoscopy. So
+the gap that actually bit a real patient's visit was the ICD allowlist, not the
+CPT one this rider fixes. The CPT fix stays correct: the first colonoscopy needs
+it, and the pilot is one dictation away. **The ICD half was surfaced rather than
+widened unilaterally**, because the owner had scoped the rider to CPT.
+
+⚠️ **AND A CORRECTION THAT WAS MINE, MADE BEFORE THE DECLARATION WAS USED.** I
+first wrote that the same visit's `MODEL_OUTPUT_VALIDATION_FAIL` "may be" a
+fabricated-commentary defect, and that the doctor was "one click from signing".
+Both false. Measured: `layer L4`, six operative-note headings missing —
+**omission, not editorializing** — and `needsReview = true` with the amber
+pre-sign banner already rendering. I read a SIGNAL'S NAME and believed a
+MECHANISM, which is this night's own defect class arriving on a real patient's
+record. The RC-2 session refuted it with seven positive-controlled probes.
+
+**The re-aimed finding is better than the one I withdrew:** the validator worked,
+and *"SOAP draft didn't match expected markdown structure"* is true and nearly
+useless to a clinician. Naming the six sections and the document-kind mismatch is
+the fix. Owned by the RC-2 session.
+
+---
+
+## THE NIGHT'S THROUGH-LINE — ONE DEFECT WEARING DIFFERENT CLOTHES — 2026-08-14
+
+**Recorded verbatim at the owner's instruction.** Two sessions, one night,
+RC-1 and Gastroenterology shipped. Between them they found the same defect
+seven times in seven costumes, and it is worth writing down as ONE thing rather
+than seven, because the next instance will not look like any of these either.
+
+> ### A CHECK THAT ANSWERS CORRECTLY ABOUT THE WRONG UNIVERSE.
+
+Every one of these was GREEN, and green is what they would have stayed:
+
+| the costume | what it actually watched |
+|---|---|
+| a gate titled *"every canonical specialty has a bundle"* | **four** literal keys, against fifteen bundles |
+| a gate titled *"every variant maps to a value"* | a hardcoded **sixteen-string** array, not the map |
+| an anti-stale arm guarding the ultrasound exemption | a normalised key that resolves to an **empty** bundle — it could never fire for the case it was written for |
+| three of GI's own **fresh** gates | sets they could iterate **zero times** and still report green |
+| a background waiter reporting *"BOTH QUIET"* | a **superseded** commit, whose e2e read `cancelled` |
+| a QA walk proving 15 of 15 | `primary-care` with anchors OFF, while production runs `ultrasound` with anchors ON — **0%** of the affected rows |
+| a key builder and its parser, each self-consistent | **seven** segments against a flat `length !== 8` — they agreed with their AUTHOR and not with EACH OTHER |
+
+⚠️ **NOTE WHAT NONE OF THEM WAS: none was a wrong answer.** Each computed
+something correctly. The defect is never in the logic; it is in the DISTANCE
+between what the name claims and what the body reaches. That is why review does
+not catch them — a reviewer reads the name, agrees, and moves on — and why they
+survive test suites, mutation proofs and QA walks that all inherit the author's
+idea of the universe.
+
+### THE TWO THINGS THAT ACTUALLY SURFACED THEM
+
+Not the suite. 3820 tests were green through most of this.
+
+**1 · MUTATING TOWARD THE HALF-LANDED FAILURE, NOT THE TOTAL ONE.** The habit is
+to delete the whole fix and watch the guard redden. That proves the guard sees a
+total regression, which is not what ships. What ships is the FIRST edit the
+code's own comment invites, committed by somebody tired, with the other two
+layers still missing. GI's anti-stale arm PASSED its author's proof (keys +
+variant + bundle, all three) and was blind to the bundle-only edit its own
+exemption text told the next person to make.
+
+**2 · A SECOND SESSION WILLING TO SAY "I CHECKED YOURS AND IT'S WRONG."** Every
+cross-session correction tonight landed, in both directions, and each one was
+verified by the receiver before being believed — including two that turned out
+to be the challenger's error. The adversarial pass found SIX defects in a diff
+that had already been proven, pushed and CI-cited; FOUR were in gates written an
+hour earlier to catch exactly this class. **One was clinical** — guidance
+instructing the model to assert *"no complications"* on a dictation that never
+mentioned them — and no test in this repository could have seen it.
+
+> **The failure is invisible by construction from the inside. That is not a
+> statement about anyone's care; it is the property that makes an outside
+> reader load-bearing rather than polite.**
+
+### THE OPERATIONAL RESIDUE
+
+- **Assert what you COUNTED, not only what you FOUND.** An arm that iterates
+  zero times and an arm that checked everything produce the same green.
+- **A producer and its parser are ONE contract in two files.** Round-trip them;
+  hand-written fixtures test the author's mental model, not the builder.
+- **Prove a guard against the PARTIAL fix.** The complete inverse is the tidy
+  case.
+- **Re-read which universe an instrument points at**, especially a waiter — it
+  cannot know its subject was replaced, so its success and its staleness are
+  the same output.
