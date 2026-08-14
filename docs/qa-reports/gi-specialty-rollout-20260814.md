@@ -240,3 +240,105 @@ satisfy late and impossible to detect afterwards.
 - **CPT / ICD coding for GI** — recorded, not built, per instruction. See
   `docs/backlog/gi-open-items-20260814.md` GI-OPEN-2; the codes are measurably
   absent and 07b drops them silently.
+
+---
+
+## 8 · THE QA WALK — RUN, AND WHAT IT DOES *NOT* PROVE
+
+Run on the isolated `meddoc-qa` stack (`127.0.0.1:9020`, synthetic DB,
+`MOCK_AI_CALLS=true`, vendor-severed — `check-qa-mock-posture.sh` 🟢) against
+**images rebuilt from this branch**, because the previous `:qa` images predated
+GI and a walk against them would have read green and proved nothing.
+
+    transcribe-md:qa   2026-08-11 14:54Z  ->  2026-08-14 02:01:45Z
+    worker:qa          2026-08-13 17:29Z  ->  2026-08-14 02:00:16Z
+    db-migrate:qa      2026-08-12 20:44Z  ->  2026-08-14 02:01:33Z
+
+**Symbols verified INSIDE the running container, not inferred from image ids:**
+`specialties.ts` 2 hits · guidance entry present · `ileocecal valve` present ·
+**negative control** `hepatology` = 0 (the variant removed by the adversarial
+pass). QA migrations **102/102** after applying RC-1's
+`20260813231500_rc1_reclassify_fixed_blocks`, which QA was missing — RC-1's
+migration, applied by this session's hand.
+
+### What the walk demonstrated
+
+| # | step | evidence |
+|---|---|---|
+| 1 | GI in the new-visit dropdown | 14 options; `Gastroenterology` after Vascular Surgery, before flag-gated Ultrasound |
+| 2 | **hidden-input contract preserved** | live DOM: `input[name="specialty"].value === "gastroenterology"` — the **slug**, not the label, inside `#new-visit-form` |
+| 3 | specialty persisted | `transcribe_visits.specialty='gastroenterology'` in a plain `text NOT NULL` column — **no migration, as measured** |
+| 4 | GI template resolved | `noteTemplateId=qa_gi_optnote` via the `encounterType` exact-match arm |
+| 5 | pipeline ran in the production flag set | worker log `scope:"anchored-generation"` — anchors ON |
+| 6 | **E/M ON for GI** | `emScoredCode=99212`, rendered as "This visit is documented at 99212" |
+| 7 | structure validator live | `MODEL_OUTPUT_VALIDATION_FAIL` — it noticed the mock's 4 SOAP sections ≠ the template's 6 |
+| 8 | sign gate enforced | attestation blocker; Sign disabled until checked |
+| 9 | signed | `status=SIGNED`, `signedAt=02:07:59`, `signedBy` attributed |
+| 10 | exported | PDF downloaded, then **shredded** (`shred -u -n 3 -z`, exit checked, 0 remaining) |
+| 11 | **audit rows READ BACK** | `VISIT_CREATED` · `ANCHOR_FLAGS_RECORDED` · `VISIT_SIGNED` ✓ · `EXPORT_PDF_DOWNLOADED` ✓ · 2× `VISIT_AUTOMATION_INCOMPLETE` (success=false) |
+
+### ⚠️ WHAT THE WALK DID NOT PROVE, STATED PLAINLY
+
+**It did not prove the GI guidance reached the model.** `MOCK_AI` returns a
+canned tension-headache SOAP note; it ignores the transcript, the template and
+the prompt. `ai_calls` stores a `promptHash`, not the prompt. So the note body
+says nothing about GI, and neither does the mocked walk about prompt content.
+
+That gap is closed **in the suite instead**, by
+`gi-guidance-reaches-the-prompt.test.ts`, which builds the real L4 system prompt
+for a GI operative-note template and asserts the safety clause and the doctor's
+own section headings both survive into it. A walk proves plumbing; a prompt gate
+proves prompts. Neither substitutes for the other, and saying so is the point.
+
+Likewise **the tripwire**: RC-1's `500 milliseconds` tripwire lives in the
+imaging family, which GI is deliberately outside. GI's equivalent invariant — no
+fabricated surveillance interval — is unobservable under a mock and is asserted
+in the suite, not the walk.
+
+### The walk surfaced a live instance of GI-OPEN-1
+
+The banner read *"Auto-coding returned no diagnoses for this **gastroenterology**
+encounter"* and the paper showed **99212** on a colonoscopy operative note. Both
+open items are visible in one screen: E/M applying to a procedure note, and the
+coding allowlist dropping GI codes. Neither was built tonight, per instruction —
+but neither is theoretical now, and the report says so.
+
+---
+
+## 9 · THE ADVERSARIAL PASS — 5 LENSES, 19 AGENTS, INDEPENDENTLY ADJUDICATED
+
+**2 CONFIRMED · 5 PARTIAL · 7 REFUTED.** Every finding was verified by hand
+before a line changed, and every fix was mutation-proved in both directions.
+
+**Six defects were found in MY OWN diff, and four of them were in the gates I
+had written an hour earlier to prevent exactly this class.**
+
+| # | defect | disposition |
+|---|---|---|
+| 1 | **CLINICAL** — guidance told the model to assert *"no complications"* on a dictation that never mentioned them | fixed: conditional on the dictation |
+| 2 | anti-stale arm could not fire for the case it guarded (`normalizeSpecialty('ultrasound')` → empty bundle) | fixed: reads the catalog id directly too; **M5** |
+| 3 | speculative `hepatology → gastroenterology` variant made the cross-catalog gate report a future row COVERED | removed |
+| 4 | a mixed-case variant key is dead and undetectable | assertion added |
+| 5 | the guidance's safety clause had **zero** content anchors — deletable with a green suite | gate added; **M6** |
+| 6 | a mistargeted ASR bridge (`gastroenterology → psychiatry`) passed every gate | identity arm added; **M7** |
+
+**The counter-proofs are the argument, not the fixes:**
+
+| mutation | new gate | old gate |
+|---|---|---|
+| M1 key present, bundle absent | RED | **PASSES** |
+| M5 bundle-only ultrasound fix | RED | **PASSES** |
+| M6 safety clause deleted | RED (2) | **12 passed — blind** |
+| M7 bridge mistargeted | RED | **10 passed — blind** |
+
+⚠️ **AND THE LESSON ABOUT MY OWN M4.** My original anti-stale proof exercised the
+COMPLETE fix (keys + variant + bundle) and passed. It was silent on the
+*bundle-only* edit — which is the first edit the exemption's own text invites.
+
+> **A mutation proof that exercises the complete inverse of a change has proved
+> the tidy case. What ships is a HALF-LANDED fix.**
+
+The 5 PARTIAL verdicts all share one shape: **mechanism confirmed, attribution
+refuted.** The CPT/ICD drops are real and reproducible, and they are
+pre-existing — the GI change does not worsen them, it puts a doctor in front of
+them.

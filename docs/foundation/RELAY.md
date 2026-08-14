@@ -12017,5 +12017,51 @@ satisfy late and impossible to detect afterwards.**
   GI, so a walk would read green and prove nothing (the B8 shape). The rebuild
   was **deliberately held** while the peer session ran its production deploy on
   the same host.
-- **QA is one migration behind** — `20260813231500_rc1_reclassify_fixed_blocks`,
-  which is RC-1's, not GI's. `assert-migrations-applied.sh --qa` exits 1.
+- **QA was one migration behind** — `20260813231500_rc1_reclassify_fixed_blocks`,
+  RC-1's, not GI's. Applied by THIS session's hand while rebuilding QA; QA is now
+  102/102. One row, two owners: their migration, my hand.
+
+### 8 · BOTH DONE AFTER THE ROW ABOVE WAS FIRST WRITTEN
+
+**THE QA WALK RAN** — on `:qa` images rebuilt from this branch (the previous ones
+predated GI), with the GI symbols verified INSIDE the running container and a
+negative control. 14-option dropdown; `input[name="specialty"]` carrying the
+SLUG in the live DOM; specialty persisted to plain `text`; the GI template
+resolved; anchors ON; **E/M 99212**; attestation gate enforced; SIGNED with
+attribution; PDF exported then shredded; audit rows READ BACK including
+`VISIT_SIGNED` and `EXPORT_PDF_DOWNLOADED`.
+
+⚠️ **AND WHAT IT DID NOT PROVE IS WRITTEN DOWN.** `MOCK_AI` ignores the prompt,
+so the walk cannot show the GI guidance reached the model — the note body is a
+canned headache SOAP. That half is closed in the SUITE by a new gate that builds
+the real L4 prompt and asserts the safety clause and the doctor's own headings
+both survive into it. **A walk proves plumbing; a prompt gate proves prompts.**
+
+**THE ADVERSARIAL PASS FOUND SIX DEFECTS IN THIS DIFF AND FOUR WERE IN THE GATES
+WRITTEN AN HOUR EARLIER TO PREVENT EXACTLY THAT CLASS.** 5 lenses, 19 agents,
+independently adjudicated: 2 CONFIRMED, 5 PARTIAL (mechanism real, attribution
+to this diff refuted — the CPT/ICD drops are pre-existing), 7 REFUTED (mostly
+because the fix had already landed while the lens was running).
+
+⚠️ **ONE WAS CLINICAL AND NO TEST IN THIS REPO COULD HAVE SEEN IT.** The GI
+guidance said *"State complications explicitly INCLUDING their absence"* —
+unconditional. On a colonoscopy dictation that never mentions complications that
+instructs the model to write "no complications" on its own authority: a
+fabricated clinical claim in an operative note, contradicting the safety clause
+two paragraphs below it in the same string. Same family as #107 — not a model
+failing, an instruction telling it to assert something nobody said.
+
+**THE COUNTER-PROOFS, WHICH ARE THE ARGUMENT:** on the identical mutation the
+OLD gate passes and the NEW one fails — M1, M5, M6 (12 old tests blind), M7 (10
+old tests blind).
+
+⚠️ **AND THE REFINEMENT TO THE MUTATION-PROOF RULE, EARNED HERE.** The original
+anti-stale proof (M4) exercised the COMPLETE fix — keys + variant + bundle — and
+passed. It was blind to the BUNDLE-ONLY edit, which is the first edit the
+exemption's own text invites.
+
+> **A mutation proof that exercises the complete inverse of a change has proved
+> the tidy case. What ships is a HALF-LANDED fix — prove the guard against the
+> partial one.**
+
+Being carried into `AGENTS.md` canon by the RC-1 session, jointly attributed.
