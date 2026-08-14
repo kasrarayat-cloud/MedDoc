@@ -18,7 +18,6 @@ import {
   laneMatchesFilter,
   sortLanes,
   toBoardLane,
-  type BoardLane,
 } from '../board-data';
 
 const base = {

@@ -540,6 +540,14 @@ describe('no dangling chat intents', () => {
     expect(src).not.toContain('listed_suggestions');
     expect(src).not.toContain('suggestions the outstanding');
     expect(src).not.toContain('target `codes`');
+    // ⚠️ `rx_gate` WAS MISSING FROM THIS LIST, and a mutation proved the gap:
+    // re-adding the prompt's `rx_gate  the prescription-safety card` line while
+    // leaving `ScrollIntentSchema` narrowed — the natural half-applied removal —
+    // left 1491 tests green. The consequence is not cosmetic: per `intent.ts`,
+    // an out-of-union target makes `safeParse` reject the ENTIRE reply, so the
+    // model would be told about an anchor whose use silently kills a clinical
+    // chat turn. The schema half was already guarded; this is the other half.
+    expect(src).not.toContain('rx_gate');
   });
 
   it('"show billing" is a CANNOT, not a refusal', () => {

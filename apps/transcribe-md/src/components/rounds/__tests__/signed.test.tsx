@@ -98,7 +98,7 @@ describe('the safety trail shows ONLY what applied', () => {
     // trail happened to be empty.
     for (const trail of [
       NO_TRAIL,
-      { criticalOverridesBeforeSign: 3, emAcknowledgedAt: '2026-07-30T11:00:00.000Z' },
+      { emAcknowledgedAt: '2026-07-30T11:00:00.000Z' },
     ]) {
       const { unmount } = renderSigned({ trail });
       expect(screen.queryByTestId('rounds-signed-trail-attestation')).toBeNull();

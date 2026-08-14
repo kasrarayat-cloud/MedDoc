@@ -42,7 +42,6 @@ export interface RoundsStageProps {
   gates: readonly SignGate[];
   n: number;
   emArtifact?: boolean;
-  /** Unresolved CRITICAL Rx count, for the band across the sheet's top. */
   /** The existing paper component. */
   children: React.ReactNode;
   /** The existing `<ChatEditorPanel>`, dropped into the drawer. */

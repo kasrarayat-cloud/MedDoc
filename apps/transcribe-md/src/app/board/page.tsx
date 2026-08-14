@@ -119,8 +119,6 @@ export default async function BoardPage({
         createdAt: true,
         signedAt: true,
         audioDurationSec: true,
-        // The board's critical treatment derives from real warnings — see
-        // criticalWarningsOf(). Selected here so the lane never has to guess.
         patient: { select: { name: true } },
       },
     }),

@@ -109,11 +109,18 @@ describe('createDeferredScroll', () => {
     const sched = manualScheduler();
     const d = createDeferredScroll(scrollTo, sched.schedule);
 
-    // ⚠️ THE TWO TARGETS MUST DIFFER OR THIS PROVES NOTHING. Ruling #109 took
-    // `rx_gate` out of the union, and the mechanical substitution to `em_gate`
-    // briefly made both records identical — at which point the assertion held
-    // whether the FIRST or the LAST won. `document` is the union's other
-    // surviving member, so the discrimination is restored rather than faked.
+    // ⚠️ THE TWO TARGETS MUST DIFFER OR THIS PROVES NOTHING. The mechanical
+    // substitution of `em_gate` for `rx_gate` (ruling #109) briefly made both
+    // records identical — at which point the assertion held whether the FIRST
+    // or the LAST won.
+    //
+    // CORRECTION, from the adversarial pass: an earlier version of this note
+    // said `document` was "the union's other surviving member". There is no
+    // union here — `record(target: string)` takes a plain string, and
+    // `rx_gate` was never constrained by `ScrollIntentSchema` at this layer.
+    // The fix is right and the reason was wrong, which is worse than saying
+    // nothing: the next reader would have gone looking for a type that does
+    // not exist. Two DISTINCT strings are all this needs.
     d.record('document');
     d.record('em_gate');
     d.flush();

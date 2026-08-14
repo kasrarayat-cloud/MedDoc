@@ -163,7 +163,10 @@ export async function openGateFlow(page: Page): Promise<void> {
  */
 export async function expectGateStep(
   page: Page,
-  step: 'rx' | 'em' | 'attestation',
+  // `'rx'` left this union with the gate (owner ruling #109). Keeping it would
+  // compile and then time out for 10s against a `data-step` that can never
+  // hold it, reporting a broken flow instead of a bad argument.
+  step: 'em' | 'attestation',
 ): Promise<void> {
   await expect(
     page.getByTestId('rounds-gate-flow'),

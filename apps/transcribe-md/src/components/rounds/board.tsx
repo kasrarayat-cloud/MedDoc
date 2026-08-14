@@ -436,7 +436,6 @@ function BoardLegend() {
     { key: 'ready', label: 'Ready', swatch: { background: 'var(--rounds-paper-1)' } },
     { key: 'recording', label: 'Recording', swatch: { background: 'var(--rounds-critical)' } },
     { key: 'processing', label: 'Processing', swatch: { background: 'var(--rounds-em)' } },
-    { key: 'critical', label: 'Critical', swatch: { border: '2px solid var(--rounds-critical)' } },
     { key: 'signed', label: 'Signed', swatch: { background: 'var(--rounds-ready)' } },
   ];
   return (

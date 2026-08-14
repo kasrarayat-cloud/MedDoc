@@ -4815,10 +4815,7 @@ body {
   background: var(--color-linear-sage);
   box-shadow: 0 0 0 3px var(--color-linear-sage-tint);
 }
-.qm-c3-rev2-dot.warn {
-  background: var(--color-linear-amber);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-linear-amber) 16%, transparent);
-}
+
 .qm-c3-rev2-pips {
   display: inline-flex;
   gap: 4px;
@@ -4935,25 +4932,14 @@ body {
   gap: 8px;
   min-width: 0;
 }
-.qm-c3-rev2-jump {
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  text-align: left;
-  font-family: var(--font-sans);
-  padding: 2px 0;
-}
+
 .qm-c3-rev2-sign-msg {
   font-size: 12.5px;
   font-weight: 500;
   color: var(--color-linear-text-2);
 }
-.qm-c3-rev2-jump:hover .qm-c3-rev2-sign-msg {
-  color: var(--color-linear-text);
-}
-.qm-c3-rev2-go {
-  color: var(--color-linear-text-3);
-}
+
+
 .qm-c3-rev2-sign-action {
   flex: none;
 }
@@ -5386,9 +5372,7 @@ body {
 .qm-ux-sum-muted { color: var(--color-linear-text-3); }
 /* The Rx-override line is the one summary item that can carry a real warning,
    so it gets the amber treatment rather than blending into the coding strip. */
-.qm-ux-sum-rx { flex-basis: 100%; }
-.qm-ux-sum-rx .qm-ux-sum-key { color: var(--color-linear-amber); }
-.qm-ux-sum-rx .qm-ux-sum-val { color: var(--color-linear-text-2); line-height: 1.55; }
+
 
 /* ── original dictation, collapsed ───────────────────────────────────── */
 .qm-ux-doc-dictation { margin-top: 18px; }

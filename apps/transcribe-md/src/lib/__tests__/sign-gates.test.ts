@@ -22,6 +22,7 @@ import {
   blockerCount,
   signGates,
   type SignGateInput,
+  type SignGateId,
 } from '../sign-gates';
 
 const PRIMARY = 'primary-care';
@@ -304,9 +305,47 @@ describe('THE B2 RULING — the E/M gate exists always, counts only when the ser
 
     // Each one names a refusal code in the route. A gate whose enforcement is
     // asserted here but absent there is the exact drift this test exists for.
-    const route = readFileSync('src/app/api/visits/[id]/sign/route.ts', 'utf8');
-    for (const code of ['OVERRIDE_REQUIRED', 'EM_CHANGE_UNACKNOWLEDGED', 'ATTESTATION_REQUIRED']) {
-      expect(route, `${code} is not refused by the route`).toContain(code);
+    //
+    // ⚠️ TWO DEFECTS WERE FIXED HERE AT ONCE, BOTH FOUND BY REFUTATION, AND
+    // BOTH ARE THIS REPO'S OWN NAMED CLASSES.
+    //
+    //  1. THE LIST WAS HAND-KEPT. It was frozen at three codes while the loop
+    //     above iterates the LIVE gate set. Ruling #109 took the gate set to
+    //     two and the list stayed at three, so the test demanded a refusal code
+    //     for a gate that no longer exists. The list is now DERIVED from the
+    //     same `set.gates` the loop uses — one source, so it cannot go stale
+    //     again. ("A gate's WATCHED SET is diffed against the spec's NAMED
+    //     set", arriving through a stale constant.)
+    //
+    //  2. IT MATCHED AGAINST PROSE. `OVERRIDE_REQUIRED` still occurs EXACTLY
+    //     ONCE in the route — inside the comment recording the gate's removal.
+    //     So the assertion passed on the strength of a sentence describing the
+    //     absence of the very thing it claims to verify, and rewording that
+    //     comment would have turned the suite red for a documentation edit.
+    //     Comments are stripped first, exactly as `gate-flow.test.tsx` does.
+    const CODE_FOR: Record<SignGateId, string> = {
+      em: 'EM_CHANGE_UNACKNOWLEDGED',
+      attestation: 'ATTESTATION_REQUIRED',
+    };
+    const routeSrc = readFileSync('src/app/api/visits/[id]/sign/route.ts', 'utf8');
+    const routeCode = routeSrc
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/^\s*\/\/.*$/gm, ' ');
+
+    // NON-VACUITY: the stripper must not have eaten the file. Without this, a
+    // regex that removed everything would pass every assertion below by
+    // finding nothing to contradict — and this test would be measuring a blank
+    // string.
+    expect(routeCode).toContain('export const POST = withApiHandler');
+
+    for (const g of set.gates) {
+      expect(routeCode, `${g.id} is not refused by the route`).toContain(CODE_FOR[g.id]);
     }
+
+    // …and the retired code is gone from the CODE, while surviving in the
+    // prose that explains its removal. Both halves asserted, because a bare
+    // `not.toContain` over the raw file would fail on the comment.
+    expect(routeCode).not.toContain('OVERRIDE_REQUIRED');
+    expect(routeSrc).toContain('OVERRIDE_REQUIRED');
   });
 });

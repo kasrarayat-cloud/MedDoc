@@ -27,9 +27,6 @@ const stateOf = (n: number) =>
  *  cannot be produced by the production path proves nothing about it. */
 const gatesFor = (over: Parameters<typeof signGates>[0]) => signGates(over);
 
-const RX_ONE_CRITICAL = {
-};
-
 describe('node positioning', () => {
   it('READY marks stages 1-4 done and stage 5 CURRENT — not done', () => {
     // completedStageCount('READY') is 5, which would tick every node including

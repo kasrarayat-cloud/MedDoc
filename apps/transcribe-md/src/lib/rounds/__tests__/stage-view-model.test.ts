@@ -90,9 +90,26 @@ describe('applyGateOverlay', () => {
   });
 
   it('zeroes the E/M and attestation terms independently', () => {
+    // ⚠️ ASSERTED PER-GATE, NOT VIA `n`, AND THAT IS THE WHOLE POINT OF THE
+    // WORD "INDEPENDENTLY". With exactly two gates left after ruling #109, `n`
+    // reads 1 whichever one was zeroed — so an `n`-only version of this test
+    // passes with the two arms SWAPPED. Mutation-proved: swapping them leaves
+    // 1491 tests green, and the product failure that ships is a doctor
+    // confirming the E/M level, the attestation term zeroing instead, and the
+    // gate flow staying locked on a step they just cleared. That is an
+    // unclearable block — the exact failure class ruling #109 exists to avoid.
     const d = data([EM(1), ATTEST]);
-    expect(applyGateOverlay(d, { emConfirmed: true }).n).toBe(1);
-    expect(applyGateOverlay(d, { attested: true }).n).toBe(1);
+
+    const emOnly = applyGateOverlay(d, { emConfirmed: true });
+    expect(emOnly.gates.find((g) => g.id === 'em')?.unresolved).toBe(0);
+    expect(emOnly.gates.find((g) => g.id === 'attestation')?.unresolved).toBe(1);
+    expect(emOnly.n).toBe(1);
+
+    const attestOnly = applyGateOverlay(d, { attested: true });
+    expect(attestOnly.gates.find((g) => g.id === 'attestation')?.unresolved).toBe(0);
+    expect(attestOnly.gates.find((g) => g.id === 'em')?.unresolved).toBe(1);
+    expect(attestOnly.n).toBe(1);
+
     expect(applyGateOverlay(d, { emConfirmed: true, attested: true }).n).toBe(0);
   });
 

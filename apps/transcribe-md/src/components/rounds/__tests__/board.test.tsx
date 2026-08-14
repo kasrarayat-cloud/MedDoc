@@ -190,12 +190,29 @@ describe('the matrix actually positions', () => {
 });
 
 describe('the legend explains every marker it uses', () => {
-  it('names all five', () => {
+  it('names all four', () => {
     render(<RoundsBoard lanes={[lane({})]} />);
     const legend = screen.getByTestId('rounds-board-legend');
-    for (const label of ['Ready', 'Recording', 'Processing', 'Critical', 'Signed']) {
+    for (const label of ['Ready', 'Recording', 'Processing', 'Signed']) {
       expect(within(legend).getByText(label)).toBeTruthy();
     }
+  });
+
+  // ⚠️ AND THE OTHER DIRECTION, WHICH IS WHY THIS TEST'S TITLE WAS FALSE WHILE
+  // IT PASSED. It asserted the legend NAMES five markers and never asserted the
+  // legend names nothing it cannot draw. Owner ruling #109 removed every
+  // producer of the red-bordered lane — the border, the ⚠ glyph, the
+  // interaction line, the row tint, `criticalCount`, the `critical` filter —
+  // and the legend kept advertising it. `tsc` could not see it: `items` is
+  // typed `{ key: string }`, not `BoardFilter`.
+  //
+  // "Explains every marker it USES" is a claim in both directions. Now it is
+  // tested in both.
+  it('and names NOTHING it can no longer draw', () => {
+    render(<RoundsBoard lanes={[lane({})]} />);
+    const legend = screen.getByTestId('rounds-board-legend');
+    expect(within(legend).queryByText('Critical')).toBeNull();
+    expect(legend.textContent).not.toMatch(/critical|interaction/i);
   });
 });
 

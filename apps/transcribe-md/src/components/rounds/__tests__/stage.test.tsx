@@ -11,6 +11,8 @@
 //     anything in there is invented.
 // ============================================================================
 
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 
@@ -166,6 +168,29 @@ describe('THE CRITICAL BAND IS GONE — owner ruling #109', () => {
     expect(document.body.textContent).not.toMatch(/critical interaction/i);
     // …and it does not merely fail to mention Gate 1 — there is no Gate 1.
     expect(document.body.textContent).not.toMatch(/Gate 1/);
+  });
+
+  it('the COMPONENT cannot draw it — not merely this caller', () => {
+    // ⚠️ THE RENDER ASSERTION ABOVE IS NOT ENOUGH, AND A MUTATION PROVED IT.
+    // `criticalUnresolved` was an OPTIONAL prop defaulting to 0, so
+    // `renderStage({})` drew no band on `origin/main` either. Reinstating the
+    // whole band block in `stage.tsx` — the exact half-applied removal where
+    // the component keeps the code and only the caller stops passing the prop
+    // — left this file 32/32 green, 1491 tests green, and tsc at 0 errors.
+    //
+    // A doctor would then see "1 critical interaction — you'll clear it at
+    // Gate 1" pointing at a gate that no longer exists. So the deletion is
+    // asserted at the SOURCE, where it cannot hide behind a default.
+    const src = readFileSync('src/components/rounds/stage.tsx', 'utf8');
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+
+    // NON-VACUITY: the stripper must leave the component behind. A regex that
+    // ate the file would satisfy every absence below by finding nothing.
+    expect(code).toContain('qm-rounds-sheet');
+
+    expect(code).not.toContain('criticalUnresolved');
+    expect(code).not.toContain('qm-rounds-critical-band');
+    expect(code).not.toContain('rounds-critical-band');
   });
 });
 
