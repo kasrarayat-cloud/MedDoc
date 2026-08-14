@@ -168,6 +168,90 @@ Prefer the IMAGE rollback (`:pre-emrehome-20260728`) when the concern is the E/M
 surface specifically — it has no such constraint. Full detail and the tag table:
 `docs/DEPLOYMENT_RUNBOOK.md` §3.1–3.2.
 
+## A DELETION IS SCOPED BY WHAT THE COMPONENT **DOES**, NOT BY WHAT THE RULING **CALLS** IT
+
+**Standing 2026-08-14.** A ruling names an INTENT. A component has a JOB LIST.
+The two are not the same enumeration, and the gap between them is where a
+deletion over-reaches.
+
+> **Before deleting a named surface, enumerate everything the component
+> actually renders — then check each job against the ruling. Anything the
+> ruling does not name is a decision you are making, not one you were given.**
+
+⚠️ **REFERENCE CASE — ruling #109, "delete the Prescription Safety surface".**
+The component it named had two jobs, and its host section's heading toggled
+between them in one line:
+
+    {props.rxHasWarnings ? 'Prescription safety' : 'Prescriptions'}
+
+It rendered on `prescriptions OR warnings`. The ruling named the SAFETY job.
+Deleting the whole component executed the ruling exactly as written and removed
+the drafted MEDICATION LIST with it — the only dedicated card for it — while the
+export path went on emitting a `MEDICATIONS` block into five EHR clipboard
+formats, the PDF and the DOCX.
+
+**Restored by owner ruling as a read-only list.** The safety surface and both
+gate halves stayed deleted.
+
+### ⚠️ AND THE RESTORE HAD THE SAME DEFECT ONE FIELD DOWN, WHICH IS THE HALF WORTH REMEMBERING
+
+The restored card showed drug, strength, sig, quantity and refills — and no
+ACTION. `visit-export.ts` appends an uppercase tag to every prescription whose
+action is not `new`, so **a STOP ORDER rendered identically to a NEW START while
+the signed PDF said `[DISCONTINUE]`.**
+
+Measured on production the moment it was found: **44 of 53 prescription rows
+carry a non-`new` action** — continue 33, hold 5, unclear 3, discontinue 2,
+increase 1. The common case, not the edge. ⚠️ And `hold` was a value the deleted
+component's own type union never listed, so the field is typed as a bare string:
+**the wire is the authority, and switching on a closed set silently drops the
+member nobody enumerated.**
+
+> **An absent field is content the doctor did not see. A WRONG field is content
+> that says the opposite of the record being signed. The second is worse, and
+> restoring a surface can introduce it while fixing the first.**
+
+A second divergence in the same pass: the card filtered
+`typeof p.drug === 'string'` while the export's payload builder does not, so a
+`drug`-less prescription was PRINTED into the signed record and DROPPED from the
+card. The card now drops nothing the export prints, and a missing name renders
+AS missing — a doctor can act on *"this row has no drug name"* and cannot act on
+a row that is not there.
+
+### THE GUARD IS A BICONDITIONAL PLUS FIELD PARITY, AND PRESENCE IS NOT ENOUGH
+
+`gate-exported-medications-are-seen.test.ts` states the invariant as an equality
+between the export's emit condition and the display's render condition, plus a
+leg asserting the card is actually MOUNTED — **two predicates can agree
+perfectly while nothing is on screen.**
+
+⚠️ **THAT VERSION WAS GREEN THROUGHOUT THE ACTION DEFECT.** Presence is exactly
+what let it through, so the gate now asserts FIELD PARITY: every action value
+production holds plus the ones nobody typed, the tag TEXT itself (*a card
+reading "STOPPED" against an export reading `[DISCONTINUE]` is two records*), and
+that no row is dropped that the export prints.
+
+⚠️ **AND THE GATE CAUGHT ITS OWN AUTHOR TWICE.** On its first run,
+`hasDraftedPrescriptions` read `(blob?.prescriptions?.length ?? 0) > 0`, which
+returns TRUE for a malformed `prescriptions: 'nonsense'` (length 8) while the
+export's condition returns false. Then the field-parity arm caught the `drug`
+filter. **A guard that reddens against its author on first execution is
+discriminating rather than agreeing** — that is the strongest evidence a guard
+can produce about itself.
+
+### HONEST LIMITS, RECORDED SO THE GATE IS NOT READ WIDER THAN IT IS
+
+- It mirrors **one of three** medication emitters. `pdf-generator.ts` and
+  `docx-generator.ts` are unwatched, and docx gates additionally on
+  `!data.formOnly` — which is DELIBERATE (form-only exports carry no chrome by
+  design) and must not be "fixed".
+- The mount leg is a substring scan and is defeated by a conditional render. The
+  product has that shape one level up: the whole surface is behind
+  `isReviewDocView()`, and the flag-OFF rollback path renders no medications at
+  all.
+- The mirrored export condition is not byte-faithful on the non-array-truthy
+  case: the real export does not return empty there, it THROWS.
+
 ## Shared components — diff the callers BEFORE you replace them
 
 **A shared component must accept every context its predecessors carried.**
@@ -579,6 +663,198 @@ the merge commit did, so its citation covers the same code *plus* the stray, and
 it certifies the thing that actually ships rather than its parent. Wait for it in
 full; do not deploy the parent's evidence.
 
+## A SWEEP IS DEFEATED BY AN INCOMPLETE **TOKEN LIST** AT LEAST AS OFTEN AS BY A MISSING **FORM**
+
+**Standing 2026-08-14, and it corrects an earlier version of itself — which is
+the reason it is worth reading.**
+
+The first draft of this entry said the R5 sweep "enumerated two of four naming
+forms" and missed a file that reached the deleted surface by role name and
+element id. **That diagnosis was wrong about its own file.** The missed file,
+`rounds-a11y.spec.ts`, reaches the gate by the TEST ID `rounds-gate-host-rx` at
+line 214 — one line BEFORE the role-name reach at :215. The sweep DID search
+test ids. Completing a form checklist would not have found it.
+
+> **The token was absent because it is INTERPOLATED AT ITS DEFINITION SITE.**
+>
+>     data-testid={`rounds-gate-host-${active.id}`}
+>
+> **No grep of the application source can produce the literal
+> `rounds-gate-host-rx`. It exists only in the code that CONSUMES it.**
+
+The same failure recurred inside a form the sweep had already "covered": it
+found the `qm-lin-rx-*` class family and missed `qm-warn-*` — 78 rules, a second
+family belonging to the same surface.
+
+### THE DISCIPLINE, AND THE FIRST ITEM IS THE ONE USUALLY SKIPPED
+
+1. **ENUMERATE TOKENS FROM THE CONSUMERS, NOT ONLY THE DEFINITION.** A composed
+   identifier has no literal in source. The only place it appears is in the code
+   reaching for it — so grep the TESTS and the callers, not just the component.
+2. **TREAT EVERY FORM AS A SET TO EXHAUST, NOT A BOX TO TICK.** *"I searched test
+   ids"* is not a coverage statement; `qm-lin-rx-*` found and `qm-warn-*` missed
+   is the proof.
+3. **ENUMERATE THE FORMS ANYWAY — necessary, not sufficient.** R5 actually had to
+   touch: test id · CSS class family · ARIA/accessible name · element id · free
+   text content · `data-*` attribute · URL query-param VALUE (`?filter=critical`)
+   · enum/union string constants spanning schema + prompt + resolver (`rx_gate`)
+   · derived field names (`criticalCount`) · seeder/fixture option names
+   (`hasRxGate`, `withCriticalOverride`) · helper module and import paths ·
+   Playwright project names and env fixtures (`rx-safety`, `MOCK_RX_WARNINGS`) ·
+   audit-action enum values. **A four-item checklist reads as complete and is
+   not.**
+
+⚠️ **AND NOTE WHAT ACTUALLY FOUND THE MISSED FILE: the E2E gate, by running the
+pack.** Not the sweep that was supposed to precede it. Positive-control the
+sweep's own pattern before believing any zero, and drive the fixing pass from
+the list — but do not mistake a sweep for the thing that proves coverage.
+
+---
+
+## A DETECTOR CAN BE BLIND TO THE THING IT MOST EXISTS TO WATCH
+
+**Standing 2026-08-14.** `rounds-axe.ts` decided whether a modal was open with:
+
+    d.offsetParent !== null || d.getAttribute('data-state') === 'open'
+
+⚠️ **`offsetParent` IS ALWAYS NULL FOR `position: fixed`.** The Rounds gate flow
+is `role="dialog" aria-modal="true"` on `position: fixed; inset: 0`, carrying
+`data-step` but not `data-state` — so it satisfied **neither** arm, and the
+focus-trap assertion had **never once been applied to the primary modal of the
+surface.** The Rounds chat drawer was invisible for the same reason.
+
+**Nothing said so, because the count was non-zero.** The override modal — which
+IS also `position: fixed`, via an inline style, and was detected only because
+Radix stamps `data-state` on `Dialog.Content` — supplied every `modalStates` the
+walk ever counted. **It took DELETING the one dialog the detector could see for
+the zero to appear**, and only then did the non-vacuity guard fire.
+
+> **A detector that silently covers half of what its name implies is
+> indistinguishable from one that works. The tell is never a red test — it is
+> the count that never moves, and a count nobody expected to move looks
+> healthy.**
+
+**And the correction needed its own correction:** the first version of this note
+said the override modal was NOT `position: fixed`. It is; the inline style is
+just not in its class. Verified rather than assumed, on the second pass.
+
+### ⚠️ TWO ZEROES WITH OPPOSITE MEANINGS IS **ONE BROKEN INSTRUMENT**, NOT TWO FINDINGS
+
+**Contributed by the GI session, 2026-08-14, and it is the cheapest reading of a
+broken probe there is.** Verifying R5 in production, it grepped the running APP
+container for two source files and got:
+
+    rx-tab.tsx            0   ← must be GONE      ✔ looks like a pass
+    prescriptions-card.tsx 0   ← must EXIST        ✘ looks like a failure
+
+Read as two results, that is "the deletion worked and the restore did not" — a
+plausible, alarming, and entirely false conclusion. Read as one, it is obvious:
+**a probe that answers 0 to a question whose true answer is 1 is not measuring.**
+The app image ships a BUILT Next application, not a source tree, so neither path
+ever resolved. Re-run against the worker with a traversal control (50 `.tsx`
+files found), the real answers appeared: the deleted files 0, the restored card
+1, `OVERRIDE_REQUIRED` 0 against a live control of 4.
+
+> **When a sweep returns zeroes for things that MUST be absent AND zeroes for
+> things that MUST be present, stop reading the results and check the
+> instrument. The contradiction is the finding.**
+
+This is the positive-control rule with a free control already in hand: any sweep
+that contains at least one must-exist row carries its own tripwire, and a
+must-not-appear table without one cannot tell absence from blindness.
+
+## AN OVER-PERMISSION FIX'S DECLARATION ASSERTS **ABSENCE** ROWS
+
+**Standing 2026-08-14. Contributed by the GI session; verified here against
+`main` before it was written down.**
+
+Most §2.5 declarations assert what must APPEAR after a deploy. That is the right
+shape for a change that ADDS a capability. It is the wrong shape — and a
+dangerous one — for a fix to something that was **too permissive**.
+
+> **A presence-only declaration cannot detect over-admission. "Is the new code
+> shipped?" passes just as happily on the broken version.**
+
+⚠️ **REFERENCE CASE — two non-billable ICD-10 headers on the accepted side of a
+billing floor.** A GI cohort's first draft added `'K21.0'` and `'K22.7'`. Both
+are subcategory HEADERS, not submittable codes: FY2023 expanded `K21.0` into
+`K21.00`/`K21.01`, FY2017 expanded `K22.7` into `K22.70`/`K22.71x`. Measured
+against the real module at the time:
+
+    isValidIcd10('K21.0')   true    ← a non-submittable code ADMITTED
+    isValidIcd10('K21.00')  false   ← the code a chart maps to, still DROPPED
+
+So the fix for *"GI codes get dropped"* **failed at its own purpose and created
+False Claims Act exposure at the same time**, in the file whose header names that
+exact risk. Verified on `main` after the fix: `K21.0` and `K22.7` absent,
+`K21.00`, `K21.01`, `K22.70` present.
+
+⚠️ **AND THE TELL WAS INSIDE THE AUTHOR'S OWN DIFF — "THE EVIDENCE WAS IN THE
+ARTIFACT I AUTHORED".** The comment written beside `'K22.7'` was the official
+title of **`K22.70`**. The correct code had been written down, in prose, on the
+same line as the wrong one.
+
+The declaration therefore carried a row asserting `'K21.0'` must still read
+**0** in the shipped validator — and the guard
+(`icd10-allowlist-gastroenterology.test.ts`) refuses both headers **paired with
+an arm asserting the billable children ARE allowed**, because refusing both
+would be a stricter floor and a worse product. Mutation-proved: re-admitting
+`K21.0` reddens naming it.
+
+## TEXT PRESENCE IS NOT MEMBERSHIP
+
+**Standing 2026-08-14. Same night, same file, and the verification PASSED while
+the module did not even parse.**
+
+> **`grep` answers a question about a FILE. Membership is a question about a
+> DATA STRUCTURE. They agree right up until they don't.**
+
+⚠️ **REFERENCE CASE.** A 33-code block was inserted anchored on the
+`export const ICD10_ALLOWLIST` declaration rather than on the array's closing
+`];`, so the codes landed **outside the array literal** — dangling statements
+after the close. The file did not parse. **And the author's verification
+reported success anyway:**
+
+    grep -o "'K63.5'" file | wc -l   ->  1     "0 of 33 missing"
+
+The text was in the file. The value was not in the Set.
+
+⚠️ **THE PARSER CAUGHT IT, NOT THE CHECK — which is the part that should worry
+you.** Had the block landed somewhere syntactically legal but semantically
+wrong, the grep would still have reported 33 of 33 and nothing else would have
+objected.
+
+**So allowlist and registry verification asserts THROUGH the structure** —
+`ICD10_ALLOWLIST.has()`, `isValidIcd10()` — never through the file text. The
+guard on `main` carries **14** membership assertions and **zero** file-text
+assertions, plus a non-vacuity row (`expect(all.length).toBe(38)`) so a cohort
+that collapsed to nothing cannot satisfy every filter while checking nothing.
+
+## SPLIT-FAMILY COVERAGE PINS **BOTH** DIRECTIONS
+
+**Standing 2026-08-14.** When a fix adds the missing half of a pair, asserting
+only the half you added lets a future edit remove the half that was already
+there — **reproducing the original defect inverted**, and a one-sided test
+cannot see it.
+
+⚠️ **REFERENCE CASE — four split families, each with exactly one member
+present** before the cohort that fixed them:
+
+| already there | was missing | the pair |
+|---|---|---|
+| `K21.9` | `K21.00` | GERD without vs WITH esophagitis |
+| `K58.0` | `K58.1` | IBS-D vs IBS-C |
+| `K57.30` | `K57.32` | diverticulosis vs diverticulitis |
+| `Z12.11` | `K63.5` | the screening ENCOUNTER vs the FINDING it screens for |
+
+A clinician documenting the other half had the code silently dropped, with only
+a fire-and-forget audit row to show for it.
+
+The guard iterates the pairs and asserts **both** members, with the failure
+message naming which side went — *"K21.9 (the side that was already there)"*.
+Mutation-proved by deleting the side that was **already** present, which is
+precisely the direction a new-side-only test is blind to.
+
 ## THE LIST IS THE DRIVER, NOT THE CONTEXT
 
 **When a sweep produces an enumeration, the fixing pass ITERATES THE LIST.** Each
@@ -729,6 +1005,39 @@ server has not finished populating. **That makes it the WATCHED-SET failure, not
 the broken-instrument failure: the right question asked of the wrong universe,
 a few seconds too early.** The two sections above name both shapes; this is the
 one where the check is flawless and the universe is wrong.
+
+### ⚠️ AND THE GENERAL FORM: AN IDENTIFIER IS QUERIED IN ITS **FULL** FORM, EVERYWHERE
+
+**Standing 2026-08-14. This entry began as a `gh` quirk and it is not one.**
+
+> **A lookup keyed on an ABBREVIATED identifier can return "no matches" instead
+> of "ambiguous", with exit 0. Abbreviation is a display convenience; it is
+> never a query key.**
+
+`gh run list --commit` is the instance this repo has paid for, and the table
+above records it. The generalisation is the addition: **any** interface that
+accepts a shortened id — a SHA prefix, a truncated container id, a partial
+image digest, a name without its namespace — may resolve it, or may silently
+resolve nothing, and the two outcomes are indistinguishable from the exit code.
+
+⚠️ **REPRODUCED LIVE BY BOTH SESSIONS ON THE SAME NIGHT, and mine sat directly
+on a deploy gate.** Waiting for `main`'s merge-commit citation before deploying
+R5, I polled `gh run list --commit 636e69a3` — the short form. It returned `[]`,
+my `until` loop read that as "nothing in flight", and **it exited while three
+required checks were still running.** Measured seconds apart on the same commit:
+
+    --commit SHORT : 0 runs
+    --commit FULL  : 4 runs
+    --branch main  : 4 runs
+
+All three commands exit 0. **What caught it was the two-view rule above** — the
+`--branch` view disagreed, in the same output, and the disagreement was the only
+signal. A single-view check would have deployed a commit whose gate had not
+finished looking at it.
+
+**So the two rules compose, and neither is sufficient alone:** take two views,
+AND query with the full 40 characters. The two-view habit catches a lying
+instrument; the full identifier stops you creating one.
 
 > **THE RULE, TIGHTENED TWICE, AND THE SECOND TIGHTENING IS THE LOAD-BEARING
 > ONE: TAKE TWO VIEWS.** `--branch` is the view that is right first. A citation
@@ -1134,11 +1443,48 @@ programme to fix the weaker case. The deploy records provenance **loudly** and
 does not refuse on it. **Both call the same `scripts/lib/declaration.sh`** — one
 implementation, two strictnesses, because a second copy drifts from the first.
 
+⚠️ **AND FILE THE EVIDENCE WHERE GIT WILL TAKE IT: `docs/deploy-reports/` IS
+TRACKED, `docs/deploy-logs/` IS GITIGNORED.** The two names are one word apart
+in meaning and opposite in behaviour. Both sessions hit this on 2026-08-14 from
+different directions — one had `git add` refuse (loudly, and caught), the other
+had a `cp` into a citation PR silently contribute nothing (caught only by
+reading what the commit actually contained, rather than trusting `git add -A`).
+**A verification written to the ignored path looks committed and is invisible**,
+which is the worst of both: the work was done and the record does not exist.
+
 **A post-deploy check written afterwards is unfalsifiable.** Every number has a
 story available to it, and a migration supplies a ready-made excuse for *any*
 movement — *"the migration touched that table"*. Declaring first removes the
 excuse: the comparison has one correct answer, fixed before the evidence existed.
 Same discipline as *no evidence before the event*, pointed the other way.
+
+### ⚠️ A DECLARATION IS BOUND TO A **CHANGE**. A DEPLOY SHIPS A **TREE**.
+
+**Standing 2026-08-14, and neither session could have found it alone.**
+
+> **When two changes reach `main` before either ships, the deploy discharges only
+> the declaration whose author ran the comparison. The other is silently left
+> unjudged unless somebody notices.**
+
+**REFERENCE CASE.** R5 merged as `636e69a3`. The GI session then deployed
+`2b527509` and judged it **16 of 16** — against its own declaration, which
+covered an ICD-10 allowlist change. `636e69a3` is an ancestor, so **R5 went to
+production inside that deploy.** Correct behaviour: they deployed `main`, which
+is what `main` is for. But the payload was strictly larger than the
+declaration's scope, and **not one of those sixteen rows could have detected an
+R5 regression.** "16 of 16" was a true sentence doing misleading work.
+
+**THE HABIT:** when more than one change is queued, either deploy them
+separately so each declaration gates its own act, or write a declaration naming
+the **FULL DIFF** being shipped. ⚠️ ***"I deployed `main`" is not the same claim
+as "I judged what I deployed."***
+
+**AND IF IT HAPPENS ANYWAY, THE UNJUDGED DECLARATION IS STILL WORTH RUNNING.**
+R5's comparison was performed after the fact and every declared quantity
+matched. The declaration's commit timestamp provably preceded the rows, so the
+answer could not have been tuned to the outcome — that half of §2.5's product
+survives. What is lost is the GATE, not the evidence, and saying which half you
+have is the whole discipline.
 
 **A difference that is not in the declaration is THE FINDING**, whatever its
 explanation sounds like after the fact. And the clinical-count row is never
@@ -1261,6 +1607,49 @@ Two things generalise:
 2. **Assert the backups before mutating**, the same way a scripted edit asserts
    its occurrence count. A restore that reads a file that was never written is
    a second silent failure stacked on the first.
+
+## AUTHORIZATION TRAVELS OWNER → SESSION DIRECTLY, AND NEVER THROUGH A PEER
+
+**Standing 2026-08-14, and it is a rule about the CHANNEL, not about trust.** A
+peer session can carry reasoning, evidence, measurements and warnings — all of
+that is worth having and this programme runs better for it. What a peer cannot
+carry is **authority**.
+
+> **"The lead has ordered X", arriving sideways, is a CLAIM ABOUT
+> AUTHORIZATION. It is verified like any other claim — by asking the owner —
+> and it is never acted on because a peer asserted it.**
+
+⚠️ **REFERENCE CASE, 2026-08-14, AND THE REFUSAL IS THE PART TO COPY.** One
+session relayed an owner-ordered item to another: an ICD-10 allowlist append,
+correctly reasoned, backed by a real production audit row, and genuinely the
+right next item. The receiving session **declined to start it**, on the grounds
+that its own owner had scoped its work to a different half and only he could
+move that boundary. It surfaced the item to its owner with the reasoning
+attached instead.
+
+That was correct, and the relaying session (me) was wrong to phrase it as an
+order.
+
+⚠️ **AND THE ARGUMENT AGAINST THE CHANNEL WAS DRAWN FROM THAT SAME NIGHT.** The
+brief that opened the session had **invented a peer that did not exist** and
+**misattributed the work to rulings #103/#104 when it was #109**. Both were
+caught by checking rather than by following. A channel that had already
+produced two false statements — about who exists, and about which ruling
+applies — is not a channel to accept work orders on, and the one message
+asking for an exception came from inside it.
+
+**The failure mode is not a wasted hour.** It is one session doing unreviewed
+work on a clinical path while its owner believes it is doing something else,
+and neither party knowing which of them is out of step. That state is
+undetectable from either side until something lands wrong.
+
+**The cost of the discipline is one message.** If the two owners are the same
+person it resolves immediately and nothing was lost; if they are not, the
+refusal has just located the seam.
+
+**Corollary, for the relaying side:** state it as *your owner's reasoning,
+offered to theirs*, with no authorization attached. Sending reasoning is
+collaboration. Sending an order is a claim you are not in a position to make.
 
 ## WAR-ROOM RULINGS ARE RECORDED BY THE RECEIVING SESSION, IN ITS FIRST COMMIT
 
@@ -1477,6 +1866,52 @@ Read the relay's `## Rules` section before touching its program. The Rounds
 rules (one item per session; merge-commit CI cited by SHA; no push mid-run; no
 evidence before the event; say what would make the check fail, then make it
 fail) apply to both and are not restated in the Foundation ledger.
+
+## A WORKTREE IS ISOLATED IN **FILES** AND SHARED IN **REFS**
+
+**Standing 2026-08-14, and it is the half nobody expects — because the whole
+reason anyone reaches for a worktree is isolation.**
+
+> **`git checkout` / `git reset --hard` inside a worktree moves the branch ref
+> for EVERY worktree sharing the repository.** The files are private. The refs
+> are not.
+
+⚠️ **REFERENCE CASE — R5's merge, and it came one `git commit` away from
+undoing the entire item.** After merging PR #652 I was still standing on the
+retired branch, so `retire-branch.sh` correctly refused to delete the local copy
+("left in place — not claiming success"). To move off it I ran, IN MY WORKTREE:
+
+    git checkout -B main origin/main && git reset --hard origin/main
+
+That moved the SHARED `main` out from under `/opt/meddoc-pro`, which had `main`
+checked out. Its HEAD jumped to the merge commit; its FILES stayed at the
+previous one. `git status` there then showed 53 modified, 6 deleted — and **ten
+files staged as ADDED that were exactly R5's deletions**: `rx-tab.tsx`,
+`rx-warning-card.tsx`, `override-confirm-modal.tsx`, both `dev/rx-warnings`
+files, `rxGate.ts`, and E2E scenarios 24 and 25.
+
+**A `git commit` in that tree would have resurrected the whole deleted surface**
+— in a tree that looked superficially normal, minutes after the merge, with the
+deploy still ahead of it.
+
+### THE SAFE EXIT, AND THE REPAIR
+
+- **Leaving a branch you are retiring: `git checkout --detach` first.** It moves
+  no shared ref. Only then delete the branch.
+- **Repairing a tree whose HEAD moved under it: ESTABLISH WHAT IS TRUE BEFORE
+  CHOOSING A REPAIR.** `git diff --quiet <the commit the files should match>`
+  proved the working tree was byte-identical to where the other session left it,
+  so nothing uncommitted existed to lose — *then* the reset was safe. Capture
+  the staged-add list (`git diff --cached --name-only --diff-filter=A`) before
+  resetting, so the cleanup is computed rather than guessed.
+- ⚠️ **DO NOT REACH FOR `git clean` ON A TREE YOU HAVE JUST BROKEN.** It is the
+  instrument most likely to convert a recoverable ref confusion into permanent
+  loss, and at that moment you do not yet know what is untracked-and-precious
+  versus untracked-and-residue.
+
+This is the "restore from BACKUP, not from git" rule arriving one layer up: the
+question is not which command restores the file, it is **what was true before
+you touched anything**, established first and in writing.
 
 ## Branch cadence — standing rule
 
