@@ -11820,3 +11820,71 @@ verified back to 0 `always_include` after every dry-run.
 **Not deployed.** The declaration is written and the rollback tags are cut, but
 the diagnosis that motivated the item changed tonight, and a deploy decided on a
 corrected diagnosis is the owner's call, not a session's.
+
+## RC-1 SHIPS — THE OWNER'S RULINGS ON THE CORRECTED DIAGNOSIS — 2026-08-14
+
+**Four decisions, taken after the adversarial pass overturned #106's diagnosis.**
+
+### 1 · #107 STANDS · #106 AMENDED, NOT ERASED
+
+The amendment is written into #106's own row so the correction is legible where
+the claim was made. Its mechanism survives with a **truer justification**:
+
+> Statics are assembled not because a model *might* paraphrase them, but because
+> **no layer — stochastic or deterministic, model or normalizer — may rewrite a
+> doctor's authored bytes.**
+
+That form covers the failure that actually happened, and it is why the fix is
+structural rather than a stricter prompt.
+
+### 2 · BOTH LAYERS SHIP, AND EACH COVERS WHAT THE OTHER CANNOT
+
+| layer | covers |
+|---|---|
+| the one-liner — no normalizer touches doctor-AUTHORED text | **every** template, including the ones the migration does NOT reclassify, whose text still enters the prompt |
+| assembly | makes the class **structurally impossible** on reclassified sections |
+
+Scoped precisely, per the ruling: `defaultText`, statics, template prose — **and
+the doctor's own table COLUMN HEADERS**, found by sweeping every caller rather
+than fixing the reported one. `renderStructureDirective` was rewriting
+`REFLUX TIME (ms)` → `(seconds)`: the same defect one layer over. The unit
+concern it served is now **stated** in the cell discipline instead of applied to
+what the doctor wrote.
+
+⚠️ **Its application to DICTATED or MODEL values is untouched and recorded as
+its own question** — `reconcileMeasurementTables` (operates on model output) and
+`normalizeExtractedText` (ingest-time unicode/whitespace folding, which produces
+`defaultText` rather than editing it) are both out of tonight's scope, named
+here so the boundary is not re-derived.
+
+⚠️ **AND THE PARSE PATH COULD UNDO THE CLASSIFIER.** `appendMarkerLine`
+hardcodes `scaffold_confirm`, and both marker-reconciliation passes run AFTER
+classification — so a just-classified fixed block was downgraded the moment a
+dropped dropdown was restored into it. **On the owner's RE-UPLOAD path that is
+the fix undoing itself.** Sections are re-classified after reconciliation:
+anything that edits the text re-earns its mode.
+
+### 3 · CANON — TWO ENTRIES IN `AGENTS.md`
+
+- **"A well-chosen fixture disguises a wrong universe."** Pipeline proofs run in
+  production's flag set AND production's routes, with a per-route matrix.
+  Proving one builder proves one builder.
+- **"The adversarial pass is mandatory on the clinical generation path."**
+  Refutation over the finished diff, before merge, with draft-marking the PR at
+  the moment of doubt as the recorded companion move.
+
+### 4 · #108 ORDERED — CI RUNS IN THE PRODUCTION FLAG UNIVERSE
+
+`l4-golden-prompt` and `04-generate-soap` — 8 tests — are RED on `main` with
+`TRANSCRIBE_MD_EVIDENCE_ANCHORS=true`, the live worker's value. **The golden
+gate that guards the L4 prompt has never run against the prompt production
+builds.** Ordered now, built after RC-2; the 8 reds are triaged individually
+with evidence and **never absorbed** by a bulk re-baseline.
+
+### PROOF CARRIED FORWARD
+
+Mutations **M7** (header rewrite restored → 3 red, both routes) and **M8** (prose
+rewrite restored → 4 red, both routes), each proved on a gate that runs a
+**not-reclassified** template through **both** builders — the population the
+one-liner exists for. Suite 294 files / 3813 green with anchors OFF; anchors ON
+carries only #108's 8.
