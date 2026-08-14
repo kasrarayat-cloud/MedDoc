@@ -24,6 +24,26 @@
 #
 # Ingress note: host nginx owns 80/443. Nothing here touches Caddy or nginx.
 #
+# ⚠️ 4. THE TREE THIS RUNS IN IS A DEPLOY SURFACE, NOT A WORKSPACE.
+#      This script deploys `git rev-parse HEAD` OF THE TREE IT RUNS IN, and
+#      names its §2.5 declaration after that SHA. Run it from a checkout parked
+#      on somebody's feature branch and it ships THAT branch, under a
+#      declaration naming the wrong commit — which is worse than no declaration,
+#      because it looks like evidence.
+#
+#      ⚠️ AND YOU CANNOT SIDESTEP IT BY DEPLOYING FROM A WORKTREE. The prod
+#      compose carries RELATIVE bind mounts — `./Caddyfile`,
+#      `./infra/postgres-backup/postscript.sh`,
+#      `./infra/backup-offsite-sync.sh` — so `docker compose up` from another
+#      directory re-points the INGRESS CONFIG BIND at that directory. Reap the
+#      worktree afterwards and the bind dangles. Verified 2026-08-14: the live
+#      caddy container binds `/opt/meddoc-pro/Caddyfile` by absolute path.
+#
+#      So: `/opt/meddoc-pro` stays on `main` and clean. ALL feature work happens
+#      in an isolated `git worktree`. Two sessions sharing one working tree is a
+#      CLASS, not an incident — it produced two near-misses on 2026-08-14 in a
+#      single night, and both resolved only because somebody happened to look.
+#
 # Usage:  bash scripts/deploy-prod.sh [--skip-backup]
 # Exit:   0 = deployed · non-zero = aborted (nothing recreated)
 # ============================================================================

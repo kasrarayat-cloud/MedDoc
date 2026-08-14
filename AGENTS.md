@@ -1044,6 +1044,57 @@ to anyone consulting either document.
 That is why the fix shipped with `scripts/check-ingress-tls.sh` rather than with
 a corrected paragraph.
 
+## THE SHARED TREE IS A DEPLOY SURFACE, NOT A WORKSPACE
+
+**Standing 2026-08-14.** `/opt/meddoc-pro` stays on `main` and clean. **All
+feature work happens in an isolated `git worktree`.** A session that checks a
+branch out in the shared tree has moved a deploy surface, and that is now a
+named hazard rather than a matter of taste.
+
+> **Two sessions, one working tree, is a CLASS — not two incidents.**
+
+⚠️ **BOTH HALVES OF THE HAZARD ARE REAL AND NEITHER IS OBVIOUS.**
+
+**1 · `deploy-prod.sh` deploys the tree's HEAD, whatever it is.** It reads
+`git rev-parse HEAD` from the tree it runs in and names its §2.5 declaration
+after that SHA. Caught on 2026-08-14 with a deploy fully staged: the shared tree
+had been checked out to another session's `feat/rc2-…` branch at the previous
+commit, so the deploy would have shipped **the prior release without the change
+being deployed**, under a declaration naming the wrong commit. **A declaration
+naming the wrong commit is worse than no declaration, because it looks like
+evidence.**
+
+**2 · YOU CANNOT SIDESTEP IT BY DEPLOYING FROM A WORKTREE.** The obvious
+workaround is the more expensive mistake. `docker-compose.yml` carries RELATIVE
+bind mounts — `./Caddyfile`, `./infra/postgres-backup/postscript.sh`,
+`./infra/backup-offsite-sync.sh` — so `docker compose up` from another directory
+**re-points the ingress config bind at that directory**, and reaping the
+worktree afterwards leaves it dangling. Verified the same night: the running
+caddy container binds `/opt/meddoc-pro/Caddyfile` by absolute path. The
+worktree route trades a wrong-commit deploy for a broken ingress.
+
+**The two incidents that made it a class, both on 2026-08-14, both in one
+night:**
+
+| what collided | how it surfaced |
+|---|---|
+| one session's preflight report written beside another's uncommitted §2.5 declaration | noticed by hand; it could have muddied a `git status` cleanliness check mid-deploy |
+| a feature branch checked out under a fully-staged deploy | noticed by hand, one command before `deploy-prod.sh` |
+
+**Neither was caught by a check. Both were caught by somebody re-reading state
+they had no particular reason to re-read** — which is exactly the property you
+cannot schedule. Hence the rule instead: keep the deploy surface boring, and put
+the work somewhere that cannot reach it.
+
+⚠️ **AND THE COORDINATION MOVE IS TO ASK, NOT TO FIX IT YOURSELF.** The correct
+response to finding the shared tree on someone else's branch is to ask that
+session to move it — never `git checkout` under another actor. On 2026-08-14
+that ask paid for itself twice over: the other session, forced to commit before
+switching, read its staged file list and found a migration written to
+`apps/transcribe-md/packages/db/prisma/migrations/` — a path Prisma would never
+have read and `assert-migrations-applied` would never have known to look at. It
+would have surfaced in production as *"the column does not exist"*.
+
 ## A DEPLOY DECLARES ITS EXPECTED DELTA BEFORE IT RUNS
 
 **Standing part of the deploy standard — `docs/DEPLOYMENT_RUNBOOK.md` §2.5.**
