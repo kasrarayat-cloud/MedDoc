@@ -310,7 +310,7 @@ test.describe('the visit page is the document', () => {
   // exercised is still covered by the tap-to-edit test below, which drives the
   // SAME re-fill through an edit.
 
-  test('the E/M gate still renders, and signing is still reachable', async ({ page }) => {
+  test('NO Rx gate, and signing is still reachable', async ({ page }) => {
     test.setTimeout(300_000);
     await page.setViewportSize({ width: 1400, height: 1000 });
     await openVisit(page);
@@ -321,8 +321,19 @@ test.describe('the visit page is the document', () => {
     // dropped, because this test's title says "BOTH gates still render" and a
     // silently-removed line would leave the title lying.
     await expect(page.getByTestId('review-doc-rx-gate')).toHaveCount(0);
-    // The E/M gate is the one that still renders here.
-    await expect(page.getByTestId('review-doc-em-gate')).toBeVisible();
+    // ⚠️ AND THE CONTROL FOR THAT ZERO IS `expectSignatureReachable` BELOW, not
+    // a sibling gate. My first attempt asserted `review-doc-em-gate` visible
+    // here as a "positive control" and it reddened CI: that gate renders only
+    // when `emPendingChange` is set (`review-document-view.tsx:330`), and these
+    // visit-doc fixtures seed none — so it was never true on this page, on this
+    // branch or on main. A control has to be something you have CHECKED is
+    // present, not something that sounds like it ought to be.
+    //
+    // The walk is the better control anyway, and it was already here: it proves
+    // the surface rendered AND that the signature is reachable through it.
+    // I also had to rename this test — it was briefly titled "the E/M gate
+    // still renders", a claim it cannot make on a fixture with no pending
+    // change.
     // WAS: `expect(getByRole('button', /sign & download/i)).toBeVisible()` —
     // "the pinned bar is untouched". The bar is not pinned to this surface any
     // more and there is nothing to pin: the signature is Gate 3's child. The
@@ -819,11 +830,13 @@ test.describe('the visit page is the document', () => {
       // the converter down, what matters is that the signature is still
       // REACHABLE and still becomes LIVE, not merely that a button is painted.
       await expectSignatureReachable(page);
+      // The control for this zero is `expectSignatureReachable` immediately
+      // above — with the converter down, it proves the page rendered AND the
+      // signature works, so the zero is about a deleted gate rather than a
+      // surface that failed to load. (An `em-gate` visibility check stood here
+      // briefly and was wrong: that gate needs a pending E/M change, which this
+      // fixture does not seed.)
       await expect(page.getByTestId('review-doc-rx-gate')).toHaveCount(0);
-      // POSITIVE CONTROL — the surface rendered; the zero above is about a
-      // deleted gate, not about a page that failed to load with the converter
-      // down, which is precisely what this test is stressing.
-      await expect(page.getByTestId('review-doc-em-gate')).toBeVisible();
       expect(visitDocManifestCount()).toBe(0);
     } finally {
       converter('start');

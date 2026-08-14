@@ -44,6 +44,29 @@ interface Prescription {
   sig?: string | null;
   quantity?: string | null;
   refills?: string | null;
+  /**
+   * ⚠️ LOAD-BEARING, AND ITS ABSENCE WAS A DEFECT IN THE FIRST DRAFT OF THIS
+   * FILE. `visit-export.ts:415-419` appends an uppercase tag — `[DISCONTINUE]`,
+   * `[HOLD]`, `[INCREASE]` — to every prescription whose action is not `new`,
+   * into the signed PDF, the DOCX and the EHR clipboard. A card that omits it
+   * renders a STOP ORDER identically to a new start.
+   *
+   * That is worse than the defect this card was restored to fix. An absent
+   * medication list is content the doctor did not see; a list that shows a
+   * discontinue as if it were a new prescription is content that says the
+   * OPPOSITE of the record being signed.
+   *
+   * Measured on production when this was found: 44 of 53 prescription rows
+   * carry a non-`new` action — continue 33, hold 5, unclear 3, discontinue 2,
+   * increase 1. It is the common case, not the edge.
+   *
+   * ⚠️ TYPED AS A BARE STRING ON PURPOSE. The deleted component's union was
+   * `new | continue | increase | decrease | discontinue | unclear`, and
+   * production contains `hold` — a value that union never listed. The wire is
+   * the authority, so this renders whatever it is handed rather than switching
+   * on a closed set and silently dropping the member nobody enumerated.
+   */
+  action?: string | null;
 }
 
 interface RxBlob {
@@ -70,7 +93,33 @@ export function draftedPrescriptions(rx: unknown): Prescription[] {
   const list = blob?.prescriptions;
   // Model output persisted as jsonb. A malformed payload must render nothing
   // rather than throw and take the whole review surface down with it.
-  return Array.isArray(list) ? list.filter((p) => p && typeof p.drug === 'string') : [];
+  if (!Array.isArray(list)) return [];
+  // ⚠️ DROPS NOTHING THE EXPORT WOULD PRINT. This filtered
+  // `typeof p.drug === 'string'` until the field-parity arm caught it: the
+  // export's payload builder is a tolerant cast with no such check, so a
+  // prescription with no `drug` was PRINTED into the signed record and DROPPED
+  // from this card — one unseen medication, with every presence check green.
+  //
+  // The only rejection left is a non-object, which cannot be rendered at all.
+  // A missing name is shown AS missing rather than silently removed: a doctor
+  // can act on "this row has no drug name", and cannot act on a row that is
+  // not there.
+  return list.filter((p): p is Prescription => !!p && typeof p === 'object');
+}
+
+/**
+ * The tag the EXPORT would print for this action, or null when it prints none.
+ *
+ * Mirrors `prescriptionOneLine`'s rule exactly — `action !== 'new'` — so the
+ * card and the signed record cannot disagree about which prescriptions carry
+ * one. `gate-exported-medications-are-seen.test.ts` asserts the two agree
+ * across every action value production actually holds.
+ */
+export function actionTag(action?: string | null): string | null {
+  if (typeof action !== 'string') return null;
+  const a = action.trim();
+  if (a === '' || a.toLowerCase() === 'new') return null;
+  return a.toUpperCase();
 }
 
 export function PrescriptionsCard({ rx }: { rx: unknown }) {
@@ -91,7 +140,12 @@ export function PrescriptionsCard({ rx }: { rx: unknown }) {
           {list.map((rxItem, i) => (
             <li key={`${rxItem.drug}-${i}`} className="qm-rx-item">
               <div className="qm-rx-name">
-                {rxItem.drug}
+                {typeof rxItem.drug === 'string' && rxItem.drug.trim() !== '' ? (
+                  rxItem.drug
+                ) : (
+                  /* Named as missing, never omitted — see draftedPrescriptions. */
+                  <span data-testid="review-doc-rx-unnamed">(no drug name)</span>
+                )}
                 {rxItem.strength ? ` ${rxItem.strength}` : ''}
                 {rxItem.form ? ` ${rxItem.form}` : ''}
               </div>
@@ -101,6 +155,15 @@ export function PrescriptionsCard({ rx }: { rx: unknown }) {
                     "the model did not say" are different clinical claims. */}
                 <span>Qty {rxItem.quantity ?? '—'}</span>
                 <span>Refills {rxItem.refills ?? '—'}</span>
+                {/* SAME RULE AS THE EXPORT, deliberately: shown when the action
+                    is not `new`, because NEW is implied by context on a fresh
+                    note (`visit-export.ts:415-418`). Divergence here is the
+                    whole defect class this card exists for. */}
+                {actionTag(rxItem.action) ? (
+                  <span className="qm-rx-action" data-testid="review-doc-rx-action">
+                    {actionTag(rxItem.action)}
+                  </span>
+                ) : null}
               </div>
             </li>
           ))}

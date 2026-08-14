@@ -6185,6 +6185,9 @@ body {
 .qm-rx-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .qm-rx-item { padding: 8px 0; border-bottom: 1px solid var(--color-linear-border); }
 .qm-rx-item:last-child { border-bottom: 0; padding-bottom: 0; }
+/* The action tag. Legible, not alarming — a DISCONTINUE is information, not a
+   warning, and this card carries no advisory chrome by ruling #109. */
+.qm-rx-action { color: var(--color-linear-text-2); letter-spacing: 0.04em; }
 .qm-rx-name { font-size: 13.5px; font-weight: 600; color: var(--color-linear-text); }
 .qm-rx-sig { margin-top: 2px; font-size: 12.5px; color: var(--color-linear-text-2); line-height: 1.5; }
 .qm-rx-meta {

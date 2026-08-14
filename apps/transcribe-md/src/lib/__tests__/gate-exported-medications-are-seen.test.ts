@@ -27,7 +27,11 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-import { hasDraftedPrescriptions } from '@/app/visits/[id]/prescriptions-card';
+import {
+  actionTag,
+  draftedPrescriptions,
+  hasDraftedPrescriptions,
+} from '@/app/visits/[id]/prescriptions-card';
 
 /** The export's own condition, read off `ehr-formatters.ts:rxSection` —
  *  `if (data.prescriptions.length === 0) return []`. Mirrored here rather than
@@ -69,6 +73,76 @@ describe('the export and the pre-sign surface agree about medications', () => {
     // lie and the biconditional above starts proving something else.
     const src = readFileSync('src/lib/ehr-formatters.ts', 'utf8');
     expect(src).toContain('if (data.prescriptions.length === 0) return [];');
+  });
+
+  // ── FIELD PARITY, not merely presence ──────────────────────────────────
+  //
+  // ⚠️ THE PRESENCE CHECK ABOVE IS WHAT LET THE SECOND DEFECT THROUGH, and the
+  // second was worse than the first. The card was restored, the biconditional
+  // was green, and the card still had no `action` field — while
+  // `visit-export.ts:415-418` appends `[DISCONTINUE]`, `[HOLD]`, `[INCREASE]`
+  // to every prescription whose action is not `new`.
+  //
+  // So a STOP ORDER rendered on screen identically to a new start, and the
+  // signed PDF said the opposite. An absent list is content the doctor did not
+  // see; a list that contradicts the record is content that misleads them.
+  //
+  // Measured when it was found: 44 of 53 production prescription rows carry a
+  // non-`new` action (continue 33, hold 5, unclear 3, discontinue 2,
+  // increase 1). The common case, not the edge.
+  //
+  // "Both sides render medications" is therefore too weak a claim to be worth
+  // asserting. What follows is per-field.
+  describe('the card and the export agree FIELD BY FIELD, not just in presence', () => {
+    // Every action production actually holds, plus the two the deleted
+    // component's union listed that production has not yet produced, plus the
+    // shapes the wire can carry but nobody typed.
+    const ACTIONS = [
+      'new', 'continue', 'increase', 'decrease', 'discontinue', 'unclear',
+      'hold',            // ⚠️ IN PRODUCTION, and absent from the old union
+      'NEW', ' new ',    // case / whitespace — must still count as "no tag"
+      '', null, undefined, 42,
+    ];
+
+    it.each(ACTIONS.map((a) => [JSON.stringify(a), a]))(
+      'action %s — the card tags it exactly when the export would',
+      (_label, action) => {
+        // The export's rule, transcribed from prescriptionOneLine:
+        //   if (rx.action !== 'new') parts.push(`[${rx.action.toUpperCase()}]`)
+        const exportTags =
+          typeof action === 'string' && action.trim() !== '' && action.trim().toLowerCase() !== 'new';
+        expect(actionTag(action as string | null | undefined) !== null).toBe(exportTags);
+      },
+    );
+
+    it('and the tag TEXT matches what the export prints', () => {
+      // Not just "both show something" — the same word. A card reading
+      // "STOPPED" against an export reading "[DISCONTINUE]" is two records.
+      expect(actionTag('discontinue')).toBe('DISCONTINUE');
+      expect(actionTag('hold')).toBe('HOLD');
+      expect(actionTag('increase')).toBe('INCREASE');
+      expect(actionTag('new')).toBeNull();
+    });
+
+    it('⚠️ NO PRESCRIPTION IS DROPPED BY THE CARD THAT THE EXPORT PRINTS', () => {
+      // THE ROW THAT WAS MISSING, and it fails on the branch as first written.
+      // The card filters `typeof p.drug === 'string'`; the export's payload
+      // builder is a tolerant cast with no such check. A prescription whose
+      // `drug` is absent is therefore PRINTED into the signed record and
+      // DROPPED from the card — one unseen medication, with the booleans above
+      // all agreeing.
+      const blob = {
+        prescriptions: [
+          { drug: 'Amoxicillin', action: 'new' },
+          { strength: '500 mg', action: 'discontinue' }, // no `drug`
+        ],
+      };
+      expect(
+        draftedPrescriptions(blob).length,
+        'the card drops a prescription the export prints — that is an unseen ' +
+          'medication in a signed record, which is this gate\'s entire subject',
+      ).toBe(blob.prescriptions.length);
+    });
   });
 
   it('the pre-sign surface actually MOUNTS the card', () => {

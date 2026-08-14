@@ -85,11 +85,50 @@ describe('the drafted medication list is SHOWN, because the export prints it', (
   it('a MALFORMED payload renders nothing rather than throwing', () => {
     // Model output persisted as jsonb. A bad payload must not take the whole
     // pre-sign review surface down with it.
-    for (const bad of [42, 'nonsense', { prescriptions: 'no' }, { prescriptions: [null, {}] }]) {
+    for (const bad of [42, 'nonsense', { prescriptions: 'no' }, { prescriptions: [] }]) {
       expect(() => draftedPrescriptions(bad)).not.toThrow();
       const { container } = render(<PrescriptionsCard rx={bad} />);
       expect(container.firstChild).toBeNull();
     }
+  });
+
+  it('⚠️ A ROW THE EXPORT WOULD PRINT IS RENDERED, however thin it is', () => {
+    // ⚠️ THIS TEST CHANGED MEANING, AND THE CHANGE IS THE SAFER DIRECTION.
+    // `{ prescriptions: [null, {}] }` used to be listed above as "malformed,
+    // renders nothing", because the card filtered `typeof p.drug === 'string'`.
+    // The field-parity arm in `gate-exported-medications-are-seen` showed that
+    // filter was a DEFECT: the export's payload builder has no such check, so
+    // a `drug`-less row was printed into the signed PDF and dropped from the
+    // card — an unseen medication with every presence assertion green.
+    //
+    // Now it renders, and says what is wrong with it. A doctor can act on
+    // "this row has no drug name"; they cannot act on a row that is not there.
+    render(<PrescriptionsCard rx={{ prescriptions: [null, {}] }} />);
+    expect(screen.getByTestId('review-doc-prescriptions')).toBeTruthy();
+    expect(screen.getByTestId('review-doc-rx-unnamed')).toBeTruthy();
+    // The `null` entry is still dropped — it cannot be rendered at all, and the
+    // export cannot print it either.
+    expect(screen.getAllByTestId('review-doc-rx-unnamed')).toHaveLength(1);
+  });
+
+  it('the action tag is shown for every non-new action, and never for new', () => {
+    // The export appends `[DISCONTINUE]` and friends to the signed record
+    // (`visit-export.ts:415-418`). A card without it renders a stop order
+    // identically to a new start — worse than omitting the list, because it
+    // says the opposite of the record being signed.
+    render(
+      <PrescriptionsCard
+        rx={{
+          prescriptions: [
+            { drug: 'Warfarin', action: 'discontinue' },
+            { drug: 'Lisinopril', action: 'new' },
+          ],
+        }}
+      />,
+    );
+    const tags = screen.getAllByTestId('review-doc-rx-action');
+    expect(tags).toHaveLength(1);
+    expect(tags[0].textContent).toBe('DISCONTINUE');
   });
 
   it('an absent quantity is an em-dash, NEVER a fabricated 0', () => {
