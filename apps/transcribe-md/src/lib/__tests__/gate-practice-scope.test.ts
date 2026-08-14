@@ -108,7 +108,22 @@ const SYSTEM_PATHS = ['src/worker/', 'src/lib/template-twin/', 'src/worker.ts'] 
  * genuinely user-less. Measured 2026-08-06.
  */
 const SYSTEM_ALLOWLIST: Record<string, number> = {
-  'src/lib/template-twin/create-draft.ts': 1,
+  // 1 → 2 on 2026-08-14, RC-2 (#106(b)): the ATTACH-TARGET lookup.
+  // ⚠️ DECLARED, AND IT IS THE OPPOSITE CLASS FROM THE OTHER READ IN THIS
+  // FILE. The existing one is the system-default template — genuinely
+  // tenant-less, global by design. This one is the reverse: it reads the
+  // note template the caller is asking to attach a compiled twin version
+  // to, and it is bounded by `templateScope(asPracticeId(actor.practiceId))`
+  // — the accessor, not a hand-written predicate — precisely so a compiled
+  // version can never be bound to another practice's row.
+  //
+  // It sits in the SYSTEM bucket only because `isSystem` classifies by PATH
+  // (`src/lib/template-twin/`) before it looks at scoping, so no amount of
+  // correct scoping moves it. That is the classifier being conservative in
+  // the safe direction — a false 'system' costs a declared line, a false
+  // 'scoped' would cost a leak — so the line is written rather than the
+  // classifier loosened.
+  'src/lib/template-twin/create-draft.ts': 2,
   'src/lib/template-twin/fill-engine.ts': 1,
   'src/lib/template-twin/native-export.ts': 1,
   'src/lib/template-twin/synthetic-test.ts': 1,

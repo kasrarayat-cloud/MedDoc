@@ -154,6 +154,12 @@ export async function saveNoteTemplateAction(
   // file byte-for-byte. The doctor edited the parsed text; the file it was
   // parsed from is unchanged.
   let sourceRef: { objectKey: string; sha256: string } | null = null;
+  // ⚠️ NEW UPLOAD, not merely 'has a source'. A version bump CARRIES the ref
+  // forward (see below), so keying compile-on-upload off `sourceRef` alone
+  // would re-compile the same bytes on every subsequent edit — a fresh twin
+  // lineage per keystroke-save, none of them asked for. The twin is compiled
+  // once, for the request that actually brought the file.
+  let isNewUpload = false;
   if (existing) {
     sourceRef =
       existing.sourceObjectKey && existing.sourceSha256
@@ -179,6 +185,7 @@ export async function saveNoteTemplateAction(
       };
     }
     sourceRef = { objectKey: claimed.objectKey, sha256: claimed.sha256 };
+    isNewUpload = true;
   }
 
   try {
@@ -240,6 +247,73 @@ export async function saveNoteTemplateAction(
       });
       return { id: created.id, status };
     });
+
+    // ── RC-2 (#106(b)) — COMPILE ON UPLOAD. THE DOOR. ─────────────────────
+    //
+    // ⚠️ THIS IS THE WHOLE ITEM. The twin compiler has existed and worked for
+    // months; its ONLY caller was `template-twin-certify.ts`, reached from
+    // `NativeTemplateManager`, which renders **null** in production because
+    // `NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true`. So prod holds zero compiled
+    // versions — not because the gate refused, but because nothing could knock.
+    // AGENTS.md records the symptom ("there is therefore no door in"); this is
+    // the door.
+    //
+    // It ATTACHES to the template just written rather than minting one, so the
+    // doctor ends up with their template, not their template and a shadow.
+    //
+    // ⚠️ IT CAN NEVER FAIL THE SAVE. Same contract as the PDF carry-forward
+    // below: the transaction is already committed, the doctor's note format is
+    // already theirs, and the twin is a PARKED capability. A compile failure
+    // must cost a log line, never the doctor's upload. But it is NOT
+    // fire-and-forget — it is awaited and its outcome recorded, because a side
+    // effect nothing reads back is a comment (AGENTS.md, the fire-and-forget
+    // rule), and `attemptedTwinCompile` is what the reachability test asserts.
+    let twinCompile: 'skipped' | 'compiled' | 'failed' = 'skipped';
+    if (isNewUpload && sourceRef) {
+      try {
+        const [{ createTemplateTwinDraft }, { createTemplateTwinArtifactStore }] =
+          await Promise.all([
+            import('@/lib/template-twin/create-draft'),
+            import('@/lib/template-twin/storage'),
+          ]);
+        const store = createTemplateTwinArtifactStore();
+        // ⚠️ THE DIGEST IS REQUIRED BY THE READ, AND THAT IS THE POINT OF
+        // HAVING STORED IT. A key alone cannot prove the object still holds
+        // what was uploaded; `readUploadArtifact` verifies against this and
+        // refuses a mismatch, so the twin can never be compiled from bytes
+        // that are not the doctor's file.
+        const bytes = await store.readUploadArtifact({
+          objectKey: sourceRef.objectKey,
+          practiceId: session.user.practiceId,
+          expectedSha256: sourceRef.sha256,
+        });
+        const compiled = await createTemplateTwinDraft({
+          source: new Uint8Array(bytes),
+          actor: {
+            userId: doctorId,
+            userEmail: session.user.email,
+            practiceId: session.user.practiceId,
+          },
+          attachToNoteTemplateId: result.id,
+        });
+        twinCompile = 'compiled';
+        console.info(
+          `[template-twin:compile-on-upload] template=${result.id} ` +
+            `fields=${compiled.fieldCount} blocking=${compiled.blockingUnsupportedCount} ` +
+            `fallbackMappings=${compiled.usedFallbackMappings}`,
+        );
+      } catch (error) {
+        // Loud, and non-fatal. The `.docx` itself is already kept (RC-2 part 1),
+        // so a failed compile loses nothing that was not already recoverable —
+        // which is precisely why part 1 had to land before this.
+        twinCompile = 'failed';
+        console.warn(
+          `[template-twin:compile-on-upload] template=${result.id} FAILED — ` +
+            'the upload is saved and the source .docx is kept; the twin was not ' +
+            `compiled: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
 
     // Durable PDF-native cert — a re-upload/re-activation of the SAME flat-PDF
     // form mints a new id; carry a prior cert forward so native export never
