@@ -12394,3 +12394,45 @@ both would be a stricter floor and a worse product. Mutation-proved: re-admit
 `83d22d01` GI 17/17 · `f975b0cf` CPT rider 15/15 · `2b527509` ICD 16/16, plus
 RC-1's `833a6f2d` 17/17 from the parallel session. No clinical row moved in any
 of them, and no patient record was touched by any verification.
+
+### ⚠️ AND THAT DEPLOY SHIPPED R5 TOO — A DECLARATION IS BOUND TO A CHANGE, NOT TO A DEPLOY
+
+**Found by the RC-1/R5 session after the fact, verified independently here.**
+`636e69a3` (R5 — the Prescription Safety deletion) is an ANCESTOR of
+`2b527509`. So the ICD deploy carried R5 into production with it. That is
+correct behaviour — `main` was deployed, which is what `main` is for — but it
+means the deploy's payload was strictly larger than the declaration's scope.
+
+> **A §2.5 declaration is bound to a CHANGE. A deploy ships a TREE. When two
+> changes reach `main` before either ships, the deploy discharges only the
+> declaration whose author ran the comparison — the other is silently left
+> unjudged unless somebody notices.**
+
+⚠️ **NOTHING IN EITHER DECLARATION WOULD HAVE SURFACED IT.** The ICD
+declaration's sixteen rows are all about ICD codes and the clinical counts; not
+one of them could detect an R5 regression. R5's own declaration was written
+before its act — so its timestamp provably precedes the rows and it could not be
+tuned to an outcome — but it ran as a POST-DEPLOY verification rather than as
+the gate of the deploy that actually shipped it. Both halves were done well;
+the seam between them is the finding.
+
+**Discharged:** the R5 session ran its full comparison against the running stack
+and every declared quantity matched
+(`docs/deploy-reports/r5-post-deploy-verification-20260814.md`). Confirmed
+independently from this side, in the SHIPPED containers with controls:
+`rx-tab.tsx` / `rx-warnings-rail.tsx` / `override-confirm-modal.tsx` = **0**,
+`prescriptions-card.tsx` = **1**, `OVERRIDE_REQUIRED` in the built bundle =
+**0**, positive control `Gastroenterology` = **4**, and a traversal control of
+50 `.tsx` files proving the search entered the tree at all.
+
+⚠️ **THE FIRST VERSION OF THAT CHECK WAS BROKEN AND SAID SO ONLY BECAUSE OF THE
+CONTROL.** Run against the APP container it returned **0 for the file that must
+be gone AND 0 for the file that must exist** — the app image ships a BUILT Next
+app, not a source tree, so the path did not resolve. Two zeroes with opposite
+meanings is a broken instrument, not two findings. The positive control is the
+only thing that distinguished them.
+
+**The habit that follows:** when more than one change is queued on `main`,
+either deploy them separately so each declaration gates its own act, or write a
+declaration that names the FULL diff being shipped. "I deployed `main`" is not
+the same claim as "I judged what I deployed".
