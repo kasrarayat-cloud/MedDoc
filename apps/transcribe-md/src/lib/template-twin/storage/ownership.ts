@@ -50,6 +50,14 @@ export function parseTemplateTwinArtifactKey(
       return { practiceId, kind: 'source', sha256 };
     }
 
+    if (category === 'uploads') {
+      // Both middle segments are the uploadId — see createUploadArtifactKey.
+      const uploadId = assertOpaqueId(parts[4] ?? '', 'uploadId');
+      if (parts[5] !== uploadId) return null;
+      assertOpaqueId(parts[6] ?? '', 'artifactId');
+      return { practiceId, kind: 'upload', sha256 };
+    }
+
     if (category === 'outputs') {
       assertOpaqueId(parts[4] ?? '', 'visitId');
       assertSha256(parts[5] ?? '', 'manifestSha256');

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import {
   createOutputArtifactKey,
   createSourceArtifactKey,
+  createUploadArtifactKey,
   DOCX_MIME_TYPE,
   resolveTemplateTwinBucket,
   type TemplateTwinArtifactKind,
@@ -88,6 +89,13 @@ export interface StoreSourceArtifactInput {
   bytes: Buffer | Uint8Array;
 }
 
+export interface StoreUploadArtifactInput {
+  practiceId: string;
+  /** Opaque id minted per upload attempt — NOT a template id. */
+  uploadId: string;
+  bytes: Buffer | Uint8Array;
+}
+
 export interface StoreOutputArtifactInput {
   practiceId: string;
   visitId: string;
@@ -106,6 +114,10 @@ export interface TemplateTwinArtifactStore {
   readonly bucket: string;
   storeSourceArtifact(input: StoreSourceArtifactInput): Promise<StoredTemplateTwinArtifact>;
   storeOutputArtifact(input: StoreOutputArtifactInput): Promise<StoredTemplateTwinArtifact>;
+  /** RC-2 (#106(b)): keep the doctor's original bytes BEFORE extraction, when
+   *  no template — and therefore no lineage or version — exists yet. */
+  storeUploadArtifact(input: StoreUploadArtifactInput): Promise<StoredTemplateTwinArtifact>;
+  readUploadArtifact(input: ReadArtifactInput): Promise<Buffer>;
   readSourceArtifact(input: ReadArtifactInput): Promise<Buffer>;
   readOutputArtifact(input: ReadArtifactInput): Promise<Buffer>;
 }
@@ -429,6 +441,18 @@ export function createTemplateTwinArtifactStore(
       });
       return putOnce({ objectKey, bytes, digest, kind: 'source' });
     },
+    async storeUploadArtifact(
+      input: StoreUploadArtifactInput
+    ): Promise<StoredTemplateTwinArtifact> {
+      const bytes = asBuffer(input.bytes);
+      const digest = sha256(bytes);
+      const objectKey = createUploadArtifactKey({
+        practiceId: input.practiceId,
+        uploadId: input.uploadId,
+        sha256: digest,
+      });
+      return putOnce({ objectKey, bytes, digest, kind: 'upload' });
+    },
     async storeOutputArtifact(
       input: StoreOutputArtifactInput
     ): Promise<StoredTemplateTwinArtifact> {
@@ -448,6 +472,9 @@ export function createTemplateTwinArtifactStore(
     },
     readOutputArtifact(input: ReadArtifactInput): Promise<Buffer> {
       return readVerified(input, 'output');
+    },
+    readUploadArtifact(input: ReadArtifactInput): Promise<Buffer> {
+      return readVerified(input, 'upload');
     },
   });
 }

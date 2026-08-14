@@ -2465,6 +2465,29 @@ model NoteTemplate {
   /// the twin tables (template_twin_source_artifacts.lineageId), never here.
   templateTwinCompiledVersion TemplateTwinCompiledVersion?
 
+  /// RC-2, ruling #106(b) — THE UPLOADED FILE IS A KEPT ARTIFACT.
+  ///
+  /// ⚠️ THIS SUPERSEDES THE "no column on note_templates" STANCE STATED
+  /// DIRECTLY ABOVE, AND THE TWO ARE LEFT SIDE BY SIDE ON PURPOSE. That stance
+  /// was right about the TWIN BINDING, which is a lineage the twin tables own.
+  /// It was never a claim that the doctor's ORIGINAL FILE should be discarded —
+  /// and discarded is what happened: every `.docx` uploaded through
+  /// Settings → My Note Format had its text extracted and its bytes dropped, so
+  /// one customer's logo and letterhead stopped existing at upload and are
+  /// recoverable from nothing we hold.
+  ///
+  /// Object key in the private template-artifact bucket, written BEFORE
+  /// extraction so a failed parse can no longer destroy the only copy. NULL for
+  /// every template created before RC-2, and for any created by paste rather
+  /// than upload — absence means "we do not have the file", never "the file is
+  /// somewhere else".
+  sourceObjectKey String?
+
+  /// SHA-256 of those bytes, lowercase hex. Stored beside the key because a key
+  /// alone cannot prove the object still holds what was uploaded; the read path
+  /// verifies against this and refuses a mismatch.
+  sourceSha256 String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

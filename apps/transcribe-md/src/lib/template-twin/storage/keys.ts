@@ -6,7 +6,27 @@ export const DOCX_MIME_TYPE =
 export const DEFAULT_TEMPLATE_TWIN_BUCKET =
   'transcribe-md-template-artifacts';
 
-export type TemplateTwinArtifactKind = 'source' | 'output';
+/**
+ * ⚠️ `upload` IS NOT A TWIN ARTIFACT, AND IT LIVES HERE ANYWAY — deliberately.
+ *
+ * RC-2 (ruling #106(b)) keeps the doctor's original `.docx` from the moment it
+ * is received, BEFORE extraction, so a failed parse can no longer destroy the
+ * only copy. At that moment there is no template, no lineage and no version —
+ * the row is created later — so it cannot use the `source` key shape, which
+ * asserts all three.
+ *
+ * It reuses this module rather than growing a parallel store because the parts
+ * that matter are identical: the same private bucket, the same practice-scoped
+ * prefix, the same tenant-ownership parsing, the same digest-verified put. A
+ * second store would drift from this one on the day either is fixed.
+ *
+ * ⚠️ AND IT IS A DISTINCT CATEGORY, NOT A SYNTHETIC LINEAGE. Filing pre-template
+ * bytes under `sources/` with an invented lineage id would make them
+ * indistinguishable from real twin sources to every sweep and ownership check
+ * that reads this namespace — a category error that is cheap to avoid now and
+ * expensive to unpick later.
+ */
+export type TemplateTwinArtifactKind = 'source' | 'output' | 'upload';
 
 const SAFE_OPAQUE_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -83,6 +103,34 @@ export function createSourceArtifactKey({
   const objectId = assertOpaqueId(idFactory(), 'artifactId');
   const digest = assertSha256(sha256);
   return `${prefix}/sources/${lineage}/v${templateVersion}/${objectId}/${digest}.docx`;
+}
+
+export interface CreateUploadArtifactKeyInput {
+  practiceId: string;
+  /** Opaque id minted per upload attempt. NOT a template id — no template
+   *  exists yet, which is the entire reason this key shape is needed. */
+  uploadId: string;
+  sha256: string;
+}
+
+/**
+ * `practices/<practiceId>/template-twin/uploads/<uploadId>/<sha256>.docx`
+ *
+ * Eight segments, like its siblings, so `parseTemplateTwinArtifactKey` keeps one
+ * shape to reason about. The `uploadId` segment is repeated as the artifact-id
+ * position because an upload IS its own artifact: there is nothing else to
+ * disambiguate it by, and a second random id would suggest a grouping that does
+ * not exist.
+ */
+export function createUploadArtifactKey({
+  practiceId,
+  uploadId,
+  sha256,
+}: CreateUploadArtifactKeyInput): string {
+  const prefix = templateTwinTenantPrefix(practiceId);
+  const upload = assertOpaqueId(uploadId, 'uploadId');
+  const digest = assertSha256(sha256);
+  return `${prefix}/uploads/${upload}/${upload}/${digest}.docx`;
 }
 
 export interface CreateOutputArtifactKeyInput {
