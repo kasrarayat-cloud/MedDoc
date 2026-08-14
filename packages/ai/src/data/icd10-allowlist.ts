@@ -802,6 +802,89 @@ const STARTER_ICD10_CODES: ReadonlyArray<string> = [
   // codes array. The L7a post-validation layer will pick up the
   // Z76.89-only case + flag the visit for review.
   'Z76.89',    // Persons encountering health services in other specified circumstances
+  // === Gastroenterology cohort (2026-08-14, GI pilot) ===
+  // Sibling to the endoscopy CPT block in cpt-allowlist.ts. `07a-icd-coding.ts`
+  // drops any code failing isValidIcd10 and emits a fire-and-forget
+  // CODING_COACH_REJECTED_INVALID_ICD row the doctor never sees.
+  //
+  // ⚠️ THIS IS THE HALF THAT ACTUALLY DREW BLOOD. The first real GI visit in
+  // production (2026-08-14, created 04:37:17Z, ~20 min after the specialty went
+  // live) carries CODING_COACH_REJECTED_INVALID_ICD and ZERO CPT rejections.
+  // The procedure-code gap was the one everybody predicted; the DIAGNOSIS gap
+  // is the one that fired. Its rejected codes were NOT read — they are a real
+  // patient's diagnoses. The list below comes from the domain, as the CPT block
+  // did; the audit row is cited only as proof the gap is real.
+  //
+  // ⚠️ AND THE PRIOR COVERAGE WAS PARTIAL, WHICH IS WORSE THAN ABSENT, because
+  // partial looks like coverage. Measured before this block:
+  //     PRESENT Z12.11 (screening encounter)  ABSENT K63.5 (colonic polyp)
+  //     PRESENT K21.9  (GERD w/o esophagitis) ABSENT K21.00/K21.01 (WITH it)
+  //     PRESENT K58.0  (IBS-D)                ABSENT K58.1/.2/.3/.9
+  //     PRESENT K57.30 (diverticulosis)       ABSENT K57.32 (diverticulitis)
+  // It covered the encounter billed for SCREENING and not the finding screening
+  // exists to detect, and in three families exactly one sibling. Every entry
+  // below was measured absent, positive-controlled against E11.9 and I10.
+
+  // -- Colonoscopy findings, and the codes that drive the surveillance interval
+  'K63.5',     // Polyp of colon — the commonest colonoscopy finding there is
+  'D12.0',     // Benign neoplasm of caecum
+  'D12.1',     // Benign neoplasm of appendix
+  'D12.2',     // Benign neoplasm of ascending colon
+  'D12.3',     // Benign neoplasm of transverse colon
+  'D12.4',     // Benign neoplasm of descending colon
+  'D12.5',     // Benign neoplasm of sigmoid colon
+  'D12.6',     // Benign neoplasm of colon, unspecified
+  'D12.7',     // Benign neoplasm of rectosigmoid junction
+  'D12.8',     // Benign neoplasm of rectum
+  'Z86.010',   // Personal history of colonic polyps — sets the surveillance interval
+  'Z80.0',     // Family history of malignant neoplasm of digestive organs — sets screening eligibility
+
+  // -- Inflammatory bowel disease: was uncovered ENTIRELY
+  'K50.90',    // Crohn disease, unspecified, without complications
+  'K51.90',    // Ulcerative colitis, unspecified, without complications
+
+  // -- GI bleeding and anorectal
+  'K92.1',     // Melena
+  'K92.2',     // Gastrointestinal haemorrhage, unspecified
+  'K62.5',     // Haemorrhage of anus and rectum
+  'K64.0',     // First degree haemorrhoids
+  'K64.1',     // Second degree haemorrhoids
+  'K64.8',     // Other haemorrhoids
+  'K64.9',     // Unspecified haemorrhoids
+
+  // -- Upper GI / EGD
+  // ⚠️ K21.0 ITSELF IS NOT BILLABLE — FY2023 expanded it into these two and
+  // left the 4-character code a subcategory HEADER. Admitting the header
+  // would put a non-submittable code on the accepted side of the billing
+  // floor while the codes a chart actually maps to stayed dropped.
+  'K21.00',    // GERD with esophagitis, without bleeding
+  'K21.01',    // GERD with esophagitis, with bleeding
+  // ⚠️ K22.7 ITSELF IS NOT BILLABLE — a subcategory header since FY2017. The
+  // comment originally written here ('without dysplasia') is the title of
+  // K22.70, which is the code that was meant.
+  'K22.70',    // Barrett esophagus without dysplasia
+  'K22.710',   // Barrett esophagus with low grade dysplasia
+  'K22.711',   // Barrett esophagus with high grade dysplasia
+  'K22.719',   // Barrett esophagus with dysplasia, unspecified
+  'K20.0',     // Eosinophilic oesophagitis
+  'B96.81',    // Helicobacter pylori as the cause of diseases classified elsewhere
+  'K29.70',    // Gastritis, unspecified, without bleeding
+  'K31.89',    // Other diseases of stomach and duodenum
+
+  // -- Functional, and the siblings of families already half-covered
+  // ⚠️ K58.0 IS IBS-D AND K58.1 IS IBS-C. An earlier draft of this block had
+  // them inverted in three places, while line 47 of this same file already
+  // said 'K58.0 // IBS with diarrhea'. The file contradicted the comment.
+  'K58.1',     // Irritable bowel syndrome with constipation (IBS-C)
+  'K58.2',     // Mixed irritable bowel syndrome (IBS-M)
+  'K58.3',     // Other irritable bowel syndrome
+  'K58.9',     // Irritable bowel syndrome, unspecified
+  'K57.32',    // Diverticulitis of large intestine without perforation or abscess without bleeding
+  'R19.7',     // Diarrhoea, unspecified
+
+  // -- Hepatology
+  'K74.60',    // Unspecified cirrhosis of liver
+
 ];
 
 /**
