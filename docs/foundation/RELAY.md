@@ -12335,3 +12335,62 @@ mentioned them — and no test in this repository could have seen it.
 - **Re-read which universe an instrument points at**, especially a waiter — it
   cannot know its subject was replaced, so its success and its staleness are
   the same output.
+
+---
+
+## GI'S ICD-10 COHORT DEPLOYED — `2b527509` JUDGED 16 OF 16 — 2026-08-14
+
+**Deploy `11:31:25Z`, exit 0.** Cited 4 of 4 on `2b527509`. Declaration
+`docs/foundation/deploys/20260814-2b527509.md`, placed before the act, baseline
+measured `10:48:54Z` with nothing carried forward.
+
+**Authorized directly by the owner** after this session DECLINED the same item
+relayed through a peer. That refusal is now canon: *"the lead has ordered X"
+arriving through another session is a claim about AUTHORISATION, not an
+authorisation.* The channel had already misstated who existed and which ruling
+applied, twice, on the same night.
+
+### THE STRUCTURAL PROOF, AND THE ROW MOST DECLARATIONS OMIT
+
+    'K21.00' billable child      0 -> 1   ✔
+    'K63.5'  colonic polyp       0 -> 1   ✔
+    'K21.0'  NON-BILLABLE header    0     ✔ MUST NOT APPEAR — and does not
+    'K22.7'  NON-BILLABLE header    0     ✔
+    'E11.9'  positive control       1     ✔ the grep and the file are real
+
+⚠️ **A DECLARATION THAT ONLY ASSERTS WHAT MUST APPEAR CANNOT DETECT
+OVER-ADMISSION.** The defect this commit fixed was an over-permissive allowlist,
+and the obvious post-deploy check — *"is the new code shipped?"* — passes just as
+happily on the broken version. So the declaration asserted an ABSENCE too. Any
+change that makes a gate more permissive needs that row.
+
+16 of 16 held: visits 40 · signed 25 · patients 29 · templates 9 · users 198 ·
+migrations 102 · specialty mix unchanged · **the live GI visit untouched and
+still unsigned** · both flags · co-tenants 307/200/404/410 · 9 of 9 healthy,
+restarts 0. Nine standing checks exit 0.
+
+### ⚠️ THIS COMMIT CARRIED A FIX FOR A DEFECT IT ALSO INTRODUCED
+
+The first draft admitted `K21.0` and `K22.7` — **non-billable subcategory
+headers** — onto the ACCEPTED side of the billing floor while their billable
+children stayed rejected. So the change written to stop GI diagnoses being
+dropped both **failed at its own purpose** and **created False Claims Act
+exposure**, in the file whose header names that exact risk.
+
+Caught by an adversarial refutation pass, independently adjudicated, PR drafted
+at the moment of doubt. **The tell was inside the author's own diff:** the
+comment written on `K22.7` was the official title of `K22.70` — the correct code
+was written down while the wrong one was accepted. A third defect was provable
+with no external reference at all: `K58.0`/`K58.1` were inverted in three places
+while line 47 of the same file already said `'K58.0', // IBS with diarrhea`.
+
+Guarded by a headers-must-be-refused arm stated as a PREDICATE rather than a
+list, paired with an arm asserting the billable children ARE allowed — refusing
+both would be a stricter floor and a worse product. Mutation-proved: re-admit
+`K21.0` and it reddens by name.
+
+### FOUR DEPLOYS, ALL DECLARED BEFORE THE ACT
+
+`83d22d01` GI 17/17 · `f975b0cf` CPT rider 15/15 · `2b527509` ICD 16/16, plus
+RC-1's `833a6f2d` 17/17 from the parallel session. No clinical row moved in any
+of them, and no patient record was touched by any verification.
