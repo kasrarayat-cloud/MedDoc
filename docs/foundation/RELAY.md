@@ -11889,6 +11889,89 @@ rewrite restored → 4 red, both routes), each proved on a gate that runs a
 one-liner exists for. Suite 294 files / 3813 green with anchors OFF; anchors ON
 carries only #108's 8.
 
+## RC-1 IS LIVE — `833a6f2d` DEPLOYED, JUDGED 17 OF 17 — 2026-08-14
+
+**Deployed 01:52:33Z. Log `docs/deploy-logs/deploy-20260814T015233Z.log`.**
+Migrations **101 → 102**; the script's own step-4 assertion: *"🟢 every repo
+migration is applied — 102 in repo, 102 rows recorded"*.
+
+**Citation on the deploy target — 4 of 4 on `833a6f2d`:** `CI` 31759774337 ·
+`e2e` 31759774335 · `a11y-ci` 31759774357 · `secrets-scan` 31759774327.
+
+### THE DECLARATION, JUDGED
+
+**17 sub-checks over 14 declared items. 17 green, 0 red.**
+
+| | |
+|---|---|
+| MUST CHANGE (5) | app + worker images moved · `assemble-note.ts` present in the worker · `always_include` **0 → 6** · `scaffold_confirm` **18 → 12** |
+| MUST NOT CHANGE (9) | sections **52** · templates **9** · `omit_unless_supported` **34** · the 4 touched rows still carry the tripwire · twin tables **0** · `FAILED` **0** · `failureCategory` **0** · co-tenants **307·404·200·200·410** · flags unchanged · 9/9 healthy, RestartCount 0 |
+
+**Structural proof in the SHIPPED worker, not inferred from an image id:**
+`assemble-note.ts` present; `normalizeRefluxTimeUnit` gone from `defaultText`
+(**0**) *and* from column headers (**0**); the stated seconds convention
+present; the coupling assertion present; the L6b arm present.
+
+Standing checks **9 of 9 green** after the deploy, including
+`assert-migrations-applied` flipping 🔴→🟢 as its own migration landed.
+
+### ⚠️ ONE COUNT MOVED, AND IT WAS DISCHARGED RATHER THAN WAVED THROUGH
+
+`transcribe_md_patients` **24 → 26**. The declaration's attribution clause says
+a clinical count that moves *with no corresponding user action* is the finding.
+Checked: both rows were created **01:31:22Z** and **01:38:14Z**, i.e. **before
+the deploy started at 01:52:33Z**, same practice — and the migration's entire
+write set is `UPDATE note_templates`. Organic, and pre-dating the act.
+
+### ⚠️ A PROCESS ERROR OF MINE, NAMED BECAUSE IT NEARLY MATTERED
+
+**I ran the deploy as `bash scripts/deploy-prod.sh 2>&1 | tail -60`.** The exit
+code reported back was therefore **`tail`'s, not the deploy's** — the same
+swallowed-status shape as the `&&`-chain rebase case in canon, arriving through
+a pipe. Runbook §2.3 warns about this in as many words (*"the log is a file,
+never a pipe into `tail`"*), and I did it anyway.
+
+**Nothing was hidden**, and the conclusion stands on evidence rather than on the
+exit code: the script's own migration assertion printed 🟢, the transcript
+reaches step 8 and prints *"deploy complete"*, a grep for failures across the
+1099-line log returns only the bundle-assert guard's own source text, and the
+17-of-17 judge plus the structural image verification were taken independently.
+
+**The lesson is that the verification saved it, not the invocation.** Flagged by
+the parallel GI session, which hit the identical shape on its own build in the
+same hour — `docker compose build … | tail -25` exiting 0 on a failed build,
+caught only by an `echo BUILD_EXIT=${PIPESTATUS[0]}` written out of habit.
+
+### WHAT SHIPPED
+
+Both layers of #106/#107, as ruled:
+
+- **the one-liner** — no normalizer touches doctor-AUTHORED text, on every path
+  including the templates the migration does NOT reclassify;
+- **assembly** — 6 sections across 4 templates now compose from the doctor's own
+  bytes and never reach the model.
+
+⚠️ **The observable half for the four affected doctors is the COLUMN HEADERS**:
+those table sections are `omit_unless_supported`, never assembled, so the
+one-liner is the only thing that repairs them. The prose threshold is covered
+twice, deliberately.
+
+### OWNER PING — STAGE ONE, AS RULED
+
+*"Run a NEW visit; your words should be exact; do NOT re-upload yet."* Plus the
+em-dash guidance from **#110**: a `—` means the dictation did not support the
+field, **and if one appears where he DID say the words, that is a transcription
+finding, not an assembly one.** Told rather than left to be discovered as "the
+fix leaves holes in my form".
+
+### QUEUE
+
+**#109** (delete the Rx surface) and the reduced R4b (host fix for
+DOCUMENTATION LEVEL only) are recorded. **#110** is filed, measured, unfixed.
+Order stands: **RC-2 → R4b → #109 → `rm STOP`**. A parallel supervised session
+holds Gastroenterology on its own branch off `833a6f2d`; its owner gave it a
+priority override which **this session has not applied to its own queue**, on
+the principle that neither session re-orders on the other's relay.
 ---
 
 ## GASTROENTEROLOGY — A NEW SPECIALTY, ADDITIVE BY CONSTRUCTION — 2026-08-14
