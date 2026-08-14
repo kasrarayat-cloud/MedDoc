@@ -188,4 +188,35 @@ describe('system-default template — drift guards', () => {
     expect(extract('sections')).toEqual(SYSTEM_DEFAULT_NOTE_TEMPLATE.sections);
     expect(extract('styleProfile')).toEqual(SYSTEM_DEFAULT_NOTE_TEMPLATE.styleProfile);
   });
+
+  // ⚠️ The parity arm above reads the VALUES and is blind to the STATEMENT.
+  // On 2026-08-14 a regeneration prepended a second `UPDATE "note_templates"
+  // SET` without removing the first; both @seed markers still matched, this
+  // file stayed green, and Postgres refused the migration at deploy time with
+  // `syntax error at or near "note_templates"`. A data migration is only
+  // proved by the values AND by the shape that carries them.
+  it('the resync migration is exactly ONE well-formed UPDATE statement', () => {
+    const dir = readdirSync(MIGRATIONS_DIR)
+      .filter((d) => d.includes('_resync_system_default_template'))
+      .sort()
+      .pop();
+    const sql = readFileSync(
+      path.join(MIGRATIONS_DIR, dir!, 'migration.sql'),
+      'utf8'
+    );
+    // Strip comment lines so prose mentioning `UPDATE` cannot inflate a count
+    // (the substring trap: this repo's migrations are heavily commented).
+    const code = sql
+      .split('\n')
+      .filter((l) => !l.trimStart().startsWith('--'))
+      .join('\n');
+
+    expect(code.match(/UPDATE "note_templates"/g) ?? []).toHaveLength(1);
+    expect(code.split('\n').filter((l) => l.trim() === 'SET')).toHaveLength(1);
+    expect(code.match(/^WHERE /gm) ?? []).toHaveLength(1);
+    // NOT a `;` count: semicolons live inside the JSONB payload text, so
+    // counting them counts string content, not statements. Assert only that
+    // the statement is terminated where it ends.
+    expect(code.trimEnd().endsWith(';')).toBe(true);
+  });
 });

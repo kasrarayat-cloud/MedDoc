@@ -59,6 +59,15 @@ require_working_api() {
 }
 
 cmd="${1:-}"; sha="${2:-}"
+# ⚠️ THE COMMAND IS VALIDATED BEFORE THE SHA, DELIBERATELY. Validating the sha
+# first makes a wrong VERB report a sha complaint: `gh-runs.sh list --commit
+# <sha>` (the shape muscle-memory reaches for) refused with "'--commit' is not
+# hexadecimal", which is true, fail-closed, and names the wrong problem.
+case "$cmd" in
+  status|pending|cited) ;;
+  *) die2 "unknown command '${cmd:-}'. Use: status | pending | cited <FULL-40-char-sha>
+       This wrapper takes a BARE sha, never a \`--commit\` flag." ;;
+esac
 require_full_sha "$sha"
 require_working_api
 
