@@ -298,7 +298,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
               level needs re-checking is. */}
           {props.emStale && !props.emPendingChange && (
             <section
-              className="qm-rdoc-gate qm-rdoc-gate-em"
+              className="qm-rounds-host qm-rdoc-gate qm-rdoc-gate-em"
               data-testid="review-doc-em-stale-gate"
               data-chat-target="em_gate"
             >
@@ -329,7 +329,7 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
 
           {props.emPendingChange && (
             <section
-              className={`qm-rdoc-gate qm-rdoc-gate-em${emConfirmed ? ' is-done' : ''}`}
+              className={`qm-rounds-host qm-rdoc-gate qm-rdoc-gate-em${emConfirmed ? ' is-done' : ''}`}
               data-testid="review-doc-em-gate"
               data-chat-target="em_gate"
             >

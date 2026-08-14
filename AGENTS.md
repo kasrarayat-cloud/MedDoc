@@ -1737,6 +1737,89 @@ This is the same family as **"a script that prints a number it does not act
 on"** — the output describes an intention, and nobody checks it against the
 effect. Here the number was never printed at all, which is worse.
 
+### ⚠️ AND ITS SIBLING: A MUTATION PROOF ASSERTS ITS **OWN** APPLICATION
+
+**Standing 2026-08-14.** The rule above is about an edit you MEANT to keep. This
+is the same defect in the edit you mean to THROW AWAY — and it is more
+dangerous, because the whole point of that edit is to produce a test result you
+will then believe.
+
+> **An unapplied mutation yields a green that proves nothing — and it is
+> indistinguishable from a guard that works.**
+
+⚠️ **REFERENCE CASE — F3's proof, and I nearly recorded it as evidence.** The
+mutation was meant to restore a plain `prisma.update` in place of the additive
+review-state writer, to show the new guard would catch the shape that had
+shipped. The anchor did not match, the script's assertion threw, **the file was
+never touched** — and the suite then ran against UNMUTATED code and printed
+`7 passed`. Read quickly, that is a guard confirming the fix. It is a guard
+confirming nothing at all, on a proof that never happened.
+
+Note what did work: the script's own `assert` fired, exactly as the entry above
+requires. What was missing was the next step — **reading that failure as
+invalidating the run that followed it.** The traceback and the green scrolled
+past in the same output.
+
+**The shape that prevents it, and it is one line:**
+
+    open(p,'w').write(mutated)
+    print('  mutation applied:', MARKER in open(p).read())   # ← before believing anything
+
+Then re-run, and treat a `False` there as terminating the proof.
+
+**Two corollaries, both earned the same night:**
+
+- **MUTATE TOWARD THE REAL SHAPE.** A second F3-adjacent mutation *did* apply
+  and still proved nothing, because it planted a marker as a COMMENT and the
+  guard correctly strips comments before matching. A mutation aimed at the wrong
+  form produces a green as empty as one that never landed.
+- **A PROOF'S OUTPUT IS READ AS A WHOLE.** "Assertion error" followed by
+  "N passed" is not a pass; it is a proof that aborted and a suite that ran
+  anyway. If a mutation step can fail without stopping the run, it will
+  eventually.
+
+### ⚠️ AND WHEN THE ARTIFACT IS GENERATED: THE GENERATOR MUST DELETE WHAT IT REPLACES
+
+**Standing 2026-08-14.** A regeneration that PREPENDS its output and never
+removes the previous copy leaves a file that still contains every value you
+assert — and is syntactically dead.
+
+⚠️ **REFERENCE CASE — this programme's own migration, found by CI.** `130cbc22`
+regenerated `…_resync_system_default_template_never_editorialize/migration.sql`
+and emitted a second `UPDATE "note_templates" SET` above the first. One
+statement, two headers. Postgres refused it at deploy —
+`syntax error at or near "note_templates"` — taking `a11y-ci`, `CI` and `e2e`
+down together on a branch whose unit suite was green.
+
+**Its parity test stayed GREEN, and that is the finding.** The test extracts
+`@seed:sections` and `@seed:styleProfile` by regex and deep-equals both against
+the TS constant. Both markers were present, correct and byte-identical. **The
+values were right and the statement carrying them was not** — the watched-set
+failure aimed at a generated artifact: the test asserted the PAYLOAD and
+nothing about the SHAPE. Mutation-proved afterwards in the direction that
+matters: with the doubled header restored, the new shape arm goes red and the
+parity arm **stays green** — `1 failed | 10 passed` — which is the blindness
+stated as a measurement rather than as a worry.
+
+So: **a test over a generated file asserts its STRUCTURE as well as its
+CONTENT.** Here: exactly one `UPDATE`, one `SET`, one `WHERE`, terminated at
+the end.
+
+⚠️ **AND BIND THE STRUCTURAL ASSERTIONS TO CODE.** The first draft of that arm
+counted `;` and read **4** on a correct file, because semicolons live inside
+the JSONB payload. A structural check that counts string content is the
+wrong-QUANTITY failure arriving inside the fix for the wrong-SHAPE one — and it
+was caught only because the arm was run against the KNOWN-GOOD file before
+being trusted against a bad one. Comment lines are stripped for the same
+reason: prose in a migration says `UPDATE` too.
+
+**A DATA MIGRATION IS PROVED BY APPLYING IT, ON A THROWAWAY DATABASE.**
+`pg_isready` is not that proof — it returns green during the image's bootstrap
+phase, before the target database exists. Poll for the database, apply the full
+set, then confirm the row actually moved (`_prisma_migrations` finished, and
+the seeded value present in the column). 103 migrations were then swept for the
+same doubled-header shape, pattern positive-controlled first: none.
+
 ### ⚠️ AND THE SAME SHAPE OUTSIDE `.replace()`: AN OPERATION THAT SUCCEEDS AND DOES NOT LAND
 
 **`core.fileMode` is `false` in this repository**, so git ignores the on-disk

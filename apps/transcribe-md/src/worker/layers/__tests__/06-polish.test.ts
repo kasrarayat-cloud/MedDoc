@@ -40,6 +40,10 @@ vi.mock('@meddoc/ai', async () => {
 
 vi.mock('@meddoc/db', () => ({
   default: {
+    // ⚠️ `$executeRaw` — L4 and L6 write review state through
+    // `applyAdditiveReviewState`, which is SQL-side so the concat is atomic.
+    // Without it here the helper throws and the failure reads as a layer bug.
+    $executeRaw: vi.fn().mockResolvedValue(1),
     transcribeVisit: { update: mocks.prismaUpdate },
   },
 }));
@@ -354,10 +358,20 @@ describe('runLayer6Polish — FIND-P1-016 validator-fail path', () => {
     const addArgs = mocks.applyAdditiveReviewState.mock.calls[0];
     expect(addArgs[0]).toBe(FAKE_VISIT);
     expect(addArgs[1].needsReview).toBe(true);
-    expect(addArgs[1].reviewReason).toMatch(/Polish output didn't match expected markdown structure/);
+    // ⚠️ RETARGETED — the retired vocabulary. This pinned "Polish output didn't
+    // match expected markdown structure", the system-facing phrasing the L4
+    // banner was rewritten to replace, which landed immediately after it and
+    // called operative-note headings "SOAP sections". L6 now uses the same
+    // measured-claim wording.
+    expect(addArgs[1].reviewReason).toMatch(/could not be found in this note|different headings from your template|generation failure/i);
+    expect(addArgs[1].reviewReason).not.toMatch(/expected markdown structure/i);
 
     expect(result.needsReview).toBe(true);
-    expect(result.reviewReason).toMatch(/Polish output didn't match/);
+    // Retired vocabulary — L6 now uses the same measured-claim wording as the
+    // L4 banner. This case is the empty-output class, which blames the MODEL
+    // rather than the clinician's template.
+    expect(result.reviewReason).toMatch(/did not come back in a usable form|generation failure/i);
+    expect(result.reviewReason).not.toMatch(/expected markdown structure/i);
   });
 
   it('validator + unfixable critical → BOTH reasons compose in reviewReason', async () => {
@@ -376,7 +390,7 @@ describe('runLayer6Polish — FIND-P1-016 validator-fail path', () => {
 
     // Validator-fail reason prepends; unfixable reason follows.
     expect(result.reviewReason).toMatch(
-      /Polish output didn't match expected markdown structure[\s\S]*Auto-polish could not fix 1 critical issue/
+      /(could not be found in this note|different headings from your template|generation failure)[\s\S]*Auto-polish could not fix 1 critical issue/i
     );
     expect(result.needsReview).toBe(true);
   });

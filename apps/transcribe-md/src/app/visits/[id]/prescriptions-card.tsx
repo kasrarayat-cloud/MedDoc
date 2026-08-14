@@ -127,7 +127,21 @@ export function PrescriptionsCard({ rx }: { rx: unknown }) {
   if (list.length === 0) return null;
 
   return (
-    <section className="qm-rdoc-gate qm-rdoc-gate-quiet" data-testid="review-doc-prescriptions">
+    /* ⚠️ The Rounds bridge is ON THE COMPONENT, NOT ON ITS CALLERS — the same
+       treatment `EmLevelCard` carries, for the same mechanism. `.qm-rdoc-gate`
+       paints border and background from `--color-linear-amber` (globals.css
+       :5546), and only `[data-skin='rounds'] .qm-rounds-host` redeclares that
+       token. Outside a host this panel keeps the LEGACY amber and renders as a
+       cream card on a dark Rounds route.
+
+       THIS CARD WAS BORN DURING R5, AFTER R4b's SCOPE WAS ENUMERATED — which
+       is exactly how a hand-kept list goes stale: nobody was careless, the
+       member simply did not exist when the list was written. The census arm in
+       `gate-rdoc-gate-hosts.test.ts` is the cure; this comment is not. */
+    <section
+      className="qm-rounds-host qm-rdoc-gate qm-rdoc-gate-quiet"
+      data-testid="review-doc-prescriptions"
+    >
       {/* NO ALARM GLYPH AND NO AMBER. A routine refill must not look like an
           interaction — that was the exact complaint the deleted surface had
           already been fixed for once, and re-introducing the alarm here would

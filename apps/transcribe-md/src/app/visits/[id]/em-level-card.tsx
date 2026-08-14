@@ -93,7 +93,23 @@ export function EmLevelCard(props: EmLevelCardProps) {
   const changed = code !== level;
 
   return (
-    <section className="qm-rdoc-gate qm-rdoc-gate-quiet" data-testid="review-doc-em-level">
+    /* ⚠️ `qm-rounds-host` IS ON THE COMPONENT, NOT ON ITS CALLERS — R4.1's
+       lesson, applied. `.qm-rdoc-gate` paints its background from
+       `--color-linear-amber` (globals.css), and `[data-skin='rounds']
+       .qm-rounds-host` redeclares that token along with 29 others. Outside the
+       host the card keeps the LEGACY amber and renders as a cream panel on a
+       dark Rounds route — which is what the owner found by hand on a
+       colonoscopy op-note.
+
+       Putting the bridge here rather than on the mount means every present and
+       future mount inherits it and the list cannot go stale. R3.4 hosted one of
+       three `RxTab` mounts and verified it there — correctly, and incompletely;
+       the other two rendered the cream panel for two rounds. A per-caller list
+       is kept complete by hand, and hand-kept lists are wrong eventually. */
+    <section
+      className="qm-rounds-host qm-rdoc-gate qm-rdoc-gate-quiet"
+      data-testid="review-doc-em-level"
+    >
       <div className="qm-rdoc-gate-head">
         <span>Documentation level</span>
       </div>
