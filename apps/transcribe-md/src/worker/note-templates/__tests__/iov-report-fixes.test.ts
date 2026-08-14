@@ -42,11 +42,31 @@ describe('renderStructureDirective (BUG 1a/1b/1c — bare values, header unit, c
     columns: ['Vein', 'DIAMETER (mm)', 'REFLUX TIME (ms)'],
     rowLabels: ['GSV at the SFJ'],
   };
-  it('renders the reflux header in seconds while leaving DIAMETER (mm) intact', () => {
+  // ⚠️ THIS TEST ASSERTED THE OPPOSITE, AND ITS INVERSION IS THE POINT.
+  // It used to require the doctor's `REFLUX TIME (ms)` header to be REWRITTEN to
+  // `(seconds)` in the prompt. That is ruling #107's defect one layer over: a
+  // column header is doctor-AUTHORED template text, and SPEC §4.3a(a) says such
+  // text is "never paraphrased, never normalised, never 'improved'". The unit
+  // concern it served is real and is now carried by an INSTRUCTION about the
+  // value (asserted immediately below) rather than by an edit to what the
+  // doctor wrote.
+  it('⚠️ renders the doctor\'s column headers VERBATIM, both of them', () => {
     const out = renderStructureDirective(table);
-    expect(out).toContain('REFLUX TIME (seconds)');
-    expect(out).not.toContain('REFLUX TIME (ms)');
-    expect(out).toContain('DIAMETER (mm)'); // untouched
+    // ⚠️ ASSERT ON THE HEADER ROW, NOT THE WHOLE PROMPT. A `not.toContain` over
+    // the full text trips on the cell-discipline instruction, which legitimately
+    // NAMES a unit header as an example — the substring trap AGENTS.md records,
+    // arriving in a negative assertion where prose is guaranteed to mention the
+    // token.
+    const header = out.split('\n').find((l) => l.startsWith('| Vein')) ?? '';
+    expect(header).toContain('REFLUX TIME (ms)');
+    expect(header).not.toContain('seconds');
+    expect(header).toContain('DIAMETER (mm)');
+  });
+
+  it('states the seconds convention instead of editing the header', () => {
+    const out = renderStructureDirective(table);
+    expect(out).toMatch(/WRITTEN IN SECONDS AS DICTATED/);
+    expect(out).toMatch(/never restate a header or/);
   });
   it('instructs BARE values under a unit header (no doubled unit)', () => {
     const out = renderStructureDirective(table);
@@ -62,7 +82,8 @@ describe('renderStructureDirective (BUG 1a/1b/1c — bare values, header unit, c
   });
   it('applies the same discipline to the variable-row table shape', () => {
     const out = renderStructureDirective({ kind: 'table', columns: ['Vein', 'REFLUX TIME (ms)'] });
-    expect(out).toContain('REFLUX TIME (seconds)');
+    expect(out).toContain('REFLUX TIME (ms)');
+    expect(out).toMatch(/WRITTEN IN SECONDS AS DICTATED/);
     expect(out).toMatch(/BARE value/);
     expect(out).toContain('"—"');
   });

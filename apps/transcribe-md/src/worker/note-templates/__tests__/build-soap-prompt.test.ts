@@ -126,7 +126,16 @@ describe('buildSoapSystemPrompt — normals handling per defaultTextMode', () =>
     expect(prompt).toContain(SCAFFOLD_CONFIRM_MARKER);
   });
 
-  it('always_include inserts the default text WITHOUT a marker', () => {
+  // ⚠️ THIS TEST USED TO ASSERT THE OPPOSITE, AND ITS INVERSION IS THE PROOF.
+  // Until ruling #106(a) an `always_include` default was INSERTED INTO THE
+  // PROMPT — "always_include inserts the default text WITHOUT a marker" — and
+  // that is exactly how a doctor's fixed protocol paragraph became text a model
+  // was asked to reproduce, and then normalised (`500 milliseconds` →
+  // `0.5 seconds` on a real customer's note). The section is now SYSTEM-COMPOSED:
+  // the model is told it exists, told which holes it may fill, and never
+  // receives the bytes. See `assemble-note.ts` and `l4-assembly.test.ts` for the
+  // other half — that the bytes reach the note by a different road.
+  it('⚠️ always_include NEVER reaches the model — it is composed by code (#106(a))', () => {
     const t: ResolvedNoteTemplate = {
       ...CUSTOM,
       sections: [
@@ -140,8 +149,30 @@ describe('buildSoapSystemPrompt — normals handling per defaultTextMode', () =>
       ],
     };
     const prompt = buildSoapSystemPrompt(t, OPTS);
-    expect(prompt).toContain('Generated with AI assistance.');
+    expect(prompt).not.toContain('Generated with AI assistance.');
+    expect(prompt).toContain('SYSTEM-COMPOSED SECTION');
     expect(prompt).not.toContain(SCAFFOLD_CONFIRM_MARKER);
+  });
+
+  it('a STRUCTURED always_include section keeps the pre-#106 injection', () => {
+    // A table's cells carry dictated values, so it is a fill surface and not a
+    // static region — `staticSections` excludes it and this path is unchanged.
+    const t: ResolvedNoteTemplate = {
+      ...CUSTOM,
+      sections: [
+        sect({
+          key: 'grid',
+          label: 'Grid',
+          order: 1,
+          defaultText: 'Grid scaffold text.',
+          defaultTextMode: 'always_include',
+          structure: { kind: 'table', columns: ['DIAMETER (mm)'] },
+        }),
+      ],
+    };
+    const prompt = buildSoapSystemPrompt(t, OPTS);
+    expect(prompt).toContain('Grid scaffold text.');
+    expect(prompt).not.toContain('SYSTEM-COMPOSED SECTION');
   });
 
   it('omit_unless_supported NEVER injects defaultText even if present', () => {

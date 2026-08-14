@@ -434,6 +434,195 @@ function entailmentClaimIndices(user: string): number[] {
   return [...user.matchAll(/^CLAIM (\d+):/gm)].map((m) => Number(m[1]));
 }
 
+// ---------------------------------------------------------------------------
+// SLOT-VALUES MOCK — the content-aware `tm_soap_draft` (ruling #106(a)).
+// ---------------------------------------------------------------------------
+// ⚠️ WHY THIS CANNOT BE A CONSTANT, stated in the same terms ruling 69 used for
+// `tm_chat_edit`: the contract under test is "the model reads a slot inventory
+// and answers it from the transcript". A canned answer would name slot ids that
+// no template produced and options no menu offered, so the assembler would
+// refuse every one of them and the run would look exactly like a run where the
+// mechanism worked and the transcript said nothing. **A constant fixture here
+// would make the proof and the failure indistinguishable.**
+//
+// It reads TWO things and invents nothing:
+//   - the SYSTEM prompt, for the inventory (which sections are system-composed,
+//     which slots they carry, and each slot's own menu);
+//   - the USER prompt, for the transcript, which is what decides a value.
+//
+// ⚠️ THE SENTINELS ARE DUPLICATED FROM THE APP, KNOWINGLY. `packages/ai` cannot
+// import from `apps/transcribe-md`, so the token exists twice — and a second
+// copy drifts from the first the day either is fixed. It is pinned instead:
+// `slot-fill-protocol.test.ts` in the app imports BOTH and asserts they are
+// equal, so the drift fails a test rather than silently disabling this branch.
+export const MOCK_SLOT_VALUES_OPEN = '<<<SLOT_VALUES';
+export const MOCK_SLOT_VALUES_CLOSE = 'SLOT_VALUES>>>';
+
+/** The marker `renderStaticSectionRequest` writes under a system-composed
+ *  heading. Duplicated and pinned by the same test as the sentinels. */
+export const MOCK_SYSTEM_COMPOSED_MARKER = 'SYSTEM-COMPOSED SECTION';
+
+/** A verbatim span of the transcript, for an anchor that must survive the
+ *  deterministic stage. Falls back to a token the stage will reject rather than
+ *  inventing one — a fabricated anchor is worse than a demoted line. */
+function firstSpan(user: string): string {
+  const m = /[A-Za-z][A-Za-z ,'-]{14,60}/.exec(user);
+  return (m?.[0] ?? 'no transcript span').replace(/"/g, '');
+}
+
+export interface MockSlotSection {
+  sectionKey: string;
+  slots: { id: string; options: string[] }[];
+}
+
+/**
+ * Read the slot inventory out of the built system prompt.
+ *
+ * ⚠️ ANCHORED AND EXACT, for the reason `entailmentClaimIndices` is: the tokens
+ * are matched at the START of a line in the shape the builder emits them, never
+ * by a bare `.includes`. A menu's options are prose containing the word "one
+ * of" as often as not, and a loose matcher would read a sentence as a slot.
+ */
+export function parseSlotInventory(system: string): MockSlotSection[] {
+  const out: MockSlotSection[] = [];
+  let current: MockSlotSection | null = null;
+  for (const line of system.split('\n')) {
+    const head = /^Supply ONLY the values for its \d+ slots?, under the key "(.+)":$/.exec(line);
+    if (head) {
+      current = { sectionKey: head[1]!, slots: [] };
+      out.push(current);
+      continue;
+    }
+    const slot = /^ {2}(s\d+) — one of: (.*)$/.exec(line);
+    if (slot && current) {
+      current.slots.push({
+        id: slot[1]!,
+        options: slot[2]!.split('|').map((o) => o.trim()).filter((o) => o.length > 0),
+      });
+      continue;
+    }
+    // Any other non-indented line ends the inventory block for that section.
+    if (line.length > 0 && !line.startsWith('  ')) current = null;
+  }
+  return out;
+}
+
+/** The `## ` headings the MODEL is expected to write — every heading in the
+ *  prompt except those marked system-composed. Derived from the prompt rather
+ *  than from a list, so a template change cannot leave this stale. */
+export function parseGeneratedHeadings(system: string): string[] {
+  const lines = system.split('\n');
+  const out: string[] = [];
+  let heading: string | null = null;
+  let body: string[] = [];
+  const flush = () => {
+    if (heading !== null && !body.join('\n').includes(MOCK_SYSTEM_COMPOSED_MARKER)) {
+      out.push(heading);
+    }
+  };
+  for (const line of lines) {
+    const m = /^## (.+)$/.exec(line);
+    if (m) {
+      flush();
+      heading = m[1]!;
+      body = [];
+    } else if (heading !== null) {
+      body.push(line);
+    }
+  }
+  flush();
+  return out;
+}
+
+/**
+ * Build the mocked `tm_soap_draft` answer: markdown for the sections the model
+ * writes, then the slot-values block.
+ *
+ * ⚠️ A VALUE IS CHOSEN ONLY WHEN THE TRANSCRIPT CONTAINS IT. That is the whole
+ * content-awareness: an option the transcript never mentions is OMITTED, which
+ * exercises the fail-closed half of the assembler on every run rather than only
+ * when somebody remembers to test it.
+ *
+ * ⚠️ `MOCK_SLOT_OUT_OF_MENU=true` makes the FIRST slot of each section answer
+ * with a value that is on no menu — the refusal arm. Without it, "the assembler
+ * refuses an out-of-menu value" is a claim about a branch nothing reaches.
+ */
+export function mockSoapDraftWithSlots(
+  system: string,
+  user: string,
+  anchored = false
+): string {
+  const inventory = parseSlotInventory(system);
+  const headings = parseGeneratedHeadings(system);
+  const haystack = user.toLowerCase();
+  const outOfMenu = process.env.MOCK_SLOT_OUT_OF_MENU === 'true';
+
+  const fills: Record<string, Record<string, string>> = {};
+  for (const section of inventory) {
+    const picked: Record<string, string> = {};
+    section.slots.forEach((slot, i) => {
+      if (outOfMenu && i === 0) {
+        picked[slot.id] = '[MOCK] not on this menu';
+        return;
+      }
+      const supported = slot.options.find((o) => haystack.includes(o.toLowerCase()));
+      if (supported !== undefined) picked[slot.id] = supported;
+    });
+    fills[section.sectionKey] = picked;
+  }
+
+  // Under MOCK_SOAP_ANCHORS each generated line carries an anchor whose span is
+  // a literal substring of the transcript — the same discipline
+  // MOCK_SOAP_TEXT_ANCHORED follows, so `deterministicStage` keeps it and
+  // `tm_anchor_entailment` stays countable for B4's gate.
+  const anchor = anchored ? ` ⟦A:"${firstSpan(user)}"⟧` : '';
+  const body = headings.length > 0
+    ? headings
+        .map((h) => `## ${h}\n[MOCK] ${h} recorded for this encounter.${anchor}`)
+        .join('\n\n')
+    : '[MOCK] no generated sections in this template.';
+
+  return [
+    body,
+    '',
+    MOCK_SLOT_VALUES_OPEN,
+    JSON.stringify(fills),
+    MOCK_SLOT_VALUES_CLOSE,
+  ].join('\n');
+}
+
+/**
+ * The mocked `tm_polish` answer: the draft it was given, back.
+ *
+ * ⚠️ AN ECHO, NOT A CONSTANT, AND THE DIFFERENCE IS THE WHOLE END-TO-END PROOF.
+ * L6 is a copy editor; returning a fixed note meant a mocked polish DELETED
+ * whatever the draft actually contained, so no assertion downstream of L6 could
+ * ever see a doctor's assembled section. With the echo, `500 milliseconds`
+ * reaching `soapFinal` means it survived the polisher — which is the claim.
+ *
+ * ⚠️ IT IS A NO-OP FOR EVERY EXISTING TEST, BY CONSTRUCTION. On the default SOAP
+ * path the draft IS `MOCK_SOAP_TEXT`, so the echo returns exactly what the
+ * constant returned. When the draft cannot be located the constant is used —
+ * a caller that passes an arbitrary user string (the B0 boundary gate does)
+ * keeps today's answer.
+ *
+ * ⚠️ `MOCK_POLISH_PARAPHRASE=true` reproduces the PRODUCTION DEFECT on demand —
+ * the polisher normalising `500 milliseconds` to `0.5 seconds`. It is how the
+ * L6b static-divergence arm is proved to go red; a guard proven only in the
+ * green direction is half-proven, and it is the cheaper half.
+ */
+export function mockPolishEcho(user: string, fallback: string): string {
+  const start = user.indexOf('Draft:\n');
+  if (start === -1) return fallback;
+  const from = start + 'Draft:\n'.length;
+  const end = user.indexOf('\n\nIssues to apply (apply in order):', from);
+  const draft = end === -1 ? user.slice(from) : user.slice(from, end);
+  if (draft.trim().length === 0) return fallback;
+  return process.env.MOCK_POLISH_PARAPHRASE === 'true'
+    ? draft.replace(/500 milliseconds/g, '0.5 seconds')
+    : draft;
+}
+
 /**
  * The ONE selection function for `completeText` fixtures.
  *
@@ -446,7 +635,8 @@ function entailmentClaimIndices(user: string): number[] {
  */
 function completeTextFixture(
   purpose: ModelCallPurpose,
-  user?: string
+  user?: string,
+  system?: string
 ): AnthropicCompleteTextResult {
   const fixture = MOCK_COMPLETE_TEXT_FIXTURES[purpose];
   if (fixture === undefined) {
@@ -466,6 +656,43 @@ function completeTextFixture(
   // B4's closing gate — without this, L4's mocked draft carries no `⟦A:…⟧`, so
   // `toEntail` is empty and `tm_anchor_entailment` is uncountable. See the
   // fixture's own header for why the default stays unanchored.
+  // ⚠️ THE CONTRACT BRANCH COMES FIRST, AND THE ORDER IS A BUG FIX. The anchors
+  // branches below used to return before these, so under
+  // `docker-compose.qa.b4-coverage.yml` — which sets MOCK_SOAP_ANCHORS *and*
+  // MOCK_CRITIQUE_ISSUES, the combination that makes L6 call its model — a
+  // static-bearing template got a draft with NO slot block (every slot `—`) and
+  // a "polish" sharing no text with it. The L6b arm then rejected EVERY visit,
+  // climbing the per-template counter that is #106(g)(4)'s live signal, on a
+  // pure artefact of fixture selection. That overlay's own header asserts the
+  // opposite in as many words.
+  //
+  // CONTENT-SENSITIVE, ruling #106(a). Gated on the PROMPT carrying the
+  // slot-values contract — not on a template id, not on an env flag — so the
+  // branch fires exactly when the thing it answers is present, and a template
+  // with no assembled statics keeps the constant fixture byte-for-byte.
+  if (
+    purpose === 'tm_soap_draft' &&
+    system !== undefined &&
+    system.includes(MOCK_SLOT_VALUES_OPEN)
+  ) {
+    return {
+      ...fixture,
+      text: mockSoapDraftWithSlots(system, user ?? '', soapAnchorsEnabled()),
+    };
+  }
+  if (purpose === 'tm_polish' && user !== undefined) {
+    // Under anchors the echo is stripped, which is what the anchored constant
+    // existed to express — L6's output equals its input — reached by echoing
+    // the real draft instead of substituting a different note for it.
+    const echoed = mockPolishEcho(
+      user,
+      soapAnchorsEnabled() ? MOCK_SOAP_TEXT_ANCHORED_STRIPPED : fixture.text
+    );
+    return {
+      ...fixture,
+      text: soapAnchorsEnabled() ? echoed.replace(/\s*⟦A:[\s\S]*?⟧/g, '') : echoed,
+    };
+  }
   if (purpose === 'tm_soap_draft' && soapAnchorsEnabled()) {
     return { ...fixture, text: MOCK_SOAP_TEXT_ANCHORED };
   }
@@ -625,6 +852,12 @@ export function buildMockMessage(args: {
   kind: 'tool' | 'text' | 'completeText';
   toolName?: string;
   user?: string;
+  /** The rendered SYSTEM prompt. Read by the slot-values branch, which needs
+   *  the inventory — and the inventory is in the system prompt, not the user
+   *  one. Taken from the params actually sent to the vendor rather than from a
+   *  caller argument, so it cannot describe a different prompt than the one
+   *  under test. */
+  system?: string;
   model: string;
 }): Anthropic.Messages.Message {
   const base = {
@@ -639,7 +872,7 @@ export function buildMockMessage(args: {
   };
 
   if (args.kind === 'completeText') {
-    const fixture = completeTextFixture(args.purpose, args.user);
+    const fixture = completeTextFixture(args.purpose, args.user, args.system);
     return { ...base, content: [{ type: 'text', text: fixture.text, citations: [] }] } as unknown as Anthropic.Messages.Message;
   }
 
@@ -726,10 +959,15 @@ export function mockComplete<T>(args: {
 
 export function mockCompleteText(args: {
   purpose: ModelCallPurpose;
-  /** The rendered user content. Only tm_anchor_entailment reads it. */
+  /** The rendered user content. Read by tm_anchor_entailment and tm_polish. */
   user?: string;
+  /** The rendered system content. Read by the tm_soap_draft slot-values
+   *  branch. Present here for the same reason `user` is: this function and
+   *  `buildMockMessage` must select from identical inputs, or a test of this
+   *  one stops being a test of what production selects. */
+  system?: string;
 }): AnthropicCompleteTextResult {
-  return completeTextFixture(args.purpose, args.user);
+  return completeTextFixture(args.purpose, args.user, args.system);
 }
 
 export function mockDeepgramBatch(): DeepgramBatchResult {

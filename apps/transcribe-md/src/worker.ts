@@ -115,6 +115,7 @@ import {
   type ResolvedNoteTemplate,
 } from '@/worker/note-templates/build-soap-prompt';
 import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '@/worker/note-templates/system-default-template';
+import { detectTemplateFallback } from '@/worker/note-templates/detect-template-fallback';
 import { runLayer7aIcdCoding } from '@/worker/layers/07a-icd-coding';
 import { runLayer7bCptCoding } from '@/worker/layers/07b-cpt-coding';
 import { runLayer7cRxDrafting } from '@/worker/layers/07c-rx-drafting';
@@ -730,6 +731,11 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // output + provenance populated. Defensive fallback to the constant so a
     // DB hiccup never breaks generation.
     let noteTemplate: ResolvedNoteTemplate;
+    // RC-3 (#106(c)): what the VISIT asked for, captured BEFORE resolution and
+    // before L4's provenance write-back overwrites the same column with the
+    // template that was actually used.
+    const requestedTemplateId: string | null = visit.noteTemplateId ?? null;
+    let templateResolutionFailed = false;
     try {
       // Honor an explicit per-visit pick (chosen on the new-visit form) over
       // active-template resolution. Scoped: the row must be the doctor's own or
@@ -757,7 +763,81 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         { visitId, err: err instanceof Error ? err.message : String(err) }
       );
       noteTemplate = SYSTEM_DEFAULT_NOTE_TEMPLATE;
+      templateResolutionFailed = true;
     }
+
+    // ── RC-3 — THE FALLBACK GOES LOUD (#106(c), SPEC §4.3a(d)) ─────────────
+    //
+    // ⚠️ IT CHANGES NO CHOICE. Every fallback above stays exactly as it was —
+    // making one throw would turn "wrong layout" into "failed visit", which is
+    // worse for the doctor and is not what the ruling asks for. What changes is
+    // that the doctor is TOLD, in a banner that names the cause, instead of
+    // receiving a generic note indistinguishable from the product not working.
+    //
+    // The applicable-template probe runs ONLY when the generic layout won and
+    // nothing else already explains it — one cheap count on the path where the
+    // answer might be "you have a form and did not get it".
+    {
+      // ⚠️ THE DETECTOR IS CALLED UNCONDITIONALLY, AND THE EARLIER GATE MADE ONE
+      // OF ITS ARMS UNREACHABLE. It used to run only when the GENERIC layout
+      // won — but "the visit named format A and format B produced the note" is
+      // a substitution the doctor never asked for and neither template is the
+      // system default, so that arm could never fire. A stale pick falling
+      // through to a DIFFERENT custom template is exactly the case
+      // `resolveActiveTemplate`'s fallbacks produce.
+      //
+      // The detector returns null in the overwhelmingly common case, so calling
+      // it always costs nothing. Only the PROBE — one count query — stays
+      // gated, to the path where the answer might be "you have a form and did
+      // not get it".
+      let hasApplicableActiveTemplate = false;
+      if (!templateResolutionFailed && noteTemplate.isSystemDefault) {
+        try {
+          hasApplicableActiveTemplate =
+            (await prisma.noteTemplate.count({
+              where: {
+                doctorId: visit.userId ?? '',
+                status: 'active',
+                isSystemDefault: false,
+                // Their format for THIS visit type, or their catch-all. A
+                // template scoped to another specialty resolving away is
+                // correct behaviour, and a banner there would be a false alarm
+                // — the fastest way to teach a clinician to ignore the banner
+                // that matters.
+                OR: [{ encounterType: visit.specialty }, { encounterType: null }],
+              },
+            })) > 0;
+        } catch (err) {
+          // A failed probe must never break generation. It means the banner is
+          // not raised, which is the same as today.
+          log.warn('worker:note-template', 'applicable-template probe failed', {
+            visitId,
+            err: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+      const fallback = detectTemplateFallback({
+        requestedTemplateId,
+        effective: { id: noteTemplate.id, isSystemDefault: noteTemplate.isSystemDefault },
+        resolutionFailed: templateResolutionFailed,
+        hasApplicableActiveTemplate,
+      });
+      if (fallback) {
+        log.warn('worker:note-template', 'generic layout used for a template-bound visit', {
+          visitId,
+          kind: fallback.kind,
+          requestedTemplateId,
+          effectiveTemplateId: noteTemplate.id,
+        });
+        // Additive + monotone + SQL-side, so it cannot clobber a
+        // safety-relevant reason another layer sets later.
+        await applyAdditiveReviewState(visitId, {
+          needsReview: true,
+          reviewReason: fallback.reason,
+        });
+      }
+    }
+
     let soapDraft: string;
     if (isLayerComplete(resumeState, 'L4')) {
       logSkippedLayer(visitId, 'L4', attempt);

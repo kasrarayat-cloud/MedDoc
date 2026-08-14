@@ -30,6 +30,12 @@ import {
   templateHasChoiceSlots,
   type ResolvedNoteTemplate,
 } from '../note-templates/build-soap-prompt';
+import {
+  composeNote,
+  generatedSections,
+  staticSections,
+} from '../note-templates/assemble-note';
+import { extractSlotFills, SLOT_VALUES_OPEN } from '../note-templates/slot-fill-protocol';
 import { buildTemplateScaffold } from '../note-templates/template-scaffold';
 import { applyContextDefaults } from '@/lib/note-template-context';
 import { SYSTEM_DEFAULT_NOTE_TEMPLATE } from '../note-templates/system-default-template';
@@ -123,6 +129,39 @@ export async function runLayer4GenerateSoap(
       resolvedTemplate.styleProfile?.contextDefaults ?? null
     ),
   };
+
+  // ── THE EXPECTED SETS, DECLARED BEFORE THE CALL (ruling #106(e)) ─────────
+  //
+  // ⚠️ WRITTEN DOWN HERE, ABOVE THE MODEL CALL, ON PURPOSE. The structure gate
+  // used to measure ONE set — every section label — against ONE text. Assembly
+  // splits that in two: the model is answerable for the sections it writes, and
+  // the composed document is answerable for all of them. A gate re-scoped after
+  // the fact is a gate that can be quietly narrowed to whatever passed, which is
+  // the failure this programme has already paid for twice. So the partition is
+  // computed first and RECONCILED against the undivided set below; a label that
+  // belongs to neither half, or to both, is a defect in the split and not in the
+  // note.
+  const statics = staticSections(template.sections);
+  const assembling = statics.length > 0;
+  const allSectionLabels = requiredSectionLabels(template);
+  const generatedLabels = generatedSections(template.sections).map((x) => x.label);
+  const staticLabels = statics.map((x) => x.label);
+  if (
+    assembling &&
+    (generatedLabels.length + staticLabels.length !== allSectionLabels.length ||
+      new Set([...generatedLabels, ...staticLabels]).size !== allSectionLabels.length)
+  ) {
+    // Not a throw: a template whose labels collide must still produce a note.
+    // It IS logged loudly, because every downstream count derived from this
+    // split is then describing a set nobody can name.
+    log.warn('l4:assembly', 'section partition does not reconcile', {
+      visitId: input.visitId,
+      templateId: template.id,
+      all: allSectionLabels.length,
+      generated: generatedLabels.length,
+      static: staticLabels.length,
+    });
+  }
 
   // Round 3 PR-J — A07-P0 prompt-injection delimiter.
   // The transcript is user-supplied (whatever the doctor + patient
@@ -228,6 +267,33 @@ export async function runLayer4GenerateSoap(
       : buildSoapSystemPrompt(template, systemOpts)) +
     (anchorsOn ? ANCHOR_GENERATION_ADDENDUM : '');
 
+  // ── THE COUPLING ASSERTION (#106(a)) ─────────────────────────────────────
+  //
+  // ⚠️ COMPOSITION IS GATED ON THE PROMPT, NOT ONLY ON THE TEMPLATE, AND THIS
+  // GUARD EXISTS BECAUSE ITS ABSENCE ALMOST SHIPPED. `assembling` was derived
+  // from the template alone, while the prompt came from one of TWO builders —
+  // and only one of them had been taught the contract. The model was then asked
+  // to write a section that code proceeded to overwrite with an unfilled form.
+  //
+  // The atomic pair is a property of a SINGLE RUN, so it is checked on that
+  // run: if the system prompt this visit actually sent does not carry the
+  // contract, the model was never asked for slot values and its output is the
+  // note. Fail-closed means falling back to TODAY's behaviour, never to a
+  // composed document built from an answer nobody requested.
+  //
+  // A third builder added later cannot silently repeat this: it will trip here
+  // rather than delete a patient's findings.
+  const promptCarriesContract = system.includes(SLOT_VALUES_OPEN);
+  const composing = assembling && promptCarriesContract;
+  if (assembling && !promptCarriesContract) {
+    log.error('l4:assembly', 'BUILDER DID NOT EMIT THE SLOT CONTRACT — not composing', {
+      visitId: input.visitId,
+      templateId: template.id,
+      staticSections: statics.length,
+      route: isUltrasoundReport ? 'ultrasound' : 'soap',
+    });
+  }
+
   const user = buildSoapUserPrompt({
     specialty: input.specialty,
     entitiesJson: JSON.stringify(input.entities, null, 2),
@@ -247,7 +313,23 @@ export async function runLayer4GenerateSoap(
     temperature: 0.2,
   });
 
-  let text = rawText;
+  // ── SLOT VALUES OFF THE WIRE (ruling #106(a)) ────────────────────────────
+  //
+  // The protocol block is removed from the note BEFORE anything else reads it:
+  // a downstream layer that saw it would treat JSON as clinical prose. When the
+  // template has no statics this is a no-op by construction — `rawText` passes
+  // through untouched and no parse is attempted, so the plain-SOAP path cannot
+  // be changed by a protocol it never speaks.
+  //
+  // ⚠️ A MISSING OR MALFORMED BLOCK IS NOT AN ERROR HERE. It yields no fills,
+  // every slot renders the form's visible empty marker, and the doctor's fixed
+  // prose is emitted regardless. Fail-closed produces a note with visible holes;
+  // it never produces a note with invented values, and never one missing the
+  // doctor's paragraph.
+  const extraction = composing
+    ? extractSlotFills(rawText)
+    : { text: rawText, fills: {}, error: null };
+  let text = extraction.text;
   // Flag OFF → {} so the persisted shape is byte-identical to the pre-anchor
   // path (test-pinned). Flag ON → set unconditionally inside the branch.
   let suggestedClaimsWrite: { suggestedClaims?: Prisma.InputJsonValue | typeof Prisma.DbNull } = {};
@@ -267,7 +349,19 @@ export async function runLayer4GenerateSoap(
       visitId: input.visitId,
       practiceId: input.practiceId,
       userId: input.userId,
-      anchoredDraft: rawText,
+      // ⚠️ THE STRIPPED TEXT, NOT `rawText` — AND THIS IS A CLINICAL BUG FIX.
+      // `runAnchorVerify` returns `fullBody`, rebuilt from whatever it was
+      // given, so handing it the UN-stripped output put the slot-values block
+      // straight back into the note. `TRANSCRIBE_MD_EVIDENCE_ANCHORS` is **true
+      // in production**, so that is the shipped configuration and not an edge
+      // case: raw protocol JSON — including a value the assembler had REFUSED
+      // as out-of-menu — would have reached `soapDraft`, L5, the review surface
+      // and a signable note.
+      //
+      // ⚠️ AND THIS BRANCH'S OWN TESTS WERE GREEN OVER IT, because they ran with
+      // the flag OFF. Found by an adversarial pass, not by the suite. Every
+      // assembly test now runs in BOTH flag states — see `l4-assembly.test.ts`.
+      anchoredDraft: text,
       roleLabeledTranscript: input.roleLabeledTranscript,
       templateScaffold,
       // The active template's own sections. This is what tells 04b which
@@ -333,9 +427,50 @@ export async function runLayer4GenerateSoap(
   // into a specific spacing/casing. On fail we DON'T crash: write the
   // raw output (doctor can fix it manually), flip needsReview, emit
   // a MODEL_OUTPUT_VALIDATION_FAIL audit row for forensics.
-  // Validate against THIS template's required sections. System default →
-  // the 4 SOAP headers → identical to the prior fixed check.
-  const validation = validateSoapStructure(text, requiredSectionLabels(template));
+  // ── GATE A — the MODEL's output, measured against what the MODEL was asked
+  // for. When nothing is assembled, `generatedLabels` IS `allSectionLabels`, so
+  // this is the original single check on the original text, unchanged: system
+  // default → the 4 SOAP headers → identical to the prior fixed check.
+  // When nothing is composed the model owns the WHOLE document, so it is
+  // answerable for every section — the pre-#106 check, unchanged.
+  const modelValidation = validateSoapStructure(
+    text,
+    composing ? generatedLabels : allSectionLabels
+  );
+
+  // ── COMPOSE — the doctor's own bytes, stitched around the model's values.
+  // Returns its input unchanged when `assembling` is false.
+  const composed = composing
+    ? composeNote(text, template.sections, extraction.fills)
+    : { text, regions: [], replaced: 0, inserted: 0, duplicatesDropped: 0, unfilled: 0, rejected: 0, droppedLines: 0 };
+  text = composed.text;
+  if (composing) {
+    log.info('l4:assembly', 'composed static sections', {
+      visitId: input.visitId,
+      templateId: template.id,
+      staticSections: statics.length,
+      replaced: composed.replaced,
+      inserted: composed.inserted,
+      duplicatesDropped: composed.duplicatesDropped,
+      unfilled: composed.unfilled,
+      // An out-of-menu value the model proposed and the assembler refused. This
+      // is the ONLY place that number exists: a fill refused silently would be
+      // indistinguishable from a slot the transcript never supported, and the
+      // two mean very different things about the model.
+      rejected: composed.rejected,
+      slotBlock: extraction.error ?? 'ok',
+    });
+  }
+
+  // ── GATE B — the COMPOSED document, measured against EVERY section. Only when
+  // something was composed; otherwise it is the identical call on the identical
+  // text, and running it twice would put two audit rows on one fault.
+  const composedValidation = composing
+    ? validateSoapStructure(text, allSectionLabels)
+    : modelValidation;
+  // Gate A first: a model that did not write its OWN sections is the more
+  // specific fault, and composition cannot repair it.
+  const validation = modelValidation.ok ? composedValidation : modelValidation;
   if (!validation.ok) {
     void logAudit({
       action: 'MODEL_OUTPUT_VALIDATION_FAIL',
@@ -349,6 +484,11 @@ export async function runLayer4GenerateSoap(
         reason: validation.reason,
         outputLength: validation.outputLength,
         missingSections: validation.missingSections,
+        // Which half of the split failed. Omitted entirely when nothing was
+        // assembled, so a plain-SOAP row keeps exactly today's shape.
+        ...(composing
+          ? { scope: modelValidation.ok ? 'composed' : 'generated' }
+          : {}),
         // NO raw output — PHI surface. Just the structural fail-class.
       },
     });

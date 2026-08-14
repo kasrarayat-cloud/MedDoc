@@ -113,7 +113,15 @@ const SYSTEM_ALLOWLIST: Record<string, number> = {
   'src/lib/template-twin/native-export.ts': 1,
   'src/lib/template-twin/synthetic-test.ts': 1,
   'src/lib/template-twin/workspace-read.ts': 1,
-  'src/worker.ts': 5,
+  // 5 → 6 on 2026-08-13, RC-3 (#106(c)): the applicable-active-template probe.
+  // ⚠️ DELIBERATE, and it is the SAME CLASS as the read directly below it —
+  // `resolve-active-template.ts` reads `note_templates` doctor-scoped from the
+  // worker, which has no request and therefore no signed-in practice to bound
+  // it. The new probe asks the same question about the same rows, one layer up:
+  // "does this doctor have an activated format that should have applied to this
+  // visit?" It is scoped by `doctorId` — strictly narrower than a practice —
+  // and it reads nothing a doctor could not already see in Settings.
+  'src/worker.ts': 6,
   'src/worker/cleanup/minio-orphans.ts': 1,
   'src/worker/cleanup/retention-sweep.ts': 1,
   'src/worker/cleanup/stale-visits.ts': 2,

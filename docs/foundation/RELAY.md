@@ -11588,3 +11588,303 @@ technologist names. Never committed, never quoted verbatim beyond minimal
 structural tokens, **CI fixtures are sanitized equivalents** with the same
 structural features and no real names, bytes in protected storage only. The
 distinctive token `500 milliseconds` is the permitted verbatim tripwire.
+
+## RC-1 + RC-3 — THE STATICS ARE ASSEMBLED, AND THE FALLBACK IS AUDIBLE — 2026-08-13
+
+> **Supervised session, landing into a HALTED loop (`docs/foundation/STOP` down
+> since 21:43Z). Queue head #106. RC-2 is NOT in this branch — see the tail.**
+
+### WHAT SHIPPED, IN THE RULING'S OWN ORDER
+
+**(a) text fidelity FIRST — it repairs every doctor including the owner's
+CURRENT template, with no re-upload.** `always_include` content never reaches
+the model: it returns slot VALUES and code stitches the doctor's bytes around
+them. The parser's forced `scaffold_confirm` is gone for the two section kinds
+that are whole fixed blocks, and 7 stored sections across 4 templates are
+reclassified by migration.
+
+**(c) the loud fallback.** A visit that got the generic layout when it should
+not have now says so, in a banner naming the cause.
+
+**(b) the twin door — NOT DONE. Named, not attempted.** See "HALTED".
+
+### THE FIVE COMMITS, AND WHY THE PAIR IS ONE OF THEM
+
+| commit | what |
+|---|---|
+| `0065eaa9` | the MOCK speaks slot values, content-aware; `tm_polish` becomes an echo |
+| `90ea1da7` | **THE ATOMIC PAIR** — prompt reshaped + assembler wired at the seam |
+| `0272dbac` | the L6b static-region arm wired (#106(g)) |
+| `cdc29e0b` | the classifier, both persist paths, and the reclassification migration |
+| `9e2395c9` | RC-3 — the generic fallback goes loud |
+
+The pair is ONE commit deliberately: there is no intermediate state where the
+model produces scaffolds while the assembler expects values, or the reverse.
+Either half alone is a broken product.
+
+### ⚠️ RULING #106(g) WAS CITED EVERYWHERE AND RECORDED NOWHERE
+
+`#106(g)` is named in PR #645's code (`section-assembly.ts`, twice), in its
+tests, in commit `158fad19`'s message, and in this session's brief. `RULINGS.md`
+grepped clean for `(g)` across the whole file. **Nothing would ever have
+surfaced it** — the code compiles, the tests pass, and a citation to a ruling
+nobody can find reads exactly like a citation to one they can. Found by doing
+what the canon requires (*no brief's claim about rulings state is trusted; grep
+it*) and recorded in this session's own commit.
+
+### ⚠️ THE MIGRATION IS NARROWER THAN #106(a)'s LETTER, AND THAT IS A FINDING
+
+#106(a) says fixed prose defaults to `always_include`. Applying that to every
+prose section would be **worse than the defect**. Measured on the real imaging
+templates, `defaultText` is two different things:
+
+| kind | example | assembling it |
+|---|---|---|
+| a WHOLE FIXED BLOCK | the scan-protocol paragraph; the `LABEL: <slot>` field header | **is the fix** |
+| a SCAFFOLD THE MODEL EXTENDS | the per-leg FINDINGS stub, the per-side IMPRESSION stub | **deletes the visit's clinical findings** and leaves an empty skeleton |
+
+The second would satisfy every static-fidelity check in this programme — the
+doctor's bytes preserved perfectly, the patient's gone — and would do it
+silently. Nothing in the schema distinguishes them, so the rollout is an
+allowlist of the two kinds that were READ and confirmed: `technique` and
+`exam_metadata`. **The general rule needs the doctor-facing designation #106(a)
+already names as future work.**
+
+### THE NUMBERS, MEASURED — AND ONE OF MY OWN QUERIES LIED FIRST
+
+Production, read-only. 7 templates, 40 sections, **0 `always_include` anywhere**.
+
+⚠️ **My first bucket query reported `scaffold_confirm = 4, prose = 0,
+structured = 0` for a template and I read it as "every candidate is
+structured".** The buckets did not reconcile — 0 + 0 ≠ 4 — and I had not
+checked. The cause: `s->'structure'` is jsonb `null`, not SQL NULL, so both
+arms evaluated to NULL and neither counted. Re-measured per section: **none of
+those sections is structured at all.** Had I believed it, the migration would
+have been a no-op and the owner's template would not have been repaired. *Name
+every bucket the scan can sort an item into, and assert the total.*
+
+Dry-run inside `BEGIN … ROLLBACK` on production: **7 sections flipped across 4
+templates**, all four guards passed, post-rollback verified back to 0
+`always_include` / 40 sections.
+
+### ⚠️ THE FIRST GUARD CONTROL WAS WORTHLESS, AND IT LOOKED FINE
+
+Widening the migration's predicate to include structured sections produced **no
+abort** — because no structured section is `scaffold_confirm`, so the widened
+set still could not reach the forbidden state. **A control that cannot produce
+the state proves nothing about the guard.** Re-run after forcing a structured
+section into `scaffold_confirm` inside the same transaction, G1 fired by name.
+G2 and G4 likewise. **G3 is NOT independently proven** — the dropped-section
+control was refused by G2 first, because an ordinal shift makes every text
+comparison mismatch.
+
+### MUTATION PROOFS — BOTH DIRECTIONS
+
+| # | mutation | result |
+|---|---|---|
+| M1 | the assembler disabled | 12 red |
+| M2 | the prompt un-reshaped (statics injected again) | 3 red, incl. *"the fixed paragraph is ABSENT from the system prompt"* |
+| M3 | the slot-values directive made unconditional | 2 red, incl. **the L4 golden** — #106(e) at pipeline level |
+| M4 | the L6b arm removed | **5 red, 4 STILL GREEN** — the happy-path control, the zero-static inertness case, the no-model-call case, and the fidelity verdict keeping its own reason |
+
+M4's green four is the load-bearing half: it says these tests discriminate
+rather than fail together.
+
+### ⚠️ A NULL-CASE TEST CAUGHT A REAL BUG IN MY OWN DETECTOR
+
+RC-3's detector told a doctor who had **deliberately picked "Standard SOAP"**
+that their activated format had not been applied. False, and precisely the false
+alarm that teaches a clinician to ignore the banner that matters. Caught by the
+arm asserting SILENCE, not by review.
+
+### STATE AT WRITING
+
+- `main` = `42a26aa2` (#645 merged, 4 of 4 on `158fad19`).
+- ⚠️ **`main`'s PREVIOUS head `9258e0cc` carries a FAILED `e2e`** — a docs-only
+  merge, two unrelated specs (`16-account-settings`, `35-sign-role-gate`). The
+  same app code passed 4 of 4 on `158fad19` twenty minutes later, so it is the
+  known flake class (#603), not a regression. Recorded because a deploy must
+  cite its own commit and not inherit that one's.
+- Unit suite **292 files / 3790 tests green** from `apps/transcribe-md`;
+  `tsc --noEmit` 0 errors.
+
+## RC-1 + RC-3 — WHAT THE ADVERSARIAL PASS FOUND — 2026-08-14
+
+> **The branch was proven, pushed, and one command from merge. An adversarial
+> pass over the finished diff found FIFTEEN defects, two of which would have
+> deleted clinical content from a signed imaging report. The PR was converted to
+> draft rather than merged.**
+
+### THE TWO THAT MATTERED, BOTH VERIFIED AGAINST PRODUCTION BEFORE BEING BELIEVED
+
+**(1) The imaging route never spoke the contract — and it is the ONLY route.**
+`04-generate-soap` picks its prompt builder by report type. RC-1 taught
+`buildSoapSystemPrompt`; `buildUltrasoundSystemPrompt` carried its own copy of
+the section renderer and learned nothing. `composeNote` ran regardless.
+
+Measured: **all 7 production visits** bound to the 4 templates the migration
+flips carry `specialty='ultrasound'`, and `NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true`
+in the live worker. So on **100%** of the affected rows the model would have
+written the section correctly and had its answer overwritten with an unfilled
+form — SIDE OF EXAM and the indication replaced by an em dash. Both structure
+gates pass on that output.
+
+**(2) Anchors ON put the protocol block back into the note.**
+`runAnchorVerify` was handed the UN-stripped output and rebuilds the note from
+what it is given. `TRANSCRIBE_MD_EVIDENCE_ANCHORS=true` in production — so raw
+JSON, including a value the assembler had *refused*, would have reached
+`soapDraft`, L5, the review surface and a signable note. **The branch's own test
+goes red in that universe**, which is how it was confirmed.
+
+### ⚠️ AND THE DIAGNOSIS OF #106 IS WRONG — RECORDED AS RULING #107
+
+`normalizeRefluxTimeUnit`, applied by the imaging builder to `defaultText`
+before the prompt is built, turns the doctor's `500 milliseconds` into
+`0.5 seconds`. **The prompt said `0.5 seconds`; the model reproduced it
+faithfully.** The paraphrase #106 attributes to the model was ours,
+deterministic, on every imaging visit.
+
+Assembly still fixes it — for a better reason than the one recorded, because
+bytes that never reach the model cannot be rewritten by anything on the way
+there. But a stricter prompt would have fixed nothing, and **the reported
+symptom has a one-line fix independent of the entire RC-1 mechanism**.
+
+### THE GATES WERE FLAWLESS OVER A UNIVERSE PRODUCTION DOES NOT USE — TWICE
+
+| the proof used | production uses |
+|---|---|
+| `specialty: 'primary-care'` → the SOAP builder | `ultrasound` → the imaging builder |
+| `TRANSCRIBE_MD_EVIDENCE_ANCHORS` unset | **`true`** |
+
+⚠️ **And the QA fixture was imaging-SHAPED** — `## EXAM`, `SIDE OF EXAM: —`, the
+`500 milliseconds` tripwire — which is exactly what made fifteen green arms
+*read* as an imaging proof. **A well-chosen fixture disguises a wrong universe.**
+That is the watched-set rule with a new and nastier face: the check was not
+merely aimed at the wrong set, it *looked* aimed at the right one.
+
+### THE OTHER THIRTEEN, IN ONE LINE EACH
+
+- The lenient heading matcher (the validator's PRESENCE check, used for
+  IDENTITY) deleted a section headed `## TECHNIQUE NOTES FOR THIS STUDY`
+  carrying a dictated limitation.
+- `extractSlotFills` took `lastIndexOf(OPEN)`, so a model that answered
+  correctly and then MENTIONED the block in prose had every value discarded and
+  its JSON left in the clinical note.
+- `findStaticDivergence` was containment-only: a polisher that EMPTIED the
+  doctor's section and appended its text to Findings passed clean — and L6's own
+  preamble licenses exactly that ("reword, REORGANIZE, and reformat").
+- On a resumed run the arm made the model's paraphrase the sacred bytes and told
+  the clinician "the note keeps your template's exact wording" about a note
+  saying `0.5 seconds`.
+- An empty polish skipped the arm entirely and was persisted to `soapFinal` AND
+  `soapL6Original`.
+- **The migration's guards reported and did not prevent**: no `BEGIN`/`COMMIT`,
+  so under psql the UPDATE committed before the guard block ran.
+- G3 (`EXCEPT ALL`) was blind to a section being ADDED — the exact failure a
+  botched `jsonb_agg` produces.
+- `btrim` strips spaces only; JS `.trim()` does not — a demonstrated
+  disagreement in a pair whose whole purpose is to agree.
+- The allowlist's premise for `exam_metadata` is FALSE on a real row: one
+  template's is 7 lines with ZERO slots, and flipping it freezes 7 fields
+  forever. **The declared figure moves 7 → 6.**
+- The mock's anchors branches shadowed both new functions; under the b4-coverage
+  overlay the L6b arm would reject EVERY visit and climb the counter that is
+  #106(g)(4)'s live signal.
+- The QA walk's ARM 0 measured a hand-seeded row, so it could not tell "the
+  migration flipped it" from "somebody seeded it flipped" — **and the report
+  claimed the script re-created those rows, which it did not.**
+- RC-3's custom→custom arm was unreachable given `worker.ts`'s gating.
+- ⚠️ **`l4-golden-prompt` and `04-generate-soap` have been RED on `main` in the
+  shipped configuration** (anchors ON) — confirmed in a detached worktree at
+  `42a26aa2`. Pre-existing, not this branch's, and nobody saw it because CI runs
+  the flag off. **The golden gate that guards the L4 prompt does not run in the
+  universe production uses.**
+
+### THE FIX CARRIES A GUARD FOR THE CLASS, NOT JUST THE INSTANCE
+
+Composition is now gated on **the prompt this run actually sent** carrying the
+contract — not on the template alone. A third builder added later trips a loud
+refusal and falls back to today's behaviour instead of deleting a patient's
+findings. Mutation **M5** (builder un-taught) reddens 8 assertions and leaves
+**4 green**, including *"the model's dictated FINDINGS survive byte-for-byte"* —
+the guard doing exactly its job.
+
+### STATE
+
+Re-walked on QA in the production universe (imaging route, anchors ON, migration
+applied by the walk from the file): **16 of 16**. Suite 293 files / 3804 tests
+green with anchors OFF; with anchors ON, the 8 pre-existing `main` failures and
+no others. Production re-measured: **6 sections across 4 templates**, prod
+verified back to 0 `always_include` after every dry-run.
+
+**Not deployed.** The declaration is written and the rollback tags are cut, but
+the diagnosis that motivated the item changed tonight, and a deploy decided on a
+corrected diagnosis is the owner's call, not a session's.
+
+## RC-1 SHIPS — THE OWNER'S RULINGS ON THE CORRECTED DIAGNOSIS — 2026-08-14
+
+**Four decisions, taken after the adversarial pass overturned #106's diagnosis.**
+
+### 1 · #107 STANDS · #106 AMENDED, NOT ERASED
+
+The amendment is written into #106's own row so the correction is legible where
+the claim was made. Its mechanism survives with a **truer justification**:
+
+> Statics are assembled not because a model *might* paraphrase them, but because
+> **no layer — stochastic or deterministic, model or normalizer — may rewrite a
+> doctor's authored bytes.**
+
+That form covers the failure that actually happened, and it is why the fix is
+structural rather than a stricter prompt.
+
+### 2 · BOTH LAYERS SHIP, AND EACH COVERS WHAT THE OTHER CANNOT
+
+| layer | covers |
+|---|---|
+| the one-liner — no normalizer touches doctor-AUTHORED text | **every** template, including the ones the migration does NOT reclassify, whose text still enters the prompt |
+| assembly | makes the class **structurally impossible** on reclassified sections |
+
+Scoped precisely, per the ruling: `defaultText`, statics, template prose — **and
+the doctor's own table COLUMN HEADERS**, found by sweeping every caller rather
+than fixing the reported one. `renderStructureDirective` was rewriting
+`REFLUX TIME (ms)` → `(seconds)`: the same defect one layer over. The unit
+concern it served is now **stated** in the cell discipline instead of applied to
+what the doctor wrote.
+
+⚠️ **Its application to DICTATED or MODEL values is untouched and recorded as
+its own question** — `reconcileMeasurementTables` (operates on model output) and
+`normalizeExtractedText` (ingest-time unicode/whitespace folding, which produces
+`defaultText` rather than editing it) are both out of tonight's scope, named
+here so the boundary is not re-derived.
+
+⚠️ **AND THE PARSE PATH COULD UNDO THE CLASSIFIER.** `appendMarkerLine`
+hardcodes `scaffold_confirm`, and both marker-reconciliation passes run AFTER
+classification — so a just-classified fixed block was downgraded the moment a
+dropped dropdown was restored into it. **On the owner's RE-UPLOAD path that is
+the fix undoing itself.** Sections are re-classified after reconciliation:
+anything that edits the text re-earns its mode.
+
+### 3 · CANON — TWO ENTRIES IN `AGENTS.md`
+
+- **"A well-chosen fixture disguises a wrong universe."** Pipeline proofs run in
+  production's flag set AND production's routes, with a per-route matrix.
+  Proving one builder proves one builder.
+- **"The adversarial pass is mandatory on the clinical generation path."**
+  Refutation over the finished diff, before merge, with draft-marking the PR at
+  the moment of doubt as the recorded companion move.
+
+### 4 · #108 ORDERED — CI RUNS IN THE PRODUCTION FLAG UNIVERSE
+
+`l4-golden-prompt` and `04-generate-soap` — 8 tests — are RED on `main` with
+`TRANSCRIBE_MD_EVIDENCE_ANCHORS=true`, the live worker's value. **The golden
+gate that guards the L4 prompt has never run against the prompt production
+builds.** Ordered now, built after RC-2; the 8 reds are triaged individually
+with evidence and **never absorbed** by a bulk re-baseline.
+
+### PROOF CARRIED FORWARD
+
+Mutations **M7** (header rewrite restored → 3 red, both routes) and **M8** (prose
+rewrite restored → 4 red, both routes), each proved on a gate that runs a
+**not-reclassified** template through **both** builders — the population the
+one-liner exists for. Suite 294 files / 3813 green with anchors OFF; anchors ON
+carries only #108's 8.

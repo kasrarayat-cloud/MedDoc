@@ -52,7 +52,13 @@ function getClient(): Anthropic {
 async function createMessage(
   client: Anthropic,
   params: Anthropic.Messages.MessageCreateParamsNonStreaming,
-  ctx: { purpose: ModelCallPurpose; kind: 'tool' | 'text' | 'completeText'; toolName?: string; user?: string }
+  ctx: {
+    purpose: ModelCallPurpose;
+    kind: 'tool' | 'text' | 'completeText';
+    toolName?: string;
+    user?: string;
+    system?: string;
+  }
 ): Promise<Anthropic.Messages.Message> {
   if (isMockEnabled()) {
     return buildMockMessage({
@@ -60,6 +66,7 @@ async function createMessage(
       kind: ctx.kind,
       toolName: ctx.toolName,
       user: ctx.user,
+      system: ctx.system,
       model: params.model,
     });
   }
@@ -684,7 +691,10 @@ export async function anthropicCompleteText(
         system: args.system,
         messages: [{ role: 'user', content: args.user }],
       },
-      { purpose: args.purpose, kind: 'completeText', user: args.user }
+      // `system` is read off the params actually being sent, never re-derived
+      // from `args`. The mock must answer the prompt the vendor would have
+      // received; a second expression here could describe a different one.
+      { purpose: args.purpose, kind: 'completeText', user: args.user, system: args.system }
     );
 
     const latencyMs = Date.now() - started;

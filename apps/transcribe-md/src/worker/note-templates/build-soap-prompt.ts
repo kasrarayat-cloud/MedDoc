@@ -22,6 +22,12 @@ import {
   type NoteTemplateStyleProfile,
   type SectionFormatHint,
 } from './system-default-template';
+import { segmentStaticSections, staticSections } from './assemble-note';
+import type { AssemblyLine } from './section-assembly';
+import {
+  renderStaticSectionRequest,
+  SLOT_VALUES_DIRECTIVE,
+} from './slot-fill-protocol';
 
 /** The minimal template shape the builder consumes — produced from either the
  *  system-default constant or a Prisma NoteTemplate row (via {@link
@@ -48,9 +54,22 @@ export const SCAFFOLD_CONFIRM_MARKER =
  *  choice slots (from Word content-control dropdowns; see
  *  docx-content-controls.ts). Constrained-fill invariant: pick ONLY a listed
  *  option, blank when unsupported, never invent — and fill a multi-slot
- *  carrier sentence as one coherent set. Appended to the prompt ONLY when a
- *  section actually carries a marker, so a template without choice slots
- *  (every prod SOAP visit today) produces a byte-identical prompt. */
+ *  carrier sentence as one coherent set.
+ *
+ *  ⚠️ ITS REPRODUCE-THE-SCAFFOLD CONTRACT IS RETIRED FOR `always_include`
+ *  SECTIONS (ruling #106(a)). This directive hands the model the doctor's fixed
+ *  prose and asks it to hold the line structure and hand it back — and a model
+ *  asked to reproduce prose normalises it, which is how `500 milliseconds`
+ *  became `0.5 seconds` in a real customer's note. A static section now takes
+ *  `SLOT_VALUES_DIRECTIVE` instead: the model returns VALUES and never receives
+ *  the doctor's bytes as writable.
+ *
+ *  ⚠️ IT IS NOT DELETED, AND THAT IS DELIBERATE. Slots also live in sections the
+ *  model genuinely writes (`scaffold_confirm`, `omit_unless_supported`), and
+ *  every template in production is still classified that way. Emitted ONLY when
+ *  a NON-static section carries a marker — so a template with no statics
+ *  produces a byte-identical prompt, which is #106(e)'s invariant and is now
+ *  asserted rather than hoped for. */
 export const CHOICE_SLOT_DIRECTIVE = [
   'CHOICE SLOTS. Some scaffold text contains inline menus written',
   '`{{one of: A | B | C}}`. For each menu, replace the ENTIRE `{{...}}` marker',
@@ -104,6 +123,19 @@ export function templateHasChoiceSlots(sections: readonly NoteTemplateSection[])
   return sections.some(
     (s) => re.test(s.defaultText ?? '') || re.test(s.styleInstructions ?? '')
   );
+}
+
+/** True when a slot lives in a section the MODEL still writes — i.e. anywhere
+ *  outside the assembled static set. This, not the whole-template predicate, is
+ *  what gates `CHOICE_SLOT_DIRECTIVE` now: a slot inside an `always_include`
+ *  section is spoken about by the slot-values protocol instead, and telling the
+ *  model to "replace the ENTIRE marker" in text it never receives would be an
+ *  instruction about nothing. */
+export function hasGenerativeChoiceSlots(
+  sections: readonly NoteTemplateSection[]
+): boolean {
+  const staticKeys = new Set(staticSections(sections).map((s) => s.key));
+  return templateHasChoiceSlots(sections.filter((s) => !staticKeys.has(s.key)));
 }
 
 /** Normalize a Prisma NoteTemplate row (JSONB columns are untyped) into the
@@ -203,10 +235,21 @@ export function renderStructureDirective(
       'spelling.',
     ].join('\n');
   }
-  // Reconcile reflux-time column headers to SECONDS so a bare seconds value
-  // (e.g. "3.4") is not rendered under a milliseconds header (unit mismatch).
-  // No-op for every non-reflux header (e.g. "DIAMETER (mm)" is untouched).
-  const cols = structure.columns.map(normalizeRefluxTimeUnit);
+  // ⚠️ THE DOCTOR'S COLUMN HEADERS, VERBATIM. This used to run them through
+  // `normalizeRefluxTimeUnit`, rewriting `REFLUX TIME (ms)` to
+  // `REFLUX TIME (seconds)` — the doctor's own header, edited to match a
+  // convention we prefer.
+  //
+  // That is the same defect as ruling #107, one layer over: a header is
+  // doctor-AUTHORED template text, and SPEC §4.3a(a) says such text is "never
+  // paraphrased, never normalised, never 'improved'". The unit concern is real
+  // — a bare seconds value under a milliseconds header IS a mismatch — but the
+  // remedy belongs in what we ASK FOR, not in what the doctor wrote. See
+  // `CELL_DISCIPLINE` below, which now states the convention explicitly.
+  //
+  // ⚠️ THE FUNCTION IS NOT DELETED. Its application to DICTATED or MODEL values
+  // is a separate question, recorded as one and untouched tonight.
+  const cols = [...structure.columns];
   const header = `| ${cols.join(' | ')} |`;
   const separator = `| ${cols.map(() => '---').join(' | ')} |`;
   // Cell-value discipline shared by both table shapes: a numeric column cell
@@ -214,13 +257,24 @@ export function renderStructureDirective(
   // and a STATED-normal segment gets a clean "—" marker — never a prose phrase.
   const CELL_DISCIPLINE = [
     'A cell holds ONLY the BARE value: when a column header ends in a unit',
-    '(e.g. "DIAMETER (mm)", "REFLUX TIME (seconds)"), write just the number',
+    // The example names the unit the DOCTOR's header uses, not one we prefer —
+    // an instruction that silently models a rewritten header teaches the
+    // rewrite. (It also stopped a test asserting the header is verbatim from
+    // tripping on this very line: prose is where the token you are grepping for
+    // is guaranteed to appear.)
+    '(e.g. "DIAMETER (mm)", "REFLUX TIME (ms)"), write just the number',
     'the transcript dictated (e.g. "6.2") — never repeat the unit word and',
     'never write a unit the header does not name. Never put a phrase or a',
     'sentence in a cell.',
     'When the transcript EXPLICITLY reports a segment as normal/absent (e.g.',
     '"no reflux", "competent"), put "—" in that numeric cell — reserve',
     '"[not documented]" for a segment that was NOT assessed.',
+    // Stated, not applied — see the header note above. This replaces an edit to
+    // the doctor's own column header with an instruction about the value.
+    'REFLUX / REVERSE-FLOW TIME IS WRITTEN IN SECONDS AS DICTATED (e.g. "3.4"),',
+    'whatever unit the column header or the protocol prose uses to state the',
+    'threshold. Never convert a dictated value, and never restate a header or',
+    'a protocol sentence to match the cell.',
   ];
   if (structure.rowLabels && structure.rowLabels.length > 0) {
     // HOW MANY VALUE CELLS DOES A ROW HAVE?
@@ -282,14 +336,62 @@ export function renderStructureDirective(
   ].join('\n');
 }
 
-function renderSectionBody(s: NoteTemplateSection): string[] {
+/**
+ * Render one section's body — THE ONE IMPLEMENTATION, shared by both builders.
+ *
+ * ⚠️ IT IS EXPORTED BECAUSE A SECOND COPY ALMOST SHIPPED A CLINICAL DEFECT.
+ * `build-ultrasound-prompt.ts` carried its own near-identical copy, and RC-1's
+ * static-aware treatment was added to THIS one only. Every production visit
+ * bound to the templates the reclassification migration touches takes the
+ * IMAGING route — so the model would have been handed the doctor's bytes as
+ * scaffold while `composeNote` composed as though it had not been, replacing
+ * the model's dictated values (side of exam, indication) with an em dash on a
+ * signed imaging report. Silently: both structure gates pass.
+ *
+ * That is AGENTS.md's "shared components — diff the callers BEFORE you replace
+ * them" in its second recorded shape: the treatment was put on ONE caller and
+ * verified there, correctly and incompletely. The cure the canon prescribes is
+ * the one applied here — put the behaviour where it cannot be forgotten, on the
+ * thing both callers already share.
+ *
+ * `styleInstructionsFallback` is the only remaining difference between the two
+ * routes: the imaging builder uses `||` so an EMPTY-STRING styleInstructions
+ * falls back to the format hint, which the built-in ultrasound template relies
+ * on. A parameter, not a fork.
+ */
+export function renderSectionBody(
+  s: NoteTemplateSection,
+  staticLines: ReadonlyMap<string, AssemblyLine[]>,
+  opts: { emptyStyleInstructionsFallBack?: boolean } = {}
+): string[] {
+  // ⚠️ A STATIC SECTION'S BODY IS A REQUEST, NOT A SCAFFOLD (ruling #106(a)).
+  // The doctor's bytes are not in this prompt at all — not as text to
+  // reproduce, not as an example, not behind a "do not change" instruction.
+  // The model is told the section exists, told which holes it may fill and from
+  // which menus, and nothing else. It also gets no styleInstructions and no
+  // structure directive, because both describe how to WRITE a section this
+  // model does not write.
+  const lines = staticLines.get(s.key);
+  if (lines !== undefined) {
+    return renderStaticSectionRequest(s, lines);
+  }
   const out: string[] = [];
-  out.push(s.styleInstructions ?? formatHintDirective(s.formatHint));
+  out.push(
+    (opts.emptyStyleInstructionsFallBack
+      ? s.styleInstructions || null
+      : s.styleInstructions) ?? formatHintDirective(s.formatHint)
+  );
   if (s.structure) {
     out.push(renderStructureDirective(s.structure));
   }
   if (s.defaultText) {
     if (s.defaultTextMode === 'always_include') {
+      // Reachable only for an `always_include` section that `staticSections`
+      // excludes — today that means a STRUCTURED one, whose cells carry
+      // dictated values and which is therefore a fill surface, not a static
+      // region. It keeps the pre-#106 behaviour on purpose; see
+      // `staticSections` for why composing it from `defaultText` would delete
+      // the transcript's own numbers.
       out.push(s.defaultText);
     } else if (s.defaultTextMode === 'scaffold_confirm') {
       out.push(`${s.defaultText}\n${SCAFFOLD_CONFIRM_MARKER}`);
@@ -310,6 +412,15 @@ export interface BuildSystemPromptOpts {
   specialtyGuidanceText: string | null;
 }
 
+/** The segmented static sections, keyed for the renderer. ONE derivation, so
+ *  the slot ids a prompt names are the ids `composeNote` fills — whichever
+ *  builder wrote the prompt. */
+export function staticLinesByKey(
+  sections: readonly NoteTemplateSection[]
+): Map<string, AssemblyLine[]> {
+  return new Map(segmentStaticSections(sections).map((x) => [x.section.key, x.lines]));
+}
+
 /**
  * Build the L4 SYSTEM prompt from a resolved template. Element order mirrors
  * the pre-Phase-1 L4 array exactly; for the system default this is byte-
@@ -321,6 +432,12 @@ export function buildSoapSystemPrompt(
 ): string {
   const sections = [...template.sections].sort((a, b) => a.order - b.order);
   const guidance = opts.specialtyGuidanceText || null;
+  // Segmented ONCE, here, and shared with the composer through
+  // `segmentStaticSections`. The slot ids this prompt names and the slot ids
+  // `composeNote` fills are produced by the same function over the same text —
+  // two derivations would agree until the day one of them was fixed.
+  const staticLines = staticLinesByKey(sections);
+  const generativeSlots = hasGenerativeChoiceSlots(sections);
 
   const lines: (string | null | undefined)[] = [
     // 1. Immutable safety preamble — always first.
@@ -334,14 +451,23 @@ export function buildSoapSystemPrompt(
     // 3. Template sections.
     'Structure the note with these markdown headings exactly:',
     '',
-    ...sections.flatMap((s) => [`## ${s.label}`, ...renderSectionBody(s), '']),
+    ...sections.flatMap((s) => [`## ${s.label}`, ...renderSectionBody(s, staticLines), '']),
     // 5. Immutable safety guardrails — fixed position after the sections.
     'Critical rules:',
     ...SAFETY.globalRules,
-    // Choice-slot directive — only when the template actually has `{{one of}}`
-    // menus, so a slot-free template's prompt stays byte-identical (golden).
-    templateHasChoiceSlots(sections) ? '' : undefined,
-    templateHasChoiceSlots(sections) ? CHOICE_SLOT_DIRECTIVE : undefined,
+    // Choice-slot directive — only when a section the MODEL WRITES carries a
+    // `{{one of}}` menu, so a slot-free template's prompt stays byte-identical
+    // (golden) and a template whose slots are all inside assembled statics is
+    // not handed a contract about text it never sees.
+    generativeSlots ? '' : undefined,
+    generativeSlots ? CHOICE_SLOT_DIRECTIVE : undefined,
+    // Slot-values protocol — only when the template HAS assembled statics.
+    // ⚠️ THIS IS THE ZERO-STATIC BYTE-IDENTITY GUARANTEE, AND IT IS STRUCTURAL:
+    // both entries are `undefined` when `staticLines` is empty, so a template
+    // with no `always_include` sections cannot receive a byte of this feature.
+    // #106(e), asserted by the golden gate at pipeline level.
+    staticLines.size > 0 ? '' : undefined,
+    staticLines.size > 0 ? SLOT_VALUES_DIRECTIVE : undefined,
     // Specialty guidance (unchanged mechanism — from specialtyGuidance()).
     guidance ? '' : undefined,
     guidance ? `Specialty guidance (${opts.specialty}):\n${guidance}` : undefined,
@@ -399,15 +525,35 @@ export function buildSoapUserPrompt(opts: BuildUserPromptOpts): string {
   ].join('\n');
 }
 
-/** Sections whose template default would be INSERTED into the draft (i.e. not
- *  omit_unless_supported with a default). L5's normals-scrutiny checks these
- *  against the transcript. Empty for the system default. */
+/**
+ * Sections whose template default would be INSERTED into the draft (i.e. not
+ * omit_unless_supported with a default). L5's normals-scrutiny checks these
+ * against the transcript. Empty for the system default.
+ *
+ * ⚠️ ASSEMBLED STATICS ARE EXCLUDED, AND THE OMISSION IS THE POINT (#106(a)).
+ * L5's scrutiny asks "is this inserted finding supported by the transcript?" —
+ * the right question for a scaffold the model was handed and may have kept
+ * wrongly, and the WRONG question for a paragraph the doctor's own form
+ * mandates. There is no transcript span for a scan-protocol sentence and there
+ * never will be, so scrutinising it produces a CRITICAL "Unsupported template
+ * default" on every visit, which sets needsReview, sends L6 to "fix" the
+ * doctor's prose, and is then rejected by the L6b gate. The whole cascade fires
+ * because a section was asked a question that never applied to it — the same
+ * argument `SectionProvenance` already makes for `template`-provenance sections
+ * against the anchored verifier.
+ *
+ * ⚠️ NO EXISTING TEMPLATE CHANGES. Every production row is `scaffold_confirm`
+ * or `omit_unless_supported` today, so `staticSections` is empty for all of
+ * them and this filter removes nothing until the reclassification lands.
+ */
 export function insertedDefaultSections(
   template: ResolvedNoteTemplate
 ): NoteTemplateSection[] {
+  const assembled = new Set(staticSections(template.sections).map((s) => s.key));
   return template.sections.filter(
     (s) =>
       s.defaultText != null &&
+      !assembled.has(s.key) &&
       (s.defaultTextMode === 'always_include' ||
         s.defaultTextMode === 'scaffold_confirm')
   );

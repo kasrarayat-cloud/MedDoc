@@ -29,6 +29,7 @@ import type {
   NoteTemplateSection,
 } from '@/lib/note-template-parse/note-template-schema';
 import type { NoteTemplateHeaderField } from '@/worker/note-templates/system-default-template';
+import { classifyDefaultTextMode } from '@/worker/note-templates/classify-default-text-mode';
 import { canonicalHeaderKey } from '@/lib/note-template-parse/header-fields';
 import { detectStructuredPhi } from '@/lib/note-template-parse/phi-gate';
 
@@ -154,7 +155,9 @@ export function normalizeReviewedTemplate(input: ReviewedTemplateInput): {
   draft: ParsedTemplateDraft;
 } {
   const ordered = [...input.sections].sort((a, b) => a.order - b.order);
-  const sections: NoteTemplateSection[] = ordered.map((s, i) => {
+  // Built first WITHOUT a mode, because the classifier's family test is a
+  // property of the WHOLE template — a section cannot answer it alone.
+  const shaped: NoteTemplateSection[] = ordered.map((s, i) => {
     const trimmedDefault = s.defaultText?.trim() ? s.defaultText.trim() : null;
     return {
       key: s.key,
@@ -163,11 +166,26 @@ export function normalizeReviewedTemplate(input: ReviewedTemplateInput): {
       formatHint: s.formatHint,
       styleInstructions: s.styleInstructions?.trim() ? s.styleInstructions.trim() : null,
       defaultText: trimmedDefault,
-      // RULE 2 — never always_include; a default is always confirm-gated.
-      defaultTextMode: trimmedDefault ? 'scaffold_confirm' : 'omit_unless_supported',
+      // Placeholder — replaced in the pass below. Never persisted as this.
+      defaultTextMode: 'omit_unless_supported',
       structure: s.structure ?? null,
     };
   });
+  // ⚠️ RULE 2, AS AMENDED BY RULING #106(a). It used to read "never
+  // always_include; a default is always confirm-gated" — and confirm-gating is
+  // what made a doctor's fixed protocol paragraph model-editable, which is how
+  // `500 milliseconds` came back as `0.5 seconds`. The rule is now: a WHOLE
+  // FIXED BLOCK is `always_include` and never reaches the model; everything
+  // else stays confirm-gated exactly as before.
+  //
+  // ⚠️ THIS IS THE PATH THE OWNER'S RE-UPLOAD TAKES. If the migration repaired
+  // his stored template and this path still forced `scaffold_confirm`, the
+  // re-upload would silently undo the fix — and the re-upload is this item's
+  // closing step.
+  const sections: NoteTemplateSection[] = shaped.map((s) => ({
+    ...s,
+    defaultTextMode: classifyDefaultTextMode(s, shaped),
+  }));
 
   const draft: ParsedTemplateDraft = {
     name: input.name,

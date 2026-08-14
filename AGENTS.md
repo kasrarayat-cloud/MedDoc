@@ -372,6 +372,91 @@ Three questions that catch it, and they are cheap:
    **A guard proven only in the RED direction is half-proven, and it is the
    cheaper half.**
 
+## A WELL-CHOSEN FIXTURE DISGUISES A WRONG UNIVERSE
+
+**Third cousin of the two sections below, and the nastiest of the family.**
+Those describe a check that measures the wrong QUANTITY, and a check that
+measures the right quantity over the wrong SET. This one is a check that is
+correct in both respects **and runs in a configuration production does not
+use** — while *looking* like it runs in the right one, because its fixture was
+chosen from the right domain.
+
+> **A pipeline proof runs in the PRODUCTION UNIVERSE: production's FLAG SET and
+> production's ROUTES. Anything else is a proof about a system nobody ships.**
+
+⚠️ **REFERENCE CASE, 2026-08-14 — RC-1, one command from merge.** The branch
+carried a unit suite (3790 green), four mutation proofs, and a QA walk that read
+**15 of 15** on the live stack. Every one of them was wrong about the universe,
+in two independent ways:
+
+| the proof used | production uses |
+|---|---|
+| `specialty: 'primary-care'` → `buildSoapSystemPrompt` | **`ultrasound`** → `buildUltrasoundSystemPrompt`, a DIFFERENT builder |
+| `TRANSCRIBE_MD_EVIDENCE_ANCHORS` unset | **`true`** |
+
+Measured: **all 7** production visits bound to the templates the change targets
+carry `specialty='ultrasound'`. The proof covered **0%** of the affected rows.
+The consequence was not cosmetic — the model wrote the section correctly and had
+its answer overwritten with an unfilled form, deleting the side of exam and the
+study indication from a signed imaging report, silently, with both structure
+gates passing.
+
+⚠️ **AND THE FIXTURE IS WHAT MADE IT INVISIBLE.** The QA walk's template was
+imaging-SHAPED — `## EXAM`, `SIDE OF EXAM: —`, a `500 milliseconds` tripwire —
+so fifteen green arms *read* as an imaging proof to their own author. A wrong
+universe announces itself when the fixture looks foreign. **When the fixture
+looks native, nothing announces anything.**
+
+The discipline is mechanical:
+
+1. **ENUMERATE THE ROUTES.** If a value selects between implementations — a
+   report type, a specialty, a builder, a renderer — **proving one proves ONE.**
+   Run the matrix. `describe.each` over the routes costs a line.
+2. **ENUMERATE THE FLAGS, FROM THE RUNNING CONTAINER.** Not from `.env`, not
+   from the compose file, not from memory: `docker exec … printenv`. A test that
+   defaults a flag OFF while production runs it ON is testing the rollback.
+3. **ASK WHICH PRODUCTION ROWS THE PROOF COVERS, AND COUNT THEM.** "It passes"
+   and "it passes for anybody" are different claims. A `GROUP BY` on the
+   affected population answers it in one query, and the answer here was zero.
+4. **A FIXTURE FROM THE RIGHT DOMAIN IS NOT A ROUTE.** Shape is not routing.
+
+## THE ADVERSARIAL PASS IS MANDATORY ON THE CLINICAL GENERATION PATH
+
+**Standing 2026-08-14, and it is a gate, not a nicety.** For any change to the
+clinical generation path — L4/L5/L6, the prompt builders, the assemblers, the
+fidelity gates, anything that decides what text reaches a note — **a refutation
+pass over the FINISHED DIFF runs before merge.**
+
+> **Told to REFUTE, not to review.** "Find the counterexample; default to *this
+> is broken*; report only what you can demonstrate with a concrete input → wrong
+> output." A reviewer asked whether the code is good says yes to code that is
+> good and wrong.
+
+⚠️ **THE ARGUMENT IS ONE NIGHT'S EVIDENCE.** On 2026-08-14 the pass found
+**fifteen** defects in a branch that had already been proven, pushed, and
+CI-cited. Two would have deleted clinical content from a signed imaging report.
+Neither was reachable by the suite, the mutation proofs, or the QA walk —
+because all three shared the author's assumptions about which universe mattered.
+**It was the only thing between a green branch and clinical harm.**
+
+What makes it work is that it does not share the author's context:
+
+- give it the CLAIMS, not the intent — "this asserts X; break X";
+- give it **distinct lenses** (data loss, byte-identity, migration/schema,
+  false-green-and-false-rejection), because redundancy finds one failure mode
+  four times;
+- require **FILE:LINE + a concrete input → wrong output**, and permit
+  `NOTHING FOUND` — an invented finding is worse than none;
+- **verify every finding yourself before believing it.** Two of the fifteen were
+  confirmed against production before a line was changed, and one reframed a
+  standing ruling.
+
+⚠️ **AND THE COMPANION MOVE IS RECORDED WITH IT: MARK THE PR A DRAFT AT THE
+MOMENT OF DOUBT.** Not after triage, not once severity is known — at the moment.
+Converting takes one command and makes the branch unmergeable by anyone,
+including a future you at 01:00 with the findings half-read. It is the cheapest
+possible action and it is reversible; the state it prevents is not.
+
 ## A gate's WATCHED SET is diffed against the spec's NAMED set
 
 **Sibling of the section above, not a duplicate — and the difference is the
