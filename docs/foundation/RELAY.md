@@ -9,6 +9,91 @@
 > one line with a pointer to its full text. **Grep it before deciding anything
 > ruling-shaped.** New rulings append there in the same commit that records them.
 
+## ⏭️ THE QUEUE — FIDELITY ARC AT THE HEAD — set 2026-08-15
+
+> **Supervised sessions are CLOSED. The loop carries this from here, and it is
+> the ONLY deploy actor.** Standard ceremony per item: citation by
+> `scripts/gh-runs.sh` on the FULL sha, merge by `scripts/merge-pr.sh`, §2.5
+> declaration for anything that changes runtime, and an **ADVERSARIAL PASS that
+> is MANDATORY on any note-surface or export change** — told to REFUTE, given
+> the claims not the intent, required to produce FILE:LINE + a concrete input →
+> wrong output, and permitted to report NOTHING FOUND.
+
+**Why fidelity jumps the billing tail:** these are defects on the path the pilot
+doctor actually walks, found by the owner on a signed visit tonight. The
+certification door (item 3 / F5) remains the cure for FULL native fill — but a
+half-filled export and a divergent signed view are wrong NOW.
+
+| # | Item | Ruling | Done when |
+|---|---|---|---|
+| **F1** | **Ship the numbering fix** — the branch `fix/docx-numbering-fidelity` (PR open) carries it. Cite, merge, deploy. | **#112** | Deployed under a §2.5 declaration naming the **document-visible** change: *every DOCX-derived surface now renders the note's STORED numbers*. ⚠️ Morning report carries an **OWNER PING**: *re-export the same visit and eyeball RECOMMENDATIONS — it should read 1-2-3.* |
+| **F2** | **Name #1's REAL mechanism by MEASUREMENT** — render both surfaces' preview bytes for the test visit and DIFF them. Then fix under the one-truth rule. | **#114** | The mechanism is named with evidence, not a theory. **If the fix is ruling-shaped and reversible → PROVISIONAL per protocol. If not → HALT with the finding.** Suspect one: cached-at-`soapVersion` vs deliberately-uncached. |
+| **F3** | **Retire `generateVisitPdf`** onto `generateVisitDocx` → Gotenberg. Census, delete-don't-hide. Parity gate REDEFINED to ONE builder's bytes across preview / Word / PDF. | **#113** | The retired builder is gone by traversal, the gate red-proves against tonight's diverging PDF, and Gotenberg is named in the ledger as the single shared dependency it already is. |
+| **F4** | **Land #663 and #664**, then rebase and land the held worktree commits — `feat/certification-door` carries the classification fix (`543b5a21`) and the mappings door (`799d1c45`). | — | On `main`, cited. F1's commit is also on that branch; the rebase drops it as a duplicate once F1 has merged. |
+| **F5** | **Item 3 — the certification door, to completion.** | **#106(b)** | See the scope block below. ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* |
+
+Then the **billing tail (B8 close, B9)** per the existing ledger below.
+
+### F5 — ITEM 3'S FULL SCOPE, WITH ITS RECORDED DESIGN RULES
+
+**Two of the five pieces are BUILT and held** on `feat/certification-door`:
+
+1. ✅ **The classification fix** (`543b5a21`). `classifyFieldSource` was called by
+   the model proposer ONLY; `fallbackSemanticMappings` omitted `sourceType`, so
+   the schema default silently labelled **every** field `extraction`. Measured
+   partition on the real customer form, buckets named and total reconciled:
+   **52 extraction · 23 verified_note_selection · 5 manual = 80.**
+   ⚠️ **Removing the schema default was EVALUATED AND DECLINED on evidence** —
+   `tsc` was clean with it gone and only tests failed, so removal is
+   runtime-plausible; it is KEPT because six re-parse sites feed the FILL path
+   and removal turns a silent mislabel into **a throw while filling a doctor's
+   document**. The reason is written AT the default. The ruling's goal — a
+   forgetful future path fails loudly — is met by
+   `gate-source-type-explicit.test.ts` at AUTHOR time instead.
+2. ✅ **The mappings door** (`799d1c45`). `updateTemplateTwinMappings` shipped
+   correct, tested and **with no caller** — the only reference anywhere was a
+   test grepping its source text. So `MAPPINGS_NOT_READY` refused 79 of 80
+   fields **because nothing could ever confirm them**: the gate was right and
+   unsatisfiable. Its own module, because the test could not LOAD inside
+   `template-twin-certify.ts` (which drags in the worker's extractor and note
+   generator) — **a module whose test must mock the world to load is doing too
+   much.**
+
+**Three remain:**
+
+3. 🔵 **The per-field confirmation UI** in the existing review workspace,
+   designed for **BOTH shapes**: *proposed-and-review* (the model filled a
+   concept; the physician confirms or changes it) and *unproposed-and-choose*
+   (no concept; the physician picks). ⚠️ **The 80/80-unproposed figure measured
+   on QA is the MOCK universe** — QA is vendor-severed, so the proposal never
+   ran (`fallbackMappings=true`). Production would propose. **Design for both;
+   do not design for a number that has not been seen.**
+4. 🔵 **The reachable entry point** under the CURRENT settings layout.
+   `NativeTemplateManager` renders **null** under
+   `NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true`. ⚠️ **Its fold was RIGHT about the
+   upload half and took the confirmation surface with it** — the comment says it
+   retired *"upload your .docx to certify"* as **a second upload of a file we
+   already have**, which is true and is #109's class exactly: a ruling names an
+   INTENT, a component has a JOB LIST. RC-2 means the upload already happened
+   and the twin is already compiled, so what the doctor needs is **confirmation,
+   not upload.**
+5. 🔵 **Registry expansion driven by the MEASURED 23** `verified_note_selection`
+   fields — never invented concepts.
+
+**DESIGN RULE, RECORDED UP FRONT:** 80 confirmations must be tractable in **ONE
+physician sitting** — cheap confirms for high-confidence mappings, full control
+retained — **WITHOUT weakening per-field confirmation.**
+⚠️ **`MAPPINGS_NOT_READY` STAYS STRICT. The door satisfies the gate; it never
+softens it.** ⚠️ And note the honest arithmetic: the classification fix reduces
+the fields NEEDING A CONCEPT by **5** (the manual ones), not 28 — only `manual`
+is exempt. What the other 23 gain is **correct fill behaviour**, which is the
+documented *"fourteen permanently blank on every real visit"* defect.
+
+**COMPLETION PROOF:** the QA twin walk's **fill → export** leg finally ticks —
+**DATE OF PROCEDURE on a CERTIFIED twin.**
+
+---
+
 ## GATE 0 — ✅ CLEARED 2026-08-04
 
 All five decisions are made and are recorded **verbatim in `SPEC.md` §4**.
