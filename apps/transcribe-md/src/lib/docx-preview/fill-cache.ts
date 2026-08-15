@@ -85,12 +85,24 @@ export type FillVariant = 'twin' | 'styled';
  *  two dates differ. ⚠️ The key still names nothing about the renderer, so this
  *  will need doing again; it is not automatic and no test can infer it.
  *
+ *  `v4 -> v5` for ruling #117, the attestation footer, and it is the SAME shape
+ *  a THIRD time — this time found by an adversarial pass rather than by its
+ *  author, which is the reason the sentence above ("this will need doing again;
+ *  it is not automatic and no test can infer it") is worth its space. The
+ *  unsigned export gains `DRAFT — Not yet signed.` in a section footer on every
+ *  page, so the same note at the same `soapVersion` renders different bytes.
+ *  ⚠️ WITHOUT THE BUMP THE DEFECT INVERTS ITSELF ONTO THE ONE SURFACE #117 WAS
+ *  WRITTEN FOR: for up to the TTL, a doctor reloading the pre-sign canvas is
+ *  served the PRE-FOOTER bytes — pages 1..n-1 indistinguishable from a finished
+ *  record — while `…/export/docx` returns the marked file. The canvas is the
+ *  surface she actually reads before signing.
+ *
  *  ⚠️ AND BOTH OCCURRENCES MOVE TOGETHER. `invalidateVisitFills` SCANs on this
  *  same prefix, so bumping only the writer would leave it scanning for `v2`
  *  keys while new `v3` keys accumulate — quietly breaking the one-entry-per-
  *  visit bound that exists because THE CACHED VALUE IS PHI. */
 function key(visitId: string, soapVersion: number, variant: FillVariant): string {
-  return `visitdoc:v4:${variant}:${visitId}:${soapVersion}`;
+  return `visitdoc:v5:${variant}:${visitId}:${soapVersion}`;
 }
 
 export interface CachedFill {

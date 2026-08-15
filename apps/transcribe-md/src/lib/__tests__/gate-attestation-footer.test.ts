@@ -51,6 +51,25 @@
 //   · VACUITY. Every arm here could pass on a builder that emits an empty
 //     document, so the non-vacuity arm asserts the note's own body text made
 //     it through the same call.
+//
+// ----------------------------------------------------------------------------
+// HONEST LIMITS — MEASURED, so this guard is not read wider than it is.
+//
+//   · ⚠️ IT WATCHES ONE OF FOUR ATTESTATION EMITTERS. Measured: re-drifting
+//     `pdf-generator.ts` back to its own inline string leaves this file
+//     **7 of 7 GREEN**. `pdf-native/export.ts` (unsigned → NOTHING on any
+//     page; signed → page 1 only) and `ehr-formatters.ts` (a third date
+//     format) are likewise unwatched. The shared source in `visit-export.ts`
+//     is what holds them together, and nothing here enforces its adoption.
+//
+//   · ⚠️ IT PROVES THE OOXML, NOT THE RENDER. Ruling #117(e) asks for a
+//     multi-page proof THROUGH THE REAL CONVERTER, "because PAGE COUNT IS
+//     LIBREOFFICE'S". This fixture is ONE page, so "on every page" is
+//     asserted over a set of size one, and `w:type="default"` is a PROXY for
+//     what LibreOffice actually paints. #117(e) is NOT delivered here.
+//     The `titlePg` / even-odd / `vanish` / section-count arms below exist
+//     precisely because they are the ways that proxy comes apart — but they
+//     are still structure, not pixels.
 // ============================================================================
 import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
@@ -97,6 +116,22 @@ function data(over: Partial<VisitExportData>): VisitExportData {
 interface Packed {
   /** Every `word/footer*.xml` part, as visible text. */
   footerTexts: string[];
+  /** Every `word/footer*.xml` part, RAW — the visible text says what the runs
+   *  contain, not whether they render. `w:vanish`, a white fill or a 1pt size
+   *  leave `<w:t>` byte-identical and the footer unreadable. */
+  footerXml: string[];
+  /** `<w:titlePg/>` — "different first page". ⚠️ With it set and no `first`
+   *  footer defined, page 1 renders NO footer, so page 1 of every one-page
+   *  draft is unmarked while the `default` reference still reads correct. */
+  titlePg: boolean;
+  /** `word/settings.xml`'s `w:evenAndOddHeaders`. ⚠️ Enabled, the `default`
+   *  footer stops applying to EVEN pages — pages 2 and 4 of a 4-page draft go
+   *  bare with `document.xml` byte-unchanged. */
+  evenAndOddHeaders: boolean;
+  /** How many sections the document has. ⚠️ Footers attach PER SECTION, so an
+   *  appended second section is unmarked in its entirety and the reference set
+   *  of the first is unchanged. */
+  sectionCount: number;
   /** The `w:type` of every footer the SECTION references, in document order.
    *  ⚠️ `'default'` is the ONLY type that renders on every page. `'first'`
    *  needs `w:titlePg` (never set here) and `'even'` needs the document-level
@@ -109,22 +144,41 @@ async function pack(over: Partial<VisitExportData>): Promise<Packed> {
   const zip = await JSZip.loadAsync(await generateVisitDocx(data(over)));
 
   const footerTexts: string[] = [];
+  const footerXml: string[] = [];
   for (const name of Object.keys(zip.files).sort()) {
     if (!/^word\/footer\d*\.xml$/.test(name)) continue;
-    footerTexts.push(visibleText(await zip.file(name)!.async('string')));
+    const raw = await zip.file(name)!.async('string');
+    footerXml.push(raw);
+    footerTexts.push(visibleText(raw));
   }
+
+  // `<w:evenAndOddHeaders w:val="false"/>` is the OFF state docx emits; the
+  // element with no `w:val`, or a truthy one, is ON.
+  const settings = (await zip.file('word/settings.xml')?.async('string')) ?? '';
+  const evenOdd = settings.match(/<w:evenAndOddHeaders([^>]*)\/>/);
 
   const documentXml = await zip.file('word/document.xml')!.async('string');
   // ⚠️ SCOPED TO `w:sectPr`. A footerReference is only a reference where the
   // section properties are; matching the whole document would count one
   // sitting anywhere.
-  const sectPr = documentXml.slice(documentXml.indexOf('<w:sectPr'));
+  // ⚠️ AND THE BOUND IS ASSERTED RATHER THAN ASSUMED. `indexOf` returns -1 when
+  // absent, and `slice(-1)` is the LAST CHARACTER — which yields zero matches
+  // and would silently SATISFY the signed-form-only arm, whose expected value
+  // is []. An emptiness answer computed from a missing haystack is the
+  // broken-instrument failure, so the haystack is established first.
+  const sectPrAt = documentXml.indexOf('<w:sectPr');
+  expect(sectPrAt, 'no <w:sectPr> — the reference scan would measure nothing').toBeGreaterThan(-1);
+  const sectPr = documentXml.slice(sectPrAt);
   return {
     footerTexts,
+    footerXml,
     // ⚠️ THE ARM THAT SEPARATES "the part exists" FROM "every page shows it".
     footerReferenceTypes: [
       ...sectPr.matchAll(/<w:footerReference[^>]*w:type="([^"]+)"/g),
     ].map((m) => m[1]),
+    titlePg: /<w:titlePg[ />]/.test(documentXml),
+    evenAndOddHeaders: evenOdd ? !/w:val="(false|0)"/.test(evenOdd[1]) : false,
+    sectionCount: [...documentXml.matchAll(/<w:sectPr[ >]/g)].length,
     documentText: visibleText(documentXml),
   };
 }
@@ -135,6 +189,57 @@ function visibleText(xml: string): string {
 }
 
 describe('RULING #117 — the attestation footer', () => {
+  it('THE LITERAL STRINGS ARE PINNED — every other arm compares output to these', () => {
+    // ⚠️ WITHOUT THIS ARM EVERY TEXT ASSERTION IN THIS FILE IS A TAUTOLOGY.
+    // They compare the emitted text to a constant imported FROM THE MODULE
+    // UNDER TEST, so `DRAFT_FOOTER_LINE = ''` ships a footer paragraph with no
+    // characters — a draft "marked" on every page with nothing on it — and
+    // `= 'Not yet signed.'` silently discards the DRAFT word, which is the one
+    // edit the constant's own doc-comment argues against. Both were MEASURED
+    // green against the previous version of this file. The output must be
+    // pinned to the ruling's words, not to itself.
+    expect(DRAFT_FOOTER_LINE).toBe('DRAFT — Not yet signed.');
+    expect(DRAFT_FOOTER_LINE.startsWith('DRAFT'), 'a draft leads with the word').toBe(true);
+    expect(signedAttestationLine('Dr Test', SIGNED_AT)).toBe(
+      'Signed electronically by Dr Test on 2026-08-15.'
+    );
+    // The fallback a null clinician takes — an attestation naming nobody is
+    // still an attestation, and it must not read as an empty signature.
+    expect(signedAttestationLine(null, SIGNED_AT)).toBe(
+      'Signed electronically by Clinician on 2026-08-15.'
+    );
+  });
+
+  it('NOTHING OUTSIDE THE FOOTER CAN UNMARK IT — the four measured false greens', async () => {
+    // ⚠️ EVERY ONE OF THESE PASSED 5 OF 5 AGAINST THE PREVIOUS VERSION OF THIS
+    // GUARD, measured on real emitted OOXML rather than argued. A footer's
+    // reference type being right does not mean the footer is READ.
+    const draft = await pack({ signedAt: null });
+
+    // 1 — `titlePage: true` + no `first` footer = page 1 renders NO footer.
+    //     On a one-page draft, that is the whole document.
+    expect(draft.titlePg, 'titlePg unmarks page 1 while `default` still reads correct').toBe(false);
+
+    // 2 — even/odd headers = the `default` footer stops applying to EVEN pages.
+    //     `document.xml` is byte-unchanged; the switch lives in settings.xml,
+    //     which nothing here used to read.
+    expect(draft.evenAndOddHeaders, 'even/odd would bare pages 2 and 4').toBe(false);
+
+    // 3 — the run can be made INVISIBLE with `<w:t>` byte-identical: `vanish`,
+    //     a white fill, a 2pt size. `visibleText()` reads what the XML says,
+    //     never what renders.
+    const [xml] = draft.footerXml;
+    expect(xml, 'a vanished run is not a marking').not.toMatch(/<w:vanish/);
+    expect(xml, 'the muted grey the in-body block uses').toContain('666666');
+    expect(xml, 'half-points: 18 = 9pt, legible').toContain('w:sz w:val="18"');
+
+    // 4 — footers attach PER SECTION, so an appended section is unmarked in
+    //     full while the first section's reference set is untouched. One
+    //     section is the contract; a second one must fail HERE and be handled
+    //     deliberately rather than render quietly.
+    expect(draft.sectionCount, 'a second section would be entirely unmarked').toBe(1);
+  });
+
   it('UNSIGNED standard: the draft marking is in a referenced section footer', async () => {
     const { footerTexts, footerReferenceTypes, documentText } = await pack({ signedAt: null });
 
