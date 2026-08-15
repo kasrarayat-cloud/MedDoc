@@ -33,6 +33,31 @@ half-filled export and a divergent signed view are wrong NOW.
 | **F4** | **Land #663 and #664**, then rebase and land the held worktree commits — `feat/certification-door` carries the classification fix (`543b5a21`) and the mappings door (`799d1c45`). | — | On `main`, cited. F1's commit is also on that branch; the rebase drops it as a duplicate once F1 has merged. |
 | **F5** | **Item 3 — the certification door, to completion.** | **#106(b)** | See the scope block below. ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* |
 
+**F3 IS BLOCKED ON RULING #117** — merged (`1dce00ff`, 4-of-4) and **NOT deployed**.
+It lands only with the attestation/draft footer; §2.5 names the document-visible
+change. **Reachability was verified, not assumed: an unsigned FORM-ONLY export IS
+reachable** (`formOnly` derives from the template and is independent of signing;
+neither export route carries a signed gate), so the draft footer applies there
+too. **Draft downloads stay legal — the marking is the control, not a gate.**
+
+### F6 — SIX VERIFIED-UNFIXED ITEMS, behind F5
+
+Found and confirmed during F3; none is a theory. **Each is its own item — the
+archive-loop one especially, which is a live hazard rather than a polish task.**
+
+| # | Item | Why it is real |
+|---|---|---|
+| F6.1 | **Patient-summary line breaks are lost in the DOCX** | a genuine fidelity bug on the same class #112 fixed for numbers — the export changes what the note says |
+| F6.2 | **`CLINICAL NOTE` heading renders on an EMPTY note** | a heading over nothing is a document asserting content it does not have |
+| F6.3 | ⚠️ **The archive loop is UNBOUNDED against a single strictly-serializing sidecar** | **measured: a 0.42s staircase**, and `maxDuration` is **INERT on a standalone build** — so nothing bounds it. Real hazard, own item, not a tail |
+| F6.4 | **`export-cleanliness`'s markdown detector is now VACUOUS** | a green that cannot go red — the ratchet class this house names on sight |
+| F6.5 | **`gate-r1`'s "BOTH sides" test asserts one side** | the title is wider than the measurement |
+| F6.6 | **`check-cotenants.sh` watches FOUR hosts; MASTER.md STEP 0.6 names FIVE** | `www.quillmd.com` is missing from its `EXPECTED` table — **my omission when I wrote it**. One line; rides the next small PR rather than waiting for F6 |
+
+⚠️ **F6.6 is the watched-set failure inside the check written to cure watched-set
+failures** — the census I built to stop an unwatched hostname omitted one. Fix it
+with its reason inline, like the others.
+
 Then the **billing tail (B8 close, B9)** per the existing ledger below.
 
 ### F5 — ITEM 3'S FULL SCOPE, WITH ITS RECORDED DESIGN RULES

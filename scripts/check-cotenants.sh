@@ -36,6 +36,7 @@ set -uo pipefail
 # nobody remembering whether it was intended.
 EXPECTED=(
   "quillmd.com|200|the marketing site serves"
+  "www.quillmd.com|200|the same site on the www host. MASTER.md STEP 0.6 names FIVE hosts and this table shipped with FOUR — the watched-set failure INSIDE the check written to cure watched-set failures. Keep every entry on ONE line: the floor is derived by cutting field 2, and a wrapped reason is parsed as extra expected codes."
   "app.quillmd.com|307|unauthenticated redirect to login"
   "admin.quillmd.com|404|the documented adminApi() 404-gate — admin is INVISIBLE, not merely forbidden"
   "pro.quillmd.com|410|DELIBERATELY RETIRED. The meddoc-pro CRM container was stopped (SIGTERM) on ~2026-08-04 and Caddy answers Gone. A change AWAY from 410 is the finding: either it started serving again, or a 502 is wearing its place."
