@@ -107,3 +107,44 @@ to the doctor's own template, correctly uncertified.
 ⚠️ **AND THE QA STACK WAS REBUILT FROM THAT BRANCH TO RUN IT** — QA images are
 now newer than production's and contain RC-2. `check-qa-mock-posture.sh` was
 re-run afterwards and still reports vendor-severed.
+
+### 2026-08-15T04:18:34Z — HANDOFF: the fidelity arc is at RELAY's head, and the loop is the ONLY deploy actor
+
+**Supervised sessions are CLOSED.** The owner has stopped relaying; this loop
+carries the queue from here.
+
+**READ `RELAY.md`'s head before anything else.** Five items (F1–F5) sit ahead of
+the billing tail, each with its ruling and its done-when. They are fidelity
+defects the owner found on a signed test visit — **on the path the pilot doctor
+actually walks** — which is why they jump B8/B9.
+
+**Three rulings were recorded tonight: #112, #113, #114.** Grep them before
+deciding anything in this area. Two of them record things that are NOT true, so
+nobody re-derives them:
+
+- ⚠️ **The twin is NOT half-filling the PDF.** Production holds 0 compiled twin
+  versions, 0 mappings, 0 fill manifests. RC-3's loud-fallback rule stands as a
+  RULE and is worth extending to every export leg — it is simply not that bug's
+  mechanism.
+- ⚠️ **The signed view does NOT fall back to a different renderer.** It already
+  renders the document surface. Both proposed mechanisms for the signed/pre-sign
+  divergence were wrong; **F2 is a MEASUREMENT, not a theory.**
+
+**IN FLIGHT WHEN THIS WAS WRITTEN:**
+
+- `fix/docx-numbering-fidelity` — **PR open, F1's payload.** Cite, merge, deploy
+  under a §2.5 declaration naming the document-visible change.
+- **#663** (RC-2 deploy report) and **#664** (co-tenant status check) — open,
+  waiting on a quiet `main`. F4.
+- `feat/certification-door` — a worktree branch holding **two finished item-3
+  commits**. Do not lose them; F4 rebases and lands them.
+
+**PRODUCTION IS CURRENT.** RC-2 is live (migrations 104) and the `.dockerignore`
+build fix is deployed. Twin tables are 0 by design — **the first non-zero will be
+a doctor's upload, not a defect**, and it supersedes every earlier "zero compiled
+versions" report by ACTION.
+
+⚠️ **ONE HOUSEKEEPING ITEM THE LOOP CANNOT DO:** ~147 MB of scratch at
+`…/scratchpad/rc2-build` + `rc2-src.tar` needs shredding and `shred` is denied to
+the unattended layer. The paths are in the owner's hands. **Do not `rm` them** —
+unlinking before shredding converts a recoverable failure into a permanent one.

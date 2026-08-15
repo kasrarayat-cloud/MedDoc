@@ -408,6 +408,52 @@ request after deploy, with `Argument \`user\` is missing` — an error that does
 not even name the missing column. Finding it took enumerating rather than
 patching what CI happened to surface.
 
+## AN UNFALSIFIABLE OBSERVATION IS NOT EVIDENCE, WHOEVER MADE IT
+
+**Standing 2026-08-15.** A claim earns the word *measured* when something could
+have made it come out the other way. If nothing could, it is a belief with a
+screenshot attached.
+
+⚠️ **REFERENCE CASE, AND IT CAME FROM THE OWNER'S SIDE.** A finding stated that
+the Word export rendered a numbered list correctly while the other surfaces did
+not — the fact that made it a THREE-WAY parity violation and pointed the fix at
+the other two. **The screenshot's Word pane was cut off before the second list,
+which is the only one that discriminates.** The observation could not have come
+out false. Measured on the real signed visit afterwards, Word carried the SAME
+defect: all six paragraphs on one numbering instance, no literal marker
+surviving anywhere in `document.xml`.
+
+**The cost was direction, not effort.** Believing it made Word the reference
+implementation and the other surfaces the suspects — the exact inversion of the
+truth, which would have "fixed" the surface that was already right.
+
+> **Before a comparison becomes the axis of a diagnosis, ask what the
+> observation would have looked like if it were false — then check that the
+> evidence could show it.**
+
+## ⚠️ AND TWO MECHANISMS FOR ONE SYMPTOM, BOTH WRONG, IN ONE NIGHT
+
+Same night, same symptom, and the lesson is about ORDER rather than care:
+
+| proposed | refuted by |
+|---|---|
+| "the signed view falls back to a different renderer" | `visit-ready-view.tsx:787` already guards that whole block with `!isSigned`; `:1116` routes signed visits to a surface that renders the document |
+| "the uncertified twin's native-fill half-fills the PDF" | **0** twin compiled versions for that template, **0** in the entire database, **0** fill manifests |
+
+Both were reached by READING code and were plausible. **One had a fix and a
+paragraph of explanatory comment already written before verification killed it —
+and the comment was the worse artifact**, because a wrong mechanism stated
+confidently in a source file outlives the session that wrote it.
+
+> **Read to form a hypothesis; RUN something to name a mechanism.** The
+> reproduction that settled it took one command and produced a number
+> (`NUMID-SEQUENCE`) that no amount of further reading would have produced.
+
+**And the good half is worth copying:** the second wrong mechanism was caught by
+the author verifying his own fix before shipping it, which is the cheapest
+possible moment. Verify your own change against the code it claims to fix, not
+against your memory of what you read.
+
 ## A check whose TITLE is narrower than what it MEASURES
 
 **Standing rule. Read a check's name as a claim, then go and confirm the
