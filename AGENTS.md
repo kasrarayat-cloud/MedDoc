@@ -1450,6 +1450,35 @@ switching, read its staged file list and found a migration written to
 have read and `assert-migrations-applied` would never have known to look at. It
 would have surfaced in production as *"the column does not exist"*.
 
+### ⚠️ AND THE DISCRIMINATOR IS **DARK vs LIVE**, NOT THE SIZE OF THE FIX
+
+**Standing 2026-08-15.** The rule above — *ask, never fix it yourself* — is about
+acting **under another actor**. It is not a prohibition on touching the shared
+tree; it is a prohibition on touching it **while somebody else is standing in
+it.**
+
+> **LOOP LIVE → the shared tree is theirs. Ask, or wait.**
+> **LOOP DARK → an obstruction there is nobody's, and clearing it is ordinary
+> maintenance.**
+
+⚠️ **REFERENCE CASE, AND IT IS THE DARK ONE.** The loop had died and **could not
+restart**: its launch guard refuses a dirty tree, and a dead session had left
+`?? docs/preflight-reports/preflight-<ts>.md` behind. Waiting for the owner
+would have kept the loop down for no benefit — **there was no other actor to
+collide with, which is the entire content of the hazard.** The report was moved
+onto an open branch and committed (never deleted — it is the audit trail for the
+run it describes) and the loop restarted ~40 minutes sooner.
+
+**What makes this safe is checkable in one command, not a judgement call:**
+`tmux ls` / `pgrep -af foundation-loop.sh`. If either answers, the tree is not
+yours.
+
+⚠️ **AND FLAG IT ANYWAY.** The act was correct and it is still worth naming in
+the report, because *"I resolved a shared-tree obstruction"* reads as routine
+once nobody records which side of the line it was on. **The boundary is what
+keeps the ratification from becoming a precedent for the LIVE case** — which is
+the one that costs a deploy.
+
 ## A DEPLOY DECLARES ITS EXPECTED DELTA BEFORE IT RUNS
 
 **Standing part of the deploy standard — `docs/DEPLOYMENT_RUNBOOK.md` §2.5.**
