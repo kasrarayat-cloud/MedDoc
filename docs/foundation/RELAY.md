@@ -13266,3 +13266,67 @@ written into the census (`69633475`) and **closed by #664 (`cbddb45f`) two
 commits later**, unmarked. Verified on `main`: `scripts/check-cotenants.sh:39`
 carries `www.quillmd.com|200` with its reason inline. **No fix was needed; the
 row was stale.** The other five F6 items stand.
+
+#### F-117 — CITATION AND DEPLOY
+
+**PR #676, merge `012ea04c`. Deployed 2026-08-15T22:52:07Z.**
+
+**Citation — 4 of 4 on `012ea04c48461ba239f51d17c96dee8a77d2535f`:**
+   · `CI` 31911389817 a1
+   · `e2e` 31911389795 a1
+   · `a11y-ci` 31911389763 a1
+   · `secrets-scan` 31911389761 a1
+
+Produced by `scripts/check-citation.sh`, not typed. Every line `a1`.
+
+⚠️ **THIS CITATION ALSO DISCHARGES `1d80e4a3` (PR #675), WHICH WAS 3-OF-4.**
+Another actor merged #675 while this item was in the gate; its `e2e` on `main`
+hit `e2e.yml:56`'s 55-minute wall and reports `cancelled` (55m21s). `012ea04c`
+contains it in full, so the descendant citation is strictly stricter — the
+standing recovery pattern, applied without anyone having to re-run the past.
+
+**§2.5 declaration judged 15 of 15** —
+`docs/foundation/deploys/20260815-012ea04c.md`, placed before the act.
+Full report: `docs/deploy-reports/f117-attestation-footer-20260815.md`.
+
+⚠️ **THE PAYLOAD WAS LARGER THAN THE DECLARATION'S SUBJECT, AND IT SAID SO
+BEFORE THE DEPLOY.** `012ea04c` carries #675 as well. Verified docs-only —
+`MASTER.md` +65, `RELAY.md` +29, one preflight report, **zero production
+files** — and named in the declaration's payload table rather than discovered
+afterwards. *"I deployed `main`" is not the same claim as "I judged what I
+deployed"*, so both were said.
+
+#### ⚠️ FINDING — I DECLARED A ROW I AM NOT ALLOWED TO VERIFY
+
+Rows 4–7 declared that unsigned / signed / form-only `.docx` exports would be
+**unzipped and inspected** after the deploy. **On production that means
+exporting a real doctor's note, which is forbidden.**
+
+> **A declaration row must name a check that is LEGAL on production. "Unzip an
+> export" never is, and writing it took until judgement time to notice.**
+
+Downgraded honestly to a STRUCTURAL check in the shipped worker — the
+`attestationFooter` branch ORDER and `DRAFT_FOOTER_LINE`'s value — with the
+behavioural proof left where it belongs, in the unit gate that ran inside the
+cited `CI`. **Named, not ticked.**
+
+#### ⚠️ AND A `timeout-minutes` EXPIRY REPORTS AS `cancelled` — TWICE, ONE NEAR-MISACCUSATION
+
+| run | budget | actual |
+|---|---|---|
+| this item's `CI`/`test` on the PR head | `test.yml:39` — 20 min | **20m16s** |
+| **#675's `e2e` on `main`** | `e2e.yml:56` — 55 min | **55m21s** |
+
+⚠️ **THE SECOND ONE LOOKED EXACTLY LIKE MY MERGE DESTROYING SOMEBODY'S
+CITATION** — the class with three reference cases in `AGENTS.md`. **The clock
+refutes it: #675's e2e ended `22:07:53Z`; my merge's runs were created
+`22:09:27Z`, 94 seconds LATER.** `merge-pr.sh` was correct not to refuse.
+
+> **A cancelled run is not evidence of a canceller. Check the timestamps before
+> accusing a guard — or yourself.**
+
+The `CI` re-run confirmed rather than merely cleared the diagnosis: attempt 2 of
+the same job on the same commit ran **1m42s against a 20m16s timeout**. A 12×
+swing with zero code delta is what makes it a named mechanism instead of a
+re-run-and-hope. **Both budgets were sized for faster runners than tonight's;
+raising them is a CI-policy call for the war room, not an item fix.**
