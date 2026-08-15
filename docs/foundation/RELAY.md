@@ -27,7 +27,8 @@ half-filled export and a divergent signed view are wrong NOW.
 | # | Item | Ruling | Done when |
 |---|---|---|---|
 | ~~**F1**~~ | ✅ **SHIPPED AND LIVE 2026-08-15** — merge `efe1b443`, 4 of 4, deployed, **25 of 25 declared rows matched**. See the ledger row below. ⚠️ **OWNER PING still owed** — carried in the morning report. | **#112** | ~~Deployed under a §2.5 declaration naming the document-visible change.~~ **MET.** |
-| **F2** | **Name #1's REAL mechanism by MEASUREMENT** — render both surfaces' preview bytes for the test visit and DIFF them. Then fix under the one-truth rule. | **#114** | The mechanism is named with evidence, not a theory. **If the fix is ruling-shaped and reversible → PROVISIONAL per protocol. If not → HALT with the finding.** Suspect one: cached-at-`soapVersion` vs deliberately-uncached. |
+| ~~**F2**~~ | ✅ **MECHANISM NAMED AND MEASURED 2026-08-15** — the surfaces share one builder; the divergence is three signed-gated branches in `loadVisitExportData`, and **the DATE one is wrong**. Ruling **#115** (PROVISIONAL). See the ledger row below. | **#114** | ~~The mechanism is named with evidence, not a theory.~~ **MET.** ⚠️ **The suspect was WRONG and is withdrawn on evidence** — see below. |
+| **F2-b** | **Fix the visit-date substitution — TEN sites, swept by predicate.** The visit/surgery date renders `createdAt`; `signedAt` stays in the signature chrome only. | **#115** | Ten sites changed, a guard that red-proves against the substitution at the *renderer*, and the **MANDATORY adversarial pass** on the finished diff. ⚠️ **Not a two-site patch** — the symptom named 2, the predicate found 10. |
 | **F3** | **Retire `generateVisitPdf`** onto `generateVisitDocx` → Gotenberg. Census, delete-don't-hide. Parity gate REDEFINED to ONE builder's bytes across preview / Word / PDF. | **#113** | The retired builder is gone by traversal, the gate red-proves against tonight's diverging PDF, and Gotenberg is named in the ledger as the single shared dependency it already is. |
 | **F4** | **Land #663 and #664**, then rebase and land the held worktree commits — `feat/certification-door` carries the classification fix (`543b5a21`) and the mappings door (`799d1c45`). | — | On `main`, cited. F1's commit is also on that branch; the rebase drops it as a duplicate once F1 has merged. |
 | **F5** | **Item 3 — the certification door, to completion.** | **#106(b)** | See the scope block below. ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* |
@@ -93,6 +94,80 @@ documented *"fourteen permanently blank on every real visit"* defect.
 **DATE OF PROCEDURE on a CERTIFIED twin.**
 
 ---
+
+### ✅ F2 — the signed-vs-pre-sign divergence, MEASURED — **mechanism named 2026-08-15**
+
+**Ruling #114 asked for a measurement and forbade another theory. This is it.**
+Harness: `scripts/qa/f2-signed-vs-presign-bytes.ts` — **synthetic by
+construction**, no visit id, no database, no production read. F1's
+`settle-word-numbering.ts` reads a real doctor's note and was correctly declined
+by session 02; this probe exists so the question can be answered without one.
+
+#### WHAT WAS MEASURED
+
+**Both surfaces call the same action.** `visit-ready-view.tsx:894` (pre-sign) and
+`:1113` (signed) both mount `VisitDocumentSurface`, which calls
+`previewVisitDocumentAction`. The differing props are suggestion overlays, not
+document bytes.
+
+**The signed branch's alternative is DEAD in production** — measured, not
+inherited:
+
+| production, 2026-08-15 | |
+|---|---|
+| `template_twin_fill_manifests` | **0** |
+| …servable (`VERIFIED` + roundtrip + key) | **0** |
+| `template_twin_compiled_versions` | **0** |
+| signed visits | **27** |
+
+So `loadNativeTemplateDocxForVisit` returns null for every one of the 27, and the
+signed path falls through to the **same** `styledDocument` → `loadVisitExportData`
+→ `generateVisitDocx` the pre-sign path uses. **One builder, both surfaces.**
+
+#### THE THREE SIGNED-GATED BRANCHES, EACH MEASURED AGAINST THE REAL POPULATION
+
+| branch | site | fires on prod |
+|---|---|---|
+| body — `soapFinal` → `signedSoap ?? soapFinal` | `visit-export-server.ts:87` | **0 of 27** — all 27 byte-identical |
+| E/M — `code` → `signedCode ?? override ?? code` | `:138` | **1 of 27** (99215 → 99214) |
+| date — `createdAt` → `signedAt ?? createdAt` | `:148`, `docx-generator.ts:493` | **1 of 27** |
+
+Plus the intended signing chrome, confirmed in bytes: a `Status: Signed` meta row
+and `Not yet signed.` → `Signed electronically by …`. **Those are correct** — a
+signed document should say it is signed.
+
+#### ⚠️ THE DATE BRANCH IS WRONG, AND IT IS LIVE
+
+A row labelled **"Visit date"** and a header field labelled **DATE OF SURGERY**
+both render `signedAt ?? createdAt`. **`cmsdvjgf5000m01mmbs0srykk` occurred
+2026-08-03 and was signed 2026-08-10; its exported document states "Visit date:
+2026-08-10" — seven days wrong, on a signed record, today.** Full decision,
+ten-site census and reversal path: **ruling #115 (PROVISIONAL)**, queued as
+**F2-b**.
+
+#### ⚠️ #114'S NAMED SUSPECT IS WITHDRAWN — ON EVIDENCE, NOT PREFERENCE
+
+#114 suspected the cache (*"cached-at-`soapVersion` vs deliberately-uncached"*).
+It is **not needed to explain the observation, and could not have applied to the
+visit that prompted it**: `cmsttvgpc001m01mdpzsq5q5p` was created `03:40:11Z` and
+signed `03:42:16Z` — a 149-second window with no deploy in it — and carries no
+template, no E/M and an identical body, so every content branch is inert for it.
+Redis holds **0** `visitdoc:*` keys.
+
+**The cache remains a real staleness vector and is NOT dismissed** — its key
+names the visit, the variant and the `soapVersion` and **nothing about the
+renderer**, which is exactly why F1 had to bump `v2 → v3` by hand. It is a
+second, transient mechanism (TTL 30 min), not this one.
+
+⚠️ **AND THE THIRD WRONG MECHANISM IN THIS ARC WOULD HAVE BEEN MINE.** The probe's
+first run reported the BASELINE control as *differing* — and the delta was raw
+`<w:tc>` XML. `<w:t[^>]*>` **also matches `<w:tc>`**, so table cells were being
+captured as "visible text": the repo's own substring trap, inside the probe
+written to measure a fidelity defect. **The control I built specifically so the
+probe COULD say "identical" is the only thing that caught it.** Second defect,
+same run: the first version reported only the FIRST delta, so the BODY and E/M
+arms "passed" on the signing chrome — a check correct about the wrong quantity,
+green with the branches it named deleted. Both fixed; the arms now isolate.
 
 ### ✅ F1 — the note's own list numbers are CONTENT — **SHIPPED AND LIVE 2026-08-15**
 
