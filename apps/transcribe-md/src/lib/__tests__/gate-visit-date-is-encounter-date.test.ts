@@ -80,10 +80,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import JSZip from 'jszip';
-import { extractText, getDocumentProxy } from 'unpdf';
 
 import { generateVisitDocx } from '../docx-generator';
-import { generateVisitPdf } from '../pdf-generator';
 import { formatForEhr, type EhrFormat } from '../ehr-formatters';
 import { resolveHeaderFields, type VisitExportData } from '../visit-export';
 
@@ -209,21 +207,17 @@ describe('styled DOCX', () => {
 });
 
 // ---------------------------------------------------------------------------
-// B · the styled PDF — the same data through the other generator.
+// B · the styled PDF — RETIRED WITH THE SECOND GENERATOR (ruling #113).
 // ---------------------------------------------------------------------------
-describe('styled PDF', () => {
-  it('renders the ENCOUNTER date as the visit date and the SIGNING date in the signature', async () => {
-    const pdf = await generateVisitPdf(DATA);
-    const doc = await getDocumentProxy(new Uint8Array(pdf));
-    const { text } = await extractText(doc, { mergePages: true });
-    const flatText = String(text).replace(/\s+/g, ' ');
-
-    expect(flatText.toLowerCase()).toContain('visit date');
-    expect(flatText).toContain('Signed electronically by');
-
-    assertDateParity('PDF', flatText, ENCOUNTER_ISO, SIGNED_ISO);
-  });
-});
+// This block rendered `generateVisitPdf` and asserted the same date parity the
+// DOCX block above asserts. There is no longer "the other generator": the PDF
+// download is LibreOffice's render of the DOCX block A just checked, so the two
+// arms had become one assertion written twice.
+//
+// ⚠️ THIS IS NOT A COVERAGE REDUCTION FOR RULING #115, AND THE REASON MATTERS.
+// #115's ten sites are all in code that builds the DOCX or the clipboard text;
+// none of them lived in the PDF builder alone. Block A still fails if any of
+// them regresses.
 
 // ---------------------------------------------------------------------------
 // C · the EHR clipboard formats — five of them, reached through ONE shared
@@ -396,23 +390,9 @@ describe('form-only export — the customer operative form', () => {
     ).toBe(1);
   });
 
-  it('PDF: the same form, the same two dates in the same two roles', async () => {
-    const pdf = await generateVisitPdf(FORM_DATA);
-    const doc = await getDocumentProxy(new Uint8Array(pdf));
-    const { text } = await extractText(doc, { mergePages: true });
-    const flatText = String(text).replace(/\s+/g, ' ');
-
-    expect(flatText).toContain('DD:');
-    expect(flatText).toContain('Electronically Signed');
-    expect(flatText).toContain(`DD: ${ENCOUNTER_ISO}`);
-    expect(flatText).toContain(`DT: ${ENCOUNTER_ISO}`);
-    expect(flatText).not.toContain(`DD: ${SIGNED_ISO}`);
-    expect(flatText).not.toContain(`DT: ${SIGNED_ISO}`);
-    expect(
-      (flatText.match(new RegExp(esc(SIGNED_ISO), 'g')) ?? []).length,
-      'the signing date must appear EXACTLY once on a form-only export'
-    ).toBe(1);
-  });
+  // The PDF form arm retired with the second generator (ruling #113) — same
+  // reasoning as block B. `formSignatureLines` is shared, and the DOCX arm
+  // directly above exercises it, so #115-b's `DD:`/`DT:` fix is still gated.
 });
 
 // ---------------------------------------------------------------------------
@@ -451,7 +431,13 @@ describe('the census — no date renderer may fall back to the signing date', ()
    *  (ruling #115-b). It is here because the sweep that produced the ten could
    *  not see a BARE `signedAt`. */
   const WATCHED = [
-    'lib/pdf-generator.ts',
+    // ⚠️ `lib/pdf-generator.ts` was one of #115's ten and is GONE — retired by
+    // ruling #113. It is replaced here rather than merely dropped: shrinking a
+    // watched set is how coverage disappears quietly, so the module that now
+    // sits on that path takes its slot. `lib/visit-pdf.ts` renders no date
+    // today, which is exactly the state this census must keep it in — the day
+    // it learns to format one, it is already watched.
+    'lib/visit-pdf.ts',
     'lib/docx-generator.ts',
     'lib/ehr-formatters.ts',
     'lib/visit-export-server.ts',

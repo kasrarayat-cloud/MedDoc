@@ -12,7 +12,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { filenameSlug, formatVisitDate } from '@/lib/visit-export';
 import { loadVisitExportData } from '@/lib/visit-export-server';
-import { generateVisitPdf } from '@/lib/pdf-generator';
+import { renderVisitPdf, VisitPdfUnavailableError } from '@/lib/visit-pdf';
 import { nativePdfExport } from '@/lib/pdf-native/export';
 import { logDelivery } from '@/lib/deliveries';
 
@@ -64,8 +64,22 @@ export const GET = withApiHandler<{ id: string }>(
           redactPhi(nativeErr instanceof Error ? nativeErr.message : nativeErr)
         );
       }
-      pdf = nativePdf ?? (await generateVisitPdf(data));
+      pdf = nativePdf ?? (await renderVisitPdf(data));
     } catch (err) {
+      // Ruling #113/#116 — the styled PDF is now a Gotenberg render of the Word
+      // export, and there is no second builder to fall back to. A sidecar that
+      // cannot render must therefore say so BY NAME: never a half-document,
+      // never a DOCX wearing a PDF's content type. The doctor can still take
+      // the Word export, and the message has to tell them that.
+      if (err instanceof VisitPdfUnavailableError) {
+        console.error(
+          `[api:visits:export:pdf] renderer unavailable reason=${err.reason}`
+        );
+        return apiError(
+          `the PDF renderer is unavailable (${err.reason}) — the Word export is unaffected`,
+          503
+        );
+      }
       console.error(
         '[api:visits:export:pdf] generation failed:',
         redactPhi(err instanceof Error ? err.message : err)

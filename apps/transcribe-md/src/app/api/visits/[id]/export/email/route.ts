@@ -15,7 +15,6 @@ import { z } from 'zod';
 import { getSession } from '@/lib/auth';
 import { formatVisitDate } from '@/lib/visit-export';
 import { loadVisitExportData } from '@/lib/visit-export-server';
-import { generateVisitPdf } from '@/lib/pdf-generator';
 import { sendVisitPdfEmail } from '@/lib/email';
 import { logDelivery } from '@/lib/deliveries';
 
@@ -98,11 +97,20 @@ export const POST = withApiHandler<{ id: string }>(
       );
     }
 
-    // The PDF is still GENERATED — it is what the delivery row measures, and
-    // generating it here still exercises the export path end to end. It is no
-    // longer SENT: the email carries a link, and the doctor downloads over their
-    // own authenticated session. See sendVisitPdfEmail for why.
-    const pdf = await generateVisitPdf(data);
+    // ⚠️ Ruling #116(b) — a full PDF render of this patient's signed note USED
+    // to happen here. Its own comment said it was "still GENERATED — it is what
+    // the delivery row measures"; the email has carried a LINK rather than an
+    // attachment since `sendVisitPdfEmail` changed, so the document was
+    // rendered and dropped.
+    //
+    // `sizeBytes` is WRITE-ONLY: `visitDelivery` has exactly one reference in
+    // the application (the `.create` in `deliveries.ts`) and no read anywhere.
+    //
+    // ⚠️ AND THE AUDIT ROW'S COPY WAS WORSE THAN USELESS — it recorded the byte
+    // size of a document THIS EMAIL NEVER SENT, in a compliance record, where a
+    // reader would reasonably take it for the size of what was delivered. A
+    // wrong field is worse than an absent one. Both are gone; everything else
+    // in the row (action, target, destination domain) is untouched.
     try {
       const result = await sendVisitPdfEmail({
         toEmail,
@@ -117,14 +125,12 @@ export const POST = withApiHandler<{ id: string }>(
         practiceId: session.user.practiceId,
         channel: 'email',
         destination: toEmail,
-        sizeBytes: pdf.byteLength,
       });
       void logAudit({
         action: 'EXPORT_EMAIL_SENT',
         targetType: 'TranscribeVisit',
         targetId: visitId,
         metadata: {
-          sizeBytes: pdf.byteLength,
           // Destination is the session's own email (gated above); OK
           // to record it verbatim since it's already in the users row.
           destinationDomain: toEmail.split('@')[1] ?? 'unknown',

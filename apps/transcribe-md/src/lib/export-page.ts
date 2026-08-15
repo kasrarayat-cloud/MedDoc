@@ -3,7 +3,7 @@
 // ----------------------------------------------------------------------------
 // ⚠️ THIS EXISTS BECAUSE A MISSING UNIT CONVERSION SHIPPED A SPLIT PAGE.
 //
-// `pdf-generator.ts` draws with pdfkit, which takes POINTS, and had always used
+// `pdf-generator.ts` drew with pdfkit, which takes POINTS, and had always used
 // US Letter. `docx-generator.ts` builds with the `docx` library, which takes
 // TWIPS, and declared no page properties at all — so Word used the library's
 // own default, **A4**. Nobody chose A4 and nothing recorded it.
@@ -16,6 +16,14 @@
 // The on-screen paper IS a render of the Word file. So the doctor was reading
 // an A4 page and downloading a Letter one, and `SPEC.md:200` — "exports must
 // match preview 1:1" — could not hold no matter what either generator drew.
+//
+// ⚠️ THE SECOND BUILDER IS GONE (ruling #113, 2026-08-15). `pdf-generator.ts`
+// was retired and the PDF download now takes the SAME route as the preview:
+// `generateVisitDocx()` → Gotenberg → PDF (`lib/visit-pdf.ts`). The past tense
+// above is deliberate — the split this file exists to prevent can no longer be
+// re-created by a divergence between two generators, because there is one.
+// This module survives because the DOCX still has to DECLARE the page it draws
+// on; nothing else in the repo records that it is US Letter.
 //
 // Text extraction could never have caught it: the parity check that existed
 // compares section-heading STRINGS, and stripping XML tags throws away

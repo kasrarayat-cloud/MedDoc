@@ -1,16 +1,36 @@
 // ============================================================================
-// DOCX → PDF, for PREVIEW ONLY.
+// DOCX → PDF. Previews, and — since ruling #113 — the PDF EXPORT.
 // ----------------------------------------------------------------------------
 // A doctor should be able to see their own form, filled, before they trust it
 // with a patient's note. Rendering Word layout faithfully needs a Word-class
 // renderer, so a Gotenberg sidecar does the conversion.
 //
-// THE RULE THAT SHAPES THIS FILE: a preview may never gate clinical work.
-// Certification, export and signing do not call it and must not learn to. If
-// the sidecar is slow, unhealthy, or simply not deployed, this returns null and
-// the caller renders the TRUE BYTES in the browser instead — the doctor still
-// sees their document, just drawn by a different engine. A preview that can
-// block a signature would be worse than no preview at all.
+// ⚠️ THIS HEADER USED TO SAY "for PREVIEW ONLY", and that stopped being true.
+// It read: *"a preview may never gate clinical work. Certification, export and
+// signing do not call it and must not learn to."* Ruling #113 retired the
+// second PDF builder (`pdf-generator.ts`, pdfkit) and converged the PDF export
+// onto this function, so EXPORT now calls it. The sentence is corrected rather
+// than left standing, because a file asserting an invariant that has quietly
+// become false is read by everyone as a description of the running system —
+// the `DEPLOYMENT_RUNBOOK.md` §5.6 failure, which was false for two months.
+//
+// WHAT IS STILL TRUE, AND IS THE PART THAT MATTERED:
+//   · **SIGNING does not call this, and must not learn to.** `POST /sign` no
+//     longer renders a PDF at all (#116 deleted that call — it existed only to
+//     read `.byteLength` into a write-only column). A preview that can block a
+//     signature would still be worse than no preview at all.
+//   · **CERTIFICATION does not call this.**
+//   · **This function never throws.** Every failure path returns
+//     `{ pdf: null, reason }`.
+//
+// WHAT CHANGED: `pdf: null` no longer means one thing to every caller.
+//   · PREVIEW callers fall back — they render the TRUE BYTES in the browser
+//     instead, and the doctor still sees their document.
+//   · The EXPORT caller REFUSES. `lib/visit-pdf.ts` translates null into a
+//     thrown `VisitPdfUnavailableError`, because an export has no second
+//     engine to fall back to and a half-document would be worse than an
+//     honest refusal. That translation lives THERE, once, not here — this
+//     function's fail-open contract is unchanged.
 //
 // WHERE THE BYTES GO: the filled DOCX (which carries PHI) crosses the internal
 // `converter` Docker network to a service with no route off the host, is

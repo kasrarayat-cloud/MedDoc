@@ -86,9 +86,9 @@ vi.mock('@/lib/visit-export-server', () => ({
   loadVisitExportData: mocks.loadVisitExportData,
 }));
 vi.mock('@/lib/ehr-formatters', () => ({ formatForEhr: () => 'formatted' }));
-vi.mock('@/lib/pdf-generator', () => ({
-  generateVisitPdf: vi.fn(async () => Buffer.from('pdf')),
-}));
+// Ruling #116(b) — `POST /sign` no longer renders a PDF at all, so there is no
+// generator left to stub. The render that used to happen here existed only to
+// read `.byteLength` into a write-only column.
 vi.mock('@/lib/email', () => ({ sendVisitPdfEmail: vi.fn() }));
 vi.mock('@/lib/deliveries', () => ({ logDelivery: mocks.logDelivery }));
 vi.mock('@/lib/edit-tracking', () => ({
