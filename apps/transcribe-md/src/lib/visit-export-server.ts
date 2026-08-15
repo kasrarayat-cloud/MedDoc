@@ -145,7 +145,9 @@ export async function loadVisitExportData(
   // DATE from the visit record, SURGEON from the dictated note, DOB/ID blank.
   const headerFields = resolveHeaderFields(parsedHeaderFields, {
     patientName: visit.patientName,
-    visitDate: visit.signedAt ?? visit.createdAt,
+    // Ruling #115 — DATE OF SURGERY names when the encounter happened. Reading
+    // `signedAt` here printed the SIGNING date onto a customer's operative form.
+    visitDate: visit.createdAt,
     soapText,
     dictationText: visit.rawTextInput,
   });

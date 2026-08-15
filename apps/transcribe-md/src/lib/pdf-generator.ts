@@ -249,7 +249,10 @@ function renderPatientBlock(
 ): void {
   const cells: Array<{ label: string; value: string }> = [
     { label: 'Patient', value: data.patientName?.trim() || 'Anonymous' },
-    { label: 'Visit date', value: formatVisitDate(data.signedAt ?? data.createdAt) },
+    // Ruling #115 — the VISIT date is the ENCOUNTER's date. `signedAt` belongs
+    // only in the signature chrome (the signed line at the foot of this file),
+    // never here: a note signed days later was not a visit that happened then.
+    { label: 'Visit date', value: formatVisitDate(data.createdAt) },
   ];
   if (data.chiefComplaint) {
     cells.push({ label: 'Chief complaint', value: data.chiefComplaint });

@@ -490,7 +490,9 @@ function renderPatientInfoBar(data: VisitExportData): Table {
     { label: 'Patient', value: data.patientName?.trim() || 'Anonymous' },
     {
       label: 'Visit date',
-      value: formatVisitDate(data.signedAt ?? data.createdAt),
+      // Ruling #115 — the VISIT date is the ENCOUNTER's date. `signedAt` belongs
+      // only in the signature chrome (the signed line above), never here.
+      value: formatVisitDate(data.createdAt),
     },
   ];
   if (data.chiefComplaint) {

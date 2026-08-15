@@ -93,8 +93,11 @@ export const GET = withApiHandler<{ id: string }>(
       },
     });
 
+    // Ruling #115 — the filename names the ENCOUNTER, so it carries the same
+    // date the document's own "Visit date" row does. A file dated the signing
+    // day beside a document dated the visit day is two records.
     const filename = `visit-${filenameSlug(data.patientName)}-${formatVisitDate(
-      data.signedAt ?? data.createdAt
+      data.createdAt
     )}.pdf`;
 
     return new NextResponse(pdf as unknown as BodyInit, {

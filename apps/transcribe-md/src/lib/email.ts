@@ -59,9 +59,18 @@ export interface SendVisitPdfEmailArgs {
   visitId: string;
   /** Display name for the greeting. The DOCTOR's name, never a patient's. */
   doctorName: string | null;
-  /** ISO YYYY-MM-DD of the visit. A date alone is not an identifier here — it
-   *  is the doctor's own calendar, in their own inbox. */
-  visitDate: string;
+  /** ISO YYYY-MM-DD the note was SIGNED — not the encounter date. A date alone
+   *  is not an identifier here: it is the doctor's own calendar, in their own
+   *  inbox.
+   *
+   *  ⚠️ RULING #115 NAMED THIS FIELD AND IT IS DELIBERATELY UNCHANGED. That
+   *  ruling moved the VISIT date off `signedAt` at eight render sites, and this
+   *  was one of the ten it enumerated. It is not one of them by JOB: the body
+   *  reads "A note you SIGNED ON ${x}", so `signedAt` is the correct source and
+   *  `createdAt` would have made the sentence false. It was called `visitDate`,
+   *  which is what invited the mistake — hence the rename. The prose is the
+   *  authority on what a field means, not the field's name. */
+  signedDate: string;
 }
 
 export interface SendVisitPdfEmailResult {
@@ -128,7 +137,7 @@ export async function sendVisitPdfEmail(
 
   const html = [
     `<p>${greeting}</p>`,
-    `<p>A note you signed on ${escapeHtml(args.visitDate)} is ready. Open QuillMD to read, download or export it.</p>`,
+    `<p>A note you signed on ${escapeHtml(args.signedDate)} is ready. Open QuillMD to read, download or export it.</p>`,
     `<p><a href="${visitsUrl}" style="display:inline-block;padding:10px 18px;background:#7C3AED;color:#fff;border-radius:6px;text-decoration:none;">Open your visits</a></p>`,
     `<p style="color:#666;font-size:13px;">You'll be asked to sign in. We don't send notes or patient details by email.</p>`,
     `<hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />`,
@@ -138,7 +147,7 @@ export async function sendVisitPdfEmail(
   const text = [
     greeting,
     '',
-    `A note you signed on ${args.visitDate} is ready. Open QuillMD to read, download or export it.`,
+    `A note you signed on ${args.signedDate} is ready. Open QuillMD to read, download or export it.`,
     '',
     visitsUrl,
     '',

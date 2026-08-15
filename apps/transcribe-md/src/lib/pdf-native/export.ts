@@ -107,7 +107,13 @@ export async function nativePdfExport(
         ? visit.signedSoap ?? visit.soapFinal ?? ''
         : visit.soapFinal ?? '';
     const noteText = sanitizeExportedSoap(raw);
-    const visitDate = visit.signedAt ?? visit.createdAt;
+    // Ruling #115 — TWO DATES, and they are not the same date. This used to be
+    // one `visitDate = signedAt ?? createdAt` feeding BOTH the header fill and
+    // the signed line below; collapsing them meant a note signed days later
+    // printed the SIGNING date as DATE OF SURGERY. Splitting them is the fix,
+    // and the split has to stay: changing the header source alone would have
+    // silently moved the encounter date into the signature line instead.
+    const encounterDate = visit.createdAt;
 
     const { texts, addenda } = buildPdfFillTexts({
       noteText,
@@ -115,7 +121,7 @@ export async function nativePdfExport(
       headerFields: coerceHeaderFields(sp.headerFields),
       headerCtx: {
         patientName: visit.patientName,
-        visitDate,
+        visitDate: encounterDate,
         soapText: noteText,
         dictationText: visit.rawTextInput,
       },
@@ -131,7 +137,7 @@ export async function nativePdfExport(
 
     const surgeon = extractSurgeonFromNote(noteText);
     const signedLine = visit.signedAt
-      ? `Electronically signed${surgeon ? ` by ${surgeon}` : ''} on ${visitDate.toISOString().slice(0, 10)} · QuillMD`
+      ? `Electronically signed${surgeon ? ` by ${surgeon}` : ''} on ${visit.signedAt.toISOString().slice(0, 10)} · QuillMD`
       : null;
 
     const out = await fillPdfTemplate({

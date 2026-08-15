@@ -173,9 +173,12 @@ export async function loadOrComputeNativeTemplateDocxForVisit(
       entities: visit.entities,
       generatedNote: visit.soapFinal,
       validationNow: new Date(),
-      // Encounter date for the DATE OF PROCEDURE metadata fill: the signed date
-      // once frozen, else the visit's creation (encounter) date.
-      visitDate: visit.signedAt ?? visit.createdAt,
+      // Encounter date for the DATE OF PROCEDURE metadata fill: the visit's
+      // creation (encounter) date, ALWAYS. Ruling #115 — this used to prefer
+      // `signedAt` "once frozen", which printed the day the note was signed as
+      // the day the procedure happened. Freezing a note does not move a
+      // procedure; the signing date lives in the signature chrome alone.
+      visitDate: visit.createdAt,
       resolverModelVersion: null,
       storage: deps?.storage,
     });
