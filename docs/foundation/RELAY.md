@@ -58,6 +58,35 @@ archive-loop one especially, which is a live hazard rather than a polish task.**
 failures** — the census I built to stop an unwatched hostname omitted one. Fix it
 with its reason inline, like the others.
 
+### F7 — THE ONE-TIME SCRATCH SWEEP — supervised, at the next natural window
+
+**Ruled 2026-08-15.** ~200 scratch files sit at the repo root
+(`.b6-*`, `.b7-*`, `.b8-*`, `.f2-*`, `.t1-*`), plus stale worktrees and `/tmp`
+scratchpads from dead sessions. All gitignored, tree clean — **and that is why
+it accumulated.** Each session correctly reported only its own; the pile was
+always somebody else's.
+
+⚠️ **THIS IS THE BACKLOG. `MASTER.md`'s PICKUP now owns the FLOW** — every
+future pickup reaps or paste-lists anything older than its run, so this item is
+a one-time debt, not a recurring chore.
+
+**SUPERVISED, and at a natural window — never mid-item on a live loop**, because
+the repo root is the deploy surface and `deploy-prod.sh` reads the tree it runs
+in.
+
+| step | |
+|---|---|
+| 1 | **Enumerate** — root dotfile families, `git worktree list` strays, `/tmp` scratchpads |
+| 2 | ⚠️ **Classify by CONTENT, never filename** — credential shapes AND clinical markers, **positive-controlled**, because a clean sweep and a broken sweep produce the same output. A `synthetic_`-style name has already been rejected as evidence once |
+| 3 | **Reap what permissions allow** — a stale worktree goes with `git worktree remove`, which is not `rm` |
+| 4 | **ONE consolidated paste block** for everything `shred`/`rm`-denied — **one paste, not five trickling across reports** |
+
+**Done when:** the root carries no scratch older than the current run, every
+survivor is named with the owner action that clears it, and the classification's
+positive control is in the report. **A filled clinical artifact is PHI
+regardless of synthetic status** — if one is found, it is the history-rewrite
+path, not a delete.
+
 Then the **billing tail (B8 close, B9)** per the existing ledger below.
 
 ### F5 — ITEM 3'S FULL SCOPE, WITH ITS RECORDED DESIGN RULES

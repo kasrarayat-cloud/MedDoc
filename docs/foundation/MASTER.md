@@ -384,6 +384,46 @@ cycle because two pushes happened minutes apart where one would have done.
 
 ---
 
+## ⚠️ YOU ARE UNATTENDED. A QUESTION IS A HALT.
+
+**Ruled 2026-08-15, after a session burned its slot asking permission it already
+had.** It ran preflight, got GO, and ended with *"The gate is GO. Shall I proceed
+into the full STEP 0 sweep and then the RELAY queue?"* — **two minutes, no work,
+and the runner correctly classified it as a stop**, because only `CONTINUE`
+continues.
+
+**There is nobody to answer.** The authorization is the queue at `RELAY.md`'s
+head; a GO gate is the permission, not a prompt for one.
+
+> **Never end a turn with a question. If you are weighing a choice, make it,
+> record the reasoning, and continue — or halt DELIBERATELY on a real
+> stop-condition and say which one.** *"Shall I proceed?"* is not a
+> stop-condition; it is the work not happening.
+
+The real halts are unchanged and few: **real money · legal · clinical mutation
+beyond sanctioned patterns · contradicting a ruling.** Everything else: heal,
+rule provisionally, or park — and keep going.
+
+## ⚠️ WRITING THE PREFLIGHT REPORT INTO THE SHARED TREE BLOCKS THE NEXT RELIGHT
+
+**Ruled 2026-08-15, measured the same night.** `AGENTS.md`'s preflight skill says
+reports are *"always written to `docs/preflight-reports/…` for the audit trail"*.
+The launch guard refuses to start on a dirty tree and **counts untracked files**.
+So a session that follows the skill leaves
+`?? docs/preflight-reports/preflight-<ts>.md` behind, and **the loop cannot
+relight** — the self-blocking-relight class again, this time caused by a rule
+telling the session to write the file.
+
+**Two standing lines were disagreeing and sessions resolved it inconsistently:**
+one earlier session skipped the report *"because writing it would have dirtied
+the deploy surface"*; the next wrote it and blocked the relight.
+
+**THE RESOLUTION: write it, then COMMIT it in your first commit of the session** —
+it is an audit artifact and belongs in git, which is exactly why the skill says
+to write it. **Never leave it untracked at close-out.** If you genuinely make no
+commit that session, say so in your report and name the path, so the pickup
+clears it rather than the guard discovering it.
+
 ## PICKUP — the standing lines, so they stop being re-decided
 
 **Every session opens by doing these. They are not judgement calls and they do
@@ -399,6 +439,31 @@ not need re-deriving each night.**
   leftover.
 - Same for anything else the permissions table marks **denied on purpose**:
   report the path, name the owner action, move on.
+- ⚠️ **SCRATCH OLDER THAN THIS RUN IS YOURS TO ACCOUNT FOR — reap what you can,
+  PASTE-LIST the rest.** Ruled 2026-08-15. Close-out already makes you list what
+  YOU made; that left everything from EARLIER runs owned by nobody, and it grew
+  to **~200 files at the repo root** (`.b6-*`, `.b7-*`, `.b8-*`, `.f2-*`,
+  `.t1-*`) before anyone named it. All gitignored, all harmless individually —
+  which is exactly why it accumulated: **each session correctly reported only
+  its own, and the pile was always somebody else's.**
+
+  So the pickup owns it now:
+  1. **Enumerate** every scratch path older than this run — repo-root dotfile
+     families, stale `git worktree list` entries, `/tmp` scratchpads from dead
+     sessions.
+  2. **Classify by CONTENT, never by filename.** A `synthetic_`-style name has
+     already been rejected as evidence once. Credential shapes AND clinical
+     markers, with a positive control so a clean sweep is distinguishable from
+     a broken one.
+  3. **Reap what permissions allow** (a stale worktree usually goes with
+     `git worktree remove`, which is NOT `rm`).
+  4. **Emit ONE consolidated paste block** for everything `shred`/`rm`-denied —
+     **one paste, not five trickling in across reports.** A hand-off the owner
+     has to reassemble from six messages is a hand-off that does not happen.
+
+  ⚠️ **This is accounting, not destruction.** You still cannot reap what is
+  denied, and you must not try to work around the refusal — the point is that
+  the pile has an owner every night instead of surprising someone monthly.
 
 ## CLOSE-OUT — your final block LISTS THE SCRATCH. Every time.
 
