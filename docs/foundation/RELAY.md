@@ -26,7 +26,7 @@ half-filled export and a divergent signed view are wrong NOW.
 
 | # | Item | Ruling | Done when |
 |---|---|---|---|
-| **F1** | **Ship the numbering fix** — the branch `fix/docx-numbering-fidelity` (PR open) carries it. Cite, merge, deploy. | **#112** | Deployed under a §2.5 declaration naming the **document-visible** change: *every DOCX-derived surface now renders the note's STORED numbers*. ⚠️ Morning report carries an **OWNER PING**: *re-export the same visit and eyeball RECOMMENDATIONS — it should read 1-2-3.* |
+| ~~**F1**~~ | ✅ **SHIPPED AND LIVE 2026-08-15** — merge `efe1b443`, 4 of 4, deployed, **25 of 25 declared rows matched**. See the ledger row below. ⚠️ **OWNER PING still owed** — carried in the morning report. | **#112** | ~~Deployed under a §2.5 declaration naming the document-visible change.~~ **MET.** |
 | **F2** | **Name #1's REAL mechanism by MEASUREMENT** — render both surfaces' preview bytes for the test visit and DIFF them. Then fix under the one-truth rule. | **#114** | The mechanism is named with evidence, not a theory. **If the fix is ruling-shaped and reversible → PROVISIONAL per protocol. If not → HALT with the finding.** Suspect one: cached-at-`soapVersion` vs deliberately-uncached. |
 | **F3** | **Retire `generateVisitPdf`** onto `generateVisitDocx` → Gotenberg. Census, delete-don't-hide. Parity gate REDEFINED to ONE builder's bytes across preview / Word / PDF. | **#113** | The retired builder is gone by traversal, the gate red-proves against tonight's diverging PDF, and Gotenberg is named in the ledger as the single shared dependency it already is. |
 | **F4** | **Land #663 and #664**, then rebase and land the held worktree commits — `feat/certification-door` carries the classification fix (`543b5a21`) and the mappings door (`799d1c45`). | — | On `main`, cited. F1's commit is also on that branch; the rebase drops it as a duplicate once F1 has merged. |
@@ -91,6 +91,108 @@ documented *"fourteen permanently blank on every real visit"* defect.
 
 **COMPLETION PROOF:** the QA twin walk's **fill → export** leg finally ticks —
 **DATE OF PROCEDURE on a CERTIFIED twin.**
+
+---
+
+### ✅ F1 — the note's own list numbers are CONTENT — **SHIPPED AND LIVE 2026-08-15**
+
+**Ruling #112.** PR **#665**, merge **`efe1b443`**, deployed the same session.
+
+**Citation — 4 of 4 on `efe1b4430219793a23015a11ceca5dfcda350ac0`:**
+   · `CI` 31868610915 a1
+   · `e2e` 31868610900 a1
+   · `a11y-ci` 31868610890 a1
+   · `secrets-scan` 31868610938 a1
+
+Produced by `scripts/check-citation.sh`, not typed. **Every line is `a1`** — no
+run was re-run, so there is nothing to explain.
+
+#### WHAT LANDED
+
+| | |
+|---|---|
+| fix | `docx-generator.ts` — a numbered line renders its marker as LITERAL TEXT with a hanging indent (`toTwip(18)`), instead of attaching `numbering: { reference: 'plan-numbering' }` and letting Word repaint it |
+| cache | `docx-preview/fill-cache.ts` — `visitdoc:v2` → `v3`, **the writer and `invalidateVisitFills`'s SCAN pattern together** |
+| guard | `docx-numbering-fidelity.test.ts`, 4 arms |
+| declaration | `docs/foundation/deploys/20260815-efe1b443.md` |
+| judgement | `docs/deploy-reports/deploy-f1-numbering-20260815.md` — **25 of 25** |
+
+#### ⚠️ THE AFFECTED POPULATION WAS COUNTED, NOT ASSUMED — AND 7 OF THEM ARE SIGNED
+
+Measured read-only on production **before** the deploy, matcher controlled in
+both directions (the same regex form finds `## ` in all 42 non-null `soapFinal`
+rows; an impossible token returns 0):
+
+| | |
+|---|---|
+| visits with at least one numbered line | **18** of 44 |
+| visits with **two or more** numbered sections | **12** |
+| **of those 12, SIGNED** | **7** |
+| distinct clinicians | **2** |
+
+**Seven signed clinical documents in production have been exporting
+RECOMMENDATIONS 4/5/6 where the note says 1/2/3.** ⚠️ **Nothing was rewritten
+and nothing should be** — `soapFinal` is untouched; only what the renderer emits
+next time changes. The stored text was always the record.
+
+#### THE PROOF THAT COULD HAVE FAILED — a STRUCTURAL probe, declared with its expected values
+
+A doctor's visit is never a smoke target, so *"did the fix ship"* was answered
+by the ABSENCE of the numbering attachment from the built artifact — **declared
+before the deploy, with the pre-deploy numbers written down.**
+
+    app chunks   plan-numbering  2 → 1     defect shape  1 → 0   (both chunks)
+    worker src   plan-numbering  3 → 2     defect line   1 → 0
+    bundle       visitdoc:v3  = 5          visitdoc:v2   = 0
+
+All six rows landed exactly as declared. ⚠️ **The app image ships a BUILT bundle
+and the worker ships SOURCE**, so the two are probed differently — a probe
+pointed at the wrong one returns 0 for everything and reads like a pass.
+**Traversal control:** `grep -rl` found 2 chunks before AND after; chunk names
+are content-hashed, so the probe re-derives them — a stale filename returns 0
+because the file is gone, which is indistinguishable from success.
+
+#### ⚠️ WHAT IS NOT CLAIMED
+
+- **No behavioural export walk ran on production or QA.** The structural probe
+  proves the SHIPPED CODE, not a rendered document. The document-bytes proof for
+  a real note belongs on QA against a byte-identical build and **was not run** —
+  named here rather than implied by a green probe.
+- **The PDF export leg is untouched.** `…/export/pdf` runs `generateVisitPdf`
+  (pdfkit) — ruling #113 / **F3** owns it.
+
+#### 🟠 FOUND ON THE WAY PAST — A CORRECT OUTCOME WITH A MISLEADING MECHANISM, IN THE FIX'S OWN COMMENT
+
+`fill-cache.ts`'s new comment says the pre-fix cache would have served stale
+bytes *"while `…/export/docx` and `…/export/pdf` both returned the corrected
+1/2/3."*
+
+**The outcome claim is true and the implied mechanism is not.** Read against the
+code: `pdf-generator.ts`'s `renderSoap` has **no numbered-line branch at all**,
+so a `1. ` line falls through to the inline renderer and its literal marker was
+**always** printed. The PDF was never repainted, so nothing about it was
+*"corrected"* — and it does not share the builder that was fixed.
+
+⚠️ **This is the shape AGENTS.md warns about** — *"a wrong mechanism stated
+confidently in a source file outlives the session that wrote it"* — arriving in
+its mildest form, since the sentence is right about what the route returns. It
+is recorded rather than patched: fixing it would have required a push that
+cancelled three in-flight runs on a green PR. **F3 owns that file's
+neighbourhood and corrects the sentence when it converges the leg.**
+
+⚠️ **AND IT SHARPENS F3's PREMISE.** Ruling #113 says the PDF export is *"the
+ONLY leg still diverging"* after #112. On NUMBERING that is now false in the
+useful direction — pre-fix, Word said 4/5/6 while the PDF said 1/2/3, so **this
+fix CONVERGED them.** F3's divergence is template/formatHint awareness, not
+numbers.
+
+#### 🟠 SESSION 01 LEFT ITS LOCAL BRANCH IN A WORKTREE
+
+`retire-branch.sh` retired the REMOTE `fix/docx-numbering-fidelity` and
+**correctly refused to claim the local one** — it is held by session 01's
+worktree at `/tmp/claude-1000/.../scratchpad/f1`. Not deleted from here: moving a
+ref under another actor's worktree is the R5 hazard (`git checkout` in a
+worktree moves the SHARED branch ref). Listed in the scratch inventory.
 
 ---
 
