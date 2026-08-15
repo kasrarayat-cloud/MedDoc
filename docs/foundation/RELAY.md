@@ -97,6 +97,23 @@ documented *"fourteen permanently blank on every real visit"* defect.
 
 ### ✅ F2 — the signed-vs-pre-sign divergence, MEASURED — **mechanism named 2026-08-15**
 
+**Ruling #114.** PR **#668**, merge **`8a792801`**.
+
+**Citation — 4 of 4 on `8a792801547ebeb4f94ebd5fda5a71a795fd5d44`:**
+   · `CI` 31876539443 a1
+   · `e2e` 31876539459 a1
+   · `a11y-ci` 31876539451 a1
+   · `secrets-scan` 31876539516 a1
+
+Produced by `scripts/check-citation.sh`, not typed. **Every line is `a1`** — no
+run was re-run, so there is nothing to explain.
+
+⚠️ **NOT DEPLOYED, AND THAT IS CORRECT, NOT AN OMISSION.** This change carries
+**no runtime code** — a ledger row, a ruling, a `.gitignore` pattern and a
+diagnostic harness that nothing imports. There is no document-visible delta, so
+there is nothing for a §2.5 declaration to declare. **The runtime change is
+F2-b**, and it takes its own declaration and its own adversarial pass.
+
 **Ruling #114 asked for a measurement and forbade another theory. This is it.**
 Harness: `scripts/qa/f2-signed-vs-presign-bytes.ts` — **synthetic by
 construction**, no visit id, no database, no production read. F1's
