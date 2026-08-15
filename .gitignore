@@ -195,6 +195,12 @@ docker-compose.*key*.yml
 .b[0-9]*-*
 .t[0-9]*-*
 .a[0-9]*-*
+# ⚠️ `.f<N>-*` for the FIDELITY arc (F1…F5), added when F2 needed a probe and
+# found no declared pattern for its own item prefix. The dash is load-bearing —
+# `.f2probe.ts` does NOT match, and an undeclared file at the repo root is what
+# once left the loop unable to relight ("REFUSING TO START — the working tree is
+# dirty") over scratch it was not permitted to reap.
+.f[0-9]*-*
 
 # ⚠️ THE LOOP HALT SWITCH IS LOCAL, NEVER TRACKED. A committed STOP halts the
 # FOUNDATION loop in every clone and on every future checkout — and it arrives
