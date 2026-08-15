@@ -408,6 +408,44 @@ and the sentinel is assembled at runtime.
 
 ---
 
+#### ⛔ AND `e2e` WENT RED — A TRUE POSITIVE, AND IT WIDENS #116(c)'s DECLARED COST
+
+**PR #673, run `31897585925`.** `CI`, `a11y-ci` and `secrets-scan` all green;
+**`e2e` FAILED**, and it failed on exactly the right thing:
+
+    expect(pdf.suggestedFilename()).toMatch(/\.pdf$/)
+
+Scenarios **1** (`audio-upload-full`) and **3** (`text-to-soap`) both sign a
+visit and download a PDF. **The main E2E job brings up
+`transcribe-md transcribe-md-worker` — and no `gotenberg`.** Two later jobs in
+that file do; the one where the PDF download actually lives did not. Before this
+change the export was in-process pdfkit and needed nothing.
+
+> ⚠️ **#116(c) DECLARED THE COST AS "a doctor cannot download a PDF while the
+> sidecar is DOWN". THE REAL COST IS WIDER: any environment that does not RUN
+> the sidecar loses PDF export entirely — and one of ours was such an
+> environment.** The declaration in `docs/deploy-declarations/` names gotenberg
+> as a MUST-VERIFY for production; it did not anticipate that the *test* stack
+> was already a counterexample. That gap is the finding, not the red run.
+
+**The gate was right and the stack was wrong** — a test environment whose
+service set no longer matches production's is the wrong-universe class, and the
+red is the instrument working exactly as it should. **Fixed in-branch** by
+adding `gotenberg` to both `up -d --wait` steps in that job, with the reasoning
+written at the step. **Not yet re-run** — see below.
+
+⚠️ **AND THE OTHER RED ARM IS A KNOWN FLAKE, NOT MINE:** scenario 16
+(`account-settings`, *"the profile panel never showed its saved chip"*) is the
+open auto-filed issue **#610**, whose title records that it recurs past its
+documented 12/12 mitigation. Named here so the next reader does not attribute it
+to F3.
+
+⚠️ **THE RE-RUN IS OWED AND IS NOT CLAIMED.** The workflow fix is committed and
+pushed; this session did not stay to watch the new `e2e`. **Nobody may read the
+earlier `CI` green as covering it** — that run predates the workflow change.
+
+---
+
 #### ⛔ THE BLOCKER — #109's CLASS, ON THE SIGNATURE, AND IT IS NOT MINE TO DECIDE
 
 > **`main:pdf-generator.ts:1544-1549` registered a `pageAdded` handler that

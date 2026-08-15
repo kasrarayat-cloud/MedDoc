@@ -305,8 +305,24 @@ jobs:
           fi
           exit $rc
 
-      - name: Start app + worker
-        run: docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
+      # ⚠️ `gotenberg` IS NOT OPTIONAL HERE SINCE RULING #113, AND THIS PR'S OWN
+      # RUN IS WHAT PROVED IT. `pdf-generator.ts` (pdfkit, in-process) was
+      # retired and the PDF export converged onto `generateVisitDocx` →
+      # Gotenberg, so a stack without the sidecar cannot produce a PDF at all —
+      # BY DESIGN, since #116(c) requires the failure be a loud named refusal
+      # rather than a half-document or a DOCX wearing a PDF's content type.
+      #
+      # This job brought up only the app and the worker, so scenarios 1 and 3
+      # asked for a PDF, met the 503, and failed on
+      # `expect(pdf.suggestedFilename()).toMatch(/\.pdf$/)`.
+      #
+      # THE GATE WAS RIGHT AND THE STACK WAS WRONG: a test environment whose
+      # service set no longer matches production's is the wrong-universe class,
+      # and the red is the instrument working. Two later jobs in this file
+      # already list gotenberg — the main scenario job is where the PDF
+      # DOWNLOAD actually lives, and it was the one missing it.
+      - name: Start app + worker (+ the PDF converter — see above)
+        run: docker compose -f docker-compose.qa.yml up -d --wait gotenberg transcribe-md transcribe-md-worker
 
       # ── Run the suite from the runner against the dockerized app at :9020. ──
       - name: Install Playwright chromium
@@ -367,10 +383,14 @@ jobs:
       # created above persists in the qa_minio named volume → /api/health stays
       # healthy. If a future edit adds minio to this step (or a `down`), the
       # bucket-create step must run again before this.
+      # gotenberg listed for the same reason as the step above — these projects
+      # sign visits too, and a recreate that dropped the converter would
+      # reintroduce the 503 for any spec that exports a PDF.
       - name: Recreate app + worker with the flag-gated MOCK fixtures
         run: >
           MOCK_TEMPLATE_PHI_FLAG=true MOCK_RX_WARNINGS=true
-          docker compose -f docker-compose.qa.yml up -d --wait transcribe-md transcribe-md-worker
+          docker compose -f docker-compose.qa.yml up -d --wait
+          gotenberg transcribe-md transcribe-md-worker
 
       # ── The pre-sign document surface. Needs the C3 skin AND the review-doc
       #    flag baked in (both are read from CLIENT components, so a runtime env
