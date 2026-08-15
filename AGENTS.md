@@ -2194,7 +2194,29 @@ bash scripts/check-ingress-tls.sh             # READ-ONLY. 0 = all SNIs OK, 1 = 
 bash scripts/check-composite-fk.sh            # READ-ONLY. 0 = intact, 1 = ABSENT/RESHAPED, 2 = can't tell
 bash scripts/check-bind-mount-agreement.sh    # READ-ONLY. 0 = agrees, 1 = DIVERGED, 2 = can't tell
 bash scripts/check-hooks-installed.sh         # READ-ONLY. 0 = hooks live, 1 = INERT, 2 = can't tell
+bash scripts/check-cotenants.sh               # READ-ONLY. 0 = expected, 1 = DIVERGED, 2 = can't tell
 ```
+
+⚠️ **`check-cotenants.sh` CARRIES AN EXPECTED STATUS PER HOST, AND ONE OF THEM
+IS A `410`.** `pro.quillmd.com` is DELIBERATELY RETIRED — the `meddoc-pro` CRM
+container was stopped with SIGTERM (`Exited (143)`) and Caddy answers Gone. It
+went unwatched for eleven days, and when a post-deploy sweep finally saw the
+410 nobody could say whether it was new; establishing it took reading container
+state.
+
+> **The cure for an unwatched surface is not "watch it" — it is "watch it WITH
+> THE RIGHT ANSWER".** A check demanding 2xx/3xx would go red on a deliberate
+> retirement; a check accepting anything would go green on a **502 wearing the
+> retirement's place**. So the expected code is declared per host with its
+> reason, and a change AWAY from 410 is the finding.
+
+⚠️ **AND ITS DISCRIMINATION CONTROL IS DERIVED FROM THE TABLE, NOT A CONSTANT.**
+The first draft hardcoded "at least 3 distinct codes", which is arbitrary: it
+does not scale when a host is added and it cannot tell a legitimate
+single-divergence from a flat ingress. **Mutation-proved it and the control did
+NOT fire** — removing a host left 3 distinct codes and it passed. The floor is
+now `distinct(expected) - 1`, so an ingress answering every host identically
+exits `2` while one genuine divergence still exits `1` and is reported.
 
 ⚠️ **`--qa` IS A SEPARATE LINE BECAUSE A CAPABILITY NOBODY INVOKES IS
 INDISTINGUISHABLE FROM ONE THAT DOES NOT EXIST.** `assert-migrations-applied.sh`
