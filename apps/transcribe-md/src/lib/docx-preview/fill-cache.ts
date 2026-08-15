@@ -97,12 +97,21 @@ export type FillVariant = 'twin' | 'styled';
  *  record — while `…/export/docx` returns the marked file. The canvas is the
  *  surface she actually reads before signing.
  *
- *  ⚠️ AND BOTH OCCURRENCES MOVE TOGETHER. `invalidateVisitFills` SCANs on this
- *  same prefix, so bumping only the writer would leave it scanning for `v2`
- *  keys while new `v3` keys accumulate — quietly breaking the one-entry-per-
- *  visit bound that exists because THE CACHED VALUE IS PHI. */
+ *  ⚠️ BOTH OCCURRENCES MOVE TOGETHER — and this comment was NOT ENOUGH. On the
+ *  `v4 -> v5` bump the writer moved and the SCAN did not; it was caught by a
+ *  sweep AFTER the commit message had already claimed both had moved. Bumping
+ *  only the writer leaves `invalidateVisitFills` scanning for the OLD version
+ *  while new keys accumulate — quietly breaking the one-entry-per-visit bound
+ *  that exists because THE CACHED VALUE IS PHI.
+ *
+ *  ⚠️ SO THE VERSION IS NOW ONE CONSTANT AND THE DIVERGENCE IS UNREPRESENTABLE.
+ *  A warning that has to be obeyed by hand is obeyed until somebody is tired;
+ *  there is nothing to keep in step here any more. Bump `KEY_VERSION`, and the
+ *  writer and the SCAN move by construction. */
+const KEY_VERSION = 'v5';
+
 function key(visitId: string, soapVersion: number, variant: FillVariant): string {
-  return `visitdoc:v5:${variant}:${visitId}:${soapVersion}`;
+  return `visitdoc:${KEY_VERSION}:${variant}:${visitId}:${soapVersion}`;
 }
 
 export interface CachedFill {
@@ -149,7 +158,8 @@ export async function invalidateVisitFills(visitId: string): Promise<void> {
       const [next, found] = await redis.scan(
         cursor,
         'MATCH',
-        `visitdoc:v4:*:${visitId}:*`,
+        // Same constant as the writer — see KEY_VERSION. These cannot diverge.
+        `visitdoc:${KEY_VERSION}:*:${visitId}:*`,
         'COUNT',
         100,
       );
