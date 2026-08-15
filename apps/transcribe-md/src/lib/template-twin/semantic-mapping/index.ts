@@ -180,6 +180,25 @@ export function fallbackSemanticMappings(
         blankPolicy: field.unknownPolicy,
         unknownPolicy: field.unknownPolicy,
         practiceDefault: null,
+        // ⚠️ THE SAME CLASSIFIER THE MODEL PATH USES, FOR THE SAME REASON.
+        // `classifyFieldSource` reads the COMPILER's label and the field's own
+        // shape — it is not an inference, so it does not belong to the model
+        // path alone. Omitting it here let the schema's `.default('extraction')`
+        // silently label EVERY field `extraction`, including the enumerated
+        // dropdowns whose values come from the note's constrained pick and the
+        // manual fields that have no clinical concept BY CONSTRUCTION.
+        //
+        // That is not cosmetic. `MAPPINGS_NOT_READY` demands a concept for every
+        // NON-manual field, so a manual field mislabelled `extraction` becomes
+        // permanently unsatisfiable — and `concept-registry.ts` already records
+        // what the enumerated half costs: classifying those as `extraction`
+        // "left fourteen of them permanently blank on every real visit and
+        // blocked the native export". The fallback path was still reproducing
+        // the defect that comment was written about.
+        //
+        // One classifier, two callers. A second implementation would drift from
+        // the first the day either is fixed.
+        sourceType: classifyFieldSource(field.originalLabel, field),
         status: 'needs_confirmation',
       });
     });

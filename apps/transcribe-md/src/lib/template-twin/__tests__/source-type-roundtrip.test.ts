@@ -17,6 +17,7 @@ import { describe, expect, it } from 'vitest';
 
 import { SemanticMappingSchema } from '../ir';
 import { classifyFieldSource } from '../concept-registry';
+import { fallbackSemanticMappings } from '../semantic-mapping';
 
 const read = (rel: string) => {
   const { readFileSync } = require('node:fs') as typeof import('node:fs');
@@ -52,6 +53,11 @@ describe('schema', () => {
   });
 
   it('defaults to extraction when absent', () => {
+    // ⚠️ THE DEFAULT IS A SAFETY NET FOR THE FILL PATH'S RE-PARSES, NOT A
+    // CLASSIFICATION. Removing it was evaluated on 2026-08-15 and declined on
+    // evidence — the reason is written at the default in `ir.ts`. What changed
+    // instead: every CONSTRUCTING site now classifies explicitly, guarded by
+    // `gate-source-type-explicit.test.ts`. This arm pins the net, not a policy.
     const parsed = SemanticMappingSchema.parse({ ...BASE });
     expect(parsed.sourceType).toBe('extraction');
   });
@@ -151,5 +157,80 @@ describe('the persistence chain — every link', () => {
     // fieldsReady, and the mapping-update validation.
     expect(src).toContain("mapping.sourceType === 'manual'");
     expect(src).toContain("mapping.sourceType !== 'manual'");
+  });
+});
+
+// ============================================================================
+// ⚠️ THE FALLBACK PATH CLASSIFIES TOO — ATTEMPT-PROVED, NOT ASSUMED.
+//
+// `classifyFieldSource` was called ONLY by the model proposer. When the vendor
+// is unreachable — which is the QA stack's PERMANENT state, and any production
+// outage — `fallbackSemanticMappings` ran instead and omitted the field, so the
+// schema default labelled EVERY field `extraction`.
+//
+// Measured on a real compiled twin of the customer form (QA, 2026-08-15):
+// 80 of 80 mappings came back `extraction`, on a document whose dropdowns
+// should be `verified_note_selection`. `MAPPINGS_NOT_READY` demands a concept
+// for every non-manual field, so that mislabel makes certification
+// unsatisfiable for fields that never needed a concept at all.
+//
+// These arms run the FALLBACK — the path that was wrong — not the classifier
+// in isolation. A unit test of `classifyFieldSource` alone was already green
+// throughout the defect.
+// ============================================================================
+describe('fallbackSemanticMappings classifies like the model path', () => {
+  const field = (over: Record<string, unknown> = {}) => ({
+    fieldId: `ttf_${'b'.repeat(24)}`,
+    originalLabel: 'Study Type',
+    labelSource: 'content_control',
+    kind: 'single_select',
+    allowedOptions: [
+      { ordinal: 0, displayText: 'Bilateral Detailed', value: 'bilateral_detailed' },
+      { ordinal: 1, displayText: 'Unilateral', value: 'unilateral' },
+    ],
+    required: false,
+    unknownPolicy: 'blank',
+    displayOrder: 0,
+    ...over,
+  });
+
+  it('AN ENUMERATED DROPDOWN IS verified_note_selection, THROUGH THE FALLBACK', () => {
+    const [mapping] = fallbackSemanticMappings({ fields: [field()] as never });
+    expect(
+      mapping!.sourceType,
+      'the fallback labelled an enumerated dropdown `extraction` — its value comes ' +
+        'from the note\'s constrained pick, and classifying it as extraction is what ' +
+        '"left fourteen of them permanently blank on every real visit"',
+    ).toBe('verified_note_selection');
+  });
+
+  it('A MANUAL LABEL IS manual, THROUGH THE FALLBACK — and manual needs NO concept', () => {
+    const [mapping] = fallbackSemanticMappings({
+      fields: [field({ originalLabel: 'Ultrasound Technologist', kind: 'narrative_text', allowedOptions: [] })] as never,
+    });
+    expect(mapping!.sourceType).toBe('manual');
+    // The gate's carve-out: a manual field is ready when CONFIRMED, with a null
+    // concept, because nothing dictates who was on shift. Mislabelled
+    // `extraction`, it would demand a concept that cannot exist.
+    expect(mapping!.clinicalConcept).toBeNull();
+  });
+
+  it('a plain free-text field is still extraction — the fix is not a blanket relabel', () => {
+    const [mapping] = fallbackSemanticMappings({
+      fields: [field({ originalLabel: 'Findings', kind: 'narrative_text', allowedOptions: [] })] as never,
+    });
+    expect(mapping!.sourceType).toBe('extraction');
+  });
+
+  it('the fallback and the classifier AGREE — one classifier, two callers', () => {
+    // If the two ever diverge, one of them grew its own copy.
+    for (const f of [
+      field(),
+      field({ originalLabel: 'Ultrasound Technologist', kind: 'narrative_text', allowedOptions: [] }),
+      field({ originalLabel: 'Findings', kind: 'narrative_text', allowedOptions: [] }),
+    ]) {
+      const [mapping] = fallbackSemanticMappings({ fields: [f] as never });
+      expect(mapping!.sourceType).toBe(classifyFieldSource(f.originalLabel, f as never));
+    }
   });
 });

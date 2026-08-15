@@ -294,6 +294,32 @@ export const SemanticMappingSchema = z
         // section, and the marker + note version recorded on the cited fact.
         'verified_note_selection',
       ])
+      // ⚠️ THE DEFAULT STAYS, AND ITS REASON IS WRITTEN HERE RATHER THAN
+      // ASSUMED. Removal was evaluated on 2026-08-15 (owner ruling, item 3)
+      // because a default must never be the assumed classification. The
+      // evidence, in full:
+      //
+      //   · both CONSTRUCTING sites now classify explicitly
+      //     (`fallbackSemanticMappings` and the model proposer, one shared
+      //     `classifyFieldSource`), so the default is no longer load-bearing
+      //     for anything this codebase writes;
+      //   · with it removed, `tsc` was CLEAN and only tests failed — 8
+      //     `procedure-date` fixtures that omit the field, plus one arm in
+      //     `source-type-roundtrip.test.ts` that asserts the default by name;
+      //   · so removal is runtime-PLAUSIBLE.
+      //
+      // It is kept anyway, for one reason: SIX re-parse sites feed the FILL
+      // path (`fill-engine`, `resolver`, `validation` — the last via
+      // `safeParse` on raw input). Removing the default converts "a mapping
+      // arrived without a classification" from a silent mislabel into a THROW
+      // WHILE FILLING A DOCTOR'S DOCUMENT. The schema's input is loosely typed,
+      // so `tsc` cannot prove no such value exists — and a red test is a
+      // strictly better place to learn this than a doctor's export.
+      //
+      // The ruling's goal — "a future path that forgets fails loudly" — is
+      // therefore met by `gate-source-type-explicit.test.ts`, which fails when
+      // a CONSTRUCTING site omits `sourceType`. Loud at author time, silent at
+      // fill time. Revisit only with the fill path's own adversarial pass.
       .default('extraction'),
     clinicalConcept: z.string().min(1).max(160).nullable(),
     expectedDataType: z.enum([
