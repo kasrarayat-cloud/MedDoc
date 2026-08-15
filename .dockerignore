@@ -8,8 +8,30 @@
 # below excludes every env-bearing path and explicitly re-allows only
 # placeholder/template files.
 
-node_modules
-.next
+# ⚠️ `**/` IS LOAD-BEARING ON THESE TWO. A BARE DIRECTORY NAME MATCHES ONLY AT
+# THE CONTEXT ROOT — `node_modules` does NOT exclude `apps/transcribe-md/
+# node_modules`, and `.next` does NOT exclude `apps/*/.next`. Both were being
+# shipped into the build context and copied over the installed ones by
+# `COPY . .`.
+#
+# PROVED, 2026-08-14: a build from a git WORKTREE failed with
+#   `cannot replace to directory /app/apps/transcribe-md/node_modules with file`
+# because the nested path is a SYMLINK there and Docker cannot replace a
+# directory with a file. In `/opt/meddoc-pro` the same paths are real
+# directories, so the identical mistake fails SILENTLY instead of loudly — the
+# build "works" while overlaying host modules onto the image's.
+#
+# ⚠️ AND LINE `apps/*/.next/standalone/**/.env` BELOW IS THIS BUG'S OWN
+# FOOTPRINT: somebody hit the `.next` gap, and patched the symptom (one env path
+# inside it) rather than the pattern. It is deliberately LEFT in place —
+# defence in depth on a secrets block is not something to trim while fixing
+# build hygiene.
+#
+# The other four need no `**/`, checked rather than assumed: the only nested
+# `docs` and `.claude` live under `landing-monolith/`, and the only nested
+# `.git` under `.local/` — both already excluded outright below.
+**/node_modules
+**/.next
 .git
 .claude
 backups
