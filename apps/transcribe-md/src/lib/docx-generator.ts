@@ -354,8 +354,14 @@ export async function generateVisitDocx(
       },
     },
     numbering: {
-      // Unused today — declared so future Plan sections can render as a
-      // real Word numbered list without adding another Document option.
+      // ⚠️ GENUINELY UNUSED NOW, AND THIS COMMENT IS THE CORRECTED ONE.
+      // It said "unused today" while the numbered-line branch below was
+      // actively attaching it — true when written, false for however long
+      // afterwards, and the sentence is what stopped anyone looking. The
+      // branch now renders the note's own markers as text (see there), so
+      // nothing references this config. It is kept, declared and inert,
+      // because a future list that SHOULD be Word-numbered would want it —
+      // but if that day comes, the fidelity test is the thing to read first.
       config: [
         {
           reference: 'plan-numbering',
@@ -634,16 +640,36 @@ function renderSoapParagraphs(soap: string, formOnly = false): (Paragraph | Tabl
     }
     const numbered = line.match(/^(\d+)\.\s+(.*)$/);
     if (numbered) {
-      // T-M22.3: numbered Plan items go through the "plan-numbering"
-      // Numbering config declared on the Document. Previously these
-      // fell through to the plain-paragraph branch so "1." / "2." /
-      // "3." rendered as literal text without Word's numbering
-      // machinery (no auto-renumbering on edit, no indent).
+      // ⚠️ THE NOTE'S OWN NUMBERS ARE CONTENT, NOT STYLING — SO THEY ARE
+      // RENDERED, NOT REPAINTED.
+      //
+      // This used to attach `numbering: { reference: 'plan-numbering' }` and
+      // emit only the text AFTER the marker, letting Word paint the number.
+      // One numbering instance is shared by the whole document, so a second
+      // numbered section CONTINUES the first: a note storing
+      //
+      //     ## POSTOPERATIVE FINDINGS   1. 2. 3.
+      //     ## RECOMMENDATIONS          1. 2. 3.
+      //
+      // exported as RECOMMENDATIONS **4. 5. 6.** Measured on the real signed
+      // visit, not a fixture: all six paragraphs carried `w:numId 2`, and no
+      // literal marker survived anywhere in `document.xml`.
+      //
+      // A clinical note is a record. "Recommendation 1" is a thing the doctor
+      // wrote and may be referred to elsewhere; a renderer that silently calls
+      // it 4 has changed the record's content while claiming to style it. The
+      // auto-renumber convenience is not worth that, and the doctor edits the
+      // note in the app, not in Word.
+      //
+      // The marker is therefore emitted as TEXT, with a hanging indent so it
+      // still reads as a list. Rendered numbers === stored numbers, exactly,
+      // and `docx-numbering-fidelity.test.ts` asserts precisely that across two
+      // adjacent numbered sections.
       out.push(
         new Paragraph({
           spacing: { after: 40 },
-          numbering: { reference: 'plan-numbering', level: 0 },
-          children: renderInlineRuns(numbered[2]),
+          indent: { left: toTwip(18), hanging: toTwip(18) },
+          children: renderInlineRuns(`${numbered[1]}. ${numbered[2]}`),
         })
       );
       continue;
