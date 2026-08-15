@@ -99,7 +99,70 @@ documented *"fourteen permanently blank on every real visit"* defect.
 
 **Rulings #115 and #115-b.** Branch `fix/visit-date-is-encounter-date`.
 
-**Citation and deploy: see the close-out row appended after the merge.**
+#### F2-b — CITATION AND DEPLOY
+
+**PR #670, merge `85e82be5`. Deployed 2026-08-15T12:50Z.**
+
+**Citation — 4 of 4 on `85e82be5190890aa2f24a52292c9a458e18904bd`:**
+   · `CI` 31883766135 a1
+   · `e2e` 31883766151 a1
+   · `a11y-ci` 31883766123 a1
+   · `secrets-scan` 31883766185 a1
+
+Produced by `scripts/check-citation.sh`, not typed. **Every line is `a1`** — no
+run was re-run, so there is nothing to explain.
+
+**§2.5 declaration judged 14 of 14** —
+`docs/foundation/deploys/20260815-85e82be5.md`, a verbatim copy of the
+declaration committed in #670 before the merge commit existed. Full report:
+`docs/deploy-reports/f2b-visit-date-20260815.md`.
+
+⚠️ **THE ROW THAT MATTERED MOST WAS AN ABSENCE ROW.** The over-correction — an
+encounter date leaking into the SIGNATURE line — is a worse document than the
+defect being fixed, and a presence-only declaration cannot see it. Measured as
+`0` signature lines reading `createdAt` against three must-exist controls, so a
+blind probe fails the controls rather than passing the absence.
+
+#### ⚠️ FINDING — THE DECLARED ROLLBACK PATH DID NOT EXIST
+
+The declaration named `meddoc-pro-transcribe-md:pre-visitdate-20260815` and its
+worker twin as *"image tags cut against the RUNNING ids before the deploy"*.
+**`deploy-prod.sh` does not cut rollback tags** — it contains no `docker tag` at
+all; every previous `pre-*` tag on this host was cut BY HAND by the deploying
+session. So the declared rollback path did not exist immediately after the
+deploy.
+
+**Caught by verifying my own declaration row, not by any check** — and the deploy
+log ECHOES the declaration back, so the words *"Image tags cut…"* appear in the
+output and read exactly like confirmation that they were.
+
+Repaired: both pre-deploy images survived as dangling, so the tags were cut
+against the exact ids the declaration names. ⚠️ **A `docker image prune` in that
+window would have made the rollback path unrecoverable**, silently, until
+somebody reached for it mid-incident.
+
+> **STANDING: a §2.5 declaration that NAMES rollback tags must CUT them, or say
+> plainly that the operator must. Naming them is not cutting them, and the
+> deploy log's echo makes the two indistinguishable.**
+
+#### OPEN ITEMS CARRIED OUT OF F2-b — not fixed, named
+
+1. **UTC vs local.** `formatVisitDate` is `toISOString().slice(0,10)` while every
+   in-app date renderer is LOCAL. An evening encounter can print the next day in
+   the document and the current day on screen. **Pre-existing**, but this change
+   makes the field a claim a doctor will check against a schedule, so it is now
+   load-bearing. ⚠️ **The guard's fixtures sit mid-day UTC and therefore cannot
+   come out false on it** — stated in the guard so nobody reads it as covered.
+2. **`POST …/export/email` has no signed-status gate**, so an unsigned visit
+   sends *"A note you signed on `<createdAt>`"*. Pre-existing; the `signedDate`
+   rename turns it from a sloppy name into an asserted falsehood on that branch.
+   Fix is either a status gate or `string | null` with branching prose.
+3. **No behavioural arm on either native-fill leg.** `pdf-native` is LIVE in
+   production; the twin leg has 0 compiled versions. Asserted at source, by
+   consumption.
+4. **No `encounterDate` column.** `createdAt` is the visit-OPENED time. The
+   proper long-term answer is a real encounter date — a schema question, for the
+   war room.
 
 #### WHAT LANDED
 
