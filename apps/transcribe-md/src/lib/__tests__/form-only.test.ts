@@ -51,24 +51,56 @@ High-fiber diet.  Repeat colonoscopy in 5 years if pathology is benign.  Increas
 });
 
 describe('formSignatureLines', () => {
-  it('signed: renders the form signature with DD/DT when the form has them', () => {
-    const lines = formSignatureLines('Dr. Enayati', new Date('2026-07-24'), { dd: true, dt: true });
-    expect(lines[0]).toMatch(/^Electronically Signed – Dr\. Enayati\s+/);
-    expect(lines).toEqual([lines[0], expect.stringMatching(/^DD: /), expect.stringMatching(/^DT: /)]);
+  // ⚠️ THE TWO DATES ARE DELIBERATELY DIFFERENT, AND THE OLD VERSION OF THIS
+  // BLOCK PASSED ONE `Date` FOR BOTH ROLES. That fixture could not tell a
+  // dictation date from a signing date, and it asserted only the PREFIX
+  // (`/^DD: /`) — so it stayed green through the whole defect ruling #115-b
+  // exists for. A fixture whose two inputs are equal cannot discriminate the
+  // thing under test; the assertions now name VALUES.
+  const ENCOUNTER = new Date('2026-08-03T14:30:00Z');
+  const SIGNED = new Date('2026-08-10T09:15:00Z');
+
+  it('signed: DD/DT carry the ENCOUNTER date, the attestation carries the SIGNING date', () => {
+    const lines = formSignatureLines({
+      clinicianName: 'Dr. Enayati',
+      signedAt: SIGNED,
+      encounterDate: ENCOUNTER,
+      sig: { dd: true, dt: true },
+    });
+    expect(lines).toEqual([
+      'Electronically Signed – Dr. Enayati   2026-08-10',
+      'DD: 2026-08-03',
+      'DT: 2026-08-03',
+    ]);
+    // Both directions, explicitly: the signing date must not leak into the
+    // dictation lines, and the encounter date must not leak into the
+    // attestation. Either substitution is a form that contradicts itself.
+    expect(lines.slice(1).join(' ')).not.toContain('2026-08-10');
+    expect(lines[0]).not.toContain('2026-08-03');
   });
 
   it('signed without DD/DT → just the signed line', () => {
-    const lines = formSignatureLines('Dr. Lee', new Date('2026-07-24'), null);
+    const lines = formSignatureLines({
+      clinicianName: 'Dr. Lee',
+      signedAt: SIGNED,
+      encounterDate: ENCOUNTER,
+      sig: null,
+    });
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^Electronically Signed – Dr\. Lee/);
   });
 
-  it('unsigned → the blank form stubs', () => {
-    expect(formSignatureLines(null, null, { dd: true, dt: true })).toEqual([
-      'Electronically Signed –',
-      'DD:',
-      'DT:',
-    ]);
+  it('unsigned → the blank form stubs, encounter date notwithstanding', () => {
+    // The stubs stay gated on SIGNED — that convention is unchanged by #115-b.
+    // Only the VALUE moved, so an unsigned form still renders bare `DD:`.
+    expect(
+      formSignatureLines({
+        clinicianName: null,
+        signedAt: null,
+        encounterDate: ENCOUNTER,
+        sig: { dd: true, dt: true },
+      })
+    ).toEqual(['Electronically Signed –', 'DD:', 'DT:']);
   });
 });
 

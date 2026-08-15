@@ -89,21 +89,49 @@ function renumberBody(bodyLines: string[]): string[] {
  * <date>" (+ DD:/DT: <date> when the form has them). Unsigned → the blank form
  * stubs ("Electronically Signed –", "DD:", "DT:"). Returns the lines in order.
  */
-export function formSignatureLines(
-  name: string | null,
-  signedAt: Date | null,
-  sig?: FormSignatureStyle | null
-): string[] {
-  const who = (name ?? '').trim();
-  const when = signedAt ? formatVisitDate(signedAt) : '';
+export function formSignatureLines(args: {
+  clinicianName: string | null;
+  /** When the note was SIGNED. The attestation line, and nothing else. */
+  signedAt: Date | null;
+  /** When the encounter happened (`visit.createdAt`) — the DD:/DT: lines.
+   *  Ruling #115-b. See the block comment below for why this is separate. */
+  encounterDate: Date;
+  sig?: FormSignatureStyle | null;
+}): string[] {
+  const { clinicianName, signedAt, encounterDate, sig } = args;
+  const who = (clinicianName ?? '').trim();
+  // ⚠️ TWO DATES, AND THEY ARE NOT THE SAME DATE — ruling #115-b.
+  //
+  // This used to be ONE `when = formatVisitDate(signedAt)` feeding the
+  // attestation line AND the DD:/DT: lines. The interface above names them:
+  // DD is the DICTATION date and DT the TRANSCRIPTION date. Neither is a
+  // signature date, and both precede signing — in this system dictation
+  // happens when the visit is opened.
+  //
+  // ⚠️ AND #115 MADE IT WORSE BEFORE IT MADE IT BETTER. Moving DATE OF SURGERY
+  // to the encounter date while leaving these on `signedAt` left the customer's
+  // own operative form asserting the procedure happened on the 3rd and was
+  // dictated on the 10th. Before that fix the page was uniformly wrong; after
+  // it, and until this, it CONTRADICTED ITSELF — and a self-contradicting
+  // clinical form is the worse artifact.
+  //
+  // ⚠️ Note what made this invisible: it is a BARE `signedAt`, not the
+  // `signedAt ?? createdAt` shape #115's predicate swept for, and this file was
+  // not among the ten the ruling named. Three independent adversarial lenses
+  // found it; the author's own by-predicate sweep could not.
+  const signedWhen = signedAt ? formatVisitDate(signedAt) : '';
+  const dictatedWhen = formatVisitDate(encounterDate);
   const lines: string[] = [];
   lines.push(
     signedAt
-      ? `Electronically Signed – ${who}${who ? '   ' : ''}${when}`.trim()
+      ? `Electronically Signed – ${who}${who ? '   ' : ''}${signedWhen}`.trim()
       : 'Electronically Signed –'
   );
-  if (sig?.dd) lines.push(signedAt ? `DD: ${when}` : 'DD:');
-  if (sig?.dt) lines.push(signedAt ? `DT: ${when}` : 'DT:');
+  // The blank-form stubs stay gated on SIGNED — a form renders its dictation
+  // dates when it is finalised, and that convention is unchanged here. Only
+  // the VALUE moves.
+  if (sig?.dd) lines.push(signedAt ? `DD: ${dictatedWhen}` : 'DD:');
+  if (sig?.dt) lines.push(signedAt ? `DT: ${dictatedWhen}` : 'DT:');
   return lines;
 }
 

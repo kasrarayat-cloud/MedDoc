@@ -304,7 +304,11 @@ export function coerceHeaderFields(raw: unknown): NoteTemplateHeaderField[] {
  * Deterministically fill a template's header fields for the styled export.
  * Same rule class as context defaults + the native DATE OF PROCEDURE fill:
  *   - patient_name    → the visit's patient name (visit record)
- *   - date_of_surgery → the visit date (signed/created — visit record)
+ *   - date_of_surgery → the ENCOUNTER date (`visit.createdAt`), never the
+ *     signing date. Ruling #115. ⚠️ This line used to read "(signed/created)",
+ *     which documented the removed `signedAt ?? createdAt` mechanism — stale
+ *     prose in the very file the ruling is about, found by the refutation pass
+ *     rather than by any check, because the census strips comments.
  *   - surgeon         → an explicit surgeon attribution in the note, else blank
  *   - patient_dob / patient_id / anything else → blank unless dictated (never
  *     inferred — DOB/ID are never guessed)

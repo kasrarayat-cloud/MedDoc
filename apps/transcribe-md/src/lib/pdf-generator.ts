@@ -311,7 +311,12 @@ function parseTableRow(line: string): string[] {
 function renderFormSignature(doc: PDFKit.PDFDocument, data: VisitExportData): void {
   doc.moveDown(1.2);
   doc.font(FONTS.bodyRegular).fontSize(SIZE.small).fillColor(COLORS.textPrimary);
-  for (const line of formSignatureLines(data.clinicianName, data.signedAt, data.formSignature)) {
+  for (const line of formSignatureLines({
+    clinicianName: data.clinicianName,
+    signedAt: data.signedAt,
+    encounterDate: data.createdAt,
+    sig: data.formSignature,
+  })) {
     doc.text(line);
     doc.moveDown(0.15);
   }
