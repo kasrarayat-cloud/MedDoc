@@ -28,7 +28,7 @@ half-filled export and a divergent signed view are wrong NOW.
 |---|---|---|---|
 | ~~**F1**~~ | ✅ **SHIPPED AND LIVE 2026-08-15** — merge `efe1b443`, 4 of 4, deployed, **25 of 25 declared rows matched**. See the ledger row below. ⚠️ **OWNER PING still owed** — carried in the morning report. | **#112** | ~~Deployed under a §2.5 declaration naming the document-visible change.~~ **MET.** |
 | ~~**F2**~~ | ✅ **MECHANISM NAMED AND MEASURED 2026-08-15** — the surfaces share one builder; the divergence is three signed-gated branches in `loadVisitExportData`, and **the DATE one is wrong**. Ruling **#115** (PROVISIONAL). See the ledger row below. | **#114** | ~~The mechanism is named with evidence, not a theory.~~ **MET.** ⚠️ **The suspect was WRONG and is withdrawn on evidence** — see below. |
-| **F2-b** | **Fix the visit-date substitution — TEN sites, swept by predicate.** The visit/surgery date renders `createdAt`; `signedAt` stays in the signature chrome only. | **#115** | Ten sites changed, a guard that red-proves against the substitution at the *renderer*, and the **MANDATORY adversarial pass** on the finished diff. ⚠️ **Not a two-site patch** — the symptom named 2, the predicate found 10. |
+| ~~**F2-b**~~ | ✅ **SHIPPED 2026-08-15** — 8 of #115's 10 sites changed (2 exempt by JOB), plus **ruling #115-b** (`DD:`/`DT:`) which the adversarial pass found the fix had CREATED, plus the cache bump. Guard mutation-proved **12 of 12**. See the ledger row below. | **#115** · **#115-b** | ~~Ten sites, a guard, the mandatory adversarial pass.~~ **MET.** ⚠️ The pass found **4 false greens in the guard** and **1 defect the fix introduced** — the reason it is a gate and not a nicety. |
 | **F3** | **Retire `generateVisitPdf`** onto `generateVisitDocx` → Gotenberg. Census, delete-don't-hide. Parity gate REDEFINED to ONE builder's bytes across preview / Word / PDF. | **#113** | The retired builder is gone by traversal, the gate red-proves against tonight's diverging PDF, and Gotenberg is named in the ledger as the single shared dependency it already is. |
 | **F4** | **Land #663 and #664**, then rebase and land the held worktree commits — `feat/certification-door` carries the classification fix (`543b5a21`) and the mappings door (`799d1c45`). | — | On `main`, cited. F1's commit is also on that branch; the rebase drops it as a duplicate once F1 has merged. |
 | **F5** | **Item 3 — the certification door, to completion.** | **#106(b)** | See the scope block below. ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* |
@@ -94,6 +94,128 @@ documented *"fourteen permanently blank on every real visit"* defect.
 **DATE OF PROCEDURE on a CERTIFIED twin.**
 
 ---
+
+### ✅ F2-b — the visit date is the ENCOUNTER's date — **SHIPPED 2026-08-15**
+
+**Rulings #115 and #115-b.** Branch `fix/visit-date-is-encounter-date`.
+
+**Citation and deploy: see the close-out row appended after the merge.**
+
+#### WHAT LANDED
+
+**Eight of ruling #115's ten sites changed. Two did not, and that is the finding
+in the diff.** A ruling names an INTENT; a site has a JOB. Both email senders
+render *"A note you SIGNED ON ${x}"*, so `createdAt` there would not have fixed
+anything — it would have made the email state something untrue. They keep the
+fallback; the parameter is renamed `visitDate` → `signedDate` so the mislabel
+that invited the substitution cannot invite it again.
+
+⚠️ **One site would have broken the signature line.** `pdf-native/export.ts`
+computed ONE `visitDate = signedAt ?? createdAt` and fed BOTH the header fill and
+the *"Electronically signed on …"* line. The obvious edit — change the header
+source — would have silently moved the encounter date into the signature.
+
+**Third commit: ruling #115-b**, and it is the one worth reading. See below.
+
+**Fourth change: the preview fill-cache prefix `visitdoc:v3 → v4`**, writer and
+SCAN pattern together. The key names the visit, the variant and `soapVersion` and
+**nothing about the renderer**, so without the bump a doctor reloading the
+canvas would read the OLD date for up to the 30-minute TTL while the exports read
+the new one — and the visit most likely to be reloaded right after signing is
+precisely the one whose two dates differ. Second instance of that shape; F1 was
+the first.
+
+#### ⚠️ THE ADVERSARIAL PASS FOUND A DEFECT THE FIX ITSELF CREATED
+
+**Ruling #115-b.** `form-only.ts` rendered `DD:` (dictation) and `DT:`
+(transcription) from `signedAt`. Fixing `DATE OF SURGERY` and leaving those left
+the customer's operative form asserting **the procedure happened on the 3rd and
+was dictated on the 10th** — where before the fix the page was uniformly wrong.
+**A self-contradicting clinical form is the worse artifact**, and a partial fix
+produced it. Three of four lenses converged on it independently.
+
+**It was invisible to the sweep because it is a BARE `signedAt`**, not the
+`signedAt ?? createdAt` shape the predicate looked for. The syntactic predicate
+was narrower than the semantic class, by exactly one file.
+
+#### ⚠️ AND THE GUARD I SHIPPED ONE COMMIT EARLIER HAD **FOUR** FALSE GREENS
+
+Every one demonstrated with a one-line edit against the real files; three are
+what a FORMATTER or a routine refactor emits with nobody deciding anything:
+
+| the mutation | why the guard missed it |
+|---|---|
+| consumption moved one hop, marker line left in place | the native arms asserted TEXT PRESENCE, not what is passed — **DATE OF SURGERY re-broke with 13 of 13 green** |
+| `signedAt ? signedAt : createdAt` | the census knew only `??` and `\|\|` |
+| `signedAt ??`⏎`  createdAt` | the census matched PER LINE — and that is Prettier's output one nesting level deeper |
+| a NEW file rendering a visit date | `WATCHED` was hand-kept, and `toBe(8)`/`toBe(10)` **punished adding a file to it** |
+
+Plus two more from the same pass: the EHR block had **two assertions with one
+predicate** and no negative arm at all; and ⚠️ **the fixture's `Dr Test` was
+buying the green** — arms keyed on `Signed electronically by [^.]*on <date>`,
+and `[^.]*` cannot cross the period in a real clinician name. Under the
+production-shaped `Dr. Test` one arm went RED on correct code and **the
+over-correction arm was VACUOUS: it could never fail, for the exact regression
+it exists to catch.**
+
+**Repairs:** newline-collapsed comment-stripped matching, the ternary added, a
+**tree-walking arm** (>300 files asserted) that makes `WATCHED` a consequence
+rather than a promise, **consumption asserted** on the native legs with both
+sides of the split pinned, derived bucket totals, a real EHR negative arm, and a
+period-bearing fixture with the name escaped into the pattern.
+
+**Mutation-proved 12 of 12 RED, restore GREEN**, every mutation asserted APPLIED
+before its result was believed — the 7 partial fixes plus all 5 false-green
+shapes.
+
+#### ⚠️ TWO CLAIMS CORRECTED RATHER THAN DEFENDED
+
+- **`createdAt` is not the encounter date.** There is no `encounterDate` column;
+  `createdAt` is set when the NEW-VISIT FORM is submitted, before any audio
+  exists. The honest claim is *"the visit date is the date the visit was OPENED,
+  not the date it was SIGNED"* — a strict improvement, not the encounter date.
+  Two skews are recorded at the top of the guard, including the one direction
+  where the new value can be **worse** than the old (a visit opened during clinic
+  prep and recorded the next day). **A real encounter-date column is the proper
+  answer and is a schema question — war room.**
+- **The honest-limit sentence was measured on the wrong mechanism.** It excused
+  both native legs with *"zero compiled twin versions"*. That measures
+  `template_twin_compiled_versions`; **`pdf-native` is a different mechanism and
+  is LIVE** — 4 certified templates, canvases in MinIO, 8 signed visits bound.
+  The gap is real, on a real path, and is now named as such.
+
+#### MEASURED PAYLOAD — read-only on production, before the deploy
+
+| | count |
+|---|---|
+| visits / signed | **45 / 27** |
+| **signed AND `date(createdAt) <> date(signedAt)`** | **1** |
+| signed same-day (byte-identical) | 26 |
+| unsigned (already resolved to `createdAt`) | 18 |
+| templates with `formSignature.dd/.dt` | 4 |
+| signed visits on those templates | 8 — **0 of them diverged** |
+
+**Exactly ONE production document changes**, and it is #115's own reference visit
+`cmsdvjgf5000m01mmbs0srykk` (ultrasound, no template, created 2026-08-03, signed
+2026-08-10). The #115-b half changes **zero** documents today and is armed for
+the next operative note whose dictation and signing fall on different days.
+
+#### WHAT THIS DOES NOT CLAIM
+
+- **No behavioural arm on either native-fill leg** — both need a stored PDF
+  canvas / a compiled twin. Asserted at SOURCE, by consumption.
+- **`formatVisitDate` is UTC-truncating while every in-app date renderer is
+  LOCAL.** An evening encounter can print the next day in the document and the
+  current day on screen. **PRE-EXISTING and not introduced here** — but this
+  change makes the field a claim a doctor will check against a schedule, so it is
+  now load-bearing. **The fixtures sit mid-day UTC and therefore cannot come out
+  false on it.** Recorded as an open item, not fixed.
+- **The email exemption's reason does not hold on one branch**:
+  `POST …/export/email` has no signed-status gate, so an unsigned visit sends
+  *"A note you signed on <createdAt>"*. Pre-existing; the rename makes it an
+  asserted falsehood rather than a sloppy name. **Open item.**
+- **Filenames change**, so a copy downloaded before this deploy and one after do
+  not collide — the same note can be filed into a chart twice under two names.
 
 ### ✅ F2 — the signed-vs-pre-sign divergence, MEASURED — **mechanism named 2026-08-15**
 

@@ -8,8 +8,21 @@
 //
 // THE KEY IS THE NOTE'S VERSION. `soapVersion` is bumped by every path that can
 // change what the document says — adopting a suggestion, a doctor's edit — so a
-// stale entry cannot survive a change to the note. Signing is covered too: the
-// signed view reads the STORED delivered bytes, never this.
+// stale entry cannot survive a change to the note.
+//
+// ⚠️ THIS USED TO SAY "Signing is covered too: the signed view reads the STORED
+// delivered bytes, never this." THAT IS FALSE IN PRODUCTION, and was corrected
+// under ruling #115 by the session that had to reason about it.
+//
+// It is true only where a CERTIFIED twin has produced stored native bytes.
+// Production holds ZERO compiled twin versions and ZERO fill manifests
+// (measured 2026-08-15, 27 signed visits), so `loadNativeTemplateDocxForVisit`
+// returns null for every one of them and the signed view re-derives through the
+// SAME `styledDocument` -> `loadVisitExportData` -> `generateVisitDocx` path the
+// pre-sign preview uses — and reads THIS cache on the way. So a renderer change
+// reaches the signed view too, which is exactly why the prefix below is bumped
+// on one. The sentence was true when written, about code somewhere else; that
+// is the whole failure mode of a comment asserting another module's behaviour.
 //
 // WHAT THIS DOES NOT TOUCH: the fill manifest, the artifact store, the sign
 // gate. Nothing here is ever read by the signing path — the gate still
@@ -63,12 +76,21 @@ export type FillVariant = 'twin' | 'styled';
  *  before the deploy would have disagreed for thirty minutes, on the surface
  *  the doctor actually reads.
  *
+ *  `v3 -> v4` for ruling #115, the visit-date fix, and it is the SAME shape a
+ *  second time: the "Visit date" row moves from `signedAt` to `createdAt`, so
+ *  the same note at the same `soapVersion` renders different bytes. Without the
+ *  bump a doctor reloading the canvas within the TTL would read the SIGNING
+ *  date while the Word and PDF exports read the encounter date — and the visit
+ *  most likely to be reloaded right after signing is precisely the one whose
+ *  two dates differ. ⚠️ The key still names nothing about the renderer, so this
+ *  will need doing again; it is not automatic and no test can infer it.
+ *
  *  ⚠️ AND BOTH OCCURRENCES MOVE TOGETHER. `invalidateVisitFills` SCANs on this
  *  same prefix, so bumping only the writer would leave it scanning for `v2`
  *  keys while new `v3` keys accumulate — quietly breaking the one-entry-per-
  *  visit bound that exists because THE CACHED VALUE IS PHI. */
 function key(visitId: string, soapVersion: number, variant: FillVariant): string {
-  return `visitdoc:v3:${variant}:${visitId}:${soapVersion}`;
+  return `visitdoc:v4:${variant}:${visitId}:${soapVersion}`;
 }
 
 export interface CachedFill {
@@ -115,7 +137,7 @@ export async function invalidateVisitFills(visitId: string): Promise<void> {
       const [next, found] = await redis.scan(
         cursor,
         'MATCH',
-        `visitdoc:v3:*:${visitId}:*`,
+        `visitdoc:v4:*:${visitId}:*`,
         'COUNT',
         100,
       );

@@ -305,7 +305,12 @@ export async function generateVisitDocx(
   if (data.formOnly) {
     // The form's OWN signature block — "Electronically Signed – <name> <date>"
     // (+ DD:/DT: when the form has them). No QuillMD signed line.
-    for (const line of formSignatureLines(data.clinicianName, data.signedAt, data.formSignature)) {
+    for (const line of formSignatureLines({
+      clinicianName: data.clinicianName,
+      signedAt: data.signedAt,
+      encounterDate: data.createdAt,
+      sig: data.formSignature,
+    })) {
       children.push(
         new Paragraph({
           spacing: { after: 20 },
@@ -490,7 +495,9 @@ function renderPatientInfoBar(data: VisitExportData): Table {
     { label: 'Patient', value: data.patientName?.trim() || 'Anonymous' },
     {
       label: 'Visit date',
-      value: formatVisitDate(data.signedAt ?? data.createdAt),
+      // Ruling #115 — the VISIT date is the ENCOUNTER's date. `signedAt` belongs
+      // only in the signature chrome (the signed line above), never here.
+      value: formatVisitDate(data.createdAt),
     },
   ];
   if (data.chiefComplaint) {

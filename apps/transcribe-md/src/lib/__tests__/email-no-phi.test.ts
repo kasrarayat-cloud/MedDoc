@@ -96,7 +96,7 @@ describe('the visit email carries no patient and no note', () => {
       toEmail: 'doctor@example.com',
       visitId: VISIT_ID,
       doctorName: 'Dr Aisha Rahman',
-      visitDate: '2026-07-28',
+      signedDate: '2026-07-28',
     });
   });
 
@@ -145,7 +145,7 @@ describe('EVERY email that references a visit, swept', () => {
           toEmail: 'doctor@example.com',
           visitId: VISIT_ID,
           doctorName: 'Dr Aisha Rahman',
-          visitDate: '2026-07-28',
+          signedDate: '2026-07-28',
         }),
     },
     {

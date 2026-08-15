@@ -249,7 +249,10 @@ function renderPatientBlock(
 ): void {
   const cells: Array<{ label: string; value: string }> = [
     { label: 'Patient', value: data.patientName?.trim() || 'Anonymous' },
-    { label: 'Visit date', value: formatVisitDate(data.signedAt ?? data.createdAt) },
+    // Ruling #115 — the VISIT date is the ENCOUNTER's date. `signedAt` belongs
+    // only in the signature chrome (the signed line at the foot of this file),
+    // never here: a note signed days later was not a visit that happened then.
+    { label: 'Visit date', value: formatVisitDate(data.createdAt) },
   ];
   if (data.chiefComplaint) {
     cells.push({ label: 'Chief complaint', value: data.chiefComplaint });
@@ -308,7 +311,12 @@ function parseTableRow(line: string): string[] {
 function renderFormSignature(doc: PDFKit.PDFDocument, data: VisitExportData): void {
   doc.moveDown(1.2);
   doc.font(FONTS.bodyRegular).fontSize(SIZE.small).fillColor(COLORS.textPrimary);
-  for (const line of formSignatureLines(data.clinicianName, data.signedAt, data.formSignature)) {
+  for (const line of formSignatureLines({
+    clinicianName: data.clinicianName,
+    signedAt: data.signedAt,
+    encounterDate: data.createdAt,
+    sig: data.formSignature,
+  })) {
     doc.text(line);
     doc.moveDown(0.15);
   }

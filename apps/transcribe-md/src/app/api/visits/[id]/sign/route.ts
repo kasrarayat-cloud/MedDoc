@@ -640,7 +640,9 @@ export const POST = withApiHandler<{ id: string }>(
             toEmail: to,
             visitId,
             doctorName: data.clinicianName,
-            visitDate: formatVisitDate(data.signedAt ?? data.createdAt),
+            // Ruling #115 — SIGNING date, deliberately: the body says "a note
+            // you signed on X". Not one of the eight visit-date sites.
+            signedDate: formatVisitDate(data.signedAt ?? data.createdAt),
           });
           emailQueued = true;
           logDelivery({

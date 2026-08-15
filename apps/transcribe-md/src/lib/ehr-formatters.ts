@@ -61,7 +61,9 @@ function formatHumanDate(d: Date): string {
 function patientHeader(data: VisitExportData): { name: string; date: string } {
   return {
     name: data.patientName?.trim() || 'Anonymous patient',
-    date: formatHumanDate(data.signedAt ?? data.createdAt),
+    // Ruling #115 — the ENCOUNTER's date, never the signing date. The signing
+    // date is rendered by formatSignedBy() below, which is where it belongs.
+    date: formatHumanDate(data.createdAt),
   };
 }
 
