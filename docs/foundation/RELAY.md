@@ -29,7 +29,7 @@ half-filled export and a divergent signed view are wrong NOW.
 | ~~**F1**~~ | ✅ **SHIPPED AND LIVE 2026-08-15** — merge `efe1b443`, 4 of 4, deployed, **25 of 25 declared rows matched**. See the ledger row below. ⚠️ **OWNER PING still owed** — carried in the morning report. | **#112** | ~~Deployed under a §2.5 declaration naming the document-visible change.~~ **MET.** |
 | ~~**F2**~~ | ✅ **MECHANISM NAMED AND MEASURED 2026-08-15** — the surfaces share one builder; the divergence is three signed-gated branches in `loadVisitExportData`, and **the DATE one is wrong**. Ruling **#115** (PROVISIONAL). See the ledger row below. | **#114** | ~~The mechanism is named with evidence, not a theory.~~ **MET.** ⚠️ **The suspect was WRONG and is withdrawn on evidence** — see below. |
 | ~~**F2-b**~~ | ✅ **SHIPPED 2026-08-15** — 8 of #115's 10 sites changed (2 exempt by JOB), plus **ruling #115-b** (`DD:`/`DT:`) which the adversarial pass found the fix had CREATED, plus the cache bump. Guard mutation-proved **12 of 12**. See the ledger row below. | **#115** · **#115-b** | ~~Ten sites, a guard, the mandatory adversarial pass.~~ **MET.** ⚠️ The pass found **4 false greens in the guard** and **1 defect the fix introduced** — the reason it is a gate and not a nicety. |
-| **F3** | **Retire `generateVisitPdf`** onto `generateVisitDocx` → Gotenberg. Census, delete-don't-hide. Parity gate REDEFINED to ONE builder's bytes across preview / Word / PDF. ⚠️ **CENSUS TAKEN 2026-08-15 — see the ledger row below. It found FIVE production callers where #113 names ONE**, two of which render a patient's signed note only to read `.byteLength` into a write-only column. Ruling **#116** (PROVISIONAL) records their disposition. **The retirement itself has NOT started.** | **#113** · **#116** | The retired builder is gone by traversal, the gate red-proves against tonight's diverging PDF, and Gotenberg is named in the ledger as the single shared dependency it already is. |
+| ~~**F3**~~ | ✅ **EXECUTED 2026-08-15** — `generateVisitPdf` and `pdf-generator.ts` are GONE; five callers dispositioned per #116 (3 converged, 2 deleted); parity REDEFINED as a traversal proving one builder; six test files triaged with the coverage MOVED. See the ledger row below. ⚠️ The census under-described site 3 by one consumer — an **audit row** carrying `sizeBytes` for an email that sends a LINK. ⚠️ The new gate's own mutation proof caught a **false green** in its named-503 arm. | **#113** · **#116** | ~~The retired builder is gone by traversal…~~ **MET**, except the deploy — see the row below for what is NOT claimed. |
 | **F4** | **Land #663 and #664**, then rebase and land the held worktree commits — `feat/certification-door` carries the classification fix (`543b5a21`) and the mappings door (`799d1c45`). | — | On `main`, cited. F1's commit is also on that branch; the rebase drops it as a duplicate once F1 has merged. |
 | **F5** | **Item 3 — the certification door, to completion.** | **#106(b)** | See the scope block below. ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* |
 
@@ -250,6 +250,166 @@ by everyone as a description of the running system.
   must MOVE to the DOCX side, not be deleted with the import. That triage is the
   bulk of the remaining work and is deliberately not rushed at the end of a
   session.
+
+---
+
+### 🟢 F3 — THE RETIREMENT, EXECUTED — **2026-08-15**
+
+**Rulings #113 and #116.** Branch `fix/f3-retire-generate-visit-pdf`.
+The census above is discharged: `generateVisitPdf` and `pdf-generator.ts` are
+gone, and every visit PDF is now LibreOffice's render of `generateVisitDocx`'s
+bytes — which is what the preview has always been.
+
+#### THE FIVE CALLERS, BY JOB, AND THE LIST IS THE DRIVER
+
+| # | Site | Disposition | Evidence |
+|---|---|---|---|
+| 1 | `export/pdf/route.ts` | **CONVERGED** | imports `renderVisitPdf`; 503 branch on refusal |
+| 2 | `sign/route.ts:638` | **DELETED** | no render; `logDelivery` keeps channel + destination, drops `sizeBytes` |
+| 3 | `export/email/route.ts:105` | **DELETED** | same — **and its audit-row copy too, see below** |
+| 4 | `patients/[id]/export/route.ts` | **CONVERGED** | + named absence entry on failure |
+| 5 | `settings/export-data/route.ts` | **CONVERGED** | + named absence entry on failure |
+| — | `scripts/gen-test-pdf.ts` | **DELETED** | dev script, not referenced by any `package.json` |
+| — | `export-page.ts:14`, `template-native-pdf.ts:5` | **REWRITTEN** | the two describing comments the census named |
+| — | six test files | **TRIAGED** — see below | |
+
+⚠️ **THE CENSUS UNDER-DESCRIBED SITE 3 BY ONE CONSUMER, AND THE EXTRA ONE WAS
+THE WORSE OF THE TWO.** #116 recorded both deleted sites as feeding
+`logDelivery({ sizeBytes })`. `export/email/route.ts` also wrote
+`sizeBytes: pdf.byteLength` into the **`EXPORT_EMAIL_SENT` audit row** — a
+compliance record, where a reader would reasonably take that number for the size
+of what was delivered. **The email carries a LINK, not an attachment**, so the
+row asserted a delivered size for a document that was never sent. Both are gone;
+action, target and `destinationDomain` are untouched. *A wrong field is worse
+than an absent one*, and this one lived in the audit log.
+
+#### THE COST, PAID AND NAMED — #116(c)
+
+`renderVisitPdf` **throws** `VisitPdfUnavailableError` carrying the converter's
+coded reason. The download route answers **503** naming the reason and pointing
+at the Word export. The two archive routes append
+`visits/<id>/signed.pdf.UNAVAILABLE.txt` **inside the ZIP** rather than omitting
+the file: an archive that silently drops a signed visit's PDF is a silent
+half-document, because the doctor cannot tell a render failure from a visit that
+was never signed.
+
+⚠️ **AND THAT MESSAGE WAS WRONG IN ITS FIRST DRAFT.** It pointed the reader at
+`visits/<id>/signed.docx` "if present". **Neither archive contains a DOCX** —
+enumerated by grepping every `archive.append` in both routes, which is what
+caught it. It now names `visits/<id>.json`, which both archives genuinely carry.
+*A recovery note that sends somebody to a file that does not exist is the
+absent-field defect wearing a fix's clothes.*
+
+`convert.ts`'s header — *"certification, export and signing do not call it and
+must not learn to"* — is **rewritten in the same commit**, per #116. What stayed
+true is stated with it: **signing still does not call it** (#116(b) removed that
+call entirely), certification does not, and `convertDocxToPdf` still never
+throws. What changed is that `pdf: null` no longer means one thing to every
+caller — previews fall back, the export refuses — and that translation lives in
+`visit-pdf.ts`, once, not at three call sites.
+
+#### THE TEST TRIAGE — THE COVERAGE MOVED; IT WAS NOT DELETED WITH THE IMPORT
+
+Worked entry by entry, each PDF arm marked against its replacement:
+
+| removed PDF arm | disposition |
+|---|---|
+| `generateVisitPdf` magic header | twin exists — DOCX "PK magic header" |
+| tolerates an empty SOAP | **MOVED** — now a DOCX arm |
+| larger buffer when more sections populated | **MOVED** — now a DOCX arm |
+| structure-aware: tables + task lines | twin exists — DOCX "real Word table" |
+| paginates a long table | **MOVED, MEANING RESTATED** — LibreOffice paginates now, so the DOCX arm asserts an 80-row table builds as a real `<w:tbl>`, not literal markdown |
+| metadata PHI guard × 3 | twins exist — DOCX `docProps/core.xml` × 3 |
+| header fields | twins exist — the two DOCX header-field arms assert strictly more |
+| `export-cleanliness` PDF text | twin exists — the DOCX arm above it |
+| `visit-date` styled-PDF + PDF form arms | twins exist — blocks A and the DOCX form-only arm; #115's ten sites are all DOCX/clipboard code |
+| `gate-r1` PDF-source assertions | **RETIRED WITH THE BUILDER** — they pinned pdfkit's drawing code against the shared tokens; there is no second renderer to keep in sync. Every DOCX typography assertion survives |
+| `gate-c2b` PDF geometry arms | **REPLACED BY A STRUCTURAL CLAIM** — two artifacts from one set of bytes through one converter cannot carry two page sizes |
+
+#### THE NEW GATE, AND WHAT IT DOES NOT CLAIM
+
+`gate-f3-one-pdf-builder.test.ts` — 13 arms. Proves by **traversal** that
+`pdf-generator.ts` does not exist, that nothing imports or calls it, that each
+converged caller reaches `renderVisitPdf`, that the two deleted sites render
+nothing, and that the renderer **refuses** rather than substituting.
+
+Every absence arm is paired with a control on the same instrument, because
+`git grep` exits 1 on no-match and the `catch` returns `[]` — *a broken
+traversal and a clean tree produce the same zero*.
+
+⚠️ **IT REDDENED AGAINST ITS AUTHOR ON ITS FIRST RUN**, which is the strongest
+evidence a guard produces about itself. The arm searching for the call shape
+carried a comment asserting *"which no comment in this repo writes"* —
+`gate-c2b`'s own explanatory prose wrote exactly that shape. That comment was
+**stale anyway** (it quoted the pre-retirement route line) and is corrected; the
+traversal now filters comment lines, with its own two-direction control.
+
+⚠️ **AND THE MUTATION PROOF CAUGHT A FALSE GREEN IN THE GATE — THE ARM THAT
+MATTERS MOST TO A DOCTOR.** Proved against **PARTIAL** applications, not only the
+complete inverse:
+
+| mutation | shape | result |
+|---|---|---|
+| renderer returns the DOCX instead of throwing | **partial** — the first edit `convert.ts`'s own fail-open contract invites | 🔴 red |
+| `POST /sign` renders again | **partial** — 1 of the 2 deleted sites | 🔴 red |
+| route loses its named-503 branch (`if (false)`) | complete | 🟢 **GREEN — false** |
+
+The third arm asserted the file *contained* `VisitPdfUnavailableError` and a
+`503`. Neutering the branch left the import line naming the type and the dead
+block holding the 503, so it passed on a route that had stopped distinguishing a
+sidecar outage from a crash. **Text presence is not behaviour.** Rewritten to
+assert the CONDITION on comment-stripped source, then **re-proved red**.
+
+#### WHAT THIS ROW DOES **NOT** CLAIM
+
+- **The conversion leg is not exercised by any unit test.** Every arm mocks
+  `convertDocxToPdf`. So *"the DOCX is clean ⇒ the PDF is clean"* — the argument
+  that let the metadata-PHI and cleanliness arms retire — is an **argument, not a
+  measurement**, and it is written into the gate as one. What does measure it:
+  `gate-c2b`'s font block (converter image + the deploy that rebuilds it) and the
+  E2E export pack against the real sidecar.
+- **Byte-level CONTENT parity across the four surfaces is not asserted anywhere**,
+  and never was. What is proved is that they come from one builder.
+- **The route list in the new gate is hand-kept.** It is #116's census. A sixth
+  caller added tomorrow is caught only if it reaches for the *retired* module.
+- **Not deployed by this session.** See the deploy row.
+
+#### ⚠️ THE FULL UNIT SUITE COULD NOT BE RUN IN THE WORKTREE — SAID PLAINLY
+
+`git worktree add` does not carry `apps/transcribe-md/node_modules`, which holds
+this app's local `react`/`react-dom`. **16 files failed on `Failed to resolve
+import "react/jsx-dev-runtime"`** — one cause, not sixteen findings. All 16 pass
+on `main`, and **this diff touches zero `.tsx` files**. The other **3735 tests
+passed**, including every file this change edits. `tsc --noEmit`: **0 errors**.
+**CI is the full-suite measurement** — it installs cleanly — and the citation
+below is what discharges it, not the local run.
+
+---
+
+### 🔵 CARRIED FORWARD FROM SESSION 05'S LOG — findings that were never in the ledger
+
+**Session 05 recorded these in its morning report and could not land them: it
+found them ~36 minutes into #672's runs, and an addendum push would have
+cancelled that gate at the expensive end of the class.** They are landed here.
+
+1. ⚠️ **#113 IS WRONG ON A LOAD-BEARING POINT.** It says *"the parity gate's
+   watched set excludes the exact leg that diverged."* It did **not** —
+   `gate-c2b-export-parity.test.ts` imported **both** builders. What the gate
+   measured was **geometry only** (page size, margins, font wiring,
+   skin-independence); nothing compared rendered CONTENT, so a PDF with different
+   numbering passed every arm. **The gate's NAME was wider than what it
+   measured** — this house's own named class — and the work was therefore never
+   "add the missing leg to a set it was already in".
+   **Status after F3:** moot by construction. There is one builder, and the
+   premise is now gated by `gate-f3-one-pdf-builder.test.ts` instead.
+2. ✅ **`gate-c2b` would break when `pdf-generator.ts` was deleted** — its "both
+   generators share ONE page definition" arm read that file off disk.
+   **Handled in this item**: the arm now asserts the surviving generator.
+3. 🔵 **`check-cotenants.sh` watches FOUR hosts; MASTER.md STEP 0.6 names FIVE.**
+   `www.quillmd.com` is absent from its `EXPECTED` table — the
+   watched-set-vs-named-set divergence, in a check that landed the same night.
+   **STILL OPEN.** Not fixed here: it is a different item and this session did
+   not want a second unrelated change riding an export PR.
 
 ---
 
