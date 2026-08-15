@@ -16,6 +16,8 @@ import {
   prescriptionOneLine,
   formatVisitDate,
   procedureProvenanceNote,
+  signedAttestationLine,
+  DRAFT_FOOTER_LINE,
 } from './visit-export';
 import { formSignatureLines } from './form-only';
 import {
@@ -948,11 +950,17 @@ function drawWatermark(doc: PDFKit.PDFDocument): void {
 
 function drawFooter(doc: PDFKit.PDFDocument, data: VisitExportData): void {
   const y = doc.page.height - 54;
+  // RULING #117 — the THIRD copy of these strings, and the reason the shared
+  // source exists. Clause (a)'s subject is "UNSIGNED EXPORTS", not "the DOCX",
+  // so leaving this one composing its own text would have shipped ONE RECORD
+  // WITH TWO DRAFT MARKINGS: `…/export/docx` reading `DRAFT — Not yet signed.`
+  // on every page while `…/export/pdf` read `Not yet signed.` on every page.
+  // ⚠️ This builder is NOT retired — it has five production callers on `main`
+  // (F3's census), so "it is going away" was not available as a reason to skip
+  // it. A list that is produced and not worked from is a comment.
   const signedLine = data.signedAt
-    ? `Signed electronically by ${data.clinicianName ?? 'Clinician'} on ${formatVisitDate(
-        data.signedAt
-      )}.`
-    : 'Not yet signed.';
+    ? signedAttestationLine(data.clinicianName, data.signedAt)
+    : DRAFT_FOOTER_LINE;
   doc
     .save()
     .font(FONTS.labelRegular)

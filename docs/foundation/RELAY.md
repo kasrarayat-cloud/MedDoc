@@ -33,9 +33,22 @@ half-filled export and a divergent signed view are wrong NOW.
 | **F4** | **Land #663 and #664**, then rebase and land the held worktree commits — `feat/certification-door` carries the classification fix (`543b5a21`) and the mappings door (`799d1c45`). | — | On `main`, cited. F1's commit is also on that branch; the rebase drops it as a duplicate once F1 has merged. |
 | **F5** | **Item 3 — the certification door, to completion.** | **#106(b)** | See the scope block below. ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* |
 
-**F3 IS BLOCKED ON RULING #117** — merged (`1dce00ff`, 4-of-4) and **NOT deployed**.
-It lands only with the attestation/draft footer; §2.5 names the document-visible
-change. **Reachability was verified, not assumed: an unsigned FORM-ONLY export IS
+**F3 IS BLOCKED ON RULING #117.** It lands only with the attestation/draft
+footer; §2.5 names the document-visible change.
+
+⚠️ **THIS SENTENCE USED TO READ *"blocked on ruling #117 — merged (`1dce00ff`,
+4-of-4) and NOT deployed"*, AND ITS AMBIGUOUS ANTECEDENT PROPAGATED INTO
+RULING #117 ITSELF**, which now asserts *"F3 IS ALREADY MERGED (`1dce00ff`)"*.
+Measured: `1dce00ff` merged PR #672 — `RELAY.md` +90, `RULINGS.md` +1, **zero
+production files**. It is F3's CENSUS, four lines above this in the same table
+(*"The retirement itself has NOT started"*). F3's retirement commit `0fdaa573`
+is **not an ancestor of `main`** and `generateVisitPdf` still has **five**
+production callers. Corrected here and withdrawn in **ruling #118(c)**; #117's
+clauses are unaffected.
+
+**#117's FOOTER IS BUILT AND ITS (a)(b)(c)(d) ARE MET — see the F-117 row
+below. ⚠️ (e) IS NOT BUILT**, so #117 is only PARTIALLY discharged and F3's
+deploy gate is still open. **Reachability was verified, not assumed: an unsigned FORM-ONLY export IS
 reachable** (`formOnly` derives from the template and is independent of signing;
 neither export route carries a signed gate), so the draft footer applies there
 too. **Draft downloads stay legal — the marking is the control, not a gate.**
@@ -13117,3 +13130,139 @@ physician confirmation flow. That flow is the parked INTEGRATE work, and the
 gate is not weakened to reach it. **Named honestly rather than ticked**: an
 unverified step named is worth more than a green bought by loosening
 `MAPPINGS_NOT_READY`.
+
+---
+
+### ✅ F-117 — AN UNSIGNED NOTE IS MARKED ON EVERY PAGE — **2026-08-15**
+
+**Ruling #117**, plus **#118 (PROVISIONAL)** which records the two places #117
+contradicts itself. Branch `fix/f3-attestation-footer`.
+
+**The property is RESTORED, not invented.** `pdf-generator.ts:190` hooks
+`pageAdded` and paints the attestation on every page; `docx-generator.ts` had
+**`new Footer(` = 0** against a control of 29 `new Paragraph(` and rendered the
+line ONCE, in the body, on the last page.
+
+⚠️ **AND IT IS A LIVE DEFECT ON `main`, INDEPENDENT OF F3.** The Word download
+and the pre-sign canvas are both renders of THIS builder's bytes, so pages
+1..n-1 of an unsigned multi-page note are already indistinguishable from a
+finished record. **Measured, not theorised: 18 of 45 production visits are
+unsigned, and `audit_logs` holds 4 `EXPORT_DOCX_DOWNLOADED` + 2
+`EXPORT_PDF_DOWNLOADED` rows with `isSigned=false`.** Reachability is six
+recorded events, not an argument.
+
+#### WHAT LANDED — the matrix, all four cells
+
+|           | SIGNED                    | UNSIGNED               |
+|-----------|---------------------------|------------------------|
+| standard  | (b) the attestation       | (a) `DRAFT — Not yet…` |
+| form-only | (c) NO footer at all      | (a) `DRAFT — Not yet…` |
+
+Plus the shared `signedAttestationLine` / `DRAFT_FOOTER_LINE` in
+`visit-export.ts`, adopted by **both** live builders, and the fill-cache bump.
+
+#### ⚠️ THE ADVERSARIAL PASS IS WHY THIS DID NOT SHIP AS IT STOOD
+
+Four lenses over the finished diff. **It found a defect in the change and five
+false greens in the guard that had already been mutation-proved 5 of 5.** Every
+finding was verified here before a line moved.
+
+**1 · THE FILL-CACHE KEY WAS NOT BUMPED — and the defect inverted onto the one
+surface #117 exists to protect.** `visitdoc:v4` names the visit, the variant and
+`soapVersion` and **nothing about the RENDERER**, so for up to the 30-minute TTL
+a doctor reloading the PRE-SIGN CANVAS would read the PRE-FOOTER bytes while
+`…/export/docx` returned the marked file. ⚠️ **THIRD OCCURRENCE OF THE CLASS**
+(`v2→v3` numbered lists, `v3→v4` ruling #115), and the file's own comment ends
+*"this will need doing again; it is not automatic and no test can infer it."*
+It was right — and it still took a lens rather than the author. Bumped `v4→v5`,
+writer and SCAN together.
+
+**2 · FIVE MEASURED FALSE GREENS**, each EXECUTED against real OOXML and each
+passing 5-of-5 against the first version of the guard:
+
+| mutation | what the doctor gets | now |
+|---|---|---|
+| `titlePage: true` | page 1 of every draft unmarked — on a 1-page draft, the whole document | RED |
+| `evenAndOddHeaderAndFooters: true` | pages 2 and 4 bare, `document.xml` byte-unchanged | RED |
+| `vanish: true` / white / 2pt | `<w:t>` identical, footer unreadable | RED |
+| `DRAFT_FOOTER_LINE = ''` | a draft "marked" with zero characters | RED |
+| `DRAFT_FOOTER_LINE = 'Not yet signed.'` | the DRAFT word silently dropped | RED |
+
+⚠️ **THE LAST TWO ARE STRUCTURAL: EVERY TEXT ARM COMPARED THE OUTPUT TO A
+CONSTANT IMPORTED FROM THE MODULE UNDER TEST** — a tautology that can only ever
+say *"the builder used the constant"*, never *"the constant says what the ruling
+says"*. The literals are now pinned to the ruling's words. The first three are
+mutation 5's lesson one level out: `titlePg` and `evenAndOddHeaders` decide
+whether a `default` reference applies **at all**, and neither lived in a file
+the guard opened.
+
+#### MUTATION-PROVED 11 OF 11, each asserting its own application first
+
+Round 1 (the implementation): total inverse → 4 red · branch order swapped → 2
+red · attestation drift → 2 red · chrome onto a signed form → 2 red ·
+**attached as `first` not `default` → 4 red**.
+Round 2 (the false greens above): all five → red.
+Round 11 is the **blindness measurement**, below.
+
+⚠️ **MUTATION 5 PASSED 5 OF 5 AGAINST THE FIRST GUARD.** The arm asserted
+`footerReferences > 0`, which `{ first: … }` satisfies. Measured:
+
+    <w:footerReference w:type="first" r:id="rId7"/>     titlePg: false
+
+A first-page footer is honoured **only when `w:titlePg` is set**, and `docx`
+does not set it — so that one-word edit yields a valid footer part, a valid
+reference, and a draft marked on **ZERO pages**: strictly worse than the defect
+being fixed, passing the guard written to prevent it. *Presence was never the
+property*, and it was the **partial** mutation that said so, not the complete
+inverse.
+
+#### WHAT THIS DOES **NOT** CLAIM — measured limits, not hedges
+
+- ⚠️ **#117(e) IS NOT BUILT, SO #117 IS ONLY PARTIALLY DISCHARGED AND F3's
+  DEPLOY GATE STAYS OPEN.** The clause wants an E2E through the REAL converter
+  on a MULTI-PAGE note *"because PAGE COUNT IS LIBREOFFICE'S"*. This fixture is
+  **one page**, so *"on every page"* is asserted over a set of size one, and
+  `w:type="default"` is a **proxy** for what LibreOffice paints. The four new
+  arms exist because they are the ways that proxy comes apart — they are still
+  structure, not pixels.
+- ⚠️ **THE GUARD WATCHES ONE OF FOUR ATTESTATION EMITTERS, MEASURED.**
+  Re-drifting `pdf-generator` to its own inline string leaves the suite **7 of 7
+  GREEN**. `pdf-native/export.ts` and `ehr-formatters.ts` are likewise unwatched.
+  Recorded IN the guard so it is not read wider than it is.
+- **No E2E, no QA walk, no deploy verification of the rendered artifact.**
+
+#### 🔴 NEW FINDING — `pdf-native` MARKS NOTHING, AND IT IS LIVE
+
+`NEXT_PUBLIC_TEMPLATE_NATIVE_PDF=true` in the running container.
+`pdf-native/export.ts:139` → `signedLine = visit.signedAt ? … : null`;
+`fill-engine.ts:218` draws it on `pages[0]` **only**. So an **unsigned**
+pdf-native export carries **no marking on any page**, and a signed one only on
+page 1. **Measured: 10 non-deleted visits bound to `pdfNativeCertified`
+templates, 2 of them UNSIGNED and READY**, canvases present in MinIO so the path
+applies rather than falling back.
+
+⚠️ **NOT FIXED HERE, DELIBERATELY.** Marking a doctor's OWN PDF canvas at fixed
+coordinates is a design decision #117 did not make — the chrome-versus-safety
+question (c) settled for DOCX, asked again on paper the renderer does not own.
+**Own item, own ruling.** Referred in **#118(d)**.
+
+#### ALSO FOUND, UNFIXED
+
+- **`form-only.ts:126` prints the literal `Electronically Signed –` on an
+  UNSIGNED form-only export** (name and date suppressed, the words are not). An
+  unsigned draft already carries those words on the doctor's paper — which is
+  the strongest single argument for #118(a)'s reading of the (a)/(e) conflict.
+- **`ehr-formatters.ts:73` composes a THIRD attestation with a different date
+  format** (`formatHumanDate`). Not unified; named.
+- **Every pre-existing DOCX gate reads `word/document.xml` only.** The
+  attestation now also lives in `word/footer1.xml`, so ruling #115's own
+  date guard cannot see a date written wrongly into the footer. Watched-set gap
+  created by this change; the new gate covers the signed cell by exact string.
+
+#### CORRECTION TO THE F6 TABLE — **F6.6 was already closed**
+
+F6.6 (*"`check-cotenants.sh` watches FOUR hosts; MASTER.md names FIVE"*) was
+written into the census (`69633475`) and **closed by #664 (`cbddb45f`) two
+commits later**, unmarked. Verified on `main`: `scripts/check-cotenants.sh:39`
+carries `www.quillmd.com|200` with its reason inline. **No fix was needed; the
+row was stale.** The other five F6 items stand.

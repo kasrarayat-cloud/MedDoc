@@ -12,6 +12,7 @@ import {
   AlignmentType,
   BorderStyle,
   Document,
+  Footer,
   HeadingLevel,
   LevelFormat,
   Packer,
@@ -29,6 +30,8 @@ import {
   prescriptionOneLine,
   formatVisitDate,
   procedureProvenanceNote,
+  signedAttestationLine,
+  DRAFT_FOOTER_LINE,
 } from './visit-export';
 import { formSignatureLines } from './form-only';
 import {
@@ -324,10 +327,11 @@ export async function generateVisitDocx(
         alignment: AlignmentType.CENTER,
         children: [
           new TextRun({
+            // RULING #117(b) — the SAME source as the section footer. This
+            // used to compose the string inline; the footer would have been a
+            // second copy of it.
             text: data.signedAt
-              ? `Signed electronically by ${data.clinicianName ?? 'Clinician'} on ${formatVisitDate(
-                  data.signedAt
-                )}.`
+              ? signedAttestationLine(data.clinicianName, data.signedAt)
               : 'Not yet signed.',
             color: '666666',
             size: 18,
@@ -337,6 +341,8 @@ export async function generateVisitDocx(
       })
     );
   }
+
+  const pageFooter = attestationFooter(data);
 
   const doc = new Document({
     // docProps/core.xml survives every Word/Pages/LibreOffice
@@ -394,12 +400,59 @@ export async function generateVisitDocx(
             },
           },
         },
+        // RULING #117 — a SECTION footer, so Word/LibreOffice repeat it on
+        // every page by construction. The retired PDF builder painted its
+        // equivalent with a manual `pageAdded` hook, which is why converging
+        // the two dropped it silently: the property lived in the renderer, not
+        // in the document.
+        ...(pageFooter ? { footers: { default: pageFooter } } : {}),
         children,
       },
     ],
   });
 
   return Packer.toBuffer(doc) as unknown as Buffer;
+}
+
+/** RULING #117 — the attestation footer, repeated on every rendered page.
+ *
+ *  |           | SIGNED                          | UNSIGNED                  |
+ *  |-----------|---------------------------------|---------------------------|
+ *  | standard  | (b) the attestation             | (a) DRAFT — Not yet…      |
+ *  | form-only | (c) NONE — the doctor's paper    | (a) DRAFT — Not yet…      |
+ *
+ *  ⚠️ (c) IS NOT AN OVERSIGHT AND MUST NOT BE "FIXED". On a FINAL document the
+ *  doctor's own form holds the attestation slot (Electronically Signed / DD /
+ *  DT) and the form's field IS the attestation — QuillMD chrome there would be
+ *  a second, competing signature on a record that already has one.
+ *
+ *  ⚠️ AND (a) DELIBERATELY OVERRIDES THAT for the unsigned case. A draft is a
+ *  draft on anyone's paper; safety outranks chrome for non-final documents.
+ *  The chrome-free contract applies to FINAL documents, which is exactly the
+ *  collision #117 resolves — so the ORDER of these two branches is the ruling,
+ *  not a preference. Swapping them silently unmarks every form-only draft.
+ *
+ *  Returns undefined for the ONE cell that carries no footer.
+ */
+function attestationFooter(data: VisitExportData): Footer | undefined {
+  if (!data.signedAt) return footerLine(DRAFT_FOOTER_LINE); // (a) — form-only included
+  if (data.formOnly) return undefined; // (c)
+  return footerLine(signedAttestationLine(data.clinicianName, data.signedAt)); // (b)
+}
+
+/** One centered muted line, matching the in-body signature block's treatment so
+ *  the two do not read as different voices. */
+function footerLine(text: string): Footer {
+  return new Footer({
+    children: [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [
+          new TextRun({ text, color: '666666', size: 18, italics: true }),
+        ],
+      }),
+    ],
+  });
 }
 
 // ---------------------------------------------------------------------------
