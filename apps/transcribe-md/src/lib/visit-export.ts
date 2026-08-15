@@ -359,6 +359,42 @@ export function formatVisitDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** RULING #117(b) — ONE FUNCTION, ONE TRUTH.
+ *
+ *  The attestation appears in more than one place on the same document: the
+ *  in-body signature block, and — since #117 — a section footer repeated on
+ *  every page. Two call sites composing it independently is how one document
+ *  ends up disagreeing with itself, which is #109's class arriving on the
+ *  SIGNATURE line. An absent field is content the doctor did not see; a WRONG
+ *  one says the opposite of the record being signed, and the second is worse.
+ *
+ *  ⚠️ THERE WERE THREE BYTE-IDENTICAL COPIES OF THIS STRING WHEN IT WAS
+ *  EXTRACTED — `docx-generator`'s in-body block, `pdf-generator`'s per-page
+ *  footer, and the footer #117 adds. They had not drifted yet. That is not
+ *  evidence they would not; it is the reason the extraction is cheap today.
+ */
+export function signedAttestationLine(
+  clinicianName: string | null | undefined,
+  signedAt: Date
+): string {
+  return `Signed electronically by ${clinicianName ?? 'Clinician'} on ${formatVisitDate(
+    signedAt
+  )}.`;
+}
+
+/** RULING #117(a) — what an UNSIGNED export carries in its section footer, on
+ *  EVERY page, form-only included.
+ *
+ *  ⚠️ DELIBERATELY NOT the in-body `'Not yet signed.'`, and the difference is
+ *  the whole point: the footer's job is to make page 4 of a draft unmistakable
+ *  when that page is read ALONE, so it leads with the word that does that.
+ *  ⚠️ It also CONTAINS the in-body string as a substring — any assertion about
+ *  which one rendered must be an EXACT match scoped to the footer part, never a
+ *  `toContain` over the whole document. That is the substring trap this house
+ *  has now met four times.
+ */
+export const DRAFT_FOOTER_LINE = 'DRAFT — Not yet signed.';
+
 /** Filename-safe version of the patient name (or "anonymous"). */
 export function filenameSlug(name: string | null | undefined): string {
   const base = (name ?? 'anonymous').trim().toLowerCase();
