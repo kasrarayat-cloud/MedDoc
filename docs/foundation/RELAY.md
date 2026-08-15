@@ -440,9 +440,41 @@ open auto-filed issue **#610**, whose title records that it recurs past its
 documented 12/12 mitigation. Named here so the next reader does not attribute it
 to F3.
 
-⚠️ **THE RE-RUN IS OWED AND IS NOT CLAIMED.** The workflow fix is committed and
-pushed; this session did not stay to watch the new `e2e`. **Nobody may read the
-earlier `CI` green as covering it** — that run predates the workflow change.
+#### ⚠️ THE RE-RUN HAPPENED, AND THE FIX DID **NOT** CLEAR IT — SAID PLAINLY
+
+**`62a353db`, run `31898568822`.** `CI` `31898568845`, `a11y-ci` `31898568842`
+and `secrets-scan` `31898568869` all **green**. **`e2e` still RED.**
+
+| | before the workflow fix (`c89fdddd`) | after (`62a353db`) |
+|---|---|---|
+| scenario 1 `audio-upload-full` | ✘ | **✘ — still** |
+| scenario 3 `text-to-soap` | ✘ | ✔ |
+| scenario 16 `account-settings` (known flake #610) | ✘ | ✔ |
+
+**So the diagnosis was PARTIALLY right and I am not claiming more than that.**
+Adding `gotenberg` cleared scenario 3 — which is real evidence the missing
+sidecar was *a* cause — and scenario 1 fails on the identical assertion
+(`Expected pattern: /\.pdf$/`) with the converter now running. **A second
+mechanism is in play and it is NOT NAMED.** That is one genuine cure attempt
+spent, not three.
+
+⚠️ **WHAT IS ALREADY RULED OUT, so the next session does not re-walk it:** the
+QA compose wires this correctly — `transcribe-md` joins the `converter`
+network (`docker-compose.qa.yml:342-345`), `gotenberg` is on it (`:45`), and
+**no `GOTENBERG_URL` is set in either compose file**, so the code default
+`http://gotenberg:3000/…` applies and resolves. The wiring is not the gap.
+
+**THE LIKELY SHAPE, offered as a hypothesis and explicitly not as a finding:**
+the spec captures the FIRST download event into `pdf`, then a second into
+`docx`. If the PDF request answers **503** no download fires for it, so the
+DOCX arrives first and `suggestedFilename()` ends `.docx` — which is exactly
+what the assertion reports. **Read to form a hypothesis; RUN something to name
+a mechanism.** The next step is the run's own artifacts (the failure PNG and
+the app container's `[api:visits:export:pdf] renderer unavailable reason=…`
+line), neither of which this session had runway to pull.
+
+⚠️ **NOBODY MAY READ ANY GREEN HERE AS COVERING THE ITEM.** Three of four are
+green on `62a353db`; the fourth is the one that measures the change.
 
 ---
 
