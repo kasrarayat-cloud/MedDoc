@@ -50,8 +50,25 @@ const MAX_CACHED_BYTES = 1_500_000;
  *  kept being shown QuillMD's layout for the rest of the TTL, silently. */
 export type FillVariant = 'twin' | 'styled';
 
+/** ⚠️ THE VERSION PREFIX IS BUMPED WHENEVER THE BUILDER'S OUTPUT CHANGES, AND
+ *  THAT IS NOT AUTOMATIC — the key holds the visit, the variant and the
+ *  `soapVersion`, but NOTHING that identifies the RENDERER. So a deploy that
+ *  changes what the same note renders to leaves entries that are still
+ *  "current" by every term in the key.
+ *
+ *  `v2 -> v3` for the numbered-list fidelity fix: for up to the TTL after that
+ *  deploy, a doctor reloading the pre-sign canvas would have been served the
+ *  PRE-FIX bytes — RECOMMENDATIONS 4/5/6 — while `…/export/docx` and
+ *  `…/export/pdf` both returned the corrected 1/2/3. Two surfaces that agreed
+ *  before the deploy would have disagreed for thirty minutes, on the surface
+ *  the doctor actually reads.
+ *
+ *  ⚠️ AND BOTH OCCURRENCES MOVE TOGETHER. `invalidateVisitFills` SCANs on this
+ *  same prefix, so bumping only the writer would leave it scanning for `v2`
+ *  keys while new `v3` keys accumulate — quietly breaking the one-entry-per-
+ *  visit bound that exists because THE CACHED VALUE IS PHI. */
 function key(visitId: string, soapVersion: number, variant: FillVariant): string {
-  return `visitdoc:v2:${variant}:${visitId}:${soapVersion}`;
+  return `visitdoc:v3:${variant}:${visitId}:${soapVersion}`;
 }
 
 export interface CachedFill {
@@ -98,7 +115,7 @@ export async function invalidateVisitFills(visitId: string): Promise<void> {
       const [next, found] = await redis.scan(
         cursor,
         'MATCH',
-        `visitdoc:v2:*:${visitId}:*`,
+        `visitdoc:v3:*:${visitId}:*`,
         'COUNT',
         100,
       );

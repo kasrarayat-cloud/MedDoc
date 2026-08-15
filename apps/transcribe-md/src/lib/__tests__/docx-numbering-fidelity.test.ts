@@ -16,18 +16,48 @@
 // style it. This test is the invariant: whatever the note stores is what the
 // document shows.
 //
-// ⚠️ IT ASSERTS THE ORDERED SEQUENCE, NOT A SET. `toEqual` on the array is
-// deliberate — a set comparison passes on 1,2,3,1,2,3 rendered in the wrong
-// order, and an order defect in a numbered clinical list is exactly as wrong
-// as a renumber.
+// ----------------------------------------------------------------------------
+// ⚠️ THE FIRST VERSION OF THIS GUARD PASSED 4 OF 4 AGAINST TWO REGRESSIONS THAT
+// EACH CHANGE A SIGNED RECORD. Both were measured against the real generator,
+// with the mutation asserted as applied, before this rewrite:
+//
+//   · A PER-SECTION RENUMBERER written in JS instead of OOXML — the identical
+//     defect one layer up — rendered ["1","2","3","1","2"] and PASSED, because
+//     the old fixture STORED exactly 1,2,3 / 1,2. A fixture holding the
+//     canonical restart sequence cannot tell "rendered === stored" apart from
+//     "rendered === canonical 1..n", which is the entire question.
+//   · DELETING EVERY NUMBERED ITEM'S CLINICAL TEXT PASSED, because the marker
+//     regex stopped at the marker: `<w:t>1. </w:t>` satisfies it with the
+//     finding gone. An absent finding is content the doctor did not see.
+//
+// So the fixture now stores numbers NO RENUMBERER CAN PRODUCE — a gap where an
+// item was deleted (1, 2, 4) and a list that starts at 2 — and the arms assert
+// the WHOLE LINE, never the marker alone.
+//
+// ⚠️ AND IT CARRIES BULLETS ON PURPOSE. Word bullets emit `w:numId` too, so the
+// old document-wide `w:numId === 0` arm was green only because the fixture had
+// no bullets. That is an invariant which could never be checked against a
+// realistically shaped note, and a false RED waiting for whoever first made the
+// fixture realistic — whose cheapest response would be to loosen the only arm
+// pinning the mechanism. It is now scoped to the numbered paragraphs, and keeps
+// the bullets as its positive control.
 // ============================================================================
 import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
 
 import { generateVisitDocx } from '@/lib/docx-generator';
 
-const SECTION_A = ['1. Alpha finding', '2. Beta finding', '3. Gamma finding'];
-const SECTION_B = ['1. First recommendation', '2. Second recommendation'];
+/** ⚠️ NOT 1,2,3 — the gap is deliberate: a doctor deleted the third finding.
+ *  No renumbering scheme, continuous or per-section, emits this. */
+const SECTION_A = ['1. Alpha finding', '2. Beta finding', '4. Delta finding'];
+/** ⚠️ NOT starting at 1, for the same reason. Carries inline markdown so the
+ *  line-equality arm covers formatted content too. */
+const SECTION_B = ['2. **Second** recommendation', '3. Third recommendation'];
+/** Ordinary bullets — what every real note has, and the mechanism arm's
+ *  positive control. */
+const BULLETS = ['- Ambulate as tolerated', '- Diet as before'];
+
+const NUMBERED = [...SECTION_A, ...SECTION_B];
 
 const NOTE = [
   '## POSTOPERATIVE FINDINGS',
@@ -37,6 +67,10 @@ const NOTE = [
   '## RECOMMENDATIONS',
   '',
   ...SECTION_B,
+  '',
+  '## DISCHARGE INSTRUCTIONS',
+  '',
+  ...BULLETS,
   '',
 ].join('\n');
 
@@ -68,43 +102,89 @@ async function documentXml(): Promise<string> {
   return zip.file('word/document.xml')!.async('string');
 }
 
-/** Every `N.` that appears as VISIBLE TEXT, in document order. */
-function renderedMarkers(xml: string): string[] {
-  return [...xml.matchAll(/<w:t[^>]*>\s*(\d+)\.\s/g)].map((m) => m[1]);
+/** Each `<w:p>` element's body. `<w:pPr>` and `<w:pStyle>` do NOT match — the
+ *  split requires a space or `>` immediately after `<w:p`. */
+function paragraphs(xml: string): string[] {
+  return xml.split(/<w:p[ >]/).slice(1);
 }
 
+/** Everything the reader actually sees in one paragraph, runs concatenated. */
+function visibleText(paragraph: string): string {
+  return [...paragraph.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)]
+    .map((m) => m[1])
+    .join('');
+}
+
+/** Inline markdown is styling, so it is not part of the visible text. */
+const plain = (line: string) => line.replace(/\*/g, '');
+
+/** `N.` at the start of what the reader sees — the shape this guard is about. */
+const LEADING_MARKER = /^\s*(\d+)\.\s/;
+
 describe('DOCX numbered lists reproduce the note’s own numbers', () => {
-  it('the stored note really does restart at 1 — the fixture is not begging the question', () => {
-    // NON-VACUITY. If the fixture itself ran 1..5 the test would pass on a
-    // builder that renumbers, which is the defect.
-    expect(SECTION_A.map((l) => l[0])).toEqual(['1', '2', '3']);
-    expect(SECTION_B.map((l) => l[0])).toEqual(['1', '2']);
+  it('the STORED numbers are ones no renumberer could produce', () => {
+    // ⚠️ NON-VACUITY — AND THE ARM THE FIRST VERSION GOT BACKWARDS. Asserting
+    // "each section restarts at 1" PINNED the fixture to the exact sequence a
+    // per-section renumberer emits, which is what made that regression
+    // invisible. The property that matters is the opposite one.
+    const stored = NUMBERED.map((l) => l.match(LEADING_MARKER)![1]);
+    expect(stored).toEqual(['1', '2', '4', '2', '3']);
+
+    const continuous = NUMBERED.map((_, i) => String(i + 1));
+    const perSection = [
+      ...SECTION_A.map((_, i) => String(i + 1)),
+      ...SECTION_B.map((_, i) => String(i + 1)),
+    ];
+    expect(stored, 'a continuous renumberer would be indistinguishable').not.toEqual(continuous);
+    expect(stored, 'a per-section renumberer would be indistinguishable').not.toEqual(perSection);
   });
 
-  it('RENDERED NUMBERS === STORED NUMBERS, across two adjacent sections', async () => {
-    const xml = await documentXml();
+  it('EVERY numbered line renders EXACTLY as stored, in order', async () => {
+    const numbered = paragraphs(await documentXml())
+      .map(visibleText)
+      .filter((t) => LEADING_MARKER.test(t));
+
+    // ⚠️ THE WHOLE LINE, NOT THE MARKER. Asserting only the markers passed with
+    // every finding's text deleted.
+    // ⚠️ AND AS AN ORDERED SEQUENCE: a set comparison passes on the right
+    // numbers in the wrong order, and misordering a numbered clinical list is
+    // as wrong as renumbering it.
     expect(
-      renderedMarkers(xml),
-      'the exported numbers differ from the ones the note stores — the second ' +
-        'numbered section is continuing the first instead of restarting, which ' +
-        'changes what the signed record says',
-    ).toEqual(['1', '2', '3', '1', '2']);
+      numbered,
+      'the exported numbered lines differ from the ones the note stores — the ' +
+        'export has changed what the signed record says',
+    ).toEqual(NUMBERED.map(plain));
   });
 
-  it('no numbered paragraph delegates its number to Word', async () => {
-    const xml = await documentXml();
-    // ⚠️ THE MECHANISM, PINNED SEPARATELY FROM THE SYMPTOM. Numbers could be
-    // right today and repainted tomorrow by a numbering reference creeping
-    // back; this arm fails the moment one does.
+  it('no NUMBERED paragraph delegates its number to Word — while bullets still do', async () => {
+    const paras = paragraphs(await documentXml());
+    const delegating = paras.filter((p) => p.includes('<w:numId'));
+
+    // ⚠️ THE MECHANISM, PINNED SEPARATELY FROM THE SYMPTOM. The numbers could be
+    // right today and repainted tomorrow by a numbering reference creeping back;
+    // this fails the moment one does, even if the numbers look right that day.
+    for (const p of delegating) {
+      expect(
+        visibleText(p),
+        'a numbered paragraph carries a Word numbering reference again — Word ' +
+          'will repaint the numbers and a second section will continue the first',
+      ).not.toMatch(LEADING_MARKER);
+    }
+
+    // ⚠️ POSITIVE CONTROL, AND IT IS WHY THIS ARM IS SCOPED RATHER THAN A
+    // DOCUMENT-WIDE ZERO. Bullets legitimately delegate. A document-wide
+    // `w:numId === 0` was satisfiable by a document containing no lists at all.
     expect(
-      (xml.match(/<w:numId w:val="\d+"/g) ?? []).length,
-      'a paragraph carries a Word numbering reference again — Word will repaint ' +
-        'the numbers and a second section will continue the first',
-    ).toBe(0);
+      delegating.length,
+      'the fixture’s bullets should still be a real Word list',
+    ).toBe(BULLETS.length);
   });
 
   it('the markers survive as literal text', async () => {
+    // ⚠️ IMPLIED BY THE LINE-EQUALITY ARM ABOVE — kept for the failure message
+    // and NOT counted as independent coverage. The two discriminating arms are
+    // the line-equality one and the mechanism one.
     const xml = await documentXml();
-    expect(/<w:t[^>]*>\s*1\.\s/.test(xml)).toBe(true);
+    expect(/<w:t[^>]*>\s*4\.\s/.test(xml)).toBe(true);
   });
 });
