@@ -34,6 +34,24 @@ import type { VisitExportData } from '../visit-export';
 // ---------------------------------------------------------------------------
 const APP_ROOT = `${__dirname}/../../..`;
 
+/** ⚠️ EVERY ABSENCE NEEDLE EXCLUDES `__tests__`, AND THE REASON IS NOT TIDINESS.
+ *
+ *  A guard cannot be written in the language it bans. This file's own arms
+ *  contain the literal strings `from '@/lib/pdf-generator'` and `from 'pdfkit'`
+ *  as CODE — not as comments, so the comment filter cannot help — and they
+ *  matched themselves the moment the file became tracked.
+ *
+ *  ⚠️ AND "THE MOMENT IT BECAME TRACKED" IS THE PART WORTH KEEPING. `git grep`
+ *  reads TRACKED files only, so on the first run — with this file still
+ *  untracked — every arm passed. The same code went red on the next run for no
+ *  reason but a `git add`. A gate whose result depends on the index state of
+ *  its own source was green for the wrong reason once already.
+ *
+ *  Tests do not ship, so excluding them costs nothing the product cares about;
+ *  a reintroduced builder lives in `src`, not in a spec. */
+const SRC_AND_SCRIPTS = "'src' 'scripts' ':(exclude)src/**/__tests__/**'";
+const SRC_ONLY = "'src' ':(exclude)src/**/__tests__/**'";
+
 /** A `git grep -n` hit line whose match sits in a whole-line comment.
  *
  *  ⚠️ THIS EXISTS BECAUSE THE GATE REDDENED AGAINST ITS OWN AUTHOR ON ITS FIRST
@@ -43,13 +61,26 @@ const APP_ROOT = `${__dirname}/../../..`;
  *  corrected in the same commit — but relying on "no comment says this" is the
  *  substring trap wearing a promise, so the filter is here as well.
  *
- *  HONEST LIMIT: this is a LINE-level filter. A trailing comment after real
- *  code on the same line is not stripped, which is the conservative direction —
- *  it can only ever report MORE than the truth, never fewer. A false red is a
- *  minute of reading; a false green is a second PDF builder nobody noticed. */
+ *  ⚠️ AND ITS FIRST "HONEST LIMIT" WAS INVERTED, WHICH IS WORSE THAN HAVING
+ *  NONE. It claimed the filter "can only ever report MORE than the truth, never
+ *  fewer". False: `/^\s*(\/\/|\*|\/\*)/` matched a LEADING BLOCK COMMENT on a
+ *  line that then carries real code —
+ *
+ *      /* legacy path *\/ const pdf = await generateVisitPdf(data);
+ *
+ *  — so a live call was classified as prose and the arm went green. A stated
+ *  limit that points the wrong way is a licence the reader grants on false
+ *  information. Found by the refutation pass; the control below now covers that
+ *  shape, which the first version's control did not.
+ *
+ *  The filter now closes block comments before deciding, so a line is prose
+ *  only if NOTHING but comment survives. */
 function isCommentLine(hit: string): boolean {
-  const text = hit.replace(/^[^:]*:\d+:/, '');
-  return /^\s*(\/\/|\*|\/\*)/.test(text);
+  const text = hit
+    .replace(/^[^:]*:\d+:/, '')
+    // Strip CLOSED block comments first — what remains is code, if any.
+    .replace(/\/\*.*?\*\//g, ' ');
+  return /^\s*(\/\/|\*|\/\*)/.test(text) || text.trim() === '';
 }
 
 function gitGrep(pattern: string, pathspec: string): string[] {
@@ -83,7 +114,13 @@ describe('F3 — the traversal itself works', () => {
   });
 
   it('NEGATIVE CONTROL — it returns empty for a token that is really absent', () => {
-    expect(gitGrep('zzzNoSuchSymbolAnywhereF3zzz', "'src' 'tests'")).toEqual([]);
+    // ⚠️ THE SENTINEL IS ASSEMBLED AT RUNTIME so no literal of it exists in any
+    // tracked file — including this one. Written as a literal, it matched ITS
+    // OWN SOURCE LINE the moment the file was committed, and the control that
+    // proves the traversal can return empty was the third arm in this file to
+    // fail that way. A control that cannot hold still is not a control.
+    const absent = 'zzzNoSuchSymbol' + 'AnywhereF3zzz';
+    expect(gitGrep(absent, "'src' 'tests'")).toEqual([]);
   });
 });
 
@@ -104,12 +141,12 @@ describe('F3 — the retired builder is GONE, by traversal', () => {
     // the census named those comment sites precisely because a bare-word grep
     // reports a finished retirement as incomplete. That is the substring trap
     // this house has now met five times, so the needle is the import path.
-    expect(gitGrep("from '@/lib/pdf-generator'", "'src' 'tests' 'scripts'")).toEqual([]);
-    expect(gitGrep("from '../pdf-generator'", "'src' 'tests'")).toEqual([]);
-    expect(gitGrep("from './pdf-generator'", "'src'")).toEqual([]);
+    expect(gitGrep("from '@/lib/pdf-generator'", SRC_AND_SCRIPTS)).toEqual([]);
+    expect(gitGrep("from '../pdf-generator'", SRC_ONLY)).toEqual([]);
+    expect(gitGrep("from './pdf-generator'", SRC_ONLY)).toEqual([]);
     // The CALL shape. Comment lines are filtered by `gitGrep` — see the note on
     // `isCommentLine` for the run on which that turned out to be necessary.
-    expect(gitGrep('await generateVisitPdf(', "'src' 'tests' 'scripts'")).toEqual([]);
+    expect(gitGrep('await generateVisitPdf(', SRC_AND_SCRIPTS)).toEqual([]);
   });
 
   it('CONTROL — the comment filter does not hide a real CODE hit', () => {
@@ -118,6 +155,39 @@ describe('F3 — the retired builder is GONE, by traversal', () => {
     expect(isCommentLine("a.ts:1:  // await generateVisitPdf(data)")).toBe(true);
     expect(isCommentLine("a.ts:1:   * await generateVisitPdf(data)")).toBe(true);
     expect(isCommentLine("a.ts:1:  const p = await generateVisitPdf(data);")).toBe(false);
+    // ⚠️ THE SHAPE THE FIRST VERSION MISSED, and the reason its stated limit
+    // was inverted: a closed block comment followed by live code on one line.
+    expect(
+      isCommentLine("a.ts:1:  /* legacy */ const p = await generateVisitPdf(data);"),
+      'a leading block comment must not launder the code after it',
+    ).toBe(false);
+  });
+
+  it('⚠️ NO OTHER MODULE MAY BUILD A PDF FROM SCRATCH — the ban is on the LIBRARY, not the filename', () => {
+    // ⚠️ THE GATE'S TITLE SAYS "ONE PDF BUILDER"; ITS FIRST VERSION BANNED ONE
+    // FILE PATH. `pdfkit` is still a dependency, so a new
+    // `src/lib/export/pdf-fallback.ts` importing it and wired in as a
+    // `.catch(() => buildFallbackPdf(data))` would satisfy every absence arm
+    // above — the retired PATH absent, no retired IMPORT, no retired CALL —
+    // while restoring precisely the second builder #113 exists to end.
+    // A name is not a capability. Found by the refutation pass.
+    //
+    // ⚠️ THE PATHSPEC EXCLUDES `__tests__`, AND IT HAS TO — this arm's own
+    // source line contains the needle, so its first run matched ITSELF and went
+    // red. That is the substring trap in a fresh costume: a guard cannot be
+    // written in the language it bans without excluding the place it is
+    // written. Tests do not ship, so excluding them costs nothing real.
+    expect(gitGrep("from 'pdfkit'", SRC_ONLY)).toEqual([]);
+    expect(gitGrep("require('pdfkit')", SRC_ONLY)).toEqual([]);
+    // `pdf-lib` is a DELIBERATE exception and is named rather than silently
+    // permitted: `pdf-native/export.ts` fills the doctor's OWN certified page
+    // and is a different product surface, not a styled re-creation. It is the
+    // one live producer this gate does not converge, by ruling #113's scope.
+    const pdfLib = gitGrep("from 'pdf-lib'", SRC_ONLY);
+    expect(
+      pdfLib.every((h) => h.includes('pdf-native/') || h.includes('template-twin/')),
+      `pdf-lib is used outside the native-fill surfaces:\n  ${pdfLib.join('\n  ')}`,
+    ).toBe(true);
   });
 
   it('CONTROL — the same needle shapes DO find the surviving builder', () => {
@@ -251,6 +321,27 @@ describe('F3 — the renderer REFUSES rather than substituting', () => {
     vi.resetModules();
   });
 
+  it('⚠️ a 200 carrying a NON-PDF body is REFUSED, not streamed as application/pdf', async () => {
+    // ⚠️ THIS WAS REACHABLE IN THE FIRST DRAFT AND IT IS THE WORST ARTIFACT THE
+    // module's own header forbids. `convertDocxToPdf` checks the LENGTH of a 200
+    // body and never its CONTENT, so a mis-proxied sidecar answering
+    // `200 <html>502 Bad Gateway</html>` produced a non-empty Uint8Array that
+    // went straight to the route and out as Content-Type: application/pdf.
+    // The doctor downloads a "signed record" that is not a PDF.
+    vi.resetModules();
+    vi.doMock('../docx-preview/convert', () => ({
+      convertDocxToPdf: async () => ({
+        pdf: new TextEncoder().encode('<html>502 Bad Gateway</html>'),
+        reason: null,
+      }),
+    }));
+    const { renderVisitPdf: subject, VisitPdfUnavailableError: Err } = await import('../visit-pdf');
+
+    await expect(subject(DATA)).rejects.toBeInstanceOf(Err);
+    vi.doUnmock('../docx-preview/convert');
+    vi.resetModules();
+  });
+
   it('the error type is exported and carries the reason — callers can branch on it', () => {
     // The PDF route returns 503 + the reason on this type specifically. If it
     // stopped being exported, that branch would silently become unreachable and
@@ -281,13 +372,17 @@ describe('F3 — the renderer REFUSES rather than substituting', () => {
       .map((l) => l.replace(/(^|[^:])\/\/.*$/, '$1'))
       .join('\n');
 
+    // ⚠️ ONE REGEX, NOT TWO `toContain`s — BOUND TO THE BRANCH.
+    // A second draft asserted the condition and, separately, that `503` appeared
+    // anywhere in the file. Changing the branch's own `apiError(…, 503)` to 500
+    // while any other 503 literal existed would have passed. The status must be
+    // matched INSIDE the guarded block.
     expect(
       code,
-      'the route no longer BRANCHES on VisitPdfUnavailableError, so a sidecar ' +
-        'outage reaches the doctor as a generic 500 with no mention of the ' +
-        'Word export that would still have worked',
-    ).toMatch(/instanceof\s+VisitPdfUnavailableError/);
-    expect(code, 'the named branch does not answer 503').toContain('503');
+      'the route no longer BRANCHES on VisitPdfUnavailableError and answer 503 ' +
+        'inside that branch, so a sidecar outage reaches the doctor as a ' +
+        'generic 500 with no mention of the Word export that still works',
+    ).toMatch(/instanceof\s+VisitPdfUnavailableError\s*\)\s*\{[\s\S]{0,600}?503/);
     // Non-vacuity: the stripper must not have returned an empty file.
     expect(code.length, 'the comment stripper ate the route').toBeGreaterThan(1000);
   });

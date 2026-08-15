@@ -432,11 +432,23 @@ describe('the census — no date renderer may fall back to the signing date', ()
    *  not see a BARE `signedAt`. */
   const WATCHED = [
     // ⚠️ `lib/pdf-generator.ts` was one of #115's ten and is GONE — retired by
-    // ruling #113. It is replaced here rather than merely dropped: shrinking a
-    // watched set is how coverage disappears quietly, so the module that now
-    // sits on that path takes its slot. `lib/visit-pdf.ts` renders no date
-    // today, which is exactly the state this census must keep it in — the day
-    // it learns to format one, it is already watched.
+    // ruling #113. `lib/visit-pdf.ts` takes its slot rather than the slot being
+    // dropped, because shrinking a watched set is how coverage disappears
+    // quietly.
+    //
+    // ⚠️ BUT THE SWAP IS PRESENTATIONALLY EQUAL AND SUBSTANTIVELY NOT, AND AN
+    // EARLIER VERSION OF THIS COMMENT OVERSOLD IT. It claimed the slot means
+    // "the day it learns to format a date, it is already watched." That is only
+    // true for the shape `hits()` matches — `signedAt ?? createdAt` and the
+    // ternary. A BARE `signedAt` used as a visit date is invisible to this
+    // census, which is exactly how `lib/form-only.ts` escaped #115's original
+    // sweep and became #115-b. Membership buys the bucket arms, not that shape.
+    //
+    // The count stayed at 11; the effective coverage went from ten
+    // date-RENDERING members to ten, plus one member that renders none. The
+    // real protection against a new offender is the whole-tree walk below,
+    // which does not depend on this list. Said plainly so the list is not read
+    // as stronger than it is. Found by the refutation pass.
     'lib/visit-pdf.ts',
     'lib/docx-generator.ts',
     'lib/ehr-formatters.ts',
