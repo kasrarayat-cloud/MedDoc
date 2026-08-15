@@ -29,7 +29,7 @@ half-filled export and a divergent signed view are wrong NOW.
 | ~~**F1**~~ | ✅ **SHIPPED AND LIVE 2026-08-15** — merge `efe1b443`, 4 of 4, deployed, **25 of 25 declared rows matched**. See the ledger row below. ⚠️ **OWNER PING still owed** — carried in the morning report. | **#112** | ~~Deployed under a §2.5 declaration naming the document-visible change.~~ **MET.** |
 | ~~**F2**~~ | ✅ **MECHANISM NAMED AND MEASURED 2026-08-15** — the surfaces share one builder; the divergence is three signed-gated branches in `loadVisitExportData`, and **the DATE one is wrong**. Ruling **#115** (PROVISIONAL). See the ledger row below. | **#114** | ~~The mechanism is named with evidence, not a theory.~~ **MET.** ⚠️ **The suspect was WRONG and is withdrawn on evidence** — see below. |
 | ~~**F2-b**~~ | ✅ **SHIPPED 2026-08-15** — 8 of #115's 10 sites changed (2 exempt by JOB), plus **ruling #115-b** (`DD:`/`DT:`) which the adversarial pass found the fix had CREATED, plus the cache bump. Guard mutation-proved **12 of 12**. See the ledger row below. | **#115** · **#115-b** | ~~Ten sites, a guard, the mandatory adversarial pass.~~ **MET.** ⚠️ The pass found **4 false greens in the guard** and **1 defect the fix introduced** — the reason it is a gate and not a nicety. |
-| **F3** | **Retire `generateVisitPdf`** onto `generateVisitDocx` → Gotenberg. Census, delete-don't-hide. Parity gate REDEFINED to ONE builder's bytes across preview / Word / PDF. | **#113** | The retired builder is gone by traversal, the gate red-proves against tonight's diverging PDF, and Gotenberg is named in the ledger as the single shared dependency it already is. |
+| **F3** | **Retire `generateVisitPdf`** onto `generateVisitDocx` → Gotenberg. Census, delete-don't-hide. Parity gate REDEFINED to ONE builder's bytes across preview / Word / PDF. ⚠️ **CENSUS TAKEN 2026-08-15 — see the ledger row below. It found FIVE production callers where #113 names ONE**, two of which render a patient's signed note only to read `.byteLength` into a write-only column. Ruling **#116** (PROVISIONAL) records their disposition. **The retirement itself has NOT started.** | **#113** · **#116** | The retired builder is gone by traversal, the gate red-proves against tonight's diverging PDF, and Gotenberg is named in the ledger as the single shared dependency it already is. |
 | **F4** | **Land #663 and #664**, then rebase and land the held worktree commits — `feat/certification-door` carries the classification fix (`543b5a21`) and the mappings door (`799d1c45`). | — | On `main`, cited. F1's commit is also on that branch; the rebase drops it as a duplicate once F1 has merged. |
 | **F5** | **Item 3 — the certification door, to completion.** | **#106(b)** | See the scope block below. ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* |
 
@@ -92,6 +92,94 @@ documented *"fourteen permanently blank on every real visit"* defect.
 
 **COMPLETION PROOF:** the QA twin walk's **fill → export** leg finally ticks —
 **DATE OF PROCEDURE on a CERTIFIED twin.**
+
+---
+
+### 🔵 F3 — THE CENSUS, TAKEN FIRST — **2026-08-15**
+
+**Ruling #113 orders the retirement "delete-don't-hide, WITH ITS CENSUS."**
+This is that census, taken before a line was changed. **It does not match the
+ruling's own scope, and that mismatch is the finding.**
+
+⚠️ **RULING #113'S FILES COLUMN NAMES ONE ROUTE. `generateVisitPdf` HAS FIVE
+PRODUCTION CALLERS.** This is #109's class exactly — *a ruling names an INTENT,
+a component has a JOB LIST* — arriving on the export path instead of the
+prescriptions card. Retiring the builder on the strength of the named route
+would have taken four other surfaces with it, unannounced.
+
+| # | Site | The JOB it does | Named by #113 |
+|---|---|---|---|
+| 1 | `api/visits/[id]/export/pdf/route.ts:67` | the doctor's PDF **download** — the leg #113 measured as diverging | ✅ **yes** |
+| 2 | `api/visits/[id]/sign/route.ts:638` | renders a PDF **and discards it**, keeping only `.byteLength` | ❌ no |
+| 3 | `api/visits/[id]/export/email/route.ts:105` | same — *"still GENERATED … it is what the delivery row measures"*, not sent | ❌ no |
+| 4 | `api/patients/[id]/export/route.ts:215` | `signed.pdf` inside the **patient archive ZIP** — a real artifact a doctor receives | ❌ no |
+| 5 | `api/settings/export-data/route.ts:207` | the same shape, account-wide | ❌ no |
+
+Plus one script (`apps/transcribe-md/scripts/gen-test-pdf.ts`), **six** test
+files that import it, and two source comments that describe it
+(`export-page.ts:14`, `template-native-pdf.ts:5`). The comment sites are named
+because a source grep that counts them reports a finished retirement as
+incomplete — the substring trap this house has now met four times.
+
+#### ⚠️ SITES 2 AND 3 RENDER A PATIENT'S SIGNED NOTE TO COMPUTE A NUMBER NOTHING READS
+
+Both call `generateVisitPdf(data)`, take `pdf.byteLength`, hand it to
+`logDelivery({ … sizeBytes })`, and **drop the document**. The email has carried
+a link rather than an attachment since `sendVisitPdfEmail` was changed; both
+call sites say so in their own comments.
+
+**Enumerated rather than assumed** — `prisma.visitDelivery` has **exactly ONE**
+reference in the entire application, the `.create` at `deliveries.ts:35`. There
+is no read anywhere: no route, no action, no admin surface, no test. The only
+other statement touching `visit_deliveries` is the E2E cleanup's `DELETE`. So
+`sizeBytes` is **write-only**, and two full renders of a patient's signed note
+exist to populate it.
+
+⚠️ **AND UNDER F3 THAT WASTE BECOMES A NETWORK CALL ON THE SIGNING PATH.**
+Converged naïvely, site 2 would post a DOCX to the Gotenberg sidecar and wait
+for a PDF back — **inside `POST /sign`**, the most critical clinical action in
+the product — for a column nobody queries. That is not a reason to refuse the
+ruling; it is the reason the census had to come first.
+
+#### ⚠️ AND THE CONVERTER'S OWN HEADER FORBIDS, IN AS MANY WORDS, WHAT #113 ORDERS
+
+`docx-preview/convert.ts:8` states the rule that shapes the file:
+
+> *"a preview may never gate clinical work. **Certification, export and signing
+> do not call it and must not learn to.** … A preview that can block a signature
+> would be worse than no preview at all."*
+
+#113 orders export onto that exact function. **The two are reconcilable, and the
+reconciliation is design work rather than a contradiction to halt on:** #113
+already decided the coupling on the record — *"Gotenberg becomes a single shared
+dependency, and it ALREADY IS ONE for previews — that is not new coupling, it is
+naming what exists."* What the header protects is the **fail-open** property, and
+`convertDocxToPdf` never throws: every failure returns `{ pdf: null, reason }`.
+
+**So the honest cost, stated before it ships:** today a doctor can download a
+signed PDF with the sidecar down. After the retirement they cannot, because
+delete-don't-hide leaves no second builder to fall back to. The failure must
+therefore be **loud and named** (RC-3's rule) — never a silent half-document and
+never a DOCX wearing a PDF's content type. **`convert.ts`'s header must be
+rewritten in the same commit**: a file whose stated invariant has become false is
+the `DEPLOYMENT_RUNBOOK.md` §5.6 failure, which was false for two months and read
+by everyone as a description of the running system.
+
+#### WHAT THIS ROW DOES **NOT** CLAIM
+
+- **Nothing has been retired.** No production code changed. This is the
+  enumeration and its disposition, per #113's own ordering — *"RED-PROVE against
+  tonight's diverging PDF **before the retirement lands**."*
+- **The red-proof is not built.** The existing gate
+  (`gate-c2b-export-parity.test.ts`) compares the two builders' page geometry and
+  therefore **dies with the builder it compares against**. The redefined gate is a
+  different assertion — one builder's bytes, plus a traversal proving no second
+  PDF path exists — and it is not written yet.
+- **The six test files importing `generateVisitPdf` are un-triaged.** They carry
+  real coverage (metadata PHI guards, header fields, structure-awareness) that
+  must MOVE to the DOCX side, not be deleted with the import. That triage is the
+  bulk of the remaining work and is deliberately not rushed at the end of a
+  session.
 
 ---
 
