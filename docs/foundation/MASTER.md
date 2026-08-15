@@ -399,6 +399,31 @@ not need re-deriving each night.**
   leftover.
 - Same for anything else the permissions table marks **denied on purpose**:
   report the path, name the owner action, move on.
+- ⚠️ **SCRATCH OLDER THAN THIS RUN IS YOURS TO ACCOUNT FOR — reap what you can,
+  PASTE-LIST the rest.** Ruled 2026-08-15. Close-out already makes you list what
+  YOU made; that left everything from EARLIER runs owned by nobody, and it grew
+  to **~200 files at the repo root** (`.b6-*`, `.b7-*`, `.b8-*`, `.f2-*`,
+  `.t1-*`) before anyone named it. All gitignored, all harmless individually —
+  which is exactly why it accumulated: **each session correctly reported only
+  its own, and the pile was always somebody else's.**
+
+  So the pickup owns it now:
+  1. **Enumerate** every scratch path older than this run — repo-root dotfile
+     families, stale `git worktree list` entries, `/tmp` scratchpads from dead
+     sessions.
+  2. **Classify by CONTENT, never by filename.** A `synthetic_`-style name has
+     already been rejected as evidence once. Credential shapes AND clinical
+     markers, with a positive control so a clean sweep is distinguishable from
+     a broken one.
+  3. **Reap what permissions allow** (a stale worktree usually goes with
+     `git worktree remove`, which is NOT `rm`).
+  4. **Emit ONE consolidated paste block** for everything `shred`/`rm`-denied —
+     **one paste, not five trickling in across reports.** A hand-off the owner
+     has to reassemble from six messages is a hand-off that does not happen.
+
+  ⚠️ **This is accounting, not destruction.** You still cannot reap what is
+  denied, and you must not try to work around the refusal — the point is that
+  the pile has an owner every night instead of surprising someone monthly.
 
 ## CLOSE-OUT — your final block LISTS THE SCRATCH. Every time.
 
