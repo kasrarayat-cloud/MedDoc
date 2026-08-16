@@ -98,7 +98,28 @@ field 2, so a wrapped reason is parsed as extra expected codes — that defect w
 introduced and caught while fixing this very row, and it made a healthy ingress
 report `floor 6, from 7 distinct expected` and exit 2.
 
-### ✅ F9 — `deploy-prod.sh` CUTS ITS OWN ROLLBACK TAG — **BUILT 2026-08-16, session 04**
+### ✅ F9 — `deploy-prod.sh` CUTS ITS OWN ROLLBACK TAG — **MERGED AND CITED 2026-08-16, session 04**
+
+**Merged as `5f2334b160f44b09094ca8c419e621d53fe71988` (PR #695).** Produced by
+`check-citation.sh`, not typed; every line `a1`, so nothing was re-run:
+
+**Citation — 4 of 4 on `5f2334b160f44b09094ca8c419e621d53fe71988`:**
+   · `CI` 31969107944 a1
+   · `e2e` 31969107957 a1
+   · `a11y-ci` 31969107951 a1
+   · `secrets-scan` 31969107975 a1
+
+⚠️ **NOT DEPLOYED, AND THAT IS A DECISION.** F9's done-when is *on `main`,
+cited* — **MET**. It changes no app runtime, so it carries no §2.5 declaration
+of its own. **The next deploy is the thing that exercises it**, and that deploy
+is F5-b's — see `docs/foundation/deploys/20260816-5f2334b1.md`, written and
+committed by this session **before** any act, with the baselines measured while
+they were still true and the rollback tags already cut.
+
+⚠️ **Session 05 picks up the deploy. It is staged, not started:** tags cut,
+declaration committed, baselines measured, carry-forward path documented (F10).
+Deferred deliberately rather than rushed at the end of a long session — a §2.5
+judgement performed in a hurry is the failure the declaration exists to prevent.
 
 **Branch `feat/f9-deploy-cuts-its-rollback-tag`.** The pre-step is mechanism now.
 `scripts/deploy-prod.sh` STEP 0b sources `scripts/lib/rollback-tag.sh` and
