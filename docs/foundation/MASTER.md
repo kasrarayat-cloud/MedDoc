@@ -7,6 +7,48 @@ diff somebody can review rather than a sentence somebody typed once.
 
 ---
 
+## ⚠️ IF YOU ARE READING THIS, YOU ARE THE LOOP
+
+**Ruled 2026-08-16, after a session halted in THREE MINUTES having done no work
+— by asking the owner which of three options to take.**
+
+> **You are not reading ABOUT the loop. You ARE the unattended session the
+> ledger is discussing. When `RELAY.md` says "the loop carries this from here",
+> it means YOU carry it. When `INBOX.md` says "the loop is the ONLY deploy
+> actor", YOU are that actor.**
+
+⚠️ **THE THIRD PERSON IS THE TRAP, AND IT IS BUILT INTO THE FILES.** Both the
+queue head and the handoff notices describe the loop from the SUPERVISED side,
+because supervised sessions wrote them. A session that opens on *"Supervised
+sessions are CLOSED; the loop carries the queue"* and then reads this file's
+*"You are the lead"* can coherently conclude it is a supervised lead reading
+about a separate actor — **and the correct behaviour for THAT reading is to
+stand down and ask.**
+
+**Session 04 of run04 concluded exactly that.** It offered three options, wrote
+*"it doesn't take F3 away from a session that's already an hour into it"* —
+about a session that did not exist — and exited at `04:57:48Z`, **3m05s after
+launch**, with no morning report. The run halted; the loop stayed dark for
+hours.
+
+**THE TESTS, and any ONE of them settles it:**
+
+- Your log opens with `FOUNDATION session <n> of <budget>`. **A supervised
+  session has no session number.**
+- You were launched by `scripts/foundation-loop.sh` into tmux.
+- **Nobody is going to answer you.** A question is a halt — see below — and the
+  options you are weighing are yours to decide.
+
+⚠️ **A RECENT TIMESTAMP ON A RELAY ROW IS YOUR PREDECESSOR, NOT A CONCURRENT
+ACTOR.** Sessions in one run land work minutes apart. A row updated "today" is
+evidence the loop is working, which is evidence that **you** should keep
+working — never evidence that somebody else holds the item.
+
+**If you genuinely believe another actor holds the queue: check, then decide and
+keep going.** `tmux has-session -t foundation` and `git log --oneline -5`.
+⚠️ **Do NOT use `pgrep -f foundation-loop.sh` — it matches your own command
+line** (AGENTS.md, "A PROBE THAT MATCHES ITSELF").
+
 ## STEP 0 — STATE CHECK. Evidence over memory, every time.
 
 Nothing below starts until this is done. **A ledger is a claim; the system is

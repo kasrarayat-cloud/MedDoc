@@ -828,6 +828,41 @@ files found), the real answers appeared: the deleted files 0, the restored card
 > things that MUST be present, stop reading the results and check the
 > instrument. The contradiction is the finding.**
 
+#### ⚠️ AND THE FOURTH MEMBER: A PROBE THAT MATCHES ITSELF
+
+**Standing 2026-08-16, found on its own author.** For roughly three hours a
+supervised session reported the FOUNDATION loop as **LIVE** and shaped real
+decisions on it — declining to touch the shared tree, and choosing a "declared
+live landing" over the dark-window one the owner preferred. **The loop had been
+DARK the whole time.**
+
+The probe was `pgrep -f "foundation-loop.sh"`. **`-f` matches the FULL COMMAND
+LINE**, and the session's own background waiter carried that literal string —
+because the waiter's entire job was to poll for it:
+
+    pgrep -f "foundation-loop.sh"
+    → 1370001  /bin/bash -c … until { ! pgrep -f "foundation-loop.sh" …
+
+> **A search whose PATTERN appears in the SEARCHER is a self-fulfilling probe.
+> It cannot return false, and a check that cannot return false is not a check.**
+
+⚠️ **NOTHING CONTRADICTED IT UNTIL THE LOG DID** — `pgrep` saying LIVE against a
+log ending `LOOP HALTED`. That is this family's own diagnostic and it worked:
+the contradiction was the finding. **The authority is
+`tmux has-session -t foundation`**, which asks the thing that owns the session
+rather than pattern-matching the process table.
+
+**It generalises past `pgrep`.** Any check whose pattern is a string the
+checking machinery itself carries — a grep for a filename run from a script of
+that name, a log scan for a message the scanner emits, a process match from a
+poller named after its target — is measuring its own reflection. **Ask the OWNER
+of the state (tmux, the scheduler, the API), never the process table.**
+
+⚠️ **AND THE COST WAS NOT NOTHING:** three hours of a dark loop nobody was
+restarting, and two decisions made on a false premise. Both happened to land
+well — **a wrong premise that produces a good outcome is the kind nobody
+corrects.**
+
 This is the positive-control rule with a free control already in hand: any sweep
 that contains at least one must-exist row carries its own tripwire, and a
 must-not-appear table without one cannot tell absence from blindness.

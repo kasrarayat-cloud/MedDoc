@@ -148,3 +148,23 @@ versions" report by ACTION.
 `…/scratchpad/rc2-build` + `rc2-src.tar` needs shredding and `shred` is denied to
 the unattended layer. The paths are in the owner's hands. **Do not `rm` them** —
 unlinking before shredding converts a recoverable failure into a permanent one.
+
+### 2026-08-16T08:10:00Z — the 147 MB housekeeping clause is DISCHARGED, and F7 is re-priced
+
+**The clause at the end of the 2026-08-15 handoff entry above is STALE. Do not
+act on it.**
+
+**Measured 2026-08-16: `scratchpad/rc2-build` and `rc2-src.tar` DO NOT EXIST.**
+The owner cleared them. F7 was scoped partly around that figure and should not
+be.
+
+Remaining scratch, same pass: **35 files, 456 KB** of
+`.b6-*/.b7-*/.f2-*/.f3-*` at the repo root, **all gitignored** — so
+`git status --porcelain` reads **0** and they **do NOT block a relight**, which
+is the launch guard's actual predicate. Clinical artifacts: **0**, against a
+traversal control of **133** `.md` files in the same trees. **F7 is tidying, not
+a blocker, and must not hold the queue.**
+
+⚠️ **A notice that says work is pending when it is not makes the next session
+re-derive it** — which is the exact failure an inbox exists to prevent. Retiring
+a discharged clause is as much a part of the mechanism as adding a live one.
