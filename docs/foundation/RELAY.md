@@ -30,7 +30,7 @@ half-filled export and a divergent signed view are wrong NOW.
 | ~~**F2**~~ | ✅ **MECHANISM NAMED AND MEASURED 2026-08-15** — the surfaces share one builder; the divergence is three signed-gated branches in `loadVisitExportData`, and **the DATE one is wrong**. Ruling **#115** (PROVISIONAL). See the ledger row below. | **#114** | ~~The mechanism is named with evidence, not a theory.~~ **MET.** ⚠️ **The suspect was WRONG and is withdrawn on evidence** — see below. |
 | ~~**F2-b**~~ | ✅ **SHIPPED 2026-08-15** — 8 of #115's 10 sites changed (2 exempt by JOB), plus **ruling #115-b** (`DD:`/`DT:`) which the adversarial pass found the fix had CREATED, plus the cache bump. Guard mutation-proved **12 of 12**. See the ledger row below. | **#115** · **#115-b** | ~~Ten sites, a guard, the mandatory adversarial pass.~~ **MET.** ⚠️ The pass found **4 false greens in the guard** and **1 defect the fix introduced** — the reason it is a gate and not a nicety. |
 | **F3** | 🟢 **UNBLOCKED 2026-08-16 — #117 LANDED THE FOOTER, #119 DISPOSITIONS THE WATERMARK, AND THE `e2e` MECHANISM IS NAMED.** The draft's blocker is discharged on evidence (see "THE BLOCKER IS DISCHARGED" below): `docx-generator.ts:408` attaches a **`default`** footer, so the converged PDF inherits per-page marking BY CONSTRUCTION, and #117(e) proved it rendered on 5 real LibreOffice pages. ⚠️ **The blocker named TWO marks and #117 discharged ONE** — the `QUILLMD` watermark is dropped by convergence and is ruled **#119 (PROVISIONAL): not restored, declared not discovered.** ⚠️ **The red `e2e` was a REAL behavioural change, not a flake**: `/export/pdf` went from in-process pdfkit to a Gotenberg round-trip **measured at 0.43-0.48s against a 600ms download gap**, so the DOCX now routinely lands first; the ordering assertion is replaced by a SET assertion and the order is no longer asserted anywhere. *Previous status, kept for the record:* 🟡 **BUILT AND PROVEN — DOES NOT MERGE YET.** `generateVisitPdf` and `pdf-generator.ts` are gone; five callers dispositioned per #116; new traversal gate, 15 arms, mutation-proved 3 ways. ⚠️ **THEN THE MANDATORY ADVERSARIAL PASS FOUND ~25 DEFECTS AND SEVEN WERE FIXED IN-BRANCH.** ⚠️ **THE BLOCKER IS #109's CLASS AGAIN: the retired builder stamped `Signed electronically by …` / `Not yet signed.` on EVERY PAGE, and the DOCX has no footer at all.** Shipping loses a per-page DRAFT marker — a LOOSENING, which fails the provisional-ruling test. **PR opened as a DRAFT.** See the ledger row and the findings block below. | **#113** · **#116** · **#116-b** · **#117** · **#119** | 🟢 **MET on the code, pending the gate.** The retired builder is gone by traversal, the per-page job is restored on all three surfaces by #117 rather than on the PDF alone, the one unnamed job is dispositioned by #119, and Gotenberg is named in the ledger as the single shared dependency it already was. |
-| **F4** | **Land #663 and #664**, then rebase and land the held worktree commits — `feat/certification-door` carries the classification fix (`543b5a21`) and the mappings door (`799d1c45`). | — | On `main`, cited. F1's commit is also on that branch; the rebase drops it as a duplicate once F1 has merged. |
+| **F4** | 🟡 **IN FLIGHT 2026-08-16 — the first half was ALREADY DONE and the row did not say so.** `#663` merged `2026-08-15T14:32:23Z` and `#664` merged `2026-08-15T15:15:14Z`; only the rebase-and-land half remained. `feat/certification-door` is rebased onto `main` as `feat/f4-certification-door-land` — the classification fix (`543b5a21` → `ecc1dc4b`) and the mappings door (`799d1c45` → `b4436fb3`). See the ledger row below. | — | On `main`, cited. ✅ **F1's duplicate was dropped BY MEASUREMENT, not by hope** — `git patch-id --stable` gives `8a797bde` and F1's `529e8219` the **identical** id `6213c8f2…`, and the rebase skipped it naming it. |
 | **F5** | **Item 3 — the certification door, to completion.** | **#106(b)** | See the scope block below. ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* |
 
 **F3 WAS BLOCKED ON RULING #117 — AND IS NOT, SINCE 2026-08-16.** The condition
@@ -14296,3 +14296,88 @@ row on a timer" — never by the mechanism you expect to find.**
 - **Nothing was exercised end-to-end on production.** No visit was exported,
   signed or unzipped. Rows 3, 4, 8 and 10 are STRUCTURAL, and the behavioural
   proof lives in the unit and rendered gates inside the cited `CI`.
+
+---
+
+### 🟡 F4 — THE HELD COMMITS, REBASED — **2026-08-16**
+
+**Branch `feat/f4-certification-door-land`, two commits, both purely additive
+(228 + 290 insertions, 0 deletions in source).**
+
+#### ⚠️ HALF OF THIS ITEM WAS ALREADY DONE, AND THE ROW STILL SAID "LAND #663 AND #664"
+
+Measured, not remembered: `#663` merged `2026-08-15T14:32:23Z`, `#664` merged
+`2026-08-15T15:15:14Z`. **Both were merged the day before this session opened**,
+and the queue row still ordered them landed.
+
+This is the file's own standing rule arriving from the other side — *a FIXED
+item left listed as OPEN costs a whole session*, written four days ago about
+F6.6 and true again here. **The cost this time was small only because the row
+named its PRs, so the state was one `gh pr view` away.** A row naming work
+without an identifier would have cost the re-derivation.
+
+#### THE DUPLICATE WAS DROPPED BY MEASUREMENT
+
+The queue predicted F1's commit would rebase away as a duplicate. **That was
+checked before the rebase rather than after**, because "it should drop out" and
+"it dropped out" are different claims:
+
+    git show 8a797bde | git patch-id --stable  ->  6213c8f252c5…  8a797bde
+    git show 529e8219 | git patch-id --stable  ->  6213c8f252c5…  529e8219
+
+Identical patch ids, so the two are the same change under different commits —
+and the rebase then said so itself: `skipped previously applied commit 8a797bde`.
+Two independent instruments agreeing, one predictive and one observed.
+
+⚠️ **AND THE TRANSITION WAS GUARDED BEFORE ANY NUMBER WAS TAKEN.** `git status
+--porcelain` in the worktree reads **empty** and `origin/main..HEAD` is exactly
+**2** commits. Per the standing rule, measurements on a half-rebased tree are
+fabricated by accident.
+
+#### THE MANDATORY ADVERSARIAL PASS — NOTHING FOUND, AND WHAT THAT IS WORTH
+
+The queue makes the pass mandatory on any note-surface or export change. The
+classification fix feeds the FILL path, so it qualifies. **Four claims were
+taken as claims to break, not as code to admire:**
+
+| the claim | how it was tested | verdict |
+|---|---|---|
+| *"TENANCY … `loadOwnedCompilation` scopes by `doctorId`"* — a COMMENT | read the writer: `findFirst({ where: { id, doctorId: actor.userId } })` at `certification-lifecycle.ts:162` | ✅ the comment is TRUE |
+| a client can supply `sourceType: 'manual'` and **skip the concept requirement** (`certification-lifecycle.ts:436`) | traced the fill path | ✅ **fail-SAFE** — see below |
+| `.default('extraction')` survives, so a payload omitting `sourceType` is silently labelled | that direction makes `MAPPINGS_NOT_READY` **unsatisfiable** — it refuses certification | ✅ fails CLOSED |
+| the writer trusts the client's field set | `byId.size !== fieldById.size` + exact-key check → `FIELD_SET_MISMATCH` | ✅ exact set enforced |
+
+**The second row is the one that mattered**, because it is the only arm that
+could have LOOSENED a gate: if a doctor could relabel a real extraction field
+`manual`, they would escape the confirmed-concept requirement. The carve-out's
+own comment asserts *"it can never produce a value, so no evidence rule is
+relaxed"* — **and an assertion in a comment is exactly what this house does not
+accept.** Verified at `resolver/index.ts:406`:
+
+    if (mapping.sourceType === 'manual') {
+      return makeResolution(field.fieldId, 'not_mentioned', null, [], 'manual_source_not_filled');
+    }
+
+A `manual` field resolves to `null`. **A mislabel renders BLANK — it cannot
+fabricate content into a doctor's document**, which is the correct fail
+direction and makes the carve-out safe. Claim confirmed at the code, not at the
+comment.
+
+#### WHAT F4 DOES **NOT** CLAIM
+
+- ⚠️ **THE ADVERSARIAL PASS WAS SINGLE-LENS.** This session cannot spawn
+  subagents, so the pass is not the distinct-context form the canon requires.
+  **It is stronger than F3's in exactly one respect and no other: I am NOT the
+  author of these two commits** — a previous session built them — so the reading
+  is at least genuinely independent of the intent that wrote them. It is still
+  one reader with one lens, and `NOTHING FOUND` from one lens is weaker evidence
+  than `NOTHING FOUND` from four.
+- **No behavioural proof was run.** The rebase is a code-motion operation; the
+  suite of record is the cited `CI`, not a local run. ⚠️ **A local unit run was
+  DELIBERATELY NOT quoted**: `vitest.config.ts` aliases react to
+  `../../node_modules/react`, which a worktree does not carry, so a number from
+  here would be the known 15-failed-files artifact and not a measurement.
+- **Nothing here reaches a production row.** Production holds **0** compiled
+  twin versions, **0** mappings and **0** certifications, and the certification
+  UI is still folded (`NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true`). This lands the
+  door; **F5 items 3 and 4 are what open it.**
