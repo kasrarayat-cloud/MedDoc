@@ -37,9 +37,34 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+/** ⚠️ COMMENTS ARE STRIPPED BEFORE ANY ASSERTION, AND THIS IS THE WHOLE REASON
+ *  THIS HELPER EXISTS. The first version of this guard asserted `toContain` over
+ *  raw file text, and THREE of its assertions were satisfiable by PROSE —
+ *  `docker-compose.qa.rendered.yml` appears in an explanatory comment in
+ *  `e2e.yml` one line above the step that uses it, and `converter` and
+ *  `vitest.rendered.config.ts` each appear in comments in the override. Deleting
+ *  the step and leaving the comment would have kept this guard GREEN.
+ *
+ *  That is the substring trap this house has now met five times, and a file's
+ *  own comments are the one place the words you are grepping for are guaranteed
+ *  to appear — doubly so here, where the comments explain the very mechanism
+ *  being asserted.
+ *
+ *  ⚠️ ONLY FULL-LINE COMMENTS ARE STRIPPED, deliberately. Cutting from the first
+ *  `//` anywhere would truncate `http://gotenberg:3000` and silently change what
+ *  the haystack contains — a fix that introduces the defect it is fixing, one
+ *  layer down.
+ */
+function stripFullLineComments(src: string, marker: '#' | '//'): string {
+  return src
+    .split('\n')
+    .filter((line) => !line.trim().startsWith(marker))
+    .join('\n');
+}
+
 describe('#117(e) — the rendered tier is actually invoked', () => {
   it('the e2e workflow runs the rendered-tests service', () => {
-    const wf = read(E2E_WORKFLOW);
+    const wf = stripFullLineComments(read(E2E_WORKFLOW), '#');
 
     // ⚠️ POSITIVE CONTROL FIRST. A path that moved, a workflow that was
     // renamed, or a read that silently returned '' would make every assertion
@@ -63,12 +88,15 @@ describe('#117(e) — the rendered tier is actually invoked', () => {
   });
 
   it('the rendered config exists and points at __rendered__', () => {
-    const cfg = read(resolve(REPO_ROOT, 'apps/transcribe-md', RENDERED_CONFIG));
+    const cfg = stripFullLineComments(
+      read(resolve(REPO_ROOT, 'apps/transcribe-md', RENDERED_CONFIG)),
+      '//'
+    );
     expect(cfg).toContain('__rendered__');
   });
 
   it('the compose override runs THAT config, in the converter network', () => {
-    const override = read(resolve(REPO_ROOT, RENDERED_OVERRIDE));
+    const override = stripFullLineComments(read(resolve(REPO_ROOT, RENDERED_OVERRIDE)), '#');
 
     expect(override).toContain(RENDERED_SERVICE);
     expect(
@@ -86,12 +114,43 @@ describe('#117(e) — the rendered tier is actually invoked', () => {
     ).toContain('converter');
   });
 
+  it('⚠️ the stripper actually strips — the defect this guard shipped with, pinned', () => {
+    // ⚠️ THE ASSERTION THAT WOULD HAVE CAUGHT THE ORIGINAL DEFECT, kept as a
+    // permanent control. `e2e.yml` genuinely contains the override's filename in
+    // BOTH a comment and the live command; if the stripper ever stops working,
+    // the arms above quietly go back to being satisfiable by prose and nothing
+    // else would say so.
+    const raw = read(E2E_WORKFLOW);
+    const stripped = stripFullLineComments(raw, '#');
+
+    expect(raw, 'e2e.yml no longer explains itself — has the comment block gone?').toContain(
+      '# bound. See docker-compose.qa.rendered.yml.'
+    );
+    expect(
+      stripped,
+      'the stripper left a full-line comment in place — every arm above is now prose-satisfiable'
+    ).not.toContain('# bound. See docker-compose.qa.rendered.yml.');
+
+    // ...and it must NOT have eaten the real command with it.
+    expect(stripped, 'the stripper removed the actual step').toContain(RENDERED_SERVICE);
+
+    // ⚠️ AND IT MUST NOT TRUNCATE MID-LINE. A stripper that cut from the first
+    // `//` would take `http://gotenberg:3000` with it.
+    const override = stripFullLineComments(read(resolve(REPO_ROOT, RENDERED_OVERRIDE)), '#');
+    expect(override, 'mid-line truncation — the in-network URL was eaten').toContain(
+      'http://gotenberg:3000'
+    );
+  });
+
   it('the default vitest config still EXCLUDES the rendered tier', () => {
     // The other half of the same contract. If someone "fixes" the exclusion,
     // these files land in the `CI` workflow, which has no sidecar — and the
     // fail-closed health check turns every CI run red for an environmental
     // reason. That is a real failure mode with a tempting one-line cause.
-    const cfg = read(resolve(REPO_ROOT, 'apps/transcribe-md/vitest.config.ts'));
+    const cfg = stripFullLineComments(
+      read(resolve(REPO_ROOT, 'apps/transcribe-md/vitest.config.ts')),
+      '//'
+    );
     expect(
       cfg,
       'vitest.config.ts no longer excludes __rendered__ — CI has no converter and will fail closed'
