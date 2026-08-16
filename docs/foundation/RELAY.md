@@ -100,6 +100,23 @@ report `floor 6, from 7 distinct expected` and exit 2.
 
 ### ✅ F5-b + F9 ARE LIVE IN PRODUCTION — **2026-08-16T21:29Z, session 05 — 16 of 16 JUDGED**
 
+**The judgement itself is merged as
+`eb0bb290e453402151022083ae37b5b9223ec501` (PR #698).** Produced by
+`check-citation.sh`, not typed; every line `a1`, so nothing was re-run:
+
+**Citation — 4 of 4 on `eb0bb290e453402151022083ae37b5b9223ec501`:**
+   · `CI` 31977886581 a1
+   · `e2e` 31977886556 a1
+   · `a11y-ci` 31977886635 a1
+   · `secrets-scan` 31977886585 a1
+
+⚠️ **NOTE THE ORDER, BECAUSE IT IS THE UNUSUAL ONE.** The DEPLOY happened at
+21:26Z and this citation certifies the RECORD of it, merged afterwards — not
+the code that shipped. The code that shipped was `3045ae16`, cited 4 of 4 by
+session 04 before the deploy. **Two different commits, two different
+citations, and conflating them would be exactly the "evidence describes the
+tree it was taken on" error.**
+
 **Deployed `3045ae16` (payload `46769791..3045ae16`, carrying PRs #693 F5-b,
 #694, #695 F9, #696).** `deploy-prod.sh` exit 0, `/api/health` **200**.
 Declaration: `docs/foundation/deploys/20260816-3045ae16.md` — the F10
