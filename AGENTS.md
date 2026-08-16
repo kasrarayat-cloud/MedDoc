@@ -784,6 +784,29 @@ the zero to appear**, and only then did the non-vacuity guard fire.
 said the override modal was NOT `position: fixed`. It is; the inline style is
 just not in its class. Verified rather than assumed, on the second pass.
 
+### ⚠️ TWO MORE OF THE SAME FAMILY, FROM ONE RECON — F8, 2026-08-16
+
+Both produced a confident number about the wrong thing, and both were caught by a
+control rather than by re-reading the query.
+
+**THE RE-EXPORT TRAP.** Parsing the ICD-10 allowlist reported **`codes: 0`**. The
+file grepped was `packages/ai/src/index.ts`, which RE-EXPORTS the symbol and
+contains none of the data; the array lives in `data/icd10-allowlist.ts`. A zero
+from the wrong file is indistinguishable from an empty allowlist — and an empty
+allowlist would have been a spectacular finding, reported with total confidence.
+
+> **A grep that resolves a SYMBOL has not found its DATA.** Barrel files exist to
+> make imports tidy and measurements wrong.
+
+**THE SHAPE ASSUMPTION.** Counting stored codes with `jsonb_array_length("icdCodes")`
+errored: `cannot get array length of a non-array`. The column is an OBJECT with a
+`codes` key — 43 objects, not 43 arrays. **The error is the lucky case**: had the
+column been an array of something else, the query would have returned a number
+and it would have been the wrong number.
+
+> **Ask what SHAPE the data is before asking how much of it there is** —
+> `jsonb_typeof` costs one query and turns an assumption into a measurement.
+
 ### ⚠️ TWO ZEROES WITH OPPOSITE MEANINGS IS **ONE BROKEN INSTRUMENT**, NOT TWO FINDINGS
 
 **Contributed by the GI session, 2026-08-14, and it is the cheapest reading of a

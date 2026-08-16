@@ -106,6 +106,63 @@ positive control is in the report. **A filled clinical artifact is PHI
 regardless of synthetic status** — if one is found, it is the history-rewrite
 path, not a delete.
 
+### F8 — THE ICD-10 CODING TAB — recon landed, build waits on the owner's Figma
+
+**Owner feature, queued AFTER F5 and BEFORE the billing tail** (re-prioritizable
+on design delivery). Doctor-stated need: **the most accurate possible ICD-10
+suggestions presented at transcription's end.**
+
+⚠️ **THE RECON'S HEADLINE: THIS IS NOT A CODING ENGINE ITEM.** `07a-icd-coding.ts`
+already produces exactly the shape the constraints demand. What does not exist is
+a surface where a doctor ACTS on a code.
+
+#### What exists, measured 2026-08-16 (read-only)
+
+| | |
+|---|---|
+| generator | `worker/layers/07a-icd-coding.ts` (L7a) |
+| per-code shape | `evidence_quote` (**required, `.min(1)`**), `confidence` 0–1, `confidenceLevel` high/medium/low |
+| allowlist | **604 codes**, `packages/ai/src/data/icd10-allowlist.ts` — I 211 · Z 96 · K 50 · E 33 · M/T 28 · long tail |
+| validation | `isValidIcd10(c.code)` at `07a:447` |
+| rejections already audited | `CODING_COACH_REJECTED_INVALID_ICD` = **59** rows (+ 17 CPT) |
+| production population | **42 of 44 visits** carry codes, **131 total** (~3.1/visit), stored `icdCodes.codes[]` |
+| where codes surface today | inside `review-document-view` as part of the paper — **read-only, no action** |
+
+#### The delta — constraints against reality
+
+| # | constraint | state |
+|---|---|---|
+| (a) | every code carries linked EVIDENCE; no evidence ⇒ not suggested | ✅ **satisfied by existing** — enforced at the SCHEMA (`evidence_quote.min(1)`); L7a's own header: *"No code is included unless it can be supported by a verbatim quote from the SOAP"* |
+| (b) | validated against the allowlist; suggester and billing floor never disagree | ✅ **satisfied by existing** — one source of truth via `isValidIcd10`, rejections audited. **The K21.0 lesson holds: billable children, never category headers.** ⚠️ Checked, not assumed: the 14 decimal-less entries (`A09 E40–E46 I10 O80 O82 R42 R52 Z09 Z23`) are legitimately billable 3-character codes, NOT that class |
+| (e) | specialty-aware RANKING | 🟡 **partial** — `specialty` is an L7a input and reaches the prompt (`Specialty: ${input.specialty}`), so it steers **GENERATION, not RANKING**. Ranking is new work |
+| (c) | doctor's accept/reject is the authority; accepted flow to note/export; nothing auto-applies | ❌ **DOES NOT EXIST** — no accept/reject surface anywhere in `src` |
+| (d) | every accept/reject writes an audit row | ❌ nothing to audit yet; E/M has its equivalents (`EM_OVERRIDE_APPLIED`, `EM_LEVEL_CHANGED`), ICD has none |
+
+**So the build is a DECISION SURFACE over an engine that already emits the right
+shape**: accept/reject state, its persistence, its audit rows, its flow into
+note/export, and ranking. (a) and (b) are true before the tab exists.
+
+#### ⚠️ DESIGN QUESTION — awaiting the owner's Figma answer
+
+**59 production rejections** means the suggester proposed 59 codes the billing
+floor refused, and today each one vanishes into an audit row the doctor never
+sees.
+
+**RECOMMENDED DEFAULT, recorded for the record:** rejected-by-validation codes
+**SHOW as a distinct muted state with the reason** — *"proposed K21.0 — not
+billable; K21.00 is"* — rather than vanishing. **A suggester that silently loses
+candidates teaches the doctor to distrust the list**, and the amber-header card
+in the owner's design brief is already this state's home.
+
+Not decided here. The owner's design answers it.
+
+#### Build constraints
+
+The tab builds **ONLY** on the Figma delivery — `frontend-design` SKILL.md +
+production tokens per the standing design rules, and **the adversarial pass is
+MANDATORY**: this is a clinical surface, and a code accepted into a signed record
+is exactly the class that pass exists for.
+
 Then the **billing tail (B8 close, B9)** per the existing ledger below.
 
 ### F5 — ITEM 3'S FULL SCOPE, WITH ITS RECORDED DESIGN RULES
