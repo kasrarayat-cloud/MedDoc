@@ -41,9 +41,20 @@
 # tagging must be re-runnable.
 #
 # ── TESTABILITY ─────────────────────────────────────────────────────────────
-# Every docker call goes through `$DOCKER`, so `scripts/test-rollback-tag.sh`
-# can inject a fake and exercise both halves — the refusals AND the happy path —
-# without touching a real image. Proof: `bash scripts/test-rollback-tag.sh`.
+# Every docker call goes through `$DOCKER`, so the gate can inject a fake and
+# exercise both halves — the refusals AND the happy path — without touching a
+# real image.
+#
+#   PROOF: apps/transcribe-md/src/lib/__tests__/gate-f9-deploy-cuts-its-rollback-tag.test.ts
+#
+# ⚠️ IT IS A VITEST GATE, NOT A SHELL HARNESS, DELIBERATELY. The house style for
+# a script proof is `scripts/test-verify-post-reboot.sh` — hand-run, and a proof
+# nobody re-runs is a proof that decays. This one runs in `CI` on every PR.
+#
+# ⚠️ AND THE GATE RUNS IT UNDER `set -euo pipefail`, BECAUSE THAT IS THE CALLER'S
+# UNIVERSE. A bare `bash -c` proved every refusal message in a shell mode
+# production does not use, and hid a defect that would have killed the deploy on
+# the fallback path. See the `|| true` notes below.
 #
 # Exit convention: 0 = tagged and VERIFIED · 1 = REFUSED, caller must abort.
 # ============================================================================
@@ -67,8 +78,20 @@ rollback_tag_slug() {
   if [ -n "$decl" ] && [ -r "$decl" ]; then
     # First match wins. Anchored at line start so a slug mentioned mid-prose —
     # "…the rollback-slug: convention…" — cannot be picked up as a value.
+    #
+    # ⚠️ `|| true` IS LOAD-BEARING AND ITS ABSENCE WAS A SHIPPING DEFECT.
+    # `deploy-prod.sh` runs `set -euo pipefail`. With **pipefail**, a `grep` that
+    # matches nothing makes the whole pipeline exit 1 — so `slug=$(grep | sed)`
+    # is a failing command substitution and `set -e` kills the deploy ON THE
+    # SPOT. That is the FALLBACK path: every declaration written before F9 has
+    # no `rollback-slug:` line, so the deploy would have died at STEP 0b in the
+    # COMMON case, with no message.
+    #
+    # ⚠️ Invisible until the gate was made to run with production's shell
+    # options. Nothing else could have found it: the function is correct, the
+    # logic is correct, and it is fatal only in the caller's universe.
     slug=$(grep -m1 -E '^[[:space:]]*rollback-slug:[[:space:]]*[^[:space:]]' "$decl" 2>/dev/null \
-             | sed -E 's/^[[:space:]]*rollback-slug:[[:space:]]*//; s/[[:space:]]+$//')
+             | sed -E 's/^[[:space:]]*rollback-slug:[[:space:]]*//; s/[[:space:]]+$//' || true)
   fi
 
   # A malformed slug falls back rather than refusing: the tag must always be
@@ -116,8 +139,35 @@ rollback_tag_cut() {
     return 1
   fi
 
+  # ⚠️ EVERY CAPTURE BELOW CARRIES `|| true`, AND THAT IS NOT DEFENSIVE NOISE.
+  # This file is SOURCED INTO `deploy-prod.sh`, which runs `set -euo pipefail`.
+  # Under `set -e` a failing `var=$(cmd)` is a simple command with non-zero
+  # status and the shell EXITS THERE — so every carefully-worded refusal below
+  # would never print, and the operator would get a bare non-zero from a deploy
+  # that said nothing about why. Measured, not assumed:
+  #
+  #   set -euo pipefail; f(){ local v; v=$(docker inspect … no-such-container);
+  #                           echo REACHED; }; f
+  #   -> exit 1, "REACHED" never printed
+  #
+  # ⚠️ AND THIS WAS FOUND BY REFUTING THE GATE, NOT BY THE GATE. The gate drives
+  # this library through `bash -c` — a shell WITHOUT `set -e` — so it proved
+  # every refusal message in a universe production does not run. The gate now
+  # sets the same options; this belt is kept so the behaviour is identical in
+  # either mode rather than depending on the caller's shell settings.
   for svc in "$@"; do
-    cid=$($DOCKER compose ps -q "$svc" 2>/dev/null | head -1)
+    cid=$($DOCKER compose ps -q "$svc" 2>/dev/null | head -2 || true)
+    # ⚠️ AMBIGUITY IS A REFUSAL, NOT A `head -1`. A scaled service returns more
+    # than one container, and silently tagging whichever sorted first is an
+    # answer about a set whose boundary was never established — with a rollback
+    # target as the prize. This stack runs one of each; the guard is for the day
+    # it does not.
+    if [ "$(printf '%s' "$cid" | grep -c . || true)" -gt 1 ]; then
+      echo "🔴 REFUSING — service '$svc' has MORE THAN ONE running container."
+      echo "   Which one is 'the outgoing image' is then a guess, and a guessed"
+      echo "   rollback target is worse than a missing one. Tag by hand."
+      refused=1; continue
+    fi
     if [ -z "$cid" ]; then
       echo "🔴 REFUSING — service '$svc' has no running container."
       echo "   The outgoing image can only be read from what is actually running."
@@ -126,14 +176,24 @@ rollback_tag_cut() {
       refused=1; continue
     fi
 
-    img=$($DOCKER inspect --format '{{.Image}}' "$cid" 2>/dev/null)
+    img=$($DOCKER inspect --format '{{.Image}}' "$cid" 2>/dev/null || true)
     if ! printf '%s' "$img" | grep -qE '^sha256:[0-9a-f]{64}$'; then
       echo "🔴 REFUSING — '$svc' ($cid) did not yield a usable image id: '${img:-<empty>}'"
       refused=1; continue
     fi
 
-    cfg=$($DOCKER inspect --format '{{.Config.Image}}' "$cid" 2>/dev/null)
+    cfg=$($DOCKER inspect --format '{{.Config.Image}}' "$cid" 2>/dev/null || true)
     repo=$(_rollback_repo_of "$cfg")
+    # ⚠️ A DIGEST REFERENCE (`repo@sha256:…`) IS NAMED, NOT LEFT TO FAIL LATER.
+    # Stripping at the last colon turns it into `repo@sha256`, which `docker tag`
+    # rejects — so it already failed closed, but with "docker tag failed" as the
+    # only clue. A guard that fails for the right reason with the wrong message
+    # costs the next reader an hour.
+    if printf '%s' "$cfg" | grep -q '@'; then
+      echo "🔴 REFUSING — '$svc' was created from a DIGEST reference ('$cfg')."
+      echo "   There is no mutable tag to derive a rollback name from. Tag by hand."
+      refused=1; continue
+    fi
     # ⚠️ THE TEST IS ON `cfg`, NOT ON `repo`, AND THE FIRST DRAFT GOT IT WRONG.
     # `_rollback_repo_of "sha256:dddd…"` strips at the last colon and returns the
     # bare word `sha256`, which matches NEITHER `^sha256:` NOR a 64-hex string —
@@ -174,6 +234,7 @@ rollback_tag_cut() {
     # ⚠️ THE EARNED GREEN. `docker tag` exiting 0 is not evidence the tag
     # resolves — re-read it. This is the happy-path control, run every deploy.
     verified=$($DOCKER inspect --type=image --format '{{.Id}}' "$tag" 2>/dev/null || true)
+    # shellcheck disable=SC2015
     if [ "$verified" != "$img" ]; then
       echo "🔴 REFUSING — $tag was created but does NOT resolve to the outgoing image."
       echo "     wanted : $img"

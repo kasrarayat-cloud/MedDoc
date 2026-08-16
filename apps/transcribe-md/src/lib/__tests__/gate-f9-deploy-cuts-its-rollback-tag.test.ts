@@ -142,8 +142,23 @@ function resetState(bend: Bend = 'none', seedTag?: [string, string]): string {
   return s;
 }
 
+/** ⚠️ `set -euo pipefail` IS THE POINT, NOT BOILERPLATE.
+ *
+ *  `deploy-prod.sh` runs with those options and SOURCES the library, so that is
+ *  the universe the guards actually execute in. The first version of this gate
+ *  used a bare `bash -c` and therefore proved every refusal MESSAGE in a shell
+ *  mode production does not use: under `set -e`, a failing `var=$(cmd)` exits
+ *  the shell on the spot, so the refusals would have been silent in the one
+ *  place they matter. Measured before it was fixed —
+ *
+ *    set -euo pipefail; f(){ local v; v=$(docker inspect … nope); echo REACHED; }; f
+ *    -> exit 1, "REACHED" never printed
+ *
+ *  Found by refuting this gate, not by running it. A well-chosen fixture in the
+ *  wrong universe is this house's nastiest recorded shape, and a shell option
+ *  is exactly the kind of universe nobody thinks to enumerate. */
 function cut(services: string[], slug = 'demo', stamp = '20260816'): { code: number; out: string } {
-  const script = `. "${LIB}"; rollback_tag_cut ${[slug, stamp, ...services].map((a) => `'${a}'`).join(' ')}`;
+  const script = `set -euo pipefail; . "${LIB}"; rollback_tag_cut ${[slug, stamp, ...services].map((a) => `'${a}'`).join(' ')}`;
   try {
     const out = execFileSync('bash', ['-c', script], {
       encoding: 'utf8',
@@ -157,6 +172,19 @@ function cut(services: string[], slug = 'demo', stamp = '20260816'): { code: num
   }
 }
 
+/** Drop whole-line shell comments so an ordering or presence claim is made
+ *  about CODE. Deliberately conservative: it does not try to strip trailing
+ *  comments, because a `#` inside a string would then eat real code — and a
+ *  stripper that removes too much is a worse instrument than one that removes
+ *  too little. Positive-controlled by the arm below, which asserts the tokens
+ *  survive stripping. */
+function codeOnly(src: string): string {
+  return src
+    .split('\n')
+    .map((l) => (/^\s*#/.test(l) ? '' : l))
+    .join('\n');
+}
+
 function tagsWritten(): string[] {
   const p = join(TMP, 'state', 'tags');
   return existsSync(p) ? readFileSync(p, 'utf8').split('\n').filter(Boolean) : [];
@@ -165,7 +193,7 @@ function tagsWritten(): string[] {
 function slugFor(declBody: string | null, fallback = 'fallback-sha'): string {
   const decl = declBody === null ? join(TMP, 'does-not-exist.md') : join(TMP, `decl-${Math.abs(hash(declBody))}.md`);
   if (declBody !== null) writeFileSync(decl, declBody);
-  return execFileSync('bash', ['-c', `. "${LIB}"; rollback_tag_slug '${decl}' '${fallback}'`], {
+  return execFileSync('bash', ['-c', `set -euo pipefail; . "${LIB}"; rollback_tag_slug '${decl}' '${fallback}'`], {
     encoding: 'utf8',
     env: { ...process.env, DOCKER: 'true' },
     stdio: ['ignore', 'pipe', 'ignore'],
@@ -194,18 +222,46 @@ describe('F9 — the library exists and the deploy is wired to it', () => {
   // ⚠️ THE WHOLE POINT IS THE WIRING, NOT THE LIBRARY. A perfectly correct
   // rollback-tag lib that no deploy calls protects exactly nothing — F4's own
   // defect (`updateTemplateTwinMappings` shipped with no caller) one file over.
-  it('deploy-prod.sh sources it and calls rollback_tag_cut', () => {
-    const src = readFileSync(DEPLOY, 'utf8');
-    expect(src).toContain('lib/rollback-tag.sh');
+  // ⚠️ THE FIRST VERSION OF THIS ARM ASSERTED `lib/rollback-tag.sh`, AND THE
+  // ONLY PLACE THAT STRING APPEARS IS THE `# shellcheck source=` COMMENT. It
+  // passed on PROSE. The stripper caught it on its first run — the substring
+  // trap's fifth sighting, found by the control added for its own sake.
+  // The real code says `…/lib" …)/rollback-tag.sh` and `. "$TAG_LIB"`.
+  it('deploy-prod.sh sources it and calls rollback_tag_cut — in CODE, not prose', () => {
+    const src = codeOnly(readFileSync(DEPLOY, 'utf8'));
+    expect(src).toContain('rollback-tag.sh');
+    expect(src).toContain('. "$TAG_LIB"');
     expect(src).toContain('rollback_tag_cut');
+  });
+
+  // ⚠️ THE STRIPPER'S OWN POSITIVE CONTROL. A `codeOnly` that returned '' would
+  // make every arm above vacuous while looking stricter than the originals —
+  // the wrong-quantity failure arriving inside the fix for the substring one.
+  // So: it must remove a comment, and it must NOT remove the code beside it.
+  it('codeOnly removes comments and keeps code (the stripper is controlled)', () => {
+    const sample = '# rollback_tag_cut in a comment\nrollback_tag_cut real\n   # indented comment\n';
+    const out = codeOnly(sample);
+    expect(out).toContain('rollback_tag_cut real');
+    expect(out).not.toContain('in a comment');
+    expect(out).not.toContain('indented comment');
+    // and on the real file it must not have eaten the thing under test
+    expect(codeOnly(readFileSync(DEPLOY, 'utf8'))).toContain('rollback_tag_cut');
   });
 
   // ⚠️ ORDER IS THE CLAIM. Tagging AFTER the build would tag an image that is
   // no longer the outgoing one on a re-run, and tagging after `up -d` would be
   // useless. Assert it happens before the first thing that changes state.
+  //
+  // ⚠️ COMMENTS ARE STRIPPED FIRST, AND THAT IS THE SUBSTRING TRAP, NOT
+  // fastidiousness. `deploy-prod.sh` is a heavily commented file whose prose
+  // names the very tokens this arm searches for; a future comment mentioning
+  // `rollback_tag_cut` above the call would move `indexOf` onto the COMMENT and
+  // the ordering assertion would silently measure prose instead of code. This
+  // repo has paid for that shape four times.
   it('cuts the tag BEFORE the backup, the build and the recreate', () => {
-    const src = readFileSync(DEPLOY, 'utf8');
+    const src = codeOnly(readFileSync(DEPLOY, 'utf8'));
     const tagAt = src.indexOf('rollback_tag_cut');
+    expect(tagAt, 'rollback_tag_cut must appear in deploy-prod.sh CODE').toBeGreaterThan(-1);
     for (const later of ['pre-deploy backup', 'docker compose build db-migrate', 'docker compose up -d']) {
       const at = src.indexOf(later);
       expect(at, `'${later}' must appear in deploy-prod.sh`).toBeGreaterThan(-1);
@@ -218,7 +274,7 @@ describe('F9 — the library exists and the deploy is wired to it', () => {
   // a converter from a different build — the font-substitution failure that
   // step exists to prevent.
   it('names every service the deploy replaces — app, worker AND gotenberg', () => {
-    const src = readFileSync(DEPLOY, 'utf8');
+    const src = codeOnly(readFileSync(DEPLOY, 'utf8'));
     const call = src.slice(src.indexOf('rollback_tag_cut'), src.indexOf('rollback_tag_cut') + 300);
     for (const svc of ['transcribe-md', 'transcribe-md-worker', 'gotenberg']) {
       expect(call, `rollback_tag_cut must name ${svc}`).toContain(svc);
@@ -304,6 +360,30 @@ describe('F9 — THE REFUSALS, and none of them may mutate on the way out', () =
     const r = cut(['transcribe-md']);
     expect(r.code).not.toBe(0);
     expect(r.out).toContain('untagged image');
+  });
+
+  // ⚠️ AMBIGUITY IS A REFUSAL, NOT A `head -1`. A scaled service returns more
+  // than one container and picking the first is a guessed rollback target.
+  it('REFUSES when a service has MORE THAN ONE running container', () => {
+    resetState();
+    writeFileSync(
+      join(TMP, 'state', 'containers'),
+      'transcribe-md|cid-app\ntranscribe-md|cid-app2\n',
+    );
+    const r = cut(['transcribe-md']);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain('MORE THAN ONE running container');
+    expect(tagsWritten()).toHaveLength(0);
+  });
+
+  // A digest reference has no mutable tag to derive a name from. It already
+  // failed closed via `docker tag`, but with a message that named the symptom.
+  it('REFUSES a container created from a DIGEST reference, naming the cause', () => {
+    resetState();
+    writeFileSync(join(TMP, 'state', 'cconfig'), `cid-app|meddoc-pro-transcribe-md@${APP_IMG}\n`);
+    const r = cut(['transcribe-md']);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain('DIGEST reference');
   });
 
   // ⚠️ THE EMPTINESS FAILURE THIS HOUSE NAMES ON SIGHT. A run over an empty
