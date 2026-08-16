@@ -305,7 +305,77 @@ Everything below was measured against the real customer form
 Produced by `scripts/check-citation.sh`, not typed. Every line reads `a1`, so no
 run was re-run and there is nothing to explain.
 
-#### ⚠️ NOT DEPLOYED — AND THAT IS A DECISION, NOT AN OMISSION
+#### 🟩 F5-a IS LIVE IN PRODUCTION — 2026-08-16T16:17Z, **15 of 15 JUDGED**
+
+**Deployed `46769791` by session 03.** Rollback tags cut BY HAND first (F9 is
+still open), from the RUNNING containers' image ids, and each verified by
+`docker inspect` to resolve to the outgoing id **before** any deploy step ran —
+`meddoc-pro-transcribe-md:pre-f5-20260816`, `…-worker:pre-f5-20260816`,
+`meddoc-pro-marketing:pre-f5-20260816`. **Three consecutive deploys had left no
+rollback target; this one does not.**
+
+**Citation — 4 of 4 on `46769791ab7463fd7514649d0062adbc3c79519b`:**
+   · `CI` 31956126327 a1
+   · `e2e` 31956126355 a1
+   · `a11y-ci` 31956126497 a1
+   · `secrets-scan` 31956126441 a1
+
+Produced by `scripts/check-citation.sh`, not typed. Every line reads `a1`, so no
+run was re-run and there is nothing to explain.
+
+**Declaration: `docs/foundation/deploys/20260816-46769791.md`. Judged 15 of 15.**
+
+| # | quantity | declared | measured | |
+|---|---|---|---|---|
+| 1 | app image | different | `5c3b0e55…` → `a188a309…` | ✔ |
+| 2 | worker image | different | `0e141638…` → `65bbddc2…` | ✔ |
+| 3 | `compilerDecidedConcept` in the worker | ≥ 1 | **0 → 3** | ✔ |
+| 4 | migrations | 104 / 104 | 104 / 104 | ✔ |
+| 5–9 | the five twin tables | 0 | 0 · 0 · 0 · 0 · 0 | ✔ |
+| 10 | `note_templates` carrying a twin | 0 | 0 | ✔ |
+| 11 | visits | 44 | 44 | ✔ |
+| 12 | signed visits | 27 | 27 | ✔ |
+| 13 | patients | 32 | 32 | ✔ |
+| 14 | `note_templates` | 9 | 9 | ✔ |
+| 15 | co-tenants | 307·404·200·200·410 | 307·404·200·200·410 | ✔ |
+
+⚠️ **ONE CONTROL MOVED, AND IT IS NAMED RATHER THAN GLOSSED.** The
+must-exist control `fallbackSemanticMappings` read **1** before and **2** after.
+That is the refactor adding a second reference to the symbol, and the control's
+job — *does the probe find something it must find* — is satisfied either way.
+Reporting it as an unchanged `1` would have been the tidier and less true
+sentence. The traversal control held at **28**.
+
+⚠️ **AND ROWS 5–10 ARE WHY THIS DECLARATION WAS WORTH WRITING.** The change
+alters what a mapping CARRIES, not whether one is written; a presence-only
+declaration would have passed just as happily on a version that started writing
+twin rows nobody asked for.
+
+#### ⚠️ THE DECLARATION HAD TO BE RE-FILED, AND THAT IS **F10**, NOT A ONE-OFF
+
+Session 02 committed the substantive declaration at
+`docs/foundation/deploys/20260816-6e6edf73.md` — **before the act, tracked,
+every number fixed while still true.** `deploy-prod.sh` derives its path from
+`git rev-parse --short HEAD`, and `main` had since moved to `46769791` when the
+F5-a **citation** PR merged. So the committed declaration could not satisfy the
+gate, and a carry-forward was written at the HEAD-named path.
+
+**The runtime scope was verified rather than assumed** before reusing the
+figures: `git diff 6e6edf73..46769791 -- ':!docs' ':!*.test.ts' ':!*/__tests__/*'`
+is **EMPTY**, so the carry-forward covers exactly the same production payload.
+Every absence row was **re-measured**, not inherited.
+
+> ⚠️ **F10 — the declaration filename cannot be satisfied by a pre-committed
+> file whenever a docs or citation PR lands between the feature merge and its
+> deploy, which is this programme's NORMAL cadence.** The commit that would
+> carry the declaration is itself what moves HEAD. The `present`-not-`strict`
+> gate is what makes this legal (ruling #96(b)), and the cost is that the
+> "committed before the act" property is inherited rather than held directly.
+> **The fix is not to loosen anything** — candidates are: accept a declaration
+> naming any commit in `deployed..HEAD`, or name it after the FEATURE merge and
+> record HEAD inside. Filed, not built.
+
+#### ⚠️ NOT DEPLOYED — AND THAT IS A DECISION, NOT AN OMISSION *(superseded above — kept as the record of session 02's correct hand-off)*
 
 Production still runs `9ea09a15` (F4). **F5-a's done-when is *on `main`, cited*,
 which is MET.** Deploying is standing ceremony for a runtime change rather than
