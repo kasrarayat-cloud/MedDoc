@@ -115,6 +115,40 @@ declaration_gate "$DECL" present "deploy declaration" || {
   exit 1
 }
 
+# ============================================================================
+# STEP 0b — THE ROLLBACK TAG. F9, AND IT IS FAIL-CLOSED.
+# ----------------------------------------------------------------------------
+# ⚠️ THE SAME ARGUMENT AS STEP 0, ONE STEP LATER. Runbook §3.1 has said since
+# 2026-08-02 that tagging the outgoing images is a MANUAL pre-step, and that
+# forgetting it leaves nothing to roll back to. It was forgotten TWICE on
+# 2026-08-16 — F3 at 04:02Z and F4 at 11:35Z — the second time by a session that
+# then asserted in its own §2.5 declaration that the tags HAD been cut. Both
+# images were recovered by hand from dangling images; the ~8h window in which a
+# rollback would have needed a REBUILD is the cost that was actually paid.
+#
+# A PRE-STEP THAT LIVES ONLY IN PROSE IS A PRE-STEP THAT GETS SKIPPED. So it is
+# mechanism now, and it runs BEFORE the backup — nothing has been built,
+# migrated or recreated when it refuses.
+#
+# The runbook's manual block is now the FALLBACK, not the mechanism.
+# ============================================================================
+TAG_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" 2>/dev/null && pwd)/rollback-tag.sh"
+if [ ! -r "$TAG_LIB" ]; then
+  echo "🔴 REFUSING TO DEPLOY — $TAG_LIB is missing or unreadable."
+  echo "   A deploy that silently skipped its own rollback tag is exactly the"
+  echo "   state F9 exists to make impossible. Production is untouched."
+  exit 1
+fi
+# shellcheck source=lib/rollback-tag.sh
+. "$TAG_LIB"
+
+ROLLBACK_SLUG="$(rollback_tag_slug "$DECL" "$DEPLOY_SHA")"
+rollback_tag_cut "$ROLLBACK_SLUG" "$(date -u +%Y%m%d)" \
+  transcribe-md transcribe-md-worker gotenberg || {
+  echo "   Nothing has been built, migrated or recreated. Production is untouched."
+  exit 1
+}
+
 if [ "${1:-}" != "--skip-backup" ]; then
   echo "=== 1. pre-deploy backup ==="
   BACKUP="backups/pre_deploy_${TS}.sql.gz"

@@ -305,12 +305,76 @@ rollback target at all. The sentence described a guarantee the deploy path does
 not provide, which is the most expensive kind of documentation error: it reads
 as reassurance and is discovered during an incident.
 
-**Tagging is a MANUAL PRE-STEP. Do it BEFORE `deploy-prod.sh`, not after — once
-the build finishes, `:latest` is the new image and the outgoing one is
-untagged.**
+### ⚠️ SUPERSEDED 2026-08-16 — **F9: THE DEPLOY CUTS THE TAG ITSELF.** The manual block below is now the FALLBACK, not the mechanism.
+
+**`scripts/deploy-prod.sh` STEP 0b cuts the rollback tags and REFUSES the deploy
+if it cannot.** Nothing is backed up, built, migrated or recreated when it
+refuses. You do not run the block below before a normal deploy.
+
+**Why this stopped being a manual pre-step.** The paragraph this replaces said,
+correctly and since 2026-08-02, that tagging is manual and that forgetting it
+leaves no rollback target. **It was forgotten twice on 2026-08-16 anyway** — F3's
+deploy at 04:02Z and F4's at 11:35Z — and the second time by a session that then
+asserted *in its own §2.5 declaration* that the tags had been cut. Both outgoing
+images were recovered by hand from dangling images, identified by size and by
+`Cmd`/`User`. The ~8h window in which a rollback would have required a REBUILD is
+the cost that was actually paid.
+
+> **A PRE-STEP THAT LIVES ONLY IN PROSE IS A PRE-STEP THAT GETS SKIPPED.** Same
+> argument that turned the in-flight-runs rule into `scripts/hooks/pre-push` and
+> `scripts/merge-pr.sh`, and §2.5 into `scripts/lib/declaration.sh`.
+
+**What it does, and the three properties that matter:**
+
+| | |
+|---|---|
+| **source** | the **RUNNING container's** image id, via `docker compose ps -q` → `docker inspect {{.Image}}` — **never `:latest`**, which is the thing about to be replaced and is *newer* than production whenever a previous deploy built without recreating |
+| **repository** | derived from the container's own `{{.Config.Image}}`, not a hand-kept service→repo table — hand-kept lists are wrong eventually |
+| **verification** | the tag is **re-read** and asserted to resolve to the outgoing image. `docker tag` exiting 0 is not evidence; `retire-branch.sh` passed 9 of 9 refusal tests and still printed a false green |
+
+**It covers all three services the deploy replaces** — app, worker **and
+gotenberg**. Gotenberg is rebuilt and recreated at step 5b, so a rollback set
+without it restores an app against a converter from a different build, which is
+the font-substitution failure that step exists to prevent.
+
+**It REFUSES** on: a service with no running container · a `pre-*` tag that
+already exists **on a different image** (sacred — never re-pointed) · a failing
+`docker tag` · a tag that is created and does not resolve · a malformed image id
+· a container created from a bare image id · an empty service list. Re-running
+after an aborted deploy is **idempotent** and does not trip the never-re-point
+refusal.
+
+**Naming.** `<repo>:pre-<slug>-<YYYYMMDD>`, unchanged. The slug comes from an
+**optional** line in the §2.5 declaration:
+
+```
+rollback-slug: f5b
+```
+
+Absent or malformed, it falls back to the deploy's short SHA —
+`pre-b3a55c72-20260816`, which reads as *"production immediately before
+`b3a55c72` was deployed"*. **It falls back rather than refusing on purpose:** the
+tag must always be cut, and a bad label is not a reason to leave production
+without a rollback target.
+
+**Proof:** `apps/transcribe-md/src/lib/__tests__/gate-f9-deploy-cuts-its-rollback-tag.test.ts`
+— 20 arms in `CI`, driving the real library through a fake docker, both
+directions. The **integration** was proved separately against the real daemon on
+2026-08-16, which is what cut `:pre-f5b-20260816` on all three images.
+
+---
+
+**THE FALLBACK — use this only when `deploy-prod.sh` is not the path** (a manual
+`docker compose up`, a recovery, a co-tenant). Once the build finishes, `:latest`
+is the new image and the outgoing one is untagged, so it must run FIRST.
+
+⚠️ **AND IT READS `:latest`, WHICH THE MECHANISM DELIBERATELY DOES NOT.** If a
+previous deploy built without recreating, `:latest` is not what is running and
+this block tags the wrong image. Prefer reading the running container:
+`docker inspect --format '{{.Image}}' meddoc-pro-transcribe-md-1`.
 
 ```bash
-# Run this FIRST, before deploy-prod.sh. <slug> names what is being changed.
+# FALLBACK ONLY. deploy-prod.sh does this for you. <slug> names what is changing.
 D=$(date -u +%Y%m%d)
 docker tag meddoc-pro-transcribe-md:latest        meddoc-pro-transcribe-md:pre-<slug>-$D
 docker tag meddoc-pro-transcribe-md-worker:latest meddoc-pro-transcribe-md-worker:pre-<slug>-$D

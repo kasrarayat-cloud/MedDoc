@@ -98,7 +98,111 @@ field 2, so a wrapped reason is parsed as extra expected codes — that defect w
 introduced and caught while fixing this very row, and it made a healthy ingress
 report `floor 6, from 7 distinct expected` and exit 2.
 
-### F9 — `deploy-prod.sh` CUTS ITS OWN ROLLBACK TAG — filed 2026-08-16, from F4's deploy
+### ✅ F9 — `deploy-prod.sh` CUTS ITS OWN ROLLBACK TAG — **BUILT 2026-08-16, session 04**
+
+**Branch `feat/f9-deploy-cuts-its-rollback-tag`.** The pre-step is mechanism now.
+`scripts/deploy-prod.sh` STEP 0b sources `scripts/lib/rollback-tag.sh` and
+**refuses the deploy if it cannot tag** — before the backup, before the
+`db-migrate` build, before anything is recreated.
+
+| property | how |
+|---|---|
+| source of the outgoing image | the **RUNNING container** (`docker compose ps -q` → `inspect {{.Image}}`), never `:latest` |
+| repository | derived from the container's own `{{.Config.Image}}` — not a hand-kept service→repo table |
+| the green | the tag is **RE-READ** and asserted to resolve to the outgoing image |
+| coverage | app · worker · **gotenberg** (rebuilt AND recreated at step 5b) |
+| slug | optional `rollback-slug:` in the §2.5 declaration, else the deploy's short SHA |
+
+⚠️ **THE SLUG FALLS BACK RATHER THAN REFUSING, AND THAT IS DELIBERATE.**
+Requiring a slug would invent a NEW way for a deploy to die, on a field no
+existing declaration carries. The tag must always be cut; a bad label is not a
+reason to leave production without a rollback target. `pre-b3a55c72-20260816`
+reads as *"production immediately before `b3a55c72` was deployed"*, which is
+exactly what it is.
+
+⚠️ **`:latest` IS NOT A SUBSTITUTE, AND THIS IS THE LOAD-BEARING DESIGN CHOICE.**
+A previous deploy that built successfully and failed to recreate leaves `:latest`
+**newer** than what is running — so a tag cut from it names an image that was
+never in production, and the rollback target becomes the very build you are
+escaping. The lib reports that divergence loudly when it sees it.
+
+#### THE PROOF — BOTH DIRECTIONS, AND THE HAPPY PATH IS THE HALF THAT MATTERS
+
+`gate-f9-deploy-cuts-its-rollback-tag.test.ts`, **20 arms, in `CI`**. It drives
+the REAL library through a real `bash` with a FAKE docker injected via the lib's
+own `$DOCKER` indirection — nothing re-implements the logic, for the same reason
+`declaration.sh` and `inflight.sh` are shared.
+
+- **happy path (4)** — exit 0 · the tag points at the running image · `:latest`
+  is stripped from an already-tagged `Config.Image` · it reports the COUNT
+- **idempotence (1)** — an aborted deploy must be re-runnable without tripping
+  the never-re-point refusal
+- **refusals (7)** — no running container · a `pre-*` tag on a DIFFERENT image
+  (and **nothing tagged on the way out**) · `docker tag` fails · `docker tag`
+  exits 0 and the tag does not resolve · malformed image id · bare image id ·
+  **empty service list**
+- **wiring (4)** — the deploy sources it, calls it, calls it **BEFORE** the
+  backup/build/recreate, and names all three services
+- **slug (5)** — declared · absent · malformed · missing file · **prose**
+
+⚠️ **THE GATE WENT RED AGAINST ITS AUTHOR ON FIRST EXECUTION, TWICE, AND BOTH
+WERE REAL.**
+
+1. **A bare-image-id container was NOT refused — the deploy would have tagged
+   `sha256:pre-<slug>-<date>`.** The guard tested the *stripped* value: with
+   `Config.Image = sha256:dddd…`, `_rollback_repo_of` strips at the last colon
+   and returns the bare word **`sha256`**, which matches neither `^sha256:` nor
+   a 64-hex string. **The question was asked of a value that could not answer
+   it.** Fixed to test `cfg` itself.
+2. **The harness's own `resetState` did not reset.** It wrote the bend flags and
+   never removed them, so `tag_fails` survived into the next two arms — the
+   tag-lies arm and the bare-image arm both refused **for the wrong reason**
+   while still satisfying their `code !== 0` assertion. *A reset that does not
+   reset is an unapplied mutation wearing a fixture's clothes*, and only the
+   MESSAGE assertions discriminated. They stay for that reason.
+
+#### THE INTEGRATION WAS PROVED SEPARATELY, BECAUSE A FAKE DOCKER CANNOT
+
+**Named rather than implied:** the gate proves the LOGIC. The real daemon was
+exercised by hand on 2026-08-16 — the real lib, the real running containers —
+and it cut the rollback set the next deploy needs:
+
+```
+meddoc-pro-transcribe-md:pre-f5b-20260816         a188a309d814
+meddoc-pro-transcribe-md-worker:pre-f5b-20260816  65bbddc296d5
+meddoc-pro-gotenberg:pre-f5b-20260816             2d05d22572ba
+```
+
+All three verified **twice, by two different tools**: the lib's own re-read
+(`docker inspect --type=image`) and an independent `docker images` listing. Each
+resolves to the id its container reports. A second live run printed
+`↻ … already on the outgoing image — idempotent, left alone`.
+
+⚠️ **SO THE THIRD CONSECUTIVE DEPLOY WILL NOT BE THE THIRD WITH NO ROLLBACK
+TARGET** — F5-b's tags exist now, before its deploy, cut from the images that
+deploy will replace. A declaration for it should carry `rollback-slug: f5b` so
+the mechanism finds them idempotent rather than refusing on a name collision.
+
+**Runbook §3.1 updated**: the manual block is explicitly the FALLBACK, with its
+own warning that it reads `:latest` and the mechanism does not.
+
+#### WHAT THIS DOES **NOT** DO
+
+- **It does not delete, prune or re-point anything.** Tagging is additive, and
+  a `pre-*` tag pointing elsewhere is a REFUSAL, never an overwrite.
+- **It does not prove the integration in CI**, and cannot — a test that tags
+  real production images is not a test.
+- **It does not fix F10.** The declaration filename is still derived from
+  `rev-parse --short HEAD`, so a citation PR landing between feature merge and
+  deploy still forces a carry-forward. Separate item, deliberately: the
+  candidate fixes include one that LOOSENS what satisfies the gate, and a
+  loosening fails the provisional-ruling test.
+- **It does not remove the runbook's rollback table's maintenance burden.** The
+  table is still hand-kept and still has to be reconciled against the daemon.
+
+*Original filing, kept for the record:*
+
+### F9 (original wording) — filed 2026-08-16, from F4's deploy
 
 ⚠️ **TWO CONSECUTIVE DEPLOYS LEFT NO ROLLBACK TARGET** (F3 at 04:02Z, F4 at
 11:35Z). The runbook §3.1 has said since **2026-08-02** that tagging is a MANUAL
