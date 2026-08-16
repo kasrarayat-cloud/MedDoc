@@ -50,6 +50,34 @@ require_full_sha() {
        and no warning. That is a FALSE ALL-CLEAR, not an empty result.
        Use: \$(git rev-parse HEAD)"
   fi
+
+  # ⚠️ FULL-LOOKING IS NOT FULL. The length check above passes any 40 hex
+  # characters, including a short sha somebody PADDED or mistyped. To the
+  # runs API a fabricated sha and a real sha whose runs have not started are
+  # THE SAME ANSWER — no rows — so a polling caller waits forever on a commit
+  # that does not exist.
+  #
+  # Measured 2026-08-16: a batch citation was polled against
+  # cc6d9ee8ceff34c14eafcdf22ea59923eec4facf while origin/main was
+  # cc6d9ee81287036bbf1e97ef8cbf88eaae719cef — same 8 characters, different
+  # commit. `cited` returned exit 1 for BOTH the fabricated sha and the real
+  # one with runs pending. Indistinguishable. This is the second time a
+  # fabricated sha has been caught in this programme; the first was caught by
+  # check-citation.sh, which already verifies existence.
+  #
+  # So: EXIST-CHECK, and fail as 2 = CANNOT TELL rather than 1 = not cited.
+  if git rev-parse --git-dir >/dev/null 2>&1; then
+    if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+      git fetch --quiet origin 2>/dev/null || true
+      if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+        die2 "NO SUCH COMMIT — '$sha' is not a commit in this repository.
+       It is 40 hex characters, so it LOOKS full. It is not real.
+       A fabricated sha and a real sha with pending runs both return NO ROWS,
+       so this is reported as CANNOT TELL (2), never as 'not cited' (1).
+       Read it, do not build it: \$(git rev-parse HEAD)"
+      fi
+    fi
+  fi
 }
 
 # Prove the runs API answers for this repo before believing any zero from it.
