@@ -1167,6 +1167,43 @@ finished looking at it.
 AND query with the full 40 characters. The two-view habit catches a lying
 instrument; the full identifier stops you creating one.
 
+#### ⚠️ AND THE THIRD: **FULL-LOOKING IS NOT FULL**
+
+**Standing 2026-08-16. Second occurrence in this programme, and the first was
+caught by a different script.**
+
+> **A 40-character hex string is not a commit. Read the identifier
+> (`git rev-parse HEAD`); never BUILD one by padding, completing or
+> remembering a short sha.**
+
+⚠️ **THE REASON IT SURVIVES A LENGTH CHECK IS THE WHOLE PROBLEM.**
+`gh-runs.sh` refused short shas from the day it was written — and a fabricated
+sha sails through, because it is exactly 40 hex characters. Measured: a batch
+citation polled `cc6d9ee8ceff34c14eafcdf22ea59923eec4facf` while `origin/main`
+was `cc6d9ee81287036bbf1e97ef8cbf88eaae719cef`. **Same eight characters,
+different commit.**
+
+⚠️ **AND THE TWO FAILURES ARE INDISTINGUISHABLE TO THE CALLER, WHICH IS WHAT
+MAKES IT WAIT FOREVER:**
+
+    fabricated sha             -> no rows -> exit 1
+    real sha, runs not started -> no rows -> exit 1
+
+So an `until … cited "$SHA"` loop — the shape the wrapper exists to serve —
+polls a commit that does not exist, and its log is indistinguishable from
+patient, correct waiting.
+
+**What caught it was the two-view rule**, one section up: `--commit` returned
+empty while `--branch main` showed four runs on a *different* sha. **The
+disagreement was the only signal**, exactly as that rule promises.
+
+**Mechanized** — `gh-runs.sh` now exist-checks and fails **`2` = CANNOT TELL**
+rather than `1` = not cited, because those are different claims. It fetches once
+first, so a real-but-not-yet-local sha is not called fake. *(`check-citation.sh`
+already had this guard and caught the programme's first fabricated sha with
+"NO SUCH COMMIT — cannot tell". **A guard on one door is not a guard on the
+other** — the same lesson as the push-side hook versus `merge-pr.sh`.)*
+
 > **THE RULE, TIGHTENED TWICE, AND THE SECOND TIGHTENING IS THE LOAD-BEARING
 > ONE: TAKE TWO VIEWS.** `--branch` is the view that is right first. A citation
 > is still taken from `--commit`, because that is what binds evidence to a SHA —

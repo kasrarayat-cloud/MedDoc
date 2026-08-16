@@ -71,11 +71,32 @@ archive-loop one especially, which is a live hazard rather than a polish task.**
 | F6.3 | ⚠️ **The archive loop is UNBOUNDED against a single strictly-serializing sidecar** | **measured: a 0.42s staircase**, and `maxDuration` is **INERT on a standalone build** — so nothing bounds it. Real hazard, own item, not a tail |
 | F6.4 | **`export-cleanliness`'s markdown detector is now VACUOUS** | a green that cannot go red — the ratchet class this house names on sight |
 | F6.5 | **`gate-r1`'s "BOTH sides" test asserts one side** | the title is wider than the measurement |
-| F6.6 | **`check-cotenants.sh` watches FOUR hosts; MASTER.md STEP 0.6 names FIVE** | `www.quillmd.com` is missing from its `EXPECTED` table — **my omission when I wrote it**. One line; rides the next small PR rather than waiting for F6 |
+| ~~F6.6~~ ✅ **CLOSED 2026-08-16 — VERIFIED FIXED, see the note under this table** | ~~**`check-cotenants.sh` watches FOUR hosts; MASTER.md STEP 0.6 names FIVE**~~ | `www.quillmd.com` is missing from its `EXPECTED` table — **my omission when I wrote it**. One line; rides the next small PR rather than waiting for F6 |
 
 ⚠️ **F6.6 is the watched-set failure inside the check written to cure watched-set
 failures** — the census I built to stop an unwatched hostname omitted one. Fix it
 with its reason inline, like the others.
+
+⚠️ **F6.6 IS CLOSED — VERIFIED 2026-08-16, AND IT WAS ALREADY FIXED WHEN THIS
+ROW STILL SAID OTHERWISE.** `scripts/check-cotenants.sh` now carries
+`www.quillmd.com|200` in its `EXPECTED` table, with the lesson written beside
+the entry — *"MASTER.md STEP 0.6 names FIVE hosts and this table shipped with
+FOUR — the watched-set failure INSIDE the check written to cure watched-set
+failures."* Live run: `🟢 every co-tenant answers its expected status (4 distinct
+codes — the probe discriminates)`, exit 0. **Five hosts, four distinct codes**
+(`quillmd.com` and `www.quillmd.com` share 200), so the derived floor still
+discriminates.
+
+> **A FIXED ITEM LEFT LISTED AS OPEN COSTS A WHOLE SESSION.** This file's
+> standing rule is that a list is the driver and completion means the list is
+> exhausted — and the inverse is just as expensive: the next session picks up
+> F6.6, re-derives the fix, and finds the work already done. **Close the row in
+> the same pass that closes the item.**
+
+⚠️ **AND THE ENTRY MUST STAY ON ONE LINE.** The floor is derived by cutting
+field 2, so a wrapped reason is parsed as extra expected codes — that defect was
+introduced and caught while fixing this very row, and it made a healthy ingress
+report `floor 6, from 7 distinct expected` and exit 2.
 
 ### F7 — THE ONE-TIME SCRATCH SWEEP — supervised, at the next natural window
 
