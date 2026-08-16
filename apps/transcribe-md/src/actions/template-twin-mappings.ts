@@ -106,8 +106,15 @@ export async function openNativeTemplateWorkspaceAction(
 // ⚠️ `updateTemplateTwinMappings` HAD NO CALLER. It has existed, correct and
 // tested, with nothing in the application able to invoke it — the only
 // reference anywhere was a test grepping its source text. So certification
-// refused 79 of 80 fields not because the gate was strict but because NOTHING
-// COULD EVER CONFIRM THEM: the gate was right and unsatisfiable.
+// refused all 80 of 80 fields not because the gate was strict but because
+// NOTHING COULD EVER CONFIRM THEM: the gate was right and unsatisfiable.
+//
+// ⚠️ THIS COMMENT SAID "79 of 80" UNTIL 2026-08-16, AND SO DID FIVE OTHER
+// PLACES. It was inherited from a 2026-07-28 QA report and never re-measured,
+// and it conflated two different quantities. Measured against the real form:
+// 80 of 80 lack a physician-confirmed mapping (every mapping is
+// `needs_confirmation`); 22 of 80 lack a PROPOSED concept after F5-a, 75
+// before. Neither has ever been 79.
 //
 // That is RC-2's shape one layer up — correct, working code with no door — and
 // the fix is the same: give it a caller, never soften the thing it guards.

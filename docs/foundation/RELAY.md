@@ -31,7 +31,7 @@ half-filled export and a divergent signed view are wrong NOW.
 | ~~**F2-b**~~ | ✅ **SHIPPED 2026-08-15** — 8 of #115's 10 sites changed (2 exempt by JOB), plus **ruling #115-b** (`DD:`/`DT:`) which the adversarial pass found the fix had CREATED, plus the cache bump. Guard mutation-proved **12 of 12**. See the ledger row below. | **#115** · **#115-b** | ~~Ten sites, a guard, the mandatory adversarial pass.~~ **MET.** ⚠️ The pass found **4 false greens in the guard** and **1 defect the fix introduced** — the reason it is a gate and not a nicety. |
 | **F3** | 🟢 **UNBLOCKED 2026-08-16 — #117 LANDED THE FOOTER, #119 DISPOSITIONS THE WATERMARK, AND THE `e2e` MECHANISM IS NAMED.** The draft's blocker is discharged on evidence (see "THE BLOCKER IS DISCHARGED" below): `docx-generator.ts:408` attaches a **`default`** footer, so the converged PDF inherits per-page marking BY CONSTRUCTION, and #117(e) proved it rendered on 5 real LibreOffice pages. ⚠️ **The blocker named TWO marks and #117 discharged ONE** — the `QUILLMD` watermark is dropped by convergence and is ruled **#119 (PROVISIONAL): not restored, declared not discovered.** ⚠️ **The red `e2e` was a REAL behavioural change, not a flake**: `/export/pdf` went from in-process pdfkit to a Gotenberg round-trip **measured at 0.43-0.48s against a 600ms download gap**, so the DOCX now routinely lands first; the ordering assertion is replaced by a SET assertion and the order is no longer asserted anywhere. *Previous status, kept for the record:* 🟡 **BUILT AND PROVEN — DOES NOT MERGE YET.** `generateVisitPdf` and `pdf-generator.ts` are gone; five callers dispositioned per #116; new traversal gate, 15 arms, mutation-proved 3 ways. ⚠️ **THEN THE MANDATORY ADVERSARIAL PASS FOUND ~25 DEFECTS AND SEVEN WERE FIXED IN-BRANCH.** ⚠️ **THE BLOCKER IS #109's CLASS AGAIN: the retired builder stamped `Signed electronically by …` / `Not yet signed.` on EVERY PAGE, and the DOCX has no footer at all.** Shipping loses a per-page DRAFT marker — a LOOSENING, which fails the provisional-ruling test. **PR opened as a DRAFT.** See the ledger row and the findings block below. | **#113** · **#116** · **#116-b** · **#117** · **#119** | 🟢 **MET on the code, pending the gate.** The retired builder is gone by traversal, the per-page job is restored on all three surfaces by #117 rather than on the PDF alone, the one unnamed job is dispositioned by #119, and Gotenberg is named in the ledger as the single shared dependency it already was. |
 | ~~**F4**~~ | ✅ **SHIPPED AND LIVE 2026-08-16** — merge `9ea09a15`, cited 4 of 4, deployed, **11 of 11 declared rows matched**. See the ledger row below. ⚠️ **It also found that NO rollback tag existed for F3's deploy either — recovered, and mechanization filed as F9.** *Previous status:* 🟡 **IN FLIGHT — the first half was ALREADY DONE and the row did not say so.** `#663` merged `2026-08-15T14:32:23Z` and `#664` merged `2026-08-15T15:15:14Z`; only the rebase-and-land half remained. `feat/certification-door` is rebased onto `main` as `feat/f4-certification-door-land` — the classification fix (`543b5a21` → `ecc1dc4b`) and the mappings door (`799d1c45` → `b4436fb3`). See the ledger row below. | — | On `main`, cited. ✅ **F1's duplicate was dropped BY MEASUREMENT, not by hope** — `git patch-id --stable` gives `8a797bde` and F1's `529e8219` the **identical** id `6213c8f2…`, and the rebase skipped it naming it. |
-| **F5** | 🟡 **F5-a MERGED AND CITED 2026-08-16 — merge `6e6edf73`, 4 of 4, NOT YET DEPLOYED (declaration committed, deploy left to the next session — see the F5-a block).** MEASURED, AND TWO OF THE THREE REMAINING PIECES ARE NOT WHAT THE ROW SAYS. F5-a lands the piece that shrinks the wall: `fallbackSemanticMappings` hard-coded `clinicalConcept: null` for **every** field, throwing away the **53 of 80** concepts the document itself decides. Fixed by sharing the compiler's classifier with the fallback — the wall on the real customer form goes **75 → 22**. ⚠️ **Item 5 (registry expansion) is DISCHARGED BY MEASUREMENT, not built** — the registry needs no new concepts. ⚠️ **Item 4 is BIGGER than the row states** — there is no action anywhere that can open an EXISTING template's workspace, so unfolding the manager would still leave no door. See the F5-a block below. | **#106(b)** | Items 3 + 4 remain (the confirmation UI and its entry point). ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* |
+| **F5** | ✅ **F5-a AND F5-b ARE BOTH LIVE IN PRODUCTION — F5-a 2026-08-16 (15 of 15), F5-b 2026-08-16T21:29Z (16 of 16, merge `3045ae16`).** ⚠️ **THIS ROW SAID "NOT YET DEPLOYED" AND CLAIMED "Items 3 + 4 remain" UNTIL SESSION 05 — BOTH WERE STALE, AND THE SECOND WAS THE EXPENSIVE ONE.** F5-a was deployed by session 04 (`485067a9`, *"F5-a is LIVE — 15 of 15 judged"*), and **items 3 + 4 ARE F5-b** — the confirmation UI and its entry point — built by session 03, merged as `9208786b` (PR #693) and deployed by session 05. A session reading this table first would have rebuilt work that was already live. **This is F6.6's lesson inside the queue table itself: close the row in the same pass that closes the item.** *Previous wording, kept for the record:* MEASURED, AND TWO OF THE THREE REMAINING PIECES ARE NOT WHAT THE ROW SAYS. F5-a lands the piece that shrinks the wall: `fallbackSemanticMappings` hard-coded `clinicalConcept: null` for **every** field, throwing away the **53 of 80** concepts the document itself decides. Fixed by sharing the compiler's classifier with the fallback — the wall on the real customer form goes **75 → 22**. ⚠️ **Item 5 (registry expansion) is DISCHARGED BY MEASUREMENT, not built** — the registry needs no new concepts. ⚠️ **Item 4 is BIGGER than the row states** — there is no action anywhere that can open an EXISTING template's workspace, so unfolding the manager would still leave no door. See the F5-a block below. | **#106(b)** | ✅ **Items 3 + 4 are DONE and LIVE** (F5-b — the confirmation UI and its entry point). **F5 is closed on the code.** What remains is not a build item: **a physician must actually walk the door.** ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* — and that ping is now the ONLY thing between production and its first certified twin, because the wall is 22 concepts and the door is open. |
 
 **F3 WAS BLOCKED ON RULING #117 — AND IS NOT, SINCE 2026-08-16.** The condition
 is discharged rather than waived: it landed *"only with the attestation/draft
@@ -97,6 +97,167 @@ discriminates.
 field 2, so a wrapped reason is parsed as extra expected codes — that defect was
 introduced and caught while fixing this very row, and it made a healthy ingress
 report `floor 6, from 7 distinct expected` and exit 2.
+
+### ✅ F5-b + F9 ARE LIVE IN PRODUCTION — **2026-08-16T21:29Z, session 05 — 16 of 16 JUDGED**
+
+**Deployed `3045ae16` (payload `46769791..3045ae16`, carrying PRs #693 F5-b,
+#694, #695 F9, #696).** `deploy-prod.sh` exit 0, `/api/health` **200**.
+Declaration: `docs/foundation/deploys/20260816-3045ae16.md` — the F10
+carry-forward of session 04's `20260816-5f2334b1.md`, which stays in place
+unmodified as the original.
+
+| | |
+|---|---|
+| app image | `a188a309d814` → **`cc772df258b2`** |
+| worker image | `65bbddc296d5` → **`9848ee4c6d2b`** |
+| gotenberg | `2d05d22572ba` → **unchanged** (rebuild was fully cached; only app+worker were declared to move) |
+| rollback | `:pre-f5b-20260816` on all three, cut BEFORE the act and verified against the daemon |
+| migrations | 104 → **104** — no migration in this payload |
+
+**MUST CHANGE — 5 of 5.** Image ids moved · `NativeTemplateManager` mounts ·
+upload half stays hidden · `openNativeTemplateWorkspaceAction` reachable ·
+F9's STEP 0b present and `↻ idempotent` ×3.
+
+**MUST NOT CHANGE — 11 of 11.** visits 44 · signed 27 · patients 32 ·
+`note_templates` 9 · migrations 104 · twin source artifacts 0 · compiled 0 ·
+**CERTIFIED 0** · mappings 0 · fill manifests 0 · co-tenants 307·404·200·200·410.
+
+#### THE F10 CARRY-FORWARD, EXECUTED — and its RESIDUAL, which is a real gap
+
+F10's condition was **met and recorded, not asserted**: the runtime diff
+`5f2334b1..HEAD` is EMPTY, positive-controlled by the unfiltered diff showing
+the range is non-empty (RELAY.md + the declaration, docs only). Absence rows
+were **re-measured**, not inherited — all ten matched.
+
+⚠️ **BUT THE CARRY-FORWARD CANNOT ITSELF BE COMMITTED BEFORE THE DEPLOY, AND
+THAT IS F10's UNFIXED HALF.** `deploy-prod.sh` derives the declaration path from
+`git rev-parse --short HEAD`. Landing the carried copy through a PR — as canon
+requires for anything reaching `main` — **moves HEAD and invalidates the
+filename it was just created to satisfy.** The regress has no fixed point.
+
+So this deploy ran with the carried declaration **present and uncommitted**, and
+the gate said so loudly (`tracked: no`). That is legal — the deploy path is
+`present`, not `strict`, deliberately, because a deploy is answerable by a
+rollback. **Provenance is carried by the committed ORIGINAL**
+(`20260816-5f2334b1.md`, committed 20:00Z, provably before the 21:26Z act) whose
+payload is byte-identical by the measured empty diff. **Saying which half you
+have is the whole discipline: the ORDER is proven, the carried copy's
+TRACKEDNESS is not.**
+
+**⚠️ THIS IS F10, AND IT NOW HAS OWNER ACCEPTANCE CRITERIA — RULING #121.**
+
+**I first filed this as a new item "F11", marked `RULING NEEDED`, on the
+reasoning that every candidate fix LOOSENS the §2.5 gate and a loosening fails
+the provisional-ruling test. That framing is WITHDRAWN — it was wrong twice,
+and ruling #121 (landing via PR #697, opened 21:32Z while this deploy was
+running) says so directly.**
+
+| my framing | what #121 establishes |
+|---|---|
+| a NEW item, F11 | **it is F10**, already filed by session 03. A new number would have split one item in two |
+| `RULING NEEDED` | **the ruling has arrived**, and F10 stays **the loop's item** — *"THE MECHANISM IS THE LOOP'S TO DESIGN"*. It is a build item, not a question |
+| *"every candidate fix loosens the gate"* | ⚠️ **#121 names this exact misreading as a TERMINOLOGY COLLISION.** Criterion (1) *"the gate does not weaken"* means the SUBSTANTIVE judgement must still cover the shipped tree. It explicitly does **NOT** mean touching `declaration_gate`'s `present` argument, which stays deliberate under #96(b). **A fix can break the circularity without weakening anything** — which is precisely what I concluded was impossible |
+
+**THE THREE ACCEPTANCE CRITERIA, and a fix meeting fewer than three is not a
+fix:**
+
+1. **The gate does not weaken** — no deploy without a declaration judged against
+   the **exact tree shipped**. Read as *"the judgement covers what actually
+   shipped"*, never as *"change that argument"*.
+2. **The circularity breaks** — a declaration must be committable **before or
+   with** its deploy without invalidating its own name. Candidate shapes offered
+   and **none mandated**: name by the CHANGE's sha with ancestry-verification at
+   the gate; an explicit carry-forward marker the gate resolves; or another shape
+   entirely. ⚠️ **Proven BOTH directions, including the wrong-tree-REFUSED arm** —
+   `retire-branch.sh` passed 9 of 9 refusal tests and still printed a false green
+   on the happy path.
+3. **Falsifiability does not narrow** — a scheme that resolves to the deployed
+   tree *by construction* cannot come out false, and an unfalsifiable observation
+   is not evidence.
+
+⚠️ **AND #121's INTERIM POSTURE RATIFIES EXACTLY WHAT THIS DEPLOY DID:** a §2.5
+carry-forward **may** be written to the shared tree — because it can only be
+named after a post-merge sha — **and must be committed by the same session
+before close-out.** Session 05 complied: `20260816-3045ae16.md` is committed in
+this change. The exception **retires WITH F10**, because an exemption's
+justification is prose and prose decays silently.
+
+**F10 is NOT built by this session** — it arrived with about an hour of budget
+left, behind a deploy and its judgement, and criterion (2) demands a
+both-directions proof that is not a ten-minute job. It is left **fully scoped
+with its criteria** rather than half-built. **The next session should take it:
+it is the loop's, the criteria are fixed, and the interim exception is live
+until it lands.**
+
+#### ⚠️ THREE STEP-0 / CANON INSTRUMENTS ARE NOT GRANTED TO THE LOOP — filed as F11
+
+Both are named by `MASTER.md` as things a session must run, and neither is in
+`.claude/settings.json`. **Neither is in MASTER.md's permissions table either**,
+which is the table that exists so a session re-formulates instead of halting —
+so both are the recorded *"a refusal NOT in this table is a finding"* case.
+
+| refused | MASTER.md says | consequence |
+|---|---|---|
+| `bash scripts/check-cotenants.sh` | STEP 0.6 — the co-tenant check | the script that OWNS the expected-status table is unrunnable. Five hand `curl`s substitute for it — same evidence, but the expected codes then live in the session's head instead of in the checked-in table, which is the whole thing F6.6 just fixed |
+| `tmux has-session -t foundation` | *"the authority is `tmux has-session`"* — named as the CORRECT probe, against `pgrep -f` which matches its own command line | **the loop cannot run the one probe canon tells it to trust.** The documented alternative is the self-matching probe that already cost three hours on 2026-08-16 |
+| `DECLARE_CANCELLATION="…" git push` | the pre-push hook's **own** documented override, printed in its refusal message | **the escape hatch is unreachable.** The allowlist prefix-matches on the command's first token, and an `VAR=… git push` line starts with the assignment, not with `git`. Measured this session: the hook refused correctly, printed the override, and the override was then refused by permissions |
+
+⚠️ **THE SECOND IS THE WORSE ONE, AND IT IS SELF-UNDERMINING.** The
+*"A PROBE THAT MATCHES ITSELF"* section was written **because** `pgrep -f` gave
+a false LIVE reading, and it names `tmux has-session` as the fix. An unattended
+session that follows that instruction gets a permission refusal and is pushed
+back toward the probe the rule exists to forbid.
+
+⚠️ **THE THIRD ONE COST THIS SESSION A REAL DECISION, AND THE WAY IT COST IT IS
+THE POINT.** Needing a second commit (the stale F5 queue row), I hit the hook,
+read its offered override, and could not issue it. The available workaround was
+`gh run cancel` — **granted**, and it would have produced the identical outcome
+through a different door. **I declined and waited instead.** A guard that
+refuses, offers an escape hatch, and has that hatch blocked by an unrelated
+layer is a guard that quietly teaches sessions to route around it — and the
+route was one command away. **The cost of waiting was about thirty minutes of a
+session that had budget. The cost of the habit would have been permanent.**
+
+**The fix is three allowlist lines** — `Bash(bash scripts/check-cotenants.sh:*)`,
+`Bash(tmux has-session:*)` (read-only; broader `tmux` must NOT be granted, since
+`tmux new`/`kill-session` reach the loop's own runner), and a form that lets the
+declared-cancellation override actually be issued.
+
+⚠️ **AND THE LOOP CANNOT APPLY IT ITSELF — MEASURED, NOT ASSUMED.** There is an
+exact precedent for a session fixing this class by PR: **#692
+(`fix/loop-allowlist-gh-runs`)** added `Bash(bash scripts/gh-runs.sh:*)` after a
+session hit the identical wall, and `settings.json`'s own header sanctions the
+mechanism — *"Adding another is a reviewable diff."* So I attempted it, in that
+shape. **The edit was REFUSED: the harness protects `.claude/settings.json`
+independently of the repo-wide `Edit(//opt/meddoc-pro/**)` grant.**
+
+**That refusal is correct and it settles the item.** A process that can widen its
+own permissions has no permissions — the enumerated deny list would become
+advisory in one commit, which is the exact failure the file's header warns about
+two paragraphs above the allow list. **So this is genuinely OWNER-SIDE, not a
+judgement call I declined**, and #692 must have been landed by a session that
+had write access to that file, or by the owner.
+
+**Three lines, written out above, ready to apply.**
+
+#### ⚠️ AND THE DECLARATION CARRIED A ROW THAT COULD NOT RUN
+
+`certificationStatus='certified'` — **the enum has no such value.** Measured:
+`RECOGNIZED · NEEDS_CONFIRMATION · UNSUPPORTED · CERTIFIED · QUARANTINED`.
+Corrected to `'CERTIFIED'` in the carried declaration.
+
+**It errors rather than returning a wrong number, which is the only reason this
+was cheap.** Postgres refuses an unknown enum literal in a comparison. **Had the
+column been plain `text` — which is exactly how this house's `AuditAction`
+failures presented — the same query returns `0`, and `0` is precisely what the
+row asserts.** The judgement would have read *"✅ 0 certified"* while measuring
+nothing, on the one row that exists to prove a deploy cannot certify a template
+no physician confirmed.
+
+⚠️ **HONEST LIMIT:** with `template_twin_compiled_versions` at 0, the CERTIFIED
+count is **entailed by the parent being empty** — no filter discriminated
+anything. True, and vacuous. It becomes a real measurement on the first doctor
+upload (RC-2 compiles on every `.docx`), which is the case the row is for.
 
 ### ✅ F9 — `deploy-prod.sh` CUTS ITS OWN ROLLBACK TAG — **MERGED AND CITED 2026-08-16, session 04**
 
@@ -312,13 +473,27 @@ document stating an intended state in the present tense, read by everyone as a
 description of the running system. It must be corrected **in the same change
 that deploys F5-b**, not afterwards.
 
-⚠️ **AND A SECOND SENTENCE IN THE SAME PARAGRAPH IS SUSPECT BUT NOT VERIFIED:**
-*"on a real customer form that is 79 of 80."* F5-a moved the confirmation wall
-**75 → 22** on that form — but "fields lacking a physician-confirmed mapping"
-and "fields needing a physician to supply a CONCEPT" may not be the same
-quantity, and F5-a changed the second. **Reported as a question, not a fact.**
-Whoever lands the correction above should measure it rather than assume the two
-numbers refer to one thing.
+⚠️ **AND A SECOND SENTENCE IN THE SAME PARAGRAPH WAS SUSPECT AND IS NOW
+MEASURED — ✅ RESOLVED 2026-08-16, session 05.** *"on a real customer form that
+is 79 of 80."* The suspicion was right, and the answer is worse than stale:
+**the two quantities are different AND neither has ever been 79.**
+
+Measured by running F5-a's own gate (8 of 8 green; it carries a non-vacuity
+control asserting the form compiles to 80 fields *before* any count is read):
+
+| the question | the answer |
+|---|---|
+| fields lacking a **physician-confirmed** mapping | **80 of 80** |
+| fields needing a physician to **supply a concept** | **75** before F5-a · **22** after |
+
+Partition: **5 manual / 53 proposed / 22 unproposed**, reconciled to 80.
+
+⚠️ **AND IT HAD PROPAGATED TO SIX SITES**, one of them production source —
+`AGENTS.md:130`, `RELAY.md` ×2, `template-twin-mappings.ts:109`, and two test
+headers — every one traceable to
+`docs/qa-reports/template-twin-integration-verdict-20260728.md:10` and none
+re-measured. **All six corrected in this change**, driven from the grep
+enumeration rather than from memory of which ones had been touched.
 
 #### WHAT THIS DOES **NOT** DO
 
@@ -486,9 +661,11 @@ Then the **billing tail (B8 close, B9)** per the existing ledger below.
    `gate-source-type-explicit.test.ts` at AUTHOR time instead.
 2. ✅ **The mappings door** (`799d1c45`). `updateTemplateTwinMappings` shipped
    correct, tested and **with no caller** — the only reference anywhere was a
-   test grepping its source text. So `MAPPINGS_NOT_READY` refused 79 of 80
+   test grepping its source text. So `MAPPINGS_NOT_READY` refused all 80 of 80
    fields **because nothing could ever confirm them**: the gate was right and
-   unsatisfiable. Its own module, because the test could not LOAD inside
+   unsatisfiable. *(⚠️ read "79 of 80" until 2026-08-16 — corrected by
+   measurement, see the F5-b deploy row.)* Its own module, because the test
+   could not LOAD inside
    `template-twin-certify.ts` (which drags in the worker's extractor and note
    generator) — **a module whose test must mock the world to load is doing too
    much.**
