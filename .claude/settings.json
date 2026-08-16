@@ -79,6 +79,7 @@
       "Bash(bash scripts/check-qa-tag-isolation.sh:*)",
       "Bash(bash scripts/check-billing-source-no-deleter.sh:*)",
       "Bash(bash scripts/check-citation.sh:*)",
+      "Bash(bash scripts/gh-runs.sh:*)",
       "Bash(bash scripts/check-ledger-append-only.sh:*)",
       "Bash(bash scripts/check-hooks-installed.sh:*)",
       "Bash(bash scripts/retire-branch.sh:*)",
