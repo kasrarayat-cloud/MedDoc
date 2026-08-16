@@ -14128,6 +14128,67 @@ codebase has a recorded failure mode where exactly that happens silently
 (`AGENTS.md`, the three-layer `AuditAction` trap). **That is worth its own item
 regardless of what the actor turns out to be.**
 
+#### ✅ ROW 5 — THE ACTOR IS NAMED, 2026-08-16. IT IS A CRON — JUST NOT THE ONE THAT WAS TESTED.
+
+**Answered by a supervised session, read-only on production.** F3's row above
+says *"I CANNOT NAME THE ACTOR"* and lists what it tried. It tried the **shell**
+cron (`run-all.sh --smoke --e2e`) and refuted it correctly. **The actor is an
+application-level BullMQ cron that appears in no crontab.**
+
+`worker/cleanup/stale-visits.ts` — *"Three sweeps run as a single BullMQ cron job
+(daily at 3am UTC)"*:
+
+- **Sweep 1** — abandoned `QUEUED` drafts: `audioKey IS NULL` and
+  `dictationAudioKey IS NULL` and no `rawTextInput`, older than **24h**
+- **Sweep 2** — expired trash: `deletedAt < now() - 15 days`
+
+**Both are HARD deletes** (`tx.transcribeVisit.deleteMany`) and **neither writes
+an audit row** — `logAudit` in that file = **0**. The silence is the design, not
+a failure of the audit layer.
+
+**THE EVIDENCE, each item measured rather than reasoned:**
+
+| # | fact | source |
+|---|---|---|
+| 1 | job scheduled `"cron":"0 3 * * *","tz":"UTC"` | **the RUNNING container's own boot log**, not the source |
+| 2 | next run `2026-08-17T03:00:00Z` → previous **`2026-08-16T03:00:00Z`** | `bull:transcribe-md-cleanup:repeat:stale-visit-cleanup:1786935600000` in Redis |
+| 3 | 03:00:00Z falls **inside** F3's own window | last app activity `02:54:29Z`, deploy `04:02:25Z` |
+| 4 | both sweeps hard-delete, unaudited | `stale-visits.ts:73-74`, `:146-150` |
+| 5 | **zero** `QUEUED` visits remain | live query |
+
+⚠️ **ITEM 5 CARRIES ITS CONTROL, BECAUSE A ZERO WITHOUT ONE IS NOT A
+MEASUREMENT.** The sweep-1 cohort is empty — but so is `status='QUEUED'`
+entirely, while **44 of 44** visits are older than 24h. So the age arm is not
+what makes it zero; the *status* arm is. That is consistent with the only
+`QUEUED` row having been swept, and it is stated this way so nobody reads a
+vacuous predicate as a finding.
+
+**WHAT THIS DOES NOT ESTABLISH, AND IT MATTERS: WHICH SWEEP.** Sweep 1 and
+Sweep 2 both hard-delete without auditing, and the row is gone, so the surviving
+evidence cannot separate them. F3 measured the moved cohort as
+*unsigned/standard/non-native*, which fits Sweep 1; Sweep 2 cannot be excluded.
+**Naming the JOB is what the security question needed; naming the SWEEP is not
+required for it and is not claimed.**
+
+⚠️ **THE 03:00Z RUN'S LOGS WERE DESTROYED BY THE DEPLOY'S OWN RECREATE.** The
+worker booted at `04:04:49Z` and holds **9** lines. F3 already named this loss;
+it is now the **second** time container-log volatility has cost evidence on this
+exact question, and it is the argument for the persistent-log item.
+
+**THE DISPOSITION, per the owner's own clause.** The ruling on this item read:
+*"IF NOT CRON: stop and bring me the findings — an unknown actor hard-deleting
+clinical rows is an OWNER/security matter, not a queue item."* **It IS cron.**
+The condition resolves, and this stays a **queue item**: an unaudited retention
+delete, by design, on clinical rows.
+
+⚠️ **THE STANDING LESSON, AND IT IS ONE THIS FILE ALREADY NAMES.** *The
+inventory was taken at the layer I was thinking in, and the thing lived one
+layer down.* F3 enumerated **shell** crons — the layer where "cron" lives in a
+sysadmin's head — and the scheduler was **in the application**. A crontab sweep
+that returns nothing and a crontab sweep that is looking in the wrong place
+produce the same output. **Sweep schedulers BY BEHAVIOUR — "what can delete a
+row on a timer" — never by the mechanism you expect to find.**
+
 #### WHAT F3 DOES **NOT** CLAIM
 
 - **The order of the two sign-and-send downloads is no longer asserted
