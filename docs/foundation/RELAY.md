@@ -29,12 +29,15 @@ half-filled export and a divergent signed view are wrong NOW.
 | ~~**F1**~~ | ✅ **SHIPPED AND LIVE 2026-08-15** — merge `efe1b443`, 4 of 4, deployed, **25 of 25 declared rows matched**. See the ledger row below. ⚠️ **OWNER PING still owed** — carried in the morning report. | **#112** | ~~Deployed under a §2.5 declaration naming the document-visible change.~~ **MET.** |
 | ~~**F2**~~ | ✅ **MECHANISM NAMED AND MEASURED 2026-08-15** — the surfaces share one builder; the divergence is three signed-gated branches in `loadVisitExportData`, and **the DATE one is wrong**. Ruling **#115** (PROVISIONAL). See the ledger row below. | **#114** | ~~The mechanism is named with evidence, not a theory.~~ **MET.** ⚠️ **The suspect was WRONG and is withdrawn on evidence** — see below. |
 | ~~**F2-b**~~ | ✅ **SHIPPED 2026-08-15** — 8 of #115's 10 sites changed (2 exempt by JOB), plus **ruling #115-b** (`DD:`/`DT:`) which the adversarial pass found the fix had CREATED, plus the cache bump. Guard mutation-proved **12 of 12**. See the ledger row below. | **#115** · **#115-b** | ~~Ten sites, a guard, the mandatory adversarial pass.~~ **MET.** ⚠️ The pass found **4 false greens in the guard** and **1 defect the fix introduced** — the reason it is a gate and not a nicety. |
-| **F3** | 🟡 **BUILT AND PROVEN — DOES NOT MERGE YET.** `generateVisitPdf` and `pdf-generator.ts` are gone; five callers dispositioned per #116; new traversal gate, 15 arms, mutation-proved 3 ways. ⚠️ **THEN THE MANDATORY ADVERSARIAL PASS FOUND ~25 DEFECTS AND SEVEN WERE FIXED IN-BRANCH.** ⚠️ **THE BLOCKER IS #109's CLASS AGAIN: the retired builder stamped `Signed electronically by …` / `Not yet signed.` on EVERY PAGE, and the DOCX has no footer at all.** Shipping loses a per-page DRAFT marker — a LOOSENING, which fails the provisional-ruling test. **PR opened as a DRAFT.** See the ledger row and the findings block below. | **#113** · **#116** · **#116-b** | ⛔ **NOT MET.** The retirement is done; the retired component's per-page job is not. Needs an owner ruling — see RULING NEEDED in the morning report. |
+| **F3** | 🟢 **UNBLOCKED 2026-08-16 — #117 LANDED THE FOOTER, #119 DISPOSITIONS THE WATERMARK, AND THE `e2e` MECHANISM IS NAMED.** The draft's blocker is discharged on evidence (see "THE BLOCKER IS DISCHARGED" below): `docx-generator.ts:408` attaches a **`default`** footer, so the converged PDF inherits per-page marking BY CONSTRUCTION, and #117(e) proved it rendered on 5 real LibreOffice pages. ⚠️ **The blocker named TWO marks and #117 discharged ONE** — the `QUILLMD` watermark is dropped by convergence and is ruled **#119 (PROVISIONAL): not restored, declared not discovered.** ⚠️ **The red `e2e` was a REAL behavioural change, not a flake**: `/export/pdf` went from in-process pdfkit to a Gotenberg round-trip **measured at 0.43-0.48s against a 600ms download gap**, so the DOCX now routinely lands first; the ordering assertion is replaced by a SET assertion and the order is no longer asserted anywhere. *Previous status, kept for the record:* 🟡 **BUILT AND PROVEN — DOES NOT MERGE YET.** `generateVisitPdf` and `pdf-generator.ts` are gone; five callers dispositioned per #116; new traversal gate, 15 arms, mutation-proved 3 ways. ⚠️ **THEN THE MANDATORY ADVERSARIAL PASS FOUND ~25 DEFECTS AND SEVEN WERE FIXED IN-BRANCH.** ⚠️ **THE BLOCKER IS #109's CLASS AGAIN: the retired builder stamped `Signed electronically by …` / `Not yet signed.` on EVERY PAGE, and the DOCX has no footer at all.** Shipping loses a per-page DRAFT marker — a LOOSENING, which fails the provisional-ruling test. **PR opened as a DRAFT.** See the ledger row and the findings block below. | **#113** · **#116** · **#116-b** · **#117** · **#119** | 🟢 **MET on the code, pending the gate.** The retired builder is gone by traversal, the per-page job is restored on all three surfaces by #117 rather than on the PDF alone, the one unnamed job is dispositioned by #119, and Gotenberg is named in the ledger as the single shared dependency it already was. |
 | **F4** | **Land #663 and #664**, then rebase and land the held worktree commits — `feat/certification-door` carries the classification fix (`543b5a21`) and the mappings door (`799d1c45`). | — | On `main`, cited. F1's commit is also on that branch; the rebase drops it as a duplicate once F1 has merged. |
 | **F5** | **Item 3 — the certification door, to completion.** | **#106(b)** | See the scope block below. ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* |
 
-**F3 IS BLOCKED ON RULING #117.** It lands only with the attestation/draft
-footer; §2.5 names the document-visible change.
+**F3 WAS BLOCKED ON RULING #117 — AND IS NOT, SINCE 2026-08-16.** The condition
+is discharged rather than waived: it landed *"only with the attestation/draft
+footer"*, which `main` now carries (#117(a)-(e), all five clauses), and §2.5
+names the document-visible change — **including the watermark loss (#119), which
+is the half #117 did not cover.**
 
 ⚠️ **THIS SENTENCE USED TO READ *"blocked on ruling #117 — merged (`1dce00ff`,
 4-of-4) and NOT deployed"*, AND ITS AMBIGUOUS ANTECEDENT PROPAGATED INTO
@@ -516,6 +519,85 @@ the attestation, gated on `!formOnly`, with an arm asserting the marker appears
 on a multi-page render — which needs the E2E, since page count is LibreOffice's.
 
 ---
+
+#### ✅ THE BLOCKER IS DISCHARGED — 2026-08-16, and only HALF of it by #117
+
+**#117 landed the DOCX footer, so the paragraph above is no longer true of
+`main`.** Verified on the rebased branch rather than assumed:
+
+| | |
+|---|---|
+| `docx-generator.ts:408` | `...(pageFooter ? { footers: { default: pageFooter } } : {})` — a **`default`** reference, which is the one that applies to every page |
+| `docx-generator.ts:437-440` | `attestationFooter` — unsigned → `DRAFT_FOOTER_LINE` **including form-only** (#118(a)); signed form-only → `undefined` (c); signed standard → the attestation (b) |
+| `visit-pdf.ts:123-124` | `generateVisitDocx(data)` → `convertDocxToPdf` — so the converged PDF **inherits that footer by construction**, not by a second implementation |
+| #117(e) | proved it RENDERED, through the real Gotenberg/LibreOffice, on a **5-page** document — *"on every page"* measured on pages LibreOffice made |
+
+So the concrete input → wrong output that made this a draft — *a 3-page unsigned
+note marked once instead of three times* — no longer holds. **The retirement is
+now a TIGHTENING in the direction that mattered**, which is the direction the
+provisional test permits.
+
+⚠️ **BUT THE BLOCKER NAMED TWO MARKS AND #117 DISCHARGED ONE.** Its own quote
+reads *"plus a `QUILLMD` watermark"*, and no clause of #117, #118 or #113
+mentions it. `docx-generator.ts` has none (`grep -i watermark` = **0**), so
+convergence drops it. **Ruled provisionally as #119: NOT restored** — it is
+provenance rather than safety, and restoring it would put a wordmark on the Word
+export and the preview for the first time, manufacturing the third behaviour
+#113 exists to end. **Declared, not discovered.**
+
+#### THE DOCUMENT-VISIBLE MATRIX, MEASURED — what the PDF actually gains and loses
+
+Read-only on production, 2026-08-16, by this session rather than carried forward
+(the counts independently reproduce #118's 11-of-45 and 3-unsigned figures):
+
+| cohort | rows | the PDF after F3 |
+|---|---|---|
+| standard — not form-only | **34** | ⚠️ **loses** the `QUILLMD` watermark (#119). Footer unchanged: attestation or DRAFT, every page |
+| unsigned **and** form-only | **3** | ✅ **gains** `DRAFT — Not yet signed.` on every page — it had neither footer nor watermark before. #118(a), a tightening |
+| signed **and** form-only | 8 | unchanged — no chrome before, no chrome after (c) |
+
+**Word exports and the pre-sign preview do not change at all.** Both have always
+been `generateVisitDocx`; this item only stops the PDF being a second opinion.
+
+#### ⛔ THE `e2e` RED WAS A REAL BEHAVIOURAL CHANGE, NOT A FLAKE — MECHANISM NAMED
+
+The previous session left scenario 1 failing on `Expected pattern /\.pdf$/`
+with one cure spent and the mechanism explicitly **NOT NAMED**. It is named now,
+and its own hypothesis (*"a 503 lets the DOCX arrive first"*) was **wrong** —
+Gotenberg answers `200`.
+
+    sign-and-send-modal.tsx:781   triggerDownload(pdfUrl,  'pdf')
+    sign-and-send-modal.tsx:784   await sleep(600)
+    sign-and-send-modal.tsx:786   triggerDownload(docxUrl, 'docx')
+
+**A `download` event fires when the RESPONSE arrives, not when the anchor is
+clicked.** Before F3 `/export/pdf` was in-process pdfkit — tens of ms, so the
+PDF won that race by two orders of magnitude and the ordering looked like a law.
+After F3 it is `generateVisitDocx` + a Gotenberg round-trip. **Measured against
+the live sidecar, warm and idle, on the blank tracked fixture: 0.475s cold-ish,
+then 0.435s / 0.433s — 72-79% of the 600ms gap before CI's slower CPU, a cold
+LibreOffice on the job's first conversion, or Gotenberg's strict serialization.**
+The DOCX leg never touches Gotenberg, so it routinely returns first and the old
+assertion captured it.
+
+⚠️ **THE PRODUCT IS RIGHT AND THE TEST'S ASSUMPTION WAS WRONG — and the obvious
+"fix" is worse.** Awaiting the PDF before firing the DOCX would guarantee the
+order and put the doctor's **Word** download behind a slow or failing Gotenberg;
+a sidecar outage would then cost both files instead of one. The 600ms sleep is a
+BROWSER workaround (rapid successive programmatic downloads get suppressed),
+never a product guarantee, and the scenario's own header states the requirement
+as *"Bug 2: PDF + DOCX simultaneously selected → **both files on disk**"* — a
+SET. So the assertion now collects both downloads and compares the sorted
+extensions to `['docx','pdf']`.
+
+**What that gives up, stated plainly: the ORDER is no longer asserted anywhere.**
+Nothing else is lost — a duplicate still fails, a missing destination still
+fails, and the listener is now registered BEFORE the action, which repairs a
+latent miss the old shape had (a DOCX arriving while line 140 ran would never
+have reached a listener attached afterwards). **The sweep was by predicate, not
+by the one failure CI surfaced:** all four other `waitForEvent('download')` sites
+are single-download, and both multi-download collectors already `.sort()`.
+Scenario 1 was the only site asserting an order.
 
 #### 🔵 OPEN, VERIFIED, NOT FIXED — the rest of the pass's list
 

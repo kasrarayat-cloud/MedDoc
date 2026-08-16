@@ -21,7 +21,7 @@
 
 import { resolve } from 'node:path';
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type Download } from '@playwright/test';
 
 import { cleanupTestUsers } from '../helpers/cleanup';
 import { createPatientAndContinue } from '../helpers/patient';
@@ -133,15 +133,41 @@ test('scenario 1: fresh signup → audio upload → sign clipboard+PDF+DOCX', as
       'that PDF and DOCX deliver together (T-M8 Bug 2)',
   ).toHaveAttribute('aria-pressed', 'true');
 
-  // Two downloads expected: PDF then DOCX (T-M8 Bug 2 — 600ms gap).
-  const pdfPromise = page.waitForEvent('download', { timeout: 10_000 });
+  // Two downloads expected — BOTH of them (T-M8 Bug 2). The assertion is on the
+  // SET, deliberately, and the ORDER is no longer asserted at all.
+  //
+  // ⚠️ THIS USED TO READ "PDF then DOCX" AND F3 MADE THAT NON-DETERMINISTIC.
+  // `sign-and-send-modal.tsx:781-786` fires the PDF, sleeps a fixed 600ms, then
+  // fires the DOCX — and a `download` event fires when the RESPONSE arrives, not
+  // when the anchor is clicked. Before F3 `/export/pdf` was an in-process pdfkit
+  // build (tens of ms), so the PDF always won that race by two orders of
+  // magnitude. After F3 it is `generateVisitDocx` + a Gotenberg round-trip,
+  // MEASURED at 0.43-0.48s warm and idle on the VPS — 72-79% of the 600ms gap
+  // before CI's slower CPU, a cold LibreOffice on the job's first conversion,
+  // and Gotenberg's strict serialization are accounted for. The DOCX leg does
+  // not touch Gotenberg, so it routinely returns first and the old assertion
+  // captured the DOCX and reported `Expected pattern /\.pdf$/`.
+  //
+  // The 600ms sleep is a BROWSER workaround (rapid successive programmatic
+  // downloads get suppressed), never a product guarantee, and no ruling or spec
+  // orders these two files. What T-M8 Bug 2 actually forbids is one destination
+  // silently not delivering — which is a question about the set.
+  //
+  // FAILS IF: either destination stops delivering, or a duplicate arrives in
+  // place of the other. Collect BOTH before asserting, and register the listener
+  // BEFORE the action — the previous shape also had a latent miss, since a DOCX
+  // arriving while line 140 ran would never have reached a listener attached
+  // afterwards.
+  const downloads: Download[] = [];
+  page.on('download', (d) => downloads.push(d));
   await attestAndSubmit(page);
-  const pdf = await pdfPromise;
-  expect(pdf.suggestedFilename()).toMatch(/\.pdf$/);
-
-  // DOCX arrives up to ~1s later (gap + request latency).
-  const docx = await page.waitForEvent('download', { timeout: 10_000 });
-  expect(docx.suggestedFilename()).toMatch(/\.docx$/);
+  await expect
+    .poll(() => downloads.length, { timeout: 15_000 })
+    .toBeGreaterThanOrEqual(2);
+  expect(
+    downloads.map((d) => d.suggestedFilename().replace(/^.*\./, '')).sort(),
+    'signing with PDF and DOCX both selected must deliver exactly one of each',
+  ).toEqual(['docx', 'pdf']);
 
   // Modal closes (T-M8 Bug 3 — no more "Signing…" hang).
   // WAS: `expect(page.getByRole('dialog')).toBeHidden()`. Unusable once this
