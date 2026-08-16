@@ -30,7 +30,7 @@ half-filled export and a divergent signed view are wrong NOW.
 | ~~**F2**~~ | ✅ **MECHANISM NAMED AND MEASURED 2026-08-15** — the surfaces share one builder; the divergence is three signed-gated branches in `loadVisitExportData`, and **the DATE one is wrong**. Ruling **#115** (PROVISIONAL). See the ledger row below. | **#114** | ~~The mechanism is named with evidence, not a theory.~~ **MET.** ⚠️ **The suspect was WRONG and is withdrawn on evidence** — see below. |
 | ~~**F2-b**~~ | ✅ **SHIPPED 2026-08-15** — 8 of #115's 10 sites changed (2 exempt by JOB), plus **ruling #115-b** (`DD:`/`DT:`) which the adversarial pass found the fix had CREATED, plus the cache bump. Guard mutation-proved **12 of 12**. See the ledger row below. | **#115** · **#115-b** | ~~Ten sites, a guard, the mandatory adversarial pass.~~ **MET.** ⚠️ The pass found **4 false greens in the guard** and **1 defect the fix introduced** — the reason it is a gate and not a nicety. |
 | **F3** | 🟢 **UNBLOCKED 2026-08-16 — #117 LANDED THE FOOTER, #119 DISPOSITIONS THE WATERMARK, AND THE `e2e` MECHANISM IS NAMED.** The draft's blocker is discharged on evidence (see "THE BLOCKER IS DISCHARGED" below): `docx-generator.ts:408` attaches a **`default`** footer, so the converged PDF inherits per-page marking BY CONSTRUCTION, and #117(e) proved it rendered on 5 real LibreOffice pages. ⚠️ **The blocker named TWO marks and #117 discharged ONE** — the `QUILLMD` watermark is dropped by convergence and is ruled **#119 (PROVISIONAL): not restored, declared not discovered.** ⚠️ **The red `e2e` was a REAL behavioural change, not a flake**: `/export/pdf` went from in-process pdfkit to a Gotenberg round-trip **measured at 0.43-0.48s against a 600ms download gap**, so the DOCX now routinely lands first; the ordering assertion is replaced by a SET assertion and the order is no longer asserted anywhere. *Previous status, kept for the record:* 🟡 **BUILT AND PROVEN — DOES NOT MERGE YET.** `generateVisitPdf` and `pdf-generator.ts` are gone; five callers dispositioned per #116; new traversal gate, 15 arms, mutation-proved 3 ways. ⚠️ **THEN THE MANDATORY ADVERSARIAL PASS FOUND ~25 DEFECTS AND SEVEN WERE FIXED IN-BRANCH.** ⚠️ **THE BLOCKER IS #109's CLASS AGAIN: the retired builder stamped `Signed electronically by …` / `Not yet signed.` on EVERY PAGE, and the DOCX has no footer at all.** Shipping loses a per-page DRAFT marker — a LOOSENING, which fails the provisional-ruling test. **PR opened as a DRAFT.** See the ledger row and the findings block below. | **#113** · **#116** · **#116-b** · **#117** · **#119** | 🟢 **MET on the code, pending the gate.** The retired builder is gone by traversal, the per-page job is restored on all three surfaces by #117 rather than on the PDF alone, the one unnamed job is dispositioned by #119, and Gotenberg is named in the ledger as the single shared dependency it already was. |
-| **F4** | 🟡 **IN FLIGHT 2026-08-16 — the first half was ALREADY DONE and the row did not say so.** `#663` merged `2026-08-15T14:32:23Z` and `#664` merged `2026-08-15T15:15:14Z`; only the rebase-and-land half remained. `feat/certification-door` is rebased onto `main` as `feat/f4-certification-door-land` — the classification fix (`543b5a21` → `ecc1dc4b`) and the mappings door (`799d1c45` → `b4436fb3`). See the ledger row below. | — | On `main`, cited. ✅ **F1's duplicate was dropped BY MEASUREMENT, not by hope** — `git patch-id --stable` gives `8a797bde` and F1's `529e8219` the **identical** id `6213c8f2…`, and the rebase skipped it naming it. |
+| ~~**F4**~~ | ✅ **SHIPPED AND LIVE 2026-08-16** — merge `9ea09a15`, cited 4 of 4, deployed, **11 of 11 declared rows matched**. See the ledger row below. ⚠️ **It also found that NO rollback tag existed for F3's deploy either — recovered, and mechanization filed as F9.** *Previous status:* 🟡 **IN FLIGHT — the first half was ALREADY DONE and the row did not say so.** `#663` merged `2026-08-15T14:32:23Z` and `#664` merged `2026-08-15T15:15:14Z`; only the rebase-and-land half remained. `feat/certification-door` is rebased onto `main` as `feat/f4-certification-door-land` — the classification fix (`543b5a21` → `ecc1dc4b`) and the mappings door (`799d1c45` → `b4436fb3`). See the ledger row below. | — | On `main`, cited. ✅ **F1's duplicate was dropped BY MEASUREMENT, not by hope** — `git patch-id --stable` gives `8a797bde` and F1's `529e8219` the **identical** id `6213c8f2…`, and the rebase skipped it naming it. |
 | **F5** | **Item 3 — the certification door, to completion.** | **#106(b)** | See the scope block below. ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* |
 
 **F3 WAS BLOCKED ON RULING #117 — AND IS NOT, SINCE 2026-08-16.** The condition
@@ -97,6 +97,35 @@ discriminates.
 field 2, so a wrapped reason is parsed as extra expected codes — that defect was
 introduced and caught while fixing this very row, and it made a healthy ingress
 report `floor 6, from 7 distinct expected` and exit 2.
+
+### F9 — `deploy-prod.sh` CUTS ITS OWN ROLLBACK TAG — filed 2026-08-16, from F4's deploy
+
+⚠️ **TWO CONSECUTIVE DEPLOYS LEFT NO ROLLBACK TARGET** (F3 at 04:02Z, F4 at
+11:35Z). The runbook §3.1 has said since **2026-08-02** that tagging is a MANUAL
+pre-step and that forgetting it leaves nothing to roll back to — and it was
+forgotten twice anyway, the second time by a session that then *asserted in its
+own §2.5 declaration that the tags had been cut.*
+
+**A pre-step that lives only in prose is a pre-step that gets skipped.** This is
+the same argument that turned the in-flight-runs rule into `scripts/hooks/pre-push`
+and `scripts/merge-pr.sh`.
+
+**The item:** `deploy-prod.sh` cuts the tag itself, **from the RUNNING
+container's image id** (not from `:latest`, which is the thing about to be
+replaced), names it after the declaration's slug, and **refuses the deploy if it
+cannot** — fail-closed, like every other gate here. Then the runbook's manual
+block becomes the fallback rather than the mechanism.
+
+⚠️ **AND ITS PROOF MUST INCLUDE THE HAPPY-PATH CONTROL**, per the standing rule:
+prove it refuses when it cannot tag, **and** prove the tag actually exists and
+resolves to the outgoing image afterwards. `retire-branch.sh` passed 9 of 9
+refusal tests and still printed a false green — refusals were never the broken
+half.
+
+**Both F3's and F4's outgoing images were recovered by hand** (`pre-f4-20260816`,
+from dangling images identified by size AND `Cmd`/`User`), so nothing is lost
+today. The window between 04:02Z and ~11:50Z, during which a rollback would have
+required a REBUILD, is the cost that was actually paid.
 
 ### F7 — THE ONE-TIME SCRATCH SWEEP — supervised, at the next natural window
 
@@ -14381,3 +14410,175 @@ comment.
   twin versions, **0** mappings and **0** certifications, and the certification
   UI is still folded (`NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true`). This lands the
   door; **F5 items 3 and 4 are what open it.**
+
+---
+
+### 🔵 THE F6 ROWS, RE-VERIFIED ON THE WAY PAST — **2026-08-16**
+
+**Not this session's item.** Re-read while waiting on F4's gate, because F6.6
+had just cost a row that was fixed and still listed as open — **and the inverse
+error is worse, so nothing here is CLOSED on this reading.** Each row is marked
+CONFIRMED, REFUTED-AS-WORDED, or SHARPENED, with the evidence.
+
+| row | verdict | evidence |
+|---|---|---|
+| **F6.1** patient-summary line breaks lost in DOCX | ✅ **CONFIRMED — and narrower than the row says** | `docx-generator.ts:296` splits on `/\n\n+/` and emits each block as **one `TextRun`**. A literal `\n` inside `w:t` is not a line break in OOXML — you need `<w:br/>`. So **paragraph breaks SURVIVE and single line breaks are LOST**; the row reads as though all of them are |
+| **F6.2** `CLINICAL NOTE` heading over an empty note | ⚠️ **REFUTED AS WORDED — do NOT close, RESTATE** | `renderSoapParagraphs` returns **early** on `!soap.trim()` with *"No SOAP note available."* and never pushes the heading (`docx-generator.ts:615-630`). For a whitespace-empty note the described defect **cannot occur**. It may still hold for a note that is *structurally present but contentless* (`## SUBJECTIVE` with nothing under it), which `.trim()` sees as non-empty — **that is a different bug and needs the row's author's definition of "empty"** |
+| **F6.3** archive loop unbounded | ✅ **CONFIRMED, both halves** | `export-data/route.ts:53` sets `maxDuration = 300`; `next.config.ts:8` sets `output: 'standalone'`. `maxDuration` is a **serverless** directive and has no effect on a self-hosted Node server — **the bound is genuinely inert** |
+| **F6.4** `export-cleanliness` markdown detector vacuous | ✅ **CONFIRMED — one arm, not the detector** | the DOCX arm builds text as `xml.replace(/<[^>]+>/g, ' ')`, mapping every tag to a **space**, so the stripped text carries no `\n`. `/(^|\n)#{1,6}\s/` can then only match at index 0 — which is a space. **The HEADING arm cannot go red. The BOLD arm (`/\*\*/`, no `\n`) is still live** |
+| **F6.5** `gate-r1` "BOTH sides" asserts one side | ✅ **CONFIRMED — and its open either/or is RESOLVED** | the row said *"either they are unguarded or they are dead exports — both are findings"*. Measured: `LOCKUP_PT.eyebrowToTitle` and `titleToRule` are **used**, at `docx-generator.ts:106` and `:129`. So they are **live and UNGUARDED** — not dead code. The remaining work is a guard, not a deletion |
+
+⚠️ **F6.2 IS THE ONE TO READ TWICE.** F6.6's lesson was *a fixed item left listed
+as open costs a session*; the tempting move here is to close F6.2 the same way.
+**That would be the inverse and more expensive error** — the row's wording is
+refuted, the underlying concern may be real, and closing it would delete the
+question instead of answering it. **Restated, not closed.**
+
+⚠️ **AND F6.4 / F6.1 SHOW WHY "CONFIRMED" IS NOT ENOUGH ON ITS OWN.** Both rows
+are true and both are *wider than the defect*. A session that fixed "the markdown
+detector" or "line breaks" as written would be scoping from the row rather than
+from the code — the exact gap between a ruling's INTENT and a component's JOB
+LIST that #109 cost.
+
+---
+
+### ⚠️ FINDING — `scripts/gh-runs.sh` IS NOT IN THE LOOP'S ALLOWLIST, AND `MASTER.md` TELLS THE LOOP TO USE IT
+
+**Found 2026-08-16 by running into it.** The queue header at `RELAY.md`'s head
+states the standard ceremony as *"citation by `scripts/gh-runs.sh` on the FULL
+sha"*. Measured: **`bash scripts/gh-runs.sh …` is REFUSED by the loop's
+permission set**, in both the relative and absolute forms.
+
+`gh-runs.sh` landed in **PR #686, merged `2026-08-16T09:18:32Z`** — roughly
+**45 minutes before this session launched** — and `.claude/settings.json` was
+never widened to include it. It is the **"capability granted / shell wrapper
+not"** class the permissions audit already named: `gh run list` itself is
+granted, so nothing is *blocked*; the sanctioned **wrapper** is.
+
+**Why that matters more than the inconvenience:** the wrapper's entire product is
+**refusing a short or fabricated sha**. A loop that cannot invoke it falls back to
+raw `gh run list`, which is exactly the instrument the wrapper exists to protect
+callers from. **The guard is off for the actor it was written for.**
+
+**Worked around, not skipped:** this session took **both views** with the full
+40-character sha read from `git rev-parse`, and produced its citation with
+`scripts/check-citation.sh` — which **is** granted and which carries the same
+exist-check. So nothing was cited loosely.
+
+**OWNER ACTION:** add `Bash(bash scripts/gh-runs.sh:*)` to the loop's allowlist.
+⚠️ **And the general lesson: a script added to the CEREMONY is not added to the
+PERMISSIONS by the same commit** — the two live in different files, and the gap
+is silent until an unattended session hits it.
+
+---
+
+## ✅ F4 — SHIPPED AND LIVE, 2026-08-16 — 11 of 11 DECLARED ROWS MATCHED
+
+**PR #688, merge `9ea09a1528567a452ac9727f2cddacaa5dae0cc5`. Deployed
+2026-08-16T11:35:54Z, completed exit 0.**
+
+**Citation — 4 of 4 on `9ea09a1528567a452ac9727f2cddacaa5dae0cc5`:**
+   · `CI` 31942856432 a1
+   · `e2e` 31942856415 a1
+   · `a11y-ci` 31942856408 a1
+   · `secrets-scan` 31942856390 a1
+
+Produced by `scripts/check-citation.sh`, not typed. **Every line `a1` — no
+re-runs, so nothing here needs a why.**
+
+### §2.5 — JUDGED 11 OF 11
+
+`docs/foundation/deploys/20260816-9ea09a15.md`, written **before the act** while
+the merge-commit gate was still running; baseline measured at ~10:20Z, **before
+the merge commit existed.**
+
+| row | verdict |
+|---|---|
+| 1 · image ids new | ✅ app `c8a048d1f571` → `5c3b0e55a6bf`, worker `8b2dd8ccb391` → `0e1416382731` |
+| 2 · `template-twin-mappings.ts` in the shipped worker | ✅ present, control **23** `.ts` files in `src/actions/` |
+| 3 · `classifyFieldSource` in shipped `semantic-mapping/index.ts` | ✅ **4** |
+| 4 · `transcribe_visits` not-deleted | ✅ **44** |
+| 5 · signed | ✅ **27** |
+| 6 · patients | ✅ **32** |
+| 7 · migrations | ✅ **104**, none pending, asserted by the deploy itself |
+| 8 · all six twin tables | ✅ **0 · 0 · 0 · 0 · 0 · 0** |
+| 9 · `note_templates` | ✅ **9** (7 active) |
+| 10 · co-tenants | ✅ `307 · 404 · 200 · 200 · 410` |
+| 11 · `MAPPINGS_NOT_READY` present, unweakened | ✅ **3** occurrences in the shipped `synthetic-test.ts` |
+
+#### ⚠️ ROWS 2 AND 3 WERE MADE DISCRIMINATING BY A BEFORE/AFTER CONTROL
+
+A presence check proves the new code is *there*; it cannot tell you it **arrived**
+— the same grep would pass on an image that always had it. So the identical
+probes were run against the **outgoing** image:
+
+| probe | pre-F4 image | running image |
+|---|---|---|
+| `classifyFieldSource` in `semantic-mapping/index.ts` | **2** | **4** |
+| `template-twin-mappings.ts` | **absent** | **present** |
+| `.ts` files in `src/actions/` | **22** | **23** |
+
+**Every probe answers differently on the two images**, and the file count
+reconciles with exactly one new action file. That is a measurement, not an
+agreement.
+
+#### ⚠️ ROW 4 HELD — AND IT WAS A REAL PREDICTION THIS TIME
+
+F3 declared 45 visits and measured 44, and could not name the actor. This
+declaration named, in advance, why the count **could not** move: the actor is
+`worker/cleanup/stale-visits.ts`, a **BullMQ cron at 03:00 UTC**, and this deploy
+ran at 11:35 UTC — ~15 hours from the next sweep. **44 held.** The row was
+falsifiable and it was not falsified, which is worth more than a row that had an
+excuse available.
+
+---
+
+### 🔴 FINDING — THE ROLLBACK TAGS WERE **NOT** CUT BEFORE THE ACT, AND MY OWN DECLARATION SAID THEY WERE
+
+**Self-inflicted, found while judging, recovered — and it is the "the evidence
+was in the artifact I authored" class.** The declaration's ROLLBACK section
+reads: *"Rollback tags are cut against the running image ids before the act, per
+the runbook, and digest-verified."*
+
+**Nothing cut them.** `scripts/deploy-prod.sh` has **no tagging step** —
+`DEPLOYMENT_RUNBOOK.md` §3.1 says so in as many words, and has since it was
+**CORRECTED on 2026-08-02** for containing this exact false reassurance:
+
+> *"This section used to open 'Every promotion tags the outgoing images before
+> recreating'. **Nothing does that.** … a promotion that forgets leaves no
+> rollback target at all. The sentence described a guarantee the deploy path does
+> not provide, which is the most expensive kind of documentation error: it reads
+> as reassurance and is discovered during an incident."*
+
+⚠️ **I THEN WROTE THAT SENTENCE AGAIN, IN A DECLARATION, TWO WEEKS LATER.** The
+runbook's warning is aimed precisely at this and did not reach the moment.
+
+⚠️ **AND IT IS NOT ONLY MINE — F3's DEPLOY THIS MORNING LEFT NO TAG EITHER.**
+Measured: **no `pre-*-20260816` tag existed at all** before this recovery; the
+newest was `pre-footer-20260815`. So production has been running since 04:02Z
+with **no tagged rollback target**, and nothing said so.
+
+**RECOVERED, because untagged is not deleted.** The outgoing images survived as
+dangling and were identified by **two independent signals that agree**, not by
+guessing at timestamps:
+
+| image | size matches `:latest` | `Cmd` / `User` matches role |
+|---|---|---|
+| `c8a048d1f571` → `meddoc-pro-transcribe-md:pre-f4-20260816` | 430MB = app | `["node","apps/transcribe-md/server.js"]`, user `nextjs` |
+| `8b2dd8ccb391` → `meddoc-pro-transcribe-md-worker:pre-f4-20260816` | 1.62GB = worker | `["npx","tsx","src/worker.ts"]`, user `worker` |
+
+Both were created `2026-08-16 04:03–04:04`, which is F3's deploy window. Tags
+verified present after the act.
+
+⚠️ **THE WINDOW WAS REAL WHILE IT LASTED.** Between 04:02Z and this recovery,
+a rollback would have required a **rebuild** rather than a re-point — during an
+incident, which is the one time that cost is unaffordable.
+
+**THE STANDING FIX, and it is mechanism rather than another warning:** the
+runbook already tells you to tag manually *before* `deploy-prod.sh`, and two
+consecutive deploys forgot. **A pre-step that lives only in prose is a pre-step
+that gets skipped** — the same argument that turned the in-flight-runs rule into
+`scripts/hooks/pre-push` and `merge-pr.sh`. **`deploy-prod.sh` should cut the tag
+itself**, from the RUNNING container's image id, and refuse if it cannot. Filed
+as an item rather than done here, because it changes the deploy path and this
+session's item was F4.
