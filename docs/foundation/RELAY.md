@@ -14038,3 +14038,107 @@ the same job on the same commit ran **1m42s against a 20m16s timeout**. A 12×
 swing with zero code delta is what makes it a named mechanism instead of a
 re-run-and-hope. **Both budgets were sized for faster runners than tonight's;
 raising them is a CI-policy call for the war room, not an item fix.**
+
+---
+
+### 🟢 F3 — SHIPPED AND LIVE, 2026-08-16 — with ONE declared row VIOLATED
+
+**PR #673, merge `0d8438319d4190602009006b621febf9076ec141`. Deployed
+2026-08-16T04:02:25Z.**
+
+**Citation — 4 of 4 on `0d8438319d4190602009006b621febf9076ec141`:**
+   · `CI` 31924339505 a1
+   · `e2e` 31924339511 a1
+   · `a11y-ci` 31924339523 a1
+   · `secrets-scan` 31924339508 a1
+
+Produced by `scripts/check-citation.sh`, not typed. **Every line `a1` — no
+re-runs, so nothing here needs a why.**
+
+⚠️ **AND THE CHECKER CAUGHT ME FABRICATING A SHA.** My first invocation passed a
+40-character string I had produced by PADDING the short `0d843831` rather than
+reading `git rev-parse HEAD`. It answered `🟡 NO SUCH COMMIT — cannot tell` and
+**withheld the citation block**, which is exactly the behaviour that makes the
+row trustworthy: it refused instead of guessing. *An identifier is queried in
+its full form — and "full-looking" is not "full".*
+
+#### §2.5 — JUDGED 11 OF 12, AND THE TWELFTH IS A FINDING
+
+`docs/foundation/deploys/20260816-0d843831.md`, written **before the act** while
+the merge-commit gate was still running.
+
+| row | verdict |
+|---|---|
+| 1 · `pdf-generator.ts` absent from the shipped image | ✅ **0**, against a traversal control of **76** `.ts` files |
+| 2 · `visit-pdf.ts` present | ✅ **1** — and the 0-and-1 pair is what proves the probe discriminates |
+| 3 · watermark gone from the styled PDF | ✅ **0 in code**; the single text hit is my own comment explaining its absence |
+| 4 · unsigned form-only gains the draft footer | ✅ branch order verified in the shipped worker: `(a)` unsigned → `(c)` formOnly → `(b)` signed |
+| **5 · clinical counts unchanged** | 🔴 **VIOLATED — see below** |
+| 6 · no audit row rewritten | ✅ 5 / 1 / 35 / 42, `EXPORT_EMAIL_SENT` still **0** |
+| 7 · migrations 104 | ✅ 104 in repo, 104 recorded |
+| 8 · Word + preview byte-unchanged | ✅ no watermark symbol anywhere, so neither could gain one |
+| 9 · co-tenants | ✅ `307 · 404 · 200 · 200 · 410` |
+| 10 · signed form-only stays chrome-free | ✅ and `pdfkit` outside `__tests__` = **0** |
+| 11 · Gotenberg reachable, not merely healthy | ✅ `200`, 0.783s, 87,214 bytes through the live sidecar |
+| 12 · a failure is LOUD | ✅ the `%PDF` magic-number check is in the shipped file |
+
+#### 🔴 ROW 5 — A VISIT ROW VANISHED, UNAUDITED, AND I CANNOT NAME THE ACTOR
+
+**Declared 45. Measured after the deploy: 44.** Signed **27**, patients **32**,
+`visit_deliveries` **95** — all three unmoved.
+
+*A difference that is not in the declaration is THE FINDING, whatever its
+explanation sounds like afterwards.* So it is recorded as one, not resolved.
+
+**What is established:**
+
+- **It is a HARD delete.** `count(*)` over the whole table is **44** with
+  `deletedAt IS NOT NULL` = **0**. The row is not soft-deleted; it is gone.
+- **The cohort is `unsigned · standard · non-native`** — that bucket moved
+  **15 → 14** and every other bucket is unchanged. So the row was an unsigned
+  DRAFT, and no signature was destroyed.
+- **It was NOT audited.** `AuditAction` carries `VISIT_DELETED`, and the only
+  such row in the entire database is from **2026-07-24**.
+- **No app activity exists after `02:54:29Z`** — the last audit row of any kind.
+
+**What I tried and could NOT establish, stated so nobody re-walks it:**
+
+- ⚠️ **My convenient explanation was REFUTED by its own evidence.** The cron'd
+  `run-all.sh --smoke --e2e` runs against **production** (MASTER.md records
+  this) and its accounts logged in at `02:00` and `02:52`. But **the suite
+  contains no `DELETE` and no `deleteMany`** — grepped `tests/automated/**`.
+  A create-then-delete pair would also have returned the count to baseline
+  rather than lowering it, and **the newest surviving visit is from 08-15
+  07:17**, so nothing was created today at all.
+- **The pre-deploy container logs are gone**, destroyed by the recreate the
+  deploy itself performed — so the one place an enum-rejected audit write would
+  have surfaced (`invalid input value for enum "AuditAction"`, the known
+  fire-and-forget failure) cannot now be read.
+
+**What this does NOT license.** The deploy carried **zero migrations** and F3
+changes only how an export is rendered — there is no code path in it that
+deletes a visit. That is a reason to doubt the deploy is the actor; **it is not
+a reason to close the row.** Nothing was restored and nothing was mutated in
+response: production stays read-only, and an unexplained row is worth more open
+than tidied.
+
+⚠️ **THE LARGER FINDING, WHICH OUTLIVES TONIGHT: a clinical row left production
+with no audit trail.** Whatever deleted it, the audit did not fire — and this
+codebase has a recorded failure mode where exactly that happens silently
+(`AGENTS.md`, the three-layer `AuditAction` trap). **That is worth its own item
+regardless of what the actor turns out to be.**
+
+#### WHAT F3 DOES **NOT** CLAIM
+
+- **The order of the two sign-and-send downloads is no longer asserted
+  anywhere.** Deliberate, reasoned above — but it is coverage given up, and a
+  future regression that reverses them will not be caught.
+- **The `e2e` green is ONE observation of a race this change removes
+  structurally.** The fix is that the assertion no longer depends on timing, not
+  that Gotenberg got faster. It did not.
+- **The adversarial pass was run by the author**, because this session cannot
+  spawn subagents. The canon calls that the weaker form and it is — distinct
+  context is the mechanism, not effort. It still killed my own matrix.
+- **Nothing was exercised end-to-end on production.** No visit was exported,
+  signed or unzipped. Rows 3, 4, 8 and 10 are STRUCTURAL, and the behavioural
+  proof lives in the unit and rendered gates inside the cited `CI`.
