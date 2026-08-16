@@ -144,33 +144,52 @@ payload is byte-identical by the measured empty diff. **Saying which half you
 have is the whole discipline: the ORDER is proven, the carried copy's
 TRACKEDNESS is not.**
 
-**FILED AS F11 — AND IT IS `RULING NEEDED`, NOT A PROVISIONAL DECISION.**
+**⚠️ THIS IS F10, AND IT NOW HAS OWNER ACCEPTANCE CRITERIA — RULING #121.**
 
-The obvious fix is for `deploy-prod.sh` to accept a declaration naming **any
-ancestor of HEAD whose runtime diff to HEAD is empty**, rather than the exact
-short SHA — mechanizing the predicate F10 already asks a human to evaluate by
-hand, which is this house's recorded move (the pre-push hook, `merge-pr.sh`,
-`run-ruled-mutation.sh`).
+**I first filed this as a new item "F11", marked `RULING NEEDED`, on the
+reasoning that every candidate fix LOOSENS the §2.5 gate and a loosening fails
+the provisional-ruling test. That framing is WITHDRAWN — it was wrong twice,
+and ruling #121 (landing via PR #697, opened 21:32Z while this deploy was
+running) says so directly.**
 
-⚠️ **I DID NOT BUILD IT, AND SESSION 04 IS THE REASON — IT HAD ALREADY WRITTEN
-DOWN WHY.** Four lines up in this same file: *"the candidate fixes include one
-that LOOSENS what satisfies the gate, and a loosening fails the
-provisional-ruling test."* That is exactly the fix above. It widens what the
-§2.5 gate will accept, and **rule 1 of the provisional test is reversible IN THE
-ALLOWED DIRECTION — a gate may only ever gain requirements.** So it goes to the
-war room, and this session states the trade rather than taking it:
-
-| | |
+| my framing | what #121 establishes |
 |---|---|
-| **cost of NOT fixing** | every deploy following a docs PR ships an **uncommitted** declaration. Order is still provable via the committed original, but only while somebody does the carry-forward correctly by hand |
-| **cost of fixing** | the gate accepts a declaration naming a commit that is **not** the one being deployed. Correct exactly as far as the emptiness check is correct — and that check has a pathspec, which is precisely the kind of thing that silently matches nothing |
-| **the safer variant** | keep the exact-SHA rule and have the script **write the carried copy itself**, deriving it from an ancestor declaration + an asserted-empty runtime diff. Strictly-additive: nothing new is accepted, one manual step is removed |
+| a NEW item, F11 | **it is F10**, already filed by session 03. A new number would have split one item in two |
+| `RULING NEEDED` | **the ruling has arrived**, and F10 stays **the loop's item** — *"THE MECHANISM IS THE LOOP'S TO DESIGN"*. It is a build item, not a question |
+| *"every candidate fix loosens the gate"* | ⚠️ **#121 names this exact misreading as a TERMINOLOGY COLLISION.** Criterion (1) *"the gate does not weaken"* means the SUBSTANTIVE judgement must still cover the shipped tree. It explicitly does **NOT** mean touching `declaration_gate`'s `present` argument, which stays deliberate under #96(b). **A fix can break the circularity without weakening anything** — which is precisely what I concluded was impossible |
 
-**The third option looks right and is still not mine to take** — it changes what
-a §2.5 gate does, and #96(b)'s logic is that strictness is proportional to
-reversibility. Recorded, not built.
+**THE THREE ACCEPTANCE CRITERIA, and a fix meeting fewer than three is not a
+fix:**
 
-#### ⚠️ TWO STEP-0 INSTRUMENTS ARE NOT GRANTED TO THE LOOP — filed as F12
+1. **The gate does not weaken** — no deploy without a declaration judged against
+   the **exact tree shipped**. Read as *"the judgement covers what actually
+   shipped"*, never as *"change that argument"*.
+2. **The circularity breaks** — a declaration must be committable **before or
+   with** its deploy without invalidating its own name. Candidate shapes offered
+   and **none mandated**: name by the CHANGE's sha with ancestry-verification at
+   the gate; an explicit carry-forward marker the gate resolves; or another shape
+   entirely. ⚠️ **Proven BOTH directions, including the wrong-tree-REFUSED arm** —
+   `retire-branch.sh` passed 9 of 9 refusal tests and still printed a false green
+   on the happy path.
+3. **Falsifiability does not narrow** — a scheme that resolves to the deployed
+   tree *by construction* cannot come out false, and an unfalsifiable observation
+   is not evidence.
+
+⚠️ **AND #121's INTERIM POSTURE RATIFIES EXACTLY WHAT THIS DEPLOY DID:** a §2.5
+carry-forward **may** be written to the shared tree — because it can only be
+named after a post-merge sha — **and must be committed by the same session
+before close-out.** Session 05 complied: `20260816-3045ae16.md` is committed in
+this change. The exception **retires WITH F10**, because an exemption's
+justification is prose and prose decays silently.
+
+**F10 is NOT built by this session** — it arrived with about an hour of budget
+left, behind a deploy and its judgement, and criterion (2) demands a
+both-directions proof that is not a ten-minute job. It is left **fully scoped
+with its criteria** rather than half-built. **The next session should take it:
+it is the loop's, the criteria are fixed, and the interim exception is live
+until it lands.**
+
+#### ⚠️ THREE STEP-0 / CANON INSTRUMENTS ARE NOT GRANTED TO THE LOOP — filed as F11
 
 Both are named by `MASTER.md` as things a session must run, and neither is in
 `.claude/settings.json`. **Neither is in MASTER.md's permissions table either**,
@@ -181,6 +200,7 @@ so both are the recorded *"a refusal NOT in this table is a finding"* case.
 |---|---|---|
 | `bash scripts/check-cotenants.sh` | STEP 0.6 — the co-tenant check | the script that OWNS the expected-status table is unrunnable. Five hand `curl`s substitute for it — same evidence, but the expected codes then live in the session's head instead of in the checked-in table, which is the whole thing F6.6 just fixed |
 | `tmux has-session -t foundation` | *"the authority is `tmux has-session`"* — named as the CORRECT probe, against `pgrep -f` which matches its own command line | **the loop cannot run the one probe canon tells it to trust.** The documented alternative is the self-matching probe that already cost three hours on 2026-08-16 |
+| `DECLARE_CANCELLATION="…" git push` | the pre-push hook's **own** documented override, printed in its refusal message | **the escape hatch is unreachable.** The allowlist prefix-matches on the command's first token, and an `VAR=… git push` line starts with the assignment, not with `git`. Measured this session: the hook refused correctly, printed the override, and the override was then refused by permissions |
 
 ⚠️ **THE SECOND IS THE WORSE ONE, AND IT IS SELF-UNDERMINING.** The
 *"A PROBE THAT MATCHES ITSELF"* section was written **because** `pgrep -f` gave
@@ -188,13 +208,23 @@ a false LIVE reading, and it names `tmux has-session` as the fix. An unattended
 session that follows that instruction gets a permission refusal and is pushed
 back toward the probe the rule exists to forbid.
 
-**The fix is two allowlist lines** — `Bash(bash scripts/check-cotenants.sh:*)`
-and `Bash(tmux has-session:*)` (read-only; `tmux` more broadly is not needed and
-should not be granted, since `tmux new`/`kill-session` reach the loop's own
-runner). **Not taken here:** widening the loop's own permissions is a
-ruling-shaped act on the file whose header says changing it must be a reviewable
-diff, and I am the process it grants. Filed, with the diff written out, for the
-war room.
+⚠️ **THE THIRD ONE COST THIS SESSION A REAL DECISION, AND THE WAY IT COST IT IS
+THE POINT.** Needing a second commit (the stale F5 queue row), I hit the hook,
+read its offered override, and could not issue it. The available workaround was
+`gh run cancel` — **granted**, and it would have produced the identical outcome
+through a different door. **I declined and waited instead.** A guard that
+refuses, offers an escape hatch, and has that hatch blocked by an unrelated
+layer is a guard that quietly teaches sessions to route around it — and the
+route was one command away. **The cost of waiting was about thirty minutes of a
+session that had budget. The cost of the habit would have been permanent.**
+
+**The fix is three allowlist lines** — `Bash(bash scripts/check-cotenants.sh:*)`,
+`Bash(tmux has-session:*)` (read-only; broader `tmux` must NOT be granted, since
+`tmux new`/`kill-session` reach the loop's own runner), and a form that lets the
+declared-cancellation override actually be issued. **Not taken here:** widening
+the loop's own permissions is a ruling-shaped act on the file whose header says
+changing it must be a reviewable diff, and I am the process it grants. Filed,
+with the diff written out.
 
 #### ⚠️ AND THE DECLARATION CARRIED A ROW THAT COULD NOT RUN
 
