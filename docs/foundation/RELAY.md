@@ -13326,7 +13326,58 @@ shared tree's **3966 passed / 0 failed**, and `CI` green on `aa607405`.
 
 #### F-117e — CITATION
 
-*(filled by `scripts/check-citation.sh` on the merge commit — never typed.)*
+**PR #679, merge `7b903e7d`. NOT DEPLOYED — test-only, zero production files, so
+there is nothing to deploy and no §2.5 declaration.**
+
+**Citation — 4 of 4 on `7b903e7d067a9cc03e8c15bad931c5d482e22e5e`:**
+   · `CI` 31918685430 a1
+   · `e2e` 31918686779 a1
+   · `a11y-ci` 31918686925 a1
+   · `secrets-scan` 31918686164 a1
+
+Produced by `scripts/check-citation.sh`, not typed. Every line `a1` — no re-run.
+
+#### ⚠️ THE PROOF RAN IN CI, AND THE OUTPUT WAS READ — not just the exit status
+
+The `e2e` run above carries the step `Run the RENDERED tier (#117e — real
+LibreOffice, multi-page)`, and its log reads:
+
+    ✓ src/lib/__rendered__/gate-attestation-footer-rendered.test.ts (5 tests) 2224ms
+
+**That line is the positive control**, and it was fetched deliberately rather
+than inferred from a green step. A step can succeed without running anything;
+this one converted a real DOCX through a real LibreOffice on a GitHub runner and
+read five arms back. **The sidecar, the internal network, the read-only mount and
+the explicit binary path all work in CI**, which is the half no local run could
+establish.
+
+#### THE UNIT-SUITE DELTA, MEASURED IN THE PRODUCTION UNIVERSE
+
+Not from a worktree — from `CI` itself, on both commits:
+
+| tree | test files | tests passed |
+|---|---|---|
+| `main` `ff2a33cc` (run 31915395694) | 306 / 308 | **3962** |
+| this branch `1b9204a5` (run 31917210334) | 307 / 309 | **3967** |
+
+**+1 file, +5 tests, 0 failed** — exactly `gate-rendered-tier-is-invoked`'s five
+arms. ⚠️ **And the rendered tier's own five tests are ABSENT from that count,
+which confirms the `vitest.config.ts` exclusion EMPIRICALLY** rather than by
+reading the config. The two halves of the design — excluded from `CI`, invoked by
+`e2e` — are each visible in a number.
+
+#### ⚠️ ONE MORE HONEST LIMIT, MEASURED BY MUTATION B
+
+**The SIGNED-standard arm cannot discriminate a footer missing on the LAST page
+only.** Mutation B showed why: with no footer at all, the attestation is still
+present on page 5, supplied by the in-body signature block. So that arm's page-5
+hit does not depend on the footer.
+
+It is a limit and not a gap, and the reason is structural: footers attach per
+SECTION, and the OOXML mechanisms that drop pages — `first`, `even` — drop page 1
+or the even pages, both of which the arms DO catch. A second section could orphan
+the last page, and **the two UNSIGNED arms would catch that**, since their needle
+has no in-body twin. Recorded so nobody reads the signed arm wider than it is.
 
 ---
 
