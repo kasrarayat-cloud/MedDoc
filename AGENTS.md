@@ -809,6 +809,30 @@ This is the positive-control rule with a free control already in hand: any sweep
 that contains at least one must-exist row carries its own tripwire, and a
 must-not-appear table without one cannot tell absence from blindness.
 
+### ⚠️ AND A THIRD MEMBER: A TREE THAT CANNOT RESOLVE ITS OWN IMPORTS
+
+**Contributed by the FOUNDATION loop's session 02, 2026-08-15.**
+
+> **A number printed from a tree that cannot resolve its own imports is not a
+> measurement, and saying which half you have is the whole discipline.**
+
+Running the unit suite **from a git worktree** reports 15 failed files / 1 failed
+test, every one `Failed to resolve import "react/jsx-dev-runtime"`. The session's
+first reading blamed its own leftover bind-mount — a plausible, self-implicating
+diagnosis.
+
+⚠️ **THE CONTROL REFUTED IT.** A clean detached worktree at `origin/main`,
+carrying **none** of the change, produces the identical 15/1. `vitest.config.ts`
+aliases react to `../../node_modules/react`, and **a worktree checks out TRACKED
+FILES ONLY**, so that path does not exist there. A pre-existing property of the
+config, not a defect in anybody's branch.
+
+⚠️ **AND WHAT IT DID NEXT IS THE PART TO COPY: IT REPORTED THE CONTROLLED
+DELTA, NOT THE RAW NUMBER.** `origin/main` 308 files / 3741 passed, branch 309 /
+3746 — **+1 file, +5 tests, exactly the new arms.** That confirms the exclusion
+**empirically**, where reading the config would only have confirmed it by
+argument.
+
 ## AN OVER-PERMISSION FIX'S DECLARATION ASSERTS **ABSENCE** ROWS
 
 **Standing 2026-08-14. Contributed by the GI session; verified here against
@@ -1468,6 +1492,27 @@ would have kept the loop down for no benefit — **there was no other actor to
 collide with, which is the entire content of the hazard.** The report was moved
 onto an open branch and committed (never deleted — it is the audit trail for the
 run it describes) and the loop restarted ~40 minutes sooner.
+
+#### ⚠️ AND THE SECOND REFERENCE CASE IS THE LIVE ONE — ROUTINE SYNCING COUNTS
+
+> **`git merge --ff-only` on the shared tree is an act on a deploy surface, not
+> housekeeping.**
+
+**Standing 2026-08-16.** The author ran `tmux ls`, **saw the loop alive, and
+ff-merged anyway** — not by overriding the rule but by never reaching for it,
+because fast-forwarding a clean tree to a commit it already contains feels like
+tidying. No harm followed, by about two minutes of timing.
+
+⚠️ **THE NEAR-MISS AND THE REFLEX THAT ALMOST DOCUMENTED IT LIVE ARE ONE
+LESSON.** The same session then began writing this very entry into the shared
+tree while the loop still held it. **A rule about not touching a live deploy
+surface, being written onto a live deploy surface**, is the clearest available
+proof that the hazard is a reflex rather than a decision — and reflexes are not
+fixed by knowing the rule.
+
+**So the test is not "is this a change?" but "is anyone standing there?"** If
+the loop is live, the tree is theirs — including for operations that modify
+nothing anyone would notice.
 
 **What makes this safe is checkable in one command, not a judgement call:**
 `tmux ls` / `pgrep -af foundation-loop.sh`. If either answers, the tree is not

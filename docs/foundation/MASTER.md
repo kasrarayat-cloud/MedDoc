@@ -424,6 +424,60 @@ to write it. **Never leave it untracked at close-out.** If you genuinely make no
 commit that session, say so in your report and name the path, so the pickup
 clears it rather than the guard discovering it.
 
+## ⚠️ `.github/` IS THE DEPLOY SURFACE TOO — CI CONFIG GOES IN A WORKTREE
+
+**Ruled 2026-08-16.** Workflow and CI config edits follow the shared-tree rule
+like everything else. A run that ends mid-edit leaves the tree dirty and
+**blocks its own relight** — the self-blocking class directly above.
+
+⚠️ **TWICE ON THE SAME FILE (`.github/workflows/e2e.yml`) IS A PATTERN, NOT A
+SLIP.** It is the one artifact a session naturally reaches for in the repo root,
+because that is where CI config lives — there is no worktree instinct attached
+to it. Session 06 caught and reverted it; session 02 resolved it by committing
+real work. **Right both times. The rule exists for the time it is neither.**
+
+## MEASUREMENT DISCIPLINE — SHAPE-AND-SOURCE IS ROUTINE, NOT RESERVED
+
+**Ruled 2026-08-16.** Any count or measurement over data reached through an
+IMPORT, a RE-EXPORT, or a QUERY first proves it read the REAL source — a
+one-element positive control: **the known-present member is found, and the shape
+is confirmed** — BEFORE the number is believed.
+
+> ⚠️ **IMPLAUSIBILITY IS NOT A DETECTOR.**
+
+**REFERENCE CASE, AND ITS STAKES ARE WHY THIS IS ROUTINE.** F8's recon parsed the
+ICD-10 allowlist and reported **`codes: 0`**. The file it grepped was
+`packages/ai/src/index.ts` — a **barrel that RE-EXPORTS the symbol and contains
+none of the data.** Reported, that finding would have read *"the ICD-10 allowlist
+is empty"*: a catastrophic-sounding and entirely false claim about the **billing
+floor**, on the one subsystem where a wrong claim carries **False Claims Act
+exposure**.
+
+⚠️ **IT WAS CAUGHT ONLY BECAUSE 0 WAS ABSURD ENOUGH TO RE-CHECK. A LESS ABSURD
+WRONG NUMBER WOULD HAVE SURVIVED** — which is the whole argument. The check
+cannot be triggered by suspicion, because suspicion is precisely what a plausible
+wrong number does not raise.
+
+Two shapes, both cheap:
+
+- **SOURCE** — *a grep that resolves a SYMBOL has not found its DATA.* Barrel
+  files exist to make imports tidy, and they make measurements wrong.
+- **SHAPE** — ask what shape the data is **before** asking how much of it there
+  is. `jsonb_typeof` costs one query. The same recon assumed an array where the
+  column was an object; it **errored**, which was the lucky case — a different
+  wrong shape returns a plausible number instead of failing.
+
+### A RECURRING MEASUREMENT CARRIES ITS CONTROL **IN THE SCRIPT**
+
+Where a measurement recurs — allowlist size, population counts, coverage figures
+— **the control lives in the script, not in the operator's habit.** A habit is
+re-derived by whoever is tired at 03:00; a control in the script is not.
+
+**Precedent: `scripts/gh-runs.sh`**, which refuses a short SHA rather than
+trusting every caller to remember the trap. Same move applied to counting: the
+script asserts its known-present member and its expected shape, and **REFUSES to
+print a number when either fails — `2 = cannot tell`, never a bare `0`.**
+
 ## PICKUP — the standing lines, so they stop being re-decided
 
 **Every session opens by doing these. They are not judgement calls and they do
