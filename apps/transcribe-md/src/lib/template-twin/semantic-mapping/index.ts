@@ -138,14 +138,83 @@ export function isMappingTypeCompatible(
 }
 
 /**
+ * Table cells grouped by their row, so a cell can see its siblings. A vein grid
+ * row is identified by containing a REFLUX TIME cell, which is what lets the
+ * structure — rather than the model — decide the row's two concepts.
+ */
+export function tableCellsByRow(
+  fields: readonly TemplateField[],
+): Map<string, TemplateField[]> {
+  const byRow = new Map<string, TemplateField[]>();
+  for (const f of fields) {
+    // ⚠️ OPTIONAL, THOUGH THE TYPE SAYS REQUIRED — and that is a behaviour
+    // decision, not a convenience. This helper is reached from the FALLBACK
+    // path, which runs precisely when the semantic provider is unavailable.
+    // Throwing on a field with no binding would convert "the model is down, so
+    // the mapping is unconfirmed" into "the upload fails" — strictly worse, and
+    // a regression this refactor would otherwise have introduced. A field with
+    // no binding is simply not a table cell.
+    if (f.rendererBinding?.bindingType !== 'table_cell') continue;
+    const key = `${f.tableId ?? ''}#${f.rendererBinding.rowIndex ?? -1}`;
+    (byRow.get(key) ?? byRow.set(key, []).get(key)!).push(f);
+  }
+  return byRow;
+}
+
+/**
+ * THE CONCEPT THE DOCUMENT ITSELF DECIDES — no model, no network, deterministic.
+ *
+ * A vein-grid structure or a label the compiler recognises names its own
+ * concept. Returns null when the document decides nothing, leaving whatever the
+ * caller has (a model proposal, or nothing at all).
+ *
+ * ⚠️ ONE IMPLEMENTATION, TWO CALLERS — the same doctrine the `sourceType`
+ * comment below already records, and for the same reason. This logic used to
+ * live inside `proposeSemanticMappings` alone, so `fallbackSemanticMappings`
+ * hard-coded `clinicalConcept: null` for EVERY field and threw away 53 of 80
+ * concepts on the real customer form that cost nothing to compute. That is the
+ * `sourceType` defect one field over: the compiler's own answer available in
+ * the model path and absent from the fallback.
+ *
+ * The registry check is deliberately NOT made here. The model path's precedence
+ * is `grid ?? override ?? model proposal`, and one check at the end — folding it
+ * in would let a compiler concept that failed the registry fall THROUGH to the
+ * model's proposal instead of being dropped to null, which is a different
+ * behaviour from the one that shipped.
+ */
+export function compilerDecidedConcept(
+  field: TemplateField,
+  rowCells: readonly TemplateField[],
+): string | null {
+  const gridConcept = veinGridCellConcept({
+    originalLabel: field.originalLabel,
+    isReflux: /reflux/i.test(field.originalLabel),
+    rowHasRefluxCell: rowCells.some((c) => /reflux/i.test(c.originalLabel)),
+    isRowLabelCell: field.labelSource === 'left_cell',
+  });
+  return gridConcept ?? conceptOverrideFor(field.originalLabel);
+}
+
+/**
  * Deterministic provider-failure fallback. It is structurally complete enough
- * for the physician review UI, but intentionally contains no inferred concept,
- * synonym, default, or certified status. It therefore cannot activate or fill
- * a production document without explicit physician mapping approval.
+ * for the physician review UI, and it carries the concept the DOCUMENT ITSELF
+ * decides — but never an INFERRED one, never a default, and never a certified
+ * status. It therefore cannot activate or fill a production document without
+ * explicit physician mapping approval.
+ *
+ * ⚠️ THIS SENTENCE USED TO SAY "no inferred concept, synonym, default, or
+ * certified status", and the concept/synonym half stopped being true the moment
+ * the compiler's own answer started reaching this path. Corrected here rather
+ * than left standing: a doc-comment describing an invariant the code no longer
+ * holds is read as a description of the running system, which is the
+ * `DEPLOYMENT_RUNBOOK.md` §5.6 failure in miniature. What did NOT change is the
+ * part that matters — `status` is `needs_confirmation` for every field and
+ * `practiceDefault` is null for every field.
  */
 export function fallbackSemanticMappings(
   ir: Pick<TemplateDocIR, 'fields'>,
 ): SemanticMapping[] {
+  const cellsByRow = tableCellsByRow(ir.fields);
   return [...ir.fields]
     .sort(
       (a, b) =>
@@ -161,9 +230,18 @@ export function fallbackSemanticMappings(
           `Compiler field kind has no fillable data type for ${field.fieldId}.`,
         );
       }
+      // The document's own answer, registry-checked exactly as the model path
+      // checks it. A concept here is a PROPOSAL — `status` below stays
+      // `needs_confirmation` for every field, so nothing becomes certifiable
+      // without the physician confirming it. What this removes is the busywork
+      // of re-typing 53 concepts the form itself already determines.
+      const rowKey = `${field.tableId ?? ''}#${field.rendererBinding?.rowIndex ?? -1}`;
+      const decided = compilerDecidedConcept(field, cellsByRow.get(rowKey) ?? []);
+      const clinicalConcept =
+        decided && isRegisteredConcept(decided) ? decided : null;
       return SemanticMappingSchema.parse({
         fieldId: field.fieldId,
-        clinicalConcept: null,
+        clinicalConcept,
         expectedDataType,
         polarityBehavior:
           field.kind === 'checkbox' ? 'affirmative_only' : 'not_applicable',
@@ -175,7 +253,7 @@ export function fallbackSemanticMappings(
             : field.kind === 'number'
               ? 'forbidden'
               : 'not_applicable',
-        approvedSynonyms: [],
+        approvedSynonyms: clinicalConcept ? [...synonymsFor(clinicalConcept)] : [],
         required: field.required,
         blankPolicy: field.unknownPolicy,
         unknownPolicy: field.unknownPolicy,
@@ -360,13 +438,9 @@ export async function proposeSemanticMappings(
   }
 
   // Cells grouped by their table row, so a cell can see its siblings — a vein
-  // grid row is identified by containing a REFLUX TIME cell.
-  const cellsByRow = new Map<string, TemplateField[]>();
-  for (const f of orderedFields) {
-    if (f.rendererBinding.bindingType !== 'table_cell') continue;
-    const key = `${f.tableId ?? ''}#${f.rendererBinding.rowIndex ?? -1}`;
-    (cellsByRow.get(key) ?? cellsByRow.set(key, []).get(key)!).push(f);
-  }
+  // grid row is identified by containing a REFLUX TIME cell. Shared with the
+  // fallback path; a second copy would drift the day either is fixed.
+  const cellsByRow = tableCellsByRow(orderedFields);
 
   const mappings = orderedFields.map((field) => {
     const mapping = byId.get(field.fieldId);
@@ -396,14 +470,8 @@ export async function proposeSemanticMappings(
     // registry.
     const rowKey = `${field.tableId ?? ''}#${field.rendererBinding.rowIndex ?? -1}`;
     const rowCells = cellsByRow.get(rowKey) ?? [];
-    const gridConcept = veinGridCellConcept({
-      originalLabel: field.originalLabel,
-      isReflux: /reflux/i.test(field.originalLabel),
-      rowHasRefluxCell: rowCells.some((c) => /reflux/i.test(c.originalLabel)),
-      isRowLabelCell: field.labelSource === 'left_cell',
-    });
     const candidate =
-      gridConcept ?? conceptOverrideFor(field.originalLabel) ?? mapping.clinicalConcept;
+      compilerDecidedConcept(field, rowCells) ?? mapping.clinicalConcept;
     const proposedConcept = candidate && isRegisteredConcept(candidate) ? candidate : null;
 
     // Compiler uncertainty always wins over a model's optimistic recognition.

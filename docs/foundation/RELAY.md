@@ -31,7 +31,7 @@ half-filled export and a divergent signed view are wrong NOW.
 | ~~**F2-b**~~ | ✅ **SHIPPED 2026-08-15** — 8 of #115's 10 sites changed (2 exempt by JOB), plus **ruling #115-b** (`DD:`/`DT:`) which the adversarial pass found the fix had CREATED, plus the cache bump. Guard mutation-proved **12 of 12**. See the ledger row below. | **#115** · **#115-b** | ~~Ten sites, a guard, the mandatory adversarial pass.~~ **MET.** ⚠️ The pass found **4 false greens in the guard** and **1 defect the fix introduced** — the reason it is a gate and not a nicety. |
 | **F3** | 🟢 **UNBLOCKED 2026-08-16 — #117 LANDED THE FOOTER, #119 DISPOSITIONS THE WATERMARK, AND THE `e2e` MECHANISM IS NAMED.** The draft's blocker is discharged on evidence (see "THE BLOCKER IS DISCHARGED" below): `docx-generator.ts:408` attaches a **`default`** footer, so the converged PDF inherits per-page marking BY CONSTRUCTION, and #117(e) proved it rendered on 5 real LibreOffice pages. ⚠️ **The blocker named TWO marks and #117 discharged ONE** — the `QUILLMD` watermark is dropped by convergence and is ruled **#119 (PROVISIONAL): not restored, declared not discovered.** ⚠️ **The red `e2e` was a REAL behavioural change, not a flake**: `/export/pdf` went from in-process pdfkit to a Gotenberg round-trip **measured at 0.43-0.48s against a 600ms download gap**, so the DOCX now routinely lands first; the ordering assertion is replaced by a SET assertion and the order is no longer asserted anywhere. *Previous status, kept for the record:* 🟡 **BUILT AND PROVEN — DOES NOT MERGE YET.** `generateVisitPdf` and `pdf-generator.ts` are gone; five callers dispositioned per #116; new traversal gate, 15 arms, mutation-proved 3 ways. ⚠️ **THEN THE MANDATORY ADVERSARIAL PASS FOUND ~25 DEFECTS AND SEVEN WERE FIXED IN-BRANCH.** ⚠️ **THE BLOCKER IS #109's CLASS AGAIN: the retired builder stamped `Signed electronically by …` / `Not yet signed.` on EVERY PAGE, and the DOCX has no footer at all.** Shipping loses a per-page DRAFT marker — a LOOSENING, which fails the provisional-ruling test. **PR opened as a DRAFT.** See the ledger row and the findings block below. | **#113** · **#116** · **#116-b** · **#117** · **#119** | 🟢 **MET on the code, pending the gate.** The retired builder is gone by traversal, the per-page job is restored on all three surfaces by #117 rather than on the PDF alone, the one unnamed job is dispositioned by #119, and Gotenberg is named in the ledger as the single shared dependency it already was. |
 | ~~**F4**~~ | ✅ **SHIPPED AND LIVE 2026-08-16** — merge `9ea09a15`, cited 4 of 4, deployed, **11 of 11 declared rows matched**. See the ledger row below. ⚠️ **It also found that NO rollback tag existed for F3's deploy either — recovered, and mechanization filed as F9.** *Previous status:* 🟡 **IN FLIGHT — the first half was ALREADY DONE and the row did not say so.** `#663` merged `2026-08-15T14:32:23Z` and `#664` merged `2026-08-15T15:15:14Z`; only the rebase-and-land half remained. `feat/certification-door` is rebased onto `main` as `feat/f4-certification-door-land` — the classification fix (`543b5a21` → `ecc1dc4b`) and the mappings door (`799d1c45` → `b4436fb3`). See the ledger row below. | — | On `main`, cited. ✅ **F1's duplicate was dropped BY MEASUREMENT, not by hope** — `git patch-id --stable` gives `8a797bde` and F1's `529e8219` the **identical** id `6213c8f2…`, and the rebase skipped it naming it. |
-| **F5** | **Item 3 — the certification door, to completion.** | **#106(b)** | See the scope block below. ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* |
+| **F5** | 🟡 **IN FLIGHT — MEASURED, AND TWO OF THE THREE REMAINING PIECES ARE NOT WHAT THE ROW SAYS.** F5-a lands the piece that shrinks the wall: `fallbackSemanticMappings` hard-coded `clinicalConcept: null` for **every** field, throwing away the **53 of 80** concepts the document itself decides. Fixed by sharing the compiler's classifier with the fallback — the wall on the real customer form goes **75 → 22**. ⚠️ **Item 5 (registry expansion) is DISCHARGED BY MEASUREMENT, not built** — the registry needs no new concepts. ⚠️ **Item 4 is BIGGER than the row states** — there is no action anywhere that can open an EXISTING template's workspace, so unfolding the manager would still leave no door. See the F5-a block below. | **#106(b)** | Items 3 + 4 remain (the confirmation UI and its entry point). ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* |
 
 **F3 WAS BLOCKED ON RULING #117 — AND IS NOT, SINCE 2026-08-16.** The condition
 is discharged rather than waived: it landed *"only with the attestation/draft
@@ -287,6 +287,155 @@ documented *"fourteen permanently blank on every real visit"* defect.
 
 **COMPLETION PROOF:** the QA twin walk's **fill → export** leg finally ticks —
 **DATE OF PROCEDURE on a CERTIFIED twin.**
+
+---
+
+### 🟡 F5-a — THE WALL IS 22, NOT 75, AND THE MEASUREMENT CAME FIRST — **2026-08-16**
+
+**Branch `feat/f5-certification-door`.** Everything below was measured against
+the real customer form (`WM IOV Template.docx`) before a line was changed.
+
+#### THE PARTITION, AND IT RECONCILES
+
+Compiled the real form and classified all 80 fields. **Every bucket named, total
+asserted** — anything that did not fit a named bucket would have been the finding:
+
+| bucket | n | what it is |
+|---|---|---|
+| `manual` | **5** | attested, no concept BY CONSTRUCTION (address, referring physician, technologist, machine, location) |
+| compiler-decided concept | **53** | 52 vein-grid cells + `SIDE OF EXAM` — the document's own structure and labels decide these, deterministically |
+| needs a physician's concept | **22** | all `verified_note_selection`, all enumerated dropdowns |
+| | **80** | ✅ reconciles against `ir.fields.length` |
+
+#### THE DEFECT: THE FALLBACK THREW AWAY 53 CONCEPTS IT COULD COMPUTE FOR FREE
+
+`fallbackSemanticMappings` (`semantic-mapping/index.ts`) hard-coded
+`clinicalConcept: null` for **every** field. The compiler's concept logic —
+`veinGridCellConcept` and `conceptOverrideFor`, both **pure functions of the
+document**, no model and no network — lived **only** in `proposeSemanticMappings`.
+
+So when the semantic provider is unavailable (`create-draft.ts:257-272`), a
+physician confirming this form had to supply **75** concepts by hand, **53 of
+which the form itself already determines.**
+
+⚠️ **THIS IS THE `sourceType` DEFECT ONE FIELD OVER, AND F4's OWN COMMENT SITS
+DIRECTLY ABOVE THE LINE THAT STILL SAID `null`:** *"One classifier, two callers.
+A second implementation would drift from the first the day either is fixed."*
+The **classifier** was shared. The **concept** was not. The evidence was in the
+artifact the previous fix authored.
+
+**FIXED** by extracting `compilerDecidedConcept()` + `tableCellsByRow()` and
+giving both paths the one implementation. The model path's precedence is
+**byte-preserved** — `grid ?? override ?? model proposal`, then a single registry
+check — deliberately, because folding the registry check into the extracted
+helper would let a failing compiler concept fall THROUGH to the model's proposal
+instead of nulling, which is a different behaviour from the one that shipped.
+
+#### WHAT THIS DOES **NOT** DO — the gate does not move by one field
+
+- **Every fallback mapping is still `needs_confirmation`.** A compiler-decided
+  concept is a PROPOSAL, not a confirmation. `MAPPINGS_NOT_READY` is untouched,
+  per-field confirmation is untouched, and an arm fails if that stops being true.
+- **It does not claim the 53 concepts are clinically right** for their fields —
+  that is the physician's judgement and is exactly what confirmation is for. It
+  claims they are the ones the compiler *already* decides in the model path, now
+  also available when the model is down.
+- **It does not concept the 22.** A change that concepted every field would pass
+  a one-sided "concepts are proposed" test and be strictly worse than the defect
+  — a guessed concept on a dropdown only the physician can answer. The
+  unproposed side is pinned for that reason.
+
+#### ⚠️ ITEM 5 IS DISCHARGED BY MEASUREMENT — THE REGISTRY NEEDS NO EXPANSION
+
+The row says *"Registry expansion driven by the MEASURED 23 `verified_note_selection`
+fields."* Measured, that premise is false.
+
+`tests/e2e/fixtures/twin-certified-pins.json` — the committed pin, asserted
+**through `isRegisteredConcept()` rather than by reading the file** — holds all
+80 mappings with **0 off-registry concepts** and a `fieldsReady` mirror of
+**0 unready**. All 23 `verified_note_selection` fields already carry
+registry-legal concepts: `chief_complaint` ×6, `past_medical_history` ×6,
+`exam.vascular` ×9, `assessment` ×1, `test.name` ×2.
+
+⚠️ **AND THE MECHANISM EXPLAINS WHY NO EXPANSION IS POSSIBLE OR NEEDED.** For a
+`verified_note_selection` field the fact is **manufactured from the mapping**
+(`verified-note-selection.ts:103` — `concept: input.mapping.clinicalConcept`)
+and bound **by `fieldId`** (`picks-bridge.ts:244-253`), not matched against the
+extractor's vocabulary. The concept's only job there is to be non-null. So the
+registry's founding rationale — *"a concept the extractor never emits can never
+be matched"* — is **true for `extraction` and does not apply to this class.**
+
+**I nearly built a `selection.*` namespace on the opposite assumption.** Reading
+`picks-bridge.ts` killed it. Recorded because a wrong mechanism written
+confidently into a source file outlives the session that wrote it.
+
+#### ⚠️ ITEM 4 IS BIGGER THAN THE ROW STATES — THERE IS NO DOOR AT ALL
+
+The row says the entry point is missing because `NativeTemplateManager` renders
+`null` under `NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true`. **Unfolding it would not be
+enough.** Enumerated: the workspace state in that component comes from
+`uploadNativeTemplateAction` and **nothing else**; the `existing` template list
+is display-only; and **no server action anywhere can open an existing template's
+twin workspace** — `readTemplateTwinWorkspace` has four callers, all internal.
+
+So a doctor whose template compiled on upload (which RC-2 now does on **every**
+`.docx` upload) can only reach it by re-uploading — *"a second upload of a file
+we already have"*, which is precisely what the fold correctly retired.
+
+**#109's class again: a ruling names an INTENT, the component has a JOB LIST.**
+Item 4 is two halves — the fold, and a read door that does not exist.
+
+#### THE PROOF
+
+- **8-arm gate** — `gate-f5-fallback-proposes-what-the-document-decides.test.ts`,
+  asserted **through the emitted mapping objects**, never through file text.
+- **Mutation-proved 7 ways, aimed at the PARTIAL applications** rather than only
+  the complete inverse. Every mutation asserted its own application first;
+  backups taken to scratch and restored from scratch, never from git; final
+  restore verified byte-identical.
+
+| # | mutation | gate |
+|---|---|---|
+| 1 | complete inverse — concept back to `null` | 🔴 4 arms |
+| 2 | **partial** — model path's conditional `status` copied into the fallback | 🔴 the-gate-does-not-move |
+| 3 | **partial** — registry check dropped | 🟢 **BLIND SPOT — see below** |
+| 4 | over-application — every field concepted | 🔴 3 arms |
+| 5 | **partial** — `approvedSynonyms` left empty | 🔴 synonyms arm |
+| 6 | an OFF-REGISTRY `CONCEPT_LABEL_OVERRIDES` entry added | 🔴 author-time invariant |
+| 7 | the enumeration goes stale against what the grid emits | 🔴 author-time invariant |
+
+⚠️ **MUTATION 3 STAYED GREEN, AND DIAGNOSING IT WAS WORTH MORE THAN RECORDING
+IT.** The fallback's registry check is **unreachable**: every value
+`compilerDecidedConcept` can return is already registry-legal, so dropping the
+check changes nothing observable on any fixture. Rather than bank that as a
+blind spot, the **invariant that makes it unreachable** is now asserted at
+AUTHOR time — `compilerDecidableConcepts()` enumerates every concept the
+compiler can decide, from the override table and a `VEIN_GRID_CONCEPTS` constant
+**the grid function itself uses**, so the enumeration cannot drift from the
+implementation. Mutations 6 and 7 exist to prove both halves fire.
+
+**Two source-text assertions in `concept-registry.test.ts` were replaced with
+BEHAVIOURAL ones** — the refactor legitimately moved the text they pinned, and
+the precedence claim (structure outranks label override) is now asserted by
+calling the function with a label that matches both. One source pin remains, on
+the line where the compiler's answer meets the model's, because no function
+exposes that junction.
+
+#### NUMBERS, AND THE CONTROL THEY WERE TAKEN AGAINST
+
+A worktree cannot resolve `react/jsx-dev-runtime`, so the raw suite number is
+meaningless on its own. **Measured against a clean detached worktree at
+`origin/main`, same host, same command:**
+
+| | files | passed | failed files | failed tests |
+|---|---|---|---|---|
+| `origin/main` control | 312 | 3765 | 15 | 1 |
+| this branch | 313 | 3774 | 15 | 1 |
+| **delta** | **+1** | **+9** | **0** | **0** |
+
+**+1 file, +9 tests — exactly the new arms**, and the 15/1 is identical on both
+trees, which confirms it as a pre-existing property of the config rather than
+anything on this branch. `tsc --noEmit` 0 errors.
 
 ---
 

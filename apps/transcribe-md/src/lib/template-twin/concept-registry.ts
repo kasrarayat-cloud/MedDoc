@@ -149,9 +149,40 @@ const MANUAL_LABEL_PATTERNS: ReadonlyArray<RegExp> = [
  * lower extremity venous duplex" does not entail "Bilateral Detailed", so the
  * field stays honestly blank.
  */
-const CONCEPT_LABEL_OVERRIDES: ReadonlyArray<readonly [RegExp, string]> = [
+export const CONCEPT_LABEL_OVERRIDES: ReadonlyArray<readonly [RegExp, string]> = [
   [/^\s*(side of exam|exam type|type of (exam|study)|study type)\b/i, 'test.name'],
 ];
+
+/**
+ * The concepts `veinGridCellConcept` can emit. Declared beside the function and
+ * USED BY IT, so the enumeration cannot drift from the implementation the way a
+ * hand-kept list would.
+ */
+export const VEIN_GRID_CONCEPTS = {
+  reflux: 'measurement.reflux_time',
+  diameter: 'measurement.diameter',
+} as const;
+
+/**
+ * EVERY concept the compiler can decide from the document alone — the override
+ * table's targets plus the vein-grid pair.
+ *
+ * ⚠️ WHY THIS IS EXPORTED. The fallback mapping path registry-checks the
+ * compiler's answer, and a mutation proof showed that check is presently
+ * UNREACHABLE: every value here is already registry-legal, so dropping the check
+ * changed nothing observable. Rather than record that as a blind spot, the
+ * invariant that makes it unreachable is asserted at AUTHOR time — add an
+ * override naming a concept the extractor never emits and the guard reddens
+ * immediately, instead of the field going permanently unfillable in production.
+ */
+export function compilerDecidableConcepts(): readonly string[] {
+  return [
+    ...new Set([
+      ...CONCEPT_LABEL_OVERRIDES.map(([, concept]) => concept),
+      ...Object.values(VEIN_GRID_CONCEPTS),
+    ]),
+  ];
+}
 
 /** The compiler's concept for this label, or null to let the model propose. */
 export function conceptOverrideFor(originalLabel: string): string | null {
@@ -190,8 +221,8 @@ export function veinGridCellConcept(input: {
   isRowLabelCell: boolean;
 }): string | null {
   if (!input.rowHasRefluxCell) return null;
-  if (input.isReflux) return 'measurement.reflux_time';
-  return input.isRowLabelCell ? 'measurement.diameter' : null;
+  if (input.isReflux) return VEIN_GRID_CONCEPTS.reflux;
+  return input.isRowLabelCell ? VEIN_GRID_CONCEPTS.diameter : null;
 }
 
 export type MappingSourceType =

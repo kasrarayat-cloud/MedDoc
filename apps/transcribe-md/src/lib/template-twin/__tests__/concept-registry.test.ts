@@ -20,6 +20,7 @@ import {
   synonymsFor,
   REGISTRY_CONCEPTS,
 } from '../concept-registry';
+import { compilerDecidedConcept } from '../semantic-mapping';
 
 describe('registry membership', () => {
   it('accepts every concept observed in a real extraction run', () => {
@@ -86,7 +87,16 @@ describe('proposer wiring', () => {
   it('a compiler concept override still has to be in the registry', () => {
     // The override is the compiler's label talking, not an exemption: an
     // override naming an unregistered concept nulls exactly like a bad proposal.
-    expect(src()).toMatch(/conceptOverrideFor\(field\.originalLabel\) \?\? mapping\.clinicalConcept/);
+    //
+    // ⚠️ THIS USED TO PIN THE INLINE EXPRESSION BY SOURCE TEXT. The precedence
+    // now lives in `compilerDecidedConcept`, so it is asserted by BEHAVIOUR —
+    // which is what the arm was always trying to say, and it survives the next
+    // refactor instead of reddening on it. The one remaining source pin is the
+    // line where the compiler's answer meets the model's, because no function
+    // exposes that junction.
+    expect(src()).toMatch(
+      /compilerDecidedConcept\(field, rowCells\) \?\? mapping\.clinicalConcept/,
+    );
     expect(conceptOverrideFor('SIDE OF EXAM: Choose an item.')).toBe('test.name');
     expect(isRegisteredConcept(conceptOverrideFor('SIDE OF EXAM: Choose an item.')!)).toBe(true);
     expect(conceptOverrideFor('GSV at the SFJ')).toBeNull();
@@ -144,12 +154,28 @@ describe('vein grid columns', () => {
     expect(isRegisteredConcept('measurement.reflux_time')).toBe(true);
   });
 
-  it('the proposer consults the structure before the model', () => {
-    const { readFileSync } = require('node:fs') as typeof import('node:fs');
-    const { join } = require('node:path') as typeof import('node:path');
-    const src = readFileSync(join(__dirname, '..', 'semantic-mapping', 'index.ts'), 'utf-8');
-    expect(src).toMatch(
-      /gridConcept \?\? conceptOverrideFor\(field\.originalLabel\) \?\? mapping\.clinicalConcept/,
-    );
+  it('the STRUCTURE outranks the label override, by behaviour', () => {
+    // Asserted through `compilerDecidedConcept` rather than by grepping the
+    // expression: a reflux cell whose label ALSO matches an override pattern
+    // still resolves as reflux time, which is the precedence claim itself.
+    const refluxCell = {
+      originalLabel: 'SIDE OF EXAM REFLUX TIME (ms)',
+      labelSource: 'left_cell',
+      tableId: 't1',
+      rendererBinding: { bindingType: 'table_cell', rowIndex: 0 },
+    } as unknown as Parameters<typeof compilerDecidedConcept>[0];
+    // The same label through the OVERRIDE alone would say `test.name` …
+    expect(conceptOverrideFor('SIDE OF EXAM REFLUX TIME (ms)')).toBe('test.name');
+    // … and the structure wins, because the row carries a reflux cell.
+    expect(compilerDecidedConcept(refluxCell, [refluxCell])).toBe('measurement.reflux_time');
+  });
+
+  it('says nothing when the document decides nothing — the model still proposes', () => {
+    const plain = {
+      originalLabel: 'Some free-text field nobody recognises',
+      labelSource: 'paragraph',
+      rendererBinding: { bindingType: 'paragraph' },
+    } as unknown as Parameters<typeof compilerDecidedConcept>[0];
+    expect(compilerDecidedConcept(plain, [])).toBeNull();
   });
 });
