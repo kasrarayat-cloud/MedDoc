@@ -547,14 +547,28 @@ export and the preview for the first time, manufacturing the third behaviour
 
 #### THE DOCUMENT-VISIBLE MATRIX, MEASURED — what the PDF actually gains and loses
 
-Read-only on production, 2026-08-16, by this session rather than carried forward
-(the counts independently reproduce #118's 11-of-45 and 3-unsigned figures):
+Read-only on production, 2026-08-16, by this session.
+
+⚠️ **THE FIRST VERSION OF THIS TABLE WAS WRONG AND MY OWN REFUTATION PASS KILLED
+IT — the correction is the reason the pass is a gate.** I wrote *"3 unsigned
+form-only GAIN the draft footer"*, having reproduced #118's 3-of-11 figure and
+read the match as confirmation. **`export/pdf/route.ts:55` calls
+`nativePdfExport` BEFORE the styled path and returns the doctor's own canvas when
+it applies**, so a pdf-native visit never reaches `generateVisitDocx` at all.
+#118's 3 was measured for the **DOCX** universe, where that short-circuit does
+not exist. *The number was right and the universe was wrong* — carried across a
+routing boundary that discriminates.
 
 | cohort | rows | the PDF after F3 |
 |---|---|---|
-| standard — not form-only | **34** | ⚠️ **loses** the `QUILLMD` watermark (#119). Footer unchanged: attestation or DRAFT, every page |
-| unsigned **and** form-only | **3** | ✅ **gains** `DRAFT — Not yet signed.` on every page — it had neither footer nor watermark before. #118(a), a tightening |
-| signed **and** form-only | 8 | unchanged — no chrome before, no chrome after (c) |
+| standard — not form-only, styled | **34** | ⚠️ **loses** the `QUILLMD` watermark (#119). Footer unchanged: attestation (19 signed) or DRAFT (15 unsigned), every page |
+| unsigned **and** form-only, **styled** | **1** | ✅ **gains** `DRAFT — Not yet signed.` on every page — it had neither footer nor watermark before. #118(a), a tightening |
+| unsigned **and** form-only, **pdf-native** | **2** | **unchanged — F3 does not reach them.** They short-circuit at `route.ts:55` and stay unmarked, which is **#118(d)'s open finding, not this item's doing** |
+| signed **and** form-only, **pdf-native** | 8 | unchanged — and note the mechanism is the short-circuit, NOT clause (c); they never consult `attestationFooter` |
+
+**So F3's total document-visible reach is 35 of 45 visits: 34 lose a wordmark,
+one gains a per-page draft marking.** Every remaining row is pdf-native and
+is untouched by this change.
 
 **Word exports and the pre-sign preview do not change at all.** Both have always
 been `generateVisitDocx`; this item only stops the PDF being a second opinion.

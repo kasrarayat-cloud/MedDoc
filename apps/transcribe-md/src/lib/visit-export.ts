@@ -195,10 +195,24 @@ export interface VisitExportData {
    *  styled export, in order. */
   headerFields: RenderedHeaderField[];
   /** "Form-only export": when true, the styled export renders EXACTLY the
-   *  doctor's form — suppress ALL QuillMD chrome (banner, "CLINICAL NOTE" title,
-   *  the appended Diagnoses / Procedures / Medications / Referrals / Patient
-   *  Summary blocks, watermark, QuillMD signed line) and render the form's own
-   *  title + header + sections + signature style instead. */
+   *  doctor's form — suppress QuillMD chrome (banner, "CLINICAL NOTE" title,
+   *  and the appended Diagnoses / Procedures / Medications / Referrals /
+   *  Patient Summary blocks) and render the form's own title + header +
+   *  sections + signature style instead.
+   *
+   *  ⚠️ TWO ITEMS THIS COMMENT USED TO LIST ARE NO LONGER TRUE, and a stale
+   *  invariant stated in the present tense gets read as a description of the
+   *  running system:
+   *
+   *  - **"watermark"** — there is no longer one ANYWHERE. `pdf-generator.ts`
+   *    owned the only `QUILLMD` wordmark and retired with ruling #113; the
+   *    surviving `docx-generator.ts` never had one and, per ruling #119, does
+   *    not gain one. Nothing to suppress.
+   *  - **"QuillMD signed line"** — suppressed only when the visit IS SIGNED.
+   *    Ruling #117(a)/#118(a) put `DRAFT — Not yet signed.` on every page of an
+   *    UNSIGNED export *including form-only*: a draft is a draft on anyone's
+   *    paper, and the chrome-free contract applies to FINAL documents. See
+   *    `docx-generator.ts:437-440`, where the branch ORDER is the ruling. */
   formOnly: boolean;
   /** The form's title for form-only mode (the template name, e.g. "Operative
    *  Note"). Null when unknown. Rendered centered/uppercased as on the form. */
