@@ -314,6 +314,30 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
+      # ── RULING #117(e) — the attestation footer as LIBREOFFICE paints it. ──
+      # The unit suite's structural guard reads `word/footer1.xml` and the
+      # section's `w:footerReference w:type`, and records its own limit: a
+      # ONE-PAGE fixture, so "on every page" is asserted over a set of size one,
+      # and the reference type is a PROXY for what the renderer does. This step
+      # removes the proxy — a genuinely multi-page document through the REAL
+      # converter, read back page by page.
+      #
+      # ⚠️ IT LIVES HERE, NOT IN `CI`, BECAUSE IT NEEDS THE SIDECAR. The `CI`
+      # workflow starts no gotenberg, so these files are excluded from the
+      # default vitest config; `gate-rendered-tier-is-invoked.test.ts` asserts
+      # from inside that default suite that THIS STEP still exists, so deleting
+      # it turns the unit suite red rather than silently retiring a gate.
+      #
+      # It runs INSIDE the `converter` network rather than publishing gotenberg's
+      # port: that network is `internal: true` on purpose, and Docker silently
+      # declines to publish a port from it — the mapping appears in
+      # `docker compose config`, the container comes up healthy, and no port is
+      # bound. See docker-compose.qa.rendered.yml.
+      - name: Run the RENDERED tier (#117e — real LibreOffice, multi-page)
+        run: >
+          docker compose -f docker-compose.qa.yml -f docker-compose.qa.rendered.yml
+          run --rm rendered-tests
+
       - name: Run E2E (chromium; scenario 5 note-format UN-GATED via NOTE_FORMAT_E2E)
         working-directory: apps/transcribe-md
         env:
