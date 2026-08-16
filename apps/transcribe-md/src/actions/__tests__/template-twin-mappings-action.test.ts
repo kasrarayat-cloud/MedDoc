@@ -3,7 +3,7 @@
 //
 // ⚠️ `updateTemplateTwinMappings` SHIPPED WITH NO CALLER. Correct, tested, and
 // unreachable: the only reference anywhere in the repository was a test
-// grepping its source text. So `MAPPINGS_NOT_READY` refused 79 of 80 fields not
+// grepping its source text. So `MAPPINGS_NOT_READY` refused all 80 of 80 fields not
 // because the gate was strict but because NOTHING COULD EVER CONFIRM THEM —
 // the gate was right and unsatisfiable.
 //

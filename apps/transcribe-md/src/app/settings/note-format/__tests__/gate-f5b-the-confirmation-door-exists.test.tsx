@@ -4,7 +4,11 @@
 // `MAPPINGS_NOT_READY` refuses certification until every field carries a
 // physician-confirmed mapping. That gate was RIGHT and UNSATISFIABLE: nothing
 // in the application could open an existing template's twin workspace, so on
-// the real customer form 79 of 80 fields could never be confirmed by anyone.
+// the real customer form ALL 80 of 80 fields could never be confirmed by
+// anyone. (⚠️ this line said "79 of 80" until 2026-08-16 — an inherited figure
+// that was never measured and conflated two quantities. Measured: 80 of 80
+// lack a physician-confirmed mapping; 22 of 80 lack a PROPOSED concept after
+// F5-a, 75 before. See AGENTS.md → "Template Twin — the parked steady state".)
 //
 // ⚠️ THE FAILURE THIS PINS IS #109's CLASS, TWICE OVER, AND BOTH HALVES ARE
 // ALREADY ON THE RECORD IN THIS REPOSITORY:

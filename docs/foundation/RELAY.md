@@ -98,6 +98,123 @@ field 2, so a wrapped reason is parsed as extra expected codes — that defect w
 introduced and caught while fixing this very row, and it made a healthy ingress
 report `floor 6, from 7 distinct expected` and exit 2.
 
+### ✅ F5-b + F9 ARE LIVE IN PRODUCTION — **2026-08-16T21:29Z, session 05 — 16 of 16 JUDGED**
+
+**Deployed `3045ae16` (payload `46769791..3045ae16`, carrying PRs #693 F5-b,
+#694, #695 F9, #696).** `deploy-prod.sh` exit 0, `/api/health` **200**.
+Declaration: `docs/foundation/deploys/20260816-3045ae16.md` — the F10
+carry-forward of session 04's `20260816-5f2334b1.md`, which stays in place
+unmodified as the original.
+
+| | |
+|---|---|
+| app image | `a188a309d814` → **`cc772df258b2`** |
+| worker image | `65bbddc296d5` → **`9848ee4c6d2b`** |
+| gotenberg | `2d05d22572ba` → **unchanged** (rebuild was fully cached; only app+worker were declared to move) |
+| rollback | `:pre-f5b-20260816` on all three, cut BEFORE the act and verified against the daemon |
+| migrations | 104 → **104** — no migration in this payload |
+
+**MUST CHANGE — 5 of 5.** Image ids moved · `NativeTemplateManager` mounts ·
+upload half stays hidden · `openNativeTemplateWorkspaceAction` reachable ·
+F9's STEP 0b present and `↻ idempotent` ×3.
+
+**MUST NOT CHANGE — 11 of 11.** visits 44 · signed 27 · patients 32 ·
+`note_templates` 9 · migrations 104 · twin source artifacts 0 · compiled 0 ·
+**CERTIFIED 0** · mappings 0 · fill manifests 0 · co-tenants 307·404·200·200·410.
+
+#### THE F10 CARRY-FORWARD, EXECUTED — and its RESIDUAL, which is a real gap
+
+F10's condition was **met and recorded, not asserted**: the runtime diff
+`5f2334b1..HEAD` is EMPTY, positive-controlled by the unfiltered diff showing
+the range is non-empty (RELAY.md + the declaration, docs only). Absence rows
+were **re-measured**, not inherited — all ten matched.
+
+⚠️ **BUT THE CARRY-FORWARD CANNOT ITSELF BE COMMITTED BEFORE THE DEPLOY, AND
+THAT IS F10's UNFIXED HALF.** `deploy-prod.sh` derives the declaration path from
+`git rev-parse --short HEAD`. Landing the carried copy through a PR — as canon
+requires for anything reaching `main` — **moves HEAD and invalidates the
+filename it was just created to satisfy.** The regress has no fixed point.
+
+So this deploy ran with the carried declaration **present and uncommitted**, and
+the gate said so loudly (`tracked: no`). That is legal — the deploy path is
+`present`, not `strict`, deliberately, because a deploy is answerable by a
+rollback. **Provenance is carried by the committed ORIGINAL**
+(`20260816-5f2334b1.md`, committed 20:00Z, provably before the 21:26Z act) whose
+payload is byte-identical by the measured empty diff. **Saying which half you
+have is the whole discipline: the ORDER is proven, the carried copy's
+TRACKEDNESS is not.**
+
+**FILED AS F11 — AND IT IS `RULING NEEDED`, NOT A PROVISIONAL DECISION.**
+
+The obvious fix is for `deploy-prod.sh` to accept a declaration naming **any
+ancestor of HEAD whose runtime diff to HEAD is empty**, rather than the exact
+short SHA — mechanizing the predicate F10 already asks a human to evaluate by
+hand, which is this house's recorded move (the pre-push hook, `merge-pr.sh`,
+`run-ruled-mutation.sh`).
+
+⚠️ **I DID NOT BUILD IT, AND SESSION 04 IS THE REASON — IT HAD ALREADY WRITTEN
+DOWN WHY.** Four lines up in this same file: *"the candidate fixes include one
+that LOOSENS what satisfies the gate, and a loosening fails the
+provisional-ruling test."* That is exactly the fix above. It widens what the
+§2.5 gate will accept, and **rule 1 of the provisional test is reversible IN THE
+ALLOWED DIRECTION — a gate may only ever gain requirements.** So it goes to the
+war room, and this session states the trade rather than taking it:
+
+| | |
+|---|---|
+| **cost of NOT fixing** | every deploy following a docs PR ships an **uncommitted** declaration. Order is still provable via the committed original, but only while somebody does the carry-forward correctly by hand |
+| **cost of fixing** | the gate accepts a declaration naming a commit that is **not** the one being deployed. Correct exactly as far as the emptiness check is correct — and that check has a pathspec, which is precisely the kind of thing that silently matches nothing |
+| **the safer variant** | keep the exact-SHA rule and have the script **write the carried copy itself**, deriving it from an ancestor declaration + an asserted-empty runtime diff. Strictly-additive: nothing new is accepted, one manual step is removed |
+
+**The third option looks right and is still not mine to take** — it changes what
+a §2.5 gate does, and #96(b)'s logic is that strictness is proportional to
+reversibility. Recorded, not built.
+
+#### ⚠️ TWO STEP-0 INSTRUMENTS ARE NOT GRANTED TO THE LOOP — filed as F12
+
+Both are named by `MASTER.md` as things a session must run, and neither is in
+`.claude/settings.json`. **Neither is in MASTER.md's permissions table either**,
+which is the table that exists so a session re-formulates instead of halting —
+so both are the recorded *"a refusal NOT in this table is a finding"* case.
+
+| refused | MASTER.md says | consequence |
+|---|---|---|
+| `bash scripts/check-cotenants.sh` | STEP 0.6 — the co-tenant check | the script that OWNS the expected-status table is unrunnable. Five hand `curl`s substitute for it — same evidence, but the expected codes then live in the session's head instead of in the checked-in table, which is the whole thing F6.6 just fixed |
+| `tmux has-session -t foundation` | *"the authority is `tmux has-session`"* — named as the CORRECT probe, against `pgrep -f` which matches its own command line | **the loop cannot run the one probe canon tells it to trust.** The documented alternative is the self-matching probe that already cost three hours on 2026-08-16 |
+
+⚠️ **THE SECOND IS THE WORSE ONE, AND IT IS SELF-UNDERMINING.** The
+*"A PROBE THAT MATCHES ITSELF"* section was written **because** `pgrep -f` gave
+a false LIVE reading, and it names `tmux has-session` as the fix. An unattended
+session that follows that instruction gets a permission refusal and is pushed
+back toward the probe the rule exists to forbid.
+
+**The fix is two allowlist lines** — `Bash(bash scripts/check-cotenants.sh:*)`
+and `Bash(tmux has-session:*)` (read-only; `tmux` more broadly is not needed and
+should not be granted, since `tmux new`/`kill-session` reach the loop's own
+runner). **Not taken here:** widening the loop's own permissions is a
+ruling-shaped act on the file whose header says changing it must be a reviewable
+diff, and I am the process it grants. Filed, with the diff written out, for the
+war room.
+
+#### ⚠️ AND THE DECLARATION CARRIED A ROW THAT COULD NOT RUN
+
+`certificationStatus='certified'` — **the enum has no such value.** Measured:
+`RECOGNIZED · NEEDS_CONFIRMATION · UNSUPPORTED · CERTIFIED · QUARANTINED`.
+Corrected to `'CERTIFIED'` in the carried declaration.
+
+**It errors rather than returning a wrong number, which is the only reason this
+was cheap.** Postgres refuses an unknown enum literal in a comparison. **Had the
+column been plain `text` — which is exactly how this house's `AuditAction`
+failures presented — the same query returns `0`, and `0` is precisely what the
+row asserts.** The judgement would have read *"✅ 0 certified"* while measuring
+nothing, on the one row that exists to prove a deploy cannot certify a template
+no physician confirmed.
+
+⚠️ **HONEST LIMIT:** with `template_twin_compiled_versions` at 0, the CERTIFIED
+count is **entailed by the parent being empty** — no filter discriminated
+anything. True, and vacuous. It becomes a real measurement on the first doctor
+upload (RC-2 compiles on every `.docx`), which is the case the row is for.
+
 ### ✅ F9 — `deploy-prod.sh` CUTS ITS OWN ROLLBACK TAG — **MERGED AND CITED 2026-08-16, session 04**
 
 **Merged as `5f2334b160f44b09094ca8c419e621d53fe71988` (PR #695).** Produced by
@@ -312,13 +429,27 @@ document stating an intended state in the present tense, read by everyone as a
 description of the running system. It must be corrected **in the same change
 that deploys F5-b**, not afterwards.
 
-⚠️ **AND A SECOND SENTENCE IN THE SAME PARAGRAPH IS SUSPECT BUT NOT VERIFIED:**
-*"on a real customer form that is 79 of 80."* F5-a moved the confirmation wall
-**75 → 22** on that form — but "fields lacking a physician-confirmed mapping"
-and "fields needing a physician to supply a CONCEPT" may not be the same
-quantity, and F5-a changed the second. **Reported as a question, not a fact.**
-Whoever lands the correction above should measure it rather than assume the two
-numbers refer to one thing.
+⚠️ **AND A SECOND SENTENCE IN THE SAME PARAGRAPH WAS SUSPECT AND IS NOW
+MEASURED — ✅ RESOLVED 2026-08-16, session 05.** *"on a real customer form that
+is 79 of 80."* The suspicion was right, and the answer is worse than stale:
+**the two quantities are different AND neither has ever been 79.**
+
+Measured by running F5-a's own gate (8 of 8 green; it carries a non-vacuity
+control asserting the form compiles to 80 fields *before* any count is read):
+
+| the question | the answer |
+|---|---|
+| fields lacking a **physician-confirmed** mapping | **80 of 80** |
+| fields needing a physician to **supply a concept** | **75** before F5-a · **22** after |
+
+Partition: **5 manual / 53 proposed / 22 unproposed**, reconciled to 80.
+
+⚠️ **AND IT HAD PROPAGATED TO SIX SITES**, one of them production source —
+`AGENTS.md:130`, `RELAY.md` ×2, `template-twin-mappings.ts:109`, and two test
+headers — every one traceable to
+`docs/qa-reports/template-twin-integration-verdict-20260728.md:10` and none
+re-measured. **All six corrected in this change**, driven from the grep
+enumeration rather than from memory of which ones had been touched.
 
 #### WHAT THIS DOES **NOT** DO
 
@@ -486,9 +617,11 @@ Then the **billing tail (B8 close, B9)** per the existing ledger below.
    `gate-source-type-explicit.test.ts` at AUTHOR time instead.
 2. ✅ **The mappings door** (`799d1c45`). `updateTemplateTwinMappings` shipped
    correct, tested and **with no caller** — the only reference anywhere was a
-   test grepping its source text. So `MAPPINGS_NOT_READY` refused 79 of 80
+   test grepping its source text. So `MAPPINGS_NOT_READY` refused all 80 of 80
    fields **because nothing could ever confirm them**: the gate was right and
-   unsatisfiable. Its own module, because the test could not LOAD inside
+   unsatisfiable. *(⚠️ read "79 of 80" until 2026-08-16 — corrected by
+   measurement, see the F5-b deploy row.)* Its own module, because the test
+   could not LOAD inside
    `template-twin-certify.ts` (which drags in the worker's extractor and note
    generator) — **a module whose test must mock the world to load is doing too
    much.**
