@@ -14,8 +14,19 @@ everything else** — because it references tokens, not numbers.
 
 ## Provenance — how these were obtained
 
-`app/layout.tsx` imports `globals.css` (45 custom properties) and
-`rounds-tokens.css` (54). Those are the files the build reads.
+`app/layout.tsx:10-11` imports `globals.css` and `rounds-tokens.css`. Those are
+the files the build reads.
+
+Measured 2026-08-16: `globals.css` declares **40** distinct custom properties
+(41 lines); `rounds-tokens.css` declares **76** distinct (85 lines — 9 are
+redeclared under skin selectors, which is the whole point of the file).
+
+⚠️ **AN EARLIER DRAFT OF THIS PARAGRAPH SAID "45" AND "54". BOTH WERE WRONG** —
+they match no measure of either file (declaration lines, distinct names, or
+`var()` references). They were carried from a note rather than measured, in the
+one document whose entire thesis is that numbers are measured. Corrected before
+merge, and left on the record here because **the failure mode this doc exists to
+prevent showed up inside the doc itself.**
 
 **Verified twice, independently:**
 
