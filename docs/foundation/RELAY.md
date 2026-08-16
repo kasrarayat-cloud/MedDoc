@@ -4108,6 +4108,43 @@ scratch**; it reports paths instead. And `.claude/settings.json` is unwritable
 from inside a session, which is the property that makes the allowlist an
 allowlist. The original finding follows.
 
+#### ⚠️ AND THE ELEVENTH SCRIPT PROVED THE GAP RECURS — `gh-runs.sh`, 2026-08-16
+
+**Closed by a supervised session the same day it was found.** The list above was
+enumerated, not wildcarded, for a good reason — and an enumerated list is
+**kept complete by hand**, which this file's own standing rule says is wrong
+eventually.
+
+It was wrong within hours. `scripts/gh-runs.sh` merged in **#686 at 09:18Z**;
+the loop relit at **10:03Z**; the allowlist was never widened. So for a whole
+run, **MASTER's queue header instructed the loop to cite with a script it could
+not execute** — and the wrapper's entire product is refusing a short or
+fabricated sha, so **the guard was off for the actor it was written for.**
+
+⚠️ **NOTHING FAILED, WHICH IS THE POINT.** The loop worked around it correctly —
+both views on the full 40-character sha, plus `check-citation.sh`, which IS
+granted and carries the same exist-check. **An absent grant is silent until it
+is load-bearing**, and here a second tool happening to cover the same ground
+kept it silent for longer.
+
+**THE STRUCTURAL LESSON: a script that MASTER instructs the loop to run is not
+shipped until its grant ships with it.** The two live in different files, land
+in different PRs, and nothing checks that the second followed the first — so the
+gap is invisible from both sides. **Ship the grant in the same PR as the
+script**, or the next one recurs exactly like this.
+
+⚠️ **AND IT IS STRUCTURALLY SUPERVISED WORK.** `.claude/settings.json` is
+unwritable from inside a session — the property named directly above — so the
+loop could file the finding and could not close it. **That asymmetry is correct
+and must not be "fixed":** a session that can widen its own permissions has no
+permission boundary at all.
+
+**Granted:** `Bash(bash scripts/gh-runs.sh:*)`, one line, enumerated beside the
+others — never a `scripts/` wildcard, for the reason recorded above. The script
+was read before granting: its whole command surface is `gh run`, `git cat-file`,
+`git fetch`, `git rev-parse` and `jq` — **read-only**, and strictly narrower
+than the already-granted `check-citation.sh`.
+
 #### The original finding, as recorded
 
 **Status at the time: OWNER ACTION. The loop is blocked on this, and no session

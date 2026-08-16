@@ -466,6 +466,30 @@ to write it. **Never leave it untracked at close-out.** If you genuinely make no
 commit that session, say so in your report and name the path, so the pickup
 clears it rather than the guard discovering it.
 
+### ⚠️ AND WRITE IT INTO YOUR OWN WORKTREE — THE SHARED-TREE PATH STRANDS BY CONSTRUCTION
+
+**Ruled 2026-08-16.** The resolution above says *commit it in your first
+commit*. That is right and it does not happen on its own, because **your commits
+go to your WORKTREE and the report was written to the SHARED tree** — two
+different working directories. The instruction and the mechanism point at
+different places, so *"commit it in your first commit"* silently becomes *"leave
+it untracked on the deploy surface"*.
+
+> **Write the report to `docs/preflight-reports/` INSIDE THE WORKTREE YOU ARE
+> WORKING IN. Then it rides your first commit naturally, and the shared tree is
+> never dirtied at all.**
+
+⚠️ **THIS IS THE SELF-BLOCKING-RELIGHT CLASS ARRIVING *THROUGH* THE WORKTREE
+RULE** — the rule that exists to keep the deploy surface clean is what routes
+the report onto it. Neither rule is wrong; the seam between them is.
+
+⚠️ **AND IT WILL LOOK FIXED WHEN IT IS NOT.** Sessions that happen to `git add`
+from the shared tree, or whose worktree is the shared tree, clear it by
+accident — so the class disappears for a run and returns with the next session
+that works in a worktree and commits only from there. **A clean
+`git status` is not evidence the seam is closed;** it is evidence that this
+session's habits covered for it.
+
 ## ⚠️ `.github/` IS THE DEPLOY SURFACE TOO — CI CONFIG GOES IN A WORKTREE
 
 **Ruled 2026-08-16.** Workflow and CI config edits follow the shared-tree rule
