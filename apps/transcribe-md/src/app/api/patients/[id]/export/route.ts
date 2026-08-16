@@ -40,7 +40,7 @@ import { getSession } from '@/lib/auth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { downloadAudio } from '@/lib/minio';
 import { loadVisitExportData } from '@/lib/visit-export-server';
-import { generateVisitPdf } from '@/lib/pdf-generator';
+import { renderVisitPdf, unavailableNote } from '@/lib/visit-pdf';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
 
@@ -212,13 +212,23 @@ export const GET = withApiHandler<{ id: string }>(
 
           if (v.status === 'SIGNED' && exportData) {
             try {
-              const pdf = await generateVisitPdf(exportData);
+              const pdf = await renderVisitPdf(exportData);
               archive.append(pdf, { name: `visits/${v.id}/signed.pdf` });
             } catch (err) {
+              // Ruling #113/#116 — the PDF is now a Gotenberg render and has no
+              // fallback builder. An archive that silently omits a signed
+              // visit's PDF is a silent half-document: the doctor unzips it,
+              // sees files for every OTHER visit, and has no way to tell a
+              // render failure from a visit that was never signed. So the
+              // absence is NAMED, in the archive, at the path the PDF would
+              // have occupied.
               console.warn(
                 `[api:patients:export] pdf render failed visit=${v.id}:`,
                 redactPhi(err instanceof Error ? err.message : err)
               );
+              archive.append(unavailableNote(v.id, err), {
+                name: `visits/${v.id}/signed.pdf.UNAVAILABLE.txt`,
+              });
             }
           }
         }

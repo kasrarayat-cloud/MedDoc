@@ -42,7 +42,7 @@ import { getSession } from '@/lib/auth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { downloadAudio } from '@/lib/minio';
 import { loadVisitExportData } from '@/lib/visit-export-server';
-import { generateVisitPdf } from '@/lib/pdf-generator';
+import { renderVisitPdf, unavailableNote } from '@/lib/visit-pdf';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
 
@@ -204,15 +204,23 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
 
         if (v.status === 'SIGNED' && exportData) {
           try {
-            const pdf = await generateVisitPdf(exportData);
+            const pdf = await renderVisitPdf(exportData);
             archive.append(pdf, {
               name: `visits/${v.id}/signed.pdf`,
             });
           } catch (err) {
+            // Ruling #113/#116 — same reasoning as the patient archive: with no
+            // fallback builder, a silently-absent signed.pdf is indistinguishable
+            // from a visit that was never signed. Name the absence in place, and
+            // let `unavailableNote` say WHICH failure it was — a renderer outage
+            // and an unbuildable document need different advice.
             console.warn(
               `[api:settings:export-data] pdf render failed visit=${v.id}:`,
               redactPhi(err instanceof Error ? err.message : err)
             );
+            archive.append(unavailableNote(v.id, err), {
+              name: `visits/${v.id}/signed.pdf.UNAVAILABLE.txt`,
+            });
           }
         }
       }

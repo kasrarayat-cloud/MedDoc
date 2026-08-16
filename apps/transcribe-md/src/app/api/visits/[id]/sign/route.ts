@@ -47,7 +47,6 @@ import { formatVisitDate } from '@/lib/visit-export';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { computeDisplayedEmCode } from '@/lib/em-coding/displayed-level';
 import { formatForEhr, type EhrFormat } from '@/lib/ehr-formatters';
-import { generateVisitPdf } from '@/lib/pdf-generator';
 import { sendVisitPdfEmail } from '@/lib/email';
 import {
   logDelivery,
@@ -633,9 +632,18 @@ export const POST = withApiHandler<{ id: string }>(
           // when present. Resolve to sessionEmail explicitly to
           // close the loop for any future refactor of the guard.
           const to = sessionEmail;
-          // Still generated (the delivery row records its size); no longer
-          // attached. See sendVisitPdfEmail.
-          const pdf = await generateVisitPdf(data);
+          // ⚠️ Ruling #116(b) — a full PDF render of this patient's signed note
+          // USED to happen here, purely to read `pdf.byteLength` into
+          // `logDelivery({ sizeBytes })`. The email has carried a link rather
+          // than an attachment since `sendVisitPdfEmail` changed, so the
+          // document was rendered and dropped.
+          //
+          // `sizeBytes` is WRITE-ONLY — enumerated, not assumed: `visitDelivery`
+          // has exactly one reference in the application (the `.create` in
+          // `deliveries.ts`), with no read in any route, action, admin surface
+          // or test. Under #113 that render would have become a Gotenberg
+          // network round-trip INSIDE `POST /sign`, the most critical clinical
+          // action in the product, for a number nobody queries. Deleted.
           await sendVisitPdfEmail({
             toEmail: to,
             visitId,
@@ -650,7 +658,6 @@ export const POST = withApiHandler<{ id: string }>(
             practiceId: session.user.practiceId,
             channel,
             destination: to,
-            sizeBytes: pdf.byteLength,
           });
         } else {
           const format = FORMAT_FOR_CHANNEL[dest];

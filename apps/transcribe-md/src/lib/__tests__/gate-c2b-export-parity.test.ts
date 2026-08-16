@@ -13,7 +13,8 @@
 // WHAT THE PIPELINE ACTUALLY IS, and why this is the right place to assert:
 //   preview  = `preview-visit-document.ts:96` generates the DOCX →
 //              `:103` posts it to Gotenberg (LibreOffice) → PDF → pdf.js canvas
-//   download = `generateVisitDocx` (Word) or `generateVisitPdf` (pdfkit)
+//   download = `generateVisitDocx` (Word), and — since ruling #113 retired
+//              the pdfkit builder — the PDF too, via the SAME Gotenberg hop
 // The on-screen paper IS a render of the DOCX export. So "preview matches
 // export" reduces to two checkable claims:
 //   (1) the DOCX and the PDF agree on page geometry and type — asserted here;
@@ -28,11 +29,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
 
 import JSZip from 'jszip';
-import { getDocumentProxy } from 'unpdf';
 import { describe, expect, it } from 'vitest';
 
 import { generateVisitDocx } from '../docx-generator';
-import { generateVisitPdf } from '../pdf-generator';
 import type { VisitExportData } from '../visit-export';
 
 /** The default QuillMD layout — NOT a custom template. `formOnly:false` and no
@@ -90,13 +89,6 @@ async function docxPageProps(data = fixture()) {
   };
 }
 
-async function pdfPageProps(data = fixture()) {
-  const buf = await generateVisitPdf(data);
-  const doc = await getDocumentProxy(new Uint8Array(buf));
-  const page = await doc.getPage(1);
-  const vp = page.getViewport({ scale: 1 });
-  return { width: Math.round(vp.width), height: Math.round(vp.height), pages: doc.numPages };
-}
 
 describe('C2-b — the two generators agree on the page', () => {
   it('the harness can read both artifacts — positive control', async () => {
@@ -104,9 +96,6 @@ describe('C2-b — the two generators agree on the page', () => {
     // every assertion below vacuous.
     const d = await docxPageProps();
     expect(d.xml.length, 'word/document.xml read as empty').toBeGreaterThan(500);
-    const p = await pdfPageProps();
-    expect(p.pages, 'the PDF has no pages').toBeGreaterThanOrEqual(1);
-    expect(p.width, 'the PDF viewport has no width').toBeGreaterThan(0);
   }, 30_000);
 
   it('⚠️ the DOCX DECLARES a page size at all', async () => {
@@ -130,25 +119,22 @@ describe('C2-b — the two generators agree on the page', () => {
     });
   }, 30_000);
 
-  it('the PDF page size is US Letter, in points', async () => {
-    const p = await pdfPageProps();
-    expect({ width: p.width, height: p.height }).toEqual({
-      width: LETTER.widthPt,
-      height: LETTER.heightPt,
-    });
-  }, 30_000);
-
-  it('⚠️ and therefore the PREVIEW matches the download — the same page, both ways', async () => {
-    // The claim the deliverable actually makes. The preview is Gotenberg's
-    // render of the DOCX, so DOCX geometry IS preview geometry; the download is
-    // the PDF. Converted into one unit and compared.
-    const [d, p] = await Promise.all([docxPageProps(), pdfPageProps()]);
-    expect(
-      { widthPt: d.w / TWIPS_PER_PT, heightPt: d.h / TWIPS_PER_PT },
-      'the Word file (and therefore the on-screen preview, which is its render) ' +
-        'is a different page size from the PDF the doctor downloads',
-    ).toEqual({ widthPt: p.width, heightPt: p.height });
-  }, 30_000);
+  // ⚠️ THE TWO PDF-RENDERING ARMS ARE GONE, AND THE CLAIM THEY MADE IS NOW
+  // STRUCTURAL RATHER THAN MEASURED — which is STRONGER, not weaker.
+  //
+  // They rendered `generateVisitPdf` and compared its page box to the DOCX's.
+  // That comparison existed because there were two builders that could disagree.
+  // Ruling #113 retired the second one: the PDF download is now LibreOffice's
+  // render of the very DOCX asserted above, exactly as the preview always was.
+  // Two artifacts produced from one set of bytes by one converter cannot carry
+  // two page sizes, so "preview matches download" is no longer a coincidence to
+  // check — it is the same sentence twice.
+  //
+  // ⚠️ AND BECAUSE THAT ARGUMENT IS ONLY AS GOOD AS ITS PREMISE, THE PREMISE IS
+  // ITSELF GATED: `gate-f3-one-pdf-builder.test.ts` proves by traversal that no
+  // second PDF builder exists and that every PDF-emitting route reaches the one
+  // renderer. If that ever stops being true, THAT file reddens — and the
+  // reasoning in this comment is what it is protecting.
 
   it('the margins agree too', async () => {
     const d = await docxPageProps();
@@ -247,9 +233,9 @@ describe('C2-b — the converter can resolve the type the document names', () =>
 
 describe('C2-b — the export path is skin-INDEPENDENT, and that is checked', () => {
   // ⚠️ WHY THIS IS ASSERTED RATHER THAN STATED. Everything above runs the real
-  // generators directly, so it is a faithful proof of the bytes the export
-  // route streams — `pdf = nativePdf ?? await generateVisitPdf(data)` and the
-  // DOCX equivalent do no post-processing. But "the unit test is the export
+  // generator directly, so it is a faithful proof of the bytes the export route
+  // streams — the route does `nativePdf ?? renderVisitPdf(data)` and the DOCX
+  // equivalent, neither of which post-processes. But "the unit test is the export
   // path" only holds while nothing in that path branches on the skin. If a
   // generator ever emitted a skin token, this file would be measuring one
   // configuration and production would ship another, and nothing would say so.
@@ -260,7 +246,10 @@ describe('C2-b — the export path is skin-INDEPENDENT, and that is checked', ()
   // which is why it needed proving on a production-shaped build.
   const MODULES = [
     'src/lib/export-page.ts',
-    'src/lib/pdf-generator.ts',
+    // `pdf-generator.ts` was here until ruling #113 retired it. Replaced rather
+    // than dropped — the module that now sits on the PDF export path takes its
+    // slot, so the watched set does not quietly shrink by one.
+    'src/lib/visit-pdf.ts',
     'src/lib/docx-generator.ts',
   ];
 
@@ -303,16 +292,15 @@ describe('C2-b — the export path is skin-INDEPENDENT, and that is checked', ()
     expect(stripped.includes('isSkinRounds'), 'a real read was stripped away').toBe(true);
   });
 
-  it('both generators share ONE page definition — the drift cannot come back', () => {
+  it('the ONE generator reads the shared page definition — the drift cannot come back', () => {
     // The defect was two files each typing their own numbers with no conversion
-    // between them. Sharing the module is the structural fix; this asserts the
-    // sharing rather than the values, which the assertions above already pin.
-    for (const m of ['src/lib/pdf-generator.ts', 'src/lib/docx-generator.ts']) {
-      expect(
-        readFileSync(m, 'utf8'),
-        `${m} no longer reads the shared page definition — it has its own numbers again`,
-      ).toMatch(/from '\.\/export-page'/);
-    }
+    // between them. There is now one file; it must still take its page from the
+    // shared module rather than re-typing numbers, because a future second
+    // renderer would otherwise have nothing to agree with.
+    expect(
+      readFileSync('src/lib/docx-generator.ts', 'utf8'),
+      'docx-generator no longer reads the shared page definition — it has its own numbers again',
+    ).toMatch(/from '\.\/export-page'/);
   });
 });
 

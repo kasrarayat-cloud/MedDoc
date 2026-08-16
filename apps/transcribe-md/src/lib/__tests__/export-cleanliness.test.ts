@@ -19,7 +19,6 @@ import {
 } from '../visit-export';
 import { EMPTY_SECTION_PLACEHOLDER } from '../soap-format';
 import { generateVisitDocx } from '../docx-generator';
-import { generateVisitPdf } from '../pdf-generator';
 import { formatForEhr, type EhrFormat } from '../ehr-formatters';
 
 // UNIVERSAL forbidden class — review-screen machinery, placeholder wrappers,
@@ -137,16 +136,19 @@ describe('export cleanliness — rendered surfaces carry no forbidden patterns',
     expect(text).not.toContain('RENALADJUSTXYZ');
   });
 
-  it('PDF (extracted text) is clean and correct', async () => {
-    const buf = await generateVisitPdf(data);
-    const pdf = await getDocumentProxy(new Uint8Array(buf));
-    const { text } = await extractText(pdf, { mergePages: true });
-    const flat = Array.isArray(text) ? text.join('\n') : text;
-    assertClean('pdf', flat, { markdown: true });
-    expect(flat).toContain('Amoxicillin');
-    expect(flat).not.toContain('QTPROLONGATIONXYZ');
-    expect(flat).not.toContain('RENALADJUSTXYZ');
-  });
+  // ⚠️ THE PDF ARM RETIRED WITH THE SECOND BUILDER (ruling #113), AND WHAT
+  // REPLACES IT IS THE DOCX ARM ABOVE — not nothing.
+  //
+  // It used to render `generateVisitPdf` and extract its text. The PDF is now
+  // LibreOffice's render of the very DOCX the arm above just asserted clean, so
+  // "the PDF text carries no forbidden pattern" is exactly "the DOCX text
+  // carries no forbidden pattern" plus "the converter did not INVENT one".
+  // A text-extraction arm here could only re-assert the first half against a
+  // sidecar this suite cannot reach.
+  //
+  // What is genuinely NOT covered by that argument is named where it belongs —
+  // `gate-f3-one-pdf-builder.test.ts` records the conversion leg as the
+  // untested step and says what does test it.
 
   it.each(EHR_FORMATS)('EHR/clipboard format "%s" is clean and correct', (fmt) => {
     const rendered = formatForEhr(fmt, data);

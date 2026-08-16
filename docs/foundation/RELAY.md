@@ -29,12 +29,15 @@ half-filled export and a divergent signed view are wrong NOW.
 | ~~**F1**~~ | ✅ **SHIPPED AND LIVE 2026-08-15** — merge `efe1b443`, 4 of 4, deployed, **25 of 25 declared rows matched**. See the ledger row below. ⚠️ **OWNER PING still owed** — carried in the morning report. | **#112** | ~~Deployed under a §2.5 declaration naming the document-visible change.~~ **MET.** |
 | ~~**F2**~~ | ✅ **MECHANISM NAMED AND MEASURED 2026-08-15** — the surfaces share one builder; the divergence is three signed-gated branches in `loadVisitExportData`, and **the DATE one is wrong**. Ruling **#115** (PROVISIONAL). See the ledger row below. | **#114** | ~~The mechanism is named with evidence, not a theory.~~ **MET.** ⚠️ **The suspect was WRONG and is withdrawn on evidence** — see below. |
 | ~~**F2-b**~~ | ✅ **SHIPPED 2026-08-15** — 8 of #115's 10 sites changed (2 exempt by JOB), plus **ruling #115-b** (`DD:`/`DT:`) which the adversarial pass found the fix had CREATED, plus the cache bump. Guard mutation-proved **12 of 12**. See the ledger row below. | **#115** · **#115-b** | ~~Ten sites, a guard, the mandatory adversarial pass.~~ **MET.** ⚠️ The pass found **4 false greens in the guard** and **1 defect the fix introduced** — the reason it is a gate and not a nicety. |
-| **F3** | **Retire `generateVisitPdf`** onto `generateVisitDocx` → Gotenberg. Census, delete-don't-hide. Parity gate REDEFINED to ONE builder's bytes across preview / Word / PDF. ⚠️ **CENSUS TAKEN 2026-08-15 — see the ledger row below. It found FIVE production callers where #113 names ONE**, two of which render a patient's signed note only to read `.byteLength` into a write-only column. Ruling **#116** (PROVISIONAL) records their disposition. **The retirement itself has NOT started.** | **#113** · **#116** | The retired builder is gone by traversal, the gate red-proves against tonight's diverging PDF, and Gotenberg is named in the ledger as the single shared dependency it already is. |
+| **F3** | 🟢 **UNBLOCKED 2026-08-16 — #117 LANDED THE FOOTER, #119 DISPOSITIONS THE WATERMARK, AND THE `e2e` MECHANISM IS NAMED.** The draft's blocker is discharged on evidence (see "THE BLOCKER IS DISCHARGED" below): `docx-generator.ts:408` attaches a **`default`** footer, so the converged PDF inherits per-page marking BY CONSTRUCTION, and #117(e) proved it rendered on 5 real LibreOffice pages. ⚠️ **The blocker named TWO marks and #117 discharged ONE** — the `QUILLMD` watermark is dropped by convergence and is ruled **#119 (PROVISIONAL): not restored, declared not discovered.** ⚠️ **The red `e2e` was a REAL behavioural change, not a flake**: `/export/pdf` went from in-process pdfkit to a Gotenberg round-trip **measured at 0.43-0.48s against a 600ms download gap**, so the DOCX now routinely lands first; the ordering assertion is replaced by a SET assertion and the order is no longer asserted anywhere. *Previous status, kept for the record:* 🟡 **BUILT AND PROVEN — DOES NOT MERGE YET.** `generateVisitPdf` and `pdf-generator.ts` are gone; five callers dispositioned per #116; new traversal gate, 15 arms, mutation-proved 3 ways. ⚠️ **THEN THE MANDATORY ADVERSARIAL PASS FOUND ~25 DEFECTS AND SEVEN WERE FIXED IN-BRANCH.** ⚠️ **THE BLOCKER IS #109's CLASS AGAIN: the retired builder stamped `Signed electronically by …` / `Not yet signed.` on EVERY PAGE, and the DOCX has no footer at all.** Shipping loses a per-page DRAFT marker — a LOOSENING, which fails the provisional-ruling test. **PR opened as a DRAFT.** See the ledger row and the findings block below. | **#113** · **#116** · **#116-b** · **#117** · **#119** | 🟢 **MET on the code, pending the gate.** The retired builder is gone by traversal, the per-page job is restored on all three surfaces by #117 rather than on the PDF alone, the one unnamed job is dispositioned by #119, and Gotenberg is named in the ledger as the single shared dependency it already was. |
 | **F4** | **Land #663 and #664**, then rebase and land the held worktree commits — `feat/certification-door` carries the classification fix (`543b5a21`) and the mappings door (`799d1c45`). | — | On `main`, cited. F1's commit is also on that branch; the rebase drops it as a duplicate once F1 has merged. |
 | **F5** | **Item 3 — the certification door, to completion.** | **#106(b)** | See the scope block below. ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* |
 
-**F3 IS BLOCKED ON RULING #117.** It lands only with the attestation/draft
-footer; §2.5 names the document-visible change.
+**F3 WAS BLOCKED ON RULING #117 — AND IS NOT, SINCE 2026-08-16.** The condition
+is discharged rather than waived: it landed *"only with the attestation/draft
+footer"*, which `main` now carries (#117(a)-(e), all five clauses), and §2.5
+names the document-visible change — **including the watermark loss (#119), which
+is the half #117 did not cover.**
 
 ⚠️ **THIS SENTENCE USED TO READ *"blocked on ruling #117 — merged (`1dce00ff`,
 4-of-4) and NOT deployed"*, AND ITS AMBIGUOUS ANTECEDENT PROPAGATED INTO
@@ -250,6 +253,463 @@ by everyone as a description of the running system.
   must MOVE to the DOCX side, not be deleted with the import. That triage is the
   bulk of the remaining work and is deliberately not rushed at the end of a
   session.
+
+---
+
+### 🟢 F3 — THE RETIREMENT, EXECUTED — **2026-08-15**
+
+**Rulings #113 and #116.** Branch `fix/f3-retire-generate-visit-pdf`.
+The census above is discharged: `generateVisitPdf` and `pdf-generator.ts` are
+gone, and every visit PDF is now LibreOffice's render of `generateVisitDocx`'s
+bytes — which is what the preview has always been.
+
+#### THE FIVE CALLERS, BY JOB, AND THE LIST IS THE DRIVER
+
+| # | Site | Disposition | Evidence |
+|---|---|---|---|
+| 1 | `export/pdf/route.ts` | **CONVERGED** | imports `renderVisitPdf`; 503 branch on refusal |
+| 2 | `sign/route.ts:638` | **DELETED** | no render; `logDelivery` keeps channel + destination, drops `sizeBytes` |
+| 3 | `export/email/route.ts:105` | **DELETED** | same — **and its audit-row copy too, see below** |
+| 4 | `patients/[id]/export/route.ts` | **CONVERGED** | + named absence entry on failure |
+| 5 | `settings/export-data/route.ts` | **CONVERGED** | + named absence entry on failure |
+| — | `scripts/gen-test-pdf.ts` | **DELETED** | dev script, not referenced by any `package.json` |
+| — | `export-page.ts:14`, `template-native-pdf.ts:5` | **REWRITTEN** | the two describing comments the census named |
+| — | six test files | **TRIAGED** — see below | |
+
+⚠️ **THE CENSUS UNDER-DESCRIBED SITE 3 BY ONE CONSUMER, AND THE EXTRA ONE WAS
+THE WORSE OF THE TWO.** #116 recorded both deleted sites as feeding
+`logDelivery({ sizeBytes })`. `export/email/route.ts` also wrote
+`sizeBytes: pdf.byteLength` into the **`EXPORT_EMAIL_SENT` audit row** — a
+compliance record, where a reader would reasonably take that number for the size
+of what was delivered. **The email carries a LINK, not an attachment**, so the
+row asserted a delivered size for a document that was never sent. Both are gone;
+action, target and `destinationDomain` are untouched. *A wrong field is worse
+than an absent one*, and this one lived in the audit log.
+
+#### THE COST, PAID AND NAMED — #116(c)
+
+`renderVisitPdf` **throws** `VisitPdfUnavailableError` carrying the converter's
+coded reason. The download route answers **503** naming the reason and pointing
+at the Word export. The two archive routes append
+`visits/<id>/signed.pdf.UNAVAILABLE.txt` **inside the ZIP** rather than omitting
+the file: an archive that silently drops a signed visit's PDF is a silent
+half-document, because the doctor cannot tell a render failure from a visit that
+was never signed.
+
+⚠️ **AND THAT MESSAGE WAS WRONG IN ITS FIRST DRAFT.** It pointed the reader at
+`visits/<id>/signed.docx` "if present". **Neither archive contains a DOCX** —
+enumerated by grepping every `archive.append` in both routes, which is what
+caught it. It now names `visits/<id>.json`, which both archives genuinely carry.
+*A recovery note that sends somebody to a file that does not exist is the
+absent-field defect wearing a fix's clothes.*
+
+`convert.ts`'s header — *"certification, export and signing do not call it and
+must not learn to"* — is **rewritten in the same commit**, per #116. What stayed
+true is stated with it: **signing still does not call it** (#116(b) removed that
+call entirely), certification does not, and `convertDocxToPdf` still never
+throws. What changed is that `pdf: null` no longer means one thing to every
+caller — previews fall back, the export refuses — and that translation lives in
+`visit-pdf.ts`, once, not at three call sites.
+
+#### THE TEST TRIAGE — THE COVERAGE MOVED; IT WAS NOT DELETED WITH THE IMPORT
+
+Worked entry by entry, each PDF arm marked against its replacement:
+
+| removed PDF arm | disposition |
+|---|---|
+| `generateVisitPdf` magic header | twin exists — DOCX "PK magic header" |
+| tolerates an empty SOAP | **MOVED** — now a DOCX arm |
+| larger buffer when more sections populated | **MOVED** — now a DOCX arm |
+| structure-aware: tables + task lines | twin exists — DOCX "real Word table" |
+| paginates a long table | **MOVED, MEANING RESTATED** — LibreOffice paginates now, so the DOCX arm asserts an 80-row table builds as a real `<w:tbl>`, not literal markdown |
+| metadata PHI guard × 3 | twins exist — DOCX `docProps/core.xml` × 3 |
+| header fields | twins exist — the two DOCX header-field arms assert strictly more |
+| `export-cleanliness` PDF text | twin exists — the DOCX arm above it |
+| `visit-date` styled-PDF + PDF form arms | twins exist — blocks A and the DOCX form-only arm; #115's ten sites are all DOCX/clipboard code |
+| `gate-r1` PDF-source assertions | **RETIRED WITH THE BUILDER** — they pinned pdfkit's drawing code against the shared tokens; there is no second renderer to keep in sync. Every DOCX typography assertion survives |
+| `gate-c2b` PDF geometry arms | **REPLACED BY A STRUCTURAL CLAIM** — two artifacts from one set of bytes through one converter cannot carry two page sizes |
+
+#### THE NEW GATE, AND WHAT IT DOES NOT CLAIM
+
+`gate-f3-one-pdf-builder.test.ts` — 13 arms. Proves by **traversal** that
+`pdf-generator.ts` does not exist, that nothing imports or calls it, that each
+converged caller reaches `renderVisitPdf`, that the two deleted sites render
+nothing, and that the renderer **refuses** rather than substituting.
+
+Every absence arm is paired with a control on the same instrument, because
+`git grep` exits 1 on no-match and the `catch` returns `[]` — *a broken
+traversal and a clean tree produce the same zero*.
+
+⚠️ **IT REDDENED AGAINST ITS AUTHOR ON ITS FIRST RUN**, which is the strongest
+evidence a guard produces about itself. The arm searching for the call shape
+carried a comment asserting *"which no comment in this repo writes"* —
+`gate-c2b`'s own explanatory prose wrote exactly that shape. That comment was
+**stale anyway** (it quoted the pre-retirement route line) and is corrected; the
+traversal now filters comment lines, with its own two-direction control.
+
+⚠️ **AND THE MUTATION PROOF CAUGHT A FALSE GREEN IN THE GATE — THE ARM THAT
+MATTERS MOST TO A DOCTOR.** Proved against **PARTIAL** applications, not only the
+complete inverse:
+
+| mutation | shape | result |
+|---|---|---|
+| renderer returns the DOCX instead of throwing | **partial** — the first edit `convert.ts`'s own fail-open contract invites | 🔴 red |
+| `POST /sign` renders again | **partial** — 1 of the 2 deleted sites | 🔴 red |
+| route loses its named-503 branch (`if (false)`) | complete | 🟢 **GREEN — false** |
+
+The third arm asserted the file *contained* `VisitPdfUnavailableError` and a
+`503`. Neutering the branch left the import line naming the type and the dead
+block holding the 503, so it passed on a route that had stopped distinguishing a
+sidecar outage from a crash. **Text presence is not behaviour.** Rewritten to
+assert the CONDITION on comment-stripped source, then **re-proved red**.
+
+#### WHAT THIS ROW DOES **NOT** CLAIM
+
+- **The conversion leg is not exercised by any unit test.** Every arm mocks
+  `convertDocxToPdf`. So *"the DOCX is clean ⇒ the PDF is clean"* — the argument
+  that let the metadata-PHI and cleanliness arms retire — is an **argument, not a
+  measurement**, and it is written into the gate as one. What does measure it:
+  `gate-c2b`'s font block (converter image + the deploy that rebuilds it) and the
+  E2E export pack against the real sidecar.
+- **Byte-level CONTENT parity across the four surfaces is not asserted anywhere**,
+  and never was. What is proved is that they come from one builder.
+- **The route list in the new gate is hand-kept.** It is #116's census. A sixth
+  caller added tomorrow is caught only if it reaches for the *retired* module.
+- **Not deployed by this session.** See the deploy row.
+
+#### ⛔ THE ADVERSARIAL PASS — AND WHY THIS BRANCH DOES **NOT** MERGE
+
+**The pass ran over the FINISHED diff, three lenses, told to REFUTE:** clinical
+data loss · failure paths · false greens and deleted coverage. It found **~25
+defects on a branch that was `tsc`-clean, 80-green on its own files, and
+mutation-proved three ways.**
+
+⚠️ **EVERY ROW BELOW WAS VERIFIED BY ME BEFORE BEING BELIEVED OR ACTED ON.**
+The row that decides the item was verified against the deleted builder's own
+source and against the running production container.
+
+**FIXED IN-BRANCH (7):**
+
+| # | defect | why it mattered |
+|---|---|---|
+| 1 | **A 200 carrying a NON-PDF body was streamed as `application/pdf`.** `convertDocxToPdf` checks a body's LENGTH, never its CONTENT, so a mis-proxied sidecar answering `200 <html>502…</html>` reached the doctor as a "signed record". | **The exact artifact `visit-pdf.ts`'s own header declares forbidden**, reachable in the first draft. Now a `%PDF` check; mutation-proved red. |
+| 2 | **The archive note asserted a cause it had not established.** Both routes catch a BARE error, so a throw out of `generateVisitDocx` produced text reading *"the PDF renderer was unavailable"* and *"download the Word export"* — **the one surface that had just failed and would fail identically forever.** | A WRONG field, in the file added so the absence would not be silent. Now `unavailableNote(visitId, err)` discriminates, shared, one implementation. |
+| 3 | **`visit-pdf.ts`'s header claimed every PDF a doctor receives is rendered there.** FALSE as shipped: `nativePdfExport` short-circuits ahead of it and `NEXT_PUBLIC_TEMPLATE_NATIVE_PDF=true` **in the running production container**. | A new file creating the §5.6 "stated invariant is a wish" defect rather than inheriting it. |
+| 4 | **The gate's title said "ONE PDF builder"; it banned one FILE PATH.** `pdfkit` is still a dependency, so a new `pdf-fallback.ts` wired as a `.catch(…)` passed **every** absence arm. | A name is not a capability. New arm bans the LIBRARY, with `pdf-lib`/native-fill named as the deliberate exception. |
+| 5 | **`isCommentLine`'s stated honest limit was INVERTED.** It claimed it could only over-report; `/* legacy */ const pdf = await generateVisitPdf(…)` was classified as prose. | **A limit that points the wrong way is a licence granted on false information.** Fixed, with a control for that exact shape. |
+| 6 | **The 503 arm asserted the condition and a `503` ANYWHERE in the file.** Any other 503 literal would have kept it green on a route that had stopped discriminating. | One regex, bound to the branch. |
+| 7 | **The #115 census's swap comment oversold itself** — membership does not cover the BARE-`signedAt` shape, which is how `form-only.ts` became #115-b. | Corrected in place; the whole-tree walk is the real protection, said plainly. |
+
+⚠️ **AND THE GATE FAILED AGAINST ITSELF THREE TIMES, EACH FOR THE SAME REASON,
+WHICH IS THE FINDING WORTH KEEPING.** A guard cannot be written in the language
+it bans: its own arms carry `from '@/lib/pdf-generator'`, `from 'pdfkit'` and a
+sentinel token as **code**. **All three passed on the first run and reddened on
+the next — for no reason but a `git add`**, because `git grep` reads TRACKED
+files only. *A gate whose result depends on the index state of its own source
+was green for the wrong reason once already.* Needles now exclude `__tests__`
+and the sentinel is assembled at runtime.
+
+---
+
+#### ⛔ AND `e2e` WENT RED — A TRUE POSITIVE, AND IT WIDENS #116(c)'s DECLARED COST
+
+**PR #673, run `31897585925`.** `CI`, `a11y-ci` and `secrets-scan` all green;
+**`e2e` FAILED**, and it failed on exactly the right thing:
+
+    expect(pdf.suggestedFilename()).toMatch(/\.pdf$/)
+
+Scenarios **1** (`audio-upload-full`) and **3** (`text-to-soap`) both sign a
+visit and download a PDF. **The main E2E job brings up
+`transcribe-md transcribe-md-worker` — and no `gotenberg`.** Two later jobs in
+that file do; the one where the PDF download actually lives did not. Before this
+change the export was in-process pdfkit and needed nothing.
+
+> ⚠️ **#116(c) DECLARED THE COST AS "a doctor cannot download a PDF while the
+> sidecar is DOWN". THE REAL COST IS WIDER: any environment that does not RUN
+> the sidecar loses PDF export entirely — and one of ours was such an
+> environment.** The declaration in `docs/deploy-declarations/` names gotenberg
+> as a MUST-VERIFY for production; it did not anticipate that the *test* stack
+> was already a counterexample. That gap is the finding, not the red run.
+
+**The gate was right and the stack was wrong** — a test environment whose
+service set no longer matches production's is the wrong-universe class, and the
+red is the instrument working exactly as it should. **Fixed in-branch** by
+adding `gotenberg` to both `up -d --wait` steps in that job, with the reasoning
+written at the step. **Not yet re-run** — see below.
+
+⚠️ **AND THE OTHER RED ARM IS A KNOWN FLAKE, NOT MINE:** scenario 16
+(`account-settings`, *"the profile panel never showed its saved chip"*) is the
+open auto-filed issue **#610**, whose title records that it recurs past its
+documented 12/12 mitigation. Named here so the next reader does not attribute it
+to F3.
+
+#### ⚠️ THE RE-RUN HAPPENED, AND THE FIX DID **NOT** CLEAR IT — SAID PLAINLY
+
+**`62a353db`, run `31898568822`.** `CI` `31898568845`, `a11y-ci` `31898568842`
+and `secrets-scan` `31898568869` all **green**. **`e2e` still RED.**
+
+| | before the workflow fix (`c89fdddd`) | after (`62a353db`) |
+|---|---|---|
+| scenario 1 `audio-upload-full` | ✘ | **✘ — still** |
+| scenario 3 `text-to-soap` | ✘ | ✔ |
+| scenario 16 `account-settings` (known flake #610) | ✘ | ✔ |
+
+**So the diagnosis was PARTIALLY right and I am not claiming more than that.**
+Adding `gotenberg` cleared scenario 3 — which is real evidence the missing
+sidecar was *a* cause — and scenario 1 fails on the identical assertion
+(`Expected pattern: /\.pdf$/`) with the converter now running. **A second
+mechanism is in play and it is NOT NAMED.** That is one genuine cure attempt
+spent, not three.
+
+⚠️ **WHAT IS ALREADY RULED OUT, so the next session does not re-walk it:** the
+QA compose wires this correctly — `transcribe-md` joins the `converter`
+network (`docker-compose.qa.yml:342-345`), `gotenberg` is on it (`:45`), and
+**no `GOTENBERG_URL` is set in either compose file**, so the code default
+`http://gotenberg:3000/…` applies and resolves. The wiring is not the gap.
+
+**THE LIKELY SHAPE, offered as a hypothesis and explicitly not as a finding:**
+the spec captures the FIRST download event into `pdf`, then a second into
+`docx`. If the PDF request answers **503** no download fires for it, so the
+DOCX arrives first and `suggestedFilename()` ends `.docx` — which is exactly
+what the assertion reports. **Read to form a hypothesis; RUN something to name
+a mechanism.** The next step is the run's own artifacts (the failure PNG and
+the app container's `[api:visits:export:pdf] renderer unavailable reason=…`
+line), neither of which this session had runway to pull.
+
+⚠️ **NOBODY MAY READ ANY GREEN HERE AS COVERING THE ITEM.** Three of four are
+green on `62a353db`; the fourth is the one that measures the change.
+
+---
+
+#### ⛔ THE BLOCKER — #109's CLASS, ON THE SIGNATURE, AND IT IS NOT MINE TO DECIDE
+
+> **`main:pdf-generator.ts:1544-1549` registered a `pageAdded` handler that
+> painted `Signed electronically by <name> on <date>.` — or `Not yet signed.` —
+> at the foot of EVERY PAGE, plus a `QUILLMD` watermark.**
+>
+> **`docx-generator.ts` has NO footer. Verified: `new Footer(` / `footers:`
+> count = 0, against a control of 29 `new Paragraph(`.** The attestation is one
+> in-flow paragraph.
+
+**Concrete input → wrong output:** a 3-page UNSIGNED note, downloaded as PDF —
+and the route has no signed gate, so drafts are downloadable. Before: `Not yet
+signed.` on pages 1, 2 and 3. After: once, wherever the flow lands. **Page 1 of
+a draft becomes typographically indistinguishable from a finished record.**
+
+**This is ruling #109 exactly.** The ruling named the INTENT — *retire the PDF
+builder*. The component had a JOB LIST, and the per-page draft marking is a job
+nobody named. *Anything the ruling does not name is a decision I would be
+making, not one I was given.*
+
+⚠️ **AND THE OBVIOUS FIX COLLIDES WITH A STANDING DESIGN RULE, WHICH IS WHY IT
+IS A RULING AND NOT A PATCH.** Adding a DOCX footer would put the attestation on
+every page of Word, the preview AND the PDF — restoring the job. But
+**form-only exports carry NO QuillMD chrome by design** (AGENTS.md, recorded),
+so the footer needs a `formOnly` carve-out and its own gate, and it changes what
+**every doctor's Word export** looks like. That is design work with its own
+proof obligation, not a ten-line patch at the end of a session.
+
+**WHY I DID NOT RULE ON IT PROVISIONALLY:** shipping as-is **LOSES a safety
+marker**. The provisional test permits tighten-later and forbids loosen-later,
+in as many words — *"if being wrong means weakening a constraint that already
+shipped, halt instead."*
+
+**RECOMMENDATION:** F3's code lands only together with a DOCX footer carrying
+the attestation, gated on `!formOnly`, with an arm asserting the marker appears
+on a multi-page render — which needs the E2E, since page count is LibreOffice's.
+
+---
+
+#### ✅ THE BLOCKER IS DISCHARGED — 2026-08-16, and only HALF of it by #117
+
+**#117 landed the DOCX footer, so the paragraph above is no longer true of
+`main`.** Verified on the rebased branch rather than assumed:
+
+| | |
+|---|---|
+| `docx-generator.ts:408` | `...(pageFooter ? { footers: { default: pageFooter } } : {})` — a **`default`** reference, which is the one that applies to every page |
+| `docx-generator.ts:437-440` | `attestationFooter` — unsigned → `DRAFT_FOOTER_LINE` **including form-only** (#118(a)); signed form-only → `undefined` (c); signed standard → the attestation (b) |
+| `visit-pdf.ts:123-124` | `generateVisitDocx(data)` → `convertDocxToPdf` — so the converged PDF **inherits that footer by construction**, not by a second implementation |
+| #117(e) | proved it RENDERED, through the real Gotenberg/LibreOffice, on a **5-page** document — *"on every page"* measured on pages LibreOffice made |
+
+So the concrete input → wrong output that made this a draft — *a 3-page unsigned
+note marked once instead of three times* — no longer holds. **The retirement is
+now a TIGHTENING in the direction that mattered**, which is the direction the
+provisional test permits.
+
+⚠️ **BUT THE BLOCKER NAMED TWO MARKS AND #117 DISCHARGED ONE.** Its own quote
+reads *"plus a `QUILLMD` watermark"*, and no clause of #117, #118 or #113
+mentions it. `docx-generator.ts` has none (`grep -i watermark` = **0**), so
+convergence drops it. **Ruled provisionally as #119: NOT restored** — it is
+provenance rather than safety, and restoring it would put a wordmark on the Word
+export and the preview for the first time, manufacturing the third behaviour
+#113 exists to end. **Declared, not discovered.**
+
+#### THE DOCUMENT-VISIBLE MATRIX, MEASURED — what the PDF actually gains and loses
+
+Read-only on production, 2026-08-16, by this session.
+
+⚠️ **THE FIRST VERSION OF THIS TABLE WAS WRONG AND MY OWN REFUTATION PASS KILLED
+IT — the correction is the reason the pass is a gate.** I wrote *"3 unsigned
+form-only GAIN the draft footer"*, having reproduced #118's 3-of-11 figure and
+read the match as confirmation. **`export/pdf/route.ts:55` calls
+`nativePdfExport` BEFORE the styled path and returns the doctor's own canvas when
+it applies**, so a pdf-native visit never reaches `generateVisitDocx` at all.
+#118's 3 was measured for the **DOCX** universe, where that short-circuit does
+not exist. *The number was right and the universe was wrong* — carried across a
+routing boundary that discriminates.
+
+| cohort | rows | the PDF after F3 |
+|---|---|---|
+| standard — not form-only, styled | **34** | ⚠️ **loses** the `QUILLMD` watermark (#119). Footer unchanged: attestation (19 signed) or DRAFT (15 unsigned), every page |
+| unsigned **and** form-only, **styled** | **1** | ✅ **gains** `DRAFT — Not yet signed.` on every page — it had neither footer nor watermark before. #118(a), a tightening |
+| unsigned **and** form-only, **pdf-native** | **2** | **unchanged — F3 does not reach them.** They short-circuit at `route.ts:55` and stay unmarked, which is **#118(d)'s open finding, not this item's doing** |
+| signed **and** form-only, **pdf-native** | 8 | unchanged — and note the mechanism is the short-circuit, NOT clause (c); they never consult `attestationFooter` |
+
+**So F3's total document-visible reach is 35 of 45 visits: 34 lose a wordmark,
+one gains a per-page draft marking.** Every remaining row is pdf-native and
+is untouched by this change.
+
+**Word exports and the pre-sign preview do not change at all.** Both have always
+been `generateVisitDocx`; this item only stops the PDF being a second opinion.
+
+#### ⛔ THE `e2e` RED WAS A REAL BEHAVIOURAL CHANGE, NOT A FLAKE — MECHANISM NAMED
+
+The previous session left scenario 1 failing on `Expected pattern /\.pdf$/`
+with one cure spent and the mechanism explicitly **NOT NAMED**. It is named now,
+and its own hypothesis (*"a 503 lets the DOCX arrive first"*) was **wrong** —
+Gotenberg answers `200`.
+
+⚠️ **AND THE ROW SAYING THE BRANCH IS RED IS ITSELF OUT OF DATE — CORRECTED
+HERE.** `10b11c6d`'s commit message says *"the e2e re-run did NOT clear"*, citing
+run **31898568822** (`62a353db`, 17:31Z, **failure**). But run **31899482235**
+ran on **`10b11c6d` itself** at 17:51Z and came back **success, 41m17s**. The
+session never saw it, because it ended its turn — the one-shot trap, in its
+cheapest form.
+
+**`62a353db → 10b11c6d` IS DOCS-ONLY. Same code, opposite outcomes, twenty
+minutes apart** (and a third run, 31897585925 at 17:11Z, also failed). *That is
+the definition of a race*, and it is what refutes "a second mechanism is in
+play" as a DETERMINISTIC cause while corroborating the timing one below: a
+contest decided at 72-79% of its budget flaps, and flapping is exactly what the
+run history shows. **The branch was not red; it was lucky.** This item removes
+the race rather than banking the luck.
+
+    sign-and-send-modal.tsx:781   triggerDownload(pdfUrl,  'pdf')
+    sign-and-send-modal.tsx:784   await sleep(600)
+    sign-and-send-modal.tsx:786   triggerDownload(docxUrl, 'docx')
+
+**A `download` event fires when the RESPONSE arrives, not when the anchor is
+clicked.** Before F3 `/export/pdf` was in-process pdfkit — tens of ms, so the
+PDF won that race by two orders of magnitude and the ordering looked like a law.
+After F3 it is `generateVisitDocx` + a Gotenberg round-trip. **Measured against
+the live sidecar, warm and idle, on the blank tracked fixture: 0.475s cold-ish,
+then 0.435s / 0.433s — 72-79% of the 600ms gap before CI's slower CPU, a cold
+LibreOffice on the job's first conversion, or Gotenberg's strict serialization.**
+The DOCX leg never touches Gotenberg, so it routinely returns first and the old
+assertion captured it.
+
+⚠️ **THE PRODUCT IS RIGHT AND THE TEST'S ASSUMPTION WAS WRONG — and the obvious
+"fix" is worse.** Awaiting the PDF before firing the DOCX would guarantee the
+order and put the doctor's **Word** download behind a slow or failing Gotenberg;
+a sidecar outage would then cost both files instead of one. The 600ms sleep is a
+BROWSER workaround (rapid successive programmatic downloads get suppressed),
+never a product guarantee, and the scenario's own header states the requirement
+as *"Bug 2: PDF + DOCX simultaneously selected → **both files on disk**"* — a
+SET. So the assertion now collects both downloads and compares the sorted
+extensions to `['docx','pdf']`.
+
+**What that gives up, stated plainly: the ORDER is no longer asserted anywhere.**
+Nothing else is lost — a duplicate still fails, a missing destination still
+fails, and the listener is now registered BEFORE the action, which repairs a
+latent miss the old shape had (a DOCX arriving while line 140 ran would never
+have reached a listener attached afterwards). **The sweep was by predicate, not
+by the one failure CI surfaced:** all four other `waitForEvent('download')` sites
+are single-download, and both multi-download collectors already `.sort()`.
+Scenario 1 was the only site asserting an order.
+
+#### 🔵 OPEN, VERIFIED, NOT FIXED — the rest of the pass's list
+
+**Content parity, same #109 family as the blocker:**
+
+- **Patient-summary LINE BREAKS are lost.** `pdf-generator` used `doc.text()`,
+  which honours `\n`; `docx-generator:291-301` splits on `/\n\n+/` only and emits
+  one `TextRun` per block, and **`grep 'break:' docx-generator.ts` = 0**, so no
+  `<w:br/>` is ever produced. Patient-facing instructions run together.
+  ⚠️ *Pre-existing for the Word export; NEW for the PDF download.*
+- **The `§ CLINICAL NOTE` heading vanishes on an empty note** — the PDF emitted
+  it before the empty check, the DOCX returns before it.
+
+**The new Gotenberg coupling, MEASURED by the failure-path lens:**
+
+- The sidecar is **one instance, `cpus: 1.5`**, and serializes strictly —
+  measured **0.42s staircase** across 4 concurrent conversions. The archive
+  routes now loop `renderVisitPdf` per signed visit with **no `take`, no
+  bound**. ~27 signed visits ≈ the 12s `CONVERT_TIMEOUT_MS` of every *other*
+  user's preview or download. **A doctor's PDF then 503s with "the renderer is
+  unavailable (timeout)" while the renderer is merely queued behind someone
+  else's ZIP** — the message this item added, firing on contention and saying
+  something false about the system.
+- ⚠️ **`maxDuration` is INERT on this deployment** — `output: 'standalone'`, a
+  plain `node server.js`, no platform to honour it. All three routes' comments
+  describe a cap that does not exist.
+- Archive builders are detached (`void (async () => …)()`) and never check
+  `req.signal`, so a cancelled download keeps consuming sidecar slots.
+
+**Guard coverage, verified and left open:**
+
+- The gate cannot see *call `renderVisitPdf`, then append a DOCX under a `.pdf`
+  name*, nor *inline `convertDocxToPdf` in `POST /sign`* — text presence again,
+  one level out.
+- **`export-cleanliness`'s markdown-heading detector is now VACUOUS**: its regex
+  needs a `\n`, and the surviving DOCX arm's tag-stripping yields spaces.
+- **`gate-r1`'s "the lockup gaps are absolute points on BOTH sides"** now has one
+  assertion on one side; `LOCKUP_PT.eyebrowToTitle` / `titleToRule` are asserted
+  by nothing. **Either they are unguarded or they are dead exports — both are
+  findings**, and the title is false either way.
+- Both archive READMEs still promise `signed.pdf` and never mention
+  `signed.pdf.UNAVAILABLE.txt`; `export-data`'s also claims the PDF is
+  *"byte-identical to what Download PDF would produce"*, which the native-PDF
+  path already made false.
+
+---
+
+#### ⚠️ THE FULL UNIT SUITE COULD NOT BE RUN IN THE WORKTREE — SAID PLAINLY
+
+`git worktree add` does not carry `apps/transcribe-md/node_modules`, which holds
+this app's local `react`/`react-dom`. **16 files failed on `Failed to resolve
+import "react/jsx-dev-runtime"`** — one cause, not sixteen findings. All 16 pass
+on `main`, and **this diff touches zero `.tsx` files**. The other **3735 tests
+passed**, including every file this change edits. `tsc --noEmit`: **0 errors**.
+**CI is the full-suite measurement** — it installs cleanly — and the citation
+below is what discharges it, not the local run.
+
+---
+
+### 🔵 CARRIED FORWARD FROM SESSION 05'S LOG — findings that were never in the ledger
+
+**Session 05 recorded these in its morning report and could not land them: it
+found them ~36 minutes into #672's runs, and an addendum push would have
+cancelled that gate at the expensive end of the class.** They are landed here.
+
+1. ⚠️ **#113 IS WRONG ON A LOAD-BEARING POINT.** It says *"the parity gate's
+   watched set excludes the exact leg that diverged."* It did **not** —
+   `gate-c2b-export-parity.test.ts` imported **both** builders. What the gate
+   measured was **geometry only** (page size, margins, font wiring,
+   skin-independence); nothing compared rendered CONTENT, so a PDF with different
+   numbering passed every arm. **The gate's NAME was wider than what it
+   measured** — this house's own named class — and the work was therefore never
+   "add the missing leg to a set it was already in".
+   **Status after F3:** moot by construction. There is one builder, and the
+   premise is now gated by `gate-f3-one-pdf-builder.test.ts` instead.
+2. ✅ **`gate-c2b` would break when `pdf-generator.ts` was deleted** — its "both
+   generators share ONE page definition" arm read that file off disk.
+   **Handled in this item**: the arm now asserts the surviving generator.
+3. 🔵 **`check-cotenants.sh` watches FOUR hosts; MASTER.md STEP 0.6 names FIVE.**
+   `www.quillmd.com` is absent from its `EXPECTED` table — the
+   watched-set-vs-named-set divergence, in a check that landed the same night.
+   **STILL OPEN.** Not fixed here: it is a different item and this session did
+   not want a second unrelated change riding an export PR.
 
 ---
 

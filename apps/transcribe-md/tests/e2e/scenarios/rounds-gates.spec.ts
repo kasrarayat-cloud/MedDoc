@@ -452,6 +452,20 @@ test.describe('Rounds Screen 3 — the gates', () => {
     // its universe — and a US-Letter PDF and an A4 Word file with the same
     // words passed it for as long as both existed. The preview is Gotenberg's
     // render of the DOCX, so that split was also preview-vs-download.
+    //
+    // ⚠️ AND SINCE RULING #113 THE EQUALITY LEG IS NEARLY TAUTOLOGICAL — SAID
+    // HERE SO NOBODY READS IT AS STRONGER THAN IT IS. `pdf-generator.ts` was
+    // retired; the PDF download is now LibreOffice's render of this very DOCX,
+    // so the two artifacts cannot disagree on page size. What still carries
+    // weight is the ABSOLUTE assertion below (612×792 stated, not merely
+    // "equal to each other") and the two FONT assertions — those are the legs
+    // that would catch the converter image losing Charter, which is the live
+    // failure mode now that naming and embedding happen in different places.
+    //
+    // ⚠️ THIS IS ALSO THE ONLY PLACE THE CONVERSION LEG IS MEASURED AT ALL.
+    // Every unit arm mocks `convertDocxToPdf`; the argument that a clean DOCX
+    // implies a clean PDF is an argument, and this pack is what tests it. See
+    // the honest-limits block in `gate-f3-one-pdf-builder.test.ts`.
     {
       const byExt = new Map(
         files.map((f) => [f.suggestedFilename().replace(/^.*\./, ''), f]),

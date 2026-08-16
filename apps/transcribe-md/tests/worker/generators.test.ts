@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
 import type { VisitExportData } from '@/lib/visit-export';
-import { generateVisitPdf } from '@/lib/pdf-generator';
 import { generateVisitDocx } from '@/lib/docx-generator';
 
 function mkVisit(overrides: Partial<VisitExportData> = {}): VisitExportData {
@@ -60,32 +59,13 @@ function mkVisit(overrides: Partial<VisitExportData> = {}): VisitExportData {
   };
 }
 
-describe('generateVisitPdf', () => {
-  it('emits bytes that start with the PDF magic header', async () => {
-    const buf = await generateVisitPdf(mkVisit());
-    expect(buf.length).toBeGreaterThan(1000);
-    expect(buf.subarray(0, 4).toString('ascii')).toBe('%PDF');
-  });
-
-  it('tolerates an empty SOAP without crashing', async () => {
-    const buf = await generateVisitPdf(mkVisit({ soapText: '' }));
-    expect(buf.subarray(0, 4).toString('ascii')).toBe('%PDF');
-  });
-
-  it('emits a larger buffer when more sections are populated', async () => {
-    const small = await generateVisitPdf(
-      mkVisit({
-        icdCodes: [],
-        procedures: [],
-        prescriptions: [],
-        referrals: [],
-        patientSummary: null,
-      })
-    );
-    const big = await generateVisitPdf(mkVisit());
-    expect(big.length).toBeGreaterThan(small.length);
-  });
-});
+// ⚠️ `describe('generateVisitPdf')` STOOD HERE AND ITS ARMS WERE NOT DELETED —
+// they MOVED into the DOCX block below (ruling #113 retired the second builder;
+// #116 required the coverage to move rather than go with the import).
+//
+// Two of its three arms had exact DOCX twins already ("magic header" ↔ "PK
+// magic header"). The other two did not, and are now DOCX arms: the empty-SOAP
+// tolerance and the grows-with-content check.
 
 describe('generateVisitDocx', () => {
   it('emits a DOCX (zip) payload starting with PK magic header', async () => {
@@ -108,12 +88,37 @@ describe('generateVisitDocx', () => {
     );
     expect(buf.subarray(0, 2).toString('ascii')).toBe('PK');
   });
+
+  // ↓ MOVED from `describe('generateVisitPdf')` when ruling #113 retired the
+  //   second builder. Neither arm had a DOCX twin, so neither could be dropped
+  //   as duplicate coverage — an empty SOAP and a "does it grow with content"
+  //   check are properties of whatever builds the document, and that is now
+  //   this one.
+  it('tolerates an empty SOAP without crashing', async () => {
+    const buf = await generateVisitDocx(mkVisit({ soapText: '' }));
+    expect(buf.subarray(0, 2).toString('ascii')).toBe('PK');
+  });
+
+  it('emits a larger buffer when more sections are populated', async () => {
+    const small = await generateVisitDocx(
+      mkVisit({
+        icdCodes: [],
+        procedures: [],
+        prescriptions: [],
+        referrals: [],
+        patientSummary: null,
+      })
+    );
+    const big = await generateVisitDocx(mkVisit());
+    expect(big.length).toBeGreaterThan(small.length);
+  });
 });
 
 // ---------------------------------------------------------------------------
 // Structure-aware notes — GitHub-style markdown tables + task lists inside
-// section bodies. These smoke-test that the DOCX Table path and the PDF
-// vector-checkbox / grid path don't crash and produce well-formed output.
+// section bodies. These smoke-test that the DOCX Table path doesn't crash and
+// produces well-formed output. (It used to say "and the PDF vector-checkbox /
+// grid path" too; that builder retired under ruling #113.)
 // ---------------------------------------------------------------------------
 
 const STRUCTURED_SOAP = [
@@ -144,24 +149,33 @@ describe('generateVisitDocx — structure-aware notes', () => {
     expect(docXml).toContain('☒');
     expect(docXml).toContain('☐');
   });
-});
 
-describe('generateVisitPdf — structure-aware notes', () => {
-  it('renders tables + task lines without crashing', async () => {
-    const buf = await generateVisitPdf(mkVisit({ soapText: STRUCTURED_SOAP }));
-    expect(buf.subarray(0, 4).toString('ascii')).toBe('%PDF');
-    expect(buf.length).toBeGreaterThan(1000);
-  });
-
-  it('paginates a long table across a page break without crashing', async () => {
+  // ↓ MOVED from the retired PDF block, with its meaning restated. It used to
+  //   assert "paginates a long table across a page break without crashing".
+  //   The DOCX declares no page breaks — LibreOffice paginates now — so what
+  //   survives is the half that was always ours: an 80-row table must build,
+  //   and build as a REAL Word table rather than degrading to literal markdown
+  //   pipes, which is the failure mode a long table actually has.
+  it('builds an 80-row table as a real Word table, not literal markdown', async () => {
     const rows = ['| Item | Result |', '| --- | --- |'];
     for (let i = 0; i < 80; i++) rows.push(`| Finding ${i} | Value ${i} |`);
-    const buf = await generateVisitPdf(
+    const buf = await generateVisitDocx(
       mkVisit({ soapText: `## Findings\n\n${rows.join('\n')}` })
     );
-    expect(buf.subarray(0, 4).toString('ascii')).toBe('%PDF');
+    expect(buf.subarray(0, 2).toString('ascii')).toBe('PK');
+    const zip = await JSZip.loadAsync(buf);
+    const docXml = await zip.file('word/document.xml')!.async('text');
+    expect(docXml).toContain('<w:tbl>');
+    expect(docXml).toContain('Finding 79');
+    expect(docXml).not.toContain('| Finding 79 |');
   });
 });
+
+// The PDF structure-aware block moved into the DOCX one above for the same
+// reason. Its long-table arm is the one worth keeping and it changed MEANING in
+// the move: pagination is no longer ours to get wrong — LibreOffice breaks the
+// page now — so what the DOCX can still be held to is that an 80-row table
+// BUILDS, and builds as a real Word table rather than as markdown left as text.
 
 // ---------------------------------------------------------------------------
 // Metadata-PHI guards. The PDF /Info dictionary and the DOCX
@@ -177,81 +191,19 @@ const PHI_PATIENT = 'METADATA TEST PATIENT';
 const PHI_CLINICIAN = 'METADATA TEST CLINICIAN';
 const PHI_VISIT_ID = 'vmeta-test-001';
 
-function extractPdfInfoDict(buf: Buffer): Record<string, string> {
-  // pdfkit serializes each /Info entry as an indirect object reference
-  // (e.g. `/Title 13 0 R`) and stores the actual literal-string body
-  // in object 13 under `13 0 obj\n(Visit vmeta-test-001)\nendobj`.
-  // Two-step: collect refs from the /Info dict, then resolve each.
-  // lastIndexOf-on-')' tolerates inner parens (e.g. the Producer
-  // string "QuillMD PDF Generator (pdfkit)").
-  const text = buf.toString('latin1');
-  const refs: Array<[string, number]> = [];
-  const refRe = /\/(Title|Author|Creator|Producer)\s+(\d+)\s+0\s+R/g;
-  let m: RegExpExecArray | null;
-  while ((m = refRe.exec(text)) !== null) {
-    refs.push([m[1], Number(m[2])]);
-  }
-  const out: Record<string, string> = {};
-  for (const [key, objNum] of refs) {
-    const startMarker = `${objNum} 0 obj`;
-    const objStart = text.indexOf(startMarker);
-    if (objStart < 0) continue;
-    const objEnd = text.indexOf('endobj', objStart);
-    if (objEnd < 0) continue;
-    const body = text.slice(objStart + startMarker.length, objEnd);
-    const open = body.indexOf('(');
-    const close = body.lastIndexOf(')');
-    if (open >= 0 && close > open) {
-      out[key] = body.slice(open + 1, close);
-    }
-  }
-  return out;
-}
 
-describe('generateVisitPdf — metadata PHI guard', () => {
-  it('puts only visitId in /Title and brand in /Author', async () => {
-    const buf = await generateVisitPdf(
-      mkVisit({
-        visitId: PHI_VISIT_ID,
-        patientName: PHI_PATIENT,
-        clinicianName: PHI_CLINICIAN,
-      })
-    );
-    const info = extractPdfInfoDict(buf);
-    expect(info.Title).toBe(`Visit ${PHI_VISIT_ID}`);
-    expect(info.Author).toBe('QuillMD');
-    expect(info.Creator).toBe('QuillMD');
-    expect(info.Producer).toMatch(/QuillMD/);
-  });
-
-  it('never embeds the patient name in any /Info field', async () => {
-    const buf = await generateVisitPdf(
-      mkVisit({
-        visitId: PHI_VISIT_ID,
-        patientName: PHI_PATIENT,
-        clinicianName: PHI_CLINICIAN,
-      })
-    );
-    const info = extractPdfInfoDict(buf);
-    for (const value of Object.values(info)) {
-      expect(value).not.toContain(PHI_PATIENT);
-    }
-  });
-
-  it('never embeds the clinician name in any /Info field', async () => {
-    const buf = await generateVisitPdf(
-      mkVisit({
-        visitId: PHI_VISIT_ID,
-        patientName: PHI_PATIENT,
-        clinicianName: PHI_CLINICIAN,
-      })
-    );
-    const info = extractPdfInfoDict(buf);
-    for (const value of Object.values(info)) {
-      expect(value).not.toContain(PHI_CLINICIAN);
-    }
-  });
-});
+// ⚠️ THE PDF METADATA-PHI BLOCK IS GONE AND ITS GUARANTEE IS NOT.
+//
+// It asserted three things about pdfkit's /Info dictionary: only visitId in
+// /Title, brand in /Author, and neither the patient's nor the clinician's name
+// anywhere in it. All three have exact DOCX twins in the block below, and the
+// PDF is now LibreOffice's render of that DOCX — LibreOffice maps docProps into
+// /Info, so a docProps proven PHI-free is what makes the /Info PHI-free.
+//
+// ⚠️ THAT IS AN ARGUMENT, NOT A MEASUREMENT, AND IT IS WRITTEN DOWN AS ONE.
+// The conversion step is not exercised by any unit test — see
+// `gate-f3-one-pdf-builder.test.ts`, which records the untested leg by name
+// rather than leaving the gap to be rediscovered.
 
 async function readDocxCoreXml(buf: Buffer): Promise<string> {
   const zip = await JSZip.loadAsync(buf);
@@ -346,12 +298,6 @@ describe('generateVisitDocx — header fields (form templates)', () => {
   });
 });
 
-describe('generateVisitPdf — header fields', () => {
-  it('renders header fields + form-only without crashing', async () => {
-    const buf = await generateVisitPdf(
-      mkVisit({ headerFields: [{ label: 'SURGEON', value: 'Dr. Shabatian' }], formOnly: true })
-    );
-    expect(buf.subarray(0, 4).toString('ascii')).toBe('%PDF');
-    expect(buf.length).toBeGreaterThan(1000);
-  });
-});
+// The PDF header-fields smoke test retired with the builder. Its two DOCX
+// twins directly above assert strictly more than it did — it only checked the
+// bytes did not crash; they check the rendered XML.

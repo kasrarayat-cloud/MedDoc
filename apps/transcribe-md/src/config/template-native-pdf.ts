@@ -2,7 +2,9 @@
 // Feature flag — native-PDF template fill (feat/pdf-native-fill, 2026-07-23)
 // ----------------------------------------------------------------------------
 // Default OFF. When OFF, the custom-template PDF export path is BYTE-IDENTICAL to
-// the styled generator (loadVisitExportData → generateVisitPdf). When ON, and the
+// the styled export (loadVisitExportData → generateVisitDocx → Gotenberg, via
+// `lib/visit-pdf.ts`; it was `generateVisitPdf` until ruling #113 retired that
+// second builder). When ON, and the
 // visit's active template is a flat PDF that has been CERTIFIED (its blank page
 // bytes + label anchors stored at certify time), the export instead returns the
 // doctor's OWN page with generated answers drawn into its blank regions
