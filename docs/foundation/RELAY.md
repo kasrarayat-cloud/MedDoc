@@ -31,7 +31,7 @@ half-filled export and a divergent signed view are wrong NOW.
 | ~~**F2-b**~~ | ✅ **SHIPPED 2026-08-15** — 8 of #115's 10 sites changed (2 exempt by JOB), plus **ruling #115-b** (`DD:`/`DT:`) which the adversarial pass found the fix had CREATED, plus the cache bump. Guard mutation-proved **12 of 12**. See the ledger row below. | **#115** · **#115-b** | ~~Ten sites, a guard, the mandatory adversarial pass.~~ **MET.** ⚠️ The pass found **4 false greens in the guard** and **1 defect the fix introduced** — the reason it is a gate and not a nicety. |
 | **F3** | 🟢 **UNBLOCKED 2026-08-16 — #117 LANDED THE FOOTER, #119 DISPOSITIONS THE WATERMARK, AND THE `e2e` MECHANISM IS NAMED.** The draft's blocker is discharged on evidence (see "THE BLOCKER IS DISCHARGED" below): `docx-generator.ts:408` attaches a **`default`** footer, so the converged PDF inherits per-page marking BY CONSTRUCTION, and #117(e) proved it rendered on 5 real LibreOffice pages. ⚠️ **The blocker named TWO marks and #117 discharged ONE** — the `QUILLMD` watermark is dropped by convergence and is ruled **#119 (PROVISIONAL): not restored, declared not discovered.** ⚠️ **The red `e2e` was a REAL behavioural change, not a flake**: `/export/pdf` went from in-process pdfkit to a Gotenberg round-trip **measured at 0.43-0.48s against a 600ms download gap**, so the DOCX now routinely lands first; the ordering assertion is replaced by a SET assertion and the order is no longer asserted anywhere. *Previous status, kept for the record:* 🟡 **BUILT AND PROVEN — DOES NOT MERGE YET.** `generateVisitPdf` and `pdf-generator.ts` are gone; five callers dispositioned per #116; new traversal gate, 15 arms, mutation-proved 3 ways. ⚠️ **THEN THE MANDATORY ADVERSARIAL PASS FOUND ~25 DEFECTS AND SEVEN WERE FIXED IN-BRANCH.** ⚠️ **THE BLOCKER IS #109's CLASS AGAIN: the retired builder stamped `Signed electronically by …` / `Not yet signed.` on EVERY PAGE, and the DOCX has no footer at all.** Shipping loses a per-page DRAFT marker — a LOOSENING, which fails the provisional-ruling test. **PR opened as a DRAFT.** See the ledger row and the findings block below. | **#113** · **#116** · **#116-b** · **#117** · **#119** | 🟢 **MET on the code, pending the gate.** The retired builder is gone by traversal, the per-page job is restored on all three surfaces by #117 rather than on the PDF alone, the one unnamed job is dispositioned by #119, and Gotenberg is named in the ledger as the single shared dependency it already was. |
 | ~~**F4**~~ | ✅ **SHIPPED AND LIVE 2026-08-16** — merge `9ea09a15`, cited 4 of 4, deployed, **11 of 11 declared rows matched**. See the ledger row below. ⚠️ **It also found that NO rollback tag existed for F3's deploy either — recovered, and mechanization filed as F9.** *Previous status:* 🟡 **IN FLIGHT — the first half was ALREADY DONE and the row did not say so.** `#663` merged `2026-08-15T14:32:23Z` and `#664` merged `2026-08-15T15:15:14Z`; only the rebase-and-land half remained. `feat/certification-door` is rebased onto `main` as `feat/f4-certification-door-land` — the classification fix (`543b5a21` → `ecc1dc4b`) and the mappings door (`799d1c45` → `b4436fb3`). See the ledger row below. | — | On `main`, cited. ✅ **F1's duplicate was dropped BY MEASUREMENT, not by hope** — `git patch-id --stable` gives `8a797bde` and F1's `529e8219` the **identical** id `6213c8f2…`, and the rebase skipped it naming it. |
-| **F5** | 🟡 **IN FLIGHT — MEASURED, AND TWO OF THE THREE REMAINING PIECES ARE NOT WHAT THE ROW SAYS.** F5-a lands the piece that shrinks the wall: `fallbackSemanticMappings` hard-coded `clinicalConcept: null` for **every** field, throwing away the **53 of 80** concepts the document itself decides. Fixed by sharing the compiler's classifier with the fallback — the wall on the real customer form goes **75 → 22**. ⚠️ **Item 5 (registry expansion) is DISCHARGED BY MEASUREMENT, not built** — the registry needs no new concepts. ⚠️ **Item 4 is BIGGER than the row states** — there is no action anywhere that can open an EXISTING template's workspace, so unfolding the manager would still leave no door. See the F5-a block below. | **#106(b)** | Items 3 + 4 remain (the confirmation UI and its entry point). ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* |
+| **F5** | 🟡 **F5-a MERGED AND CITED 2026-08-16 — merge `6e6edf73`, 4 of 4, NOT YET DEPLOYED (declaration committed, deploy left to the next session — see the F5-a block).** MEASURED, AND TWO OF THE THREE REMAINING PIECES ARE NOT WHAT THE ROW SAYS. F5-a lands the piece that shrinks the wall: `fallbackSemanticMappings` hard-coded `clinicalConcept: null` for **every** field, throwing away the **53 of 80** concepts the document itself decides. Fixed by sharing the compiler's classifier with the fallback — the wall on the real customer form goes **75 → 22**. ⚠️ **Item 5 (registry expansion) is DISCHARGED BY MEASUREMENT, not built** — the registry needs no new concepts. ⚠️ **Item 4 is BIGGER than the row states** — there is no action anywhere that can open an EXISTING template's workspace, so unfolding the manager would still leave no door. See the F5-a block below. | **#106(b)** | Items 3 + 4 remain (the confirmation UI and its entry point). ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* |
 
 **F3 WAS BLOCKED ON RULING #117 — AND IS NOT, SINCE 2026-08-16.** The condition
 is discharged rather than waived: it landed *"only with the attestation/draft
@@ -292,8 +292,33 @@ documented *"fourteen permanently blank on every real visit"* defect.
 
 ### 🟡 F5-a — THE WALL IS 22, NOT 75, AND THE MEASUREMENT CAME FIRST — **2026-08-16**
 
-**Branch `feat/f5-certification-door`.** Everything below was measured against
-the real customer form (`WM IOV Template.docx`) before a line was changed.
+**Branch `feat/f5-certification-door` (retired). PR #690, merged `6e6edf73`.**
+Everything below was measured against the real customer form
+(`WM IOV Template.docx`) before a line was changed.
+
+**Citation — 4 of 4 on `6e6edf73de64e6c346f7b222e1f0c601478bd45d`:**
+   · `CI` 31952025228 a1
+   · `e2e` 31952025281 a1
+   · `a11y-ci` 31952025242 a1
+   · `secrets-scan` 31952025235 a1
+
+Produced by `scripts/check-citation.sh`, not typed. Every line reads `a1`, so no
+run was re-run and there is nothing to explain.
+
+#### ⚠️ NOT DEPLOYED — AND THAT IS A DECISION, NOT AN OMISSION
+
+Production still runs `9ea09a15` (F4). **F5-a's done-when is *on `main`, cited*,
+which is MET.** Deploying is standing ceremony for a runtime change rather than
+part of the item, and the §2.5 declaration is **already committed** at
+`docs/foundation/deploys/20260816-6e6edf73.md` — which is *stricter* than the
+deploy gate requires (`present`, not `strict`), and means the next session judges
+against a declaration it did not author and could not tune to the outcome.
+
+⚠️ **THE DECLARATION CARRIES F9's WARNING AS A PRE-STEP, WITH THE IMAGE IDS
+ALREADY CAPTURED:** `deploy-prod.sh` does not cut a rollback tag, and two
+consecutive deploys on 2026-08-16 left none. The outgoing image ids were read
+from the RUNNING containers at ~13:30Z and are written into the declaration, with
+an instruction to re-read them first in case production has moved.
 
 #### THE PARTITION, AND IT RECONCILES
 
@@ -436,6 +461,100 @@ meaningless on its own. **Measured against a clean detached worktree at
 **+1 file, +9 tests — exactly the new arms**, and the 15/1 is identical on both
 trees, which confirms it as a pre-existing property of the config rather than
 anything on this branch. `tsc --noEmit` 0 errors.
+
+#### ⚠️ AND THE SELF-REVIEW CAUGHT THE GATE'S OWN TITLE — recorded, because it is this house's named class
+
+One arm read **"BOTH DIRECTIONS: it proposes the 53 and it does NOT invent the
+22"** while asserting only `toBeGreaterThan(0)` on each side. **The numbers lived
+in the NAME and not in the BODY** — *a check whose title is wider than what it
+measures*, in a gate written by someone who had re-read that rule an hour
+earlier. The 53/22 counts ARE asserted, one arm up in the partition test, which
+is where an exact-count claim belongs; the arm was renamed to state what it
+uniquely measures (both sides non-empty, and the unproposed remainder is exactly
+the enumerated-pick class).
+
+⚠️ **THE RENAME WAS HELD AND BATCHED, DELIBERATELY.** It was found while the PR's
+gate was ~7 minutes in. Pushing it alone would have cancelled `CI` and `e2e` for
+a test's name; it rode the citation PR instead, which had to be pushed anyway.
+**That is the batching rule doing its job rather than being quoted.**
+
+---
+
+### 🔵 F5-b — THE CONFIRMATION DOOR — recon done 2026-08-16, build is next
+
+**Read-only recon, taken while F5-a's gate ran. Every claim is a measurement or
+a file:line.**
+
+#### THE DOOR HAS TWO MISSING HALVES AND THE ROW NAMES ONE
+
+| half | state |
+|---|---|
+| the fold | `settings/page.tsx:246` — `templateNativeDocxEnabled() && !isSettingsSimpleRow()`, so the manager is `null` in production |
+| **a read door** | **DOES NOT EXIST.** `readTemplateTwinWorkspace` has four callers, all internal |
+
+`NativeTemplateManager`'s workspace state comes from `uploadNativeTemplateAction`
+and nothing else (`native-template-manager.tsx:64,77`); the `existing` list is
+display-only (`:140-177`). ⚠️ **So unfolding the flag would still leave no door**
+— the only route back to a compiled template would be re-uploading it, which is
+exactly *"a second upload of a file we already have"* that the fold's own comment
+(`settings/page.tsx:241-244`) correctly retired. **#109's class: a ruling names
+an INTENT, a component has a JOB LIST.**
+
+#### THE SERVER ALREADY KNOWS WHO NEEDS CONFIRMING
+
+`loadNativeTemplates` (`settings/page.tsx:87-103`) already selects every
+`note_template` with a compiled twin, with `certificationStatus` and field count,
+doctor-scoped. The data for an entry point is present and rendered read-only
+behind a flag that is ON.
+
+#### THE READINESS PREDICATE THE UI MUST SATISFY
+
+Mirrored from its two agreeing sites (`certification-lifecycle.ts:609-627`,
+`synthetic-test.ts:236-243`):
+
+    manual     -> status === 'certified' && type-compatible
+    every other-> status === 'certified' && clinicalConcept && type-compatible
+                  && validPracticeDefault
+
+So the UI's job per field is exactly two things: **set a concept** (except
+`manual`) and **flip status to `certified`**.
+
+#### THE THREE CONFIRM CLASSES ARE MEASURED, AND THEY *ARE* THE DESIGN RULE
+
+| class | n | the doctor's action |
+|---|---|---|
+| `manual` | **5** | attest — no concept exists to choose |
+| proposed | **53** | confirm or change — 2 concepts over 26 rows each, so groupable |
+| unproposed | **22** | choose — full per-field control |
+
+That is the recorded rule (*"cheap confirms for high-confidence mappings, full
+control retained, WITHOUT weakening per-field confirmation"*) arriving as a
+measurement instead of an aspiration.
+
+⚠️ **AND F5-a IS WHAT LETS QA EXERCISE BOTH SHAPES.** RELAY warned that *"the
+80/80-unproposed figure measured on QA is the MOCK universe … design for both; do
+not design for a number that has not been seen."* The mechanism was never "the
+proposer did not run" — `fallbackSemanticMappings` hard-coded null. With that
+fixed, the vendor-severed QA stack produces **53 proposed + 22 unproposed + 5
+manual**, so the fallback and production universes now have the same SHAPE.
+
+#### THE VOCABULARY IS KNOWN AND SMALL
+
+`REGISTRY_CONCEPTS` is **15** exact concepts plus 3 patterns. The real form's 23
+enumerated fields need only **5** of them — measured from the committed pin,
+through `isRegisteredConcept`.
+
+#### THE SLICE
+
+1. `openNativeTemplateWorkspaceAction(noteTemplateId)` — read-only, session-scoped.
+   ⚠️ **Must ship WITH its caller.** F4's whole finding was a correct action with
+   no door; shipping a second one would be that defect twice.
+2. Per-field confirm in `ReviewWorkspace`, wired to
+   `updateTemplateTwinMappingsAction`, carrying `expectedMappingsSha256` for the
+   optimistic-concurrency refusal the writer already implements.
+3. Selective fold: the upload half stays retired, the CONFIRM half renders.
+4. **`MAPPINGS_NOT_READY` stays strict.** The door satisfies the gate; it never
+   softens it.
 
 ---
 

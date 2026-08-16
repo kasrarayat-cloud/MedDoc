@@ -78,11 +78,22 @@ describe('F5 — the fallback carries the compiler-decided concepts', () => {
     expect(buckets.manual + buckets.proposed + buckets.unproposed).toBe(80);
   });
 
-  it('BOTH DIRECTIONS: it proposes the 53 and it does NOT invent the 22', async () => {
+  it('BOTH DIRECTIONS: some are proposed, some are deliberately not, and the unproposed are exactly the enumerated picks', async () => {
     // A change that concepted every field would satisfy a one-sided
     // "concepts are proposed" assertion and be strictly worse than the defect:
     // it would put a guessed concept on a dropdown whose answer only the
     // physician knows. The unproposed side is pinned for that reason.
+    //
+    // ⚠️ THIS ARM WAS RENAMED AFTER A SELF-REVIEW CAUGHT ITS OWN TITLE. It used
+    // to read "it proposes the 53 and it does NOT invent the 22" while
+    // asserting only `toBeGreaterThan(0)` on each side — the numbers lived in
+    // the NAME and not in the BODY, which is this house's "a check whose title
+    // is wider than what it measures" failure, in a gate written by someone who
+    // had just re-read that rule. The 53/22 counts ARE asserted, one arm up in
+    // the partition test, which is where an exact-count claim belongs. What
+    // THIS arm uniquely measures is the direction and the CLASS: both sides
+    // non-empty, and the unproposed remainder is exactly the enumerated-pick
+    // class rather than an arbitrary leftover.
     const ir = await realForm();
     const mappings = fallbackSemanticMappings(ir);
     const withConcept = mappings.filter((m) => m.clinicalConcept !== null);
