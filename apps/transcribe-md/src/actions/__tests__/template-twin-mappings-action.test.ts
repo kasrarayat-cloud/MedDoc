@@ -47,7 +47,10 @@ vi.mock('@/lib/template-twin/certification-lifecycle', () => ({
 }));
 vi.mock('@/lib/template-twin/workspace-read', () => ({ readTemplateTwinWorkspace: h.read }));
 
-import { updateTemplateTwinMappingsAction } from '@/actions/template-twin-mappings';
+import {
+  updateTemplateTwinMappingsAction,
+  openNativeTemplateWorkspaceAction,
+} from '@/actions/template-twin-mappings';
 
 const SHA = 'a'.repeat(64);
 const MAPPINGS = [] as never[];
@@ -146,6 +149,71 @@ describe('updateTemplateTwinMappingsAction', () => {
     const out = await updateTemplateTwinMappingsAction('tmpl_1', SHA, MAPPINGS);
     if (out.ok) throw new Error('expected a refusal');
     expect(out.reason).toBe('disabled');
+    expect(h.update).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// F5-b — THE READ HALF OF THE DOOR.
+//
+// ⚠️ THESE ARMS EXIST BECAUSE A MUTATION PROOF FOUND THE UI GATE BLIND HERE.
+// `gate-f5b-the-confirmation-door-exists.test.tsx` MOCKS this action, so it
+// asserts the door is reachable and says NOTHING about what happens inside it:
+// a mutation replacing `doctorId: session.user.id` with the caller-supplied id
+// left all 17 of its arms green. The UI gate watches the DOOR; this watches the
+// LOCK. Neither substitutes for the other.
+// ============================================================================
+describe('⚠️ the workspace READER has a caller — the reason it may exist at all', () => {
+  it('openNativeTemplateWorkspaceAction is reachable from application code', () => {
+    // `getNativeTemplateWorkspaceAction` was DELETED on 2026-07-28 for having
+    // zero callers, correctly: a server action is an HTTP endpoint, so an
+    // unused exported one is attack surface no test covers. Re-adding a reader
+    // is only defensible while this arm is green.
+    const callers = sourceFiles(SRC)
+      .filter((f) => !f.endsWith('template-twin-mappings.ts'))
+      .filter((f) => /openNativeTemplateWorkspaceAction\s*\(/.test(readFileSync(f, 'utf8')))
+      .map((f) => path.relative(SRC, f));
+    expect(
+      callers,
+      'nothing in the application calls openNativeTemplateWorkspaceAction. An exported ' +
+        'server action with no caller is an unreviewed HTTP endpoint — the exact reason ' +
+        'its predecessor was deleted.',
+    ).not.toEqual([]);
+  });
+});
+
+describe('openNativeTemplateWorkspaceAction', () => {
+  it('scopes the read to the SESSION, never to the caller-supplied id', async () => {
+    await openNativeTemplateWorkspaceAction('tmpl_1');
+    expect(h.read).toHaveBeenCalledTimes(1);
+    expect(h.read.mock.calls[0]![0]).toEqual({
+      noteTemplateId: 'tmpl_1',
+      doctorId: 'doc_1',
+      practiceId: 'prac_1',
+    });
+  });
+
+  it('another doctor’s template is INDISTINGUISHABLE from one that does not exist', async () => {
+    // `readTemplateTwinWorkspace` filters on doctorId, so someone else's
+    // template reads as absent. The refusal must not tell the two apart —
+    // otherwise the id space is enumerable by reading which message came back.
+    h.read.mockResolvedValueOnce(null);
+    const out = await openNativeTemplateWorkspaceAction('tmpl_someone_else');
+    if (out.ok) throw new Error('expected a refusal');
+    expect(out.error).toBe('That template could not be opened for review.');
+    expect(out.error).not.toMatch(/permission|denied|another|owner|exists/i);
+  });
+
+  it('the flag gates the READER too, and it refuses BEFORE touching the database', async () => {
+    h.enabled.mockReturnValue(false);
+    const out = await openNativeTemplateWorkspaceAction('tmpl_1');
+    if (out.ok) throw new Error('expected a refusal');
+    expect(out.reason).toBe('disabled');
+    expect(h.read).not.toHaveBeenCalled();
+  });
+
+  it('is READ-ONLY — opening a workspace never writes', async () => {
+    await openNativeTemplateWorkspaceAction('tmpl_1');
     expect(h.update).not.toHaveBeenCalled();
   });
 });

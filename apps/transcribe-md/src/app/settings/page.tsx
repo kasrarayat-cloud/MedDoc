@@ -242,10 +242,22 @@ export default async function SettingsPage({
   // your .docx to certify" is the same ritual the row-level CTA was: a second
   // upload of a file we were already given, presented as homework. Replace on
   // the row does it, so there is nothing here for the doctor to do.
-  const nativeSlot =
-    templateNativeDocxEnabled() && !isSettingsSimpleRow() ? (
-      <NativeTemplateManager existing={await loadNativeTemplates(session.user.id)} />
-    ) : null;
+  // ⚠️ THE FOLD IS SELECTIVE NOW, AND THE HALF IT KEEPS RETIRED IS THE UPLOAD.
+  // The comment above is still exactly right about the UPLOAD ritual: "a second
+  // upload of a file we were already given" is homework, and Replace-on-the-row
+  // does that job. It was never right about the CONFIRM half — folding the
+  // whole component left compiled templates with no door at all, so
+  // `MAPPINGS_NOT_READY` refused certification on fields nothing in the
+  // application could confirm. RC-2 compiles on EVERY .docx upload, so the
+  // doctor already has the twin; what they lacked was a way back into it.
+  //
+  // Flag OFF → null, unchanged. Simple row ON → the confirm surface only.
+  const nativeSlot = templateNativeDocxEnabled() ? (
+    <NativeTemplateManager
+      existing={await loadNativeTemplates(session.user.id)}
+      showUpload={!isSettingsSimpleRow()}
+    />
+  ) : null;
 
   // ── C3 calm-skin settings (Stage 3, flag-gated) ───────────────────────────
   // SKIN-ONLY: identical auth + Prisma reads + VIEWED_SETTINGS audit row + the
