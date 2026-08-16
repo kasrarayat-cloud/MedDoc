@@ -79,6 +79,21 @@ with its reason inline, like the others.
 
 ### F7 — THE ONE-TIME SCRATCH SWEEP — supervised, at the next natural window
 
+⚠️ **RE-PRICED 2026-08-16, MEASURED: F7 IS TIDYING, NOT A BLOCKER.**
+
+| item | measured |
+|---|---|
+| `rc2-build` + `rc2-src.tar` (~147 MB) | **GONE** — the owner cleared it |
+| repo-root `.b6-*/.b7-*/.f2-*/.f3-*` | **35 files, 456 KB, all gitignored** |
+| clinical artifacts (`twin-*.docx`, `diag-*`, `visit-*.pdf\|docx`, `*-output.docx`) | **0** |
+
+**The gitignored files do NOT block a relight** — `git status --porcelain` reads
+**0**, and that is the guard's actual predicate. **F7 must not hold the queue.**
+
+⚠️ **AND THE 0 CARRIES ITS CONTROL:** the same matcher found **133** `.md` files
+in the same trees, so the traversal ran. A sweep that covers nothing returns
+zero for every needle, and this one was checked before its zero was believed.
+
 **Ruled 2026-08-15.** ~200 scratch files sit at the repo root
 (`.b6-*`, `.b7-*`, `.b8-*`, `.f2-*`, `.t1-*`), plus stale worktrees and `/tmp`
 scratchpads from dead sessions. All gitignored, tree clean — **and that is why
