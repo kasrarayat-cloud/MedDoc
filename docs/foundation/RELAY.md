@@ -13254,6 +13254,65 @@ network, AND that the exclusion itself still exists (removing it would turn
 every `CI` run red for an environmental reason). **Mutation-proved by silently
 retiring the e2e step: red.**
 
+#### 🔴 AND THE GUARD SHIPPED SATISFIABLE BY ITS OWN COMMENTS — caught before merge
+
+**The substring trap, FIFTH sighting, inside the guard written to close a
+coverage hole.** The first version asserted `toContain` over RAW file text:
+
+| file | token | also appears in |
+|---|---|---|
+| `e2e.yml` | `docker-compose.qa.rendered.yml` | a comment at `:335`, one line above the command at `:338` |
+| the override | `converter` | **four** comments |
+| the override | `vitest.rendered.config.ts` | a comment at `:57` |
+
+⚠️ **MEASURED, NOT REASONED — AND IT WAS TOTAL BLINDNESS ON ONE FILE, NOT A
+WEAKENED ARM.** Gutting the override to `services: {}` plus three comment lines
+leaves **all three** tokens present (1 · 1 · 1), so the original guard passed
+**completely** on an override file that does nothing.
+
+**A file's own comments are the one place the words you are grepping for are
+guaranteed to appear** — and here the comments EXPLAIN the mechanism being
+asserted, which makes the collision certain rather than unlucky.
+
+**Fixed** by stripping FULL-LINE comments before every assertion. ⚠️ **Full-line
+only, deliberately**: cutting from the first `//` anywhere would truncate
+`http://gotenberg:3000` — the wrong-quantity defect arriving inside the fix for
+the wrong-universe one. An arm asserts that URL survives.
+
+**The defect is PINNED by a permanent control arm**: `e2e.yml` genuinely carries
+the override's filename in both a comment and the live command, so the arm
+asserts it is present raw, absent after stripping, and that the real command
+survives. If the stripper ever stops working, the other arms quietly become
+prose-satisfiable again and nothing else would say so.
+
+Two further mutations, each asserted to have landed: **F** — step deleted,
+comment left in place → **2 red**; **G** — the override gutted → **2 red**. F is
+the case the original was weak on; **G is the case it was blind to.**
+
+#### ⚠️ THE UNIT SUITE CANNOT BE RUN FROM A WORKTREE — a pre-existing property, CONTROLLED
+
+Running `vitest run` from any `git worktree` reports **15 failed files / 1 failed
+test**, every one `Failed to resolve import "react/jsx-dev-runtime"`.
+`vitest.config.ts` aliases react to `path.resolve(__dirname, '../../node_modules/react')`,
+and a worktree checks out **tracked files only** — so that path does not exist.
+
+⚠️ **MY FIRST DIAGNOSIS WAS WRONG AND IS WITHDRAWN.** I attributed it to an empty
+`node_modules` directory my own temporary bind-mount had left behind. **The
+control refuted it**: a clean detached worktree at **`origin/main`, without any
+of this change**, produces the identical 15/1.
+
+The controlled delta is what the run is actually worth:
+
+| tree | files | tests passed |
+|---|---|---|
+| `origin/main` | 308 | 3741 |
+| this branch | 309 | 3746 |
+
+**+1 file, +5 tests, all passing** — exactly the meta-guard's five arms, with the
+rendered tier absent from the count, which **confirms the exclusion empirically**
+rather than by reading the config. The authoritative full-suite green is the
+shared tree's **3966 passed / 0 failed**, and `CI` green on `aa607405`.
+
 #### WHAT THIS DOES NOT CLAIM
 
 - **It watches ONE of four attestation emitters.** `pdf-generator.ts`,
