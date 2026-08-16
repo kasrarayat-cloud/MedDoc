@@ -580,6 +580,21 @@ with one cure spent and the mechanism explicitly **NOT NAMED**. It is named now,
 and its own hypothesis (*"a 503 lets the DOCX arrive first"*) was **wrong** —
 Gotenberg answers `200`.
 
+⚠️ **AND THE ROW SAYING THE BRANCH IS RED IS ITSELF OUT OF DATE — CORRECTED
+HERE.** `10b11c6d`'s commit message says *"the e2e re-run did NOT clear"*, citing
+run **31898568822** (`62a353db`, 17:31Z, **failure**). But run **31899482235**
+ran on **`10b11c6d` itself** at 17:51Z and came back **success, 41m17s**. The
+session never saw it, because it ended its turn — the one-shot trap, in its
+cheapest form.
+
+**`62a353db → 10b11c6d` IS DOCS-ONLY. Same code, opposite outcomes, twenty
+minutes apart** (and a third run, 31897585925 at 17:11Z, also failed). *That is
+the definition of a race*, and it is what refutes "a second mechanism is in
+play" as a DETERMINISTIC cause while corroborating the timing one below: a
+contest decided at 72-79% of its budget flaps, and flapping is exactly what the
+run history shows. **The branch was not red; it was lucky.** This item removes
+the race rather than banking the luck.
+
     sign-and-send-modal.tsx:781   triggerDownload(pdfUrl,  'pdf')
     sign-and-send-modal.tsx:784   await sleep(600)
     sign-and-send-modal.tsx:786   triggerDownload(docxUrl, 'docx')
