@@ -16,7 +16,13 @@ import {
   uploadNativeTemplateAction,
   certifyNativeTemplateAction,
 } from '@/actions/template-twin-certify';
+import {
+  openNativeTemplateWorkspaceAction,
+  updateTemplateTwinMappingsAction,
+} from '@/actions/template-twin-mappings';
 import type { TemplateTwinWorkspace } from '@/lib/template-twin/client-types';
+import { REGISTRY_CONCEPTS } from '@/lib/template-twin/concept-registry';
+import type { SemanticMapping } from '@/lib/template-twin/ir';
 
 export interface NativeTemplateListItem {
   noteTemplateId: string;
@@ -58,15 +64,37 @@ function StatusPill({ status }: { status: string }) {
 
 export function NativeTemplateManager({
   existing,
+  showUpload = true,
 }: {
   existing: NativeTemplateListItem[];
+  /** The selective fold. FALSE retires the upload ritual (Replace-on-the-row
+   *  does that job) while keeping the CONFIRM surface, which is the half that
+   *  has no other door. See `settings/page.tsx`. */
+  showUpload?: boolean;
 }) {
   const [workspace, setWorkspace] = useState<TemplateTwinWorkspace | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [certifiedName, setCertifiedName] = useState<string | null>(null);
   const [uploading, startUpload] = useTransition();
   const [certifying, startCertify] = useTransition();
+  const [opening, startOpen] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // THE READ DOOR'S CALLER. Without this the only route into a compiled
+  // template was to upload the same file again — see the action's own header.
+  function onOpen(noteTemplateId: string) {
+    setError(null);
+    setCertifiedName(null);
+    startOpen(async () => {
+      const res = await openNativeTemplateWorkspaceAction(noteTemplateId);
+      if (res.ok) {
+        setWorkspace(res.data);
+      } else {
+        setError(res.error);
+        setWorkspace(null);
+      }
+    });
+  }
 
   function onFile(file: File) {
     setError(null);
@@ -102,7 +130,16 @@ export function NativeTemplateManager({
     });
   }
 
-  const busy = uploading || certifying;
+  const busy = uploading || certifying || opening;
+
+  // ⚠️ FOLDED **AND** NOTHING TO CONFIRM → RENDER NOTHING. Under the simple row
+  // the upload ritual is retired, so a doctor with no compiled template has no
+  // action available here; a "Native template (beta)" heading over an empty box
+  // is a section asserting a capability it is not offering. This is the one
+  // case where the fold's original behaviour (null) is still the right answer.
+  if (!showUpload && existing.length === 0 && !workspace && !certifiedName && !error) {
+    return null;
+  }
 
   return (
     <div
@@ -130,10 +167,25 @@ export function NativeTemplateManager({
           maxWidth: 620,
         }}
       >
-        Upload your own Word template with dropdowns and tables. You review the
-        field mapping <strong>once</strong> and certify it; after that, every
-        visit on this template comes back as your exact document, filled in — no
-        per-note review. Until you certify, exports use the standard format.
+        {/* The copy follows the fold. Telling a doctor to "upload your own Word
+            template" where no upload control is rendered describes a door that
+            is not there — the same illegibility this item exists to fix. */}
+        {showUpload ? (
+          <>
+            Upload your own Word template with dropdowns and tables. You review the
+            field mapping <strong>once</strong> and certify it; after that, every
+            visit on this template comes back as your exact document, filled in — no
+            per-note review. Until you certify, exports use the standard format.
+          </>
+        ) : (
+          <>
+            Your uploaded Word templates are prepared for native fill
+            automatically. Confirm what each field means <strong>once</strong> and
+            certify; after that, every visit on that template comes back as your
+            exact document, filled in — no per-note review. Until you certify,
+            exports use the standard format.
+          </>
+        )}
       </p>
 
       {/* Existing native templates */}
@@ -170,7 +222,23 @@ export function NativeTemplateManager({
                   {t.fieldCount} fields
                 </span>
               </div>
-              <StatusPill status={t.certificationStatus} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <StatusPill status={t.certificationStatus} />
+                <button
+                  type="button"
+                  className="qm-lin-btn qm-tap-44"
+                  data-testid={`twin-open-workspace-${t.noteTemplateId}`}
+                  disabled={busy}
+                  onClick={() => onOpen(t.noteTemplateId)}
+                  style={{ opacity: busy ? 0.55 : 1, whiteSpace: 'nowrap' }}
+                >
+                  {/* A CERTIFIED template is IMMUTABLE — the writer throws
+                      IMMUTABLE on any edit. Saying "Review" rather than
+                      "Confirm fields" is the honest label for a door that
+                      opens onto a read-only record. */}
+                  {t.certificationStatus === 'certified' ? 'Review' : 'Confirm fields'}
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -183,7 +251,7 @@ export function NativeTemplateManager({
           style={{
             padding: '11px 14px',
             borderRadius: 8,
-            border: '1px solid rgba(122, 166, 140, 0.4)',
+            border: '1px solid var(--color-linear-sage-edge)',
             background: 'var(--color-linear-row-hover)',
             marginBottom: 14,
             fontFamily: sans,
@@ -203,8 +271,8 @@ export function NativeTemplateManager({
           style={{
             padding: '11px 14px',
             borderRadius: 8,
-            border: '1px solid rgba(212, 87, 74, 0.35)',
-            background: 'rgba(212, 87, 74, 0.06)',
+            border: '1px solid color-mix(in srgb, var(--color-linear-coral) 35%, transparent)',
+            background: 'color-mix(in srgb, var(--color-linear-coral) 6%, transparent)',
             marginBottom: 14,
             fontFamily: sans,
             fontSize: 12.5,
@@ -219,15 +287,27 @@ export function NativeTemplateManager({
       {/* Review workspace (post-upload, pre-certify) */}
       {workspace ? (
         <ReviewWorkspace
+          /* ⚠️ THE KEY IS LOAD-BEARING, NOT COSMETIC. The confirm draft is
+             seeded from the workspace, and `mappingsSha256` is exactly the
+             identity of that seed — it is the optimistic-concurrency token the
+             writer checks. Re-keying on it discards a draft the moment the
+             server's mappings move, so a stale draft can never be re-submitted
+             against a hash it was not built from. */
+          key={workspace.mappingsSha256}
           workspace={workspace}
           certifying={certifying}
           onCertify={onCertify}
+          onSaved={(next) => {
+            setWorkspace(next);
+            setError(null);
+          }}
+          onError={setError}
           onCancel={() => {
             setWorkspace(null);
             setError(null);
           }}
         />
-      ) : (
+      ) : !showUpload ? null : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <input
             ref={fileRef}
@@ -268,18 +348,124 @@ export function NativeTemplateManager({
   );
 }
 
+// ============================================================================
+// THE THREE CONFIRM CLASSES. Measured on the real customer form (80 fields):
+// manual 5 · proposed 53 · unproposed 22. They are not cosmetic groupings —
+// each names a DIFFERENT act by the doctor, and the readiness predicate in
+// `certification-lifecycle.ts:598-618` treats them differently:
+//
+//   attest (sourceType 'manual', 5)  -> No concept exists to choose; nothing
+//            can produce a value, so it renders blank and `fieldsReady` does
+//            not ask for a concept.
+//   confirm (53)  -> confirm or change. The compiler decided the concept from
+//            the document's own structure (F5-a). A PROPOSAL is not a
+//            confirmation — the doctor still has to say yes.
+//   choose (sourceType 'verified_note_selection', 22)  -> Only the physician
+//            can answer these. Never bulk-confirmable, WITH OR WITHOUT a
+//            concept present: a guess at an enumerated dropdown is worse than
+//            an empty one, and on production a guess is exactly what may be
+//            sitting there.
+// ============================================================================
+// ⚠️ NAMED AFTER THE DOCTOR'S ACT, NOT AFTER THE DATA'S SHAPE — and that is a
+// correction, not a preference. The first version classified on CONCEPT
+// PRESENCE (`clinicalConcept ? 'proposed' : 'unproposed'`), which is right in
+// the FALLBACK universe and WRONG in production's:
+//
+//   fallback (provider down, and every QA fixture)  -> the 22 enumerated picks
+//                                                     carry clinicalConcept null
+//   model proposer (production, provider up)        -> it MAY propose a concept
+//                                                     for those same 22
+//
+// So on production a `verified_note_selection` field could arrive carrying a
+// concept, classify as "proposed", and be swept by the bulk confirm — which is
+// precisely the class the recorded design rule reserves for full per-field
+// control. A model's guess at an enumerated dropdown is not a high-confidence
+// mapping; it is the thing only the physician can answer.
+//
+// The discriminator is therefore STRUCTURAL (`sourceType`, set by
+// `classifyFieldSource` from the field's kind and options) and never the
+// presence of a concept.
+type ConfirmClass = 'attest' | 'confirm' | 'choose';
+
+// ⚠️ EXPORTED FOR ITS OWN TEST, AND THAT IS NOT A STYLE CHOICE. A mutation
+// proof replacing the ternary in `confirmed()` with an unconditional
+// `clinicalConcept: concept` left all 17 UI arms GREEN — because the attest
+// button passes `m.clinicalConcept` as `concept`, so both versions compute the
+// same value through every route the UI offers. The branch is a real guard
+// against a future edit that gives manual fields a picker, and it was
+// UNOBSERVABLE. Testing the pure function directly is what makes it fire.
+export function confirmClassOf(mapping: SemanticMapping): ConfirmClass {
+  if (mapping.sourceType === 'manual') return 'attest';
+  // ⚠️ STRUCTURAL, AND IT OUTRANKS CONCEPT PRESENCE. An enumerated pick stays
+  // the doctor's to answer even when the model proposer has already put a
+  // concept in the box.
+  if (mapping.sourceType === 'verified_note_selection') return 'choose';
+  return mapping.clinicalConcept ? 'confirm' : 'choose';
+}
+
+/** The doctor's confirmation, applied. Mirrors `fieldsReady`'s two demands:
+ *  a concept (except manual) and `status === 'certified'`. Nothing else moves —
+ *  in particular `practiceDefault` is never written, because the writer refuses
+ *  a non-null one outright until the flagged-review lane exists. */
+export function confirmed(mapping: SemanticMapping, concept: string | null): SemanticMapping {
+  return {
+    ...mapping,
+    clinicalConcept: mapping.sourceType === 'manual' ? mapping.clinicalConcept : concept,
+    status: 'certified',
+  };
+}
+
 function ReviewWorkspace({
   workspace,
   certifying,
   onCertify,
   onCancel,
+  onSaved,
+  onError,
 }: {
   workspace: TemplateTwinWorkspace;
   certifying: boolean;
   onCertify: () => void;
   onCancel: () => void;
+  onSaved: (next: TemplateTwinWorkspace) => void;
+  onError: (message: string) => void;
 }) {
   const fields = workspace.fields;
+  const [draft, setDraft] = useState<SemanticMapping[]>(() =>
+    fields.map((f) => f.mapping),
+  );
+  const [saving, startSave] = useTransition();
+  const draftById = new Map(draft.map((m) => [m.fieldId, m]));
+  const readOnly = !workspace.canEdit || workspace.template.certificationStatus === 'certified';
+
+  function setMapping(fieldId: string, next: SemanticMapping) {
+    setDraft((prev) => prev.map((m) => (m.fieldId === fieldId ? next : m)));
+  }
+
+  // ⚠️ THE WRITER DEMANDS THE EXACT COMPILER FIELD SET (`FIELD_SET_MISMATCH`,
+  // certification-lifecycle.ts:413-421) — every field, once, no additions. So
+  // the whole draft goes every time; there is no partial submit to get wrong.
+  function onSave() {
+    startSave(async () => {
+      const res = await updateTemplateTwinMappingsAction(
+        workspace.template.id,
+        workspace.mappingsSha256,
+        draft,
+      );
+      if (res.ok) onSaved(res.data);
+      else onError(res.error);
+    });
+  }
+
+  const unconfirmed = draft.filter((m) => m.status !== 'certified');
+  // A field the doctor has confirmed in this draft but which still has no
+  // concept cannot be saved as certified — the writer throws MAPPING_INVALID.
+  // Surfacing it here means the refusal is legible before the round trip.
+  const incomplete = draft.filter(
+    (m) => m.status === 'certified' && !m.clinicalConcept && m.sourceType !== 'manual',
+  );
+  const dirty = draft.some((m, i) => m !== fields[i]?.mapping);
+  const proposedPending = unconfirmed.filter((m) => confirmClassOf(m) === 'confirm');
   const byStatus = fields.reduce<Record<string, number>>((acc, f) => {
     const s = f.field.detectionStatus;
     acc[s] = (acc[s] ?? 0) + 1;
@@ -332,7 +518,7 @@ function ReviewWorkspace({
           style={{
             padding: '11px 16px',
             borderBottom: '1px solid var(--color-linear-hairline)',
-            background: 'color-mix(in srgb, var(--color-linear-amber, #d0a215) 8%, transparent)',
+            background: 'color-mix(in srgb, var(--color-linear-amber) 8%, transparent)',
             fontFamily: sans,
             fontSize: 12.5,
             lineHeight: 1.5,
@@ -375,52 +561,199 @@ function ReviewWorkspace({
         )}
       </div>
 
+      {/* Bulk confirm for the PROPOSED class only — the recorded design rule is
+          "cheap confirms for high-confidence mappings, full control retained,
+          WITHOUT weakening per-field confirmation".
+          ⚠️ It is deliberately NOT offered for the unproposed class. A button
+          that confirmed those would be confirming nothing — they have no
+          concept to agree with — and it would satisfy `fieldsReady` by
+          certifying fields no physician had actually read. */}
+      {!readOnly && proposedPending.length > 0 && (
+        <div
+          style={{
+            padding: '10px 16px',
+            borderBottom: '1px solid var(--color-linear-hairline)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+          }}
+        >
+          <button
+            type="button"
+            className="qm-lin-btn qm-tap-44"
+            data-testid="twin-confirm-all-proposed"
+            disabled={saving}
+            onClick={() =>
+              setDraft((prev) =>
+                prev.map((m) =>
+                  m.status !== 'certified' && confirmClassOf(m) === 'confirm'
+                    ? confirmed(m, m.clinicalConcept)
+                    : m,
+                ),
+              )
+            }
+          >
+            Confirm all {proposedPending.length} proposed
+          </button>
+          <span style={{ fontFamily: mono, fontSize: 11, color: 'var(--color-linear-text-3)' }}>
+            these carry a concept the form itself determines — change any below
+          </span>
+        </div>
+      )}
+
       {/* Field mapping list (scrollable) */}
       <div style={{ maxHeight: 320, overflowY: 'auto' }} role="list" aria-label="Field mapping proposal">
-        {fields.map((f) => (
-          <div
-            key={f.definitionId}
-            role="listitem"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              padding: '8px 16px',
-              borderBottom: '1px solid var(--color-linear-hairline)',
-            }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  fontFamily: sans,
-                  fontSize: 12.5,
-                  color: 'var(--color-linear-text)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {f.field.originalLabel}
+        {fields.map((f) => {
+          const m = draftById.get(f.mapping.fieldId) ?? f.mapping;
+          const klass = confirmClassOf(m);
+          const isConfirmed = m.status === 'certified';
+          return (
+            <div
+              key={f.definitionId}
+              role="listitem"
+              data-testid={`twin-field-row-${m.fieldId}`}
+              data-confirm-class={klass}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                padding: '8px 16px',
+                borderBottom: '1px solid var(--color-linear-hairline)',
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div
+                  style={{
+                    fontFamily: sans,
+                    fontSize: 12.5,
+                    color: 'var(--color-linear-text)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {f.field.originalLabel}
+                </div>
+                <div style={{ fontFamily: mono, fontSize: 10.5, color: 'var(--color-linear-text-3)', marginTop: 2 }}>
+                  {f.field.kind.replace('_', ' ')}
+                  {klass === 'attest'
+                    ? ' · filled by hand each visit'
+                    : m.clinicalConcept
+                      ? ` → ${m.clinicalConcept}`
+                      : ' · no concept yet'}
+                </div>
               </div>
-              <div style={{ fontFamily: mono, fontSize: 10.5, color: 'var(--color-linear-text-3)', marginTop: 2 }}>
-                {f.field.kind.replace('_', ' ')}
-                {f.mapping.clinicalConcept ? ` → ${f.mapping.clinicalConcept}` : ''}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                {/* The CHOOSE control, for the class only a physician can
+                    answer. Rendered for proposed fields too, because "confirm
+                    or CHANGE" is the recorded rule — a proposal the doctor
+                    disagrees with must be correctable in place. */}
+                {!readOnly && klass !== 'attest' && (
+                  <select
+                    aria-label={`Clinical concept for ${f.field.originalLabel}`}
+                    data-testid={`twin-concept-select-${m.fieldId}`}
+                    disabled={saving}
+                    value={m.clinicalConcept ?? ''}
+                    onChange={(e) => {
+                      const concept = e.target.value || null;
+                      // ⚠️ CHANGING A CONCEPT UN-CONFIRMS THE FIELD. The
+                      // doctor confirmed the OLD concept; carrying the
+                      // certified status across would certify a value nobody
+                      // agreed to — the mapping's status is a statement about
+                      // the concept beside it, not about the row.
+                      setMapping(m.fieldId, { ...m, clinicalConcept: concept, status: 'needs_confirmation' });
+                    }}
+                    style={{
+                      fontFamily: mono,
+                      fontSize: 11,
+                      maxWidth: 190,
+                      padding: '4px 6px',
+                      borderRadius: 6,
+                      border: '1px solid var(--color-linear-border)',
+                      background: 'var(--color-linear-surface-1)',
+                      color: 'var(--color-linear-text)',
+                    }}
+                  >
+                    <option value="">— choose a concept —</option>
+                    {REGISTRY_CONCEPTS.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                    {/* The compiler can decide PATTERNED concepts
+                        (`exam.*`, `test.*.result`) that are registry-legal but
+                        not enumerable. Keeping the current value selectable
+                        means opening the picker cannot silently drop one. */}
+                    {m.clinicalConcept && !REGISTRY_CONCEPTS.includes(m.clinicalConcept) && (
+                      <option value={m.clinicalConcept}>{m.clinicalConcept}</option>
+                    )}
+                  </select>
+                )}
+
+                {isConfirmed ? (
+                  <span className="qm-lin-pill qm-lin-pill--ready">Confirmed</span>
+                ) : readOnly ? (
+                  <span className="qm-lin-pill">{m.status.replace('_', ' ')}</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="qm-lin-btn qm-tap-44"
+                    data-testid={`twin-confirm-field-${m.fieldId}`}
+                    // A field with no concept cannot be confirmed — except a
+                    // MANUAL one, which is attested and has no concept by
+                    // construction. Same carve-out `fieldsReady` makes.
+                    disabled={saving || (klass !== 'attest' && !m.clinicalConcept)}
+                    onClick={() => setMapping(m.fieldId, confirmed(m, m.clinicalConcept))}
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    {klass === 'attest' ? 'Attest' : 'Confirm'}
+                  </button>
+                )}
               </div>
             </div>
-            <span
-              className={
-                f.field.detectionStatus === 'unsupported'
-                  ? 'qm-lin-pill qm-lin-pill--review'
-                  : 'qm-lin-pill'
-              }
-              style={{ flexShrink: 0 }}
-            >
-              {f.field.detectionStatus.replace('_', ' ')}
-            </span>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {/* Save — the write half. Separate from Certify DELIBERATELY: confirming
+          mappings and certifying the template are two different acts, and
+          `updateTemplateTwinMappings` refuses outright once a version is
+          certified (IMMUTABLE). */}
+      {!readOnly && (
+        <div
+          style={{
+            padding: '11px 16px',
+            borderTop: '1px solid var(--color-linear-hairline)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+            flexWrap: 'wrap',
+          }}
+        >
+          <span
+            aria-live="polite"
+            style={{ fontFamily: mono, fontSize: 11, color: 'var(--color-linear-text-3)' }}
+          >
+            {incomplete.length > 0
+              ? `${incomplete.length} confirmed field${incomplete.length === 1 ? '' : 's'} still need a concept`
+              : `${unconfirmed.length} of ${draft.length} still to confirm`}
+          </span>
+          <button
+            type="button"
+            className="qm-lin-btn qm-tap-44"
+            data-testid="twin-save-mappings"
+            disabled={saving || !dirty || incomplete.length > 0}
+            onClick={onSave}
+            style={{ opacity: saving || !dirty || incomplete.length > 0 ? 0.5 : 1 }}
+          >
+            {saving ? 'Saving…' : 'Save confirmations'}
+          </button>
+        </div>
+      )}
 
       {blockingUnsupported.length > 0 && (
         <div
@@ -461,7 +794,7 @@ function ReviewWorkspace({
             opacity: canCertify ? 1 : 0.5,
             background: 'var(--color-linear-sage)',
             borderColor: 'var(--color-linear-sage)',
-            color: '#0d1611', // allowlisted text-on-sage (matches note-format-manager)
+            color: 'var(--color-linear-on-sage)',
             fontWeight: 500,
           }}
         >

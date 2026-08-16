@@ -558,6 +558,195 @@ through `isRegisteredConcept`.
 
 ---
 
+### 🟡 F5-b — THE CONFIRMATION DOOR IS BUILT — **2026-08-16, session 03**
+
+**Branch `feat/f5b-confirmation-door`.** All four slice items landed. The gate
+does not move by one field: every arm that makes confirming cheaper is paired
+with one proving nothing became confirmable that a physician did not confirm.
+
+| slice item | state |
+|---|---|
+| 1 · `openNativeTemplateWorkspaceAction` | **built, WITH its caller in the same commit** |
+| 2 · per-field confirm wired to `updateTemplateTwinMappingsAction` | **built**, carrying `expectedMappingsSha256` |
+| 3 · selective fold | **built** — `showUpload={!isSettingsSimpleRow()}` |
+| 4 · `MAPPINGS_NOT_READY` stays strict | **untouched**, and three arms fail if that stops being true |
+
+#### THE READ DOOR IS A DELETED ACTION COMING BACK, AND THE DELETION WAS RIGHT
+
+`getNativeTemplateWorkspaceAction` was removed 2026-07-28 for having **zero
+callers**, with the reasoning written in place: *"a server action is an HTTP
+endpoint, so an exported one with no caller is attack surface that no test
+covers and no reviewer reads."* That judgement is **not overturned** — what
+changed is that a caller ships in the same commit, and a reachability arm
+(modelled on F4's, walking application source with `__tests__` excluded) fails
+if it ever stops existing.
+
+#### ⚠️ THE C1-f GATE WENT RED AGAINST ME, AND IT WAS RIGHT
+
+**The single most valuable thing this session hit.** `gate-c1f-templates`
+exempted `native-template-manager.tsx` from its colour-literal scan on **one
+stated premise**: *"PARKED and mounts nowhere in production."* The selective
+fold makes it mount — under exactly the flag pair that used to null it — so the
+premise became false and **five colour literals became live on a doctor's
+screen** under a skin bridge that *cannot reach a literal*.
+
+    rgba(122, 166, 140, 0.4)   ->  var(--color-linear-sage-edge)
+    rgba(212, 87, 74, 0.35)    ->  color-mix(… var(--color-linear-coral) 35% …)
+    rgba(212, 87, 74, 0.06)    ->  color-mix(… var(--color-linear-coral) 6% …)
+    var(--color-linear-amber, #d0a215)  ->  var(--color-linear-amber)
+    #0d1611                    ->  var(--color-linear-on-sage)
+
+⚠️ **THE `#d0a215` FALLBACK WAS BOTH DEAD AND A DIFFERENT COLOUR.**
+`--color-linear-amber` **is** declared (`globals.css:115`, `#D4A574`), so the
+fallback could never render — and if it ever had, it would have painted a
+colour the design system does not contain. Verified declared before removing
+it, because *an undeclared token on the RHS of a custom property is INVISIBLE.*
+
+**The exemption is DELETED, not re-worded**, and its anti-stale arm is replaced
+by one guarding the opposite direction — the surface must **stay** mounted, and
+no exemption for it may reappear — because a future re-fold would restore a
+coverage hole with nothing left to name it.
+
+> **This is the "an exemption's reason is prose, and prose decays silently" rule
+> working exactly as designed: the guard fired against an author who had not
+> read it. Nothing else in the branch would have noticed.**
+
+#### THE PROOF
+
+- **27 new arms** — 22 in `gate-f5b-the-confirmation-door-exists.test.tsx`,
+  5 added to the existing `template-twin-mappings-action.test.ts`. Asserted
+  through rendered behaviour and through the mock's received payload, never
+  through file text.
+- **Mutation-proved 11 ways, EVERY ONE A PARTIAL APPLICATION** — the
+  half-landed edit, not the complete inverse. **11 of 11 caught.** Each asserted
+  its own application before its result was believed; backups taken to scratch
+  and restored from scratch; final state verified byte-identical.
+
+| # | partial mutation | gate |
+|---|---|---|
+| 1 | action shipped with **no caller** (F4's exact defect) | 🔴 14 arms |
+| 2 | bulk confirm sweeps **all** classes, not just proposed | 🔴 6 arms |
+| 3 | changing a concept **keeps** the certified status | 🔴 2 arms |
+| 4 | save sends only the **changed** mappings | 🔴 3 arms |
+| 5 | save sends a **fabricated** hash | 🔴 1 arm |
+| 6 | a concept-less non-manual field becomes confirmable | 🔴 2 arms |
+| 7 | a **manual** field made to require a concept (the OVER-STRICT direction) | 🔴 1 arm |
+| 8 | fold prop threaded, upload still renders | 🔴 1 arm |
+| 9 | a certified version left editable | 🔴 1 arm |
+| 10 | the read action **trusts the caller's id** | 🔴 1 arm |
+| 11 | **classify on concept presence instead of `sourceType`** (see below) | 🔴 4 arms |
+
+⚠️ **TWO OF THOSE WERE GREEN ON THE FIRST RUN AND BOTH DIAGNOSES CHANGED THE
+CODE** — banking them as blind spots would have been the cheaper and worse move:
+
+- **#7 was UNOBSERVABLE, not wrong.** `confirmed()`'s manual carve-out ternary
+  computes the same value through every route the UI offers, because the attest
+  button passes the field's own concept back in. The branch is a real guard
+  against a future edit that gives manual fields a picker — and nothing could
+  exercise it. Fixed by **exporting the pure helpers and testing them
+  directly**, where the UI cannot reach.
+- **#10 exposed the PROOF's own watched set, not the code's.** The UI gate
+  *mocks* the action, so it is structurally blind to the action's internals; the
+  mutation was caught the moment the action's own test file was added to the
+  mutation runner. **A mutation proof aimed at a subset of the guards is a proof
+  about that subset** — recorded in the runner in place.
+
+#### ⚠️ THE REFUTATION PASS FOUND A WRONG-UNIVERSE DEFECT — MUTATION 11
+
+**The most serious finding of the session, and no suite, mutation or typecheck
+could have produced it** — every one of them agreed with the author, because
+they all shared his fixture.
+
+`confirmClassOf` originally classified on **concept presence**:
+
+    clinicalConcept ? 'proposed' : 'unproposed'
+
+That is **correct in the FALLBACK universe and wrong in production's:**
+
+| universe | the 22 enumerated picks carry |
+|---|---|
+| fallback — provider down, **and every QA fixture** | `clinicalConcept: null` |
+| **model proposer — production, provider up** | a concept it MAY have guessed |
+
+So on production a `verified_note_selection` field could arrive carrying a
+model's guess, classify as *"proposed"*, and be **swept by the bulk confirm**
+— certifying an enumerated dropdown no physician ever read, which is exactly
+the class the recorded design rule reserves for full per-field control.
+`fieldsReady` would then pass on it, and `MAPPINGS_NOT_READY` would stop
+refusing it. **The gate would have moved, silently, in the one direction this
+item promises it will not.**
+
+⚠️ **AND THE FIXTURE IS WHAT HID IT.** F5-a's own measured partition — manual 5
+/ concept 53 / no-concept 22 — *is* the fallback shape, so a fixture built
+faithfully from the ledger reproduces the blind spot faithfully. **A fixture
+from the right domain is not a route.**
+
+**FIXED** by making the discriminator STRUCTURAL: `sourceType`, which
+`classifyFieldSource` derives from the field's kind and options and which does
+not move with the proposer. The classes are renamed after the doctor's ACT —
+`attest` / `confirm` / `choose` — because *proposed* and *unproposed* were
+names about the data's shape, and the data's shape was the thing that lied.
+The fixture now carries a `verified_note_selection` field **with** a concept,
+which is production's shape and which a concept-presence classifier sweeps.
+
+#### ⚠️ AND THE GATE CAUGHT ITS OWN AUTHOR A THIRD TIME, BEFORE ANY MUTATION
+
+One arm asserted the Save button **disables** when a confirmed field lacks a
+concept. It reddened on first execution: **that state is unreachable** —
+confirming requires a concept, and changing one un-confirms the field. Asserting
+a blocked transition out of an unreachable state is a check that passes on *any*
+implementation, including one with no guard at all. Replaced with the stronger
+claim it should always have made: **no sequence of controls can send a
+`certified` mapping with no concept.**
+
+#### NUMBERS, AND THE CONTROL THEY WERE TAKEN AGAINST
+
+⚠️ **A worktree cannot resolve `react/jsx-dev-runtime`** — `vitest.config.ts`
+aliases react to `../../node_modules/react` and a worktree checks out TRACKED
+FILES ONLY, so **every `.tsx` test fails there** and no component gate can be
+run at all. Worked around with a worktree-local config overriding **only** those
+five react entry points to the same physical modules the shared tree uses.
+**It is never committed and dies with the worktree.**
+
+Measured against a clean detached worktree at `origin/main`, same host, same
+command, same override:
+
+| | files | passed | failed |
+|---|---|---|---|
+| `origin/main` control | 313 | 3995 | **0** |
+| this branch | 314 | 4022 | **0** |
+| **delta** | **+1** | **+27** | **0** |
+
+**+1 file, +27 tests — exactly 22 + 5, the new arms.** ⚠️ **And the control is
+what makes the override trustworthy**: `origin/main` runs **0 failed** under it,
+so the config is not suppressing anything. `tsc --noEmit` 0 errors.
+
+#### WHAT THIS DOES **NOT** DO
+
+- **It does not weaken `MAPPINGS_NOT_READY` by one field.** Confirming still
+  requires a concept on every non-manual field; the manual carve-out is the one
+  `fieldsReady` already makes, applied by CLASS, not a new exception.
+- **It does not confirm anything on the doctor's behalf.** Bulk confirm is
+  offered for the **`confirm`** class only — the 53 the document itself decides
+  (F5-a) — and never for the 22 only a physician can answer, **with or without
+  a concept already sitting in the box.**
+- **It does not certify.** Save and Certify stay two acts; the writer refuses
+  outright once a version is certified, so the surface renders read-only there.
+- **It does not claim a doctor has walked it.** No QA walk was performed this
+  session — the behavioural proof is unit-level. **Named honestly rather than
+  implied.**
+- ⚠️ **THE ADVERSARIAL PASS WAS A SELF-REVIEW, NOT AN INDEPENDENT ONE.** The
+  queue's standing ceremony calls for a refutation pass that *does not share
+  the author's context*; this session's harness forbids spawning one, so the
+  pass was run by the author against his own finished diff under the four
+  lenses. **It found mutation 11 — a real, shipping-severity defect — so it was
+  not worthless; but a pass that shares the author's assumptions is exactly the
+  configuration that missed mutation 11's whole class until the lens was
+  pointed at the universe.** A second, independent pass over this diff is owed
+  before anyone treats the refutation ceremony as discharged.
+
+---
+
 ### 🔵 F3 — THE CENSUS, TAKEN FIRST — **2026-08-15**
 
 **Ruling #113 orders the retirement "delete-don't-hide, WITH ITS CENSUS."**

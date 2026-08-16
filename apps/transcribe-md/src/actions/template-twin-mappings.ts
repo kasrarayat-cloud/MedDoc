@@ -49,6 +49,58 @@ function actorFrom(session: Session) {
 }
 
 // ============================================================================
+// OPEN AN EXISTING TEMPLATE'S WORKSPACE — the READ half of the door.
+//
+// ⚠️ SHIPPED WITH ITS CALLER, AND THAT IS THE WHOLE REASON THIS IS SAFE TO ADD.
+// `getNativeTemplateWorkspaceAction` was DELETED on 2026-07-28 for having zero
+// callers — see the note where it used to live in `template-twin-certify.ts`.
+// Its reasoning was right and is not being overturned: a server action is an
+// HTTP endpoint, so an exported one with no caller is attack surface that no
+// test covers and no reviewer reads. What changed is the caller, not the
+// judgement — `NativeTemplateManager`'s existing-template rows invoke this in
+// the same commit, and a gate arm fails if that stops being true.
+//
+// WHY IT HAD TO COME BACK. `NativeTemplateManager` obtained its workspace from
+// `uploadNativeTemplateAction` and NOTHING else, so the only route back into a
+// template that had already compiled was to upload the same file again — the
+// ritual `settings/page.tsx:241-244` correctly retired. Every doctor whose
+// template compiled on upload (RC-2 does this on every `.docx`) therefore had
+// a draft mapping set nothing in the application could open. `MAPPINGS_NOT_READY`
+// was refusing certification on fields that no surface could confirm.
+//
+// TENANCY: `readTemplateTwinWorkspace` filters on `doctorId`, which T7's
+// `note_templates_practice_iff_doctor` biconditional makes strictly narrower
+// than practice scope. The session is the only identity; the id is never
+// trusted. A template belonging to anyone else reads as absent, which is the
+// correct answer to give a caller who should not know it exists.
+//
+// READ-ONLY. It writes nothing, and it must not: the confirm action below is
+// the write half and carries the optimistic-concurrency hash this read returns.
+// ============================================================================
+export async function openNativeTemplateWorkspaceAction(
+  noteTemplateId: string,
+): Promise<MappingsActionResult<TemplateTwinWorkspace>> {
+  if (!templateNativeDocxEnabled()) return { ok: false, reason: 'disabled', error: DISABLED };
+  const session = await requireSession();
+  const workspace = await readTemplateTwinWorkspace({
+    noteTemplateId,
+    doctorId: session.user.id,
+    practiceId: session.user.practiceId,
+  });
+  if (!workspace) {
+    // ⚠️ ONE MESSAGE FOR "does not exist", "not yours" and "has no twin".
+    // Distinguishing them would let a caller enumerate other doctors'
+    // template ids by reading which refusal came back.
+    return {
+      ok: false,
+      reason: 'lifecycle',
+      error: 'That template could not be opened for review.',
+    };
+  }
+  return { ok: true, data: workspace };
+}
+
+// ============================================================================
 // CONFIRM THE FIELD MAPPINGS — the door `MAPPINGS_NOT_READY` was waiting for.
 //
 // ⚠️ `updateTemplateTwinMappings` HAD NO CALLER. It has existed, correct and

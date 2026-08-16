@@ -311,11 +311,14 @@ describe('C1-f — no literal survives where a token has to reach', () => {
   it('the templates surfaces carry no colour literals', () => {
     const found: string[] = [];
     for (const f of TEMPLATE_FILES) {
-      // native-template-manager is PARKED and mounts nowhere in production
-      // (`SETTINGS_SIMPLE_ROW` + `TEMPLATE_NATIVE_DOCX` both true renders it
-      // null). Named, not silently skipped — see the assertion below, which
-      // holds the exemption to being real.
-      if (f.endsWith('native-template-manager.tsx')) continue;
+      // ⚠️ THE `native-template-manager.tsx` EXEMPTION IS GONE — F5-b, 2026-08-16.
+      // It was exempt on ONE premise: the surface "mounts nowhere in production"
+      // because `SETTINGS_SIMPLE_ROW` folded it away. F5-b makes the fold
+      // SELECTIVE — the confirm half now renders under exactly the flag pair
+      // that used to null it — so the premise is false and the file is in
+      // scope like every other. Its five literals were replaced with tokens in
+      // the same commit; the arm below pins that it MOUNTS, which is what makes
+      // this scan's coverage of it load-bearing rather than incidental.
       for (const [i, line] of blankComments(src(f)).split('\n').entries()) {
         for (const m of line.match(LITERAL()) ?? []) found.push(`${f}:${i + 1}  ${m}  ${line.trim().slice(0, 90)}`);
       }
@@ -329,19 +332,30 @@ describe('C1-f — no literal survives where a token has to reach', () => {
     ).toEqual([]);
   });
 
-  it('the parked exemption is REAL, not a stale skip', () => {
-    // An exemption that no longer describes anything silently widens.
-    const parked = `${TEMPLATES_ROOT}/native-template-manager.tsx`;
-    expect(TEMPLATE_FILES, 'the parked file is gone — drop the exemption').toContain(parked);
+  // ⚠️ THIS ARM REPLACES "the parked exemption is REAL, not a stale skip", AND
+  // THE REPLACEMENT IS THE POINT. That arm existed to fire the moment the
+  // exemption's PROSE REASON stopped being true — "this surface mounts
+  // nowhere" — and on 2026-08-16 it did exactly that, against F5-b's selective
+  // fold, catching an author who had not read it. The exemption's premise is
+  // now false, so the exemption is gone rather than re-worded, and this arm
+  // guards the OPPOSITE direction: the surface must stay mounted, because a
+  // future re-fold would silently restore a coverage hole that no longer has
+  // an exemption naming it.
+  it('the confirm surface MOUNTS in production, which is why it is scanned', () => {
+    const manager = `${TEMPLATES_ROOT}/native-template-manager.tsx`;
+    expect(TEMPLATE_FILES, 'the manager moved — the scan no longer covers it').toContain(manager);
+    // No exemption may reappear without its own reason.
     expect(
-      src(parked).match(LITERAL()),
-      'the parked file no longer contains a literal, so the exemption is dead weight',
-    ).not.toBeNull();
-    // …and it must still be the surface that cannot mount: the slot is gated on
-    // the two flags production sets, inverted.
+      readFileSync('src/lib/__tests__/gate-c1f-templates.test.ts', 'utf8'),
+      'an exemption for the manager came back — it mounts in production now',
+    ).not.toMatch(/if \(f\.endsWith\('native-template-manager\.tsx'\)\) continue;/);
+    // The fold is SELECTIVE: the component renders whenever the twin flag is
+    // on, and `showUpload` — not mounting — is what the simple row controls.
     const page = readFileSync('src/app/settings/page.tsx', 'utf8');
-    expect(page, 'the parked manager is no longer gated the way the park assumes')
-      .toMatch(/templateNativeDocxEnabled\(\)\s*&&\s*!isSettingsSimpleRow\(\)/);
+    expect(page, 'the manager is gated on the simple row again — it would stop mounting')
+      .not.toMatch(/templateNativeDocxEnabled\(\)\s*&&\s*!isSettingsSimpleRow\(\)/);
+    expect(page, 'the selective fold is gone — showUpload is what the simple row must control')
+      .toMatch(/showUpload=\{!isSettingsSimpleRow\(\)\}/);
   });
 
   it('⚠️ `.qm-ux-primary` no longer hardcodes its ink — the globals.css blind spot', () => {
