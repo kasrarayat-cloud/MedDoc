@@ -168,3 +168,40 @@ a blocker, and must not hold the queue.**
 ⚠️ **A notice that says work is pending when it is not makes the next session
 re-derive it** — which is the exact failure an inbox exists to prevent. Retiring
 a discharged clause is as much a part of the mechanism as adding a live one.
+
+### 2026-08-16T19:30:00Z — POINTER: F10 now has OWNER ACCEPTANCE CRITERIA (ruling #121). Read them before designing the fix.
+
+**This is a pointer, not the decision.** The decision is **ruling #121** in
+`RULINGS.md`. Read it there.
+
+**Why it is in front of you tonight:** F10 was filed hours ago and the criteria
+were set afterwards. **A fix designed before them would be guessed at**, and
+F10 is the kind of item where a plausible wrong shape passes its own test.
+
+**The three, in one line each — the mechanism is YOURS to design:**
+
+1. **The gate does not weaken** — no deploy without a declaration judged against
+   the **exact tree shipped**. ⚠️ **This does NOT mean flipping
+   `declaration_gate`'s `present` to `strict`** — `present` is deliberate under
+   ruling #96(b), and flipping it would refuse every deploy whose declaration
+   lands in the same PR. Read it as *"the judgement covers what actually
+   shipped"*.
+2. **The circularity breaks** — a declaration must be committable **before or
+   with** its deploy without invalidating its own name. Candidates (none
+   mandated): name by the CHANGE's sha with ancestry-verification at the gate;
+   an explicit carry-forward marker the gate resolves; or another shape.
+   ⚠️ **Prove it BOTH directions, including the wrong-tree-REFUSED arm** —
+   `retire-branch.sh` passed 9 of 9 refusal tests and still printed a false
+   green on the happy path.
+3. **Falsifiability does not narrow** — a declaration that can name *"whatever
+   ships"* is no declaration. A scheme that resolves to the deployed tree by
+   construction cannot come out false.
+
+**INTERIM, until F10 lands:** a §2.5 **carry-forward** may be written to the
+shared tree — it can only be named after a post-merge sha — and **MUST be
+committed by the same session before close-out.** The exception **retires with
+F10**; do not let it outlive its reason.
+
+✅ **F9 IS DONE AND THIS NOTICE DOES NOT REOPEN IT.** Merged and cited
+(`5f2334b1`, #695). The manual tag-first habit is now the **fallback**, not the
+mechanism.
