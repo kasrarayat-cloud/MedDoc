@@ -57,6 +57,13 @@ export default defineConfig({
       '**/.next/**',
       '**/dist/**',
       '**/tests/e2e/**',
+      // The RENDERED tier needs the real Gotenberg/LibreOffice sidecar, which
+      // the `CI` workflow does not start. It runs in `e2e`, where the sidecar
+      // is already up, via `vitest.rendered.config.ts`. ⚠️ The exclusion is
+      // load-bearing and dangerous in the usual way — a gate nobody runs looks
+      // exactly like a gate that passes — so `gate-rendered-tier-is-invoked`
+      // (in THIS suite) asserts the e2e workflow still invokes that config.
+      '**/__rendered__/**',
     ],
   },
 });

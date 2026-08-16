@@ -47,8 +47,11 @@ production callers. Corrected here and withdrawn in **ruling #118(c)**; #117's
 clauses are unaffected.
 
 **#117's FOOTER IS BUILT AND ITS (a)(b)(c)(d) ARE MET — see the F-117 row
-below. ⚠️ (e) IS NOT BUILT**, so #117 is only PARTIALLY discharged and F3's
-deploy gate is still open. **Reachability was verified, not assumed: an unsigned FORM-ONLY export IS
+below. ✅ **(e) IS NOW BUILT TOO — see the F-117e row.** #117 is **fully
+discharged** and **F3's DEPLOY GATE IS CLEARED**, with one honest caveat: (e) is
+discharged *as #118(a) reads it*, and #118(a) is PROVISIONAL. If the war room
+reverses it, one assertion in the rendered proof inverts along with the two
+guards in `docx-generator.ts:437-439`. **Reachability was verified, not assumed: an unsigned FORM-ONLY export IS
 reachable** (`formOnly` derives from the template and is independent of signing;
 neither export route carries a signed gate), so the draft footer applies there
 too. **Draft downloads stay legal — the marking is the control, not a gate.**
@@ -13130,6 +13133,200 @@ physician confirmation flow. That flow is the parked INTEGRATE work, and the
 gate is not weakened to reach it. **Named honestly rather than ticked**: an
 unverified step named is worth more than a green bought by loosening
 `MAPPINGS_NOT_READY`.
+
+---
+
+### ✅ F-117e — "ON EVERY PAGE" MEASURED ON PAGES LIBREOFFICE ACTUALLY MADE — **2026-08-16**
+
+**Ruling #117(e)**, the one clause F-117 left unbuilt — and with it, **F3's
+deploy gate is CLEARED.**
+
+**Test-only. ZERO production files, so there is nothing to deploy** and no §2.5
+declaration: `docx-generator.ts` is byte-identical to `main` (verified by `diff`
+against a pre-mutation backup after four mutations were reverted).
+
+#### WHAT (e) ASKED FOR, AND WHY THE EXISTING GUARD COULD NOT GIVE IT
+
+`gate-attestation-footer.test.ts` is a good guard and it **records its own
+limit**: its fixture is ONE PAGE, so *"on every page"* is asserted over a set of
+**size one**, and `w:footerReference w:type="default"` is a **PROXY** for what
+the renderer paints. (e) asked for the real thing — *"because PAGE COUNT IS
+LIBREOFFICE'S"*.
+
+`src/lib/__rendered__/gate-attestation-footer-rendered.test.ts` builds a
+genuinely multi-page note, sends it through the **REAL Gotenberg/LibreOffice**,
+and reads text back **page by page**. Measured: the fixture renders **5 pages**
+— three of them genuine interior pages.
+
+#### THE FOUR CELLS, AS RENDERED — all four #117 states, on every page
+
+| cell | asserted |
+|---|---|
+| UNSIGNED standard | `DRAFT — Not yet signed.` on **all 5**, and the attestation on **none** |
+| UNSIGNED form-only | `DRAFT` on **all 5** — #117(a), per **#118(a)** |
+| SIGNED standard | the attestation on **all 5**, `DRAFT` on **none** |
+| SIGNED form-only | **neither** chrome on any page, with the body asserted present FIRST |
+
+⚠️ **THE ABSENCE ARM CARRIES ITS POSITIVE CONTROL AHEAD OF IT.** *"Neither
+chrome"* is satisfied perfectly by a blank page, a failed conversion, or an
+extractor returning empty strings. The body marker is asserted before the two
+absences, so the emptiness answer is computed over a haystack known to exist.
+
+#### 🔴 THE NON-VACUITY FLOOR IS ASSERTED, NOT HOPED
+
+Every arm is a loop over pages, so a fixture that collapsed to one page would
+make all of them trivially true — reproducing the exact weakness this file
+exists to remove. `MIN_PAGES = 3` is asserted first. **Mutation-proved by
+raising it to 99: 4 arms red, and the message printed the real count (5).**
+
+#### MUTATION PROOFS — 4 applied, each ASSERTED to have landed before belief
+
+| # | mutation | result |
+|---|---|---|
+| A | `MIN_PAGES` 3 → 99 | **4 red** — the floor fires, and prints `5 page(s)` |
+| B | the pre-#117 world: `attestationFooter` returns `undefined` always | **3 red** |
+| C | `footers: { first: … }` instead of `{ default: … }` | **3 red** |
+| D | the (a)/(c) branch order swapped | **exactly 1 red** |
+
+⚠️ **C IS THE ONE THAT JUSTIFIES THIS FILE'S EXISTENCE.** `first` yields a valid
+footer part AND a valid footer reference — structurally present, and it is the
+mutation that **passed 5 of 5 against the FIRST version of the structural
+guard**. Rendered, LibreOffice paints it on **ZERO pages**: `DRAFT` missing from
+1, 2, 3, 4, 5 of 5. *Ground truth, where the OOXML could only ever offer a
+proxy.*
+
+⚠️ **AND B's SIGNED ARM IS THE MOST LEGIBLE MEASUREMENT OF WHAT #117 RESTORED.**
+With no footer, the attestation is missing from pages **1, 2, 3, 4 — but present
+on page 5**, because the in-body signature block renders on the last page. So
+the pre-#117 product marked a five-page signed record on its **final page
+only**, and an unsigned five-page draft on **none**. The failure message says
+which pages, by number.
+
+⚠️ **D REDDENS EXACTLY ONE ARM**, which is the evidence that the form-only arm
+DISCRIMINATES rather than riding on its neighbours — and it is #118(a)'s
+reversal path, so the cost of reversing that ruling is now a measured number
+rather than a guess.
+
+#### ⚠️ #118(a)'s PREDICTION, EXECUTED — AND IT WAS RIGHT
+
+#118(a) wrote: *"as (e) is literally written, building its E2E would go RED
+against this implementation."* Confirmed. (e)'s own sentence says form-only
+shows *"neither chrome in both states"*; (a) says the draft footer lands
+*"INCLUDING FORM-ONLY"*. **This file is written to #118(a)** — the unsigned
+form-only arm asserts the marking IS there, which is the OPPOSITE of (e)'s
+literal text. The arm is named and the inversion documented in place, so an
+amendment is a one-line change with a known blast radius.
+
+**This is built on a PROVISIONAL ruling and says so.** Reversing #118(a) unwinds
+this arm and the two guards it mirrors — nothing else.
+
+#### ⚠️ THE SIDECAR IS ISOLATED, AND THE OBVIOUS WORKAROUND FAILS SILENTLY
+
+The `converter` network is `internal: true` **on purpose** — *"the filled DOCX
+crosses to a service with no route off the host"*. The natural move, publishing
+gotenberg's port, **does not work and does not say so**: `docker compose config`
+shows the mapping, the container comes up **healthy**, and `docker ps` shows no
+published port. Attempted and measured here.
+
+Adding a second, non-internal network WOULD make it work **and would hand a
+document converter outbound internet access.** Rejected. **The test goes to the
+sidecar instead**: `docker-compose.qa.rendered.yml` runs the suite inside
+`converter`, reaching `http://gotenberg:3000` — the same address the application
+uses — and the network stays internal.
+
+The runner mounts the repo **READ-ONLY**, for two independent reasons: a
+container writing `node_modules/.vite` into the working tree leaves files the
+unattended loop **cannot delete** (`rm`/`shred` denied) — a permanently dirty
+deploy surface and a blocked relight — and pinning `user:` to a host uid breaks
+on a GitHub runner, whose checkout is owned by 1001. **Verified: `git status` is
+byte-unchanged across every run.**
+
+#### 🔴 THE EXCLUSION IS THE RISK, AND IT IS WATCHED
+
+These files are excluded from `vitest.config.ts` because the `CI` workflow
+starts no sidecar. **That exclusion is the dangerous half: a gate nobody runs is
+indistinguishable from a gate that passes**, and deleting the e2e step would
+turn nothing red.
+
+`gate-rendered-tier-is-invoked.test.ts` — in the **default** suite, which always
+runs — asserts the e2e step, the compose override, the config, the `converter`
+network, AND that the exclusion itself still exists (removing it would turn
+every `CI` run red for an environmental reason). **Mutation-proved by silently
+retiring the e2e step: red.**
+
+#### 🔴 AND THE GUARD SHIPPED SATISFIABLE BY ITS OWN COMMENTS — caught before merge
+
+**The substring trap, FIFTH sighting, inside the guard written to close a
+coverage hole.** The first version asserted `toContain` over RAW file text:
+
+| file | token | also appears in |
+|---|---|---|
+| `e2e.yml` | `docker-compose.qa.rendered.yml` | a comment at `:335`, one line above the command at `:338` |
+| the override | `converter` | **four** comments |
+| the override | `vitest.rendered.config.ts` | a comment at `:57` |
+
+⚠️ **MEASURED, NOT REASONED — AND IT WAS TOTAL BLINDNESS ON ONE FILE, NOT A
+WEAKENED ARM.** Gutting the override to `services: {}` plus three comment lines
+leaves **all three** tokens present (1 · 1 · 1), so the original guard passed
+**completely** on an override file that does nothing.
+
+**A file's own comments are the one place the words you are grepping for are
+guaranteed to appear** — and here the comments EXPLAIN the mechanism being
+asserted, which makes the collision certain rather than unlucky.
+
+**Fixed** by stripping FULL-LINE comments before every assertion. ⚠️ **Full-line
+only, deliberately**: cutting from the first `//` anywhere would truncate
+`http://gotenberg:3000` — the wrong-quantity defect arriving inside the fix for
+the wrong-universe one. An arm asserts that URL survives.
+
+**The defect is PINNED by a permanent control arm**: `e2e.yml` genuinely carries
+the override's filename in both a comment and the live command, so the arm
+asserts it is present raw, absent after stripping, and that the real command
+survives. If the stripper ever stops working, the other arms quietly become
+prose-satisfiable again and nothing else would say so.
+
+Two further mutations, each asserted to have landed: **F** — step deleted,
+comment left in place → **2 red**; **G** — the override gutted → **2 red**. F is
+the case the original was weak on; **G is the case it was blind to.**
+
+#### ⚠️ THE UNIT SUITE CANNOT BE RUN FROM A WORKTREE — a pre-existing property, CONTROLLED
+
+Running `vitest run` from any `git worktree` reports **15 failed files / 1 failed
+test**, every one `Failed to resolve import "react/jsx-dev-runtime"`.
+`vitest.config.ts` aliases react to `path.resolve(__dirname, '../../node_modules/react')`,
+and a worktree checks out **tracked files only** — so that path does not exist.
+
+⚠️ **MY FIRST DIAGNOSIS WAS WRONG AND IS WITHDRAWN.** I attributed it to an empty
+`node_modules` directory my own temporary bind-mount had left behind. **The
+control refuted it**: a clean detached worktree at **`origin/main`, without any
+of this change**, produces the identical 15/1.
+
+The controlled delta is what the run is actually worth:
+
+| tree | files | tests passed |
+|---|---|---|
+| `origin/main` | 308 | 3741 |
+| this branch | 309 | 3746 |
+
+**+1 file, +5 tests, all passing** — exactly the meta-guard's five arms, with the
+rendered tier absent from the count, which **confirms the exclusion empirically**
+rather than by reading the config. The authoritative full-suite green is the
+shared tree's **3966 passed / 0 failed**, and `CI` green on `aa607405`.
+
+#### WHAT THIS DOES NOT CLAIM
+
+- **It watches ONE of four attestation emitters.** `pdf-generator.ts`,
+  `pdf-native/export.ts` and `ehr-formatters.ts` remain unwatched — unchanged by
+  this item, and already recorded in the F-117 row.
+- **The meta-guard asserts the step is WIRED, not that it PASSED.** A workflow
+  file is text.
+- **`pdf-native` still marks nothing** — #118(d), still referred, still its own
+  item.
+- **No QA walk, no deploy verification.** There is nothing deployed to verify.
+
+#### F-117e — CITATION
+
+*(filled by `scripts/check-citation.sh` on the merge commit — never typed.)*
 
 ---
 
