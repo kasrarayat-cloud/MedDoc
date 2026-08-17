@@ -208,6 +208,21 @@ declaration_resolve() {
     echo "              provably about the SAME PROGRAM. ⚠️ Mode is 'strict' here, not"
     echo "              'present': a carry-forward means a commit existed to ride, so"
     echo "              the declaration must be COMMITTED. This tightens the record."
+    # ⚠️ THE ONE THING A CARRY-FORWARD DOES **NOT** REFRESH, SAID OUT LOUD.
+    # Tree-identity is proved above. The declaration's BASELINE — visit counts,
+    # patient counts, signature counts — was captured when it was WRITTEN, and
+    # production keeps working in the meantime. Under the old scheme a fresh
+    # filename forced fresh baselines by accident; this scheme does not, so the
+    # hazard is printed rather than left for the post-deploy comparison to
+    # discover as "drift". A difference that is not in the declaration is still
+    # THE FINDING — but an operator must be able to tell business activity from
+    # a defect, and that needs the capture time, which follows on the next line.
+    echo
+    echo "⚠️  BASELINE AGE — the carry-forward proves the CODE is identical. It does"
+    echo "    NOT refresh the NUMBERS. This declaration's baseline was captured when"
+    echo "    it was written (commit time printed below). If real clinical activity"
+    echo "    has happened since, re-capture the baseline instead of explaining the"
+    echo "    difference away afterwards."
     DECLARATION_PATH="$best"; DECLARATION_MODE="strict"
     echo
     return 0

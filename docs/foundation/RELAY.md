@@ -15801,6 +15801,22 @@ one forward. Re-measured.
   *tree*; whether the declaration says anything true is what the post-deploy
   comparison is for. A declaration naming the right commit and declaring nothing
   useful passes this gate and always did.
+- ⚠️ **IT PROVES THE CODE IS IDENTICAL. IT DOES NOT REFRESH THE BASELINE — AND
+  THAT IS THE ONE PLACE F10 GENUINELY NARROWS SOMETHING.** A declaration's
+  numbers (visits, patients, signatures) are captured when it is WRITTEN.
+  **Under the old scheme a fresh filename forced fresh baselines BY ACCIDENT**;
+  a carry-forward does not, so a declaration written three days and ten
+  docs-commits ago carries three-day-old counts into the post-deploy comparison,
+  where normal clinical activity then reads as drift.
+
+  Not fixable by a threshold — any hour or commit limit would be arbitrary — so
+  it is **PRINTED LOUDLY** instead, in the house's `present`-mode style (record
+  provenance, do not refuse on it): the resolver emits a `⚠️ BASELINE AGE` block
+  beside the declaration's commit time. **The warning IS the compensating
+  control, so an arm asserts it** — deleting it is a real regression, not a
+  cosmetic one. *A difference that is not in the declaration is still THE
+  FINDING; the operator just has to be able to tell business activity from a
+  defect.*
 - ⚠️ **The runtime allowlist is a JUDGEMENT, and it is deliberately conservative.**
   A test-only change disqualifies a carry-forward even though no shipped byte
   moves. That is fail-closed on purpose: refusing costs one declaration, and

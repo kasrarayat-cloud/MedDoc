@@ -233,6 +233,13 @@ describe('F10 · the accept direction (positive control)', () => {
     // committed — which is exactly what the interim exception could not require.
     expect(r.mode).toBe('strict');
     expect(r.out).toContain('CARRY-FORWARD');
+    // ⚠️ THE HAZARD THE CARRY-FORWARD INTRODUCES, ASSERTED SO IT CANNOT BE
+    // QUIETLY DROPPED. Tree-identity is proved; the declaration's BASELINE
+    // numbers are as old as the declaration. Under the old scheme a fresh
+    // filename forced fresh baselines by accident — this scheme does not, so
+    // the warning IS the compensating control and a deletion of it is a real
+    // regression.
+    expect(r.out).toContain('BASELINE AGE');
     // the non-vacuity control, printed by the script itself rather than by the
     // operator's habit: an empty runtime diff over an EMPTY range proves nothing.
     expect(r.out).toContain('the range is NON-EMPTY');
