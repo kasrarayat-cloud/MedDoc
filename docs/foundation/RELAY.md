@@ -29,7 +29,7 @@ half-filled export and a divergent signed view are wrong NOW.
 | ~~**F1**~~ | ✅ **SHIPPED AND LIVE 2026-08-15** — merge `efe1b443`, 4 of 4, deployed, **25 of 25 declared rows matched**. See the ledger row below. ⚠️ **OWNER PING still owed** — carried in the morning report. | **#112** | ~~Deployed under a §2.5 declaration naming the document-visible change.~~ **MET.** |
 | ~~**F2**~~ | ✅ **MECHANISM NAMED AND MEASURED 2026-08-15** — the surfaces share one builder; the divergence is three signed-gated branches in `loadVisitExportData`, and **the DATE one is wrong**. Ruling **#115** (PROVISIONAL). See the ledger row below. | **#114** | ~~The mechanism is named with evidence, not a theory.~~ **MET.** ⚠️ **The suspect was WRONG and is withdrawn on evidence** — see below. |
 | ~~**F2-b**~~ | ✅ **SHIPPED 2026-08-15** — 8 of #115's 10 sites changed (2 exempt by JOB), plus **ruling #115-b** (`DD:`/`DT:`) which the adversarial pass found the fix had CREATED, plus the cache bump. Guard mutation-proved **12 of 12**. See the ledger row below. | **#115** · **#115-b** | ~~Ten sites, a guard, the mandatory adversarial pass.~~ **MET.** ⚠️ The pass found **4 false greens in the guard** and **1 defect the fix introduced** — the reason it is a gate and not a nicety. |
-| **F3** | 🟢 **UNBLOCKED 2026-08-16 — #117 LANDED THE FOOTER, #119 DISPOSITIONS THE WATERMARK, AND THE `e2e` MECHANISM IS NAMED.** The draft's blocker is discharged on evidence (see "THE BLOCKER IS DISCHARGED" below): `docx-generator.ts:408` attaches a **`default`** footer, so the converged PDF inherits per-page marking BY CONSTRUCTION, and #117(e) proved it rendered on 5 real LibreOffice pages. ⚠️ **The blocker named TWO marks and #117 discharged ONE** — the `QUILLMD` watermark is dropped by convergence and is ruled **#119 (PROVISIONAL): not restored, declared not discovered.** ⚠️ **The red `e2e` was a REAL behavioural change, not a flake**: `/export/pdf` went from in-process pdfkit to a Gotenberg round-trip **measured at 0.43-0.48s against a 600ms download gap**, so the DOCX now routinely lands first; the ordering assertion is replaced by a SET assertion and the order is no longer asserted anywhere. *Previous status, kept for the record:* 🟡 **BUILT AND PROVEN — DOES NOT MERGE YET.** `generateVisitPdf` and `pdf-generator.ts` are gone; five callers dispositioned per #116; new traversal gate, 15 arms, mutation-proved 3 ways. ⚠️ **THEN THE MANDATORY ADVERSARIAL PASS FOUND ~25 DEFECTS AND SEVEN WERE FIXED IN-BRANCH.** ⚠️ **THE BLOCKER IS #109's CLASS AGAIN: the retired builder stamped `Signed electronically by …` / `Not yet signed.` on EVERY PAGE, and the DOCX has no footer at all.** Shipping loses a per-page DRAFT marker — a LOOSENING, which fails the provisional-ruling test. **PR opened as a DRAFT.** See the ledger row and the findings block below. | **#113** · **#116** · **#116-b** · **#117** · **#119** | 🟢 **MET on the code, pending the gate.** The retired builder is gone by traversal, the per-page job is restored on all three surfaces by #117 rather than on the PDF alone, the one unnamed job is dispositioned by #119, and Gotenberg is named in the ledger as the single shared dependency it already was. |
+| ~~**F3**~~ | ✅ **SHIPPED AND LIVE 2026-08-16** — PR #673, merge `0d843831`, cited 4 of 4, deployed `04:02:25Z`, **11 of 12 declared rows matched and the twelfth is an open FINDING** (a visit row vanished unaudited; the actor was later named as the BullMQ stale-visits cron). See the ledger row below. ⚠️ **THIS CELL SAID "MET on the code, pending the gate" UNTIL SESSION 06, AND F3 HAD BEEN LIVE FOR TWENTY-ONE HOURS.** That is F6.6's lesson and F5's lesson arriving a third time **in the same table** — *close the row in the same pass that closes the item* — and it cost session 06 part of its STEP 0 re-deriving whether the queue head was F3 or F10. *Previous status, kept for the record:* 🟢 **UNBLOCKED 2026-08-16 — #117 LANDED THE FOOTER, #119 DISPOSITIONS THE WATERMARK, AND THE `e2e` MECHANISM IS NAMED.** The draft's blocker is discharged on evidence (see "THE BLOCKER IS DISCHARGED" below): `docx-generator.ts:408` attaches a **`default`** footer, so the converged PDF inherits per-page marking BY CONSTRUCTION, and #117(e) proved it rendered on 5 real LibreOffice pages. ⚠️ **The blocker named TWO marks and #117 discharged ONE** — the `QUILLMD` watermark is dropped by convergence and is ruled **#119 (PROVISIONAL): not restored, declared not discovered.** ⚠️ **The red `e2e` was a REAL behavioural change, not a flake**: `/export/pdf` went from in-process pdfkit to a Gotenberg round-trip **measured at 0.43-0.48s against a 600ms download gap**, so the DOCX now routinely lands first; the ordering assertion is replaced by a SET assertion and the order is no longer asserted anywhere. *Previous status, kept for the record:* 🟡 **BUILT AND PROVEN — DOES NOT MERGE YET.** `generateVisitPdf` and `pdf-generator.ts` are gone; five callers dispositioned per #116; new traversal gate, 15 arms, mutation-proved 3 ways. ⚠️ **THEN THE MANDATORY ADVERSARIAL PASS FOUND ~25 DEFECTS AND SEVEN WERE FIXED IN-BRANCH.** ⚠️ **THE BLOCKER IS #109's CLASS AGAIN: the retired builder stamped `Signed electronically by …` / `Not yet signed.` on EVERY PAGE, and the DOCX has no footer at all.** Shipping loses a per-page DRAFT marker — a LOOSENING, which fails the provisional-ruling test. **PR opened as a DRAFT.** See the ledger row and the findings block below. | **#113** · **#116** · **#116-b** · **#117** · **#119** | ✅ **MET, DEPLOYED AND JUDGED.** *Previous wording:* 🟢 *MET on the code, pending the gate.* The retired builder is gone by traversal, the per-page job is restored on all three surfaces by #117 rather than on the PDF alone, the one unnamed job is dispositioned by #119, and Gotenberg is named in the ledger as the single shared dependency it already was. |
 | ~~**F4**~~ | ✅ **SHIPPED AND LIVE 2026-08-16** — merge `9ea09a15`, cited 4 of 4, deployed, **11 of 11 declared rows matched**. See the ledger row below. ⚠️ **It also found that NO rollback tag existed for F3's deploy either — recovered, and mechanization filed as F9.** *Previous status:* 🟡 **IN FLIGHT — the first half was ALREADY DONE and the row did not say so.** `#663` merged `2026-08-15T14:32:23Z` and `#664` merged `2026-08-15T15:15:14Z`; only the rebase-and-land half remained. `feat/certification-door` is rebased onto `main` as `feat/f4-certification-door-land` — the classification fix (`543b5a21` → `ecc1dc4b`) and the mappings door (`799d1c45` → `b4436fb3`). See the ledger row below. | — | On `main`, cited. ✅ **F1's duplicate was dropped BY MEASUREMENT, not by hope** — `git patch-id --stable` gives `8a797bde` and F1's `529e8219` the **identical** id `6213c8f2…`, and the rebase skipped it naming it. |
 | **F5** | ✅ **F5-a AND F5-b ARE BOTH LIVE IN PRODUCTION — F5-a 2026-08-16 (15 of 15), F5-b 2026-08-16T21:29Z (16 of 16, merge `3045ae16`).** ⚠️ **THIS ROW SAID "NOT YET DEPLOYED" AND CLAIMED "Items 3 + 4 remain" UNTIL SESSION 05 — BOTH WERE STALE, AND THE SECOND WAS THE EXPENSIVE ONE.** F5-a was deployed by session 04 (`485067a9`, *"F5-a is LIVE — 15 of 15 judged"*), and **items 3 + 4 ARE F5-b** — the confirmation UI and its entry point — built by session 03, merged as `9208786b` (PR #693) and deployed by session 05. A session reading this table first would have rebuilt work that was already live. **This is F6.6's lesson inside the queue table itself: close the row in the same pass that closes the item.** *Previous wording, kept for the record:* MEASURED, AND TWO OF THE THREE REMAINING PIECES ARE NOT WHAT THE ROW SAYS. F5-a lands the piece that shrinks the wall: `fallbackSemanticMappings` hard-coded `clinicalConcept: null` for **every** field, throwing away the **53 of 80** concepts the document itself decides. Fixed by sharing the compiler's classifier with the fallback — the wall on the real customer form goes **75 → 22**. ⚠️ **Item 5 (registry expansion) is DISCHARGED BY MEASUREMENT, not built** — the registry needs no new concepts. ⚠️ **Item 4 is BIGGER than the row states** — there is no action anywhere that can open an EXISTING template's workspace, so unfolding the manager would still leave no door. See the F5-a block below. | **#106(b)** | ✅ **Items 3 + 4 are DONE and LIVE** (F5-b — the confirmation UI and its entry point). **F5 is closed on the code.** What remains is not a build item: **a physician must actually walk the door.** ⚠️ Morning report carries the second **OWNER PING**: *certify the West Medical template, then look at the export.* — and that ping is now the ONLY thing between production and its first certified twin, because the wall is 22 concepts and the door is open. |
 
@@ -15578,3 +15578,305 @@ that gets skipped** — the same argument that turned the in-flight-runs rule in
 itself**, from the RUNNING container's image id, and refuse if it cannot. Filed
 as an item rather than done here, because it changes the deploy path and this
 session's item was F4.
+
+---
+
+## ✅ F10 — A DECLARATION IS COMMITTABLE BEFORE ITS DEPLOY — **2026-08-17, session 06**
+
+**The circularity is broken by MEASUREMENT, and the gate moved only in the
+tightening direction.** Ruling **#121** set three acceptance criteria and left
+the mechanism to the loop; this is the mechanism.
+
+### THE BUG, RESTATED SO THE FIX IS LEGIBLE
+
+`scripts/deploy-prod.sh:91` derived the declaration path from
+`git rev-parse --short HEAD` **of the deploying tree**:
+
+    DECL="$DECL_DIR/$(date -u +%Y%m%d)-${DEPLOY_SHA}.md"
+
+`main` moves between a feature merge and its deploy — a citation PR, a ledger
+row, a docs fix — which is this programme's *normal cadence*, not an accident.
+⚠️ **And it does not converge: the commit that would CARRY the declaration is
+itself what MOVES HEAD.** No number of extra PR cycles reaches a fixed point.
+
+### THE SHAPE
+
+`declaration_resolve` (in the SHARED `scripts/lib/declaration.sh`, not a second
+copy) takes the **exact match** when it exists — pre-F10 behaviour, byte for
+byte — and otherwise accepts a declaration naming an **ANCESTOR** of HEAD, but
+**only when it can prove the two are the same program**:
+
+| requirement | how it is established |
+|---|---|
+| the named commit exists | `git rev-parse --verify <sha>^{commit}` — a fabricated or ambiguous abbreviation fails here rather than being padded |
+| it is an ANCESTOR of HEAD | `git merge-base --is-ancestor` |
+| **zero runtime paths moved** | `git diff --name-only <cand> HEAD` filtered through a **fail-closed allowlist** |
+| exactly one candidate is nearest | ties REFUSE with exit **2** — *cannot tell* is not *there is none* |
+
+⚠️ **THE NON-RUNTIME SET IS AN ALLOWLIST, NEVER A DENYLIST** —
+`^(docs/|[^/]+\.md$)`. Everything else counts as runtime: `apps/`, `packages/`,
+**`scripts/`** (they are read off the working tree at deploy time, which is
+exactly why F9 was *"effective for the NEXT deploy"* the moment it merged),
+`.github/`, `package.json`, a Dockerfile, a `.md` nested inside an app. The
+boundary was **measured before it was written**: no Dockerfile `COPY`/`ADD`s
+`docs/`, and nothing under `apps/` or `packages/` reads `docs/` outside dev and
+eval scripts.
+
+### THE THREE CRITERIA, EACH WITH ITS ARM
+
+| #121 | how it is met | the arm that would go red |
+|---|---|---|
+| **(1) the gate does not weaken** | `present` is **untouched** on the exact match — #96(b) stands, and #121 names "flip it to `strict`" as the misreading. ⚠️ **The NEW door is the STRICTER one**: a carry-forward resolves at `strict`, because it means a commit existed to ride | `mode is present` · `mode is strict` (M3, M4) |
+| **(2) the circularity breaks** | a declaration naming X, committed in the docs PR that becomes Y, is ACCEPTED at HEAD=Y — **committed before the act**, which the interim exception could never require | `the carry-forward is ACCEPTED` (M1, M2, M6) |
+| **(3) falsifiability does not narrow** | it refuses a non-ancestor, ANY runtime movement, a fabricated sha, an uncommitted carry-forward, and an ambiguous pair | every `REFUSES` arm (M1, M2, M5) |
+
+### THE PROOF — BOTH DIRECTIONS, WHICH IS THE HALF THAT GETS SKIPPED
+
+`apps/transcribe-md/src/lib/__tests__/gate-f10-declaration-carry-forward.test.ts`
+— **16 arms, 16 green**, driving the REAL library under a real bash against
+THROWAWAY git repositories. It reaps its own tmpdir (F9's gate's lesson,
+`1cf669a8`, filed against itself after nine leftovers).
+
+⚠️ **THE ACCEPT ARMS ARE ASSERTED FIRST AND THEY ARE THE POSITIVE CONTROL.** A
+resolver that found nothing ever would satisfy **every refusal arm in the file**.
+That is the `retire-branch.sh` precedent #121 names by hand — 9 of 9 refusals
+and then a false green on the happy path — and it is why the accept arms assert
+the **exit code, the resolved PATH and the MODE**, not merely "it did not
+refuse".
+
+**MUTATION PROOF — 8 of 8 reddened.** Baseline 16/16 green, post-restore 16/16
+green, both files byte-identical to their backups. **Every mutation asserted it
+APPLIED before its result was believed.**
+
+| mutation | result |
+|---|---|
+| M1 · drop the ANCESTRY check | RED (1) |
+| M2 · drop the RUNTIME-DIFF check | RED (2) |
+| M3 · exact match silently becomes `strict` | RED (1) |
+| M4 · carry-forward loosened to `present` | RED (3) |
+| M5 · drop AMBIGUITY detection | RED (1) |
+| **M6 · PARTIAL: revert `deploy-prod.sh` to the circular derivation** | RED (2) |
+| **M7 · PARTIAL: resolve, but do not thread the MODE through** | RED (1) |
+| M8 · duplicate EXACT matches silently take the last | RED (1) |
+
+⚠️ **M8 CAME FROM RE-READING MY OWN RESOLVER WHILE WAITING ON CI, AND IT IS A
+HOLE THE PRE-F10 CODE COULD NOT HAVE HAD.** Resolution is now by **SHA**, and
+the date prefix is decoration — so `20260816-abc.md` and `20260817-abc.md` BOTH
+match one commit, which is a deploy that crossed midnight and got a second
+declaration written. The loop took the **last one silently**. That is exactly
+the defect the carry-forward tie already refused, sitting unrefused four lines
+above it — *the same question answered two ways in one function.* Now `return 2`,
+with its own arm.
+
+⚠️ **M6 AND M7 ARE THE ONES THAT MATTER.** The habit is to mutate by the
+COMPLETE inverse, which proves the guard sees a total regression. The failure
+that actually ships is a **half-landed fix** — here, a library that is perfect
+and a caller that quietly stopped consulting it. Both are one-line reverts, and
+both would have reintroduced F10 in full while every behavioural arm stayed
+green. That is what the three `the deploy actually uses it` arms exist for.
+
+### ⚠️ MY OWN MUTATION HARNESS LIED FIRST, AND THE TELL WAS A MUST-BE-NONZERO ZERO
+
+The proof's first run printed **`baseline: 0 passed, 0 failed`** for a suite that
+had just passed **13**. The parser tested `part.endswith('passed')` against
+vitest's `Tests  1 failed | 12 passed (13)` — the trailing `(13)` defeats it. So
+`failed` parsed correctly and `passed` was **always 0**.
+
+**The RED/GREEN verdicts keyed on `failed` and were sound.** The damage was to
+the *baseline guard*, which read `if f != 0` and was satisfied by a run that
+**collected nothing at all** — the emptiness test this house names on sight.
+Fixed to assert **both** halves (`f != 0 or p == 0`) and **re-run from scratch**
+rather than reasoned around; the numbers in the table above are from the second
+run. *A must-be-nonzero reading zero is the broken-instrument tell, and it
+appeared inside the instrument built to check everything else.*
+
+### ⚠️ AND THE GATE ITSELF RAN IN THE WRONG UNIVERSE — CAUGHT AFTER THE FIRST PUSH
+
+**The flags are part of the universe.** `deploy-prod.sh:50` runs
+`set -euo pipefail`; the gate's helpers sourced `declaration.sh` under a bare
+`set -u`. **Fifteen green arms, every one proving the logic in a shell the
+deploy does not use** — the *"a test that defaults a flag OFF while production
+runs it ON is testing the rollback"* rule, one layer down from env vars.
+
+⚠️ **IT IS NOT COSMETIC, AND THE ACCEPT PATH IS WHERE IT WOULD HAVE BITTEN:**
+
+    runtime=$(git diff --name-only … | grep -Ecv "$RE" || true)
+
+**`grep -c` exits 1 when the count is ZERO — which is exactly the case a
+carry-forward must accept.** Under `pipefail` that 1 propagates; under `set -e`
+it would abort. The `|| true` is what makes it safe, and *"this guard holds"*
+was an assertion the file did not test.
+
+Re-run under the real flags: **16 of 16 still green**, so the guards do hold —
+now a measurement rather than a claim. The mutation proof was **re-run against
+the hardened harness**, because evidence describes only the tree it was taken
+on: **8 of 8 still red**, baseline 16/16, post-restore 16/16.
+
+**Found by reading `deploy-prod.sh`'s own `set` line, not by any test — and no
+test would have said anything.** A milder shell fails in the PERMISSIVE
+direction, so the suite was green and would have stayed green.
+
+⚠️ **AND F9 ALREADY PAID FOR THIS EXACT TRAP, IN THE SIBLING LIBRARY — WHICH IS
+WHY IT IS WORTH A SECTION RATHER THAN A LINE.** `scripts/lib/rollback-tag.sh:82`
+carries its author's own note, verbatim: *"`|| true` IS LOAD-BEARING AND ITS
+ABSENCE WAS A SHIPPING DEFECT … with **pipefail**, a `grep` that matches nothing
+makes the whole pipeline exit 1 … `set -e` kills the deploy ON THE SPOT"* — and,
+decisively, *"**Invisible until the gate was made to run with production's shell
+options. Nothing else could have found it**: the function is correct, the logic
+is correct, and it is fatal only in the caller's universe."*
+
+**Same trap, same `grep`-exits-1 mechanism, same file family, one item apart.**
+F9's version was the worse one — it would have killed the deploy in the COMMON
+case, because every pre-F9 declaration lacks the line it greps for. Mine is
+guarded by the same `|| true`, and **the guard is now tested rather than
+assumed.** Two independent instances is a property of the seam, not of either
+author.
+
+### THE F9 INTERACTION WAS CHECKED, AND IT IS SOUND
+
+F10 changes **what `$DECL` can be**, and `deploy-prod.sh:145` hands `$DECL` to
+F9's `rollback_tag_slug "$DECL" "$DEPLOY_SHA"`. *Diff the callers before you
+change a shared thing.*
+
+Under a carry-forward, `$DECL` names an ANCESTOR — so the slug is read from the
+ancestor's declaration, and the fallback remains **HEAD's** short sha. Both are
+correct: the slug labels the release the declaration describes, and the
+carry-forward has already PROVEN the shipped tree is runtime-identical to it. No
+change needed, and it is recorded as checked rather than assumed.
+
+### AGAINST THE REAL DECLARATION SET — the production universe
+
+Every synthetic repo above holds two or three commits and one declaration. The
+real directory holds **37 files**, including a `README.md` whose name carries no
+sha. Two arms run the same library against it, and the resolver was executed on
+`main` for the record:
+
+    shipping    : a8d4e8b2
+    🔴 REFUSING — no delta declaration covers the tree you are shipping.
+    RC=1
+
+**That is the correct answer and it is not a regression** — pre-F10 code refuses
+identically here, because there is no `20260817-a8d4e8b2.md`. The nearest
+declaration is `20260816-3045ae16.md`, and `3045ae16..a8d4e8b2` moves
+`template-twin-mappings.ts` plus three test files, so a carry-forward is
+correctly disqualified. **The two implementations differ only where a docs-only
+commit moved `main` — which is precisely F10's case.**
+
+⚠️ **HONEST LIMIT, NAMED:** `main` currently has **no** docs-only ancestor range,
+so the carry-forward ACCEPTANCE is proven synthetically and was not
+demonstrable live tonight. The refusal path was.
+
+### CONTROLLED DELTA, NOT THE RAW NUMBER
+
+Running the unit suite from a worktree fails on `react/jsx-dev-runtime` —
+`vitest.config.ts` aliases react to `../../node_modules/react` and a worktree
+checks out TRACKED FILES ONLY. A clean detached worktree at `origin/main`,
+carrying **none** of this change, was measured as the control:
+
+| | test files | tests |
+|---|---|---|
+| `origin/main` (control) | 16 failed, 297 passed (315) | 1 failed, 3802 passed |
+| this branch | 16 failed, 298 passed (316) | 1 failed, 3817 passed |
+
+**+1 file, +15 tests, +0 failures — exactly the new arms.** The failures are a
+pre-existing property of the config, refuted **empirically** rather than by
+argument.
+
+⚠️ **AND THE DOCUMENTED FIGURE HAD DRIFTED.** `AGENTS.md` records this artifact
+as *"15 failed files / 1 failed test"*. Measured tonight on `origin/main`: **16**.
+Not a defect — the count grows as client components are added — but it is an
+inherited number, and this house's own rule is to re-measure rather than carry
+one forward. Re-measured.
+
+### WHAT THIS ITEM DOES **NOT** CLAIM
+
+- **It does not deploy.** Like F9, F10's done-when is *on `main`, cited*. Scripts
+  run from the tree, so it is effective for the NEXT deploy rather than pending a
+  release. No §2.5 declaration is owed by this change, because it changes no
+  runtime path in the shipped image.
+- **It does not make a carry-forward routine.** The exact match is still the
+  normal case and still `present`. The carry-forward is the door for the cadence
+  that had none.
+- **It cannot judge CONTENT.** It proves a declaration is about the shipped
+  *tree*; whether the declaration says anything true is what the post-deploy
+  comparison is for. A declaration naming the right commit and declaring nothing
+  useful passes this gate and always did.
+- ⚠️ **IT PROVES THE CODE IS IDENTICAL. IT DOES NOT REFRESH THE BASELINE — AND
+  THAT IS THE ONE PLACE F10 GENUINELY NARROWS SOMETHING.** A declaration's
+  numbers (visits, patients, signatures) are captured when it is WRITTEN.
+  **Under the old scheme a fresh filename forced fresh baselines BY ACCIDENT**;
+  a carry-forward does not, so a declaration written three days and ten
+  docs-commits ago carries three-day-old counts into the post-deploy comparison,
+  where normal clinical activity then reads as drift.
+
+  Not fixable by a threshold — any hour or commit limit would be arbitrary — so
+  it is **PRINTED LOUDLY** instead, in the house's `present`-mode style (record
+  provenance, do not refuse on it): the resolver emits a `⚠️ BASELINE AGE` block
+  beside the declaration's commit time. **The warning IS the compensating
+  control, so an arm asserts it** — deleting it is a real regression, not a
+  cosmetic one. *A difference that is not in the declaration is still THE
+  FINDING; the operator just has to be able to tell business activity from a
+  defect.*
+- ⚠️ **The runtime allowlist is a JUDGEMENT, and it is deliberately conservative.**
+  A test-only change disqualifies a carry-forward even though no shipped byte
+  moves. That is fail-closed on purpose: refusing costs one declaration, and
+  accepting wrongly costs a deploy nobody judged.
+
+### ⚠️ I APPENDED THIS VERY LEDGER ROW TO THE SHARED TREE — AND THE MECHANISM IS `cd`, NOT CARELESSNESS
+
+**Recorded because it is the third occurrence of a class this file already
+names, and because the previous two were also committed by people who knew the
+rule.**
+
+The F10 row above was written with `cat >> docs/foundation/RELAY.md` — a
+**RELATIVE** path — while the shell's working directory had silently fallen back
+to `/opt/meddoc-pro`. It had been inside the control worktree
+(`.f10-ctl/apps/transcribe-md`), and **removing that worktree destroyed the cwd
+out from under the shell**:
+
+    pwd: error retrieving current directory: getcwd: cannot access
+         parent directories: No such file or directory
+
+So **176 lines landed on the deploy surface**, not in the branch. `git status`
+on the shared tree read `M docs/foundation/RELAY.md` — which is exactly the
+state that **blocks the next relight**, since the launch guard refuses a dirty
+tree. Scratch the loop cannot reap making the loop unstartable, one more time.
+
+⚠️ **AND NOTE WHAT IT WAS:** a ledger row about declaration discipline, written
+onto the surface whose cleanliness the discipline protects. AGENTS.md already
+records that shape verbatim — *"a rule about not touching a live deploy surface,
+being written onto a live deploy surface … reflexes are not fixed by knowing the
+rule."*
+
+**THE REPAIR, in the order that matters — EXTRACT BEFORE REVERT:**
+
+1. **Measure first.** `git diff --numstat` → `176 0`, a PURE APPEND after line
+   15580. That number is what made the extraction computable rather than guessed.
+2. **Extract to the branch**, `tail -n +15581` into the worktree's copy.
+3. **VERIFY THE EXTRACTION** — 15580 → 15756 lines (+176, reconciling against
+   the numstat), heading present exactly once, tail byte-matching — **before**
+   anything was reverted. `git checkout --` is the instrument this house
+   documents as silently destroying uncommitted work; it is only safe once the
+   work is provably somewhere else.
+4. **Revert, then re-assert clean.** `git status --porcelain` empty.
+
+**THE GENERALISABLE HALF, and it is not "be careful":**
+
+> **A relative path is a bet on cwd, and `git worktree remove` INVALIDATES the
+> cwd of any shell standing inside it.** Every file-writing command in a session
+> that creates and destroys worktrees should use an ABSOLUTE path — the `Edit`
+> calls in this same session all used absolute paths and all landed correctly;
+> the one `cat >>` that used a relative path is the one that went astray.
+
+### ⚠️ #121's INTERIM EXCEPTION IS NOW DISCHARGED — AND RETIRING IT NEEDS THE OWNER
+
+#121 says the carry-forward where-exception *"retires WITH F10 — do not let it
+outlive its reason; an exemption's justification is prose and prose decays
+silently."* **F10 has landed, so the reason is gone.**
+
+The exception's text lives in `docs/foundation/INBOX.md`
+(`2026-08-16T19:30:00Z`), and **the loop never writes to the INBOX** — it is
+append-only from the supervised side by design. So this is flagged rather than
+executed: **the entry should be moved to `inbox-archive/`**, and the interim
+clause in #121 marked discharged. Carried in the morning report.
+
