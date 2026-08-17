@@ -233,6 +233,53 @@ for (( n=1; n<=batch_size; n++ )); do
   # prints nothing and never blocks a launch. An inbox that could stop the
   # programme would be a worse bug than the problem it solves.
   #
+  # ══════════════════════════════════════════════════════════════════════
+  # SYNC THE SHARED TREE BEFORE READING THE INBOX. F13.
+  # ----------------------------------------------------------------------
+  # ⚠️ THE INBOX'S OWN HEADER CLAIMS delivery is "mechanical: receipt cannot be
+  # skipped and requires no read-discipline from anybody." That was FALSE, and
+  # false in exactly the case it exists for.
+  #
+  # This runner had NO git sync of any kind, and MASTER.md never instructed one.
+  # It printed INBOX.md from the SHARED TREE, which only advanced because
+  # sessions happened to `git merge --ff-only` it as an unwritten habit. So an
+  # owner notice merged to `main` reached the loop only if some later session
+  # chose to sync — which is read-discipline, wearing a mechanism's clothes.
+  #
+  # MEASURED 2026-08-17: the shared tree sat at 1537ae47 while origin/main was
+  # 82f743ca — FOUR merges behind. An owner ruling (#123) and its INBOX pointer
+  # for F12 were on main and INVISIBLE to the loop, and the next session would
+  # have launched with the stale five entries and a RELAY with no F12 row.
+  #
+  # ⚠️ FAIL-LOUD, NOT FAIL-CLOSED. A stale tree is bad; a halted loop is worse,
+  # and this is a delivery aid rather than a safety gate. So it never refuses:
+  # it ff's when it safely can, and when it cannot it SAYS SO with the distance,
+  # because "N commits behind" in the log is the thing that gets noticed.
+  # ⚠️ AND IT IS `--ff-only`, ON `main`, AND ONLY WHEN CLEAN. A session may have
+  # the shared tree checked out to a branch or dirty mid-item; moving it under
+  # that session is the shared-tree hazard this house already has a rule for.
+  # (plain `git` — the script cd's to the repo root at the top, so there is no
+  #  $ROOT to pass; an earlier draft referenced one that does not exist, which
+  #  bash would have accepted silently as an empty -C argument.)
+  git fetch --quiet origin 2>/dev/null || true
+  _branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')
+  _dirty=$(git status --porcelain 2>/dev/null | wc -l)
+  _behind=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo '?')
+  if [ "$_behind" = "0" ]; then
+    :
+  elif [ "$_branch" = "main" ] && [ "$_dirty" = "0" ]; then
+    if git merge --ff-only origin/main >/dev/null 2>&1; then
+      echo "[loop] shared tree fast-forwarded $_behind commit(s) → $(git rev-parse --short HEAD)"
+    else
+      echo "[loop] ⚠️ shared tree is $_behind commit(s) behind origin/main and the ff FAILED."
+      echo "[loop]    The INBOX and MASTER below may be STALE. Sync it by hand."
+    fi
+  else
+    echo "[loop] ⚠️ shared tree is $_behind commit(s) behind origin/main and NOT synced:"
+    echo "[loop]    branch=$_branch dirty=$_dirty — refusing to move it under a session."
+    echo "[loop]    The INBOX and MASTER below may be STALE."
+  fi
+
   # "Holding no entries" is COUNTED, not assumed — entries are
   # `### <ISO8601> — <title>` headings, so a file carrying only its own header
   # prints nothing, and a prose `### heading` does not trip it.

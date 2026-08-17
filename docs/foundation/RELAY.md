@@ -59,6 +59,54 @@ reachable** (`formOnly` derives from the template and is independent of signing;
 neither export route carries a signed gate), so the draft footer applies there
 too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
+### 🔴 F13 — THE INBOX'S "MECHANICAL DELIVERY" WAS NOT MECHANICAL — FIXED 2026-08-17
+
+**`INBOX.md`'s own header claims delivery is *"mechanical: receipt cannot be
+skipped and requires no read-discipline from anybody."* That was FALSE, and
+false in exactly the case it exists for.**
+
+⚠️ **MEASURED: `scripts/foundation-loop.sh` had NO git sync of any kind** — a
+grep for `git pull|fetch|merge|reset|checkout` in it returned **nothing** — and
+**`MASTER.md` never instructed one either** (same grep, zero hits). The runner
+printed `INBOX.md` from the **shared tree**, which advanced only because
+sessions happened to `git merge --ff-only` it as an **unwritten habit** visible
+in the reflog. **An owner notice merged to `main` reached the loop only if some
+later session chose to sync — which is read-discipline wearing a mechanism's
+clothes.**
+
+**THE LIVE CONSEQUENCE, caught before it cost anything:** the shared tree sat at
+`1537ae47` while `origin/main` was `82f743ca` — **four merges behind.** Ruling
+**#123** and the **F12 pointer** were on `main` and **invisible to the loop**;
+the next session would have launched with the stale five entries and a RELAY
+carrying no F12 row. **The INBOX routing was chosen specifically so those
+criteria would arrive mechanically, and the mechanism did not exist.**
+
+**THE FIX — the runner syncs before it reads the INBOX, and it is FAIL-LOUD, not
+fail-closed.** A stale tree is bad; a halted loop is worse, and this is a
+delivery aid rather than a safety gate. So it never refuses: it fast-forwards
+when it safely can, and when it cannot it **says so with the distance**, because
+*"N commits behind"* in the log is what gets noticed.
+
+⚠️ **AND IT WILL NOT MOVE THE TREE UNDER A SESSION** — `--ff-only`, on `main`,
+only when clean. That is the shared-tree hazard this house already has a rule
+for, and the sync must not become the thing that violates it.
+
+**Proved on a throwaway clone, all four branches:**
+
+| case | behaviour |
+|---|---|
+| up to date | **silent** |
+| clean + behind | fast-forwards, reports the distance |
+| **dirty** | **refuses**, HEAD unchanged, reports staleness |
+| **on a feature branch** | **refuses**, HEAD unchanged, reports staleness |
+
+⚠️ **AND MY FIRST DRAFT REFERENCED `$ROOT`, WHICH DOES NOT EXIST** — the script
+`cd`s to the repo root at `:60`, so `git -C "$ROOT"` would have passed an empty
+argument silently. Caught by checking the variable rather than assuming it.
+⚠️ **The check for it then lied too**, reporting `$ROOT` still present when the
+only occurrence was **the comment I had just written explaining its removal** —
+the prose-matching trap, in the verification of its own fix.
+
 ### 🔴 F12 — E/M ON PROCEDURE NOTES, AND THE EXPORT'S CREAM E/M BLOCK — **AT F6's HEAD** (ruling #123)
 
 **OWNER FINDING, ON HIS OWN EXPORTED PDF. Two parts; both ship together.**
