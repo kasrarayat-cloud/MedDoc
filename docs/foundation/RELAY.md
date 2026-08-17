@@ -514,6 +514,44 @@ layer is a guard that quietly teaches sessions to route around it — and the
 route was one command away. **The cost of waiting was about thirty minutes of a
 session that had budget. The cost of the habit would have been permanent.**
 
+#### ✅ F11's THIRD GRANT — RESOLVED AS A WRAPPER, NOT A SHAPE-GRANT. 2026-08-17.
+
+**Owner ruling.** `scripts/push-with-cancellation.sh` takes the reason as its
+argument, refuses an empty one, echoes the declaration into the log, sets
+`DECLARE_CANCELLATION` and pushes. **Allowlisted BY NAME; the raw compound
+`VAR=value command` form stays DENIED** — that is a shape, not a command, and
+granting it would grant every variable prefix to every command.
+
+⚠️ **THE RATIONALE, RECORDED SO IT IS NOT RE-LITIGATED: refusing the grant never
+withheld the CAPABILITY.** The loop already holds `gh run cancel` — the same
+outcome through another door, with no declaration and no log line. What refusal
+withheld was the **DISCIPLINE**. The wrapper restores the record-keeping, which
+is the entire point of a declaration. House precedent: `retire-branch.sh`,
+`merge-pr.sh`.
+
+**PROOF — 9 refusal arms, a happy path, and a negative control:**
+
+| arm | result |
+|---|---|
+| no argument · empty · whitespace-only | refused, exit 1 |
+| bare `1` `true` `force` `skip` | refused — *a declaration wearing a token's clothes is a bypass* |
+| 11 chars (below the documented 12-char floor) | refused |
+| **valid reason — HAPPY PATH CONTROL** | **exit 0**, `git push origin HEAD` invoked, `DECLARE_CANCELLATION` present in git's environment |
+| the hook's own gate (`inflight_declaration_ok`, the function `pre-push:75` calls) | **accepts it** |
+| **NEGATIVE CONTROL** — refused reason | **`git push` never invoked** |
+
+⚠️ **THE HAPPY PATH IS THE HALF THAT MATTERS**, per `retire-branch.sh`, which
+passed 9 of 9 refusal tests and then printed a false green. Proved here by
+stubbing `git` and reading what the wrapper actually handed it — not by trusting
+an exit code.
+
+⚠️ **ONE RULE IS THE WRAPPER'S OWN, DELIBERATELY.** `inflight_declaration_ok ""`
+returns **0** — correct for the HOOK, which calls it on every push where empty
+means *no declaration offered*. For a wrapper whose only purpose is carrying
+one, empty means *the override was invoked and nothing was declared*, which must
+refuse. So the shared validator is reused for the token and length rules and
+never reimplemented; the empty case is added on top.
+
 **The fix is three allowlist lines** — `Bash(bash scripts/check-cotenants.sh:*)`,
 `Bash(tmux has-session:*)` (read-only; broader `tmux` must NOT be granted, since
 `tmux new`/`kill-session` reach the loop's own runner), and a form that lets the
