@@ -1934,6 +1934,43 @@ The rule is therefore about the RECEIVING end, deliberately. The war room states
 the ruling; the session that acts on it is the one that must leave the artifact,
 because it is the one holding the evidence that the ruling was made.
 
+### ⚠️ AND AN ENTRY THAT **NAMES AN INSTRUMENT** VERIFIES THAT INSTRUMENT'S **GRANT**, IN THE SAME COMMIT
+
+**Standing 2026-08-17. Two reference cases, same author, same week — which is
+why it is mechanism and not advice.**
+
+> **If a canon entry, a MASTER step or a ruling tells a session to RUN
+> something, the landing commit checks that the thing is in
+> `.claude/settings.json` — and adds it if not. A rule and its grant live in
+> different files, land in different PRs, and NOTHING checks that the second
+> followed the first.**
+
+| # | the entry | the instrument | what the loop got |
+|---|---|---|---|
+| 1 | MASTER's queue header — *cite with `scripts/gh-runs.sh`* | `gh-runs.sh` | **refused**; worked around with `check-citation.sh`. Closed by #692 |
+| 2 | canon *"A PROBE THAT MATCHES ITSELF"* — *the authority is `tmux has-session`* | `tmux has-session` | **refused**; pushed back toward `pgrep -f` |
+
+⚠️ **THE SECOND IS THE ARGUMENT, BECAUSE THE RULE BACKFIRED.** That entry exists
+*because* `pgrep -f` returned a false LIVE reading for three hours. An unattended
+session obeying it hits a permission refusal and falls back to **exactly the
+probe the rule forbids** — so the canon entry made the loop **less safe than no
+entry at all.**
+
+⚠️ **AND #692's OWN COMMIT MESSAGE HAD ALREADY STATED THIS LESSON** — *"a script
+MASTER instructs the loop to run is not shipped until its GRANT ships with
+it"* — written, merged, and violated in the next canon entry **by the same
+author, days apart.** Naming a class is not enumerating it, and **writing a
+lesson down is not obeying it.** That is precisely why this is a step in the
+landing ritual rather than a thing to remember.
+
+**The check is one line and it is cheap:**
+
+    grep -c "<the instrument>" .claude/settings.json    # 0 = your entry is inert
+
+⚠️ **AND IT APPLIES TO THIS ENTRY.** The commit landing it names
+`scripts/push-with-cancellation.sh`, so it grants it in the same commit —
+the rule's first application is to itself.
+
 ## LANDING INTO A LIVE LOOP — PREFER THE STOP FILE, AND OWN THE COST IF YOU DO NOT
 
 **Standing 2026-08-12.** The FOUNDATION loop runs unattended and continuously,

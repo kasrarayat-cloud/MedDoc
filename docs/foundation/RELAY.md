@@ -59,6 +59,43 @@ reachable** (`formOnly` derives from the template and is independent of signing;
 neither export route carries a signed gate), so the draft footer applies there
 too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
+### 🔴 F12 — E/M ON PROCEDURE NOTES, AND THE EXPORT'S CREAM E/M BLOCK — **AT F6's HEAD** (ruling #123)
+
+**OWNER FINDING, ON HIS OWN EXPORTED PDF. Two parts; both ship together.**
+
+**(1) SKIN.** The E/M *"Documentation Level"* block renders in **LEGACY CREAM**
+at the bottom of exported PDFs — the export-side E/M rendering never got R4b's
+host treatment. **Fix at the COMPONENT/BUILDER ROOT so every surface inherits,
+never per-caller** (R3.4's lesson). **Semantics byte-identical.** Red-prove
+against the owner's PDF.
+
+⚠️ **DO NOT GUESS THE MECHANISM — REPRODUCE IT FIRST.** Measured while filing:
+`docx-generator.ts:188-197` — the emitter the PDF now converges onto — is
+**plain paragraphs with NO shading** (only `color:'FFFFFF'` at `:470` in the
+whole builder). **The cream is not coming from there.** Discriminate between
+`review-document-view` (CSS-capable), `pdf-native`, `ehr-formatters.ts:182`, or
+a pre-F3 PDF **before editing anything**.
+
+**(2) POLICY — OWNER-DECIDED, BUILD IT.** E/M **does not belong on
+PROCEDURE/OPERATIVE notes at all.** Imaging-style suppression **keyed on the
+NOTE'S SHAPE** (op-note templates / procedure encounters), hiding the block
+**in-app AND in exports**. **Office visits unchanged.** Discharges the recorded
+*E/M-suppression-on-procedure-notes* item.
+
+⚠️ **THE CRUX, MEASURED: THE EXISTING SEAM CANNOT EXPRESS THIS.**
+`emAppliesToSpecialty(id)` (`specialties.ts:144`) takes **only a specialty id**,
+and **a GI doctor does office visits AND colonoscopies under one specialty.**
+So this is a **SECOND AXIS**, not another specialty. Feed it through
+`projectDisplayedEmCode`'s `emApplies` — a required param by design, so an
+unthinking caller fails to typecheck.
+
+**DONE WHEN:** attempt-proved **both** directions — **GI office visit SHOWS
+E/M**; **colonoscopy op-note shows NONE, NOWHERE** (in-app, DOCX, PDF, every EHR
+format) — under a **§2.5 declaration carrying ABSENCE rows**, with the
+**MANDATORY adversarial pass**. ⚠️ **The positive arm is what catches an
+over-broad suppression stripping E/M from office visits, which is worse than the
+defect.**
+
 ### F6 — SIX VERIFIED-UNFIXED ITEMS, behind F5
 
 Found and confirmed during F3; none is a theory. **Each is its own item — the
@@ -68,7 +105,7 @@ archive-loop one especially, which is a live hazard rather than a polish task.**
 |---|---|---|
 | ~~F6.1~~ | ✅ **FIXED AND GATED — 2026-08-17, session 02 of run `20260817-033820-b2`.** `freeTextRuns` in `docx-generator.ts`; **four** free-text sites render through it. 15 arms, **11 of 11 mutations reddened**, plus a RENDERED differential through the real LibreOffice. See the ledger row below. ⚠️ **THE ROW WAS NARROWER THAN THE DEFECT IN THE DIRECTION THAT MATTERS.** It says *"in the DOCX"*; since F3 the pre-sign preview, the signed preview, the Word download and the PDF download all converge on `generateVisitDocx`, so **one flattening reached FOUR surfaces** — while `ehr-formatters.ts:423` kept the breaks, so the EHR clipboard and the signed document disagreed about what the note said. ⚠️ **And it was not "patient-summary" only**: referral `reason`, referral `relevant_history` and modifier `rationale` flatten identically (0 prod rows carry a break there TODAY, against live controls of 13 and 14 — latent, not absent). **Measured: 43 of 43** prod visits with a non-empty `patientSummary` satisfy the defect's own predicate. *Previous wording:* **Patient-summary line breaks are lost in the DOCX** — a genuine fidelity bug on the same class #112 fixed for numbers |
 | F6.2 | **`CLINICAL NOTE` heading renders on an EMPTY note** | a heading over nothing is a document asserting content it does not have |
-| ~~F6.3~~ | ✅ **BOUNDED — built and gated 2026-08-17, session 01 of run `20260817-033820-b2`.** `archive-pdf-budget.ts`; both archive routes render THROUGH it. 35 arms, **11 of 11 mutations reddened**. See the ledger row below. ⚠️ **The refutation pass found a defect in the FIX**: the first draft charged elapsed wall-clock, which the audio downloads in the same loop would have consumed — truncating the archives of exactly the doctors with the most recordings, while the sidecar sat idle. It charges sidecar-time now, and M11 re-plants the original defect to prove the gate sees it. *Previous wording:* ⚠️ **The archive loop is UNBOUNDED against a single strictly-serializing sidecar** — **measured: a 0.42s staircase**, and `maxDuration` is **INERT on a standalone build** — so nothing bounds it. Real hazard, own item, not a tail |
+| ~~F6.3~~ | ✅ **LIVE IN PRODUCTION 2026-08-17T06:53Z — merge `1537ae47`, cited 4 of 4, 15 of 15 declared rows matched.** Built and gated the same session (01 of run `20260817-033820-b2`). `archive-pdf-budget.ts`; both archive routes render THROUGH it. 35 arms, **11 of 11 mutations reddened**. See the ledger row below. ⚠️ **The refutation pass found a defect in the FIX**: the first draft charged elapsed wall-clock, which the audio downloads in the same loop would have consumed — truncating the archives of exactly the doctors with the most recordings, while the sidecar sat idle. It charges sidecar-time now, and M11 re-plants the original defect to prove the gate sees it. *Previous wording:* ⚠️ **The archive loop is UNBOUNDED against a single strictly-serializing sidecar** — **measured: a 0.42s staircase**, and `maxDuration` is **INERT on a standalone build** — so nothing bounds it. Real hazard, own item, not a tail |
 | F6.4 | **`export-cleanliness`'s markdown detector is now VACUOUS** | a green that cannot go red — the ratchet class this house names on sight |
 | F6.5 | **`gate-r1`'s "BOTH sides" test asserts one side** | the title is wider than the measurement |
 | ~~F6.6~~ ✅ **CLOSED 2026-08-16 — VERIFIED FIXED, see the note under this table** | ~~**`check-cotenants.sh` watches FOUR hosts; MASTER.md STEP 0.6 names FIVE**~~ | `www.quillmd.com` is missing from its `EXPECTED` table — **my omission when I wrote it**. One line; rides the next small PR rather than waiting for F6 |
@@ -266,6 +303,67 @@ CONTROL instead of passing the proof.
    build break is a weaker claim** — it proves the compile noticed, not that the
    GATE saw the defect. Re-anchored on the whole block; it now reddens
    behaviourally.
+
+---
+
+### ✅ F6.3 IS LIVE IN PRODUCTION — **2026-08-17T06:53Z, session 01 — 15 of 15 JUDGED**
+
+**Merge `1537ae472c146e7c977def6aabde7d5dcec2255d` (PR #702).** Citation
+produced by `check-citation.sh`, not typed; every line `a1`, so nothing was
+re-run:
+
+**Citation — 4 of 4 on `1537ae472c146e7c977def6aabde7d5dcec2255d`:**
+   · `CI` 32000480913 a1
+   · `e2e` 32000480888 a1
+   · `a11y-ci` 32000480842 a1
+   · `secrets-scan` 32000480843 a1
+
+**§2.5 declaration:** `docs/foundation/deploys/20260817-c65da48f.md`.
+
+⚠️ **THIS IS F10's CARRY-FORWARD RESOLVER'S FIRST REAL USE, AND IT WORKED.**
+The gate reported `resolution : CARRY-FORWARD`, resolved `c65da48f` as an
+ancestor of the deployed HEAD, proved the range between them touched **zero
+runtime paths** (two files, both under `docs/`), and — as F10 designed — held
+the carry-forward to **`strict`** rather than `present`, because a commit
+existed to ride. **The circularity F10 was built for did not appear:** the
+declaration was committed before the act, in the same PR as the work, and the
+deploy accepted it. It also printed its own `⚠️ BASELINE AGE` warning, which is
+the compensating control session 06 built for exactly this case.
+
+| # | declared | measured | ✓ |
+|---|---|---|---|
+| 1 | `transcribe-md` image differs | `cc772df2…` → `2a855056…` | ✓ |
+| 2 | worker image differs | `9848ee4c…` → `9d5a37e3…` | ✓ |
+| 3 | `budget_exhausted` in the shipped image ≥1 · CONTROL stays 4 | **0 → 2** · control **4 → 4** | ✓ |
+| 4 | visits stay 44 | 44 | ✓ |
+| 5 | SIGNED stays 27 | 27 | ✓ |
+| 6 | patients stay 32 | 32 | ✓ |
+| 7 | practices stay 199 | 199 | ✓ |
+| 8 | users stay 198 | 198 | ✓ |
+| 9 | migrations stay 104 | 104, *"No pending migrations to apply"* | ✓ |
+| 10 | `ledger_entries` stays 177 | 177 | ✓ |
+| 11 | `audit_logs` must not DECREASE | 11533 → **11537** | ✓ |
+| 12 | 9 containers, healthy | 9, healthy | ✓ |
+| 13 | `gotenberg` image unchanged | `2d05d225…` unchanged, container `Up 9 days` | ✓ |
+| 14 | co-tenants 307/404/200/200/410 | 307/404/200/200/410 | ✓ |
+| 15 | no `budget_exhausted` skip on today's population | **0**, against a readable log stream (8 lines) | ✓ |
+
+**Row 13 is worth reading twice:** `deploy-prod.sh` *does* `build gotenberg` and
+`up -d gotenberg` on every deploy, so *"the sidecar is not rebuilt"* would have
+been a false premise. The declaration asserted instead that **this change
+touches nothing in that build context**, so a cached build must reproduce the
+same id — and the container's `Up 9 days` confirms compose found no reason to
+recreate it. **The assertion was written against the mechanism, not against the
+hoped-for outcome.**
+
+**Rows 3 and 15 both carry their own controls**, because each is a claim about
+an ABSENCE or a presence in a place where a broken probe and a true answer look
+identical: row 3's control proves `src/lib` literals survive minification into
+the built chunks, and row 15's proves the log stream was readable at all.
+
+**Rollback tags cut and verified against the RUNNING images (F9), 3 of 3:**
+`meddoc-pro-transcribe-md:pre-1537ae47-20260817`,
+`…-worker:pre-1537ae47-20260817`, `…-gotenberg:pre-1537ae47-20260817`.
 
 ---
 
@@ -658,6 +756,93 @@ layer is a guard that quietly teaches sessions to route around it — and the
 route was one command away. **The cost of waiting was about thirty minutes of a
 session that had budget. The cost of the habit would have been permanent.**
 
+#### ✅ AND `gh-runs.sh` COLLAPSED TWO STATES INTO ONE EXIT — A SECOND TIME. FIXED 2026-08-17.
+
+**`cited` returned exit 1 for BOTH "still pending" and "a run FAILED".** So the
+canonical `until bash scripts/gh-runs.sh cited "$SHA"` loop — the pattern this
+wrapper exists to serve — **polls forever** on a commit whose run has already
+concluded `failure` and can never reach 4 of 4.
+
+**MEASURED ON PR #705, and it was live:** `e2e` concluded FAILURE at 06:59Z
+(`npm ECONNRESET` in the image build). `cited` printed *"3 of 4 success"* and
+exited 1 — **true, and indistinguishable from three-done-one-running.** A waiter
+was doing exactly that; it was caught only by querying the runs directly.
+
+⚠️ **SECOND INSTANCE IN THE SAME FILE, SAME AUTHOR, SAME SHAPE** — the first was
+a fabricated sha vs a real sha with pending runs, fixed by adding `2 = CANNOT
+TELL`. So the states are now **enumerated in one function** rather than
+re-derived per branch:
+
+    0 CITED · 1 PENDING · 2 CANNOT TELL · 3 FAILED (terminal)
+
+**And `wait` is the cure, because the defect is not fixable in the caller.**
+`until` observes only zero/nonzero, so exit 3 alone would still loop. The
+polling moved INTO the script, where terminal states are distinguishable, and it
+carries a timeout that reports `2` rather than hanging.
+
+**PROVED BOTH DIRECTIONS, against controlled fixtures — new vs old:**
+
+| fixture | new | old |
+|---|---|---|
+| all success → CITED | **0** | 0 |
+| one running → PENDING | **1** | 1 |
+| one **FAILED** → TERMINAL | **3** | 1 ⟵ *the defect* |
+| one **CANCELLED** → TERMINAL | **3** | 1 ⟵ *also collapsed* |
+| no runs → CANNOT TELL | **2** | 1 |
+
+⚠️ **THE HAPPY-PATH ROWS ARE THE POINT OF THE TABLE:** cited stays `0` and
+pending stays `1`, so **every existing `until … cited` loop keeps working** for
+the legitimate case. A fix that made the guard fire and broke the ordinary path
+would be worse than the defect.
+
+**And the defect was demonstrated, not just described:** `until` + the old
+script on a FAILED fixture was killed by `timeout` at **exit 124** — an infinite
+loop, observed.
+
+⚠️ **TWO OF MY OWN PROOF INSTRUMENTS LIED FIRST, BOTH CAUGHT BY A WRONG NUMBER.**
+The backup copy reported `2` for a commit that is genuinely cited — it was
+sitting outside `scripts/`, so its `LIB` path could not resolve and it
+fail-closed correctly about the wrong thing. And the live-failure fixture
+evaporated when the re-run replaced it. **Hence controlled fixtures**: a proof
+that depends on transient production state is not repeatable.
+
+#### ✅ F11's THIRD GRANT — RESOLVED AS A WRAPPER, NOT A SHAPE-GRANT. 2026-08-17.
+
+**Owner ruling.** `scripts/push-with-cancellation.sh` takes the reason as its
+argument, refuses an empty one, echoes the declaration into the log, sets
+`DECLARE_CANCELLATION` and pushes. **Allowlisted BY NAME; the raw compound
+`VAR=value command` form stays DENIED** — that is a shape, not a command, and
+granting it would grant every variable prefix to every command.
+
+⚠️ **THE RATIONALE, RECORDED SO IT IS NOT RE-LITIGATED: refusing the grant never
+withheld the CAPABILITY.** The loop already holds `gh run cancel` — the same
+outcome through another door, with no declaration and no log line. What refusal
+withheld was the **DISCIPLINE**. The wrapper restores the record-keeping, which
+is the entire point of a declaration. House precedent: `retire-branch.sh`,
+`merge-pr.sh`.
+
+**PROOF — 9 refusal arms, a happy path, and a negative control:**
+
+| arm | result |
+|---|---|
+| no argument · empty · whitespace-only | refused, exit 1 |
+| bare `1` `true` `force` `skip` | refused — *a declaration wearing a token's clothes is a bypass* |
+| 11 chars (below the documented 12-char floor) | refused |
+| **valid reason — HAPPY PATH CONTROL** | **exit 0**, `git push origin HEAD` invoked, `DECLARE_CANCELLATION` present in git's environment |
+| the hook's own gate (`inflight_declaration_ok`, the function `pre-push:75` calls) | **accepts it** |
+| **NEGATIVE CONTROL** — refused reason | **`git push` never invoked** |
+
+⚠️ **THE HAPPY PATH IS THE HALF THAT MATTERS**, per `retire-branch.sh`, which
+passed 9 of 9 refusal tests and then printed a false green. Proved here by
+stubbing `git` and reading what the wrapper actually handed it — not by trusting
+an exit code.
+
+⚠️ **ONE RULE IS THE WRAPPER'S OWN, DELIBERATELY.** `inflight_declaration_ok ""`
+returns **0** — correct for the HOOK, which calls it on every push where empty
+means *no declaration offered*. For a wrapper whose only purpose is carrying
+one, empty means *the override was invoked and nothing was declared*, which must
+refuse. So the shared validator is reused for the token and length rules and
+never reimplemented; the empty case is added on top.
 #### ✅ F11 — TWO OF THE THREE ARE GRANTED, 2026-08-17. THE THIRD IS AN OWNER QUESTION.
 
 **Closed from the supervised side, which is the only side that can.** The loop's
