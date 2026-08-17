@@ -17712,3 +17712,70 @@ cleanly.** The adjacency is SEMANTIC, and it is the kind a file diff cannot see:
 ⚠️ **STATED AS REASONING, WITH NO AUTHORIZATION ATTACHED** — *authorization
 travels owner → session and never through a peer.* This is a heads-up for
 whoever reviews either branch, not an instruction to that session.
+
+---
+
+## F16 — SECOND REFUTATION PASS, FOUR LENSES, RUN ON THE FINISHED DIFF — **2026-08-17, run `20260817-231454` session 01**
+
+⚠️ **STILL BY THE AUTHOR, AND STILL A WEAKER INSTRUMENT THAN THE MANDATORY
+PASS.** Run with **deliberately different lenses** from the first pass (which
+was a correctness read and found the monotonicity defect). Recorded so a
+reviewer can see what was checked and what was not, rather than inferring it.
+
+### LENS 1 — FALSE REJECTION / FALSE GREEN: is the refusal predicate identical?
+
+**Claim under test: `notReady.length > 0` ⟺ the old `.some(p)`.**
+
+Old: `status !== 'certified' || (sourceType !== 'manual' && !clinicalConcept)`.
+New: `if (status !== 'certified') return …; if (sourceType !== 'manual' && !clinicalConcept) return …; return null`.
+
+A field yields non-null **iff** the first disjunct holds **or** the second does.
+**Logically identical — a disjunction rewritten as ordered guards.** ✅ No field
+is newly refused and none newly admitted.
+
+### LENS 2 — PRECEDENCE: does a different error now win?
+
+| order | before | after |
+|---|---|---|
+| 1 | missing mapping row (thrown inside `.map()`) | missing mapping row (thrown **before** `.map()`) |
+| 2 | `CONFLICT` — mappings sha changed | `CONFLICT` — unchanged |
+| 3 | status / concept readiness | status / concept readiness |
+
+**Unchanged.** The first throw moved *earlier in the same position* — it
+previously fired on the first iteration of a map that had not yet done anything
+observable. ✅
+
+### LENS 3 — PHI / CUSTOMER CONTENT: is anything new crossing a boundary?
+
+`blocking` now reaches the **audit row** for `MAPPINGS_NOT_READY` (previously it
+carried only class/code/message). Those entries are `<fieldId>:<reason>`, and
+production's fieldIds are opaque hex — `ttf_5d84f80e2fec3d0085ad6b33`. This is
+**the same channel `VALIDATION_FAILED` has always used**, with the same
+ids-and-codes-only rule. The **doctor-facing** sentence is built from counts
+alone and cannot carry a label even if one appeared in an id. ✅
+
+### LENS 4 — EQUIVALENCE OF THE TWO TOTALS
+
+`totalFields: mappings.length` (second throw) vs `compiled.fields.length` (first).
+After the missing-row check, `mappings` is a 1:1 map of `compiled.fields`, so the
+two are equal wherever both are reachable. ✅
+
+### ⚠️ WHAT THE PASS FOUND, AND WHY IT WAS **NOT** FIXED
+
+`unreadyBeforeParse` is computed on **every** call, including the happy path
+where every mapping exists and it is discarded unused. It is an O(80) filter on
+an interactive one-time action a doctor is already waiting seconds on.
+
+**Declined deliberately, and this is the reasoning rather than an oversight:**
+it is a **tidiness item, not a defect** — no behaviour depends on it — and
+fixing it would mean another push to #719, cancelling an `e2e` that is currently
+in flight. **The batching rule prices that at more than the fix is worth.**
+Recorded here so a reviewer knows it was seen and weighed, not missed. **Fold it
+into the next commit that touches the file for any real reason.**
+
+### WHAT THIS PASS DID **NOT** COVER
+
+- It did not run the certify path end to end; that needs prisma + storage.
+- It shares the author's assumptions about which universe matters, which is the
+  exact failure the mandatory independent pass exists to defeat. **An
+  independent refutation is still owed before #719 is read as fully gated.**
