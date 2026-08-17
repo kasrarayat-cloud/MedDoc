@@ -34,7 +34,11 @@ import {
   certifyAndActivateTemplateTwin,
   TemplateTwinLifecycleError,
 } from '@/lib/template-twin/certification-lifecycle';
-import { runTemplateTwinSyntheticTest } from '@/lib/template-twin/synthetic-test';
+import {
+  runTemplateTwinSyntheticTest,
+  TemplateTwinSyntheticTestError,
+} from '@/lib/template-twin/synthetic-test';
+import { mappingsNotReadyMessage } from '@/lib/template-twin/mappings-not-ready-message';
 import { extractTemplateTwinEntities } from '@/worker/layers/03-extract-entities';
 import { createEphemeralVisitNoteGenerator } from '@/worker/template-twin-note-generator';
 import { TemplateDocxError } from '@/lib/note-template-docx';
@@ -75,11 +79,20 @@ export type CertifyActionResult<T> =
         | 'conflict'
         | 'certification_blocked'
         | 'lifecycle'
+        | 'mappings_not_ready'
         | 'unexpected';
       /** Present only for `unexpected`, and only the error's CLASS — never its
        *  message, which can quote document content. The message goes to the
        *  server log and the audit row, which are not the doctor's screen. */
       errorClass?: string;
+      /** Present only for `mappings_not_ready`: how many fields still need a
+       *  physician's confirmation, and how many the form has in total.
+       *
+       *  ⚠️ COUNTS ONLY. The field LABELS are the customer's own form and never
+       *  cross this boundary — the same rule `errorClass` exists to keep. The
+       *  opaque fieldIds stay in the audit row. */
+      remaining?: number;
+      totalFields?: number | null;
     };
 
 function actorFrom(session: Session) {
@@ -235,6 +248,60 @@ export async function certifyNativeTemplateAction(
         };
       }
       return { ok: false, reason: 'lifecycle', error: err.message };
+    }
+
+    // ⚠️ MAPPINGS_NOT_READY IS A DESIGNED REFUSAL AND BELONGS ON THIS LADDER,
+    // NOT IN THE UNANTICIPATED-THROW BRANCH BELOW. (F16.)
+    //
+    // Measured on production 2026-08-17: a physician uploaded their form at
+    // 17:39Z, confirmed 74 of its 80 fields at 18:11:33Z, pressed Certify at
+    // 18:11:38Z and AGAIN at 18:11:52Z. Both attempts fell through to `:298`
+    // and told them:
+    //
+    //   "Certification could not be completed (MAPPINGS_NOT_READY). This has
+    //    been recorded — it will not succeed on a retry until it is fixed."
+    //
+    // That sentence frames a state THEY could clear in a minute as a fault
+    // someone else must repair, and names neither how many fields remain nor
+    // which. They pressed twice and stopped. The useful sentence — "Every
+    // field needs a physician-confirmed mapping" — went only to the audit row.
+    //
+    // ⚠️ THE GATE IS NOT WEAKENED BY ONE FIELD. This branch changes what is
+    // SAID about a refusal that already happened; `runTemplateTwinSyntheticTest`
+    // decides the refusal and is untouched. A certified twin nobody confirmed
+    // is worse than no twin.
+    //
+    // ⚠️ AND IT CARRIES NO FIELD LABELS — the constraint the branch below
+    // states in its own comment, and the reason it withholds `err.message`.
+    // Only a COUNT and a route cross to the doctor. The opaque fieldIds stay
+    // in the audit row, where they already were.
+    if (err instanceof TemplateTwinSyntheticTestError && err.code === 'MAPPINGS_NOT_READY') {
+      const remaining = err.blocking.length;
+      const total = err.totalFields;
+      void logTwinAudit({
+        action: 'TEMPLATE_TWIN_CERTIFY_FAILED',
+        targetType: 'note_template',
+        targetId: noteTemplateId,
+        success: false,
+        errorCode: 'MAPPINGS_NOT_READY',
+        metadata: {
+          errorClass: 'TemplateTwinSyntheticTestError',
+          code: 'MAPPINGS_NOT_READY',
+          message: err.message,
+          stage: 'certifyNativeTemplateAction',
+          // Ids and reason codes only — the same PHI-safe channel
+          // VALIDATION_FAILED already uses.
+          blocking: err.blocking,
+          totalFields: total,
+        },
+      });
+      return {
+        ok: false,
+        reason: 'mappings_not_ready',
+        remaining,
+        totalFields: total,
+        error: mappingsNotReadyMessage(remaining, total),
+      };
     }
 
     // AN UNANTICIPATED THROW. This branch used to return "Certification failed.
