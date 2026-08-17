@@ -17543,3 +17543,33 @@ migrations are applied, and `db-migrate:qa` is.
 would consume a session. Filed so it is a lookup rather than a rediscovery, and
 so that *"proved on QA"* is not written by the next session without checking the
 image first.
+
+---
+
+## ⚠️ SESSION NOTE — F16's FULL-SUITE NUMBER IS REPORTED AS A **CONTROLLED DELTA**, BECAUSE THE RAW ONE IS MEANINGLESS — **2026-08-17, run `20260817-231454` session 01**
+
+Running the **whole** unit suite from the F16 worktree reports **61 failed files
+/ 57 failed tests**. Read raw, that is an alarming branch.
+
+**The control refutes it.** The same command in this session's *other* worktree
+— `docs/f15-session-ledger`, which is **docs-only and carries none of F16's
+code** — reports the **identical 61 failed files / 57 failed tests**:
+
+| tree | files | passed | **failed files** | **failed tests** |
+|---|---|---|---|---|
+| docs-only control | 320 | 3408 | **61** | **57** |
+| F16 branch | 321 | 3415 | **61** | **57** |
+| **delta** | **+1** | **+7** | **0** | **0** |
+
+**+1 file and +7 tests is exactly the new gate**, and **not one additional
+failure.** The 61/57 are a pre-existing property of running this suite from a
+`git worktree` — the class AGENTS.md already records (a worktree checks out
+tracked files only, and the config resolves paths relative to the real root).
+The visible failure is a fixture read at `../../WM IOV Template.docx`, which is
+the same family.
+
+⚠️ **AND THE AUTHORITATIVE RUN IS CI, NOT EITHER OF THESE.** #719's `CI` —
+including *"unit tests (transcribe-md + packages)"* — is **green** in a proper
+checkout. The worktree numbers are reported here only because a session that ran
+them and did not control would have filed a false alarm against its own branch;
+*saying which half you have is the whole discipline.*
