@@ -107,6 +107,69 @@ argument silently. Caught by checking the variable rather than assuming it.
 only occurrence was **the comment I had just written explaining its removal** —
 the prose-matching trap, in the verification of its own fix.
 
+### ✅ F14-a — THE CITATION DOOR SURVIVES A RUNS-API OUTAGE — **2026-08-17, run `20260817-183630` session 01**
+
+**F14 had no ledger row until now.** It was begun by session 04 of the previous
+run, which died on an API 529 **without a morning report**, leaving the work
+UNCOMMITTED in `.f14-wt`. This row is part of that reconstruction.
+
+**THE FAULT.** GitHub's repo-wide `/actions/runs` route 404'd for this
+repository for hours on 2026-08-17 while every other Actions route answered.
+`check-citation.sh`, `gh-runs.sh` and `lib/inflight.sh` all funnel through it,
+so the programme's gate had a **single point of failure** — nothing could be
+cited, pushed or merged. Session 03 parked **PR #710** on exactly this.
+⚠️ **The instruments refused fail-closed and nobody routed around them. That
+half was correct and is not what was fixed** — a correct refusal is still a
+stopped queue.
+
+**THE FIX (session 04's design, verified rather than believed here).**
+`scripts/lib/runs-api.sh` adds a per-workflow fallback — `/actions/workflows/
+{id}/runs`, unioned — with the union's own coverage asserted against a THIRD
+route, `/commits/{sha}/check-suites`, which is indexed by COMMIT and so cannot
+inherit the enumeration's blind spot.
+
+⚠️ **AND IT DID NOT RUN. `runs_api_mode_banner` read two globals nothing
+assigns**, so under `set -u` the script aborted right after its positive control
+and printed no verdict. The header documents that very bug being fixed by moving
+the transport into the payload — **the producers moved and the consumer did
+not.** A half-landed fix whose own comment says it landed. Found by RUNNING it.
+
+Also fixed: the header claimed **three** consumers and had **one** (the
+§5.6 wish-as-fact shape, inside a file added to fix an outage), and the fallback
+was **unreachable except during an outage** — the one path whose job is to work
+during an incident was the one nothing could exercise.
+
+| proof | result |
+|---|---|
+| primary transport, `1b1de497…` | 4 of 4, all `a1`, banner says `repo-wide` |
+| forced fallback, same sha | **4 of 4, IDENTICAL run ids**, banner says `PER-WORKFLOW FALLBACK`, control `12 runs = 12 check suites` |
+| `--expect` audit arm through the fallback | passes |
+| mutation: drop `e2e` | union 11 vs suites 12 → DIVERGE → cannot tell |
+| ⚠️ mutation: drop **`Dependabot Updates`** | union 4 vs suites 12 → DIVERGE → cannot tell |
+
+⚠️ **THE SECOND MUTATION IS THE LOAD-BEARING ONE.** Dropping `e2e` proves the
+control detects incompleteness — but `e2e` is REQUIRED, so its absence reddens
+the citation anyway. Dropping a **non-required** workflow leaves all four
+required runs present, so **without the control the run cites 4 of 4 and looks
+perfect**. Both mutations asserted APPLIED before their results were read; the
+file restored from a scratch copy, never from git.
+
+**HONEST SCOPE — the citation door only.** `gh-runs.sh` and `lib/inflight.sh`,
+and therefore `merge-pr.sh` and the `pre-push` hook, still call `gh run list`.
+**A repo-wide outage no longer stops citing; it still stops merging and
+pushing.** The branch view has no per-commit control and its fallback counts are
+a FLOOR; the control is vacuous on a zero-run commit.
+
+### ▶ F14-b — WIRE THE MERGE AND PUSH DOORS — **the retirement condition for F14-a's scope note**
+
+`gh-runs.sh` and `lib/inflight.sh` onto `runs-api.sh`, so `merge-pr.sh` and the
+`pre-push` hook survive the same outage. **Deliberately NOT done in F14-a:** it
+changes the two instruments needed to land any change at all, and getting it
+wrong in an unattended session means nothing can be merged or pushed to fix it.
+Land it as its own item, with the refusal arms re-proved on both doors —
+`retire-branch.sh` passed 9 of 9 refusals and still printed a false green on the
+happy path, so **prove the SUCCESS direction too.**
+
 ### 🔴 F12 — E/M ON PROCEDURE NOTES, AND THE EXPORT'S CREAM E/M BLOCK — **AT F6's HEAD** (ruling #123)
 
 **OWNER FINDING, ON HIS OWN EXPORTED PDF. Two parts; both ship together.**
