@@ -180,9 +180,23 @@ case "$cmd" in
     # 60 identical "3 of 4 success" lines, and for an UNATTENDED session the log
     # IS the report — noise there is not cosmetic, it buries the line that
     # matters. stderr is never suppressed: a TERMINAL block must always show.
-    last=""; grace_until=$(( $(date +%s) + WAIT_GRACE ))
+    last=""; grace_said=0; grace_until=$(( $(date +%s) + WAIT_GRACE ))
     while :; do
       out=$(citation_state "$rows" "$sha"); st=$?
+      # ⚠️ RESTORED. The grace-window edit below DELETED this line, silently, and
+      # `wait` then succeeded in total silence — no "4 of 4 success", nothing. The
+      # anchor matched, the file parsed, and the grace tests passed because they
+      # asserted the NEW behaviour and never re-asserted the PRESERVED behaviour.
+      # A scripted edit proves its own application; it must also prove it did not
+      # remove what it was not asked to remove.
+      if [ "$out" != "$last" ]; then printf '%s\n' "$out"; last="$out"; fi
+      # ⚠️ COUNTED HERE, NOT INSIDE citation_state. That function runs in a
+      # COMMAND SUBSTITUTION, so anything it assigns dies with the subshell — the
+      # first version read a `total_seen` global that was therefore ALWAYS 0, and
+      # the guard below would have fired for ANY cannot-tell, masking a broken
+      # instrument as "runs haven't appeared yet". Exactly what the bound exists
+      # to prevent.
+      seen=$(echo "$rows" | jq -r 'length' 2>/dev/null || echo 0)
       # ⚠️ THE POST-PUSH GRACE WINDOW. Immediately after a push GitHub has not
       # created the runs yet, so `citation_state` correctly reports 2 = CANNOT
       # TELL on zero rows. Returning that instantly makes `wait` useless for its
@@ -195,9 +209,13 @@ case "$cmd" in
       # Measured 2026-08-17: a PR head sat at zero runs for >3 minutes and the
       # cause was not propagation at all, it was a CONFLICTING PR, which gets no
       # merge ref to run against. A grace window must not hide that.
-      if [ "$st" -eq 2 ] && [ "$total_seen" = "0" ] && [ "$(date +%s)" -lt "$grace_until" ]; then
+      if [ "$st" -eq 2 ] && [ "${seen:-0}" -eq 0 ] && [ "$(date +%s)" -lt "$grace_until" ]; then
         st=1
-        [ "$last" != "__grace__" ] && { echo "no runs yet — waiting up to ${WAIT_GRACE}s for them to appear"; last="__grace__"; }
+        # ⚠️ ITS OWN FLAG, NOT `last`. The print-on-change line above also writes
+        # `last`, so sharing it made each side clobber the other and the grace
+        # notice printed once per poll — the exact noise this loop was fixed for,
+        # reintroduced by two mechanisms owning one variable.
+        [ "$grace_said" = "0" ] && { echo "no runs yet — waiting up to ${WAIT_GRACE}s for them to appear"; grace_said=1; }
       fi
       [ "$st" -eq 1 ] || exit "$st"          # 0 cited · 3 failed · 2 cannot tell
       if [ "$(date +%s)" -ge "$deadline" ]; then
