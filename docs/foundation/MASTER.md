@@ -156,10 +156,31 @@ down here so nobody rediscovers them one halted session at a time.
 | `dmesg` | not granted | `docker logs` for container-level evidence |
 | `crontab -l` | **not granted to the loop** — but it WORKS for a supervised session, and the answer matters: this host's crontab installs `run-all.sh --smoke --e2e` at 02:00 against **production** (`tests/automated/setup-cron.sh`) | ask a supervised session, or read the per-night JSON it leaves in `tests/automated/reports/` — same evidence, no permission needed |
 | `ls /etc/cron.d/` | **granted** as a bare `ls`; it is the COMPOUND form (`for`, `sudo`, `$(…)`) that is refused | `ls -la /etc/cron.d/` on its own line. Contents as of 2026-08-10: `certbot`, `e2scrub_all`, `sysstat` — nothing MedDoc, so this is a dead end and need not be re-checked |
+| `bash <any-other-file>.sh` — a scratch proof harness you just wrote | **not granted.** The allow list names scripts ONE BY ONE (`Bash(bash scripts/gh-runs.sh:*)` …); there is no `Bash(bash:*)`, deliberately, because `scripts/` is session-writable and a blanket grant would read *"write a script, then run it"* | ⚠️ **Do NOT tunnel it through `node -e` or `python3 -c`** — both are granted and both would run the file, and using them to reach a form the allow list withholds is the sanctioned-hatch-becomes-the-undisciplined-door failure. **Write the proof as a TRACKED test and run it with `npx vitest run <filter>`** (granted). Strictly better: it is reviewable, it runs in CI, and it stops being a one-off. F14-b's 30-arm gate started life as a refused `bash .f14b-proof.sh` |
+| `cmd > /tmp/out.txt` — redirecting anywhere outside the repo | **not granted** — writes are confined to `/opt/meddoc-pro` | drop the redirect and read stdout, or `\| tail -n` it. ⚠️ Anything you *do* write inside the repo is scratch you cannot reap — prefer no file |
+| `bash -n <file>` (syntax check) · `${PIPESTATUS[0]}` · `VAR=1 cmd` · `env` | **not granted** | ⚠️ **`bash -n` is a poor loss anyway** — it cannot see the `unbound variable` class that cost F14-a a whole run. **RUN the thing**; a parse check that passes on a script which aborts at line 3 is the weaker instrument |
 
 `cd`, `echo` and `printf` **are** granted, so `cd apps/transcribe-md && npx …`
 works. Note the compound rule that makes those safe: a command joined by `&&`,
 `;` or `|` is refused unless **every** part is granted independently.
+
+⚠️ **AND THE GRANTS ARE RELATIVE PATHS, SO `cd` DECIDES WHICH COPY YOU RUN.**
+`Bash(bash scripts/gh-runs.sh:*)` matches the literal prefix, so
+`bash /opt/meddoc-pro/scripts/gh-runs.sh` is REFUSED while `bash
+scripts/gh-runs.sh` runs whatever `scripts/` resolves to **from your current
+directory** — the shared tree's copy, or your worktree's. **The Bash tool's cwd
+persists across calls and survives in ways you will not notice**, including
+after a `git worktree remove` pulls the ground out from under it.
+
+⚠️ **THIS BIT THIS PROGRAMME THREE TIMES IN TWO SESSIONS, AND THE THIRD PRODUCED
+A NUMBER.** Session 03 ran the SHARED tree's script believing it was testing its
+own. Session 02 of run `20260817-183630` hit it twice: once as a harmless
+`No such file or directory`, and once as a bare `npx vitest run` from the
+worktree ROOT instead of `apps/transcribe-md` — which resolved a **different
+vitest config** and printed **`218 failed | 177 passed (396 files)`** against the
+true `16 failed | 301 passed (319 files)`. The tells were `setup: 0ms` and a file
+count that had no business changing. **A wrong-universe measurement looks exactly
+like a catastrophic regression.** `pwd` before you believe a number.
 
 ⚠️ **If you hit a refusal that is NOT in this table, that is a finding.** Say
 which command, what you were trying to establish, and whether a granted

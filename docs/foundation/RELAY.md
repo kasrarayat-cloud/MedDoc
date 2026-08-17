@@ -260,6 +260,89 @@ sides.
 **NOT DEPLOYED, AND NO §2.5:** nothing here enters an image. These are ops
 instruments and a test.
 
+**MERGED** as PR #716 → `79ddd855b45378f28b8d345520c2c9c68cede5a3`; branch
+retired on **both** sides, confirmed by `git ls-remote` and `git branch --list`
+rather than by the wrapper's exit code.
+
+**Citation — 4 of 4 on `79ddd855b45378f28b8d345520c2c9c68cede5a3`:**
+   · `CI` 32075115093 a1
+   · `e2e` 32075115121 a1
+   · `a11y-ci` 32075115038 a1
+   · `secrets-scan` 32075115115 a1
+
+*Produced by `bash scripts/check-citation.sh`, not typed. All four `a1` on the
+MERGE commit — the PR-head citation carried an `a3` on `a11y-ci` and is a
+different, explained thing; see the apt-stall block below.*
+
+⚠️ **AND THE MERGE ITSELF IS THIS ITEM'S OWN POSITIVE CONTROL.**
+`bash scripts/merge-pr.sh 716` ran `inflight_count` against `main` through the
+NEW transport and merged — so the door's SUCCESS direction is proved in anger,
+not only its refusals. Same for the PUSH door: this branch's own `git push` ran
+the modified hook. `retire-branch.sh` passed 9 of 9 refusals and still printed a
+false green on the happy path; that precedent is why both directions are named
+here.
+
+### ⚠️ THE a11y-ci CITATION CARRIES AN `a3`, AND HERE IS WHY — AN EXTERNAL APT MIRROR STALL
+
+**Canon forbids re-run-and-hope, so an unexplained re-run is its own finding.
+This one is explained from the log, not from a guess.**
+
+`a11y-ci` on the PR head **timed out twice** and was re-run twice. Both failures
+died in the SAME step — **step 10 of 19, `Install Playwright Chromium (with
+system deps)`** — and both consumed essentially the entire `timeout-minutes: 25`
+budget:
+
+| attempt | step 10 window | duration | outcome |
+|---|---|---|---|
+| a1 | `21:12:32Z → 21:36:36Z` | **24m04s** | job cancelled at the 25-min timeout |
+| a2 | `21:39:44Z → 22:03:47Z` | **24m03s** | job cancelled at the 25-min timeout |
+| **a3** | `22:10:56Z → 22:11:10Z` | **14s** | ✅ **success** |
+
+⚠️ **GITHUB REPORTS A `timeout-minutes` KILL AS `cancelled`, NOT `failure`** —
+which reads exactly like a push cancelled the run. **No push happened**; this
+branch had a single push. Anyone reading `cancelled` here should read *timed
+out*.
+
+**THE MECHANISM, FROM THE LOG RATHER THAN FROM A THEORY.** Attempt 1's step 10:
+
+    21:12:33  Switching to root user to install dependencies...
+    21:13:04  Ign:2 http://azure.archive.ubuntu.com/ubuntu noble InRelease
+    21:13:04  Ign:3/4/5  noble-updates / -backports / -security   (retried, all Ign)
+    21:13:11  …failover to https://archive.ubuntu.com/ubuntu, InRelease fetched
+    21:13:11 → 21:36:36   TWENTY-THREE MINUTES OF SILENCE
+    21:36:36  ##[error]The operation was canceled.
+
+The runner's **Azure Ubuntu apt mirror stopped answering**, apt failed over to
+the public `archive.ubuntu.com`, and the fetch then stalled to the timeout. That
+is the runner's package layer, **before a single line of this repository
+executes** — step 10 of 19, with the build and the axe suite never reached.
+
+**WHY IT IS NOT THIS BRANCH.** The diff is five shell scripts and one vitest
+file; there is no causal path from it to apt's mirror resolution. And the
+decisive evidence is `a3`: **the same commit and the same tree** ran that step in
+**14 seconds** an hour later. A change that caused a 24-minute stall cannot stop
+causing it while unmodified.
+
+⚠️ **AND A CONTROL I RAN WAS NOT THE CONTROL I THOUGHT IT WAS — RECORDED BECAUSE
+IT ALMOST BECAME THE EVIDENCE.** To test "is it my tree?", I re-ran a11y on the
+dependabot PR #714 (a tree with none of this change). Its step 10 finished in
+**16 seconds** — which looks like a clean refutation of "external". It is not:
+that branch had its own Playwright cache from `18:33Z`, so its step 10 took the
+**cache-hit path and never ran apt at all.** Two different code paths compared as
+if they were one. **The log is what settled it**, and the log should have been
+the first stop rather than the third.
+
+**FILED — 🟡 F15, and it is priced by the asset, not by the symptom.**
+`playwright install --with-deps` is this repo's **THIRD external reach in a
+build**, and the only one with **neither a retry budget nor a fallback** —
+`npm ci` got `NPM_CONFIG_FETCH_RETRIES=5` (#583) and `next/font/google` was
+REMOVED. It also has **no headroom**: a step that normally costs seconds can eat
+a 25-minute job budget whole, and when it does, the axe sweep never runs and the
+whole gate reads `cancelled`. **This is not a flake to re-run; it is an
+unguarded external dependency on a required check.** Not built tonight
+deliberately — it changes a shared gate for every branch, and doing that
+unattended while the fault was live is how a CI fix becomes a CI outage.
+
 ### 🔴 F12 — E/M ON PROCEDURE NOTES, AND THE EXPORT'S CREAM E/M BLOCK — **AT F6's HEAD** (ruling #123)
 
 **OWNER FINDING, ON HIS OWN EXPORTED PDF. Two parts; both ship together.**
