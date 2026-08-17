@@ -110,15 +110,37 @@ export function decideAutoConfirm(c: AutoConfirmCandidate): AutoConfirmDecision 
     };
   }
 
+  // ⚠️ LATERALITY IS RECORDED HERE, NOT GATED HERE — AMENDED, RULING #124.
+  //
+  // The first version REFUSED to auto-confirm any laterality-critical field the
+  // document did not structurally side. That was wrong, and the measurement is
+  // what corrected it: CERTIFICATION NEVER ENCODES A SIDE. A mapping declares
+  // what a field MEANS; the side is derived per visit from the dictation, every
+  // time, by `defaultLaterality()` — a word-boundary regex over the dictated
+  // text, with no model judgement anywhere in it.
+  //
+  // Fail-closed lives DOWNSTREAM, at fill, and is asserted rather than assumed:
+  //   resolver/index.ts:551  laterality 'required' + unknown  -> needs_clinician_input
+  //                          two sides for one field          -> conflict, no value
+  //   bridge-fill.ts:206     "a right-leg value simply cannot fill a left-leg row"
+  //   row-laterality.test.ts CROSS-LEG CANARY, both directions refused
+  //
+  // ⚠️ AND THE HISTORY IS THE ARGUMENT. resolver/index.ts:462-468 records that
+  // judging laterality at RESOLVE time made spurious conflicts out of unrelated
+  // sentences and "blocked certification on a field about which the encounter had
+  // said nothing selectable. Seven fields, every run." Those are the same seven
+  // fields this gate would have blocked. Re-adding an upstream laterality gate
+  // re-creates a defect this codebase already diagnosed and moved downstream.
+  //
+  // Provenance is still recorded, because HOW a mapping was confirmed belongs in
+  // the audit trail even when it does not change the outcome.
   if (c.criticality === 'laterality') {
-    if (hasStructuralLateralityAnchor(c.originalLabel, c.sectionHeading)) {
-      return { confirm: true, provenance: 'structural', reason: null };
-    }
     return {
-      confirm: false,
-      provenance: null,
-      reason:
-        'the document does not say which side this field refers to — confirm it once',
+      confirm: true,
+      provenance: hasStructuralLateralityAnchor(c.originalLabel, c.sectionHeading)
+        ? 'structural'
+        : 'model',
+      reason: null,
     };
   }
 

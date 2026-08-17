@@ -39,27 +39,32 @@ describe('structural laterality anchor', () => {
 });
 
 describe('decideAutoConfirm — the fail-closed direction', () => {
-  it('REFUSES an unanchored laterality field, and names why', () => {
+  /**
+   * ⚠️ AMENDED, RULING #124. This arm used to assert the OPPOSITE — that an
+   * unanchored laterality field is REFUSED. It is not, and the measurement is
+   * why: certification never encodes a side, so refusing here bought nothing and
+   * cost the doctor a field-touch. Fail-closed lives at fill and is asserted in
+   * resolver.test.ts ('CONFLICTING sides…', 'required_laterality_missing') and
+   * row-laterality.test.ts (CROSS-LEG CANARY, both directions).
+   */
+  it('CONFIRMS an unanchored laterality field — certification encodes no side', () => {
     const d = decideAutoConfirm({
       ...base,
       originalLabel: 'SIDE OF EXAM: Choose an item.',
       criticality: 'laterality',
       sourceType: 'verified_note_selection',
     });
-    expect(d.confirm).toBe(false);
-    expect(d.provenance).toBeNull();
-    expect(d.reason).toMatch(/which side/i);
+    expect(d.confirm).toBe(true);
+    expect(d.reason).toBeNull();
   });
 
-  it('⚠️ a laterality field can NEVER reach model provenance', () => {
-    // Everything else about this candidate is ordinary and would confirm.
+  it('⚠️ but PROVENANCE still discriminates — unanchored is model, not structural', () => {
     const d = decideAutoConfirm({
       ...base,
       originalLabel: 'SIDE OF EXAM',
       criticality: 'laterality',
     });
-    expect(d.provenance).not.toBe('model');
-    expect(d.confirm).toBe(false);
+    expect(d.provenance).toBe('model');
   });
 
   it('refuses any non-manual field with no concept', () => {
@@ -107,7 +112,7 @@ describe("the measured customer form — 7 laterality fields, both directions pr
     ['Left deep venous system Choose an item.', true],
   ];
 
-  it('resolves 6 of 7 structurally and names the 7th', () => {
+  it('all 7 confirm, and 6 of 7 carry STRUCTURAL provenance', () => {
     const decided = REAL.map(([label]) =>
       decideAutoConfirm({
         ...base,
@@ -116,10 +121,11 @@ describe("the measured customer form — 7 laterality fields, both directions pr
         sourceType: 'verified_note_selection',
       }),
     );
-    expect(decided.filter((d) => d.confirm).length).toBe(6);
-    const refused = decided.filter((d) => !d.confirm);
-    expect(refused).toHaveLength(1);
-    expect(refused[0].reason).toMatch(/which side/i);
+    // Certification is not blocked — the owner touches ZERO fields.
+    expect(decided.every((d) => d.confirm)).toBe(true);
+    // But the audit trail still says which were the document's own assertion.
+    expect(decided.filter((d) => d.provenance === 'structural')).toHaveLength(6);
+    expect(decided.filter((d) => d.provenance === 'model')).toHaveLength(1);
   });
 
   it('⚠️ NON-VACUITY: the fixture actually contains both outcomes', () => {
