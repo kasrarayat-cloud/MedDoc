@@ -14,6 +14,7 @@ import {
   Document,
   Footer,
   HeadingLevel,
+  type IRunOptions,
   LevelFormat,
   Packer,
   Paragraph,
@@ -51,6 +52,66 @@ import {
   toEighthPt,
   bareHex,
 } from './export-page';
+
+// ---------------------------------------------------------------------------
+// F6.1 — A LINE BREAK INSIDE FREE TEXT IS CONTENT, NOT WHITESPACE
+// ---------------------------------------------------------------------------
+// ⚠️ A LITERAL `\n` INSIDE `<w:t>` IS NOT A LINE BREAK IN OOXML. Word collapses
+// it to a space. So `new TextRun({ text: 'a\nb' })` emits
+// `<w:t xml:space="preserve">a\nb</w:t>` — which LOOKS like it preserved the
+// break (the attribute even says `preserve`) and renders as `a b`. The only
+// thing Word treats as a line break inside a paragraph is `<w:br/>`, which the
+// `docx` package emits from a run's `break` option, BEFORE that run's text.
+// (Measured, not assumed: `break: 2` emits exactly two `<w:br/>` ahead of the
+// `<w:t>`.)
+//
+// This mattered on every production visit that had one. Measured 2026-08-17
+// against prod: **43 of 43** visits with a non-empty `patientSummary` satisfy
+// the defect's OWN predicate — split the text on `/\n\n+/` as the renderer
+// does, and at least one resulting block still contains a `\n` that was being
+// silently flattened. Not an edge case; the universal case.
+//
+// ⚠️ AND IT WAS NEVER A DOCX-ONLY DEFECT, THOUGH THE LEDGER ROW SAYS "in the
+// DOCX". Since F3 the pre-sign preview, the signed preview, the Word download
+// and the PDF download ALL converge on `generateVisitDocx` (see
+// `visit-pdf.ts`), so one flattening reached four surfaces. Meanwhile
+// `ehr-formatters.ts:423` pushes `patientSummary.trim()` into the EHR clipboard
+// text as-is, where `\n` survives natively — so the clipboard and the document
+// disagreed about what the note said.
+//
+// THE TREATMENT LIVES HERE, ON A SHARED HELPER, RATHER THAN ON THE FOUR CALL
+// SITES — a per-caller list is kept complete by hand, and hand-kept lists are
+// wrong eventually. A future free-text field inherits it by using this helper.
+//
+// ⚠️ IT IS A NO-OP FOR TEXT WITH NO LINE BREAK: one run, no `break` key, byte-
+// identical to what shipped. That is asserted by the gate, because a fidelity
+// fix that also restyles every unaffected document is a bigger change than
+// anybody reviewed.
+interface FreeTextRunOptions extends Omit<IRunOptions, 'text' | 'break' | 'children'> {
+  /** Prepended to EVERY line, not just the first — so an indented block stays
+   *  aligned when it carries on past line one. Without it, a referral's second
+   *  line hangs left of its first and reads as a different field. */
+  linePrefix?: string;
+}
+
+/** Doctor- and model-authored free text → `TextRun[]`, with every line break
+ *  the author wrote surviving as a real `<w:br/>`. */
+function freeTextRuns(text: string, opts: FreeTextRunOptions = {}): TextRun[] {
+  const { linePrefix = '', ...run } = opts;
+  // `\r\n` and a bare `\r` are line breaks too. A note that round-tripped
+  // through a Windows EHR carries them, and splitting on `\n` alone would
+  // leave a stray `\r` inside the run.
+  return text.split(/\r\n|\r|\n/).map(
+    (line, i) =>
+      new TextRun({
+        ...run,
+        text: `${linePrefix}${line}`,
+        // `break` is OMITTED on the first run rather than set to 0, so the
+        // single-line case produces exactly the object it always did.
+        ...(i === 0 ? {} : { break: 1 }),
+      })
+  );
+}
 
 /** R1.4 — the hairline both generators draw, in the unit `docx` takes. */
 const HAIRLINE = {
@@ -217,14 +278,14 @@ export async function generateVisitDocx(
       children.push(
         new Paragraph({
           spacing: { after: 60 },
-          children: [
-            new TextRun({
-              text: `Modifier -${m.code}: ${m.rationale}`,
-              italics: true,
-              size: toHalfPt(TYPE_PT.body),
-              color: '666666',
-            }),
-          ],
+          // The `Modifier -NN: ` label rides line one; only the rationale's own
+          // breaks continue below it, with no indent — which is what the single
+          // run used to look like for the no-break case.
+          children: freeTextRuns(`Modifier -${m.code}: ${m.rationale}`, {
+            italics: true,
+            size: toHalfPt(TYPE_PT.body),
+            color: '666666',
+          }),
         })
       );
     }
@@ -268,21 +329,21 @@ export async function generateVisitDocx(
       children.push(
         new Paragraph({
           spacing: { after: 40 },
-          children: [new TextRun({ text: `    ${r.reason}` })],
+          // `linePrefix`, not a `    ` baked into the string: the indent has to
+          // reach line two as well, or a two-line reason reads as two fields.
+          children: freeTextRuns(r.reason, { linePrefix: '    ' }),
         })
       );
       if (r.relevant_history) {
         children.push(
           new Paragraph({
             spacing: { after: 80 },
-            children: [
-              new TextRun({
-                text: `    ${r.relevant_history}`,
-                italics: true,
-                color: '666666',
-                size: toHalfPt(TYPE_PT.body),
-              }),
-            ],
+            children: freeTextRuns(r.relevant_history, {
+              linePrefix: '    ',
+              italics: true,
+              color: '666666',
+              size: toHalfPt(TYPE_PT.body),
+            }),
           })
         );
       }
@@ -293,11 +354,14 @@ export async function generateVisitDocx(
   // ── Patient summary ──────────────────────────────────────────────
   if (!data.formOnly && data.patientSummary) {
     children.push(sectionHeading('Patient Summary'));
+    // The split on `\n\n+` makes a real PARAGRAPH per block, which is right and
+    // is not what F6.1 was about. `freeTextRuns` restores the SINGLE breaks
+    // WITHIN each block, which the one-run-per-block shape used to swallow.
     for (const block of data.patientSummary.trim().split(/\n\n+/)) {
       children.push(
         new Paragraph({
           spacing: { after: 120 },
-          children: [new TextRun({ text: block })],
+          children: freeTextRuns(block),
         })
       );
     }
