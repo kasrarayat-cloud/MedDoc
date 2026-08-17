@@ -229,7 +229,15 @@ looking complete. The checker sorted the same 12 runs into **green 4 + extra 8**
 and named every extra one. *A citation is produced by the checker, never typed,
 and never read off a `--limit`.*
 
-**NOT DEPLOYED — owed, and the declaration is in this PR.**
+⚠️ **THIS PARAGRAPH SAID "NOT DEPLOYED — owed" AND IS NOW STALE. F6.1 IS LIVE**
+— deployed `2026-08-17T12:42:58Z` by session 03, **18 of 18 judged**; see the
+"F6.1 IS LIVE IN PRODUCTION" row further down. Corrected in the same pass that
+closed the item, per this file's own standing rule — *a fixed item left listed
+as open costs a whole session.* The rest of this paragraph is kept verbatim
+because it describes the declaration, which is unchanged and was written before
+the act.
+
+**The declaration was in PR #709 when this was written.**
 `docs/foundation/deploys/20260817-1b1de497.md` is written against a baseline
 captured at `08:59Z`, **before** the merge, and names the FULL payload rather
 than just F6.1: the running image also predates #703, #704, #705, #706 and #708,
@@ -16618,6 +16626,71 @@ The exception's text lives in `docs/foundation/INBOX.md`
 append-only from the supervised side by design. So this is flagged rather than
 executed: **the entry should be moved to `inbox-archive/`**, and the interim
 clause in #121 marked discharged. Carried in the morning report.
+
+---
+
+### ✅ F6.1 IS LIVE IN PRODUCTION — **2026-08-17T12:42:58Z, session 03** — 18 of 18 judged
+
+**The deploy session 02 left owed is paid.** Shipped `a8ee62fb` (the #709 merge);
+the §2.5 declaration is `docs/foundation/deploys/20260817-1b1de497.md`, resolved
+by **F10's carry-forward** — its first real use in anger, and it worked exactly
+as designed:
+
+```
+declared  : 1b1de497 — an ANCESTOR of the shipped tree, 2 commit(s) back
+range     : 1b1de497..a8ee62fb — 2 file(s) changed, 0 of them runtime
+control   : the range is NON-EMPTY (2 files) — an empty runtime diff over an
+            empty range would prove nothing
+mode      : strict (tracked, unmodified, committed 15320e9b @ 11:51:04Z)
+```
+
+⚠️ **THE CIRCULARITY #121 NAMED IS THE ONE THIS DEPLOY WOULD HAVE HIT.** The
+declaration could only be named after F6.1's merge sha, and the PR carrying it
+is itself what moved `main`. Before F10 that had **no fixed point**. Note also
+that the resolver prints its own **non-vacuity control** — a carry-forward over
+an empty range would be a proof about nothing.
+
+**THE RUNTIME SHIPPED IS A COMMIT CITED 4 OF 4.** `1b1de497` carries
+`CI` 32023467135 · `e2e` 32023467157 · `a11y-ci` 32023467123 ·
+`secrets-scan` 32023467139, all `a1`, **re-verified at this session's STEP 0
+with `check-citation.sh --expect`** rather than copied from the row. The
+resolver then proved the shipped tree is runtime-identical to it. ⚠️ **`a8ee62fb`'s
+own citation is still owed to the ledger as BOOKKEEPING** — it is docs-only and
+changes nothing about what runs, but the row should be paid, the way F10's was.
+
+**ROLLBACK TAGS CUT AND VERIFIED BY RE-READING** (F9, not by `docker tag`'s exit
+code): `pre-a8ee62fb-20260817` on `transcribe-md` → `2a855056…`,
+`transcribe-md-worker` → `9d5a37e3…`, `gotenberg` → `2d05d225…` — the exact
+outgoing digests the declaration named.
+
+**JUDGED — 18 of 18.**
+
+| # | declared | measured |
+|---|---|---|
+| 1 | app image moves off `2a855056…` | ✅ `08ea3c9d…` |
+| 2 | worker image moves off `9d5a37e3…` | ✅ `990af8ab…` |
+| 3 | `freeTextRuns` in the running worker **≥ 1** | ✅ **6** (was 0) |
+| 4–10 | visits · signed · patients · templates · migrations · twin compiled · twin manifests | ✅ **45 · 28 · 33 · 9 · 104 · 0 · 0** — every one unmoved |
+| 11–15 | co-tenants `307 · 404 · 200 · 200 · 410` | ✅ all five, `pro` still deliberately `410` |
+| 16 | container health | ✅ **9 of 9** |
+| 17 | no invented breaks | ✅ discharged by the shipped gate, as the declaration says |
+| 18 | `pdf-generator.ts` absent | ✅ F3's retirement holds |
+
+⚠️ **AND ONE NAMED DEVIATION, RECORDED RATHER THAN EXPLAINED AWAY.** Row 3's
+**positive control** — `generateVisitDocx` in the same file — was declared as
+**1** and measured **2**. *A movement the declaration does not name is a
+finding*, so it was chased rather than waved through: **F6.1's own commit adds
+the second occurrence** (`1b1de497^` = 1, `1b1de497` = 2), and the running
+worker reads 2, matching the shipped source exactly. The control's contract is
+*"the instrument reads this file"* — satisfied by any non-zero — so it did its
+job. **Named here because the number moved and the reader is entitled to know
+why**, not because anything is wrong.
+
+⚠️ **ROWS 4–10 WERE ALSO RE-MEASURED BEFORE THE DEPLOY, NOT ONLY AFTER**, because
+the resolver's own warning says a carry-forward proves the CODE identical and
+does **not** refresh the NUMBERS. The `08:59Z` baseline still read
+`45 · 28 · 33 · 9 · 104 · 0 · 0` at `12:40Z`, so the comparison is against a
+baseline that was still true — rather than one explained after the fact.
 
 ---
 
