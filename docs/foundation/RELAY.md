@@ -17145,7 +17145,12 @@ share an exit code. Re-run from `git rev-parse`: **4 of 4, all `a1`.**
 
 ---
 
-## 🔴 F16 — THE CERTIFY REFUSAL IS AUDIBLE BUT UNACTIONABLE, AND A REAL PHYSICIAN HIT IT TWICE — **FILED 2026-08-17, run `20260817-231454` session 01**
+## 🟡 F16 — THE CERTIFY REFUSAL IS AUDIBLE BUT UNACTIONABLE, AND A REAL PHYSICIAN HIT IT TWICE — **FILED *AND BUILT* 2026-08-17, run `20260817-231454` session 01**
+
+> **BUILT AS PR #719** (`fix/f16-mappings-not-ready-is-actionable`) in the same
+> session that filed it, because the mechanism turned out to be one missing arm
+> on a ladder that already existed. **Not yet merged or deployed** — see the
+> build block at the end of this row.
 
 **This is #713's class one surface deeper, found in the audit trail while
 capturing F15's §2.5 baseline. Nothing went looking for it.**
@@ -17275,6 +17280,68 @@ what a person does when told a retry cannot succeed.
   reason any of this is knowable. Everything above was reconstructed from
   `audit_logs` **read-only**, on a real physician's session, with no clinical
   content read and nothing mutated.
+
+### ✅ THE BUILD — PR #719, and what it is proved to be
+
+**The fix is one arm on a ladder that already existed**, which is why it was
+built in the same session rather than queued. `MAPPINGS_NOT_READY` now returns
+`reason: 'mappings_not_ready'` with a derived count and a route:
+
+> *"Not yet — 6 of 80 fields still need confirming. Open the field list above,
+> confirm the ones still marked as needing review, then certify again."*
+
+**BOTH EXISTING GUARDS SURVIVE, AND THAT IS THE POINT.** The refusal's predicate
+is **byte-identical** — `.some(p)` became `.map().filter()` over the same `p`,
+so what is REFUSED never moved; and the sentence is built from **counts only**,
+so the `:240` branch's rule against surfacing `err.message` (*"it can quote the
+field labels of their own form"*) is untouched.
+
+⚠️ **SELF-REFUTATION FOUND A REAL DEFECT IN MY OWN FIRST DRAFT.** `remaining`
+came from the first throw's blocking list, which counted only fields with **no
+mapping row** — so a form with 3 unmapped and 10 unconfirmed would say *"3 of
+80"*, then *"10 of 80"* after the physician cleared the 3. **The count going UP
+as a reward for doing the work.** Each figure was true of its own blocker class
+and the sequence was indefensible. Fixed; **not reachable on the production
+template** (all 80 fields carry rows) and fixed anyway.
+
+⚠️ **AND THE ERROR CLASS HAD TO MOVE TO A LEAF MODULE FIRST.**
+`synthetic-test.ts` imports prisma, storage, the fill engine and the docx
+parser, so importing the **error class** dragged the whole persistence chain in
+and the gate could not load — `Cannot find module next/server`. **Controlled
+against an untouched test from the same worktree, which PASSED**, so this was a
+real transitive import and *not* the known worktree/vitest resolution trap. The
+class now lives in `synthetic-test-error.ts` and is re-exported, and the gate
+imports from the **leaf** — *a grep that resolves a symbol through a barrel has
+not found its definition.*
+
+| proof | result |
+|---|---|
+| gate `gate-f16-mappings-not-ready-is-actionable.test.ts` | **7 of 7** |
+| `template-twin` suite | **242 tests / 29 files** green |
+| `tsc --noEmit` | clean |
+| **M1** — hard-code `"6 of 80"` in place of the derivation | **4 failed / 3 passed** |
+| **M2** — `totalFields` defaults to `0` instead of `null` | **1 failed / 6 passed** |
+
+**M1 is the PARTIAL-fix mutation**, which is the one that matters: a constant
+satisfying the production case is exactly the shape a tired session lands. **M2
+reddens ONE arm rather than everything** — the arm discriminating rather than
+agreeing. Both asserted the mutation had **APPLIED** before the result was
+believed, and both restored from **scratch copies, never from git**.
+
+### ⚠️ WHAT THE BUILD DOES NOT CLAIM
+
+- **The gate asserts what the ACTION RETURNS, not that the sentence is
+  RENDERED.** A UI that drops `result.error` leaves it green — the identical
+  limit #713's gate carries, recorded rather than papered over.
+- **It does not exercise `runTemplateTwinSyntheticTest` end to end.** That needs
+  the whole prisma + storage path; the gate asserts the error CONTRACT and the
+  SENTENCE.
+- ⚠️ **THE ADVERSARIAL PASS WAS RUN BY ME, ON MY OWN DIFF.** A self-review
+  shares the author's assumptions, which is precisely what the mandatory-pass
+  rule exists to defeat. It did find the monotonicity defect above — but it is
+  named here as a **WEAKER INSTRUMENT**, not claimed as that gate. **An
+  independent refutation pass is still owed before this is read as fully
+  gated.**
 - **Not measured on any other template.** One template, one physician, two
   attempts.
 
