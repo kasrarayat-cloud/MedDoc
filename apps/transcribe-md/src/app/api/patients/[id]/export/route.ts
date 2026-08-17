@@ -41,16 +41,22 @@ import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { downloadAudio } from '@/lib/minio';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { renderVisitPdf, unavailableNote } from '@/lib/visit-pdf';
+import { createArchivePdfBudget, skippedNote } from '@/lib/archive-pdf-budget';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// ⚠️ F6.3 — INERT ON THIS DEPLOYMENT, and nothing here ever said so.
+// `maxDuration` is a SERVERLESS directive and `next.config.ts` sets
+// `output: 'standalone'`, so there is no platform to honour it. The render
+// loop below is bounded by `archive-pdf-budget.ts`, not by this line. Kept
+// because it is correct wherever this IS deployed serverlessly.
 export const maxDuration = 300;
 
 export const GET = withApiHandler<{ id: string }>(
   'api:patients:export',
-  async (_req, { params }) => {
+  async (req, { params }) => {
     const session = await getSession();
     const userId = session?.user.id;
     if (!userId) return apiError('unauthorized', 401);
@@ -146,6 +152,10 @@ export const GET = withApiHandler<{ id: string }>(
       passThrough.destroy(err);
     });
 
+    // F6.3 — the render bound, created where the detached builder begins so
+    // the clock covers exactly this archive's render phase.
+    const pdfBudget = createArchivePdfBudget({ signal: req.signal });
+
     void (async () => {
       try {
         archive.append(
@@ -211,10 +221,34 @@ export const GET = withApiHandler<{ id: string }>(
           }
 
           if (v.status === 'SIGNED' && exportData) {
-            try {
-              const pdf = await renderVisitPdf(exportData);
-              archive.append(pdf, { name: `visits/${v.id}/signed.pdf` });
-            } catch (err) {
+            // F6.3 — the render goes THROUGH the bound: it yields the shared
+            // sidecar between visits, charges what this archive consumes, and
+            // refuses once it has had its share. A refusal is NAMED rather
+            // than dropped, for the same reason the failure branch names a
+            // failure: a missing file cannot be told apart from a visit that
+            // was never signed.
+            const outcome = await pdfBudget.render(() =>
+              renderVisitPdf(exportData)
+            );
+
+            if (outcome.status === 'rendered') {
+              archive.append(outcome.value, {
+                name: `visits/${v.id}/signed.pdf`,
+              });
+            } else if (outcome.status === 'skipped') {
+              log.info('api:patients:export', 'pdf render skipped', {
+                userId,
+                patientId,
+                visitId: v.id,
+                reason: outcome.reason,
+                rendered: pdfBudget.rendered,
+                spentMs: pdfBudget.spentMs,
+              });
+              archive.append(skippedNote(v.id, outcome.reason), {
+                name: `visits/${v.id}/signed.pdf.UNAVAILABLE.txt`,
+              });
+            } else {
+              const err = outcome.error;
               // Ruling #113/#116 — the PDF is now a Gotenberg render and has no
               // fallback builder. An archive that silently omits a signed
               // visit's PDF is a silent half-document: the doctor unzips it,
@@ -316,6 +350,15 @@ function readmeText(a: ReadmeArgs): string {
     '  visits/<id>/audio.<ext>       — Original uploaded audio, if any.',
     '  visits/<id>/dictation.<ext>   — Voice-dictation audio, if any.',
     '  visits/<id>/signed.pdf        — Final PDF for SIGNED visits.',
+    '',
+    '  visits/<id>/signed.pdf.UNAVAILABLE.txt',
+    '                                — Appears INSTEAD of signed.pdf when',
+    '                                   that one PDF could not be included.',
+    '                                   The file says which reason it was',
+    '                                   and what to do about it. The visit',
+    '                                   itself is unaffected either way, and',
+    '                                   its full record is still in',
+    '                                   visits/<id>.json.',
     '',
     'Scope',
     '-----',

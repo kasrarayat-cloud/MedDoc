@@ -43,13 +43,21 @@ import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { downloadAudio } from '@/lib/minio';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { renderVisitPdf, unavailableNote } from '@/lib/visit-pdf';
+import { createArchivePdfBudget, skippedNote } from '@/lib/archive-pdf-budget';
 import { redactPhi } from '@meddoc/ai';
 import { log } from '@/lib/log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-// Heavy users with lots of visits + audio can push past the default
-// 60s. Cap at 300s which matches Playwright's own job timeout.
+// ⚠️ F6.3 — THIS LINE IS INERT AND ITS OLD COMMENT CLAIMED OTHERWISE.
+// It used to read: *"Heavy users with lots of visits + audio can push past the
+// default 60s. Cap at 300s which matches Playwright's own job timeout."*
+// `maxDuration` is a SERVERLESS directive; `next.config.ts` sets
+// `output: 'standalone'`, so this deployment is a plain `node server.js` with
+// no platform to honour it. **There was no cap.** Kept because it is correct
+// and load-bearing anywhere this is deployed serverlessly, and because
+// removing it would silently lower a real ceiling on such a host — but it is
+// NOT what bounds the render loop here. That is `archive-pdf-budget.ts`.
 export const maxDuration = 300;
 
 export function isDataExportEnabled(): boolean {
@@ -58,7 +66,7 @@ export function isDataExportEnabled(): boolean {
   return raw !== 'false' && raw !== '0';
 }
 
-export const GET = withApiHandler('api:settings:export-data', async () => {
+export const GET = withApiHandler('api:settings:export-data', async (req) => {
   if (!isDataExportEnabled()) {
     return apiError('Data export is disabled on this deployment.', 503);
   }
@@ -139,6 +147,11 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
   // Async build — do it in the background so we return the response
   // immediately and bytes start flowing. The archiver pipes to
   // passThrough as content gets appended.
+  // F6.3 — the render bound. Created HERE, where the detached builder begins,
+  // so the clock covers exactly this archive's render phase and one doctor's
+  // export can never spend another's budget.
+  const pdfBudget = createArchivePdfBudget({ signal: req.signal });
+
   void (async () => {
     try {
       // README (inventory + format notes)
@@ -203,12 +216,32 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
         }
 
         if (v.status === 'SIGNED' && exportData) {
-          try {
-            const pdf = await renderVisitPdf(exportData);
-            archive.append(pdf, {
+          // F6.3 — the render goes THROUGH the bound, which yields the shared
+          // sidecar between visits, charges what this archive consumes, and
+          // refuses once it has had its share.
+          const outcome = await pdfBudget.render(() =>
+            renderVisitPdf(exportData)
+          );
+
+          if (outcome.status === 'rendered') {
+            archive.append(outcome.value, {
               name: `visits/${v.id}/signed.pdf`,
             });
-          } catch (err) {
+          } else if (outcome.status === 'skipped') {
+            // NAMED, never dropped — an absent file is indistinguishable from
+            // a visit that was never signed, which is the reasoning ruling
+            // #113/#116 already recorded for the failure case below.
+            log.info('api:settings:export-data', 'pdf render skipped', {
+              userId,
+              visitId: v.id,
+              reason: outcome.reason,
+              rendered: pdfBudget.rendered,
+              spentMs: pdfBudget.spentMs,
+            });
+            archive.append(skippedNote(v.id, outcome.reason), {
+              name: `visits/${v.id}/signed.pdf.UNAVAILABLE.txt`,
+            });
+          } else {
             // Ruling #113/#116 — same reasoning as the patient archive: with no
             // fallback builder, a silently-absent signed.pdf is indistinguishable
             // from a visit that was never signed. Name the absence in place, and
@@ -216,9 +249,13 @@ export const GET = withApiHandler('api:settings:export-data', async () => {
             // and an unbuildable document need different advice.
             console.warn(
               `[api:settings:export-data] pdf render failed visit=${v.id}:`,
-              redactPhi(err instanceof Error ? err.message : err)
+              redactPhi(
+                outcome.error instanceof Error
+                  ? outcome.error.message
+                  : outcome.error
+              )
             );
-            archive.append(unavailableNote(v.id, err), {
+            archive.append(unavailableNote(v.id, outcome.error), {
               name: `visits/${v.id}/signed.pdf.UNAVAILABLE.txt`,
             });
           }
@@ -333,6 +370,15 @@ function readmeText(a: ReadmeArgs): string {
     '  visits/<id>/dictation.<ext>   — Voice-dictation audio, if any.',
     '  visits/<id>/signed.pdf        — Final PDF for SIGNED visits.',
     '',
+    '  visits/<id>/signed.pdf.UNAVAILABLE.txt',
+    '                                — Appears INSTEAD of signed.pdf when',
+    '                                   that one PDF could not be included.',
+    '                                   The file says which of the reasons',
+    '                                   it was and what to do about it. The',
+    '                                   visit itself is unaffected either',
+    '                                   way, and its full record is still in',
+    '                                   visits/<id>.json.',
+    '',
     '  doctor_edit_patterns.json     — Per-visit pairs of (AI original,',
     '                                   your edit) captured at sign',
     '                                   time. Used locally to improve',
@@ -345,8 +391,11 @@ function readmeText(a: ReadmeArgs): string {
     '------',
     '  JSON files: UTF-8, human-readable (2-space indent).',
     '  Audio:      Byte-identical to what was uploaded or recorded.',
-    '  PDF:        Byte-identical to what "Download PDF" would produce',
-    '              for the same signed visit.',
+    '  PDF:        The same styled document "Download PDF" produces for',
+    '              that visit. If your practice uses a certified native',
+    '              PDF template, the download gives you your own form and',
+    '              this archive gives you the styled render instead — the',
+    '              clinical content is the same, the layout is not.',
     '',
     'This export is complete as of the Generated timestamp above.',
     'New activity after that point is not included. Request a fresh',
