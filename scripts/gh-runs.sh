@@ -172,8 +172,14 @@ case "$cmd" in
     # the same signal to it and the loop never ends. The polling belongs HERE,
     # where the terminal states are distinguishable, instead of in every caller.
     deadline=$(( $(date +%s) + WAIT_TIMEOUT ))
+    # ⚠️ PRINT ON CHANGE, NOT ON EVERY POLL. An hour's wait at 60s intervals is
+    # 60 identical "3 of 4 success" lines, and for an UNATTENDED session the log
+    # IS the report — noise there is not cosmetic, it buries the line that
+    # matters. stderr is never suppressed: a TERMINAL block must always show.
+    last=""
     while :; do
-      citation_state "$rows" "$sha"; st=$?
+      out=$(citation_state "$rows" "$sha"); st=$?
+      if [ "$out" != "$last" ]; then printf '%s\n' "$out"; last="$out"; fi
       [ "$st" -eq 1 ] || exit "$st"          # 0 cited · 3 failed · 2 cannot tell
       if [ "$(date +%s)" -ge "$deadline" ]; then
         die2 "TIMED OUT after ${WAIT_TIMEOUT}s waiting on $sha — still pending.
