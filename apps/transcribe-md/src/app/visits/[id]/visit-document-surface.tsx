@@ -34,7 +34,20 @@ import { NativeDocumentPreview } from '@/components/native-preview/native-docume
 /** Doctor-facing, PHI-free. Every miss is SAID, never swallowed. */
 const MISS_TEXT: Record<string, string> = {
   not_template_visit: '',
-  not_certified: '',
+  // ⚠️ THIS WAS THE EMPTY STRING, AND THE BANNER IS GATED ON TRUTHINESS.
+  // The one miss a doctor can actually ACT on rendered NOTHING. The comment at
+  // the render site says "Silence is illegal" and describes this exact case; the
+  // map defeated it. Measured 2026-08-17: a doctor re-uploaded his form, ran a
+  // visit, got the standard layout, and no surface told him the template needed
+  // certifying — the twin sat at 0 of 80 mappings confirmed.
+  //
+  // It names the CURE, not just the miss. `not_template_visit` stays empty
+  // because there is nothing to do about it; this one is a click-path away from
+  // fixed, so it points there. Saying only "this is not your form" is what sent
+  // that doctor back to re-upload a file we already had.
+  not_certified:
+    'This is QuillMD’s layout, not your form — your uploaded template needs ' +
+    'confirming once before it can be used. Settings › My Note Format › Confirm fields.',
   no_render: 'We could not draw your form for this visit, so the note is shown instead.',
   fill_failed: 'We could not fill your form for this visit, so the note is shown instead.',
   sample_unavailable: 'We could not open your form this time, so the note is shown instead.',
@@ -132,7 +145,7 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
           about it. Quiet, and only when it is true. */}
       {styledLayout && (
         <p className="qm-vdoc-toolbar-hint" data-testid="visit-document-styled-note">
-          QuillMD&rsquo;s layout — upload your own blank form in Settings ›{' '}
+          QuillMD&rsquo;s layout — set up your own blank form in Settings ›{' '}
           <em>My Note Format</em> and this becomes your page.
         </p>
       )}
