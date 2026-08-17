@@ -907,6 +907,47 @@ This is the positive-control rule with a free control already in hand: any sweep
 that contains at least one must-exist row carries its own tripwire, and a
 must-not-appear table without one cannot tell absence from blindness.
 
+#### ⚠️ AND A FIFTH: **ONE SUCCESS IS NOT RECOVERY, AS ONE ZERO IS NOT ABSENCE**
+
+**Standing 2026-08-17. Written by the author of the other four, hours after
+fixing them, which is the entire argument for it being a rule.**
+
+> **A DEGRADED service succeeds intermittently. A single successful probe
+> during an outage is a BLIP, not a recovery — and a waiter with no debounce
+> will report health at the first one.**
+
+⚠️ **REFERENCE CASE.** During a GitHub incident (Actions, API, Webhooks, Issues
+and Pull Requests all degraded), a waiter polling the runs API printed
+**`API RECOVERED at 14:16:18Z`**. It had not. The independent check still
+returned **HTTP 404**, the status page still read *Partially Degraded*, and
+**six consecutive samples came back 0 ok / 6 failed.** The service had simply
+answered once, at minute 19, and the waiter exited on it.
+
+**The family, now five, and every member is the same defect wearing different
+clothes — two distinguishable states collapsed into one observation:**
+
+| # | the collapse |
+|---|---|
+| 1 | two zeroes, opposite meanings — one broken instrument |
+| 2 | a tree that cannot resolve its own imports |
+| 3 | a probe that matches its own searcher (`pgrep -f`) |
+| 4 | `cited` returning 1 for PENDING and for FAILED |
+| **5** | **one success read as recovery** |
+
+**THE FIX IS A DEBOUNCE, AND IT REPORTS THE FLAP.** Require **N consecutive**
+successes — three is enough — and **print when a streak BREAKS**, so
+intermittency is visible as intermittency rather than being averaged into
+"working". A waiter that only reports its final verdict cannot be audited.
+
+⚠️ **AND THE CORRECT POSTURE DURING THE OUTAGE IS THE OTHER HALF OF THIS
+ENTRY.** The pre-push hook refused every push — *"CANNOT TELL — the runs API
+returned nothing"* — which is the fail-closed behaviour working exactly as
+designed. **`DECLARE_CANCELLATION` is NOT the way past it:** that flag declares
+a cancellation, it does not certify a blind instrument, and using it there is
+the sanctioned-hatch-becomes-the-undisciplined-door failure the wrapper exists
+to prevent. **The work stayed committed and unpushed, and the loop stayed dark
+rather than burning sessions that could not push, cite or merge.**
+
 ### ⚠️ AND A THIRD MEMBER: A TREE THAT CANNOT RESOLVE ITS OWN IMPORTS
 
 **Contributed by the FOUNDATION loop's session 02, 2026-08-15.**
@@ -1432,6 +1473,47 @@ rule (§"A gate's WATCHED SET is diffed against the spec's NAMED set") pointed a
 an EXCLUSION list instead of an inclusion one, and it is the more dangerous
 direction: an exclusion that goes stale removes coverage silently, and the gate
 keeps reporting zero.
+
+### ⚠️ SO WRITE THE EXEMPTION WITH ITS RETIREMENT CONDITION IN THE SAME SENTENCE
+
+**Standing 2026-08-17. The constructive half of the entry above — that one says
+how exemptions rot; this one says how to stop it.**
+
+> **An exemption is written WITH the condition that retires it, in the same
+> sentence. Then checking whether it still applies is a LOOKUP, not a
+> judgement — and a lookup is something a tired session at 03:00 actually
+> performs.**
+
+The entry above prescribes *re-read the justification by hand whenever the code
+it describes is touched.* True, and it depends on somebody noticing the code was
+touched. **A named retirement condition does not:** it turns an open question
+into a closed one anybody can answer without reconstructing the reasoning.
+
+⚠️ **REFERENCE CASE — A CLEAN DEATH, WHICH IS WHY IT IS WORTH RECORDING.** A
+§2.5 carry-forward exemption was written *"it may live in the shared tree
+because it can only be named after a post-merge sha — **and it retires WITH
+F10**"*. **F10 shipped under nine hours later** (`c0ee3994`); the gate began
+resolving declarations by ancestry; the forcing condition vanished; and the
+exemption was **deleted before it ever landed.** The rule that replaced it is
+SHORTER than the exemption was.
+
+⚠️ **THE COUNTERFACTUAL IS THE ARGUMENT.** That exemption was **RATIFIED,
+correct when written, and one mechanical landing away.** A ratified staged file
+reads as settled and nothing in the landing would have questioned it. Had the
+retirement condition been a rationale PARAGRAPH instead of a CLAUSE, it would
+have shipped and become permanent — not by anyone's error, but because **no step
+exists whose job is to ask "is this exemption still true?"**
+
+**Two habits follow, and the second is the cheaper one:**
+
+1. **Name the retirement condition as a TESTABLE EVENT** — an item id, a flag, a
+   migration, a shipped fix. *"Until we have time"* and *"for now"* are not
+   conditions; they never become false.
+2. **RE-READ YOUR OWN STAGED AND UNLANDED WORK AGAINST WHAT SHIPPED WHILE IT
+   WAITED.** Anything held for a window is evidence about a tree that has since
+   moved — *"evidence is only evidence on the tree it describes"*, applied to
+   your own drafts. This one was caught by a routine status check reading a
+   merge and asking what it invalidated.
 
 ## AN EXTERNAL REACH IN THE BUILD IS REMOVED, NOT RETRIED
 

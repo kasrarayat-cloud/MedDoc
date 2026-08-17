@@ -216,6 +216,14 @@ each taken to its gate. For every item:
 - deploy under **§2.5** with the declared delta written down FIRST — at
   **`docs/foundation/deploys/<UTC-date>-<short-sha>.md`** (e.g.
   `20260809-ac9a46cd.md`). ⚠️ **`deploy-prod.sh` REFUSES any other filename**, so
+  ⚠️ **AND WRITE IT INTO YOUR OWN WORKTREE, NOT THE SHARED TREE** — a §2.5
+  declaration is a session-produced artifact like any other; see *"EVERY
+  SESSION-PRODUCED ARTIFACT IS WRITTEN INTO YOUR OWN WORKTREE"*. **Since F10 the
+  gate resolves a declaration by ANCESTRY**, so a moving `main` no longer
+  invalidates a name and there is no reason to write one into the shared tree.
+  The deploy gate requires only that it be **present**; the provenance that
+  makes §2.5 worth anything comes from its **commit timestamp preceding the
+  act**, which an untracked file does not have.
   a declaration written under a descriptive name costs a refused deploy and a
   second PR cycle; it refuses *before* it builds, migrates or recreates anything,
   which makes that failure expensive in minutes and free in risk — rollback tags
@@ -466,7 +474,33 @@ to write it. **Never leave it untracked at close-out.** If you genuinely make no
 commit that session, say so in your report and name the path, so the pickup
 clears it rather than the guard discovering it.
 
-### ⚠️ AND WRITE IT INTO YOUR OWN WORKTREE — THE SHARED-TREE PATH STRANDS BY CONSTRUCTION
+### ⚠️ EVERY SESSION-PRODUCED ARTIFACT IS WRITTEN INTO YOUR OWN WORKTREE
+
+> **THE RULE NAMES A CLASS, DELIBERATELY: any artifact a session PRODUCES —
+> preflight report, §2.5 deploy declaration, evidence file, mutation-proof
+> output — is written into the WORKTREE YOU ARE WORKING IN, and rides your
+> first commit. Never into the shared tree.**
+
+**It is stated as a class because it was first written as a FILE TYPE, and the
+class produced a second instance within hours.** An enumerated list needs a new
+rider for every artifact anyone invents; a class needs none.
+
+⚠️ **REFERENCE CASES, both 2026-08-16:** a preflight report
+(`preflight-20260816T100403Z.md`), then a **§2.5 carry-forward declaration**
+(`20260816-46769791.md`) — a *different* file type, hours later, in a session
+doing everything else right. **The seam catches careful sessions.**
+
+⚠️ **AND THE DIRECTORY MATTERS.** `docs/foundation/deploys/` and
+`docs/deploy-reports/` are TRACKED, so a stranded artifact there dirties the
+tree and refuses the next relight. `docs/deploy-logs/` is gitignored and does
+not. Know which you are writing into.
+
+⚠️ **IT LOOKS FIXED WHEN IT IS NOT — THE ACCIDENTAL CLEAR.** A session that
+happens to `git add` from the shared tree clears it by accident, so the class
+vanishes for a run and returns with the next session that commits only from its
+worktree. **A clean `git status` is not evidence the seam is closed; it is
+evidence that this session's habits covered for it.** A later commit of a
+stranded artifact closes that INSTANCE and says nothing about the seam.
 
 **Ruled 2026-08-16.** The resolution above says *commit it in your first
 commit*. That is right and it does not happen on its own, because **your commits
