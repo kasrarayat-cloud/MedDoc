@@ -82,6 +82,9 @@ require_full_sha() {
 
 WAIT_TIMEOUT="${GH_RUNS_WAIT_TIMEOUT:-3600}"
 WAIT_INTERVAL="${GH_RUNS_WAIT_INTERVAL:-60}"
+# How long "zero runs" is treated as PENDING rather than CANNOT-TELL.
+WAIT_GRACE="${GH_RUNS_WAIT_GRACE:-180}"
+total_seen=0
 
 # ⚠️ THREE TERMINAL STATES, NOT TWO — AND THAT IS THE WHOLE FIX.
 # This function used to collapse "some runs are still PENDING" and "a run has
@@ -115,6 +118,7 @@ citation_state() {
   # ⚠️ A ZERO-RUN COMMIT IS NOT CITED. Without this, a sha nothing ever ran
   # against reports "all runs succeeded" — vacuously, which is the same
   # false all-clear one layer up.
+  total_seen="$total"
   if [ "$total" -lt 1 ]; then
     echo "NOT CITED — no runs exist for $sha (vacuous, not clean)."
     return 2
@@ -176,10 +180,25 @@ case "$cmd" in
     # 60 identical "3 of 4 success" lines, and for an UNATTENDED session the log
     # IS the report — noise there is not cosmetic, it buries the line that
     # matters. stderr is never suppressed: a TERMINAL block must always show.
-    last=""
+    last=""; grace_until=$(( $(date +%s) + WAIT_GRACE ))
     while :; do
       out=$(citation_state "$rows" "$sha"); st=$?
-      if [ "$out" != "$last" ]; then printf '%s\n' "$out"; last="$out"; fi
+      # ⚠️ THE POST-PUSH GRACE WINDOW. Immediately after a push GitHub has not
+      # created the runs yet, so `citation_state` correctly reports 2 = CANNOT
+      # TELL on zero rows. Returning that instantly makes `wait` useless for its
+      # PRIMARY job — waiting on a citation for the push you just made.
+      #
+      # ⚠️ AND IT IS BOUNDED ON PURPOSE. "No runs yet" and "this commit will
+      # NEVER have runs" are genuinely indistinguishable from outside, and
+      # conflating them is the exact class this file was just fixed for. So the
+      # grace period EXPIRES and the answer reverts to 2 — honest, not hopeful.
+      # Measured 2026-08-17: a PR head sat at zero runs for >3 minutes and the
+      # cause was not propagation at all, it was a CONFLICTING PR, which gets no
+      # merge ref to run against. A grace window must not hide that.
+      if [ "$st" -eq 2 ] && [ "$total_seen" = "0" ] && [ "$(date +%s)" -lt "$grace_until" ]; then
+        st=1
+        [ "$last" != "__grace__" ] && { echo "no runs yet — waiting up to ${WAIT_GRACE}s for them to appear"; last="__grace__"; }
+      fi
       [ "$st" -eq 1 ] || exit "$st"          # 0 cited · 3 failed · 2 cannot tell
       if [ "$(date +%s)" -ge "$deadline" ]; then
         die2 "TIMED OUT after ${WAIT_TIMEOUT}s waiting on $sha — still pending.
