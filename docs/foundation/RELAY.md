@@ -59,6 +59,43 @@ reachable** (`formOnly` derives from the template and is independent of signing;
 neither export route carries a signed gate), so the draft footer applies there
 too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
+### 🔴 F12 — E/M ON PROCEDURE NOTES, AND THE EXPORT'S CREAM E/M BLOCK — **AT F6's HEAD** (ruling #123)
+
+**OWNER FINDING, ON HIS OWN EXPORTED PDF. Two parts; both ship together.**
+
+**(1) SKIN.** The E/M *"Documentation Level"* block renders in **LEGACY CREAM**
+at the bottom of exported PDFs — the export-side E/M rendering never got R4b's
+host treatment. **Fix at the COMPONENT/BUILDER ROOT so every surface inherits,
+never per-caller** (R3.4's lesson). **Semantics byte-identical.** Red-prove
+against the owner's PDF.
+
+⚠️ **DO NOT GUESS THE MECHANISM — REPRODUCE IT FIRST.** Measured while filing:
+`docx-generator.ts:188-197` — the emitter the PDF now converges onto — is
+**plain paragraphs with NO shading** (only `color:'FFFFFF'` at `:470` in the
+whole builder). **The cream is not coming from there.** Discriminate between
+`review-document-view` (CSS-capable), `pdf-native`, `ehr-formatters.ts:182`, or
+a pre-F3 PDF **before editing anything**.
+
+**(2) POLICY — OWNER-DECIDED, BUILD IT.** E/M **does not belong on
+PROCEDURE/OPERATIVE notes at all.** Imaging-style suppression **keyed on the
+NOTE'S SHAPE** (op-note templates / procedure encounters), hiding the block
+**in-app AND in exports**. **Office visits unchanged.** Discharges the recorded
+*E/M-suppression-on-procedure-notes* item.
+
+⚠️ **THE CRUX, MEASURED: THE EXISTING SEAM CANNOT EXPRESS THIS.**
+`emAppliesToSpecialty(id)` (`specialties.ts:144`) takes **only a specialty id**,
+and **a GI doctor does office visits AND colonoscopies under one specialty.**
+So this is a **SECOND AXIS**, not another specialty. Feed it through
+`projectDisplayedEmCode`'s `emApplies` — a required param by design, so an
+unthinking caller fails to typecheck.
+
+**DONE WHEN:** attempt-proved **both** directions — **GI office visit SHOWS
+E/M**; **colonoscopy op-note shows NONE, NOWHERE** (in-app, DOCX, PDF, every EHR
+format) — under a **§2.5 declaration carrying ABSENCE rows**, with the
+**MANDATORY adversarial pass**. ⚠️ **The positive arm is what catches an
+over-broad suppression stripping E/M from office visits, which is worse than the
+defect.**
+
 ### F6 — SIX VERIFIED-UNFIXED ITEMS, behind F5
 
 Found and confirmed during F3; none is a theory. **Each is its own item — the
