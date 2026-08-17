@@ -43,6 +43,9 @@
     },
     "@prisma/dev": {
       "find-my-way": "^9.7.0"
-    }
+    },
+    "undici": "^7.29.0",
+    "js-yaml": "^4.3.1",
+    "deepmerge-ts": "^8.0.1"
   }
 }
