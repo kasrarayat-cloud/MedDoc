@@ -17333,6 +17333,14 @@ believed, and both restored from **scratch copies, never from git**.
 - **The gate asserts what the ACTION RETURNS, not that the sentence is
   RENDERED.** A UI that drops `result.error` leaves it green — the identical
   limit #713's gate carries, recorded rather than papered over.
+
+  ⚠️ **BUT THE REACH WAS VERIFIED BY READING THE CONSUMER, NOT ASSUMED** — which
+  is the difference between a limit and a hole. `native-template-manager.tsx:129`
+  does `setError(res.error)` on the `!res.ok` branch, and `:268-283` renders
+  `{error}`. **So the sentence does reach the doctor's screen today.** What is
+  missing is a TEST binding those two facts together, so a future edit to the
+  manager could silently break the reach with this gate still green. Stated as a
+  measurement of the current tree, never as a guarantee about the next one.
 - **It does not exercise `runTemplateTwinSyntheticTest` end to end.** That needs
   the whole prisma + storage path; the gate asserts the error CONTRACT and the
   SENTENCE.
