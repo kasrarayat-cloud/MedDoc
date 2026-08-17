@@ -15578,3 +15578,251 @@ that gets skipped** — the same argument that turned the in-flight-runs rule in
 itself**, from the RUNNING container's image id, and refuse if it cannot. Filed
 as an item rather than done here, because it changes the deploy path and this
 session's item was F4.
+
+---
+
+## ✅ F10 — A DECLARATION IS COMMITTABLE BEFORE ITS DEPLOY — **2026-08-17, session 06**
+
+**The circularity is broken by MEASUREMENT, and the gate moved only in the
+tightening direction.** Ruling **#121** set three acceptance criteria and left
+the mechanism to the loop; this is the mechanism.
+
+### THE BUG, RESTATED SO THE FIX IS LEGIBLE
+
+`scripts/deploy-prod.sh:91` derived the declaration path from
+`git rev-parse --short HEAD` **of the deploying tree**:
+
+    DECL="$DECL_DIR/$(date -u +%Y%m%d)-${DEPLOY_SHA}.md"
+
+`main` moves between a feature merge and its deploy — a citation PR, a ledger
+row, a docs fix — which is this programme's *normal cadence*, not an accident.
+⚠️ **And it does not converge: the commit that would CARRY the declaration is
+itself what MOVES HEAD.** No number of extra PR cycles reaches a fixed point.
+
+### THE SHAPE
+
+`declaration_resolve` (in the SHARED `scripts/lib/declaration.sh`, not a second
+copy) takes the **exact match** when it exists — pre-F10 behaviour, byte for
+byte — and otherwise accepts a declaration naming an **ANCESTOR** of HEAD, but
+**only when it can prove the two are the same program**:
+
+| requirement | how it is established |
+|---|---|
+| the named commit exists | `git rev-parse --verify <sha>^{commit}` — a fabricated or ambiguous abbreviation fails here rather than being padded |
+| it is an ANCESTOR of HEAD | `git merge-base --is-ancestor` |
+| **zero runtime paths moved** | `git diff --name-only <cand> HEAD` filtered through a **fail-closed allowlist** |
+| exactly one candidate is nearest | ties REFUSE with exit **2** — *cannot tell* is not *there is none* |
+
+⚠️ **THE NON-RUNTIME SET IS AN ALLOWLIST, NEVER A DENYLIST** —
+`^(docs/|[^/]+\.md$)`. Everything else counts as runtime: `apps/`, `packages/`,
+**`scripts/`** (they are read off the working tree at deploy time, which is
+exactly why F9 was *"effective for the NEXT deploy"* the moment it merged),
+`.github/`, `package.json`, a Dockerfile, a `.md` nested inside an app. The
+boundary was **measured before it was written**: no Dockerfile `COPY`/`ADD`s
+`docs/`, and nothing under `apps/` or `packages/` reads `docs/` outside dev and
+eval scripts.
+
+### THE THREE CRITERIA, EACH WITH ITS ARM
+
+| #121 | how it is met | the arm that would go red |
+|---|---|---|
+| **(1) the gate does not weaken** | `present` is **untouched** on the exact match — #96(b) stands, and #121 names "flip it to `strict`" as the misreading. ⚠️ **The NEW door is the STRICTER one**: a carry-forward resolves at `strict`, because it means a commit existed to ride | `mode is present` · `mode is strict` (M3, M4) |
+| **(2) the circularity breaks** | a declaration naming X, committed in the docs PR that becomes Y, is ACCEPTED at HEAD=Y — **committed before the act**, which the interim exception could never require | `the carry-forward is ACCEPTED` (M1, M2, M6) |
+| **(3) falsifiability does not narrow** | it refuses a non-ancestor, ANY runtime movement, a fabricated sha, an uncommitted carry-forward, and an ambiguous pair | every `REFUSES` arm (M1, M2, M5) |
+
+### THE PROOF — BOTH DIRECTIONS, WHICH IS THE HALF THAT GETS SKIPPED
+
+`apps/transcribe-md/src/lib/__tests__/gate-f10-declaration-carry-forward.test.ts`
+— **15 arms, 15 green**, driving the REAL library under a real bash against
+THROWAWAY git repositories. It reaps its own tmpdir (F9's gate's lesson,
+`1cf669a8`, filed against itself after nine leftovers).
+
+⚠️ **THE ACCEPT ARMS ARE ASSERTED FIRST AND THEY ARE THE POSITIVE CONTROL.** A
+resolver that found nothing ever would satisfy **every refusal arm in the file**.
+That is the `retire-branch.sh` precedent #121 names by hand — 9 of 9 refusals
+and then a false green on the happy path — and it is why the accept arms assert
+the **exit code, the resolved PATH and the MODE**, not merely "it did not
+refuse".
+
+**MUTATION PROOF — 7 of 7 reddened.** Baseline 13/13 green, post-restore 13/13
+green, both files byte-identical to their backups. **Every mutation asserted it
+APPLIED before its result was believed.**
+
+| mutation | result |
+|---|---|
+| M1 · drop the ANCESTRY check | RED (1) |
+| M2 · drop the RUNTIME-DIFF check | RED (2) |
+| M3 · exact match silently becomes `strict` | RED (1) |
+| M4 · carry-forward loosened to `present` | RED (3) |
+| M5 · drop AMBIGUITY detection | RED (1) |
+| **M6 · PARTIAL: revert `deploy-prod.sh` to the circular derivation** | RED (2) |
+| **M7 · PARTIAL: resolve, but do not thread the MODE through** | RED (1) |
+
+⚠️ **M6 AND M7 ARE THE ONES THAT MATTER.** The habit is to mutate by the
+COMPLETE inverse, which proves the guard sees a total regression. The failure
+that actually ships is a **half-landed fix** — here, a library that is perfect
+and a caller that quietly stopped consulting it. Both are one-line reverts, and
+both would have reintroduced F10 in full while every behavioural arm stayed
+green. That is what the three `the deploy actually uses it` arms exist for.
+
+### ⚠️ MY OWN MUTATION HARNESS LIED FIRST, AND THE TELL WAS A MUST-BE-NONZERO ZERO
+
+The proof's first run printed **`baseline: 0 passed, 0 failed`** for a suite that
+had just passed **13**. The parser tested `part.endswith('passed')` against
+vitest's `Tests  1 failed | 12 passed (13)` — the trailing `(13)` defeats it. So
+`failed` parsed correctly and `passed` was **always 0**.
+
+**The RED/GREEN verdicts keyed on `failed` and were sound.** The damage was to
+the *baseline guard*, which read `if f != 0` and was satisfied by a run that
+**collected nothing at all** — the emptiness test this house names on sight.
+Fixed to assert **both** halves (`f != 0 or p == 0`) and **re-run from scratch**
+rather than reasoned around; the numbers in the table above are from the second
+run. *A must-be-nonzero reading zero is the broken-instrument tell, and it
+appeared inside the instrument built to check everything else.*
+
+### ⚠️ AND THE GATE ITSELF RAN IN THE WRONG UNIVERSE — CAUGHT AFTER THE FIRST PUSH
+
+**The flags are part of the universe.** `deploy-prod.sh:50` runs
+`set -euo pipefail`; the gate's helpers sourced `declaration.sh` under a bare
+`set -u`. **Fifteen green arms, every one proving the logic in a shell the
+deploy does not use** — the *"a test that defaults a flag OFF while production
+runs it ON is testing the rollback"* rule, one layer down from env vars.
+
+⚠️ **IT IS NOT COSMETIC, AND THE ACCEPT PATH IS WHERE IT WOULD HAVE BITTEN:**
+
+    runtime=$(git diff --name-only … | grep -Ecv "$RE" || true)
+
+**`grep -c` exits 1 when the count is ZERO — which is exactly the case a
+carry-forward must accept.** Under `pipefail` that 1 propagates; under `set -e`
+it would abort. The `|| true` is what makes it safe, and *"this guard holds"*
+was an assertion the file did not test.
+
+Re-run under the real flags: **15 of 15 still green**, so the guards do hold —
+now a measurement rather than a claim. The mutation proof was **re-run against
+the hardened harness**, because evidence describes only the tree it was taken
+on: **7 of 7 still red**, baseline 15/15, post-restore 15/15.
+
+**Found by reading `deploy-prod.sh`'s own `set` line, not by any test — and no
+test would have said anything.** A milder shell fails in the PERMISSIVE
+direction, so the suite was green and would have stayed green.
+
+### AGAINST THE REAL DECLARATION SET — the production universe
+
+Every synthetic repo above holds two or three commits and one declaration. The
+real directory holds **37 files**, including a `README.md` whose name carries no
+sha. Two arms run the same library against it, and the resolver was executed on
+`main` for the record:
+
+    shipping    : a8d4e8b2
+    🔴 REFUSING — no delta declaration covers the tree you are shipping.
+    RC=1
+
+**That is the correct answer and it is not a regression** — pre-F10 code refuses
+identically here, because there is no `20260817-a8d4e8b2.md`. The nearest
+declaration is `20260816-3045ae16.md`, and `3045ae16..a8d4e8b2` moves
+`template-twin-mappings.ts` plus three test files, so a carry-forward is
+correctly disqualified. **The two implementations differ only where a docs-only
+commit moved `main` — which is precisely F10's case.**
+
+⚠️ **HONEST LIMIT, NAMED:** `main` currently has **no** docs-only ancestor range,
+so the carry-forward ACCEPTANCE is proven synthetically and was not
+demonstrable live tonight. The refusal path was.
+
+### CONTROLLED DELTA, NOT THE RAW NUMBER
+
+Running the unit suite from a worktree fails on `react/jsx-dev-runtime` —
+`vitest.config.ts` aliases react to `../../node_modules/react` and a worktree
+checks out TRACKED FILES ONLY. A clean detached worktree at `origin/main`,
+carrying **none** of this change, was measured as the control:
+
+| | test files | tests |
+|---|---|---|
+| `origin/main` (control) | 16 failed, 297 passed (315) | 1 failed, 3802 passed |
+| this branch | 16 failed, 298 passed (316) | 1 failed, 3817 passed |
+
+**+1 file, +15 tests, +0 failures — exactly the new arms.** The failures are a
+pre-existing property of the config, refuted **empirically** rather than by
+argument.
+
+⚠️ **AND THE DOCUMENTED FIGURE HAD DRIFTED.** `AGENTS.md` records this artifact
+as *"15 failed files / 1 failed test"*. Measured tonight on `origin/main`: **16**.
+Not a defect — the count grows as client components are added — but it is an
+inherited number, and this house's own rule is to re-measure rather than carry
+one forward. Re-measured.
+
+### WHAT THIS ITEM DOES **NOT** CLAIM
+
+- **It does not deploy.** Like F9, F10's done-when is *on `main`, cited*. Scripts
+  run from the tree, so it is effective for the NEXT deploy rather than pending a
+  release. No §2.5 declaration is owed by this change, because it changes no
+  runtime path in the shipped image.
+- **It does not make a carry-forward routine.** The exact match is still the
+  normal case and still `present`. The carry-forward is the door for the cadence
+  that had none.
+- **It cannot judge CONTENT.** It proves a declaration is about the shipped
+  *tree*; whether the declaration says anything true is what the post-deploy
+  comparison is for. A declaration naming the right commit and declaring nothing
+  useful passes this gate and always did.
+- ⚠️ **The runtime allowlist is a JUDGEMENT, and it is deliberately conservative.**
+  A test-only change disqualifies a carry-forward even though no shipped byte
+  moves. That is fail-closed on purpose: refusing costs one declaration, and
+  accepting wrongly costs a deploy nobody judged.
+
+### ⚠️ I APPENDED THIS VERY LEDGER ROW TO THE SHARED TREE — AND THE MECHANISM IS `cd`, NOT CARELESSNESS
+
+**Recorded because it is the third occurrence of a class this file already
+names, and because the previous two were also committed by people who knew the
+rule.**
+
+The F10 row above was written with `cat >> docs/foundation/RELAY.md` — a
+**RELATIVE** path — while the shell's working directory had silently fallen back
+to `/opt/meddoc-pro`. It had been inside the control worktree
+(`.f10-ctl/apps/transcribe-md`), and **removing that worktree destroyed the cwd
+out from under the shell**:
+
+    pwd: error retrieving current directory: getcwd: cannot access
+         parent directories: No such file or directory
+
+So **176 lines landed on the deploy surface**, not in the branch. `git status`
+on the shared tree read `M docs/foundation/RELAY.md` — which is exactly the
+state that **blocks the next relight**, since the launch guard refuses a dirty
+tree. Scratch the loop cannot reap making the loop unstartable, one more time.
+
+⚠️ **AND NOTE WHAT IT WAS:** a ledger row about declaration discipline, written
+onto the surface whose cleanliness the discipline protects. AGENTS.md already
+records that shape verbatim — *"a rule about not touching a live deploy surface,
+being written onto a live deploy surface … reflexes are not fixed by knowing the
+rule."*
+
+**THE REPAIR, in the order that matters — EXTRACT BEFORE REVERT:**
+
+1. **Measure first.** `git diff --numstat` → `176 0`, a PURE APPEND after line
+   15580. That number is what made the extraction computable rather than guessed.
+2. **Extract to the branch**, `tail -n +15581` into the worktree's copy.
+3. **VERIFY THE EXTRACTION** — 15580 → 15756 lines (+176, reconciling against
+   the numstat), heading present exactly once, tail byte-matching — **before**
+   anything was reverted. `git checkout --` is the instrument this house
+   documents as silently destroying uncommitted work; it is only safe once the
+   work is provably somewhere else.
+4. **Revert, then re-assert clean.** `git status --porcelain` empty.
+
+**THE GENERALISABLE HALF, and it is not "be careful":**
+
+> **A relative path is a bet on cwd, and `git worktree remove` INVALIDATES the
+> cwd of any shell standing inside it.** Every file-writing command in a session
+> that creates and destroys worktrees should use an ABSOLUTE path — the `Edit`
+> calls in this same session all used absolute paths and all landed correctly;
+> the one `cat >>` that used a relative path is the one that went astray.
+
+### ⚠️ #121's INTERIM EXCEPTION IS NOW DISCHARGED — AND RETIRING IT NEEDS THE OWNER
+
+#121 says the carry-forward where-exception *"retires WITH F10 — do not let it
+outlive its reason; an exemption's justification is prose and prose decays
+silently."* **F10 has landed, so the reason is gone.**
+
+The exception's text lives in `docs/foundation/INBOX.md`
+(`2026-08-16T19:30:00Z`), and **the loop never writes to the INBOX** — it is
+append-only from the supervised side by design. So this is flagged rather than
+executed: **the entry should be moved to `inbox-archive/`**, and the interim
+clause in #121 marked discharged. Carried in the morning report.
+
