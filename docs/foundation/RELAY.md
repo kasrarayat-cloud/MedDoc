@@ -514,6 +514,56 @@ layer is a guard that quietly teaches sessions to route around it — and the
 route was one command away. **The cost of waiting was about thirty minutes of a
 session that had budget. The cost of the habit would have been permanent.**
 
+#### ✅ AND `gh-runs.sh` COLLAPSED TWO STATES INTO ONE EXIT — A SECOND TIME. FIXED 2026-08-17.
+
+**`cited` returned exit 1 for BOTH "still pending" and "a run FAILED".** So the
+canonical `until bash scripts/gh-runs.sh cited "$SHA"` loop — the pattern this
+wrapper exists to serve — **polls forever** on a commit whose run has already
+concluded `failure` and can never reach 4 of 4.
+
+**MEASURED ON PR #705, and it was live:** `e2e` concluded FAILURE at 06:59Z
+(`npm ECONNRESET` in the image build). `cited` printed *"3 of 4 success"* and
+exited 1 — **true, and indistinguishable from three-done-one-running.** A waiter
+was doing exactly that; it was caught only by querying the runs directly.
+
+⚠️ **SECOND INSTANCE IN THE SAME FILE, SAME AUTHOR, SAME SHAPE** — the first was
+a fabricated sha vs a real sha with pending runs, fixed by adding `2 = CANNOT
+TELL`. So the states are now **enumerated in one function** rather than
+re-derived per branch:
+
+    0 CITED · 1 PENDING · 2 CANNOT TELL · 3 FAILED (terminal)
+
+**And `wait` is the cure, because the defect is not fixable in the caller.**
+`until` observes only zero/nonzero, so exit 3 alone would still loop. The
+polling moved INTO the script, where terminal states are distinguishable, and it
+carries a timeout that reports `2` rather than hanging.
+
+**PROVED BOTH DIRECTIONS, against controlled fixtures — new vs old:**
+
+| fixture | new | old |
+|---|---|---|
+| all success → CITED | **0** | 0 |
+| one running → PENDING | **1** | 1 |
+| one **FAILED** → TERMINAL | **3** | 1 ⟵ *the defect* |
+| one **CANCELLED** → TERMINAL | **3** | 1 ⟵ *also collapsed* |
+| no runs → CANNOT TELL | **2** | 1 |
+
+⚠️ **THE HAPPY-PATH ROWS ARE THE POINT OF THE TABLE:** cited stays `0` and
+pending stays `1`, so **every existing `until … cited` loop keeps working** for
+the legitimate case. A fix that made the guard fire and broke the ordinary path
+would be worse than the defect.
+
+**And the defect was demonstrated, not just described:** `until` + the old
+script on a FAILED fixture was killed by `timeout` at **exit 124** — an infinite
+loop, observed.
+
+⚠️ **TWO OF MY OWN PROOF INSTRUMENTS LIED FIRST, BOTH CAUGHT BY A WRONG NUMBER.**
+The backup copy reported `2` for a commit that is genuinely cited — it was
+sitting outside `scripts/`, so its `LIB` path could not resolve and it
+fail-closed correctly about the wrong thing. And the live-failure fixture
+evaporated when the re-run replaced it. **Hence controlled fixtures**: a proof
+that depends on transient production state is not repeatable.
+
 #### ✅ F11's THIRD GRANT — RESOLVED AS A WRAPPER, NOT A SHAPE-GRANT. 2026-08-17.
 
 **Owner ruling.** `scripts/push-with-cancellation.sh` takes the reason as its
