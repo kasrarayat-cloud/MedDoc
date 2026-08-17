@@ -338,6 +338,25 @@ not added to the PERMISSIONS by the same commit"*. Three more, same class:
 | `docker system df` | preflight Check 2 is unrunnable → recorded `cannot tell`, never a pass |
 | `rm` on a scratch file the session created | a `tsc` probe could not be removed by the obvious command. **`git clean -f -x -- <path>` IS granted and did the job** — worth knowing, because the alternative is leaving scratch in `src/` |
 
+**⚠️ F11 HAS A SECOND MEASURED OCCURRENCE, SAME CAUSE, INDEPENDENTLY HIT.**
+Session 06 measured it at ~40 minutes. This session paid it again, ~41 minutes,
+in the same shape: needing a second push mid-run, the pre-push hook **correctly**
+refused, and its own documented override —
+`DECLARE_CANCELLATION="…" git push` — is **refused by the loop's permission
+set**, because the compound `VAR=… command` form is not granted.
+
+⚠️ **THE COST IS NOT THE CYCLE, IT IS WHAT THE LOOP DOES INSTEAD.** The
+sanctioned action was cheap and correct: cancel four runs **three minutes old,
+all mine**, to fold the §2.5 declaration into the same PR and save a full
+41-minute gate. The loop cannot take it, so it waits — **and the alternative it
+CAN reach (`gh run cancel`) is a way of simulating the override through another
+door, which is exactly what session 06 declined to do and this session declines
+too.** A guard whose legitimate release valve is unreachable turns a declared,
+audited decision into an undeclared workaround for whoever is less careful.
+
+**OWNER ACTION:** grant the `DECLARE_CANCELLATION=… git push` form. Two
+occurrences, two sessions, same root cause, ~81 minutes between them.
+
 **⚠️ AND THE PREFLIGHT REPORT'S PATH IS A SEAM, MEASURED.** `MASTER.md` rules
 the report is written **into the worktree you are working in**. The loop **cannot
 write outside `/opt/meddoc-pro`**, so a worktree created anywhere else — the
