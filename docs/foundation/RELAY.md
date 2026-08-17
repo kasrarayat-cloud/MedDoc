@@ -17008,3 +17008,137 @@ on a suppression that fired ten times too widely. **The positive arm (8 + 1
 office-side levels that MUST survive) is the row that catches it**, and it is
 the arm #123 says is the one that matters.
 
+
+---
+
+## ✅ F15 — THE CERTIFICATION DOOR IS AUDIBLE, AND A PHYSICIAN HAD ALREADY WALKED 74 OF 80 THROUGH IT — **2026-08-17, run `20260817-231454` session 01**
+
+**#713 merged as `455e109c`.** It was green, `CLEAN`, owner-priority, and had
+been sitting **five hours** across two sessions. The change is small and its
+premise turned out to be live in production while it waited.
+
+**THE FIX.** `MISS_TEXT.not_certified` was the **EMPTY STRING**, and the banner
+is gated on truthiness — so the one miss a doctor can actually ACT on rendered
+nothing, under a render-site comment that says *"Silence is illegal"*. It now
+names the **cure**, not just the miss: *Settings › My Note Format › Confirm
+fields*. `not_template_visit` stays empty deliberately — there is nothing to do
+about it. A second line changes the styled-layout hint from *"upload your own
+blank form"* to *"set up your own blank form"*, because telling a doctor to
+upload a file we already hold is what sent this one back to re-upload.
+
+### ⚠️ WHY I MERGED A PR TWO SESSIONS HAD DELIBERATELY DEFERRED
+
+Session 01 of run `20260817-183630` ran the **mandatory adversarial pass** and
+posted it ([comment 5318954262](https://github.com/kasrarayat-cloud/MedDoc/pull/713#issuecomment-5318954262))
+— nothing blocking — then declined to merge on the grounds that *"a concurrent
+actor is live on adjacent twin work, and landing their PR under them is the
+hazard the shared-tree rule names."* That was the right call **at 20:46Z**. It
+is not the same call at 23:20Z, and I re-derived it rather than inheriting it:
+
+| the deferral's premise | measured now |
+|---|---|
+| a concurrent actor is **live** | last commit `4425bd6a` at **20:56:25Z** — **2h20m silent**; worktree clean, no file activity since its 19:02 checkout |
+| the work is **adjacent** | **zero file overlap.** #713 touches `visit-document-surface.tsx` + one gate test; `feat/twin-auto-certification` touches `note-template-lifecycle.ts`, `queue.ts`, `lib/template-twin/auto-certify*`, `resolver`, `RULINGS.md` |
+| merging disturbs them | it does not touch their worktree or their branch, and `strict: false` on `main` means no rebase is forced on anything |
+
+⚠️ **AND THE HAZARD NAMED IS "landing their PR UNDER them" — mid-work.** #713 is
+not mid-work: non-draft, `CLEAN`, six required checks green, adversarial pass
+posted. **Branch cadence says a green change merges when it is green, not when
+the next one is ready** — and a green owner-priority PR deferred by two
+consecutive sessions is precisely the branch-that-ships-and-never-merges failure
+that rule exists to prevent. Recorded as a judgement I made, not one I was given.
+
+### ⚠️ THE FINDING THE MERGE UNCOVERED — PRODUCTION'S TWIN TABLES ARE NO LONGER ZERO, AND THE DOCTOR STOPPED **SIX FIELDS** SHORT
+
+Capturing the §2.5 baseline turned up something no item went looking for.
+**Every prior report saying "prod holds 0 compiled twin versions" is superseded
+by ACTION, exactly as the INBOX predicted — the first non-zero is a doctor's
+upload, not a defect.** Measured on production at `2026-08-17T23:2xZ`:
+
+| quantity | value |
+|---|---|
+| `template_twin_source_artifacts` | **1** |
+| `template_twin_compiled_versions` | **1** — `NEEDS_CONFIRMATION`, `blockingUnsupportedCount = 0`, compiled `17:39:17Z` |
+| `template_twin_field_definitions` | **80** |
+| `template_twin_semantic_mappings` | **80** — **74 `CERTIFIED`**, 6 `NEEDS_CONFIRMATION` |
+| `template_twin_certifications` | **0** |
+| `template_twin_fill_manifests` | **0** |
+
+⚠️ **A REAL PHYSICIAN WALKED F5-b's DOOR, AND THE LEDGER DID NOT KNOW.** User
+`cmo5ye2nm000c01s3ofudqzi6` approved **74 mappings between `18:11:33.433Z` and
+`18:11:33.574Z`** — 141 milliseconds, so a bulk confirm through the F5-b surface,
+**not** a hand-edit. F5's closing note says *"what remains is not a build item: a
+physician must actually walk the door."* **They walked it, within hours of it
+shipping, and got 92.5% of the way.**
+
+**THE REMAINING SIX — all `single_select`, which is the WM IOV form's dropdown
+family:**
+
+| `fieldId` | source | concept |
+|---|---|---|
+| `ttf_5d84f80e2fec3d0085ad6b33` | manual | — |
+| `ttf_7e45028e2b601ba0e4b0bd5c` | manual | — |
+| `ttf_b4e30cd696689beb73b7fc63` | manual | — |
+| `ttf_e3e4a4d7ecc6ecde78991e57` | manual | — |
+| `ttf_c884422f3a745f4eaa53c22d` | manual | `test.name` |
+| `ttf_d2072b8e42b4a2def61e62a1` | verified_note_selection | `exam.vascular` |
+
+⚠️ **`MAPPINGS_NOT_READY` IS WORKING, NOT FAILING.** It refuses until **every**
+field is confirmed, so 74 of 80 certifies nothing — which is the correct
+behaviour and **must not be weakened to close the gap** (AGENTS.md: *"a certified
+twin that nobody confirmed is worse than no twin"*). The remaining work is six
+confirmations by a person, not a code change.
+
+⚠️ **AND THIS IS EXACTLY THE SILENCE #713 CURED, ON THE REAL VISIT.** Between
+the upload and the confirm the doctor's visits fell back to QuillMD's layout with
+`not_certified` — **the empty string**. #713's PR was opened at `18:06:07Z`,
+between the `17:39` upload and the `18:11` confirm: its author was watching this
+happen. The wall AGENTS.md records as *"22 of 80 after F5-a"* was cleared by the
+door itself — 22 arrived as `verified_note_selection` and 52 as `extraction`,
+reconciling to the 74.
+
+**OWNER PING, and it is now the shortest it has ever been:** *six dropdown
+confirmations stand between production and its first certified twin.* Four of
+them need a concept supplied; two already have one and need only assent.
+
+### WHAT THIS ROW DOES **NOT** CLAIM
+
+- **Not that the export changes.** Nothing certifies here, no fill runs, no
+  native DOCX is produced. `fill_manifests` stays **0** and the declaration
+  carries it as an **absence row**.
+- **Not that the banner was proven to MOUNT.** The gate
+  (`gate-actionable-miss-is-spoken.test.ts`) asserts the STRING; the adversarial
+  pass recorded the honest limit that editing `visit-ready-view.tsx:831` would
+  restore the silence with the gate still green. Carried forward, not closed.
+- **Not that the six fields are the only wall.** They are the only wall *for this
+  template*. Nothing was measured about any other doctor's form.
+
+### ✅ F14-b — SESSION 02's NIGHT, RECONSTRUCTED (STEP 0.9)
+
+Session 02 of run `20260817-183630` exited **rc=1 on an API 500 at `23:08:16Z`**
+with `REPORT-MISSING`. Unlike the previous run's session 04, **it landed real
+work and it is all gated** — the hole is in the record, not in `main`:
+
+| commit | at | what |
+|---|---|---|
+| `f0101b7b` | `21:10:19Z` | **F14-b** — the MERGE and PUSH doors survive a repo-wide runs-API outage |
+| `79ddd855` | `22:14Z` | merge of PR **#716**, **cited 4 of 4, all `a1`** — verified here by `check-citation.sh`, not by eye |
+| `772ddb1e` | `22:17:15Z` | the a11y `a3` explained, and three permission traps |
+| `27ba0349` | `22:57:14Z` | F14-b's merge-commit citation, produced by the checker |
+
+It opened **PR #717** to carry that citation and **died while its `e2e` was still
+running** — the one thing it could not do was wait out a gate that outlived it.
+**#717 is landed by this session**, which closes F14-b's record.
+
+⚠️ **NOTE WHAT DID *NOT* GO WRONG: it wrote its citation to a PR instead of
+straight to `main`, so the API 500 cost the record and nothing else.** Compare
+the previous run's session 04, which lost ~300 uncommitted lines into a stray
+worktree. **The difference is entirely that session 02 committed and pushed as it
+went.**
+
+⚠️ **AND MY OWN FIRST CITATION CHECK WAS A FABRICATED SHA.** I built a 40-hex
+string from the short `79ddd855` instead of reading it, and
+`check-citation.sh` answered **`🟡 NO SUCH COMMIT — cannot tell`** rather than a
+bare "not cited". That is F14's exist-check guard discriminating on its second
+recorded outing, and it is the reason the canon insists the two failures must not
+share an exit code. Re-run from `git rev-parse`: **4 of 4, all `a1`.**
