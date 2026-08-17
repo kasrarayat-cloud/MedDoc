@@ -157,7 +157,7 @@ export const JOB_RETENTION_SWEEP = 'retention_sweep';
  *  per-attempt timeout can't reach. */
 export const JOB_STUCK_VISIT_WATCHDOG = 'stuck_visit_watchdog';
 
-/** RULING #124 — auto-certify a freshly compiled template twin.
+/** RULING #125 — auto-certify a freshly compiled template twin.
  *
  * ⚠️ IT RUNS HERE AND NOT ON THE UPLOAD REQUEST because certification runs a
  * LIVE model generation for its round-trip proof. On the upload thread that

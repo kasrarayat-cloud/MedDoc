@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
 # ============================================================================
-# gh-runs.sh — the ONLY sanctioned door to `gh run list --commit`.
+# gh-runs.sh — the ONLY sanctioned door to "what ran on this SHA?".
+#
+# ⚠️ IT NO LONGER CALLS `gh run list`. Since F14-b (2026-08-17) the transport is
+# `lib/runs-api.sh`, reached through `lib/inflight.sh`. `gh run list` calls the
+# repo-wide `/actions/runs` route underneath, and that route 404'd for this
+# repository for hours on 2026-08-17 while every other Actions route answered —
+# blinding every waiter and every citation poll at once. The header below still
+# describes `gh run list` because that is the history this file's refusals were
+# built against, and every one of those refusals is still correct: the failure
+# mode belongs to the QUESTION, not to the client that used to ask it.
 # ----------------------------------------------------------------------------
 # ⚠️ IT REFUSES ANY SHA UNDER 40 CHARACTERS, and that refusal is the whole
 # product. `gh run list --commit <SHORT-sha>` returns **[]** for ANY
-# abbreviation — exit 0, no warning, no "ambiguous". A false all-clear that is
-# indistinguishable from a quiet branch.
+# abbreviation — exit 0, no warning, no "ambiguous" — and `?head_sha=<SHORT>`
+# on the REST route matches nothing just as silently. A false all-clear that is
+# indistinguishable from a quiet branch, whichever client asks.
 #
 # ⚠️ THIS EXISTS BECAUSE THE RULE WAS ALREADY WRITTEN DOWN AND STILL FIRED
 # TWICE ON ITS OWN AUTHOR IN ONE SESSION — once on a deploy gate, where a
@@ -46,8 +56,8 @@ require_full_sha() {
   case "$sha" in *[!0-9a-fA-F]*) die2 "sha '$sha' is not hexadecimal." ;; esac
   if [ "${#sha}" -ne 40 ]; then
     die2 "REFUSED — sha '$sha' is ${#sha} characters, not 40.
-       \`gh run list --commit\` returns [] for ANY abbreviated sha, with exit 0
-       and no warning. That is a FALSE ALL-CLEAR, not an empty result.
+       An abbreviated sha matches NOTHING on the runs routes — no error, no
+       'ambiguous', just an empty result. That is a FALSE ALL-CLEAR.
        Use: \$(git rev-parse HEAD)"
   fi
 
@@ -143,7 +153,7 @@ require_working_api() {
   inflight_positive_control || die2 "the runs API returned nothing for this repository — a zero from it proves nothing."
 }
 
-cmd="${1:-}"; sha="${2:-}"
+cmd="${1:-}"; sha="${2:-}"; opt="${3:-}"
 # ⚠️ THE COMMAND IS VALIDATED BEFORE THE SHA, DELIBERATELY. Validating the sha
 # first makes a wrong VERB report a sha complaint: `gh-runs.sh list --commit
 # <sha>` (the shape muscle-memory reaches for) refused with "'--commit' is not
@@ -153,12 +163,86 @@ case "$cmd" in
   *) die2 "unknown command '${cmd:-}'. Use: status | pending | cited | wait <FULL-40-char-sha>
        This wrapper takes a BARE sha, never a \`--commit\` flag." ;;
 esac
+
+# ⚠️ `--force-fallback` IS A FLAG, NOT ONLY AN ENV VAR, AND THAT IS THE WHOLE
+# REASON IT EXISTS HERE. `RUNS_API_FORCE_FALLBACK=1` already reaches the lib —
+# but `VAR=1 bash …` and `env` are BOTH refused to the unattended loop, so an
+# env-only hatch is inert for the one actor that runs every citation and every
+# waiter. F14-a learned this on `check-citation.sh` and added the same flag;
+# omitting it here would leave the fallback exercisable in exactly the sessions
+# that never need to exercise it. **The path whose job is to work during an
+# incident must be reachable when there is no incident.**
+case "$opt" in
+  ''|--force-fallback) ;;
+  *) die2 "unknown option '$opt'. The only option is --force-fallback." ;;
+esac
+if [ "$opt" = "--force-fallback" ]; then
+  export RUNS_API_FORCE_FALLBACK=1
+  echo "   · --force-fallback: the repo-wide route is being REFUSED locally to" >&2
+  echo "     exercise the per-workflow union. This is a drill, not an outage." >&2
+fi
+
 require_full_sha "$sha"
 require_working_api
 
-rows=$(gh run list --commit "$sha" --limit 30 --json name,status,conclusion 2>/dev/null) \
-  || die2 "the runs query failed for $sha."
+# ⚠️ THE TRANSPORT IS `lib/runs-api.sh` SINCE F14-b, NOT `gh run list`. `gh run
+# list` calls the repo-wide `/actions/runs` route underneath, and that route
+# 404'd for this repository for hours on 2026-08-17 while every other Actions
+# route answered — so every waiter and every citation poll in the programme went
+# blind at once. `fetch_rows` tries that route and, if it does not answer, unions
+# the per-workflow route and asserts its own coverage against check-suites.
+#
+# ⚠️ THE ROW SHAPE IS UNCHANGED ON PURPOSE. `citation_state` and every jq
+# expression below read `[{name,status,conclusion}]`, which is what `gh run list
+# --json name,status,conclusion` produced. The payload is projected back to
+# exactly that shape here, so the transport swap touches ONE function and the
+# logic that reads it is not re-proved by hand.
+#
+# ⚠️ AND THIS ONE *IS* TRUNCATION-REFUSED, unlike inflight.sh's branch view. A
+# single sha carries a handful of runs, so `total_count` and the fetched length
+# must agree; if they do not, the answer is about a subset nobody chose. (The
+# branch view cannot do this — `?branch=main` reports thousands against a
+# 100-row page — which is why that limit is stated there rather than here.)
+#
+# ⚠️ IT SETS GLOBALS AND IS CALLED PLAINLY — NEVER AS `rows=$(fetch_rows)`.
+# THE FIRST DRAFT DID EXACTLY THAT AND THE BANNER CAUGHT IT ON THE FIRST RUN:
+# a command substitution is a SUBSHELL, so `ROWS_TRANSPORT` and `ROWS_BANNER`
+# died with it and the banner printed *"transport: UNKNOWN — no _transport key"*
+# over a verdict that was otherwise perfect (`4 of 4 success`, exit 0). That is
+# the third sighting of this exact trap in this one library — `RUNS_API_MODE`,
+# then `inflight_repo`'s tempting cache, then here — and the `*)` arm its author
+# called "deliberate" is what discriminated. **A wrong provenance is worse than
+# an absent one**, and nothing but that arm would have said so.
+#
+# ⚠️ AND THE SUBSHELL BROKE THE FAILURE PATH TOO, WHICH IS THE HALF NOBODY SEES.
+# `die2` ends in `exit 2`; inside `$( )` that exits the SUBSHELL, so the script
+# carried on with empty rows and died later under a different, wrong message.
+# Called plainly, `die2` terminates the script with the reason it was given.
+ROWS_TRANSPORT=""
+ROWS_BANNER=""
+rows=""
+fetch_rows() {
+  local payload total fetched
+  payload="$(runs_api_for_sha "$REPO" "$sha" 100)" \
+    || die2 "no runs transport answered for $sha."
+  total="$(printf '%s' "$payload" | jq -r '.total_count // empty' 2>/dev/null)"
+  fetched="$(printf '%s' "$payload" | jq -r '.workflow_runs | length' 2>/dev/null)"
+  printf '%s' "$total" | grep -qE '^[0-9]+$' || die2 "the runs payload for $sha was not readable."
+  [ "$total" = "$fetched" ] \
+    || die2 "TRUNCATED — $total run(s) exist for $sha and $fetched were fetched.
+       A verdict from a subset nobody chose is a cannot-tell, not an answer."
+  ROWS_TRANSPORT="$(printf '%s' "$payload" | jq -r '._transport // "unknown"' 2>/dev/null)"
+  ROWS_BANNER="$payload"
+  rows="$(printf '%s' "$payload" | jq -c '[.workflow_runs[] | {name, status, conclusion}]')"
+}
+
+REPO="$(inflight_repo)" || die2 "cannot determine which repository this is."
+fetch_rows
 [ -n "$rows" ] || die2 "the runs query returned nothing readable for $sha."
+# ⚠️ PRINTED, ALWAYS. A verdict whose PROVENANCE is unstated is how a fallback
+# answer gets read as a normal one — the failure `runs_api_mode_banner`'s own
+# header records being caught by a contradicting probe rather than by review.
+runs_api_mode_banner "$ROWS_BANNER" >&2
 
 case "$cmd" in
   status)
@@ -223,8 +307,20 @@ case "$cmd" in
        This is a CANNOT-TELL, not a failure: the runs may yet finish."
       fi
       sleep "$WAIT_INTERVAL"
-      rows=$(gh run list --commit "$sha" --limit 30 --json name,status,conclusion 2>/dev/null) \
-        || die2 "the runs query failed for $sha mid-wait."
+      # ⚠️ THE SAME DOOR AS THE FIRST FETCH, DELIBERATELY. An earlier shape had
+      # the initial read and the mid-wait re-read as two separate `gh run list`
+      # calls, so a transport change had to be made in two places and the second
+      # one is the one that gets forgotten. One function, two callers.
+      prev_transport="$ROWS_TRANSPORT"
+      fetch_rows
+      # ⚠️ A TRANSPORT THAT CHANGES MID-WAIT IS REPORTED, NOT AVERAGED. An
+      # outage that starts or ends underneath a poll is exactly the
+      # intermittency the debounce rule exists for: a waiter that only prints
+      # its final verdict cannot be audited.
+      if [ "$ROWS_TRANSPORT" != "$prev_transport" ]; then
+        echo "   · ⚠️ transport changed mid-wait: $prev_transport → $ROWS_TRANSPORT" >&2
+        runs_api_mode_banner "$ROWS_BANNER" >&2
+      fi
     done
     ;;
   *)

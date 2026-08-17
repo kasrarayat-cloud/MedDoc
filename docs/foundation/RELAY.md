@@ -107,6 +107,159 @@ argument silently. Caught by checking the variable rather than assuming it.
 only occurrence was **the comment I had just written explaining its removal** —
 the prose-matching trap, in the verification of its own fix.
 
+### ✅ F14-a — THE CITATION DOOR SURVIVES A RUNS-API OUTAGE — **2026-08-17, run `20260817-183630` session 01**
+
+**F14 had no ledger row until now.** It was begun by session 04 of the previous
+run, which died on an API 529 **without a morning report**, leaving the work
+UNCOMMITTED in `.f14-wt`. This row is part of that reconstruction.
+
+**THE FAULT.** GitHub's repo-wide `/actions/runs` route 404'd for this
+repository for hours on 2026-08-17 while every other Actions route answered.
+`check-citation.sh`, `gh-runs.sh` and `lib/inflight.sh` all funnel through it,
+so the programme's gate had a **single point of failure** — nothing could be
+cited, pushed or merged. Session 03 parked **PR #710** on exactly this.
+⚠️ **The instruments refused fail-closed and nobody routed around them. That
+half was correct and is not what was fixed** — a correct refusal is still a
+stopped queue.
+
+**THE FIX (session 04's design, verified rather than believed here).**
+`scripts/lib/runs-api.sh` adds a per-workflow fallback — `/actions/workflows/
+{id}/runs`, unioned — with the union's own coverage asserted against a THIRD
+route, `/commits/{sha}/check-suites`, which is indexed by COMMIT and so cannot
+inherit the enumeration's blind spot.
+
+⚠️ **AND IT DID NOT RUN. `runs_api_mode_banner` read two globals nothing
+assigns**, so under `set -u` the script aborted right after its positive control
+and printed no verdict. The header documents that very bug being fixed by moving
+the transport into the payload — **the producers moved and the consumer did
+not.** A half-landed fix whose own comment says it landed. Found by RUNNING it.
+
+Also fixed: the header claimed **three** consumers and had **one** (the
+§5.6 wish-as-fact shape, inside a file added to fix an outage), and the fallback
+was **unreachable except during an outage** — the one path whose job is to work
+during an incident was the one nothing could exercise.
+
+| proof | result |
+|---|---|
+| primary transport, `1b1de497…` | 4 of 4, all `a1`, banner says `repo-wide` |
+| forced fallback, same sha | **4 of 4, IDENTICAL run ids**, banner says `PER-WORKFLOW FALLBACK`, control `12 runs = 12 check suites` |
+| `--expect` audit arm through the fallback | passes |
+| mutation: drop `e2e` | union 11 vs suites 12 → DIVERGE → cannot tell |
+| ⚠️ mutation: drop **`Dependabot Updates`** | union 4 vs suites 12 → DIVERGE → cannot tell |
+
+⚠️ **THE SECOND MUTATION IS THE LOAD-BEARING ONE.** Dropping `e2e` proves the
+control detects incompleteness — but `e2e` is REQUIRED, so its absence reddens
+the citation anyway. Dropping a **non-required** workflow leaves all four
+required runs present, so **without the control the run cites 4 of 4 and looks
+perfect**. Both mutations asserted APPLIED before their results were read; the
+file restored from a scratch copy, never from git.
+
+~~**HONEST SCOPE — the citation door only.**~~ ⚠️ **RETIRED BY F14-b, 2026-08-17
+— its own named retirement condition, discharged the same day.** The paragraph
+read: *"`gh-runs.sh` and `lib/inflight.sh`, and therefore `merge-pr.sh` and the
+`pre-push` hook, still call `gh run list`. A repo-wide outage no longer stops
+citing; it still stops merging and pushing."* **All three doors now share one
+transport** — see the F14-b row below. Kept struck through rather than deleted,
+because a reader arriving at F14-a's proof table needs to know which era it
+describes.
+
+**WHAT SURVIVES OF IT, UNCHANGED AND STILL TRUE:** the branch view has no
+per-commit coverage control, so its fallback count is a **FLOOR**; and the
+control is **vacuous on a zero-run commit**. F14-b does not fix either — it
+makes both doors PRINT the first one, and `check-citation.sh` already routes
+zero-run commits into a finding rather than a green.
+
+### ✅ F14-b — THE MERGE AND PUSH DOORS SURVIVE THE OUTAGE — **2026-08-17, run `20260817-183630` session 02**
+
+**F14-a's scope note is retired: its own named retirement condition has landed.**
+`lib/inflight.sh` now sources `lib/runs-api.sh`, so all three doors — CITATION
+(`check-citation.sh`), PUSH (`hooks/pre-push`) and MERGE (`merge-pr.sh`), plus
+every waiter through `gh-runs.sh` — share one transport. `runs-api.sh`'s header
+carries the consumer list as a **list**, verified by
+`grep -rln 'runs-api\.sh' scripts/` rather than asserted, because that block has
+now been wrong in **both** directions: first a wish written as a fact, then a
+scope note that F14-b makes false.
+
+**WHAT CHANGED, AND WHAT DELIBERATELY DID NOT.** Every genuinely-blind state
+still REFUSES — no `gh`, no `jq`, an unauthenticated `gh`, an unresolvable
+repository, a non-zero transport rc, an unreadable payload, a sha under 40
+characters. **A repo-wide outage ALONE no longer produces that state.** Ruling
+**#124 (PROVISIONAL)** records the decision and its three-line reversal path.
+
+⚠️ **THE HONEST LIMIT, AND IT IS PRINTED AT BOTH DOORS RATHER THAN BURIED HERE.**
+The COMMIT view keeps `runs-api.sh`'s check-suites coverage control in fallback
+mode, so it is complete or it refuses. **The BRANCH view has none** — nothing
+indexes a branch's runs independently of the workflow enumeration — so its count
+is a **FLOOR**. `INFLIGHT_DEGRADED` / `INFLIGHT_NOTE` carry that in words, and
+both doors print it *even when the verdict is "clear"*, which is when it matters.
+
+**LIVE PROOF — both transports, two real shas, `gh-runs.sh`:**
+
+| sha | primary | forced fallback |
+|---|---|---|
+| `b2f30ea2…` (green) | `4 of 4 success`, rc **0** | `4 of 4 success`, rc **0**, control `4 runs = 4 check suites` |
+| `a15f52d2…` (CI + e2e failed) | `2 of 4`, rc **3**, both named | `2 of 4`, rc **3**, both named, control `4 = 4` |
+
+Identical verdicts, identical run sets, identical exit codes. Refusals live:
+short sha **2**, fabricated 40-char sha **2**, unknown command **2**, unknown
+option **2**.
+
+⚠️ **`--force-fallback` IS A FLAG ON `gh-runs.sh`, NOT ONLY AN ENV VAR** — F14-a's
+finding #4, recurring. `VAR=1 bash …` and `env` are both refused to the loop, so
+an env-only hatch is inert for the one actor that runs every citation.
+
+**GATE — `gate-f14b-merge-push-doors.test.ts`, 30 arms, no network.** It drives
+the REAL `lib/inflight.sh` under `set -uo pipefail` (the shell both doors
+actually use) with the two query functions stubbed. **Mutation-proved 6 ways,
+each asserted APPLIED before its result was read, each restored from a scratch
+copy and never from git:**
+
+| # | mutation | result |
+|---|---|---|
+| M1 | the **partial fix** — banner deleted from ONE door | 🔴 1 arm — the half-landed-fix arm |
+| M4a | transport detected, `INFLIGHT_DEGRADED` silently dropped | 🔴 3 arms |
+| M4b | note kept, the word **FLOOR** removed | 🔴 1 arm |
+| M6 | `--force-fallback` renamed, leaving the env-only hatch | 🔴 1 arm |
+| M7 | `gh run list` restored into the lib (complete inverse) | 🔴 4 arms |
+| M8 | the source extractor made to return nothing | 🔴 4 arms — **the positive controls** |
+
+⚠️ **AND M5 IS THE ENTRY WORTH READING, BECAUSE IT DID NOT REDDEN.** Deleting the
+branch query's `|| return 1` left the suite **30 of 30 green**. The arm that was
+supposed to catch it handed the stub an EMPTY payload, so the refusal still fired
+one line later from the `jq` unreadable-payload check — **the arm was real and it
+was guarding a different guard.** The return-code path had never been exercised
+at all. Two arms added that pair a **valid, parsing payload with a non-zero rc**,
+which is the only input that isolates it; M5 then reddens exactly one. *A
+mutation that fails to redden is a finding about the gate, not a pass.*
+
+⚠️ **AND THE BANNER CAUGHT ITS OWN NEXT READER, ON THE FIRST RUN.** The first
+draft of `gh-runs.sh`'s `fetch_rows` was invoked as `rows=$(fetch_rows)` — a
+command substitution, hence a subshell — so `ROWS_TRANSPORT`/`ROWS_BANNER` died
+with it and the run printed **`transport: UNKNOWN`** over an otherwise perfect
+`4 of 4 success`, exit 0. That is the **third** sighting of this exact trap in
+this one library (`RUNS_API_MODE`, then `inflight_repo`'s tempting cache, then
+here), and `runs_api_mode_banner`'s `*)` arm — which its author called
+deliberate — is the only thing that discriminated. **A wrong provenance is worse
+than an absent one.** ⚠️ The subshell also broke the FAILURE path: `die2`'s
+`exit 2` exited the subshell, so the script carried on with empty rows and died
+later under a different, wrong message.
+
+**SUITE — the CONTROLLED DELTA, not the raw number.** A worktree cannot resolve
+`react/jsx-dev-runtime` (tracked files only), so both sides carry 16 failed files
+and 1 pre-existing failed test. Measured against a clean detached worktree at
+`origin/main` carrying none of this change:
+
+| | files | tests |
+|---|---|---|
+| `origin/main` control | 16 failed / **300** passed (318) | 1 failed / **3868** passed |
+| this branch | 16 failed / **301** passed (319) | 1 failed / **3898** passed |
+
+**+1 file, +30 tests — exactly the new gate.** Failure sets identical on both
+sides.
+
+**NOT DEPLOYED, AND NO §2.5:** nothing here enters an image. These are ops
+instruments and a test.
+
 ### 🔴 F12 — E/M ON PROCEDURE NOTES, AND THE EXPORT'S CREAM E/M BLOCK — **AT F6's HEAD** (ruling #123)
 
 **OWNER FINDING, ON HIS OWN EXPORTED PDF. Two parts; both ship together.**
@@ -229,7 +382,15 @@ looking complete. The checker sorted the same 12 runs into **green 4 + extra 8**
 and named every extra one. *A citation is produced by the checker, never typed,
 and never read off a `--limit`.*
 
-**NOT DEPLOYED — owed, and the declaration is in this PR.**
+⚠️ **THIS PARAGRAPH SAID "NOT DEPLOYED — owed" AND IS NOW STALE. F6.1 IS LIVE**
+— deployed `2026-08-17T12:42:58Z` by session 03, **18 of 18 judged**; see the
+"F6.1 IS LIVE IN PRODUCTION" row further down. Corrected in the same pass that
+closed the item, per this file's own standing rule — *a fixed item left listed
+as open costs a whole session.* The rest of this paragraph is kept verbatim
+because it describes the declaration, which is unchanged and was written before
+the act.
+
+**The declaration was in PR #709 when this was written.**
 `docs/foundation/deploys/20260817-1b1de497.md` is written against a baseline
 captured at `08:59Z`, **before** the merge, and names the FULL payload rather
 than just F6.1: the running image also predates #703, #704, #705, #706 and #708,
@@ -16618,4 +16779,232 @@ The exception's text lives in `docs/foundation/INBOX.md`
 append-only from the supervised side by design. So this is flagged rather than
 executed: **the entry should be moved to `inbox-archive/`**, and the interim
 clause in #121 marked discharged. Carried in the morning report.
+
+---
+
+### ✅ F6.1 IS LIVE IN PRODUCTION — **2026-08-17T12:42:58Z, session 03** — 18 of 18 judged
+
+**The deploy session 02 left owed is paid.** Shipped `a8ee62fb` (the #709 merge);
+the §2.5 declaration is `docs/foundation/deploys/20260817-1b1de497.md`, resolved
+by **F10's carry-forward** — its first real use in anger, and it worked exactly
+as designed:
+
+```
+declared  : 1b1de497 — an ANCESTOR of the shipped tree, 2 commit(s) back
+range     : 1b1de497..a8ee62fb — 2 file(s) changed, 0 of them runtime
+control   : the range is NON-EMPTY (2 files) — an empty runtime diff over an
+            empty range would prove nothing
+mode      : strict (tracked, unmodified, committed 15320e9b @ 11:51:04Z)
+```
+
+⚠️ **THE CIRCULARITY #121 NAMED IS THE ONE THIS DEPLOY WOULD HAVE HIT.** The
+declaration could only be named after F6.1's merge sha, and the PR carrying it
+is itself what moved `main`. Before F10 that had **no fixed point**. Note also
+that the resolver prints its own **non-vacuity control** — a carry-forward over
+an empty range would be a proof about nothing.
+
+**THE RUNTIME SHIPPED IS A COMMIT CITED 4 OF 4.** `1b1de497` carries
+`CI` 32023467135 · `e2e` 32023467157 · `a11y-ci` 32023467123 ·
+`secrets-scan` 32023467139, all `a1`, **re-verified at this session's STEP 0
+with `check-citation.sh --expect`** rather than copied from the row. The
+resolver then proved the shipped tree is runtime-identical to it. ⚠️ **`a8ee62fb`'s
+own citation is still owed to the ledger as BOOKKEEPING** — it is docs-only and
+changes nothing about what runs, but the row should be paid, the way F10's was.
+
+**ROLLBACK TAGS CUT AND VERIFIED BY RE-READING** (F9, not by `docker tag`'s exit
+code): `pre-a8ee62fb-20260817` on `transcribe-md` → `2a855056…`,
+`transcribe-md-worker` → `9d5a37e3…`, `gotenberg` → `2d05d225…` — the exact
+outgoing digests the declaration named.
+
+**JUDGED — 18 of 18.**
+
+| # | declared | measured |
+|---|---|---|
+| 1 | app image moves off `2a855056…` | ✅ `08ea3c9d…` |
+| 2 | worker image moves off `9d5a37e3…` | ✅ `990af8ab…` |
+| 3 | `freeTextRuns` in the running worker **≥ 1** | ✅ **6** (was 0) |
+| 4–10 | visits · signed · patients · templates · migrations · twin compiled · twin manifests | ✅ **45 · 28 · 33 · 9 · 104 · 0 · 0** — every one unmoved |
+| 11–15 | co-tenants `307 · 404 · 200 · 200 · 410` | ✅ all five, `pro` still deliberately `410` |
+| 16 | container health | ✅ **9 of 9** |
+| 17 | no invented breaks | ✅ discharged by the shipped gate, as the declaration says |
+| 18 | `pdf-generator.ts` absent | ✅ F3's retirement holds |
+
+⚠️ **AND ONE NAMED DEVIATION, RECORDED RATHER THAN EXPLAINED AWAY.** Row 3's
+**positive control** — `generateVisitDocx` in the same file — was declared as
+**1** and measured **2**. *A movement the declaration does not name is a
+finding*, so it was chased rather than waved through: **F6.1's own commit adds
+the second occurrence** (`1b1de497^` = 1, `1b1de497` = 2), and the running
+worker reads 2, matching the shipped source exactly. The control's contract is
+*"the instrument reads this file"* — satisfied by any non-zero — so it did its
+job. **Named here because the number moved and the reader is entitled to know
+why**, not because anything is wrong.
+
+⚠️ **ROWS 4–10 WERE ALSO RE-MEASURED BEFORE THE DEPLOY, NOT ONLY AFTER**, because
+the resolver's own warning says a carry-forward proves the CODE identical and
+does **not** refresh the NUMBERS. The `08:59Z` baseline still read
+`45 · 28 · 33 · 9 · 104 · 0 · 0` at `12:40Z`, so the comparison is against a
+baseline that was still true — rather than one explained after the fact.
+
+---
+
+### 🔵 F12 — THE RECONNAISSANCE THE RULING DEMANDED — **2026-08-17, session 03**
+
+**Ruling #123 says, in as many words, ⚠️ *"THE MECHANISM IS NOT NAMED YET AND
+MUST NOT BE GUESSED — REPRODUCE FIRST."* This is that pass, and NOTHING was
+edited.** The item is not built; it is now buildable, and two of its four
+load-bearing assumptions did not survive contact.
+
+---
+
+#### PART (1) — THE SKIN. **⚠️ THE CREAM CANNOT COME FROM ANY CURRENT EXPORT
+PATH, AND THE SURFACE IT DOES COME FROM WAS FIXED ON 2026-08-14.**
+
+The row's own suspicion — *"the export-side E/M rendering never got R4b's host
+treatment"* — is **not supported by the code as it stands.** Measured, not read:
+
+| the question | the answer |
+|---|---|
+| does the converged DOCX→Gotenberg builder emit E/M at all? | **YES** — `docx-generator.ts:246-293`, heading **`Procedures / E&M`** |
+| does it shade anything? | **NO.** Every colour in the whole builder: `666666` ×6 (muted body), `FFFFFF` ×1, `DDDDDD` ×1. **No `shading`, no `fill`, no `ShadingType`, no highlight** |
+| does the string **"Documentation level"** appear in ANY export builder? | **NO — zero occurrences.** It exists only in the React surfaces |
+| where does the cream live? | `.qm-rdoc-gate` in `globals.css:5546-5551`, background `color-mix(… var(--color-linear-amber) 8% …)` — **CSS, in-app, and nowhere a document generator can reach** |
+
+⚠️ **MY FIRST GREP RETURNED ZERO AND THE ZERO WAS USELESS.** Searching
+`E/M|emCode|documentationLevel|Documentation Level` in `docx-generator.ts`
+matched **nothing** — a true answer to the wrong question, because the heading
+is spelled **`E&M`** and the field is `data.em`. Read as *"the export emits no
+E/M"*, that zero would have inverted the whole diagnosis. It was caught by
+re-asking rather than by any control, which is luck; the controlled form is
+below and is what the rest of this section uses.
+
+**AND THE IN-APP SOURCE IS ALREADY TREATED.** `EmLevelCard` carries
+`qm-rounds-host` **on the component** — `em-level-card.tsx:110` — landed by
+**R4b (`04d148ed`, 2026-08-14 12:33Z)**, an ancestor of `main` and live since
+that day's deploy. Its own comment names the owner's case verbatim: *"renders as
+a cream panel on a dark Rounds route — which is what the owner found by hand on
+a colonoscopy op-note."* **Census of the whole class: 4 of 4 `.qm-rdoc-gate`
+mounts carry the host** (`em-level-card.tsx:110`,
+`review-document-view.tsx:301`, `:332`, `prescriptions-card.tsx:142`) — so the
+per-caller list cannot go stale, which was R3.4's requirement.
+
+⚠️ **AND THIS IS VERIFIED IN THE SHIPPED BUNDLE, NOT ASSERTED FROM SOURCE** —
+because *"it is fixed on `main`"* and *"it is fixed in what production is
+serving"* are different claims, and this house has already paid for reading a
+built image as if it were a source tree:
+
+```
+docker exec meddoc-pro-transcribe-md-1 sh -c '
+  grep -c "qm-rounds-host qm-rdoc-gate qm-rdoc-gate-quiet" …/static/chunks/3ui6nlh8o_bz0.js   → 1
+  grep -c "qm-rdoc-gate-quiet"                              …/static/chunks/3ui6nlh8o_bz0.js   → 1'
+```
+
+**The two counts AGREE, which is the arm that matters**: had the hosted string
+read 1 and the bare class read 2, there would be an un-hosted second copy of
+the card in the bundle and the census above would be wrong about production.
+⚠️ **The chunk was located by a positive control first** (`Documentation level`
+→ 3 chunks, against a traversal control of **680** `.js` files), because the app
+image ships a BUILT Next application and a grep for a SOURCE path there returns
+zero for everything — a zero indistinguishable from a clean reading.
+
+> **SO THE HONEST READING IS: the artifact predates the fix, OR it is a browser
+> print / screenshot of the in-app page rather than an export.** Both are
+> consistent with everything measured. ⚠️ **What is NOT open is "an export
+> builder paints the E/M block cream" — that is refuted**, and acting on it
+> would mean editing a builder that never had the defect. *That inversion is
+> this house's recorded numbered-list failure: believing the wrong surface is
+> the reference implementation and "fixing" the one that was already right.*
+
+**WHAT PART (1) NOW NEEDS IS ONE FACT FROM THE OWNER, NOT A FIX:** the DATE of
+the PDF he was looking at, or the file itself. **OWNER PING — carried in the
+morning report.** ⚠️ **This is deliberately NOT closed on my own measurement.**
+An observation I cannot reproduce is not an observation I get to dismiss, and
+the whole reason this pass exists is that a session already refuted two
+confidently-argued mechanisms in this area on the same night.
+
+---
+
+#### PART (2) — THE POLICY. **REAL, MEASURED ON PRODUCTION, AND CURRENTLY
+MIS-STATING A BILLABLE LEVEL ON ONE SIGNED OPERATIVE RECORD.**
+
+> **A SIGNED GASTROENTEROLOGY *OPERATIVE NOTE* CARRIES E/M `99214` AND PRINTS IT
+> INTO EVERY EXPORT SURFACE TODAY.**
+
+That is one row, and it is exactly the state #123's reversal path names as
+forbidden — *"mis-states a billable level on an operative record."* It is not a
+theory and it is not latent.
+
+**THE POPULATION, EVERY BUCKET NAMED AND THE TOTAL RECONCILED:**
+
+| bucket | visits | `em` is a JSON **object** | **prints a level** |
+|---|---|---|---|
+| bound to an **OP-NOTE template** | 11 | 1 | **1** |
+| bound to another template | 4 | 1 | 1 |
+| **no template** | 30 | 8 | 8 |
+| **total** | **45** ✓ | **10** | **10** |
+
+45 reconciles against the F6.1 declaration's independently-captured baseline of
+**45** `transcribe_visits`. **The 8 and the 1 in the other buckets are the
+positive control**: a zero in the op-note row would have been distinguishable
+from a broken query, and it is not zero.
+
+⚠️ **AND MY FIRST TWO NUMBERS FOR THIS WERE WRONG — WITHDRAWN HERE RATHER THAN
+QUIETLY RE-RUN.** I first reported **27** visits *"with an em blob"* and
+**11 of 11** op-note visits carrying one. Both counted `"cptCodes"->'em' IS NOT
+NULL`, and **`->` returns a JSONB `null`, which is not SQL NULL** — so JSON
+nulls counted as present. The truth is **10** objects repo-wide and **1** on an
+op-note. It was caught because `jsonb_object_keys` **errored** on a scalar,
+which is the lucky failure this house already names: *ask what SHAPE the data is
+before asking how much of it there is.* A differently-wrong shape would have
+returned a plausible number and I would have shipped it into a declaration.
+
+**THE CRUX IS CONFIRMED FROM A SECOND DIRECTION, AND IT IS WORSE THAN THE ROW
+SAYS.** #123 argues a specialty-keyed predicate cannot separate an office visit
+from a colonoscopy. Production agrees — the op-note visits sit under
+**`bariatric-surgery`** and **`gastroenterology`**, both of which also hold
+office visits. ⚠️ **But the field that looks like it would express note shape
+already means something else:** `note_templates.encounterType` is **NULL on all
+9 production rows**, and `worker.ts:756` resolves templates with
+`encounterType: visit.specialty`. **It IS the specialty slot.** So the second
+axis cannot be hung on it, and a migration adding a column would still leave
+every existing row unclassified.
+
+**THE SHAPE IS LEGIBLE FROM THE TEMPLATE'S OWN SECTION LABELS — no migration,
+and it classifies the rows that already exist:**
+
+| template | section labels, in order |
+|---|---|
+| `Colonoscopy Operative Note` · `Operative Note` ×3 | `PROCEDURE` · `PREOPERATIVE DIAGNOSIS` · `POSTOPERATIVE FINDINGS` · `CONSENT` · `DESCRIPTION OF PROCEDURE` · `RECOMMENDATIONS` |
+| `Primary Care Chronic Disease Follow-up` | `CHIEF COMPLAINT` · `INTERVAL HISTORY` · `EXAM` · `IMPRESSION & PLAN` · `PATIENT INSTRUCTIONS` |
+
+⚠️ **AND THE TRAP IS ALREADY PRESENT IN THE DATA: one of the four op-note
+templates spells every label with a TRAILING COLON** (`PROCEDURE:`,
+`CONSENT:`, …). An exact-match classifier finds **3 of 4** and reports a
+confident, wrong answer. Normalise (trim · strip trailing `:` · upper) before
+comparing, and make the fourth template a fixture so the normalisation cannot
+be dropped later.
+
+**THE SWEEP SURFACE, BY THE PREDICATE — *"every site that decides whether an
+office E/M level applies to this visit"*, not by the symbol:** 11 production
+call sites of `emAppliesToSpecialty`.
+
+| layer | sites |
+|---|---|
+| **EXPORT** | `visit-export-server.ts:141` — ⚠️ **the single seam for EVERY export surface.** All of docx · pdf · clipboard · email · patient export · settings export-data · the sign route · the preview action reach it through `loadVisitExportData`, so the export half of F12 is **one line at the root**, not a per-route sweep |
+| **COMPUTE** | `worker/layers/04-generate-soap.ts:97` · `visits/[id]/page.tsx:585` |
+| **STORE** | `actions/soap.ts:189` · `api/…/em-score/apply-additions/route.ts:198` · `actions/rescore-em.ts:107` |
+| **GATE** | `sign-gates.ts:176` · `api/visits/[id]/sign/route.ts:331` · `api/…/em-score/override/route.ts:153` |
+| ⛔ **NOT THIS ONE** | `board/page.tsx:156` — `const isImaging = (s) => !emAppliesToSpecialty(s)`. **A DIFFERENT JOB wearing the same symbol.** An operative note is not an imaging report, and threading note-shape here would mis-label the board. *A deletion — or an addition — is scoped by what the site DOES, not by what it calls.* |
+
+**WHAT F12 STILL OWES, and none of it is guesswork any more:** the normalised
+shape classifier + its fixture, the second axis threaded through the ten sites
+that want it, the **attempt-proof in BOTH directions** (a GI office visit still
+SHOWS a level; the op-note shows none in-app, DOCX, PDF and every EHR format),
+a §2.5 carrying **ABSENCE** rows against the measured `1`, and the **mandatory
+adversarial pass**.
+
+⚠️ **AND THE DECLARATION'S HEADLINE NUMBER IS `1`, NOT `11`.** Writing `11` —
+the figure my own first query produced — would have made a presence check pass
+on a suppression that fired ten times too widely. **The positive arm (8 + 1
+office-side levels that MUST survive) is the row that catches it**, and it is
+the arm #123 says is the one that matters.
 

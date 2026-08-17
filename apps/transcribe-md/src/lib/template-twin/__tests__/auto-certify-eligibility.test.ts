@@ -40,7 +40,7 @@ describe('structural laterality anchor', () => {
 
 describe('decideAutoConfirm — the fail-closed direction', () => {
   /**
-   * ⚠️ AMENDED, RULING #124. This arm used to assert the OPPOSITE — that an
+   * ⚠️ AMENDED, RULING #125. This arm used to assert the OPPOSITE — that an
    * unanchored laterality field is REFUSED. It is not, and the measurement is
    * why: certification never encodes a side, so refusing here bought nothing and
    * cost the doctor a field-touch. Fail-closed lives at fill and is asserted in

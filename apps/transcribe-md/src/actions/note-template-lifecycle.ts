@@ -298,7 +298,7 @@ export async function saveNoteTemplateAction(
         });
         twinCompile = 'compiled';
 
-        // ── RULING #124 — AUTO-CERTIFY. ──────────────────────────────────
+        // ── RULING #125 — AUTO-CERTIFY. ──────────────────────────────────
         //
         // The doctor's job is upload then run visits. When the twin compiles
         // with ZERO blocking elements the model's proposals are confirmed and
@@ -317,7 +317,7 @@ export async function saveNoteTemplateAction(
         //
         // ⚠️ AND FAIL-SAFE, like the compile above it. An enqueue failure must
         // never fail the upload: the template is saved and the twin compiled,
-        // so the worst case is the pre-#124 behaviour — a template awaiting
+        // so the worst case is the pre-#125 behaviour — a template awaiting
         // manual confirmation, which the manual screen still serves.
         if (compiled.blockingUnsupportedCount === 0) {
           try {
