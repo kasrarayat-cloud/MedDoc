@@ -297,6 +297,54 @@ export async function saveNoteTemplateAction(
           attachToNoteTemplateId: result.id,
         });
         twinCompile = 'compiled';
+
+        // ── RULING #124 — AUTO-CERTIFY. ──────────────────────────────────
+        //
+        // The doctor's job is upload then run visits. When the twin compiles
+        // with ZERO blocking elements the model's proposals are confirmed and
+        // the template certifies itself — no sitting, no eighty clicks.
+        //
+        // ⚠️ ENQUEUED, NEVER AWAITED. Certification runs a live model
+        // generation for its round-trip proof; awaiting it here would make an
+        // upload hang on a generation, and a slow model would read to the
+        // doctor as a broken upload. The row shows "Preparing your format…"
+        // until the worker finishes.
+        //
+        // ⚠️ GATED ON blockingUnsupportedCount === 0 — the ruling's own
+        // condition. A template with blocking elements cannot be reproduced
+        // faithfully, so it must NOT auto-certify; it stays in needs-review
+        // where the doctor is told why.
+        //
+        // ⚠️ AND FAIL-SAFE, like the compile above it. An enqueue failure must
+        // never fail the upload: the template is saved and the twin compiled,
+        // so the worst case is the pre-#124 behaviour — a template awaiting
+        // manual confirmation, which the manual screen still serves.
+        if (compiled.blockingUnsupportedCount === 0) {
+          try {
+            const { enqueueAutoCertifyTwin } = await import('@/lib/queue');
+            await enqueueAutoCertifyTwin({
+              noteTemplateId: result.id,
+              userId: doctorId,
+              userEmail: session.user.email,
+              practiceId: session.user.practiceId,
+            });
+            console.info(
+              `[template-twin:auto-certify] template=${result.id} ENQUEUED ` +
+                `(fields=${compiled.fieldCount}, blocking=0)`,
+            );
+          } catch (enqueueError) {
+            console.warn(
+              `[template-twin:auto-certify] template=${result.id} enqueue FAILED — ` +
+                'the template is saved and compiled; it awaits manual confirmation: ' +
+                `${enqueueError instanceof Error ? enqueueError.message : String(enqueueError)}`,
+            );
+          }
+        } else {
+          console.info(
+            `[template-twin:auto-certify] template=${result.id} SKIPPED ` +
+              `(blocking=${compiled.blockingUnsupportedCount})`,
+          );
+        }
         console.info(
           `[template-twin:compile-on-upload] template=${result.id} ` +
             `fields=${compiled.fieldCount} blocking=${compiled.blockingUnsupportedCount} ` +
