@@ -15716,6 +15716,34 @@ on: **8 of 8 still red**, baseline 16/16, post-restore 16/16.
 test would have said anything.** A milder shell fails in the PERMISSIVE
 direction, so the suite was green and would have stayed green.
 
+⚠️ **AND F9 ALREADY PAID FOR THIS EXACT TRAP, IN THE SIBLING LIBRARY — WHICH IS
+WHY IT IS WORTH A SECTION RATHER THAN A LINE.** `scripts/lib/rollback-tag.sh:82`
+carries its author's own note, verbatim: *"`|| true` IS LOAD-BEARING AND ITS
+ABSENCE WAS A SHIPPING DEFECT … with **pipefail**, a `grep` that matches nothing
+makes the whole pipeline exit 1 … `set -e` kills the deploy ON THE SPOT"* — and,
+decisively, *"**Invisible until the gate was made to run with production's shell
+options. Nothing else could have found it**: the function is correct, the logic
+is correct, and it is fatal only in the caller's universe."*
+
+**Same trap, same `grep`-exits-1 mechanism, same file family, one item apart.**
+F9's version was the worse one — it would have killed the deploy in the COMMON
+case, because every pre-F9 declaration lacks the line it greps for. Mine is
+guarded by the same `|| true`, and **the guard is now tested rather than
+assumed.** Two independent instances is a property of the seam, not of either
+author.
+
+### THE F9 INTERACTION WAS CHECKED, AND IT IS SOUND
+
+F10 changes **what `$DECL` can be**, and `deploy-prod.sh:145` hands `$DECL` to
+F9's `rollback_tag_slug "$DECL" "$DEPLOY_SHA"`. *Diff the callers before you
+change a shared thing.*
+
+Under a carry-forward, `$DECL` names an ANCESTOR — so the slug is read from the
+ancestor's declaration, and the fallback remains **HEAD's** short sha. Both are
+correct: the slug labels the release the declaration describes, and the
+carry-forward has already PROVEN the shipped tree is runtime-identical to it. No
+change needed, and it is recorded as checked rather than assumed.
+
 ### AGAINST THE REAL DECLARATION SET — the production universe
 
 Every synthetic repo above holds two or three commits and one declaration. The
