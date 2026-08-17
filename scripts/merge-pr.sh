@@ -71,6 +71,17 @@ base_sha=$(git rev-parse "origin/$base" 2>/dev/null)
 inflight_count "$base" "$base_sha" || { echo "🟡 merge-pr: refusing."; exit 2; }
 busy=$(inflight_total)
 
+# ⚠️ SAME ANNOUNCEMENT AS THE PUSH DOOR, AND IT MATTERS MORE HERE. Since F14-b a
+# repo-wide `/actions/runs` outage no longer blinds this wrapper — `runs-api.sh`
+# unions the per-workflow route instead. The commit half of the count keeps its
+# check-suites coverage control in that mode; the BRANCH half has none, so its
+# zero is a FLOOR. A merge is irreversible in a way a push is not, so the
+# degradation is printed whether the verdict is "clear" or "refused".
+if [ "${INFLIGHT_DEGRADED:-0}" = "1" ]; then
+  echo "🟡 merge-pr: ${INFLIGHT_NOTE}" >&2
+  echo "             $base @ ${base_sha:0:8} — --commit $INFLIGHT_BY_COMMIT, --branch $INFLIGHT_BY_BRANCH" >&2
+fi
+
 if [ "$busy" -gt 0 ]; then
   if [ -z "$DECL" ]; then
     {

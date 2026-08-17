@@ -154,21 +154,111 @@ required runs present, so **without the control the run cites 4 of 4 and looks
 perfect**. Both mutations asserted APPLIED before their results were read; the
 file restored from a scratch copy, never from git.
 
-**HONEST SCOPE — the citation door only.** `gh-runs.sh` and `lib/inflight.sh`,
-and therefore `merge-pr.sh` and the `pre-push` hook, still call `gh run list`.
-**A repo-wide outage no longer stops citing; it still stops merging and
-pushing.** The branch view has no per-commit control and its fallback counts are
-a FLOOR; the control is vacuous on a zero-run commit.
+~~**HONEST SCOPE — the citation door only.**~~ ⚠️ **RETIRED BY F14-b, 2026-08-17
+— its own named retirement condition, discharged the same day.** The paragraph
+read: *"`gh-runs.sh` and `lib/inflight.sh`, and therefore `merge-pr.sh` and the
+`pre-push` hook, still call `gh run list`. A repo-wide outage no longer stops
+citing; it still stops merging and pushing."* **All three doors now share one
+transport** — see the F14-b row below. Kept struck through rather than deleted,
+because a reader arriving at F14-a's proof table needs to know which era it
+describes.
 
-### ▶ F14-b — WIRE THE MERGE AND PUSH DOORS — **the retirement condition for F14-a's scope note**
+**WHAT SURVIVES OF IT, UNCHANGED AND STILL TRUE:** the branch view has no
+per-commit coverage control, so its fallback count is a **FLOOR**; and the
+control is **vacuous on a zero-run commit**. F14-b does not fix either — it
+makes both doors PRINT the first one, and `check-citation.sh` already routes
+zero-run commits into a finding rather than a green.
 
-`gh-runs.sh` and `lib/inflight.sh` onto `runs-api.sh`, so `merge-pr.sh` and the
-`pre-push` hook survive the same outage. **Deliberately NOT done in F14-a:** it
-changes the two instruments needed to land any change at all, and getting it
-wrong in an unattended session means nothing can be merged or pushed to fix it.
-Land it as its own item, with the refusal arms re-proved on both doors —
-`retire-branch.sh` passed 9 of 9 refusals and still printed a false green on the
-happy path, so **prove the SUCCESS direction too.**
+### ✅ F14-b — THE MERGE AND PUSH DOORS SURVIVE THE OUTAGE — **2026-08-17, run `20260817-183630` session 02**
+
+**F14-a's scope note is retired: its own named retirement condition has landed.**
+`lib/inflight.sh` now sources `lib/runs-api.sh`, so all three doors — CITATION
+(`check-citation.sh`), PUSH (`hooks/pre-push`) and MERGE (`merge-pr.sh`), plus
+every waiter through `gh-runs.sh` — share one transport. `runs-api.sh`'s header
+carries the consumer list as a **list**, verified by
+`grep -rln 'runs-api\.sh' scripts/` rather than asserted, because that block has
+now been wrong in **both** directions: first a wish written as a fact, then a
+scope note that F14-b makes false.
+
+**WHAT CHANGED, AND WHAT DELIBERATELY DID NOT.** Every genuinely-blind state
+still REFUSES — no `gh`, no `jq`, an unauthenticated `gh`, an unresolvable
+repository, a non-zero transport rc, an unreadable payload, a sha under 40
+characters. **A repo-wide outage ALONE no longer produces that state.** Ruling
+**#124 (PROVISIONAL)** records the decision and its three-line reversal path.
+
+⚠️ **THE HONEST LIMIT, AND IT IS PRINTED AT BOTH DOORS RATHER THAN BURIED HERE.**
+The COMMIT view keeps `runs-api.sh`'s check-suites coverage control in fallback
+mode, so it is complete or it refuses. **The BRANCH view has none** — nothing
+indexes a branch's runs independently of the workflow enumeration — so its count
+is a **FLOOR**. `INFLIGHT_DEGRADED` / `INFLIGHT_NOTE` carry that in words, and
+both doors print it *even when the verdict is "clear"*, which is when it matters.
+
+**LIVE PROOF — both transports, two real shas, `gh-runs.sh`:**
+
+| sha | primary | forced fallback |
+|---|---|---|
+| `b2f30ea2…` (green) | `4 of 4 success`, rc **0** | `4 of 4 success`, rc **0**, control `4 runs = 4 check suites` |
+| `a15f52d2…` (CI + e2e failed) | `2 of 4`, rc **3**, both named | `2 of 4`, rc **3**, both named, control `4 = 4` |
+
+Identical verdicts, identical run sets, identical exit codes. Refusals live:
+short sha **2**, fabricated 40-char sha **2**, unknown command **2**, unknown
+option **2**.
+
+⚠️ **`--force-fallback` IS A FLAG ON `gh-runs.sh`, NOT ONLY AN ENV VAR** — F14-a's
+finding #4, recurring. `VAR=1 bash …` and `env` are both refused to the loop, so
+an env-only hatch is inert for the one actor that runs every citation.
+
+**GATE — `gate-f14b-merge-push-doors.test.ts`, 30 arms, no network.** It drives
+the REAL `lib/inflight.sh` under `set -uo pipefail` (the shell both doors
+actually use) with the two query functions stubbed. **Mutation-proved 6 ways,
+each asserted APPLIED before its result was read, each restored from a scratch
+copy and never from git:**
+
+| # | mutation | result |
+|---|---|---|
+| M1 | the **partial fix** — banner deleted from ONE door | 🔴 1 arm — the half-landed-fix arm |
+| M4a | transport detected, `INFLIGHT_DEGRADED` silently dropped | 🔴 3 arms |
+| M4b | note kept, the word **FLOOR** removed | 🔴 1 arm |
+| M6 | `--force-fallback` renamed, leaving the env-only hatch | 🔴 1 arm |
+| M7 | `gh run list` restored into the lib (complete inverse) | 🔴 4 arms |
+| M8 | the source extractor made to return nothing | 🔴 4 arms — **the positive controls** |
+
+⚠️ **AND M5 IS THE ENTRY WORTH READING, BECAUSE IT DID NOT REDDEN.** Deleting the
+branch query's `|| return 1` left the suite **30 of 30 green**. The arm that was
+supposed to catch it handed the stub an EMPTY payload, so the refusal still fired
+one line later from the `jq` unreadable-payload check — **the arm was real and it
+was guarding a different guard.** The return-code path had never been exercised
+at all. Two arms added that pair a **valid, parsing payload with a non-zero rc**,
+which is the only input that isolates it; M5 then reddens exactly one. *A
+mutation that fails to redden is a finding about the gate, not a pass.*
+
+⚠️ **AND THE BANNER CAUGHT ITS OWN NEXT READER, ON THE FIRST RUN.** The first
+draft of `gh-runs.sh`'s `fetch_rows` was invoked as `rows=$(fetch_rows)` — a
+command substitution, hence a subshell — so `ROWS_TRANSPORT`/`ROWS_BANNER` died
+with it and the run printed **`transport: UNKNOWN`** over an otherwise perfect
+`4 of 4 success`, exit 0. That is the **third** sighting of this exact trap in
+this one library (`RUNS_API_MODE`, then `inflight_repo`'s tempting cache, then
+here), and `runs_api_mode_banner`'s `*)` arm — which its author called
+deliberate — is the only thing that discriminated. **A wrong provenance is worse
+than an absent one.** ⚠️ The subshell also broke the FAILURE path: `die2`'s
+`exit 2` exited the subshell, so the script carried on with empty rows and died
+later under a different, wrong message.
+
+**SUITE — the CONTROLLED DELTA, not the raw number.** A worktree cannot resolve
+`react/jsx-dev-runtime` (tracked files only), so both sides carry 16 failed files
+and 1 pre-existing failed test. Measured against a clean detached worktree at
+`origin/main` carrying none of this change:
+
+| | files | tests |
+|---|---|---|
+| `origin/main` control | 16 failed / **300** passed (318) | 1 failed / **3868** passed |
+| this branch | 16 failed / **301** passed (319) | 1 failed / **3898** passed |
+
+**+1 file, +30 tests — exactly the new gate.** Failure sets identical on both
+sides.
+
+**NOT DEPLOYED, AND NO §2.5:** nothing here enters an image. These are ops
+instruments and a test.
 
 ### 🔴 F12 — E/M ON PROCEDURE NOTES, AND THE EXPORT'S CREAM E/M BLOCK — **AT F6's HEAD** (ruling #123)
 
