@@ -17573,3 +17573,59 @@ including *"unit tests (transcribe-md + packages)"* — is **green** in a proper
 checkout. The worktree numbers are reported here only because a session that ran
 them and did not control would have filed a false alarm against its own branch;
 *saying which half you have is the whole discipline.*
+
+---
+
+## ⚠️ CORRECTION TO MY OWN F15 ROW — THE CONCURRENT ACTOR IS **LIVE**, AND MY STATED PREMISE WENT STALE WITHIN MINUTES — **2026-08-17, run `20260817-231454` session 01**
+
+**The F15 row above justifies merging #713 partly on *"last commit `4425bd6a` at
+`20:56:25Z` — 2h20m silent"*. That was TRUE when I measured it at ~23:18Z and
+FALSE by ~23:20Z.** Correcting it here rather than editing the row, so both the
+claim and its decay are legible.
+
+**Measured now:** `feat/twin-auto-certification` is at **`e9b4e5c6`, committed
+`23:20:22Z`** — *"docs: my auto-certification ruling renumbers to #125 — the
+loop claimed #124 first"*. They rebased onto `79ddd855` and are **actively
+working and aware of this loop.**
+
+⚠️ **THIS IS THE "EVIDENCE ONLY DESCRIBES THE TREE IT WAS TAKEN ON" RULE POINTED
+AT A PERSON RATHER THAN A TREE.** A silence measurement has a shelf life, and
+mine expired in about two minutes. **A quiet actor is not an absent one**, and
+"2h20m silent" should never have been load-bearing on its own.
+
+**WHAT DOES NOT CHANGE, AND WHY THE MERGE STILL STANDS.** The substantive
+grounds never depended on their silence:
+
+- **ZERO file overlap**, re-measured against their current head: they touch
+  `note-template-lifecycle.ts`, `queue.ts`, `auto-certify{,-eligibility}.ts`,
+  two auto-certify tests, a resolver test and `RULINGS.md`. #713 touched
+  `visit-document-surface.tsx` and one gate test.
+- #713 was **non-draft, `CLEAN`, six required checks green**, with the mandatory
+  adversarial pass already posted.
+- `main` is `strict: false`, so nothing was forced to rebase.
+- The merge touched neither their worktree nor their branch.
+
+**They have not yet picked up `455e109c`** — their branch sits on `79ddd855` —
+so they will meet it on their next sync as an ordinary fast-forward.
+
+### ⚠️ AND A COORDINATION FLAG THAT MATTERS MORE THAN THE CORRECTION
+
+**They are building AUTO-CERTIFICATION for template twins. F16 changes the
+CERTIFY REFUSAL PATH those auto-certifications would run through.**
+
+**File-level overlap is ZERO** — F16 touches `synthetic-test.ts`,
+`synthetic-test-error.ts`, `mappings-not-ready-message.ts` and
+`template-twin-certify.ts`; none appear in their diff. **So the two merge
+cleanly.** The adjacency is SEMANTIC, and it is the kind a file diff cannot see:
+
+- F16 gives `MAPPINGS_NOT_READY` a **typed expected-refusal arm**
+  (`reason: 'mappings_not_ready'`, with `remaining` / `totalFields`). An
+  auto-certifier that pattern-matches on `reason: 'unexpected'` to detect "not
+  ready" would **silently stop matching** once F16 lands.
+- `TemplateTwinSyntheticTestError` **moved to a leaf module** and is re-exported.
+  Existing importers are unaffected **by construction**, but anyone adding a new
+  import should take the leaf.
+
+⚠️ **STATED AS REASONING, WITH NO AUTHORIZATION ATTACHED** — *authorization
+travels owner → session and never through a peer.* This is a heads-up for
+whoever reviews either branch, not an instruction to that session.
