@@ -88,7 +88,6 @@ echo
 # ============================================================================
 DEPLOY_SHA="$(git rev-parse --short HEAD)"
 DECL_DIR="docs/foundation/deploys"
-DECL="$DECL_DIR/$(date -u +%Y%m%d)-${DEPLOY_SHA}.md"
 
 # ⚠️ THE GATE IS SOURCED, NOT CARRIED. `scripts/lib/declaration.sh` is shared
 # with `scripts/run-ruled-mutation.sh`; a second copy would drift from the first.
@@ -103,14 +102,31 @@ fi
 # shellcheck source=lib/declaration.sh
 . "$DECL_LIB"
 
-# ⚠️ MODE IS `present`, NOT `strict`, AND THAT ASYMMETRY IS DELIBERATE. A ruled
-# MUTATION must have its declaration COMMITTED before it runs, because nothing
-# can undo an append-only row and the commit timestamp is the only durable proof
-# of order. A deploy is answerable by a rollback, and requiring a commit here
-# would refuse every deploy whose author lands the declaration in the same PR —
-# a real habit. So the deploy records provenance loudly and does not refuse on it.
-# Strictness proportional to reversibility; ruling #96(b)'s logic.
-declaration_gate "$DECL" present "deploy declaration" || {
+# ⚠️ THE PATH IS RESOLVED, NOT DERIVED — F10, ruling #121. It used to be
+# `$DECL_DIR/$(date -u +%Y%m%d)-${DEPLOY_SHA}.md`, which bound the declaration's
+# NAME to the deploying tree's HEAD. `main` moves between a feature merge and its
+# deploy in this programme's normal cadence, and the commit that would CARRY the
+# declaration is itself what moves HEAD — so the naming had no fixed point.
+# `declaration_resolve` takes the exact match when it exists and otherwise
+# accepts an ANCESTOR whose runtime diff to HEAD is provably empty. Full
+# reasoning, and why this satisfies #121's three criteria, is in the library.
+declaration_resolve "$DECL_DIR" || {
+  echo "   Nothing has been built, migrated or recreated. Production is untouched."
+  exit 1
+}
+DECL="$DECLARATION_PATH"
+
+# ⚠️ MODE IS `present` ON THE EXACT MATCH, AND THAT ASYMMETRY IS DELIBERATE. A
+# ruled MUTATION must have its declaration COMMITTED before it runs, because
+# nothing can undo an append-only row and the commit timestamp is the only
+# durable proof of order. A deploy is answerable by a rollback, and requiring a
+# commit here would refuse every deploy whose author lands the declaration in the
+# same PR — a real habit. So the deploy records provenance loudly and does not
+# refuse on it. Strictness proportional to reversibility; ruling #96(b)'s logic.
+#
+# ⚠️ A CARRY-FORWARD IS RESOLVED AT `strict`, WHICH IS STRICTLY STRONGER. #121's
+# criterion (1) says the gate must not weaken; this is the direction it moves.
+declaration_gate "$DECL" "$DECLARATION_MODE" "deploy declaration" || {
   echo "   Nothing has been built, migrated or recreated. Production is untouched."
   exit 1
 }

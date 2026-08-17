@@ -33,6 +33,185 @@
 # — a real habit, and breaking it would halt the programme to fix a weaker case.
 # ============================================================================
 
+# ============================================================================
+# F10 — THE CARRY-FORWARD RESOLVER. The circularity, broken by MEASUREMENT.
+# ----------------------------------------------------------------------------
+# ⚠️ THE BUG THIS FIXES IS STRUCTURAL, NOT CARELESS. `deploy-prod.sh` derived the
+# declaration path from `git rev-parse --short HEAD` of the deploying tree. This
+# programme's normal cadence moves `main` between a feature merge and its deploy
+# — a citation PR, a ledger row, a docs fix. So:
+#
+#     feature merges as X   ->  you write <date>-X.md
+#     canon says nothing reaches `main` outside a PR
+#     the PR carrying the declaration merges as Y   ->  HEAD is now Y
+#     the gate now wants <date>-Y.md, which does not exist
+#
+# ⚠️ AND IT DOES NOT CONVERGE: the commit that would CARRY the declaration is
+# itself what MOVES HEAD. No number of extra PR cycles reaches a fixed point.
+# Session 03 hit it; session 05 deployed with a declaration `tracked: no` and
+# said so loudly. Ruling #121 set the acceptance criteria.
+#
+# THE SHAPE, and why it satisfies all three of #121's criteria:
+#
+#   A declaration names a COMMIT. The gate accepts it for a DIFFERENT HEAD only
+#   when it can PROVE the two are the same program:
+#
+#     (i)  the named commit is an ANCESTOR of HEAD, and
+#     (ii) the diff between them touches ZERO runtime paths.
+#
+#   (1) THE GATE DOES NOT WEAKEN. `present` is untouched — ruling #96(b) stands
+#       and this does NOT flip it to `strict`. The judgement still covers the
+#       exact tree shipped, because (ii) proves the shipped tree is
+#       runtime-identical to the declared one. ⚠️ AND THE NEW DOOR IS THE
+#       STRICTER ONE: a carry-forward is required to be TRACKED, UNMODIFIED and
+#       COMMITTED, because by construction there WAS a commit to ride. So the
+#       resolver can only ever tighten the record, never loosen it.
+#
+#   (2) THE CIRCULARITY BREAKS. Write <date>-X.md, land it in the docs PR that
+#       becomes Y, deploy at HEAD=Y. The gate resolves X, proves X..Y is
+#       docs-only, and the declaration is COMMITTED BEFORE the act. Fixed point
+#       reached in one PR, and the interim "written to the shared tree,
+#       uncommitted" exception retires with it.
+#
+#   (3) FALSIFIABILITY DOES NOT NARROW. This cannot name "whatever ships". It
+#       REFUSES when the named commit is not an ancestor, when ANY runtime file
+#       moved in between, when the name is a sha that does not exist, and when
+#       two candidates are equally near (ambiguous). Every one of those arms is
+#       proved in `scripts/tests/declaration-resolve-proof.sh`, in BOTH
+#       directions — the `retire-branch.sh` lesson: 9 of 9 refusals and a false
+#       green on the happy path is a half-proven guard.
+#
+# ⚠️ THE NON-RUNTIME SET IS AN ALLOWLIST AND IT IS FAIL-CLOSED. A path is
+# non-runtime ONLY if it matches here; everything else — apps/, packages/,
+# scripts/, .github/, package.json, a Dockerfile, a .md nested inside an app —
+# counts as RUNTIME and defeats a carry-forward. Measured before it was written
+# rather than assumed: no Dockerfile COPY/ADDs `docs/`, and nothing under
+# `apps/` or `packages/` reads `docs/` outside dev and eval scripts.
+DECLARATION_NONRUNTIME_RE='^(docs/|[^/]+\.md$)'
+
+# declaration_resolve <decl_dir>
+#   Sets DECLARATION_PATH and DECLARATION_MODE on success.
+#   0 = resolved   1 = nothing covers the shipped tree   2 = AMBIGUOUS
+declaration_resolve() {
+  local dir="${1:?}"
+  DECLARATION_PATH=""; DECLARATION_MODE=""
+
+  local head head_short
+  head=$(git rev-parse --verify HEAD 2>/dev/null) || {
+    echo "🔴 REFUSING — cannot read HEAD. This is not a git tree, or git is broken."
+    echo "   Nothing has been changed."
+    return 1
+  }
+  head_short=$(git rev-parse --short HEAD)
+
+  echo "=== DECLARATION RESOLUTION (§2.5, F10) ==="
+  echo "shipping    : $head_short  ($head)"
+
+  local exact="" best="" best_dist="" best_total="" best_sha="" ambiguous="no" ambig_with=""
+  local f base shapart cand dist total runtime
+
+  for f in "$dir"/*.md; do
+    [ -e "$f" ] || continue
+    base=$(basename "$f" .md)
+    # the sha is the text after the LAST dash. `README.md` and any prose name
+    # fail the hex test below and are skipped — they are not declarations.
+    shapart="${base##*-}"
+    case "$shapart" in
+      ""|*[!0-9a-fA-F]*) continue ;;
+    esac
+    [ "${#shapart}" -ge 7 ] || continue
+
+    # ⚠️ RESOLVED THROUGH GIT, NEVER PARSED AND TRUSTED. A fabricated sha, a
+    # sha from another repository, or an AMBIGUOUS abbreviation all fail here
+    # rather than being padded, completed or guessed at. "Full-looking is not
+    # full" — and neither is "hex-looking is a commit".
+    cand=$(git rev-parse --verify --quiet "${shapart}^{commit}" 2>/dev/null) || continue
+
+    if [ "$cand" = "$head" ]; then exact="$f"; continue; fi
+
+    git merge-base --is-ancestor "$cand" "$head" 2>/dev/null || continue
+
+    total=$(git diff --name-only "$cand" "$head" -- | wc -l)
+    runtime=$(git diff --name-only "$cand" "$head" -- | grep -Ecv "$DECLARATION_NONRUNTIME_RE" || true)
+    [ "$runtime" -eq 0 ] || continue
+
+    dist=$(git rev-list --count "${cand}..${head}" 2>/dev/null) || continue
+    if [ -z "$best" ] || [ "$dist" -lt "$best_dist" ]; then
+      best="$f"; best_dist="$dist"; best_total="$total"; best_sha="$cand"
+      ambiguous="no"; ambig_with=""
+    elif [ "$dist" -eq "$best_dist" ]; then
+      ambiguous="yes"; ambig_with="$f"
+    fi
+  done
+
+  # ── the EXACT match is the pre-F10 behaviour, unchanged and still `present` ──
+  if [ -n "$exact" ]; then
+    echo "declared    : $head_short — the deploying tree itself"
+    echo "resolution  : EXACT. Pre-F10 behaviour, unchanged; mode stays 'present'"
+    echo "              per ruling #96(b) — strictness proportional to reversibility."
+    DECLARATION_PATH="$exact"; DECLARATION_MODE="present"
+    echo
+    return 0
+  fi
+
+  if [ "$ambiguous" = "yes" ]; then
+    echo
+    echo "🔴 REFUSING — TWO declarations are equally near the shipped tree."
+    echo "     $best"
+    echo "     $ambig_with"
+    echo "   Both are ancestors of HEAD at distance $best_dist with no runtime change,"
+    echo "   so nothing here can say WHICH ONE was written about this deploy."
+    echo "   Judging against the wrong one would look exactly like judging against"
+    echo "   the right one. Write a declaration naming $head_short and re-run."
+    echo "   Nothing has been changed."
+    return 2
+  fi
+
+  if [ -n "$best" ]; then
+    local declared_short; declared_short=$(git rev-parse --short "$best_sha")
+    echo "declared    : $declared_short — an ANCESTOR of the shipped tree, $best_dist commit(s) back"
+    echo "range       : ${declared_short}..${head_short} — $best_total file(s) changed, 0 of them runtime"
+    if [ "$best_total" -eq 0 ]; then
+      echo "control     : the two commits have IDENTICAL TREES, so this is not a"
+      echo "              measurement over an empty set — it is the strongest case there is."
+    else
+      echo "control     : the range is NON-EMPTY ($best_total file(s)) — an empty runtime"
+      echo "              diff over an empty range would prove nothing, so this is a"
+      echo "              real measurement rather than a vacuous one."
+    fi
+    echo "resolution  : CARRY-FORWARD. The declaration is about a different COMMIT and"
+    echo "              provably about the SAME PROGRAM. ⚠️ Mode is 'strict' here, not"
+    echo "              'present': a carry-forward means a commit existed to ride, so"
+    echo "              the declaration must be COMMITTED. This tightens the record."
+    DECLARATION_PATH="$best"; DECLARATION_MODE="strict"
+    echo
+    return 0
+  fi
+
+  echo
+  echo "🔴 REFUSING — no delta declaration covers the tree you are shipping."
+  echo
+  echo "   expected: $dir/$(date -u +%Y%m%d)-${head_short}.md"
+  echo
+  echo "   §2.5 requires the expected delta to be written down BEFORE the act."
+  echo "   Afterwards it is unfalsifiable — every number has a story available"
+  echo "   to it. Write it, then re-run. It must state:"
+  echo "     · the BASELINE, captured before anything changes"
+  echo "     · what MUST change"
+  echo "     · what MUST NOT change — clinical counts are never omitted"
+  echo "     · what would make the check FAIL"
+  echo
+  echo "   A declaration naming an ANCESTOR of this commit is also accepted, but"
+  echo "   ONLY when nothing runtime moved in between — that is what makes it a"
+  echo "   statement about the tree being shipped rather than about a different"
+  echo "   one. If you have such a file and it was not taken, the range carries a"
+  echo "   runtime change. Read it:"
+  echo "     git diff --name-only <declared-sha> ${head_short}"
+  echo
+  echo "   Nothing has been changed."
+  return 1
+}
+
 # declaration_gate <path> <present|strict> <label>
 #   0 = gate passed (provenance printed)   1 = REFUSED
 declaration_gate() {
