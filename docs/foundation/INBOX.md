@@ -205,3 +205,24 @@ F10**; do not let it outlive its reason.
 ✅ **F9 IS DONE AND THIS NOTICE DOES NOT REOPEN IT.** Merged and cited
 (`5f2334b1`, #695). The manual tag-first habit is now the **fallback**, not the
 mechanism.
+
+### 2026-08-17T12:00:00Z — POINTER: F12 is at F6's HEAD — owner finding on E/M (ruling #123)
+
+**Pointer, not the decision.** The decision is **ruling #123** in `RULINGS.md`;
+the item is **F12** in `RELAY.md`, queued **ahead of F6**.
+
+Two parts, both from the owner's own exported PDF, and they ship together:
+
+1. **SKIN** — the E/M block renders in **legacy cream** in exported PDFs. Fix at
+   the **component/builder root**, semantics byte-identical.
+   ⚠️ **The mechanism is NOT named. Reproduce before editing.** Measured:
+   `docx-generator.ts:188-197` has **no shading at all**, so the cream is *not*
+   from the converged DOCX→Gotenberg path. Discriminate first.
+2. **POLICY** — E/M **does not belong on procedure/operative notes.** Suppress
+   **by note SHAPE**, in-app and in exports. Office visits unchanged.
+   ⚠️ **`emAppliesToSpecialty` takes only a specialty id and CANNOT express
+   this** — a GI doctor does both under one specialty. It is a **second axis**.
+
+**Done when:** both directions attempt-proved (office visit SHOWS E/M;
+colonoscopy op-note shows NONE, nowhere), §2.5 with **absence rows**, mandatory
+adversarial pass.
