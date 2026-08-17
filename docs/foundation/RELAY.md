@@ -210,6 +210,48 @@ commit is green while saying nothing about whether these four ids are its runs.
 
 ---
 
+### ✅ F6.1 — MERGED AND CITED — **2026-08-17, session 02**
+
+**Merge `1b1de497aadf1e87dfc2278c9d156ad99efc6035` (PR #707).** Citation produced
+by `check-citation.sh`, not typed; every line `a1`, so nothing was re-run:
+
+**Citation — 4 of 4 on `1b1de497aadf1e87dfc2278c9d156ad99efc6035`:**
+   · `CI` 32023467135 a1
+   · `e2e` 32023467157 a1
+   · `a11y-ci` 32023467123 a1
+   · `secrets-scan` 32023467139 a1
+
+⚠️ **THE CHECKER EARNED ITS KEEP ON THIS ONE.** A raw
+`gh run list --branch main --limit 4` at the same moment returned **four
+`Dependabot Updates` rows** — the four most recent runs on the ref, none of them
+a required check. Read as a citation that is not merely wrong, it is wrong while
+looking complete. The checker sorted the same 12 runs into **green 4 + extra 8**
+and named every extra one. *A citation is produced by the checker, never typed,
+and never read off a `--limit`.*
+
+**NOT DEPLOYED — owed, and the declaration is in this PR.**
+`docs/foundation/deploys/20260817-1b1de497.md` is written against a baseline
+captured at `08:59Z`, **before** the merge, and names the FULL payload rather
+than just F6.1: the running image also predates #703, #704, #705, #706 and #708,
+all of which are docs or `.claude/settings.json` and none of which is in the
+image. **The runtime delta is F6.1 alone.**
+
+⚠️ **IT CARRIES ABSENCE ROWS, NOT ONLY PRESENCE ROWS.** F6.1 makes the renderer
+EMIT something it did not emit before, so *"is the new code shipped?"* passes
+just as happily on a version that has started inventing line breaks in text
+nobody broke. Rows 17–18 are the absence side, and the declaration says plainly
+that they are discharged by the shipped gate rather than by a post-deploy query —
+which is the honest split, not a gloss.
+
+**Row 3's probe is controlled and was measured today:** `freeTextRuns` reads
+**0** in the running worker, against a positive control of **1** for
+`generateVisitDocx` in the same file, with `pdf-generator.ts` absent (F3 holds).
+⚠️ **The first version of that probe pointed at `.next/standalone`, which does
+not exist in the worker — it ships SOURCE.** It returned nothing at all, which
+is indistinguishable from a clean reading; the control is what separated them.
+
+---
+
 ### ✅ F6.1 — THE AUTHORED LINE BREAK REACHES THE DOCUMENT — **2026-08-17, session 02**
 
 **A literal `\n` inside `<w:t>` is not a line break in OOXML.** Word collapses it
