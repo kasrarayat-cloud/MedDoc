@@ -601,6 +601,46 @@ means *no declaration offered*. For a wrapper whose only purpose is carrying
 one, empty means *the override was invoked and nothing was declared*, which must
 refuse. So the shared validator is reused for the token and length rules and
 never reimplemented; the empty case is added on top.
+#### ✅ F11 — TWO OF THE THREE ARE GRANTED, 2026-08-17. THE THIRD IS AN OWNER QUESTION.
+
+**Closed from the supervised side, which is the only side that can.** The loop's
+own attempt was refused: the harness protects `.claude/settings.json`
+independently of the repo-wide `Edit` grant — **and that asymmetry is correct.**
+A session that can widen its own permissions has no permission boundary.
+
+| # | grant | why it is safe |
+|---|---|---|
+| 1 | `Bash(bash scripts/check-cotenants.sh:*)` | READ before granting: its whole command surface is `curl -s` — HTTP probes, no writes. Same class as the eleven scripts already enumerated |
+| 2 | `Bash(tmux has-session:*)` | read-only. ⚠️ **Deliberately NOT `Bash(tmux:*)`** — the loop flagged that `tmux new`/`kill-session` reach its OWN runner, so the broad grant would let a session kill the loop it is running in. **Verified after editing: zero broader `tmux` grants** |
+
+⚠️ **NUMBER 2 IS A DEFECT I INTRODUCED AND IT IS THE ONE WORTH REMEMBERING.**
+The canon entry *"A PROBE THAT MATCHES ITSELF"* names `tmux has-session` as the
+authority **because `pgrep -f` gave a false LIVE reading for three hours.** That
+entry shipped without its grant — so an unattended session obeying it hits a
+refusal and is pushed back toward the probe the rule exists to forbid. **The
+rule made the loop less safe than no rule.**
+
+⚠️ **AND #692's COMMIT MESSAGE STATES THE LESSON I THEN IMMEDIATELY REPEATED:**
+*"a script MASTER instructs the loop to run is not shipped until its GRANT ships
+with it. They live in different files and land in different PRs, and nothing
+checks that the second followed the first."* Written, merged, and violated in
+the next canon entry by the same author. **Naming a class is not enumerating
+it** — and it is not obeying it either.
+
+**#3 IS NOT TAKEN AND IS REFERRED, DELIBERATELY.** The
+`DECLARE_CANCELLATION="…" git push` override needs a compound `VAR=value command`
+form, which is **categorically broader** than a named read-only script — it is a
+shape, not a command. Grants 1 and 2 are strictly narrower than what is already
+allowed; #3 is not, so it is the owner's call and not mine to make quietly.
+**Until it is decided the loop keeps waiting, which is what both sessions
+correctly chose** — and the cost is measured: **~40 min in session 06, ~41 min
+in b2-run01.**
+
+⚠️ **THE REASON #3 MATTERS MORE THAN ITS MINUTES:** the granted workaround
+`gh run cancel` produces the identical outcome through another door. **A guard
+that refuses, offers an escape hatch, and has that hatch blocked by an unrelated
+layer teaches sessions to route around it.** Two sessions declined. The third
+one that does not will be right about the outcome and wrong about the habit.
 
 **The fix is three allowlist lines** — `Bash(bash scripts/check-cotenants.sh:*)`,
 `Bash(tmux has-session:*)` (read-only; broader `tmux` must NOT be granted, since

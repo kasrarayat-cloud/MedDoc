@@ -81,6 +81,8 @@
       "Bash(bash scripts/check-citation.sh:*)",
       "Bash(bash scripts/gh-runs.sh:*)",
       "Bash(bash scripts/push-with-cancellation.sh:*)",
+      "Bash(bash scripts/check-cotenants.sh:*)",
+      "Bash(tmux has-session:*)",
       "Bash(bash scripts/check-ledger-append-only.sh:*)",
       "Bash(bash scripts/check-hooks-installed.sh:*)",
       "Bash(bash scripts/retire-branch.sh:*)",
