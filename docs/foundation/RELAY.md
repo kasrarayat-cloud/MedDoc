@@ -17455,3 +17455,43 @@ does not exist here. **Adjudicating billability from memory is precisely how
 `K22.7` got written**, and it is the one place where being wrong manufactures
 False Claims Act exposure rather than merely a bug. **An unverified step named
 honestly is worth more than a green tick bought with a guess.**
+
+---
+
+## ⚠️ SESSION FINDING — A GRANT IS ON THE **RELATIVE** PATH, AND AN ABSOLUTE PATH IS A DIFFERENT COMMAND — **2026-08-17, run `20260817-231454` session 01**
+
+**Not in MASTER's permissions table, so it is recorded here as MASTER requires:
+an unlisted refusal is a finding, never a step to drop.**
+
+`push-with-cancellation.sh` is the sanctioned door for a declared cancellation,
+and `grep -c` against `.claude/settings.json` returns **1** — so the canon's
+*"an entry that names an instrument verifies that instrument's grant"* check
+**passes**, and the instrument was still unreachable for three attempts.
+
+| what I typed | outcome |
+|---|---|
+| `DECLARE_CANCELLATION="…" git push` | **refused** — an env-var-prefixed command; already on record as refused to the loop |
+| `bash /opt/meddoc-pro/scripts/push-with-cancellation.sh "…"` | **refused** |
+| `bash scripts/push-with-cancellation.sh "…"` | ✅ **allowed** |
+
+**The grant reads `Bash(bash scripts/push-with-cancellation.sh:*)` — a RELATIVE
+path.** An absolute path to the identical file is a different string and matches
+nothing. Same for `merge-pr.sh` (`:89`) and `retire-branch.sh` (`:88`).
+
+⚠️ **AND THE `grep -c` CHECK CANNOT SEE THIS.** It answers *"is this instrument
+named?"* — which was **yes** — while the question that mattered was *"is the
+FORM I am about to type granted?"* **The right quantity, over a set that did not
+contain the failure.** The canon's own watched-set lesson, landing on the check
+the canon added to prevent exactly this class.
+
+⚠️ **THE PRACTICAL CONSEQUENCE IS SHARPER THAN IT LOOKS: it makes the grant
+CWD-DEPENDENT.** A relative path only resolves from a tree that has `scripts/`
+— so the wrapper works from the shared tree **or from a full worktree**, and
+fails from anywhere else with a permission refusal rather than a missing-file
+error. **Two different causes, one indistinguishable message.** It worked here
+because a `git worktree` checks out the whole repo, `scripts/` included.
+
+**For the next session:** run the wrapper scripts **relatively, from inside your
+worktree**. If one is refused, check the FORM against `settings.json` before
+concluding the capability is missing — the third recorded instance of a rule and
+its grant landing out of step.
