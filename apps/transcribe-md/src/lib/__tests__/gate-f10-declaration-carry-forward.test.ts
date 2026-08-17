@@ -144,13 +144,29 @@ function bash(script: string, cwd: string): Run {
   }
 }
 
-/** Resolution ONLY — what `deploy-prod.sh` calls first. */
+// ⚠️ THE FLAGS ARE PART OF THE UNIVERSE, AND THIS HARNESS GOT THEM WRONG FIRST.
+// `scripts/deploy-prod.sh:50` runs `set -euo pipefail`. The first version of
+// these helpers used a bare `set -u`, which is a MILDER shell than the one the
+// code actually runs in — and the resolver's accept path contains two pipelines
+// (`… | wc -l`, `… | grep -Ecv …`) where `pipefail` is exactly what would bite:
+// `grep -c` exits 1 when the count is zero, which under `pipefail` propagates
+// and under `set -e` would abort. It is caught by `|| true`, and that is a claim
+// this file has to TEST rather than assert.
+//
+// "A test that defaults a flag OFF while production runs it ON is testing the
+// rollback" — the same rule, one layer down from env vars.
+const PROD_FLAGS = 'set -euo pipefail';
+
+/** Resolution ONLY — what `deploy-prod.sh` calls first.
+ *  ⚠️ `|| rc=$?` rather than a bare call: under `set -e` a non-zero return
+ *  aborts the script before the outputs are echoed, which would make every
+ *  refusal arm read as "bash died" instead of "the resolver refused". */
 function resolve(dir: string): Run & { path: string; mode: string } {
   const r = bash(
-    `set -u
+    `${PROD_FLAGS}
      . "${LIB}"
-     declaration_resolve "${DECL_DIR}"
-     rc=$?
+     rc=0
+     declaration_resolve "${DECL_DIR}" || rc=$?
      echo "F10_PATH=\${DECLARATION_PATH:-}"
      echo "F10_MODE=\${DECLARATION_MODE:-}"
      exit $rc`,
@@ -165,9 +181,11 @@ function resolve(dir: string): Run & { path: string; mode: string } {
  *  cannot pass by resolving something the gate would then throw out. */
 function resolveAndGate(dir: string): Run {
   return bash(
-    `set -u
+    `${PROD_FLAGS}
      . "${LIB}"
-     declaration_resolve "${DECL_DIR}" || exit $?
+     rc=0
+     declaration_resolve "${DECL_DIR}" || rc=$?
+     [ "$rc" = "0" ] || exit $rc
      declaration_gate "$DECLARATION_PATH" "$DECLARATION_MODE" "deploy declaration" || exit 1
      echo "F10_GATE=passed"`,
     dir,
