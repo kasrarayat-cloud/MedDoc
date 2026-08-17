@@ -105,7 +105,7 @@ archive-loop one especially, which is a live hazard rather than a polish task.**
 |---|---|---|
 | F6.1 | **Patient-summary line breaks are lost in the DOCX** | a genuine fidelity bug on the same class #112 fixed for numbers — the export changes what the note says |
 | F6.2 | **`CLINICAL NOTE` heading renders on an EMPTY note** | a heading over nothing is a document asserting content it does not have |
-| ~~F6.3~~ | ✅ **BOUNDED — built and gated 2026-08-17, session 01 of run `20260817-033820-b2`.** `archive-pdf-budget.ts`; both archive routes render THROUGH it. 35 arms, **11 of 11 mutations reddened**. See the ledger row below. ⚠️ **The refutation pass found a defect in the FIX**: the first draft charged elapsed wall-clock, which the audio downloads in the same loop would have consumed — truncating the archives of exactly the doctors with the most recordings, while the sidecar sat idle. It charges sidecar-time now, and M11 re-plants the original defect to prove the gate sees it. *Previous wording:* ⚠️ **The archive loop is UNBOUNDED against a single strictly-serializing sidecar** — **measured: a 0.42s staircase**, and `maxDuration` is **INERT on a standalone build** — so nothing bounds it. Real hazard, own item, not a tail |
+| ~~F6.3~~ | ✅ **LIVE IN PRODUCTION 2026-08-17T06:53Z — merge `1537ae47`, cited 4 of 4, 15 of 15 declared rows matched.** Built and gated the same session (01 of run `20260817-033820-b2`). `archive-pdf-budget.ts`; both archive routes render THROUGH it. 35 arms, **11 of 11 mutations reddened**. See the ledger row below. ⚠️ **The refutation pass found a defect in the FIX**: the first draft charged elapsed wall-clock, which the audio downloads in the same loop would have consumed — truncating the archives of exactly the doctors with the most recordings, while the sidecar sat idle. It charges sidecar-time now, and M11 re-plants the original defect to prove the gate sees it. *Previous wording:* ⚠️ **The archive loop is UNBOUNDED against a single strictly-serializing sidecar** — **measured: a 0.42s staircase**, and `maxDuration` is **INERT on a standalone build** — so nothing bounds it. Real hazard, own item, not a tail |
 | F6.4 | **`export-cleanliness`'s markdown detector is now VACUOUS** | a green that cannot go red — the ratchet class this house names on sight |
 | F6.5 | **`gate-r1`'s "BOTH sides" test asserts one side** | the title is wider than the measurement |
 | ~~F6.6~~ ✅ **CLOSED 2026-08-16 — VERIFIED FIXED, see the note under this table** | ~~**`check-cotenants.sh` watches FOUR hosts; MASTER.md STEP 0.6 names FIVE**~~ | `www.quillmd.com` is missing from its `EXPECTED` table — **my omission when I wrote it**. One line; rides the next small PR rather than waiting for F6 |
@@ -159,6 +159,67 @@ is effective for the next deploy and no §2.5 declaration is owed.
 row CLAIMS and asks GitHub which commit each belongs to — the only direction
 that can catch a substitution. Verifying without it would have proved the
 commit is green while saying nothing about whether these four ids are its runs.
+
+---
+
+### ✅ F6.3 IS LIVE IN PRODUCTION — **2026-08-17T06:53Z, session 01 — 15 of 15 JUDGED**
+
+**Merge `1537ae472c146e7c977def6aabde7d5dcec2255d` (PR #702).** Citation
+produced by `check-citation.sh`, not typed; every line `a1`, so nothing was
+re-run:
+
+**Citation — 4 of 4 on `1537ae472c146e7c977def6aabde7d5dcec2255d`:**
+   · `CI` 32000480913 a1
+   · `e2e` 32000480888 a1
+   · `a11y-ci` 32000480842 a1
+   · `secrets-scan` 32000480843 a1
+
+**§2.5 declaration:** `docs/foundation/deploys/20260817-c65da48f.md`.
+
+⚠️ **THIS IS F10's CARRY-FORWARD RESOLVER'S FIRST REAL USE, AND IT WORKED.**
+The gate reported `resolution : CARRY-FORWARD`, resolved `c65da48f` as an
+ancestor of the deployed HEAD, proved the range between them touched **zero
+runtime paths** (two files, both under `docs/`), and — as F10 designed — held
+the carry-forward to **`strict`** rather than `present`, because a commit
+existed to ride. **The circularity F10 was built for did not appear:** the
+declaration was committed before the act, in the same PR as the work, and the
+deploy accepted it. It also printed its own `⚠️ BASELINE AGE` warning, which is
+the compensating control session 06 built for exactly this case.
+
+| # | declared | measured | ✓ |
+|---|---|---|---|
+| 1 | `transcribe-md` image differs | `cc772df2…` → `2a855056…` | ✓ |
+| 2 | worker image differs | `9848ee4c…` → `9d5a37e3…` | ✓ |
+| 3 | `budget_exhausted` in the shipped image ≥1 · CONTROL stays 4 | **0 → 2** · control **4 → 4** | ✓ |
+| 4 | visits stay 44 | 44 | ✓ |
+| 5 | SIGNED stays 27 | 27 | ✓ |
+| 6 | patients stay 32 | 32 | ✓ |
+| 7 | practices stay 199 | 199 | ✓ |
+| 8 | users stay 198 | 198 | ✓ |
+| 9 | migrations stay 104 | 104, *"No pending migrations to apply"* | ✓ |
+| 10 | `ledger_entries` stays 177 | 177 | ✓ |
+| 11 | `audit_logs` must not DECREASE | 11533 → **11537** | ✓ |
+| 12 | 9 containers, healthy | 9, healthy | ✓ |
+| 13 | `gotenberg` image unchanged | `2d05d225…` unchanged, container `Up 9 days` | ✓ |
+| 14 | co-tenants 307/404/200/200/410 | 307/404/200/200/410 | ✓ |
+| 15 | no `budget_exhausted` skip on today's population | **0**, against a readable log stream (8 lines) | ✓ |
+
+**Row 13 is worth reading twice:** `deploy-prod.sh` *does* `build gotenberg` and
+`up -d gotenberg` on every deploy, so *"the sidecar is not rebuilt"* would have
+been a false premise. The declaration asserted instead that **this change
+touches nothing in that build context**, so a cached build must reproduce the
+same id — and the container's `Up 9 days` confirms compose found no reason to
+recreate it. **The assertion was written against the mechanism, not against the
+hoped-for outcome.**
+
+**Rows 3 and 15 both carry their own controls**, because each is a claim about
+an ABSENCE or a presence in a place where a broken probe and a true answer look
+identical: row 3's control proves `src/lib` literals survive minification into
+the built chunks, and row 15's proves the log stream was readable at all.
+
+**Rollback tags cut and verified against the RUNNING images (F9), 3 of 3:**
+`meddoc-pro-transcribe-md:pre-1537ae47-20260817`,
+`…-worker:pre-1537ae47-20260817`, `…-gotenberg:pre-1537ae47-20260817`.
 
 ---
 
