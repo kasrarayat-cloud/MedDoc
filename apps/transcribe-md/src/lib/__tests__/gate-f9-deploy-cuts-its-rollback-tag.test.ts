@@ -211,7 +211,21 @@ beforeAll(() => {
   chmodSync(join(TMP, 'docker'), 0o755);
 });
 afterAll(() => {
-  // Left for the OS. Nothing here is clinical and nothing is outside $TMPDIR.
+  // ⚠️ THIS USED TO BE A DELIBERATE NO-OP — "left for the OS. Nothing here is
+  // clinical and nothing is outside $TMPDIR." Both halves of that are still
+  // TRUE, and it was still the wrong call, for a reason outside this file:
+  //
+  // the FOUNDATION loop runs unattended and `shred`/`rm` are DENIED to it by
+  // design, so every run of this gate mints a directory that the only actor
+  // present is structurally incapable of reaping. Session 04 filed it against
+  // its own gate after counting NINE of them; a tenth appeared during session
+  // 05's unit run, which is the growth rate stated as a measurement.
+  //
+  // "Ephemeral in CI" is true and it is not the environment that matters —
+  // the developer box and the loop's own host keep them forever. A test that
+  // cleans up after itself is cheaper than a close-out contract that has to
+  // name what it could not delete.
+  if (TMP) rmSync(TMP, { recursive: true, force: true });
 });
 
 describe('F9 — the library exists and the deploy is wired to it', () => {
