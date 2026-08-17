@@ -90,6 +90,18 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   by_commit=$INFLIGHT_BY_COMMIT
   by_branch=$INFLIGHT_BY_BRANCH
 
+  # ⚠️ A DEGRADED TRANSPORT IS ANNOUNCED EVEN WHEN THE ANSWER IS "CLEAR" — in
+  # fact ESPECIALLY then. Since F14-b a repo-wide outage no longer blinds this
+  # hook: `lib/runs-api.sh` falls back to the per-workflow route. But the BRANCH
+  # half of the count has no coverage control in that mode, so a zero there is a
+  # FLOOR rather than a measurement, and a push allowed on a floor is a push
+  # nobody can audit afterwards. Printing it costs one line; not printing it
+  # turns a known limit into an invisible one.
+  if [ "${INFLIGHT_DEGRADED:-0}" = "1" ]; then
+    echo "pre-push: ${INFLIGHT_NOTE}" >&2
+    echo "          ${branch} @ ${remote_sha:0:8} — --commit ${by_commit}, --branch ${by_branch}" >&2
+  fi
+
   if [ "$by_commit" -gt 0 ] || [ "$by_branch" -gt 0 ]; then
     busy_total=$(( busy_total + by_commit + by_branch ))
     report="${report}    · ${branch} @ ${remote_sha:0:8} — in flight: --commit ${by_commit}, --branch ${by_branch}"$'\n'

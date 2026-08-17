@@ -2,23 +2,28 @@
 # ============================================================================
 # runs-api.sh — the ONE transport for "what ran on this SHA / this branch?".
 #
-# ⚠️ WIRED INTO `check-citation.sh` ONLY, AS OF 2026-08-17. `gh-runs.sh` and
-# `lib/inflight.sh` — and therefore `merge-pr.sh` and the `pre-push` hook —
-# still call `gh run list`, which goes through the SAME repo-wide route this
-# file exists to route around. So the citation door is covered and the MERGE
-# and PUSH doors are not.
+# SOURCED BY, AND VERIFIED BY GREP RATHER THAN ASSERTED — F14-b, 2026-08-17:
 #
-# ⚠️ THIS SENTENCE USED TO READ *"Sourced by check-citation.sh, gh-runs.sh and
-# lib/inflight.sh"* IN THE PRESENT TENSE, AND THAT WAS NEVER TRUE. It described
-# the intent; a reader would have taken it as a description of the running
-# system and concluded the whole gate was outage-proof. That is this repo's
-# `DEPLOYMENT_RUNBOOK.md §5.6` shape — a wish written as a fact — and it is
-# corrected here rather than left for the next incident to discover.
+#     check-citation.sh          directly          — the CITATION door
+#     lib/inflight.sh            directly          — and therefore:
+#       · scripts/hooks/pre-push (sources inflight.sh)   — the PUSH door
+#       · scripts/merge-pr.sh    (sources inflight.sh)   — the MERGE door
+#       · scripts/gh-runs.sh     (sources inflight.sh)   — waiters and polls
 #
-# RETIRES WITH **F14-b**, which wires the other two doors. Until F14-b lands, a
-# repo-wide outage still stops merging and pushing; it no longer stops citing.
-# The scope is stated so nobody reads this file's presence as coverage it does
-# not have.
+# ⚠️ THIS BLOCK HAS BEEN WRONG IN BOTH DIRECTIONS AND THAT IS WHY IT IS A LIST.
+# It first read *"Sourced by check-citation.sh, gh-runs.sh and lib/inflight.sh"*
+# in the present tense while only ONE of the three was wired — the
+# `DEPLOYMENT_RUNBOOK.md §5.6` shape, a wish written as a fact, which a reader
+# takes as a description of the running system. F14-a corrected it to a scope
+# note; F14-b makes the original sentence true. **If you edit the wiring, edit
+# this list in the same commit and check it with a grep, not with memory:**
+#
+#     grep -rln 'runs-api\.sh' scripts/
+#
+# ⚠️ ALL THREE DOORS ARE COVERED; THE HONEST LIMIT IS NOW ELSEWHERE. It is the
+# BRANCH view's missing coverage control — see `runs_api_for_branch` — where a
+# fallback-mode count is a FLOOR rather than a measurement. That limit is
+# surfaced by every caller instead of being papered over.
 #
 # Never copied — one implementation, however many callers.
 # ----------------------------------------------------------------------------
@@ -164,7 +169,14 @@
 # the emitted object. A value that must cross a subshell boundary cannot be a
 # global, and "it worked when I tested the function directly" is exactly how this
 # survives review.
-RUNS_API_WORKFLOW_IDS=""    # cached enumeration, per process (read-only use, safe)
+# cached enumeration, per process (read-only use, safe).
+# ⚠️ `:=` NOT `=`, SINCE F14-b. This file is now sourced from TWO places that can
+# both be live at once — `check-citation.sh` directly, and `lib/inflight.sh`
+# (hence `gh-runs.sh`, `merge-pr.sh` and the pre-push hook). A bare `=` would
+# reset the cache on the second source, turning one workflow enumeration into
+# two identical API calls. Harmless, and wrong for a file whose whole subject is
+# behaving well while an API is unwell.
+: "${RUNS_API_WORKFLOW_IDS:=}"
 
 runs_api_require() {
   command -v gh >/dev/null 2>&1 || {
@@ -302,7 +314,13 @@ runs_api_for_sha() {
 
 # runs_api_for_branch <repo> <branch> [per_page]
 # ⚠️ NO coverage control exists for a branch — see the header. In fallback mode
-# the count is a FLOOR, and RUNS_API_CONTROL_NOTE says so.
+# the count is a FLOOR, and the payload's `_control` key says so; callers surface
+# it (`runs_api_mode_banner`, and `inflight.sh`'s INFLIGHT_NOTE).
+#
+# ⚠️ THIS COMMENT NAMED THE DEAD GLOBAL `RUNS_API_CONTROL_NOTE` UNTIL F14-b —
+# the same half-landed rename the banner itself carried, surviving in the one
+# place `set -u` cannot reach. A comment naming a variable nothing assigns is
+# how the next reader reintroduces it.
 runs_api_for_branch() {
   local repo="$1" br="$2" pp="${3:-100}" body
   runs_api_require || return 1
