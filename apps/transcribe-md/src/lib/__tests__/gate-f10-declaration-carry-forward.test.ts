@@ -363,6 +363,24 @@ describe('F10 · the refuse direction (criterion 3 — it can come out false)', 
     expect(g.out).toContain('NOT COMMITTED');
   });
 
+  it('REFUSES two declarations naming THIS commit — the date prefix is decoration, not identity', () => {
+    // ⚠️ THE PRE-F10 CODE COULD NOT REACH THIS, which is why it needs its own
+    // arm: the old name was DERIVED including today's date, so only one file
+    // could ever match. Resolution is by SHA now, so a deploy that crosses
+    // midnight and gets a second declaration written produces two exact
+    // matches — and silently taking the last would be precisely the defect the
+    // carry-forward tie already refuses.
+    const dir = newRepo();
+    const head = git(dir, 'rev-parse', 'HEAD');
+    write(dir, `${DECL_DIR}/20260816-${head.slice(0, 8)}.md`, '# written before midnight\n');
+    write(dir, `${DECL_DIR}/20260817-${head.slice(0, 8)}.md`, '# written after midnight\n');
+
+    const r = resolve(dir);
+    expect(r.code).toBe(2);
+    expect(r.path).toBe('');
+    expect(r.out).toContain('name THIS commit');
+  });
+
   it('REFUSES an AMBIGUOUS pair — two declarations equally near cannot both be about this deploy', () => {
     const dir = newRepo();
     const base = git(dir, 'rev-parse', 'HEAD');

@@ -107,7 +107,7 @@ declaration_resolve() {
   echo "=== DECLARATION RESOLUTION (§2.5, F10) ==="
   echo "shipping    : $head_short  ($head)"
 
-  local exact="" best="" best_dist="" best_total="" best_sha="" ambiguous="no" ambig_with=""
+  local exact="" exact_dup="" best="" best_dist="" best_total="" best_sha="" ambiguous="no" ambig_with=""
   local f base shapart cand dist total runtime
 
   for f in "$dir"/*.md; do
@@ -127,7 +127,16 @@ declaration_resolve() {
     # full" — and neither is "hex-looking is a commit".
     cand=$(git rev-parse --verify --quiet "${shapart}^{commit}" 2>/dev/null) || continue
 
-    if [ "$cand" = "$head" ]; then exact="$f"; continue; fi
+    # ⚠️ TWO FILES CAN NAME THE SAME COMMIT. Matching is by SHA and the date
+    # prefix is decoration, so `20260816-abc.md` and `20260817-abc.md` BOTH
+    # match — a deploy that crosses midnight and gets a second declaration
+    # written. The pre-F10 code could not hit this because the date was part of
+    # the derived filename. Taking the last one silently would be the exact
+    # defect the carry-forward tie already refuses, so it is refused too.
+    if [ "$cand" = "$head" ]; then
+      if [ -n "$exact" ]; then exact_dup="$f"; else exact="$f"; fi
+      continue
+    fi
 
     git merge-base --is-ancestor "$cand" "$head" 2>/dev/null || continue
 
@@ -143,6 +152,18 @@ declaration_resolve() {
       ambiguous="yes"; ambig_with="$f"
     fi
   done
+
+  if [ -n "$exact_dup" ]; then
+    echo
+    echo "🔴 REFUSING — AT LEAST TWO declarations name THIS commit:"
+    echo "     $exact"
+    echo "     $exact_dup"
+    echo "   Matching is by SHA; the date prefix is decoration. Nothing here can"
+    echo "   say which one was written about this deploy, and judging against the"
+    echo "   wrong one looks exactly like judging against the right one."
+    echo "   Keep one and re-run. Nothing has been changed."
+    return 2
+  fi
 
   # ── the EXACT match is the pre-F10 behaviour, unchanged and still `present` ──
   if [ -n "$exact" ]; then

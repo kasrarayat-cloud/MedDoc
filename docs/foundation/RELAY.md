@@ -15633,7 +15633,7 @@ eval scripts.
 ### THE PROOF — BOTH DIRECTIONS, WHICH IS THE HALF THAT GETS SKIPPED
 
 `apps/transcribe-md/src/lib/__tests__/gate-f10-declaration-carry-forward.test.ts`
-— **15 arms, 15 green**, driving the REAL library under a real bash against
+— **16 arms, 16 green**, driving the REAL library under a real bash against
 THROWAWAY git repositories. It reaps its own tmpdir (F9's gate's lesson,
 `1cf669a8`, filed against itself after nine leftovers).
 
@@ -15644,7 +15644,7 @@ and then a false green on the happy path — and it is why the accept arms asser
 the **exit code, the resolved PATH and the MODE**, not merely "it did not
 refuse".
 
-**MUTATION PROOF — 7 of 7 reddened.** Baseline 13/13 green, post-restore 13/13
+**MUTATION PROOF — 8 of 8 reddened.** Baseline 16/16 green, post-restore 16/16
 green, both files byte-identical to their backups. **Every mutation asserted it
 APPLIED before its result was believed.**
 
@@ -15657,6 +15657,16 @@ APPLIED before its result was believed.**
 | M5 · drop AMBIGUITY detection | RED (1) |
 | **M6 · PARTIAL: revert `deploy-prod.sh` to the circular derivation** | RED (2) |
 | **M7 · PARTIAL: resolve, but do not thread the MODE through** | RED (1) |
+| M8 · duplicate EXACT matches silently take the last | RED (1) |
+
+⚠️ **M8 CAME FROM RE-READING MY OWN RESOLVER WHILE WAITING ON CI, AND IT IS A
+HOLE THE PRE-F10 CODE COULD NOT HAVE HAD.** Resolution is now by **SHA**, and
+the date prefix is decoration — so `20260816-abc.md` and `20260817-abc.md` BOTH
+match one commit, which is a deploy that crossed midnight and got a second
+declaration written. The loop took the **last one silently**. That is exactly
+the defect the carry-forward tie already refused, sitting unrefused four lines
+above it — *the same question answered two ways in one function.* Now `return 2`,
+with its own arm.
 
 ⚠️ **M6 AND M7 ARE THE ONES THAT MATTER.** The habit is to mutate by the
 COMPLETE inverse, which proves the guard sees a total regression. The failure
@@ -15697,10 +15707,10 @@ carry-forward must accept.** Under `pipefail` that 1 propagates; under `set -e`
 it would abort. The `|| true` is what makes it safe, and *"this guard holds"*
 was an assertion the file did not test.
 
-Re-run under the real flags: **15 of 15 still green**, so the guards do hold —
+Re-run under the real flags: **16 of 16 still green**, so the guards do hold —
 now a measurement rather than a claim. The mutation proof was **re-run against
 the hardened harness**, because evidence describes only the tree it was taken
-on: **7 of 7 still red**, baseline 15/15, post-restore 15/15.
+on: **8 of 8 still red**, baseline 16/16, post-restore 16/16.
 
 **Found by reading `deploy-prod.sh`'s own `set` line, not by any test — and no
 test would have said anything.** A milder shell fails in the PERMISSIVE
