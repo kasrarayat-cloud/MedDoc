@@ -264,6 +264,16 @@ instruments and a test.
 retired on **both** sides, confirmed by `git ls-remote` and `git branch --list`
 rather than by the wrapper's exit code.
 
+**Citation — 4 of 4 on `79ddd855b45378f28b8d345520c2c9c68cede5a3`:**
+   · `CI` 32075115093 a1
+   · `e2e` 32075115121 a1
+   · `a11y-ci` 32075115038 a1
+   · `secrets-scan` 32075115115 a1
+
+*Produced by `bash scripts/check-citation.sh`, not typed. All four `a1` on the
+MERGE commit — the PR-head citation carried an `a3` on `a11y-ci` and is a
+different, explained thing; see the apt-stall block below.*
+
 ⚠️ **AND THE MERGE ITSELF IS THIS ITEM'S OWN POSITIVE CONTROL.**
 `bash scripts/merge-pr.sh 716` ran `inflight_count` against `main` through the
 NEW transport and merged — so the door's SUCCESS direction is proved in anger,
