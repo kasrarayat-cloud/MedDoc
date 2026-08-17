@@ -16619,3 +16619,166 @@ append-only from the supervised side by design. So this is flagged rather than
 executed: **the entry should be moved to `inbox-archive/`**, and the interim
 clause in #121 marked discharged. Carried in the morning report.
 
+---
+
+### 🔵 F12 — THE RECONNAISSANCE THE RULING DEMANDED — **2026-08-17, session 03**
+
+**Ruling #123 says, in as many words, ⚠️ *"THE MECHANISM IS NOT NAMED YET AND
+MUST NOT BE GUESSED — REPRODUCE FIRST."* This is that pass, and NOTHING was
+edited.** The item is not built; it is now buildable, and two of its four
+load-bearing assumptions did not survive contact.
+
+---
+
+#### PART (1) — THE SKIN. **⚠️ THE CREAM CANNOT COME FROM ANY CURRENT EXPORT
+PATH, AND THE SURFACE IT DOES COME FROM WAS FIXED ON 2026-08-14.**
+
+The row's own suspicion — *"the export-side E/M rendering never got R4b's host
+treatment"* — is **not supported by the code as it stands.** Measured, not read:
+
+| the question | the answer |
+|---|---|
+| does the converged DOCX→Gotenberg builder emit E/M at all? | **YES** — `docx-generator.ts:246-293`, heading **`Procedures / E&M`** |
+| does it shade anything? | **NO.** Every colour in the whole builder: `666666` ×6 (muted body), `FFFFFF` ×1, `DDDDDD` ×1. **No `shading`, no `fill`, no `ShadingType`, no highlight** |
+| does the string **"Documentation level"** appear in ANY export builder? | **NO — zero occurrences.** It exists only in the React surfaces |
+| where does the cream live? | `.qm-rdoc-gate` in `globals.css:5546-5551`, background `color-mix(… var(--color-linear-amber) 8% …)` — **CSS, in-app, and nowhere a document generator can reach** |
+
+⚠️ **MY FIRST GREP RETURNED ZERO AND THE ZERO WAS USELESS.** Searching
+`E/M|emCode|documentationLevel|Documentation Level` in `docx-generator.ts`
+matched **nothing** — a true answer to the wrong question, because the heading
+is spelled **`E&M`** and the field is `data.em`. Read as *"the export emits no
+E/M"*, that zero would have inverted the whole diagnosis. It was caught by
+re-asking rather than by any control, which is luck; the controlled form is
+below and is what the rest of this section uses.
+
+**AND THE IN-APP SOURCE IS ALREADY TREATED.** `EmLevelCard` carries
+`qm-rounds-host` **on the component** — `em-level-card.tsx:110` — landed by
+**R4b (`04d148ed`, 2026-08-14 12:33Z)**, an ancestor of `main` and live since
+that day's deploy. Its own comment names the owner's case verbatim: *"renders as
+a cream panel on a dark Rounds route — which is what the owner found by hand on
+a colonoscopy op-note."* **Census of the whole class: 4 of 4 `.qm-rdoc-gate`
+mounts carry the host** (`em-level-card.tsx:110`,
+`review-document-view.tsx:301`, `:332`, `prescriptions-card.tsx:142`) — so the
+per-caller list cannot go stale, which was R3.4's requirement.
+
+⚠️ **AND THIS IS VERIFIED IN THE SHIPPED BUNDLE, NOT ASSERTED FROM SOURCE** —
+because *"it is fixed on `main`"* and *"it is fixed in what production is
+serving"* are different claims, and this house has already paid for reading a
+built image as if it were a source tree:
+
+```
+docker exec meddoc-pro-transcribe-md-1 sh -c '
+  grep -c "qm-rounds-host qm-rdoc-gate qm-rdoc-gate-quiet" …/static/chunks/3ui6nlh8o_bz0.js   → 1
+  grep -c "qm-rdoc-gate-quiet"                              …/static/chunks/3ui6nlh8o_bz0.js   → 1'
+```
+
+**The two counts AGREE, which is the arm that matters**: had the hosted string
+read 1 and the bare class read 2, there would be an un-hosted second copy of
+the card in the bundle and the census above would be wrong about production.
+⚠️ **The chunk was located by a positive control first** (`Documentation level`
+→ 3 chunks, against a traversal control of **680** `.js` files), because the app
+image ships a BUILT Next application and a grep for a SOURCE path there returns
+zero for everything — a zero indistinguishable from a clean reading.
+
+> **SO THE HONEST READING IS: the artifact predates the fix, OR it is a browser
+> print / screenshot of the in-app page rather than an export.** Both are
+> consistent with everything measured. ⚠️ **What is NOT open is "an export
+> builder paints the E/M block cream" — that is refuted**, and acting on it
+> would mean editing a builder that never had the defect. *That inversion is
+> this house's recorded numbered-list failure: believing the wrong surface is
+> the reference implementation and "fixing" the one that was already right.*
+
+**WHAT PART (1) NOW NEEDS IS ONE FACT FROM THE OWNER, NOT A FIX:** the DATE of
+the PDF he was looking at, or the file itself. **OWNER PING — carried in the
+morning report.** ⚠️ **This is deliberately NOT closed on my own measurement.**
+An observation I cannot reproduce is not an observation I get to dismiss, and
+the whole reason this pass exists is that a session already refuted two
+confidently-argued mechanisms in this area on the same night.
+
+---
+
+#### PART (2) — THE POLICY. **REAL, MEASURED ON PRODUCTION, AND CURRENTLY
+MIS-STATING A BILLABLE LEVEL ON ONE SIGNED OPERATIVE RECORD.**
+
+> **A SIGNED GASTROENTEROLOGY *OPERATIVE NOTE* CARRIES E/M `99214` AND PRINTS IT
+> INTO EVERY EXPORT SURFACE TODAY.**
+
+That is one row, and it is exactly the state #123's reversal path names as
+forbidden — *"mis-states a billable level on an operative record."* It is not a
+theory and it is not latent.
+
+**THE POPULATION, EVERY BUCKET NAMED AND THE TOTAL RECONCILED:**
+
+| bucket | visits | `em` is a JSON **object** | **prints a level** |
+|---|---|---|---|
+| bound to an **OP-NOTE template** | 11 | 1 | **1** |
+| bound to another template | 4 | 1 | 1 |
+| **no template** | 30 | 8 | 8 |
+| **total** | **45** ✓ | **10** | **10** |
+
+45 reconciles against the F6.1 declaration's independently-captured baseline of
+**45** `transcribe_visits`. **The 8 and the 1 in the other buckets are the
+positive control**: a zero in the op-note row would have been distinguishable
+from a broken query, and it is not zero.
+
+⚠️ **AND MY FIRST TWO NUMBERS FOR THIS WERE WRONG — WITHDRAWN HERE RATHER THAN
+QUIETLY RE-RUN.** I first reported **27** visits *"with an em blob"* and
+**11 of 11** op-note visits carrying one. Both counted `"cptCodes"->'em' IS NOT
+NULL`, and **`->` returns a JSONB `null`, which is not SQL NULL** — so JSON
+nulls counted as present. The truth is **10** objects repo-wide and **1** on an
+op-note. It was caught because `jsonb_object_keys` **errored** on a scalar,
+which is the lucky failure this house already names: *ask what SHAPE the data is
+before asking how much of it there is.* A differently-wrong shape would have
+returned a plausible number and I would have shipped it into a declaration.
+
+**THE CRUX IS CONFIRMED FROM A SECOND DIRECTION, AND IT IS WORSE THAN THE ROW
+SAYS.** #123 argues a specialty-keyed predicate cannot separate an office visit
+from a colonoscopy. Production agrees — the op-note visits sit under
+**`bariatric-surgery`** and **`gastroenterology`**, both of which also hold
+office visits. ⚠️ **But the field that looks like it would express note shape
+already means something else:** `note_templates.encounterType` is **NULL on all
+9 production rows**, and `worker.ts:756` resolves templates with
+`encounterType: visit.specialty`. **It IS the specialty slot.** So the second
+axis cannot be hung on it, and a migration adding a column would still leave
+every existing row unclassified.
+
+**THE SHAPE IS LEGIBLE FROM THE TEMPLATE'S OWN SECTION LABELS — no migration,
+and it classifies the rows that already exist:**
+
+| template | section labels, in order |
+|---|---|
+| `Colonoscopy Operative Note` · `Operative Note` ×3 | `PROCEDURE` · `PREOPERATIVE DIAGNOSIS` · `POSTOPERATIVE FINDINGS` · `CONSENT` · `DESCRIPTION OF PROCEDURE` · `RECOMMENDATIONS` |
+| `Primary Care Chronic Disease Follow-up` | `CHIEF COMPLAINT` · `INTERVAL HISTORY` · `EXAM` · `IMPRESSION & PLAN` · `PATIENT INSTRUCTIONS` |
+
+⚠️ **AND THE TRAP IS ALREADY PRESENT IN THE DATA: one of the four op-note
+templates spells every label with a TRAILING COLON** (`PROCEDURE:`,
+`CONSENT:`, …). An exact-match classifier finds **3 of 4** and reports a
+confident, wrong answer. Normalise (trim · strip trailing `:` · upper) before
+comparing, and make the fourth template a fixture so the normalisation cannot
+be dropped later.
+
+**THE SWEEP SURFACE, BY THE PREDICATE — *"every site that decides whether an
+office E/M level applies to this visit"*, not by the symbol:** 11 production
+call sites of `emAppliesToSpecialty`.
+
+| layer | sites |
+|---|---|
+| **EXPORT** | `visit-export-server.ts:141` — ⚠️ **the single seam for EVERY export surface.** All of docx · pdf · clipboard · email · patient export · settings export-data · the sign route · the preview action reach it through `loadVisitExportData`, so the export half of F12 is **one line at the root**, not a per-route sweep |
+| **COMPUTE** | `worker/layers/04-generate-soap.ts:97` · `visits/[id]/page.tsx:585` |
+| **STORE** | `actions/soap.ts:189` · `api/…/em-score/apply-additions/route.ts:198` · `actions/rescore-em.ts:107` |
+| **GATE** | `sign-gates.ts:176` · `api/visits/[id]/sign/route.ts:331` · `api/…/em-score/override/route.ts:153` |
+| ⛔ **NOT THIS ONE** | `board/page.tsx:156` — `const isImaging = (s) => !emAppliesToSpecialty(s)`. **A DIFFERENT JOB wearing the same symbol.** An operative note is not an imaging report, and threading note-shape here would mis-label the board. *A deletion — or an addition — is scoped by what the site DOES, not by what it calls.* |
+
+**WHAT F12 STILL OWES, and none of it is guesswork any more:** the normalised
+shape classifier + its fixture, the second axis threaded through the ten sites
+that want it, the **attempt-proof in BOTH directions** (a GI office visit still
+SHOWS a level; the op-note shows none in-app, DOCX, PDF and every EHR format),
+a §2.5 carrying **ABSENCE** rows against the measured `1`, and the **mandatory
+adversarial pass**.
+
+⚠️ **AND THE DECLARATION'S HEADLINE NUMBER IS `1`, NOT `11`.** Writing `11` —
+the figure my own first query produced — would have made a presence check pass
+on a suppression that fired ten times too widely. **The positive arm (8 + 1
+office-side levels that MUST survive) is the row that catches it**, and it is
+the arm #123 says is the one that matters.
+
