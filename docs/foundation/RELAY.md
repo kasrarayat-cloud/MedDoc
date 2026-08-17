@@ -66,7 +66,7 @@ archive-loop one especially, which is a live hazard rather than a polish task.**
 
 | # | Item | Why it is real |
 |---|---|---|
-| F6.1 | **Patient-summary line breaks are lost in the DOCX** | a genuine fidelity bug on the same class #112 fixed for numbers — the export changes what the note says |
+| ~~F6.1~~ | ✅ **FIXED AND GATED — 2026-08-17, session 02 of run `20260817-033820-b2`.** `freeTextRuns` in `docx-generator.ts`; **four** free-text sites render through it. 15 arms, **11 of 11 mutations reddened**, plus a RENDERED differential through the real LibreOffice. See the ledger row below. ⚠️ **THE ROW WAS NARROWER THAN THE DEFECT IN THE DIRECTION THAT MATTERS.** It says *"in the DOCX"*; since F3 the pre-sign preview, the signed preview, the Word download and the PDF download all converge on `generateVisitDocx`, so **one flattening reached FOUR surfaces** — while `ehr-formatters.ts:423` kept the breaks, so the EHR clipboard and the signed document disagreed about what the note said. ⚠️ **And it was not "patient-summary" only**: referral `reason`, referral `relevant_history` and modifier `rationale` flatten identically (0 prod rows carry a break there TODAY, against live controls of 13 and 14 — latent, not absent). **Measured: 43 of 43** prod visits with a non-empty `patientSummary` satisfy the defect's own predicate. *Previous wording:* **Patient-summary line breaks are lost in the DOCX** — a genuine fidelity bug on the same class #112 fixed for numbers |
 | F6.2 | **`CLINICAL NOTE` heading renders on an EMPTY note** | a heading over nothing is a document asserting content it does not have |
 | ~~F6.3~~ | ✅ **BOUNDED — built and gated 2026-08-17, session 01 of run `20260817-033820-b2`.** `archive-pdf-budget.ts`; both archive routes render THROUGH it. 35 arms, **11 of 11 mutations reddened**. See the ledger row below. ⚠️ **The refutation pass found a defect in the FIX**: the first draft charged elapsed wall-clock, which the audio downloads in the same loop would have consumed — truncating the archives of exactly the doctors with the most recordings, while the sidecar sat idle. It charges sidecar-time now, and M11 re-plants the original defect to prove the gate sees it. *Previous wording:* ⚠️ **The archive loop is UNBOUNDED against a single strictly-serializing sidecar** — **measured: a 0.42s staircase**, and `maxDuration` is **INERT on a standalone build** — so nothing bounds it. Real hazard, own item, not a tail |
 | F6.4 | **`export-cleanliness`'s markdown detector is now VACUOUS** | a green that cannot go red — the ratchet class this house names on sight |
@@ -122,6 +122,150 @@ is effective for the next deploy and no §2.5 declaration is owed.
 row CLAIMS and asks GitHub which commit each belongs to — the only direction
 that can catch a substitution. Verifying without it would have proved the
 commit is green while saying nothing about whether these four ids are its runs.
+
+---
+
+### ✅ F6.1 — THE AUTHORED LINE BREAK REACHES THE DOCUMENT — **2026-08-17, session 02**
+
+**A literal `\n` inside `<w:t>` is not a line break in OOXML.** Word collapses it
+to a space, so every single break the author wrote inside free text was silently
+flattened. Measured before the fix: **`<w:br/>` count 0**, both lines sharing one
+`<w:t xml:space="preserve">`. ⚠️ **The attribute says `preserve` and the bytes
+really do carry the `\n`** — it is the RENDERER that drops it, which is exactly
+why reading the XML "looked fine" and why this needed a reproduction rather than
+a reading.
+
+⚠️ **THE POPULATION IS THE UNIVERSAL CASE, NOT AN EDGE.** Measured against
+production by the defect's OWN predicate — split on `/\n\n+/` as the renderer
+does, then ask whether any resulting block still holds a `\n`:
+
+| the question | the answer |
+|---|---|
+| prod visits with a non-empty `patientSummary` | **43** |
+| …of those, satisfying the defect's own predicate | **43 of 43** |
+
+⚠️ **AND IT WAS NEVER DOCX-ONLY, THOUGH THIS ROW SAID "in the DOCX".** Since F3
+the pre-sign preview, the signed preview, the Word download and the PDF download
+all converge on `generateVisitDocx` (`visit-pdf.ts`), so one flattening reached
+**four** surfaces. Meanwhile `ehr-formatters.ts:423` passes
+`patientSummary.trim()` into the EHR clipboard as plain text, where `\n` survives
+natively — **so the clipboard and the signed document disagreed about what the
+note said.** The row was narrower than the defect, which is the F6-table warning
+(*"CONFIRMED is not enough on its own"*) landing in the direction that matters:
+more surfaces, not fewer.
+
+**THE FIX** is a shared helper, `freeTextRuns`, and the placement is the point —
+a per-caller list is kept complete by hand and hand-kept lists are wrong
+eventually, so the behaviour lives where a future free-text field inherits it.
+**It is a no-op for text with no break** (one run, no `break` key), asserted,
+because a fidelity fix that also restyles every unaffected document is a bigger
+change than anybody reviewed.
+
+**THE ENUMERATION, worked entry by entry** — scoped from the CODE, not from the
+row:
+
+| site | disposition | evidence |
+|---|---|---|
+| `patientSummary` blocks | **FIXED** | 43 of 43 prod rows |
+| `referral.reason` | **FIXED** | 0 of 13 prod rows today — the code flattens |
+| `referral.relevant_history` | **FIXED** | 0 of 13 today — the code flattens |
+| `modifier.rationale` | **FIXED** | 0 of 14 today — the code flattens |
+| SOAP body | n/a — **already CORRECT** | splits per line into Paragraphs; asserted as a CONTROL so nobody "fixes" the surface that was right |
+| form signature lines | n/a | already emitted one per line |
+| ICD / procedure / E&M description | n/a | registry values, single line |
+| `prescriptionOneLine` | n/a | composed here, single line |
+| header fields + patient info bar | n/a | `metaRows`; sources are a trimmed name, a formatted date, a regex-extracted surgeon, or blank |
+| attestation + draft footer | n/a | composed, single line |
+
+⚠️ **THE ZEROES CARRY THEIR CONTROLS** — 13 referral rows and 14 modifier rows
+exist, so those zeroes distinguish *"no newlines"* from *"query broken"*.
+⚠️ **`chiefComplaint` IS CLASSIFIED BY READING THE CODE, NOT BY ITS ZERO: 0
+production visits have a non-empty one at all**, so that control is VACUOUS and
+proves nothing. Said out loud rather than counted as a pass.
+
+**THE TWIN RENDERER WAS ALREADY RIGHT, AND THAT IS THE INTERESTING HALF.**
+`note-template-docx/renderer.ts:955-961` splits on `\r\n|\r|\n|\t` and emits
+`<w:br/>` / `<w:tab/>`. The house already held the correct implementation in one
+module while the styled generator flattened. **This is the numbering case
+inverted** — there the surface believed correct was the broken one; here a
+genuinely correct implementation sat one directory away and nothing compared
+them.
+
+**GATE** — `gate-f6-1-free-text-line-breaks.test.ts`, **15 arms** over three
+independently-failing claims: **(A)** the break survives, per field, asserting
+separate runs **AND** a real `<w:br/>` between them; **(B)** break-free text is
+unchanged, paragraph splits stay paragraphs, `\r\n`/`\r` are handled, and an
+authored blank line survives; **(C)** the treatment is wired — a census diffed
+against the enumeration, with positive and negative traversal controls.
+
+**11 of 11 MUTATIONS REDDENED**, each asserting it applied, backed up to scratch
+rather than restored from git, byte-identical afterwards. **Five are PARTIAL
+applications** — one field reverted at a time, plus the half-landed indent —
+because the failure that ships is the first edit a tired author lands, not the
+complete inverse.
+
+⚠️ **M7 IS THE ONE WORTH NAMING:** runs split correctly but **no `<w:br/>`
+emitted**. Two predicates agree while the page renders one continuous line — the
+same wrong output by a different route, and the reason claim A asserts the BREAK
+and not merely the split.
+
+**AND THE STRUCTURAL GUARD IS NOT THE WHOLE PROOF.** `<w:br/>` is the correct
+OOXML primitive, but *"correct primitive"* is a claim about a SPEC and what F6.1
+promises a doctor is a claim about a RENDERER — the proxy #117(e) removed for the
+footer. `src/lib/__rendered__/gate-f6-1-line-breaks-rendered.test.ts` runs it
+through the real Gotenberg/LibreOffice in the `e2e` tier, and it is a
+**DIFFERENTIAL**: two documents differing only in whether a break was authored
+must render DIFFERENTLY, so an extractor that cannot tell them apart fails the
+CONTROL instead of passing the proof.
+
+#### WHAT THIS DOES **NOT** CLAIM
+
+- **A new free-text field that never calls the helper is invisible to the
+  census.** Claim C counts CALL SITES; a bare `new TextRun({ text: … })` added
+  tomorrow is not seen, and claim A only knows the four fields named above. The
+  honest limit, and the reason the behaviour lives on the helper.
+- **`nativePdfExport` short-circuits ahead of `generateVisitDocx`** for a
+  CERTIFIED flat-PDF template. Production holds **0** certifications, so no live
+  row takes that path today.
+- **The rendered arm proves LIBREOFFICE, not Word.** The structural arm is what
+  covers the `.docx` a doctor opens in Word.
+- **A TRAILING authored newline now produces a trailing break.** `patientSummary`
+  is `.trim()`ed as a whole so it cannot occur there; a referral `reason` is not
+  trimmed, so `"reason\n"` gains a blank line where it previously rendered a
+  trailing space. **0 prod rows carry any `\n` in that field**, and the
+  alternative — trimming — would silently drop authored content, which is the
+  exact thing F6.1 fixes. **Left faithful, named rather than discovered.**
+- **The adversarial pass was SINGLE-LENS.** This session cannot spawn subagents,
+  so it is not the distinct-context form the canon requires — the same limit F4's
+  session recorded. It is weaker than four lenses and it is not nothing: it found
+  the vacuous census arm, the contaminated suite delta, and M4's build-break.
+
+#### ⚠️ THREE THINGS CAUGHT IN MY OWN WORK, ALL BY CONTROLS RATHER THAN RE-READING
+
+1. **THE CENSUS ARM PASSED VACUOUSLY ON ITS FIRST RUN.** A **backtick** in a
+   `git grep` pattern opened a command substitution in `/bin/sh`; the shell died
+   with `EOF in backquote substitution`, `gitGrep` swallowed the non-zero exit as
+   *"no matches"*, and the arm asserted over an EMPTY list. **The shell printed
+   its complaint beside the passing run** — 14 green and an error message in the
+   same output, which is the *"a proof's output is read as a whole"* rule. This
+   is AGENTS.md's **"prose is never a shell argument"** arriving inside a test;
+   rewritten to read the file directly, positive control first.
+2. **THE SUITE DELTA WAS CONTAMINATED BY MY OWN SCRATCH.** The branch read
+   **+3 files / +19 tests** against the control when I had added **ONE** test
+   file. It reconciles exactly as 1 gate (14) + 2 scratch probes (5) — vitest
+   picked the dotfile probes up, which I had assumed it skipped because naming
+   one explicitly had been necessary earlier. Removed via `git clean -f -x`
+   (`rm` is denied) and re-measured: **+1 file, +14 tests**, exactly the new arms.
+   ⚠️ **The 16-failed-file worktree react-alias artifact is IDENTICAL on branch
+   and on a detached `origin/main` control** — the exclusion confirmed
+   empirically, not by argument. *(AGENTS.md still records this artifact as 15
+   files; measured 16 on both trees today, independently confirming session 01's
+   finding that the figure is stale.)*
+3. **M4's FIRST FORM WAS `RED(build)`, NOT A BEHAVIOURAL RED.** It replaced an
+   opening line and left mismatched brackets, so the file stopped compiling. **A
+   build break is a weaker claim** — it proves the compile noticed, not that the
+   GATE saw the defect. Re-anchored on the whole block; it now reddens
+   behaviourally.
 
 ---
 
