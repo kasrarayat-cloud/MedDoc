@@ -339,7 +339,28 @@ describe('F6.3 (B) — the default bound does NOT truncate a real archive', () =
   // length — recorded because that conflation is what the constant would
   // otherwise have been sized against.
   const LARGEST_ARCHIVE_ON_PROD = 18;
-  /** Measured sidecar cost per conversion — the 0.42s staircase. */
+
+  /** Per-conversion sidecar cost.
+   *
+   * ⚠️ **INHERITED, NOT RE-MEASURED HERE — and the distinction is load-bearing
+   * for exactly one claim.** The 0.42s staircase was measured on 2026-08-16
+   * and recorded in `RELAY.md`; this session did not reproduce it. A faithful
+   * reproduction needs a REAL visit render, and the cheap substitutes — a DOCX
+   * synthesized in a container, a trivial fixture — would have produced a
+   * measured-LOOKING number for a document nobody exports.
+   *
+   * **What depends on it:** the headroom arm below, and therefore the claim
+   * that an 18-visit archive fits. If the true cost is above ~3.3s per render,
+   * an 18-visit archive WOULD be truncated by the default budget.
+   *
+   * **What does NOT depend on it:** the safety property. Whatever a render
+   * costs, one archive can never occupy the sidecar for more than
+   * `ARCHIVE_PDF_BUDGET_MS`. That bound is absolute and needs no estimate.
+   *
+   * **What would falsify it:** a production archive emitting
+   * `signed.pdf.UNAVAILABLE.txt` with reason `budget_exhausted`. That is the
+   * observable, it is NAMED rather than silent, and it means this constant is
+   * wrong — re-measure before widening the budget. */
   const MEASURED_RENDER_MS = 420;
 
   it(`admits all ${LARGEST_ARCHIVE_ON_PROD} visits of the largest archive on production`, async () => {

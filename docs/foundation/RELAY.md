@@ -127,6 +127,12 @@ commit is green while saying nothing about whether these four ids are its runs.
 
 ### ✅ F6.3 — THE ARCHIVE LOOP IS BOUNDED — **2026-08-17, session 01**
 
+> **Ruling #122 (PROVISIONAL, loop) records the TRUNCATION POLICY** — what a
+> doctor gets when the bound engages, the three alternatives rejected, and why
+> the note must not reuse `unavailableNote`. A bound implies a truncation
+> policy, and that half is product-shaped rather than mechanical, so it is a
+> ruling rather than an implicit constant.
+
 **The defect, both halves confirmed before a line was written.** The two archive
 routes (`GET /api/settings/export-data`, `GET /api/patients/[id]/export`) looped
 `renderVisitPdf` once per SIGNED visit against the Gotenberg sidecar — **one
@@ -180,6 +186,25 @@ download stops consuming sidecar slots. RELAY's own finding named this
 and buys nothing the budget does not: the hazard is measured in sidecar-SECONDS,
 so a count cap would add a second way to truncate a doctor's archive while
 bounding nothing the clock does not already bound.
+
+⚠️ **THE 0.42s PER-CONVERSION FIGURE IS INHERITED FROM 2026-08-16, NOT
+RE-MEASURED HERE — SAID PLAINLY BECAUSE THE SIZING RESTS ON IT.** A faithful
+reproduction needs a REAL visit render; the cheap substitutes available tonight
+(a DOCX synthesized inside a container, a trivial fixture) would have produced a
+measured-LOOKING number about a document nobody exports — the well-chosen-fixture
+trap pointed at a benchmark. `docker cp` of the blank tracked fixture into the QA
+sidecar was refused by the loop's permissions, and the QA sidecar is otherwise a
+faithful proxy (**identical image, identical `NanoCpus=1500000000`, identical
+1 GB cap** — verified).
+
+- **Depends on it:** the headroom claim, i.e. that an 18-visit archive fits.
+  Above ~3.3s per render it would not.
+- **Does NOT depend on it:** the safety property. Whatever a render costs, one
+  archive can never occupy the sidecar longer than `ARCHIVE_PDF_BUDGET_MS`.
+- **Falsified by:** a production archive emitting `signed.pdf.UNAVAILABLE.txt`
+  with reason `budget_exhausted`. NAMED, not silent — which is why shipping on
+  an inherited constant is acceptable here and would not be if the failure were
+  quiet.
 
 #### ⚠️ THE REFUTATION PASS FOUND A DEFECT IN THE FIX, AND IT WOULD HAVE HURT THE WORST-AFFECTED DOCTORS
 
