@@ -17495,3 +17495,51 @@ because a `git worktree` checks out the whole repo, `scripts/` included.
 worktree**. If one is refused, check the FORM against `settings.json` before
 concluding the capability is missing — the third recorded instance of a rule and
 its grant landing out of step.
+
+---
+
+## ⚠️ SESSION FINDING — THE QA STACK'S IMAGES ARE THREE DAYS STALE, AND THE STANDING CHECK CANNOT SEE IT — **2026-08-17, run `20260817-231454` session 01**
+
+**AGENTS.md documents this class from B8 (2026-08-12) and it has recurred.**
+Recorded because the next session to plan a behavioural proof on QA would be
+reading a stale binary with a green check agreeing with it.
+
+| image | built |
+|---|---|
+| `meddoc-pro-transcribe-md:qa` | **2026-08-14 18:07Z** |
+| `meddoc-pro-db-migrate:qa` | **2026-08-14 18:06Z** |
+| `meddoc-pro-transcribe-md-worker:qa` | **2026-08-14 18:06Z** |
+
+Meanwhile `assert-migrations-applied --qa` reports **104 of 104 🟢** — correctly.
+**The database is current and the services are three days behind it**, which is
+precisely the drift that check was added to prevent and cannot detect.
+
+**PROVED BY A DISCRIMINATING SYMBOL, not by the date.** `pdf-generator.ts` is
+**PRESENT** in the QA worker — and F3 *retired* it, deployed to production
+`2026-08-16T04:02Z`. Its presence is F3's absence, stated as a measurement.
+
+⚠️ **AND MY FIRST PROBE WAS BROKEN, WHICH ITS OWN CONTROL CAUGHT.** Run against
+the QA **app** container it returned **three zeroes** — including the control
+(`ls …/template-twin/*.ts | wc -l`, which MUST be non-zero):
+
+```
+CONTROL ts files (must be >0):  0     <- the finding
+F5-a symbol:                    0
+pdf-generator.ts:               0
+```
+
+The app image ships a **BUILT** Next application, not a source tree, so no
+source path resolves and every needle returns 0. **Read as three results that is
+"QA is missing everything"; read as one it is a probe that is not measuring.**
+Re-run against the **worker**, which ships source, the control reads **23** and
+the real answers appear. *AGENTS.md's own "two zeroes with opposite meanings is
+ONE broken instrument" — the diagnostic working on its own author.*
+
+**So QA cannot exercise F3, F5-a, F5-b, F12, F14 or anything since.** Not a
+defect in anyone's branch; the app and worker images are simply not rebuilt when
+migrations are applied, and `db-migrate:qa` is.
+
+**Not acted on**, deliberately: rebuilding the QA stack is not this item and
+would consume a session. Filed so it is a lookup rather than a rediscovery, and
+so that *"proved on QA"* is not written by the next session without checking the
+image first.
