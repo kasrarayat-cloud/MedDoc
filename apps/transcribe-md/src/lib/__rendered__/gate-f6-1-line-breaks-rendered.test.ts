@@ -107,8 +107,17 @@ async function renderedLines(
   const docx = await generateVisitDocx(data(over));
   const pdf = await convert(new Uint8Array(docx), `${label}.docx`);
   const doc = await getDocumentProxy(pdf);
-  const { text } = await extractText(doc, { mergePages: true });
-  return String(text)
+  // ⚠️ `mergePages: false` AND THE ARRAY GUARD, BOTH DELIBERATE. `extractText`'s
+  // return shape is not fixed — the sibling #117(e) proof guards it the same
+  // way. With `mergePages: true` a returned ARRAY would be coerced by
+  // `String(...)` into a COMMA-joined string, silently destroying the very
+  // newlines this differential measures: the control and the positive arm would
+  // then agree, and the proof would pass having measured nothing. Ask what
+  // SHAPE the data is before asking what it contains.
+  const { text } = await extractText(doc, { mergePages: false });
+  const pages = Array.isArray(text) ? text : [String(text)];
+  return pages
+    .join('\n')
     .split('\n')
     .map((l) => l.replace(/\s+/g, ' ').trim())
     .filter(Boolean);
