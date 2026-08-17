@@ -146,3 +146,68 @@ export function decideAutoConfirm(c: AutoConfirmCandidate): AutoConfirmDecision 
 
   return { confirm: true, provenance: 'model', reason: null };
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * THE PLANNER. Kept in this module BECAUSE IT IS PURE and this module imports
+ * nothing — so it is testable without dragging next-auth, and by extension the
+ * whole Next runtime, into a unit test. The audit writer lives next door in
+ * auto-certify.ts, which does the I/O.
+ * ────────────────────────────────────────────────────────────────────────── */
+import type { TemplateTwinWorkspace } from './client-types';
+import type { SemanticMapping } from './ir';
+
+export interface AutoConfirmOutcome {
+  /** The mapping set to persist. */
+  mappings: SemanticMapping[];
+  /** Fields the engine declined, with the reason, for the needs-review banner. */
+  declined: Array<{ label: string; reason: string }>;
+  /** provenance -> count. Recorded on the audit row and in the log line. */
+  provenanceCounts: Record<AutoConfirmProvenance, number>;
+}
+
+/**
+ * PURE. Decide the whole mapping set. No I/O, so it is testable against a real
+ * workspace shape without a database.
+ *
+ * ⚠️ IT MIRRORS `confirmed()` FROM THE MANUAL SCREEN RATHER THAN INVENTING A
+ * SECOND SHAPE. Two writers producing "a confirmed mapping" differently is how
+ * the manual and automatic paths drift until only one of them satisfies
+ * MAPPINGS_NOT_READY. Same two demands: a concept except for manual, and
+ * status 'certified'.
+ */
+export function planAutoConfirm(workspace: TemplateTwinWorkspace): AutoConfirmOutcome {
+  const declined: AutoConfirmOutcome['declined'] = [];
+  const provenanceCounts: Record<AutoConfirmProvenance, number> = {
+    structural: 0,
+    model: 0,
+    manual: 0,
+  };
+
+  const mappings = workspace.fields.map(({ field, mapping }) => {
+    const decision = decideAutoConfirm({
+      originalLabel: field.originalLabel ?? null,
+      criticality: field.criticality ?? null,
+      sourceType: mapping.sourceType ?? null,
+      hasClinicalConcept: Boolean(mapping.clinicalConcept),
+    });
+
+    if (!decision.confirm) {
+      declined.push({
+        label: field.originalLabel ?? '(unnamed field)',
+        reason: decision.reason ?? 'this field could not be confirmed automatically',
+      });
+      return mapping;
+    }
+
+    if (decision.provenance) provenanceCounts[decision.provenance] += 1;
+    // ⚠️ THE CONCEPT IS NOT REWRITTEN, AND THAT IS THE POINT. `confirmed()` on the
+    // manual screen takes a concept because the DOCTOR may be changing it there.
+    // Auto-confirm changes nothing about meaning — it accepts the proposal as
+    // proposed. The spread carries `clinicalConcept` through untouched.
+    // (An earlier draft had a ternary here whose branches were identical: it
+    // looked deliberate and did nothing.)
+    return { ...mapping, status: 'certified' as const };
+  });
+
+  return { mappings, declined, provenanceCounts };
+}
