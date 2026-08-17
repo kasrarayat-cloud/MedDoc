@@ -1433,6 +1433,47 @@ an EXCLUSION list instead of an inclusion one, and it is the more dangerous
 direction: an exclusion that goes stale removes coverage silently, and the gate
 keeps reporting zero.
 
+### ⚠️ SO WRITE THE EXEMPTION WITH ITS RETIREMENT CONDITION IN THE SAME SENTENCE
+
+**Standing 2026-08-17. The constructive half of the entry above — that one says
+how exemptions rot; this one says how to stop it.**
+
+> **An exemption is written WITH the condition that retires it, in the same
+> sentence. Then checking whether it still applies is a LOOKUP, not a
+> judgement — and a lookup is something a tired session at 03:00 actually
+> performs.**
+
+The entry above prescribes *re-read the justification by hand whenever the code
+it describes is touched.* True, and it depends on somebody noticing the code was
+touched. **A named retirement condition does not:** it turns an open question
+into a closed one anybody can answer without reconstructing the reasoning.
+
+⚠️ **REFERENCE CASE — A CLEAN DEATH, WHICH IS WHY IT IS WORTH RECORDING.** A
+§2.5 carry-forward exemption was written *"it may live in the shared tree
+because it can only be named after a post-merge sha — **and it retires WITH
+F10**"*. **F10 shipped under nine hours later** (`c0ee3994`); the gate began
+resolving declarations by ancestry; the forcing condition vanished; and the
+exemption was **deleted before it ever landed.** The rule that replaced it is
+SHORTER than the exemption was.
+
+⚠️ **THE COUNTERFACTUAL IS THE ARGUMENT.** That exemption was **RATIFIED,
+correct when written, and one mechanical landing away.** A ratified staged file
+reads as settled and nothing in the landing would have questioned it. Had the
+retirement condition been a rationale PARAGRAPH instead of a CLAUSE, it would
+have shipped and become permanent — not by anyone's error, but because **no step
+exists whose job is to ask "is this exemption still true?"**
+
+**Two habits follow, and the second is the cheaper one:**
+
+1. **Name the retirement condition as a TESTABLE EVENT** — an item id, a flag, a
+   migration, a shipped fix. *"Until we have time"* and *"for now"* are not
+   conditions; they never become false.
+2. **RE-READ YOUR OWN STAGED AND UNLANDED WORK AGAINST WHAT SHIPPED WHILE IT
+   WAITED.** Anything held for a window is evidence about a tree that has since
+   moved — *"evidence is only evidence on the tree it describes"*, applied to
+   your own drafts. This one was caught by a routine status check reading a
+   merge and asking what it invalidated.
+
 ## AN EXTERNAL REACH IN THE BUILD IS REMOVED, NOT RETRIED
 
 **The image build has reached outside this repository exactly twice, and both
