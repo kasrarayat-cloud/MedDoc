@@ -17142,3 +17142,241 @@ string from the short `79ddd855` instead of reading it, and
 bare "not cited". That is F14's exist-check guard discriminating on its second
 recorded outing, and it is the reason the canon insists the two failures must not
 share an exit code. Re-run from `git rev-parse`: **4 of 4, all `a1`.**
+
+---
+
+## 🔴 F16 — THE CERTIFY REFUSAL IS AUDIBLE BUT UNACTIONABLE, AND A REAL PHYSICIAN HIT IT TWICE — **FILED 2026-08-17, run `20260817-231454` session 01**
+
+**This is #713's class one surface deeper, found in the audit trail while
+capturing F15's §2.5 baseline. Nothing went looking for it.**
+
+#713 fixed *the miss is SILENT*. This is *the refusal SPEAKS and does not name
+the remaining work* — and it is the last thing standing between production and
+its first certified twin.
+
+### THE EVIDENCE — one real physician's session, from `audit_logs`, read-only
+
+| time (UTC, 2026-08-17) | action | success |
+|---|---|---|
+| `17:34:34` | `LOGIN_SUCCESS` | ✅ |
+| `17:37:29` | `VIEWED_SETTINGS` | ✅ |
+| `17:39:17` | `TEMPLATE_TWIN_SOURCE_UPLOADED` + `TEMPLATE_TWIN_COMPILED` | ✅ |
+| `17:41:36` | `TM_PATIENT_CREATED` | ✅ |
+| `17:41:55` | `VISIT_CREATED` | ✅ |
+| `17:44:10` | `CODING_COACH_REJECTED_INVALID_ICD` — 3 codes dropped | ❌ |
+| `17:44:30` | `VISIT_SIGNED` | ✅ |
+| `17:44:31` | `EXPORT_PDF_DOWNLOADED` + `EXPORT_DOCX_DOWNLOADED` | ✅ |
+| `18:09:50` | `VIEWED_SETTINGS` — **they came back** | ✅ |
+| `18:10:42` → `18:11:33` | `TEMPLATE_TWIN_MAPPING_UPDATED` ×2 — **74 mappings confirmed** | ✅ |
+| **`18:11:38`** | **`TEMPLATE_TWIN_CERTIFY_FAILED`** | ❌ |
+| **`18:11:52`** | **`TEMPLATE_TWIN_CERTIFY_FAILED`** — **they tried again, 14s later** | ❌ |
+
+**Both failures carry the identical AUDIT payload:**
+
+```json
+{ "code": "MAPPINGS_NOT_READY",
+  "stage": "certifyNativeTemplateAction",
+  "message": "Every field needs a physician-confirmed mapping before testing.",
+  "errorClass": "TemplateTwinSyntheticTestError" }
+```
+
+⚠️ **THAT MESSAGE GOES TO THE AUDIT ROW. THE PHYSICIAN NEVER SAW IT — AND MY
+FIRST DRAFT OF THIS ROW SAID THEY DID.** Corrected before it shipped by reading
+`actions/template-twin-certify.ts` instead of trusting the audit metadata to be
+what reached the screen. **The useful sentence is written to US; the doctor got a
+different one.**
+
+### THE MECHANISM, NAMED FROM THE CODE
+
+`certifyNativeTemplateAction` has an **expected-refusal ladder** at
+`template-twin-certify.ts:221-238`, and both of its arms are exemplary — each
+names the cure in plain English, with no field labels:
+
+| code | what the doctor is told |
+|---|---|
+| `CONFLICT` | *"This template changed since you reviewed it. Reload and review again before certifying."* |
+| `CERTIFICATION_BLOCKED` | *"This template can't be certified — it has elements that can't be safely reproduced. Simplify it in Word and re-upload."* |
+
+**That ladder is typed on `TemplateTwinLifecycleError`.** `MAPPINGS_NOT_READY` is
+a **`TemplateTwinSyntheticTestError`**, so it misses the ladder entirely and
+falls through to the generic `catch` at `:240` — the branch whose own comment
+opens **"AN UNANTICIPATED THROW"** and which returns `reason: 'unexpected'`.
+
+**So what the physician actually saw was `:298`:**
+
+> *"Certification could not be completed (MAPPINGS_NOT_READY). This has been
+> recorded — it will not succeed on a retry until it is fixed."*
+
+### THE DEFECT, STATED PRECISELY
+
+⚠️ **THE GATE IS CORRECT AND MUST NOT BE WEAKENED.** It refused because **6 of
+80** fields were unconfirmed — the strict refusal AGENTS.md protects, *a
+certified twin that nobody confirmed is worse than no twin.* **F16 is not a
+request to lower the bar.**
+
+⚠️ **AND THE MESSAGE-WITHHOLDING IS CORRECT TOO, AND MUST SURVIVE THE FIX.** That
+branch deliberately sends the class and never the message, and its comment says
+why: *"never the message, which can quote the field labels of their own form."*
+The customer's template is theirs. **Any fix that closes F16 by leaking
+`err.message` to the UI has traded one defect for a worse one.**
+
+**The defect is that a DESIGNED refusal is being reported as an ENGINEERING
+FAULT.** *"This has been recorded — it will not succeed on a retry until it is
+fixed"* tells a doctor that nothing they do will help and someone else must
+repair something. The truth is the exact opposite: the thing needing "fixing" is
+**six confirmations they could finish in a minute**. They are handed a raw error
+code, no count, and no route — and the sentence actively discourages the one
+action that would work.
+
+**They pressed the button twice, fourteen seconds apart, and stopped.** That is
+what a person does when told a retry cannot succeed.
+
+**THE SIX, all `single_select` — the WM IOV form's dropdown family:**
+
+| `fieldId` | source | concept |
+|---|---|---|
+| `ttf_5d84f80e2fec3d0085ad6b33` | manual | — |
+| `ttf_7e45028e2b601ba0e4b0bd5c` | manual | — |
+| `ttf_b4e30cd696689beb73b7fc63` | manual | — |
+| `ttf_e3e4a4d7ecc6ecde78991e57` | manual | — |
+| `ttf_c884422f3a745f4eaa53c22d` | manual | `test.name` |
+| `ttf_d2072b8e42b4a2def61e62a1` | verified_note_selection | `exam.vascular` |
+
+### DONE WHEN
+
+- **`MAPPINGS_NOT_READY` gets its own arm on the EXPECTED-refusal ladder**, beside
+  `CONFLICT` and `CERTIFICATION_BLOCKED`, rather than falling to the
+  unanticipated-throw branch. The pattern already exists in this file; the fix is
+  to join it, not to invent one.
+- The refusal names the **COUNT** (*"6 of 80 fields still need confirming"*) and
+  **ROUTES** to them — filter, anchor or list. The gate's predicate does not
+  move by a single field.
+- ⚠️ **The count is DERIVED and carries NO field labels.** Both constraints at
+  once: a number computed from the mappings, and nothing quoting the customer's
+  form. The `:240` branch's withholding rule stays exactly as strict.
+- **Both directions attempt-proved**: 6 unconfirmed → refusal names 6 and routes;
+  0 unconfirmed → certification proceeds. ⚠️ **The second arm is the one that is
+  usually skipped and the one `retire-branch.sh` proved you cannot skip** — a
+  guard proven only in the RED direction is half-proven.
+- ⚠️ **A non-vacuity arm**: the count must be *derived*, not a constant. A
+  message hard-coding *"6"* passes the first arm and is wrong the moment a
+  seventh field appears.
+- The mandatory **adversarial pass** — this is a clinical-adjacent surface on the
+  pilot path.
+
+### WHAT F16 DOES NOT CLAIM
+
+- **Not that certification would succeed if the message were better.** Six fields
+  still need a human decision; F16 buys the physician the ability to *find* them.
+- **Not that the UI is silent.** It is not — `TEMPLATE_TWIN_CERTIFY_FAILED` is
+  audited and a sentence does reach the screen. The failure is *what that
+  sentence says*, not its absence. **#713 was the absence case; this is not.**
+- **Not that the audit trail failed.** It worked perfectly, and it is the only
+  reason any of this is knowable. Everything above was reconstructed from
+  `audit_logs` **read-only**, on a real physician's session, with no clinical
+  content read and nothing mutated.
+- **Not measured on any other template.** One template, one physician, two
+  attempts.
+
+---
+
+## 🔴 F17 — FOUR NON-BILLABLE ICD-10 HEADERS ARE ON THE ACCEPTED SIDE OF THE BILLING FLOOR, AND THE FILE PROVES IT KNEW BETTER EIGHT LINES ABOVE — **FILED 2026-08-17, run `20260817-231454` session 01**
+
+**AGENTS.md's over-permission section, arriving in the vein practice.** Same
+class as the GI cohort's `K21.0` / `K22.7`, four instances instead of two, on the
+specialty the pilot doctor actually bills.
+
+### MEASURED THROUGH THE STRUCTURE, NOT THE FILE TEXT
+
+*Text presence is not membership.* Asserted via `isValidIcd10()` with controls
+(`ICD10_ALLOWLIST.size = 604`, `isValidIcd10('I10') = true`,
+`isValidIcd10('ZZZ.9') = false`, so the instrument discriminates):
+
+| | |
+|---|---|
+| `isValidIcd10('I87.30' \| '.31' \| '.32' \| '.33')` | **`true` ×4** — non-submittable headers **ADMITTED** |
+| `isValidIcd10('I87.301…I87.339')` — all **16** billable children | **`false` ×16** — the codes a chart maps to, **DROPPED** |
+
+⚠️ **AND PRODUCTION CORROBORATES IT — the model emits the CORRECT codes and they
+are the ones thrown away.** `CODING_COACH_REJECTED_INVALID_ICD` on real visits,
+**18 rejections in the `I87` family alone**: `I87.312` ×6, `I87.302` ×3,
+`I87.1` ×3, `I87.311` ×2, `I87.301` / `I87.391` / `I87.392` / `I87.393` ×1.
+**The four headers would have sailed through.**
+
+### ⚠️ THE COMMENTS ARE CLINICALLY WRONG, AND THAT IS HOW IT SURVIVED
+
+```
+'I87.30',    // Chronic venous hypertension (idiopathic) without complications of unspecified LE
+'I87.31',    // … right LE
+'I87.32',    // … left LE
+'I87.33',    // … bilateral LE
+```
+
+The author read `I87.30/.31/.32/.33` as **four lateralities**, by analogy with
+`I83.10/.11/.12` immediately above, where that analogy genuinely holds. **It does
+not hold one subcategory over.** They are four **complication states** —
+`.30` without complications · `.31` with ulcer · `.32` with inflammation ·
+`.33` with ulcer *and* inflammation — each requiring a fifth character for
+laterality. **So the line reading `… right LE` actually means `with ulcer`.**
+
+⚠️ **THE REPO'S OWN STANDARD IS STATED EIGHT LINES ABOVE, AND WAS APPLIED
+CORRECTLY THERE:**
+
+```
+// NOTE: the bare 5-char subcategory I83.81 is intentionally NOT allowlisted —
+// it is a non-billable category header whose billable children (…810/811/812/
+// 813) are below; a model that emits the bare code is correctly dropped.
+```
+
+**Right discipline, same block, same hand, one subcategory later — not applied.**
+This is *"the evidence was in the artifact I authored"* (the `K22.7` case) with
+the roles reversed: there the correct code was written in the comment, here the
+correct *rule* was.
+
+### ⚠️ WHAT IS **NOT** A DEFECT — READ THIS BEFORE "FIXING" THE OMISSIONS
+
+The file's header declares a deliberate posture:
+
+> *"A code that is real but missing from the allowlist gets dropped (false
+> negative) — clinically safer than letting hallucinated codes through."*
+
+So **131 code-drops across 61 real visits since 2026-06-15 are mostly the
+DESIGNED behaviour of a starter set**, not a bug, and must not be swept up into
+this item. ⚠️ **F17 is the OVER-PERMISSION half only** — the four codes on the
+**accepted** side that cannot be submitted. Widening coverage is a separate,
+larger scope question for the owner.
+
+⚠️ **AND ONE CANDIDATE FINDING OF MINE WAS REFUTED BY MEASUREMENT AND IS
+WITHDRAWN.** `K63.5` shows **10** production rejections and AGENTS.md records it
+as *added* by the GI cohort — which reads as a fix that never took. Measured: the
+last `K63.5` rejection is **`2026-08-14 02:20:05Z`**, and `K57.32`'s only
+rejection is the **same timestamp**. The GI cohort fix landed and **the
+rejections stop dead at it.** The GI cohort is working; reporting it as broken
+would have been a false alarm built on a true count.
+
+### DONE WHEN
+
+- The four headers are **REFUSED**, paired with an arm asserting their **billable
+  children ARE admitted** — *"refusing both would be a stricter floor and a worse
+  product"*, per the GI cohort's own precedent.
+- ⚠️ The **§2.5 declaration carries ABSENCE rows**: `isValidIcd10('I87.31')` must
+  read **`0`/false** in the shipped validator. *A presence-only declaration
+  cannot detect over-admission* — it passes just as happily on the broken
+  version.
+- The wrong comments are corrected in the same commit. **A comment that
+  misstates what a billing code means is the mechanism that produced this.**
+- Mutation-proved by **re-admitting a header** and watching the guard redden
+  naming it, per `icd10-allowlist-gastroenterology.test.ts`.
+- The `I87.39x` family (`I87.391/392/393/399`, *with other complications*) is
+  dispositioned explicitly — production emitted three of them — rather than left
+  unnamed.
+
+### ⚠️ WHY THIS WAS FILED AND NOT BUILT TONIGHT
+
+The **structure** of the defect is proved to the hilt. The **remedy** is a list
+of billable ICD-10 codes, and this host carries no authoritative CMS reference —
+the file's own header names `icd10cm_codes_2026.txt` as a *future* import that
+does not exist here. **Adjudicating billability from memory is precisely how
+`K22.7` got written**, and it is the one place where being wrong manufactures
+False Claims Act exposure rather than merely a bug. **An unverified step named
+honestly is worth more than a green tick bought with a guess.**
