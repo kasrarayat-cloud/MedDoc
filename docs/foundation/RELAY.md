@@ -68,7 +68,7 @@ archive-loop one especially, which is a live hazard rather than a polish task.**
 |---|---|---|
 | F6.1 | **Patient-summary line breaks are lost in the DOCX** | a genuine fidelity bug on the same class #112 fixed for numbers — the export changes what the note says |
 | F6.2 | **`CLINICAL NOTE` heading renders on an EMPTY note** | a heading over nothing is a document asserting content it does not have |
-| F6.3 | ⚠️ **The archive loop is UNBOUNDED against a single strictly-serializing sidecar** | **measured: a 0.42s staircase**, and `maxDuration` is **INERT on a standalone build** — so nothing bounds it. Real hazard, own item, not a tail |
+| ~~F6.3~~ | ✅ **BOUNDED — built and gated 2026-08-17, session 01 of run `20260817-033820-b2`.** `archive-pdf-budget.ts`; both archive routes render THROUGH it. 35 arms, **11 of 11 mutations reddened**. See the ledger row below. ⚠️ **The refutation pass found a defect in the FIX**: the first draft charged elapsed wall-clock, which the audio downloads in the same loop would have consumed — truncating the archives of exactly the doctors with the most recordings, while the sidecar sat idle. It charges sidecar-time now, and M11 re-plants the original defect to prove the gate sees it. *Previous wording:* ⚠️ **The archive loop is UNBOUNDED against a single strictly-serializing sidecar** — **measured: a 0.42s staircase**, and `maxDuration` is **INERT on a standalone build** — so nothing bounds it. Real hazard, own item, not a tail |
 | F6.4 | **`export-cleanliness`'s markdown detector is now VACUOUS** | a green that cannot go red — the ratchet class this house names on sight |
 | F6.5 | **`gate-r1`'s "BOTH sides" test asserts one side** | the title is wider than the measurement |
 | ~~F6.6~~ ✅ **CLOSED 2026-08-16 — VERIFIED FIXED, see the note under this table** | ~~**`check-cotenants.sh` watches FOUR hosts; MASTER.md STEP 0.6 names FIVE**~~ | `www.quillmd.com` is missing from its `EXPECTED` table — **my omission when I wrote it**. One line; rides the next small PR rather than waiting for F6 |
@@ -97,6 +97,285 @@ discriminates.
 field 2, so a wrapped reason is parsed as extra expected codes — that defect was
 introduced and caught while fixing this very row, and it made a healthy ingress
 report `floor 6, from 7 distinct expected` and exit 2.
+
+### ✅ F10 — THE CITATION ROW SESSION 06 COULD NOT LAND — **recorded 2026-08-17**
+
+Session 06 merged F10 and closed with *"F10's citation row is not yet committed
+to `RELAY.md` — that needs its own PR cycle and this is the run's last
+session."* It is owed to the ledger, so it is paid here.
+
+**F10 — a §2.5 declaration is committable BEFORE its deploy.** Merge
+`c0ee3994a6e022e81d5f4e8ab7a30fb5a1cd7ede` (PR #701).
+
+**Citation — 4 of 4, re-verified by `check-citation.sh --expect` at this
+session's STEP 0, not copied from the log:**
+   · `CI` 31989385930 a1
+   · `e2e` 31989386006 a1
+   · `a11y-ci` 31989385953 a1
+   · `secrets-scan` 31989385921 a1
+
+Every line `a1`, so nothing was re-run. **Not deployed, by design** — F9's
+precedent: the done-when is *on `main`, cited*; scripts run from the tree, so it
+is effective for the next deploy and no §2.5 declaration is owed.
+
+⚠️ **THE `--expect` ARM IS THE ONE THAT MATTERED HERE.** It takes the ids the
+row CLAIMS and asks GitHub which commit each belongs to — the only direction
+that can catch a substitution. Verifying without it would have proved the
+commit is green while saying nothing about whether these four ids are its runs.
+
+---
+
+### ✅ F6.3 — THE ARCHIVE LOOP IS BOUNDED — **2026-08-17, session 01**
+
+> **Ruling #122 (PROVISIONAL, loop) records the TRUNCATION POLICY** — what a
+> doctor gets when the bound engages, the three alternatives rejected, and why
+> the note must not reuse `unavailableNote`. A bound implies a truncation
+> policy, and that half is product-shaped rather than mechanical, so it is a
+> ruling rather than an implicit constant.
+
+**The defect, both halves confirmed before a line was written.** The two archive
+routes (`GET /api/settings/export-data`, `GET /api/patients/[id]/export`) looped
+`renderVisitPdf` once per SIGNED visit against the Gotenberg sidecar — **one
+instance, `cpus: '1.5'`** (`docker-compose.yml:499`), shared with every doctor's
+interactive preview and PDF download. Nothing bounded the loop. Both routes
+declared `export const maxDuration = 300` and both comments called it a cap;
+`next.config.ts:8` sets `output: 'standalone'`, so the directive is **inert** —
+a stated invariant nothing asserts, the §5.6 shape.
+
+**The symptom that made it a hazard rather than a tidy-up:** a doctor's PDF
+download 503s with *"the renderer is unavailable (timeout)"* — `convert.ts`'s
+12s `CONVERT_TIMEOUT_MS` firing — while the renderer is not unavailable at all.
+It is queued behind somebody else's ZIP, and the message is false about the
+system.
+
+#### ⚠️ THE LEDGER'S OWN NUMBER WAS WRONG, AND IT IS THE NUMBER THE FIX WOULD HAVE BEEN SIZED AGAINST
+
+The F6.3 row reasoned from *"~27 signed visits"*. Measured on production
+2026-08-17, read from the database rather than carried forward:
+
+| quantity | value |
+|---|---|
+| largest archive — **signed visits for one USER** | **18** |
+| largest archive — **signed visits for one PATIENT** | **7** |
+| total signed rows in the whole database | **27** |
+| total visit rows | 44 |
+
+**27 is the global total and is not any one archive's loop length.** Sizing a
+bound against it would have been sizing against a quantity no request can ever
+produce. This is AGENTS.md's *"a count carried forward from another session's
+report is a fabricated number"*, caught before it did damage rather than after.
+
+#### WHAT WAS BUILT
+
+`apps/transcribe-md/src/lib/archive-pdf-budget.ts` — **the behaviour lives on
+the shared helper, not on the two callers**, so a third archive route inherits
+it. Two arms, bounding two different things:
+
+- **YIELD (250ms) cures the COMMON case and drops nothing.** A gap between this
+  archive's submissions is precisely the window a strictly-serializing sidecar
+  can use to serve an interactive request.
+- **BUDGET (60s of sidecar time) bounds the WORST case.** Past it, remaining
+  visits are **NAMED** as unrendered, never silently absent — the same reasoning
+  rulings #113/#116 recorded for the render-failure case.
+
+Plus **cancellation**: the request signal is threaded in, so a cancelled
+download stops consuming sidecar slots. RELAY's own finding named this
+(*"Archive builders are detached and never check `req.signal`"*).
+
+**There is deliberately NO count cap.** A `take(N)` reads like the obvious bound
+and buys nothing the budget does not: the hazard is measured in sidecar-SECONDS,
+so a count cap would add a second way to truncate a doctor's archive while
+bounding nothing the clock does not already bound.
+
+⚠️ **THE 0.42s PER-CONVERSION FIGURE IS INHERITED FROM 2026-08-16, NOT
+RE-MEASURED HERE — SAID PLAINLY BECAUSE THE SIZING RESTS ON IT.** A faithful
+reproduction needs a REAL visit render; the cheap substitutes available tonight
+(a DOCX synthesized inside a container, a trivial fixture) would have produced a
+measured-LOOKING number about a document nobody exports — the well-chosen-fixture
+trap pointed at a benchmark. `docker cp` of the blank tracked fixture into the QA
+sidecar was refused by the loop's permissions, and the QA sidecar is otherwise a
+faithful proxy (**identical image, identical `NanoCpus=1500000000`, identical
+1 GB cap** — verified).
+
+- **Depends on it:** the headroom claim, i.e. that an 18-visit archive fits.
+  Above ~3.3s per render it would not.
+- **Does NOT depend on it:** the safety property. Whatever a render costs, one
+  archive can never occupy the sidecar longer than `ARCHIVE_PDF_BUDGET_MS`.
+- **Falsified by:** a production archive emitting `signed.pdf.UNAVAILABLE.txt`
+  with reason `budget_exhausted`. NAMED, not silent — which is why shipping on
+  an inherited constant is acceptable here and would not be if the failure were
+  quiet.
+
+#### ⚠️ THE REFUTATION PASS FOUND A DEFECT IN THE FIX, AND IT WOULD HAVE HURT THE WORST-AFFECTED DOCTORS
+
+The first draft charged **elapsed wall-clock since the archive started**. The
+same loop also loads each visit and downloads its audio — so a doctor with large
+recordings would have spent the entire budget on **downloads** and then had every
+remaining PDF skipped, **while the sidecar was idle the whole time**. The module
+header claimed it was "a conservative bound on sidecar occupancy"; it was a bound
+on something else.
+
+It now charges **time spent inside the render**. And **a FAILED render is charged
+too**, deliberately: a `convert.ts` timeout costs the sidecar its full 12s
+whether or not a PDF comes back, so charging only successes would let one archive
+hammer a wedged sidecar 18 × 12s — the exact starvation this bounds. Five
+timeouts now exhaust the budget and the archive stops asking.
+
+**M11 re-plants the original defect** so the gate is proved against it, not
+merely against the tidy inverse.
+
+#### THE GATE — `gate-f6-3-archive-render-bound.test.ts`, 35 arms
+
+Three claims that fail independently: **the bound works**, **the bound is not a
+trap**, **the bound is wired**.
+
+⚠️ **THE SECOND IS THE ARM PEOPLE SKIP.** A budget tightened until it engages
+would pass every red-direction arm while silently shortening a medical record.
+So the happy path is pinned against the **measured** population: all 18 visits
+of the largest archive on production must render under the DEFAULT constants,
+with a ≥3× headroom assertion beside it.
+
+**The wiring is a CENSUS, not a spot-check** — `EXPECTED_CALLERS` names all
+three production callers of `renderVisitPdf` and their classification, and the
+census is diffed against it, so a fourth caller reddens and forces a human to
+classify it. Each looped caller is asserted to create a budget, render THROUGH
+it, name a skip, thread the signal, and — the biconditional — to call
+`renderVisitPdf` **exactly once**, since a second unwrapped call would satisfy
+every other arm and be the original defect.
+
+**Mutation proof: 11 of 11 reddened**, each asserting it applied first, restore
+from SCRATCH backups (never git), files byte-identical afterwards, baseline
+35/35 restored.
+
+| # | mutation | shape |
+|---|---|---|
+| M1 | settings renders outside the budget | partial |
+| M2 | settings drops the skip silently | partial |
+| M3 | patients loses the cancel signal | partial |
+| M4 | **only the settings route was fixed** | partial |
+| M5 | budget tightened to 5s | **toward SUCCESS** |
+| M6 | no re-check after the yield | partial |
+| M7 | boundary `>=` → `>` | partial |
+| M8 | yields before the FIRST render | partial |
+| M9 | **a NEW unbounded looped caller appears** | future regression |
+| M10 | charges only SUCCESSFUL renders | partial |
+| M11 | **elapsed-time budget — the original defect** | regression |
+
+⚠️ **M9 WENT GREEN ON ITS FIRST RUN, AND THE HARNESS WAS THE THING AT FAULT.**
+It wrote a new unbounded caller, asserted *"applied: True"* because the file
+existed, and the census did not see it — **`git grep` reads TRACKED files, and
+the probe was never staged.** An unapplied mutation wearing an applied
+mutation's clothes: the edit landed in the wrong universe. The harness now
+stages the probe and its applied-check asks *"can the CENSUS see it"* rather
+than *"does the file exist"*. A real new route would be committed, so staging is
+what makes the arm ask the question it claims to ask.
+
+#### MEASUREMENTS, AND THE TREE THEY DESCRIBE
+
+- `tsc --noEmit` **0 errors**, and **proved to discriminate** — a planted type
+  error was caught. ⚠️ A dotfile-named probe was NOT caught (outside the include
+  glob), which is itself worth knowing before anyone trusts a dotfile probe.
+- Unit suite, **controlled delta** against a clean detached `origin/main`
+  worktree: control **298 files / 3818 passed**, branch **299 / 3853** —
+  **+1 file, +35 tests, +0 failures.** The `16 failed files | 1 failed test`
+  residue is present **identically on both** and is the known worktree
+  react-resolution artifact, not this branch. ⚠️ **AGENTS.md records that figure
+  as 15; it is 16 today** — an inherited count that has drifted, named here
+  rather than silently re-used.
+
+#### ⚠️ WHAT THIS DOES **NOT** CLAIM
+
+- **It does not make the sidecar FAIR.** Two archives running at once still
+  occupy it twice over. There is no cross-request admission control and no
+  priority for interactive renders. That is a separate item, filed below.
+- **The cancellation half's PRODUCTION semantics are inherited, not measured.**
+  The unit arms prove the budget responds to an aborted signal; they do not
+  prove Next fires that signal on client disconnect for a streamed response.
+  The evidence is a **shipped in-repo precedent** —
+  `api/admin/stream/activity/route.ts:122-124` uses `req.signal` for exactly
+  this on an SSE stream, and its comment asserts *"Client disconnected —
+  Next.js fires `req.signal.abort`"*; that route would be visibly broken if the
+  signal fired on handler return. **Watch for:** an archive whose PDFs are all
+  `UNAVAILABLE` with reason `client_disconnected`. That is the shape that would
+  falsify it, and the failure is NAMED rather than silent, which is why it was
+  judged shippable on inherited evidence.
+- **`maxDuration` is still inert on the other nine routes that declare it.**
+  Enumerated: `admin/stream/activity` 300 · `settings/export-data` 300 ·
+  `patients/[id]/export` 300 · `visits/[id]/dictation/upload` 120 ·
+  `visits/[id]/upload` 300 · `visits/[id]/export/docx` 60 ·
+  `visits/[id]/export/email` 60 · `visits/[id]/export/pdf` 60 ·
+  `visits/[id]/em-score{,/override,/apply-additions}` 30 ·
+  `visits/[id]/sign` 120. **Only the two archive routes were in F6.3's scope**
+  and only their comments were corrected; the rest bound short requests where
+  inertness is far less consequential. **The line is KEPT everywhere** — it is
+  correct wherever this is deployed serverlessly, and deleting it would silently
+  lower a real ceiling on such a host.
+
+---
+
+### 🔵 FINDINGS FROM F6.3's SESSION — filed, not fixed
+
+**F6.3-followup · THE SIDECAR IS BOUNDED BUT NOT FAIR.** F6.3 stops ONE archive
+monopolising the renderer. It does nothing about **two** archives at once, and
+nothing gives an interactive render priority over a bulk one. The honest state
+is *"no single archive can starve you; N archives still can"*. The cures are a
+cross-request admission gate or a second sidecar for bulk work, and both are
+their own item. **Do not read F6.3's green as fairness.**
+
+**F6.4 IS NARROWER THAN ITS ROW AND F6.3 DID NOT TOUCH IT.** Re-confirming the
+2026-08-16 re-verification rather than re-deriving it: the DOCX arm's
+tag-stripping maps every tag to a space, so `/(^|\n)#{1,6}\s/` can only match at
+index 0. **The HEADING arm cannot go red; the BOLD arm is still live.** Still
+open.
+
+**⚠️ THREE THINGS `MASTER.md` TELLS THE LOOP TO DO THAT THE LOOP CANNOT DO.**
+The `gh-runs.sh` finding (2026-08-16) said *"a script added to the CEREMONY is
+not added to the PERMISSIONS by the same commit"*. Three more, same class:
+
+| refused | consequence |
+|---|---|
+| `bash scripts/check-cotenants.sh` | **STEP 0.6's own script.** Worked around with the five separate `curl` calls the permissions table prescribes — same evidence, and the expected-status table in the script was NOT consulted, so a deliberate `410` had to be recognised from memory rather than from the check that encodes it |
+| `docker system df` | preflight Check 2 is unrunnable → recorded `cannot tell`, never a pass |
+| `rm` on a scratch file the session created | a `tsc` probe could not be removed by the obvious command. **`git clean -f -x -- <path>` IS granted and did the job** — worth knowing, because the alternative is leaving scratch in `src/` |
+
+**⚠️ F11 HAS A SECOND MEASURED OCCURRENCE, SAME CAUSE, INDEPENDENTLY HIT.**
+Session 06 measured it at ~40 minutes. This session paid it again, ~41 minutes,
+in the same shape: needing a second push mid-run, the pre-push hook **correctly**
+refused, and its own documented override —
+`DECLARE_CANCELLATION="…" git push` — is **refused by the loop's permission
+set**, because the compound `VAR=… command` form is not granted.
+
+⚠️ **THE COST IS NOT THE CYCLE, IT IS WHAT THE LOOP DOES INSTEAD.** The
+sanctioned action was cheap and correct: cancel four runs **three minutes old,
+all mine**, to fold the §2.5 declaration into the same PR and save a full
+41-minute gate. The loop cannot take it, so it waits — **and the alternative it
+CAN reach (`gh run cancel`) is a way of simulating the override through another
+door, which is exactly what session 06 declined to do and this session declines
+too.** A guard whose legitimate release valve is unreachable turns a declared,
+audited decision into an undeclared workaround for whoever is less careful.
+
+**OWNER ACTION:** grant the `DECLARE_CANCELLATION=… git push` form. Two
+occurrences, two sessions, same root cause, ~81 minutes between them.
+
+**⚠️ AND THE PREFLIGHT REPORT'S PATH IS A SEAM, MEASURED.** `MASTER.md` rules
+the report is written **into the worktree you are working in**. The loop **cannot
+write outside `/opt/meddoc-pro`**, so a worktree created anywhere else — the
+natural reading of *"an isolated worktree"* — **silently cannot receive it**; the
+first attempt here was refused. The working convention is a worktree at a
+**gitignored dot-path inside the repo** (`.f6-wt`, matching `.f[0-9]*-*`), which
+is writable AND invisible to `git status --porcelain`, so the launch guard stays
+satisfied. Session 06 used `.f10-wt`. **The convention exists and is written down
+nowhere** — it is written down here now.
+
+**⚠️ `journalctl -k` IS BLIND TO THIS USER AND ITS SILENCE READS AS AN
+ALL-CLEAR.** Preflight Check 5 returned no output, which looks exactly like
+*"no OOM kills in 24h"*. The control — asking the same tool a question it must
+be able to answer — returned `-- No entries --` plus a hint that this user is in
+neither `adm` nor `systemd-journal`. **A host with an OOM kill sixty seconds ago
+produces byte-identical output.** Recorded as `cannot tell`. The standing
+preflight skill should say so rather than leaving each session to rediscover it.
+
+---
 
 ### ✅ F5-b + F9 ARE LIVE IN PRODUCTION — **2026-08-16T21:29Z, session 05 — 16 of 16 JUDGED**
 
