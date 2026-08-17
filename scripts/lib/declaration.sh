@@ -156,7 +156,11 @@ declaration_resolve() {
 
   if [ "$ambiguous" = "yes" ]; then
     echo
-    echo "🔴 REFUSING — TWO declarations are equally near the shipped tree."
+    # ⚠️ "AT LEAST TWO", NOT "TWO". Three equidistant candidates would print two
+    # of them, and a refusal message that asserts a count it did not measure is
+    # the same defect as a check whose title is wider than what it computes.
+    # Both shown are real; there may be more.
+    echo "🔴 REFUSING — AT LEAST TWO declarations are equally near the shipped tree:"
     echo "     $best"
     echo "     $ambig_with"
     echo "   Both are ancestors of HEAD at distance $best_dist with no runtime change,"
