@@ -18431,3 +18431,148 @@ It is **4 of 4 green and merge-ready**. It is also a **RUNTIME** change, and not
 one row above could have detected a regression in it. **F10's resolver would have
 REFUSED this declaration had #719 landed first** — the mechanism working, not a
 constraint I remembered. **F16 needs its own §2.5 and its own deploy.**
+
+---
+
+## 🟡 F12-a — E/M IS SUPPRESSED ON PROCEDURE AND OPERATIVE NOTES — **BUILT 2026-08-18, run `20260818-080141-b1` session 01. NOT DEPLOYED.**
+
+**Ruling #123 part (2), and ruling #125 (PROVISIONAL) is why it ships without
+part (1).** Part (1) — the "legacy cream" E/M block — was **refuted by #123's
+own required recon**: no export builder paints it, and `EmLevelCard` was
+already hosted by R4b on 2026-08-14. It is **F12-b**, PARKED on the OWNER PING.
+
+### WHAT WAS BUILT
+
+`apps/transcribe-md/src/lib/note-shape.ts` — the note-SHAPE axis, read from the
+bound template's own **section labels**.
+
+⚠️ **NOT from `note_templates.encounterType`, and that is measured.** That
+column looks like the note-shape slot and is not: it is **NULL on all 10**
+production rows, and `worker.ts:756` resolves templates with
+`encounterType: visit.specialty` — it IS the specialty slot under another name.
+Section labels classify the rows that already exist, with **no migration**.
+
+⚠️ **THE COUNT IS 10 TEMPLATES, NOT 9.** The recon said 9. Re-measured
+read-only on 2026-08-18 rather than carried forward — *a count inherited from
+another session's report and then repeated is a fabricated number.*
+
+| verdict | templates | markers each |
+|---|---|---|
+| operative | **4** (incl. the trailing-colon one) | **3** |
+| not operative | **6** | **0** |
+| total | **10** ✓ | |
+
+### THE OVER-SUPPRESSION GUARD IS THE POINT, NOT A SIDE CONDITION
+
+#123 states that stripping E/M from an **office** visit is worse than the
+defect being fixed. So:
+
+- **`PROCEDURE` and `CONSENT` are deliberately NOT markers.** An office visit
+  carries both when a biopsy or injection is done in the room. A dedicated arm
+  pins the omission itself, so re-adding either goes red.
+- **Two distinct markers are required, not one.**
+- **Absent / malformed / untemplated input fails OPEN** — 30 of 45 production
+  visits have no template at all, and the safe direction is that they are
+  unaffected.
+
+### THE SWEEP, BY PREDICATE — EIGHT THREADED, TWO REFUSED
+
+| layer | site |
+|---|---|
+| **EXPORT** | `visit-export-server.ts` — the **single seam** for docx · pdf · every EHR clipboard format · email · patient export · sign route · preview, all via `loadVisitExportData`. One line at the root |
+| **DISPLAY** | `visits/[id]/page.tsx` |
+| **STORE** | `actions/soap.ts` · `actions/rescore-em.ts` · `em-score/apply-additions` |
+| **GATE** | `sign-gates.ts` · `sign/route.ts` · `em-score/override` |
+
+⛔ **NOT THREADED, AND THE SECOND ONE CORRECTS THE RECON'S OWN TABLE:**
+
+- `board/page.tsx` — `isImaging`, a board label. Already flagged by the recon.
+- `worker/layers/04-generate-soap.ts` — the recon filed this under **COMPUTE**.
+  Reading it, `isUltrasoundReport` selects the **PROMPT BUILDER and TEMPLATE**.
+  ⚠️ **An operative note is not an imaging study.** Threading note-shape there
+  would route a colonoscopy to the ultrasound report builder — *a clinical
+  regression, not a fix.* **A site is scoped by what it DOES, not by the symbol
+  it wears.**
+
+`SignGateInput.templateSections` is **REQUIRED**, so `tsc` enumerated the
+callers rather than a hand-kept list — the move #109's removal made. It found
+the production caller and seven test sites.
+
+### PROOF
+
+**Mutation-proved 4 of 4**, each asserting its own application *before* the run
+was believed, each restored from a **scratch backup, never from git**:
+
+| # | mutation — every one a PARTIAL application, not the complete inverse | result |
+|---|---|---|
+| M1 | drop the trailing-colon strip | **9 red** |
+| M2 | floor 2 → 1 | **1 red** — the over-suppression arm |
+| M3 | add `PROCEDURE` + `CONSENT` as markers | **2 red** |
+| M4 | shape axis never consulted (the half-landed fix) | **2 red** |
+
+⚠️ **M3 did NOT redden the over-suppression arms** — with the floor at 2, one
+borrowed marker still fails. It was caught by the arm that **pins the omission
+itself**, which is exactly why that arm exists.
+
+⚠️ **THE NEW SWEEP ARM REDDENED AGAINST ITS OWN AUTHOR ON FIRST RUN.** A plain
+filename grep returned four extra files and **three were PURE PROSE** —
+doc-comments naming the old switch while explaining the history. *A file's
+comments are the one place the token you are grepping for is guaranteed to
+appear.* It is bound to CODE now (comment lines stripped, call form matched)
+and carries **two** positive controls: the grep must find something, and
+comment-stripping must not eat everything.
+
+**CONTROLLED DELTA** — a raw count from a worktree is meaningless, because
+`react/jsx-dev-runtime` cannot resolve there:
+
+| tree | files | passed | failed files | failed tests |
+|---|---|---|---|---|
+| `origin/main`, detached control | 322 | 3928 | **16** | **1** |
+| this branch | 323 | 3971 | **16** | **1** |
+
+**+1 file, +43 tests, failures IDENTICAL.** 43 = 42 note-shape arms + 1 sweep
+arm. `tsc` **0 errors**.
+
+### WHAT F12-a DOES NOT CLAIM, AND WHAT IT STILL OWES
+
+- **No rendered PDF or DOCX was produced and compared.** The proof is at the
+  projection seam and through source-grep guards.
+- **The §2.5 declaration with ABSENCE rows is NOT written.** Its headline
+  number is **1**, not 11 — the recon's own first query said 11 and was
+  withdrawn, and a presence check against 11 would pass on a suppression firing
+  ten times too widely. The positive arm (**8 + 1** office-side levels that MUST
+  survive) is the row that catches it.
+- **The E2E both-directions walk is NOT done.**
+- ⚠️ **The MANDATORY adversarial pass is NOT done.** This is the clinical
+  export path, so that is a merge gate, not a nicety.
+
+**THEREFORE: NOT DEPLOYABLE, AND THE PR IS A DRAFT.**
+
+### ⚠️ SESSION FINDING — A WORKTREE RESOLVES `@meddoc/*` TO THE **SHARED TREE**, SILENTLY
+
+**Not in the canon, and it is a sharper edge than the recorded
+`react/jsx-dev-runtime` case.** A `git worktree` checks out tracked files only
+and has **no `node_modules`**, so Node walks UP and resolves
+`@meddoc/shared` at `/opt/meddoc-pro/node_modules/@meddoc/shared` — a symlink
+to **`/opt/meddoc-pro/packages/shared`**, the shared tree.
+
+**A new file added to a workspace package under a worktree is therefore
+invisible to `tsc` and to every `@meddoc/*` import**, and a MODIFIED one
+resolves to *another tree's code* — silently, with no error, rather than
+failing loudly. The classifier was written into `packages/shared` first and did
+not resolve; it now lives in `apps/transcribe-md/src/lib/`, which is where all
+eight consumers are anyway.
+
+⚠️ **The tell was a `tsc` error naming only the NEW file** while every existing
+`@meddoc/shared` import resolved fine — two results that look like one problem
+and are the instrument telling you which tree it is reading.
+
+**`ln` is not granted to the loop** (not in MASTER's permissions table — filed
+as a finding below), so shadowing the package locally was not available.
+
+### ⚠️ SESSION FINDING — A REFUSAL NOT IN MASTER'S TABLE
+
+`ln -sfn …` — **refused**. Wanted to shadow `@meddoc/shared` into the worktree
+so it would resolve to its own copy. Worked around by relocating the module,
+which was the better answer anyway. **Filed per MASTER's rule that a refusal
+outside the table is a finding.**
