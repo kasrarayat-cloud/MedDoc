@@ -33,8 +33,19 @@ export type AutoConfirmProvenance =
   | 'structural'
   /** The model proposed it and it carries no laterality risk. */
   | 'model'
-  /** A manual field: no concept exists to assert, it renders blank and is attested blank. */
-  | 'manual';
+  /**
+   * The field has NO AUTOMATIC SOURCE and renders blank — a human types it at
+   * fill time (the technologist on shift, the referring physician).
+   *
+   * ⚠️ DELIBERATELY NOT NAMED 'manual'. `sourceType === 'manual'` is a settled
+   * term for WHAT THE FIELD IS. This enum answers a different question — WHO
+   * CONFIRMED THIS MAPPING — and for these rows the answer is THE MODEL.
+   * Measured on the owner's production template before this was written: all 5
+   * manual rows carry `proposedByModel` and ZERO carry an `approvedById`.
+   * Labelling them 'manual' would have written a human attestation into an
+   * audit row that no human ever made.
+   */
+  | 'blank_by_design';
 
 export interface AutoConfirmDecision {
   confirm: boolean;
@@ -97,7 +108,7 @@ export function decideAutoConfirm(c: AutoConfirmCandidate): AutoConfirmDecision 
   // A manual field has no concept BY CONSTRUCTION — nothing dictates who the
   // technologist on shift was. It is ready when attested, renders blank.
   if (c.sourceType === 'manual') {
-    return { confirm: true, provenance: 'manual', reason: null };
+    return { confirm: true, provenance: 'blank_by_design', reason: null };
   }
 
   // Certification requires a concept for every non-manual field. Without one
@@ -180,7 +191,7 @@ export function planAutoConfirm(workspace: TemplateTwinWorkspace): AutoConfirmOu
   const provenanceCounts: Record<AutoConfirmProvenance, number> = {
     structural: 0,
     model: 0,
-    manual: 0,
+    blank_by_design: 0,
   };
 
   const mappings = workspace.fields.map(({ field, mapping }) => {

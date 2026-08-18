@@ -66,7 +66,7 @@ describe('planAutoConfirm', () => {
     expect(out.mappings.every((m) => readyForCertification(m as unknown as ReadinessRow))).toBe(true);
     // Provenance still discriminates: 6 sided labels are the document's own word.
     expect(out.provenanceCounts.structural).toBe(6);
-    expect(out.provenanceCounts.manual).toBe(5);
+    expect(out.provenanceCounts.blank_by_design).toBe(5);
     expect(out.provenanceCounts.model).toBe(69);
   });
 

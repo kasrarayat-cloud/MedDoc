@@ -96,7 +96,7 @@ describe('decideAutoConfirm — the confirming direction', () => {
       sourceType: 'manual',
       hasClinicalConcept: false,
     });
-    expect(d).toMatchObject({ confirm: true, provenance: 'manual' });
+    expect(d).toMatchObject({ confirm: true, provenance: 'blank_by_design' });
   });
 });
 
@@ -131,4 +131,37 @@ describe("the measured customer form — 7 laterality fields, both directions pr
   it('⚠️ NON-VACUITY: the fixture actually contains both outcomes', () => {
     expect(new Set(REAL.map(([, v]) => v)).size).toBe(2);
   });
+
+  /**
+   * ⚠️ MEASURED ON PRODUCTION, NOT INVENTED. The owner's West Medical template
+   * carries five `sourceType: 'manual'` rows — Address, LOCATION, MACHINE,
+   * REFERRING PHYSICIAN, ULTRASOUND TECHNOLOGIST. All five carry
+   * `proposedByModel = 'claude-sonnet-4-6'`; NONE carries an `approvedById`.
+   *
+   * The first version of this module labelled their provenance 'manual', which
+   * in an audit row reads as "a human attested this". No human had. The label
+   * is the whole finding — the confirm decision was always correct.
+   */
+  it('a no-source field is NEVER attributed to a human — the model proposed it', () => {
+    for (const label of [
+      'Address',
+      'LOCATION: Choose an item.',
+      'MACHINE: Choose an item.',
+      'REFERRING PHYSICIAN: Choose an item.',
+      'ULTRASOUND TECHNOLOGIST: Choose an item.',
+    ]) {
+      const d = decideAutoConfirm({
+        originalLabel: label,
+        sectionHeading: null,
+        criticality: 'routine',
+        sourceType: 'manual',
+        hasClinicalConcept: false,
+      });
+      expect(d.confirm).toBe(true);
+      expect(d.provenance).toBe('blank_by_design');
+      // THE ASSERTION THAT MATTERS: nothing here may read as human attestation.
+      expect(d.provenance).not.toBe('manual');
+    }
+  });
+
 });
