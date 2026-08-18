@@ -226,3 +226,29 @@ Two parts, both from the owner's own exported PDF, and they ship together:
 **Done when:** both directions attempt-proved (office visit SHOWS E/M;
 colonoscopy op-note shows NONE, nowhere), §2.5 with **absence rows**, mandatory
 adversarial pass.
+
+### 2026-08-18T07:00:00Z — AUTO-CERTIFICATION IS IN FLIGHT; the West Medical walk is SUPERSEDED
+
+**Pointer to rulings #124 (loop's, merge/push doors) is unrelated — the ones
+that matter here are the owner's auto-certification ruling recorded as #125, on
+branch `feat/twin-auto-certification`, built by a SUPERVISED session.**
+
+⚠️ **DO NOT CITE "certify the West Medical template" AS A BLOCKER, and do not
+build toward it.** The owner will certify nothing — the machine will. On upload,
+when a twin compiles with zero blocking elements, the model's own proposals are
+confirmed, a round-trip proof runs in the worker, and the template certifies
+itself. The twice-owed OWNER PING is retired by that work, not by the doctor.
+
+**Coordinate any twin-adjacent work against that branch.** It already touches
+`auto-certify-eligibility.ts`, `auto-certify.ts`, `worker.ts`, `queue.ts`,
+`note-template-lifecycle.ts`, `settings/page.tsx` and
+`native-template-manager.tsx`, and it consumes F16's `mappings-readiness.ts`
+rather than restating its predicate.
+
+✅ **THE THIRD ACTOR SESSION 03 DETECTED IS THIS BUILD — correctly spotted, and
+the observation was right to make.** `feat/twin-auto-certification` in a `/tmp`
+scratchpad worktree, semantically adjacent to F16, with real file-level overlap.
+It syncs from `main` before each stage precisely so the overlap resolves in the
+branch rather than at merge.
+
+**This entry retires when that branch merges.**
