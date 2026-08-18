@@ -134,11 +134,38 @@ export async function runAutoCertifyTwin(
     return { status: 'proof_failed', confirmed: plan.mappings.length, declined: [], reason };
   }
 
-  await certifyAndActivateTemplateTwin({
-    noteTemplateId,
-    actor,
-    expectedMappingsSha256: persisted.mappingsSha256,
-  });
+  // ⚠️ THE LIFECYCLE TRANSITION REFUSES TOO, AND ITS REFUSALS ARE NOT THE
+  // PROOF'S. `certifyAndActivateTemplateTwin` runs its own final gate — fill
+  // coverage among them: "0 filled, need >= 10 … or the certificate attests a
+  // template whose fill path is dead", and a measurement CELL must be filled
+  // because that is the path that silently produced empty documents.
+  //
+  // Found by the QA walk on 2026-08-18: this call was NOT wrapped, so a
+  // legitimate refusal escaped as an unhandled throw. In the worker that is a
+  // FAILED JOB — no audit row, no reason, and the doctor's "Preparing your
+  // format…" simply stops with nothing to read. The refusal was correct; the
+  // way it left the building was not.
+  //
+  // Fail-closed must still be LEGIBLE: same shape as the proof's catch, so
+  // every refusal lands as needs-review with a reason and an audited stage.
+  try {
+    await certifyAndActivateTemplateTwin({
+      noteTemplateId,
+      actor,
+      expectedMappingsSha256: persisted.mappingsSha256,
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    await logTwinAudit({
+      action: 'TEMPLATE_TWIN_CERTIFY_FAILED',
+      userId,
+      practiceId,
+      targetType: 'note_template',
+      targetId: noteTemplateId,
+      metadata: { auto: true, stage: 'certify', reason },
+    });
+    return { status: 'proof_failed', confirmed: plan.mappings.length, declined: [], reason };
+  }
 
   return { status: 'certified', confirmed: plan.mappings.length, declined: [] };
 }

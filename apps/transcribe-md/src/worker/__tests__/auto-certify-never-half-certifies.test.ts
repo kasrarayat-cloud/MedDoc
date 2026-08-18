@@ -97,4 +97,27 @@ describe('auto-certify never half-certifies', () => {
     // present after persisting — not a captured earlier variable.
     expect(certifySpy.mock.calls[0][0].expectedMappingsSha256).toBe('sha-before');
   });
+
+  /**
+   * ⚠️ THE LIFECYCLE GATE IS A SECOND REFUSER, AND IT USED TO ESCAPE.
+   * `certifyAndActivateTemplateTwin` runs its own final checks (fill coverage,
+   * measurement-cell coverage). That call was unwrapped, so its refusal left as
+   * an unhandled throw: a FAILED worker job with no audit row and no reason.
+   * Found by the QA walk, not by this file — which is why the arm exists now.
+   */
+  it('a LIFECYCLE refusal lands as needs-review, not as a crashed job', async () => {
+    testSpy.mockResolvedValueOnce(undefined);
+    certifySpy.mockRejectedValueOnce(
+      new Error('Confirm every field, clear blocking structure, and verify a synthetic DOCX.'),
+    );
+    const { runAutoCertifyTwin } = await import('../auto-certify-twin-job');
+
+    const res = await runAutoCertifyTwin(payload as never);
+
+    expect(res.status).toBe('proof_failed');
+    expect(res.reason).toMatch(/synthetic DOCX/);
+    const calls = auditSpy.mock.calls.map((c) => c[0]);
+    expect(calls.some((c) => c.metadata?.stage === 'certify')).toBe(true);
+  });
+
 });
