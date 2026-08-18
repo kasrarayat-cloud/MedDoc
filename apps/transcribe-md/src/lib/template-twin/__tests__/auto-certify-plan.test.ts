@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { planAutoConfirm } from '../auto-certify-eligibility';
 import type { TemplateTwinWorkspace } from '../client-types';
+import { unreadyReason, type ReadinessRow } from '../mappings-readiness';
 
 /**
  * The engine over a workspace shaped like the REAL customer form: 80 fields,
@@ -30,9 +31,17 @@ function ws(fields: Array<Partial<{ label: string; crit: string; src: string; co
   } as unknown as TemplateTwinWorkspace;
 }
 
-/** MAPPINGS_NOT_READY, restated here so the test asserts the REAL gate. */
-const readyForCertification = (m: { status: string; sourceType: string; clinicalConcept: string | null }) =>
-  m.status === 'certified' && (m.sourceType === 'manual' || Boolean(m.clinicalConcept));
+/**
+ * ⚠️ THE REAL PREDICATE, IMPORTED — NOT RESTATED.
+ *
+ * An earlier draft of this test re-declared MAPPINGS_NOT_READY's condition
+ * inline. F16 landed `mappings-readiness.ts` precisely because that predicate
+ * had already been duplicated TWICE, in two shapes, against two row types — and
+ * its own header records that no test anywhere executed the real one. A third
+ * copy here would repeat the defect F16 exists to fix, and would let the planner
+ * and the gate drift while both stayed green.
+ */
+const readyForCertification = (m: ReadinessRow) => unreadyReason(m) === null;
 
 describe('planAutoConfirm', () => {
   it('the whole real-shaped form satisfies MAPPINGS_NOT_READY after planning', () => {
@@ -54,7 +63,7 @@ describe('planAutoConfirm', () => {
     // ⚠️ THE OWNER TOUCHES ZERO FIELDS.
     expect(out.declined).toHaveLength(0);
     // ⚠️ AND EVERY MAPPING PASSES THE ACTUAL CERTIFICATION PREDICATE.
-    expect(out.mappings.every((m) => readyForCertification(m as never))).toBe(true);
+    expect(out.mappings.every((m) => readyForCertification(m as unknown as ReadinessRow))).toBe(true);
     // Provenance still discriminates: 6 sided labels are the document's own word.
     expect(out.provenanceCounts.structural).toBe(6);
     expect(out.provenanceCounts.manual).toBe(5);
@@ -73,7 +82,7 @@ describe('planAutoConfirm', () => {
   it('a manual field with NO concept still confirms — attested blank by construction', () => {
     const out = planAutoConfirm(ws([{ src: 'manual', concept: null }]));
     expect(out.declined).toHaveLength(0);
-    expect(readyForCertification(out.mappings[0] as never)).toBe(true);
+    expect(readyForCertification(out.mappings[0] as unknown as ReadinessRow)).toBe(true);
   });
 
   it('⚠️ NON-VACUITY: the plan can decline — a suite where nothing ever declines proves nothing', () => {
