@@ -17091,3 +17091,691 @@ on a suppression that fired ten times too widely. **The positive arm (8 + 1
 office-side levels that MUST survive) is the row that catches it**, and it is
 the arm #123 says is the one that matters.
 
+
+---
+
+## ✅ F15 — THE CERTIFICATION DOOR IS AUDIBLE, AND A PHYSICIAN HAD ALREADY WALKED 74 OF 80 THROUGH IT — **2026-08-17, run `20260817-231454` session 01**
+
+**#713 merged as `455e109c`.** It was green, `CLEAN`, owner-priority, and had
+been sitting **five hours** across two sessions. The change is small and its
+premise turned out to be live in production while it waited.
+
+**THE FIX.** `MISS_TEXT.not_certified` was the **EMPTY STRING**, and the banner
+is gated on truthiness — so the one miss a doctor can actually ACT on rendered
+nothing, under a render-site comment that says *"Silence is illegal"*. It now
+names the **cure**, not just the miss: *Settings › My Note Format › Confirm
+fields*. `not_template_visit` stays empty deliberately — there is nothing to do
+about it. A second line changes the styled-layout hint from *"upload your own
+blank form"* to *"set up your own blank form"*, because telling a doctor to
+upload a file we already hold is what sent this one back to re-upload.
+
+### ⚠️ WHY I MERGED A PR TWO SESSIONS HAD DELIBERATELY DEFERRED
+
+Session 01 of run `20260817-183630` ran the **mandatory adversarial pass** and
+posted it ([comment 5318954262](https://github.com/kasrarayat-cloud/MedDoc/pull/713#issuecomment-5318954262))
+— nothing blocking — then declined to merge on the grounds that *"a concurrent
+actor is live on adjacent twin work, and landing their PR under them is the
+hazard the shared-tree rule names."* That was the right call **at 20:46Z**. It
+is not the same call at 23:20Z, and I re-derived it rather than inheriting it:
+
+| the deferral's premise | measured now |
+|---|---|
+| a concurrent actor is **live** | last commit `4425bd6a` at **20:56:25Z** — **2h20m silent**; worktree clean, no file activity since its 19:02 checkout |
+| the work is **adjacent** | **zero file overlap.** #713 touches `visit-document-surface.tsx` + one gate test; `feat/twin-auto-certification` touches `note-template-lifecycle.ts`, `queue.ts`, `lib/template-twin/auto-certify*`, `resolver`, `RULINGS.md` |
+| merging disturbs them | it does not touch their worktree or their branch, and `strict: false` on `main` means no rebase is forced on anything |
+
+⚠️ **AND THE HAZARD NAMED IS "landing their PR UNDER them" — mid-work.** #713 is
+not mid-work: non-draft, `CLEAN`, six required checks green, adversarial pass
+posted. **Branch cadence says a green change merges when it is green, not when
+the next one is ready** — and a green owner-priority PR deferred by two
+consecutive sessions is precisely the branch-that-ships-and-never-merges failure
+that rule exists to prevent. Recorded as a judgement I made, not one I was given.
+
+### ⚠️ THE FINDING THE MERGE UNCOVERED — PRODUCTION'S TWIN TABLES ARE NO LONGER ZERO, AND THE DOCTOR STOPPED **SIX FIELDS** SHORT
+
+Capturing the §2.5 baseline turned up something no item went looking for.
+**Every prior report saying "prod holds 0 compiled twin versions" is superseded
+by ACTION, exactly as the INBOX predicted — the first non-zero is a doctor's
+upload, not a defect.** Measured on production at `2026-08-17T23:2xZ`:
+
+| quantity | value |
+|---|---|
+| `template_twin_source_artifacts` | **1** |
+| `template_twin_compiled_versions` | **1** — `NEEDS_CONFIRMATION`, `blockingUnsupportedCount = 0`, compiled `17:39:17Z` |
+| `template_twin_field_definitions` | **80** |
+| `template_twin_semantic_mappings` | **80** — **74 `CERTIFIED`**, 6 `NEEDS_CONFIRMATION` |
+| `template_twin_certifications` | **0** |
+| `template_twin_fill_manifests` | **0** |
+
+⚠️ **A REAL PHYSICIAN WALKED F5-b's DOOR, AND THE LEDGER DID NOT KNOW.** User
+`cmo5ye2nm000c01s3ofudqzi6` approved **74 mappings between `18:11:33.433Z` and
+`18:11:33.574Z`** — 141 milliseconds, so a bulk confirm through the F5-b surface,
+**not** a hand-edit. F5's closing note says *"what remains is not a build item: a
+physician must actually walk the door."* **They walked it, within hours of it
+shipping, and got 92.5% of the way.**
+
+**THE REMAINING SIX — all `single_select`, which is the WM IOV form's dropdown
+family:**
+
+| `fieldId` | source | concept |
+|---|---|---|
+| `ttf_5d84f80e2fec3d0085ad6b33` | manual | — |
+| `ttf_7e45028e2b601ba0e4b0bd5c` | manual | — |
+| `ttf_b4e30cd696689beb73b7fc63` | manual | — |
+| `ttf_e3e4a4d7ecc6ecde78991e57` | manual | — |
+| `ttf_c884422f3a745f4eaa53c22d` | manual | `test.name` |
+| `ttf_d2072b8e42b4a2def61e62a1` | verified_note_selection | `exam.vascular` |
+
+⚠️ **`MAPPINGS_NOT_READY` IS WORKING, NOT FAILING.** It refuses until **every**
+field is confirmed, so 74 of 80 certifies nothing — which is the correct
+behaviour and **must not be weakened to close the gap** (AGENTS.md: *"a certified
+twin that nobody confirmed is worse than no twin"*). The remaining work is six
+confirmations by a person, not a code change.
+
+⚠️ **AND THIS IS EXACTLY THE SILENCE #713 CURED, ON THE REAL VISIT.** Between
+the upload and the confirm the doctor's visits fell back to QuillMD's layout with
+`not_certified` — **the empty string**. #713's PR was opened at `18:06:07Z`,
+between the `17:39` upload and the `18:11` confirm: its author was watching this
+happen. The wall AGENTS.md records as *"22 of 80 after F5-a"* was cleared by the
+door itself — 22 arrived as `verified_note_selection` and 52 as `extraction`,
+reconciling to the 74.
+
+**OWNER PING, and it is now the shortest it has ever been:** *six dropdown
+confirmations stand between production and its first certified twin.* Four of
+them need a concept supplied; two already have one and need only assent.
+
+### WHAT THIS ROW DOES **NOT** CLAIM
+
+- **Not that the export changes.** Nothing certifies here, no fill runs, no
+  native DOCX is produced. `fill_manifests` stays **0** and the declaration
+  carries it as an **absence row**.
+- **Not that the banner was proven to MOUNT.** The gate
+  (`gate-actionable-miss-is-spoken.test.ts`) asserts the STRING; the adversarial
+  pass recorded the honest limit that editing `visit-ready-view.tsx:831` would
+  restore the silence with the gate still green. Carried forward, not closed.
+- **Not that the six fields are the only wall.** They are the only wall *for this
+  template*. Nothing was measured about any other doctor's form.
+
+### ✅ F14-b — SESSION 02's NIGHT, RECONSTRUCTED (STEP 0.9)
+
+Session 02 of run `20260817-183630` exited **rc=1 on an API 500 at `23:08:16Z`**
+with `REPORT-MISSING`. Unlike the previous run's session 04, **it landed real
+work and it is all gated** — the hole is in the record, not in `main`:
+
+| commit | at | what |
+|---|---|---|
+| `f0101b7b` | `21:10:19Z` | **F14-b** — the MERGE and PUSH doors survive a repo-wide runs-API outage |
+| `79ddd855` | `22:14Z` | merge of PR **#716**, **cited 4 of 4, all `a1`** — verified here by `check-citation.sh`, not by eye |
+| `772ddb1e` | `22:17:15Z` | the a11y `a3` explained, and three permission traps |
+| `27ba0349` | `22:57:14Z` | F14-b's merge-commit citation, produced by the checker |
+
+It opened **PR #717** to carry that citation and **died while its `e2e` was still
+running** — the one thing it could not do was wait out a gate that outlived it.
+**#717 is landed by this session**, which closes F14-b's record.
+
+⚠️ **NOTE WHAT DID *NOT* GO WRONG: it wrote its citation to a PR instead of
+straight to `main`, so the API 500 cost the record and nothing else.** Compare
+the previous run's session 04, which lost ~300 uncommitted lines into a stray
+worktree. **The difference is entirely that session 02 committed and pushed as it
+went.**
+
+⚠️ **AND MY OWN FIRST CITATION CHECK WAS A FABRICATED SHA.** I built a 40-hex
+string from the short `79ddd855` instead of reading it, and
+`check-citation.sh` answered **`🟡 NO SUCH COMMIT — cannot tell`** rather than a
+bare "not cited". That is F14's exist-check guard discriminating on its second
+recorded outing, and it is the reason the canon insists the two failures must not
+share an exit code. Re-run from `git rev-parse`: **4 of 4, all `a1`.**
+
+---
+
+## 🟡 F16 — THE CERTIFY REFUSAL IS AUDIBLE BUT UNACTIONABLE, AND A REAL PHYSICIAN HIT IT TWICE — **FILED *AND BUILT* 2026-08-17, run `20260817-231454` session 01**
+
+> **BUILT AS PR #719** (`fix/f16-mappings-not-ready-is-actionable`) in the same
+> session that filed it, because the mechanism turned out to be one missing arm
+> on a ladder that already existed. **Not yet merged or deployed** — see the
+> build block at the end of this row.
+
+**This is #713's class one surface deeper, found in the audit trail while
+capturing F15's §2.5 baseline. Nothing went looking for it.**
+
+#713 fixed *the miss is SILENT*. This is *the refusal SPEAKS and does not name
+the remaining work* — and it is the last thing standing between production and
+its first certified twin.
+
+### THE EVIDENCE — one real physician's session, from `audit_logs`, read-only
+
+| time (UTC, 2026-08-17) | action | success |
+|---|---|---|
+| `17:34:34` | `LOGIN_SUCCESS` | ✅ |
+| `17:37:29` | `VIEWED_SETTINGS` | ✅ |
+| `17:39:17` | `TEMPLATE_TWIN_SOURCE_UPLOADED` + `TEMPLATE_TWIN_COMPILED` | ✅ |
+| `17:41:36` | `TM_PATIENT_CREATED` | ✅ |
+| `17:41:55` | `VISIT_CREATED` | ✅ |
+| `17:44:10` | `CODING_COACH_REJECTED_INVALID_ICD` — 3 codes dropped | ❌ |
+| `17:44:30` | `VISIT_SIGNED` | ✅ |
+| `17:44:31` | `EXPORT_PDF_DOWNLOADED` + `EXPORT_DOCX_DOWNLOADED` | ✅ |
+| `18:09:50` | `VIEWED_SETTINGS` — **they came back** | ✅ |
+| `18:10:42` → `18:11:33` | `TEMPLATE_TWIN_MAPPING_UPDATED` ×2 — **74 mappings confirmed** | ✅ |
+| **`18:11:38`** | **`TEMPLATE_TWIN_CERTIFY_FAILED`** | ❌ |
+| **`18:11:52`** | **`TEMPLATE_TWIN_CERTIFY_FAILED`** — **they tried again, 14s later** | ❌ |
+
+**Both failures carry the identical AUDIT payload:**
+
+```json
+{ "code": "MAPPINGS_NOT_READY",
+  "stage": "certifyNativeTemplateAction",
+  "message": "Every field needs a physician-confirmed mapping before testing.",
+  "errorClass": "TemplateTwinSyntheticTestError" }
+```
+
+⚠️ **THAT MESSAGE GOES TO THE AUDIT ROW. THE PHYSICIAN NEVER SAW IT — AND MY
+FIRST DRAFT OF THIS ROW SAID THEY DID.** Corrected before it shipped by reading
+`actions/template-twin-certify.ts` instead of trusting the audit metadata to be
+what reached the screen. **The useful sentence is written to US; the doctor got a
+different one.**
+
+### THE MECHANISM, NAMED FROM THE CODE
+
+`certifyNativeTemplateAction` has an **expected-refusal ladder** at
+`template-twin-certify.ts:221-238`, and both of its arms are exemplary — each
+names the cure in plain English, with no field labels:
+
+| code | what the doctor is told |
+|---|---|
+| `CONFLICT` | *"This template changed since you reviewed it. Reload and review again before certifying."* |
+| `CERTIFICATION_BLOCKED` | *"This template can't be certified — it has elements that can't be safely reproduced. Simplify it in Word and re-upload."* |
+
+**That ladder is typed on `TemplateTwinLifecycleError`.** `MAPPINGS_NOT_READY` is
+a **`TemplateTwinSyntheticTestError`**, so it misses the ladder entirely and
+falls through to the generic `catch` at `:240` — the branch whose own comment
+opens **"AN UNANTICIPATED THROW"** and which returns `reason: 'unexpected'`.
+
+**So what the physician actually saw was `:298`:**
+
+> *"Certification could not be completed (MAPPINGS_NOT_READY). This has been
+> recorded — it will not succeed on a retry until it is fixed."*
+
+### THE DEFECT, STATED PRECISELY
+
+⚠️ **THE GATE IS CORRECT AND MUST NOT BE WEAKENED.** It refused because **6 of
+80** fields were unconfirmed — the strict refusal AGENTS.md protects, *a
+certified twin that nobody confirmed is worse than no twin.* **F16 is not a
+request to lower the bar.**
+
+⚠️ **AND THE MESSAGE-WITHHOLDING IS CORRECT TOO, AND MUST SURVIVE THE FIX.** That
+branch deliberately sends the class and never the message, and its comment says
+why: *"never the message, which can quote the field labels of their own form."*
+The customer's template is theirs. **Any fix that closes F16 by leaking
+`err.message` to the UI has traded one defect for a worse one.**
+
+**The defect is that a DESIGNED refusal is being reported as an ENGINEERING
+FAULT.** *"This has been recorded — it will not succeed on a retry until it is
+fixed"* tells a doctor that nothing they do will help and someone else must
+repair something. The truth is the exact opposite: the thing needing "fixing" is
+**six confirmations they could finish in a minute**. They are handed a raw error
+code, no count, and no route — and the sentence actively discourages the one
+action that would work.
+
+**They pressed the button twice, fourteen seconds apart, and stopped.** That is
+what a person does when told a retry cannot succeed.
+
+**THE SIX, all `single_select` — the WM IOV form's dropdown family:**
+
+| `fieldId` | source | concept |
+|---|---|---|
+| `ttf_5d84f80e2fec3d0085ad6b33` | manual | — |
+| `ttf_7e45028e2b601ba0e4b0bd5c` | manual | — |
+| `ttf_b4e30cd696689beb73b7fc63` | manual | — |
+| `ttf_e3e4a4d7ecc6ecde78991e57` | manual | — |
+| `ttf_c884422f3a745f4eaa53c22d` | manual | `test.name` |
+| `ttf_d2072b8e42b4a2def61e62a1` | verified_note_selection | `exam.vascular` |
+
+### DONE WHEN
+
+- **`MAPPINGS_NOT_READY` gets its own arm on the EXPECTED-refusal ladder**, beside
+  `CONFLICT` and `CERTIFICATION_BLOCKED`, rather than falling to the
+  unanticipated-throw branch. The pattern already exists in this file; the fix is
+  to join it, not to invent one.
+- The refusal names the **COUNT** (*"6 of 80 fields still need confirming"*) and
+  **ROUTES** to them — filter, anchor or list. The gate's predicate does not
+  move by a single field.
+- ⚠️ **The count is DERIVED and carries NO field labels.** Both constraints at
+  once: a number computed from the mappings, and nothing quoting the customer's
+  form. The `:240` branch's withholding rule stays exactly as strict.
+- **Both directions attempt-proved**: 6 unconfirmed → refusal names 6 and routes;
+  0 unconfirmed → certification proceeds. ⚠️ **The second arm is the one that is
+  usually skipped and the one `retire-branch.sh` proved you cannot skip** — a
+  guard proven only in the RED direction is half-proven.
+- ⚠️ **A non-vacuity arm**: the count must be *derived*, not a constant. A
+  message hard-coding *"6"* passes the first arm and is wrong the moment a
+  seventh field appears.
+- The mandatory **adversarial pass** — this is a clinical-adjacent surface on the
+  pilot path.
+
+### WHAT F16 DOES NOT CLAIM
+
+- **Not that certification would succeed if the message were better.** Six fields
+  still need a human decision; F16 buys the physician the ability to *find* them.
+- **Not that the UI is silent.** It is not — `TEMPLATE_TWIN_CERTIFY_FAILED` is
+  audited and a sentence does reach the screen. The failure is *what that
+  sentence says*, not its absence. **#713 was the absence case; this is not.**
+- **Not that the audit trail failed.** It worked perfectly, and it is the only
+  reason any of this is knowable. Everything above was reconstructed from
+  `audit_logs` **read-only**, on a real physician's session, with no clinical
+  content read and nothing mutated.
+
+### ✅ THE BUILD — PR #719, and what it is proved to be
+
+**The fix is one arm on a ladder that already existed**, which is why it was
+built in the same session rather than queued. `MAPPINGS_NOT_READY` now returns
+`reason: 'mappings_not_ready'` with a derived count and a route:
+
+> *"Not yet — 6 of 80 fields still need confirming. Open the field list above,
+> confirm the ones still marked as needing review, then certify again."*
+
+**BOTH EXISTING GUARDS SURVIVE, AND THAT IS THE POINT.** The refusal's predicate
+is **byte-identical** — `.some(p)` became `.map().filter()` over the same `p`,
+so what is REFUSED never moved; and the sentence is built from **counts only**,
+so the `:240` branch's rule against surfacing `err.message` (*"it can quote the
+field labels of their own form"*) is untouched.
+
+⚠️ **SELF-REFUTATION FOUND A REAL DEFECT IN MY OWN FIRST DRAFT.** `remaining`
+came from the first throw's blocking list, which counted only fields with **no
+mapping row** — so a form with 3 unmapped and 10 unconfirmed would say *"3 of
+80"*, then *"10 of 80"* after the physician cleared the 3. **The count going UP
+as a reward for doing the work.** Each figure was true of its own blocker class
+and the sequence was indefensible. Fixed; **not reachable on the production
+template** (all 80 fields carry rows) and fixed anyway.
+
+⚠️ **AND THE ERROR CLASS HAD TO MOVE TO A LEAF MODULE FIRST.**
+`synthetic-test.ts` imports prisma, storage, the fill engine and the docx
+parser, so importing the **error class** dragged the whole persistence chain in
+and the gate could not load — `Cannot find module next/server`. **Controlled
+against an untouched test from the same worktree, which PASSED**, so this was a
+real transitive import and *not* the known worktree/vitest resolution trap. The
+class now lives in `synthetic-test-error.ts` and is re-exported, and the gate
+imports from the **leaf** — *a grep that resolves a symbol through a barrel has
+not found its definition.*
+
+| proof | result |
+|---|---|
+| gate `gate-f16-mappings-not-ready-is-actionable.test.ts` | **7 of 7** |
+| `template-twin` suite | **242 tests / 29 files** green |
+| `tsc --noEmit` | clean |
+| **M1** — hard-code `"6 of 80"` in place of the derivation | **4 failed / 3 passed** |
+| **M2** — `totalFields` defaults to `0` instead of `null` | **1 failed / 6 passed** |
+
+**M1 is the PARTIAL-fix mutation**, which is the one that matters: a constant
+satisfying the production case is exactly the shape a tired session lands. **M2
+reddens ONE arm rather than everything** — the arm discriminating rather than
+agreeing. Both asserted the mutation had **APPLIED** before the result was
+believed, and both restored from **scratch copies, never from git**.
+
+### ⚠️ WHAT THE BUILD DOES NOT CLAIM
+
+- **The gate asserts what the ACTION RETURNS, not that the sentence is
+  RENDERED.** A UI that drops `result.error` leaves it green — the identical
+  limit #713's gate carries, recorded rather than papered over.
+
+  ⚠️ **BUT THE REACH WAS VERIFIED BY READING THE CONSUMER, NOT ASSUMED** — which
+  is the difference between a limit and a hole. `native-template-manager.tsx:129`
+  does `setError(res.error)` on the `!res.ok` branch, and `:268-283` renders
+  `{error}`. **So the sentence does reach the doctor's screen today.** What is
+  missing is a TEST binding those two facts together, so a future edit to the
+  manager could silently break the reach with this gate still green. Stated as a
+  measurement of the current tree, never as a guarantee about the next one.
+- **It does not exercise `runTemplateTwinSyntheticTest` end to end.** That needs
+  the whole prisma + storage path; the gate asserts the error CONTRACT and the
+  SENTENCE.
+- ⚠️ **THE ADVERSARIAL PASS WAS RUN BY ME, ON MY OWN DIFF.** A self-review
+  shares the author's assumptions, which is precisely what the mandatory-pass
+  rule exists to defeat. It did find the monotonicity defect above — but it is
+  named here as a **WEAKER INSTRUMENT**, not claimed as that gate. **An
+  independent refutation pass is still owed before this is read as fully
+  gated.**
+- **Not measured on any other template.** One template, one physician, two
+  attempts.
+
+---
+
+## 🔴 F17 — FOUR NON-BILLABLE ICD-10 HEADERS ARE ON THE ACCEPTED SIDE OF THE BILLING FLOOR, AND THE FILE PROVES IT KNEW BETTER EIGHT LINES ABOVE — **FILED 2026-08-17, run `20260817-231454` session 01**
+
+**AGENTS.md's over-permission section, arriving in the vein practice.** Same
+class as the GI cohort's `K21.0` / `K22.7`, four instances instead of two, on the
+specialty the pilot doctor actually bills.
+
+### MEASURED THROUGH THE STRUCTURE, NOT THE FILE TEXT
+
+*Text presence is not membership.* Asserted via `isValidIcd10()` with controls
+(`ICD10_ALLOWLIST.size = 604`, `isValidIcd10('I10') = true`,
+`isValidIcd10('ZZZ.9') = false`, so the instrument discriminates):
+
+| | |
+|---|---|
+| `isValidIcd10('I87.30' \| '.31' \| '.32' \| '.33')` | **`true` ×4** — non-submittable headers **ADMITTED** |
+| `isValidIcd10('I87.301…I87.339')` — all **16** billable children | **`false` ×16** — the codes a chart maps to, **DROPPED** |
+
+⚠️ **AND PRODUCTION CORROBORATES IT — the model emits the CORRECT codes and they
+are the ones thrown away.** `CODING_COACH_REJECTED_INVALID_ICD` on real visits,
+**18 rejections in the `I87` family alone**: `I87.312` ×6, `I87.302` ×3,
+`I87.1` ×3, `I87.311` ×2, `I87.301` / `I87.391` / `I87.392` / `I87.393` ×1.
+**The four headers would have sailed through.**
+
+### ⚠️ THE COMMENTS ARE CLINICALLY WRONG, AND THAT IS HOW IT SURVIVED
+
+```
+'I87.30',    // Chronic venous hypertension (idiopathic) without complications of unspecified LE
+'I87.31',    // … right LE
+'I87.32',    // … left LE
+'I87.33',    // … bilateral LE
+```
+
+The author read `I87.30/.31/.32/.33` as **four lateralities**, by analogy with
+`I83.10/.11/.12` immediately above, where that analogy genuinely holds. **It does
+not hold one subcategory over.** They are four **complication states** —
+`.30` without complications · `.31` with ulcer · `.32` with inflammation ·
+`.33` with ulcer *and* inflammation — each requiring a fifth character for
+laterality. **So the line reading `… right LE` actually means `with ulcer`.**
+
+⚠️ **THE REPO'S OWN STANDARD IS STATED EIGHT LINES ABOVE, AND WAS APPLIED
+CORRECTLY THERE:**
+
+```
+// NOTE: the bare 5-char subcategory I83.81 is intentionally NOT allowlisted —
+// it is a non-billable category header whose billable children (…810/811/812/
+// 813) are below; a model that emits the bare code is correctly dropped.
+```
+
+**Right discipline, same block, same hand, one subcategory later — not applied.**
+This is *"the evidence was in the artifact I authored"* (the `K22.7` case) with
+the roles reversed: there the correct code was written in the comment, here the
+correct *rule* was.
+
+### ⚠️ WHAT IS **NOT** A DEFECT — READ THIS BEFORE "FIXING" THE OMISSIONS
+
+The file's header declares a deliberate posture:
+
+> *"A code that is real but missing from the allowlist gets dropped (false
+> negative) — clinically safer than letting hallucinated codes through."*
+
+So **131 code-drops across 61 real visits since 2026-06-15 are mostly the
+DESIGNED behaviour of a starter set**, not a bug, and must not be swept up into
+this item. ⚠️ **F17 is the OVER-PERMISSION half only** — the four codes on the
+**accepted** side that cannot be submitted. Widening coverage is a separate,
+larger scope question for the owner.
+
+⚠️ **AND ONE CANDIDATE FINDING OF MINE WAS REFUTED BY MEASUREMENT AND IS
+WITHDRAWN.** `K63.5` shows **10** production rejections and AGENTS.md records it
+as *added* by the GI cohort — which reads as a fix that never took. Measured: the
+last `K63.5` rejection is **`2026-08-14 02:20:05Z`**, and `K57.32`'s only
+rejection is the **same timestamp**. The GI cohort fix landed and **the
+rejections stop dead at it.** The GI cohort is working; reporting it as broken
+would have been a false alarm built on a true count.
+
+### DONE WHEN
+
+- The four headers are **REFUSED**, paired with an arm asserting their **billable
+  children ARE admitted** — *"refusing both would be a stricter floor and a worse
+  product"*, per the GI cohort's own precedent.
+- ⚠️ The **§2.5 declaration carries ABSENCE rows**: `isValidIcd10('I87.31')` must
+  read **`0`/false** in the shipped validator. *A presence-only declaration
+  cannot detect over-admission* — it passes just as happily on the broken
+  version.
+- The wrong comments are corrected in the same commit. **A comment that
+  misstates what a billing code means is the mechanism that produced this.**
+- Mutation-proved by **re-admitting a header** and watching the guard redden
+  naming it, per `icd10-allowlist-gastroenterology.test.ts`.
+- The `I87.39x` family (`I87.391/392/393/399`, *with other complications*) is
+  dispositioned explicitly — production emitted three of them — rather than left
+  unnamed.
+
+### ⚠️ WHY THIS WAS FILED AND NOT BUILT TONIGHT
+
+The **structure** of the defect is proved to the hilt. The **remedy** is a list
+of billable ICD-10 codes, and this host carries no authoritative CMS reference —
+the file's own header names `icd10cm_codes_2026.txt` as a *future* import that
+does not exist here. **Adjudicating billability from memory is precisely how
+`K22.7` got written**, and it is the one place where being wrong manufactures
+False Claims Act exposure rather than merely a bug. **An unverified step named
+honestly is worth more than a green tick bought with a guess.**
+
+---
+
+## ⚠️ SESSION FINDING — A GRANT IS ON THE **RELATIVE** PATH, AND AN ABSOLUTE PATH IS A DIFFERENT COMMAND — **2026-08-17, run `20260817-231454` session 01**
+
+**Not in MASTER's permissions table, so it is recorded here as MASTER requires:
+an unlisted refusal is a finding, never a step to drop.**
+
+`push-with-cancellation.sh` is the sanctioned door for a declared cancellation,
+and `grep -c` against `.claude/settings.json` returns **1** — so the canon's
+*"an entry that names an instrument verifies that instrument's grant"* check
+**passes**, and the instrument was still unreachable for three attempts.
+
+| what I typed | outcome |
+|---|---|
+| `DECLARE_CANCELLATION="…" git push` | **refused** — an env-var-prefixed command; already on record as refused to the loop |
+| `bash /opt/meddoc-pro/scripts/push-with-cancellation.sh "…"` | **refused** |
+| `bash scripts/push-with-cancellation.sh "…"` | ✅ **allowed** |
+
+**The grant reads `Bash(bash scripts/push-with-cancellation.sh:*)` — a RELATIVE
+path.** An absolute path to the identical file is a different string and matches
+nothing. Same for `merge-pr.sh` (`:89`) and `retire-branch.sh` (`:88`).
+
+⚠️ **AND THE `grep -c` CHECK CANNOT SEE THIS.** It answers *"is this instrument
+named?"* — which was **yes** — while the question that mattered was *"is the
+FORM I am about to type granted?"* **The right quantity, over a set that did not
+contain the failure.** The canon's own watched-set lesson, landing on the check
+the canon added to prevent exactly this class.
+
+⚠️ **THE PRACTICAL CONSEQUENCE IS SHARPER THAN IT LOOKS: it makes the grant
+CWD-DEPENDENT.** A relative path only resolves from a tree that has `scripts/`
+— so the wrapper works from the shared tree **or from a full worktree**, and
+fails from anywhere else with a permission refusal rather than a missing-file
+error. **Two different causes, one indistinguishable message.** It worked here
+because a `git worktree` checks out the whole repo, `scripts/` included.
+
+**For the next session:** run the wrapper scripts **relatively, from inside your
+worktree**. If one is refused, check the FORM against `settings.json` before
+concluding the capability is missing — the third recorded instance of a rule and
+its grant landing out of step.
+
+---
+
+## ⚠️ SESSION FINDING — THE QA STACK'S IMAGES ARE THREE DAYS STALE, AND THE STANDING CHECK CANNOT SEE IT — **2026-08-17, run `20260817-231454` session 01**
+
+**AGENTS.md documents this class from B8 (2026-08-12) and it has recurred.**
+Recorded because the next session to plan a behavioural proof on QA would be
+reading a stale binary with a green check agreeing with it.
+
+| image | built |
+|---|---|
+| `meddoc-pro-transcribe-md:qa` | **2026-08-14 18:07Z** |
+| `meddoc-pro-db-migrate:qa` | **2026-08-14 18:06Z** |
+| `meddoc-pro-transcribe-md-worker:qa` | **2026-08-14 18:06Z** |
+
+Meanwhile `assert-migrations-applied --qa` reports **104 of 104 🟢** — correctly.
+**The database is current and the services are three days behind it**, which is
+precisely the drift that check was added to prevent and cannot detect.
+
+**PROVED BY A DISCRIMINATING SYMBOL, not by the date.** `pdf-generator.ts` is
+**PRESENT** in the QA worker — and F3 *retired* it, deployed to production
+`2026-08-16T04:02Z`. Its presence is F3's absence, stated as a measurement.
+
+⚠️ **AND MY FIRST PROBE WAS BROKEN, WHICH ITS OWN CONTROL CAUGHT.** Run against
+the QA **app** container it returned **three zeroes** — including the control
+(`ls …/template-twin/*.ts | wc -l`, which MUST be non-zero):
+
+```
+CONTROL ts files (must be >0):  0     <- the finding
+F5-a symbol:                    0
+pdf-generator.ts:               0
+```
+
+The app image ships a **BUILT** Next application, not a source tree, so no
+source path resolves and every needle returns 0. **Read as three results that is
+"QA is missing everything"; read as one it is a probe that is not measuring.**
+Re-run against the **worker**, which ships source, the control reads **23** and
+the real answers appear. *AGENTS.md's own "two zeroes with opposite meanings is
+ONE broken instrument" — the diagnostic working on its own author.*
+
+**So QA cannot exercise F3, F5-a, F5-b, F12, F14 or anything since.** Not a
+defect in anyone's branch; the app and worker images are simply not rebuilt when
+migrations are applied, and `db-migrate:qa` is.
+
+**Not acted on**, deliberately: rebuilding the QA stack is not this item and
+would consume a session. Filed so it is a lookup rather than a rediscovery, and
+so that *"proved on QA"* is not written by the next session without checking the
+image first.
+
+---
+
+## ⚠️ SESSION NOTE — F16's FULL-SUITE NUMBER IS REPORTED AS A **CONTROLLED DELTA**, BECAUSE THE RAW ONE IS MEANINGLESS — **2026-08-17, run `20260817-231454` session 01**
+
+Running the **whole** unit suite from the F16 worktree reports **61 failed files
+/ 57 failed tests**. Read raw, that is an alarming branch.
+
+**The control refutes it.** The same command in this session's *other* worktree
+— `docs/f15-session-ledger`, which is **docs-only and carries none of F16's
+code** — reports the **identical 61 failed files / 57 failed tests**:
+
+| tree | files | passed | **failed files** | **failed tests** |
+|---|---|---|---|---|
+| docs-only control | 320 | 3408 | **61** | **57** |
+| F16 branch | 321 | 3415 | **61** | **57** |
+| **delta** | **+1** | **+7** | **0** | **0** |
+
+**+1 file and +7 tests is exactly the new gate**, and **not one additional
+failure.** The 61/57 are a pre-existing property of running this suite from a
+`git worktree` — the class AGENTS.md already records (a worktree checks out
+tracked files only, and the config resolves paths relative to the real root).
+The visible failure is a fixture read at `../../WM IOV Template.docx`, which is
+the same family.
+
+⚠️ **AND THE AUTHORITATIVE RUN IS CI, NOT EITHER OF THESE.** #719's `CI` —
+including *"unit tests (transcribe-md + packages)"* — is **green** in a proper
+checkout. The worktree numbers are reported here only because a session that ran
+them and did not control would have filed a false alarm against its own branch;
+*saying which half you have is the whole discipline.*
+
+---
+
+## ⚠️ CORRECTION TO MY OWN F15 ROW — THE CONCURRENT ACTOR IS **LIVE**, AND MY STATED PREMISE WENT STALE WITHIN MINUTES — **2026-08-17, run `20260817-231454` session 01**
+
+**The F15 row above justifies merging #713 partly on *"last commit `4425bd6a` at
+`20:56:25Z` — 2h20m silent"*. That was TRUE when I measured it at ~23:18Z and
+FALSE by ~23:20Z.** Correcting it here rather than editing the row, so both the
+claim and its decay are legible.
+
+**Measured now:** `feat/twin-auto-certification` is at **`e9b4e5c6`, committed
+`23:20:22Z`** — *"docs: my auto-certification ruling renumbers to #125 — the
+loop claimed #124 first"*. They rebased onto `79ddd855` and are **actively
+working and aware of this loop.**
+
+⚠️ **THIS IS THE "EVIDENCE ONLY DESCRIBES THE TREE IT WAS TAKEN ON" RULE POINTED
+AT A PERSON RATHER THAN A TREE.** A silence measurement has a shelf life, and
+mine expired in about two minutes. **A quiet actor is not an absent one**, and
+"2h20m silent" should never have been load-bearing on its own.
+
+**WHAT DOES NOT CHANGE, AND WHY THE MERGE STILL STANDS.** The substantive
+grounds never depended on their silence:
+
+- **ZERO file overlap**, re-measured against their current head: they touch
+  `note-template-lifecycle.ts`, `queue.ts`, `auto-certify{,-eligibility}.ts`,
+  two auto-certify tests, a resolver test and `RULINGS.md`. #713 touched
+  `visit-document-surface.tsx` and one gate test.
+- #713 was **non-draft, `CLEAN`, six required checks green**, with the mandatory
+  adversarial pass already posted.
+- `main` is `strict: false`, so nothing was forced to rebase.
+- The merge touched neither their worktree nor their branch.
+
+**They have not yet picked up `455e109c`** — their branch sits on `79ddd855` —
+so they will meet it on their next sync as an ordinary fast-forward.
+
+### ⚠️ AND A COORDINATION FLAG THAT MATTERS MORE THAN THE CORRECTION
+
+**They are building AUTO-CERTIFICATION for template twins. F16 changes the
+CERTIFY REFUSAL PATH those auto-certifications would run through.**
+
+**File-level overlap is ZERO** — F16 touches `synthetic-test.ts`,
+`synthetic-test-error.ts`, `mappings-not-ready-message.ts` and
+`template-twin-certify.ts`; none appear in their diff. **So the two merge
+cleanly.** The adjacency is SEMANTIC, and it is the kind a file diff cannot see:
+
+- F16 gives `MAPPINGS_NOT_READY` a **typed expected-refusal arm**
+  (`reason: 'mappings_not_ready'`, with `remaining` / `totalFields`). An
+  auto-certifier that pattern-matches on `reason: 'unexpected'` to detect "not
+  ready" would **silently stop matching** once F16 lands.
+- `TemplateTwinSyntheticTestError` **moved to a leaf module** and is re-exported.
+  Existing importers are unaffected **by construction**, but anyone adding a new
+  import should take the leaf.
+
+⚠️ **STATED AS REASONING, WITH NO AUTHORIZATION ATTACHED** — *authorization
+travels owner → session and never through a peer.* This is a heads-up for
+whoever reviews either branch, not an instruction to that session.
+
+---
+
+## F16 — SECOND REFUTATION PASS, FOUR LENSES, RUN ON THE FINISHED DIFF — **2026-08-17, run `20260817-231454` session 01**
+
+⚠️ **STILL BY THE AUTHOR, AND STILL A WEAKER INSTRUMENT THAN THE MANDATORY
+PASS.** Run with **deliberately different lenses** from the first pass (which
+was a correctness read and found the monotonicity defect). Recorded so a
+reviewer can see what was checked and what was not, rather than inferring it.
+
+### LENS 1 — FALSE REJECTION / FALSE GREEN: is the refusal predicate identical?
+
+**Claim under test: `notReady.length > 0` ⟺ the old `.some(p)`.**
+
+Old: `status !== 'certified' || (sourceType !== 'manual' && !clinicalConcept)`.
+New: `if (status !== 'certified') return …; if (sourceType !== 'manual' && !clinicalConcept) return …; return null`.
+
+A field yields non-null **iff** the first disjunct holds **or** the second does.
+**Logically identical — a disjunction rewritten as ordered guards.** ✅ No field
+is newly refused and none newly admitted.
+
+### LENS 2 — PRECEDENCE: does a different error now win?
+
+| order | before | after |
+|---|---|---|
+| 1 | missing mapping row (thrown inside `.map()`) | missing mapping row (thrown **before** `.map()`) |
+| 2 | `CONFLICT` — mappings sha changed | `CONFLICT` — unchanged |
+| 3 | status / concept readiness | status / concept readiness |
+
+**Unchanged.** The first throw moved *earlier in the same position* — it
+previously fired on the first iteration of a map that had not yet done anything
+observable. ✅
+
+### LENS 3 — PHI / CUSTOMER CONTENT: is anything new crossing a boundary?
+
+`blocking` now reaches the **audit row** for `MAPPINGS_NOT_READY` (previously it
+carried only class/code/message). Those entries are `<fieldId>:<reason>`, and
+production's fieldIds are opaque hex — `ttf_5d84f80e2fec3d0085ad6b33`. This is
+**the same channel `VALIDATION_FAILED` has always used**, with the same
+ids-and-codes-only rule. The **doctor-facing** sentence is built from counts
+alone and cannot carry a label even if one appeared in an id. ✅
+
+### LENS 4 — EQUIVALENCE OF THE TWO TOTALS
+
+`totalFields: mappings.length` (second throw) vs `compiled.fields.length` (first).
+After the missing-row check, `mappings` is a 1:1 map of `compiled.fields`, so the
+two are equal wherever both are reachable. ✅
+
+### ⚠️ WHAT THE PASS FOUND, AND WHY IT WAS **NOT** FIXED
+
+`unreadyBeforeParse` is computed on **every** call, including the happy path
+where every mapping exists and it is discarded unused. It is an O(80) filter on
+an interactive one-time action a doctor is already waiting seconds on.
+
+**Declined deliberately, and this is the reasoning rather than an oversight:**
+it is a **tidiness item, not a defect** — no behaviour depends on it — and
+fixing it would mean another push to #719, cancelling an `e2e` that is currently
+in flight. **The batching rule prices that at more than the fix is worth.**
+Recorded here so a reviewer knows it was seen and weighed, not missed. **Fold it
+into the next commit that touches the file for any real reason.**
+
+### WHAT THIS PASS DID **NOT** COVER
+
+- It did not run the certify path end to end; that needs prisma + storage.
+- It shares the author's assumptions about which universe matters, which is the
+  exact failure the mandatory independent pass exists to defeat. **An
+  independent refutation is still owed before #719 is read as fully gated.**
