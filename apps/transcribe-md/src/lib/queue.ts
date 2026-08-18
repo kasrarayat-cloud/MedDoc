@@ -182,7 +182,16 @@ export async function enqueueAutoCertifyTwin(payload: AutoCertifyTwinPayload): P
   // jobId keyed on the template so a double upload cannot start two live
   // generations for the same form.
   await getCleanupQueue().add(JOB_AUTO_CERTIFY_TWIN, payload, {
-    jobId: `autocert:${payload.noteTemplateId}`,
+    // ⚠️ '--', NEVER ':'. BullMQ REFUSES a custom job id containing a colon —
+    // `Custom Id cannot contain :` — and it refuses at ADD time, so the enqueue
+    // throws and NO JOB IS EVER CREATED. This file already records that exact
+    // failure for the DLQ enqueuer (G10, ~100 lines below): "EVERY [enqueue]
+    // failed ... Switching to '--' as the separator makes the jobId
+    // BullMQ-legal." This line was written with a colon anyway and reproduced
+    // it, so auto-certification could never run — not on upload, not by
+    // backfill. Caught by running the real backfill against production; the
+    // enqueue guards mock the queue and never meet BullMQ's validator.
+    jobId: `autocert--${payload.noteTemplateId}`,
     attempts: 1,
   });
 }
