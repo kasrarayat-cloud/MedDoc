@@ -140,10 +140,24 @@ export interface SignGateInput {
   templateSections: unknown;
   /**
    * F12-a / ruling #126 — the NOTE BODY (`signedSoap ?? soapFinal` when
-   * signed, `soapFinal` otherwise). Consulted only when the template is
-   * SILENT, because a template can be deleted out from under a signed
-   * operative record and `onDelete: SetNull` then re-admits an office E/M
-   * gate onto it. REQUIRED for the same reason `templateSections` is.
+   * signed, `soapFinal` otherwise). REQUIRED for the same reason
+   * `templateSections` is.
+   *
+   * ⚠️ THIS COMMENT SAID "Consulted only when the template is SILENT" UNTIL
+   * F12-d, AND THAT IS NO LONGER TRUE. It is consulted in TWO places now:
+   *
+   *   1. when the template is SILENT — #126(a), unchanged. A template can be
+   *      deleted out from under a signed operative record and
+   *      `onDelete: SetNull` then re-admits an office E/M gate onto it.
+   *   2. when the template reads OPERATIVE — F12-d. A body carrying all four
+   *      SOAP concepts and ZERO operative markers is an office visit, and an
+   *      operative-shaped template does not overrule it. Measured: production
+   *      row `cmsu1mhrp000h01nsxpvxxshk` is SIGNED, has a frozen `signedCode`
+   *      99214, and its bound template is INACTIVE — a retired template was
+   *      suppressing a live billable level.
+   *
+   * Corrected in the same commit that changed the behaviour, because this is
+   * the paragraph a reader consults to understand what the SIGN gate does.
    */
   noteText: unknown;
   /** The raw `emPendingChange` jsonb. Coerced here, fail-closed. */

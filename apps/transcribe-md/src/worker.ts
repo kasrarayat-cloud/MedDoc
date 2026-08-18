@@ -1007,6 +1007,12 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // and the note body's own headings decide. Without that clause the template
     // arm would answer "office visit" for every untemplated operative note and
     // this parameter would be permanently true.
+    //
+    // ⚠️ STILL TRUE AFTER F12-d. An earlier draft of F12-d ungated that arm into
+    // an OR, which would have made this paragraph false — and this comment was
+    // edited to say so before the adversarial pass killed the OR. Both the code
+    // and the sentence are back where they were; recorded because the next
+    // session will have the same idea and this is the paragraph it will read.
     const emApplies = emAppliesToVisit({
       specialtyId: visit.specialty,
       templateSections: noteTemplate.sections,
