@@ -18150,3 +18150,70 @@ instead of on every run. **Filed, not built** — it touches CI config for two
 required workflows, and doing it inside a session that is mid-citation would
 cancel the very runs it is trying to protect. ⚠️ And note `.github/` is a deploy
 surface like any other: that work belongs in a worktree.
+
+### 🔵 THE QA IMAGES ARE FOUR DAYS STALE, RE-MEASURED WITH A CONTROL — **2026-08-18, session 02**
+
+Session 01 filed this at "three days". Re-measured rather than incremented — *a
+count carried forward and then adjusted by assumption is a fabricated number.*
+
+    meddoc-pro-transcribe-md:qa         2026-08-14 18:07:03Z
+    meddoc-pro-db-migrate:qa            2026-08-14 18:06:57Z
+    meddoc-pro-transcribe-md-worker:qa  2026-08-14 18:06:32Z
+
+**Probed WITH A TRAVERSAL CONTROL, because a probe that finds nothing and a
+probe that reads nothing produce the same output:**
+
+| probe | reads | means |
+|---|---|---|
+| **CONTROL** — `.ts` files under `lib/template-twin` | **23** | the instrument traverses |
+| `pdf-generator.ts` — **F3 RETIRED it** | **1** | ⚠️ the image predates F3 |
+| `mappings-not-ready-message.ts` — F16 | **0** | expected; F16 is unmerged |
+
+⚠️ **AND `assert-migrations-applied --qa` IS GREEN — CORRECTLY.** This is the
+documented *"the `--qa` green covers the DATABASE, not the IMAGES"* failure,
+live right now. No migration has landed since 2026-08-14, so 104 of 104 is a
+true statement about a stack whose application code is four days behind `main`
+— missing F3's PDF retirement, F5-b, the F6 series, F10, F12, F13, F14 and F15.
+
+**Consequence, stated so nobody trusts the stack by accident: any behavioural
+proof run on QA today is a proof about a build nobody ships.** Rebuilding is
+`docker compose -f docker-compose.qa.yml build`, which IS granted to the loop —
+**deliberately not done inside this session**, because it competes for disk and
+CPU with two live citations. It is the natural first act of a session that needs
+QA, and it must be done BEFORE any QA measurement is believed, not after.
+
+### 🔴 THE `e2e` CEILING HAS UNDER TEN MINUTES OF HEADROOM, AND THAT IS NOW MEASURED — **2026-08-18, session 02**
+
+Session 01 recorded one `e2e` timeout at the 55-minute ceiling and called it
+*"outlier, not yet a trend"* — correctly, on one data point. **Measured here
+across the last fourteen SUCCESSFUL runs** (`gh run list --workflow e2e.yml`,
+`createdAt → updatedAt`):
+
+| | |
+|---|---|
+| fastest success | **34m19s** (`27ba0349`) |
+| slowest success | **45m23s** (`b2f30ea2`) |
+| mean | **≈41 min** |
+| ceiling (`e2e.yml:56`) | **55 min** |
+| **headroom over the WORST success** | **9m37s** |
+
+⚠️ **EVERY CITATION THIS PROGRAMME TAKES DEPENDS ON THIS WORKFLOW, AND IT PASSES
+WITH LESS THAN TEN MINUTES TO SPARE.** A 20% slowdown on a runner — a slower
+image build, a busier queue, one apt failover — converts a green gate into a
+`cancelled` that reads exactly like a push cancellation.
+
+⚠️ **AND THE TWO FAILURE MODES ARE DIFFERENT, WHICH IS WHY THIS IS NOT THE SAME
+ROW AS THE `playwright install` STALL.** That one hangs in the runner's package
+layer before any repository code executes. This is the job doing **real work** and
+running out of budget: sampled mid-run, `#720`'s `e2e` was in **step 38, "Build
+flag-ON image for the document preview"** — a docker image build inside the e2e
+job, not an apt fetch. **Two independent paths to the same `cancelled`**, and
+only reading the log tells them apart.
+
+**Filed, not fixed** — raising a required workflow's ceiling is a change to the
+gate itself and belongs in front of the owner, not in a session that is mid-
+citation. The honest options are: raise `timeout-minutes`, cache the image build
+that step 38 performs, or split the pack. ⚠️ **Do not read a `cancelled` on
+`e2e` as a push cancellation without checking the branch for a second sha** —
+this programme has now produced three timeouts wearing that costume in under
+thirty hours.
