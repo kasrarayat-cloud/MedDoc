@@ -17782,6 +17782,564 @@ into the next commit that touches the file for any real reason.**
 
 ---
 
+## F17 — TWO ADDITIONS FROM AN INDEPENDENT RE-MEASUREMENT, AND THE ITEM STAYS PARKED — **2026-08-18, run `20260817-231454` session 02**
+
+**Session 01 filed F17 and declined to build it**, on the grounds that no CMS
+reference exists on this host and *"adjudicating billability from memory is how
+`K22.7` got written."* **That judgement is re-affirmed here, not overturned** —
+and the reasoning is now sharper, because two things were measured rather than
+recalled.
+
+### 1 · THE 18 REJECTIONS ARE RE-MEASURED, NOT CARRIED FORWARD
+
+*A count carried forward from another session's report and then repeated is
+inherited evidence.* Re-run against production by this session, independently:
+
+```sql
+select c as code, count(*) from audit_logs a,
+       jsonb_array_elements_text(a.metadata->'rejectedCodes') c
+ where a.action::text='CODING_COACH_REJECTED_INVALID_ICD' and c like 'I87%'
+ group by 1 order by 2 desc, 1;
+```
+
+| code | rejections |
+|---|---|
+| `I87.312` | 6 |
+| `I87.1` | 3 |
+| `I87.302` | 3 |
+| `I87.311` | 2 |
+| `I87.301` · `I87.391` · `I87.392` · `I87.393` | 1 each |
+
+**18 total — identical to session 01's figure, measured a second time by a
+different hand.** ⚠️ Note the shape trap on the way: the first query assumed
+`metadata->>'code'`, which returned one null-keyed row of 61. The column is an
+object with a `rejectedCodes` ARRAY; *ask what shape the data is before asking
+how much of it there is.*
+
+### 2 · NEW — THE STRUCTURAL ARGUMENT IS AVAILABLE **INSIDE `I87` ITSELF**, WITH NO EXTERNAL AUTHORITY
+
+Session 01's argument rested on the written rule at `I83.81`, **a different
+category**. The stronger form is seven lines above the defect, in the **same**
+one:
+
+```
+'I87.001',   // Postthrombotic syndrome without complications, right LE
+'I87.002',   // … left LE
+'I87.003',   // … bilateral LE          ← I87.00 (the 5-char header) is ABSENT
+'I87.011',   // Postthrombotic syndrome with ulcer of right LE
+'I87.012',   // … left LE
+'I87.013',   // … bilateral LE          ← I87.01 (the 5-char header) is ABSENT
+'I87.2',
+'I87.30',    // ← 5-char ADMITTED, and NO 6-char child appears anywhere
+'I87.31',
+'I87.32',
+'I87.33',
+```
+
+**Within `I87.0`, the file treats 5-char as header and 6-char as billable, and
+omits the headers deliberately. Four lines later, in `I87.3`, it does the exact
+opposite.** That is an internal contradiction in one category of one file, and
+establishing it requires no CMS reference at all.
+
+⚠️ **AND PRODUCTION NAMES SEVEN OF THE MISSING CHILDREN.** The rejection table
+above is the model emitting `I87.301`, `I87.302`, `I87.311`, `I87.312`,
+`I87.391`, `I87.392`, `I87.393` — **six-character codes under exactly the
+headers the allowlist admits.** A five-character code with observed
+six-character children is not a terminal code.
+
+### ⚠️ WHY THAT IS STILL NOT ENOUGH TO BUILD IT — THE PART THAT MATTERS
+
+**An emitted code is not a billable code, and the allowlist exists precisely
+because the model is not trusted.** Using `CODING_COACH_REJECTED_INVALID_ICD` as
+the source for what to ADD would make the allowlist a record of what the model
+happens to say — which inverts its entire purpose. The rejections are strong
+evidence about **structure** (these headers have children) and **no evidence
+about billability** (whether CMS accepts each specific child).
+
+So F17 splits, and the two halves have different dispositions:
+
+| half | direction | disposition |
+|---|---|---|
+| **A** — remove `I87.30/.31/.32/.33` | **TIGHTENING** — strictly fewer codes admitted | provisionally rulable in principle; **NOT shipped alone**, see below |
+| **B** — add the billable six-character children | **LOOSENING** — more codes admitted, on a billing floor | **fails the provisional test.** Needs an authoritative source |
+
+⚠️ **AND A IS DELIBERATELY NOT SHIPPED WITHOUT B.** AGENTS.md's own GI reference
+case records that refusing both headers alone *"would be a stricter floor and a
+worse product"*. Here it is worse still: the pilot practice is **vascular /
+venous ultrasound**, `I87` is their family, and A-alone converts 18 mis-coded
+rejections into 18 **silent total drops** on the specialty the doctor bills.
+**Shipping the safe half in isolation would look like progress and cost the
+doctor a diagnosis code.**
+
+### 3 · NEW FINDING — THE `I87` FAMILY IS WATCHED BY NOTHING
+
+`packages/ai/src/__tests__/icd10-varicose-symptomatic.test.ts` is the guard for
+this clinical area and contains **zero `I87` assertions** (`grep -c I87` → 0,
+against a file that asserts `I83` throughout). **The watched-set diff, in the one
+place F17 lives:** the guard is flawless over a set that does not contain the
+codes at issue, so its green says nothing about them. Whatever shape F17's fix
+takes, **the guard must gain `I87` arms in the same commit** — asserting the
+headers are refused AND the children admitted, the split-family both-directions
+shape.
+
+### WHAT UNPARKS F17
+
+**An authoritative billable-code source for `I87.3x`** — a CMS/ICD-10-CM
+reference the owner supplies, or explicit owner adjudication of the sixteen
+codes. Nothing else. **It is not unparked by another session feeling confident
+about the sixth character.**
+
+---
+
+## ✅ F16 — THE **INDEPENDENT** ADVERSARIAL PASS, AND IT FOUND SIX DEFECTS — **2026-08-18, run `20260817-231454` session 02**
+
+**This discharges the debt session 01 recorded in its own last line:** *"An
+independent refutation is still owed before #719 is read as fully gated."* Its
+two passes were by the branch's author and were named as the weaker instrument.
+This one was run by four refuters that did not write the code, each given the
+CLAIMS rather than the intent, each required to produce FILE:LINE + a concrete
+input → wrong output, each permitted to return NOTHING FOUND.
+
+⚠️ **#719 WAS CONVERTED TO A DRAFT THE MOMENT THE FIRST DEFECT WAS CONFIRMED** —
+not after triage, not once severity was known. It was non-draft, `CLEAN`,
+7-of-7 green and mergeable at that moment, which is exactly the state the
+draft-at-doubt rule exists for.
+
+### THE FOUR LENSES, AND WHAT EACH WAS ASKED TO BREAK
+
+| lens | claim under test | verdict |
+|---|---|---|
+| **gate integrity** | the refusal predicate is byte-identical; no check moved relative to CONFLICT | **central claim HOLDS** — 3 side defects |
+| **disclosure boundary** | no field label, `err.message` or `blocking` reaches the doctor | **HOLDS** — 1 false precedent claim |
+| **count correctness** | one entry per FIELD; the count is monotone as work is done | *(recorded below)* |
+| **false green / guard blindness** | the guard sees the regression that actually ships | 🔴 **REFUTED** |
+
+### 🔴 THE ONE THAT MATTERS — THE GUARD IS BLIND TO THREE OF FOUR PARTIAL LANDINGS
+
+**`gate-f16-…test.ts:32-42` imports ONLY `../mappings-not-ready-message` and
+`../synthetic-test-error`.** It never loads `synthetic-test.ts` or
+`template-twin-certify.ts` — **verified by reading the import block directly,
+not taken on report.** So it is a unit test of two new leaf modules wearing a
+gate's name. Each mutation below was **applied and asserted applied** before its
+result was read:
+
+| the partial landing a tired session would ship | what the physician gets | the gate |
+|---|---|---|
+| `synthetic-test.ts` counts land, the certify ladder branch does NOT | the **2026-08-17 sentence verbatim** — *"…will not succeed on a retry until it is fixed"* | **7 passed** |
+| the ladder branch lands, `synthetic-test.ts` throws with no detail | `remaining = 0` → *"Not yet — **some fields** still need confirming"* — **F16's entire product, the NUMBER, gone** | **7 passed** |
+| the message helper lands, the action returns the old literal | the 2026-08-17 sentence verbatim | **7 passed** |
+
+Only the fourth (dropping the re-export) is caught, and **not by this gate** —
+`tsc` catches it, because `template-twin-certify.ts:39` is the sole importer.
+
+⚠️ **AND ARM 4's NAME IS A CLAIM ABOUT THE DOCTOR WHILE ITS BODY IS A CLAIM
+ABOUT A PURE FUNCTION.** `it('never tells the doctor the refusal is somebody
+else's to fix')` asserts on `mappingsNotReadyMessage(6, 80)` — it cannot observe
+whether the action ever *calls* that function. **No arm anywhere asserts
+`reason === 'mappings_not_ready'`, and no arm asserts `result.error` for any
+input.** This is *"a check whose TITLE is narrower than what it MEASURES"*
+inverted: the title is **wider**.
+
+### 🟠 THE ACTIONABLE CLAUSE POINTS THE WRONG WAY — AND THE GATE IS GREEN ON IT
+
+**`mappings-not-ready-message.ts:38-40`** — *"Open the field list **above**…"*
+
+**Verified by reading the component rather than by report:** the error banner
+renders at `native-template-manager.tsx:268-285`; `<ReviewWorkspace>`, which
+contains the field list, mounts at **`:289`**. The list is strictly **BELOW**
+the sentence that points above it. The doctor also presses **Certify** from
+inside that workspace, so they are told to *"open"* a list that is already open.
+
+⚠️ **THE COUNT IS THE DIAGNOSTIC HALF; THIS IS THE ACTIONABLE HALF, AND IT IS
+THE ENTIRE POINT OF THE ITEM.** The gate passes because `:49` asserts only that
+the hint STRING is present — never that it is TRUE of the DOM.
+
+### 🟡 THE SINGULAR SENTENCE IS UNGRAMMATICAL, AND THE GATE ENSHRINES IT
+
+`mappingsNotReadyScope(1, 80)` → **`"1 of 80 field still needs confirming"`**.
+The noun is pluralised off `remaining`, but with a total present the noun
+belongs to `totalFields`. `[2,80]`, `[6,80]`, `[79,80]`, `[80,80]` all read
+correctly — **only `remaining === 1` with a total is broken, which is the last
+step before success and the most likely moment a physician reads it.**
+
+⚠️ **`gate-f16-…test.ts:55` asserts `toBe('1 of 12 field still needs
+confirming')`.** The guard does not merely miss the defect, it **locks it in** —
+fixing the sentence reddens the gate. That is the shape that makes a copy bug
+permanent.
+
+### 🟡 A FALSE PRECEDENT IN A COMMENT, ON A DISCLOSURE BOUNDARY
+
+`template-twin-certify.ts:292-294` says the new audit metadata uses *"the same
+PHI-safe channel VALIDATION_FAILED already uses."* **Measured on production:
+`select count(*) from audit_logs where metadata ? 'blocking'` → 0, against a
+positive control of 2 for `errorClass`.** VALIDATION_FAILED's `blocking` goes to
+a `console.warn`, never to an audit row. **F16 introduces the first `blocking`
+key `audit_logs` has ever carried** — and `logAudit` fans the row out to the
+SUPER_ADMIN activity SSE stream, so up to 80 `ttf_<hash>:<reason>` entries newly
+cross that boundary.
+
+**Low as shipped** — opaque hashes and a closed reason vocabulary. **Worth
+fixing anyway, because the comment sanctions a channel that does not exist**, and
+the next person widening `blocking` to a free-form issue string will read it as
+precedent. *A wrong mechanism stated confidently in a source file outlives the
+session that wrote it.*
+
+Second, smaller: the *"NO FIELD LABELS, EVER … the customer's property"* framing
+reads wider than the real boundary — **the same component already renders
+`f.field.originalLabel` to the same doctor at `:637` and `:656`** (verified by
+grep). The true invariant is *labels never reach an error string or an audit
+row*, which the code does enforce.
+
+### 🔵 AND ONE THE DIFF DID NOT CAUSE BUT MAKES ACUTE — FILED, NOT FIXED
+
+**Three different counts will render on one screen, in nearly the same words,
+with different values.** `native-template-manager.tsx:469-472` reads
+`f.field.detectionStatus`, parsed from `compiledDocumentIr` — an **immutable
+compile-time artifact**. `updateTemplateTwinMappings` writes only
+`mappingStatus`; the IR is never rewritten and the DB column is bulk-set only on
+*successful* certification. **So that banner is FROZEN and never decreases as
+the physician confirms fields.** F16 now renders a live count directly above a
+stale one, and a third at `:742` counts a narrower predicate again.
+
+**Not introduced by this change** — but F16's whole claim is that the number can
+be ACTED on, and it will be read against one that cannot move. Filed as its own
+item; fixing the frozen banner is a separate change to the workspace reader.
+
+### WHAT THE PASS COULD **NOT** BREAK — recorded, because a refutation that finds only defects is not a measurement
+
+- **The refusal set is provably unchanged.** 14,521 `mappings` arrays brute-forced
+  over `status × sourceType × {null,'',0,undefined,false,'gerd'}`: **0
+  mismatches** between the deleted `.some(…)` and `notReady.length > 0`.
+- **Precedence holds.** Nothing moved relative to the `mappings.length`/sha
+  CONFLICT check.
+- **No case-normalisation seam.** `mappingStatus` is a non-null Postgres enum
+  (`schema.prisma:3099`); `mapping()` lowercases at `synthetic-test.ts:124` and
+  the early filter applies the same — **0 early-vs-late disagreements** across
+  all enum values × sourceTypes × concept shapes.
+- **`fieldId`s are opaque BY CONSTRUCTION, not by convention.**
+  `compiler.ts:1303-1305` is `prefix + sha256(...)` and **the label is not an
+  input**; the prisma select feeding `blocking` never loads `originalLabel` at
+  all. **80 of 80** production rows match `^ttf_[a-f0-9]{24}$`.
+- **No cross-tenant oracle.** A foreign `noteTemplateId` throws `NOT_FOUND` before
+  any count exists.
+
+### THE FIXES, AND THE MUTATION PROOFS THAT SAY THE NEW GUARD IS REAL
+
+Landed as `8d2d8e62` on `fix/f16-mappings-not-ready-is-actionable`. Six files,
+**21 arms across two gate files** (was 7 in one), `tsc` 0 errors, **344 passed**
+across `src/lib/template-twin` + `src/actions`.
+
+The structural change is that the readiness rule moved OUT of `synthetic-test.ts`
+— which imports prisma, storage, the fill engine and the docx parser — into
+`mappings-readiness.ts`, a leaf. **That is what makes the rule executable by a
+test at all**, and it is the same move F16 already made for the error class.
+⚠️ It also collapses **two copies of one predicate into one**: the early branch
+filtered on the three-way rule and LABELLED with a two-way expression, which is
+the false-reason-code defect.
+
+**Every mutation was applied and ASSERTED APPLIED before its result was read**,
+and each was restored from git — safe here only because the work was COMMITTED
+first, which is the honest form of *"restore from backup, not from git"*.
+
+| # | the regression | old gate | **new gate** |
+|---|---|---|---|
+| **M1** | the certify ladder branch disabled — the 2026-08-17 sentence returns | 7 passed | 🔴 **4 failed / 18 passed** |
+| **M2** | the late throw stops carrying `{blocking, totalFields}` — the NUMBER disappears | 7 passed | 🔴 **1 failed / 15 passed**, naming the site |
+| **M3** | the route hint reverts to *"above"* | green | 🔴 **2 failed / 20 passed** |
+| **M4** | the noun agrees with `remaining` again | **green — it ASSERTED the defect** | 🔴 **2 failed / 14 passed** |
+| **M5** | a concept-less CERTIFIED field labelled `unconfirmed` | *unexecutable* | 🔴 **2 failed / 20 passed** |
+
+⚠️ **AND THE HAPPY-PATH CONTROL IS AN ARM, NOT AN AFTERTHOUGHT.** Every other
+action-level arm asserts on a REFUSAL, so a harness that rejected everything
+would satisfy all of them. `POSITIVE CONTROL — the same harness certifies when
+nothing refuses` proves it can also produce `ok: true`. *A guard proven only in
+the RED direction is half-proven, and it is the cheaper half.*
+
+⚠️ **AND WRITING THE FIX REPRODUCED THE DEFECT IT WAS FIXING — CAUGHT, IN THE
+SAME PASS.** The action-level gate mocks `runTemplateTwinSyntheticTest`
+wholesale, so it is **blind to M2** — the partial landing where the throw stops
+carrying detail. The arm that closes it (`every MAPPINGS_NOT_READY throw carries
+totalFields`) exists only because the mutation list was worked through entry by
+entry instead of stopping when the first arms went green. **Its limit is stated
+in place: it is a SOURCE-TEXT assertion, not a membership one**, because
+`synthetic-test.ts` cannot be loaded in a unit test at all — which is the very
+fact that motivated the leaf extraction.
+
+---
+
+## 🔵 F18 — THREE COUNTS ON ONE SCREEN, AND THE BIGGEST ONE IS FROZEN AT COMPILE TIME — **FILED 2026-08-18, run `20260817-231454` session 02**
+
+**Found by the F16 adversarial pass, by two refuters independently. NOT caused by
+F16 — but F16 is what makes it matter, because F16's whole claim is that the
+number can be ACTED on.**
+
+`native-template-manager.tsx:469-473` reduces `byStatus` over
+**`f.field.detectionStatus`** — the COMPILER's status, parsed out of
+`compiledDocumentIr`, an **immutable compile-time artifact**. Confirming a field
+writes `template_twin_semantic_mappings.mappingStatus` and **never rewrites the
+IR**; the DB column is bulk-set only at `certification-lifecycle.ts:809`, on
+*successful* certification.
+
+**Measured on production by this session, independently of the refuters:**
+
+```sql
+select f->>'detectionStatus', count(*) from template_twin_compiled_versions v,
+       jsonb_array_elements(v."compiledDocumentIr"->'fields') f group by 1;
+-- needs_confirmation | 79
+-- recognized         |  1
+```
+
+against `74 CERTIFIED / 6 NEEDS_CONFIRMATION` in the mapping rows. So today,
+on the real form, a physician sees:
+
+| surface | reads | source |
+|---|---|---|
+| amber banner `:535` | **"79 of 80 fields still need a quick confirmation…"** | frozen IR `detectionStatus` |
+| F16's refusal `:268` | **"Not yet — 6 of 80 fields still need confirming."** | live `mappingStatus` |
+| footer `:743` | **"6 of 80 still to confirm"** | live, narrower predicate |
+
+⚠️ **THE BANNER IS MONOTONE-FROZEN.** It reads 79 whether the doctor has
+confirmed zero fields or seventy-nine; it vanishes only when
+`certificationStatus` flips. **A physician told "6 of 80" by the button and
+"79 of 80" by the banner directly above it learns nothing actionable** — which
+is precisely the failure F16 exists to end.
+
+⚠️ **AND THE NUMBER IS `79`, WHICH IS THE FIGURE `AGENTS.md` SPENDS A TABLE
+CORRECTING.** That entry establishes the wall has never been 79 in either sense
+it was claimed — *"so the old figure was not merely stale, it was wrong when
+written"* — and could not say where 79 came from. **`detectionStatus` is a
+CANDIDATE ORIGIN that matches exactly**: a third quantity nobody enumerated,
+rendered live by the UI in the same words. Offered as a lead, **not** as proof of
+provenance; the 2026-07-28 report cannot now be asked what it read.
+
+**Done when:** one count, from one source, or three counts that say plainly which
+question each answers. ⚠️ **Do NOT "fix" it by making the banner read the
+mapping rows without checking what the compile-time status is FOR** — it is the
+compiler's own detection confidence, and it may have a reader that needs it
+unchanged.
+
+---
+
+## 🔵 THE `playwright install --with-deps` STALL IS NOW ON ITS THIRD WORKFLOW — **2026-08-18, session 02**
+
+**`CI` on PR #720's head came back `cancelled` with no push having happened.**
+Diagnosed from the log rather than re-run on hope:
+
+    Terminate orphan process: pid (3240) (npm exec playwright install --with-deps chromium)
+
+`test.yml:39` sets `timeout-minutes: 20`; the job ran **20m16s** — a timeout,
+which **GitHub reports as `cancelled`**, exactly as the `a11y-ci` `a3` row above
+records. The same job takes **3m45s** normally, so this is a hang, not a slow run.
+
+⚠️ **THIS IS THE THIRD OCCURRENCE IN ~30 HOURS AND THE SECOND WORKFLOW.**
+`a11y-ci` stalled twice on 2026-08-17 in the step named *"Install Playwright
+Chromium (with system deps)"*, failing over from the Azure Ubuntu apt mirror to
+`archive.ubuntu.com` and then going silent for 23 minutes. **Both workflows make
+the same external reach, and every citation this programme takes depends on
+both.** Re-run: `a2`, **success** — the reason recorded here because canon
+forbids an unexplained re-run.
+
+**The class is already named in `AGENTS.md` — *"AN EXTERNAL REACH IN THE BUILD
+IS REMOVED, NOT RETRIED"*** — with two members (`npm ci`, retried;
+`next/font/google`, removed). This is a third, and it is currently in the
+*retried* column by default rather than by decision.
+
+**The candidate fix is a CACHE, not a retry:** `actions/cache` over
+`~/.cache/ms-playwright` plus the apt layer, so the reach happens on a cache miss
+instead of on every run. **Filed, not built** — it touches CI config for two
+required workflows, and doing it inside a session that is mid-citation would
+cancel the very runs it is trying to protect. ⚠️ And note `.github/` is a deploy
+surface like any other: that work belongs in a worktree.
+
+### 🔵 THE QA IMAGES ARE FOUR DAYS STALE, RE-MEASURED WITH A CONTROL — **2026-08-18, session 02**
+
+Session 01 filed this at "three days". Re-measured rather than incremented — *a
+count carried forward and then adjusted by assumption is a fabricated number.*
+
+    meddoc-pro-transcribe-md:qa         2026-08-14 18:07:03Z
+    meddoc-pro-db-migrate:qa            2026-08-14 18:06:57Z
+    meddoc-pro-transcribe-md-worker:qa  2026-08-14 18:06:32Z
+
+**Probed WITH A TRAVERSAL CONTROL, because a probe that finds nothing and a
+probe that reads nothing produce the same output:**
+
+| probe | reads | means |
+|---|---|---|
+| **CONTROL** — `.ts` files under `lib/template-twin` | **23** | the instrument traverses |
+| `pdf-generator.ts` — **F3 RETIRED it** | **1** | ⚠️ the image predates F3 |
+| `mappings-not-ready-message.ts` — F16 | **0** | expected; F16 is unmerged |
+
+⚠️ **AND `assert-migrations-applied --qa` IS GREEN — CORRECTLY.** This is the
+documented *"the `--qa` green covers the DATABASE, not the IMAGES"* failure,
+live right now. No migration has landed since 2026-08-14, so 104 of 104 is a
+true statement about a stack whose application code is four days behind `main`
+— missing F3's PDF retirement, F5-b, the F6 series, F10, F12, F13, F14 and F15.
+
+**Consequence, stated so nobody trusts the stack by accident: any behavioural
+proof run on QA today is a proof about a build nobody ships.** Rebuilding is
+`docker compose -f docker-compose.qa.yml build`, which IS granted to the loop —
+**deliberately not done inside this session**, because it competes for disk and
+CPU with two live citations. It is the natural first act of a session that needs
+QA, and it must be done BEFORE any QA measurement is believed, not after.
+
+### 🔴 THE `e2e` CEILING HAS UNDER TEN MINUTES OF HEADROOM, AND THAT IS NOW MEASURED — **2026-08-18, session 02**
+
+Session 01 recorded one `e2e` timeout at the 55-minute ceiling and called it
+*"outlier, not yet a trend"* — correctly, on one data point. **Measured here
+across the last fourteen SUCCESSFUL runs** (`gh run list --workflow e2e.yml`,
+`createdAt → updatedAt`):
+
+| | |
+|---|---|
+| fastest success | **34m19s** (`27ba0349`) |
+| slowest success | **45m23s** (`b2f30ea2`) |
+| mean | **≈41 min** |
+| ceiling (`e2e.yml:56`) | **55 min** |
+| **headroom over the WORST success** | **9m37s** |
+
+⚠️ **EVERY CITATION THIS PROGRAMME TAKES DEPENDS ON THIS WORKFLOW, AND IT PASSES
+WITH LESS THAN TEN MINUTES TO SPARE.** A 20% slowdown on a runner — a slower
+image build, a busier queue, one apt failover — converts a green gate into a
+`cancelled` that reads exactly like a push cancellation.
+
+⚠️ **AND THE TWO FAILURE MODES ARE DIFFERENT, WHICH IS WHY THIS IS NOT THE SAME
+ROW AS THE `playwright install` STALL.** That one hangs in the runner's package
+layer before any repository code executes. This is the job doing **real work** and
+running out of budget: sampled mid-run, `#720`'s `e2e` was in **step 38, "Build
+flag-ON image for the document preview"** — a docker image build inside the e2e
+job, not an apt fetch. **Two independent paths to the same `cancelled`**, and
+only reading the log tells them apart.
+
+**Filed, not fixed** — raising a required workflow's ceiling is a change to the
+gate itself and belongs in front of the owner, not in a session that is mid-
+citation. The honest options are: raise `timeout-minutes`, cache the image build
+that step 38 performs, or split the pack. ⚠️ **Do not read a `cancelled` on
+`e2e` as a push cancellation without checking the branch for a second sha** —
+this programme has now produced three timeouts wearing that costume in under
+thirty hours.
+
+#### ⚠️ CORRECTION, TWELVE MINUTES LATER: THE HEADROOM IS **23 SECONDS**, NOT 9m37s
+
+**My own row above is superseded by the very run it was written about, and the
+number moved in the alarming direction.** Recorded as a correction rather than
+edited away, because a reader who saw the first figure has no way to know a
+second replaced it.
+
+`#720`'s `e2e` **SUCCEEDED** at `03:19:25Z`:
+
+    job started 2026-08-18T02:24:48Z
+    job ended   2026-08-18T03:19:25Z
+    duration    54m37s          ceiling 55m00s
+    ------------------------------------------
+    MARGIN      23 SECONDS
+
+The 9m37s figure was true of the fourteen runs measured before it and is now
+**wrong by an order of magnitude**. The correct statement is:
+
+> **The `e2e` gate — required for every citation this programme takes — passed
+> its most recent run with twenty-three seconds to spare.**
+
+⚠️ **AND THIS IS WHY THE EARLIER TIMEOUTS WERE MISREAD AS OUTLIERS.** A 55-minute
+ceiling against a 41-minute mean *looks* like a 25% buffer. It is not: the
+distribution has a long right tail (34m19s to 54m37s observed), and the ceiling
+sits inside the tail rather than beyond it. **Session 01's timeout and this
+23-second pass are the same phenomenon sampled twice** — one either side of the
+line — not an outlier and a healthy run.
+
+**This raises the item's priority and it is not a "🟢 noise" row.** *A fix is
+priced by the ASSET behind the symptom:* the asset here is **the citation
+mechanism itself**. When this workflow times out, the programme cannot cite,
+cannot merge and cannot deploy — and the failure arrives wearing a push
+cancellation's clothes, which is the costume that wastes the most time.
+
+#### ⚠️ AND A FOURTH, THIRTY MINUTES LATER — SAME STEP, SECOND WORKFLOW, SAME NIGHT
+
+**The `playwright install --with-deps` row above said "third occurrence". Before
+this session ended it was the FOURTH, and the two tonight are in different
+workflows.** Recorded as an increment measured rather than assumed.
+
+`#719`'s `a11y-ci` on `8d2d8e62` came back **`cancelled`** with **one sha on the
+branch** (two-view checked — no push happened):
+
+    created 2026-08-18T02:52:48Z
+    ended   2026-08-18T03:18:07Z
+    duration 25m19s        ceiling 25m00s   (a11y.yml:63)
+    step 10 "Install Playwright Chromium (with system deps)"  -> cancelled
+
+**The tally for this ONE step, in thirty hours:**
+
+| when | workflow | ceiling | outcome |
+|---|---|---|---|
+| 2026-08-17 21:12Z | `a11y-ci` | 25m | timed out (24m04s in step 10) |
+| 2026-08-17 21:39Z | `a11y-ci` | 25m | timed out (24m03s in step 10) — `a2` |
+| 2026-08-18 02:24Z | **`CI` / `test`** | 20m | timed out; orphan `npm exec playwright install --with-deps chromium` |
+| 2026-08-18 02:52Z | `a11y-ci` | 25m | timed out in step 10 |
+
+⚠️ **THIS IS NO LONGER AN INCIDENT, IT IS THE PROGRAMME'S MOST FREQUENT GATE
+FAILURE**, and it is a single external reach in a single step that **two of the
+four required workflows both perform**. Re-run in each case; each re-run
+succeeded. **Every one of those re-runs is an `a2`/`a3` that a citation row must
+explain**, which is a recurring tax on the audit trail as well as on wall clock.
+
+**AGENTS.md already rules on the class: *"AN EXTERNAL REACH IN THE BUILD IS
+REMOVED, NOT RETRIED."*** Its two recorded members were disposed of — `npm ci`
+retried with a budget, `next/font/google` removed. **This third member is
+currently in neither column: it is being retried by hand, one session at a
+time, with no budget and no decision behind it.**
+
+**The candidate fix stays a CACHE rather than a retry** (`actions/cache` over
+`~/.cache/ms-playwright` and the apt layer, so the reach happens on a miss
+instead of on every run) — **filed, not built, and deliberately so.** It edits
+two REQUIRED workflows; doing that inside a session holding two live citations
+would cancel the runs it is trying to protect. ⚠️ And `.github/` is a deploy
+surface: that work belongs in a worktree, which is a rule this programme has
+already broken twice on `e2e.yml` specifically.
+
+### 🔴 ISSUE #603 RECURRED AND TOOK `main` RED — ON A COMMIT WITH ZERO CODE IN IT — **2026-08-18, session 02**
+
+**`e2e` on `8f8b67c2` (the merge of docs-only PR #720) FAILED.** Not a timeout —
+a genuine test failure, and it is a textbook recurrence of an issue STEP 0 had
+already enumerated as KNOWN that same night.
+
+**The fingerprint matched on every discriminating detail:**
+
+| this occurrence | issue #603 as filed |
+|---|---|
+| `17-password-reset.spec.ts` | same spec |
+| `helpers/auth.ts:71` | same site |
+| `expect(page).toHaveURL(/\/login$/)` | same assertion |
+| hard failure, **both** attempts | same |
+| observed `…:9020/board`, **19 samples, all `/board`** | same arm |
+| the merge of a **docs-only** PR | *"zero-code-delta commit"* |
+
+`auth.ts:71` is `logoutViaMenu`: sign-out is clicked and the URL never leaves the
+home board. **The session-revocation race, arriving as a test race.**
+
+⚠️ **THE TREE-IDENTITY CHECK WAS RE-RUN HERE RATHER THAN INHERITED**, because
+that is the check #603 itself used to rule the code out:
+
+    git diff --name-only <parent> 8f8b67c2 | grep -vc '^docs/'   ->  0
+
+**Two markdown files, 174 insertions, zero code** — and the identical tree had
+passed `e2e` on the PR head **fifty-five minutes earlier**. The code is
+eliminated by measurement, not by assertion.
+
+**Re-run, with the reason recorded, and the recurrence posted to #603** so the
+alarm gets louder instead of being absorbed silently. ⚠️ *An auto-filed issue is
+a finding somebody already wrote down for you; the failure mode is not that it is
+unknown, it is that each session re-runs past it and the count never
+accumulates.*
+
+⚠️ **AND NOTE WHERE IT LANDS, WHICH IS THE PART THAT MATTERS.** This failure
+strikes commits that **cannot** have caused it — which in this programme means
+the **docs and ledger merges**, and those are exactly what every citation and
+every deploy must pass through. A flake sitting on the trunk's narrowest point is
+not a test-suite nuisance; it is a tax on the release path.
+
+**Tonight's gate arithmetic, so the scale is legible:** four `playwright
+install` timeouts, one `e2e` success with **23 seconds** of margin, and one #603
+recurrence — **six gate events in a single session**, none of them caused by any
+change under test.
 ## ✅ F15 IS DEPLOYED AND JUDGED — **22 OF 22**, `bfb420c8`, `2026-08-18T02:15:52Z`
 
 **#713 is LIVE in production.** Full judgement:
