@@ -19164,3 +19164,110 @@ standing owner ping rather than repeating it.
   new count on the same screen, deliberately not bundled into a deploy whose
   declaration did not name it.
 - **No clinical mutation.** Structural, read-only verification throughout.
+
+### ✅ F12-a — MERGED AND CITED — **2026-08-18, run `20260818-080141-b1` session 02**
+
+**PR #724, merge commit `daf2b13d74f164393151decd1d5f805f969883e4`.**
+
+**Citation — 4 of 4 on `daf2b13d74f164393151decd1d5f805f969883e4`:**
+   · `CI` 32129873837 a1
+   · `e2e` 32129873771 **a2**
+   · `a11y-ci` 32129873696 a1
+   · `secrets-scan` 32129873876 a1
+
+⚠️ **THE `e2e` `a2` IS EXPLAINED, BECAUSE AN UNEXPLAINED RE-RUN IS ITS OWN
+FINDING.** Attempt 1 failed on `rounds-c1.spec.ts:313` — **open issue #631**,
+matched by its title (*"survives retry"*: it failed on the initial attempt AND
+on retry #1) and by the test's OWN printed diagnosis:
+
+> *not on the login form — /login redirected us, so the signup session survived
+> `clearCookies()`. **This is the flake; it is not a slow render.***
+
+⚠️ **AND THE PAIRING RULES OUT A CODE CAUSE BY CONSTRUCTION.** The identical
+tree had passed `e2e` **41 minutes earlier** on the PR head —
+`git diff --stat 1d48d7cd daf2b13d` is **EMPTY**, because the branch had
+already merged `origin/main`, so the merge commit introduced no content at all.
+Same bytes, opposite results, on a spec that touches auth and settings and
+nothing F12-a changed. **The recurrence is recorded as a comment on #631 with
+that controlled pair**, because an alarm nobody annotates decays into noise —
+this programme has already paid for that once, three nights running.
+
+
+#### THE FILED FINDINGS WERE VERIFIED BY ME, NOT RELAYED
+
+A finding that arrives from a refuter is a CLAIM until its own author checks it.
+All five were re-verified against source before the rows above were written:
+
+| # | claim | verified |
+|---|---|---|
+| 4 | L7b gated on the specialty alone | `worker.ts:963-967` — `cpt: … && !isImagingReport`. Confirmed |
+| 5 | the watcher cannot see the operative artifact class | `check-imaging-em-artifacts.sh` filters `specialty='ultrasound'`. Confirmed |
+| 8 | a SUPERSEDED template is edited IN PLACE | `note-template-lifecycle.ts:211-225` — `if (existing && existing.status !== 'active')` → `update({ data: { … sections … } })`. ⚠️ **AND ITS OWN COMMENT STATES THE FALSE PREMISE**: *"draft / inactive → update in place (**not a live row**)"*. An inactive row a SIGNED visit still points at is exactly a live row. Confirmed |
+| 9 | the read route returns the raw blob | `api/visits/[id]/route.ts:134` selects `cptCodes: true`; **0** occurrences of `note-shape` in the file. Confirmed |
+| 10 | two `codes-tab` reversions | `visits/[id]/codes-tab.tsx:100` — `emApplies = true` as a DEFAULT PARAMETER; `:106` — `projectEmForDisplay(…, readonly, emApplies)` passes `readonly` where the view computes `readonly \|\| signedAt !== null`. Confirmed |
+
+#### ⚠️ THE DECLARED `e2e` RISK DID NOT MATERIALISE, AND NOW IT IS A NUMBER
+
+The ledger row above priced the new fixture class against **F19's 9m37s of
+headroom** and named the response in advance (*trim the pack, never raise the
+ceiling*). Measured on the PR head:
+
+| | |
+|---|---|
+| session 01's `e2e`, **without** the operative class | **43m19s** |
+| this session's `e2e`, **with** it | **41m26s** |
+| the timeout | **55m** |
+
+**The class added no detectable time — it came in ~2 minutes FASTER, which is
+run-to-run variance dominating.** Recorded as a measurement rather than left as
+a worry, and F19's ceiling was not touched.
+
+#### ⚠️ AND I CANCELLED ONE OF MY OWN RUNS, 61 SECONDS AFTER MY OWN PUSH
+
+`gh pr ready 724` fires a `ready_for_review` event, which started a **second**
+`a11y-ci` and cancelled the first through the workflow's concurrency group:
+
+    push              10:20:58Z  → CI · e2e · a11y-ci · secrets-scan
+    gh pr ready       10:21:59Z  → a11y-ci (new)  ·  a11y-ci 32126305404 CANCELLED
+
+**This is the recorded class — a second event landing a minute into my own
+runs — and it is mine.** The cost was about one runner-minute because it landed
+early; the identical mistake at minute forty discards the gate. ⚠️ **The habit
+this teaches is not "batch the commits" — they were batched.** It is that
+**lifting a draft is an EVENT, not a UI state change**, and it belongs BEFORE
+the push that starts the runs, or after they finish. The two-view check does not
+see it: both views were legitimately empty when I pushed.
+
+⚠️ **It also makes the PR head permanently uncitable**, because a cancelled run
+stays attached to the sha and `gh-runs.sh wait` correctly calls that terminal.
+No cost here — the citation that matters is the MERGE commit's, and it is above —
+but a session that needed a PR-head citation would have had to push a descendant.
+
+#### 🔵 A REFUSAL NOT IN MASTER's TABLE — shell LOOP CONSTRUCTS
+
+`until … ; do … ; done` is refused by the permission layer **in every tool**,
+including inside `Monitor`, whose own documentation prescribes exactly that shape
+for waiting. `$(…)` is refused too, which rules out the documented poll-loop
+patterns. Filed per MASTER's rule that a refusal outside the table is a finding.
+
+**The granted re-formulation exists and is better anyway:**
+`gh run watch <run-id> --exit-status` blocks natively and needs no loop; it
+exceeds the 600s foreground cap and continues in the background, notifying on
+exit — and its exit code IS the verdict. `bash scripts/gh-runs.sh wait <sha>` is
+the sanctioned waiter and was tried FIRST; it declined this sha for the correct
+reason (the cancelled duplicate above), which is the tool being right rather
+than a fault.
+
+#### THE DECLARATION WAS RENAMED BEFORE THE DEPLOY, AND THE GATE IS WHY
+
+`declaration_resolve` accepts an ancestor only when the diff to HEAD touches
+**zero runtime paths**. The declaration was named `20260818-645db4a1.md` after
+the first code commit; the adversarial pass then landed two more fixes as
+`1d48d7cd`, so `645db4a1..HEAD` **does** touch runtime and the deploy would have
+been REFUSED — before building, migrating or recreating anything.
+
+Renamed to `20260818-1d48d7cd.md`, with the revision recorded **in the file**:
+what changed, what did not, and that every declared quantity is byte-identical
+to the original commit (`fd6ea2d2`) and was re-derived against the final
+predicate. **Caught by reading the resolver rather than by the deploy failing**,
+which is the cheaper of the two.
