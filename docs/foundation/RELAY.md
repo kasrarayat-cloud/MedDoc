@@ -18400,3 +18400,68 @@ It is **4 of 4 green and merge-ready**. It is also a **RUNTIME** change, and not
 one row above could have detected a regression in it. **F10's resolver would have
 REFUSED this declaration had #719 landed first** — the mechanism working, not a
 constraint I remembered. **F16 needs its own §2.5 and its own deploy.**
+
+---
+
+## ✅ F16 IS LIVE IN PRODUCTION — **2026-08-18T06:13:38Z, session 02 — 24 of 24 JUDGED**
+
+**The queue item is closed end to end: built, independently refuted, fixed,
+mutation-proved, merged, cited and deployed under a declaration written before
+the outcome existed.**
+
+| | |
+|---|---|
+| deployed | `0a265e9af26c83a19bd4a2fe119ae28934d8ea9c` |
+| declaration | `docs/foundation/deploys/20260818-8d2d8e62.md` — committed `f7301902`, **before the merge** |
+| judgement | `docs/deploy-reports/20260818-0a265e9a-f16-judgement.md` — **24 of 24** |
+| rollback | `pre-0a265e9a-20260818` → app `cba869ef…`, worker `4cd51411…`, digest-verified |
+
+**Citations — every commit in the payload earned its own, no descendant
+recovery:**
+
+| commit | what | citation |
+|---|---|---|
+| `8f8b67c2` | #720, F15's deploy judgement | 4 of 4 — `e2e` **`a2`**, the #603 recurrence |
+| `d4a8d63e` | **#719, F16 + the six adversarial fixes** | **4 of 4, all `a1`** |
+| `0a265e9a` | #721, this session's ledger | **4 of 4, all `a1`** |
+
+⚠️ **A DECLARED BATCH WAS DECLARED IN ADVANCE AND THEN WITHDRAWN.** The session
+declared, before the first merge, that #719 and #721 would go back-to-back with
+the citation taken on the descendant. When `d4a8d63e`'s runs came back
+three-quarters green anyway, **the batch was withdrawn** so each merge commit
+earned its own citation. It cost ~15 minutes. **The descendant citation is a
+RECOVERY pattern, not a plan** — and F16 now has a clean `a1` row instead of
+being certified through its child.
+
+### THE ROWS THAT MATTERED
+
+**23 and 24: `CERTIFIED` stayed exactly 74 and `NEEDS_CONFIRMATION` exactly 6.**
+The gate did not move by one field. They were declared as an **exact pair rather
+than a total of 80**, because a total is satisfied by 75/5 — which is precisely
+the over-admission being guarded against.
+
+**6: the positive control held at 1.** Rows 3-5 going 0 → 1 is indistinguishable
+from a probe that started reading a different tree; the control is the
+unanticipated-throw sentence F16 deliberately leaves alone, and it still reads 1.
+
+### WHAT THE PHYSICIAN GETS, AND THE SIX ARE MEASURED
+
+> *"Not yet — 6 of 80 fields still need confirming. In the field list below,
+> confirm the ones still marked as needing review, then certify again."*
+
+⚠️ **NONE OF THE SIX NEEDS A CLINICAL CONCEPT.** Measured: 5 `manual` +
+1 `verified_note_selection`, all `:unconfirmed`. A manual field has no concept by
+construction and is ready once confirmed; the `verified_note_selection` one
+already carries its concept. **The wall between production and its first
+certified twin is six confirmations and nothing else** — which sharpens the
+standing owner ping rather than repeating it.
+
+### WHAT IS **NOT** CLAIMED
+
+- **Not that a browser rendered the sentence.** The strings are proven inlined in
+  the shipped bundle and the action is proven to return them; the render is
+  asserted structurally, not end to end.
+- **Not that F18 is fixed.** The frozen *"79 of 80"* banner still contradicts the
+  new count on the same screen, deliberately not bundled into a deploy whose
+  declaration did not name it.
+- **No clinical mutation.** Structural, read-only verification throughout.
