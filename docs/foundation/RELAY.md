@@ -18217,3 +18217,37 @@ that step 38 performs, or split the pack. ⚠️ **Do not read a `cancelled` on
 `e2e` as a push cancellation without checking the branch for a second sha** —
 this programme has now produced three timeouts wearing that costume in under
 thirty hours.
+
+#### ⚠️ CORRECTION, TWELVE MINUTES LATER: THE HEADROOM IS **23 SECONDS**, NOT 9m37s
+
+**My own row above is superseded by the very run it was written about, and the
+number moved in the alarming direction.** Recorded as a correction rather than
+edited away, because a reader who saw the first figure has no way to know a
+second replaced it.
+
+`#720`'s `e2e` **SUCCEEDED** at `03:19:25Z`:
+
+    job started 2026-08-18T02:24:48Z
+    job ended   2026-08-18T03:19:25Z
+    duration    54m37s          ceiling 55m00s
+    ------------------------------------------
+    MARGIN      23 SECONDS
+
+The 9m37s figure was true of the fourteen runs measured before it and is now
+**wrong by an order of magnitude**. The correct statement is:
+
+> **The `e2e` gate — required for every citation this programme takes — passed
+> its most recent run with twenty-three seconds to spare.**
+
+⚠️ **AND THIS IS WHY THE EARLIER TIMEOUTS WERE MISREAD AS OUTLIERS.** A 55-minute
+ceiling against a 41-minute mean *looks* like a 25% buffer. It is not: the
+distribution has a long right tail (34m19s to 54m37s observed), and the ceiling
+sits inside the tail rather than beyond it. **Session 01's timeout and this
+23-second pass are the same phenomenon sampled twice** — one either side of the
+line — not an outlier and a healthy run.
+
+**This raises the item's priority and it is not a "🟢 noise" row.** *A fix is
+priced by the ASSET behind the symptom:* the asset here is **the citation
+mechanism itself**. When this workflow times out, the programme cannot cite,
+cannot merge and cannot deploy — and the failure arrives wearing a push
+cancellation's clothes, which is the costume that wastes the most time.
