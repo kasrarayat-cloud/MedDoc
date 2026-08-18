@@ -229,9 +229,18 @@ adversarial pass.
 
 ### 2026-08-18T07:00:00Z — AUTO-CERTIFICATION IS IN FLIGHT; the West Medical walk is SUPERSEDED
 
-**Pointer to rulings #124 (loop's, merge/push doors) is unrelated — the ones
-that matter here are the owner's auto-certification ruling recorded as #125, on
-branch `feat/twin-auto-certification`, built by a SUPERVISED session.**
+**The decision is the owner's AUTO-CERTIFICATION ruling, built by a SUPERVISED
+session on branch `feat/twin-auto-certification`.**
+
+⚠️ **DELIBERATELY CITED BY NAME AND BRANCH, NOT BY NUMBER.** An earlier version
+of this entry said "#125" and was WRONG within hours: the loop independently
+numbered its own F12-splits ruling #125 and merged first, so this pointer sent
+readers to a different decision entirely. It had already happened once before
+that with #124.
+
+**Two actors drafting from the same snapshot will pick the same next number, and
+neither can see the other's choice until a merge.** The number is therefore not
+a stable address until the row lands. **The branch name is.**
 
 ⚠️ **DO NOT CITE "certify the West Medical template" AS A BLOCKER, and do not
 build toward it.** The owner will certify nothing — the machine will. On upload,
