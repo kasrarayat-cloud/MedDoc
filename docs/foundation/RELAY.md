@@ -19655,3 +19655,76 @@ is exactly that, and its "16 of 16" was a true sentence doing misleading work.
 auto-certification merge moved nothing in them), the declaration is renamed to
 the merge commit so F10's resolver can reach it by ancestry, and the rollback
 tag is cut automatically by `deploy-prod.sh` STEP 0b.
+
+### ✅ F12-c — MERGED AND CITED — **2026-08-18, run `20260818-080141-b1` session 03**
+
+| | |
+|---|---|
+| PR | **#729** |
+| merge commit | `c4ed3f943a7974b447600605ca3b6ab08185ef50` |
+| declaration | `docs/foundation/deploys/20260818-be1a1d53.md` (names the merge-of-main commit; every commit after it is docs-only, so F10's resolver reaches it by ancestry) |
+| deployed | ⚠️ **NO — deliberately.** See the block above: the tree also carries auto-certification, which is on `main` and NOT in production, and F12-c's declaration cannot judge it |
+
+**Citation — 4 of 4 on `c4ed3f943a7974b447600605ca3b6ab08185ef50`:**
+   · `CI` 32168253687 a1
+   · `e2e` 32168253695 a1
+   · `a11y-ci` 32168253518 a1
+   · `secrets-scan` 32168253706 a1
+
+**Every line is `a1` — no re-run on the merge commit**, produced by
+`scripts/check-citation.sh` and pasted, not typed.
+
+⚠️ **THE PR HEAD NEEDED TWO RE-RUNS AND BOTH REASONS ARE NAMED, BECAUSE CANON
+FORBIDS AN UNEXPLAINED ONE.** Neither was a test failure and neither was on the
+merge commit:
+
+| workflow | attempt | what happened |
+|---|---|---|
+| `a11y-ci` | a1 → **a2** | hung **25m24s** in `Install Playwright Chromium (with system deps)`, killed by `timeout-minutes` and reported as `cancelled` — **the fourth occurrence of the filed stall**, on its third workflow. a2: **7m26s green** |
+| `e2e` | a1 → **a2** | **55m27s against `timeout-minutes: 55`** — the ceiling, not a failure. a2: **48m24s green** |
+
+⚠️ **AND PR #730 MERGED INTO `main` WHILE THIS CITATION'S RUNS WERE FINISHING.**
+It did not cost anything — all four had already completed, which is why the
+citation reads `a1` across the board — but that was timing, not design, and it
+is recorded rather than left to look like a plan.
+
+### 🔴 F19's CEILING IS NO LONGER A HEADROOM FIGURE — IT WAS **REACHED**, AND THERE ARE NOW TWO DATAPOINTS — **2026-08-18, session 03**
+
+**`e2e` on `58924c0f` ran `16:10:12Z` → `17:05:39Z` = 55m27s against
+`e2e.yml:56`'s `timeout-minutes: 55`, and GitHub reported it as `cancelled`** —
+the same reporting quirk this ledger already records for `a11y-ci` and `CI`. It
+is a TIMEOUT, not a test failure, and no test failed.
+
+| run | tree | duration |
+|---|---|---|
+| `main` #728 (auto-certification merge) | main | **48m14s** |
+| this branch, attempt 1 | main + F12-c | **55m27s — TIMED OUT** |
+
+⚠️ **F19 RECORDED "9m37s of headroom across 14 runs" ON 2026-08-18. THAT FIGURE
+IS SPENT.** Auto-certification's merge alone took main to 48m14s, leaving under
+seven minutes, and the next run crossed.
+
+⚠️ **THE OVERAGE IS NOT THIS ITEM'S DIFF, AND THAT IS CHECKABLE RATHER THAN
+ASSERTED.** F12-c adds **zero** E2E fixtures — its 22 new arms are unit arms, and
+unit tests do not run in the `e2e` pack. The branch is `main` plus changes the
+pack does not exercise beyond the `operative` class F12-a already added. Three
+long runs were in flight concurrently at the time (this `e2e`, this `a11y-ci`,
+and main's `e2e`), and the same `a11y-ci` job that takes 4m57s alone took
+**25m24s** and was itself killed in the `Install Playwright Chromium` step —
+**the fourth occurrence of the filed stall**, on its third workflow. So
+CONTENTION is the leading hypothesis and it is not proven.
+
+⚠️ **THE CEILING WAS NOT RAISED, AND MUST NOT BE.** F19 states it explicitly —
+*"DO NOT RAISE OR LOWER THE CEILING AS A SIDE EFFECT OF ANYTHING ELSE"* — and
+F12-a's own row says that if `e2e` times out the correct response is to TRIM the
+pack, never to move the number. This session did neither: it re-ran on a NAMED
+mechanism (contention against a known-marginal ceiling), which is a different
+act from re-run-and-hope, and recorded the reason here in advance of the result.
+
+**WHAT THIS MAKES ACUTE, and it is now blocking rather than advisory:** every
+citation this programme takes depends on `e2e` finishing, and the pack is at the
+line. The two candidate fixes are already filed and neither is a ceiling change:
+the **`actions/cache` over `~/.cache/ms-playwright`** (which would also retire the
+install stall) and **trimming or sharding the pack**. ⚠️ Both touch `.github/`,
+which is a deploy surface, and neither may be done mid-citation — doing it inside
+a session that is waiting on a run cancels the very run it is protecting.
