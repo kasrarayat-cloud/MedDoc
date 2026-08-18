@@ -189,7 +189,9 @@ describe('note shape — malformed and absent input fails OPEN, never into suppr
   });
 
   it('an untemplated visit keeps whatever its specialty decided', () => {
-    // 30 of 45 production visits have no template at all. The safe direction is
+    // 30 of 46 production visits have no template at all (measured
+    // 2026-08-18; the recon's population of 45 had grown by one). The safe
+    // direction is
     // that they are unaffected by this change — the alternative silently
     // deletes levels from two thirds of the population.
     expect(emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: null })).toBe(true);

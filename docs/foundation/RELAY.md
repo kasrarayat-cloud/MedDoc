@@ -18471,9 +18471,16 @@ defect being fixed. So:
   carries both when a biopsy or injection is done in the room. A dedicated arm
   pins the omission itself, so re-adding either goes red.
 - **Two distinct markers are required, not one.**
-- **Absent / malformed / untemplated input fails OPEN** — 30 of 45 production
+- **Absent / malformed / untemplated input fails OPEN** — 30 of **46** production
   visits have no template at all, and the safe direction is that they are
   unaffected.
+
+⚠️ **AND I REPEATED AN INHERITED COUNT IN MY OWN DRAFT — CAUGHT AND CORRECTED
+HERE.** The two bullets above first read *"30 of 45"*, carried from the recon
+without re-running it. **Re-measured 2026-08-18, read-only: the population is
+46, not 45** — it grew by one visit since 2026-08-17. The 30 was right; the
+denominator was a fabricated number in exactly the sense this house defines,
+and it was in a source comment and a ledger row before anything checked it.
 
 ### THE SWEEP, BY PREDICATE — EIGHT THREADED, TWO REFUSED
 
@@ -18641,3 +18648,33 @@ clinical-path diff that is already awaiting an independent adversarial pass.
 - **A signed visit's frozen `signedCode` IS suppressed** —
   `projectDisplayedEmCode` returns null on `!emApplies` before it ever reads
   `signedCode`. That is the intended behaviour and it is the §2.5 absence row.
+
+#### THE §2.5 NUMBERS, RE-MEASURED BY ME RATHER THAN CARRIED FROM THE RECON — 2026-08-18, READ-ONLY
+
+**Shape asked before quantity**, per the standing rule — `jsonb_typeof` first,
+because `->` returns a JSONB `null` that is not SQL NULL and the recon's own
+first pass was wrong by that exact mechanism:
+
+    cptCodes->'em'   object 10 · json-null 17 · absent 19   → 46 ✓
+
+Then the population, with the classifier's marker logic mirrored in SQL:
+
+| bucket | visits | `em` object | **SIGNED with `em`** |
+|---|---|---|---|
+| **OP-NOTE** (≥2 markers) | 11 | **1** | **1** |
+| other template | 5 | 1 | 0 |
+| no template | 30 | 8 | 5 |
+| **total** | **46** ✓ | **10** | **6** |
+
+- **THE DECLARATION'S HEADLINE IS `1`, AND THAT ROW IS SIGNED.** Not 11. The
+  recon's own first query said 11 and was withdrawn; a presence check against
+  11 would pass on a suppression firing ten times too widely.
+- **THE POSITIVE ARM IS `9`** — the 8 + 1 office-side `em` objects that MUST
+  still print. That is the row that catches an over-broad suppression.
+- **THE POSITIVE CONTROL IS BUILT IN**: the non-op-note buckets are non-zero,
+  so a zero in the OP-NOTE row would have been distinguishable from a broken
+  query. It is not zero.
+
+⚠️ **THE RECON'S `1` WAS RIGHT AND ITS TOTAL WAS NOT** — 45 → **46**, one visit
+added since 2026-08-17. Re-measured rather than inherited, which is the only
+reason the drift is visible at all.
