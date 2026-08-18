@@ -1,7 +1,7 @@
 'use server';
 
 /**
- * FIRST-FILL REVIEW — ruling #125, clause 2(d).
+ * FIRST-FILL REVIEW — ruling #127, clause 2(d).
  *
  * The first visit rendered through a freshly auto-certified twin carries a
  * one-time banner: "First document on your new format — check field placement

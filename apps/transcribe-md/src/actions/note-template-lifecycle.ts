@@ -27,6 +27,7 @@
 import { revalidatePath } from 'next/cache';
 
 import prisma from '@meddoc/db';
+import { requireManualCertification } from '@/config/require-manual-certification';
 import { requireSession } from '@/lib/auth';
 import { isTenantOwnedArtifactKey } from '@/lib/template-twin/storage';
 import { applyPhiGate } from '@/lib/note-template-parse/phi-gate';
@@ -298,7 +299,7 @@ export async function saveNoteTemplateAction(
         });
         twinCompile = 'compiled';
 
-        // ── RULING #125 — AUTO-CERTIFY. ──────────────────────────────────
+        // ── RULING #127 — AUTO-CERTIFY. ──────────────────────────────────
         //
         // The doctor's job is upload then run visits. When the twin compiles
         // with ZERO blocking elements the model's proposals are confirmed and
@@ -317,9 +318,14 @@ export async function saveNoteTemplateAction(
         //
         // ⚠️ AND FAIL-SAFE, like the compile above it. An enqueue failure must
         // never fail the upload: the template is saved and the twin compiled,
-        // so the worst case is the pre-#125 behaviour — a template awaiting
+        // so the worst case is the pre-#127 behaviour — a template awaiting
         // manual confirmation, which the manual screen still serves.
-        if (compiled.blockingUnsupportedCount === 0) {
+        // ⚠️ BOTH CONDITIONS, AND THE SECOND ONE WAS SILENTLY LOST ONCE.
+        // An earlier revision of this block carried `!requireManualCertification()`
+        // and an indentation fix dropped it — the edit applied, tsc stayed green,
+        // and the guard was simply gone. That is the proves-what-it-preserved
+        // class, and it is why a regression arm now asserts this line's shape.
+        if (compiled.blockingUnsupportedCount === 0 && !requireManualCertification()) {
           try {
             const { enqueueAutoCertifyTwin } = await import('@/lib/queue');
             await enqueueAutoCertifyTwin({

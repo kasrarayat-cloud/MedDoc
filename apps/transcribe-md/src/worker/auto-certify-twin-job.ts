@@ -1,5 +1,5 @@
 /**
- * AUTO-CERTIFY, THE WORKER JOB — ruling #125.
+ * AUTO-CERTIFY, THE WORKER JOB — ruling #127.
  *
  * Enqueued by compile-on-upload when the twin compiles with zero blocking
  * elements. Confirms the model's own proposals, runs the round-trip proof, and
@@ -20,7 +20,7 @@ import { updateTemplateTwinMappings, certifyAndActivateTemplateTwin } from '@/li
 import { runTemplateTwinSyntheticTest } from '@/lib/template-twin/synthetic-test';
 import { extractTemplateTwinEntities } from '@/worker/layers/03-extract-entities';
 import { createEphemeralVisitNoteGenerator } from '@/worker/template-twin-note-generator';
-import { VERIFICATION_ENCOUNTER } from '@/actions/template-twin-certify';
+import { VERIFICATION_ENCOUNTER } from '@/lib/template-twin/verification-encounter';
 import { planAutoConfirm } from '@/lib/template-twin/auto-certify-eligibility';
 import { auditAutoConfirm } from '@/lib/template-twin/auto-certify';
 import { logTwinAudit } from '@/lib/template-twin/twin-audit';

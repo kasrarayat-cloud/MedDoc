@@ -247,7 +247,7 @@ describe('resolveTemplateFields', () => {
   /**
    * ⚠️ THIS ARM EXISTS BECAUSE AN UPSTREAM GATE WAS REMOVED ON ITS STRENGTH.
    *
-   * Ruling #125 first blocked auto-certification of any laterality-critical
+   * Ruling #127 first blocked auto-certification of any laterality-critical
    * field the document did not structurally side. That blocker was removed once
    * it was measured that certification NEVER encodes a side — the mapping
    * declares what a field MEANS; the side is derived per visit from the

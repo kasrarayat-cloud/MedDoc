@@ -30,7 +30,7 @@ export interface NativeTemplateListItem {
   certificationStatus: string; // 'certified' | 'recognized' | 'needs_confirmation' | 'unsupported' | 'quarantined'
   fieldCount: number;
   version: number;
-  /** RULING #125 — auto-certification is running for this twin. Derived and
+  /** RULING #127 — auto-certification is running for this twin. Derived and
    *  BOUNDED at the settings query; see its comment for why it is not stored. */
   preparing?: boolean;
 }
@@ -226,7 +226,7 @@ export function NativeTemplateManager({
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                {/* ⚠️ RULING #125 — "Preparing your format…" REPLACES the pill
+                {/* ⚠️ RULING #127 — "Preparing your format…" REPLACES the pill
                     while auto-certification runs, because "Needs review" during
                     that window is FALSE and it is the exact false instruction
                     #713 was opened for: it sends a doctor to do work the system

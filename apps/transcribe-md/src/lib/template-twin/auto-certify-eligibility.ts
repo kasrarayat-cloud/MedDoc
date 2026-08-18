@@ -110,7 +110,7 @@ export function decideAutoConfirm(c: AutoConfirmCandidate): AutoConfirmDecision 
     };
   }
 
-  // ⚠️ LATERALITY IS RECORDED HERE, NOT GATED HERE — AMENDED, RULING #125.
+  // ⚠️ LATERALITY IS RECORDED HERE, NOT GATED HERE — AMENDED, RULING #127.
   //
   // The first version REFUSED to auto-confirm any laterality-critical field the
   // document did not structurally side. That was wrong, and the measurement is

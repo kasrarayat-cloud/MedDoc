@@ -33,6 +33,9 @@ const QUEUE = ['v1', 'v2', 'v3'];
 
 const clean = signGates({
   specialty: 'primary-care',
+  templateSections: null,
+  // ruling #126 — no note body, so the note-text fallback cannot fire.
+  noteText: '',
   emPendingChange: null,
 });
 
@@ -198,6 +201,9 @@ describe('the action rail', () => {
   it('the primary carries the same count as the padlock', () => {
     const blocked = signGates({
       specialty: 'primary-care',
+      templateSections: null,
+      // ruling #126 — no note body, so the note-text fallback cannot fire.
+      noteText: '',
       emPendingChange: { from: '99213', to: '99214', cause: 'note_edited', at: '2026-07-30T00:00:00Z' },
     });
     renderStage({ gates: blocked.gates, n: blocked.n });

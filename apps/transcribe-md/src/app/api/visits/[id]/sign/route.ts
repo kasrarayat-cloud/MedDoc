@@ -33,10 +33,10 @@
 import { NextResponse } from 'next/server';
 import { rescoreEmAction } from '@/actions/rescore-em';
 import {
-  emAppliesToSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
+import { emAppliesToVisit } from '@/lib/note-shape';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 import { z } from 'zod';
 
@@ -202,6 +202,8 @@ export const POST = withApiHandler<{ id: string }>(
         emPendingChange: true,
         emStale: true,
         specialty: true,
+        // F12 / ruling #123 — the note-SHAPE axis of E/M applicability.
+        noteTemplate: { select: { sections: true } },
       },
     });
     // ═══ THE SIGN GATE — TWO BRANCHES, AND THEY ARE NOT INTERCHANGEABLE ═══
@@ -327,9 +329,17 @@ export const POST = withApiHandler<{ id: string }>(
     // staleness gate over a level that does not exist would make an ultrasound
     // report permanently unsignable after any edit, and "resolving" it would
     // mean inventing a clinic code. The flag may be set; here it is inert.
-    const emApplies = !(
-      !emAppliesToSpecialty(visit.specialty)
-    );
+    // F12 / ruling #123 — the same reasoning covers an OPERATIVE or PROCEDURE
+    // note: a staleness gate over a level that does not exist would make a
+    // colonoscopy report permanently unsignable after any edit.
+    const emApplies = emAppliesToVisit({
+      specialtyId: visit.specialty,
+      templateSections: visit.noteTemplate?.sections ?? null,
+      // `soapFinal`, not `signedSoap`: this runs BEFORE the sign, and
+      // `signedSoap` is written FROM `soapFinal` further down (`:517`). So
+      // this is the same bytes the signature is about to freeze.
+      noteText: visit.soapFinal,
+    });
     if (visit.status === TranscribeVisitStatus.READY && visit.emStale && emApplies) {
       // RE-SCORE HERE, don't just refuse.
       //
@@ -376,8 +386,28 @@ export const POST = withApiHandler<{ id: string }>(
         : null;
     }
 
+    // ⚠️ `&& emApplies` — F12-a / ruling #126, and this arm makes an operative
+    // note PERMANENTLY UNSIGNABLE without it. Found by the independent
+    // adversarial pass; `emApplies` has been in scope since `:335`.
+    //
+    // Ungated, a colonoscopy holding an `emPendingChange` gets a 400 reading
+    // "Documentation level changed (99213 → 99214) … confirm the new level
+    // before signing" — an office E/M level asserted about an operative note.
+    // And the doctor cannot clear it: `page.tsx` nulls the client's
+    // `pendingEmChange` when E/M does not apply, so the modal never collects an
+    // acknowledgement, and `rescore-em.ts`'s not-applicable branch clears only
+    // `emStale`, never `emPendingChange`. The loop has no exit.
+    //
+    // ⚠️ THIS IS THE FAILURE THE COMMENT 50 LINES ABOVE SAYS IT IS PREVENTING —
+    // *"would make a colonoscopy report permanently unsignable after any
+    // edit"* — fixed on the STALE arm and reintroduced on the PENDING one.
+    // F12 is what makes it reachable: the predicate used to be a near-immutable
+    // column, and it is now a function of the note body and the template
+    // binding, both of which move on ordinary edits. TRUE-at-write /
+    // FALSE-at-sign is routine now, where it used to be the "should never
+    // happen" imaging artifact.
     const pendingEm =
-      visit.status === TranscribeVisitStatus.READY
+      visit.status === TranscribeVisitStatus.READY && emApplies
         ? unacknowledgedEmChange(visit.emPendingChange)
         : null;
     if (pendingEm) {
@@ -483,7 +513,29 @@ export const POST = withApiHandler<{ id: string }>(
         cptBlob && cptBlob.em && typeof cptBlob.em === 'object'
           ? (cptBlob.em as Record<string, unknown>)
           : null;
-      if (emBlob) {
+      // ⚠️ `&& emApplies` — F12-a / ruling #126, found by the independent
+      // adversarial pass. This branch used to read `if (emBlob)` alone, and
+      // `emApplies` has been sitting in scope since `:335` without being
+      // consulted here. On an operative note the pipeline still WRITES a
+      // `cptCodes.em` blob (see the FOLLOW-UP note below), so this freeze
+      // stamped a **frozen office E/M level onto the signed record** of a
+      // colonoscopy — invisible, because display and export both suppress it.
+      //
+      // That is the artifact class this repository has already paid for once:
+      // five production imaging visits acquired `emScoredCode` from a page
+      // render and sat there for two days, written by no seeder and visible to
+      // no test. `specialties.ts:139-143` states the invariant is enforced at
+      // THREE layers — COMPUTE, STORE, EXPORT — and for the note-shape axis
+      // this was the missing STORE half.
+      //
+      // ⚠️ FOLLOW-UP, DELIBERATELY NOT FIXED HERE: `worker.ts:963-967` gates
+      // L7b on `!isImagingReportSpecialty(...)` only, so an operative note
+      // still COMPUTES an `em` blob. The naive repair — adding the note-shape
+      // axis to `flags.cpt` — would suppress the WHOLE of L7b and delete the
+      // PROCEDURE CPT codes from a colonoscopy, which is the one code that
+      // encounter genuinely bills. That is a bigger change than a one-line
+      // conjunction and it is filed as its own item rather than guessed at.
+      if (emBlob && emApplies) {
         try {
           const signedCode = await computeDisplayedEmCode(
             visit.soapFinal ?? '',

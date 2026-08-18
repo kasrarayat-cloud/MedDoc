@@ -856,7 +856,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           </p>
         ) : null;
 
-      // ── RULING #125(d) — FIRST-FILL REVIEW ────────────────────────────────
+      // ── RULING #127(d) — FIRST-FILL REVIEW ────────────────────────────────
       //
       // Auto-certification means no doctor sat through eighty confirmations, so
       // the human check has to happen somewhere. This is that somewhere: the

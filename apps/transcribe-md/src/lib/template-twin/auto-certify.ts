@@ -1,5 +1,5 @@
 /**
- * AUTO-CERTIFICATION — the engine. Ruling #125.
+ * AUTO-CERTIFICATION — the engine. Ruling #127.
  *
  * The doctor uploads a .docx and runs visits. The model's own proposals are
  * confirmed, the round-trip proof runs, and the template certifies — with no
@@ -53,7 +53,7 @@ export async function auditAutoConfirm(input: {
     targetId: input.noteTemplateId,
     metadata: {
       auto: true,
-      // ⚠️ MODEL IDENTITY, NOT CONFIDENCE — ruling #125(c) as AMENDED. There is
+      // ⚠️ MODEL IDENTITY, NOT CONFIDENCE — ruling #127(c) as AMENDED. There is
       // no numeric confidence anywhere on the mapping-proposal path; inventing a
       // column to carry a number nothing produces is the fabricated-signal class.
       proposedByModel: input.proposedByModel,

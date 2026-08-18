@@ -17,10 +17,10 @@
 
 import { NextResponse } from 'next/server';
 import {
-  emAppliesToSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
+import { emAppliesToVisit } from '@/lib/note-shape';
 import { seedEmBaselineIfUnset } from '@/lib/em-coding/seed-baseline';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 import { z } from 'zod';
@@ -93,6 +93,8 @@ export const POST = withApiHandler<{ id: string }>(
         emScoredCode: true,
         cptCodes: true,
         specialty: true,
+        // F12 / ruling #123 — the note-SHAPE axis of E/M applicability.
+        noteTemplate: { select: { sections: true } },
         audioDurationSec: true,
         dictationDurationSec: true,
         inputMode: true,
@@ -195,7 +197,22 @@ export const POST = withApiHandler<{ id: string }>(
       // and the doctor gets a phantom confirm forever.
       signals: { icdCodes: visit.icdCodes, rxDrafts: visit.rxDrafts, cptCodes: visit.cptCodes },
       ctx: { practiceId, userId },
-      applies: emAppliesToSpecialty(visit.specialty),
+      applies: emAppliesToVisit({
+        specialtyId: visit.specialty,
+        templateSections: visit.noteTemplate?.sections ?? null,
+        // The PRE-MERGE text, matching `priorSoap` above. The merge rewrites
+        // section CONTENT, not the template's headings, so the two agree —
+        // but the baseline is a statement about the note as it stood.
+        //
+        // ⚠️ `?? soapDraft ?? ''` MIRRORS `currentSoap` AT `:133`, and the
+        // mirror is the point rather than defensiveness for its own sake. The
+        // sibling override route already spelled it this way; this one did
+        // not, so the two routes disagreed about what "the note" is on a READY
+        // visit with a null `soapFinal`. Whether that row is reachable is
+        // genuinely unsettled — `rescore-em.ts:98` guards against it — and two
+        // answers to one question is the defect regardless of which is right.
+        noteText: visit.soapFinal ?? visit.soapDraft ?? '',
+      }),
     });
 
     await scopedUpdate(

@@ -113,7 +113,7 @@ async function loadNativeTemplates(doctorId: string): Promise<NativeTemplateList
     } | null;
   };
 
-  // ── RULING #125 — "Preparing your format…" ─────────────────────────────────
+  // ── RULING #127 — "Preparing your format…" ─────────────────────────────────
   //
   // ⚠️ DERIVED, NOT STORED, AND THE BOUND IS WHY THAT IS SAFE. There is no
   // "preparing" column and adding one is a migration on a clinical table for a

@@ -204,7 +204,7 @@ const STUCK_VISIT_WATCHDOG_ENABLED =
 const STUCK_VISIT_WATCHDOG_CRON =
   process.env.STUCK_VISIT_WATCHDOG_CRON?.trim() || '* * * * *';
 const STUCK_VISIT_WATCHDOG_TIMEOUT_MS = 60_000;
-/** RULING #125 — auto-certification's budget.
+/** RULING #127 — auto-certification's budget.
  *
  * ⚠️ MINUTES, NOT SECONDS, AND DELIBERATELY. The round-trip proof runs an
  * ephemeral visit through the real L4 and the real bridge fill — a live model
@@ -1895,7 +1895,7 @@ async function startCleanupWorker(): Promise<void> {
         return;
       }
       if (job.name === JOB_AUTO_CERTIFY_TWIN) {
-        // RULING #125 — auto-certify a freshly compiled twin.
+        // RULING #127 — auto-certify a freshly compiled twin.
         //
         // ⚠️ TIMEOUT IS GENEROUS BECAUSE THE PROOF IS A LIVE GENERATION. The
         // synthetic test runs an ephemeral visit through the real L4 and the

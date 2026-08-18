@@ -31,6 +31,7 @@ import {
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
+import { emAppliesToVisit } from '@/lib/note-shape';
 
 import { unacknowledgedEmChange } from '@/lib/em-pending-change';
 import { getSession } from '@/lib/auth';
@@ -113,6 +114,8 @@ export const POST = withApiHandler<{ id: string }>(
         archivedAt: true,
         signedAt: true,
         specialty: true,
+        // F12 / ruling #123 — the note-SHAPE axis of E/M applicability.
+        noteTemplate: { select: { sections: true } },
         emPendingChange: true,
         soapDraft: true,
         soapFinal: true,
@@ -143,16 +146,33 @@ export const POST = withApiHandler<{ id: string }>(
       );
     }
     // AN IMAGING REPORT HAS NO OFFICE E/M LEVEL, so there is nothing here to
-    // override and no code that would be correct to write.
+    // override and no code that would be correct to write. F12 / ruling #123:
+    // NEITHER DOES AN OPERATIVE OR PROCEDURE NOTE.
     //
-    // The UI never offers this on an imaging visit — the level row does not
+    // The UI never offers this on such a visit — the level row does not
     // render when E/M does not apply — but the route is the thing that owns the
     // column, and "the caller wouldn't do that" is how an office code ends up
     // on an ultrasound report. It reaches the export and the signed record from
     // there, which is why this is a 409 and not a silent no-op.
-    if (!emAppliesToSpecialty(visit.specialty)) {
+    if (
+      !emAppliesToVisit({
+        specialtyId: visit.specialty,
+        templateSections: visit.noteTemplate?.sections ?? null,
+        // Same text this route scores against 30 lines below
+        // (`visit.soapFinal ?? visit.soapDraft ?? ''`), so the refusal and the
+        // score can never disagree about what document this is.
+        noteText: visit.soapFinal ?? visit.soapDraft ?? '',
+      })
+    ) {
+      // ⚠️ THE MESSAGE NAMES WHICH REASON APPLIES. "This is an imaging report"
+      // on a colonoscopy op-note is a false statement to a doctor about their
+      // own chart, and a 409 they cannot act on. The two axes suppress for
+      // different reasons and must say so.
+      const isImaging = !emAppliesToSpecialty(visit.specialty);
       return apiError(
-        'This visit is an imaging report and has no office E/M level.',
+        isImaging
+          ? 'This visit is an imaging report and has no office E/M level.'
+          : 'This visit is an operative or procedure note and has no office E/M level.',
         409,
         { code: 'EM_NOT_APPLICABLE' },
       );
