@@ -18576,3 +18576,68 @@ as a finding below), so shadowing the package locally was not available.
 so it would resolve to its own copy. Worked around by relocating the module,
 which was the better answer anyway. **Filed per MASTER's rule that a refusal
 outside the table is a finding.**
+
+### ⚠️ F12-a — THE MANDATORY ADVERSARIAL PASS, RUN ON THE FINISHED DIFF, AND IT FOUND TWO THINGS
+
+**Run by the author against his own diff, told to REFUTE.** ⚠️ **STATED LIMIT:
+this session could not spawn independent refuters** (the subagent tool is not
+available to it), so this pass does **not** have the property the canon says
+makes the gate work — *it does not fail to share the author's assumptions.*
+**It is therefore NOT a discharge of #123's adversarial-pass requirement.**
+An independent pass is still owed before F12-a merges. Recorded as a partial,
+because two confirmed findings are worth more than a clean self-review.
+
+#### 🔴 FINDING 1 — THE SUPPRESSION IS NOT FROZEN, AND `onDelete: SetNull` RE-ADMITS IT
+
+**`schema.prisma:2225` — `noteTemplate NoteTemplate? @relation(… onDelete: SetNull)`.**
+
+    a signed colonoscopy op-note, cptCodes.em.signedCode = '99214'
+      → the bound template row is deleted
+      → noteTemplateId becomes NULL
+      → visit.noteTemplate is null
+      → isProcedureNoteShape(null) is false  (fails OPEN, by design)
+      → emAppliesToVisit returns TRUE
+      → the export prints 99214 again, onto a SIGNED operative record
+
+**That is exactly the state #123's reversal path forbids** — *"procedure notes
+carry an office-visit E/M level again"* — reached not by a revert but by
+ordinary template housekeeping.
+
+⚠️ **IT IS A WEAKNESS OF MY OWN DESIGN CHOICE, NOT A PRE-EXISTING ONE.** The
+specialty axis does not have it: `specialty` is a COLUMN on the visit. The
+shape axis hangs on a LIVE RELATION, so it can be un-decided after the fact.
+**The fail-open default is right in itself** — an unclassified visit must not
+lose its level — and it is precisely what makes this path silent.
+
+**NOT RESOLVED HERE.** Three candidates, and the choice wants a person:
+(a) denormalise the verdict onto the visit at pipeline time (migration);
+(b) fall back to the NOTE TEXT's own section headings when the template is
+gone — the headings are there because the template generated them;
+(c) accept and carry an absence row. ⚠️ **(c) alone is not enough for a signed
+record.** **This blocks F12-a's merge, and the PR stays a DRAFT for it.**
+
+#### 🟡 FINDING 2 — `POST /em-score` HAS NO APPLICABILITY CHECK ON EITHER AXIS
+
+**Pre-existing, NOT introduced by F12-a, and it never had the imaging guard
+either.** `api/visits/[id]/em-score/route.ts` does not even `select` the
+`specialty` column: it computes a score and returns it, unconditionally.
+
+**Reachability, measured rather than assumed:** its only client is
+`CodingRail`, mounted from `soap-editor.tsx` — the legacy tabbed editor behind
+`NEXT_PUBLIC_REVIEW_DOC_VIEW`. Production runs that flag **`true`** (read from
+the running container), so the read-only paper renders and the rail is not
+mounted. **Latent in production; LIVE on the documented rollback path.**
+
+It computes and returns — it does not persist — so it is a display hole rather
+than an artifact writer. Filed, not fixed: fixing it inside F12-a would widen a
+clinical-path diff that is already awaiting an independent adversarial pass.
+
+#### WHAT THE PASS CONFIRMED RATHER THAN BROKE
+
+- **The export claim holds, verified rather than inherited.** All seven export
+  routes plus the preview action and the sign route reach `loadVisitExportData`
+  — so one line at that seam really does cover docx · pdf · every EHR clipboard
+  format · email · patient export · preview · sign.
+- **A signed visit's frozen `signedCode` IS suppressed** —
+  `projectDisplayedEmCode` returns null on `!emApplies` before it ever reads
+  `signedCode`. That is the intended behaviour and it is the §2.5 absence row.
