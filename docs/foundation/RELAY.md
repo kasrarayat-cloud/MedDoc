@@ -19629,3 +19629,29 @@ number in different merge orders would both be "the ruling", and a session
 grepping `#127` would find two contradictory decisions.** `RULINGS.md` already
 records that this file exists to prevent exactly that failure. A cheap guard
 exists — assert every `#<n> —` appears at most once — and it is not built.
+
+### ⚠️ F12-c IS MERGED-AND-CITED, **NOT DEPLOYED**, AND THE REASON IS A RULE RATHER THAN A CLOCK
+
+**Measured from the RUNNING worker at `~16:14Z`: `0` auto-certify files present,
+against a traversal control of `16` `.ts` files.** So PR **#728**'s
+auto-certification work is **on `main` and NOT in production** — and a deploy of
+this tree would ship it alongside F12-c.
+
+**That is the recorded hazard by name: *a declaration is bound to a CHANGE, a
+deploy ships a TREE*.** F12-c's §2.5 covers F12-c; auto-certification has its own
+(`20260818-1a6e8b82.md`) written by its author, who took its baseline and knows
+its expected delta. **Not one row in F12-c's declaration could detect a
+regression in auto-certification**, and writing rows for a change this session
+has not analysed would be fabrication, not a declaration.
+
+**The disciplined options are the two the rule names, and either is open to the
+next session:** deploy the two separately so each declaration gates its own act,
+or write one declaration naming the FULL diff. **What is not open is deploying
+this tree under F12-c's declaration alone and calling it judged** — the R5 case
+is exactly that, and its "16 of 16" was a true sentence doing misleading work.
+
+**Handed forward, ready to use:** the production baseline was re-measured
+`~16:12Z` (all twelve quantities **identical** to the `14:52Z` capture, so the
+auto-certification merge moved nothing in them), the declaration is renamed to
+the merge commit so F10's resolver can reach it by ancestry, and the rollback
+tag is cut automatically by `deploy-prod.sh` STEP 0b.
