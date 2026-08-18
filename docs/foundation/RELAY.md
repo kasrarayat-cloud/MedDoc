@@ -19327,3 +19327,331 @@ shared-tree hazard, in one command, caught by the `pwd` habit the canon
 prescribes for exactly this.** The shared tree was fast-forwarded to `5e7b6f2e`
 first — an act on a deploy surface, flagged here rather than left to read as
 housekeeping; the loop is the only actor holding that tree, and it is me.
+
+## ✅ F12-c — THE COMPUTE LAYER STOPS WRITING AN OFFICE E/M ONTO AN OPERATIVE NOTE — **BUILT 2026-08-18, run `20260818-080141-b1` session 03**
+
+**Ruling #128 (PROVISIONAL).** `packages/shared/src/specialties.ts:139-143` states the
+E/M invariant is enforced at **THREE** layers — COMPUTE · STORE · EXPORT. F12-a
+closed STORE and EXPORT for the note-shape axis and left COMPUTE keyed on
+specialty alone; RELAY filed it as **FINDING 4** and warned that the naive fix is
+worse than the defect. This closes it without the naive fix.
+
+### THE SWEEP, BY PREDICATE
+
+*"Every write that can put an office E/M code onto a visit row"* — never by ORM
+verb. **Ten writers across two columns:** `cptCodes` ×3 (`07b-cpt-coding.ts:347`,
+`em-score/override/route.ts:268`, `sign/route.ts:578`) and `emScoredCode` ×4
+(`seed-baseline.ts:96`, `page.tsx:666`, `override/route.ts:291`,
+`rescore-em.ts:193`), plus three read-side projections. **Nine were already
+gated by F12-a. L7b was the one.**
+
+⚠️ **THE ENUMERATION WAS CONFIRMED BY AN INSTRUMENT THAT DOES NOT SHARE ITS
+ASSUMPTIONS.** Making the parameter REQUIRED produced `tsc` errors in **three
+TEST files and ZERO production files** — so `worker.ts` is provably the only
+production caller of either seam. `tsconfig` includes `**/*.ts` excluding only
+`node_modules`, so E2E specs, seeders and scripts are all inside that zero.
+
+⚠️ **ONE SITE IS NOT-APPLICABLE AND IS RECORDED RATHER THAN SKIPPED.**
+`04-generate-soap.ts:97` reads `emAppliesToSpecialty` and its variable is
+`isUltrasoundReport` — a **prompt-builder router**, not an E/M gate. Adding the
+note-shape axis there would route operative notes to the imaging report builder.
+*(A predicate whose NAME says E/M while its JOB is routing is its own small
+finding — filed, not fixed.)*
+
+### WHAT SHIPS
+
+- L7b takes `emApplies` as a **REQUIRED** parameter and drops the E/M half when
+  false — **BEFORE** the allowlist check, so a suppressed code is not filed as a
+  `CODING_COACH_REJECTED_INVALID_CPT` row whose stated reason is false.
+- `worker.ts` computes `emAppliesToVisit` **once** and hands it to **both**
+  consumers.
+- ⚠️ **`flags.cpt` IS UNCHANGED.** Suppressing the LAYER deletes the PROCEDURE
+  CPT code from every colonoscopy — the one code that encounter genuinely bills.
+  The axis suppresses a **FIELD**, not a **LAYER**. That is ruling #109's class,
+  and it is the mutation this gate was wrong about twice (below).
+- `automation-incomplete.ts` is told, or the fix is a **permanent false banner**:
+  `isCptEmpty` reports empty when `em` is null, so every operative note would
+  carry *"Auto-coding incomplete — cpt-coding: no E&M code emitted. Click Retry
+  to reprocess"*, which Retry can never clear. **That is that file's own recorded
+  ultrasound bug arriving through the one door its fix does not cover** —
+  imaging escapes via `status:'skipped'`; an operative note deliberately runs
+  L7b and does not.
+
+### PROOF — 10 MUTATIONS, 9 RED + 1 GREEN CONTROL
+
+Each asserted its own application before any result was believed, each restored
+from a **scratch copy** rather than from git, and each a **PARTIAL** application
+rather than the complete inverse.
+
+| # | mutation | result |
+|---|---|---|
+| M1 | the detector half omitted — **THE** partial landing | 1 red |
+| M2 | the L7b half omitted | 2 red |
+| M3 | `emApplies: true` hardcoded at L7b | 1 red |
+| M4 | `emApplies: true` hardcoded at the detector | 1 red |
+| M5 | suppression moved AFTER the allowlist check | 1 red |
+| M6 | `flags.cpt && emApplies` — the #109 layer-gating trap | 1 red |
+| M7 | `noteText: ''` at the call site | 1 red |
+| M8 | `enabled: flags.cpt && emApplies` — the SAME trap, one line lower | 1 red |
+| M9 | a layer gate that never spells `emApplies` (a second import) | 1 red |
+| **M10** | `const emApplies: boolean = …` — a cosmetic annotation | **GREEN (control)** |
+
+⚠️ **THE GATE WAS WRONG ABOUT THE #109 TRAP THREE TIMES, AND EACH CORRECTION WAS
+TOO NARROW.** This is the entry worth reading.
+
+1. **No arm at all.** M6 left the gate **16 of 16 GREEN**. The file's own
+   *"#109 ARM"* calls `runLayer7bCptCoding` directly, so it cannot see a layer
+   that never runs — **its title was wider than what it measured.**
+2. **An arm scanning the `cpt:` line.** An adversarial reviewer gated the same
+   layer one line lower — `enabled: flags.cpt && emApplies` on the task object —
+   and the gate read **16 of 16 GREEN AGAIN**. One form enumerated, two
+   available.
+3. **A bucket census over the token `emApplies`.** The same reviewer imported a
+   **second** export of the same module (`isProcedureNoteShapeFromText`), derived
+   `isOperativeNote`, and gated `flags.cpt` on that. **16 of 16 GREEN a third
+   time** — and `1132 passed` across the whole worker suite. The census
+   enumerates lines containing `emApplies`; a gate that never spells it is never
+   enumerated.
+
+**A denylist of identifiers is unbounded; the correct answer is not.** The gate
+now pins **both** layer-gate lines by EQUALITY — canon's own *"prefer `toBe` over
+`toContain` whenever the expected value is knowable"* — and keeps the census for
+the wiring. ⚠️ **It therefore reddens on a reformat of those two lines, which is
+intended:** they decide whether a colonoscopy keeps the one code it bills, and a
+change to either should cost somebody a deliberate read of #128.
+
+⚠️ **AND THE OVER-STRICT DIRECTION WAS A REAL DEFECT TOO, FOUND BY THE SAME
+REVIEWER.** `const emApplies: boolean = …` — behaviour-identical — earned a
+failure message accusing the author of deleting a procedure code, as did a
+trailing `// emApplies …` comment surviving a leading-only comment strip. Both
+fixed; **M10 is the happy-path control that proves it**, which is the half
+everybody skips.
+
+### CONTROLLED DELTA — both halves measured here, neither carried forward
+
+    origin/main 7ee4713a   323 files · 4004 passed · 16 failed files · 1 failed test
+    this branch            324 files · 4020 passed · 16 failed files · 1 failed test
+
+**+1 file, +16 tests, failures IDENTICAL**, and 16 reconciles exactly with the
+gate's 16 arms. The 16 failed files are the recorded worktree property
+(`react/jsx-dev-runtime` is untracked; a worktree checks out tracked files only)
+and are present on **both** sides. `tsc` 0 errors.
+
+### ⚠️ WHAT F12-c DOES **NOT** CLAIM — AND THE BIGGEST ONE IS NEW
+
+- **FORWARD-ONLY.** The four production operative notes already carrying a
+  `cptCodes.em` blob keep it. Display, export and the sign-time freeze all
+  suppress it (F12-a); clearing stored rows is an irreversible mutation with its
+  own door.
+- **It does not close the third layer for every operative note — see F12-d.**
+- **No rendered PDF or DOCX was produced and compared.**
+- **Modifiers are untouched** — see the `-25` finding below.
+
+### 🔴 F12-d — `templateIsSilent` REACHES ONE TEMPLATE IN TEN, SO THE NOTE-BODY FALLBACK IS DEAD FOR MOST FUTURE VISITS — **FILED 2026-08-18, session 03. AFFECTS F12-a's SHIPPED EXPORT LAYER, NOT ONLY F12-c.**
+
+**Found by the adversarial pass's wrong-universe lens; every number below was
+re-measured independently before it was written down.**
+
+`templateIsSilent` returns true only when **every** label is in the SOAP
+skeleton. Measured over all **10** production templates, that is true for
+**exactly one** — `tmpl_system_default_soap`.
+
+| doctor | visits | ACTIVE catch-all template's labels | silent? | operative? |
+|---|---|---|---|---|
+| `cmo5ye2nm…` | **31** | EXAM METADATA · TECHNIQUE · FINDINGS · IMPRESSION · DIAMETER AND REFLUX TIME | **no** | **no** |
+| `cmss46fg0…` | **10** | PROCEDURE · PREOPERATIVE DIAGNOSIS · POSTOPERATIVE FINDINGS · CONSENT · DESCRIPTION OF PROCEDURE · RECOMMENDATIONS | no | **yes** |
+| `cmsrzdmph…` | 3 | EXAM METADATA · … | **no** | **no** |
+| `cmrz9r0u6…` | 1 | EXAM METADATA · … | **no** | **no** |
+
+⚠️ **EVERY DOCTOR WHO HAS EVER CREATED A VISIT HOLDS AN ACTIVE CATCH-ALL**
+(`encounterType` is NULL on all 10 rows), so `resolveActiveTemplate` binds
+*theirs* and **never reaches the system default**. Ruling #126c's silence
+clause — the thing `worker.ts` calls *"what makes this reachable at all"* —
+therefore fires for **one of four** doctors' templates, and that one is
+operative-shaped so it never needed the fallback.
+
+**THE FORWARD HOLE, traced by construction on the real labels.** For
+`cmo5ye2nm`'s template: `countOfficeSkeleton` = 0 (not ≥ 4) → `countMarkers` = 0
+(not ≥ 2) → `isProcedureNoteShape` **false**; `labels.length` 5 ≠ 0 and
+`'EXAM METADATA'` ∉ the skeleton → `templateIsSilent` **false** → **the note body
+is never read** → `emApplies` falls through to the specialty axis alone. A
+`bariatric-surgery` operative note dictated by that doctor **today** keeps its
+office E/M level.
+
+⚠️ **TODAY'S ROWS ARE PROTECTED BY AN ACCIDENT, AND THE ACCIDENT DOES NOT
+REPEAT.** 30 of 46 production visits carry **no template at all** — the
+`onDelete: SetNull` hole #126a was written for — so `templateSections` is null,
+silence is true, and the body decides. **All four operative notes carrying an
+office E/M code are in that group**, which is why F12-a's export suppression
+works on them. **Every NEW visit gets `noteTemplateId` written by L4
+(`04-generate-soap.ts:523,562`), so new visits do not inherit that protection.**
+
+⚠️ **AND THE INVERSE IS ALSO LIVE, IN THE DIRECTION #123 CALLS WORSE.**
+`cmss46fg0`'s active template is operative-shaped and the template arm has no
+note-body escape, so **their OFFICE visits are suppressed too** — measured, that
+doctor has 1 body-office visit among 10, and the partial unique on
+`(doctorId, encounterType) WHERE status='active'` means they cannot hold an
+office template alongside it.
+
+**THIS IS NOT A DEFECT F12-c INTRODUCED.** F12-c is a strict tightening that
+fires exactly as far as the classifier reaches. The classifier's reach is the
+finding, and it constrains **F12-a's already-deployed EXPORT layer identically**.
+
+**WHY IT IS NOT FIXED HERE.** Widening `templateIsSilent` changes ruling #126c,
+governs suppression on **signed** records at the export seam, and moves in the
+**over-suppression** direction #123 names as worse than the defect. It needs its
+own measurement, its own §2.5 and its own adversarial pass. Candidate shapes,
+none chosen: treat a template with **zero** operative markers **and** zero SOAP
+skeleton as silent; or thread `isSystemDefault`; or make the note body an OR
+rather than a fallback (a TIGHTENING, and therefore the legal direction).
+
+**WHAT UNPARKS IT:** nothing external. It is the next queue item.
+
+### 🟠 SESSION FINDING — A `-25` MODIFIER PRINTS ON AN OPERATIVE NOTE WITH NO E/M CODE ANYWHERE, AND IT IS LIVE
+
+`ehr-formatters.ts:192`, `docx-generator.ts:277` and `codes-tab.tsx:744` all emit
+`cptCodes.modifiers` **independently of `em`**. F12-a suppressed the E/M block on
+operative notes and left the modifier tray alone.
+
+**Measured, with the row id:** visit `cmst4e95i000e01lszydheks7` — no template,
+**3 operative markers / 0 SOAP sections** by its own headings, `cptCodes.em.code`
+= `99215`, and a `-25` modifier: *"separately identifiable E&M on the same day as
+a procedure"*. Its E/M is correctly hidden; **the modifier asserting that E/M is
+printed.** Production carries `-59` ×10, `-33` ×3, `-25` ×2 — the other `-25`
+(`cmqfgj6lv…`) sits on a full-SOAP office note, where it is coherent.
+
+**FILED, NOT FIXED, DELIBERATELY.** It is a different surface, and a ruling that
+names the E/M *level* does not name the modifier tray — ruling #109's rule that a
+deletion is scoped by what the component DOES, not by what the ruling CALLS it.
+The cure is also not obvious: `-59` and `-33` are procedure modifiers and belong
+on an operative note. **It predates F12-c and is not made worse by it.**
+
+### ⚠️ SESSION FINDING — I STAGED `apps/` WHILE ANOTHER ACTOR WAS WRITING TO IT, AND THE COMMIT CAPTURED THEIR MUTATION
+
+Two of the four refuters were told read-only and **mutated `worker.ts` anyway**,
+correctly, to test the gate. One mutation was live at the moment I ran
+`git add apps/transcribe-md && git commit --amend`, so **the amended commit
+contained `const emApplies = true;` with the classifier's result discarded** —
+the very bypass that refuter was demonstrating.
+
+⚠️ **AND EVERY INSTRUMENT AGREED WITH ME:** `tsc` 0 errors, and the full suite
+printed the expected 324 / 4020. It was caught by `git status` showing
+`M worker.ts` after a restore that should have left the tree clean — the
+contradiction was the finding, not any check.
+
+**THE LESSON IS MINE, NOT THEIRS: an adversarial pass that can mutate must be
+given its own copy of the tree.** Running refuters against the worktree you are
+committing from makes *"evidence describes the tree it was taken on"* unenforceable
+— the tree is moving under both of you. Fixed by re-verifying the committed
+content with `git show HEAD:<path>` rather than trusting the exit code, and
+re-amending.
+
+### ⚠️ F12-c — THE MANDATORY ADVERSARIAL PASS, FOUR LENSES, AND IT CHANGED THE DESIGN TWICE
+
+**Four independent refuters over the finished diff — data loss · false green · wrong universe · state and ordering.** Three returned findings that survived my own verification. **Two of them altered the implementation, and one of those was a defect this change INTRODUCED.**
+
+#### 🔴 THE ONE THAT MATTERED — TWO REFUTERS CONVERGED ON IT INDEPENDENTLY
+
+`em: null` is **ambiguous**: it means *"the model produced nothing"* AND *"nobody asked for one"*. Draft 2 resolved that by handing the incompleteness check `emApplies`, **recomputed at read time**. On the RESUME path the two disagree:
+
+    operative note      -> L7b writes { em: null, procedures: [...] }
+    doctor edits it     -> the note's shape flips to OFFICE
+    doctor hits Retry   -> L7b is SKIPPED (`hasContent` is true for ANY object)
+                           and records status:'ok'
+    the check recomputes-> "E/M applies" — about a blob produced under "it does not"
+                        -> "no E&M code emitted (status:ok)"
+    the doctor sees     -> "Auto-coding incomplete … Click Retry to reprocess"
+
+⚠️ **AND RETRY CAN NEVER CLEAR IT** — L7b is skipped on every subsequent attempt for the same reason, until `MANUAL_RETRY_BUDGET` (5) is spent and the route answers **429 "contact support"**. **That is precisely the failure the parameter had been added to prevent, reappearing through the one door the draft did not cover.**
+
+**FIXED AT THE ROOT: the verdict is STORED WITH THE ROW IT DESCRIBES.** L7b writes `cptCodes.emSuppressed: true`; the check reads that; and `LayerOutputs` now carries **no verdict at all**. **A stored fact cannot drift from the record it is attached to; a recomputation always can.** Additive JSON, no migration. Mutation **M13** — a reader that ignores the marker — reddens 2 arms including one named for this path.
+
+#### 🔴 DRAFT 1 LOST A TRUE POSITIVE WHILE REMOVING A FALSE ONE
+
+It skipped the E/M leg **wholesale**, so the claim *"this removes ONLY a false positive"* was **false**. It also removed the only doctor-facing signal for a real failure on the same notes — the model returning `{em:null, procedures:[]}`, or the allowlist rejecting every procedure code — leaving a colonoscopy with an **empty Codes tab, no banner and no retry CTA**, the only trace a fire-and-forget audit row nobody sees. ⚠️ **And it silently disabled the DB-blip defence** whose comment in `worker.ts` says it is on — a sentence that would have become false in the same commit that edited the code it describes. Fixed via `isCptWhollyEmpty`, which asks the SAME question the helper always asked, and a reason string that does not say *"no E&M code emitted"* about a note nobody wanted one on.
+
+#### 🔴 THE GATE WAS BLIND TO A LAYER GATE THAT NEVER SPELLS `emApplies`
+
+A refuter imported a **second** export of the same module, derived `isOperativeNote`, and gated `flags.cpt` on it: **16 of 16 green, and 1132 green across the whole worker suite.** A token census is a denylist and denylists are unbounded. Both layer-gate lines are now pinned by **equality**. ⚠️ **The over-strict direction was a real defect too** — `const emApplies: boolean = …` earned a message accusing the author of deleting a procedure code — and **M10 is the happy-path control that proves it fixed.**
+
+#### 🟠 FILED, NOT FIXED — F12-e: A SHAPE FLIP LEAVES THE SIGNED DOCUMENT WITH NO E/M WHILE THE SCREEN SHOWS ONE
+
+Found by two lenses. After the flip above, `sign/route.ts:538`'s `if (emBlob && emApplies)` sees `emBlob === null`, so **no `signedCode` is frozen**, and `projectEmForDisplay(null, …)` returns null — the signed PDF, DOCX and every EHR clipboard format carry **no E/M code**, while the coding rail showed one and the doctor confirmed it.
+
+⚠️ **THIS IS INTRODUCED BY F12-c AND IS STATED PLAINLY RATHER THAN MINIMISED.** Pre-F12-c the blob always held an `em`, so a flip merely revealed it. **What it is NOT is the worse direction:** pre-F12-c the document printed a code computed from an OPERATIVE-shaped note onto an office visit — a WRONG field, which this house rules worse than an absent one. F12-c moves it from wrong to absent.
+
+**Not fixed here because the cure lives on the SIGNING and EXPORT surfaces of a signed record**, needs its own §2.5 and its own adversarial pass, and a third substantive change to this diff without a fresh pass over it is the over-reach canon warns about. ⚠️ **The stored `emSuppressed` marker is exactly the hook a fix needs** — it is the only thing that lets a reader tell "suppressed under a verdict that no longer holds" from "the model produced nothing".
+
+#### 🔵 FILED — RETRY SKIPS L7b, SO "FORWARD-ONLY" IS WIDER THAN THE DECLARATION SAID
+
+`hasContent` returns true for **any** non-null JSONB object, and `retry/route.ts` does not clear `cptCodes`. So an existing office E/M on an operative note **survives every retry**. The declaration said forward-only *"for a row that has already been processed"*; it is also forward-only for **any row whose `cptCodes` is non-null**, a strictly larger set. Recorded in the declaration's not-claimed list.
+
+#### WHAT THE PASS CONFIRMED RATHER THAN BROKE
+
+- `flags.cpt` untouched; procedure codes preserved on every path.
+- The atomic single-update (FIND-P1-004) survives; `finalize-review-state.ts` is still additive.
+- The icd leg, the failed legs and the `TM_ENABLE_ICD_CPT=false` escape hatch are byte-unchanged.
+- A genuinely FAILED L7b still trips — the failed leg was never gated on applicability.
+- `normalizeTemplate` is a pure cast, so the worker's in-memory `sections` **are** the DB JSONB; **0** production section elements lack a string `label`.
+- No resume, dictation, text-notes or twin-fill path yields an empty `noteText` — `isLayerComplete('L6')` requires non-empty.
+
+⚠️ **AND A CORRECTION TO ONE REFUTER, VERIFIED RATHER THAN ACCEPTED.** It reported the gate blind to `const emApplies = true;` with the call discarded. **Measured against the CURRENT gate: it reddens, naming both lines** (`M11`). It had evaluated the pre-census version. **Two of its other findings described a commit I had already repaired** — the contamination recorded above — and it said so itself.
+
+### ⚠️ SESSION FINDING — TWO ACTORS ALLOCATED THE **SAME RULING NUMBER** CONCURRENTLY, AND NOTHING PREVENTS IT — **2026-08-18, session 03**
+
+`main` moved under this item while its gate ran: PR **#728** landed the
+supervised auto-certification work. The merge conflicted on **one line** of
+`RULINGS.md` — and it was not a text conflict, it was a **NUMBER** conflict.
+**Both sides had allocated `#127`**: the owner's STANDING auto-certification
+ruling (2026-08-17) and this loop's PROVISIONAL compute-layer ruling
+(2026-08-18).
+
+**RESOLVED AS A UNION WITH THIS SIDE RENUMBERED — both rows kept, mine is now
+`#128`.** The owner's ruling keeps `#127`: it is earlier, it is STANDING rather
+than provisional, and it was already merged and deployed. Every reference in
+this item's own artifacts followed the renumber.
+
+⚠️ **AND THE RENUMBER'S FIRST ATTEMPT OVER-REACHED — CAUGHT BY THE UNION CHECK,
+NOT BY READING THE FILE.** A blanket replace of `ruling #127` rewrote **two
+lines this session did not author**, pre-existing text about F12's split. It
+was invisible in the merged file and visible only as `-2` in
+`git diff --numstat` against `origin/main`. **That is exactly why canon says to
+verify a union by the REMOVAL COUNT rather than by reading the result** — a
+section that survived and a section that was silently edited look identical.
+Both lines restored to `origin/main`'s bytes, re-verified **+269/-0** and
+**+1/-0**.
+
+⚠️ **THE CLASS IS NOT THE COLLISION, IT IS THAT NOTHING DETECTS ONE.** Ruling
+numbers are allocated by hand, by whoever writes the row, with no registry and
+no uniqueness check. A collision only surfaces if the two rows happen to land in
+the same file region — this one did, by luck. **Two rows carrying the same
+number in different merge orders would both be "the ruling", and a session
+grepping `#127` would find two contradictory decisions.** `RULINGS.md` already
+records that this file exists to prevent exactly that failure. A cheap guard
+exists — assert every `#<n> —` appears at most once — and it is not built.
+
+### ⚠️ F12-c IS MERGED-AND-CITED, **NOT DEPLOYED**, AND THE REASON IS A RULE RATHER THAN A CLOCK
+
+**Measured from the RUNNING worker at `~16:14Z`: `0` auto-certify files present,
+against a traversal control of `16` `.ts` files.** So PR **#728**'s
+auto-certification work is **on `main` and NOT in production** — and a deploy of
+this tree would ship it alongside F12-c.
+
+**That is the recorded hazard by name: *a declaration is bound to a CHANGE, a
+deploy ships a TREE*.** F12-c's §2.5 covers F12-c; auto-certification has its own
+(`20260818-1a6e8b82.md`) written by its author, who took its baseline and knows
+its expected delta. **Not one row in F12-c's declaration could detect a
+regression in auto-certification**, and writing rows for a change this session
+has not analysed would be fabrication, not a declaration.
+
+**The disciplined options are the two the rule names, and either is open to the
+next session:** deploy the two separately so each declaration gates its own act,
+or write one declaration naming the FULL diff. **What is not open is deploying
+this tree under F12-c's declaration alone and calling it judged** — the R5 case
+is exactly that, and its "16 of 16" was a true sentence doing misleading work.
+
+**Handed forward, ready to use:** the production baseline was re-measured
+`~16:12Z` (all twelve quantities **identical** to the `14:52Z` capture, so the
+auto-certification merge moved nothing in them), the declaration is renamed to
+the merge commit so F10's resolver can reach it by ancestry, and the rollback
+tag is cut automatically by `deploy-prod.sh` STEP 0b.
