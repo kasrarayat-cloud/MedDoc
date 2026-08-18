@@ -422,6 +422,18 @@ describe('F10 · the refuse direction (criterion 3 — it can come out false)', 
 // insurance against that — it runs the SAME library against the REAL repo.
 // ────────────────────────────────────────────────────────────────────────────
 describe('F10 · against the real declaration set', () => {
+  // ⚠️ AN EXPLICIT TIMEOUT, BECAUSE THESE TWO ARMS SPAWN PROCESSES.
+  // Every `resolve()` shells out to bash to source `declaration.sh`, and the
+  // non-vacuity control spawns a second. Vitest's 5000ms default is comfortable
+  // on an idle box and NOT comfortable on a busy one: both arms timed out
+  // during a full run taken while a QA image build had the host at load 17.06,
+  // and both passed 16-of-16 twice when re-run in isolation moments later.
+  //
+  // A required gate that reddens on somebody else's build is a gate people
+  // learn to re-run rather than read. The ASSERTIONS are unchanged — only the
+  // patience is.
+  const SPAWNS_PROCESSES = 30_000;
+
   it('survives contact with the real directory and answers coherently', () => {
     const r = resolve(REPO_ROOT);
 
@@ -448,7 +460,7 @@ describe('F10 · against the real declaration set', () => {
       expect(r.path).toBe('');
       expect(r.mode).toBe('');
     }
-  });
+  }, SPAWNS_PROCESSES);
 
   it('is not confused by `README.md`, which names no sha', () => {
     // the real directory contains one, and a resolver that treated `README` as
@@ -456,7 +468,7 @@ describe('F10 · against the real declaration set', () => {
     const readme = join(REPO_ROOT, DECL_DIR, 'README.md');
     expect(readFileSync(readme, 'utf8').length).toBeGreaterThan(0);
     expect(resolve(REPO_ROOT).code).not.toBe(-1); // -1 is "bash itself died"
-  });
+  }, SPAWNS_PROCESSES);
 });
 
 // ────────────────────────────────────────────────────────────────────────────
