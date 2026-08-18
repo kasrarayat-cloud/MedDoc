@@ -18913,6 +18913,195 @@ changing.** Re-measured from `pwd`-confirmed `.f12-wt/apps/transcribe-md`: the
 - The `e2e` runtime effect of the new class is **not measured** — it is a
   declared risk, priced against F19's 9m37s.
 
+#### ⚠️ THE OTHER TWO REFUTERS LANDED LATER, AND ONE OF THEM FOUND THE FINDING THAT MATTERED MOST
+
+The pass was four lenses. The two above (over-suppression, threading) reported
+first. These two ran nearly four times as long and returned the two findings
+that would have shipped.
+
+#### 🔴 FINDING 6 — **WITHOUT THIS, #126a WAS INERT FOR EVERY FUTURE VISIT.** FIXED (#126c)
+
+**`worker/layers/04-generate-soap.ts` writes `noteTemplateId` UNCONDITIONALLY**
+on both of its paths (`:523`, `:562`), and `template` falls back to
+`SYSTEM_DEFAULT_NOTE_TEMPLATE` — whose sections are exactly
+`Subjective · Objective · Assessment · Plan`. **Four labels, zero markers.**
+
+So `templateIsSilent` read FALSE, the note body was never consulted, and a
+bariatric surgeon with no operative template would have had his op note keep its
+office E/M level — with the fallback sitting right there, disabled.
+
+⚠️ **AND THE DOCTOR CANNOT CONFIGURE THEIR WAY OUT.** `note_templates` carries a
+PARTIAL unique on `(doctorId, encounterType) WHERE status='active'`, and the
+resolver keys `encounterType` on the **specialty**. One doctor cannot hold an
+active office template AND an active operative template for one specialty —
+which is the exact split `note-shape.ts`'s own header says the module exists
+for. The template arm is structurally incapable of separating the case it was
+written for.
+
+⚠️ **THE REFUTER FLAGGED A CONTRADICTION IN ITS OWN FINDING AND ASKED FOR IT TO
+BE MEASURED, WHICH IS WHY IT RESOLVED CLEANLY.** Its objection: this row's own
+header says 30 of 46 production visits carry no template, yet the write is
+unconditional — both cannot describe the forward population. **Measured, and
+BOTH are true:** `tmpl_system_default_soap` is bound on **2** production visits
+(2026-06-15 and 2026-08-14) while 30 rows are NULL, spanning 2026-07-07 to
+2026-08-15. Two populations, not a contradiction — and the templated one is the
+one that grows.
+
+**FIXED (#126c): a template whose labels add nothing beyond the SOAP skeleton
+has described the document's SKELETON, not its KIND, and is SILENT.**
+`isSystemDefault` was the alternative and is recorded in the ruling with why it
+was not taken. **Measured: both system-default-bound visits carry ZERO operative
+markers, so no current verdict moves.**
+
+#### 🔴 FINDING 7 — an operative note with a pending E/M change was **PERMANENTLY UNSIGNABLE**. FIXED, one conjunction
+
+`sign/route.ts:409` computed `pendingEm` without `emApplies`, which had been in
+scope since `:335`. Ungated, a colonoscopy holding an `emPendingChange` gets a
+**400** reading *"Documentation level changed (99213 → 99214) … confirm the new
+level before signing"* — an office E/M level asserted about an operative note —
+**and the doctor cannot clear it**: `page.tsx` nulls the client's
+`pendingEmChange` when E/M does not apply, so the modal never collects an
+acknowledgement, and `rescore-em.ts`'s not-applicable branch clears only
+`emStale`, never `emPendingChange`. The loop has no exit.
+
+⚠️ **THIS IS THE FAILURE THE COMMENT FIFTY LINES ABOVE SAYS IT IS PREVENTING** —
+*"would make a colonoscopy report permanently unsignable after any edit"* —
+fixed on the STALE arm and reintroduced on the PENDING one. **And F12 is what
+made it reachable:** the predicate used to be a near-immutable column, and it is
+now a function of the note body and the template binding, both of which move on
+ordinary edits. TRUE-at-write / FALSE-at-sign went from "should never happen" to
+routine.
+
+#### 🔵 FINDING 8 — **THE WORST ONE OPEN, AND IT IS WORSE THAN THE HOLE #126a CLOSED.** FILED
+
+**Editing a SUPERSEDED template mutates `sections` IN PLACE on a row a signed
+visit still points at.** `note-template-lifecycle.ts:211-225` updates rather
+than versioning when `status !== 'active'`; superseded rows are listed with no
+status filter (`note-template-persist/read.ts:95`), and neither the UI nor the
+server action gates Edit on status.
+
+    signed colonoscopy → doctor uploads v2 → v1 flips inactive (the NORMAL
+    re-upload lifecycle) → doctor later edits v1, renaming
+    "DESCRIPTION OF PROCEDURE" and deleting "ESTIMATED BLOOD LOSS"
+      → markers drop to 0, LABELS REMAIN
+      → templateIsSilent FALSE → the fallback is skipped BY DESIGN
+      → the signed operative record prints its frozen signedCode again
+
+⚠️ **DELETE IS RECOVERABLE AND EDIT IS NOT.** Deletion nulls the relation →
+silence → #126a fires. Editing leaves labels behind → silence is correctly
+false → the note body is deliberately not consulted. **#126a covers the
+recoverable event and not the unrecoverable one.** Not fixed here because the
+cure is in template VERSIONING semantics — a superseded row referenced by a
+signed visit must not be mutable in place — which is a different subsystem and
+a different ruling.
+
+#### 🟠 FINDING 9 — `GET /api/visits/[id]:134` returns the raw `cptCodes` blob unprojected. FILED
+
+No `projectEmForDisplay`, no `emAppliesToVisit`, no import of `@/lib/note-shape`.
+⚠️ **So `visit-export-server.ts`'s claim to be *"THE SINGLE SEAM FOR EVERY EXPORT
+SURFACE"* is true of the export surfaces and false of this read route** — and
+the blob is present on operative notes by design (Finding 4). Practice-scoped
+auth only. The same posture exists for imaging today, so it is not a regression
+this item introduced; it is a hole this item's own comment overstates the
+closure of. **The comment has been left as written and this row is the
+correction** — narrowing it without fixing the route would be worse.
+
+#### 🟡 FINDING 10 — two smaller reversions of this change's own discipline. FILED
+
+- `codes-tab.tsx:100` gives `emApplies` a **default parameter** of `true`,
+  reinstating exactly the permissive default `visit-export.ts:66-70` exists to
+  forbid. Both current callers pass it; a third would not have to.
+- `codes-tab.tsx:106` passes `readonly` as the `isSigned` argument, while
+  `visit-ready-view.tsx:609` computes `isSigned = readonly || signedAt !== null`
+  — so a `signedAt`-set / non-`SIGNED` visit prints `override ?? code` instead of
+  the frozen `signedCode`.
+
+#### THE SECOND PASS ALSO CONFIRMED, RATHER THAN BROKE
+
+The export seam genuinely does cover DOCX · PDF · every EHR clipboard format ·
+email · `settings/export-data` · `patients/[id]/export` · the preview action ·
+the sign route. No admin surface reaches a visit row, there is no CSV or billing
+dump, and `pdf-native` and the twin native export carry no `cptCodes` at all.
+
+#### AND A FALSE-GREEN LENS CAUGHT A HARD `e2e` BLOCKER **BEFORE THE PUSH**
+
+`review-document.spec.ts` passed the literal `'EXAM TYPE'` as
+`extractExportText`'s non-vacuity marker. **That helper THROWS when the marker is
+absent** — correctly, since an absence assertion over text the extractor never
+read is vacuous — and `'EXAM TYPE'` exists only in the IMAGING fixture, while
+the arm runs for **every** class with `emApplies: false`. Adding the `operative`
+class would therefore have thrown inside the non-vacuity guard and **reddened
+the required `e2e` gate**, reading like a broken extractor rather than a fixture
+mismatch. Fixed by deriving `exportMarker` per class through `headingMarker`,
+which throws at module load if a marker and its fixture ever drift. *(The
+sibling literal in `rounds-gates.spec.ts:506` is CORRECT and stays — that spec
+seeds `specialtyClass: 'imaging'` explicitly. Checked, not assumed.)*
+
+**That finding alone paid for the pass**: the alternative was a 40-minute CI
+cycle spent discovering it.
+
+#### AND THREE GUARDS OF MINE WERE PROVED NOT TO MAKE THEIR OWN CLAIMS
+
+1. **The half-landed-fix source guard did not watch the new key.**
+   `review-read-only-paper.test.ts` asserted `emAppliesToVisit({`,
+   `specialtyId:` and `templateSections:` — and **not `noteText:`** — over 3 of
+   the 7 sites. The demonstrated regression: change `sign/route.ts` to
+   `noteText: ''` and `tsc`, every note-shape arm, every sign-gates arm and that
+   whole file stay GREEN while every untemplated operative note silently gets
+   its level back at sign time. ⚠️ **The type cannot catch it: `noteText` is
+   REQUIRED but typed `unknown`, so the compiler forces the next author to write
+   *something* and the cheapest something disables the axis — and this branch's
+   own fixtures write `noteText: ''` nine times, so the permissive value is
+   house style.** Now all seven sites, asserted comment-stripped, with the four
+   placeholder spellings refused, a positive control on the matcher, and the one
+   exclusion (`sign-gates.ts` FORWARDS) asserted rather than assumed.
+2. **"The two arms share ONE marker list" did not prove sharing.** It read
+   `MARKERS.slice(0, FLOOR)` and checked both functions accepted those two —
+   which two INDEPENDENT copies satisfy equally well. It could see drift by
+   REMOVAL of the first two entries and was blind to drift by ADDITION.
+   ⚠️ **And it left 3 of the 11 markers never exercised at all** — the
+   hyphenated variants, which exist only for a template the classifier has not
+   met yet, all three deletable with the suite green. Now iterates the WHOLE
+   list on BOTH arms, with a negative control and a non-vacuity count.
+3. **Three arms were named after a branch that never runs.**
+   `emAppliesToVisit` returns on the specialty check BEFORE either shape source
+   is read, so *"shape cannot re-admit it"* stayed green with the fallback AND
+   the counterweight both deleted. One arm now asserts what they were all
+   actually proving — THE ORDER — over the full four-way shape matrix; one was
+   renamed; one was deleted with its reason left in place.
+
+⚠️ **ALSO RECORDED RATHER THAN FIXED: the floor is not "two independent signals"
+for the hyphenated pairs.** `normalizeSectionLabel` does not normalise hyphens,
+so `PREOPERATIVE`/`PRE-OPERATIVE DIAGNOSIS` is ONE concept scored as TWO signals
+— reaching the floor on a single concept. De-duplicating would make the floor
+HARDER to reach, i.e. LESS suppression, on the clinical export path, decided
+late and measured against nothing. Production carries zero hyphenated spellings,
+so it is unreachable today. **Pinned by an arm so the next reader meets the fact
+instead of the comment's claim.**
+
+#### PROOFS, UPDATED — 11 of 11
+
+M9 · the refuter's own regression, `noteText: ''` at the sign route → **1 red**
+M10 · a private DRIFTED marker list in the text arm (addition-drift) → **1 red**
+M11 · silence narrowed back to the empty case only → **2 red**
+
+Each asserted its own application first and was restored from a scratch copy.
+
+**CONTROLLED DELTA, re-measured from a `pwd`-confirmed worktree:**
+
+    origin/main       322 files · 3928 passed · 16 failed files · 1 failed test
+    session 01's tip  323 files · 3971 passed · 16 failed files · 1 failed test
+    this session      323 files · 4004 passed · 16 failed files · 1 failed test
+
+**+33 tests, failures IDENTICAL.** `tsc` 0 errors.
+
+#### THE §2.5 DECLARATION IS UNCHANGED, AND THAT WAS CHECKED RATHER THAN ASSUMED
+
+Findings 6 and the counterweight are both HARDENING, so the declared delta had
+to be re-derived against the FINAL predicate rather than the one it was written
+for. Re-measured: **printing today 10 → after 5 · MUST DISAPPEAR 5 · of which
+SIGNED 3 · reverse direction 0** — identical to the committed declaration.
+
 ## ✅ F16 IS LIVE IN PRODUCTION — **2026-08-18T06:13:38Z, session 02 — 24 of 24 JUDGED**
 
 **The queue item is closed end to end: built, independently refuted, fixed,

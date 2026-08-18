@@ -386,8 +386,28 @@ export const POST = withApiHandler<{ id: string }>(
         : null;
     }
 
+    // ⚠️ `&& emApplies` — F12-a / ruling #126, and this arm makes an operative
+    // note PERMANENTLY UNSIGNABLE without it. Found by the independent
+    // adversarial pass; `emApplies` has been in scope since `:335`.
+    //
+    // Ungated, a colonoscopy holding an `emPendingChange` gets a 400 reading
+    // "Documentation level changed (99213 → 99214) … confirm the new level
+    // before signing" — an office E/M level asserted about an operative note.
+    // And the doctor cannot clear it: `page.tsx` nulls the client's
+    // `pendingEmChange` when E/M does not apply, so the modal never collects an
+    // acknowledgement, and `rescore-em.ts`'s not-applicable branch clears only
+    // `emStale`, never `emPendingChange`. The loop has no exit.
+    //
+    // ⚠️ THIS IS THE FAILURE THE COMMENT 50 LINES ABOVE SAYS IT IS PREVENTING —
+    // *"would make a colonoscopy report permanently unsignable after any
+    // edit"* — fixed on the STALE arm and reintroduced on the PENDING one.
+    // F12 is what makes it reachable: the predicate used to be a near-immutable
+    // column, and it is now a function of the note body and the template
+    // binding, both of which move on ordinary edits. TRUE-at-write /
+    // FALSE-at-sign is routine now, where it used to be the "should never
+    // happen" imaging artifact.
     const pendingEm =
-      visit.status === TranscribeVisitStatus.READY
+      visit.status === TranscribeVisitStatus.READY && emApplies
         ? unacknowledgedEmChange(visit.emPendingChange)
         : null;
     if (pendingEm) {

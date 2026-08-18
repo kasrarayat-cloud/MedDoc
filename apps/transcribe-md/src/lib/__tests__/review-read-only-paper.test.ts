@@ -755,6 +755,72 @@ describe('an imaging visit has NO E/M level — not displayed, not computed, not
     }
   });
 
+  it('AND THE NOTE BODY IS PASSED AT EVERY SITE, AND IS NEVER A PERMISSIVE PLACEHOLDER', () => {
+    // ⚠️ THE ARM ABOVE WAS TWO CLAIMS AND #126 MADE IT THREE, AND THIS IS THE
+    // THIRD. Found by F12-a's independent adversarial pass, which produced the
+    // regression that stayed green: change `sign/route.ts`'s
+    // `noteText: visit.soapFinal` to `noteText: ''` and `tsc` passes, every
+    // note-shape arm passes, every sign-gates arm passes, this file passed —
+    // and every untemplated operative note silently gets its office E/M level
+    // back at sign time.
+    //
+    // ⚠️ THE TYPE CANNOT CATCH IT, WHICH IS THE WHOLE PROBLEM. `noteText` is
+    // deliberately REQUIRED so a caller must think about it — but it is typed
+    // `unknown`, so `''`, `null` and `undefined` all typecheck and all read as
+    // "no headings", which fails OPEN. The compiler forces the next author to
+    // write *something*; the cheapest something is the one that disables the
+    // axis. ⚠️ And this repo's own test fixtures write `noteText: ''` by hand
+    // nine times, so the permissive value is house style — which is exactly
+    // why PRODUCTION sites need a guard the fixtures do not trip.
+    //
+    // ⛔ THE LIST IS ALL SEVEN NON-FORWARDING SITES, not the three above. A
+    // hand-kept list of three was the gap; the predicate is "every production
+    // site that calls the switch", and `sign-gates.ts` is excluded only
+    // because it FORWARDS `input.noteText` from its caller rather than
+    // resolving one — asserted below rather than assumed.
+    const SITES = [
+      'src/actions/soap.ts',
+      'src/actions/rescore-em.ts',
+      'src/app/api/visits/[id]/sign/route.ts',
+      'src/app/api/visits/[id]/em-score/apply-additions/route.ts',
+      'src/app/api/visits/[id]/em-score/override/route.ts',
+      'src/lib/visit-export-server.ts',
+      'src/app/visits/[id]/page.tsx',
+    ];
+    for (const f of SITES) {
+      // Comment-stripped, because this file's own prose quotes the very tokens
+      // being searched for — the recorded trap where a matcher is satisfied by
+      // an explanatory comment.
+      const code = stripComments(read(f));
+      expect(code, `${f} must call the one switch`).toContain('emAppliesToVisit({');
+      expect(code, `${f} must pass the note body`).toContain('noteText:');
+      for (const placeholder of [
+        "noteText: ''",
+        'noteText: ""',
+        'noteText: null',
+        'noteText: undefined',
+      ]) {
+        expect(
+          code,
+          `${f} passes ${placeholder} — that disables the note-shape axis at this ` +
+            'site and nothing else would say so',
+        ).not.toContain(placeholder);
+      }
+    }
+
+    // POSITIVE CONTROL ON THE MATCHER ITSELF. A `not.toContain` sweep that
+    // silently matched nothing would report a clean pass over an empty read,
+    // so prove the same matcher DOES find the placeholder when it is present.
+    const canary = "emAppliesToVisit({ specialtyId: x, templateSections: y, noteText: '' })";
+    expect(canary).toContain("noteText: ''");
+
+    // AND THE ONE EXCLUSION IS ASSERTED, NOT ASSUMED: sign-gates forwards.
+    const gates = stripComments(read('src/lib/sign-gates.ts'));
+    expect(gates, 'sign-gates must forward its caller\'s note body').toContain(
+      'noteText: input.noteText',
+    );
+  });
+
   it('NO SITE STILL READS THE SPECIALTY AXIS ALONE FOR AN E/M DECISION', () => {
     // ⚠️ THE ARM THAT CATCHES A HALF-LANDED F12. The three files above are a
     // hand-kept list, and a hand-kept list is wrong eventually — this one is

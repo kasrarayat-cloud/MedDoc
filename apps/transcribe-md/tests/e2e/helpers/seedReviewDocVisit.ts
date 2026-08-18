@@ -31,7 +31,10 @@ function psql(sql: string): string {
   ).trim();
 }
 
-const NOTE = [
+/** EXPORTED as a source array for the same reason the imaging and operative
+ *  fixtures are: a per-class marker must be DERIVED from the fixture, never
+ *  hand-copied beside it. */
+export const NOTE_SOURCE = [
   '## Subjective',
   'Chief Complaint: Asthma review',
   'HPI: Established patient, symptoms several weeks, moderate severity.',
@@ -44,7 +47,8 @@ const NOTE = [
   '',
   '## Plan',
   '1. Continue current medications.',
-].join('\n');
+];
+const NOTE = NOTE_SOURCE.join('\n');
 
 /** Three claims, one per section, so placement is checkable per section. The
  *  third is deliberately LONG — a card taller than a phone viewport is the case
@@ -334,8 +338,40 @@ const OPERATIVE_ICD = [
   { code: 'Z12.11', description: 'Encounter for screening for malignant neoplasm of colon' },
 ];
 
+/** Pick a heading out of a note fixture BY NAME, and throw at module load if it
+ *  is not there.
+ *
+ *  ⚠️ THIS EXISTS BECAUSE A HARDCODED MARKER IS A LANDMINE FOR THE NEXT CLASS.
+ *  `review-document.spec.ts`'s export arm passes a `mustContain` to
+ *  `extractExportText`, which **throws** when the marker is absent — correctly,
+ *  because an absence assertion over text the extractor never read is vacuous.
+ *  That marker was the literal `'EXAM TYPE'`, which exists only in the IMAGING
+ *  fixture, while the arm runs for EVERY class with `emApplies: false`. Adding
+ *  the operative class would therefore have thrown inside the non-vacuity guard
+ *  and reddened the required `e2e` gate — presenting as *"the extractor is not
+ *  seeing the document text"* rather than as a fixture mismatch.
+ *
+ *  Found by F12-a's independent adversarial pass, BEFORE the push. Deriving the
+ *  marker per class is what both note fixtures were exported for in the first
+ *  place: *"so a parity test derives its markers from the FIXTURE rather than
+ *  from a second hand-written copy of it."* */
+function headingMarker(source: readonly string[], heading: string): string {
+  const found = source.some((l) => l.replace(/^#+\s*/, '').trim() === heading);
+  if (!found) {
+    throw new Error(
+      `headingMarker: ${JSON.stringify(heading)} is not a heading in this note fixture. ` +
+        'The class marker and the fixture have drifted, and the export arm would ' +
+        'throw at runtime looking like a broken extractor.',
+    );
+  }
+  return heading;
+}
+
 /** The specialty classes the review-doc pack runs across. `emApplies` is the
- *  single switch every specialty-conditional expectation reads. */
+ *  single switch every specialty-conditional expectation reads.
+ *
+ *  `exportMarker` is the heading the export arm proves it actually read, per
+ *  class — see `headingMarker` directly above for why it is not a literal. */
 export const REVIEW_DOC_CLASSES = [
   {
     key: 'primary-care' as const,
@@ -343,6 +379,9 @@ export const REVIEW_DOC_CLASSES = [
     label: 'an office visit',
     /** E/M applies: level row, Adjust, confirm gate and stale gate all exist. */
     emApplies: true,
+    /** The heading the export arm proves it read. Unused while this class is
+     *  `emApplies: true` — carried so every class answers the same question. */
+    exportMarker: headingMarker(NOTE_SOURCE, 'Subjective'),
     /** ⚠️ `hasRxGate` WAS REMOVED FROM THIS MATRIX — owner ruling #109. The
      *  fixture still carries a critical Rx interaction (extraction was not in
      *  scope); it simply no longer gates anything, so there is no per-specialty
@@ -352,6 +391,7 @@ export const REVIEW_DOC_CLASSES = [
     key: 'imaging' as const,
     label: 'an imaging report',
     emApplies: false,
+    exportMarker: headingMarker(IMAGING_NOTE_SOURCE, 'EXAM TYPE'),
   },
   {
     key: 'operative' as const,
@@ -359,6 +399,7 @@ export const REVIEW_DOC_CLASSES = [
     /** Suppressed by the NOTE-SHAPE axis (#123 part 2), not by the specialty —
      *  `gastroenterology` bills office E/M all day. See the block above. */
     emApplies: false,
+    exportMarker: headingMarker(OPERATIVE_NOTE_SOURCE, 'DESCRIPTION OF PROCEDURE'),
   },
 ] as const;
 
@@ -598,7 +639,7 @@ export function seedReviewDocVisit(
           -- asserted; the office fixture keeps the critical interaction. The
           -- operative note carries none either — a colonoscopy report is not a
           -- prescribing encounter.
-          ${noOfficeEm && !opts.imagingWithRx ? 'null' : `'${j(imaging ? IMAGING_RX : RX)}'::jsonb`},
+          ${operative || (imaging && !opts.imagingWithRx) ? 'null' : `'${j(imaging ? IMAGING_RX : RX)}'::jsonb`},
           -- AND NO PENDING E/M CHANGE, ever, on imaging OR on an operative
           -- note: there is no level to have moved. Seeding one would be seeding
           -- the bug.

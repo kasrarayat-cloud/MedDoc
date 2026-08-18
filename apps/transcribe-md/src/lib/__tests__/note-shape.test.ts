@@ -357,9 +357,12 @@ describe('emAppliesToVisit — BOTH axes, and the conjunction lives in ONE place
       expect(ultrasoundSpecialtyEnabled()).toBe(true);
     });
 
-    it('the specialty axis still suppresses, and shape cannot re-admit it', () => {
-      // An imaging report stays suppressed whatever its sections say — the two
-      // axes are AND-ed, so neither can override the other.
+    it('the specialty axis suppresses, and it is FIRST — shape is never consulted', () => {
+      // ⚠️ RENAMED. The old title — *"shape cannot re-admit it"* — reads as a
+      // claim about the shape sources, and `emAppliesToVisit` returns on the
+      // specialty check before either is read, so it stayed green with both
+      // shape halves deleted. It asserts the ORDER; it now says so. The full
+      // combination matrix lives on the arm of that name further down.
       expect(
         emAppliesToVisit({ specialtyId: 'ultrasound', templateSections: PRIMARY_CARE, noteText: EMPTY_NOTE })
       ).toBe(false);
@@ -446,14 +449,68 @@ describe('ruling #126 — the note body is read when the template is silent', ()
     ).toBe(true);
   });
 
-  it('a template with labels but no markers is NOT silent; an empty or absent one IS', () => {
+  it('an empty or absent template is SILENT', () => {
     expect(templateIsSilent(null)).toBe(true);
     expect(templateIsSilent(undefined)).toBe(true);
     expect(templateIsSilent([])).toBe(true);
     expect(templateIsSilent('nonsense')).toBe(true);
     expect(templateIsSilent([{ key: 'a' }, { key: 'b' }])).toBe(true); // no labels
-    expect(templateIsSilent(SYSTEM_SOAP)).toBe(false);
     expect(templateIsSilent(OP_NOTE)).toBe(false);
+    expect(templateIsSilent(PRIMARY_CARE)).toBe(false);
+  });
+
+  it('🔴 AND SO IS A BARE-SOAP TEMPLATE — without this, #126a is INERT for every future visit', () => {
+    // Found by the independent adversarial pass, and it is the finding that
+    // would have made the whole fallback decorative going forward.
+    //
+    // `04-generate-soap.ts` writes `noteTemplateId` UNCONDITIONALLY on both
+    // paths, falling back to SYSTEM_DEFAULT_NOTE_TEMPLATE — whose sections are
+    // exactly Subjective/Objective/Assessment/Plan. So a doctor with no
+    // operative template dictates an op note, the resolver binds the system
+    // default, and a `labels.length === 0` definition of silence would skip the
+    // note body entirely and hand the operative note its office E/M level.
+    //
+    // MEASURED: that template is bound on 2 production visits today, both with
+    // zero operative markers — so this changes no current verdict. It is the
+    // forward population it saves.
+    expect(templateIsSilent(SYSTEM_SOAP)).toBe(true);
+
+    // THE CONSEQUENCE, end to end: the same bare-SOAP binding, two bodies,
+    // two opposite and correct answers.
+    expect(
+      emAppliesToVisit({
+        specialtyId: 'bariatric-surgery',
+        templateSections: SYSTEM_SOAP,
+        noteText: OP_NOTE_BODY,
+      }),
+      'an operative note bound to the SYSTEM DEFAULT must still be suppressed',
+    ).toBe(false);
+    expect(
+      emAppliesToVisit({
+        specialtyId: 'bariatric-surgery',
+        templateSections: SYSTEM_SOAP,
+        noteText: OFFICE_NOTE_BODY,
+      }),
+      'and an office visit bound to the same default must keep its level',
+    ).toBe(true);
+    // …and an empty body still fails OPEN.
+    expect(
+      emAppliesToVisit({
+        specialtyId: 'bariatric-surgery',
+        templateSections: SYSTEM_SOAP,
+        noteText: EMPTY_NOTE,
+      })
+    ).toBe(true);
+  });
+
+  it('a template that says anything BEYOND the SOAP skeleton is NOT silent', () => {
+    // The boundary. `PRIMARY_CARE` (CHIEF COMPLAINT · INTERVAL HISTORY · EXAM …)
+    // is a real clinical declaration and keeps its veto over the note body —
+    // which is what stops the fallback becoming an OR across both sources.
+    expect(templateIsSilent(PRIMARY_CARE)).toBe(false);
+    expect(templateIsSilent(sec(['SUBJECTIVE', 'OBJECTIVE', 'ASSESSMENT', 'PLAN', 'EXAM']))).toBe(false);
+    // A strict subset of the skeleton is still just a skeleton.
+    expect(templateIsSilent(sec(['SUBJECTIVE', 'PLAN']))).toBe(true);
   });
 
   it('the template arm still wins when it says OPERATIVE and the body is silent', () => {
@@ -465,14 +522,34 @@ describe('ruling #126 — the note body is read when the template is silent', ()
     ).toBe(false);
   });
 
-  it('the specialty axis still cannot be re-admitted by either source', () => {
+  it('THE SPECIALTY AXIS SHORT-CIRCUITS BEFORE EITHER SHAPE SOURCE IS READ', () => {
+    // ⚠️ RENAMED AFTER THE INDEPENDENT ADVERSARIAL PASS, AND THE RENAME IS THE
+    // FIX. It used to be called *"the specialty axis cannot be re-admitted by
+    // either source"* — which sounds like a claim about the two shape sources
+    // and is not one, because `emAppliesToVisit` returns on the specialty check
+    // BEFORE either is consulted. Delete the whole #126 fallback AND the
+    // counterweight and this arm stays green: the "sources" it names are
+    // variables the branch provably never reads.
+    //
+    // What it actually proves is worth exactly one arm — THE ORDER — so it is
+    // now named that, and the two duplicate copies of it elsewhere in this file
+    // were folded into this one. `AGENTS.md`: if the work a check guards
+    // regressed completely, what number would it print? The same one.
     const prev = process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY;
     process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY = 'true';
     try {
       expect(ultrasoundSpecialtyEnabled()).toBe(true); // control
-      expect(
-        emAppliesToVisit({ specialtyId: 'ultrasound', templateSections: null, noteText: OFFICE_NOTE_BODY })
-      ).toBe(false);
+      // Every combination of the two shape sources, including the ones that
+      // would otherwise say "keep the level" — the specialty answer wins in
+      // all four.
+      for (const templateSections of [null, PRIMARY_CARE]) {
+        for (const noteText of [OFFICE_NOTE_BODY, OP_NOTE_BODY]) {
+          expect(
+            emAppliesToVisit({ specialtyId: 'ultrasound', templateSections, noteText }),
+            'an imaging report has no office level whatever its shape says',
+          ).toBe(false);
+        }
+      }
     } finally {
       if (prev === undefined) delete process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY;
       else process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY = prev;
@@ -588,23 +665,15 @@ describe('ruling #126 — the OFFICE COUNTERWEIGHT, and it is tested FIRST', () 
     expect(isProcedureNoteShapeFromText(threeOfFour.map((l) => '## ' + l).join('\n'))).toBe(true);
   });
 
-  it('the counterweight cannot re-admit a level the SPECIALTY axis refused', () => {
-    const prev = process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY;
-    process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY = 'true';
-    try {
-      expect(ultrasoundSpecialtyEnabled()).toBe(true); // control
-      expect(
-        emAppliesToVisit({
-          specialtyId: 'ultrasound',
-          templateSections: null,
-          noteText: POST_OP_OFFICE_BODY,
-        })
-      ).toBe(false);
-    } finally {
-      if (prev === undefined) delete process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY;
-      else process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY = prev;
-    }
-  });
+  // ⛔ AN ARM WAS DELETED HERE, DELIBERATELY. It was titled *"the counterweight
+  // cannot re-admit a level the SPECIALTY axis refused"* and asserted
+  // `ultrasound` + `POST_OP_OFFICE_BODY` is false — which is true, and is a
+  // fact about the specialty short-circuit rather than about the
+  // counterweight. It stayed green with the counterweight deleted. The claim
+  // it was reaching for is asserted once, over all four shape combinations, by
+  // "THE SPECIALTY AXIS SHORT-CIRCUITS BEFORE EITHER SHAPE SOURCE IS READ"
+  // above. Three arms named after an unreachable branch are not three times
+  // the coverage.
 
   it('⚠️ EXACT MATCH, NEVER `includes` — "IMPLANT" contains "plan"', () => {
     // The prior art matches office markers by substring. Copying that here
@@ -711,13 +780,67 @@ describe('ruling #126 — heading extraction from the note body', () => {
     expect(isProcedureNoteShapeFromText(input)).toBe(false);
   });
 
-  it('the two arms share ONE marker list and ONE floor', () => {
-    // A second copy of either would drift the day one is edited, and both
-    // would still return a number. Asserted through the structures rather than
-    // by reading the file.
-    const labels = PROCEDURE_NOTE_SECTION_MARKERS.slice(0, PROCEDURE_NOTE_MARKER_FLOOR);
-    const body = labels.map((l) => '## ' + l).join('\n');
-    expect(isProcedureNoteShapeFromText(body)).toBe(true);
-    expect(isProcedureNoteShape(sec([...labels]))).toBe(true);
+  it('the two arms share ONE marker list — EVERY marker, both arms, plus a negative control', () => {
+    // ⚠️ THIS ARM WAS REWRITTEN AFTER THE INDEPENDENT ADVERSARIAL PASS PROVED
+    // THE FIRST VERSION DID NOT MAKE ITS OWN CLAIM. It read
+    // `PROCEDURE_NOTE_SECTION_MARKERS.slice(0, FLOOR)` and asserted both
+    // functions accepted those two — which two INDEPENDENT COPIES of the list
+    // satisfy equally well. It could only see drift by REMOVAL of the first
+    // two entries; drift by ADDITION — the overwhelmingly likely edit — was
+    // invisible, which is the opposite of what its own comment claimed.
+    //
+    // ⚠️ AND IT LEFT 3 OF THE 11 MARKERS NEVER EXERCISED AT ALL:
+    // `PRE-OPERATIVE DIAGNOSIS`, `POST-OPERATIVE DIAGNOSIS` and
+    // `POST-OPERATIVE FINDINGS` had ZERO occurrences anywhere in this file, and
+    // all three could be deleted from the module with the whole suite green.
+    // They exist only for a template the classifier has not met yet, which is
+    // the entire reason they were written down — a guard that cannot see their
+    // removal is not guarding them.
+    //
+    // Iterating the WHOLE list on BOTH arms fixes both defects at once.
+    for (const marker of PROCEDURE_NOTE_SECTION_MARKERS) {
+      expect(
+        procedureNoteMarkerCountFromText('## ' + marker),
+        `${marker} must be a marker on the NOTE-TEXT arm`,
+      ).toBe(1);
+      expect(
+        procedureNoteMarkerCount(sec([marker])),
+        `${marker} must be a marker on the TEMPLATE arm`,
+      ).toBe(1);
+    }
+
+    // NEGATIVE CONTROL — without it, an arm that scored 1 for everything would
+    // pass every row above. `ANESTHESIA` is a plausible operative heading that
+    // is deliberately NOT on the list.
+    for (const notAMarker of ['ANESTHESIA', 'RECOMMENDATIONS', 'TECHNIQUE']) {
+      expect(procedureNoteMarkerCountFromText('## ' + notAMarker)).toBe(0);
+      expect(procedureNoteMarkerCount(sec([notAMarker]))).toBe(0);
+    }
+
+    // NON-VACUITY on the list itself: a cohort that collapsed to nothing would
+    // satisfy every loop above while checking nothing.
+    expect(PROCEDURE_NOTE_SECTION_MARKERS.length).toBe(11);
+  });
+
+  it('⚠️ THE FLOOR IS NOT "two independent signals" FOR THE HYPHENATED PAIRS — recorded, not fixed', () => {
+    // `normalizeSectionLabel` strips colons and collapses whitespace but does
+    // NOT normalise hyphens, so the 11 entries cover 9 CONCEPTS:
+    // PREOPERATIVE/PRE-OPERATIVE DIAGNOSIS and POSTOPERATIVE/POST-OPERATIVE
+    // FINDINGS are each one concept spelled twice — and `countMarkers` scores
+    // the two spellings as TWO signals, reaching the floor on ONE concept.
+    //
+    // The floor's stated purpose is "two INDEPENDENT signals". For these pairs
+    // it is not what it enforces. Found by the independent adversarial pass.
+    //
+    // ⛔ DELIBERATELY PINNED RATHER THAN CHANGED, and the reason is direction:
+    // de-duplicating by concept would make the floor HARDER to reach, which is
+    // LESS suppression — the under-suppression direction, on the clinical
+    // export path, decided late in a session and measured against nothing.
+    // Production carries ZERO hyphenated spellings today (measured
+    // 2026-08-18), so the behaviour is unreachable on the real corpus. This arm
+    // exists so the next reader meets the fact instead of the comment's claim.
+    const oneConceptTwoSpellings = '## PREOPERATIVE DIAGNOSIS\na\n## PRE-OPERATIVE DIAGNOSIS\nb';
+    expect(procedureNoteMarkerCountFromText(oneConceptTwoSpellings)).toBe(2);
+    expect(isProcedureNoteShapeFromText(oneConceptTwoSpellings)).toBe(true);
   });
 });

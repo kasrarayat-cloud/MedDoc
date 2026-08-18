@@ -293,7 +293,41 @@ export function isProcedureNoteShapeFromText(noteText: unknown): boolean {
  *  sources is a TIGHTENING and is therefore the legal direction to be wrong
  *  in; narrowing after shipping an OR would not be. */
 export function templateIsSilent(sections: unknown): boolean {
-  return normalizedSectionLabels(sections).length === 0;
+  const labels = normalizedSectionLabels(sections);
+  // No template at all, or a malformed one: nothing said.
+  if (labels.length === 0) return true;
+  // ⚠️ AND A TEMPLATE THAT SAYS NOTHING BUT "SOAP" HAS ALSO SAID NOTHING ABOUT
+  // THE ENCOUNTER — it has described the document's SKELETON, not its KIND.
+  //
+  // THIS IS THE HOLE THE INDEPENDENT ADVERSARIAL PASS FOUND, AND WITHOUT IT
+  // #126a IS INERT FOR EVERY FUTURE VISIT. `worker/layers/04-generate-soap.ts`
+  // writes `noteTemplateId: template.id` UNCONDITIONALLY on both of its paths
+  // (`:523` and `:562`), and `template` falls back to
+  // `SYSTEM_DEFAULT_NOTE_TEMPLATE` when resolution fails — whose sections are
+  // exactly `Subjective · Objective · Assessment · Plan`. Four labels, zero
+  // markers. So a bariatric surgeon with no operative template dictates an
+  // op note, the resolver binds the system default, the template arm sees no
+  // markers, `templateIsSilent` would have been FALSE, the note body would
+  // never be read, and the operative note keeps its office E/M level.
+  //
+  // ⚠️ AND THE DOCTOR CANNOT CONFIGURE THEIR WAY OUT. `note_templates` carries
+  // a PARTIAL unique on `(doctorId, encounterType) WHERE status='active'`, and
+  // the resolver keys `encounterType` on the SPECIALTY — so one doctor cannot
+  // hold an active office template AND an active operative template for one
+  // specialty. That is the very split this module exists for.
+  //
+  // MEASURED: `tmpl_system_default_soap` is bound on 2 production visits
+  // (2026-06-15 and 2026-08-14), both carrying ZERO operative markers, so this
+  // changes no verdict today — it is the forward population it saves.
+  //
+  // ⚠️ THE ALTERNATIVE WAS TO THREAD `isSystemDefault` FROM THE DATABASE, and
+  // it was NOT taken. It is the more direct statement of the mechanism, and it
+  // requires a new column at all seven call sites plus a new prop; this form
+  // needs none, and it gives the SAME answer wherever it differs — because
+  // whenever it fires, the NOTE BODY decides, and the body carries the office
+  // counterweight. A bare-SOAP template on an office note reads office from the
+  // body; on an operative note it reads operative. Both correct.
+  return labels.every((l) => OFFICE_SKELETON_SECTIONS.includes(l));
 }
 
 /** IS THIS NOTE AN OPERATIVE / PROCEDURE REPORT?

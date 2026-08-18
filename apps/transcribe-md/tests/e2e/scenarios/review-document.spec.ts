@@ -738,15 +738,26 @@ test.describe('pre-sign review as the document', () => {
           for (const f of files) {
             const path = await f.path();
             expect(path, `no path for ${f.suggestedFilename()}`).toBeTruthy();
-            // Non-vacuity marker: a heading from the seeded imaging note, which
-            // both artifacts render. NOT the patient name — exports anonymise
-            // PHI ("PATIENT Anonymous"), and that mistake is exactly what this
-            // check is for: it turned a wrong marker into a loud failure instead
-            // of letting an absence assertion run against text I had misread.
+            // Non-vacuity marker: a heading from THIS CLASS's seeded note,
+            // which both artifacts render. NOT the patient name — exports
+            // anonymise PHI ("PATIENT Anonymous"), and that mistake is exactly
+            // what this check is for: it turned a wrong marker into a loud
+            // failure instead of letting an absence assertion run against text
+            // I had misread.
+            //
+            // ⚠️ `cls.exportMarker`, NOT THE LITERAL `'EXAM TYPE'`. This arm
+            // runs for every class with `emApplies: false`, and that string
+            // exists only in the IMAGING fixture — so the moment a second
+            // suppressed class was added, `extractExportText` would have THROWN
+            // here (it refuses a missing marker, correctly) and reddened the
+            // required `e2e` gate while reading like a broken extractor. Found
+            // by F12-a's independent adversarial pass, before the push. The
+            // marker is now derived per class from the fixture itself, and
+            // `headingMarker` throws at module load if the two ever drift.
             const text = await extractExportText(
               path!,
               f.suggestedFilename(),
-              'EXAM TYPE',
+              cls.exportMarker,
             );
             // THE ASSERTION. Not "no 99212" — no office E/M code at all, in
             // either artifact, from a row that holds three of them.
