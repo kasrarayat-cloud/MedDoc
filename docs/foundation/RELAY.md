@@ -18251,3 +18251,46 @@ priced by the ASSET behind the symptom:* the asset here is **the citation
 mechanism itself**. When this workflow times out, the programme cannot cite,
 cannot merge and cannot deploy — and the failure arrives wearing a push
 cancellation's clothes, which is the costume that wastes the most time.
+
+#### ⚠️ AND A FOURTH, THIRTY MINUTES LATER — SAME STEP, SECOND WORKFLOW, SAME NIGHT
+
+**The `playwright install --with-deps` row above said "third occurrence". Before
+this session ended it was the FOURTH, and the two tonight are in different
+workflows.** Recorded as an increment measured rather than assumed.
+
+`#719`'s `a11y-ci` on `8d2d8e62` came back **`cancelled`** with **one sha on the
+branch** (two-view checked — no push happened):
+
+    created 2026-08-18T02:52:48Z
+    ended   2026-08-18T03:18:07Z
+    duration 25m19s        ceiling 25m00s   (a11y.yml:63)
+    step 10 "Install Playwright Chromium (with system deps)"  -> cancelled
+
+**The tally for this ONE step, in thirty hours:**
+
+| when | workflow | ceiling | outcome |
+|---|---|---|---|
+| 2026-08-17 21:12Z | `a11y-ci` | 25m | timed out (24m04s in step 10) |
+| 2026-08-17 21:39Z | `a11y-ci` | 25m | timed out (24m03s in step 10) — `a2` |
+| 2026-08-18 02:24Z | **`CI` / `test`** | 20m | timed out; orphan `npm exec playwright install --with-deps chromium` |
+| 2026-08-18 02:52Z | `a11y-ci` | 25m | timed out in step 10 |
+
+⚠️ **THIS IS NO LONGER AN INCIDENT, IT IS THE PROGRAMME'S MOST FREQUENT GATE
+FAILURE**, and it is a single external reach in a single step that **two of the
+four required workflows both perform**. Re-run in each case; each re-run
+succeeded. **Every one of those re-runs is an `a2`/`a3` that a citation row must
+explain**, which is a recurring tax on the audit trail as well as on wall clock.
+
+**AGENTS.md already rules on the class: *"AN EXTERNAL REACH IN THE BUILD IS
+REMOVED, NOT RETRIED."*** Its two recorded members were disposed of — `npm ci`
+retried with a budget, `next/font/google` removed. **This third member is
+currently in neither column: it is being retried by hand, one session at a
+time, with no budget and no decision behind it.**
+
+**The candidate fix stays a CACHE rather than a retry** (`actions/cache` over
+`~/.cache/ms-playwright` and the apt layer, so the reach happens on a miss
+instead of on every run) — **filed, not built, and deliberately so.** It edits
+two REQUIRED workflows; doing that inside a session holding two live citations
+would cancel the runs it is trying to protect. ⚠️ And `.github/` is a deploy
+surface: that work belongs in a worktree, which is a rule this programme has
+already broken twice on `e2e.yml` specifically.
