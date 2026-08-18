@@ -1540,6 +1540,37 @@ from dangling images identified by size AND `Cmd`/`User`), so nothing is lost
 today. The window between 04:02Z and ~11:50Z, during which a rollback would have
 required a REBUILD, is the cost that was actually paid.
 
+### ⏸️ F19 — THE `e2e` CEILING — **DEFERRED by owner ruling, decision owed after the auto-cert ping**
+
+**It changes a REQUIRED gate, so it waits until the auto-certification deploy
+clears.** Session 02 measured the headroom: **9m37s across 14 runs.** That
+measurement is attached here so the decision, when it is taken, is taken against
+a number somebody observed rather than re-derived.
+
+⚠️ **DO NOT RAISE OR LOWER THE CEILING AS A SIDE EFFECT OF ANYTHING ELSE.** A
+required gate's budget is the kind of constant that gets adjusted to make a red
+run green, which is how a gate stops measuring what it was built to measure.
+
+### 🔧 F20 — SWAP IS PINNED AT 4.0Gi/4.0Gi WITH 20 GB RAM FREE — misconfiguration, not pressure
+
+**Re-measured 2026-08-18, not relayed.** Session 02's reading was CORRECT and is
+confirmed rather than retired:
+
+    SwapTotal 4194300 kB   SwapFree 1640 kB   SwapCached 70688 kB
+    MemAvailable 21092128 kB (~20 GB)   swappiness 60
+    /swap.img  4194300  used 4192660  priority -2
+
+⚠️ **THE TWO NUMBERS TOGETHER ARE THE FINDING.** Swap essentially fully consumed
+*while 20 GB of RAM sits available* is not memory pressure — nothing is being
+forced out now. These are historical pages swapped during an earlier memory
+event that have never been faulted back, because nothing has touched them.
+
+**THE FIX TOUCHES THE HOST, SO IT IS OWNER-APPROVED AND WAITS FOR A QUIET
+WINDOW:** `swapoff -a && swapon -a` forces those pages back and releases the
+file; right-sizing the swapfile is the other half. ⚠️ **`swapoff` needs enough
+free RAM to absorb 4 GB — there is, today, but re-measure before running it, not
+from this row.**
+
 ### F7 — THE ONE-TIME SCRATCH SWEEP — supervised, at the next natural window
 
 ⚠️ **RE-PRICED 2026-08-16, MEASURED: F7 IS TIDYING, NOT A BLOCKER.**
