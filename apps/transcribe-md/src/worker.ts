@@ -66,6 +66,7 @@ import {
   JOB_STALE_VISIT_CLEANUP,
   JOB_RETENTION_SWEEP,
   JOB_STUCK_VISIT_WATCHDOG,
+  JOB_AUTO_CERTIFY_TWIN,
   enqueueDlq,
   getSharedRedisConnection,
   getCleanupQueue,
@@ -203,6 +204,18 @@ const STUCK_VISIT_WATCHDOG_ENABLED =
 const STUCK_VISIT_WATCHDOG_CRON =
   process.env.STUCK_VISIT_WATCHDOG_CRON?.trim() || '* * * * *';
 const STUCK_VISIT_WATCHDOG_TIMEOUT_MS = 60_000;
+/** RULING #127 — auto-certification's budget.
+ *
+ * ⚠️ MINUTES, NOT SECONDS, AND DELIBERATELY. The round-trip proof runs an
+ * ephemeral visit through the real L4 and the real bridge fill — a live model
+ * generation. The sweeps above are database work measured in seconds; this is
+ * not, and giving it a sweep-sized budget would time out every certification on
+ * a large form and report it as a failure the doctor cannot act on.
+ *
+ * The bound still exists: a generation that hangs must not hold a worker
+ * forever. On timeout the template stays NEEDS_CONFIRMATION, which is a state
+ * the banner names and the manual screen resolves. */
+const AUTO_CERTIFY_TIMEOUT_MS = 8 * 60_000;
 
 function withTimeout<T>(p: Promise<T>, ms: number, tag: string): Promise<T> {
   return Promise.race([
@@ -1879,6 +1892,31 @@ async function startCleanupWorker(): Promise<void> {
             errors: result.errors,
           });
         }
+        return;
+      }
+      if (job.name === JOB_AUTO_CERTIFY_TWIN) {
+        // RULING #127 — auto-certify a freshly compiled twin.
+        //
+        // ⚠️ TIMEOUT IS GENEROUS BECAUSE THE PROOF IS A LIVE GENERATION. The
+        // synthetic test runs an ephemeral visit through the real L4 and the
+        // real bridge fill; that is the price of attesting the real path, and it
+        // is why this is a job and not part of the upload request.
+        //
+        // ⚠️ A FAILURE HERE IS NOT A LOST TEMPLATE. Every exit leaves the doctor
+        // somewhere they can act: certified, or NEEDS_CONFIRMATION with the
+        // reason named on the visit banner and in the audit row.
+        const { runAutoCertifyTwin } = await import('@/worker/auto-certify-twin-job');
+        const result = await withTimeout(
+          runAutoCertifyTwin(job.data as never),
+          AUTO_CERTIFY_TIMEOUT_MS,
+          'auto-certify-twin'
+        );
+        console.info(
+          `[auto-certify] template=${(job.data as { noteTemplateId?: string }).noteTemplateId} ` +
+            `status=${result.status} confirmed=${result.confirmed}` +
+            (result.declined.length ? ` declined=${result.declined.length}` : '') +
+            (result.reason ? ` reason=${result.reason}` : '')
+        );
         return;
       }
       throw new Error(`Unknown cleanup job name: ${job.name}`);

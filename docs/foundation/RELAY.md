@@ -349,7 +349,7 @@ unattended while the fault was live is how a CI fix becomes a CI outage.
 > TO LEARN IT — the queue table's own recorded lesson, *close the row in the
 > same pass that closes the item*.**
 >
-> - **The two parts NO LONGER ship together — ruling #125 (PROVISIONAL) split
+> - **The two parts NO LONGER ship together — ruling #127 (PROVISIONAL) split
 >   them**, because #123's own required recon refuted part (1): no export
 >   builder paints the cream, and `EmLevelCard` was already hosted by R4b.
 > - **(1) SKIN — PARKED.** It needs one fact from the owner (the date of the
@@ -17714,7 +17714,7 @@ FALSE by ~23:20Z.** Correcting it here rather than editing the row, so both the
 claim and its decay are legible.
 
 **Measured now:** `feat/twin-auto-certification` is at **`e9b4e5c6`, committed
-`23:20:22Z`** — *"docs: my auto-certification ruling renumbers to #125 — the
+`23:20:22Z`** — *"docs: my auto-certification ruling renumbers to #127 — the
 loop claimed #124 first"*. They rebased onto `79ddd855` and are **actively
 working and aware of this loop.**
 
@@ -18452,7 +18452,7 @@ constraint I remembered. **F16 needs its own §2.5 and its own deploy.**
 
 ## 🟡 F12-a — E/M IS SUPPRESSED ON PROCEDURE AND OPERATIVE NOTES — **BUILT 2026-08-18, run `20260818-080141-b1` session 01. NOT DEPLOYED.**
 
-**Ruling #123 part (2), and ruling #125 (PROVISIONAL) is why it ships without
+**Ruling #123 part (2), and ruling #127 (PROVISIONAL) is why it ships without
 part (1).** Part (1) — the "legacy cream" E/M block — was **refuted by #123's
 own required recon**: no export builder paints it, and `EmLevelCard` was
 already hosted by R4b on 2026-08-14. It is **F12-b**, PARKED on the OWNER PING.

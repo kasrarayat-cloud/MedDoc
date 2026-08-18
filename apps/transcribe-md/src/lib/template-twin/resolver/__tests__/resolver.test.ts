@@ -244,6 +244,71 @@ describe('resolveTemplateFields', () => {
     });
   });
 
+  /**
+   * ⚠️ THIS ARM EXISTS BECAUSE AN UPSTREAM GATE WAS REMOVED ON ITS STRENGTH.
+   *
+   * Ruling #127 first blocked auto-certification of any laterality-critical
+   * field the document did not structurally side. That blocker was removed once
+   * it was measured that certification NEVER encodes a side — the mapping
+   * declares what a field MEANS; the side is derived per visit from the
+   * dictation. Removing an upstream gate on the strength of downstream
+   * enforcement is legitimate only if that enforcement is ASSERTED, never
+   * quoted from a comment.
+   *
+   * `required_laterality_missing` was already covered directly above.
+   * `laterality_conflict` had ZERO test files — measured, not assumed. This is
+   * that leg.
+   */
+  it('CONFLICTING sides in one encounter are REFUSED, never silently picked', () => {
+    const sided = field('7', 'measurement', {});
+    const sidedMapping = mapping(sided, 'exam.lesion_size', {
+      laterality: 'required',
+      unitPolicy: 'required',
+    });
+    const left = fact('8', 'exam.lesion_size', '12 mm', {
+      number: 12,
+      unit: 'mm',
+      laterality: 'left',
+    });
+    const right = fact('9', 'exam.lesion_size', '12 mm', {
+      number: 12,
+      unit: 'mm',
+      laterality: 'right',
+    });
+    const [conflicted] = resolveTemplateFields({
+      fields: [sided],
+      mappings: [sidedMapping],
+      facts: [left, right],
+    });
+    expect(conflicted).toMatchObject({
+      status: 'conflict',
+      reasonCode: 'laterality_conflict',
+    });
+    // ⚠️ AND IT MUST NOT HAVE PICKED ONE. A conflict that still emits a value is
+    // worse than no enforcement — it looks resolved.
+    expect(conflicted.value ?? null).toBeNull();
+  });
+
+  it('NON-VACUITY: the same field with ONE side resolves cleanly', () => {
+    const sided = field('7', 'measurement', {});
+    const sidedMapping = mapping(sided, 'exam.lesion_size', {
+      laterality: 'required',
+      unitPolicy: 'required',
+    });
+    const onlyRight = fact('9', 'exam.lesion_size', '12 mm', {
+      number: 12,
+      unit: 'mm',
+      laterality: 'right',
+    });
+    const [ok] = resolveTemplateFields({
+      fields: [sided],
+      mappings: [sidedMapping],
+      facts: [onlyRight],
+    });
+    expect(ok.status).not.toBe('conflict');
+    expect(ok.status).not.toBe('needs_clinician_input');
+  });
+
   it('resolves repeating table cells independently with row evidence keys', () => {
     const definition = field('4', 'narrative_text', {
       tableId: `ttb_${'4'.repeat(20)}`,

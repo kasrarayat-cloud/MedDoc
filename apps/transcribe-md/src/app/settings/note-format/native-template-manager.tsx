@@ -30,6 +30,9 @@ export interface NativeTemplateListItem {
   certificationStatus: string; // 'certified' | 'recognized' | 'needs_confirmation' | 'unsupported' | 'quarantined'
   fieldCount: number;
   version: number;
+  /** RULING #127 — auto-certification is running for this twin. Derived and
+   *  BOUNDED at the settings query; see its comment for why it is not stored. */
+  preparing?: boolean;
 }
 
 const mono = 'var(--font-mono)';
@@ -223,7 +226,23 @@ export function NativeTemplateManager({
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                <StatusPill status={t.certificationStatus} />
+                {/* ⚠️ RULING #127 — "Preparing your format…" REPLACES the pill
+                    while auto-certification runs, because "Needs review" during
+                    that window is FALSE and it is the exact false instruction
+                    #713 was opened for: it sends a doctor to do work the system
+                    is already doing. The state is bounded (see the settings
+                    query), so it always resolves to something actionable. */}
+                {t.preparing ? (
+                  <span
+                    className="qm-lin-pill"
+                    data-testid={`twin-preparing-${t.noteTemplateId}`}
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    Preparing your format…
+                  </span>
+                ) : (
+                  <StatusPill status={t.certificationStatus} />
+                )}
                 <button
                   type="button"
                   className="qm-lin-btn qm-tap-44"
@@ -236,7 +255,11 @@ export function NativeTemplateManager({
                       IMMUTABLE on any edit. Saying "Review" rather than
                       "Confirm fields" is the honest label for a door that
                       opens onto a read-only record. */}
-                  {t.certificationStatus === 'certified' ? 'Review' : 'Confirm fields'}
+                  {t.certificationStatus === 'certified'
+                    ? 'Review'
+                    : t.preparing
+                      ? 'Review anyway'
+                      : 'Confirm fields'}
                 </button>
               </div>
             </div>

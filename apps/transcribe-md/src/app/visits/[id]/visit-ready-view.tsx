@@ -12,7 +12,7 @@
 // is preserved as a no-op for caller back-compat.
 // ============================================================================
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { EmScore } from '@/lib/em-coding-ui/types';
 import {
@@ -56,6 +56,7 @@ import { ExtrasTab, extrasTabHasFlag } from './extras-tab';
 import { CopySectionButton } from './copy-section-button';
 import { TranscriptTab, utterancesToSources } from './transcript-tab';
 import { projectEmForDisplay, projectDisplayedEmCode } from '@/lib/visit-export';
+import { isFirstFillOnTemplateAction } from '@/actions/twin-first-fill';
 import type { VisitExportData, CptEm } from '@/lib/visit-export';
 import {
   sectionSoap,
@@ -286,7 +287,24 @@ export function VisitReadyView(props: VisitReadyViewProps) {
    *  sign bar react without a round trip. */
   const [emStale, setEmStale] = useState(props.emStale ?? false);
   const [docPageMiss, setDocPageMiss] = useState<string | null>(null);
+  const [firstFillOnTemplate, setFirstFillOnTemplate] = useState(false);
   const docPageUnavailable = docPageMiss !== null;
+  // ⚠️ ASKED ONCE, ON THE DOC PAGE ONLY, AND FAIL-SAFE TO SILENT. The read is a
+  // COUNT over fill manifests — it touches no clinical content and cannot fail
+  // the page. If it throws or the visit has no manifest, the banner does not
+  // show, which costs the doctor nothing they were not already doing.
+  useEffect(() => {
+    if (!docPage) return;
+    let alive = true;
+    void isFirstFillOnTemplateAction(props.visitId)
+      .then((first) => {
+        if (alive) setFirstFillOnTemplate(first);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [docPage, props.visitId]);
   const handleDocPageUnavailable = useCallback((reason: string | null) => {
     setDocPageMiss(reason ?? 'no_render');
   }, []);
@@ -838,6 +856,27 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           </p>
         ) : null;
 
+      // ── RULING #127(d) — FIRST-FILL REVIEW ────────────────────────────────
+      //
+      // Auto-certification means no doctor sat through eighty confirmations, so
+      // the human check has to happen somewhere. This is that somewhere: the
+      // FIRST real document on a new format, which the doctor must read before
+      // signing anyway.
+      //
+      // ⚠️ ONE TIME, AND THAT IS THE WHOLE VALUE. A banner on every visit is
+      // noise, and noise on a clinical surface is trained-blindness — the same
+      // reason `not_template_visit` stays silent. It fires when this visit's
+      // fill manifest is the earliest for its template, and never again.
+      const firstFillLine = firstFillOnTemplate ? (
+        <p
+          className="qm-vdoc-counts"
+          role="status"
+          data-testid="visit-document-first-fill"
+        >
+          First document on your new format — check field placement before signing.
+        </p>
+      ) : null;
+
       // On the Rounds stage this same node moves INSIDE the drawer. `false`
       // and `null` render identically, so the off-stage output is unchanged.
       const chatPanel =
@@ -1007,6 +1046,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           <div className="w-full qm-c3-rev2-root">
             {banner}
             {missLine}
+            {firstFillLine}
             <RoundsStage
               status={roundsView.status}
               signedAt={roundsView.signedAt}
@@ -1088,6 +1128,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
         <div className="w-full qm-c3-rev2-root">
           {banner}
           {missLine}
+            {firstFillLine}
           {chatPanel}
           {paper}
         </div>
