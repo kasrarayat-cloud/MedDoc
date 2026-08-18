@@ -289,8 +289,35 @@ export async function certifyNativeTemplateAction(
           code: 'MAPPINGS_NOT_READY',
           message: err.message,
           stage: 'certifyNativeTemplateAction',
-          // Ids and reason codes only — the same PHI-safe channel
-          // VALIDATION_FAILED already uses.
+          // ⚠️ IDS AND CLOSED REASON CODES ONLY — AND THIS IS THE FIRST TIME
+          // `blocking` HAS EVER BEEN WRITTEN TO AN AUDIT ROW.
+          //
+          // An earlier version of this comment claimed it used "the same
+          // PHI-safe channel VALIDATION_FAILED already uses". That precedent
+          // does not exist. Measured on production during the independent
+          // adversarial pass:
+          //
+          //     select count(*) from audit_logs where metadata ? 'blocking';
+          //       -> 0     (positive control: `errorClass` -> 2)
+          //
+          // VALIDATION_FAILED's `blocking` goes to a `console.warn` server log
+          // and into the thrown error; it never reaches `audit_logs`, because
+          // that path falls through to the unanticipated-throw branch below
+          // whose metadata is {errorClass, code, message, stage} only.
+          //
+          // ⚠️ SO READ THIS AS A NEW CHANNEL, NOT A SANCTIONED ONE. `logAudit`
+          // JSON-stringifies the whole entry onto the admin activity stream, so
+          // every entry here fans out to any subscribed SUPER_ADMIN — across
+          // tenants. That is acceptable for `ttf_<sha256-prefix>:<reason>`,
+          // which carries no customer content: the ids are opaque BY
+          // CONSTRUCTION (`compiler.ts:1303` hashes sourceSha256 + partName +
+          // nodePath + kind — the LABEL is not an input), and `UnreadyReason`
+          // is a closed union.
+          //
+          // ⚠️ IT IS NOT ACCEPTABLE FOR FREE TEXT. Anyone widening `blocking`
+          // to carry an issue message, a field label or a parser complaint is
+          // putting that text on a cross-tenant stream, and must re-decide this
+          // rather than inherit it.
           blocking: err.blocking,
           totalFields: total,
         },

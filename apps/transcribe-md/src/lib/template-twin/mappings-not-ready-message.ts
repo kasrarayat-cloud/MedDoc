@@ -34,9 +34,28 @@
 // ============================================================================
 
 /** Where a doctor goes to clear the refusal. Kept beside the sentence so the
- *  route and the count cannot drift apart into two different edits. */
+ *  route and the count cannot drift apart into two different edits.
+ *
+ * ⚠️ THE DIRECTION WORD IS LOAD-BEARING AND IT WAS WRONG. This read "Open the
+ * field list ABOVE" until the independent adversarial pass measured the DOM:
+ * the error banner renders at `native-template-manager.tsx:268-285` and
+ * `<ReviewWorkspace>` — which contains the field list — mounts at `:289`. The
+ * list is strictly BELOW the sentence that pointed above it, and the doctor
+ * presses Certify from inside that workspace, so they were also told to "open"
+ * a list that was already open.
+ *
+ * The count is the DIAGNOSTIC half of this item; this clause is the ACTIONABLE
+ * half, and it is the whole point of F16 — a physician who cannot find the six
+ * fields is no better off than one who was told to wait for an engineer.
+ *
+ * ⚠️ AND THE OLD GATE WAS GREEN ON IT, because it asserted only that this
+ * STRING was present in the message — never that it was TRUE of the component.
+ * `gate-f16-…` now pins the render order that makes "below" correct, so moving
+ * the banner reddens a test instead of silently inverting a doctor's
+ * instructions. A prose claim about layout is a wish until something asserts
+ * it. */
 export const MAPPINGS_NOT_READY_ROUTE_HINT =
-  'Open the field list above, confirm the ones still marked as needing review, ' +
+  'In the field list below, confirm the ones still marked as needing review, ' +
   'then certify again.';
 
 /**
@@ -70,7 +89,23 @@ export function mappingsNotReadyScope(
   if (!Number.isFinite(remaining) || remaining <= 0) {
     return 'some fields still need confirming';
   }
-  const noun = remaining === 1 ? 'field' : 'fields';
+  // ⚠️ THE NOUN AND THE VERB AGREE WITH DIFFERENT NUMBERS, AND CONFLATING THEM
+  // BROKE EXACTLY ONE CASE — the last one before success.
+  //
+  // The VERB agrees with the subject, which is the remainder ("1 … still
+  // needs", "6 … still need"). The NOUN agrees with whatever it immediately
+  // counts: bare, that is the remainder ("1 field"); in the "N of M" form it is
+  // the TOTAL ("1 of 80 fields"), because the noun belongs to the M.
+  //
+  // Both were pluralised off `remaining` until the independent adversarial pass
+  // ran the real function, which produced:
+  //
+  //     scope(1, 80)  ->  "1 of 80 field still needs confirming"   ← wrong
+  //
+  // ⚠️ AND THE FIRST GATE ASSERTED THAT STRING WITH `toBe`, so it did not merely
+  // miss the defect — it LOCKED IT IN: correcting the sentence reddened the
+  // guard. That is the shape that makes a copy bug permanent, and it is why
+  // this case now has arms on both sides of the `of`.
   const verb = remaining === 1 ? 'still needs' : 'still need';
   if (
     totalFields === null ||
@@ -79,7 +114,7 @@ export function mappingsNotReadyScope(
   ) {
     // A total smaller than the remainder cannot be true of the same form, so
     // it is dropped rather than printed. "7 of 6" is worse than "7".
-    return `${remaining} ${noun} ${verb} confirming`;
+    return `${remaining} ${remaining === 1 ? 'field' : 'fields'} ${verb} confirming`;
   }
-  return `${remaining} of ${totalFields} ${noun} ${verb} confirming`;
+  return `${remaining} of ${totalFields} ${totalFields === 1 ? 'field' : 'fields'} ${verb} confirming`;
 }

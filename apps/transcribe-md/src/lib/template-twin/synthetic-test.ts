@@ -71,6 +71,7 @@ export interface TwinNoteGenerator {
 // untestable. See the header there.
 export { TemplateTwinSyntheticTestError } from './synthetic-test-error';
 import { TemplateTwinSyntheticTestError } from './synthetic-test-error';
+import { collectUnready } from './mappings-readiness';
 
 interface MappingRow {
   sourceType: string;
@@ -215,15 +216,26 @@ export async function runTemplateTwinSyntheticTest(input: {
   // the 3 — the count going UP as a reward for doing the work. Each figure was
   // true of its own blocker class and the sequence was indefensible. Caught by
   // refuting the change before pushing it, not by a test.
-  const unreadyBeforeParse = compiled.fields
-    .filter((field: { fieldId: string; mapping: MappingRow | null }) => {
-      if (!field.mapping) return true;
-      if (field.mapping.mappingStatus.toLowerCase() !== 'certified') return true;
-      return field.mapping.sourceType !== 'manual' && !field.mapping.clinicalConcept;
-    })
-    .map((field: { fieldId: string; mapping: MappingRow | null }) =>
-      field.mapping ? `${field.fieldId}:unconfirmed` : `${field.fieldId}:no_mapping`,
-    );
+  // ⚠️ ONE CLASSIFIER, SHARED WITH THE LATE BRANCH. This used to filter on the
+  // three-way readiness predicate and then LABEL with a two-way expression, so
+  // a CERTIFIED field missing only its clinical concept was reported to the
+  // audit row as `:unconfirmed` — a false reason on the one per-field channel
+  // this item exists to make legible. Found by the independent adversarial
+  // pass; both call sites now reduce to `unreadyReason` in a leaf module that a
+  // unit test can actually execute.
+  const unreadyBeforeParse = collectUnready(
+    compiled.fields.map((field: { fieldId: string; mapping: MappingRow | null }) => ({
+      fieldId: field.fieldId,
+      mapping: field.mapping
+        ? {
+            // the ONLY `.toLowerCase()` on this path — see `ReadinessRow`
+            status: field.mapping.mappingStatus.toLowerCase(),
+            sourceType: field.mapping.sourceType,
+            clinicalConcept: field.mapping.clinicalConcept,
+          }
+        : null,
+    })),
+  );
   // Only a MISSING ROW may refuse here — the status checks are re-run below on
   // the parsed mappings, and that is where they belong. This branch exists
   // because `mapping()` cannot be called on a null row; the wider count is
@@ -258,18 +270,9 @@ export async function runTemplateTwinSyntheticTest(input: {
   // and send a physician looking for a seventh that does not exist. The
   // predicate below is byte-identical to the `.some()` it replaces — this
   // changes WHAT IS REPORTED, never WHAT IS REFUSED. (F16.)
-  const notReady = mappings
-    .map((item: SemanticMapping) => {
-      if (item.status !== 'certified') return `${item.fieldId}:unconfirmed`;
-      // A manual field has no concept BY CONSTRUCTION — nothing dictates who
-      // the technologist on shift was, so there is no fact to cite. It is
-      // ready when it is confirmed; it renders blank and is attested blank.
-      if (item.sourceType !== 'manual' && !item.clinicalConcept) {
-        return `${item.fieldId}:no_concept`;
-      }
-      return null;
-    })
-    .filter((entry): entry is string => entry !== null);
+  const notReady = collectUnready(
+    mappings.map((item: SemanticMapping) => ({ fieldId: item.fieldId, mapping: item })),
+  );
   if (notReady.length > 0) {
     throw new TemplateTwinSyntheticTestError(
       'MAPPINGS_NOT_READY',
