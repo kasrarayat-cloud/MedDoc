@@ -31,7 +31,10 @@ function psql(sql: string): string {
   ).trim();
 }
 
-const NOTE = [
+/** EXPORTED as a source array for the same reason the imaging and operative
+ *  fixtures are: a per-class marker must be DERIVED from the fixture, never
+ *  hand-copied beside it. */
+export const NOTE_SOURCE = [
   '## Subjective',
   'Chief Complaint: Asthma review',
   'HPI: Established patient, symptoms several weeks, moderate severity.',
@@ -44,7 +47,8 @@ const NOTE = [
   '',
   '## Plan',
   '1. Continue current medications.',
-].join('\n');
+];
+const NOTE = NOTE_SOURCE.join('\n');
 
 /** Three claims, one per section, so placement is checkable per section. The
  *  third is deliberately LONG — a card taller than a phone viewport is the case
@@ -202,7 +206,7 @@ export const SEEDED_EM_LEVEL = '99214';
 // IT CARRIES NO E/M FIELDS AT ALL — no `cptCodes.em`, no `emScoredCode`, no
 // pending change. That is not tidiness, it is the invariant: an office E/M code
 // on an imaging report is wrong as DATA and reaches the export and the signed
-// record. `assertImagingHasNoEm` below enforces it after every seed.
+// record. `assertNoOfficeEm` below enforces it after every seed.
 // ===========================================================================
 
 /** An imaging report reads as headings, not SOAP. Mirrors the shape the
@@ -257,7 +261,7 @@ const IMAGING_ICD = [
 ];
 
 /** The office-E/M blob an imaging visit must never carry — seeded deliberately by
- *  `imagingEmArtifact` so the export guard has something to suppress. Mirrors the
+ *  `emArtifact` so the export guard has something to suppress. Mirrors the
  *  shape of prod row cms3k19d2001801mkyarrlq57 plus a raw code and a signedCode,
  *  so `override ?? code` and `signedCode ?? …` both have a value to leak. */
 const IMAGING_EM_ARTIFACT = {
@@ -271,8 +275,103 @@ const IMAGING_EM_ARTIFACT = {
   },
 };
 
+// ===========================================================================
+// THE OPERATIVE-NOTE CLASS — F12-a / rulings #123 and #126.
+// ---------------------------------------------------------------------------
+// #123 requires the proof BOTH DIRECTIONS: a GI OFFICE VISIT still shows a
+// level, and a COLONOSCOPY OP-NOTE shows NONE, NOWHERE — in-app, DOCX, PDF and
+// every EHR clipboard format. The matrix below already runs every core spec
+// once per class off the single `emApplies` switch, so the whole walk is bought
+// by adding one class rather than by writing a parallel pack.
+//
+// ⚠️ IT IS DELIBERATELY UNTEMPLATED, AND THAT IS THE MEASURED SHAPE. On
+// production 2026-08-18, 30 of 46 visits carry no template at all and 9 of
+// those are operative notes by their own headings. The template-only classifier
+// suppressed ONE production row; the note-text fallback (#126) is what reaches
+// the other four. A fixture WITH an operative template would exercise the arm
+// that already worked and leave the new one unproven — the wrong-universe
+// failure, with a fixture from exactly the right domain.
+//
+// ⚠️ AND ITS SPECIALTY IS `gastroenterology`, NOT SOMETHING INERT. The office
+// class is `primary-care`, so a suppression keyed on specialty would still pass
+// this matrix. GI is a specialty that DOES bill office E/M — it is the
+// specialty in #123's own example, precisely because one GI doctor does office
+// visits and colonoscopies under one id. So the only thing that can make this
+// fixture's E/M disappear is the NOTE-SHAPE axis.
+// ===========================================================================
+
+/** A colonoscopy operative note. Three markers — `PREOPERATIVE DIAGNOSIS`,
+ *  `POSTOPERATIVE FINDINGS`, `DESCRIPTION OF PROCEDURE` — which is exactly what
+ *  all 19 of production's operative notes carry (measured 2026-08-18; the
+ *  distribution is bimodal, 27 notes at 0 markers and 19 at 3).
+ *
+ *  ⚠️ IT ALSO CARRIES `PROCEDURE` AND `CONSENT`, WHICH ARE **NOT** MARKERS.
+ *  Their presence here is the over-suppression guard standing in the fixture:
+ *  if somebody adds either to the marker list, an in-office biopsy note starts
+ *  suppressing too, and #123 calls that worse than the defect being fixed.
+ *
+ *  EXPORTED so a parity assertion derives its strings from the FIXTURE rather
+ *  than from a second hand-written copy. */
+export const OPERATIVE_NOTE_SOURCE = [
+  '## PROCEDURE',
+  'Colonoscopy with polypectomy.',
+  '',
+  '## PREOPERATIVE DIAGNOSIS',
+  'Average-risk screening, first examination.',
+  '',
+  '## CONSENT',
+  'Risks, benefits and alternatives discussed; written consent obtained.',
+  '',
+  '## DESCRIPTION OF PROCEDURE',
+  'The colonoscope was advanced to the cecum and withdrawn under direct vision.',
+  '',
+  '## POSTOPERATIVE FINDINGS',
+  'Two diminutive polyps in the sigmoid colon, removed by cold snare.',
+  '',
+  '## RECOMMENDATIONS',
+  'Repeat surveillance colonoscopy in five years.',
+];
+const OPERATIVE_NOTE = OPERATIVE_NOTE_SOURCE.join('\n');
+
+/** Legitimate on a screening colonoscopy; an office E/M level is not. */
+const OPERATIVE_ICD = [
+  { code: 'Z12.11', description: 'Encounter for screening for malignant neoplasm of colon' },
+];
+
+/** Pick a heading out of a note fixture BY NAME, and throw at module load if it
+ *  is not there.
+ *
+ *  ⚠️ THIS EXISTS BECAUSE A HARDCODED MARKER IS A LANDMINE FOR THE NEXT CLASS.
+ *  `review-document.spec.ts`'s export arm passes a `mustContain` to
+ *  `extractExportText`, which **throws** when the marker is absent — correctly,
+ *  because an absence assertion over text the extractor never read is vacuous.
+ *  That marker was the literal `'EXAM TYPE'`, which exists only in the IMAGING
+ *  fixture, while the arm runs for EVERY class with `emApplies: false`. Adding
+ *  the operative class would therefore have thrown inside the non-vacuity guard
+ *  and reddened the required `e2e` gate — presenting as *"the extractor is not
+ *  seeing the document text"* rather than as a fixture mismatch.
+ *
+ *  Found by F12-a's independent adversarial pass, BEFORE the push. Deriving the
+ *  marker per class is what both note fixtures were exported for in the first
+ *  place: *"so a parity test derives its markers from the FIXTURE rather than
+ *  from a second hand-written copy of it."* */
+function headingMarker(source: readonly string[], heading: string): string {
+  const found = source.some((l) => l.replace(/^#+\s*/, '').trim() === heading);
+  if (!found) {
+    throw new Error(
+      `headingMarker: ${JSON.stringify(heading)} is not a heading in this note fixture. ` +
+        'The class marker and the fixture have drifted, and the export arm would ' +
+        'throw at runtime looking like a broken extractor.',
+    );
+  }
+  return heading;
+}
+
 /** The specialty classes the review-doc pack runs across. `emApplies` is the
- *  single switch every specialty-conditional expectation reads. */
+ *  single switch every specialty-conditional expectation reads.
+ *
+ *  `exportMarker` is the heading the export arm proves it actually read, per
+ *  class — see `headingMarker` directly above for why it is not a literal. */
 export const REVIEW_DOC_CLASSES = [
   {
     key: 'primary-care' as const,
@@ -280,6 +379,9 @@ export const REVIEW_DOC_CLASSES = [
     label: 'an office visit',
     /** E/M applies: level row, Adjust, confirm gate and stale gate all exist. */
     emApplies: true,
+    /** The heading the export arm proves it read. Unused while this class is
+     *  `emApplies: true` — carried so every class answers the same question. */
+    exportMarker: headingMarker(NOTE_SOURCE, 'Subjective'),
     /** ⚠️ `hasRxGate` WAS REMOVED FROM THIS MATRIX — owner ruling #109. The
      *  fixture still carries a critical Rx interaction (extraction was not in
      *  scope); it simply no longer gates anything, so there is no per-specialty
@@ -289,6 +391,15 @@ export const REVIEW_DOC_CLASSES = [
     key: 'imaging' as const,
     label: 'an imaging report',
     emApplies: false,
+    exportMarker: headingMarker(IMAGING_NOTE_SOURCE, 'EXAM TYPE'),
+  },
+  {
+    key: 'operative' as const,
+    label: 'a colonoscopy operative note',
+    /** Suppressed by the NOTE-SHAPE axis (#123 part 2), not by the specialty —
+     *  `gastroenterology` bills office E/M all day. See the block above. */
+    emApplies: false,
+    exportMarker: headingMarker(OPERATIVE_NOTE_SOURCE, 'DESCRIPTION OF PROCEDURE'),
   },
 ] as const;
 
@@ -318,7 +429,7 @@ export interface SeededReviewDocVisit {
  *  problem and skips, but an imaging visit with a billing level is a wrong
  *  fixture, and a spec that runs against it proves the opposite of what it says.
  */
-export function assertImagingHasNoEm(visitId: string): void {
+export function assertNoOfficeEm(visitId: string): void {
   const row = psql(
     `select coalesce("emScoredCode",'-') || '|' ||
             coalesce("cptCodes"->'em'->>'code','-') || '|' ||
@@ -327,7 +438,7 @@ export function assertImagingHasNoEm(visitId: string): void {
             case when "emPendingChange" is null then '-' else 'pending' end
        from transcribe_visits where id = '${visitId}'`,
   );
-  if (!row) throw new Error(`assertImagingHasNoEm: visit ${visitId} not found`);
+  if (!row) throw new Error(`assertNoOfficeEm: visit ${visitId} not found`);
   const [scored, code, signedCode, overrideCode, pending] = row.split('|');
   const offenders: string[] = [];
   if (scored !== '-') offenders.push(`emScoredCode=${scored}`);
@@ -337,8 +448,9 @@ export function assertImagingHasNoEm(visitId: string): void {
   if (pending !== '-') offenders.push('emPendingChange is set');
   if (offenders.length) {
     throw new Error(
-      `IMAGING FIXTURE CARRIES OFFICE E/M STATE — ${visitId}: ${offenders.join(', ')}. ` +
-        'An imaging report has no office-visit level; this is wrong as data and ' +
+      `SUPPRESSED FIXTURE CARRIES OFFICE E/M STATE — ${visitId}: ${offenders.join(', ')}. ` +
+        'Neither an imaging report nor an operative note has an office-visit ' +
+        'level; this is wrong as data and ' +
         'reaches the export and the signed record. Either the seed regressed or ' +
         'a pre-label-fix page render wrote it back. Do not assert against it.',
     );
@@ -374,9 +486,9 @@ export function seedReviewDocVisit(
      *
      *  Reproduces the real production row: `code` AND `override.code` AND
      *  `signedCode`, so every branch of the projection has something to return.
-     *  Skips `assertImagingHasNoEm` (this fixture is the exception it exists to
+     *  Skips `assertNoOfficeEm` (this fixture is the exception it exists to
      *  make impossible everywhere else) — hence the explicit, ugly opt-in name. */
-    imagingEmArtifact?: boolean;
+    emArtifact?: boolean;
     /** DISTINGUISH TWO SEEDS MADE IN THE SAME MILLISECOND.
      *
      *  The ids below are keyed on `Date.now().toString(36)` alone, and the
@@ -416,7 +528,7 @@ export function seedReviewDocVisit(
     emAcknowledged?: boolean;
     /** SEED AN IMAGING VISIT CARRYING AN UNACKNOWLEDGED OFFICE E/M CHANGE.
      *
-     *  Like `imagingEmArtifact`, this deliberately creates the state everything
+     *  Like `emArtifact`, this deliberately creates the state everything
      *  else exists to prevent — and for the same reason: the anomaly path
      *  CANNOT BE TESTED WITHOUT IT.
      *
@@ -427,13 +539,20 @@ export function seedReviewDocVisit(
      *  nothing. This option is what turns those assertions into real ones.
      *
      *  Reproduces the shape found in production: five imaging visits acquired
-     *  office E/M state and sat there two days. Skips `assertImagingHasNoEm`,
+     *  office E/M state and sat there two days. Skips `assertNoOfficeEm`,
      *  hence the explicit opt-in name. */
     imagingEmPending?: boolean;
   } = {},
 ): SeededReviewDocVisit | null {
   const cls: ReviewDocClass = opts.specialtyClass ?? 'primary-care';
   const imaging = cls === 'imaging';
+  /** F12-a — the operative-note class. UNTEMPLATED by design; see the block
+   *  beside `OPERATIVE_NOTE_SOURCE`. */
+  const operative = cls === 'operative';
+  /** The two classes that must show NO office E/M level, for two DIFFERENT
+   *  reasons. Every "no level here" branch below reads this rather than
+   *  `imaging`, so a third suppressed class cannot be half-wired. */
+  const noOfficeEm = imaging || operative;
 
   let userId: string;
   let practiceId: string;
@@ -508,29 +627,36 @@ export function seedReviewDocVisit(
           -- (No backticks here: this text lives inside a JS template literal,
           --  and a backtick would close it. That cost two tsc errors.)
           ${opts.signed ? `'${userId}'` : 'null'},
-          '${imaging ? 'ultrasound' : 'primary-care'}', 'text_notes',
+          '${imaging ? 'ultrasound' : operative ? 'gastroenterology' : 'primary-care'}', 'text_notes',
           '${opts.signed ? 'SIGNED' : 'READY'}',
           ${opts.signed ? `'${SIGNED_AT}'::timestamptz` : 'null'},
-          ${opts.signed ? `'${q(imaging ? IMAGING_NOTE : NOTE)}'` : 'null'},
+          ${opts.signed ? `'${q(imaging ? IMAGING_NOTE : operative ? OPERATIVE_NOTE : NOTE)}'` : 'null'},
           ${opts.chiefComplaint ? `'${q(opts.chiefComplaint)}'` : 'null'},
-          '${imaging ? 'Bilateral venous duplex, screening study.' : 'Asthma review. Continue current medications.'}',
-          '${q(imaging ? IMAGING_NOTE : NOTE)}', 1,
+          '${imaging ? 'Bilateral venous duplex, screening study.' : operative ? 'Screening colonoscopy.' : 'Asthma review. Continue current medications.'}',
+          '${q(imaging ? IMAGING_NOTE : operative ? OPERATIVE_NOTE : NOTE)}', 1,
           '${j(CLAIMS)}'::jsonb,
           -- No medications on an imaging report, so no Rx gate. Its ABSENCE is
-          -- asserted; the office fixture keeps the critical interaction.
-          ${imaging && !opts.imagingWithRx ? 'null' : `'${j(imaging ? IMAGING_RX : RX)}'::jsonb`},
-          -- AND NO PENDING E/M CHANGE, ever, on imaging: there is no level to
-          -- have moved. Seeding one would be seeding the bug.
+          -- asserted; the office fixture keeps the critical interaction. The
+          -- operative note carries none either — a colonoscopy report is not a
+          -- prescribing encounter.
+          ${operative || (imaging && !opts.imagingWithRx) ? 'null' : `'${j(imaging ? IMAGING_RX : RX)}'::jsonb`},
+          -- AND NO PENDING E/M CHANGE, ever, on imaging OR on an operative
+          -- note: there is no level to have moved. Seeding one would be seeding
+          -- the bug.
           ${
-            (imaging && !opts.imagingEmPending) || opts.emPending === false
+            (noOfficeEm && !opts.imagingEmPending) || opts.emPending === false
               ? 'null'
               : `'${j(opts.emAcknowledged ? { ...EM_PENDING, acknowledgedAt: SIGNED_AT } : EM_PENDING)}'::jsonb`
           },
-          '${j(imaging ? IMAGING_ICD : ICD)}'::jsonb,
-          -- The whole point of the imaging fixture: NO office E/M blob …
+          '${j(imaging ? IMAGING_ICD : operative ? OPERATIVE_ICD : ICD)}'::jsonb,
+          -- The whole point of the suppressed fixtures: NO office E/M blob …
           -- …EXCEPT when a spec is testing the export guard, which needs one.
-          ${imaging ? (opts.imagingEmArtifact ? `'${j(IMAGING_EM_ARTIFACT)}'::jsonb` : 'null') : `'${j(CPT)}'::jsonb`},
+          ${noOfficeEm ? (opts.emArtifact ? `'${j(IMAGING_EM_ARTIFACT)}'::jsonb` : 'null') : `'${j(CPT)}'::jsonb`},
           ${opts.emStale ? 'true' : 'false'},
+          -- ⚠️ THE OPERATIVE FIXTURE IS UNTEMPLATED ON PURPOSE — it is the
+          -- production-majority shape and the only one that exercises #126's
+          -- note-text fallback. A template here would prove the arm that
+          -- already worked.
           ${imaging ? `'${templateId}'` : 'null'}, ${imaging ? '1' : 'null'},
           now(), now())
        on conflict (id) do nothing`,
@@ -563,15 +689,20 @@ export function seedReviewDocVisit(
       );
     }
 
-  if (imaging && !opts.imagingEmArtifact && !opts.imagingEmPending)
-    assertImagingHasNoEm(visitId);
+  // ⚠️ `noOfficeEm`, NOT `imaging`. The invariant is "this class has no office
+  // E/M level", and it belongs to the operative note for a different reason and
+  // with identical force. Leaving this arm keyed on `imaging` would have given
+  // the new class a fixture nothing read back — the exact shape of the residue
+  // this guard was written for.
+  if (noOfficeEm && !opts.emArtifact && !opts.imagingEmPending)
+    assertNoOfficeEm(visitId);
 
   return { visitId, patientId, claimCount: CLAIMS.length, specialtyClass: cls };
 }
 
 /** THE DATABASE-WIDE NET, for artifacts that arrive from outside any seeder.
  *
- *  `assertImagingHasNoEm` guards the row a spec just seeded. This guards the
+ *  `assertNoOfficeEm` guards the row a spec just seeded. This guards the
  *  ones it did not: two long-lived QA fixtures acquired office-E/M state from a
  *  page render made by a PRE-LABEL-FIX build — `qa_visitdoc_twin.emScoredCode =
  *  99212` and `qa_twin_donor.cptCodes.em.code = 99213`. No seeder wrote either.

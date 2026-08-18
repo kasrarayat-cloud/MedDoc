@@ -33,6 +33,14 @@ const PENDING_EM = { from: '99213', to: '99214', cause: 'note_edited', at: '2026
 function input(over: Partial<SignGateInput> = {}): SignGateInput {
   return {
     specialty: PRIMARY,
+    // F12 / ruling #123 — the note-SHAPE axis. `null` is "no template", which
+    // is explicitly NOT an operative note, so every existing arm below keeps
+    // the exact behaviour it asserted before the axis existed.
+    templateSections: null,
+    // F12-a / ruling #126 — the note-text fallback. An empty body carries no
+    // headings and therefore no markers, so every existing arm below keeps the
+    // exact behaviour it asserted before the fallback existed.
+    noteText: '',
     emPendingChange: null,
     ...over,
   };

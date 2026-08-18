@@ -66,7 +66,16 @@ export function projectDisplayedEmCode(
    *  A required parameter, not an optional one, for the reason
    *  `seedEmBaselineIfUnset` takes `applies` the same way: a caller that has not
    *  thought about applicability must fail to TYPECHECK, not silently inherit a
-   *  permissive default. Compute this from `emAppliesToSpecialty(specialtyId)`. */
+   *  permissive default.
+   *
+   *  ⚠️ COMPUTE THIS FROM
+   *  `emAppliesToVisit({ specialtyId, templateSections, noteText })`
+   *  — `@/lib/note-shape`. It was `emAppliesToSpecialty(specialtyId)` until
+   *  F12 / ruling #123 added the note-SHAPE axis: an operative or procedure
+   *  note has no office-visit E/M level either, and a specialty id cannot say
+   *  so, because a GI doctor does office visits AND colonoscopies under one
+   *  specialty. Passing the specialty-only predicate here still typechecks and
+   *  silently re-admits an office level onto an operative record. */
   emApplies: boolean
 ): string | null {
   // THE EXPORT-LAYER GUARD. `loadVisitExportData` projected `cptCodes.em`

@@ -77,7 +77,7 @@ import { test, expect } from '@playwright/test';
 import { cleanupTestUsers } from '../helpers/cleanup';
 import {
   seedReviewDocVisit,
-  assertImagingHasNoEm,
+  assertNoOfficeEm,
   findImagingEmArtifacts,
   psqlOne,
   REVIEW_DOC_CLASSES,
@@ -165,7 +165,7 @@ test.describe('pre-sign review as the document', () => {
       emStale?: boolean;
       emPending?: boolean;
       specialtyClass?: ReviewDocClass;
-      imagingEmArtifact?: boolean;
+      emArtifact?: boolean;
     } = {},
   ) {
     const { email } = await signupFreshUser(page, tag);
@@ -515,6 +515,35 @@ test.describe('pre-sign review as the document', () => {
         'review-doc-em-rescore',
       ];
 
+      if (cls.key === 'operative') {
+        test('⚠️ NON-VACUITY: the operative fixture is UNTEMPLATED and its BODY is what classifies it', async ({
+          page,
+        }) => {
+          // F12-a / ruling #126. Without this arm the whole class can pass for
+          // the wrong reason, silently: give the fixture an operative TEMPLATE
+          // and every "E/M is ABSENT" assertion below stays green while
+          // proving the arm that ALREADY worked, and nothing anywhere would
+          // say the note-text fallback had stopped being exercised.
+          //
+          // That is the wrong-universe failure with a fixture from exactly the
+          // right domain — the one this house records as the nastiest of the
+          // family, because nothing announces it.
+          const seeded = await open(page, 'mx-nonvacuity-operative', {
+            specialtyClass: 'operative',
+          });
+          test.skip(!seeded, 'psql seeding unavailable');
+          const row = psqlOne(
+            `select coalesce("noteTemplateId",'-') || '|' || specialty
+               from transcribe_visits where id = '${seeded!.visitId}'`,
+          );
+          expect(
+            row,
+            'the operative fixture must be UNTEMPLATED (production-majority shape) and on a ' +
+              'specialty that genuinely bills office E/M, or the class proves the wrong axis',
+          ).toBe('-|gastroenterology');
+        });
+      }
+
       test('renders as the document', async ({ page }) => {
         test.skip(
           !(await open(page, `mx-doc-${cls.key}`, { specialtyClass: cls.key })),
@@ -599,7 +628,7 @@ test.describe('pre-sign review as the document', () => {
         } else {
           await expect(
             page.getByTestId('review-doc-em-stale-gate'),
-            'an imaging report has no level to re-check',
+            `${cls.label} has no level to re-check`,
           ).toHaveCount(0);
           await expect(page.getByTestId('review-doc-em-rescore')).toHaveCount(0);
           // The surface must not name a blocker that cannot be cleared.
@@ -634,7 +663,7 @@ test.describe('pre-sign review as the document', () => {
           // assertion is on the exported BYTES, not on the screen.
           const seeded = await open(page, `mx-exportguard-${cls.key}`, {
             specialtyClass: cls.key,
-            imagingEmArtifact: true,
+            emArtifact: true,
           });
           test.skip(!seeded, 'psql seeding unavailable');
 
@@ -709,21 +738,32 @@ test.describe('pre-sign review as the document', () => {
           for (const f of files) {
             const path = await f.path();
             expect(path, `no path for ${f.suggestedFilename()}`).toBeTruthy();
-            // Non-vacuity marker: a heading from the seeded imaging note, which
-            // both artifacts render. NOT the patient name — exports anonymise
-            // PHI ("PATIENT Anonymous"), and that mistake is exactly what this
-            // check is for: it turned a wrong marker into a loud failure instead
-            // of letting an absence assertion run against text I had misread.
+            // Non-vacuity marker: a heading from THIS CLASS's seeded note,
+            // which both artifacts render. NOT the patient name — exports
+            // anonymise PHI ("PATIENT Anonymous"), and that mistake is exactly
+            // what this check is for: it turned a wrong marker into a loud
+            // failure instead of letting an absence assertion run against text
+            // I had misread.
+            //
+            // ⚠️ `cls.exportMarker`, NOT THE LITERAL `'EXAM TYPE'`. This arm
+            // runs for every class with `emApplies: false`, and that string
+            // exists only in the IMAGING fixture — so the moment a second
+            // suppressed class was added, `extractExportText` would have THROWN
+            // here (it refuses a missing marker, correctly) and reddened the
+            // required `e2e` gate while reading like a broken extractor. Found
+            // by F12-a's independent adversarial pass, before the push. The
+            // marker is now derived per class from the fixture itself, and
+            // `headingMarker` throws at module load if the two ever drift.
             const text = await extractExportText(
               path!,
               f.suggestedFilename(),
-              'EXAM TYPE',
+              cls.exportMarker,
             );
             // THE ASSERTION. Not "no 99212" — no office E/M code at all, in
             // either artifact, from a row that holds three of them.
             expect(
               text,
-              `${f.suggestedFilename()} leaked an office E/M code from an imaging row`,
+              `${f.suggestedFilename()} leaked an office E/M code from ${cls.label}`,
             ).not.toMatch(/\b992\d\d\b/);
           }
 
@@ -742,7 +782,7 @@ test.describe('pre-sign review as the document', () => {
           // seeded for a visit that has none. That render is the exact writer
           // the label-vs-id bug turned loose on every ultrasound visit, so
           // asserting after it is the assertion that matters.
-          assertImagingHasNoEm(seeded!.visitId);
+          assertNoOfficeEm(seeded!.visitId);
 
           // Then the artifact. The signed export is what outlives every UI
           // decision, so it gets checked as text rather than trusted.
@@ -754,13 +794,13 @@ test.describe('pre-sign review as the document', () => {
           await openSignFlow(page);
           await page.getByRole('button', { name: /^download docx$/i }).click();
           const modalEm = page.getByTestId('em-change-confirm-toggle');
-          await expect(modalEm, 'nothing to confirm on an imaging report').toHaveCount(0);
+          await expect(modalEm, `nothing to confirm on ${cls.label}`).toHaveCount(0);
           await attestAndSubmit(page);
           const file = await dl;
           expect(file.suggestedFilename()).toMatch(/\.(docx|pdf)$/);
 
           // …and the level never appeared at sign time either.
-          assertImagingHasNoEm(seeded!.visitId);
+          assertNoOfficeEm(seeded!.visitId);
         });
       }
     });

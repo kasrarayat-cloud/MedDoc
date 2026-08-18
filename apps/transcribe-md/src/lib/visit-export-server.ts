@@ -13,7 +13,8 @@
 import prisma from '@meddoc/db';
 import { visitByIdScope, type PracticeId } from '@/lib/practice-scope';
 import type { TranscribeVisitStatus } from '@prisma/client';
-import { emAppliesToSpecialty, findSpecialty } from '@meddoc/shared/specialties';
+import { findSpecialty } from '@meddoc/shared/specialties';
+import { emAppliesToVisit } from './note-shape';
 import {
   projectEmForDisplay,
   sanitizeExportedSoap,
@@ -67,7 +68,11 @@ export async function loadVisitExportData(
       // (header fields + form-only pref) rides in its styleProfile JSONB. One
       // round-trip via the relation; only these two export fields are read,
       // note-gen never sees them.
-      noteTemplate: { select: { styleProfile: true, name: true } },
+      // F12 / ruling #123 adds `sections`: the note-SHAPE axis of E/M
+      // applicability is read from the template's own section labels, because
+      // `encounterType` is NULL on every production row and is really the
+      // specialty slot. Still one round-trip; note-gen never sees these.
+      noteTemplate: { select: { styleProfile: true, name: true, sections: true } },
       user: { select: { name: true, email: true } },
     },
   });
@@ -130,7 +135,15 @@ export async function loadVisitExportData(
   // em.code so every artifact (PDF, DOCX, all EHR clipboard formats) prints
   // what the doctor reviewed — never the raw L7b suggestion. The SAME helper
   // the client Codes tab + "Copy codes" use, so all surfaces agree.
-  // AN IMAGING REPORT EXPORTS NO OFFICE E/M LEVEL, whatever the row carries.
+  // AN IMAGING REPORT EXPORTS NO OFFICE E/M LEVEL, whatever the row carries —
+  // and since F12 / ruling #123, NEITHER DOES AN OPERATIVE OR PROCEDURE NOTE.
+  //
+  // ⚠️ THIS IS THE SINGLE SEAM FOR EVERY EXPORT SURFACE. DOCX, PDF, all the EHR
+  // clipboard formats, email, patient export, settings export-data, the sign
+  // route and the preview action all reach it through `loadVisitExportData`, so
+  // the export half of #123 is ONE line at the root rather than a per-route
+  // sweep — which is R3.4's recorded lesson: a per-caller list is kept complete
+  // by hand, and hand-kept lists are wrong eventually.
   //
   // `visit.specialty` is the raw column, which IS an id — the label conversion
   // happens below at `specialty:`, and feeding a label to the predicate is the
@@ -138,7 +151,16 @@ export async function loadVisitExportData(
   const emForExport = projectEmForDisplay(
     cptBlob?.em ?? null,
     visit.status === 'SIGNED',
-    emAppliesToSpecialty(visit.specialty),
+    emAppliesToVisit({
+      specialtyId: visit.specialty,
+      templateSections: visit.noteTemplate?.sections ?? null,
+      // `rawSoap`, deliberately — the STORED record, before the export-only
+      // cleanups. `stripNotePatientSummarySection` and `sanitizeExportedSoap`
+      // both rewrite the body for presentation, and classifying a note by a
+      // string that exists only inside one export path would make the verdict
+      // depend on which surface asked.
+      noteText: rawSoap,
+    }),
   );
 
   // Deterministically fill the header fields for THIS visit (never AI): NAME +
