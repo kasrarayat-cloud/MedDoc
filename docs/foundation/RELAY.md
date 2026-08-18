@@ -18294,3 +18294,49 @@ two REQUIRED workflows; doing that inside a session holding two live citations
 would cancel the runs it is trying to protect. ⚠️ And `.github/` is a deploy
 surface: that work belongs in a worktree, which is a rule this programme has
 already broken twice on `e2e.yml` specifically.
+
+### 🔴 ISSUE #603 RECURRED AND TOOK `main` RED — ON A COMMIT WITH ZERO CODE IN IT — **2026-08-18, session 02**
+
+**`e2e` on `8f8b67c2` (the merge of docs-only PR #720) FAILED.** Not a timeout —
+a genuine test failure, and it is a textbook recurrence of an issue STEP 0 had
+already enumerated as KNOWN that same night.
+
+**The fingerprint matched on every discriminating detail:**
+
+| this occurrence | issue #603 as filed |
+|---|---|
+| `17-password-reset.spec.ts` | same spec |
+| `helpers/auth.ts:71` | same site |
+| `expect(page).toHaveURL(/\/login$/)` | same assertion |
+| hard failure, **both** attempts | same |
+| observed `…:9020/board`, **19 samples, all `/board`** | same arm |
+| the merge of a **docs-only** PR | *"zero-code-delta commit"* |
+
+`auth.ts:71` is `logoutViaMenu`: sign-out is clicked and the URL never leaves the
+home board. **The session-revocation race, arriving as a test race.**
+
+⚠️ **THE TREE-IDENTITY CHECK WAS RE-RUN HERE RATHER THAN INHERITED**, because
+that is the check #603 itself used to rule the code out:
+
+    git diff --name-only <parent> 8f8b67c2 | grep -vc '^docs/'   ->  0
+
+**Two markdown files, 174 insertions, zero code** — and the identical tree had
+passed `e2e` on the PR head **fifty-five minutes earlier**. The code is
+eliminated by measurement, not by assertion.
+
+**Re-run, with the reason recorded, and the recurrence posted to #603** so the
+alarm gets louder instead of being absorbed silently. ⚠️ *An auto-filed issue is
+a finding somebody already wrote down for you; the failure mode is not that it is
+unknown, it is that each session re-runs past it and the count never
+accumulates.*
+
+⚠️ **AND NOTE WHERE IT LANDS, WHICH IS THE PART THAT MATTERS.** This failure
+strikes commits that **cannot** have caused it — which in this programme means
+the **docs and ledger merges**, and those are exactly what every citation and
+every deploy must pass through. A flake sitting on the trunk's narrowest point is
+not a test-suite nuisance; it is a tax on the release path.
+
+**Tonight's gate arithmetic, so the scale is legible:** four `playwright
+install` timeouts, one `e2e` success with **23 seconds** of margin, and one #603
+recurrence — **six gate events in a single session**, none of them caused by any
+change under test.
