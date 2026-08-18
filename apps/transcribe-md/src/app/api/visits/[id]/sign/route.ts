@@ -33,10 +33,10 @@
 import { NextResponse } from 'next/server';
 import { rescoreEmAction } from '@/actions/rescore-em';
 import {
-  emAppliesToSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
+import { emAppliesToVisit } from '@/lib/note-shape';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 import { z } from 'zod';
 
@@ -202,6 +202,8 @@ export const POST = withApiHandler<{ id: string }>(
         emPendingChange: true,
         emStale: true,
         specialty: true,
+        // F12 / ruling #123 — the note-SHAPE axis of E/M applicability.
+        noteTemplate: { select: { sections: true } },
       },
     });
     // ═══ THE SIGN GATE — TWO BRANCHES, AND THEY ARE NOT INTERCHANGEABLE ═══
@@ -327,9 +329,13 @@ export const POST = withApiHandler<{ id: string }>(
     // staleness gate over a level that does not exist would make an ultrasound
     // report permanently unsignable after any edit, and "resolving" it would
     // mean inventing a clinic code. The flag may be set; here it is inert.
-    const emApplies = !(
-      !emAppliesToSpecialty(visit.specialty)
-    );
+    // F12 / ruling #123 — the same reasoning covers an OPERATIVE or PROCEDURE
+    // note: a staleness gate over a level that does not exist would make a
+    // colonoscopy report permanently unsignable after any edit.
+    const emApplies = emAppliesToVisit({
+      specialtyId: visit.specialty,
+      templateSections: visit.noteTemplate?.sections ?? null,
+    });
     if (visit.status === TranscribeVisitStatus.READY && visit.emStale && emApplies) {
       // RE-SCORE HERE, don't just refuse.
       //

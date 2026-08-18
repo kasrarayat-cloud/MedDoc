@@ -30,10 +30,10 @@ import prisma from '@meddoc/db';
 import { Prisma, TranscribeVisitStatus } from '@prisma/client';
 
 import {
-  emAppliesToSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
+import { emAppliesToVisit } from '@/lib/note-shape';
 
 import { requireSession } from '@/lib/auth';
 import { visitByIdScope } from '@/lib/practice-scope';
@@ -81,6 +81,8 @@ export async function rescoreEmAction(visitId: string): Promise<RescoreEmResult>
       emStale: true,
       emScoredCode: true,
       specialty: true,
+      // F12 / ruling #123 — the note-SHAPE axis of E/M applicability.
+      noteTemplate: { select: { sections: true } },
       soapFinal: true,
       soapVersion: true,
       emPendingChange: true,
@@ -103,8 +105,14 @@ export async function rescoreEmAction(visitId: string): Promise<RescoreEmResult>
   // Imaging reports have no office-visit E/M level — the pipeline skips scoring
   // them entirely. Gating on a level that does not exist would make an
   // ultrasound report unsignable after any edit, and "resolving" it would mean
-  // inventing a clinic code.
-  if (!emAppliesToSpecialty(visit.specialty)) {
+  // inventing a clinic code. F12 / ruling #123: the same is true of an
+  // OPERATIVE or PROCEDURE note, which the specialty axis cannot express.
+  if (
+    !emAppliesToVisit({
+      specialtyId: visit.specialty,
+      templateSections: visit.noteTemplate?.sections ?? null,
+    })
+  ) {
     const cleared = await prisma.transcribeVisit.updateMany({
       where: {
         // T6 §4.1c — was `userId: session.user.id`. These two updateManys carry

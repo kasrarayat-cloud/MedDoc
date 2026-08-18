@@ -19,7 +19,17 @@
 // with no migration at all.
 // ============================================================================
 
-import { emAppliesToSpecialty } from './specialties';
+// LIVES IN THE APP, NOT IN `packages/shared`, AND THAT IS A MEASURED CHOICE
+// RATHER THAN A TASTE ONE. Every consumer of this axis is inside
+// `apps/transcribe-md` (export loader, worker L4, the visit page, three store
+// paths, three gates), so `packages/shared` buys nothing — and it costs
+// something real: a `git worktree` checks out TRACKED FILES ONLY and has no
+// `node_modules`, so `@meddoc/shared/*` resolves by walking UP to
+// `/opt/meddoc-pro/node_modules/@meddoc/shared`, which is a symlink to the
+// SHARED TREE's copy. A new file added to that package under a worktree is
+// therefore invisible to `tsc` and to every `@meddoc/*` import — silently, and
+// it resolves to another tree's code rather than failing loudly.
+import { emAppliesToSpecialty } from '@meddoc/shared/specialties';
 
 /** Section labels that only an OPERATIVE / PROCEDURE report carries.
  *

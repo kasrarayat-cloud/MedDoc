@@ -6,7 +6,6 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./specialties": "./src/specialties.ts",
-    "./note-shape": "./src/note-shape.ts"
+    "./specialties": "./src/specialties.ts"
   }
 }

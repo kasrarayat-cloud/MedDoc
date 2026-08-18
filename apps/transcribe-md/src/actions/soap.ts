@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  emAppliesToSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from "@meddoc/shared/specialties";
+import { emAppliesToVisit } from "@/lib/note-shape";
 import { seedEmBaselineIfUnset } from "@/lib/em-coding/seed-baseline";
 import { z } from "zod";
 
@@ -105,6 +105,8 @@ export async function saveSoapDraftAction(
       soapFinal: true,
       emScoredCode: true,
       specialty: true,
+      // F12 / ruling #123 — the note-SHAPE axis of E/M applicability.
+      noteTemplate: { select: { sections: true } },
       icdCodes: true,
       rxDrafts: true,
       cptCodes: true,
@@ -186,7 +188,10 @@ export async function saveSoapDraftAction(
         cptCodes: visit.cptCodes,
       },
       ctx: { practiceId: visit.user?.practiceId, userId: session.user.id },
-      applies: emAppliesToSpecialty(visit.specialty),
+      applies: emAppliesToVisit({
+        specialtyId: visit.specialty,
+        templateSections: visit.noteTemplate?.sections ?? null,
+      }),
     });
 
     revalidatePath(`/visits/${visitId}`);

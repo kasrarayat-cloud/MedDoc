@@ -622,12 +622,15 @@ describe('an imaging visit has NO E/M level — not displayed, not computed, not
     ]) {
       const src = read(caller);
       expect(src).toContain('seedEmBaselineIfUnset(');
-      expect(src).toContain(
-        // ONE named switch, not a re-typed conjunction. The original bug in this
-        // area was a call site spelling the predicate's argument differently
-        // (a label where an id was wanted); a single helper removes the chance.
-        'applies: emAppliesToSpecialty(visit.specialty),',
-      );
+      // ONE named switch, not a re-typed conjunction. The original bug in this
+      // area was a call site spelling the predicate's argument differently
+      // (a label where an id was wanted); a single helper removes the chance.
+      // ⚠️ The switch is `emAppliesToVisit` since F12 / ruling #123 — it now
+      // carries the note-SHAPE axis as well as the specialty one. The claim
+      // this arm makes is unchanged; only the name of the one switch moved.
+      expect(src).toContain('applies: emAppliesToVisit({');
+      expect(src).toContain('specialtyId: visit.specialty,');
+      expect(src).toContain('templateSections: visit.noteTemplate?.sections ?? null,');
     }
 
     // THE OVERRIDE ROUTE IS A WRITER TOO, since it moves the baseline when it
@@ -636,7 +639,7 @@ describe('an imaging visit has NO E/M level — not displayed, not computed, not
     // a new emScoredCode writer that is not on this list is not being checked.
     const override = read('src/app/api/visits/[id]/em-score/override/route.ts');
     expect(override).toContain('emScoredCode: parsed.data.overrideToCode');
-    const imagingGate = override.indexOf('emAppliesToSpecialty(visit.specialty)');
+    const imagingGate = override.indexOf('emAppliesToVisit({');
     expect(imagingGate).toBeGreaterThan(-1);
     expect(
       override.indexOf('emScoredCode:'),
@@ -646,7 +649,7 @@ describe('an imaging visit has NO E/M level — not displayed, not computed, not
     // The re-score never scores an imaging visit — it clears the flag instead.
     const rescore = read('src/actions/rescore-em.ts');
     const imagingBranch = rescore.slice(
-      rescore.indexOf('if (!emAppliesToSpecialty(visit.specialty)) {'),
+      rescore.indexOf('!emAppliesToVisit({'),
       rescore.indexOf('let scored: string;'),
     );
     expect(imagingBranch).toContain('emStale: false');
@@ -730,12 +733,100 @@ describe('an imaging visit has NO E/M level — not displayed, not computed, not
     // The page needed a new prop because it had already turned the column into
     // a label. Everywhere else reads `visit.specialty` straight off Prisma, so
     // the predicate gets an id and the same bug cannot be there.
+    //
+    // ⚠️ THE SWITCH IS `emAppliesToVisit` SINCE F12 / ruling #123, and the
+    // claim is now TWO claims: the specialty argument is still the raw id, AND
+    // the note-shape argument is the bound template's sections. A site that
+    // threaded one and forgot the other is the half-landed fix this house
+    // names, so both keys are asserted rather than the call alone.
     for (const f of [
       'src/actions/soap.ts',
       'src/actions/rescore-em.ts',
       'src/app/api/visits/[id]/sign/route.ts',
     ]) {
-      expect(read(f)).toContain('emAppliesToSpecialty(visit.specialty)');
+      const src = read(f);
+      expect(src, `${f} must call the one switch`).toContain('emAppliesToVisit({');
+      expect(src, `${f} must pass the raw id, never a label`).toContain(
+        'specialtyId: visit.specialty',
+      );
+      expect(src, `${f} must pass the note shape`).toContain(
+        'templateSections: visit.noteTemplate?.sections ?? null',
+      );
     }
+  });
+
+  it('NO SITE STILL READS THE SPECIALTY AXIS ALONE FOR AN E/M DECISION', () => {
+    // ⚠️ THE ARM THAT CATCHES A HALF-LANDED F12. The three files above are a
+    // hand-kept list, and a hand-kept list is wrong eventually — this one is
+    // swept by the PREDICATE instead: no E/M-applicability site may call the
+    // specialty-only switch, because doing so silently re-admits an office
+    // level onto an operative note.
+    //
+    // `override/route.ts` is the ONE legitimate remaining caller: it uses
+    // `emAppliesToSpecialty` only to decide WHICH of the two refusal messages
+    // to print, AFTER `emAppliesToVisit` has already refused. Telling a doctor
+    // "this is an imaging report" about their colonoscopy is a false statement
+    // about their own chart, so that distinction is deliberate.
+    //
+    // ⛔ NOT SWEPT, and each for a stated reason — these wear the same symbol
+    // and do a DIFFERENT JOB:
+    //   · `board/page.tsx`            — `isImaging`, a board label
+    //   · `worker/layers/04-generate-soap.ts` — `isUltrasoundReport`, which
+    //     selects the PROMPT BUILDER and TEMPLATE. An operative note is not an
+    //     imaging study; threading note-shape there would route a colonoscopy
+    //     to the ultrasound report builder — a clinical regression, not a fix.
+    // ⚠️ THIS ARM REDDENED AGAINST ITS OWN AUTHOR ON ITS FIRST RUN, WHICH IS
+    // WHY IT IS WRITTEN THIS WAY. A plain filename grep returned FOUR extra
+    // files — `sign-gates.ts`, `visit-export.ts`, `visit-export-server.ts` and
+    // `note-shape.ts`. Three were PURE PROSE: doc-comments that name the old
+    // switch while explaining the history. That is this house's recorded
+    // substring trap — a file's comments are the one place the token you are
+    // grepping for is guaranteed to appear — so the scan is bound to CODE by
+    // stripping comment lines before matching, and it matches the CALL form
+    // `emAppliesToSpecialty(` rather than the bare word.
+    const { execSync } = require('node:child_process') as typeof import('node:child_process');
+    const files = execSync('grep -rl "emAppliesToSpecialty" src || true', {
+      encoding: 'utf8',
+    })
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .filter((f) => !/__tests__|\.test\./.test(f));
+
+    // POSITIVE CONTROL — a scan that reports nothing and a scan that is broken
+    // produce the same output. If the pattern matches no file at all, the
+    // instrument is wrong, not the codebase clean.
+    expect(
+      files.length,
+      'the grep found no file at all — check the pattern, not the codebase',
+    ).toBeGreaterThan(0);
+
+    const callers = files.filter((f) =>
+      read(f)
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => !l.startsWith('//') && !l.startsWith('*') && !l.startsWith('/*'))
+        .some((l) => l.includes('emAppliesToSpecialty(')),
+    );
+
+    // SECOND POSITIVE CONTROL — the comment strip must not eat everything.
+    // Without this, a filter bug that dropped every line would produce an empty
+    // `callers` list and read as a perfectly clean codebase.
+    expect(
+      callers.length,
+      'comment-stripping removed every line — the filter is broken',
+    ).toBeGreaterThan(0);
+
+    expect(callers.sort()).toEqual(
+      [
+        // The composed switch's own definition — it IS the copy.
+        'src/lib/note-shape.ts',
+        // Refusal-message selection only, AFTER emAppliesToVisit has refused.
+        'src/app/api/visits/[id]/em-score/override/route.ts',
+        // Different jobs wearing the same symbol — see the note above.
+        'src/app/board/page.tsx',
+        'src/worker/layers/04-generate-soap.ts',
+      ].sort(),
+    );
   });
 });

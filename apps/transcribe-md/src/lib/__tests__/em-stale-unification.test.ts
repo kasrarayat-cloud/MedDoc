@@ -174,15 +174,23 @@ describe('imaging reports have no E/M, so the gate does not apply to them', () =
     // for it. A staleness gate over a level that does not exist would make an
     // imaging report permanently unsignable after any edit, and "resolving"
     // it would mean inventing a clinic code.
+    // ⚠️ THE WATCHED TOKEN MOVED WITH F12 / ruling #123, AND THE REASON DID
+    // NOT. The predicate is now `emAppliesToVisit`, which carries BOTH the
+    // specialty axis and the note-SHAPE axis — an operative note has no office
+    // level either, for exactly the reason written above. What this guard
+    // asserts is unchanged: the sign route consults the ONE switch and gates
+    // staleness on its answer, rather than re-typing a conjunction.
     const src = readFileSync('src/app/api/visits/[id]/sign/route.ts', 'utf8');
-    expect(src).toContain('emAppliesToSpecialty(visit.specialty)');
+    expect(src).toContain('emAppliesToVisit({');
+    expect(src).toContain('specialtyId: visit.specialty');
     expect(src).toContain('visit.emStale && emApplies');
   });
 
   it('the re-score clears the flag without scoring one', () => {
     const src = readFileSync('src/actions/rescore-em.ts', 'utf8');
     const guard = src.slice(
-      src.indexOf('emAppliesToSpecialty(visit.specialty)'),
+      // Watched token moved with F12 / #123 — see the note above.
+      src.indexOf('emAppliesToVisit({'),
       src.indexOf('let scored'),
     );
     expect(guard).toContain('emStale: false');

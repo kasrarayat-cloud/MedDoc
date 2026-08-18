@@ -119,6 +119,7 @@ describe('the padlocked Signed node', () => {
   it('names WHICH gates are outstanding in the accessible name', () => {
     const set = gatesFor({
       specialty: 'primary-care',
+      templateSections: null,
       emPendingChange: { from: '99213', to: '99214', cause: 'note_edited', at: '2026-07-30T00:00:00Z' },
     });
     render(
@@ -134,6 +135,7 @@ describe('the padlocked Signed node', () => {
   it('a satisfied gate is not named as a blocker', () => {
     const set = gatesFor({
       specialty: 'primary-care',
+      templateSections: null,
       emPendingChange: null,
       attested: true,
     });
@@ -160,6 +162,7 @@ describe('imaging never grows an E/M term', () => {
   it('the strip says nothing about a documentation level', () => {
     const set = gatesFor({
       specialty: 'ultrasound',
+      templateSections: null,
       emPendingChange: null,
     });
     const { container } = render(
@@ -176,6 +179,7 @@ describe('imaging never grows an E/M term', () => {
     // gate at all.
     const set = gatesFor({
       specialty: 'primary-care',
+      templateSections: null,
       emPendingChange: {
         from: '99213',
         to: '99214',
@@ -192,6 +196,7 @@ describe('imaging never grows an E/M term', () => {
   it('an imaging visit holding office E/M state is NAMED, not silently zeroed', () => {
     const set = gatesFor({
       specialty: 'ultrasound',
+      templateSections: null,
       emPendingChange: {
         from: '99213',
         to: '99214',

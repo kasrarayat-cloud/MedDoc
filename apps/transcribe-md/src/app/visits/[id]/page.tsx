@@ -5,11 +5,11 @@ import * as Sentry from '@sentry/nextjs';
 import prisma from '@meddoc/db';
 import { TranscribeVisitStatus } from '@prisma/client';
 import {
-  emAppliesToSpecialty,
   findSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
+import { emAppliesToVisit } from '@/lib/note-shape';
 import { getSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { AppFrame } from '@/components/ui/app-frame';
@@ -147,6 +147,9 @@ export default async function VisitPage({
     emPendingChange: unknown;
   emStale: boolean;
   emScoredCode: string | null;
+    /** F12 / ruling #123 — the bound template's section labels, which carry
+     *  the note-SHAPE axis of E/M applicability. `Json`, so `unknown`. */
+    noteTemplate: { sections: unknown } | null;
     patientSummary: string | null;
     confidenceScores: unknown;
   };
@@ -209,6 +212,10 @@ export default async function VisitPage({
         emPendingChange: true,
         emStale: true,
         emScoredCode: true,
+        // F12 / ruling #123 — the note-SHAPE axis. An operative note carries
+        // no office-visit E/M level, and a specialty id cannot say so: a GI
+        // doctor does office visits AND colonoscopies under one specialty.
+        noteTemplate: { select: { sections: true } },
         patientSummary: true,
         confidenceScores: true,
       },
@@ -303,6 +310,7 @@ export default async function VisitPage({
           doctorName={user.name}
           specialty={specialtyLabel(visit.specialty)}
           specialtyId={specialtyId(visit.specialty)}
+          templateSections={visit.noteTemplate?.sections ?? null}
           emailEnabled={isEmailDeliveryEnabled()}
           inputMode={visit.inputMode}
           status={visit.status}
@@ -392,6 +400,12 @@ interface VisitBodyProps {
    *  signed record. Two props now, because one string cannot be both a label
    *  and a key. */
   specialtyId: string;
+  /** F12 / ruling #123 — the bound template's `sections` JSONB, the SECOND
+   *  AXIS of E/M applicability. A specialty id cannot separate a GI office
+   *  visit from a GI colonoscopy; the note's own section labels can. `null`
+   *  when the visit has no template, which is 30 of 45 production rows and is
+   *  explicitly NOT an operative note. */
+  templateSections: unknown;
   emailEnabled: boolean;
   inputMode: string;
   status: TranscribeVisitStatus;
@@ -581,8 +595,17 @@ async function VisitBody(props: VisitBodyProps) {
   // "not applicable" note instead of a forced clinic-visit code.
   // `props.specialtyId`, NOT `props.specialty` — the latter is the display
   // label and this comparator takes an id. See the prop doc above.
-  const emNotApplicable =
-    !emAppliesToSpecialty(props.specialtyId);
+  //
+  // F12 / ruling #123 — AND IT DOES NOT APPLY TO AN OPERATIVE OR PROCEDURE
+  // NOTE EITHER, which the specialty axis is structurally unable to express.
+  // Both axes go through ONE named predicate rather than an open-coded `&&`:
+  // this conjunction was open-coded in seven places once already, one of them
+  // spelled with a display label, and every ultrasound visit stored an office
+  // E/M level for it.
+  const emNotApplicable = !emAppliesToVisit({
+    specialtyId: props.specialtyId,
+    templateSections: props.templateSections,
+  });
   // Imaging reports skip E/M scoring entirely (left null → the Billing surface
   // renders the "not applicable" note). Only clinic encounters are scored.
   let initialEmScore: import('@/lib/em-coding-ui/types').EmScore | null = null;
@@ -694,6 +717,7 @@ async function VisitBody(props: VisitBodyProps) {
 
   const gateSet = signGates({
     specialty: props.specialtyId,
+    templateSections: props.templateSections,
     emPendingChange: props.emPendingChange,
     emStale: props.emStale,
   });

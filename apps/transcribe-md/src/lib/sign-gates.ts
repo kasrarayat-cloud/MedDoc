@@ -56,7 +56,7 @@
 // directory scheduled for deletion.
 // ============================================================================
 
-import { emAppliesToSpecialty } from '@meddoc/shared/specialties';
+import { emAppliesToVisit } from './note-shape';
 
 import { unacknowledgedEmChange } from './em-pending-change';
 
@@ -126,6 +126,17 @@ export interface SignGateInput {
    * compute an office E/M level once already.
    */
   specialty: string | null | undefined;
+  /**
+   * F12 / ruling #123 — the bound template's `sections` JSONB, carrying the
+   * note-SHAPE axis. REQUIRED, and deliberately not optional: a caller that
+   * has not thought about note shape must fail to TYPECHECK rather than
+   * silently inherit a permissive default. That is the same reasoning
+   * `projectDisplayedEmCode`'s `emApplies` is a required positional, and it is
+   * how the caller list gets enumerated by the compiler instead of by hand.
+   *
+   * `null` for a visit with no template — which is NOT an operative note.
+   */
+  templateSections: unknown;
   /** The raw `emPendingChange` jsonb. Coerced here, fail-closed. */
   emPendingChange: unknown;
   /** The `emStale` column. Renders as a note; never a count. */
@@ -173,7 +184,12 @@ export function signGates(input: SignGateInput): SignGateSet {
   // ── Gate 1 — E/M ────────────────────────────────────────────────────────
   // THE ONE SWITCH decides whether this gate exists at all. Never re-type the
   // conjunction; it has been spelled wrong before and the failure was silent.
-  const emApplies = emAppliesToSpecialty(input.specialty);
+  // Since F12 / ruling #123 the switch carries BOTH axes — specialty AND note
+  // shape — so an operative note has no E/M gate to satisfy.
+  const emApplies = emAppliesToVisit({
+    specialtyId: input.specialty,
+    templateSections: input.templateSections,
+  });
   const pendingEm = unacknowledgedEmChange(input.emPendingChange);
   const emUnconfirmed = pendingEm !== null && !input.emConfirmedThisSession;
 

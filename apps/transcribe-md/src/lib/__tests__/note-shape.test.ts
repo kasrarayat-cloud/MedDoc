@@ -15,7 +15,7 @@
 // ============================================================================
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { ultrasoundSpecialtyEnabled } from './specialties';
+import { ultrasoundSpecialtyEnabled } from '@meddoc/shared/specialties';
 import {
   emAppliesToVisit,
   isProcedureNoteShape,
@@ -24,7 +24,7 @@ import {
   procedureNoteMarkerCount,
   PROCEDURE_NOTE_MARKER_FLOOR,
   PROCEDURE_NOTE_SECTION_MARKERS,
-} from './note-shape';
+} from '../note-shape';
 
 const sec = (labels: string[]) =>
   labels.map((label, i) => ({ key: `k${i}`, label, order: i }));

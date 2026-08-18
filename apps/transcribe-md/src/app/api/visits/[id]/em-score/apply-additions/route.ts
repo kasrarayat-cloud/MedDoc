@@ -17,10 +17,10 @@
 
 import { NextResponse } from 'next/server';
 import {
-  emAppliesToSpecialty,
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
+import { emAppliesToVisit } from '@/lib/note-shape';
 import { seedEmBaselineIfUnset } from '@/lib/em-coding/seed-baseline';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 import { z } from 'zod';
@@ -93,6 +93,8 @@ export const POST = withApiHandler<{ id: string }>(
         emScoredCode: true,
         cptCodes: true,
         specialty: true,
+        // F12 / ruling #123 — the note-SHAPE axis of E/M applicability.
+        noteTemplate: { select: { sections: true } },
         audioDurationSec: true,
         dictationDurationSec: true,
         inputMode: true,
@@ -195,7 +197,10 @@ export const POST = withApiHandler<{ id: string }>(
       // and the doctor gets a phantom confirm forever.
       signals: { icdCodes: visit.icdCodes, rxDrafts: visit.rxDrafts, cptCodes: visit.cptCodes },
       ctx: { practiceId, userId },
-      applies: emAppliesToSpecialty(visit.specialty),
+      applies: emAppliesToVisit({
+        specialtyId: visit.specialty,
+        templateSections: visit.noteTemplate?.sections ?? null,
+      }),
     });
 
     await scopedUpdate(
