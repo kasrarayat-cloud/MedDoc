@@ -2431,6 +2431,45 @@ can never be shredded, and the blocks stay on disk. This cost two files on
 
 **Report paths, never contents.**
 
+### ⚠️ A DESTRUCTION LIST IS A CLAIM
+
+**Standing 2026-08-18.** A list of things to reap — handed over by another
+session, a report, or your own earlier self — is a CLAIM about what those paths
+are. Destruction is irreversible, so the claim is verified before it is executed,
+never after.
+
+> **CLASSIFY BY CONTENT, AND VERIFY REGISTRATION.** Before anything is shredded:
+> `git worktree list` (is that directory a registered worktree?), `gh pr list`
+> (does an OPEN pr depend on it?), and `git ls-files` (is the file TRACKED?).
+> A path is scratch when those three say so — never because a list said so.
+
+⚠️ **REFERENCE CASE, AND IT WAS ONE COMMAND FROM REAL LOSS.** A loop session
+handed over a reap list reading, in effect, *"`.f18-comment603.md`,
+`.f18-wt/.f18-{msg,msg2,…}`"*. The list meant **scratch files INSIDE a
+worktree**. Read literally as *"reap `.f18-*`"* it would have destroyed:
+
+- **`.f18-wt` itself — a REGISTERED git worktree**, not a stray snapshot;
+- on an **UNMERGED** branch with **PR #722 OPEN**;
+- whose `.jpeg`/`.png` files are **TRACKED repo content** (`certify-panel.png`,
+  `audit-new-visit.jpeg` and others), not evidence and not scratch.
+
+**The filenames looked exactly like the liability class this file warns about** —
+a directory of images with audit-shaped names, sitting in the repo root. That is
+the trap: the shape that should make you suspicious and the shape that is
+innocent are the same shape, and only the three checks tell them apart.
+
+⚠️ **AND THE PHI SWEEP'S ONE HIT WAS PROSE.** A grep for PHI/credential shapes
+matched the word *"patients"* in one file. Read in context it was
+`patients 34` — a §2.5 **clinical-count row**, a number and not content. Had the
+sweep's zero been trusted in the other direction, or its one hit been treated as
+a finding without reading it, the conclusion would have been wrong both ways.
+
+**POST-DESTRUCTION CONTROLS ARE PART OF THE REAP, NOT AN EXTRA.** After
+shredding, assert what must SURVIVE, not only what must be gone: the worktree
+still resolves, its tracked files are present, its `git status` is still clean.
+A reap that only proves absence cannot tell "I removed the scratch" from
+"I removed rather more than the scratch".
+
 #### Session evidence trees are EXTRACT-THEN-SHRED, at session end
 
 **Findings go into the repository; the raw tree is destroyed. An unowned

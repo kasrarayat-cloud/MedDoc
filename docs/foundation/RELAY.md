@@ -349,7 +349,7 @@ unattended while the fault was live is how a CI fix becomes a CI outage.
 > TO LEARN IT — the queue table's own recorded lesson, *close the row in the
 > same pass that closes the item*.**
 >
-> - **The two parts NO LONGER ship together — ruling #125 (PROVISIONAL) split
+> - **The two parts NO LONGER ship together — ruling #127 (PROVISIONAL) split
 >   them**, because #123's own required recon refuted part (1): no export
 >   builder paints the cream, and `EmLevelCard` was already hosted by R4b.
 > - **(1) SKIN — PARKED.** It needs one fact from the owner (the date of the
@@ -17714,7 +17714,7 @@ FALSE by ~23:20Z.** Correcting it here rather than editing the row, so both the
 claim and its decay are legible.
 
 **Measured now:** `feat/twin-auto-certification` is at **`e9b4e5c6`, committed
-`23:20:22Z`** — *"docs: my auto-certification ruling renumbers to #125 — the
+`23:20:22Z`** — *"docs: my auto-certification ruling renumbers to #127 — the
 loop claimed #124 first"*. They rebased onto `79ddd855` and are **actively
 working and aware of this loop.**
 
@@ -18452,7 +18452,7 @@ constraint I remembered. **F16 needs its own §2.5 and its own deploy.**
 
 ## 🟡 F12-a — E/M IS SUPPRESSED ON PROCEDURE AND OPERATIVE NOTES — **BUILT 2026-08-18, run `20260818-080141-b1` session 01. NOT DEPLOYED.**
 
-**Ruling #123 part (2), and ruling #125 (PROVISIONAL) is why it ships without
+**Ruling #123 part (2), and ruling #127 (PROVISIONAL) is why it ships without
 part (1).** Part (1) — the "legacy cream" E/M block — was **refuted by #123's
 own required recon**: no export builder paints it, and `EmLevelCard` was
 already hosted by R4b on 2026-08-14. It is **F12-b**, PARKED on the OWNER PING.
@@ -19330,7 +19330,7 @@ housekeeping; the loop is the only actor holding that tree, and it is me.
 
 ## ✅ F12-c — THE COMPUTE LAYER STOPS WRITING AN OFFICE E/M ONTO AN OPERATIVE NOTE — **BUILT 2026-08-18, run `20260818-080141-b1` session 03**
 
-**Ruling #127 (PROVISIONAL).** `packages/shared/src/specialties.ts:139-143` states the
+**Ruling #128 (PROVISIONAL).** `packages/shared/src/specialties.ts:139-143` states the
 E/M invariant is enforced at **THREE** layers — COMPUTE · STORE · EXPORT. F12-a
 closed STORE and EXPORT for the note-shape axis and left COMPUTE keyed on
 specialty alone; RELAY filed it as **FINDING 4** and warned that the naive fix is
@@ -19418,7 +19418,7 @@ now pins **both** layer-gate lines by EQUALITY — canon's own *"prefer `toBe` o
 `toContain` whenever the expected value is knowable"* — and keeps the census for
 the wiring. ⚠️ **It therefore reddens on a reformat of those two lines, which is
 intended:** they decide whether a colonoscopy keeps the one code it bills, and a
-change to either should cost somebody a deliberate read of #127.
+change to either should cost somebody a deliberate read of #128.
 
 ⚠️ **AND THE OVER-STRICT DIRECTION WAS A REAL DEFECT TOO, FOUND BY THE SAME
 REVIEWER.** `const emApplies: boolean = …` — behaviour-identical — earned a
@@ -19596,3 +19596,36 @@ Found by two lenses. After the flip above, `sign/route.ts:538`'s `if (emBlob && 
 - No resume, dictation, text-notes or twin-fill path yields an empty `noteText` — `isLayerComplete('L6')` requires non-empty.
 
 ⚠️ **AND A CORRECTION TO ONE REFUTER, VERIFIED RATHER THAN ACCEPTED.** It reported the gate blind to `const emApplies = true;` with the call discarded. **Measured against the CURRENT gate: it reddens, naming both lines** (`M11`). It had evaluated the pre-census version. **Two of its other findings described a commit I had already repaired** — the contamination recorded above — and it said so itself.
+
+### ⚠️ SESSION FINDING — TWO ACTORS ALLOCATED THE **SAME RULING NUMBER** CONCURRENTLY, AND NOTHING PREVENTS IT — **2026-08-18, session 03**
+
+`main` moved under this item while its gate ran: PR **#728** landed the
+supervised auto-certification work. The merge conflicted on **one line** of
+`RULINGS.md` — and it was not a text conflict, it was a **NUMBER** conflict.
+**Both sides had allocated `#127`**: the owner's STANDING auto-certification
+ruling (2026-08-17) and this loop's PROVISIONAL compute-layer ruling
+(2026-08-18).
+
+**RESOLVED AS A UNION WITH THIS SIDE RENUMBERED — both rows kept, mine is now
+`#128`.** The owner's ruling keeps `#127`: it is earlier, it is STANDING rather
+than provisional, and it was already merged and deployed. Every reference in
+this item's own artifacts followed the renumber.
+
+⚠️ **AND THE RENUMBER'S FIRST ATTEMPT OVER-REACHED — CAUGHT BY THE UNION CHECK,
+NOT BY READING THE FILE.** A blanket replace of `ruling #127` rewrote **two
+lines this session did not author**, pre-existing text about F12's split. It
+was invisible in the merged file and visible only as `-2` in
+`git diff --numstat` against `origin/main`. **That is exactly why canon says to
+verify a union by the REMOVAL COUNT rather than by reading the result** — a
+section that survived and a section that was silently edited look identical.
+Both lines restored to `origin/main`'s bytes, re-verified **+269/-0** and
+**+1/-0**.
+
+⚠️ **THE CLASS IS NOT THE COLLISION, IT IS THAT NOTHING DETECTS ONE.** Ruling
+numbers are allocated by hand, by whoever writes the row, with no registry and
+no uniqueness check. A collision only surfaces if the two rows happen to land in
+the same file region — this one did, by luck. **Two rows carrying the same
+number in different merge orders would both be "the ruling", and a session
+grepping `#127` would find two contradictory decisions.** `RULINGS.md` already
+records that this file exists to prevent exactly that failure. A cheap guard
+exists — assert every `#<n> —` appears at most once — and it is not built.

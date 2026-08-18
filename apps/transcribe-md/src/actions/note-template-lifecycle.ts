@@ -27,6 +27,10 @@
 import { revalidatePath } from 'next/cache';
 
 import prisma from '@meddoc/db';
+import { requireManualCertification } from '@/config/require-manual-certification';
+
+/** An upload must never wait longer than this on the queue. See the call site. */
+const ENQUEUE_TIMEOUT_MS = 3000;
 import { requireSession } from '@/lib/auth';
 import { isTenantOwnedArtifactKey } from '@/lib/template-twin/storage';
 import { applyPhiGate } from '@/lib/note-template-parse/phi-gate';
@@ -297,6 +301,87 @@ export async function saveNoteTemplateAction(
           attachToNoteTemplateId: result.id,
         });
         twinCompile = 'compiled';
+
+        // ── RULING #127 — AUTO-CERTIFY. ──────────────────────────────────
+        //
+        // The doctor's job is upload then run visits. When the twin compiles
+        // with ZERO blocking elements the model's proposals are confirmed and
+        // the template certifies itself — no sitting, no eighty clicks.
+        //
+        // ⚠️ ENQUEUED, NEVER AWAITED. Certification runs a live model
+        // generation for its round-trip proof; awaiting it here would make an
+        // upload hang on a generation, and a slow model would read to the
+        // doctor as a broken upload. The row shows "Preparing your format…"
+        // until the worker finishes.
+        //
+        // ⚠️ GATED ON blockingUnsupportedCount === 0 — the ruling's own
+        // condition. A template with blocking elements cannot be reproduced
+        // faithfully, so it must NOT auto-certify; it stays in needs-review
+        // where the doctor is told why.
+        //
+        // ⚠️ AND FAIL-SAFE, like the compile above it. An enqueue failure must
+        // never fail the upload: the template is saved and the twin compiled,
+        // so the worst case is the pre-#127 behaviour — a template awaiting
+        // manual confirmation, which the manual screen still serves.
+        // ⚠️ BOTH CONDITIONS, AND THE SECOND ONE WAS SILENTLY LOST ONCE.
+        // An earlier revision of this block carried `!requireManualCertification()`
+        // and an indentation fix dropped it — the edit applied, tsc stayed green,
+        // and the guard was simply gone. That is the proves-what-it-preserved
+        // class, and it is why a regression arm now asserts this line's shape.
+        if (compiled.blockingUnsupportedCount === 0 && !requireManualCertification()) {
+          try {
+            // ⚠️ BOUNDED, BECAUSE AN UNREACHABLE QUEUE MUST NOT HANG AN UPLOAD.
+            // `enqueueAutoCertifyTwin` opens an ioredis connection, and ioredis
+            // RETRIES INDEFINITELY rather than rejecting — so a bare `await`
+            // here does not fail, it simply never returns, and the catch below
+            // never runs. The doctor's save would hang on a Redis outage.
+            //
+            // Found by the unit suite on 2026-08-18: four tests in
+            // note-template-source-ref.test.ts went from passing to `Test timed
+            // out in 5000ms` inside `saveNoteTemplateAction` — the enqueue was
+            // blocking the action itself, not the worker.
+            //
+            // A missed enqueue is RECOVERABLE and costs nothing permanent:
+            // `scripts/backfill-auto-certify.ts` re-enqueues any compiled twin
+            // still sitting uncertified. A hung save is not recoverable — the
+            // doctor is looking at it.
+            const { enqueueAutoCertifyTwin } = await import('@/lib/queue');
+            let enqueueTimer: ReturnType<typeof setTimeout> | undefined;
+            try {
+              await Promise.race([
+                enqueueAutoCertifyTwin({
+                  noteTemplateId: result.id,
+                  userId: doctorId,
+                  userEmail: session.user.email,
+                  practiceId: session.user.practiceId,
+                }),
+                new Promise((_, reject) => {
+                  enqueueTimer = setTimeout(
+                    () => reject(new Error('enqueue timed out after 3000ms')),
+                    ENQUEUE_TIMEOUT_MS,
+                  );
+                }),
+              ]);
+            } finally {
+              if (enqueueTimer) clearTimeout(enqueueTimer);
+            }
+            console.info(
+              `[template-twin:auto-certify] template=${result.id} ENQUEUED ` +
+                `(fields=${compiled.fieldCount}, blocking=0)`,
+            );
+          } catch (enqueueError) {
+            console.warn(
+              `[template-twin:auto-certify] template=${result.id} enqueue FAILED — ` +
+                'the template is saved and compiled; it awaits manual confirmation: ' +
+                `${enqueueError instanceof Error ? enqueueError.message : String(enqueueError)}`,
+            );
+          }
+        } else {
+          console.info(
+            `[template-twin:auto-certify] template=${result.id} SKIPPED ` +
+              `(blocking=${compiled.blockingUnsupportedCount})`,
+          );
+        }
         console.info(
           `[template-twin:compile-on-upload] template=${result.id} ` +
             `fields=${compiled.fieldCount} blocking=${compiled.blockingUnsupportedCount} ` +

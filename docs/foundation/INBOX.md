@@ -230,7 +230,7 @@ adversarial pass.
 ### 2026-08-18T07:00:00Z — AUTO-CERTIFICATION IS IN FLIGHT; the West Medical walk is SUPERSEDED
 
 **Pointer to rulings #124 (loop's, merge/push doors) is unrelated — the ones
-that matter here are the owner's auto-certification ruling recorded as #125, on
+that matter here are the owner's auto-certification ruling recorded as #127, on
 branch `feat/twin-auto-certification`, built by a SUPERVISED session.**
 
 ⚠️ **DO NOT CITE "certify the West Medical template" AS A BLOCKER, and do not
