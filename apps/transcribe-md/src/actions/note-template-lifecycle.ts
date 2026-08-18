@@ -28,6 +28,9 @@ import { revalidatePath } from 'next/cache';
 
 import prisma from '@meddoc/db';
 import { requireManualCertification } from '@/config/require-manual-certification';
+
+/** An upload must never wait longer than this on the queue. See the call site. */
+const ENQUEUE_TIMEOUT_MS = 3000;
 import { requireSession } from '@/lib/auth';
 import { isTenantOwnedArtifactKey } from '@/lib/template-twin/storage';
 import { applyPhiGate } from '@/lib/note-template-parse/phi-gate';
@@ -327,13 +330,41 @@ export async function saveNoteTemplateAction(
         // class, and it is why a regression arm now asserts this line's shape.
         if (compiled.blockingUnsupportedCount === 0 && !requireManualCertification()) {
           try {
+            // ⚠️ BOUNDED, BECAUSE AN UNREACHABLE QUEUE MUST NOT HANG AN UPLOAD.
+            // `enqueueAutoCertifyTwin` opens an ioredis connection, and ioredis
+            // RETRIES INDEFINITELY rather than rejecting — so a bare `await`
+            // here does not fail, it simply never returns, and the catch below
+            // never runs. The doctor's save would hang on a Redis outage.
+            //
+            // Found by the unit suite on 2026-08-18: four tests in
+            // note-template-source-ref.test.ts went from passing to `Test timed
+            // out in 5000ms` inside `saveNoteTemplateAction` — the enqueue was
+            // blocking the action itself, not the worker.
+            //
+            // A missed enqueue is RECOVERABLE and costs nothing permanent:
+            // `scripts/backfill-auto-certify.ts` re-enqueues any compiled twin
+            // still sitting uncertified. A hung save is not recoverable — the
+            // doctor is looking at it.
             const { enqueueAutoCertifyTwin } = await import('@/lib/queue');
-            await enqueueAutoCertifyTwin({
-              noteTemplateId: result.id,
-              userId: doctorId,
-              userEmail: session.user.email,
-              practiceId: session.user.practiceId,
-            });
+            let enqueueTimer: ReturnType<typeof setTimeout> | undefined;
+            try {
+              await Promise.race([
+                enqueueAutoCertifyTwin({
+                  noteTemplateId: result.id,
+                  userId: doctorId,
+                  userEmail: session.user.email,
+                  practiceId: session.user.practiceId,
+                }),
+                new Promise((_, reject) => {
+                  enqueueTimer = setTimeout(
+                    () => reject(new Error('enqueue timed out after 3000ms')),
+                    ENQUEUE_TIMEOUT_MS,
+                  );
+                }),
+              ]);
+            } finally {
+              if (enqueueTimer) clearTimeout(enqueueTimer);
+            }
             console.info(
               `[template-twin:auto-certify] template=${result.id} ENQUEUED ` +
                 `(fields=${compiled.fieldCount}, blocking=0)`,
