@@ -19271,3 +19271,59 @@ what changed, what did not, and that every declared quantity is byte-identical
 to the original commit (`fd6ea2d2`) and was re-derived against the final
 predicate. **Caught by reading the resolver rather than by the deploy failing**,
 which is the cheaper of the two.
+
+### ✅ F12-a IS LIVE IN PRODUCTION — **2026-08-18T13:38:52Z, session 02 — 21 of 21 JUDGED**
+
+**The queue item is closed end to end: built by session 01, refuted by four
+independent lenses, fixed, mutation-proved 11 ways, merged, cited, deployed
+under a declaration written before the outcome existed, and judged against it.**
+
+| | |
+|---|---|
+| deployed | `5e7b6f2eec6490a7c67be60ccabafb87d2cb42d7` |
+| the item's merge commit | `daf2b13d74f164393151decd1d5f805f969883e4` |
+| citation on the DEPLOYED commit | **4 of 4, every line `a1`** |
+| citation on the merge commit | **4 of 4**, `e2e` at `a2` — issue #631, explained above |
+| declaration | `docs/foundation/deploys/20260818-1d48d7cd.md`, committed `fd6ea2d2` |
+| rollback | `:pre-5e7b6f2e-20260818`, both service images |
+| migration | **none** |
+| full judgement | `docs/deploy-reports/20260818-5e7b6f2e-f12a-judgement.md` |
+
+**MUST CHANGE — 4 of 4.** Visits whose export prints an office E/M code
+**10 → 5**, three of them SIGNED. **1** from the template arm, **4** from ruling
+#126a's note-text fallback. ⚠️ **Without the fallback the adversarial pass
+forced, this deploy would have moved ONE production row.**
+
+**MUST NOT CHANGE — 12 of 12.** 0 newly printing · 0 office visits losing a
+level · 21 untemplated office visits untouched · 46 visits · 34 patients · 29
+signatures · `emScoredCode` 17 · `cptCodes.em` 27 · `signedCode` 6 ·
+templates 10 · migrations 104 · co-tenants exact.
+
+⚠️ **THE THREE ARTIFACT COUNTS HOLDING IS A PASS, NOT AN OMISSION** — the
+declaration said so in advance. This deploy suppresses a PROJECTION and
+deliberately leaves the five stored artifacts alone; **a comparison showing them
+FALL would have been a finding.** Clearing them is an irreversible mutation with
+its own declaration and its own door.
+
+**STRUCTURAL — 5 of 5**, including a NEGATIVE control read from the running
+container: the pre-fix `if (emBlob) {` shape reads **0**, against a traversal
+control of 91 files.
+
+⚠️ **NO REAL DOCTOR'S VISIT WAS EXPORTED, SIGNED OR RENDERED.** The projection
+rows describe what an export PRINTS, and reading that directly from production
+means exporting somebody's clinical note. They are verified instead by the
+shipped image carrying the predicate (with a negative control) and by
+re-deriving the predicate over the post-deploy database — which reproduces every
+declared number exactly. **What is NOT claimed: that a PDF or DOCX was produced
+and read.** That proof is the E2E byte assertion inside the citation.
+
+⚠️ **AND THE DEPLOY ALMOST RAN FROM THE WRONG TREE.** `pwd` immediately before
+`deploy-prod.sh` read **`/opt/meddoc-pro/.f12-wt`**, not the shared tree — the
+Bash tool's cwd had persisted from an earlier `cd`. Deploying from there would
+have read a DETACHED HEAD for the declaration name and, worse,
+`docker-compose.yml`'s RELATIVE bind mounts would have re-pointed the ingress
+config at a worktree that is later reaped. **Both halves of the recorded
+shared-tree hazard, in one command, caught by the `pwd` habit the canon
+prescribes for exactly this.** The shared tree was fast-forwarded to `5e7b6f2e`
+first — an act on a deploy surface, flagged here rather than left to read as
+housekeeping; the loop is the only actor holding that tree, and it is me.
