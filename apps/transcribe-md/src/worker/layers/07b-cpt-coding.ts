@@ -95,6 +95,26 @@ export interface Layer7bInput {
   specialty: string;
   soapFinal: string;
   entitiesJson: string;
+  /** DOES AN OFFICE-VISIT E/M LEVEL APPLY TO THIS VISIT AT ALL?
+   *
+   *  `emAppliesToVisit({ specialtyId, templateSections, noteText })` —
+   *  `@/lib/note-shape`. Both axes: the SPECIALTY (an imaging report has no
+   *  office E/M) and the NOTE SHAPE (neither does an operative or procedure
+   *  note — ruling #123).
+   *
+   *  ⚠️ REQUIRED, NOT OPTIONAL, AND NOT DEFAULTED. This is the COMPUTE layer of
+   *  the three-layer invariant `packages/shared/src/specialties.ts:139-143`
+   *  names — COMPUTE · STORE · EXPORT — and it was the one still keyed on
+   *  specialty alone. A caller that has not thought about applicability must
+   *  fail to TYPECHECK rather than inherit a permissive default; that is the
+   *  same rule `visit-export.ts:66-70` states for the export seam and the same
+   *  one `seedEmBaselineIfUnset` states for the store seam.
+   *
+   *  ⚠️ IT DOES NOT GATE THE WHOLE LAYER, AND THAT DISTINCTION IS THE ITEM.
+   *  Suppressing L7b entirely on an operative note would delete the PROCEDURE
+   *  CPT code from a colonoscopy — the one code that encounter genuinely bills.
+   *  Only the E/M half is dropped; procedures and modifiers are untouched. */
+  emApplies: boolean;
 }
 
 /** Placeholder when neither the clinician nor the coding model named the code.
@@ -243,8 +263,28 @@ export async function runLayer7bCptCoding(
   // row aggregating all rejections per visit. Modifiers are
   // validated as part of the codes (e.g. "99213-25") via isValidCpt.
   const rejectedCodes: string[] = [];
-  let filteredEm = result.em;
-  if (result.em && !isValidCpt(result.em.code)) {
+
+  // F12-c / ruling #123 — THE COMPUTE LAYER. An imaging report and an
+  // OPERATIVE / PROCEDURE note have no office-visit E/M level, so the E/M half
+  // of this layer's output is dropped before anything is persisted.
+  //
+  // ⚠️ WHY THE MODEL IS STILL ASKED, AND WHY THAT IS THE RIGHT TRADE. The
+  // alternative is a second system prompt with the E/M instructions removed.
+  // That would edit the one blob that also carries the PROCEDURE and MODIFIER
+  // instructions, on the clinical coding path, with no way to prove the
+  // procedure output did not move — and a colonoscopy's procedure code is the
+  // one code that encounter genuinely bills. Dropping a field deterministically
+  // after the call cannot move procedures at all. The cost is the output tokens
+  // for an E/M object that is discarded; the benefit is that this change is
+  // provably confined to one field.
+  //
+  // ⚠️ AND IT IS DROPPED **BEFORE** THE ALLOWLIST CHECK, DELIBERATELY. A
+  // suppressed E/M is not an allowlist rejection, and routing it through
+  // `rejectedCodes` would file a `CODING_COACH_REJECTED_INVALID_CPT` audit row
+  // whose stated reason is false — the code was not invalid, it did not apply.
+  // A WRONG field in an audit row is worse than an absent one.
+  let filteredEm = input.emApplies ? result.em : null;
+  if (input.emApplies && result.em && !isValidCpt(result.em.code)) {
     rejectedCodes.push(result.em.code);
     filteredEm = null;
   }
@@ -311,10 +351,39 @@ export async function runLayer7bCptCoding(
       },
     });
   }
-  const filtered: typeof result = {
+  const filtered: typeof result & { emSuppressed?: true } = {
     em: filteredEm,
     procedures: filteredProcedures,
     modifiers: result.modifiers,
+    // ⚠️ THE RECORD CARRIES **WHY** THE FIELD IS ABSENT, AND THAT IS NOT
+    // DECORATION — IT IS WHAT STOPS A LATER READER RE-DERIVING A DIFFERENT
+    // ANSWER ABOUT THE SAME ROW.
+    //
+    // `em: null` alone is ambiguous: it means "the model produced nothing" AND
+    // "nobody asked for one". Every reader that wants to tell those apart was
+    // recomputing `emAppliesToVisit` at READ time — against a note the doctor
+    // may have edited since. Two independent refuters found the same seam:
+    //
+    //   worker writes em:null under emApplies=FALSE (operative note)
+    //     -> doctor edits the note, the shape flips to office
+    //     -> doctor hits Retry; L7b is SKIPPED (`hasContent(cptCodes)` is true
+    //        for ANY object) and records status:'ok'
+    //     -> the incompleteness check recomputes emApplies as TRUE, reads
+    //        em:null, and reports "no E&M code emitted (status:ok)"
+    //     -> "Auto-coding incomplete … Click Retry" that RETRY CANNOT CLEAR,
+    //        because L7b is skipped on every subsequent attempt, until the
+    //        5-retry budget is spent and the route answers 429.
+    //
+    // That is precisely the failure the `emApplies` parameter was introduced to
+    // prevent, reappearing through the resume door — because the guard was keyed
+    // on a RECOMPUTED verdict while the emptiness it judged was produced under a
+    // DIFFERENT one. Same function, two moments, two answers.
+    //
+    // So the verdict is STORED WITH THE ROW IT DESCRIBES. A stored fact cannot
+    // drift from the record it is attached to; a recomputation always can.
+    // Additive JSON — no migration, and every existing consumer reads `em`,
+    // `procedures`, `modifiers` or `codes` and is inert to an extra key.
+    ...(input.emApplies ? {} : { emSuppressed: true as const }),
   };
 
   // Q2 fix-pack §06.6 — flag visits where any procedure landed at low

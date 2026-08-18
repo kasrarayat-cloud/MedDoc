@@ -127,6 +127,7 @@ import {
   type AutomationConfidenceScores,
 } from '@/worker/automation-incomplete';
 import { isImagingReportSpecialty } from '@meddoc/shared/specialties';
+import { emAppliesToVisit } from '@/lib/note-shape';
 
 const CONCURRENCY = Number.parseInt(
   process.env.TRANSCRIBE_MD_WORKER_CONCURRENCY ?? '2',
@@ -962,6 +963,43 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     // pipeline-level E/M suppression; the on-read E/M coaching score is
     // suppressed separately at the visit-detail read (see page.tsx).
     const isImagingReport = isImagingReportSpecialty(visit.specialty);
+
+    // F12-c / ruling #123 — THE SECOND AXIS, AT THE COMPUTE LAYER.
+    //
+    // `flags.cpt` above is the SPECIALTY axis and it stays exactly as it is: an
+    // imaging report skips the whole layer. An OPERATIVE note must NOT, because
+    // the layer is also where a colonoscopy's PROCEDURE code comes from — the
+    // one code that encounter genuinely bills. So the note-shape axis is not a
+    // flag; it is a parameter, and it suppresses one field rather than a layer.
+    //
+    // ⚠️ COMPUTED ONCE, HERE, AND HANDED TO BOTH CONSUMERS. L7b needs it to drop
+    // the E/M half, and `detectIncompleteAutomation` needs it so a deliberately
+    // absent E/M is not reported to the doctor as a failed layer. Two consumers
+    // reading one value is the point — this conjunction was open-coded in seven
+    // places once already and one copy was spelled wrong.
+    //
+    // ⚠️ THE TEMPLATE COMES FROM THE RESOLVED OBJECT, NOT A RE-READ. Every other
+    // caller passes `visit.noteTemplate?.sections`, i.e. the JOINED row for
+    // `noteTemplateId` — and `noteTemplateId` is written from THIS object by L4
+    // (`04-generate-soap.ts:523,562`), so the two name the same template. Using
+    // the object avoids a query and cannot race the write that L4 just made.
+    // `ResolvedNoteTemplate.sections` is `NoteTemplateSection[]`, whose `label`
+    // is the field `normalizedSectionLabels` reads — the same shape, asserted
+    // by the gate rather than assumed here.
+    //
+    // ⚠️ AND THE NOTE TEXT IS `soapFinalForFanout`, WHICH IS WHAT THE VISIT WILL
+    // CARRY. Ruling #126c's silence clause is what makes this reachable at all:
+    // L4 binds the SYSTEM DEFAULT when a doctor has no operative template, its
+    // four labels are exactly the SOAP skeleton, so `templateIsSilent` is true
+    // and the note body's own headings decide. Without that clause the template
+    // arm would answer "office visit" for every untemplated operative note and
+    // this parameter would be permanently true.
+    const emApplies = emAppliesToVisit({
+      specialtyId: visit.specialty,
+      templateSections: noteTemplate.sections,
+      noteText: soapFinalForFanout,
+    });
+
     const flags = {
       icd: process.env.TM_ENABLE_ICD_CPT !== 'false',
       cpt: process.env.TM_ENABLE_ICD_CPT !== 'false' && !isImagingReport,
@@ -1006,6 +1044,7 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
             specialty: visit.specialty,
             soapFinal: soapFinalForFanout,
             entitiesJson,
+            emApplies,
           }),
       },
       {
@@ -1235,6 +1274,11 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         // pass-2's icd empty check only adds signal on RESUMED attempts,
         // where the attempt-start reset wiped that flag and L7a is skipped.
         icdResumed: resumedOk.has('icd_coding'),
+        // F12-c — NOTHING IS PASSED HERE, DELIBERATELY. The helper reads
+        // `cptCodes.emSuppressed`, which L7b wrote in the same run that produced
+        // the blob. Handing it `emApplies` recomputed HERE would re-open the
+        // resume-path banner: on a retry this value is derived from the EDITED
+        // note, while the blob it judges was produced from the original.
       },
     );
     if (incomplete.needsReview) {

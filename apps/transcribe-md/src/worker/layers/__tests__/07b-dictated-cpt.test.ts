@@ -71,6 +71,18 @@ const baseInput = {
   specialty: 'ultrasound',
   soapFinal: VENOUS_DUPLEX_SOAP,
   entitiesJson: '{}',
+  // F12-c — every arm in this file is about the PROCEDURE half, which
+  // `emApplies` does not touch. Set true so these arms keep testing exactly
+  // what they tested before the parameter existed.
+  //
+  // ⚠️ AND THE COMBINATION IS UNREACHABLE IN PRODUCTION, WHICH IS SAID HERE
+  // RATHER THAN LEFT TO BE REDISCOVERED: an `ultrasound` visit never reaches
+  // L7b at all (`worker.ts` sets `flags.cpt = … && !isImagingReport`), so a
+  // real ultrasound run would carry `emApplies: false` or would not run. That
+  // does not weaken these arms — the dictated-code merge is specialty-agnostic
+  // and none of them reads `result.em` — but a reader must not take this
+  // fixture as evidence about how imaging visits are coded.
+  emApplies: true,
 };
 
 beforeEach(() => {
