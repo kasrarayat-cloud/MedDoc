@@ -19,15 +19,86 @@ import { ultrasoundSpecialtyEnabled } from '@meddoc/shared/specialties';
 import {
   emAppliesToVisit,
   isProcedureNoteShape,
+  isProcedureNoteShapeFromText,
+  OFFICE_SKELETON_FLOOR,
+  OFFICE_SKELETON_SECTIONS,
   normalizeSectionLabel,
+  normalizedNoteHeadings,
   normalizedSectionLabels,
   procedureNoteMarkerCount,
+  procedureNoteMarkerCountFromText,
+  templateIsSilent,
   PROCEDURE_NOTE_MARKER_FLOOR,
   PROCEDURE_NOTE_SECTION_MARKERS,
 } from '../note-shape';
 
 const sec = (labels: string[]) =>
   labels.map((label, i) => ({ key: `k${i}`, label, order: i }));
+
+/** The note body for every arm that predates ruling #126's note-text fallback.
+ *  An empty body carries no headings, so the fallback cannot fire and those
+ *  arms assert exactly what they asserted before it existed. */
+const EMPTY_NOTE = '';
+
+/** A note body rendered from the operative template — the SAME three markers
+ *  the 19 production operative notes carry, measured 2026-08-18. */
+const OP_NOTE_BODY = [
+  '## PROCEDURE',
+  'Colonoscopy.',
+  '',
+  '## PREOPERATIVE DIAGNOSIS',
+  'Screening.',
+  '',
+  '## POSTOPERATIVE FINDINGS',
+  'Two polyps.',
+  '',
+  '## DESCRIPTION OF PROCEDURE',
+  'The scope was advanced.',
+  '',
+  '## RECOMMENDATIONS',
+  'Repeat in five years.',
+].join('\n');
+
+/** ⚠️ THE FAMILY THE INDEPENDENT ADVERSARIAL PASS FOUND — a routine, billable
+ *  POST-OP OFFICE FOLLOW-UP. A full SOAP skeleton PLUS two operative markers.
+ *  A bare `markers >= 2` rule calls this an operative note and deletes the
+ *  doctor's documentation level from a visit that legitimately has one.
+ *
+ *  It is one of four families named, verbatim, in this repository's own prior
+ *  art at `worker/layers/structure-mismatch-reason.ts:66-70` — where the same
+ *  naive rule shipped, was found CONFIDENTLY BACKWARDS, and was corrected with
+ *  the office counterweight that #126 now carries here. */
+const POST_OP_OFFICE_BODY = [
+  '## SUBJECTIVE',
+  'Month six after laparoscopic Roux-en-Y gastric bypass. Routine follow-up.',
+  '',
+  '## OBJECTIVE',
+  'BP 122/74. Incisions well healed.',
+  '',
+  '## POSTOPERATIVE DIAGNOSIS',
+  'Status post laparoscopic Roux-en-Y gastric bypass.',
+  '',
+  '## POSTOPERATIVE FINDINGS',
+  'Weight loss on target. No dumping syndrome.',
+  '',
+  '## ASSESSMENT',
+  'Doing well.',
+  '',
+  '## PLAN',
+  'Switch to calcium citrate 1200 mg BID.',
+].join('\n');
+
+/** An ordinary office-visit body. No markers anywhere. */
+const OFFICE_NOTE_BODY = [
+  '## CHIEF COMPLAINT',
+  'Follow-up.',
+  '',
+  '## EXAM',
+  'Unremarkable.',
+  '',
+  '## IMPRESSION & PLAN',
+  'Continue current therapy.',
+].join('\n');
 
 // ── the real production templates ───────────────────────────────────────────
 const OP_NOTE = sec([
@@ -149,7 +220,7 @@ describe('note shape — the OVER-SUPPRESSION guard, which is the arm that matte
     ]);
     expect(isProcedureNoteShape(officeWithProcedure)).toBe(false);
     expect(
-      emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: officeWithProcedure })
+      emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: officeWithProcedure, noteText: EMPTY_NOTE })
     ).toBe(true);
   });
 
@@ -188,14 +259,25 @@ describe('note shape — malformed and absent input fails OPEN, never into suppr
     expect(isProcedureNoteShape(input)).toBe(false);
   });
 
-  it('an untemplated visit keeps whatever its specialty decided', () => {
+  it('an untemplated visit keeps whatever its specialty decided — WHEN ITS NOTE IS SILENT TOO', () => {
     // 30 of 46 production visits have no template at all (measured
     // 2026-08-18; the recon's population of 45 had grown by one). The safe
     // direction is
     // that they are unaffected by this change — the alternative silently
     // deletes levels from two thirds of the population.
-    expect(emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: null })).toBe(true);
-    expect(emAppliesToVisit({ specialtyId: 'primary-care', templateSections: undefined })).toBe(true);
+    //
+    // ⚠️ THE TITLE OF THIS ARM WAS NARROWED BY RULING #126 AND THE NARROWING IS
+    // THE POINT. It used to read "an untemplated visit keeps whatever its
+    // specialty decided", full stop — and that sentence became FALSE the
+    // moment the note-text fallback landed, for the 9 untemplated production
+    // visits whose own headings say operative. A test whose NAME outlives its
+    // claim is how a stale guarantee gets re-read as a current one.
+    expect(emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: null, noteText: EMPTY_NOTE })).toBe(true);
+    expect(emAppliesToVisit({ specialtyId: 'primary-care', templateSections: undefined, noteText: EMPTY_NOTE })).toBe(true);
+    // The measured majority case: untemplated AND an ordinary office body.
+    expect(
+      emAppliesToVisit({ specialtyId: 'bariatric-surgery', templateSections: null, noteText: OFFICE_NOTE_BODY })
+    ).toBe(true);
   });
 });
 
@@ -226,15 +308,15 @@ describe('normalizeSectionLabel', () => {
 describe('emAppliesToVisit — BOTH axes, and the conjunction lives in ONE place', () => {
   it('THE DEFECT F12 FIXES: a GI operative note gets NO office level', () => {
     expect(
-      emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: OP_NOTE })
+      emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: OP_NOTE, noteText: EMPTY_NOTE })
     ).toBe(false);
     expect(
-      emAppliesToVisit({ specialtyId: 'bariatric-surgery', templateSections: OP_NOTE })
+      emAppliesToVisit({ specialtyId: 'bariatric-surgery', templateSections: OP_NOTE, noteText: EMPTY_NOTE })
     ).toBe(false);
     // The trailing-colon template must suppress identically — it is the same
     // clinical document, and a colon is not a semantic difference.
     expect(
-      emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: OP_NOTE_TRAILING_COLON })
+      emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: OP_NOTE_TRAILING_COLON, noteText: EMPTY_NOTE })
     ).toBe(false);
   });
 
@@ -243,10 +325,10 @@ describe('emAppliesToVisit — BOTH axes, and the conjunction lives in ONE place
     // suppression silently stripping E/M from office visits". Same specialty
     // ids as the row above — only the note shape differs.
     expect(
-      emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: PRIMARY_CARE })
+      emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: PRIMARY_CARE, noteText: EMPTY_NOTE })
     ).toBe(true);
     expect(
-      emAppliesToVisit({ specialtyId: 'bariatric-surgery', templateSections: SYSTEM_SOAP })
+      emAppliesToVisit({ specialtyId: 'bariatric-surgery', templateSections: SYSTEM_SOAP, noteText: EMPTY_NOTE })
     ).toBe(true);
   });
 
@@ -279,20 +361,363 @@ describe('emAppliesToVisit — BOTH axes, and the conjunction lives in ONE place
       // An imaging report stays suppressed whatever its sections say — the two
       // axes are AND-ed, so neither can override the other.
       expect(
-        emAppliesToVisit({ specialtyId: 'ultrasound', templateSections: PRIMARY_CARE })
+        emAppliesToVisit({ specialtyId: 'ultrasound', templateSections: PRIMARY_CARE, noteText: EMPTY_NOTE })
       ).toBe(false);
       expect(
-        emAppliesToVisit({ specialtyId: 'ultrasound', templateSections: null })
+        emAppliesToVisit({ specialtyId: 'ultrasound', templateSections: null, noteText: EMPTY_NOTE })
       ).toBe(false);
     });
 
     it('and the office arm is unaffected by the flag', () => {
       expect(
-        emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: PRIMARY_CARE })
+        emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: PRIMARY_CARE, noteText: EMPTY_NOTE })
       ).toBe(true);
       expect(
-        emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: OP_NOTE })
+        emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: OP_NOTE, noteText: EMPTY_NOTE })
       ).toBe(false);
     });
+  });
+});
+
+// ============================================================================
+// RULING #126 — THE NOTE-TEXT FALLBACK.
+// ----------------------------------------------------------------------------
+// F12-a's own adversarial pass found that the shape axis hung on a LIVE
+// RELATION: `TranscribeVisit.noteTemplate` is `onDelete: SetNull`, so deleting
+// a template re-admits an office E/M level onto a signed operative record.
+//
+// ⚠️ AND THE MEASUREMENT MADE IT BIGGER THAN THE FINDING SAID. Production,
+// 2026-08-18, all 46 visits:
+//
+//     30 of 46 carry NO template at all
+//      9 of those 30 are operative notes BY THEIR OWN HEADINGS (7 SIGNED)
+//      4 of those 9 currently carry an office E/M code
+//      2 of those 4 carry a FROZEN signedCode on a signed operative record
+//
+// So the template-only classifier suppressed ONE production row. The hole was
+// the common case, not a future hazard.
+//
+// The marker distribution over those 46 notes is BIMODAL — 27 notes with 0
+// markers and 19 with exactly 3, nothing in between — so the floor of 2 has a
+// margin of one in BOTH directions on the real corpus.
+// ============================================================================
+
+describe('ruling #126 — the note body is read when the template is silent', () => {
+  it('THE FINDING: a deleted template no longer re-admits an office level', () => {
+    // The exact sequence from the adversarial pass: a signed colonoscopy
+    // op-note whose bound template row is deleted, so `noteTemplateId` nulls.
+    expect(
+      emAppliesToVisit({
+        specialtyId: 'gastroenterology',
+        templateSections: null, // ← the template was deleted
+        noteText: OP_NOTE_BODY, // ← the record itself still says what it is
+      })
+    ).toBe(false);
+  });
+
+  it('and the 9 untemplated production operative notes are covered by the same arm', () => {
+    for (const specialtyId of ['gastroenterology', 'bariatric-surgery']) {
+      expect(
+        emAppliesToVisit({ specialtyId, templateSections: null, noteText: OP_NOTE_BODY })
+      ).toBe(false);
+    }
+  });
+
+  it('THE POSITIVE ARM: an untemplated OFFICE visit keeps its level', () => {
+    // #123: an over-broad suppression that strips E/M from office visits is
+    // WORSE than the defect being fixed. 21 of the 30 untemplated production
+    // visits are this case.
+    expect(
+      emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: null, noteText: OFFICE_NOTE_BODY })
+    ).toBe(true);
+  });
+
+  it('⚠️ THE FALLBACK FIRES ONLY INTO SILENCE — a template that said OFFICE is not overruled', () => {
+    // This is the whole narrowness of #126, and the arm that goes red if
+    // somebody "simplifies" the fallback into an OR across both sources.
+    // A template WITH labels and no markers has an opinion: office visit.
+    expect(templateIsSilent(PRIMARY_CARE)).toBe(false);
+    expect(
+      emAppliesToVisit({
+        specialtyId: 'gastroenterology',
+        templateSections: PRIMARY_CARE, // ← says office
+        noteText: OP_NOTE_BODY, // ← says operative, and does NOT win
+      })
+    ).toBe(true);
+  });
+
+  it('a template with labels but no markers is NOT silent; an empty or absent one IS', () => {
+    expect(templateIsSilent(null)).toBe(true);
+    expect(templateIsSilent(undefined)).toBe(true);
+    expect(templateIsSilent([])).toBe(true);
+    expect(templateIsSilent('nonsense')).toBe(true);
+    expect(templateIsSilent([{ key: 'a' }, { key: 'b' }])).toBe(true); // no labels
+    expect(templateIsSilent(SYSTEM_SOAP)).toBe(false);
+    expect(templateIsSilent(OP_NOTE)).toBe(false);
+  });
+
+  it('the template arm still wins when it says OPERATIVE and the body is silent', () => {
+    // The one production visit where the two sources disagree in the other
+    // direction: template operative, note body carrying no markers (measured
+    // 2026-08-18 — 1 visit, SIGNED, with a frozen signedCode).
+    expect(
+      emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: OP_NOTE, noteText: OFFICE_NOTE_BODY })
+    ).toBe(false);
+  });
+
+  it('the specialty axis still cannot be re-admitted by either source', () => {
+    const prev = process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY;
+    process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY = 'true';
+    try {
+      expect(ultrasoundSpecialtyEnabled()).toBe(true); // control
+      expect(
+        emAppliesToVisit({ specialtyId: 'ultrasound', templateSections: null, noteText: OFFICE_NOTE_BODY })
+      ).toBe(false);
+    } finally {
+      if (prev === undefined) delete process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY;
+      else process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY = prev;
+    }
+  });
+});
+
+// ============================================================================
+// THE OFFICE COUNTERWEIGHT — found by F12-a's INDEPENDENT adversarial pass.
+// ----------------------------------------------------------------------------
+// ⚠️ THE PASS DID NOT INVENT THIS. It found PRIOR ART IN THIS REPOSITORY:
+// `worker/layers/structure-mismatch-reason.ts:53-76` had already shipped the
+// naive `markers >= 2` rule, already found it CONFIDENTLY BACKWARDS on four
+// families of ordinary office visit, and already fixed it by testing the SOAP
+// skeleton FIRST. Nothing in F12-a's own proofs could have found this — the
+// suite, the four mutation proofs and the production census all shared the
+// author's assumption that markers alone decide.
+//
+// The consequence was priced the way #123 prices it: `templateKind` only
+// chooses the wording of a BANNER, while this predicate decides whether a
+// billable level appears on a signed clinical document.
+// ============================================================================
+
+describe('ruling #126 — the OFFICE COUNTERWEIGHT, and it is tested FIRST', () => {
+  it('🔴 THE FINDING: a post-op office follow-up KEEPS its level', () => {
+    // S/O/A/P + POSTOPERATIVE DIAGNOSIS + POSTOPERATIVE FINDINGS. Two markers,
+    // so a bare `markers >= 2` deletes this doctor's documentation level from
+    // a routine billable office visit — and silently, on export.
+    expect(procedureNoteMarkerCountFromText(POST_OP_OFFICE_BODY)).toBe(2);
+    expect(procedureNoteMarkerCountFromText(POST_OP_OFFICE_BODY)).toBeGreaterThanOrEqual(
+      PROCEDURE_NOTE_MARKER_FLOOR,
+    );
+    // …and the verdict is nevertheless NOT an operative note.
+    expect(isProcedureNoteShapeFromText(POST_OP_OFFICE_BODY)).toBe(false);
+    expect(
+      emAppliesToVisit({
+        specialtyId: 'bariatric-surgery',
+        templateSections: null,
+        noteText: POST_OP_OFFICE_BODY,
+      })
+    ).toBe(true);
+  });
+
+  it('the COUNT and the VERDICT are no longer interchangeable, and that is the shape of the fix', () => {
+    // Stated as a measurement so nobody "simplifies" the verdict back into
+    // `count >= floor`. The margin is still exported as evidence; it is no
+    // longer the answer.
+    const count = procedureNoteMarkerCountFromText(POST_OP_OFFICE_BODY);
+    expect(count >= PROCEDURE_NOTE_MARKER_FLOOR).toBe(true);
+    expect(isProcedureNoteShapeFromText(POST_OP_OFFICE_BODY)).toBe(false);
+  });
+
+  it('the same family on the TEMPLATE arm, because one arm fixed is a half fix', () => {
+    const postOpTemplate = sec([
+      'SUBJECTIVE',
+      'OBJECTIVE',
+      'POSTOPERATIVE DIAGNOSIS',
+      'POSTOPERATIVE FINDINGS',
+      'ASSESSMENT',
+      'PLAN',
+    ]);
+    expect(procedureNoteMarkerCount(postOpTemplate)).toBe(2);
+    expect(isProcedureNoteShape(postOpTemplate)).toBe(false);
+    expect(
+      emAppliesToVisit({
+        specialtyId: 'bariatric-surgery',
+        templateSections: postOpTemplate,
+        noteText: EMPTY_NOTE,
+      })
+    ).toBe(true);
+  });
+
+  it('the other three families the prior art names', () => {
+    const families: Array<[string, string[]]> = [
+      // derm office with excision
+      ['derm excision', ['SUBJECTIVE', 'OBJECTIVE', 'SPECIMENS REMOVED', 'ESTIMATED BLOOD LOSS', 'ASSESSMENT', 'PLAN']],
+      // pre-op H&P, done in the office
+      ['pre-op H&P', ['SUBJECTIVE', 'OBJECTIVE', 'PREOPERATIVE DIAGNOSIS', 'INDICATIONS FOR PROCEDURE', 'ASSESSMENT', 'PLAN']],
+      // surgical consult, done in the office
+      ['surgical consult', ['SUBJECTIVE', 'OBJECTIVE', 'DESCRIPTION OF PROCEDURE', 'OPERATIVE FINDINGS', 'ASSESSMENT', 'PLAN']],
+    ];
+    for (const [name, labels] of families) {
+      expect(procedureNoteMarkerCount(sec(labels)), `${name}: fixture must be non-vacuous`).toBeGreaterThanOrEqual(
+        PROCEDURE_NOTE_MARKER_FLOOR,
+      );
+      expect(isProcedureNoteShape(sec(labels)), `${name} is an OFFICE visit`).toBe(false);
+      expect(
+        isProcedureNoteShapeFromText(labels.map((l) => '## ' + l).join('\n')),
+        `${name} is an OFFICE visit on the note-text arm too`,
+      ).toBe(false);
+    }
+  });
+
+  it('⚠️ ALL FOUR, NOT THREE — the measured signed row that decided the threshold', () => {
+    // Production visit `cmrxxj1rn000h01pnoloiiajx`, SIGNED, signedCode 99214:
+    // SUBJECTIVE · OBJECTIVE · ASSESSMENT (no PLAN) alongside a full operative
+    // skeleton. The prior art's SECOND clause (`op >= 2 && office < 3`) would
+    // hand this signed operative record its office level back. Copying prior
+    // art verbatim would have been the error.
+    const threeOfFour = [
+      'SUBJECTIVE',
+      'OBJECTIVE',
+      'ASSESSMENT',
+      'PROCEDURE',
+      'PREOPERATIVE DIAGNOSIS',
+      'DESCRIPTION OF PROCEDURE',
+      'POSTOPERATIVE FINDINGS',
+      'CONSENT',
+      'RECOMMENDATIONS',
+    ];
+    expect(OFFICE_SKELETON_FLOOR).toBe(4);
+    expect(isProcedureNoteShape(sec(threeOfFour))).toBe(true);
+    expect(isProcedureNoteShapeFromText(threeOfFour.map((l) => '## ' + l).join('\n'))).toBe(true);
+  });
+
+  it('the counterweight cannot re-admit a level the SPECIALTY axis refused', () => {
+    const prev = process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY;
+    process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY = 'true';
+    try {
+      expect(ultrasoundSpecialtyEnabled()).toBe(true); // control
+      expect(
+        emAppliesToVisit({
+          specialtyId: 'ultrasound',
+          templateSections: null,
+          noteText: POST_OP_OFFICE_BODY,
+        })
+      ).toBe(false);
+    } finally {
+      if (prev === undefined) delete process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY;
+      else process.env.NEXT_PUBLIC_ULTRASOUND_SPECIALTY = prev;
+    }
+  });
+
+  it('⚠️ EXACT MATCH, NEVER `includes` — "IMPLANT" contains "plan"', () => {
+    // The prior art matches office markers by substring. Copying that here
+    // would let an operative note score an office point off `IMPLANT REMOVAL`
+    // and, with three more, keep its office E/M level. This repository has a
+    // canon section on exactly this family ('dashboard' contains 'board').
+    expect('IMPLANT'.toLowerCase().includes('plan')).toBe(true); // the trap, demonstrated
+    const opWithImplant = [
+      'IMPLANT REMOVAL',
+      'SUBJECTIVE',
+      'OBJECTIVE',
+      'ASSESSMENT',
+      'PREOPERATIVE DIAGNOSIS',
+      'DESCRIPTION OF PROCEDURE',
+    ];
+    // Exact matching scores office = 3 (SUBJECTIVE/OBJECTIVE/ASSESSMENT), below
+    // the floor, so the operative markers still decide. A substring scan would
+    // score 4 and hand this operative note a level.
+    expect(isProcedureNoteShape(sec(opWithImplant))).toBe(true);
+  });
+
+  it('the office skeleton is exactly the four SOAP sections', () => {
+    expect([...OFFICE_SKELETON_SECTIONS]).toEqual(['SUBJECTIVE', 'OBJECTIVE', 'ASSESSMENT', 'PLAN']);
+    // Non-vacuity: none of them may also be an operative marker, or the
+    // counterweight and the trigger would fight over the same heading.
+    for (const s of OFFICE_SKELETON_SECTIONS) {
+      expect(PROCEDURE_NOTE_SECTION_MARKERS).not.toContain(s);
+    }
+  });
+
+  it('and a pure operative note is untouched by the counterweight', () => {
+    // The regression direction: the counterweight must not have quietly
+    // switched the whole classifier off.
+    expect(isProcedureNoteShape(OP_NOTE)).toBe(true);
+    expect(isProcedureNoteShapeFromText(OP_NOTE_BODY)).toBe(true);
+  });
+});
+
+describe('ruling #126 — heading extraction from the note body', () => {
+  it('counts DISTINCT markers, and the operative body carries exactly three', () => {
+    // The margin, not only the verdict — the same reason the template arm
+    // exports its count. Production's operative notes carry 3; a silent drift
+    // to 1 would flip the verdict with nothing to see.
+    expect(procedureNoteMarkerCountFromText(OP_NOTE_BODY)).toBe(3);
+    expect(procedureNoteMarkerCountFromText(OFFICE_NOTE_BODY)).toBe(0);
+  });
+
+  it('a repeated heading counts ONCE — two signals means two DIFFERENT markers', () => {
+    const repeated = '## PREOPERATIVE DIAGNOSIS\na\n## PREOPERATIVE DIAGNOSIS\nb';
+    expect(procedureNoteMarkerCountFromText(repeated)).toBe(1);
+    expect(isProcedureNoteShapeFromText(repeated)).toBe(false);
+  });
+
+  it('ONE marker is below the floor in the note body too', () => {
+    const oneMarker = '## CHIEF COMPLAINT\nx\n## ESTIMATED BLOOD LOSS\n50 mL\n## PLAN\ny';
+    expect(procedureNoteMarkerCountFromText(oneMarker)).toBe(1);
+    expect(isProcedureNoteShapeFromText(oneMarker)).toBe(false);
+  });
+
+  it('PROCEDURE and CONSENT in the BODY do not suppress either', () => {
+    // The over-suppression omission has to hold on both arms, or the fallback
+    // is a second, laxer classifier wearing the same name.
+    const officeWithProcedure =
+      '## CHIEF COMPLAINT\nx\n## PROCEDURE\nbiopsy\n## CONSENT\nobtained\n## PLAN\ny';
+    expect(procedureNoteMarkerCountFromText(officeWithProcedure)).toBe(0);
+    expect(isProcedureNoteShapeFromText(officeWithProcedure)).toBe(false);
+  });
+
+  it('the trailing colon is stripped in the BODY as well as in the template', () => {
+    // The fourth production template spells every label with a colon, and the
+    // notes it generates carry the colon into the body.
+    const colons = '## PREOPERATIVE DIAGNOSIS:\na\n## DESCRIPTION OF PROCEDURE:\nb';
+    expect(isProcedureNoteShapeFromText(colons)).toBe(true);
+  });
+
+  it('heading depth 1..6 all count, and prose mentioning a marker does not', () => {
+    expect(normalizedNoteHeadings('# A\n## B\n###### C')).toEqual(['A', 'B', 'C']);
+    // ⚠️ PROSE IS NOT A HEADING. A note that says the words "preoperative
+    // diagnosis" in a sentence must not classify the document — this codebase
+    // has been bitten four times by a matcher satisfied by prose.
+    const prose = 'The preoperative diagnosis was X and the description of procedure follows.';
+    expect(procedureNoteMarkerCountFromText(prose)).toBe(0);
+    // Seven hashes is not a heading in markdown either.
+    expect(normalizedNoteHeadings('####### G')).toEqual([]);
+  });
+
+  it('a heading with no space after the hashes is NOT read as a heading', () => {
+    // The controlled choice: both this form and the permissive one returned an
+    // IDENTICAL distribution over all 46 production notes (27 zero / 19 three),
+    // so the strictness costs nothing on the real corpus. Pinned so the choice
+    // is visible if the corpus ever changes.
+    expect(normalizedNoteHeadings('##PREOPERATIVE DIAGNOSIS')).toEqual([]);
+  });
+
+  it.each([
+    ['null', null],
+    ['undefined', undefined],
+    ['an empty string', ''],
+    ['a number', 7],
+    ['an object', { text: '## PREOPERATIVE DIAGNOSIS' }],
+    ['an array', ['## PREOPERATIVE DIAGNOSIS', '## DESCRIPTION OF PROCEDURE']],
+  ])('%s reads as NO headings and therefore fails OPEN', (_name, input) => {
+    expect(normalizedNoteHeadings(input)).toEqual([]);
+    expect(isProcedureNoteShapeFromText(input)).toBe(false);
+  });
+
+  it('the two arms share ONE marker list and ONE floor', () => {
+    // A second copy of either would drift the day one is edited, and both
+    // would still return a number. Asserted through the structures rather than
+    // by reading the file.
+    const labels = PROCEDURE_NOTE_SECTION_MARKERS.slice(0, PROCEDURE_NOTE_MARKER_FLOOR);
+    const body = labels.map((l) => '## ' + l).join('\n');
+    expect(isProcedureNoteShapeFromText(body)).toBe(true);
+    expect(isProcedureNoteShape(sec([...labels]))).toBe(true);
   });
 });

@@ -158,6 +158,10 @@ export const POST = withApiHandler<{ id: string }>(
       !emAppliesToVisit({
         specialtyId: visit.specialty,
         templateSections: visit.noteTemplate?.sections ?? null,
+        // Same text this route scores against 30 lines below
+        // (`visit.soapFinal ?? visit.soapDraft ?? ''`), so the refusal and the
+        // score can never disagree about what document this is.
+        noteText: visit.soapFinal ?? visit.soapDraft ?? '',
       })
     ) {
       // ⚠️ THE MESSAGE NAMES WHICH REASON APPLIES. "This is an imaging report"

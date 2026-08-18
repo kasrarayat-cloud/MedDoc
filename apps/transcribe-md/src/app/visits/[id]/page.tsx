@@ -605,6 +605,10 @@ async function VisitBody(props: VisitBodyProps) {
   const emNotApplicable = !emAppliesToVisit({
     specialtyId: props.specialtyId,
     templateSections: props.templateSections,
+    // `soapText` is already `signedSoap ?? soapFinal` for a signed visit and
+    // `soapFinal` otherwise — the same rule the export seam applies, so the
+    // page and the PDF classify one visit the same way.
+    noteText: soapText,
   });
   // Imaging reports skip E/M scoring entirely (left null → the Billing surface
   // renders the "not applicable" note). Only clinic encounters are scored.
@@ -718,6 +722,7 @@ async function VisitBody(props: VisitBodyProps) {
   const gateSet = signGates({
     specialty: props.specialtyId,
     templateSections: props.templateSections,
+    noteText: soapText,
     emPendingChange: props.emPendingChange,
     emStale: props.emStale,
   });

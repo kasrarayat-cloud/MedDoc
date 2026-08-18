@@ -120,6 +120,9 @@ describe('the padlocked Signed node', () => {
     const set = gatesFor({
       specialty: 'primary-care',
       templateSections: null,
+      // ruling #126 — no note body here, so the note-text fallback cannot fire
+      // and these arms assert exactly what they asserted before it existed.
+      noteText: '',
       emPendingChange: { from: '99213', to: '99214', cause: 'note_edited', at: '2026-07-30T00:00:00Z' },
     });
     render(
@@ -136,6 +139,9 @@ describe('the padlocked Signed node', () => {
     const set = gatesFor({
       specialty: 'primary-care',
       templateSections: null,
+      // ruling #126 — no note body here, so the note-text fallback cannot fire
+      // and these arms assert exactly what they asserted before it existed.
+      noteText: '',
       emPendingChange: null,
       attested: true,
     });
@@ -163,6 +169,9 @@ describe('imaging never grows an E/M term', () => {
     const set = gatesFor({
       specialty: 'ultrasound',
       templateSections: null,
+      // ruling #126 — no note body here, so the note-text fallback cannot fire
+      // and these arms assert exactly what they asserted before it existed.
+      noteText: '',
       emPendingChange: null,
     });
     const { container } = render(
@@ -180,6 +189,9 @@ describe('imaging never grows an E/M term', () => {
     const set = gatesFor({
       specialty: 'primary-care',
       templateSections: null,
+      // ruling #126 — no note body here, so the note-text fallback cannot fire
+      // and these arms assert exactly what they asserted before it existed.
+      noteText: '',
       emPendingChange: {
         from: '99213',
         to: '99214',
@@ -197,6 +209,9 @@ describe('imaging never grows an E/M term', () => {
     const set = gatesFor({
       specialty: 'ultrasound',
       templateSections: null,
+      // ruling #126 — no note body here, so the note-text fallback cannot fire
+      // and these arms assert exactly what they asserted before it existed.
+      noteText: '',
       emPendingChange: {
         from: '99213',
         to: '99214',

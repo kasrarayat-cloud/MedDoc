@@ -200,6 +200,18 @@ export const POST = withApiHandler<{ id: string }>(
       applies: emAppliesToVisit({
         specialtyId: visit.specialty,
         templateSections: visit.noteTemplate?.sections ?? null,
+        // The PRE-MERGE text, matching `priorSoap` above. The merge rewrites
+        // section CONTENT, not the template's headings, so the two agree —
+        // but the baseline is a statement about the note as it stood.
+        //
+        // ⚠️ `?? soapDraft ?? ''` MIRRORS `currentSoap` AT `:133`, and the
+        // mirror is the point rather than defensiveness for its own sake. The
+        // sibling override route already spelled it this way; this one did
+        // not, so the two routes disagreed about what "the note" is on a READY
+        // visit with a null `soapFinal`. Whether that row is reachable is
+        // genuinely unsettled — `rescore-em.ts:98` guards against it — and two
+        // answers to one question is the defect regardless of which is right.
+        noteText: visit.soapFinal ?? visit.soapDraft ?? '',
       }),
     });
 

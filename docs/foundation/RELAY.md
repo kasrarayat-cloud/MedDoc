@@ -345,6 +345,22 @@ unattended while the fault was live is how a CI fix becomes a CI outage.
 
 ### 🔴 F12 — E/M ON PROCEDURE NOTES, AND THE EXPORT'S CREAM E/M BLOCK — **AT F6's HEAD** (ruling #123)
 
+> ⚠️ **STATUS, KEPT HERE SO A READER DOES NOT HAVE TO REACH THE END OF THIS FILE
+> TO LEARN IT — the queue table's own recorded lesson, *close the row in the
+> same pass that closes the item*.**
+>
+> - **The two parts NO LONGER ship together — ruling #125 (PROVISIONAL) split
+>   them**, because #123's own required recon refuted part (1): no export
+>   builder paints the cream, and `EmLevelCard` was already hosted by R4b.
+> - **(1) SKIN — PARKED.** It needs one fact from the owner (the date of the
+>   PDF, or the file), not a build.
+> - **(2) POLICY — BUILT, and as of 2026-08-18 its blocking finding is CLOSED
+>   and the MANDATORY independent adversarial pass has RUN** (four refuters,
+>   four lenses, two findings, both fixed; two more filed). **Ruling #126.**
+>   See *"F12-a — THE BLOCKING FINDING IS CLOSED"* at the end of this file for
+>   the measurements, the 8 mutation proofs and the honest limits.
+> - **What F12-a still owes: the merge-commit citation and the §2.5 deploy.**
+
 **OWNER FINDING, ON HIS OWN EXPORTED PDF. Two parts; both ship together.**
 
 **(1) SKIN.** The E/M *"Documentation Level"* block renders in **LEGACY CREAM**
@@ -18678,3 +18694,221 @@ Then the population, with the classifier's marker logic mirrored in SQL:
 ⚠️ **THE RECON'S `1` WAS RIGHT AND ITS TOTAL WAS NOT** — 45 → **46**, one visit
 added since 2026-08-17. Re-measured rather than inherited, which is the only
 reason the drift is visible at all.
+
+### ✅ F12-a — THE BLOCKING FINDING IS CLOSED, AND THE INDEPENDENT ADVERSARIAL PASS FOUND A SECOND ONE THAT WAS WORSE — **2026-08-18, run `20260818-080141-b1` session 02**
+
+**Session 01 built F12-a, gated it 4 of 4, and deliberately left PR #724 a DRAFT
+on a finding its own refutation pass produced.** It also recorded, honestly, that
+the pass *"does not have the property that makes the gate work"* — it had no
+independent refuters. This session closed the finding and ran the pass #123
+actually requires. **Four refuters, four distinct lenses. Two returned findings.
+Both were verified against source and against production before a line moved.**
+
+#### 🔴 FINDING 1 (session 01's, now CLOSED) — the suppression hung on a LIVE RELATION
+
+`schema.prisma:2225` is `onDelete: SetNull`, and
+`note-template-lifecycle.ts:466` is a doctor-reachable HARD `deleteMany`. So
+deleting a template retroactively nulls `noteTemplateId` on every past visit
+**including signed ones**, the classifier fails OPEN by design, and an office
+E/M level re-appears on a signed operative record.
+
+⚠️ **AND THE MEASUREMENT MADE IT BIGGER THAN THE FINDING SAID — this was never a
+future hazard.** Measured read-only against production, 2026-08-18, all 46
+visits:
+
+| the question | the answer |
+|---|---|
+| visits carrying NO template at all | **30 of 46** |
+| of those, operative notes BY THEIR OWN HEADINGS | **9** (7 SIGNED) |
+| of those nine, carrying an office E/M code | **4** |
+| of those four, carrying a FROZEN `signedCode` | **2** |
+| rows the template-only classifier suppressed | **1** |
+
+**So F12-a as it stood removed an office level from ONE production row while
+four operative notes kept theirs.** The hole was the common case.
+
+**FIXED (ruling #126a): when the template is SILENT, classify from the NOTE
+BODY's own markdown headings** — the record itself, which survives the
+template's deletion. The fallback fires **only into silence**
+(`templateIsSilent` = the template contributes zero labels), so it changes no
+verdict for any templated visit. Widening it to an OR across both sources is a
+TIGHTENING and is the legal direction to be wrong in; #123 says over-suppression
+is the worse error, so the narrow form was taken.
+
+#### 🔴 FINDING 2 (the independent pass, and NOTHING THIS SESSION OWNED COULD HAVE FOUND IT) — the classifier was missing the OFFICE COUNTERWEIGHT **this repository had already written once**
+
+⚠️ **THE REFUTER DID NOT REASON IT OUT — IT FOUND PRIOR ART.**
+`worker/layers/structure-mismatch-reason.ts:53-76` had already shipped a bare
+`markers >= 2` rule, already found it **CONFIDENTLY BACKWARDS**, and already
+corrected it. Its comment names four families, and every one is an ORDINARY
+BILLABLE OFFICE VISIT:
+
+    post-op office follow-up   S/O/A/P + POSTOPERATIVE DIAGNOSIS/FINDINGS
+    derm office w/ excision    S/O/A/P + SPECIMENS + ESTIMATED BLOOD LOSS
+    pre-op H&P (office)        S/O/A/P + PREOPERATIVE DIAGNOSIS
+    surgical consult (office)  S/O/A/P + DESCRIPTION OF PROCEDURE DISCUSSED
+
+`note-shape.ts` had no counterweight on **either** arm, so each of those loses
+its documentation level — silently, on export, on a signed record. And the
+reachability is #126a's own mechanism pointed the other way: **delete a
+post-op-follow-up template and every past office visit it generated becomes
+template-silent, so the note body's own headings then classify it operative.**
+
+⚠️ **`templateKind` only chooses the WORDING OF A BANNER. This predicate decides
+whether a billable level appears on a signed clinical document.** Same mistake,
+consequence #123 calls worse than the defect being fixed.
+
+**FIXED (ruling #126b): the full SOAP skeleton is tested FIRST and the markers
+cannot overrule it.**
+
+⚠️ **THE PRIOR ART'S SECOND CLAUSE IS DELIBERATELY NOT COPIED, AND MEASUREMENT
+IS WHY.** `templateKind` also declines `operative` when `office >= 3`. Production
+visit `cmrxxj1rn000h01pnoloiiajx` — **SIGNED, `signedCode` 99214** — carries
+SUBJECTIVE · OBJECTIVE · ASSESSMENT (three, no PLAN) beside PROCEDURE ·
+PREOPERATIVE DIAGNOSIS · DESCRIPTION OF PROCEDURE · POSTOPERATIVE FINDINGS ·
+CONSENT. It is an operative note whose generator also emitted S/O/A, and
+`office >= 3` would hand it its office level back. **ALL FOUR is the threshold,
+and copying prior art verbatim would have been the error.**
+
+⚠️ **MATCHING IS EXACT, NEVER `includes`.** The prior art matches by substring;
+**`'IMPLANT'` contains `'plan'`**, so a substring counterweight scores an office
+point off an `IMPLANT REMOVAL` heading on a genuine operative note. This house
+has a canon section on that family (`'dashboard'` contains `'board'`), and the
+counterweight is the one place a false positive costs a suppression.
+
+**MEASURED IMPACT OF (b) ON TODAY'S CORPUS: ZERO verdicts change.** Of 46 notes:
+18 op-and-no-SOAP · 1 op-and-three-SOAP (the row above) · 7 SOAP-and-no-markers ·
+20 neither. Of 10 templates: 4 op/no-SOAP · 1 SOAP/no-op. Pure hardening.
+
+#### 🟡 FINDING 3 — the STORE layer at sign was ungated. **FIXED, one conjunction.**
+
+`sign/route.ts:496` read `if (emBlob)` and froze `signedCode` onto the signed
+record. `emApplies` had been sitting in scope since `:335`, unconsulted. On an
+operative note the pipeline still WRITES a `cptCodes.em` blob (Finding 4), so
+this **stamped a frozen office E/M level onto the signed record of a
+colonoscopy** — invisible, because display and export both suppress it.
+
+`specialties.ts:139-143` states the invariant is enforced at THREE layers —
+COMPUTE · STORE · EXPORT. For the note-shape axis this was the missing STORE
+half. Now `if (emBlob && emApplies)`.
+
+#### 🔵 FINDING 4 — the COMPUTE layer is still specialty-only. **FILED, NOT FIXED, AND THE NAIVE FIX IS WORSE.**
+
+`worker.ts:963-967` gates L7b on `!isImagingReportSpecialty(visit.specialty)`
+alone — the codebase's own comment calls it *"the pipeline-level E/M
+suppression"*. So an operative note runs L7b and stores a `cptCodes.em` blob.
+
+⚠️ **DO NOT "FIX" THIS BY ADDING THE NOTE-SHAPE AXIS TO `flags.cpt`.** That flag
+gates the WHOLE of L7b — CPT **procedures** as well as E/M — so suppressing it
+on an operative note would **delete the PROCEDURE CPT code from a colonoscopy**,
+which is the one code that encounter genuinely bills. That is #109's class
+exactly: a deletion scoped by what the ruling CALLS the component rather than by
+what the component DOES. The real work is to let L7b run and omit only its E/M
+half, which is a change inside the coding layer and is not F12-a's diff.
+
+#### 🔵 FINDING 5 — `check-imaging-em-artifacts.sh` cannot see this artifact class
+
+`scripts/check-imaging-em-artifacts.sh:68` filters `where specialty='ultrasound'`.
+It is blind to an office E/M artifact on an OPERATIVE note **by construction**,
+so its standing 🟢 says nothing about the class Finding 4 leaves open. The
+watched set and the named set differ; recorded so the green is not read wider
+than it is.
+
+#### WHAT THE PASS CONFIRMED RATHER THAN BROKE
+
+- **The threading survives, enumerated site by site.** All 8 `emAppliesToVisit`
+  call sites pass the correct note string, and **every column each one reads is
+  actually in its Prisma `select`** — the failure that `tsc` cannot see, because
+  `noteText` is typed `unknown` and an omitted column yields `undefined`, which
+  reads as "no headings" and fails OPEN.
+- **No helper hides the argument object** one layer up, so a call-site grep is
+  sufficient here.
+- **The heading regex over-matches nothing.** `##HEADING`, seven hashes, prose
+  naming a marker, bold-wrapped headings and `\r\n` bodies all yield ZERO
+  headings — every failure direction is fail-OPEN.
+- **One inconsistency corrected in passing:** `apply-additions` passed
+  `visit.soapFinal` where its sibling `override` route passed
+  `soapFinal ?? soapDraft ?? ''`, and both compute `currentSoap` the second way.
+  Two answers to one question is the defect regardless of which is reachable.
+
+#### THE E2E BOTH-DIRECTIONS WALK — #123's own required proof
+
+The review-doc pack already runs every core spec once per specialty class off a
+single `emApplies` switch, so the walk is bought by adding a class rather than
+by writing a parallel pack. Added: **`operative` — a colonoscopy note,
+specialty `gastroenterology`, UNTEMPLATED.**
+
+- **`gastroenterology`, not something inert.** The office class is
+  `primary-care`, so a suppression keyed on specialty would still pass this
+  matrix. GI bills office E/M all day — it is #123's own example. The only thing
+  that can make this fixture's level disappear is the NOTE-SHAPE axis.
+- **UNTEMPLATED, deliberately** — the production-majority shape, and the only
+  one that exercises #126a's fallback. A templated operative fixture would prove
+  the arm that already worked: a fixture from the right domain that is
+  nevertheless the wrong universe.
+- It inherits the matrix's export arm, which asserts the exported **BYTES** of
+  the PDF and the DOCX carry no `992\d\d`, and the arm that re-reads the row
+  after a page render to prove nothing was COMPUTED or STORED.
+- `imagingEmArtifact` → `emArtifact` and `assertImagingHasNoEm` →
+  `assertNoOfficeEm`: the invariant belongs to the operative note with identical
+  force, and a name narrower than what it measures is how the next class gets
+  half-wired. The post-seed guard is keyed on `noOfficeEm`, not `imaging`.
+
+⚠️ **ONE CLASS WAS ADDED, NOT TWO, AND THE REASON IS A MEASURED CEILING.** A
+`post-op-office` class would prove the counterweight end-to-end and was NOT
+added: **F19 records 9m37s of headroom across 14 runs**, one recent `e2e` ran
+52m against a 55m timeout, and the projects run sequentially in one job. F19
+also rules that the ceiling must not be moved as a side effect of anything else.
+**The counterweight is proven at the unit layer (9 arms, 3 mutations) and its
+threading is proven end-to-end by the `operative` class.** If `e2e` times out on
+this change, the cause is named here in advance and the correct response is to
+TRIM this pack — never to raise the ceiling.
+
+#### PROOFS
+
+**MUTATION-PROVED 8 of 8**, each asserting its own application before the run
+was believed, each restored from a scratch copy rather than from git, and each a
+PARTIAL application — the first edit the code's own comments invite — rather
+than the complete inverse:
+
+| # | mutation | red |
+|---|---|---|
+| M1 | `noteText` threaded everywhere, never consulted (the half-landed fix) | 2 |
+| M2 | fallback as an OR instead of silence-only (the "simplification") | 1 |
+| M3 | note-text arm skips `normalizeSectionLabel` (the two arms drift) | 1 |
+| M4 | heading regex accepts any line (prose becomes a heading) | 2 |
+| M5 | `templateIsSilent` keyed on array-ness rather than labels | 1 |
+| M6 | office counterweight deleted | 4 |
+| M7 | `OFFICE_SKELETON_FLOOR` 4 → 3 (the prior art's rejected clause) | 2 |
+| M8 | counterweight matches by substring (the `IMPLANT`/`plan` trap) | 1 |
+
+**CONTROLLED DELTA**, because a raw count from a worktree is meaningless
+(`react/jsx-dev-runtime` cannot resolve there):
+
+    origin/main       322 files · 3928 passed · 16 failed files · 1 failed test
+    session 01's tip  323 files · 3971 passed · 16 failed files · 1 failed test
+    this session      323 files · 4001 passed · 16 failed files · 1 failed test
+
+**+30 tests, failures IDENTICAL.** 30 reconciles exactly: 21 fallback arms + 9
+counterweight arms. `tsc` 0 errors.
+
+⚠️ **AND ONE OF THIS SESSION'S OWN MEASUREMENTS WAS WITHDRAWN RATHER THAN
+QUIETLY RE-RUN.** A `npx vitest run` printed **`801 files · 202 failed`** — the
+SHARED TREE's root config, because an earlier `cd /opt/meddoc-pro` to read
+`deploy-prod.sh` had moved the Bash tool's persistent cwd. **The tells are the
+ones MASTER records verbatim: `setup: 0ms` and a file count with no business
+changing.** Re-measured from `pwd`-confirmed `.f12-wt/apps/transcribe-md`: the
+323/4001 above. The shared tree was re-checked and is clean, on `main`.
+
+#### WHAT THIS DOES NOT CLAIM
+
+- **No rendered PDF/DOCX was produced and compared by this session.** The export
+  proof is the E2E arm's byte assertion, which runs in CI, and the projection
+  seam in unit tests.
+- **Finding 4 is open**: an operative note still has a `cptCodes.em` blob
+  COMPUTED for it. Display, export and now the sign-time freeze all suppress it;
+  the blob itself is not prevented.
+- **Finding 5 is open**: no standing check watches the operative-note artifact
+  class.
+- The `e2e` runtime effect of the new class is **not measured** — it is a
+  declared risk, priced against F19's 9m37s.

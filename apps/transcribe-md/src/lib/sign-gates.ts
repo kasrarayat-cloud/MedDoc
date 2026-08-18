@@ -134,9 +134,18 @@ export interface SignGateInput {
    * `projectDisplayedEmCode`'s `emApplies` is a required positional, and it is
    * how the caller list gets enumerated by the compiler instead of by hand.
    *
-   * `null` for a visit with no template — which is NOT an operative note.
+   * `null` for a visit with no template — and since ruling #126 that is no
+   * longer the end of the classification: see `noteText` directly below.
    */
   templateSections: unknown;
+  /**
+   * F12-a / ruling #126 — the NOTE BODY (`signedSoap ?? soapFinal` when
+   * signed, `soapFinal` otherwise). Consulted only when the template is
+   * SILENT, because a template can be deleted out from under a signed
+   * operative record and `onDelete: SetNull` then re-admits an office E/M
+   * gate onto it. REQUIRED for the same reason `templateSections` is.
+   */
+  noteText: unknown;
   /** The raw `emPendingChange` jsonb. Coerced here, fail-closed. */
   emPendingChange: unknown;
   /** The `emStale` column. Renders as a note; never a count. */
@@ -189,6 +198,7 @@ export function signGates(input: SignGateInput): SignGateSet {
   const emApplies = emAppliesToVisit({
     specialtyId: input.specialty,
     templateSections: input.templateSections,
+    noteText: input.noteText,
   });
   const pendingEm = unacknowledgedEmChange(input.emPendingChange);
   const emUnconfirmed = pendingEm !== null && !input.emConfirmedThisSession;

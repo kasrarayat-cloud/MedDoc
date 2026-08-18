@@ -37,6 +37,10 @@ function input(over: Partial<SignGateInput> = {}): SignGateInput {
     // is explicitly NOT an operative note, so every existing arm below keeps
     // the exact behaviour it asserted before the axis existed.
     templateSections: null,
+    // F12-a / ruling #126 — the note-text fallback. An empty body carries no
+    // headings and therefore no markers, so every existing arm below keeps the
+    // exact behaviour it asserted before the fallback existed.
+    noteText: '',
     emPendingChange: null,
     ...over,
   };

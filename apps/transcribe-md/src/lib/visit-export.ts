@@ -68,7 +68,8 @@ export function projectDisplayedEmCode(
    *  thought about applicability must fail to TYPECHECK, not silently inherit a
    *  permissive default.
    *
-   *  ⚠️ COMPUTE THIS FROM `emAppliesToVisit({ specialtyId, templateSections })`
+   *  ⚠️ COMPUTE THIS FROM
+   *  `emAppliesToVisit({ specialtyId, templateSections, noteText })`
    *  — `@/lib/note-shape`. It was `emAppliesToSpecialty(specialtyId)` until
    *  F12 / ruling #123 added the note-SHAPE axis: an operative or procedure
    *  note has no office-visit E/M level either, and a specialty id cannot say

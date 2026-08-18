@@ -191,6 +191,10 @@ export async function saveSoapDraftAction(
       applies: emAppliesToVisit({
         specialtyId: visit.specialty,
         templateSections: visit.noteTemplate?.sections ?? null,
+        // The PRE-EDIT text, matching `priorSoap` two lines up: this call
+        // decides whether a baseline should exist for the note as it stood,
+        // and a signed visit never reaches this path.
+        noteText: visit.soapFinal,
       }),
     });
 

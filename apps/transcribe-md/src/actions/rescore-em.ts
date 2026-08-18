@@ -111,6 +111,8 @@ export async function rescoreEmAction(visitId: string): Promise<RescoreEmResult>
     !emAppliesToVisit({
       specialtyId: visit.specialty,
       templateSections: visit.noteTemplate?.sections ?? null,
+      // READY-only path (guarded above), so `soapFinal` IS the note.
+      noteText: visit.soapFinal,
     })
   ) {
     const cleared = await prisma.transcribeVisit.updateMany({

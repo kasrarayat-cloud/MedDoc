@@ -154,6 +154,12 @@ export async function loadVisitExportData(
     emAppliesToVisit({
       specialtyId: visit.specialty,
       templateSections: visit.noteTemplate?.sections ?? null,
+      // `rawSoap`, deliberately — the STORED record, before the export-only
+      // cleanups. `stripNotePatientSummarySection` and `sanitizeExportedSoap`
+      // both rewrite the body for presentation, and classifying a note by a
+      // string that exists only inside one export path would make the verdict
+      // depend on which surface asked.
+      noteText: rawSoap,
     }),
   );
 

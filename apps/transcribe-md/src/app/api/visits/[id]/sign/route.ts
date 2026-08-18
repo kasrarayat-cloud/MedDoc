@@ -335,6 +335,10 @@ export const POST = withApiHandler<{ id: string }>(
     const emApplies = emAppliesToVisit({
       specialtyId: visit.specialty,
       templateSections: visit.noteTemplate?.sections ?? null,
+      // `soapFinal`, not `signedSoap`: this runs BEFORE the sign, and
+      // `signedSoap` is written FROM `soapFinal` further down (`:517`). So
+      // this is the same bytes the signature is about to freeze.
+      noteText: visit.soapFinal,
     });
     if (visit.status === TranscribeVisitStatus.READY && visit.emStale && emApplies) {
       // RE-SCORE HERE, don't just refuse.
@@ -489,7 +493,29 @@ export const POST = withApiHandler<{ id: string }>(
         cptBlob && cptBlob.em && typeof cptBlob.em === 'object'
           ? (cptBlob.em as Record<string, unknown>)
           : null;
-      if (emBlob) {
+      // ⚠️ `&& emApplies` — F12-a / ruling #126, found by the independent
+      // adversarial pass. This branch used to read `if (emBlob)` alone, and
+      // `emApplies` has been sitting in scope since `:335` without being
+      // consulted here. On an operative note the pipeline still WRITES a
+      // `cptCodes.em` blob (see the FOLLOW-UP note below), so this freeze
+      // stamped a **frozen office E/M level onto the signed record** of a
+      // colonoscopy — invisible, because display and export both suppress it.
+      //
+      // That is the artifact class this repository has already paid for once:
+      // five production imaging visits acquired `emScoredCode` from a page
+      // render and sat there for two days, written by no seeder and visible to
+      // no test. `specialties.ts:139-143` states the invariant is enforced at
+      // THREE layers — COMPUTE, STORE, EXPORT — and for the note-shape axis
+      // this was the missing STORE half.
+      //
+      // ⚠️ FOLLOW-UP, DELIBERATELY NOT FIXED HERE: `worker.ts:963-967` gates
+      // L7b on `!isImagingReportSpecialty(...)` only, so an operative note
+      // still COMPUTES an `em` blob. The naive repair — adding the note-shape
+      // axis to `flags.cpt` — would suppress the WHOLE of L7b and delete the
+      // PROCEDURE CPT codes from a colonoscopy, which is the one code that
+      // encounter genuinely bills. That is a bigger change than a one-line
+      // conjunction and it is filed as its own item rather than guessed at.
+      if (emBlob && emApplies) {
         try {
           const signedCode = await computeDisplayedEmCode(
             visit.soapFinal ?? '',
