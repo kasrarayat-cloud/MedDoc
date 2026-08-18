@@ -18340,3 +18340,63 @@ not a test-suite nuisance; it is a tax on the release path.
 install` timeouts, one `e2e` success with **23 seconds** of margin, and one #603
 recurrence — **six gate events in a single session**, none of them caused by any
 change under test.
+## ✅ F15 IS DEPLOYED AND JUDGED — **22 OF 22**, `bfb420c8`, `2026-08-18T02:15:52Z`
+
+**#713 is LIVE in production.** Full judgement:
+`docs/deploy-reports/20260818-bfb420c8-f15-judgement.md`.
+
+| | |
+|---|---|
+| citation | **4 of 4** — `CI` 32085518229 `a1` · **`e2e` 32085518152 `a2`** · `a11y-ci` 32085518206 `a1` · `secrets-scan` 32085518367 `a1` |
+| declaration | `docs/foundation/deploys/20260817-455e109c.md`, **committed in #718 and merged BEFORE the act** |
+| MUST CHANGE | **5 of 5** (both image ids moved; cure sentence 0→2; *set up* 0→2; *upload* 2→0; traversal control 2) |
+| MUST NOT CHANGE | **14 of 14** |
+| ABSENCE rows | **3 of 3** — certifications **0**, fill manifests **0**, mappings still **74 CERTIFIED / 6 NEEDS_CONFIRMATION** |
+| rollback | `pre-bfb420c8-20260818`, **digest-verified** to `08ea3c9d…` / `990af8ab…` |
+| containers | **9 of 9** healthy |
+
+**Row 22 is the one that earned its place.** A presence-only declaration would
+have passed identically on a build that advanced a mapping. **The wall did not
+move by one field.**
+
+### ⚠️ THE `e2e` RE-RUN, AND WHY `cancelled` IS A TRAP WORTH RECORDING
+
+Attempt 1 ran `00:42:16Z → 01:37:36Z` = **55m20s**, against
+`.github/workflows/e2e.yml:56`'s **`timeout-minutes: 55`**. **The job hit its
+ceiling.**
+
+⚠️ **GITHUB REPORTS A TIMEOUT AS `cancelled` — THE SAME CONCLUSION A
+PUSH-CANCELLATION PRODUCES.** My first move was to look for a commit that had
+landed on `main`. **None had**; `main` was still `bfb420c8`. Only the DURATION
+against the declared ceiling separated the two readings. **Two distinguishable
+states collapsed into one conclusion string** — this programme's own family,
+arriving somewhere new.
+
+**Not a re-run-and-hope:** the mechanism was named from the workflow file and the
+run's timestamps *before* the re-run was triggered.
+
+**AND THE HEADROOM IS THIN, WHICH IS THE FINDING BEHIND THE SYMPTOM.** Measured
+across the last 15 `e2e` runs, successful ones take **34m19s – 45m23s** against a
+**55m** ceiling — **under 10 minutes of margin at the worst.** This is the first
+timeout in that window, so it is an **outlier, not yet a trend** — but a gate
+that times out cannot cite, and a gate that cannot cite blocks every deploy.
+⚠️ **Priced by the ASSET behind it — the deploy gate itself — not by the
+symptom.** Filed for whoever next has budget: either raise the ceiling knowingly
+or find what took the extra ten minutes.
+
+### ⚠️ AND THE SHARED TREE WAS FAST-FORWARDED BY ME, DELIBERATELY
+
+`git merge --ff-only origin/main` on `/opt/meddoc-pro`, from `79ddd855` to
+`bfb420c8`, on a **clean** tree, **as the loop** — `tmux has-session -t foundation`
+answers, and that session is mine. **Flagged rather than left as routine**,
+because the canon's second reference case is precisely a session that
+ff-merged the shared tree while somebody else stood in it and called it tidying.
+The deploy requires the tree to be at the commit being shipped, so this was a
+prerequisite, not housekeeping.
+
+### F16 (#719) WAS DELIBERATELY HELD OUT OF THIS DEPLOY
+
+It is **4 of 4 green and merge-ready**. It is also a **RUNTIME** change, and not
+one row above could have detected a regression in it. **F10's resolver would have
+REFUSED this declaration had #719 landed first** — the mechanism working, not a
+constraint I remembered. **F16 needs its own §2.5 and its own deploy.**
