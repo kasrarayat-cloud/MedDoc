@@ -271,7 +271,88 @@ export function isProcedureNoteShapeFromText(noteText: unknown): boolean {
   return labelsReadAsProcedureNote(normalizedNoteHeadings(noteText));
 }
 
+/** DOES THE NOTE BODY AFFIRMATIVELY READ AS AN OFFICE VISIT? — F12-d.
+ *
+ *  ⚠️ THIS IS NOT `!isProcedureNoteShapeFromText(...)`, AND THE DIFFERENCE IS
+ *  THE WHOLE POINT. That predicate has THREE outcomes collapsed into a boolean:
+ *  *operative*, *affirmatively office*, and *says nothing either way* (a stub,
+ *  a note with one heading, a body still being written). Only the SECOND is
+ *  strong enough to overrule a template, so it needs its own name.
+ *
+ *  The claim is the one ruling #126(b) already made and measured: **the full
+ *  SOAP skeleton is the STRONGER claim, because an operative note does not
+ *  carry all four.** This reuses that exact predicate and its exact floor —
+ *  `countOfficeSkeleton >= OFFICE_SKELETON_FLOOR`, ALL FOUR, exact-match — so
+ *  the counterweight cannot be strong in one place and weak in another. */
+export function noteReadsAsOfficeVisitFromText(noteText: unknown): boolean {
+  return officeConceptCount(normalizedNoteHeadings(noteText)) >= OFFICE_SKELETON_FLOOR;
+}
+
+/** Headings that satisfy TWO of the four SOAP concepts at once.
+ *
+ *  ⚠️ THIS LIST EXISTS ONLY FOR THE ESCAPE, AND `countOfficeSkeleton` IS
+ *  DELIBERATELY NOT CHANGED. That function ALSO supplies the operative-note
+ *  counterweight inside `labelsReadAsProcedureNote`, where widening it would
+ *  make more notes read as NOT operative — an UNDER-suppression, on the signed
+ *  row `cmrxxj1rn000h01pnoloiiajx` whose floor of FOUR ruling #126(b) set by
+ *  hand against the corpus. **The two uses are split here rather than merged.**
+ *
+ *  ⚠️ AND THE SPLIT IS WHAT MAKES THE ESCAPE STABLE UNDER AN ORDINARY EDIT.
+ *  Found by the adversarial pass: with a bare `countOfficeSkeleton`, a doctor
+ *  merging `## Assessment` and `## Plan` into `## Assessment & Plan` drops the
+ *  count 4 -> 2 and FLIPS the verdict mid-visit — stranding `emPendingChange`,
+ *  and (under Rounds) leaving a visit with no sign control and a banner whose
+ *  text is false. The concepts are what the doctor documented; the number of
+ *  headings they used to spell them is not a clinical fact. */
+const OFFICE_CONCEPT_PAIRS: ReadonlyArray<readonly [string, readonly string[]]> = [
+  // label spelled by the doctor        -> the concepts it satisfies
+  ['ASSESSMENT & PLAN', ['ASSESSMENT', 'PLAN']],
+  ['ASSESSMENT AND PLAN', ['ASSESSMENT', 'PLAN']],
+  ['ASSESSMENT/PLAN', ['ASSESSMENT', 'PLAN']],
+  ['IMPRESSION & PLAN', ['ASSESSMENT', 'PLAN']],
+  ['IMPRESSION AND PLAN', ['ASSESSMENT', 'PLAN']],
+  ['IMPRESSION/PLAN', ['ASSESSMENT', 'PLAN']],
+  ['SUBJECTIVE & OBJECTIVE', ['SUBJECTIVE', 'OBJECTIVE']],
+  ['SUBJECTIVE AND OBJECTIVE', ['SUBJECTIVE', 'OBJECTIVE']],
+];
+
+/** How many of the four SOAP CONCEPTS the labels carry, counting the combined
+ *  spellings above. Exact match on the normalised label throughout — never
+ *  `includes`, for the reason `countOfficeSkeleton` records (`'IMPLANT'`
+ *  contains `'plan'`). */
+function officeConceptCount(labels: Iterable<string>): number {
+  const set = new Set(labels);
+  const satisfied = new Set<string>();
+  for (const section of OFFICE_SKELETON_SECTIONS) {
+    if (set.has(section)) satisfied.add(section);
+  }
+  for (const [label, concepts] of OFFICE_CONCEPT_PAIRS) {
+    if (set.has(label)) for (const c of concepts) satisfied.add(c);
+  }
+  return satisfied.size;
+}
+
+/** The concept count, exported for the same margin reason as its siblings — a
+ *  guard can assert WHY a body did or did not reach the escape. */
+export function officeConceptCountFromText(noteText: unknown): number {
+  return officeConceptCount(normalizedNoteHeadings(noteText));
+}
+
+/** How many of the four SOAP sections the NOTE BODY's own headings carry.
+ *  Exported for the same reason as `procedureNoteMarkerCountFromText`: the
+ *  COUNT is evidence and the VERDICT is the function, and a fixture sitting at
+ *  0 is a different fact from one sitting at 3 — which is precisely the
+ *  distinction that let a test fixture stand in for a production row it did not
+ *  resemble (F12-d). A guard can now assert the MARGIN, not only the answer. */
+export function officeSkeletonCountFromText(noteText: unknown): number {
+  return countOfficeSkeleton(normalizedNoteHeadings(noteText));
+}
+
 /** DID THE TEMPLATE SAY ANYTHING AT ALL?
+ *
+ *  ⚠️ STILL LOAD-BEARING. F12-d PROPOSED UNGATING THE ARM THIS GUARDS INTO AN
+ *  OR AND THE ADVERSARIAL PASS KILLED THAT — see the comment beside the
+ *  fallback in `emAppliesToVisit`. Do not "simplify" it away.
  *
  *  ⚠️ THIS IS THE WHOLE NARROWNESS OF THE FALLBACK, AND IT IS DELIBERATE.
  *  There are two different states that both produce "not an operative note"
@@ -387,12 +468,85 @@ export function emAppliesToVisit(input: {
   noteText: unknown;
 }): boolean {
   if (!emAppliesToSpecialty(input.specialtyId)) return false;
-  if (isProcedureNoteShape(input.templateSections)) return false;
+
+  // ── THE PROXY DOES NOT OVERRULE AN AFFIRMATIVELY OFFICE-SHAPED RECORD ────
+  // F12-d. This is the ONLY thing F12-d changes, and its scope was cut down to
+  // this by the mandatory adversarial pass — see the two rejected halves below.
+  //
+  // ⚠️ WITHOUT THIS CONJUNCT A **SIGNED** OFFICE VISIT LOSES ITS BILLABLE
+  // LEVEL, AND THAT IS LIVE IN PRODUCTION, NOT A HYPOTHETICAL. Measured
+  // 2026-08-18: visit `cmsu1mhrp000h01nsxpvxxshk`, SIGNED, `gastroenterology`,
+  // body headings `CHIEF COMPLAINT · SUBJECTIVE · OBJECTIVE · ASSESSMENT ·
+  // PLAN`, `cptCodes.em.code` 99215 and a FROZEN `signedCode` 99214 — an
+  // unambiguous office visit whose export F12-a suppresses. Ruling #123 names
+  // over-suppression as WORSE than the defect being fixed.
+  //
+  // ⚠️ AND THE MECHANISM IS NOT THE ONE THIS COMMENT FIRST CLAIMED — CORRECTED
+  // BY THE ADVERSARIAL PASS, WHICH READ THE ROW INSTEAD OF ASSUMING IT.
+  // The first draft said "because that GI doctor's ACTIVE template is
+  // colonoscopy-shaped", and reasoned from the partial unique on
+  // `(doctorId, encounterType) WHERE status='active'` that the doctor could not
+  // configure their way out. **Both halves are false for this row.** Measured:
+  //
+  //     bound template  cmsu1jsls000901ns6y1aeoy6  "Operative Note"  INACTIVE
+  //     that doctor's ONE active template          "Venous Duplex …"  IMAGING
+  //
+  // The visit's `noteTemplateId` FK is FROZEN to a template that has since been
+  // RETIRED, and every read path joins it **without a status filter**. So a
+  // retired template goes on classifying signed visits forever, and the doctor
+  // has already reconfigured — which is a STRONGER argument for reading the
+  // record rather than the proxy, not a weaker one. Read to form a hypothesis;
+  // RUN something to name a mechanism.
+  //
+  // ⚠️ THE ESCAPE IS AFFIRMATIVE ON BOTH LEGS, AND THE SECOND LEG WAS ADDED BY
+  // A REFUTER. `noteReadsAsOfficeVisitFromText` is a bare `countOfficeSkeleton
+  // >= 4` with NO marker check, so a body carrying the full SOAP skeleton
+  // **and** three operative markers satisfied it — `isProcedureNoteShapeFromText`
+  // returns false there because the office counterweight is tested first, so
+  // nothing else objected either. Verified: that input flipped `false -> true`,
+  // which would freeze an office E/M onto a signed operative record at
+  // `sign/route.ts:538` — the exact state that conjunction exists to prevent.
+  // Requiring ZERO operative markers costs nothing (the rescued row has none)
+  // and closes it.
+  if (
+    isProcedureNoteShape(input.templateSections) &&
+    !(
+      noteReadsAsOfficeVisitFromText(input.noteText) &&
+      procedureNoteMarkerCountFromText(input.noteText) === 0
+    )
+  ) {
+    return false;
+  }
+
   // THE FALLBACK, AND IT FIRES ONLY INTO SILENCE — see `templateIsSilent`.
   // A template that carries labels and no markers has said "office visit", and
   // the note text does not get to overrule it.
+  //
+  // ⚠️ F12-d DELIBERATELY DID **NOT** UNGATE THIS INTO AN OR, AND THE FIRST
+  // DRAFT DID. Ruling #126 names the OR as "a TIGHTENING and therefore the
+  // legal direction to be wrong in", and the corpus says it changes ZERO
+  // production verdicts — so it guards a hole with no instance. A refuter then
+  // showed it INTRODUCES one: production template `cmpz63jsw000501tayag818lq`
+  // is ACTIVE and spells its sections `CHIEF COMPLAINT · INTERVAL HISTORY ·
+  // EXAM · IMPRESSION & PLAN · PATIENT INSTRUCTIONS`, so a body written in that
+  // vocabulary scores **0** on the office counterweight (which is exact-match
+  // and cannot see `IMPRESSION & PLAN`) while an in-room excision supplies two
+  // operative markers. Verified: `true -> false` — an ordinary billable office
+  // visit silently loses its level, which is precisely the "derm office w/
+  // excision" family #126(b)'s counterweight exists to protect, defeated
+  // because the counterweight is unreachable for that template's wording.
+  //
+  // The honest limit at `countOfficeSkeleton` says "every combined-heading
+  // template in production carries ZERO operative markers" — TRUE, and it is a
+  // statement about TEMPLATES. Ungating this arm makes it load-bearing over
+  // NOTE BODIES, whose markers are not the template's. **The exemption's reason
+  // would have gone stale in the same commit that made it load-bearing.**
+  //
+  // So the OR waits for the combined-heading forms to be named (F12-f), and
+  // that work must split `countOfficeSkeleton`'s two uses first.
   if (templateIsSilent(input.templateSections) && isProcedureNoteShapeFromText(input.noteText)) {
     return false;
   }
+
   return true;
 }

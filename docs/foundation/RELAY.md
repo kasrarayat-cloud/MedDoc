@@ -19728,3 +19728,230 @@ the **`actions/cache` over `~/.cache/ms-playwright`** (which would also retire t
 install stall) and **trimming or sharding the pack**. ⚠️ Both touch `.github/`,
 which is a deploy surface, and neither may be done mid-citation — doing it inside
 a session that is waiting on a run cancels the very run it is protecting.
+
+
+---
+
+### 🟢 F12-d — CLOSED 2026-08-19 — A **RETIRED** TEMPLATE WAS SUPPRESSING THE BILLABLE LEVEL ON A **SIGNED** OFFICE VISIT
+
+**Ruling #129 (🟡 PROVISIONAL, loop). Branch `feat/f12d-note-shape-precedence`.**
+
+F12-d was filed as two FORWARD holes. **It is not — the same root defect was
+already costing a real signed record, in the direction ruling #123 calls WORSE
+than the defect being fixed, and the filing did not see it.**
+
+⚠️ **AND THE MANDATORY ADVERSARIAL PASS CUT THE SHIPPED SCOPE IN HALF AND
+CHANGED THE IMPLEMENTATION TWICE. Four refuters, four lenses; the two most
+consequential findings were against the FIX, not against the old code.** Every
+finding below was re-verified by me against the real module before I acted on
+it; two were re-verified against production.
+
+#### THE DEFECT, WITH THE ROW ID
+
+`cmsu1mhrp000h01nsxpvxxshk` — `gastroenterology`, **SIGNED**,
+`cptCodes.em.code` **99215** with a **FROZEN `signedCode` 99214**, body headings
+`CHIEF COMPLAINT · SUBJECTIVE · OBJECTIVE · ASSESSMENT · PLAN` (4 of 4 SOAP
+concepts, 0 operative markers). An unambiguous office visit whose export is
+suppressed today.
+
+⚠️ **THE MECHANISM IS NOT THE ONE I FIRST WROTE DOWN, AND A REFUTER CORRECTED IT
+BY READING THE ROW.** My draft said *"that GI doctor's ACTIVE template is
+colonoscopy-shaped"* and built an argument on the partial unique proving the
+doctor could not configure their way out. **Measured:**
+
+    bound template  cmsu1jsls000901ns6y1aeoy6  "Operative Note"          INACTIVE
+    that doctor's ONE active template          "Venous Duplex … Report"  IMAGING
+
+The FK is frozen to a **RETIRED** template and every read path joins it
+**without a status filter** — so a retired template goes on classifying signed
+visits forever, and the doctor **has already reconfigured**. A stronger argument
+for reading the record over the proxy, not a weaker one. *Read to form a
+hypothesis; RUN something to name a mechanism.*
+
+#### WHAT SHIPPED — ONE CHANGE, BOTH LEGS AFFIRMATIVE
+
+An operative-shaped template no longer suppresses a body that reads
+**affirmatively** as an office visit: **all four SOAP CONCEPTS present AND zero
+operative markers.** A stub, an empty body or a mid-generation note does not
+escape.
+
+**Measured through the REAL predicate** — not a harness re-implementation — over
+all 48 production visits in production's flag universe: **+0 newly suppressed,
+exactly 1 newly applied.**
+
+⚠️ **THE FIRST RUN OF THAT HARNESS WAS IN THE WRONG UNIVERSE AND ITS TOTALS ARE
+WITHDRAWN.** `tsx` runs with `NEXT_PUBLIC_ULTRASOUND_SPECIALTY` unset, so
+`emAppliesToSpecialty('ultrasound')` returned **true** and all 20 imaging visits
+entered the corpus as office visits (`applies 28`). Read from the RUNNING
+containers, production runs it `true`; the corrected figure is `applies 8 -> 9`.
+**The scheme DIFFS were identical under both universes**, so the conclusion
+survives — but the totals printed first were wrong and are not carried forward.
+The harness now ASSERTS the flag universe before printing any number.
+
+⚠️ **AND THE TWO CANDIDATES THIS ITEM WAS FILED WITH BOTH FIX NOTHING.**
+Scheme **B** (the plain OR — the filing's candidate 3) and scheme **D** (widen
+`templateIsSilent` — candidate 1) each move **0 of 48** rows. They guard a
+forward hole with no instance and never reach the live one. *A candidate list
+written from a diagnosis is a list of guesses until each one is run against the
+corpus* — and one of these two then turned out to be actively harmful.
+
+#### ⚠️ THE HALF THAT DID **NOT** SHIP, AND IT IS THE PART TO REMEMBER
+
+My first draft also ungated the note-body arm from `templateIsSilent` into an
+**OR** — the widening ruling #126 itself named as *"a TIGHTENING and therefore
+the legal direction to be wrong in"*.
+
+| | |
+|---|---|
+| what it fixes on the corpus | **0 rows** |
+| what a refuter showed it BREAKS | an ordinary office visit, **verified `true -> false`** |
+
+Template `cmpz63jsw000501tayag818lq` is **ACTIVE** and spells its sections
+`CHIEF COMPLAINT · INTERVAL HISTORY · EXAM · IMPRESSION & PLAN · PATIENT
+INSTRUCTIONS`. An office visit with an in-room excision documented in that
+vocabulary scores **0** on the exact-match office counterweight — which cannot
+see `IMPRESSION & PLAN` — while the excision supplies two operative markers. The
+body reads *operative* and the level is stripped. **That is exactly the "derm
+office w/ excision" family #126(b)'s counterweight exists to protect**, defeated
+because the counterweight is unreachable for that template's wording.
+
+⚠️ **AND THE EXEMPTION'S REASON WOULD HAVE GONE STALE IN THE SAME COMMIT THAT
+MADE IT LOAD-BEARING.** `countOfficeSkeleton`'s honest limit says *"every
+combined-heading template in production carries ZERO operative markers"* — TRUE,
+and a statement about **TEMPLATES**. The OR makes it load-bearing over **NOTE
+BODIES**, whose markers are not the template's.
+
+> **A widening that fixes nothing and breaks something is not a tightening,
+> whatever the ledger called it.** #126 was right about the DIRECTION and wrong
+> about the COST — because the cost did not exist until the combined-heading
+> limit was put underneath it.
+
+#### TWO REFUTER FINDINGS THAT CHANGED THE IMPLEMENTATION
+
+1. 🔴 **THE ESCAPE HAD NO MARKER CHECK.** `noteReadsAsOfficeVisitFromText` was a
+   bare concept count, and `isProcedureNoteShapeFromText` returns **false** for a
+   body carrying the full SOAP skeleton because the office counterweight is
+   tested first — **so nothing anywhere objected.** A body with four SOAP
+   headings *and three operative markers* escaped: **verified `false -> true`**,
+   which would freeze an office E/M onto a SIGNED operative record at
+   `sign/route.ts:538`, the exact state that conjunction exists to prevent.
+   Fixed by requiring **zero** markers; costs nothing, the rescued row has none.
+2. 🔴 **THE ESCAPE FLIPPED MID-VISIT ON AN ORDINARY EDIT.** Merging
+   `## Assessment` and `## Plan` into `## Assessment & Plan` drops the
+   exact-match count 4→2 and flips the verdict — stranding `emPendingChange`,
+   and **under Rounds leaving a visit with no sign control at all**, behind a
+   banner whose text is false, with no control able to clear it. Fixed by
+   counting SOAP **CONCEPTS**, with the combined spellings named.
+   ⚠️ **SCOPED TO THE ESCAPE ALONE.** `countOfficeSkeleton` is deliberately
+   untouched, because it also supplies the operative-note counterweight —
+   widening it there moves suppression in the UNDER- direction on signed row
+   `cmrxxj1rn000h01pnoloiiajx`, whose floor of FOUR #126(b) set by hand. **The
+   two uses are SPLIT, not merged.**
+
+#### ⚠️ IT IS NOT READ-ONLY, AND AN EARLIER DRAFT OF THIS ROW SAID IT WAS
+
+A refuter demonstrated the predicate **drives writes**: `page.tsx:656-667`
+writes `emScoredCode` on render when it returns true; `sign/route.ts:578` freezes
+`cptCodes.em.signedCode`; `rescore-em.ts:118` writes `emStale`.
+
+> **So a rollback is NOT a clean inverse.** A row that acquires a `signedCode`
+> while this is live keeps it, and the rolled-back predicate then suppresses that
+> same row — a signed record whose stored row carries a code its document refuses
+> to print.
+
+#### PROOF
+
+- **6 mutations: 5 RED, 1 GREEN control**, each asserting the mutation APPLIED
+  before any result was believed. ⚠️ **Three of them — the missing marker check,
+  the exact-match flip, and a caller passing `visit.noteTemplate?.sections` where
+  `noteText` belongs — left the FIRST version of this gate 89/89 GREEN.**
+- **Controlled delta, both halves measured here:** `origin/main` 331 files / 4077
+  passed → branch **332 / 4092** = **+1 file, +15 tests**. Failures **identical**
+  both sides (16 files / 1 test — the recorded worktree `react/jsx-dev-runtime`
+  property). `tsc` **0 errors**.
+
+#### ⚠️ THE GATE'S OWN SEAM WAS BLIND, AND THAT IS THE MOST REUSABLE FINDING
+
+The first version asserted each caller passes *a* `noteText` key that is not a
+literal `''`. A refuter passed `visit.noteTemplate?.sections` — **the line
+directly above it**, the copy-paste a tired human actually makes — and every arm
+stayed green: `normalizedNoteHeadings` returns `[]` for any non-string, and the
+parameter is typed `unknown`, so **`tsc` cannot object either.** The whole
+note-shape axis was silently dead on the signing path.
+
+> **The gate was strict about SYNTAX and blind about SEMANTICS in the same
+> assertion.** It now pins each caller's note-body expression to a per-site
+> ALLOWLIST, so a same-typed neighbour (`soapDraft`, `signedSoap`, `transcript`)
+> is a named failure rather than a green.
+
+Two further gate defects the same refuter demonstrated, both fixed: the census
+regex required `({` adjacently, so a pure **reformat** produced an unwatched
+caller; and `stripComments` ran block-before-line, so an ordinary `//` comment
+merely MENTIONING a block-comment opener started a phantom block that swallowed
+~60 lines including the call — **reddening two arms on a comment-only edit.**
+
+#### WHAT F12-d DOES **NOT** CLAIM
+
+- **Forward-only.** No stored row changes; operative notes already carrying a
+  `cptCodes.em` blob keep it. No migration, no column, no flag.
+- **`countOfficeSkeleton`, `flags.cpt` and the specialty axis are untouched.**
+- **No rendered PDF or DOCX was produced and compared.**
+- ⚠️ **THE E2E PACK DOES NOT COVER THE POPULATION THIS CHANGES.**
+  `seedReviewDocVisit.ts`'s `operative` class is **UNTEMPLATED BY DESIGN** — its
+  own comment says a fixture WITH an operative template *"would exercise the arm
+  that already worked and leave the new one unproven"*, which was right for F12-a
+  and is exactly inverted for F12-d. Its verdicts are unchanged, so its green says
+  **nothing** about F12-d. **A templated-operative E2E class is the cheap
+  follow-up and belongs with F12-f.**
+- **It does not close over-suppression for every office note — see F12-f.**
+
+### 🟠 F12-f — THE OFFICE COUNTERWEIGHT IS EXACT-MATCH, AND ITS TWO USES MUST BE SPLIT BEFORE EITHER IS WIDENED — **FILED 2026-08-19 WITH F12-d, ASSERTED BY AN ARM**
+
+`countOfficeSkeleton` matches the four literal SOAP words. Real office notes are
+not written that way — production's own ACTIVE template `cmpz63jsw` uses
+`CHIEF COMPLAINT · INTERVAL HISTORY · EXAM · IMPRESSION & PLAN · PATIENT
+INSTRUCTIONS`. **Every defect found tonight traces to this one limit:** the
+rejected OR, the mid-visit flip, and the residual below.
+
+F12-d split the limit **only for the escape** (`officeConceptCount`, which names
+the combined spellings). The **shared** counterweight inside
+`labelsReadAsProcedureNote` still cannot see them, so:
+
+- an office note in that vocabulary, under an operative template, is **still
+  over-suppressed** — the arm named `KNOWN RESIDUAL — F12-f` pins it;
+- and the note-body OR remains unshippable, because it would strip levels from
+  that same family.
+
+⚠️ **THE OBVIOUS CURE IS THE DANGEROUS ONE.** Widening `countOfficeSkeleton`
+itself makes more notes read as NOT operative — an UNDER-suppression — on signed
+row `cmrxxj1rn000h01pnoloiiajx`, whose floor of FOUR #126(b) set by hand against
+the corpus. **The work is to give the operative counterweight and the office
+escape separate, separately-measured predicates**, then re-run the corpus diff in
+both directions.
+
+**WHAT UNPARKS IT:** nothing external. It is the next queue item, and it carries
+the templated-operative E2E class with it.
+
+### 🟠 F12-g — 19 PRODUCTION VISITS CARRY OFFICE E/M STATE UNDER A FALSE VERDICT, AND NO CHECK WATCHES THEM — **FILED 2026-08-19**
+
+Found by F12-d's adversarial pass. `page.tsx` writes `emScoredCode` while the
+verdict is true and **nothing clears it when the verdict later flips**; the same
+holds for `cptCodes.em` and the frozen `signedCode`.
+
+| quantity | count |
+|---|---|
+| non-ultrasound visits where the verdict is FALSE **and** the row carries `emScoredCode` / `cptCodes.em` / `emPendingChange` | **19** |
+| of those, carrying a **frozen** `signedCode` on a SIGNED record | **2** |
+
+⚠️ **`check-imaging-em-artifacts.sh` IS `where specialty='ultrasound'`** — the
+note-shape axis is entirely outside its watched set, so its 🟢 is true and covers
+none of the 19. *A gate's watched set diffed against what the spec names.*
+
+⚠️ **The 19 is the refuter's figure, re-derived in SQL from a re-implementation
+of the predicate — it is NOT measured through the real module, and the specialty
+axis was approximated. Re-measure before acting on it.**
+
+**NOT a remediation item as filed** — clearing stored clinical rows is an
+irreversible production mutation with its own door (`run-ruled-mutation.sh`) and
+its own declaration. **The first step is a WATCHER**, so the number stops being
+invisible; the disposition of the 19 is a war-room question.

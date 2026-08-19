@@ -25,6 +25,8 @@ import {
   normalizeSectionLabel,
   normalizedNoteHeadings,
   normalizedSectionLabels,
+  noteReadsAsOfficeVisitFromText,
+  officeSkeletonCountFromText,
   procedureNoteMarkerCount,
   procedureNoteMarkerCountFromText,
   templateIsSilent,
@@ -97,6 +99,33 @@ const OFFICE_NOTE_BODY = [
   'Unremarkable.',
   '',
   '## IMPRESSION & PLAN',
+  'Continue current therapy.',
+].join('\n');
+
+/** ⚠️ THE HEADINGS OF A REAL SIGNED PRODUCTION OFFICE VISIT — visit
+ *  `cmsu1mhrp000h01nsxpvxxshk`, `gastroenterology`, SIGNED, `cptCodes.em.code`
+ *  99215 with a FROZEN `signedCode` 99214, bound to that doctor's ACTIVE
+ *  colonoscopy-shaped template. Measured 2026-08-18 (F12-d).
+ *
+ *  It exists because `OFFICE_NOTE_BODY` above is office-SHAPED but carries
+ *  **0 of the 4** SOAP sections, while this row carries **4 of 4** — and an
+ *  arm whose comment cited this very visit was pinned to the wrong one. The
+ *  two are kept side by side deliberately: one is the row the escape must
+ *  rescue, the other is the residual it does not (F12-f). */
+const REAL_SIGNED_OFFICE_BODY = [
+  '## CHIEF COMPLAINT',
+  'Follow-up.',
+  '',
+  '## SUBJECTIVE',
+  'Doing well.',
+  '',
+  '## OBJECTIVE',
+  'Unremarkable.',
+  '',
+  '## ASSESSMENT',
+  'Stable.',
+  '',
+  '## PLAN',
   'Continue current therapy.',
 ].join('\n');
 
@@ -439,6 +468,21 @@ describe('ruling #126 — the note body is read when the template is silent', ()
     // This is the whole narrowness of #126, and the arm that goes red if
     // somebody "simplifies" the fallback into an OR across both sources.
     // A template WITH labels and no markers has an opinion: office visit.
+    //
+    // ⚠️ F12-d PROPOSED INVERTING THIS ARM AND THE ADVERSARIAL PASS KILLED IT —
+    // recorded here because the next session will have the same idea. Ruling
+    // #126 names the OR as "a TIGHTENING and therefore the legal direction to
+    // be wrong in", and it changes ZERO production verdicts, so it guards a
+    // hole with no instance. A refuter then showed it INTRODUCES one: template
+    // `cmpz63jsw000501tayag818lq` is ACTIVE and spells its sections
+    // `CHIEF COMPLAINT · INTERVAL HISTORY · EXAM · IMPRESSION & PLAN ·
+    // PATIENT INSTRUCTIONS`, so an ordinary office visit with an in-room
+    // excision scores 0 on the office counterweight (exact-match cannot see
+    // `IMPRESSION & PLAN`) while the excision supplies two operative markers.
+    // Measured: `true -> false`. That is the "derm office w/ excision" family
+    // #126(b)'s counterweight exists to protect, losing its billable level.
+    //
+    // **The OR waits for the combined-heading forms to be named — F12-f.**
     expect(templateIsSilent(PRIMARY_CARE)).toBe(false);
     expect(
       emAppliesToVisit({
@@ -513,12 +557,61 @@ describe('ruling #126 — the note body is read when the template is silent', ()
     expect(templateIsSilent(sec(['SUBJECTIVE', 'PLAN']))).toBe(true);
   });
 
-  it('the template arm still wins when it says OPERATIVE and the body is silent', () => {
-    // The one production visit where the two sources disagree in the other
-    // direction: template operative, note body carrying no markers (measured
-    // 2026-08-18 — 1 visit, SIGNED, with a frozen signedCode).
+  it('⚠️ THE FIXTURE DID NOT MATCH THE ROW ITS OWN COMMENT DESCRIBED — F12-d', () => {
+    // ⚠️ THIS ARM USED TO ASSERT `false` AND TO CITE, IN ITS COMMENT, "the one
+    // production visit where the two sources disagree in the other direction …
+    // 1 visit, SIGNED, with a frozen signedCode". That visit is
+    // `cmsu1mhrp000h01nsxpvxxshk`, and `OFFICE_NOTE_BODY` DOES NOT RESEMBLE IT.
+    //
+    //   OFFICE_NOTE_BODY          CHIEF COMPLAINT · EXAM · IMPRESSION & PLAN
+    //                             -> 0 of the 4 SOAP sections
+    //   cmsu1mhrp… (the real row) CHIEF COMPLAINT · SUBJECTIVE · OBJECTIVE ·
+    //                             ASSESSMENT · PLAN
+    //                             -> 4 of 4
+    //
+    // The arm was office-SHAPED, so it read as a faithful reproduction of the
+    // production disagreement to its own author, and it went on passing
+    // unchanged when F12-d's escape landed — for a reason that has nothing to
+    // do with the behaviour it claims to pin. Canon: a well-chosen fixture
+    // disguises a wrong universe.
+    //
+    // Both shapes are now asserted, with the real one first.
+    expect(officeSkeletonCountFromText(REAL_SIGNED_OFFICE_BODY)).toBe(4);
     expect(
-      emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: OP_NOTE, noteText: OFFICE_NOTE_BODY })
+      emAppliesToVisit({
+        specialtyId: 'gastroenterology',
+        templateSections: OP_NOTE, // ← the GI doctor's ONE active template
+        noteText: REAL_SIGNED_OFFICE_BODY, // ← an unambiguous office visit
+      }),
+      'a SIGNED office visit must not lose its level to a colonoscopy template',
+    ).toBe(true);
+
+    // ⚠️ AND THE RESIDUAL, ASSERTED RATHER THAN LEFT TO BE DISCOVERED — F12-f.
+    // The escape is the FULL SOAP skeleton, so an office note that spells its
+    // sections some other way is STILL over-suppressed under an operative
+    // template. `OFFICE_NOTE_BODY` is exactly that shape, and it is the
+    // PRIMARY_CARE template's own vocabulary — an ordinary office note, not a
+    // contrived one. Filed as F12-f; NOT fixed here, because the cure is to
+    // widen `countOfficeSkeleton`, which also feeds the operative-note
+    // counterweight and would move suppression in the under- direction on a
+    // signed row #126(b) measured by hand.
+    expect(officeSkeletonCountFromText(OFFICE_NOTE_BODY)).toBe(0);
+    expect(
+      emAppliesToVisit({
+        specialtyId: 'gastroenterology',
+        templateSections: OP_NOTE,
+        noteText: OFFICE_NOTE_BODY,
+      }),
+      'KNOWN RESIDUAL (F12-f): a non-SOAP-worded office note is still suppressed',
+    ).toBe(false);
+  });
+
+  it('the template arm still wins when the body says NOTHING — the fail-safe is unchanged', () => {
+    // A body with no headings at all (a stub, a visit mid-pipeline) must not
+    // un-suppress an operative-templated visit. This is what keeps F12-d an
+    // AFFIRMATIVE exception rather than a wholesale inversion of precedence.
+    expect(
+      emAppliesToVisit({ specialtyId: 'gastroenterology', templateSections: OP_NOTE, noteText: EMPTY_NOTE })
     ).toBe(false);
   });
 
