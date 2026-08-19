@@ -19734,7 +19734,25 @@ a session that is waiting on a run cancels the very run it is protecting.
 
 ### 🟢 F12-d — CLOSED 2026-08-19 — A **RETIRED** TEMPLATE WAS SUPPRESSING THE BILLABLE LEVEL ON A **SIGNED** OFFICE VISIT
 
-**Ruling #129 (🟡 PROVISIONAL, loop). Branch `feat/f12d-note-shape-precedence`.**
+**Ruling #129 (🟡 PROVISIONAL, loop). Branch `feat/f12d-note-shape-precedence`,
+retired both sides on merge.**
+
+**Citation — 4 of 4 on `ed2058c8a9107c48d54164567503cd0464c2c09a`** (PR #735),
+produced by `scripts/check-citation.sh`, never typed:
+
+   · `CI` 32203137174 a1
+   · `e2e` 32203137128 a1
+   · `a11y-ci` 32203137151 a1
+   · `secrets-scan` 32203137170 a1
+
+Every line is `a1` — no run was re-run.
+
+⚠️ **THE PR HEAD WAS FORCE-PUSHED ONCE UNDER A DECLARED CANCELLATION**, and the
+declaration is in the log: `sign-gates.ts`'s doc-comment said the note body is
+consulted *"only when the template is SILENT"*, which F12-d made false in the
+same commit that made it false. Three of my own runs were discarded about 7
+minutes in — the cheap moment per the batching rule — via
+`scripts/push-with-cancellation.sh`. No other actor's evidence was touched.
 
 F12-d was filed as two FORWARD holes. **It is not — the same root defect was
 already costing a real signed record, in the direction ruling #123 calls WORSE
@@ -19940,8 +19958,27 @@ holds for `cptCodes.em` and the frozen `signedCode`.
 
 | quantity | count |
 |---|---|
-| non-ultrasound visits where the verdict is FALSE **and** the row carries `emScoredCode` / `cptCodes.em` / `emPendingChange` | **19** |
+| non-ultrasound visits where the verdict is FALSE **and** the row carries `emScoredCode` / `cptCodes.em` / a frozen `signedCode` | **15** |
 | of those, carrying a **frozen** `signedCode` on a SIGNED record | **2** |
+| ultrasound visits in the same state | **0** |
+
+⚠️ **RE-MEASURED THROUGH THE REAL PREDICATE, AND THE INHERITED FIGURE WAS 19.**
+The refuter's 19 came from a re-implementation of the predicate in SQL with the
+specialty axis approximated. Re-run through the shipped `emAppliesToVisit` over
+the same 48 rows, with the flag universe asserted first, the answer is **15** —
+and it reconciles as a partition of the whole corpus:
+
+    verdict FALSE + carries E/M state   15    <- F12-g
+    verdict FALSE + clean               24
+    verdict TRUE  + carries E/M state    7
+    verdict TRUE  + clean                2
+                                        --
+                                        48    == rows
+
+*A count carried forward from another session's report is a fabricated number* —
+and that rule does not stop applying because the other session was a subagent of
+mine. The two frozen-`signedCode` rows (`cmrxry1in…`, `cmrxxj1rn…`, both
+bariatric-surgery, both 99214) ARE confirmed.
 
 ⚠️ **`check-imaging-em-artifacts.sh` IS `where specialty='ultrasound'`** — the
 note-shape axis is entirely outside its watched set, so its 🟢 is true and covers
