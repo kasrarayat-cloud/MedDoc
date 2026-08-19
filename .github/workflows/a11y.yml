@@ -170,8 +170,32 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
 
-      - name: Install Playwright Chromium (with system deps)
-        run: npx playwright install --with-deps chromium
+      # ── #739 — this workflow already had the cache above, and it is the one
+      # that has stayed greenest. It gets the SPLIT anyway, for the diagnostic
+      # rather than the mitigation: a stall here would otherwise land in the
+      # same single silent log that made the phase unidentifiable on `CI`.
+      # ⚠️ AND ITS HEALTH IS NOT EVIDENCE THAT THE CACHE CURES THE STALL — a
+      # cached run was measured at 51s and an uncached one at ~18m39s in the
+      # SAME MINUTE, which reads as a cure and is confounded: the apt half runs
+      # either way, so an intermittent apt fault explains both observations
+      # equally. The split is what will finally separate them.
+      # #739 — bound apt's own network waits; see the measurement in `test.yml`.
+      - name: Bound apt's network waits (#739)
+        run: |
+          printf 'Acquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nAcquire::Retries "3";\n' \
+            | sudo tee /etc/apt/apt.conf.d/99-quillmd-timeouts > /dev/null
+          # Proves its own application: apt parses apt.conf.d at STARTUP, so a
+          # malformed drop-in fails here rather than being silently ignored.
+          sudo apt-get --version > /dev/null
+
+      - name: Install Playwright system deps (apt half of --with-deps)
+        timeout-minutes: 5
+        run: npx playwright install-deps chromium
+        working-directory: apps/transcribe-md
+
+      - name: Install Playwright Chromium (browser half of --with-deps)
+        timeout-minutes: 5
+        run: npx playwright install chromium
         working-directory: apps/transcribe-md
 
       - name: Install psql client (for seedVisitStates)
