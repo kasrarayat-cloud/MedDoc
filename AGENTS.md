@@ -717,6 +717,48 @@ met. So the discipline is a step, not an instinct:
 checklist, and the most confident-looking zero in a programme is the one produced
 over a universe nobody re-checked.
 
+### ⚠️ AND THE SAME SHAPE IN A KILL SWITCH: IT HALTED A LOOP THAT WAS WORKING
+
+**Standing 2026-08-19.** The section above describes a gate whose zero is
+worthless. This is the inverse cost: a check that measures the wrong universe
+and **fires**, stopping work that was demonstrably happening.
+
+> **A progress signal must be read where progress LANDS.** The FOUNDATION loop's
+> no-progress switch hashed the SHARED WORKING TREE's `RELAY.md`, while sessions
+> do their work in WORKTREES and land it on ORIGIN.
+
+The shared tree fast-forwards only at session START, so a session's own merges
+are invisible to the switch that judges it: `ledger_after` can never differ from
+`ledger_before` for work that session landed itself.
+
+⚠️ **MEASURED COST — 2026-08-19T12:44:53Z, 1h45m of dark loop.** Session 04
+merged **three** PRs and added **615 lines** to `RELAY.md`, closing F12-g
+(#742 merged `12:07:30Z`, thirty-seven minutes before the halt). The switch read
+two identical hashes and stopped. Every word of its halt message was true about
+the file it hashed and false about the programme.
+
+**Fixed by reading `git show origin/main:$LEDGER` after a fetch**, proved in
+BOTH directions by `scripts/tests/noprogress-switch.test.sh` against a throwaway
+repo with a real remote: a session that lands on origin counts as progress *even
+with the tree left behind*, and an idle pair still halts. **The idle arm is the
+one that matters** — anyone can stop a switch firing, and a fix that made the
+loop unstoppable would be strictly worse than the bug.
+
+⚠️ **AND THE HARNESS CAUGHT A SECOND DEFECT IN THE FIX ITSELF, ON ITS FIRST
+RUN.** The first version piped `git show` straight into `sha256sum`. On failure
+`git show` writes nothing and exits non-zero — **and the pipe runs anyway**, so
+`sha256sum` hashes EMPTY STDIN and returns the constant `e3b0c442…855`. A
+valid-looking hash, **identical on every broken read**, so two blind sessions
+would compare equal and reproduce the very false halt the function was written
+to prevent. Now: capture, test, then hash — and the switch additionally
+**declines to fire on an empty reading** and says so, because a blind instrument
+must never halt a loop that may be working.
+
+> **Piping a command into a hasher discards its exit code and converts a
+> FAILURE into a stable, plausible VALUE.** Any `X | sha256sum`, `X | wc -l`,
+> `X | jq` has this shape.
+
+
 ## NOTHING REACHES `main` OUTSIDE A PR — DOCS INCLUDED
 
 **`main` is what deploys. A commit that arrives outside the gate is a commit
