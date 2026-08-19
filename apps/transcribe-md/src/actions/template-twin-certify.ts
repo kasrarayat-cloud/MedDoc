@@ -198,7 +198,6 @@ export async function certifyNativeTemplateAction(
           (current?.fields ?? []).map(({ field, mapping }) => ({
             originalLabel: field.originalLabel,
             clinicalConcept: mapping.clinicalConcept,
-            laterality: mapping.laterality,
           })),
         ),
         encounterMode: 'dictation',

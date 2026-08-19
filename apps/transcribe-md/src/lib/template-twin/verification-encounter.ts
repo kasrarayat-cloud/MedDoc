@@ -60,15 +60,18 @@ export const VERIFICATION_ENCOUNTER = [
  * segments BY THEIR OWN NAMES, and the names come from the compiled field set.
  */
 
-/** The minimum the lifecycle gate requires. Named so the relationship between
- *  this generator and the gate is legible from here, and asserted by
- *  `gate-derived-encounter-exercises-the-form.test.ts`. */
-export const LIFECYCLE_MIN_FILLED_FIELDS = 10;
+/**
+ * ⚠️ BOUND TO THE GATE, NOT COPIED FROM IT. An earlier draft declared its own
+ * `LIFECYCLE_MIN_FILLED_FIELDS = 10` beside the real, then-private
+ * `MIN_CERTIFIED_FILLED_FIELDS` in `certification-lifecycle.ts`. Two constants
+ * for one threshold drift the day either moves, and the copy is the one nobody
+ * re-reads. Found by the adversarial pass.
+ */
+export { MIN_CERTIFIED_FILLED_FIELDS } from './certification-thresholds';
 
 export interface EncounterSourceField {
   originalLabel: string | null;
   clinicalConcept: string | null;
-  laterality?: string | null;
 }
 
 /** Placeholder rows carry no anatomy — the customer form literally contains
@@ -76,37 +79,78 @@ export interface EncounterSourceField {
  *  a measurement for a location nobody named would be inventing a finding. */
 const PLACEHOLDER = /<<.*?>>|&lt;&lt;.*?&gt;&gt;/;
 
-const MEASUREMENT_CONCEPTS = new Set([
-  'measurement.diameter',
-  'measurement.reflux_time',
-]);
+/**
+ * ⚠️ THE WHOLE MEASUREMENT FAMILY, READ FROM THE REGISTRY'S OWN VOCABULARY.
+ * An earlier draft hand-kept `{diameter, reflux_time}` — 2 of the registry's 5 —
+ * so a form whose rows carry `measurement.velocity` or `.length` produced NO
+ * dictation and silently fell back to the generic encounter. A hand-kept subset
+ * of somebody else's list is wrong eventually.
+ */
+const MEASUREMENT_PREFIX = 'measurement.';
 
 /**
- * Deterministic, index-derived values. NO randomness: a certification proof that
- * varies run to run cannot be compared against itself, and `Math.random()` in a
- * generator that feeds a stored artifact makes every re-run a different document.
+ * ⚠️ THE NARRATIVE IS VENOUS, SO IT IS ONLY EMITTED FOR A VENOUS FORM.
+ * The generator dictates reflux times, competence verdicts and a
+ * "no deep vein thrombosis" negative. On a NON-venous form carrying measurement
+ * rows — a thyroid or obstetric study — that is FABRICATED CLINICAL CONTENT in
+ * a document the certification stores. Found by the adversarial pass's
+ * clinical lens, and it is the only finding of the set that could have put
+ * invented findings into an artifact.
  *
- * The spread is deliberate rather than decorative: diameters straddle the
- * clinically ordinary 3–8 mm band, and reflux alternates either side of the
- * 0.5 s competence cutoff so a run exercises BOTH the competent and the
- * incompetent branch instead of proving one of them twice.
+ * The evidence for "venous" is the form's OWN labels, not a guess about the
+ * doctor: a venous duplex names its saphenous/femoral/popliteal segments.
  */
-function diameterFor(index: number): string {
-  return (3.2 + ((index * 7) % 45) / 10).toFixed(1);
+const VENOUS_TOKEN =
+  /\b(gsv|ssv|aagsv|pagsv|saphenous|femoral|popliteal|perforator|tibial|reflux|varicos)\b/i;
+
+/**
+ * Deterministic values. NO randomness: a proof that varies run to run cannot be
+ * compared against itself, and this text feeds a stored artifact.
+ *
+ * ⚠️ AND EVERY VALUE IS GLOBALLY UNIQUE ACROSS THE WHOLE ENCOUNTER, WHICH IS
+ * THE ENTIRE POINT AND WAS THE BUG.
+ *
+ * The first version derived values from `index % 3` / `index % 5`. With the
+ * owner's ten-vessel form the left leg's index is `i + 10`, and `10 % 5 === 0`,
+ * so EVERY incompetent vessel got the IDENTICAL reflux value on both legs — 8
+ * distinct values across 20 cells, measured. `bridge-evidence.ts:183` then
+ * refuses a cell whose candidate facts disagree on side
+ * (`sides.size > 1 -> ambiguous_laterality`), and that check runs BEFORE the
+ * row's own laterality can break the tie. Measured downstream: 14 of 20 reflux
+ * cells refused, one filled citing a DIFFERENT vein.
+ *
+ * The gate could not see it — 20 diameters alone clear the >= 10 threshold — so
+ * certification would have SUCCEEDED on a proof that never once exercised an
+ * incompetent-vein cell.
+ */
+function measurementValues(count: number): { diameter: string; reflux: string; competent: boolean }[] {
+  const out: { diameter: string; reflux: string; competent: boolean }[] = [];
+  for (let k = 0; k < count; k += 1) {
+    const competent = k % 2 === 0;
+    out.push({
+      // 3.10 .. upward in 0.13 steps: distinct, and inside the ordinary 3-8mm band
+      diameter: (3.1 + k * 0.13).toFixed(2),
+      // competent stays under the 0.5s cutoff, incompetent over it; both strictly
+      // increasing, so no two cells anywhere in the encounter share a number.
+      reflux: competent ? (0.11 + k * 0.003).toFixed(3) : (0.62 + k * 0.017).toFixed(3),
+      competent,
+    });
+  }
+  return out;
 }
-function refluxFor(index: number): { seconds: string; competent: boolean } {
-  const competent = index % 2 === 0;
-  return {
-    seconds: competent ? (0.2 + (index % 3) / 10).toFixed(1) : (1.1 + (index % 5) / 2).toFixed(1),
-    competent,
-  };
-}
+
+/** Hard ceiling. The evidence gate refuses anything over 12,000 chars BEFORE any
+ *  model call, and that refusal reads as SYNTHETIC_EVIDENCE_REJECTED — a
+ *  security-shaped error for what is really "your form is large". A big form
+ *  must degrade to a shorter dictation, never to a misleading refusal. */
+const MAX_ENCOUNTER_CHARS = 9_000;
 
 /**
  * Build a synthetic dictation that speaks to THIS template's own measurement
  * rows. Falls back to the generic encounter when a template has no measurement
- * fields at all — a SOAP-shaped template has nothing to enumerate, and the
- * generic text is right for it.
+ * fields, when its rows are all placeholders, or when the form is not venous —
+ * the narrative this generator writes is venous, and it must not be told about
+ * a study it does not describe.
  */
 export function deriveVerificationEncounter(
   fields: readonly EncounterSourceField[],
@@ -114,11 +158,11 @@ export function deriveVerificationEncounter(
   const labels: string[] = [];
   const seen = new Set<string>();
   for (const f of fields) {
-    if (!f.clinicalConcept || !MEASUREMENT_CONCEPTS.has(f.clinicalConcept)) continue;
+    if (!f.clinicalConcept || !f.clinicalConcept.startsWith(MEASUREMENT_PREFIX)) continue;
     const label = (f.originalLabel ?? '').trim();
     if (!label || PLACEHOLDER.test(label)) continue;
-    // The reflux column's own label is a UNIT HEADER ("REFLUX TIME (ms)"), not a
-    // vessel. It addresses no row and must not become a dictated segment.
+    // A column's UNIT HEADER ("REFLUX TIME (ms)") labels a column, addresses no
+    // row, and would become a dictated segment that aligns with nothing.
     if (/^reflux\s+time/i.test(label)) continue;
     const key = label.toLowerCase();
     if (seen.has(key)) continue;
@@ -128,31 +172,43 @@ export function deriveVerificationEncounter(
 
   if (labels.length === 0) return VERIFICATION_ENCOUNTER;
 
-  const lines: string[] = [
-    // ⚠️ LOAD-BEARING: the evidence gate requires an explicit synthetic marker
-    // and throws SYNTHETIC_EVIDENCE_REJECTED, before any model call, without it.
-    'Synthetic certification test encounter — fictional example data, no real patient.',
-    'Bilateral lower extremity venous reflux study, standing, with distal augmentation.',
-    'Indication: bilateral leg heaviness, aching, and visible varicosities.',
-  ];
+  // ⚠️ EVIDENCE, NOT ASSUMPTION: the form's own labels must look venous before a
+  // venous narrative is written about it.
+  if (!labels.some((l) => VENOUS_TOKEN.test(l))) return VERIFICATION_ENCOUNTER;
 
-  // Both legs, because the form carries each row twice and a one-legged
-  // dictation leaves half the table unaddressed — and because the laterality
-  // arms downstream only mean something when a side is actually said.
-  for (const side of ['Right', 'Left'] as const) {
-    labels.forEach((label, i) => {
-      const idx = side === 'Right' ? i : i + labels.length;
-      const d = diameterFor(idx);
-      const r = refluxFor(idx);
-      lines.push(
-        `${side} ${label}: diameter ${d} millimeters, reflux time ${r.seconds} seconds` +
-          `${r.competent ? '; competent, within normal limits.' : '; incompetent.'}`,
-      );
+  const build = (take: number): string => {
+    const used = labels.slice(0, take);
+    const vals = measurementValues(used.length * 2);
+    const lines: string[] = [
+      // ⚠️ LOAD-BEARING: the evidence gate requires an explicit synthetic marker
+      // and throws SYNTHETIC_EVIDENCE_REJECTED, before any model call, without it.
+      'Synthetic certification test encounter — fictional example data, no real patient.',
+      'Bilateral lower extremity venous reflux study, standing, with distal augmentation.',
+      'Indication: bilateral leg heaviness, aching, and visible varicosities.',
+    ];
+    (['Right', 'Left'] as const).forEach((side, s) => {
+      used.forEach((label, i) => {
+        const v = vals[s * used.length + i];
+        lines.push(
+          `${side} ${label}: diameter ${v.diameter} millimeters, reflux time ${v.reflux} seconds` +
+            `${v.competent ? '; competent, within normal limits.' : '; incompetent.'}`,
+        );
+      });
     });
-  }
+    lines.push(
+      'Deep venous system patent bilaterally, compressible, phasic, no deep vein thrombosis.',
+    );
+    return lines.join(' ');
+  };
 
-  lines.push(
-    'Deep venous system patent bilaterally, compressible, phasic, no deep vein thrombosis.',
-  );
-  return lines.join(' ');
+  // Shrink rather than overflow. A form large enough to exceed the gate's scan
+  // window degrades to fewer segments — still far above the fill threshold —
+  // instead of being refused with a security-shaped error.
+  let take = labels.length;
+  let text = build(take);
+  while (text.length > MAX_ENCOUNTER_CHARS && take > 1) {
+    take -= 1;
+    text = build(take);
+  }
+  return text;
 }

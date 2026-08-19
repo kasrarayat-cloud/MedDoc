@@ -120,7 +120,6 @@ export async function runAutoCertifyTwin(
         persisted.fields.map(({ field, mapping }) => ({
           originalLabel: field.originalLabel,
           clinicalConcept: mapping.clinicalConcept,
-          laterality: mapping.laterality,
         })),
       ),
       encounterMode: 'dictation',
