@@ -20000,7 +20000,7 @@ irreversible production mutation with its own door (`run-ruled-mutation.sh`) and
 its own declaration. **The first step is a WATCHER**, so the number stops being
 invisible; the disposition of the 15 is a war-room question.
 
-> ✅ **THE WATCHER IS DELIVERED — 2026-08-19, session 03.**
+> 🟠 **THE WATCHER IS BUILT AND PROVEN — 2026-08-19, session 03. ITS GATE IS PARKED ON #739.**
 > `scripts/check-em-note-shape-artifacts.sh`, read-only, running the shipped
 > predicate, with a 30-arm gate. It re-derived this partition independently
 > (**15 / 24 / 7 / 2 = 48**) and added three facts this row did not carry:
@@ -20267,7 +20267,54 @@ deployed."*
 
 ---
 
-### 🟢 F12-g — THE WATCHER IS DELIVERED — **2026-08-19, run `20260818-232127-b1` session 03**
+### 🟠 F12-g — THE WATCHER IS BUILT AND PROVEN; **THE GATE IS PARKED ON AN EXTERNAL FAULT (#739)** — **2026-08-19, run `20260818-232127-b1` session 03**
+
+> ⚠️ **STATUS, WRITTEN BEFORE THE EVIDENCE BELOW SO IT CANNOT BE MISREAD.**
+> The work is complete, committed and pushed as **PR #740** (`af797344`). It is
+> **NOT MERGED AND NOT CITED**, and that is nobody's code defect: `CI` and `e2e`
+> could not complete because of the Playwright-install stall filed as **#739**.
+>
+> | check | on `af797344` |
+> |---|---|
+> | `secrets-scan` | ✅ success (a1) |
+> | `a11y-ci` | ✅ success (a2, after one stall) |
+> | `CI` | 🔴 cancelled ×3 — stalls of **18m45s · ~18m39s · ~19m** against a **20-minute** ceiling |
+> | `e2e` | 🔴 cancelled ×2 — install stalls of **21m06s** and **13m51s+**; both cancelled BY ME once the arithmetic made them unpassable (a ~20-minute stall plus a 36–49 minute pack does not fit in 55 minutes) |
+>
+> **Treated as an EXTERNAL fault under MASTER's own clause, so it consumed no
+> cure attempt:** the mechanism is named from evidence — same step, same
+> command, same commit; the identical `CI` job took **5m16s** on the previous
+> head seventeen minutes earlier; three sibling jobs in the same run passed
+> normally; and it struck **two different workflows concurrently**.
+>
+> ⚠️ **AND A "RECOVERY" I POSTED WAS WRONG, WHICH IS THE RULE WORKING ON ITS
+> OWN AUTHOR.** After the first re-run I recorded *"the mirror RECOVERED"* on
+> the strength of one **51-second** install. `CI` stalled again **17 minutes
+> later**. I had flagged the caveat — *one fast install is a blip* — and it came
+> true inside the same hour. Corrected publicly on #739 rather than left
+> standing.
+>
+> **THE DISCRIMINATOR, and it is the useful residue:** the two re-runs started in
+> the SAME MINUTE on the same commit — `a11y-ci` (**cached**, `a11y.yml:166`)
+> took **51s**; `CI` (**no cache**) stalled ~18m39s. Measured: **only `a11y.yml`
+> caches `~/.cache/ms-playwright`** — `test.yml` and `e2e.yml` have none, while
+> all three run the identical `npx playwright install --with-deps chromium`.
+> **`CI` is the most exposed required check in the repository: no cache, and the
+> tightest ceiling of the three (20 / 25 / 55).** This does not overturn the
+> earlier finding that a cache-HIT run still stalled in apt; both hold if the
+> fault is intermittent and the cache reduces exposure without eliminating it.
+>
+> ⚠️ **AND IT BEARS ON F12-h**, which is parked on `e2e` headroom: an 18–20
+> minute stall exceeds e2e's ~6 minutes of worst-case headroom by 3× on its own,
+> independent of anything F12-h would add. F12-h's unpark condition — *a measured
+> run under the ceiling with the fourth class in* — is unreachable while this is
+> live, because the variance is not in the pack.
+>
+> **WHAT UNPARKS THIS ROW:** a green `CI` + `e2e` on `af797344` (or its
+> descendant). Nothing in the branch needs to change. Three comments on #739
+> carry the full timings.
+
+### THE ITEM ITSELF — BUILT, MEASURED AND PROVEN
 
 **Branch `feat/f12g-em-shape-watcher`. The item's own first step, executed as
 written: `check-em-note-shape-artifacts.sh`, READ-ONLY, plus a 25-arm gate.**
