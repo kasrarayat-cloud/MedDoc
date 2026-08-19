@@ -20206,3 +20206,47 @@ formats. An unverified step named honestly is worth more than a green tick.
 `~/.cache/ms-playwright`, or trimming/sharding the pack. Not a feeling that there
 is room; a measured run under the ceiling with the fourth class in.
 
+
+### ✅ F12-f IS LIVE IN PRODUCTION — **2026-08-19T05:03:56Z, session 02 — 26 of 26 JUDGED**
+
+**Deployed:** `24b739f9eac155b6f614ab7f80cdc993ad03ee05` (merge of PR #737),
+cited **4 of 4, every line `a1`** — `CI` 32215456960 · `e2e` 32215456851 ·
+`a11y-ci` 32215456842 · `secrets-scan` 32215456821. The PR head
+`99c518d91483c4f6b18296c20d6647e68cfb9f4c` was separately cited 4 of 4, also all
+`a1`; **no re-run anywhere**, so nothing needs explaining.
+
+**§2.5 resolved CARRY-FORWARD** to `20260819-fc8e7790.md`, 2 commits back, range
+**6 files / 0 runtime**, with the gate's own non-emptiness control firing.
+
+| group | rows | result |
+|---|---|---|
+| structural, read from the running worker | 8 | **8 exact** |
+| clinical + twin counts (MUST NOT CHANGE) | 12 | **12 unmoved** |
+| co-tenants | 5 | **5 at expected** |
+| behavioural — production verdict delta | 1 | **exact (zero)** |
+
+**Full report: `docs/deploy-reports/f12f-counterweight-concepts-20260819.md`.**
+
+⚠️ **THE BEHAVIOURAL ROW IS A DECLARED ZERO AND IT HELD: 9 apply / 39 suppressed,
+before and after.** The harness was proved to be reading the SHIPPED code —
+`sha256sum` of `note-shape.ts` inside the worker container and of the file the
+harness imports are identical (`78f2a6c3…`). *A behavioural claim run against a
+same-branch copy that had drifted would look exactly like this one.*
+
+⚠️ **AND ROW 4 WAS GIVEN ITS OWN POSITIVE CONTROL, BECAUSE `0 → 0` CANNOT
+DISCRIMINATE ALONE.** The absence row for `'RECOMMENDATIONS', ['PLAN']` reads 0
+both sides; a broken grep reads 0 too. The same matcher relaxed to
+`'RECOMMENDATIONS',` returns **1** in the same file, so the region is reachable
+and the zero is a real absence rather than a blind one.
+
+**Environment after:** co-tenants 5/5 · migrations 104/104 · imaging invariant
+🟢 (0 of 20) · ingress TLS 🟢 · 9 of 9 containers healthy, both app services
+recreated. Most recent visit `createdAt` unchanged at `2026-08-18 20:37:53Z`
+across BOTH of tonight's deploys, so the unmoved counts were compared against a
+genuinely static population rather than one that happened not to move.
+
+**Payload scope:** `24b739f9`'s parent `0c3698b1` was already live, so this
+deploy ships exactly F12-f and the declaration covers the full diff. The
+two-changes-one-deploy hazard does not apply — *stated rather than assumed,
+because "I deployed `main`" is not the same claim as "I judged what I
+deployed."*
