@@ -325,14 +325,36 @@ describe('F12-g — an unknown key under cptCodes.em is a CANNOT-TELL, not a cle
   // as a perfectly clean row — silently, and indistinguishably from a row that
   // really is clean. Zero instances on production today; this is for the row
   // nobody has written yet.
-  it('the known key set is exactly what production carries', () => {
-    // Censused 2026-08-19 across all 10 object-typed rows.
+  // ⚠️ THIS ARM WAS NAMED `the known key set is exactly what production
+  // carries` AND ITS BODY COMPARES TWO CONSTANTS. It never touched production
+  // and, from a unit test with no database, it never could — so the name made a
+  // claim the implementation cannot make. Canon's "A check whose TITLE is
+  // narrower than what it MEASURES", caught by this gate's own author in the
+  // pass that shipped it.
+  //
+  // The arm is KEPT, because what it actually does is worth doing: it is a PIN
+  // on `KNOWN_EM_KEYS`, and the pin is what forces the partition decision. The
+  // constant's own doc-comment sets the retirement condition — *"a key added
+  // here alone silences the control without widening the watch"* — and this arm
+  // is what makes an edit to it LOUD instead of quiet. So it is renamed to what
+  // it measures rather than deleted.
+  //
+  // ⚠️ WHERE THE LIVE MEASUREMENT ACTUALLY LIVES: `unknownEmKeys`, run against
+  // the real column by `scripts/check-em-note-shape-artifacts.sh`. That is the
+  // only thing that can compare this list to production, and it reports a
+  // non-empty result as CANNOT-TELL rather than as a finding about a visit.
+  // A green here says the list has not drifted since the census; it does not
+  // say the census is still true.
+  it('PINS KNOWN_EM_KEYS to the 2026-08-19 census — a pin, not a live measurement', () => {
     expect([...KNOWN_EM_KEYS].sort()).toEqual(
       ['code', 'description', 'evidence_quote', 'override', 'reasoning', 'signedCode'].sort()
     );
   });
 
-  it('accepts the production key set without complaint', () => {
+  // Same reading applied one arm down: this is a FIXTURE built from the census
+  // (five of the six known keys — `override` is absent, which is the ordinary
+  // shape), not a row read from production. Named for what it is.
+  it('accepts a row carrying only CENSUSED keys without complaint', () => {
     expect(
       unknownEmKeys([
         row({
