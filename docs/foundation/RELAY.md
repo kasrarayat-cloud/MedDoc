@@ -20440,6 +20440,41 @@ extension condition is written into the constant, so checking it is a lookup.
 - **Neither census gate was weakened.** Both were red before my entries and green
   after; the matchers are untouched and the assertions are exact-array equality.
 
+#### ⚠️ AND THE WRAPPER SHIPS UNEXECUTED, SO IT GOT A LINE-BY-LINE READ — WHICH FOUND A BUG THE READ ALONE WOULD NOT HAVE
+
+Because the loop cannot invoke `check-em-note-shape-artifacts.sh` (limit 1
+below), it would have shipped having never run. Every EXTERNAL behaviour in it
+was therefore exercised by hand — `psql -A -t -f -`, `npx --no-install tsx` from
+a worktree, `docker exec sha256sum`, `docker exec printenv` — and the one line
+that had not been was run on its own. **It was broken:**
+
+```
+node -e 'console.log(require("fs").realpathSync(process.argv[1]))' \
+  "$ROOT/node_modules/@meddoc/shared/src/specialties.ts"
+  → Error: ENOENT … lstat '/opt/meddoc-pro/.f12g-wt/node_modules'
+```
+
+**A git worktree checks out TRACKED FILES ONLY and has no `node_modules` at
+all.** So `realpathSync` threw, `SHARED_SPECIALTIES` came back empty, and the
+script refused with `2` — **every time, from the one place the loop actually
+works.** It failed CLOSED, which is the right direction, but *a check that can
+only ever say "cannot tell" is not a check.*
+
+⚠️ **`note-shape.ts`'s OWN HEADER DESCRIBES THIS EXACT TRAP**, I cited it in the
+comment sitting directly above the broken line, and I still built the resolution
+wrong. *Read to form a hypothesis; RUN something to name a mechanism* — applied
+here to my own script, and the reading is what failed.
+
+Fixed to walk up the way Node does; verified from the worktree, resolving to
+`/opt/meddoc-pro/packages/shared/src/specialties.ts` — the shared tree's copy,
+which is exactly the silent cross-tree resolution the control exists to expose,
+and which the script now PRINTS rather than assumes.
+
+**HONEST RESIDUE: the wrapper's bash GLUE is still unexecuted.** Its arrays,
+its identity loop and its final pipeline have been read and their pieces proved
+individually; the assembled script has never run, because it cannot. Named, not
+papered over.
+
 #### PROOF
 
 - **Unit gate: 30 arms, all green.** Controlled delta, **both sides measured on

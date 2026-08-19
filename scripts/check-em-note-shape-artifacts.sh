@@ -129,9 +129,25 @@ fi
 sha_local() { sha256sum "$1" 2>/dev/null | cut -c1-16; }
 sha_ctr()   { docker exec "$APP_CONTAINER" sha256sum "$1" 2>/dev/null | cut -c1-16; }
 
-SHARED_SPECIALTIES="$(node -e 'console.log(require("fs").realpathSync(process.argv[1]))' \
-  "$ROOT/node_modules/@meddoc/shared/src/specialties.ts" 2>/dev/null)"
-[ -n "$SHARED_SPECIALTIES" ] || cannot_tell "could not resolve @meddoc/shared/src/specialties.ts from $ROOT"
+# ⚠️ THIS WALKS UP, AND THE FIRST DRAFT DID NOT — CAUGHT BY RUNNING THE LINE
+# RATHER THAN READING IT. It read `$ROOT/node_modules/...` directly, which does
+# not exist when `$ROOT` is a git WORKTREE: a worktree checks out TRACKED FILES
+# ONLY and has no `node_modules` at all. `realpathSync` threw, the variable came
+# back empty, and the script refused — every time, from the one place the loop
+# actually works.
+#
+# It failed CLOSED, which is the right direction, but a check that can only ever
+# say "cannot tell" is not a check. So resolution now does what NODE does: walk
+# up until a `node_modules/@meddoc/shared` exists, then realpath it. From a
+# worktree that lands in the SHARED tree — which is precisely the silent
+# cross-tree resolution this control exists to expose, so the resolved path is
+# printed below rather than assumed.
+#
+# ⚠️ AND NOTE-SHAPE.TS'S OWN HEADER ALREADY DESCRIBES THIS EXACT TRAP. It was
+# read, cited in the comment above, and the resolution was still built wrong.
+SHARED_SPECIALTIES="$(node -e 'const fs=require("fs"),p=require("path");let d=process.argv[1];for(;;){const c=p.join(d,"node_modules/@meddoc/shared/src/specialties.ts");if(fs.existsSync(c)){console.log(fs.realpathSync(c));process.exit(0);}const u=p.dirname(d);if(u===d)process.exit(1);d=u;}' \
+  "$ROOT" 2>/dev/null)"
+[ -n "$SHARED_SPECIALTIES" ] || cannot_tell "could not resolve @meddoc/shared/src/specialties.ts by walking up from $ROOT"
 
 declare -a PAIRS=(
   "$ROOT/apps/transcribe-md/src/lib/note-shape.ts|/app/apps/transcribe-md/src/lib/note-shape.ts"
