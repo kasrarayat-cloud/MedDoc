@@ -29,6 +29,7 @@ import {
   createTemplateTwinDraft,
   TemplateTwinDraftError,
 } from '@/lib/template-twin/create-draft';
+import { VERIFICATION_ENCOUNTER } from '@/lib/template-twin/verification-encounter';
 import { readTemplateTwinWorkspace } from '@/lib/template-twin/workspace-read';
 import {
   certifyAndActivateTemplateTwin,
@@ -52,13 +53,10 @@ import { logTwinAudit } from '@/lib/template-twin/twin-audit';
 // roundtrips before certification (the certify step binds this verified proof).
 // Generic enough to exercise common fields; the roundtrip proof is about render
 // mechanics, not fill completeness.
-const VERIFICATION_ENCOUNTER = [
-  'Bilateral lower extremity venous reflux study, standing, with distal augmentation.',
-  'Indication: bilateral leg heaviness, aching, and visible varicosities.',
-  'Right great saphenous vein 6.2 millimeters at the saphenofemoral junction with reflux time 3.4 seconds; incompetent.',
-  'Right small saphenous vein competent, no reflux. Left great saphenous vein 4.8 millimeters, reflux 0.4 seconds, within normal limits.',
-  'Deep venous system patent bilaterally, compressible, phasic, no deep vein thrombosis.',
-].join(' ');
+/** ⚠️ EXPORTED so the auto-certify worker job uses THE SAME synthetic encounter
+ *  the manual path attests against. Two verification encounters would mean the
+ *  automatic path proves something the manual path never proved, and neither
+ *  reader would know which one their template passed. Ruling #127. */
 
 const MAX_DOCX_BYTES = 5 * 1024 * 1024; // 5 MB — a single clinical template
 const DISABLED = 'Native template fill is not enabled for your account.';

@@ -48,6 +48,10 @@ const baseInput = {
   specialty: 'primary-care',
   soapFinal: '## Subjective\nRoutine follow-up for hypertension.',
   entitiesJson: '{}',
+  // F12-c — an ordinary office visit: E/M applies, so every arm below keeps
+  // asserting exactly what it asserted before the parameter existed. The
+  // suppressed direction has its own gate (gate-f12c-compute-layer-em.test.ts).
+  emApplies: true,
 };
 
 beforeEach(() => {

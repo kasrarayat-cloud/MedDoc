@@ -157,6 +157,45 @@ export const JOB_RETENTION_SWEEP = 'retention_sweep';
  *  per-attempt timeout can't reach. */
 export const JOB_STUCK_VISIT_WATCHDOG = 'stuck_visit_watchdog';
 
+/** RULING #127 — auto-certify a freshly compiled template twin.
+ *
+ * ⚠️ IT RUNS HERE AND NOT ON THE UPLOAD REQUEST because certification runs a
+ * LIVE model generation for its round-trip proof. On the upload thread that
+ * would make an upload hang on a generation, and a slow or failing model would
+ * read to the doctor as a broken upload. Upload returns fast; the row says
+ * "Preparing your format…"; this finishes out of band.
+ *
+ * ⚠️ attempts: 1, DELIBERATELY. A retry costs another live generation, and the
+ * failure mode this must never produce is a half-certified template — clause
+ * 2(a). One attempt: it certifies, or it lands in needs-review with the reason
+ * named, which is a state the doctor can act on. */
+export const JOB_AUTO_CERTIFY_TWIN = 'auto_certify_twin';
+
+export interface AutoCertifyTwinPayload {
+  noteTemplateId: string;
+  userId: string;
+  userEmail: string;
+  practiceId: string;
+}
+
+export async function enqueueAutoCertifyTwin(payload: AutoCertifyTwinPayload): Promise<void> {
+  // jobId keyed on the template so a double upload cannot start two live
+  // generations for the same form.
+  await getCleanupQueue().add(JOB_AUTO_CERTIFY_TWIN, payload, {
+    // ⚠️ '--', NEVER ':'. BullMQ REFUSES a custom job id containing a colon —
+    // `Custom Id cannot contain :` — and it refuses at ADD time, so the enqueue
+    // throws and NO JOB IS EVER CREATED. This file already records that exact
+    // failure for the DLQ enqueuer (G10, ~100 lines below): "EVERY [enqueue]
+    // failed ... Switching to '--' as the separator makes the jobId
+    // BullMQ-legal." This line was written with a colon anyway and reproduced
+    // it, so auto-certification could never run — not on upload, not by
+    // backfill. Caught by running the real backfill against production; the
+    // enqueue guards mock the queue and never meet BullMQ's validator.
+    jobId: `autocert--${payload.noteTemplateId}`,
+    attempts: 1,
+  });
+}
+
 export function getCleanupQueue(): Queue {
   if (cleanupQueue) return cleanupQueue;
   cleanupQueue = new Queue(CLEANUP_QUEUE_NAME, {

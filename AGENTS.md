@@ -2431,6 +2431,45 @@ can never be shredded, and the blocks stay on disk. This cost two files on
 
 **Report paths, never contents.**
 
+### ⚠️ A DESTRUCTION LIST IS A CLAIM
+
+**Standing 2026-08-18.** A list of things to reap — handed over by another
+session, a report, or your own earlier self — is a CLAIM about what those paths
+are. Destruction is irreversible, so the claim is verified before it is executed,
+never after.
+
+> **CLASSIFY BY CONTENT, AND VERIFY REGISTRATION.** Before anything is shredded:
+> `git worktree list` (is that directory a registered worktree?), `gh pr list`
+> (does an OPEN pr depend on it?), and `git ls-files` (is the file TRACKED?).
+> A path is scratch when those three say so — never because a list said so.
+
+⚠️ **REFERENCE CASE, AND IT WAS ONE COMMAND FROM REAL LOSS.** A loop session
+handed over a reap list reading, in effect, *"`.f18-comment603.md`,
+`.f18-wt/.f18-{msg,msg2,…}`"*. The list meant **scratch files INSIDE a
+worktree**. Read literally as *"reap `.f18-*`"* it would have destroyed:
+
+- **`.f18-wt` itself — a REGISTERED git worktree**, not a stray snapshot;
+- on an **UNMERGED** branch with **PR #722 OPEN**;
+- whose `.jpeg`/`.png` files are **TRACKED repo content** (`certify-panel.png`,
+  `audit-new-visit.jpeg` and others), not evidence and not scratch.
+
+**The filenames looked exactly like the liability class this file warns about** —
+a directory of images with audit-shaped names, sitting in the repo root. That is
+the trap: the shape that should make you suspicious and the shape that is
+innocent are the same shape, and only the three checks tell them apart.
+
+⚠️ **AND THE PHI SWEEP'S ONE HIT WAS PROSE.** A grep for PHI/credential shapes
+matched the word *"patients"* in one file. Read in context it was
+`patients 34` — a §2.5 **clinical-count row**, a number and not content. Had the
+sweep's zero been trusted in the other direction, or its one hit been treated as
+a finding without reading it, the conclusion would have been wrong both ways.
+
+**POST-DESTRUCTION CONTROLS ARE PART OF THE REAP, NOT AN EXTRA.** After
+shredding, assert what must SURVIVE, not only what must be gone: the worktree
+still resolves, its tracked files are present, its `git status` is still clean.
+A reap that only proves absence cannot tell "I removed the scratch" from
+"I removed rather more than the scratch".
+
 #### Session evidence trees are EXTRACT-THEN-SHRED, at session end
 
 **Findings go into the repository; the raw tree is destroyed. An unowned
@@ -2513,6 +2552,7 @@ COLUMN, and no sweep of the filesystem will find them.
 
 ```bash
 bash scripts/check-imaging-em-artifacts.sh    # READ-ONLY. 0 = clean, 1 = found, 2 = off-host
+bash scripts/check-em-note-shape-artifacts.sh # READ-ONLY. 0 = clean, 1 = FOUND, 2 = can't tell
 bash scripts/assert-migrations-applied.sh     # READ-ONLY. 0 = all applied, 1 = UNAPPLIED, 2 = off-host
 bash scripts/assert-migrations-applied.sh --qa # READ-ONLY. same, against the QA stack
 bash scripts/check-qa-mock-posture.sh         # READ-ONLY. 0 = severed, 1 = LIVE KEYS, 2 = stack down
@@ -2524,6 +2564,45 @@ bash scripts/check-bind-mount-agreement.sh    # READ-ONLY. 0 = agrees, 1 = DIVER
 bash scripts/check-hooks-installed.sh         # READ-ONLY. 0 = hooks live, 1 = INERT, 2 = can't tell
 bash scripts/check-cotenants.sh               # READ-ONLY. 0 = expected, 1 = DIVERGED, 2 = can't tell
 ```
+
+⚠️ **THE TWO E/M WATCHERS COVER TWO DIFFERENT AXES, AND NEITHER IS A WIDENING
+OF THE OTHER.** `check-imaging-em-artifacts.sh` is `where specialty='ultrasound'`
+— the SPECIALTY axis. `check-em-note-shape-artifacts.sh` (F12-g) watches the
+NOTE-SHAPE axis, ruling #123's second axis, which is **entirely outside the
+first's watched set**: a GI doctor does office visits AND colonoscopies under one
+specialty id, so no specialty predicate can separate them.
+
+> **The imaging watcher's 🟢 is TRUE and covers none of the note-shape rows.
+> Measured 2026-08-19: it read `0 of 20` on the same day the note-shape watcher
+> read `15`, and all 15 are `axis=note-shape`, `0` are `axis=specialty`.** The
+> two do not overlap today, and that is a measurement rather than an assumption
+> — the scan reports which axis suppressed each row precisely so the claim stays
+> checkable.
+
+The note-shape watcher runs the **shipped** `emAppliesToVisit`; it never
+re-implements it. F12-g's own filing records the cost of the alternative: an SQL
+re-implementation with the specialty axis approximated answered **19** where the
+shipped predicate answers **15**, and the 19 reached a ledger row before anyone
+caught it. It also never reads a note BODY — the extract emits only heading
+lines, filtered by a strict prefix of `NOTE_SECTION_HEADING_RE`, and the scanner
+asserts on every run that nothing else came through.
+
+⚠️ **IT REPORTS; IT NEVER REMEDIATES, AND THE THREE CLASSES IT FINDS ARE NOT ONE
+FINDING.** A computed `emScoredCode`, a DOCTOR-SET `cptCodes.em.override.code`,
+and a FROZEN `signedCode` on a signed record need three different decisions —
+clearing the second deletes somebody's recorded clinical judgement, and the
+third is never touched. Remediation goes through
+`scripts/run-ruled-mutation.sh` with its own §2.5 declaration; the disposition is
+a war-room question.
+
+⚠️ **AND THE LOOP CANNOT INVOKE IT BY NAME UNTIL AN OWNER GRANTS IT.**
+`.claude/settings.json` names permitted scripts one by one and is protected from
+the layer it governs, so the session that wrote the script **could not ship its
+own grant** — canon's *"an entry that names an instrument verifies that
+instrument's grant in the same commit"* is structurally unreachable from the
+unattended side. The granted fallback is documented in the script's own header
+and is the route the 2026-08-19 measurement actually used. **Do not tunnel the
+refused file through `node -e` or `python3 -c`.**
 
 ⚠️ **`check-cotenants.sh` CARRIES AN EXPECTED STATUS PER HOST, AND ONE OF THEM
 IS A `410`.** `pro.quillmd.com` is DELIBERATELY RETIRED — the `meddoc-pro` CRM

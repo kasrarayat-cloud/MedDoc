@@ -94,6 +94,7 @@ async function loadNativeTemplates(doctorId: string): Promise<NativeTemplateList
       templateTwinCompiledVersion: {
         select: {
           certificationStatus: true,
+          compiledAt: true,
           fields: { select: { id: true } },
         },
       },
@@ -107,9 +108,28 @@ async function loadNativeTemplates(doctorId: string): Promise<NativeTemplateList
     version: number;
     templateTwinCompiledVersion: {
       certificationStatus: string;
+      compiledAt: Date | null;
       fields: { id: string }[];
     } | null;
   };
+
+  // ── RULING #127 — "Preparing your format…" ─────────────────────────────────
+  //
+  // ⚠️ DERIVED, NOT STORED, AND THE BOUND IS WHY THAT IS SAFE. There is no
+  // "preparing" column and adding one is a migration on a clinical table for a
+  // transient UI state. So the row infers it: a twin that compiled RECENTLY and
+  // has not certified yet is being prepared.
+  //
+  // ⚠️ THE BOUND IS THE HONESTY. Auto-certification is capped at 8 minutes by the
+  // worker's own timeout, so a window wider than that cannot be "still working" —
+  // it is a template that needs the doctor. Showing "Preparing…" indefinitely
+  // after a failure would be a worse silence than the one #713 just fixed:
+  // a spinner that never resolves teaches a doctor to stop looking.
+  //
+  // Past the window an uncertified twin reads "Needs review", which is true and
+  // actionable, and the manual screen is one click away.
+  const PREPARING_WINDOW_MS = 10 * 60_000;
+  const now = Date.now();
   return (rows as Row[]).map((t) => ({
     noteTemplateId: t.id,
     name: t.name,
@@ -118,6 +138,10 @@ async function loadNativeTemplates(doctorId: string): Promise<NativeTemplateList
       t.templateTwinCompiledVersion?.certificationStatus ?? 'NEEDS_CONFIRMATION'
     ).toLowerCase(),
     fieldCount: t.templateTwinCompiledVersion?.fields.length ?? 0,
+    preparing:
+      (t.templateTwinCompiledVersion?.certificationStatus ?? '') !== 'CERTIFIED' &&
+      t.templateTwinCompiledVersion?.compiledAt != null &&
+      now - new Date(t.templateTwinCompiledVersion.compiledAt).getTime() < PREPARING_WINDOW_MS,
   }));
 }
 

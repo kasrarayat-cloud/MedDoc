@@ -325,10 +325,54 @@ jobs:
         run: docker compose -f docker-compose.qa.yml up -d --wait gotenberg transcribe-md transcribe-md-worker
 
       # ── Run the suite from the runner against the dockerized app at :9020. ──
-      - name: Install Playwright chromium
+      # ── #739 — see the long note in `test.yml` for the measurement. Same
+      # split, same reason: `--with-deps` is one step with one silent log, and
+      # when it hangs nothing says which of its two halves hung. Split here
+      # too, so this pack's stalls are diagnosable by the same tell.
+      #
+      # ⚠️ AND THE ARITHMETIC IS WHY IT MATTERS MORE HERE THAN IN `CI`. This
+      # job's budget is generous but the PACK is long — the last ten `e2e` runs
+      # on `main` measured 36m01s–49m01s — so a ~19-minute install stall does
+      # not merely fail this step, it makes the remaining budget unable to hold
+      # the pack. Bounding the install at 10 minutes is what keeps a stall from
+      # converting into an unrelated-looking timeout further down.
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Resolve Playwright version (for cache key)
+        id: pw-version
         run: |
-          npm ci
-          npx playwright install --with-deps chromium
+          ver=$(node -p "require('./apps/transcribe-md/package.json').devDependencies['@playwright/test']")
+          echo "version=${ver}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      # #739 — bound apt's own network waits; see the measurement in `test.yml`.
+      # The hang is `apt-get install` fetching packages AFTER the index has
+      # recovered, so the cure belongs at the layer that can tell a slow fetch
+      # from a dead one.
+      - name: Bound apt's network waits (#739)
+        run: |
+          printf 'Acquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nAcquire::Retries "3";\n' \
+            | sudo tee /etc/apt/apt.conf.d/99-quillmd-timeouts > /dev/null
+          # Proves its own application: apt parses apt.conf.d at STARTUP, so a
+          # malformed drop-in fails here rather than being silently ignored.
+          sudo apt-get --version > /dev/null
+
+      - name: Install Playwright system deps (apt half of --with-deps)
+        timeout-minutes: 5
+        run: npx playwright install-deps chromium
+
+      - name: Install Playwright Chromium (browser half of --with-deps)
+        timeout-minutes: 5
+        run: npx playwright install chromium
 
       # ── RULING #117(e) — the attestation footer as LIBREOFFICE paints it. ──
       # The unit suite's structural guard reads `word/footer1.xml` and the

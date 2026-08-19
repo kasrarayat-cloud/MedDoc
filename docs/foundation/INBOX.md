@@ -229,18 +229,29 @@ adversarial pass.
 
 ### 2026-08-18T07:00:00Z — AUTO-CERTIFICATION IS IN FLIGHT; the West Medical walk is SUPERSEDED
 
-**The decision is the owner's AUTO-CERTIFICATION ruling, built by a SUPERVISED
-session on branch `feat/twin-auto-certification`.**
+**The decision is the owner's AUTO-CERTIFICATION ruling — `#127`, recorded in
+`RULINGS.md` as "AUTO-CERTIFICATION BY AI IS THE DEFAULT PATH, AND THE MODEL
+NEVER ASSERTS LATERALITY" — built by a SUPERVISED session on branch
+`feat/twin-auto-certification`.**
 
-⚠️ **DELIBERATELY CITED BY NAME AND BRANCH, NOT BY NUMBER.** An earlier version
-of this entry said "#125" and was WRONG within hours: the loop independently
-numbered its own F12-splits ruling #125 and merged first, so this pointer sent
+⚠️ **CITE BY NAME AND BRANCH, AND ONLY THEN BY NUMBER.** An earlier version of
+this entry said "#125" and was WRONG within hours: the loop independently
+numbered its own F12-splits ruling **#125** and merged first, so the pointer sent
 readers to a different decision entirely. It had already happened once before
-that with #124.
+that with **#124**.
 
-**Two actors drafting from the same snapshot will pick the same next number, and
-neither can see the other's choice until a merge.** The number is therefore not
-a stable address until the row lands. **The branch name is.**
+**Two actors drafting from the same snapshot pick the same next number, and
+neither can see the other's choice until a merge.** A number is not a stable
+address until the row lands; the branch name is. The number above is safe to
+quote *because* the row has landed and was re-read from `RULINGS.md` on
+2026-08-19 — not because it was remembered.
+
+⚠️ **AND THE LEDGERS STILL DISAGREE ABOUT THIS EXACT NUMBER.** `RULINGS.md` has
+**#125 = F12 SPLITS** and **#127 = auto-certification**; `RELAY.md`'s F12 section
+says *"ruling #127 (PROVISIONAL) split them"*. One of those is stale. Treat
+`RULINGS.md` as the index — it is the one-line-per-decision register the
+programme keeps for exactly this purpose — and do not propagate a number read
+out of a prose section.
 
 ⚠️ **DO NOT CITE "certify the West Medical template" AS A BLOCKER, and do not
 build toward it.** The owner will certify nothing — the machine will. On upload,

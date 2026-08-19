@@ -72,6 +72,11 @@ export interface IcdLikeResult {
 export interface CptLikeResult {
   em?: { code?: string | null } | null;
   procedures?: ReadonlyArray<unknown>;
+  /** Written by L7b when it dropped the E/M half because E/M did not apply to
+   *  this visit (F12-c, ruling #127). **Read this instead of recomputing the
+   *  verdict** — see `isCptWhollyEmpty` for why that distinction is load-bearing
+   *  rather than stylistic. */
+  emSuppressed?: boolean;
 }
 
 export interface LayerOutputs {
@@ -86,6 +91,20 @@ export interface LayerOutputs {
    *  RESUMED attempt the reset at worker attempt-start wiped that flag and
    *  07a never re-runs — pass 2 is the SOLE empty-codes guard there. */
   icdResumed?: boolean;
+  /** ⚠️ THERE IS DELIBERATELY NO `emApplies` FIELD HERE, AND ITS ABSENCE IS THE
+   *  FIX RATHER THAN AN OMISSION.
+   *
+   *  An earlier draft carried one, so this helper could tell "the model
+   *  produced nothing" from "nobody asked for an E/M". It was RECOMPUTED at
+   *  read time, and on the resume path — L7b skipped, the note edited, the
+   *  shape flipped — it returned a different answer than the run that produced
+   *  the blob. The result was an "Auto-coding incomplete … Click Retry" banner
+   *  that Retry could never clear: exactly the failure the parameter had been
+   *  added to prevent.
+   *
+   *  The discriminator is now `cptCodes.emSuppressed`, written by the same L7b
+   *  run that produced the `em: null` being judged. A stored fact cannot drift
+   *  from the record it is attached to. See `isCptWhollyEmpty`. */
 }
 
 /** Distinguishes "the layer crashed" from "the layer returned nothing
@@ -177,13 +196,44 @@ export function detectIncompleteAutomation(
       reasonsByLayer.icd_coding = 'returned empty codes array (status:ok)';
       causeByLayer.icd_coding = 'empty';
     }
+    // F12-c — AND THE E/M LEG ONLY ASKS ITS QUESTION WHERE THE ANSWER EXISTS.
+    // On an operative note L7b runs, succeeds, emits the procedure codes and
+    // returns a null `em` BY DESIGN (ruling #123). "No E&M code emitted" is
+    // then a true sentence about a field nobody asked for, and turning it into
+    // a doctor-facing "Auto-coding incomplete — click Retry" is the ultrasound
+    // banner described above, reappearing through the one door that comment's
+    // fix does not cover.
+    //
+    // ⚠️ THE ALTERNATIVE — trip on an empty PROCEDURES array instead, since an
+    // operative note with no procedure code is arguably incomplete — was
+    // considered and NOT taken. It ADDS a trip condition that has never
+    // existed, on notes whose procedure may legitimately not be codeable, and
+    // this change's whole claim is that it removes an E/M and moves nothing
+    // else. Narrowing a false positive is reversible; a new banner class is a
+    // product decision. Recorded in ruling #127 rather than left implicit here.
+    // ⚠️ THE DISCRIMINATOR IS THE STORED MARKER, NEVER A RECOMPUTED VERDICT.
+    // `outputs.cptCodes.emSuppressed` was written by the same L7b run that
+    // produced the `em: null` being judged here, so the two cannot disagree. An
+    // earlier draft asked `emApplies`, recomputed at read time — and on the
+    // resume path (L7b skipped, note edited, shape flipped) that recomputation
+    // returned TRUE about a blob produced under FALSE, reinstating the exact
+    // unclearable banner this whole parameter exists to prevent. Found by two
+    // independent refuters; see `07b-cpt-coding.ts`'s `emSuppressed` comment.
+    const emWasSuppressed = outputs.cptCodes?.emSuppressed === true;
     if (
       scores?.cpt_coding?.status === 'ok' &&
       causeByLayer.cpt_coding == null &&
-      isCptEmpty(outputs.cptCodes)
+      (emWasSuppressed
+        ? isCptWhollyEmpty(outputs.cptCodes)
+        : isCptEmpty(outputs.cptCodes))
     ) {
       tripped.push('cpt_coding');
-      reasonsByLayer.cpt_coding = 'no E&M code emitted (status:ok)';
+      // ⚠️ THE REASON MUST NAME THE RIGHT ABSENCE. "no E&M code emitted" is a
+      // FALSE statement about an operative note — nobody asked for one — and a
+      // wrong field in a doctor-facing banner is worse than an absent one.
+      reasonsByLayer.cpt_coding = emWasSuppressed
+        ? 'no codes emitted at all (status:ok)'
+        : 'no E&M code emitted (status:ok)';
       causeByLayer.cpt_coding = 'empty';
     }
   }
@@ -230,4 +280,35 @@ function isCptEmpty(cpt: CptLikeResult | null | undefined): boolean {
   if (em == null) return true;
   const code = em.code;
   return typeof code !== 'string' || code.trim() === '';
+}
+
+/** Empty when the layer produced NOTHING — no E/M *and* no procedures.
+ *
+ *  ⚠️ THIS EXISTS BECAUSE SKIPPING THE E/M LEG WHOLESALE LOST A TRUE POSITIVE,
+ *  AND AN ADVERSARIAL PASS CAUGHT IT. The first version of F12-c simply
+ *  disabled the empty check when `emApplies` was false. That removed the false
+ *  banner it was written for — and also removed the only doctor-facing signal
+ *  for a REAL failure on the same notes: the model returning
+ *  `{em:null, procedures:[]}`, or every procedure code being rejected by the
+ *  allowlist (`07b-cpt-coding.ts` `filteredProcedures` → `[]`). The doctor got a
+ *  colonoscopy with an entirely empty Codes tab, no banner and no retry CTA,
+ *  and the only trace was a fire-and-forget audit row nobody sees.
+ *
+ *  So the question asked of an operative note is not *"where is the E/M"* — it
+ *  is the SAME question this helper always asked, *"did the layer return
+ *  anything successfully"*, phrased for a visit where an E/M was never
+ *  expected. It adds no trip condition that did not exist: pre-F12-c this exact
+ *  input tripped too, via the `em == null` arm.
+ *
+ *  ⚠️ IT ALSO RESTORES THE DB-BLIP DEFENCE. The comment above the post-fan-out
+ *  re-read in `worker.ts` states that a failed re-read lands the visit in review
+ *  "via the cpt-null leg only" — with the leg gated off, a fresh operative-note
+ *  attempt whose re-read blipped would have gone READY unflagged, and that
+ *  sentence would have become false in the same commit that edited the code it
+ *  describes. `cpt == null` is the first thing this returns true for. */
+function isCptWhollyEmpty(cpt: CptLikeResult | null | undefined): boolean {
+  if (cpt == null) return true;
+  if (!isCptEmpty(cpt)) return false;
+  const procedures = cpt.procedures;
+  return !Array.isArray(procedures) || procedures.length === 0;
 }
