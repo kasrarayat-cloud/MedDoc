@@ -200,6 +200,13 @@ ROWS_JSON="$(docker exec -i "$CONTAINER" psql -U "$DB_USER" "$DB" -A -t -f - \
 # Piped, never written. The payload is production-derived and a scratch file is
 # how that class escapes a session.
 say ""
-printf '{"flags":%s,"rows":%s}' "$FLAGS_JSON" "$ROWS_JSON" \
+# ⚠️ THE PAYLOAD DECLARES ITS OWN FLAG PROVENANCE, and the CLI reports
+# "UNVERIFIED" when it does not. THIS wrapper is the only thing that has
+# actually read the flags out of the running container (§3 above), so it is the
+# only thing entitled to say so — an earlier draft had the CLI *assume* the
+# wrapper on every non-piped payload, which is the same
+# asserting-an-intended-state defect one layer down.
+printf '{"flagSource":"the running container (docker exec printenv %s)","flags":%s,"rows":%s}' \
+  "$APP_CONTAINER" "$FLAGS_JSON" "$ROWS_JSON" \
   | ( cd "$ROOT" && npx --no-install tsx scripts/lib/em-artifact-scan-cli.ts )
 exit $?

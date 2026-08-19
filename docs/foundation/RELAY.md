@@ -20470,6 +20470,34 @@ Fixed to walk up the way Node does; verified from the worktree, resolving to
 which is exactly the silent cross-tree resolution the control exists to expose,
 and which the script now PRINTS rather than assumes.
 
+#### ⚠️ AND FINISHING THE READ FOUND FOUR MORE — REPORT LINES THAT ASSERT RATHER THAN PRINT
+
+The same read, continued into the CLI, found a family of four. Every one was
+**true at the moment it was written and true only because of the control flow
+above it** — which is precisely what makes them decorative the day somebody
+downgrades a refusal to a warning.
+
+| line | what it did | what it does now |
+|---|---|---|
+| flag provenance | **defaulted to `'the running container (via the wrapper)'`** and was corrected only on the `--flags` branch, so a hand-piped object payload printed a container provenance nothing had verified | the PAYLOAD declares its source; absent that the report says **`UNVERIFIED`**. Only the wrapper has actually run `docker exec printenv`, so only the wrapper may claim it |
+| `em key-set control: 0 unknown keys` | the **`0` was a literal** | prints `unknown.length` |
+| `universe: … ✔ · … ✔` | two hardcoded tick marks | prints both predicate values with their wanted values beside them |
+| missing `rows` key | collapsed into *"the corpus is EMPTY"* | a distinct refusal — *the extract is malformed, not the corpus empty*, so the reader is sent to the payload rather than the database |
+
+⚠️ **THE FIRST ONE IS THE §5.6 SHAPE INSIDE THE FIX FOR THE §5.6 SHAPE.** The
+provenance line existed *because* an earlier draft printed *"flags read from the
+running container"* on both paths; the correction then asserted the wrapper by
+DEFAULT. **A document asserting an intended state, written to stop a document
+asserting an intended state.** Proved both ways: a hand-piped object payload now
+reports `UNVERIFIED`, and a missing `rows` key refuses on its own terms.
+
+⚠️ **AND THE PROCESS LESSON IS MINE: I PUSHED BEFORE FINISHING MY OWN REVIEW,
+TWICE.** Canon's #568 rule is *hold the first push until the session's remaining
+commits are written*. Both of this branch's declared cancellations exist because
+a review that was still running produced a fix after the push. The rule is not
+"batch the commits you already have" — it is **finish looking before you start
+the clock**.
+
 **HONEST RESIDUE: the wrapper's bash GLUE is still unexecuted.** Its arrays,
 its identity loop and its final pipeline have been read and their pieces proved
 individually; the assembled script has never run, because it cannot. Named, not

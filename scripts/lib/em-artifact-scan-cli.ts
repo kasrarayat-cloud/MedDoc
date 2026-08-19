@@ -74,10 +74,22 @@ async function main() {
   // piped one, in the line a reader would quote as evidence. A document that
   // states an intended state in the present tense gets read as a description of
   // the running system; this house has a §5.6 that was false for two months.
-  let flagSource = 'the running container (via the wrapper)';
+  // ⚠️ AND THE DEFAULT IS "UNVERIFIED", NOT THE WRAPPER'S NAME — THIS LINE WAS
+  // ITSELF THE §5.6 SHAPE ON ITS SECOND DRAFT. It read
+  // `'the running container (via the wrapper)'` and was only corrected on the
+  // `--flags` branch, so ANY hand-piped object payload printed a container
+  // provenance nothing had verified. The fix for a document asserting an
+  // intended state, asserting an intended state. The payload must now SAY where
+  // its flags came from; absent that, this reports that it does not know.
+  let flagSource = 'UNVERIFIED — the payload did not declare a source';
 
   // A bare array is the piped-from-psql form; the flags then come from argv.
-  let payload: { flags?: Record<string, string>; rows?: EmScanRow[] };
+  let payload: {
+    flags?: Record<string, string>;
+    rows?: EmScanRow[];
+    /** Set by the wrapper, which reads the flags via `docker exec printenv`. */
+    flagSource?: string;
+  };
   if (Array.isArray(parsed)) {
     const i = process.argv.indexOf('--flags');
     if (i === -1 || !process.argv[i + 1]) {
@@ -96,7 +108,8 @@ async function main() {
         'them from the container in the same pass, or use the wrapper.'
     );
   } else {
-    payload = parsed as { flags?: Record<string, string>; rows?: EmScanRow[] };
+    payload = parsed as typeof payload;
+    if (payload.flagSource) flagSource = payload.flagSource;
   }
 
   // ── THE FLAG UNIVERSE, FROM THE RUNNING CONTAINER ────────────────────────
@@ -124,7 +137,13 @@ async function main() {
     );
   }
 
-  const rows = payload.rows ?? [];
+  // ⚠️ A MISSING `rows` KEY AND AN EMPTY CORPUS ARE DIFFERENT FAILURES, AND
+  // COLLAPSING THEM WOULD SEND THE READER TO THE DATABASE WHEN THE BUG IS IN
+  // THE PAYLOAD. Both refuse; they say different things.
+  if (!Array.isArray(payload.rows)) {
+    die('the payload carries no `rows` array — the extract is malformed, not the corpus empty');
+  }
+  const rows = payload.rows;
   if (rows.length === 0) {
     die('the corpus is EMPTY — an empty scan and a clean scan are the same output');
   }
@@ -157,8 +176,17 @@ async function main() {
 
   const r = scanEmArtifacts(rows);
 
+  // ⚠️ EVERY LINE BELOW PRINTS A MEASURED VALUE. None of them asserts a state
+  // it merely believes — two of them did on an earlier draft (a hardcoded
+  // `0 unknown keys`, and a universe line spelled as two ✔ marks), and both were
+  // TRUE ONLY BY THE CONTROL FLOW ABOVE THEM. The moment somebody downgrades one
+  // of those refusals to a warning, an asserted line keeps printing the reassuring
+  // answer forever. A report that cannot come out wrong is not evidence.
   console.log(`E/M artifact scan — ${r.control.rows} production visits`);
-  console.log(`   · universe: ultrasound suppressed ✔ · gastroenterology admitted ✔`);
+  console.log(
+    `   · universe: emAppliesToSpecialty('ultrasound')=${emAppliesToSpecialty('ultrasound')} ` +
+      `(want false) · ('gastroenterology')=${emAppliesToSpecialty('gastroenterology')} (want true)`
+  );
   console.log(
     `   · flag universe, from ${flagSource}: ` +
       Object.entries(flags)
@@ -177,7 +205,10 @@ async function main() {
     `   · cptCodes.em shape ${JSON.stringify(r.control.cptEmTypes)} ` +
       `— "null" means {"em": null}, an EXPLICIT no-E/M, not stale state`
   );
-  console.log(`   · em key-set control: 0 unknown keys (known: ${KNOWN_EM_KEYS.join(', ')})`);
+  console.log(
+    `   · em key-set control: ${unknown.length} unknown keys ` +
+      `(known: ${KNOWN_EM_KEYS.join(', ')})`
+  );
   console.log(
     `   · non-vacuity: ${r.control.specialtyEligible} specialty-eligible · ` +
       `${r.control.rowsWithHeadings} with headings · ` +
