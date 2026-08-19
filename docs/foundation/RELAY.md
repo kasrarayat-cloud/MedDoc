@@ -20953,3 +20953,125 @@ wiring. It does not prove the runner's loop arithmetic end to end — that would
 mean launching sessions, and a test that spawns 24 headless agents is not a
 test. The streak semantics are guarded by the wiring arms instead, which a
 silent revert would have to remove.
+
+---
+
+### ✅ F21 — THE OWED #739 CORRECTION, AND THE PLAN IT WAS OWED TO IS WITHDRAWN TOO — **2026-08-19, run `20260819-143043-b1` session 01**
+
+**THIS DISCHARGES AN EXPLICIT DEBT.** Session 04 closed owing the #131(b)
+correction and said so plainly: it ran out of gate cycles, not evidence.
+Ruling **#131(c)** records the whole of it.
+
+**The prediction #131(b) closed with fired.** *"If the stall survives a bounded
+20-second wait with three retries, that is a finding."* It survived.
+
+> ⚠️ **AN INACTIVITY TIMEOUT NEVER TRIPS ON A CONNECTION THAT IS TRANSFERRING.
+> Slow is not stalled, and only one of those is a thing apt can detect.**
+
+**The drop-in STAYS** — harmless, self-proving, correct for a genuine stall.
+**What changes is the CLAIM:** #739 is not fixed and not bounded; it is bounded
+*per half, with the phase named*.
+
+#### ⚠️ THE MIRROR PIN IS WITHDRAWN, ON THIS SESSION'S OWN MEASUREMENT
+
+Measured in one step, seconds apart, from **one** host (`32266134945` a2):
+
+| phase | measured |
+|---|---|
+| index — `Fetched 11.4 MB in 36s` | **313 kB/s** |
+| pool — `fonts-ipafont-gothic` 3513 kB | **~24 kB/s** |
+
+The pin's whole basis was *"the index came down fast from the other host"* — and
+the index comes down fast from **this** host too. **A >13× index-vs-pool
+divergence on one mirror means index speed discriminates nothing.**
+
+#### ⚠️ AND I CORRECTED MYSELF WITHIN THE HOUR — THE PART WORTH COPYING
+
+I first posted to #739 that the fault is **per-job intermittent**, citing *"CI
+passed on the very same commit ~30 minutes earlier."* **That never
+discriminated:** two observations 31 minutes apart fit *per-job randomness* and
+*time-varying mirror* equally well, and I stated one as measured. It was an
+inference wearing a measurement's clothes — this house's own named failure,
+committed by me, in a comment.
+
+**Refuted the same hour, by better evidence:**
+
+| time | runs | apt half |
+|---|---|---|
+| `14:47:34Z` | PR #744 `CI` | passed |
+| `15:18:45Z` | PR #744 `e2e` a2 | **stalled** |
+| `15:24:59Z` | PR #744 `e2e` a3 | passed |
+| `15:53:54Z` | `main` `CI` + `a11y-ci` + `e2e`, **same second, different runners** | **all three stalled** |
+
+`secrets-scan` — the one required workflow with **no** Playwright install —
+passed in that same second. **Three concurrent failures is not independent
+per-job randomness.**
+
+#### ⚠️ AND THEN MY SECOND MECHANISM WAS REFUTED TOO, IN THE SAME SESSION
+
+I replaced "per-job" with **time-correlated bursts**. Twenty minutes later, on
+`main` @ `904991ab`:
+
+| run | install began | outcome |
+|---|---|---|
+| `a11y-ci` | `16:12:41.37Z` | **stalled out at 5 min** |
+| `CI` | `16:12:56.83Z` | **passed** |
+
+**Fifteen seconds apart. Opposite outcomes.** So the bursts model is dead too.
+
+> **TWO MECHANISMS PROPOSED BY ME, BOTH REFUTED, IN ONE SESSION.** That is this
+> house's own *"two mechanisms for one symptom, both wrong, in one night"*, and
+> the correct response is to **stop proposing and measure**.
+
+**WHAT IS ACTUALLY ESTABLISHED — a QUANTITY, not a story.** The discriminating
+variable is **pool throughput**, and it varies **~8× between two runners fifteen
+seconds apart**:
+
+| run | index | **pool (21.1 MB)** |
+|---|---|---|
+| `CI` (passed) | 11.4 MB in 6s — 1811 kB/s | **1 min 55 s — 184 kB/s** |
+| `a11y-ci` (stalled) | — | **~24 kB/s** |
+
+⚠️ **AND THE CEILING IS TIGHT, NOT GENEROUS: the PASSING run used 1 m 55 s of its
+5-minute budget.** About **2.6×** of headroom is all that separates green from
+red, which is why an 8× swing decides it.
+
+It is **not** deterministic per-commit, **not** purely time-windowed, **not**
+independent-per-job. **The untested hypothesis that fits all three observations
+is per-runner backend assignment** behind the load-balanced
+`azure.archive.ubuntu.com` name — **named as UNTESTED, not adopted.** The one
+cheap instrument that would settle it: **log the resolved mirror IP in the
+install step and correlate it with throughput.**
+
+#### 🟢 AND THE STRONGEST CANDIDATE IS CANON'S OWN RULE, ALREADY WRITTEN DOWN
+
+> **"AN EXTERNAL REACH IN THE BUILD IS REMOVED, NOT RETRIED."**
+
+Every cure tried so far — apt timeouts, retries, a mirror pin — tries to make a
+**21.1 MB fetch from the public internet, on every required job, four times per
+commit** go faster or fail louder. The canon-consistent move is to **stop making
+the fetch**: cache the `.deb` payload (the workflow already caches Playwright
+**browsers** and does *not* cache the apt debs), or bake the deps into an image.
+Same disposition `next/font/google` got, for the same reason.
+
+⚠️ **Deliberately NOT built this session** — it changes four required workflows,
+and it belongs in front of an owner rather than in a session that has already
+been wrong twice about this fault in one night.
+
+#### 🔴 THE OPERATIONAL CONSEQUENCE, WHICH OUTRANKS THE LABEL
+
+**#739 CAN TAKE `main` RED WITH NO CITATION AT ALL, AND DID** — `f98c14fe`, a
+docs-only commit adding **one file, 81 insertions**, went 1 of 4. A deploy taken
+in that window ships a commit whose gate never passed. *(Discharged by the
+descendant: `904991ab` contains it — see the F20 row's citation.)*
+
+**Unpark condition CHANGED rather than counted up to:** it was *"a third stalled
+run naming the same host"*, and the third run is what **refuted** the plan that
+count existed to authorise. It is now **log the resolved mirror IP and correlate
+it with pool throughput** — or an owner's word.
+
+⚠️ **PROCESS NOTE AGAINST MYSELF, kept because it cost evidence:** I re-ran the
+failed job **before** reading its log, and `--log-failed` then returned nothing.
+The numbers survived only because `gh run view <id> --attempt 2 --log` still
+works. **Read the attempt's log before re-running it** — a re-run is not free of
+evidence cost.
