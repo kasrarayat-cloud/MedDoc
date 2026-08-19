@@ -70,6 +70,40 @@ PROMPT_FILE="docs/foundation/MASTER.md"
 STOP_FILE="docs/foundation/STOP"
 INBOX_FILE="docs/foundation/INBOX.md"
 LEDGER="docs/foundation/RELAY.md"
+
+# ⚠️ THE PROGRESS SIGNAL IS READ FROM `origin/main`, NOT FROM THE WORKING TREE.
+#
+# It used to be `sha256sum "$LEDGER"` on the shared tree, and that measured the
+# wrong universe. Sessions do their work in WORKTREES and land it on ORIGIN; the
+# shared tree only fast-forwards at session START. So a session's OWN merges are
+# invisible to the check that judges it — `ledger_after` can never differ from
+# `ledger_before` for work that session landed itself.
+#
+# ⚠️ IT COST A FALSE HALT, MEASURED: 2026-08-19T12:44:53Z. Session 04 merged
+# three PRs and added 615 lines to RELAY.md, closing F12-g (#742 merged
+# 12:07:30Z — 37 minutes before the halt). The switch saw two identical hashes
+# and stopped a productive loop for 1h45m. This is the watched-set family: the
+# check was flawless at hashing a file that progress does not flow through.
+#
+# The fetch is deliberate and cheap — the hash must describe the remote as it is
+# NOW, not as it was when this process started.
+ledger_hash() {
+  git fetch --quiet origin main 2>/dev/null || true
+  # ⚠️ CAPTURE, THEN TEST, THEN HASH — NEVER PIPE `git show` STRAIGHT INTO
+  # `sha256sum`. On failure `git show` writes NOTHING and exits non-zero, but
+  # the pipe runs anyway and `sha256sum` cheerfully hashes EMPTY STDIN, yielding
+  # the constant e3b0c442…855. That is a valid-LOOKING hash, identical on every
+  # broken read — so two blind sessions would compare equal and trigger exactly
+  # the false halt this function exists to prevent, through a different door.
+  #
+  # Caught by `scripts/tests/noprogress-switch.test.sh` on its FIRST run,
+  # against the version of this function written moments earlier.
+  local _blob
+  _blob="$(git show "origin/main:$LEDGER" 2>/dev/null)" || return 0
+  [ -n "$_blob" ] || return 0
+  printf '%s' "$_blob" | sha256sum | cut -d' ' -f1
+}
+
 LOG_DIR="docs/foundation/logs"
 # ⚠️ DATE AND LAUNCH ARE COMPUTED PER BATCH, NOT ONCE — AN OVERNIGHT RUN CROSSES
 # MIDNIGHT. Computed once at start, every log written after 00:00Z would carry
@@ -205,7 +239,7 @@ for (( n=1; n<=batch_size; n++ )); do
     break
   fi
 
-  ledger_before="$(sha256sum "$LEDGER" 2>/dev/null | cut -d' ' -f1)"
+  ledger_before="$(ledger_hash)"
 
   {
     echo "════════════════════════════════════════════════════════════════"
@@ -422,8 +456,20 @@ Reply with EXACTLY ONE of those markers and NOTHING else: no punctuation, no exp
   esac
 
   # ── KILL SWITCH 4 — no-progress ──────────────────────────────────────────
-  ledger_after="$(sha256sum "$LEDGER" 2>/dev/null | cut -d' ' -f1)"
-  if [ -n "$prev_ledger_hash" ] && \
+  ledger_after="$(ledger_hash)"
+
+  # ⚠️ AN UNREADABLE MEASUREMENT IS NOT A NO-PROGRESS RESULT.
+  # If the fetch fails or `git show` cannot read the blob, `ledger_hash` returns
+  # EMPTY — and empty compares equal to empty, which would halt a working loop
+  # on a broken probe. That is precisely the failure this switch just caused in
+  # the other direction, so the switch declines to fire on a blind reading and
+  # says so. A stalled loop is caught on the next session that CAN measure.
+  if [ -z "$ledger_after" ] || [ -z "$ledger_before" ]; then
+    echo "[loop] ⚠️ no-progress switch SKIPPED for session $RUN — could not read"
+    echo "[loop]    origin/main:$LEDGER (before='$ledger_before' after='$ledger_after')."
+    echo "[loop]    A blind instrument must not halt a loop that may be working."
+    prev_ledger_hash=""
+  elif [ -n "$prev_ledger_hash" ] && \
      [ "$ledger_after" = "$ledger_before" ] && \
      [ "$ledger_before" = "$prev_ledger_hash" ]; then
     halt_reason="NO-PROGRESS — $LEDGER unchanged across two consecutive sessions (through $RUN)"
