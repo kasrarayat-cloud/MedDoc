@@ -20000,6 +20000,20 @@ irreversible production mutation with its own door (`run-ruled-mutation.sh`) and
 its own declaration. **The first step is a WATCHER**, so the number stops being
 invisible; the disposition of the 15 is a war-room question.
 
+> 🟠 **THE WATCHER IS BUILT AND PROVEN — 2026-08-19, session 03. ITS GATE IS PARKED ON #739.**
+> `scripts/check-em-note-shape-artifacts.sh`, read-only, running the shipped
+> predicate, with a 30-arm gate. It re-derived this partition independently
+> (**15 / 24 / 7 / 2 = 48**) and added three facts this row did not carry:
+> **all 15 are `axis=note-shape` and 0 are `axis=specialty`** (so the imaging
+> watcher's `0 of 20` covers none of them — measured, not argued), **0 of the 15
+> carry a doctor-set override** (the corpus's one override sits on a
+> verdict-TRUE row and is legitimate), and **0 of the 15 carry
+> `emPendingChange`**. See the F12-g
+> close-out section at the end of this file — including the honest limits, of
+> which the first is that **the loop cannot invoke the wrapper by name until an
+> owner grants it**. *The row is closed in the same pass that closed the item.*
+> **The disposition of the 15 remains open and is still a war-room question.**
+
 ⚠️ **AND F12-f DID NOT CHANGE IT.** F12-f's corpus diff is `+0 / +0`, so every
 one of these rows still carries E/M state under a verdict that is still false.
 The item is untouched and still first-step-is-a-watcher.
@@ -20250,3 +20264,376 @@ deploy ships exactly F12-f and the declaration covers the full diff. The
 two-changes-one-deploy hazard does not apply — *stated rather than assumed,
 because "I deployed `main`" is not the same claim as "I judged what I
 deployed."*
+
+---
+
+### 🟠 F12-g — THE WATCHER IS BUILT AND PROVEN; **THE GATE IS PARKED ON AN EXTERNAL FAULT (#739)** — **2026-08-19, run `20260818-232127-b1` session 03**
+
+> ⚠️ **STATUS, WRITTEN BEFORE THE EVIDENCE BELOW SO IT CANNOT BE MISREAD.**
+> The work is complete, committed and pushed as **PR #740** (`af797344`). It is
+> **NOT MERGED AND NOT CITED**, and that is nobody's code defect: `CI` and `e2e`
+> could not complete because of the Playwright-install stall filed as **#739**.
+>
+> | check | on `af797344` |
+> |---|---|
+> | `secrets-scan` | ✅ success (a1) |
+> | `a11y-ci` | ✅ success (a2, after one stall) |
+> | `CI` | 🔴 cancelled ×3 — stalls of **18m45s · ~18m39s · ~19m** against a **20-minute** ceiling |
+> | `e2e` | 🔴 cancelled ×2 — install stalls of **21m06s** and **13m51s+**; both cancelled BY ME once the arithmetic made them unpassable (a ~20-minute stall plus a 36–49 minute pack does not fit in 55 minutes) |
+>
+> **Treated as an EXTERNAL fault under MASTER's own clause, so it consumed no
+> cure attempt:** the mechanism is named from evidence — same step, same
+> command, same commit; the identical `CI` job took **5m16s** on the previous
+> head seventeen minutes earlier; three sibling jobs in the same run passed
+> normally; and it struck **two different workflows concurrently**.
+>
+> ⚠️ **AND A "RECOVERY" I POSTED WAS WRONG, WHICH IS THE RULE WORKING ON ITS
+> OWN AUTHOR.** After the first re-run I recorded *"the mirror RECOVERED"* on
+> the strength of one **51-second** install. `CI` stalled again **17 minutes
+> later**. I had flagged the caveat — *one fast install is a blip* — and it came
+> true inside the same hour. Corrected publicly on #739 rather than left
+> standing.
+>
+> **THE DISCRIMINATOR, and it is the useful residue:** the two re-runs started in
+> the SAME MINUTE on the same commit — `a11y-ci` (**cached**, `a11y.yml:166`)
+> took **51s**; `CI` (**no cache**) stalled ~18m39s. Measured: **only `a11y.yml`
+> caches `~/.cache/ms-playwright`** — `test.yml` and `e2e.yml` have none, while
+> all three run the identical `npx playwright install --with-deps chromium`.
+> **`CI` is the most exposed required check in the repository: no cache, and the
+> tightest ceiling of the three (20 / 25 / 55).** This does not overturn the
+> earlier finding that a cache-HIT run still stalled in apt; both hold if the
+> fault is intermittent and the cache reduces exposure without eliminating it.
+>
+> ⚠️ **AND IT BEARS ON F12-h**, which is parked on `e2e` headroom: an 18–20
+> minute stall exceeds e2e's ~6 minutes of worst-case headroom by 3× on its own,
+> independent of anything F12-h would add. F12-h's unpark condition — *a measured
+> run under the ceiling with the fourth class in* — is unreachable while this is
+> live, because the variance is not in the pack.
+>
+> **WHAT UNPARKS THIS ROW:** a green `CI` + `e2e` on `af797344` (or its
+> descendant). Nothing in the branch needs to change. Three comments on #739
+> carry the full timings.
+
+### THE ITEM ITSELF — BUILT, MEASURED AND PROVEN
+
+**Branch `feat/f12g-em-shape-watcher`. The item's own first step, executed as
+written: `check-em-note-shape-artifacts.sh`, READ-ONLY, plus a 25-arm gate.**
+
+F12-g was filed *"NOT a remediation item as filed … the first step is a
+WATCHER, so the number stops being invisible; the disposition of the 15 is a
+war-room question."* That is exactly what shipped. **Nothing in production was
+mutated and no remediation was designed** — a stored clinical column is cleared
+through `run-ruled-mutation.sh` with its own §2.5 declaration or not at all.
+
+#### THE MEASUREMENT — RE-DERIVED, NOT INHERITED
+
+Run against production through the **shipped** `emAppliesToVisit`, in the
+production flag universe:
+
+    verdict FALSE + carries E/M state   15    <- F12-g
+    verdict FALSE + clean               24
+    verdict TRUE  + carries E/M state    7
+    verdict TRUE  + clean                2
+                                        --
+                                        48    == rows
+
+**Identical to F12-g's filed partition, reached independently.** Its
+`39 suppressed / 9 apply` also reconciles against F12-f's deploy row, which
+declared `9 apply / 39 suppressed` and held.
+
+**THREE THINGS THE FILED ROW DID NOT CARRY, all new:**
+
+| measured | value |
+|---|---|
+| artifacts by **axis** | **15 note-shape · 0 specialty** |
+| **of the 15**, carrying a DOCTOR-SET `cptCodes.em.override.code` | **0** |
+| **of the 15**, carrying `emPendingChange` | **0** |
+
+⚠️ **THE OVERRIDE ROW IS "0 OF THE 15", NOT "0 IN THE CORPUS", AND THE
+DISTINCTION IS THE WHOLE VALUE OF THE ROW.** Production holds **one**
+doctor-set override — `cmqfgj6lv…`, primary-care, unsigned, `override.code`
+99211 — and its verdict is **TRUE**, so it is legitimately holding its level and
+is correctly **not** an artifact. A first draft of this row said *"0 rows carry
+a doctor-set override"*, which is false about the corpus and true about the
+finding. Caught by re-measuring the claim instead of the count.
+
+⚠️ **THE AXIS SPLIT IS THE ONE THAT MATTERS, BECAUSE IT TURNS A WATCHED-SET
+ARGUMENT INTO A MEASUREMENT.** `check-imaging-em-artifacts.sh` read **0 of 20**
+on the same host on the same day. It was right, and it covers **none** of these
+15 — every one is suppressed by note shape, which is outside its
+`where specialty='ultrasound'` universe entirely. *A gate's zero is only worth
+what its watched set is worth*, and until now nothing said which rows the two
+watchers do and do not share.
+
+⚠️ **AND THE ZERO IN ROW 2 CHANGES THE DISPOSITION QUESTION.** F12-g's filing
+warns that `cptCodes.em.override` is a doctor's recorded judgement and clearing
+it deletes what somebody chose. **Today there are none** — the 15 are 13
+computed baselines (`emScoredCode` / `cptCodes.em.code`) and 2 frozen
+`signedCode`s on signed records. That is a materially easier war-room question
+than the row implied, and it is a fact about **today**, which is precisely why
+it needs a watcher rather than a note.
+
+**The two frozen rows are the ones F12-g named** — `cmrxry1in…` and
+`cmrxxj1rn…`, both bariatric-surgery, both signed, both 99214. `cmrxxj1rn…` is
+the row ruling #126(b) set the floor of FOUR against and #130 refused to
+un-suppress. **11 of the 15 are signed.**
+
+#### WHAT IT DOES, AND THE THREE CONTROLS THAT MAKE ITS NUMBER MEAN ANYTHING
+
+- **It runs the SHIPPED predicate and never re-implements it.** F12-g's own
+  filing records what the alternative costs: an SQL re-implementation with the
+  specialty axis approximated answered **19** where the shipped predicate
+  answers **15**, and the 19 reached a ledger row. The SQL here is a projection;
+  every verdict is `emAppliesToVisit`'s.
+- **SHIPPED-CODE IDENTITY.** `sha256` of `note-shape.ts` and `specialties.ts` on
+  disk vs **inside the running worker**, and it refuses `2` on divergence.
+  Measured: `78f2a6c3…` and `aaabfaa9…`, identical both sides — the first digest
+  matching what session 02 recorded for F12-f. ⚠️ Written because
+  `@meddoc/shared` resolves through a **symlink to the shared tree**, not to the
+  worktree, so a worktree copy silently classifies with another tree's specialty
+  axis; the path is `realpath`-resolved and the resolved file is the one hashed.
+- **THE FLAG UNIVERSE IS READ FROM THE RUNNING CONTAINER**, never from `.env` or
+  memory, and a two-directional control (`ultrasound` suppressed **and**
+  `gastroenterology` admitted) refuses `2` if either reads the other way.
+
+**PHI POSTURE — no note body leaves the database.** The extract emits only
+markdown heading lines, filtered by `^[ \t]*#{1,6}[ \t]+`, which is a strict
+**prefix** of `NOTE_SECTION_HEADING_RE` — so it cannot MISS a heading the
+classifier would see, and `assertNoBodyText` asserts on every run that it did not
+over-select either. Live: **290 lines delivered = 290 headings.** Nothing is
+written to disk; the payload is piped.
+
+**Exit codes are three, and `2` is never collapsed into `0`:** unreachable,
+wrong universe, empty corpus, zero specialty-eligible rows, a partition that
+does not reconcile, or an over-selecting projection all refuse.
+
+#### ⚠️ THE GATE REDDENED AGAINST ITS OWN AUTHOR ON ITS FIRST RUN — IN THE WRONG UNIVERSE
+
+**5 of 25 arms failed, and every one had the same cause: `NEXT_PUBLIC_
+ULTRASOUND_SPECIALTY` is unset under vitest.** With the flag OFF,
+`emAppliesToSpecialty('ultrasound')` returns **true**, so the fixture built to
+exercise the SPECIALTY axis was silently exercising the note-shape one and
+`byAxis` could not discriminate at all. **Production runs the flag ON.** A gate
+that defaults it off is a gate about the rollback — canon's own reference case,
+caught by the gate on itself. Fixed with `beforeAll`, and a dedicated
+universe arm now asserts **both directions** so it cannot recur silently.
+
+#### ⚠️ AND IT TRIPPED TWO EXISTING CENSUS GATES, WHICH IS THEM WORKING
+
+Adding a new consumer of the E/M axis reddened two guards that reconcile their
+caller list against the tree. **Neither was weakened; both got an adjudicated
+entry with its reasoning:**
+
+| gate | why the new caller is legitimate |
+|---|---|
+| `review-read-only-paper` — *"NO SITE STILL READS THE SPECIALTY AXIS ALONE FOR AN E/M DECISION"* | `suppressingAxis` is **attribution, not a decision**. It runs only inside `if (!applies)`, i.e. *after* `emAppliesToVisit` has already refused, and answers *which* axis refused. Structurally the sanctioned `override/route.ts` use. It cannot decide applicability because it never runs until applicability is decided |
+| `gate-f12d` — *"the caller census is the WHOLE census"* | the note-body expression is pinned to `row.noteHeadingLines`, with the reason recorded: it is a heading projection of `coalesce("signedSoap","soapFinal")`, which is this table's own rule |
+
+**That is the census design paying for itself** — a new E/M-axis consumer cannot
+enter the tree without somebody writing down why.
+
+#### ⚠️ THE REFUTATION PASS FOUND A LATENT FALSE GREEN IN MY OWN WATCHER — AND THE OBVIOUS FIX WOULD HAVE BEEN WORSE
+
+**Self-run, which is the WEAKER form and is named as such** — this session cannot
+spawn independent refuters, and canon is explicit that the pass works *because*
+it does not share the author's context. It found something anyway, on the lens
+*"can this report zero while artifacts exist?"*
+
+**THE GAP.** The scan reads three fixed paths under `cptCodes.em`
+(`code`, `override.code`, `signedCode`). **State arriving under a FOURTH key
+would read as a perfectly clean row** — silently, indistinguishably from a row
+that really is clean. `check-imaging-em-artifacts.sh` guards its own version of
+this by testing bare KEY EXISTENCE, and **its comment says so explicitly**. I
+had not copied it.
+
+⚠️ **AND COPYING IT WOULD HAVE BEEN THE ERROR. THE CORPUS SAID SO.** Measured:
+
+| `jsonb_typeof(cptCodes->'em')` | rows |
+|---|---|
+| `object` | **10** |
+| **`null`** — i.e. `{"em": null}` | **17** |
+| absent | 21 |
+| | **48** ✔ |
+
+`{"em": null}` is an **EXPLICIT RECORD OF NO E/M LEVEL** — the opposite of stale
+state. Bare key existence would have **invented 5 findings out of clean rows.**
+*Copying prior art verbatim would have been the error; measuring the corpus is
+what chose the predicate* — the same lesson `note-shape.ts` already records
+about the `office >= 3` clause it deliberately did not copy.
+
+**AND THE GAP HAS ZERO INSTANCES TODAY, WHICH I MEASURED RATHER THAN HOPED.**
+Every one of the 10 object-typed rows carries `code`, so nothing escapes the
+three paths: `object_em_with_no_watched_path = 0`. **The count of 15 is correct.**
+⚠️ Note what I did NOT do: infer set equality from two counts that happened to
+both read 17. That coincidence was checked directly.
+
+**THE FIX IS A KEY-SET CONTROL, NOT A WIDER PREDICATE.** The full key census —
+`code` 10 · `description` 10 · `evidence_quote` 10 · `reasoning` 10 ·
+`signedCode` 6 · `override` 1 — is recorded as `KNOWN_EM_KEYS`, partitioned into
+**STATE** (`code`, `override`, `signedCode` — the watched three) and
+**NARRATIVE** (`description`, `evidence_quote`, `reasoning` — prose accompanying
+a code, never seen alone). **An unknown key is now a CANNOT-TELL, not a clean
+row**, and the refusal text names the trap in its own message: *adding a key to
+`KNOWN_EM_KEYS` alone silences the control without widening the watch.* The
+extension condition is written into the constant, so checking it is a lookup.
+
+**Also confirmed by the same pass, and both came back clean:**
+- **The flag enumeration is complete, measured not assumed** —
+  `grep process.env` across `note-shape.ts` and `specialties.ts` returns exactly
+  **one** hit, `NEXT_PUBLIC_ULTRASOUND_SPECIALTY`. The wrapper's `FLAG_NAMES`
+  is the whole set.
+- **`emScoredCode = ''`** — a falsy-but-present value my truthiness test would
+  drop while the imaging watcher's `is not null` would keep: **0 rows.**
+- **Neither census gate was weakened.** Both were red before my entries and green
+  after; the matchers are untouched and the assertions are exact-array equality.
+
+#### ⚠️ AND THE WRAPPER SHIPS UNEXECUTED, SO IT GOT A LINE-BY-LINE READ — WHICH FOUND A BUG THE READ ALONE WOULD NOT HAVE
+
+Because the loop cannot invoke `check-em-note-shape-artifacts.sh` (limit 1
+below), it would have shipped having never run. Every EXTERNAL behaviour in it
+was therefore exercised by hand — `psql -A -t -f -`, `npx --no-install tsx` from
+a worktree, `docker exec sha256sum`, `docker exec printenv` — and the one line
+that had not been was run on its own. **It was broken:**
+
+```
+node -e 'console.log(require("fs").realpathSync(process.argv[1]))' \
+  "$ROOT/node_modules/@meddoc/shared/src/specialties.ts"
+  → Error: ENOENT … lstat '/opt/meddoc-pro/.f12g-wt/node_modules'
+```
+
+**A git worktree checks out TRACKED FILES ONLY and has no `node_modules` at
+all.** So `realpathSync` threw, `SHARED_SPECIALTIES` came back empty, and the
+script refused with `2` — **every time, from the one place the loop actually
+works.** It failed CLOSED, which is the right direction, but *a check that can
+only ever say "cannot tell" is not a check.*
+
+⚠️ **`note-shape.ts`'s OWN HEADER DESCRIBES THIS EXACT TRAP**, I cited it in the
+comment sitting directly above the broken line, and I still built the resolution
+wrong. *Read to form a hypothesis; RUN something to name a mechanism* — applied
+here to my own script, and the reading is what failed.
+
+Fixed to walk up the way Node does; verified from the worktree, resolving to
+`/opt/meddoc-pro/packages/shared/src/specialties.ts` — the shared tree's copy,
+which is exactly the silent cross-tree resolution the control exists to expose,
+and which the script now PRINTS rather than assumes.
+
+#### ⚠️ AND FINISHING THE READ FOUND FOUR MORE — REPORT LINES THAT ASSERT RATHER THAN PRINT
+
+The same read, continued into the CLI, found a family of four. Every one was
+**true at the moment it was written and true only because of the control flow
+above it** — which is precisely what makes them decorative the day somebody
+downgrades a refusal to a warning.
+
+| line | what it did | what it does now |
+|---|---|---|
+| flag provenance | **defaulted to `'the running container (via the wrapper)'`** and was corrected only on the `--flags` branch, so a hand-piped object payload printed a container provenance nothing had verified | the PAYLOAD declares its source; absent that the report says **`UNVERIFIED`**. Only the wrapper has actually run `docker exec printenv`, so only the wrapper may claim it |
+| `em key-set control: 0 unknown keys` | the **`0` was a literal** | prints `unknown.length` |
+| `universe: … ✔ · … ✔` | two hardcoded tick marks | prints both predicate values with their wanted values beside them |
+| missing `rows` key | collapsed into *"the corpus is EMPTY"* | a distinct refusal — *the extract is malformed, not the corpus empty*, so the reader is sent to the payload rather than the database |
+
+⚠️ **THE FIRST ONE IS THE §5.6 SHAPE INSIDE THE FIX FOR THE §5.6 SHAPE.** The
+provenance line existed *because* an earlier draft printed *"flags read from the
+running container"* on both paths; the correction then asserted the wrapper by
+DEFAULT. **A document asserting an intended state, written to stop a document
+asserting an intended state.** Proved both ways: a hand-piped object payload now
+reports `UNVERIFIED`, and a missing `rows` key refuses on its own terms.
+
+⚠️ **AND THE PROCESS LESSON IS MINE: I PUSHED BEFORE FINISHING MY OWN REVIEW,
+TWICE.** Canon's #568 rule is *hold the first push until the session's remaining
+commits are written*. Both of this branch's declared cancellations exist because
+a review that was still running produced a fix after the push. The rule is not
+"batch the commits you already have" — it is **finish looking before you start
+the clock**.
+
+**HONEST RESIDUE: the wrapper's bash GLUE is still unexecuted.** Its arrays,
+its identity loop and its final pipeline have been read and their pieces proved
+individually; the assembled script has never run, because it cannot. Named, not
+papered over.
+
+#### PROOF
+
+- **Unit gate: 30 arms, all green.** Controlled delta, **both sides measured on
+  equivalent worktrees, neither inherited**: `origin/main` **333 files / 4141
+  tests**, branch **334 / 4171** — **+1 file, +30 tests**, exactly the new arms.
+  ⚠️ The failure profile is **identical on both sides — 16 failed files, 1 failed
+  test** — all of it the recorded worktree `react/jsx-dev-runtime` resolution
+  property (15 collection errors + `gate-devstates`, which reaches it through a
+  dynamic import and so surfaces as a test failure). **The branch adds none.**
+- **`tsc --noEmit` on the app: 0 errors.**
+- **Four mutation proofs, each asserting its own application before its result
+  was read, each restored from a scratch copy and the restore verified by
+  `sha256`** (never `git checkout` — the tree is dirty):
+
+| # | mutation | red |
+|---|---|---|
+| M1 | `emScoredCode` dropped from the watched set | **5** |
+| M2 | axis attribution always returns `note-shape` | **2** |
+| M3 | the over-selection (PHI) control stops discriminating | **1** |
+| M4 | the scan short-cuts to `emAppliesToSpecialty` alone | **11** |
+
+  ⚠️ **M4 is the load-bearing one.** It is not "delete the fix" — it is the
+  *plausible optimisation* the module's own header warns against, and it is the
+  edit a tired session actually makes. 11 arms catch it.
+
+  ⚠️ **ALL FOUR WERE RE-RUN AGAINST THE FINAL TREE AFTER THE REFUTATION FIX,
+  NOT CARRIED FORWARD.** Their first run was against the 25-arm version; M4 read
+  **10** there and reads **11** here. *A count carried forward from an earlier
+  state of your own branch and then reported as current is the same fabrication
+  as one inherited from another session's report.*
+
+- **The CLI's own arms, exercised live — 4 refusals AND the green**, because a
+  guard proven only in the red direction is half-proven:
+
+| probe | result |
+|---|---|
+| empty corpus | `2` — *"an empty scan and a clean scan are the same output"* |
+| bare array, no `--flags` | `2` |
+| flag universe inverted | `2` — WRONG UNIVERSE, both directions named |
+| body text smuggled into the projection | `2` — *3 lines delivered, 2 headings* |
+| an `em` object carrying an unmodelled key | `2` — names the key, and names the trap |
+| **a clean office visit** | **`0` 🟢 — it earns its green** |
+
+#### ⚠️ HONEST LIMITS, RECORDED SO THE WATCHER IS NOT READ WIDER THAN IT IS
+
+1. **THE LOOP CANNOT INVOKE THE WRAPPER BY NAME.** `.claude/settings.json` names
+   scripts one by one and **is protected from the layer it governs**, so this
+   session could not ship its own grant. Canon's *"an entry that names an
+   instrument verifies that instrument's GRANT in the same commit"* is
+   **structurally unreachable from the unattended side** — a genuine hole in
+   that rule, named here rather than quietly worked around. **OWNER ACTION:**
+   add `"Bash(bash scripts/check-em-note-shape-artifacts.sh:*)"`. Until then the
+   granted `psql | tsx` route in the script's header is the way, it is what took
+   tonight's measurement, and the script says loudly that it is **weaker** —
+   it skips the identity and container-flag controls. **The header also forbids
+   tunnelling the refused file through `node -e`/`python3 -c` by name**, because
+   that is the failure mode a refusal invites.
+2. **The measurement above used that weaker route**, so its flag value was
+   TYPED. It was separately read from the running worker in the same pass
+   (`NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true`) and both digests were compared by
+   hand — the controls were performed, just not by the wrapper.
+   ⚠️ The CLI's report line now NAMES its flag provenance instead of asserting
+   *"read from the running container"* unconditionally, which is what the first
+   draft printed on both paths — the §5.6 shape, caught in my own output.
+3. **`scripts/lib/*.ts` IS NOT TYPECHECKED BY CI.** The `CI` workflow runs
+   `npm run test:all` and the audits; there is no `tsc` step, and the app
+   tsconfig's `include` does not reach `scripts/`. The CLI's types are
+   decorative. Its *logic* lives in `apps/…/lib/em-artifact-scan.ts`, which IS
+   typechecked and IS covered by the gate — and the CLI itself was **executed**
+   seven times including every refusal arm, which for a script is the stronger
+   evidence.
+4. **No deploy is required and none was taken.** `em-artifact-scan.ts` is
+   imported by nothing at runtime; the watcher runs from the repo tree against
+   the production database. The shipped-code identity control covers
+   `note-shape.ts` and `specialties.ts`, which this change does not touch.
+5. **It watches `transcribe_visits` only.** Whether any other table can hold a
+   stale E/M level is not established here and is not claimed.
+6. **The 15 are REPORTED, NOT DISPOSITIONED.** That was the item's own
+   instruction and it has not been exceeded.
+
+#### WHAT REMAINS OF F12-g
+
+**The disposition of the 15 — a war-room question, unchanged.** The watcher's
+job was to stop the number being invisible, and it is now checkable in one
+command by anybody. ⚠️ **The number will move on its own**, in both directions,
+whenever a template is retired or the classifier is corrected — which is the
+argument for a watcher rather than a one-off count in a ledger row.
