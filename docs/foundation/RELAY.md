@@ -20000,6 +20000,18 @@ irreversible production mutation with its own door (`run-ruled-mutation.sh`) and
 its own declaration. **The first step is a WATCHER**, so the number stops being
 invisible; the disposition of the 15 is a war-room question.
 
+> ✅ **THE WATCHER IS DELIVERED — 2026-08-19, session 03.**
+> `scripts/check-em-note-shape-artifacts.sh`, read-only, running the shipped
+> predicate, with a 25-arm gate. It re-derived this partition independently
+> (**15 / 24 / 7 / 2 = 48**) and added three facts this row did not carry:
+> **all 15 are `axis=note-shape` and 0 are `axis=specialty`** (so the imaging
+> watcher's `0 of 20` covers none of them — measured, not argued), **0 carry a
+> doctor-set override**, and **0 carry `emPendingChange`**. See the F12-g
+> close-out section at the end of this file — including the honest limits, of
+> which the first is that **the loop cannot invoke the wrapper by name until an
+> owner grants it**. *The row is closed in the same pass that closed the item.*
+> **The disposition of the 15 remains open and is still a war-room question.**
+
 ⚠️ **AND F12-f DID NOT CHANGE IT.** F12-f's corpus diff is `+0 / +0`, so every
 one of these rows still carries E/M state under a verdict that is still false.
 The item is untouched and still first-step-is-a-watcher.
@@ -20250,3 +20262,196 @@ deploy ships exactly F12-f and the declaration covers the full diff. The
 two-changes-one-deploy hazard does not apply — *stated rather than assumed,
 because "I deployed `main`" is not the same claim as "I judged what I
 deployed."*
+
+---
+
+### 🟢 F12-g — THE WATCHER IS DELIVERED — **2026-08-19, run `20260818-232127-b1` session 03**
+
+**Branch `feat/f12g-em-shape-watcher`. The item's own first step, executed as
+written: `check-em-note-shape-artifacts.sh`, READ-ONLY, plus a 25-arm gate.**
+
+F12-g was filed *"NOT a remediation item as filed … the first step is a
+WATCHER, so the number stops being invisible; the disposition of the 15 is a
+war-room question."* That is exactly what shipped. **Nothing in production was
+mutated and no remediation was designed** — a stored clinical column is cleared
+through `run-ruled-mutation.sh` with its own §2.5 declaration or not at all.
+
+#### THE MEASUREMENT — RE-DERIVED, NOT INHERITED
+
+Run against production through the **shipped** `emAppliesToVisit`, in the
+production flag universe:
+
+    verdict FALSE + carries E/M state   15    <- F12-g
+    verdict FALSE + clean               24
+    verdict TRUE  + carries E/M state    7
+    verdict TRUE  + clean                2
+                                        --
+                                        48    == rows
+
+**Identical to F12-g's filed partition, reached independently.** Its
+`39 suppressed / 9 apply` also reconciles against F12-f's deploy row, which
+declared `9 apply / 39 suppressed` and held.
+
+**THREE THINGS THE FILED ROW DID NOT CARRY, all new:**
+
+| measured | value |
+|---|---|
+| artifacts by **axis** | **15 note-shape · 0 specialty** |
+| rows carrying a DOCTOR-SET `cptCodes.em.override.code` | **0** |
+| rows carrying `emPendingChange` | **0** |
+
+⚠️ **THE AXIS SPLIT IS THE ONE THAT MATTERS, BECAUSE IT TURNS A WATCHED-SET
+ARGUMENT INTO A MEASUREMENT.** `check-imaging-em-artifacts.sh` read **0 of 20**
+on the same host on the same day. It was right, and it covers **none** of these
+15 — every one is suppressed by note shape, which is outside its
+`where specialty='ultrasound'` universe entirely. *A gate's zero is only worth
+what its watched set is worth*, and until now nothing said which rows the two
+watchers do and do not share.
+
+⚠️ **AND THE ZERO IN ROW 2 CHANGES THE DISPOSITION QUESTION.** F12-g's filing
+warns that `cptCodes.em.override` is a doctor's recorded judgement and clearing
+it deletes what somebody chose. **Today there are none** — the 15 are 13
+computed baselines (`emScoredCode` / `cptCodes.em.code`) and 2 frozen
+`signedCode`s on signed records. That is a materially easier war-room question
+than the row implied, and it is a fact about **today**, which is precisely why
+it needs a watcher rather than a note.
+
+**The two frozen rows are the ones F12-g named** — `cmrxry1in…` and
+`cmrxxj1rn…`, both bariatric-surgery, both signed, both 99214. `cmrxxj1rn…` is
+the row ruling #126(b) set the floor of FOUR against and #130 refused to
+un-suppress. **11 of the 15 are signed.**
+
+#### WHAT IT DOES, AND THE THREE CONTROLS THAT MAKE ITS NUMBER MEAN ANYTHING
+
+- **It runs the SHIPPED predicate and never re-implements it.** F12-g's own
+  filing records what the alternative costs: an SQL re-implementation with the
+  specialty axis approximated answered **19** where the shipped predicate
+  answers **15**, and the 19 reached a ledger row. The SQL here is a projection;
+  every verdict is `emAppliesToVisit`'s.
+- **SHIPPED-CODE IDENTITY.** `sha256` of `note-shape.ts` and `specialties.ts` on
+  disk vs **inside the running worker**, and it refuses `2` on divergence.
+  Measured: `78f2a6c3…` and `aaabfaa9…`, identical both sides — the first digest
+  matching what session 02 recorded for F12-f. ⚠️ Written because
+  `@meddoc/shared` resolves through a **symlink to the shared tree**, not to the
+  worktree, so a worktree copy silently classifies with another tree's specialty
+  axis; the path is `realpath`-resolved and the resolved file is the one hashed.
+- **THE FLAG UNIVERSE IS READ FROM THE RUNNING CONTAINER**, never from `.env` or
+  memory, and a two-directional control (`ultrasound` suppressed **and**
+  `gastroenterology` admitted) refuses `2` if either reads the other way.
+
+**PHI POSTURE — no note body leaves the database.** The extract emits only
+markdown heading lines, filtered by `^[ \t]*#{1,6}[ \t]+`, which is a strict
+**prefix** of `NOTE_SECTION_HEADING_RE` — so it cannot MISS a heading the
+classifier would see, and `assertNoBodyText` asserts on every run that it did not
+over-select either. Live: **290 lines delivered = 290 headings.** Nothing is
+written to disk; the payload is piped.
+
+**Exit codes are three, and `2` is never collapsed into `0`:** unreachable,
+wrong universe, empty corpus, zero specialty-eligible rows, a partition that
+does not reconcile, or an over-selecting projection all refuse.
+
+#### ⚠️ THE GATE REDDENED AGAINST ITS OWN AUTHOR ON ITS FIRST RUN — IN THE WRONG UNIVERSE
+
+**5 of 25 arms failed, and every one had the same cause: `NEXT_PUBLIC_
+ULTRASOUND_SPECIALTY` is unset under vitest.** With the flag OFF,
+`emAppliesToSpecialty('ultrasound')` returns **true**, so the fixture built to
+exercise the SPECIALTY axis was silently exercising the note-shape one and
+`byAxis` could not discriminate at all. **Production runs the flag ON.** A gate
+that defaults it off is a gate about the rollback — canon's own reference case,
+caught by the gate on itself. Fixed with `beforeAll`, and a dedicated
+universe arm now asserts **both directions** so it cannot recur silently.
+
+#### ⚠️ AND IT TRIPPED TWO EXISTING CENSUS GATES, WHICH IS THEM WORKING
+
+Adding a new consumer of the E/M axis reddened two guards that reconcile their
+caller list against the tree. **Neither was weakened; both got an adjudicated
+entry with its reasoning:**
+
+| gate | why the new caller is legitimate |
+|---|---|
+| `review-read-only-paper` — *"NO SITE STILL READS THE SPECIALTY AXIS ALONE FOR AN E/M DECISION"* | `suppressingAxis` is **attribution, not a decision**. It runs only inside `if (!applies)`, i.e. *after* `emAppliesToVisit` has already refused, and answers *which* axis refused. Structurally the sanctioned `override/route.ts` use. It cannot decide applicability because it never runs until applicability is decided |
+| `gate-f12d` — *"the caller census is the WHOLE census"* | the note-body expression is pinned to `row.noteHeadingLines`, with the reason recorded: it is a heading projection of `coalesce("signedSoap","soapFinal")`, which is this table's own rule |
+
+**That is the census design paying for itself** — a new E/M-axis consumer cannot
+enter the tree without somebody writing down why.
+
+#### PROOF
+
+- **Unit gate: 25 arms, all green.** Controlled delta, **both sides measured on
+  equivalent worktrees, neither inherited**: `origin/main` **333 files / 4141
+  tests**, branch **334 / 4166** — **+1 file, +25 tests**, exactly the new arms.
+  ⚠️ The failure profile is **identical on both sides — 16 failed files, 1 failed
+  test** — all of it the recorded worktree `react/jsx-dev-runtime` resolution
+  property (15 collection errors + `gate-devstates`, which reaches it through a
+  dynamic import and so surfaces as a test failure). **The branch adds none.**
+- **`tsc --noEmit` on the app: 0 errors.**
+- **Four mutation proofs, each asserting its own application before its result
+  was read, each restored from a scratch copy and the restore verified by
+  `sha256`** (never `git checkout` — the tree is dirty):
+
+| # | mutation | red |
+|---|---|---|
+| M1 | `emScoredCode` dropped from the watched set | **5** |
+| M2 | axis attribution always returns `note-shape` | **2** |
+| M3 | the over-selection (PHI) control stops discriminating | **1** |
+| M4 | the scan short-cuts to `emAppliesToSpecialty` alone | **10** |
+
+  ⚠️ **M4 is the load-bearing one.** It is not "delete the fix" — it is the
+  *plausible optimisation* the module's own header warns against, and it is the
+  edit a tired session actually makes. 10 arms catch it.
+
+- **The CLI's own arms, exercised live — 4 refusals AND the green**, because a
+  guard proven only in the red direction is half-proven:
+
+| probe | result |
+|---|---|
+| empty corpus | `2` — *"an empty scan and a clean scan are the same output"* |
+| bare array, no `--flags` | `2` |
+| flag universe inverted | `2` — WRONG UNIVERSE, both directions named |
+| body text smuggled into the projection | `2` — *3 lines delivered, 2 headings* |
+| **a clean office visit** | **`0` 🟢 — it earns its green** |
+
+#### ⚠️ HONEST LIMITS, RECORDED SO THE WATCHER IS NOT READ WIDER THAN IT IS
+
+1. **THE LOOP CANNOT INVOKE THE WRAPPER BY NAME.** `.claude/settings.json` names
+   scripts one by one and **is protected from the layer it governs**, so this
+   session could not ship its own grant. Canon's *"an entry that names an
+   instrument verifies that instrument's GRANT in the same commit"* is
+   **structurally unreachable from the unattended side** — a genuine hole in
+   that rule, named here rather than quietly worked around. **OWNER ACTION:**
+   add `"Bash(bash scripts/check-em-note-shape-artifacts.sh:*)"`. Until then the
+   granted `psql | tsx` route in the script's header is the way, it is what took
+   tonight's measurement, and the script says loudly that it is **weaker** —
+   it skips the identity and container-flag controls. **The header also forbids
+   tunnelling the refused file through `node -e`/`python3 -c` by name**, because
+   that is the failure mode a refusal invites.
+2. **The measurement above used that weaker route**, so its flag value was
+   TYPED. It was separately read from the running worker in the same pass
+   (`NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true`) and both digests were compared by
+   hand — the controls were performed, just not by the wrapper.
+   ⚠️ The CLI's report line now NAMES its flag provenance instead of asserting
+   *"read from the running container"* unconditionally, which is what the first
+   draft printed on both paths — the §5.6 shape, caught in my own output.
+3. **`scripts/lib/*.ts` IS NOT TYPECHECKED BY CI.** The `CI` workflow runs
+   `npm run test:all` and the audits; there is no `tsc` step, and the app
+   tsconfig's `include` does not reach `scripts/`. The CLI's types are
+   decorative. Its *logic* lives in `apps/…/lib/em-artifact-scan.ts`, which IS
+   typechecked and IS covered by the gate — and the CLI itself was **executed**
+   seven times including every refusal arm, which for a script is the stronger
+   evidence.
+4. **No deploy is required and none was taken.** `em-artifact-scan.ts` is
+   imported by nothing at runtime; the watcher runs from the repo tree against
+   the production database. The shipped-code identity control covers
+   `note-shape.ts` and `specialties.ts`, which this change does not touch.
+5. **It watches `transcribe_visits` only.** Whether any other table can hold a
+   stale E/M level is not established here and is not claimed.
+6. **The 15 are REPORTED, NOT DISPOSITIONED.** That was the item's own
+   instruction and it has not been exceeded.
+
+#### WHAT REMAINS OF F12-g
+
+**The disposition of the 15 — a war-room question, unchanged.** The watcher's
+job was to stop the number being invisible, and it is now checkable in one
+command by anybody. ⚠️ **The number will move on its own**, in both directions,
+whenever a template is retired or the classifier is corrected — which is the
+argument for a watcher rather than a one-off count in a ledger row.

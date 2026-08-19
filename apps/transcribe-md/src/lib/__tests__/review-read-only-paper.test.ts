@@ -892,6 +892,16 @@ describe('an imaging visit has NO E/M level — not displayed, not computed, not
         // Different jobs wearing the same symbol — see the note above.
         'src/app/board/page.tsx',
         'src/worker/layers/04-generate-soap.ts',
+        // F12-g's read-only production watcher. ATTRIBUTION, NOT A DECISION —
+        // structurally the same sanctioned use as override/route.ts above.
+        // `suppressingAxis` is called ONLY inside `if (!applies)`, i.e. after
+        // `emAppliesToVisit` has already refused, and it answers "WHICH axis
+        // refused?" so that a row `check-imaging-em-artifacts.sh` already owns
+        // is distinguishable from F12-g's own class. It cannot decide
+        // applicability, because it never runs until applicability is decided.
+        // Measured on production 2026-08-19: 15 note-shape, 0 specialty — which
+        // is the number that proves the two watchers do not overlap today.
+        'src/lib/em-artifact-scan.ts',
       ].sort(),
     );
   });
