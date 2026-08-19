@@ -29,7 +29,7 @@ import {
   createTemplateTwinDraft,
   TemplateTwinDraftError,
 } from '@/lib/template-twin/create-draft';
-import { VERIFICATION_ENCOUNTER } from '@/lib/template-twin/verification-encounter';
+import { deriveVerificationEncounter } from '@/lib/template-twin/verification-encounter';
 import { readTemplateTwinWorkspace } from '@/lib/template-twin/workspace-read';
 import {
   certifyAndActivateTemplateTwin,
@@ -191,7 +191,16 @@ export async function certifyNativeTemplateAction(
         noteTemplateId,
         actor,
         expectedMappingsSha256,
-        encounterText: VERIFICATION_ENCOUNTER,
+        // ⚠️ THE SAME DERIVATION AS THE AUTOMATIC PATH — F5-c.
+        // An automatic path that proved something different from the manual one
+        // would leave neither reader able to say what their template passed.
+        encounterText: deriveVerificationEncounter(
+          (current?.fields ?? []).map(({ field, mapping }) => ({
+            originalLabel: field.originalLabel,
+            clinicalConcept: mapping.clinicalConcept,
+            laterality: mapping.laterality,
+          })),
+        ),
         encounterMode: 'dictation',
         extractEntities: extractTemplateTwinEntities,
         // Run the proof through the LIVE fill path: a real (ephemeral) visit,

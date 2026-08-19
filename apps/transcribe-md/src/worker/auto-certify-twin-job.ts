@@ -20,7 +20,7 @@ import { updateTemplateTwinMappings, certifyAndActivateTemplateTwin } from '@/li
 import { runTemplateTwinSyntheticTest } from '@/lib/template-twin/synthetic-test';
 import { extractTemplateTwinEntities } from '@/worker/layers/03-extract-entities';
 import { createEphemeralVisitNoteGenerator } from '@/worker/template-twin-note-generator';
-import { VERIFICATION_ENCOUNTER } from '@/lib/template-twin/verification-encounter';
+import { deriveVerificationEncounter } from '@/lib/template-twin/verification-encounter';
 import { planAutoConfirm } from '@/lib/template-twin/auto-certify-eligibility';
 import { auditAutoConfirm } from '@/lib/template-twin/auto-certify';
 import { logTwinAudit } from '@/lib/template-twin/twin-audit';
@@ -111,7 +111,18 @@ export async function runAutoCertifyTwin(
       noteTemplateId,
       actor,
       expectedMappingsSha256: persisted.mappingsSha256,
-      encounterText: VERIFICATION_ENCOUNTER,
+      // ⚠️ DERIVED FROM THIS TEMPLATE, NOT A CONSTANT — F5-c.
+      // The generic encounter filled 7 of the owner's 80 fields and the
+      // lifecycle gate refused at >= 10, correctly. The encounter now speaks to
+      // the form's own measurement rows so the fill path is genuinely
+      // exercised; the threshold is untouched.
+      encounterText: deriveVerificationEncounter(
+        persisted.fields.map(({ field, mapping }) => ({
+          originalLabel: field.originalLabel,
+          clinicalConcept: mapping.clinicalConcept,
+          laterality: mapping.laterality,
+        })),
+      ),
       encounterMode: 'dictation',
       extractEntities: extractTemplateTwinEntities,
       generateNote: createEphemeralVisitNoteGenerator({
