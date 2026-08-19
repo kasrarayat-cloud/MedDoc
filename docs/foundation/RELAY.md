@@ -20865,3 +20865,91 @@ no cure attempt under MASTER's external-fault clause. It is not
 *re-run-and-hope*: `e2e` on the same commit sailed past the identical install
 and ran the full pack, which is what established the fault as **per-job
 intermittent** rather than per-commit.
+
+---
+
+### ✅ F20 — THE NO-PROGRESS KILL SWITCH WAS READING A FILE THE SESSION CANNOT WRITE — **2026-08-19, run `20260819-143043-b1` session 01**
+
+**THE PREVIOUS RUN HALTED ON NO-PROGRESS HAVING LANDED THREE PRs.** Run
+`20260818-232127-b1` ended at `12:44:53Z` with `#740`, `#741` and `#742` merged
+— every one of them carrying a `RELAY.md` row — and the runner's own banner
+said *"no item finished"*. **It was wrong, and the reason is structural rather
+than careless.**
+
+`KILL SWITCH 4` hashed the **shared tree's working copy** of
+`docs/foundation/RELAY.md`. A session never writes that file: it works in its
+own `git worktree` and lands its row on `origin/main` through a merged PR. The
+shared tree learns of it only through the launch-time `--ff-only` sync, **which
+runs before the session**. So the switch sampled something the judged session
+could not affect.
+
+**MEASURED FROM THE LOGS, NOT INFERRED:**
+
+| session | launch (sample) | shared-tree commit | ledger hash |
+|---|---|---|---|
+| run03 | `06:52:02Z` | `febfdcfd` | `c631a099` |
+| run04 | `09:11:51Z` | `febfdcfd` | `c631a099` |
+
+⚠️ **AND THE FIRST HYPOTHESIS WAS WRONG, WHICH IS WORTH RECORDING.** The obvious
+reading is *"the ff-sync broke"*. It did not: `origin/main` genuinely **was**
+`febfdcfd` at both sample moments — the previous merge landed `06:05:58Z` and
+the next at `10:00:35Z` — so the sync correctly did nothing. The three merges
+landed at `10:00:35Z` and `~12:07Z`, **all after the last sample the switch
+would ever take**, leaving it **14** commits behind the file it was reading
+(`git rev-list --count febfdcfd..37a654f4` = 14). *Read to form a hypothesis;
+run something to name a mechanism.*
+
+⚠️ **IT IS THIS HOUSE'S OWN NAMED FAMILY — two distinguishable states collapsed
+into one observation.** *"No item finished"* and *"no sync ran"* produced
+byte-identical output, and only one of them is a finding. **A fail-CLOSED kill
+switch had been built on a deliberately fail-OPEN input** — the runner's own
+comment says the sync must never refuse, *"a stale tree is bad; a halted loop is
+worse"*.
+
+**THE FIX — ruling #132 (PROVISIONAL).** `scripts/lib/ledger-progress.sh`
+measures the ledger **on `origin/main`, after a fresh fetch, at both ends of the
+session**, so the pair BRACKETS the session instead of trailing it.
+**CANNOT-TELL is a third state** — `exit 2`, its own `LEDGER-UNREADABLE` halt
+name, debounced at 3 consecutive — because a failed fetch is evidence about the
+network and never about the session.
+
+**⚠️ IT IS NOT A LOOSENING, AND THAT IS ASSERTED RATHER THAN CLAIMED.** Two arms
+prove a spinning session is still caught, including the case where `main` moves
+**without** the ledger moving — which a git-log check would have scored as
+progress.
+
+| proof | result |
+|---|---|
+| `gate-f20-ledger-progress-universe.test.ts` | **20 of 20**, real bash, real `origin`, throwaway repos |
+| unit suite, controlled delta vs `origin/main` | **+1 file, +20 tests**; failures **16/1 on BOTH** trees |
+
+**MUTATION-PROVED FIVE WAYS, AND THE LOAD-BEARING ONE IS THE *PARTIAL* FIX:**
+
+| mutation | reddens |
+|---|---|
+| **the PARTIAL fix** — lib hashes the working copy, every exit code and token intact | **the stale-working-tree arm ALONE** (1 red, 18 green) |
+| `\|\| true` re-added on the sample | the RC-capture arm (1 red) |
+| cannot-tell reset removed from one path | the *"consecutive"* arm (1 red) |
+| the COMPLETE inverse — `sha256sum "$LEDGER"` restored | 2 wiring arms |
+| a deliberate syntax error in the runner | the parse arm |
+
+⚠️ **TWO OF THOSE FIVE ARE DEFECTS THIS FIX'S OWN FIRST DRAFT CONTAINED**, both
+caught before the first green: a `|| true` that would have made `$?` the status
+of `true` — **always 0** — silently disarming the cannot-tell arm and feeding
+the literal string `CANNOT-TELL:fetch-failed` in as a hash (*permanent progress:
+the exact inverse of the bug, wearing the fix's clothes*); and a
+`cannottell_streak` reset on only one measured path, which would have let three
+**non-consecutive** blind samples add up to a halt whose name says *consecutive*.
+
+⚠️ **AND THE GATE HAD A HOLE OF THE SAME SHAPE, FOUND BY ASKING WHAT IT DOES NOT
+WATCH.** Every wiring arm read `foundation-loop.sh` as **text**, so a syntax
+error in it would have left all of them green while the loop could not start at
+all — the worst available outcome, since a runner that does not parse costs the
+whole night rather than one item. A parse arm was added and **positive-controlled
+with a real syntax error** before being believed.
+
+**HONEST LIMIT, NAMED RATHER THAN IMPLIED.** This proves the MEASURE and the
+wiring. It does not prove the runner's loop arithmetic end to end — that would
+mean launching sessions, and a test that spawns 24 headless agents is not a
+test. The streak semantics are guarded by the wiring arms instead, which a
+silent revert would have to remove.
