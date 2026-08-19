@@ -2552,6 +2552,7 @@ COLUMN, and no sweep of the filesystem will find them.
 
 ```bash
 bash scripts/check-imaging-em-artifacts.sh    # READ-ONLY. 0 = clean, 1 = found, 2 = off-host
+bash scripts/check-em-note-shape-artifacts.sh # READ-ONLY. 0 = clean, 1 = FOUND, 2 = can't tell
 bash scripts/assert-migrations-applied.sh     # READ-ONLY. 0 = all applied, 1 = UNAPPLIED, 2 = off-host
 bash scripts/assert-migrations-applied.sh --qa # READ-ONLY. same, against the QA stack
 bash scripts/check-qa-mock-posture.sh         # READ-ONLY. 0 = severed, 1 = LIVE KEYS, 2 = stack down
@@ -2563,6 +2564,45 @@ bash scripts/check-bind-mount-agreement.sh    # READ-ONLY. 0 = agrees, 1 = DIVER
 bash scripts/check-hooks-installed.sh         # READ-ONLY. 0 = hooks live, 1 = INERT, 2 = can't tell
 bash scripts/check-cotenants.sh               # READ-ONLY. 0 = expected, 1 = DIVERGED, 2 = can't tell
 ```
+
+⚠️ **THE TWO E/M WATCHERS COVER TWO DIFFERENT AXES, AND NEITHER IS A WIDENING
+OF THE OTHER.** `check-imaging-em-artifacts.sh` is `where specialty='ultrasound'`
+— the SPECIALTY axis. `check-em-note-shape-artifacts.sh` (F12-g) watches the
+NOTE-SHAPE axis, ruling #123's second axis, which is **entirely outside the
+first's watched set**: a GI doctor does office visits AND colonoscopies under one
+specialty id, so no specialty predicate can separate them.
+
+> **The imaging watcher's 🟢 is TRUE and covers none of the note-shape rows.
+> Measured 2026-08-19: it read `0 of 20` on the same day the note-shape watcher
+> read `15`, and all 15 are `axis=note-shape`, `0` are `axis=specialty`.** The
+> two do not overlap today, and that is a measurement rather than an assumption
+> — the scan reports which axis suppressed each row precisely so the claim stays
+> checkable.
+
+The note-shape watcher runs the **shipped** `emAppliesToVisit`; it never
+re-implements it. F12-g's own filing records the cost of the alternative: an SQL
+re-implementation with the specialty axis approximated answered **19** where the
+shipped predicate answers **15**, and the 19 reached a ledger row before anyone
+caught it. It also never reads a note BODY — the extract emits only heading
+lines, filtered by a strict prefix of `NOTE_SECTION_HEADING_RE`, and the scanner
+asserts on every run that nothing else came through.
+
+⚠️ **IT REPORTS; IT NEVER REMEDIATES, AND THE THREE CLASSES IT FINDS ARE NOT ONE
+FINDING.** A computed `emScoredCode`, a DOCTOR-SET `cptCodes.em.override.code`,
+and a FROZEN `signedCode` on a signed record need three different decisions —
+clearing the second deletes somebody's recorded clinical judgement, and the
+third is never touched. Remediation goes through
+`scripts/run-ruled-mutation.sh` with its own §2.5 declaration; the disposition is
+a war-room question.
+
+⚠️ **AND THE LOOP CANNOT INVOKE IT BY NAME UNTIL AN OWNER GRANTS IT.**
+`.claude/settings.json` names permitted scripts one by one and is protected from
+the layer it governs, so the session that wrote the script **could not ship its
+own grant** — canon's *"an entry that names an instrument verifies that
+instrument's grant in the same commit"* is structurally unreachable from the
+unattended side. The granted fallback is documented in the script's own header
+and is the route the 2026-08-19 measurement actually used. **Do not tunnel the
+refused file through `node -e` or `python3 -c`.**
 
 ⚠️ **`check-cotenants.sh` CARRIES AN EXPECTED STATUS PER HOST, AND ONE OF THEM
 IS A `410`.** `pro.quillmd.com` is DELIBERATELY RETIRED — the `meddoc-pro` CRM

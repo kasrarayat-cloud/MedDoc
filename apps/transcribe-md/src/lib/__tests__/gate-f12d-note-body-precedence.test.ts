@@ -316,6 +316,24 @@ describe('F12-d — THE SEAM: what each caller PASSES, not merely that it passes
     'actions/soap.ts': ['visit.soapFinal'],
     'actions/rescore-em.ts': ['visit.soapFinal'],
     'worker.ts': ['soapFinalForFanout'],
+    // F12-g's READ-ONLY production watcher. Not a runtime caller — nothing in
+    // the app imports it; it is driven by
+    // `scripts/check-em-note-shape-artifacts.sh` against the production
+    // database, and it exists so a stale office E/M level stops being
+    // invisible.
+    //
+    // ⚠️ `row.noteHeadingLines` IS NOT A SAME-TYPED NEIGHBOUR SLIPPING THROUGH,
+    // AND THE DISTINCTION IS THE POINT OF THIS ROW. The projection carries only
+    // the note's markdown HEADING LINES, filtered in SQL by a strict PREFIX of
+    // `NOTE_SECTION_HEADING_RE` — so no clinical prose leaves the database, and
+    // the heading list `normalizedNoteHeadings` derives is IDENTICAL to the one
+    // it would derive from the whole note. `assertNoBodyText` asserts the other
+    // direction (that the filter did not over-select) on every run.
+    //
+    // The SOURCE is still this table's rule: the SQL reads
+    // `coalesce("signedSoap", "soapFinal")`, i.e. the stored record, signed
+    // text first.
+    'lib/em-artifact-scan.ts': ['row.noteHeadingLines'],
   };
 
   /** ⚠️ LINE COMMENTS ARE STRIPPED **BEFORE** BLOCK COMMENTS, AND THE ORDER IS
