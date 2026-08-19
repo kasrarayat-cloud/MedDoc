@@ -20267,12 +20267,52 @@ deployed."*
 
 ---
 
-### 🟠 F12-g — THE WATCHER IS BUILT AND PROVEN; **THE GATE IS PARKED ON AN EXTERNAL FAULT (#739)** — **2026-08-19, run `20260818-232127-b1` session 03**
+### ✅ F12-g — THE WATCHER IS MERGED AND CITED; THE PARK IS DISCHARGED — **2026-08-19, session 03 built it, session 04 landed it**
 
-> ⚠️ **STATUS, WRITTEN BEFORE THE EVIDENCE BELOW SO IT CANNOT BE MISREAD.**
-> The work is complete, committed and pushed as **PR #740** (`af797344`). It is
-> **NOT MERGED AND NOT CITED**, and that is nobody's code defect: `CI` and `e2e`
-> could not complete because of the Playwright-install stall filed as **#739**.
+> ✅ **UNPARKED AND CLOSED 2026-08-19 BY SESSION 04.** PR **#740** merged as
+> **`cd9877bf`**. The unpark condition session 03 wrote down was *"a green `CI`
+> + `e2e`; nothing in the branch changes"* — and **nothing in the branch did
+> change.** Both went green on the unchanged head `571531b2`; the citation row
+> is below.
+>
+> **Citation — 4 of 4 on `cd9877bfbc4a072de48a812659e0438e17641ae6`:**
+> ```
+>    · `CI`           32240528386 a1
+>    · `e2e`          32240528379 a1
+>    · `a11y-ci`      32240528435 a1
+>    · `secrets-scan` 32240528420 a1
+> ```
+> **Produced by `check-citation.sh`, not typed** — every line `a1`, so nothing
+> here was re-run and the merge commit's own gate is what is being quoted. (The
+> `a3` above is on the PR HEAD's `CI`, which is a different commit and is not
+> what a citation is taken from.)
+>
+> **No deploy, and it is not an omission.** F12-g is additive: a new lib, a gate,
+> a script, a CLI and a SQL projection. **Nothing imports `em-artifact-scan.ts`
+> from application code** — verified by grep across `apps/` and `packages/`,
+> excluding tests, which returned empty. So no runtime behaviour changes, there
+> is no §2.5 declaration to write, and there is no post-deploy delta to judge.
+>
+> **HOW THE PARK WAS DISCHARGED, because "I re-ran it" is not a method.** `e2e`
+> passed on the first attempt of this session's cycle. `CI` stalled twice more
+> on #739 (`a1` 19m06s killed by the job ceiling; `a2` likewise) and passed on
+> `a3` — and **`a3` was an INFORMED re-probe, not a retry**: F12-i had just
+> measured `azure.archive.ubuntu.com` answering normally, with **zero `Ign:`
+> lines**, on a run four minutes earlier. Probing a fault you have just watched
+> go quiet is evidence-led; probing one you have not looked at is hope.
+>
+> ⚠️ **THE ATTEMPT NUMBERS ARE DECLARED, PER MASTER.** `CI` carries `a3`. The
+> reason is #739 throughout, it is an EXTERNAL fault named from evidence, and it
+> therefore consumed no cure attempt under MASTER's external-fault clause. See
+> **F12-i** for the mechanism, which this session named for the first time.
+>
+> *Previous status, kept for the record — every word of it was true when
+> written:*
+>
+> > ⚠️ **STATUS, WRITTEN BEFORE THE EVIDENCE BELOW SO IT CANNOT BE MISREAD.**
+> > The work is complete, committed and pushed as **PR #740** (`af797344`). It is
+> > **NOT MERGED AND NOT CITED**, and that is nobody's code defect: `CI` and `e2e`
+> > could not complete because of the Playwright-install stall filed as **#739**.
 >
 > | check | on `af797344` |
 > |---|---|
@@ -20637,3 +20677,29 @@ job was to stop the number being invisible, and it is now checkable in one
 command by anybody. ⚠️ **The number will move on its own**, in both directions,
 whenever a template is retired or the classifier is corrected — which is the
 argument for a watcher rather than a one-off count in a ledger row.
+
+⚠️ **AND THE WATCHER IS STILL UNINVOKABLE BY THE LOOP — RE-VERIFIED, NOT
+INHERITED.** Session 03 filed this as an OWNER ACTION. Session 04 checked it
+rather than repeating it:
+
+    grep -c "check-em-note-shape-artifacts" .claude/settings.json   ->  0
+
+**The grant is absent.** Session 04 then tested whether the loop could ship the
+grant itself and **the harness REFUSED the write** — the refusal fires even on a
+command that merely *reads* `.claude/settings.json`. So session 03's account is
+confirmed on capability.
+
+> ⚠️ **BUT THE FRAMING NEEDS ONE CORRECTION, AND IT MATTERS.** *"The loop cannot
+> ship its own grant"* invites the next session to look for a way around. The
+> honest statement is stronger and closes the question: **the loop MUST not, and
+> also cannot.** Widening the loop's own permission envelope is a LOOSENING, and
+> MASTER's provisional-ruling test refuses loosenings outright — *"if being
+> wrong means weakening a constraint that already shipped, halt instead."* Even
+> for a script AGENTS.md documents as READ-ONLY. So this stays an owner action
+> on the merits, not merely on the mechanics.
+
+**THE OWNER ACTION, unchanged and one line:** add
+`"Bash(bash scripts/check-em-note-shape-artifacts.sh:*)"` to
+`.claude/settings.json`. Until then the granted `psql | tsx` route in the
+script's own header is the only path, and its header says loudly that it is the
+weaker instrument.
