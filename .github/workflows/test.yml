@@ -144,6 +144,42 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
 
+      # ⚠️ #739 — THE PHASE IS NOW NAMED, BY THE SPLIT ABOVE, ON ITS FIRST RUN.
+      # Run 32237637366's apt half failed at its ceiling and its log is the
+      # measurement the single step could never produce:
+      #
+      #     09:28:39  apt index starts; `Ign:` storm against azure.archive
+      #     09:29:17  FALLS BACK to archive.ubuntu.com, all four suites Hit/Get
+      #               ^^^ 38s — the INDEX phase completes, exactly as before
+      #     09:29:17  ......... 4m33s of SILENCE .........
+      #     09:33:50  timed out after 5 minutes
+      #
+      # So the hang is in `apt-get install` fetching PACKAGES, after the index
+      # has already recovered. That confirms #739's title and RETIRES the
+      # competing "the cache is the discriminator" reading: this run had a cache
+      # HIT (4s restore) and hung anyway, in a step the cache does not touch.
+      #
+      # THE CURE IS AT THE LAYER THAT CAN SEE THE HANG. A shell-level retry
+      # cannot tell a slow fetch from a dead one; apt can. Bounding
+      # `Acquire::*::Timeout` turns a silent indefinite wait into a 20-second
+      # failure that apt itself retries against the NEXT mirror in the list —
+      # which is the same fallback that demonstrably works for the index.
+      #
+      # ⚠️ ONE THING THIS DOES NOT KNOW: which HOST hangs. The log goes silent
+      # before naming it, so "the azure mirror is the culprit" stays an
+      # inference. This fix is deliberately host-agnostic for that reason — it
+      # bounds the wait whoever is on the other end. If the stall survives it,
+      # that is a finding and not a mystery.
+      - name: Bound apt's network waits (#739)
+        run: |
+          printf 'Acquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nAcquire::Retries "3";\n' \
+            | sudo tee /etc/apt/apt.conf.d/99-quillmd-timeouts > /dev/null
+          # The drop-in proves its own application: apt parses apt.conf.d at
+          # STARTUP, so a malformed file fails here, loudly — rather than being
+          # silently ignored and leaving the timeouts unset while this step
+          # reports success.
+          sudo apt-get --version > /dev/null
+
       - name: Install Playwright system deps (apt half of --with-deps)
         timeout-minutes: 5
         run: npx playwright install-deps chromium

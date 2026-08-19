@@ -179,6 +179,15 @@ jobs:
       # SAME MINUTE, which reads as a cure and is confounded: the apt half runs
       # either way, so an intermittent apt fault explains both observations
       # equally. The split is what will finally separate them.
+      # #739 — bound apt's own network waits; see the measurement in `test.yml`.
+      - name: Bound apt's network waits (#739)
+        run: |
+          printf 'Acquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nAcquire::Retries "3";\n' \
+            | sudo tee /etc/apt/apt.conf.d/99-quillmd-timeouts > /dev/null
+          # Proves its own application: apt parses apt.conf.d at STARTUP, so a
+          # malformed drop-in fails here rather than being silently ignored.
+          sudo apt-get --version > /dev/null
+
       - name: Install Playwright system deps (apt half of --with-deps)
         timeout-minutes: 5
         run: npx playwright install-deps chromium

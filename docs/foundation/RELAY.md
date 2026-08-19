@@ -20348,3 +20348,68 @@ All four files parse (`yaml.safe_load`, jobs enumerated).
 Merged and cited 4 of 4. **No deploy** — these are CI workflow files; nothing in
 the shipped image changes, so there is no §2.5 declaration and no runtime delta
 to judge.
+
+#### ⚠️ THE INSTRUMENT ANSWERED ITS OWN QUESTION ON ITS FIRST RUN — ruling #131(b)
+
+**Four minutes after the paragraph above was written, it stopped being true, and
+the correction ships in the same change rather than in a later one.**
+
+The split's **first execution** (run `32237637366`, job `96021057572`) failed at
+the apt half's ceiling and printed the separation the single step never could:
+
+    09:28:33  cache restore ......................... 4s  ← a HIT
+    09:28:39  apt index starts; `Ign:` storm vs azure.archive
+    09:29:17  FALLS BACK to archive.ubuntu.com — all four suites Hit/Get
+              ^^^ 38 seconds. The INDEX phase completes. Again.
+    09:29:17  ............ 4m33s of SILENCE ............
+    09:33:50  ##[error] timed out after 5 minutes
+    --------  browser half: SKIPPED
+
+**The hang is `apt-get install` fetching PACKAGES, after the index has already
+recovered.** Two candidates became one, by measurement, in the first run of the
+thing built to measure it.
+
+⚠️ **AND IT RETIRES THE CACHE READING THE RIGHT WAY — BY EVIDENCE, NOT BY
+ARGUMENT.** This run had a **cache HIT** and hung anyway, in a step the cache
+does not touch. So #739's title (*"the filed cache fix cannot retire it"*) was
+**right all along**; what was missing was anyone able to show it. F12-i's own
+first verdict — *"unsupported at the granularity it asserts"* — was the correct
+call **on the evidence then available**, and is now superseded by better
+evidence. *Both halves of that are worth keeping: the verdict was sound and the
+conclusion changed.*
+
+**THE ADDITION, and the layer is the whole argument.** Bound **apt's own**
+network waits at all four sites — `Acquire::http::Timeout 20`,
+`Acquire::https::Timeout 20`, `Acquire::Retries 3`. A shell-level retry cannot
+tell a slow fetch from a dead one, so it must either kill healthy installs or
+wait forever. **apt can tell**, and on timeout it retries against the NEXT
+mirror — the same fallback that demonstrably works for the index, in 38 seconds,
+on both observed runs.
+
+The drop-in **proves its own application**: apt parses `apt.conf.d` at STARTUP,
+so `apt-get --version` on the next line fails loudly on a malformed file rather
+than leaving the timeouts silently unset while the step reports success.
+
+⚠️ **STILL NOT MEASURED, AND SAID SO RATHER THAN ASSUMED: WHICH HOST HANGS.**
+The log goes silent before naming it, so *"the azure mirror is the culprit"* is
+an **inference**. The fix is host-agnostic for exactly that reason. **If the
+stall survives a bounded 20-second wait with three retries, that is a finding —
+and a far sharper one — not a mystery.**
+
+#### THE OCCURRENCE COUNT, RE-MEASURED RATHER THAN CARRIED
+
+Session 03 recorded four (`CI` ×3 + the doomed fourth) plus `e2e` ×3. **This
+session observed two more**, and the first of them is the most useful datum in
+the whole file because **nobody caused it**:
+
+| # | run | duration | ended by |
+|---|---|---|---|
+| 5 | `32235245817` a1 `CI` | `08:59:40`→`09:18:46` = **19m06s** | the **20-minute job ceiling** — unconfounded |
+| 6 | `32235245817` a2 `CI` | `09:22:23`→ still hung at `09:37` = **>14m** | in flight at time of writing |
+
+⚠️ **THE RE-RUN IS DECLARED, PER MASTER.** Attempt `a2` was started by this
+session deliberately, on a NAMED external fault with evidence, and it consumed
+no cure attempt under MASTER's external-fault clause. It is not
+*re-run-and-hope*: `e2e` on the same commit sailed past the identical install
+and ran the full pack, which is what established the fault as **per-job
+intermittent** rather than per-commit.
