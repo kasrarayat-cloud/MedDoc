@@ -91,7 +91,62 @@ export type EmScanRow = {
    *  measurement. Null when the column itself is NULL. */
   cptCodesType: string | null;
   templateSectionsType: string | null;
+  /** `jsonb_typeof(cptCodes->'em')`. ⚠️ `'null'` is a REAL and COMMON value —
+   *  `{"em": null}` is an explicit record of NO E/M level, not stale state, and
+   *  it is 17 of the 27 rows carrying the key. */
+  cptEmType: string | null;
+  /** The keys an `em` OBJECT carries; null when `em` is absent or not an
+   *  object. Feeds `unknownEmKeys` — see `KNOWN_EM_KEYS`. */
+  cptEmKeys: string[] | null;
 };
+
+/** EVERY KEY AN `em` OBJECT IS KNOWN TO CARRY, censused on production
+ *  2026-08-19 across all 10 object-typed rows:
+ *
+ *      code 10 · description 10 · evidence_quote 10 · reasoning 10
+ *      signedCode 6 · override 1
+ *
+ *  THE PARTITION, and it is the reason this list is not just documentation:
+ *
+ *    STATE, watched   `code` · `override` · `signedCode` — a level the record
+ *                     carries. These are `EM_STATE_FIELDS`.
+ *    NARRATIVE, not   `description` · `evidence_quote` · `reasoning` — prose
+ *                     ACCOMPANYING a code. All 10 rows carrying them also carry
+ *                     `code`, so they have never appeared alone, and a row
+ *                     holding only narrative would carry no level to be stale.
+ *
+ *  ⚠️ AN UNKNOWN KEY IS A CANNOT-TELL, NOT A CLEAN ROW. The scan reads three
+ *  fixed paths; state arriving under a FOURTH key would read as clean —
+ *  silently, and indistinguishably from a row that really is clean. That is the
+ *  false green this control exists for, and it currently has ZERO instances: it
+ *  is for the row nobody has written yet.
+ *
+ *  **RETIREMENT/EXTENSION CONDITION, so this list cannot rot quietly:** when a
+ *  new key legitimately appears, decide which half of the partition above it
+ *  belongs to and add it HERE — and if it is STATE, add it to `EM_STATE_FIELDS`
+ *  in the same edit. A key added here alone silences the control without
+ *  widening the watch, which is strictly worse than leaving it red. */
+export const KNOWN_EM_KEYS: readonly string[] = [
+  'code',
+  'description',
+  'evidence_quote',
+  'override',
+  'reasoning',
+  'signedCode',
+];
+
+/** Keys seen on `em` objects that `KNOWN_EM_KEYS` does not name, deduplicated.
+ *  Non-empty is a CANNOT-TELL for the caller — never a finding about a visit,
+ *  because what it reports is that the SCAN's model of the data is incomplete. */
+export function unknownEmKeys(rows: EmScanRow[]): string[] {
+  const known = new Set(KNOWN_EM_KEYS);
+  const unknown = new Set<string>();
+  for (const row of rows) {
+    if (!Array.isArray(row.cptEmKeys)) continue;
+    for (const k of row.cptEmKeys) if (!known.has(k)) unknown.add(k);
+  }
+  return [...unknown].sort();
+}
 
 /** Which of the watched fields this row actually carries. Empty = clean. */
 export function emStateOn(row: EmScanRow): EmStateField[] {
@@ -159,6 +214,12 @@ export type EmScanResult = {
      *  anything. */
     cptCodesTypes: Record<string, number>;
     templateSectionsTypes: Record<string, number>;
+    /** Shape census of `cptCodes->'em'` itself. ⚠️ Printed because `'null'` is
+     *  the MAJORITY value and reads alarming without context: `{"em": null}` is
+     *  an explicit "no E/M level", and treating it as state — which copying the
+     *  imaging watcher's bare key-existence test would do — invents 5 findings
+     *  out of clean rows. */
+    cptEmTypes: Record<string, number>;
   };
 };
 
@@ -199,6 +260,7 @@ export function scanEmArtifacts(rows: EmScanRow[]): EmScanResult {
   const byAxis = { specialty: 0, 'note-shape': 0 };
   const cptCodesTypes: Record<string, number> = {};
   const templateSectionsTypes: Record<string, number> = {};
+  const cptEmTypes: Record<string, number> = {};
   let specialtyEligible = 0;
   let rowsWithHeadings = 0;
   let rowsWithTemplateLabels = 0;
@@ -208,6 +270,8 @@ export function scanEmArtifacts(rows: EmScanRow[]): EmScanResult {
     cptCodesTypes[shape] = (cptCodesTypes[shape] ?? 0) + 1;
     const tShape = row.templateSectionsType ?? 'null';
     templateSectionsTypes[tShape] = (templateSectionsTypes[tShape] ?? 0) + 1;
+    const emShape = row.cptEmType ?? 'absent';
+    cptEmTypes[emShape] = (cptEmTypes[emShape] ?? 0) + 1;
 
     if (emAppliesToSpecialty(row.specialty)) specialtyEligible++;
     if (normalizedNoteHeadings(row.noteHeadingLines).length > 0) rowsWithHeadings++;
@@ -262,6 +326,7 @@ export function scanEmArtifacts(rows: EmScanRow[]): EmScanResult {
       rowsWithTemplateLabels,
       cptCodesTypes,
       templateSectionsTypes,
+      cptEmTypes,
     },
   };
 }

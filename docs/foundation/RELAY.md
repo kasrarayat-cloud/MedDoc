@@ -20002,11 +20002,13 @@ invisible; the disposition of the 15 is a war-room question.
 
 > ✅ **THE WATCHER IS DELIVERED — 2026-08-19, session 03.**
 > `scripts/check-em-note-shape-artifacts.sh`, read-only, running the shipped
-> predicate, with a 25-arm gate. It re-derived this partition independently
+> predicate, with a 30-arm gate. It re-derived this partition independently
 > (**15 / 24 / 7 / 2 = 48**) and added three facts this row did not carry:
 > **all 15 are `axis=note-shape` and 0 are `axis=specialty`** (so the imaging
-> watcher's `0 of 20` covers none of them — measured, not argued), **0 carry a
-> doctor-set override**, and **0 carry `emPendingChange`**. See the F12-g
+> watcher's `0 of 20` covers none of them — measured, not argued), **0 of the 15
+> carry a doctor-set override** (the corpus's one override sits on a
+> verdict-TRUE row and is legitimate), and **0 of the 15 carry
+> `emPendingChange`**. See the F12-g
 > close-out section at the end of this file — including the honest limits, of
 > which the first is that **the loop cannot invoke the wrapper by name until an
 > owner grants it**. *The row is closed in the same pass that closed the item.*
@@ -20297,8 +20299,16 @@ declared `9 apply / 39 suppressed` and held.
 | measured | value |
 |---|---|
 | artifacts by **axis** | **15 note-shape · 0 specialty** |
-| rows carrying a DOCTOR-SET `cptCodes.em.override.code` | **0** |
-| rows carrying `emPendingChange` | **0** |
+| **of the 15**, carrying a DOCTOR-SET `cptCodes.em.override.code` | **0** |
+| **of the 15**, carrying `emPendingChange` | **0** |
+
+⚠️ **THE OVERRIDE ROW IS "0 OF THE 15", NOT "0 IN THE CORPUS", AND THE
+DISTINCTION IS THE WHOLE VALUE OF THE ROW.** Production holds **one**
+doctor-set override — `cmqfgj6lv…`, primary-care, unsigned, `override.code`
+99211 — and its verdict is **TRUE**, so it is legitimately holding its level and
+is correctly **not** an artifact. A first draft of this row said *"0 rows carry
+a doctor-set override"*, which is false about the corpus and true about the
+finding. Caught by re-measuring the claim instead of the count.
 
 ⚠️ **THE AXIS SPLIT IS THE ONE THAT MATTERS, BECAUSE IT TURNS A WATCHED-SET
 ARGUMENT INTO A MEASUREMENT.** `check-imaging-em-artifacts.sh` read **0 of 20**
@@ -20375,11 +20385,66 @@ entry with its reasoning:**
 **That is the census design paying for itself** — a new E/M-axis consumer cannot
 enter the tree without somebody writing down why.
 
+#### ⚠️ THE REFUTATION PASS FOUND A LATENT FALSE GREEN IN MY OWN WATCHER — AND THE OBVIOUS FIX WOULD HAVE BEEN WORSE
+
+**Self-run, which is the WEAKER form and is named as such** — this session cannot
+spawn independent refuters, and canon is explicit that the pass works *because*
+it does not share the author's context. It found something anyway, on the lens
+*"can this report zero while artifacts exist?"*
+
+**THE GAP.** The scan reads three fixed paths under `cptCodes.em`
+(`code`, `override.code`, `signedCode`). **State arriving under a FOURTH key
+would read as a perfectly clean row** — silently, indistinguishably from a row
+that really is clean. `check-imaging-em-artifacts.sh` guards its own version of
+this by testing bare KEY EXISTENCE, and **its comment says so explicitly**. I
+had not copied it.
+
+⚠️ **AND COPYING IT WOULD HAVE BEEN THE ERROR. THE CORPUS SAID SO.** Measured:
+
+| `jsonb_typeof(cptCodes->'em')` | rows |
+|---|---|
+| `object` | **10** |
+| **`null`** — i.e. `{"em": null}` | **17** |
+| absent | 21 |
+| | **48** ✔ |
+
+`{"em": null}` is an **EXPLICIT RECORD OF NO E/M LEVEL** — the opposite of stale
+state. Bare key existence would have **invented 5 findings out of clean rows.**
+*Copying prior art verbatim would have been the error; measuring the corpus is
+what chose the predicate* — the same lesson `note-shape.ts` already records
+about the `office >= 3` clause it deliberately did not copy.
+
+**AND THE GAP HAS ZERO INSTANCES TODAY, WHICH I MEASURED RATHER THAN HOPED.**
+Every one of the 10 object-typed rows carries `code`, so nothing escapes the
+three paths: `object_em_with_no_watched_path = 0`. **The count of 15 is correct.**
+⚠️ Note what I did NOT do: infer set equality from two counts that happened to
+both read 17. That coincidence was checked directly.
+
+**THE FIX IS A KEY-SET CONTROL, NOT A WIDER PREDICATE.** The full key census —
+`code` 10 · `description` 10 · `evidence_quote` 10 · `reasoning` 10 ·
+`signedCode` 6 · `override` 1 — is recorded as `KNOWN_EM_KEYS`, partitioned into
+**STATE** (`code`, `override`, `signedCode` — the watched three) and
+**NARRATIVE** (`description`, `evidence_quote`, `reasoning` — prose accompanying
+a code, never seen alone). **An unknown key is now a CANNOT-TELL, not a clean
+row**, and the refusal text names the trap in its own message: *adding a key to
+`KNOWN_EM_KEYS` alone silences the control without widening the watch.* The
+extension condition is written into the constant, so checking it is a lookup.
+
+**Also confirmed by the same pass, and both came back clean:**
+- **The flag enumeration is complete, measured not assumed** —
+  `grep process.env` across `note-shape.ts` and `specialties.ts` returns exactly
+  **one** hit, `NEXT_PUBLIC_ULTRASOUND_SPECIALTY`. The wrapper's `FLAG_NAMES`
+  is the whole set.
+- **`emScoredCode = ''`** — a falsy-but-present value my truthiness test would
+  drop while the imaging watcher's `is not null` would keep: **0 rows.**
+- **Neither census gate was weakened.** Both were red before my entries and green
+  after; the matchers are untouched and the assertions are exact-array equality.
+
 #### PROOF
 
-- **Unit gate: 25 arms, all green.** Controlled delta, **both sides measured on
+- **Unit gate: 30 arms, all green.** Controlled delta, **both sides measured on
   equivalent worktrees, neither inherited**: `origin/main` **333 files / 4141
-  tests**, branch **334 / 4166** — **+1 file, +25 tests**, exactly the new arms.
+  tests**, branch **334 / 4171** — **+1 file, +30 tests**, exactly the new arms.
   ⚠️ The failure profile is **identical on both sides — 16 failed files, 1 failed
   test** — all of it the recorded worktree `react/jsx-dev-runtime` resolution
   property (15 collection errors + `gate-devstates`, which reaches it through a
@@ -20394,11 +20459,17 @@ enter the tree without somebody writing down why.
 | M1 | `emScoredCode` dropped from the watched set | **5** |
 | M2 | axis attribution always returns `note-shape` | **2** |
 | M3 | the over-selection (PHI) control stops discriminating | **1** |
-| M4 | the scan short-cuts to `emAppliesToSpecialty` alone | **10** |
+| M4 | the scan short-cuts to `emAppliesToSpecialty` alone | **11** |
 
   ⚠️ **M4 is the load-bearing one.** It is not "delete the fix" — it is the
   *plausible optimisation* the module's own header warns against, and it is the
-  edit a tired session actually makes. 10 arms catch it.
+  edit a tired session actually makes. 11 arms catch it.
+
+  ⚠️ **ALL FOUR WERE RE-RUN AGAINST THE FINAL TREE AFTER THE REFUTATION FIX,
+  NOT CARRIED FORWARD.** Their first run was against the 25-arm version; M4 read
+  **10** there and reads **11** here. *A count carried forward from an earlier
+  state of your own branch and then reported as current is the same fabrication
+  as one inherited from another session's report.*
 
 - **The CLI's own arms, exercised live — 4 refusals AND the green**, because a
   guard proven only in the red direction is half-proven:
@@ -20409,6 +20480,7 @@ enter the tree without somebody writing down why.
 | bare array, no `--flags` | `2` |
 | flag universe inverted | `2` — WRONG UNIVERSE, both directions named |
 | body text smuggled into the projection | `2` — *3 lines delivered, 2 headings* |
+| an `em` object carrying an unmodelled key | `2` — names the key, and names the trap |
 | **a clean office visit** | **`0` 🟢 — it earns its green** |
 
 #### ⚠️ HONEST LIMITS, RECORDED SO THE WATCHER IS NOT READ WIDER THAN IT IS

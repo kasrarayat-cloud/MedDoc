@@ -39,6 +39,8 @@ import {
   assertNoBodyText,
   emStateOn,
   suppressingAxis,
+  unknownEmKeys,
+  KNOWN_EM_KEYS,
   EM_STATE_FIELDS,
   type EmScanRow,
 } from '../em-artifact-scan';
@@ -119,6 +121,8 @@ const CLEAN: Omit<EmScanRow, 'visitId' | 'specialty' | 'noteHeadingLines'> = {
   templateSections: null,
   cptCodesType: null,
   templateSectionsType: null,
+  cptEmType: null,
+  cptEmKeys: null,
 };
 
 function row(over: Partial<EmScanRow> & { visitId: string }): EmScanRow {
@@ -312,6 +316,74 @@ describe('F12-g — the projection carries headings and never a body', () => {
     const r = assertNoBodyText([row({ visitId: 'empty', noteHeadingLines: '' })]);
     expect(r.deliveredLines).toBe(0);
     expect(r.headingLines).toBe(0);
+  });
+});
+
+describe('F12-g — an unknown key under cptCodes.em is a CANNOT-TELL, not a clean row', () => {
+  // ⚠️ FOUND BY THIS BRANCH'S OWN REFUTATION PASS, BEFORE MERGE. The scan reads
+  // three fixed paths under `em`. State arriving under a FOURTH key would read
+  // as a perfectly clean row — silently, and indistinguishably from a row that
+  // really is clean. Zero instances on production today; this is for the row
+  // nobody has written yet.
+  it('the known key set is exactly what production carries', () => {
+    // Censused 2026-08-19 across all 10 object-typed rows.
+    expect([...KNOWN_EM_KEYS].sort()).toEqual(
+      ['code', 'description', 'evidence_quote', 'override', 'reasoning', 'signedCode'].sort()
+    );
+  });
+
+  it('accepts the production key set without complaint', () => {
+    expect(
+      unknownEmKeys([
+        row({
+          visitId: 'known',
+          cptEmType: 'object',
+          cptEmKeys: ['code', 'description', 'evidence_quote', 'reasoning', 'signedCode'],
+        }),
+      ])
+    ).toEqual([]);
+  });
+
+  it('DETECTS a key the scan does not model', () => {
+    expect(
+      unknownEmKeys([
+        row({ visitId: 'u1', cptEmType: 'object', cptEmKeys: ['code', 'levelOverrideV2'] }),
+        row({ visitId: 'u2', cptEmType: 'object', cptEmKeys: ['frozenAt', 'code'] }),
+      ])
+    ).toEqual(['frozenAt', 'levelOverrideV2']);
+  });
+
+  // ⚠️ THE ARM THAT RECORDS WHY PRIOR ART WAS NOT COPIED.
+  // `check-imaging-em-artifacts.sh` tests bare KEY EXISTENCE (`cptCodes ? 'em'`)
+  // and its comment explains why — for ITS question that is right. Here it is
+  // wrong: measured 2026-08-19, 17 of the 27 rows carrying the key hold JSON
+  // `null`, and bare existence would have invented FIVE findings out of rows
+  // that explicitly record NO E/M level. Copying prior art verbatim would have
+  // been the error; measuring the corpus is what chose the predicate.
+  it('{"em": null} is an EXPLICIT no-E/M and is NOT an artifact', () => {
+    const r = scanEmArtifacts([
+      row({
+        visitId: 'em-json-null',
+        noteHeadingLines: body(OPERATIVE_BODY), // verdict FALSE — the flaggable side
+        cptCodesType: 'object',
+        cptEmType: 'null',
+        cptEmKeys: null,
+      }),
+    ]);
+    expect(r.buckets.verdictFalseWithState).toBe(0);
+    expect(r.buckets.verdictFalseClean).toBe(1);
+    expect(r.artifacts).toHaveLength(0);
+    expect(unknownEmKeys([row({ visitId: 'x', cptEmType: 'null', cptEmKeys: null })])).toEqual([]);
+  });
+
+  it('counts the em shape census, so "null" is visible rather than surprising', () => {
+    const r = scanEmArtifacts([
+      row({ visitId: 'a', cptEmType: 'null' }),
+      row({ visitId: 'b', cptEmType: 'null' }),
+      row({ visitId: 'c', cptEmType: 'object', cptEmKeys: ['code'], cptEmCode: '99213' }),
+      row({ visitId: 'd' }),
+    ]);
+    expect(r.control.cptEmTypes).toEqual({ null: 2, object: 1, absent: 1 });
   });
 });
 

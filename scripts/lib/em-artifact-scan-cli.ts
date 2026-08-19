@@ -33,6 +33,8 @@ import { emAppliesToSpecialty } from '@meddoc/shared/specialties';
 import {
   scanEmArtifacts,
   assertNoBodyText,
+  unknownEmKeys,
+  KNOWN_EM_KEYS,
   EM_STATE_FIELDS,
   type EmScanRow,
 } from '../../apps/transcribe-md/src/lib/em-artifact-scan';
@@ -137,6 +139,22 @@ async function main() {
     );
   }
 
+  // ⚠️ AN UNKNOWN KEY UNDER `em` MEANS THE SCAN'S MODEL OF THE DATA IS
+  // INCOMPLETE, AND AN INCOMPLETE MODEL PRODUCES A CLEAN-LOOKING ZERO.
+  // The scan reads three fixed paths; state arriving under a fourth key is
+  // invisible to it and indistinguishable from a genuinely clean row. Found by
+  // this branch's own refutation pass. Zero instances today — this refuses for
+  // the row nobody has written yet.
+  const unknown = unknownEmKeys(rows);
+  if (unknown.length > 0) {
+    die(
+      `cptCodes.em carries key(s) this scan does not model: ${unknown.join(', ')}. ` +
+        `Decide whether each is STATE or NARRATIVE, add it to KNOWN_EM_KEYS — and ` +
+        `if it is STATE, to EM_STATE_FIELDS in the same edit. Adding it to ` +
+        `KNOWN_EM_KEYS alone silences this control without widening the watch.`
+    );
+  }
+
   const r = scanEmArtifacts(rows);
 
   console.log(`E/M artifact scan — ${r.control.rows} production visits`);
@@ -155,6 +173,11 @@ async function main() {
     `   · shape: cptCodes ${JSON.stringify(r.control.cptCodesTypes)} · ` +
       `sections ${JSON.stringify(r.control.templateSectionsTypes)}`
   );
+  console.log(
+    `   · cptCodes.em shape ${JSON.stringify(r.control.cptEmTypes)} ` +
+      `— "null" means {"em": null}, an EXPLICIT no-E/M, not stale state`
+  );
+  console.log(`   · em key-set control: 0 unknown keys (known: ${KNOWN_EM_KEYS.join(', ')})`);
   console.log(
     `   · non-vacuity: ${r.control.specialtyEligible} specialty-eligible · ` +
       `${r.control.rowsWithHeadings} with headings · ` +

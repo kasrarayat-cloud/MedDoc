@@ -55,6 +55,30 @@ from (
     t.sections                                 as "templateSections",
     jsonb_typeof(v."cptCodes")                 as "cptCodesType",
     jsonb_typeof(t.sections)                   as "templateSectionsType",
+    -- ⚠️ THE KEY-SET CONTROL, AND IT EXISTS BECAUSE THE REFUTATION PASS FOUND A
+    -- LATENT FALSE GREEN. The scanner reads three fixed paths under `em`
+    -- (`code`, `override.code`, `signedCode`). An `em` OBJECT carrying state
+    -- under some FOURTH key would read as a perfectly clean row — silently, and
+    -- indistinguishably from a row that really is clean.
+    --
+    -- `check-imaging-em-artifacts.sh` guards its own version of this by testing
+    -- KEY EXISTENCE (`"cptCodes" ? 'em'`), and its comment says so explicitly.
+    -- ⚠️ COPYING THAT HERE WOULD BE WRONG, AND THE CORPUS IS WHAT SAYS SO:
+    -- measured 2026-08-19, **17 of 27** rows carrying the `em` key hold JSON
+    -- `null` — `{"em": null}`, an EXPLICIT RECORD OF NO E/M LEVEL, which is the
+    -- opposite of stale state. Bare key existence would flag **5** of them as
+    -- artifacts. Prior art solved a different question; measuring chose this
+    -- predicate.
+    --
+    -- So the shape is: keep the narrow paths, and make an UNKNOWN KEY a loud
+    -- CANNOT-TELL rather than a silent clean. Measured today: every one of the
+    -- 10 object-typed rows carries `code`, so nothing escapes — the control has
+    -- ZERO instances and exists for the row nobody has written yet.
+    jsonb_typeof(v."cptCodes"->'em')           as "cptEmType",
+    case when jsonb_typeof(v."cptCodes"->'em') = 'object'
+         then (select json_agg(k order by k)
+                 from jsonb_object_keys(v."cptCodes"->'em') k)
+    end                                        as "cptEmKeys",
     coalesce((
       select string_agg(line, E'\n')
       from unnest(
