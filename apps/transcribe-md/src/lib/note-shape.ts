@@ -112,8 +112,35 @@ export const OFFICE_SKELETON_SECTIONS: readonly string[] = [
   'PLAN',
 ];
 
-/** ALL FOUR. Not three — see the measured signed row named above. */
-export const OFFICE_SKELETON_FLOOR = OFFICE_SKELETON_SECTIONS.length;
+// ── F12-f: TWO USES, TWO NAMES, TWO FLOORS, ONE VOCABULARY ──────────────────
+// `OFFICE_SKELETON_FLOOR` used to be one constant serving both the OPERATIVE
+// COUNTERWEIGHT and the OFFICE ESCAPE, and `countOfficeSkeleton` used to be one
+// function serving both. That is why F12-d could only widen the escape: moving
+// the shared function would have moved the counterweight with it, in the
+// UNDER-suppression direction, on a signed record.
+//
+// They are now two named floors at two named call sites. Neither can be moved
+// by editing the other, and a divergence between them is a deliberate, visible
+// act at one line rather than a side effect.
+
+/** THE OPERATIVE COUNTERWEIGHT'S FLOOR. How many SOAP concepts a label set must
+ *  carry before the operative markers are overruled.
+ *
+ *  ALL FOUR. Not three — see the measured signed row named above
+ *  (`cmrxxj1rn000h01pnoloiiajx`, SUBJECTIVE · OBJECTIVE · ASSESSMENT and no
+ *  PLAN, alongside three operative markers). LOWERING THIS IS AN
+ *  UNDER-SUPPRESSION and hands that signed record its office E/M level back. */
+export const OFFICE_COUNTERWEIGHT_FLOOR = OFFICE_SKELETON_SECTIONS.length;
+
+/** THE OFFICE ESCAPE'S FLOOR. How many SOAP concepts a NOTE BODY must carry
+ *  before it may overrule a template that says "operative".
+ *
+ *  Equal to the counterweight's today, and that equality is asserted rather
+ *  than assumed — see `gate-f12f-counterweight-vocabulary.test.ts`. They are
+ *  separate constants because they answer separate questions: the counterweight
+ *  asks "can these labels belong to an operative note at all?", the escape asks
+ *  "does this body affirmatively claim to be an office visit?". */
+export const OFFICE_ESCAPE_FLOOR = OFFICE_SKELETON_SECTIONS.length;
 
 /** Trim · strip a trailing colon · collapse inner whitespace · upper-case.
  *
@@ -162,7 +189,14 @@ function countMarkers(labels: Iterable<string>): number {
   return n;
 }
 
-/** How many of the four SOAP sections this label set carries.
+/** How many of the four SOAP sections this label set carries **LITERALLY**.
+ *
+ *  ⚠️ EVIDENCE ONLY. THIS IS NO LONGER THE COUNTERWEIGHT — F12-f. Nothing in
+ *  this module decides anything with it; it exists so a guard can assert the
+ *  MARGIN and, specifically, so a fixture can assert the gap between the
+ *  literal spelling and the concept it names (`ASSESSMENT & PLAN` reads 0 here
+ *  and 2 in `officeConceptCount`). Do not reintroduce it into a verdict: that
+ *  is precisely the coupling F12-f removed.
  *
  *  ⚠️ EXACT MATCH ON THE NORMALISED LABEL, NEVER `includes`. The prior art
  *  matches by substring, and that is not safe to copy: **`'IMPLANT'` contains
@@ -170,16 +204,9 @@ function countMarkers(labels: Iterable<string>): number {
  *  would score an office point and, with three more, hand the note its office
  *  E/M level back. This repository has a canon section on exactly this family
  *  (`'dashboard'` contains `'board'`), and the counterweight is the one place
- *  a false positive costs a suppression.
- *
- *  ⚠️ HONEST LIMIT, STATED RATHER THAN DISCOVERED LATER: a note that spells its
- *  last two sections as ONE heading — `ASSESSMENT & PLAN` — scores 2, not 4,
- *  and so does not reach the counterweight. Production's seven SOAP notes all
- *  carry the four separately (measured 2026-08-18), and every combined-heading
- *  template in production carries ZERO operative markers, so nothing today
- *  depends on it. If that changes, the fix is to name the combined forms
- *  explicitly — never to loosen this to a substring scan. */
-function countOfficeSkeleton(labels: Iterable<string>): number {
+ *  a false positive costs a suppression. `officeConceptCount` inherits that
+ *  rule unchanged — it adds NAMED spellings, never a substring scan. */
+function countLiteralSkeletonLabels(labels: Iterable<string>): number {
   const set = new Set(labels);
   let n = 0;
   for (const section of OFFICE_SKELETON_SECTIONS) {
@@ -192,9 +219,28 @@ function countOfficeSkeleton(labels: Iterable<string>): number {
  *  own headings — resolve through this, so the counterweight cannot be present
  *  on one and missing on the other.
  *
- *  OFFICE IS TESTED FIRST. That order is the whole correction. */
+ *  OFFICE IS TESTED FIRST. That order is the whole correction.
+ *
+ *  ⚠️ THE COUNTERWEIGHT COUNTS **CONCEPTS**, NOT HEADINGS — F12-f. It used to
+ *  count the four literal SOAP words, and F12-d could not widen it without
+ *  moving the escape too, so the escape was widened alone and this was left
+ *  behind. The asymmetry was a live over-suppression:
+ *
+ *      SUBJECTIVE · OBJECTIVE · ASSESSMENT & PLAN
+ *        + POSTOPERATIVE DIAGNOSIS · POSTOPERATIVE FINDINGS
+ *
+ *  is a POST-OP OFFICE FOLLOW-UP — the first of the four families ruling
+ *  #126(b) names — and the literal counterweight scored it **3**, so the
+ *  markers won and an ordinary billable office visit lost its level. Measured
+ *  through this classifier before and after: `operative true -> false`. The
+ *  derm-office-with-excision family flips the same way. **The number of
+ *  headings a doctor used to spell four concepts is not a clinical fact.**
+ *
+ *  ⚠️ AND THE WIDENING IS BOUNDED TO SPELLINGS OF THE **SAME FOUR CONCEPTS** —
+ *  see `REFUSED_OFFICE_CONCEPT_SYNONYMS`, which records the direction that was
+ *  measured and rejected. */
 function labelsReadAsProcedureNote(labels: string[]): boolean {
-  if (countOfficeSkeleton(labels) >= OFFICE_SKELETON_FLOOR) return false;
+  if (officeConceptCount(labels) >= OFFICE_COUNTERWEIGHT_FLOOR) return false;
   return countMarkers(labels) >= PROCEDURE_NOTE_MARKER_FLOOR;
 }
 
@@ -281,28 +327,37 @@ export function isProcedureNoteShapeFromText(noteText: unknown): boolean {
  *
  *  The claim is the one ruling #126(b) already made and measured: **the full
  *  SOAP skeleton is the STRONGER claim, because an operative note does not
- *  carry all four.** This reuses that exact predicate and its exact floor —
- *  `countOfficeSkeleton >= OFFICE_SKELETON_FLOOR`, ALL FOUR, exact-match — so
- *  the counterweight cannot be strong in one place and weak in another. */
+ *  carry all four.** It uses the same vocabulary and the same floor value as
+ *  the counterweight — `officeConceptCount >= OFFICE_ESCAPE_FLOOR` — so the
+ *  counterweight cannot be strong in one place and weak in another. Since
+ *  F12-f the two floors are separate CONSTANTS carrying the same value, and a
+ *  guard asserts they still agree; that is what makes a future divergence a
+ *  decision rather than an accident. */
 export function noteReadsAsOfficeVisitFromText(noteText: unknown): boolean {
-  return officeConceptCount(normalizedNoteHeadings(noteText)) >= OFFICE_SKELETON_FLOOR;
+  return officeConceptCount(normalizedNoteHeadings(noteText)) >= OFFICE_ESCAPE_FLOOR;
 }
 
 /** Headings that satisfy TWO of the four SOAP concepts at once.
  *
- *  ⚠️ THIS LIST EXISTS ONLY FOR THE ESCAPE, AND `countOfficeSkeleton` IS
- *  DELIBERATELY NOT CHANGED. That function ALSO supplies the operative-note
- *  counterweight inside `labelsReadAsProcedureNote`, where widening it would
- *  make more notes read as NOT operative — an UNDER-suppression, on the signed
- *  row `cmrxxj1rn000h01pnoloiiajx` whose floor of FOUR ruling #126(b) set by
- *  hand against the corpus. **The two uses are split here rather than merged.**
+ *  ⚠️ SINCE F12-f THIS VOCABULARY SERVES **BOTH** THE ESCAPE AND THE
+ *  COUNTERWEIGHT, AND THAT CONVERGENCE IS THE ITEM. F12-d added it for the
+ *  escape only, with the note *"`countOfficeSkeleton` is deliberately not
+ *  changed"* — correct at the time, because the counterweight and the escape
+ *  shared one function and one floor, so widening either moved both. The
+ *  separation now lives in two named floors at two named call sites, so the
+ *  vocabulary can be shared without the coupling that forced the split.
  *
- *  ⚠️ AND THE SPLIT IS WHAT MAKES THE ESCAPE STABLE UNDER AN ORDINARY EDIT.
- *  Found by the adversarial pass: with a bare `countOfficeSkeleton`, a doctor
- *  merging `## Assessment` and `## Plan` into `## Assessment & Plan` drops the
- *  count 4 -> 2 and FLIPS the verdict mid-visit — stranding `emPendingChange`,
- *  and (under Rounds) leaving a visit with no sign control and a banner whose
- *  text is false. The concepts are what the doctor documented; the number of
+ *  The measured consequence of the convergence: a post-op office follow-up or a
+ *  derm office excision whose `ASSESSMENT & PLAN` is one heading is no longer
+ *  read as an operative note. Both are families ruling #126(b) exists to
+ *  protect, and both were defeated by orthography alone.
+ *
+ *  ⚠️ AND IT IS WHAT MAKES THE ESCAPE STABLE UNDER AN ORDINARY EDIT.
+ *  Found by F12-d's adversarial pass: with a literal count, a doctor merging
+ *  `## Assessment` and `## Plan` into `## Assessment & Plan` drops the count
+ *  4 -> 2 and FLIPS the verdict mid-visit — stranding `emPendingChange`, and
+ *  (under Rounds) leaving a visit with no sign control and a banner whose text
+ *  is false. The concepts are what the doctor documented; the number of
  *  headings they used to spell them is not a clinical fact. */
 const OFFICE_CONCEPT_PAIRS: ReadonlyArray<readonly [string, readonly string[]]> = [
   // label spelled by the doctor        -> the concepts it satisfies
@@ -316,10 +371,83 @@ const OFFICE_CONCEPT_PAIRS: ReadonlyArray<readonly [string, readonly string[]]> 
   ['SUBJECTIVE AND OBJECTIVE', ['SUBJECTIVE', 'OBJECTIVE']],
 ];
 
+/** SINGLE-CONCEPT SYNONYMS THAT WERE MEASURED AND **REFUSED** — F12-f.
+ *
+ *  ⚠️ THIS IS A RECORD OF A REJECTED DIRECTION, NOT A TODO LIST. Every label
+ *  here is a plausible office-visit heading, and adding any of them to
+ *  `OFFICE_CONCEPT_PAIRS` would weaken the operative counterweight. The
+ *  temptation is concrete: production's ACTIVE template
+ *  `cmpz63jsw000501tayag818lq` spells its sections `CHIEF COMPLAINT · INTERVAL
+ *  HISTORY · EXAM · IMPRESSION & PLAN · PATIENT INSTRUCTIONS`, so an office
+ *  note in that vocabulary reaches only TWO concepts and, under an operative
+ *  template, is still over-suppressed. That residual is real and it is
+ *  **forward-only** — measured 2026-08-19, that template is bound to **0**
+ *  visits.
+ *
+ *  ⚠️ AND THE OBVIOUS CURE WAS RUN AGAINST THE CORPUS AND CAME BACK WORSE.
+ *  Teaching the counterweight these synonyms **un-suppresses a SIGNED
+ *  operative record**: visit `cmrxxj1rn000h01pnoloiiajx`, bariatric surgery,
+ *  SIGNED with a FROZEN `signedCode` 99214, whose body is
+ *
+ *      PROCEDURE · PREOPERATIVE DIAGNOSIS · POSTOPERATIVE FINDINGS · CONSENT
+ *      · DESCRIPTION OF PROCEDURE · RECOMMENDATIONS · SUBJECTIVE · OBJECTIVE
+ *      · ASSESSMENT
+ *
+ *  — three operative markers and three SOAP concepts. `RECOMMENDATIONS -> PLAN`
+ *  takes it to FOUR, the counterweight fires, and the note that ruling #126(b)
+ *  calibrated the floor of FOUR against gets its office E/M level back.
+ *  Measured: `+0 newly suppressed, +1 newly APPLIED`, and that one row is it.
+ *
+ *  ⚠️ AND `RECOMMENDATIONS` IS NOT AN EDGE CASE — IT IS THE OPERATIVE NOTE'S
+ *  OWN PLAN SECTION. Census over the production corpus: it appears in **4 of 4**
+ *  operative templates and **19 of 19** operative note bodies, and on **no**
+ *  record without operative markers. The label that looks most like an office
+ *  synonym is the one most reliably attached to an operative note.
+ *
+ *  ⚠️ AND REMOVING THE ONE PROVEN OFFENDER IS NOT A FIX. With
+ *  `RECOMMENDATIONS` dropped, the remaining synonyms move **0** corpus rows —
+ *  and that zero is worth nothing, because the corpus holds exactly ONE
+ *  operative vocabulary, emitted 19 times by one generator. A clean diff over
+ *  a monoculture is not evidence of safety; it is evidence that the corpus
+ *  cannot discriminate. `DIAGNOSIS · FINDINGS · CHIEF COMPLAINT · PATIENT
+ *  INSTRUCTIONS` is an entirely ordinary operative-note heading set that would
+ *  score FOUR under those synonyms, and nothing in today's data would object.
+ *
+ *  **WHAT WOULD RETIRE THIS REFUSAL:** a production corpus containing office
+ *  notes written in a non-SOAP vocabulary *under an operative template* — i.e.
+ *  the residual acquiring its first real instance — measured per label, with
+ *  the corpus diff run in both directions. Not a feeling that it is safe, and
+ *  not the absence of a counterexample in a corpus with one operative
+ *  vocabulary in it. */
+export const REFUSED_OFFICE_CONCEPT_SYNONYMS: readonly string[] = [
+  'RECOMMENDATIONS',
+  'CHIEF COMPLAINT',
+  'INTERVAL HISTORY',
+  'HISTORY OF PRESENT ILLNESS',
+  'HPI',
+  'EXAM',
+  'PHYSICAL EXAM',
+  'PHYSICAL EXAMINATION',
+  'FINDINGS',
+  'IMPRESSION',
+  'DIAGNOSIS',
+  'PATIENT INSTRUCTIONS',
+  'PLAN OF CARE',
+];
+
 /** How many of the four SOAP CONCEPTS the labels carry, counting the combined
- *  spellings above. Exact match on the normalised label throughout — never
- *  `includes`, for the reason `countOfficeSkeleton` records (`'IMPLANT'`
- *  contains `'plan'`). */
+ *  spellings above.
+ *
+ *  ⚠️ IT ONLY EVER ADDS **SPELLINGS OF THE SAME FOUR CONCEPTS**, never a fifth
+ *  concept and never a synonym for one of them. That bound is what keeps
+ *  #126(b)'s claim intact: *an operative note does not carry all four SOAP
+ *  concepts*, however the doctor spells them. See
+ *  `REFUSED_OFFICE_CONCEPT_SYNONYMS` for the direction that breaks it, and the
+ *  signed record that proves it does.
+ *
+ *  Exact match on the normalised label throughout — never `includes`, for the
+ *  reason `countLiteralSkeletonLabels` records (`'IMPLANT'` contains
+ *  `'plan'`). */
 function officeConceptCount(labels: Iterable<string>): number {
   const set = new Set(labels);
   const satisfied = new Set<string>();
@@ -338,14 +466,21 @@ export function officeConceptCountFromText(noteText: unknown): number {
   return officeConceptCount(normalizedNoteHeadings(noteText));
 }
 
-/** How many of the four SOAP sections the NOTE BODY's own headings carry.
- *  Exported for the same reason as `procedureNoteMarkerCountFromText`: the
- *  COUNT is evidence and the VERDICT is the function, and a fixture sitting at
- *  0 is a different fact from one sitting at 3 — which is precisely the
- *  distinction that let a test fixture stand in for a production row it did not
- *  resemble (F12-d). A guard can now assert the MARGIN, not only the answer. */
+/** How many of the four SOAP sections the NOTE BODY's own headings carry
+ *  **LITERALLY**. Exported for the same reason as
+ *  `procedureNoteMarkerCountFromText`: the COUNT is evidence and the VERDICT is
+ *  the function, and a fixture sitting at 0 is a different fact from one
+ *  sitting at 3 — which is precisely the distinction that let a test fixture
+ *  stand in for a production row it did not resemble (F12-d). A guard can now
+ *  assert the MARGIN, not only the answer.
+ *
+ *  ⚠️ SINCE F12-f THIS IS NOT THE QUANTITY ANY VERDICT USES. Both the
+ *  counterweight and the escape read `officeConceptCount`. The gap between the
+ *  two is exactly the point of the pair — on `## Assessment & Plan` this reads
+ *  **0** and the concept count reads **2** — so a guard asserting only this one
+ *  would be asserting a number nothing consults. */
 export function officeSkeletonCountFromText(noteText: unknown): number {
-  return countOfficeSkeleton(normalizedNoteHeadings(noteText));
+  return countLiteralSkeletonLabels(normalizedNoteHeadings(noteText));
 }
 
 /** DID THE TEMPLATE SAY ANYTHING AT ALL?
@@ -408,7 +543,39 @@ export function templateIsSilent(sections: unknown): boolean {
   // whenever it fires, the NOTE BODY decides, and the body carries the office
   // counterweight. A bare-SOAP template on an office note reads office from the
   // body; on an operative note it reads operative. Both correct.
-  return labels.every((l) => OFFICE_SKELETON_SECTIONS.includes(l));
+  //
+  // ⚠️ AND "BARE SOAP" MEANS BARE **CONCEPTS**, NOT BARE LITERAL WORDS — F12-f,
+  // AND THIS CLAUSE WAS A HALF-LANDED FIX UNTIL THE REFUTATION PASS RAN ON IT.
+  // F12-f moved the counterweight from literal labels to CONCEPTS and did not,
+  // at first, move this. The two then disagreed about the same template, and the
+  // disagreement had a concrete wrong output — verified, not reasoned:
+  //
+  //     template SUBJECTIVE · OBJECTIVE · ASSESSMENT · PLAN     silent -> body
+  //       + an OPERATIVE note body            E/M applies = FALSE   ✔ suppressed
+  //     template SUBJECTIVE · OBJECTIVE · ASSESSMENT & PLAN     NOT silent
+  //       + the SAME operative note body      E/M applies = TRUE    ✘
+  //
+  // **An operative note kept an office E/M level purely because the doctor
+  // merged two headings in their TEMPLATE.** That is the identical defect F12-f
+  // exists to remove, one function over — and it is exactly the shape canon
+  // warns about: the failure that ships is the first edit the code's own comment
+  // invites, with the other layer still missing.
+  //
+  // The clause's own stated reason settles the direction: a template that names
+  // only the document's SKELETON has said nothing about the ENCOUNTER, and
+  // `ASSESSMENT & PLAN` names skeleton exactly as much as `ASSESSMENT` and
+  // `PLAN` do. So silence is judged on the concepts, and a label carrying no
+  // office concept at all still makes the template speak.
+  //
+  // ⚠️ DIRECTION AND BLAST RADIUS, BECAUSE THIS ONE LOOSENS `templateIsSilent`
+  // AND THEREFORE **TIGHTENS** SUPPRESSION. More templates read as silent, so
+  // the note body is consulted more often — and the body only suppresses when it
+  // affirmatively reads operative (2+ markers AND fewer than four concepts). It
+  // cannot strip a level from an office-shaped body, because such a body reaches
+  // the counterweight first. MEASURED over all 48 production visits: **+0 in
+  // either direction** — no production template spells its skeleton with a
+  // merged heading, so this is forward-only, like the rest of F12-f.
+  return labels.every((l) => officeConceptCount([l]) > 0);
 }
 
 /** IS THIS NOTE AN OPERATIVE / PROCEDURE REPORT?
@@ -529,21 +696,26 @@ export function emAppliesToVisit(input: {
   // showed it INTRODUCES one: production template `cmpz63jsw000501tayag818lq`
   // is ACTIVE and spells its sections `CHIEF COMPLAINT · INTERVAL HISTORY ·
   // EXAM · IMPRESSION & PLAN · PATIENT INSTRUCTIONS`, so a body written in that
-  // vocabulary scores **0** on the office counterweight (which is exact-match
-  // and cannot see `IMPRESSION & PLAN`) while an in-room excision supplies two
-  // operative markers. Verified: `true -> false` — an ordinary billable office
-  // visit silently loses its level, which is precisely the "derm office w/
-  // excision" family #126(b)'s counterweight exists to protect, defeated
-  // because the counterweight is unreachable for that template's wording.
+  // vocabulary cannot reach the office counterweight while an in-room excision
+  // supplies two operative markers. Verified: `true -> false` — an ordinary
+  // billable office visit silently loses its level, which is precisely the
+  // "derm office w/ excision" family #126(b)'s counterweight exists to protect,
+  // defeated because the counterweight is unreachable for that wording.
   //
-  // The honest limit at `countOfficeSkeleton` says "every combined-heading
-  // template in production carries ZERO operative markers" — TRUE, and it is a
-  // statement about TEMPLATES. Ungating this arm makes it load-bearing over
-  // NOTE BODIES, whose markers are not the template's. **The exemption's reason
-  // would have gone stale in the same commit that made it load-bearing.**
+  // ⚠️ F12-f RE-MEASURED THAT COUNTEREXAMPLE AND IT SURVIVES, WITH A CORRECTED
+  // NUMBER. The refuter's figure was "scores **0**", which was true of the
+  // literal counterweight. The counterweight now counts CONCEPTS, so
+  // `IMPRESSION & PLAN` is seen and that body scores **2** — `CHIEF COMPLAINT`,
+  // `INTERVAL HISTORY` and `EXAM` are refused synonyms, deliberately, and
+  // supply nothing. Two is still short of the floor of four, so the OR remains
+  // unshippable for exactly the reason recorded here. **The count moved; the
+  // conclusion did not** — and re-reading it was the point, because an
+  // exemption's reason is prose and prose decays silently.
   //
-  // So the OR waits for the combined-heading forms to be named (F12-f), and
-  // that work must split `countOfficeSkeleton`'s two uses first.
+  // F12-f DID split the two uses and DID name the combined-heading forms. What
+  // it did NOT do is teach the counterweight single-concept synonyms, which is
+  // what this arm would additionally need — see
+  // `REFUSED_OFFICE_CONCEPT_SYNONYMS` and the signed record that refused it.
   if (templateIsSilent(input.templateSections) && isProcedureNoteShapeFromText(input.noteText)) {
     return false;
   }

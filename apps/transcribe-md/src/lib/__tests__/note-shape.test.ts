@@ -20,12 +20,13 @@ import {
   emAppliesToVisit,
   isProcedureNoteShape,
   isProcedureNoteShapeFromText,
-  OFFICE_SKELETON_FLOOR,
+  OFFICE_COUNTERWEIGHT_FLOOR,
   OFFICE_SKELETON_SECTIONS,
   normalizeSectionLabel,
   normalizedNoteHeadings,
   normalizedSectionLabels,
   noteReadsAsOfficeVisitFromText,
+  officeConceptCountFromText,
   officeSkeletonCountFromText,
   procedureNoteMarkerCount,
   procedureNoteMarkerCountFromText,
@@ -753,7 +754,12 @@ describe('ruling #126 — the OFFICE COUNTERWEIGHT, and it is tested FIRST', () 
       'CONSENT',
       'RECOMMENDATIONS',
     ];
-    expect(OFFICE_SKELETON_FLOOR).toBe(4);
+    expect(OFFICE_COUNTERWEIGHT_FLOOR).toBe(4);
+    // ⚠️ AND THIS FIXTURE IS THE ONE F12-f's REFUSED SYNONYMS ARE MEASURED
+    // AGAINST. It carries `RECOMMENDATIONS`, which is the operative note's own
+    // plan section — mapping it to PLAN takes this row to four concepts and
+    // un-suppresses a SIGNED record. It must therefore stay at THREE.
+    expect(officeConceptCountFromText(threeOfFour.map((l) => '## ' + l).join('\n'))).toBe(3);
     expect(isProcedureNoteShape(sec(threeOfFour))).toBe(true);
     expect(isProcedureNoteShapeFromText(threeOfFour.map((l) => '## ' + l).join('\n'))).toBe(true);
   });

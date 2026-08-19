@@ -49,7 +49,7 @@ import {
   procedureNoteMarkerCount,
   procedureNoteMarkerCountFromText,
   templateIsSilent,
-  OFFICE_SKELETON_FLOOR,
+  OFFICE_ESCAPE_FLOOR,
 } from '../note-shape';
 
 const sec = (labels: string[]) => labels.map((label, i) => ({ key: `k${i}`, label, order: i }));
@@ -98,13 +98,13 @@ describe('F12-d — NON-VACUITY: the fixtures are the shapes they claim to be', 
   // office-SHAPED already stood in for a production row it did not resemble
   // once inside this very feature — that is what F12-d found in F12-a's suite.
   it('the office bodies sit where the reasoning says they do', () => {
-    expect(officeConceptCountFromText(SIGNED_OFFICE_BODY)).toBe(OFFICE_SKELETON_FLOOR);
+    expect(officeConceptCountFromText(SIGNED_OFFICE_BODY)).toBe(OFFICE_ESCAPE_FLOOR);
     expect(procedureNoteMarkerCountFromText(SIGNED_OFFICE_BODY)).toBe(0);
     // The combined-heading edit: FEWER literal SOAP headings, SAME concepts.
     expect(officeSkeletonCountFromText(SIGNED_OFFICE_BODY_COMBINED)).toBe(2);
-    expect(officeConceptCountFromText(SIGNED_OFFICE_BODY_COMBINED)).toBe(OFFICE_SKELETON_FLOOR);
+    expect(officeConceptCountFromText(SIGNED_OFFICE_BODY_COMBINED)).toBe(OFFICE_ESCAPE_FLOOR);
     // The residual reaches neither count.
-    expect(officeConceptCountFromText(NON_SOAP_OFFICE_BODY)).toBeLessThan(OFFICE_SKELETON_FLOOR);
+    expect(officeConceptCountFromText(NON_SOAP_OFFICE_BODY)).toBeLessThan(OFFICE_ESCAPE_FLOOR);
   });
 
   it('the operative fixtures carry a real MARGIN, not a bare pass', () => {
@@ -152,7 +152,7 @@ describe('F12-d — the escape: an affirmatively office-shaped record beats a re
       'SUBJECTIVE', 'OBJECTIVE', 'ASSESSMENT', 'PLAN',
       'PROCEDURE', 'PREOPERATIVE DIAGNOSIS', 'POSTOPERATIVE FINDINGS', 'DESCRIPTION OF PROCEDURE',
     ]);
-    expect(officeConceptCountFromText(opBodyWithFullSoap)).toBe(OFFICE_SKELETON_FLOOR);
+    expect(officeConceptCountFromText(opBodyWithFullSoap)).toBe(OFFICE_ESCAPE_FLOOR);
     expect(procedureNoteMarkerCountFromText(opBodyWithFullSoap)).toBe(3);
     expect(noteReadsAsOfficeVisitFromText(opBodyWithFullSoap)).toBe(true);
     expect(
@@ -189,7 +189,7 @@ describe('F12-d — the escape: an affirmatively office-shaped record beats a re
       'IMPRESSION & PLAN', 'IMPRESSION AND PLAN', 'IMPRESSION/PLAN',
     ]) {
       const b = body(['SUBJECTIVE', 'OBJECTIVE', combined]);
-      expect(officeConceptCountFromText(b), `${combined} must satisfy A and P`).toBe(OFFICE_SKELETON_FLOOR);
+      expect(officeConceptCountFromText(b), `${combined} must satisfy A and P`).toBe(OFFICE_ESCAPE_FLOOR);
     }
   });
 
