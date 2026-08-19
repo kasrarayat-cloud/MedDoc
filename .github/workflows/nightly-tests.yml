@@ -60,8 +60,35 @@ jobs:
           cd apps/transcribe-md
           npm ci --no-audit --no-fund
 
-      - name: Install Playwright browsers
-        run: cd apps/transcribe-md && npx playwright install --with-deps chromium
+      # ── #739 — the FOURTH install site, and the one the issue's own workflow
+      # table does not list. #739 enumerates `CI`, `a11y-ci` and `e2e` as "all
+      # three required workflows"; that is true about REQUIRED checks and
+      # incomplete about install sites. This job runs the identical command on
+      # a 30-minute budget with no cache, so a ~19-minute stall here fails the
+      # nightly and auto-files an issue whose cause is invisible in the log.
+      # Same split and same cache as `test.yml` — see the long note there.
+      - name: Resolve Playwright version (for cache key)
+        id: pw-version
+        run: |
+          ver=$(node -p "require('./apps/transcribe-md/package.json').devDependencies['@playwright/test']")
+          echo "version=${ver}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Install Playwright system deps (apt half of --with-deps)
+        timeout-minutes: 5
+        run: cd apps/transcribe-md && npx playwright install-deps chromium
+
+      - name: Install Playwright Chromium (browser half of --with-deps)
+        timeout-minutes: 5
+        run: cd apps/transcribe-md && npx playwright install chromium
 
       - name: Seed .env.test from secrets
         # Secrets live in the repository settings. Missing secrets just

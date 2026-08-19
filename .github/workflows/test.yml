@@ -102,8 +102,56 @@ jobs:
       - name: Apply database migrations
         run: npm run db:migrate:deploy
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+      # ── #739 — `npx playwright install --with-deps chromium` intermittently
+      # hangs. MEASURED on this workflow 2026-08-19: the healthy step is
+      # 3m59s (run 32228240177, 07:33:21→07:37:20); the stalled one ran
+      # 08:59:40→09:18:46 = 19m06s and was killed by the 20-minute JOB ceiling,
+      # taking every other step with it.
+      #
+      # ⚠️ AND THE SINGLE STEP COULD NOT SAY WHICH HALF HUNG. Its log showed the
+      # apt INDEX fetch recovering on its own — a 38s `Ign:` storm against
+      # azure.archive.ubuntu.com, then a clean fallback to archive.ubuntu.com at
+      # 08:38:11 — followed by 18m18s of TOTAL SILENCE. Two candidates remained
+      # (the apt PACKAGE install, and the browser download) and one step with
+      # one silent log cannot distinguish them.
+      #
+      # So the step is SPLIT into the two halves `--with-deps` performs, each
+      # with its own ceiling. This is the mitigation AND the instrument: the
+      # next stall names its own phase by which step times out.
+      #
+      # ⚠️ THIS IS A MITIGATION, NOT A CURE, AND IT IS NOT KNOWN TO REMOVE THE
+      # STALL. The cache removes the browser-download reach on a HIT; nothing
+      # here removes the apt reach. What it does guarantee is that a stall costs
+      # ~5 minutes and says where it was, instead of 19 minutes and silence.
+      # Retry is deliberately NOT used: 2 attempts × either half does not fit
+      # under this job's 20-minute budget, and a retry that cannot complete is
+      # a job that always times out.
+      - name: Resolve Playwright version (for cache key)
+        id: pw-version
+        run: |
+          ver=$(node -p "require('./apps/meddoc-pro/package.json').devDependencies['@playwright/test']")
+          echo "version=${ver}" >> "$GITHUB_OUTPUT"
+
+      # Same key namespace as a11y.yml on purpose — that workflow already
+      # populates this cache, so this one restores it rather than racing to
+      # build its own. Both apps pin the identical `@playwright/test` range.
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Install Playwright system deps (apt half of --with-deps)
+        timeout-minutes: 5
+        run: npx playwright install-deps chromium
+        working-directory: apps/meddoc-pro
+
+      - name: Install Playwright Chromium (browser half of --with-deps)
+        timeout-minutes: 5
+        run: npx playwright install chromium
         working-directory: apps/meddoc-pro
 
       - name: Run test pipeline (seed + vitest + playwright)

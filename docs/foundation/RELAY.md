@@ -20250,3 +20250,101 @@ deploy ships exactly F12-f and the declaration covers the full diff. The
 two-changes-one-deploy hazard does not apply — *stated rather than assumed,
 because "I deployed `main`" is not the same claim as "I judged what I
 deployed."*
+
+---
+
+### 🔵 F12-i — THE GATE'S OWN BLOCKER: `--with-deps` IS SPLIT SO THE NEXT STALL NAMES ITS PHASE — **2026-08-19, run `20260818-232127-b1` session 04**
+
+**Ruling #131 (PROVISIONAL). Branch `fix/f739-playwright-install-split`. No
+product code, no test, no migration — four workflow files.**
+
+⚠️ **THIS IS NOT A NEW ITEM I WENT LOOKING FOR. It is the thing F12-g is parked
+on**, and F12-h too: session 03 recorded that F12-h's unpark condition is
+*"unreachable while #739 is live"*. #739 had stalled the gate **five** times
+across two days by the time this session opened, and the fifth is the cleanest
+evidence in the record because **nobody caused it** — see below.
+
+#### THE MEASUREMENT, AND IT REFUTES BOTH ACCOUNTS ON THE RECORD
+
+Two mechanisms were written down and **neither survives its own log.**
+
+| the account | where it comes from | what the log says |
+|---|---|---|
+| *"the stall is in `--with-deps` **apt**, not the browser download"* | #739's own title, extended by session 03 | **too specific for its evidence** — the apt INDEX phase demonstrably recovers |
+| *"the **cache** is the discriminator"* — cached `a11y-ci` 51s vs uncached `CI` ~18m39s, same minute | session 03's re-run pair | **CONFOUNDED** — the apt half runs on a cache hit too, so an intermittent apt fault explains both readings equally |
+
+**Measured on `32229550418`'s job log**, which is the only place the phases are
+separable at all:
+
+    08:37:33  install begins
+    08:37:33  apt hits azure.archive.ubuntu.com -> `Ign:` storm, backoff
+    08:38:11  FALLS BACK to archive.ubuntu.com — all four suites Hit/Get  <- 38s, RECOVERED
+    08:38:11  ................ 18m18s of TOTAL SILENCE ................
+    08:56:29  ##[error]The operation was canceled.
+
+**The index fetch is exonerated by its own output.** What remains silent is the
+apt PACKAGE install or the browser download, and **one step with one log cannot
+tell them apart** — which is why the fix is a split rather than a guess.
+
+**The healthy figure, for scale:** the same step on the same workflow the same
+morning took **3m59s** (run `32228240177`, `07:33:21`→`07:37:20`).
+
+#### ⚠️ THE FIFTH STALL WAS UNCONFOUNDED, WHICH THE FIRST FOUR WERE NOT
+
+Session 03's four were **cancelled by its own pushes** — real stalls, but their
+durations are lower bounds set by a human's patience. This session's was killed
+by the **20-minute JOB CEILING**, nobody having touched it:
+`08:59:40`→`09:18:46` = **19m06s**. That is the fault's own duration, measured,
+and it is what makes *"a ~4-minute step can eat a 20-minute job"* a fact rather
+than an inference.
+
+#### THE CHANGE, AND THE SWEEP THAT SIZED IT
+
+**By predicate, not by the files I had already opened** — every
+`playwright install --with-deps` in the tree:
+
+| site | required check? | had cache? | disposition |
+|---|---|---|---|
+| `test.yml:105` | ✅ `CI` | ❌ | split + timeouts + cache |
+| `e2e.yml:328` | ✅ `e2e` | ❌ | split + timeouts + cache |
+| `a11y.yml:174` | ✅ `a11y-ci` | ✅ already | split + timeouts (diagnostic only) |
+| **`nightly-tests.yml:64`** | ❌ scheduled | ❌ | split + timeouts + cache |
+
+⚠️ **THE FOURTH ROW IS A FINDING ABOUT #739 ITSELF.** The issue says *"all three
+required workflows"* — true about REQUIRED CHECKS and **incomplete about install
+sites**. `nightly-tests.yml` runs the identical command on a 30-minute budget
+with no cache, and it is the workflow whose failures **auto-file issues**, so a
+stall there arrives as an alarm whose cause is invisible in its own log. It was
+invisible to the earlier enumeration precisely *because* it is not a required
+check.
+
+**Verified through the PARSED YAML, never by grep** — text presence is not
+membership:
+
+    deps halves: 4 | browser halves: 4 | pw caches: 4
+    every half carries timeout-minutes=5; remaining `--with-deps` invocations: 0
+    (that zero is discriminating — the positive control found 4 replacements)
+
+All four files parse (`yaml.safe_load`, jobs enumerated).
+
+#### ⚠️ WHAT THIS DOES NOT CLAIM
+
+- **It is a MITIGATION and is NOT known to remove the stall.** The cache removes
+  the browser-download reach *on a hit*; **nothing here removes the apt reach.**
+  If the silent phase turns out to be apt, the stall recurs — and then it
+  recurs *naming itself*, in 5 minutes instead of 19.
+- **Retry was declined on arithmetic, not taste.** Canon retries `npm ci`
+  because it *"says the word"*; this failure is a silent hang, and two attempts
+  at either half do not fit under `CI`'s 20-minute budget. A retry that cannot
+  complete is a job that always times out.
+- **Dropping `--with-deps` is probably the real cure** — canon's *"an external
+  reach is REMOVED, not retried"* points straight at it — and it is **not a
+  change to make blind on an unattended session**: if one system library is
+  actually missing, chromium fails to launch across every pack at once. Left as
+  the named next step rather than taken.
+
+#### DONE WHEN
+
+Merged and cited 4 of 4. **No deploy** — these are CI workflow files; nothing in
+the shipped image changes, so there is no §2.5 declaration and no runtime delta
+to judge.
