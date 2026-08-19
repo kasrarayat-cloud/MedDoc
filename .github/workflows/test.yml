@@ -102,8 +102,92 @@ jobs:
       - name: Apply database migrations
         run: npm run db:migrate:deploy
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+      # ── #739 — `npx playwright install --with-deps chromium` intermittently
+      # hangs. MEASURED on this workflow 2026-08-19: the healthy step is
+      # 3m59s (run 32228240177, 07:33:21→07:37:20); the stalled one ran
+      # 08:59:40→09:18:46 = 19m06s and was killed by the 20-minute JOB ceiling,
+      # taking every other step with it.
+      #
+      # ⚠️ AND THE SINGLE STEP COULD NOT SAY WHICH HALF HUNG. Its log showed the
+      # apt INDEX fetch recovering on its own — a 38s `Ign:` storm against
+      # azure.archive.ubuntu.com, then a clean fallback to archive.ubuntu.com at
+      # 08:38:11 — followed by 18m18s of TOTAL SILENCE. Two candidates remained
+      # (the apt PACKAGE install, and the browser download) and one step with
+      # one silent log cannot distinguish them.
+      #
+      # So the step is SPLIT into the two halves `--with-deps` performs, each
+      # with its own ceiling. This is the mitigation AND the instrument: the
+      # next stall names its own phase by which step times out.
+      #
+      # ⚠️ THIS IS A MITIGATION, NOT A CURE, AND IT IS NOT KNOWN TO REMOVE THE
+      # STALL. The cache removes the browser-download reach on a HIT; nothing
+      # here removes the apt reach. What it does guarantee is that a stall costs
+      # ~5 minutes and says where it was, instead of 19 minutes and silence.
+      # Retry is deliberately NOT used: 2 attempts × either half does not fit
+      # under this job's 20-minute budget, and a retry that cannot complete is
+      # a job that always times out.
+      - name: Resolve Playwright version (for cache key)
+        id: pw-version
+        run: |
+          ver=$(node -p "require('./apps/meddoc-pro/package.json').devDependencies['@playwright/test']")
+          echo "version=${ver}" >> "$GITHUB_OUTPUT"
+
+      # Same key namespace as a11y.yml on purpose — that workflow already
+      # populates this cache, so this one restores it rather than racing to
+      # build its own. Both apps pin the identical `@playwright/test` range.
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      # ⚠️ #739 — THE PHASE IS NOW NAMED, BY THE SPLIT ABOVE, ON ITS FIRST RUN.
+      # Run 32237637366's apt half failed at its ceiling and its log is the
+      # measurement the single step could never produce:
+      #
+      #     09:28:39  apt index starts; `Ign:` storm against azure.archive
+      #     09:29:17  FALLS BACK to archive.ubuntu.com, all four suites Hit/Get
+      #               ^^^ 38s — the INDEX phase completes, exactly as before
+      #     09:29:17  ......... 4m33s of SILENCE .........
+      #     09:33:50  timed out after 5 minutes
+      #
+      # So the hang is in `apt-get install` fetching PACKAGES, after the index
+      # has already recovered. That confirms #739's title and RETIRES the
+      # competing "the cache is the discriminator" reading: this run had a cache
+      # HIT (4s restore) and hung anyway, in a step the cache does not touch.
+      #
+      # THE CURE IS AT THE LAYER THAT CAN SEE THE HANG. A shell-level retry
+      # cannot tell a slow fetch from a dead one; apt can. Bounding
+      # `Acquire::*::Timeout` turns a silent indefinite wait into a 20-second
+      # failure that apt itself retries against the NEXT mirror in the list —
+      # which is the same fallback that demonstrably works for the index.
+      #
+      # ⚠️ ONE THING THIS DOES NOT KNOW: which HOST hangs. The log goes silent
+      # before naming it, so "the azure mirror is the culprit" stays an
+      # inference. This fix is deliberately host-agnostic for that reason — it
+      # bounds the wait whoever is on the other end. If the stall survives it,
+      # that is a finding and not a mystery.
+      - name: Bound apt's network waits (#739)
+        run: |
+          printf 'Acquire::http::Timeout "20";\nAcquire::https::Timeout "20";\nAcquire::Retries "3";\n' \
+            | sudo tee /etc/apt/apt.conf.d/99-quillmd-timeouts > /dev/null
+          # The drop-in proves its own application: apt parses apt.conf.d at
+          # STARTUP, so a malformed file fails here, loudly — rather than being
+          # silently ignored and leaving the timeouts unset while this step
+          # reports success.
+          sudo apt-get --version > /dev/null
+
+      - name: Install Playwright system deps (apt half of --with-deps)
+        timeout-minutes: 5
+        run: npx playwright install-deps chromium
+        working-directory: apps/meddoc-pro
+
+      - name: Install Playwright Chromium (browser half of --with-deps)
+        timeout-minutes: 5
+        run: npx playwright install chromium
         working-directory: apps/meddoc-pro
 
       - name: Run test pipeline (seed + vitest + playwright)

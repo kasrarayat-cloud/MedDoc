@@ -20637,3 +20637,166 @@ job was to stop the number being invisible, and it is now checkable in one
 command by anybody. ⚠️ **The number will move on its own**, in both directions,
 whenever a template is retired or the classifier is corrected — which is the
 argument for a watcher rather than a one-off count in a ledger row.
+
+---
+
+### 🔵 F12-i — THE GATE'S OWN BLOCKER: `--with-deps` IS SPLIT SO THE NEXT STALL NAMES ITS PHASE — **2026-08-19, run `20260818-232127-b1` session 04**
+
+**Ruling #131 (PROVISIONAL). Branch `fix/f739-playwright-install-split`. No
+product code, no test, no migration — four workflow files.**
+
+⚠️ **THIS IS NOT A NEW ITEM I WENT LOOKING FOR. It is the thing F12-g is parked
+on**, and F12-h too: session 03 recorded that F12-h's unpark condition is
+*"unreachable while #739 is live"*. #739 had stalled the gate **five** times
+across two days by the time this session opened, and the fifth is the cleanest
+evidence in the record because **nobody caused it** — see below.
+
+#### THE MEASUREMENT, AND IT REFUTES BOTH ACCOUNTS ON THE RECORD
+
+Two mechanisms were written down and **neither survives its own log.**
+
+| the account | where it comes from | what the log says |
+|---|---|---|
+| *"the stall is in `--with-deps` **apt**, not the browser download"* | #739's own title, extended by session 03 | **too specific for its evidence** — the apt INDEX phase demonstrably recovers |
+| *"the **cache** is the discriminator"* — cached `a11y-ci` 51s vs uncached `CI` ~18m39s, same minute | session 03's re-run pair | **CONFOUNDED** — the apt half runs on a cache hit too, so an intermittent apt fault explains both readings equally |
+
+**Measured on `32229550418`'s job log**, which is the only place the phases are
+separable at all:
+
+    08:37:33  install begins
+    08:37:33  apt hits azure.archive.ubuntu.com -> `Ign:` storm, backoff
+    08:38:11  FALLS BACK to archive.ubuntu.com — all four suites Hit/Get  <- 38s, RECOVERED
+    08:38:11  ................ 18m18s of TOTAL SILENCE ................
+    08:56:29  ##[error]The operation was canceled.
+
+**The index fetch is exonerated by its own output.** What remains silent is the
+apt PACKAGE install or the browser download, and **one step with one log cannot
+tell them apart** — which is why the fix is a split rather than a guess.
+
+**The healthy figure, for scale:** the same step on the same workflow the same
+morning took **3m59s** (run `32228240177`, `07:33:21`→`07:37:20`).
+
+#### ⚠️ THE FIFTH STALL WAS UNCONFOUNDED, WHICH THE FIRST FOUR WERE NOT
+
+Session 03's four were **cancelled by its own pushes** — real stalls, but their
+durations are lower bounds set by a human's patience. This session's was killed
+by the **20-minute JOB CEILING**, nobody having touched it:
+`08:59:40`→`09:18:46` = **19m06s**. That is the fault's own duration, measured,
+and it is what makes *"a ~4-minute step can eat a 20-minute job"* a fact rather
+than an inference.
+
+#### THE CHANGE, AND THE SWEEP THAT SIZED IT
+
+**By predicate, not by the files I had already opened** — every
+`playwright install --with-deps` in the tree:
+
+| site | required check? | had cache? | disposition |
+|---|---|---|---|
+| `test.yml:105` | ✅ `CI` | ❌ | split + timeouts + cache |
+| `e2e.yml:328` | ✅ `e2e` | ❌ | split + timeouts + cache |
+| `a11y.yml:174` | ✅ `a11y-ci` | ✅ already | split + timeouts (diagnostic only) |
+| **`nightly-tests.yml:64`** | ❌ scheduled | ❌ | split + timeouts + cache |
+
+⚠️ **THE FOURTH ROW IS A FINDING ABOUT #739 ITSELF.** The issue says *"all three
+required workflows"* — true about REQUIRED CHECKS and **incomplete about install
+sites**. `nightly-tests.yml` runs the identical command on a 30-minute budget
+with no cache, and it is the workflow whose failures **auto-file issues**, so a
+stall there arrives as an alarm whose cause is invisible in its own log. It was
+invisible to the earlier enumeration precisely *because* it is not a required
+check.
+
+**Verified through the PARSED YAML, never by grep** — text presence is not
+membership:
+
+    deps halves: 4 | browser halves: 4 | pw caches: 4
+    every half carries timeout-minutes=5; remaining `--with-deps` invocations: 0
+    (that zero is discriminating — the positive control found 4 replacements)
+
+All four files parse (`yaml.safe_load`, jobs enumerated).
+
+#### ⚠️ WHAT THIS DOES NOT CLAIM
+
+- **It is a MITIGATION and is NOT known to remove the stall.** The cache removes
+  the browser-download reach *on a hit*; **nothing here removes the apt reach.**
+  If the silent phase turns out to be apt, the stall recurs — and then it
+  recurs *naming itself*, in 5 minutes instead of 19.
+- **Retry was declined on arithmetic, not taste.** Canon retries `npm ci`
+  because it *"says the word"*; this failure is a silent hang, and two attempts
+  at either half do not fit under `CI`'s 20-minute budget. A retry that cannot
+  complete is a job that always times out.
+- **Dropping `--with-deps` is probably the real cure** — canon's *"an external
+  reach is REMOVED, not retried"* points straight at it — and it is **not a
+  change to make blind on an unattended session**: if one system library is
+  actually missing, chromium fails to launch across every pack at once. Left as
+  the named next step rather than taken.
+
+#### DONE WHEN
+
+Merged and cited 4 of 4. **No deploy** — these are CI workflow files; nothing in
+the shipped image changes, so there is no §2.5 declaration and no runtime delta
+to judge.
+
+#### ⚠️ THE INSTRUMENT ANSWERED ITS OWN QUESTION ON ITS FIRST RUN — ruling #131(b)
+
+**Four minutes after the paragraph above was written, it stopped being true, and
+the correction ships in the same change rather than in a later one.**
+
+The split's **first execution** (run `32237637366`, job `96021057572`) failed at
+the apt half's ceiling and printed the separation the single step never could:
+
+    09:28:33  cache restore ......................... 4s  ← a HIT
+    09:28:39  apt index starts; `Ign:` storm vs azure.archive
+    09:29:17  FALLS BACK to archive.ubuntu.com — all four suites Hit/Get
+              ^^^ 38 seconds. The INDEX phase completes. Again.
+    09:29:17  ............ 4m33s of SILENCE ............
+    09:33:50  ##[error] timed out after 5 minutes
+    --------  browser half: SKIPPED
+
+**The hang is `apt-get install` fetching PACKAGES, after the index has already
+recovered.** Two candidates became one, by measurement, in the first run of the
+thing built to measure it.
+
+⚠️ **AND IT RETIRES THE CACHE READING THE RIGHT WAY — BY EVIDENCE, NOT BY
+ARGUMENT.** This run had a **cache HIT** and hung anyway, in a step the cache
+does not touch. So #739's title (*"the filed cache fix cannot retire it"*) was
+**right all along**; what was missing was anyone able to show it. F12-i's own
+first verdict — *"unsupported at the granularity it asserts"* — was the correct
+call **on the evidence then available**, and is now superseded by better
+evidence. *Both halves of that are worth keeping: the verdict was sound and the
+conclusion changed.*
+
+**THE ADDITION, and the layer is the whole argument.** Bound **apt's own**
+network waits at all four sites — `Acquire::http::Timeout 20`,
+`Acquire::https::Timeout 20`, `Acquire::Retries 3`. A shell-level retry cannot
+tell a slow fetch from a dead one, so it must either kill healthy installs or
+wait forever. **apt can tell**, and on timeout it retries against the NEXT
+mirror — the same fallback that demonstrably works for the index, in 38 seconds,
+on both observed runs.
+
+The drop-in **proves its own application**: apt parses `apt.conf.d` at STARTUP,
+so `apt-get --version` on the next line fails loudly on a malformed file rather
+than leaving the timeouts silently unset while the step reports success.
+
+⚠️ **STILL NOT MEASURED, AND SAID SO RATHER THAN ASSUMED: WHICH HOST HANGS.**
+The log goes silent before naming it, so *"the azure mirror is the culprit"* is
+an **inference**. The fix is host-agnostic for exactly that reason. **If the
+stall survives a bounded 20-second wait with three retries, that is a finding —
+and a far sharper one — not a mystery.**
+
+#### THE OCCURRENCE COUNT, RE-MEASURED RATHER THAN CARRIED
+
+Session 03 recorded four (`CI` ×3 + the doomed fourth) plus `e2e` ×3. **This
+session observed two more**, and the first of them is the most useful datum in
+the whole file because **nobody caused it**:
+
+| # | run | duration | ended by |
+|---|---|---|---|
+| 5 | `32235245817` a1 `CI` | `08:59:40`→`09:18:46` = **19m06s** | the **20-minute job ceiling** — unconfounded |
+| 6 | `32235245817` a2 `CI` | `09:22:23`→ still hung at `09:37` = **>14m** | in flight at time of writing |
+
+⚠️ **THE RE-RUN IS DECLARED, PER MASTER.** Attempt `a2` was started by this
+session deliberately, on a NAMED external fault with evidence, and it consumed
+no cure attempt under MASTER's external-fault clause. It is not
+*re-run-and-hope*: `e2e` on the same commit sailed past the identical install
+and ran the full pack, which is what established the fault as **per-job
+intermittent** rather than per-commit.
