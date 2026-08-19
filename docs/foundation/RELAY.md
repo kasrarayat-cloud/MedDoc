@@ -19950,7 +19950,7 @@ both directions.
 **WHAT UNPARKS IT:** nothing external. It is the next queue item, and it carries
 the templated-operative E2E class with it.
 
-### 🟠 F12-g — 19 PRODUCTION VISITS CARRY OFFICE E/M STATE UNDER A FALSE VERDICT, AND NO CHECK WATCHES THEM — **FILED 2026-08-19**
+### 🟠 F12-g — 15 PRODUCTION VISITS CARRY OFFICE E/M STATE UNDER A FALSE VERDICT, AND NO CHECK WATCHES THEM — **FILED 2026-08-19** *(heading corrected from 19 → 15 by session 02, 2026-08-19 — see below)*
 
 Found by F12-d's adversarial pass. `page.tsx` writes `emScoredCode` while the
 verdict is true and **nothing clears it when the verdict later flips**; the same
@@ -19982,13 +19982,227 @@ bariatric-surgery, both 99214) ARE confirmed.
 
 ⚠️ **`check-imaging-em-artifacts.sh` IS `where specialty='ultrasound'`** — the
 note-shape axis is entirely outside its watched set, so its 🟢 is true and covers
-none of the 19. *A gate's watched set diffed against what the spec names.*
+none of the 15. *A gate's watched set diffed against what the spec names.*
 
-⚠️ **The 19 is the refuter's figure, re-derived in SQL from a re-implementation
-of the predicate — it is NOT measured through the real module, and the specialty
-axis was approximated. Re-measure before acting on it.**
+⚠️ **THE FIGURE IS 15, AND THE THREE PARAGRAPHS ABOVE ALREADY SAID SO WHILE THIS
+ROW'S HEADING AND TWO SENTENCES STILL SAID 19.** The 19 was the refuter's,
+re-derived in SQL from a re-implementation of the predicate with the specialty
+axis approximated; the 15 is measured through the shipped `emAppliesToVisit` and
+reconciles as a partition of the corpus. Session 01 corrected the body and left
+the heading — **and a heading is what the next reader quotes.** Corrected by
+session 02, 2026-08-19, without re-measuring: this is a transcription fix inside
+one row, not a new measurement, and the partition table above remains the
+source. *A count that disagrees with itself inside one ledger row is the finding,
+however small.*
 
 **NOT a remediation item as filed** — clearing stored clinical rows is an
 irreversible production mutation with its own door (`run-ruled-mutation.sh`) and
 its own declaration. **The first step is a WATCHER**, so the number stops being
-invisible; the disposition of the 19 is a war-room question.
+invisible; the disposition of the 15 is a war-room question.
+
+⚠️ **AND F12-f DID NOT CHANGE IT.** F12-f's corpus diff is `+0 / +0`, so every
+one of these rows still carries E/M state under a verdict that is still false.
+The item is untouched and still first-step-is-a-watcher.
+
+---
+
+### 🟢 F12-f — CLOSED 2026-08-19 — THE COUNTERWEIGHT COUNTS **CONCEPTS**, AND THE SYNONYMS THAT WOULD BREAK IT ARE REFUSED WITH THEIR COUNTEREXAMPLE
+
+**Ruling #130 (PROVISIONAL, loop). Branch `feat/f12f-office-counterweight-split`.**
+
+F12-f was filed as *"the two uses must be split before either is widened"*. Both
+halves are done, and the second half turned out to be the smaller one.
+
+#### THE SPLIT — and it is what made the widening safe to reason about
+
+`OFFICE_SKELETON_FLOOR` was one constant serving the operative COUNTERWEIGHT and
+the office ESCAPE; `countOfficeSkeleton` was one function serving both. That is
+the entire reason F12-d could not widen the counterweight. It is now:
+
+| | counterweight | escape |
+|---|---|---|
+| floor | `OFFICE_COUNTERWEIGHT_FLOOR` | `OFFICE_ESCAPE_FLOOR` |
+| call site | `labelsReadAsProcedureNote` | `noteReadsAsOfficeVisitFromText` |
+| counter | `officeConceptCount` | `officeConceptCount` |
+
+`countOfficeSkeleton` is renamed `countLiteralSkeletonLabels` and demoted to
+**evidence only** — nothing in the module decides anything with it. The two
+floors carry the same value and a gate arm asserts they still agree, so a
+divergence is a decision somebody had to overwrite a test to make.
+
+#### THE FIX — a live over-suppression, not a tidiness item
+
+⚠️ **THE ASYMMETRY F12-d LEFT BEHIND WAS COSTING THREE OF THE FOUR #126(b)
+FAMILIES.** Measured through the classifier, on **both** arms:
+
+| shape | before | after |
+|---|---|---|
+| `SUBJECTIVE · OBJECTIVE · ASSESSMENT & PLAN` + 2 markers — post-op office follow-up | operative **true** | **false** |
+| `… ASSESSMENT AND PLAN` + SPECIMENS + EBL — derm office w/ excision | operative **true** | **false** |
+| `… ASSESSMENT/PLAN` + PREOPERATIVE DIAGNOSIS — pre-op H&P | operative **true** | **false** |
+
+Each is an ordinary billable office visit that the literal counterweight scored
+**3** and suppressed. **The number of headings a doctor used to spell four
+concepts is not a clinical fact.**
+
+**CORPUS DIFF, BOTH DIRECTIONS** — all 48 production visits, through the real
+`emAppliesToVisit`, in the production flag universe read from the running
+container: **+0 newly suppressed, +0 newly applied** (9 apply / 39 suppressed on
+both sides). Forward hardening. The three shapes above are exercised by forward
+probes in the gate, because production does not yet hold one.
+
+#### ⚠️ THE HALF WITH TEETH IS THE **REFUSAL**, AND IT CAME FROM THE CORPUS
+
+F12-f's own row warned *"the obvious cure is the dangerous one"*. It is, and the
+danger is now a number rather than a worry.
+
+| candidate | newly suppressed | newly APPLIED |
+|---|---|---|
+| combined spellings (shipped) | 0 | 0 |
+| **+ single-concept synonyms** | 0 | **1** |
+| + synonyms minus `RECOMMENDATIONS` | 0 | 0 |
+
+The one row is **`cmrxxj1rn000h01pnoloiiajx`** — bariatric surgery, **SIGNED**,
+`cptCodes.em.signedCode` **FROZEN at 99214**, three operative markers and three
+SOAP concepts. `RECOMMENDATIONS -> PLAN` takes it to four and hands a signed
+operative record its office E/M level back. **This is the exact row #126(b) set
+the floor of FOUR against by hand, defeated through a different door.**
+
+⚠️ **AND `RECOMMENDATIONS` IS NOT AN EDGE CASE.** Label census over the corpus:
+it appears in **4 of 4** operative templates and **19 of 19** operative note
+bodies, and on **no** record without operative markers. *The label that reads
+most like an office synonym is the one most reliably attached to an operative
+note.*
+
+⚠️ **AND THE THIRD ROW'S ZERO IS WORTHLESS, WHICH IS THE CLAUSE WORTH KEEPING.**
+Dropping the one proven offender moves 0 rows — over a corpus holding **ONE**
+operative vocabulary emitted 19 times by one generator. **A clean diff over a
+monoculture is not evidence of safety; it is evidence the corpus cannot
+discriminate.** `CHIEF COMPLAINT · FINDINGS · DIAGNOSIS · PATIENT INSTRUCTIONS ·
+DESCRIPTION OF PROCEDURE · POSTOPERATIVE FINDINGS` is an ordinary operative
+heading set that scores FOUR under those synonyms, and nothing in today's data
+would object.
+
+`REFUSED_OFFICE_CONCEPT_SYNONYMS` records all 13, with the retirement condition
+in the same sentence, and **13 gate arms assert each supplies ZERO concepts —
+through the data structure, never through the file text.**
+
+#### ⚠️ THE REFUTATION PASS FOUND THIS BRANCH SHIPPING **HALF-APPLIED**, AND THAT IS THE FINDING OF THE ITEM
+
+The counterweight was moved to concepts and **`templateIsSilent` was left
+literal**. Its bare-SOAP clause — *"a template that says nothing but SOAP has
+also said nothing about the ENCOUNTER"* — tested
+`labels.every(l => OFFICE_SKELETON_SECTIONS.includes(l))`, so the two predicates
+then disagreed about the same template. Verified, not reasoned:
+
+| template | silent? | + an OPERATIVE note body → E/M applies |
+|---|---|---|
+| `SUBJECTIVE · OBJECTIVE · ASSESSMENT · PLAN` | true | **false** ✔ suppressed |
+| `SUBJECTIVE · OBJECTIVE · ASSESSMENT & PLAN` | **false** | **TRUE** ✘ |
+
+**An operative note kept an office E/M level purely because the doctor merged
+two headings in their TEMPLATE.** That is the identical defect F12-f exists to
+remove, one function over — *the failure that ships is the first edit the code's
+own comment invites, with the other layer still missing.*
+
+**Fixed in the same change:** silence is judged on CONCEPTS
+(`labels.every(l => officeConceptCount([l]) > 0)`). ⚠️ **Direction: this
+LOOSENS `templateIsSilent` and therefore TIGHTENS suppression** — more templates
+are silent, so the body is consulted more often, and the body only suppresses
+when it affirmatively reads operative. It cannot strip a level from an
+office-shaped body, which reaches the counterweight first. Corpus re-measured
+after the fix: still **+0 / +0**.
+
+⚠️ **HONEST LIMIT ON THE PASS ITSELF: IT WAS SELF-RUN.** This session cannot
+spawn independent refuters, so the pass was executed by the author against his
+own finished diff, with the stance set to *refute* and every claim exercised by
+running code rather than reading it. Canon is explicit that what makes the
+mandatory pass work is that it **does not share the author's context** — so this
+is the weaker form, and it is named as such rather than reported as the standard
+article. **It still found a live defect on its first pass**, which is an argument
+for running the weak form, not for calling it the strong one.
+
+#### PROOF — 7 mutations, each asserting its own application first
+
+| mutation | red arms |
+|---|---|
+| M1 — counterweight back to literal (**the pre-F12-f state**) | 12 |
+| M2 — the two floors diverged | 9 |
+| M3 — admit `RECOMMENDATIONS` (**the edit the residual invites**) | 3 |
+| M4 — half the vocabulary landed | 3 |
+| M5 — substring scan instead of named spellings | 2 |
+| **M6 — CLOSE THE RESIDUAL (the SUCCESS direction)** | **6** |
+| **M7 — `templateIsSilent` left literal (the state the refuter caught)** | **6** |
+
+**M1, M4 and M7 are PARTIAL applications**, which is the shape that ships — not
+the complete inverse. **M7 is not a hypothetical partial: it is the state this
+branch was actually in.** **M6 is the half everybody skips:** it proves the
+KNOWN-RESIDUAL arm goes RED when the residual is genuinely closed, so the pin
+moves rather than decorating. Restored from a scratch backup, never from git;
+the restore was verified byte-identical after every mutation and the green
+control re-run at 44/44.
+
+**Controlled delta**, both sides from a detached worktree at `origin/main`:
+`332 files / 4092 passed` → `333 / 4136`. **+1 file, +44 tests**, exactly the new
+arms. The `16 failed files / 1 failed test` are **identical on both sides** and
+are the known worktree `react/jsx-dev-runtime` exclusion. `tsc` 0 errors.
+
+#### WHAT F12-f DOES **NOT** CLAIM
+
+- **The residual is NOT closed**, and an arm pins it so it cannot be closed
+  silently: an office note in a non-SOAP vocabulary, under an operative
+  template, is still over-suppressed. ⚠️ **Forward-only — measured 2026-08-19,
+  template `cmpz63jsw000501tayag818lq` is ACTIVE and bound to ZERO visits.**
+- ⚠️ **THE REFUTER'S FIGURE FOR THAT SHAPE WAS `0` AND IS NOW `2`.**
+  `IMPRESSION & PLAN` **is** seen by the concept counterweight; `CHIEF
+  COMPLAINT`, `INTERVAL HISTORY` and `EXAM` are refused and supply nothing. Two
+  is still short of four. **The count moved and the conclusion did not** — and
+  the comment in `emAppliesToVisit` that carried the old number was corrected in
+  this same change, because an exemption's reason is prose and prose decays.
+- **Forward-only in the data sense too:** no stored row changes, no migration, no
+  column, no flag. The specialty axis, the marker list and the marker floor are
+  untouched.
+- ⚠️ **AN HONEST LIMIT, PINNED BY AN ARM: TWO HEADINGS NOW SATISFY A
+  FOUR-CONCEPT FLOOR.** `SUBJECTIVE & OBJECTIVE` + `ASSESSMENT & PLAN` is two
+  headings and four concepts. That is correct by design — the floor counts what
+  the doctor DOCUMENTED, not how many headings they typed — and it is the
+  strongest argument for keeping the vocabulary bounded to SPELLINGS: **every
+  synonym admitted lowers this number further, and at two headings there is not
+  much floor left to give.** Neither heading appears on any production template
+  or note body (10 templates, 48 bodies, measured).
+- **No rendered PDF or DOCX was produced and compared.**
+- ⚠️ **THE TEMPLATED-OPERATIVE E2E CLASS IS NOT DELIVERED — see F12-h.**
+
+### 🟠 F12-h — THE TEMPLATED-OPERATIVE E2E CLASS, DEFERRED ON A MEASURED CEILING — **FILED 2026-08-19 WITH F12-f**
+
+F12-d owed *"a templated-operative E2E class"* and F12-f was to carry it. It is
+**not delivered**, and the reason is measured rather than inherited.
+
+`REVIEW_DOC_CLASSES` runs **every core spec once per class**, so a fourth class
+multiplies the review-doc pack by 4/3. Re-measured this session — not carried
+forward from session 03's report — the last **eight** `e2e` runs on `main`:
+
+    36m01s · 40m40s · 40m08s · 49m01s · 40m54s · 44m22s · 42m07s · 48m14s
+
+against `e2e.yml`'s **55-minute** ceiling. Worst-case headroom **~6 minutes**,
+median ~14. F12-a's standing instruction is explicit: if `e2e` times out, **TRIM
+the pack, never move the number** — and adding a fourth class is the largest
+available addition to it.
+
+⚠️ **AND THE COST OF GETTING THIS WRONG LANDS ON EVERYONE'S CITATION, NOT ONLY
+ON THIS ITEM.** `e2e` is required; a timeout takes `main` red and every session
+waiting on a gate with it.
+
+**WHAT IS COVERED WITHOUT IT:** the TEMPLATE arm is asserted at the unit level in
+both directions — every family fixture in the F12-f gate asserts
+`isProcedureNoteShape` (template) **and** `isProcedureNoteShapeFromText` (body),
+because an asymmetry between them is precisely the state F12-f removed.
+
+**WHAT IS GENUINELY NOT COVERED:** the end-to-end render and export proof for a
+visit with an operative template bound — in-app, DOCX, PDF and the EHR clipboard
+formats. An unverified step named honestly is worth more than a green tick.
+
+**WHAT UNPARKS IT:** the `e2e` headroom work already filed — `actions/cache` over
+`~/.cache/ms-playwright`, or trimming/sharding the pack. Not a feeling that there
+is room; a measured run under the ceiling with the fourth class in.
+
