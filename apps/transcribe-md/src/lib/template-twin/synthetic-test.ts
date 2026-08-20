@@ -316,6 +316,7 @@ export async function runTemplateTwinSyntheticTest(input: {
   // pair, not to a compiled-version row: re-uploading the same docx makes a NEW
   // compiled version, so a per-row pin would never be reused and determinism
   // could never be demonstrated. Look the pin up by its content hashes.
+  let adoptedFromSibling = false;
   let pinned = compiled.pinnedSyntheticNote;
   let pinnedModel = compiled.pinnedNoteModelVersion;
   let pinnedAt = compiled.pinnedNoteGeneratedAt;
@@ -352,6 +353,7 @@ export async function runTemplateTwinSyntheticTest(input: {
       },
     });
     if (sibling?.pinnedSyntheticNote) {
+      adoptedFromSibling = true;
       pinned = sibling.pinnedSyntheticNote;
       pinnedModel = sibling.pinnedNoteModelVersion;
       pinnedAt = sibling.pinnedNoteGeneratedAt;
@@ -373,7 +375,24 @@ export async function runTemplateTwinSyntheticTest(input: {
       });
     }
   }
-  const pinValid = !!pinned;
+  // ⚠️ A NOTE IS VALID ONLY IF ITS KEY MATCHES — PRESENCE IS NOT VALIDITY.
+  //
+  // This read `!!pinned`. The block above correctly identifies a note whose
+  // encounter/template sha no longer match, looks for a sibling that does, and
+  // — when there is none — falls through with `pinned` STILL HOLDING THE STALE
+  // NOTE. Presence alone then made it valid, so the proof ran against a note
+  // generated from a DIFFERENT encounter.
+  //
+  // Measured in production 2026-08-20: the owner's template certified against a
+  // note whose `pinnedNoteGeneratedAt` was 2026-08-18T23:19:50Z — two days
+  // before the encounter it was keyed to existed. Fills went 7 -> 5 because the
+  // stale note was being matched against a changed expectation, and the refusal
+  // read as "your form does not fill" when the truth was "the model never saw
+  // this encounter".
+  const noteKeyMatches =
+    compiled.pinnedNoteEncounterSha256 === encounterSha256 &&
+    compiled.pinnedNoteTemplateSha256 === templateSha256;
+  const pinValid = !!pinned && (adoptedFromSibling || noteKeyMatches);
 
   // ── PINNED EXTRACTION ────────────────────────────────────────────────────
   // Layer 3 is a model too. Re-extracting per attempt made the identical
@@ -400,12 +419,34 @@ export async function runTemplateTwinSyntheticTest(input: {
     // note pin skips generation entirely, and pinning only there left the
     // extraction unpinned forever — the run after it extracted fresh again and
     // certification stayed non-reproducible.
+    // ⚠️ THIS WRITE STAMPS THE **NOTE'S** KEY WHILE PINNING ONLY THE EXTRACTION,
+    // AND THAT IS HOW A STALE NOTE BECOMES PERMANENTLY "CURRENT".
+    //
+    // One column, `pinnedNoteEncounterSha256`, keys BOTH pins. Pinning a fresh
+    // extraction under a new encounter therefore re-keyed the OLD note to the
+    // NEW encounter without regenerating it — a write-on-read. Every later run
+    // then found the shas equal at :332, skipped invalidation entirely, and
+    // served content that does not correspond to its own key. The cache lied
+    // about what it held, and nothing downstream could tell.
+    //
+    // So: when the note does NOT belong to this encounter, it is DROPPED in the
+    // same statement that re-keys the extraction. The key then describes what
+    // the row actually holds. A missing note is regenerated on the next line;
+    // a mislabelled one is undetectable forever.
     await prisma.templateTwinCompiledVersion.update({
       where: { id: compiled.id },
       data: {
         pinnedSyntheticEntities: asJson(extracted.entities),
         pinnedSyntheticContextText: extracted.contextText,
         pinnedNoteEncounterSha256: encounterSha256,
+        ...(pinValid
+          ? {}
+          : {
+              pinnedSyntheticNote: null,
+              pinnedNoteGeneratedAt: null,
+              pinnedNoteModelVersion: null,
+              pinnedNoteTemplateSha256: null,
+            }),
       },
     });
   }
