@@ -21421,3 +21421,213 @@ and this deploy carries no migration and no backfill. Evidence and SQL:
 - **The MAY-CHANGE backfill was NOT run.** Twin CERTIFIED is still **0**, the
   declared correct state. The retroactive auto-certification dry run remains a
   separate deliberate act.
+
+---
+
+## ✅ F22 — THE DEPLOY REFUSES A COMMIT ITS OWN GATE HAS NOT SEEN — **2026-08-20, run `20260820-014110-b1` session 03**
+
+**The 🔴 PRIORITY queue item from INBOX `2026-08-20T07:20:00Z`, owner-ruled the
+same morning. Recorded as ruling #134.**
+
+### THE INCIDENT, AND IT IS THIS PROGRAMME'S OWN
+
+| time | event |
+|---|---|
+| `06:14:42Z` | `e2e` created on `7c42d2d7` |
+| `06:15:13Z` | `secrets-scan` finishes — **the only check that had** |
+| **`06:15:17Z`** | **`deploy-prod.sh` STARTS** |
+| `06:19:26Z` | `a11y-ci` finishes |
+| `06:22:33Z` | `CI` finishes |
+| `06:52:02Z` | `e2e` finishes |
+
+All four passed in the end, so **nothing unverified survives in production**.
+That is luck wearing a process's clothes: the deploy was taken on evidence that
+did not yet exist, and a red `e2e` would have found the tree already live for
+thirty-seven minutes.
+
+### WHAT LANDED
+
+`scripts/lib/citation-gate.sh`, sourced **fail-closed** by `deploy-prod.sh` as
+**STEP 0a** — after the declaration gate, and before the rollback tag, the
+backup, the db-migrate build, the migration, the app/worker build and the
+recreate. Nothing has been built, migrated, tagged or recreated when it refuses,
+and an arm of the gate asserts exactly that ordering against the script's text.
+
+**It decides nothing about run state.** `scripts/gh-runs.sh` is already the only
+sanctioned door to *"what ran on this SHA?"* and already carries every refusal
+this needs — short sha, fabricated sha, zero runs, dead API, truncated payload.
+Re-implementing any of it would be a second copy that drifts from the first the
+day either is fixed. So the gate maps four exit codes and refuses everything
+that is not an unambiguous `0`:
+
+| `gh-runs.sh` | meaning | the deploy |
+|---|---|---|
+| `0` | every run concluded success | **PROCEEDS** |
+| `1` | at least one run not completed | REFUSES — *the 2026-08-20 incident itself* |
+| `2` | no runs · blind instrument · fabricated sha · timeout | **REFUSES, fail-closed** |
+| `3` | a run concluded non-success | REFUSES, and says it is TERMINAL |
+| anything else | — | **REFUSES** |
+
+⚠️ **THE UNMAPPED ARM IS NOT DEFENSIVE PADDING.** `gh-runs.sh` grew its `2` and
+its `3` one incident at a time, each because two states had been collapsed into
+one code. The next state it learns to report must not arrive here as a silent
+PROCEED.
+
+**The emergency exit is a DECLARATION, never a flag:**
+
+    bash scripts/deploy-prod.sh --declare-citation-override 'GitHub Actions is degraded and the ingress fix must ship now'
+
+⚠️ **IT IS A COMMAND-LINE FLAG AND NOT ONLY AN ENV VAR, AND THAT IS
+LOAD-BEARING.** `VAR=... cmd` is REFUSED to the unattended loop by
+`.claude/settings.json`, and **the loop is the only deploy actor** — an env-only
+hatch would be inert in exactly the sessions that could ever need it. That is the
+defect `gh-runs.sh --force-fallback` already exists to fix, and this is its
+second instance. `DEPLOY_CITATION_OVERRIDE` is honoured for a supervised
+operator's muscle memory; the flag wins.
+
+The reason is validated by the **shared** `inflight_declaration_ok` — the same
+function the push hook and the merge wrapper use, not a second definition of what
+counts as a reason — so a bare `1`/`true`/`yes`/`force`/`skip`, or anything under
+12 characters, is refused. **And the gate still probes and prints what it
+overrode.** A waiver with no state attached is indistinguishable from never
+having looked.
+
+### PROVED IN BOTH DIRECTIONS — `gate-f22-deploy-citation-gate.test.ts`, 30 of 30
+
+It drives the REAL library in a real bash, in throwaway trees, with **one**
+stub: `scripts/gh-runs.sh`, because that is the boundary. **The accept arms come
+first and they are the point** — a gate that refused everything would pass every
+refusal arm and be strictly worse than no gate. `retire-branch.sh` passed 9 of 9
+refusal tests and then printed a false green on the one path that mattered.
+
+⚠️ **AND THE SEVEN MUTATIONS ARE ALL *PARTIAL*, NOT THE TIDY COMPLETE INVERSE.**
+Deleting the whole gate is the version nobody ships. The versions a tired session
+actually lands leave the library itself perfect and every one of its own arms
+green:
+
+| mutation | result |
+|---|---|
+| baseline, unmutated | **0 failed / 30 passed** |
+| **M1** the lib lands and `deploy-prod.sh` never calls it | **3 failed** / 27 |
+| **M2** called, and its return value ignored (`\|\| true`) | **1 failed** / 29 |
+| **M3** the SHORT sha reaches the runs routes | **4 failed** / 26 |
+| **M4** the gate runs AFTER the build | **1 failed** / 29 |
+| **M5** cannot-tell made fail-OPEN | **2 failed** / 28 |
+| **M6** an unmapped exit code proceeds | **2 failed** / 28 |
+| **M7** the override skips its shared validator | **2 failed** / 28 |
+
+**Every mutation asserted APPLIED before the run that followed it was believed** —
+an unapplied mutation yields a green that proves nothing and is
+indistinguishable from a guard that works. **Every restore read from scratch
+backups taken and hash-asserted BEFORE the first mutation, never from git**, and
+30/30 was re-verified after each one; both files ended byte-identical to their
+backups.
+
+### ⚠️ THE GATE CAUGHT ITS OWN AUTHOR TWICE, ON ITS FIRST RUN
+
+Both are this house's named substring trap, and **the file's comments are the one
+place where the words you are grepping for are guaranteed to appear** — doubly so
+here, because `deploy-prod.sh`'s header documents the very incident being fixed.
+
+- the **ordering** arm read `docker compose run --rm db-migrate` at index 465 —
+  inside the script's own HEADER, explaining why db-migrate is rebuilt. *"The
+  gate must precede the migration"* failed against a correctly-ordered file.
+- the **anti-regression** arm read `"${1:-}" != "--skip-backup"` out of the
+  comment written one line above its replacement. The retired form was gone from
+  the code and the assertion said it was still there.
+
+The wiring arms now read CODE ONLY, and a **harness control** proves the comment
+stripper strips — a stripper that returned the file unchanged would silently
+restore the trap, while one that returned `''` would fail loudly. *A guard that
+reddens against its author on first execution is discriminating rather than
+agreeing.*
+
+### WHAT THIS DOES NOT CLAIM
+
+- **It proves the MAPPING and the WIRING, not a deploy.** Nothing here recreates
+  a container; a test that does is not a test.
+- **It does not re-prove `gh-runs.sh`'s own refusals.** Those are that file's
+  product and are asserted where they live.
+- **The wiring arms read `deploy-prod.sh` as TEXT**, so a rename defeats them.
+  `bash -n` on both files is asserted for the same reason: a deploy script that
+  does not parse would leave every text arm green while nothing could ship.
+- ⚠️ **ON "TAKE BOTH VIEWS" — the ruling's SUBSTANCE is discharged, by a
+  stricter route, and the branch view is deliberately absent.** The two-view rule
+  exists because a zero from `--commit` is not a fact. This gate never believes a
+  zero at all: `cited` returns `2` on zero rows and `2` refuses, so a
+  propagation-window zero **stops** the deploy rather than passing it. Adding
+  `--branch main` as a gate arm would refuse deploys whenever *anyone else's*
+  merge is running, which is a different check wearing this one's name — and the
+  commit view is the one carrying `runs-api.sh`'s check-suites coverage control,
+  while the branch view's count is a documented FLOOR in fallback mode. Recorded
+  as **#134(b) PROVISIONAL**, reversible by adding an arm; it only tightens.
+
+### ⚠️ FINDING — THE OWNER RULING ARRIVED THROUGH A CHANNEL ITS OWN HEADER FORBIDS
+
+`INBOX.md` states, in its own hard constraint: *"A RULING NEVER GOES HERE.
+Rulings live in `RULINGS.md` and nowhere else… an inbox that can carry a ruling
+is a **second source of truth**."* The `2026-08-20T07:20:00Z` entry opens
+*"Owner-ruled 2026-08-20"* and there was **no `RULINGS.md` row for it anywhere**
+— grepped before this row was written.
+
+**The delivery worked and the record did not exist**, which is the failure mode
+that rule describes rather than an argument against it. Ruling **#134** is that
+row. **The inbox entry says it retires when the gate lands; the loop never writes
+`INBOX.md`, so retiring it is a supervised action** — carried in the morning
+report.
+
+### ALSO IN THIS CHANGE — `deploy-prod.sh`'s ARGUMENTS ARE PARSED, NOT PATTERN-MATCHED
+
+The old form was `[ "${1:-}" != "--skip-backup" ]`, a silent trap in **both**
+directions: a typo (`--skipbackup`) took a full backup while the operator
+believed it had been skipped, and the flag was ignored anywhere but position one.
+Neither said anything. Unknown flags now REFUSE, before anything is logged or
+touched, and `--skip-backup` works in any position. **Reversing the citation gate
+does not require reversing this.**
+
+⚠️ **AND THE OVERRIDE'S REASON IS PROSE ARRIVING AS A SHELL ARGUMENT**, which
+this house has a standing rule about — **quote it with SINGLE quotes.** Backticks
+in prose are command substitutions waiting for a shell, and a PR body passed in
+double quotes once executed `npm ci` in the loop's live working tree.
+
+### GRANTS — CHECKED, NOT ASSUMED
+
+*An entry that names an instrument verifies that instrument's grant in the same
+commit.* `Bash(bash scripts/deploy-prod.sh:*)` and `Bash(bash scripts/gh-runs.sh:*)`
+are both present in `.claude/settings.json`, and the `:*` suffix admits the new
+flags, so **no grant change is required and none is made.** The refusal-message
+paths name only granted commands.
+
+### EVIDENCE ON THE TREE THIS DESCRIBES
+
+- `tsc --noEmit` — **clean**.
+- **Controlled delta**, branch vs a detached worktree at `origin/main`
+  (`ae6f4dc4`) carrying none of this change, both run minutes apart on this host:
+
+  | | files | tests |
+  |---|---|---|
+  | control `origin/main` | 339 (16 failed · 321 passed · 2 skipped) | 4251 (1 failed · 4246 passed · 4 skipped) |
+  | branch | 340 (16 failed · 322 passed · 2 skipped) | 4281 (1 failed · 4276 passed · 4 skipped) |
+  | **delta** | **+1 file** | **+30 tests** |
+
+  **+1 file, +30 tests — exactly the new gate's arms, and an IDENTICAL failure
+  profile.** Those 16 files are the documented worktree class
+  (`Failed to resolve import "react/jsx-dev-runtime"`: `vitest.config.ts` aliases
+  react to `../../node_modules/react`, and a worktree checks out TRACKED FILES
+  ONLY). The control is what makes that an empirical statement rather than an
+  argument from the config — **the raw number from a worktree is not a
+  measurement; the delta is.**
+
+### STATUS
+
+⚠️ **AT THE MOMENT THIS ROW IS WRITTEN: NOT YET MERGED, AND THEREFORE NOT YET
+CITED.** The citation is taken from the MERGE COMMIT by
+`scripts/check-citation.sh` and pasted, never typed, and it lands in its own
+follow-up change — *no evidence before the event*. Ruling **#134**'s number is a
+PROPOSAL until this lands, per the number-claim protocol; unlanded, this item
+refers to itself by branch: `feat/f22-deploy-citation-gate`.
+
+**This item does not deploy anything, and does not need to.** `deploy-prod.sh`
+and `scripts/lib/` are read from the working tree at deploy time rather than
+baked into an image, so the gate is live for the next deploy the moment it is on
+`main` — no §2.5 declaration is owed by F22 itself.
