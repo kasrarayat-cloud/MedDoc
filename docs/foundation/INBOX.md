@@ -273,73 +273,149 @@ branch rather than at merge.
 
 **This entry retires when that branch merges.**
 
-### 2026-08-20T01:45:00Z — ONE-LINE HARDENING OWED ON `ledger-progress.sh` (small, take it when convenient)
+### 2026-08-20T01:45:00Z — ✅ RETIRED: the `ledger-progress.sh` hardening — LANDED, AND NOT AS FILED
 
-**Not a defect in what shipped. A residual, filed rather than argued about.**
+**The residual was real. My proposed fix was the WRONG ONE, and the loop said so
+in its own gate.**
 
-`ledger_progress_hash()` proves the blob exists with `git cat-file -e` and only
-then pipes `git show … | sha256sum`. That ordering is correct and it is why the
-function is safe today.
+I filed: compare the hash against the empty-stdin digest `e3b0c442…855` and
+return CANNOT-TELL. The loop **declined it, with a reason that is better than
+mine**, recorded at
+`gate-f20-ledger-progress-universe.test.ts:522` — *"it cannot tell 'we hashed
+nothing' from 'the file is genuinely zero bytes', and the existence check exists
+precisely so those stay distinguishable. `pipefail` is also strictly stronger:
+it catches a truncated read that emitted bytes before failing, which yields a
+WRONG hash that no constant comparison could ever see."*
 
-⚠️ **The residual: if `git show` fails ANYWAY** — a corrupt object, a gc racing
-the read, a truncated pack — **it writes nothing, the pipe runs regardless, and
-`sha256sum` hashes EMPTY STDIN to the stable constant `e3b0c442…855`.** That is
-a plausible-looking hash, identical on every broken read, so two consecutive
-blind sessions would compare equal and reproduce the exact false halt this
-function exists to prevent. The existing `[ -z "$blob_hash" ]` guard cannot
-catch it, because the value is not empty.
+It shipped `$(set -o pipefail; git show … | sha256sum …)` — inside the
+substitution, so a sourced library neither mutates its caller's shell options
+nor depends on them.
 
-**The fix is one line** — either check `${PIPESTATUS[0]}` after the pipe, or
-compare against the known empty-stdin digest and return
-`CANNOT-TELL:hash-of-empty` instead:
+⚠️ **AND I RE-BROKE IT BY "LANDING" MY VERSION ON TOP.** I grepped for
+`PIPESTATUS|hash-of-empty|e3b0c442`, saw nothing, and concluded the fix was
+outstanding. The shipped fix uses `set -o pipefail` — **a form my token list did
+not contain**. CI caught it immediately: `a LEGITIMATELY EMPTY ledger still
+MEASURES` went red, which is exactly the arm written to catch my proposal.
 
-    [ "$blob_hash" = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ] \
-      && { printf 'CANNOT-TELL:hash-of-empty\n'; return 2; }
+> **A sweep is defeated by an incomplete TOKEN LIST at least as often as by a
+> missing form** — AGENTS.md's own rule, and I searched for the shape of the fix
+> I had imagined rather than the shape of a fix.
 
-**Near-unreachable is not unreachable, and the cost of being wrong is a dark
-loop nobody can explain.** Found while diffing two independent fixes for the
-same defect (#744 shipped; the supervised PR #746 was closed as superseded).
+**Reverted; `ledger-progress.sh` is byte-identical to `main`.**
 
-**This entry retires when that line lands.**
 
-### 2026-08-20T07:20:00Z — 🔴 PRIORITY QUEUE ITEM: `deploy-prod.sh` NEEDS A CITATION GATE
+### 2026-08-20T15:30:00Z — F5-d: TWO `GSV at the SFJ` CELLS BLOCK CERTIFICATION, AND THE CACHE IS NOW HONEST
 
-**Owner-ruled 2026-08-20. Mechanism, not a memo.**
+**The owner's template is one gate from certifying. This is the gate.**
 
-⚠️ **THE LOOP DEPLOYED A COMMIT BEFORE ITS OWN GATE HAD SEEN IT.** Measured:
+Third live observation, and each refusal has been more specific than the last:
 
-| time | event |
+| run | refusal |
 |---|---|
-| `06:14:42Z` | `e2e` created on `7c42d2d7` |
-| `06:15:13Z` | `secrets-scan` finishes — **the only check that had** |
-| **`06:15:17Z`** | **`deploy-prod.sh` STARTS** |
-| `06:19:26Z` | `a11y-ci` finishes |
-| `06:22:33Z` | `CI` finishes |
-| `06:52:02Z` | `e2e` finishes |
+| 2026-08-18 | `fillCoverage=false (7 filled, need >= 10)` |
+| 2026-08-20 07:00 | `fillCoverage=false (5 filled)` — **a STALE PINNED NOTE**; fixed by `8f46098a` + a declared pin-clear |
+| **2026-08-20 15:25** | **passes fill coverage**; blocked by **2 field checks** |
 
-All four passed in the end, so nothing unverified survives in production.
-**That is luck wearing a process's clothes.** The deploy was taken on evidence
-that did not yet exist, and had `e2e` gone red the tree would already have been
-live for thirty-seven minutes.
+    [template-twin:synthetic] BLOCKED compiled=617d6de9…:
+      ttf_e119ecd84bdd6b6c0b802967:ASSERTION_NOT_SUPPORTED,
+      ttf_12e093b32f6ad5da739ada7d:ASSERTION_NOT_SUPPORTED
 
-**THE ITEM:** `deploy-prod.sh` gains a **CITATION GATE** — it refuses to deploy
-a commit whose required checks have not all COMPLETED SUCCESSFULLY.
+    TEMPLATE_TWIN_CERTIFY_FAILED {"auto": true, "stage": "synthetic_test",
+      "reason": "The synthetic encounter left 2 blocking field checks. Add direct
+                 synthetic evidence or correct the mapping, then test again."}
 
-- The instrument already exists: `scripts/gh-runs.sh wait <full-sha>` returns
-  **0 = cited · 1 = pending · 2 = CANNOT TELL · 3 = failed**. The gate is a call,
-  not a new mechanism.
-- ⚠️ **FAIL-CLOSED ON `2`.** A blind instrument must refuse, exactly as the
-  pre-push hook does. A runs-API outage is not a licence to ship.
-- ⚠️ **FULL 40-CHARACTER SHA, and take both views.** `--commit` with an
-  abbreviated sha returns `[]` with exit 0, and `--commit` under-reports in the
-  propagation window right after a push. Both recorded traps.
-- **The emergency override is a DECLARATION, never a flag** — the established
-  wrapper pattern: a reason of real prose, echoed to stderr, refused if it is a
-  bare token or under 12 characters. An incident may need to ship past a broken
-  gate; it may not need to do so silently.
+**Both blockers are the SAME LABEL, once per leg** — measured, not inferred:
 
-**PROVE IT IN BOTH DIRECTIONS**, and the green half is the one usually skipped:
-a fully-cited commit must still deploy. A gate that refuses everything passes
-every refusal test and is worse than no gate.
+| fieldId | label | criticality | concept | sourceType |
+|---|---|---|---|---|
+| `ttf_e119ecd84bdd…` | `GSV at the SFJ` | routine | `measurement.diameter` | extraction |
+| `ttf_12e093b32f6a…` | `GSV at the SFJ` | routine | `measurement.diameter` | extraction |
 
-**This entry retires when the gate lands.**
+Blank-cell tally for the run: **44 blank — 32 `no_supporting_fact`, 12
+`laterality_mismatch`.**
+
+⚠️ **THE ENCOUNTER DOES DICTATE THIS SEGMENT.** `deriveVerificationEncounter`
+emits `Right GSV at the SFJ: diameter … millimeters, reflux time … seconds` and
+the Left equivalent. So the assertion is unsupported for a reason **downstream
+of the text**, not because the segment was never said.
+
+**PRIME SUSPECT, STATED AS A SUSPECT AND NOT A DIAGNOSIS:**
+`segmentCongruent` (`bridge-evidence.ts:131-142`) is token-overlap —
+`want.some(t => hay.includes(t))` — and `'aagsv'` CONTAINS `'gsv'`. The
+refutation pass already demonstrated this filling an **AAGSV** cell from a
+plain-GSV fact. The same looseness plausibly makes a `GSV at the SFJ` cell's
+candidate set ambiguous in the other direction. **This has NOT been reproduced.
+Reproduce it before believing it** — this programme has twice had a confidently
+stated mechanism refuted, and the reproduction that settles it is one script.
+
+**DO NOT** loosen the validator or the fill threshold to get past this. A
+certificate over a cell nobody proved is what these gates exist to refuse.
+
+**The state is intact and the doctor owes nothing:** `NEEDS_CONFIRMATION`,
+**80 mappings CERTIFIED / 0 pending**, 0 fill manifests.
+
+**This entry retires when the owner's template certifies, or when the two
+assertions are shown to be correctly refused — in which case the encounter or
+the mapping is what changes, never the gate.**
+
+### ⚠️ F5-d IS THE HEAD ITEM, AND ITS ACCEPTANCE SHAPE IS RULED — NOT NEGOTIABLE
+
+**(a) REPRODUCE BEFORE YOU FIX.** One script, running the REAL matcher on the
+REAL derived encounter against THE TWO BLOCKED FIELDS. Name the mechanism at
+FILE:LINE **before a line of fix is written**. The token-overlap suspect
+(`segmentCongruent`, `bridge-evidence.ts:131-142`) is CONFIRMED OR REFUTED with
+the same rigor that killed the last two confident mechanisms in this programme —
+both of which were plausible, both read out of the code, and both wrong.
+
+> *Read to form a hypothesis; RUN something to name a mechanism.*
+
+**(b) FIX AT THE ROOT, RED-PROVEN AGAINST TONIGHT'S EXACT REFUSAL** — both
+fields, both legs, `ASSERTION_NOT_SUPPORTED`. Then **re-measure the blank
+census**. Tonight's is **44 blank: 32 `no_supporting_fact`, 12
+`laterality_mismatch`**. If the fix moves those numbers, **say WHICH and WHY**.
+A number that moves without an explanation is the finding, and a number that
+moves in the right direction for the wrong reason is worse.
+
+**(c) THEN the backfill re-run → OBSERVE → CERTIFIED → verify the DB → the ping;
+or the FOURTH verbatim refusal with the mappings intact.** The no-ping-until-
+observed rule stands. Three honest refusals in, the fourth candidate inherits
+everything the first three proved: the arms have teeth, the cache is honest, and
+the encounter reaches the model.
+
+⚠️ **DO NOT loosen the validator, the fill threshold, or the congruence test to
+get past this.** A certificate over a cell nobody proved is precisely what these
+gates exist to refuse.
+
+---
+
+### 2026-08-20T16:40:00Z — RETIREMENT CONDITIONS BECOME MECHANICAL (queued BEHIND F5-d)
+
+**Small. Behind F5-d, not in front of it.**
+
+A sweep — nightly, or at PICKUP — greps `INBOX.md` and `RELAY.md` for
+**"retires when"** clauses and TESTS each one where it names a checkable fact:
+a PR merged, a file present, a symbol in a script, a flag flipped. Expired
+entries surface as a **named list** instead of sitting at the top of the queue
+for the next session to read past.
+
+⚠️ **TONIGHT IS THE REFERENCE CASE, AND THE COST IS MEASURED.** The citation-gate
+entry ended *"This entry retires when the gate lands."* The gate landed in #756;
+the entry stayed. **Session 04 was handed it as its 🔴 TOP PRIORITY**, spent its
+run establishing that the work was already done, landed nothing, and honestly
+marked `STOP-CONDITION`. The loop then sat dark. The clause was written
+correctly, came due, and **nobody executed it** — by the author, who was awake
+and working on adjacent things.
+
+> **A retirement condition nobody executes is the EXEMPTION-DECAY class one file
+> over.** `AGENTS.md` already records that an exemption's reason is prose and
+> prose decays silently, and that the cure is to write the retiring condition as
+> a testable event. This is the other half: **a testable event that nothing
+> tests is still just prose.**
+
+**Shape:** report-only first — print the list, change nothing. A sweep that
+auto-deletes entries on a heuristic would eventually delete a live one, and the
+failure mode of a wrong deletion is worse than a stale entry. Positive-control
+it: an entry whose condition is demonstrably NOT met must not appear in the
+expired list.
+
+**This entry retires when the sweep prints its first list.**
