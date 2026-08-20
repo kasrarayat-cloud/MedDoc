@@ -273,34 +273,36 @@ branch rather than at merge.
 
 **This entry retires when that branch merges.**
 
-### 2026-08-20T01:45:00Z — ONE-LINE HARDENING OWED ON `ledger-progress.sh` (small, take it when convenient)
+### 2026-08-20T01:45:00Z — ✅ RETIRED: the `ledger-progress.sh` hardening — LANDED, AND NOT AS FILED
 
-**Not a defect in what shipped. A residual, filed rather than argued about.**
+**The residual was real. My proposed fix was the WRONG ONE, and the loop said so
+in its own gate.**
 
-`ledger_progress_hash()` proves the blob exists with `git cat-file -e` and only
-then pipes `git show … | sha256sum`. That ordering is correct and it is why the
-function is safe today.
+I filed: compare the hash against the empty-stdin digest `e3b0c442…855` and
+return CANNOT-TELL. The loop **declined it, with a reason that is better than
+mine**, recorded at
+`gate-f20-ledger-progress-universe.test.ts:522` — *"it cannot tell 'we hashed
+nothing' from 'the file is genuinely zero bytes', and the existence check exists
+precisely so those stay distinguishable. `pipefail` is also strictly stronger:
+it catches a truncated read that emitted bytes before failing, which yields a
+WRONG hash that no constant comparison could ever see."*
 
-⚠️ **The residual: if `git show` fails ANYWAY** — a corrupt object, a gc racing
-the read, a truncated pack — **it writes nothing, the pipe runs regardless, and
-`sha256sum` hashes EMPTY STDIN to the stable constant `e3b0c442…855`.** That is
-a plausible-looking hash, identical on every broken read, so two consecutive
-blind sessions would compare equal and reproduce the exact false halt this
-function exists to prevent. The existing `[ -z "$blob_hash" ]` guard cannot
-catch it, because the value is not empty.
+It shipped `$(set -o pipefail; git show … | sha256sum …)` — inside the
+substitution, so a sourced library neither mutates its caller's shell options
+nor depends on them.
 
-**The fix is one line** — either check `${PIPESTATUS[0]}` after the pipe, or
-compare against the known empty-stdin digest and return
-`CANNOT-TELL:hash-of-empty` instead:
+⚠️ **AND I RE-BROKE IT BY "LANDING" MY VERSION ON TOP.** I grepped for
+`PIPESTATUS|hash-of-empty|e3b0c442`, saw nothing, and concluded the fix was
+outstanding. The shipped fix uses `set -o pipefail` — **a form my token list did
+not contain**. CI caught it immediately: `a LEGITIMATELY EMPTY ledger still
+MEASURES` went red, which is exactly the arm written to catch my proposal.
 
-    [ "$blob_hash" = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ] \
-      && { printf 'CANNOT-TELL:hash-of-empty\n'; return 2; }
+> **A sweep is defeated by an incomplete TOKEN LIST at least as often as by a
+> missing form** — AGENTS.md's own rule, and I searched for the shape of the fix
+> I had imagined rather than the shape of a fix.
 
-**Near-unreachable is not unreachable, and the cost of being wrong is a dark
-loop nobody can explain.** Found while diffing two independent fixes for the
-same defect (#744 shipped; the supervised PR #746 was closed as superseded).
+**Reverted; `ledger-progress.sh` is byte-identical to `main`.**
 
-**This entry retires when that line lands.**
 
 ### 2026-08-20T15:30:00Z — F5-d: TWO `GSV at the SFJ` CELLS BLOCK CERTIFICATION, AND THE CACHE IS NOW HONEST
 

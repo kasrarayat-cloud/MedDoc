@@ -146,22 +146,6 @@ ledger_progress_hash() {
   # truncated read that emitted some bytes before failing, which produces a
   # WRONG hash rather than the empty one, and no constant comparison can see
   # that at all.
-  # ⚠️ `git show | sha256sum` DISCARDS THE EXIT CODE. If `git show` fails after
-  # the cat-file guard — a corrupt object, a gc racing the read — it writes
-  # NOTHING, the pipe runs anyway, and sha256sum returns the digest of EMPTY
-  # STDIN: a stable, plausible-looking constant, identical on every broken read.
-  # Two blind sessions would then compare equal and reproduce the very false
-  # halt this function exists to prevent. `-z` cannot catch it, because the
-  # value is not empty.
-  #
-  # Near-unreachable is not unreachable, and the cost of being wrong is a dark
-  # loop nobody can explain. Filed as an INBOX residual 2026-08-20; landing it.
-  local EMPTY_STDIN_SHA256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-  if [ "$blob_hash" = "$EMPTY_STDIN_SHA256" ]; then
-    printf 'CANNOT-TELL:hash-of-empty\n'
-    return 2
-  fi
-
   if [ -z "$blob_hash" ]; then
     printf 'CANNOT-TELL:hash-empty\n'
     return 2
