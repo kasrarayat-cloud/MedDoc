@@ -116,6 +116,37 @@ And the scopes that DO move the number move it to something other than 237:
 split reconciles to the total (**193 + 58 + 26 + 5 = 282**), so no practice
 exclusion yields 237 either. `282 − 237 = 45`, and nothing in the data has 45.
 
+### ⚠️ AND AN INDEPENDENT INSTRUMENT CORROBORATES 282 — FOUND BY ACCIDENT
+
+This was not sought; it fell out of running the F12-g note-shape watcher as a
+standing STEP 0 check, minutes later and for an unrelated reason.
+
+That scan's own **projection control** reports, on this same database:
+
+    · projection control: 290 lines delivered = 290 headings — no body text
+
+It extracts markdown heading lines with `^[ \t]*#{1,6}[ \t]+` — **every** depth,
+not just `##`. My measurement, taken separately with different SQL for a
+different purpose, is:
+
+    ##   282
+    ###    8
+    #      0
+    ####+  0
+    ─────────
+    total 290
+
+**290 = 290.** Two instruments written by different sessions, with different
+regexes, for different purposes, reconcile exactly — and they reconcile on
+**282**, not on 237. There is no residue for a 45-line difference to hide in.
+
+⚠️ **This is corroboration, and its limits are stated rather than glossed.** The
+agreement is on the TOTAL heading count; the scan does not publish a per-depth
+split, so it confirms `282 + 8 + 0 + 0` as a sum rather than confirming `##`
+alone. Since the two non-`##` buckets are measured at zero by the query above,
+the sum pins `##` at 282 — but that last step is my arithmetic, not a second
+instrument's reading.
+
 ### DISPOSITION — RE-BASELINED, NOT WAIVED, AND NOT A BLOCKER
 
 > **Row 6 is judged against `##` = 282**, measured by me, **committed before the
