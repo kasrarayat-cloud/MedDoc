@@ -301,3 +301,45 @@ loop nobody can explain.** Found while diffing two independent fixes for the
 same defect (#744 shipped; the supervised PR #746 was closed as superseded).
 
 **This entry retires when that line lands.**
+
+### 2026-08-20T07:20:00Z — 🔴 PRIORITY QUEUE ITEM: `deploy-prod.sh` NEEDS A CITATION GATE
+
+**Owner-ruled 2026-08-20. Mechanism, not a memo.**
+
+⚠️ **THE LOOP DEPLOYED A COMMIT BEFORE ITS OWN GATE HAD SEEN IT.** Measured:
+
+| time | event |
+|---|---|
+| `06:14:42Z` | `e2e` created on `7c42d2d7` |
+| `06:15:13Z` | `secrets-scan` finishes — **the only check that had** |
+| **`06:15:17Z`** | **`deploy-prod.sh` STARTS** |
+| `06:19:26Z` | `a11y-ci` finishes |
+| `06:22:33Z` | `CI` finishes |
+| `06:52:02Z` | `e2e` finishes |
+
+All four passed in the end, so nothing unverified survives in production.
+**That is luck wearing a process's clothes.** The deploy was taken on evidence
+that did not yet exist, and had `e2e` gone red the tree would already have been
+live for thirty-seven minutes.
+
+**THE ITEM:** `deploy-prod.sh` gains a **CITATION GATE** — it refuses to deploy
+a commit whose required checks have not all COMPLETED SUCCESSFULLY.
+
+- The instrument already exists: `scripts/gh-runs.sh wait <full-sha>` returns
+  **0 = cited · 1 = pending · 2 = CANNOT TELL · 3 = failed**. The gate is a call,
+  not a new mechanism.
+- ⚠️ **FAIL-CLOSED ON `2`.** A blind instrument must refuse, exactly as the
+  pre-push hook does. A runs-API outage is not a licence to ship.
+- ⚠️ **FULL 40-CHARACTER SHA, and take both views.** `--commit` with an
+  abbreviated sha returns `[]` with exit 0, and `--commit` under-reports in the
+  propagation window right after a push. Both recorded traps.
+- **The emergency override is a DECLARATION, never a flag** — the established
+  wrapper pattern: a reason of real prose, echoed to stderr, refused if it is a
+  bare token or under 12 characters. An incident may need to ship past a broken
+  gate; it may not need to do so silently.
+
+**PROVE IT IN BOTH DIRECTIONS**, and the green half is the one usually skipped:
+a fully-cited commit must still deploy. A gate that refuses everything passes
+every refusal test and is worse than no gate.
+
+**This entry retires when the gate lands.**
