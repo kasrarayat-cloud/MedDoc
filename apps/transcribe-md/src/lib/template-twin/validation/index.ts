@@ -25,6 +25,11 @@ import {
   type TemplateTwinValidationResult,
 } from '../ir';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
+import {
+  deriveFieldValueFromFact,
+  exactOption,
+  isStrictIsoDate,
+} from '../field-value-derivation';
 import { isMappingTypeCompatible } from '../semantic-mapping';
 import {
   approvedPracticeDefaultAnchorId,
@@ -106,74 +111,10 @@ function parseRowValue(entry: Record<string, string | null>): RowValue | null {
   };
 }
 
-function isStrictIsoDate(value: string): boolean {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return false;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
-  );
-}
-
-function exactOption(
-  field: TemplateField,
-  value: string,
-): { value: string; displayText: string; ordinal: number } | null {
-  return (
-    field.allowedOptions.find(
-      (option) => option.value === value || option.displayText === value,
-    ) ?? null
-  );
-}
-
-function valueFromFact(
-  field: TemplateField,
-  mapping: SemanticMapping,
-  fact: EncounterFact,
-): string | number | boolean | null {
-  switch (field.kind) {
-    case 'narrative_text':
-      return typeof fact.value === 'string' ? fact.value : null;
-    case 'single_select': {
-      if (typeof fact.value !== 'string') return null;
-      return exactOption(field, fact.value)?.value ?? null;
-    }
-    case 'multi_select':
-      return typeof fact.value === 'string'
-        ? exactOption(field, fact.value)?.value ?? null
-        : null;
-    case 'checkbox':
-      return fact.polarity === 'affirmed'
-        ? true
-        : fact.polarity === 'denied'
-          ? false
-          : null;
-    case 'date':
-      return typeof fact.value === 'string' && isStrictIsoDate(fact.value.trim())
-        ? fact.value.trim()
-        : null;
-    case 'number': {
-      const parsed = parseExplicitNumberAndUnit(fact.value);
-      const number = fact.number ?? parsed.number;
-      const unit = fact.unit ?? parsed.unit;
-      return number !== null && unit === null ? number : null;
-    }
-    case 'measurement': {
-      const parsed = parseExplicitNumberAndUnit(fact.value);
-      const number = fact.number ?? parsed.number;
-      const unit = fact.unit ?? parsed.unit;
-      if (number === null) return null;
-      if (mapping.unitPolicy === 'required' && !unit) return null;
-      if (mapping.unitPolicy === 'forbidden' && unit) return null;
-      return unit ? `${number} ${unit}` : number;
-    }
-  }
-}
+// isStrictIsoDate, exactOption and the value derivation now live in
+// ../field-value-derivation, because the BRIDGE has to produce exactly what
+// this module re-derives and was producing something else. Moved verbatim; the
+// validator's behaviour is unchanged by the extraction. See that file's header.
 
 function practiceDefaultMatches(
   field: TemplateField,
@@ -262,7 +203,7 @@ function assertionSupported(
       ) {
         return false;
       }
-      const derived = valueFromFact(field, mapping, fact);
+      const derived = deriveFieldValueFromFact(field, mapping, fact);
       if (derived === null || entry.value !== String(derived)) return false;
       if (field.kind === 'single_select') {
         const option = exactOption(field, entry.value);
@@ -280,7 +221,7 @@ function assertionSupported(
       citedFacts.some(
         (fact) =>
           factMatchesMapping(fact, mapping) &&
-          valueFromFact(field, mapping, fact) === selected,
+          deriveFieldValueFromFact(field, mapping, fact) === selected,
       ),
     );
   }
@@ -288,7 +229,7 @@ function assertionSupported(
   return citedFacts.some(
     (fact) =>
       factMatchesMapping(fact, mapping) &&
-      valueFromFact(field, mapping, fact) === value,
+      deriveFieldValueFromFact(field, mapping, fact) === value,
   );
 }
 
