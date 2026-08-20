@@ -154,6 +154,34 @@ printf 'RC=%s\\n' "$?"
   return { rc: Number(m[1]), out: raw };
 }
 
+/** ⚠️ THE PRODUCTION UNIVERSE. `probe` above runs `set -uo pipefail`, which is
+ *  NOT what `deploy-prod.sh` runs — it runs `set -euo pipefail`, and this
+ *  function is sourced INTO it. A proof that only ever exercises the looser
+ *  shell is a proof about a script nobody ships.
+ *
+ *  It also calls the gate PLAINLY rather than as `citation_gate … || exit 1`.
+ *  That distinction is the whole point: an `||` list suppresses `set -e` for
+ *  everything inside the function, so the bare `cmd; rc=$?` form works today and
+ *  would keep working right up until somebody calls it plainly — at which point
+ *  a PENDING verdict aborts the deploy at the probe line with NO MESSAGE AT ALL.
+ *  Correct outcome, zero explanation, indistinguishable from a crash. */
+function probeUnderSetE(root: string, mode = 'refuse', override = ''): Probe {
+  const script = `
+set -euo pipefail
+. ${JSON.stringify(join(root, 'scripts/lib/citation-gate.sh'))}
+citation_gate ${JSON.stringify(SHA)} ${JSON.stringify(mode)} ${JSON.stringify(override)}
+printf 'RC=%s\\n' "$?"
+`;
+  try {
+    const raw = execFileSync('bash', ['-c', script], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const m = /RC=(\d+)/.exec(raw);
+    return { rc: m ? Number(m[1]) : 0, out: raw };
+  } catch (e) {
+    const err = e as { status?: number; stdout?: string; stderr?: string };
+    return { rc: err.status ?? -1, out: `${err.stdout ?? ''}${err.stderr ?? ''}` };
+  }
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // THE GREEN HALF FIRST. A gate that refuses everything passes every arm below.
 // ───────────────────────────────────────────────────────────────────────────
@@ -265,6 +293,53 @@ describe('F22 — every non-zero answer REFUSES', () => {
       expect(p.rc).toBe(1);
       expect(p.out).toContain('Production is untouched');
     }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// THE PRODUCTION SHELL — `set -euo pipefail`, which is what deploy-prod.sh runs.
+// Found by a refutation pass over the finished diff, on the author's own code.
+// ───────────────────────────────────────────────────────────────────────────
+describe('F22 — it survives `set -e`, which is the shell it is sourced into', () => {
+  it('a CITED commit still proceeds under `set -euo pipefail`', () => {
+    const p = probeUnderSetE(tree({ decide: 0 }));
+    expect(p.rc).toBe(0);
+    expect(p.out).toContain('CITED');
+  });
+
+  it('⚠️ a PENDING verdict still PRINTS ITS REFUSAL under `set -e`, called plainly', () => {
+    // This is the discriminating arm. With the retired `bash "$runner" cited
+    // "$sha"; rc=$?` form, a non-zero probe aborts the function AT THAT LINE
+    // under `set -e` — so the deploy stops (right) with no message (useless),
+    // and an operator sees a bare non-zero exit indistinguishable from a crash.
+    // The refusal TEXT is the evidence that control reached the mapping at all.
+    const p = probeUnderSetE(tree({ decide: 1 }));
+    expect(p.out).toContain('has NOT finished looking at this commit');
+    expect(p.out).toContain('Production is untouched');
+    expect(p.rc).not.toBe(0);
+  });
+
+  it('a TERMINAL verdict likewise names itself rather than dying silently', () => {
+    const p = probeUnderSetE(tree({ decide: 3 }));
+    expect(p.out).toContain('CONCLUDED NON-SUCCESS');
+    expect(p.rc).not.toBe(0);
+  });
+
+  it('and the override path survives it too — its probe is non-fatal by construction', () => {
+    const p = probeUnderSetE(tree({ decide: 3 }), 'refuse', 'the runs API is down and this ingress fix must ship');
+    expect(p.rc).toBe(0);
+    expect(p.out).toContain('state at the moment of override');
+    expect(p.out).toContain('exit 3');
+  });
+
+  it('an unknown MODE says production is untouched, like every other refusal', () => {
+    // It did not, on the first draft: the mode arm was the one refusal that
+    // omitted the line, and the "every refusal says so" arm never reached it
+    // because that arm varies the EXIT CODE, not the mode. A set of arms that
+    // all vary one axis cannot see a gap on another.
+    const p = probe(tree({ decide: 0 }), 'whatever');
+    expect(p.rc).toBe(1);
+    expect(p.out).toContain('Production is untouched');
   });
 });
 

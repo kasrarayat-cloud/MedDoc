@@ -140,8 +140,9 @@ citation_gate() {
     # attached is indistinguishable from never having looked. `cited` is used
     # rather than `wait` because an override is reached during an incident and a
     # gate that hangs for an hour after being waived is a gate that gets killed.
-    if [ -x "$runner" ] || [ -r "$runner" ]; then
-      bash "$runner" cited "$sha"; rc=$?
+    if [ -r "$runner" ]; then
+      # ⚠️ `|| rc=$?`, NEVER `cmd; rc=$?` — see the note at the decision call below.
+      rc=0; bash "$runner" cited "$sha" || rc=$?
       echo "   (state at the moment of override: gh-runs cited -> exit $rc)"
     else
       echo "   (state at the moment of override: UNKNOWN — $runner is not readable)"
@@ -161,15 +162,24 @@ citation_gate() {
     refuse|wait) ;;
     *)
       echo "🔴 REFUSING TO DEPLOY — unknown citation-gate mode '$mode'."
+      echo "   Nothing has been built, migrated or recreated. Production is untouched."
       return 1 ;;
   esac
 
+  # ⚠️ `|| rc=$?`, NEVER `cmd; rc=$?`. `deploy-prod.sh` runs under `set -euo
+  # pipefail`. Today this function is invoked as `citation_gate … || exit 1`,
+  # which suppresses `set -e` throughout its body — so the bare form WORKS, and
+  # would go on working right up until somebody calls it plainly. Then a PENDING
+  # verdict (exit 1) would abort the deploy at this line with **no message at
+  # all**: correct outcome, zero explanation, and indistinguishable from a crash.
+  # The `||` form is safe in every calling context, which is the only property
+  # worth having in a gate. There is a behavioural arm for exactly this.
   if [ "$mode" = "wait" ]; then
     echo "   mode: WAIT — polling until every run on this commit concludes."
-    bash "$runner" wait "$sha"; rc=$?
+    rc=0; bash "$runner" wait "$sha" || rc=$?
   else
     echo "   mode: REFUSE — one decisive read, no polling."
-    bash "$runner" cited "$sha"; rc=$?
+    rc=0; bash "$runner" cited "$sha" || rc=$?
   fi
 
   case "$rc" in

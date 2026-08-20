@@ -21492,7 +21492,7 @@ counts as a reason — so a bare `1`/`true`/`yes`/`force`/`skip`, or anything un
 overrode.** A waiver with no state attached is indistinguishable from never
 having looked.
 
-### PROVED IN BOTH DIRECTIONS — `gate-f22-deploy-citation-gate.test.ts`, 30 of 30
+### PROVED IN BOTH DIRECTIONS — `gate-f22-deploy-citation-gate.test.ts`, 35 of 35
 
 It drives the REAL library in a real bash, in throwaway trees, with **one**
 stub: `scripts/gh-runs.sh`, because that is the boundary. **The accept arms come
@@ -21515,6 +21515,14 @@ green:
 | **M5** cannot-tell made fail-OPEN | **2 failed** / 28 |
 | **M6** an unmapped exit code proceeds | **2 failed** / 28 |
 | **M7** the override skips its shared validator | **2 failed** / 28 |
+
+**Round 2, against the arms the refutation pass below added** (baseline **0
+failed / 35 passed**):
+
+| mutation | result |
+|---|---|
+| **M8** the retired `cmd; rc=$?` shell form returns | **2 failed** / 33 |
+| **M9** the unknown-MODE refusal drops its production-untouched line | **1 failed** / 34 |
 
 **Every mutation asserted APPLIED before the run that followed it was believed** —
 an unapplied mutation yields a green that proves nothing and is
@@ -21541,6 +21549,44 @@ stripper strips — a stripper that returned the file unchanged would silently
 restore the trap, while one that returned `''` would fail loudly. *A guard that
 reddens against its author on first execution is discriminating rather than
 agreeing.*
+
+### ⚠️ THE REFUTATION PASS OVER THE FINISHED DIFF FOUND A REAL DEFECT — AND IT WAS THE WRONG-UNIVERSE CLASS
+
+**The mandatory adversarial pass is scoped to the clinical generation path and
+this diff is deploy tooling, so it was not owed. It was run anyway, by hand on
+the finished diff, and it paid.** ⚠️ *Honest limit on the pass itself: this
+session's harness forbids spawning subagents, so it is ONE reader refuting his
+own work rather than the independent, lens-diverse pass the canon describes. It
+is the weaker instrument and it is named as such.*
+
+> **THE PROOF RAN IN A SHELL PRODUCTION DOES NOT USE.** `deploy-prod.sh` runs
+> `set -euo pipefail`; the gate's own harness ran `set -uo pipefail` — **no
+> `-e`** — and called the function plainly rather than as
+> `citation_gate … || exit 1`.
+
+The library read `bash "$runner" cited "$sha"; rc=$?`. Under `set -e` that
+aborts **at the probe line** on any non-zero verdict. It works TODAY only because
+an `||` list suppresses `set -e` for everything inside the function — so the
+defect is **invisible while the single call site keeps its `|| exit 1`**, and
+arrives the moment anyone calls it plainly:
+
+| | outcome |
+|---|---|
+| the deploy stops | ✅ correct |
+| the operator is told why | ❌ **nothing prints at all** |
+| distinguishable from a crash | ❌ **no** |
+
+Fixed to `rc=0; bash "$runner" … || rc=$?`, which is safe in **every** calling
+context — the only property worth having in a gate. **The arm that proves it is
+BEHAVIOURAL, not textual:** it sources the real library under `set -euo pipefail`,
+calls it plainly, and asserts the refusal **TEXT** appears. Mutation **M8**
+restores the retired form and two arms redden.
+
+**A second, smaller one from the same pass:** the unknown-MODE branch was the one
+refusal that omitted *"Production is untouched"*. ⚠️ **The "every refusal says so"
+arm could never have caught it, because that arm varies the EXIT CODE and the gap
+was on the MODE axis.** *A set of arms that all vary one axis cannot see a gap on
+another.* Mutation **M9**.
 
 ### WHAT THIS DOES NOT CLAIM
 
@@ -21607,10 +21653,15 @@ paths name only granted commands.
   | | files | tests |
   |---|---|---|
   | control `origin/main` | 339 (16 failed · 321 passed · 2 skipped) | 4251 (1 failed · 4246 passed · 4 skipped) |
-  | branch | 340 (16 failed · 322 passed · 2 skipped) | 4281 (1 failed · 4276 passed · 4 skipped) |
-  | **delta** | **+1 file** | **+30 tests** |
+  | branch | 340 (16 failed · 322 passed · 2 skipped) | 4286 (1 failed · 4281 passed · 4 skipped) |
+  | **delta** | **+1 file** | **+35 tests** |
 
-  **+1 file, +30 tests — exactly the new gate's arms, and an IDENTICAL failure
+  ⚠️ **RE-MEASURED after the refutation pass added five arms, not incremented
+  from the +30 that was true before it** — *a count carried forward and then
+  incremented by assumption is a fabricated number, however small the
+  increment.*
+
+  **+1 file, +35 tests — exactly the new gate's arms, and an IDENTICAL failure
   profile.** Those 16 files are the documented worktree class
   (`Failed to resolve import "react/jsx-dev-runtime"`: `vitest.config.ts` aliases
   react to `../../node_modules/react`, and a worktree checks out TRACKED FILES
