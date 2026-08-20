@@ -44,12 +44,54 @@
 #      CLASS, not an incident — it produced two near-misses on 2026-08-14 in a
 #      single night, and both resolved only because somebody happened to look.
 #
-# Usage:  bash scripts/deploy-prod.sh [--skip-backup]
+# Usage:  bash scripts/deploy-prod.sh [--skip-backup] [--wait-for-citation]
+#                                    [--declare-citation-override '<reason>']
 # Exit:   0 = deployed · non-zero = aborted (nothing recreated)
 # ============================================================================
 set -euo pipefail
 
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# ============================================================================
+# ARGUMENTS — PARSED BEFORE ANYTHING IS LOGGED OR TOUCHED, AND UNKNOWN ONES ARE
+# REFUSED.
+# ----------------------------------------------------------------------------
+# ⚠️ THE OLD FORM WAS `[ "${1:-}" != "--skip-backup" ]`, WHICH IS A SILENT TRAP
+# IN BOTH DIRECTIONS: a typo (`--skipbackup`) took a full backup while the
+# operator believed it had been skipped, and `--skip-backup` in any position but
+# the first was ignored. Neither says anything. A flag the script does not
+# recognise is now a refusal, which is the only reading that cannot be wrong.
+#
+# ⚠️ AND THE OVERRIDE'S REASON IS PROSE ARRIVING AS A SHELL ARGUMENT, which this
+# house has a standing rule about. QUOTE IT WITH SINGLE QUOTES. Backticks in
+# prose are command substitutions waiting for a shell, and prose is exactly where
+# backticks live — a PR body passed in double quotes once executed `npm ci` in
+# the loop's live working tree.
+SKIP_BACKUP=0
+CITATION_MODE="refuse"
+CITATION_OVERRIDE="${DEPLOY_CITATION_OVERRIDE:-}"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --skip-backup)  SKIP_BACKUP=1 ;;
+    --wait-for-citation) CITATION_MODE="wait" ;;
+    --declare-citation-override)
+      shift
+      CITATION_OVERRIDE="${1:-}"
+      if [ -z "$CITATION_OVERRIDE" ]; then
+        echo "🔴 REFUSING — --declare-citation-override needs a REASON as its argument." >&2
+        echo "   Use single quotes: --declare-citation-override 'why this ships uncited'" >&2
+        exit 1
+      fi
+      ;;
+    --declare-citation-override=*) CITATION_OVERRIDE="${1#*=}" ;;
+    *)
+      echo "🔴 REFUSING — unknown argument '$1'. Nothing has been touched." >&2
+      echo "   Usage: bash scripts/deploy-prod.sh [--skip-backup] [--wait-for-citation]" >&2
+      echo "                                      [--declare-citation-override '<reason>']" >&2
+      exit 1 ;;
+  esac
+  shift
+done
 
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 LOG_DIR="docs/deploy-logs"
@@ -64,6 +106,7 @@ echo "=== deploy $TS ==="
 echo "commit: $(git log --oneline -1)"
 echo "branch: $(git branch --show-current)"
 echo "log:    $LOG"
+echo "citation gate: mode=$CITATION_MODE override=$([ -n "$CITATION_OVERRIDE" ] && echo "DECLARED" || echo "none")"
 echo
 
 # ============================================================================
@@ -132,6 +175,40 @@ declaration_gate "$DECL" "$DECLARATION_MODE" "deploy declaration" || {
 }
 
 # ============================================================================
+# STEP 0a — THE CITATION GATE. OWNER-RULED 2026-08-20, AND IT IS FAIL-CLOSED.
+# ----------------------------------------------------------------------------
+# ⚠️ ON 2026-08-20 THIS SCRIPT DEPLOYED A COMMIT FOUR SECONDS AFTER THE ONLY
+# CHECK THAT HAD FINISHED, WHILE `e2e` HAD THIRTY-SEVEN MINUTES LEFT TO RUN.
+# Everything passed, so nothing unverified survives in production — which is luck
+# wearing a process's clothes, and exactly the reasoning §2.5 already refuses one
+# step further down. The full timeline is in `lib/citation-gate.sh`.
+#
+# It runs AFTER the declaration gate and BEFORE the rollback tag, so the cheap
+# local refusal still comes first and nothing has been built, migrated, tagged or
+# recreated when this one fires.
+#
+# ⚠️ SOURCED, NOT CARRIED — the same argument as STEP 0. Its absence is
+# fail-closed: a deploy that silently skipped its own citation gate is worse than
+# one that refuses.
+# ============================================================================
+CITE_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" 2>/dev/null && pwd)/citation-gate.sh"
+if [ ! -r "$CITE_LIB" ]; then
+  echo "🔴 REFUSING TO DEPLOY — $CITE_LIB is missing or unreadable."
+  echo "   Production is untouched."
+  exit 1
+fi
+# shellcheck source=lib/citation-gate.sh
+. "$CITE_LIB"
+
+# ⚠️ THE FULL 40 CHARACTERS, READ AND NEVER BUILT. `$DEPLOY_SHA` above is the
+# SHORT form and is used for naming; an abbreviated sha matches NOTHING on the
+# runs routes — exit 0, no rows, a false all-clear. `gh-runs.sh` refuses one, and
+# passing it here would turn a gate into a formality.
+DEPLOY_SHA_FULL="$(git rev-parse HEAD)"
+citation_gate "$DEPLOY_SHA_FULL" "$CITATION_MODE" "$CITATION_OVERRIDE" || exit 1
+echo
+
+# ============================================================================
 # STEP 0b — THE ROLLBACK TAG. F9, AND IT IS FAIL-CLOSED.
 # ----------------------------------------------------------------------------
 # ⚠️ THE SAME ARGUMENT AS STEP 0, ONE STEP LATER. Runbook §3.1 has said since
@@ -165,7 +242,7 @@ rollback_tag_cut "$ROLLBACK_SLUG" "$(date -u +%Y%m%d)" \
   exit 1
 }
 
-if [ "${1:-}" != "--skip-backup" ]; then
+if [ "$SKIP_BACKUP" != "1" ]; then
   echo "=== 1. pre-deploy backup ==="
   BACKUP="backups/pre_deploy_${TS}.sql.gz"
   docker compose exec -T postgres pg_dump -U meddoc -d meddoc --no-owner --no-acl | gzip > "$BACKUP"
