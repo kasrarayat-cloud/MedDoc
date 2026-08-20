@@ -355,3 +355,65 @@ certificate over a cell nobody proved is what these gates exist to refuse.
 **This entry retires when the owner's template certifies, or when the two
 assertions are shown to be correctly refused — in which case the encounter or
 the mapping is what changes, never the gate.**
+
+### ⚠️ F5-d IS THE HEAD ITEM, AND ITS ACCEPTANCE SHAPE IS RULED — NOT NEGOTIABLE
+
+**(a) REPRODUCE BEFORE YOU FIX.** One script, running the REAL matcher on the
+REAL derived encounter against THE TWO BLOCKED FIELDS. Name the mechanism at
+FILE:LINE **before a line of fix is written**. The token-overlap suspect
+(`segmentCongruent`, `bridge-evidence.ts:131-142`) is CONFIRMED OR REFUTED with
+the same rigor that killed the last two confident mechanisms in this programme —
+both of which were plausible, both read out of the code, and both wrong.
+
+> *Read to form a hypothesis; RUN something to name a mechanism.*
+
+**(b) FIX AT THE ROOT, RED-PROVEN AGAINST TONIGHT'S EXACT REFUSAL** — both
+fields, both legs, `ASSERTION_NOT_SUPPORTED`. Then **re-measure the blank
+census**. Tonight's is **44 blank: 32 `no_supporting_fact`, 12
+`laterality_mismatch`**. If the fix moves those numbers, **say WHICH and WHY**.
+A number that moves without an explanation is the finding, and a number that
+moves in the right direction for the wrong reason is worse.
+
+**(c) THEN the backfill re-run → OBSERVE → CERTIFIED → verify the DB → the ping;
+or the FOURTH verbatim refusal with the mappings intact.** The no-ping-until-
+observed rule stands. Three honest refusals in, the fourth candidate inherits
+everything the first three proved: the arms have teeth, the cache is honest, and
+the encounter reaches the model.
+
+⚠️ **DO NOT loosen the validator, the fill threshold, or the congruence test to
+get past this.** A certificate over a cell nobody proved is precisely what these
+gates exist to refuse.
+
+---
+
+### 2026-08-20T16:40:00Z — RETIREMENT CONDITIONS BECOME MECHANICAL (queued BEHIND F5-d)
+
+**Small. Behind F5-d, not in front of it.**
+
+A sweep — nightly, or at PICKUP — greps `INBOX.md` and `RELAY.md` for
+**"retires when"** clauses and TESTS each one where it names a checkable fact:
+a PR merged, a file present, a symbol in a script, a flag flipped. Expired
+entries surface as a **named list** instead of sitting at the top of the queue
+for the next session to read past.
+
+⚠️ **TONIGHT IS THE REFERENCE CASE, AND THE COST IS MEASURED.** The citation-gate
+entry ended *"This entry retires when the gate lands."* The gate landed in #756;
+the entry stayed. **Session 04 was handed it as its 🔴 TOP PRIORITY**, spent its
+run establishing that the work was already done, landed nothing, and honestly
+marked `STOP-CONDITION`. The loop then sat dark. The clause was written
+correctly, came due, and **nobody executed it** — by the author, who was awake
+and working on adjacent things.
+
+> **A retirement condition nobody executes is the EXEMPTION-DECAY class one file
+> over.** `AGENTS.md` already records that an exemption's reason is prose and
+> prose decays silently, and that the cure is to write the retiring condition as
+> a testable event. This is the other half: **a testable event that nothing
+> tests is still just prose.**
+
+**Shape:** report-only first — print the list, change nothing. A sweep that
+auto-deletes entries on a heuristic would eventually delete a live one, and the
+failure mode of a wrong deletion is worse than a stale entry. Positive-control
+it: an entry whose condition is demonstrably NOT met must not appear in the
+expired list.
+
+**This entry retires when the sweep prints its first list.**
