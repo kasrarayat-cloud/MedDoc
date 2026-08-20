@@ -5,6 +5,7 @@
 // test-then-edit activation). Authorization is supplied by the caller
 // (TemplateTwinActor value-object); uses the prisma singleton + logTwinAudit only.
 // ============================================================================
+import { MIN_CERTIFIED_FILLED_FIELDS } from './certification-thresholds';
 import { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
 
@@ -32,7 +33,7 @@ import { validateTemplateTwin } from './validation';
 /** Minimum filled fields a synthetic proof must produce before a template may
  *  certify. Set from what the WM_IOV encounter legitimately supports; raise it
  *  as encounters get richer, never lower it to make a fixture pass. */
-const MIN_CERTIFIED_FILLED_FIELDS = 10;
+
 
 export class TemplateTwinLifecycleError extends Error {
   readonly code:
