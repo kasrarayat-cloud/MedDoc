@@ -21814,6 +21814,31 @@ Recorded now rather than discovered mid-incident.
 **Acceptance shape (a) is MET. (b) and (c) are OWED, and the reason is written
 down rather than left as a gap.**
 
+**Shipped: PR #761, merge `ef1e15378557dc6d841518708e3c244b21848296`.**
+Produced by `scripts/check-citation.sh`, not typed:
+
+**Citation — 4 of 4 on `ef1e15378557dc6d841518708e3c244b21848296`:**
+   · `CI` 32404455324 a1
+   · `e2e` 32404455234 a1
+   · `a11y-ci` 32404455092 a1
+   · `secrets-scan` 32404455370 a1
+
+Every line is `a1` — no re-run, so nothing to explain. **NOT DEPLOYED, and it
+needs no deploy: the change is a test file plus ledger prose, zero production
+code.**
+
+⚠️ **ONE CORRECTION TO THIS ROW'S OWN WORDING, made before anyone relies on it.**
+Below it says a real doctor dictating a trailing-zero measurement "produces the
+same mismatch on a real visit". That is true of the CODE and it is **not live
+today**, and the distinction matters to whoever schedules the fix. Measured on
+production after this row was first written: **0 CERTIFIED compiled versions, 0
+fill manifests** — so the per-visit fill short-circuits `not_certified_twin` on
+every visit and no real visit currently reaches the assertion check at all.
+**The defect is PROSPECTIVE, not historical.** It becomes reachable the moment
+certification succeeds — which is precisely what F5-d is unblocking — so its
+first victim would be the pilot doctor's first real study, immediately after the
+fix. That makes it more urgent than a live-bug reading would, not less.
+
 The INBOX filed this with a PRIME SUSPECT and the explicit instruction to
 confirm or refute it with the same rigor that killed the last two confident
 mechanisms in this programme. **It is refuted, by running it.**
@@ -21915,3 +21940,64 @@ nothing new.
 **The mappings are intact and the doctor still owes nothing:**
 `NEEDS_CONFIRMATION`, 80 mappings CERTIFIED / 0 pending, 0 fill manifests —
 unchanged by this session, which wrote no production data.
+
+### 🔎 TWO FINDINGS F5-d DID NOT GO LOOKING FOR — 2026-08-20, session 01
+
+**(1) ⚠️ THE REFLUX COLUMN IS STRUCTURALLY UNFILLABLE, AND F5-d's FIX WILL NOT
+FIX IT.** Worth knowing BEFORE the fix lands, because the obvious success
+criterion — *"the owner's template certifies"* — can be met with half the table
+still empty.
+
+Measured on production's own stored manifest, with the control in the same
+query:
+
+| concept | facts | quotes carrying an anatomy token |
+|---|---|---|
+| `measurement.diameter` | 20 | **20** |
+| `measurement.reflux_time` | 20 | **0** |
+
+The 20 is the positive control: the same pattern that finds anatomy in every
+diameter quote finds it in no reflux quote, so the zero is absence rather than a
+blind matcher. The quotes themselves say it plainly — `Right GSV at the SFJ:
+diameter 3.10 millimeters` against a bare `reflux time 0.110 seconds`.
+
+**Why that is fatal for those cells:** `bridge-fill.ts` `place()` passes
+`irRow.vein` as the `segmentLabel` for the reflux cell exactly as it does for the
+diameter cell, so a reflux cell is addressed by `GSV at the SFJ`.
+`segmentCongruent` then needs `gsv` or `sfj` somewhere in the fact's concept,
+value or quote — and a reflux fact has none of the three. Every reflux cell
+therefore refuses as `no_supporting_fact` and renders blank.
+
+⚠️ **STATED AT ITS REAL STRENGTH: this is measured data plus a read of the
+shipped call site and predicate. It has NOT been reproduced end to end**, and
+this programme has twice had a confidently-read mechanism refuted. Reproduce it
+before fixing it — the same discipline that refuted F5-d's own filed suspect.
+*(It was not reproduced here because doing so meant a second push onto a branch
+with three runs in flight, which would have cancelled them for a finding that
+belongs in a report.)*
+
+**(2) 🔴 A STALE INBOX ENTRY IS STILL BEING DELIVERED TO EVERY SESSION.**
+`INBOX.md` `2026-08-14T20:09:13Z` opens *"RC-2 IS ON `main` AND NOT DEPLOYED. A
+`main` DEPLOY SHIPS COMPILE-ON-UPLOAD"* and tells the reader to write a new §2.5
+declaration before running `deploy-prod.sh`.
+
+**It shipped five days ago.** Migration
+`20260814024500_rc2_note_template_source_artifact` finished
+**`2026-08-15 01:36:44Z`**, and the entry's own predicted consequence has already
+happened: it says twin tables "will stop being empty on the first `.docx` upload
+after the deploy", and `template_twin_compiled_versions` now holds **1** row —
+`617d6de9…`, the very compiled version F5-d is working on.
+
+⚠️ **THIS IS A SECOND LIVE INSTANCE OF THE CLASS THE `2026-08-20T16:40:00Z`
+ENTRY WAS FILED TO FIX**, found the same night, and it is the more dangerous
+shape: the citation-gate entry was merely obsolete, whereas this one asserts a
+FALSE state of production in the present tense to every session that launches —
+the `DEPLOYMENT_RUNBOOK.md §5.6` shape, which cost six hours the last time.
+
+⚠️ **AND IT HAD NO RETIREMENT CONDITION TO EXECUTE**, which is exactly why
+nobody executed one. It never says "this entry retires when…". That is the
+argument for the queued sweep being about *writing* conditions as testable
+events, not only about checking them.
+
+**The loop never writes to `INBOX.md`** — append-only from the supervised side —
+so this is reported, not fixed.
