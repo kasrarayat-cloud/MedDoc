@@ -59,54 +59,24 @@ not a fixture.** The account is the owner's own. B9 must reconcile it as real.
 DOOR".** The 175 / $1,750.00 figures elsewhere in `RELAY.md` and `RULINGS.md` are
 NOT wrong — they were true when written, and every one of them predates this.
 
-### 2026-08-14T20:09:13Z — RC-2 IS ON `main` AND NOT DEPLOYED. A `main` DEPLOY SHIPS COMPILE-ON-UPLOAD.
+### 2026-08-14T20:09:13Z — ✅ RETIRED: "RC-2 IS ON `main` AND NOT DEPLOYED"
 
-**Read this before running `scripts/deploy-prod.sh`.**
+**Retired 2026-08-20 by owner order. A FALSE PRESENT-TENSE FACT delivered to
+every session for five days.**
 
-`main` (`e022ec0c`) now carries RC-2, which **changes production behaviour on a
-path every doctor uses**: `saveNoteTemplateAction` compiles a Template Twin on
-**every `.docx` upload** through Settings → My Note Format, and stores the
-uploaded bytes before extraction.
+It told the next session to read it before running `deploy-prod.sh`. Its
+migration finished **2026-08-15T01:36:44Z** and its own predicted consequence has
+happened — `template_twin_compiled_versions` holds the row F5-d has been working
+on all week.
 
-**Production has NOT been deployed with it.** The last deploy was `133f55c1`
-(item 3 + F3 + R4b), whose declaration
-(`docs/foundation/deploys/20260814-133f55c1.md`) says nothing about any of this
-— it could not, because RC-2 merged afterwards.
+⚠️ **THE WORSE SHAPE OF THE STALE-ENTRY CLASS.** An expired *condition* wastes a
+session's time; a false *present-tense fact* is read as a description of the
+running system. The `DEPLOYMENT_RUNBOOK §5.6` shape, which this repository has
+already paid six hours for.
 
-⚠️ **SO A DEPLOY OF `main` RIGHT NOW WOULD SHIP AN UNDECLARED RUNTIME CHANGE**,
-which is the exact seam the R5 row in `RELAY.md` records: *"I deployed `main`"
-is not the same claim as "I judged what I deployed"*. Write a NEW §2.5
-declaration naming RC-2 before deploying, and note that it is
-**migration-carrying**:
+Second live instance behind the retirement-sweep item — and the reason a false
+fact outranks the sweep's schedule.
 
-    20260814024500_rc2_note_template_source_artifact   (migrations 103 → 104)
-
-**What the declaration must name, at minimum:**
-
-- migrations **103 → 104**
-- `note_templates` gains `sourceObjectKey` / `sourceSha256`, **NULL for every
-  existing row** — absence means "we do not have the file", never "it is
-  elsewhere". No backfill; do not invent one.
-- **twin rows begin to appear in production for the first time.**
-  `template_twin_source_artifacts` and `template_twin_compiled_versions` are
-  currently EMPTY in prod and will stop being empty on the first `.docx` upload
-  after the deploy. That is intended, and it will make prod's twin tables stop
-  matching every prior report that says "zero compiled versions".
-- **`MAPPINGS_NOT_READY` still refuses** — compiled ≠ certified. Nothing becomes
-  certified by this, no fill runs, no export changes.
-- object storage takes new writes under the template-artifact prefix.
-
-**Not a bug, and deliberately not deployed by the session that built it:** the
-queue said *"RC-2 to completion"*, and completion is merged-and-cited. Shipping a
-parked capability's first live behaviour change is an owner call, not a tidy-up.
-
-**Proof it works, if you need it before deciding:**
-`scripts/qa/rc2-twin-door-on-qa.ts` — 17 of 17 on the QA stack, 80 fields, bound
-to the doctor's own template, correctly uncertified.
-
-⚠️ **AND THE QA STACK WAS REBUILT FROM THAT BRANCH TO RUN IT** — QA images are
-now newer than production's and contain RC-2. `check-qa-mock-posture.sh` was
-re-run afterwards and still reports vendor-severed.
 
 ### 2026-08-15T04:18:34Z — HANDOFF: the fidelity arc is at RELAY's head, and the loop is the ONLY deploy actor
 
@@ -419,3 +389,48 @@ it: an entry whose condition is demonstrably NOT met must not appear in the
 expired list.
 
 **This entry retires when the sweep prints its first list.**
+
+### 2026-08-20T23:10:00Z — 🔴 F5-e: THE REFLUX COLUMN IS STRUCTURALLY UNADDRESSABLE
+
+**CONFIRMED end to end, with a positive control. Not a suspicion.**
+
+`bridge-fill`'s `place()` addresses the reflux cell with `irRow.vein` — the
+row's vessel label — for BOTH columns. `segmentCongruent` then needs an anatomy
+token in the fact's concept, value or evidence quote. **A reflux fact has none.**
+
+| fact concept | n | quotes carrying an anatomy token |
+|---|---|---|
+| `measurement.diameter` | 20 | **20** |
+| `measurement.reflux_time` | 20 | **0** |
+
+Real quotes: `Right GSV at the SFJ: diameter 3.10 millimeters` versus
+`reflux time 0.110 seconds`.
+
+Through the real `matchMeasurementFact`:
+
+    diameter  3.1   -> FILLED   cites "Right GSV at the SFJ: diameter 3.10 millimeters"
+    reflux    0.11  -> REFUSED  no_supporting_fact
+    CONTROL   the same reflux fact WITH anatomy in its quote -> FILLED
+
+⚠️ **A REQUIRED GATE ARM ASSERTED THE OPPOSITE AND PASSED** — it fed both facts
+the whole dictated sentence, a quote production never produces. Corrected in the
+same change that files this, and mutation-proved: restoring the old quote
+reddens it.
+
+**TWO FIX DIRECTIONS. Loop's choice; the adversarial pass is MANDATORY either
+way (clinical generation path).**
+
+**(A) GENERATOR PHRASING** — emit a self-contained reflux sentence carrying the
+vessel. Cheap. **Fixes only the synthetic proof**; a real dictation has no such
+guarantee.
+
+**(B) ADDRESSING / L3 CONTEXT AT THE ROOT** — `place()` supplies the row's
+anatomy as addressing context, or L3 attaches the segment to every measurement
+fact it splits. Invasive. **The one that helps a real visit.**
+
+⚠️ **(A) WITHOUT (B) MAKES THE PROOF PASS AND LEAVES THE PRODUCT BROKEN** — a
+certificate attesting a fill path a real encounter cannot exercise. If (A) is
+taken alone, say so in the ledger and keep F5-e OPEN for (B).
+
+**Retires when a reflux cell fills from a fact whose quote does not name the
+vessel — or when (B) lands and the arm above is deliberately inverted.**
