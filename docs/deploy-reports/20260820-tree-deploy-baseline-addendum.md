@@ -147,6 +147,58 @@ alone. Since the two non-`##` buckets are measured at zero by the query above,
 the sum pins `##` at 282 — but that last step is my arithmetic, not a second
 instrument's reading.
 
+### ⚠️ AND THE DECISIVE ONE: F6.4's OWN COMMITTED DECLARATION ALSO SAYS 282
+
+`docs/foundation/deploys/20260820-64c49a45.md`, committed by session 01 before
+its own act, on the **same database, the same night**:
+
+    | **`##` heading lines in stored notes** | **282** |
+    | **`###` heading lines in stored notes** |   **8** |
+    ...
+    | 6 | **`##` lines still 282** | the renderer must not touch stored note text |
+    | 7 | **`###` lines still 8**  | ⚠️ **THE ONE THAT MATTERS.** ...
+
+**Same quantity. Same wording. Same MUST-NOT-CHANGE row number. 282.**
+
+`RELAY.md:21274` restates it in the hand-off — *"`##` 282 lines · `###` 8
+lines"*. So PR #752's framing — *"F6.4's baseline reads 282; the same question
+asked by THIS declaration's query reads 237, the queries differ in scope"* — is
+a real and honestly-flagged discrepancy whose stated resolution does not hold:
+**there is no scope on this database, that I could find, under which the
+`soapFinal`-only question answers 237.**
+
+**The tally, and it is three independent sources against one:**
+
+| source | `##` |
+|---|---|
+| F6.4's committed declaration (session 01, same night) | **282** |
+| my own SQL, 7 query shapes, run pre-deploy | **282** |
+| F12-g's projection control, total headings, different regex | **290 = 282 + 8** |
+| PR #752's declaration row 6 | *237* |
+
+⚠️ **This is stated as a measurement, not an accusation.** The author flagged the
+discrepancy rather than hiding it, and every other row they wrote reproduces
+exactly — including the two structural claims I re-derived. The most likely
+reading is a query that was run, produced 237, and whose scope was described from
+memory rather than pasted. **Which is exactly why the fix is to paste the SQL,
+not to be more careful.**
+
+### ROW 16's STRUCTURAL PROBE — RE-VERIFIED PRE-DEPLOY, WITH ITS CONTROL
+
+Handed forward by session 01 and **re-run here rather than inherited**:
+
+    docker exec meddoc-pro-transcribe-md-worker-1 grep -c \
+      NOTE_HEADING_LINE_RE /app/apps/transcribe-md/src/lib/docx-generator.ts
+    → 0       must read >= 1 after the deploy
+
+    … grep -c renderSoapParagraphs …
+    → 2       traversal control — the probe reaches the file
+
+**The zero is only meaningful because the control is non-zero.** Without it, "the
+new symbol is absent" and "the probe never opened the file" are the same output —
+this repository's most expensive recurring defect, and the reason a post-deploy
+`1` will actually mean something.
+
 ### DISPOSITION — RE-BASELINED, NOT WAIVED, AND NOT A BLOCKER
 
 > **Row 6 is judged against `##` = 282**, measured by me, **committed before the
