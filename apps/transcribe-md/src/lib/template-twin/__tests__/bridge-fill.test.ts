@@ -84,11 +84,32 @@ const NOTE = [
  *  now, so a test that supplies no facts is asserting the blank path, not the
  *  fill path. Ids are real (ttfact_ + 24 hex) because that is exactly what the
  *  validator checks for. */
+// ⚠️ `value` DEFAULTS TO THE CANONICAL NUMERIC *STRING*, NOT A NUMBER, AND THAT
+// IS THE PRODUCTION SHAPE. It used to default to the bare number `n`, which no
+// L3 extraction produces: measured on production 2026-08-20, the compiled
+// version's own latestSyntheticTestManifest stores `value="3.1"` with
+// `number=3.1` alongside it.
+//
+// The distinction was invisible while the bridge copied the note's cell text,
+// and it is load-bearing now that the bridge derives the cell FROM THE FACT
+// (ruling #135, field-value-derivation.ts). A `narrative_text` field derives
+// `typeof fact.value === 'string' ? fact.value : null`, so a NUMERIC fact value
+// derives null.
+//
+// ⚠️ AND THE OLD FIXTURE WAS ASSERTING A SHAPE THE SHIPPED VALIDATOR REFUSES —
+// which nothing here noticed, because this file exercises the bridge and never
+// calls validateTemplateTwin. With numeric fact values every fill below is
+// ASSERTION_NOT_SUPPORTED (blocking) downstream, so these seven cases were
+// green about a document that could never render. Filed as a finding; the
+// end-to-end proof lives in gate-f5d-bridge-writes-what-the-validator-derives.
+//
+// Nothing else about this fixture moved: same numbers, same concepts, same
+// sides, same ids (the id digest keys on `n`, not on `value`).
 function fact(
   n: number,
   concept: string,
   laterality: 'left' | 'right' | 'bilateral' | 'not_applicable' = 'right',
-  value: string | number = n,
+  value: string | number = String(n),
 ) {
   const id = `ttfact_${Math.abs(hash(`${concept}${n}${laterality}`)).toString(16).padStart(24, '0').slice(0, 24)}`;
   return {

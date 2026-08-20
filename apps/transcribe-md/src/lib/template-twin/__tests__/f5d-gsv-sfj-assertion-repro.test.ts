@@ -210,8 +210,12 @@ function diameterFact(seed: string, dictated: string): EncounterFact {
   };
 }
 
-/** The resolution `bridge-fill.ts:258-266` builds — `value` is the markdown
- *  cell's BARE STRING: "no unit, no reformat" (its own comment, line 261). */
+/** ⚠️ THE RESOLUTION `bridge-fill.ts` USED TO BUILD — `value` is the markdown
+ *  cell's BARE STRING: "no unit, no reformat" (its own comment at the time).
+ *  Since F5-d(b) the shipped bridge derives the value from the cited fact
+ *  instead, so this is a HISTORICAL shape kept deliberately: it is what the
+ *  arms below feed the validator to prove the validator never stopped refusing
+ *  it. It is NOT what the bridge produces today. */
 function bridgedResolution(f: TemplateField, fact: EncounterFact, cellText: string): FieldResolution {
   return {
     fieldId: f.fieldId,
@@ -249,16 +253,36 @@ function codesFor(kind: TemplateField['kind'], dictated: string): string[] {
 // other one would be proving a system nobody ships.
 const PRODUCTION_CELL_KIND = 'narrative_text' as const;
 
+// ⚠️ THE FIX LANDED (F5-d(b), ruling #135) AND THESE TWO ARMS ARE DELIBERATELY
+// **NOT** INVERTED. Read this before "finishing the job" they ask for.
+//
+// The instruction below said they must become `.not.toContain(...)` once the
+// bridge and the validator agree. That instruction was written before the fix
+// DIRECTION was ruled, and inverting them now would be wrong twice over:
+//
+//  1. ⚠️ THEY DO NOT CALL THE BRIDGE. `bridgedResolution` above is a HAND-BUILT
+//     mirror of what bridge-fill.ts used to write. A mirror cannot invert when
+//     the real thing is fixed — it would have to be edited to say the opposite,
+//     which proves nothing about shipped code.
+//  2. **INVERTING THEM WOULD DELETE THE ONLY PROOF THAT THE GATE STAYED
+//     STRICT.** Ruling #135 forbids fixing F5-d by making the validator compare
+//     numerically. Read as they stand, these arms assert exactly that the
+//     validator STILL refuses a resolution whose text diverges from its cited
+//     fact — i.e. that the fix was a tightening. That is worth more after the
+//     fix than before it.
+//
+// THE INVERSION LIVES WHERE IT CAN BE HONEST — driving the real bridge into the
+// real validator, in gate-f5d-bridge-writes-what-the-validator-derives.test.ts.
+// Mutation-proved: weakening this comparison reddens that gate's own
+// anti-loosening arm.
 describe('F5-d ARM B — the REAL validator on the REAL production route', () => {
-  it('⚠️ "3.10" — the RIGHT blocked cell — is refused ASSERTION_NOT_SUPPORTED', () => {
-    // THIS IS THE DEFECT, CHARACTERISED. ⚠️ THE FIX INVERTS THIS ARM: when the
-    // bridge and the validator stop disagreeing about how to render a number,
-    // this must become `.not.toContain(...)`. An arm that silently keeps
-    // passing after the fix would be a decoration.
+  it('⚠️ "3.10" — the PRE-FIX bridge shape — is refused ASSERTION_NOT_SUPPORTED', () => {
+    // THIS IS THE DEFECT, CHARACTERISED — and, since F5-d(b), also the
+    // anti-loosening guard. See the block above for why it was not inverted.
     expect(codesFor(PRODUCTION_CELL_KIND, '3.10')).toContain('ASSERTION_NOT_SUPPORTED');
   });
 
-  it('⚠️ "4.40" — the LEFT blocked cell — is refused ASSERTION_NOT_SUPPORTED', () => {
+  it('⚠️ "4.40" — the other leg, same PRE-FIX shape — is refused too', () => {
     expect(codesFor(PRODUCTION_CELL_KIND, '4.40')).toContain('ASSERTION_NOT_SUPPORTED');
   });
 

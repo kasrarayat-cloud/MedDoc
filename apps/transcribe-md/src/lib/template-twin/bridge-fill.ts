@@ -25,6 +25,7 @@ import {
 } from './ir';
 import { bridgeChoiceSlotPicks } from './picks-bridge';
 import { citationOf, matchMeasurementFact } from './bridge-evidence';
+import { deriveFieldValueFromFact } from './field-value-derivation';
 import type { EncounterFact, SemanticMapping } from './ir';
 
 // ── numeric table-cell fill ─────────────────────────────────────────────────
@@ -239,7 +240,18 @@ function pickTable(tables: ParsedMarkdownTable[], irRows: IrTableRow[]): ParsedM
 
 /** A measurement is written ONLY when a real fact supports it, and it cites
  *  THAT fact. No match -> null, and the caller leaves the cell to the resolver
- *  baseline (blank) with the failure named in the log. */
+ *  baseline (blank) with the failure named in the log.
+ *
+ *  ⚠️ THE WRITTEN VALUE IS DERIVED FROM THE CITED FACT, NOT COPIED FROM THE
+ *  NOTE. It used to be the model's raw markdown cell text, with the comment
+ *  "narrative_text cells render the bare string; no unit, no reformat" — and
+ *  the validator re-derives the same cell from the FACT and compares with
+ *  strict `===`. The matcher proves the two agree NUMERICALLY (1e-9); it says
+ *  nothing about their TEXT. `"3.1" === "3.10"` is false, so a dictated
+ *  trailing zero produced ASSERTION_NOT_SUPPORTED, and because that issue is
+ *  BLOCKING the cost was the ENTIRE native fill for the visit — silently: the
+ *  document simply is not natively filled. Ruling #135; reproduced first by
+ *  f5d-gsv-sfj-assertion-repro.test.ts. */
 function supportedNumeric(
   field: TemplateField,
   value: string,
@@ -248,6 +260,55 @@ function supportedNumeric(
   mapping?: SemanticMapping,
   rowLaterality?: 'right' | 'left' | 'unknown',
 ): FieldResolution | null {
+  // ⚠️ THIS BRIDGE WRITES MEASUREMENTS AND ONLY MEASUREMENTS, AND THE GUARD IS
+  // LOAD-BEARING RATHER THAN TIDY. Deriving from the fact means the derivation
+  // now returns whatever the FIELD KIND says — including a BOOLEAN for a
+  // checkbox, taken from the fact's polarity. So a numeric table cell compiled
+  // as `checkbox` would have turned a dictated "3.1" into a TICKED BOX: the
+  // validator would accept it (it re-derives the same boolean) and the renderer
+  // would happily draw ☒. Before this change that combination was inert,
+  // because writing the string "3.1" against a derived boolean always failed
+  // assertion and blocked the render.
+  //
+  // Not reachable in production today — all 52 table_cell fields of the
+  // customer's compiled template are `narrative_text` (measured 2026-08-20) —
+  // and refused here anyway, because "not reachable today" is a fact about one
+  // template rather than a property of this function. `single_select` is
+  // refused for a second, independent reason: this function writes
+  // `selectedOptionOrdinal: null`, and the renderer resolves a select through
+  // its ordinal.
+  const WRITABLE_KINDS: ReadonlySet<TemplateField['kind']> = new Set([
+    'narrative_text',
+    'number',
+    'measurement',
+  ]);
+  if (!WRITABLE_KINDS.has(field.kind)) {
+    console.info(
+      `[template-twin:bridge] cell left blank field=${field.fieldId} reason=kind_not_writable_by_measurement_bridge kind=${field.kind}`,
+    );
+    return null;
+  }
+  // ⚠️ AND THE SECOND AXIS, WHICH THE KIND LIST ABOVE DOES NOT COVER — the
+  // watched-set failure caught inside this very guard by the adversarial pass.
+  // `assertionSupported` branches on `field.rowPrototype`, NOT on `field.kind`
+  // (validation/index.ts:206), and that branch demands a ROW ARRAY. A table
+  // cell inside a repeat region compiles to `rowPrototype: true` with kind
+  // `narrative_text` — which the list above happily admits — and this function
+  // only ever writes a SCALAR. That scalar then raises BOTH
+  // ASSERTION_NOT_SUPPORTED and REPEATING_ROW_SHAPE_INVALID, killing the whole
+  // native fill: the exact failure ruling #135 exists to remove.
+  //
+  // Not a regression (the pre-fix cell text was equally scalar) and not
+  // reachable on the customer's form — measured 2026-08-20, WM IOV compiles 80
+  // fields and ZERO rowPrototype. Refused anyway, for the same reason the kind
+  // list is: reachability is a fact about one template, not about this
+  // function. Filling repeat rows is a real feature and it is not this one.
+  if (field.rowPrototype) {
+    console.info(
+      `[template-twin:bridge] cell left blank field=${field.fieldId} reason=row_prototype_needs_row_array`,
+    );
+    return null;
+  }
   const matched = matchMeasurementFact({ value, segmentLabel, facts, mapping, rowLaterality });
   if (!matched.ok) {
     console.info(
@@ -255,10 +316,22 @@ function supportedNumeric(
     );
     return null;
   }
+  const derived = deriveFieldValueFromFact(field, mapping, matched.match.fact);
+  // A refusal from the derivation is honoured as a refusal. Writing `value`
+  // here as a fallback would restore the exact defect this call replaced.
+  if (derived === null) {
+    console.info(
+      `[template-twin:bridge] cell left blank field=${field.fieldId} reason=value_not_derivable_from_fact`,
+    );
+    return null;
+  }
   return FieldResolutionSchema.parse({
     fieldId: field.fieldId,
     status: 'supported',
-    value, // narrative_text cells render the bare string; no unit, no reformat
+    // Written through UNCHANGED, never stringified: the renderer type-checks by
+    // field kind (renderer.ts:778-824) and refuses a string where it wants a
+    // number with FIELD_VALUE_INVALID, which fails the whole render.
+    value: derived,
     ...citationOf(matched.match),
     selectedOptionOrdinal: null,
     reasonCode: 'table_cell_measurement',
@@ -366,6 +439,19 @@ export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): Fi
     //
     // This is ADDRESSING only. Which fact may support a cell, and what it must
     // cite, are unchanged.
+    //
+    // ⚠️ ONE HONEST QUALIFICATION, ADDED BY F5-d(b) AND FOUND BY ITS ADVERSARIAL
+    // PASS: since `supportedNumeric` can now refuse because a value is NOT
+    // DERIVABLE from the matched fact, DERIVABILITY IS AN INPUT TO ADDRESSING.
+    // A refused pairing still costs nothing (the note row is not consumed), but
+    // the loop moves on and a LATER note row may fill the cell instead — so the
+    // note row a cell ends up bound to can differ from the pre-fix choice.
+    //
+    // LATERALITY IS UNAFFECTED — `rowLateralityVerdict` (bridge-evidence.ts:207)
+    // is fail-closed on side and untouched, so no leg can cross. What changes is
+    // WHICH NOTE ROW, not WHICH LEG. Unreachable on production's route today
+    // (a narrative_text cell with a string-valued fact always derives), and
+    // stated here so nobody reads "addressing is unchanged" as wider than it is.
     const consumed = new Set<number>();
     for (const irRow of irRows) {
       const core = normVein(irRow.vein);
