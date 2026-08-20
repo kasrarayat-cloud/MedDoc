@@ -21808,3 +21808,110 @@ Recorded now rather than discovered mid-incident.
 - **QA could not have supplied one either** — its images predate this payload.
 - **The gotenberg container was not restarted**, so nothing here re-proves the
   font stack; it was already running the digest this deploy rebuilt identically.
+
+## ✅ F5-d — THE `GSV at the SFJ` REFUSAL IS REPRODUCED AND ITS MECHANISM NAMED — 2026-08-20, run `20260820-174139-b1` session 01
+
+**Acceptance shape (a) is MET. (b) and (c) are OWED, and the reason is written
+down rather than left as a gap.**
+
+The INBOX filed this with a PRIME SUSPECT and the explicit instruction to
+confirm or refute it with the same rigor that killed the last two confident
+mechanisms in this programme. **It is refuted, by running it.**
+
+### THE SUSPECT, REFUTED
+
+`segmentCongruent` token overlap (`bridge-evidence.ts:131-142`) is real —
+`tokens('GSV at the SFJ')` is `['gsv','sfj']`, `want.some(...)` is an ANY-match,
+and `'aagsv'.includes('gsv')` is true. **It is still not the mechanism here.**
+The REAL `matchMeasurementFact`, run against facts for all 20 dictated segments,
+MATCHES every one of the 20 cells — both blocked ones included. Every diameter
+in the derived encounter is globally unique, so `numbersEqual` (1e-9) narrows to
+a single fact BEFORE congruence is ever consulted.
+
+### THE MECHANISM — every link measured against PRODUCTION
+
+| link | where | what it holds |
+|---|---|---|
+| the model writes the cell | pinned synthetic note, prod | `\| GSV at the SFJ \| 3.10 \| 0.110 \|` |
+| L3 stores the fact | `latestSyntheticTestManifest`, prod | `value="3.1"` · `number=3.1` · `unit="mm"` |
+| the field kind | `template_twin_field_definitions`, prod | `narrative_text` — **all 52** measurement fields are |
+| the bridge writes the value | `bridge-fill.ts:261` | the RAW cell text — its own comment: *"no unit, no reformat"* |
+| the validator re-derives it | `validation/index.ts:141` | the FACT'S OWN `value` string |
+| the comparison | `validation/index.ts:288-292` | strict string `===` |
+
+`"3.1" === "3.10"` is **false** → `ASSERTION_NOT_SUPPORTED`. The two sides agree
+NUMERICALLY and differ only in TEXT — the matcher had already proved numeric
+identity to 1e-9 before the validator re-checked it through a lossier channel.
+
+⚠️ **WHY EXACTLY TWO CELLS, AND WHY BOTH LEGS OF ONE LABEL.**
+`verification-encounter.ts:132` emits `(3.1 + k*0.13).toFixed(2)`. Across all 20
+diameters that produces a non-canonical string **exactly twice** — `k=0` gives
+`"3.10"` and `k=10` gives `"4.40"` — and those are Right and Left
+`GSV at the SFJ`. The other 18 round-trip unchanged. That is not a coincidence
+to be admired; it is the whole reason the refusal names one label twice.
+
+### THE REPRODUCTION IS TRACKED, AND IT REFUTED ITS AUTHOR TWICE
+
+`f5d-gsv-sfj-assertion-repro.test.ts` — 12 arms, all green, calling SHIPPED code
+throughout (nothing re-implemented). Its first two runs killed two of my own
+hypotheses: a `measurement`-kind route production does not use, and a fixture
+whose fact value I had set equal to the cell text. **Both were caught by the
+controls, not by re-reading the code.**
+
+- **ARM A** — exactly 2 of 20 diameters fail a `String(Number(x)) === x`
+  round-trip, and they are the GSV-at-SFJ pair. A non-vacuity arm asserts all 20
+  cells are addressed first.
+- **ARM B** — the REAL validator refuses `3.10` and `4.40`, **paired with two
+  controls**: `3.23` (the immediate neighbour) and all 18 canonical diameters
+  are accepted. Without those, an all-refusing validator would give the same
+  green.
+- **ARM C** — the suspect, refuted; plus the uniqueness fact that explains why.
+
+**Mutation-proved.** Setting the fixture fact's `value` to the dictated text
+instead of the canonical form reddens **exactly the two defect arms and nothing
+else** (`2 failed | 10 passed`) — so the arm measures the canonicalisation
+specifically. The mutation was asserted APPLIED (marker count 1) before its
+result was believed, and restored from a scratch COPY, never from git.
+
+⚠️ **ARM B IS A CHARACTERISATION OF THE DEFECT AND THE FIX INVERTS IT.** Its two
+defect arms must become `.not.toContain(...)` when the fix lands. Said in the
+test itself, so an arm that silently keeps passing afterwards is a tripwire
+rather than a decoration.
+
+### ⚠️ WHAT IS OWED, AND WHY IT IS NOT DONE
+
+**(b) THE FIX IS RULED BUT NOT IMPLEMENTED — ruling #135 (PROVISIONAL).** The
+direction is fixed so the next session does not re-litigate it: **share the
+derivation** so the bridge writes the value the validator will re-derive. It is
+a TIGHTENING (the document carries the cited fact's value, not model free text),
+and it is the same "one rule, both callers" move `rowLateralityVerdict` already
+makes at `bridge-evidence.ts:207`.
+
+Two directions are ruled OUT, and both would have "worked":
+
+- ❌ **making the validator compare numerically** — weakens a shipped gate on the
+  clinical path; fails the provisional test outright.
+- ❌ **canonicalising the encounter's numbers** — certification would pass while
+  the defect stayed live. The INBOX sanctions changing the encounter, and here
+  that would be wrong: the encounter is doing its job. It found a real bug.
+
+⚠️ **AND THE DEFECT IS NOT SYNTHETIC-ONLY, WHICH IS THE FINDING BEHIND THE
+FINDING.** A real doctor dictating *"three point one zero millimetres"* produces
+the same mismatch on a real visit. A blocking validation issue kills
+`prepared.render` outright, so the cost is **the ENTIRE native fill for that
+visit**, not one blank cell. It is silent: the document simply is not natively
+filled.
+
+**The fix is a clinical-generation-path change, so `AGENTS.md` makes an
+INDEPENDENT adversarial refutation pass MANDATORY before merge.** This session
+landed the reproduction ONLY — tests, zero production code — which needs no such
+pass. Shipping the fix without one would be trading a named gate for speed on
+the one path where this repository has already measured the cost.
+
+**(c) the backfill re-run stays behind (b).** Re-running it now would produce a
+FOURTH verbatim refusal — exactly what the INBOX predicted — and would teach
+nothing new.
+
+**The mappings are intact and the doctor still owes nothing:**
+`NEEDS_CONFIRMATION`, 80 mappings CERTIFIED / 0 pending, 0 fill manifests —
+unchanged by this session, which wrote no production data.
