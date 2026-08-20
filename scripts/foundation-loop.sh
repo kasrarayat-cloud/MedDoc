@@ -39,6 +39,19 @@
 # not change" and "no item completed" are the same statement. A git-log check
 # would count commits, and a spinning session commits plenty.
 #
+# ⚠️ AND IT IS MEASURED ON `origin/main`, NOT ON THIS WORKING TREE — F20.
+# A session works in its own `git worktree` and lands its row through a merged
+# PR. It never writes the shared tree's copy of RELAY.md, which advances only
+# via the launch-time ff-sync BELOW — i.e. before the session runs. Hashing that
+# file therefore sampled something the judged session could not affect, and
+# collapsed "no item finished" into "no sync happened".
+#
+# It FIRED FALSELY on 2026-08-19 and ended a productive run: sessions 03 and 04
+# both launched with the tree at `febfdcfd`, session 04 then merged #740, #741
+# and #742 — all carrying ledger rows — and halted on NO-PROGRESS 37 minutes
+# later, 14 commits ahead of the file being read. Full mechanism in
+# `scripts/lib/ledger-progress.sh`.
+#
 # ── WHAT THE LOOP INHERITS ─────────────────────────────────────────────────
 # Every guardrail in MASTER.md, unchanged: deploy-prod.sh is the only path to
 # production; co-tenants are untouchable; Stripe stays TEST MODE; owner-boundary
@@ -58,6 +71,11 @@
 set -uo pipefail
 
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# F20 — the progress signal. Sourced AFTER the cd, so its relative path resolves
+# from the repo root like every other path in this file.
+# shellcheck source=scripts/lib/ledger-progress.sh
+. scripts/lib/ledger-progress.sh
 
 MAX_SESSIONS="${MAX_SESSIONS:-6}"
 # ⚠️ THE CAP IS A BATCH SIZE; **TOTAL_BUDGET** IS THE NIGHT'S REAL BOUND.
@@ -140,13 +158,21 @@ if [ "$START_BRANCH" != "main" ]; then
   echo
 fi
 
-# ⚠️ `prev_ledger_hash` LIVES OUTSIDE THE BATCH LOOP, DELIBERATELY. The
+# ⚠️ THE STREAK COUNTERS LIVE OUTSIDE THE BATCH LOOP, DELIBERATELY. The
 # no-progress switch watches the whole night, not each batch: resetting it per
 # batch would let a stalled loop relight forever, since the switch needs two
 # CONSECUTIVE unchanged sessions and a reset makes every batch's first session
 # look like a fresh start. The one kill switch that catches "busy but landing
 # nothing" must not be the one the relight silently disarms.
-prev_ledger_hash=""
+noprogress_streak=0
+# ⚠️ CANNOT-TELL IS COUNTED SEPARATELY AND NEVER REPORTED AS NO-PROGRESS. A
+# failed fetch is evidence about the network, not about the session, and calling
+# it "no progress" is precisely the collapse F20 exists to undo. But a switch
+# that is silently disarmed by a permanent fault is no switch at all — so a
+# cannot-tell that PERSISTS halts under its own name. Three consecutive, the
+# same debounce the runs-API waiter uses, because one blind sample is a blip.
+cannottell_streak=0
+CANNOTTELL_LIMIT=3
 overall_halt=""
 sessions_used=0
 batch=0
@@ -205,7 +231,19 @@ for (( n=1; n<=batch_size; n++ )); do
     break
   fi
 
-  ledger_before="$(sha256sum "$LEDGER" 2>/dev/null | cut -d' ' -f1)"
+  # F20 — sampled from `origin/main`, so it brackets the session rather than
+  # trailing it.
+  #
+  # ⚠️ NO `|| true` HERE, AND THAT IS LOAD-BEARING. This script runs `set -uo
+  # pipefail` WITHOUT `-e`, so a non-zero return does not end the run and needs
+  # no rescue. Adding `|| true` would make `$?` the exit status of `true` —
+  # ALWAYS 0 — silently disarming the cannot-tell arm and feeding the literal
+  # string `CANNOT-TELL:fetch-failed` in as if it were a hash. That reads as
+  # permanent progress: the exact inverse of the bug this fix exists for, wearing
+  # the fix's own clothes. (Written down because the first draft of this line had
+  # it.)
+  ledger_before="$(ledger_progress_hash "$LEDGER")"
+  ledger_before_rc=$?
 
   {
     echo "════════════════════════════════════════════════════════════════"
@@ -213,7 +251,7 @@ for (( n=1; n<=batch_size; n++ )); do
     echo "started : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "commit  : $(git rev-parse --short HEAD 2>/dev/null)"
     echo "branch  : $(git branch --show-current 2>/dev/null)"
-    echo "ledger  : ${ledger_before:0:12}"
+    echo "ledger  : ${ledger_before:0:12} (origin/main)"
     echo "════════════════════════════════════════════════════════════════"
   } >> "$LOG"
 
@@ -422,22 +460,66 @@ Reply with EXACTLY ONE of those markers and NOTHING else: no punctuation, no exp
   esac
 
   # ── KILL SWITCH 4 — no-progress ──────────────────────────────────────────
-  ledger_after="$(sha256sum "$LEDGER" 2>/dev/null | cut -d' ' -f1)"
-  if [ -n "$prev_ledger_hash" ] && \
-     [ "$ledger_after" = "$ledger_before" ] && \
-     [ "$ledger_before" = "$prev_ledger_hash" ]; then
-    halt_reason="NO-PROGRESS — $LEDGER unchanged across two consecutive sessions (through $RUN)"
+  # F20 — the CLOSING sample, taken from `origin/main` like the opening one, so
+  # the pair brackets the session that is being judged. See the note by
+  # `ledger_before` on why there is no `|| true`.
+  ledger_after="$(ledger_progress_hash "$LEDGER")"
+  ledger_after_rc=$?
+
+  if [ "$ledger_before_rc" -ne 0 ] || [ "$ledger_after_rc" -ne 0 ]; then
+    # ⚠️ NOT A NO-PROGRESS HALT. Neither sample says anything about the session.
+    # Reported LOUDLY — a switch that goes quiet when it goes blind is the
+    # failure this whole item is about.
+    cannottell_streak=$((cannottell_streak + 1))
     {
       echo ""
-      echo "🔴 NO-PROGRESS HALT."
-      echo "   The session reported CONTINUE, but $LEDGER is byte-identical for a"
-      echo "   second consecutive run. By this programme's rules an item is not"
-      echo "   finished until its ledger row lands, so no item finished."
-      echo "   CONTINUE is a claim about PROGRESS, not about effort."
+      echo "⚠️ LEDGER PROGRESS: CANNOT TELL (${cannottell_streak}/${CANNOTTELL_LIMIT})."
+      echo "   before: $ledger_before"
+      echo "   after : $ledger_after"
+      echo "   This is NOT scored as no-progress — a failed fetch is evidence"
+      echo "   about the network, not about session $RUN. The streak is what"
+      echo "   halts, not the single blind sample."
     } >> "$LOG"
-    break
+    if [ "$cannottell_streak" -ge "$CANNOTTELL_LIMIT" ]; then
+      halt_reason="LEDGER-UNREADABLE — $LEDGER could not be read on origin/main for $cannottell_streak consecutive sessions (through $RUN)"
+      {
+        echo ""
+        echo "🔴 LEDGER-UNREADABLE HALT."
+        echo "   The progress signal has been unmeasurable for $cannottell_streak sessions."
+        echo "   The loop is not being judged at all, so it stops rather than"
+        echo "   running on with its one anti-spin switch disarmed."
+      } >> "$LOG"
+      break
+    fi
+    # A blind sample cannot anchor a streak in either direction.
+    noprogress_streak=0
+  elif [ "$ledger_after" = "$ledger_before" ]; then
+    # ⚠️ RESET HERE TOO, NOT ONLY ON THE PROGRESS PATH. The limit reads
+    # "N CONSECUTIVE", and a reset that lives only in the final `else` would let
+    # three cannot-tells scattered across a whole night — each one separated by a
+    # perfectly measured session — add up to a halt that never happened
+    # consecutively. A counter whose name says "consecutive" and whose code
+    # accumulates is this house's own wrong-quantity defect. (First draft had it.)
+    cannottell_streak=0
+    noprogress_streak=$((noprogress_streak + 1))
+    if [ "$noprogress_streak" -ge 2 ]; then
+      halt_reason="NO-PROGRESS — $LEDGER unchanged on origin/main across two consecutive sessions (through $RUN)"
+      {
+        echo ""
+        echo "🔴 NO-PROGRESS HALT."
+        echo "   The session reported CONTINUE, but $LEDGER on origin/main is"
+        echo "   byte-identical from the start of the session to its end, for a"
+        echo "   second consecutive run. By this programme's rules an item is not"
+        echo "   finished until its ledger row lands, so no item finished."
+        echo "   CONTINUE is a claim about PROGRESS, not about effort."
+        echo "   ledger (origin/main): $ledger_before"
+      } >> "$LOG"
+      break
+    fi
+  else
+    noprogress_streak=0
+    cannottell_streak=0
   fi
-  prev_ledger_hash="$ledger_before"
 done
 
   # ── BATCH BOUNDARY — RELIGHT, or carry the halt outward ──────────────────

@@ -20865,3 +20865,213 @@ no cure attempt under MASTER's external-fault clause. It is not
 *re-run-and-hope*: `e2e` on the same commit sailed past the identical install
 and ran the full pack, which is what established the fault as **per-job
 intermittent** rather than per-commit.
+
+---
+
+### ✅ F20 — THE NO-PROGRESS KILL SWITCH WAS READING A FILE THE SESSION CANNOT WRITE — **2026-08-19, run `20260819-143043-b1` session 01**
+
+**THE PREVIOUS RUN HALTED ON NO-PROGRESS HAVING LANDED THREE PRs.** Run
+`20260818-232127-b1` ended at `12:44:53Z` with `#740`, `#741` and `#742` merged
+— every one of them carrying a `RELAY.md` row — and the runner's own banner
+said *"no item finished"*. **It was wrong, and the reason is structural rather
+than careless.**
+
+`KILL SWITCH 4` hashed the **shared tree's working copy** of
+`docs/foundation/RELAY.md`. A session never writes that file: it works in its
+own `git worktree` and lands its row on `origin/main` through a merged PR. The
+shared tree learns of it only through the launch-time `--ff-only` sync, **which
+runs before the session**. So the switch sampled something the judged session
+could not affect.
+
+**MEASURED FROM THE LOGS, NOT INFERRED:**
+
+| session | launch (sample) | shared-tree commit | ledger hash |
+|---|---|---|---|
+| run03 | `06:52:02Z` | `febfdcfd` | `c631a099` |
+| run04 | `09:11:51Z` | `febfdcfd` | `c631a099` |
+
+⚠️ **AND THE FIRST HYPOTHESIS WAS WRONG, WHICH IS WORTH RECORDING.** The obvious
+reading is *"the ff-sync broke"*. It did not: `origin/main` genuinely **was**
+`febfdcfd` at both sample moments — the previous merge landed `06:05:58Z` and
+the next at `10:00:35Z` — so the sync correctly did nothing. The three merges
+landed at `10:00:35Z` and `~12:07Z`, **all after the last sample the switch
+would ever take**, leaving it **14** commits behind the file it was reading
+(`git rev-list --count febfdcfd..37a654f4` = 14). *Read to form a hypothesis;
+run something to name a mechanism.*
+
+⚠️ **IT IS THIS HOUSE'S OWN NAMED FAMILY — two distinguishable states collapsed
+into one observation.** *"No item finished"* and *"no sync ran"* produced
+byte-identical output, and only one of them is a finding. **A fail-CLOSED kill
+switch had been built on a deliberately fail-OPEN input** — the runner's own
+comment says the sync must never refuse, *"a stale tree is bad; a halted loop is
+worse"*.
+
+**THE FIX — ruling #132 (PROVISIONAL).** `scripts/lib/ledger-progress.sh`
+measures the ledger **on `origin/main`, after a fresh fetch, at both ends of the
+session**, so the pair BRACKETS the session instead of trailing it.
+**CANNOT-TELL is a third state** — `exit 2`, its own `LEDGER-UNREADABLE` halt
+name, debounced at 3 consecutive — because a failed fetch is evidence about the
+network and never about the session.
+
+**⚠️ IT IS NOT A LOOSENING, AND THAT IS ASSERTED RATHER THAN CLAIMED.** Two arms
+prove a spinning session is still caught, including the case where `main` moves
+**without** the ledger moving — which a git-log check would have scored as
+progress.
+
+| proof | result |
+|---|---|
+| `gate-f20-ledger-progress-universe.test.ts` | **20 of 20**, real bash, real `origin`, throwaway repos |
+| unit suite, controlled delta vs `origin/main` | **+1 file, +20 tests**; failures **16/1 on BOTH** trees |
+
+**MUTATION-PROVED FIVE WAYS, AND THE LOAD-BEARING ONE IS THE *PARTIAL* FIX:**
+
+| mutation | reddens |
+|---|---|
+| **the PARTIAL fix** — lib hashes the working copy, every exit code and token intact | **the stale-working-tree arm ALONE** (1 red, 18 green) |
+| `\|\| true` re-added on the sample | the RC-capture arm (1 red) |
+| cannot-tell reset removed from one path | the *"consecutive"* arm (1 red) |
+| the COMPLETE inverse — `sha256sum "$LEDGER"` restored | 2 wiring arms |
+| a deliberate syntax error in the runner | the parse arm |
+
+⚠️ **TWO OF THOSE FIVE ARE DEFECTS THIS FIX'S OWN FIRST DRAFT CONTAINED**, both
+caught before the first green: a `|| true` that would have made `$?` the status
+of `true` — **always 0** — silently disarming the cannot-tell arm and feeding
+the literal string `CANNOT-TELL:fetch-failed` in as a hash (*permanent progress:
+the exact inverse of the bug, wearing the fix's clothes*); and a
+`cannottell_streak` reset on only one measured path, which would have let three
+**non-consecutive** blind samples add up to a halt whose name says *consecutive*.
+
+⚠️ **AND THE GATE HAD A HOLE OF THE SAME SHAPE, FOUND BY ASKING WHAT IT DOES NOT
+WATCH.** Every wiring arm read `foundation-loop.sh` as **text**, so a syntax
+error in it would have left all of them green while the loop could not start at
+all — the worst available outcome, since a runner that does not parse costs the
+whole night rather than one item. A parse arm was added and **positive-controlled
+with a real syntax error** before being believed.
+
+**HONEST LIMIT, NAMED RATHER THAN IMPLIED.** This proves the MEASURE and the
+wiring. It does not prove the runner's loop arithmetic end to end — that would
+mean launching sessions, and a test that spawns 24 headless agents is not a
+test. The streak semantics are guarded by the wiring arms instead, which a
+silent revert would have to remove.
+
+---
+
+### ✅ F21 — THE OWED #739 CORRECTION, AND THE PLAN IT WAS OWED TO IS WITHDRAWN TOO — **2026-08-19, run `20260819-143043-b1` session 01**
+
+**THIS DISCHARGES AN EXPLICIT DEBT.** Session 04 closed owing the #131(b)
+correction and said so plainly: it ran out of gate cycles, not evidence.
+Ruling **#131(c)** records the whole of it.
+
+**The prediction #131(b) closed with fired.** *"If the stall survives a bounded
+20-second wait with three retries, that is a finding."* It survived.
+
+> ⚠️ **AN INACTIVITY TIMEOUT NEVER TRIPS ON A CONNECTION THAT IS TRANSFERRING.
+> Slow is not stalled, and only one of those is a thing apt can detect.**
+
+**The drop-in STAYS** — harmless, self-proving, correct for a genuine stall.
+**What changes is the CLAIM:** #739 is not fixed and not bounded; it is bounded
+*per half, with the phase named*.
+
+#### ⚠️ THE MIRROR PIN IS WITHDRAWN, ON THIS SESSION'S OWN MEASUREMENT
+
+Measured in one step, seconds apart, from **one** host (`32266134945` a2):
+
+| phase | measured |
+|---|---|
+| index — `Fetched 11.4 MB in 36s` | **313 kB/s** |
+| pool — `fonts-ipafont-gothic` 3513 kB | **~24 kB/s** |
+
+The pin's whole basis was *"the index came down fast from the other host"* — and
+the index comes down fast from **this** host too. **A >13× index-vs-pool
+divergence on one mirror means index speed discriminates nothing.**
+
+#### ⚠️ AND I CORRECTED MYSELF WITHIN THE HOUR — THE PART WORTH COPYING
+
+I first posted to #739 that the fault is **per-job intermittent**, citing *"CI
+passed on the very same commit ~30 minutes earlier."* **That never
+discriminated:** two observations 31 minutes apart fit *per-job randomness* and
+*time-varying mirror* equally well, and I stated one as measured. It was an
+inference wearing a measurement's clothes — this house's own named failure,
+committed by me, in a comment.
+
+**Refuted the same hour, by better evidence:**
+
+| time | runs | apt half |
+|---|---|---|
+| `14:47:34Z` | PR #744 `CI` | passed |
+| `15:18:45Z` | PR #744 `e2e` a2 | **stalled** |
+| `15:24:59Z` | PR #744 `e2e` a3 | passed |
+| `15:53:54Z` | `main` `CI` + `a11y-ci` + `e2e`, **same second, different runners** | **all three stalled** |
+
+`secrets-scan` — the one required workflow with **no** Playwright install —
+passed in that same second. **Three concurrent failures is not independent
+per-job randomness.**
+
+#### ⚠️ AND THEN MY SECOND MECHANISM WAS REFUTED TOO, IN THE SAME SESSION
+
+I replaced "per-job" with **time-correlated bursts**. Twenty minutes later, on
+`main` @ `904991ab`:
+
+| run | install began | outcome |
+|---|---|---|
+| `a11y-ci` | `16:12:41.37Z` | **stalled out at 5 min** |
+| `CI` | `16:12:56.83Z` | **passed** |
+
+**Fifteen seconds apart. Opposite outcomes.** So the bursts model is dead too.
+
+> **TWO MECHANISMS PROPOSED BY ME, BOTH REFUTED, IN ONE SESSION.** That is this
+> house's own *"two mechanisms for one symptom, both wrong, in one night"*, and
+> the correct response is to **stop proposing and measure**.
+
+**WHAT IS ACTUALLY ESTABLISHED — a QUANTITY, not a story.** The discriminating
+variable is **pool throughput**, and it varies **~8× between two runners fifteen
+seconds apart**:
+
+| run | index | **pool (21.1 MB)** |
+|---|---|---|
+| `CI` (passed) | 11.4 MB in 6s — 1811 kB/s | **1 min 55 s — 184 kB/s** |
+| `a11y-ci` (stalled) | — | **~24 kB/s** |
+
+⚠️ **AND THE CEILING IS TIGHT, NOT GENEROUS: the PASSING run used 1 m 55 s of its
+5-minute budget.** About **2.6×** of headroom is all that separates green from
+red, which is why an 8× swing decides it.
+
+It is **not** deterministic per-commit, **not** purely time-windowed, **not**
+independent-per-job. **The untested hypothesis that fits all three observations
+is per-runner backend assignment** behind the load-balanced
+`azure.archive.ubuntu.com` name — **named as UNTESTED, not adopted.** The one
+cheap instrument that would settle it: **log the resolved mirror IP in the
+install step and correlate it with throughput.**
+
+#### 🟢 AND THE STRONGEST CANDIDATE IS CANON'S OWN RULE, ALREADY WRITTEN DOWN
+
+> **"AN EXTERNAL REACH IN THE BUILD IS REMOVED, NOT RETRIED."**
+
+Every cure tried so far — apt timeouts, retries, a mirror pin — tries to make a
+**21.1 MB fetch from the public internet, on every required job, four times per
+commit** go faster or fail louder. The canon-consistent move is to **stop making
+the fetch**: cache the `.deb` payload (the workflow already caches Playwright
+**browsers** and does *not* cache the apt debs), or bake the deps into an image.
+Same disposition `next/font/google` got, for the same reason.
+
+⚠️ **Deliberately NOT built this session** — it changes four required workflows,
+and it belongs in front of an owner rather than in a session that has already
+been wrong twice about this fault in one night.
+
+#### 🔴 THE OPERATIONAL CONSEQUENCE, WHICH OUTRANKS THE LABEL
+
+**#739 CAN TAKE `main` RED WITH NO CITATION AT ALL, AND DID** — `f98c14fe`, a
+docs-only commit adding **one file, 81 insertions**, went 1 of 4. A deploy taken
+in that window ships a commit whose gate never passed. *(Discharged by the
+descendant: `904991ab` contains it — see the F20 row's citation.)*
+
+**Unpark condition CHANGED rather than counted up to:** it was *"a third stalled
+run naming the same host"*, and the third run is what **refuted** the plan that
+count existed to authorise. It is now **log the resolved mirror IP and correlate
+it with pool throughput** — or an owner's word.
+
+⚠️ **PROCESS NOTE AGAINST MYSELF, kept because it cost evidence:** I re-ran the
+failed job **before** reading its log, and `--log-failed` then returned nothing.
+The numbers survived only because `gh run view <id> --attempt 2 --log` still
+works. **Read the attempt's log before re-running it** — a re-run is not free of
+evidence cost.
