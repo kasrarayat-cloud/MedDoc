@@ -669,6 +669,12 @@ const TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
 const TABLE_SEPARATOR_ROW_RE = /^\s*\|[\s:|-]+\|\s*$/;
 const TASK_LINE_RE = /^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/;
 
+/** A markdown section heading at ANY depth — group 1 is the hashes (depth),
+ *  group 2 is the heading TEXT. Deliberately the same shape as
+ *  `note-shape.ts:291`'s `NOTE_SECTION_HEADING_RE`, so the renderer and the
+ *  note-shape classifier cannot disagree about what a heading line is. */
+const NOTE_HEADING_LINE_RE = /^[ \t]*(#{1,6})[ \t]+(.+?)[ \t]*$/;
+
 /** Walk markdown-ish SOAP text and emit Paragraphs (plus real Word
  *  Tables for GitHub-style markdown tables). Supports `##` headings,
  *  `**Label:** content` / `*Label:* content`, `**bold**` + `*italic*`
@@ -713,15 +719,41 @@ function renderSoapParagraphs(soap: string, formOnly = false): (Paragraph | Tabl
       out.push(new Paragraph({ spacing: { after: 80 }, children: [] }));
       continue;
     }
-    if (/^##\s+/.test(line)) {
+    // ⚠️ EVERY MARKDOWN HEADING DEPTH RENDERS AS A HEADING — F6.4, ruling #133.
+    //
+    // This matched `^##\s+` ONLY. A `###` line therefore fell through to the
+    // plain-paragraph branch at the bottom of this loop and printed ITS OWN
+    // HASHES into the signed document — while `ehr-formatters.ts:88` strips
+    // `^#{1,6}\s+`, so the clipboard read the same note correctly. Two
+    // surfaces, one note, two different records.
+    //
+    // ⚠️ AND SINCE F3 THE BLAST RADIUS IS FOUR SURFACES, NOT ONE: the pre-sign
+    // preview, the signed preview, the Word download and the PDF download all
+    // converge on `generateVisitDocx`.
+    //
+    // MEASURED ON PRODUCTION 2026-08-20, not inferred: `##` 282 heading lines
+    // across 47 visits; `###` **8 lines across 3 visits**; `#` none; headings
+    // with LEADING whitespace **0** — so the `[ \t]*` tolerance below (which
+    // matches `note-shape.ts:291`'s `NOTE_SECTION_HEADING_RE`) is forward-only
+    // and moves nothing today.
+    //
+    // TWO TIERS, DELIBERATELY, AND NO LADDER WAS INVENTED. `#`/`##` keep
+    // today's treatment BYTE-IDENTICALLY, so the 282 existing lines do not
+    // move. `###`–`######` render bold at BODY size — a weight the document
+    // already uses for `**Label:**` runs — so a subsection reads as
+    // subordinate to its section instead of shouting at the same size. A
+    // six-level size ladder would be a new visual vocabulary nobody ruled.
+    const heading = line.match(NOTE_HEADING_LINE_RE);
+    if (heading) {
+      const subsection = heading[1].length >= 3;
       out.push(
         new Paragraph({
-          spacing: { before: 160, after: 80 },
+          spacing: { before: subsection ? 120 : 160, after: 80 },
           children: [
             new TextRun({
-              text: line.replace(/^##\s+/, ''),
+              text: heading[2],
               bold: true,
-              size: 24,
+              ...(subsection ? {} : { size: 24 }),
             }),
           ],
         })

@@ -28,9 +28,22 @@ export interface FormSignatureStyle {
  *  impression). Only these are renumbered — narrative sections stay prose. */
 const ENUMERABLE_SECTION_RE = /\b(findings?|recommendations?|impression|plan)\b/i;
 // Note headings are emitted as `## {label}` (build-soap-prompt / build-ultrasound-
-// prompt); the generators detect a section with `/^##\s+/`. Match the SAME level
-// so renumber's notion of a "section" agrees with the generators (a bilateral
-// `### Right`/`### Left` sub-block is not a section boundary).
+// prompt). `##` here is a SECTION BOUNDARY for renumbering — deliberately NOT a
+// "what counts as a heading" test — so a bilateral `### Right`/`### Left`
+// sub-block does not start a new section and its prose is renumbered as one run.
+//
+// ⚠️ THIS COMMENT USED TO READ *"the generators detect a section with
+// `/^##\s+/`. Match the SAME level …"*, AND F6.4 MADE THAT FALSE.
+// `docx-generator` now renders EVERY depth `#{1,6}` as a heading, because
+// matching `^##` only meant a `###` line printed its own hashes into the signed
+// document (measured: 8 lines across 3 production visits) while
+// `ehr-formatters.ts:88` stripped them and the clipboard read the same note
+// correctly. The two regexes are no longer "the same level" and MUST NOT be
+// re-aligned by widening this one — that would make every `### Right` a section
+// boundary and split a bilateral study's renumbering in half.
+//
+// The bail at `:76` (`/^#{3,}\s/m`) is the other half of that intent and is
+// unchanged: structured sub-block content is left alone rather than renumbered.
 const SECTION_HEADING_RE = /^##\s+(.+?)\s*$/;
 const ANY_SECTION_HEADING_RE = /^##\s+/;
 

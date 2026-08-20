@@ -40,7 +40,22 @@ const FORBIDDEN_UNIVERSAL: Array<{ name: string; re: RegExp }> = [
 // class is asserted only where the surface itself is the finished document.
 const FORBIDDEN_MARKDOWN: Array<{ name: string; re: RegExp }> = [
   { name: 'unrendered markdown bold', re: /\*\*/ },
-  { name: 'unrendered markdown heading', re: /(^|\n)#{1,6}\s/ },
+  // ⚠️ `[ \t]*` IS LOAD-BEARING AND IS THE SECOND HALF OF F6.4.
+  //
+  // The row diagnosed one cause — the tag strip mapped every tag to a space,
+  // so the text held no `\n` at all. Restoring the newline is the obvious
+  // first edit and it is NOT SUFFICIENT: a paragraph's own opening tags
+  // (`<w:p><w:r><w:t>`) each become a space too, so the rendered line reads
+  // `"\n      ### Bilateral …"` and `(^|\n)#` still cannot match. **The arm
+  // stays vacuous through the fix its own diagnosis invites.**
+  //
+  // Measured before either edit: `HAS_NEWLINE true · HAS_HASHES true ·
+  // HEADING_ARM_MATCH false` on a document that plainly leaked `###`.
+  //
+  // The tolerance matches the app's own `NOTE_SECTION_HEADING_RE`
+  // (`note-shape.ts:291` — `^[ \t]*#{1,6}[ \t]+`), so the gate and the
+  // classifier agree about what a heading line is.
+  { name: 'unrendered markdown heading', re: /(^|\n)[ \t]*#{1,6}\s/ },
 ];
 
 function assertClean(surface: string, rendered: string, opts: { markdown?: boolean } = {}) {
@@ -48,6 +63,28 @@ function assertClean(surface: string, rendered: string, opts: { markdown?: boole
   for (const { name, re } of set) {
     expect(re.test(rendered), `${surface} leaked forbidden pattern: ${name}`).toBe(false);
   }
+}
+
+// ⚠️ F6.4 — THE PARAGRAPH BOUNDARY IS WHAT MAKES THE HEADING ARM ABLE TO FAIL.
+//
+// This used to be `xml.replace(/<[^>]+>/g, ' ')`, which maps EVERY tag to a
+// space — so the stripped text carried no `\n` anywhere, and
+// `/(^|\n)#{1,6}\s/` could then only ever match at index 0, which is a space
+// (the document opens `<?xml …?>`). **The heading arm could not go red for any
+// input**, which is this house's ratchet class: a green that cannot move.
+//
+// `</w:p>` is a paragraph END and `<w:br/>` is an explicit line break, so both
+// become `\n` BEFORE the general strip. Everything else still becomes a space,
+// because a tag boundary inside a paragraph separates two runs of one line.
+//
+// ⚠️ THE NON-VACUITY CONTROL IS BELOW AND IT IS NOT OPTIONAL: assert the
+// stripped text actually contains a `\n`. Reverting this helper leaves every
+// other assertion in this file green.
+function docxTextFromXml(xml: string): string {
+  return xml
+    .replace(/<w:br\b[^>]*\/?>/g, '\n')
+    .replace(/<\/w:p>/g, '\n')
+    .replace(/<[^>]+>/g, ' ');
 }
 
 // A note carrying every dirty input: an ADOPTED prose section (must survive
@@ -61,6 +98,16 @@ const RAW_DIRTY_NOTE = [
   EMPTY_SECTION_PLACEHOLDER,
   '',
   '## ASSESSMENT',
+  '',
+  // ⚠️ F6.4 — A DEPTH THE RENDERER DID NOT HANDLE, AND PRODUCTION HOLDS IT.
+  // Measured 2026-08-20 on the production corpus: `##` 282 heading lines / 47
+  // visits, `###` 8 lines / 3 visits. `docx-generator` matched `^##\s+` ONLY,
+  // so a `###` line fell through to the plain-paragraph branch and printed its
+  // own hashes into the signed document — while `ehr-formatters.ts:88` strips
+  // `^#{1,6}\s+` and the clipboard read it correctly. Two surfaces, one note,
+  // different records.
+  '### Bilateral lower extremity',
+  'Reflux present at the saphenofemoral junction.',
   '',
   '## DIAMETER AND REFLUX TIME — Left Leg',
   '| DIAMETER (mm) | REFLUX TIME (seconds) |',
@@ -126,7 +173,12 @@ describe('export cleanliness — rendered surfaces carry no forbidden patterns',
     const buf = await generateVisitDocx(data);
     const zip = await JSZip.loadAsync(buf);
     const xml = await zip.file('word/document.xml')!.async('string');
-    const text = xml.replace(/<[^>]+>/g, ' ');
+    const text = docxTextFromXml(xml);
+    // ⚠️ NON-VACUITY, FIRST — the heading arm is meaningless without it.
+    expect(
+      text.includes('\n'),
+      'docx text carries no newline — the heading arm cannot go red (F6.4)'
+    ).toBe(true);
     assertClean('docx', text, { markdown: true });
     expect(text).toContain(EXPORT_EMPTY_SECTION_TEXT); // empty/set-aside → "Not documented."
     expect(text).toContain(EXPORT_EMPTY_CELL); // table cell → "—"
