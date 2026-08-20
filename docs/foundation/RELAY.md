@@ -423,7 +423,7 @@ archive-loop one especially, which is a live hazard rather than a polish task.**
 | ~~F6.1~~ | ✅ **FIXED AND GATED — 2026-08-17, session 02 of run `20260817-033820-b2`.** `freeTextRuns` in `docx-generator.ts`; **four** free-text sites render through it. 15 arms, **11 of 11 mutations reddened**, plus a RENDERED differential through the real LibreOffice. See the ledger row below. ⚠️ **THE ROW WAS NARROWER THAN THE DEFECT IN THE DIRECTION THAT MATTERS.** It says *"in the DOCX"*; since F3 the pre-sign preview, the signed preview, the Word download and the PDF download all converge on `generateVisitDocx`, so **one flattening reached FOUR surfaces** — while `ehr-formatters.ts:423` kept the breaks, so the EHR clipboard and the signed document disagreed about what the note said. ⚠️ **And it was not "patient-summary" only**: referral `reason`, referral `relevant_history` and modifier `rationale` flatten identically (0 prod rows carry a break there TODAY, against live controls of 13 and 14 — latent, not absent). **Measured: 43 of 43** prod visits with a non-empty `patientSummary` satisfy the defect's own predicate. *Previous wording:* **Patient-summary line breaks are lost in the DOCX** — a genuine fidelity bug on the same class #112 fixed for numbers |
 | F6.2 | **`CLINICAL NOTE` heading renders on an EMPTY note** | a heading over nothing is a document asserting content it does not have |
 | ~~F6.3~~ | ✅ **LIVE IN PRODUCTION 2026-08-17T06:53Z — merge `1537ae47`, cited 4 of 4, 15 of 15 declared rows matched.** Built and gated the same session (01 of run `20260817-033820-b2`). `archive-pdf-budget.ts`; both archive routes render THROUGH it. 35 arms, **11 of 11 mutations reddened**. See the ledger row below. ⚠️ **The refutation pass found a defect in the FIX**: the first draft charged elapsed wall-clock, which the audio downloads in the same loop would have consumed — truncating the archives of exactly the doctors with the most recordings, while the sidecar sat idle. It charges sidecar-time now, and M11 re-plants the original defect to prove the gate sees it. *Previous wording:* ⚠️ **The archive loop is UNBOUNDED against a single strictly-serializing sidecar** — **measured: a 0.42s staircase**, and `maxDuration` is **INERT on a standalone build** — so nothing bounds it. Real hazard, own item, not a tail |
-| ~~F6.4~~ | ✅ **FIXED AND GATED — 2026-08-20, run `20260820-014110-b1` session 01.** The arm was vacuous for **TWO** independent reasons, not the one the row diagnosed — and repairing it exposed a **live product defect on the signed record**: `docx-generator` matched `^##\s+` only, so a `###` line printed its own hashes into the document while the EHR clipboard stripped them. **Measured on production: 8 such lines across 3 visits.** Ruling **#133**. See the ledger row at the end of this file. | ~~a green that cannot go red — the ratchet class this house names on sight~~ **CONFIRMED, and narrower AND wider than the row said** |
+| ~~F6.4~~ | ✅ **LIVE IN PRODUCTION 2026-08-20T06:15:17Z — deployed `7c42d2d7`, 15 of 15 judged, session 02.** The worker's `NOTE_HEADING_LINE_RE` went **0 → 2** against a traversal control steady at 2. *Previous status:* ✅ **FIXED AND GATED — 2026-08-20, run `20260820-014110-b1` session 01.** The arm was vacuous for **TWO** independent reasons, not the one the row diagnosed — and repairing it exposed a **live product defect on the signed record**: `docx-generator` matched `^##\s+` only, so a `###` line printed its own hashes into the document while the EHR clipboard stripped them. **Measured on production: 8 such lines across 3 visits.** Ruling **#133**. See the ledger row at the end of this file. | ~~a green that cannot go red — the ratchet class this house names on sight~~ **CONFIRMED, and narrower AND wider than the row said** |
 | F6.5 | **`gate-r1`'s "BOTH sides" test asserts one side** | the title is wider than the measurement |
 | ~~F6.6~~ ✅ **CLOSED 2026-08-16 — VERIFIED FIXED, see the note under this table** | ~~**`check-cotenants.sh` watches FOUR hosts; MASTER.md STEP 0.6 names FIVE**~~ | `www.quillmd.com` is missing from its `EXPECTED` table — **my omission when I wrote it**. One line; rides the next small PR rather than waiting for F6 |
 
@@ -21307,6 +21307,93 @@ night's latency is the wrong side of that trade, and the shared tree is left on
 
 #### WHAT IS AND IS NOT LIVE
 
-**The defect is still in production.** The 8 `###` lines across 3 visits still
-render their own hashes on the next export, and will until this ships. The fix
-is on `main` and cited; it is not in the image.
+⚠️ **THIS SECTION IS SUPERSEDED — F6.4 IS LIVE IN PRODUCTION SINCE
+2026-08-20T06:15:17Z.** *Previous wording, kept for the record:* **"The defect is
+still in production.** The 8 `###` lines across 3 visits still render their own
+hashes on the next export, and will until this ships. The fix is on `main` and
+cited; it is not in the image."
+
+**Closed by the row immediately below, in the same pass that closed the item** —
+this file's own standing rule, and the one it keeps paying for.
+
+---
+
+### 🟩 THE TREE DEPLOY IS LIVE AND JUDGED — **2026-08-20T06:15:17Z, run `20260820-014110-b1` session 02 — 15 of 15**
+
+**F6.4's parked deploy is discharged, and F5-c shipped with it.** The park's
+unblock condition was written down by session 01 — *"deploy the two separately,
+or write one declaration naming the FULL diff"* — and the second option is what
+happened.
+
+| | |
+|---|---|
+| deployed commit | **`7c42d2d77eb0f7ec1a83b2b4d61acd74a13e5ea6`** |
+| replaced | `24b739f9` (2026-08-19T05:03:56Z), read from the deploy log, not inherited |
+| declaration | `docs/foundation/deploys/20260820-b3459390.md` — PR **#752**, merged as `7c42d2d7` |
+| resolution | **CARRY-FORWARD**, mode `strict`; declaration committed `05:31:05Z`, deploy began `06:15:17Z` |
+| judgment | **15 of 15 — 3 MUST CHANGE, 12 MUST NOT CHANGE** · full report: `docs/deploy-reports/20260820-tree-deploy-judgment.md` |
+| rollback | `pre-7c42d2d7-20260820` on app / worker / gotenberg, cut against the RUNNING digests and verified |
+
+**F6.4's own row 16 is the point of the deploy and it moved:**
+`NOTE_HEADING_LINE_RE` in the worker's `docx-generator.ts` **0 → 2**, against a
+traversal control (`renderSoapParagraphs`) steady at **2**. *The zero was only
+ever meaningful because the control was non-zero.* The 8 `###` lines across 3
+production visits no longer print their own hashes into an exported document.
+
+#### ⚠️ TWO THINGS ARE NAMED RATHER THAN ABSORBED, PER THE DECLARATION'S OWN FINDING RULE
+
+**1 · MUST-CHANGE row 2 could not be satisfied as written, and the reason is
+structural.** It says *"the deployed commit becomes `b3459390`"*; production runs
+`7c42d2d7`. **Merging the declaration is what moved `main`** — so a declaration
+that names a sha can never name the commit that lands it, once the gate requires
+that declaration to be COMMITTED. Measured: the FULL diff `b3459390..7c42d2d7` is
+**one file, the declaration itself**, so the runtime tree shipped is
+byte-identical to `b3459390` — which this session re-verified **4 of 4 with
+`--expect`** at STEP 0. *Recommendation recorded in the judgment: write that row
+as "…or a descendant whose only diff is this declaration", which is checkable and
+always satisfiable.*
+
+**2 · MUST-NOT-CHANGE row 6's baseline was NOT REPRODUCIBLE and was RE-BASELINED
+BEFORE THE ACT.** The declaration says `##` heading lines in `soapFinal` = **237**,
+explaining the gap from F6.4's 282 as a scope difference. **Scanning `soapFinal`
+only returns 282**, and so do seven further query shapes. Three independent
+sources say 282 and none says 237:
+
+| source | `##` |
+|---|---|
+| F6.4's own committed declaration `20260820-64c49a45.md` | **282** |
+| this session's SQL, 8 shapes, run pre-deploy | **282** |
+| F12-g's projection control (all depths, different regex) | **290 = 282 + 8** |
+
+Judged **282 → 282**, against a figure measured and committed at `05:42:56Z`, so
+§2.5's product survives intact. **Not a blocker:** row 6 is the sanity row, the
+discriminating row is 7 (`###` = 8, reproduced exactly on the same three visits),
+and this deploy carries no migration and no backfill. Evidence and SQL:
+`docs/deploy-reports/20260820-tree-deploy-baseline-addendum.md`.
+
+> **THE CLASS, AND IT IS THE ONE WORTH CARRYING FORWARD: A DECLARATION STATES
+> ITS ROWS AND MUST ALSO STATE ITS QUERIES.** Row 6 was uncheckable by a second
+> actor *not* through carelessness — the discrepancy was flagged and explained —
+> but because the explanation is the part that does not reproduce, and there was
+> no SQL to check it against. **Under the standing split the writer of a
+> declaration and the runner of a deploy are routinely different sessions**, so a
+> row the deploying actor cannot recompute is a row that cannot be judged.
+
+#### HONEST LIMITS
+
+- ⚠️ **The APP-image probe is a CANNOT-TELL, not a pass.** The same grep returned
+  **0** *and so did its traversal control* — two zeroes with opposite meanings,
+  one broken instrument. The app ships a standalone Next build (`server.js`, no
+  source tree), so no source-symbol grep resolves there. What stands: the worker
+  demonstrably carries the fix, both images were rebuilt from `7c42d2d7` in one
+  run, and both image ids moved.
+- **No clinical walk, by standing law**, and ⚠️ **QA could not have supplied one
+  either** — its images are from `2026-08-18T14:4xZ` and carry **0** occurrences
+  of `NOTE_HEADING_LINE_RE` against a traversal control of **2**. A behavioural
+  proof of F6.4 on QA today would have exercised a build without the fix in it.
+- **F5-c is judged only to the depth its three declared rows reach** — the symbol
+  is in the image, the constant file exists. Nothing here exercises its
+  behaviour.
+- **The MAY-CHANGE backfill was NOT run.** Twin CERTIFIED is still **0**, the
+  declared correct state. The retroactive auto-certification dry run remains a
+  separate deliberate act.
