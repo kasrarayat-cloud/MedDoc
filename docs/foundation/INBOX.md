@@ -434,3 +434,37 @@ taken alone, say so in the ledger and keep F5-e OPEN for (B).
 
 **Retires when a reflux cell fills from a fact whose quote does not name the
 vessel — or when (B) lands and the arm above is deliberately inverted.**
+
+### 2026-08-20T23:00:00Z — 📌 CLAIM A RULED FIX DIRECTION BEFORE BUILDING IT
+
+**Cheap rule. Tonight is the reference case.**
+
+Ruling **#135** named a fix direction (shared canonical derivation, one rule
+both callers). **Two actors independently built it** — the loop as F5-d(b)
+(#763) and a supervised session (#764) — in the same window, neither knowing
+the other had started.
+
+**Measured cost: one full adversarial pass and one closed PR.** Nothing was
+lost and nothing shipped twice; the loop's version was better and won on the
+merits. But the second pass bought a verdict on code that never merged.
+
+> **When a PROVISIONAL ruling names a fix direction, the actor picking it up
+> posts the claim to `INBOX.md` (or the RELAY row) BEFORE building — one line,
+> the ruling number and who is on it. The second actor then EXTENDS instead of
+> duplicating.**
+
+⚠️ **AND THE COLLISION WAS NOT WASTED, WHICH IS THE PART TO READ CORRECTLY.**
+Two independent implementations reached the SAME core predicate —
+`derived === null`, never a type test, never `String()` — which is real evidence
+the predicate is right, of a kind one implementation cannot produce. The
+diff also surfaced what each had missed: the loop's version carried the
+`rowPrototype` axis the supervised one did not, and the supervised one carried a
+FALSE GREEN correction, F5-e, and a stale-entry retirement the loop's did not.
+
+**So the rule is CLAIM FIRST, not "never converge".** A convergent fix is a
+chance to diff two solutions — the existing canon already says so. What this
+entry adds is that the diff is worth more when it is *chosen* than when it is
+*discovered at merge time*, and the choosing costs one line.
+
+**This entry retires when a claim line appears on a ruled fix direction and the
+second actor extends it.**
