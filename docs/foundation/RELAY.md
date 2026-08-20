@@ -406,7 +406,7 @@ archive-loop one especially, which is a live hazard rather than a polish task.**
 | ~~F6.1~~ | ✅ **FIXED AND GATED — 2026-08-17, session 02 of run `20260817-033820-b2`.** `freeTextRuns` in `docx-generator.ts`; **four** free-text sites render through it. 15 arms, **11 of 11 mutations reddened**, plus a RENDERED differential through the real LibreOffice. See the ledger row below. ⚠️ **THE ROW WAS NARROWER THAN THE DEFECT IN THE DIRECTION THAT MATTERS.** It says *"in the DOCX"*; since F3 the pre-sign preview, the signed preview, the Word download and the PDF download all converge on `generateVisitDocx`, so **one flattening reached FOUR surfaces** — while `ehr-formatters.ts:423` kept the breaks, so the EHR clipboard and the signed document disagreed about what the note said. ⚠️ **And it was not "patient-summary" only**: referral `reason`, referral `relevant_history` and modifier `rationale` flatten identically (0 prod rows carry a break there TODAY, against live controls of 13 and 14 — latent, not absent). **Measured: 43 of 43** prod visits with a non-empty `patientSummary` satisfy the defect's own predicate. *Previous wording:* **Patient-summary line breaks are lost in the DOCX** — a genuine fidelity bug on the same class #112 fixed for numbers |
 | F6.2 | **`CLINICAL NOTE` heading renders on an EMPTY note** | a heading over nothing is a document asserting content it does not have |
 | ~~F6.3~~ | ✅ **LIVE IN PRODUCTION 2026-08-17T06:53Z — merge `1537ae47`, cited 4 of 4, 15 of 15 declared rows matched.** Built and gated the same session (01 of run `20260817-033820-b2`). `archive-pdf-budget.ts`; both archive routes render THROUGH it. 35 arms, **11 of 11 mutations reddened**. See the ledger row below. ⚠️ **The refutation pass found a defect in the FIX**: the first draft charged elapsed wall-clock, which the audio downloads in the same loop would have consumed — truncating the archives of exactly the doctors with the most recordings, while the sidecar sat idle. It charges sidecar-time now, and M11 re-plants the original defect to prove the gate sees it. *Previous wording:* ⚠️ **The archive loop is UNBOUNDED against a single strictly-serializing sidecar** — **measured: a 0.42s staircase**, and `maxDuration` is **INERT on a standalone build** — so nothing bounds it. Real hazard, own item, not a tail |
-| F6.4 | **`export-cleanliness`'s markdown detector is now VACUOUS** | a green that cannot go red — the ratchet class this house names on sight |
+| ~~F6.4~~ | ✅ **FIXED AND GATED — 2026-08-20, run `20260820-014110-b1` session 01.** The arm was vacuous for **TWO** independent reasons, not the one the row diagnosed — and repairing it exposed a **live product defect on the signed record**: `docx-generator` matched `^##\s+` only, so a `###` line printed its own hashes into the document while the EHR clipboard stripped them. **Measured on production: 8 such lines across 3 visits.** Ruling **#133**. See the ledger row at the end of this file. | ~~a green that cannot go red — the ratchet class this house names on sight~~ **CONFIRMED, and narrower AND wider than the row said** |
 | F6.5 | **`gate-r1`'s "BOTH sides" test asserts one side** | the title is wider than the measurement |
 | ~~F6.6~~ ✅ **CLOSED 2026-08-16 — VERIFIED FIXED, see the note under this table** | ~~**`check-cotenants.sh` watches FOUR hosts; MASTER.md STEP 0.6 names FIVE**~~ | `www.quillmd.com` is missing from its `EXPECTED` table — **my omission when I wrote it**. One line; rides the next small PR rather than waiting for F6 |
 
@@ -21075,3 +21075,145 @@ failed job **before** reading its log, and `--log-failed` then returned nothing.
 The numbers survived only because `gh run view <id> --attempt 2 --log` still
 works. **Read the attempt's log before re-running it** — a re-run is not free of
 evidence cost.
+
+---
+
+## ✅ F6.4 — THE VACUOUS ARM, AND THE SIGNED-DOCUMENT DEFECT IT WAS HIDING — **2026-08-20, run `20260820-014110-b1` session 01**
+
+**Ruling #133 (PROVISIONAL).** Branch `fix/f64-export-cleanliness-heading-arm`.
+Three production files, two gate files.
+
+### THE ROW'S DIAGNOSIS WAS RIGHT AND INCOMPLETE, AND THE INCOMPLETENESS IS THE ITEM
+
+The 2026-08-16 re-verification recorded F6.4 as *“CONFIRMED — one arm, not the
+detector”*, with the mechanism: the DOCX arm strips tags to spaces, so the text
+carries no `\n` and `/(^|\n)#{1,6}\s/` can only match at index 0.
+
+**True. And restoring the newline is NOT sufficient** — a paragraph's *opening*
+tags become spaces too, so a leaked heading reads `"\n      ### Bilateral …"`
+and `(^|\n)#` still does not match. Measured on the pre-fix tree, before any
+edit:
+
+    HAS_NEWLINE true · HAS_HASHES true · HEADING_ARM_MATCH false
+
+⚠️ **This is the half-landed-fix shape aimed at a diagnosis rather than at a
+diff: the arm stays blind through exactly the edit its own write-up invites.**
+M4 below is that state, and it reads **12 passed** on a leaking document.
+
+### AND THE GATE, ONCE ABLE TO SEE, REDDENED AGAINST `main`
+
+`docx-generator.ts` matched `^##\s+` **only**. A `###` line fell through to the
+plain-paragraph branch and **printed its own hashes into the signed document**,
+while `ehr-formatters.ts:88` strips `^#{1,6}\s+` — so the clipboard and the
+document disagreed about the same note. **Since F3 the DOCX side is four
+surfaces**, not one: pre-sign preview, signed preview, Word download, PDF
+download all converge on `generateVisitDocx`.
+
+**MEASURED ON PRODUCTION 2026-08-20, before a line was changed:**
+
+| shape | lines | visits |
+|---|---|---|
+| `##` | **282** | 47 |
+| **`###`** | **8** | **3** |
+| `#` | 0 | — |
+| leading whitespace before the hashes | 0 | — |
+| heading carrying inline `**` | 0 | — |
+| 7+ hashes | 0 | — |
+
+The last four zeroes are what make the widening forward-only, and they come from
+the same query shape that returned 282 and 8 — so the matcher is
+positive-controlled by its own non-zero rows.
+
+### WHAT SHIPS
+
+- **`docx-generator.ts`** — `NOTE_HEADING_LINE_RE = /^[ \t]*(#{1,6})[ \t]+(.+?)[ \t]*$/`,
+  deliberately the same shape as `note-shape.ts:291`, in **two tiers**: `#`/`##`
+  keep today's treatment **byte-identically**; `###`–`######` render bold at
+  **body** size, a weight the document already uses for `**Label:**` runs.
+  **No six-level ladder was invented** — that would be a new visual vocabulary
+  nobody ruled.
+- **`export-cleanliness.test.ts`** — a paragraph-aware strip, `[ \t]*` in the
+  heading pattern, and a **non-vacuity control** asserting the stripped text
+  contains a `\n`. Reverting the helper alone leaves every other assertion in
+  that file green, which is precisely why the control is not optional.
+- **`gate-f64-docx-heading-depths.test.ts`** — 19 arms: byte-identity for `##`,
+  all six depths × (renders / DOCX-EHR parity), the two-tier decision, the
+  leading-whitespace tolerance, the **false-positive** direction, the 7-hash
+  limit, the `form-only` boundary, and a positive control on the detector itself.
+- **`form-only.ts`** — a comment corrected; see the refutation section.
+
+⚠️ **THE BYTE-IDENTITY ARM IS THE LOAD-BEARING ONE AND IT IS A MEASUREMENT.**
+The fix's whole safety claim is *“the 282 live `##` lines do not move”*. The
+expected paragraph XML was captured by restoring `origin/main`'s own
+`docx-generator.ts` into the worktree, rendering, and then restoring the fixed
+file **from a scratch copy — never from git**.
+
+### PROOF — 8 MUTATIONS, 7 RED + 1 GREEN CONTROL, MOSTLY PARTIAL APPLICATIONS
+
+| # | mutation | result |
+|---|---|---|
+| M1 | renderer back to `^##` — the complete inverse | **8 red** |
+| M3 | paragraph-aware strip reverted, regex kept | **1 red — on the NON-VACUITY CONTROL** |
+| **M4** | **regex narrowed AND renderer reverted — THE HALF-LANDED SHAPE** | **`export-cleanliness` 12 PASSED on a leaking document; the new gate 7 red** |
+| M5 | heading rendered with EMPTY text | **15 red on the new gate; `export-cleanliness` GREEN** |
+| M6 | the two tiers collapsed | 1 red |
+| M8 | `form-only`'s `#{3,}` sub-block bail dropped | 1 red |
+| **M7** | a cosmetic type annotation — **the SUCCESS direction** | **GREEN, 29/29** |
+
+**M4 is the argument for the whole item** and M5 is the argument for the second
+gate: *“no forbidden pattern”* is satisfied just as well by a renderer that
+**deletes** the heading.
+
+⚠️ **AND THE GATE REDDENED AGAINST ITS OWN AUTHOR ON FIRST EXECUTION**, against
+unmodified `main` — the strongest evidence a guard can produce about itself.
+
+### THE REFUTATION PASS — ONE FINDING, AND IT WAS A SENTENCE
+
+`form-only.ts:31` read *“the generators detect a section with `/^##\s+/`. Match
+the SAME level …”*. **True when written; made FALSE by this diff.** Corrected in
+the same commit — and the behaviour it protects is now **pinned by an arm**,
+because a future reader “closing the divergence” by widening `SECTION_HEADING_RE`
+to `#{1,6}` would make every `### Right` a section boundary and renumber each
+half of a bilateral study from 1. *(That file's own `#{3,}` bail is also evidence
+the codebase always expected `###` sub-blocks to exist — only the renderer never
+handled them.)*
+
+⚠️ **THE PASS WAS SELF-RUN.** This session cannot spawn independent refuters, so
+it is the weaker form canon names and is recorded as such. It found a live
+defect on its first pass anyway.
+
+⚠️ **AND MY OWN MUTATION-APPLIED CHECK LIED ONCE.** M8's assertion reported the
+mutation UNAPPLIED because the token `#{3,}` still appeared in the **comment I
+had written minutes earlier** — the prose-matching trap, inside the verification
+of its own fix, and the same shape F13 recorded against `$ROOT`. The mutation had
+in fact applied; re-asserted against the code line rather than the token.
+
+### WHAT F6.4 DOES NOT CLAIM
+
+- **Seven or more hashes is not a heading** in either the renderer or the
+  detector — they share the CommonMark bound — and renders literally.
+  Production holds **0**. Recorded as an ARM, not as prose.
+- **`ehr-formatters.ts:357-360` is untouched**, so `^##\s+Subjective` → `S:`
+  still means a `### Subjective` misses the Epic abbreviation. Pre-existing;
+  named, not fixed.
+- **It mirrors one of the export surfaces' detectors.** The heading arm applies
+  to the DOCX only; the EHR formats deliberately keep markdown for the target
+  EHR to render.
+- **No production row is rewritten.** The 8 affected lines re-render correctly on
+  the next export; nothing back-fills a stored document.
+
+### THE FULL SUITE — REPORTED AS A CONTROLLED DELTA, BECAUSE THE RAW NUMBER IS MEANINGLESS
+
+A worktree checks out TRACKED FILES ONLY and `vitest.config.ts` aliases react to
+`../../node_modules/react`, so a raw run from here carries a known artifact.
+Measured against a **clean detached worktree at `origin/main` carrying none of
+this change**:
+
+| tree | files | passed | failed files | failed tests |
+|---|---|---|---|---|
+| `origin/main` (control) | 335 | 4186 | 16 | 1 |
+| this branch | 336 | 4203 | **16** | **1** |
+
+**+1 file, +17 tests — exactly the new gate's arms**, and the failure profile is
+**identical**, which confirms the exclusion empirically rather than by argument.
+`tsc --noEmit` is clean.
