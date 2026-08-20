@@ -272,3 +272,32 @@ It syncs from `main` before each stage precisely so the overlap resolves in the
 branch rather than at merge.
 
 **This entry retires when that branch merges.**
+
+### 2026-08-20T01:45:00Z — ONE-LINE HARDENING OWED ON `ledger-progress.sh` (small, take it when convenient)
+
+**Not a defect in what shipped. A residual, filed rather than argued about.**
+
+`ledger_progress_hash()` proves the blob exists with `git cat-file -e` and only
+then pipes `git show … | sha256sum`. That ordering is correct and it is why the
+function is safe today.
+
+⚠️ **The residual: if `git show` fails ANYWAY** — a corrupt object, a gc racing
+the read, a truncated pack — **it writes nothing, the pipe runs regardless, and
+`sha256sum` hashes EMPTY STDIN to the stable constant `e3b0c442…855`.** That is
+a plausible-looking hash, identical on every broken read, so two consecutive
+blind sessions would compare equal and reproduce the exact false halt this
+function exists to prevent. The existing `[ -z "$blob_hash" ]` guard cannot
+catch it, because the value is not empty.
+
+**The fix is one line** — either check `${PIPESTATUS[0]}` after the pipe, or
+compare against the known empty-stdin digest and return
+`CANNOT-TELL:hash-of-empty` instead:
+
+    [ "$blob_hash" = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ] \
+      && { printf 'CANNOT-TELL:hash-of-empty\n'; return 2; }
+
+**Near-unreachable is not unreachable, and the cost of being wrong is a dark
+loop nobody can explain.** Found while diffing two independent fixes for the
+same defect (#744 shipped; the supervised PR #746 was closed as superseded).
+
+**This entry retires when that line lands.**
