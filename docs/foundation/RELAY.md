@@ -21217,3 +21217,79 @@ this change**:
 **+1 file, +17 tests — exactly the new gate's arms**, and the failure profile is
 **identical**, which confirms the exclusion empirically rather than by argument.
 `tsc --noEmit` is clean.
+
+### ✅ F6.4 — MERGED AND CITED. ⚠️ **NOT DEPLOYED, AND THE REASON IS A RULE RATHER THAN A CLOCK**
+
+| | |
+|---|---|
+| PR | **#749** |
+| merge commit | `768644d015d491e44aad7ed9e2a3ad3b850252c3` |
+| declaration | `docs/foundation/deploys/20260820-64c49a45.md` — committed **before** the act, names an ANCESTOR of the merge commit, so F10's resolver reaches it by ancestry |
+| deployed | ⚠️ **NO — deliberately.** See below |
+
+**Citation — 4 of 4 on `768644d015d491e44aad7ed9e2a3ad3b850252c3`**, produced by
+`scripts/check-citation.sh` and pasted, not typed:
+
+   · `CI` 32327989119 a1
+   · `e2e` 32327989143 a1
+   · `a11y-ci` 32327989077 a1
+   · `secrets-scan` 32327989103 a1
+
+**Every line is `a1` — no re-run on the merge commit.** The PR head was likewise
+4 of 4 all `a1` (`168f5a08…`: CI 32323481973 · e2e 32323482004 · a11y-ci
+32323481919 · secrets-scan 32323482044).
+
+#### WHY IT IS NOT DEPLOYED — A DECLARATION IS BOUND TO A **CHANGE**, A DEPLOY SHIPS A **TREE**
+
+Between taking the citation and staging the deploy, **PR #750 (F5-c, the twin
+verification encounter) merged as `73df57e2`.** Measured rather than assumed:
+
+    git diff --stat 768644d0.. 73df57e2..
+    template-twin-certify.ts | certification-lifecycle.ts |
+    certification-thresholds.ts | verification-encounter.ts |
+    auto-certify-twin-job.ts  + 2 gates      7 files, 645 insertions
+
+**Five of those are RUNTIME files**, and **`docs/foundation/deploys/` holds no
+declaration for them** — so deploying `main` tonight would have shipped another
+actor's runtime change with **no** §2.5 gate at all, under a declaration whose
+sixteen rows are about markdown heading depths. That is the R5 case made worse:
+*“I deployed `main`” is not the same claim as “I judged what I deployed”.*
+
+**The two disciplined options are the ones the rule names, and BOTH are open to
+the next session:** deploy the two separately so each declaration gates its own
+act, or write one declaration naming the FULL diff. **What was not open was
+deploying this tree under F6.4's declaration alone and calling it judged.**
+
+⚠️ **The detach-and-deploy-an-ancestor route was considered and declined.**
+`deploy-prod.sh` ships the tree's HEAD, so pinning `768644d0` means leaving
+`/opt/meddoc-pro` on a **detached HEAD** — which breaks the runner's launch-time
+`--ff-only` sync for the next session. Trading a clean deploy surface for one
+night's latency is the wrong side of that trade, and the shared tree is left on
+`main`, clean, fast-forwarded.
+
+#### HANDED FORWARD, READY TO USE — NOTHING HERE NEEDS RE-DERIVING
+
+- **The declaration is committed and its baseline is captured** (visits 48 ·
+  signed 30 · patients 35 · active templates 7 · migrations 104/104 · both image
+  digests · `##` 282 lines · `###` 8 lines).
+- **Row 16's structural probe is already CONTROLLED**, taken pre-deploy so it can
+  actually discriminate:
+
+      docker exec meddoc-pro-transcribe-md-worker-1 grep -c \
+        NOTE_HEADING_LINE_RE /app/apps/transcribe-md/src/lib/docx-generator.ts
+      -> 0      (must be >=1 after the deploy)
+
+      … grep -c renderSoapParagraphs …
+      -> 2      (traversal control — the probe reaches the file)
+
+  **A zero on the first line is only meaningful because the second is non-zero.**
+- **The rollback tag is cut automatically** by `deploy-prod.sh` STEP 0b against
+  the RUNNING image ids, digest-verified, before anything is recreated.
+- ⚠️ **Whoever deploys must ALSO judge F5-c**, or deploy it separately. Its
+  author is active and has not staged a declaration for it.
+
+#### WHAT IS AND IS NOT LIVE
+
+**The defect is still in production.** The 8 `###` lines across 3 visits still
+render their own hashes on the next export, and will until this ships. The fix
+is on `main` and cited; it is not in the image.
