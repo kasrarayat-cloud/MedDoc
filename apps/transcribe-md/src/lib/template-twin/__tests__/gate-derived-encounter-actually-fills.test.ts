@@ -84,8 +84,17 @@ function parse(text: string): { cells: Cell[]; facts: EncounterFact[] } {
     const line = m[0];
     cells.push({ side, vessel, kind: 'diameter', value: m[3], incompetent });
     cells.push({ side, vessel, kind: 'reflux', value: m[4], incompetent });
-    facts.push(fact('measurement.diameter', Number(m[3]), side, line));
-    facts.push(fact('measurement.reflux_time', Number(m[4]), side, line));
+    // ⚠️ PRODUCTION-SHAPED QUOTES, NOT THE WHOLE SENTENCE FOR BOTH.
+    //
+    // This handed BOTH facts the full dictated line, so the reflux fact carried
+    // "GSV at the SFJ" and the arm below passed. Measured on the real manifest
+    // 2026-08-20: diameter quotes carry an anatomy token 20 of 20; reflux quotes
+    // **0 of 20** — L3 emits "reflux time 0.110 seconds", no vessel in it.
+    //
+    // The arm was one layer short of production: the wrong-universe class,
+    // inside the gate written to kill it.
+    facts.push(fact('measurement.diameter', Number(m[3]), side, `${side === 'right' ? 'Right' : 'Left'} ${vessel}: diameter ${m[3]} millimeters`));
+    facts.push(fact('measurement.reflux_time', Number(m[4]), side, `reflux time ${m[4]} seconds`));
   }
   return { cells, facts };
 }
@@ -114,17 +123,35 @@ describe('the derived encounter ACTUALLY FILLS the owner\'s form', () => {
     expect(filled.length).toBeGreaterThanOrEqual(MIN_CERTIFIED_FILLED_FIELDS);
   });
 
-  it('⚠️ REQUIRED: at least one REFLUX cell on an INCOMPETENT vessel fills', () => {
-    // The exact blindness the refutation pass found: every incompetent reflux
-    // cell was refused as ambiguous_laterality while the gate passed on
-    // diameters alone. Pinned so it cannot return.
-    const incompetentReflux = filled.filter(
-      (x) => x.c.kind === 'reflux' && x.c.incompetent,
-    );
+  it('⚠️ REQUIRED — F5-e: the reflux column is UNFILLABLE, and that is pinned', () => {
+    // ⚠️ THIS ARM ASSERTED THE OPPOSITE UNTIL 2026-08-20, AND PASSED, because it
+    // fed the matcher a quote production never produces.
+    //
+    // With production-shaped quotes every reflux cell refuses: bridge-fill's
+    // place() addresses the reflux cell by irRow.vein ("GSV at the SFJ") and
+    // segmentCongruent needs an anatomy token in the fact's concept, value or
+    // quote — a reflux fact has none. Reproduced end to end through the real
+    // matcher with a positive control (the same fact WITH anatomy fills).
+    //
+    // Pinned as a KNOWN GAP so it cannot silently change in EITHER direction.
+    const reflux = results.filter((x) => x.c.kind === 'reflux');
+    expect(reflux.length).toBeGreaterThan(0); // non-vacuity
     expect(
-      incompetentReflux.length,
-      'the proof never exercises an abnormal vein — this is the 2026-08-19 defect',
-    ).toBeGreaterThan(0);
+      reflux.every((x) => !x.r.ok),
+      'a reflux cell FILLED — F5-e may have landed; invert this arm deliberately',
+    ).toBe(true);
+    expect(new Set(reflux.map((x) => (x.r.ok ? 'ok' : x.r.reason)))).toEqual(
+      new Set(['no_supporting_fact']),
+    );
+  });
+
+  it('⚠️ REQUIRED: the DIAMETER column still fills on both legs — the gap is scoped', () => {
+    // Scoping matters: F5-e is about the reflux COLUMN only. If diameters stop
+    // filling too, the cause is elsewhere and this arm says so.
+    for (const side of ['right', 'left'] as const) {
+      const n = filled.filter((x) => x.c.kind === 'diameter' && x.c.side === side).length;
+      expect(n, `no diameter cell filled on the ${side} leg`).toBeGreaterThan(0);
+    }
   });
 
   it('⚠️ REQUIRED: at least one measurement cell fills PER LEG', () => {
