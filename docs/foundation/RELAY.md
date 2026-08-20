@@ -22001,3 +22001,260 @@ events, not only about checking them.
 
 **The loop never writes to `INBOX.md`** — append-only from the supervised side —
 so this is reported, not fixed.
+
+## ✅ F5-d(b) — THE BRIDGE WRITES WHAT THE VALIDATOR RE-DERIVES — 2026-08-20, run `20260820-174139-b1` session 02
+
+**Acceptance shape (b) is MET on the code. (c) is OWED and is a DEPLOY away —
+the reason is written down rather than left as a gap.**
+
+Ruling **#135** implemented. F5-d(a) named the mechanism at FILE:LINE; this is
+the fix, its gate, and the mandatory adversarial pass over it.
+
+### THE CHANGE, IN ONE SENTENCE
+
+`bridge-fill.ts` wrote the MODEL'S markdown cell text (`"3.10"`) while
+`validation/index.ts` re-derives the same cell from the CITED FACT (`"3.1"`) and
+compares with strict `===`. The derivation now lives in one place —
+`field-value-derivation.ts` — and the bridge calls it instead of copying the
+note. **One rule, both callers**, exactly the move `rowLateralityVerdict`
+already makes.
+
+It is a **TIGHTENING**: the rendered document carries the cited fact's value
+instead of model-authored text. Neither route ruling #135 forbids was taken,
+and the first is now guarded against by a test that reddens if anyone tries.
+
+### THE GATE — `gate-f5d-bridge-writes-what-the-validator-derives.test.ts`, 17 arms
+
+All shipped code: `compileTemplateDocx` on the customer's **real WM IOV
+template**, the real bridge, the real merge, the real validator, the real
+renderer. Nothing re-implemented.
+
+⚠️ **UNIVERSE CONTROL — THE ARM THAT MAKES THE REST MEAN ANYTHING.** The field
+ids compiled at the coordinates it addresses are asserted to BE the two ids
+production's refusal named:
+
+| coordinate | compiled id | production's refusal |
+|---|---|---|
+| `w:tbl[0]/w:tr[1]/w:tc[1]` | `ttf_e119ecd84bdd6b6c0b802967` | ✅ same |
+| `w:tbl[0]/w:tr[15]/w:tc[1]` | `ttf_12e093b32f6ad5da739ada7d` | ✅ same |
+
+Cross-checked against production's own stored round-trip proof, which places
+those two ids at exactly those coordinates. **So this is a proof about THOSE TWO
+CELLS, not about two cells that resemble them.**
+
+### MUTATION-PROVED SIX WAYS
+
+Each asserted **APPLIED** before its result was read; each restored from a
+scratch **COPY**, never from git.
+
+| # | mutation | result |
+|---|---|---|
+| M1 | write the model text again (complete inverse) | 🔴 **8 arms** |
+| M2 | derive, then `String()` — **the HALF-LANDED fix** | 🔴 1 arm |
+| M3 | fall back instead of refusing a null derivation | 🔴 1 arm |
+| M6 | make the validator compare NUMERICALLY — **the forbidden route** | 🔴 1 arm |
+| M7 | remove the writable-kinds guard | 🔴 1 arm |
+| M8 | remove the rowPrototype guard | 🔴 1 arm |
+
+⚠️ **M2 IS THE ONE TO READ.** Production's 52 table cells are all
+`narrative_text`, where the derivation returns a string and `String(derived)` is
+a **NO-OP** — so the most likely half-landed version of this fix is **invisible
+on the only route production takes**. The `number`-route arm exists solely for
+it and is the only thing in the suite that can see it.
+
+⚠️ **M6 IS THE ANTI-LOOSENING PROOF.** Ruling #135 forbids fixing this by
+weakening the validator. If a future session tries, CI stops them — and the arm
+that catches it is one of ARM B's in F5-d(a)'s repro, which is why **those arms
+were deliberately NOT inverted** despite that file instructing the fix to invert
+them. Inverting them would have deleted the only proof the gate stayed strict.
+The reason is written into the test beside them.
+
+### ⚠️ A DEFECT THIS FIX WOULD HAVE INTRODUCED, CAUGHT BY RE-READING THE DIFF
+
+Deriving from the fact returns whatever the FIELD KIND says — and `checkbox`
+derives a **BOOLEAN from the fact's polarity**, nothing to do with the number.
+A numeric table cell compiled as a checkbox would have turned a dictated
+`"3.10"` into a **TICKED BOX**, with the validator agreeing (it re-derives the
+same boolean) and the renderer drawing `☒`. A competent vein marked as
+refluxing, from a reflux time of `0.11`.
+
+Pre-fix that was inert **by accident** — a string never equals a boolean. The
+fix removed the accident, so the protection is now explicit: the bridge refuses
+every kind it has no business writing.
+
+### THE MANDATORY ADVERSARIAL PASS — FOUR LENSES, EIGHT FINDINGS
+
+`AGENTS.md` makes this a gate on the clinical generation path. Lenses: clinical
+data loss · false-green/false-rejection · type contract across kinds and
+consumers · blast radius. Told to REFUTE, given the CLAIMS not the intent,
+permitted to report NOTHING FOUND. **Every finding was verified against the code
+before a line was changed.**
+
+**Two were defects in the fix, and both are closed:**
+
+1. ⚠️ **THE GUARD ENUMERATED THE WRONG AXIS — the watched-set failure living
+   inside the guard written to prevent it.** `assertionSupported` branches on
+   `field.rowPrototype`, **not** on `field.kind`. A repeat-region table cell
+   compiles as rowPrototype `narrative_text`, which the kind allowlist
+   **admits**, and this bridge writes only scalars — raising
+   ASSERTION_NOT_SUPPORTED *and* REPEATING_ROW_SHAPE_INVALID, the
+   whole-document death #135 exists to remove. Now refused. Measured: WM IOV
+   compiles **80 fields and ZERO rowPrototype**, so it is latent for the owner's
+   form and guarded regardless.
+2. ⚠️ **§4 OF THE GATE WAS A DECORATION.** `VerifiedRenderedField` carries a
+   `valueSha256` and **no value**, so `kind === 'filled'` is as true of `"3.10"`
+   as of `"3.1"`: the render section **passed identically on the defect it was
+   captioned to guard**, and all three of its stated rationales were
+   unfalsifiable on `narrative_text`. It now pins the published hash. **The
+   measurement: M1 used to redden 3 arms and now reddens 8.**
+
+**Two more weak arms in my own gate:** an `expect(reasons).not.toContain(…)`
+over an array that is **always empty** on green — the vacuous-assertion trap,
+inside the gate written to catch vacuous greens — and an
+`every(r => r.status === 'supported')` **tautology** (the bridge writes that
+literal and has no other producer). Both replaced with assertions that can fail.
+
+**Three claims of mine were wrong or too wide, corrected in place:**
+
+| the claim | what is true |
+|---|---|
+| "extracted **verbatim**" | true of `isStrictIsoDate` and `exactOption`; the derivation gained **exactly one line**. Measured by comparing normalised function bodies against `origin/main`, not by eye. The validator cannot reach that line |
+| "the resolver **does not carry this defect**" | it does not carry the note-text copy; it carries the same FAMILY through a different door — finding **A** below |
+| "**addressing is unchanged**" | a refusal now advances the note-row loop, so **derivability is an input to addressing** and the note row a cell binds to can differ. ⚠️ **LATERALITY IS UNAFFECTED** — `rowLateralityVerdict` is fail-closed on side and untouched. What changes is WHICH NOTE ROW, never WHICH LEG |
+
+**And the public docstring was wrong for two of seven kinds.** The function was
+born COMPARE-ONLY inside the validator; making it public turned its return into
+a WRITE-SIDE contract. `multi_select` returns a bare string where every consumer
+needs `string[]`; `single_select` drops the **ORDINAL** a writer needs (its
+sibling `convertValue` returns the pair for exactly that reason). Both named in
+the docstring now, and the bridge refuses both kinds.
+
+### TWO ROUTES THE ENUMERATION MISSED, NOW COVERED
+
+- **`measurement`** — the only kind whose derived text DIFFERS from the note
+  cell, because it **appends the unit**: `"3.1 mm"` under a column already
+  headed `DIAMETER (mm)`. That is what `unitPolicy: 'required'` demands, not a
+  defect introduced here — but it is **document-visible**, and it should be a
+  decision somebody makes rather than a surprise somebody finds.
+- ⚠️ **THE SILENT BLANK.** A `number` cell plus a PRODUCTION-shaped fact
+  (`unit='mm'`) derives null → the cell blanks → `populated` is false → **no
+  blocking issue is raised**, so the document renders clean with the diameter
+  absent. **THE DATA LOSS IS NOT NEW — THE SILENCE IS**; the same input used to
+  fail loudly. The trade is this bridge's standing design (every refusal is a
+  named blank, never a dead document) and it is now a measurement rather than a
+  surprise. It also closes the one coverage gap the pass named: it is the only
+  **production-shaped** input that reaches the `derived === null` branch.
+
+### WHAT THE PASS COULD NOT BREAK — the negative space, stated so it is legible
+
+- **The never-lose-a-cell invariant is STRUCTURAL, not merely observed.** The old
+  code wrote a BARE NUMERIC STRING, and `null === "<numeric string>"` is false
+  for every input — so **every new refusal was already a blocked document**, and
+  one blocking issue kills the entire native fill.
+- ⚠️ **THE CLINICAL PRECISION QUESTION IS CLOSED, AND NOT BY ARGUMENT.** `"3.10"`
+  cannot survive into a fact at all: `measurements[].value` is a **JSON number**
+  and `encounter-facts/index.ts:598` writes `String(norm.value)`. The trailing
+  zero is destroyed at L3, **before any fact exists**. No significant figure is
+  lost by this change that was ever available to lose.
+- No laterality or row-placement guarantee is weakened.
+- No prose or PHI can reach a numeric cell: the matcher requires
+  `typeof f.number === 'number'`, and only the structured-measurement projection
+  emits `measurement.*` concepts.
+
+### 🔎 THREE FINDINGS THIS DID NOT GO LOOKING FOR
+
+**(A) 🔴 THE RESOLVER AND THE VALIDATOR DISAGREE BY ONE CHARACTER, AND IT COSTS
+THE WHOLE DOCUMENT.** `resolver/index.ts:107` **trims** before matching an
+option; the validator's derivation does not (and never did — the extraction
+introduced nothing). A `single_select` fact value of `"Normal "` therefore
+resolves in the resolver, writes `status: 'supported'`, and fails to re-derive
+in the validator → **ASSERTION_NOT_SUPPORTED, blocking** → the native document
+is **silently withheld** and the visit falls back to the styled export.
+
+⚠️ **THIS IS F5-d's OWN FAILURE MODE, LIVE ON `main`, IN A DIFFERENT DOOR** — one
+character costing an entire document, with nothing anywhere objecting. **Filed,
+not fixed:** folding it in is a behaviour change to the resolver on the clinical
+path and needs its own reproduction and its own adversarial pass. It should not
+ride F5-d's coat-tails.
+
+**(B) 🟡 THE PRACTICE-DEFAULT PATH HAS THE SAME SHAPE.** `resolver/index.ts:190`
+treats anything not `'false'` as affirmed; `validation/index.ts` requires exactly
+`'true'`/`'false'`. A checkbox mapping with `practiceDefault: 'yes'` →
+**PRACTICE_DEFAULT_INVALID, blocking** → whole document withheld. Same family,
+same disposition: filed.
+
+**(C) 🟡 `bridge-fill.test.ts` WAS GREEN ABOUT A DOCUMENT THAT COULD NEVER
+RENDER.** Its fixture facts carried **numeric** values, which no L3 extraction
+produces, and the file renders with a **stubbed** `validation` object — so
+nothing in the repository connected the bridge to the validator in either
+direction. Corrected to the production shape; **not one assertion changed**.
+
+⚠️ **AND THE FIXTURE EDIT IS LOAD-BEARING, NOT COSMETIC — say so plainly.** With
+the old numeric fixture, all seven tests **redden** under the new bridge. It is
+a prerequisite for the fix to go green and belongs inside the change's declared
+scope, not beside it. ⚠️ **Honest limit:** for all seven fixture values
+`String(n)` is byte-identical to the note's cell text, so that file **cannot
+discriminate** the fix in either direction. Only the gate can. Left that way
+deliberately rather than widening the blast radius across seven patient-safety
+assertions about laterality.
+
+### ⚠️ AND ONE PROCESS DEFECT OF MY OWN, RECORDED BECAUSE IT COST NOTHING ONLY BY LUCK
+
+**I ran the mutation proofs WHILE the adversarial pass was reading the tree.**
+Two lenses therefore reviewed a moving target — and a captured diff that
+predated the `WRITABLE_KINDS` guard — so one of them reported a checkbox defect
+the working tree had **already closed**, and another observed the tree
+transiently holding an `M7 MUTATION` marker.
+
+The rule is *a refutation pass over the FINISHED diff*, and a `git diff` is not
+that: **it omits untracked files**, which here were the entire derivation module
+and the whole gate. It cost nothing only because both lenses said so explicitly
+and named what they had read. **Next time: commit first, hand over the commit
+range, and run no mutations until the pass reports.**
+
+### THE NUMBERS
+
+| | |
+|---|---|
+| gate | **17 arms**, all shipped code |
+| `tsc --noEmit` | **0 errors**, new module confirmed in the compilation via `--listFiles` |
+| template-twin + renderer suites | **42 files / 370 tests** green |
+| full suite, branch | 16 failed / **324** passed (342) · 1 failed / **4310** passed |
+| full suite, `origin/main` **control** | 16 failed / **323** passed (341) · 1 failed / **4293** passed |
+
+**+1 file, +17 tests — exactly the new gate.** The 16/1 failures are the known
+worktree `react/jsx-dev-runtime` resolution issue, present identically at
+`origin/main` carrying none of this change, and **the failure SETS are
+identical** (diffed, not counted).
+
+### PRODUCTION STATE — measured this session, not inherited
+
+| quantity | value |
+|---|---|
+| compiled versions | **1** (`617d6de9…`, `NEEDS_CONFIRMATION`, 0 blocking unsupported) |
+| semantic mappings | **80 CERTIFIED / 0 pending** |
+| fill manifests | **0** |
+| field kinds | **52 `narrative_text` table_cell + 28 `single_select` content_control = 80** |
+| visits / signed / patients | 48 / 30 / 35 |
+
+The 80-field figure is now confirmed **three independent ways** this session
+(the kind census, the rowPrototype probe, and the mapping count).
+
+### ⚠️ WHAT IS OWED — (c), AND IT IS A DEPLOY AWAY
+
+**This is not deployed, and it must be.** The certification path runs the LIVE
+fill through `bridgeTemplateFill` (`template-twin-certify.ts:206`), so the
+owner's template **cannot certify until this ships**. (c) — the backfill re-run,
+the observation, the DB verification, and the ping — stays owed and is
+explicitly **not claimed here**.
+
+The no-ping-until-observed rule stands. **The mappings are intact and the doctor
+still owes nothing:** `NEEDS_CONFIRMATION`, 80 CERTIFIED / 0 pending, 0 fill
+manifests — unchanged by this session, which wrote no production data.
+
+⚠️ **AND THE BLANK CENSUS CANNOT BE RE-MEASURED WITHOUT (c).** Tonight's is 44
+blank / 32 `no_supporting_fact` / 12 `laterality_mismatch`. Those two reasons
+are emitted by `matchMeasurementFact`, which this change does not touch and
+which runs **before** the derivation is consulted — so neither count can move,
+and the gate asserts that rather than arguing it. The real re-measurement is a
+property of the backfill run and belongs to (c).
