@@ -121,6 +121,22 @@ fi
 # ⚠️ A STALE STOP FILE MUST NOT SILENTLY DISABLE THE LOOP. If one is left over
 # from a previous halt, say so loudly and refuse — rather than exiting 0 in a way
 # that reads like "the queue is finished".
+# ⚠️ THE INTERPRETER IS ASSERTED BEFORE THE FIRST SESSION, NOT DISCOVERED BY IT.
+# On 2026-08-20T01:36Z the `claude` CLI auto-updated to 2.1.237, whose linux
+# native package was never published, and every session died on launch with
+# "claude native binary not installed". The loop went dark mid-run and nothing
+# said why — tmux was fine, the tree was fine, and the thing that was broken is
+# the one component no liveness signal looks at.
+#
+# A named refusal here costs one line and turns a silent dark loop into a
+# sentence that names the repair.
+if ! bash scripts/check-claude-cli.sh; then
+  echo "🔴 REFUSING TO LAUNCH — the claude CLI cannot run (see above)."
+  echo "   Every session would die on startup and the loop would go dark"
+  echo "   without saying why. Fix the CLI, then relight."
+  exit 1
+fi
+
 if [ -f "$STOP_FILE" ]; then
   echo "🔴 $STOP_FILE exists — the loop is disabled."
   echo "   It was created $(date -u -r "$STOP_FILE" +%Y-%m-%dT%H:%M:%SZ). Contents:"

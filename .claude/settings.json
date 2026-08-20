@@ -81,6 +81,7 @@
       "Bash(bash scripts/check-citation.sh:*)",
       "Bash(bash scripts/gh-runs.sh:*)",
       "Bash(bash scripts/push-with-cancellation.sh:*)",
+      "Bash(bash scripts/check-claude-cli.sh:*)",
       "Bash(bash scripts/check-cotenants.sh:*)",
       "Bash(tmux has-session:*)",
       "Bash(tmux list-panes:*)",
