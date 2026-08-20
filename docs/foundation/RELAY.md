@@ -21334,6 +21334,30 @@ happened.
 | judgment | **15 of 15 — 3 MUST CHANGE, 12 MUST NOT CHANGE** · full report: `docs/deploy-reports/20260820-tree-deploy-judgment.md` |
 | rollback | `pre-7c42d2d7-20260820` on app / worker / gotenberg, cut against the RUNNING digests and verified |
 
+**Citation — 4 of 4 on the DEPLOYED commit `7c42d2d77eb0f7ec1a83b2b4d61acd74a13e5ea6`**,
+produced by `scripts/check-citation.sh` and pasted, not typed:
+
+   · `CI` 32338776979 a1
+   · `e2e` 32338777028 a1
+   · `a11y-ci` 32338777015 a1
+   · `secrets-scan` 32338777041 a1
+
+**Every line is `a1`** — nothing was re-run.
+
+⚠️ **THIS ROW EXISTS BECAUSE THE DEPLOY LEGITIMATELY PRECEDED IT, AND THAT GAP
+IS WORTH NAMING RATHER THAN HIDING.** The deploy ran at `06:15:17Z`; these four
+runs were still in flight then. What discharged the gate at deploy time was
+**`b3459390`'s** citation — re-verified **4 of 4 with `--expect`** at this
+session's STEP 0 — together with the measured fact that the FULL diff
+`b3459390..7c42d2d7` is **one file, the declaration itself**. So the runtime tree
+shipped was byte-identical to a fully-cited commit at the moment it shipped, and
+this row now closes the loop on the deployed sha in its own right.
+
+*The alternative — waiting for a merge commit's citation before deploying it —
+is the stricter habit and remains the default. It was not available here without
+leaving the fix in production's `###` blind spot for another gate cycle, and the
+byte-identity above is what made proceeding honest rather than convenient.*
+
 **F6.4's own row 16 is the point of the deploy and it moved:**
 `NOTE_HEADING_LINE_RE` in the worker's `docx-generator.ts` **0 → 2**, against a
 traversal control (`renderSoapParagraphs`) steady at **2**. *The zero was only
