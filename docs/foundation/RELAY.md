@@ -21682,3 +21682,35 @@ refers to itself by branch: `feat/f22-deploy-citation-gate`.
 and `scripts/lib/` are read from the working tree at deploy time rather than
 baked into an image, so the gate is live for the next deploy the moment it is on
 `main` — no §2.5 declaration is owed by F22 itself.
+
+### ✅ F22 IS MERGED AND CITED — `be9286c5`, **4 of 4, all `a1`**
+
+**Citation — 4 of 4 on `be9286c520824a8bc81e3cf4101ce2050e781d16`**, produced by
+`scripts/check-citation.sh` and pasted, never typed:
+
+   · `CI` 32354767791 a1
+   · `e2e` 32354767729 a1
+   · `a11y-ci` 32354767730 a1
+   · `secrets-scan` 32354767724 a1
+
+**Every line is `a1`** — nothing was re-run. PR **#756**, merged through
+`scripts/merge-pr.sh` on a base branch that was itself **4 of 4** at merge time
+(`ae6f4dc4`), so nobody's evidence was cancelled by the merge. Branch retired on
+both sides by `scripts/retire-branch.sh`.
+
+⚠️ **THE ONE CANCELLATION THIS ITEM CAUSED WAS DECLARED, AND IT IS PRICED
+HONESTLY.** The refutation pass found the `set -e` defect ~6 minutes into the
+PR's own first run, and the fix was pushed through
+`scripts/push-with-cancellation.sh` with a written reason rather than waiting a
+full cycle to say the same thing. **Measured cost: `CI` 5m00s, `e2e` 4m48s,
+`a11y-ci` 4m41s — ~15 runner-minutes, all mine, nobody else waiting.** *Price the
+class by its worst instance, not its cheapest* — the identical decision at minute
+forty discards a whole gate, and the habit is the same either way. `secrets-scan`
+had already finished and survived.
+
+⚠️ **RULING #134's NUMBER IS NOW CLAIMED**, per the number-claim protocol: it
+landed on `main` in this merge, so it is a stable address rather than a proposal.
+
+**The gate is LIVE for the next deploy the moment this is on `main`** —
+`deploy-prod.sh` and `scripts/lib/` are read from the working tree at deploy
+time, not baked into an image.
