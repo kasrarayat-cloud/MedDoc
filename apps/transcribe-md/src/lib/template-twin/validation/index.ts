@@ -113,8 +113,21 @@ function parseRowValue(entry: Record<string, string | null>): RowValue | null {
 
 // isStrictIsoDate, exactOption and the value derivation now live in
 // ../field-value-derivation, because the BRIDGE has to produce exactly what
-// this module re-derives and was producing something else. Moved verbatim; the
-// validator's behaviour is unchanged by the extraction. See that file's header.
+// this module re-derives and was producing something else. See that file's
+// header.
+//
+// ⚠️ "MOVED VERBATIM" IS TRUE OF TWO OF THE THREE, AND THE THIRD IS STATED
+// EXACTLY RATHER THAN ROUNDED. `isStrictIsoDate` and `exactOption` are
+// byte-identical (measured by comparing normalised function bodies against
+// origin/main). `valueFromFact` -> `deriveFieldValueFromFact` gained exactly
+// ONE line, `if (!mapping) return null;` in the `measurement` branch, because
+// its `mapping` parameter is now optional for the bridge's sake.
+//
+// THAT LINE IS UNREACHABLE FROM THIS FILE, and it is structural rather than a
+// hope: validateTemplateTwin `continue`s on a missing mapping with
+// MAPPING_MISSING well before assertionSupported is ever called, so every call
+// site here passes a defined mapping. The validator's behaviour is therefore
+// unchanged — but it is unchanged BECAUSE of that, not because nothing moved.
 
 function practiceDefaultMatches(
   field: TemplateField,

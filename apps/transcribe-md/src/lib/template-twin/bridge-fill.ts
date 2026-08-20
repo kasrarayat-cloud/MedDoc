@@ -288,6 +288,27 @@ function supportedNumeric(
     );
     return null;
   }
+  // ⚠️ AND THE SECOND AXIS, WHICH THE KIND LIST ABOVE DOES NOT COVER — the
+  // watched-set failure caught inside this very guard by the adversarial pass.
+  // `assertionSupported` branches on `field.rowPrototype`, NOT on `field.kind`
+  // (validation/index.ts:206), and that branch demands a ROW ARRAY. A table
+  // cell inside a repeat region compiles to `rowPrototype: true` with kind
+  // `narrative_text` — which the list above happily admits — and this function
+  // only ever writes a SCALAR. That scalar then raises BOTH
+  // ASSERTION_NOT_SUPPORTED and REPEATING_ROW_SHAPE_INVALID, killing the whole
+  // native fill: the exact failure ruling #135 exists to remove.
+  //
+  // Not a regression (the pre-fix cell text was equally scalar) and not
+  // reachable on the customer's form — measured 2026-08-20, WM IOV compiles 80
+  // fields and ZERO rowPrototype. Refused anyway, for the same reason the kind
+  // list is: reachability is a fact about one template, not about this
+  // function. Filling repeat rows is a real feature and it is not this one.
+  if (field.rowPrototype) {
+    console.info(
+      `[template-twin:bridge] cell left blank field=${field.fieldId} reason=row_prototype_needs_row_array`,
+    );
+    return null;
+  }
   const matched = matchMeasurementFact({ value, segmentLabel, facts, mapping, rowLaterality });
   if (!matched.ok) {
     console.info(
@@ -418,6 +439,19 @@ export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): Fi
     //
     // This is ADDRESSING only. Which fact may support a cell, and what it must
     // cite, are unchanged.
+    //
+    // ⚠️ ONE HONEST QUALIFICATION, ADDED BY F5-d(b) AND FOUND BY ITS ADVERSARIAL
+    // PASS: since `supportedNumeric` can now refuse because a value is NOT
+    // DERIVABLE from the matched fact, DERIVABILITY IS AN INPUT TO ADDRESSING.
+    // A refused pairing still costs nothing (the note row is not consumed), but
+    // the loop moves on and a LATER note row may fill the cell instead — so the
+    // note row a cell ends up bound to can differ from the pre-fix choice.
+    //
+    // LATERALITY IS UNAFFECTED — `rowLateralityVerdict` (bridge-evidence.ts:207)
+    // is fail-closed on side and untouched, so no leg can cross. What changes is
+    // WHICH NOTE ROW, not WHICH LEG. Unreachable on production's route today
+    // (a narrative_text cell with a string-valued fact always derives), and
+    // stated here so nobody reads "addressing is unchanged" as wider than it is.
     const consumed = new Set<number>();
     for (const irRow of irRows) {
       const core = normVein(irRow.vein);

@@ -36,6 +36,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { compileTemplateDocx, renderTemplateDocx } from '@/lib/note-template-docx';
 
 import { bridgeNumericTableCells, mergeFieldResolutions } from '../bridge-fill';
+import { canonicalSha256 } from '../canonical';
 import { expectedDataTypeForFieldKind } from '../semantic-mapping';
 import { validateTemplateTwin } from '../validation';
 import {
@@ -239,7 +240,15 @@ describe('F5-d(b) — the two blocked GSV-at-SFJ cells now pass the validator', 
     const ids = new Set(bridged.map((r) => r.fieldId));
     expect(ids.has(cell(RIGHT_SFJ_ROW, DIAMETER_COL).fieldId)).toBe(true);
     expect(ids.has(cell(LEFT_SFJ_ROW, DIAMETER_COL).fieldId)).toBe(true);
-    expect(bridged.every((r) => r.status === 'supported')).toBe(true);
+    // ⚠️ `every(r => r.status === 'supported')` used to sit here and was a
+    // TAUTOLOGY — the bridge writes that string literal and has no other
+    // producer, so it cannot fail in any world. Replaced with the thing that
+    // can: exactly the two cells, and each carrying real citations.
+    expect(bridged).toHaveLength(2);
+    for (const r of bridged) {
+      expect(r.sourceFactIds).toHaveLength(1);
+      expect(r.evidenceAnchorIds.length).toBeGreaterThan(0);
+    }
   });
 
   it('⚠️ THE FIX: neither trailing-zero cell is ASSERTION_NOT_SUPPORTED any more', () => {
@@ -291,8 +300,12 @@ describe('F5-d(b) — the two blocked GSV-at-SFJ cells now pass the validator', 
         ? { ...m, expectedDataType: 'number' as const, unitPolicy: 'not_applicable' as const }
         : m,
     );
-    // A `number` field derives `number !== null && unit === null ? number : null`,
-    // so the unit must be absent for this route to produce a value at all.
+    // ⚠️ A `number` field derives `number !== null && unit === null ? number
+    // : null`, so it can only ever FILL from a UNITLESS fact. That is not the
+    // production fact shape — production measurement facts carry unit='mm' —
+    // and the unit-carrying case is measured in its own arm below rather than
+    // quietly avoided here. Naming the split is the point: this arm proves the
+    // TYPE CONTRACT, and it does so on the only input that can reach it.
     const unitless = { ...fact, unit: null } as EncounterFact;
     const bridged = bridgeNumericTableCells({
       facts: [unitless],
@@ -304,6 +317,61 @@ describe('F5-d(b) — the two blocked GSV-at-SFJ cells now pass the validator', 
     expect(written, 'the number route must still fill').toBeDefined();
     expect(typeof written?.value).toBe('number');
     expect(written?.value).toBe(3.1);
+  });
+
+  it('⚠️ THE SILENT BLANK: a `number` cell + a PRODUCTION-shaped fact fills nothing', () => {
+    // FOUND BY THE ADVERSARIAL PASS, AND IT IS A REAL BEHAVIOUR CHANGE, NOT A
+    // BUG THIS GATE IS HIDING. A production measurement fact carries
+    // unit='mm'. Against a `number`-kind cell the derivation therefore refuses,
+    // the cell stays blank, `populated` is false in the validator, and NO
+    // blocking issue is raised — so the document RENDERS CLEAN with the
+    // dictated diameter absent.
+    //
+    // ⚠️ BEFORE THIS CHANGE THE SAME INPUT FAILED LOUDLY (ASSERTION_NOT_SUPPORTED,
+    // blocking; and FIELD_VALUE_INVALID at the renderer for a string in a
+    // number cell). THE DATA LOSS IS NOT NEW — THE SILENCE IS. That trade is
+    // deliberate and is this bridge's standing design: every refusal is a blank
+    // cell with its reason NAMED IN THE LOG, never a dead document. It is
+    // recorded here as a measurement so nobody has to rediscover it.
+    //
+    // Unreachable in production today: all 52 table cells are narrative_text.
+    // The trigger is a template that compiles a measurement cell as `number`.
+    const field = cell(RIGHT_SFJ_ROW, DIAMETER_COL);
+    const numberIr: TemplateDocIR = {
+      ...ir,
+      fields: ir.fields.map((f) =>
+        f.fieldId === field.fieldId ? { ...f, kind: 'number' as const } : f,
+      ),
+    };
+    const mappings = mappingsForAllFields().map((m) =>
+      m.fieldId === field.fieldId
+        ? { ...m, expectedDataType: 'number' as const, unitPolicy: 'not_applicable' as const }
+        : m,
+    );
+    const productionShaped = diameterFact('a', '3.10', 'right'); // unit: 'mm'
+    expect(productionShaped.unit).toBe('mm');
+
+    const bridged = bridgeNumericTableCells({
+      facts: [productionShaped],
+      mappings,
+      ir: numberIr,
+      filledNote: noteWith('3.10', '[not documented]'),
+    });
+    expect(bridged.find((r) => r.fieldId === field.fieldId)).toBeUndefined();
+
+    // AND THE SILENCE, ASSERTED RATHER THAN DESCRIBED: the validator raises no
+    // blocking issue for that field, so nothing downstream reports the loss.
+    const merged = mergeFieldResolutions(ir, blankBaseline(), bridged);
+    const blocking = validateTemplateTwin({
+      fields: numberIr.fields,
+      mappings,
+      facts: [productionShaped],
+      resolutions: merged,
+      tables: ir.tables,
+      allowUncertifiedForSyntheticTest: true,
+      now: NOW,
+    }).issues.filter((i) => i.severity === 'blocking' && i.fieldId === field.fieldId);
+    expect(blocking).toEqual([]);
   });
 
   it('⚠️ A DICTATED NUMBER NEVER BECOMES A TICKED BOX — the `checkbox` route', () => {
@@ -343,6 +411,94 @@ describe('F5-d(b) — the two blocked GSV-at-SFJ cells now pass the validator', 
       filledNote: noteWith('3.10', '[not documented]'),
     });
     expect(ok.find((r) => r.fieldId === field.fieldId)?.value).toBe('3.1');
+  });
+
+  it('⚠️ THE `measurement` ROUTE — the one kind whose text DIFFERS from the cell', () => {
+    // The route enumeration was short by one and an adversarial pass said so.
+    // `measurement` is the kind where the derivation does not merely re-format
+    // the number, it APPENDS THE UNIT: `${number} ${unit}` -> "3.1 mm". So the
+    // rendered cell stops matching the note's "3.10" in a way the other kinds
+    // never do.
+    //
+    // ⚠️ AND THE CONSEQUENCE IS WORTH SEEING RATHER THAN INFERRING: the column
+    // is already headed "DIAMETER (mm)", so this route renders "3.1 mm" under
+    // an mm heading. That is what the validator DEMANDS (unitPolicy 'required'
+    // refuses a unitless value), not a defect introduced here — but it is a
+    // document-visible consequence of the mapping's unit policy, and it should
+    // be a decision somebody makes rather than a surprise somebody finds.
+    // Unreachable on the customer's form: all 52 cells are narrative_text.
+    const field = cell(RIGHT_SFJ_ROW, DIAMETER_COL);
+    const measurementIr: TemplateDocIR = {
+      ...ir,
+      fields: ir.fields.map((f) =>
+        f.fieldId === field.fieldId ? { ...f, kind: 'measurement' as const } : f,
+      ),
+    };
+    const mappings = mappingsForAllFields().map((m) =>
+      m.fieldId === field.fieldId
+        ? { ...m, expectedDataType: 'measurement' as const, unitPolicy: 'required' as const }
+        : m,
+    );
+    const fact = diameterFact('a', '3.10', 'right'); // unit: 'mm', as production stores it
+    const bridged = bridgeNumericTableCells({
+      facts: [fact],
+      mappings,
+      ir: measurementIr,
+      filledNote: noteWith('3.10', '[not documented]'),
+    });
+    const written = bridged.find((r) => r.fieldId === field.fieldId);
+    expect(written?.value).toBe('3.1 mm');
+
+    // And it VALIDATES — the point of the route being writable at all. Pre-fix
+    // this kind could never pass: "3.1 mm" === "3.10" is false for every input.
+    const merged = mergeFieldResolutions(ir, blankBaseline(), bridged);
+    const blocking = validateTemplateTwin({
+      fields: measurementIr.fields,
+      mappings,
+      facts: [fact],
+      resolutions: merged,
+      tables: ir.tables,
+      allowUncertifiedForSyntheticTest: true,
+      now: NOW,
+    }).issues.filter((i) => i.severity === 'blocking' && i.fieldId === field.fieldId);
+    expect(blocking).toEqual([]);
+  });
+
+  it('⚠️ THE SECOND AXIS: a rowPrototype cell is refused, not written as a scalar', () => {
+    // `assertionSupported` branches on `field.rowPrototype`, NOT on
+    // `field.kind` — so the kind allowlist above does not cover it, which an
+    // adversarial pass identified as the watched-set failure living inside the
+    // guard itself. A repeat-region table cell compiles as rowPrototype
+    // narrative_text, which the kind list ADMITS, and a scalar written there
+    // raises ASSERTION_NOT_SUPPORTED *and* REPEATING_ROW_SHAPE_INVALID — the
+    // whole-document death this item exists to remove.
+    //
+    // Measured: the customer's WM IOV compiles 80 fields and ZERO rowPrototype,
+    // so this is latent for that form and guarded anyway.
+    const field = cell(RIGHT_SFJ_ROW, DIAMETER_COL);
+    const repeatIr: TemplateDocIR = {
+      ...ir,
+      fields: ir.fields.map((f) =>
+        f.fieldId === field.fieldId ? { ...f, rowPrototype: true } : f,
+      ),
+    };
+    const bridged = bridgeNumericTableCells({
+      facts: [diameterFact('a', '3.10', 'right')],
+      mappings: mappingsForAllFields(),
+      ir: repeatIr,
+      filledNote: noteWith('3.10', '[not documented]'),
+    });
+    expect(bridged.find((r) => r.fieldId === field.fieldId)).toBeUndefined();
+    // Non-vacuity: the same input on the real (non-repeat) field DOES fill, so
+    // this is a refusal of the repeat shape and not of everything.
+    expect(
+      bridgeNumericTableCells({
+        facts: [diameterFact('a', '3.10', 'right')],
+        mappings: mappingsForAllFields(),
+        ir,
+        filledNote: noteWith('3.10', '[not documented]'),
+      }).find((r) => r.fieldId === field.fieldId)?.value,
+    ).toBe('3.1');
   });
 
   it('THE CONTROL: canonical diameters were never broken and still are not', () => {
@@ -508,6 +664,21 @@ describe('F5-d(b) — a refusal only ever replaces a BLOCKING failure', () => {
     // fix would be trading two refused cells for a fresh crop of blank ones.
     const reasons = bridgeReasons(diameterFact('a', '3.10', 'right'), '3.10');
     expect(reasons).not.toContain('value_not_derivable_from_fact');
+
+    // ⚠️ WITHOUT THE NEXT TWO LINES THIS ARM WAS VACUOUS, and an adversarial
+    // pass caught it: on this note exactly one cell is numeric, it FILLS, and
+    // every other cell short-circuits before the log — so `reasons` is []
+    // and `expect([]).not.toContain(x)` passes no matter what the bridge does.
+    // Say the stronger thing instead: NOTHING was refused, and the cell that
+    // could fill DID. An empty reason list now has to be earned.
+    expect(reasons).toEqual([]);
+    const filled = bridgeNumericTableCells({
+      facts: [diameterFact('a', '3.10', 'right')],
+      mappings: mappingsForAllFields(),
+      ir,
+      filledNote: noteWith('3.10', '[not documented]'),
+    });
+    expect(filled.map((r) => r.value)).toEqual(['3.1']);
   });
 });
 
@@ -533,15 +704,9 @@ describe('F5-d(b) — the derived value reaches the rendered document', () => {
       resolutions: merged,
       validation,
     });
-    // The renderer refuses a string where a kind wants a number
-    // (FIELD_VALUE_INVALID) and vice versa, by THROWING — so reaching a
-    // round-trip verification at all already asserts that the derivation's
-    // RETURN TYPE matched the field's kind.
     expect(rendered.verification.verified).toBe(true);
     expect(rendered.verification.fieldCheck).toBe('verified');
 
-    // And the cell is FILLED, not proven-blank: the derived value reached the
-    // document and survived the round-trip read-back.
     const right = rendered.verification.fields.find(
       (f) => f.fieldId === cell(RIGHT_SFJ_ROW, DIAMETER_COL).fieldId,
     );
@@ -550,5 +715,26 @@ describe('F5-d(b) — the derived value reaches the rendered document', () => {
     );
     expect(right?.kind).toBe('filled');
     expect(left?.kind).toBe('filled');
+
+    // ⚠️ AND THE PART THAT ACTUALLY DISCRIMINATES — WITHOUT IT THIS WHOLE
+    // SECTION WAS A DECORATION, which is what an adversarial pass called it.
+    // `VerifiedRenderedField` carries a valueSha256 and NO value, and "3.10"
+    // is a filled string that round-trips exactly as well as "3.1". Every
+    // assertion above passes identically on the PRE-FIX bridge. The three
+    // rationales this section used to give were all unfalsifiable on
+    // narrative_text, where String(derived) is the identity.
+    //
+    // So the value is pinned through the hash the renderer actually published:
+    // canonicalSha256({fieldId, value}) — renderer.ts:1223. Now the section
+    // fails if the document carries the model's text instead of the fact's.
+    expect(right?.valueSha256).toBe(
+      canonicalSha256({ fieldId: cell(RIGHT_SFJ_ROW, DIAMETER_COL).fieldId, value: '3.1' }),
+    );
+    expect(right?.valueSha256).not.toBe(
+      canonicalSha256({ fieldId: cell(RIGHT_SFJ_ROW, DIAMETER_COL).fieldId, value: '3.10' }),
+    );
+    expect(left?.valueSha256).toBe(
+      canonicalSha256({ fieldId: cell(LEFT_SFJ_ROW, DIAMETER_COL).fieldId, value: '4.4' }),
+    );
   });
 });

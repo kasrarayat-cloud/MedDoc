@@ -29,12 +29,40 @@
 // numerically instead would have "worked" and would have weakened a shipped
 // gate on the clinical path — explicitly ruled out by #135.
 //
+// ⚠️ PROVENANCE, STATED EXACTLY. `isStrictIsoDate` and `exactOption` came out
+// of validation/index.ts byte-identical. `deriveFieldValueFromFact` is its
+// `valueFromFact` plus exactly ONE line — `if (!mapping) return null;` — and
+// nothing else; measured by comparing normalised function bodies against
+// origin/main rather than by eye. The validator cannot reach that line (it
+// refuses a mapping-less field with MAPPING_MISSING before assertionSupported
+// runs), so its behaviour is unchanged.
+//
 // The third producer, resolver/index.ts's convertValue, is a SEPARATE
 // implementation of the same rule and is deliberately NOT folded in here
 // today: it converts from a raw fact value under resolver-specific failure
-// CODES that its own callers switch on. It already derives FROM THE FACT, so
-// it does not carry this defect. Named here so the next reader knows the
-// duplication is seen rather than missed.
+// CODES that its own callers switch on, and it already derives FROM THE FACT
+// rather than from model text — so it does not carry THIS defect (the bridge's
+// note-text copy). Named here so the next reader knows the duplication is seen
+// rather than missed.
+//
+// ⚠️ AN EARLIER VERSION OF THAT SENTENCE STOPPED AT "does not carry this
+// defect", AND AN ADVERSARIAL PASS CORRECTLY READ IT AS WIDER THAN INTENDED.
+// The resolver carries the same FAMILY — a writer and the validator disagreeing
+// by one character, costing the whole document — through a different door:
+// `resolver/index.ts:107` TRIMS before matching an option and this module does
+// not (nor did the validator's private copy it came from, so the extraction
+// introduced nothing). A `single_select` fact value of `"Normal "` therefore
+// resolves in the resolver and fails to re-derive in the validator →
+// ASSERTION_NOT_SUPPORTED → the native document is silently withheld. That is
+// live on `main` today, it is OUT OF SCOPE for F5-d, and it is filed in RELAY
+// rather than fixed here, because folding it in is a behaviour change to the
+// resolver on the clinical path and needs its own proof.
+//
+// ⚠️ AND THE DUPLICATION LIST IS THREE, NOT TWO — an adversarial pass caught
+// this note being short by one. `isStrictIsoDate` also has a THIRD copy at
+// note-template-docx/renderer.ts:883, outside this package entirely. None of
+// the three is folded in today; enumerating them is the point, because "the
+// duplication is seen" is a claim that decays the moment a copy is missed.
 // ============================================================================
 
 import type { EncounterFact, SemanticMapping, TemplateField } from './ir';
@@ -86,6 +114,30 @@ export function exactOption(
  * field with no mapping REFUSES rather than guessing a unit policy — there is
  * no safe default, and the validator, which always has the mapping, would
  * refuse the guess anyway.
+ *
+ * ⚠️⚠️ **"WRITE IT THROUGH UNCHANGED" IS SOUND FOR FIVE OF THE SEVEN KINDS AND
+ * WRONG FOR TWO.** This function was born COMPARE-ONLY inside the validator,
+ * where a return value is only ever `===`-tested. Making it public made its
+ * return a WRITE-SIDE contract, and for two kinds that contract is incomplete.
+ * Both were found by an adversarial pass; both are stated here rather than
+ * papered over, because the previous version of this docstring told a caller to
+ * do something that produces a blocking issue and a thrown render:
+ *
+ *  - **`multi_select` returns a bare STRING, and every consumer needs
+ *    `string[]`.** Writing it through yields MULTI_SELECT_TYPE_INVALID
+ *    (blocking) plus `failTemplateDocxRender('FIELD_VALUE_INVALID')`. Compare
+ *    against a `string[]` element; do not write the result.
+ *  - **`single_select` returns the option's VALUE and drops its ORDINAL**,
+ *    which is the half a writer needs: the validator checks
+ *    `selectedOptionOrdinal` against the option (DROPDOWN_ORDINAL_MISMATCH) and
+ *    the renderer resolves the option THROUGH the ordinal. Its sibling
+ *    implementation, resolver/index.ts's `convertValue`, returns the PAIR for
+ *    exactly this reason.
+ *
+ * So: any future writer beyond the measurement bridge must handle those two
+ * kinds explicitly or refuse them, as `supportedNumeric` does. The refusal
+ * lives on the CALLER today, which is the weaker place for it — recorded as a
+ * known limit rather than claimed as a design.
  */
 export function deriveFieldValueFromFact(
   field: TemplateField,
