@@ -284,9 +284,36 @@ function supportedNumeric(
   // validation/index.ts:290), so a cell with no mapping is already asking a
   // different question.
   const canonical = mapping ? valueFromFact(field, mapping, matched.match.fact) : value;
-  if (typeof canonical !== 'string') {
-    // Nothing canonical to assert -> refuse, rather than write a value the
-    // validator is guaranteed to reject.
+
+  // ⚠️ THE PREDICATE IS `=== null`, NOT `typeof !== 'string'`, AND THE
+  // DIFFERENCE SILENTLY BLANKED WHOLE FIELD KINDS.
+  //
+  // `valueFromFact` signals "nothing to assert" with NULL. It returns a STRING
+  // only for narrative_text / single_select / multi_select / date; `number`
+  // returns a NUMBER, `checkbox` a BOOLEAN, and `measurement` returns
+  // `unit ? "N unit" : number`. `ResolvedFieldValueSchema` (ir.ts:411-417)
+  // accepts string, number and boolean alike.
+  //
+  // So `typeof canonical !== 'string'` was TRUE for every `number`-kind table
+  // cell and for every measurement whose cited fact carries no unit — each one
+  // refused with `no_canonical_value` and recorded as `not_mentioned`, for a
+  // value the doctor dictated and which is sitting in the generated note.
+  //
+  // ⚠️ AND THE GUARD'S OWN COMMENT WAS FALSE FOR THE BRANCH IT KILLED: it said
+  // it refused "rather than write a value the validator is guaranteed to
+  // reject", and the adversarial pass proved the validator ACCEPTS the raw
+  // canonical number — `valid = true`, zero issues on the cell.
+  //
+  // Found by the mandatory refutation pass, 2026-08-20, which reached it by
+  // surgery on the blank fixture (`Perforator count` -> kind `number`) because
+  // the owner's live form is 52 of 52 narrative_text and could never have shown
+  // it. Latent, not firing today, and clinical in kind the moment any uploaded
+  // form carries a count/score/number/quantity/age row label.
+  //
+  // ⚠️ NEVER `String(canonical)` HERE. Stringifying a number reintroduces BOTH
+  // ASSERTION_NOT_SUPPORTED (strict `===` compares `3 === "3"`) and
+  // NUMBER_INVALID (`typeof resolution.value !== 'number'`).
+  if (canonical === null) {
     console.info(
       `[template-twin:bridge] cell left blank field=${field.fieldId} reason=no_canonical_value`,
     );

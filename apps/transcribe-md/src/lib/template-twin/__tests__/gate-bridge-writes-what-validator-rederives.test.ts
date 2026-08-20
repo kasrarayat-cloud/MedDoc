@@ -67,5 +67,80 @@ describe('#135 — one derivation, both callers', () => {
   });
 });
 
+/**
+ * ⚠️ EVERY FIELD KIND THE CHANGED PATH CAN CARRY — the arm the first version
+ * did NOT have, and its absence hid a real defect.
+ *
+ * The first gate exercised `valueFromFact` at ONE kind (`narrative_text`) — the
+ * only kind that returns a string. The bridge guard then tested
+ * `typeof canonical !== 'string'`, which is TRUE for every `number`-kind cell
+ * and for every `measurement` whose fact carries no unit, so those cells were
+ * silently blanked and recorded as `not_mentioned`.
+ *
+ * The refutation pass reached it by SURGERY ON THE BLANK FIXTURE (a row label
+ * changed to `Perforator count`, which the compiler infers as kind `number`),
+ * because the owner's live form is 52 of 52 `narrative_text` and could never
+ * have shown it. A census over the kinds is what makes the blindness
+ * impossible to repeat.
+ */
+describe('the canonical value survives for EVERY kind, not just strings', () => {
+  const kinds: Array<[string, EncounterFact, unknown]> = [
+    ['narrative_text', fact('3.1', 3.1), '3.1'],
+    ['number', numberFact(3), 3],
+    ['checkbox', affirmedFact(), true],
+  ];
+
+  it('the census is non-vacuous — more than one kind is exercised', () => {
+    expect(new Set(kinds.map(([k]) => k)).size).toBeGreaterThan(1);
+  });
+
+  for (const [kind, f, expected] of kinds) {
+    it(`⚠️ ${kind}: valueFromFact yields a NON-NULL value the bridge must write`, () => {
+      const v = valueFromFact(field(kind), mapping, f);
+      expect(v, `${kind} produced null — the bridge would blank this cell`).not.toBeNull();
+      expect(v).toEqual(expected);
+    });
+
+    it(`${kind}: a "is it a string?" guard would have DISCARDED it`, () => {
+      const v = valueFromFact(field(kind), mapping, f);
+      // The defect, stated as data: for every non-string kind the old predicate
+      // was true and the cell was refused.
+      if (kind !== 'narrative_text') expect(typeof v).not.toBe('string');
+    });
+  }
+
+  it('⚠️ THE BRIDGE GUARD TESTS NULLITY, NOT TYPE', () => {
+    const src = readFileSync(join(__dirname, '..', 'bridge-fill.ts'), 'utf8');
+    const code = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+    expect(code).toMatch(/if \(canonical === null\)/);
+    expect(code).not.toMatch(/typeof canonical !== 'string'/);
+    // and it must never stringify — that reintroduces ASSERTION_NOT_SUPPORTED
+    // and NUMBER_INVALID together.
+    expect(code).not.toMatch(/String\(canonical\)/);
+  });
+});
+
+function numberFact(n: number): EncounterFact {
+  return {
+    factId: 'ttfact_n', sourceType: 'encounter_evidence', concept: 'measurement.diameter',
+    value: String(n), polarity: 'affirmed', temporality: 'current', experiencer: 'patient',
+    laterality: 'right', number: n, unit: null, speaker: null,
+    sourceTranscriptOffsets: null, audioTimestampSeconds: null,
+    evidenceAnchorIds: ['a1'], evidenceQuote: 'Perforator count 3',
+    quality: { asr: 'high', evidence: 'direct' },
+  } as unknown as EncounterFact;
+}
+
+function affirmedFact(): EncounterFact {
+  return {
+    factId: 'ttfact_b', sourceType: 'encounter_evidence', concept: 'measurement.diameter',
+    value: 'yes', polarity: 'affirmed', temporality: 'current', experiencer: 'patient',
+    laterality: 'right', number: null, unit: null, speaker: null,
+    sourceTranscriptOffsets: null, audioTimestampSeconds: null,
+    evidenceAnchorIds: ['a1'], evidenceQuote: 'present',
+    quality: { asr: 'high', evidence: 'direct' },
+  } as unknown as EncounterFact;
+}
+
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
