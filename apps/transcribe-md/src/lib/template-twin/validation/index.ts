@@ -131,7 +131,22 @@ function exactOption(
   );
 }
 
-function valueFromFact(
+/**
+ * ⚠️ EXPORTED SO THE BRIDGE WRITES WHAT THIS FUNCTION WILL RE-DERIVE — #135.
+ *
+ * The document's cell and the validator's expectation used to be two INDEPENDENT
+ * renderings of one number: `bridge-fill.ts:261` wrote the model's raw cell text
+ * ("3.10"), this function re-derived the fact's own value ("3.1"), and `:291`
+ * compared them with strict `===`. Numerically identical, textually different,
+ * `ASSERTION_NOT_SUPPORTED`.
+ *
+ * Measured on the owner's production template 2026-08-20: exactly two of twenty
+ * diameters were non-canonical — `k=0` -> "3.10" and `k=10` -> "4.40", which are
+ * Right and Left `GSV at the SFJ` — and they were the only two blocking cells.
+ *
+ * One rule, both callers. The same move `rowLateralityVerdict` already makes.
+ */
+export function valueFromFact(
   field: TemplateField,
   mapping: SemanticMapping,
   fact: EncounterFact,

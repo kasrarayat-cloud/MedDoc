@@ -24,6 +24,7 @@ import {
   type TemplateField,
 } from './ir';
 import { bridgeChoiceSlotPicks } from './picks-bridge';
+import { valueFromFact } from './validation';
 import { citationOf, matchMeasurementFact } from './bridge-evidence';
 import type { EncounterFact, SemanticMapping } from './ir';
 
@@ -255,10 +256,46 @@ function supportedNumeric(
     );
     return null;
   }
+  // ⚠️ THE DOCUMENT CARRIES THE CITED FACT'S VALUE, NOT THE MODEL'S FREE TEXT —
+  // #135. This used to write `value`, the raw cell text from the generated note,
+  // while the validator re-derived the FACT's value and compared with strict
+  // `===`. "3.10" !== "3.1" and the assertion failed on two cells that were
+  // numerically correct and textually different.
+  //
+  // Writing what the validator will re-derive makes the two sides ONE
+  // derivation instead of two renderings. It is also the stricter half: the
+  // document now carries a value traceable to the cited fact rather than to
+  // whatever the model happened to type.
+  // ⚠️ NO CAST HERE. An earlier draft wrote
+  //     valueFromFact(field, mapping ?? matched.match.fact as never, …)
+  // which passes a FACT where a MAPPING is expected and compiles only because
+  // `as never` silences it. `tsc` was green and the code was wrong.
+  //
+  // ⚠️ AND THE CANONICALISATION IS SCOPED TO WHERE A MAPPING EXISTS, WHICH IS
+  // EVERY PRODUCTION CELL. Measured 2026-08-20: 0 of 52 measurement fields on
+  // the live template lack a mapping. `input.mappings` is nevertheless OPTIONAL
+  // at this API boundary, and callers that omit it keep the previous behaviour
+  // rather than having their cells refused by a fix aimed elsewhere.
+  //
+  // The limit is stated, not silent: WITHOUT a mapping the document still
+  // carries the model's raw text, so the "3.10" vs "3.1" class is fixed on the
+  // production path and unfixed on a path production does not use. The
+  // validator's own check requires a mapping too (`factMatchesMapping` at
+  // validation/index.ts:290), so a cell with no mapping is already asking a
+  // different question.
+  const canonical = mapping ? valueFromFact(field, mapping, matched.match.fact) : value;
+  if (typeof canonical !== 'string') {
+    // Nothing canonical to assert -> refuse, rather than write a value the
+    // validator is guaranteed to reject.
+    console.info(
+      `[template-twin:bridge] cell left blank field=${field.fieldId} reason=no_canonical_value`,
+    );
+    return null;
+  }
   return FieldResolutionSchema.parse({
     fieldId: field.fieldId,
     status: 'supported',
-    value, // narrative_text cells render the bare string; no unit, no reformat
+    value: canonical,
     ...citationOf(matched.match),
     selectedOptionOrdinal: null,
     reasonCode: 'table_cell_measurement',
