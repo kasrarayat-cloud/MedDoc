@@ -111,8 +111,41 @@ ledger_progress_hash() {
   # so a hash taken that way is not the hash of the blob. It would still be
   # deterministic and would still work — which is precisely why it would never
   # be noticed, and why the byte-faithful form is used instead.
-  blob_hash="$(git show "origin/main:$ledger" 2>/dev/null | sha256sum | cut -d' ' -f1)"
+  #
+  # ⚠️ BUT A PIPE DISCARDS THE LEFT SIDE'S EXIT CODE, AND THAT CONVERTS A
+  # FAILURE INTO A STABLE, PLAUSIBLE VALUE. On failure `git show` writes
+  # nothing, the pipe runs ANYWAY, and `sha256sum` hashes EMPTY STDIN to the
+  # constant `e3b0c442…855`. That is 64 hex characters — so the `-z` guard
+  # below cannot see it — and it is IDENTICAL ON EVERY BROKEN READ, so two
+  # consecutive blind sessions compare EQUAL and the no-progress switch fires.
+  # This function exists to prevent exactly that false halt, so failing this
+  # way would make it the cause of the bug it was written to cure.
+  #
+  # `git cat-file -e` above proves the blob exists, which is what makes this
+  # near-unreachable — a corrupt object, a gc racing the read, a truncated
+  # pack. Near-unreachable is not unreachable, and the cost of being wrong is a
+  # dark loop nobody can explain.
+  #
+  # `pipefail` is set INSIDE the substitution, not at file scope: this is a
+  # sourced library and it must not mutate the shell options of whatever
+  # sources it. It also means the guard holds no matter how the caller is
+  # configured, rather than depending on the caller for its correctness.
+  local pipe_status=0
+  blob_hash="$(set -o pipefail; git show "origin/main:$ledger" 2>/dev/null | sha256sum | cut -d' ' -f1)" || pipe_status=$?
 
+  if [ "$pipe_status" -ne 0 ]; then
+    printf 'CANNOT-TELL:show-failed\n'
+    return 2
+  fi
+
+  # ⚠️ COMPARING AGAINST THE EMPTY-STDIN DIGEST WAS CONSIDERED AS A SECOND NET
+  # AND IS DELIBERATELY NOT DONE — it cannot tell "we hashed nothing" from "the
+  # ledger is legitimately a zero-byte file", and the existence check above is
+  # separate PRECISELY so those two stay distinguishable (see its comment: "an
+  # empty file hashes fine"). `pipefail` is also STRICTLY STRONGER: it catches a
+  # truncated read that emitted some bytes before failing, which produces a
+  # WRONG hash rather than the empty one, and no constant comparison can see
+  # that at all.
   if [ -z "$blob_hash" ]; then
     printf 'CANNOT-TELL:hash-empty\n'
     return 2

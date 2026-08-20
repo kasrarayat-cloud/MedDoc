@@ -417,3 +417,128 @@ describe('F20 — the runner actually uses it', () => {
     expect(resets).toBe(3);
   });
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// THE PIPE SWALLOWS `git show`'s EXIT CODE — filed as an owed residual in
+// INBOX 2026-08-20T01:45:00Z, closed here.
+//
+// `git cat-file -e` proves the blob exists, which is what makes this
+// near-unreachable. Near-unreachable is not unreachable (a corrupt object, a gc
+// racing the read, a truncated pack), and the failure is the nastiest shape
+// there is: `git show` writes NOTHING, the pipe runs anyway, `sha256sum` hashes
+// EMPTY STDIN, and the result is `e3b0c442…855` — 64 hex characters, so the
+// `-z` guard cannot see it, and IDENTICAL ON EVERY BROKEN READ. Two consecutive
+// blind sessions therefore compare EQUAL and the no-progress switch fires: this
+// function would become the cause of the exact false halt it was written to
+// cure.
+//
+// ⚠️ MAKING IT REACHABLE IS THE WHOLE DIFFICULTY, so the failure is injected
+// rather than simulated: a `git` shim on PATH that is byte-for-byte the real
+// git for every subcommand EXCEPT the one named. `cat-file -e` still succeeds,
+// so control genuinely reaches the pipe — this exercises the real gap, not a
+// re-implementation of it.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** sha256 of zero bytes. Named, because an unexplained constant in a test is
+ *  indistinguishable from a typo. */
+const SHA256_OF_EMPTY = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
+/** A `git` that is the real git except for `sub`, which exits 1 printing
+ *  nothing — precisely how a failed `git show` behaves. */
+function shimBreaking(sub: string): string {
+  const dir = join(TMP, `shim${seq++}`);
+  mkdirSync(dir, { recursive: true });
+  const real = execFileSync('bash', ['-c', 'command -v git'], { encoding: 'utf8' }).trim();
+  writeFileSync(
+    join(dir, 'git'),
+    `#!/usr/bin/env bash\n` +
+      `if [ "\${1:-}" = ${JSON.stringify(sub)} ]; then exit 1; fi\n` +
+      `exec ${JSON.stringify(real)} "$@"\n`,
+    { mode: 0o755 },
+  );
+  return dir;
+}
+
+/** `probe`, with a shim directory prepended to PATH. */
+function probeWithPath(cwd: string, shimDir: string): Probe {
+  const script = `
+set -uo pipefail
+export PATH=${JSON.stringify(shimDir)}:"$PATH"
+. ${JSON.stringify(LIB)}
+out="$(ledger_progress_hash ${JSON.stringify(LEDGER)})"
+rc=$?
+printf '%s\\n' "$rc"
+printf '%s\\n' "$out"
+`;
+  const raw = execFileSync('bash', ['-c', script], { cwd, encoding: 'utf8' });
+  const lines = raw.split('\n');
+  return { rc: Number(lines[0]), out: (lines[1] ?? '').trim() };
+}
+
+describe('F20 — a FAILED READ is cannot-tell, never a stable plausible hash', () => {
+  // ⚠️ THE HARNESS IS CONTROLLED FIRST. A shim that broke *everything* would
+  // make every refusal arm below pass while proving nothing about `show`.
+  it('the shim is a real git for everything it does not break (harness control)', () => {
+    const { work } = newPair('# ledger\ncontrolled\n');
+    const clean = probeWithPath(work, shimBreaking('this-is-not-a-git-subcommand'));
+    expect(clean.rc).toBe(0);
+    expect(clean.out).toMatch(HEX64);
+  });
+
+  it('returns CANNOT-TELL and exit 2 when `git show` fails, instead of hashing empty stdin', () => {
+    const { work } = newPair('# ledger\nrow one\n');
+    const p = probeWithPath(work, shimBreaking('show'));
+
+    expect(p.rc).toBe(2);
+    expect(p.out).toBe('CANNOT-TELL:show-failed');
+  });
+
+  it('⚠️ and specifically does NOT return the empty-stdin digest — the shape of the bug', () => {
+    // This is the arm that would have gone RED before the fix. The old code
+    // reached `[ -z "$blob_hash" ]` holding e3b0c442…855, which is not empty,
+    // so it returned that value with exit 0 — a valid-looking hash meaning
+    // "I could not read anything".
+    const { work } = newPair('# ledger\nrow one\n');
+    const p = probeWithPath(work, shimBreaking('show'));
+
+    expect(p.out).not.toBe(SHA256_OF_EMPTY);
+    expect(p.rc).not.toBe(0);
+  });
+
+  it('⚠️ TWO blind reads do not compare EQUAL — the false halt is what this prevents', () => {
+    // The defect was never "a wrong hash". It was "the SAME wrong hash twice",
+    // because the no-progress switch fires on equality. Asserting inequality of
+    // the returned values would be the wrong test: both are the same
+    // CANNOT-TELL string. What must hold is that neither is a MEASUREMENT.
+    const { work } = newPair('# ledger\nrow one\n');
+    const a = probeWithPath(work, shimBreaking('show'));
+    const b = probeWithPath(work, shimBreaking('show'));
+
+    expect(a.rc).toBe(2);
+    expect(b.rc).toBe(2);
+    expect([a.out, b.out].every((o) => !HEX64.test(o))).toBe(true);
+  });
+
+  it('a LEGITIMATELY EMPTY ledger still MEASURES — the net does not overreach', () => {
+    // ⚠️ The residual as filed proposed comparing against the empty digest.
+    // That was declined: it cannot tell "we hashed nothing" from "the file is
+    // genuinely zero bytes", and the existence check exists precisely so those
+    // stay distinguishable. `pipefail` is also strictly stronger — it catches a
+    // truncated read that emitted bytes before failing, which yields a WRONG
+    // hash that no constant comparison could ever see.
+    const { work } = newPair('');
+    const p = probe(work);
+
+    expect(p.rc).toBe(0);
+    expect(p.out).toBe(SHA256_OF_EMPTY);
+  });
+
+  it('sets pipefail INSIDE the substitution, so a caller without it is still guarded', () => {
+    // A sourced library must not mutate its caller's shell options, and must
+    // not depend on them for its correctness either.
+    const src = readFileSync(LIB, 'utf8');
+    expect(src).toContain('$(set -o pipefail; git show');
+    // and it must NOT be set at file scope, which would leak into the runner
+    expect(src).not.toMatch(/^set -o pipefail$/m);
+  });
+});
