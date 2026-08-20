@@ -21714,3 +21714,97 @@ landed on `main` in this merge, so it is a stable address rather than a proposal
 **The gate is LIVE for the next deploy the moment this is on `main`** —
 `deploy-prod.sh` and `scripts/lib/` are read from the working tree at deploy
 time, not baked into an image.
+
+---
+
+### 🟩 THE TREE DEPLOY IS LIVE AND JUDGED — **2026-08-20T11:44:26Z, session 03 — 16 of 17, one FINDING**
+
+**The park that sessions 01 and 02 both held is discharged, and it was
+discharged the way the park's own unblock condition said: by writing a
+declaration that names the FULL DIFF.**
+
+| | |
+|---|---|
+| deployed commit | **`89429c1b0213209a75c2823e2107a43ee91dfb9e`** |
+| replaced | `7c42d2d7` (2026-08-20T06:15:17Z), read from the running images |
+| declaration | `docs/foundation/deploys/20260820-be9286c5.md` — **CARRY-FORWARD**, mode `strict`, committed before the act |
+| judgment | **16 of 17** · full report `docs/deploy-reports/20260820-89429c1b-f22-and-754-judgment.md` |
+| rollback | `pre-89429c1b-20260820` on app / worker / gotenberg, cut from the RUNNING digests and verified by re-reading each tag |
+
+**Citation — 4 of 4 on the DEPLOYED commit
+`89429c1b0213209a75c2823e2107a43ee91dfb9e`**, produced by
+`scripts/check-citation.sh` and pasted, not typed:
+
+   · `CI` 32361718066 a1
+   · `e2e` 32361717983 a1
+   · `a11y-ci` 32361718095 a1
+   · `secrets-scan` 32361718194 a1
+
+**Every line is `a1`** — nothing was re-run. ⚠️ **AND UNLIKE THE 06:15:17Z
+DEPLOY THIS ONE WAS TAKEN *AFTER* ITS CITATION EXISTED, BECAUSE THE GATE MADE IT
+IMPOSSIBLE TO DO OTHERWISE.**
+
+#### ⚠️ F22's GATE FIRED IN BOTH DIRECTIONS, LIVE, ON PRODUCTION
+
+**RED first.** With `89429c1b` at **3 of 4** (`e2e` in flight), the deploy
+printed `🔴 REFUSING TO DEPLOY — the gate has NOT finished looking at this
+commit.` **Verified rather than asserted:** image ids identical before and after,
+and **zero** `pre-89429c1b` tags in existence at that moment — the refusal landed
+before STEP 0b cut a rollback tag, before the backup, before any build. *That is
+the 06:15:17Z incident, prevented, on the day it was ruled.*
+
+**GREEN forty minutes later**, at 4 of 4: `🟢 CITED`. **The green half is the one
+usually skipped and it is the half that proves the gate is not simply broken
+shut.**
+
+#### ⚠️ THE ONE UNMET ROW IS THE DECLARATION'S FAULT, NOT THE DEPLOY'S
+
+MUST-CHANGE row 1 said all three image ids move. **App and worker moved
+(`47c225d4ab3a → 990efdb55017`, `fc16cbd6db7d → 51439ac7695d`); gotenberg did
+not.** Measured cause, from the deploy's own log: **every gotenberg layer built
+`CACHED` and the export wrote the identical digest**, so compose correctly
+declined to recreate a container whose image hash had not moved.
+
+> **The row was OVER-BROAD: it asserted three ids move when only the two whose
+> sources changed can. A row that a correct deploy cannot satisfy is a row that
+> trains its reader to wave one through.** Future declarations: *"the ids of
+> every service whose sources changed move, and the others are asserted
+> UNCHANGED with their cache state read from the build log."*
+
+⚠️ **AND TWO INSTRUMENTS DISAGREED GETTING THERE.** `docker compose images` said
+gotenberg was created *"42 seconds ago"*; the deploy's own `docker compose ps`
+said *"Up 13 days"*. `docker inspect --format '{{.State.StartedAt}}'` — asking
+the container instead of a summary table — settled it at **2026-08-07T08:31:48Z**.
+*The contradiction was the finding.*
+
+#### THE ROWS THAT MATTERED HELD
+
+#754 can NULL a pinned synthetic note — but only inside
+`runTemplateTwinSyntheticTest`, which a deploy never calls. Rows 11 and 12 were
+written for exactly that, are not redundant (a regeneration moves 12 while
+leaving 11 non-null), and **both held**: `pinnedSyntheticNote` still non-null,
+`pinnedNoteGeneratedAt` still `2026-08-18 23:19:50.436+00`. All twelve
+MUST-NOT-CHANGE rows met, including visits **48**, signed **30**, patients
+**35**, migrations **104 of 104**, imaging E/M **0 of 20**, note-shape E/M
+**15**, co-tenants **5 of 5** with `pro` at **410**, health **200**.
+
+#### ⚠️ `gh-runs.sh cited` AND `check-citation.sh` ASK DIFFERENT QUESTIONS
+
+The gate's verdict line read **`12 of 12 success`**, not `4 of 4`: eight
+**Dependabot** runs were attributed to this commit, all green.
+`check-citation.sh` classifies them as `extra` and prints the required four.
+**They agree here and would NOT agree if a non-required run went red — `cited`
+would refuse while the citation stayed complete.** That is a stricter deploy gate
+than the citation standard, which is the safe direction, but it is a real
+difference between two instruments this programme treats as interchangeable.
+Recorded now rather than discovered mid-incident.
+
+#### HONEST LIMITS
+
+- **No clinical walk, by standing law.** Nothing signed, adopted or exported.
+- **`synthetic-test.ts`'s BEHAVIOUR is not exercised** — the judgment reaches
+  *the symbol is in the shipped image* and no further. Its behavioural proof
+  belongs to PR #754's own gate.
+- **QA could not have supplied one either** — its images predate this payload.
+- **The gotenberg container was not restarted**, so nothing here re-proves the
+  font stack; it was already running the digest this deploy rebuilt identically.
