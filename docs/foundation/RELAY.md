@@ -359,7 +359,24 @@ unattended while the fault was live is how a CI fix becomes a CI outage.
 >   four lenses, two findings, both fixed; two more filed). **Ruling #126.**
 >   See *"F12-a — THE BLOCKING FINDING IS CLOSED"* at the end of this file for
 >   the measurements, the 8 mutation proofs and the honest limits.
-> - **What F12-a still owes: the merge-commit citation and the §2.5 deploy.**
+> - ⚠️ **F12-a OWES NOTHING. THIS LINE WAS STALE BY TWO DAYS AND IS CORRECTED
+>   2026-08-20, run `20260820-014110-b1` session 02.** *Previous wording, kept
+>   for the record: "What F12-a still owes: the merge-commit citation and the
+>   §2.5 deploy."* **Both were discharged on 2026-08-18**, measured rather than
+>   recalled:
+>   `docs/deploy-logs/deploy-20260818T133852Z.log` records
+>   `commit: 5e7b6f2e Merge pull request #725 from
+>   kasrarayat-cloud/docs/f12a-citation-and-declaration` under
+>   `declaration: docs/foundation/deploys/20260818-1d48d7cd.md` — a PR whose own
+>   branch name is *"f12a-citation-and-declaration"*. The declaration is present,
+>   committed, and carries its own **REVISED-before-the-deploy** note explaining
+>   the rename from `20260818-645db4a1.md`.
+>   **This is the row-left-open-after-the-item-closed class**, which this file
+>   already names four lines from here in F6.6's block — *"A FIXED ITEM LEFT
+>   LISTED AS OPEN COSTS A WHOLE SESSION"* — recurring in the STATUS BLOCK that
+>   exists so nobody has to read to the end of the file to learn the status.
+>   ⚠️ **A status block is the highest-leverage place for a stale line**, because
+>   it is written precisely to be trusted without checking.
 
 **OWNER FINDING, ON HIS OWN EXPORTED PDF. Two parts; both ship together.**
 
