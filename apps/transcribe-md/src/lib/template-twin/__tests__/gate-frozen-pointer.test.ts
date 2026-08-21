@@ -136,5 +136,65 @@ describe('the pointer is written with the signature, in one statement', () => {
   });
 });
 
+/**
+ * ⚠️ THE POINTER IS DERIVED AT WRITE TIME, NOT TRUSTED FROM THE FREEZE.
+ *
+ * The aimed TOCTOU pass found two interleaves where the freeze's in-memory
+ * manifestId is wrong at the moment the signature lands:
+ *   · two concurrent signs — the loser's fill throws MANIFEST_CONFLICT, its
+ *     outcome is `failed` (a variant that structurally cannot carry an id), and
+ *     it stamps NULL even though the winner produced exactly the right document;
+ *   · one sign whose 20s race expired — the orphaned fill lands the correct
+ *     manifest moments later, and NULL is stamped anyway.
+ *
+ * Both strand the record on styled FOREVER, with an audit row asserting a
+ * downgrade that did not happen.
+ */
+describe('resolveFrozenPointer — asked of the database, at the last moment', () => {
+  it('⚠️ finds the manifest matching the CAPTURED note, whoever produced it', async () => {
+    const wanted = await sha(NOTE);
+    manifestFindFirst.mockResolvedValueOnce({ id: 'm-by-other-actor' });
+    const { resolveFrozenPointer } = await import('../sign-freeze');
+    const id = await resolveFrozenPointer('v1', 'p1', NOTE);
+
+    expect(id).toBe('m-by-other-actor');
+    // it is bound to the CAPTURE, not to the visit's current note
+    expect(manifestFindFirst.mock.calls[0][0].where.noteSha256).toBe(wanted);
+  });
+
+  it('⚠️ returns null when NOTHING matches — styled becomes a fact, not a guess', async () => {
+    manifestFindFirst.mockResolvedValueOnce(null);
+    const { resolveFrozenPointer } = await import('../sign-freeze');
+    expect(await resolveFrozenPointer('v1', 'p1', NOTE)).toBeNull();
+  });
+
+  it('a visit with no captured note has no pointer to resolve', async () => {
+    const { resolveFrozenPointer } = await import('../sign-freeze');
+    expect(await resolveFrozenPointer('v1', 'p1', null)).toBeNull();
+    expect(manifestFindFirst).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ it demands the SERVE predicate — a half-ready manifest is not a pointer', async () => {
+    manifestFindFirst.mockResolvedValueOnce({ id: 'm' });
+    const { resolveFrozenPointer } = await import('../sign-freeze');
+    await resolveFrozenPointer('v1', 'p1', NOTE);
+    const w = manifestFindFirst.mock.calls[0][0].where;
+    expect(w.status).toBe('VERIFIED');
+    expect(w.roundTripVerified).toBe(true);
+    expect(w.outputObjectKey).toEqual({ not: null });
+  });
+
+  it('⚠️ the sign route stamps the DERIVED pointer, not the freeze\'s id', () => {
+    const c = readFileSync(
+      join(__dirname, '..', '..', '..', 'app', 'api', 'visits', '[id]', 'sign', 'route.ts'),
+      'utf8',
+    ).split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+    expect(c).toMatch(/resolveFrozenPointer\(/);
+    expect(c).toMatch(/signWrite\(pointer\)/);
+    // the in-memory value must NOT be what reaches the write
+    expect(c).not.toMatch(/signWrite\(nativeFreeze\.manifestId/);
+  });
+});
+
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';

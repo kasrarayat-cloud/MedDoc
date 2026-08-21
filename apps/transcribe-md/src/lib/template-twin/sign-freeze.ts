@@ -18,7 +18,7 @@
 // response, so the doctor learns at SIGN time rather than at download time.
 // The same shape the E/M signedCode freeze twenty lines above already uses.
 import prisma from '@meddoc/db';
-import { manifestMatchesNote } from './note-identity';
+import { manifestMatchesNote, noteIdentity } from './note-identity';
 
 /** Bounded FILL-sized, not sweep-sized. A doctor is waiting on this request. */
 export const SIGN_FREEZE_BUDGET_MS = 20_000;
@@ -169,4 +169,40 @@ export async function freezeNativeManifestForSigning(input: {
     return { state: 'failed', reason: 'refill_did_not_match' };
   }
   return { state: 'regenerated', manifestId: after.id };
+}
+
+/**
+ * Which manifest corresponds to the text about to be signed?
+ *
+ * ⚠️ ASKED AT WRITE TIME, OF THE DATABASE — not "what did my freeze produce".
+ * A concurrent signer, or this request's own orphaned fill, may have produced
+ * the correct document after the freeze returned. Trusting the freeze's
+ * in-memory id stamps NULL in exactly those cases and strands the record on the
+ * styled path forever.
+ *
+ * Returns null when no VERIFIED manifest matches the captured note — which is
+ * the honest answer, and the one that makes `styled` a fact rather than a guess.
+ */
+export async function resolveFrozenPointer(
+  visitId: string,
+  practiceId: string,
+  capturedNote: string | null,
+): Promise<string | null> {
+  const wanted = noteIdentity(capturedNote);
+  if (!wanted) return null;
+  const m = await prisma.templateTwinFillManifest.findFirst({
+    where: {
+      visitId,
+      visit: { practiceId, deletedAt: null },
+      status: 'VERIFIED',
+      roundTripVerified: true,
+      outputObjectKey: { not: null },
+      // ⚠️ BOUND TO THE CAPTURE, not to whatever the visit's note says now.
+      // The signature freezes the captured text; the pointer must agree with
+      // THAT, or the pair is not one object.
+      noteSha256: wanted,
+    },
+    select: { id: true },
+  });
+  return m?.id ?? null;
 }

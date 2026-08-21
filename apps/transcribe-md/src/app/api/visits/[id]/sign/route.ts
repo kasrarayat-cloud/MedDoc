@@ -703,7 +703,39 @@ export const POST = withApiHandler<{ id: string }>(
 
       let updated: { count: number };
       try {
-        updated = await signWrite(nativeFreeze.manifestId ?? null);
+        // ⚠️ THE POINTER IS DERIVED AT WRITE TIME, NOT TRUSTED FROM THE FREEZE.
+        //
+        // `nativeFreeze.manifestId` is an in-memory value computed BEFORE the
+        // CAS. Two interleaves make it wrong, and the aimed pass demonstrated
+        // both:
+        //   · two concurrent signs — the loser's fill throws MANIFEST_CONFLICT,
+        //     its outcome is `failed` (a variant that structurally carries no
+        //     manifestId), and it stamps NULL even though the winner produced
+        //     exactly the document this note needs;
+        //   · a single sign whose 20s race expired — the orphaned fill lands
+        //     the correct manifest moments later, and NULL is stamped anyway.
+        //
+        // Either way the record is styled FOREVER and its audit row asserts a
+        // downgrade that did not happen.
+        //
+        // So the question asked here is not "what did MY freeze produce" but
+        // "which manifest corresponds to the text I am about to sign" — which
+        // is answerable from the database, by anyone, at the last moment.
+        const { resolveFrozenPointer } = await import(
+          '@/lib/template-twin/sign-freeze'
+        );
+        const pointer = await resolveFrozenPointer(
+          visitId,
+          session.user.practiceId,
+          visit.soapFinal
+        );
+        if (!pointer && nativeFreeze.state !== 'failed') {
+          nativeFreeze = { state: 'failed', reason: 'no_matching_manifest_at_signature' };
+        } else if (pointer && nativeFreeze.state === 'failed') {
+          // Another actor produced it. The downgrade notice would be a lie.
+          nativeFreeze = { state: 'regenerated', manifestId: pointer };
+        }
+        updated = await signWrite(pointer);
       } catch (err) {
         log.warn(
           'api:visits:sign',
