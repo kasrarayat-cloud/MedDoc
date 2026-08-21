@@ -31,13 +31,12 @@
 // refer to the same section three times.
 // ============================================================================
 
+import { parseMarkdownRow, MARKDOWN_RULE_ROW_RE } from './markdown-row';
 import { isDataColumnHeader } from './table-header-shape';
 import { readNoteSection } from './splice-note-section';
 
 /** `| --- | :--- |` — a table's alignment rule, never content. */
-const RULE_RE = /^\s*\|[\s:|-]+\|\s*$/;
 /** Any `| … | … |` line. */
-const ROW_RE = /^\s*\|.*\|\s*$/;
 /** `## HEADING` */
 const HEADING_RE = /^\s*#{1,6}\s/;
 
@@ -84,10 +83,21 @@ function norm(s: string): string {
     .replace(/\s+/g, ' ');
 }
 
+/** ONE reader, five callers — `lib/markdown-row.ts`.
+ *
+ *  ⚠️ THIS CALLER NOW SEES ROWS IT USED TO SKIP. Under the strict matcher a row
+ *  carrying a trailing annotation after its last pipe returned null here, was
+ *  skipped by the match loop, and the doctor was told `row_not_found` about a
+ *  row printed in their document — while the fill path read it correctly the
+ *  whole time. The suffix is deliberately dropped at THIS caller: an edit
+ *  rewrites the row from its cells, and carrying an evidence quote for a value
+ *  that has just been replaced would put two records on one line. */
 function cells(line: string): string[] | null {
-  if (RULE_RE.test(line) || !ROW_RE.test(line)) return null;
-  const inner = line.trim().replace(/^\|/, '').replace(/\|$/, '');
-  return inner.split('|').map((c) => c.trim());
+  // A separator is not content HERE — the header scan and the match loop both
+  // rely on it. The shared primitive parses it, because `bridge-fill` needs
+  // that; the judgement lives with the caller that holds it.
+  if (MARKDOWN_RULE_ROW_RE.test(line)) return null;
+  return parseMarkdownRow(line)?.cells ?? null;
 }
 
 /** Rebuild a row, preserving cell count. */
@@ -187,7 +197,7 @@ export function editTableCell(params: {
   // never against a neighbour's.
   const headerAt: number[] = [];
   for (let i = 0; i < lines.length; i += 1) {
-    if (cells(lines[i]) && RULE_RE.test(lines[i + 1] ?? '')) headerAt.push(i);
+    if (cells(lines[i]) && MARKDOWN_RULE_ROW_RE.test(lines[i + 1] ?? '')) headerAt.push(i);
   }
   if (headerAt.length === 0) return { ok: false, reason: 'no_table' };
 

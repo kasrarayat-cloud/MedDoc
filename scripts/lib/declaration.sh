@@ -233,6 +233,36 @@ declaration_resolve() {
   echo
   echo "   expected: $dir/$(date -u +%Y%m%d)-${head_short}.md"
   echo
+
+  # ⚠️ THE MISFILED-DECLARATION HINT.
+  #
+  # `docs/deploy-reports/` and `docs/foundation/deploys/` are one word apart in
+  # meaning and opposite in behaviour: the first is where deploy EVIDENCE is
+  # filed, the second is where this gate LOOKS. A declaration written to the
+  # first is tracked, committed, correct in content — and invisible here, so the
+  # refusal above reads as "you did not write one" when the truth is "you wrote
+  # one and I cannot see it".
+  #
+  # That happened TWICE IN ONE DAY, 2026-08-21, with the canon entry naming both
+  # directories open in front of the author. An error made twice with the rule
+  # in hand is an error the tooling should make impossible, so the refusal now
+  # goes and looks.
+  local misfiled
+  misfiled="$(ls -1t docs/deploy-reports/*decl*.md docs/deploy-reports/*declaration*.md 2>/dev/null | head -3)"
+  if [ -n "$misfiled" ]; then
+    echo "   ⚠️ BUT THESE LOOK LIKE DECLARATIONS, AND THEY ARE IN THE WRONG PLACE:"
+    echo "$misfiled" | sed "s|^|        |"
+    echo
+    echo "      docs/deploy-reports/  is where deploy EVIDENCE is filed."
+    echo "      docs/foundation/deploys/  is where THIS GATE looks."
+    echo
+    echo "      If one of those is the declaration for this deploy, re-path it:"
+    echo "        git mv <file> $dir/$(date -u +%Y%m%d)-${head_short}.md"
+    echo "      Keep the body byte-identical and say so in the commit — a"
+    echo "      declaration re-pathed after the fact is only trustworthy if its"
+    echo "      original commit timestamp still provably precedes the act."
+    echo
+  fi
   echo "   §2.5 requires the expected delta to be written down BEFORE the act."
   echo "   Afterwards it is unfalsifiable — every number has a story available"
   echo "   to it. Write it, then re-run. It must state:"

@@ -16,6 +16,7 @@
 // Pure + deterministic. No I/O, no AI. The generated note is the only new input.
 // ============================================================================
 
+import { parseMarkdownRow } from '@/lib/markdown-row';
 import {
   FieldResolutionSchema,
   type FieldResolution,
@@ -66,10 +67,13 @@ const SEP_ROW_RE = /^[\s:|-]+$/; // the | --- | --- | separator
 
 /** Split one "| a | b | c |" line into its cell strings (trimmed). Any trailing
  *  evidence-anchor "[...]" after the last pipe is dropped by TABLE_ROW_RE. */
+/** ONE reader, five callers — `@/lib/markdown-row`. The primitive was BUILT
+ *  from this function's tolerant semantics: greedy to the last pipe, trailing
+ *  annotation ignored. The other four callers converged onto it; this one is
+ *  unchanged in behaviour and now shares the definition rather than owning a
+ *  private copy of it. */
 function splitRow(line: string): string[] | null {
-  const m = TABLE_ROW_RE.exec(line);
-  if (!m) return null;
-  return m[1].split('|').map((c) => c.trim());
+  return parseMarkdownRow(line)?.cells ?? null;
 }
 
 /** Extract every contiguous markdown pipe-table from the note. A table is a

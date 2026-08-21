@@ -11,6 +11,7 @@
 // its own "Copy this section" buttons without a round-trip.
 // ============================================================================
 
+import { parseMarkdownRow, MARKDOWN_RULE_ROW_RE } from './markdown-row';
 import type { VisitExportData } from './visit-export';
 import { prescriptionOneLine, procedureProvenanceNote } from './visit-export';
 
@@ -90,17 +91,17 @@ function stripMarkdown(s: string): string {
     .replace(/(?<!\*)\*(?!\*)(.+?)\*(?!\*)/g, '$1'); // *italic* → italic
 }
 
-const TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
-const TABLE_SEPARATOR_ROW_RE = /^\s*\|[\s:|-]+\|\s*$/;
 const TASK_LINE_RE = /^(\s*)[-*]\s+\[( |x|X)\]\s+(.*)$/;
 
+/** ONE reader, five callers — `lib/markdown-row.ts`. See its header for why
+ *  five independent matchers disagreeing was a defect rather than a style. */
 function parseTableRow(line: string): string[] {
-  return line
-    .trim()
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split('|')
-    .map((c) => c.trim());
+  return parseMarkdownRow(line)?.cells ?? [];
+}
+
+/** The trailing annotation after a row's last pipe, or ''. */
+function rowSuffix(line: string): string {
+  return parseMarkdownRow(line)?.suffix ?? '';
 }
 
 /** Flatten GitHub-style markdown tables into plain lines an EHR text
@@ -116,21 +117,42 @@ export function flattenTables(s: string): string {
   let buf: string[] = [];
   const flush = () => {
     if (buf.length === 0) return;
-    const rows = buf
-      .filter((l) => !TABLE_SEPARATOR_ROW_RE.test(l))
-      .map(parseTableRow);
+    // Parse ONCE, carrying each row's trailing annotation with its cells. An
+    // earlier version recovered the suffix by indexing `body` back into `buf`,
+    // which is off by the separator row and silently attached the wrong row's
+    // annotation.
+    const parsed = buf
+      .filter((l) => !MARKDOWN_RULE_ROW_RE.test(l))
+      .map((l) => ({ cells: parseTableRow(l), suffix: rowSuffix(l) }));
     buf = [];
-    if (rows.length === 0) return;
-    const [header, ...body] = rows;
+    if (parsed.length === 0) return;
+    const header = parsed[0].cells;
+    const body = parsed.slice(1);
     if (body.length === 0) {
-      out.push(header.join(' · '));
+      // ⚠️ SAME RULE AS THE ROW PATH BELOW: an UNNAMED column contributes
+      // nothing to a header-only line. Without this an empty label cell
+      // produced a leading separator — ` · DIAMETER (mm) · REFLUX TIME (ms)`.
+      //
+      // Found while reconning Slice 2, in the fix for the row path: I changed
+      // ONE of this function's three `join(' · ')` sites and called the class
+      // closed. Naming a class is not enumerating it — the sites are 126, 133
+      // and 156, and 133 (orphan cells) is already correct because
+      // `.filter(Boolean)` drops empties there.
+      out.push(header.filter((h) => h !== '').join(' · '));
       return;
     }
-    for (const cells of body) {
+    for (const { cells, suffix } of body) {
       // A malformed row wider than the header keeps its orphan cells —
       // this is a clinical export, nothing may drop silently.
-      const orphans = cells.slice(header.length).filter(Boolean);
-      const tail = orphans.length > 0 ? ` · ${orphans.join(' · ')}` : '';
+      // ⚠️ THE TRAILING ANNOTATION RIDES WITH THE ORPHANS, UNDER THE SAME RULE.
+      // L4 appends an evidence quote after a row's last pipe in three observed
+      // forms. The strict matcher used to reject the whole row, so it leaked as
+      // raw markdown; the tolerant read parses the cells and hands back the
+      // suffix. Dropping it here would be this export silently losing content
+      // the note carries — which is the rule stated one line above, applied to
+      // the same class of content.
+      const extras = [...cells.slice(header.length).filter(Boolean), ...(suffix ? [suffix] : [])];
+      const tail = extras.length > 0 ? ` · ${extras.join(' · ')}` : '';
       if (header.length === 2) {
         // 2-column table → `cell1: cell2` (label/value), matching the
         // shape today's parse produces so EHR paste stays familiar.
@@ -158,7 +180,13 @@ export function flattenTables(s: string): string {
     }
   };
   for (const raw of lines) {
-    if (TABLE_ROW_RE.test(raw)) {
+    // ⚠️ THE TOLERANT READ, VIA THE SHARED PRIMITIVE. The strict matcher this
+    // replaced rejected any row carrying a trailing annotation after its last
+    // pipe — a shape L4 emits in three forms — so the row fell through to
+    // `out.push(raw)` and leaked as RAW MARKDOWN into the doctor's EHR paste,
+    // sandwiched between two flattened neighbours. The fill path read the same
+    // row correctly the whole time; one note, two documents.
+    if (parseMarkdownRow(raw) !== null || MARKDOWN_RULE_ROW_RE.test(raw)) {
       buf.push(raw);
       continue;
     }

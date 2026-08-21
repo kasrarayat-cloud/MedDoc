@@ -16,17 +16,20 @@
 // returned untouched — this only ever reformats markup, never content.
 // ============================================================================
 
-/** `| a | b | c |` with at least two cells. */
-const ROW_RE = /^\s*\|(.+)\|\s*$/;
-/** `| --- | :--- | ---: |` — a table's alignment rule, never content. */
-const RULE_RE = /^\s*\|[\s:|-]+\|\s*$/;
+import { parseMarkdownRow, MARKDOWN_RULE_ROW_RE } from './markdown-row';
 
+/** ONE reader, five callers — `lib/markdown-row.ts`.
+ *
+ *  ⚠️ THE `>= 2` RULE IS THIS CALLER'S, AND IT STAYS HERE. The primitive
+ *  parses; each caller decides what it will accept. A one-cell pipe line is a
+ *  table row as far as markdown is concerned and is not a measurement row as
+ *  far as claim prose is concerned — folding that judgement into the shared
+ *  reader would impose it on the export renderers, which must render whatever
+ *  the note carries. */
 function cells(line: string): string[] | null {
-  if (RULE_RE.test(line)) return null;
-  const m = ROW_RE.exec(line);
-  if (!m) return null;
-  const parts = m[1].split('|').map((c) => c.trim());
-  return parts.length >= 2 ? parts : null;
+  const parsed = parseMarkdownRow(line);
+  if (!parsed) return null;
+  return parsed.cells.length >= 2 ? parsed.cells : null;
 }
 
 /** "DIAMETER (mm)" -> { label: 'diameter', unit: 'mm' } */
@@ -61,7 +64,7 @@ function headerFor(note: string, rowText: string): { header: string[]; caption: 
   const at = hits[0];
   for (let i = at - 1; i >= 0; i -= 1) {
     const line = lines[i];
-    if (RULE_RE.test(line)) {
+    if (MARKDOWN_RULE_ROW_RE.test(line)) {
       const head = cells(lines[i - 1] ?? '');
       if (!head || head.length < 2) return null;
       // The line above the header is usually the table's own caption, and on a
