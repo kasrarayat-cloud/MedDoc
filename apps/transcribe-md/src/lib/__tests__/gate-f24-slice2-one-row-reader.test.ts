@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { flattenTables } from '../ehr-formatters';
+import { claimProse } from '../claim-prose';
+import { editTableCell } from '../note-table-edit';
 import { parseMarkdownRow, MARKDOWN_RULE_ROW_RE } from '../markdown-row';
 import JSZip from 'jszip';
 import { generateVisitDocx } from '../docx-generator';
@@ -194,5 +196,43 @@ describe('⚠️ BOTH export surfaces, not one — the watched-set gap the pass 
     expect(r?.cells).toEqual(['GSV at the SFJ', '6.2', '3.4']);
     expect(r?.cells).not.toContain('"reflux 3.4 seconds"');
     expect(r?.suffix).toBe('"reflux 3.4 seconds"');
+  });
+});
+
+describe('the two remaining callers, re-tested against HEAD', () => {
+  it('an EDIT drops the annotation, deliberately — and that is content loss by choice', () => {
+    // ⚠️ RECORDED AS A DECISION, NOT LEFT IMPLICIT. An edit rewrites the row
+    // from its cells, so the evidence quote no longer supports the value
+    // standing in the cell. Keeping it would put two records on one line —
+    // "a WRONG field is content that says the opposite of the record being
+    // signed". Dropping it IS content loss; it is the lesser of the two, and
+    // it is pinned here so nobody restores the quote thinking they are fixing
+    // a bug.
+    const r = editTableCell({
+      note: ['## F', '', '|  | D (mm) |', '| --- | --- |', '| GSV | 6.2 | "evidence for 6.2"', ''].join('\n'),
+      sectionLabel: 'F', rowLabel: 'GSV', columnLabel: 'D (mm)', value: '9.9',
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.body).toContain('| GSV | 9.9 |');
+      expect(r.body).not.toContain('evidence for 6.2');
+    }
+  });
+
+  it('claim-prose converts an ANNOTATED row it used to hand back as markup', () => {
+    // Its strict matcher rejected the annotated row, so a demoted claim was
+    // shown to the doctor as `| GSV at the SFJ | 6.2 | 3400 | "quote"` — a
+    // fragment of markup they were asked to make a clinical decision about,
+    // which is the exact thing that file exists to prevent.
+    const note = (row: string) =>
+      ['## FINDINGS', '', 'Right Leg:', '|  | DIAMETER (mm) | REFLUX (ms) |', '| --- | --- | --- |', row, ''].join('\n');
+    const annotated = '| GSV at the SFJ | 6.2 | 3400 | "quote"';
+    const out = claimProse(annotated, note(annotated));
+    expect(out.trim().startsWith('|')).toBe(false);
+    expect(out).toContain('GSV at the SFJ');
+    expect(out).toContain('Right Leg');
+    // control: the well-formed row still converts, unchanged in behaviour
+    const plain = '| GSV at the SFJ | 6.2 | 3400 |';
+    expect(claimProse(plain, note(plain)).trim().startsWith('|')).toBe(false);
   });
 });
