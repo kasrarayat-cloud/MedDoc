@@ -10,14 +10,29 @@
  * propagates and the template stays NEEDS_CONFIRMATION with the reason logged
  * and audited. A template is certified or it is not.
  *
- * ⚠️ AND IT REUSES THE MANUAL PATH'S OWN PIECES — the same VERIFICATION_ENCOUNTER,
- * the same synthetic test, the same lifecycle transition. An automatic path that
- * proved something different from the manual one would leave neither reader able
- * to say what their template actually passed.
+ * ⚠️ AND IT REUSES THE MANUAL PATH'S OWN PIECES — the same
+ * `deriveVerificationEncounter`, the same synthetic test, the same lifecycle
+ * transition. An automatic path that proved something different from the manual
+ * one would leave neither reader able to say what their template actually
+ * passed.
+ *
+ * ⚠️ THIS PARAGRAPH USED TO NAME `VERIFICATION_ENCOUNTER` — a shared CONSTANT.
+ * That was accurate until F5-c derived the encounter per template, and F5-i
+ * then removed the constant's last role: it is no longer a fallback, so a
+ * template this generator cannot address is REFUSED with a named reason rather
+ * than certified against a venous study. Both paths still refuse identically,
+ * which is the property this paragraph exists to assert.
  */
 import { readTemplateTwinWorkspace } from '@/lib/template-twin/workspace-read';
 import { updateTemplateTwinMappings, certifyAndActivateTemplateTwin } from '@/lib/template-twin/certification-lifecycle';
 import { runTemplateTwinSyntheticTest } from '@/lib/template-twin/synthetic-test';
+// ⚠️ FROM THE LEAF MODULE, NOT THE BARREL — `synthetic-test.ts` re-exports this
+// class, and importing it from there drags prisma, storage and the docx parser
+// in behind it. That file's own header says to import the DEFINITION from here.
+// It also matters to callers' tests: a `vi.mock` of the barrel that stubs only
+// `runTemplateTwinSyntheticTest` makes the re-export vanish, which is precisely
+// how this import first broke.
+import { TemplateTwinSyntheticTestError } from '@/lib/template-twin/synthetic-test-error';
 import { extractTemplateTwinEntities } from '@/worker/layers/03-extract-entities';
 import { createEphemeralVisitNoteGenerator } from '@/worker/template-twin-note-generator';
 import { deriveVerificationEncounter } from '@/lib/template-twin/verification-encounter';
@@ -106,22 +121,33 @@ export async function runAutoCertifyTwin(
     return { status: 'declined', confirmed: plan.mappings.length, declined: [], reason: 'reread_failed' };
   }
 
+  // ⚠️ DERIVED FROM THIS TEMPLATE, NOT A CONSTANT — F5-c.
+  // The generic encounter filled 7 of the owner's 80 fields and the lifecycle
+  // gate refused at >= 10, correctly. The encounter speaks to the form's own
+  // measurement rows so the fill path is genuinely exercised; the threshold is
+  // untouched.
+  //
+  // ⚠️ AND IT CAN REFUSE — F5-i. A form this generator cannot speak to used to
+  // receive a VENOUS dictation, so a colonoscopy operative note certified
+  // against a leg-vein study. Now nothing runs: the template stays
+  // NEEDS_CONFIRMATION and the reason says we could not generate a matching
+  // self-test, rather than reporting a proof that never touched this form.
   try {
     await runTemplateTwinSyntheticTest({
       noteTemplateId,
       actor,
       expectedMappingsSha256: persisted.mappingsSha256,
-      // ⚠️ DERIVED FROM THIS TEMPLATE, NOT A CONSTANT — F5-c.
-      // The generic encounter filled 7 of the owner's 80 fields and the
-      // lifecycle gate refused at >= 10, correctly. The encounter now speaks to
-      // the form's own measurement rows so the fill path is genuinely
-      // exercised; the threshold is untouched.
-      encounterText: deriveVerificationEncounter(
-        persisted.fields.map(({ field, mapping }) => ({
-          originalLabel: field.originalLabel,
-          clinicalConcept: mapping.clinicalConcept,
-        })),
-      ),
+      // ⚠️ A THUNK, NOT A STRING — F5-i. It is evaluated inside, BELOW the
+      // mappings-readiness gates, because a refusal computed over an unconfirmed
+      // field set is a statement about how much is confirmed and not about the
+      // form. See the `deriveEncounter` doc on runTemplateTwinSyntheticTest.
+      deriveEncounter: () =>
+        deriveVerificationEncounter(
+          persisted.fields.map(({ field, mapping }) => ({
+            originalLabel: field.originalLabel,
+            clinicalConcept: mapping.clinicalConcept,
+          })),
+        ),
       encounterMode: 'dictation',
       extractEntities: extractTemplateTwinEntities,
       generateNote: createEphemeralVisitNoteGenerator({
@@ -132,14 +158,28 @@ export async function runAutoCertifyTwin(
     // ⚠️ THE PROOF FAILED, SO NOTHING CERTIFIES. The mappings stay confirmed —
     // that work is real and the doctor should not have to redo it — but the
     // template remains NEEDS_CONFIRMATION and #713's banner names the reason.
-    const reason = err instanceof Error ? err.message : String(err);
+    // ⚠️ "WE COULD NOT TEST YOUR FORM" IS NOT "YOUR FORM WAS TESTED AND FAILED"
+    // — F5-i. Both arrive through this catch, and stamping them with the same
+    // `stage: 'synthetic_test'` would make the audit row claim a proof ran when
+    // none did. The stage is what a reader uses to tell those apart.
+    const notDerivable =
+      err instanceof TemplateTwinSyntheticTestError && err.code === 'ENCOUNTER_NOT_DERIVABLE';
+    const reason = notDerivable
+      ? `ENCOUNTER_NOT_DERIVABLE:${(err as TemplateTwinSyntheticTestError).blocking[0] ?? 'unknown'}`
+      : err instanceof Error
+        ? err.message
+        : String(err);
     await logTwinAudit({
       action: 'TEMPLATE_TWIN_CERTIFY_FAILED',
       userId,
       practiceId,
       targetType: 'note_template',
       targetId: noteTemplateId,
-      metadata: { auto: true, stage: 'synthetic_test', reason },
+      metadata: {
+        auto: true,
+        stage: notDerivable ? 'derive_encounter' : 'synthetic_test',
+        reason,
+      },
     });
     return { status: 'proof_failed', confirmed: plan.mappings.length, declined: [], reason };
   }

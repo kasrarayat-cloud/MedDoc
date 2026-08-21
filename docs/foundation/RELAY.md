@@ -23052,3 +23052,213 @@ payload was not, and every row is about the one file that moved.
   the rest of the gate is a measurement. **Retires when `MAIN_DIGEST` is
   extended to hash every entry** — a few lines, and the right first task for
   whoever next touches this gate.
+
+
+---
+
+## 🟡 F5-i(a)+(b) — SHAPE-DERIVED, OR REFUSE — BUILT AND GATED — 2026-08-21, run `20260821-111818-b1` session 01
+
+**CLAIM LINE (per the 2026-08-21T23:00Z INBOX rule): the loop is on F5-i's ruled
+part 2.** ⚠️ Filed in the same session that built it rather than before, because
+the item was picked up and started inside one session — the rule's purpose
+(a second actor EXTENDS instead of duplicating) is served, its timing is not.
+Part 1 (the second-shape QA walk) is **NOT started** — see PARKED below.
+
+**THE DEFECT.** `deriveVerificationEncounter` returned `VERIFICATION_ENCOUNTER` —
+a bilateral lower-extremity VENOUS REFLUX dictation — for any form it could not
+address. A Colonoscopy Operative Note, a SOAP office template and a thyroid
+study each certified against a leg-vein study naming not one field they contain.
+
+> **A certificate must mean THE form was exercised, not that A form was.**
+
+**THE FIX.** `{ok:true,text} | {ok:false,reason}`, three reasons that name
+genuinely different situations, and the fallback deleted rather than re-pointed.
+
+| what | where |
+|---|---|
+| the union + the three reasons | `verification-encounter.ts` |
+| the typed refusal code | `synthetic-test-error.ts` — `ENCOUNTER_NOT_DERIVABLE` |
+| the ORDER (see below) | `synthetic-test.ts`, below its readiness gates |
+| the doctor-facing rung | `template-twin-certify.ts`, beside MAPPINGS_NOT_READY |
+
+⚠️ **(a) SHIPPED A REAL DEFECT AND (b) IS THAT DEFECT NAMED.** (a) derived
+EAGERLY in each caller, which **pre-empted MAPPINGS_NOT_READY**: a physician
+with six unconfirmed fields was told *"your form and your field mappings are
+fine; this kind of form is not one we can self-test yet."* Their mappings were
+not fine, six awaited them, and the sentence told them to stop doing the one
+thing that would unblock them — **F16's own defect, inverted, inside the change
+that cites F16 as its reason.**
+
+**The mechanism, from the code rather than from argument:**
+`unreadyReason` (`mappings-readiness.ts:69`) refuses any non-manual field with
+no `clinicalConcept`. So while mappings are unready the derivation reads an
+INCOMPLETE field set — and F5-a's census leaves **22 of 80** fields unproposed
+on the real customer form, meaning a doctor can still supply a measurement
+concept by hand and turn a `no_measurement_rows` form into a derivable one.
+**A refusal computed there is a statement about how much has been confirmed,
+not about the form.**
+
+**(b) makes the encounter a THUNK** evaluated inside `runTemplateTwinSyntheticTest`
+immediately below its readiness gates — the first point at which every field
+provably has a confirmed mapping and a concept. Both callers inherit the order
+instead of each keeping it by hand.
+
+### THE PRODUCTION UNIVERSE, MEASURED THIS SESSION — NOT INHERITED
+
+| question | answer |
+|---|---|
+| note templates | **10** |
+| compiled twins | **1**, and it is `CERTIFIED` — the Venous Duplex |
+| templates that LOSE a certificate they hold | **0** |
+
+**This is a TIGHTENING and it costs a capability, knowingly.** The forms that
+would have gained a certificate would have gained a false one. Widening coverage
+(a per-shape generator) is additive and **must never arrive by restoring the
+fallback**.
+
+### PROOF
+
+- `tsc` **0 errors**. The SHAPE change — not `string | null` — is what named
+  every site; ⚠️ **two were in `apps/transcribe-md/scripts/`, which my grep had
+  missed** because I searched `src/` and the REPO-ROOT `scripts/`.
+- Full unit suite, controlled against `origin/main` in an identical detached
+  worktree (both carry the known `react/jsx-dev-runtime` alias failures):
+
+| | files | tests |
+|---|---|---|
+| `origin/main` | 16 failed / 334 passed | 1 failed / **4404** passed |
+| this branch | 16 failed / 334 passed | 1 failed / **4412** passed |
+
+  **Identical failure profile, +8 arms, zero new failures.**
+
+- **Mutation-proved, including the PARTIAL applications:**
+
+| # | mutation | result |
+|---|---|---|
+| **M1** | the ordering regression — derive eagerly in the manual caller | **8 red**, incl. `MAPPINGS_NOT_READY still wins` |
+| **M2** | the fallback restored | **4 red** in the derived-encounter gate |
+| **M3** | refuse EVERYTHING | the happy-path control **runs and fails** |
+
+  ⚠️ **M3 also proves a fix the pass demanded**: `derivedText()` used to throw in
+  a DESCRIBE BODY, so under M3 the file aborted at COLLECTION and reported
+  *"Tests no tests"* — not one arm ran, including the control whose comment
+  claimed it was *"the arm that fails in that case"*. Moved to `beforeAll`; it
+  was always fail-loud, never a false green, but the mechanism was not what the
+  comment said.
+
+### THE ADVERSARIAL PASS FOUND THE ORDERING DEFECT INDEPENDENTLY, AND FOUR MORE
+
+Every finding verified before acting on it. Beyond the ordering defect (found by
+both the pass and by taking a red test seriously rather than adjusting it):
+
+- **the "closed union" arm never read the union** — `KNOWN` was a test-local
+  array and its Set assertion a tautology. The pass mutation-proved it: a
+  brand-new union member plus a reachable branch gave **33 PASSED**. Now driven
+  by `satisfies Record<EncounterNotDerivable, …>` so a new member is a COMPILE
+  error until an input produces it.
+- **an unfalsifiable assertion** — `not.toMatch(/reflux/)` after a `toEqual`
+  that already pins the whole object. Removed: an assertion that reads as
+  coverage and asserts nothing is worse than none, because the next reader
+  counts it.
+- **a title wider than its measurement** — *"NO REFUSAL EVER RETURNS THE VENOUS
+  TEXT"*; the scan is not what reddens. Retitled to the one job it does.
+- ⚠️ **the manual caller had NO coverage in any direction** — a mutation
+  re-pointing it at the retired fallback left `tsc` at exit 0 and every suite
+  green. `gate-f16-certify-refusal-is-actionable.test.ts` gains **4 arms**, and
+  the load-bearing one is the regression guard for the defect (b) fixes.
+
+### ⚠️ AND THE PASS ITSELF COST SOMETHING — RECORDED, NOT SMOOTHED
+
+Two subagents were spawned for it. One **edited files in the live worktree**,
+leaving `MUTANT_D` and `MUTANT_E` in two production sources. Both were found and
+reverted; `MUTANT` reads **0** across the tree and `git status` is clean.
+
+⚠️ **At the moment of the first mutation the session's work was UNCOMMITTED** —
+the `B0-a` shape exactly, one command from real loss. The response was to commit
+F5-i(a) as a restore point *before* continuing, then instruct both agents to
+stop writing to the tree. **A restore point is what made the rest of the pass
+safe, and it existed by luck of timing rather than by design.**
+
+⚠️ **AND IT IS A STANDING TENSION THIS ROW DOES NOT SETTLE.** The session
+directive says not to use the Agent tool unless asked; `AGENTS.md` and MASTER
+say the adversarial pass is **mandatory** on the clinical generation path. The
+F6.2 session (2026-08-21, session 04) resolved it by **self-running** the pass
+and naming the residual. This session resolved it by **spawning**, on the
+reading that the standing prompt's "MANDATORY" is itself the request. Both are
+defensible; they are not the same policy, and two sessions doing different
+things is the shape the ledger exists to prevent. **Carried to the war room.**
+
+### WHAT THIS DOES NOT CLAIM
+
+- **F5-i part 1 is NOT DONE.** No second SHAPE has certified end-to-end; the
+  census is unchanged at 1 compiled twin. This closes the *honesty* half only.
+- **No production behaviour is verified.** 0 production rows reach the new
+  refusal today, and a real doctor's visit is never a smoke target.
+- **The QA stack could not have proven it either** — its app/worker images are
+  from **2026-08-18** and predate F5-d/e/f/h. Named, not worked around.
+
+### ⚠️ ADDENDUM — F5-i(c): THE PASS REFUTED THIS ITEM'S OWN HEADLINE CLAIM
+
+Everything above was written before the clinical lens reported. It did not find
+a rough edge; **it refuted the claim the item is named after** — *"no input can
+now cause a venous narrative to be attested against a non-venous form."*
+
+`VENOUS_TOKEN` listed `femoral`, `popliteal`, `tibial`. **Those three name a
+VEIN AND AN ARTERY at the same level**, so an ordinary lower-extremity
+**ARTERIAL** duplex satisfied the venous guard. Reproduced against the real
+function before changing it:
+
+    Right Superficial Femoral Artery: diameter 3.23 millimeters,
+    reflux time 0.637 seconds; incompetent.
+
+⚠️ **ARTERIES HAVE NO VALVES.** No arterial "reflux time" exists, "incompetent"
+is not a verdict for an artery, the study measures velocity in cm/s not a
+diameter in mm, and the closing line asserts a **deep venous** negative about a
+form with no venous rows. The guard's own comment — *"a venous duplex names its
+saphenous/femoral/popliteal segments"* — **is** the bug: an arterial duplex
+names them too. *The evidence was in the artifact I authored.*
+
+Fixed as three predicates (`ARTERIAL_TOKEN` refuses outright · unambiguous
+venous tokens qualify · the three shared tokens qualify **only** beside an
+explicit `vein|veins|venous`). ⚠️ **It cannot touch the one certified twin** —
+its rows are GSV/SSV/AAGSV/PAGSV, all unambiguous — and it is **not** a blanket
+deletion of the three tokens, because a femoral VEIN study is one this
+generator should speak to. Pinned in both directions.
+
+| mutation | result |
+|---|---|
+| **M4** complete inverse (the old list) | **3 red** |
+| **M5** PARTIAL — arterial guard lands, ambiguous requirement does not | **1 red** |
+
+⚠️ **M5 IS THE ONE TO READ. The arterial-duplex arm PASSES under it**, because
+`Artery` is caught by the arterial guard alone. Only the *"AMBIGUOUS tokens
+alone are not venous evidence"* arm sees it — **without that arm the
+half-landed fix ships silently.**
+
+**Also closed:** `scripts/prod-smoke/twin-ga-proof.ts` hand-asserted
+`{ok:true, text: ENCOUNTER}`, bypassing every F5-i refusal — the one remaining
+repo path feeding a venous dictation into a certification proof, **and it runs
+against production**. The pin is kept and now cross-checked against the real
+derivation. Found by sweeping the repo rather than the two callers.
+
+### ⚠️ AND I DESTROYED THE ARTERIAL FIX WHILE PROVING IT — CANON'S OWN MECHANISM
+
+Restoring after M5 with `git checkout -- verification-encounter.ts` reverted the
+file to HEAD, and **the arterial fix was UNCOMMITTED**, so it went with the
+mutation. The earlier restores in this same session were safe only because the
+fix happened to be committed at the time — *"restore from git" and "restore from
+backup" are not the same operation*, and the difference is invisible until the
+one time it is not.
+
+**The tell was a test count, exactly as canon predicts:** the three arterial
+arms went red on the next run. **The gate written minutes earlier is what caught
+it** — the strongest available argument for writing the arm before the fix.
+
+### RESIDUALS — open, named, not fixed here
+
+| # | residual | disposition |
+|---|---|---|
+| ~~R1~~ | ⚠️ **WITHDRAWN — the pass's own residual was a FALSE POSITIVE, and I checked it before leaving it filed.** It read *"`04b-anchor-verify.ts:329` carries the identical ambiguous token list and the same artery/vein ambiguity."* The token list IS similar. **The JOB is not.** `VESSEL_RE`'s own comment says *"Vessels a venous/arterial study names. Anatomy, not phrasing."* — it identifies WHICH VESSEL a sentence asserts about so the claim can be checked against the transcript. It **deliberately spans venous and arterial**, because that is the set of studies it must read; it never decides study TYPE. Ambiguity is a defect in a classifier and is intended in an identifier. **Same tokens, different job, different correctness criterion — no finding.** Recorded rather than deleted, because a withdrawn residual and an unexamined one look identical in a table. |
+| R2 | **laterality is prefixed, never read** — `build()` emits `Right `/`Left ` onto labels that may already carry a side, and both callers drop the `rowLaterality` they have | Pre-existing to F5-c, not introduced here. Fails CLOSED (`rowLateralityVerdict` refuses the cell), so the cost is coverage, not a wrong value. |
+| R3 | **the venous-evidence scan reads MEASUREMENT labels only** | Deliberate, and stated in the code: a wider scan would refuse a legitimate venous study carrying "Arterial history: none". |
+| R4 | **`seed-certified-twin.ts` also hand-asserts `ok:true`** | Left as is — a determinism-pinned QA seeder against the known venous fixture. |

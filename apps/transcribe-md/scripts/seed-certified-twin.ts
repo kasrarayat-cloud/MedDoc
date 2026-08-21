@@ -239,7 +239,10 @@ async function main() {
     noteTemplateId,
     actor,
     expectedMappingsSha256: ws.mappingsSha256,
-    encounterText: pins.encounterText,
+    // F5-i: a thunk, evaluated below the readiness gates. The seed PINS its
+    // encounter (determinism is the whole contract here — see the sha warning
+    // above), so it returns that pin rather than deriving.
+    deriveEncounter: () => ({ ok: true, text: pins.encounterText }),
     encounterMode: 'text',
     extractEntities: refuseExtractor,
     generateNote: refuseGenerator,
