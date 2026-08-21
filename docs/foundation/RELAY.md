@@ -63,6 +63,54 @@ too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
 
 
+
+### 🟢 F24 SLICE 2 — merged `706148c5`. One row reader, five callers.
+
+Five pipe-row matchers, four strict and one tolerant, disagreed about a row
+carrying a trailing annotation. Byte-identity proven on all **49** production
+notes across BOTH export surfaces, each with a control on a
+production-exercised path. Two clinical defects found by the adversarial pass,
+both mine, both fixed: the DOCX surface deleting an annotation the EHR paste
+kept, and `| Side of exam | Right` losing the side of exam from a signed
+imaging report.
+
+---
+
+### 🟢 F25 — SPLIT THE LOOP'S `REPORT-MISSING` MARKER. **Small, loop-eligible.**
+
+**Filed 2026-08-21 from a live observation.** The loop halted at `21:16:09Z`
+and reported:
+
+    ⚠️ REPORT-MISSING — session 03 produced no morning report
+       … If it was woken after reporting, the report is GONE —
+       reconstruct from git log, RELAY.md and the PRs.
+
+**Session 03 never ran.** Its entire captured output was
+`You've hit your session limit · resets 10:20pm (UTC)`. There is no report to
+reconstruct and no night missing from the record — but the marker instructs the
+next session to go and rebuild one.
+
+**THE SPLIT:**
+
+| marker | condition | what the next session owes |
+|---|---|---|
+| `REPORT-MISSING` | the session STARTED and produced output, but no `MORNING REPORT` header | reconstruct from git log, RELAY and the PRs |
+| `SESSION-NEVER-STARTED` | non-zero rc from launch with no invocation — quota, CLI failure, a refused grant | **nothing.** Name the cause and move on |
+
+Reference case: the quota exit above.
+
+⚠️ **AND IT IS THE THIRD MEMBER OF ONE FAMILY IN A SINGLE DAY** — worth stating
+together, because the shape is only legible from the set:
+
+| check | reports one word | for two worlds | the cost when the cheaper world is assumed |
+|---|---|---|---|
+| a citation waiter | "completed" | **cancelled** vs **succeeded** | merging a 3-of-4 |
+| the loop's marker | `REPORT-MISSING` | **worked-then-lost** vs **never-ran** | reconstructing a night that never happened |
+| `ledger-progress` (morning) | a valid-looking digest | **hashed nothing** vs **a genuinely empty file** | halting a loop that was working |
+
+> **A check that reports one word for two worlds, where the cheaper world is
+> the one that gets acted on wrongly.**
+
 ### 🟢 F24 SLICE 1 + 1b — LIVE-READY. The generator stops emitting a grid the guard is right to refuse
 
 **Owner's sentence:** *"the AI must be able to edit everything it shows me in
