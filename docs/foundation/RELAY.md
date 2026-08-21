@@ -22917,3 +22917,98 @@ today.**
    observable consequence documented.** A separator-only run produces no table
    and no diagnostic. That is correct — it is not a defect — but it was the
    invisible half of this bug, and nothing anywhere said so until now.
+
+
+---
+
+### 🟩 F6.2 IS LIVE IN PRODUCTION — **2026-08-21T07:32Z, session 04 — 13 of 13 JUDGED**
+
+**Deployed `c7d13ac9855f01b725cd62c09c9468eff32a599c`.** Declaration
+`docs/foundation/deploys/20260821-b86f2a0b.md`, committed **before** the act and
+resolved by ancestry (F10).
+
+| step | evidence |
+|---|---|
+| fix + gate | PR **#772**, merge `b86f2a0b47a1a49e72e51a7e4a9e3c698f733b66` |
+| citation | **4 of 4** · `CI` 32453189756 a1 · `e2e` 32453189746 a1 · `a11y-ci` 32453189777 a1 · `secrets-scan` 32453189784 a1 |
+| §2.5 declaration | PR **#773**, merge `c7d13ac9855f01b725cd62c09c9468eff32a599c` |
+| citation | **4 of 4** · `CI` 32455901913 a1 · `e2e` 32455901966 a1 · `a11y-ci` 32455901914 a1 · `secrets-scan` 32455901946 a1 |
+| deployed | `c7d13ac9`, log `docs/deploy-logs/deploy-20260821T073215Z.log` |
+| rollback | `pre-c7d13ac9-20260821` on all three images, digest-verified |
+
+**Every citation produced by `check-citation.sh`, never typed. Every run `a1` —
+no re-run anywhere in this item, so nothing here needs a why.**
+
+#### §2.5 — JUDGED 13 OF 13
+
+| # | row | verdict |
+|---|---|---|
+| 1 | app image id | ✅ `05b15441…` → `b3a2d4e3…` |
+| 2 | worker image id | ✅ `e7bb304f…` → `2f362232…` |
+| 3 | `blankCount` in the shipped worker | ✅ **0 → 4**, and its control `renderSoapParagraphs` **stayed at 2** |
+| 4 | visits not-deleted | ✅ **49** |
+| 5 | signed | ✅ **31** |
+| 6 | patients | ✅ **36** |
+| 7 | migrations | ✅ **104**, none pending, asserted by the deploy itself |
+| 8 | `note_templates` | ✅ **10** |
+| 9 | `template_twin_compiled_versions` | ✅ **1** |
+| 10 | `template_twin_fill_manifests` | ✅ **1** |
+| 11 | co-tenants | ✅ `307 · 404 · 200 · 200 · 410`, 4 distinct codes so the probe discriminates |
+| 12 | `sectionHeading('Clinical Note')` still in the shipped source | ✅ **1** — suppressed conditionally, never deleted |
+| 13 | the render-content predicate over production | ✅ **48 / 0 / 23**, unchanged — control included |
+
+⚠️ **ROWS 12 AND 13 ARE THE ABSENCE ROWS, AND THEY ARE WHY THIS DECLARATION HAS
+THIRTEEN ROWS RATHER THAN ELEVEN.** The change is not purely additive: it makes
+a heading DISAPPEAR in one case. A presence-only declaration would have passed
+just as happily on a version that suppressed the heading everywhere — which
+would strip it from all 48 real notes and be far worse than the defect. Row 13
+re-runs the production predicate and its **control of 23** is what makes the
+zero mean absence rather than blindness.
+
+⚠️ **AND THE ROLLBACK TAGS CROSS-CHECKED THE BASELINE FOR FREE.**
+`pre-c7d13ac9-20260821` was cut against the RUNNING images and points at
+`05b15441…` and `e7bb304f…` — byte-for-byte the two ids the declaration recorded
+as the baseline hours earlier. An independent confirmation that the "before"
+column was not mis-transcribed.
+
+#### ⚠️ THE DECLARATION CORRECTED ITSELF BEFORE IT WAS COMMITTED, AND THAT IS RECORDED IN IT
+
+Its scope section first read *"nothing else is riding along … the declaration's
+scope and the payload coincide."* **False.** The payload also carried **PR #771**
+— F5-e's ledger row, which merged *after* F5-e's own deploy and had therefore
+never shipped.
+
+**Caught by actually running the command the sentence claimed to have run.** The
+correction is left visible in the declaration rather than smoothed away, because
+a declaration that overstates its own scope is precisely the artifact §2.5 exists
+to prevent — and the failure mode was not carelessness, it was that the sentence
+*felt* measured.
+
+Re-measured with `git diff --numstat` against the previously deployed
+`9063ec5c`: two PRs in the payload, and **exactly one shipped source file moves**
+— `docx-generator.ts`, `+47 / −17`. PR #771's entire contribution is
+`RELAY.md +88 / −0`. So the payload was larger than the change and the *runtime*
+payload was not, and every row is about the one file that moved.
+
+#### ⚠️ WHAT IS NOT CLAIMED
+
+- **Nobody has seen this behave in production, and nobody should.** The deploy
+  proves the predicate shipped (row 3, with its control). It cannot prove the
+  defect is gone in the wild, because **0 production notes reach it** — measured
+  before and after, with a live control of 23. A real doctor's visit is never a
+  smoke target.
+- **The value here is the invariant, not the incident.** F6.2 protected no
+  production row on the day it landed. It lands because nothing asserted that
+  the chrome heading labels something, and mutation **M2** demonstrates that the
+  obvious half-landed edit reintroduces the originally-filed defect with every
+  other gate still green.
+- **The adversarial pass was self-run, not spawned** — this session is directed
+  not to use the Agent tool. It produced two real additions (the caller
+  enumeration, and the byte-identity arm that did not exist before it), but it
+  shares the author's context. **Named as a residual, not counted as a fully
+  discharged gate.**
+- **The byte-identity digest covers `word/document.xml` only**, not every zip
+  part. Nothing in the diff reaches the others, but that is an argument where
+  the rest of the gate is a measurement. **Retires when `MAIN_DIGEST` is
+  extended to hash every entry** — a few lines, and the right first task for
+  whoever next touches this gate.
