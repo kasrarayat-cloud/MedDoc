@@ -562,6 +562,34 @@ it was actually computing*. A test that passes and a test that measures the
 wrong thing look identical from the outside, and a green ratchet that cannot
 move looks exactly like a codebase with nothing left to fix.
 
+⚠️ **FRESH REFERENCE CASE, 2026-08-21 — `notMentionedCount`, AND IT BLOCKED AN
+ATTRIBUTION IN REAL TIME.** `picks-bridge.ts:254-286` routes **FIVE** distinct
+exits into one bucket named *not mentioned*:
+
+| exit | what it actually means |
+|---|---|
+| `!pick` | the dictation genuinely did not mention it — **benign** |
+| `pick.value == null \|\| ''` | empty value |
+| `set_aside_not_adopted` | the verifier DEMOTED it, awaiting the clinician |
+| `not_an_enumerated_option` | an off-list value |
+| `!built` | **the derivation REFUSED it** |
+
+**A REFUSAL AND AN ABSENCE ARE THE SAME NUMBER.** On the owner's acceptance
+visit the fill read 25 → 20, and a deploy carrying a new refusing derivation
+had landed 53 minutes earlier — so *"the new code refused five cells"* was
+live, plausible, and **unanswerable from the count**.
+
+**The worker LOG discriminated where the COUNT could not**: 9 ×
+`laterality_mismatch`, 0 × `not_an_enumerated_option`, 0 ×
+`set_aside_not_adopted`, **0 derivation refusals** — not a regression. The
+`console.info` lines at each non-benign exit are the only reason that question
+was answerable at all.
+
+> **A bucket that absorbs a REFUSAL and an ABSENCE cannot answer "did my change
+> break this?" — which is the one question a count like that gets asked.**
+
+Filed, not fixed: the exits want counting separately.
+
 Three questions that catch it, and they are cheap:
 
 1. **If the work this check guards SUCCEEDED completely, what number would it
@@ -1110,6 +1138,49 @@ a cancellation, it does not certify a blind instrument, and using it there is
 the sanctioned-hatch-becomes-the-undisciplined-door failure the wrapper exists
 to prevent. **The work stayed committed and unpushed, and the loop stayed dark
 rather than burning sessions that could not push, cite or merge.**
+
+
+#### ⚠️ AND A SIXTH — **TWO WEAK DEFECTS COMPOSED INTO A CONFIDENT FALSE GREEN**
+
+**Standing 2026-08-21. Written by the author of the other five, the same day,
+about a waiter he had just "corrected".** That is the argument for it being a
+rule rather than a lesson.
+
+> **THE BAD KEY PRODUCED A ZERO; THE VACUOUS TEST CONVERTED IT INTO A
+> CITATION.** Neither defect alone would have printed a green.
+
+A citation waiter reported **`CITED — all 0 SUCCEEDED`** on a PR that was
+provably 3 of 4 with `e2e` still running. Two independent faults, each
+individually survivable:
+
+| fault | on its own |
+|---|---|
+| queried the **abbreviated** sha (`8a7271a7`) | the known `gh` trap — returns `[]`, exit 0, no warning |
+| success test was `OK == T` | **true when both are zero** — no non-vacuity floor |
+
+**Reproduced side by side, live, on the same commit:**
+
+    --commit SHORT (8a7271a7)  ->  0 runs
+    --commit FULL   (40 chars) ->  4 runs
+    --branch  (second view)    -> 10 runs
+
+**WHAT GENERALISES, AND IT IS NOT "USE THE FULL SHA" — THAT RULE ALREADY
+EXISTED AND IS ONE SECTION UP.** The new part is the COMPOSITION: this
+programme's canon already names the short-sha trap AND already demands a
+non-vacuity control, and **the author had just written a "corrected" waiter
+that violated both**. A defect list is not a defence; the same session that
+fixes one member of this family will introduce another.
+
+**So a check that reports success MUST carry a FLOOR, not only a ratio.**
+`OK == T` is a ratio and ratios are vacuous at zero. The shipped form asserts
+`T >= expected` and reports **`CANNOT TELL`** below it — because *"there are no
+runs"* and *"every run passed"* are the two states this family exists to keep
+apart, arriving here for the sixth time in a new costume.
+
+⚠️ **AND THE THIRD WAITER IN THE SAME SESSION HAD THE SAME SHAPE ONE STATE
+OVER:** it exited on `status != completed` being empty, and **a CANCELLED run
+is `completed`** — so it printed a partial count as a citation. Cancelled vs
+succeeded; absent vs passing. One family, two costumes, one hour.
 
 ### ⚠️ AND A THIRD MEMBER: A TREE THAT CANNOT RESOLVE ITS OWN IMPORTS
 
@@ -2411,6 +2482,23 @@ The tree survived: the lockfile was unchanged, so `npm ci` reinstalled exactly
 what was locked, `sharp` and its six `@img` binaries came back, and the five
 workspace symlinks were intact. None of that was by design. A prose mention of
 a *deploy* script came one file-mode bit away from running it.
+
+⚠️ **SECOND OCCURRENCE, 2026-08-21 — A COMMIT MESSAGE, AND IT RAN.** A `-m`
+message containing `` `laterality` `` in backticks was passed as a quoted
+argument. The shell evaluated it: **`laterality: command not found`**, and the
+word was **deleted from the committed message**, which then read *"names a ␣
+attribute"*. Harmless ONLY because that word is not a command — the same luck
+that saved the `deploy-staging.sh` mention above, which was one file-mode bit
+from executing.
+
+**Two costs, and the second is the quiet one:** a substitution ran, and **the
+artifact was silently corrupted**. Nothing errors when the shell eats a word
+out of prose; the commit succeeds and the record is simply wrong. Amended via
+stdin.
+
+⚠️ **AND IT WAS WRITTEN BY A SESSION THAT HAD USED `-F` CORRECTLY ALL DAY.**
+The rule does not fail when you disagree with it; it fails on the one message
+you dashed off. That is exactly why it is mechanical.
 
 **The rule is mechanical, so obey it mechanically:** write the body to a file,
 pass the path. `gh pr create --body-file`, `gh pr comment --body-file`,
