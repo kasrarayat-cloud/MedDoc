@@ -31,6 +31,7 @@
 // refer to the same section three times.
 // ============================================================================
 
+import { isDataColumnHeader } from './table-header-shape';
 import { readNoteSection } from './splice-note-section';
 
 /** `| --- | :--- |` — a table's alignment rule, never content. */
@@ -228,7 +229,38 @@ export function editTableCell(params: {
   }
   const everyDataRowAgrees =
     dataRowCounts.length > 0 && new Set(dataRowCounts).size === 1;
+  // ⚠️ THE DELTA SAYS *THAT* A CELL IS MISSING. IT NEVER SAYS *WHICH END*.
+  //
+  // The first version of this widened on delta alone, reasoning that a row is
+  // only a candidate when `norm(c[0]) === wantRow`, so cell 0 is the label.
+  // THAT IS A NON-SEQUITUR AND THE ADVERSARIAL PASS BROKE IT: it proves cell 0
+  // of the ROW is the label and says nothing about the HEADER. A header that
+  // NAMES its label column and is short a TRAILING data column is delta +1 too.
+  //
+  // Reproduced on the real function before this guard was added:
+  //     | VEIN | DIAMETER (mm) |          <- names its label column, short one
+  //     | GSV at the SFJ | 6.2 | 3.4 |
+  //   edit DIAMETER := 7.7  ->  ok=true, reports column "DIAMETER (mm)",
+  //                             writes `| GSV at the SFJ | 6.2 | 7.7 |`
+  // The diameter was left uncorrected, the REFLUX time was destroyed, and the
+  // doctor was told the diameter had changed. Before the slice that input was
+  // refused. A WRONG measurement under a correct-looking confirmation is worse
+  // than the refusal it replaced — which is precisely what the original
+  // `ragged_table` test feared, arriving through the fix for it.
+  //
+  // ⚠️ AND THE PRODUCTION CENSUS COULD NOT HAVE CAUGHT IT: it measured DELTA
+  // (+1 -> 339, 0 -> 331, other -> 0), and delta is invariant under which end
+  // is short. An observation that cannot come out the other way is not
+  // evidence for the thing it was cited for.
+  //
+  // SO THE WIDEN NOW TURNS ON EVIDENCE ABOUT THE HEADER: it fires only when the
+  // header's FIRST cell is itself a DATA column, i.e. the header demonstrably
+  // has no label column — the same question, through the same predicate, that
+  // the generator asks when deciding whether to emit one.
+  const headerLacksLabelColumn =
+    rawHeaderCells.length > 0 && isDataColumnHeader(rawHeaderCells[0]);
   const headerCells =
+    headerLacksLabelColumn &&
     rawHeaderCells.length === rowCells.length - 1 &&
     everyDataRowAgrees &&
     dataRowCounts[0] === rowCells.length

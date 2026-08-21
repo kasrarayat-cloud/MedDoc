@@ -15,6 +15,7 @@
 // position after the sections.
 // ============================================================================
 
+import { isDataColumnHeader } from '@/lib/table-header-shape';
 import { delimiterSystemSuffix } from '@meddoc/ai';
 import {
   SYSTEM_DEFAULT_NOTE_TEMPLATE,
@@ -292,8 +293,11 @@ export function renderStructureDirective(
     // A header column that names a unit or a metric is a DATA column; a plain
     // word like "VEIN" is the label column. When the header is all data, the
     // label cell is extra and the row carries one placeholder per column.
-    const isDataColumn = (h: string) =>
-      /\([^)]*\)\s*$/.test(h) || /diameter|reflux|velocity|length|depth|time|size/i.test(h);
+    // ONE PREDICATE, TWO CALLERS — `lib/table-header-shape.ts`. The editor asks
+    // the identical question when deciding whether a short header is short at
+    // the FRONT. Two copies would drift, and the day they disagree the
+    // generator emits a shape the editor misreads.
+    const isDataColumn = isDataColumnHeader;
     const valueColumnCount =
       structure.columns.length > 0 && isDataColumn(structure.columns[0]!)
         ? structure.columns.length

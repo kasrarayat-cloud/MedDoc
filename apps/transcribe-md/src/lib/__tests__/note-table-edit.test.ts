@@ -257,6 +257,46 @@ describe('editTableCell', () => {
     });
 
     // (b) EVERY OTHER RAGGED SHAPE — still refused, verbatim reason.
+    // ⚠️ THE ARM THE ADVERSARIAL PASS EARNED. The first version of the widen
+    // fired on DELTA alone, and delta is invariant under WHICH END is short.
+    // A header that NAMES its label column and drops a TRAILING data column is
+    // +1 too — and the widen wrote the doctor's diameter into the REFLUX cell,
+    // destroyed the reflux time, left the diameter uncorrected, and reported
+    // back the column they had named. Before the slice that input was refused.
+    it('REFUSES a +1 header that is short at the TRAILING end, not the front', () => {
+      const r = edit(
+        note('| VEIN | DIAMETER (mm) |', '| --- | --- |', [
+          '| GSV at the SFJ | 6.2 | 3.4 |',
+        ]),
+      );
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe('ragged_table');
+    });
+
+    it('REFUSES a trailing-short header even when it ALREADY has an empty label cell', () => {
+      // This is the shape the generator half of this very slice emits, one
+      // column short — so it is the likeliest trailing-short header in the
+      // system. Prepending a second empty cell would shift every index right.
+      const r = edit(
+        note('|  | DIAMETER (mm) |', '| --- | --- |', ['| GSV at the SFJ | 6.2 | 3.4 |']),
+      );
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe('ragged_table');
+    });
+
+    it('leaves the post-fix generator shape alone and writes the correct cell', () => {
+      const r = edit(
+        note('|  | DIAMETER (mm) | REFLUX TIME (seconds) |', '| --- | --- | --- |', [
+          '| GSV at the SFJ | 6.2 | 3.4 |',
+        ]),
+      );
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.before).toBe('6.2');
+        expect(r.body).toContain('| GSV at the SFJ | 9.9 | 3.4 |');
+      }
+    });
+
     it('still REFUSES a header two or more cells narrower', () => {
       const r = edit(note('| DIAMETER (mm) |', '| --- |', ['| GSV at the SFJ | 6.2 | 3.4 |']));
       expect(r.ok).toBe(false);
