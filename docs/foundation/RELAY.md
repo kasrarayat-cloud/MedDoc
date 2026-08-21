@@ -59,6 +59,46 @@ reachable** (`formOnly` derives from the template and is independent of signing;
 neither export route carries a signed gate), so the draft footer applies there
 too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
+
+### 🔴 F5-i — MULTI-SHAPE CERTIFICATION PROOF — **baseline census, measured 2026-08-21**
+
+**Owner question: "is the fix for ALL categories/templates, not just mine?"**
+
+**Structurally YES** — one engine, no per-template code paths. Every template
+goes compiler → mappings → auto-certify → fill → export, and nothing branches on
+a template id or a specialty.
+
+⚠️ **ONE OBSERVATION IS NOT A CATEGORY PROOF.** Everything demonstrated
+end-to-end ran on ONE shape. A table-less form never touches the paths a table
+exercises — `bridgeNumericTableCells`, row addressing, `segmentCongruent`,
+measurement-cell fill coverage — so the engine is least proven exactly where it
+has never run.
+
+**THE BASELINE, measured against production:**
+
+| shape | status |
+|---|---|
+| **tabular measurement** (venous duplex, 80 fields) | ✅ PROVEN end-to-end — certified, filled, exported, owner-verified |
+| **operative note** (Colonoscopy Operative Note, Operative Note ×3) | ⚠️ **UNPROVEN** — 4 templates, **0 compiled twins** |
+| **SOAP office** (System Default — SOAP, Primary Care Chronic Disease Follow-up) | ⚠️ **UNPROVEN** — 0 compiled twins |
+| **imaging report** (Ultrasound Imaging Report) | ⚠️ **UNPROVEN** — 0 compiled twins |
+
+**Production holds 10 note templates and exactly ONE compiled twin.** The
+generality claim rests on that one. That is the honest state, and it is why this
+item exists rather than a reassurance.
+
+**Two ruled parts** (full text in `INBOX.md`):
+1. the QA walk gains a second full end-to-end shape — a BLANK operative-note
+   fixture, zero measurement tables;
+2. the derived-encounter fallback becomes **SHAPE-DERIVED-OR-REFUSE**: a
+   template the generator cannot address lands in needs-review naming that,
+   never certifies against an unrelated specialty's dictation.
+
+> **A certificate must mean THE form was exercised, not that A form was.**
+
+**Retires when a second SHAPE certifies end-to-end and this census is
+re-measured.**
+
 ### 🔴 F13 — THE INBOX'S "MECHANICAL DELIVERY" WAS NOT MECHANICAL — FIXED 2026-08-17
 
 **`INBOX.md`'s own header claims delivery is *"mechanical: receipt cannot be

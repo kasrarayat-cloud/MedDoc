@@ -281,9 +281,59 @@ describe('sign gate — unacknowledged E/M change blocks (fail-closed)', () => {
   });
 });
 
+describe('sign gate — a change landing BETWEEN the gate and the write', () => {
+  // The source gate next door asserts the STRUCTURE that makes this
+  // impossible. This asserts the BEHAVIOUR: the route refuses, signs nothing,
+  // and refuses with the code the confirm card already renders.
+  it('REFUSES when the transaction re-read finds a change the gate never judged', async () => {
+    mocks.findUnique
+      // the gate sees a clean visit — nothing to acknowledge
+      .mockResolvedValueOnce(visitRow({ emPendingChange: null }))
+      // …and a doctor moves the level while the signature is in flight
+      .mockResolvedValueOnce(
+        visitRow({
+          emPendingChange: {
+            from: '99213',
+            to: '99215',
+            cause: 'doctor_override',
+            at: '2026-06-12T10:30:00.000Z',
+          },
+        })
+      )
+      .mockResolvedValue({
+        signedAt: new Date('2026-06-12T11:00:00.000Z'),
+        status: TranscribeVisitStatus.SIGNED,
+      });
+
+    const res = await call({ destinations: [] });
+
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.code).toBe('EM_CHANGE_UNACKNOWLEDGED');
+    expect(body.pendingEmChange).toEqual({ from: '99213', to: '99215' });
+    // ⚠️ THE LOAD-BEARING ARM: nothing was signed. A refusal that still wrote
+    // the signature would be the defect wearing a 409.
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+    expect(
+      mocks.logAudit.mock.calls.some(
+        (c: unknown[]) =>
+          (c[0] as { action?: string })?.action ===
+          'EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE'
+      )
+    ).toBe(true);
+  });
+});
+
 describe('sign gate — explicit acknowledgement signs + leaves the trail', () => {
   it('signs with a matching ack: record MARKED acknowledged in the same update, VISIT_SIGNED metadata carries emChangeAcknowledged', async () => {
     mocks.findUnique
+      .mockResolvedValueOnce(visitRow({ emPendingChange: PENDING }))
+      // F5-h RESIDUAL: the signature write RE-READS the visit inside its own
+      // transaction, so the gate that judged the change and the write that
+      // freezes it see ONE snapshot. That is a second read of the same row,
+      // and a mock answering the entry read `Once` handed the transaction the
+      // POST-SIGN shape instead — which carries no `emPendingChange`, so the
+      // acknowledgement write was silently skipped.
       .mockResolvedValueOnce(visitRow({ emPendingChange: PENDING }))
       .mockResolvedValue({
         signedAt: new Date('2026-06-12T11:00:00.000Z'),

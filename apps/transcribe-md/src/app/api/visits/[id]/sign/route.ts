@@ -663,6 +663,21 @@ export const POST = withApiHandler<{ id: string }>(
       // that is how a formatting concern becomes a database incident. Only the
       // PRECEDENCE is applied inside — `override.code ?? engine.code`, the same
       // projection the rail and the gate use.
+      class EmChangedWhileSigning extends Error {
+        constructor(readonly emFrom: string, readonly emTo: string) {
+          super('EM_CHANGED_WHILE_SIGNING');
+          this.name = 'EmChangedWhileSigning';
+        }
+      }
+
+      // ⚠️ SERIALIZABLE, THE SAME LEVEL THE FILL ENGINE'S CREATE PATH USES.
+      // At Postgres's default READ COMMITTED the re-read and the CAS-guarded
+      // `updateMany` take two snapshots, so an override committing between
+      // them is invisible to BOTH — to the read (uncommitted) and to the CAS
+      // (it touches neither `status` nor `soapVersion`). That is the original
+      // erasure race with a smaller window, which is not the same as a closed
+      // one. Serializable makes the pair atomic; the expensive work stays
+      // outside, so the transaction holds for one round trip.
       const signWrite = (frozenId: string | null) =>
         prisma.$transaction(async (tx) => {
           const fresh = await tx.transcribeVisit.findFirst({
@@ -673,6 +688,50 @@ export const POST = withApiHandler<{ id: string }>(
             em?: { override?: { code?: string } };
           } | null;
           const freshOverride = freshBlob?.em?.override?.code;
+
+          // ⚠️ THE GATE AND THE WRITE MUST JUDGE THE SAME SNAPSHOT.
+          //
+          // The aimed re-run caught this in W1 itself, and it is the canon
+          // shape: *"an absent field is content the doctor did not see; a WRONG
+          // field is content that says the opposite of the record being
+          // signed — and restoring a surface can introduce the second while
+          // fixing the first."*
+          //
+          // Before W1, a concurrent override was ERASED by the whole-blob
+          // overwrite. Data loss, and the record stayed internally honest: it
+          // froze the level the signer had actually reviewed.
+          //
+          // W1 fixed the erasure by reading `cptCodes` fresh — and in the same
+          // expression started freezing a level NOTHING ON THE RECORD SAYS WAS
+          // CONFIRMED. `POST /em-score/override` deliberately does not move
+          // `soapVersion` (a coding decision must not trip a colleague's
+          // note-CAS), so it is invisible to the CAS; and the confirm gate ran
+          // hundreds of lines earlier against the ENTRY capture. The signed
+          // record could therefore assert an acknowledged 99213→99214 while
+          // freezing 99215. That is strictly worse than the bug it replaced.
+          //
+          // The fix is NOT to go back to the stale read. It is to make the
+          // divergence IMPOSSIBLE rather than silent: the same transaction
+          // re-reads the gate's own datum, and a change the gate never judged
+          // REFUSES the signature. The doctor confirms it and signs again —
+          // which is the product behaviour they already know, arriving one
+          // moment later than usual.
+          //
+          // The override still wins by construction. It simply cannot be frozen
+          // without an attestation naming it.
+          const freshPending = emApplies
+            ? unacknowledgedEmChange(fresh?.emPendingChange)
+            : null;
+          const gateJudged = pendingEm;
+          const divergent =
+            freshPending !== null &&
+            (gateJudged === null ||
+              freshPending.from !== gateJudged.from ||
+              freshPending.to !== gateJudged.to ||
+              freshPending.at !== gateJudged.at);
+          if (divergent) {
+            throw new EmChangedWhileSigning(freshPending.from, freshPending.to);
+          }
 
           // Start from the FRESH blob so a concurrent override survives; layer
           // this signature's frozen level on top, deferring to the override.
@@ -745,20 +804,29 @@ export const POST = withApiHandler<{ id: string }>(
           // E/M visible-confirm: the gate above verified the explicit
           // acknowledgement — MARK (not clear) the record so the row
           // keeps the forensic trail alongside the audit rows.
-          ...(pendingEm
+          // ⚠️ THE FRESH RECORD, NOT THE CAPTURED ONE. The re-read above
+          // refused every value that diverges from what the gate judged, so
+          // by here `freshPending` IS the gate's change — or the doctor
+          // reverted it mid-signature and there is nothing left to
+          // acknowledge. Spreading the captured `pendingEm` instead would
+          // stamp an acknowledgement onto a record the database no longer
+          // holds, which is the same lie one field over.
+          ...(freshPending
             ? {
                 emPendingChange: {
-                  ...pendingEm,
+                  ...freshPending,
                   acknowledgedAt: new Date().toISOString(),
                 } as unknown as Prisma.InputJsonValue,
               }
             : {}),
         },
           });
-        });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
       let updated: { count: number };
       try {
+       try {
         // ⚠️ THE POINTER IS DERIVED AT WRITE TIME, NOT TRUSTED FROM THE FREEZE.
         //
         // `nativeFreeze.manifestId` is an in-memory value computed BEFORE the
@@ -793,6 +861,18 @@ export const POST = withApiHandler<{ id: string }>(
         }
         updated = await signWrite(pointer);
       } catch (err) {
+        // ⚠️ THE E/M REFUSAL IS NOT A MANIFEST FAILURE AND MUST NOT BE
+        // RETRIED STYLED. Falling through here would re-run the identical
+        // transaction, hit the identical divergence, and — because the second
+        // throw lands outside this try — surface as a 500 on a route whose
+        // whole job is to be precise about why a signature did not happen.
+        // The doctor needs the coding card, not an error page.
+        // ⚠️ RETHROWN, NOT ANSWERED HERE — AND NOT RETRIED STYLED.
+        // The styled retry below lives INSIDE this catch, so an E/M refusal
+        // raised by THAT attempt would escape the try entirely and reach the
+        // client as a 500. Both attempts therefore hand the sentinel to the
+        // outer handler, where the refusal is written exactly once.
+        if (err instanceof EmChangedWhileSigning) throw err;
         log.warn(
           'api:visits:sign',
           'frozen manifest unavailable at signature — signing styled',
@@ -800,6 +880,52 @@ export const POST = withApiHandler<{ id: string }>(
         );
         nativeFreeze = { state: 'failed', reason: 'frozen_manifest_vanished' };
         updated = await signWrite(null);
+       }
+      } catch (err) {
+        if (!(err instanceof EmChangedWhileSigning)) throw err;
+        // ⚠️ THE SAME `code` THE ENTRY GATE USES, DELIBERATELY.
+        //
+        // The aimed pass's sibling finding was that `supersededBy` is a wire
+        // field NOTHING READS — an honest server still handing the loser a
+        // success-shaped 200. A fresh code here would repeat that mistake one
+        // refusal over: the client would fall to its generic error toast and
+        // the doctor would be told "something went wrong" about a coding
+        // change they can resolve in one click.
+        //
+        // `EM_CHANGE_UNACKNOWLEDGED` already has a renderer — the confirm
+        // card — and this IS that condition, discovered a few hundred
+        // milliseconds later than usual. Reusing it ships the fix with a
+        // working surface instead of a wire field and a promise.
+        void logAudit({
+          // ⚠️ THE EXISTING VALUE, NOT A FOURTH ONE. A new enum member is
+          // THREE edits (TS union, Prisma enum, its own Postgres migration)
+          // and this programme has shipped that half-done twice.
+          // `EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE` already means exactly "a
+          // sign request was rejected over an unacknowledged E/M change"; the
+          // only difference is WHEN it was detected, carried as metadata.
+          action: 'EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE',
+          userId,
+          practiceId: session.user.practiceId,
+          targetType: 'TranscribeVisit',
+          targetId: visitId,
+          metadata: {
+            reason: 'em_changed_between_gate_and_write',
+            from: err.emFrom,
+            to: err.emTo,
+            gateJudged: pendingEm
+              ? { from: pendingEm.from, to: pendingEm.to }
+              : null,
+          },
+        });
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `Documentation level changed (${err.emFrom} → ${err.emTo}) while you were signing — confirm the new level before signing.`,
+            code: 'EM_CHANGE_UNACKNOWLEDGED',
+            pendingEmChange: { from: err.emFrom, to: err.emTo },
+          },
+          { status: 409 }
+        );
       }
       // The pre-sign preview cache is keyed on soapVersion, which SIGNING DOES
       // NOT BUMP — so without this a signed visit could be served the pre-sign
@@ -842,8 +968,17 @@ export const POST = withApiHandler<{ id: string }>(
         // treats it as a mandatory server term (400 ATTESTATION_REQUIRED), so a
         // term that was offered and then silently dropped is exactly the silence
         // family this programme keeps closing. It becomes a RECORDED NON-EVENT.
-        supersededBySigner =
-          refreshed.signer?.name ?? refreshed.signer?.email ?? 'another clinician';
+        // ⚠️ ONLY NAME A COLLEAGUE WHEN IT WAS ONE. Nothing serialises two
+        // sign requests from one session — no lock, no idempotency key — so a
+        // double-submit loses the CAS to ITSELF. Telling that caller "Dr X
+        // signed this first" when Dr X is the caller is a fabricated second
+        // actor in a clinical audit trail, and `signedBy` may also be null on
+        // a legacy row. Both collapse to the honest, unnamed sentence.
+        const supersededBySelf =
+          refreshed.signedBy !== null && refreshed.signedBy === userId;
+        supersededBySigner = supersededBySelf
+          ? 'this account (a second signature request)'
+          : (refreshed.signer?.name ?? refreshed.signer?.email ?? 'another clinician');
         void logAudit({
           // ⚠️ NOT `VISIT_SIGNED` — THIS REQUEST SIGNED NOTHING.
           //
