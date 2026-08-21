@@ -421,7 +421,7 @@ archive-loop one especially, which is a live hazard rather than a polish task.**
 | # | Item | Why it is real |
 |---|---|---|
 | ~~F6.1~~ | ✅ **FIXED AND GATED — 2026-08-17, session 02 of run `20260817-033820-b2`.** `freeTextRuns` in `docx-generator.ts`; **four** free-text sites render through it. 15 arms, **11 of 11 mutations reddened**, plus a RENDERED differential through the real LibreOffice. See the ledger row below. ⚠️ **THE ROW WAS NARROWER THAN THE DEFECT IN THE DIRECTION THAT MATTERS.** It says *"in the DOCX"*; since F3 the pre-sign preview, the signed preview, the Word download and the PDF download all converge on `generateVisitDocx`, so **one flattening reached FOUR surfaces** — while `ehr-formatters.ts:423` kept the breaks, so the EHR clipboard and the signed document disagreed about what the note said. ⚠️ **And it was not "patient-summary" only**: referral `reason`, referral `relevant_history` and modifier `rationale` flatten identically (0 prod rows carry a break there TODAY, against live controls of 13 and 14 — latent, not absent). **Measured: 43 of 43** prod visits with a non-empty `patientSummary` satisfy the defect's own predicate. *Previous wording:* **Patient-summary line breaks are lost in the DOCX** — a genuine fidelity bug on the same class #112 fixed for numbers |
-| F6.2 | **`CLINICAL NOTE` heading renders on an EMPTY note** | a heading over nothing is a document asserting content it does not have |
+| ~~F6.2~~ | ✅ **RESTATED, FIXED AND GATED — 2026-08-21, run `20260820-174139-b1` session 04.** The 2026-08-16 re-verification's *"REFUTED AS WORDED — do NOT close, RESTATE"* is **discharged by answering the question rather than deleting it.** The wording was refuted and the concern was real: the early return guarded the **RAW STRING** while the heading's claim is about the **RENDERED BODY**. Reachable instance, found by RUNNING the code — a note that is only markdown table separators (`\|---\|---\|`) has a non-empty `.trim()`, so no early return fired, and `renderMarkdownTable` returned null for a separator-only run: the shipped `document.xml` carried `§  CLINICAL NOTE` with the signature paragraph directly beneath it. 12-arm biconditional gate, **5 mutations**, **byte-identity against `origin/main`'s own generator** in both `formOnly` directions. ⚠️ **0 production rows reach it** — stated, not hidden; it lands because nothing asserted the invariant and a one-line reordering would have reintroduced the filed defect with every gate green. ⚠️ **SCOPE IS THE INJECTED CHROME ONLY** — the note's own `## FINDINGS`-with-nothing-under-it still renders (one prod visit holds two), because suppressing it would be the renderer editing the record. See the ledger row at the end of this file. | ~~a heading over nothing is a document asserting content it does not have~~ **CONFIRMED as a PREDICATE gap, not the gap the row described** |
 | ~~F6.3~~ | ✅ **LIVE IN PRODUCTION 2026-08-17T06:53Z — merge `1537ae47`, cited 4 of 4, 15 of 15 declared rows matched.** Built and gated the same session (01 of run `20260817-033820-b2`). `archive-pdf-budget.ts`; both archive routes render THROUGH it. 35 arms, **11 of 11 mutations reddened**. See the ledger row below. ⚠️ **The refutation pass found a defect in the FIX**: the first draft charged elapsed wall-clock, which the audio downloads in the same loop would have consumed — truncating the archives of exactly the doctors with the most recordings, while the sidecar sat idle. It charges sidecar-time now, and M11 re-plants the original defect to prove the gate sees it. *Previous wording:* ⚠️ **The archive loop is UNBOUNDED against a single strictly-serializing sidecar** — **measured: a 0.42s staircase**, and `maxDuration` is **INERT on a standalone build** — so nothing bounds it. Real hazard, own item, not a tail |
 | ~~F6.4~~ | ✅ **LIVE IN PRODUCTION 2026-08-20T06:15:17Z — deployed `7c42d2d7`, 15 of 15 judged, session 02.** The worker's `NOTE_HEADING_LINE_RE` went **0 → 2** against a traversal control steady at 2. *Previous status:* ✅ **FIXED AND GATED — 2026-08-20, run `20260820-014110-b1` session 01.** The arm was vacuous for **TWO** independent reasons, not the one the row diagnosed — and repairing it exposed a **live product defect on the signed record**: `docx-generator` matched `^##\s+` only, so a `###` line printed its own hashes into the document while the EHR clipboard stripped them. **Measured on production: 8 such lines across 3 visits.** Ruling **#133**. See the ledger row at the end of this file. | ~~a green that cannot go red — the ratchet class this house names on sight~~ **CONFIRMED, and narrower AND wider than the row said** |
 | F6.5 | **`gate-r1`'s "BOTH sides" test asserts one side** | the title is wider than the measurement |
@@ -22734,3 +22734,186 @@ fail-closed, so a reflux match means the note row is already side-correct, and
 every value still requires its own cited fact. The residual case is a duplicate
 same-leg note row for one vessel. **Not a wrong value — at worst a diameter cell
 that stays blank.**
+
+
+---
+
+## ✅ F6.2 — THE INJECTED HEADING LABELS CONTENT, OR IS ABSENT — 2026-08-21, run `20260820-174139-b1` session 04
+
+**The row said `CLINICAL NOTE` heading renders on an EMPTY note. The 2026-08-16
+re-verification marked it REFUTED AS WORDED — do NOT close, RESTATE — and warned
+in as many words that the tempting move was to close it like F6.6, which would be
+"the inverse and more expensive error … closing it would delete the question
+instead of answering it."**
+
+**This answers it.** The wording was refuted and the concern behind it was real.
+
+### THE GAP IS A PREDICATE GAP, AND THAT IS WHY THE REFUTATION WAS BOTH CORRECT AND INCOMPLETE
+
+`renderSoapParagraphs` returned early on `!soap.trim()` and pushed the heading on
+the next line, so for a whitespace-empty note the described defect genuinely
+could not occur. But **the early return guards the RAW STRING while the heading's
+claim is about the RENDERED BODY**, and those are not the same question.
+
+**Found by RUNNING the code, not by reading it** — the house rule that says a
+mechanism is named by a reproduction:
+
+    soap = "|---|---|"
+    .trim() non-empty                  -> no early return
+    heading pushed
+    line matches TABLE_ROW_RE          -> buffered, never emitted as prose
+    flushTable -> renderMarkdownTable  -> every row is a separator, rows.length
+                                          === 0, returns null
+
+The rendered `word/document.xml` then carried
+
+    <w:t xml:space="preserve">§  CLINICAL NOTE</w:t>
+
+with the signature paragraph as the **next element** and nothing in between.
+Three arms of the gate were RED against unmutated `main` before a line of the
+fix existed.
+
+### THE FIX BUILDS THE BODY FIRST AND DECIDES THE CHROME AFTERWARDS
+
+Blank source lines are counted, so *"the body rendered nothing"* is decided by
+the loop's own rules rather than by re-deriving them somewhere else — the
+duplicate-predicate drift this file has paid for before.
+
+⚠️ **SCOPE IS THE INJECTED CHROME ONLY, AND THAT IS THE LOAD-BEARING HALF.** A
+heading the NOTE ITSELF contains still renders. Suppressing `## FINDINGS` because
+nothing sits under it would be the renderer editing the record — ruling **#112**'s
+class (*"the note's own numbers are CONTENT"*), and exactly what F1, F6.1 and
+F6.4 exist to prevent. The gate pins that direction with its own arm and M4
+proves the arm fires.
+
+### MEASURED ON PRODUCTION BEFORE A LINE WAS CHANGED
+
+49 visits, `deletedAt IS NULL`, note text resolved exactly as
+`visit-export-server.ts` resolves it (`signedSoap ?? soapFinal` when signed,
+`soapFinal` otherwise):
+
+| quantity | value |
+|---|---|
+| notes empty after trim | **1** — early return, correct today and after |
+| notes non-empty | **48** |
+| notes that are headings ONLY | **0** (floor: **12** non-blank lines) |
+| **notes reaching this defect** | **0** |
+
+**0 production rows. Stated rather than hidden.** It lands anyway because
+nothing asserted the invariant: a one-line reordering of that early return
+reintroduces the originally-filed defect with every gate still green — which is
+not hypothetical, it is exactly what mutation **M2** below does.
+
+⚠️ **AND THE HEADING CENSUS CORRECTED ITSELF, WHICH IS THE MEASUREMENT WORTH
+READING.** Of **295** heading lines across those 48 notes:
+
+| successor | count | reading |
+|---|---|---|
+| a DEEPER heading (`## FINDINGS` → `### Right Leg`) | **4** | nested — the parent's content IS the subsection. **Legitimate.** |
+| a same-or-shallower heading | **2** | genuinely contentless, **1 unsigned visit**, deliberately left rendered |
+| end-of-note | **0** | |
+
+**The first draft of that measurement said 6**, because its predicate was
+*"heading followed by heading"* and it counted the four nested ones. The depth
+comparison is what makes the number mean what its name says — this house's own
+wrong-quantity class, caught in the act rather than after.
+
+⚠️ **AND THE 295 IS NOT A BARE NUMBER.** It reconciles **exactly** against
+`check-em-note-shape-artifacts.sh`'s own projection control (*"295 lines
+delivered = 295 headings"*), so the detector used here and the shipped one agree
+about what a heading line is. A free cross-instrument control.
+
+### THE GATE — `gate-f62-injected-heading-labels-content.test.ts`, 12 arms
+
+**A BICONDITIONAL.** Neither half is worth anything alone: a renderer that never
+emitted the heading satisfies every absence arm, and one that always emitted it
+satisfies every presence arm. M3 proves the presence half is real.
+
+**MUTATION-PROVED FIVE WAYS.** Each asserted APPLIED before its result was read;
+each restored from a **scratch copy** and never from git, with the restore
+confirmed by checksum:
+
+| # | mutation | reddens |
+|---|---|---|
+| M1 | complete inverse — the pre-fix file, copied from a DETACHED `origin/main` worktree | **3** — the defect arms |
+| **M2** | **PARTIAL: drop only `blankCount++`** — the obvious half-landed edit | **3**, and it **REINTRODUCES F6.2's ORIGINALLY-FILED DEFECT**: the spacer paragraph counts as content, so an empty note gets the heading again |
+| M3 | heading never emitted | **4** — the presence half |
+| M4 | over-reach: treat the note's OWN headings as "not content" | **1** — the fidelity arm |
+| M5 | heading text renamed `Clinical Note` → `Clinical Notes` | **1** — the digest arm ONLY |
+
+⚠️ **M2 IS THE ONE TO READ.** Canon's refinement says the failure that ships is a
+HALF-LANDED fix rather than a total inverse. Here the half-landed version is
+**strictly worse than not fixing it at all** — it re-opens the defect the row was
+filed for, in the same edit that was meant to close it.
+
+⚠️ **AND M5 CAUGHT THE SUBSTRING TRAP LIVE.** Renaming the heading reddens the
+digest arm and leaves **every presence arm green**, because `CLINICAL NOTE` is a
+substring of `CLINICAL NOTES`. The digest is the only arm that could see it.
+
+### BYTE-IDENTITY — the arm the safety claim actually rests on
+
+Since **0** production rows reach the defect, the only way this change can hurt a
+real doctor is by perturbing a document that renders correctly today. So the gate
+carries a digest of the full `word/document.xml` for a note exercising every
+branch of the loop — two heading depths, prose, a bullet, a task line, a real
+table, bold and italic labels, a numbered pair — **captured by rendering
+`origin/main`'s OWN `docx-generator.ts` in a detached worktree at `86b9910d`
+carrying none of this change.** Both `formOnly` directions:
+
+    formOnly=false   len 13122   sha256 01b81abe…d464fac4
+    formOnly=true    len 12187   sha256 6c7b4716…69514afe
+
+Both match on the branch. **The fix is a proven no-op for every note that renders
+today.**
+
+### PROOFS
+
+| proof | result |
+|---|---|
+| the gate | **12 of 12** |
+| unit suite, CONTROLLED DELTA vs a detached `origin/main` worktree | control **325 passed / 4324 tests**; branch **326 / 4334** — **+1 file, +10 tests**, exactly the new arms. The **16 failed files / 1 failed test are IDENTICAL on both** — the known `react/jsx-dev-runtime` worktree-alias artifact, not a regression |
+| `tsc --noEmit` | **0** |
+| caller enumeration | `renderSoapParagraphs` has **exactly one** production caller (`docx-generator.ts:225`); no other surface changes |
+
+### ⚠️ HONEST LIMITS
+
+- **The adversarial pass was SELF-RUN, not spawned.** This session is directed
+  not to use the Agent tool unless asked. Canon's argument for the pass is
+  precisely that it does not share the author's context; a self-run pass does.
+  It produced two real additions — the caller enumeration and the byte-identity
+  arm, neither of which existed before it — but this is **the weaker form and is
+  named as a residual, not counted as a fully discharged gate.**
+- **No behavioural proof on QA or production.** The change is in a pure renderer
+  and the byte-identity arm covers the shipped path; a real doctor's visit is
+  never a smoke target, and the one unsigned production visit with two empty
+  sections is deliberately untouched.
+- **A pre-existing oddity is PRESERVED, not fixed:** a form-only export of an
+  empty note still emits *"No SOAP note available."* — QuillMD prose in an
+  export whose contract is zero QuillMD chrome. It behaved that way before this
+  change and still does; the gate pins it so the next reader sees a decision
+  rather than an accident. **Retires when someone rules on what a form-only
+  export of an empty note should say.**
+- **The digest arm is bound to one fixture.** It cannot see a change that
+  affects only a branch the fixture does not exercise. The fixture was built
+  from the loop's own branch list for exactly that reason, and the list is in
+  the test header.
+
+### 🔎 FINDINGS THIS DID NOT GO LOOKING FOR
+
+1. ⚠️ **`check-ledger-append-only.sh` IS STILL RED, AND IT IS NOT IN MASTER's
+   STEP 0 LIST.** Re-measured this session, not inherited from session 03's
+   report: `🔴 expected 5 named CHECK constraints on ledger_entries, found 6`.
+   The sixth is `ledger_entries_usage_has_pricing`, added by **B6**
+   (`20260811103000_b6_ledger_pricing_snapshot`) — a legitimate migration that
+   made the constraint set **stronger**. This is canon's own class verbatim: *a
+   check that fails when the thing it guards starts working is a check nobody
+   keeps.* It should assert the five required constraints **BY NAME**, not a
+   total. It does **not** gate the deploy (`deploy-prod.sh` gates only on
+   `assert-migrations-applied.sh`), so nothing is blocked — but an unwatched red
+   guard is indistinguishable from no guard. **Filed for a session that can take
+   it as its item; it needs either the by-name fix plus a STEP 0 line, or a
+   retirement.**
+2. **`renderMarkdownTable` returning `null` is silent by design and now has one
+   observable consequence documented.** A separator-only run produces no table
+   and no diagnostic. That is correct — it is not a defect — but it was the
+   invisible half of this bug, and nothing anywhere said so until now.

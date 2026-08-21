@@ -681,23 +681,31 @@ const NOTE_HEADING_LINE_RE = /^[ \t]*(#{1,6})[ \t]+(.+?)[ \t]*$/;
  *  inline, `-` bullets, `- [x]` task lines, and `| a | b |` tables —
  *  everything else renders as a plain paragraph. */
 function renderSoapParagraphs(soap: string, formOnly = false): (Paragraph | Table)[] {
+  // ⚠️ F6.2 — THE INJECTED HEADING IS DECIDED BY THE RENDERED BODY, NOT BY THE
+  // RAW STRING. This used to return early on `!soap.trim()` and push the
+  // heading immediately after, which guards the WRONG PREDICATE: a note whose
+  // text is non-blank can still render to nothing. `|---|---|` is the reachable
+  // instance — `.trim()` is non-empty so no early return fired, the line was
+  // swallowed by the table buffer, and `renderMarkdownTable` returned null for
+  // a separator-only run. The document then carried `§  CLINICAL NOTE` with the
+  // signature paragraph directly beneath it and nothing in between.
+  //
+  // So the body is built FIRST and the chrome is decided afterwards.
+  //
+  // ⚠️ AND THE SCOPE IS THE INJECTED CHROME ONLY. A heading the NOTE ITSELF
+  // contains — `## FINDINGS` with nothing under it, which one production visit
+  // holds twice — still renders. Suppressing that would be the renderer editing
+  // the record, which is ruling #112's class ("the note's own numbers are
+  // CONTENT") and precisely what F1/F6.1/F6.4 exist to prevent.
+  //
+  // Proved by `gate-f62-injected-heading-labels-content.test.ts`, which pins
+  // BOTH directions: a note with prose still gets the heading, so a renderer
+  // that simply stopped emitting it would go red.
   const out: (Paragraph | Table)[] = [];
-  if (!soap.trim()) {
-    out.push(
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: 'No SOAP note available.',
-            italics: true,
-            color: '666666',
-          }),
-        ],
-      })
-    );
-    return out;
-  }
-  // Form-only omits the injected "CLINICAL NOTE" heading (not on the form).
-  if (!formOnly) out.push(sectionHeading('Clinical Note'));
+  // Blank source lines emit a spacer paragraph, which is layout and not
+  // content. Counting them is what lets `out.length === blankCount` mean
+  // "the body rendered nothing" without re-deriving the loop's own rules.
+  let blankCount = 0;
   // Consecutive pipe rows collect here and flush as one Table on the
   // first non-pipe line (and at end-of-note). Prose-only notes never
   // populate the buffer, so their output is unchanged.
@@ -717,6 +725,7 @@ function renderSoapParagraphs(soap: string, formOnly = false): (Paragraph | Tabl
     flushTable();
     if (!line.trim()) {
       out.push(new Paragraph({ spacing: { after: 80 }, children: [] }));
+      blankCount++;
       continue;
     }
     // ⚠️ EVERY MARKDOWN HEADING DEPTH RENDERS AS A HEADING — F6.4, ruling #133.
@@ -858,7 +867,28 @@ function renderSoapParagraphs(soap: string, formOnly = false): (Paragraph | Tabl
     );
   }
   flushTable();
-  return out;
+
+  // F6.2 — nothing but spacers means the note rendered no content, whatever the
+  // raw string looked like. Emit the placeholder ALONE: no chrome heading, and
+  // not the spacers either, since they were the layout around content that does
+  // not exist.
+  if (out.length === blankCount) {
+    return [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'No SOAP note available.',
+            italics: true,
+            color: '666666',
+          }),
+        ],
+      }),
+    ];
+  }
+
+  // Form-only omits the injected "CLINICAL NOTE" heading (not on the form) —
+  // its own sections speak for themselves.
+  return formOnly ? out : [sectionHeading('Clinical Note'), ...out];
 }
 
 /** `| a | b |` → `['a', 'b']` — trims the outer pipes + per-cell whitespace. */
