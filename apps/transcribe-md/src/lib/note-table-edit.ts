@@ -42,6 +42,9 @@ const ROW_RE = /^\s*\|.*\|\s*$/;
 const HEADING_RE = /^\s*#{1,6}\s/;
 
 export type TableEditFailure =
+  /** Two tables carry this row and NEITHER has a caption to name it by.
+   *  Distinct from `row_ambiguous`, which the caller CAN answer. */
+  | 'caption_not_found'
   | 'section_not_found'
   | 'no_table'
   | 'row_not_found'
@@ -98,6 +101,45 @@ function renderRow(parts: string[]): string {
  * carries the laterality, so it is the only honest disambiguator.
  */
 function captionFor(lines: string[], headerIdx: number): string | null {
+  // ⚠️ THE ADJACENT LINE ONLY. A ONE-BLANK SKIP WAS BUILT, PROVEN, AND
+  // WITHDRAWN — F24 SLICE 1b, 2026-08-21.
+  //
+  // The motivation was real and still stands: 20 of 45 production headers have
+  // a blank line above them, so a bilateral study in the canonical markdown
+  // shape (caption, blank line, table) could not be disambiguated at all.
+  //
+  // ⚠️ BUT `captionFor` NEVER DISTINGUISHED A CAPTION FROM ARBITRARY PROSE —
+  // it returns whatever line sits above, and always has. Widening its reach
+  // therefore did not teach it to find captions; it multiplied the amount of
+  // ORDINARY CLINICAL NARRATIVE it could mistake for one. Reproduced on the
+  // real function before the revert:
+  //
+  //     ## FINDINGS
+  //     |  | DIAMETER (mm) | ... |        <- table 1, the RIGHT leg, 5.1
+  //     | GSV at the SFJ | 5.1 | 0.3 |
+  //
+  //     The right leg was normal; the left GSV is dilated.
+  //                                        <- one blank line
+  //     |  | DIAMETER (mm) | ... |        <- table 2, the LEFT leg, 6.2
+  //     | GSV at the SFJ | 6.2 | 3.4 |
+  //
+  //   editTableCell(rowLabel 'GSV at the SFJ', tableCaption 'Right Leg', 6.8)
+  //     -> ok=true, before="6.2", LEFT leg written, RIGHT leg untouched
+  //
+  // That narrative became table 2's caption, the substring narrowing matched
+  // "right" inside it, and the doctor's RIGHT-leg correction was persisted
+  // into the LEFT leg and reported as success. `.caption` has no consumer, so
+  // nothing downstream shows which table was chosen.
+  //
+  // A WRONG-LEG MEASUREMENT IS WORSE THAN AN UNEDITABLE TABLE. The refusal it
+  // replaced cost the doctor a retype; this costs them a wrong record.
+  //
+  // THE REAL DEFECT IS CAPTION *VALIDATION*, NOT CAPTION *DISTANCE*, and a
+  // correct fix has to decide what a caption IS — which is a product question,
+  // not a loop bound. Reaching further without answering it is strictly worse
+  // than reaching one line. (Note that `claim-prose.ts:71` reads the adjacent
+  // line too; whatever answers this must move both, or the two readers in this
+  // codebase will disagree about what a caption is.)
   for (let i = headerIdx - 1; i >= 0; i -= 1) {
     const line = lines[i];
     if (!line.trim()) return null;
@@ -106,6 +148,7 @@ function captionFor(lines: string[], headerIdx: number): string | null {
   }
   return null;
 }
+
 
 /**
  * Replace ONE cell in ONE table row, inside ONE section.
@@ -173,13 +216,23 @@ export function editTableCell(params: {
     if (narrowed.length === 1) matches = narrowed;
   }
   if (matches.length > 1) {
+    // ⚠️ AN UNANSWERABLE QUESTION IS NOT A REFUSAL, IT IS A DEAD END — SLICE 1b.
+    //
+    // `row_ambiguous` means "tell me which one and I will change it". Emitting
+    // it with an EMPTY choices list asks the doctor to pick from nothing, and
+    // no answer they can give will ever narrow it. That shape is now
+    // unreachable BY CONSTRUCTION rather than patched at this one call site: if
+    // no candidate carries a caption there is nothing to disambiguate WITH, and
+    // the refusal says so instead of pretending the conversation can continue.
+    const choices = matches.map((m) => m.caption).filter((c): c is string => Boolean(c));
+    if (choices.length === 0) return { ok: false, reason: 'caption_not_found' };
     return {
       ok: false,
       reason: 'row_ambiguous',
       // Say what the caller may pick BETWEEN. Asking "which one?" while
       // offering no way to answer is how the bilateral case — the main
       // ultrasound case — became simply uneditable.
-      choices: matches.map((m) => m.caption).filter((c): c is string => Boolean(c)),
+      choices,
     };
   }
 
@@ -310,6 +363,8 @@ export const TABLE_EDIT_REASON: Record<TableEditFailure, string> = {
     'That row appears in more than one table here — tell me which one and I will change it.',
   column_not_found: "I couldn't find that column in the table.",
   column_ambiguous: 'That column name appears twice in the table, so I stopped rather than guess.',
+  caption_not_found:
+    'That row appears in more than one table here, and neither table has a heading I can tell them apart by. Name each table — "Right leg", "Left leg" — and I will change it.',
   ragged_table:
     "That table's header and its rows don't line up, so I can't tell which column is which.",
   illegal_value: "A measurement can't contain a line break or a “|”.",

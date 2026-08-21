@@ -372,3 +372,105 @@ describe('editTableCell', () => {
     expect(named.body).toContain('| GSV at the SFJ | 7.0 |');
   });
 });
+
+describe('F24 SLICE 1b — an unanswerable question becomes an honest refusal', () => {
+  // Production 2026-08-21: 20 of 45 headers have a BLANK line above, 25 have
+  // the caption adjacent. The 20 could not be disambiguated at all, and the
+  // doctor was asked "which table?" with NO options — a dead end, not a
+  // refusal.
+  //
+  // ⚠️ THE OBVIOUS FIX — let captionFor skip the blank line — WAS BUILT,
+  // PROVEN, AND WITHDRAWN. `captionFor` never distinguished a caption from
+  // arbitrary prose, so widening its reach multiplied the narrative it could
+  // mistake for one, and a doctor's RIGHT-leg correction was persisted into
+  // the LEFT leg and reported as success. See the comment on `captionFor`.
+  // What ships is the honest refusal; the 20 stay uneditable until caption
+  // VALIDATION is answered.
+  const tbl = (gaps: number) => {
+    const g: string[] = Array(gaps).fill('');
+    const t = [
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| SSV at the SPJ | [not documented] | [not documented] |',
+    ];
+    return ['## STUDY', '', 'Right Leg:', ...g, ...t, '', 'Left Leg:', ...g, ...t, ''].join('\n');
+  };
+  const go = (gaps: number, tableCaption?: string) =>
+    editTableCell({
+      note: tbl(gaps),
+      sectionLabel: 'STUDY',
+      rowLabel: 'SSV at the SPJ',
+      columnLabel: 'DIAMETER (mm)',
+      value: '10',
+      ...(tableCaption ? { tableCaption } : {}),
+    });
+
+  it('an ADJACENT caption still disambiguates and the edit completes', () => {
+    const q = go(0);
+    expect(q.ok).toBe(false);
+    if (!q.ok) expect(q.choices).toEqual(['Right Leg:', 'Left Leg:']);
+    const r = go(0, 'Right Leg');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.before).toBe('[not documented]');
+      const body = r.body ?? '';
+      expect(body.split('Left Leg:')).toHaveLength(2);
+      expect(body.split('Left Leg:')[0]).toContain('| SSV at the SPJ | 10 |');
+      expect(body.split('Left Leg:')[1]).toContain(
+        '| SSV at the SPJ | [not documented] | [not documented] |',
+      );
+    }
+  });
+
+  it('⚠️ NEVER asks a question it offers no way to answer', () => {
+    // The dead end this slice actually removes. With a blank line above each
+    // header no candidate carries a caption, so there is nothing to
+    // disambiguate WITH — and the refusal says so instead of pretending the
+    // conversation can continue.
+    for (const n of [1, 2, 3]) {
+      const r = go(n);
+      expect(r.ok).toBe(false);
+      if (!r.ok) {
+        expect(r.reason).toBe('caption_not_found');
+        expect(r.choices ?? []).toHaveLength(0);
+      }
+    }
+  });
+
+  it('⚠️ REGRESSION GUARD: narrative one blank above a table is NOT its caption', () => {
+    // The withdrawn widen made this exact note write the LEFT leg when asked
+    // for the RIGHT, and report ok=true. Reproduced on the real function
+    // before the revert; pinned here so it cannot come back quietly.
+    const note = [
+      '## FINDINGS',
+      '',
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 5.1 | 0.3 |',
+      '',
+      'The right leg was normal; the left GSV is dilated.',
+      '',
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3.4 |',
+      '',
+    ].join('\n');
+    const r = editTableCell({
+      note,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'DIAMETER (mm)',
+      value: '6.8',
+      tableCaption: 'Right Leg',
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('caption_not_found');
+    // non-vacuity: the fixture really does hold two tables with the same row
+    expect(note.split('| GSV at the SFJ |')).toHaveLength(3);
+  });
+
+  it('the doctor-facing reason tells them how to answer', () => {
+    expect(TABLE_EDIT_REASON.caption_not_found).toContain('Right leg');
+    expect(TABLE_EDIT_REASON.caption_not_found).not.toBe(TABLE_EDIT_REASON.row_ambiguous);
+  });
+});
