@@ -667,13 +667,41 @@ export async function processTemplateTwinVisit(
     }
   } else {
     try {
-      await prisma.templateTwinFillManifest.create({
-        data: {
-          practiceId: input.practiceId,
-          visitId: input.visitId,
-          ...writeData,
+      // ⚠️ THE CREATE PATH NEEDS ITS OWN GUARD — a relation filter is only
+      // available to `updateMany`.
+      //
+      // The pre-write visit read above is NOT atomic with this insert, and the
+      // aimed TOCTOU pass demonstrated the window: an orphaned fill whose wait
+      // the sign-freeze abandoned can pass the read, the signature can land,
+      // and the insert can then create a manifest on an already-SIGNED visit.
+      // The update branch is protected by `visit: { status: { not: 'SIGNED' } }`;
+      // this branch had nothing.
+      //
+      // SERIALIZABLE, and only around these two statements. The check and the
+      // insert must be one indivisible act, and this is the smallest scope that
+      // makes them one.
+      await prisma.$transaction(
+        async (tx) => {
+          const still = await tx.transcribeVisit.findFirst({
+            where: { id: input.visitId, practiceId: input.practiceId },
+            select: { status: true, signedAt: true },
+          });
+          if (still?.status === 'SIGNED' || still?.signedAt != null) {
+            throw new TemplateTwinFillError(
+              'SIGNED_MANIFEST_IMMUTABLE',
+              'The visit was signed while this fill was running; the result is discarded.',
+            );
+          }
+          await tx.templateTwinFillManifest.create({
+            data: {
+              practiceId: input.practiceId,
+              visitId: input.visitId,
+              ...writeData,
+            },
+          });
         },
-      });
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&

@@ -627,7 +627,20 @@ export const POST = withApiHandler<{ id: string }>(
         );
       }
 
-      const updated = await prisma.transcribeVisit.updateMany({
+      // ⚠️ THE POINTER MUST NEVER COST A SIGNATURE.
+      //
+      // `frozenFillManifestId` is a FOREIGN KEY written inside the one statement
+      // that must not fail. A concurrent note-template delete cascades the
+      // visit's fill manifest away, and this UPDATE would then violate the FK
+      // and throw — a doctor unable to sign because a FORMATTING artifact was
+      // removed underneath them. Found by the aimed TOCTOU pass.
+      //
+      // Attempted with the pointer, retried WITHOUT it. Signing styled is the
+      // correct degraded outcome and is already a first-class state (null =
+      // this signature froze no native document), so the retry lands in a
+      // meaning the rest of the system already understands.
+      const signWrite = (frozenId: string | null) =>
+        prisma.transcribeVisit.updateMany({
         where: {
           ...visitByIdScope(visitId, session.user.practiceId),
           status: TranscribeVisitStatus.READY,
@@ -658,7 +671,7 @@ export const POST = withApiHandler<{ id: string }>(
           // NULL is not an absence of information: it records that this
           // signature froze NO native document and the record is styled,
           // deliberately and forever.
-          frozenFillManifestId: nativeFreeze.manifestId ?? null,
+          frozenFillManifestId: frozenId,
           signedAt: new Date(),
           // ⚠️ T4 — THE SIGNER, STAMPED SERVER-SIDE, IN THE SAME STATEMENT AS
           // THE SIGNATURE. `userId` is `session.user.id` (line ~137), resolved
@@ -686,7 +699,20 @@ export const POST = withApiHandler<{ id: string }>(
               }
             : {}),
         },
-      });
+        });
+
+      let updated: { count: number };
+      try {
+        updated = await signWrite(nativeFreeze.manifestId ?? null);
+      } catch (err) {
+        log.warn(
+          'api:visits:sign',
+          'frozen manifest unavailable at signature — signing styled',
+          { visitId, error: err instanceof Error ? err.message : String(err) }
+        );
+        nativeFreeze = { state: 'failed', reason: 'frozen_manifest_vanished' };
+        updated = await signWrite(null);
+      }
       // The pre-sign preview cache is keyed on soapVersion, which SIGNING DOES
       // NOT BUMP — so without this a signed visit could be served the pre-sign
       // render for the rest of the TTL, defeating the rule that a signed
