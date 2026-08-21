@@ -140,6 +140,8 @@ export const POST = withApiHandler<{ id: string }>(
     let nativeFreeze: { state: string; reason?: string; manifestId?: string } = {
       state: 'not_applicable',
     };
+    /** Set when THIS request lost the race: another actor's signature stands. */
+    let supersededBySigner: string | null = null;
 
     const session = await getSession();
     const userId = session?.user.id;
@@ -639,8 +641,61 @@ export const POST = withApiHandler<{ id: string }>(
       // correct degraded outcome and is already a first-class state (null =
       // this signature froze no native document), so the retry lands in a
       // meaning the rest of the system already understands.
+      // ⚠️ THE E/M STATE IS RE-READ INSIDE THE GUARDED WRITE — F5-h ruling 1.
+      //
+      // `cptCodes` and `emPendingChange` were both built from the :198 capture
+      // and written after every intervening await — a read-modify-write across
+      // seconds, including the whole sign-freeze window.
+      //
+      // `POST /em-score/override` is the concurrent writer, and it DELIBERATELY
+      // does not bump `soapVersion` ("an override is not a note edit" — which is
+      // correct: a coding decision must never trip a colleague's note-CAS into a
+      // 409). So the note-CAS passes and the signature's whole-blob overwrite
+      // ERASED the doctor's override — code, typed reason and timestamp — then
+      // froze `signedCode` at the model's level.
+      //
+      // The fix is not a wider CAS. It is to stop the stale read being an INPUT:
+      // the blob is re-read inside the same statement's transaction, and the
+      // override — whenever it landed — wins by construction.
+      //
+      // ⚠️ THE EXPENSIVE PART STAYS OUTSIDE. `computeDisplayedEmCode` awaits
+      // `computeEmScore`, which can reach a model; holding a row lock across
+      // that is how a formatting concern becomes a database incident. Only the
+      // PRECEDENCE is applied inside — `override.code ?? engine.code`, the same
+      // projection the rail and the gate use.
       const signWrite = (frozenId: string | null) =>
-        prisma.transcribeVisit.updateMany({
+        prisma.$transaction(async (tx) => {
+          const fresh = await tx.transcribeVisit.findFirst({
+            where: visitByIdScope(visitId, session.user.practiceId),
+            select: { cptCodes: true, emPendingChange: true },
+          });
+          const freshBlob = (fresh?.cptCodes ?? null) as {
+            em?: { override?: { code?: string } };
+          } | null;
+          const freshOverride = freshBlob?.em?.override?.code;
+
+          // Start from the FRESH blob so a concurrent override survives; layer
+          // this signature's frozen level on top, deferring to the override.
+          const mergedCpt =
+            cptWrite === undefined
+              ? undefined
+              : ({
+                  ...(freshBlob ?? {}),
+                  em: {
+                    ...(freshBlob?.em ?? {}),
+                    ...((cptWrite as { em?: object }).em ?? {}),
+                    // the override itself is never overwritten
+                    ...(freshBlob?.em?.override
+                      ? { override: freshBlob.em.override }
+                      : {}),
+                    signedCode:
+                      freshOverride ??
+                      ((cptWrite as { em?: { signedCode?: string } }).em?.signedCode ??
+                        undefined),
+                  },
+                } as Prisma.InputJsonValue);
+
+          return tx.transcribeVisit.updateMany({
         where: {
           ...visitByIdScope(visitId, session.user.practiceId),
           status: TranscribeVisitStatus.READY,
@@ -686,7 +741,7 @@ export const POST = withApiHandler<{ id: string }>(
           // unrepresentable anyway — this is the code side of the same rule, so
           // the constraint never has to fire in normal operation.
           signedBy: userId,
-          ...(cptWrite !== undefined ? { cptCodes: cptWrite } : {}),
+          ...(mergedCpt !== undefined ? { cptCodes: mergedCpt } : {}),
           // E/M visible-confirm: the gate above verified the explicit
           // acknowledgement — MARK (not clear) the record so the row
           // keeps the forensic trail alongside the audit rows.
@@ -699,6 +754,7 @@ export const POST = withApiHandler<{ id: string }>(
               }
             : {}),
         },
+          });
         });
 
       let updated: { count: number };
@@ -756,7 +812,13 @@ export const POST = withApiHandler<{ id: string }>(
         // Another concurrent request got there first. Re-read.
         const refreshed = await prisma.transcribeVisit.findFirst({
           where: visitByIdScope(visitId, session.user.practiceId),
-          select: { signedAt: true, status: true, soapVersion: true },
+          select: {
+            signedAt: true,
+            status: true,
+            soapVersion: true,
+            signedBy: true,
+            signer: { select: { name: true, email: true } },
+          },
         });
         if (refreshed?.status !== TranscribeVisitStatus.SIGNED) {
           // ⚠️ TWO DIFFERENT RACES, TWO DIFFERENT MESSAGES. A doctor whose note
@@ -770,6 +832,46 @@ export const POST = withApiHandler<{ id: string }>(
             409
           );
         }
+        // ⚠️ THE LOSER IS TOLD WHAT HAPPENED — F5-h ruling 2.
+        //
+        // This branch used to fall through to a 200 that looks exactly like a
+        // successful signature. It is not one: THIS request signed nothing.
+        // Another actor did, possibly against a different version of the note.
+        //
+        // ⚠️ AND THE ATTESTATION IS RECORDED RATHER THAN DISCARDED. The route
+        // treats it as a mandatory server term (400 ATTESTATION_REQUIRED), so a
+        // term that was offered and then silently dropped is exactly the silence
+        // family this programme keeps closing. It becomes a RECORDED NON-EVENT.
+        supersededBySigner =
+          refreshed.signer?.name ?? refreshed.signer?.email ?? 'another clinician';
+        void logAudit({
+          // ⚠️ NOT `VISIT_SIGNED` — THIS REQUEST SIGNED NOTHING.
+          //
+          // The first draft used it and my OWN gate caught it: two rows claiming
+          // that action for one visit is the corrupted trail, and a reader doing
+          // `.find(action === 'VISIT_SIGNED')` would pick the non-signature.
+          // The `SIGN_BLOCKED_*` family already means "an attempt that did not
+          // produce a signature", which is exactly this — and reusing it avoids
+          // the three-edit enum trap for a value that would mean the same thing.
+          action: 'SIGN_BLOCKED_NO_ATTESTATION',
+          userId,
+          practiceId: session.user.practiceId,
+          targetType: 'TranscribeVisit',
+          targetId: visitId,
+          metadata: {
+            // The attestation WAS supplied — the block is the lost race. Named
+            // in the metadata so the row is not misread as a missing term.
+            sign_attempt_superseded: true,
+            supersededBy: refreshed.signedBy ?? null,
+            attestedSoapVersion: visit.soapVersion,
+            signedSoapVersion: refreshed.soapVersion,
+            attestation: parsed.data.attestation ?? null,
+          },
+        });
+        // ⚠️ AND ITS OWN freeze VERDICT IS SUPPRESSED. `nativeFreeze` describes
+        // work this request did that never reached the record; reporting it
+        // would describe a freeze that did not win.
+        nativeFreeze = { state: 'not_applicable' };
         signedAt = refreshed.signedAt;
       } else {
         const refreshed = await prisma.transcribeVisit.findFirst({
@@ -923,6 +1025,8 @@ export const POST = withApiHandler<{ id: string }>(
         pdfDownloadUrl,
         docxDownloadUrl,
         emailQueued,
+        // Present ONLY when this request did not produce the signature.
+        supersededBy: supersededBySigner ?? undefined,
         // ⚠️ THE DOCTOR LEARNS AT SIGN TIME, NOT AT DOWNLOAD TIME.
         //
         // Present ONLY when the native document could not be refreshed against

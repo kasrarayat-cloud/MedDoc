@@ -58,7 +58,7 @@ vi.mock('next/server', () => {
 });
 
 vi.mock('@meddoc/db', () => {
-  const prisma = {
+  const prisma: Record<string, unknown> = {
     transcribeVisit: {
       findUnique: mocks.findUnique,
       // T5: the sign route's reads are practice-scoped, so they use findFirst
@@ -70,6 +70,13 @@ vi.mock('@meddoc/db', () => {
     // route throws before any gate under test runs, and 13 specs report 500.
     user: { findUnique: mocks.userFindUnique },
     rxWarningOverride: { findMany: mocks.rxOverrideFindMany },
+    // F5-h: the signature write now runs inside a transaction so the E/M blob
+    // is RE-READ next to the CAS-guarded update — a concurrent override must
+    // not be erased by a whole-blob overwrite built from a stale capture.
+    // The interactive callback gets the same client, so these specs observe the
+    // identical calls they did before.
+    $transaction: (fn: (tx: unknown) => unknown) =>
+      typeof fn === 'function' ? fn(prisma) : Promise.all(fn as never),
   };
   return { default: prisma, prisma };
 });
