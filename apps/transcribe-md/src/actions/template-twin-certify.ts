@@ -78,6 +78,13 @@ export type CertifyActionResult<T> =
         | 'certification_blocked'
         | 'lifecycle'
         | 'mappings_not_ready'
+        /** F5-i. No self-test could be GENERATED for this form's shape, so no
+         *  proof ran. ⚠️ It is its own reason and not `unexpected`, because
+         *  nothing broke and nothing is awaiting repair by an operator — the
+         *  engine simply cannot yet write a dictation for this kind of form.
+         *  F16's lesson: a designed refusal framed as a fault teaches the
+         *  doctor to press the button twice and give up. */
+        | 'encounter_not_derivable'
         | 'unexpected';
       /** Present only for `unexpected`, and only the error's CLASS — never its
        *  message, which can quote document content. The message goes to the
@@ -187,19 +194,33 @@ export async function certifyNativeTemplateAction(
       current?.latestSyntheticTest?.roundTripVerified === true &&
       current.latestSyntheticTest.mappingsSha256 === expectedMappingsSha256;
     if (!proofFresh) {
+      // ⚠️ THE SAME DERIVATION AS THE AUTOMATIC PATH — F5-c.
+      // An automatic path that proved something different from the manual one
+      // would leave neither reader able to say what their template passed.
+      //
+      // ⚠️ AND IT REFUSES ON THE SAME REASONS — F5-i. A form this generator
+      // cannot speak to gets no proof at all, rather than a VENOUS one. The
+      // throw lands on the ladder below beside MAPPINGS_NOT_READY, because
+      // "we could not generate a self-test for your form" is a DESIGNED
+      // refusal the doctor can act on, not an unexpected error.
+      const derived = deriveVerificationEncounter(
+        (current?.fields ?? []).map(({ field, mapping }) => ({
+          originalLabel: field.originalLabel,
+          clinicalConcept: mapping.clinicalConcept,
+        })),
+      );
+      if (!derived.ok) {
+        throw new TemplateTwinSyntheticTestError(
+          'ENCOUNTER_NOT_DERIVABLE',
+          'We could not generate a self-test that matches this form, so nothing was certified.',
+          { blocking: [derived.reason] },
+        );
+      }
       await runTemplateTwinSyntheticTest({
         noteTemplateId,
         actor,
         expectedMappingsSha256,
-        // ⚠️ THE SAME DERIVATION AS THE AUTOMATIC PATH — F5-c.
-        // An automatic path that proved something different from the manual one
-        // would leave neither reader able to say what their template passed.
-        encounterText: deriveVerificationEncounter(
-          (current?.fields ?? []).map(({ field, mapping }) => ({
-            originalLabel: field.originalLabel,
-            clinicalConcept: mapping.clinicalConcept,
-          })),
-        ),
+        encounterText: derived.text,
         encounterMode: 'dictation',
         extractEntities: extractTemplateTwinEntities,
         // Run the proof through the LIVE fill path: a real (ephemeral) visit,
@@ -334,6 +355,47 @@ export async function certifyNativeTemplateAction(
         remaining,
         totalFields: total,
         error: mappingsNotReadyMessage(remaining, total),
+      };
+    }
+
+    // ⚠️ ENCOUNTER_NOT_DERIVABLE IS A DESIGNED REFUSAL TOO — F5-i, and it is on
+    // this ladder for exactly F16's reason. Left to fall through, the doctor
+    // would read "Certification could not be completed
+    // (ENCOUNTER_NOT_DERIVABLE). This has been recorded — it will not succeed
+    // on a retry until it is fixed", which frames a KNOWN LIMIT of the
+    // generator as a fault under repair, and names nothing they can act on.
+    //
+    // What is true, and what this says instead: their form is fine, their
+    // mappings are fine, and the engine cannot yet write a self-test that
+    // speaks to this KIND of form. Certifying anyway is what F5-i removed —
+    // the old fallback proved a leg-vein study and called it their template.
+    //
+    // ⚠️ `blocking` carries ONE value from a CLOSED union (EncounterNotDerivable)
+    // and no document content, which is precisely the constraint the
+    // MAPPINGS_NOT_READY branch above states for this cross-tenant channel.
+    // Anyone widening it to free text must re-decide that, not inherit it.
+    if (err instanceof TemplateTwinSyntheticTestError && err.code === 'ENCOUNTER_NOT_DERIVABLE') {
+      void logTwinAudit({
+        action: 'TEMPLATE_TWIN_CERTIFY_FAILED',
+        targetType: 'note_template',
+        targetId: noteTemplateId,
+        success: false,
+        errorCode: 'ENCOUNTER_NOT_DERIVABLE',
+        metadata: {
+          errorClass: 'TemplateTwinSyntheticTestError',
+          code: 'ENCOUNTER_NOT_DERIVABLE',
+          message: err.message,
+          stage: 'certifyNativeTemplateAction',
+          blocking: err.blocking,
+        },
+      });
+      return {
+        ok: false,
+        reason: 'encounter_not_derivable',
+        error:
+          'Not yet — we could not generate a self-test that matches this form, so nothing was certified. ' +
+          'Your form and your field mappings are fine; this kind of form is not one we can self-test yet. ' +
+          'This has been recorded and does not need anything from you.',
       };
     }
 

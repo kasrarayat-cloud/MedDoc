@@ -43,8 +43,18 @@ const ownersForm = (): EncounterSourceField[] => [
   { originalLabel: 'Address', clinicalConcept: null },
 ];
 
+/** F5-i: the derivation REFUSES rather than falling back, so every arm that
+ *  wants the TEXT unwraps through here. It doubles as the file's non-vacuity
+ *  control — a change that made the owner's own form stop deriving would fail
+ *  every arm naming the reason, instead of matching zero rows quietly. */
+function derivedText(fields: EncounterSourceField[]): string {
+  const d = deriveVerificationEncounter(fields);
+  if (!d.ok) throw new Error(`expected a derived encounter, got refusal: ${d.reason}`);
+  return d.text;
+}
+
 describe('the derived encounter speaks to the template it certifies', () => {
-  const text = deriveVerificationEncounter(ownersForm());
+  const text = derivedText(ownersForm());
 
   it('names every real vessel segment, on BOTH legs', () => {
     for (const v of VESSELS) {
@@ -86,7 +96,7 @@ describe('the derived encounter speaks to the template it certifies', () => {
   });
 
   it('is DETERMINISTIC — two derivations are byte-identical', () => {
-    expect(deriveVerificationEncounter(ownersForm())).toBe(text);
+    expect(derivedText(ownersForm())).toBe(text);
   });
 
   it('still passes the evidence gate that blocked everything before', async () => {
@@ -111,26 +121,103 @@ describe('the derived encounter speaks to the template it certifies', () => {
   });
 });
 
-describe('templates with nothing to enumerate fall back, not break', () => {
-  it('a SOAP-shaped template gets the generic encounter', () => {
+/**
+ * F5-i — SHAPE-DERIVED, OR REFUSE.
+ *
+ * ⚠️ THIS BLOCK USED TO ASSERT THE OPPOSITE, AND IT WAS THE DEFECT. It read
+ * "templates with nothing to enumerate FALL BACK, not break", and every arm
+ * asserted `toBe(VERIFICATION_ENCOUNTER)` — a bilateral lower extremity VENOUS
+ * REFLUX dictation. So the gate PINNED the behaviour by which a Colonoscopy
+ * Operative Note certified against a leg-vein study that never mentions one
+ * field it contains.
+ *
+ * > A certificate must mean THE form was exercised, not that A form was.
+ *
+ * The arms are inverted rather than deleted, because the INPUTS were right:
+ * these are the three shapes that cannot be dictated, and each now has to name
+ * WHICH one it is.
+ */
+describe('a template this generator cannot speak to is REFUSED, never faked', () => {
+  it('a SOAP-shaped template refuses — there are no measurement rows at all', () => {
     const soap: EncounterSourceField[] = [
       { originalLabel: 'Subjective', clinicalConcept: 'chief_complaint' },
       { originalLabel: 'Assessment', clinicalConcept: 'assessment' },
     ];
-    expect(deriveVerificationEncounter(soap)).toBe(VERIFICATION_ENCOUNTER);
+    expect(deriveVerificationEncounter(soap)).toEqual({
+      ok: false,
+      reason: 'no_measurement_rows',
+    });
   });
 
-  it('an empty field set falls back rather than emitting a bare marker', () => {
-    expect(deriveVerificationEncounter([])).toBe(VERIFICATION_ENCOUNTER);
+  it('an empty field set refuses rather than emitting a bare marker', () => {
+    expect(deriveVerificationEncounter([])).toEqual({
+      ok: false,
+      reason: 'no_measurement_rows',
+    });
   });
 
-  it('⚠️ a form of ONLY placeholders falls back — it has no real anatomy', () => {
+  it('⚠️ a form of ONLY placeholders refuses — it has measurement rows and no anatomy', () => {
     const onlyPlaceholders: EncounterSourceField[] = PLACEHOLDERS.map((l) => ({
       originalLabel: l,
       clinicalConcept: 'measurement.diameter',
       laterality: null,
     }));
-    expect(deriveVerificationEncounter(onlyPlaceholders)).toBe(VERIFICATION_ENCOUNTER);
+    // ⚠️ A DIFFERENT REASON FROM THE TWO ABOVE, DELIBERATELY. This form DOES
+    // carry measurement rows; what it lacks is a location anybody named. A
+    // doctor can fix this one by filling in the placeholders, and cannot fix
+    // `no_measurement_rows` at all — collapsing them would tell them the wrong
+    // thing about their own form.
+    expect(deriveVerificationEncounter(onlyPlaceholders)).toEqual({
+      ok: false,
+      reason: 'only_placeholder_rows',
+    });
+  });
+
+  it('⚠️ NO REFUSAL EVER RETURNS THE VENOUS TEXT — the fallback is gone, not renamed', () => {
+    const refusals: EncounterSourceField[][] = [
+      [],
+      [{ originalLabel: 'Subjective', clinicalConcept: 'chief_complaint' }],
+      PLACEHOLDERS.map((l) => ({ originalLabel: l, clinicalConcept: 'measurement.diameter' })),
+      [{ originalLabel: 'Right thyroid lobe', clinicalConcept: 'measurement.length' }],
+    ];
+    // Non-vacuity: all four really are refusals, so the assertion below is
+    // about something.
+    expect(refusals.map((f) => deriveVerificationEncounter(f).ok)).toEqual([
+      false,
+      false,
+      false,
+      false,
+    ]);
+    for (const fields of refusals) {
+      const out = deriveVerificationEncounter(fields);
+      expect(JSON.stringify(out)).not.toContain('deep vein thrombosis');
+      expect(JSON.stringify(out)).not.toContain('saphenofemoral');
+      expect(JSON.stringify(out)).not.toContain(VERIFICATION_ENCOUNTER);
+    }
+  });
+
+  it('every refusal reason is a member of the declared closed union', () => {
+    // ⚠️ THE REASON CROSSES TO AN AUDIT ROW THAT FANS OUT CROSS-TENANT, so it
+    // must never become free text carrying a customer's field labels. Pinning
+    // the set here is what makes that a checkable property rather than a note.
+    const KNOWN = ['no_measurement_rows', 'only_placeholder_rows', 'unsupported_study_type'];
+    const seen = [
+      deriveVerificationEncounter([]),
+      deriveVerificationEncounter([
+        { originalLabel: 'Right thyroid lobe', clinicalConcept: 'measurement.length' },
+      ]),
+      deriveVerificationEncounter(
+        PLACEHOLDERS.map((l) => ({ originalLabel: l, clinicalConcept: 'measurement.diameter' })),
+      ),
+    ].map((d) => (d.ok ? 'OK' : d.reason));
+    expect(seen).toEqual([
+      'no_measurement_rows',
+      'unsupported_study_type',
+      'only_placeholder_rows',
+    ]);
+    // and the three distinct reasons observed ARE the whole declared union —
+    // a new reason added without a test lands here.
+    expect([...new Set(seen)].sort()).toEqual([...KNOWN].sort());
   });
 });
 
@@ -150,7 +237,7 @@ describe('templates with nothing to enumerate fall back, not break', () => {
  * A count of phrases is not a measure of whether any of them can address a cell.
  */
 describe('every dictated value is globally unique — the cross-leg collision', () => {
-  const text = deriveVerificationEncounter(ownersForm());
+  const text = derivedText(ownersForm());
   const rows = [...text.matchAll(
     /(Right|Left) (.+?): diameter (\d+\.\d+) millimeters, reflux time (\d+\.\d+) seconds/g,
   )].map((m) => ({ side: m[1], vessel: m[2], diameter: m[3], reflux: m[4] }));
@@ -198,32 +285,40 @@ describe('a NON-venous form never receives a venous narrative', () => {
    * a "no deep vein thrombosis" negative. Emitted for a thyroid or obstetric form
    * that merely carries measurement rows, that is fabrication.
    */
-  it('a thyroid measurement form falls back to the generic encounter', () => {
+  it('a thyroid measurement form REFUSES — it is not certified against a leg study', () => {
     const thyroid: EncounterSourceField[] = [
       { originalLabel: 'Right thyroid lobe', clinicalConcept: 'measurement.length' },
       { originalLabel: 'Left thyroid lobe', clinicalConcept: 'measurement.length' },
       { originalLabel: 'Isthmus', clinicalConcept: 'measurement.depth' },
     ];
     const out = deriveVerificationEncounter(thyroid);
-    expect(out).toBe(VERIFICATION_ENCOUNTER);
+    expect(out).toEqual({ ok: false, reason: 'unsupported_study_type' });
 
-    // ⚠️ WHAT THIS ARM ASSERTS, PRECISELY: no measurement is DICTATED ABOUT THIS
-    // FORM'S OWN ROWS. It deliberately does NOT assert the output is free of the
-    // word "reflux" — an earlier draft of this arm did, and failed, because the
-    // fallback constant is itself a venous encounter.
+    // ⚠️ THIS ARM'S PREVIOUS VERSION IS WHY F5-i EXISTS, AND ITS OWN COMMENT
+    // SAID SO. It asserted `toBe(VERIFICATION_ENCOUNTER)` and recorded, in as
+    // many words: "an honest, PRE-EXISTING LIMIT … a non-venous template still
+    // certifies against a venous generic dictation … fixing it needs a
+    // per-specialty generic encounter and is not in this change."
     //
-    // ⚠️ AND THAT IS AN HONEST, PRE-EXISTING LIMIT, RECORDED RATHER THAN HIDDEN:
-    // a non-venous template still certifies against a venous generic dictation.
-    // It was true before F5-c for EVERY template and F5-c does not worsen it —
-    // but it means a thyroid form's proof fills nothing and refuses at the gate,
-    // which is the safe direction. Fixing it needs a per-specialty generic
-    // encounter and is not in this change.
-    expect(out).not.toMatch(/thyroid lobe: diameter/i);
-    expect(out).not.toMatch(/Isthmus: diameter/i);
+    // That limit is now closed in the SAFE direction — refuse, rather than
+    // certify against the wrong study. The other direction (a per-shape
+    // generator, so a thyroid form CAN certify honestly) is F5-i's additive
+    // second half and must never arrive by restoring the fallback.
+    //
+    // ⚠️ AND THE OLD ARM COULD NOT ASSERT THIS, WHICH WAS THE TELL: it noted
+    // it "deliberately does NOT assert the output is free of the word reflux …
+    // because the fallback constant is itself a venous encounter." Now it can.
+    expect(JSON.stringify(out)).not.toMatch(/reflux/i);
+    expect(JSON.stringify(out)).not.toMatch(/thyroid/i);
   });
 
   it('the venous form still qualifies — the guard is not simply off', () => {
-    expect(deriveVerificationEncounter(ownersForm())).not.toBe(VERIFICATION_ENCOUNTER);
+    // ⚠️ THE HAPPY-PATH CONTROL. Every arm above is a refusal, and a change
+    // that refused EVERYTHING would satisfy all of them while destroying the
+    // feature. This is the arm that fails in that case.
+    const out = deriveVerificationEncounter(ownersForm());
+    expect(out.ok).toBe(true);
+    expect(out.ok && out.text).toContain('Right GSV at the SFJ');
   });
 });
 
@@ -233,10 +328,11 @@ describe('a large form degrades in LENGTH, never into a security-shaped refusal'
       originalLabel: `GSV segment ${i} at the Proximal Thigh`,
       clinicalConcept: 'measurement.diameter',
     }));
-    const out = deriveVerificationEncounter(huge);
+    const out = derivedText(huge);
     expect(out.length).toBeLessThan(12_000);
-    // and it is still a real dictation, not the fallback
-    expect(out).not.toBe(VERIFICATION_ENCOUNTER);
+    // ⚠️ and it is still a real dictation — it DEGRADES IN LENGTH, it does not
+    // become a refusal. A large venous form is one this generator can speak to,
+    // so turning it into `unsupported_study_type` would be F5-i overreaching.
     const n = (out.match(/diameter \d+\.\d+ millimeters/g) ?? []).length;
     expect(n).toBeGreaterThanOrEqual(MIN_CERTIFIED_FILLED_FIELDS);
   });
@@ -248,6 +344,10 @@ describe('the whole measurement family is enumerated, not a hand-kept pair', () 
       { originalLabel: 'GSV at the SFJ', clinicalConcept: 'measurement.velocity' },
       { originalLabel: 'SSV at the SPJ', clinicalConcept: 'measurement.velocity' },
     ];
-    expect(deriveVerificationEncounter(velocity)).not.toBe(VERIFICATION_ENCOUNTER);
+    // ⚠️ ASSERTS THE DICTATION, NOT MERELY "not the fallback". The old form of
+    // this arm passed on ANY string that was not the constant — including a
+    // refusal, once refusals existed. Naming the vessel is what makes it a
+    // claim about the velocity family being enumerated.
+    expect(derivedText(velocity)).toContain('Right GSV at the SFJ');
   });
 });

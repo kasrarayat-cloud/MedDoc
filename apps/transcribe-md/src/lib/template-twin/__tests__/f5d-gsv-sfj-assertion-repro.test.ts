@@ -68,9 +68,19 @@ const ownersForm = (): EncounterSourceField[] => [
   { originalLabel: 'Address', clinicalConcept: null },
 ];
 
+/** F5-i: the derivation REFUSES rather than falling back, so every arm here
+ *  first asserts it produced a text at all. That doubles as this file's
+ *  non-vacuity control — if the owner's form ever stops deriving, these arms
+ *  fail naming the reason instead of quietly matching zero rows. */
+function derivedText(fields: EncounterSourceField[]): string {
+  const d = deriveVerificationEncounter(fields);
+  if (!d.ok) throw new Error(`expected a derived encounter, got refusal: ${d.reason}`);
+  return d.text;
+}
+
 /** Every `<Side> <label>: diameter <v> millimeters` the REAL generator emits. */
 function dictatedDiameters(): { side: string; label: string; diameter: string }[] {
-  const text = deriveVerificationEncounter(ownersForm());
+  const text = derivedText(ownersForm());
   const out: { side: string; label: string; diameter: string }[] = [];
   for (const side of ['Right', 'Left']) {
     for (const label of VESSELS) {

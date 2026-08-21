@@ -21,10 +21,16 @@ export class TemplateTwinSyntheticTestError extends Error {
     | 'CONFLICT'
     | 'MAPPINGS_NOT_READY'
     | 'VALIDATION_FAILED'
-    | 'SYNTHETIC_EVIDENCE_REJECTED';
+    | 'SYNTHETIC_EVIDENCE_REJECTED'
+    /** F5-i. No self-test could be GENERATED for this template's own shape, so
+     *  nothing was run. ⚠️ Distinct from every code above, which report that a
+     *  proof RAN and failed — conflating them would let "we never tested your
+     *  form" read as "your form was tested". */
+    | 'ENCOUNTER_NOT_DERIVABLE';
 
   /** For VALIDATION_FAILED: "<fieldId>:<issueCode>" per blocking check.
    *  For MAPPINGS_NOT_READY: "<fieldId>:<no_mapping|unconfirmed|no_concept>".
+   *  For ENCOUNTER_NOT_DERIVABLE: the single EncounterNotDerivable reason.
    *  Ids and codes only — never encounter text or filled values. */
   readonly blocking: readonly string[];
 

@@ -1,5 +1,16 @@
 /**
- * THE SYNTHETIC ENCOUNTER certification attests against.
+ * THE REFERENCE VENOUS ENCOUNTER.
+ *
+ * ⚠️ SINCE F5-i THIS IS NOT A FALLBACK, AND IT MUST NEVER BE MADE ONE AGAIN.
+ * `deriveVerificationEncounter` used to return this text for any form it could
+ * not address, which certified operative notes, SOAP templates and thyroid
+ * studies against a bilateral leg-vein study. That is now a NAMED REFUSAL —
+ * see the F5-i block below. **Zero production call sites read this constant**;
+ * its remaining readers are the gates that assert the shape a derived
+ * encounter must have, and it is exported for them.
+ *
+ * If you are here because a template will not certify: the answer is a
+ * generator that speaks to THAT form, never a re-pointed fallback to this one.
  *
  * ⚠️ IT LIVES HERE, NOT IN THE ACTION, BECAUSE A `'use server'` FILE MAY EXPORT
  * ASYNC FUNCTIONS ONLY. Exporting this const from `template-twin-certify.ts`
@@ -7,10 +18,12 @@
  * have failed to render. `use-server-exports.test.ts` caught it — a guard that
  * exists precisely because this trap has been paid for before.
  *
- * ⚠️ AND IT IS ONE CONSTANT, SHARED. The manual certify action and the
- * auto-certify worker job both attest against THIS text. Two verification
- * encounters would mean the automatic path proved something the manual path
- * never did, and neither reader could say what their template actually passed.
+ * ⚠️ AND THE DERIVATION IS STILL ONE FUNCTION, SHARED. The manual certify
+ * action and the auto-certify worker job both attest against what
+ * `deriveVerificationEncounter` returns for their own template — and both
+ * refuse on the same reasons. Two derivations would mean the automatic path
+ * proved something the manual path never did, and neither reader could say
+ * what their template actually passed.
  */
 export const VERIFICATION_ENCOUNTER = [
   // ⚠️ THE FIRST LINE IS LOAD-BEARING, NOT A COMMENT ABOUT THE DATA.
@@ -145,20 +158,68 @@ function measurementValues(count: number): { diameter: string; reflux: string; c
  *  must degrade to a shorter dictation, never to a misleading refusal. */
 const MAX_ENCOUNTER_CHARS = 9_000;
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * F5-i — SHAPE-DERIVED, OR REFUSE. NEVER A FALLBACK.
+ * ──────────────────────────────────────────────────────────────────────────
+ *
+ * ⚠️ THIS FUNCTION USED TO RETURN `VERIFICATION_ENCOUNTER` — a bilateral lower
+ * extremity VENOUS REFLUX dictation — for any form it could not address. So a
+ * Colonoscopy Operative Note, a SOAP office template and a thyroid study were
+ * each certified against a leg-vein study that never mentions one field they
+ * contain.
+ *
+ * > A certificate must mean THE form was exercised, not that A form was.
+ *
+ * The fallback was the weaker claim wearing the stronger one's clothes. It is
+ * removed: a template this generator cannot speak to now returns a NAMED
+ * refusal, and both callers land it in needs-review saying so.
+ *
+ * ⚠️ THE RETURN SHAPE CHANGED, NOT JUST ITS NULLABILITY, AND THAT IS
+ * DELIBERATE. A `string | null` would have let a caller stringify the refusal
+ * into an encounter. A discriminated union cannot be passed to `encounterText`
+ * at all, so `tsc` names every site — and the `reason` is what needs-review
+ * has to display, so it must survive the return.
+ *
+ * ⚠️ THIS IS A TIGHTENING AND IT COSTS A CAPABILITY, KNOWINGLY. A non-venous
+ * template that would previously have "certified" now cannot certify at all.
+ * That is the correct direction: production holds 10 note templates and
+ * exactly ONE compiled twin — the venous one — so no template loses a
+ * certificate it actually holds, and the ones that would have gained one would
+ * have gained a false one. Widening coverage (a per-shape generator for
+ * operative notes / SOAP / imaging) is F5-i's second half and is ADDITIVE on
+ * top of this; it must never be delivered by restoring the fallback.
+ */
+
+/** Why this template could not have a self-test generated FOR IT. Displayed to
+ *  the doctor via needs-review, so each value names a real, distinguishable
+ *  situation rather than one catch-all. */
+export type EncounterNotDerivable =
+  | 'no_measurement_rows'
+  | 'only_placeholder_rows'
+  | 'unsupported_study_type';
+
+export type DerivedEncounter =
+  | { readonly ok: true; readonly text: string }
+  | { readonly ok: false; readonly reason: EncounterNotDerivable };
+
 /**
  * Build a synthetic dictation that speaks to THIS template's own measurement
- * rows. Falls back to the generic encounter when a template has no measurement
- * fields, when its rows are all placeholders, or when the form is not venous —
- * the narrative this generator writes is venous, and it must not be told about
- * a study it does not describe.
+ * rows, or REFUSE with a named reason. It never invents a narrative about a
+ * study the form does not describe.
  */
 export function deriveVerificationEncounter(
   fields: readonly EncounterSourceField[],
-): string {
+): DerivedEncounter {
   const labels: string[] = [];
   const seen = new Set<string>();
+  /** Counted separately from `labels` so "no measurement rows at all" stays
+   *  distinguishable from "measurement rows that name no anatomy". Collapsing
+   *  them would put a table-less SOAP form and an all-placeholder venous form
+   *  under one reason, and they need different answers from the doctor. */
+  let measurementRows = 0;
   for (const f of fields) {
     if (!f.clinicalConcept || !f.clinicalConcept.startsWith(MEASUREMENT_PREFIX)) continue;
+    measurementRows += 1;
     const label = (f.originalLabel ?? '').trim();
     if (!label || PLACEHOLDER.test(label)) continue;
     // A column's UNIT HEADER ("REFLUX TIME (ms)") labels a column, addresses no
@@ -170,11 +231,21 @@ export function deriveVerificationEncounter(
     labels.push(label);
   }
 
-  if (labels.length === 0) return VERIFICATION_ENCOUNTER;
+  // A table-less form — an operative note, a SOAP office template. There is
+  // nothing here this generator knows how to dictate.
+  if (measurementRows === 0) return { ok: false, reason: 'no_measurement_rows' };
+
+  // Measurement rows exist but none of them name anatomy, so any dictation
+  // would address a location nobody wrote down.
+  if (labels.length === 0) return { ok: false, reason: 'only_placeholder_rows' };
 
   // ⚠️ EVIDENCE, NOT ASSUMPTION: the form's own labels must look venous before a
-  // venous narrative is written about it.
-  if (!labels.some((l) => VENOUS_TOKEN.test(l))) return VERIFICATION_ENCOUNTER;
+  // venous narrative is written about it. A thyroid or obstetric study reaches
+  // here, and dictating reflux times and a "no deep vein thrombosis" negative
+  // about it would be FABRICATED CLINICAL CONTENT in a stored artifact.
+  if (!labels.some((l) => VENOUS_TOKEN.test(l))) {
+    return { ok: false, reason: 'unsupported_study_type' };
+  }
 
   const build = (take: number): string => {
     const used = labels.slice(0, take);
@@ -210,5 +281,5 @@ export function deriveVerificationEncounter(
     take -= 1;
     text = build(take);
   }
-  return text;
+  return { ok: true, text };
 }

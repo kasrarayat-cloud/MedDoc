@@ -110,7 +110,12 @@ function parse(text: string): { cells: Cell[]; facts: EncounterFact[] } {
   return { cells, facts };
 }
 
-const text = deriveVerificationEncounter(ownersForm());
+// F5-i: the derivation REFUSES rather than falling back, so unwrap explicitly.
+// This is also the file's non-vacuity control — a form that stopped deriving
+// would otherwise parse to zero cells and every arm below would pass on nothing.
+const derived = deriveVerificationEncounter(ownersForm());
+if (!derived.ok) throw new Error(`expected a derived encounter, got refusal: ${derived.reason}`);
+const text = derived.text;
 const { cells, facts } = parse(text);
 
 const fill = (c: Cell) =>
