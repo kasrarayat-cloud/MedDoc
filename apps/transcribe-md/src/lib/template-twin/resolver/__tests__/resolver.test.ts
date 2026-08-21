@@ -120,6 +120,11 @@ function fact(
     evidenceQuote: `Synthetic evidence ${seed}`,
     quality: { asr: 'high', evidence: 'direct' },
     ...overrides,
+    // F5-e. `Partial<EncounterFact>` types `segment` as `string | null |
+    // undefined`, so spreading overrides could reintroduce `undefined` over a
+    // field the fact type requires. Resolve it AFTER the spread — an override
+    // that omits the key means "no segment", never "unset it".
+    segment: overrides.segment ?? null,
   };
 }
 

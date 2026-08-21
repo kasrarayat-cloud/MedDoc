@@ -60,6 +60,9 @@ function pickFact(id: string, value: string, concept = 'finding') {
     audioTimestampSeconds: null,
     evidenceAnchorIds: [`anchor-${id}`],
     evidenceQuote: 'synthetic fixture evidence',
+    // F5-e. Dropdown picks are not measurements and carry no anatomical segment;
+    // `null` is what the projection emits for them.
+    segment: null,
     quality: { asr: 'unknown' as const, evidence: 'direct' as const },
   };
 }

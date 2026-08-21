@@ -123,6 +123,9 @@ function fact(
     evidenceQuote: `Synthetic evidence ${seed}`,
     quality: { asr: 'high', evidence: 'direct' },
     ...overrides,
+    // F5-e — see the identical note in resolver.test.ts: resolve `segment` after
+    // the spread so a `Partial` override cannot reintroduce `undefined`.
+    segment: overrides.segment ?? null,
   };
 }
 

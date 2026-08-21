@@ -128,8 +128,14 @@ interface AddFactOptions {
   number?: number;
   unit?: string;
   /** Anatomical segment, carried as DATA so downstream addressing never has to
-   *  parse it back out of a concept string. Folded into the concept for
-   *  matching; the raw text stays in the evidence quote. */
+   *  parse it back out of prose. Emitted onto the fact as `segment`, and also
+   *  hashed into the factId so two metrics on one vessel stay distinct.
+   *
+   *  ⚠️ THIS COMMENT USED TO SAY "Folded into the concept for matching", AND
+   *  THAT WAS NEVER TRUE — the concept is a bare `measurement.<metric>`, and
+   *  until F5-e the segment was consumed by the id hash and dropped. A reader
+   *  who trusted it would conclude anatomy already reached the matcher. It did
+   *  not, and twenty reflux cells rendered blank on a real signed document. */
   segment?: string;
 }
 
@@ -382,6 +388,9 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
             : null,
         evidenceAnchorIds: [`ttev_${digest(anchorIdentity).slice(0, 24)}`],
         evidenceQuote: quote,
+        // F5-e: the segment is EMITTED, not merely hashed into the factId above.
+        // It reached this function and died here, which is the whole of F5-e.
+        segment: options.segment ?? null,
         quality: { asr, evidence: evidenceQuality },
       }),
     );
@@ -582,9 +591,14 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
     if (!m || typeof m.value !== 'number' || !Number.isFinite(m.value)) continue;
     const norm = normalizeMeasurement(m.value, m.unit);
     add({
-      // Concept is the measurement KIND plus the segment as an attribute-style
-      // suffix — anatomy stays structured data in the fact (laterality, span),
-      // never invented into a per-field concept string.
+      // Concept is the measurement KIND ALONE — `measurement.diameter`. Anatomy
+      // is NOT folded in here; it stays structured data on the fact
+      // (`segment`, `laterality`), never invented into a per-field concept
+      // string, so the concept keeps matching the registry's own vocabulary.
+      //
+      // ⚠️ This comment used to claim the concept carried "the segment as an
+      // attribute-style suffix". It never did, and the segment was not on the
+      // fact either — see the `segment` doc above and F5-e.
       path: `measurements.${m.metric}`,
       concept: `measurement.${m.metric}`,
       // A fact's `value` is its STATED FORM; `number` and `unit` are the

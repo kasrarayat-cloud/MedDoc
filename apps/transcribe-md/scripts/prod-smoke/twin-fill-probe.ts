@@ -93,7 +93,12 @@ async function main() {
   const measurements = facts.filter((f) => f.concept.startsWith('measurement.'));
   say(`measurement facts=${measurements.length}`);
   for (const m of measurements) {
-    say(`  m ${m.concept} lat=${m.laterality} num=${m.number} unit=${m.unit} seg="${String((m as { segment?: string }).segment ?? '')}"`);
+    // ⚠️ F5-e: this line used to cast — `(m as { segment?: string }).segment` —
+    // because `EncounterFact` had no such field, so it printed seg="" for EVERY
+    // fact. The symptom of the whole defect was sitting in a diagnostic, in the
+    // one place designed to show it. The cast is gone now that the field is real;
+    // keeping it would let a future rename go on printing "" forever.
+    say(`  m ${m.concept} lat=${m.laterality} num=${m.number} unit=${m.unit} seg="${m.segment ?? ''}"`);
   }
 
   const mappings = compiled.fields.map((f: (typeof compiled.fields)[number]) =>
