@@ -25,6 +25,7 @@
 //   signedAt: ISO,
 //   clipboardTexts?: Record<clipboard_format, string>,
 //   pdfDownloadUrl?: string,   // "/api/visits/:id/export/pdf"
+//   formatNotice?: { reason, message },  // present ONLY on a styled downgrade
 //   docxDownloadUrl?: string,
 //   emailQueued?: boolean
 // }
@@ -131,6 +132,11 @@ export const POST = withApiHandler<{ id: string }>(
   'api:visits:sign',
   async (req, { params }) => {
     const { id: visitId } = await params;
+
+    // Declared at handler scope: set inside the sign branch, read by the
+    // response below. A visit that was ALREADY signed never enters that branch
+    // and correctly reports no notice.
+    let nativeFreeze: { state: string; reason?: string } = { state: 'not_applicable' };
 
     const session = await getSession();
     const userId = session?.user.id;
@@ -553,6 +559,44 @@ export const POST = withApiHandler<{ id: string }>(
           });
         }
       }
+      // ⚠️ FREEZE THE PAIR BEFORE THE SIGNATURE — F5-f ruling 1.
+      //
+      // `native-export` declines a manifest that no longer matches the note, so
+      // a stale document is never SERVED. But a visit signed while stale is
+      // frozen stale: afterwards the compute path refuses to recompute
+      // (`visit_not_eligible`), so the doctor's own letterhead is unavailable
+      // on their own signed record, permanently, with no stated reason.
+      //
+      // Re-fill happens HERE, before the row becomes SIGNED, so a fresh
+      // manifest and the signed note correspond by construction.
+      //
+      // ⚠️ AND IT NEVER BLOCKS THE SIGNATURE. Every failure path below lets the
+      // sign proceed styled — a formatting subsystem must not stand between a
+      // doctor and their signature. What is forbidden is SILENCE, so the reason
+      // reaches BOTH the audit row and the response the doctor sees. Same shape
+      // as the E/M signedCode freeze above.
+      // ⚠️ LAZY IMPORT, DELIBERATELY. A static import pulls the whole fill engine
+      // into this route's module graph — a route a doctor waits on, and one
+      // whose existing tests mock `@meddoc/ai` narrowly. Widening that graph
+      // broke an unrelated sign test on first attempt.
+      const { freezeNativeManifestForSigning } = await import(
+        '@/lib/template-twin/sign-freeze'
+      );
+      nativeFreeze = await freezeNativeManifestForSigning({
+        visitId,
+        practiceId: session.user.practiceId,
+      }).catch((err) => ({
+        state: 'failed' as const,
+        reason: err instanceof Error ? err.message : 'freeze_threw',
+      }));
+      if (nativeFreeze.state === 'failed') {
+        log.warn(
+          'api:visits:sign',
+          'native manifest could not be refreshed — signing styled',
+          { visitId, reason: nativeFreeze.reason }
+        );
+      }
+
       const updated = await prisma.transcribeVisit.updateMany({
         where: {
           ...visitByIdScope(visitId, session.user.practiceId),
@@ -639,6 +683,22 @@ export const POST = withApiHandler<{ id: string }>(
                     from: pendingEm.from,
                     to: pendingEm.to,
                   },
+                }
+              : {}),
+            // ⚠️ THE DOWNGRADE RIDES THE SIGNATURE'S OWN ROW — one signature,
+            // one audit row.
+            //
+            // An earlier draft emitted a SECOND `VISIT_SIGNED` row carrying
+            // this reason. Two rows claiming the same action for one signature
+            // is a corrupted trail, and the first of them was not a signature
+            // at all. It was caught by an existing sign test whose
+            // `.find(action === 'VISIT_SIGNED')` picked up my row instead of
+            // the real one — the audit trail's own reader noticing the
+            // duplicate before any human did.
+            ...(nativeFreeze.state === 'failed'
+              ? {
+                  signNativeRefreshFailed: true,
+                  signNativeRefreshReason: nativeFreeze.reason,
                 }
               : {}),
           },
@@ -742,6 +802,22 @@ export const POST = withApiHandler<{ id: string }>(
         pdfDownloadUrl,
         docxDownloadUrl,
         emailQueued,
+        // ⚠️ THE DOCTOR LEARNS AT SIGN TIME, NOT AT DOWNLOAD TIME.
+        //
+        // Present ONLY when the native document could not be refreshed against
+        // the signed note, so the record's exports are the styled layout rather
+        // than their own form. Signing succeeded; the downgrade did not silently
+        // succeed with it. Absent on every healthy path, so a client need not
+        // special-case the common case.
+        formatNotice:
+          nativeFreeze.state === 'failed'
+            ? {
+                reason: nativeFreeze.reason,
+                message:
+                  'Signed. This record exports in the standard layout — your own ' +
+                  'form could not be regenerated for the signed note.',
+              }
+            : undefined,
         deliveryErrors: Object.keys(deliveryErrors).length
           ? deliveryErrors
           : undefined,

@@ -29,7 +29,9 @@ export interface NativeTemplateExport {
   roundTripVerified: boolean;
 }
 
-function mapInputMode(inputMode: string): EncounterInputMode {
+/** Shared with `sign-freeze.ts`: the sign path re-fills through the SAME
+ *  mapping the export path uses. A second copy would drift. */
+export function mapInputMode(inputMode: string): EncounterInputMode {
   if (inputMode === 'voice_dictation') return 'dictation';
   if (inputMode === 'text_notes') return 'text';
   return 'conversation';
