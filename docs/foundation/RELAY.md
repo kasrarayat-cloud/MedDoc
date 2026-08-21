@@ -60,6 +60,46 @@ neither export route carries a signed gate), so the draft footer applies there
 too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
 
+
+### 🟢 F23 — PRUNE ROLLBACK TAGS BY NAME (ruling #137) — **loop-eligible, small**
+
+**Owner-ruled 2026-08-21. Full text: `RULINGS.md` #137.** Build
+`scripts/ops/prune-rollback-tags.sh`.
+
+**KEEP SET — a UNION, not an intersection:**
+- the last **10 deploys'** `pre-*` tags, **PLUS**
+- any tag **≤14 days old**.
+
+Everything else is deletable.
+
+**NON-NEGOTIABLE SHAPE:**
+1. **DRY-RUN BY DEFAULT.** Deleting requires an explicit flag.
+2. **The KEEP-LIST is PRINTED BEFORE any deletion**, not after and not only
+   the delete-list — a reader has to be able to see what SURVIVES.
+3. **Deletion is BY NAME.** Never `-a`, never a bare `--filter`. The whole
+   reason this exists is that `prune -a` removes tagged images.
+
+⚠️ **THE HAZARD IS ALREADY REMOVED.** Preflight's Check 2 no longer prescribes
+`docker image prune -af` — it is forbidden there as of #137, ahead of this
+script, so no run can be told to do the dangerous thing while the safe thing is
+being built. **This item ADDS a capability; it does not close an exposure.**
+
+⚠️ **THE GRANT IS ALREADY IN `.claude/settings.json`** — shipped with the
+ruling, so the loop is not refused its own instrument. Do not re-add it.
+
+**PROVE IT IN BOTH DIRECTIONS, and the SUCCESS half is the one usually
+skipped** (`retire-branch.sh` passed 9 of 9 refusal tests and then printed
+`🟢 retired, exit 0` on a branch it had left in place):
+- a tag inside the keep set is **NOT** deleted — and a tag outside it **IS**;
+- **the 10-deploy arm and the 14-day arm are proved SEPARATELY**, because a
+  union whose arms are only ever tested together cannot show that either one
+  works — a script keeping everything satisfies both.
+- dry-run **deletes nothing** and says so; the delete path is exercised against
+  **throwaway tags this test creates**, never against the real 146.
+
+**Measured baseline 2026-08-21: 146 rollback tags; images 84.38GB with
+53.87GB reclaimable; disk 70%, 86G free.** Nothing is urgent.
+
 ### 🔴 F5-i — MULTI-SHAPE CERTIFICATION PROOF — **baseline census, measured 2026-08-21**
 
 **Owner question: "is the fix for ALL categories/templates, not just mine?"**
