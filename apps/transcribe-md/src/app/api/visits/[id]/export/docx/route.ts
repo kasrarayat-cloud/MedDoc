@@ -9,10 +9,8 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { filenameSlug, formatVisitDate } from '@/lib/visit-export';
 import { loadVisitExportData } from '@/lib/visit-export-server';
-import { generateVisitDocx } from '@/lib/docx-generator';
 import { logDelivery } from '@/lib/deliveries';
-import { templateNativeDocxEnabled } from '@/config/template-native-docx';
-import { loadOrComputeNativeTemplateDocxForVisit } from '@/lib/template-twin/native-export';
+import { resolveVisitDocx } from '@/lib/visit-docx-source';
 
 import { apiError, withApiHandler } from '@/lib/api-error';
 import { redactPhi } from '@meddoc/ai';
@@ -50,22 +48,20 @@ export const GET = withApiHandler<{ id: string }>(
       // A native-load failure (MinIO read / sha256 or size integrity mismatch)
       // DEGRADES to the styled export rather than failing the download — the
       // doctor always gets a valid document, never a 500 or a corrupt native one.
-      const outcome = templateNativeDocxEnabled()
-        ? await loadOrComputeNativeTemplateDocxForVisit(visitId, userId).catch((err) => {
-            console.warn(
-              '[api:visits:export:docx] native load failed; falling back to styled:',
-              redactPhi(err instanceof Error ? err.message : err)
-            );
-            return { native: null, reason: 'fill_failed' as const };
-          })
-        : { native: null, reason: null };
-      if (outcome.native) {
-        docx = outcome.native.bytes;
-        nativeTemplate = true;
-      } else {
-        nativeReason = outcome.reason;
-        docx = await generateVisitDocx(data);
-      }
+      // ⚠️ F5-f — THE SAME FUNCTION THE PDF ROUTE ASKS. This block used to live
+      // here only, and the PDF route grew its own (different, wrong) native
+      // branch, so Word and PDF served two different documents for one record.
+      // The decision now lives on the shared thing; a hand-kept list of callers
+      // was already wrong once.
+      const source = await resolveVisitDocx(
+        visitId,
+        userId,
+        data,
+        '[api:visits:export:docx]',
+      );
+      docx = source.bytes;
+      nativeTemplate = source.native;
+      nativeReason = source.reason;
       console.info(
         `[api:visits:export:docx] nativeTemplateApplied=${nativeTemplate} reason=${nativeReason ?? 'n/a'}`
       );
