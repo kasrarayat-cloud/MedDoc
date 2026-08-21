@@ -208,6 +208,51 @@ skipped** (`retire-branch.sh` passed 9 of 9 refusal tests and then printed
 **Measured baseline 2026-08-21: 146 rollback tags; images 84.38GB with
 53.87GB reclaimable; disk 70%, 86G free.** Nothing is urgent.
 
+### ✅ F23 — MERGED AND CITED — **2026-08-21, run `20260821-111818-b1` session 02**
+
+| step | evidence |
+|---|---|
+| PR | **#783**, merge `5e6683ccd4eb20d08d045f32c33f9b692a9918a9` |
+| citation | **4 of 4** · `CI` 32506632298 a1 · `e2e` 32506632312 a1 · `a11y-ci` 32506632295 a1 · `secrets-scan` 32506632347 a1 |
+| deployed | **NO — and none is owed.** Nothing in `scripts/ops/` reaches the runtime: no image, migration, flag or clinical behaviour changes. No §2.5. |
+| branch | retired both sides, verified with `git ls-remote` and `branch --list` rather than trusting the exit code |
+
+Produced by `check-citation.sh` and pasted, never typed. **Every run `a1`** — no
+re-run anywhere in this item.
+
+⚠️ **THE MERGE COMMIT'S CITATION IS THE ONE ABOVE, AND THE PR HEAD'S IS NOT
+SUBSTITUTED FOR IT.** The head `06eb7e46` was separately 4 of 4; the row cites
+the commit that is on `main`.
+
+⚠️ **THIS CITATION-ROW PR TAKES NO CITATION OF ITS OWN.** It is a docs-only
+record and nothing deploys from it; production is untouched by this whole item.
+
+#### ⚠️ A PR WHOSE `mergeable_state` IS `dirty` PRODUCES **ZERO** RUNS, AND NOTHING SAYS SO
+
+**Cost here: ~17 minutes and one wasted `e2e`. Recorded because the two states
+are indistinguishable from every instrument this programme uses.**
+
+A `pull_request` workflow builds `refs/pull/N/merge`. **A conflicted PR has no
+such ref to build**, so a push that GitHub accepts as a synchronize creates *no
+runs at all*:
+
+    gh api …/pulls/783 --jq .head.sha   ->  fdbb914e…   ← the push LANDED
+    gh run list --commit fdbb914e…      ->  (empty)     ← reads as propagation
+    gh run list --branch feat/f23-…     ->  the PREVIOUS head's runs, one
+                                             still listed `in_progress`
+
+> **Every one of those outputs is what a healthy propagation window looks
+> like.** Canon already warns that `--commit` returns empty right after a push;
+> here that warning is the thing that makes you wait instead of look. The tell
+> is the **two views disagreeing about which head they are describing** — and
+> the field that actually answers it, `mergeable_state`, is in neither.
+
+**So: when a push produces no runs, read `mergeable_state` before waiting
+longer.** `dirty` means resolve the conflict; nothing else will start the gate.
+The resolution here was a UNION with `#782`'s F5-f section, verified by removal
+count — **0 removed against this branch, 1 against `origin/main`**, that one
+being the F23 status header this item supersedes.
+
 ### ✅ F23 — BUILT AND GATED — **2026-08-21, run `20260821-111818-b1` session 02**
 
 `scripts/ops/prune-rollback-tags.sh` exists. Dry-run by default, keep-list
