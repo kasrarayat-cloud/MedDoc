@@ -23941,3 +23941,160 @@ because the project name derives from the directory.
 **WHAT IS NOT CLAIMED:** zero production rows reach the new refusal (9 of 10
 templates have no compiled twin), no clinical walk backs it on prod or QA, and
 **F5-i part 1 remains open with its close condition unreachable as worded.**
+
+---
+
+## 🟡 F5-i PART 1a — A SECOND SHAPE WALKS THE REAL PIPELINE AND IS REFUSED BY NAME — **BUILT AND GATED 2026-08-21, run `20260821-111818-b1` session 03**
+
+**No production code changed. Zero runtime files. No deploy, and none is owed.**
+The diff is one BLANK fixture, its tracked source, a regenerator, and a gate.
+
+### THE ITEM, AND THE PROVISIONAL RULING THAT UNBLOCKED IT
+
+Session 01 filed F5-i part 1 and then filed, against itself, that **its own
+close condition had become unreachable**: part 2 makes an operative note
+*unable* to certify by design, so *"a second shape certifies end-to-end"*
+cannot happen until per-shape generators exist. It recommended a **1a / 1b**
+split and explicitly declined to take it — *"owner's call, not taken
+unilaterally."*
+
+**Ruled PROVISIONAL this session (`RULINGS.md` #138): take 1a now.** It passes
+all four provisional tests — additive, reversible, inside the envelope, no
+clinical mutation, and it contradicts nothing in `RULINGS.md`. 1b (per-shape
+generators) stays untaken and is still the owner's call. **The reversal path is
+one `git revert`**: nothing depends on this, because nothing production reads it.
+
+### ⚠️ WHAT WAS ACTUALLY UNPROVEN WAS THE FRONT HALF, NOT THE REFUSAL
+
+`gate-derived-encounter-exercises-the-form.test.ts` already pins every refusal
+reason — **by handing `deriveVerificationEncounter` a HAND-BUILT
+`EncounterSourceField[]`.** So the stages before it had never run on a second
+shape at all:
+
+    .docx bytes -> ingestDocxTemplateSource -> compileTemplateDocx
+                -> fallbackSemanticMappings -> deriveVerificationEncounter
+
+**MEASURED, not assumed.** The set of tests that ingest real `.docx` bytes has
+9 members; the set that reaches the derivation has 5; **the intersection was
+EMPTY** before this gate. For any shape, including the venous one — no test
+anywhere chained real document bytes to the derivation.
+
+That gap matters because a classifier that mislabelled a narrative field would
+produce a WRONG refusal reason, or the case that would have mattered: an
+`ok: true` **venous dictation about a colonoscopy** — the exact fabrication
+F5-i part 2 was built to remove.
+
+### THE FIXTURE — BLANK, AUTHORED HERE, PINNED TO TRACKED TEXT
+
+`apps/transcribe-md/tests/e2e/fixtures/sample-operative-note.docx` — a blank
+screening-colonoscopy operative note. Allowlisted path (`pre-commit`'s
+`tests/e2e/fixtures/**`), and **verified blank by reading the artifact**, not by
+trusting its generator: 35 text nodes, all headings, labels and Word prompts
+(*"Enter the endoscopic findings."*). No patient, no date, no clinician, no
+finding. It is authored from the ordinary structure of such a note and copies
+no third party's document.
+
+⚠️ **THE BINARY IS AN ARTIFACT; `operative-note-source.ts` IS THE SOURCE.** A
+`.docx` nobody can diff is a `.docx` that drifts silently, so the gate compiles
+BOTH the committed file and an in-memory build from the source and asserts an
+identical field set — pinning the bytes to reviewable text without depending on
+zip determinism, which this repo does not have.
+
+### THE MEASUREMENTS
+
+| quantity | value |
+|---|---|
+| compiled fields | **17** |
+| …declared in the fixture source | 16 — **the 17th is the header's "Practice display name"**, from the shared `buildSyntheticDocx` helper |
+| fields with a `measurement.*` concept | **0** |
+| fields the COMPILER calls `kind: 'measurement'` | **1** — `Largest polyp diameter (mm)` |
+| verdict | `{ ok: false, reason: 'no_measurement_rows' }` |
+| venous control through the identical walk | `ok: true`, 80 fields |
+
+⚠️ **THE 16-vs-17 GAP IS ASSERTED, NOT LEFT AS ARITHMETIC.** A reader counting
+controls in the source and getting 16 against `toBe(17)` reads it as an
+off-by-one, and the obvious "correction" is to loosen the assertion. The gate
+names that field explicitly and the source file says so in its header.
+
+### ⚠️ THE SHARPEST ARM: THE BUCKET IS DECIDED BY THE **CONCEPT**, NEVER BY THE **KIND**
+
+The fixture deliberately carries `Largest polyp diameter (mm)`. `inferTextKind`
+(`compiler.ts:1187`) reads the word *"diameter"* and compiles it as
+`kind: 'measurement'` — so the document contains a field the compiler calls a
+measurement, and the derivation must **still** answer `no_measurement_rows`,
+because that bucket keys on `clinicalConcept.startsWith('measurement.')`.
+
+F5-i's own comment warns that *"the buckets are defined by the FIELD SET, never
+by what the document is called."* This is the same trap one field lower down —
+kind is not concept — and it is the one a future reader is most likely to
+conflate.
+
+### MUTATION-PROVED FOUR WAYS, AND **M3 IS THE ONE TO READ**
+
+| mutation | result |
+|---|---|
+| **M1** — restore the pre-F5-i fallback (`ok:true, VERIFICATION_ENCOUNTER` for a table-less form) | **3 red**, including the fabrication arm |
+| **M2a** — edit the source, leave the committed `.docx` stale | **1 red — exactly the pin arm.** Nothing else fires |
+| **M2b** — remove the polyp-diameter control and regenerate | **2 red**; the kind arm reads `expected 0 to be greater than 0` |
+| **M3** — the harness silently yields an EMPTY field set | ⚠️ **1 red — ONLY the positive control** |
+
+⚠️ **M3 IS THE ARGUMENT FOR THE WHOLE GATE.** With a harness that compiles
+nothing, **7 of 8 arms stay GREEN — including `REFUSES with no_measurement_rows`
+and the fabrication arm** — because `no_measurement_rows` is exactly what an
+empty field set answers. A broken instrument and a correct refusal are the same
+output here. The venous positive control is the single thing standing between
+them, and M3 is that stated as a measurement rather than as a worry.
+
+**Restores were from SCRATCH COPIES, never `git checkout`** — four backups taken
+and asserted present before the first mutation, and every restore confirmed by
+the marker being gone.
+
+### ⚠️ ONE FINDING I RAISED AGAINST MYSELF AND THEN REFUTED — RECORDED, NOT DELETED
+
+I filed that `no_measurement_rows` is a **misleading message** for a form that
+visibly contains "Largest polyp diameter (mm)" — technically true at the concept
+layer, confusing at the document layer.
+
+**Refuted by reading the shipped surface.** The doctor never sees that string.
+`template-twin-certify.ts:395` returns *"Not yet — we could not generate a
+self-test that matches this form… Your form and your field mappings are fine;
+this kind of form is not one we can self-test yet."* F16 already solved the
+actionability problem; the reason value is an internal discriminator carried in
+`blocking` for audit and telemetry. **Recorded rather than dropped, because a
+withdrawn residual and an unexamined one look identical in a table.**
+
+### THE NUMBERS — a CONTROLLED delta, both halves measured this session
+
+| tree | files | tests |
+|---|---|---|
+| `origin/main` `46b7cbe1` (control, detached worktree) | 16 failed / 335 passed (353) | 1 failed / 4452 passed |
+| this branch | 16 failed / 336 passed (354) | 1 failed / 4460 passed |
+| **delta** | **+1 file** | **+8 tests** |
+
+Failure counts **identical** — the known worktree `react/jsx-dev-runtime` alias,
+a pre-existing property of `vitest.config.ts` and not this branch. `tsc --noEmit`
+**0 errors**. ⚠️ The control was **re-measured here rather than inherited from
+session 02's report**, which is the only way the delta is evidence.
+
+### WHAT THIS DOES NOT CLAIM
+
+- **It does NOT claim an operative note can certify.** It cannot, by design;
+  that refusal IS part 2. This proves the refusal is correct, named, and reached
+  from real document bytes.
+- **It does NOT exercise the MODEL mapping path.** It walks the deterministic
+  FALLBACK — the path with no network, and therefore the one a gate can pin.
+  ⚠️ Stated as an ARM rather than a comment: `compilerDecidableConcepts()` is
+  asserted to be exactly `measurement.diameter`, `measurement.reflux_time`,
+  `test.name`. Widen that range and the arm reddens, forcing whoever widens it
+  to re-read what this gate is entitled to conclude.
+- **It does NOT walk an upload through the UI or the worker.** That is part 1a's
+  QA-stack half and is **owed, not claimed**.
+- **Zero production rows are affected** — nothing runtime changed.
+
+### WHAT REMAINS OF F5-i
+
+- **1a's QA-stack walk** — upload the new fixture through the real UI, watch it
+  compile and land in needs-review. Owed.
+- **1b — per-shape generators.** Untaken, owner's call, and ⚠️ **it must never
+  be delivered by restoring the fallback.**
+- The census retires when a second shape genuinely CERTIFIES, which is 1b.
