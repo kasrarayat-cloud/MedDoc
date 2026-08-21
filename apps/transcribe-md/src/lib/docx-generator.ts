@@ -8,6 +8,7 @@
 // their EHR.
 // ============================================================================
 
+import { parseMarkdownRow, MARKDOWN_RULE_ROW_RE } from './markdown-row';
 import {
   AlignmentType,
   BorderStyle,
@@ -665,8 +666,6 @@ const INLINE_MARKDOWN_RE = /(\*\*[^*]+?\*\*|\*[^*]+?\*)/g;
 // Structure-aware note line shapes. A table row is any line that starts
 // and ends with a pipe; separator rows (|---|:---|) are dropped at flush
 // time. Task lines are GitHub-style checklist items (- [x] / - [ ]).
-const TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
-const TABLE_SEPARATOR_ROW_RE = /^\s*\|[\s:|-]+\|\s*$/;
 const TASK_LINE_RE = /^\s*[-*]\s+\[( |x|X)\]\s+(.*)$/;
 
 /** A markdown section heading at ANY depth — group 1 is the hashes (depth),
@@ -718,7 +717,13 @@ function renderSoapParagraphs(soap: string, formOnly = false): (Paragraph | Tabl
   };
   for (const raw of soap.split('\n')) {
     const line = raw.trimEnd();
-    if (TABLE_ROW_RE.test(line)) {
+    // ⚠️ THE TOLERANT READ, VIA THE SHARED PRIMITIVE. The strict matcher here
+    // rejected any row carrying a trailing annotation after its last pipe — a
+    // shape L4 emits in three forms — so the row never entered the table buffer
+    // and was rendered as a plain paragraph of raw markdown inside the DOCX,
+    // between two properly-drawn rows. The fill path read the same row the
+    // whole time.
+    if (parseMarkdownRow(line) !== null || MARKDOWN_RULE_ROW_RE.test(line)) {
       tableBuffer.push(line);
       continue;
     }
@@ -892,14 +897,11 @@ function renderSoapParagraphs(soap: string, formOnly = false): (Paragraph | Tabl
 }
 
 /** `| a | b |` → `['a', 'b']` — trims the outer pipes + per-cell whitespace. */
+/** ONE reader, five callers — `lib/markdown-row.ts`. */
 function parseTableRow(line: string): string[] {
-  return line
-    .trim()
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split('|')
-    .map((c) => c.trim());
+  return parseMarkdownRow(line)?.cells ?? [];
 }
+
 
 /** A run of markdown table rows → a real Word Table. First non-separator
  *  row is the header (bold, Inter Tight); body cells keep inline
@@ -908,7 +910,7 @@ function parseTableRow(line: string): string[] {
  *  grid is content here, not layout. */
 function renderMarkdownTable(lines: string[]): Table | null {
   const rows = lines
-    .filter((l) => !TABLE_SEPARATOR_ROW_RE.test(l))
+    .filter((l) => !MARKDOWN_RULE_ROW_RE.test(l))
     .map(parseTableRow);
   if (rows.length === 0) return null;
 
