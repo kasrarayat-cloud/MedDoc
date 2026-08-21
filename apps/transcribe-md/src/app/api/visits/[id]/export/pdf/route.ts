@@ -12,7 +12,8 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { filenameSlug, formatVisitDate } from '@/lib/visit-export';
 import { loadVisitExportData } from '@/lib/visit-export-server';
-import { renderVisitPdf, VisitPdfUnavailableError } from '@/lib/visit-pdf';
+import { renderVisitPdfFromDocx, VisitPdfUnavailableError } from '@/lib/visit-pdf';
+import { resolveVisitDocx } from '@/lib/visit-docx-source';
 import { nativePdfExport } from '@/lib/pdf-native/export';
 import { logDelivery } from '@/lib/deliveries';
 
@@ -43,6 +44,7 @@ export const GET = withApiHandler<{ id: string }>(
     // (e.g. an orphaned cert after template-id rotation surfaces as stale_cert /
     // no_canvas instead of vanishing). Logged + returned on the response.
     let nativeApplied = false;
+    let nativeTwinDocx = false;
     let nativeReason = 'flag_off';
     try {
       // feat/pdf-native-fill: when the flag is ON and the visit's template is a
@@ -64,7 +66,31 @@ export const GET = withApiHandler<{ id: string }>(
           redactPhi(nativeErr instanceof Error ? nativeErr.message : nativeErr)
         );
       }
-      pdf = nativePdf ?? (await renderVisitPdf(data));
+      // ⚠️ F5-f — THE PDF DERIVES FROM THE SAME DOCUMENT THE WORD DOWNLOAD SERVES.
+      //
+      // `nativePdf` above is the FLAT PDF TEMPLATE path (`pdf-native`), which
+      // declines for a DOCX-derived Template Twin. It used to fall through to
+      // `renderVisitPdf(data)`, which calls `generateVisitDocx` — the STYLED
+      // layout — while `export/docx/route.ts` served the doctor's OWN
+      // roundtrip-verified document. One record, two formats, two documents.
+      //
+      // Measured on the owner's first certified-twin visit: Word was his
+      // letterhead (VERIFIED manifest, 49,418 bytes), PDF was the generic
+      // layout. Now both ask `resolveVisitDocx` and the PDF is a CONVERSION of
+      // whatever that returns — never a second render.
+      if (nativePdf) {
+        pdf = nativePdf;
+      } else {
+        const source = await resolveVisitDocx(
+          visitId,
+          session.user.practiceId,
+          data,
+          '[api:visits:export:pdf]',
+        );
+        nativeTwinDocx = source.native;
+        if (!source.native) nativeReason = source.reason ?? nativeReason;
+        pdf = await renderVisitPdfFromDocx(source.bytes);
+      }
     } catch (err) {
       // Ruling #113/#116 — the styled PDF is now a Gotenberg render of the Word
       // export, and there is no second builder to fall back to. A sidecar that
@@ -86,7 +112,9 @@ export const GET = withApiHandler<{ id: string }>(
       );
       return apiError('pdf generation failed', 500);
     }
-    console.info(`[api:visits:export:pdf] nativePdfApplied=${nativeApplied} reason=${nativeReason}`);
+    console.info(
+      `[api:visits:export:pdf] nativePdfApplied=${nativeApplied} nativeTwinDocx=${nativeTwinDocx} reason=${nativeReason}`
+    );
 
     logDelivery({
       visitId,

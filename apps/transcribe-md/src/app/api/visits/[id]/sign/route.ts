@@ -25,6 +25,7 @@
 //   signedAt: ISO,
 //   clipboardTexts?: Record<clipboard_format, string>,
 //   pdfDownloadUrl?: string,   // "/api/visits/:id/export/pdf"
+//   formatNotice?: { reason, message },  // present ONLY on a styled downgrade
 //   docxDownloadUrl?: string,
 //   emailQueued?: boolean
 // }
@@ -37,6 +38,7 @@ import {
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
 import { emAppliesToVisit } from '@/lib/note-shape';
+import { templateNativeDocxEnabled } from '@/config/template-native-docx';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 import { z } from 'zod';
 
@@ -132,6 +134,15 @@ export const POST = withApiHandler<{ id: string }>(
   async (req, { params }) => {
     const { id: visitId } = await params;
 
+    // Declared at handler scope: set inside the sign branch, read by the
+    // response below. A visit that was ALREADY signed never enters that branch
+    // and correctly reports no notice.
+    let nativeFreeze: { state: string; reason?: string; manifestId?: string } = {
+      state: 'not_applicable',
+    };
+    /** Set when THIS request lost the race: another actor's signature stands. */
+    let supersededBySigner: string | null = null;
+
     const session = await getSession();
     const userId = session?.user.id;
     const sessionEmail = session?.user?.email;
@@ -193,6 +204,10 @@ export const POST = withApiHandler<{ id: string }>(
         userId: true,
         status: true,
         soapFinal: true,
+        // ⚠️ THE CAPTURE'S IDENTITY — the compare-and-swap on the signature
+        // write guards on it, so the text that is signed is the text that was
+        // read.
+        soapVersion: true,
         icdCodes: true,
         rxDrafts: true,
         cptCodes: true,
@@ -553,14 +568,224 @@ export const POST = withApiHandler<{ id: string }>(
           });
         }
       }
-      const updated = await prisma.transcribeVisit.updateMany({
+      // ⚠️ FREEZE THE PAIR BEFORE THE SIGNATURE — F5-f ruling 1.
+      //
+      // `native-export` declines a manifest that no longer matches the note, so
+      // a stale document is never SERVED. But a visit signed while stale is
+      // frozen stale: afterwards the compute path refuses to recompute
+      // (`visit_not_eligible`), so the doctor's own letterhead is unavailable
+      // on their own signed record, permanently, with no stated reason.
+      //
+      // Re-fill happens HERE, before the row becomes SIGNED, so a fresh
+      // manifest and the signed note correspond by construction.
+      //
+      // ⚠️ AND IT NEVER BLOCKS THE SIGNATURE. Every failure path below lets the
+      // sign proceed styled — a formatting subsystem must not stand between a
+      // doctor and their signature. What is forbidden is SILENCE, so the reason
+      // reaches BOTH the audit row and the response the doctor sees. Same shape
+      // as the E/M signedCode freeze above.
+      // ⚠️ LAZY IMPORT, DELIBERATELY. A static import pulls the whole fill engine
+      // into this route's module graph — a route a doctor waits on, and one
+      // whose existing tests mock `@meddoc/ai` narrowly. Widening that graph
+      // broke an unrelated sign test on first attempt.
+      // ⚠️ THE IMPORT IS INSIDE THE TRY, AND THAT IS THE WHOLE POINT.
+      //
+      // The first draft put `await import(...)` OUTSIDE the `.catch`, which
+      // covered only the CALL. A module-load rejection therefore escaped the
+      // handler, `withApiHandler` returned 500, and the `updateMany` that writes
+      // SIGNED never ran — the visit stayed READY and the doctor COULD NOT SIGN.
+      //
+      // That falsified this change's own central claim, stated twice in its own
+      // comments, and my gate was GREEN with the defect present: its substring
+      // window checked for `.catch(` and never asked what the catch covered.
+      // Found by the refutation pass over POST /sign.
+      //
+      // ⚠️ AND IT IS FLAG-GATED. `freezeNativeManifestForSigning` was the only
+      // entry point to the twin subsystem not behind `templateNativeDocxEnabled`,
+      // so the documented flag rollback would still have run a full fill inside
+      // the signature request and still shown the doctor a notice about a
+      // feature that is switched off.
+      try {
+        if (templateNativeDocxEnabled()) {
+          const { freezeNativeManifestForSigning } = await import(
+            '@/lib/template-twin/sign-freeze'
+          );
+          nativeFreeze = await freezeNativeManifestForSigning({
+            visitId,
+            practiceId: session.user.practiceId,
+          });
+        }
+      } catch (err) {
+        nativeFreeze = {
+          state: 'failed',
+          reason: err instanceof Error ? err.message : 'freeze_threw',
+        };
+      }
+      if (nativeFreeze.state === 'failed') {
+        log.warn(
+          'api:visits:sign',
+          'native manifest could not be refreshed — signing styled',
+          { visitId, reason: nativeFreeze.reason }
+        );
+      }
+
+      // ⚠️ THE POINTER MUST NEVER COST A SIGNATURE.
+      //
+      // `frozenFillManifestId` is a FOREIGN KEY written inside the one statement
+      // that must not fail. A concurrent note-template delete cascades the
+      // visit's fill manifest away, and this UPDATE would then violate the FK
+      // and throw — a doctor unable to sign because a FORMATTING artifact was
+      // removed underneath them. Found by the aimed TOCTOU pass.
+      //
+      // Attempted with the pointer, retried WITHOUT it. Signing styled is the
+      // correct degraded outcome and is already a first-class state (null =
+      // this signature froze no native document), so the retry lands in a
+      // meaning the rest of the system already understands.
+      // ⚠️ THE E/M STATE IS RE-READ INSIDE THE GUARDED WRITE — F5-h ruling 1.
+      //
+      // `cptCodes` and `emPendingChange` were both built from the :198 capture
+      // and written after every intervening await — a read-modify-write across
+      // seconds, including the whole sign-freeze window.
+      //
+      // `POST /em-score/override` is the concurrent writer, and it DELIBERATELY
+      // does not bump `soapVersion` ("an override is not a note edit" — which is
+      // correct: a coding decision must never trip a colleague's note-CAS into a
+      // 409). So the note-CAS passes and the signature's whole-blob overwrite
+      // ERASED the doctor's override — code, typed reason and timestamp — then
+      // froze `signedCode` at the model's level.
+      //
+      // The fix is not a wider CAS. It is to stop the stale read being an INPUT:
+      // the blob is re-read inside the same statement's transaction, and the
+      // override — whenever it landed — wins by construction.
+      //
+      // ⚠️ THE EXPENSIVE PART STAYS OUTSIDE. `computeDisplayedEmCode` awaits
+      // `computeEmScore`, which can reach a model; holding a row lock across
+      // that is how a formatting concern becomes a database incident. Only the
+      // PRECEDENCE is applied inside — `override.code ?? engine.code`, the same
+      // projection the rail and the gate use.
+      class EmChangedWhileSigning extends Error {
+        constructor(readonly emFrom: string, readonly emTo: string) {
+          super('EM_CHANGED_WHILE_SIGNING');
+          this.name = 'EmChangedWhileSigning';
+        }
+      }
+
+      // ⚠️ SERIALIZABLE, THE SAME LEVEL THE FILL ENGINE'S CREATE PATH USES.
+      // At Postgres's default READ COMMITTED the re-read and the CAS-guarded
+      // `updateMany` take two snapshots, so an override committing between
+      // them is invisible to BOTH — to the read (uncommitted) and to the CAS
+      // (it touches neither `status` nor `soapVersion`). That is the original
+      // erasure race with a smaller window, which is not the same as a closed
+      // one. Serializable makes the pair atomic; the expensive work stays
+      // outside, so the transaction holds for one round trip.
+      const signWrite = (frozenId: string | null) =>
+        prisma.$transaction(async (tx) => {
+          const fresh = await tx.transcribeVisit.findFirst({
+            where: visitByIdScope(visitId, session.user.practiceId),
+            select: { cptCodes: true, emPendingChange: true },
+          });
+          const freshBlob = (fresh?.cptCodes ?? null) as {
+            em?: { override?: { code?: string } };
+          } | null;
+          const freshOverride = freshBlob?.em?.override?.code;
+
+          // ⚠️ THE GATE AND THE WRITE MUST JUDGE THE SAME SNAPSHOT.
+          //
+          // The aimed re-run caught this in W1 itself, and it is the canon
+          // shape: *"an absent field is content the doctor did not see; a WRONG
+          // field is content that says the opposite of the record being
+          // signed — and restoring a surface can introduce the second while
+          // fixing the first."*
+          //
+          // Before W1, a concurrent override was ERASED by the whole-blob
+          // overwrite. Data loss, and the record stayed internally honest: it
+          // froze the level the signer had actually reviewed.
+          //
+          // W1 fixed the erasure by reading `cptCodes` fresh — and in the same
+          // expression started freezing a level NOTHING ON THE RECORD SAYS WAS
+          // CONFIRMED. `POST /em-score/override` deliberately does not move
+          // `soapVersion` (a coding decision must not trip a colleague's
+          // note-CAS), so it is invisible to the CAS; and the confirm gate ran
+          // hundreds of lines earlier against the ENTRY capture. The signed
+          // record could therefore assert an acknowledged 99213→99214 while
+          // freezing 99215. That is strictly worse than the bug it replaced.
+          //
+          // The fix is NOT to go back to the stale read. It is to make the
+          // divergence IMPOSSIBLE rather than silent: the same transaction
+          // re-reads the gate's own datum, and a change the gate never judged
+          // REFUSES the signature. The doctor confirms it and signs again —
+          // which is the product behaviour they already know, arriving one
+          // moment later than usual.
+          //
+          // The override still wins by construction. It simply cannot be frozen
+          // without an attestation naming it.
+          const freshPending = emApplies
+            ? unacknowledgedEmChange(fresh?.emPendingChange)
+            : null;
+          const gateJudged = pendingEm;
+          const divergent =
+            freshPending !== null &&
+            (gateJudged === null ||
+              freshPending.from !== gateJudged.from ||
+              freshPending.to !== gateJudged.to ||
+              freshPending.at !== gateJudged.at);
+          if (divergent) {
+            throw new EmChangedWhileSigning(freshPending.from, freshPending.to);
+          }
+
+          // Start from the FRESH blob so a concurrent override survives; layer
+          // this signature's frozen level on top, deferring to the override.
+          const mergedCpt =
+            cptWrite === undefined
+              ? undefined
+              : ({
+                  ...(freshBlob ?? {}),
+                  em: {
+                    ...(freshBlob?.em ?? {}),
+                    ...((cptWrite as { em?: object }).em ?? {}),
+                    // the override itself is never overwritten
+                    ...(freshBlob?.em?.override
+                      ? { override: freshBlob.em.override }
+                      : {}),
+                    signedCode:
+                      freshOverride ??
+                      ((cptWrite as { em?: { signedCode?: string } }).em?.signedCode ??
+                        undefined),
+                  },
+                } as Prisma.InputJsonValue);
+
+          return tx.transcribeVisit.updateMany({
         where: {
           ...visitByIdScope(visitId, session.user.practiceId),
           status: TranscribeVisitStatus.READY,
+          // ⚠️ A SIGNED RECORD IS ONE FROZEN OBJECT — COMPARE-AND-SWAP ON THE
+          // NOTE'S IDENTITY.
+          //
+          // `signedSoap` is written from the in-memory `visit.soapFinal`
+          // captured at entry, and the freshness check and any re-fill target
+          // that SAME capture. Without this guard a save landing between the
+          // capture and this write produced a signed record whose frozen text
+          // was one version and whose native document was bound to another —
+          // the download could contain clinical text the signature does not.
+          //
+          // With it: a doctor signs what they saw, or signs nothing.
+          soapVersion: visit.soapVersion,
         },
         data: {
           status: TranscribeVisitStatus.SIGNED,
           signedSoap: visit.soapFinal,
+          // ⚠️ THE POINTER AND THE SIGNATURE ARE ONE WRITE — ruling 2(b).
+          //
+          // The SIGNED serve path resolves the document by THIS id and never by
+          // lookup, so a manifest that lands afterwards (an orphaned fill whose
+          // wait was abandoned) is UNREACHABLE rather than merely refused.
+          // Layer (a) makes that write impossible; this makes a write that
+          // slipped through inert.
+          //
+          // NULL is not an absence of information: it records that this
+          // signature froze NO native document and the record is styled,
+          // deliberately and forever.
+          frozenFillManifestId: frozenId,
           signedAt: new Date(),
           // ⚠️ T4 — THE SIGNER, STAMPED SERVER-SIDE, IN THE SAME STATEMENT AS
           // THE SIGNATURE. `userId` is `session.user.id` (line ~137), resolved
@@ -575,20 +800,133 @@ export const POST = withApiHandler<{ id: string }>(
           // unrepresentable anyway — this is the code side of the same rule, so
           // the constraint never has to fire in normal operation.
           signedBy: userId,
-          ...(cptWrite !== undefined ? { cptCodes: cptWrite } : {}),
+          ...(mergedCpt !== undefined ? { cptCodes: mergedCpt } : {}),
           // E/M visible-confirm: the gate above verified the explicit
           // acknowledgement — MARK (not clear) the record so the row
           // keeps the forensic trail alongside the audit rows.
-          ...(pendingEm
+          // ⚠️ THE FRESH RECORD, NOT THE CAPTURED ONE. The re-read above
+          // refused every value that diverges from what the gate judged, so
+          // by here `freshPending` IS the gate's change — or the doctor
+          // reverted it mid-signature and there is nothing left to
+          // acknowledge. Spreading the captured `pendingEm` instead would
+          // stamp an acknowledgement onto a record the database no longer
+          // holds, which is the same lie one field over.
+          ...(freshPending
             ? {
                 emPendingChange: {
-                  ...pendingEm,
+                  ...freshPending,
                   acknowledgedAt: new Date().toISOString(),
                 } as unknown as Prisma.InputJsonValue,
               }
             : {}),
         },
-      });
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+      let updated: { count: number };
+      try {
+       try {
+        // ⚠️ THE POINTER IS DERIVED AT WRITE TIME, NOT TRUSTED FROM THE FREEZE.
+        //
+        // `nativeFreeze.manifestId` is an in-memory value computed BEFORE the
+        // CAS. Two interleaves make it wrong, and the aimed pass demonstrated
+        // both:
+        //   · two concurrent signs — the loser's fill throws MANIFEST_CONFLICT,
+        //     its outcome is `failed` (a variant that structurally carries no
+        //     manifestId), and it stamps NULL even though the winner produced
+        //     exactly the document this note needs;
+        //   · a single sign whose 20s race expired — the orphaned fill lands
+        //     the correct manifest moments later, and NULL is stamped anyway.
+        //
+        // Either way the record is styled FOREVER and its audit row asserts a
+        // downgrade that did not happen.
+        //
+        // So the question asked here is not "what did MY freeze produce" but
+        // "which manifest corresponds to the text I am about to sign" — which
+        // is answerable from the database, by anyone, at the last moment.
+        const { resolveFrozenPointer } = await import(
+          '@/lib/template-twin/sign-freeze'
+        );
+        const pointer = await resolveFrozenPointer(
+          visitId,
+          session.user.practiceId,
+          visit.soapFinal
+        );
+        if (!pointer && nativeFreeze.state !== 'failed') {
+          nativeFreeze = { state: 'failed', reason: 'no_matching_manifest_at_signature' };
+        } else if (pointer && nativeFreeze.state === 'failed') {
+          // Another actor produced it. The downgrade notice would be a lie.
+          nativeFreeze = { state: 'regenerated', manifestId: pointer };
+        }
+        updated = await signWrite(pointer);
+      } catch (err) {
+        // ⚠️ THE E/M REFUSAL IS NOT A MANIFEST FAILURE AND MUST NOT BE
+        // RETRIED STYLED. Falling through here would re-run the identical
+        // transaction, hit the identical divergence, and — because the second
+        // throw lands outside this try — surface as a 500 on a route whose
+        // whole job is to be precise about why a signature did not happen.
+        // The doctor needs the coding card, not an error page.
+        // ⚠️ RETHROWN, NOT ANSWERED HERE — AND NOT RETRIED STYLED.
+        // The styled retry below lives INSIDE this catch, so an E/M refusal
+        // raised by THAT attempt would escape the try entirely and reach the
+        // client as a 500. Both attempts therefore hand the sentinel to the
+        // outer handler, where the refusal is written exactly once.
+        if (err instanceof EmChangedWhileSigning) throw err;
+        log.warn(
+          'api:visits:sign',
+          'frozen manifest unavailable at signature — signing styled',
+          { visitId, error: err instanceof Error ? err.message : String(err) }
+        );
+        nativeFreeze = { state: 'failed', reason: 'frozen_manifest_vanished' };
+        updated = await signWrite(null);
+       }
+      } catch (err) {
+        if (!(err instanceof EmChangedWhileSigning)) throw err;
+        // ⚠️ THE SAME `code` THE ENTRY GATE USES, DELIBERATELY.
+        //
+        // The aimed pass's sibling finding was that `supersededBy` is a wire
+        // field NOTHING READS — an honest server still handing the loser a
+        // success-shaped 200. A fresh code here would repeat that mistake one
+        // refusal over: the client would fall to its generic error toast and
+        // the doctor would be told "something went wrong" about a coding
+        // change they can resolve in one click.
+        //
+        // `EM_CHANGE_UNACKNOWLEDGED` already has a renderer — the confirm
+        // card — and this IS that condition, discovered a few hundred
+        // milliseconds later than usual. Reusing it ships the fix with a
+        // working surface instead of a wire field and a promise.
+        void logAudit({
+          // ⚠️ THE EXISTING VALUE, NOT A FOURTH ONE. A new enum member is
+          // THREE edits (TS union, Prisma enum, its own Postgres migration)
+          // and this programme has shipped that half-done twice.
+          // `EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE` already means exactly "a
+          // sign request was rejected over an unacknowledged E/M change"; the
+          // only difference is WHEN it was detected, carried as metadata.
+          action: 'EM_SIGN_BLOCKED_UNACKNOWLEDGED_CHANGE',
+          userId,
+          practiceId: session.user.practiceId,
+          targetType: 'TranscribeVisit',
+          targetId: visitId,
+          metadata: {
+            reason: 'em_changed_between_gate_and_write',
+            from: err.emFrom,
+            to: err.emTo,
+            gateJudged: pendingEm
+              ? { from: pendingEm.from, to: pendingEm.to }
+              : null,
+          },
+        });
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `Documentation level changed (${err.emFrom} → ${err.emTo}) while you were signing — confirm the new level before signing.`,
+            code: 'EM_CHANGE_UNACKNOWLEDGED',
+            pendingEmChange: { from: err.emFrom, to: err.emTo },
+          },
+          { status: 409 }
+        );
+      }
       // The pre-sign preview cache is keyed on soapVersion, which SIGNING DOES
       // NOT BUMP — so without this a signed visit could be served the pre-sign
       // render for the rest of the TTL, defeating the rule that a signed
@@ -600,11 +938,75 @@ export const POST = withApiHandler<{ id: string }>(
         // Another concurrent request got there first. Re-read.
         const refreshed = await prisma.transcribeVisit.findFirst({
           where: visitByIdScope(visitId, session.user.practiceId),
-          select: { signedAt: true, status: true },
+          select: {
+            signedAt: true,
+            status: true,
+            soapVersion: true,
+            signedBy: true,
+            signer: { select: { name: true, email: true } },
+          },
         });
         if (refreshed?.status !== TranscribeVisitStatus.SIGNED) {
-          return apiError('sign race lost — please refresh and retry', 409);
+          // ⚠️ TWO DIFFERENT RACES, TWO DIFFERENT MESSAGES. A doctor whose note
+          // moved under them must re-read it before signing again; one who
+          // simply lost a double-click need not.
+          const noteMoved = refreshed?.soapVersion !== visit.soapVersion;
+          return apiError(
+            noteMoved
+              ? 'note changed while signing — reload and review before signing'
+              : 'sign race lost — please refresh and retry',
+            409
+          );
         }
+        // ⚠️ THE LOSER IS TOLD WHAT HAPPENED — F5-h ruling 2.
+        //
+        // This branch used to fall through to a 200 that looks exactly like a
+        // successful signature. It is not one: THIS request signed nothing.
+        // Another actor did, possibly against a different version of the note.
+        //
+        // ⚠️ AND THE ATTESTATION IS RECORDED RATHER THAN DISCARDED. The route
+        // treats it as a mandatory server term (400 ATTESTATION_REQUIRED), so a
+        // term that was offered and then silently dropped is exactly the silence
+        // family this programme keeps closing. It becomes a RECORDED NON-EVENT.
+        // ⚠️ ONLY NAME A COLLEAGUE WHEN IT WAS ONE. Nothing serialises two
+        // sign requests from one session — no lock, no idempotency key — so a
+        // double-submit loses the CAS to ITSELF. Telling that caller "Dr X
+        // signed this first" when Dr X is the caller is a fabricated second
+        // actor in a clinical audit trail, and `signedBy` may also be null on
+        // a legacy row. Both collapse to the honest, unnamed sentence.
+        const supersededBySelf =
+          refreshed.signedBy !== null && refreshed.signedBy === userId;
+        supersededBySigner = supersededBySelf
+          ? 'this account (a second signature request)'
+          : (refreshed.signer?.name ?? refreshed.signer?.email ?? 'another clinician');
+        void logAudit({
+          // ⚠️ NOT `VISIT_SIGNED` — THIS REQUEST SIGNED NOTHING.
+          //
+          // The first draft used it and my OWN gate caught it: two rows claiming
+          // that action for one visit is the corrupted trail, and a reader doing
+          // `.find(action === 'VISIT_SIGNED')` would pick the non-signature.
+          // The `SIGN_BLOCKED_*` family already means "an attempt that did not
+          // produce a signature", which is exactly this — and reusing it avoids
+          // the three-edit enum trap for a value that would mean the same thing.
+          action: 'SIGN_BLOCKED_NO_ATTESTATION',
+          userId,
+          practiceId: session.user.practiceId,
+          targetType: 'TranscribeVisit',
+          targetId: visitId,
+          metadata: {
+            // The attestation WAS supplied — the block is the lost race. Named
+            // in the metadata so the row is not misread as a missing term.
+            sign_attempt_superseded: true,
+            supersededBy: refreshed.signedBy ?? null,
+            attestedSoapVersion: visit.soapVersion,
+            signedSoapVersion: refreshed.soapVersion,
+            attestation: parsed.data.attestation ?? null,
+          },
+        });
+        // ⚠️ AND ITS OWN freeze VERDICT IS SUPPRESSED. `nativeFreeze` describes
+        // work this request did that never reached the record; reporting it
+        // would describe a freeze that did not win.
+        nativeFreeze = { state: 'not_applicable' };
         signedAt = refreshed.signedAt;
       } else {
         const refreshed = await prisma.transcribeVisit.findFirst({
@@ -639,6 +1041,22 @@ export const POST = withApiHandler<{ id: string }>(
                     from: pendingEm.from,
                     to: pendingEm.to,
                   },
+                }
+              : {}),
+            // ⚠️ THE DOWNGRADE RIDES THE SIGNATURE'S OWN ROW — one signature,
+            // one audit row.
+            //
+            // An earlier draft emitted a SECOND `VISIT_SIGNED` row carrying
+            // this reason. Two rows claiming the same action for one signature
+            // is a corrupted trail, and the first of them was not a signature
+            // at all. It was caught by an existing sign test whose
+            // `.find(action === 'VISIT_SIGNED')` picked up my row instead of
+            // the real one — the audit trail's own reader noticing the
+            // duplicate before any human did.
+            ...(nativeFreeze.state === 'failed'
+              ? {
+                  signNativeRefreshFailed: true,
+                  signNativeRefreshReason: nativeFreeze.reason,
                 }
               : {}),
           },
@@ -742,6 +1160,24 @@ export const POST = withApiHandler<{ id: string }>(
         pdfDownloadUrl,
         docxDownloadUrl,
         emailQueued,
+        // Present ONLY when this request did not produce the signature.
+        supersededBy: supersededBySigner ?? undefined,
+        // ⚠️ THE DOCTOR LEARNS AT SIGN TIME, NOT AT DOWNLOAD TIME.
+        //
+        // Present ONLY when the native document could not be refreshed against
+        // the signed note, so the record's exports are the styled layout rather
+        // than their own form. Signing succeeded; the downgrade did not silently
+        // succeed with it. Absent on every healthy path, so a client need not
+        // special-case the common case.
+        formatNotice:
+          nativeFreeze.state === 'failed'
+            ? {
+                reason: nativeFreeze.reason,
+                message:
+                  'Signed. This record exports in the standard layout — your own ' +
+                  'form could not be regenerated for the signed note.',
+              }
+            : undefined,
         deliveryErrors: Object.keys(deliveryErrors).length
           ? deliveryErrors
           : undefined,

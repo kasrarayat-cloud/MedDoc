@@ -119,8 +119,28 @@ export function unavailableNote(visitId: string, err: unknown): string {
   );
 }
 
+/**
+ * Render a PDF from DOCX bytes that have already been resolved.
+ *
+ * ⚠️ THE CALLER CHOOSES THE SOURCE, AND THAT IS THE POINT — F5-f. When the visit
+ * is bound to a certified Template Twin the source is the doctor's OWN
+ * roundtrip-verified document, so the PDF is a CONVERSION OF THE SAME ARTIFACT
+ * the Word download serves rather than a second render of a different one.
+ *
+ * Before this, `renderVisitPdf` always called `generateVisitDocx` itself, so a
+ * twin visit's PDF was the styled layout while its Word download was the
+ * doctor's letterhead — one record, two documents.
+ */
+export async function renderVisitPdfFromDocx(docx: Buffer): Promise<Buffer> {
+  return convertOrThrow(docx);
+}
+
 export async function renderVisitPdf(data: VisitExportData): Promise<Buffer> {
   const docx = await generateVisitDocx(data);
+  return convertOrThrow(docx);
+}
+
+async function convertOrThrow(docx: Buffer): Promise<Buffer> {
   const { pdf, reason } = await convertDocxToPdf(
     new Uint8Array(docx),
     'visit.docx',

@@ -102,7 +102,7 @@ async function main() {
         noteTemplateId: template!.id,
         noteTemplateVersion: template!.version,
       },
-      select: { id: true },
+      select: { id: true, practiceId: true },
     });
     visitId = visit.id;
     say(`visit ${visit.id} created`);
@@ -223,7 +223,12 @@ async function main() {
     const { loadOrComputeNativeTemplateDocxForVisit } = await import(
       '@/lib/template-twin/native-export'
     );
-    const outcome = await loadOrComputeNativeTemplateDocxForVisit(visit.id, doctorId);
+    // ⚠️ PRACTICE-SCOPED since ruling 2 — this caller was MISSED by the first
+    // sweep and passed a doctorId where a practiceId is expected.
+    const outcome = await loadOrComputeNativeTemplateDocxForVisit(
+      visit.id,
+      visit.practiceId,
+    );
     say(`EXPORT nativeTemplateApplied=${!!outcome.native} nativeTemplateReason=${outcome.reason ?? 'n/a'}`);
     if (outcome.native) {
       writeFileSync(out, Buffer.from(outcome.native.bytes));

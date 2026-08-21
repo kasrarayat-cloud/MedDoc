@@ -151,6 +151,7 @@ export async function previewVisitDocumentAction(
       archivedAt: null,
     },
     select: {
+      userId: true,
       // `status` MUST be selected — the guard below reads it, and Prisma is
       // untyped here, so an absent column reads as `undefined` and silently
       // rejects every visit. Fourth time this class has bitten in this repo.
@@ -191,7 +192,7 @@ export async function previewVisitDocumentAction(
   // from what the doctor put their name to, and the twin fill path refuses a
   // signed visit anyway.
   if (visit.signedAt) {
-    const stored = await loadNativeTemplateDocxForVisit(visitId, session.user.id);
+    const stored = await loadNativeTemplateDocxForVisit(visitId, session.user.practiceId);
     if (!stored) {
       // No stored native file (never had one, or the template was deleted).
       // The signed note as a styled document is the honest answer — and it is
@@ -283,7 +284,10 @@ export async function previewVisitDocumentAction(
   try {
     const { prepared } = await readAndPrepareTemplateTwinFill({
       practiceId: visit.user.practiceId,
-      doctorId: session.user.id,
+      // ⚠️ THE VISIT'S OWN DOCTOR, NOT THE REQUESTER. This read is
+      // practice-scoped, so a colleague previewing the record would otherwise
+      // stamp their id on the author's fill. Same actor fix as native-export's.
+      doctorId: visit.userId,
       noteTemplateId: templateId,
       noteTemplateVersion: templateVersion,
       inputMode:

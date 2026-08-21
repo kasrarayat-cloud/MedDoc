@@ -41,6 +41,8 @@ import {
   skippedNote,
 } from '../archive-pdf-budget';
 
+import fs from 'node:fs';
+
 const APP_ROOT = `${__dirname}/../../..`;
 
 /** A deterministic clock. A budget proved with real timers is a 60-second
@@ -497,9 +499,27 @@ describe('F6.3 (C) — every LOOPED caller of renderVisitPdf is bounded', () => 
     'src/app/api/visits/[id]/export/pdf/route.ts': 'single',
   };
 
+  // ⚠️ THE CENSUS WATCHES THE RENDERER SURFACE, NOT ONE FUNCTION NAME.
+  //
+  // It used to grep `renderVisitPdf(` alone. F5-f added a second entry point,
+  // `renderVisitPdfFromDocx(`, so the PDF route could convert the SAME document
+  // the Word download serves — and `renderVisitPdf(` does not match
+  // `renderVisitPdfFromDocx(`, because the paren falls after `FromDocx`.
+  //
+  // The PDF route therefore dropped OUT of the watched set entirely, and this
+  // gate went red rather than silently covering one caller fewer. That is the
+  // watched-set class caught by a census that counts itself — the failure mode
+  // is a gate whose zero is true about a set that no longer contains the thing
+  // it was written to protect.
+  //
+  // Any future renderer entry point belongs in RENDERERS or it is unwatched.
+  const RENDERERS = ['renderVisitPdf(', 'renderVisitPdfFromDocx('];
+
   const callerFiles = Array.from(
     new Set(
-      gitGrep('renderVisitPdf(', CALLERS_PATHSPEC).map((h) => h.split(':')[0]),
+      RENDERERS.flatMap((fn) =>
+        gitGrep(fn, CALLERS_PATHSPEC).map((h) => h.split(':')[0]),
+      ),
     ),
   ).sort();
 
@@ -514,6 +534,18 @@ describe('F6.3 (C) — every LOOPED caller of renderVisitPdf is bounded', () => 
 
   it('non-vacuity — the census is not empty', () => {
     expect(callerFiles.length).toBe(3);
+  });
+
+  it('⚠️ every renderer entry point is watched — a new one must not slip the census', () => {
+    // The exported surface of visit-pdf.ts, compared against what this census
+    // greps for. A renderer that exists and is not watched is a hole, and F5-f
+    // opened exactly that hole for the length of one commit.
+    const src = fs.readFileSync(`${APP_ROOT}/src/lib/visit-pdf.ts`, 'utf8');
+    const exported = Array.from(
+      src.matchAll(/export async function (renderVisitPdf\w*)\s*\(/g),
+    ).map((m) => `${m[1]}(`);
+    expect(exported.length, 'no renderer exports found — the scan is broken').toBeGreaterThan(0);
+    expect(exported.sort()).toEqual([...RENDERERS].sort());
   });
 
   for (const [file, kind] of Object.entries(EXPECTED_CALLERS)) {
