@@ -53,13 +53,44 @@ heading of any depth) is behaviourally the same boundary.
 ### ⚠️ CORRECTION 1 — the denominator is 28, not 45
 
 A caption is consulted **only** when `matches.length > 1`
-(`note-table-edit.ts:211-237`). The 17 headers in single-table sections never
-reach that branch: their row label is unique in the section and the edit
+(`note-table-edit.ts:211-237`). The headers in single-table sections mostly never
+reach that branch: their row labels are unique in the section, so the edit
 succeeds with no caption at all.
 
 > **The blocked figure is 20 of 28 bilateral tables — 71% — not 20 of 45.**
 > The item is worse than its own headline in the population that matters, and
 > covers 17 fewer tables than the headline implies.
+
+#### ⚠️ AND THIS CORRECTION NEEDED ITS OWN CORRECTION — CAUGHT BY MEASURING MY OWN CLAIM
+
+The first draft of this section said *"the 17 headers in single-table sections
+**never** reach that branch."* **That is too strong, and the check that found it
+was asking what `matches.length > 1` actually depends on.** It depends on the ROW
+LABEL repeating within the SECTION — which does not require two tables.
+
+Measured: **2 of the 17 single-table sections carry a genuinely repeated row
+label** (not an empty first cell and not a dash placeholder — those were
+classified out explicitly; the bilateral sections carry 138 such groups, as
+expected).
+
+⚠️ **AND A CAPTION CAN NEVER FIX THOSE TWO, WHICH IS WHY THEY ARE A DIFFERENT
+DEFECT.** Both matching rows sit in the **same table**, so they share the same
+header *and the same caption*. The narrowing at `:211-217` compares captions;
+with one table, `narrowed.length` is **2**, never 1. So:
+
+- with a caption, the caller is offered **two identical choices**;
+- with none — and **both of these sit under a heading**, measured, so
+  `captionFor` returns null — it is **`caption_not_found`**.
+
+That is the *"unanswerable question"* shape Slice 1b was written to kill,
+**surviving in a form Slice 1b's fix cannot reach**: 1b made an empty `choices`
+list honest, and this case produces either an empty list or a list of duplicates,
+for a reason no caption strategy addresses. **Filed here, out of this item's
+scope** — a caption addresses a TABLE, and this is two rows inside one.
+
+**So the population that can reach the ambiguity branch is 30, not 28**, and the
+count that reaches an unanswerable refusal is **22** — 20 bilateral-with-no-
+caption plus these 2.
 
 ### ⚠️ CORRECTION 2 — "green on the 25 of 45 whose caption sits ADJACENT" is false as stated
 

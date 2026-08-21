@@ -24193,8 +24193,21 @@ whole-note approximation is behaviourally `readNoteSection`'s boundary.
 ### ⚠️ THREE CORRECTIONS, AND ALL THREE ARE THE SAME SHAPE
 
 **1 · THE DENOMINATOR IS 28, NOT 45.** A caption is consulted only when
-`matches.length > 1`. The 17 single-table headers never reach that branch. The
+`matches.length > 1`. Single-table headers mostly never reach that branch. The
 blocked figure is **20 of 28 bilateral tables — 71%**.
+
+⚠️ **AND THIS CORRECTION NEEDED ITS OWN CORRECTION, WHICH IS THE PART WORTH
+READING.** The draft said the 17 single-table headers **never** reach that
+branch. `matches.length > 1` depends on the ROW LABEL repeating **within the
+section**, and that does not require two tables. Measured: **2 of the 17
+single-table sections carry a genuinely repeated row label** (empty first cells
+and dash placeholders classified out explicitly). **A caption can never fix
+those** — both rows are in the SAME table, so they share a caption, and
+`narrowed.length` is 2 and never 1. Both sit under a heading, so today they
+return **`caption_not_found`**. That is Slice 1b's *"unanswerable question"*
+shape **surviving in a form no caption strategy can address**. Filed, out of
+scope. So the branch-reaching population is **30**, and the count reaching an
+unanswerable refusal is **22** — 20 + these 2.
 
 **2 · *"green on the 25 of 45 whose caption sits ADJACENT"* IS FALSE AS
 STATED.** `45 − 20 = 25` is arithmetic over a blank count. Measured, only **9**
