@@ -61,6 +61,84 @@ too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
 
 
+
+### 🟢 F5-f — **ACCEPTED AND CLOSED 2026-08-21.** The owner's words: *"word pdf ok bodan"*
+
+**One frozen document, both formats, on his letterhead.** The behavioural
+evidence F5-f was missing since the deploy — *shipped* is now *behaves*.
+
+**EVIDENCE ROWS, against the spec recorded BEFORE the run:**
+
+| # | row | outcome |
+|---|---|---|
+| 1 | both formats byte-derived from one frozen object | 🟢 owner-confirmed |
+| 2 | the edit PRESENT in both (stale-manifest class dead) | 🟢 owner-confirmed — step 2 existed to make this falsifiable |
+| 3 | the letterhead HIS specifically, not merely not-generic | 🟢 owner-confirmed |
+| 4 | the fill delta | **MEASURED — 25 → 20**, see below |
+
+**THE SIGN PATH RAN — structural proof, measured after:**
+
+| quantity | before | after |
+|---|---|---|
+| fill manifests | 1 | **2** |
+| visits carrying `frozenFillManifestId` | 0 | **1** ← the pointer stamped in the guarded write |
+| SIGNED visits | 31 | **32** |
+| visits | 49 | **50** |
+| new manifest `noteSha256` | — | **`aa33e3ef…` SET** ← the new column doing its job |
+
+The second manifest: `VERIFIED · filled=20 · notMentioned=60 · needsReview=0 ·
+conflicts=0 · criticalUnresolved=0 · roundTripVerified=true · 49,388 bytes`.
+20+60 reconciles to the template's 80 fields.
+
+⚠️ **THE −5 FILL DELTA IS ATTRIBUTED, AND THE COUNT COULD NOT DO IT.** The loop
+deployed F5-d(b) + F5-i at `14:14:25Z`; the acceptance visit filled at
+`15:07:53Z` — **after** it. So "the new shared derivation refused five cells"
+was a live hypothesis, and `notMentionedCount` **cannot distinguish a refusal
+from an absence** (see the recon: five exits, one bucket).
+
+**The worker log discriminated where the count could not: 9 ×
+`laterality_mismatch`, 0 × `not_an_enumerated_option`, 0 ×
+`set_aside_not_adopted`, 0 derivation refusals.** The delta is **NOT** an
+F5-d(b)/F5-i regression. *Read to form a hypothesis; RUN something to name a
+mechanism.*
+
+**Routed per the staged row. F5-f CLOSED.**
+
+---
+
+### 🔴 F24 — EDITOR PARITY — **owner-priority, AHEAD OF F8**
+
+**His spec, verbatim:** *"the AI must be able to edit everything it shows me in
+the Word/PDF."* Three failures, live, on the certified template.
+
+**RECON COMPLETE — `docs/qa-reports/f24-editor-parity-recon-20260821.md`.**
+Nothing built. Headlines:
+
+1. **`note-table-edit.ts:197`** refuses on `headerCells.length !== rowCells.length`.
+   The editor resolves columns **by position in re-parsed markdown**; the twin
+   holds exact semantics for all 80 fields. **Twin refs in the edit path: 0, 0,
+   0** across `chat-edit-visit.ts`, `note-table-edit.ts`, `intent.ts` —
+   positive-controlled at 50/31/14 on the same matcher, so the zeros are real.
+   ⚠️ **The refusal is CORRECT for the information it has.** The defect is the
+   input, not the guard — do not "fix" it by loosening the ragged-table check.
+2. **Input surface is exactly `visit.soapFinal`** (`chat-edit-visit.ts:117,146`).
+   `DATE OF PROCEDURE` is a native content-control fill (`procedure-date.ts`),
+   so the export renders it and the editor cannot see it. **Census: 80 fields =
+   52 `narrative_text` (all in tables) + 28 `single_select` (standalone).**
+3. ⚠️ **THE RULING NAMES AN ATTRIBUTE THE IR DOES NOT STORE.** *"label +
+   laterality + section"* — and **0 of 80** fields carry a `laterality` key.
+   It is DERIVED and the derivation already ships:
+   `verified-note-selection.ts:56 fieldLateralityFromLabel(originalLabel)`.
+   **The tuple is constructible; no new data is needed.** Recorded so nobody
+   greps the IR, finds nothing, and concludes the twin cannot express it.
+   **LEAD (not a diagnosis):** the owner's disambiguation asked right-vs-left
+   correctly then failed on execution, and the same visit logged **nine**
+   `laterality_mismatch` blanks from `rowLateralityVerdict`.
+
+**KEEP:** the disambiguation flow. It was correct behaviour.
+**HOLD:** signed stays read-only per the freeze.
+⚠️ **The adversarial pass is MANDATORY — note-editing surface, clinical path.**
+
 ### 🟡 F5-f ACCEPTANCE — the owner's live test, SPEC RECORDED BEFORE THE RUN
 
 **Owner-specified 2026-08-21. Recorded here BEFORE the outcome exists**, so the
