@@ -24098,3 +24098,70 @@ session 02's report**, which is the only way the delta is evidence.
 - **1b — per-shape generators.** Untaken, owner's call, and ⚠️ **it must never
   be delivered by restoring the fallback.**
 - The census retires when a second shape genuinely CERTIFIES, which is 1b.
+
+### ✅ F5-i PART 1a — MERGED AND CITED — **2026-08-21, run `20260821-111818-b1` session 03**
+
+| step | evidence |
+|---|---|
+| PR | **#786**, merge `2328823b18bc5ffcc73ec8b15a7791a1fac342d4` |
+| citation | **4 of 4** · `CI` 32521403760 a1 · `e2e` 32521403807 a1 · `a11y-ci` 32521403757 a1 · `secrets-scan` 32521403759 a1 |
+| deployed | **NO, and none is owed.** Zero runtime files — a blank fixture, a test-only source module, a dev regenerator and a gate. **No §2.5.** |
+| branch | retired both sides, verified by `retire-branch.sh` rather than by an exit code |
+
+**Citation produced by `check-citation.sh` and pasted, never typed. Every run on
+the merge commit is `a1`** — no re-run anywhere in the citation.
+
+#### ⚠️ THE PR HEAD CARRIED A `secrets-scan` `a2`, AND THE MECHANISM IS NAMED
+
+The PR head's first `secrets-scan` (`32516555802 a1`) **failed**, and the reason
+is worth the paragraph because it is not this branch's:
+
+    panic: wasm error: out of bounds memory access
+      github.com/wasilibs/go-re2/internal.newRE ... re2_wazero.go:301
+      github.com/trufflesecurity/trufflehog/v3/pkg/detectors/sentryorgtoken.init()
+
+**TruffleHog panicked inside its OWN package `init()`**, compiling one of its
+detector regexes, **6 seconds in and before reading a single byte of input.**
+
+⚠️ **THE OBVIOUS HYPOTHESIS WAS WRONG AND THE LOG REFUTED IT.** The job prints
+`Status: Downloaded newer image for …/trufflehog:latest`, so *"upstream shipped
+a broken `:latest`"* is the natural read — the workflow does pull an unpinned
+external image. **Measured: the DIGEST IS IDENTICAL** —
+`sha256:ff4c95e9df7d645daf2140e3ca1039031c63106268d5fbb25feb43ceca1bcc33` in
+both my failing run and the green `main` run 23 minutes earlier. Same bytes, one
+green, one panicking. **Not a new image: an intermittent wasm OOB.**
+
+**The prediction was stated BEFORE the experiment** — *a re-run passes, because
+a fault in `init()` cannot see my diff* — and it held: `a2` green.
+
+⚠️ **AND THE MERGE COMMIT IS THE STRONGER EVIDENCE, BECAUSE IT CONTAINS THE
+FIXTURE.** `secrets-scan` on `2328823b` passed **`a1`, first attempt, with the
+new `.docx` in the tree.** So input-independence is now MEASURED and not merely
+argued from a stack trace. **This is not a re-run-and-hope**: the mechanism was
+named from the trace, the competing hypothesis was refuted from the logs, and
+the re-run was the discriminating experiment.
+
+**FILED AS A FINDING, NOT FIXED HERE:** `.github/workflows/secrets-scan.yml`
+pins TruffleHog to `:latest`. That is a build reaching outside this repository —
+AGENTS.md's *"AN EXTERNAL REACH IN THE BUILD IS REMOVED, NOT RETRIED"* class.
+Today it cost one re-run; the same unpinned reach is what makes a genuinely bad
+upstream push a repo-wide red with no rollback. **Pinning it to a digest is a
+one-line change and is left to an owner**, because changing a security gate's
+version policy is not a loop decision.
+
+#### ⚠️ A MERGE I WAITED FOR RATHER THAN CANCELLED
+
+`merge-pr.sh` **REFUSED** the first attempt: `main` had moved to `8ae016ff`
+(PR #784, the supervised side's F24 Slice 1) with its `e2e` **in flight**.
+Merging would have cancelled another actor's merge-commit citation — the
+33m39s reference case in canon. **Waited for it to go 4 of 4, then merged.**
+The wrapper is the reason that was a refusal rather than a discovery.
+
+⚠️ **AND MY OWN FOLLOW-UP QUERY REPRODUCED THE ABBREVIATED-SHA TRAP, SECONDS
+LATER.** Asking `gh run list --commit 8ae016ff` returned **`[]`** while the
+wrapper — using the full 40 characters — correctly reported `--commit 1,
+--branch 1`. Canon's *"abbreviation is a display convenience; it is never a
+query key"*, committed by the session that had just read the rule. Nothing was
+lost: the wrapper had already refused, so the false zero had no authority to
+act on. **Recorded because the near-miss that costs nothing is the one nobody
+writes down.**
