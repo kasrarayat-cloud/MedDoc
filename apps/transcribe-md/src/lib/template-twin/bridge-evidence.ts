@@ -137,8 +137,40 @@ function segmentCongruent(label: string, fact: EncounterFact): boolean {
   // spoken form in the quote. Reading the quote here is addressing, not
   // evidence: it decides which row the fact is offered to, never whether the
   // value is written.
-  const hay = `${norm(fact.concept)} ${norm(String(fact.value ?? ''))} ${norm(fact.evidenceQuote ?? '')}`;
-  return want.some((t) => hay.includes(t));
+  //
+  // ⚠️ F5-e: `fact.segment` IS THE AUTHORITATIVE TERM HERE, AND IT IS READ
+  // FIRST BECAUSE THE QUOTE IS ONLY A PROXY FOR IT.
+  //
+  // L3 extracts the segment per measurement as REQUIRED data and emits one
+  // entry per number, so both halves of "Right GSV at the SFJ: diameter 3.10
+  // millimeters, reflux time 0.110 seconds" name the vessel. Only the DIAMETER
+  // half says so in its quote. Reading prose alone therefore answered this
+  // question correctly for one column and blindly for the other — 0 of 20
+  // reflux quotes carried anatomy on production's own manifest, so every reflux
+  // cell refused and the doctor's table rendered blank down that column.
+  //
+  // ⚠️ THIS WIDENS THE HAYSTACK, so it can only ever produce MORE matches. That
+  // is the direction that fills a WRONG row, and it is defensible only because
+  // the added term is the structured answer to the exact question being asked,
+  // not a looser reading of the same prose. The vessel-identity arms in
+  // `gate-f5e-*` pin BOTH directions (a GSV row must not bind an AAGSV fact,
+  // and vice versa) precisely so this widening cannot rot into a wrong-vessel
+  // citation on a signed document.
+  const hay = `${norm(fact.segment ?? '')} ${norm(fact.concept)} ${norm(String(fact.value ?? ''))} ${norm(fact.evidenceQuote ?? '')}`;
+  // ⚠️ WHOLE TOKENS, NEVER `hay.includes(t)` — THE ABBREVIATIONS NEST.
+  //
+  // `'aagsv'.includes('gsv')` is true, so a substring test made a **GSV Below
+  // Knee** row congruent with an **AAGSV at the Proximal Thigh** fact: a
+  // different vessel at a different level, sharing nothing but a suffix. Only
+  // numeric equality and laterality stood between that and a wrong-vessel value
+  // in a signed document, and neither is a vessel check.
+  //
+  // Pre-existing, and F5-e is why it is fixed HERE: adding `segment` widens this
+  // haystack, and widening a predicate with a known substring hole extends the
+  // hole to the reflux column rather than leaving it where it was. This is the
+  // STRICTER direction — it can only remove matches, never add them.
+  const hayTokens = new Set(hay.split(' '));
+  return want.some((t) => hayTokens.has(t));
 }
 
 function numbersEqual(a: number, b: number): boolean {

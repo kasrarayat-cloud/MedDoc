@@ -104,7 +104,7 @@ describe('withProcedureDateFact', () => {
     const existing: EncounterFact = {
       factId: `ttfact_${'c'.repeat(24)}`, sourceType: 'encounter_evidence', concept: 'date of procedure', value: '2026-01-01',
       polarity: 'affirmed', temporality: 'current', experiencer: 'patient', laterality: 'not_applicable', number: null, unit: null,
-      speaker: null, sourceTranscriptOffsets: null, audioTimestampSeconds: null, evidenceAnchorIds: ['a1'], evidenceQuote: 'q', quality: { asr: 'high', evidence: 'direct' },
+      speaker: null, sourceTranscriptOffsets: null, audioTimestampSeconds: null, evidenceAnchorIds: ['a1'], evidenceQuote: 'q', segment: null, quality: { asr: 'high', evidence: 'direct' },
     };
     expect(withProcedureDateFact({ fields: [DOP], mappings: [dateMapping(DOP, 'date of procedure')], facts: [existing], visitDate: VISIT })).toHaveLength(1); // just the existing
   });

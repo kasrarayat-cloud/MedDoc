@@ -128,6 +128,12 @@ function fact(
     audioTimestampSeconds: null,
     evidenceAnchorIds: [`anchor-${id.slice(-8)}`],
     evidenceQuote: 'synthetic fixture evidence',
+    // F5-e. These fixtures address by the QUOTE-era rules and deliberately keep
+    // `segment: null`, which is exactly what a non-measurement fact carries and
+    // what the projection produced for everything before F5-e. Setting a segment
+    // here would change which rows these facts are congruent with and silently
+    // re-point the assertions below.
+    segment: null,
     quality: { asr: 'unknown' as const, evidence: 'direct' as const },
   };
 }
