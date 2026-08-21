@@ -208,6 +208,54 @@ Prefer the IMAGE rollback (`:pre-emrehome-20260728`) when the concern is the E/M
 surface specifically — it has no such constraint. Full detail and the tag table:
 `docs/DEPLOYMENT_RUNBOOK.md` §3.1–3.2.
 
+
+### A PRE-DEPLOY SIGNED VISIT SERVES **STYLED** FOREVER — accepted 2026-08-21
+
+**Ruled (a): ACCEPTED. Do not build a re-attestation path.**
+
+F5-h made a signed record resolve its document **by pointer, never by lookup**
+(`native-export.ts:63-67`): a SIGNED visit with no `frozenFillManifestId`
+declines to styled. Every signature taken **before** that deploy has NULL
+there.
+
+**Measured on production the day it shipped, and the partition reconciles:**
+
+| set | count |
+|---|---|
+| SIGNED · VERIFIED manifest · no pointer → **loses native export** | **1** |
+| SIGNED · no manifest (styled anyway — unaffected) | **30** |
+| UNSIGNED with a manifest (freshness path — unaffected) | **0** |
+| | **31 SIGNED** |
+
+The one is the owner's first certified-twin visit — **the very record whose
+Word download he confirmed carried his letterhead.**
+
+⚠️ **BOTH HALVES ARE TRUE, AND THE COMFORTABLE ONE ALONE IS THE DISHONEST
+FRAMING.** It is **correct-by-design**: that manifest's `noteSha256` is NULL —
+written before the column existed — so nothing proves it corresponds to the
+signed text, and serving it would be exactly the stale-manifest class the
+freeze exists to kill. It is **also a capability lost**, permanently, for that
+record.
+
+> **A null identity is DECLINED, never inferred — the rule applied to its own
+> pre-history.**
+
+**WHY NO RECOVERY PATH WAS BUILT.** A backfilled pointer asserts a match nobody
+verified: the manifest rendered at `00:18:46Z`, the visit signed at
+`00:25:42Z`, and no stored hash from that era exists to compare. Re-running the
+fill to compare would **mutate a signed clinical record**. The only honest
+option is to decline. Its only beneficiary would be a record that already reads
+correctly in styled form — the clinical content is intact; what is lost is the
+doctor's own form as the *presentation* of one historical document.
+
+⚠️ **HONEST LIMIT, RECORDED WITH IT: established by READING THE SHIPPED CODE,
+never by exercising it.** The only visit that would demonstrate it is a real
+patient's signed record, and a real doctor's visit is never a smoke target.
+
+**IF A DOCTOR RE-DOWNLOADS A PRE-2026-08-21 SIGNED VISIT AND GETS THE GENERIC
+LAYOUT, THAT IS THIS ENTRY, NOT A BUG.** Everything signed from that deploy
+onward carries a pointer and renders native in **both** formats.
+
 ## A DELETION IS SCOPED BY WHAT THE COMPONENT **DOES**, NOT BY WHAT THE RULING **CALLS** IT
 
 **Standing 2026-08-14.** A ruling names an INTENT. A component has a JOB LIST.
