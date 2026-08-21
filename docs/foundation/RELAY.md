@@ -23262,3 +23262,44 @@ it** — the strongest available argument for writing the arm before the fix.
 | R2 | **laterality is prefixed, never read** — `build()` emits `Right `/`Left ` onto labels that may already carry a side, and both callers drop the `rowLaterality` they have | Pre-existing to F5-c, not introduced here. Fails CLOSED (`rowLateralityVerdict` refuses the cell), so the cost is coverage, not a wrong value. |
 | R3 | **the venous-evidence scan reads MEASUREMENT labels only** | Deliberate, and stated in the code: a wider scan would refuse a legitimate venous study carrying "Arterial history: none". |
 | R4 | **`seed-certified-twin.ts` also hand-asserts `ok:true`** | Left as is — a determinism-pinned QA seeder against the known venous fixture. |
+
+### 🔴 F5-i PART 1's CLOSE CONDITION IS NOW UNREACHABLE, AND PART 2 IS WHY
+
+**Filed 2026-08-21 by the session that caused it. This re-shapes the remaining
+work and is NOT a thing to discover mid-walk.**
+
+Part 1 says: *"the QA walk gains a second full end-to-end shape — a BLANK
+operative-note fixture … upload → compile → auto-certify → visit → fill →
+export"*, and the item **retires when a second SHAPE certifies end-to-end.**
+
+⚠️ **AFTER PART 2, AN OPERATIVE NOTE CANNOT CERTIFY — BY DESIGN.** It has no
+measurement rows, so `deriveVerificationEncounter` returns
+`no_measurement_rows` and certification refuses, **honestly and correctly**.
+That refusal *is* part 2. So the walk now ends at `auto-certify → refused,
+naming why`, and *"a second shape certifies end-to-end"* is unreachable until
+per-shape generators exist.
+
+> **The close condition was written before the fix it depends on, and the fix
+> made it false. Neither half is wrong; the ORDER made the criterion stale.**
+
+This is canon's *"if the work this check guards SUCCEEDED completely, what
+number would it print?"* pointed at an ITEM rather than a check — part 2
+succeeding is precisely what makes part 1 unachievable as worded.
+
+**RECOMMENDED SPLIT — owner's call, not taken unilaterally, because F5-i's
+shape came from the owner's own question:**
+
+| | |
+|---|---|
+| **1a** | a second shape walks end-to-end and lands in **needs-review naming why**. ✅ Achievable now, and it is a real generality proof: it demonstrates the engine handles an unfamiliar shape *honestly*. |
+| **1b** | **per-shape generators** (operative note / SOAP / imaging) so a second shape can genuinely certify. Additive, larger, and the only route to the original wording. ⚠️ **It must never be delivered by restoring the fallback.** |
+
+⚠️ **AND PART 1 HAS A SECOND, INDEPENDENT BLOCKER: THE FIXTURE DOES NOT EXIST.**
+`tests/e2e/fixtures/` holds `audio/`, `notes/`, `sample-form.docx` (the venous
+form) and `twin-certified-pins.json` — **no operative-note template.** A BLANK
+operative-note `.docx` must be authored or obtained before either 1a or 1b can
+be walked, and per the tracked-fixture rule it must be BLANK. *A filled document
+is never a fixture.*
+
+**Neither blocker is a reason to un-park anything.** They are stated so the next
+session meets them on paper instead of forty minutes into a QA walk.
