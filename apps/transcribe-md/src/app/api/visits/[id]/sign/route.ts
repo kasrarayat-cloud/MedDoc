@@ -38,6 +38,7 @@ import {
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
 import { emAppliesToVisit } from '@/lib/note-shape';
+import { templateNativeDocxEnabled } from '@/config/template-native-docx';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 import { z } from 'zod';
 
@@ -579,16 +580,39 @@ export const POST = withApiHandler<{ id: string }>(
       // into this route's module graph — a route a doctor waits on, and one
       // whose existing tests mock `@meddoc/ai` narrowly. Widening that graph
       // broke an unrelated sign test on first attempt.
-      const { freezeNativeManifestForSigning } = await import(
-        '@/lib/template-twin/sign-freeze'
-      );
-      nativeFreeze = await freezeNativeManifestForSigning({
-        visitId,
-        practiceId: session.user.practiceId,
-      }).catch((err) => ({
-        state: 'failed' as const,
-        reason: err instanceof Error ? err.message : 'freeze_threw',
-      }));
+      // ⚠️ THE IMPORT IS INSIDE THE TRY, AND THAT IS THE WHOLE POINT.
+      //
+      // The first draft put `await import(...)` OUTSIDE the `.catch`, which
+      // covered only the CALL. A module-load rejection therefore escaped the
+      // handler, `withApiHandler` returned 500, and the `updateMany` that writes
+      // SIGNED never ran — the visit stayed READY and the doctor COULD NOT SIGN.
+      //
+      // That falsified this change's own central claim, stated twice in its own
+      // comments, and my gate was GREEN with the defect present: its substring
+      // window checked for `.catch(` and never asked what the catch covered.
+      // Found by the refutation pass over POST /sign.
+      //
+      // ⚠️ AND IT IS FLAG-GATED. `freezeNativeManifestForSigning` was the only
+      // entry point to the twin subsystem not behind `templateNativeDocxEnabled`,
+      // so the documented flag rollback would still have run a full fill inside
+      // the signature request and still shown the doctor a notice about a
+      // feature that is switched off.
+      try {
+        if (templateNativeDocxEnabled()) {
+          const { freezeNativeManifestForSigning } = await import(
+            '@/lib/template-twin/sign-freeze'
+          );
+          nativeFreeze = await freezeNativeManifestForSigning({
+            visitId,
+            practiceId: session.user.practiceId,
+          });
+        }
+      } catch (err) {
+        nativeFreeze = {
+          state: 'failed',
+          reason: err instanceof Error ? err.message : 'freeze_threw',
+        };
+      }
       if (nativeFreeze.state === 'failed') {
         log.warn(
           'api:visits:sign',

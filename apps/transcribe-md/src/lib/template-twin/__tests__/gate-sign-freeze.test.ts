@@ -146,13 +146,49 @@ describe('the sign route surfaces the downgrade', () => {
     expect(src()).toMatch(/formatNotice/);
   });
 
-  it('the signature is never blocked by the freeze', () => {
-    // No throw, no early return, no apiError on the freeze path.
+  it('⚠️ the signature is never blocked — and the guard COVERS THE IMPORT', () => {
+    // ⚠️ THIS ARM WAS GREEN WITH THE DEFECT PRESENT.
+    //
+    // It asserted a `.catch(` existed near the call and never asked WHAT IT
+    // COVERED. The `await import()` sat OUTSIDE it, so a module-load rejection
+    // escaped the handler, returned 500, and the signature was never written —
+    // falsifying the very invariant this arm is named for.
+    //
+    // Presence of a guard is not coverage by it. The arm now checks the
+    // STRUCTURE: the dynamic import must be lexically inside a try whose catch
+    // yields a `failed` state rather than propagating.
+    const c = src();
+    // ⚠️ ANCHOR ON THE CALL, NOT THE FIRST MENTION. A first draft of this arm
+    // used `indexOf('freezeNativeManifestForSigning')`, which in the DEFECTIVE
+    // version matches the import destructuring itself — so the arm measured a
+    // window that already contained the import and passed. Caught by mutating
+    // toward the shipped defect and watching this arm stay green.
+    const callIdx = c.indexOf('await freezeNativeManifestForSigning(');
+    expect(callIdx, 'the freeze call must exist').toBeGreaterThan(-1);
+
+    const tryIdx = c.lastIndexOf('try {', callIdx);
+    expect(tryIdx, 'the freeze must sit inside a try').toBeGreaterThan(-1);
+
+    const importIdx = c.lastIndexOf("import(", callIdx);
+    expect(
+      importIdx > tryIdx,
+      'the dynamic import must be INSIDE the try that guards the call — a ' +
+        'module-load failure must not escape and 500 the signature',
+    ).toBe(true);
+
+    // and the catch must degrade, not rethrow or refuse
+    const after = c.slice(callIdx, callIdx + 700);
+    expect(after).not.toMatch(/return apiError/);
+    expect(after).toMatch(/state: 'failed'/);
+  });
+
+  it('⚠️ the freeze is FLAG-GATED — a rollback must not run a fill inside /sign', () => {
+    // It was the only twin entry point not behind the flag, so the documented
+    // rollback would still have run a full fill on the signature path.
     const c = src();
     const i = c.indexOf('freezeNativeManifestForSigning');
-    const window = c.slice(i, i + 900);
-    expect(window).not.toMatch(/return apiError/);
-    expect(window).toMatch(/\.catch\(/);
+    const before = c.slice(Math.max(0, i - 400), i);
+    expect(before).toMatch(/templateNativeDocxEnabled\(\)/);
   });
 });
 
