@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { renderStructureDirective } from '../build-soap-prompt';
 import { editTableCell } from '@/lib/note-table-edit';
 import { parseMarkdownTablesForDiagnosis } from '@/lib/template-twin/bridge-fill';
+import { flattenTables } from '@/lib/ehr-formatters';
 
 /**
  * F24 SLICE 1 — THE GENERATED SKELETON'S HEADER MATCHES THE ROWS IT DICTATES.
@@ -134,5 +135,34 @@ describe('the generated table skeleton is not ragged', () => {
     const lines = pipeLines(renderStructureDirective(labelled));
     expect(lines[0].trim().replace(/^\|/, '').split('|')[0].trim()).toBe('VEIN');
     expect(cellCount(lines[0])).toBe(cellCount(lines[2]));
+  });
+
+  it('⚠️ the EHR paste carries no stray ": " for the unheaded column', () => {
+    // Found by the adversarial pass in the EXPORT — the surface this change
+    // was not aimed at. Zipping an empty header cell blindly produced
+    //     : GSV at the SFJ · DIAMETER (mm): 6.2 · REFLUX TIME (ms): 3.4
+    // in the text a doctor pastes into Epic or Cerner.
+    const t = [
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3.4 |',
+    ].join('\n');
+    const out = flattenTables(t);
+    expect(out.startsWith(':')).toBe(false);
+    expect(out).toBe('GSV at the SFJ · DIAMETER (mm): 6.2 · REFLUX TIME (ms): 3.4');
+    // DIRECTION CONTROL: a NAMED first column must still be labelled — the fix
+    // must not strip names, only skip absent ones. THREE columns, because a
+    // 2-column table takes flattenTables' documented `label: value` collapse
+    // and never reaches the zip this fix touches. (My first version of this
+    // control used two and asserted the zipped form — the arm caught my
+    // expectation, not the code.)
+    const named = [
+      '| VEIN | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3.4 |',
+    ].join('\n');
+    expect(flattenTables(named)).toBe(
+      'VEIN: GSV at the SFJ · DIAMETER (mm): 6.2 · REFLUX TIME (ms): 3.4',
+    );
   });
 });

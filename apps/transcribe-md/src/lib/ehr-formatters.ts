@@ -137,7 +137,24 @@ export function flattenTables(s: string): string {
         out.push(`${cells[0] ?? ''}: ${cells[1] ?? ''}${tail}`);
         continue;
       }
-      out.push(header.map((h, i) => `${h}: ${cells[i] ?? ''}`).join(' · ') + tail);
+      // ⚠️ AN UNNAMED COLUMN CONTRIBUTES ITS VALUE, NOT `": value"`.
+      //
+      // A markdown table may carry an UNHEADED first column — the row-label
+      // column of a form whose header names only its data columns. F24's
+      // generator now emits exactly that (`|  | DIAMETER (mm) | … |`) because
+      // the doctor's DOCX has an unheaded first cell and naming it would
+      // assert a header their form does not carry.
+      //
+      // Zipping it blindly produced a leading `": "` in the text a doctor
+      // pastes into Epic or Cerner:
+      //     : GSV at the SFJ · DIAMETER (mm): 6.2 · REFLUX TIME (ms): 3.4
+      // Found by the F24 adversarial pass, in the export rather than the
+      // editor — the surface the change was not aimed at.
+      out.push(
+        header
+          .map((h, i) => (h === '' ? (cells[i] ?? '') : `${h}: ${cells[i] ?? ''}`))
+          .join(' · ') + tail,
+      );
     }
   };
   for (const raw of lines) {
