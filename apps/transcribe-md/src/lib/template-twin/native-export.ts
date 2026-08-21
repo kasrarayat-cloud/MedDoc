@@ -42,9 +42,36 @@ export async function loadNativeTemplateDocxForVisit(
   practiceId: string,
   deps?: { storage?: TemplateTwinArtifactStore },
 ): Promise<NativeTemplateExport | null> {
+  // ⚠️ A SIGNED RECORD RESOLVES BY POINTER, NEVER BY LOOKUP — ruling 2(b).
+  //
+  // The signature stamped `frozenFillManifestId` in the same write that set
+  // SIGNED. Reading it — rather than searching for "a VERIFIED manifest for
+  // this visit" — makes a manifest that landed AFTERWARDS unreachable by
+  // construction. Layer (a) makes that write impossible; this makes a write
+  // that slipped through inert.
+  //
+  // NULL on a signed visit is not "look it up instead": it records that the
+  // signature froze NO native document, and the answer is styled, forever.
+  const signedVisit = await prisma.transcribeVisit.findFirst({
+    // Scoped inline, matching this file's own manifest query below rather than
+    // importing the accessor — which would drag next-auth into every consumer's
+    // module graph and add a declared system read for no tenancy gain.
+    where: { id: visitId, practiceId, deletedAt: null },
+    select: { status: true, frozenFillManifestId: true },
+  });
+  const isSigned = signedVisit?.status === 'SIGNED';
+  if (isSigned && !signedVisit?.frozenFillManifestId) {
+    console.info(
+      `[template-twin:native] signed visit=${visitId} froze no native document — styled`,
+    );
+    return null;
+  }
+
   const manifest = await prisma.templateTwinFillManifest.findFirst({
     where: {
       visitId,
+      // ⚠️ THE POINTER IS THE WHOLE PREDICATE FOR A SIGNED RECORD.
+      ...(isSigned ? { id: signedVisit!.frozenFillManifestId! } : {}),
       // ⚠️ TENANCY IS PER-PRACTICE, NOT PER-USER — F5-f ruling 2.
       //
       // This read `visit: { userId }`, so a colleague with access to the same
@@ -90,7 +117,20 @@ export async function loadNativeTemplateDocxForVisit(
   // Fail-closed on all three unprovable cases, including a manifest written
   // before `noteSha256` existed. An artifact that cannot prove which note it
   // came from is not evidence of anything.
-  const freshness = manifestMatchesNote(manifest.noteSha256, manifest.visit?.soapFinal);
+  // ⚠️ FRESHNESS GOVERNS THE UNSIGNED RECORD; THE POINTER GOVERNS THE SIGNED ONE.
+  //
+  // A signed record's pair was frozen AT the signature, under the CAS that
+  // guarantees `signedSoap` is the text the manifest was bound to. Re-deriving
+  // freshness from `soapFinal` afterwards would let a post-signature edit to
+  // that column DECLINE the very document the signature froze — the record
+  // would stop being able to produce itself.
+  //
+  // So for a signed visit the pointer is authoritative and this check is
+  // skipped, deliberately. For an unsigned one the note can still move and the
+  // check is the only thing standing between a doctor and a stale download.
+  const freshness = isSigned
+    ? ({ ok: true, reason: 'match' } as const)
+    : manifestMatchesNote(manifest.noteSha256, manifest.visit?.soapFinal);
   if (!freshness.ok) {
     console.info(
       `[template-twin:native] manifest declined visit=${visitId} reason=${freshness.reason}`,

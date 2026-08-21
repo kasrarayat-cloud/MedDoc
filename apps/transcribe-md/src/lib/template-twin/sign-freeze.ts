@@ -26,10 +26,11 @@ export const SIGN_FREEZE_BUDGET_MS = 20_000;
 export type NativeFreezeOutcome =
   /** No native document is involved — nothing to freeze, nothing to say. */
   | { state: 'not_applicable' }
-  /** The manifest already matches the note. ⚠️ THE COMMON PATH PAYS NOTHING. */
-  | { state: 'already_fresh' }
+  /** The manifest already matches the note. ⚠️ THE COMMON PATH PAYS NOTHING.
+   *  `manifestId` is the document the signature must FREEZE BY POINTER. */
+  | { state: 'already_fresh'; manifestId: string }
   /** Re-filled against the current note; the pair is frozen. */
-  | { state: 'regenerated' }
+  | { state: 'regenerated'; manifestId: string }
   /** Could not refresh. Signing proceeds STYLED, and the reason is recorded. */
   | { state: 'failed'; reason: string };
 
@@ -56,6 +57,7 @@ export async function freezeNativeManifestForSigning(input: {
       outputObjectKey: { not: null },
     },
     select: {
+      id: true,
       noteSha256: true,
       visit: {
         select: {
@@ -77,7 +79,7 @@ export async function freezeNativeManifestForSigning(input: {
   if (!manifest?.visit) return { state: 'not_applicable' };
 
   if (manifestMatchesNote(manifest.noteSha256, manifest.visit.soapFinal).ok) {
-    return { state: 'already_fresh' };
+    return { state: 'already_fresh', manifestId: manifest.id };
   }
 
   const v = manifest.visit;
@@ -161,10 +163,10 @@ export async function freezeNativeManifestForSigning(input: {
       roundTripVerified: true,
       outputObjectKey: { not: null },
     },
-    select: { noteSha256: true, visit: { select: { soapFinal: true } } },
+    select: { id: true, noteSha256: true, visit: { select: { soapFinal: true } } },
   });
   if (!after || !manifestMatchesNote(after.noteSha256, after.visit?.soapFinal).ok) {
     return { state: 'failed', reason: 'refill_did_not_match' };
   }
-  return { state: 'regenerated' };
+  return { state: 'regenerated', manifestId: after.id };
 }

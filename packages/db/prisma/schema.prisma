@@ -2130,6 +2130,20 @@ model TranscribeVisit {
   /// surface "another edit happened, reload to see".
   soapVersion Int @default(1)
 
+  /// ⚠️ THE DOCUMENT THIS SIGNATURE FROZE — resolved by POINTER, never by lookup.
+  ///
+  /// Stamped INSIDE the CAS-guarded signature write, so the pointer and the
+  /// signature are one write. NULL means the record was signed STYLED, and that
+  /// is a deliberate recorded outcome rather than an absence of information.
+  ///
+  /// The SIGNED serve path reads ONLY this. A manifest that lands afterwards —
+  /// an orphaned fill whose wait was abandoned — is therefore UNREACHABLE by
+  /// construction, not merely refused: layer (a) makes the write impossible,
+  /// this makes a write that slipped through inert.
+  frozenFillManifestId String?
+  frozenFillManifest   TemplateTwinFillManifest? @relation("VisitFrozenFill", fields: [frozenFillManifestId], references: [id], onDelete: SetNull)
+  @@index([frozenFillManifestId])
+
   // ── T-M4: review flag ──
   /// Layer 5/6 can set this when critical issues can't be auto-fixed,
   /// or Layer 2 can set it when any speaker's confidence < 0.7.
@@ -3186,6 +3200,10 @@ model TemplateTwinFillManifest {
   /// thread. NULLABLE because manifests written before this column exist and
   /// must be treated as UNPROVABLE — declined, not trusted.
   noteSha256            String? @db.Char(64)
+
+  /// Back-relation for the visit's frozen pointer. A manifest may be the frozen
+  /// document of at most one visit; the FK lives on the visit.
+  frozenForVisits TranscribeVisit[] @relation("VisitFrozenFill")
 
   roundTripVerified     Boolean @default(false)
   roundTripVerification Json?

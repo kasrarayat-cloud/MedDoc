@@ -137,7 +137,9 @@ export const POST = withApiHandler<{ id: string }>(
     // Declared at handler scope: set inside the sign branch, read by the
     // response below. A visit that was ALREADY signed never enters that branch
     // and correctly reports no notice.
-    let nativeFreeze: { state: string; reason?: string } = { state: 'not_applicable' };
+    let nativeFreeze: { state: string; reason?: string; manifestId?: string } = {
+      state: 'not_applicable',
+    };
 
     const session = await getSession();
     const userId = session?.user.id;
@@ -645,6 +647,18 @@ export const POST = withApiHandler<{ id: string }>(
         data: {
           status: TranscribeVisitStatus.SIGNED,
           signedSoap: visit.soapFinal,
+          // ⚠️ THE POINTER AND THE SIGNATURE ARE ONE WRITE — ruling 2(b).
+          //
+          // The SIGNED serve path resolves the document by THIS id and never by
+          // lookup, so a manifest that lands afterwards (an orphaned fill whose
+          // wait was abandoned) is UNREACHABLE rather than merely refused.
+          // Layer (a) makes that write impossible; this makes a write that
+          // slipped through inert.
+          //
+          // NULL is not an absence of information: it records that this
+          // signature froze NO native document and the record is styled,
+          // deliberately and forever.
+          frozenFillManifestId: nativeFreeze.manifestId ?? null,
           signedAt: new Date(),
           // ⚠️ T4 — THE SIGNER, STAMPED SERVER-SIDE, IN THE SAME STATEMENT AS
           // THE SIGNATURE. `userId` is `session.user.id` (line ~137), resolved

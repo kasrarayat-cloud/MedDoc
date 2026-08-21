@@ -135,7 +135,18 @@ const SYSTEM_ALLOWLIST: Record<string, number> = {
   // the whole `template-twin/` directory is bucketed as system before scoping
   // is considered. A declared line is the cost of the conservative direction.
   'src/lib/template-twin/fill-engine.ts': 2,
-  'src/lib/template-twin/native-export.ts': 1,
+  // ⚠️ 1 -> 2 on 2026-08-21, DECLARED. The second is the FROZEN-POINTER read
+  // added by ruling 2(b): a SIGNED record resolves its document by the id the
+  // signature stamped, never by lookup, so a manifest landing afterwards is
+  // unreachable.
+  //
+  // The read IS practice-scoped — `{ id, practiceId, deletedAt: null }`, inline,
+  // matching this file's own manifest query. I briefly reverted this line on the
+  // assumption the count was driven by an `asPracticeId` mint; it is not. The
+  // classifier buckets the whole `template-twin/` directory as system BEFORE it
+  // looks at scoping, exactly as the note above says, so no amount of correct
+  // scoping moves it. The line is written rather than the classifier loosened.
+  'src/lib/template-twin/native-export.ts': 2,
   'src/lib/template-twin/synthetic-test.ts': 1,
   'src/lib/template-twin/workspace-read.ts': 1,
   // 5 → 6 on 2026-08-13, RC-3 (#106(c)): the applicable-active-template probe.
