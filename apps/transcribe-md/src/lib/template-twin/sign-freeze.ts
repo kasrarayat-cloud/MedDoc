@@ -61,6 +61,7 @@ export async function freezeNativeManifestForSigning(input: {
         select: {
           soapFinal: true,
           userId: true,
+          createdAt: true,
           noteTemplateId: true,
           noteTemplateVersion: true,
           inputMode: true,
@@ -114,6 +115,12 @@ export async function freezeNativeManifestForSigning(input: {
         contextText: v.transcriptText ?? '',
         entities: v.entities,
         generatedNote: v.soapFinal,
+        // ⚠️ visitDate IS LOAD-BEARING AND THE FIRST DRAFT DROPPED IT.
+        // `withProcedureDateFact` injects DATE OF PROCEDURE from it; omitting it
+        // made the sign-time re-fill BLANK a field the original fill had
+        // populated — a signature that silently erased a date. Found by the
+        // refutation pass; the export path has always passed it.
+        visitDate: v.createdAt,
         // Same values the export path's compute uses — one behaviour, not a
         // second configuration of the same engine.
         validationNow: new Date(),
@@ -139,8 +146,21 @@ export async function freezeNativeManifestForSigning(input: {
   // necessarily produced a manifest matching this note — the engine can decline
   // for its own reasons. Re-read and prove it before claiming the pair is
   // frozen; the whole point of this function is that the claim is checkable.
+  // ⚠️ THE SAME PREDICATE THE SERVE PATH USES, NOT A WEAKER ONE.
+  //
+  // The first draft re-read without `status: 'VERIFIED'`,
+  // `roundTripVerified` or `outputObjectKey`, so it could claim `regenerated`
+  // for a manifest `loadNativeTemplateDocxForVisit` would still decline — the
+  // freeze reporting success for a document the doctor cannot receive. Found by
+  // the refutation pass.
   const after = await prisma.templateTwinFillManifest.findFirst({
-    where: { visitId, visit: { practiceId, deletedAt: null } },
+    where: {
+      visitId,
+      visit: { practiceId, deletedAt: null },
+      status: 'VERIFIED',
+      roundTripVerified: true,
+      outputObjectKey: { not: null },
+    },
     select: { noteSha256: true, visit: { select: { soapFinal: true } } },
   });
   if (!after || !manifestMatchesNote(after.noteSha256, after.visit?.soapFinal).ok) {

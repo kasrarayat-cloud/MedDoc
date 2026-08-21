@@ -151,6 +151,7 @@ export async function previewVisitDocumentAction(
       archivedAt: null,
     },
     select: {
+      userId: true,
       // `status` MUST be selected — the guard below reads it, and Prisma is
       // untyped here, so an absent column reads as `undefined` and silently
       // rejects every visit. Fourth time this class has bitten in this repo.
@@ -283,7 +284,10 @@ export async function previewVisitDocumentAction(
   try {
     const { prepared } = await readAndPrepareTemplateTwinFill({
       practiceId: visit.user.practiceId,
-      doctorId: session.user.id,
+      // ⚠️ THE VISIT'S OWN DOCTOR, NOT THE REQUESTER. This read is
+      // practice-scoped, so a colleague previewing the record would otherwise
+      // stamp their id on the author's fill. Same actor fix as native-export's.
+      doctorId: visit.userId,
       noteTemplateId: templateId,
       noteTemplateVersion: templateVersion,
       inputMode:
