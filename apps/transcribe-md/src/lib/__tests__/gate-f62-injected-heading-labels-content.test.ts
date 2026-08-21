@@ -61,12 +61,54 @@
 // ============================================================================
 import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
+import { createHash } from 'node:crypto';
 
 import { generateVisitDocx } from '../docx-generator';
 import type { VisitExportData } from '../visit-export';
 
 const INJECTED_HEADING = 'CLINICAL NOTE';
 const EMPTY_PLACEHOLDER = 'No SOAP note available.';
+
+/** A note exercising every branch of the renderer's loop — headings at two
+ *  depths, prose, a bullet, a task line, a real table, bold/italic labels and
+ *  a numbered pair. Deterministic: every date in the fixture is fixed. */
+const REPRESENTATIVE_NOTE = [
+  '## SUBJECTIVE',
+  'Cough for three days. No fever.',
+  '',
+  '## OBJECTIVE',
+  '- Chest clear',
+  '- [x] Vitals reviewed',
+  '',
+  '| Vessel | Reflux |',
+  '|---|---|',
+  '| GSV | 0.4 s |',
+  '',
+  '### Right Leg',
+  '**PMH:** asthma',
+  '*Note:* stable',
+  '1. First recommendation',
+  '2. Second recommendation',
+  '',
+  '## ASSESSMENT',
+  'Viral URI.',
+].join('\n');
+
+/** ⚠️ CAPTURED BY RENDERING `origin/main`'s OWN `docx-generator.ts`, in a
+ *  DETACHED worktree at `86b9910d` carrying none of this change — a
+ *  measurement, not an argument.
+ *
+ *  This is the arm that carries the fix's whole safety claim. Production holds
+ *  48 non-empty notes and NONE of them reaches the defect, so the only thing
+ *  that could go wrong for a real doctor is the restructure perturbing a
+ *  document that renders perfectly well today. The body is now assembled and
+ *  THEN prefixed with the heading, where it used to be pushed onto an array
+ *  that already held the heading; those produce the same sequence, and this
+ *  says so in bytes rather than in prose. */
+const MAIN_DIGEST = {
+  false: { len: 13122, sha256: '01b81abe926126246bf85b5cfad9afb6435a1e9332459bbd1614931ed464fac4' },
+  true: { len: 12187, sha256: '6c7b47166e58176ee34a6358af3dfeb98232625600f818867ff9941069514afe' },
+} as const;
 
 function fixture(soapText: string, over: Partial<VisitExportData> = {}): VisitExportData {
   return {
@@ -115,6 +157,27 @@ function docxTextFromXml(xml: string): string {
 }
 
 describe('F6.2 — the injected CLINICAL NOTE heading labels content, or is absent', () => {
+  it.each([false, true])(
+    'a content-bearing note renders BYTE-IDENTICALLY to what main shipped (formOnly=%s)',
+    async (formOnly) => {
+      const xml = await renderDocxXml(REPRESENTATIVE_NOTE, {
+        formOnly,
+        formTitle: formOnly ? 'WM IOV' : null,
+      });
+      const want = MAIN_DIGEST[String(formOnly) as 'true' | 'false'];
+      // Length first: a digest mismatch says only "something moved", and the
+      // length says whether it was a byte or a block.
+      expect(xml.length, 'document.xml length moved').toBe(want.len);
+      expect(createHash('sha256').update(xml).digest('hex')).toBe(want.sha256);
+      // ⚠️ NON-VACUITY: a fixture that silently stopped rendering the note
+      // would hash consistently and prove nothing.
+      expect(xml).toContain('SUBJECTIVE');
+      expect(xml).toContain('Viral URI.');
+      expect(xml).toContain('GSV');
+    }
+  );
+
+
   // ── the BICONDITIONAL. Neither half is worth anything alone: a renderer that
   //    never emits the heading satisfies every absence arm below, and one that
   //    always emits it satisfies every presence arm.
