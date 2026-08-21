@@ -203,24 +203,23 @@ export async function certifyNativeTemplateAction(
       // throw lands on the ladder below beside MAPPINGS_NOT_READY, because
       // "we could not generate a self-test for your form" is a DESIGNED
       // refusal the doctor can act on, not an unexpected error.
-      const derived = deriveVerificationEncounter(
-        (current?.fields ?? []).map(({ field, mapping }) => ({
-          originalLabel: field.originalLabel,
-          clinicalConcept: mapping.clinicalConcept,
-        })),
-      );
-      if (!derived.ok) {
-        throw new TemplateTwinSyntheticTestError(
-          'ENCOUNTER_NOT_DERIVABLE',
-          'We could not generate a self-test that matches this form, so nothing was certified.',
-          { blocking: [derived.reason] },
-        );
-      }
       await runTemplateTwinSyntheticTest({
         noteTemplateId,
         actor,
         expectedMappingsSha256,
-        encounterText: derived.text,
+        // ⚠️ A THUNK, NOT A STRING — F5-i. Evaluated inside, BELOW the
+        // mappings-readiness gates. An earlier draft of this change derived it
+        // HERE and threw ENCOUNTER_NOT_DERIVABLE eagerly, which pre-empted
+        // MAPPINGS_NOT_READY and told a physician with six unconfirmed fields
+        // that their FORM could not be self-tested — false, and it would have
+        // stopped them doing the one thing that unblocks it.
+        deriveEncounter: () =>
+          deriveVerificationEncounter(
+            (current?.fields ?? []).map(({ field, mapping }) => ({
+              originalLabel: field.originalLabel,
+              clinicalConcept: mapping.clinicalConcept,
+            })),
+          ),
         encounterMode: 'dictation',
         extractEntities: extractTemplateTwinEntities,
         // Run the proof through the LIVE fill path: a real (ephemeral) visit,

@@ -24,6 +24,7 @@ import {
   type TemplateTwinArtifactStore,
 } from './storage';
 import type { TemplateTwinActor } from './certification-lifecycle';
+import type { DerivedEncounter } from './verification-encounter';
 import { readTemplateTwinWorkspace } from './workspace-read';
 import { assertTemplateTwinSyntheticEvidencePhiFree } from './synthetic-evidence-gate';
 import { docxToTextWithControls } from '@/lib/note-template-parse/docx-content-controls';
@@ -116,7 +117,31 @@ export async function runTemplateTwinSyntheticTest(input: {
   noteTemplateId: string;
   actor: TemplateTwinActor;
   expectedMappingsSha256: string;
-  encounterText: string;
+  /**
+   * THE ENCOUNTER, LAZILY — F5-i.
+   *
+   * ⚠️ IT IS A THUNK BECAUSE THE ORDER MATTERS, AND THE ORDER BELONGS HERE
+   * RATHER THAN IN EACH CALLER. `deriveVerificationEncounter` reads every
+   * field's `clinicalConcept`, and `unreadyReason` (mappings-readiness.ts:69)
+   * refuses any non-manual field that HAS no concept. So while mappings are
+   * unready the derivation is reading an INCOMPLETE field set, and a refusal
+   * computed from it is not yet a fact about the form:
+   *
+   *   a doctor can still supply a measurement concept by hand — F5-a's census
+   *   leaves 22 of 80 fields unproposed on the real customer form — which turns
+   *   a `no_measurement_rows` form into a derivable one.
+   *
+   * Evaluating it EAGERLY in the caller therefore told a physician "we cannot
+   * self-test this kind of form" when the true and actionable answer was
+   * "6 of 80 fields still need confirming". That is a false statement about
+   * their form, and it stops them doing the work that would unblock it.
+   *
+   * ⚠️ SO IT IS EVALUATED BELOW THE READINESS GATES AND NOWHERE ELSE. Passing
+   * a string would let a caller re-introduce the ordering bug silently; a thunk
+   * cannot be evaluated early by accident, and both callers inherit the order
+   * instead of each keeping it by hand.
+   */
+  deriveEncounter: () => DerivedEncounter;
   encounterMode?: 'text' | 'dictation';
   storage?: TemplateTwinArtifactStore;
   /** Injected live-L3 entity extractor (no worker import in this module). */
@@ -281,12 +306,28 @@ export async function runTemplateTwinSyntheticTest(input: {
     );
   }
 
+  // ⚠️ THE ENCOUNTER IS DERIVED HERE AND NOT ONE LINE EARLIER — F5-i. Every
+  // field now has a physician-confirmed mapping AND (except for `manual`
+  // fields, which have none by construction) a clinical concept, because the
+  // gate immediately above refuses otherwise. Only now is "this generator
+  // cannot speak to this form" a fact about the FORM rather than a fact about
+  // how much of it has been confirmed. See the `deriveEncounter` doc above.
+  const derived = input.deriveEncounter();
+  if (!derived.ok) {
+    throw new TemplateTwinSyntheticTestError(
+      'ENCOUNTER_NOT_DERIVABLE',
+      'We could not generate a self-test that matches this form, so nothing was certified.',
+      { blocking: [derived.reason], totalFields: mappings.length },
+    );
+  }
+  const encounterText = derived.text;
+
   // Certification artifacts retain evidence anchors and filled values. Gate
   // the encounter before Layer 3 or storage so a mislabeled real encounter is
   // not persisted as a synthetic proof.
   try {
     await assertTemplateTwinSyntheticEvidencePhiFree({
-      encounterText: input.encounterText,
+      encounterText: encounterText,
       practiceId: input.actor.practiceId,
       userId: input.actor.userId,
     });
@@ -299,7 +340,7 @@ export async function runTemplateTwinSyntheticTest(input: {
 
   const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
   const encounterMode = input.encounterMode ?? 'text';
-  const encounterSha256 = createHash('sha256').update(input.encounterText).digest('hex');
+  const encounterSha256 = createHash('sha256').update(encounterText).digest('hex');
 
   // Run the LIVE brain over the synthetic encounter, then recover the compiled
   // {{one of}} marker form from the SAME verified source the IR came from —
@@ -408,7 +449,7 @@ export async function runTemplateTwinSyntheticTest(input: {
       ? { entities: pinnedEntities, contextText: pinnedContextText }
       : await input.extractEntities({
           mode: encounterMode,
-          text: input.encounterText,
+          text: encounterText,
           practiceId: input.actor.practiceId,
           userId: input.actor.userId,
           noteTemplateId: row.id,
@@ -480,7 +521,7 @@ export async function runTemplateTwinSyntheticTest(input: {
     );
   } else if (input.generateNote) {
     generatedNote = await input.generateNote({
-      encounterText: input.encounterText,
+      encounterText: encounterText,
       noteTemplateId: row.id,
       practiceId: input.actor.practiceId,
       userId: input.actor.userId,

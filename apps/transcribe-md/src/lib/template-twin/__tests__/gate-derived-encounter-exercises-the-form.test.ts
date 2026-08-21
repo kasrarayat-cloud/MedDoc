@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import {
   deriveVerificationEncounter,
   VERIFICATION_ENCOUNTER,
   MIN_CERTIFIED_FILLED_FIELDS,
   type EncounterSourceField,
+  type EncounterNotDerivable,
 } from '../verification-encounter';
 import { assertTemplateTwinSyntheticEvidencePhiFree } from '../synthetic-evidence-gate';
 
@@ -53,8 +54,24 @@ function derivedText(fields: EncounterSourceField[]): string {
   return d.text;
 }
 
+/**
+ * ⚠️ DERIVED IN `beforeAll`, NOT IN THE DESCRIBE BODY — F5-i, found by the
+ * adversarial pass. `derivedText` THROWS on a refusal, and a throw in a
+ * describe callback aborts the whole file at COLLECTION: vitest reports
+ * "Tests no tests" and **not one arm runs**, including the happy-path control
+ * further down whose entire job is to catch a change that refuses everything.
+ *
+ * The file still went red, so there was never a false green — but a
+ * collection abort is a far worse signal than "the owner's own form stopped
+ * deriving", and the comment on that control claimed it was "the arm that
+ * fails in that case" when it could not even execute. Moving the derivation to
+ * run time keeps the throw loud and lets every other arm still report.
+ */
 describe('the derived encounter speaks to the template it certifies', () => {
-  const text = derivedText(ownersForm());
+  let text: string;
+  beforeAll(() => {
+    text = derivedText(ownersForm());
+  });
 
   it('names every real vessel segment, on BOTH legs', () => {
     for (const v of VESSELS) {
@@ -173,51 +190,74 @@ describe('a template this generator cannot speak to is REFUSED, never faked', ()
     });
   });
 
-  it('⚠️ NO REFUSAL EVER RETURNS THE VENOUS TEXT — the fallback is gone, not renamed', () => {
+  /**
+   * ⚠️ READ THE TITLE AS EXACTLY WHAT IT MEASURES, WHICH IS NARROWER THAN THE
+   * ONE THIS ARM FIRST CARRIED. It was called "NO REFUSAL EVER RETURNS THE
+   * VENOUS TEXT", and the adversarial pass showed the venous-text scan is not
+   * what reddens: once `.ok` is false the object has no text to scan, so the
+   * discriminating assertion is the `.ok` map. The scan retains exactly one
+   * job — catching a `{ok:false, reason, text: VERIFICATION_ENCOUNTER}` shape,
+   * i.e. somebody smuggling the fallback back in beside the refusal — and the
+   * title now says that rather than implying a general guarantee.
+   */
+  it('⚠️ every unaddressable form REFUSES, and no refusal smuggles the venous text alongside', () => {
     const refusals: EncounterSourceField[][] = [
       [],
       [{ originalLabel: 'Subjective', clinicalConcept: 'chief_complaint' }],
       PLACEHOLDERS.map((l) => ({ originalLabel: l, clinicalConcept: 'measurement.diameter' })),
       [{ originalLabel: 'Right thyroid lobe', clinicalConcept: 'measurement.length' }],
     ];
-    // Non-vacuity: all four really are refusals, so the assertion below is
-    // about something.
+    // THE DISCRIMINATING ASSERTION. Restore the fallback and every entry here
+    // becomes `undefined`, because the returned value is a bare string.
     expect(refusals.map((f) => deriveVerificationEncounter(f).ok)).toEqual([
       false,
       false,
       false,
       false,
     ]);
+    // The narrower job described above.
     for (const fields of refusals) {
-      const out = deriveVerificationEncounter(fields);
-      expect(JSON.stringify(out)).not.toContain('deep vein thrombosis');
-      expect(JSON.stringify(out)).not.toContain('saphenofemoral');
-      expect(JSON.stringify(out)).not.toContain(VERIFICATION_ENCOUNTER);
+      expect(JSON.stringify(deriveVerificationEncounter(fields))).not.toContain(
+        VERIFICATION_ENCOUNTER,
+      );
     }
   });
 
-  it('every refusal reason is a member of the declared closed union', () => {
+  it('every declared refusal reason has an arm that produces it', () => {
     // ⚠️ THE REASON CROSSES TO AN AUDIT ROW THAT FANS OUT CROSS-TENANT, so it
     // must never become free text carrying a customer's field labels. Pinning
-    // the set here is what makes that a checkable property rather than a note.
-    const KNOWN = ['no_measurement_rows', 'only_placeholder_rows', 'unsupported_study_type'];
-    const seen = [
-      deriveVerificationEncounter([]),
-      deriveVerificationEncounter([
+    // the set is what makes that checkable rather than a note.
+    //
+    // ⚠️ AND THE FIRST VERSION OF THIS ARM DID NOT READ THE UNION AT ALL. Its
+    // `KNOWN` was a test-local string array and its Set assertion was a
+    // tautology conditional on the `toEqual` above it — its own comment claimed
+    // "a new reason added without a test lands here", and the adversarial pass
+    // mutation-proved that a brand-new union member plus a reachable branch
+    // gave **33 passed**. A check whose title is wider than what it measures,
+    // caught in the change that introduced it.
+    //
+    // `satisfies` is what closes it: a new member of `EncounterNotDerivable`
+    // is now a COMPILE error here until somebody adds the input that produces
+    // it. That is a property `tsc` enforces, not one this file asserts.
+    const PRODUCED = {
+      no_measurement_rows: [],
+      only_placeholder_rows: PLACEHOLDERS.map((l) => ({
+        originalLabel: l,
+        clinicalConcept: 'measurement.diameter',
+      })),
+      unsupported_study_type: [
         { originalLabel: 'Right thyroid lobe', clinicalConcept: 'measurement.length' },
-      ]),
-      deriveVerificationEncounter(
-        PLACEHOLDERS.map((l) => ({ originalLabel: l, clinicalConcept: 'measurement.diameter' })),
-      ),
-    ].map((d) => (d.ok ? 'OK' : d.reason));
-    expect(seen).toEqual([
-      'no_measurement_rows',
-      'unsupported_study_type',
-      'only_placeholder_rows',
-    ]);
-    // and the three distinct reasons observed ARE the whole declared union —
-    // a new reason added without a test lands here.
-    expect([...new Set(seen)].sort()).toEqual([...KNOWN].sort());
+      ],
+    } satisfies Record<EncounterNotDerivable, EncounterSourceField[]>;
+
+    for (const [reason, fields] of Object.entries(PRODUCED)) {
+      expect(deriveVerificationEncounter(fields), `input for ${reason}`).toEqual({
+        ok: false,
+        reason,
+      });
+    }
+    // non-vacuity: the table really did drive three assertions, not zero.
+    expect(Object.keys(PRODUCED)).toHaveLength(3);
   });
 });
 
@@ -237,10 +277,16 @@ describe('a template this generator cannot speak to is REFUSED, never faked', ()
  * A count of phrases is not a measure of whether any of them can address a cell.
  */
 describe('every dictated value is globally unique — the cross-leg collision', () => {
-  const text = derivedText(ownersForm());
-  const rows = [...text.matchAll(
-    /(Right|Left) (.+?): diameter (\d+\.\d+) millimeters, reflux time (\d+\.\d+) seconds/g,
-  )].map((m) => ({ side: m[1], vessel: m[2], diameter: m[3], reflux: m[4] }));
+  // Same reason as the describe above: a collection-time throw would abort the
+  // whole file and silence every other arm.
+  let rows: { side: string; vessel: string; diameter: string; reflux: string }[];
+  beforeAll(() => {
+    rows = [
+      ...derivedText(ownersForm()).matchAll(
+        /(Right|Left) (.+?): diameter (\d+\.\d+) millimeters, reflux time (\d+\.\d+) seconds/g,
+      ),
+    ].map((m) => ({ side: m[1]!, vessel: m[2]!, diameter: m[3]!, reflux: m[4]! }));
+  });
 
   it('the scan is non-vacuous — it found both legs of every vessel', () => {
     expect(rows.length).toBe(VESSELS.length * 2);
@@ -305,11 +351,17 @@ describe('a NON-venous form never receives a venous narrative', () => {
     // generator, so a thyroid form CAN certify honestly) is F5-i's additive
     // second half and must never arrive by restoring the fallback.
     //
-    // ⚠️ AND THE OLD ARM COULD NOT ASSERT THIS, WHICH WAS THE TELL: it noted
-    // it "deliberately does NOT assert the output is free of the word reflux …
-    // because the fallback constant is itself a venous encounter." Now it can.
-    expect(JSON.stringify(out)).not.toMatch(/reflux/i);
-    expect(JSON.stringify(out)).not.toMatch(/thyroid/i);
+    // ⚠️ AND NO `not.toMatch(/reflux/)` FOLLOWS, DELIBERATELY. A first draft of
+    // this arm added exactly that and it was UNFALSIFIABLE: `toEqual` above
+    // already pins the WHOLE object, so the stringified output is fixed and no
+    // scan of it can ever fire. The adversarial pass caught it — an assertion
+    // that reads like extra coverage and asserts nothing is worse than none,
+    // because the next reader counts it.
+    //
+    // The old arm's own note ("deliberately does NOT assert the output is free
+    // of the word reflux … because the fallback constant is itself a venous
+    // encounter") is DISCHARGED by the `toEqual` above, not by a second scan:
+    // the refusal object provably has no text field at all.
   });
 
   it('the venous form still qualifies — the guard is not simply off', () => {

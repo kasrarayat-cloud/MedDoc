@@ -26,6 +26,13 @@
 import { readTemplateTwinWorkspace } from '@/lib/template-twin/workspace-read';
 import { updateTemplateTwinMappings, certifyAndActivateTemplateTwin } from '@/lib/template-twin/certification-lifecycle';
 import { runTemplateTwinSyntheticTest } from '@/lib/template-twin/synthetic-test';
+// ⚠️ FROM THE LEAF MODULE, NOT THE BARREL — `synthetic-test.ts` re-exports this
+// class, and importing it from there drags prisma, storage and the docx parser
+// in behind it. That file's own header says to import the DEFINITION from here.
+// It also matters to callers' tests: a `vi.mock` of the barrel that stubs only
+// `runTemplateTwinSyntheticTest` makes the re-export vanish, which is precisely
+// how this import first broke.
+import { TemplateTwinSyntheticTestError } from '@/lib/template-twin/synthetic-test-error';
 import { extractTemplateTwinEntities } from '@/worker/layers/03-extract-entities';
 import { createEphemeralVisitNoteGenerator } from '@/worker/template-twin-note-generator';
 import { deriveVerificationEncounter } from '@/lib/template-twin/verification-encounter';
@@ -125,40 +132,22 @@ export async function runAutoCertifyTwin(
   // against a leg-vein study. Now nothing runs: the template stays
   // NEEDS_CONFIRMATION and the reason says we could not generate a matching
   // self-test, rather than reporting a proof that never touched this form.
-  const derived = deriveVerificationEncounter(
-    persisted.fields.map(({ field, mapping }) => ({
-      originalLabel: field.originalLabel,
-      clinicalConcept: mapping.clinicalConcept,
-    })),
-  );
-  if (!derived.ok) {
-    await logTwinAudit({
-      action: 'TEMPLATE_TWIN_CERTIFY_FAILED',
-      userId,
-      practiceId,
-      targetType: 'note_template',
-      targetId: noteTemplateId,
-      metadata: {
-        auto: true,
-        stage: 'derive_encounter',
-        reason: 'ENCOUNTER_NOT_DERIVABLE',
-        detail: derived.reason,
-      },
-    });
-    return {
-      status: 'proof_failed',
-      confirmed: plan.mappings.length,
-      declined: [],
-      reason: `ENCOUNTER_NOT_DERIVABLE:${derived.reason}`,
-    };
-  }
-
   try {
     await runTemplateTwinSyntheticTest({
       noteTemplateId,
       actor,
       expectedMappingsSha256: persisted.mappingsSha256,
-      encounterText: derived.text,
+      // ⚠️ A THUNK, NOT A STRING — F5-i. It is evaluated inside, BELOW the
+      // mappings-readiness gates, because a refusal computed over an unconfirmed
+      // field set is a statement about how much is confirmed and not about the
+      // form. See the `deriveEncounter` doc on runTemplateTwinSyntheticTest.
+      deriveEncounter: () =>
+        deriveVerificationEncounter(
+          persisted.fields.map(({ field, mapping }) => ({
+            originalLabel: field.originalLabel,
+            clinicalConcept: mapping.clinicalConcept,
+          })),
+        ),
       encounterMode: 'dictation',
       extractEntities: extractTemplateTwinEntities,
       generateNote: createEphemeralVisitNoteGenerator({
@@ -169,14 +158,28 @@ export async function runAutoCertifyTwin(
     // ⚠️ THE PROOF FAILED, SO NOTHING CERTIFIES. The mappings stay confirmed —
     // that work is real and the doctor should not have to redo it — but the
     // template remains NEEDS_CONFIRMATION and #713's banner names the reason.
-    const reason = err instanceof Error ? err.message : String(err);
+    // ⚠️ "WE COULD NOT TEST YOUR FORM" IS NOT "YOUR FORM WAS TESTED AND FAILED"
+    // — F5-i. Both arrive through this catch, and stamping them with the same
+    // `stage: 'synthetic_test'` would make the audit row claim a proof ran when
+    // none did. The stage is what a reader uses to tell those apart.
+    const notDerivable =
+      err instanceof TemplateTwinSyntheticTestError && err.code === 'ENCOUNTER_NOT_DERIVABLE';
+    const reason = notDerivable
+      ? `ENCOUNTER_NOT_DERIVABLE:${(err as TemplateTwinSyntheticTestError).blocking[0] ?? 'unknown'}`
+      : err instanceof Error
+        ? err.message
+        : String(err);
     await logTwinAudit({
       action: 'TEMPLATE_TWIN_CERTIFY_FAILED',
       userId,
       practiceId,
       targetType: 'note_template',
       targetId: noteTemplateId,
-      metadata: { auto: true, stage: 'synthetic_test', reason },
+      metadata: {
+        auto: true,
+        stage: notDerivable ? 'derive_encounter' : 'synthetic_test',
+        reason,
+      },
     });
     return { status: 'proof_failed', confirmed: plan.mappings.length, declined: [], reason };
   }

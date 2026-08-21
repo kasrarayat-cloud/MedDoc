@@ -110,7 +110,10 @@ async function main() {
       noteTemplateId,
       actor,
       expectedMappingsSha256: ws.mappingsSha256,
-      encounterText: ENCOUNTER,
+      // F5-i: a thunk, evaluated below the readiness gates. This harness pins
+      // its OWN venous encounter rather than deriving one, so it hands back a
+      // ready-made `ok` — the pin is the point of the proof.
+      deriveEncounter: () => ({ ok: true, text: ENCOUNTER }),
       encounterMode: 'text',
       // Use the REAL L3 extractor. An earlier run stubbed this to an empty
       // entity set, which made every field resolve "notMentioned" (filled=0)

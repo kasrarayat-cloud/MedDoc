@@ -1,4 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+// ⚠️ THE REAL CLASS, FROM THE LEAF MODULE. The barrel `synthetic-test` is
+// mocked below, so importing it from there would yield undefined — and the
+// production code imports it from the leaf for the same reason.
+import { TemplateTwinSyntheticTestError } from '@/lib/template-twin/synthetic-test-error';
 
 /**
  * CLAUSE 2(a) — A TEMPLATE IS CERTIFIED OR IT IS NOT.
@@ -166,53 +170,62 @@ describe('auto-certify never half-certifies', () => {
    * change hollowed out the arms above. Asserting that the round-trip proof was
    * never REACHED is the only claim that distinguishes this path from those.
    */
-  it('⚠️ a form with no measurement rows REFUSES WITHOUT RUNNING THE PROOF', async () => {
-    readSpy.mockImplementation(async () => ({
-      ...DERIVABLE_WORKSPACE(),
-      // A table-less form: an operative note, a SOAP template. Nothing here can
-      // be dictated, and the old code answered with a VENOUS reflux study.
-      fields: [
-        {
-          definitionId: 'd1',
-          field: { fieldId: 'f1', originalLabel: 'Findings', criticality: 'routine' },
-          mapping: {
-            sourceType: 'extraction',
-            clinicalConcept: 'exam.vascular',
-            status: 'needs_confirmation',
-          },
-        },
-      ],
-    }));
+  /**
+   * F5-i — "WE COULD NOT TEST YOUR FORM" MUST NOT READ AS "YOUR FORM WAS
+   * TESTED AND FAILED".
+   *
+   * ⚠️ THE REFUSAL ITSELF LIVES INSIDE `runTemplateTwinSyntheticTest`, BELOW
+   * ITS MAPPINGS-READINESS GATES, AND THAT ORDER IS THE POINT. An earlier
+   * draft refused HERE, in the caller, before the proof was invoked — which
+   * pre-empted MAPPINGS_NOT_READY and told a physician with six unconfirmed
+   * fields that their FORM could not be self-tested. False, and it would have
+   * stopped them doing the one thing that unblocks it.
+   *
+   * So this arm no longer asserts "the caller refused". It asserts the caller
+   * CLASSIFIES the refusal correctly when it arrives, which is all that is
+   * left of its job.
+   */
+  it('⚠️ an ENCOUNTER_NOT_DERIVABLE refusal is audited as derive_encounter, not synthetic_test', async () => {
+    testSpy.mockRejectedValueOnce(
+      new TemplateTwinSyntheticTestError(
+        'ENCOUNTER_NOT_DERIVABLE',
+        'We could not generate a self-test that matches this form, so nothing was certified.',
+        { blocking: ['no_measurement_rows'] },
+      ),
+    );
     const { runAutoCertifyTwin } = await import('../auto-certify-twin-job');
     const res = await runAutoCertifyTwin(payload as never);
 
-    expect(testSpy).not.toHaveBeenCalled();
     expect(certifySpy).not.toHaveBeenCalled();
     expect(res.status).toBe('proof_failed');
     expect(res.reason).toBe('ENCOUNTER_NOT_DERIVABLE:no_measurement_rows');
 
-    // The refusal is AUDITED with a stage that distinguishes it from a proof
-    // that ran and failed — "we never tested your form" must not read as
-    // "your form was tested".
     const calls = auditSpy.mock.calls.map((c) => c[0]);
     expect(calls.some((c) => c.metadata?.stage === 'derive_encounter')).toBe(true);
+    // ⚠️ THE DISCRIMINATING HALF. Every other refusal in this file stamps
+    // `synthetic_test`; if this one did too, the audit row would claim a proof
+    // ran when none did, and nothing downstream could tell them apart.
     expect(JSON.stringify(calls)).not.toMatch(/synthetic_test/);
   });
 
   /**
-   * ⚠️ THE CONTROL FOR THE ARM ABOVE. Without it, a change that refused EVERY
-   * template would satisfy every refusal arm in this file. This asserts the
-   * derivable fixture really does reach the proof — so "not called" above is a
-   * measurement rather than a constant.
+   * ⚠️ THE CONTROL. Without it, a change that refused EVERY template — or one
+   * that stopped deriving from the form at all — would satisfy every refusal
+   * arm in this file.
    */
-  it('⚠️ POSITIVE CONTROL: a DERIVABLE form DOES reach the round-trip proof', async () => {
+  it('⚠️ POSITIVE CONTROL: the proof is handed a thunk that derives from THIS form', async () => {
     testSpy.mockResolvedValueOnce(undefined);
     const { runAutoCertifyTwin } = await import('../auto-certify-twin-job');
     await runAutoCertifyTwin(payload as never);
 
     expect(testSpy).toHaveBeenCalledTimes(1);
-    // and it was handed a dictation derived from THIS form's own row, not a
-    // constant — the property F5-c established and F5-i must not regress.
-    expect(testSpy.mock.calls[0][0].encounterText).toContain('Right GSV at the SFJ');
+    // ⚠️ A THUNK, NOT A STRING — evaluating it here is what proves the caller
+    // wired the form's own fields in rather than a constant. F5-c established
+    // that property and F5-i must not regress it.
+    const derived = testSpy.mock.calls[0][0].deriveEncounter();
+    expect(derived.ok).toBe(true);
+    expect(derived.text).toContain('Right GSV at the SFJ');
+    // and it never reads the retired venous constant
+    expect(derived.text).not.toContain('great saphenous vein 6.2 millimeters');
   });
 });
