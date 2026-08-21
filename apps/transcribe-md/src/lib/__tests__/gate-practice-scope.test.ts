@@ -124,7 +124,17 @@ const SYSTEM_ALLOWLIST: Record<string, number> = {
   // 'scoped' would cost a leak — so the line is written rather than the
   // classifier loosened.
   'src/lib/template-twin/create-draft.ts': 2,
-  'src/lib/template-twin/fill-engine.ts': 1,
+  // ⚠️ 1 -> 2 on 2026-08-21, DECLARED. The second is the post-signature
+  // re-check added with the sign-freeze: the persist re-reads the visit's
+  // status immediately before writing and REFUSES to land a manifest on a
+  // SIGNED visit, so an orphaned fill whose wait was abandoned cannot land
+  // after the signature.
+  //
+  // It IS practice-scoped — `visitByIdScope(id, asPracticeId(input.practiceId))`
+  // — and the classifier still counts it, exactly as the note above predicts:
+  // the whole `template-twin/` directory is bucketed as system before scoping
+  // is considered. A declared line is the cost of the conservative direction.
+  'src/lib/template-twin/fill-engine.ts': 2,
   'src/lib/template-twin/native-export.ts': 1,
   'src/lib/template-twin/synthetic-test.ts': 1,
   'src/lib/template-twin/workspace-read.ts': 1,

@@ -6,6 +6,7 @@
 // options, blank when unsaid, never invented; every populated value carries
 // evidence. prisma singleton + injectable storage + logTwinAudit only.
 // ============================================================================
+import { visitByIdScope, asPracticeId } from '@/lib/practice-scope';
 import { noteIdentity } from './note-identity';
 import { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
@@ -570,6 +571,60 @@ export async function processTemplateTwinVisit(
       : Prisma.JsonNull,
   } as const;
 
+  // ⚠️ A SIGNED VISIT NEVER RECEIVES A MANIFEST — RE-CHECKED HERE, AT THE WRITE.
+  //
+  // The sign-time freeze bounds its WAIT with `Promise.race`, which cannot
+  // CANCEL the fill. An orphaned fill therefore keeps running and could land a
+  // manifest AFTER the signature — making the signature's own audit row assert
+  // a downgrade that did not happen, and handing out a document the signed
+  // record never froze.
+  //
+  // The manifest-level guards below key on the MANIFEST's status, not the
+  // VISIT's, so they do not catch it. This does. The read is deliberately as
+  // late as possible: it narrows the window to the write itself rather than
+  // pretending to close it at the top of a long fill.
+  //
+  // ⚠️ AND THE DISCARD IS LOUD. A silently dropped fill is indistinguishable
+  // from one that never ran; the audit row makes the orphan's landing a
+  // RECORDED NON-EVENT, so the sign-time record stays true.
+  // ⚠️ PRACTICE-SCOPED, not a system-context read. The engine already holds the
+  // practice; reading a clinical row without it would have widened T5's
+  // system-context allowlist for no reason — and the allowlist gate caught it
+  // going 1 -> 2 on this file, which is exactly its job.
+  const visitNow = await prisma.transcribeVisit.findFirst({
+    where: visitByIdScope(input.visitId, asPracticeId(input.practiceId)),
+    select: { status: true, signedAt: true },
+  });
+  if (visitNow?.status === 'SIGNED' || visitNow?.signedAt != null) {
+    console.info(
+      `[template-twin:fill] DISCARDED post-signature visit=${input.visitId} ` +
+        `compiled=${compiled.id} — a signed record is one frozen object`,
+    );
+    await logAudit({
+      // ⚠️ AN EXISTING ACTION, DELIBERATELY. A new AuditAction value is THREE
+      // edits — the TS union, the Prisma enum, and its own Postgres migration —
+      // and this repo has shipped that half-done twice, each time with the
+      // write failing silently at runtime while tsc and prisma validate stayed
+      // green. `TEMPLATE_TWIN_SIGN_BLOCKED` already means "the signature state
+      // refused a twin operation", which is exactly this. The distinguishing
+      // detail lives in the metadata.
+      action: 'TEMPLATE_TWIN_SIGN_BLOCKED',
+      targetType: 'TranscribeVisit',
+      targetId: input.visitId,
+      userId: input.doctorId,
+      practiceId: input.practiceId,
+      metadata: {
+        fill_discarded_post_signature: true,
+        compiledVersionId: compiled.id,
+      },
+    }).catch(() => {});
+    throw new TemplateTwinFillError(
+      // Reusing the code this engine already raises for the same refusal.
+      'SIGNED_MANIFEST_IMMUTABLE',
+      'The visit was signed while this fill was running; the result is discarded.',
+    );
+  }
+
   if (existing) {
     // Signing and clinician correction both use optimistic claims. The worker
     // must claim the exact unsigned row it observed; a signed or concurrently
@@ -577,6 +632,9 @@ export async function processTemplateTwinVisit(
     const updated = await prisma.templateTwinFillManifest.updateMany({
       where: {
         id: existing.id,
+        // The VISIT's state, enforced by the database rather than by the read
+        // above alone — that read and this write are not atomic together.
+        visit: { status: { not: 'SIGNED' } },
         status: { not: 'SIGNED' },
         signedDecisionAt: null,
         reviewedAt: null,

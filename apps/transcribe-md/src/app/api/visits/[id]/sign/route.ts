@@ -200,6 +200,10 @@ export const POST = withApiHandler<{ id: string }>(
         userId: true,
         status: true,
         soapFinal: true,
+        // ⚠️ THE CAPTURE'S IDENTITY — the compare-and-swap on the signature
+        // write guards on it, so the text that is signed is the text that was
+        // read.
+        soapVersion: true,
         icdCodes: true,
         rxDrafts: true,
         cptCodes: true,
@@ -625,6 +629,18 @@ export const POST = withApiHandler<{ id: string }>(
         where: {
           ...visitByIdScope(visitId, session.user.practiceId),
           status: TranscribeVisitStatus.READY,
+          // ⚠️ A SIGNED RECORD IS ONE FROZEN OBJECT — COMPARE-AND-SWAP ON THE
+          // NOTE'S IDENTITY.
+          //
+          // `signedSoap` is written from the in-memory `visit.soapFinal`
+          // captured at entry, and the freshness check and any re-fill target
+          // that SAME capture. Without this guard a save landing between the
+          // capture and this write produced a signed record whose frozen text
+          // was one version and whose native document was bound to another —
+          // the download could contain clinical text the signature does not.
+          //
+          // With it: a doctor signs what they saw, or signs nothing.
+          soapVersion: visit.soapVersion,
         },
         data: {
           status: TranscribeVisitStatus.SIGNED,
@@ -668,10 +684,19 @@ export const POST = withApiHandler<{ id: string }>(
         // Another concurrent request got there first. Re-read.
         const refreshed = await prisma.transcribeVisit.findFirst({
           where: visitByIdScope(visitId, session.user.practiceId),
-          select: { signedAt: true, status: true },
+          select: { signedAt: true, status: true, soapVersion: true },
         });
         if (refreshed?.status !== TranscribeVisitStatus.SIGNED) {
-          return apiError('sign race lost — please refresh and retry', 409);
+          // ⚠️ TWO DIFFERENT RACES, TWO DIFFERENT MESSAGES. A doctor whose note
+          // moved under them must re-read it before signing again; one who
+          // simply lost a double-click need not.
+          const noteMoved = refreshed?.soapVersion !== visit.soapVersion;
+          return apiError(
+            noteMoved
+              ? 'note changed while signing — reload and review before signing'
+              : 'sign race lost — please refresh and retry',
+            409
+          );
         }
         signedAt = refreshed.signedAt;
       } else {
