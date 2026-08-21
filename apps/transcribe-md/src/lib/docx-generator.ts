@@ -909,9 +909,31 @@ function parseTableRow(line: string): string[] {
  *  patient info bar, note tables carry VISIBLE hairline borders — the
  *  grid is content here, not layout. */
 function renderMarkdownTable(lines: string[]): Table | null {
+  // ⚠️ THE TRAILING ANNOTATION IS CARRIED INTO THE TABLE, NOT DROPPED.
+  //
+  // This renderer read only `.cells`, and the adversarial pass proved what that
+  // cost against the real generateVisitDocx:
+  //   · an evidence annotation vanished from word/document.xml while the EHR
+  //     paste kept it — one note, two records, the defect this slice exists to
+  //     close, reintroduced in the other direction;
+  //   · `| Side of exam | Right` (closing pipe omitted by L4) parsed as one
+  //     cell plus a suffix, and `Right` — THE SIDE OF EXAM — was deleted from a
+  //     signed imaging report.
+  // Both latent (0 of 49 production notes) and neither had a guard: the slice's
+  // own arm asserted survival against `flattenTables` ONLY, so this surface sat
+  // outside its watched set.
+  //
+  // It rides as an extra cell in THIS renderer, which is a table and can hold
+  // one — not in the shared primitive. `visit-fill-defects.test.ts` pins that
+  // the FILL must never see it as a cell, because the fill writes cells into
+  // the doctor's own form and prose there becomes a measurement.
   const rows = lines
     .filter((l) => !MARKDOWN_RULE_ROW_RE.test(l))
-    .map(parseTableRow);
+    .map((l) => {
+      const parsed = parseMarkdownRow(l);
+      if (!parsed) return [];
+      return parsed.suffix ? [...parsed.cells, parsed.suffix] : parsed.cells;
+    });
   if (rows.length === 0) return null;
 
   const hairline = {

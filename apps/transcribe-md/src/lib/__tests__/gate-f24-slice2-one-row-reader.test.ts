@@ -3,6 +3,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { flattenTables } from '../ehr-formatters';
 import { parseMarkdownRow, MARKDOWN_RULE_ROW_RE } from '../markdown-row';
+import JSZip from 'jszip';
+import { generateVisitDocx } from '../docx-generator';
 
 /**
  * F24 SLICE 2 — ONE ROW READER, FIVE CALLERS.
@@ -127,5 +129,70 @@ describe('⚠️ the FROZEN-MANIFEST SERVE never routes through the row reader',
       'note-table-edit.ts',
       'template-twin/bridge-fill.ts',
     ]);
+  });
+});
+
+describe('⚠️ BOTH export surfaces, not one — the watched-set gap the pass found', () => {
+  // The original arm asserted "the annotation SURVIVES" against `flattenTables`
+  // ONLY. The DOCX surface sat outside its watched set, and that is exactly
+  // where the content was being deleted: an evidence annotation vanished from
+  // word/document.xml while the EHR paste kept it, and `| Side of exam | Right`
+  // — closing pipe omitted by L4 — lost `Right`, THE SIDE OF EXAM, from a
+  // signed imaging report. A gate that watches one of two emitters reports zero
+  // for the one it cannot see.
+  const docxText = async (soapText: string) => {
+    const buf = await generateVisitDocx({
+      visitId: 'v', patientName: 'X', specialty: 'ultrasound', chiefComplaint: null,
+      status: 'SIGNED', createdAt: new Date(0), signedAt: new Date(0),
+      clinicianName: 'C', clinicianEmail: 'c@e', soapText,
+      icdCodes: [], em: null, procedures: [], modifiers: [],
+      prescriptions: [], rxWarnings: [], referrals: [], patientSummary: null,
+      headerFields: [], formOnly: false,
+    } as never);
+    const zip = await JSZip.loadAsync(buf as never);
+    return (await zip.file('word/document.xml')?.async('string')) ?? '';
+  };
+
+  it('an evidence annotation reaches the SIGNED document, not only the paste', async () => {
+    const note = [
+      '## EXAM', '',
+      '|  | DIAMETER (mm) | REFLUX (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3400 | "reflux 3.4 seconds"',
+      '',
+    ].join('\n');
+    const xml = await docxText(note);
+    // non-vacuity: the document really was produced and holds the row
+    expect(xml).toContain('GSV at the SFJ');
+    expect(xml).toContain('reflux 3.4 seconds');
+    expect(flattenTables(note)).toContain('reflux 3.4 seconds');
+  });
+
+  it('⚠️ a row whose closing pipe L4 omitted keeps its LAST VALUE', async () => {
+    // The greedy read cannot tell an annotation from a truncated final cell —
+    // both are "text after the last pipe". Dropping it deleted a measurement.
+    const note = [
+      '## EXAM', '',
+      '| FIELD | VALUE |',
+      '| --- | --- |',
+      '| Side of exam | Right',
+      '| Study indication | Venous reflux |',
+      '',
+    ].join('\n');
+    const xml = await docxText(note);
+    expect(xml).toContain('Side of exam');
+    expect(xml).toContain('Right');
+    expect(xml).toContain('Venous reflux');
+  });
+
+  it('the FILL still never sees the annotation as a cell', () => {
+    // The other half of the contract. `visit-fill-defects.test.ts` pins it, and
+    // it is why the trailing text is carried at the RENDERER rather than
+    // promoted to a cell in the shared primitive: the fill writes cells into
+    // the doctor's own form, so prose there would become a measurement.
+    const r = parseMarkdownRow('| GSV at the SFJ | 6.2 | 3.4 | "reflux 3.4 seconds"');
+    expect(r?.cells).toEqual(['GSV at the SFJ', '6.2', '3.4']);
+    expect(r?.cells).not.toContain('"reflux 3.4 seconds"');
+    expect(r?.suffix).toBe('"reflux 3.4 seconds"');
   });
 });
