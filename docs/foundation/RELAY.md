@@ -61,7 +61,7 @@ too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
 
 
-### 🟢 F23 — PRUNE ROLLBACK TAGS BY NAME (ruling #137) — **loop-eligible, small**
+### ✅ F23 — PRUNE ROLLBACK TAGS BY NAME (ruling #137) — **BUILT AND GATED 2026-08-21. The completion block is below this section.**
 
 **Owner-ruled 2026-08-21. Full text: `RULINGS.md` #137.** Build
 `scripts/ops/prune-rollback-tags.sh`.
@@ -99,6 +99,180 @@ skipped** (`retire-branch.sh` passed 9 of 9 refusal tests and then printed
 
 **Measured baseline 2026-08-21: 146 rollback tags; images 84.38GB with
 53.87GB reclaimable; disk 70%, 86G free.** Nothing is urgent.
+
+### ✅ F23 — BUILT AND GATED — **2026-08-21, run `20260821-111818-b1` session 02**
+
+`scripts/ops/prune-rollback-tags.sh` exists. Dry-run by default, keep-list
+printed first, deletion by name. Gate:
+`apps/transcribe-md/src/lib/__tests__/gate-f23-prune-rollback-tags.test.ts`,
+**36 arms**, driving the REAL script through a `docker` PATH stub that records
+every argv — so the delete path is provable in CI with no daemon and no risk.
+
+**⚠️ THE ROW ABOVE SAYS "the real 146" AND THE NUMBER HAS MOVED. Re-measured
+2026-08-21T15:40Z: 152.** Session 01's F5-i deploy cut `pre-d7cc0246-20260821`
+and the supervised side's deploys account for the rest. The figure moves with
+every deploy, which is why the script re-measures and this row does not ask
+anyone to trust either number.
+
+#### THE ITEM'S PREMISE WAS WRONG ABOUT ITS OWN DATA, AND THE FIRST DRAFT INHERITED IT
+
+**The tag population has THREE shapes, not one.** #137 and this row both speak
+of `pre-<sha>-<date>` — F9's automatic form. The host actually holds:
+
+| shape | example | n |
+|---|---|---|
+| sha then date (F9, automatic) | `pre-d7cc0246-20260821` | 48 |
+| **label then date (the pre-F9 MANUAL habit)** | `pre-footer-20260815` | 103 |
+| **date then label (same habit, fields reversed)** | `pre-20260802-attest` | 1 |
+
+A positional `^pre-<sha>-<date>$` regex — which is what the ruling's wording
+invites — classified **104 of 152 as unparseable** and therefore kept them
+forever. **It reclaimed nothing and reported a cheerful green `0 tag(s) would
+be removed`.** The date is now found by SCANNING for a token that is a real
+calendar date; no token → unparseable → KEPT, two tokens → ambiguous → KEPT.
+
+⚠️ **AND AGE IS READ FROM THE EMBEDDED DATE, NEVER FROM `CreatedAt`.** A `pre-*`
+tag names the image that was RUNNING BEFORE the deploy, i.e. the PREVIOUS
+deploy's build. Measured: `pre-7c42d2d7-20260820` points at an image created
+`2026-08-19 05:06`. Ageing by `CreatedAt` would age every tag by one deploy
+interval, silently and plausibly. `CreatedAt` is used for ORDERING only, to
+break ties inside one day.
+
+#### TWO REAL DEFECTS, BOTH SILENT NO-OPS, BOTH CAUGHT BY THE GATE
+
+**1 · `GROUPS` IS A BASH SPECIAL ARRAY.** The deploy grouping was assigned to a
+variable named `GROUPS` — which bash reserves for the invoking user's group
+ids. **The assignment is silently IGNORED: no error, no non-zero status**, and
+`"$GROUPS"` then expands to the primary gid. Every deploy collapsed into one
+group called `1000`, keep-list empty, delete-list empty, reconciliation
+self-consistent, **exit 0 with a green summary line against 152 real tags.**
+
+This is canon's *"an operation that succeeds and does not land"* — the
+`chmod +x` / `.replace()` class — in a variable name. The non-vacuity arm
+(*"a 12-deploy fixture is SEEN as 12 deploys, not collapsed"*) exists because
+it caught this, and **nothing else in the file would have**: a script that keeps
+everything satisfies every "is X kept?" assertion there is.
+
+**2 · TAB IS IFS WHITESPACE, SO `IFS=$'\t' read` COLLAPSES EMPTY FIELDS.** A
+`docker images` row with a blank field shifted every later field left, the
+deploy suffix read back empty, and the tag **fell out of BOTH buckets** — while
+the per-tag reconciliation still added up, because an unclassified row counts as
+"not deleted". Safe, and invisible. Fixed by splitting fields by hand and by an
+internal separator of `\x1f`, plus a **GROUP-level** reconciliation that exits
+`2` when deploys-in ≠ keep + delete.
+
+⚠️ **AND THE MUTATION PROOF SHOWED THE GATE COULD NOT SEE THE SEPARATOR HALF.**
+Reverting `SEP` from `\x1f` to a tab left all 35 arms GREEN — the manual split
+covers a blank *id* on its own; it is a blank *CreatedAt* that reaches the
+grouping rows. A 36th arm was added for exactly that, and the mutation then
+reddened **one** arm. *A fix whose mutation changes nothing is a fix nothing is
+watching.*
+
+#### MUTATION-PROVED TEN WAYS, EACH LANDING ON THE RIGHT ARMS
+
+Backed up to scratch first and restored from the copy — never `git checkout`,
+which on an uncommitted file deletes the work. Restore verified **byte-identical**
+(`diff -q`), and every mutation asserted APPLIED (`grep -c MUTANT`) before its
+result was read.
+
+| # | mutation | arms red |
+|---|---|---|
+| M2 | drop the 14-day arm | 4 |
+| M3 | drop the 10-deploy arm | 7 |
+| M4 | dry run deletes anyway | 1 |
+| M5a | keep-list prints a count, not names | 7 |
+| M5b | delete banner printed before the keep-list | 1 |
+| M6 | positional date extraction (the first-draft defect) | 3 |
+| M7 | separator back to tab | 1 |
+| M8 | **the `GROUPS` special-variable defect, restored** | 3+ |
+| M9 | remove the container-backed hold | 1 |
+| M10 | remove the blind-instrument guard | 2 |
+| M11 | co-tenant repositories no longer excluded | 2 |
+| M12 | 14-day boundary made exclusive | 1 |
+
+**M12 is the partial-fix direction** canon asks for — an off-by-one, not a
+deletion — and exactly one arm sees it.
+
+#### THE DELETE PATH, PROVED AGAINST THROWAWAY TAGS, WITH POST-DESTRUCTION CONTROLS
+
+Two tags minted for the purpose (`docker tag` of an existing image to
+`pre-f23aaaa{1,2}-2020010{1,2}`), an inventory naming them plus ten fabricated
+recent deploys so ranks 1-10 were spent, then:
+
+    dry run    -> "2 tag(s) would be removed"      throwaway tags still 2
+    --delete   -> "deleted 2, failed 0, held 0"    throwaway tags now 0
+
+**What must SURVIVE was asserted, not only what must be gone:** the real
+rollback tags read **152 before and 152 after**, and the source image
+(`meddoc-pro-gotenberg:pre-r4-20260803`, id `2d05d22572ba`, whose id the
+throwaways shared) is still tagged — so `rmi <name>` untagged rather than
+removing layers, which is the intended behaviour on a shared id.
+
+#### WHAT THE REAL HOST SAYS TODAY — REPORTED, NOT EXECUTED
+
+    152 dated tags = 133 kept/held + 19 deletable
+    KEEP 53 of 63 deploys   (ranks 1-10 "recent-10 + <=14d", 11-53 "<=14d")
+
+⚠️ **NO REAL TAG WAS DELETED.** #137 authorises the keep set; it does not order
+a sweep, F23 says *"this item ADDS a capability; it does not close an
+exposure"*, and *"nothing is urgent"*. Running the real prune is a separate,
+deliberate act.
+
+⚠️ **AND THE REAL INVENTORY ALONE CANNOT PROVE THE COUNT ARM.** Deploys here are
+dense enough that all 53 survivors are inside 14 days, so the last-10 arm is
+fully subsumed and contributes nothing to today's answer. That is precisely why
+the two arms are proved separately, on synthetic inventories where each one
+alone decides.
+
+#### FIVE GUARDS BEYOND WHAT THE RULING ASKED FOR, AND WHY EACH IS THERE
+
+- **Scoped to `meddoc-pro-*`.** Co-tenants share this host and are untouchable;
+  another project's `pre-*` tag is none of our business. Counted and named, never
+  considered.
+- **A container-backed image is HELD.** Real and non-hypothetical: gotenberg is
+  never rebuilt, so **every** deploy re-tags the identical image, and five
+  out-of-keep-set gotenberg tags point at the image the running container uses.
+- **A blank image id cannot hold the whole list.** `grep -qF -- ""` matches every
+  line; without the emptiness guard one malformed row would mark everything
+  container-backed and report a green zero.
+- **Zero images of ANY kind is `2` = CANNOT TELL**, not a clean zero — a blind
+  `docker images` and a host with no rollback tags produce the same empty output.
+  Its discriminating control is the arm where images exist and none is a rollback
+  tag: that is a real zero and exits `0`.
+- **The partition reconciles by COUNTING each bucket**, not by subtracting one
+  from the other. A derived reconciliation cannot detect the case it exists for.
+
+#### THE OVERRIDES ARE FLAGS AS WELL AS ENV VARS, AND THAT IS THE LOAD-BEARING PART
+
+`--inventory <file>`, `--now YYYYMMDD`, `--in-use <file>`, each printing a loud
+banner. They began as env vars only, and **the unattended loop cannot set an
+environment variable on a command** — `VAR=1 cmd` is not a granted form. A hook
+the only actor who runs this script cannot reach is indistinguishable from one
+that does not exist; the delete-path proof above was impossible until the flags
+existed. Canon's *"an entry that names an instrument verifies that instrument's
+grant"*, arriving one layer in: **an instrument's own test hooks have to be
+reachable by the hand that holds it.**
+
+#### HONEST LIMITS
+
+- **The gate's stub is not docker.** It proves which commands the script ISSUES,
+  not what a daemon does with them. The daemon half is the throwaway-tag proof
+  above, run by hand; a daemon-mutating arm has no place in CI on a shared runner.
+- **`docker rmi` is DENIED to the loop and this script is GRANTED**, so the file
+  is a hole in its own deny by construction — the same shape `merge-pr.sh`
+  carries against `gh pr merge`. Deliberate and conservative.
+- **The gate asserts the grant as SOURCE TEXT only.** Whether the permission
+  layer honours it is not a question a test in this repo can answer.
+- **No deploy, no §2.5.** Nothing in `scripts/ops/` reaches the runtime; no
+  image, migration, flag or clinical behaviour changes.
+
+**Ledger measurement, controlled rather than computed:** `origin/main`
+**16 failed files / 334 passed / 2 skipped (352)**, **1 failed test / 4416
+passed**; this branch **16 / 335 / 2 (353)**, **1 / 4452**. **+1 file, +36 tests,
+identical failure counts.** All 17 failures are the pre-existing
+`react/jsx-dev-runtime` worktree-alias property canon already records — and the
+refinement worth adding is that it presents as **16 files AND 1 test**, the
+latter being `gate-devstates.test.ts` importing a `.tsx` from a `.ts` test.
 
 ### 🔴 F5-i — MULTI-SHAPE CERTIFICATION PROOF — **baseline census, measured 2026-08-21**
 
