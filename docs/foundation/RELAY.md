@@ -23196,3 +23196,69 @@ things is the shape the ledger exists to prevent. **Carried to the war room.**
   refusal today, and a real doctor's visit is never a smoke target.
 - **The QA stack could not have proven it either** — its app/worker images are
   from **2026-08-18** and predate F5-d/e/f/h. Named, not worked around.
+
+### ⚠️ ADDENDUM — F5-i(c): THE PASS REFUTED THIS ITEM'S OWN HEADLINE CLAIM
+
+Everything above was written before the clinical lens reported. It did not find
+a rough edge; **it refuted the claim the item is named after** — *"no input can
+now cause a venous narrative to be attested against a non-venous form."*
+
+`VENOUS_TOKEN` listed `femoral`, `popliteal`, `tibial`. **Those three name a
+VEIN AND AN ARTERY at the same level**, so an ordinary lower-extremity
+**ARTERIAL** duplex satisfied the venous guard. Reproduced against the real
+function before changing it:
+
+    Right Superficial Femoral Artery: diameter 3.23 millimeters,
+    reflux time 0.637 seconds; incompetent.
+
+⚠️ **ARTERIES HAVE NO VALVES.** No arterial "reflux time" exists, "incompetent"
+is not a verdict for an artery, the study measures velocity in cm/s not a
+diameter in mm, and the closing line asserts a **deep venous** negative about a
+form with no venous rows. The guard's own comment — *"a venous duplex names its
+saphenous/femoral/popliteal segments"* — **is** the bug: an arterial duplex
+names them too. *The evidence was in the artifact I authored.*
+
+Fixed as three predicates (`ARTERIAL_TOKEN` refuses outright · unambiguous
+venous tokens qualify · the three shared tokens qualify **only** beside an
+explicit `vein|veins|venous`). ⚠️ **It cannot touch the one certified twin** —
+its rows are GSV/SSV/AAGSV/PAGSV, all unambiguous — and it is **not** a blanket
+deletion of the three tokens, because a femoral VEIN study is one this
+generator should speak to. Pinned in both directions.
+
+| mutation | result |
+|---|---|
+| **M4** complete inverse (the old list) | **3 red** |
+| **M5** PARTIAL — arterial guard lands, ambiguous requirement does not | **1 red** |
+
+⚠️ **M5 IS THE ONE TO READ. The arterial-duplex arm PASSES under it**, because
+`Artery` is caught by the arterial guard alone. Only the *"AMBIGUOUS tokens
+alone are not venous evidence"* arm sees it — **without that arm the
+half-landed fix ships silently.**
+
+**Also closed:** `scripts/prod-smoke/twin-ga-proof.ts` hand-asserted
+`{ok:true, text: ENCOUNTER}`, bypassing every F5-i refusal — the one remaining
+repo path feeding a venous dictation into a certification proof, **and it runs
+against production**. The pin is kept and now cross-checked against the real
+derivation. Found by sweeping the repo rather than the two callers.
+
+### ⚠️ AND I DESTROYED THE ARTERIAL FIX WHILE PROVING IT — CANON'S OWN MECHANISM
+
+Restoring after M5 with `git checkout -- verification-encounter.ts` reverted the
+file to HEAD, and **the arterial fix was UNCOMMITTED**, so it went with the
+mutation. The earlier restores in this same session were safe only because the
+fix happened to be committed at the time — *"restore from git" and "restore from
+backup" are not the same operation*, and the difference is invisible until the
+one time it is not.
+
+**The tell was a test count, exactly as canon predicts:** the three arterial
+arms went red on the next run. **The gate written minutes earlier is what caught
+it** — the strongest available argument for writing the arm before the fix.
+
+### RESIDUALS — open, named, not fixed here
+
+| # | residual | disposition |
+|---|---|---|
+| R1 | **`04b-anchor-verify.ts:329` carries the identical ambiguous token list** and the same artery/vein ambiguity | NOT swept — it is a different subsystem (anchor verification, not encounter generation) and changing it is out of F5-i's scope. **Filed. Retires when that file's own guard is re-read against the arterial case.** |
+| R2 | **laterality is prefixed, never read** — `build()` emits `Right `/`Left ` onto labels that may already carry a side, and both callers drop the `rowLaterality` they have | Pre-existing to F5-c, not introduced here. Fails CLOSED (`rowLateralityVerdict` refuses the cell), so the cost is coverage, not a wrong value. |
+| R3 | **the venous-evidence scan reads MEASUREMENT labels only** | Deliberate, and stated in the code: a wider scan would refuse a legitimate venous study carrying "Arterial history: none". |
+| R4 | **`seed-certified-twin.ts` also hand-asserts `ok:true`** | Left as is — a determinism-pinned QA seeder against the known venous fixture. |
