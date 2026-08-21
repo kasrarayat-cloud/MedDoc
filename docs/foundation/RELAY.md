@@ -22532,3 +22532,117 @@ only assert that reflux now fills.
 
 **Retires when the reflux column fills from a fact whose quote does not name the
 vessel, with vessel-identity pinned in both directions.**
+
+## 🟡 F5-e — BUILT AND GATED — 2026-08-21, run `20260820-174139-b1` session 03
+
+**The claim above is discharged: (B) taken, (A) never touched.** The retirement
+condition is met — the reflux column fills from a fact whose quote names no
+vessel, and vessel identity is pinned in both directions.
+
+### THE MECHANISM, AND IT IS A DROPPED FIELD RATHER THAN A STRICT GATE
+
+`EncounterFact` had no `segment`. L3 extracts one per measurement (REQUIRED,
+`min(1)`) and emits **one entry per number**, so both halves of a dictated line
+name the vessel — but `add()` spent `options.segment` on the **factId hash** and
+never emitted it. `segmentCongruent` therefore had to recover anatomy from the
+QUOTE, which carries it for the diameter half and never for the reflux half.
+
+**So the fix restores information; it does not relax a check.** The schema gains
+`segment` (nullable, defaulted, so every existing fact still parses under
+`.strict()`), `add()` emits it, and the predicate reads it.
+
+⚠️ **FACT IDs DO NOT CHURN, AND THAT IS MEASURED RATHER THAN ARGUED.** The two
+literals in the gate were computed on a **detached worktree at `origin/main`**
+and pasted in. Pinning what the post-fix code emits would assert only that the
+code agrees with itself.
+
+### ⚠️ A SECOND, PRE-EXISTING DEFECT IN THE SAME PREDICATE — FIXED, BECAUSE THE FIRST FIX WIDENS IT
+
+`segmentCongruent` tested `hay.includes(t)`, and **`'aagsv'` contains `'gsv'`**.
+A **GSV Below Knee** row was congruent with an **AAGSV at the Proximal Thigh**
+fact — different vessel, different level, sharing only a suffix. Only numeric
+equality and laterality stood in the way, and neither is a vessel check.
+
+Leaving it while adding `segment` would have extended the hole to the reflux
+column. Now whole-token — the strictly stricter direction.
+
+### 🔴 AND THE ADVERSARIAL PASS FOUND THAT THE HARDENING BROKE SOMETHING ELSE
+
+**On this branch's own diff, under the false-REJECTION lens** — the half
+everybody skips, because the instinct is to ask whether a fix admits too much.
+
+Whole-token matching meant a **`Perforator`** row stopped matching a
+**`perforators`** fact. Not invented vocabulary: `specialty-guidance.ts:119` and
+`ultrasound-report-template.ts:150` both steer the model to the PLURAL.
+
+**Measured before deciding: 0 of the certified template's 80 labels mention a
+perforator, so it is UNREACHABLE there today. Fixed anyway** — reachability is a
+fact about one template, not a property of the predicate, and the failure mode is
+the identical silent blank column, which `needsReviewCount = 0` never flags.
+Stemming a trailing plural keeps `gsv` and `aagsv` distinct, and the two
+properties are pinned **as a pair**.
+
+### COVERAGE, COUNTED — canon's *"which production rows does this proof cover?"*
+
+| quantity, on the CERTIFIED template | value |
+|---|---|
+| fields | **80** (52 `narrative_text` + 28 `single_select`) |
+| **reflux-labelled cells** | **26**, every one `narrative_text` |
+| `rowPrototype` cells | **0** |
+
+So all 26 reflux cells are writable by the bridge and refused by neither of its
+two guards. Previously **all 26 refused** `no_supporting_fact`.
+
+### PROOFS
+
+| # | mutation | result |
+|---|---|---|
+| M0 | complete inverse — detached `origin/main` | **7 of 10** new arms RED |
+| M1 | half-landed: schema + emit, addressing NOT reading | **5** RED |
+| M2 | whole-token hardening reverted only | exactly **1** RED — the substring arm |
+| M3 | emit reverted only (schema + read intact) | **5** RED |
+| M4 | stem removed only | exactly **1** RED — the plural arm, nesting arm still green |
+
+Every mutation asserted APPLIED by marker count before its result was believed,
+and restored from **scratch copies, never from git**.
+
+⚠️ **THE GATE CAUGHT ITS AUTHOR TWICE.** On first run the pre-existing AAGSV arm
+went red — it asserted vessel identity through the QUOTE, which a reflux fact
+does not carry. Then the adversarial pass caught the plural regression. *A guard
+that reddens against its author is discriminating rather than agreeing.*
+
+⚠️ **AND ONE ARM PASSES PRE-FIX FOR THE WRONG REASON, SAID OUT LOUD:** *"a GSV
+row does NOT bind an AAGSV fact"* is green on `origin/main` because pre-fix the
+predicate refuses **everything**. It is its paired happy-path arm that goes red,
+and the pair is what discriminates.
+
+### RISKS CHECKED, NOT ASSUMED
+
+- **The certified twin SURVIVES the deploy.** Runtime gates read the stored
+  `certificationStatus` column (`template-twin-fill-step.ts:57`,
+  `fill-engine.ts:351`); `latestTestOutputSha256` is a record, not a gate. The
+  determinism pin is content-addressed on `(encounterSha256, templateSha256)`,
+  and `encounterSha256` hashes the encounter **TEXT**, not the facts array.
+- **No bridge/validator divergence** — F5-d's failure mode, which kills the
+  WHOLE native fill rather than one column. Reflux writes through
+  `deriveFieldValueFromFact`, the same canonical derivation the validator
+  re-runs; the metric never enters it.
+- **The symptom was sitting in a diagnostic.** `twin-fill-probe.ts:96` printed
+  `seg=""` for every fact via a cast `(m as { segment?: string })`, because the
+  field did not exist. Cast removed.
+
+### ⚠️ HONEST LIMITS
+
+1. **The adversarial pass was SELF-RUN, not spawned.** Canon's argument for it is
+   that it *"does not share the author's context"* — a self-run pass does. It
+   found a real defect anyway, but this is the weaker form and is named as a
+   residual rather than counted as a discharged gate.
+2. **No end-to-end proof on a real encounter.** The arms exercise the projection
+   and the matcher; the full L3 → bridge → validator → render round trip on the
+   customer's form is unexercised here. **The 26 cells are a CEILING, not a
+   prediction** — how many actually fill depends on facts present with matching
+   numbers and laterality.
+3. **`segmentCongruent` uses `some`, not `every`**, so "GSV at the Knee" and
+   "GSV at the SFJ" are mutually congruent on the shared `gsv` token. Pre-existing,
+   out of F5-e's scope, and **filed rather than silently changed** — tightening it
+   could refuse legitimate fills where a row label carries words the segment lacks.
