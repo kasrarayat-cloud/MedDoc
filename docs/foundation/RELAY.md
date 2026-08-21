@@ -101,6 +101,13 @@ content read):
 **FALSIFIABILITY, ratified verbatim:** *both formats or it is recorded as one*;
 *"yours specifically, not merely not-generic."*
 
+⚠️ **DISCLOSURE, SO ONE RE-DOWNLOAD IS NOT MISREAD: the owner's ORIGINAL
+(pre-2026-08-21) signed visit now serves STYLED, PERMANENTLY AND BY DESIGN.**
+That is ruling (a), accepted — `AGENTS.md` "A PRE-DEPLOY SIGNED VISIT SERVES
+STYLED FOREVER". It is **expected**, it is **not F5-f failing**, and it says
+nothing about this test. The acceptance is judged on the **FRESH** visit from
+step 1, which carries a pointer and must render native in **both** formats.
+
 **A WRONG OUTCOME ROUTES WITH THE SAME WEIGHT** — it is F5-f's behavioural
 evidence and the next fix's spec, not a failure to hide.
 
