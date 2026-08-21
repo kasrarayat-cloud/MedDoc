@@ -387,6 +387,29 @@ export const EncounterFactSchema = z
     audioTimestampSeconds: z.number().nonnegative().nullable(),
     evidenceAnchorIds: z.array(z.string().min(1).max(120)).min(1),
     evidenceQuote: z.string().min(1),
+    /**
+     * ANATOMICAL SEGMENT AS SPOKEN — "GSV at the SFJ". Structured, because the
+     * evidence quote is not a reliable carrier of it.
+     *
+     * ⚠️ F5-e. L3 extracts this per measurement (`03-extract-entities.ts:254`,
+     * REQUIRED `min(1)`) and emits ONE ENTRY PER NUMBER, so a line dictating a
+     * diameter and a reflux time yields two entries that both name the vessel.
+     * The projection then dropped it: `segment` reached `add()` and was spent
+     * only on the fact-ID hash. Downstream, `segmentCongruent` had to recover
+     * anatomy from the QUOTE — which works for the diameter half ("Right GSV at
+     * the SFJ: diameter 3.10 millimeters") and never for the reflux half
+     * ("reflux time 0.110 seconds"). Measured on production's own manifest:
+     * anatomy present in 20 of 20 diameter quotes and 0 of 20 reflux quotes, so
+     * every reflux cell refused `no_supporting_fact` and rendered BLANK.
+     *
+     * Nullable, defaulted, and NOT `min(1)`: most facts are not measurements and
+     * have no segment, and a default keeps every previously-constructed fact
+     * parseable under `.strict()`.
+     *
+     * ⚠️ Adding this changes NO factId — `sourceIdentity` already hashed the
+     * segment before it was ever emitted.
+     */
+    segment: z.string().max(120).nullable().default(null),
     quality: z
       .object({
         asr: z.enum(['high', 'review', 'unknown']),

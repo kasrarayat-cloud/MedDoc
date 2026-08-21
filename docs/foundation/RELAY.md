@@ -22258,3 +22258,391 @@ are emitted by `matchMeasurementFact`, which this change does not touch and
 which runs **before** the derivation is consulted — so neither count can move,
 and the gate asserts that rather than arguing it. The real re-measurement is a
 property of the backfill run and belongs to (c).
+
+### 🟩 F5-d(b) IS LIVE, AND PRODUCTION HAS ITS FIRST CERTIFIED TWIN — **2026-08-20T23:41:26Z, session 02**
+
+**Acceptance shape (c) is MET. The owner's template CERTIFIED, and it was
+OBSERVED rather than assumed.**
+
+| | |
+|---|---|
+| deployed commit | **`0aa9f625cffae9857e098f8c3735a867ba47a7d1`** |
+| replaced | `89429c1b` (2026-08-20T11:44:26Z), read from RELAY's deploy row and the running image build times |
+| declaration | `docs/foundation/deploys/20260820-cba367fc.md` — named after PR #763's merge commit, **committed before the act**, resolved by ancestry (F10) |
+| judgment | **14 of 14 declared rows matched** |
+| rollback | `pre-0aa9f625-20260820` on app / worker / gotenberg |
+
+**Citation — 4 of 4 on the F5-d(b) merge commit
+`cba367fccbad458585867f8463dedc06e3c6ea8a`:**
+   · `CI` 32423128868 a1
+   · `e2e` 32423128864 a1
+   · `a11y-ci` 32423128942 a1
+   · `secrets-scan` 32423128887 a1
+
+**Citation — 4 of 4 on the DEPLOYED commit
+`0aa9f625cffae9857e098f8c3735a867ba47a7d1`:**
+   · `CI` 32426631171 a1
+   · `e2e` 32426631163 a1
+   · `a11y-ci` 32426631168 a1
+   · `secrets-scan` 32426631174 a1
+
+**Every line is `a1`** — nothing was re-run, so there is nothing to explain.
+Both blocks were produced by `scripts/check-citation.sh` and pasted, not typed.
+
+#### THE DEPLOY JUDGMENT — 14 of 14
+
+**Changed, as declared:** both image digests
+(`990efdb5…`→`f6cbe192…` app, `51439ac7…`→`34251ecb…` worker), the deployed
+commit, and the rollback tags on all three images. Nine containers, all healthy.
+
+**Unchanged, as declared — and these are the rows that mattered:** compiled
+versions **1**, **CERTIFIED compiled versions 0**, fill manifests **0**, mappings
+**80 / 80 CERTIFIED**, visits **48** / signed **30** / patients **35**, active
+note templates **7**, migrations **104 of 104**, co-tenants at their expected
+codes with `pro` still **410**.
+
+⚠️ **THE LOAD-BEARING ABSENCE ROW HELD.** The declaration named
+`CERTIFIED = 0` *at deploy time* because this fix REMOVES a certification
+blocker while auto-certification is LIVE — so if certification could happen as a
+side effect of restarting a container, this was the deploy that would have shown
+it. It did not. Certification stayed a **deliberate act**, and the deploy was
+judged BEFORE the backfill was run.
+
+#### ⚠️ STRUCTURAL VERIFICATION — AND MY FIRST PROBE WAS THE PROSE TRAP, ON MYSELF
+
+The fix was verified **in the running worker image**, not in the repo:
+
+    field-value-derivation.ts                     present (9405 bytes)
+    deriveFieldValueFromFact in bridge-fill.ts    2
+    WRITABLE_KINDS / row_prototype guards         3
+    value: derived,                               1   (line 334)
+    ^    value,$  — the OLD shape                 0
+
+⚠️ **MY FIRST "MUST BE ABSENT" PROBE GREPPED `no unit, no reformat` AND
+RETURNED 1.** That is the old code's comment — **which I had quoted inside the
+NEW comment explaining what changed.** The probe matched my own prose about the
+fix and read as *"the old code is still shipped"*.
+
+> **This is `AGENTS.md`'s substring/prose trap, self-applied, in the
+> verification of my own deploy** — *"a file's comments are the one place where
+> the words you are grepping for are guaranteed to appear"*. Re-probed on the
+> CODE token (`value: derived,` present, `^    value,$` absent) and it answered
+> cleanly. **A verification that greps a comment has verified a comment.**
+
+#### 🎉 (c) — THE TEMPLATE CERTIFIED, AND EVERY PREDICTION HELD
+
+The backfill was run as the ruled shape prescribes — **dry run first**, then
+`--commit`, both through the SHIPPED `scripts/backfill-auto-certify.ts` (which
+ENQUEUES; the worker job remains the one certification path).
+
+    dry run  → eligible twins: 1
+               cmsxip5f9000901nadsggo2l1  NEEDS_CONFIRMATION
+               "Venous Duplex Lower Extremities US Report"
+    --commit → ENQUEUED 1 of 1
+    worker   → [auto-certify] template=cmsxip5f9000901nadsggo2l1
+               status=certified confirmed=80
+
+**Verified in the DATABASE, not from the log line:**
+
+| quantity | before | after |
+|---|---|---|
+| compiled version `617d6de9…` | `NEEDS_CONFIRMATION` | ✅ **`CERTIFIED`** |
+| CERTIFIED compiled versions | 0 | ✅ **1** |
+| mappings | 80 / 80 CERTIFIED | **80 / 80 CERTIFIED** — unchanged |
+| fill manifests | 0 | 0 — a certification is not a fill |
+| visits / signed / patients | 48 / 30 / 35 | **48 / 30 / 35** — untouched |
+
+**And the audit rows were READ BACK rather than assumed** (a fire-and-forget
+writer is proved only by querying it), all at `23:41:26Z`, all `success = t`:
+`TEMPLATE_TWIN_SYNTHETIC_TESTED` · `TEMPLATE_TWIN_CERTIFIED` ·
+`TEMPLATE_TWIN_ACTIVATED` · two `TEMPLATE_TWIN_MAPPING_UPDATED`.
+
+⚠️ **ZERO `ASSERTION_NOT_SUPPORTED`, ZERO `BLOCKED compiled` — against a
+POSITIVE CONTROL of 44 log lines the same probe DID find.** The fourth
+candidate did not produce a fourth verbatim refusal; it produced a certificate.
+
+#### ⚠️ THE BLANK CENSUS DID NOT MOVE, WHICH IS THE PREDICTION WORTH KEEPING
+
+    32 reason=no_supporting_fact
+    12 reason=laterality_mismatch
+    -- 44 blank, and ZERO of the new reason value_not_derivable_from_fact
+
+**Identical to the INBOX's `44 blank — 32 / 12`, to the row.** The gate asserted
+this could not move — both reasons are emitted by `matchMeasurementFact`, which
+this change does not touch and which runs BEFORE the derivation is consulted —
+and the real production run confirmed it. *A number that moves without an
+explanation is the finding; this one was predicted, and it did not move.*
+
+⚠️ **AND THE REFLUX COLUMN IS STILL STRUCTURALLY UNFILLABLE.** Session 01's
+finding (1) stands, unaddressed and now measurable on a CERTIFIED template: the
+12 `laterality_mismatch` and much of the 32 `no_supporting_fact` are the reflux
+cells, whose facts carry no anatomy token for `segmentCongruent` to align on.
+**The template certifying does NOT mean the table fills.** That is the next
+thing worth building, and it is exactly the trap session 01 warned about — *"the
+obvious success criterion can be met with half the table still empty"*.
+
+#### ☎️ THE OWNER PING IS NOW EARNED — OBSERVED, NOT ASSUMED
+
+Both standing pings are discharged by this: **the West Medical template is
+CERTIFIED**, production has its first certified twin, and the doctor was never
+asked to confirm anything — the machine did it, as ruling #127 said it would.
+
+**What to look at, and what NOT to expect:** the twin will now attempt a native
+fill on the next visit bound to that template. ⚠️ **Expect the vessel table to
+be substantially blank** — 44 of the measurement cells cannot fill for the
+reasons above, and that is a known, filed, unfixed limitation rather than a
+regression. The certification is real; the table is not yet.
+
+### 🟩 AND THE TWIN FILLED A REAL VISIT — **2026-08-21T00:18:46Z, production's FIRST fill manifest**
+
+**Observed at close-out, thirty-seven minutes after certification, and not
+caused by this session.** A doctor created and signed a visit; the certified
+twin filled it natively. This is the terminal artifact the programme has been
+chasing, and production had never produced one.
+
+**Read STRUCTURALLY — status columns only. No note body, no patient data, and
+the visit was not opened, exported or mutated.** It is a real doctor's record;
+the standing law applies and nothing here is a smoke target.
+
+| column | value |
+|---|---|
+| `status` | **`VERIFIED`** |
+| `roundTripVerified` | **`true`** |
+| `filledCount` | **25** |
+| `needsReviewCount` | **0** |
+| `notMentionedCount` | **55** |
+| `conflictCount` | **0** |
+| `criticalUnresolvedCount` | **0** |
+| output | a real `.docx`, **49,418 bytes** |
+| `rendererVersion` | `template-docx-renderer/1.0.0` |
+
+**25 + 55 = 80** — reconciles exactly to the compiled field count, so nothing
+fell outside a named bucket.
+
+**THE CHAIN IS CLOSED STRUCTURALLY, NOT INFERRED.** The manifest's
+`compiledVersionId` is the SAME compiled version this session certified, and
+that version reads `CERTIFIED` — asserted in one query rather than assumed from
+timing:
+
+    m."compiledVersionId" = c.id  →  t
+    c."certificationStatus"       →  CERTIFIED
+
+So: **F5-d(b) → deploy → certification → a real visit filled natively and
+round-trip verified.** Every link measured.
+
+#### ⚠️ AND 55 OF 80 FIELDS ARE BLANK, WHICH IS THE HALF NOT TO CELEBRATE
+
+`notMentionedCount = 55`. **The document that reached that doctor is
+substantially empty**, and this is the limitation session 01 filed and this
+session's owner ping warned about, now confirmed on a real record rather than
+predicted: certification does NOT mean the table fills. The 44 measurement
+cells refused for `no_supporting_fact` (32) and `laterality_mismatch` (12) are
+the bulk of it, and the reflux column is **structurally** unfillable —
+`segmentCongruent` needs an anatomy token that a reflux fact's concept, value
+and quote do not carry.
+
+> **A certificate over a form that renders mostly blank is a real result and a
+> partial one. The gate did its job; the FILL is the next problem, and it is
+> now the most valuable open item in this arc.**
+
+⚠️ **`needsReviewCount` and `criticalUnresolvedCount` are both 0**, so nothing
+is flagged to the doctor as needing attention — which is correct for cells that
+were never claimed, and is exactly why the blankness has to be said out loud
+rather than left for someone to notice in a signed document.
+
+## 🔵 F5-e — CLAIMED: fix direction **(B)**, at the root — 2026-08-21, run `20260820-174139-b1` session 03
+
+**This row is the CLAIM, posted before building**, per the INBOX entry
+`2026-08-20T23:00:00Z` (*"claim a ruled fix direction before building it"*) —
+whose own retirement condition is *"a claim line appears on a ruled fix
+direction and the second actor extends it."* This is that line.
+
+**Taking (B), declining (A).** The INBOX states the choice: (A) generator
+phrasing is cheap and **fixes only the synthetic proof**; (B) is *"`place()`
+supplies the row's anatomy as addressing context, **or L3 attaches the segment
+to every measurement fact it splits**"* and is *"the one that helps a real
+visit."* (A) alone would buy a certificate attesting a fill path a real
+encounter cannot exercise — so it is not taken, even partially.
+
+### THE REPRODUCTION IS ALREADY GREEN ON `main`, AND IT IS SESSION 02's
+
+No new reproduction was needed: `gate-derived-encounter-actually-fills.test.ts`
+already pins the gap through the **real matcher** with a positive control, and
+its own text invites the inversion (*"a reflux cell FILLED — F5-e may have
+landed; invert this arm deliberately"*). Re-run here: **8 passed**.
+
+### ⚠️ AND A MECHANISM I READ CONFIDENTLY AND REFUTED MYSELF, BEFORE WRITING CODE
+
+**Recorded because the wrong version was more attractive than the right one.**
+
+`encounter-facts/index.ts:610` passes `segment: m.segment` into `add()`, and two
+comments in that same file say the segment travels with the fact:
+
+- `:130-132` — *"Anatomical segment, carried as DATA so downstream addressing
+  never has to parse it back out of a concept string. **Folded into the concept
+  for matching**"*
+- `:585-587` — *"Concept is the measurement KIND plus the segment as an
+  attribute-style suffix"*
+
+Read together, those say F5-e is a one-line fix: the field exists, the addressing
+predicate simply doesn't read it. **I believed that for about five minutes.**
+
+**It is false, and `grep segment ir.ts` returning NOTHING is what killed it.**
+`EncounterFactSchema` (`ir.ts:360-397`) is `.strict()` and has **no `segment`
+field**. `add()` (`:359-387`) consumes `options.segment` in exactly one place —
+`sourceIdentity`, the fact-ID hash — and never emits it. The concept is a bare
+`measurement.${m.metric}` with **no segment suffix**. So:
+
+> **Both comments assert an intended state in the present tense, and the code
+> does neither thing.** That is `DEPLOYMENT_RUNBOOK §5.6`'s shape living inside
+> a source file — and it is the *reason* F5-e exists rather than an aside: the
+> design intended the segment to travel, and the projection drops it.
+
+⚠️ **The tell was a grep returning nothing where prose promised something.** Had
+I trusted the comments I would have shipped a change to `segmentCongruent`'s
+haystack that reads a field which does not exist — green on a fixture, inert in
+production. **This is why the filing said "reproduce it before fixing it".**
+
+### SO (B) IS SMALLER THAN "INVASIVE" SUGGESTED — L3 ALREADY DOES ITS HALF
+
+`03-extract-entities.ts:254` types `segment: z.string().min(1).max(120)` —
+**REQUIRED**, and `:460-461` instructs *"One entry PER NUMBER: a segment stated
+with both a diameter and a reflux time yields TWO entries."* So a real
+dictation's reflux measurement already carries its vessel; the information is
+lost **in the projection**, not at extraction.
+
+**The planned change, and it RESTORES a dropped field rather than weakening a
+gate:**
+
+1. `EncounterFact` gains `segment`, `.nullable().default(null)` so every
+   existing fact and fixture still parses under `.strict()`.
+2. `add()` emits `options.segment ?? null`.
+3. `segmentCongruent` reads it alongside concept/value/quote.
+4. The two lying comments are corrected to describe what the code does.
+
+⚠️ **Fact IDs do NOT churn** — `sourceIdentity` already hashes the segment, so
+identity is unchanged by construction.
+
+⚠️ **STATED HONESTLY: step 3 WIDENS a haystack, so it can only produce MORE
+matches, never fewer.** It is defensible because `segment` is the authoritative
+answer to the question the predicate is asking, where the quote is a proxy — but
+"more matches" is the direction that fills a WRONG row, so the gate must pin the
+vessel both ways (`GSV` must not bind an `AAGSV` fact, and vice versa) and not
+only assert that reflux now fills.
+
+**Retires when the reflux column fills from a fact whose quote does not name the
+vessel, with vessel-identity pinned in both directions.**
+
+## 🟡 F5-e — BUILT AND GATED — 2026-08-21, run `20260820-174139-b1` session 03
+
+**The claim above is discharged: (B) taken, (A) never touched.** The retirement
+condition is met — the reflux column fills from a fact whose quote names no
+vessel, and vessel identity is pinned in both directions.
+
+### THE MECHANISM, AND IT IS A DROPPED FIELD RATHER THAN A STRICT GATE
+
+`EncounterFact` had no `segment`. L3 extracts one per measurement (REQUIRED,
+`min(1)`) and emits **one entry per number**, so both halves of a dictated line
+name the vessel — but `add()` spent `options.segment` on the **factId hash** and
+never emitted it. `segmentCongruent` therefore had to recover anatomy from the
+QUOTE, which carries it for the diameter half and never for the reflux half.
+
+**So the fix restores information; it does not relax a check.** The schema gains
+`segment` (nullable, defaulted, so every existing fact still parses under
+`.strict()`), `add()` emits it, and the predicate reads it.
+
+⚠️ **FACT IDs DO NOT CHURN, AND THAT IS MEASURED RATHER THAN ARGUED.** The two
+literals in the gate were computed on a **detached worktree at `origin/main`**
+and pasted in. Pinning what the post-fix code emits would assert only that the
+code agrees with itself.
+
+### ⚠️ A SECOND, PRE-EXISTING DEFECT IN THE SAME PREDICATE — FIXED, BECAUSE THE FIRST FIX WIDENS IT
+
+`segmentCongruent` tested `hay.includes(t)`, and **`'aagsv'` contains `'gsv'`**.
+A **GSV Below Knee** row was congruent with an **AAGSV at the Proximal Thigh**
+fact — different vessel, different level, sharing only a suffix. Only numeric
+equality and laterality stood in the way, and neither is a vessel check.
+
+Leaving it while adding `segment` would have extended the hole to the reflux
+column. Now whole-token — the strictly stricter direction.
+
+### 🔴 AND THE ADVERSARIAL PASS FOUND THAT THE HARDENING BROKE SOMETHING ELSE
+
+**On this branch's own diff, under the false-REJECTION lens** — the half
+everybody skips, because the instinct is to ask whether a fix admits too much.
+
+Whole-token matching meant a **`Perforator`** row stopped matching a
+**`perforators`** fact. Not invented vocabulary: `specialty-guidance.ts:119` and
+`ultrasound-report-template.ts:150` both steer the model to the PLURAL.
+
+**Measured before deciding: 0 of the certified template's 80 labels mention a
+perforator, so it is UNREACHABLE there today. Fixed anyway** — reachability is a
+fact about one template, not a property of the predicate, and the failure mode is
+the identical silent blank column, which `needsReviewCount = 0` never flags.
+Stemming a trailing plural keeps `gsv` and `aagsv` distinct, and the two
+properties are pinned **as a pair**.
+
+### COVERAGE, COUNTED — canon's *"which production rows does this proof cover?"*
+
+| quantity, on the CERTIFIED template | value |
+|---|---|
+| fields | **80** (52 `narrative_text` + 28 `single_select`) |
+| **reflux-labelled cells** | **26**, every one `narrative_text` |
+| `rowPrototype` cells | **0** |
+
+So all 26 reflux cells are writable by the bridge and refused by neither of its
+two guards. Previously **all 26 refused** `no_supporting_fact`.
+
+### PROOFS
+
+| # | mutation | result |
+|---|---|---|
+| M0 | complete inverse — detached `origin/main` | **7 of 10** new arms RED |
+| M1 | half-landed: schema + emit, addressing NOT reading | **5** RED |
+| M2 | whole-token hardening reverted only | exactly **1** RED — the substring arm |
+| M3 | emit reverted only (schema + read intact) | **5** RED |
+| M4 | stem removed only | exactly **1** RED — the plural arm, nesting arm still green |
+
+Every mutation asserted APPLIED by marker count before its result was believed,
+and restored from **scratch copies, never from git**.
+
+⚠️ **THE GATE CAUGHT ITS AUTHOR TWICE.** On first run the pre-existing AAGSV arm
+went red — it asserted vessel identity through the QUOTE, which a reflux fact
+does not carry. Then the adversarial pass caught the plural regression. *A guard
+that reddens against its author is discriminating rather than agreeing.*
+
+⚠️ **AND ONE ARM PASSES PRE-FIX FOR THE WRONG REASON, SAID OUT LOUD:** *"a GSV
+row does NOT bind an AAGSV fact"* is green on `origin/main` because pre-fix the
+predicate refuses **everything**. It is its paired happy-path arm that goes red,
+and the pair is what discriminates.
+
+### RISKS CHECKED, NOT ASSUMED
+
+- **The certified twin SURVIVES the deploy.** Runtime gates read the stored
+  `certificationStatus` column (`template-twin-fill-step.ts:57`,
+  `fill-engine.ts:351`); `latestTestOutputSha256` is a record, not a gate. The
+  determinism pin is content-addressed on `(encounterSha256, templateSha256)`,
+  and `encounterSha256` hashes the encounter **TEXT**, not the facts array.
+- **No bridge/validator divergence** — F5-d's failure mode, which kills the
+  WHOLE native fill rather than one column. Reflux writes through
+  `deriveFieldValueFromFact`, the same canonical derivation the validator
+  re-runs; the metric never enters it.
+- **The symptom was sitting in a diagnostic.** `twin-fill-probe.ts:96` printed
+  `seg=""` for every fact via a cast `(m as { segment?: string })`, because the
+  field did not exist. Cast removed.
+
+### ⚠️ HONEST LIMITS
+
+1. **The adversarial pass was SELF-RUN, not spawned.** Canon's argument for it is
+   that it *"does not share the author's context"* — a self-run pass does. It
+   found a real defect anyway, but this is the weaker form and is named as a
+   residual rather than counted as a discharged gate.
+2. **No end-to-end proof on a real encounter.** The arms exercise the projection
+   and the matcher; the full L3 → bridge → validator → render round trip on the
+   customer's form is unexercised here. **The 26 cells are a CEILING, not a
+   prediction** — how many actually fill depends on facts present with matching
+   numbers and laterality.
+3. **`segmentCongruent` uses `some`, not `every`**, so "GSV at the Knee" and
+   "GSV at the SFJ" are mutually congruent on the shared `gsv` token. Pre-existing,
+   out of F5-e's scope, and **filed rather than silently changed** — tightening it
+   could refuse legitimate fills where a row label carries words the segment lacks.

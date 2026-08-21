@@ -206,6 +206,10 @@ function diameterFact(seed: string, dictated: string): EncounterFact {
     audioTimestampSeconds: null,
     evidenceAnchorIds: [`anchor-${seed}`],
     evidenceQuote: `Right GSV at the SFJ: diameter ${dictated} millimeters`,
+    // F5-e. This repro is about the VALUE's canonical form, not addressing, and
+    // its quote already names the vessel — so `null` keeps it measuring exactly
+    // what it measured before.
+    segment: null,
     quality: { asr: 'high', evidence: 'direct' },
   };
 }

@@ -51,6 +51,12 @@ const fact = (
   num: number,
   laterality: 'right' | 'left',
   quote: string,
+  // ⚠️ F5-e. PRODUCTION ALWAYS SETS THIS. `03-extract-entities.ts:254` types the
+  // segment `z.string().min(1)` — REQUIRED — and instructs one entry per number,
+  // so both halves of a dictated line carry the vessel. Omitting it here (as
+  // this fixture did) modelled an extraction L3 cannot emit, which is the
+  // wrong-universe class one field over from the quote it had already fixed.
+  segment: string | null,
 ): EncounterFact => ({
   factId: `ttfact_${String(seq++).padStart(24, '0')}`,
   sourceType: 'encounter_evidence',
@@ -67,6 +73,7 @@ const fact = (
   audioTimestampSeconds: null,
   evidenceAnchorIds: ['a1'],
   evidenceQuote: quote,
+  segment,
   quality: { asr: 'high', evidence: 'direct' },
 });
 
@@ -93,8 +100,12 @@ function parse(text: string): { cells: Cell[]; facts: EncounterFact[] } {
     //
     // The arm was one layer short of production: the wrong-universe class,
     // inside the gate written to kill it.
-    facts.push(fact('measurement.diameter', Number(m[3]), side, `${side === 'right' ? 'Right' : 'Left'} ${vessel}: diameter ${m[3]} millimeters`));
-    facts.push(fact('measurement.reflux_time', Number(m[4]), side, `reflux time ${m[4]} seconds`));
+    //
+    // ⚠️ AND F5-e FOUND IT WAS STILL ONE FIELD SHORT. The quotes were right and
+    // `segment` was absent, which L3's REQUIRED `min(1)` makes impossible. Both
+    // facts now carry the vessel as structured data, exactly as production does.
+    facts.push(fact('measurement.diameter', Number(m[3]), side, `${side === 'right' ? 'Right' : 'Left'} ${vessel}: diameter ${m[3]} millimeters`, vessel));
+    facts.push(fact('measurement.reflux_time', Number(m[4]), side, `reflux time ${m[4]} seconds`, vessel));
   }
   return { cells, facts };
 }
@@ -123,26 +134,69 @@ describe('the derived encounter ACTUALLY FILLS the owner\'s form', () => {
     expect(filled.length).toBeGreaterThanOrEqual(MIN_CERTIFIED_FILLED_FIELDS);
   });
 
-  it('⚠️ REQUIRED — F5-e: the reflux column is UNFILLABLE, and that is pinned', () => {
-    // ⚠️ THIS ARM ASSERTED THE OPPOSITE UNTIL 2026-08-20, AND PASSED, because it
-    // fed the matcher a quote production never produces.
+  it('⚠️ REQUIRED — F5-e: the reflux column FILLS, on both legs', () => {
+    // ⚠️ INVERTED DELIBERATELY, 2026-08-21, WHICH IS WHAT THE PREVIOUS VERSION
+    // OF THIS ARM ASKED FOR IN WRITING ("a reflux cell FILLED — F5-e may have
+    // landed; invert this arm deliberately"). Its history, kept because this arm
+    // has now been wrong in BOTH directions:
     //
-    // With production-shaped quotes every reflux cell refuses: bridge-fill's
-    // place() addresses the reflux cell by irRow.vein ("GSV at the SFJ") and
-    // segmentCongruent needs an anatomy token in the fact's concept, value or
-    // quote — a reflux fact has none. Reproduced end to end through the real
-    // matcher with a positive control (the same fact WITH anatomy fills).
+    //   until 2026-08-20  "reflux fills"      — PASSED, on a quote production
+    //                                            never produces (both facts got
+    //                                            the whole dictated sentence)
+    //   2026-08-20        "reflux CANNOT fill" — correct about the quote, and
+    //                                            still one field short: it built
+    //                                            facts with no `segment`, which
+    //                                            L3's REQUIRED min(1) forbids
+    //   now               "reflux fills"      — with BOTH production-shaped
+    //                                            quotes AND the segment present
     //
-    // Pinned as a KNOWN GAP so it cannot silently change in EITHER direction.
+    // The fix restored a DROPPED FIELD rather than relaxing this matcher:
+    // `segment` reached encounter-facts and was spent on the factId hash alone.
     const reflux = results.filter((x) => x.c.kind === 'reflux');
-    expect(reflux.length).toBeGreaterThan(0); // non-vacuity
-    expect(
-      reflux.every((x) => !x.r.ok),
-      'a reflux cell FILLED — F5-e may have landed; invert this arm deliberately',
-    ).toBe(true);
-    expect(new Set(reflux.map((x) => (x.r.ok ? 'ok' : x.r.reason)))).toEqual(
-      new Set(['no_supporting_fact']),
+    expect(reflux.length, 'no reflux cells at all — arm is vacuous').toBe(
+      VESSELS.length * 2,
     );
+    const unfilled = reflux.filter((x) => !x.r.ok);
+    expect(
+      unfilled.map((x) => `${x.c.side} ${x.c.vessel}: ${x.r.ok ? '' : x.r.reason}`),
+      'a reflux cell still refuses — F5-e is not fully landed',
+    ).toEqual([]);
+    // PER LEG, so a fix that rescued one side would not read as success.
+    for (const side of ['right', 'left'] as const) {
+      expect(
+        reflux.filter((x) => x.c.side === side && x.r.ok).length,
+        `no reflux cell filled on the ${side} leg`,
+      ).toBe(VESSELS.length);
+    }
+  });
+
+  it('⚠️ REQUIRED — F5-e: and it is the SEGMENT that rescued it, not a weaker matcher', () => {
+    // THE DISCRIMINATION CONTROL. The arm above proves reflux cells fill; it
+    // cannot say WHY, and a `segmentCongruent` that had simply stopped requiring
+    // congruence would satisfy it just as well — while letting a GSV fact fill an
+    // SSV row on a signed document.
+    //
+    // So: rebuild the SAME facts with `segment: null` — the pre-fix projection,
+    // nothing else changed — and require the refusal to come straight back.
+    const refluxNoSegment = facts
+      .filter((f) => f.concept === 'measurement.reflux_time')
+      .map((f) => ({ ...f, segment: null }));
+    const anyFilled = cells
+      .filter((c) => c.kind === 'reflux')
+      .map((c) =>
+        matchMeasurementFact({
+          value: c.value,
+          segmentLabel: c.vessel,
+          facts: refluxNoSegment,
+          rowLaterality: c.side,
+        }),
+      );
+    expect(anyFilled.length).toBeGreaterThan(0); // non-vacuity
+    expect(
+      anyFilled.every((r) => !r.ok),
+      'a reflux cell filled with NO segment and a bare quote — congruence is no ' +
+        'longer being required, which is a wrong-vessel citation waiting to happen',
+    ).toBe(true);
   });
 
   it('⚠️ REQUIRED: the DIAMETER column still fills on both legs — the gap is scoped', () => {
@@ -165,13 +219,28 @@ describe('the derived encounter ACTUALLY FILLS the owner\'s form', () => {
     // `segmentCongruent` is token-overlap over a haystack that includes the
     // evidence quote, and 'aagsv' contains 'gsv'. A cell that filled from a
     // plain-GSV fact would be a certification artifact citing the wrong vessel.
+    //
+    // ⚠️ F5-e MOVED THE AUTHORITY. This arm used to read the evidence QUOTE,
+    // which was the only anatomy carrier before the segment was emitted. It is
+    // no longer a complete one: a reflux fact's quote is "reflux time 0.128
+    // seconds" and names no vessel, so a quote-only assertion FAILS on a cell
+    // that filled perfectly correctly. Assert the SEGMENT — the field the
+    // matcher actually addresses on — and fall back to the quote only where a
+    // fact carries no segment, so neither carrier can rot unnoticed.
     const aagsv = results.filter((x) => x.c.vessel.startsWith('AAGSV') && x.r.ok);
     expect(aagsv.length, 'no AAGSV cell filled at all — arm is vacuous').toBeGreaterThan(0);
+    // Non-vacuity on the CARRIER: at least one of these must be a reflux cell,
+    // or this arm is only re-testing the diameter column it already covered.
+    expect(
+      aagsv.some((x) => x.c.kind === 'reflux'),
+      'no AAGSV *reflux* cell filled — the arm cannot see the column F5-e fixed',
+    ).toBe(true);
     for (const x of aagsv) {
-      const quote = x.r.ok ? x.r.match.fact.evidenceQuote : '';
+      const f = x.r.ok ? x.r.match.fact : null;
+      const carrier = f?.segment ?? f?.evidenceQuote ?? '';
       expect(
-        quote,
-        `AAGSV cell cited a non-AAGSV fact: ${quote}`,
+        carrier,
+        `AAGSV cell cited a non-AAGSV fact: ${carrier}`,
       ).toMatch(/AAGSV/i);
       expect(x.r.ok && x.r.match.laterality).toBe(x.c.side);
     }
