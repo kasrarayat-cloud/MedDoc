@@ -22449,3 +22449,86 @@ and quote do not carry.
 is flagged to the doctor as needing attention — which is correct for cells that
 were never claimed, and is exactly why the blankness has to be said out loud
 rather than left for someone to notice in a signed document.
+
+## 🔵 F5-e — CLAIMED: fix direction **(B)**, at the root — 2026-08-21, run `20260820-174139-b1` session 03
+
+**This row is the CLAIM, posted before building**, per the INBOX entry
+`2026-08-20T23:00:00Z` (*"claim a ruled fix direction before building it"*) —
+whose own retirement condition is *"a claim line appears on a ruled fix
+direction and the second actor extends it."* This is that line.
+
+**Taking (B), declining (A).** The INBOX states the choice: (A) generator
+phrasing is cheap and **fixes only the synthetic proof**; (B) is *"`place()`
+supplies the row's anatomy as addressing context, **or L3 attaches the segment
+to every measurement fact it splits**"* and is *"the one that helps a real
+visit."* (A) alone would buy a certificate attesting a fill path a real
+encounter cannot exercise — so it is not taken, even partially.
+
+### THE REPRODUCTION IS ALREADY GREEN ON `main`, AND IT IS SESSION 02's
+
+No new reproduction was needed: `gate-derived-encounter-actually-fills.test.ts`
+already pins the gap through the **real matcher** with a positive control, and
+its own text invites the inversion (*"a reflux cell FILLED — F5-e may have
+landed; invert this arm deliberately"*). Re-run here: **8 passed**.
+
+### ⚠️ AND A MECHANISM I READ CONFIDENTLY AND REFUTED MYSELF, BEFORE WRITING CODE
+
+**Recorded because the wrong version was more attractive than the right one.**
+
+`encounter-facts/index.ts:610` passes `segment: m.segment` into `add()`, and two
+comments in that same file say the segment travels with the fact:
+
+- `:130-132` — *"Anatomical segment, carried as DATA so downstream addressing
+  never has to parse it back out of a concept string. **Folded into the concept
+  for matching**"*
+- `:585-587` — *"Concept is the measurement KIND plus the segment as an
+  attribute-style suffix"*
+
+Read together, those say F5-e is a one-line fix: the field exists, the addressing
+predicate simply doesn't read it. **I believed that for about five minutes.**
+
+**It is false, and `grep segment ir.ts` returning NOTHING is what killed it.**
+`EncounterFactSchema` (`ir.ts:360-397`) is `.strict()` and has **no `segment`
+field**. `add()` (`:359-387`) consumes `options.segment` in exactly one place —
+`sourceIdentity`, the fact-ID hash — and never emits it. The concept is a bare
+`measurement.${m.metric}` with **no segment suffix**. So:
+
+> **Both comments assert an intended state in the present tense, and the code
+> does neither thing.** That is `DEPLOYMENT_RUNBOOK §5.6`'s shape living inside
+> a source file — and it is the *reason* F5-e exists rather than an aside: the
+> design intended the segment to travel, and the projection drops it.
+
+⚠️ **The tell was a grep returning nothing where prose promised something.** Had
+I trusted the comments I would have shipped a change to `segmentCongruent`'s
+haystack that reads a field which does not exist — green on a fixture, inert in
+production. **This is why the filing said "reproduce it before fixing it".**
+
+### SO (B) IS SMALLER THAN "INVASIVE" SUGGESTED — L3 ALREADY DOES ITS HALF
+
+`03-extract-entities.ts:254` types `segment: z.string().min(1).max(120)` —
+**REQUIRED**, and `:460-461` instructs *"One entry PER NUMBER: a segment stated
+with both a diameter and a reflux time yields TWO entries."* So a real
+dictation's reflux measurement already carries its vessel; the information is
+lost **in the projection**, not at extraction.
+
+**The planned change, and it RESTORES a dropped field rather than weakening a
+gate:**
+
+1. `EncounterFact` gains `segment`, `.nullable().default(null)` so every
+   existing fact and fixture still parses under `.strict()`.
+2. `add()` emits `options.segment ?? null`.
+3. `segmentCongruent` reads it alongside concept/value/quote.
+4. The two lying comments are corrected to describe what the code does.
+
+⚠️ **Fact IDs do NOT churn** — `sourceIdentity` already hashes the segment, so
+identity is unchanged by construction.
+
+⚠️ **STATED HONESTLY: step 3 WIDENS a haystack, so it can only produce MORE
+matches, never fewer.** It is defensible because `segment` is the authoritative
+answer to the question the predicate is asking, where the quote is a proxy — but
+"more matches" is the direction that fills a WRONG row, so the gate must pin the
+vessel both ways (`GSV` must not bind an `AAGSV` fact, and vice versa) and not
+only assert that reflux now fills.
+
+**Retires when the reflux column fills from a fact whose quote does not name the
+vessel, with vessel-identity pinned in both directions.**
