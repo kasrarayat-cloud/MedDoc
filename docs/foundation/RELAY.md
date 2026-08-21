@@ -60,6 +60,109 @@ neither export route carries a signed gate), so the draft footer applies there
 too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
 
+
+### 🟡 F5-f ACCEPTANCE — the owner's live test, SPEC RECORDED BEFORE THE RUN
+
+**Owner-specified 2026-08-21. Recorded here BEFORE the outcome exists**, so the
+evidence rows cannot be chosen once the answer is known — the same discipline
+§2.5 buys for a deploy, applied to an acceptance.
+
+**⚠️ IT IS NOT A RE-DOWNLOAD.** The sign path is the unexercised half, and a
+re-download exercises none of it. The test is four steps:
+
+| # | step | what it exercises |
+|---|---|---|
+| 1 | run a **FRESH** visit on the certified template | F5-e live; the fill itself |
+| 2 | **EDIT one word** in the note | makes the note diverge from any earlier manifest |
+| 3 | **SIGN** | capture · CAS · regenerate-then-sign · pointer stamp |
+| 4 | download **BOTH** formats of that signed visit | F5-f's one-document claim |
+
+**EVIDENCE ROWS — all four, or the row says which are missing:**
+
+1. both formats **byte-derived from one frozen object**;
+2. **the edit PRESENT in both** — this is what kills the stale-manifest class,
+   and step 2 exists solely to make that falsifiable;
+3. the letterhead is **HIS specifically** — not merely "not generic";
+4. the **fill delta** against the baseline below.
+
+**BASELINE, measured 2026-08-21 before the run** (structural only — no note
+content read):
+
+| quantity | value |
+|---|---|
+| manifests in production | **1** |
+| `filledCount` | **25** |
+| `notMentionedCount` | **55** (25+55 = the template's 80 fields) |
+| needsReview · conflicts · criticalUnresolved | **0 · 0 · 0** |
+| `roundTripVerified` | **true** |
+| output | **49,418 bytes** |
+| visits carrying `frozenFillManifestId` | **0** |
+
+**FALSIFIABILITY, ratified verbatim:** *both formats or it is recorded as one*;
+*"yours specifically, not merely not-generic."*
+
+**A WRONG OUTCOME ROUTES WITH THE SAME WEIGHT** — it is F5-f's behavioural
+evidence and the next fix's spec, not a failure to hide.
+
+---
+
+#### ⚠️ FOUND BEFORE THE RUN — ONE SIGNED VISIT LOSES ITS NATIVE EXPORT, AND IT IS THE OWNER'S ORIGINAL
+
+**This is a consequence of ruling 2(b) that nobody wrote down, found by
+measuring the baseline rather than by the test.** Flagged ahead of the run
+because it is the one visit an owner would naturally also re-download, and
+meeting it mid-acceptance would read as F5-f failing when it is not.
+
+`native-export.ts:63-67`, **in the shipped worker**:
+
+    const isSigned = signedVisit?.status === 'SIGNED';
+    if (isSigned && !signedVisit?.frozenFillManifestId) return null;   // → styled
+
+Every visit signed BEFORE this deploy has `frozenFillManifestId = NULL`, so a
+signed record with a native manifest now declines to styled.
+
+**MEASURED, and the partition reconciles:**
+
+| set | count |
+|---|---|
+| SIGNED · has a VERIFIED manifest · no pointer → **loses native export** | **1** |
+| SIGNED · no manifest (was styled anyway — unaffected) | **30** |
+| UNSIGNED with a manifest (freshness path — unaffected) | **0** |
+| | **31 SIGNED total** |
+
+The one is `cmt2744qm000c01p5jbp7e3zf`, signed `00:25:42Z` — **the visit whose
+Word download the owner confirmed carried his letterhead.**
+
+**⚠️ IT IS CORRECT-BY-DESIGN AND IT IS STILL A CAPABILITY LOST. BOTH HALVES ARE
+TRUE AND THE ROW REFUSES TO PICK THE COMFORTABLE ONE.** That manifest's
+`noteSha256` is **NULL** — written before the column existed — so **nothing
+proves it corresponds to the signed text.** Serving it as the signed record's
+native document would be precisely the stale-manifest class step 2 exists to
+kill. Declining is fail-closed and right.
+
+**AND IT IS NOT HONESTLY RECOVERABLE.** A backfilled pointer would assert a
+match nobody verified: the manifest was rendered at `00:18:46Z`, the visit
+signed at `00:25:42Z`, and there is no stored hash from that era to compare
+against. Re-running the fill to compare would mutate a signed clinical record.
+**A null identity is DECLINED, never inferred** — the rule the column was added
+to enforce, applied to the column's own pre-history.
+
+**WHAT IS ACTUALLY LOST:** the doctor's own form as the *presentation* of one
+historical record. The styled export still carries the full clinical content.
+**Nothing about the signed note changes.**
+
+⚠️ **HONEST LIMIT: this was established by READING THE SHIPPED CODE, not by
+exercising it** — the only visit that would demonstrate it is a real patient's
+signed record, and a real doctor's visit is never a smoke target. It is stated
+as a code-level finding, not a measured export.
+
+**DISPOSITION — a war-room question, NOT a thing to fix on a feeling.** The
+options are (a) accept and record it, as the E/M rollback constraint was
+accepted; or (b) build an honest re-attestation path — re-fill on a copy,
+compare, and stamp a pointer only on a proven match. **(a) is the
+recommendation:** it is one historical document, and (b) is real work whose
+only beneficiary is a record that already reads correctly in styled form.
+
 ### 🔴 F5-i — MULTI-SHAPE CERTIFICATION PROOF — **baseline census, measured 2026-08-21**
 
 **Owner question: "is the fix for ALL categories/templates, not just mine?"**
