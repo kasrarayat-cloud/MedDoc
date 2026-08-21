@@ -169,8 +169,23 @@ function segmentCongruent(label: string, fact: EncounterFact): boolean {
   // haystack, and widening a predicate with a known substring hole extends the
   // hole to the reflux column rather than leaving it where it was. This is the
   // STRICTER direction — it can only remove matches, never add them.
-  const hayTokens = new Set(hay.split(' '));
-  return want.some((t) => hayTokens.has(t));
+  //
+  // ⚠️ AND THE STEM IS WHY THIS IS NOT A BARE EQUALITY. Whole-token matching
+  // alone is stricter in a way that BREAKS a real case: a row labelled
+  // "Perforator" stops matching a fact whose segment says "perforators", which
+  // the substring test used to catch. The imaging vocabulary this product steers
+  // the model toward uses the PLURAL — `specialty-guidance.ts:119` ("GSV / SSV /
+  // perforators") and `ultrasound-report-template.ts:150` ("Perforators:
+  // location …") — so that is the expected dictation, not an edge case.
+  //
+  // Not reachable on production's only certified template today (measured: 0 of
+  // its 80 field labels mention a perforator), and fixed anyway, because the
+  // next form is not this form and a silent blank column is exactly the failure
+  // F5-e already cost. Stemming a trailing plural keeps the nesting fix intact —
+  // `gsv` and `aagsv` are still different tokens.
+  const stem = (t: string) => (t.length > 3 && t.endsWith('s') ? t.slice(0, -1) : t);
+  const hayTokens = new Set(hay.split(' ').map(stem));
+  return want.some((t) => hayTokens.has(stem(t)));
 }
 
 function numbersEqual(a: number, b: number): boolean {

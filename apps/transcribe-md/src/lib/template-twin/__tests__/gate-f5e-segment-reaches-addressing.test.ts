@@ -143,6 +143,47 @@ describe('F5-e — the segment reaches addressing', () => {
     expect(r.ok && r.match.fact.segment).toBe('AAGSV at the Proximal Thigh');
   });
 
+  it('⚠️ REQUIRED: a singular row label still matches a PLURAL segment', () => {
+    // FOUND BY THE ADVERSARIAL PASS, ON THIS BRANCH'S OWN DIFF. The whole-token
+    // hardening that closes the `aagsv`/`gsv` nesting hole is STRICTER, and
+    // strictness breaks things: "Perforator" stopped matching "perforators",
+    // which the substring test used to catch.
+    //
+    // Not hypothetical vocabulary — `specialty-guidance.ts:119` ("GSV / SSV /
+    // perforators") and `ultrasound-report-template.ts:150` ("Perforators:
+    // location …") steer the model to the PLURAL, so that is what a dictation
+    // says. Measured: production's only certified template has 0 of 80 labels
+    // mentioning a perforator, so this is unreachable there TODAY — pinned
+    // because the next form is not this form, and the failure mode is the same
+    // silent blank column F5-e already cost a doctor.
+    const facts = project([
+      ENTITY('medial calf perforators', 'reflux_time', 0.42, 'seconds', 'reflux time 0.420 seconds'),
+    ]);
+    const r = matchMeasurementFact({
+      value: '0.42',
+      segmentLabel: 'Perforator',
+      facts,
+      rowLaterality: 'right',
+    });
+    expect(r.ok, r.ok ? '' : `a plural segment refused a singular row: ${r.reason}`).toBe(true);
+  });
+
+  it('and stemming did NOT reopen the nesting hole it sits beside', () => {
+    // The pair. Plural tolerance is a widening, so it is asserted together with
+    // the narrowing it must not undo — otherwise the cure for one silent
+    // wrong-row bug quietly restores the other.
+    const facts = project([
+      ENTITY('AAGSV at the Proximal Thigh', 'reflux_time', 0.42, 'seconds', 'reflux time 0.420 seconds'),
+    ]);
+    const r = matchMeasurementFact({
+      value: '0.42',
+      segmentLabel: 'GSV Below Knee',
+      facts,
+      rowLaterality: 'right',
+    });
+    expect(r.ok, 'stemming reopened the aagsv/gsv nesting hole').toBe(false);
+  });
+
   it('the spoken long form still folds to the template’s abbreviation', () => {
     // `segment` is "the anatomical location AS SPOKEN", so it can arrive fully
     // spelled out. Addressing must fold it exactly as it folds a quote.
