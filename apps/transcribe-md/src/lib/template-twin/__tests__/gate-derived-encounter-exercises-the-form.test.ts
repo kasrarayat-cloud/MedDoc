@@ -364,6 +364,80 @@ describe('a NON-venous form never receives a venous narrative', () => {
     // the refusal object provably has no text field at all.
   });
 
+  /**
+   * ⚠️ THE ARTERIAL DUPLEX — found by the adversarial pass's clinical lens, and
+   * it refutes the claim this file's own header made.
+   *
+   * `femoral`, `popliteal` and `tibial` name a VEIN **and an ARTERY** at the
+   * same level. The old venous guard read those tokens as evidence of a venous
+   * study, so a lower-extremity ARTERIAL duplex — a real, common vascular-lab
+   * form — passed it and was dictated as:
+   *
+   *   "Right Superficial Femoral Artery: diameter 3.23 millimeters,
+   *    reflux time 0.637 seconds; incompetent."
+   *
+   * ⚠️ ARTERIES HAVE NO VALVES. There is no such quantity as an arterial
+   * reflux time, "incompetent" is not a verdict that exists for an artery, and
+   * the closing line asserts a DEEP VENOUS negative about a form with no venous
+   * rows. That is fabricated clinical content in a stored certification
+   * artifact — exactly the class the venous guard was written to prevent,
+   * reaching it through the three tokens that guard shares with arteries.
+   */
+  it('⚠️ a lower-extremity ARTERIAL duplex REFUSES — arteries have no reflux', () => {
+    const arterial: EncounterSourceField[] = [
+      { originalLabel: 'Common Femoral Artery', clinicalConcept: 'measurement.velocity' },
+      { originalLabel: 'Superficial Femoral Artery', clinicalConcept: 'measurement.velocity' },
+      { originalLabel: 'Popliteal Artery', clinicalConcept: 'measurement.velocity' },
+      { originalLabel: 'Anterior Tibial Artery', clinicalConcept: 'measurement.velocity' },
+      { originalLabel: 'Posterior Tibial Artery', clinicalConcept: 'measurement.velocity' },
+    ];
+    expect(deriveVerificationEncounter(arterial)).toEqual({
+      ok: false,
+      reason: 'unsupported_study_type',
+    });
+  });
+
+  it('⚠️ a MIXED form naming any artery refuses, even beside real venous rows', () => {
+    // The dangerous middle case: an arterial row alone would be caught by the
+    // token gate, but a form carrying BOTH would satisfy the venous evidence
+    // and still have its arteries dictated with reflux times.
+    const mixed: EncounterSourceField[] = [
+      { originalLabel: 'GSV at the SFJ', clinicalConcept: 'measurement.diameter' },
+      { originalLabel: 'Popliteal Artery', clinicalConcept: 'measurement.velocity' },
+    ];
+    expect(deriveVerificationEncounter(mixed)).toEqual({
+      ok: false,
+      reason: 'unsupported_study_type',
+    });
+  });
+
+  it('⚠️ the AMBIGUOUS tokens alone are not venous evidence', () => {
+    // `femoral`/`popliteal`/`tibial` name a vein AND an artery. Without a
+    // venous discriminator anywhere on the form, this generator must not
+    // assume which one it is looking at.
+    const ambiguousOnly: EncounterSourceField[] = [
+      { originalLabel: 'Common Femoral', clinicalConcept: 'measurement.diameter' },
+      { originalLabel: 'Popliteal', clinicalConcept: 'measurement.diameter' },
+    ];
+    expect(deriveVerificationEncounter(ambiguousOnly)).toEqual({
+      ok: false,
+      reason: 'unsupported_study_type',
+    });
+  });
+
+  it('the ambiguous tokens DO qualify when the form says VEIN — not an over-refusal', () => {
+    // ⚠️ THE CONTROL FOR THE THREE ARMS ABOVE. A fix that simply deleted
+    // femoral/popliteal/tibial would refuse a legitimate femoral VEIN reflux
+    // study, which is a study this generator can and should speak to.
+    const femoralVein: EncounterSourceField[] = [
+      { originalLabel: 'Common Femoral Vein', clinicalConcept: 'measurement.diameter' },
+      { originalLabel: 'Popliteal Vein', clinicalConcept: 'measurement.diameter' },
+    ];
+    const out = deriveVerificationEncounter(femoralVein);
+    expect(out.ok).toBe(true);
+    expect(out.ok && out.text).toContain('Right Common Femoral Vein');
+  });
+
   it('the venous form still qualifies — the guard is not simply off', () => {
     // ⚠️ THE HAPPY-PATH CONTROL. Every arm above is a refusal, and a change
     // that refused EVERYTHING would satisfy all of them while destroying the

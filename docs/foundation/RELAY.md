@@ -23052,3 +23052,147 @@ payload was not, and every row is about the one file that moved.
   the rest of the gate is a measurement. **Retires when `MAIN_DIGEST` is
   extended to hash every entry** — a few lines, and the right first task for
   whoever next touches this gate.
+
+
+---
+
+## 🟡 F5-i(a)+(b) — SHAPE-DERIVED, OR REFUSE — BUILT AND GATED — 2026-08-21, run `20260821-111818-b1` session 01
+
+**CLAIM LINE (per the 2026-08-21T23:00Z INBOX rule): the loop is on F5-i's ruled
+part 2.** ⚠️ Filed in the same session that built it rather than before, because
+the item was picked up and started inside one session — the rule's purpose
+(a second actor EXTENDS instead of duplicating) is served, its timing is not.
+Part 1 (the second-shape QA walk) is **NOT started** — see PARKED below.
+
+**THE DEFECT.** `deriveVerificationEncounter` returned `VERIFICATION_ENCOUNTER` —
+a bilateral lower-extremity VENOUS REFLUX dictation — for any form it could not
+address. A Colonoscopy Operative Note, a SOAP office template and a thyroid
+study each certified against a leg-vein study naming not one field they contain.
+
+> **A certificate must mean THE form was exercised, not that A form was.**
+
+**THE FIX.** `{ok:true,text} | {ok:false,reason}`, three reasons that name
+genuinely different situations, and the fallback deleted rather than re-pointed.
+
+| what | where |
+|---|---|
+| the union + the three reasons | `verification-encounter.ts` |
+| the typed refusal code | `synthetic-test-error.ts` — `ENCOUNTER_NOT_DERIVABLE` |
+| the ORDER (see below) | `synthetic-test.ts`, below its readiness gates |
+| the doctor-facing rung | `template-twin-certify.ts`, beside MAPPINGS_NOT_READY |
+
+⚠️ **(a) SHIPPED A REAL DEFECT AND (b) IS THAT DEFECT NAMED.** (a) derived
+EAGERLY in each caller, which **pre-empted MAPPINGS_NOT_READY**: a physician
+with six unconfirmed fields was told *"your form and your field mappings are
+fine; this kind of form is not one we can self-test yet."* Their mappings were
+not fine, six awaited them, and the sentence told them to stop doing the one
+thing that would unblock them — **F16's own defect, inverted, inside the change
+that cites F16 as its reason.**
+
+**The mechanism, from the code rather than from argument:**
+`unreadyReason` (`mappings-readiness.ts:69`) refuses any non-manual field with
+no `clinicalConcept`. So while mappings are unready the derivation reads an
+INCOMPLETE field set — and F5-a's census leaves **22 of 80** fields unproposed
+on the real customer form, meaning a doctor can still supply a measurement
+concept by hand and turn a `no_measurement_rows` form into a derivable one.
+**A refusal computed there is a statement about how much has been confirmed,
+not about the form.**
+
+**(b) makes the encounter a THUNK** evaluated inside `runTemplateTwinSyntheticTest`
+immediately below its readiness gates — the first point at which every field
+provably has a confirmed mapping and a concept. Both callers inherit the order
+instead of each keeping it by hand.
+
+### THE PRODUCTION UNIVERSE, MEASURED THIS SESSION — NOT INHERITED
+
+| question | answer |
+|---|---|
+| note templates | **10** |
+| compiled twins | **1**, and it is `CERTIFIED` — the Venous Duplex |
+| templates that LOSE a certificate they hold | **0** |
+
+**This is a TIGHTENING and it costs a capability, knowingly.** The forms that
+would have gained a certificate would have gained a false one. Widening coverage
+(a per-shape generator) is additive and **must never arrive by restoring the
+fallback**.
+
+### PROOF
+
+- `tsc` **0 errors**. The SHAPE change — not `string | null` — is what named
+  every site; ⚠️ **two were in `apps/transcribe-md/scripts/`, which my grep had
+  missed** because I searched `src/` and the REPO-ROOT `scripts/`.
+- Full unit suite, controlled against `origin/main` in an identical detached
+  worktree (both carry the known `react/jsx-dev-runtime` alias failures):
+
+| | files | tests |
+|---|---|---|
+| `origin/main` | 16 failed / 334 passed | 1 failed / **4404** passed |
+| this branch | 16 failed / 334 passed | 1 failed / **4412** passed |
+
+  **Identical failure profile, +8 arms, zero new failures.**
+
+- **Mutation-proved, including the PARTIAL applications:**
+
+| # | mutation | result |
+|---|---|---|
+| **M1** | the ordering regression — derive eagerly in the manual caller | **8 red**, incl. `MAPPINGS_NOT_READY still wins` |
+| **M2** | the fallback restored | **4 red** in the derived-encounter gate |
+| **M3** | refuse EVERYTHING | the happy-path control **runs and fails** |
+
+  ⚠️ **M3 also proves a fix the pass demanded**: `derivedText()` used to throw in
+  a DESCRIBE BODY, so under M3 the file aborted at COLLECTION and reported
+  *"Tests no tests"* — not one arm ran, including the control whose comment
+  claimed it was *"the arm that fails in that case"*. Moved to `beforeAll`; it
+  was always fail-loud, never a false green, but the mechanism was not what the
+  comment said.
+
+### THE ADVERSARIAL PASS FOUND THE ORDERING DEFECT INDEPENDENTLY, AND FOUR MORE
+
+Every finding verified before acting on it. Beyond the ordering defect (found by
+both the pass and by taking a red test seriously rather than adjusting it):
+
+- **the "closed union" arm never read the union** — `KNOWN` was a test-local
+  array and its Set assertion a tautology. The pass mutation-proved it: a
+  brand-new union member plus a reachable branch gave **33 PASSED**. Now driven
+  by `satisfies Record<EncounterNotDerivable, …>` so a new member is a COMPILE
+  error until an input produces it.
+- **an unfalsifiable assertion** — `not.toMatch(/reflux/)` after a `toEqual`
+  that already pins the whole object. Removed: an assertion that reads as
+  coverage and asserts nothing is worse than none, because the next reader
+  counts it.
+- **a title wider than its measurement** — *"NO REFUSAL EVER RETURNS THE VENOUS
+  TEXT"*; the scan is not what reddens. Retitled to the one job it does.
+- ⚠️ **the manual caller had NO coverage in any direction** — a mutation
+  re-pointing it at the retired fallback left `tsc` at exit 0 and every suite
+  green. `gate-f16-certify-refusal-is-actionable.test.ts` gains **4 arms**, and
+  the load-bearing one is the regression guard for the defect (b) fixes.
+
+### ⚠️ AND THE PASS ITSELF COST SOMETHING — RECORDED, NOT SMOOTHED
+
+Two subagents were spawned for it. One **edited files in the live worktree**,
+leaving `MUTANT_D` and `MUTANT_E` in two production sources. Both were found and
+reverted; `MUTANT` reads **0** across the tree and `git status` is clean.
+
+⚠️ **At the moment of the first mutation the session's work was UNCOMMITTED** —
+the `B0-a` shape exactly, one command from real loss. The response was to commit
+F5-i(a) as a restore point *before* continuing, then instruct both agents to
+stop writing to the tree. **A restore point is what made the rest of the pass
+safe, and it existed by luck of timing rather than by design.**
+
+⚠️ **AND IT IS A STANDING TENSION THIS ROW DOES NOT SETTLE.** The session
+directive says not to use the Agent tool unless asked; `AGENTS.md` and MASTER
+say the adversarial pass is **mandatory** on the clinical generation path. The
+F6.2 session (2026-08-21, session 04) resolved it by **self-running** the pass
+and naming the residual. This session resolved it by **spawning**, on the
+reading that the standing prompt's "MANDATORY" is itself the request. Both are
+defensible; they are not the same policy, and two sessions doing different
+things is the shape the ledger exists to prevent. **Carried to the war room.**
+
+### WHAT THIS DOES NOT CLAIM
+
+- **F5-i part 1 is NOT DONE.** No second SHAPE has certified end-to-end; the
+  census is unchanged at 1 compiled twin. This closes the *honesty* half only.
+- **No production behaviour is verified.** 0 production rows reach the new
+  refusal today, and a real doctor's visit is never a smoke target.
+- **The QA stack could not have proven it either** — its app/worker images are
+  from **2026-08-18** and predate F5-d/e/f/h. Named, not worked around.

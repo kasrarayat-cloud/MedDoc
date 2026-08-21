@@ -46,6 +46,11 @@ async function main() {
     '@/lib/template-twin/certification-lifecycle'
   );
   const { runTemplateTwinSyntheticTest } = await import('@/lib/template-twin/synthetic-test');
+  // F5-i: the real derivation, used to CROSS-CHECK this harness's pinned
+  // encounter against the template it is about to certify. See the call site.
+  const { deriveVerificationEncounter } = await import(
+    '@/lib/template-twin/verification-encounter'
+  );
   const { extractTemplateTwinEntities } = await import('@/worker/layers/03-extract-entities');
   const { createEphemeralVisitNoteGenerator } = await import('@/worker/template-twin-note-generator');
 
@@ -110,10 +115,31 @@ async function main() {
       noteTemplateId,
       actor,
       expectedMappingsSha256: ws.mappingsSha256,
-      // F5-i: a thunk, evaluated below the readiness gates. This harness pins
-      // its OWN venous encounter rather than deriving one, so it hands back a
-      // ready-made `ok` — the pin is the point of the proof.
-      deriveEncounter: () => ({ ok: true, text: ENCOUNTER }),
+      // F5-i: a thunk, evaluated below the readiness gates.
+      //
+      // ⚠️ THIS HARNESS PINS ITS OWN VENOUS ENCOUNTER, AND THE PIN IS THE POINT
+      // OF THE PROOF — but a bare `{ok: true, text: ENCOUNTER}` would make it
+      // the one remaining path in the repository that feeds a venous dictation
+      // into a certification proof without asking whether the template is
+      // venous. Pointed at a non-venous `noteTemplateId` it would certify that
+      // template against a leg-vein study — the exact defect F5-i exists to
+      // close — and it runs against PRODUCTION. Found by F5-i's adversarial
+      // pass sweeping the whole repo rather than the two callers.
+      //
+      // So the pin is kept and CROSS-CHECKED: the real derivation must agree
+      // that this template is one the generator can speak to before the pinned
+      // text is used. Determinism is preserved (the pinned text is what runs);
+      // the hole is closed (a non-venous template refuses here, loudly).
+      deriveEncounter: () => {
+        const derived = deriveVerificationEncounter(
+          (ws?.fields ?? []).map(({ field, mapping }) => ({
+            originalLabel: field.originalLabel,
+            clinicalConcept: mapping.clinicalConcept,
+          })),
+        );
+        if (!derived.ok) return derived;
+        return { ok: true, text: ENCOUNTER };
+      },
       encounterMode: 'text',
       // Use the REAL L3 extractor. An earlier run stubbed this to an empty
       // entity set, which made every field resolve "notMentioned" (filled=0)

@@ -113,8 +113,61 @@ const MEASUREMENT_PREFIX = 'measurement.';
  * The evidence for "venous" is the form's OWN labels, not a guess about the
  * doctor: a venous duplex names its saphenous/femoral/popliteal segments.
  */
-const VENOUS_TOKEN =
-  /\b(gsv|ssv|aagsv|pagsv|saphenous|femoral|popliteal|perforator|tibial|reflux|varicos)\b/i;
+/**
+ * ⚠️ AND THE FIRST VERSION OF THIS GUARD ADMITTED AN ARTERIAL STUDY, WHICH IS
+ * THE SAME FABRICATION IT WAS WRITTEN TO PREVENT. Found by F5-i's adversarial
+ * pass, reproduced against this function before it was changed.
+ *
+ * The old single list included `femoral`, `popliteal` and `tibial`. Those three
+ * name a VEIN **and an ARTERY at the same level** — the artery/vein
+ * discriminator is the one word the list never read. So a lower-extremity
+ * ARTERIAL duplex, an ordinary vascular-lab form, satisfied the venous check
+ * and was dictated as:
+ *
+ *     Right Superficial Femoral Artery: diameter 3.23 millimeters,
+ *     reflux time 0.637 seconds; incompetent.
+ *
+ * ⚠️ ARTERIES HAVE NO VALVES. There is no arterial "reflux time", "incompetent"
+ * is not a verdict that exists for an artery, the study measures velocity in
+ * cm/s rather than a diameter in millimetres, and the closing line asserts a
+ * DEEP VENOUS negative about a form with no venous rows.
+ *
+ * The old comment stated the intent exactly right — "a venous duplex names its
+ * saphenous/femoral/popliteal segments" — and that sentence IS the bug: an
+ * arterial duplex names them too.
+ */
+
+/** No artery is dictated by this generator, full stop. A form naming one is
+ *  not a study it can speak to, whatever else the form also contains — the
+ *  MIXED case (real venous rows beside an arterial row) is the dangerous one,
+ *  because the venous evidence is genuine and the arteries still get reflux
+ *  times. */
+const ARTERIAL_TOKEN = /\barter(y|ies|ial)\b/i;
+
+/** Unambiguously venous — no artery carries any of these names. */
+const VENOUS_UNAMBIGUOUS = /\b(gsv|ssv|aagsv|pagsv|saphenous|perforator|reflux|varicos)\b/i;
+
+/** Shared with the arterial tree at the same level. Evidence of a VENOUS study
+ *  only when the form says so somewhere else. */
+const VENOUS_AMBIGUOUS = /\b(femoral|popliteal|tibial)\b/i;
+const EXPLICIT_VEIN = /\b(vein|veins|venous)\b/i;
+
+/**
+ * Does the form's OWN vocabulary establish a lower-extremity venous study?
+ *
+ * ⚠️ SCOPED TO THE MEASUREMENT LABELS — the rows that actually get DICTATED,
+ * which is where fabrication can occur. A wider scan over every field on the
+ * form would refuse a legitimate venous study carrying an unrelated field like
+ * "Arterial history: none", and that over-refusal costs a capability for no
+ * safety gain. Stated so the boundary is checkable rather than assumed.
+ */
+function venousEvidence(labels: readonly string[]): boolean {
+  if (labels.some((l) => ARTERIAL_TOKEN.test(l))) return false;
+  if (labels.some((l) => VENOUS_UNAMBIGUOUS.test(l))) return true;
+  return (
+    labels.some((l) => VENOUS_AMBIGUOUS.test(l)) && labels.some((l) => EXPLICIT_VEIN.test(l))
+  );
+}
 
 /**
  * Deterministic values. NO randomness: a proof that varies run to run cannot be
@@ -231,8 +284,18 @@ export function deriveVerificationEncounter(
     labels.push(label);
   }
 
-  // A table-less form — an operative note, a SOAP office template. There is
-  // nothing here this generator knows how to dictate.
+  // A form with no measurement rows AT ALL — a SOAP office template, and the
+  // common shape of an operative note.
+  //
+  // ⚠️ "OPERATIVE NOTE" IS NOT A SYNONYM FOR THIS BUCKET, AND AN EARLIER
+  // VERSION OF THIS COMMENT SAID IT WAS. The adversarial pass produced the
+  // counterexample: a colonoscopy operative note carrying `Polyp size (mm)` →
+  // `measurement.length` and `Scope insertion depth (cm)` → `measurement.depth`
+  // has measurementRows = 2 and lands in `unsupported_study_type` instead.
+  // That is the CORRECT bucket for it — the rows exist and this generator
+  // cannot speak to them — but the buckets are defined by the FIELD SET, never
+  // by what the document is called. A reader who maps them to document kinds
+  // will be wrong about exactly the forms F5-i's second half must handle.
   if (measurementRows === 0) return { ok: false, reason: 'no_measurement_rows' };
 
   // Measurement rows exist but none of them name anatomy, so any dictation
@@ -243,7 +306,7 @@ export function deriveVerificationEncounter(
   // venous narrative is written about it. A thyroid or obstetric study reaches
   // here, and dictating reflux times and a "no deep vein thrombosis" negative
   // about it would be FABRICATED CLINICAL CONTENT in a stored artifact.
-  if (!labels.some((l) => VENOUS_TOKEN.test(l))) {
+  if (!venousEvidence(labels)) {
     return { ok: false, reason: 'unsupported_study_type' };
   }
 
