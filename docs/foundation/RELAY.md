@@ -184,7 +184,7 @@ result was read.
 | M5b | delete banner printed before the keep-list | 1 |
 | M6 | positional date extraction (the first-draft defect) | 3 |
 | M7 | separator back to tab | 1 |
-| M8 | **the `GROUPS` special-variable defect, restored** | 3+ |
+| M8 | **the `GROUPS` special-variable defect, restored** | **23 of 36** |
 | M9 | remove the container-backed hold | 1 |
 | M10 | remove the blind-instrument guard | 2 |
 | M11 | co-tenant repositories no longer excluded | 2 |
@@ -207,6 +207,16 @@ rollback tags read **152 before and 152 after**, and the source image
 (`meddoc-pro-gotenberg:pre-r4-20260803`, id `2d05d22572ba`, whose id the
 throwaways shared) is still tagged — so `rmi <name>` untagged rather than
 removing layers, which is the intended behaviour on a shared id.
+
+⚠️ **AND THE PROOF RAN WITH `--in-use /dev/null`, WHICH IS NOT A DETAIL.** The
+throwaways were minted from gotenberg's image, and that image backs a RUNNING
+container — so without the override the in-use guard would have HELD both and
+the delete path would never have been reached. Suppressing the guard is what
+made the arm exercisable; **it also means this transcript proves the delete
+path and says nothing about the hold.** The hold is proved separately, in the
+gate, by the arm that supplies an in-use id and the control that supplies a
+non-matching one. *An override that is not named turns a scoped proof into a
+claim about the whole script.*
 
 #### WHAT THE REAL HOST SAYS TODAY — REPORTED, NOT EXECUTED
 
@@ -273,6 +283,47 @@ identical failure counts.** All 17 failures are the pre-existing
 `react/jsx-dev-runtime` worktree-alias property canon already records — and the
 refinement worth adding is that it presents as **16 files AND 1 test**, the
 latter being `gate-devstates.test.ts` importing a `.tsx` from a `.ts` test.
+
+#### 🔵 FINDINGS FROM F23's SESSION — filed, not fixed
+
+**1 · TWO `INBOX.md` ENTRIES HAVE MET THEIR RETIREMENT CONDITIONS AND ARE STILL
+BEING DELIVERED TO EVERY SESSION.** Found by hand while waiting on a gate,
+which is exactly the way the 2026-08-20T16:40 item predicts nobody finds them.
+The loop never writes to `INBOX.md`, so these are **supervised-side actions**:
+
+| entry | its own retirement condition | state |
+|---|---|---|
+| `2026-08-18T07:00Z` — auto-certification | *"This entry retires when that branch merges."* | **MET.** `feat/twin-auto-certification` is gone from origin and its files are on `main` — `auto-certify.ts`, `auto-certify-eligibility.ts`, `auto-certify-twin-job.ts` and four gates, all present in `git ls-tree origin/main` |
+| `2026-08-16T19:30Z` — the F10 pointer | *"The exception retires with F10; do not let it outlive its reason."* | **MET.** F10 is ✅ in this ledger. The INTERIM clause permitting a §2.5 carry-forward in the SHARED TREE is expired and still reads as live — and it licenses writing to the deploy surface, which is the one place a stale permission costs something |
+
+⚠️ **THE SECOND IS THE ONE THAT MATTERS**, and it is the shape canon names: an
+expired *permission* is worse than an expired *task*, because a session that
+obeys it does the forbidden thing correctly.
+
+**2 · THE PREFLIGHT SKILL'S F23 CLAUSE IS NOW DISCHARGEABLE, AND THE LOOP
+CANNOT DISCHARGE IT.** Check 2 currently reads *"If that script is not present
+yet (RELAY F23 builds it), this trigger is a REPORT, not a fix."* It is present
+as of this PR. The skill lives at
+`/home/claude/.claude/skills/preflight-health-check` — **outside the
+repository**, so it cannot be landed through a PR and `Edit` is scoped to
+`/opt/meddoc-pro/**`. **OWNER ACTION**, named rather than silently left.
+
+⚠️ This is the *instrument-and-its-grant* seam once more: the rule and the
+thing it names live in different files, land by different routes, and nothing
+checks that the second followed the first.
+
+**3 · `3b7f440c`'s `e2e` SURVIVED #782's MERGE — checked, and the suspicion was
+REFUTED.** #782 merged at `16:17:12Z` while a 40-minute `e2e` looked in flight
+on `main`; measured afterwards, that run completed **success at 40m0s** before
+the merge landed, so `3b7f440c` is 4 of 4 and nothing was cancelled. Recorded
+because the merge-side cancellation class has a real history here and a
+near-miss that turns out fine is the kind nobody writes down.
+
+⚠️ **AND THE FIRST ATTEMPT TO CHECK IT FABRICATED THE SHA.** I padded
+`3b7f440c` to 40 characters by hand, got an empty run list, and was one step
+from reading that as "the runs are gone". `git rev-parse` gave the real
+`3b7f440c27fe…`; the padded string was `…48d95efa…`. Canon's *"full-looking is
+not full"*, committed by the session that had just re-read the rule.
 
 ### 🔴 F5-i — MULTI-SHAPE CERTIFICATION PROOF — **baseline census, measured 2026-08-21**
 
