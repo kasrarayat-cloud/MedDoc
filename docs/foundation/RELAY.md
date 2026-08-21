@@ -22646,3 +22646,91 @@ and the pair is what discriminates.
    "GSV at the SFJ" are mutually congruent on the shared `gsv` token. Pre-existing,
    out of F5-e's scope, and **filed rather than silently changed** — tightening it
    could refuse legitimate fills where a row label carries words the segment lacks.
+
+### 🟩 F5-e IS LIVE IN PRODUCTION — **2026-08-21T04:10Z, 11 of 11 JUDGED**
+
+| step | evidence |
+|---|---|
+| fix + gate | PR **#769**, merge `973de22f47cc0a972d3ef43634ad39ae4e56dc76` |
+| citation | **4 of 4** · `CI` 32440806371 a1 · `e2e` 32440806415 a1 · `a11y-ci` 32440806479 a1 · `secrets-scan` 32440806384 a1 |
+| §2.5 declaration | PR **#770**, `docs/foundation/deploys/20260821-973de22f.md`, **committed before the act**, resolved by ancestry (F10) |
+| deployed | `9063ec5cb73ef376ead4283e8f6d979f06bc6bbe` at **04:10Z** |
+| citation | **4 of 4** · `CI` 32443333884 a1 · `e2e` 32443333859 a1 · `a11y-ci` 32443333868 a1 · `secrets-scan` 32443333894 a1 |
+| rollback | `pre-9063ec5c-20260821` on app / worker / gotenberg |
+
+**Every citation is `a1` — no re-runs anywhere in this item.**
+
+#### THE COMPARISON, ROW BY ROW — 11 of 11
+
+| # | declared | observed |
+|---|---|---|
+| 1 | app image MUST change | `f6cbe192…` → **`05b15441…`** ✔ |
+| 2 | worker image MUST change | `34251ecb…` → **`e7bb304f…`** ✔ |
+| 3 | visits = 49 | **49** ✔ |
+| 4 | signed = 31 | **31** ✔ |
+| 5 | patients = 36 | **36** ✔ |
+| 6 | migrations = 104 | **104** ✔ |
+| 7 | **CERTIFIED = 1** | **1** ✔ — *the twin survived* |
+| 8 | fill manifests = 1 | **1** ✔ — no doctor signed in the window |
+| 9 | gotenberg unchanged | `2d05d225…` = `2d05d225…` ✔ |
+| 10 | co-tenants | 200 · 200 · 307 · 404 · **410** ✔ |
+| 11 | the predicate is in the shipped worker | see below ✔ |
+
+**Row 7 was the one worth declaring.** F5-e adds a field to `EncounterFact`, and
+production has exactly ONE certified twin, earned nine hours earlier. The
+mechanism was checked before the deploy *and* declared as a row that would catch
+it if that reasoning were wrong. It held.
+
+**Row 11 carried its own positive control**, against the running worker:
+
+    fact.segment    0 -> 2      (must appear)
+    hayTokens       0 -> 2      (must appear)
+    segmentCongruent 2 -> 2     (CONTROL — must stay non-zero)
+
+The control is what makes the first two lines mean anything: all-zeros would be a
+probe that never resolved the file, not a deploy that failed. Containers: **9 of
+9 healthy**, app and worker `Up 54 seconds`.
+
+⚠️ **ONE CORRECTION TO MY OWN DECLARATION, RECORDED RATHER THAN QUIETLY
+DROPPED.** Its ROLLBACK section named the tag `pre-973de22f-20260821`. The script
+names the tag after the DEPLOYED head, so the real tags are
+**`pre-9063ec5c-20260821`**. The tags exist and were digest-verified against the
+pre-deploy baseline (`f6cbe192` / `34251ecb` / `2d05d225`, exactly the ids
+captured at 02:02Z) — **the tags are correct and only the declaration's prose was
+wrong.** Naming it because a rollback instruction pointing at a tag that does not
+exist is the kind of error found at the worst possible moment.
+
+#### ⚠️ WHAT IS **NOT** CLAIMED, AND IT IS THE HALF THAT MATTERS
+
+**Nobody has seen a reflux cell fill in production.** This deploy proves the
+predicate SHIPPED; it cannot prove the column FILLS, because that needs a new
+visit bound to the certified template and **a real doctor's visit is never a
+smoke target.**
+
+**26 is a CEILING, not a prediction** — 26 reflux-labelled fields, all
+`narrative_text`, all `rowPrototype: false`, previously all refusing
+`no_supporting_fact`. How many realise depends on facts present with matching
+numbers and laterality.
+
+> **The evidence will be the next fill manifest produced by ordinary use.** Read
+> it STRUCTURALLY — status columns only, exactly as session 02 read the first
+> one. The number to watch is `notMentionedCount`: **55 of 80** on the first
+> manifest. If F5-e works, the next one is materially lower and
+> `no_supporting_fact` drops. **If it reads 55 again, F5-e did not do what this
+> row claims**, and that is the falsifier — stated in advance so it cannot be
+> explained away afterwards.
+
+#### 🔵 A CONSEQUENCE OF THIS CHANGE, NAMED BEFORE SOMEONE ELSE FINDS IT
+
+`bridge-fill.ts:485` consumes a note row on `filledDiameter || filledReflux`.
+Before F5-e a reflux-only success was impossible, so consumption was effectively
+diameter-driven. **Now an IR row can bind a note row on its REFLUX alone and stop
+looking**, where previously it would have continued to a later matching row.
+
+This is the mirror image of the class F5-d(b) already documented at
+`bridge-fill.ts:443-454` — that one is refusals changing addressing, this is
+acceptances changing it. **Benign in the real topology**: laterality is
+fail-closed, so a reflux match means the note row is already side-correct, and
+every value still requires its own cited fact. The residual case is a duplicate
+same-leg note row for one vessel. **Not a wrong value — at worst a diameter cell
+that stays blank.**
