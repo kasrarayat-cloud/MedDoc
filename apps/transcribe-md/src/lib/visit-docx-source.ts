@@ -55,12 +55,12 @@ export interface VisitDocxSource {
  */
 export async function resolveVisitDocx(
   visitId: string,
-  userId: string,
+  practiceId: string,
   data: VisitExportData,
   logTag: string,
 ): Promise<VisitDocxSource> {
   const outcome = templateNativeDocxEnabled()
-    ? await loadOrComputeNativeTemplateDocxForVisit(visitId, userId).catch((err) => {
+    ? await loadOrComputeNativeTemplateDocxForVisit(visitId, practiceId).catch((err) => {
         console.warn(
           `${logTag} native load failed; falling back to styled:`,
           redactPhi(err instanceof Error ? err.message : err),

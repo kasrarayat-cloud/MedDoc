@@ -6,6 +6,7 @@
 // options, blank when unsaid, never invented; every populated value carries
 // evidence. prisma singleton + injectable storage + logTwinAudit only.
 // ============================================================================
+import { noteIdentity } from './note-identity';
 import { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
 
@@ -557,6 +558,12 @@ export async function processTemplateTwinVisit(
     outputMimeType: storedOutput?.mimeType ?? null,
     outputSizeBytes: storedOutput?.sizeBytes ?? null,
     staticContentSha256: prepared.render ? ir.staticContentSha256 : null,
+    // ⚠️ THE NOTE THIS FILL RAN AGAINST — stamped ONCE here, so both the
+    // `updateMany` and the `create` below inherit it. The serve path recomputes
+    // it from the visit's CURRENT note and declines a mismatch; without it a
+    // VERIFIED manifest was served forever and a doctor's edit could silently
+    // fail to reach their own download.
+    noteSha256: noteIdentity(input.generatedNote),
     roundTripVerified: prepared.render?.verification.verified === true,
     roundTripVerification: prepared.render
       ? asJson(prepared.render.verification)

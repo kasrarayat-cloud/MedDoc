@@ -83,7 +83,7 @@ export const GET = withApiHandler<{ id: string }>(
       } else {
         const source = await resolveVisitDocx(
           visitId,
-          session.user.id,
+          session.user.practiceId,
           data,
           '[api:visits:export:pdf]',
         );

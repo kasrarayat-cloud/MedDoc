@@ -191,7 +191,7 @@ export async function previewVisitDocumentAction(
   // from what the doctor put their name to, and the twin fill path refuses a
   // signed visit anyway.
   if (visit.signedAt) {
-    const stored = await loadNativeTemplateDocxForVisit(visitId, session.user.id);
+    const stored = await loadNativeTemplateDocxForVisit(visitId, session.user.practiceId);
     if (!stored) {
       // No stored native file (never had one, or the template was deleted).
       // The signed note as a styled document is the honest answer — and it is

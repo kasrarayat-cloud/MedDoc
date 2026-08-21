@@ -55,7 +55,7 @@ export const GET = withApiHandler<{ id: string }>(
       // was already wrong once.
       const source = await resolveVisitDocx(
         visitId,
-        userId,
+        session.user.practiceId,
         data,
         '[api:visits:export:docx]',
       );
