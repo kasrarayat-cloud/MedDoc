@@ -468,3 +468,57 @@ entry adds is that the diff is worth more when it is *chosen* than when it is
 
 **This entry retires when a claim line appears on a ruled fix direction and the
 second actor extends it.**
+
+### 2026-08-21T09:00:00Z — 🔴 F5-i: MULTI-SHAPE CERTIFICATION PROOF (behind F5-f's ship)
+
+**OWNER QUESTION: "is the fix for ALL categories/templates, not just mine?"**
+
+**The structural answer is YES** — one engine, no per-template code paths: every
+template goes through the same compiler → mappings → auto-certify → fill →
+export. Nothing branches on a template id or a specialty.
+
+⚠️ **BUT ONE OBSERVATION IS NOT A CATEGORY PROOF.** Everything demonstrated
+end-to-end so far ran on ONE shape: a tabular measurement form (the 80-field
+venous duplex). The paths a table exercises — `bridgeNumericTableCells`, row
+addressing, `segmentCongruent`, measurement-cell fill coverage — are precisely
+the paths a table-less form never touches. The engine is least proven exactly
+where it has never been run.
+
+**1. THE QA WALK GAINS A SECOND SHAPE.** A committed BLANK operative-note
+fixture — numbered lists, free-text sections, header fields, **zero measurement
+tables** — through the same arms where applicable: upload → compile →
+auto-certify → visit → fill → export.
+
+⚠️ Note the fixture question is itself open: the repo carries
+`colon_blank_answers.pdf` (a blank PDF form) and `WM IOV Template.docx` (the
+tabular one). A blank operative-note **.docx** may need to be added under the
+sanctioned fixture path — and it must be BLANK, per the tracked-fixture rule. A
+filled document is never a fixture.
+
+**2. THE HONEST LIMIT GETS ITS FIX DIRECTION: SHAPE-DERIVED OR REFUSE.**
+`deriveVerificationEncounter` currently FALLS BACK to a venous dictation for a
+form whose labels it cannot speak to. Ruled: a template the generator cannot
+address lands in **needs-review** naming that — *"we could not generate a
+matching self-test"* — and never certifies against an unrelated specialty's
+dictation.
+
+> **A certificate must mean THE form was exercised, not that A form was.**
+
+The current fallback is the weaker claim wearing the stronger one's clothes: it
+produces a green certificate whose proof never touched the template it certifies.
+
+**3. THE CENSUS — measured 2026-08-21, so the next specialty arrives onto a map.**
+
+| shape | status |
+|---|---|
+| **tabular measurement** (venous duplex, 80 fields) | ✅ PROVEN end-to-end in production — certified, filled, exported, owner-verified |
+| **operative note** (Colonoscopy Operative Note, Operative Note ×3) | ⚠️ **UNPROVEN** — 4 templates exist in production, **0 compiled twins** |
+| **SOAP office** (System Default — SOAP, Primary Care Chronic Disease Follow-up) | ⚠️ **UNPROVEN** — 0 compiled twins |
+| **imaging report** (Ultrasound Imaging Report) | ⚠️ **UNPROVEN** — 0 compiled twins |
+
+**Production holds 10 note templates and exactly ONE compiled twin.** The
+generality claim currently rests on that one. That is the honest state, and it
+is why this item exists rather than a reassurance.
+
+**This entry retires when a second SHAPE certifies end-to-end and the census
+above is re-measured.**
