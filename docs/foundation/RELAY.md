@@ -23056,7 +23056,7 @@ payload was not, and every row is about the one file that moved.
 
 ---
 
-## 🟡 F5-i(a)+(b) — SHAPE-DERIVED, OR REFUSE — BUILT AND GATED — 2026-08-21, run `20260821-111818-b1` session 01
+## 🟩 F5-i(a)+(b)+(c) — SHAPE-DERIVED, OR REFUSE — **LIVE IN PRODUCTION 2026-08-21T14:14Z, 16 of 16 JUDGED** — run `20260821-111818-b1` session 01
 
 **CLAIM LINE (per the 2026-08-21T23:00Z INBOX rule): the loop is on F5-i's ruled
 part 2.** ⚠️ Filed in the same session that built it rather than before, because
@@ -23303,3 +23303,56 @@ is never a fixture.*
 
 **Neither blocker is a reason to un-park anything.** They are stated so the next
 session meets them on paper instead of forty minutes into a QA walk.
+
+### 🟩 F5-i IS LIVE IN PRODUCTION — **2026-08-21T14:14Z, session 01 — 16 of 16 JUDGED**
+
+**Deployed `d7cc0246ddd396ae949aa164666d27fab99b69e1`.** Declaration
+`docs/foundation/deploys/20260821-3e9c29a2.md`, committed **before** the act and
+resolved by ancestry (F10). Full judgement:
+`docs/foundation/deploys/20260821-3e9c29a2-JUDGED.md`.
+
+| step | evidence |
+|---|---|
+| fix + gate | PR **#778**, merge `3e9c29a25606cc73d473910a71fb9e1d72ae21d7` |
+| citation | **4 of 4** · `CI` 32483385870 a1 · `e2e` 32483385922 a1 · `a11y-ci` 32483385940 a1 · `secrets-scan` 32483385908 a1 |
+| §2.5 declaration | PR **#779**, merge `d7cc0246ddd396ae949aa164666d27fab99b69e1` |
+| citation | **4 of 4** · `CI` 32487227616 a1 · `e2e` 32487227629 a1 · `a11y-ci` 32487227613 a1 · `secrets-scan` 32487227951 a1 |
+| deployed | `d7cc0246`, log `docs/deploy-logs/deploy-20260821T141425Z.log` |
+| rollback | `pre-d7cc0246-20260821` on all three images, digest-verified |
+
+**Both citations produced by `check-citation.sh` and pasted, never typed. Every
+run `a1`** — no re-run anywhere in this item.
+
+⚠️ **THE ABSENCE ROW IS THE ONE THAT DID WORK.** Rows 3-6 (new code present)
+would each have passed on a build shipping the fix BESIDE the old permissive
+guard. **Row 7 — `saphenous|femoral` falling 1 → 0 in the shipped worker — is
+the only row that fails on that build**, and row 3 is its control, answering 1
+in the same file where row 7 answers 0. A probe that had merely stopped matching
+would read 0 for both.
+
+⚠️ **ROW 13 WAS THE ROW WITH SOMETHING TO LOSE**, and it confirmed a prediction
+rather than assuming one: the certified twin's real 80 fields were measured
+BEFORE the act (52 measurement rows, 52 of 52 unambiguous venous, 0 arterial),
+so the arterial guard provably never fires on it. It is still `CERTIFIED`.
+
+### ⚠️ THE DEPLOY REFUSED ONCE FIRST, FROM THE WRONG DIRECTORY
+
+The first invocation ran **from the worktree** — the shell's cwd had persisted
+from an earlier `npx tsc` — so `deploy-prod.sh` read HEAD as `766aac04` instead
+of `d7cc0246`. **F9's rollback gate refused before anything was built, migrated
+or recreated.**
+
+It caught a hazard it was not designed for. `docker-compose.yml` carries
+RELATIVE bind mounts, so a compose run from another directory **re-points the
+ingress config bind at that directory** — canon's *"you cannot sidestep it by
+deploying from a worktree"*. The tell was compose finding no running containers,
+because the project name derives from the directory.
+
+> **The Bash cwd is a deploy input.** MASTER already records it choosing which
+> `vitest` config resolves and which copy of a script runs. This is the same
+> trap reaching the production deploy, and a guard written for another purpose
+> is what stood between it and a re-pointed ingress bind.
+
+**WHAT IS NOT CLAIMED:** zero production rows reach the new refusal (9 of 10
+templates have no compiled twin), no clinical walk backs it on prod or QA, and
+**F5-i part 1 remains open with its close condition unreachable as worded.**
