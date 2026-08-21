@@ -22258,3 +22258,137 @@ are emitted by `matchMeasurementFact`, which this change does not touch and
 which runs **before** the derivation is consulted — so neither count can move,
 and the gate asserts that rather than arguing it. The real re-measurement is a
 property of the backfill run and belongs to (c).
+
+### 🟩 F5-d(b) IS LIVE, AND PRODUCTION HAS ITS FIRST CERTIFIED TWIN — **2026-08-20T23:41:26Z, session 02**
+
+**Acceptance shape (c) is MET. The owner's template CERTIFIED, and it was
+OBSERVED rather than assumed.**
+
+| | |
+|---|---|
+| deployed commit | **`0aa9f625cffae9857e098f8c3735a867ba47a7d1`** |
+| replaced | `89429c1b` (2026-08-20T11:44:26Z), read from RELAY's deploy row and the running image build times |
+| declaration | `docs/foundation/deploys/20260820-cba367fc.md` — named after PR #763's merge commit, **committed before the act**, resolved by ancestry (F10) |
+| judgment | **14 of 14 declared rows matched** |
+| rollback | `pre-0aa9f625-20260820` on app / worker / gotenberg |
+
+**Citation — 4 of 4 on the F5-d(b) merge commit
+`cba367fccbad458585867f8463dedc06e3c6ea8a`:**
+   · `CI` 32423128868 a1
+   · `e2e` 32423128864 a1
+   · `a11y-ci` 32423128942 a1
+   · `secrets-scan` 32423128887 a1
+
+**Citation — 4 of 4 on the DEPLOYED commit
+`0aa9f625cffae9857e098f8c3735a867ba47a7d1`:**
+   · `CI` 32426631171 a1
+   · `e2e` 32426631163 a1
+   · `a11y-ci` 32426631168 a1
+   · `secrets-scan` 32426631174 a1
+
+**Every line is `a1`** — nothing was re-run, so there is nothing to explain.
+Both blocks were produced by `scripts/check-citation.sh` and pasted, not typed.
+
+#### THE DEPLOY JUDGMENT — 14 of 14
+
+**Changed, as declared:** both image digests
+(`990efdb5…`→`f6cbe192…` app, `51439ac7…`→`34251ecb…` worker), the deployed
+commit, and the rollback tags on all three images. Nine containers, all healthy.
+
+**Unchanged, as declared — and these are the rows that mattered:** compiled
+versions **1**, **CERTIFIED compiled versions 0**, fill manifests **0**, mappings
+**80 / 80 CERTIFIED**, visits **48** / signed **30** / patients **35**, active
+note templates **7**, migrations **104 of 104**, co-tenants at their expected
+codes with `pro` still **410**.
+
+⚠️ **THE LOAD-BEARING ABSENCE ROW HELD.** The declaration named
+`CERTIFIED = 0` *at deploy time* because this fix REMOVES a certification
+blocker while auto-certification is LIVE — so if certification could happen as a
+side effect of restarting a container, this was the deploy that would have shown
+it. It did not. Certification stayed a **deliberate act**, and the deploy was
+judged BEFORE the backfill was run.
+
+#### ⚠️ STRUCTURAL VERIFICATION — AND MY FIRST PROBE WAS THE PROSE TRAP, ON MYSELF
+
+The fix was verified **in the running worker image**, not in the repo:
+
+    field-value-derivation.ts                     present (9405 bytes)
+    deriveFieldValueFromFact in bridge-fill.ts    2
+    WRITABLE_KINDS / row_prototype guards         3
+    value: derived,                               1   (line 334)
+    ^    value,$  — the OLD shape                 0
+
+⚠️ **MY FIRST "MUST BE ABSENT" PROBE GREPPED `no unit, no reformat` AND
+RETURNED 1.** That is the old code's comment — **which I had quoted inside the
+NEW comment explaining what changed.** The probe matched my own prose about the
+fix and read as *"the old code is still shipped"*.
+
+> **This is `AGENTS.md`'s substring/prose trap, self-applied, in the
+> verification of my own deploy** — *"a file's comments are the one place where
+> the words you are grepping for are guaranteed to appear"*. Re-probed on the
+> CODE token (`value: derived,` present, `^    value,$` absent) and it answered
+> cleanly. **A verification that greps a comment has verified a comment.**
+
+#### 🎉 (c) — THE TEMPLATE CERTIFIED, AND EVERY PREDICTION HELD
+
+The backfill was run as the ruled shape prescribes — **dry run first**, then
+`--commit`, both through the SHIPPED `scripts/backfill-auto-certify.ts` (which
+ENQUEUES; the worker job remains the one certification path).
+
+    dry run  → eligible twins: 1
+               cmsxip5f9000901nadsggo2l1  NEEDS_CONFIRMATION
+               "Venous Duplex Lower Extremities US Report"
+    --commit → ENQUEUED 1 of 1
+    worker   → [auto-certify] template=cmsxip5f9000901nadsggo2l1
+               status=certified confirmed=80
+
+**Verified in the DATABASE, not from the log line:**
+
+| quantity | before | after |
+|---|---|---|
+| compiled version `617d6de9…` | `NEEDS_CONFIRMATION` | ✅ **`CERTIFIED`** |
+| CERTIFIED compiled versions | 0 | ✅ **1** |
+| mappings | 80 / 80 CERTIFIED | **80 / 80 CERTIFIED** — unchanged |
+| fill manifests | 0 | 0 — a certification is not a fill |
+| visits / signed / patients | 48 / 30 / 35 | **48 / 30 / 35** — untouched |
+
+**And the audit rows were READ BACK rather than assumed** (a fire-and-forget
+writer is proved only by querying it), all at `23:41:26Z`, all `success = t`:
+`TEMPLATE_TWIN_SYNTHETIC_TESTED` · `TEMPLATE_TWIN_CERTIFIED` ·
+`TEMPLATE_TWIN_ACTIVATED` · two `TEMPLATE_TWIN_MAPPING_UPDATED`.
+
+⚠️ **ZERO `ASSERTION_NOT_SUPPORTED`, ZERO `BLOCKED compiled` — against a
+POSITIVE CONTROL of 44 log lines the same probe DID find.** The fourth
+candidate did not produce a fourth verbatim refusal; it produced a certificate.
+
+#### ⚠️ THE BLANK CENSUS DID NOT MOVE, WHICH IS THE PREDICTION WORTH KEEPING
+
+    32 reason=no_supporting_fact
+    12 reason=laterality_mismatch
+    -- 44 blank, and ZERO of the new reason value_not_derivable_from_fact
+
+**Identical to the INBOX's `44 blank — 32 / 12`, to the row.** The gate asserted
+this could not move — both reasons are emitted by `matchMeasurementFact`, which
+this change does not touch and which runs BEFORE the derivation is consulted —
+and the real production run confirmed it. *A number that moves without an
+explanation is the finding; this one was predicted, and it did not move.*
+
+⚠️ **AND THE REFLUX COLUMN IS STILL STRUCTURALLY UNFILLABLE.** Session 01's
+finding (1) stands, unaddressed and now measurable on a CERTIFIED template: the
+12 `laterality_mismatch` and much of the 32 `no_supporting_fact` are the reflux
+cells, whose facts carry no anatomy token for `segmentCongruent` to align on.
+**The template certifying does NOT mean the table fills.** That is the next
+thing worth building, and it is exactly the trap session 01 warned about — *"the
+obvious success criterion can be met with half the table still empty"*.
+
+#### ☎️ THE OWNER PING IS NOW EARNED — OBSERVED, NOT ASSUMED
+
+Both standing pings are discharged by this: **the West Medical template is
+CERTIFIED**, production has its first certified twin, and the doctor was never
+asked to confirm anything — the machine did it, as ruling #127 said it would.
+
+**What to look at, and what NOT to expect:** the twin will now attempt a native
+fill on the next visit bound to that template. ⚠️ **Expect the vessel table to
+be substantially blank** — 44 of the measurement cells cannot fill for the
+reasons above, and that is a known, filed, unfixed limitation rather than a
+regression. The certification is real; the table is not yet.
