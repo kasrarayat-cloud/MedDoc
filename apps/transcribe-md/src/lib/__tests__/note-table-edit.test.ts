@@ -197,24 +197,148 @@ describe('editTableCell', () => {
     expect(ok.body).not.toContain('GSV at the Knee');
   });
 
-  it('REFUSES a ragged table rather than writing one column left', () => {
-    // A header that omits the row-label column puts every index off by one, so
-    // the write lands in a different column from the one it reports back.
-    const ragged = [
-      '## FINDINGS',
-      '| DIAMETER (mm) | REFLUX TIME (seconds) |',
-      '| --- | --- |',
-      '| GSV at the SFJ | 6.2 | 3.4 |',
-    ].join('\n');
-    const r = editTableCell({
-      note: ragged,
-      sectionLabel: 'FINDINGS',
-      rowLabel: 'GSV at the SFJ',
-      columnLabel: 'DIAMETER (mm)',
-      value: '9.9',
+  // ⚠️ RE-PINNED 2026-08-21 (F24 SLICE 1). THIS TEST USED TO ASSERT THAT THE
+  // SHAPE BELOW IS REFUSED. Its reason, verbatim, as history:
+  //
+  //   "A header that omits the row-label column puts every index off by one,
+  //    so the write lands in a different column from the one it reports back."
+  //
+  // THAT WAS TRUE WHEN WRITTEN AND THE NORMALISATION MADE IT FALSE. The header
+  // is widened on parse, so the indices line up and the write lands where it
+  // says it does. The sentence is not deleted — it is replaced by the arm that
+  // proves it STAYS false, because the fear it expressed is exactly what would
+  // return if anyone widened the guard instead of the header.
+  //
+  // WHAT WAS PROTECTED WAS THE REFUSAL OF GENUINE AMBIGUITY, NOT THIS FIXTURE.
+  // Measured on production 2026-08-21 over every data row under a detected
+  // header: delta +1 -> 339 rows, delta 0 -> 331, delta ANYTHING ELSE -> 0.
+  // The universe is closed, so a +1 header is missing its LABEL column and
+  // nothing else; and the missing cell is provably LEADING because a row is
+  // selected only when `norm(c[0]) === wantRow`.
+  describe('a ragged table: normalised when unambiguous, refused otherwise', () => {
+    const note = (header: string, sep: string, rows: string[]) =>
+      ['## FINDINGS', header, sep, ...rows].join('\n');
+    const edit = (n: string, columnLabel = 'DIAMETER (mm)') =>
+      editTableCell({
+        note: n,
+        sectionLabel: 'FINDINGS',
+        rowLabel: 'GSV at the SFJ',
+        columnLabel,
+        value: '9.9',
+      });
+
+    // (a) THE UNAMBIGUOUS +1 — the owner's 339 production rows.
+    it('normalises the +1 shape AND writes the CORRECT cell, both columns', () => {
+      // ⚠️ ASSERT THE CELL, NOT MERELY SUCCESS. The old test's fear was a write
+      // landing one column left; `ok === true` cannot see that, and a fix that
+      // succeeded into the wrong column would satisfy it. 6.2 and 3.4 are
+      // deliberately distinct so an off-by-one is VISIBLE.
+      const legacy = note(
+        '| DIAMETER (mm) | REFLUX TIME (seconds) |',
+        '| --- | --- |',
+        ['| GSV at the SFJ | 6.2 | 3.4 |'],
+      );
+
+      const d = edit(legacy, 'DIAMETER (mm)');
+      expect(d.ok).toBe(true);
+      if (d.ok) {
+        expect(d.column).toBe('DIAMETER (mm)');
+        expect(d.before).toBe('6.2');
+        expect(d.body).toContain('| GSV at the SFJ | 9.9 | 3.4 |');
+      }
+
+      const x = edit(legacy, 'REFLUX TIME (seconds)');
+      expect(x.ok).toBe(true);
+      if (x.ok) {
+        expect(x.column).toBe('REFLUX TIME (seconds)');
+        expect(x.before).toBe('3.4');
+        expect(x.body).toContain('| GSV at the SFJ | 6.2 | 9.9 |');
+      }
     });
-    expect(r.ok).toBe(false);
-    expect(r.reason).toBe('ragged_table');
+
+    // (b) EVERY OTHER RAGGED SHAPE — still refused, verbatim reason.
+    // ⚠️ THE ARM THE ADVERSARIAL PASS EARNED. The first version of the widen
+    // fired on DELTA alone, and delta is invariant under WHICH END is short.
+    // A header that NAMES its label column and drops a TRAILING data column is
+    // +1 too — and the widen wrote the doctor's diameter into the REFLUX cell,
+    // destroyed the reflux time, left the diameter uncorrected, and reported
+    // back the column they had named. Before the slice that input was refused.
+    it('REFUSES a +1 header that is short at the TRAILING end, not the front', () => {
+      const r = edit(
+        note('| VEIN | DIAMETER (mm) |', '| --- | --- |', [
+          '| GSV at the SFJ | 6.2 | 3.4 |',
+        ]),
+      );
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe('ragged_table');
+    });
+
+    it('REFUSES a trailing-short header even when it ALREADY has an empty label cell', () => {
+      // This is the shape the generator half of this very slice emits, one
+      // column short — so it is the likeliest trailing-short header in the
+      // system. Prepending a second empty cell would shift every index right.
+      const r = edit(
+        note('|  | DIAMETER (mm) |', '| --- | --- |', ['| GSV at the SFJ | 6.2 | 3.4 |']),
+      );
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe('ragged_table');
+    });
+
+    it('leaves the post-fix generator shape alone and writes the correct cell', () => {
+      const r = edit(
+        note('|  | DIAMETER (mm) | REFLUX TIME (seconds) |', '| --- | --- | --- |', [
+          '| GSV at the SFJ | 6.2 | 3.4 |',
+        ]),
+      );
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.before).toBe('6.2');
+        expect(r.body).toContain('| GSV at the SFJ | 9.9 | 3.4 |');
+      }
+    });
+
+    it('still REFUSES a header two or more cells narrower', () => {
+      const r = edit(note('| DIAMETER (mm) |', '| --- |', ['| GSV at the SFJ | 6.2 | 3.4 |']));
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe('ragged_table');
+    });
+
+    it('still REFUSES a header WIDER than its rows', () => {
+      const r = edit(
+        note(
+          '| A | DIAMETER (mm) | REFLUX TIME (seconds) | Z |',
+          '| --- | --- | --- | --- |',
+          ['| GSV at the SFJ | 6.2 | 3.4 |'],
+        ),
+      );
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe('ragged_table');
+    });
+
+    it('still REFUSES when the data rows disagree with EACH OTHER', () => {
+      // Nothing can be inferred about a table that is not internally consistent.
+      const r = edit(
+        note('| DIAMETER (mm) | REFLUX TIME (seconds) |', '| --- | --- |', [
+          '| GSV at the SFJ | 6.2 | 3.4 | 9.9 |',
+          '| SSV at the SPJ | 4.1 | 1.2 |',
+        ]),
+      );
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe('ragged_table');
+    });
+
+    it('leaves a well-formed table completely alone', () => {
+      const r = edit(
+        note('| VEIN | DIAMETER (mm) | REFLUX TIME (seconds) |', '| --- | --- | --- |', [
+          '| GSV at the SFJ | 6.2 | 3.4 |',
+        ]),
+      );
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.column).toBe('DIAMETER (mm)');
+        expect(r.before).toBe('6.2');
+      }
+    });
   });
 
   it('a bilateral study IS editable once the table is named', () => {
@@ -246,5 +370,107 @@ describe('editTableCell', () => {
     expect(named.before).toBe('5.1');
     expect(named.body).toContain('| GSV at the SFJ | 6.2 |');
     expect(named.body).toContain('| GSV at the SFJ | 7.0 |');
+  });
+});
+
+describe('F24 SLICE 1b — an unanswerable question becomes an honest refusal', () => {
+  // Production 2026-08-21: 20 of 45 headers have a BLANK line above, 25 have
+  // the caption adjacent. The 20 could not be disambiguated at all, and the
+  // doctor was asked "which table?" with NO options — a dead end, not a
+  // refusal.
+  //
+  // ⚠️ THE OBVIOUS FIX — let captionFor skip the blank line — WAS BUILT,
+  // PROVEN, AND WITHDRAWN. `captionFor` never distinguished a caption from
+  // arbitrary prose, so widening its reach multiplied the narrative it could
+  // mistake for one, and a doctor's RIGHT-leg correction was persisted into
+  // the LEFT leg and reported as success. See the comment on `captionFor`.
+  // What ships is the honest refusal; the 20 stay uneditable until caption
+  // VALIDATION is answered.
+  const tbl = (gaps: number) => {
+    const g: string[] = Array(gaps).fill('');
+    const t = [
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| SSV at the SPJ | [not documented] | [not documented] |',
+    ];
+    return ['## STUDY', '', 'Right Leg:', ...g, ...t, '', 'Left Leg:', ...g, ...t, ''].join('\n');
+  };
+  const go = (gaps: number, tableCaption?: string) =>
+    editTableCell({
+      note: tbl(gaps),
+      sectionLabel: 'STUDY',
+      rowLabel: 'SSV at the SPJ',
+      columnLabel: 'DIAMETER (mm)',
+      value: '10',
+      ...(tableCaption ? { tableCaption } : {}),
+    });
+
+  it('an ADJACENT caption still disambiguates and the edit completes', () => {
+    const q = go(0);
+    expect(q.ok).toBe(false);
+    if (!q.ok) expect(q.choices).toEqual(['Right Leg:', 'Left Leg:']);
+    const r = go(0, 'Right Leg');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.before).toBe('[not documented]');
+      const body = r.body ?? '';
+      expect(body.split('Left Leg:')).toHaveLength(2);
+      expect(body.split('Left Leg:')[0]).toContain('| SSV at the SPJ | 10 |');
+      expect(body.split('Left Leg:')[1]).toContain(
+        '| SSV at the SPJ | [not documented] | [not documented] |',
+      );
+    }
+  });
+
+  it('⚠️ NEVER asks a question it offers no way to answer', () => {
+    // The dead end this slice actually removes. With a blank line above each
+    // header no candidate carries a caption, so there is nothing to
+    // disambiguate WITH — and the refusal says so instead of pretending the
+    // conversation can continue.
+    for (const n of [1, 2, 3]) {
+      const r = go(n);
+      expect(r.ok).toBe(false);
+      if (!r.ok) {
+        expect(r.reason).toBe('caption_not_found');
+        expect(r.choices ?? []).toHaveLength(0);
+      }
+    }
+  });
+
+  it('⚠️ REGRESSION GUARD: narrative one blank above a table is NOT its caption', () => {
+    // The withdrawn widen made this exact note write the LEFT leg when asked
+    // for the RIGHT, and report ok=true. Reproduced on the real function
+    // before the revert; pinned here so it cannot come back quietly.
+    const note = [
+      '## FINDINGS',
+      '',
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 5.1 | 0.3 |',
+      '',
+      'The right leg was normal; the left GSV is dilated.',
+      '',
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3.4 |',
+      '',
+    ].join('\n');
+    const r = editTableCell({
+      note,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'DIAMETER (mm)',
+      value: '6.8',
+      tableCaption: 'Right Leg',
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('caption_not_found');
+    // non-vacuity: the fixture really does hold two tables with the same row
+    expect(note.split('| GSV at the SFJ |')).toHaveLength(3);
+  });
+
+  it('the doctor-facing reason tells them how to answer', () => {
+    expect(TABLE_EDIT_REASON.caption_not_found).toContain('Right leg');
+    expect(TABLE_EDIT_REASON.caption_not_found).not.toBe(TABLE_EDIT_REASON.row_ambiguous);
   });
 });

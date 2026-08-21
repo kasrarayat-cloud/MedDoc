@@ -61,6 +61,173 @@ too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
 
 
+
+
+### 🟢 F24 SLICE 1 + 1b — LIVE-READY. The generator stops emitting a grid the guard is right to refuse
+
+**Owner's sentence:** *"the AI must be able to edit everything it shows me in
+the Word/PDF."* Measured instance: **339 of 670** production data rows sat under
+a header one cell too narrow, and the editor refused every one — correctly.
+
+**WHAT SHIPS**
+
+1. **The generator** emits a header whose cell count matches the rows it
+   dictates — an **empty** leading label cell, because the doctor's DOCX has an
+   unheaded first cell and naming it would assert a header their form does not
+   carry.
+2. **Widen-on-parse** for legacy notes, gated on **evidence about the header**
+   (its first cell is itself a data column), never on the delta.
+3. **One predicate, two callers** — `lib/table-header-shape.ts`. First kill in
+   the five-matcher drift.
+4. **An unanswerable question becomes an honest refusal** — `caption_not_found`
+   replaces `row_ambiguous` with an empty choices list.
+5. **The EHR paste** carries no stray `": "` for an unheaded column.
+
+⚠️ **The guard at `note-table-edit.ts:197` is byte-identical.** The fix is
+stopping the generator from emitting a grid the guard is RIGHT to refuse. The
+old test is **re-pinned as the distinction, not deleted** — its reason preserved
+verbatim as history, replaced by the arm that proves it stays false, and that
+arm asserts THE CELL rather than mere success.
+
+**ACCEPTANCE — ONE REPLAY GREEN, ON AN UNSIGNED NOTE OF THE CERTIFIED SHAPE**
+
+*(A signed record refusing the edit is the FREEZE working, not a Slice 1
+failure. The owner's original failure was on his PRE-SIGN draft; his acceptance
+visit is now signed.)*
+
+| step | outcome |
+|---|---|
+| edit without naming a leg | 🟢 `row_ambiguous`, `choices=["Right Leg:","Left Leg:"]` — the disambiguation fires WITH options |
+| `DIAMETER (mm) := 10` | 🟢 `was="[not documented]"`, right leg `\| SSV at the SPJ \| 10 \| … \|` |
+| `REFLUX TIME (ms) := 2.8` | 🟢 `was="[not documented]"`, right leg `\| … \| 2.8 \|` |
+| the LEFT leg | 🟢 untouched in both |
+
+**⚠️ THE 20 OF 45 ARE BLOCKED, AND THE CENSUS IS CORRECTED TO WHAT IT MEASURED.**
+The replay is green on the **25 of 45** tables whose caption sits ADJACENT to the
+header. The other **20 of 45** — caption, blank line, header, which is the
+canonical markdown shape — remain uneditable. **That census counted BLANK LINES.
+It never classified the line above the blank**, so it says how many tables have
+a gap and nothing about what sits beyond it.
+
+**TWO CLINICAL DEFECTS WERE FOUND IN THIS SLICE BY ADVERSARIAL PASSES, BOTH
+MINE, BOTH IN THE FIX RATHER THAN THE BUG:**
+
+- widening on **delta** wrote a diameter into the **reflux** cell;
+- widening the **caption reach** wrote a RIGHT-leg correction into the **LEFT
+  leg**.
+
+Both reported `ok=true`. Both were REFUSED before the change. Both were
+justified by a real census that could not have refuted the claim it was cited
+for — see `AGENTS.md` **"THE DOUBLE TAP"**.
+
+**351 files, 4678 passed, 0 failed. tsc 0.**
+
+---
+
+### 🔴 F24-CAPTION-VALIDATION — deciding what a caption IS. **Product-shaped; its own recon.**
+
+**Filed 2026-08-21 out of Slice 1b's withdrawal.** Blocks **20 of 45**
+production tables from being edited at all when bilateral — and bilateral is the
+main ultrasound case.
+
+⚠️ **THE DEFECT IS VALIDATION, NOT DISTANCE.** `captionFor` returns whatever
+line sits above a header and **never distinguished a caption from arbitrary
+prose**. Reaching further does not make it smarter; it multiplies the clinical
+narrative it can mistake for a caption. Proven: the withdrawn widen turned
+*"The right leg was normal; the left GSV is dilated."* into table 2's caption
+and wrote the wrong leg. **Do not re-open this by making the reach longer.**
+
+**DIRECTION NOTED, NOT RULED — it goes through its own recon:**
+the twin already knows each table's leg — **`rendererBinding.rowLaterality` is
+populated 80 of 80**, read from the DOCX's own leg-heading rows at compile time.
+The likely honest fix is the editor **asking the TWIN which table is which** for
+template-bound visits, rather than teaching prose-sniffing to be cleverer.
+Candidates to weigh in recon: the twin's laterality; a generator-emitted caption
+marker; both.
+
+⚠️ **CONSTRAINT, RECORDED SO IT IS NOT DISCOVERED LATE: `claim-prose.ts:71`
+READS THE SAME ADJACENT LINE.** Whatever answers this must move **both**
+readers, or the two caption readers in this codebase will disagree about what a
+caption is — and a disagreement between them is a wrong-table edit waiting to
+happen.
+
+### 🟢 F5-f — **ACCEPTED AND CLOSED 2026-08-21.** The owner's words: *"word pdf ok bodan"*
+
+**One frozen document, both formats, on his letterhead.** The behavioural
+evidence F5-f was missing since the deploy — *shipped* is now *behaves*.
+
+**EVIDENCE ROWS, against the spec recorded BEFORE the run:**
+
+| # | row | outcome |
+|---|---|---|
+| 1 | both formats byte-derived from one frozen object | 🟢 owner-confirmed |
+| 2 | the edit PRESENT in both (stale-manifest class dead) | 🟢 owner-confirmed — step 2 existed to make this falsifiable |
+| 3 | the letterhead HIS specifically, not merely not-generic | 🟢 owner-confirmed |
+| 4 | the fill delta | **MEASURED — 25 → 20**, see below |
+
+**THE SIGN PATH RAN — structural proof, measured after:**
+
+| quantity | before | after |
+|---|---|---|
+| fill manifests | 1 | **2** |
+| visits carrying `frozenFillManifestId` | 0 | **1** ← the pointer stamped in the guarded write |
+| SIGNED visits | 31 | **32** |
+| visits | 49 | **50** |
+| new manifest `noteSha256` | — | **`aa33e3ef…` SET** ← the new column doing its job |
+
+The second manifest: `VERIFIED · filled=20 · notMentioned=60 · needsReview=0 ·
+conflicts=0 · criticalUnresolved=0 · roundTripVerified=true · 49,388 bytes`.
+20+60 reconciles to the template's 80 fields.
+
+⚠️ **THE −5 FILL DELTA IS ATTRIBUTED, AND THE COUNT COULD NOT DO IT.** The loop
+deployed F5-d(b) + F5-i at `14:14:25Z`; the acceptance visit filled at
+`15:07:53Z` — **after** it. So "the new shared derivation refused five cells"
+was a live hypothesis, and `notMentionedCount` **cannot distinguish a refusal
+from an absence** (see the recon: five exits, one bucket).
+
+**The worker log discriminated where the count could not: 9 ×
+`laterality_mismatch`, 0 × `not_an_enumerated_option`, 0 ×
+`set_aside_not_adopted`, 0 derivation refusals.** The delta is **NOT** an
+F5-d(b)/F5-i regression. *Read to form a hypothesis; RUN something to name a
+mechanism.*
+
+**Routed per the staged row. F5-f CLOSED.**
+
+---
+
+### 🔴 F24 — EDITOR PARITY — **owner-priority, AHEAD OF F8**
+
+**His spec, verbatim:** *"the AI must be able to edit everything it shows me in
+the Word/PDF."* Three failures, live, on the certified template.
+
+**RECON COMPLETE — `docs/qa-reports/f24-editor-parity-recon-20260821.md`.**
+Nothing built. Headlines:
+
+1. **`note-table-edit.ts:197`** refuses on `headerCells.length !== rowCells.length`.
+   The editor resolves columns **by position in re-parsed markdown**; the twin
+   holds exact semantics for all 80 fields. **Twin refs in the edit path: 0, 0,
+   0** across `chat-edit-visit.ts`, `note-table-edit.ts`, `intent.ts` —
+   positive-controlled at 50/31/14 on the same matcher, so the zeros are real.
+   ⚠️ **The refusal is CORRECT for the information it has.** The defect is the
+   input, not the guard — do not "fix" it by loosening the ragged-table check.
+2. **Input surface is exactly `visit.soapFinal`** (`chat-edit-visit.ts:117,146`).
+   `DATE OF PROCEDURE` is a native content-control fill (`procedure-date.ts`),
+   so the export renders it and the editor cannot see it. **Census: 80 fields =
+   52 `narrative_text` (all in tables) + 28 `single_select` (standalone).**
+3. ⚠️ **THE RULING NAMES AN ATTRIBUTE THE IR DOES NOT STORE.** *"label +
+   laterality + section"* — and **0 of 80** fields carry a `laterality` key.
+   It is DERIVED and the derivation already ships:
+   `verified-note-selection.ts:56 fieldLateralityFromLabel(originalLabel)`.
+   **The tuple is constructible; no new data is needed.** Recorded so nobody
+   greps the IR, finds nothing, and concludes the twin cannot express it.
+   **LEAD (not a diagnosis):** the owner's disambiguation asked right-vs-left
+   correctly then failed on execution, and the same visit logged **nine**
+   `laterality_mismatch` blanks from `rowLateralityVerdict`.
+
+**KEEP:** the disambiguation flow. It was correct behaviour.
+**HOLD:** signed stays read-only per the freeze.
+⚠️ **The adversarial pass is MANDATORY — note-editing surface, clinical path.**
+
 ### 🟡 F5-f ACCEPTANCE — the owner's live test, SPEC RECORDED BEFORE THE RUN
 
 **Owner-specified 2026-08-21. Recorded here BEFORE the outcome exists**, so the
