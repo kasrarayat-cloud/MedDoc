@@ -62,6 +62,95 @@ too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
 
 
+
+### 🟢 F24 SLICE 1 + 1b — LIVE-READY. The generator stops emitting a grid the guard is right to refuse
+
+**Owner's sentence:** *"the AI must be able to edit everything it shows me in
+the Word/PDF."* Measured instance: **339 of 670** production data rows sat under
+a header one cell too narrow, and the editor refused every one — correctly.
+
+**WHAT SHIPS**
+
+1. **The generator** emits a header whose cell count matches the rows it
+   dictates — an **empty** leading label cell, because the doctor's DOCX has an
+   unheaded first cell and naming it would assert a header their form does not
+   carry.
+2. **Widen-on-parse** for legacy notes, gated on **evidence about the header**
+   (its first cell is itself a data column), never on the delta.
+3. **One predicate, two callers** — `lib/table-header-shape.ts`. First kill in
+   the five-matcher drift.
+4. **An unanswerable question becomes an honest refusal** — `caption_not_found`
+   replaces `row_ambiguous` with an empty choices list.
+5. **The EHR paste** carries no stray `": "` for an unheaded column.
+
+⚠️ **The guard at `note-table-edit.ts:197` is byte-identical.** The fix is
+stopping the generator from emitting a grid the guard is RIGHT to refuse. The
+old test is **re-pinned as the distinction, not deleted** — its reason preserved
+verbatim as history, replaced by the arm that proves it stays false, and that
+arm asserts THE CELL rather than mere success.
+
+**ACCEPTANCE — ONE REPLAY GREEN, ON AN UNSIGNED NOTE OF THE CERTIFIED SHAPE**
+
+*(A signed record refusing the edit is the FREEZE working, not a Slice 1
+failure. The owner's original failure was on his PRE-SIGN draft; his acceptance
+visit is now signed.)*
+
+| step | outcome |
+|---|---|
+| edit without naming a leg | 🟢 `row_ambiguous`, `choices=["Right Leg:","Left Leg:"]` — the disambiguation fires WITH options |
+| `DIAMETER (mm) := 10` | 🟢 `was="[not documented]"`, right leg `\| SSV at the SPJ \| 10 \| … \|` |
+| `REFLUX TIME (ms) := 2.8` | 🟢 `was="[not documented]"`, right leg `\| … \| 2.8 \|` |
+| the LEFT leg | 🟢 untouched in both |
+
+**⚠️ THE 20 OF 45 ARE BLOCKED, AND THE CENSUS IS CORRECTED TO WHAT IT MEASURED.**
+The replay is green on the **25 of 45** tables whose caption sits ADJACENT to the
+header. The other **20 of 45** — caption, blank line, header, which is the
+canonical markdown shape — remain uneditable. **That census counted BLANK LINES.
+It never classified the line above the blank**, so it says how many tables have
+a gap and nothing about what sits beyond it.
+
+**TWO CLINICAL DEFECTS WERE FOUND IN THIS SLICE BY ADVERSARIAL PASSES, BOTH
+MINE, BOTH IN THE FIX RATHER THAN THE BUG:**
+
+- widening on **delta** wrote a diameter into the **reflux** cell;
+- widening the **caption reach** wrote a RIGHT-leg correction into the **LEFT
+  leg**.
+
+Both reported `ok=true`. Both were REFUSED before the change. Both were
+justified by a real census that could not have refuted the claim it was cited
+for — see `AGENTS.md` **"THE DOUBLE TAP"**.
+
+**351 files, 4678 passed, 0 failed. tsc 0.**
+
+---
+
+### 🔴 F24-CAPTION-VALIDATION — deciding what a caption IS. **Product-shaped; its own recon.**
+
+**Filed 2026-08-21 out of Slice 1b's withdrawal.** Blocks **20 of 45**
+production tables from being edited at all when bilateral — and bilateral is the
+main ultrasound case.
+
+⚠️ **THE DEFECT IS VALIDATION, NOT DISTANCE.** `captionFor` returns whatever
+line sits above a header and **never distinguished a caption from arbitrary
+prose**. Reaching further does not make it smarter; it multiplies the clinical
+narrative it can mistake for a caption. Proven: the withdrawn widen turned
+*"The right leg was normal; the left GSV is dilated."* into table 2's caption
+and wrote the wrong leg. **Do not re-open this by making the reach longer.**
+
+**DIRECTION NOTED, NOT RULED — it goes through its own recon:**
+the twin already knows each table's leg — **`rendererBinding.rowLaterality` is
+populated 80 of 80**, read from the DOCX's own leg-heading rows at compile time.
+The likely honest fix is the editor **asking the TWIN which table is which** for
+template-bound visits, rather than teaching prose-sniffing to be cleverer.
+Candidates to weigh in recon: the twin's laterality; a generator-emitted caption
+marker; both.
+
+⚠️ **CONSTRAINT, RECORDED SO IT IS NOT DISCOVERED LATE: `claim-prose.ts:71`
+READS THE SAME ADJACENT LINE.** Whatever answers this must move **both**
+readers, or the two caption readers in this codebase will disagree about what a
+caption is — and a disagreement between them is a wrong-table edit waiting to
+happen.
+
 ### 🟢 F5-f — **ACCEPTED AND CLOSED 2026-08-21.** The owner's words: *"word pdf ok bodan"*
 
 **One frozen document, both formats, on his letterhead.** The behavioural
