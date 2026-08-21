@@ -1174,6 +1174,38 @@ to prevent. **The work stayed committed and unpushed, and the loop stayed dark
 rather than burning sessions that could not push, cite or merge.**
 
 
+#### ⚠️ A CONTROL AIMED WHERE THE ANSWER IS PREDETERMINED IS NOT A CONTROL
+
+**Standing 2026-08-21. Two specimens, same day, same author — which is why it
+is a line rather than an anecdote.**
+
+The positive-control rule says: before believing a zero, run the same matcher
+against something you KNOW is present. This is the failure INSIDE that rule.
+A control only tells you the instrument works if the target could have gone
+either way. Aim it somewhere the answer is fixed and it reports the target's
+properties, not the instrument's.
+
+> **BEFORE TRUSTING ANY CONTROL, STATE WHAT THE CORRECT MACHINERY WOULD DO AT
+> THAT TARGET. If the answer is "fire" or "stay silent" REGARDLESS of the
+> machinery's health, re-aim.**
+
+| specimen | the control | why it was predetermined | what it nearly cost |
+|---|---|---|---|
+| a byte-identity harness over 49 production notes | mutate `flattenTables`'s **header-only** join and expect digests to move | **no production note is a header-only table**, so that path is never reached — it moves 0 of 49 whatever the harness does | recording a WORKING harness as blind, and with it the 49/49 identity it had just proven |
+| a misfiled-declaration hint | run its glob against `docs/foundation/deploys/` and expect silence | that directory legitimately holds `20260812-b7s3c-backfill-declaration.md`, a RULED-MUTATION declaration — it matches `*declaration*.md` **by right** | recording a WORKING mechanism as a false-positive generator |
+
+**Both were re-aimed and both then discriminated**: the first at the 2-column
+collapse every production table takes (15 of 49 move; the DOCX twin moves 24 of
+49), the second at `preflight-reports/` and `qa-reports/`, which hold no
+declarations — silent there, firing on `deploy-reports/` where the misfiled
+files actually were.
+
+⚠️ **THE TELL IS THAT YOU CAN PREDICT THE CONTROL'S RESULT FROM THE TARGET
+ALONE.** If you can say what it will do without knowing whether the code works,
+it is measuring the target. A control has to be a question the instrument
+answers — otherwise it is the emptiness test one level up, wearing the clothes
+of the rule that exists to prevent it.
+
 #### ⚠️ AND A SIXTH — **TWO WEAK DEFECTS COMPOSED INTO A CONFIDENT FALSE GREEN**
 
 **Standing 2026-08-21. Written by the author of the other five, the same day,
