@@ -22392,3 +22392,60 @@ fill on the next visit bound to that template. ⚠️ **Expect the vessel table 
 be substantially blank** — 44 of the measurement cells cannot fill for the
 reasons above, and that is a known, filed, unfixed limitation rather than a
 regression. The certification is real; the table is not yet.
+
+### 🟩 AND THE TWIN FILLED A REAL VISIT — **2026-08-21T00:18:46Z, production's FIRST fill manifest**
+
+**Observed at close-out, thirty-seven minutes after certification, and not
+caused by this session.** A doctor created and signed a visit; the certified
+twin filled it natively. This is the terminal artifact the programme has been
+chasing, and production had never produced one.
+
+**Read STRUCTURALLY — status columns only. No note body, no patient data, and
+the visit was not opened, exported or mutated.** It is a real doctor's record;
+the standing law applies and nothing here is a smoke target.
+
+| column | value |
+|---|---|
+| `status` | **`VERIFIED`** |
+| `roundTripVerified` | **`true`** |
+| `filledCount` | **25** |
+| `needsReviewCount` | **0** |
+| `notMentionedCount` | **55** |
+| `conflictCount` | **0** |
+| `criticalUnresolvedCount` | **0** |
+| output | a real `.docx`, **49,418 bytes** |
+| `rendererVersion` | `template-docx-renderer/1.0.0` |
+
+**25 + 55 = 80** — reconciles exactly to the compiled field count, so nothing
+fell outside a named bucket.
+
+**THE CHAIN IS CLOSED STRUCTURALLY, NOT INFERRED.** The manifest's
+`compiledVersionId` is the SAME compiled version this session certified, and
+that version reads `CERTIFIED` — asserted in one query rather than assumed from
+timing:
+
+    m."compiledVersionId" = c.id  →  t
+    c."certificationStatus"       →  CERTIFIED
+
+So: **F5-d(b) → deploy → certification → a real visit filled natively and
+round-trip verified.** Every link measured.
+
+#### ⚠️ AND 55 OF 80 FIELDS ARE BLANK, WHICH IS THE HALF NOT TO CELEBRATE
+
+`notMentionedCount = 55`. **The document that reached that doctor is
+substantially empty**, and this is the limitation session 01 filed and this
+session's owner ping warned about, now confirmed on a real record rather than
+predicted: certification does NOT mean the table fills. The 44 measurement
+cells refused for `no_supporting_fact` (32) and `laterality_mismatch` (12) are
+the bulk of it, and the reflux column is **structurally** unfillable —
+`segmentCongruent` needs an anatomy token that a reflux fact's concept, value
+and quote do not carry.
+
+> **A certificate over a form that renders mostly blank is a real result and a
+> partial one. The gate did its job; the FILL is the next problem, and it is
+> now the most valuable open item in this arc.**
+
+⚠️ **`needsReviewCount` and `criticalUnresolvedCount` are both 0**, so nothing
+is flagged to the doctor as needing attention — which is correct for cells that
+were never claimed, and is exactly why the blankness has to be said out loud
+rather than left for someone to notice in a signed document.
