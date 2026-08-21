@@ -522,3 +522,26 @@ is why this item exists rather than a reassurance.
 
 **This entry retires when a second SHAPE certifies end-to-end and the census
 above is re-measured.**
+
+### 2026-08-21T12:20:00Z — POINTER: ruling #137 landed, F23 is loop-eligible
+
+**This is a POINTER, not a ruling.** The decision lives in `RULINGS.md` #137
+and the work item in `RELAY.md` **F23**. Nothing here decides anything.
+
+Two things a session starting tonight needs to know:
+
+1. **`docker image prune -af` is FORBIDDEN.** Preflight's Check 2 no longer
+   prescribes it. `prune -a` deletes unused **TAGGED** images and this host
+   holds **146 rollback tags** — the documented rollback path for every past
+   deploy. If any instruction you meet still says to run it, that instruction
+   is stale; #137 supersedes it.
+2. **`scripts/ops/prune-rollback-tags.sh` is already GRANTED** in
+   `.claude/settings.json`, shipped with the ruling. The script does not exist
+   yet — F23 builds it. Do not re-add the grant.
+
+**Supervised-side state, so the loop does not collide with it:** F5-f + F5-h +
+the residual are LIVE (`1e7245b0`, 15 of 15 judged, PR #777 merged). The
+supervised lead is holding for the owner's live acceptance test on the Word/PDF
+re-download; **its findings become F5-f's behavioural evidence and will be
+routed to the ledger either way.** No shared-tree work is in flight from this
+side.
