@@ -197,24 +197,108 @@ describe('editTableCell', () => {
     expect(ok.body).not.toContain('GSV at the Knee');
   });
 
-  it('REFUSES a ragged table rather than writing one column left', () => {
-    // A header that omits the row-label column puts every index off by one, so
-    // the write lands in a different column from the one it reports back.
-    const ragged = [
-      '## FINDINGS',
-      '| DIAMETER (mm) | REFLUX TIME (seconds) |',
-      '| --- | --- |',
-      '| GSV at the SFJ | 6.2 | 3.4 |',
-    ].join('\n');
-    const r = editTableCell({
-      note: ragged,
-      sectionLabel: 'FINDINGS',
-      rowLabel: 'GSV at the SFJ',
-      columnLabel: 'DIAMETER (mm)',
-      value: '9.9',
+  // ⚠️ RE-PINNED 2026-08-21 (F24 SLICE 1). THIS TEST USED TO ASSERT THAT THE
+  // SHAPE BELOW IS REFUSED. Its reason, verbatim, as history:
+  //
+  //   "A header that omits the row-label column puts every index off by one,
+  //    so the write lands in a different column from the one it reports back."
+  //
+  // THAT WAS TRUE WHEN WRITTEN AND THE NORMALISATION MADE IT FALSE. The header
+  // is widened on parse, so the indices line up and the write lands where it
+  // says it does. The sentence is not deleted — it is replaced by the arm that
+  // proves it STAYS false, because the fear it expressed is exactly what would
+  // return if anyone widened the guard instead of the header.
+  //
+  // WHAT WAS PROTECTED WAS THE REFUSAL OF GENUINE AMBIGUITY, NOT THIS FIXTURE.
+  // Measured on production 2026-08-21 over every data row under a detected
+  // header: delta +1 -> 339 rows, delta 0 -> 331, delta ANYTHING ELSE -> 0.
+  // The universe is closed, so a +1 header is missing its LABEL column and
+  // nothing else; and the missing cell is provably LEADING because a row is
+  // selected only when `norm(c[0]) === wantRow`.
+  describe('a ragged table: normalised when unambiguous, refused otherwise', () => {
+    const note = (header: string, sep: string, rows: string[]) =>
+      ['## FINDINGS', header, sep, ...rows].join('\n');
+    const edit = (n: string, columnLabel = 'DIAMETER (mm)') =>
+      editTableCell({
+        note: n,
+        sectionLabel: 'FINDINGS',
+        rowLabel: 'GSV at the SFJ',
+        columnLabel,
+        value: '9.9',
+      });
+
+    // (a) THE UNAMBIGUOUS +1 — the owner's 339 production rows.
+    it('normalises the +1 shape AND writes the CORRECT cell, both columns', () => {
+      // ⚠️ ASSERT THE CELL, NOT MERELY SUCCESS. The old test's fear was a write
+      // landing one column left; `ok === true` cannot see that, and a fix that
+      // succeeded into the wrong column would satisfy it. 6.2 and 3.4 are
+      // deliberately distinct so an off-by-one is VISIBLE.
+      const legacy = note(
+        '| DIAMETER (mm) | REFLUX TIME (seconds) |',
+        '| --- | --- |',
+        ['| GSV at the SFJ | 6.2 | 3.4 |'],
+      );
+
+      const d = edit(legacy, 'DIAMETER (mm)');
+      expect(d.ok).toBe(true);
+      if (d.ok) {
+        expect(d.column).toBe('DIAMETER (mm)');
+        expect(d.before).toBe('6.2');
+        expect(d.body).toContain('| GSV at the SFJ | 9.9 | 3.4 |');
+      }
+
+      const x = edit(legacy, 'REFLUX TIME (seconds)');
+      expect(x.ok).toBe(true);
+      if (x.ok) {
+        expect(x.column).toBe('REFLUX TIME (seconds)');
+        expect(x.before).toBe('3.4');
+        expect(x.body).toContain('| GSV at the SFJ | 6.2 | 9.9 |');
+      }
     });
-    expect(r.ok).toBe(false);
-    expect(r.reason).toBe('ragged_table');
+
+    // (b) EVERY OTHER RAGGED SHAPE — still refused, verbatim reason.
+    it('still REFUSES a header two or more cells narrower', () => {
+      const r = edit(note('| DIAMETER (mm) |', '| --- |', ['| GSV at the SFJ | 6.2 | 3.4 |']));
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe('ragged_table');
+    });
+
+    it('still REFUSES a header WIDER than its rows', () => {
+      const r = edit(
+        note(
+          '| A | DIAMETER (mm) | REFLUX TIME (seconds) | Z |',
+          '| --- | --- | --- | --- |',
+          ['| GSV at the SFJ | 6.2 | 3.4 |'],
+        ),
+      );
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe('ragged_table');
+    });
+
+    it('still REFUSES when the data rows disagree with EACH OTHER', () => {
+      // Nothing can be inferred about a table that is not internally consistent.
+      const r = edit(
+        note('| DIAMETER (mm) | REFLUX TIME (seconds) |', '| --- | --- |', [
+          '| GSV at the SFJ | 6.2 | 3.4 | 9.9 |',
+          '| SSV at the SPJ | 4.1 | 1.2 |',
+        ]),
+      );
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toBe('ragged_table');
+    });
+
+    it('leaves a well-formed table completely alone', () => {
+      const r = edit(
+        note('| VEIN | DIAMETER (mm) | REFLUX TIME (seconds) |', '| --- | --- | --- |', [
+          '| GSV at the SFJ | 6.2 | 3.4 |',
+        ]),
+      );
+      expect(r.ok).toBe(true);
+      if (r.ok) {
+        expect(r.column).toBe('DIAMETER (mm)');
+        expect(r.before).toBe('6.2');
+      }
+    });
   });
 
   it('a bilateral study IS editable once the table is named', () => {

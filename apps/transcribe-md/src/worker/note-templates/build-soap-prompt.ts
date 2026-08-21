@@ -304,12 +304,54 @@ export function renderStructureDirective(
           .map(() => ' [not documented] |')
           .join('')}`
     );
+    // ⚠️ F24 SLICE 1 — THE SKELETON'S HEADER MUST MATCH THE ROWS IT DICTATES.
+    //
+    // Every row emitted above carries a LEADING LABEL CELL (`| GSV at the SFJ |
+    // …`). When the header's first column is itself a DATA column — WM_IOV's
+    // is: `| DIAMETER (mm) | REFLUX TIME (ms) |` — the header has NO cell for
+    // that label, so this skeleton instructs L4 to "reproduce exactly" a grid
+    // whose header is one cell narrower than its rows. L4 obeys.
+    //
+    // Measured on production 2026-08-21: **339 of 670** data rows sit under a
+    // 2-cell header over 3-cell rows. `note-table-edit.ts:197` refuses every
+    // one with `ragged_table` — CORRECTLY, because column resolution indexes
+    // the header and writes the row at the SAME index, so a mismatched grid
+    // writes one column left of the one it reports back.
+    //
+    // ⚠️ THE FIX IS STOPPING THE GENERATOR FROM EMITTING A GRID THE GUARD IS
+    // RIGHT TO REFUSE. The guard at note-table-edit.ts:197 is NOT touched and
+    // note-table-edit.test.ts:200-217 pins its refusal. Anyone reaching for
+    // that guard — inserting a synthetic column, padding to the shorter
+    // length, matching columns by fuzzy name — is proposing to infer a column
+    // the note does not state and then perform an off-by-one-sensitive
+    // positional write on a MEASUREMENT. That is a war-room question, not a fix.
+    //
+    // THE LABEL CELL IS EMPTY, DELIBERATELY. The doctor's DOCX has an UNHEADED
+    // first cell; naming it (`VEIN`, `SEGMENT`) would assert a header their
+    // form does not carry. An empty cell is the faithful representation, it is
+    // legal markdown, and note-table-edit.ts:200-204 already skips index 0 when
+    // resolving a column, so it can never be written to.
+    //
+    // DOWNSTREAM IS UNCHANGED BY CONSTRUCTION, NOT BY HOPE. bridge-fill.ts:421
+    // computes `labelColumnOffset = roleByCol[0] === 'other' ? 0 : 1`, and
+    // classifyHeader returns 'other' for an empty cell — so the fill moves from
+    // its offset=1 branch to its offset=0 branch, BOTH already shipped and
+    // tested because L4 has always emitted both shapes. Measured with the real
+    // parser: corrected -> header=3 rows=2; legacy -> header=2 rows=2. The fill
+    // path's tolerance was a deliberate two-shape handler, never load-bearing.
+    const headerHasLabelColumn = !(
+      structure.columns.length > 0 && isDataColumn(structure.columns[0]!)
+    );
+    const skeletonCols = headerHasLabelColumn ? cols : ['', ...cols];
+    const skeletonHeader = `| ${skeletonCols.join(' | ')} |`;
+    const skeletonSeparator = `| ${skeletonCols.map(() => '---').join(' | ')} |`;
+
     return [
       'This section is a TABLE with fixed rows. Reproduce this markdown',
       'table skeleton exactly — same header row, same row labels, same',
       'order:',
-      header,
-      separator,
+      skeletonHeader,
+      skeletonSeparator,
       ...rows,
       'Replace a "[not documented]" cell ONLY with a value the transcript',
       'states, copied as dictated.',

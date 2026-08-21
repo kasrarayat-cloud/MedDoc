@@ -183,9 +183,57 @@ export function editTableCell(params: {
   }
 
   const { line, header, caption } = matches[0];
-  const headerCells = cells(lines[header]);
+  const rawHeaderCells = cells(lines[header]);
   const rowCells = cells(lines[line]);
-  if (!headerCells || !rowCells) return { ok: false, reason: 'no_table' };
+  if (!rawHeaderCells || !rowCells) return { ok: false, reason: 'no_table' };
+
+  // ⚠️ LEGACY WIDEN-ON-PARSE — F24 SLICE 1. THE NOTE IS NOT TOUCHED.
+  //
+  // Notes generated before the skeleton fix carry a header one cell narrower
+  // than their rows, because `renderStructureDirective` emitted
+  // `| DIAMETER (mm) | REFLUX TIME (ms) |` over rows that always lead with a
+  // label cell. Measured on production 2026-08-21, over every data row under a
+  // detected header:
+  //
+  //     delta = +1 : 339 rows      delta = 0 : 331 rows      delta OTHER : 0
+  //
+  // THE UNIVERSE IS CLOSED. There is no delta of +2, and none of -1. So the
+  // only ragged shape that exists is the one whose missing cell is the label
+  // column, and recognising it is a measurement rather than a guess.
+  //
+  // ⚠️ AND THE MISSING CELL IS PROVABLY *LEADING*, NOT TRAILING — which is the
+  // whole risk, because inferring the wrong end reintroduces exactly the
+  // off-by-one write the guard exists to prevent. The proof is upstream, at the
+  // match loop: a row becomes a candidate ONLY when `norm(c[0]) === wantRow`.
+  // So for the row we are about to write, cell 0 IS the row label, by the same
+  // predicate that selected it. The extra cell is at the front.
+  //
+  // ⚠️ THIS IS NOT A WEAKENING OF THE GUARD, AND THE GUARD'S LINE BELOW IS
+  // UNCHANGED. What changes is the header VALUE handed to it: a header that
+  // says nothing about its label column is read as having an unnamed one. Every
+  // other mismatch still reaches the refusal — a delta of 2, a table whose rows
+  // disagree with each other, a header WIDER than its rows. The synthesised
+  // cell is empty and index 0 is filtered out of column resolution below, so it
+  // can never be written to and can never be selected as a target.
+  const dataRowCounts: number[] = [];
+  for (let i = header + 2; i < lines.length; i += 1) {
+    if (headerAt.includes(i)) break;
+    const c = cells(lines[i]);
+    if (!c) {
+      if (lines[i].trim().startsWith('|')) break;
+      if (lines[i].trim() === '') continue;
+      break;
+    }
+    dataRowCounts.push(c.length);
+  }
+  const everyDataRowAgrees =
+    dataRowCounts.length > 0 && new Set(dataRowCounts).size === 1;
+  const headerCells =
+    rawHeaderCells.length === rowCells.length - 1 &&
+    everyDataRowAgrees &&
+    dataRowCounts[0] === rowCells.length
+      ? ['', ...rawHeaderCells]
+      : rawHeaderCells;
 
   // A RAGGED TABLE IS NOT WRITABLE.
   //
