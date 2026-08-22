@@ -79,6 +79,58 @@ emits the annotated shape.
 
 **Adversarial pass MANDATORY — note-editing surface, clinical path.**
 
+> 📊 **THE CENSUS EXISTS AND IS MEASURED — run `20260822-164142-b1`, session 02.**
+> `gate-f24-s3-editor-addressable-census.test.ts`. **The acceptance is NOT met**
+> and this row stays 🔴: it asks for ZERO gaps and the gap set is **40 of 80**.
+>
+> Produced by REPLAY, never by a source sweep — the shipped editor
+> (`editTableCell`) run against a note built by the shipped generator
+> (`renderStructureDirective`) over the real customer form compiled by the
+> shipped compiler. Universe pinned by **CONTENT** per Finding B (rowLaterality
+> present AND 52 sided cells), never by `certificationStatus` or either version
+> field.
+>
+> | reading | addressable | row_ambiguous | same_table | no_editor_intent |
+> |---|---|---|---|---|
+> | **TODAY** — rowLabel only | **0** | 52 | — | 28 |
+> | **WITH THE TWIN** — `rowLaterality` supplies the caption | **40** | — | 12 | 28 |
+>
+> ⚠️ **THE ZERO IS A MEASUREMENT, NOT A BLIND INSTRUMENT, AND THE SECOND ROW IS
+> ITS POSITIVE CONTROL** — the same replay function over the same note reports
+> 40 once the twin speaks. An instrument that can produce a non-zero is one
+> whose zero means something.
+>
+> **THE GAP SET, NAMED — this is the remaining work, and it is the driver:**
+>
+> - **28 · content controls.** No editor intent addresses them AT ALL:
+>   `edit_header` enumerates exactly `{patient_name, chief_complaint}`. This is
+>   **PART 2** — structured edits routed to their own writers. ⚠️ Note
+>   `DATE OF PROCEDURE` is **not** among the 28 labels on this form; enumerate
+>   the writers by BEHAVIOUR, as the row already says, not by that one name.
+> - **12 · duplicate row labels.** `Saphenous Tributary Vein <<insert location>>`
+>   appears **THREE TIMES IN EACH LEG** — blank slots the doctor fills in, so the
+>   labels are identical by design. The twin knows the `rowIndex`; the editor
+>   addresses by LABEL. **Closing these means the editor accepting a
+>   twin-supplied ordinal** — that is the item's title, and it is the next build.
+>
+> ⚠️ **AND THE REPLAY FOUND A LIVE DEFECT ON SHIPPED CODE, NOW FIXED.** Asking
+> for the right-leg tributary WITH `tableCaption: 'Right Leg'` returned, on
+> `main`, `row_ambiguous` with
+> `choices: [Right Leg ×3, Left Leg ×3]` — the leg the doctor had just named,
+> offered back three times, beside the leg they had excluded. The narrowing only
+> applied when it resolved to exactly ONE candidate, so a caption cutting six to
+> three was discarded entirely. **A non-empty choice list can be exactly as
+> unanswerable as the empty one Slice 1b removed.** Fixed in the refusal
+> direction only; both PARTIAL applications of the fix were mutation-proved (A
+> reddens 3 arms, B reddens 4).
+>
+> ⚠️ **HONEST LIMITS.** (1) The note's `DIAMETER (mm)` header is **not derivable
+> from the twin** — the doctor's form leaves that column unheaded and the vein
+> name sits in the cell, so it is pinned as a constant with its provenance while
+> the reflux header IS derived and asserted. (2) The census covers the ONE
+> certified template; the other three shapes in the F5-i census remain
+> uncompiled. (3) Nothing was replayed against a real visit.
+
 > 📐 **SUBSTRATE RECON LANDED 2026-08-22 — READ IT BEFORE BUILDING.**
 > `docs/qa-reports/f24-s3-addressing-substrate-recon-20260822.md`
 > (run `20260822-164142-b1`, session 01). Read-only; zero production files
