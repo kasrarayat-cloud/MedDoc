@@ -10,6 +10,35 @@
 //      generator will emit a shape the editor misreads — which is the defect
 //      this module exists to close."
 //
+// ⚠️ THAT COMMENT UNDERCOUNTS ITS OWN CLASS, AND THIS FILE'S FIRST DRAFT
+// REPEATED THE UNDERCOUNT APPROVINGLY. There are THREE sites deciding "does
+// header cell 0 name a data column?", using TWO vocabularies. The third is
+// `template-twin/bridge-fill.ts:147-152` (`classifyHeader`), consumed at `:425`:
+//
+//     const labelColumnOffset = roleByCol[0] === 'other' || roleByCol.length === 0 ? 0 : 1;
+//
+// and its comment describes the identical decision — "if that column already
+// classifies as DATA, the header has no label column and every data cell sits
+// one to the right." Its vocabulary is `/reflux/` and
+// `/diameter|(^|\W)mm(\W|$)/`, which agrees with `isDataColumnHeader` on the
+// customer form and diverges elsewhere, in BOTH directions:
+//
+//     "CFV mm"           isDataColumnHeader false  ·  classifyHeader diameter
+//     "VELOCITY (cm/s)"  isDataColumnHeader true   ·  classifyHeader other
+//
+// So the generator and the editor can agree while the TWIN FILL disagrees. They
+// AGREE on the real customer form (`DIAMETER (mm)`, `REFLUX TIME (ms)`, `VEIN`),
+// which is why nothing has broken in production.
+//
+// ⚠️ NOTHING IN THIS FILE ASSERTS THAT DIVERGENCE, AND THE OMISSION IS
+// DELIBERATE. `classifyHeader` is not exported (`bridge-fill.ts:147`), and
+// re-implementing a shipped predicate inside a test is the F12-g failure — an
+// SQL re-implementation answered 19 where the shipped predicate answered 15,
+// and the 19 reached a ledger row. So this is a FINDING, recorded in prose and
+// in the recon report, and it is F24-S3's to reconcile with its own adversarial
+// pass. Exporting the symbol to assert it would be a production change made for
+// a test's convenience.
+//
 // Measured 2026-08-22, with a positive control so the zero is a real absence
 // rather than a broken matcher:
 //
@@ -116,34 +145,143 @@ describe('isDataColumnHeader — pinned behaviour', () => {
     expect(isDataColumnHeader(header)).toBe(expected);
   });
 
-  // ⚠️ THE SIX DIVERGENCES. Every one is REAL, reproduced by running the
-  // predicate, and every one is pinned at what it ACTUALLY returns.
+  // ⚠️⚠️ THIS BLOCK USED TO CALL THESE "ACCEPTED LIMITS" AND ASSERT, ON THIS
+  // PAGE, THAT THE COST IS "NEVER A WRITE INTO THE WRONG CELL". THAT SENTENCE
+  // WAS FALSE, AND THE THREE FALSE-POSITIVE ROWS BELOW ARE PRECISELY THE INPUTS
+  // THAT FALSIFY IT. The mandatory adversarial pass found it; see the
+  // `THE FALSE POSITIVES ARE A WRONG-CELL WRITE` describe below, which now
+  // reproduces the harm instead of asserting it away.
   //
-  // They are recorded here rather than fixed because the consequence is bounded
-  // and is proved by the contract arms below: because ONE predicate answers for
-  // BOTH callers, a misclassification makes the generator and the editor wrong
-  // in the SAME direction, so the grid stays internally consistent. The cost is
-  // a coverage gap or a redundant column — never a write into the wrong cell.
-  // Widening the vocabulary to "fix" any row here is a product decision about
-  // doctors' headers, and it is F24-S3's to make with evidence.
+  // The reasoning that was wrong is worth keeping, because it is seductive:
+  // "one predicate answers for both callers, so a misclassification makes them
+  // wrong in the SAME direction and the grid stays internally consistent."
+  // ⚠️ THE TWO CALLERS ACT AT DIFFERENT TIMES. The generator wrote the note's
+  // header months ago; the editor asks the predicate about it today. Internal
+  // consistency is a property of ONE generation, never of a note already in the
+  // database — and the widen exists only for notes from the other era.
+  //
+  // Every row is REAL, reproduced by running the predicate, and pinned at what
+  // it ACTUALLY returns.
   const DIVERGES: [string, boolean, string][] = [
-    // FALSE POSITIVE — a LABEL column read as DATA.
+    // FALSE POSITIVE — a LABEL column read as DATA. ⚠️ THESE THREE LICENSE A
+    // WRONG-CELL WRITE on a legacy note. Not an accepted limit: a defect.
     ['Segment (right leg)', true, 'a label column that ends in a parenthetical'],
     ['Vein Size', true, 'a label column containing a metric word'],
     ['Site (see key)', true, 'a label column with a parenthetical note'],
-    // FALSE NEGATIVE — a DATA column read as the LABEL column.
+    // FALSE NEGATIVE — a DATA column read as the LABEL column. These fail
+    // CLOSED: the column gets no cell and refuses with `column_not_found`.
     ['CFV mm', false, 'a data column whose unit is not parenthesised'],
     ['Thickness', false, 'a data column whose metric is not in the vocabulary'],
     ['Grade', false, 'a categorical data column'],
+    // ⚠️ SEVENTH CLASS, and it is not about the WORDS at all — it is about
+    // DECORATION. `/\([^)]*\)\s*$/` is anchored, so any non-space character
+    // after the parenthetical kills that arm and the word arm knows only seven
+    // metrics. `AREA (cm2)` is a data column; bold it and it stops being one.
+    //
+    // Reachable rather than hypothetical, and the proof is in this repository:
+    // `note-table-edit.ts:79` STRIPS `**` from header cells before comparing,
+    // so the editor already expects bold headers in exactly the strings this
+    // predicate cannot parse.
+    ['**AREA (cm2)**', false, 'DECORATION — bold kills the parenthetical anchor'],
+    ['AREA (cm2).', false, 'DECORATION — a trailing full stop does the same'],
   ];
 
-  it.each(DIVERGES)('%s -> %s  (accepted limit: %s)', (header, actual) => {
+  it.each(DIVERGES)('%s -> %s  (%s)', (header, actual) => {
     expect(isDataColumnHeader(header)).toBe(actual);
   });
 
-  it('the divergence list is not silently empty', () => {
-    expect(DIVERGES.length).toBe(6);
+  it('the undecorated forms ARE data columns — so the seventh class is decoration, not vocabulary', () => {
+    expect(isDataColumnHeader('AREA (cm2)')).toBe(true);
+    // …and a TRAILING SPACE is fine, because the anchor allows `\s*$`. The
+    // class is non-whitespace decoration specifically.
+    expect(isDataColumnHeader('AREA (cm2) ')).toBe(true);
   });
+
+  it('the divergence list is not silently empty', () => {
+    expect(DIVERGES.length).toBe(8);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2b. ⚠️ THE FALSE POSITIVES ARE A WRONG-CELL WRITE. ON SHIPPED CODE.
+// ---------------------------------------------------------------------------
+// Found by the MANDATORY adversarial pass over this very diff, and verified
+// here before being believed. NO MUTATION IS APPLIED — this is `main`.
+//
+// A legacy note whose header NAMES its label column is supposed to be refused:
+// that is what the `ragged_table` guard is for, and with `VEIN` it works. But
+// when the label column's text happens to satisfy `isDataColumnHeader`, the
+// widen fires, the header is padded at the FRONT, and every column resolves one
+// place to the right of where it belongs.
+//
+//     | Vein Size | DIAMETER (mm) |
+//     | --- | --- |
+//     | GSV at the SFJ | 6.2 | 3.4 |
+//
+//     edit DIAMETER (mm) := 7.7
+//       ->  ok: true,  column: "DIAMETER (mm)",  before: "3.4"
+//           | GSV at the SFJ | 6.2 | 7.7 |
+//
+// The diameter is UNTOUCHED. 7.7 landed in the REFLUX TIME cell, destroying a
+// measurement, and the doctor was told the diameter had changed. This is the
+// exact defect `note-table-edit.ts:295-317` records the guard as having closed
+// — arriving through the guard's own predicate.
+//
+// ⚠️ LATENT, NOT LIVE — and the number is what makes it a filing rather than an
+// incident. Measured on production 2026-08-22 over `note_templates.sections`:
+// **3 table structures, and all 3 have `DIAMETER (mm)` as their first column**,
+// which the predicate classifies correctly. No production template triggers
+// this today.
+//
+// HONEST LIMIT: that measures TEMPLATE structures, not the headers sitting in
+// already-written NOTES. A note generated under a template whose columns have
+// since changed is not covered by it, and establishing that would mean reading
+// note bodies.
+//
+// THE TRIGGER, so it is a lookup and not a judgement: a doctor's table whose
+// FIRST column is a row-label column whose text ends in a parenthetical or
+// contains one of diameter|reflux|velocity|length|depth|time|size.
+describe('⚠️ DEFECT — a misread label column writes the wrong cell', () => {
+  const legacy = (header0: string) =>
+    [
+      '## FINDINGS',
+      'DIAMETER AND REFLUX TIME',
+      `| ${header0} | DIAMETER (mm) |`,
+      '| --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3.4 |',
+    ].join('\n');
+
+  const askForDiameter = (header0: string) =>
+    editTableCell({
+      note: legacy(header0),
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'DIAMETER (mm)',
+      value: '7.7',
+    });
+
+  // THE CONTROL FIRST. A label column the predicate reads correctly is refused,
+  // so what follows is a property of the PREDICATE and not of the fixture.
+  it.each(['VEIN', 'Segment'])('control: %s is correctly REFUSED', (h) => {
+    const r = askForDiameter(h);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('ragged_table');
+  });
+
+  // ⚠️ PINNED AS THE DEFECT IT IS. If somebody fixes the predicate, these arms
+  // go RED and they must update them DELIBERATELY — which is the point. An
+  // unpinned defect is one the next reader cannot tell from intent.
+  it.each(['Vein Size', 'Segment (right leg)', 'Site (see key)'])(
+    'DEFECT: %s is accepted, and the REFLUX cell is what changes',
+    (h) => {
+      const r = askForDiameter(h);
+      expect(r.ok).toBe(true);
+      // The value replaced is the reflux time, not the diameter.
+      expect(r.before).toBe('3.4');
+      // The diameter is left exactly as it was, and the doctor is told it moved.
+      expect(r.body).toContain('| GSV at the SFJ | 6.2 | 7.7 |');
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -195,10 +333,12 @@ describe('generator -> editor: the emitted grid is never ragged', () => {
       columnLabel: columns[columns.length - 1],
       value: '7.7',
     });
-    // The editor may legitimately refuse for a reason that is not about grid
-    // SHAPE. `ragged_table` is the one refusal that means the two callers
-    // disagreed, and it is the one this contract forbids.
-    expect(r.ok === true || r.reason !== 'ragged_table').toBe(true);
+    // ⚠️ ASSERTED AS `ok`, NOT AS "not ragged". The first draft said
+    // `r.ok === true || r.reason !== 'ragged_table'` — true of a matrix in
+    // which every shape refused for some OTHER reason, i.e. vacuous in exactly
+    // the direction that would hide a broken contract. Measured: all five
+    // shapes return `ok: true` and write. So the knowable value is asserted.
+    expect(r.ok).toBe(true);
   });
 
   it('and on the customer form the write actually lands in the named column', () => {
@@ -323,6 +463,48 @@ describe('a legacy grid the predicate would now read differently', () => {
     expect(r.ok).toBe(false);
     expect(r.reason).toBe('ragged_table');
     // And nothing was written — the refusal carries no body.
+    expect(r.body).toBeUndefined();
+  });
+
+  // ⚠️ THE ARM ABOVE REDDENS UNDER THE DELTA-ONLY MUTATION AND CANNOT
+  // DEMONSTRATE ANY HARM. THIS ONE CAN, AND THAT DIFFERENCE IS THE LESSON.
+  //
+  // Found by re-reading my own fixture AFTER its mutation proof had already
+  // gone green -> red. Measured with the widen mutated to fire on DELTA alone:
+  //
+  //   the arm above   ask REFLUX  -> | GSV at the SFJ | seg | 6.2 | 9.9 |
+  //                                   the CORRECT cell. Refusing it is
+  //                                   conservative, not protective.
+  //   this arm        ask DIAMETER -> | GSV at the SFJ | 6.2 | 9.9 |
+  //                                   the diameter is UNTOUCHED and 9.9 landed
+  //                                   in the REFLUX position.
+  //
+  // The second is the defect quoted verbatim at note-table-edit.ts:304-312:
+  // the doctor asks to correct a diameter, is told the diameter changed, and
+  // the reflux time is destroyed. A mutation aimed at the wrong FORM produces a
+  // red as empty as a green that never ran.
+  it('the REFERENCE shape — a header short a TRAILING data column — is refused', () => {
+    const reference = [
+      '## FINDINGS',
+      'DIAMETER AND REFLUX TIME',
+      // Names its label column AND is short one trailing data column. Delta is
+      // +1 here exactly as it is above — which is why delta can never say
+      // WHICH END is short.
+      '| VEIN | DIAMETER (mm) |',
+      '| --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3.4 |',
+    ].join('\n');
+
+    const r = editTableCell({
+      note: reference,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'DIAMETER (mm)',
+      value: '9.9',
+    });
+
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('ragged_table');
     expect(r.body).toBeUndefined();
   });
 });

@@ -87,16 +87,17 @@ emits the annotated shape.
 > and raises two facts that change the design, plus one coverage hole now
 > closed:
 >
-> ⚠️ **(A) "NO SCHEMA CHANGE. Everything is already in `compiledDocumentIr`" IS
-> TRUE ONLY FOR DESIGNS THAT NEVER NEED THE ROW LABEL'S TEXT.** The IR stores
-> `staticTextSha256` — a HASH — and **no key anywhere holds static cell text**.
-> The editor's address is (section, **ROW LABEL**, column) and matches that
-> label against the note's markdown (`note-table-edit.ts:209`). So the twin can
-> supply identity, column, row index and leg, and **cannot supply the text the
-> doctor will name.** A twin that VALIDATES a note-resolved address is free; a
-> twin that LOCATES the row from the doctor's phrase needs the source bytes
-> (`template_twin_source_artifacts.objectKey`, retained) or a schema addition.
-> The recon prices all three and picks none.
+> ❌ **(A) WITHDRAWN — IT WAS WRONG, AND THE ADVERSARIAL PASS KILLED IT.** The
+> draft of this row claimed the IR *"cannot supply the text the doctor will
+> name"* and scoped this item's **"NO SCHEMA CHANGE"** line accordingly.
+> **That sentence stands exactly as written.** The row label lives on the FIELD,
+> not the table cell: `TemplateFieldSchema.originalLabel` (`ir.ts:105`) with
+> `labelSource='left_cell'` (`compiler.ts:803-819`) — measured on production,
+> **26 of the 52 table-bound fields** carry the vein names (`SSV at the SPJ`,
+> `AAGSV at the Proximal Thigh`). And `bridge-fill.ts:186-193` **already
+> locates the note row from that text.** The enumeration behind the wrong claim
+> covered `tables[*].cells[*]`, `nodes[*]` and the top-level keys and **never
+> opened `fields[*]`** — the thing lived one layer down.
 >
 > ⚠️ **(B) THE ACCEPTANCE SAYS "PROVEN BY REPLAY", AND THE REPLAY'S UNIVERSE
 > MUST BE PINNED BY CONTENT.** Two IR shapes exist at the **identical**
@@ -107,12 +108,36 @@ emits the annotated shape.
 > such a row. A replay that picks one of the 21 measures a system where
 > laterality routing can never succeed, and nothing announces it.
 >
-> ✅ **(C) `isDataColumnHeader` — Slice 1's shared predicate, load-bearing for
-> BOTH the generator and the editor — had ZERO direct tests** (positive-
-> controlled against `rowLateralityVerdict`, which finds its test on the same
-> matcher). Closed by `gate-f24-table-header-shape-contract.test.ts`, **29
-> arms**, mutation-proved three ways including a PARTIAL mutation that
-> reproduces Slice 1's original clinical defect.
+> ✅ **(C) `isDataColumnHeader` — Slice 1's shared predicate — had ZERO direct
+> tests** (positive-controlled against `rowLateralityVerdict`, which finds its
+> test on the same matcher). Closed by
+> `gate-f24-table-header-shape-contract.test.ts`, **38 arms**, mutation-proved
+> three ways including a PARTIAL mutation reproducing Slice 1's original
+> clinical defect.
+>
+> ⚠️ **(E) AND THE PASS FOUND A LIVE WRONG-CELL WRITE ON SHIPPED CODE — LATENT,
+> NOT LIVE.** On a legacy note, `| Vein Size | DIAMETER (mm) |` over
+> `| GSV at the SFJ | 6.2 | 3.4 |`, an edit of **DIAMETER := 7.7** returns
+> `ok:true, column:"DIAMETER (mm)", before:"3.4"` and yields
+> `| GSV at the SFJ | 6.2 | 7.7 |` — **the diameter untouched, the REFLUX TIME
+> destroyed, and the doctor told the diameter changed.** Control (`VEIN`)
+> refuses. Same for `Segment (right leg)` and `Site (see key)` — all three were
+> pinned by the gate's first draft as *accepted limits that never write the
+> wrong cell*, which is the sentence the pass falsified.
+> **SEVERITY: latent.** Production holds **3 table structures, all with
+> `DIAMETER (mm)` first**, which classifies correctly — so nothing triggers it
+> today. Honest limit: that measures TEMPLATES, not headers in written notes.
+> **Not fixed:** the geometry cannot discriminate the two readings, so the cure
+> changes the GENERATOR too and is a product decision about doctors' headers.
+> Pinned as a defect with its trigger, so a fix is deliberate.
+>
+> ⚠️ **(F) "ONE PREDICATE, TWO CALLERS" IS THREE SITES AND TWO VOCABULARIES.**
+> `bridge-fill.ts:147-152` (`classifyHeader`, consumed at `:425` for
+> `labelColumnOffset`) decides the same question with `/reflux/` and
+> `/diameter|(^|\W)mm(\W|$)/`. Diverges both ways — `CFV mm` (label vs data),
+> `VELOCITY (cm/s)` (data vs label) — and **agrees on every column of the real
+> customer form**, which is why nothing has broken. Asserted by nothing on
+> purpose: the symbol is unexported and re-implementing it would be F12-g.
 >
 > ⚠️ **(D) THAT GATE WAS BLIND ON ITS FIRST MUTATION PROOF, AND THE REASON
 > GENERALISES.** A contract matrix built from the REAL generator cannot reach
@@ -191,6 +216,61 @@ production-exercised path. Two clinical defects found by the adversarial pass,
 both mine, both fixed: the DOCX surface deleting an annotation the EHR paste
 kept, and `| Side of exam | Right` losing the side of exam from a signed
 imaging report.
+
+---
+
+### 🔴 F26 — #745 IS SECURITY-SHAPED AND HAS NEVER ENTERED THE LEDGER. **Filed 2026-08-22.**
+
+**Not a new alarm. A durably unrecorded one — which is why every STEP 0 re-derives it.**
+
+`gh issue list` has carried **#745** since `2026-08-19T15:07:48Z`:
+
+> *e2e: 12-auth-login 'wrong password grants no session' saw /board 19x — app
+> tree byte-identical to a passing tree, mechanism NOT established*
+
+**WHAT THE ISSUE ESTABLISHES, in its own words:** `12-auth-login.spec.ts:19`
+failed on the initial attempt **and** retry #1. **Nineteen consecutive samples**
+read `http://localhost:9020/board` — the authenticated landing — after a
+**wrong-password** submit. Its author filed it rather than absorbing it into the
+flake pile for a stated reason: ⚠️ **the assertion is security-shaped.**
+
+**WHY IT IS BEING FILED HERE RATHER THAN RE-NOTICED.** Measured 2026-08-22:
+
+| where #745 appears | count |
+|---|---|
+| session **logs** under `docs/foundation/logs/` | **8** |
+| `RELAY.md` | **0** |
+| `RULINGS.md` | **0** |
+
+Positive control on the same matcher: **#739** resolves to `RULINGS.md` plus its
+logs. So the matcher finds ledger references when they exist — **#745 has none.**
+
+⚠️ **THIS IS THE THREE-NIGHT ALARM SHAPE, ONE LEVEL UP.** MASTER's STEP 0.8
+exists because `nightly-tests` rang correctly for three nights into a channel
+nobody read. Here the channel IS read — eight sessions classified it, correctly,
+as a known open issue — and it still has no durable row, so every session pays
+the triage again and none of them owns it. **Each session was individually
+right; the pile was always somebody else's.**
+
+⚠️ **AND IT IS PRICED BY ITS SYMPTOM.** It reads as *"an e2e flake"*, which is
+the loudness of the symptom. **The asset behind the symptom is
+authentication** — canon's own *"a fix is priced by the asset behind the
+symptom"*, and the reference case there was a 🟢 titled *"Caddy ACME noise"*
+that became a six-hour total outage sixty-five days later.
+
+**WHAT THIS ROW DOES NOT CLAIM.** It does **not** claim production
+authentication is broken, and no such conclusion is available from what is
+recorded. The issue itself says **the mechanism is NOT established**, and the app
+tree was proven byte-identical to a tree that passed. This row asserts only that
+a security-shaped, unexplained result has been open since 2026-08-19 with no
+ledger row and no owner, and that "unknown" decays to "probably fine" through
+repetition alone.
+
+**DONE WHEN:** the mechanism is NAMED with evidence — either (a) a test-harness
+defect, with the reason the wrong-password submit reached `/board` in that
+environment, or (b) a real auth defect, in which case it is an incident and not
+a queue item. ⚠️ **Neither answer may be reached by re-running the pack until it
+goes green.** A re-run is not an attempt.
 
 ---
 
