@@ -64,6 +64,81 @@ too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
 
 
+
+### 🟢 F24 SLICE 1 + 1b + 2 — **LIVE 2026-08-22T03:53:41Z, 16 of 16 judged.** `16b21721`
+
+Judgement: `docs/foundation/deploys/20260822-5d577e2e-JUDGED.md`. Native serve
+path asserted **in the running container**, positive-controlled. 9 of 9
+standing checks. **0 of 49 existing documents render differently** — that was
+the point and it is also the limit: the new behaviour ships unobserved until L4
+emits the annotated shape.
+
+---
+
+### 🔴 F24-S3 — THE EDITOR ADDRESSES FIELDS THROUGH THE TWIN. **Loop-eligible, fully specified.**
+
+**Adversarial pass MANDATORY — note-editing surface, clinical path.**
+
+**THE TUPLE IS SETTLED BY MEASUREMENT.** On the certified template:
+`originalLabel` → **26** distinct over 80 fields (not an address);
+`+tableId` → still **26**; **`+displayOrder` → 80** ✓; `fieldId` → **80** ✓.
+
+⚠️ **AND THE LATERALITY PRIMITIVE HAS BEEN CORRECTED TWICE — READ BOTH.**
+`fieldLateralityFromLabel` is wrong (only 6 of 52 table labels carry a token).
+I then claimed `rendererBinding.rowLaterality` is "populated 80 of 80" — **the
+loop's recon showed that is VACUOUS**: `ir.ts:72` declares
+`.default('unknown')`, so every field carries the key by construction. Verified
+independently. **The true figure: it knows a real side for 52 of 52 TABLE
+CELLS; the 28 `unknown` are content controls with nothing to disambiguate.**
+Better than I claimed — but the count I gave was never evidence for it.
+
+**NO SCHEMA CHANGE.** Everything is already in `compiledDocumentIr`.
+
+**PART 2 — native-fill regions (`DATE OF PROCEDURE` and siblings) become
+STRUCTURED edits routed to their OWN writers**, never by teaching the editor to
+fake `soapFinal` text for content the export composes elsewhere. Enumerate the
+writers by BEHAVIOUR, not by that one name.
+
+**ACCEPTANCE:** the census of editor-addressable regions reaches **ZERO gaps**
+on the certified template, **proven by replay** — not by a source sweep.
+
+**HOLD:** signed stays read-only; the `:197` ragged guard stays.
+
+---
+
+### 🔴 F24-CAPTION-VALIDATION — **RECON EXISTS. Read it before building.**
+
+⚠️ **DO NOT WRITE A FRESH BRIEF.** The loop's recon is
+`docs/qa-reports/f24-caption-validation-recon-20260821.md` — measured
+in-database, PHI-safe, traversal-controlled, and it **corrected three of my
+figures**:
+
+| I said | measured |
+|---|---|
+| blocked 20 of **45** | **20 of 28 bilateral — 71%** |
+| "green on the 25 of 45 adjacent" | **false as stated** |
+| twin route is the likely fix | **0 incremental blocked headers today** |
+
+**THE TWIN ROUTE REACHES NOTHING CURRENTLY BLOCKED.** 6 of 28 bilateral headers
+are on the certified template; 2 of the 20 blocked, both already served by a
+validated read; and the 4 headers with **no caption anywhere** are all on
+no-template visits. It stays worth doing — it is the only *semantically certain*
+route — but adopting it **on the belief that it covers the blocked population**
+would be building on a count that was never evidence.
+
+**CONSTRAINTS I HOLD, unchanged by the recon:**
+- ⚠️ **THE DEFECT IS VALIDATION, NOT DISTANCE.** Widening `captionFor`'s reach
+  was built, proven and **withdrawn** — it made narrative into a caption and
+  wrote a RIGHT-leg correction into the LEFT leg, reporting success. **Do not
+  re-open by making the reach longer.**
+- ⚠️ **`claim-prose.ts:71` READS THE SAME ADJACENT LINE.** Whatever answers this
+  moves **both** readers, or a disagreement between them is a wrong-table edit.
+- **The wrong-leg regression guard is the PERMANENT FLOOR.** Never relaxed to
+  let a fix through.
+
+**ACCEPTANCE:** the blocked shape **edits correctly** or **refuses honestly**.
+Never wrong-table.
+
 ### 🟢 F24 SLICE 2 — merged `706148c5`. One row reader, five callers.
 
 Five pipe-row matchers, four strict and one tolerant, disagreed about a row
