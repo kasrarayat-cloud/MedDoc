@@ -23958,7 +23958,7 @@ cannot happen until per-shape generators exist. It recommended a **1a / 1b**
 split and explicitly declined to take it — *"owner's call, not taken
 unilaterally."*
 
-**Ruled PROVISIONAL this session (`RULINGS.md` #138): take 1a now.** It passes
+**Ruled PROVISIONAL this session (`RULINGS.md` #139): take 1a now.** It passes
 all four provisional tests — additive, reversible, inside the envelope, no
 clinical mutation, and it contradicts nothing in `RULINGS.md`. 1b (per-shape
 generators) stays untaken and is still the owner's call. **The reversal path is
@@ -24165,3 +24165,186 @@ query key"*, committed by the session that had just read the rule. Nothing was
 lost: the wrapper had already refused, so the false zero had no authority to
 act on. **Recorded because the near-miss that costs nothing is the one nobody
 writes down.**
+
+---
+
+## 📐 F24-CAPTION-VALIDATION — RECON MEASURED 2026-08-21, READ-ONLY — run `20260821-224030-b1` session 01
+
+**Full report: `docs/qa-reports/f24-caption-validation-recon-20260821.md`.**
+Nothing built for the item. **No note text was read** — the whole census runs
+inside Postgres and emits category labels and counts only.
+
+**Controls first:** 49 notes · 2,329 lines · 531 pipe rows · 45 alignment rules ·
+**45 headers**, which reproduces the ledger's own figure from an independently
+written matcher. The section boundary was **read, not assumed** —
+`splice-note-section.ts:68-75` splits on `#{1,6}` at **any** level, so the
+whole-note approximation is behaviourally `readNoteSection`'s boundary.
+
+### THE PARTITION — every header in exactly one bucket
+
+| tables in section | line above the header | count |
+|---|---|---|
+| 1 (ambiguity impossible) | heading | 16 |
+| 1 | text | 1 |
+| **2 — BILATERAL** | blank | **20** |
+| **2 — BILATERAL** | text | **8** |
+| | | **45** ✔ |
+
+### ⚠️ THREE CORRECTIONS, AND ALL THREE ARE THE SAME SHAPE
+
+**1 · THE DENOMINATOR IS 28, NOT 45.** A caption is consulted only when
+`matches.length > 1`. Single-table headers mostly never reach that branch. The
+blocked figure is **20 of 28 bilateral tables — 71%**.
+
+⚠️ **AND THIS CORRECTION NEEDED ITS OWN CORRECTION, WHICH IS THE PART WORTH
+READING.** The draft said the 17 single-table headers **never** reach that
+branch. `matches.length > 1` depends on the ROW LABEL repeating **within the
+section**, and that does not require two tables. Measured: **2 of the 17
+single-table sections carry a genuinely repeated row label** (empty first cells
+and dash placeholders classified out explicitly). **A caption can never fix
+those** — both rows are in the SAME table, so they share a caption, and
+`narrowed.length` is 2 and never 1. Both sit under a heading, so today they
+return **`caption_not_found`**. That is Slice 1b's *"unanswerable question"*
+shape **surviving in a form no caption strategy can address**. Filed, out of
+scope. So the branch-reaching population is **30**, and the count reaching an
+unanswerable refusal is **22** — 20 + these 2.
+
+**2 · *"green on the 25 of 45 whose caption sits ADJACENT"* IS FALSE AS
+STATED.** `45 − 20 = 25` is arithmetic over a blank count. Measured, only **9**
+headers have adjacent text; the other **16 sit under a `##`/`###` HEADING**,
+where `captionFor` returns null (`note-table-edit.ts:146`). **Those 16 are
+editable because they are UNAMBIGUOUS, not because they have a caption** — right
+number, wrong mechanism, and the mechanism is what a fix gets built on.
+
+**3 · THE TWIN ROUTE ADDS ZERO ON TODAY'S BLOCKED SET.** Measured on the one
+CERTIFIED compiled twin: `rowLaterality` is **26 right / 26 left / 28 unknown**,
+and **all 28 unknown are `content_control`** — so the twin knows a real side for
+**52 of 52 table cells**, which is *better* than the row implies. But ⚠️
+**"populated 80 of 80" is vacuous**: `ir.ts:72` declares `.default('unknown')`,
+so every field carries the key by construction. And the coverage answer decides
+it: only **6 of 28** bilateral headers are on that template, only **2 of the 20
+blocked**, and both of those are already served by a one-blank-up read —
+**incremental reach today: 0 headers**. The **4 headers with no caption anywhere**
+— the only ones no caption strategy can serve — are **all on no-template
+visits**, which the twin cannot reach at all.
+
+⚠️ Not a refutation of the direction, which is forward-looking and is the only
+*semantically certain* route. What must not happen is adopting it **believing it
+covers the blocked population.**
+
+> All three are a count over a **quantity** answering a question about a
+> **kind** — `AGENTS.md` **"THE DOUBLE TAP"**, third and fourth instances, in
+> the slice that entry was written about.
+
+### THE KIND CENSUS — the classification nobody had run
+
+All 25 text candidates are **≤ 4 words, name AT MOST ONE side, and carry NO
+sentence punctuation.** Zero exceptions. The refuted counterexample violates all
+three. And content-free corroboration: in **12 of 14** bilateral sections the two
+candidate lines read exactly **`right` + `left`**, in that order — `0` name both,
+`0` repeat a side, `0` name none. *A narrative does not systematically alternate
+right-then-left across twelve independent notes.*
+
+⚠️ **THIS DOES NOT SAY THE WITHDRAWN WIDEN WAS SAFE, AND MUST NOT BE READ THAT
+WAY.** That widen was refuted by RUNNING the function. This census describes what
+49 notes happen to contain; no result it could have produced would have refuted
+the reproduction. It supports a **VALIDATOR**, whose failure mode must be to
+**REFUSE** — which is byte-identical to today's behaviour and therefore a strict
+tightening.
+
+### DIRECTION — noted, NOT ruled
+
+A fail-closed caption validator reading one blank up reaches **16 of the 20
+blocked**; it must move **both** readers (`claim-prose.ts:71`) or the codebase
+holds two definitions of "caption"; the remaining **4** are out of reach of any
+caption strategy. **No single candidate covers the blocked population, and the
+one with the most reach is the one already refuted on safety** — which is exactly
+why the item is *validation*, not *distance*. **The acceptance must be a
+REPRODUCTION on the real function, not a fourth census.**
+
+### THE TWO READERS DISAGREE — LATENTLY
+
+`claim-prose.ts:75` keeps the em-dash tail; `note-table-edit.ts:147` keeps the
+whole line. **0 of 9** adjacent candidates carry that separator — **control: 94
+lines elsewhere in the corpus do**, and 417 contain a dash. Real in code,
+unexercised today, and therefore the kind that ships unnoticed the day a template
+emits titled captions.
+
+---
+
+## 🟠 FOUND ON THE WAY PAST — A NUL BYTE MADE A SOURCE FILE INVISIBLE TO `grep` — 2026-08-21
+
+**Found by accident**, because a grep for `readNoteSection` returned nothing on
+the file that defines it.
+
+`splice-note-section.ts:109` carried a **NUL inside a string literal**
+(`spliceNoteSection(markdown, label, '<NUL>probe')`), committed on `main` —
+`git show origin/main:… | file -` said **`data`**.
+
+**It was functionally INERT**: `readNoteSection` discards the spliced text and
+returns `previousBody`, computed from the original lines. The byte never reached
+a note and no test could have seen it.
+
+⚠️ **THE COST WAS EVERY SWEEP THIS PROGRAMME RUNS.** GNU grep treated the file as
+binary and **suppressed its output entirely** — no matches, not even
+*"Binary file … matches"*:
+
+    grep -rn spliceNoteSection --include=*.ts apps/transcribe-md/src
+      -> note-table-edit.ts, the test … and NOT THE DEFINITION SITE
+    git grep -c spliceNoteSection
+      -> apps/transcribe-md/src/lib/splice-note-section.ts:2
+
+**Two instruments, opposite answers, on a live dependency of the note editor.**
+That is this repo's own *"two zeroes with opposite meanings is ONE BROKEN
+INSTRUMENT"* diagnostic — arriving in the TOOLING rather than in a query. Any
+census written with plain `grep` over `apps/**/*.ts` carried a hole exactly the
+size of this file and reported a confident zero.
+
+**ENUMERATED, NOT ASSUMED:** `git grep -lP "\x00"` across every tracked `.ts`,
+`.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.json`, `.md`, `.sql`, `.sh`, `.yml`,
+`.yaml`, `.css`, `.html` returns **exactly one file** — this one; the `-P` matcher
+positive-controlled at 54 hits on a known file. **One member, class closed.**
+
+**FIXED** (scripted, occurrence-asserted: expected 1, found 1, 0 after) and
+**GUARDED** — `gate-tracked-source-has-no-nul-bytes.test.ts`, carrying a
+non-vacuity floor (≥ 900 scanned; `git ls-files` reports 1,244) **and a named
+control that the offending file is in the scanned set**, because *"found no
+NULs"* and *"never opened this file"* are the identical output.
+
+**Mutation-proved in BOTH directions.** It read **1 before the fix and 0 after**,
+so it MOVED when the fix landed — not merely green. A NUL injected into a
+*different* file turns it **RED naming that file**; restored **from a scratch
+backup, never `git checkout`**, sha256-verified byte-identical, green again.
+
+---
+
+## 🟠 SESSION FINDING — RUN `20260821-111818-b1` SESSION 03 LEFT NO REPORT, AND HERE IS ITS NIGHT — 2026-08-21
+
+**`REPORT-MISSING: 03`.** Session 03 exited `rc=1` at `2026-08-21T21:16:09Z`; the
+runner captured **one non-empty line** and no `MORNING REPORT` header. Its night
+is otherwise not in the record. Reconstructed from `git log`, the PRs and the
+ledger, per STEP 0.9:
+
+| what it did | evidence |
+|---|---|
+| merged **#784** (`docs/f24-recon`) | merge `8ae016ff`, `19:21:13Z` |
+| built **F5-i part 1a** — the blank operative-note fixture, its tracked source, a regenerator and an 8-arm gate | `091069bb`, authored `19:03:16Z` |
+| merged it as **#786** | merge `2328823b`, `20:00:48Z` |
+| ruled **#139 PROVISIONAL** (the 1a/1b split) | `RULINGS.md` row |
+| opened **#787**, the citation row, and pushed it | head `ba6c2a68`, runs `4 of 4` all `a1` |
+
+**It died between opening #787 and merging it.** This session verified
+`2328823b` at **4 of 4** independently, merged #787 as **`e23247cf`**, and
+retired the branch — so nothing it built was lost.
+
+⚠️ **AND ITS ONE UNCAUGHT ERROR IS THE REASON THE RECONSTRUCTION WAS WORTH
+DOING.** Its F5-i 1a block cited its own ruling as **`RULINGS.md` #138**. It is
+**#139** — `#138` is the owner's `f5c-refute` scratch ruling, landed the same
+day. This is precisely the collision the **NUMBER-CLAIM PROTOCOL** at the head of
+`RULINGS.md` exists for: the merged row keeps the number, the other renumbers.
+The renumber reached `RULINGS.md` and **not `RELAY.md`**, leaving a pointer to
+the wrong decision in the ledger. **Corrected here** (`RELAY.md:23961`).
+
+*A wrong pointer is worse than a missing one: a `grep` for `#138` lands on a real
+row and reads as confirmation.*
+
