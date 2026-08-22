@@ -183,6 +183,110 @@ emits the annotated shape.
 > location&gt;&gt;`); addressed with the decoded form those 12 become
 > `row_not_found` instead — the gap is the same size, and its NAME is not stable.
 
+> ### ✅ MERGED AND CITED — **4 of 4, every run `a1`**
+>
+> PR **#797**, merge `8eb99ebf4ee7f75b342023d79138548a6e37c690`. Produced by
+> `check-citation.sh` and pasted, never typed:
+>
+> | workflow | run | attempt |
+> |---|---|---|
+> | `CI` | 32599098180 | a1 |
+> | `e2e` | 32599098167 | a1 |
+> | `a11y-ci` | 32599098168 | a1 |
+> | `secrets-scan` | 32599098226 | a1 |
+>
+> **No deploy, and none is owed** — one new test file, one editor module and
+> its suite, plus docs. The editor change is REFUSAL-ONLY: it converts two
+> wrong-or-useless outcomes into honest refusals and writes nothing new.
+> ⚠️ **ONE DECLARED CANCELLATION** on the PR branch, via
+> `push-with-cancellation.sh` with its reason recorded: the adversarial pass
+> refuted the census that run was testing, so the tree was superseded. `CI`,
+> `a11y-ci` and `secrets-scan` had already completed green on it.
+> ⚠️ **AND THE DRAFT→READY FLIP RE-TRIGGERED `a11y-ci`**, cancelling the
+> first run and leaving the PR HEAD un-citable with DUPLICATE RUNS — session
+> 01 recorded the same thing. The MERGE commit is unaffected and is what this
+> row cites.
+
+> ### ⚠️ RESIDUALS THE ADVERSARIAL PASS FOUND AND THIS BRANCH DID **NOT** FIX
+>
+> Three lenses ran over the finished diff. Two defects were fixed in-branch (the
+> false `same_table` refusal I introduced, and the pre-existing empty-normalised
+> caption wrong-leg WRITE). These are the rest — **each verified by me on the
+> post-fix tree, not merely reported**, and each left alone deliberately:
+>
+> **1 · THE SUBSTRING CHOICE LOOP IS STILL LIVE, AND IT IS A FIXED POINT.**
+> When one caption is a substring of another, an answer offered verbatim never
+> narrows to one. Measured on this branch:
+>
+> ```
+> captions Right Leg | Right Leg Tributaries | Left Leg
+>   no caption            -> row_ambiguous  choices [Right Leg, Right Leg Tributaries, Left Leg]
+>   answer "Right Leg"    -> row_ambiguous  choices [Right Leg, Right Leg Tributaries]   <- FIXED POINT
+>   answer the LONGER one -> ok:true, correct cell
+> ```
+>
+> The doctor answers with an option they were offered and is asked the identical
+> question, by a message promising *"tell me which one and I will change it."*
+> This branch improves it (3 → 2 where `main` repeats all three) and does not
+> close it. ⚠️ **NOT FIXED ON PURPOSE:** the obvious cure — prefer an EXACT
+> caption match over a substring one — converts a refusal into a WRITE, and a
+> refusal→write change on the clinical editing path is not a thing to land at
+> the end of a session on a defect nobody is currently hitting. It wants its own
+> adversarial pass.
+>
+> **2 · A REFUSAL REACHES THE DOCTOR AND NEVER THE MODEL.**
+> `chat-editor-panel.tsx:94-96` builds the next turn's history as `{role, text}`
+> — `actions`, and therefore the error, are dropped — and `chat-edit-visit.ts`
+> shows `parsed.reply` is model-authored BEFORE the edits run. So on turn N+1
+> the model's own transcript can assert an edit that was refused, and it can
+> re-issue an identical failing intent indefinitely. Pre-existing; it is the
+> reason a refusal whose remedy is doctor-facing only (like
+> `row_ambiguous_same_table`) cannot self-correct in conversation.
+>
+> **3 · `[null, 'A']` OFFERS ONE CHOICE**, so an uncaptioned table sitting beside
+> a captioned one is permanently unreachable by caption. Pre-existing.
+>
+> ### 📌 PART 2's WRITERS, ENUMERATED BY BEHAVIOUR — the row asked for this
+>
+> The predicate is *"what produces a `FieldResolution` that fills a
+> content-control region?"*, and `bridgeTemplateFill` (`bridge-fill.ts:582-608`)
+> composes **exactly three** sources:
+>
+> | source | owns |
+> |---|---|
+> | **`bridgeChoiceSlotPicks`** (`picks-bridge.ts`) | ⚠️ **ALL 28 of this form's content controls** — every one is `kind: 'single_select'`, filled via `selectedOptionOrdinal` |
+> | `bridgeNumericTableCells` (`bridge-fill.ts:381`) | the 52 table cells |
+> | the resolver `baseline` | everything else |
+>
+> Plus `procedure-date.ts`, which injects the visit date as a fact upstream
+> (`fill-engine.ts:169`) for a **date** control. ⚠️ **`DATE OF PROCEDURE` — the
+> name the row uses — is NOT among this form's 28 labels**, which is exactly why
+> the row says enumerate by BEHAVIOUR rather than by that name.
+>
+> **So a content-control edit must change the PICK, never `soapFinal` text** —
+> which is what the row already demands, now with the writer named.
+> ⚠️ **AND THE PICK MAPPING IS POSITIONAL** (`picks-bridge.ts:240`, *"Nth pick →
+> Nth single_select field in document order"*), so an editor addressing one must
+> address by `fieldId`, never by position.
+>
+> ### 🔗 RULING #140 LANDED ON `main` WHILE THIS WAS IN FLIGHT, AND IT FOLDS IN
+>
+> **#140 — THE LABEL COLUMN IS RESOLVED FROM EVIDENCE, NOT GUESSED FROM TEXT**
+> (owner ruling, merged as #795 at `20:27:24Z`). It says in as many words that
+> it **FOLDS INTO F24-S3's BUILD**. This branch does **not** implement it and
+> does not contradict it — the work here is caption disambiguation, #140 is
+> label-column resolution — so the two are compatible and #140 remains open
+> inside this item. **It is the next build**, alongside the shape question.
+>
+> ⚠️ **AND THE MATRIX ABOVE SHARPENS WHICH ORDER TO DO THEM IN.** The caption
+> route is worth 0 on the blank-line shape, and the caption recon
+> (`f24-caption-validation-recon-20260821.md`, another session's measurement,
+> cited not re-measured) partitions production as **20 of 28 bilateral headers
+> with a BLANK line above** and only **9** with adjacent text — and states
+> independently that *"the twin route adds ZERO on today's blocked set"*, with
+> only 6 of 28 bilateral headers on the certified template. **Two independent
+> measurements now agree that the caption route is the wrong thing to build on.**
+
 > 📐 **SUBSTRATE RECON LANDED 2026-08-22 — READ IT BEFORE BUILDING.**
 > `docs/qa-reports/f24-s3-addressing-substrate-recon-20260822.md`
 > (run `20260822-164142-b1`, session 01). Read-only; zero production files
