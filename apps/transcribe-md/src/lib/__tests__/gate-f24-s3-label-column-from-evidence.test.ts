@@ -29,9 +29,23 @@
 // ⚠️ AND THE PRODUCTION CENSUS IS HERE AS A PINNED ROW, NOT AS A REASSURANCE.
 // Measured 2026-08-22 against `transcribe_visits.soapFinal`: 45 table headers
 // across 24 visits, SIX distinct first-cell values, and NOT ONE of them lands
-// in `cannot_tell`. That is what makes #140 a tightening with no capability
-// loss on the real corpus rather than a trade — and it is falsifiable: a value
-// that started landing in `cannot_tell` would redden the row naming it.
+// in `cannot_tell`. Falsifiable: a value that started landing there would
+// redden the row naming it.
+//
+// ⚠️ BUT DO NOT READ THAT AS "NO CAPABILITY LOSS", AND AN EARLIER DRAFT OF THIS
+// HEADER DID. The adversarial pass measured 37 of 47 plausible clinical headers
+// losing their widen — and only a handful of those were the shapes #140 names.
+// Two different things were inside that number and they get two answers:
+//
+//   · a UNIT-LIST GAP, which is not ambiguity at all — `Volume (cc)`,
+//     `Flow (L/min)`, `Diameter mm`. RESTORED, and pinned below.
+//   · a QUALIFIED MEASUREMENT NOUN — `Max Diameter`, `Peak Velocity`,
+//     `Nodule Size`. **ACCEPTED AS LOST**, and pinned below as `cannot_tell`
+//     so admitting them later is a deliberate edit rather than a drift.
+//
+// So the honest claim is narrower than the one this header used to make: **no
+// capability loss on the PRODUCTION corpus, and a measured, accepted loss on
+// qualified measurement nouns.**
 // ============================================================================
 
 import { describe, expect, it } from 'vitest';
@@ -241,7 +255,11 @@ describe('#140 — the classifier partitions every header exactly once', () => {
 // ---------------------------------------------------------------------------
 // 3. THE PRODUCTION CENSUS, PINNED
 // ---------------------------------------------------------------------------
-describe('#140 — the production corpus takes no capability loss', () => {
+// ⚠️ THE TITLE IS SCOPED TO PRODUCTION ON PURPOSE. It is NOT "#140 costs no
+// capability" — that claim is false and the Claim-2 rows above pin what it
+// costs. This block asserts the narrower, checkable thing: the corpus
+// production actually holds is untouched.
+describe('#140 — the PRODUCTION corpus takes no capability loss', () => {
   const PRODUCTION = CORPUS.filter((c) => c.source.startsWith('PROD'));
 
   // ⚠️ FOUR OF THE SIX COULD NOT HAVE FAILED, AND SAYING SO IS THE POINT.

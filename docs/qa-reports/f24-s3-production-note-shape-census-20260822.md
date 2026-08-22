@@ -136,8 +136,19 @@ total.**
 | `DIAMETER` | 1 | 1 | 2 | true | **data** |
 | `Medication` | 1 | 1 | 3 | false | **label** |
 
-> ⚠️ **NOT ONE PRODUCTION HEADER LANDS IN `cannot_tell`.** Ruling #140 is a
-> tightening with **zero capability loss on the real corpus**, not a trade.
+> ⚠️ **NOT ONE PRODUCTION HEADER LANDS IN `cannot_tell`.** Ruling #140 costs
+> **zero capability on the PRODUCTION corpus.**
+
+⚠️ **AND THAT IS NOT THE SAME AS "no capability loss" — AN EARLIER DRAFT OF THIS
+LINE SAID "not a trade" AND IT WAS WRONG.** The adversarial pass measured **37
+of 47** plausible clinical headers losing their widen. Part of that was a
+unit-list gap and is restored (`Volume (cc)`, `Flow (L/min)`, `Diameter mm`);
+the rest is a **qualified measurement noun** (`Max Diameter`, `Peak Velocity`,
+`Nodule Size`) and is **ACCEPTED AS LOST**, because it is ambiguous in exactly
+the way `Vein Size` is and #140 rules that ambiguity must be refused.
+
+**There IS a trade. It just does not land on any row production holds today** —
+which is a statement about this corpus at this instant, not about the predicate.
 
 **And this could have come out otherwise** — a `Vein Size`-shaped value would
 have appeared here as a newly-refused header. It is pinned as an arm in
