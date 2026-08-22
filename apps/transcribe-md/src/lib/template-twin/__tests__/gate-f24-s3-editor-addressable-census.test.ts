@@ -192,7 +192,23 @@ describe('F24-S3 census — replay', () => {
         value: '9.9',
         ...(useTwin ? { tableCaption: CAPTION[row.laterality] } : {}),
       });
-      return res.ok ? 'addressable' : (res.reason ?? 'unknown');
+      if (!res.ok) return res.reason ?? 'unknown';
+
+      // ⚠️ `ok: true` IS NOT ADDRESSABILITY, AND COUNTING IT AS SUCH WOULD MAKE
+      // THIS CENSUS THE EXACT FAILURE ITS OWN HEADER WARNS ABOUT — a check whose
+      // TITLE ("addressable") is wider than what it MEASURES ("an edit
+      // returned ok"). The whole reason this item exists is that an edit can
+      // succeed against the WRONG CELL and report success: that is Finding E of
+      // the substrate recon, verbatim, and it is live on shipped code.
+      //
+      // So the bucket is earned only if the editor resolved to THIS field's own
+      // row and column. Compared by exact string: `res.column` is
+      // `headerCells[idx].trim()` and `res.row` is `rowCells[0].trim()`, both
+      // taken from the note we asked about, so no normaliser is needed — and
+      // re-implementing the editor's `norm` here would be the F12-g failure.
+      if (res.column?.trim() !== columnLabel.trim()) return 'resolved_wrong_column';
+      if (res.row?.trim() !== row.vein.trim()) return 'resolved_wrong_row';
+      return 'addressable';
     }
 
     const tally = (useTwin: boolean) => {
