@@ -79,6 +79,49 @@ emits the annotated shape.
 
 **Adversarial pass MANDATORY — note-editing surface, clinical path.**
 
+> 📐 **SUBSTRATE RECON LANDED 2026-08-22 — READ IT BEFORE BUILDING.**
+> `docs/qa-reports/f24-s3-addressing-substrate-recon-20260822.md`
+> (run `20260822-164142-b1`, session 01). Read-only; zero production files
+> changed. It **confirms** this row's `52 of 52` laterality figure by
+> re-measuring production (26 left · 26 right · 28 unknown, reconciling to 80)
+> and raises two facts that change the design, plus one coverage hole now
+> closed:
+>
+> ⚠️ **(A) "NO SCHEMA CHANGE. Everything is already in `compiledDocumentIr`" IS
+> TRUE ONLY FOR DESIGNS THAT NEVER NEED THE ROW LABEL'S TEXT.** The IR stores
+> `staticTextSha256` — a HASH — and **no key anywhere holds static cell text**.
+> The editor's address is (section, **ROW LABEL**, column) and matches that
+> label against the note's markdown (`note-table-edit.ts:209`). So the twin can
+> supply identity, column, row index and leg, and **cannot supply the text the
+> doctor will name.** A twin that VALIDATES a note-resolved address is free; a
+> twin that LOCATES the row from the doctor's phrase needs the source bytes
+> (`template_twin_source_artifacts.objectKey`, retained) or a schema addition.
+> The recon prices all three and picks none.
+>
+> ⚠️ **(B) THE ACCEPTANCE SAYS "PROVEN BY REPLAY", AND THE REPLAY'S UNIVERSE
+> MUST BE PINNED BY CONTENT.** Two IR shapes exist at the **identical**
+> `compilerVersion` (`template-docx-compiler/1.0.0`) **and** `irSchemaVersion`
+> (`1`): on QA, **21 of 55** compiled versions carry no `rowLaterality` key at
+> all and **34 of 55** do. `ir.ts:72` defaults the absent key to `'unknown'`,
+> and `bridge-evidence.ts:236-238` then refuses **every sided fact** against
+> such a row. A replay that picks one of the 21 measures a system where
+> laterality routing can never succeed, and nothing announces it.
+>
+> ✅ **(C) `isDataColumnHeader` — Slice 1's shared predicate, load-bearing for
+> BOTH the generator and the editor — had ZERO direct tests** (positive-
+> controlled against `rowLateralityVerdict`, which finds its test on the same
+> matcher). Closed by `gate-f24-table-header-shape-contract.test.ts`, **29
+> arms**, mutation-proved three ways including a PARTIAL mutation that
+> reproduces Slice 1's original clinical defect.
+>
+> ⚠️ **(D) THAT GATE WAS BLIND ON ITS FIRST MUTATION PROOF, AND THE REASON
+> GENERALISES.** A contract matrix built from the REAL generator cannot reach
+> the widen path **because Slice 1 fixed the generator** — the emitted header
+> already lines up, so `headerLacksLabelColumn` is unreachable from any fresh
+> note and the arm's result is predetermined. **The widen is LEGACY-ONLY code**;
+> its population is the 339 of 670 pre-fix production rows, and only that shape
+> can prove the two callers still agree.
+
 **THE TUPLE IS SETTLED BY MEASUREMENT.** On the certified template:
 `originalLabel` → **26** distinct over 80 fields (not an address);
 `+tableId` → still **26**; **`+displayOrder` → 80** ✓; `fieldId` → **80** ✓.
