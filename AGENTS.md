@@ -2245,6 +2245,45 @@ Two things generalise:
    its occurrence count. A restore that reads a file that was never written is
    a second silent failure stacked on the first.
 
+## STANDING AUTHORITY — WHAT REACHES THE OWNER, AND WHAT DOES NOT
+
+**Owner directive, 2026-08-22. This ENDS the copy-paste relay** in which every
+step was narrated upward and every decision came back down. That pattern was
+safe and it did not scale: the owner became the bus, and a bus is a bottleneck
+whether or not it is well-informed.
+
+> **THE LOOP builds, proves and merges under its own gates.**
+> **SUPERVISED SESSIONS deploy and judge clinical-surface changes.**
+
+**ONLY THESE FOUR REACH THE OWNER:**
+
+| # | class | why it cannot be decided below |
+|---|---|---|
+| **a** | **a product decision with no ruled precedent** | it is a statement about what the product IS, and nobody else is entitled to make one |
+| **b** | **an accepted-capability loss** | somebody is losing something that used to work; the trade is his to accept, and it must be written down where the next incident will find it |
+| **c** | **an acceptance test needing his eyeball** | a document is right or wrong to the doctor reading it, and no gate substitutes for that |
+| **d** | **money, keys, or deletion of data** | irreversible or costly, and each has bitten this programme already |
+
+**EVERYTHING ELSE: build, prove, ship, record.**
+
+⚠️ **THIS IS NOT A LOOSENING, AND THE PROOF BURDEN IS UNCHANGED.** §2.5 still
+gates every deploy. The adversarial pass is still mandatory on the clinical
+generation and note-editing paths — it found a clinical defect in the author's
+own work on **three consecutive slices**, and each time the fix was wrong before
+it was right. Citations, two-view checks, the merge wrapper and the standing
+invariant checks all stand exactly as written.
+
+**What changes is the ROUTING, not the rigour.** A session that would previously
+have stopped to ask now decides, does the work to the same standard, and RECORDS
+it — because the record is what makes an unasked question auditable later.
+
+⚠️ **AND THE FOUR CLASSES ARE A FLOOR, NOT A CEILING.** If a call feels like it
+belongs to the owner and does not fit a row, that feeling is data: surface it
+with the reasoning attached and say why it did not fit. The failure this
+replaces was a bottleneck; the failure it could create is a session deciding
+something nobody would have let it decide. Neither is acceptable, and the second
+is worse.
+
 ## AUTHORIZATION TRAVELS OWNER → SESSION DIRECTLY, AND NEVER THROUGH A PEER
 
 **Standing 2026-08-14, and it is a rule about the CHANNEL, not about trust.** A
