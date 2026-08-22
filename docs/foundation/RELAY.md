@@ -25086,10 +25086,35 @@ yields `1`** — which returns `ragged_table` on the only CERTIFIED form in
 production, with the gate still green because the gate asserted the number
 instead of deriving it.
 
-> **What the twin CAN honestly settle is whether its own header row's first cell
-> is EMPTY.** Reaching that needs note-table → twin-table identification, which
-> F24-S3 has not built. **Do not re-add a twin route keyed on a count** — the
-> source says so where the next author will read it.
+**Do not re-add a twin route keyed on a count** — the source says so where the
+next author will read it.
+
+#### ⚠️ AND MY OWN PROPOSED REPLACEMENT MECHANISM IS **REFUTED BY MEASUREMENT**
+
+This row first said *"what the twin CAN honestly settle is whether its own
+header row's first cell is EMPTY."* I had written that into the source comment
+and into this ledger **before looking**. Measured against production's single
+CERTIFIED compiled version, table 0:
+
+| row | cell 0 | cell 1 | cell 2 |
+|---|---|---|---|
+| **0 — the header row** | **HAS TEXT**, 0 fields | HAS TEXT, 0 fields | HAS TEXT, 0 fields |
+| 1 — a data row | **HAS TEXT**, 0 fields ← the row label | 1 field | 1 field |
+
+**The twin's header row NAMES ALL THREE COLUMNS**, cell 0 included, while the
+rendered note carries a **two**-cell header. So the twin knows there are 3
+columns and that column 0 is the label — and it **still cannot say which header
+cell the note dropped**, because that needs the header cells' TEXT and the IR
+stores only `staticTextSha256`.
+
+> **THE REAL BLOCKER FOR #140's TWIN HALF IS NOW MEASURED RATHER THAN ASSUMED:
+> the evidence lives in the SOURCE ARTIFACT, not in the IR.** Whoever builds it
+> needs the static text as well as the note-table → twin-table identification.
+
+⚠️ **Recorded this way deliberately.** A plausible-but-wrong mechanism written
+confidently into a source file outlives the session that wrote it — this
+programme has a canon entry about exactly that, and this is it caught one commit
+before it would have become the next session's starting assumption.
 
 ### 📊 THE OPEN QUESTION IS ANSWERED — production note shape
 

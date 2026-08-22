@@ -44,10 +44,27 @@
 // IT WAS BUILT AND THEN REMOVED. It keyed on the twin's DATA COLUMN COUNT, and
 // a count cannot answer a question about which END a header is short at: a
 // header of {label + N-1 data} and one of {N data} both have N cells. It also
-// widened grids the text route correctly refuses. What the twin CAN honestly
-// settle is whether its own header row's first cell is empty — and reaching
-// that needs the note-table -> twin-table identification F24-S3 has not built.
+// widened grids the text route correctly refuses.
 // **Do not re-add a twin route keyed on a count.**
+//
+// ⚠️ AND THE OBVIOUS REPLACEMENT MECHANISM IS **REFUTED BY MEASUREMENT** — I
+// wrote it into this comment as "the twin can say whether its own header row's
+// first cell is EMPTY", then went and looked. Production's single CERTIFIED
+// compiled version, table 0:
+//
+//     row 0 (header)  cell0 HAS TEXT   cell1 HAS TEXT   cell2 HAS TEXT   0 fields
+//     row 1 (data)    cell0 HAS TEXT   cell1 1 field    cell2 1 field
+//
+// So the twin's header row NAMES ALL THREE COLUMNS, cell 0 included, while the
+// rendered note carries a TWO-cell header. The twin therefore knows there are
+// 3 columns and that column 0 is the label (static text, no field) — and it
+// still cannot say WHICH header cell the note dropped, because deciding that
+// needs the header cells' TEXT and the IR stores only `staticTextSha256`.
+//
+// **THAT is the real blocker for #140's twin half, and it is now measured
+// rather than assumed:** the evidence lives in the source artifact, not in the
+// IR. Anyone building it needs the text, plus the note-table -> twin-table
+// identification F24-S3 has not built either.
 // ============================================================================
 
 /**
