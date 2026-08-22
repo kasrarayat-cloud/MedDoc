@@ -142,6 +142,36 @@ emits the annotated shape.
 > customer form**, which is why nothing has broken. Asserted by nothing on
 > purpose: the symbol is unexported and re-implementing it would be F12-g.
 >
+> ✅ **MERGED AND CITED — 4 of 4, every run `a1`.** PR **#794**, merge
+> `20c78f325cc30bd5a8c704d07e5c9587018168fa`. Produced by `check-citation.sh`
+> and pasted, never typed:
+>
+> | workflow | run | attempt |
+> |---|---|---|
+> | `CI` | 32590235379 | a1 |
+> | `e2e` | 32590235415 | a1 |
+> | `a11y-ci` | 32590235403 | a1 |
+> | `secrets-scan` | 32590235392 | a1 |
+>
+> **No deploy, and none is owed** — the change is one new test file plus docs;
+> **zero production files.** ⚠️ **THREE DECLARED CANCELLATIONS on the PR branch**,
+> each via `scripts/push-with-cancellation.sh` with its reason recorded, each on
+> runs three to five minutes old and all of them mine: the adversarial pass
+> refuted the first tree's central claim, the second folded in the written-note
+> latency measurement, the third fixed two artifact defects I found by sweeping
+> my own files. ⚠️ **The third followed a commit message saying "no further
+> pushes are planned" — that sentence was wrong when written, because I had not
+> swept yet.** The habit canon prescribes is to hold the push until the
+> session's remaining commits are WRITTEN.
+>
+> ⚠️ **OPERATIONAL FINDING — CONVERTING A PR FROM DRAFT TO READY RE-TRIGGERS
+> `a11y-ci`.** It produced a SECOND successful `a11y-ci` run on the same head,
+> which (a) blocked the merge until it finished, and (b) made the head
+> **un-citable**: `check-citation.sh` exited **2** with *"DUPLICATE RUNS of a
+> required workflow — which one does the row mean?"*. That is the checker
+> working, and it is worth knowing before someone reads a `2` there as a fault.
+> The MERGE commit is unaffected and is what this row cites.
+>
 > ⚠️ **(D) THAT GATE WAS BLIND ON ITS FIRST MUTATION PROOF, AND THE REASON
 > GENERALISES.** A contract matrix built from the REAL generator cannot reach
 > the widen path **because Slice 1 fixed the generator** — the emitted header
