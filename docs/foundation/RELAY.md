@@ -79,6 +79,110 @@ emits the annotated shape.
 
 **Adversarial pass MANDATORY — note-editing surface, clinical path.**
 
+> 📊 **THE CENSUS EXISTS AND IS MEASURED — run `20260822-164142-b1`, session 02.**
+> `gate-f24-s3-editor-addressable-census.test.ts`. **The acceptance is NOT met**
+> and this row stays 🔴: it asks for ZERO gaps and the gap set is **40 of 80**.
+>
+> Produced by REPLAY, never by a source sweep — the shipped editor
+> (`editTableCell`) run against a note built by the shipped generator
+> (`renderStructureDirective`) over the real customer form compiled by the
+> shipped compiler. Universe pinned by **CONTENT** per Finding B (rowLaterality
+> present AND 52 sided cells), never by `certificationStatus` or either version
+> field.
+>
+> ⚠️ **ADDRESSABILITY IS SHAPE-DEPENDENT, AND THAT IS THE FINDING. THE MATRIX IS
+> THE RESULT — NEVER A SINGLE CELL OF IT.**
+>
+> | note shape | row label alone | twin-addressed |
+> |---|---|---|
+> | **captioned-adjacent** — caption on the line directly above the header | `row_ambiguous` 52 | **40** · same_table 12 |
+> | **captioned-BLANK-LINE** — caption, blank line, table | `caption_not_found` 52 | **0** — *the twin's caption route is entirely defeated* |
+> | **combined-leg-in-label** — one table, leg in the row label | `row_not_found` 52 | **40** via the LABEL route · caption_not_found 12 |
+>
+> *(28 content controls are `no_editor_intent` in every cell of the matrix.)*
+>
+> ⚠️ **A SINGLE BLANK LINE TAKES THE TWIN FROM 40 TO 0.** `captionFor` reads the
+> ADJACENT line only — deliberately, and Slice 1b's regression guard must not be
+> relaxed to change that — so on a caption/blank/table note the twin's
+> laterality cannot be applied at all. **Canon records 20 of 45 production
+> headers with a blank line above them.** If that is this template's real shape,
+> the caption route is worth nothing and addressing needs a route that does not
+> go through `captionFor` at all. **That is the single most important open
+> question on this item.**
+>
+> ⚠️ **AN EARLIER DRAFT OF THIS ROW REPORTED "40" FLAT, AND IT WAS A PROPERTY OF
+> A FIXTURE.** The census built ONE arrangement — the only one in which caption
+> disambiguation can work — and the captions and the leg split were written by
+> the harness, not by the generator (`renderStructureDirective` emits a single
+> grid and **no caption**, now asserted). Refuted by the mandatory adversarial
+> pass. Canon's *"A WELL-CHOSEN FIXTURE DISGUISES A WRONG UNIVERSE"*, landing in
+> the measuring instrument rather than in the product.
+>
+> ⚠️ **AND THE "row label alone" COLUMN IS A FLOOR, NOT A STATEMENT ABOUT TODAY.**
+> `EditTableCellIntentSchema.tableCaption` already exists, so the model can
+> supply a caption today by reading the note's prose. **What the twin adds is
+> not the CAPABILITY, it is the CERTAINTY** — `rowLaterality` is stamped at
+> compile time from the document's own leg headings, while a caption inferred
+> from surrounding narrative is exactly the unvalidated route that wrote a
+> RIGHT-leg correction into the LEFT leg and reported success (Slice 1b).
+>
+> ⚠️ **NOT ESTABLISHED: WHICH SHAPE PRODUCTION ACTUALLY HOLDS.** It needs a query
+> against this template's real `transcribe_visits.soapFinal` rows. **That is the
+> next measurement, and it decides which route is worth building.**
+>
+> **THE GAP SET, NAMED — this is the remaining work, and it is the driver:**
+>
+> - **28 · content controls.** No editor intent addresses them AT ALL:
+>   `edit_header` enumerates exactly `{patient_name, chief_complaint}`. This is
+>   **PART 2** — structured edits routed to their own writers. ⚠️ Note
+>   `DATE OF PROCEDURE` is **not** among the 28 labels on this form; enumerate
+>   the writers by BEHAVIOUR, as the row already says, not by that one name.
+> - **12 · duplicate row labels.** `Saphenous Tributary Vein <<insert location>>`
+>   appears **THREE TIMES IN EACH LEG** — blank slots the doctor fills in, so the
+>   labels are identical by design. The twin knows the `rowIndex`; the editor
+>   addresses by LABEL. **Closing these means the editor accepting a
+>   twin-supplied ordinal** — that is the item's title, and it is the next build.
+>
+> ⚠️ **AND THE REPLAY FOUND A LIVE DEFECT ON SHIPPED CODE, NOW FIXED.** Asking
+> for the right-leg tributary WITH `tableCaption: 'Right Leg'` returned, on
+> `main`, `row_ambiguous` with
+> `choices: [Right Leg ×3, Left Leg ×3]` — the leg the doctor had just named,
+> offered back three times, beside the leg they had excluded. The narrowing only
+> applied when it resolved to exactly ONE candidate, so a caption cutting six to
+> three was discarded entirely. **A non-empty choice list can be exactly as
+> unanswerable as the empty one Slice 1b removed.** Fixed in the refusal
+> direction only; both PARTIAL applications of the fix were mutation-proved (A
+> reddens 3 arms, B reddens 4).
+>
+> ⚠️ **AND THE ADVERSARIAL PASS FOUND A SECOND, PRE-EXISTING WRONG-LEG WRITE —
+> FIXED HERE.** `norm()` deletes a trailing parenthetical, so a caption that is
+> ENTIRELY a parenthetical (`(right leg)`, `(Right)`) normalises to the EMPTY
+> STRING — and `includes('')` is true of every captioned candidate. Measured on
+> `main`, against a note whose RIGHT-leg table is uncaptioned and whose LEFT-leg
+> table is captioned `Left Leg`:
+>
+> ```
+> tableCaption '(right leg)'  ->  ok:true, caption "Left Leg", before "6.2"
+> ```
+>
+> **A RIGHT-leg correction written into the LEFT leg and reported as success**,
+> with no leg shown anywhere in the reply — `chat-edit-visit.ts` surfaces the row
+> and the column, never the caption. A whitespace-only `tableCaption` reaches it
+> too: the zod field is `z.string().max(200).optional()` with no `.min` after
+> trimming, and the MODEL authors that field. Both now refuse, with arms.
+>
+> ⚠️ **HONEST LIMITS.** (1) The note's `DIAMETER (mm)` header is **not derivable
+> from the twin** — the doctor's form leaves that column unheaded and the vein
+> name sits in the cell. It is pinned with its provenance, and **the census
+> cannot check it**: the same constant builds the note and queries it, so a
+> wrong value is invisible here while breaking every real edit with
+> `column_not_found`. (2) The census covers the ONE certified template; the
+> other three shapes in the F5-i census remain uncompiled. (3) Nothing was
+> replayed against a real visit. (4) The 12-row gap depends on the IR's
+> **HTML-ENTITY-ESCAPED** label (`Saphenous Tributary Vein &lt;&lt;insert
+> location&gt;&gt;`); addressed with the decoded form those 12 become
+> `row_not_found` instead — the gap is the same size, and its NAME is not stable.
+
 > 📐 **SUBSTRATE RECON LANDED 2026-08-22 — READ IT BEFORE BUILDING.**
 > `docs/qa-reports/f24-s3-addressing-substrate-recon-20260822.md`
 > (run `20260822-164142-b1`, session 01). Read-only; zero production files

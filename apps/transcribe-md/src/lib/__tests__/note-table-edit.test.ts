@@ -474,3 +474,250 @@ describe('F24 SLICE 1b — an unanswerable question becomes an honest refusal', 
     expect(TABLE_EDIT_REASON.caption_not_found).not.toBe(TABLE_EDIT_REASON.row_ambiguous);
   });
 });
+
+// ===========================================================================
+// F24-S3 — A NON-EMPTY CHOICE LIST CAN STILL BE UNANSWERABLE
+// ---------------------------------------------------------------------------
+// Slice 1b removed the EMPTY choices list — "pick from nothing". This removes
+// the subtler shape of the same dead end: a list that is non-empty and in which
+// no available answer narrows anything.
+//
+// THE REAL INPUT, not a constructed one. The certified template carries
+// `Saphenous Tributary Vein <<insert location>>` THREE TIMES IN EACH LEG —
+// blank slots the doctor fills in, so the labels are identical by design.
+// Measured by replay in gate-f24-s3-editor-addressable-census: 12 of the 80
+// fields sit in this shape.
+//
+// ⚠️ ON `main` BEFORE THIS BRANCH, asking for the RIGHT-leg tributary WITH
+// `tableCaption: 'Right Leg'` returned:
+//   { reason: 'row_ambiguous',
+//     choices: ['Right Leg','Right Leg','Right Leg','Left Leg','Left Leg','Left Leg'] }
+// — the leg the doctor had JUST NAMED, offered back three times, alongside the
+// leg they had excluded. Every answer in that list leaves the result unchanged.
+// ===========================================================================
+describe('F24-S3 — duplicate row labels within one table', () => {
+  /** Three identical row labels per leg — the certified template's real shape. */
+  const TRIBUTARY = [
+    '## FINDINGS',
+    'Right Leg',
+    '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+    '| --- | --- | --- |',
+    '| Saphenous Tributary Vein | 4.1 | 0.2 |',
+    '| Saphenous Tributary Vein | 3.8 | 0.4 |',
+    '| Saphenous Tributary Vein | 2.9 | 0.1 |',
+    '',
+    'Left Leg',
+    '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+    '| --- | --- | --- |',
+    '| Saphenous Tributary Vein | 5.0 | 0.3 |',
+    '| Saphenous Tributary Vein | 4.4 | 0.5 |',
+    '| Saphenous Tributary Vein | 3.1 | 0.6 |',
+  ].join('\n');
+
+  const ask = (tableCaption?: string) =>
+    editTableCell({
+      note: TRIBUTARY,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'Saphenous Tributary Vein',
+      columnLabel: 'DIAMETER (mm)',
+      value: '9.9',
+      ...(tableCaption ? { tableCaption } : {}),
+    });
+
+  // NON-VACUITY: the fixture really does carry six identical labels. Without
+  // this, a fixture that lost its duplicates would satisfy every arm below by
+  // resolving cleanly, and the whole describe would assert nothing.
+  it('the fixture holds six identically-labelled rows across two legs', () => {
+    expect(TRIBUTARY.split('| Saphenous Tributary Vein |')).toHaveLength(7);
+  });
+
+  it('⚠️ REQUIRED: a caption that cannot discriminate is refused as SUCH, not re-asked', () => {
+    const r = ask('Right Leg');
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('row_ambiguous_same_table');
+    // The dead end, stated as an assertion: there is no list to pick from,
+    // because picking could not help.
+    expect(r.choices ?? []).toHaveLength(0);
+  });
+
+  it('⚠️ THE NARROWING STICKS: the excluded leg is never offered back', () => {
+    // This is the defect. `narrowed.length === 1` discarded a caption that cut
+    // six candidates to three, so the refusal re-offered BOTH legs.
+    const r = ask('Right Leg');
+    expect(JSON.stringify(r)).not.toContain('Left Leg');
+  });
+
+  it('with NO caption given, it is still refused — and never writes a cell', () => {
+    const r = ask();
+    expect(r.ok).toBe(false);
+    expect(r.body).toBeUndefined();
+    // Both legs are genuinely candidates here, and they DO carry distinct
+    // captions, so this one the caller can still answer.
+    expect(r.reason).toBe('row_ambiguous');
+  });
+
+  it('the doctor-facing reason does NOT ask a question it cannot accept an answer to', () => {
+    expect(TABLE_EDIT_REASON.row_ambiguous_same_table).not.toContain('which one');
+    expect(TABLE_EDIT_REASON.row_ambiguous_same_table).not.toBe(
+      TABLE_EDIT_REASON.row_ambiguous,
+    );
+    expect(TABLE_EDIT_REASON.row_ambiguous_same_table).not.toBe(
+      TABLE_EDIT_REASON.caption_not_found,
+    );
+  });
+
+  it('⚠️ choices are deduped on the SAME key the narrowing uses', () => {
+    // Two captions differing only in case are ONE table to the narrower, so
+    // offering both is offering an answer that cannot narrow — the same dead
+    // end this describe exists to close, in case-differing clothes.
+    const CASE_DUP = [
+      '## FINDINGS',
+      'Right Leg',
+      '|  | DIAMETER (mm) |',
+      '| --- | --- |',
+      '| GSV at the SFJ | 5.1 |',
+      '',
+      'Right leg',
+      '|  | DIAMETER (mm) |',
+      '| --- | --- |',
+      '| GSV at the SFJ | 5.4 |',
+      '',
+      'Left Leg',
+      '|  | DIAMETER (mm) |',
+      '| --- | --- |',
+      '| GSV at the SFJ | 6.2 |',
+    ].join('\n');
+    const r = editTableCell({
+      note: CASE_DUP,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'DIAMETER (mm)',
+      value: '9.9',
+    });
+    expect(r.reason).toBe('row_ambiguous');
+    // The RAW text of the first occurrence is displayed — it is what their note
+    // actually prints — but the case-variant is not offered as a second option.
+    expect(r.choices).toEqual(['Right Leg', 'Left Leg']);
+  });
+
+  it('CHOICES ARE DEDUPED where they genuinely discriminate', () => {
+    // Two legs, three rows each, no caption given: the caller can answer, and
+    // must be offered each leg ONCE rather than three times.
+    const r = ask();
+    expect(r.choices).toEqual(['Right Leg', 'Left Leg']);
+  });
+
+  // ⚠️ FOUND BY THE MANDATORY ADVERSARIAL PASS, ON THIS BRANCH'S OWN DIFF.
+  // `norm()` DELETES A TRAILING PARENTHETICAL — correct for a column
+  // ("DIAMETER (mm)" is the column a doctor calls "diameter"), and WRONG for a
+  // caption, where the parenthetical is frequently the entire laterality
+  // signal. Bucketing candidates by `norm` therefore collapsed "GSV (Right)"
+  // and "GSV (Left)" into ONE bucket, and the new refusal then told the doctor
+  // the row appears twice in the SAME table — about two different tables — and
+  // suppressed the choices `main` had been showing.
+  //
+  // A REFUSAL THAT STATES SOMETHING FALSE ABOUT THE NOTE IS WORSE THAN THE
+  // AMBIGUOUS ONE IT REPLACED. Discrimination is keyed on the caption AS
+  // WRITTEN; only MATCHING a caller's answer goes through `norm`.
+  describe('captions that differ ONLY by a parenthetical are DIFFERENT captions', () => {
+    const PAREN = [
+      '## FINDINGS',
+      'GSV (Right)',
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 5.1 | 0.3 |',
+      '',
+      'GSV (Left)',
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3.4 |',
+    ].join('\n');
+
+    it('⚠️ REQUIRED: two differently-captioned tables are still ANSWERABLE', () => {
+      const r = editTableCell({
+        note: PAREN,
+        sectionLabel: 'FINDINGS',
+        rowLabel: 'GSV at the SFJ',
+        columnLabel: 'DIAMETER (mm)',
+        value: '9.9',
+      });
+      expect(r.ok).toBe(false);
+      expect(r.reason).toBe('row_ambiguous');
+      // The doctor must still be SHOWN that a Right and a Left table exist.
+      expect(r.choices).toEqual(['GSV (Right)', 'GSV (Left)']);
+    });
+  });
+
+  // ⚠️ PRE-EXISTING ON `main`, AND A WRONG-LEG WRITE — the worst class this
+  // module exists to prevent. `norm('(right leg)')` is the EMPTY STRING, because
+  // the whole caption is a trailing parenthetical, and
+  // `norm(m.caption).includes('')` is true for EVERY captioned candidate. So a
+  // caption that names the RIGHT leg narrowed to the LEFT leg's table and the
+  // edit was WRITTEN and reported as success, with no leg shown anywhere in the
+  // reply (`chat-edit-visit.ts` surfaces row and column, never the caption).
+  //
+  // An empty want is not a narrowing signal — it is the ABSENCE of one.
+  describe('a caption that normalises to nothing never narrows', () => {
+    const MIXED = [
+      '## FINDINGS',
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 5.1 | 0.3 |',
+      '',
+      'Left Leg',
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3.4 |',
+    ].join('\n');
+
+    it('⚠️ REQUIRED: "(right leg)" must NOT write into the Left Leg table', () => {
+      const r = editTableCell({
+        note: MIXED,
+        sectionLabel: 'FINDINGS',
+        rowLabel: 'GSV at the SFJ',
+        columnLabel: 'DIAMETER (mm)',
+        value: '9.9',
+        tableCaption: '(right leg)',
+      });
+      expect(r.ok, 'a RIGHT-leg caption wrote into a LEFT-leg table').toBe(false);
+      expect(r.caption).not.toBe('Left Leg');
+    });
+
+    it('⚠️ a WHITESPACE-ONLY caption is truthy and must still not narrow', () => {
+      // `tableCaption` is `z.string().max(200).optional()` — no `.min`, no
+      // `.trim` — so "   " passes the schema, is truthy at the `if`, and norms
+      // to ''. Same wrong-leg write as above through a different door, and the
+      // model authors this field.
+      const r = editTableCell({
+        note: MIXED,
+        sectionLabel: 'FINDINGS',
+        rowLabel: 'GSV at the SFJ',
+        columnLabel: 'DIAMETER (mm)',
+        value: '9.9',
+        tableCaption: '   ',
+      });
+      expect(r.ok, 'a blank caption narrowed to a table nobody named').toBe(false);
+    });
+
+    it('the control: a caption that genuinely does not match still refuses', () => {
+      const r = editTableCell({
+        note: MIXED,
+        sectionLabel: 'FINDINGS',
+        rowLabel: 'GSV at the SFJ',
+        columnLabel: 'DIAMETER (mm)',
+        value: '9.9',
+        tableCaption: 'Right Leg',
+      });
+      expect(r.ok).toBe(false);
+    });
+  });
+
+  it('a caption matching NOTHING does not narrow to zero', () => {
+    // Narrowing to an empty set would turn "I do not recognise that table" into
+    // `row_not_found` — a refusal about the wrong thing entirely.
+    const r = ask('Posterior Leg');
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('row_ambiguous');
+    expect(r.choices).toEqual(['Right Leg', 'Left Leg']);
+  });
+});

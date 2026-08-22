@@ -40,10 +40,19 @@ import { readNoteSection } from './splice-note-section';
 /** `## HEADING` */
 const HEADING_RE = /^\s*#{1,6}\s/;
 
+/** Sentinel bucket for "this candidate has no caption at all", kept distinct
+ *  from any real caption text so the two unanswerable cases stay separable. */
+const NO_CAPTION = ' no-caption';
+
 export type TableEditFailure =
   /** Two tables carry this row and NEITHER has a caption to name it by.
    *  Distinct from `row_ambiguous`, which the caller CAN answer. */
   | 'caption_not_found'
+  /** The row appears more than once under the SAME caption — the certified
+   *  template's three blank tributary slots per leg. Naming the table cannot
+   *  separate them, so this is distinct from `row_ambiguous`, which the caller
+   *  CAN answer. */
+  | 'row_ambiguous_same_table'
   | 'section_not_found'
   | 'no_table'
   | 'row_not_found'
@@ -220,10 +229,41 @@ export function editTableCell(params: {
   // whichever row happened to come first.
   if (matches.length > 1 && params.tableCaption) {
     const want = norm(params.tableCaption);
+    // ⚠️ AN EMPTY `want` IS THE ABSENCE OF A SIGNAL, NOT A MATCH-ALL — AND THIS
+    // WAS A LIVE WRONG-LEG WRITE ON `main`, FOUND BY THE ADVERSARIAL PASS.
+    //
+    // `norm` deletes a TRAILING PARENTHETICAL, so a caption that is ENTIRELY a
+    // parenthetical — `(right leg)`, `(Right)` — normalises to `''`. Every
+    // captioned candidate then satisfied `norm(m.caption).includes('')`, so the
+    // filter kept whichever tables happened to carry a caption and, when that
+    // left exactly one, WROTE TO IT. Reproduced against a note whose RIGHT-leg
+    // table is uncaptioned and whose LEFT-leg table is captioned `Left Leg`:
+    //
+    //   tableCaption '(right leg)' -> ok:true, caption "Left Leg", before "6.2"
+    //
+    // The doctor's RIGHT-leg correction landed in the LEFT leg and was reported
+    // as success, and nothing on screen says otherwise — `chat-edit-visit.ts`
+    // surfaces the row and the column, never the caption. `(Right)` is an
+    // entirely plausible thing for the model to emit, given the note's own
+    // `FINDINGS (RIGHT)` heading convention.
     const narrowed = matches.filter(
-      (m) => m.caption && (norm(m.caption) === want || norm(m.caption).includes(want)),
+      (m) =>
+        want !== '' && m.caption && (norm(m.caption) === want || norm(m.caption).includes(want)),
     );
-    if (narrowed.length === 1) matches = narrowed;
+    // ⚠️ NARROW WHENEVER THE CAPTION DISCRIMINATES, NOT ONLY WHEN IT RESOLVES —
+    // F24-S3. This read `if (narrowed.length === 1)`, so a caption that cut six
+    // candidates down to three was DISCARDED ENTIRELY and the refusal below
+    // then offered the doctor both legs again — including the leg they had
+    // just named. Measured by replay on the certified template: asking for the
+    // right-leg tributary returned
+    //   choices: ["Right Leg","Right Leg","Right Leg","Left Leg","Left Leg","Left Leg"]
+    // A narrowing that only counts when it fully resolves throws away the half
+    // of the answer the doctor did give.
+    //
+    // Narrowing to ZERO is NOT a narrowing: a caption that matches nothing is
+    // a caption we failed to recognise, and dropping every candidate on it
+    // would turn "I don't know that table" into `row_not_found`.
+    if (narrowed.length > 0) matches = narrowed;
   }
   if (matches.length > 1) {
     // ⚠️ AN UNANSWERABLE QUESTION IS NOT A REFUSAL, IT IS A DEAD END — SLICE 1b.
@@ -234,15 +274,65 @@ export function editTableCell(params: {
     // unreachable BY CONSTRUCTION rather than patched at this one call site: if
     // no candidate carries a caption there is nothing to disambiguate WITH, and
     // the refusal says so instead of pretending the conversation can continue.
-    const choices = matches.map((m) => m.caption).filter((c): c is string => Boolean(c));
-    if (choices.length === 0) return { ok: false, reason: 'caption_not_found' };
+    //
+    // ⚠️ AND THE EMPTY LIST WAS ONLY THE LOUDEST SHAPE OF THAT DEAD END — F24-S3.
+    // A list can be non-empty and still admit no answer that narrows anything.
+    // The certified template carries `Saphenous Tributary Vein <<insert
+    // location>>` THREE TIMES IN EACH LEG — they are blank slots the doctor
+    // fills in, so the labels are identical by design. Every candidate then
+    // shares one caption, and "tell me which one" is a question whose only
+    // available answer has already been given. Distinguishing the two cases is
+    // the difference between a refusal a doctor can act on and a loop.
+    const captions = matches.map((m) => m.caption);
+    // ⚠️ DISCRIMINATION IS KEYED ON THE CAPTION *AS WRITTEN*, NEVER THROUGH
+    // `norm` — FOUND BY THE ADVERSARIAL PASS ON THIS DIFF'S FIRST DRAFT.
+    //
+    // `norm` deletes a trailing parenthetical, which is right for a COLUMN
+    // ("DIAMETER (mm)" is the column a doctor calls "diameter") and wrong for a
+    // CAPTION, where the parenthetical is often the whole laterality signal.
+    // Keyed on `norm`, `GSV (Right)` and `GSV (Left)` collapsed into ONE bucket
+    // and this branch told the doctor the row appears twice in the SAME TABLE —
+    // about two DIFFERENT tables — while suppressing the two captions `main`
+    // had been showing them. A refusal that states something false about the
+    // note is worse than the ambiguous one it replaced.
+    //
+    // `norm` still governs MATCHING a caller's answer above; only the decision
+    // "can any answer discriminate?" uses this stricter key.
+    const key = (c: string | null) =>
+      c === null ? NO_CAPTION : c.trim().toLowerCase().replace(/\s+/g, ' ');
+    // `null` is its own bucket: "every candidate is uncaptioned" and "every
+    // candidate shares a caption" are both unanswerable, for different reasons,
+    // and they get different refusals because the doctor's next move differs.
+    const distinct = new Set(captions.map(key));
+    if (distinct.size === 1) {
+      return captions[0] === null
+        ? { ok: false, reason: 'caption_not_found' }
+        : { ok: false, reason: 'row_ambiguous_same_table' };
+    }
     return {
       ok: false,
       reason: 'row_ambiguous',
       // Say what the caller may pick BETWEEN. Asking "which one?" while
       // offering no way to answer is how the bilateral case — the main
       // ultrasound case — became simply uneditable.
-      choices,
+      //
+      // DEDUPED: three identical rows under one caption used to emit that
+      // caption three times, so the doctor was offered "Right Leg" as though it
+      // were three different choices.
+      //
+      // ⚠️ DEDUPED ON THE SAME KEY THE AMBIGUITY DECISION USES, not on the raw
+      // string. With two different keys, `Right Leg` and `Right leg` counted as
+      // two choices here while narrowing treated them as one table — so the
+      // doctor was offered an option that, fed back verbatim, is a non-answer.
+      // The RAW text of the first occurrence is what gets displayed, because
+      // that is what is actually printed in their note.
+      // ⚠️ FIRST occurrence wins. `new Map(entries)` keeps the LAST value for a
+      // repeated key, so the tidy one-liner displayed the case-variant further
+      // down the note instead of the caption the doctor reads first. The arm
+      // asserting this reddened against its own author on first execution.
+      choices: captions
+        .filter((c): c is string => c !== null)
+        .filter((c, i, all) => all.findIndex((o) => key(o) === key(c)) === i),
     };
   }
 
@@ -375,6 +465,10 @@ export const TABLE_EDIT_REASON: Record<TableEditFailure, string> = {
   column_ambiguous: 'That column name appears twice in the table, so I stopped rather than guess.',
   caption_not_found:
     'That row appears in more than one table here, and neither table has a heading I can tell them apart by. Name each table — "Right leg", "Left leg" — and I will change it.',
+  // Deliberately does NOT ask "which one?" — the whole point is that naming the
+  // table cannot answer it. It says what IS true and where the doctor can act.
+  row_ambiguous_same_table:
+    'That row appears more than once in the same table, so naming the table cannot tell them apart. I have left the note unchanged — edit the row directly in the document.',
   ragged_table:
     "That table's header and its rows don't line up, so I can't tell which column is which.",
   illegal_value: "A measurement can't contain a line break or a “|”.",
