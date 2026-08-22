@@ -235,8 +235,6 @@ non-whitespace decoration.
 
 ### Mutation proof — three mutations, each asserting its own application
 
-### Mutation proof — three mutations, each asserting its own application
-
 | # | mutation | result |
 |---|---|---|
 | **A** | widen the SHARED vocabulary (`+thickness`) | truth-table arm **RED**; the addressability-gap arm **also RED — moving toward SUCCESS**, i.e. the gate registers the gap closing. Contract arms stay GREEN, correctly: one predicate keeps both callers in step even when its answer changes |

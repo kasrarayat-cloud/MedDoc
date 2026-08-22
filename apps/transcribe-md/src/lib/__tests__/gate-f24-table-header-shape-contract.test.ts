@@ -52,11 +52,14 @@
 //
 // ⚠️ WHAT THIS GATE CLAIMS, AND WHAT IT DELIBERATELY DOES NOT.
 //
-//   · It PINS the predicate's measured behaviour, INCLUDING six inputs where a
-//     reasonable reader would expect the other answer. Those are named below as
-//     accepted heuristic limits WITH their consequence — not as defects, and
-//     not as aspirations. A heuristic nobody has written down is one somebody
-//     "improves" at 02:00.
+//   · It PINS the predicate's measured behaviour, INCLUDING **eight** inputs
+//     where a reasonable reader would expect the other answer. A heuristic
+//     nobody has written down is one somebody "improves" at 02:00.
+//     ⚠️ THIS BULLET USED TO SAY "six … accepted heuristic limits, not
+//     defects." Both halves were wrong: there are eight, and THREE OF THEM ARE
+//     A DEFECT — they license a wrong-cell write on a legacy note. See the
+//     DEFECT describe below, which reproduces the harm rather than asserting
+//     it away.
 //   · It asserts the CONTRACT — generator and editor reaching the same answer
 //     — by running BOTH REAL FUNCTIONS over a matrix of header shapes. It does
 //     not re-implement either one, and it does not assert the regex.
