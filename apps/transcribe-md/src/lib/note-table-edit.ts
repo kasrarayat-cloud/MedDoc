@@ -455,9 +455,20 @@ export function editTableCell(params: {
   // invariant under which end is short — the identical axis error this file's
   // own comment above diagnoses in the production delta census. It also WIDENED
   // GRIDS THE TEXT ROUTE CORRECTLY REFUSES (`| VEIN | DIAMETER (mm) |`), which
-  // is strictly worse than the defect #140 closed. What the twin can honestly
-  // settle is whether its OWN header row's first cell is empty; that needs the
-  // note-table -> twin-table identification F24-S3 has not built yet.
+  // is strictly worse than the defect #140 closed.
+  //
+  // ⚠️ AND THE REPLACEMENT MECHANISM THIS COMMENT FIRST PROPOSED — "the twin can
+  // say whether its own header row's first cell is EMPTY" — IS REFUTED BY
+  // MEASUREMENT. Production's single CERTIFIED compiled version, table 0:
+  //
+  //     row 0 (header)  cell0 HAS TEXT  cell1 HAS TEXT  cell2 HAS TEXT  0 fields
+  //     row 1 (data)    cell0 HAS TEXT  cell1 1 field   cell2 1 field
+  //
+  // The twin's header row NAMES ALL THREE COLUMNS while the note carries a TWO
+  // -cell header, so the twin knows column 0 is the label and STILL cannot say
+  // which header cell the note dropped — that needs the header cells' TEXT, and
+  // the IR stores only `staticTextSha256`. The evidence lives in the SOURCE
+  // ARTIFACT, not the IR. See `table-header-shape.ts` for the full record.
   const shortByExactlyOne = rawHeaderCells.length === rowCells.length - 1;
   const gridIsRegular = everyDataRowAgrees && dataRowCounts[0] === rowCells.length;
 
