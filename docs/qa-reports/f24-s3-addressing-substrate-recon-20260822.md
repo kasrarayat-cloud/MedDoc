@@ -334,10 +334,36 @@ own predicate.**
 and all 3 have `DIAMETER (mm)` as their first column** — which the predicate
 classifies correctly. **No production template triggers this today.**
 
-⚠️ **HONEST LIMIT:** that measures TEMPLATE structures, not the headers sitting
-in notes already written. A note generated under a template whose columns have
-since changed is outside it, and closing that gap would mean reading note
-bodies.
+**AND THE WRITTEN NOTES AGREE — the limit this paragraph used to state is now
+measured, not stated.** Extracted from `transcribe_visits.soapFinal` with a
+projection that emits **column names only, never a value**: a line is a header
+only if the NEXT line is a markdown rule row, and only its FIRST cell is read.
+
+**45 header lines across 24 visits — six distinct first-cell values, and every
+one classifies CORRECTLY**, judged by the SHIPPED predicate rather than a
+re-implementation:
+
+| first cell | lines | `isDataColumnHeader` | correct? |
+|---|---|---|---|
+| `DIAMETER (mm)` | 27 | `true` | ✅ data — the WM_IOV headerless shape |
+| `Location` | 8 | `false` | ✅ label |
+| `Segment` | 6 | `false` | ✅ label |
+| `Site` | 2 | `false` | ✅ label |
+| `DIAMETER` | 1 | `true` | ✅ data |
+| `Medication` | 1 | `false` | ✅ label |
+| | **45** | | **0 misread** |
+
+The 45 cross-checks against the caption recon's own count of 45 headers, which
+is a control on the extraction rather than a coincidence.
+
+⚠️ **NOTE WHAT THIS MAKES OF THE COUNTEREXAMPLES: they are CONSTRUCTED, not
+observed.** Production has `Site`, which classifies correctly; my counterexample
+is `Site (see key)`, which does not appear anywhere. The defect is real and
+reproducible, and **nothing in production exercises it today** — at the template
+level or in a written note.
+
+⚠️ **REMAINING LIMIT, stated precisely:** this covers notes that currently hold a
+markdown table. It says nothing about a note written under a future template.
 
 **THE TRIGGER, written so it is a lookup and not a judgement:** a doctor's table
 whose FIRST column is a row-label column whose text ends in a parenthetical or

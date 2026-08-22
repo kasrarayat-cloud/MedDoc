@@ -124,9 +124,12 @@ emits the annotated shape.
 > refuses. Same for `Segment (right leg)` and `Site (see key)` — all three were
 > pinned by the gate's first draft as *accepted limits that never write the
 > wrong cell*, which is the sentence the pass falsified.
-> **SEVERITY: latent.** Production holds **3 table structures, all with
-> `DIAMETER (mm)` first**, which classifies correctly — so nothing triggers it
-> today. Honest limit: that measures TEMPLATES, not headers in written notes.
+> **SEVERITY: latent, at BOTH levels.** Production holds **3 table structures,
+> all with `DIAMETER (mm)` first**; and across written notes, **45 header lines
+> in 24 visits carry six distinct first cells — `DIAMETER (mm)` 27, `Location`
+> 8, `Segment` 6, `Site` 2, `DIAMETER` 1, `Medication` 1 — and ALL SIX classify
+> correctly.** 0 misread. The counterexamples are CONSTRUCTED, not observed:
+> production has `Site`; the counterexample is `Site (see key)`.
 > **Not fixed:** the geometry cannot discriminate the two readings, so the cure
 > changes the GENERATOR too and is a product decision about doctors' headers.
 > Pinned as a defect with its trigger, so a fix is deliberate.
