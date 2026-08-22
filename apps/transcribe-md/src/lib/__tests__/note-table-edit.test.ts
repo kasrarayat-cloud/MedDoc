@@ -566,11 +566,150 @@ describe('F24-S3 — duplicate row labels within one table', () => {
     );
   });
 
+  it('⚠️ choices are deduped on the SAME key the narrowing uses', () => {
+    // Two captions differing only in case are ONE table to the narrower, so
+    // offering both is offering an answer that cannot narrow — the same dead
+    // end this describe exists to close, in case-differing clothes.
+    const CASE_DUP = [
+      '## FINDINGS',
+      'Right Leg',
+      '|  | DIAMETER (mm) |',
+      '| --- | --- |',
+      '| GSV at the SFJ | 5.1 |',
+      '',
+      'Right leg',
+      '|  | DIAMETER (mm) |',
+      '| --- | --- |',
+      '| GSV at the SFJ | 5.4 |',
+      '',
+      'Left Leg',
+      '|  | DIAMETER (mm) |',
+      '| --- | --- |',
+      '| GSV at the SFJ | 6.2 |',
+    ].join('\n');
+    const r = editTableCell({
+      note: CASE_DUP,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'DIAMETER (mm)',
+      value: '9.9',
+    });
+    expect(r.reason).toBe('row_ambiguous');
+    // The RAW text of the first occurrence is displayed — it is what their note
+    // actually prints — but the case-variant is not offered as a second option.
+    expect(r.choices).toEqual(['Right Leg', 'Left Leg']);
+  });
+
   it('CHOICES ARE DEDUPED where they genuinely discriminate', () => {
     // Two legs, three rows each, no caption given: the caller can answer, and
     // must be offered each leg ONCE rather than three times.
     const r = ask();
     expect(r.choices).toEqual(['Right Leg', 'Left Leg']);
+  });
+
+  // ⚠️ FOUND BY THE MANDATORY ADVERSARIAL PASS, ON THIS BRANCH'S OWN DIFF.
+  // `norm()` DELETES A TRAILING PARENTHETICAL — correct for a column
+  // ("DIAMETER (mm)" is the column a doctor calls "diameter"), and WRONG for a
+  // caption, where the parenthetical is frequently the entire laterality
+  // signal. Bucketing candidates by `norm` therefore collapsed "GSV (Right)"
+  // and "GSV (Left)" into ONE bucket, and the new refusal then told the doctor
+  // the row appears twice in the SAME table — about two different tables — and
+  // suppressed the choices `main` had been showing.
+  //
+  // A REFUSAL THAT STATES SOMETHING FALSE ABOUT THE NOTE IS WORSE THAN THE
+  // AMBIGUOUS ONE IT REPLACED. Discrimination is keyed on the caption AS
+  // WRITTEN; only MATCHING a caller's answer goes through `norm`.
+  describe('captions that differ ONLY by a parenthetical are DIFFERENT captions', () => {
+    const PAREN = [
+      '## FINDINGS',
+      'GSV (Right)',
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 5.1 | 0.3 |',
+      '',
+      'GSV (Left)',
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3.4 |',
+    ].join('\n');
+
+    it('⚠️ REQUIRED: two differently-captioned tables are still ANSWERABLE', () => {
+      const r = editTableCell({
+        note: PAREN,
+        sectionLabel: 'FINDINGS',
+        rowLabel: 'GSV at the SFJ',
+        columnLabel: 'DIAMETER (mm)',
+        value: '9.9',
+      });
+      expect(r.ok).toBe(false);
+      expect(r.reason).toBe('row_ambiguous');
+      // The doctor must still be SHOWN that a Right and a Left table exist.
+      expect(r.choices).toEqual(['GSV (Right)', 'GSV (Left)']);
+    });
+  });
+
+  // ⚠️ PRE-EXISTING ON `main`, AND A WRONG-LEG WRITE — the worst class this
+  // module exists to prevent. `norm('(right leg)')` is the EMPTY STRING, because
+  // the whole caption is a trailing parenthetical, and
+  // `norm(m.caption).includes('')` is true for EVERY captioned candidate. So a
+  // caption that names the RIGHT leg narrowed to the LEFT leg's table and the
+  // edit was WRITTEN and reported as success, with no leg shown anywhere in the
+  // reply (`chat-edit-visit.ts` surfaces row and column, never the caption).
+  //
+  // An empty want is not a narrowing signal — it is the ABSENCE of one.
+  describe('a caption that normalises to nothing never narrows', () => {
+    const MIXED = [
+      '## FINDINGS',
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 5.1 | 0.3 |',
+      '',
+      'Left Leg',
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3.4 |',
+    ].join('\n');
+
+    it('⚠️ REQUIRED: "(right leg)" must NOT write into the Left Leg table', () => {
+      const r = editTableCell({
+        note: MIXED,
+        sectionLabel: 'FINDINGS',
+        rowLabel: 'GSV at the SFJ',
+        columnLabel: 'DIAMETER (mm)',
+        value: '9.9',
+        tableCaption: '(right leg)',
+      });
+      expect(r.ok, 'a RIGHT-leg caption wrote into a LEFT-leg table').toBe(false);
+      expect(r.caption).not.toBe('Left Leg');
+    });
+
+    it('⚠️ a WHITESPACE-ONLY caption is truthy and must still not narrow', () => {
+      // `tableCaption` is `z.string().max(200).optional()` — no `.min`, no
+      // `.trim` — so "   " passes the schema, is truthy at the `if`, and norms
+      // to ''. Same wrong-leg write as above through a different door, and the
+      // model authors this field.
+      const r = editTableCell({
+        note: MIXED,
+        sectionLabel: 'FINDINGS',
+        rowLabel: 'GSV at the SFJ',
+        columnLabel: 'DIAMETER (mm)',
+        value: '9.9',
+        tableCaption: '   ',
+      });
+      expect(r.ok, 'a blank caption narrowed to a table nobody named').toBe(false);
+    });
+
+    it('the control: a caption that genuinely does not match still refuses', () => {
+      const r = editTableCell({
+        note: MIXED,
+        sectionLabel: 'FINDINGS',
+        rowLabel: 'GSV at the SFJ',
+        columnLabel: 'DIAMETER (mm)',
+        value: '9.9',
+        tableCaption: 'Right Leg',
+      });
+      expect(r.ok).toBe(false);
+    });
   });
 
   it('a caption matching NOTHING does not narrow to zero', () => {

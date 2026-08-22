@@ -4,31 +4,40 @@
 // RELAY's acceptance: "the census of editor-addressable regions reaches ZERO
 // gaps on the certified template, proven by REPLAY — not by a source sweep."
 //
-// Every row of this census is produced by RUNNING the shipped editor
-// (`editTableCell`) against a note built by the shipped generator
+// The table-bound rows here are produced by RUNNING the shipped editor
+// (`editTableCell`) against notes built by the shipped generator
 // (`renderStructureDirective`) over the real customer form compiled by the
-// shipped compiler (`compileTemplateDocx`). Nothing here re-implements a
-// predicate — Finding F of the substrate recon is explicit that re-implementing
-// a shipped matcher inside a test is the F12-g failure.
+// shipped compiler. Nothing re-implements a predicate — Finding F of the
+// substrate recon is explicit that re-implementing a shipped matcher inside a
+// test is the F12-g failure.
+//
+// ⚠️ 28 OF THE 80 ROWS ARE A CLASSIFICATION, NOT A REPLAY, AND THE HEADER SAYS
+// SO BECAUSE AN EARLIER DRAFT DID NOT. Content controls have no editor intent
+// at all, so they never reach `editTableCell`. "Every row is produced by
+// running the shipped editor" was false for 35% of this census.
 //
 // ⚠️ THE UNIVERSE IS PINNED BY CONTENT, NOT BY A VERSION FIELD — FINDING B.
 // Two IR shapes exist in the wild at the IDENTICAL `compilerVersion` AND
 // `irSchemaVersion`: 21 of 55 QA compiled versions carry no `rowLaterality`
 // key at all, `ir.ts:72` defaults it to 'unknown', and `bridge-evidence.ts`
 // then refuses EVERY sided fact against such a row. A census run on one of
-// those measures a system where laterality routing can never succeed, and
-// every arm would read as a finding about the editor. The predicate here is
-// therefore CONTENT — rowLaterality present AND 52 sided cells — asserted as a
-// non-vacuity floor before a single bucket is counted.
+// those measures a system where laterality routing can never succeed. The
+// predicate here is therefore CONTENT — rowLaterality present AND 52 sided
+// cells — asserted as a non-vacuity floor before a single bucket is counted.
 //
-// ⚠️ AND THE FIRST DRAFT OF THIS FILE REPORTED `addressable: 0` FROM A BROKEN
-// INSTRUMENT. It derived the note's columns from the IR's `table_header`
-// labels and got ONE column, because the customer form's DIAMETER column is
-// UNHEADED — its cell carries the vein name (`labelSource: 'left_cell'`), so
-// no field anywhere in the IR is labelled `DIAMETER (mm)`. A one-column note
-// makes every edit ambiguous, and the resulting zero looked exactly like a
-// finding about the editor. The tell was in the instrument's own output: it
-// printed one column for a two-column form. See NOTE_COLUMNS below.
+// ⚠️ AND TWO EARLIER DRAFTS OF THIS FILE WERE WRONG IN WAYS WORTH KEEPING:
+//
+//   1. It derived the note's columns from the IR's `table_header` labels and
+//      got ONE column, because the customer form's DIAMETER column is
+//      UNHEADED — its cell carries the vein name (`labelSource: 'left_cell'`),
+//      so no field anywhere in the IR is labelled `DIAMETER (mm)`. A one-column
+//      note makes every edit ambiguous, and the resulting `addressable: 0`
+//      looked exactly like a finding about the editor. The tell was in the
+//      instrument's own output: one column printed for a two-column form.
+//
+//   2. It measured ONE note arrangement and reported the answer as "the"
+//      census. See the SHAPES block below — that one is the more dangerous of
+//      the two, because its number was plausible.
 // ============================================================================
 
 import { readFileSync } from 'node:fs';
@@ -51,15 +60,21 @@ const sided = (f: TemplateField) => f.rendererBinding.rowLaterality !== 'unknown
 /**
  * The note's column headers.
  *
- * ⚠️ ONLY THE SECOND ONE IS DERIVABLE FROM THE TWIN, AND THAT ASYMMETRY IS A
- * FINDING RATHER THAN AN INCONVENIENCE. `REFLUX TIME (ms)` is a real
- * `table_header` label in the IR and is asserted against it below, so this
- * constant cannot go stale silently. `DIAMETER (mm)` is NOT in the IR at all:
- * the doctor's DOCX leaves that column unheaded and the vein name sits in the
- * cell, which is why `build-soap-prompt.ts:283-291` exists. In production the
- * header text comes from `note_templates.sections`, produced by an AI-backed
- * parse (`parseNoteToTemplate`) that cannot be replayed deterministically —
- * so it is pinned here with its provenance instead of being faked as derived.
+ * ⚠️ ONLY THE SECOND ONE IS DERIVABLE FROM THE TWIN, AND THE FIRST IS AN
+ * ASSUMPTION THIS CENSUS CANNOT CHECK. `REFLUX TIME (ms)` is a real
+ * `table_header` label in the IR and is asserted against it below, so it cannot
+ * go stale silently. `DIAMETER (mm)` is NOT in the IR at all: the doctor's DOCX
+ * leaves that column unheaded and the vein name sits in the cell, which is why
+ * `build-soap-prompt.ts:283-291` exists. In production the header text comes
+ * from `note_templates.sections`, produced by an AI-backed parse
+ * (`parseNoteToTemplate`) that cannot be replayed deterministically.
+ *
+ * ⚠️ SO THIS CONSTANT BOTH BUILDS THE NOTE AND QUERIES IT, AND A WRONG VALUE
+ * WOULD BE INVISIBLE HERE WHILE BREAKING EVERY REAL EDIT. If production's
+ * header is anything other than `DIAMETER (mm)`, real edits return
+ * `column_not_found` and this census still reads the same number. That is a
+ * limit of the harness, stated rather than papered over; closing it means
+ * reading the header off this template's real `note_templates.sections` row.
  * Same value `bridge-fill.test.ts:74` and `build-soap-prompt.ts:284` carry.
  */
 const NOTE_COLUMNS = ['DIAMETER (mm)', 'REFLUX TIME (ms)'] as const;
@@ -97,21 +112,87 @@ function irRows(): { rowIndex: number; vein: string; laterality: string }[] {
 }
 
 /**
- * The note as the system produces it for this form: ONE grid in the document
- * becomes TWO captioned markdown tables, one per leg. That is not a stylistic
- * choice — it is the shape `bridge-fill.ts:368` documents and the reason the
- * caption is the only disambiguator the editor has today.
+ * ⚠️ THE NOTE SHAPE IS A ROUTE, NOT A DETAIL — AND AN EARLIER DRAFT OF THIS
+ * FILE MEASURED EXACTLY ONE OF THEM AND REPORTED THE ANSWER AS "THE" CENSUS.
+ *
+ * That draft built ONE arrangement — a bare caption on the line immediately
+ * above each leg's header — and reported `addressable: 40`. The mandatory
+ * adversarial pass refuted it: the captions and the leg split are written by
+ * THIS FILE, not by the generator (`renderStructureDirective` emits a single
+ * grid and no caption at all), and the arrangement chosen happens to be the one
+ * in which caption disambiguation can work at all. Run over the shapes this
+ * repository itself documents, the same census gives 0.
+ *
+ * That is canon's "A WELL-CHOSEN FIXTURE DISGUISES A WRONG UNIVERSE", landing
+ * in the harness rather than in the product: a number that is a property of the
+ * fixture, presented as a property of the system.
+ *
+ * So the census runs the MATRIX. Each shape is a real candidate for how this
+ * template's notes are written, each carries its provenance, and each is
+ * measured with the best route the TWIN can offer for that shape — because
+ * measuring a caption route against a note that has no captions would OVER-state
+ * the gap exactly as the single-shape draft UNDER-stated it.
+ *
+ * ⚠️ WHICH SHAPE PRODUCTION ACTUALLY HOLDS IS NOT ESTABLISHED HERE. That needs
+ * a query against this template's real `transcribe_visits.soapFinal` rows, and
+ * it is named in the ledger as the next measurement rather than guessed at.
  */
-function buildNote(): string {
+interface NoteShape {
+  name: string;
+  provenance: string;
+  note: string;
+  /** How the twin would address a row on this shape. */
+  twinRowLabel: (vein: string, laterality: string) => string;
+  twinCaption: (laterality: string) => string | undefined;
+}
+
+function legTables(
+  caption: (side: string) => string[],
+  labelFor: (vein: string, side: string) => string,
+): string {
   const out: string[] = ['## FINDINGS'];
   for (const side of ['right', 'left'] as const) {
     const labels = irRows()
       .filter((r) => r.laterality === side)
-      .map((r) => r.vein);
-    out.push(CAPTION[side], ...generatedGrid(NOTE_COLUMNS, labels), '');
+      .map((r) => labelFor(r.vein, side));
+    out.push(...caption(side), ...generatedGrid(NOTE_COLUMNS, labels), '');
   }
   return out.join('\n');
 }
+
+const SHAPES: NoteShape[] = [
+  {
+    name: 'captioned-adjacent',
+    provenance: 'caption directly above the header — the only arrangement captionFor can read',
+    note: legTables((s) => [CAPTION[s]], (v) => v),
+    twinRowLabel: (v) => v,
+    twinCaption: (lat) => CAPTION[lat],
+  },
+  {
+    name: 'captioned-blank-line',
+    provenance:
+      'caption, BLANK LINE, then the table — bridge-fill.test.ts SPLIT_NOTE; canon records 20 of 45 production headers with a blank line above',
+    note: legTables((s) => [CAPTION[s], ''], (v) => v),
+    twinRowLabel: (v) => v,
+    twinCaption: (lat) => CAPTION[lat],
+  },
+  {
+    name: 'combined-leg-in-label',
+    provenance:
+      'ONE table, the leg carried in the row label — bridge-fill.test.ts primary NOTE fixture, and the single-skeleton shape bridge-fill.ts:366-372 describes',
+    note: [
+      '## FINDINGS',
+      ...generatedGrid(
+        NOTE_COLUMNS,
+        irRows().map((r) => `${r.laterality === 'right' ? 'Right' : 'Left'} ${r.vein}`),
+      ),
+    ].join('\n'),
+    // No caption exists on this shape, so the twin's route is the LABEL: it
+    // knows the side and can name the row the way the note names it.
+    twinRowLabel: (v, lat) => `${lat === 'right' ? 'Right' : 'Left'} ${v}`,
+    twinCaption: () => undefined,
+  },
+];
 
 // ---------------------------------------------------------------------------
 // 0. THE UNIVERSE — pinned by CONTENT, before anything is counted
@@ -139,16 +220,17 @@ describe('F24-S3 census — the universe is pinned by content', () => {
     expect(nonTable.filter(sided).length, 'a content control claimed a side').toBe(0);
   });
 
-  it('the derivable column header IS derived — this constant cannot go stale silently', () => {
+  it('the derivable column header IS derived — that constant cannot go stale silently', () => {
     const headers = new Set(
       ir.fields
         .filter((f) => isTableCell(f) && f.labelSource === 'table_header')
         .map((f) => f.originalLabel),
     );
     expect([...headers]).toEqual([NOTE_COLUMNS[1]]);
-    // And the other one is genuinely absent — pinned so that the day the form
-    // grows a real DIAMETER header, this arm says so instead of the constant
-    // quietly becoming a lie.
+    // And the other is genuinely absent — pinned so that the day the form grows
+    // a real DIAMETER header, this says so instead of the constant becoming a
+    // lie. ⚠️ It does NOT verify that production's header IS `DIAMETER (mm)`;
+    // see the note on NOTE_COLUMNS.
     expect(
       ir.fields.some((f) => f.originalLabel.toLowerCase().includes('diameter')),
       'the IR now carries a diameter label — NOTE_COLUMNS[0] is no longer a pin',
@@ -157,135 +239,144 @@ describe('F24-S3 census — the universe is pinned by content', () => {
 
   it('the generator emits a two-column grid with an EMPTY leading label cell', () => {
     const grid = generatedGrid(NOTE_COLUMNS, ['GSV at the SFJ']);
-    // Non-vacuity: if the generator stopped emitting a grid, every replay below
-    // would refuse `no_table` and the census would read as a total failure of
-    // the editor.
+    // Non-vacuity: if the generator stopped emitting a grid, every replay would
+    // refuse `no_table` and the census would read as a failure of the editor.
     expect(grid.length).toBe(3);
     expect(grid[0]).toBe('|  | DIAMETER (mm) | REFLUX TIME (ms) |');
+  });
+
+  it('⚠️ the generator supplies NO caption — the captions below are the harness’s', () => {
+    // The arm that would have caught the single-shape draft. If this ever goes
+    // red because the generator started emitting a caption, the SHAPES matrix
+    // is measuring something other than what ships.
+    const directive = renderStructureDirective({
+      kind: 'table',
+      columns: [...NOTE_COLUMNS],
+      rowLabels: ['GSV at the SFJ'],
+    } as never);
+    expect(directive.includes('Right Leg')).toBe(false);
+    expect(directive.includes('Left Leg')).toBe(false);
   });
 });
 
 // ---------------------------------------------------------------------------
-// 1. THE CENSUS — every field replayed through the shipped editor
+// 1. THE CENSUS — replayed over EVERY candidate note shape
 // ---------------------------------------------------------------------------
-describe('F24-S3 census — replay', () => {
-  it('CENSUS: every one of the 80 fields lands in exactly one named bucket', () => {
-    const note = buildNote();
-    const rowsOfIr = irRows();
+describe('F24-S3 census — replay, over every candidate note shape', () => {
+  const rowsOfIr = irRows();
 
-    // Non-vacuity on the note itself.
-    expect(note.split('\n').filter((l) => l.startsWith('|')).length).toBeGreaterThan(20);
+  function replay(f: TemplateField, shape: NoteShape, useTwin: boolean): string {
+    // ⚠️ A CLASSIFICATION, NOT A REPLAY — see the file header. A content
+    // control never reaches the editor because no intent addresses one.
+    if (!isTableCell(f)) return 'no_editor_intent';
+    const row = rowsOfIr.find((r) => r.rowIndex === f.rendererBinding.rowIndex);
+    if (!row) return 'no_ir_row';
+    const columnLabel = f.labelSource === 'table_header' ? f.originalLabel : NOTE_COLUMNS[0];
+    const rowLabel = useTwin ? shape.twinRowLabel(row.vein, row.laterality) : row.vein;
+    const caption = useTwin ? shape.twinCaption(row.laterality) : undefined;
+    const res = editTableCell({
+      note: shape.note,
+      sectionLabel: 'FINDINGS',
+      rowLabel,
+      columnLabel,
+      value: '9.9',
+      ...(caption ? { tableCaption: caption } : {}),
+    });
+    if (!res.ok) return res.reason ?? 'unknown';
 
-    /** Replay one field. `useTwin` decides whether the twin's `rowLaterality`
-     *  is allowed to supply the caption — which is the whole of this item. */
-    function replay(f: TemplateField, useTwin: boolean): string {
-      if (!isTableCell(f)) return 'no_editor_intent';
-      const row = rowsOfIr.find((r) => r.rowIndex === f.rendererBinding.rowIndex);
-      if (!row) return 'no_ir_row';
-      const columnLabel =
-        f.labelSource === 'table_header' ? f.originalLabel : NOTE_COLUMNS[0];
-      const res = editTableCell({
-        note,
-        sectionLabel: 'FINDINGS',
-        rowLabel: row.vein,
-        columnLabel,
-        value: '9.9',
-        ...(useTwin ? { tableCaption: CAPTION[row.laterality] } : {}),
-      });
-      if (!res.ok) return res.reason ?? 'unknown';
+    // ⚠️ `ok: true` IS NOT ADDRESSABILITY. An edit CAN succeed against the wrong
+    // cell and report success — Finding E of the substrate recon, live on
+    // shipped code — so a bucket earned on `ok` alone would make this census the
+    // "title wider than what it measures" failure its own header cites.
+    // Compared by exact string: `res.column` is `headerCells[idx].trim()` and
+    // `res.row` is `rowCells[0].trim()`, both read out of the note we asked
+    // about, so no normaliser is needed — and re-implementing the editor's
+    // `norm` here would be the F12-g failure.
+    if (res.column?.trim() !== columnLabel.trim()) return 'resolved_wrong_column';
+    if (res.row?.trim() !== rowLabel.trim()) return 'resolved_wrong_row';
+    return 'addressable';
+  }
 
-      // ⚠️ `ok: true` IS NOT ADDRESSABILITY, AND COUNTING IT AS SUCH WOULD MAKE
-      // THIS CENSUS THE EXACT FAILURE ITS OWN HEADER WARNS ABOUT — a check whose
-      // TITLE ("addressable") is wider than what it MEASURES ("an edit
-      // returned ok"). The whole reason this item exists is that an edit can
-      // succeed against the WRONG CELL and report success: that is Finding E of
-      // the substrate recon, verbatim, and it is live on shipped code.
-      //
-      // So the bucket is earned only if the editor resolved to THIS field's own
-      // row and column. Compared by exact string: `res.column` is
-      // `headerCells[idx].trim()` and `res.row` is `rowCells[0].trim()`, both
-      // taken from the note we asked about, so no normaliser is needed — and
-      // re-implementing the editor's `norm` here would be the F12-g failure.
-      if (res.column?.trim() !== columnLabel.trim()) return 'resolved_wrong_column';
-      if (res.row?.trim() !== row.vein.trim()) return 'resolved_wrong_row';
-      return 'addressable';
+  const tally = (shape: NoteShape, useTwin: boolean) => {
+    const t = new Map<string, number>();
+    for (const f of ir.fields) {
+      const b = replay(f, shape, useTwin);
+      t.set(b, (t.get(b) ?? 0) + 1);
+    }
+    return t;
+  };
+
+  it('CENSUS: the matrix, and every field lands in exactly one named bucket', () => {
+    const lines: string[] = [
+      '',
+      'F24-S3 CENSUS — editor-addressable regions on the certified template',
+      `  fields ${ir.fields.length} · table-bound ${ir.fields.filter(isTableCell).length} · content controls ${ir.fields.filter((f) => !isTableCell(f)).length}`,
+      `  distinct vein labels per leg: ${new Set(rowsOfIr.filter((r) => r.laterality === 'right').map((r) => r.vein)).size} of ${rowsOfIr.filter((r) => r.laterality === 'right').length}`,
+      '',
+    ];
+
+    const best = new Map<string, number>();
+
+    for (const shape of SHAPES) {
+      // Non-vacuity, PER SHAPE: a shape whose note lost its tables would bucket
+      // everything as `no_table` and read as a finding about the editor.
+      expect(
+        shape.note.split('\n').filter((l) => l.startsWith('|')).length,
+        `shape ${shape.name} produced no table rows`,
+      ).toBeGreaterThan(20);
+
+      const bare = tally(shape, false);
+      const twin = tally(shape, true);
+      const fmt = (t: Map<string, number>) =>
+        [...t.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([b, n]) => `${b} ${n}`)
+          .join(' · ');
+
+      lines.push(
+        `  ${shape.name}`,
+        `      (${shape.provenance})`,
+        `      row label alone : ${fmt(bare)}`,
+        `      twin-addressed  : ${fmt(twin)}`,
+        '',
+      );
+
+      // The partition reconciles for EVERY shape and BOTH readings.
+      expect([...bare.values()].reduce((a, b) => a + b, 0)).toBe(80);
+      expect([...twin.values()].reduce((a, b) => a + b, 0)).toBe(80);
+
+      // The 28 are definitional in every cell of the matrix.
+      expect(bare.get('no_editor_intent')).toBe(28);
+      expect(twin.get('no_editor_intent')).toBe(28);
+
+      best.set(shape.name, twin.get('addressable') ?? 0);
     }
 
-    const tally = (useTwin: boolean) => {
-      const t = new Map<string, number>();
-      for (const f of ir.fields) {
-        const b = replay(f, useTwin);
-        t.set(b, (t.get(b) ?? 0) + 1);
-      }
-      return t;
-    };
-
-    const today = tally(false);
-    const withTwin = tally(true);
-
-    const fmt = (t: Map<string, number>) =>
-      [...t.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([b, n]) => `    ${b.padEnd(24)} ${n}`)
-        .join('\n');
-
-    // eslint-disable-next-line no-console
-    console.info(
-      [
-        '',
-        'F24-S3 CENSUS — editor-addressable regions on the certified template',
-        `  fields: ${ir.fields.length} · table-bound ${ir.fields.filter(isTableCell).length} · content controls ${ir.fields.filter((f) => !isTableCell(f)).length}`,
-        `  distinct vein labels per leg: ${new Set(rowsOfIr.filter((r) => r.laterality === 'right').map((r) => r.vein)).size} of ${rowsOfIr.filter((r) => r.laterality === 'right').length}`,
-        '',
-        '  TODAY — rowLabel only (the editor has no twin awareness):',
-        fmt(today),
-        '',
-        '  WITH THE TWIN — rowLaterality supplies the caption:',
-        fmt(withTwin),
-        '',
-      ].join('\n'),
+    lines.push(
+      `  BEST twin-addressed, by shape: ${[...best.entries()].map(([k, v]) => `${k}=${v}`).join(' · ')}`,
+      '',
     );
+    // eslint-disable-next-line no-console
+    console.info(lines.join('\n'));
 
-    // ── the partition reconciles in both readings ───────────────────────────
-    expect([...today.values()].reduce((a, b) => a + b, 0)).toBe(80);
-    expect([...withTwin.values()].reduce((a, b) => a + b, 0)).toBe(80);
+    // ── WHAT THE MATRIX ESTABLISHES, AND WHAT IT DOES NOT ───────────────────
+    //
+    // ⚠️ ADDRESSABILITY IS SHAPE-DEPENDENT, AND THE SPREAD IS THE FINDING. A
+    // single-shape census reported 40 and read as a property of the system; it
+    // was a property of the arrangement. The ledger carries the matrix, never
+    // the flattering cell.
+    //
+    // A RATCHET, not a pin: the BEST shape may not regress. A gate that goes red
+    // when the thing it guards starts working is a gate nobody keeps.
+    const bestAny = Math.max(...best.values());
+    expect(bestAny, 'best-case addressability REGRESSED').toBeGreaterThanOrEqual(40);
 
-    // ── TODAY: the editor has no twin awareness, so NOTHING is addressable ──
-    // ⚠️ THIS ZERO IS A MEASUREMENT, NOT A BLIND INSTRUMENT, AND THE PROOF IS
-    // THE LINE BELOW IT: the SAME replay function, over the SAME note, reports
-    // 40 addressable once the twin supplies the caption. An instrument that can
-    // produce a non-zero is one whose zero means something.
-    expect(today.get('addressable') ?? 0).toBe(0);
-    expect(today.get('row_ambiguous')).toBe(52);
-    expect(today.get('no_editor_intent')).toBe(28);
-
-    // ── WITH THE TWIN: a RATCHET, not a pin ─────────────────────────────────
-    // Deliberately `>=` / `<=`. A gate that goes RED when the thing it guards
-    // starts working is a gate nobody keeps — and closing these gaps is exactly
-    // what F24-S3 exists to do. This reddens on a REGRESSION and stays green as
-    // the count improves; the exact figures of the day are printed above.
-    const addressable = withTwin.get('addressable') ?? 0;
-    const gaps = 80 - addressable;
-    expect(addressable, 'addressability REGRESSED — the twin used to reach 40').toBeGreaterThanOrEqual(40);
-    expect(gaps, 'gap set grew').toBeLessThanOrEqual(40);
-
-    // ── THE GAP SET, NAMED. This is the item's remaining work. ──────────────
-    // 28 · content controls — no editor intent addresses them at all. F24-S3
-    //      PART 2: structured edits routed to their own writers.
-    // 12 · `Saphenous Tributary Vein <<insert location>>`, three identical
-    //      blank slots per leg × 2 cells × 2 legs. The twin knows the rowIndex;
-    //      the editor addresses by LABEL, and the label is duplicated by design.
-    //      Refused honestly since this branch — see `row_ambiguous_same_table`.
-    expect(withTwin.get('no_editor_intent')).toBe(28);
+    // ⚠️ AND THE ACCEPTANCE IS NOT MET ON ANY SHAPE. RELAY asks for ZERO gaps.
+    // Asserted rather than commented, so the day it is met this line fails and
+    // forces the ledger row to be rewritten by somebody who has looked.
     expect(
-      withTwin.get('row_ambiguous_same_table') ?? 0,
-      'the duplicate-label gap changed shape — re-read the census before trusting it',
-    ).toBe(12);
-
-    // ⚠️ AND THE ACCEPTANCE IS NOT MET. RELAY asks for ZERO gaps. It is 40.
-    // Stated as an assertion rather than a comment so that the day it reaches
-    // zero, this line fails and forces the ledger row to be rewritten by
-    // somebody who has looked.
-    expect(gaps, 'ZERO gaps reached — F24-S3 acceptance is now met; update RELAY').toBeGreaterThan(0);
+      80 - bestAny,
+      'ZERO gaps reached on some shape — F24-S3 acceptance may be met; update RELAY',
+    ).toBeGreaterThan(0);
   });
 });

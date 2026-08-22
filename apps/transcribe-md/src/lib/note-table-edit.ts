@@ -229,8 +229,26 @@ export function editTableCell(params: {
   // whichever row happened to come first.
   if (matches.length > 1 && params.tableCaption) {
     const want = norm(params.tableCaption);
+    // ⚠️ AN EMPTY `want` IS THE ABSENCE OF A SIGNAL, NOT A MATCH-ALL — AND THIS
+    // WAS A LIVE WRONG-LEG WRITE ON `main`, FOUND BY THE ADVERSARIAL PASS.
+    //
+    // `norm` deletes a TRAILING PARENTHETICAL, so a caption that is ENTIRELY a
+    // parenthetical — `(right leg)`, `(Right)` — normalises to `''`. Every
+    // captioned candidate then satisfied `norm(m.caption).includes('')`, so the
+    // filter kept whichever tables happened to carry a caption and, when that
+    // left exactly one, WROTE TO IT. Reproduced against a note whose RIGHT-leg
+    // table is uncaptioned and whose LEFT-leg table is captioned `Left Leg`:
+    //
+    //   tableCaption '(right leg)' -> ok:true, caption "Left Leg", before "6.2"
+    //
+    // The doctor's RIGHT-leg correction landed in the LEFT leg and was reported
+    // as success, and nothing on screen says otherwise — `chat-edit-visit.ts`
+    // surfaces the row and the column, never the caption. `(Right)` is an
+    // entirely plausible thing for the model to emit, given the note's own
+    // `FINDINGS (RIGHT)` heading convention.
     const narrowed = matches.filter(
-      (m) => m.caption && (norm(m.caption) === want || norm(m.caption).includes(want)),
+      (m) =>
+        want !== '' && m.caption && (norm(m.caption) === want || norm(m.caption).includes(want)),
     );
     // ⚠️ NARROW WHENEVER THE CAPTION DISCRIMINATES, NOT ONLY WHEN IT RESOLVES —
     // F24-S3. This read `if (narrowed.length === 1)`, so a caption that cut six
@@ -266,10 +284,26 @@ export function editTableCell(params: {
     // available answer has already been given. Distinguishing the two cases is
     // the difference between a refusal a doctor can act on and a loop.
     const captions = matches.map((m) => m.caption);
+    // ⚠️ DISCRIMINATION IS KEYED ON THE CAPTION *AS WRITTEN*, NEVER THROUGH
+    // `norm` — FOUND BY THE ADVERSARIAL PASS ON THIS DIFF'S FIRST DRAFT.
+    //
+    // `norm` deletes a trailing parenthetical, which is right for a COLUMN
+    // ("DIAMETER (mm)" is the column a doctor calls "diameter") and wrong for a
+    // CAPTION, where the parenthetical is often the whole laterality signal.
+    // Keyed on `norm`, `GSV (Right)` and `GSV (Left)` collapsed into ONE bucket
+    // and this branch told the doctor the row appears twice in the SAME TABLE —
+    // about two DIFFERENT tables — while suppressing the two captions `main`
+    // had been showing them. A refusal that states something false about the
+    // note is worse than the ambiguous one it replaced.
+    //
+    // `norm` still governs MATCHING a caller's answer above; only the decision
+    // "can any answer discriminate?" uses this stricter key.
+    const key = (c: string | null) =>
+      c === null ? NO_CAPTION : c.trim().toLowerCase().replace(/\s+/g, ' ');
     // `null` is its own bucket: "every candidate is uncaptioned" and "every
     // candidate shares a caption" are both unanswerable, for different reasons,
     // and they get different refusals because the doctor's next move differs.
-    const distinct = new Set(captions.map((c) => (c === null ? NO_CAPTION : norm(c))));
+    const distinct = new Set(captions.map(key));
     if (distinct.size === 1) {
       return captions[0] === null
         ? { ok: false, reason: 'caption_not_found' }
@@ -285,7 +319,20 @@ export function editTableCell(params: {
       // DEDUPED: three identical rows under one caption used to emit that
       // caption three times, so the doctor was offered "Right Leg" as though it
       // were three different choices.
-      choices: [...new Set(captions.filter((c): c is string => c !== null))],
+      //
+      // ⚠️ DEDUPED ON THE SAME KEY THE AMBIGUITY DECISION USES, not on the raw
+      // string. With two different keys, `Right Leg` and `Right leg` counted as
+      // two choices here while narrowing treated them as one table — so the
+      // doctor was offered an option that, fed back verbatim, is a non-answer.
+      // The RAW text of the first occurrence is what gets displayed, because
+      // that is what is actually printed in their note.
+      // ⚠️ FIRST occurrence wins. `new Map(entries)` keeps the LAST value for a
+      // repeated key, so the tidy one-liner displayed the case-variant further
+      // down the note instead of the caption the doctor reads first. The arm
+      // asserting this reddened against its own author on first execution.
+      choices: captions
+        .filter((c): c is string => c !== null)
+        .filter((c, i, all) => all.findIndex((o) => key(o) === key(c)) === i),
     };
   }
 
