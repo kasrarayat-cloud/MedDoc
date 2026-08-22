@@ -32,7 +32,7 @@
 // ============================================================================
 
 import { parseMarkdownRow, MARKDOWN_RULE_ROW_RE } from './markdown-row';
-import { isDataColumnHeader } from './table-header-shape';
+import { classifyFirstHeaderCell } from './table-header-shape';
 import { readNoteSection } from './splice-note-section';
 
 /** `| --- | :--- |` — a table's alignment rule, never content. */
@@ -60,7 +60,35 @@ export type TableEditFailure =
   | 'column_not_found'
   | 'column_ambiguous'
   | 'ragged_table'
+  /** The header is short by exactly one cell and NOTHING SETTLES WHICH END.
+   *  ⚠️ Distinct from `ragged_table`, which is a grid that genuinely does not
+   *  line up. This one lines up under exactly one of two readings and the
+   *  evidence does not pick between them — ruling #140. Collapsing the two
+   *  would put a refusal and an unknowable in one bucket, and then no count
+   *  could ever answer "did my change break this?". */
+  | 'label_column_unresolved'
   | 'illegal_value';
+
+/**
+ * What the TWIN knows about the table this row lives in — ruling #140's
+ * "resolved from EVIDENCE, not guessed from text".
+ *
+ * Derived from the compiled `TemplateDocIR`, never from the note: a
+ * `table_cell` field whose `labelSource` is `left_cell` is the twin stating, in
+ * its own words, that the row's leading cell is a LABEL and not a measurement.
+ * That is the fact the text heuristic was guessing at.
+ *
+ * ⚠️ ABSENT IS NOT FALSE. When this is undefined the visit is untemplated and
+ * the fallback runs; when it is present it is BELIEVED, and the text vocabulary
+ * is not consulted at all. Mixing the two would reintroduce the guess it exists
+ * to remove.
+ */
+export interface TwinTableStructure {
+  /** Data columns per row — table_cell FIELDS, excluding the label cell. */
+  dataColumnCount: number;
+  /** The twin says this table's rows carry their label in the left cell. */
+  rowLabelInLeftCell: boolean;
+}
 
 export interface TableEditResult {
   ok: boolean;
@@ -184,6 +212,10 @@ export function editTableCell(params: {
   /** Optional: which table, when the row label appears under more than one.
    *  Matched loosely against the caption line above each table. */
   tableCaption?: string | null;
+  /** Optional: the twin's compiled structure for this table — ruling #140.
+   *  Present => the label column is resolved from evidence and the text
+   *  vocabulary is never consulted. Absent => the untemplated fallback. */
+  tableStructure?: TwinTableStructure;
 }): TableEditResult {
   // A PIPE ENDS A CELL, AND NOTHING DOWNSTREAM UNDERSTANDS AN ESCAPE.
   //
@@ -406,19 +438,46 @@ export function editTableCell(params: {
   // is short. An observation that cannot come out the other way is not
   // evidence for the thing it was cited for.
   //
-  // SO THE WIDEN NOW TURNS ON EVIDENCE ABOUT THE HEADER: it fires only when the
-  // header's FIRST cell is itself a DATA column, i.e. the header demonstrably
-  // has no label column — the same question, through the same predicate, that
-  // the generator asks when deciding whether to emit one.
-  const headerLacksLabelColumn =
-    rawHeaderCells.length > 0 && isDataColumnHeader(rawHeaderCells[0]);
-  const headerCells =
-    headerLacksLabelColumn &&
-    rawHeaderCells.length === rowCells.length - 1 &&
-    everyDataRowAgrees &&
-    dataRowCounts[0] === rowCells.length
-      ? ['', ...rawHeaderCells]
-      : rawHeaderCells;
+  // SO THE WIDEN TURNS ON EVIDENCE ABOUT THE HEADER — AND SINCE RULING #140 ON
+  // THE TWIN'S EVIDENCE FIRST, WITH THE TEXT VOCABULARY AS THE UNTEMPLATED
+  // FALLBACK ONLY.
+  //
+  // ⚠️ AND THE FALLBACK NOW HAS A THIRD ANSWER. The text test fired on ANY
+  // trailing parenthetical and on any cell CONTAINING a measurement word, so
+  // `Vein Size`, `Segment (right leg)` and `Site (see key)` — all row-label
+  // columns — read as data and licensed the widen. That is #140's defect, and
+  // its cost is not a refusal but a WRITE into the neighbouring cell reported
+  // as success. Those three now return `label_column_unresolved`.
+  //
+  // ⚠️ THE PRECONDITIONS ARE UNCHANGED AND ARE CHECKED FIRST, DELIBERATELY: a
+  // header that is not short by exactly one, or a table whose data rows
+  // disagree with each other, never reaches either resolver and still falls to
+  // `ragged_table`. #140 narrows WHEN the widen may fire; it does not widen the
+  // set of grids that reach it.
+  const shortByExactlyOne = rawHeaderCells.length === rowCells.length - 1;
+  const gridIsRegular = everyDataRowAgrees && dataRowCounts[0] === rowCells.length;
+
+  let widen = false;
+  let unresolved = false;
+  if (shortByExactlyOne && gridIsRegular && rawHeaderCells.length > 0) {
+    if (params.tableStructure) {
+      // EVIDENCE. The twin knows whether its rows carry a leading label cell
+      // and how many data columns follow it, so "which end is the header short
+      // at?" stops being a question about words. A twin that does NOT describe
+      // this shape declines to widen, and the grid falls to `ragged_table` —
+      // absent evidence is never read as permission.
+      widen =
+        params.tableStructure.rowLabelInLeftCell &&
+        params.tableStructure.dataColumnCount === rawHeaderCells.length &&
+        params.tableStructure.dataColumnCount + 1 === rowCells.length;
+    } else {
+      const verdict = classifyFirstHeaderCell(rawHeaderCells[0]);
+      widen = verdict === 'data';
+      unresolved = verdict === 'cannot_tell';
+    }
+  }
+  if (unresolved) return { ok: false, reason: 'label_column_unresolved' };
+  const headerCells = widen ? ['', ...rawHeaderCells] : rawHeaderCells;
 
   // A RAGGED TABLE IS NOT WRITABLE.
   //
@@ -471,5 +530,10 @@ export const TABLE_EDIT_REASON: Record<TableEditFailure, string> = {
     'That row appears more than once in the same table, so naming the table cannot tell them apart. I have left the note unchanged — edit the row directly in the document.',
   ragged_table:
     "That table's header and its rows don't line up, so I can't tell which column is which.",
+  // Says what is true and where the doctor can act, and deliberately does NOT
+  // ask them to rephrase — no rewording of the request can supply the column
+  // heading the note is missing.
+  label_column_unresolved:
+    "That table's header is missing a heading for its first column, so I can't tell which column your value belongs in. I've left the note unchanged — edit that cell directly in the document.",
   illegal_value: "A measurement can't contain a line break or a “|”.",
 };

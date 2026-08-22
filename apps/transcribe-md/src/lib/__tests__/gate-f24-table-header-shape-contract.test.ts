@@ -206,10 +206,21 @@ describe('isDataColumnHeader — pinned behaviour', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2b. ⚠️ THE FALSE POSITIVES ARE A WRONG-CELL WRITE. ON SHIPPED CODE.
+// 2b. ⚠️ THE FALSE POSITIVES WERE A WRONG-CELL WRITE — CLOSED BY RULING #140.
 // ---------------------------------------------------------------------------
-// Found by the MANDATORY adversarial pass over this very diff, and verified
-// here before being believed. NO MUTATION IS APPLIED — this is `main`.
+// ⚠️ THIS BLOCK USED TO PIN THE DEFECT AND NOW PINS THE REFUSAL, AND THE
+// PREVIOUS TEXT IS KEPT BELOW BECAUSE IT IS THE EVIDENCE. Its own comment said:
+// "If somebody fixes the predicate, these arms go RED and they must update them
+// DELIBERATELY — which is the point." They went red on the first run of #140's
+// fix, against their author's successor, and this is that deliberate update.
+//
+// RULING #140 — the label column is resolved from EVIDENCE, not guessed from
+// text. `Vein Size`, `Segment (right leg)` and `Site (see key)` are the three
+// shapes the text vocabulary cannot settle, and they are now the fallback's
+// PERMANENT REFUSAL ARMS. The `Vein Size` fixture is pinned VERBATIM as the
+// wrong-cell regression guard, exactly as the ruling requires.
+//
+// The original finding, unedited, because it is what the arms below protect:
 //
 // A legacy note whose header NAMES its label column is supposed to be refused:
 // that is what the `ragged_table` guard is for, and with `VEIN` it works. But
@@ -244,7 +255,10 @@ describe('isDataColumnHeader — pinned behaviour', () => {
 // THE TRIGGER, so it is a lookup and not a judgement: a doctor's table whose
 // FIRST column is a row-label column whose text ends in a parenthetical or
 // contains one of diameter|reflux|velocity|length|depth|time|size.
-describe('⚠️ DEFECT — a misread label column writes the wrong cell', () => {
+describe('RULING #140 — a label column the text cannot settle is REFUSED', () => {
+  // ⚠️ PINNED VERBATIM. Ruling #140 names this fixture as the wrong-cell
+  // regression guard, so the header, the row and the values are the ones the
+  // ruling quotes. Changing them silently retires the guard.
   const legacy = (header0: string) =>
     [
       '## FINDINGS',
@@ -271,20 +285,79 @@ describe('⚠️ DEFECT — a misread label column writes the wrong cell', () =>
     expect(r.reason).toBe('ragged_table');
   });
 
-  // ⚠️ PINNED AS THE DEFECT IT IS. If somebody fixes the predicate, these arms
-  // go RED and they must update them DELIBERATELY — which is the point. An
-  // unpinned defect is one the next reader cannot tell from intent.
+  // ⚠️ THE THREE SHAPES, NOW REFUSED — AND THE REFUSAL IS ITS OWN REASON.
+  // `ragged_table` would have been true and less useful: this grid DOES line
+  // up, under exactly one of two readings, and the evidence does not pick
+  // between them. Keeping the two apart is what lets a count answer "did my
+  // change break this?" — the bucket-collapse canon names.
   it.each(['Vein Size', 'Segment (right leg)', 'Site (see key)'])(
-    'DEFECT: %s is accepted, and the REFLUX cell is what changes',
+    '#140: %s is REFUSED as label_column_unresolved',
     (h) => {
       const r = askForDiameter(h);
-      expect(r.ok).toBe(true);
-      // The value replaced is the reflux time, not the diameter.
-      expect(r.before).toBe('3.4');
-      // The diameter is left exactly as it was, and the doctor is told it moved.
-      expect(r.body).toContain('| GSV at the SFJ | 6.2 | 7.7 |');
+      expect(r.ok).toBe(false);
+      expect(r.reason).toBe('label_column_unresolved');
     },
   );
+
+  // ⚠️ AND THE NOTE IS NOT TOUCHED — the half a reason code cannot assert.
+  // A refusal that had already written the cell would satisfy the arm above.
+  it.each(['Vein Size', 'Segment (right leg)', 'Site (see key)'])(
+    '#140: %s leaves the note completely unchanged',
+    (h) => {
+      const r = askForDiameter(h);
+      expect(r.body).toBeUndefined();
+      expect(r.before).toBeUndefined();
+    },
+  );
+
+  // ⚠️ MUTATE TOWARD SUCCESS, NOT ONLY TOWARD FAILURE. A fix that refused
+  // EVERYTHING would satisfy every arm above and would be strictly worse than
+  // the defect — it would make all 27 production `DIAMETER (mm)` headers
+  // uneditable. This is the legacy shape that MUST still widen and write.
+  //
+  // ⚠️ AND MY FIRST VERSION OF THIS CONTROL WAS AIMED WHERE THE ANSWER WAS
+  // PREDETERMINED, WHICH RUNNING IT IS WHAT FOUND. It reused `legacy(h)` with
+  // `columnLabel: 'DIAMETER (mm)'`, so for h = `DIAMETER (mm)` the widened
+  // header was ['', 'DIAMETER (mm)', 'DIAMETER (mm)'] and the edit died on
+  // `column_ambiguous` — a refusal from a DIFFERENT mechanism, which no state
+  // of the widen could have changed. The canon's "a control aimed where the
+  // answer is predetermined is not a control", caught on its own author.
+  //
+  // The real customer-form shape, and BOTH columns are asserted: a widen that
+  // lands one place out would put 7.7 in the other cell, so checking one column
+  // alone cannot distinguish a correct widen from an off-by-one.
+  describe('positive control — the real customer-form header still writes', () => {
+    const customerForm = [
+      '## FINDINGS',
+      'DIAMETER AND REFLUX TIME',
+      '| DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3.4 |',
+    ].join('\n');
+
+    const edit = (columnLabel: string) =>
+      editTableCell({
+        note: customerForm,
+        sectionLabel: 'FINDINGS',
+        rowLabel: 'GSV at the SFJ',
+        columnLabel,
+        value: '7.7',
+      });
+
+    it('DIAMETER (mm) resolves to the diameter cell', () => {
+      const r = edit('DIAMETER (mm)');
+      expect(r.ok).toBe(true);
+      expect(r.before).toBe('6.2');
+      expect(r.body).toContain('| GSV at the SFJ | 7.7 | 3.4 |');
+    });
+
+    it('REFLUX TIME (ms) resolves to the reflux cell', () => {
+      const r = edit('REFLUX TIME (ms)');
+      expect(r.ok).toBe(true);
+      expect(r.before).toBe('3.4');
+      expect(r.body).toContain('| GSV at the SFJ | 6.2 | 7.7 |');
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
