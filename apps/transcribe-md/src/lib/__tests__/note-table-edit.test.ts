@@ -474,3 +474,111 @@ describe('F24 SLICE 1b — an unanswerable question becomes an honest refusal', 
     expect(TABLE_EDIT_REASON.caption_not_found).not.toBe(TABLE_EDIT_REASON.row_ambiguous);
   });
 });
+
+// ===========================================================================
+// F24-S3 — A NON-EMPTY CHOICE LIST CAN STILL BE UNANSWERABLE
+// ---------------------------------------------------------------------------
+// Slice 1b removed the EMPTY choices list — "pick from nothing". This removes
+// the subtler shape of the same dead end: a list that is non-empty and in which
+// no available answer narrows anything.
+//
+// THE REAL INPUT, not a constructed one. The certified template carries
+// `Saphenous Tributary Vein <<insert location>>` THREE TIMES IN EACH LEG —
+// blank slots the doctor fills in, so the labels are identical by design.
+// Measured by replay in gate-f24-s3-editor-addressable-census: 12 of the 80
+// fields sit in this shape.
+//
+// ⚠️ ON `main` BEFORE THIS BRANCH, asking for the RIGHT-leg tributary WITH
+// `tableCaption: 'Right Leg'` returned:
+//   { reason: 'row_ambiguous',
+//     choices: ['Right Leg','Right Leg','Right Leg','Left Leg','Left Leg','Left Leg'] }
+// — the leg the doctor had JUST NAMED, offered back three times, alongside the
+// leg they had excluded. Every answer in that list leaves the result unchanged.
+// ===========================================================================
+describe('F24-S3 — duplicate row labels within one table', () => {
+  /** Three identical row labels per leg — the certified template's real shape. */
+  const TRIBUTARY = [
+    '## FINDINGS',
+    'Right Leg',
+    '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+    '| --- | --- | --- |',
+    '| Saphenous Tributary Vein | 4.1 | 0.2 |',
+    '| Saphenous Tributary Vein | 3.8 | 0.4 |',
+    '| Saphenous Tributary Vein | 2.9 | 0.1 |',
+    '',
+    'Left Leg',
+    '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+    '| --- | --- | --- |',
+    '| Saphenous Tributary Vein | 5.0 | 0.3 |',
+    '| Saphenous Tributary Vein | 4.4 | 0.5 |',
+    '| Saphenous Tributary Vein | 3.1 | 0.6 |',
+  ].join('\n');
+
+  const ask = (tableCaption?: string) =>
+    editTableCell({
+      note: TRIBUTARY,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'Saphenous Tributary Vein',
+      columnLabel: 'DIAMETER (mm)',
+      value: '9.9',
+      ...(tableCaption ? { tableCaption } : {}),
+    });
+
+  // NON-VACUITY: the fixture really does carry six identical labels. Without
+  // this, a fixture that lost its duplicates would satisfy every arm below by
+  // resolving cleanly, and the whole describe would assert nothing.
+  it('the fixture holds six identically-labelled rows across two legs', () => {
+    expect(TRIBUTARY.split('| Saphenous Tributary Vein |')).toHaveLength(7);
+  });
+
+  it('⚠️ REQUIRED: a caption that cannot discriminate is refused as SUCH, not re-asked', () => {
+    const r = ask('Right Leg');
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('row_ambiguous_same_table');
+    // The dead end, stated as an assertion: there is no list to pick from,
+    // because picking could not help.
+    expect(r.choices ?? []).toHaveLength(0);
+  });
+
+  it('⚠️ THE NARROWING STICKS: the excluded leg is never offered back', () => {
+    // This is the defect. `narrowed.length === 1` discarded a caption that cut
+    // six candidates to three, so the refusal re-offered BOTH legs.
+    const r = ask('Right Leg');
+    expect(JSON.stringify(r)).not.toContain('Left Leg');
+  });
+
+  it('with NO caption given, it is still refused — and never writes a cell', () => {
+    const r = ask();
+    expect(r.ok).toBe(false);
+    expect(r.body).toBeUndefined();
+    // Both legs are genuinely candidates here, and they DO carry distinct
+    // captions, so this one the caller can still answer.
+    expect(r.reason).toBe('row_ambiguous');
+  });
+
+  it('the doctor-facing reason does NOT ask a question it cannot accept an answer to', () => {
+    expect(TABLE_EDIT_REASON.row_ambiguous_same_table).not.toContain('which one');
+    expect(TABLE_EDIT_REASON.row_ambiguous_same_table).not.toBe(
+      TABLE_EDIT_REASON.row_ambiguous,
+    );
+    expect(TABLE_EDIT_REASON.row_ambiguous_same_table).not.toBe(
+      TABLE_EDIT_REASON.caption_not_found,
+    );
+  });
+
+  it('CHOICES ARE DEDUPED where they genuinely discriminate', () => {
+    // Two legs, three rows each, no caption given: the caller can answer, and
+    // must be offered each leg ONCE rather than three times.
+    const r = ask();
+    expect(r.choices).toEqual(['Right Leg', 'Left Leg']);
+  });
+
+  it('a caption matching NOTHING does not narrow to zero', () => {
+    // Narrowing to an empty set would turn "I do not recognise that table" into
+    // `row_not_found` — a refusal about the wrong thing entirely.
+    const r = ask('Posterior Leg');
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('row_ambiguous');
+    expect(r.choices).toEqual(['Right Leg', 'Left Leg']);
+  });
+});
