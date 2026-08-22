@@ -207,6 +207,50 @@ on the certified template, **proven by replay** — not by a source sweep.
 
 ---
 
+#### ⚠️ AND RULING #140 FOLDS INTO THIS BUILD — THE LABEL COLUMN IS RESOLVED FROM EVIDENCE, NOT GUESSED FROM TEXT
+
+**Owner-ruled 2026-08-22 out of the loop's own Finding E. Full text:
+`RULINGS.md` #140.** It folds in here rather than shipping alone because the
+addressing work touches the same seam, and splitting them leaves the seam
+half-migrated.
+
+**THE DEFECT, on shipped `main`, reproduced by the supervised lead before
+believing it:**
+
+    | Vein Size | DIAMETER (mm) |
+    | GSV at the SFJ | 6.2 | 3.4 |
+
+    edit DIAMETER (mm) := 7.7
+      ->  ok:true, column:"DIAMETER (mm)", before:"3.4"
+          | GSV at the SFJ | 6.2 | 7.7 |
+
+The diameter is untouched, **the REFLUX TIME is destroyed**, and the doctor is
+told the diameter changed. Same for `Segment (right leg)` and `Site (see key)`;
+`VEIN` and `Segment` refuse — **a property of the PREDICATE, not the fixture**.
+
+⚠️ **It is verbatim the defect the `headerLacksLabelColumn` guard was written to
+close, arriving through that guard's own predicate.**
+
+**LATENT, measured:** all 3 production template structures lead with
+`DIAMETER (mm)`; 45 header lines across 24 visits, six distinct first-cell
+values, all classify correctly.
+
+**THE FIX:**
+1. **Template-bound → ask the TWIN.** The compiled structure knows its columns.
+   Resolving beats classifying.
+2. **Untemplated → the text heuristic survives ONLY as the fallback**, and there
+   it **REFUSES HONESTLY when classification is ambiguous — never pads and
+   shifts.** A wrong-cell write on a measurement is worse than an uneditable
+   table; this arc has now made that trade three times.
+3. **The Finding-E shapes are the fallback's PERMANENT REFUSAL ARMS**, and the
+   `Vein Size` fixture is pinned verbatim as the wrong-cell regression guard.
+
+⚠️ **AND MY "ONE PREDICATE, TWO CALLERS" WAS WRONG — the recon measured THREE
+SITES AND TWO VOCABULARIES.** Whatever replaces the predicate must move all
+three, or the drift this arc closed reopens under a new name.
+
+---
+
 ### 🔴 F24-CAPTION-VALIDATION — **RECON EXISTS. Read it before building.**
 
 ⚠️ **DO NOT WRITE A FRESH BRIEF.** The loop's recon is
