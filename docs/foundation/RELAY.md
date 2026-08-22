@@ -24348,3 +24348,158 @@ the wrong decision in the ledger. **Corrected here** (`RELAY.md:23961`).
 *A wrong pointer is worse than a missing one: a `grep` for `#138` lands on a real
 row and reads as confirmation.*
 
+### ✅ MERGED AND CITED — **4 of 4, every run `a1`**
+
+PR **#789**, merge `ab38b1b78d0d5e33a05d91c09d8ef6b90b72676d`. Produced by
+`check-citation.sh` and pasted, never typed:
+
+| workflow | run | attempt |
+|---|---|---|
+| `CI` | 32539445745 | a1 |
+| `e2e` | 32539445775 | a1 |
+| `a11y-ci` | 32539445774 | a1 |
+| `secrets-scan` | 32539445756 | a1 |
+
+**No deploy, and none is owed.** The only runtime file touched is
+`splice-note-section.ts`, and the byte removed was provably unreachable —
+`readNoteSection` discards the value it sat in. Nothing production does changes.
+
+⚠️ **THE PR-HEAD RUNS WERE CANCELLED ONCE, DELIBERATELY AND DECLARED.** Six
+minutes into the first gate I found that my own correction 1 was wrong, and
+`push-with-cancellation.sh` carried the reason: *holding the push would spend a
+full 40-minute cycle certifying a document I already knew was wrong.* The
+cancelled runs were mine alone. Every run in the citation above is `a1` — no
+re-run anywhere in this item.
+
+⚠️ **AND THE MERGE WAITED FOR SOMEBODY ELSE'S CITATION RATHER THAN DECLARING A
+BATCH.** `merge-pr.sh` refused: `main` had moved to `706148c5` (PR **#788**, the
+supervised actor's F24 Slice 2) with their `e2e` in flight. Waited ~35 minutes;
+their commit came back **4 of 4** and was discharged before this merge landed.
+*That is the rule working from the side that pays for it* — the 2026-08-10
+reference case is a session that waited correctly and had its wait defeated by
+the next actor.
+
+---
+
+## 🟠 SESSION FINDING — THE QA IMAGES ARE THREE DAYS STALE, AND F5-i PART 1a's OWED QA WALK CANNOT RUN ON THEM — 2026-08-22
+
+**The third recurrence of the class already filed on 2026-08-17** (*"the QA
+stack's images are stale and the standing check cannot see it"*). Recorded again
+because it now **blocks a named, owed item**.
+
+| image | built |
+|---|---|
+| `meddoc-pro-db-migrate:qa` | **2026-08-21 11:13Z** — fresh |
+| `meddoc-pro-transcribe-md:qa` | **2026-08-18 14:45Z** |
+| `meddoc-pro-transcribe-md-worker:qa` | **2026-08-18 14:44Z** |
+
+Exactly the documented mechanism: the migration runner is rebuilt whenever
+migrations are applied, so `assert-migrations-applied --qa` reads **its** work
+and reports 🟢 — correctly — while the services rot behind it. **This session's
+STEP 0 reported that green.**
+
+**MEASURED AT THE SYMBOL, WITH A POSITIVE CONTROL** — canon's *"check the IMAGE,
+not only the migrations"*:
+
+| container | `grep -rc no_measurement_rows` in `lib/template-twin/` |
+|---|---|
+| `meddoc-qa-transcribe-md-worker-1` | **0** |
+| `meddoc-pro-transcribe-md-worker-1` (control) | **7 across 3 files** |
+
+F5-i's shape-derived-or-refuse deployed to production `2026-08-21T14:14Z`; the
+QA images predate it by three days. **So F5-i part 1a's owed QA-stack walk —
+upload the operative-note fixture, watch it compile and land in needs-review —
+cannot be run on the QA stack as it stands.** A session that ran it anyway would
+be exercising a binary without the refusal in it, and would have a green
+migrations check agreeing.
+
+> **The first step of that owed walk is `docker compose -f docker-compose.qa.yml
+> build`, not a browser.** Written down so it is met on paper rather than forty
+> minutes into a walk.
+
+---
+
+## 🟠 SESSION FINDING — THE LOOP HAS NO GRANTABLE COMPOUND WAITER, AND MASTER'S TABLE HAS NO ROW FOR WAITING — 2026-08-22
+
+MASTER is emphatic that a session **waits INSIDE the session** and never ends a
+turn to wait. It does not say **how**, and the obvious forms are all refused:
+
+| what I tried | result |
+|---|---|
+| `while true; do …; rc=$?; …; done` (background Bash) | **refused** — `Contains simple_expansion` |
+| `until … ; do sleep 60; done; echo …` (background Bash) | **refused** — *multiple operations* |
+| the same via **`Monitor`**, whose own documentation shows `until`-loops as its canonical use | **refused** — identical *multiple operations* |
+| foreground `sleep 300; echo …` | **blocked by the harness**, by design |
+
+**What DOES work, and both should be in the table:**
+
+1. **`bash scripts/gh-runs.sh wait <FULL-sha>`** — the purpose-built blocking
+   waiter, already granted, already named in MASTER's queue header, and better
+   than anything a session would improvise: it distinguishes terminal states
+   (`until … cited` cannot tell a FAILED run from a PENDING one), prints on
+   change rather than per poll, carries a bounded post-push grace window, and
+   times out to CANNOT-TELL rather than to a verdict.
+2. **A bare `sleep N` with `run_in_background: true`**, and **`gh run watch
+   <run-id>`** for a specific run — single commands, so no compound rule bites.
+
+⚠️ **THE COST OF NOT KNOWING THIS IS A DARK RUN, NOT AN INCONVENIENCE.** A
+session that cannot arm a waiter, has foreground sleep blocked, and remembers
+*"never end your turn to wait"* has no legal move left — and the tempting
+illegal one is to end the turn, which is the exact 2026-08-09 failure that cost
+six hours. **I reached for the improvised loops first and found `gh-runs.sh
+wait` only by reading the script.** That is a rule pointing at an instrument
+nobody had told the session how to use — the same shape as *"an entry that names
+an instrument verifies that instrument's GRANT"*, one step further out: the
+grant exists, and the **usage** was undocumented.
+
+---
+
+## 🟠 SESSION FINDING — I FABRICATED A 40-CHARACTER SHA TWICE IN ONE NIGHT — 2026-08-22
+
+Canon's *"FULL-LOOKING IS NOT FULL"* names this exactly, and I did it **twice**,
+hours apart, in the session that had read the rule:
+
+| # | what I typed | the real sha |
+|---|---|---|
+| 1 | `642487c5b0f0a20e2e2b0b56cf6a2d2ad0b2ba33` | `642487c5d9c8772dc0423c91f18758f2fda96660` |
+| 2 | `706148c5cd53b1076ec3e02c15b3fb4e2f2a1e17` | `706148c515e783f32ea08a95d1aa14aaf3eba868` |
+
+**Both diverge after the eighth character** — I had the short sha in front of me
+from a script's output and completed it. Both are exactly 40 hex characters, so
+**every length check passes.**
+
+**Neither cost anything, and the reasons are worth separating.** (1) was refused
+by the permission layer for an unrelated reason (`$rc` in the same command), so
+luck. (2) returned **an empty run list**, which is indistinguishable from *"runs
+have not started"* — and what caught it was **taking the second view**, which
+showed four runs on a sha with the same eight characters. *The two-view rule
+caught the fabricated sha again, which is the third time this programme records
+it doing so.*
+
+> **The habit that removes it is mechanical and I did not have it: never retype
+> a sha a script printed. `git rev-parse` it, or copy the full 40 from the
+> checker's own output** — which is precisely why `check-citation.sh` emits the
+> full form in its citation block.
+
+---
+
+## 📌 REFINEMENT TO THE F24 RECON'S OWN HONEST LIMIT — the no-template population is not purely historical
+
+The recon records *"`noteTemplateId IS NULL` is read off the column; I did not
+establish why those 18 rows are null."* Measured afterwards, and it matters for
+how much weight the twin route can carry:
+
+| binding | visits | earliest | latest |
+|---|---|---|---|
+| bound to a template | 20 | 2026-06-15 | **2026-08-21** |
+| **NULL template** | 29 | 2026-07-07 | **2026-08-15** |
+
+The two populations **overlap heavily**, so NULL is not simply an old-era
+artifact — but the newest NULL visit is **2026-08-15** while bound visits run to
+**2026-08-21**. That is consistent with the binding becoming the norm, and it
+**strengthens the recon's "forward-looking" caveat about the twin route** without
+changing its measured reach today, which is still 0 incremental headers.
+
+⚠️ **It is a correlation over 49 rows and it is not a trend.** Recorded as a
+refinement, not a finding.
+
