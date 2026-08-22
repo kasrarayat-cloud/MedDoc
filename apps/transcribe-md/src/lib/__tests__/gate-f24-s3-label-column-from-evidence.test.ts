@@ -17,9 +17,14 @@
 //   2. THE CLASSIFIER PARTITIONS TOTALLY. Every header lands in exactly one of
 //      data / label / cannot_tell, and the buckets reconcile against the corpus
 //      size — so a classifier that quietly stopped classifying cannot pass.
-//   3. THE EDITOR REFUSES ON `cannot_tell` AND RESOLVES FROM THE TWIN WHEN THE
-//      TWIN IS THERE. Both directions, because a twin route that always widened
-//      would satisfy the positive arm alone.
+//   3. THE EDITOR REFUSES WHAT THE TEXT CANNOT SETTLE — on ANY header cell,
+//      not just the first — and still writes the shapes production holds.
+//
+// ⚠️ WHAT THIS FILE DOES **NOT** ASSERT, SO THE NAME IS NOT READ WIDER THAN THE
+// WATCHED SET: ruling #140's TWIN half is not implemented and nothing here
+// tests it. A first attempt was built and removed — it keyed on the twin's data
+// COLUMN COUNT, which is invariant under which end a header is short at, and it
+// widened grids the text route correctly refuses. See `table-header-shape.ts`.
 //
 // ⚠️ AND THE PRODUCTION CENSUS IS HERE AS A PINNED ROW, NOT AS A REASSURANCE.
 // Measured 2026-08-22 against `transcribe_visits.soapFinal`: 45 table headers
@@ -31,12 +36,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { editTableCell, type TwinTableStructure } from '../note-table-edit';
-import {
-  classifyFirstHeaderCell,
-  isDataColumnHeader,
-  type HeaderCellVerdict,
-} from '../table-header-shape';
+import { editTableCell } from '../note-table-edit';
+import { classifyHeaderCell, isDataColumnHeader, type HeaderCellVerdict } from '../table-header-shape';
 
 // ---------------------------------------------------------------------------
 // THE CORPUS — every header this programme has a reason to hold an opinion on.
@@ -60,12 +61,60 @@ const CORPUS: { header: string; source: string; verdict: HeaderCellVerdict }[] =
   { header: 'Segment (right leg)', source: '#140 wrong-cell write', verdict: 'cannot_tell' },
   { header: 'Site (see key)', source: '#140 wrong-cell write', verdict: 'cannot_tell' },
 
+  // ---- ⚠️ THE LATERALITY SHORTHAND — found by the adversarial pass ---------
+  // `(L)` parsed as LITRES while `(R)` matched nothing, so the LEFT leg widened
+  // and silently corrupted while the RIGHT leg refused, in one bilateral study.
+  // The corpus had no single-letter parenthetical, so `cannot_tell` was a floor
+  // over a set that did not contain the hazard.
+  { header: 'Vein (L)', source: 'ADV laterality shorthand', verdict: 'cannot_tell' },
+  { header: 'Vein (R)', source: 'ADV laterality shorthand', verdict: 'cannot_tell' },
+  { header: 'Side (L)', source: 'ADV laterality shorthand', verdict: 'cannot_tell' },
+  { header: 'Nerve (M)', source: 'ADV single-letter unit', verdict: 'cannot_tell' },
+  { header: 'Muscle (G)', source: 'ADV single-letter unit', verdict: 'cannot_tell' },
+  { header: 'Segment (S)', source: 'ADV single-letter unit', verdict: 'cannot_tell' },
+  { header: 'Structure (in)', source: 'ADV English-word unit', verdict: 'cannot_tell' },
+  { header: 'Category (deg)', source: 'ADV abbreviation unit', verdict: 'cannot_tell' },
+
+  // ---- ⚠️ THE BARE MEASUREMENT NOUN USED AS A ROW LABEL --------------------
+  // `Time` is the canonical row label of any timepoint table and is made
+  // entirely of measurement nouns, so cell-0-only classification widened it.
+  // It still reads `data` HERE — the editor's defence is that EVERY cell must
+  // be data, and `HEART RATE` is not. Both rows are pinned so the pair stays
+  // legible.
+  { header: 'Time', source: 'ADV bare noun as row label', verdict: 'data' },
+  { header: 'HEART RATE', source: 'ADV the cell that saves it', verdict: 'label' },
+
   // ---- the recon's fail-closed rows ---------------------------------------
   { header: 'CFV mm', source: 'RECON fails closed', verdict: 'label' },
   { header: 'Thickness', source: 'RECON fails closed', verdict: 'label' },
   { header: 'Grade', source: 'RECON fails closed', verdict: 'label' },
   { header: '**AREA (cm2)**', source: 'RECON decoration', verdict: 'label' },
   { header: 'AREA (cm2).', source: 'RECON decoration', verdict: 'label' },
+
+  // ---- ⚠️ CLAIM-2 CLASS A: unambiguous units the first list MISSED --------
+  // The adversarial pass measured 37 of 47 plausible clinical headers losing
+  // their widen. Some of those were not ambiguity at all — they were a closed
+  // unit list that was simply too short. Restored, because a unit is evidence.
+  { header: 'Volume (cc)', source: 'ADV unit-list gap', verdict: 'data' },
+  { header: 'Volume (cm3)', source: 'ADV unit-list gap', verdict: 'data' },
+  { header: 'Flow (L/min)', source: 'ADV unit-list gap', verdict: 'data' },
+  { header: 'Dose (mg)', source: 'ADV unit-list gap', verdict: 'data' },
+  { header: 'Diameter mm', source: 'ADV bare unit token', verdict: 'data' },
+  { header: 'Diameter [mm]', source: 'ADV non-round bracket', verdict: 'data' },
+  { header: 'Reflux Duration', source: 'ADV measurement noun pair', verdict: 'data' },
+
+  // ---- ⚠️ CLAIM-2 CLASS B: THE ACCEPTED LOSS, PINNED SO IT IS NOT SILENT ---
+  // A measurement noun with a NON-measurement qualifier. These WIDENED on
+  // `main` and now REFUSE. That is real capability loss and it is deliberate:
+  // `| Max Diameter | REFLUX |` reads as {label, data} or {data, data} with
+  // equal force, which is the very ambiguity #140 rules must be refused. Pinned
+  // as `cannot_tell` so that anyone who later decides to admit them has to
+  // change this table on purpose.
+  { header: 'Max Diameter', source: 'ADV accepted loss', verdict: 'cannot_tell' },
+  { header: 'Peak Velocity', source: 'ADV accepted loss', verdict: 'cannot_tell' },
+  { header: 'Vein Diameter', source: 'ADV accepted loss', verdict: 'cannot_tell' },
+  { header: 'Nodule Size', source: 'ADV accepted loss', verdict: 'cannot_tell' },
+  { header: 'Total Length', source: 'ADV accepted loss', verdict: 'cannot_tell' },
 
   // ---- real data columns that must keep widening --------------------------
   { header: 'REFLUX TIME (ms)', source: 'WM IOV column', verdict: 'data' },
@@ -103,19 +152,37 @@ describe('#140 — the GENERATOR’s view is unchanged', () => {
   // property of the two functions rather than of my imagination.
   it('agrees on a generated space, not only on the hand-picked corpus', () => {
     const stems = ['VEIN', 'Segment', 'Vein Size', 'DIAMETER', 'REFLUX TIME', 'Grade', 'Site', ''];
-    const brackets = ['', ' (mm)', ' (cm/s)', ' (right leg)', ' (see key)', ' ()', ' (mm) '];
+    const brackets = ['', ' (mm)', ' (cm/s)', ' (right leg)', ' (see key)', ' (L)', ' ()', ' (mm) '];
     const decor = ['', '**', '.', ' '];
-    let checked = 0;
+    const answers: boolean[] = [];
+    const verdicts: HeaderCellVerdict[] = [];
     for (const s of stems)
       for (const b of brackets)
         for (const d of decor) {
           const h = `${d}${s}${b}${d}`;
           expect(isDataColumnHeader(h)).toBe(preRuling140Predicate(h));
-          checked += 1;
+          answers.push(preRuling140Predicate(h));
+          verdicts.push(classifyHeaderCell(h));
         }
-    // NON-VACUITY: the loop actually ran, and it ran over both answers.
-    expect(checked).toBe(stems.length * brackets.length * decor.length);
-    expect(checked).toBeGreaterThan(200);
+
+    // ⚠️ THE FLOOR MEASURES THE *ANSWERS*, NOT THE TRIP COUNT — AND THE FIRST
+    // VERSION OF IT MEASURED THE TRIP COUNT, WHICH THE ADVERSARIAL PASS PROVED
+    // WAS DECORATION. It read `expect(checked).toBe(stems*brackets*decor)`,
+    // comparing a counter incremented once per iteration against the loop's own
+    // size — structurally incapable of failing — plus `toBeGreaterThan(200)`,
+    // which counts COMBINATIONS and not answers. Demonstrated: a generated
+    // space in which all 224 combinations answer `false`, with zero `data` and
+    // zero `cannot_tell`, passed 51 of 51.
+    //
+    // An agreement test over a space where the oracle always says the same
+    // thing proves only that both functions are constant. These floors are what
+    // make the space discriminate.
+    expect(answers.length).toBeGreaterThan(200);
+    expect(answers.filter(Boolean).length).toBeGreaterThan(20);
+    expect(answers.filter((a) => !a).length).toBeGreaterThan(20);
+    for (const v of ['data', 'label', 'cannot_tell'] as const) {
+      expect(verdicts.filter((x) => x === v).length).toBeGreaterThan(20);
+    }
   });
 });
 
@@ -124,31 +191,50 @@ describe('#140 — the GENERATOR’s view is unchanged', () => {
 // ---------------------------------------------------------------------------
 describe('#140 — the classifier partitions every header exactly once', () => {
   it.each(CORPUS)('$header ($source) -> $verdict', ({ header, verdict }) => {
-    expect(classifyFirstHeaderCell(header)).toBe(verdict);
+    expect(classifyHeaderCell(header)).toBe(verdict);
   });
 
   it('the buckets reconcile against the corpus, and none is empty', () => {
     const tally: Record<HeaderCellVerdict, number> = { data: 0, label: 0, cannot_tell: 0 };
-    for (const { header } of CORPUS) tally[classifyFirstHeaderCell(header)] += 1;
+    for (const { header } of CORPUS) tally[classifyHeaderCell(header)] += 1;
     expect(tally.data + tally.label + tally.cannot_tell).toBe(CORPUS.length);
     // A classifier that collapsed to one answer would still reconcile. These
     // floors are what stop that reading as a pass.
+    //
+    // ⚠️ THIS USED TO READ `expect(tally.cannot_tell).toBe(3)` AND THE NUMBER
+    // WENT STALE THE MOMENT THE ADVERSARIAL PASS ADDED THE LATERALITY FAMILY —
+    // which is the point the pass made about it: a count pinned to a
+    // HAND-MAINTAINED corpus measures the corpus, not the classifier. The
+    // meaning lives in the per-row arms above and in the subset invariant
+    // below; this one only has to prove no bucket is empty.
     expect(tally.data).toBeGreaterThan(0);
     expect(tally.label).toBeGreaterThan(0);
-    expect(tally.cannot_tell).toBe(3);
+    expect(tally.cannot_tell).toBeGreaterThan(0);
   });
 
-  // ⚠️ `cannot_tell` IS EXACTLY THE SET THE OLD PREDICATE GOT WRONG — the rows
-  // where it said "data" and a reader says "label". Asserting the identity
-  // rather than the count is what keeps the bucket meaning what its name says.
-  it('cannot_tell is precisely: the old predicate fired, and it should not have', () => {
-    const cannotTell = CORPUS.filter((c) => classifyFirstHeaderCell(c.header) === 'cannot_tell');
-    expect(cannotTell.map((c) => c.header).sort()).toEqual(
-      ['Segment (right leg)', 'Site (see key)', 'Vein Size'].sort(),
-    );
-    // Every one of them was a TRUE from the old predicate — i.e. every one of
-    // them licensed the widen before #140.
+  // ⚠️ `cannot_tell` IS A SUBSET OF WHAT THE OLD PREDICATE ACCEPTED — that is
+  // the invariant that keeps the bucket meaning what its name says, and it is
+  // what makes #140 a TIGHTENING: every row that lands here used to license the
+  // widen, and none of them is a row the old predicate already refused.
+  it('every cannot_tell row is one the OLD predicate accepted — a strict tightening', () => {
+    const cannotTell = CORPUS.filter((c) => classifyHeaderCell(c.header) === 'cannot_tell');
+    expect(cannotTell.length).toBeGreaterThan(0);
     for (const c of cannotTell) expect(preRuling140Predicate(c.header)).toBe(true);
+  });
+
+  // The named families, asserted by NAME rather than by count, so adding a
+  // corpus row never silently retires one of them.
+  it('the #140 shapes and the laterality family are all cannot_tell', () => {
+    for (const h of [
+      'Vein Size',
+      'Segment (right leg)',
+      'Site (see key)',
+      'Vein (L)',
+      'Vein (R)',
+      'Structure (in)',
+    ]) {
+      expect(classifyHeaderCell(h)).toBe('cannot_tell');
+    }
   });
 });
 
@@ -158,27 +244,88 @@ describe('#140 — the classifier partitions every header exactly once', () => {
 describe('#140 — the production corpus takes no capability loss', () => {
   const PRODUCTION = CORPUS.filter((c) => c.source.startsWith('PROD'));
 
-  it('all six production first-cell values are still classified, none ambiguous', () => {
+  // ⚠️ FOUR OF THE SIX COULD NOT HAVE FAILED, AND SAYING SO IS THE POINT.
+  // The classifier is only ever reached for a header that is SHORT BY EXACTLY
+  // ONE. Measured on production (header cells -> first data-row cells):
+  //
+  //     DIAMETER (mm)  2->3   26 lines   REACHES the classifier
+  //     DIAMETER       2->3    1 line    REACHES the classifier
+  //     DIAMETER (mm)  2->2    1 line    aligned — never reaches it
+  //     Location 3->3 (8) · Segment 3->3 (6) · Site 3->3 (2) · Medication 3->3 (1)
+  //                                       aligned — never reach it
+  //
+  // 27 of 45 reach it; 18 never do. And for Location/Segment/Site/Medication
+  // `cannot_tell` is unreachable BY INSPECTION OF THE STRING — no trailing
+  // parenthetical, no vocabulary word — so asserting "not ambiguous" about
+  // them is a control aimed where the answer is predetermined. The arm below
+  // still runs over all six, because a future edit could make one of them
+  // ambiguous, but the LOAD-BEARING content is the two that widen.
+  it('the six production values are classified, and none is ambiguous', () => {
     expect(PRODUCTION).toHaveLength(6);
     for (const p of PRODUCTION) {
-      expect(classifyFirstHeaderCell(p.header)).not.toBe('cannot_tell');
+      expect(classifyHeaderCell(p.header)).not.toBe('cannot_tell');
     }
   });
 
-  // ⚠️ THE ROW THAT WOULD HAVE REFUTED THE CLAIM. 27 of the 45 production
-  // headers lead with `DIAMETER (mm)`, and those are exactly the legacy notes
-  // whose header is short at the front. If #140 had cost them their widen, the
-  // ruling would be a trade rather than a tightening — and this arm is where
-  // that would show.
-  it('the 27-line majority shape still classifies as data', () => {
-    expect(classifyFirstHeaderCell('DIAMETER (mm)')).toBe('data');
+  // ⚠️ THE ROWS THAT WOULD HAVE REFUTED THE CLAIM — the ones that actually
+  // widen. An earlier draft of this arm said "27 of the 45 lead with
+  // `DIAMETER (mm)` and those are exactly the short-at-front notes", which is
+  // FALSE and the adversarial pass measured it: 27 lead with `DIAMETER (mm)`
+  // but only 26 are short at the front — one is already aligned — and the 27th
+  // short-at-front header is `DIAMETER`, a different corpus row the old arm
+  // did not cover at all.
+  //
+  // Production's widening headers are a CLOSED SET OF THREE header lines, and
+  // #140 must leave every cell of all three classified as `data` or it has
+  // taken a capability away:
+  //
+  //     | DIAMETER (mm) | REFLUX TIME (ms) |        13 lines / 7 visits
+  //     | DIAMETER (mm) | REFLUX TIME (seconds) |   13 lines / 7 visits
+  //     | DIAMETER | REFLUX TIME |                   1 line  / 1 visit
+  it.each([
+    ['DIAMETER (mm)', 'REFLUX TIME (ms)'],
+    ['DIAMETER (mm)', 'REFLUX TIME (seconds)'],
+    ['DIAMETER', 'REFLUX TIME'],
+  ])('every cell of production header [%s | %s] stays data', (a, b) => {
+    expect(classifyHeaderCell(a)).toBe('data');
+    expect(classifyHeaderCell(b)).toBe('data');
+  });
+
+  // And end to end: the real header lines still widen and still write the
+  // correct cell. Classification is a proxy; this is the behaviour.
+  it.each([
+    ['DIAMETER (mm)', 'REFLUX TIME (ms)'],
+    ['DIAMETER (mm)', 'REFLUX TIME (seconds)'],
+    ['DIAMETER', 'REFLUX TIME'],
+  ])('production header [%s | %s] still edits both columns correctly', (a, b) => {
+    const note = ['## FINDINGS', `| ${a} | ${b} |`, '| --- | --- |', '| GSV | 6.2 | 3.4 |'].join(
+      '\n',
+    );
+    const first = editTableCell({
+      note,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV',
+      columnLabel: a,
+      value: '7.7',
+    });
+    expect(first.ok).toBe(true);
+    expect(first.before).toBe('6.2');
+    const second = editTableCell({
+      note,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV',
+      columnLabel: b,
+      value: '9.9',
+    });
+    expect(second.ok).toBe(true);
+    expect(second.before).toBe('3.4');
   });
 });
 
 // ---------------------------------------------------------------------------
 // 4. THE EDITOR — evidence when the twin is there, refusal when it is not
 // ---------------------------------------------------------------------------
-describe('#140 — the editor resolves from the twin, and refuses without it', () => {
+describe('#140 — the editor refuses what the text cannot settle', () => {
   /** A legacy grid: header short by one, rows carrying a leading label cell. */
   const note = (header0: string) =>
     [
@@ -189,96 +336,149 @@ describe('#140 — the editor resolves from the twin, and refuses without it', (
       '| GSV at the SFJ | 6.2 | 3.4 |',
     ].join('\n');
 
-  const edit = (header0: string, tableStructure?: TwinTableStructure) =>
+  const edit = (header0: string) =>
     editTableCell({
       note: note(header0),
       sectionLabel: 'FINDINGS',
       rowLabel: 'GSV at the SFJ',
       columnLabel: 'REFLUX TIME (ms)',
       value: '9.9',
-      tableStructure,
     });
 
-  /** What the WM IOV form's compiled IR says: a left-cell row label, two data
-   *  columns. Derived from `labelSource: 'left_cell'` on a `table_cell` field. */
-  const WM_IOV_TWIN: TwinTableStructure = { dataColumnCount: 2, rowLabelInLeftCell: true };
-
-  it('WITHOUT a twin, an ambiguous header REFUSES', () => {
+  it('an ambiguous first cell REFUSES', () => {
     const r = edit('Vein Size');
     expect(r.ok).toBe(false);
     expect(r.reason).toBe('label_column_unresolved');
   });
 
-  // ⚠️ THE SAME INPUT, THE OPPOSITE ANSWER, AND THAT IS THE WHOLE RULING. The
-  // text cannot settle `Vein Size`; the twin can, because it knows its rows
-  // carry a leading label cell and exactly two data columns follow it. Evidence
-  // over text-guessing, as one executable sentence.
-  it('WITH the twin, the same ambiguous header RESOLVES and writes the right cell', () => {
-    const r = edit('Vein Size', WM_IOV_TWIN);
-    expect(r.ok).toBe(true);
-    expect(r.before).toBe('3.4');
-    expect(r.body).toContain('| GSV at the SFJ | 6.2 | 9.9 |');
+  // ⚠️ THE LATERALITY SHORTHAND, AND IT IS THE MOST DANGEROUS SHAPE IN THIS
+  // FILE. The unit list once carried single letters, so `(L)` parsed as LITRES
+  // and `Vein (L)` widened while `Vein (R)` refused — **the left leg silently
+  // corrupted and the right leg refused, in the same bilateral study.** Found
+  // by the adversarial pass; these arms exist so it cannot come back.
+  it.each(['Vein (L)', 'Vein (R)', 'Side (L)', 'Nerve (M)', 'Segment (S)', 'Structure (in)'])(
+    'the laterality/abbreviation shorthand %s REFUSES',
+    (h) => {
+      const r = edit(h);
+      expect(r.ok).toBe(false);
+      expect(r.reason).toBe('label_column_unresolved');
+    },
+  );
+
+  it('(L) and (R) are treated IDENTICALLY — neither leg is privileged', () => {
+    expect(classifyHeaderCell('Vein (L)')).toBe(classifyHeaderCell('Vein (R)'));
+    expect(edit('Vein (L)').reason).toBe(edit('Vein (R)').reason);
   });
 
-  // ⚠️ BOTH DIRECTIONS. A twin route that widened unconditionally would pass
-  // the arm above and be a worse defect than the one #140 closes — it would
-  // widen on a header that genuinely names its label column.
-  it('a twin that says the rows have NO left-cell label declines to widen', () => {
-    const r = edit('Vein Size', { dataColumnCount: 2, rowLabelInLeftCell: false });
-    expect(r.ok).toBe(false);
-    expect(r.reason).toBe('ragged_table');
-  });
-
-  it('a twin whose column count disagrees with the note declines to widen', () => {
-    const r = edit('Vein Size', { dataColumnCount: 3, rowLabelInLeftCell: true });
-    expect(r.ok).toBe(false);
-    expect(r.reason).toBe('ragged_table');
-  });
-
-  // ⚠️ ABSENT IS NOT FALSE, AND THE TWIN IS NEVER CONSULTED FOR A GRID THAT
-  // ALREADY LINES UP. A note the generator wrote since F24 Slice 1 carries a
-  // matching header, so no widen is needed and the twin changes nothing.
-  it('an already-aligned grid is unaffected, twin or no twin', () => {
-    const aligned = [
-      '## FINDINGS',
-      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
-      '| --- | --- | --- |',
-      '| GSV at the SFJ | 6.2 | 3.4 |',
-    ].join('\n');
-    for (const tableStructure of [undefined, WM_IOV_TWIN]) {
-      const r = editTableCell({
-        note: aligned,
-        sectionLabel: 'FINDINGS',
-        rowLabel: 'GSV at the SFJ',
-        columnLabel: 'REFLUX TIME (ms)',
-        value: '9.9',
-        tableStructure,
-      });
-      expect(r.ok).toBe(true);
-      expect(r.before).toBe('3.4');
-    }
-  });
-
-  // ⚠️ #140 NARROWS WHEN THE WIDEN MAY FIRE. IT MUST NOT WIDEN THE SET OF GRIDS
-  // THAT REACH IT — so a genuinely ragged table is still refused even with a
-  // twin that would otherwise license a widen.
-  it('a genuinely ragged grid is still refused, twin present', () => {
-    const ragged = [
-      '## FINDINGS',
-      '| DIAMETER (mm) | REFLUX TIME (ms) |',
-      '| --- | --- |',
-      '| GSV at the SFJ | 6.2 | 3.4 | 1.1 |',
-      '| SSV | 4.0 |',
-    ].join('\n');
+  // ⚠️ EVERY CELL, NOT ONLY THE FIRST. `Time` is made entirely of measurement
+  // nouns and is the canonical row label of any timepoint table; `HEART RATE`
+  // is not measurement vocabulary at all. Asking only about cell 0 widened this
+  // grid and destroyed the blood pressure.
+  it('a vitals table whose row label is `Time` is REFUSED, not widened', () => {
     const r = editTableCell({
-      note: ragged,
+      note: ['## FINDINGS', '| Time | HEART RATE |', '| --- | --- |', '| 08:00 | 72 | 120/80 |'].join(
+        '\n',
+      ),
+      sectionLabel: 'FINDINGS',
+      rowLabel: '08:00',
+      columnLabel: 'HEART RATE',
+      value: '88',
+    });
+    expect(r.ok).toBe(false);
+    expect(r.body).toBeUndefined();
+  });
+
+  it('an already-aligned grid is unaffected', () => {
+    const r = editTableCell({
+      note: [
+        '## FINDINGS',
+        '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+        '| --- | --- | --- |',
+        '| GSV at the SFJ | 6.2 | 3.4 |',
+      ].join('\n'),
       sectionLabel: 'FINDINGS',
       rowLabel: 'GSV at the SFJ',
       columnLabel: 'REFLUX TIME (ms)',
       value: '9.9',
-      tableStructure: WM_IOV_TWIN,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.before).toBe('3.4');
+  });
+
+  // ⚠️ THIS ARM REPLACES ONE THAT WAS AIMED WHERE THE ANSWER WAS PREDETERMINED.
+  // The previous "genuinely ragged grid" fixture had a 2-cell header over a
+  // 4-cell matched row, so `shortByExactlyOne` (2 !== 3) refused it before
+  // `gridIsRegular` was ever evaluated — and the adversarial pass proved it:
+  // DELETING the `gridIsRegular` precondition entirely left all 94 arms GREEN.
+  //
+  // This fixture is short-by-one AND irregular, so `gridIsRegular` is the only
+  // thing standing between it and a write into a grid whose rows provably
+  // disagree about their own width.
+  it('a grid that is short-by-one AND irregular is refused', () => {
+    const r = editTableCell({
+      note: [
+        '## FINDINGS',
+        '| DIAMETER (mm) | REFLUX TIME (ms) |',
+        '| --- | --- |',
+        '| GSV at the SFJ | 6.2 | 3.4 |',
+        '| SSV | 4.0 | 1.1 | 9.9 |',
+      ].join('\n'),
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'REFLUX TIME (ms)',
+      value: '7.7',
     });
     expect(r.ok).toBe(false);
     expect(r.reason).toBe('ragged_table');
+    expect(r.body).toBeUndefined();
+  });
+
+  // ⚠️ AN UNNAMED COLUMN IS NEVER A TARGET. `norm` strips a trailing
+  // parenthetical, so a model-authored `columnLabel` of `(mm)` normalises to
+  // the EMPTY STRING and used to select any blank header cell — writing into an
+  // unnamed column and confirming it to the doctor with an empty column name.
+  //
+  // ⚠️ THE FIXTURE IS AN **ALIGNED** GRID, DELIBERATELY. My first version used a
+  // short-by-one grid, and the "every cell must be data" rule now refuses that
+  // one at `ragged_table` before column resolution is ever reached — so the arm
+  // passed for a reason that had nothing to do with the guard it names. An
+  // aligned grid reaches column resolution, which is the only place this can be
+  // demonstrated.
+  it('an empty header cell cannot be targeted by an empty column label', () => {
+    const r = editTableCell({
+      note: [
+        '## FINDINGS',
+        '|  | DIAMETER (mm) |  |',
+        '| --- | --- | --- |',
+        '| GSV at the SFJ | 6.2 | 1.1 |',
+      ].join('\n'),
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: '(mm)',
+      value: '7.7',
+    });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('column_not_found');
+    expect(r.body).toBeUndefined();
+  });
+
+  // The positive control for the same grid: a NAMED column in it still writes,
+  // so the arm above is a statement about empty names and not about the fixture
+  // being unusable.
+  it('…but a named column in that same grid still writes', () => {
+    const r = editTableCell({
+      note: [
+        '## FINDINGS',
+        '|  | DIAMETER (mm) |  |',
+        '| --- | --- | --- |',
+        '| GSV at the SFJ | 6.2 | 1.1 |',
+      ].join('\n'),
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'DIAMETER (mm)',
+      value: '7.7',
+    });
+    expect(r.ok).toBe(true);
+    expect(r.before).toBe('6.2');
   });
 });

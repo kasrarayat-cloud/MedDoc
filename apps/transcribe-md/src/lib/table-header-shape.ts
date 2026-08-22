@@ -31,15 +31,23 @@
 // and `Site (see key)`; the controls `VEIN` and `Segment` refuse — so it is a
 // property of the PREDICATE, not of a fixture.
 //
-// THE RULING: EVIDENCE OVER TEXT-GUESSING. Where the visit is TEMPLATE-BOUND
-// the label column is resolved from the twin's compiled structure, which knows
-// its own columns (`note-table-edit.ts`, `TwinTableStructure`). The text
-// heuristic survives ONLY as the untemplated fallback, and there it must REFUSE
-// HONESTLY when the classification is ambiguous — never pad and shift.
+// THE RULING: EVIDENCE OVER TEXT-GUESSING. The text heuristic survives ONLY as
+// the untemplated fallback, and there it must REFUSE HONESTLY when the
+// classification is ambiguous — never pad and shift.
 //
 // So the vocabulary below answers THREE ways rather than two. `cannot_tell` is
 // the bucket ruling #140 exists to create: today it was silently merged into
 // `data`, which is precisely how a label column became a measurement column.
+//
+// ⚠️ THE OTHER HALF OF #140 — RESOLVING THE LABEL COLUMN FROM THE TWIN'S
+// COMPILED STRUCTURE — IS **NOT** IMPLEMENTED HERE, AND THE FIRST ATTEMPT AT
+// IT WAS BUILT AND THEN REMOVED. It keyed on the twin's DATA COLUMN COUNT, and
+// a count cannot answer a question about which END a header is short at: a
+// header of {label + N-1 data} and one of {N data} both have N cells. It also
+// widened grids the text route correctly refuses. What the twin CAN honestly
+// settle is whether its own header row's first cell is empty — and reaching
+// that needs the note-table -> twin-table identification F24-S3 has not built.
+// **Do not re-add a twin route keyed on a count.**
 // ============================================================================
 
 /**
@@ -75,9 +83,38 @@ function looksLikeDataColumn(h: string): boolean {
  * `Site (see key)` — a CROSS-REFERENCE — both read as measurements. A unit is
  * evidence that the column holds a measured quantity; a row-label column never
  * carries one. Anything else in the brackets settles nothing.
+ *
+ * ⚠️ NO SINGLE-LETTER UNITS, AND THE ADVERSARIAL PASS IS WHY. The first draft
+ * of this list carried `l`, `m`, `s`, `g`, `in` and `deg`. In vascular imaging
+ * `(L)` and `(R)` are the commonest laterality shorthand there is, so
+ * `Vein (L)` parsed as LITRES and widened:
+ *
+ *     | Vein (L) | DIAMETER (mm) |        edit DIAMETER := 7.7
+ *     | GSV at the SFJ | 6.2 | 3.4 |   ->  ok:true, before "3.4"
+ *
+ * — the REFLUX TIME destroyed, the diameter untouched, reported as success.
+ * **And `(R)` refused, because `r` was not in the list: the right leg refused
+ * and the left leg silently corrupted, in the same bilateral study.** That is
+ * the exact defect #140 exists to close, reintroduced by the fix for it.
+ *
+ * ⚠️ SO THE RULE IS: A UNIT EARNS ITS PLACE ONLY IF IT CANNOT PLAUSIBLY BE AN
+ * ABBREVIATION FOR SOMETHING ELSE IN A CLINICAL TABLE HEADER. Single letters
+ * never clear that bar, and neither does `in` (the English word) or `deg`.
+ * Losing a genuine unit costs a REFUSAL; keeping an ambiguous one costs a
+ * WRONG-CELL WRITE, and those are not the same price.
  */
-const UNIT_PARENTHETICAL =
-  /\(\s*(mm|cm|m|in|mm2|mm²|cm2|cm²|ml|l|%|mmhg|mm\s*hg|ms|msec|s|sec|secs|second|seconds|min|mins|minute|minutes|cm\/s|cm\/sec|mm\/s|m\/s|hz|khz|db|deg|degrees|°|kg|g|lb|lbs|bpm)\s*\)\s*$/i;
+const UNIT_PARENTHETICAL = new RegExp(
+  `\\(\\s*(${[
+    'mm', 'cm', 'mm2', 'mm²', 'cm2', 'cm²', 'cm3', 'mm3', 'cc',
+    'ml', 'mg', 'mcg', 'kg', 'lbs', 'mmol', 'kpa',
+    '%', 'mmhg', 'mm\\s*hg',
+    'ms', 'msec', 'sec', 'secs', 'second', 'seconds',
+    'min', 'mins', 'minute', 'minutes',
+    'cm\\/s', 'cm\\/sec', 'mm\\/s', 'm\\/s', 'l\\/min', 'ml\\/min',
+    'hz', 'khz', 'bpm', 'degrees',
+  ].join('|')})\\s*\\)\\s*$`,
+  'i',
+);
 
 /** The measurement nouns the original vocabulary recognises, as whole words. */
 const MEASUREMENT_NOUNS = new Set([
@@ -88,15 +125,45 @@ const MEASUREMENT_NOUNS = new Set([
   'depth',
   'time',
   'size',
+  // Not in the original regex vocabulary, so these can only ever be reached
+  // when some OTHER word in the same cell already matched it — they widen
+  // `data`, they can never create it. `Reflux Duration` is the motivating case.
+  'duration',
+]);
+
+/** Unit tokens written WITHOUT brackets — `Diameter mm`, `Diameter [mm]`.
+ *  Single letters are excluded for the same reason they are excluded above. */
+const UNIT_WORDS = new Set([
+  'mm', 'cm', 'ml', 'cc', 'mg', 'mcg', 'kg', 'lbs',
+  'ms', 'msec', 'sec', 'secs', 'second', 'seconds',
+  'min', 'mins', 'minute', 'minutes', 'hz', 'khz', 'bpm', 'mmhg', 'degrees',
 ]);
 
 /**
- * Every word in the cell is a measurement noun — `DIAMETER`, `REFLUX TIME`.
+ * Every word in the cell is a measurement noun or a unit — `DIAMETER`,
+ * `REFLUX TIME`, `Diameter mm`.
  *
  * ⚠️ "CONTAINS a measurement word" IS THE DEFECT; "IS MADE OF THEM" IS THE
- * EVIDENCE. `Vein Size` contains `size` and is a row-label column; `REFLUX
- * TIME` is nothing but measurement nouns and is a data column. The old
- * predicate could not tell those apart because it asked the weaker question.
+ * EVIDENCE. `Vein Size` contains `size` and ruling #140 rules it a row-label
+ * column; `REFLUX TIME` is nothing but measurement nouns and is a data column.
+ * The old predicate could not tell those apart because it asked the weaker
+ * question.
+ *
+ * ⚠️ AND THE KNOWN COST OF ASKING THE STRONGER ONE, MEASURED BY THE ADVERSARIAL
+ * PASS AND ACCEPTED RATHER THAN HIDDEN: a measurement noun carrying a
+ * NON-measurement qualifier — `Max Diameter`, `Peak Velocity`, `Nodule Size`,
+ * `Total Length` — now lands in `cannot_tell` and is REFUSED where `main`
+ * widened it. That is real capability loss on shapes production does not
+ * currently hold (its three widening headers are unaffected, asserted in the
+ * gate).
+ *
+ * It is NOT patched by adding a qualifier list, and that is a decision: a
+ * qualified measurement noun is ambiguous in exactly the way `Vein Size` is —
+ * `| Max Diameter | REFLUX |` reads as {label, data} or {data, data} with equal
+ * force — and ruling #140's instruction for that case is to refuse, not to
+ * guess better. **Refusing costs a retype; guessing costs a measurement.**
+ * The retirement condition is named: a properly-built twin route, which
+ * resolves it from the document instead of from words.
  */
 function isEntirelyMeasurementWords(h: string): boolean {
   const bare = h
@@ -105,20 +172,26 @@ function isEntirelyMeasurementWords(h: string): boolean {
     .trim()
     .toLowerCase();
   if (bare === '') return false;
-  const words = bare.split(/[^a-z]+/i).filter(Boolean);
+  const words = bare.split(/[^a-z0-9]+/i).filter(Boolean);
   if (words.length === 0) return false;
-  return words.every((w) => MEASUREMENT_NOUNS.has(w));
+  return words.every((w) => MEASUREMENT_NOUNS.has(w) || UNIT_WORDS.has(w));
 }
 
 /**
- * Classify a header's FIRST cell.
+ * Classify ONE header cell.
+ *
+ * ⚠️ IT WAS `classifyFirstHeaderCell` AND THE NAME WAS A CLAIM THE CALLER
+ * OUTGREW. The editor now asks this of EVERY header cell, not just cell 0 —
+ * see the `Time` / `HEART RATE` case in `note-table-edit.ts`. A function whose
+ * name says FIRST while callers pass it cell 2 is the check-whose-title-is-
+ * narrower-than-what-it-measures family, so the name moved with the use.
  *
  * ⚠️ THE PARTITION IS TOTAL AND EVERY CELL LANDS IN EXACTLY ONE BUCKET, which
  * is what lets the editor's guard assert a reconciled census rather than a
  * ratio. `label` is exactly the complement of the original text test, so the
  * generator's view (below) is unchanged by construction.
  */
-export function classifyFirstHeaderCell(h: string): HeaderCellVerdict {
+export function classifyHeaderCell(h: string): HeaderCellVerdict {
   if (!looksLikeDataColumn(h)) return 'label';
   if (UNIT_PARENTHETICAL.test(h) || isEntirelyMeasurementWords(h)) return 'data';
   return 'cannot_tell';
@@ -138,5 +211,5 @@ export function classifyFirstHeaderCell(h: string): HeaderCellVerdict {
  * with a different blast radius, and ruling #140 does not authorise it.
  */
 export function isDataColumnHeader(h: string): boolean {
-  return classifyFirstHeaderCell(h) !== 'label';
+  return classifyHeaderCell(h) !== 'label';
 }

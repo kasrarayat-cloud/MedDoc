@@ -32,7 +32,7 @@
 // ============================================================================
 
 import { parseMarkdownRow, MARKDOWN_RULE_ROW_RE } from './markdown-row';
-import { classifyFirstHeaderCell } from './table-header-shape';
+import { classifyHeaderCell } from './table-header-shape';
 import { readNoteSection } from './splice-note-section';
 
 /** `| --- | :--- |` — a table's alignment rule, never content. */
@@ -68,27 +68,6 @@ export type TableEditFailure =
    *  could ever answer "did my change break this?". */
   | 'label_column_unresolved'
   | 'illegal_value';
-
-/**
- * What the TWIN knows about the table this row lives in — ruling #140's
- * "resolved from EVIDENCE, not guessed from text".
- *
- * Derived from the compiled `TemplateDocIR`, never from the note: a
- * `table_cell` field whose `labelSource` is `left_cell` is the twin stating, in
- * its own words, that the row's leading cell is a LABEL and not a measurement.
- * That is the fact the text heuristic was guessing at.
- *
- * ⚠️ ABSENT IS NOT FALSE. When this is undefined the visit is untemplated and
- * the fallback runs; when it is present it is BELIEVED, and the text vocabulary
- * is not consulted at all. Mixing the two would reintroduce the guess it exists
- * to remove.
- */
-export interface TwinTableStructure {
-  /** Data columns per row — table_cell FIELDS, excluding the label cell. */
-  dataColumnCount: number;
-  /** The twin says this table's rows carry their label in the left cell. */
-  rowLabelInLeftCell: boolean;
-}
 
 export interface TableEditResult {
   ok: boolean;
@@ -212,10 +191,6 @@ export function editTableCell(params: {
   /** Optional: which table, when the row label appears under more than one.
    *  Matched loosely against the caption line above each table. */
   tableCaption?: string | null;
-  /** Optional: the twin's compiled structure for this table — ruling #140.
-   *  Present => the label column is resolved from evidence and the text
-   *  vocabulary is never consulted. Absent => the untemplated fallback. */
-  tableStructure?: TwinTableStructure;
 }): TableEditResult {
   // A PIPE ENDS A CELL, AND NOTHING DOWNSTREAM UNDERSTANDS AN ESCAPE.
   //
@@ -454,27 +429,47 @@ export function editTableCell(params: {
   // disagree with each other, never reaches either resolver and still falls to
   // `ragged_table`. #140 narrows WHEN the widen may fire; it does not widen the
   // set of grids that reach it.
+  // ⚠️ EVERY HEADER CELL IS CLASSIFIED, NOT ONLY THE FIRST — AND THE
+  // ADVERSARIAL PASS IS WHY. Asking only about cell 0 says "does the header
+  // START with a data column?", which is a weaker question than "does the
+  // header consist ONLY of data columns?" — and it is the second one that means
+  // "there is no label column here". A vitals table shows the gap:
+  //
+  //     | Time | HEART RATE |          edit HEART RATE := 88
+  //     | 08:00 | 72 | 120/80 |    ->  ok:true, before "120/80"
+  //
+  // `Time` is made entirely of measurement nouns, so cell-0-only read it as
+  // data and widened; the BLOOD PRESSURE was destroyed and the doctor was told
+  // the heart rate changed. `HEART RATE` is not measurement vocabulary at all,
+  // so requiring EVERY cell to be `data` refuses this grid — while the three
+  // header lines production actually widens are unaffected, because every cell
+  // of all three is a unit or a measurement noun. Measured, not hoped:
+  //
+  //     | DIAMETER (mm) | REFLUX TIME (ms) |       13 lines / 7 visits
+  //     | DIAMETER (mm) | REFLUX TIME (seconds) |  13 lines / 7 visits
+  //     | DIAMETER | REFLUX TIME |                  1 line  / 1 visit
+  //
+  // ⚠️ AND THE TWIN ROUTE THAT STOOD HERE WAS REMOVED, DELIBERATELY. It read
+  // `dataColumnCount === rawHeaderCells.length`, and THAT IS A COUNT: a header
+  // of {label + N-1 data} and a header of {N data} both have N cells, so it is
+  // invariant under which end is short — the identical axis error this file's
+  // own comment above diagnoses in the production delta census. It also WIDENED
+  // GRIDS THE TEXT ROUTE CORRECTLY REFUSES (`| VEIN | DIAMETER (mm) |`), which
+  // is strictly worse than the defect #140 closed. What the twin can honestly
+  // settle is whether its OWN header row's first cell is empty; that needs the
+  // note-table -> twin-table identification F24-S3 has not built yet.
   const shortByExactlyOne = rawHeaderCells.length === rowCells.length - 1;
   const gridIsRegular = everyDataRowAgrees && dataRowCounts[0] === rowCells.length;
 
   let widen = false;
   let unresolved = false;
   if (shortByExactlyOne && gridIsRegular && rawHeaderCells.length > 0) {
-    if (params.tableStructure) {
-      // EVIDENCE. The twin knows whether its rows carry a leading label cell
-      // and how many data columns follow it, so "which end is the header short
-      // at?" stops being a question about words. A twin that does NOT describe
-      // this shape declines to widen, and the grid falls to `ragged_table` —
-      // absent evidence is never read as permission.
-      widen =
-        params.tableStructure.rowLabelInLeftCell &&
-        params.tableStructure.dataColumnCount === rawHeaderCells.length &&
-        params.tableStructure.dataColumnCount + 1 === rowCells.length;
-    } else {
-      const verdict = classifyFirstHeaderCell(rawHeaderCells[0]);
-      widen = verdict === 'data';
-      unresolved = verdict === 'cannot_tell';
-    }
+    const verdicts = rawHeaderCells.map(classifyHeaderCell);
+    // A cell nothing settles is its own refusal; a cell that plainly names a
+    // label column is an ordinary ragged grid. Different remedies, so different
+    // reasons — see `label_column_unresolved`.
+    unresolved = verdicts.includes('cannot_tell');
+    widen = !unresolved && verdicts.every((v) => v === 'data');
   }
   if (unresolved) return { ok: false, reason: 'label_column_unresolved' };
   const headerCells = widen ? ['', ...rawHeaderCells] : rawHeaderCells;
@@ -492,7 +487,21 @@ export function editTableCell(params: {
   const colIdx = headerCells
     .map((h, i) => ({ h: norm(h), i }))
     // The first column is the row label itself, never a writable measurement.
-    .filter((x) => x.i > 0 && x.h === wantCol)
+    // ⚠️ AN UNNAMED COLUMN IS NEVER A TARGET, AND `x.i > 0` WAS NOT ENOUGH.
+    // `norm` strips a trailing parenthetical, so a `columnLabel` that is
+    // ENTIRELY one — `(mm)`, which the MODEL authors — normalises to `''`, and
+    // an empty header cell anywhere in the table then matched it. Measured:
+    //
+    //   | DIAMETER (mm) |  | REFLUX TIME (ms) |   columnLabel '(mm)'
+    //   | GSV at the SFJ | 6.2 | 1.1 | 3.4 |   ->  ok:true, before "1.1",
+    //                                              column "" (an EMPTY name)
+    //
+    // The value landed in the unnamed column and the confirmation the doctor
+    // reads — `chat-edit-visit.ts` renders `${row} · ${column}` — ended in a
+    // bare separator with nothing after it. The old comment justified this
+    // filter as "the first column is the row label"; that is true of index 0
+    // and says nothing about the other empty cells a widened table can carry.
+    .filter((x) => x.i > 0 && x.h !== '' && x.h === wantCol)
     .map((x) => x.i);
 
   if (colIdx.length === 0) return { ok: false, reason: 'column_not_found' };
