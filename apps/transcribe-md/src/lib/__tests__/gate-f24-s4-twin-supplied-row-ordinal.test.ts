@@ -20,8 +20,11 @@
 // the value back.
 // ============================================================================
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { editTableCell, TABLE_EDIT_REASON } from '../note-table-edit';
+import { EditTableCellIntentSchema } from '../chat-edit/intent';
 
 /** Three identical-label rows per leg, each with a DISTINCT diameter, so the
  *  row that was written is identifiable from the value alone. */
@@ -269,6 +272,77 @@ describe('F24-S4 — the refusal is answerable, and the index is ISSUED not inve
     for (const r of ['row_ordinal_invalid', 'row_ordinal_out_of_range'] as const) {
       expect(TABLE_EDIT_REASON[r], `${r} has no message`).toBeTruthy();
     }
+  });
+});
+
+describe('F24-S4 — the capability HAS A CALLER, and the message is not a lie', () => {
+  // ⚠️ F4's DEFECT, WHICH THIS BRANCH COMMITTED AND THIS ARM EXISTS TO STOP
+  // RECURRING. The first draft added `rowOrdinal` to `editTableCell`, proved it
+  // 28 ways, and never wired it: `chat-edit-visit.ts` called the function
+  // without the field, so nothing in production could ever supply one. A
+  // library capability with no caller passes every test it has.
+  const CALLER = readFileSync(
+    path.resolve(__dirname, '../../actions/chat-edit-visit.ts'),
+    'utf8',
+  );
+
+  it('the model can name an ordinal — the intent schema carries it', () => {
+    const parsed = EditTableCellIntentSchema.safeParse({
+      kind: 'edit_table_cell',
+      sectionLabel: 'FINDINGS',
+      rowLabel: TRIB,
+      columnLabel: 'DIAMETER (mm)',
+      value: '4.4',
+      rowOrdinal: 2,
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it.each([0, -1, 1.5])('the schema refuses %s before it reaches the editor', (n) => {
+    const parsed = EditTableCellIntentSchema.safeParse({
+      kind: 'edit_table_cell',
+      sectionLabel: 'FINDINGS',
+      rowLabel: TRIB,
+      columnLabel: 'DIAMETER (mm)',
+      value: '4.4',
+      rowOrdinal: n,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it('an intent WITHOUT an ordinal is still valid — this widens nothing', () => {
+    const parsed = EditTableCellIntentSchema.safeParse({
+      kind: 'edit_table_cell',
+      sectionLabel: 'FINDINGS',
+      rowLabel: TRIB,
+      columnLabel: 'DIAMETER (mm)',
+      value: '4.4',
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  // ⚠️ MATCHED ON TOKENS THAT EXIST ONLY IN CODE. Canon's substring trap: this
+  // file's own comments say "rowOrdinal" and "rowChoices" in prose, and so do
+  // the caller's, so a bare word would be satisfied by a COMMENT and assert
+  // nothing. These two forms appear only where the work is actually done.
+  it('the action passes the ordinal through to the editor', () => {
+    expect(CALLER).toContain('rowOrdinal: intent.rowOrdinal');
+  });
+
+  // The message says "tell me which of the rows I listed you mean". If the
+  // caller renders only `choices`, that sentence describes a list the doctor
+  // was never shown — a refusal that states something false, which is worse
+  // than the dead end it replaced.
+  it('the refusal the message promises is actually rendered', () => {
+    expect(CALLER).toContain('edit.rowChoices?.length');
+    expect(TABLE_EDIT_REASON.row_ambiguous_same_table).toContain('which of the rows');
+  });
+
+  // Positive control on the reader itself: a zero from the two arms above would
+  // be indistinguishable from a file that failed to load.
+  it('the caller file was actually read', () => {
+    expect(CALLER.length).toBeGreaterThan(1000);
+    expect(CALLER).toContain('editTableCell');
   });
 });
 

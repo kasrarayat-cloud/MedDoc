@@ -86,6 +86,22 @@ export const EditTableCellIntentSchema = z.object({
    * what carries the laterality.
    */
   tableCaption: z.string().max(200).optional(),
+  /**
+   * WHICH of several identical-label rows, 1-based, as OFFERED BACK.
+   *
+   * ⚠️ THIS FIELD IS AN ECHO AND NOT A COUNT THE MODEL TAKES OFF THE NOTE. The
+   * certified template carries the tributary slot three times per leg — blank
+   * slots the doctor fills in, so the labels are identical by design and naming
+   * the table cannot separate them. The server refuses such a request and
+   * returns a NUMBERED list of the candidates beside the cells that actually
+   * differ; this field is how the next turn names one of those.
+   *
+   * The server validates it and refuses anything out of range — it never
+   * clamps, because an index that clamps overwrites a real neighbouring
+   * measurement and reports success. An ordinal also never crosses tables: it
+   * says which ROW, and `tableCaption` says which TABLE.
+   */
+  rowOrdinal: z.number().int().min(1).max(50).optional(),
 });
 
 /** Correct a header field — the patient's name and the visit's own metadata.
