@@ -67,6 +67,15 @@ export type TableEditFailure =
    *  would put a refusal and an unknowable in one bucket, and then no count
    *  could ever answer "did my change break this?". */
   | 'label_column_unresolved'
+  /** A `rowOrdinal` was supplied that is not a whole number >= 1. The caller
+   *  invented an index rather than echoing one this module issued. */
+  | 'row_ordinal_invalid'
+  /** A `rowOrdinal` was supplied that names no candidate — there are N
+   *  identical-label rows and the caller asked for the (N+k)th.
+   *  ⚠️ NEVER CLAMPED. Canon, *ERR TOWARD THE EDGE — THE EDGE HAS A FENCE*:
+   *  an over-shoot that fails closed is a visibly missing edit, and a
+   *  clamp-to-last is a real neighbouring row overwritten silently. */
+  | 'row_ordinal_out_of_range'
   | 'illegal_value';
 
 export interface TableEditResult {
@@ -83,6 +92,20 @@ export interface TableEditResult {
   caption?: string | null;
   /** On `row_ambiguous`: the captions the caller may choose between. */
   choices?: string[];
+  /**
+   * On `row_ambiguous_same_table`: the identical-label candidates, numbered in
+   * NOTE ORDER, each carrying the cells that DO distinguish it.
+   *
+   * ⚠️ THIS IS WHAT MAKES THAT REFUSAL ANSWERABLE, AND THE NUMBER IS ISSUED
+   * HERE RATHER THAN INVENTED THERE. The certified template carries
+   * `Saphenous Tributary Vein <<insert location>>` three times per leg — blank
+   * slots the doctor fills in, so the labels are identical BY DESIGN and no
+   * caption can separate them. Offering a bare count would be the same dead
+   * end in a new costume: "row 2 of 3" is not a thing a doctor knows about
+   * their own note. The row's OTHER cells are, so they travel with the
+   * ordinal and the question becomes one a person can actually answer.
+   */
+  rowChoices?: { ordinal: number; cells: string[] }[];
   reason?: TableEditFailure;
 }
 
@@ -191,6 +214,21 @@ export function editTableCell(params: {
   /** Optional: which table, when the row label appears under more than one.
    *  Matched loosely against the caption line above each table. */
   tableCaption?: string | null;
+  /**
+   * Optional: WHICH of several identical-label rows, 1-based, in note order,
+   * applied AFTER any caption narrowing.
+   *
+   * ⚠️ THIS IS AN ECHO, NOT AN INFERENCE. The legitimate value is one this
+   * module itself issued in `rowChoices` on a previous `row_ambiguous_same_table`
+   * refusal, or one the TWIN derived from the document's own row order. It is
+   * never a number a model counted off a note it was reading — that is the
+   * unvalidated route which wrote a RIGHT-leg correction into the LEFT leg
+   * (Slice 1b), and an index is harder to sanity-check than a caption, not
+   * easier.
+   *
+   * Out of range REFUSES. See `row_ordinal_out_of_range`.
+   */
+  rowOrdinal?: number;
 }): TableEditResult {
   // A PIPE ENDS A CELL, AND NOTHING DOWNSTREAM UNDERSTANDS AN ESCAPE.
   //
@@ -272,6 +310,34 @@ export function editTableCell(params: {
     // would turn "I don't know that table" into `row_not_found`.
     if (narrowed.length > 0) matches = narrowed;
   }
+
+  // ── THE TWIN-SUPPLIED ORDINAL — F24-S4 ────────────────────────────────────
+  //
+  // Applied AFTER caption narrowing, deliberately: the caption says WHICH
+  // TABLE and the ordinal says WHICH ROW WITHIN IT, so an ordinal is counted
+  // over the candidates the caption already survived. Reversing the two would
+  // make "the 2nd tributary" mean a different row depending on whether a
+  // caption was supplied, which is the kind of coupling nobody can hold in
+  // their head at the moment they are correcting a measurement.
+  //
+  // ⚠️ VALIDATED BEFORE IT IS USED, AND OUT-OF-RANGE REFUSES RATHER THAN
+  // CLAMPING. Canon, *ERR TOWARD THE EDGE — THE EDGE HAS A FENCE*: the two
+  // directions of an indexed clinical write are not symmetric in safety. An
+  // ordinal past the end that fails closed leaves the cell visibly unchanged
+  // and the doctor retypes. An ordinal past the end that clamps to the last
+  // candidate silently overwrites a REAL NEIGHBOURING MEASUREMENT and reports
+  // success — the wrong-cell class this arc has already paid for three times.
+  if (params.rowOrdinal !== undefined) {
+    const n = params.rowOrdinal;
+    if (!Number.isInteger(n) || n < 1) return { ok: false, reason: 'row_ordinal_invalid' };
+    // ⚠️ `> matches.length` AND NOT `>=`. Asking for the 1st of 1 is a
+    // legitimate, fully-specified request — it is how a caller that always
+    // supplies an ordinal addresses an unambiguous row — and refusing it would
+    // make the ordinal unusable as a default rather than as an escape hatch.
+    if (n > matches.length) return { ok: false, reason: 'row_ordinal_out_of_range' };
+    matches = [matches[n - 1]];
+  }
+
   if (matches.length > 1) {
     // ⚠️ AN UNANSWERABLE QUESTION IS NOT A REFUSAL, IT IS A DEAD END — SLICE 1b.
     //
@@ -312,9 +378,20 @@ export function editTableCell(params: {
     // and they get different refusals because the doctor's next move differs.
     const distinct = new Set(captions.map(key));
     if (distinct.size === 1) {
+      // ⚠️ THE ORDINALS TRAVEL WITH THE REFUSAL, SO IT STOPS BEING A DEAD END.
+      // `row_ambiguous_same_table` was correct and terminal: the labels are
+      // identical by design, so no answer the doctor could give would narrow
+      // it. Numbering the candidates HERE — in note order, beside the cells
+      // that actually differ — is what lets the next turn resolve, and it
+      // keeps the index something this module issued rather than something a
+      // model counted.
+      const rowChoices = matches.map((m, i) => ({
+        ordinal: i + 1,
+        cells: (cells(lines[m.line]) ?? []).map((c) => c.trim()),
+      }));
       return captions[0] === null
-        ? { ok: false, reason: 'caption_not_found' }
-        : { ok: false, reason: 'row_ambiguous_same_table' };
+        ? { ok: false, reason: 'caption_not_found', rowChoices }
+        : { ok: false, reason: 'row_ambiguous_same_table', rowChoices };
     }
     return {
       ok: false,
@@ -551,8 +628,21 @@ export const TABLE_EDIT_REASON: Record<TableEditFailure, string> = {
     'That row appears in more than one table here, and neither table has a heading I can tell them apart by. Name each table — "Right leg", "Left leg" — and I will change it.',
   // Deliberately does NOT ask "which one?" — the whole point is that naming the
   // table cannot answer it. It says what IS true and where the doctor can act.
+  // ⚠️ THIS NO LONGER ENDS THE CONVERSATION, AND THE WORDING HAD TO MOVE WITH
+  // THE BEHAVIOUR. It used to say "edit the row directly in the document",
+  // which was honest when nothing could resolve it and is now FALSE: the
+  // refusal carries `rowChoices`, so there is an answer the doctor can give.
+  // A refusal that describes a dead end which no longer exists sends them to
+  // do by hand what the surface would now do for them.
   row_ambiguous_same_table:
-    'That row appears more than once in the same table, so naming the table cannot tell them apart. I have left the note unchanged — edit the row directly in the document.',
+    'That row appears more than once in the same table, so naming the table cannot tell them apart. I have left the note unchanged — tell me which of the rows I listed you mean and I will change it.',
+  row_ordinal_invalid:
+    "I couldn't tell which of the repeated rows you meant, so I left the note unchanged.",
+  // Says what is true and does NOT invite a retry at a different index — the
+  // caller asked for a row that is not there, and guessing again is how an
+  // index lands on a real neighbouring measurement.
+  row_ordinal_out_of_range:
+    "That row number is past the end of the rows with that label, so I've left the note unchanged. Tell me which of the rows I listed you mean.",
   ragged_table:
     "That table's header and its rows don't line up, so I can't tell which column is which.",
   // Says what is true and where the doctor can act, and deliberately does NOT
