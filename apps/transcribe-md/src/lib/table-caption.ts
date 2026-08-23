@@ -119,6 +119,15 @@
 //   currently UNEXERCISED; ONE note whose narrative names both legs directly
 //   above a table re-arms it with no code change anywhere. Closing it costs the
 //   titled-caption capability above and is filed, not fixed.
+//   ⚠️ AND IT IS PINNED END TO END, not merely disclosed —
+//   `gate-f24-caption-validation.test.ts`, "THE ADJACENT SLOT IS STILL
+//   UNVALIDATED", drives `editTableCell` and asserts the wrong-leg cell. Those
+//   arms are GREEN BECAUSE THE PRODUCT IS WRONG THERE; they go RED the day
+//   somebody closes it, which is the signal. Added by the independent
+//   adversarial pass, 2026-08-23, which found `note-table-edit.ts`'s
+//   `captionFor` comment asserting this slot WAS shape-checked. Three places
+//   describe this one fact — this bullet, that comment, and those arms — so a
+//   fix corrects all three in one commit.
 // - It does NOT ask the twin. `rendererBinding.rowLaterality` knows a real side
 //   for 52 of 52 table cells, and the recon measured its incremental reach over
 //   a validated read at **0 headers today** — 2 of the 20 blocked are on the

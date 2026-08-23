@@ -67,7 +67,12 @@ too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
 
 
-### 🟡 F24-CAPTION-VALIDATION — **BUILT AND GATED 2026-08-23. NOT MERGED: the independent adversarial pass is OWED.**
+### 🟢 F24-CAPTION-VALIDATION — **BUILT, GATED, AND THE INDEPENDENT ADVERSARIAL PASS IS DISCHARGED 2026-08-23.**
+
+*Previous status:* 🟡 *BUILT AND GATED 2026-08-23. NOT MERGED: the independent
+adversarial pass is OWED.* Run by session 05 of `20260823-071023-b1`, which did
+not author the diff — see the pass's own section below. **One finding, fixed
+here; no clinical-write defect.**
 
 *Previous status:* 🔴 *RECON EXISTS. Read it before building.* The recon
 (`docs/qa-reports/f24-caption-validation-recon-20260821.md`) is unchanged and
@@ -238,34 +243,90 @@ the same lines — it fires at 0 blanks *and* 1 blank, and **fires alone**.
   — the titled-caption miss is the proof they differ. **RETIREMENT CONDITION:
   re-measure when a second template shape certifies end-to-end (F5-i).**
 
-#### ⛔ WHY THIS IS 🟡 AND NOT MERGED
+#### ✅ THE INDEPENDENT ADVERSARIAL PASS — RUN AND DISCHARGED, run `20260823-071023-b1` session 05
 
-**The MANDATORY independent adversarial pass has NOT been run.** This session
-could not spawn the independent instrument, so what ran was the author's own
-refutation — which found and fixed a clinical defect, and which canon is
-explicit cannot substitute: *"an author's proofs are drawn from the same model
-of the problem that produced the defect."* Same posture as F24-S4/#809, which
-session 02 drafted and session 03 discharged. **The PR is opened as a DRAFT.**
+**The instrument was a DIFFERENT SESSION, which is the precedent this branch
+itself cites.** Session 04 authored the diff and correctly declined to be its
+own pass; session 05 opened on it cold, with no memory of writing it. That is
+exactly F24-S4/#809 — *"session 02 drafted and session 03 discharged"* — and it
+satisfies the property canon actually names: *the pass does not share the
+author's context.* It is not a new ruling and does not relax the gate.
 
-**PRE-AIM FOR THE PASS**, so it starts where the risk is:
+**VERDICT: no clinical-write defect. ONE documentation defect, FIXED here.**
 
-1. **The uniformity fence is NEW LOGIC on a clinical write path**, written late
-   in the session. `siblingHeaders` bounds a section by headings in both
-   directions — break that: nested headings, a table as the first line, a
-   heading immediately after a header row, `lines` that is a section body with
-   no heading at all.
-2. ~~**The fence reads `rawCandidate` on siblings, so a sibling's ADJACENT
-   caption satisfies it.**~~ ✅ **ANSWERED BY THE AUTHOR, AND IT WAS A REAL
-   WRONG-LEG WRITE** — see *presence is not discrimination* above; now pinned by
-   two arms. ⚠️ **Assume the replacement clause is wrong in a way I could not
-   see** — in particular the distinct-sides rule on THREE OR MORE tables in one
-   section, a shape production does not hold and no arm exercises.
-3. **`claim-prose` passes the WHOLE NOTE** while `note-table-edit` passes a
-   SECTION BODY. The two therefore see different `lines` arrays and different
-   sibling sets. Do they ever disagree because of that?
-4. The both-sides clause is the only meaning-based one. `rt`/`lt` abbreviations
-   are **not** matched — measured absent corpus-wide (0 of 2,329 lines, matcher
-   positive-controlled) — but that is a population fact.
+⚠️ **THE FINDING — `note-table-edit.ts`'s `captionFor` comment asserted a SAFETY
+PROPERTY THE SHIPPED CODE DOES NOT HAVE.** Introduced by this diff (0
+occurrences on `origin/main`), it read:
+
+> *"the adjacent line is now also shape-checked (strictly narrower — 9 of 9
+> production captions still pass)"*
+
+That is true of the FIRST design, which was withdrawn the same hour, and false
+of the shipped one — `rawCandidate` applies `isCaptionEligible` to the adjacent
+slot, never `isCaptionShaped`. **The file's own header says the opposite at
+length**, so one diff carried two statements that disagree about the same slot,
+and the wrong one was the reassuring one, in the file that performs the
+clinical WRITE.
+
+⚠️ **AND IT MATTERS BECAUSE OF *WHICH* PROPERTY IT CLAIMED.** The shape rule's
+both-sides clause is the one thing that would close the residual this item
+explicitly leaves open. **Measured by driving the shipped functions, not by
+reading them:**
+
+| probe | result |
+|---|---|
+| `captionCandidate([NARRATIVE, …TABLE], 1)` | returns *"The right leg was normal; the left GSV is dilated."* — while `isCaptionShaped` refuses it |
+| `editTableCell(row 'GSV at the SFJ', tableCaption 'right', 6.8)` on a note whose RIGHT table is uncaptioned and whose LEFT table carries the adjacent line `Right and left legs` | **`ok:true`, `before:"6.2"`, `caption:"Right and left legs"`** — the LEFT leg overwritten, the right leg's `5.1` untouched, reported as success |
+
+**This is `main`'s behaviour, unchanged by this item** — not a regression, and
+disclosed in `table-caption.ts` with its production count (0 of 8) and its
+re-arming condition. What was wrong was a comment telling the next reader it
+was closed. **A comment that closes a hole the code leaves open is worse than
+no comment, because the next reader stops looking.**
+
+**A SECOND, SAME-CLASS INSTANCE IN THE GATE FILE'S OWN HEADER**, also new here:
+it described the uniformity fence as *"FILED, NOT BUILT here"* — while the
+fence IS built and IS exercised by the block below it — and named the rule as
+PRESENCE-ONLY, which is the version this branch's own ruling #141(b2) records
+as **refuted, and a regression rather than a residual**. Corrected in place,
+with the struck text preserved.
+
+**FIXED, AND THE RESIDUAL IS NOW EXECUTABLE RATHER THAN PROSE.** Both comments
+corrected; `table-caption.ts`'s disclosure points at the pin; and a new gate
+block, **"⚠️ THE ADJACENT SLOT IS STILL UNVALIDATED"**, drives `editTableCell`
+end to end and asserts the wrong-leg CELL (not the flag — a wrong-leg write
+returns `ok:true` too). ⚠️ **Those two arms are GREEN BECAUSE THE PRODUCT IS
+WRONG THERE, deliberately: they go RED the day somebody closes it, which is the
+signal.** Mutation-proved — restoring the withdrawn design (`isCaptionShaped`
+on the adjacent slot) reddens **both new arms plus the nine capability-loss
+arms**, so the trade is now one executable object instead of three paragraphs.
+
+**THE PRE-AIM, ANSWERED — every item, with a mechanism rather than a shrug:**
+
+1. **`siblingHeaders` — REFUTED as a hazard, and the reason is monotonicity.**
+   Its header set is a strict **SUPERSET** of both callers' own scans:
+   `PIPE_RE` (`^\s*\|`) admits everything `parseMarkdownRow`'s `ROW_RE` does,
+   the rule-row regex is byte-identical to the shared `MARKDOWN_RULE_ROW_RE`,
+   and `claim-prose` narrows further with its `>= 2` cells. **Extra siblings can
+   only add `return null` opportunities**; the only way to lose the fence is
+   `siblings.length === 0`, which needs a MISSING sibling, and the superset
+   relation makes that unreachable. A table at index 0 or 1 gives
+   `adjacent < 0` → null → the fence refuses. Every mis-detection fails closed.
+2. **Three or more tables in one section: ALWAYS REFUSES, by pigeonhole.** Only
+   two side values exist, so a third table's caption necessarily duplicates one
+   already in `seen` → null. The shape production does not hold is also the
+   shape that cannot pass. Fail-closed, and now stated as a property rather
+   than an untested corner.
+3. **The two readers' `lines` differ and their SIBLING SETS CANNOT** —
+   `splice-note-section.ts:68-75`: *"the section runs to the next heading of any
+   level."* A section BODY therefore never contains a heading, so
+   `siblingHeaders`' heading-bounded window spans exactly the whole body, which
+   is exactly the universe `note-table-edit.ts:258-261` scans; and in
+   `claim-prose`'s whole-note view the same headings bound the same set. ⚠️ **A
+   hypothesis recorded because it was REFUTED** — it was the sharpest of the
+   four and the reason the section-boundary code was read at all.
+4. **`rt`/`lt`: unchanged and correctly framed** as a population fact with its
+   matcher positive-controlled. No action.
 
 ---
 

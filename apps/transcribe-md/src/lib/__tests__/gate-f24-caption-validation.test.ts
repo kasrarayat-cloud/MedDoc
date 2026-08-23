@@ -45,12 +45,29 @@
 //   | candidates carrying BOTH laterality tokens            | 0 of 25    |
 //   | candidates carrying sentence punctuation              | 0 of 25    |
 //
-// So the residual is real and currently UNEXERCISED. RE-ARMING CONDITION: one
-// section where a table carries a caption and its sibling does not, with a
-// short unpunctuated single-side line above the wrong one — no code change
-// anywhere. The fence for it is a per-SECTION uniformity rule (accept a
-// one-blank-up caption only when every table in the section has one), which
-// needs cross-table state in both readers and is FILED, NOT BUILT here.
+// ⚠️ AND THE CLAIM ABOVE WAS TESTED, AND IT REPRODUCED — SO THE FENCE IS BUILT.
+// Corrected 2026-08-23. The struck sentence read: *"the fence for it is a
+// per-SECTION uniformity rule (accept a one-blank-up caption only when every
+// table in the section has one), which needs cross-table state in both readers
+// and is FILED, NOT BUILT here."* Both halves became false in the same session:
+//
+//   1. the fence IS built, on the shared module, and is exercised by the
+//      `THE TRAILING-SUMMARY SHAPE` block below — not filed;
+//   2. the rule named there — PRESENCE only — is the one that was tried and
+//      REFUTED. It still wrote the wrong leg, because both tables carried a
+//      caption and the substring narrowing then resolved to the one containing
+//      `right`. `main` REFUSES that input, so shipping it would have been a
+//      REGRESSION rather than a residual.
+//
+// The rule that shipped is stronger: every table in the section captioned,
+// every caption naming exactly ONE side, and no two naming the SAME side.
+//
+// WHAT REMAINS OPEN, and it is a different slot: the ADJACENT line is NOT
+// shape-checked and NOT fenced, exactly as on `main`. A line naming BOTH legs
+// directly above a table still mis-narrows. Production holds 0 of 8 such lines.
+// RE-ARMING CONDITION: one note whose narrative names both legs directly above
+// a table — no code change anywhere. Pinned end-to-end below so the residual
+// stays a measurement rather than a memory.
 // ============================================================================
 
 import { describe, it, expect } from 'vitest';
@@ -605,5 +622,67 @@ describe('F24-CAPTION-VALIDATION — ⚠️ THE TWO READERS ACCEPT THE SAME LINE
       expect(results.filter((r) => r.write)).toHaveLength(0);
       expect(results.filter((r) => r.read)).toHaveLength(0);
     }
+  });
+});
+
+// ============================================================================
+// ⚠️ THE OPEN RESIDUAL, PINNED — the ADJACENT slot, which this item does NOT fix.
+// ----------------------------------------------------------------------------
+// Added by the independent adversarial pass, 2026-08-23, after the same pass
+// found `note-table-edit.ts` asserting in a comment that the adjacent line was
+// shape-checked. It is not, and the difference is a wrong-leg write.
+//
+// ⚠️ THESE TWO ARMS ASSERT A DEFECT, DELIBERATELY. They are green because the
+// product is wrong here, and they are the tripwire for its re-arming
+// condition: production holds 0 of 8 both-leg lines today, and ONE note whose
+// narrative names both legs directly above a table exercises it with no code
+// change anywhere. **When somebody closes this hole these arms go RED — that
+// is the signal, not a failure.** Delete them in the same commit that closes
+// it, and correct `table-caption.ts`'s disclosure and `note-table-edit.ts`'s
+// `captionFor` comment at the same time; all three describe one fact.
+//
+// Behaviour is IDENTICAL on `main`. Nothing here is a regression introduced by
+// F24-CAPTION-VALIDATION — the fence it adds guards the ONE-BLANK-UP slot only.
+// ============================================================================
+describe('F24-CAPTION-VALIDATION — ⚠️ THE ADJACENT SLOT IS STILL UNVALIDATED', () => {
+  it('⚠️ returns a 9-word, punctuated, BOTH-SIDES line that the shape rule refuses', () => {
+    // The two predicates disagree ON PURPOSE, and this is the asymmetry stated
+    // as a measurement rather than as a paragraph.
+    expect(isCaptionShaped(NARRATIVE)).toBe(false);
+    expect(captionCandidate([NARRATIVE, ...TABLE], 1)).toBe(NARRATIVE);
+  });
+
+  it('⚠️ a BOTH-LEGS adjacent line writes a RIGHT-leg correction into the LEFT leg', () => {
+    // The RIGHT table is uncaptioned (a heading sits directly above it), so it
+    // cannot match. The LEFT table carries a line naming BOTH sides, so a
+    // substring match on `right` hits it — and it is the only survivor.
+    const note = [
+      '## FINDINGS',
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 5.1 | 0.3 |', // the RIGHT leg
+      '',
+      'Right and left legs',
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3.4 |', // the LEFT leg
+      '',
+    ].join('\n');
+    const r = editTableCell({
+      note,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'DIAMETER (mm)',
+      value: '6.8',
+      tableCaption: 'right',
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // ⚠️ ASSERT THE CELL, NOT THE FLAG. A wrong-leg write returns ok:true too —
+    // that is the entire reason this class is dangerous.
+    expect(r.before).toBe('6.2'); // 6.2 is the LEFT leg. The right leg holds 5.1.
+    expect(r.caption).toBe('Right and left legs');
+    expect(r.body).toContain('| GSV at the SFJ | 5.1 | 0.3 |'); // right leg UNTOUCHED
+    expect(r.body).toContain('| GSV at the SFJ | 6.8 | 3.4 |'); // left leg overwritten
   });
 });

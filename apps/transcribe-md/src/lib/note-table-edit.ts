@@ -196,11 +196,40 @@ function captionFor(lines: string[], headerIdx: number): string | null {
   // `table-caption.ts`'s header — read it there rather than trusting this
   // sentence, because that is the file a future edit will change.
   //
-  // What changed for THIS caller: the adjacent line is now also shape-checked
-  // (strictly narrower — 9 of 9 production captions still pass), and a caption
-  // one blank line up is returned when it satisfies the shape (new — reaches 16
-  // of the 20 previously-blocked headers). Everything unrecognised still
-  // returns null, which every branch below already handles.
+  // What changed for THIS caller: a caption ONE BLANK LINE UP is returned when
+  // it satisfies the shape AND its section is uniformly captioned (new —
+  // reaches 16 of the 20 previously-blocked headers). Everything unrecognised
+  // still returns null, which every branch below already handles.
+  //
+  // ⚠️ THE ADJACENT SLOT IS NOT SHAPE-CHECKED, AND THIS COMMENT SAID IT WAS.
+  // Corrected by the independent adversarial pass, 2026-08-23. The struck
+  // sentence read: *"the adjacent line is now also shape-checked (strictly
+  // narrower — 9 of 9 production captions still pass)"*. That was true of the
+  // FIRST design and false of the shipped one — applying the shape rule to the
+  // adjacent slot removed the 7-word TITLED caption the product supports, so it
+  // was withdrawn the same hour, and the asymmetry became the argument.
+  //
+  // ⚠️ IT MATTERED BECAUSE OF *WHICH* PROPERTY IT CLAIMED. The shape rule's
+  // both-sides clause is the one that stops a line naming BOTH legs from
+  // narrowing a substring match to whichever table it happens to hit. A reader
+  // who believed this sentence would believe that hole is closed. It is not —
+  // measured by driving this very function:
+  //
+  //     captionCandidate(['The right leg was normal; the left GSV is
+  //                        dilated.', ...TABLE], 1)
+  //       -> returns the sentence   (isCaptionShaped refuses it)
+  //
+  //     editTableCell(row 'GSV at the SFJ', tableCaption 'right', 6.8) on a
+  //     note whose RIGHT table is uncaptioned and whose LEFT table carries the
+  //     adjacent line `Right and left legs`
+  //       -> ok:true, before:"6.2"  <- THE LEFT LEG, reported as success
+  //
+  // That is `main`'s behaviour too, unchanged by this item and disclosed in
+  // `table-caption.ts` with its production count (0 of 8) and its re-arming
+  // condition. It is pinned end-to-end by the gate so it cannot decay from a
+  // named residual into an assumption. **A comment that closes a hole the code
+  // leaves open is worse than no comment**, because the next reader stops
+  // looking.
   return captionCandidate(lines, headerIdx);
 }
 
