@@ -48,6 +48,7 @@ import { describe, expect, it } from 'vitest';
 import { compileTemplateDocx } from '@/lib/note-template-docx';
 
 import { editTableCell } from '../../note-table-edit';
+import { readNoteSection } from '../../splice-note-section';
 import { renderStructureDirective } from '../../../worker/note-templates/build-soap-prompt';
 import type { TemplateDocIR, TemplateField } from '../ir';
 
@@ -133,9 +134,30 @@ function irRows(): { rowIndex: number; vein: string; laterality: string }[] {
  * measuring a caption route against a note that has no captions would OVER-state
  * the gap exactly as the single-shape draft UNDER-stated it.
  *
- * ⚠️ WHICH SHAPE PRODUCTION ACTUALLY HOLDS IS NOT ESTABLISHED HERE. That needs
- * a query against this template's real `transcribe_visits.soapFinal` rows, and
- * it is named in the ledger as the next measurement rather than guessed at.
+ * ⚠️ WHICH SHAPE PRODUCTION HOLDS — MEASURED 2026-08-23, NO LONGER OPEN. This
+ * comment used to say it was unestablished and name it as the next
+ * measurement. It was taken against this template's real
+ * `transcribe_visits.soapFinal` rows:
+ *
+ *   certified template `cmsxip5f9000901nadsggo2l1` — 3 production visits, all
+ *   3 carrying tables. 6 table headers across them:
+ *
+ *     blank above 2 · heading 0 · pipe 0 · prose 4        (reconciles to 6)
+ *
+ *   and the split is per-VISIT, not per-leg: two visits are prose-above on
+ *   BOTH legs, one is blank-above on both. So no visit is half-addressable,
+ *   which is the arrangement that would have been worst.
+ *
+ *   The four prose lines are REAL CAPTIONS rather than narrative — 9 and 10
+ *   characters, exactly one laterality token each, alternating right then left
+ *   in both visits. That was checked because `captionFor` cannot tell a caption
+ *   from a paragraph, and a narrative line accepted as a caption is the
+ *   wrong-leg write of Slice 1b.
+ *
+ * So `captioned-adjacent` is the shape 2 of 3 production visits hold, and
+ * `captioned-blank-line` is the third. The ordinal work below is worth 12 cells
+ * on the first two and NOTHING on the third, which is F24-CAPTION-VALIDATION's
+ * to close and not this item's.
  */
 interface NoteShape {
   name: string;
@@ -265,6 +287,69 @@ describe('F24-S3 census — the universe is pinned by content', () => {
 describe('F24-S3 census — replay, over every candidate note shape', () => {
   const rowsOfIr = irRows();
 
+  /**
+   * THE TWIN'S ORDINAL — F24-S4. Among the rows the twin knows share a leg AND
+   * a vein label, this row's 1-based position by `rowIndex` ascending.
+   *
+   * ⚠️ THIS IS THE CLAIM THE CENSUS NOW ASSERTS RATHER THAN ASSUMES: that the
+   * twin's order (IR `rowIndex`) is the order the editor's candidates come out
+   * in (note line order). If those two ever disagree, an ordinal writes a real
+   * neighbouring measurement into the wrong row and reports success — so the
+   * replay below verifies WHICH LINE MOVED, not merely that something did.
+   */
+  function twinRowOrdinal(f: TemplateField): number | undefined {
+    const row = rowsOfIr.find((r) => r.rowIndex === f.rendererBinding.rowIndex);
+    if (!row) return undefined;
+    const siblings = rowsOfIr
+      .filter((r) => r.laterality === row.laterality && r.vein === row.vein)
+      .sort((a, b) => a.rowIndex - b.rowIndex);
+    // Unambiguous rows are addressed without one, exactly as before — so an
+    // ordinal appearing here can only ever be closing a duplicate-label gap.
+    if (siblings.length < 2) return undefined;
+    return siblings.findIndex((r) => r.rowIndex === row.rowIndex) + 1;
+  }
+
+  /**
+   * WHICH LINE MOVED, and where it sits among its identical-label neighbours.
+   *
+   * ⚠️ THE CENSUS'S EXISTING `resolved_wrong_row` CHECK IS VACUOUS ON EXACTLY
+   * THE ROWS F24-S4 MAKES WRITABLE. It compares `res.row` — the row's LABEL —
+   * against the label that was requested, and all three tributary candidates
+   * carry one identical label by design. It therefore holds no matter which of
+   * the three was written, so an off-by-one would have been recorded as
+   * `addressable`. Verification here is positional and content-based instead.
+   */
+  function changedRowOrdinal(
+    before: string,
+    after: string,
+  ): { nth: number; table: number } | 'not_one_line' {
+    const b = before.split('\n');
+    const a = after.split('\n');
+    if (b.length !== a.length) return 'not_one_line';
+    const moved = b.map((_, i) => i).filter((i) => b[i] !== a[i]);
+    if (moved.length !== 1) return 'not_one_line';
+    const idx = moved[0];
+    const label = (l: string) => l.split('|')[1]?.trim() ?? '';
+    // The table this line belongs to: everything back to the nearest header.
+    let start = 0;
+    for (let i = idx; i >= 0; i -= 1) {
+      if (!b[i].trim().startsWith('|')) {
+        start = i + 1;
+        break;
+      }
+    }
+    let nth = 0;
+    for (let i = start; i <= idx; i += 1) {
+      if (b[i].trim().startsWith('|') && label(b[i]) === label(b[idx])) nth += 1;
+    }
+    // ⚠️ AND WHICH TABLE, NOT ONLY WHICH POSITION WITHIN IT. Position alone is
+    // the same vacuity one level down: the 2nd tributary of the RIGHT leg and
+    // the 2nd of the LEFT both answer `nth === 2`, so a cross-leg write would
+    // have been recorded as `addressable`. `start` is the table's first line,
+    // so it identifies the table.
+    return { nth, table: start };
+  }
+
   function replay(f: TemplateField, shape: NoteShape, useTwin: boolean): string {
     // ⚠️ A CLASSIFICATION, NOT A REPLAY — see the file header. A content
     // control never reaches the editor because no intent addresses one.
@@ -274,6 +359,10 @@ describe('F24-S3 census — replay, over every candidate note shape', () => {
     const columnLabel = f.labelSource === 'table_header' ? f.originalLabel : NOTE_COLUMNS[0];
     const rowLabel = useTwin ? shape.twinRowLabel(row.vein, row.laterality) : row.vein;
     const caption = useTwin ? shape.twinCaption(row.laterality) : undefined;
+    // F24-S4: the twin supplies the ordinal, and ONLY where the label alone is
+    // genuinely ambiguous. The bare-label reading never gets one — that column
+    // is the floor this item is measured against.
+    const ordinal = useTwin ? twinRowOrdinal(f) : undefined;
     const res = editTableCell({
       note: shape.note,
       sectionLabel: 'FINDINGS',
@@ -281,6 +370,7 @@ describe('F24-S3 census — replay, over every candidate note shape', () => {
       columnLabel,
       value: '9.9',
       ...(caption ? { tableCaption: caption } : {}),
+      ...(ordinal !== undefined ? { rowOrdinal: ordinal } : {}),
     });
     if (!res.ok) return res.reason ?? 'unknown';
 
@@ -294,6 +384,40 @@ describe('F24-S3 census — replay, over every candidate note shape', () => {
     // `norm` here would be the F12-g failure.
     if (res.column?.trim() !== columnLabel.trim()) return 'resolved_wrong_column';
     if (res.row?.trim() !== rowLabel.trim()) return 'resolved_wrong_row';
+    // ⚠️ AND THE LABEL CHECK ABOVE CANNOT SEE AN OFF-BY-ONE AMONG IDENTICAL
+    // LABELS — see `changedRowOrdinal`. Where the twin supplied an ordinal, the
+    // line that actually moved must be the one it named. This is what turns
+    // "the twin's order matches the note's order" from an assumption into an
+    // assertion; if they ever diverge, these 12 land here and not in
+    // `addressable`.
+    if (ordinal !== undefined) {
+      // ⚠️ AGAINST THE SECTION, NOT THE NOTE. `editTableCell` returns the
+      // SECTION body — `readNoteSection`'s output with one line spliced — so
+      // diffing it against the whole note compares two different universes and
+      // every row reads as "more than one line moved". Driving the real reader
+      // rather than slicing the note by hand, per canon's predicate-fidelity
+      // rule.
+      const section = readNoteSection(shape.note, 'FINDINGS') ?? '';
+      const moved = changedRowOrdinal(section, res.body ?? '');
+      if (moved === 'not_one_line') return 'wrote_more_than_one_line';
+      if (moved.nth !== ordinal) return 'resolved_wrong_duplicate_row';
+      // The row must sit in the table the twin's own laterality names.
+      const wantLeg = row.laterality === 'right' ? 0 : 1;
+      const tableStarts = [
+        ...new Set(
+          section
+            .split('\n')
+            .map((l, i) => (l.trim().startsWith('|') ? i : -1))
+            .filter((i) => i >= 0)
+            .filter((i, _j, all) => !all.includes(i - 1)),
+        ),
+      ];
+      // One-table shapes carry both legs in one grid; there the leg lives in
+      // the row LABEL and is already checked by `resolved_wrong_row` above.
+      if (tableStarts.length > 1 && moved.table !== tableStarts[wantLeg]) {
+        return 'resolved_wrong_leg';
+      }
+    }
     return 'addressable';
   }
 
@@ -345,6 +469,27 @@ describe('F24-S3 census — replay, over every candidate note shape', () => {
       expect([...bare.values()].reduce((a, b) => a + b, 0)).toBe(80);
       expect([...twin.values()].reduce((a, b) => a + b, 0)).toBe(80);
 
+      // ⚠️ A WRONG WRITE IS NEVER A CENSUS RESULT — IT IS A FAILURE, IN EVERY
+      // CELL OF THE MATRIX. This assertion exists because the first version of
+      // this file REPORTED `resolved_wrong_leg 6` and still passed: the ratchet
+      // only reads the best shape, so a clinical defect on a worse shape was
+      // printed and tolerated. A gate that names a wrong-leg write in its own
+      // output and goes green is a decoration.
+      //
+      // These three buckets are the ones that mean "the editor wrote, and wrote
+      // somewhere other than where it was told". Unlike a refusal, none of them
+      // is ever an acceptable steady state.
+      for (const bad of [
+        'resolved_wrong_leg',
+        'resolved_wrong_duplicate_row',
+        'resolved_wrong_row',
+        'resolved_wrong_column',
+        'wrote_more_than_one_line',
+      ]) {
+        expect(twin.get(bad) ?? 0, `${shape.name}: ${bad}`).toBe(0);
+        expect(bare.get(bad) ?? 0, `${shape.name} (bare): ${bad}`).toBe(0);
+      }
+
       // The 28 are definitional in every cell of the matrix.
       expect(bare.get('no_editor_intent')).toBe(28);
       expect(twin.get('no_editor_intent')).toBe(28);
@@ -368,8 +513,22 @@ describe('F24-S3 census — replay, over every candidate note shape', () => {
     //
     // A RATCHET, not a pin: the BEST shape may not regress. A gate that goes red
     // when the thing it guards starts working is a gate nobody keeps.
+    // ⚠️ RAISED 40 -> 52 BY F24-S4, WHICH IS THE POINT OF A RATCHET. The twin
+    // now supplies an ordinal for the duplicate-label rows, so every one of the
+    // 52 table-bound cells is addressable on both reachable shapes. Leaving the
+    // floor at 40 would have let the whole closure regress unnoticed — a gate
+    // that does not move when the fix lands is a decoration.
     const bestAny = Math.max(...best.values());
-    expect(bestAny, 'best-case addressability REGRESSED').toBeGreaterThanOrEqual(40);
+    expect(bestAny, 'best-case addressability REGRESSED').toBeGreaterThanOrEqual(52);
+
+    // ⚠️ AND THE TABLE-BOUND HALF IS NOW COMPLETE, ASSERTED SEPARATELY FROM THE
+    // TOTAL. `bestAny` alone cannot distinguish "all 52 table cells work" from
+    // "40 table cells and 12 content controls somehow counted", so the thing
+    // this item actually closed is pinned in its own right.
+    expect(
+      best.get('captioned-adjacent'),
+      'the duplicate-label rows regressed on the shape production mostly holds',
+    ).toBe(52);
 
     // ⚠️ AND THE ACCEPTANCE IS NOT MET ON ANY SHAPE. RELAY asks for ZERO gaps.
     // Asserted rather than commented, so the day it is met this line fails and

@@ -330,6 +330,35 @@ export function editTableCell(params: {
   if (params.rowOrdinal !== undefined) {
     const n = params.rowOrdinal;
     if (!Number.isInteger(n) || n < 1) return { ok: false, reason: 'row_ordinal_invalid' };
+    // ⚠️ AN ORDINAL SAYS WHICH ROW. IT NEVER SAYS WHICH TABLE — AND APPLYING IT
+    // ACROSS TABLES IS A WRONG-LEG WRITE. Found by this change's own census arm,
+    // on the `captioned-blank-line` shape: `captionFor` reads the adjacent line
+    // only, so a caption above a blank line narrows NOTHING, all six candidates
+    // survive, and a twin ordinal of 1..3 — which counts within ONE leg —
+    // selects from whichever leg happens to come first in the note. A LEFT-leg
+    // correction then lands in the RIGHT leg and is reported as success, which
+    // is precisely the defect Slice 1b removed, re-introduced through a new
+    // door.
+    //
+    // So the ordinal is refused unless the candidates have already been reduced
+    // to a single table. The caller is told the TABLE is still ambiguous, which
+    // is the thing they actually have to supply, rather than being silently
+    // served a row from the wrong one.
+    const tables = new Set(matches.map((m) => m.header));
+    if (tables.size > 1) {
+      const captions = matches.map((m) => m.caption);
+      const key = (c: string | null) =>
+        c === null ? NO_CAPTION : c.trim().toLowerCase().replace(/\s+/g, ' ');
+      return new Set(captions.map(key)).size === 1
+        ? { ok: false, reason: 'caption_not_found' }
+        : {
+            ok: false,
+            reason: 'row_ambiguous',
+            choices: captions
+              .filter((c): c is string => c !== null)
+              .filter((c, i, all) => all.findIndex((o) => key(o) === key(c)) === i),
+          };
+    }
     // ⚠️ `> matches.length` AND NOT `>=`. Asking for the 1st of 1 is a
     // legitimate, fully-specified request — it is how a caller that always
     // supplies an ordinal addresses an unambiguous row — and refusing it would

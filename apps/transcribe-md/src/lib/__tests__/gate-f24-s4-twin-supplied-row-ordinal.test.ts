@@ -131,10 +131,31 @@ describe('F24-S4 — the ordinal selects the row, verified by CONTENT', () => {
     expect(diameters(res.body!)).toEqual(['1.1', '2.2', '3.3', '4.4', '8.8', '9.9']);
   });
 
-  it('with NO caption the ordinal counts across all six, in note order', () => {
-    const res = editTableCell({ ...base, value: '4.4', rowOrdinal: 5 });
-    expect(res.ok).toBe(true);
-    expect(res.before).toBe('8.8');
+  // ⚠️ THE ARM THAT CHANGED, AND IT CHANGED BECAUSE IT WAS WRONG. Its first
+  // draft asserted `ok: true, before: '8.8'` — the ordinal counting across BOTH
+  // legs in note order. That is a cross-leg write: the twin's ordinal counts
+  // within ONE leg (1..3), so an unnarrowed 6-candidate set makes a LEFT-leg
+  // field's ordinal 2 land on the RIGHT leg's second tributary, silently, and
+  // report success. Found by the census arm added in the same change.
+  //
+  // An ordinal says WHICH ROW. It never says WHICH TABLE.
+  it('with NO caption the ordinal REFUSES rather than crossing legs', () => {
+    const res = editTableCell({ ...base, value: '4.4', rowOrdinal: 2 });
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('row_ambiguous');
+    expect(res.body).toBeUndefined();
+    // And it asks for the thing that would actually resolve it.
+    expect(res.choices).toEqual(['Right Leg', 'Left Leg']);
+  });
+
+  it('an ordinal cannot reach the far leg even when in range there', () => {
+    // 6 candidates exist; without a caption none of ordinals 1-6 may write.
+    for (const n of [1, 2, 3, 4, 5, 6]) {
+      const res = editTableCell({ ...base, value: '4.4', rowOrdinal: n });
+      expect(res.ok, `ordinal ${n} wrote without a table`).toBe(false);
+    }
+    // The note is untouched by all six attempts.
+    expect(diameters(NOTE)).toEqual(['1.1', '2.2', '3.3', '7.7', '8.8', '9.9']);
   });
 
   it('ordinal 1 of 1 is legitimate — an unambiguous row stays addressable', () => {
@@ -274,6 +295,13 @@ describe('F24-S4 — the ordinal does not widen anything else', () => {
     expect(res.reason).toBe('illegal_value');
   });
 
+  // ⚠️ THIS ARM'S NAME WAS RIGHT AND ITS ASSERTION WAS WRONG, WHICH IS THE
+  // CHEAPEST POSSIBLE TELL AND I NEARLY SHIPPED PAST IT. It has always been
+  // called "still refuses rather than ordinal-ing blind"; its first draft then
+  // asserted `ok: true, before: '1.1'` — ordinal-ing blind. An unrecognised
+  // caption narrows to zero, which is deliberately NOT a narrowing, so all six
+  // candidates survive and the ordinal must refuse for the same reason as the
+  // no-caption case.
   it('a caption that matches nothing still refuses rather than ordinal-ing blind', () => {
     const res = editTableCell({
       ...base,
@@ -281,9 +309,8 @@ describe('F24-S4 — the ordinal does not widen anything else', () => {
       tableCaption: 'Third Leg',
       rowOrdinal: 1,
     });
-    // The caption narrowed to zero, which is NOT a narrowing, so all six
-    // candidates remain and ordinal 1 is the first of them.
-    expect(res.ok).toBe(true);
-    expect(res.before).toBe('1.1');
+    expect(res.ok).toBe(false);
+    expect(res.reason).toBe('row_ambiguous');
+    expect(res.body).toBeUndefined();
   });
 });
