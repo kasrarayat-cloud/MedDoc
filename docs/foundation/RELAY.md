@@ -67,12 +67,26 @@ too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
 
 
-### 🟢 F24-CAPTION-VALIDATION — **BUILT, GATED, AND THE INDEPENDENT ADVERSARIAL PASS IS DISCHARGED 2026-08-23.**
+### 🟢 F24-CAPTION-VALIDATION — **MERGED AND CITED 2026-08-23.** `0b5863f4`
+
+**Citation — 4 of 4 on `0b5863f4fbba05f6958c367b5432a8ca32e7f668`**, produced by
+`scripts/check-citation.sh`, never typed:
+
+   · `CI` 32654276562 a1
+   · `e2e` 32654276540 a1
+   · `a11y-ci` 32654276539 a1
+   · `secrets-scan` 32654276548 a1
+
+PR **#812** (`1e4e9807`, itself 4 of 4). Branch retired both sides.
 
 *Previous status:* 🟡 *BUILT AND GATED 2026-08-23. NOT MERGED: the independent
-adversarial pass is OWED.* Run by session 05 of `20260823-071023-b1`, which did
-not author the diff — see the pass's own section below. **One finding, fixed
-here; no clinical-write defect.**
+adversarial pass is OWED.* The pass was run by **session 05 of
+`20260823-071023-b1`**, which did not author the diff — see its own section
+below. **One finding, fixed before merge; no clinical-write defect.**
+
+⚠️ **NOT DEPLOYED. This is a note-EDITING surface change and the deploy is a
+supervised act** — the same posture F24-S4 is in. `main` now carries it; nothing
+in production does.
 
 *Previous status:* 🔴 *RECON EXISTS. Read it before building.* The recon
 (`docs/qa-reports/f24-caption-validation-recon-20260821.md`) is unchanged and
