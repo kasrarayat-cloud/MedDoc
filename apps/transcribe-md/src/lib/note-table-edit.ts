@@ -356,7 +356,12 @@ export function editTableCell(params: {
   // label cell. Measured on production 2026-08-21, over every data row under a
   // detected header:
   //
-  //     delta = +1 : 339 rows      delta = 0 : 331 rows      delta OTHER : 0
+  //     delta = +1 : 237 rows      delta = 0 : 204 rows      delta OTHER : 0
+  //
+  // ⚠️ CORRECTED 2026-08-23 — this line read `339 / 331 / 0`. The original
+  // join had no upper bound on the data row, so each header collected rows
+  // from later tables in the same note. `delta OTHER : 0` — the fact that
+  // licenses this widen — is unchanged under the corrected measurement.
   //
   // THE UNIVERSE IS CLOSED. There is no delta of +2, and none of -1. So the
   // only ragged shape that exists is the one whose missing cell is the label
@@ -409,7 +414,7 @@ export function editTableCell(params: {
   // `ragged_table` test feared, arriving through the fix for it.
   //
   // ⚠️ AND THE PRODUCTION CENSUS COULD NOT HAVE CAUGHT IT: it measured DELTA
-  // (+1 -> 339, 0 -> 331, other -> 0), and delta is invariant under which end
+  // (+1 -> 237, 0 -> 204, other -> 0), and delta is invariant under which end
   // is short. An observation that cannot come out the other way is not
   // evidence for the thing it was cited for.
   //

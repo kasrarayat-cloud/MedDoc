@@ -211,7 +211,7 @@ describe('editTableCell', () => {
   //
   // WHAT WAS PROTECTED WAS THE REFUSAL OF GENUINE AMBIGUITY, NOT THIS FIXTURE.
   // Measured on production 2026-08-21 over every data row under a detected
-  // header: delta +1 -> 339 rows, delta 0 -> 331, delta ANYTHING ELSE -> 0.
+  // header: delta +1 -> 237 rows, delta 0 -> 204, delta ANYTHING ELSE -> 0.
   // The universe is closed, so a +1 header is missing its LABEL column and
   // nothing else; and the missing cell is provably LEADING because a row is
   // selected only when `norm(c[0]) === wantRow`.
@@ -227,7 +227,7 @@ describe('editTableCell', () => {
         value: '9.9',
       });
 
-    // (a) THE UNAMBIGUOUS +1 — the owner's 339 production rows.
+    // (a) THE UNAMBIGUOUS +1 — the owner's 237 production rows.
     it('normalises the +1 shape AND writes the CORRECT cell, both columns', () => {
       // ⚠️ ASSERT THE CELL, NOT MERELY SUCCESS. The old test's fear was a write
       // landing one column left; `ok === true` cannot see that, and a fix that
