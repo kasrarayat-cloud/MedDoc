@@ -316,7 +316,18 @@ export function renderStructureDirective(
     // that label, so this skeleton instructs L4 to "reproduce exactly" a grid
     // whose header is one cell narrower than its rows. L4 obeys.
     //
-    // Measured on production 2026-08-21: **339 of 670** data rows sit under a
+    // ⚠️ CORRECTED 2026-08-23. This comment said **339 of 670**, and both
+    // numbers were wrong: the join that produced them had NO UPPER BOUND on the
+    // data row, so each header collected every pipe row after its separator
+    // anywhere in the NOTE — on a bilateral study, table 1's header also
+    // counted table 2's rows. Re-measured bounded to each header's own table:
+    // **237 of 441**, delta 0 -> 204, delta OTHER -> 0.
+    //
+    // The CONCLUSION is unchanged — the ragged shape is still the majority, and
+    // `other -> 0` still holds, which is what licenses the widen. The magnitude
+    // was inflated ~52%. A number I measured myself and believed.
+    //
+    // Measured on production: **237 of 441** data rows sit under a
     // 2-cell header over 3-cell rows. `note-table-edit.ts:197` refuses every
     // one with `ragged_table` — CORRECTLY, because column resolution indexes
     // the header and writes the row at the SAME index, so a mismatched grid

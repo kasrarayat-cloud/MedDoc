@@ -15,7 +15,7 @@ import { flattenTables } from '@/lib/ehr-formatters';
  * obeyed.
  *
  * Measured on production 2026-08-21, over every data row under a detected
- * header: 339 rows at delta +1, 331 at delta 0, ZERO at any other delta.
+ * header: 237 rows at delta +1, 331 at delta 0, ZERO at any other delta.
  * `note-table-edit.ts:197` refuses every one of the 339 with `ragged_table` —
  * correctly, because column resolution indexes the header and writes the row at
  * the same index.

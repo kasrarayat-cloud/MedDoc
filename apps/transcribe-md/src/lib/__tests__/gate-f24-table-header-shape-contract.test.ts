@@ -452,7 +452,7 @@ describe('generator -> editor: the emitted grid is never ragged', () => {
 // the arm's result is PREDETERMINED by the generator's fix rather than by the
 // editor's health.
 //
-// The widen is LEGACY-ONLY code. Its population is the 339 of 670 production
+// The widen is LEGACY-ONLY code. Its population is the 237 of 441 production
 // data rows F24 Slice 1 measured — notes written BEFORE the generator fix,
 // carrying a header one cell narrower than their rows. That shape is the only
 // input that exercises the editor's half of the shared predicate, so it is the
