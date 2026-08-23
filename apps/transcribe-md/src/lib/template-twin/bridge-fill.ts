@@ -17,6 +17,7 @@
 // ============================================================================
 
 import { parseMarkdownRow } from '@/lib/markdown-row';
+import { classifyHeaderCell } from '@/lib/table-header-shape';
 import {
   FieldResolutionSchema,
   type FieldResolution,
@@ -38,7 +39,15 @@ interface ParsedMarkdownRow {
 }
 
 interface ParsedMarkdownTable {
-  /** Header cells (column 0 is the row-label column). */
+  /** Header cells, exactly as the note carries them.
+   *
+   *  ⚠️ THIS COMMENT USED TO READ "column 0 is the row-label column", AND THAT
+   *  IS THE ONE THING THE HEADER DOES NOT GUARANTEE. It is the whole reason
+   *  `labelColumnOffset` exists forty lines below: a note's header carries a
+   *  label cell in one shape and not in the other, and which one you are
+   *  holding is the question ruling #140 governs. A field comment asserting
+   *  the answer is a `DEPLOYMENT_RUNBOOK §5.6` in miniature — an intended
+   *  state written in the present tense, read as a description. */
   header: string[];
   rows: ParsedMarkdownRow[];
 }
@@ -422,7 +431,53 @@ export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): Fi
     // Detect it from the header's own first column: if that column already
     // classifies as DATA, the header has no label column and every data cell
     // sits one to the right.
-    const labelColumnOffset = roleByCol[0] === 'other' || roleByCol.length === 0 ? 0 : 1;
+    //
+    // ⚠️ RULING #140 — THIS WAS THE **THIRD** SITE DECIDING THAT QUESTION, WITH
+    // ITS OWN VOCABULARY, AND THE DRIFT HAD WIDENED FROM TWO ANSWERS TO THREE.
+    // `classifyHeader` below is a COLUMN-ROLE classifier (diameter / reflux /
+    // other) and it is exactly right for that job — which is why it keeps it.
+    // It was ALSO being asked "does this header carry a label column?", a
+    // different question, and it answered with `!== 'other'`. On `Vein Size`
+    // the three sites said:
+    //
+    //     isDataColumnHeader   -> true         "no label column"   (generator)
+    //     classifyHeaderCell   -> cannot_tell  "REFUSE"            (editor)
+    //     classifyHeader       -> other        "has a label column" (HERE)
+    //
+    // Three answers to one question, and the fill path held the outlier. It
+    // diverged in BOTH directions and neither is benign, because this offset
+    // decides WHICH NOTE CELL a measurement is read out of:
+    //
+    //     | VELOCITY (cm/s) | DIAMETER (mm) |   role 'other' -> offset 0
+    //     | GSV at the SFJ | 12 | 6.2 |         diameterCol 1 -> reads "12"
+    //       -> the VELOCITY is written into the DIAMETER field of the
+    //          doctor's own form. The evidence matcher refuses most of these
+    //          on concept — but "refused by the layer behind it" is a second
+    //          line of defence, never the reason a shape is safe.
+    //
+    // ⚠️ AND THE ROW LABEL IS PROVEN, NOT GUESSED, WHICH IS WHAT MAKES THE
+    // PREDICATE SUFFICIENT HERE. `place` is only ever reached for a row whose
+    // cell 0 already matched an IR vein name (`veinMatches`, below). So cell 0
+    // IS the label. The only open question is whether the HEADER names that
+    // column too — `label` -> it does, offset 0; `data` -> it does not, offset
+    // 1. DELTA IS DELIBERATELY NOT CONSULTED: canon's "double tap" records that
+    // a header short at the FRONT and one short at the BACK are both +1, so a
+    // delta cannot answer a question about WHICH END.
+    //
+    // `cannot_tell` is #140's refusal bucket and it REFUSES here, skipping the
+    // candidate table rather than guessing an offset. Logged, and logged
+    // DISTINCTLY: a bucket that absorbs a refusal and an absence cannot answer
+    // "did my change break this?", which is the one question it will be asked.
+    const headerShape = md.header.length === 0 ? 'cannot_tell' : classifyHeaderCell(md.header[0]);
+    if (headerShape === 'cannot_tell') {
+      console.info('[twin-fill] candidate table SKIPPED — label_column_unresolved', {
+        headerCell0: md.header[0] ?? '(empty header)',
+        headerCells: md.header.length,
+        rows: md.rows.length,
+      });
+      continue;
+    }
+    const labelColumnOffset = headerShape === 'data' ? 1 : 0;
 
     // ROW PAIRING. WM_IOV is a single 26-row grid; L4 renders it as two 13-row
     // tables (Right Leg, Left Leg) — but it can also render one combined table,
