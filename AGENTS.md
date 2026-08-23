@@ -2145,6 +2145,62 @@ the first the day either is fixed.
   `git ls-files -s scripts/hooks/`. Full trap in §"A scripted edit PROVES ITS OWN
   APPLICATION" — it is that class, not a hook-specific quirk.
 
+### ⚠️ AND THERE IS A THIRD DOOR: `gh pr ready` FIRES WORKFLOW TRIGGERS
+
+**Standing 2026-08-23. Found by the loop, on its own PR, one minute after
+performing the two-view check correctly.**
+
+Both mechanized doors are guarded at the point a **COMMIT** moves.
+
+> **`gh pr ready` lands no commit and cancels runs anyway.** Converting a draft
+> emits a `ready_for_review` event; any workflow listening for it starts a NEW
+> run on the same ref, and `cancel-in-progress` resolves that by killing the one
+> already running.
+
+**MEASURED ON PR #812.** The push of `1e4e9807` was preceded by both views, both
+empty, nothing destroyed. `gh pr ready` ran ~1 minute later:
+
+| run | fate |
+|---|---|
+| `a11y-ci` `32652002368` (push-triggered) | **cancelled at ~1 min** |
+| `a11y-ci` `32652059194` (ready-triggered) | started, later `success` |
+
+⚠️ **THE TELL WAS ARITHMETIC, AND IT IS THE ONLY REASON IT WAS NOTICED:** the
+branch view showed **five runs for four workflows**, `a11y-ci` twice. *ARITHMETIC
+THAT DOES NOT RECONCILE IS A FINDING* caught a cancellation no rule was watching
+for.
+
+**WHY IT ESCAPES THE EXISTING GUARDS, and this is the generalisable half:**
+`gh pr ready` reads as a **metadata flag** — it flips a boolean on the PR — so
+nothing about it suggests *this is a push*. It is not denied, not hooked, and
+was not mentioned anywhere.
+
+> **ANY API CALL THAT EMITS AN EVENT A WORKFLOW SUBSCRIBES TO IS A PUSH FOR
+> CANCELLATION PURPOSES** — `pr ready`, `pr reopen`, a label add where a
+> workflow keys on `labeled`, a base-branch change.
+
+**AND THE SUBSCRIBER LIST IS MEASURED, NOT ASSUMED** — which is also why exactly
+ONE workflow moved rather than four:
+
+    grep -n "ready_for_review" .github/workflows/*.yml
+    -> a11y.yml:26   types: [opened, synchronize, reopened, ready_for_review]
+
+**`a11y.yml` is the only subscriber today, and it also takes `reopened`** — so
+`gh pr reopen` is a live second instance of this door right now, not a
+hypothetical one. ⚠️ **POPULATION FACT WITH ITS RE-ARMING CONDITION:** one
+workflow adding `ready_for_review`, `reopened` or `labeled` to its `on:` list
+widens the blast radius from one run to N **with no change to any rule, script
+or habit** — so that grep is the check, and it is one line.
+
+**THE CHEAP HABIT: convert to ready BEFORE the push that carries the citation**,
+or accept the cancellation knowingly and say so. Here the cost was ~1 minute of
+one workflow and the fresh run superseded it, so the citation was still 4 of 4 —
+⚠️ **but the cost is set by HOW LATE the event lands, exactly as the push-side
+entry says, and the identical action at minute forty discards a 40-minute
+`a11y-ci` with nothing flagging it.** Do not read the cheap instance as evidence
+the class is cheap; that sentence is already in the push-side entry, and this is
+its next costume.
+
 ## A MERGE IS A PUSH — WAIT FOR THE MERGE COMMIT, OR DECLARE THE BATCH IN ADVANCE
 
 **Ratified 2026-08-10, and it supersedes "batch and declare at merge time".**
