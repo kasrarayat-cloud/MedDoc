@@ -903,6 +903,140 @@ and where it can diverge. **A corrected number then carries its own
 reproduction**, so the next reader inherits the mechanism instead of a second
 figure to distrust.
 
+## A MEASUREMENT OF TODAY'S CORPUS IS A FACT ABOUT THE POPULATION, NOT A PROPERTY OF THE CODE
+
+**Standing 2026-08-23.**
+
+> **State which one your claim is — and if it is a population fact, state what
+> RE-ARMS the path.**
+
+A census over production is the strongest evidence this programme produces, and
+it answers *"is this happening?"* — never *"can this happen?"* The two get
+conflated because a clean zero feels like a guarantee, and a guarantee is what
+everybody wants from it.
+
+⚠️ **REFERENCE CASE — F24's caption validation.** `captionFor` performs no
+validation: it returns whatever prose sits above a table, and a line naming BOTH
+legs mis-narrows a bilateral edit into the wrong leg. Measured on production:
+
+| of the 8 accepted captions | count |
+|---|---|
+| contain a laterality token | **8 of 8** |
+| contain **BOTH** tokens — the shape that mis-narrows | **0 of 8** |
+
+**So the wrong-leg path is real and currently UNEXERCISED.** Both halves are
+load-bearing. Reporting only the zero would say the defect is gone; reporting
+only the defect would say a doctor is being harmed today. Neither is true.
+
+**The re-arming condition is the part that makes it actionable:** one note whose
+narrative names both legs directly above a table, with **no code change
+anywhere**. Written down, that is a tripwire somebody can watch. Left unwritten,
+the zero silently becomes "fixed" — the same decay that turned *"latent, not the
+outage"* into a six-hour outage sixty-five days later.
+
+**The practice:** every population figure carries its re-arming condition in the
+same sentence. If you cannot name what would re-arm it, you have not established
+that it is a population fact rather than a property — which is itself the
+finding.
+
+## RECORD A HYPOTHESIS *BECAUSE* IT WAS REFUTED
+
+**Standing 2026-08-23. The companion to the entry above, and the reason that
+measurement was taken at all.**
+
+The programme records defects it found. It has been recording almost nothing
+about the suspicions that turned out to be **wrong** — and those are evidence,
+because the next session will form the same suspicion from the same partition
+and pay for it again.
+
+⚠️ **REFERENCE CASE, SAME MEASUREMENT.** The recon's partition reads *"20
+blocked, 8 working"*. That framing invites a challenge under the ratified
+error-direction asymmetry: `captionFor` does not validate, so the 8 ACCEPTED
+captions could be the worse bucket — a wrong record beats a refusal for cost.
+The hypothesis was reasonable, it was cheap to test, and **the measurement
+refuted it** (0 of 8 carry both tokens).
+
+> **A refuted hypothesis, recorded with its measurement, converts a question
+> somebody will re-ask into a question somebody can look up.** Its value does
+> not depend on having been right.
+
+And note the shape it followed, which is canon already: *read to form a
+hypothesis; RUN something to name a mechanism.* The partition could be re-read
+forever without producing `0 of 8`.
+
+## CONFIRM A FIGURE YOU WILL BUILD ON BY A SECOND, INDEPENDENT ROUTE
+
+**Standing 2026-08-23. The constructive form of the census-fidelity rule.**
+
+That rule says a census is only as authoritative as its predicate's fidelity to
+the shipped function, and it was written after two hand-approximated predicates
+produced authoritative-looking wrong numbers. This is how to earn the number
+instead:
+
+> **Re-derive it by a route that does not share the first one's failure mode,
+> then check the two RECONCILE — not merely that they agree.**
+
+⚠️ **REFERENCE SHAPE — F24's caption figures, two sessions, two routes:**
+
+| route | figure |
+|---|---|
+| a partition of the line above each header (SQL, session A) | **20 of 28** bilateral refused |
+| the shipped `captionFor`'s own predicate (session B) | **9 of 45** headers supply a caption |
+
+They are the same measurement seen from two sides: `captionFor` returns null on
+blank, on heading and on a pipe row, so only plain text survives —
+`1 single-table + 8 bilateral = 9`, leaving `20 of 28`. **The reconciliation is
+the evidence, not the agreement.** Two routes that merely produce the same
+number could both be approximating the same wrong thing; two routes whose
+partitions ADD UP have constrained each other.
+
+⚠️ **AND A RE-IMPLEMENTATION IS NOT A SECOND ROUTE IF YOU READ THE ANSWER
+FIRST.** The SQL above was written after reading the report's partition, so on
+its own it confirms arithmetic and classification, not the concept. What made it
+independent was checking it against the SHIPPED PREDICATE — the one thing
+neither census had consulted. Say which of the two you have.
+
+## WORK PRODUCED WHILE A CITATION RUNS IS STAGED, NEVER PUSHED INTO IT
+
+**Standing 2026-08-23. The constructive half of the batching rule.**
+
+The batching rule says *hold the first push until the session's remaining
+commits are written*. It does not cover the case where the first push has
+ALREADY gone out and the session keeps working — which is most sessions, because
+a citation takes half an hour and nobody sits idle through it.
+
+> **Once a branch is pushed and its runs are in flight, that branch is CLOSED to
+> this session. Further work is written to scratch and lands as its OWN PR.**
+
+The failure it prevents is the one this file has paid for five times: a second
+commit pushed minutes into a run cancels `CI`, `e2e` and `a11y-ci`, and the cost
+scales with how late it lands. Staging costs nothing — the work is written
+either way; only the push is deferred.
+
+⚠️ **AND WHERE BOTH TOUCH THE SAME FILE, BRANCH THE SECOND PR OFF THE MERGED
+FIRST — not off the current `main`.** Two branches editing `AGENTS.md` from a
+common ancestor manufacture a conflict that neither change required. Waiting for
+the merge is not politeness; it is the cheaper merge.
+
+## ⚠️ AND APPLY A NEW ENTRY TO ITS OWN LANDING
+
+**Standing 2026-08-23. Cheap, and it is the only test an entry gets before it
+becomes precedent.**
+
+The `GATE ON THE OBJECT THE GATE READS` entry was written because a citation
+taken from the workflow run disagreed with the check-run that actually gates a
+merge. **Its own PR was then verified by reading the check-runs**, not the
+workflow runs — and that is what confirmed its waiter's silence was a genuine
+in-flight state rather than a stuck instrument.
+
+> **An entry you cannot apply to the commit that lands it is an entry nobody
+> will apply later.** Running it once, immediately, on your own work is the
+> difference between a rule and a paragraph.
+
+This is the same move as the instrument-grant rule, which grants the script its
+own entry names in the same commit. Both exist because **writing a lesson down
+is not obeying it** — this file has a recorded case of an author violating his
+own merged commit message days later.
 ### ⚠️ THE THREE-LAYER ECHO — one lesson, three altitudes, one arc
 
 **Recorded because the repetition is the finding.** F24's single lesson —
