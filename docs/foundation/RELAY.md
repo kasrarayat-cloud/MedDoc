@@ -67,11 +67,32 @@ too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
 
 
-### 🟢 F24-S4 — THE TWIN-SUPPLIED ORDINAL. **Pass RUN, 3 defects fixed, ready to merge.**
+### 🟢 F24-S4 — THE TWIN-SUPPLIED ORDINAL. **MERGED AND CITED 2026-08-23.** `8575c541`
 
 *Previous heading:* 🟡 *Built, gated, NOT merged: the independent adversarial
 pass is OWED.* **Discharged 2026-08-23 by run `20260823-071023-b1` session 03 —
 see the pass's block below.**
+
+**Citation — 4 of 4 on `8575c541e15a68f732b6449c8073eb829fc3925b`** (produced by
+`check-citation.sh`, not typed):
+
+- `CI` 32639714852 a1
+- `e2e` 32639714855 a1
+- `a11y-ci` 32639714843 a1
+- `secrets-scan` 32639714824 a1
+
+**NOT DEPLOYED — and that is the routing, not an omission.** Under the standing
+authority the loop builds, proves and merges; **a supervised session deploys and
+judges clinical-surface changes**, and the note-editing path is one. The next
+deploy of `main` carries this, and its §2.5 declaration must name the
+document-visible change: **the chat editor can now resolve a repeated row label,
+and two refusal messages changed wording.**
+
+⚠️ **ONE COST, NAMED: the draft→ready flip re-triggered `a11y-ci` and cancelled
+its first attempt at 9s** (`32637728894`), replaced by `32637732457` which
+succeeded in 4m25s. Nothing was lost — no other actor was waiting on it — but it
+is a cancellation this session caused and it is recorded rather than left to be
+discovered in the run list.
 
 **The 12-cell duplicate-label gap is closed on both reachable shapes.** The
 census ratchet moves **40 → 52** on `captioned-adjacent` and
@@ -198,6 +219,25 @@ RED, alone. Restored from a scratch backup, never from git.
 test**, which is the documented worktree `react/jsx-dev-runtime` property — the
 one failing test is `gate-devstates.test.ts`, downstream of that same resolution
 failure, in a file this session did not touch.
+
+#### ⚠️ AND A FOURTH FINDING, LANDED SEPARATELY: THE GUARD THAT NAMED THE INVARIANT WAS BLIND TO THE NEW FIELD
+
+`note-table-edit.test.ts:425` is named **"⚠️ NEVER asks a question it offers no
+way to answer"** — which is, in words, exactly the invariant defect 3 broke. **It
+was green throughout.** It asserts `r.choices ?? []` has length 0, and the
+unanswerable list arrived in **`rowChoices`**, a field that did not exist when
+the arm was written.
+
+> **A guard's watched set does not grow when somebody adds a field.** Adding a
+> SECOND carrier for a concept a guard already forbids is how a
+> correctly-named guard goes on passing.
+
+**Widened to watch both carriers, and mutation-proved in the direction that
+matters:** with the `oneTable` guard forced back to the pre-fix behaviour, this
+arm goes RED (alongside the two-table regression guard at `:468`), where before
+it slept. Landed in the citation PR rather than in `#809`, because `#809`'s runs
+were already in flight — canon's *work produced while a citation runs is staged,
+never pushed into it*.
 
 #### WHAT THIS ITEM STILL DOES NOT CLAIM
 
