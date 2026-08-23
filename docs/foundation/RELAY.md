@@ -25221,3 +25221,40 @@ of three, asserted end-to-end, both columns each:
    Not asserting Slice 1 was wrong; recording that a number quoted in a source
    comment did not reproduce. Anyone relying on 670 should re-measure.
 
+> ### ✅ MERGED AND CITED — **4 of 4, every run `a1`**
+>
+> PR **#800**, merge `1f18f6c925987fffb4949a50b81d6b96fd2117ef`. Produced by
+> `check-citation.sh` and pasted, never typed:
+>
+> | workflow | run | attempt |
+> |---|---|---|
+> | `CI` | 32609438116 | a1 |
+> | `e2e` | 32609438187 | a1 |
+> | `a11y-ci` | 32609438146 | a1 |
+> | `secrets-scan` | 32609438160 | a1 |
+>
+> Branch retired on both sides via `retire-branch.sh`.
+>
+> ⚠️ **A DEPLOY IS OWED AND IT IS NOT THE LOOP'S TO TAKE.** This changes runtime
+> on the **note-editing surface**, and the standing authority reads *"the loop
+> builds, proves and merges under its own gates; SUPERVISED SESSIONS deploy and
+> judge clinical-surface changes."* The expected §2.5 delta, so whoever deploys
+> does not have to re-derive it:
+>
+> | must change | must NOT change |
+> |---|---|
+> | nothing observable on any existing note — the change is **refusal-only** plus a widened unit list | every clinical count: visits, patients, signatures |
+> | `label_column_unresolved` becomes reachable as a chat-editor refusal | any stored `soapFinal` — this code writes only when it resolves |
+>
+> **Production's three widening header lines are asserted end-to-end in the
+> gate**, so the one shape production holds is provably unaffected.
+>
+> ⚠️ **THREE DECLARED CANCELLATIONS ON THIS BRANCH, ALL MY OWN RUNS, AND THE
+> PATTERN IS THE FINDING RATHER THAN ANY ONE OF THEM.** Each was justified in
+> its own terms — a refuted mechanism in a source comment, then its second copy,
+> then an over-broad claim written in three places. **But the root cause is the
+> same each time: I pushed before finishing my own review.** Canon's rule is
+> *hold the first push until the session's remaining commits are written*, and
+> three cancellations is that rule being learned three times in ninety minutes.
+> The corrections were right; the cadence was not.
+
