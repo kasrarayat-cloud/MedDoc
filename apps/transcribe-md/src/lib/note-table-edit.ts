@@ -34,6 +34,7 @@
 import { parseMarkdownRow, MARKDOWN_RULE_ROW_RE } from './markdown-row';
 import { classifyHeaderCell } from './table-header-shape';
 import { readNoteSection } from './splice-note-section';
+import { captionCandidate } from './table-caption';
 
 /** `| --- | :--- |` — a table's alignment rule, never content. */
 /** Any `| … | … |` line. */
@@ -180,52 +181,56 @@ function renderRow(parts: string[]): string {
  * carries the laterality, so it is the only honest disambiguator.
  */
 function captionFor(lines: string[], headerIdx: number): string | null {
-  // ⚠️ THE ADJACENT LINE ONLY. A ONE-BLANK SKIP WAS BUILT, PROVEN, AND
-  // WITHDRAWN — F24 SLICE 1b, 2026-08-21.
+  // ⚠️ THE DEFINITION IS NOT HERE ANY MORE — F24-CAPTION-VALIDATION, 2026-08-23.
   //
-  // The motivation was real and still stands: 20 of 45 production headers have
-  // a blank line above them, so a bilateral study in the canonical markdown
-  // shape (caption, blank line, table) could not be disambiguated at all.
+  // It lives in `lib/table-caption.ts`, because `claim-prose.ts` reads the same
+  // line for a clinical READ and this module reads it for a clinical WRITE. Two
+  // readers holding two definitions of "caption" is a wrong-table edit waiting
+  // to happen, and that hazard was recorded in this comment for two days before
+  // anything shared the code.
   //
-  // ⚠️ BUT `captionFor` NEVER DISTINGUISHED A CAPTION FROM ARBITRARY PROSE —
-  // it returns whatever line sits above, and always has. Widening its reach
-  // therefore did not teach it to find captions; it multiplied the amount of
-  // ORDINARY CLINICAL NARRATIVE it could mistake for one. Reproduced on the
-  // real function before the revert:
+  // ⚠️ THE PREVIOUS BODY WAS `return whatever line sits above`, WITH NO TEST OF
+  // ANY KIND, and the version before THAT reached one blank line further and was
+  // WITHDRAWN for writing a RIGHT-leg correction into the LEFT leg. Both the
+  // reproduction and the measured predicate that replaces it are in
+  // `table-caption.ts`'s header — read it there rather than trusting this
+  // sentence, because that is the file a future edit will change.
   //
-  //     ## FINDINGS
-  //     |  | DIAMETER (mm) | ... |        <- table 1, the RIGHT leg, 5.1
-  //     | GSV at the SFJ | 5.1 | 0.3 |
+  // What changed for THIS caller: a caption ONE BLANK LINE UP is returned when
+  // it satisfies the shape AND its section is uniformly captioned (new —
+  // reaches 16 of the 20 previously-blocked headers). Everything unrecognised
+  // still returns null, which every branch below already handles.
   //
-  //     The right leg was normal; the left GSV is dilated.
-  //                                        <- one blank line
-  //     |  | DIAMETER (mm) | ... |        <- table 2, the LEFT leg, 6.2
-  //     | GSV at the SFJ | 6.2 | 3.4 |
+  // ⚠️ THE ADJACENT SLOT IS NOT SHAPE-CHECKED, AND THIS COMMENT SAID IT WAS.
+  // Corrected by the independent adversarial pass, 2026-08-23. The struck
+  // sentence read: *"the adjacent line is now also shape-checked (strictly
+  // narrower — 9 of 9 production captions still pass)"*. That was true of the
+  // FIRST design and false of the shipped one — applying the shape rule to the
+  // adjacent slot removed the 7-word TITLED caption the product supports, so it
+  // was withdrawn the same hour, and the asymmetry became the argument.
   //
-  //   editTableCell(rowLabel 'GSV at the SFJ', tableCaption 'Right Leg', 6.8)
-  //     -> ok=true, before="6.2", LEFT leg written, RIGHT leg untouched
+  // ⚠️ IT MATTERED BECAUSE OF *WHICH* PROPERTY IT CLAIMED. The shape rule's
+  // both-sides clause is the one that stops a line naming BOTH legs from
+  // narrowing a substring match to whichever table it happens to hit. A reader
+  // who believed this sentence would believe that hole is closed. It is not —
+  // measured by driving this very function:
   //
-  // That narrative became table 2's caption, the substring narrowing matched
-  // "right" inside it, and the doctor's RIGHT-leg correction was persisted
-  // into the LEFT leg and reported as success. `.caption` has no consumer, so
-  // nothing downstream shows which table was chosen.
+  //     captionCandidate(['The right leg was normal; the left GSV is
+  //                        dilated.', ...TABLE], 1)
+  //       -> returns the sentence   (isCaptionShaped refuses it)
   //
-  // A WRONG-LEG MEASUREMENT IS WORSE THAN AN UNEDITABLE TABLE. The refusal it
-  // replaced cost the doctor a retype; this costs them a wrong record.
+  //     editTableCell(row 'GSV at the SFJ', tableCaption 'right', 6.8) on a
+  //     note whose RIGHT table is uncaptioned and whose LEFT table carries the
+  //     adjacent line `Right and left legs`
+  //       -> ok:true, before:"6.2"  <- THE LEFT LEG, reported as success
   //
-  // THE REAL DEFECT IS CAPTION *VALIDATION*, NOT CAPTION *DISTANCE*, and a
-  // correct fix has to decide what a caption IS — which is a product question,
-  // not a loop bound. Reaching further without answering it is strictly worse
-  // than reaching one line. (Note that `claim-prose.ts:71` reads the adjacent
-  // line too; whatever answers this must move both, or the two readers in this
-  // codebase will disagree about what a caption is.)
-  for (let i = headerIdx - 1; i >= 0; i -= 1) {
-    const line = lines[i];
-    if (!line.trim()) return null;
-    if (HEADING_RE.test(line) || cells(line)) return null;
-    return line.trim();
-  }
-  return null;
+  // That is `main`'s behaviour too, unchanged by this item and disclosed in
+  // `table-caption.ts` with its production count (0 of 8) and its re-arming
+  // condition. It is pinned end-to-end by the gate so it cannot decay from a
+  // named residual into an assumption. **A comment that closes a hole the code
+  // leaves open is worse than no comment**, because the next reader stops
+  // looking.
+  return captionCandidate(lines, headerIdx);
 }
 
 

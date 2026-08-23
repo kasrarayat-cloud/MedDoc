@@ -67,6 +67,269 @@ too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
 
 
+### 🟢 F24-CAPTION-VALIDATION — **BUILT, GATED, AND THE INDEPENDENT ADVERSARIAL PASS IS DISCHARGED 2026-08-23.**
+
+*Previous status:* 🟡 *BUILT AND GATED 2026-08-23. NOT MERGED: the independent
+adversarial pass is OWED.* Run by session 05 of `20260823-071023-b1`, which did
+not author the diff — see the pass's own section below. **One finding, fixed
+here; no clinical-write defect.**
+
+*Previous status:* 🔴 *RECON EXISTS. Read it before building.* The recon
+(`docs/qa-reports/f24-caption-validation-recon-20260821.md`) is unchanged and
+still governs; this row records what was built on it. **Ruling #141
+(PROVISIONAL)** carries the decision.
+
+**THE ITEM.** `captionFor` returned whatever line sat directly above a table
+header, with **no test of any kind**, and reached exactly ONE line. The
+canonical markdown shape is caption / blank / table, so **20 of 28 bilateral
+production tables could not be edited at all** — and bilateral is the main
+ultrasound case.
+
+**WHAT SHIPS — one definition, `lib/table-caption.ts`, imported by both readers.**
+
+| slot | rule | change |
+|---|---|---|
+| **ADJACENT** (nothing between) | the legacy rule | **BYTE-FOR-BYTE UNCHANGED** |
+| **ONE BLANK UP** | must earn it by SHAPE **and** by SECTION UNIFORMITY | **NEW** — previously always null |
+
+The asymmetry is the design, not a compromise: an adjacent line is
+*structurally bound* to its table, while a blank line **is** a paragraph break —
+positive evidence that what lies beyond is a separate block.
+
+**THE SHAPE PREDICATE, every clause measured on production 2026-08-23**
+(read-only, counts only, no note text left the database):
+
+| clause | observed over 25 text candidates |
+|---|---|
+| `<= 4` words | max **4** |
+| `<= 48` characters | max **24** |
+| no sentence punctuation `. ; ! ?` | **0 of 25** |
+| never BOTH laterality tokens | **0 of 25** |
+
+The partition reconciles and reproduces the recon by a **third independent
+route**: `16 heading-above + 9 text-above + 2 heading-beyond-blank +
+2 pipe-row-beyond-blank + 16 TEXT-ONE-BLANK-UP = 45`, against the recon's own
+traversal control (49 notes / 2,329 lines / 531 pipe rows / 45 rules) reproduced
+exactly. **The 16 text-one-blank-up are the reach; the other 4 are the
+no-caption-anywhere headers no strategy can serve.**
+
+#### ⚠️ THE FIX WAS A WRONG-LEG WRITE BEFORE IT WAS A FIX — CAUGHT BY REPRODUCING MY OWN UNTESTED CLAIM
+
+Canon asks the author to write the untested claim down **before** the pass. Mine
+was: *"I have NOT tested that a shape-valid line one blank above a header
+belongs to the table BELOW it rather than the table ABOVE it."* Built as a
+fixture, it **reproduced immediately**:
+
+    ## FINDINGS
+    |  | DIAMETER (mm) | ... |      <- table 1, the RIGHT leg, UNCAPTIONED
+    | GSV at the SFJ | 5.1 | 0.3 |
+                                    <- blank
+    Right leg normal                <- a SUMMARY OF TABLE 1. 3 words, one side,
+                                    <- blank      no punctuation
+    |  | DIAMETER (mm) | ... |      <- table 2, the LEFT leg
+    | GSV at the SFJ | 6.2 | 3.4 |
+
+    editTableCell(..., tableCaption 'Right Leg', 6.8)
+      -> ok:true, before:"6.2"      <- THE LEFT LEG. Reported as success.
+    claimProse(...)
+      -> "Right leg normal — GSV at the SFJ: …"   <- the card, mislabelled
+
+**The shape rule cannot see it** — `Right leg normal` is perfectly
+caption-shaped. What is wrong is not the LINE, it is that it belongs to the
+table ABOVE, and the only available evidence is that its SIBLING has no caption.
+**Fixed by ruling #141(b): a one-blank-up caption requires the section to be
+uniformly captioned.** Measured: **0 of 31 production sections carry mixed
+caption availability**, and all 12 captioned bilateral sections name exactly one
+`right` and one `left` — so the fence costs nothing that exists today.
+
+#### ⚠️ AND THAT FENCE WAS WRONG TOO — PRESENCE IS NOT DISCRIMINATION
+
+**A SECOND wrong-leg write, found by probing the same written-down untested
+claim one level deeper, while the citation ran.** The first fence required every
+table in the section to carry SOME caption. Measured:
+
+    ## FINDINGS
+    Arterial                       <- table 1's caption. Names NO side.
+    |  | DIAMETER (mm) | ... |     <- table 1, the RIGHT leg, 5.1
+    | GSV at the SFJ | 5.1 | 0.3 |
+                                   <- blank
+    Right leg normal               <- a summary OF TABLE 1, read as table 2's
+                                   <- blank      caption
+    |  | DIAMETER (mm) | ... |     <- table 2, the LEFT leg, 6.2
+    | GSV at the SFJ | 6.2 | 3.4 |
+
+    editTableCell(..., tableCaption 'Right Leg', 6.8)
+      -> ok:true, before:"6.2"     <- THE LEFT LEG. Measured, not argued.
+
+Both tables carry a caption, so a presence-only fence passes; the narrowing is a
+SUBSTRING match, so it resolves to the one table whose caption contains `right`.
+⚠️ **`main` REFUSES this input**, so a presence-only fence would have shipped a
+**REGRESSION**, not left a residual — which is why it was fixed rather than
+filed.
+
+**THE RULE THAT IS SOUND, and production already follows it:** in a section with
+more than one table, a one-blank-up caption is used only when **every** table
+carries a caption, **every** one names exactly ONE laterality side, and **no
+two** name the same side. A caller naming a side then matches exactly one table,
+and it is the one the section's own captions say it is. Measured: **all 12
+captioned bilateral sections name exactly one `right` and one `left`** — so this
+refuses nothing that exists today. A section captioned `Arterial` / `Venous` is
+deliberately not served: it is a shape no production note holds, and inventing a
+discriminator for it is how this seam produced two wrong-leg writes already.
+
+⚠️ **AND THE GATE REDDENED AGAINST ITS AUTHOR A SECOND TIME.** My first version
+of the same-side arm asserted a **refusal**. That would have been a capability
+LOSS: table 1's caption is ADJACENT, never subject to the fence, and `Right Leg:`
+over the right leg is exactly the write the doctor asked for — `main` behaves
+identically. The arm now asserts what the fence must actually do: the
+one-blank-up caption is DROPPED, the adjacent one still resolves, and `before`
+is `5.1`.
+
+#### ⚠️ AND THE FIRST DESIGN REMOVED A CAPABILITY THE PRODUCT SUPPORTS — CAUGHT BY FOUR ARMS THAT HAD NOTHING TO DO WITH THIS ITEM
+
+The shape rule was applied to the ADJACENT slot too, on the strength of the
+production census. `DIAMETER AND REFLUX TIME — Right Leg` is **SEVEN words**,
+`claim-prose`'s tail-split exists specifically to display it, and four
+`claim-prose` arms went red.
+
+> **A census over 49 notes measured zero titled captions and therefore could not
+> see that the SUPPORTED shape space is wider than the OBSERVED one.**
+
+Withdrawn the same hour. Restricting a working path on a population measurement
+is an **accepted-capability loss** — owner class (b), not this loop's to take —
+and it is now pinned as a regression arm.
+
+#### THE TWO READERS DISAGREED FOR REAL, NOT IN THEORY
+
+`note-table-edit.ts`'s own comment had named the hazard for two days. Measured
+while sharing the code: the two `cells()` helpers disagree about a **ONE-CELL
+pipe row**, so `| Right Leg |` was a caption to `claim-prose` (`>= 2` cells
+required) and a table row to the editor. Unified on the stricter rule; measured
+cost **zero** (0 of 45 headers carry a pipe row of any arity as a candidate).
+A gate arm now drives **both real exported functions** and asserts they accept
+the same lines — it fires at 0 blanks *and* 1 blank, and **fires alone**.
+
+#### PROOF
+
+- **`gate-f24-caption-validation.test.ts` — 46 arms**, plus the re-pinned
+  `note-table-edit` arm. `tsc --noEmit` **0 errors**.
+- **Mutation-proved SEVEN ways, including against the PARTIAL fix** (reach without
+  validation — the edit the file's own text invites), which reddens the
+  **permanent wrong-leg floor**; and against the **capability-loss direction**
+  (validate the adjacent slot), which reddens 9 arms. Removing the uniformity
+  fence reddens exactly the two trailing-summary arms, write side and read side;
+  restoring the PRESENCE-ONLY fence reddens exactly the two sibling-captioned
+  arms and nothing else.
+  Every mutation asserted its own application; every restore was from a scratch
+  backup, **never `git checkout`**, verified byte-identical by sha256.
+- **Suite:** `16 failed files / 1 failed test`, which is the documented worktree
+  `react/jsx-dev-runtime` property — **controlled**, not assumed: a detached
+  worktree at `cea1823c` carrying none of this change reports the **identical
+  16 / 1**. All 16 failures name an unresolvable `react/*` import and none is a
+  file in this diff; the 1 failed test is `gate-devstates`, downstream of the
+  same resolution failure.
+
+#### WHAT THIS ITEM DOES NOT CLAIM
+
+- **It does NOT make the ADJACENT slot safer.** A line naming both legs directly
+  above a table still mis-narrows, exactly as on `main`. Production holds
+  **0 of 8** such lines — real and currently UNEXERCISED. **RE-ARMING
+  CONDITION: one note whose narrative names both legs directly above a table,
+  with no code change anywhere.** Closing it costs the titled caption above.
+- **It does NOT ask the twin.** The recon measured the twin route's incremental
+  reach over a validated read at **0 headers today**.
+- **It does NOT reach the 4 no-caption-anywhere headers**, by construction.
+- **The thresholds are a fact about today's corpus, not a property of captions**
+  — the titled-caption miss is the proof they differ. **RETIREMENT CONDITION:
+  re-measure when a second template shape certifies end-to-end (F5-i).**
+
+#### ✅ THE INDEPENDENT ADVERSARIAL PASS — RUN AND DISCHARGED, run `20260823-071023-b1` session 05
+
+**The instrument was a DIFFERENT SESSION, which is the precedent this branch
+itself cites.** Session 04 authored the diff and correctly declined to be its
+own pass; session 05 opened on it cold, with no memory of writing it. That is
+exactly F24-S4/#809 — *"session 02 drafted and session 03 discharged"* — and it
+satisfies the property canon actually names: *the pass does not share the
+author's context.* It is not a new ruling and does not relax the gate.
+
+**VERDICT: no clinical-write defect. ONE documentation defect, FIXED here.**
+
+⚠️ **THE FINDING — `note-table-edit.ts`'s `captionFor` comment asserted a SAFETY
+PROPERTY THE SHIPPED CODE DOES NOT HAVE.** Introduced by this diff (0
+occurrences on `origin/main`), it read:
+
+> *"the adjacent line is now also shape-checked (strictly narrower — 9 of 9
+> production captions still pass)"*
+
+That is true of the FIRST design, which was withdrawn the same hour, and false
+of the shipped one — `rawCandidate` applies `isCaptionEligible` to the adjacent
+slot, never `isCaptionShaped`. **The file's own header says the opposite at
+length**, so one diff carried two statements that disagree about the same slot,
+and the wrong one was the reassuring one, in the file that performs the
+clinical WRITE.
+
+⚠️ **AND IT MATTERS BECAUSE OF *WHICH* PROPERTY IT CLAIMED.** The shape rule's
+both-sides clause is the one thing that would close the residual this item
+explicitly leaves open. **Measured by driving the shipped functions, not by
+reading them:**
+
+| probe | result |
+|---|---|
+| `captionCandidate([NARRATIVE, …TABLE], 1)` | returns *"The right leg was normal; the left GSV is dilated."* — while `isCaptionShaped` refuses it |
+| `editTableCell(row 'GSV at the SFJ', tableCaption 'right', 6.8)` on a note whose RIGHT table is uncaptioned and whose LEFT table carries the adjacent line `Right and left legs` | **`ok:true`, `before:"6.2"`, `caption:"Right and left legs"`** — the LEFT leg overwritten, the right leg's `5.1` untouched, reported as success |
+
+**This is `main`'s behaviour, unchanged by this item** — not a regression, and
+disclosed in `table-caption.ts` with its production count (0 of 8) and its
+re-arming condition. What was wrong was a comment telling the next reader it
+was closed. **A comment that closes a hole the code leaves open is worse than
+no comment, because the next reader stops looking.**
+
+**A SECOND, SAME-CLASS INSTANCE IN THE GATE FILE'S OWN HEADER**, also new here:
+it described the uniformity fence as *"FILED, NOT BUILT here"* — while the
+fence IS built and IS exercised by the block below it — and named the rule as
+PRESENCE-ONLY, which is the version this branch's own ruling #141(b2) records
+as **refuted, and a regression rather than a residual**. Corrected in place,
+with the struck text preserved.
+
+**FIXED, AND THE RESIDUAL IS NOW EXECUTABLE RATHER THAN PROSE.** Both comments
+corrected; `table-caption.ts`'s disclosure points at the pin; and a new gate
+block, **"⚠️ THE ADJACENT SLOT IS STILL UNVALIDATED"**, drives `editTableCell`
+end to end and asserts the wrong-leg CELL (not the flag — a wrong-leg write
+returns `ok:true` too). ⚠️ **Those two arms are GREEN BECAUSE THE PRODUCT IS
+WRONG THERE, deliberately: they go RED the day somebody closes it, which is the
+signal.** Mutation-proved — restoring the withdrawn design (`isCaptionShaped`
+on the adjacent slot) reddens **both new arms plus the nine capability-loss
+arms**, so the trade is now one executable object instead of three paragraphs.
+
+**THE PRE-AIM, ANSWERED — every item, with a mechanism rather than a shrug:**
+
+1. **`siblingHeaders` — REFUTED as a hazard, and the reason is monotonicity.**
+   Its header set is a strict **SUPERSET** of both callers' own scans:
+   `PIPE_RE` (`^\s*\|`) admits everything `parseMarkdownRow`'s `ROW_RE` does,
+   the rule-row regex is byte-identical to the shared `MARKDOWN_RULE_ROW_RE`,
+   and `claim-prose` narrows further with its `>= 2` cells. **Extra siblings can
+   only add `return null` opportunities**; the only way to lose the fence is
+   `siblings.length === 0`, which needs a MISSING sibling, and the superset
+   relation makes that unreachable. A table at index 0 or 1 gives
+   `adjacent < 0` → null → the fence refuses. Every mis-detection fails closed.
+2. **Three or more tables in one section: ALWAYS REFUSES, by pigeonhole.** Only
+   two side values exist, so a third table's caption necessarily duplicates one
+   already in `seen` → null. The shape production does not hold is also the
+   shape that cannot pass. Fail-closed, and now stated as a property rather
+   than an untested corner.
+3. **The two readers' `lines` differ and their SIBLING SETS CANNOT** —
+   `splice-note-section.ts:68-75`: *"the section runs to the next heading of any
+   level."* A section BODY therefore never contains a heading, so
+   `siblingHeaders`' heading-bounded window spans exactly the whole body, which
+   is exactly the universe `note-table-edit.ts:258-261` scans; and in
+   `claim-prose`'s whole-note view the same headings bound the same set. ⚠️ **A
+   hypothesis recorded because it was REFUTED** — it was the sharpest of the
+   four and the reason the section-boundary code was read at all.
+4. **`rt`/`lt`: unchanged and correctly framed** as a population fact with its
+   matcher positive-controlled. No action.
+
+---
+
 ### 🟢 F24-S4 — THE TWIN-SUPPLIED ORDINAL. **MERGED AND CITED 2026-08-23.** `8575c541`
 
 *Previous heading:* 🟡 *Built, gated, NOT merged: the independent adversarial
