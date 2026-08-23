@@ -346,6 +346,87 @@ describe('F24-CAPTION-VALIDATION — ⚠️ THE TRAILING-SUMMARY SHAPE, the unte
     if (!r.ok) expect(r.reason).toBe('caption_not_found');
   });
 
+  // ⚠️ THE SIBLING-CAPTIONED VARIANT — THE SECOND WRONG-LEG WRITE THIS ITEM
+  // PRODUCED, AND THE FIRST FENCE DID NOT CLOSE IT.
+  //
+  // Presence is not discrimination. With table 1 captioned `Arterial` — a
+  // caption that names no side — a presence-only fence is satisfied, and the
+  // substring narrowing then resolves `Right Leg` to the ONE table whose
+  // caption contains it: the wrong one.
+  //
+  //   measured before the fix:  ok:true, before:"6.2"   <- the LEFT leg
+  //
+  // ⚠️ AND `main` REFUSES THIS INPUT, so it was a REGRESSION introduced by this
+  // change rather than a pre-existing residual. Found by probing the author's
+  // own written-down untested claim one level deeper, while the citation ran.
+  const SIBLING_CAPTIONED = [
+    '## FINDINGS',
+    'Arterial', // table 1's caption — adjacent, and names NO side
+    '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+    '| --- | --- | --- |',
+    '| GSV at the SFJ | 5.1 | 0.3 |', // the RIGHT leg
+    '',
+    'Right leg normal', // a summary OF TABLE 1
+    '',
+    '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
+    '| --- | --- | --- |',
+    '| GSV at the SFJ | 6.2 | 3.4 |', // the LEFT leg
+    '',
+  ].join('\n');
+
+  it('⚠️ a caption that names NO side cannot satisfy the fence for its sibling', () => {
+    const r = editTableCell({
+      note: SIBLING_CAPTIONED,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'DIAMETER (mm)',
+      value: '6.8',
+      tableCaption: 'Right Leg',
+    });
+    if (r.ok) expect(r.before).not.toBe('6.2');
+    expect(r.ok).toBe(false);
+  });
+
+  it('⚠️ two captions naming the SAME side: the ONE-BLANK-UP one is dropped, the ADJACENT one still resolves', () => {
+    // ⚠️ THIS ARM'S FIRST VERSION ASSERTED `ok === false` AND THE GATE REDDENED
+    // AGAINST ITS AUTHOR — correctly. The refusal I expected would have been a
+    // capability LOSS: table 1's caption is ADJACENT, so it is never subject to
+    // the fence, and `Right Leg:` over the right leg is exactly the write the
+    // doctor asked for. `main` behaves identically here.
+    //
+    // What the fence must do is narrower and it is what is asserted: table 2's
+    // one-blank-up `Right leg normal` is DROPPED (it names the same side as its
+    // sibling, so it cannot discriminate), leaving the adjacent caption to
+    // resolve on its own — into the RIGHT leg, which is `before: '5.1'`.
+    const note = SIBLING_CAPTIONED.replace('Arterial', 'Right Leg:');
+    const r = editTableCell({
+      note,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'DIAMETER (mm)',
+      value: '6.8',
+      tableCaption: 'Right Leg',
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      // ASSERT THE CELL. `6.2` here would be the wrong-leg write.
+      expect(r.before).toBe('5.1');
+      const body = r.body ?? '';
+      expect(body).toContain('| GSV at the SFJ | 6.8 | 0.3 |');
+      expect(body).toContain('| GSV at the SFJ | 6.2 | 3.4 |');
+    }
+    // …and the dropped caption is not offered as a choice anywhere.
+    const unnamed = editTableCell({
+      note,
+      sectionLabel: 'FINDINGS',
+      rowLabel: 'GSV at the SFJ',
+      columnLabel: 'DIAMETER (mm)',
+      value: '6.8',
+    });
+    expect(unnamed.ok).toBe(false);
+    if (!unnamed.ok) expect(unnamed.choices ?? []).not.toContain('Right leg normal');
+  });
+
   it('the READ side is fenced by the same rule, not only the write side', () => {
     // `claim-prose` labels a suggestion card with the leg. A card that names
     // the wrong leg in the doctor's own vocabulary "reads as authoritative" —

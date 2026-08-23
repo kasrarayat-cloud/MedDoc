@@ -315,10 +315,59 @@ export function captionCandidate(lines: string[], headerIdx: number): string | n
   //
   // It lives HERE, not in the two callers, because a per-caller list is kept
   // complete by hand and hand-kept lists are wrong eventually.
-  const siblings = siblingHeaders(lines, headerIdx);
-  for (const h of siblings) {
-    if (h === headerIdx) continue;
-    if (rawCandidate(lines, h) === null) return null;
+  // ⚠️ AND "EVERY TABLE HAS *A* CAPTION" WAS NOT ENOUGH — THE FIRST VERSION OF
+  // THIS FENCE STILL WROTE THE WRONG LEG, AND THE PROBE THAT FOUND IT IS THE
+  // ONE BELOW. A caption only helps if it DISCRIMINATES, and presence is not
+  // discrimination:
+  //
+  //     ## FINDINGS
+  //     Arterial                       <- table 1's caption. Names NO side.
+  //     |  | DIAMETER (mm) | ... |     <- table 1, the RIGHT leg, 5.1
+  //     | GSV at the SFJ | 5.1 | 0.3 |
+  //                                    <- blank
+  //     Right leg normal               <- a summary OF TABLE 1, read as table
+  //                                    <- blank      2's caption
+  //     |  | DIAMETER (mm) | ... |     <- table 2, the LEFT leg, 6.2
+  //     | GSV at the SFJ | 6.2 | 3.4 |
+  //
+  //   editTableCell(..., tableCaption 'Right Leg', 6.8)
+  //     -> ok:true, before:"6.2"       <- THE LEFT LEG. Measured, not argued.
+  //
+  // Both tables carry a caption, so a presence-only fence passes. The narrowing
+  // is a SUBSTRING match on the laterality, so it resolves to the one table
+  // whose caption happens to contain `right` — the wrong one. ⚠️ `main` REFUSES
+  // this input (table 2 has no caption at all there), so a presence-only fence
+  // would have shipped a REGRESSION, not merely left a residual.
+  //
+  // THE RULE THAT IS SOUND, and it is the convention production already
+  // follows: in a section with more than one table, a one-blank-up caption is
+  // used only when EVERY table in the section carries a caption, EVERY one of
+  // those captions names exactly ONE laterality side, and NO TWO name the same
+  // side. Then a caller naming a side matches exactly one table, and it is the
+  // one the section's own captions say it is.
+  //
+  // Measured on production 2026-08-23: **all 12 captioned bilateral sections
+  // name exactly one `right` and one `left`**, and 0 of 31 sections carry mixed
+  // caption availability. So this refuses nothing that exists today.
+  //
+  // Anything else REFUSES — `caption_not_found`, which is exactly what `main`
+  // does. A section captioned `Arterial` / `Venous` is therefore not served,
+  // deliberately: it is a shape no production note holds, and inventing a
+  // discriminator for it is how this seam produced two wrong-leg writes already.
+  const siblings = siblingHeaders(lines, headerIdx).filter((h) => h !== headerIdx);
+  if (siblings.length === 0) return mine.text;
+
+  const seen = new Set<string>();
+  for (const h of [headerIdx, ...siblings]) {
+    const cap = h === headerIdx ? mine : rawCandidate(lines, h);
+    if (cap === null) return null;
+    const right = RIGHT_RE.test(cap.text);
+    const left = LEFT_RE.test(cap.text);
+    // Exactly one side, or it cannot discriminate.
+    if (right === left) return null;
+    const side = right ? 'right' : 'left';
+    if (seen.has(side)) return null;
+    seen.add(side);
   }
   return mine.text;
 }
