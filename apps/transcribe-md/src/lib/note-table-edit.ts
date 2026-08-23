@@ -434,13 +434,60 @@ export function editTableCell(params: {
       // that actually differ — is what lets the next turn resolve, and it
       // keeps the index something this module issued rather than something a
       // model counted.
-      const rowChoices = matches.map((m, i) => ({
-        ordinal: i + 1,
-        cells: (cells(lines[m.line]) ?? []).map((c) => c.trim()),
-      }));
-      return captions[0] === null
-        ? { ok: false, reason: 'caption_not_found', rowChoices }
-        : { ok: false, reason: 'row_ambiguous_same_table', rowChoices };
+      //
+      // ⚠️ OFFERED ONLY WHEN AN ORDINAL COULD ACTUALLY BE ACCEPTED — FOUND BY
+      // THE INDEPENDENT ADVERSARIAL PASS ON THIS DIFF.
+      //
+      // The ordinal path above refuses unless the candidates have already been
+      // narrowed to ONE table, because an ordinal says which ROW and never
+      // which TABLE. This branch, however, is reached whenever every candidate
+      // shares one caption KEY — and `null` is a key. Two UNCAPTIONED tables on
+      // a bilateral study therefore land here with six candidates spanning both
+      // legs, which is the ordinary production shape: canon records 20 of 45
+      // headers with a blank line above them, and a blank line yields a null
+      // caption.
+      //
+      // Numbering all six offered the doctor a list in which EVERY entry was
+      // guaranteed to be refused — `chat-edit-visit.ts` renders `rowChoices` in
+      // preference to `choices`, so they were shown six numbered rows, and
+      // echoing any of them came back `caption_not_found` with the list now
+      // gone. That is the dead end this slice set out to remove, wearing the
+      // costume of the fix, and it is worse than the honest dead end it
+      // replaced because the doctor spends a turn on it first.
+      //
+      // So the offer and the acceptance are keyed on the SAME predicate. A
+      // second, looser copy of "can an ordinal resolve this?" is exactly the
+      // drift `captionKey` was unified to prevent, one question further down.
+      //
+      // ⚠️ AND `row_ambiguous_same_table` NOW MEANS WHAT ITS NAME AND ITS
+      // MESSAGE SAY: ONE table, the label repeated inside it. It used to be
+      // selected purely on "every candidate shares a caption key", which is
+      // also true of TWO tables captioned identically — so the message
+      // "that row appears more than once in the same table" was already false
+      // for that shape on `main`, and this slice's new clause ("tell me which
+      // of the rows I listed") would have made it doubly false by promising a
+      // list that cannot exist there.
+      //
+      // Both multi-table shapes are the same problem for the doctor: nothing
+      // they can say resolves it — not a caption, because the captions do not
+      // discriminate, and not an ordinal, because an ordinal cannot cross a
+      // table. `caption_not_found` is exactly that statement, and its message
+      // points at the one thing that DOES fix it: give the tables headings
+      // that differ.
+      // So the split is on the TABLE COUNT, which is the property both
+      // messages actually describe — not on caption nullity, which describes
+      // neither. Each reason is now true of every note that reaches it, and
+      // every list that is offered can be answered.
+      const oneTable = new Set(matches.map((m) => m.header)).size === 1;
+      if (!oneTable) return { ok: false, reason: 'caption_not_found' };
+      return {
+        ok: false,
+        reason: 'row_ambiguous_same_table',
+        rowChoices: matches.map((m, i) => ({
+          ordinal: i + 1,
+          cells: (cells(lines[m.line]) ?? []).map((c) => c.trim()),
+        })),
+      };
     }
     return {
       ok: false,

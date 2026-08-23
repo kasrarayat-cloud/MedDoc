@@ -67,7 +67,11 @@ too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
 
 
-### 🟡 F24-S4 — THE TWIN-SUPPLIED ORDINAL. **Built, gated, NOT merged: the independent adversarial pass is OWED.**
+### 🟢 F24-S4 — THE TWIN-SUPPLIED ORDINAL. **Pass RUN, 3 defects fixed, ready to merge.**
+
+*Previous heading:* 🟡 *Built, gated, NOT merged: the independent adversarial
+pass is OWED.* **Discharged 2026-08-23 by run `20260823-071023-b1` session 03 —
+see the pass's block below.**
 
 **The 12-cell duplicate-label gap is closed on both reachable shapes.** The
 census ratchet moves **40 → 52** on `captioned-adjacent` and
@@ -131,18 +135,84 @@ untested claim down BEFORE the pass**, exactly as canon asks, and the sentence
 was: *"I have not tested that the editor's candidate order is the order the
 twin counts in."*
 
-#### ⛔ WHY THIS IS 🟡 AND NOT MERGED
+#### ✅ THE INDEPENDENT ADVERSARIAL PASS HAS RUN — session 03, 2026-08-23T11:4xZ
 
-**The MANDATORY independent adversarial pass has NOT been run.** This session
-could not spawn one, so the refutation above is the AUTHOR's — which canon is
-explicit is the weaker instrument: *"an author's proofs are drawn from the same
-model of the problem that produced the defect, so they CANNOT surprise their
-owner."* Three consecutive slices of this arc had a clinical defect found by the
-pass and not by the author, and this branch has already produced two of its own.
+*Previous status, kept because the correction is the point:* ⛔ **WHY THIS IS 🟡
+AND NOT MERGED — the MANDATORY independent adversarial pass has NOT been run…
+The PR is opened as a DRAFT.**
 
-**The PR is opened as a DRAFT.** It is unmergeable until an independent pass
-runs, and the pass should be aimed first at the ordinal's interaction with
-`captionFor` on shapes other than the three the census models.
+Run by **run `20260823-071023-b1` session 03**, a fresh process holding none of
+session 02's reasoning — which is the property that makes it the instrument
+canon asks for. **Three defects, all confirmed by running the code, all fixed in
+branch. Guard: `gate-f24-s4-ordinal-is-reachable-and-bounded.test.ts`, 12 arms,
+4 of them RED on `e8544cba` before the fix existed.**
+
+| # | what | evidence |
+|---|---|---|
+| 1 | ⚠️ **THE MODEL WAS NEVER TOLD THE FIELD EXISTS.** `rowOrdinal` reached the schema, the editor and the caller — and `CHAT_EDIT_SYSTEM` (`lib/chat-edit/prompt.ts`), the **only** artifact that instructs the model, never mentions it. The branch never touched that file | `grep -c rowOrdinal prompt.ts` → **0**, positive-controlled against `tableCaption` → **1** |
+| 2 | ⚠️ **AND THE SAFETY INVARIANT WAS WRITTEN WHERE NOTHING CAN READ IT.** `intent.ts:90` says *"THIS FIELD IS AN ECHO AND NOT A COUNT THE MODEL TAKES OFF THE NOTE"* — in a JSDoc comment. `intent.ts` carries **zero** `.describe()` calls, so the zod schema reaches the model (via `useToolUse`) as a bare unexplained integer. Nothing tells it not to count rows off the note, which is the Slice 1b wrong-write route | schema→tool-schema path at `chat-edit-visit.ts:178-184`; no `.describe()` in `intent.ts` |
+| 3 | ⚠️ **A NUMBERED LIST WAS OFFERED WHERE EVERY NUMBER WAS GUARANTEED TO BE REFUSED.** Two UNCAPTIONED tables — the ordinary production shape, since canon records **20 of 45** headers with a blank line above and a blank line yields a null caption — landed on `caption_not_found` **carrying 6 `rowChoices` spanning both legs**. `chat-edit-visit.ts:277` renders `rowChoices` in preference to `choices`, so the doctor saw six numbered rows; echoing any of them returned `caption_not_found` **with the list now gone** | reproduced: `ordinal 1 was offered by the refusal and then refused as caption_not_found` |
+
+**THE FIXES.**
+
+- `prompt.ts` documents `rowOrdinal` with the echo-only rule — *"ONLY ever send a
+  number the application listed back to you… NEVER count rows off the note
+  yourself"* — matching the treatment `tableCaption` already had (*"If the doctor
+  did not say which side, ASK — do not pick one"*). **The diff was missing
+  exactly the artifact its sibling field shipped with.**
+- `note-table-edit.ts` splits the ambiguity refusal on the **TABLE COUNT**, which
+  is the property both messages actually describe, instead of on caption
+  nullity, which describes neither. **The offer and the acceptance are now keyed
+  on the same predicate**, so a list is offered exactly when an ordinal would be
+  accepted.
+
+⚠️ **AND THAT SPLIT FIXED A MESSAGE THAT WAS ALREADY FALSE ON `main`.**
+`row_ambiguous_same_table` was selected whenever every candidate shared a caption
+KEY — which is also true of TWO tables captioned identically — so *"that row
+appears more than once in the same table"* was wrong for that shape before this
+branch existed. It now means what it says: one table, label repeated.
+
+⚠️ **ONE OF THE AUTHOR'S OWN ARMS WAS PINNING DEFECT 3, AND ITS NAME IS THE
+TELL.** `the uncaptioned dead end is answerable too` asserted the reason and
+`rowChoices.toHaveLength(6)` — and **never fed one of those six back**.
+Answerability was the entire claim its name made and the only thing it did not
+test. Canon's *A CHECK WHOSE TITLE IS NARROWER THAN WHAT IT MEASURES*, arriving
+with the title **wider** than the body. Rewritten in place, with the reason
+recorded, to assert the honest contract; **36 of its 37 sibling arms were
+unaffected**, which is the blast radius stated as a measurement.
+
+⚠️ **THE PRE-AIM WAS REASONABLE AND THE DEFECT WAS ONE LAYER ABOVE IT.** This row
+asked the pass to look at *"the ordinal's interaction with `captionFor` on shapes
+other than the three the census models"* — good advice, and defect 3 is exactly
+that shape. But defects 1 and 2 are not in the editor at all: they are the
+capability being unreachable by the only actor that can invoke it. **Every proof
+on this branch ran below the layer that was broken** — the editor, the schema and
+the caller were all correct, and the model was never told.
+
+**MUTATION-PROVED AGAINST THE PARTIAL FIX, not only the complete inverse.** With
+`prompt.ts` naming `rowOrdinal` but the safety rule removed — the half-edit the
+change most invites — the reachability arm stays GREEN and the echo-only arm goes
+RED, alone. Restored from a scratch backup, never from git.
+
+**Suite:** `tsc --noEmit` 0 errors; full unit run **16 failed files / 1 failed
+test**, which is the documented worktree `react/jsx-dev-runtime` property — the
+one failing test is `gate-devstates.test.ts`, downstream of that same resolution
+failure, in a file this session did not touch.
+
+#### WHAT THIS ITEM STILL DOES NOT CLAIM
+
+- **No twin PRODUCES an ordinal.** The title says the editor *accepts* one and
+  that is exact: the chat route is wired end to end, and nothing derives an
+  ordinal from the compiled twin's row order. The census exercises the editor
+  directly.
+- **The prompt fix is asserted STRUCTURALLY, never behaviourally.** The gate
+  proves the instruction is in the string the model is sent. **It does not prove
+  a model obeys it** — no arm here calls a model, and an echo-only rule is a
+  prompt instruction, not an enforced invariant. A server-side binding of the
+  ordinal to a prior refusal would be enforcement; that does not exist and is
+  not claimed.
+- **The blank-line shape is still worth nothing to the ordinal**, by design —
+  that is F24-CAPTION-VALIDATION's, unchanged.
 
 ---
 

@@ -247,7 +247,23 @@ describe('F24-S4 — the refusal is answerable, and the index is ISSUED not inve
     expect(res.before).toBe(chosen.cells[1]);
   });
 
-  it('the uncaptioned dead end is answerable too', () => {
+  // ⚠️ THIS ARM USED TO ASSERT `rowChoices` HAD LENGTH 6, AND IT WAS PINNING A
+  // DEFECT — CORRECTED BY THE INDEPENDENT ADVERSARIAL PASS ON THIS DIFF.
+  //
+  // Its name claimed the uncaptioned dead end was ANSWERABLE; its body checked
+  // only that a list was PRESENT. It never fed one of those six ordinals back,
+  // and every one of them was refused: the candidates span two tables, and an
+  // ordinal cannot cross a table. So the doctor was shown six numbered rows,
+  // spent a turn picking one, and got the same refusal with the list now gone.
+  //
+  // That is canon's *A CHECK WHOSE TITLE IS NARROWER THAN WHAT IT MEASURES*
+  // with the title WIDER than the body — the arm was green throughout, because
+  // presence was never the claim its name made.
+  //
+  // Two uncaptioned tables is now `caption_not_found` with NO list, which is
+  // the honest answer: nothing the doctor can say resolves it, and the message
+  // points at the fix — give the tables headings that differ.
+  it('the uncaptioned TWO-TABLE case offers no list, because none would work', () => {
     const uncaptioned = NOTE.replace('Right Leg\n', '').replace('Left Leg\n', '');
     const res = editTableCell({
       ...base,
@@ -256,7 +272,17 @@ describe('F24-S4 — the refusal is answerable, and the index is ISSUED not inve
     });
     expect(res.ok).toBe(false);
     expect(res.reason).toBe('caption_not_found');
-    expect(res.rowChoices).toHaveLength(6);
+    expect(res.rowChoices).toBeUndefined();
+
+    // The claim the old name made, now actually tested: whatever IS offered
+    // must resolve. Vacuous here by construction, and that is the point —
+    // `gate-f24-s4-ordinal-is-reachable-and-bounded.test.ts` carries the
+    // non-vacuous half, where one uncaptioned table DOES get a usable list.
+    for (const c of res.rowChoices ?? []) {
+      expect(
+        editTableCell({ ...base, note: uncaptioned, value: '4.4', rowOrdinal: c.ordinal }).ok,
+      ).toBe(true);
+    }
   });
 
   // ⚠️ THE PROSE MOVED WITH THE BEHAVIOUR. The old message sent the doctor to
