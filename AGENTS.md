@@ -1079,6 +1079,55 @@ This is the same move as the instrument-grant rule, which grants the script its
 own entry names in the same commit. Both exist because **writing a lesson down
 is not obeying it** — this file has a recorded case of an author violating his
 own merged commit message days later.
+## COUNTING TOKENS INSTEAD OF CLASSIFYING ROWS — AND THE DETECTOR THAT CAUGHT ALL FIVE
+
+**Standing 2026-08-23. One session, five instrument defects, ONE shape and ONE
+detector.** Filed as a synthesis because the uniformity is the finding: these
+did not look alike while they were happening.
+
+> **Every miss was COUNTING TOKENS instead of CLASSIFYING ROWS.**
+> **Every catch was an INCOHERENT VALUE left loud.**
+> **Keep impossible values loud — tidying them is how all five would have
+> shipped.**
+
+| # | the token count | the incoherent value that caught it | the real answer |
+|---|---|---|---|
+| 1 | `grep -c 'axis=note-shape'` on a watcher's output | **16 note-shape AND 1 specialty**, against a partition printing 50 rows | it matched the script's own **legend lines**; 15 / 0 — unmoved |
+| 2 | `ls \| grep -cE '^[0-9]{14}'` for migration dirs | **105 in repo, 106 applied** — more applied than exist | the pattern excluded `0000_init`; 106 / 106 |
+| 3 | `comm` over `git ls-tree` paths vs bare names | **everything divergent in BOTH directions** | a `sed` that never fired; zero divergence |
+| 4 | three tries at the highest ruling number | **`#100` as the max** with `#141` known to exist | lexical sort, then PR numbers 739–809 swept in |
+| 5 | a poll loop with no exhausted/satisfied distinction | **`conclusion: null` on a "completed" check-run** | the loop fell through on TIMEOUT and printed a verdict |
+
+⚠️ **NOT ONE WAS CAUGHT BY A TEST, A GATE, OR A REVIEW.** Each was caught
+because a number could not be true. That is the whole mechanism, and it is
+free — but only if the impossible value is allowed to reach a human instead of
+being normalised on the way.
+
+**#1 is the one that had teeth.** A MOVED count on that watcher IS a deploy
+finding, and it was inside a post-deploy judgement. Reported as `16 / 1` it
+would have manufactured a finding that did not exist, on a deploy that was
+clean — and every later reader would have inherited it.
+
+**WHY THE SHAPE REPEATS.** `grep -c`, `wc -l`, `sort`, `uniq -c` all answer
+*"how many lines carry this string"*. Almost every question worth asking is
+*"how many ROWS are of this kind"* — and a file's prose, legends, comments and
+headers are exactly where the string appears without the kind. The tool is
+always right; it is answering the other question.
+
+**THE PRACTICE, and it is one line of shell:**
+
+1. **Anchor on the row's SHAPE, not its content** — `^\s+c[a-z0-9]{24}\s` for a
+   cuid row, `\*\*#[0-9]{1,3} —` for a ruling row. A legend cannot satisfy a
+   row anchor.
+2. **Carry a positive control that names a known member** — `#141` was known to
+   exist; `#100` as the maximum refuted the matcher instantly.
+3. **Make the partition reconcile against a total you did not compute the same
+   way.** Four of the five above are visible purely as arithmetic.
+4. ⚠️ **NEVER NORMALISE AN IMPOSSIBLE VALUE.** `?? 0`, `|| echo 0`, `// "-"`,
+   a default, a coalesce — each converts *"this instrument is broken"* into a
+   plausible number. **The null and the backwards count were the only reasons
+   any of this was found.**
+
 ### ⚠️ THE THREE-LAYER ECHO — one lesson, three altitudes, one arc
 
 **Recorded because the repetition is the finding.** F24's single lesson —
