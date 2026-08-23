@@ -25034,3 +25034,190 @@ changing its measured reach today, which is still 0 incremental headers.
 ⚠️ **It is a correlation over 49 rows and it is not a trend.** Recorded as a
 refinement, not a finding.
 
+---
+
+## 🟡 F24-S3 · RULING #140 — THE FALLBACK IS HONEST. THE TWIN HALF IS **WITHDRAWN**, NOT DEFERRED — run `20260822-164142-b1`, session 03
+
+**Ruling #140 says the label column is resolved from EVIDENCE where the visit is
+template-bound, and that the text heuristic survives only as the untemplated
+fallback, where it must REFUSE HONESTLY rather than pad and shift.**
+
+> **HALF OF #140 SHIPS AND HALF DOES NOT, AND THE HALF THAT DOES NOT WAS BUILT
+> FIRST AND THEN REMOVED ON EVIDENCE.** Saying which half you have is the whole
+> discipline.
+
+### ✅ WHAT SHIPPED — the fallback stops guessing
+
+`classifyHeaderCell` answers **three** ways. `cannot_tell` is the bucket #140
+exists to create: it was silently merged into `data`, which is exactly how a
+label column became a measurement column. `data` now needs a **unit**
+parenthetical or a cell made **entirely** of measurement vocabulary; the editor
+refuses `cannot_tell` with its own reason, `label_column_unresolved`.
+
+**The generator is untouched, and it is PROVED rather than asserted.**
+`isDataColumnHeader` is `classifyHeaderCell(h) !== 'label'`, and `label` is by
+construction the exact complement of the pre-#140 expression. The gate pins that
+expression verbatim as an oracle. An adversarial lens re-derived the same
+identity independently over **5270** generated headers: **0 disagreements**,
+with a positive control (the same loop aimed at the editor's view) producing
+**2255** — so the loop is not blind.
+
+### ⛔ WHAT DID NOT SHIP, AND WHY — a count cannot answer a question about a KIND
+
+A twin route was built, gated in both directions, and **removed before merge**.
+It keyed on the twin's **data column count**:
+
+    dataColumnCount === rawHeaderCells.length
+
+⚠️ **THAT IS INVARIANT UNDER WHICH END THE HEADER IS SHORT AT.** A header of
+`{label + N-1 data}` and one of `{N data}` both have N cells. It is the
+**identical axis error** this programme's canon records for the production delta
+census — *a count over the wrong axis cannot answer a question about kind* —
+reproduced one commit later **inside the fix written to replace it**.
+
+It was also strictly worse than the defect #140 closed: it **widened grids the
+text route correctly refuses** (`| VEIN | DIAMETER (mm) |` → the fallback says
+`ragged_table`, the twin route wrote the cell).
+
+Found by me while waiting on the adversarial pass; **confirmed independently by
+one lens, and a second showed the fixture pinned a hand-chosen `2` while the
+interface's own documented derivation (`table_cell` FIELDS minus the label)
+yields `1`** — which returns `ragged_table` on the only CERTIFIED form in
+production, with the gate still green because the gate asserted the number
+instead of deriving it.
+
+**Do not re-add a twin route keyed on a count** — the source says so where the
+next author will read it.
+
+#### ⚠️ AND MY OWN PROPOSED REPLACEMENT MECHANISM IS **REFUTED BY MEASUREMENT**
+
+This row first said *"what the twin CAN honestly settle is whether its own
+header row's first cell is EMPTY."* I had written that into the source comment
+and into this ledger **before looking**. Measured against production's single
+CERTIFIED compiled version, table 0:
+
+| row | cell 0 | cell 1 | cell 2 |
+|---|---|---|---|
+| **0 — the header row** | **HAS TEXT**, 0 fields | HAS TEXT, 0 fields | HAS TEXT, 0 fields |
+| 1 — a data row | **HAS TEXT**, 0 fields ← the row label | 1 field | 1 field |
+
+**The twin's header row NAMES ALL THREE COLUMNS**, cell 0 included, while the
+rendered note carries a **two**-cell header. So the twin knows there are 3
+columns and that column 0 is the label — and it **still cannot say which header
+cell the note dropped**, because that needs the header cells' TEXT and the IR
+stores only `staticTextSha256`.
+
+> **THE REAL BLOCKER FOR #140's TWIN HALF IS NOW MEASURED RATHER THAN ASSUMED:
+> the evidence lives in the SOURCE ARTIFACT, not in the IR.** Whoever builds it
+> needs the static text as well as the note-table → twin-table identification.
+
+⚠️ **Recorded this way deliberately.** A plausible-but-wrong mechanism written
+confidently into a source file outlives the session that wrote it — this
+programme has a canon entry about exactly that, and this is it caught one commit
+before it would have become the next session's starting assumption.
+
+### 📊 THE OPEN QUESTION IS ANSWERED — production note shape
+
+`docs/qa-reports/f24-s3-production-note-shape-census-20260822.md`. The row asked
+for this by name: *"the single most important open question"*.
+
+| line directly above a table header | headers | `captionFor` |
+|---|---|---|
+| **prose** | **9** | returns it |
+| heading | 16 | `null` |
+| BLANK | 20 (16 with prose above the blank) | `null` |
+| | **45** | |
+
+> **`captionFor` reaches 9 of 45 headers. Sixteen more carry prose one blank
+> line up, where it deliberately does not look. And ambiguity is the COMMON
+> case — 280 of 441 data rows (63.5%) sit under a repeated row label, across 14
+> multi-table sections.**
+>
+> **So the caption route is not worth building on**, and addressing needs a
+> route that does not go through `captionFor`.
+
+This **corroborates session 02's replay** (*a single blank line takes the twin
+from 40 to 0*) from an independent direction: theirs was a replay over a
+synthetic matrix, this is a structural census of the real corpus. Two methods,
+one conclusion.
+
+The universe reconciles (441 data rows + 45 headers + 45 rules = **531** pipe
+lines, **0** empty first cells), and the SQL heading-matcher was controlled
+against the shipped `HEADING_RE`: **16 / 16 / 0 divergent**. ⚠️ **Stated limit:
+I counted PROSE, and a caption is a KIND — `captionFor`'s own doc says it never
+distinguished the two. So 9 is a CEILING on that route, not a measurement of
+captions.**
+
+### ⚠️ THE ADVERSARIAL PASS REFUTED MY OWN FIX — FOUR DEFECTS, ONE OF THEM THE DEFECT #140 EXISTS TO CLOSE
+
+Three lenses, distinct claims, over the finished diff. **Every finding was
+reproduced by me on my own tree before a line changed.**
+
+| # | defect | disposition |
+|---|---|---|
+| **1** | the unit list carried SINGLE LETTERS, so `(L)` parsed as **litres**: `Vein (L)` widened and destroyed the REFLUX cell while **`Vein (R)` REFUSED** — the left leg silently corrupted and the right leg refused **in the same bilateral study** | fixed; a unit must not plausibly abbreviate anything else |
+| **2** | the twin route (above) | **withdrawn** |
+| **3** | `\| Time \| HEART RATE \|` — `Time` is entirely measurement nouns, so cell-0-only classification widened it and **destroyed the blood pressure** | fixed: **every** header cell must be `data` |
+| **4** | `norm` strips a trailing parenthetical, so a model-authored `columnLabel` of `(mm)` normalises to `''` and selected any **blank header cell** — writing into an unnamed column and confirming it with an empty column name | fixed: an unnamed column is never a target |
+
+### ⚠️ AND MY GATE WAS WRONG IN FOUR WAYS — EACH PROVED BY RUNNING IT
+
+- **A FALSE GREEN.** Deleting the `gridIsRegular` precondition **left all 94
+  arms green.** The arm written to protect it was aimed where the answer was
+  predetermined — its fixture was stopped by `shortByExactlyOne` first, so
+  `gridIsRegular` was never evaluated. Now RED.
+- **A DECORATIVE FLOOR.** `expect(checked).toBe(stems*brackets*decor)` compared
+  a counter against its own loop's trip count — **structurally incapable of
+  failing**. Demonstrated: a space where all 224 combinations answer `false`
+  passed 51 of 51. It now measures the ANSWERS.
+- **A CENSUS OVER A CURATED SET.** `expect(tally.cannot_tell).toBe(3)` measured
+  the hand-picked corpus, not the predicate. Replaced by a subset invariant that
+  means something: every `cannot_tell` row is one the OLD predicate accepted, so
+  #140 is provably a **tightening**.
+- **AN INFLATED CLAIM AND A FALSE ONE.** *"All six production values, none
+  ambiguous"* — only **two** ever reach the classifier. *"27 lead with
+  `DIAMETER (mm)` and those are exactly the short-at-front notes"* — **26** are;
+  the 27th short one is `DIAMETER`, a row the arm did not cover.
+
+### ⚠️ A CAPABILITY LOSS, MEASURED AND **ACCEPTED** — not hidden
+
+A lens measured **37 of 47** plausible clinical headers losing their widen, not
+three. Two different things were inside that number, and they get two answers:
+
+- **a unit-list GAP, which is not ambiguity** — `Volume (cc)`, `Flow (L/min)`,
+  `Dose (mg)`, `Diameter mm`, `Diameter [mm]`. **Restored.**
+- **a QUALIFIED measurement noun** — `Max Diameter`, `Peak Velocity`,
+  `Nodule Size`, `Total Length`. **ACCEPTED AS LOST.** `| Max Diameter | REFLUX |`
+  reads as `{label, data}` or `{data, data}` with equal force — the exact
+  ambiguity #140 rules must be refused — and a qualifier allowlist would be
+  *guessing better* rather than refusing. **Refusing costs a retype; guessing
+  costs a measurement.** Pinned in the corpus as `cannot_tell` so admitting them
+  later is a deliberate edit. **Retirement condition: a properly-built twin
+  route.**
+
+**Production takes ZERO measured loss.** Its widening headers are a closed set
+of three, asserted end-to-end, both columns each:
+
+    | DIAMETER (mm) | REFLUX TIME (ms) |        13 lines / 7 visits
+    | DIAMETER (mm) | REFLUX TIME (seconds) |   13 lines / 7 visits
+    | DIAMETER | REFLUX TIME |                   1 line  / 1 visit
+
+### 📌 OWED, AND NAMED SO IT IS NOT REDISCOVERED
+
+1. **#140's twin half is NOT implemented.** The honest evidence is the twin's
+   own header-row first cell; it needs note-table → twin-table identification.
+2. ⚠️ **A THIRD SITE STILL DECIDES THIS QUESTION, AND THE DRIFT WIDENED FROM TWO
+   ANSWERS TO THREE.** `template-twin/bridge-fill.ts` `classifyHeader`
+   (consumed at `:425` for `labelColumnOffset`) uses its own two-valued
+   vocabulary. On `Vein Size` the three sites now say *no label column* /
+   *REFUSE* / *has a label column*. The pre-existing contract test names it and
+   defers it to F24-S3; **this branch did not reconcile it** and touches neither
+   file. It is a FILL-path offset, not the editing path.
+3. **F24-S3's acceptance is still NOT met** — the census asks for zero gaps and
+   the gap set is 40 of 80 (28 content controls + 12 duplicate row labels). The
+   row stays 🔴.
+4. **Slice 1's `670` data rows could not be reproduced** — I measure **441**,
+   reconciling exactly, and two candidate explanations were tested and rejected.
+   Not asserting Slice 1 was wrong; recording that a number quoted in a source
+   comment did not reproduce. Anyone relying on 670 should re-measure.
+

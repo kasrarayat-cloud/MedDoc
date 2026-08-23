@@ -32,7 +32,7 @@
 // ============================================================================
 
 import { parseMarkdownRow, MARKDOWN_RULE_ROW_RE } from './markdown-row';
-import { isDataColumnHeader } from './table-header-shape';
+import { classifyHeaderCell } from './table-header-shape';
 import { readNoteSection } from './splice-note-section';
 
 /** `| --- | :--- |` — a table's alignment rule, never content. */
@@ -60,6 +60,13 @@ export type TableEditFailure =
   | 'column_not_found'
   | 'column_ambiguous'
   | 'ragged_table'
+  /** The header is short by exactly one cell and NOTHING SETTLES WHICH END.
+   *  ⚠️ Distinct from `ragged_table`, which is a grid that genuinely does not
+   *  line up. This one lines up under exactly one of two readings and the
+   *  evidence does not pick between them — ruling #140. Collapsing the two
+   *  would put a refusal and an unknowable in one bucket, and then no count
+   *  could ever answer "did my change break this?". */
+  | 'label_column_unresolved'
   | 'illegal_value';
 
 export interface TableEditResult {
@@ -406,19 +413,77 @@ export function editTableCell(params: {
   // is short. An observation that cannot come out the other way is not
   // evidence for the thing it was cited for.
   //
-  // SO THE WIDEN NOW TURNS ON EVIDENCE ABOUT THE HEADER: it fires only when the
-  // header's FIRST cell is itself a DATA column, i.e. the header demonstrably
-  // has no label column — the same question, through the same predicate, that
-  // the generator asks when deciding whether to emit one.
-  const headerLacksLabelColumn =
-    rawHeaderCells.length > 0 && isDataColumnHeader(rawHeaderCells[0]);
-  const headerCells =
-    headerLacksLabelColumn &&
-    rawHeaderCells.length === rowCells.length - 1 &&
-    everyDataRowAgrees &&
-    dataRowCounts[0] === rowCells.length
-      ? ['', ...rawHeaderCells]
-      : rawHeaderCells;
+  // SO THE WIDEN TURNS ON EVIDENCE ABOUT THE HEADER — AND SINCE RULING #140 ON
+  // THE TWIN'S EVIDENCE FIRST, WITH THE TEXT VOCABULARY AS THE UNTEMPLATED
+  // FALLBACK ONLY.
+  //
+  // ⚠️ AND THE FALLBACK NOW HAS A THIRD ANSWER. The text test fired on ANY
+  // trailing parenthetical and on any cell CONTAINING a measurement word, so
+  // `Vein Size`, `Segment (right leg)` and `Site (see key)` — all row-label
+  // columns — read as data and licensed the widen. That is #140's defect, and
+  // its cost is not a refusal but a WRITE into the neighbouring cell reported
+  // as success. Those three now return `label_column_unresolved`.
+  //
+  // ⚠️ THE PRECONDITIONS ARE UNCHANGED AND ARE CHECKED FIRST, DELIBERATELY: a
+  // header that is not short by exactly one, or a table whose data rows
+  // disagree with each other, never reaches either resolver and still falls to
+  // `ragged_table`. #140 narrows WHEN the widen may fire; it does not widen the
+  // set of grids that reach it.
+  // ⚠️ EVERY HEADER CELL IS CLASSIFIED, NOT ONLY THE FIRST — AND THE
+  // ADVERSARIAL PASS IS WHY. Asking only about cell 0 says "does the header
+  // START with a data column?", which is a weaker question than "does the
+  // header consist ONLY of data columns?" — and it is the second one that means
+  // "there is no label column here". A vitals table shows the gap:
+  //
+  //     | Time | HEART RATE |          edit HEART RATE := 88
+  //     | 08:00 | 72 | 120/80 |    ->  ok:true, before "120/80"
+  //
+  // `Time` is made entirely of measurement nouns, so cell-0-only read it as
+  // data and widened; the BLOOD PRESSURE was destroyed and the doctor was told
+  // the heart rate changed. `HEART RATE` is not measurement vocabulary at all,
+  // so requiring EVERY cell to be `data` refuses this grid — while the three
+  // header lines production actually widens are unaffected, because every cell
+  // of all three is a unit or a measurement noun. Measured, not hoped:
+  //
+  //     | DIAMETER (mm) | REFLUX TIME (ms) |       13 lines / 7 visits
+  //     | DIAMETER (mm) | REFLUX TIME (seconds) |  13 lines / 7 visits
+  //     | DIAMETER | REFLUX TIME |                  1 line  / 1 visit
+  //
+  // ⚠️ AND THE TWIN ROUTE THAT STOOD HERE WAS REMOVED, DELIBERATELY. It read
+  // `dataColumnCount === rawHeaderCells.length`, and THAT IS A COUNT: a header
+  // of {label + N-1 data} and a header of {N data} both have N cells, so it is
+  // invariant under which end is short — the identical axis error this file's
+  // own comment above diagnoses in the production delta census. It also WIDENED
+  // GRIDS THE TEXT ROUTE CORRECTLY REFUSES (`| VEIN | DIAMETER (mm) |`), which
+  // is strictly worse than the defect #140 closed.
+  //
+  // ⚠️ AND THE REPLACEMENT MECHANISM THIS COMMENT FIRST PROPOSED — "the twin can
+  // say whether its own header row's first cell is EMPTY" — IS REFUTED BY
+  // MEASUREMENT. Production's single CERTIFIED compiled version, table 0:
+  //
+  //     row 0 (header)  cell0 HAS TEXT  cell1 HAS TEXT  cell2 HAS TEXT  0 fields
+  //     row 1 (data)    cell0 HAS TEXT  cell1 1 field   cell2 1 field
+  //
+  // The twin's header row NAMES ALL THREE COLUMNS while the note carries a TWO
+  // -cell header, so the twin knows column 0 is the label and STILL cannot say
+  // which header cell the note dropped — that needs the header cells' TEXT, and
+  // the IR stores only `staticTextSha256`. The evidence lives in the SOURCE
+  // ARTIFACT, not the IR. See `table-header-shape.ts` for the full record.
+  const shortByExactlyOne = rawHeaderCells.length === rowCells.length - 1;
+  const gridIsRegular = everyDataRowAgrees && dataRowCounts[0] === rowCells.length;
+
+  let widen = false;
+  let unresolved = false;
+  if (shortByExactlyOne && gridIsRegular && rawHeaderCells.length > 0) {
+    const verdicts = rawHeaderCells.map(classifyHeaderCell);
+    // A cell nothing settles is its own refusal; a cell that plainly names a
+    // label column is an ordinary ragged grid. Different remedies, so different
+    // reasons — see `label_column_unresolved`.
+    unresolved = verdicts.includes('cannot_tell');
+    widen = !unresolved && verdicts.every((v) => v === 'data');
+  }
+  if (unresolved) return { ok: false, reason: 'label_column_unresolved' };
+  const headerCells = widen ? ['', ...rawHeaderCells] : rawHeaderCells;
 
   // A RAGGED TABLE IS NOT WRITABLE.
   //
@@ -433,7 +498,21 @@ export function editTableCell(params: {
   const colIdx = headerCells
     .map((h, i) => ({ h: norm(h), i }))
     // The first column is the row label itself, never a writable measurement.
-    .filter((x) => x.i > 0 && x.h === wantCol)
+    // ⚠️ AN UNNAMED COLUMN IS NEVER A TARGET, AND `x.i > 0` WAS NOT ENOUGH.
+    // `norm` strips a trailing parenthetical, so a `columnLabel` that is
+    // ENTIRELY one — `(mm)`, which the MODEL authors — normalises to `''`, and
+    // an empty header cell anywhere in the table then matched it. Measured:
+    //
+    //   | DIAMETER (mm) |  | REFLUX TIME (ms) |   columnLabel '(mm)'
+    //   | GSV at the SFJ | 6.2 | 1.1 | 3.4 |   ->  ok:true, before "1.1",
+    //                                              column "" (an EMPTY name)
+    //
+    // The value landed in the unnamed column and the confirmation the doctor
+    // reads — `chat-edit-visit.ts` renders `${row} · ${column}` — ended in a
+    // bare separator with nothing after it. The old comment justified this
+    // filter as "the first column is the row label"; that is true of index 0
+    // and says nothing about the other empty cells a widened table can carry.
+    .filter((x) => x.i > 0 && x.h !== '' && x.h === wantCol)
     .map((x) => x.i);
 
   if (colIdx.length === 0) return { ok: false, reason: 'column_not_found' };
@@ -471,5 +550,10 @@ export const TABLE_EDIT_REASON: Record<TableEditFailure, string> = {
     'That row appears more than once in the same table, so naming the table cannot tell them apart. I have left the note unchanged — edit the row directly in the document.',
   ragged_table:
     "That table's header and its rows don't line up, so I can't tell which column is which.",
+  // Says what is true and where the doctor can act, and deliberately does NOT
+  // ask them to rephrase — no rewording of the request can supply the column
+  // heading the note is missing.
+  label_column_unresolved:
+    "That table's header is missing a heading for its first column, so I can't tell which column your value belongs in. I've left the note unchanged — edit that cell directly in the document.",
   illegal_value: "A measurement can't contain a line break or a “|”.",
 };
