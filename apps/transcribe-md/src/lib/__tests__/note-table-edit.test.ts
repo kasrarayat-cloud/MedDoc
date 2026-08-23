@@ -422,6 +422,19 @@ describe('F24 SLICE 1b — an unanswerable question becomes an honest refusal', 
     }
   });
 
+  // ⚠️ THIS ARM WATCHES EVERY CARRIER OF "HERE IS WHAT YOU MAY PICK", NOT JUST
+  // `choices` — WIDENED 2026-08-23 AFTER IT SLEPT THROUGH ITS OWN INVARIANT.
+  //
+  // Its name states exactly what F24-S4 went on to break, and it stayed green
+  // the whole time: the slice added a SECOND carrier, `rowChoices`, and this
+  // arm only ever looked at `choices`. Six numbered rows spanning two tables
+  // were offered on this very shape, and every one of them was refused when
+  // echoed back.
+  //
+  // A guard's watched set does not grow when somebody adds a field. So the
+  // assertion is over the carriers by NAME, and a third one added later must
+  // be added here too — which is why the list is written out rather than
+  // implied.
   it('⚠️ NEVER asks a question it offers no way to answer', () => {
     // The dead end this slice actually removes. With a blank line above each
     // header no candidate carries a caption, so there is nothing to
@@ -433,6 +446,7 @@ describe('F24 SLICE 1b — an unanswerable question becomes an honest refusal', 
       if (!r.ok) {
         expect(r.reason).toBe('caption_not_found');
         expect(r.choices ?? []).toHaveLength(0);
+        expect(r.rowChoices ?? []).toHaveLength(0);
       }
     }
   });
