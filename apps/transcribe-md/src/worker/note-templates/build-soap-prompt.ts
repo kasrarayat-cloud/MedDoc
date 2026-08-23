@@ -336,13 +336,27 @@ export function renderStructureDirective(
     // legal markdown, and note-table-edit.ts:200-204 already skips index 0 when
     // resolving a column, so it can never be written to.
     //
-    // DOWNSTREAM IS UNCHANGED BY CONSTRUCTION, NOT BY HOPE. bridge-fill.ts:421
-    // computes `labelColumnOffset = roleByCol[0] === 'other' ? 0 : 1`, and
-    // classifyHeader returns 'other' for an empty cell — so the fill moves from
-    // its offset=1 branch to its offset=0 branch, BOTH already shipped and
-    // tested because L4 has always emitted both shapes. Measured with the real
-    // parser: corrected -> header=3 rows=2; legacy -> header=2 rows=2. The fill
-    // path's tolerance was a deliberate two-shape handler, never load-bearing.
+    // DOWNSTREAM IS UNCHANGED BY CONSTRUCTION, NOT BY HOPE — and the
+    // CONCLUSION below survived a change of MECHANISM underneath it.
+    //
+    // ⚠️ THIS PARAGRAPH USED TO READ: "bridge-fill.ts:421 computes
+    // `labelColumnOffset = roleByCol[0] === 'other' ? 0 : 1`, and classifyHeader
+    // returns 'other' for an empty cell". BOTH CLAUSES ARE NOW FALSE. Ruling
+    // #140's third-site reconciliation made the fill resolve that offset from
+    // the header/row DELTA plus the SHARED `classifyHeaderCell` predicate, and
+    // it no longer consults `roleByCol[0]` or `classifyHeader` for it at all.
+    // The line number was stale too.
+    //
+    // The conclusion is unchanged and re-derived against the new mechanism:
+    // the skeleton emits an EMPTY first header cell, so header and rows carry
+    // the SAME cell count -> delta 0 -> offset 0. `classifyHeaderCell('')` is
+    // `'label'` (neither arm of the text test can match an empty string), so
+    // even the delta-1 route would agree. The fill path's two-shape tolerance
+    // remains deliberate and is still never load-bearing here.
+    //
+    // ⚠️ Recorded because canon's own words apply to this comment: "a wrong
+    // mechanism stated confidently in a source file outlives the session that
+    // wrote it" — and this file is on the clinical generation path.
     const headerHasLabelColumn = !(
       structure.columns.length > 0 && isDataColumn(structure.columns[0]!)
     );

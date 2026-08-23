@@ -139,17 +139,39 @@ describe('non-vacuity — the real customer form actually compiled', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 1. THE PRODUCTION UNIVERSE — and it is a CLOSED, MEASURED set
+// 1. THE PRODUCTION UNIVERSE — AND THERE ARE **TWO** OF THEM
 // ---------------------------------------------------------------------------
-// Every distinct header first cell production holds, from the census in
-// `docs/qa-reports/f24-s3-production-note-shape-census-20260822.md` §4 —
-// 45 header lines across 24 visits, six distinct values, re-measured there
-// rather than inherited.
+// ⚠️ AN EARLIER DRAFT OF THIS BLOCK WAS TITLED "the production universe" AND
+// ENUMERATED THE SIX FIRST-CELL VALUES FROM THE NOTE-SHAPE CENSUS. That set is
+// real, and it is the **editor's** universe. THIS FILE GUARDS THE **FILL**
+// PATH, whose universe is a strict and much smaller subset — and conflating
+// them is canon's "a check whose title is wider than what it measures", caught
+// in this gate before merge.
 //
-// ⚠️ THE SAFETY CLAIM OF THIS WHOLE CHANGE IS THIS ONE ARM: not one production
-// header lands in `cannot_tell`, so the new refusal costs production nothing.
-// And it COULD have come out otherwise — a `Vein Size`-shaped value in that
-// census would appear here as a newly-refused header and redden this arm.
+// Both were measured READ-ONLY against production on 2026-08-23 by this
+// session, with an independently written query — not inherited from another
+// session's report:
+//
+//   THE FILL UNIVERSE (what `bridgeNumericTableCells` actually runs on):
+//     1 compiled version · 1 certification · 2 fill manifests · 2 visits
+//     -> 4 table header lines, and ALL FOUR are `DIAMETER (mm)`.
+//
+//   THE NOTE CORPUS (the editor's universe, a superset):
+//     45 header lines · 24 visits · six distinct first cells.
+//     Re-measured this session and it reproduces the census EXACTLY:
+//     DIAMETER (mm) 27/14 · Location 8/4 · Segment 6/3 · Site 2/1 ·
+//     DIAMETER 1/1 · Medication 1/1.
+//
+// ⚠️ SO THE HONEST COVERAGE CLAIM IS TWO SENTENCES, NOT ONE:
+//   · this change covers **4 of 4** header lines the fill path meets today, and
+//     that one shape is provably unmoved (`data` -> offset 1, which is what the
+//     old vocabulary also answered);
+//   · and **6 of 6** values the wider corpus holds classify safely, so the fill
+//     is not walking into a refusal the day a second template certifies.
+//
+// The second sentence is a FORWARD-LOOKING claim about a set this code does not
+// reach yet. It is asserted because that is when it is cheap, not because it is
+// covered today.
 describe('the production universe — no production header is refused', () => {
   const PRODUCTION_FIRST_CELLS: [string, 'data' | 'label', number][] = [
     ['DIAMETER (mm)', 'data', 27],
@@ -173,10 +195,69 @@ describe('the production universe — no production header is refused', () => {
     expect(refused.map(([h]) => h)).toEqual([]);
   });
 
-  // The generator's binary view is the complement of `label` BY CONSTRUCTION,
-  // so the generator and the fill cannot disagree once both read this module.
-  it.each(PRODUCTION_FIRST_CELLS)('generator and classifier agree on %s', (header) => {
-    expect(isDataColumnHeader(header)).toBe(classifyHeaderCell(header) !== 'label');
+  // ⚠️ AN ARM HERE ONCE CALLED ITSELF "THE ARM THAT ACTUALLY COVERS THIS CODE
+  // PATH" AND NEVER CALLED `bridgeNumericTableCells` — it re-asserted
+  // `classifyHeaderCell('DIAMETER (mm)') === 'data'`, which arm 1 of this
+  // describe already does. It was written DURING the adversarial pass, in the
+  // same edit that corrected a title-wider-than-it-measures defect, and the
+  // pass caught it. Deleted rather than reworded.
+  //
+  // The fill universe's real coverage is BEHAVIOURAL and lives in §2 —
+  // "PRE-Slice-1 legacy shape", which is exactly the 2-cell `DIAMETER (mm)`
+  // header all 4 production fill-universe header lines carry.
+
+  // ⚠️ SIX ARMS HERE USED TO ASSERT
+  //     isDataColumnHeader(h) === (classifyHeaderCell(h) !== 'label')
+  // OVER THE SIX PRODUCTION VALUES, AND THE ADVERSARIAL PASS PROVED THEM A
+  // DEFINITIONAL TAUTOLOGY WITH ZERO PROTECTION. `isDataColumnHeader` IS that
+  // expression (`table-header-shape.ts:230-232`), so the equality can only
+  // discriminate on a `cannot_tell` input — and the arm two lines above
+  // guarantees no member of this list is one. The universe was selected such
+  // that the only discriminating input is absent.
+  //
+  // Demonstrated, not argued: mutating `isDataColumnHeader` to
+  // `return classifyHeaderCell(h) === 'data'` — precisely the edit
+  // `table-header-shape.ts:226-228` forbids in capitals, because it would
+  // change what the GENERATOR emits into clinical notes — left all 25 arms
+  // GREEN.
+  //
+  // Replaced by ONE arm aimed at the input that separates them.
+  it('the generator still COLLAPSES cannot_tell to data — the forbidden edit is visible here', () => {
+    expect(classifyHeaderCell('Vein Size')).toBe('cannot_tell');
+    // If someone "fixes" isDataColumnHeader to return false on cannot_tell,
+    // THIS reddens. Ruling #140 does not authorise that change: it would alter
+    // the placeholder count the generator writes into notes.
+    expect(isDataColumnHeader('Vein Size')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1b. THE **FORWARD** UNIVERSE — what future notes will carry
+// ---------------------------------------------------------------------------
+// ⚠️ ADDED BY THE ADVERSARIAL PASS. §1 measures notes that ALREADY EXIST. The
+// headers of notes not yet written come from `note_templates.sections[]
+// .structure.columns`, which `renderStructureDirective` emits verbatim — a
+// different set, and the one that decides whether this refusal ever fires
+// again. Ruling #140 measured it and neither existing gate asserted it.
+//
+// Re-measured read-only on production 2026-08-23 by this session:
+// **3 table structures, and all 3 lead with `DIAMETER (mm)`.** Reproduces
+// #140's own figure rather than inheriting it.
+describe('the forward universe — the columns future notes will carry', () => {
+  it('every production template table leads with a column the predicate SETTLES', () => {
+    expect(classifyHeaderCell('DIAMETER (mm)')).toBe('data');
+  });
+
+  // ⚠️ AND THE REFUSAL IS NEAR-UNREACHABLE FROM A GENERATED NOTE, WHICH BOUNDS
+  // THE LOSS *AND* SHRINKS THE SAFETY BEING CLAIMED FOR IT — both halves stated.
+  // `build-soap-prompt.ts` prepends an EMPTY first header cell whenever
+  // `isDataColumnHeader(columns[0])`, so the emitted header has the same cell
+  // count as its rows (delta 0 -> offset 0), and an empty cell classifies
+  // `label` anyway. A `Vein Size`-shaped TEMPLATE column therefore cannot
+  // produce a refusing header in a freshly generated note. The refusal can only
+  // fire on a LEGACY note or one where the model deviated from the skeleton.
+  it("the skeleton's empty leading cell classifies as label, so generated notes never refuse", () => {
+    expect(classifyHeaderCell('')).toBe('label');
   });
 });
 
@@ -198,7 +279,12 @@ describe('regression control — production keeps filling, both header shapes', 
     expect(got.get(cell(ir, DIAMETER_ROW, 2).fieldId)).toBe('3.4');
   });
 
-  it('PRE-Slice-1 legacy shape: header is short at the FRONT (delta 1)', () => {
+  // ⚠️ THIS ONE IS ALSO **THE ENTIRE PRODUCTION FILL UNIVERSE**. All 4 header
+  // lines on the 2 visits carrying a fill manifest are this 2-cell
+  // `DIAMETER (mm)` header. So the "zero production behaviour change" claim is
+  // discharged by a PREDETERMINED control — which is the correct instrument for
+  // "nothing moved", and is stated as such rather than counted as protection.
+  it('PRE-Slice-1 legacy shape (= the production fill universe): header short at the FRONT', () => {
     const got = fillsOf(
       '| DIAMETER (mm) | REFLUX TIME (seconds) |',
       '| Right GSV at the SFJ | 6.2 | 3.4 |',
@@ -240,16 +326,111 @@ describe('the third site now answers with the SHARED predicate', () => {
   // #140 rules that ambiguity is refused rather than guessed better, and §1
   // measures the cost on production at ZERO. Refusing costs a retype; guessing
   // costs a measurement.
+  // ⚠️ THE FIXTURE IS THE **DELTA-1** SHAPE, WHICH IS RULING #140's OWN, AND AN
+  // EARLIER DRAFT OF THIS ARM USED THE DELTA-0 SHAPE AND WAS WRONG TO REFUSE
+  // THERE. On a delta-0 table every header cell has a row cell and cell 0 is a
+  // proven label, so `Vein Size` IS the label column by structure and the text
+  // never gets a vote. Refusing there converted three CORRECT answers into
+  // refusals — a capability loss with no safety behind it. See the delta-0 arms
+  // below, which assert those same three headers now FILL.
   it.each(['Vein Size', 'Segment (right leg)', 'Site (see key)'])(
-    'an ambiguous first column REFUSES the whole candidate table: %s',
+    'delta 1 + an ambiguous first column REFUSES: %s',
     (first) => {
       const got = fillsOf(
-        `| ${first} | DIAMETER (mm) | REFLUX TIME (seconds) |`,
+        `| ${first} | DIAMETER (mm) |`,
         '| Right GSV at the SFJ | 6.2 | 3.4 |',
       );
       expect(got.size).toBe(0);
     },
   );
+
+  // ⚠️ THE OTHER HALF OF THE SAME COIN — AND THE ADVERSARIAL PASS'S FINDING 4.
+  // Same three headers, delta 0. The structure settles it, so they fill, and
+  // they fill in the RIGHT cells. A gate that only asserted the refusals would
+  // have let a future edit refuse everything and still read green.
+  it.each(['Vein Size', 'Segment (right leg)', 'Site (see key)'])(
+    'delta 0 + the same ambiguous first column FILLS CORRECTLY: %s',
+    (first) => {
+      const got = fillsOf(
+        `| ${first} | DIAMETER (mm) | REFLUX TIME (seconds) |`,
+        '| Right GSV at the SFJ | 6.2 | 3.4 |',
+      );
+      expect(got.get(cell(ir, DIAMETER_ROW, 1).fieldId)).toBe('6.2');
+      expect(got.get(cell(ir, DIAMETER_ROW, 2).fieldId)).toBe('3.4');
+    },
+  );
+
+  // ⚠️ ADVERSARIAL PASS, FINDING 1 — A REFLUX TIME INTO A DIAMETER FIELD.
+  // `classifyHeaderCell('Location (cm)')` is `data` (the trailing `(cm)` is a
+  // unit), so a predicate-only offset read 1 on a delta-0 table: the DIAMETER
+  // column resolved to the REFLUX cell and the reflux column ran off the end.
+  // The OLD vocabulary answered this correctly, so the predicate-only form was
+  // a REGRESSION of #140's own class.
+  //
+  // ⚠️ FOUR OF PRODUCTION'S SIX OBSERVED FIRST CELLS FLIP THIS WAY THE MOMENT A
+  // UNIT IS APPENDED — `Location`, `Segment`, `Site`, `Medication`. Today none
+  // carries one, which is why production was never exposed; that is a fact
+  // about this corpus, not about the predicate.
+  it.each(['Location (cm)', 'Segment (cm)', 'Site (mm)', 'Medication (mg)'])(
+    'delta 0 + a LABEL column wearing a unit reads its OWN cells: %s',
+    (first) => {
+      const got = fillsOf(
+        `| ${first} | DIAMETER (mm) | REFLUX TIME (seconds) |`,
+        '| Right GSV at the SFJ | 6.2 | 3.4 |',
+      );
+      expect(got.get(cell(ir, DIAMETER_ROW, 1).fieldId)).toBe('6.2');
+      expect(got.get(cell(ir, DIAMETER_ROW, 2).fieldId)).toBe('3.4');
+    },
+  );
+
+  // ⚠️ ADVERSARIAL PASS, FINDING 2 — A DIAMETER INTO A REFLUX FIELD.
+  // A 2-cell header over 3-cell rows CANNOT name the label column, so the
+  // offset must be 1. `classifyHeaderCell('CFV mm')` returns `label` — the bare
+  // unit never reaches #140's `cannot_tell` bucket — so a `label`-means-offset-0
+  // rule put the DIAMETER value into the REFLUX field.
+  //
+  // delta 1 + `label` is INCOHERENT (the header claims to name the label column
+  // AND the row has a spare cell), so it refuses. That is a real capability loss
+  // against the old vocabulary, which read `CFV mm` as a diameter column and got
+  // this shape right — and it is the honest answer, because the text cannot
+  // settle it.
+  it('delta 1 + a bare-unit first column REFUSES rather than shifting', () => {
+    const got = fillsOf(
+      '| CFV mm | REFLUX TIME (seconds) |',
+      '| Right GSV at the SFJ | 6.2 | 3.4 |',
+    );
+    expect(got.size).toBe(0);
+  });
+
+  // ⚠️ THE OTHER DIVERGENCE DIRECTION, AND IT WAS ADDED BECAUSE THE ADVERSARIAL
+  // PASS PROVED THE GATE BLIND TO IT. `§4` pinned `CFV mm -> label` at the
+  // PREDICATE level and no fixture ever drove it through the bridge. The pass
+  // reverted ONLY the `label` branch to the old vocabulary —
+  //
+  //     headerShape === 'data' ? 1 : classifyHeader(md.header[0]) !== 'other' ? 1 : 0
+  //
+  // — which is a real half-landed shape, and the gate stayed 25 of 25 GREEN.
+  // Every other `label` first cell in this file (`VEIN`, `Segment`) is ALSO
+  // `other` to the old vocabulary, so the two derivations agreed on every
+  // behavioural fixture that existed. `CFV mm` is the only shape that separates
+  // them, and it was the one shape with no behavioural arm.
+  //
+  // ⚠️ THIS IS THE PARTIAL APPLICATION THE AUTHOR'S OWN THREE MUTATIONS MISSED.
+  // M1/M2/M3 moved the whole derivation or the `cannot_tell` branch; nobody
+  // reverted ONE branch. Canon: "the interesting mutations are usually not
+  // 'delete everything' but 'do the obvious first step'."
+  //
+  // `classifyHeader('CFV mm')` matches /(^|\W)mm(\W|$)/ -> 'diameter' -> offset 1,
+  // so the diameter column reads the REFLUX cell and the reflux column runs off
+  // the end of the row. Under the revert this arm sees ZERO fills.
+  it('a bare-unit first column is the LABEL column — and this is asserted THROUGH the bridge', () => {
+    const got = fillsOf(
+      '| CFV mm | DIAMETER (mm) | REFLUX TIME (seconds) |',
+      '| Right GSV at the SFJ | 6.2 | 3.4 |',
+    );
+    expect(got.get(cell(ir, DIAMETER_ROW, 1).fieldId)).toBe('6.2');
+    expect(got.get(cell(ir, DIAMETER_ROW, 2).fieldId)).toBe('3.4');
+  });
 
   // ⚠️ AND THE REFUSAL IS A PROPERTY OF THE PREDICATE, NOT OF THE FIXTURE.
   // Same note, same facts, same row — only the first header cell changes, and
