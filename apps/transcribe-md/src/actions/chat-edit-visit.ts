@@ -256,6 +256,7 @@ export async function chatEditVisitAction(
             columnLabel: intent.columnLabel,
             value: intent.value,
             tableCaption: intent.tableCaption,
+            rowOrdinal: intent.rowOrdinal,
           });
           if (!edit.ok || !edit.body) {
             const why = edit.reason ? TABLE_EDIT_REASON[edit.reason] : 'I could not locate that cell.';
@@ -265,9 +266,21 @@ export async function chatEditVisitAction(
               ok: false,
               // Name the tables it could have meant, so the next turn can
               // actually answer the question this refusal asks.
-              error: edit.choices?.length
-                ? `${why} (${edit.choices.join(' or ')})`
-                : why,
+              //
+              // ⚠️ AND NAME THE ROWS TOO, BECAUSE THE MESSAGE NOW PROMISES A
+              // LIST. `row_ambiguous_same_table` reads "tell me which of the
+              // rows I listed you mean"; rendering only `choices` would make
+              // that sentence FALSE — a refusal describing a list the doctor
+              // was never shown, which is worse than the dead end it replaced.
+              // The numbers are the ones `editTableCell` issued, so the next
+              // turn echoes one back rather than counting rows itself.
+              error: edit.rowChoices?.length
+                ? `${why} (${edit.rowChoices
+                    .map((c) => `${c.ordinal}: ${c.cells.filter(Boolean).join(' · ')}`)
+                    .join('; ')})`
+                : edit.choices?.length
+                  ? `${why} (${edit.choices.join(' or ')})`
+                  : why,
             });
             break;
           }
