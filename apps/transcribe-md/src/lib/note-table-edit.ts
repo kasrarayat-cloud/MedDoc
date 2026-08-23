@@ -44,6 +44,36 @@ const HEADING_RE = /^\s*#{1,6}\s/;
  *  from any real caption text so the two unanswerable cases stay separable. */
 const NO_CAPTION = ' no-caption';
 
+/**
+ * The key that decides whether two captions are THE SAME TABLE to a caller.
+ *
+ * ⚠️ DELIBERATELY NOT `norm`, AND THERE IS ONE COPY OF IT ON PURPOSE. `norm`
+ * deletes a trailing parenthetical, which is right for a COLUMN and wrong for a
+ * CAPTION, where the parenthetical is often the whole laterality signal —
+ * keyed on `norm`, `GSV (Right)` and `GSV (Left)` collapse into one bucket and
+ * the refusal tells the doctor something false about their note.
+ *
+ * It was defined twice for about ten minutes — once in the ambiguity refusal
+ * and once in the ordinal's cross-table guard — which is the shape canon names:
+ * a second copy drifts from the first the day either is fixed, and here the two
+ * copies decide the SAME question (is this one table or two?) for two different
+ * refusals. Two answers to that question is a wrong-leg write waiting to
+ * happen.
+ */
+function captionKey(c: string | null): string {
+  return c === null ? NO_CAPTION : c.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/** The captions a caller may pick BETWEEN — deduped on `captionKey`, showing
+ *  the RAW text of the FIRST occurrence, because that is what is printed in
+ *  their note. `new Map(entries)` would keep the LAST, which shows a
+ *  case-variant further down instead of the caption they read first. */
+function distinctCaptions(captions: (string | null)[]): string[] {
+  return captions
+    .filter((c): c is string => c !== null)
+    .filter((c, i, all) => all.findIndex((o) => captionKey(o) === captionKey(c)) === i);
+}
+
 export type TableEditFailure =
   /** Two tables carry this row and NEITHER has a caption to name it by.
    *  Distinct from `row_ambiguous`, which the caller CAN answer. */
@@ -347,17 +377,9 @@ export function editTableCell(params: {
     const tables = new Set(matches.map((m) => m.header));
     if (tables.size > 1) {
       const captions = matches.map((m) => m.caption);
-      const key = (c: string | null) =>
-        c === null ? NO_CAPTION : c.trim().toLowerCase().replace(/\s+/g, ' ');
-      return new Set(captions.map(key)).size === 1
+      return new Set(captions.map(captionKey)).size === 1
         ? { ok: false, reason: 'caption_not_found' }
-        : {
-            ok: false,
-            reason: 'row_ambiguous',
-            choices: captions
-              .filter((c): c is string => c !== null)
-              .filter((c, i, all) => all.findIndex((o) => key(o) === key(c)) === i),
-          };
+        : { ok: false, reason: 'row_ambiguous', choices: distinctCaptions(captions) };
     }
     // ⚠️ `> matches.length` AND NOT `>=`. Asking for the 1st of 1 is a
     // legitimate, fully-specified request — it is how a caller that always
@@ -400,12 +422,10 @@ export function editTableCell(params: {
     //
     // `norm` still governs MATCHING a caller's answer above; only the decision
     // "can any answer discriminate?" uses this stricter key.
-    const key = (c: string | null) =>
-      c === null ? NO_CAPTION : c.trim().toLowerCase().replace(/\s+/g, ' ');
     // `null` is its own bucket: "every candidate is uncaptioned" and "every
     // candidate shares a caption" are both unanswerable, for different reasons,
     // and they get different refusals because the doctor's next move differs.
-    const distinct = new Set(captions.map(key));
+    const distinct = new Set(captions.map(captionKey));
     if (distinct.size === 1) {
       // ⚠️ THE ORDINALS TRAVEL WITH THE REFUSAL, SO IT STOPS BEING A DEAD END.
       // `row_ambiguous_same_table` was correct and terminal: the labels are
@@ -443,9 +463,11 @@ export function editTableCell(params: {
       // repeated key, so the tidy one-liner displayed the case-variant further
       // down the note instead of the caption the doctor reads first. The arm
       // asserting this reddened against its own author on first execution.
-      choices: captions
-        .filter((c): c is string => c !== null)
-        .filter((c, i, all) => all.findIndex((o) => key(o) === key(c)) === i),
+      //
+      // Both rules now live in `distinctCaptions`, once — the ordinal's
+      // cross-table guard asks the same question and must not answer it
+      // differently.
+      choices: distinctCaptions(captions),
     };
   }
 
