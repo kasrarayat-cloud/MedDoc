@@ -1091,9 +1091,63 @@ layer of the same work:
 | **predicate** | `isDataColumnHeader` judged a column by whether its text *looked* like a measurement | `Vein Size` misread as data — a diameter written into the reflux cell |
 | **measurement** | a census predicate that *resembled* the shipped function | 670 for 441; 25 for 9 |
 
-The twin knows its columns. `captionFor` has a real definition. The table has a
-real boundary. **In all three, something authoritative was available and a
-resemblance was consulted instead.**
+⚠️ **"THE TWIN KNOWS ITS COLUMNS" WAS THIS ENTRY'S OWN OPENING SENTENCE, AND IT
+IS MEASURED FALSE.** *Previous wording, kept because the correction is the
+point:* **"The twin knows its columns.** `captionFor` has a real definition. The
+table has a real boundary. **In all three, something authoritative was available
+and a resemblance was consulted instead."**
+
+The other two clauses stand. The first is corrected by the entry below:
+the twin knows its **geometry** and not its **columns**.
+
+### ⚠️ AND THE AUTHORITY ANSWERS SOME OF YOUR QUESTIONS, NOT ALL OF THEM
+
+**Standing 2026-08-23. The refinement the echo entry needed, measured on the
+one certified twin in production.**
+
+*Ask the thing that knows* is right, and it is not self-executing. **An
+authority consulted about a question it cannot answer still RETURNS
+SOMETHING** — and what it returns is a resemblance, arriving with an
+authority's credibility attached. That is strictly worse than the heuristic you
+replaced, because nobody audits an answer that came from the source of truth.
+
+> **ENUMERATE WHICH QUESTIONS THE AUTHORITY CAN ANSWER, BEFORE ROUTING ANY
+> QUESTION TO IT. "It is the authority" is a claim about the OBJECT; "it can
+> answer this" is a claim about the FIELD.**
+
+⚠️ **REFERENCE CASE — the compiled twin, asked two questions, and it knows
+exactly one.** Ruling #140 orders the label column resolved *"from the twin's
+compiled structure — it knows its columns"*. Measured:
+
+| the question | can the twin answer it? |
+|---|---|
+| **is there a row-label column, and where?** | ✅ **YES, structurally, with no text at all** — 0 of 52 table-cell fields sit at column 0, across all 28 rows |
+| **which column is the diameter?** | ❌ **NO** — and it answers anyway |
+
+The second is the trap. `compiler.ts:803-819` labels an ambiguous table cell by
+a **precedence in which the LEFT NEIGHBOUR beats the table header**:
+
+    leftLabel ? {source:"left_cell"} : headerLabel ? {source:"table_header"} : …
+
+On a measurement grid the first data column's left neighbour is the populated
+**row label**, so it wins — all 26 of `cellIndex` 1's fields are labelled with a
+**vein name** (11 distinct). Column 2's left neighbour is an *empty* form-field
+cell, so it falls through to the real column header (1 distinct). **An index
+route taking `cellIndex → role` from that twin resolves a COLUMN role out of a
+ROW label** — the identical class the arc was fixing, re-entering through the
+fix for it.
+
+⚠️ **AND THE TELL WAS A FIELD NAME, NOT A NUMBER.** The counts (26 / 26) look
+perfectly healthy. `labelSource` is what discriminates, and it is only
+meaningful because the compiler was READ rather than the labels being eyeballed.
+*Read to form a hypothesis; RUN something — or read the shipped function — to
+name a mechanism.*
+
+**AND THE BLOCKER WAS BEING READ WIDER THAN IT WAS WRITTEN.** *"The IR stores
+only `staticTextSha256`"* is true and is about header **TEXT**; it had been
+carried as though it blocked the twin route entirely. It does not touch the
+structural route at all. **A recorded blocker is scoped to the sentence that
+records it — re-read the sentence before inheriting the conclusion.**
 
 ## A CAPABILITY IS UNREACHABLE UNTIL THE ACTOR THAT INVOKES IT IS TOLD
 
