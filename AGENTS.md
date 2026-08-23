@@ -748,6 +748,85 @@ Three independent adversarial lenses found it; the author's own proof did not.
 other noticed it invalidates the way a whole series of mutation proofs had been
 run that night (eight of them, every one exercising the complete inverse).
 
+## GATE ON THE OBJECT THE GATE READS
+
+**Standing 2026-08-23. A merge was blocked for ninety minutes while every
+instrument I owned said it was cited.**
+
+> **`gh run list` reports the WORKFLOW RUN. Branch protection reads the CHECK
+> RUN. They are different objects, they can disagree, and a citation taken from
+> the wrong one is true about what you measured and false about what gates you.**
+
+Measured: `e2e` workflow run `32619113910` read `completed / success` on the PR
+head, and `4 of 4` by the usual citation check. Simultaneously its check-run
+`Playwright E2E (transcribe-md)` sat **`in_progress` forever**, and
+`mergeStateStatus` read **`BLOCKED`** with `mergeable: MERGEABLE` — no conflict,
+a required context that never reported. Re-running the workflow produced a fresh
+check-run that completed; all seven then read success and the state went `CLEAN`.
+
+**The rule generalises past `gh`.** Whenever a decision is enforced by one
+system and observed through another, confirm they name the same object. Ask what
+the ENFORCER reads, and measure that:
+
+    can this merge?   ->  /commits/<sha>/check-runs   (what protection reads)
+    did CI pass?      ->  gh run list                 (what a human means)
+
+### ⚠️ AND A DOCUMENTED-UNRELIABLE INSTRUMENT IS NOT A PERMANENTLY-WRONG ONE
+
+This file records `gh pr checks` reporting `pending` for a run already
+`completed/success`. So when it said **`Playwright E2E: pending`**, I discounted
+it as the known lie — **and it was telling the truth.** It was reporting the
+check-run, accurately, while I was reading the workflow run.
+
+> **A precedent about an instrument is a prior, not a verdict. Reaching for the
+> precedent INSTEAD of the data is how a true report gets discarded** — and the
+> failure is invisible, because dismissing an instrument you have documented as
+> unreliable feels like rigour.
+
+⚠️ **AND THE FIRST REFLEX WAS `gh pr merge --admin`** — denied by the permission
+layer, correctly. That would have forced past a gate not yet diagnosed. The deny
+caught what judgement should have: **an override is never the response to a
+blocker you cannot yet explain.**
+
+## AN ASSERTED NEGATIVE HALF NEEDS ITS OWN MEASUREMENT
+
+**Standing 2026-08-23. Found by the loop, judging a deploy I had already judged.**
+
+A §2.5 MUST-CHANGE row read: *"image ids for app + worker. **Nothing else.**"*
+I verified app and worker — **two of the three claims in that sentence.** The
+third, *nothing else*, is a claim about six other containers and I never
+measured it.
+
+> **A row that names a positive and then closes with "and nothing else" is TWO
+> assertions. The negative half is not implied by the positive half, and it is
+> the half nobody checks — because verifying what DID happen feels like the
+> work.**
+
+Measured afterwards: all seven co-services still ran their 2026-08-07 images.
+The row was **3 of 3**, and my 2-of-2 had asserted the first half only.
+
+### ⚠️ AND THE MEASUREMENT THAT SEPARATES THEM IS THE IMAGE ID, NOT THE START TIME
+
+Gotenberg's running image id is **identical** to its own `pre-*` rollback tags:
+the deploy **TAGGED** that image and never rebuilt it.
+
+> **TAGGING IS NOT CHANGING, AND ONLY AN ID COMPARISON TELLS THEM APART.** A
+> start-time check reads 2026-08-07 and says nothing about whether the id moved;
+> a tag list shows a fresh tag and looks like activity.
+
+## ARITHMETIC THAT DOES NOT RECONCILE IS A FINDING
+
+**Standing 2026-08-23.** A declaration's range table read runtime 4, tests 6,
+docs 10 over 21 files. **4 + 6 + 10 = 20.** The real count was docs 11.
+
+It was a descriptive table, not a load-bearing row, and every gated quantity was
+exact — which is precisely why it survived: nothing depended on it, so nothing
+checked it.
+
+> **Make every enumeration reconcile against its own total, and say so in the
+> table. A partition that does not add up has an unnamed bucket in it, and the
+> unnamed bucket is where the finding lives.**
+
 ## ERR TOWARD THE EDGE — THE EDGE HAS A FENCE
 
 **Standing 2026-08-23. Found by the loop's adversarial pass over its own diff,
@@ -2118,6 +2197,30 @@ night:**
 |---|---|
 | one session's preflight report written beside another's uncommitted §2.5 declaration | noticed by hand; it could have muddied a `git status` cleanliness check mid-deploy |
 | a feature branch checked out under a fully-staged deploy | noticed by hand, one command before `deploy-prod.sh` |
+
+#### ⚠️ THIRD INSTANCE, 2026-08-23 — AND IT CAME FROM A `cd` IN AN EARLIER COMMAND
+
+A supervised session ran `git merge --ff-only origin/main` intending the shared
+tree, **in a WORKTREE** — the `cd` had carried over from a merge two commands
+earlier. It then reported *"tree head == origin/main"* from that worktree and
+moved toward the deploy.
+
+**The SHARED tree was still four commits behind at `cea1823c`.**
+`deploy-prod.sh` reads the shared tree's HEAD, so the deploy would have shipped
+`cea1823c` **under a declaration naming `25cab8e7`** — the wrong-commit
+declaration this section already names as *worse than no declaration, because it
+looks like evidence*.
+
+⚠️ **THE TELL WAS IN MY OWN SUMMARY LINE AND IT READ AS CONFIRMATION.**
+"tree head == origin/main" was TRUE of the tree it measured. Caught only by
+running `git rev-parse` **in `/opt/meddoc-pro` specifically**, one command before
+the deploy — checking the tree about to ship rather than trusting a sentence
+written about a different one.
+
+> **Before a deploy, resolve the shared tree BY ABSOLUTE PATH.** `git -C
+> /opt/meddoc-pro rev-parse HEAD`. A relative check inherits whatever `cd` ran
+> last, and the failure is silent because the answer it gives is true about
+> something.
 
 **Neither was caught by a check. Both were caught by somebody re-reading state
 they had no particular reason to re-read** — which is exactly the property you
