@@ -34,6 +34,7 @@
 import { parseMarkdownRow, MARKDOWN_RULE_ROW_RE } from './markdown-row';
 import { classifyHeaderCell } from './table-header-shape';
 import { readNoteSection } from './splice-note-section';
+import { captionCandidate } from './table-caption';
 
 /** `| --- | :--- |` — a table's alignment rule, never content. */
 /** Any `| … | … |` line. */
@@ -180,52 +181,27 @@ function renderRow(parts: string[]): string {
  * carries the laterality, so it is the only honest disambiguator.
  */
 function captionFor(lines: string[], headerIdx: number): string | null {
-  // ⚠️ THE ADJACENT LINE ONLY. A ONE-BLANK SKIP WAS BUILT, PROVEN, AND
-  // WITHDRAWN — F24 SLICE 1b, 2026-08-21.
+  // ⚠️ THE DEFINITION IS NOT HERE ANY MORE — F24-CAPTION-VALIDATION, 2026-08-23.
   //
-  // The motivation was real and still stands: 20 of 45 production headers have
-  // a blank line above them, so a bilateral study in the canonical markdown
-  // shape (caption, blank line, table) could not be disambiguated at all.
+  // It lives in `lib/table-caption.ts`, because `claim-prose.ts` reads the same
+  // line for a clinical READ and this module reads it for a clinical WRITE. Two
+  // readers holding two definitions of "caption" is a wrong-table edit waiting
+  // to happen, and that hazard was recorded in this comment for two days before
+  // anything shared the code.
   //
-  // ⚠️ BUT `captionFor` NEVER DISTINGUISHED A CAPTION FROM ARBITRARY PROSE —
-  // it returns whatever line sits above, and always has. Widening its reach
-  // therefore did not teach it to find captions; it multiplied the amount of
-  // ORDINARY CLINICAL NARRATIVE it could mistake for one. Reproduced on the
-  // real function before the revert:
+  // ⚠️ THE PREVIOUS BODY WAS `return whatever line sits above`, WITH NO TEST OF
+  // ANY KIND, and the version before THAT reached one blank line further and was
+  // WITHDRAWN for writing a RIGHT-leg correction into the LEFT leg. Both the
+  // reproduction and the measured predicate that replaces it are in
+  // `table-caption.ts`'s header — read it there rather than trusting this
+  // sentence, because that is the file a future edit will change.
   //
-  //     ## FINDINGS
-  //     |  | DIAMETER (mm) | ... |        <- table 1, the RIGHT leg, 5.1
-  //     | GSV at the SFJ | 5.1 | 0.3 |
-  //
-  //     The right leg was normal; the left GSV is dilated.
-  //                                        <- one blank line
-  //     |  | DIAMETER (mm) | ... |        <- table 2, the LEFT leg, 6.2
-  //     | GSV at the SFJ | 6.2 | 3.4 |
-  //
-  //   editTableCell(rowLabel 'GSV at the SFJ', tableCaption 'Right Leg', 6.8)
-  //     -> ok=true, before="6.2", LEFT leg written, RIGHT leg untouched
-  //
-  // That narrative became table 2's caption, the substring narrowing matched
-  // "right" inside it, and the doctor's RIGHT-leg correction was persisted
-  // into the LEFT leg and reported as success. `.caption` has no consumer, so
-  // nothing downstream shows which table was chosen.
-  //
-  // A WRONG-LEG MEASUREMENT IS WORSE THAN AN UNEDITABLE TABLE. The refusal it
-  // replaced cost the doctor a retype; this costs them a wrong record.
-  //
-  // THE REAL DEFECT IS CAPTION *VALIDATION*, NOT CAPTION *DISTANCE*, and a
-  // correct fix has to decide what a caption IS — which is a product question,
-  // not a loop bound. Reaching further without answering it is strictly worse
-  // than reaching one line. (Note that `claim-prose.ts:71` reads the adjacent
-  // line too; whatever answers this must move both, or the two readers in this
-  // codebase will disagree about what a caption is.)
-  for (let i = headerIdx - 1; i >= 0; i -= 1) {
-    const line = lines[i];
-    if (!line.trim()) return null;
-    if (HEADING_RE.test(line) || cells(line)) return null;
-    return line.trim();
-  }
-  return null;
+  // What changed for THIS caller: the adjacent line is now also shape-checked
+  // (strictly narrower — 9 of 9 production captions still pass), and a caption
+  // one blank line up is returned when it satisfies the shape (new — reaches 16
+  // of the 20 previously-blocked headers). Everything unrecognised still
+  // returns null, which every branch below already handles.
+  return captionCandidate(lines, headerIdx);
 }
 
 

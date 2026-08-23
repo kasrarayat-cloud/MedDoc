@@ -435,12 +435,73 @@ describe('F24 SLICE 1b — an unanswerable question becomes an honest refusal', 
   // assertion is over the carriers by NAME, and a third one added later must
   // be added here too — which is why the list is written out rather than
   // implied.
+  // ⚠️ RE-PINNED 2026-08-23 BY F24-CAPTION-VALIDATION — THE `gaps === 1` CASE
+  // MOVED, AND THAT MOVEMENT IS THE ITEM.
+  //
+  // *Previous body, kept verbatim because the reason is the point:*
+  //
+  //     // The dead end this slice actually removes. With a blank line above
+  //     // each header no candidate carries a caption, so there is nothing to
+  //     // disambiguate WITH — and the refusal says so instead of pretending
+  //     // the conversation can continue.
+  //     for (const n of [1, 2, 3]) {
+  //       const r = go(n);
+  //       expect(r.ok).toBe(false);
+  //       if (!r.ok) {
+  //         expect(r.reason).toBe('caption_not_found');
+  //         expect(r.choices ?? []).toHaveLength(0);
+  //         expect(r.rowChoices ?? []).toHaveLength(0);
+  //       }
+  //     }
+  //
+  // That was correct while `captionFor` could not read across a blank line. It
+  // now can, WHEN THE LINE EARNS IT BY SHAPE — `Right Leg:` does — so exactly
+  // one blank is no longer a dead end. Two and three still are, and always
+  // will be: a second blank is distance, not a paragraph break.
+  //
+  // ⚠️ THE INVARIANT IN THE NAME IS UNCHANGED AND IS NOW TESTED ON BOTH SIDES.
+  // "Never asks a question it offers no way to answer" was previously proved
+  // only by the branch that asks NOTHING, which is the cheap half — a refusal
+  // with an empty list trivially satisfies it. The expensive half is the branch
+  // that DOES ask: every option it offers is fed back in and must complete the
+  // edit, into the leg that was named and no other.
   it('⚠️ NEVER asks a question it offers no way to answer', () => {
-    // The dead end this slice actually removes. With a blank line above each
-    // header no candidate carries a caption, so there is nothing to
-    // disambiguate WITH — and the refusal says so instead of pretending the
-    // conversation can continue.
-    for (const n of [1, 2, 3]) {
+    // ── ONE BLANK: the question is asked, and every answer works ────────────
+    const asked = go(1);
+    expect(asked.ok).toBe(false);
+    if (!asked.ok) {
+      expect(asked.reason).toBe('row_ambiguous');
+      expect(asked.choices).toEqual(['Right Leg:', 'Left Leg:']);
+      expect(asked.rowChoices ?? []).toHaveLength(0);
+
+      // EVERY offered option is answerable — the arm the old shape could not
+      // have contained, and the one that makes the name true.
+      for (const choice of asked.choices ?? []) {
+        const answered = go(1, choice);
+        expect(answered.ok).toBe(true);
+        if (answered.ok) {
+          // ⚠️ ASSERT THE CELL, NEVER MERE SUCCESS. A wrong-leg write returns
+          // ok:true too — that is the entire defect class this item sits in.
+          expect(answered.before).toBe('[not documented]');
+          const body = answered.body ?? '';
+          const halves = body.split('Left Leg:');
+          expect(halves).toHaveLength(2);
+          const [rightHalf, leftHalf] = halves;
+          const edited = '| SSV at the SPJ | 10 |';
+          const untouched = '| SSV at the SPJ | [not documented] | [not documented] |';
+          if (choice === 'Right Leg:') {
+            expect(rightHalf).toContain(edited);
+            expect(leftHalf).toContain(untouched);
+          } else {
+            expect(leftHalf).toContain(edited);
+            expect(rightHalf).toContain(untouched);
+          }
+        }
+      }
+    }
+
+    // ── TWO OR MORE BLANKS: still a dead end, and still says so ─────────────
+    for (const n of [2, 3]) {
       const r = go(n);
       expect(r.ok).toBe(false);
       if (!r.ok) {

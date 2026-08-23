@@ -17,6 +17,7 @@
 // ============================================================================
 
 import { parseMarkdownRow, MARKDOWN_RULE_ROW_RE } from './markdown-row';
+import { captionCandidate } from './table-caption';
 
 /** ONE reader, five callers — `lib/markdown-row.ts`.
  *
@@ -70,11 +71,35 @@ function headerFor(note: string, rowText: string): { header: string[]; caption: 
       // The line above the header is usually the table's own caption, and on a
       // bilateral study it is what carries the laterality. A card that says
       // "GSV at the Knee" without saying WHICH LEG is not enough to decide on.
-      const above = (lines[i - 2] ?? '').trim();
-      // Keep only the qualifying tail — "DIAMETER AND REFLUX TIME — Right Leg"
-      // is worth reading as "Right Leg". The table's title repeats what the
-      // column names already say; the LEG is the part a decision turns on.
-      const raw = above && !cells(above) && !/^\s*#{1,6}\s/.test(above) ? above : null;
+      //
+      // ⚠️ WHETHER A LINE *IS* A CAPTION IS NOT DECIDED HERE — F24-CAPTION-
+      // VALIDATION, 2026-08-23. It is `lib/table-caption.ts`, shared with
+      // `note-table-edit.ts`. This file used to hold its own inline version
+      // (`above && !cells(above) && !HEADING`), and `note-table-edit.ts`'s own
+      // comment named the divergence as a wrong-table edit waiting to happen:
+      // one reader labels a CARD with a leg and the other narrows a WRITE by
+      // it, so the moment they disagree about which line is the caption, a
+      // doctor is shown one table and edits another.
+      //
+      // Both readers therefore now accept exactly the same lines — including
+      // the one-blank-up shape, which this file previously refused too. Reading
+      // the caption for a card and writing to that table are the same question
+      // asked twice.
+      const raw = captionCandidate(lines, i - 1);
+      // ⚠️ THE TAIL SPLIT IS A *DISPLAY* REDUCTION AND STAYS LOCAL, DELIBERATELY.
+      // "DIAMETER AND REFLUX TIME — Right Leg" is worth SHOWING as "Right Leg":
+      // the title repeats what the column names already say, and the LEG is the
+      // part a decision turns on. That is a judgement about a card, not about
+      // what a caption is, so it is applied AFTER the shared acceptance and is
+      // not pushed into the shared module — `note-table-edit.ts` narrows by
+      // substring and would be strictly worse for having the title removed.
+      //
+      // Measured on production 2026-08-23: 0 of 25 caption candidates carry a
+      // ` — ` / ` – ` / ` - ` separator, against a control of 94 lines carrying
+      // one elsewhere in the corpus. So the two readers return BYTE-IDENTICAL
+      // strings on every caption production holds today, and this reduction is
+      // currently unexercised. RE-ARMING CONDITION: one template emitting a
+      // titled caption, with no code change anywhere.
       const caption = raw ? (raw.split(/\s+[—–-]\s+/).pop() ?? raw).trim() : null;
       return { header: head, caption };
     }
