@@ -66,6 +66,38 @@ too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
 
 
+
+### 🟢 F24-S3 (ruling #140 + the THIRD site) — **LIVE 2026-08-23T07:04Z, 18 of 18 judged.** `29c57dac`
+
+Judgement: `docs/foundation/deploys/20260823-25cab8e7-JUDGED.md`. Native serve
+asserted in the RUNNING container, positive-controlled. 9 of 9 standing checks.
+
+⚠️ **BOTH DEFECTS IT FIXES ARE LATENT** — no production template or note carries
+either shape. **The green rows mean "nothing moved", not "something improved"**,
+and that framing was written into the declaration BEFORE the act so it could not
+be upgraded afterwards.
+
+**THE STANDING AUTHORITY'S FIRST COMPLETE CLINICAL CYCLE.** The loop built the
+third site, ran its own adversarial pass, refuted its own first design, halted
+at the clinical-path boundary — *"merge, merge-commit citation, and the deploy —
+supervised, not mine"* — and the supervised side merged, deployed and judged.
+Neither half did the other's job.
+
+⚠️ **AND A NEW INSTRUMENT FINDING: `gh run list` REPORTS THE WORKFLOW RUN;
+BRANCH PROTECTION READS THE CHECK RUN.** They disagreed — `e2e` was
+`completed/success` as a workflow while its check-run sat `in_progress` forever,
+so a "cited 4 of 4" was true about the object measured and false about the
+object that gates the merge. `merge-pr.sh` refused twice and was right twice.
+**Wait on check-runs when the question is "can this merge".**
+
+⚠️ **AND I NEARLY DEPLOYED THE WRONG COMMIT** — `git merge --ff-only` run in a
+WORKTREE while the SHARED tree stayed four commits behind. The deploy reads the
+shared tree's HEAD, so it would have shipped `cea1823c` under a declaration
+naming `25cab8e7`.
+
+**Still open:** the addressable census is NOT met — duplicate row labels need a
+twin-supplied ordinal, the next build. F24-caption-validation stands at 20 of 28.
+
 ### ✅ RULING #140's TWIN HALF — **WITHDRAWN ON EVIDENCE, CONFIRMED 2026-08-23**
 
 The ruling's mechanism was **EVIDENCE OVER INFERENCE**. Routing the twin through
