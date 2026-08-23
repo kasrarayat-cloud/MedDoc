@@ -25752,6 +25752,18 @@ of three, asserted end-to-end, both columns each:
 
 1. **#140's twin half is NOT implemented.** The honest evidence is the twin's
    own header-row first cell; it needs note-table → twin-table identification.
+   ⚠️ **STILL NOT BUILT — BUT ITS SUBSTRATE IS NOW MEASURED, AND THE ROW AS
+   WRITTEN IS TOO OPTIMISTIC IN ONE HALF AND TOO PESSIMISTIC IN THE OTHER.**
+   See *"F24-S3 OWED #1 — THE TWIN'S SUBSTRATE, MEASURED"* at the end of this
+   file (session 06, 2026-08-23). Short form: the twin answers the LABEL-COLUMN
+   question structurally and needs **no header text at all** — 0 of 52
+   table-cell fields sit at column 0 — so the recorded `staticTextSha256`
+   blocker does not reach that route. It does **NOT** answer which column is
+   which: `compiler.ts:803-819` prefers the LEFT NEIGHBOUR over the table
+   header, so all 26 of `cellIndex` 1's fields are labelled with the **row's
+   vein name** (`labelSource=left_cell`, 11 distinct) while `cellIndex` 2 gets
+   the real column header (1 distinct). **Role classification must stay with
+   `classifyHeader`.**
 2. ⚠️ **A THIRD SITE STILL DECIDES THIS QUESTION, AND THE DRIFT WIDENED FROM TWO
    ANSWERS TO THREE.** `template-twin/bridge-fill.ts` `classifyHeader`
    (consumed at `:425` for `labelColumnOffset`) uses its own two-valued
@@ -26134,3 +26146,179 @@ provably unaffected.
   ruled, and not built here.**
 - **The delta is computed per ROW.** A ragged table refuses only its ragged
   rows. That is deliberate and is stricter than the per-table form it replaced.
+
+---
+
+## 🔵 F24-S3 OWED #1 — THE TWIN'S SUBSTRATE, MEASURED — run `20260823-071023-b1`, session 06
+
+**The item, verbatim from F24-S3's own OWED list:** *"#140's twin half is NOT
+implemented. The honest evidence is the twin's own header-row first cell; it
+needs note-table → twin-table identification."*
+
+**Nothing is built here.** This is the measurement that says what the twin can
+and cannot answer, taken because the last session's honest limit floated a
+design — *"an INDEX-based route could skip the header question entirely"* — and
+marked it **"noted as a direction, not ruled, and not built here."** A direction
+nobody measures is re-derived by whoever opens the file next.
+
+> ### THE HEADLINE, AND IT CUTS BOTH WAYS
+>
+> **The twin answers the OFFSET question structurally and unambiguously. It
+> does NOT answer the ROLE question at all, and for a measured reason in the
+> shipped compiler.** The floated index route can skip the header's *label
+> column*; it cannot skip the header's *column identity*.
+
+### WHAT WAS MEASURED — production, read-only, structure only
+
+The one CERTIFIED compiled twin (`617d6de9…`, template
+`cmsxip5f9000901nadsggo2l1`, *Venous Duplex Lower Extremities US Report*,
+`active`), and the **3** production visits bound to it. **No note text was read
+or printed** — cell *counts* only, per `bridge-fill.ts`'s own precedent that a
+verdict plus a length buys the whole diagnostic value at a site with no template
+binding.
+
+#### A · THE TWIN'S OWN TABLE GEOMETRY — and it reconciles
+
+| quantity | value |
+|---|---|
+| tables in the IR | **1** · fields **80** |
+| cells | **84** = 28 rows × 3 columns (`max cellIndex` = 2) |
+| cells at **column 0** carrying a field | **0 of 28** |
+| cells at column ≥ 1 carrying a field | **52** |
+| cells at column ≥ 1 static | **4** — rows 0 and 14, the two header rows, 2 cells each |
+| Σ `fieldIds` over all cells | **52** |
+
+**28 + 52 + 4 = 84.** The partition closes, so there is no unnamed bucket.
+
+> **Column 0 carries ZERO of the 52 table-cell fields, across all 28 rows. The
+> twin therefore knows — structurally, with no text and no hash — that this
+> table HAS a row-label column and that it sits at index 0.**
+
+⚠️ **THE RECORDED BLOCKER IS CORRECTLY SCOPED AND DOES NOT REACH THIS ROUTE.**
+*"The IR stores only `staticTextSha256`"* (`table-header-shape.ts:62`,
+`note-table-edit.ts:655`) is a statement about resolving header **TEXT**. The
+label-column question is answered by **which cells carry fields**, which the IR
+stores in the clear. The blocker was never wrong; it was being read wider than
+it was written.
+
+*(52 of 80 fields are table cells. The other 28 are the content controls F24-S3's
+gap set already names — consistent, not a new finding.)*
+
+#### B · THE NOTE'S GEOMETRY, ON THE SAME TEMPLATE'S REAL VISITS
+
+72 pipe lines across the 3 bound visits, partitioned by cell count and by
+whether the line is a markdown separator:
+
+| cells | separator? | lines |
+|---|---|---|
+| 2 | no | **6** — the headers |
+| 2 | yes | **6** — the separators |
+| 3 | no | **60** — the data rows |
+
+**6 + 6 + 60 = 72.** Six tables (two per visit — one leg each), each a 2-cell
+header over ten 3-cell data rows.
+
+> **The note's DATA ROW and the twin's DATA ROW agree exactly: 3 cells, label at
+> index 0, values at 1 and 2. 60 of 60 rows, 3 of 3 visits.** The note's
+> *header* is the short one — the widening shape this arc already documented
+> (delta 1, `headerShape='data'`, offset 1).
+
+So the twin's structural answer and the note's structure **agree on production
+today**, and the offset the fill path computes from the delta is the offset the
+twin would have supplied.
+
+### ⚠️ C · AND THE HALF THAT REFUTES THE FLOATED DESIGN
+
+The index route's appeal was that it would *"skip the header question
+entirely."* It cannot, because **the twin does not know which of its own columns
+is which.** Measured over the 52 table-cell fields:
+
+| cellIndex | `labelSource` | distinct labels | label length | fields |
+|---|---|---|---|---|
+| **1** | **`left_cell`** | **11** | 14–56 | 26 |
+| **2** | **`table_header`** | **1** | 16 | 26 |
+
+**Every one of the 52 is `detectionStatus = needs_confirmation`.**
+
+⚠️ **THE MECHANISM WAS READ OUT OF THE SHIPPED COMPILER, NOT INFERRED FROM THE
+NUMBERS.** `compiler.ts:803-819` sets the label by a precedence, and the left
+neighbour **wins**:
+
+    const leftLabel = cellIndex > 0
+      ? normalizeLabel(visibleText(rowCells[cellIndex - 1]!.node)) : "";
+    const headerLabel = tableHeaderLabels.get(logicalColumnStart) ?? "";
+    leftLabel ? { source: "left_cell" }
+              : headerLabel ? { source: "table_header" } : { source: "generated" }
+
+On a measurement grid that precedence is systematically wrong for the first data
+column and only accidentally right for the rest:
+
+- **column 1's** left neighbour is column 0 — the populated ROW LABEL — so it
+  wins, and the field is labelled with the **vein name**. Hence 11 distinct
+  labels for one column.
+- **column 2's** left neighbour is column 1, an *empty form-field* cell, so
+  `leftLabel` is `""` and it falls through to the **column header**. Hence
+  exactly 1 distinct label.
+
+> **A twin field's label is the cell to its LEFT whenever that cell has text.
+> For any column whose left neighbour is populated, the compiled twin carries a
+> ROW identity where a COLUMN identity was wanted.**
+
+⚠️ **THIS IS THE THREE-LAYER ECHO'S OWN LESSON POINTED AT THE THING WE WERE
+ABOUT TO ASK.** *Ask the thing that knows; do not classify what resembles* — and
+here the thing that knows **knows the geometry and does not know the columns.**
+An index route that took `cellIndex → role` from this twin would be resolving a
+COLUMN role out of a ROW label: the same class of error as the wrong-cell writes
+this arc has spent three slices fixing, arriving through the fix for them.
+
+**It is also, at last, a MECHANISM for a number this programme has only ever
+carried as a count.** *80 of 80 `needs_confirmation`* has been reported as a
+wall; this is why the wall is there for the 52 table cells.
+
+### THE DISPOSITION
+
+**#140's twin half is UNBLOCKED for exactly the question #140 names, and no
+wider.** The ruling asks where *"the label column is resolved from the twin's
+compiled structure — it knows its columns"*. On the label-column question that
+is now measured true. On column identity it is measured **false for this
+template**, so `classifyHeader` keeps the role job and the ruling's
+text-heuristic-as-fallback stands for roles.
+
+**Not built here, deliberately.** It is a change to the clinical fill path, it
+would admit rows the shipped code currently refuses — a **loosening** — and the
+last session of a run is the wrong place to start one. Filed with its substrate
+measured so the next session starts from evidence instead of from this
+paragraph.
+
+### ⚠️ THE UNTESTED CLAIM, WRITTEN DOWN BEFORE ANY PASS
+
+> **The claim I have NOT tested is that the note's column ORDER corresponds to
+> the twin's column order** — that note cell 1 is the same quantity as twin
+> `cellIndex` 1.
+
+My census counts **cells**; that claim is about **kind**, and a count over the
+wrong axis cannot answer it — this file's own double-tap entry, applied to my
+own measurement while it was being taken. What I did establish is weaker and
+stated as such: the two shapes have the same *arity* and the same *label
+position*. Column 2 is `table_header`-labelled and reflux-named on all 26
+fields, which is suggestive of order agreement and **is not a test of it**.
+
+### HONEST LIMITS, AND WHAT RE-ARMS EACH
+
+- **This is a POPULATION fact about ONE template** — the only certified twin in
+  production. **Re-arms:** a second shape certifying (the INBOX census already
+  records operative-note, SOAP-office and imaging at 0 compiled twins), or L4
+  rendering a data row whose cell count differs from its twin table's column
+  count. **No code change anywhere is required for either.**
+- **`parseMarkdownTables` matches ANY pipe line in `soapFinal`**, including a
+  table the model invented, so a note table need not correspond to the twin's at
+  all. Any twin-derived route must therefore be **gated on the note row's cell
+  count equalling the twin table's column count and REFUSE otherwise** — err
+  toward the edge, which has a fence.
+- **The `labelSource` precedence is a property of the compiler and was read
+  there**; the per-column *consequence* above is measured on this one template's
+  grid. A template whose first data column has an empty left neighbour would
+  label correctly.
+- **Nothing here was run through the fill path.** The correspondence in B is a
+  comparison of two stored structures, not an execution.
+
