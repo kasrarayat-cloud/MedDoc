@@ -67,6 +67,85 @@ too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
 
 
+### 🟡 F24-S4 — THE TWIN-SUPPLIED ORDINAL. **Built, gated, NOT merged: the independent adversarial pass is OWED.**
+
+**The 12-cell duplicate-label gap is closed on both reachable shapes.** The
+census ratchet moves **40 → 52** on `captioned-adjacent` and
+`combined-leg-in-label`; its floor is raised to 52 so the closure cannot
+silently regress. The acceptance still correctly reads NOT MET — the remaining
+28 are the content controls, which are PART 2.
+
+**What it is.** `editTableCell` takes an optional `rowOrdinal`, applied AFTER
+caption narrowing: the caption says which TABLE, the ordinal says which ROW
+within it. `row_ambiguous_same_table` now returns `rowChoices` — each candidate
+numbered in note order beside the cells that actually differ — so the index is
+one the server ISSUED rather than one a model counted. Out of range REFUSES and
+never clamps (canon, *ERR TOWARD THE EDGE*).
+
+#### 📐 THE SHAPE MEASUREMENT THE ROW CALLED "THE NEXT MEASUREMENT" — DONE
+
+Against the certified template's real `transcribe_visits.soapFinal` rows:
+
+| question | answer |
+|---|---|
+| production visits on the certified template | **3**, all 3 carrying tables |
+| table headers across them | **6** — blank 2 · heading 0 · pipe 0 · prose 4 (reconciles) |
+| the split | **per-VISIT, not per-leg** — 2 visits prose-above on BOTH legs, 1 blank-above on both |
+| are the prose lines real captions? | **yes** — 9–10 chars, exactly one laterality token each, alternating right then left |
+
+⚠️ **THE LAST ROW IS THE ONE THAT MATTERED.** `captionFor` cannot tell a caption
+from a paragraph, and a narrative line accepted as one is the wrong-leg write of
+Slice 1b. Checking it was the difference between *"the caption route works on 2
+of 3 visits"* and *"the caption route silently writes to the wrong leg on 2 of
+3 visits"*.
+
+**So the ordinal is worth 12 cells on 2 of 3 production visits and NOTHING on
+the third**, which is F24-CAPTION-VALIDATION's to close.
+
+⚠️ **AND PRODUCTION NOW HAS A CERTIFIED TWIN — 1 CERTIFIED compiled version
+(80 fields, compiled `2026-08-17T17:39Z`) and 2 VERIFIED fill manifests.**
+`AGENTS.md`'s Template Twin bullet still asserts *"PROD STILL HAS ZERO
+CERTIFICATIONS"* in the present tense. See the finding below.
+
+#### ⚠️ FOUR DEFECTS, ALL MINE, ALL IN THIS BRANCH — and two were clinical
+
+| # | what | found by |
+|---|---|---|
+| 1 | **CROSS-LEG WRITE.** On the blank-line shape the caption narrows nothing, all 6 candidates survive, and a twin ordinal (which counts within ONE leg) selects from whichever leg comes first. **Measured: 6 of 12 cells into the wrong leg, reported as success** | extending the census to actually exercise the ordinal |
+| 2 | **THE CENSUS PRINTED THAT AND PASSED.** Its ratchet reads only the BEST shape, so `resolved_wrong_leg 6` was reported and tolerated | the mutation proof, not the run |
+| 3 | **F4's DEFECT AGAIN — no caller.** The ordinal was proved 29 ways and never wired; the schema had no field | the refutation pass over the finished diff |
+| 4 | **THE MESSAGE PROMISED A LIST NOBODY RENDERED.** *"tell me which of the rows I listed you mean"* while only the captions were printed | the same pass |
+
+⚠️ **AND TWO OF MY OWN TEST ARMS ENCODED THE UNSAFE BEHAVIOUR, one of them
+NAMED FOR THE SAFE ONE** — *"a caption that matches nothing still refuses rather
+than ordinal-ing blind"* asserted `ok: true`. The name was right and the
+assertion was wrong, which is the cheapest possible tell and it was nearly
+shipped past.
+
+⚠️ **THE CENSUS'S `resolved_wrong_row` CHECK IS VACUOUS ON EXACTLY THESE ROWS,
+AND THAT IS WHY THE GATE IS KEYED ON CONTENT.** It compares `res.row` — the row
+LABEL — and all three tributary candidates carry one identical label by design,
+so it holds whichever was written. Closing the 12 would have read `addressable
+52` with nothing verifying the right row was hit. **Found by writing the
+untested claim down BEFORE the pass**, exactly as canon asks, and the sentence
+was: *"I have not tested that the editor's candidate order is the order the
+twin counts in."*
+
+#### ⛔ WHY THIS IS 🟡 AND NOT MERGED
+
+**The MANDATORY independent adversarial pass has NOT been run.** This session
+could not spawn one, so the refutation above is the AUTHOR's — which canon is
+explicit is the weaker instrument: *"an author's proofs are drawn from the same
+model of the problem that produced the defect, so they CANNOT surprise their
+owner."* Three consecutive slices of this arc had a clinical defect found by the
+pass and not by the author, and this branch has already produced two of its own.
+
+**The PR is opened as a DRAFT.** It is unmergeable until an independent pass
+runs, and the pass should be aimed first at the ordinal's interaction with
+`captionFor` on shapes other than the three the census models.
+
+---
+
 ### 🟢 F24-S3 (ruling #140 + the THIRD site) — **LIVE 2026-08-23T07:04Z, 18 of 18 judged.** `29c57dac`
 
 Judgement: `docs/foundation/deploys/20260823-25cab8e7-JUDGED.md`. Native serve
