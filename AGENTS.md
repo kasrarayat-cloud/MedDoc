@@ -748,6 +748,56 @@ Three independent adversarial lenses found it; the author's own proof did not.
 other noticed it invalidates the way a whole series of mutation proofs had been
 run that night (eight of them, every one exercising the complete inverse).
 
+## A CENSUS IS ONLY AS AUTHORITATIVE AS ITS PREDICATE'S FIDELITY TO THE SHIPPED FUNCTION
+
+**Standing 2026-08-23. Two specimens, same day, same author — which is what
+makes it a rule.**
+
+> **DRIVE THE REAL FUNCTION, OR STATE THE APPROXIMATION AND HOW IT DIFFERS.**
+
+A census over production is the strongest evidence this programme produces, and
+it is worthless the moment its predicate stops matching the code it stands for.
+Both failures below were **hand-written approximations of shipped functions**,
+both reconciled cleanly against their own universe, and both read as
+authoritative to every later reader — including the sessions that quoted them.
+
+| the census said | the shipped function does | the gap |
+|---|---|---|
+| **670** data rows under detected headers (`+1 → 339`) | a table ends at the next separator | the join had **no upper bound on the data row**, so on a bilateral study table 1's header collected table 2's rows. Real figure **441** (`+1 → 237`) |
+| **25 of 45** headers carry a caption above | `captionFor` rejects `HEADING_RE` | 16 of those 25 were `## HEADING` lines it would **never** return. Real figure **9 of 45** |
+
+⚠️ **NEITHER WAS CAUGHT BY RE-READING THE QUERY.** The first was found by
+another session failing to reproduce it and saying so; the second by replicating
+`captionFor`'s actual predicate line by line and watching the partition
+reconcile — `20 blank + 16 heading + 0 pipe + 9 prose = 45`.
+
+⚠️ **AND THE FIRST ONE REACHED A SOURCE COMMENT IN SHIPPED CODE**, where canon's
+inherited-count rule does not even apply: it was not carried forward from
+somebody else's report, it was measured first-hand, believed, and quoted. **A
+number you measured yourself is the hardest kind to doubt.**
+
+**THE PRACTICE:** when a census stands in for a function's behaviour, either
+call the function, or write down in the report which predicate you approximated
+and where it can diverge. **A corrected number then carries its own
+reproduction**, so the next reader inherits the mechanism instead of a second
+figure to distrust.
+
+### ⚠️ THE THREE-LAYER ECHO — one lesson, three altitudes, one arc
+
+**Recorded because the repetition is the finding.** F24's single lesson —
+**ASK THE THING THAT KNOWS; DO NOT CLASSIFY WHAT RESEMBLES** — fired at every
+layer of the same work:
+
+| layer | what classified instead of asking | what it cost |
+|---|---|---|
+| **editor** | `captionFor` took whatever line sat above as a caption | a RIGHT-leg correction written into the LEFT leg |
+| **predicate** | `isDataColumnHeader` judged a column by whether its text *looked* like a measurement | `Vein Size` misread as data — a diameter written into the reflux cell |
+| **measurement** | a census predicate that *resembled* the shipped function | 670 for 441; 25 for 9 |
+
+The twin knows its columns. `captionFor` has a real definition. The table has a
+real boundary. **In all three, something authoritative was available and a
+resemblance was consulted instead.**
+
 ## ⚠️ WRITE THE UNTESTED CLAIM DOWN BEFORE THE PASS RUNS
 
 **Standing 2026-08-22. The prevention side of the
