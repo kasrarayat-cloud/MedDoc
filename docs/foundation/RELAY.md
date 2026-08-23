@@ -25258,3 +25258,333 @@ of three, asserted end-to-end, both columns each:
 > three cancellations is that rule being learned three times in ninety minutes.
 > The corrections were right; the cadence was not.
 
+---
+
+## 🟢 F24-S3 OWED #2 — THE THIRD SITE ASKS THE SHARED PREDICATE — run `20260822-164142-b1`, session 04
+
+**The item, verbatim from F24-S3's own OWED list:** *"⚠️ A THIRD SITE STILL
+DECIDES THIS QUESTION, AND THE DRIFT WIDENED FROM TWO ANSWERS TO THREE.
+`template-twin/bridge-fill.ts` `classifyHeader` (consumed at `:425` for
+`labelColumnOffset`) uses its own two-valued vocabulary."*
+
+On `Vein Size`, before this change:
+
+| site | answer |
+|---|---|
+| `isDataColumnHeader` (generator) | `true` — *no label column* |
+| `classifyHeaderCell` (editor) | `cannot_tell` — **REFUSE** |
+| `classifyHeader` (**the FILL**) | `other` — *has a label column* |
+
+That offset decides **which note cell a number is read out of** before it is
+written into a field of the physician's own `.docx`.
+
+### THE DIVERGENCE RAN IN BOTH DIRECTIONS, AND NEITHER IS BENIGN
+
+    | VELOCITY (cm/s) | DIAMETER (mm) |     old role 'other' -> offset 0
+    | GSV at the SFJ | 12 | 6.2 |           diameterCol 1 -> reads "12"
+
+A **velocity offered to a diameter field**. The evidence matcher refuses most of
+those on concept — but *"refused by the layer behind it"* is a second line of
+defence, never the reason a shape is safe.
+
+### WHAT CHANGED — ONE EXPRESSION AND THE REFUSAL IT ENABLES
+
+`classifyHeader` **keeps its real job**: column ROLE (diameter/reflux/other),
+which decides `diameterCol` and `refluxCol`. Canon's *"a deletion is scoped by
+what the component DOES, not by what the ruling CALLS it"* — it had two jobs and
+only one of them was the ruling's.
+
+⚠️ **DELTA IS DELIBERATELY NOT CONSULTED.** A header short at the FRONT and one
+short at the BACK are both `+1`. I drafted a delta/predicate hybrid, built a
+fixture that appeared to show the predicate-only form refusing needlessly, and
+**refuted my own hybrid**: delta 0 is equally consistent with both readings.
+Canon's "double tap", re-derived and caught in the same hour.
+
+### ⚠️ WHAT THIS DOES **NOT** CLAIM — AND IT IS THE HALF THAT MATTERS
+
+Ruling #140 says that where the visit is **TEMPLATE-BOUND** the label column is
+resolved from **the twin's compiled structure**, and the text heuristic
+*"survives only as the UNTEMPLATED FALLBACK"*. **`bridge-fill` IS the
+template-bound path.**
+
+So this change brings the **FALLBACK DISCIPLINE** — refuse honestly when
+ambiguous — to the third site. **It does NOT implement #140's twin half**, which
+stays OWED for the reason session 03 measured: the IR stores only
+`staticTextSha256`, so the header text evidence lives in the **source artifact**,
+not the IR.
+
+### 📊 TWO PRODUCTION UNIVERSES, AND CONFLATING THEM WAS A DEFECT IN MY OWN GATE
+
+Both measured **read-only on production this session, with an independently
+written query** — not inherited.
+
+| universe | what it is | measured |
+|---|---|---|
+| **THE FILL UNIVERSE** — what this code path reaches | 1 compiled version · 1 certification · 2 fill manifests · 2 visits | **4 header lines, ALL `DIAMETER (mm)`** |
+| **THE NOTE CORPUS** — the *editor's* universe, a superset | 45 header lines · 24 visits | **6 distinct first cells** |
+
+The corpus figures **reproduce session 03's census exactly** — `DIAMETER (mm)`
+27/14 · `Location` 8/4 · `Segment` 6/3 · `Site` 2/1 · `DIAMETER` 1/1 ·
+`Medication` 1/1 — re-measured rather than carried forward.
+
+⚠️ **AN EARLIER DRAFT OF THE GATE TITLED THE SIX-VALUE SET "the production
+universe".** That set is the EDITOR's. This file guards the FILL. **A check
+whose title is wider than what it measures — caught in my own gate before
+merge**, and corrected into two named universes with two separate arms.
+
+**The honest coverage claim is two sentences:**
+
+- this change covers **4 of 4** header lines the fill path meets today, and that
+  one shape is **provably unmoved** (`data` → offset 1, which is what the old
+  vocabulary also answered);
+- **6 of 6** values the wider corpus holds classify safely, so the fill is not
+  walking into a refusal the day a second template certifies. *That second
+  sentence is forward-looking about a set this code does not reach yet, and is
+  asserted because it is cheap now — not because it is covered today.*
+
+### 🔴 REACHES THE OWNER — CLASS (b), AND IT IS **NOT** #140's ACCEPTED TRADE
+
+⚠️ **AN EARLIER DRAFT OF THIS ROW CALLED IT *"#140's accepted trade reaching a
+second path"*. THE THIRD LENS REFUTED THAT, AND IT IS RIGHT.**
+
+Ruling #140 is scoped, in its own text, to the **editing surface**: its evidence
+is `isDataColumnHeader` → `note-table-edit.ts`, its artifact column names those
+two files, and it says *"Adversarial pass mandatory — **note-editing
+surface**."* RELAY's own OWED item draws the same line about this very site —
+*"It is a FILL-path offset, not the editing path."*
+
+**And the ruling's cost calculus does not transfer, because it presumes a human:**
+
+> *"Refusing costs a retype; guessing costs a measurement."*
+
+**A retype requires somebody to be told.** On the editing path
+`label_column_unresolved` surfaces to the clinician, who retypes. **The fill path
+has no human in the loop** — the refusal is a `console.info` in a worker log.
+
+⚠️ **AND THE WORST CASE IS LARGER THAN A BLANK CELL. VERIFIED IN THE SHIPPED
+CODE BEFORE THIS WAS WRITTEN:** `fill-engine.ts:532` sets
+`status = render && counts.filled > 0 ? 'VERIFIED' : 'NEEDS_REVIEW'`, and
+`native-export.ts:86-87` serves only `VERIFIED` + `roundTripVerified`. So a
+refusal that zeroes a table's fills **flips the manifest to `NEEDS_REVIEW` and
+withholds the native export entirely** — the doctor silently gets the generic
+styled layout instead of their own letterhead. That is the same capability class
+AGENTS.md already records as owner-accepted for pre-deploy signed visits,
+**arriving through a new door, and nothing in #140 prices it.**
+
+**PRODUCTION TAKES ZERO MEASURED LOSS**, and the refusal is near-unreachable
+from a generated note: the skeleton prepends an EMPTY leading cell, which
+classifies `label` and makes the header delta 0. It can only fire on a LEGACY
+note or one where the model deviated from the skeleton. ⚠️ **That bounds the loss
+AND shrinks the safety being claimed for the refusal — both halves stated.**
+
+**Surfaced as class (b) rather than decided here.** The code is correct either
+way; what the owner is being told is that a silent letterhead loss is now
+reachable on a path where nobody gets asked to retype.
+
+### THE GATE — `gate-f24-third-site-label-column.test.ts`, **20 arms**, mutation-proved FIVE ways
+
+⚠️ **RE-MEASURED ON THE FINAL 20-ARM FILE.** The pass caused the arm set to
+change (6 tautologies and 1 duplicate removed, 2 real arms added), so the
+earlier numbers described a file that no longer exists and were **discarded
+rather than carried forward**.
+
+| mutation | red arms |
+|---|---|
+| **M1** full pre-change behaviour — old offset, no refusal, no role exclusion | **5** |
+| **M2** adopt the predicate but **SKIP the refusal** — the half-landed fix | **3** |
+| **M4** revert **ONLY the `label` branch** — the pass's F1 | **1** *(was **0** before the new arm — the hole, shown in both directions)* |
+| **M5** remove the role exclusion | **1** |
+| **M3′** `!== 'label'` in place of `=== 'data'` | **0 — AND CORRECTLY SO** |
+
+⚠️ **M3′ IS REPORTED AS A NON-MUTATION, NOT AS A BLIND SPOT.** With the refusal
+branch intact, `cannot_tell` never reaches the offset line, so `!== 'label'` and
+`=== 'data'` are the **same function** over the reachable values. **An
+equivalent program that fails to redden a gate proves nothing about the gate** —
+counting it as a missed regression would have been a fabricated weakness, and
+counting it as a passed proof would have been a fabricated strength.
+
+**M2 and M4 are the edits a tired session actually lands**, and neither is
+reachable by the complete inverse. The **2 regression controls stayed GREEN
+under every mutation** and are **LABELLED predetermined** rather than counted as
+protection — one of them IS the entire production fill universe, which is the
+correct instrument for *"nothing moved"*.
+
+### ⚠️ THE ADVERSARIAL PASS FOUND A FALSE GREEN IN MY GATE, AND A SECOND DEFECT IN MY OWN FIX
+
+**Three distinct lenses over the finished diff** — clinical wrong-cell write ·
+false-green in the gate · scope and capability loss. Every finding below was
+**re-verified by me before a line was changed**.
+
+| # | finding | disposition |
+|---|---|---|
+| **F1** | ⚠️ **THE `CFV mm` DIRECTION HAD ZERO BEHAVIOURAL COVERAGE.** Reverting **only the `label` branch** to the old vocabulary left the gate **25 of 25 GREEN**. Every other `label` first cell in the file (`VEIN`, `Segment`) is ALSO `other` to the old vocabulary, so the two derivations agreed on every fixture that existed | **FIXED** — a behavioural `CFV mm` arm through the bridge. Re-proved: M4 was green before, **RED after** |
+| **F2** | six *"generator and classifier agree"* arms were a **definitional tautology** — `isDataColumnHeader` IS `classifyHeaderCell(h) !== 'label'`, so the equality can only discriminate on a `cannot_tell` input, and the arm two lines above guaranteed none was in the list. Mutating `isDataColumnHeader` to the edit its own source forbids in capitals left **25 of 25 green** | **FIXED** — six arms replaced by **one** aimed at `Vein Size`, the input that separates them |
+| **F3** | the arm I added **during the pass**, captioned *"THE ARM THAT ACTUALLY COVERS THIS CODE PATH"*, **never called `bridgeNumericTableCells`** — it duplicated arm 1 | **DELETED**, not reworded |
+| **F4/F5** | `27+8+6+2+1+1 === 45` is arithmetic over literals; the *"not one is cannot_tell"* arm is derivable from the six verdict arms | **KEPT, RELABELLED** as list-integrity, not code coverage |
+
+### 🔴 AND THE PASS REFUTED THIS ITEM'S HEADLINE CLAIM — TWO WRONG-CELL WRITES I INTRODUCED
+
+**The claim I wrote down before the pass ran** — canon's *"write the untested
+claim down first"* — was: *"`classifyHeaderCell(md.header[0])` is SUFFICIENT,
+because for every row reaching `place`, cell 0 is a proven label."* **The premise
+was true and the conclusion did not follow.** The predicate reads header TEXT;
+what the ROW's cell 0 is says nothing about what the HEADER's cell 0 NAMES.
+
+| # | concrete input → wrong output | who was right before |
+|---|---|---|
+| **1** | `\| Location (cm) \| DIAMETER (mm) \| REFLUX TIME (seconds) \|` over a 3-cell row. `(cm)` is a **unit**, so `classifyHeaderCell` says `data` → offset 1 → **the DIAMETER column read the REFLUX value** and the reflux column ran off the end | ⚠️ **the OLD vocabulary — `other` → offset 0 — was CORRECT.** My fix was a REGRESSION of #140's own class |
+| **2** | `\| CFV mm \| REFLUX TIME (seconds) \|` over a 3-cell row. A 2-cell header **cannot** name the label column, so the offset must be 1; `classifyHeaderCell('CFV mm')` says `label` (a bare unit never reaches the `cannot_tell` bucket) → **a DIAMETER value into the REFLUX field** | the old vocabulary again |
+
+⚠️ **FOUR OF PRODUCTION'S SIX OBSERVED FIRST CELLS FLIP THIS WAY THE MOMENT A
+UNIT IS APPENDED** — `Location`, `Segment`, `Site`, `Medication`. Today none
+carries one, which is the only reason production was never exposed. That is a
+fact about this corpus, not about the predicate.
+
+⚠️ **AND THE TWO ERROR DIRECTIONS ARE NOT SYMMETRIC IN SAFETY — the sharpest
+thing the pass produced.** An **over-shoot** (0→1) hits
+`cellIndex >= cells.length` and fails closed to a blank. An **UNDER-SHOOT**
+(1→0) has **no such guard**: every column resolves one place LEFT and reads a
+real neighbouring value. *The bound check catches a read that runs off the END
+and never a read of the NEIGHBOUR* — which is precisely how the wrong-cell write
+survived it.
+
+**THE CORRECTED DERIVATION — structure first, text second, per ROW:**
+
+    delta 0 -> OFFSET 0, whatever the text says
+               (offset 1 would leave the LAST header column with no cell —
+                incoherent, not merely unlikely)
+    delta 1 -> the text decides WHICH END, and this is the ONLY place the
+               predicate is consulted:
+                 'data'        -> short at the FRONT -> OFFSET 1
+                 'label'       -> incoherent          -> REFUSE
+                 'cannot_tell' -> #140's bucket       -> REFUSE
+    otherwise -> REFUSE
+
+⚠️ **MY "DELTA IS DELIBERATELY NOT CONSULTED" WAS AN OVER-READ OF CANON.** The
+double tap forbids inferring **which end** is short from a **+1** delta. It says
+nothing about **delta 0** — where delta plus a proven label is a **proof**. I had
+drafted this exact hybrid, "refuted" it with a fixture I reasoned about instead
+of running, and shipped the weaker design. *Read to form a hypothesis; RUN
+something to name a mechanism.*
+
+**RE-PROVED, AND BOTH HALVES ARE LOAD-BEARING:**
+
+| mutation | red arms |
+|---|---|
+| **N1** predicate only, no delta — **the design the pass refuted** | **8** |
+| **N2** delta only, no predicate | **4** |
+| **N3** role search decoupled from the offset | **2** |
+
+### ⚠️ AND F1's FIXTURE EXPOSED A THIRD DEFECT — IN MY OWN FIX
+
+My first `CFV mm` arm **failed against correct code**, and the reason
+was not a bad fixture:
+
+> **THE TWO CLASSIFIERS CAN DISAGREE ABOUT THE SAME CELL.**
+> `classifyHeaderCell('CFV mm')` → `label`; `classifyHeader`'s
+> `/(^|\W)mm(\W|$)/` branch → `diameter`. So `findIndex` bound the **diameter
+> role to column 0** — the row-label column — while the offset bound it to the
+> label TEXT.
+
+It **failed CLOSED** (`numericCell` refuses a vein name, and a numeric row label
+could never have matched `veinMatches`), so **no wrong value was ever written**.
+What it cost was a **FILL**: the diameter was silently dropped while the reflux
+landed correctly.
+
+**Fixed by searching for data roles from index 1 once the header is known to
+name its label column** — a data role at index 0 is then a contradiction, not a
+preference. It is a **no-op wherever the two classifiers already agree, which is
+every shape production holds**, and it makes the new code **strictly better than
+the old** on that shape: old filled 1 of 2 cells, new fills 2 of 2.
+
+⚠️ **PROCESS FINDING, AND IT IS MINE: I GAVE THREE ADVERSARIAL AGENTS WRITE
+ACCESS TO ONE WORKTREE.** Two mutated `bridge-fill.ts` and
+`table-header-shape.ts` concurrently. **One of my measurements was taken on a
+tree another actor was mid-mutation in — a previously-green arm went red after a
+comment-only edit — and I withdrew that number rather than re-running it
+quietly.** That is canon's *two sessions, one working tree* class, reproduced by
+me inside a single session. **The lens that mutates belongs in its own
+worktree.** One lens also reported it could not create its `/tmp` backup under
+its permissions and substituted anchored inverse edits with read-back
+verification — correct improvisation, and it verified its own restore.
+
+### 📋 THE §2.5 EXPECTED DELTA — written here so whoever deploys does not re-derive it
+
+⚠️ **THE DEPLOY IS NOT THE LOOP'S TO TAKE.** This changes runtime on the
+**clinical fill path**, and the standing authority reads *"the loop builds,
+proves and merges under its own gates; SUPERVISED SESSIONS deploy and judge
+clinical-surface changes."*
+
+**Baseline captured on production BEFORE the act**, 2026-08-23T03:0xZ:
+
+| quantity | value |
+|---|---|
+| visits | **50** |
+| signed visits | **32** |
+| patients | **37** |
+| twin fill manifests | **2** |
+| note templates | **10** |
+
+| must change | must NOT change |
+|---|---|
+| nothing observable on any existing document — the fill universe's only header shape resolves to the **same offset** before and after | every clinical count above |
+| `label_column_unresolved` becomes reachable as a twin-fill **skip**, logged as `[twin-fill] candidate table SKIPPED` | any stored `soapFinal` — this code writes no note text |
+| — | any existing `template_twin_fill_manifests` row; this path only produces new resolutions on a re-fill |
+
+**The one production header shape the fill path meets (`DIAMETER (mm)`) is
+asserted end-to-end in the gate**, so the shape production actually holds is
+provably unaffected.
+
+### 🔎 FINDINGS THIS ITEM DID NOT GO LOOKING FOR
+
+- ⚠️ **THREE COMMENTS OUTSIDE THIS FILE DESCRIBED THE CHANGED LINE FALSELY**, and
+  the first commit touched none of them. `build-soap-prompt.ts` — **on the
+  clinical generation path** — named the old mechanism outright
+  (*"`labelColumnOffset = roleByCol[0] === 'other' ? 0 : 1`, and classifyHeader
+  returns 'other' for an empty cell"*). Its **conclusion** survives and is
+  re-derived against the new mechanism; the **mechanism** was false. Two gates
+  carried stale quoted code and a stale grep count. **All three corrected.**
+  Canon: *a wrong mechanism stated confidently in a source file outlives the
+  session that wrote it.*
+- ⚠️ **THE STALE GREP COUNT RE-MEASURED ITSELF INTO THIS REPO'S OWN SUBSTRING
+  TRAP.** *"grep -rln isDataColumnHeader → 3 files, NONE of them a test"* is now
+  **6 files, 3 of them tests** — and **one of the six matches on PROSE IN A
+  COMMENT**, not a code reference. The trap landed inside the re-count of a grep
+  whose entire purpose was to prove a zero.
+- **THE REFUSAL LOG LEAKED NOTE-DERIVED TEXT.** It printed the raw header cell —
+  very probably a template column name, a class this repo has twice adjudicated
+  PHI-safe, **but `parseMarkdownTables` matches ANY pipe line in `soapFinal`**,
+  so there is no template binding at that site and the string is unbounded. It
+  would also have been the **first note-derived text this file ever logged**.
+  Now the verdict plus a length — the diagnostic value was entirely in the
+  verdict.
+- **FILED, NOT FIXED — `pickTable` (singular) is DEAD** and carries a duplicate
+  of the admission filter. Pre-existing on `main`; naming it here because a dead
+  fourth copy of a neighbouring predicate is how the next drift finding starts.
+- **`main`'s head `cea1823c` is now CITED 4 of 4, all `a1`.** Session 03 merged
+  it and recorded *"its own runs are in flight; I did not wait"* — discharged
+  this session by waiting rather than by assuming.
+- **`nightly-tests` ran GREEN** (`32613962671`, event=schedule). 8 open
+  auto-filed issues, **0 NEW**.
+
+### ⚠️ HONEST LIMITS
+
+- The `md.header.length === 0 → cannot_tell` branch is **UNREACHABLE**, not a
+  live guard: `pickTables` admits a table only when
+  `t.header.some(h => classifyHeader(h) !== 'other')`, and `.some` on an empty
+  array is false. Named so nobody cites it as coverage.
+- The gate does **not** assert `classifyHeader`'s divergence directly — that
+  symbol is still unexported, and re-implementing a shipped predicate in a test
+  is the F12-g failure. The reconciliation is asserted **behaviourally**.
+- Nothing here reaches the note-EDITING path; that is
+  `gate-f24-s3-label-column-from-evidence.test.ts`.
+- ⚠️ **#140's PRIMARY clause is still not implemented, and the third lens
+  observed that this is the one path with the most evidence for it.** The fill
+  is definitionally template-bound, it has already paired note table ↔ twin
+  table, and it holds each field's own `rendererBinding.cellIndex` — so an
+  INDEX-based route could skip the header question entirely. The recorded
+  blocker (the IR stores only `staticTextSha256`) is about resolving header
+  TEXT and does not obviously block an index route. **Noted as a direction, not
+  ruled, and not built here.**
+- **The delta is computed per ROW.** A ragged table refuses only its ragged
+  rows. That is deliberate and is stricter than the per-table form it replaced.
