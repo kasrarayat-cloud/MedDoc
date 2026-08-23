@@ -327,3 +327,65 @@ so it MOVED when the fix landed. Injecting a NUL into a *different* file
 (`table-header-shape.ts`) turns it **RED naming that file**; restored **from a
 scratch backup, never `git checkout`**, verified byte-identical by sha256, and
 green again.
+
+---
+
+## ⚠️ ADDENDUM — 2026-08-23, supervised re-measurement
+
+**The 20 and the 8 were re-derived independently and BOTH reproduce. What
+changes is what the 8 MEAN.**
+
+### The two figures reconcile against the shipped predicate
+
+A separately-written census (different author, different SQL, same read-only
+posture) returns the identical partition:
+
+| tables in section | line above header | count |
+|---|---|---|
+| 1 | heading | 16 |
+| 1 | text | 1 |
+| 2 — bilateral | blank | **20** |
+| 2 — bilateral | text | **8** |
+| | | **45** ✔ |
+
+And it reconciles with the *other* session's corrected figure —
+**9 of 45 headers supply a caption** — which was derived from the shipped
+`captionFor` rather than from this partition. `captionFor` returns null on a
+blank line, on a heading, and on a pipe row; only plain text survives. So
+`1 + 8 = 9`, and `20 of 28` bilateral are refused. **Two numbers, two sessions,
+two routes, one measurement.**
+
+### ⚠️ WHAT THE PARTITION'S FRAMING HIDES, AND HOW THE MEASUREMENT ANSWERED IT
+
+The table above reads as *"20 blocked, 8 working"*. That framing deserves a
+challenge, because `captionFor` performs **no validation** — it returns whatever
+prose sits above. Under the ratified error-direction asymmetry, an accepted
+wrong caption is worse than a refusal, so the 8 could be the *higher*-risk
+bucket rather than the working one.
+
+**Hypothesis: some of the 8 are ordinary narrative that the substring narrowing
+would mis-match, silently writing a correction into the wrong leg.**
+
+**Measured — and REFUTED:**
+
+| of the 8 accepted captions | count |
+|---|---|
+| contain a laterality token (`left`/`right`) | **8 of 8** |
+| contain **BOTH** tokens — the shape that mis-narrows | **0 of 8** |
+
+Every one is a genuine single-laterality caption. The wrong-leg reproduction in
+`note-table-edit.ts:143-153` requires a line carrying **both** tokens; production
+holds **zero** such lines directly above a bilateral table.
+
+> **So the 8 are correct today — by the phrasing the notes happen to use, not by
+> any validation. The defect is real and currently UNEXERCISED.** That is a
+> materially different claim from "8 are working", and it is the one to carry
+> forward: the fix is still caption VALIDATION, and its urgency comes from the
+> 20 refusals, not from a live wrong-leg risk.
+
+**Honest limit:** `0 of 8` is a fact about the population on 2026-08-23, not a
+property of the code. One note whose narrative names both legs directly above a
+table re-arms the path with no code change anywhere.
+
+**Posture:** strictly read-only, counts only; no note text left the database and
+none appears above.
