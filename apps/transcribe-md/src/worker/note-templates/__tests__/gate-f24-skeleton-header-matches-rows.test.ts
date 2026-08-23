@@ -110,8 +110,13 @@ describe('the generated table skeleton is not ragged', () => {
   });
 
   it('the FILL path reads the corrected shape, and still reads the legacy one', () => {
-    // The fill path's two-shape tolerance is deliberate (bridge-fill.ts:421
-    // switches labelColumnOffset on whether header[0] classifies as data).
+    // The fill path's two-shape tolerance is deliberate. ⚠️ ITS MECHANISM
+    // CHANGED UNDER RULING #140 and this comment used to name the old one
+    // ("bridge-fill.ts:421 switches labelColumnOffset on whether header[0]
+    // classifies as data"): the offset now comes from the header/row DELTA
+    // plus the shared `classifyHeaderCell`, and the line reference was stale.
+    // The tolerance itself, and everything this arm asserts, is unchanged —
+    // the corrected shape is delta 0 and the legacy shape is delta 1.
     // This asserts the fix moves it between two branches that BOTH work,
     // rather than relying on tolerance that was never load-bearing.
     const rows = ['| GSV at the SFJ | 6.2 | 3.4 |', '| SSV at the SPJ | 4.1 | 1.2 |'];

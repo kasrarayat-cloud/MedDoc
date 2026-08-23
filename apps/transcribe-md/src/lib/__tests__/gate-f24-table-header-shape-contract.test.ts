@@ -11,17 +11,23 @@
 //      this module exists to close."
 //
 // ⚠️ THAT COMMENT UNDERCOUNTS ITS OWN CLASS, AND THIS FILE'S FIRST DRAFT
-// REPEATED THE UNDERCOUNT APPROVINGLY. There are THREE sites deciding "does
-// header cell 0 name a data column?", using TWO vocabularies. The third is
-// `template-twin/bridge-fill.ts:147-152` (`classifyHeader`), consumed at `:425`:
+// REPEATED THE UNDERCOUNT APPROVINGLY. There WERE THREE sites deciding "does
+// header cell 0 name a data column?", using TWO vocabularies. The third was
+// `template-twin/bridge-fill.ts` (`classifyHeader`), consumed for
+// `labelColumnOffset`:
 //
 //     const labelColumnOffset = roleByCol[0] === 'other' || roleByCol.length === 0 ? 0 : 1;
 //
-// and its comment describes the identical decision — "if that column already
-// classifies as DATA, the header has no label column and every data cell sits
-// one to the right." Its vocabulary is `/reflux/` and
-// `/diameter|(^|\W)mm(\W|$)/`, which agrees with `isDataColumnHeader` on the
-// customer form and diverges elsewhere, in BOTH directions:
+// ⚠️ **THAT EXPRESSION NO LONGER EXISTS — RECONCILED UNDER RULING #140.** The
+// fill now resolves the offset from the header/row DELTA plus the SHARED
+// `classifyHeaderCell` predicate (`gate-f24-third-site-label-column.test.ts`),
+// and `classifyHeader` is retained ONLY for its real job, COLUMN ROLE. The
+// quoted line is kept above because it is what the divergence below was
+// measured against; it is HISTORY, not current code.
+//
+// Its vocabulary was `/reflux/` and `/diameter|(^|\W)mm(\W|$)/`, which agrees
+// with `isDataColumnHeader` on the customer form and diverges elsewhere, in
+// BOTH directions:
 //
 //     "CFV mm"           isDataColumnHeader false  ·  classifyHeader diameter
 //     "VELOCITY (cm/s)"  isDataColumnHeader true   ·  classifyHeader other
@@ -43,6 +49,16 @@
 // rather than a broken matcher:
 //
 //     grep -rln isDataColumnHeader  -> 3 files, NONE of them a test
+//
+// ⚠️ RE-MEASURED 2026-08-23, AND THAT FIGURE IS NOW STALE — kept above because
+// it is the measurement the paragraph below reasons from. Live count: SIX
+// files, THREE of them tests (this one, `gate-f24-s3-label-column-from-
+// evidence`, and `gate-f24-third-site-label-column`). ⚠️ And one of the six —
+// `template-twin/bridge-fill.ts` — matches on PROSE IN A COMMENT, not on a
+// code reference: it imports `classifyHeaderCell`, never this symbol. That is
+// this repository's own substring trap ("a file's comments are the one place
+// where the words you are grepping for are guaranteed to appear"), landing in
+// the re-count of a grep whose whole purpose was to prove a zero.
 //     grep -rln rowLateralityVerdict -> 3 files, ONE of them a test  (control)
 //
 // Same matcher, same form: it finds test files when they exist. So the

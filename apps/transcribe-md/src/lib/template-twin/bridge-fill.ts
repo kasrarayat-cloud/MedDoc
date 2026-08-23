@@ -17,6 +17,7 @@
 // ============================================================================
 
 import { parseMarkdownRow } from '@/lib/markdown-row';
+import { classifyHeaderCell } from '@/lib/table-header-shape';
 import {
   FieldResolutionSchema,
   type FieldResolution,
@@ -38,7 +39,15 @@ interface ParsedMarkdownRow {
 }
 
 interface ParsedMarkdownTable {
-  /** Header cells (column 0 is the row-label column). */
+  /** Header cells, exactly as the note carries them.
+   *
+   *  ⚠️ THIS COMMENT USED TO READ "column 0 is the row-label column", AND THAT
+   *  IS THE ONE THING THE HEADER DOES NOT GUARANTEE. It is the whole reason
+   *  `labelColumnOffset` exists forty lines below: a note's header carries a
+   *  label cell in one shape and not in the other, and which one you are
+   *  holding is the question ruling #140 governs. A field comment asserting
+   *  the answer is a `DEPLOYMENT_RUNBOOK §5.6` in miniature — an intended
+   *  state written in the present tense, read as a description. */
   header: string[];
   rows: ParsedMarkdownRow[];
 }
@@ -401,9 +410,9 @@ export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): Fi
     for (const md of candidates) {
 
     // Which markdown data column is diameter, which is reflux (by header).
+    // ⚠️ The two INDICES are resolved below, AFTER the label column is known —
+    // see "A ROW-LABEL COLUMN IS NEVER A DATA ROLE".
     const roleByCol = md.header.map(classifyHeader);
-    const diameterCol = roleByCol.findIndex((r) => r === 'diameter');
-    const refluxCol = roleByCol.findIndex((r) => r === 'reflux');
 
     // HEADER/CELL ALIGNMENT. A data row is always [label, ...values], but the
     // header does NOT always carry a column for the label:
@@ -422,7 +431,134 @@ export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): Fi
     // Detect it from the header's own first column: if that column already
     // classifies as DATA, the header has no label column and every data cell
     // sits one to the right.
-    const labelColumnOffset = roleByCol[0] === 'other' || roleByCol.length === 0 ? 0 : 1;
+    //
+    // ⚠️ RULING #140 — THIS WAS THE **THIRD** SITE DECIDING THAT QUESTION, WITH
+    // ITS OWN VOCABULARY, AND THE DRIFT HAD WIDENED FROM TWO ANSWERS TO THREE.
+    // `classifyHeader` below is a COLUMN-ROLE classifier (diameter / reflux /
+    // other) and it is exactly right for that job — which is why it keeps it.
+    // It was ALSO being asked "does this header carry a label column?", a
+    // different question, and it answered with `!== 'other'`. On `Vein Size`
+    // the three sites said:
+    //
+    //     isDataColumnHeader   -> true         "no label column"   (generator)
+    //     classifyHeaderCell   -> cannot_tell  "REFUSE"            (editor)
+    //     classifyHeader       -> other        "has a label column" (HERE)
+    //
+    // Three answers to one question, and the fill path held the outlier. It
+    // diverged in BOTH directions and neither is benign, because this offset
+    // decides WHICH NOTE CELL a measurement is read out of:
+    //
+    //     | VELOCITY (cm/s) | DIAMETER (mm) |   role 'other' -> offset 0
+    //     | GSV at the SFJ | 12 | 6.2 |         diameterCol 1 -> reads "12"
+    //       -> the VELOCITY is written into the DIAMETER field of the
+    //          doctor's own form. The evidence matcher refuses most of these
+    //          on concept — but "refused by the layer behind it" is a second
+    //          line of defence, never the reason a shape is safe.
+    //
+    // ⚠️ THE ROW LABEL IS PROVEN, NOT GUESSED. `place` is only ever reached for
+    // a row whose cell 0 already matched an IR vein name (`veinMatches`,
+    // below). So cell 0 IS the label. The open question is whether the HEADER
+    // carries a cell for it.
+    //
+    // ⚠️⚠️ AN EARLIER VERSION OF THIS BLOCK ANSWERED THAT FROM THE PREDICATE
+    // ALONE AND SAID "DELTA IS DELIBERATELY NOT CONSULTED", CITING CANON'S
+    // DOUBLE TAP. THAT CITATION OVER-REACHED AND THE ADVERSARIAL PASS PROVED IT
+    // WITH TWO WRONG-CELL WRITES. The double tap forbids inferring WHICH END is
+    // short from a +1 delta. It says nothing about delta ZERO — and delta 0
+    // PLUS a proven label at cell 0 is a PROOF, not an inference:
+    //
+    //   | Location (cm) | DIAMETER (mm) | REFLUX TIME (seconds) |   header 3
+    //   | Right GSV at the SFJ | 6.2 | 3.4 |                        cells  3
+    //
+    // `classifyHeaderCell('Location (cm)')` is `data` — the trailing `(cm)` is
+    // a unit — so the predicate alone said offset 1, and the DIAMETER column
+    // read the REFLUX value while the reflux column ran off the end. The old
+    // vocabulary got this RIGHT (`other` -> 0), so the predicate-only form was
+    // a REGRESSION of exactly #140's class. Four of production's six observed
+    // first cells flip this way the moment a unit is appended.
+    //
+    // THE STRUCTURE IS THE EVIDENCE AND THE TEXT IS THE GUESS — which is
+    // ruling #140's own instruction, "EVIDENCE OVER TEXT-GUESSING":
+    //
+    //   delta 0 -> every header cell has a row cell, and cell 0 is the label,
+    //              so header[0] IS the label column. OFFSET 0, whatever the
+    //              text says. (offset 1 here would leave the LAST header
+    //              column with no cell — incoherent, not merely unlikely.)
+    //   delta 1 -> the header is short by one. NOW the text decides WHICH END,
+    //              and this is the only place the predicate is consulted:
+    //                'data'        -> short at the FRONT      -> OFFSET 1
+    //                'label'       -> claims to name the label column AND the
+    //                                 row has a spare cell -> INCOHERENT
+    //                                 -> REFUSE
+    //                'cannot_tell' -> #140's refusal bucket  -> REFUSE
+    //   otherwise -> REFUSE.
+    //
+    // ⚠️ AND THE DELTA IS PER ROW, NOT PER TABLE. A ragged table refuses only
+    // the rows that are ragged; `cellIndex >= cells.length` catches a read that
+    // runs off the END and never a read of the NEIGHBOUR, which is precisely
+    // how the wrong-cell write above survived it.
+    const headerShape = md.header.length === 0 ? 'cannot_tell' : classifyHeaderCell(md.header[0]);
+    let refusalLogged = false;
+
+    /** null = REFUSE this row. Otherwise the row-cell offset for a header index. */
+    const offsetFor = (mdRow: ParsedMarkdownRow): 0 | 1 | null => {
+      const delta = mdRow.cells.length - md.header.length;
+      if (delta === 0) return 0;
+      if (delta === 1 && headerShape === 'data') return 1;
+      if (!refusalLogged) {
+        refusalLogged = true;
+        // Logged DISTINCTLY: a bucket that absorbs a refusal and an absence
+        // cannot answer "did my change break this?", which is the one question
+        // it will be asked.
+        // ⚠️ THE VERDICT AND A LENGTH, NEVER THE CELL TEXT. An earlier draft
+        // logged `md.header[0]` raw. It is very probably a template column name
+        // and this repo has twice adjudicated that class as a PHI-safe
+        // projection — but `parseMarkdownTables` matches ANY pipe line in
+        // `soapFinal`, including a table the model invented, so there is no
+        // template binding at this site and the string is unbounded. It would
+        // also have been the first note-derived text this file ever logged;
+        // every other console.info here prints a fieldId and a reason code.
+        // The diagnostic value being argued for is carried entirely by the
+        // verdict, so the text buys nothing and costs a new class.
+        console.info('[twin-fill] row REFUSED — label_column_unresolved', {
+          headerShape,
+          headerCells: md.header.length,
+          rowCells: mdRow.cells.length,
+          headerCell0Length: (md.header[0] ?? '').length,
+        });
+      }
+      return null;
+    };
+
+    // ⚠️ A ROW-LABEL COLUMN IS NEVER A DATA ROLE — AND THE TWO CLASSIFIERS CAN
+    // DISAGREE ABOUT THE SAME CELL, WHICH IS WHAT THIS LINE EXISTS FOR.
+    // Found by the adversarial pass's own fixture, not by design: for a header
+    // cell like `CFV mm`, `classifyHeaderCell` says LABEL (no trailing unit
+    // parenthetical, no measurement noun) while `classifyHeader`'s
+    // /(^|\W)mm(\W|$)/ branch says DIAMETER. `findIndex` then bound the
+    // diameter role to column 0 — the row-label column — and the offset bound
+    // it to the label TEXT.
+    //
+    // It failed CLOSED (`numericCell` refuses a vein name, and a numeric row
+    // label could never have matched `veinMatches` in the first place), so no
+    // wrong value was ever written. What it cost was a FILL: on
+    // `| CFV mm | DIAMETER (mm) | REFLUX TIME (seconds) |` the diameter was
+    // silently dropped while the reflux landed correctly.
+    //
+    // Once the header is known to name its label column, that column is index 0
+    // BY DEFINITION, so a data role there is a contradiction rather than a
+    // preference. Searching from index 1 resolves it and is a no-op wherever
+    // the two classifiers already agree — which is every shape production
+    // holds.
+    // ⚠️ THE ROLE SEARCH IS DERIVED FROM THE OFFSET, SO IT MOVES WITH IT — and
+    // it is resolved per row for the same reason the offset is.
+    const roleColFor = (role: ColumnRole, offset: 0 | 1) =>
+      // offset 0 => header[0] IS the label column, so a data role there is a
+      // contradiction rather than a preference. `CFV mm` is the shape that
+      // proves it: `classifyHeaderCell` says LABEL while `classifyHeader`'s
+      // /(^|\W)mm(\W|$)/ branch says DIAMETER, and `indexOf` bound the diameter
+      // role to the row-label column.
+      roleByCol.indexOf(role, offset === 0 ? 1 : 0);
 
     // ROW PAIRING. WM_IOV is a single 26-row grid; L4 renders it as two 13-row
     // tables (Right Leg, Left Leg) — but it can also render one combined table,
@@ -460,9 +596,13 @@ export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): Fi
     for (const irRow of irRows) {
       const core = normVein(irRow.vein);
 
-      const place = (field: TemplateField | null, col: number, mdRow: ParsedMarkdownRow) => {
-        if (!field || col < 0) return false;
-        const cellIndex = col + labelColumnOffset;
+      const place = (field: TemplateField | null, role: ColumnRole, mdRow: ParsedMarkdownRow) => {
+        if (!field) return false;
+        const offset = offsetFor(mdRow);
+        if (offset === null) return false;
+        const col = roleColFor(role, offset);
+        if (col < 0) return false;
+        const cellIndex = col + offset;
         if (cellIndex >= mdRow.cells.length) return false;
         const num = numericCell(mdRow.cells[cellIndex]);
         if (num == null) return false; // —/[not documented]/prose → blank
@@ -484,8 +624,8 @@ export function bridgeNumericTableCells(input: BridgeNumericTableCellsInput): Fi
         if (consumed.has(i)) continue;
         if (!veinMatches(core, normVein(md.rows[i].label))) continue;
         const mdRow = md.rows[i];
-        const filledDiameter = place(irRow.diameterField, diameterCol, mdRow);
-        const filledReflux = place(irRow.refluxField, refluxCol, mdRow);
+        const filledDiameter = place(irRow.diameterField, 'diameter', mdRow);
+        const filledReflux = place(irRow.refluxField, 'reflux', mdRow);
         if (filledDiameter || filledReflux) {
           consumed.add(i);
           break;
