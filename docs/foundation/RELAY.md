@@ -65,6 +65,36 @@ too. **Draft downloads stay legal — the marking is the control, not a gate.**
 
 
 
+
+### ✅ RULING #140's TWIN HALF — **WITHDRAWN ON EVIDENCE, CONFIRMED 2026-08-23**
+
+The ruling's mechanism was **EVIDENCE OVER INFERENCE**. Routing the twin through
+`captionFor` is a build on a path that reaches **9 of 45** production headers —
+which is inference over evidence. **The ruling's letter withdrawn by the
+ruling's spirit**, which is the correct death for a direction.
+
+**VERIFIED to the same discipline that had just corrected the 670**, both
+conditions met:
+
+| condition | result |
+|---|---|
+| what would have REFUTED it | materially more than 9 — had headings been caption-eligible it reads **25**, and the route reaches over half the corpus. It discriminates. |
+| bounded to its own table | structurally impossible to leak: the join is header → the **single** line at `rn-1`. Control: **45 headers → 45 matched-above**, one each |
+
+**Partition reconciles exactly:** blank **20** + heading **16** + pipe **0** +
+prose **9** = **45**.
+
+⚠️ **AND IT EXPLAINS AN EARLIER FIGURE OF MINE.** I had reported *"25 of 45
+headers carry a caption"*. `captionFor` rejects `HEADING_RE`, so **16 of those
+25 were `## HEADING` lines it would never return**. 25 − 16 = 9.
+
+**The label-column-as-evidence half of #140 STANDS as shipped in #800.**
+
+⚠️ **FOURTH RULED-DIRECTION CORRECTION IN THIS ARC** — the 26-key tuple, the
+`rowLaterality` default, caption coverage, and now this. **Directions are
+hypotheses until measured**, and four for four says the measuring is the work,
+not the formality.
+
 ### 🟢 F24 SLICE 1 + 1b + 2 — **LIVE 2026-08-22T03:53:41Z, 16 of 16 judged.** `16b21721`
 
 Judgement: `docs/foundation/deploys/20260822-5d577e2e-JUDGED.md`. Native serve
