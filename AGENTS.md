@@ -116,10 +116,31 @@ What is true, and intended:
   (`note-template-parse/docx-to-text.ts:39` dynamically imports the twin ingest),
   and the shipped `pdf-native` feature imports twin storage. That code is
   **absorbed in place and load-bearing** — deleting it breaks working paths.
-- **The per-visit fill step short-circuits `not_certified_twin` on every visit,
-  by design.** `worker.ts` calls it; it declines because no CERTIFIED compiled
-  version exists in production. That is the correct behaviour for a parked
-  feature, not a failure to investigate.
+- ⚠️ **THE PER-VISIT FILL STEP NO LONGER SHORT-CIRCUITS ON EVERY VISIT, AND
+  THIS BULLET ASSERTED THAT IT DID.** *Previous wording:* **"The per-visit fill
+  step short-circuits `not_certified_twin` on every visit, by design. `worker.ts`
+  calls it; it declines because no CERTIFIED compiled version exists in
+  production."**
+
+  The premise — *no CERTIFIED compiled version exists in production* — became
+  false on `2026-08-17`. Measured on the three production visits bound to that
+  template, in creation order:
+
+      cmsxitmvq…  no manifest      <- PREDATES the certification
+      cmt2744qm…  VERIFIED
+      cmt32zvca…  VERIFIED
+
+  So the short-circuit is **no longer universal**: it still fires for every
+  visit on every OTHER template, and it demonstrably stopped firing for the
+  certified one. The sentence was right about most visits and wrong about its
+  own reason, and **a bullet that is right about the count and wrong about the
+  mechanism will be cited for the mechanism.**
+
+  ⚠️ **HONEST LIMIT: what was measured is that the MANIFESTS EXIST and read
+  `VERIFIED`, not which code path wrote them.** Attributing them to `worker.ts`'s
+  per-visit step specifically would be inference — the twin has also been driven
+  by hand on QA, and this programme has already paid for naming a mechanism it
+  only read rather than ran. See the certification entry below.
 - ⚠️ **THE FOLD IS SELECTIVE SINCE 2026-08-16T21:29Z, AND THERE IS A DOOR IN.**
   **This bullet used to say the opposite, in the present tense, and it was
   correct until the minute F5-b deployed.** It read: *"`NEXT_PUBLIC_SETTINGS_
@@ -135,10 +156,31 @@ What is true, and intended:
   is still retired. `NEXT_PUBLIC_SETTINGS_SIMPLE_ROW` is unchanged — still
   `true`; the fold moved into the code, not the flag.
 
-  ⚠️ **PROD STILL HAS ZERO CERTIFICATIONS, AND THE REASON IS NOW A DIFFERENT
-  ONE.** The old reason was *no door*. The new reason is that **no physician has
-  walked through it yet** — which is the correct steady state, not a defect. Do
-  not read a zero here as a broken gate in either era.
+  ⚠️ **PROD HAS A CERTIFIED TWIN. A PHYSICIAN HAS WALKED THROUGH THE DOOR.**
+  **Measured 2026-08-23**, and this bullet said the opposite until that
+  measurement:
+
+  | table | reading |
+  |---|---|
+  | `template_twin_compiled_versions` | **1**, `certificationStatus = CERTIFIED`, 80 fields, compiled `2026-08-17T17:39:17Z` |
+  | `template_twin_fill_manifests` | **2**, both `VERIFIED`, `roundTripVerified = true` (`2026-08-21T00:18:46Z`, `2026-08-21T15:07:53Z`) |
+  | production visits bound to that template | **3**, all three carrying tables |
+
+  *Previous wording, kept because the correction is the point:* **"PROD STILL
+  HAS ZERO CERTIFICATIONS, AND THE REASON IS NOW A DIFFERENT ONE. The old reason
+  was *no door*. The new reason is that no physician has walked through it yet —
+  which is the correct steady state, not a defect."**
+
+  ⚠️ **AND THE FILE ALREADY CONTRADICTED ITSELF, WHICH IS THE FINDING RATHER
+  THAN THE TYPO.** The rollback-constraints entry accepted 2026-08-21 describes,
+  in as many words, *"the owner's first certified-twin visit — the very record
+  whose Word download he confirmed carried his letterhead"*, and dates its
+  manifest to `00:18:46Z`. That is **the same manifest** in the table above. So
+  one part of canon recorded the certification while another went on asserting
+  zero, in the present tense, for two days.
+
+  **Two statements that can disagree is the exact failure the ledger design
+  exists to prevent** — and it happened inside the file that names it.
 
   **This is the `DEPLOYMENT_RUNBOOK.md §5.6` shape** — a document asserting an
   intended state in the present tense, read by everyone as a description of the
