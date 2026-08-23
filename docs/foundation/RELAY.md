@@ -26322,3 +26322,70 @@ fields, which is suggestive of order agreement and **is not a test of it**.
 - **Nothing here was run through the fill path.** The correspondence in B is a
   comparison of two stored structures, not an execution.
 
+---
+
+## F24-S5 — A CONTENT-CONTROL EDIT INTENT · the slice that CLOSES F24
+
+**Opened 2026-08-23 by owner ruling (branch `docs/f24-s5-ruling`; the row claims
+its number on landing).** Supersedes nothing; F24 stays OPEN until this lands.
+
+> **The acceptance sentence means what it says.** *"The AI must be able to edit
+> everything it shows me in the Word/PDF."* A doctor SEES the 28 dropdowns.
+
+### WHERE THE ARC ACTUALLY STANDS — measured, not remembered
+
+Run in-process by replay against `main` (`eb11ea77`), `apps/transcribe-md`:
+
+| bucket | count | shapes |
+|---|---|---|
+| table-bound, **addressable** | **52 of 52** | all three — `captioned-adjacent`, `captioned-blank-line`, `combined-leg-in-label` |
+| content controls, `no_editor_intent` | **28** | never reach `editTableCell` |
+| | **80** ✔ | |
+
+F24-S4 raised best-case 40 → 52 and the ratchet floor with it. **The remaining
+28 is the whole of the gap, and it is one class.**
+
+⚠️ **THE CENSUS GATE IS GREEN AND THE ACCEPTANCE IS NOT MET.** That is by
+construction: `expect(80 - bestAny).toBeGreaterThan(0)` asserts the gap so the
+day it closes the line reddens and forces the ledger to be rewritten **by
+somebody who looked**. Do not read its green as closure — and **do not flip that
+assertion except in the slice that earns it.**
+
+### RECON FIRST — the routing question IS the design work
+
+**Do not build before this is measured.** Where does a dropdown edit LAND?
+
+- the fill **manifest**? — but a VERIFIED manifest is the frozen-pointer artifact
+- a **pending-fill** layer?
+- the **visit's own state**?
+
+Each has a different relationship to the freeze, to re-fill, and to export.
+Measure the existing write paths before choosing; the wrong choice here is the
+kind that is discovered at export time.
+
+### THE SHAPE, RULED
+
+1. **Recognise** — *"set SIDE OF EXAM to Right"*, *"change the indication
+   dropdown to ___"*.
+2. **Resolve** through the twin's addressing (`fieldId`; the S3 tuple) — never
+   by matching label text.
+3. ⚠️ **VALIDATE against that control's OWN compiled option set.** A value that
+   is not one of its options **REFUSES, and NAMES the options.** Never
+   free-text into a constrained field — a dropdown that accepts prose is a form
+   that lies about being a form.
+4. **Route as a STRUCTURED edit** through the fill/manifest machinery.
+   **Never faked into `soapFinal`.**
+5. **UNSIGNED ONLY.** The sign-freeze governs signed records unchanged.
+
+### ACCEPTANCE
+
+- the census reads **80 / 80 by replay**;
+- **including a dropdown edit landing in the exported document** — the census
+  alone cannot prove the write reached the doctor's form;
+- the ratchet's deliberate red becomes a zero-gap assertion **in this slice**.
+
+**The adversarial pass is MANDATORY** — clinical note-editing path. Three
+consecutive slices of this arc had a clinical defect found by the pass and not
+by the author. Write the untested claim down *before* it runs.
+
+**F8 stays shut until F24 closes.**
