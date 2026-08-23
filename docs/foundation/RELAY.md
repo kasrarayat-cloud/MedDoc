@@ -137,11 +137,48 @@ uniformly captioned.** Measured: **0 of 31 production sections carry mixed
 caption availability**, and all 12 captioned bilateral sections name exactly one
 `right` and one `left` — so the fence costs nothing that exists today.
 
-⚠️ **AND THE FENCE IS SOUND RATHER THAN FIXTURE-SHAPED.** With it, a wrong
-narrowing needs the CORRECT table's caption to miss while the WRONG one's
-matches — but if both tables are captioned and the caller names a side, the
-correct table's caption names that side too, so the narrowing yields two
-candidates and refuses.
+#### ⚠️ AND THAT FENCE WAS WRONG TOO — PRESENCE IS NOT DISCRIMINATION
+
+**A SECOND wrong-leg write, found by probing the same written-down untested
+claim one level deeper, while the citation ran.** The first fence required every
+table in the section to carry SOME caption. Measured:
+
+    ## FINDINGS
+    Arterial                       <- table 1's caption. Names NO side.
+    |  | DIAMETER (mm) | ... |     <- table 1, the RIGHT leg, 5.1
+    | GSV at the SFJ | 5.1 | 0.3 |
+                                   <- blank
+    Right leg normal               <- a summary OF TABLE 1, read as table 2's
+                                   <- blank      caption
+    |  | DIAMETER (mm) | ... |     <- table 2, the LEFT leg, 6.2
+    | GSV at the SFJ | 6.2 | 3.4 |
+
+    editTableCell(..., tableCaption 'Right Leg', 6.8)
+      -> ok:true, before:"6.2"     <- THE LEFT LEG. Measured, not argued.
+
+Both tables carry a caption, so a presence-only fence passes; the narrowing is a
+SUBSTRING match, so it resolves to the one table whose caption contains `right`.
+⚠️ **`main` REFUSES this input**, so a presence-only fence would have shipped a
+**REGRESSION**, not left a residual — which is why it was fixed rather than
+filed.
+
+**THE RULE THAT IS SOUND, and production already follows it:** in a section with
+more than one table, a one-blank-up caption is used only when **every** table
+carries a caption, **every** one names exactly ONE laterality side, and **no
+two** name the same side. A caller naming a side then matches exactly one table,
+and it is the one the section's own captions say it is. Measured: **all 12
+captioned bilateral sections name exactly one `right` and one `left`** — so this
+refuses nothing that exists today. A section captioned `Arterial` / `Venous` is
+deliberately not served: it is a shape no production note holds, and inventing a
+discriminator for it is how this seam produced two wrong-leg writes already.
+
+⚠️ **AND THE GATE REDDENED AGAINST ITS AUTHOR A SECOND TIME.** My first version
+of the same-side arm asserted a **refusal**. That would have been a capability
+LOSS: table 1's caption is ADJACENT, never subject to the fence, and `Right Leg:`
+over the right leg is exactly the write the doctor asked for — `main` behaves
+identically. The arm now asserts what the fence must actually do: the
+one-blank-up caption is DROPPED, the adjacent one still resolves, and `before`
+is `5.1`.
 
 #### ⚠️ AND THE FIRST DESIGN REMOVED A CAPABILITY THE PRODUCT SUPPORTS — CAUGHT BY FOUR ARMS THAT HAD NOTHING TO DO WITH THIS ITEM
 
@@ -169,13 +206,15 @@ the same lines — it fires at 0 blanks *and* 1 blank, and **fires alone**.
 
 #### PROOF
 
-- **`gate-f24-caption-validation.test.ts` — 44 arms**, plus the re-pinned
+- **`gate-f24-caption-validation.test.ts` — 46 arms**, plus the re-pinned
   `note-table-edit` arm. `tsc --noEmit` **0 errors**.
-- **Mutation-proved SIX ways, including against the PARTIAL fix** (reach without
+- **Mutation-proved SEVEN ways, including against the PARTIAL fix** (reach without
   validation — the edit the file's own text invites), which reddens the
   **permanent wrong-leg floor**; and against the **capability-loss direction**
   (validate the adjacent slot), which reddens 9 arms. Removing the uniformity
-  fence reddens exactly the two trailing-summary arms, write side and read side.
+  fence reddens exactly the two trailing-summary arms, write side and read side;
+  restoring the PRESENCE-ONLY fence reddens exactly the two sibling-captioned
+  arms and nothing else.
   Every mutation asserted its own application; every restore was from a scratch
   backup, **never `git checkout`**, verified byte-identical by sha256.
 - **Suite:** `16 failed files / 1 failed test`, which is the documented worktree
@@ -215,9 +254,12 @@ session 02 drafted and session 03 discharged. **The PR is opened as a DRAFT.**
    directions — break that: nested headings, a table as the first line, a
    heading immediately after a header row, `lines` that is a section body with
    no heading at all.
-2. **The fence reads `rawCandidate` on siblings, so a sibling's ADJACENT caption
-   satisfies it.** Is there a shape where a sibling's *adjacent* caption is
-   itself narrative, letting a bad one-blank-up caption through?
+2. ~~**The fence reads `rawCandidate` on siblings, so a sibling's ADJACENT
+   caption satisfies it.**~~ ✅ **ANSWERED BY THE AUTHOR, AND IT WAS A REAL
+   WRONG-LEG WRITE** — see *presence is not discrimination* above; now pinned by
+   two arms. ⚠️ **Assume the replacement clause is wrong in a way I could not
+   see** — in particular the distinct-sides rule on THREE OR MORE tables in one
+   section, a shape production does not hold and no arm exercises.
 3. **`claim-prose` passes the WHOLE NOTE** while `note-table-edit` passes a
    SECTION BODY. The two therefore see different `lines` arrays and different
    sibling sets. Do they ever disagree because of that?
