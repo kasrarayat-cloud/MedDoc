@@ -570,6 +570,8 @@ export async function processTemplateTwinVisit(
       reviewedAt: true,
       manifestVersion: true,
       manifestSha256: true,
+      // F24-S5 — read so the no-op short-circuit below can compare it.
+      overridesSha256: true,
       roundTripVerified: true,
     },
   });
@@ -582,8 +584,37 @@ export async function processTemplateTwinVisit(
       'A signed Template Twin fill manifest cannot be replaced.',
     );
   }
+  // ⚠️ F24-S5 — THE NO-OP SHORT-CIRCUIT MUST ALSO AGREE ON THE OVERRIDE HALF.
+  //
+  // This returns without writing when the prepared manifest is byte-identical
+  // to the stored one. `overridesSha256` is stamped in `writeData` BELOW it, so
+  // any state where the manifest sha matches while the override identity does
+  // NOT would leave the stamp stale forever — and the freshness gates would then
+  // read `overrides_changed` on every single export, recompute, short-circuit
+  // again, and never converge. At sign time that is not merely churn: the freeze
+  // re-fills, re-reads, still fails to match, and returns `refill_did_not_match`
+  // — so the visit signs STYLED and that record loses native export permanently.
+  //
+  // ⚠️ TODAY NO SUCH STATE IS REACHABLE, AND THAT IS EXACTLY WHY THIS GUARD IS
+  // HERE. Every override outcome currently perturbs the manifest by accident of
+  // design: an APPLIED one changes the resolution and mints a fact, and a
+  // DECLINED one appends a `CLINICIAN_OVERRIDE_DECLINED` warning to
+  // `validation`. So "override set changed ⇒ manifest sha changed" holds — as an
+  // EMERGENT COUPLING between three unrelated code paths, not as a guarantee.
+  // A later tidy-up that stops emitting the declined warning would break it
+  // silently, and the failure would surface as a styled signature on a real
+  // doctor's record. Comparing the identity directly costs one term and removes
+  // the dependency on that coincidence.
+  //
+  // ⚠️ AND IT CONVERGES FOR A LEGACY MANIFEST RATHER THAN CHURNING. A NULL
+  // stamp never equals `overridesIdentity([])`, so the first fill after this
+  // ships REWRITES the row to acquire its stamp — and every fill after that
+  // short-circuits normally. One extra write, once, and then stable. Production
+  // is unaffected either way: both existing NULL-stamped manifests are on SIGNED
+  // visits, which throw `SIGNED_MANIFEST_IMMUTABLE` several lines above this.
   if (
     existing?.manifestSha256 === prepared.manifestSha256 &&
+    existing.overridesSha256 === overridesIdentity(clinicianOverrides) &&
     (prepared.render === null || existing.roundTripVerified)
   ) {
     return prepared;

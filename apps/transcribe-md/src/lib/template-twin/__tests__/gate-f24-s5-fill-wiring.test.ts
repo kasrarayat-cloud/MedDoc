@@ -22,7 +22,7 @@
 // ============================================================================
 
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
+import path, { join } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -164,6 +164,40 @@ describe('F24-S5 — the READ PATH carries the correction into the fill', () => 
     expect(after.value).toBe(opt.value);
     expect(after.reasonCode).toBe('clinician_override');
     expect(after.clinicianReviewed).toBe(true);
+  });
+
+  it('⚠️ THE NO-OP SHORT-CIRCUIT COMPARES THE OVERRIDE HALF, NOT ONLY THE MANIFEST SHA', async () => {
+    // Found by refuting my own untested claim rather than by the suite.
+    //
+    // The persist returns WITHOUT writing when the prepared manifest equals the
+    // stored one — and `overridesSha256` is stamped below that return. A state
+    // where the manifest sha matches but the override identity does not would
+    // leave the stamp stale FOREVER: every export would read `overrides_changed`,
+    // recompute, short-circuit, and never converge; and the sign freeze would
+    // return `refill_did_not_match`, so the visit signs STYLED and loses native
+    // export permanently.
+    //
+    // No such state is reachable today — every override outcome happens to
+    // perturb the manifest — but that is an emergent coupling between three
+    // unrelated paths, not a guarantee. This arm pins the guard so a later
+    // tidy-up cannot quietly re-introduce the dependency.
+    const src = readFileSync(
+      join(__dirname, '..', 'fill-engine.ts'),
+      'utf8',
+    );
+    const code = src
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('//'))
+      .join('\n');
+    const idx = code.indexOf('existing?.manifestSha256 === prepared.manifestSha256');
+    expect(idx, 'the no-op short-circuit moved or was renamed').toBeGreaterThan(-1);
+    // The override term must be part of THAT condition, not merely present
+    // somewhere in the file — the substring trap this whole gate exists to avoid.
+    const condition = code.slice(idx, code.indexOf('{', idx));
+    expect(
+      condition,
+      'the short-circuit can skip the overridesSha256 stamp — a styled signature waiting to happen',
+    ).toContain('overridesSha256');
   });
 
   it('⚠️ AND THE READ PATH RETURNS THE LIST IT USED — so the stamp cannot drift', async () => {

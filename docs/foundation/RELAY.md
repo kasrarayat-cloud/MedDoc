@@ -27206,6 +27206,53 @@ detect over-admission:
   transaction produced NO output at all — an impossible value. Re-run
   untruncated, the refusal was there.
 
+### 🔴 A DEFECT I FOUND BY REFUTING MY OWN UNTESTED CLAIM — the no-op short-circuit
+
+**Found after the branch was pushed, by going after the one sentence I had
+written down as untested** (*"widening the identity makes EVERY surface
+recompute"*). The enumeration was drawn from `manifestMatchesNote` /
+`noteSha256`; re-running it over **`templateTwinFillManifest.` as a table** —
+the by-table discipline, not the by-API one — surfaced two readers the first
+sweep never listed.
+
+| reader | verdict |
+|---|---|
+| `actions/twin-first-fill.ts` | ✅ **benign** — a UI "first fill on this template" banner reading only `noteTemplateId` and `createdAt`. Makes no freshness or serve decision. Recorded because a refuted suspicion is evidence too |
+| `fill-engine.ts:585` — the persist's **no-op short-circuit** | 🔴 **REAL** |
+
+**THE DEFECT.** The persist returns WITHOUT writing when the prepared manifest
+is byte-identical to the stored one — and `overridesSha256` is stamped in
+`writeData`, *below* that return. Any state where the manifest sha matches while
+the override identity does NOT would leave the stamp stale **forever**:
+
+    export -> overrides_changed -> recompute -> short-circuit -> never converges
+
+⚠️ **AND AT SIGN TIME IT IS NOT MERELY CHURN.** The freeze re-fills, re-reads,
+still fails to match, and returns `refill_did_not_match` — so the visit signs
+**STYLED** and that record loses native export permanently. An
+accepted-capability loss, triggered by an ordinary correction.
+
+⚠️ **NO SUCH STATE IS REACHABLE TODAY, AND THAT IS EXACTLY WHY THE GUARD IS
+THERE.** Every override outcome currently perturbs the manifest *by accident of
+design*: an APPLIED one changes the resolution and mints a fact; a DECLINED one
+appends a `CLINICIAN_OVERRIDE_DECLINED` warning to `validation`. So *"override
+set changed ⇒ manifest sha changed"* holds — as an **EMERGENT COUPLING between
+three unrelated code paths**, not as a guarantee. A later tidy-up that stops
+emitting the declined warning breaks it silently, and the failure surfaces as a
+styled signature on a real doctor's record.
+
+**Fixed** by comparing the override identity directly in the short-circuit, and
+pinned by an arm that reads the CONDITION rather than the file (mutation-proved:
+removing the term reddens it). ⚠️ It **converges** for a legacy manifest rather
+than churning — a NULL stamp never equals `overridesIdentity([])`, so the first
+fill rewrites the row once and every later one short-circuits normally.
+Production is unaffected either way: both NULL-stamped manifests are on SIGNED
+visits, which throw `SIGNED_MANIFEST_IMMUTABLE` above this line.
+
+> **This is what the mandatory pass is for, and it is not a substitute for
+> it — it is one lens, run by the author, on the author's own stated blind
+> spot.** The pass still owes this branch the lenses I cannot be.
+
 ### ⚠️ HONEST LIMITS
 
 - **NOT CITED, NOT DEPLOYED, AND THE ADVERSARIAL PASS HAS NOT RUN.** This is a
