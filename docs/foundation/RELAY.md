@@ -26709,3 +26709,199 @@ result first** — wrong JSON key (`resolutions`, the key is `fields`), then
 were caught by a **non-vacuity control** (`160 = 2 manifests × 80 fields`), not
 by noticing the query was wrong. Without it the first zero would have read as
 *"the recon's population does not exist."*
+
+---
+
+## 🔴 F24-S5 BUILD — **BUILT, GATED, AND REFUTED.** Do not merge PR #824
+
+**Run `20260823-230455-b2`, session 02, 2026-08-24.** Ruling **#143 (PROVISIONAL)**.
+Branch `feat/f24-s5-content-control-edit`, commit `99e4713a`, **PR #824 — DRAFT,
+and it must stay one.** `CI` · `a11y-ci` · `secrets-scan` green; CI is not what
+found this.
+
+> **THE MANDATORY ADVERSARIAL PASS RAN AND THE SLICE DID NOT SURVIVE IT.** Three
+> independent lenses. **Two reached the SAME root cause without contact**, each by
+> RUNNING a harness rather than by reading. This is the fourth consecutive slice
+> of this arc whose clinical defect was found by the pass and not by the author —
+> and, again, before any patient existed to be harmed. **That is the system
+> working.**
+
+⚠️ **THIS ROW SUPERSEDES THE ONE IN PR #824.** That branch carries an earlier
+draft of this row and of #143, written *before* the pass, which describes the
+slice as sound. **On any future merge, take THIS version** — the branch's is
+stale in exactly the way canon forbids: a document asserting a state in the
+present tense that stopped being true.
+
+### ⚠️ THE ROOT CAUSE — the premise is true of the ENGINE and FALSE of the two callers that gate it
+
+The slice's premise: *"an INPUT read on every run, so a recompute RE-APPLIES
+it."* True of `prepareTemplateTwinFill`. **The two surfaces that decide whether a
+fill runs AT ALL never reach it**, because both gate on a predicate over the
+NOTE alone — and an override deliberately never touches `soapFinal`:
+
+    native-export.ts:131-139   manifestMatchesNote(manifest.noteSha256, visit.soapFinal)
+    sign-freeze.ts:81          if (…ok) return already_fresh          <- no re-fill
+
+`noteIdentity` is `sha256(soapFinal)` and nothing else, so an override **cannot**
+move it. Freshness reads `match`, the stored pre-override artifact is served, and
+the freeze pins the pre-override manifest as the signed document.
+
+| step | what the doctor gets |
+|---|---|
+| chat: *"SIDE OF EXAM should be Left"* | override row written ✓ |
+| **pre-sign preview** (recomputes) | **LEFT** ✓ |
+| `GET …/export/docx` and `/pdf` | **RIGHT** ✗ — stored bytes |
+| signs, freeze returns already-fresh | pointer to the **pre-override** manifest |
+| the signed record, forever | **RIGHT** ✗ |
+
+**Proven, not read.** One lens drove `freezeNativeManifestForSigning` under a
+mocked prisma: state `already_fresh`, `processTemplateTwinVisit` **0 calls**,
+`templateTwinFieldOverride.findMany` **0 calls** — positive-controlled against a
+direct call to the same spy, which returned the row.
+
+⚠️ **AND IT IS THE EXACT DIVERGENCE THE DIFF'S OWN NEW COMMENT CLAIMS TO
+PREVENT.** `preview-visit-document.ts` gained *"the preview must read the SAME
+clinician overrides the export will"*. The preview side was fixed and the export
+side was never touched, so the sentence is true of one half and inverted about
+the outcome.
+
+**Why every proof missed it:** all 16 arms call the overlay or the fill
+**directly**. The loss happens one layer ABOVE, where the decision *whether to
+fill* is made. Requiring `visitId` on `readAndPrepareTemplateTwinFill` protects
+only paths that CALL the fill; both failing paths short-circuit above it. **The
+untested claim recorded in advance named this geometry, and the pass found it
+exactly there.**
+
+⚠️ **THE ASYMMETRY THAT HID IT:** `edit_section` rewrites `soapFinal`, so it
+self-invalidates the manifest. **`edit_form_control` is the first editor intent
+that changes the DOCUMENT without changing the NOTE.**
+
+**FIX SHAPE — both lenses converged on it independently.** The manifest's
+freshness identity must cover the override set: hash note-identity together with
+a canonical form of the overrides, in **one derivation used by the writer and by
+both readers**, exactly the doctrine `note-identity.ts` already states for the
+note. A NULL on a pre-existing manifest is UNPROVABLE and declines, per the same
+rule.
+
+**POPULATION FACT, WITH ITS RE-ARMING CONDITION:** production holds 3 visits on
+the certified template, **all SIGNED**, and 2 manifests, both on signed visits —
+so the path is real and **currently unexercised**. ⚠️ **It re-arms with the first
+new UNSIGNED visit on that template, with no code change anywhere**, because the
+worker writes the manifest before the doctor can open the chat. On a visit with
+no manifest the FIRST correction works and every later one silently fails — the
+worst discoverability profile available.
+
+### 🟠 `Choose an item.` IS A SETTABLE, VALIDATED, CLINICIAN-ATTESTED CLINICAL VALUE
+
+**Measured independently by this session: 28 of 28** content controls carry
+Word's placeholder as `allowedOptions[0]`. `listEditableFormControls` filters only
+on binding type and a non-empty option set, so the placeholder is offered to the
+model as option #1 of every control and nothing excludes it downstream.
+
+Driven end to end by the pass: nothing declined, resolution `status: supported`,
+**`clinicianReviewed: true`**, the validator raises nothing, and the renderer
+writes the literal string **into the imaging report** — occurrence count strictly
+above the blank baseline, so it is SELECTED, not merely listed in the dropdown's
+own definition.
+
+**The laterality-critical SIDE OF EXAM control can render *"Choose an item."*
+while the manifest counts it FILLED and REVIEWED**, so every needs-review surface
+stays quiet. And it is reachable by an ordinary request: there is no `clear`
+intent in the union, so *"leave the referring physician blank"* has exactly this
+one compliant encoding available to the model.
+
+⚠️ **THE AUTHOR'S OWN GATE HELPER EXCLUDES IT.** `twoDistinctOptions` filters
+`^choose an item` to pick its test data. **The test knew it was not a real
+clinical value and the product does not.**
+
+### 🟠 THE MANDATED "ASK WHICH" IS UNANSWERABLE FOR 18 OF 28
+
+The prompt requires *"quote the two labels and their numbers"* on ambiguity.
+Controls **#15–#22** carry a byte-identical label, with option sets identical in
+pairs, and `formControlsForModel` sends only a number, a label and options —
+**nothing positional**. So the mandated question reads *"did you mean #15
+'&lt;sentence&gt;' or #19 '&lt;the identical sentence&gt;'?"*
+
+That is `note-table-edit.test.ts:424`'s invariant — *never asks a question it
+offers no way to answer* — **arriving on a new carrier**, which is the
+watched-set failure canon already records for S4. Nothing server-side enforces
+the ASK, and those eight are `criticality: routine`, so unlike `tableCaption`
+there is no laterality token to fail closed on. Reported as an unenforced
+guarantee, not a demonstrated wrong write.
+
+### 🟡 `declined` IS DOCUMENTED AS THE DOCTOR'S NOTIFICATION AND HAS NO CONSUMER
+
+The module header says *"the doctor is told through `declined` either way."*
+`prepareTemplateTwinFill` destructures the facts and the resolutions and **drops
+it**. Verified: zero consumers, the only trace is a `console.info`. So a
+recompiled template silently loses a correction the chat already reported as
+`ok: true`. **The claim in the comment is false as shipped.**
+
+### 🔴 AND THE GATE ITSELF IS LARGELY DECORATIVE — 5 PARTIAL EDITS LEAVE IT 16/16 GREEN
+
+**Every one reproduced by mutating shipped source and running the gate**, and
+three are also `tsc`-clean:
+
+| mutation | gate | tsc | consequence |
+|---|---|---|---|
+| delete the `clinicianOverrides` argument from the `prepareTemplateTwinFill` call | **16/16** | 0 | **the feature is 100% dead**, everywhere |
+| make the overlay conditional on `generatedNote` | **16/16** | 0 | **the exact defect the WIRING arm NAMES** |
+| drop `visitId` from the override `where` | **16/16** | 0 | cross-**patient** contamination of form controls |
+| move the `.describe()` echo rule from `controlOrdinal` onto `value` | **16/16** | 0 | **F24-S4's defect, inside the arm written to prevent it** |
+| delete the `upsert` entirely | **16/16** | 0 | the chat says *"set SIDE OF EXAM to Left"* and **nothing is written** |
+
+**The write path — `set-template-control.ts`, the clinical write — has NO ARM AT
+ALL.** The WIRING arms are substring scans, and `toContain('clinicianOverrides')`
+is satisfied by the variable DECLARATION, which is exactly why deleting its USE
+is invisible. **The one-file/two-file enumeration the partial-mutation rule
+demands was not performed by the author.** It was performed by the pass, and it
+found five.
+
+⚠️ **A PREDETERMINED CONTROL, CONFIRMED.** The document-order arm asserts the
+list is sorted — but `ir.fields` **arrives pre-sorted**, so deleting the `.sort()`
+leaves it green. You can predict the control's result from the target alone,
+which is the tell that entry names.
+
+**WHAT WOULD MAKE THE GATE REAL:** call `prepareTemplateTwinFill` and assert the
+resolution MOVED (kills three of the five); convert `ChatReplySchema` and read
+the description ON `controlOrdinal` (kills two); give the write path any arm at
+all; shuffle `ir.fields` before the order arm; `describe.each` the 28 controls
+instead of one; assert the two chosen options are substring-independent.
+
+### ⚠️ A SELF-CONTRADICTING COMMENT THE AUTHOR WROTE, AND THE SIGNAL IT CONSUMED
+
+The new `SYSTEM_ALLOWLIST` entry opens *"the guard caught this read UNSCOPED"*
+and then states, correctly, that `isSystem` classifies by PATH **before** it
+looks at scoping. **Both cannot be true.** Measured: removing the practice bound
+leaves practice-scope 15/15, the F24-S5 gate 16/16 and `tsc` clean — so the guard
+caught an **UNDECLARED FILE**, never an unscoped read. Two statements that can
+disagree, in one comment, which is the failure the ledger design exists to
+prevent, written by the session that had just cited that rule.
+
+**The tenancy fix itself is real and the entry is materially honest** — the bound
+is derived in the query, not threaded. But **declaring the file consumed the only
+signal that ever fired**: the scope can now be removed by anyone with every gate
+green. It needs an assertion that is not the allowlist count.
+
+### WHAT THE PASS COULD NOT BREAK
+
+The addressing layer (one list, built once, resolved in-request; out-of-range
+refuses and never clamps); decline paths never blank a prior resolution;
+cardinality; the signed-visit write refusal, which also closes the
+sign-during-turn race; and provenance identity collisions.
+
+**Three hypotheses recorded BECAUSE they were refuted:** the validator arm IS
+non-vacuous — withholding the minted fact yields 3 blocking issues; the byte
+arm's opposite-direction requirement IS real; and all 28 controls apply and
+validate cleanly (approximation stated: the pass used the gate's synthetic
+mappings, not production's per-field ones).
+
+### DISPOSITION
+
+**PARKED FOR A REBUILD, NOT A PATCH.** The freshness identity is a manifest
+schema change, and the gate needs rebuilding around behaviour rather than
+substrings. Each is a slice's worth of work and the fix itself re-enters the
+mandatory pass, so landing it hastily is the failure this row exists to record.
+
+**F24 stays OPEN. The census is NOT flipped. Nothing is deployed and nothing
+asks to be.**
