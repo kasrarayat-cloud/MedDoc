@@ -26620,3 +26620,55 @@ worktree is clean.
 > this session measured are: shared tree **362 files / 5035 tests, 0 failed**;
 > worktree **16 failed + 346 passed = 362** ✔ — every worktree failure is the
 > documented import-resolution artifact, none is real.
+
+---
+
+## F24-S5 — ACCEPTANCE SHARPENED · the exercised case is named, and it is not the easy one
+
+**Owner ruling 2026-08-24, after #820's escalation was verified independently on
+production.** Amends the F24-S5 acceptance above; nothing else changes.
+
+### ⚠️ THE BLOCKER HALF-WORKS, AND THE HALF THAT FAILS IS THE DANGEROUS HALF
+
+The recon said a clinician override through `mergeFieldResolutions` *"would
+silently do nothing"*. Measured on both production fills, that is true of only
+**part** of the field set:
+
+| status | rows | value | overlay applies? | laterality |
+|---|---|---|---|---|
+| `not_mentioned` | **43** | all NULL | ✅ **yes** | 3 |
+| `supported` | **13** | all NON-NULL | ❌ **refused** | **11** |
+| | **56** ✔ | | | 14 |
+
+`56 = 28 controls × 2 manifests`. `UNFILLED = {not_mentioned,
+needs_clinician_input, ambiguous}` (`bridge-fill.ts:646-650`) — **`supported` is
+not a member**, so the resolver-filled fields refuse the overlay.
+
+> ⚠️ **A DEVELOPER TESTING "set the indication dropdown to X" HITS THE ROUTINE
+> CLASS (40 of 42 unfilled) AND SEES IT WORK PERFECTLY. A DOCTOR SAYING "SIDE OF
+> EXAM should be Left" HITS THE REFUSED CLASS AND IS SILENTLY IGNORED.**
+
+**A partial application is more dangerous than a total failure** — canon, landing
+on laterality, the class this arc has already paid for twice.
+
+### THE ACCEPTANCE, AMENDED
+
+Everything in the F24-S5 item stands, plus:
+
+> **THE EXERCISED CASE MUST BE A `supported` LATERALITY FIELD** — one of the 11.
+> **A routine dropdown passes a casual test either way and proves nothing.**
+
+A demo, a screenshot or a gate arm that exercises only an unfilled field is **not
+evidence for this slice**, however green. State which field class was exercised,
+by status, or the proof does not count.
+
+### VERIFIED INDEPENDENTLY, NOT RELAYED
+
+Every figure above was reproduced on production by the supervised session,
+read-only and counts-only, and `UNFILLED`'s membership was read in the shipped
+source. ⚠️ **Two of that verification's own queries returned an empty or null
+result first** — wrong JSON key (`resolutions`, the key is `fields`), then
+`bindingType` read at the top level when it lives under `rendererBinding`. Both
+were caught by a **non-vacuity control** (`160 = 2 manifests × 80 fields`), not
+by noticing the query was wrong. Without it the first zero would have read as
+*"the recon's population does not exist."*
