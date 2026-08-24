@@ -71,15 +71,29 @@ describe('the sign-time freeze', () => {
     expect(processFill).not.toHaveBeenCalled();
   });
 
-  it('⚠️ THE COMMON PATH PAYS NOTHING — a fresh manifest costs ONE read, no fill', async () => {
+  it('⚠️ THE COMMON PATH IS TWO INDEXED READS AND NO FILL — and the count is stated, not implied', async () => {
+    // ⚠️ THIS ARM WAS NAMED "costs ONE read" AND F24-S5 MADE THAT FALSE.
+    //
+    // Its assertion was still literally true — it counts MANIFEST lookups, and
+    // there is still exactly one — but the freeze now also reads the override
+    // set, so the function performs TWO database reads. A title that understates
+    // the cost is the check-name-vs-measurement defect canon records, and the
+    // fact that the assertion never went red is precisely what makes it worth
+    // fixing rather than shrugging at.
+    //
+    // Both counts are now asserted by name, so an N+1 on either side reddens.
     findFirst.mockResolvedValueOnce({ noteSha256: await sha(NOTE), visit: VISIT });
     const { freezeNativeManifestForSigning } = await import('../sign-freeze');
     const out = await freezeNativeManifestForSigning({ visitId: 'v1', practiceId: 'p1' });
 
     expect(out).toEqual({ state: 'already_fresh' });
     expect(processFill, 'a fresh manifest must not trigger a fill').not.toHaveBeenCalled();
-    // Exactly one lookup: no re-read, no verification round trip.
+    // One manifest lookup: no re-read, no verification round trip.
     expect(findFirst).toHaveBeenCalledTimes(1);
+    // One override lookup: the price of the widened identity, paid once. It is
+    // an indexed read on (visitId, practiceId) and it is what lets this gate see
+    // a correction at all — the alternative is the freeze the pass condemned.
+    expect(overrideFindMany).toHaveBeenCalledTimes(1);
   });
 
   it('⚠️ REGENERATES when the note has changed, and PROVES the pair afterwards', async () => {
