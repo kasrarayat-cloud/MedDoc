@@ -47,6 +47,8 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/inflight.sh
 . "$HERE/lib/inflight.sh"
+# shellcheck source=lib/citation-state.sh
+. "$HERE/lib/citation-state.sh"
 
 die2() { printf '🔴 gh-runs: %s\n' "$*" >&2; exit 2; }
 
@@ -96,56 +98,10 @@ WAIT_INTERVAL="${GH_RUNS_WAIT_INTERVAL:-60}"
 WAIT_GRACE="${GH_RUNS_WAIT_GRACE:-180}"
 total_seen=0
 
-# ⚠️ THREE TERMINAL STATES, NOT TWO — AND THAT IS THE WHOLE FIX.
-# This function used to collapse "some runs are still PENDING" and "a run has
-# FAILED" into one exit code (1). A caller cannot tell them apart, so the
-# canonical `until bash scripts/gh-runs.sh cited "$SHA"` loop polls FOREVER on a
-# commit whose run has already concluded `failure` and can never reach 4 of 4.
-#
-# Measured 2026-08-17 on PR #705: `e2e` concluded FAILURE at 06:59Z
-# (npm ECONNRESET in the image build). `cited` printed "3 of 4 success" and
-# exited 1 — true, and indistinguishable from three-done-one-running. The waiter
-# would have polled until the session ended.
-#
-# ⚠️ THIS IS THE SECOND TIME THIS SCRIPT COLLAPSED TWO STATES INTO ONE EXIT.
-# The first was a fabricated sha vs a real sha with pending runs, fixed above by
-# adding 2 = CANNOT TELL. Same author, same file, same shape — which is why the
-# states are now enumerated in one place instead of being re-derived per branch.
-#
-#   0 = CITED       every run concluded success
-#   1 = PENDING     at least one run not completed; no failures yet — retryable
-#   2 = CANNOT TELL no runs, no such commit, broken instrument, timeout
-#   3 = FAILED      a run concluded non-success — TERMINAL, will never cite
-citation_state() {
-  local rows="$1" sha="$2" total ok done_ failed
-  total=$(echo "$rows"  | jq -r 'length')
-  ok=$(echo "$rows"     | jq -r '[.[]|select(.conclusion=="success")]|length')
-  done_=$(echo "$rows"  | jq -r '[.[]|select(.status=="completed")]|length')
-  # A completed run whose conclusion is anything but success: failure,
-  # cancelled, timed_out, startup_failure. All terminal for citation purposes.
-  failed=$(echo "$rows" | jq -r '[.[]|select(.status=="completed" and .conclusion!="success")]|length')
-
-  # ⚠️ A ZERO-RUN COMMIT IS NOT CITED. Without this, a sha nothing ever ran
-  # against reports "all runs succeeded" — vacuously, which is the same
-  # false all-clear one layer up.
-  total_seen="$total"
-  if [ "$total" -lt 1 ]; then
-    echo "NOT CITED — no runs exist for $sha (vacuous, not clean)."
-    return 2
-  fi
-  echo "$ok of $total success"
-  if [ "$failed" -gt 0 ]; then
-    echo "🔴 TERMINAL — $failed of $total concluded NON-SUCCESS. This sha can NEVER" >&2
-    echo "   reach a full citation; waiting on it is an infinite loop. Re-run the" >&2
-    echo "   failed job (and SAY WHY in the row — canon forbids re-run-and-hope)," >&2
-    echo "   or push a fix. Offending runs:" >&2
-    echo "$rows" | jq -r '.[]|select(.status=="completed" and .conclusion!="success")|"     \(.name): \(.conclusion)"' >&2
-    return 3
-  fi
-  [ "$ok" -eq "$total" ] && return 0
-  [ "$done_" -lt "$total" ] && return 1
-  return 2
-}
+# THE VERDICT LIVES IN A LIB — see lib/citation-state.sh for why. Two
+# scripts answered this question and drifted; `check-citation.sh` understood
+# supersession and this one did not, so they returned OPPOSITE verdicts on
+# the same commit until 2026-08-24.
 
 # Prove the runs API answers for this repo before believing any zero from it.
 require_working_api() {
