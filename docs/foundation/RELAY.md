@@ -29302,3 +29302,35 @@ its number on landing). Reading **(iii)** of three.
 walk arms **2/4/5** land → the **16-file + 1-migration** payload deploys under
 §2.5 → the census records **75/80 with the named set** → **F24 CLOSES** →
 **F8 opens.**
+
+---
+
+### 🟢 F28 — SCRIPT-RELATIVE PATHS, NEVER CWD-RELATIVE. **Small, loop-eligible.**
+
+**Filed 2026-08-24 after the THIRD bite of one family.**
+
+| # | what a persisted `cd` did |
+|---|---|
+| 1 | `git merge --ff-only` ran in a WORKTREE while the report said "tree head == origin/main" — one command from a wrong-commit deploy |
+| 2 | `npx vitest` ran from the repo root, where the `@/` alias does not resolve — 4 copies matched, all failed |
+| 3 | `check-citation.sh` returned **`127 — No such file or directory`**: the cwd had persisted into `apps/transcribe-md`, and **the grants are relative paths** |
+
+**The third is the lucky one** — a loud `127` rather than a wrong number. The
+first was silent and true about the wrong tree.
+
+> **THE FIX: every script resolves its own paths from ITS OWN LOCATION, never
+> from the CWD.**
+>
+>     ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+>
+> Then a persisted `cd` can produce at worst a loud failure and never a
+> confident wrong answer.
+
+**Scope:** the `scripts/` entry points a session is granted to run by name.
+**Acceptance:** each resolves `ROOT` from `BASH_SOURCE`, proved by invoking one
+from an unrelated cwd and getting the same answer as from the repo root — with a
+control showing the *old* form differs there.
+
+⚠️ **Do not "fix" this by making the grants absolute.** The grant list is
+protected from the layer it governs; the hazard is the SCRIPT's assumption, not
+the grant's spelling.
