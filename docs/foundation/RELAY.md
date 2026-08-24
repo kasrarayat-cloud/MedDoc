@@ -28067,3 +28067,88 @@ worker was flag-off — which is the finding, not a reason to undo the fix.
   running container.*
 - **F24-S5's acceptance walk is still UNPERFORMED**, and this is its blocker
   being cleared rather than the walk being done.
+
+---
+
+## F24-S5 — THE ACCEPTANCE WALK RAN AND **REFUSED**. Two items, both loop-eligible.
+
+**Supervised session, 2026-08-24, on the QA-ready tree `be9bce63`.** The deploy
+is **HELD**. This is the first enforcement of the standing precedent: *no
+migration-carrying clinical deploy ships on unit evidence when the acceptance
+walk exists and has not run.*
+
+### THE WALK, EVERY ARM VERBATIM
+
+| # | arm | outcome |
+|---|---|---|
+| **1** | 80/80 census by replay | ❌ **REFUSES — reads 52/80** |
+| **2** | a dropdown edit landing in the **EXPORTED** document | ❌ **NOT PERFORMED** |
+| **3** | the sharpened `supported`-laterality case | ✅ **PASSES** (in-process) |
+| **4** | **EXPORT-AFTER-OVERRIDE** | ❌ **NOT PERFORMED** |
+| **5** | **SIGN-AFTER-OVERRIDE** | ❌ **NOT PERFORMED** |
+
+**Preconditions were all verified first and all held:** `main` cited 7/0/0; QA
+images built `09:53–09:54Z` against a `09:46:58Z` merge; **byte-identity proved
+by sha256 on 7 of 7 files** with a negative control; QA worker carries **11**
+`NEXT_PUBLIC_*` and `TEMPLATE_NATIVE_DOCX=true` (F27's fix live); QA schema has
+the table, the column and 107/107 migrations; mock posture severed.
+
+⚠️ **ARM 1's CAUSE IS THE CENSUS'S WATCHED SET, AND THAT DOES NOT MAKE IT A
+PASS.** `gate-f24-s3-editor-addressable-census.test.ts:356` classifies every
+non-table-cell as `no_editor_intent` **unconditionally**, and the file carries
+**zero** references to `clinician-override`, `editable-controls`,
+`set-template-control` or `edit_form_control`. It measures the pre-S5 world
+correctly and reports a number about a system that no longer exists.
+
+> **Until the census can SEE the new intent, nobody has measured whether all 28
+> are addressable.** The S5 gates prove the mechanism works on the fields they
+> chose — a different claim.
+
+---
+
+## ITEM A · CLEAR THE CEILING — the walk's three arms run for real
+
+**Ruled: the ceiling CLEARS, it is never accepted.**
+
+> **THE BRIGHT LINE: surfaces under test run REAL; only upstream MODEL OUTPUT is
+> supplied as DATA.**
+
+Seed the synthetic visit **by hand through the real persistence path** — a
+hand-authored note and facts in the production shape, the established QA seeding
+pattern, and the tree's production-shaped fixtures serve. Then:
+
+- the **real fill engine** builds the manifest,
+- the **real override door** writes,
+- the **real export** renders,
+- the **real sign** freezes.
+
+Nothing under test is mocked. MOCK_AI's inability to generate a note is routed
+around by supplying the note as data, not by mocking a surface.
+
+⚠️ **IF AN ARM STILL CANNOT RUN UNDER THAT RULE, REPORT THE EXACT BOUNDARY.**
+That becomes its own decision — **never a recolor.**
+
+---
+
+## ITEM B · WIDEN THE CENSUS — with anti-agreement proofs
+
+**The written-to-agree risk is the whole hazard**, so the widening carries its
+own refutation:
+
+- **(a) REPLAY, NEVER RECLASSIFY.** Each of the 28 is verified by replay through
+  the **real** `edit_form_control` resolution — *addressed*, not relabelled. A
+  bucket rename is the failure this clause exists to forbid.
+- **(b) RED IN BOTH DIRECTIONS.** Mutation-disable the new intent → the census
+  reads **52** again. An intentionally unreachable control field → classifies as
+  a **gap**.
+- **(c) THE RATCHET FLIPS ONLY IF THE REPLAY EARNS IT.** The deliberate
+  `expect(80 - bestAny).toBeGreaterThan(0)` becomes the zero assertion **in this
+  change** — and **the flipper is the one who looked**, exactly as the gate's
+  author designed it.
+
+---
+
+**THE DEPLOY STAYS HELD** until the walk re-runs with **all five arms** and every
+arm lands. Then §2.5 (106 → 107, the new table, the nullable manifest column,
+both image ids, negative half by id-comparison), judge, the census flip stands,
+F24 closes.
