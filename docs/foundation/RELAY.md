@@ -28833,3 +28833,413 @@ twin's refusal surfaced as a crash in the FALLBACK and buried its own cause.**
 
 Reworked so the twin is asked BY NAME first and a decline is a reported arm.
 *A wall that presents as a harness bug is a wall somebody recolors.*
+
+---
+
+## 🟡 F24-S5 ITEM A — **THE FIX IS BUILT AND GATED. THE CEILING CLEARED: 21 of 21.** Not merged — the pass is OWED
+
+**Run `20260824-200552-b2`, session 01. Branch `fix/f24-s5-compiler-ir-stability`,
+branched off the finding's own branch so `RELAY.md` cannot conflict.**
+
+Executes the direction CLAIMED in the finding above, and nothing wider.
+
+### WHAT SHIPS — two runtime files, and the shape is the whole point
+
+| file | change |
+|---|---|
+| `note-template-docx/compiler.ts` | **persists the document's option array VERBATIM**; the placeholder-filtered set becomes a LOCAL view used only for the validation decision and the duplicate check. Applied on **both** option paths — the content-control one and the legacy `w:ddList` one |
+| `template-twin/editable-controls.ts` | the **third reader** filters for itself, like the door and the overlay already do |
+
+⚠️ **THE READER'S FILTER GOVERNS ELIGIBILITY, NOT ONLY THE LIST SHOWN**, and that
+is the subtle half. `listEditableFormControls` issues `ordinal` as its index over
+`eligible`, so a control admitted that should not be **shifts every later ordinal
+by one** — a wrong-control write reported as success, one layer above every proof
+that watches the write. Both the predicate and the offered list now read the same
+computed set rather than re-deriving it.
+
+### THE PROOF THAT MATTERS — the acceptance walk, RUN, on the real QA stack
+
+`f24-s5-item-a-walk-on-qa.ts` re-run inside the QA worker with the fix in place:
+
+    arms 21 of 21 passed
+
+Every previously-unperformed arm landed:
+
+| arm | evidence |
+|---|---|
+| **2** — a dropdown edit reaches the EXPORTED document | door `ok=true`; row carries `ordinal=1`; `"Bilateral Detailed"` present in `word/document.xml` |
+| **4** — EXPORT-AFTER-OVERRIDE | `manifest declined … reason=overrides_changed` → recompute → bytes `dba249b308e4` → `3f5e556b84f1` |
+| **5** — SIGN-AFTER-OVERRIDE | freeze `already_fresh`; pointer resolved; CAS `updated=1`; `frozenFillManifestId` NOT null; the SIGNED record serves the same bytes, **byte-identical**, still carrying the correction; the door then refuses the signed record |
+
+Plus the discriminating controls: the target option was **absent** before the
+correction; an off-list value is refused **with the options named**; the
+placeholder is refused; and a concept-less `manual` control is refused at the
+door (`"Address is filled in by hand on this form"`).
+
+### ⚠️ THE STRONGEST EVIDENCE IS A CONTROL, NOT THE GREEN
+
+The six-leg comparison was re-run over all ten QA CERTIFIED twins under **three**
+compilers:
+
+| compiler | result |
+|---|---|
+| `main` today (the strip) | **0 of 10 match** — 10 diverge, options 153 → 125 |
+| **the fix** | **8 of 10 match** |
+| **pre-`f340c589`** (what production runs today) | **8 of 10 match — the SAME eight** |
+
+> **The fix is byte-equivalent to the compiler production is running, on this
+> whole population.** That is a far stronger statement than "the gate is green",
+> and no amount of re-reading the diff would have produced it.
+
+⚠️ **AND THE TWO THAT STILL DIVERGE ARE NOT MINE — that is why the third column
+exists.** `5076bac8` and `196ab43e`, both compiled **2026-07-25**, diverge
+`153 → 153` (so not the placeholder) and diverge **identically under the pre-strip
+compiler**. They have been orphaned since some compiler change between
+2026-07-25 and 2026-07-26, by something nobody noticed.
+
+**Both carry 0 visits, so nothing is harmed today.** Recorded because it says the
+class is **not new** — F24-S5 merely made it universal — and because the honest
+long-term cure is a compiled-IR compatibility mechanism, not this one fix.
+⚠️ **Re-arming condition: a visit bound to either template, with no code change
+anywhere.**
+
+### THE GATE — `gate-f24-s5-compiled-ir-is-stable.test.ts`, 6 arms, mutation-proved BOTH ways
+
+It asserts the compiler's OUTPUT SHAPE directly rather than round-tripping it,
+because **every other twin proof compiles its fixture fresh** — so the IR and the
+recompile come from the same compiler and agree by construction. The universe
+those proofs never contain is *an artifact compiled by yesterday's compiler*, and
+production is made entirely of those.
+
+| # | mutation | asserted applied | result |
+|---|---|---|---|
+| **M1** | re-assign the stripped set into `allowedOptions` (the exact regression that shipped) | `grep -c MUTATION-M1` → 1 | **2 arms red** — persistence and ordinal contiguity |
+| **M2** | the READER forgets to filter (the half-landed fix) | `grep -c MUTATION-M2` → 1 | **1 arm red** — 28 placeholders offered to the model |
+
+Both restored from scratch copies, never from git, and both verified back to **0**
+markers with the gate green again.
+
+### FOUR EXISTING GATES CORRECTED — they encoded the defect, and one is a lesson
+
+`gate-f24-s5-bound-identity` (3 arms), `gate-f24-s5-write-path` (6),
+`gate-f24-s5-control-addressable-census` (4), `gate-twin-certified-pin-matches-compiler` (1).
+
+Each was **re-aimed at the invariant, never flipped to match the new output**:
+
+- *"every one of the 28 has had the placeholder REMOVED"* → **STORES it at
+  ordinal 0, and the exclusion lives on the readers**.
+- *"ordinals start at 1 and stay sparse"* → **contiguous from 0**, which is the
+  STRONGER statement: the old form would have gone on passing under a
+  renumbering that shifted everything down by one.
+- *"ordinal 0 resolves to NOTHING"* → **refused BY NAME**,
+  `option_is_placeholder` instead of `ordinal_not_in_options`. The old reason was
+  true only as a side effect of the compiler having deleted the row, and would
+  have gone silent the moment anybody restored it — which is exactly what
+  happened.
+- the write-path and census fixtures now pick from the **selectable** set, i.e.
+  they ask the question the door asks.
+
+#### ⚠️ AND THE PIN GATE FIRED CORRECTLY ON THE ORIGINAL DEFECT — ITS **ADVICE** WAS THE GAP
+
+`gate-twin-certified-pin-matches-compiler` exists to catch *"the compiler's IR
+shape moved"*, and it **did** catch `f340c589` — its own header records the E2E
+seed failing ten minutes into the pack. It was answered by re-minting
+`templateSha256`, which is correct **for the seeder** and completely silent on
+the larger consequence.
+
+> **A detector whose remedy is "update the expected value" cannot, on its own,
+> protect an invariant about artifacts that ALREADY EXIST — and re-minting a pin
+> feels like housekeeping.**
+
+The pin is re-minted back to `37813a6031d4…` (the value the fix restores), and
+the gate's failure message now asks the **second** question first: *is this a
+change that may move persisted IR at all? If it is only about what a READER
+shows, filter at the reader.* It also names the recompile plan every existing
+compiled version would need if a shape change were ever genuinely intended.
+
+### THE SUITE — the controlled delta, not the raw number
+
+Run from a worktree, so the raw figure carries the documented
+`react/jsx-dev-runtime` alias class.
+
+| | base `9b728afe` — **re-measured here, not inherited** | this branch |
+|---|---|---|
+| files | 16 failed · 353 passed · 2 skipped (371) | 16 failed · **354** passed · 2 skipped (**372**) |
+| tests | 1 failed · 4897 passed · 4 skipped (4902) | 1 failed · **4903** passed · 4 skipped (**4908**) |
+
+**+1 file, +6 tests — exactly the new gate — and the failures are UNCHANGED at
+16 / 1.** `tsc --noEmit` clean. The 14 file-level failures are all
+`Failed to resolve import "react/jsx-dev-runtime"` (counted), and the 1 test
+failure is `gate-devstates`, both pre-existing and both confirmed by CI passing
+the unit suite on the parent branch from a real checkout.
+
+### 🔴 NOT MERGED — THE MANDATORY ADVERSARIAL PASS IS OWED
+
+⚠️ **This touches two RUNTIME files, one of which decides what the model is
+offered — squarely the clinical/note-editing path, where canon makes an
+independent refutation pass a GATE and not a nicety.** The loop cannot spawn a
+second actor, so **the PR is opened as a DRAFT** and the pass is owed before
+merge — the same posture `F24-CAPTION-VALIDATION` was held in, and it was right
+there too.
+
+**The claim I have NOT tested**, written down before any pass runs, per canon:
+
+> *I have not tested that NO OTHER READER of `allowedOptions` was relying on the
+> compiler having pre-filtered it.* Three readers were enumerated by grepping the
+> symbol and each was checked; a reader that reaches the options by a different
+> route — a re-export, a destructure, a stored projection — would not be in that
+> list. `editable-controls.ts` was itself found this way and was **not** in the
+> original three-layer design's count, which is the evidence that the
+> enumeration can miss one.
+
+### WHAT THIS ROW DOES NOT CLAIM
+
+- **Not deployed, and the F24-S5 deploy stays HELD.** This clears one of its two
+  blockers; the walk's five arms now all land, but the deploy is a supervised act
+  with its own §2.5.
+- **The fix does NOT recompile anything.** Existing compiled versions are left
+  exactly as they are — which is the point: they become fillable again *because*
+  nothing about them changed.
+- **It says nothing about the two 2026-07-25 twins.** They were already orphaned
+  and this does not repair them.
+- **The walk still carries its one substitution** (`requireSession`), named in
+  its own header. Every arm above runs below that boundary and none asserts
+  anything about authentication.
+- **One walk arm was CORRECTED rather than believed.** ARM 4e originally compared
+  `manifests[0]` with `manifests[len-1]` and asserted they differ — vacuously
+  FALSE with a single row, because the fill UPSERTS one manifest rather than
+  appending. It went red on a walk where everything worked. It now captures the
+  baseline `overridesSha256` **before** the correction and asserts it moved:
+  `4f53cda18c2b -> 2e67b1330bb4`. *A guard that cannot distinguish "the identity
+  did not move" from "there is only one row" is not watching its own invariant.*
+
+### THE QA CONTAINER WAS MUTATED AND RESTORED — SAID PLAINLY
+
+The fix cannot be exercised against the QA stack without the QA worker carrying
+it, and rebuilding the image would have destroyed the runtime-currency the ITEM A
+recon established. So the two files were streamed into the running container and
+**restored byte-identically afterwards**, verified by sha256 captured *before*
+the first write:
+
+    compiler.ts          ac575e5881320ea9c53a8ac67500e9788600c777ce4828397fb4b44bd54dbd98
+    editable-controls.ts ce976ccc055fc52ba4705e06e074a492d96487cf32ef0f70ffa0b5430c2c7c6d
+
+Both read identically after the restore, and `scripts/qa/` is back to its five
+original files. **The running worker PROCESS was started before any edit and
+loads its modules at boot, so it never saw them.** Nothing on production was
+touched at any point.
+
+### ROWS LEFT ON THE QA STACK — by this row's runs
+
+    visit  f24a_walk_mt7p1ovu  (SIGNED — the first full 21-arm walk)
+    visit  f24a_walk_mt7p2puj  (SIGNED — the re-run after ARM 4e was corrected)
+    visit  f24a_walk_mt7prxy9  (SIGNED — the re-run after the two reader filters)
+
+plus their patients. All three are SIGNED, which is the arm-5 outcome rather
+than an accident.
+
+⚠️ **AND THIS BLOCK SAID "FIVE PAIRS … 21 TOTAL" UNTIL IT WAS MEASURED.** That
+was arithmetic, not a reading, and it was wrong on two of its three numbers —
+the third walk run (after the reader filters) had not been counted. *ARITHMETIC
+THAT DOES NOT RECONCILE IS A FINDING*, caught here on its own author. Read from
+the database rather than computed:
+
+| | measured |
+|---|---|
+| walk visit/patient pairs left | **6** — 3 READY (the aborted runs) + 3 SIGNED |
+| QA visits bound to a CERTIFIED twin | **22 total / 19 unsigned** |
+
+The recon's *"16 unsigned"* plus 6 new gives 22, of which 3 are signed → 19
+unsigned. **The partition reconciles.** Named here so the next recon reads a
+delta rather than drift.
+
+### ⚠️ ADDENDUM — I TESTED MY OWN UNTESTED CLAIM, AND IT FOUND TWO
+
+The row above wrote down, before any pass ran:
+
+> *"I have not tested that NO OTHER READER of `allowedOptions` was relying on
+> the compiler having pre-filtered it."*
+
+**So it was tested.** Every non-test reader of `allowedOptions` in
+`apps/transcribe-md/src` and `packages` was enumerated by grepping the FIELD
+(not the fix), and each classified by what it does with the option set:
+
+| reader | what it does | verdict |
+|---|---|---|
+| `renderer.ts:790,838` · `validation:487,503` · `certification-lifecycle:139` | `.find` / `.some` keyed on `value` | positional-safe |
+| `create-draft:178` · `ir.ts:252` · `concept-registry:256` | persists / counts | unaffected |
+| `clinician-override:260` · `set-template-control:183` | already filter for themselves | untouched |
+| `semantic-mapping:291` | shows the options to the model **for the CONCEPT proposal**, not to select a value | unaffected |
+| ⚠️ **`picks-bridge:268`** | matches the model's PICK against the option set — **writes a clinical value** | **FILTERED** |
+| ⚠️ **`resolver/index.ts:108`** | exact-option match — **writes a clinical value** | **FILTERED** |
+
+**The last two are real.** With the placeholder restored to the IR they would
+match a pick or a resolution whose literal text is `Choose an item.` and render
+it as a clinical selection. Both now take their own existing
+`not_an_enumerated_option` / null exit instead — a logged refusal that already
+existed, reused rather than invented.
+
+⚠️ **AND THE HONEST FRAMING OF WHAT THAT IS.** Relative to **production** this
+is a TIGHTENING: the pre-`f340c589` compiler kept the placeholder too, so those
+two paths have been able to match it for the whole life of the feature. Relative
+to the four-hour stripped world it closes a hole the strip had closed as a side
+effect. **Either way the direction is tighten-only**, which is what makes it
+landable without a ruling.
+
+**With those two closed, no path can produce a placeholder resolution at all** —
+the overlay refuses, the door refuses, the picks bridge refuses, the resolver
+refuses. So `validation:487`'s acceptance and `certification-lifecycle:139`'s
+are unreachable-with-a-placeholder by construction rather than by their own
+predicate. **Named as residual, not fixed:** they are the checkers, not the
+writers, and widening the diff further on a clinical path without an adversarial
+pass is the larger risk. ⚠️ **Re-arming condition: a NEW writer of a
+single-select resolution that does not filter.**
+
+**Re-proved after the change, and the control is the interesting part:** the
+walk re-ran **21 of 21** with all four files in place, and the exported DOCX sha
+is `3f5e556b84f1` — **byte-identical to the run before these two filters
+existed.** They changed no document. Suite unchanged at 16 / 1, 372 files,
+4908 tests. `tsc` clean.
+
+> **This is the untested-claim rule paying for itself in one grep.** The
+> sentence was written to aim the pass; writing it made the author look, and the
+> look found two writers the three-layer design never counted — the same way
+> `editable-controls.ts` had been missed.
+
+⚠️ **AND THE BASE FIGURE WAS RE-MEASURED RATHER THAN INHERITED.** The row first
+carried ITEM B's numbers for `main`, which is a count from another session's
+report — canon's *"a count carried forward and then relied on is a fabricated
+number"*. Re-run in a detached worktree at `9b728afe` (the fix branch's actual
+base, not `main`): **16 failed · 353 passed · 2 skipped (371) files; 1 failed ·
+4897 passed · 4 skipped (4902) tests.** It agrees with the inherited figure
+exactly — which is the outcome that makes the check look unnecessary and is
+precisely why it is done.
+
+---
+
+## 🔵 F24-S5 ITEM A(fix) — THE READER ENUMERATION WAS WRONG, AND A GREEN ARM SAID OTHERWISE
+
+**Found by session 02 of run `20260824-200552-b2`, refuting a diff it did not
+author.** Session 01 built the IR-stability fix; this is the pass over it.
+
+⚠️ **NOT AN INDEPENDENT ADVERSARIAL PASS IN THE FULL SENSE, AND SAID SO
+PLAINLY.** No second actor was spawned. What it *is*: a **different session**
+reading a finished diff with none of the author's working model — which is the
+geometry canon asks for, and strictly more than the author re-reading their own
+work. It is not the parallel multi-lens pass, and that is not claimed.
+
+### THE DEFECT — the fix moved a filter from ONE place to N, and miscounted N
+
+The IR-stability fix is right: persist Word's option array verbatim (the
+renderer re-compiles and hashes `fields`), and exclude the placeholder **where
+it is read**. That trade is sound and is not what is being corrected.
+
+**What it cost is the free ride every other consumer used to get.** While the
+compiler stripped the placeholder, all 14 non-test consumers of `allowedOptions`
+inherited the exclusion for nothing. Persisting it verbatim ends that — and the
+branch's own note said **"Three readers do that today"** while the same diff
+touched **five**, and a **sixth** went unfiltered:
+
+    semantic-mapping/index.ts:291   fieldForModel()
+      -> :355  JSON.stringify({fields: fields.map(fieldForModel)})
+      -> wrapAsData(...) -> client.complete({ user: 'Compiler-owned field metadata: …' })
+
+So the **mapping-proposal payload told the model that `Choose an item.` is one
+of the field's enumerated clinical options**, on all 28 single-selects of the
+only certified twin. `placeholder-option.ts`'s own header records where that
+class ends: the literal string rendered into an imaging report on the
+laterality-critical SIDE OF EXAM control.
+
+### ⚠️ AND THE ARM THAT APPEARED TO COVER IT IS THE REAL FINDING
+
+`gate-f24-s5-compiled-ir-is-stable.test.ts:128` was titled
+
+> **"⚠️ never OFFERS the placeholder to the model, though the IR stores it"**
+
+and drives **`listEditableFormControls`** — the CLINICIAN'S EDIT DOOR. That is a
+different surface which merely also has a model on the other end.
+
+> **TWO SURFACES SHARED ONE PHRASE — "the model" — AND THE PHRASE IS WHAT HID
+> THE GAP.** This is canon's *check whose TITLE is narrower than what it
+> MEASURES*, inverted: the title was **WIDER**. Same family, and the inverted
+> direction is worse, because the name reads as coverage.
+
+The arm is retitled to the surface it drives; the payload has its own arm, by
+name, driving the **exported** `proposeSemanticMappings` with a stub client and
+reading what would go on the wire — the shipped function, never a
+re-implementation of its predicate.
+
+### THE MUTATION PROOF — M4, and it proves NECESSITY, not just redness
+
+| | |
+|---|---|
+| mutation | restore `field.allowedOptions.map(...)` in `fieldForModel` (the shipped regression) |
+| applied? | **asserted before the result was believed** — `grep -c MUTATION-M4` → `1` |
+| result | **exactly ONE arm red — the new one**, at `expected 153 to be 125` |
+| the other six | **green throughout** |
+
+**The six staying green IS the finding**, not a footnote: the pre-existing gate
+was green for the entire life of the defect, so redness alone would not have
+made the arm worth having. Restored **from the scratch backup**, never from git;
+marker count re-read as `0`.
+
+### ⚠️ A SECOND ROUTE, MEASURED, AND DELIBERATELY NOT ABSORBED INTO THE FIX
+
+The arm's **first draft asserted on the whole payload text and went RED with the
+fix already applied.** The cause was not the option set:
+
+    "originallabel": "side of exam: choose an item."
+    "originallabel": "referring physician: choose an item."
+    "originallabel": "clinical indications: choose an item., choose an item., …"
+
+`originalLabel` is derived from the container's **TEXT** (`labelSource:
+same_container`) and has always carried whatever Word rendered there.
+
+⚠️ **PRE-EXISTING, AND ESTABLISHED BY THE DIFF RATHER THAN BY RUNNING `main`'s
+COMPILER** — said that way because it is the weaker of the two evidences and
+the distinction is the discipline. The branch's `compiler.ts` hunks touch only
+the `allowedOptions` assignment and its validation predicate; label derivation
+is byte-identical to `main`. **Not a regression from this branch, and not
+silently folded into an assertion about something else.**
+
+**FILED, NOT FIXED**, with its own re-arming condition: it becomes a live
+defect the moment a reader treats `originalLabel` as clinical prose rather than
+as an addressing label. Today every consumer uses it to *match*, not to *emit*.
+
+*Text presence is not membership* — the corrected arm asserts through the
+PARSED structure and the shipped `isWordPlaceholderOption`, with a non-vacuity
+floor (`options.length === 125`) and an ordinal-integrity leg.
+
+### THE HAND-KEPT LIST IS THE RESIDUAL, AND IT IS NAMED
+
+The six filtering readers are now enumerated in `compiler.ts` beside the
+persistence decision, with the predicate that defines the class: *does it put an
+option in front of a human, a model, or a document?*
+
+⚠️ **THAT IS STILL A HAND-KEPT LIST, AND CANON SAYS HAND-KEPT LISTS GO STALE.**
+The structural answer is a single `selectableOptions(field)` accessor every
+reader is forced through — *put the behaviour where it cannot be forgotten.*
+**Filed as a follow-up, not done here:** it is a wider refactor than an
+IR-stability fix should carry, and doing it inside this branch would have made
+the diff unreviewable against the defect it exists to close.
+
+### WHAT THIS ROW DOES NOT CLAIM
+
+- **The `bridge-fill` hypothesis was REFUTED, and is recorded because it was.**
+  `deriveFieldValueFromFact` resolves `single_select` through a **second,
+  unfiltered** `exactOption` (`field-value-derivation.ts:85` — a different
+  function from the resolver's local one the branch fixed), and `bridge-fill.ts:332`
+  calls it on the fill path. That looked like a live wrong-value write.
+  **It is not:** `bridge-fill.ts:294` refuses every kind outside
+  `{narrative_text, number, measurement}`, so the `single_select` and
+  `multi_select` arms are unreachable from there. Its remaining callers are
+  validator paths. **Recorded so the next session does not pay for the same
+  suspicion** — and the two same-named `exactOption` functions remain a real
+  trap for whoever edits either.
+- **`validation/index.ts:487` (`DROPDOWN_NOT_EXACT_OPTION`) is unchanged and now
+  matches against an option set that CONTAINS the placeholder.** No writer can
+  currently emit one, so this is defence-in-depth lost rather than a live
+  defect — **a population fact, with its re-arming condition: a seventh writer.**
+- Arms 2, 4 and 5 of the acceptance walk are **still UNPERFORMED**. Not
+  recolored.
+- The census speaks about the **WM IOV** form — the only certified twin there is.

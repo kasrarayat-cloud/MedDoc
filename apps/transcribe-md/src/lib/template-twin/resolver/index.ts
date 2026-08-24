@@ -18,6 +18,7 @@ import {
   type SemanticMapping,
   type TemplateField,
 } from '../ir';
+import { withoutPlaceholderOptions } from '../../note-template-docx/placeholder-option';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
 import { isMappingTypeCompatible } from '../semantic-mapping';
 import {
@@ -105,7 +106,13 @@ function exactOption(
   raw: string,
 ): { value: string; ordinal: number } | null {
   const candidate = raw.trim();
-  const option = field.allowedOptions.find(
+  // ⚠️ WORD'S "Choose an item." IS NOT AN OPTION A RESOLVER MAY SELECT. The
+  // compiled IR carries it at ordinal 0 by necessity — the renderer re-compiles
+  // the source and hashes `fields`, so removing it orphans every
+  // already-compiled twin (F24-S5 ITEM A) — so the exclusion lives on each
+  // READER, and this reader selects a CLINICAL VALUE. Returning null here puts
+  // a placeholder match on the same path as any other off-list value.
+  const option = withoutPlaceholderOptions(field.allowedOptions).find(
     (item) => item.value === candidate || item.displayText === candidate,
   );
   return option ? { value: option.value, ordinal: option.ordinal } : null;

@@ -293,6 +293,21 @@ async function main() {
   // =========================================================================
   const before = await nativeOrStop(VISIT_ID, PRACTICE_ID, '[itemA:before]');
   const beforeText = await docxText(before.bytes);
+  // ⚠️ CAPTURED HERE, BEFORE THE CORRECTION, BECAUSE THE FILL UPSERTS ONE
+  // MANIFEST ROW RATHER THAN APPENDING A SECOND.
+  //
+  // The first version of ARM 4e compared `manifests[0]` with
+  // `manifests[len-1]` and asserted they differ — which is vacuously FALSE with
+  // a single row, and it went red on a walk where everything worked. A guard
+  // that cannot distinguish "the identity did not move" from "there is only one
+  // row" is not watching the invariant it is named for.
+  const baselineOverridesSha = (
+    await prisma.templateTwinFillManifest.findFirst({
+      where: { visitId: VISIT_ID },
+      orderBy: { createdAt: 'desc' },
+      select: { overridesSha256: true },
+    })
+  )?.overridesSha256 ?? null;
   const beforeSha = sha(before.bytes);
 
   const rendered = options
@@ -432,11 +447,11 @@ async function main() {
       `overridesSha=${latest?.overridesSha256?.slice(0, 12) ?? 'NULL'}`,
   );
   arm(
-    'ARM 4e — the identity MOVED (the recompute was earned, not free)',
-    manifests.length > 1 &&
-      manifests[0].overridesSha256 !== latest?.overridesSha256,
-    `first=${manifests[0]?.overridesSha256?.slice(0, 12) ?? 'NULL'} ` +
-      `latest=${latest?.overridesSha256?.slice(0, 12) ?? 'NULL'}`,
+    'ARM 4e — the BOUND IDENTITY moved (the recompute was earned, not free)',
+    Boolean(latest?.overridesSha256) &&
+      latest?.overridesSha256 !== baselineOverridesSha,
+    `baseline=${baselineOverridesSha?.slice(0, 12) ?? 'NULL'} -> ` +
+      `after=${latest?.overridesSha256?.slice(0, 12) ?? 'NULL'} (manifest rows=${manifests.length})`,
   );
 
   // =========================================================================

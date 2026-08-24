@@ -381,8 +381,8 @@ function processContentControl(
     // It is persisted on manifests and overrides and, on the legacy path, is
     // written back as `w:result val` — an index into the document's untouched
     // list. It must never be renumbered. See `placeholder-option.ts`.
-    allowedOptions = withoutPlaceholderOptions(
-      directChildren(optionContainer, "listItem").map((item, ordinal) => {
+    allowedOptions = directChildren(optionContainer, "listItem").map(
+      (item, ordinal) => {
         const displayText =
           getAttribute(item, "displayText") ??
           getAttribute(item, "value") ??
@@ -392,14 +392,70 @@ function processContentControl(
           displayText,
           value: getAttribute(item, "value") ?? displayText,
         };
-      }),
+      },
     );
-    // Validation runs on the REAL option set, after the placeholder is gone: a
+    // ⚠️ THE PERSISTED ARRAY IS THE DOCUMENT'S, VERBATIM. THE FILTER IS A LOCAL
+    // VIEW FOR THE VALIDATION DECISION ONLY — AND THAT DISTINCTION IS THE WHOLE
+    // POINT OF THIS SHAPE.
+    //
+    // An earlier version assigned `withoutPlaceholderOptions(...)` straight into
+    // `allowedOptions`, so the placeholder never reached the IR. It read as the
+    // safest possible change and it BROKE EVERY TEMPLATE ALREADY COMPILED.
+    //
+    // `renderer.ts:assertSourceMatchesIr` RE-COMPILES the immutable source on
+    // EVERY fill and compares the result against the STORED IR — by
+    // `structureSha256` and by `canonicalSha256(fields)`. Shrinking the option
+    // array moves both (structureSha256 is `canonicalSha256({fields, tables,
+    // nodes, unsupported})`, so one change fires two legs), while
+    // `compilerVersion` stays `1.0.0` and says nothing. Measured on QA:
+    // **10 of 10** CERTIFIED twins began failing `SOURCE_IR_MISMATCH`, options
+    // 153 -> 125 — exactly the 28 single-selects, one placeholder each. The only
+    // certified twin in production carries the identical 80/153/28, so it would
+    // have stopped filling the moment this shipped: every recompute path
+    // degrades silently to the STYLED export, and a signature freezes a NULL
+    // pointer, permanently.
+    //
+    // ⚠️ AND THE FEATURE THIS SHIPPED WITH WAS ITS OWN TRIGGER — a clinician's
+    // form-control correction moves `overridesSha256`, which is precisely what
+    // forces the recompute that then refuses.
+    //
+    // So the placeholder is excluded WHERE IT IS READ, never where it is
+    // STORED. A compile-time filter is not another layer of safety — it is a
+    // change to an artifact other code has already hashed.
+    //
+    // ⚠️ AND THE READER LIST IS ENUMERATED, NEVER REMEMBERED. An earlier
+    // version of this note said "three readers", named three, and the SAME
+    // DIFF touched five — while a SIXTH went unfiltered and unnoticed. Naming
+    // a class is not enumerating it. The filtering readers today are:
+    //
+    //   1. `set-template-control.ts`        the clinician's door
+    //   2. `clinician-override.ts`          the override overlay
+    //   3. `editable-controls.ts`           the list the edit door addresses
+    //   4. `picks-bridge.ts`                writes a clinical value
+    //   5. `resolver/index.ts`              selects a clinical value
+    //   6. `semantic-mapping/index.ts`      the payload SENT TO THE MODEL
+    //
+    // ⚠️ #6 was missed because the arm that appeared to cover it —
+    // "never OFFERS the placeholder to the model" — measured
+    // `listEditableFormControls` (#3), a DIFFERENT surface that merely also
+    // has a model on the other end. Two things named "the model" is what hid
+    // it. `gate-f24-s5-compiled-ir-is-stable.test.ts` now asserts both by name.
+    //
+    // ⚠️ THE ENUMERATION IS A HAND-KEPT LIST AND HAND-KEPT LISTS GO STALE.
+    // The structural answer is a single `selectableOptions(field)` accessor
+    // that every reader is forced through — filed as a follow-up rather than
+    // done here, because it is a wider refactor than an IR-stability fix
+    // should carry. Until then: the predicate for a reader that needs this is
+    // *"does it put an option in front of a human, a model, or a document?"*
+    // — grep `allowedOptions` and classify, never recall.
+    const selectableOptions = withoutPlaceholderOptions(allowedOptions);
+    // Validation runs on the REAL option set, with the placeholder discounted: a
     // control whose only entry was Word's placeholder offers no clinical choice
-    // at all, and SELECT_OPTIONS_INVALID is the honest verdict for it.
+    // at all, and SELECT_OPTIONS_INVALID is the honest verdict for it. This
+    // decision is UNCHANGED by the shape above — it just reads the local view.
     if (
-      allowedOptions.length === 0 ||
-      allowedOptions.some((option) => !option.displayText)
+      selectableOptions.length === 0 ||
+      selectableOptions.some((option) => !option.displayText)
     ) {
       addUnsupportedContentControl(
         state,
@@ -568,20 +624,27 @@ function processLegacyField(
     // single-selects on the certified twin are content controls), so this arm
     // is currently UNEXERCISED. It re-arms the first time a doctor uploads a
     // .doc-era template carrying `w:ddList` form fields, with no code change.
-    allowedOptions = withoutPlaceholderOptions(
-      descendants(dropdown, "listEntry").map((entry, ordinal) => {
-        const value = getAttribute(entry, "val") ?? "";
-        return { ordinal, displayText: value, value };
-      }),
-    );
+    allowedOptions = descendants(dropdown, "listEntry").map((entry, ordinal) => {
+      const value = getAttribute(entry, "val") ?? "";
+      return { ordinal, displayText: value, value };
+    });
+    // ⚠️ SAME SHAPE AS THE CONTENT-CONTROL PATH, AND FOR THE SAME REASON —
+    // persist the document's array, filter only the local view. See the long
+    // note there. Applied HERE TOO rather than on that path alone so a legacy
+    // template cannot inherit the IR-instability defect by being the case
+    // somebody forgot. It is also strictly MORE faithful on this path: the
+    // ordinal is written back as `w:result val`, an index into the document's
+    // own untouched `listEntry` array, so the IR now carries exactly what the
+    // renderer indexes into.
+    const selectableOptions = withoutPlaceholderOptions(allowedOptions);
     if (
-      allowedOptions.length === 0 ||
-      allowedOptions.some((option) => !option.value)
+      selectableOptions.length === 0 ||
+      selectableOptions.some((option) => !option.value)
     ) {
       addUnsupportedLegacy(state, context, nodePath, legacyName);
       return;
     }
-    ambiguousChoiceOptions = hasDuplicateChoiceOptions(allowedOptions);
+    ambiguousChoiceOptions = hasDuplicateChoiceOptions(selectableOptions);
     if (ambiguousChoiceOptions) {
       addUnsupported(state, {
         code: "AMBIGUOUS_SELECT_OPTIONS",

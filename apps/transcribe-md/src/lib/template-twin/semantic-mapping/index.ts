@@ -14,6 +14,7 @@ import {
   synonymsFor,
   REGISTRY_CONCEPTS,
 } from '../concept-registry';
+import { withoutPlaceholderOptions } from '../../note-template-docx/placeholder-option';
 import { z } from 'zod';
 
 import {
@@ -288,7 +289,25 @@ function fieldForModel(field: TemplateField): Record<string, unknown> {
     originalLabel: field.originalLabel,
     labelSource: field.labelSource,
     kind: field.kind,
-    allowedOptions: field.allowedOptions.map((option) => ({
+    // ⚠️ THE FOURTH READER, AND IT IS THE ONE THE ENUMERATION MISSED.
+    //
+    // This payload goes to `client.complete` (:355 below) as "Compiler-owned
+    // field metadata" — so an unfiltered array TELLS THE MODEL that Word's
+    // "Choose an item." is one of this field's enumerated clinical options,
+    // on all 28 single-selects of the certified twin.
+    //
+    // Before the IR-stability fix the compiler stripped the placeholder, so
+    // every downstream consumer inherited the exclusion for free and this line
+    // was correct BY ACCIDENT. Persisting the array verbatim moved the
+    // exclusion onto each reader — and moved it onto THIS one too, which the
+    // "three readers" note did not count. `placeholder-option.ts`'s own header
+    // records where that ends: the literal string rendered into an imaging
+    // report on the laterality-critical SIDE OF EXAM control.
+    //
+    // The ordinal is UNCHANGED by the filter (see `withoutPlaceholderOptions`),
+    // so the model still names the document's own index and a proposal keyed on
+    // an ordinal stays addressable.
+    allowedOptions: withoutPlaceholderOptions(field.allowedOptions).map((option) => ({
       ordinal: option.ordinal,
       displayText: option.displayText,
       value: option.value,

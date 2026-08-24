@@ -20,6 +20,29 @@
 // and names the remedy in its own message. It is not a substitute for the seed's
 // own refusal — that one is fail-closed at the point the live-model call would
 // happen, and stays.
+//
+// ============================================================================
+// ⚠️ AND ITS ADVICE WAS HALF THE ANSWER — THE HALF THAT COST NOTHING.
+// ----------------------------------------------------------------------------
+// This arm DID fire on `f340c589`, exactly as designed. It was answered by
+// re-minting `templateSha256`, which is correct FOR THE SEEDER and completely
+// silent on the larger consequence:
+//
+//   > **`structureSha256` is not only a fixture pin. `renderer.ts:
+//   > assertSourceMatchesIr` re-compiles the immutable source on EVERY fill and
+//   > compares it against the STORED IR of every template already compiled. A
+//   > moved structure hash does not just stale a pin — it ORPHANS EVERY
+//   > CERTIFIED TWIN IN THE DATABASE.**
+//
+// Measured on QA by driving the real fill (F24-S5 ITEM A): 10 of 10 CERTIFIED
+// twins began failing `SOURCE_IR_MISMATCH`, and production's only certified twin
+// carries the identical shape. Every recompute path then degrades SILENTLY to
+// the styled export, and a signature freezes a NULL pointer — permanently.
+//
+// So the message below now asks the SECOND question too. A detector whose
+// remedy is "update the expected value" cannot, on its own, protect an
+// invariant about artifacts that already exist — and re-minting a pin is
+// exactly the kind of change that feels like housekeeping.
 // ============================================================================
 
 import { readFileSync } from 'node:fs';
@@ -54,13 +77,25 @@ describe('the certified-twin pin tracks the compiler', () => {
 
     expect(
       ir.structureSha256,
-      'THE PIN AND THE COMPILER HAVE DIVERGED. `seed-certified-twin.ts` will ' +
-        'refuse and the e2e pack will fail. Any change to the compiler’s IR ' +
-        'shape moves this hash. Re-mint `templateSha256` in ' +
-        'tests/e2e/fixtures/twin-certified-pins.json to the value reported as ' +
-        '"received" here — and re-mint ONLY that field unless the note itself ' +
-        'is genuinely stale, because the pinned note and entities are bound to ' +
-        'the ENCOUNTER, not to the template structure.',
+      'THE PIN AND THE COMPILER HAVE DIVERGED. Any change to the compiler’s IR ' +
+        'shape moves this hash.\n\n' +
+        '⚠️ ASK THE SECOND QUESTION BEFORE RE-MINTING ANYTHING. This hash is ' +
+        'also what `renderer.ts:assertSourceMatchesIr` compares on EVERY fill, ' +
+        'against the STORED IR of every template ALREADY COMPILED. If your ' +
+        'change moved it, you have not staled a fixture — you have made every ' +
+        'CERTIFIED TWIN IN THE DATABASE unfillable, production’s included, and ' +
+        'every recompute path degrades SILENTLY to the styled export while a ' +
+        'signature freezes a NULL pointer forever. Measured on QA 2026-08-24: ' +
+        '10 of 10. So: is the compiler change one that may move persisted IR ' +
+        'at all? If it is only about what a READER shows, filter at the reader ' +
+        'and leave the stored array alone (see compiler.ts, F24-S5 ITEM A).\n\n' +
+        'ONLY IF the shape change is genuinely intended: `seed-certified-twin.ts` ' +
+        'will refuse and the e2e pack will fail until you re-mint ' +
+        '`templateSha256` in tests/e2e/fixtures/twin-certified-pins.json to the ' +
+        'value reported as "received" here — and re-mint ONLY that field unless ' +
+        'the note itself is genuinely stale, because the pinned note and ' +
+        'entities are bound to the ENCOUNTER, not to the template structure. ' +
+        'And every existing compiled version needs a recompile plan.',
     ).toBe(pins.templateSha256);
   });
 
