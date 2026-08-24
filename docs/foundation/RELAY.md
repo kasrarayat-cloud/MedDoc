@@ -28108,6 +28108,15 @@ correctly and reports a number about a system that no longer exists.
 
 ## ITEM A · CLEAR THE CEILING — the walk's three arms run for real
 
+> 🔴 **STATUS 2026-08-24, run `20260824-200552-b2` session 01: ATTEMPTED, AND THE
+> CEILING IS A WALL.** The walk was built and run for real inside the QA worker;
+> the real fill engine ran and the **real renderer refused** with
+> `SOURCE_IR_MISMATCH`. The boundary is shipped code, not the harness — the
+> F24-S5 compiler change makes **every pre-`f340c589` twin unfillable, production's
+> included**. Arms 2, 4 and 5 remain **UNPERFORMED**, and the deploy has a second
+> reason to stay held. **Read the finding at the end of this file before touching
+> ITEM A** — it also CLAIMS the fix direction.
+
 **Ruled: the ceiling CLEARS, it is never accepted.**
 
 > **THE BRIGHT LINE: surfaces under test run REAL; only upstream MODEL OUTPUT is
@@ -28575,3 +28584,252 @@ DESTRUCTION LIST IS A CLAIM* — never by filename:
 **Not force-removed.** `git worktree remove` refuses while untracked files are
 present, and forcing it would destroy another session's evidence with `rm`
 semantics — the opposite of the shred discipline. Reported instead.
+
+---
+
+## 🔴 F24-S5 ITEM A — THE CEILING IS A **WALL**, AND THE WALL IS ON THE BRANCH THE DEPLOY IS HELD ON
+
+**Run `20260824-200552-b2`, session 01. The FOUNDATION loop.**
+
+ITEM A's ruling: *"the ceiling CLEARS, it is never accepted"*, with the escape
+clause — ***"IF AN ARM STILL CANNOT RUN UNDER THAT RULE, REPORT THE EXACT
+BOUNDARY. That becomes its own decision — never a recolor."***
+
+**This is that clause, and the boundary is not the harness. It is shipped code.**
+
+> **`compiler.ts` now strips Word's `Choose an item.` placeholder from
+> `allowedOptions`. `renderer.ts:assertSourceMatchesIr` RE-COMPILES the
+> immutable source on every fill and compares the result against the STORED IR.
+> So every template compiled before that change now fails `SOURCE_IR_MISMATCH`
+> and CANNOT BE FILLED — including the only certified twin in production.**
+
+### HOW IT WAS FOUND — by running the walk, not by reading the diff
+
+The walk was built and executed **inside the QA worker container**, against QA's
+own Postgres and MinIO (`apps/transcribe-md/scripts/qa/f24-s5-item-a-walk-on-qa.ts`,
+landed with this row). It seeded a synthetic visit through the real persistence
+path, handed it a hand-authored production-shaped note, and asked the **real**
+export seam for the document.
+
+The real fill engine ran — the bridge logged 32 `cell left blank` decisions, so
+this is not a wiring failure — and then:
+
+    [native-export] on-demand fill failed for visit=f24a_walk_…; styled fallback:
+    The immutable source document does not match its compiled template structure.
+
+That string is `SOURCE_IR_MISMATCH` (`roundtrip-verify.ts:25`), raised by
+`renderer.ts:240`.
+
+### THE MEASUREMENT — 10 of 10 CERTIFIED twins on QA, and the cause is exact
+
+Every CERTIFIED compiled version on the QA stack was re-compiled from its own
+verified source artifact and compared leg by leg:
+
+| compiled versions checked | diverge | legs that fired | options |
+|---|---|---|---|
+| **10** | **10** | `structureSha256` **and** `fields`, on every one | **153 → 125** |
+
+`153 − 125 = 28`, and the twin has exactly **28** single-select content controls.
+
+**Isolated rather than inferred**, on the twin the 16 QA visits are bound to:
+
+| question | measured |
+|---|---|
+| placeholder options in the stored IR | **28** |
+| fields carrying one | **28 of 28** with options |
+| always at ordinal 0 | **true** |
+| `fields` hash: raw IR vs current compiler | **false** |
+| `fields` hash: **placeholder-stripped** IR vs current compiler | ✅ **true** |
+| `staticContentSha256` | **equal** — the document itself is untouched |
+
+**And the second failing leg has the same single cause**, read from the compiler
+rather than guessed: `compiler.ts:129` computes
+`structureSha256 = canonicalSha256({ fields, tables, nodes, unsupported })`.
+`tables`, `nodes`, `parts` and `unsupported` all compare equal. So **one change,
+two legs**, and stripping the 28 placeholders from the stored IR reconciles the
+`fields` leg completely.
+
+⚠️ **AND `compilerVersion` DID NOT MOVE.** Both sides read
+`template-docx-compiler/1.0.0`. `assertSourceMatchesIr` compares the version
+string *and* the content hashes; the version leg is silent, so the one signal
+that could have named this as a compiler change says nothing. **A behaviour
+change under an unchanged version string is why the content hashes exist — and
+it is also why nothing warned anyone.**
+
+### PROVENANCE — the commit, and it is on `main`
+
+`git log -S withoutPlaceholderOptions -- …/compiler.ts` → **exactly one commit**:
+
+    f340c589  2026-08-24  feat(twin): F24-S5 rebuild — the bound identity widens…
+
+The F24-S5 REBUILD. Its own commit message anticipates the exposure and answers
+it with **three layers** — *"compiler, overlay, and the write door"* — and
+states, correctly and in as many words:
+
+> *"the certified twin in production was compiled 2026-08-17 and still carries
+> the placeholder at ordinal 0 on all 28 of its single-selects."*
+
+**That sentence is true and it is the premise of this finding.** The three-layer
+design reasoned entirely about **SELECTABILITY** — can a placeholder be chosen —
+and never about **RE-VERIFICATION**: that the renderer hashes the option array
+it just shrank. Ordinals were deliberately not renumbered (#145), which is right
+and is not the issue; the ARRAY still got shorter, and the array is hashed.
+
+### PRODUCTION — the blast radius, measured on both sides
+
+**Today: UNAFFECTED. Read from the running container, with a positive control:**
+
+| probe on `meddoc-pro-transcribe-md-worker-1` | count | control |
+|---|---|---|
+| `withoutPlaceholderOptions` in `compiler.ts` | **0** | `compileTemplateDocx` → **1** |
+| `placeholder-option.ts` present | **0** | `fill-engine.ts` → **1** |
+| `clinician-override.ts` / `editable-controls.ts` present | **0** | `fill-engine.ts` → **1** |
+
+Production runs the pre-`f340c589` compiler. Its twin still fills.
+
+**And production's twin is in the identical state to QA's** — read-only on the
+production database, counts only:
+
+    617d6de9…  compiled 2026-08-17T17:39:17Z  template-docx-compiler/1.0.0
+    fields 80 · options 153 · placeholders 28
+
+**Same 80 / 153 / 28 as QA.** So the moment F24-S5 deploys, production's only
+certified twin stops being fillable.
+
+> ⚠️ **POPULATION FACT, WITH ITS RE-ARMING CONDITION IN THE SAME SENTENCE: the
+> defect is UNEXERCISED today and is re-armed by the F24-S5 DEPLOY — nothing
+> else. No code change, no data change, no doctor action.**
+
+### WHAT A DOCTOR WOULD SEE — and the worst path is permanent
+
+Nothing breaks **at rest**: the two VERIFIED production manifests still match
+their notes (`overridesSha256` NULL = the empty set, and there are 0 override
+rows), so cached bytes keep serving. **The damage begins at the first
+RECOMPUTE**, and every recompute path degrades SILENTLY:
+
+| path | outcome |
+|---|---|
+| worker fill on a new visit | manifest never materialises → **styled**, no error |
+| on-demand export compute | caught → `fill_failed` → **styled**, no error |
+| **sign-freeze regenerate** | `failed` → `resolveFrozenPointer` finds no matching manifest → the signature freezes **NULL** → that record is **styled FOREVER** |
+| **a clinician uses the new correction door** | `overridesSha256` moves → `overrides_changed` → recompute → **SOURCE_IR_MISMATCH** → **styled** |
+
+⚠️ **THE LAST ROW IS THE ONE THAT MATTERS: F24-S5's HEADLINE FEATURE IS ITS OWN
+TRIGGER.** The doctor makes exactly the correction this slice was built to
+deliver, and their own form disappears from the download. The door reports
+`ok: true` — because the door is correct and the refusal is three layers
+downstream.
+
+⚠️ **AND THE SIGN ROW IS `AGENTS.md`'s ACCEPTED-CAPABILITY-LOSS ENTRY ARRIVING BY
+A NEW MECHANISM** — *"a pre-deploy signed visit serves STYLED forever"* — except
+this time it would be every visit signed **after** the deploy rather than before
+it, and there is no null-identity argument making it correct.
+
+### WHY NO UNIT GATE COULD SEE IT
+
+Every S5 proof constructs its IR and its source **together**, in-fixture, or
+compiles a fixture fresh — so `assertSourceMatchesIr` compares a
+current-compiler IR against a current-compiler recompile and agrees by
+construction. **The defect exists only for an IR compiled by a DIFFERENT
+compiler than the one now running, and no fixture is old.**
+
+That is canon's *A WELL-CHOSEN FIXTURE DISGUISES A WRONG UNIVERSE*, on the
+**time** axis rather than the route axis: the universe the proofs never
+contained is *yesterday's compiled artifact*, and production is made entirely of
+those.
+
+### 📌 THE FIX DIRECTION — CLAIMED, NOT YET BUILT
+
+Per the standing *CLAIM A RULED FIX DIRECTION BEFORE BUILDING IT* notice, the
+claim is posted **before** any build, and the loop is on it.
+
+| candidate | verdict |
+|---|---|
+| bump `compilerVersion` | ❌ **worse** — `assertSourceMatchesIr` compares it too, so every old twin then fails a THIRD leg |
+| relax `assertSourceMatchesIr` to tolerate the difference | ❌ **a LOOSENING of a clinical verification path** — fails the provisional test outright, and is *weaken the gate to shrink the wall* verbatim |
+| recompile every existing CERTIFIED compiled version | ⚠️ possible; an irreversible mutation of certified clinical artifacts, so `run-ruled-mutation.sh` + its own §2.5. **Kept as the fallback** |
+| ✅ **persist the UNSTRIPPED option array; strip only where it is READ** | **claimed** |
+
+**The claimed direction, stated so a second actor extends rather than
+duplicates:**
+
+- `compiler.ts` keeps computing the stripped set **for its validation decision**
+  (`SELECT_OPTIONS_INVALID` for a control whose only entry is furniture — a real
+  refinement that must not be lost) but **persists `allowedOptions` unstripped**,
+  so the IR is byte-stable against every twin already compiled.
+- The placeholder is refused where it is **read**, which is where it already is:
+  `clinician-override.ts:278` and `set-template-control.ts:184` both filter
+  independently today and are untouched.
+- ⚠️ **THE THIRD READER IS THE ONE THE THREE-LAYER DESIGN DID NOT COUNT.**
+  `editable-controls.ts:128` maps `f.allowedOptions` straight into the options
+  offered to the model **with no filter of its own** — it inherits the
+  compiler's. Under this direction it needs the same one-line filter, and then
+  the treatment lives ON THE READERS rather than on a compile-time side effect,
+  which is where canon says to put it.
+
+**The arithmetic that makes the direction credible is already in hand:** a
+compiler that persists the unstripped array reproduces the stored `fields` hash
+(measured — stripped-IR vs compiler = **true**, which is that same equality read
+the other way), and `structureSha256` follows because `fields` is its only
+divergent input. ⚠️ **That is an argument, not a proof. The proof is a build that
+re-runs all six legs against the untouched stored IR and gets six matches, and
+it has not been run.**
+
+### WHAT THIS ROW DOES NOT CLAIM
+
+- **The walk's arms 2, 4 and 5 are STILL UNPERFORMED**, and this row does not
+  recolor that. They ran, they reached the real fill, and the real renderer
+  refused. *An unverified step named honestly is worth more than a green tick.*
+- **A fresh-twin walk was deliberately NOT substituted.** Compiling a new twin
+  under today's compiler would make the arms pass — and would be the
+  wrong-universe failure in its purest form, because **production's twin is a
+  pre-`f340c589` one** and that is the universe the acceptance is about.
+- **The fix is claimed, not built, and not proved.** No line of `compiler.ts`
+  changed in this PR.
+- **The walk harness carries ONE substitution and it is named in its own header:**
+  `requireSession` — `setTemplateControlAction` reads a NextAuth cookie through
+  `next/headers` and there is no request. Everything else in the door is the
+  shipped code. The arms below the fill never ran, so no result in this row
+  depends on that substitution at all.
+- **No independent adversarial pass ran** on this row's reasoning. The loop
+  cannot spawn a second actor; the refutations here are its own — the running
+  production container was probed with positive controls, the second failing leg
+  was traced to its derivation rather than assumed, and *"is it already live?"*
+  was measured rather than reasoned. **Self-verification has a ceiling and this
+  is inside it.**
+- **Nothing on production was written.** Two read-only measurements: one SQL
+  count over the compiled IR, one `grep -c` inside the worker container, each
+  with a positive control.
+
+### ROWS LEFT ON THE QA STACK
+
+The walk ran **three** times — once to find the wall, once so the reproduction
+belonged to the file actually committed (*evidence is only evidence on the tree
+it describes*), and once after the harness was reworked to REPORT the refusal
+instead of crashing into the styled fallback. Each run seeds its own pair, and
+all three pairs remain, enumerated from the database rather than from memory:
+
+    visit    f24a_walk_mt7ogttk · f24a_walk_mt7ost22 · f24a_walk_mt7ou6cy   (all READY, none signed)
+    patient  f24a_pat_mt7ogttk  · f24a_pat_mt7ost22  · f24a_pat_mt7ou6cy
+
+**All three aborted at the same place with the same reason**, which is itself the
+reproduction: `native=null reason=fill_failed`, from
+`SOURCE_IR_MISMATCH`.
+
+Left in place rather than deleted: they are this row's evidence, they are
+synthetic, and destruction is not something an unattended session should do to
+state it may have misclassified. ⚠️ **They also move the "16 unsigned QA visits
+bound to a certified twin" figure to 19** — named here so the next recon does
+not read it as drift.
+
+### ⚠️ ONE HARNESS DEFECT, FOUND BY ITS OWN FIRST RUN AND WORTH KEEPING
+
+The first two runs did not print the reason — they threw
+`TypeError: Cannot read properties of undefined` inside `generateVisitDocx`.
+`resolveVisitDocx` degrades to the STYLED builder when the twin declines, which
+is right for a doctor and wrong for an acceptance walk: the styled builder wants
+a full `VisitExportData` this harness has no business synthesising, **so the
+twin's refusal surfaced as a crash in the FALLBACK and buried its own cause.**
+
+Reworked so the twin is asked BY NAME first and a decline is a reported arm.
+*A wall that presents as a harness bug is a wall somebody recolors.*
