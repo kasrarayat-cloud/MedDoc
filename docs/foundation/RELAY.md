@@ -29307,3 +29307,62 @@ the Bash cwd was still the worktree's `apps/transcribe-md` from an earlier
 Caught by an exit code rather than by a wrong number — which is the lucky
 direction; the same trap has previously produced a *plausible* measurement from
 the wrong universe.
+
+---
+
+## F24 CLOSE CONDITION — 75/80, and the residue is a REFUSAL not a GAP
+
+**Owner ruling, 2026-08-24** (branch `docs/f24-close-condition`; the row claims
+its number on landing). Reading **(iii)** of three.
+
+> **THE ACCEPTANCE, RESTATED: every field the validator can defend, addressable
+> by the editor; manual-class fields refuse honestly, by design.**
+
+**F24 closes at 75 of 80** when the walk's five arms land.
+
+| half | measured |
+|---|---|
+| table cells | **52 / 52** |
+| content controls | **23 / 28** |
+| residual | **5 on the fixture · 4 on production** — `manual`, null `clinicalConcept` |
+
+### ⚠️ WHY THIS IS NOT #142's FAILURE MODE — the distinction IS the ruling
+
+| | #142's 28 dropdowns | this ruling's manual 4–5 |
+|---|---|---|
+| kind | **refused by OMISSION** | **refused by DESIGN** |
+| why | nobody had built the intent | null concept ⇒ the validator has **nothing to check a citation against** |
+| safely buildable? | **yes** — against their own compiled options | **no** — it would mint an unverifiable fact |
+| ruling | **forced the build** | **accepts the refusal** |
+
+> **An AI that writes unverifiable facts into a medical record is the defect, not
+> the gap.**
+>
+> **Closing on a re-read acceptance is legitimate ONLY when the residue is a
+> deliberate refusal. It is illegitimate when the residue is unbuilt work.**
+
+**EVIDENCE RAILS NEVER LOOSEN.**
+
+### MECHANICS — all four required
+
+1. **THE CENSUS STAYS 75/80 AND THE RESIDUAL FIELDS ARE NAMED FOREVER.** Nothing
+   hidden; the wall is not shrunk. The acceptance is renamed to what the wall
+   actually defends.
+2. ⚠️ **THE RATCHET BECOMES SET-EQUALITY, NOT A THRESHOLD.** The deliberate
+   `expect(gap).toBeGreaterThan(0)` is rewritten **by somebody who looked** into
+   *the gap equals exactly the named manual set*, tighten-only. A **6th** field
+   falling out reddens it — **and a manual field GAINING a concept reddens it.**
+   The second direction is the one a threshold cannot see, and it is the
+   direction that means the wall legitimately shrank.
+3. **AN EDIT ATTEMPT ON A MANUAL FIELD REFUSES WITH A NAMED REASON** telling the
+   clinician the field is manually supplied. **Silence stays illegal** — a
+   refusal the doctor cannot see is the unanswerable-promise class.
+4. **A CONCEPT-SUPPLY FLOW FOR THE MANUAL CLASS IS A POST-F24 BACKLOG ITEM,
+   UNSCHEDULED.** It competes with F8, billing and ADMIN **on merit**, never as
+   F24's hostage.
+
+### NO FURTHER OWNER ROUND-TRIP
+
+walk arms **2/4/5** land → the **16-file + 1-migration** payload deploys under
+§2.5 → the census records **75/80 with the named set** → **F24 CLOSES** →
+**F8 opens.**
