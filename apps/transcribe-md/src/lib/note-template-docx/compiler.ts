@@ -420,11 +420,34 @@ function processContentControl(
     // forces the recompute that then refuses.
     //
     // So the placeholder is excluded WHERE IT IS READ, never where it is
-    // STORED. Three readers do that today and each filters for itself:
-    // `set-template-control.ts` (the door), `clinician-override.ts` (the
-    // overlay), and `editable-controls.ts` (the list offered to the model).
-    // A compile-time filter is not a fourth layer of safety — it is a change to
-    // an artifact other code has already hashed.
+    // STORED. A compile-time filter is not another layer of safety — it is a
+    // change to an artifact other code has already hashed.
+    //
+    // ⚠️ AND THE READER LIST IS ENUMERATED, NEVER REMEMBERED. An earlier
+    // version of this note said "three readers", named three, and the SAME
+    // DIFF touched five — while a SIXTH went unfiltered and unnoticed. Naming
+    // a class is not enumerating it. The filtering readers today are:
+    //
+    //   1. `set-template-control.ts`        the clinician's door
+    //   2. `clinician-override.ts`          the override overlay
+    //   3. `editable-controls.ts`           the list the edit door addresses
+    //   4. `picks-bridge.ts`                writes a clinical value
+    //   5. `resolver/index.ts`              selects a clinical value
+    //   6. `semantic-mapping/index.ts`      the payload SENT TO THE MODEL
+    //
+    // ⚠️ #6 was missed because the arm that appeared to cover it —
+    // "never OFFERS the placeholder to the model" — measured
+    // `listEditableFormControls` (#3), a DIFFERENT surface that merely also
+    // has a model on the other end. Two things named "the model" is what hid
+    // it. `gate-f24-s5-compiled-ir-is-stable.test.ts` now asserts both by name.
+    //
+    // ⚠️ THE ENUMERATION IS A HAND-KEPT LIST AND HAND-KEPT LISTS GO STALE.
+    // The structural answer is a single `selectableOptions(field)` accessor
+    // that every reader is forced through — filed as a follow-up rather than
+    // done here, because it is a wider refactor than an IR-stability fix
+    // should carry. Until then: the predicate for a reader that needs this is
+    // *"does it put an option in front of a human, a model, or a document?"*
+    // — grep `allowedOptions` and classify, never recall.
     const selectableOptions = withoutPlaceholderOptions(allowedOptions);
     // Validation runs on the REAL option set, with the placeholder discounted: a
     // control whose only entry was Word's placeholder offers no clinical choice

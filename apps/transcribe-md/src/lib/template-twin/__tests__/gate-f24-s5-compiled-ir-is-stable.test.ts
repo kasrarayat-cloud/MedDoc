@@ -56,6 +56,7 @@ import {
   withoutPlaceholderOptions,
 } from '../../note-template-docx/placeholder-option';
 import { listEditableFormControls } from '../editable-controls';
+import { proposeSemanticMappings } from '../semantic-mapping';
 import type { TemplateDocIR } from '../ir';
 
 const REPO_ROOT = path.resolve(process.cwd(), '../..');
@@ -125,7 +126,16 @@ describe('F24-S5 ITEM A — the compiled IR is stable across the placeholder cha
   });
 
   // ── THE READER FILTERS FOR ITSELF ────────────────────────────────────────
-  it('⚠️ never OFFERS the placeholder to the model, though the IR stores it', () => {
+  //
+  // ⚠️ THIS ARM WAS ONCE TITLED "never OFFERS the placeholder to the model"
+  // AND MEASURED SOMETHING NARROWER THAN ITS OWN NAME. It drives
+  // `listEditableFormControls` — the CLINICIAN'S EDIT DOOR — while the phrase
+  // "the model" also names the mapping-proposal payload in
+  // `semantic-mapping/index.ts`, which was UNFILTERED and which this arm could
+  // never have seen. A green check wearing a claim it does not make is how the
+  // sixth reader stayed missing. Retitled to the surface it actually drives;
+  // the payload has its own arm below, by name.
+  it('the EDIT DOOR’s control list excludes the placeholder, though the IR stores it', () => {
     const ir = realForm() as unknown as TemplateDocIR;
     const controls = listEditableFormControls(ir);
 
@@ -135,6 +145,68 @@ describe('F24-S5 ITEM A — the compiled IR is stable across the placeholder cha
     expect(offered.filter((o) => isWordPlaceholderOption(o))).toHaveLength(0);
     // 153 stored − 28 furniture = 125 offered. The partition reconciles.
     expect(offered.length).toBe(125);
+  });
+
+  // ── THE SIXTH READER: THE MAPPING-PROPOSAL PAYLOAD ───────────────────────
+  //
+  // ⚠️ THE SURFACE THE ARM ABOVE WAS NAMED AFTER AND NEVER TOUCHED.
+  // `fieldForModel` is private, so this drives the REAL exported entry point
+  // and reads what would actually go on the wire — the shipped function, not a
+  // re-implementation of its predicate.
+  it('⚠️ the MAPPING-PROPOSAL PAYLOAD sent to the model carries no placeholder', async () => {
+    const ir = realForm() as unknown as TemplateDocIR;
+    const seen: string[] = [];
+
+    await proposeSemanticMappings(
+      { fields: ir.fields },
+      {
+        practiceId: 'p_gate',
+        userId: null,
+        client: {
+          complete: async (args: { user: string }) => {
+            seen.push(args.user);
+            // The payload is the whole subject here. Returning an empty
+            // proposal makes the caller throw FIELD_SET_MISMATCH, which is
+            // caught below — the wire content has already been captured.
+            return { mappings: [] } as never;
+          },
+        },
+      },
+    ).catch(() => undefined);
+
+    // NON-VACUITY FIRST: an empty capture would satisfy every assertion below.
+    expect(seen.length).toBeGreaterThan(0);
+
+    // ⚠️ THE CLAIM IS ABOUT THE OPTION SET, AND IT IS ASSERTED THROUGH THE
+    // PARSED STRUCTURE RATHER THAN THE TEXT. A substring scan of the whole
+    // payload is the WRONG shape here and the first draft of this arm proved
+    // it: it went red on `originalLabel`, which reads
+    // "side of exam: Choose an item." because the label is derived from the
+    // container's TEXT (`labelSource: same_container`) and has always included
+    // whatever Word rendered there. That is PRE-EXISTING, independent of
+    // `allowedOptions`, and unchanged by this branch — filed separately, not
+    // silently absorbed into this assertion. Text presence is not membership.
+    const options = seen.flatMap((payload) => {
+      const json = payload.slice(payload.indexOf('{'), payload.lastIndexOf('}') + 1);
+      const parsed = JSON.parse(json) as {
+        fields: { allowedOptions: { ordinal: number; displayText: string }[] }[];
+      };
+      return parsed.fields.flatMap((f) => f.allowedOptions);
+    });
+
+    // POSITIVE CONTROL — the payload really does carry this form's options, so
+    // the zero below is an absence rather than a blind read. 153 stored − 28
+    // furniture = 125 offered; the same figure the edit-door arm reconciles to,
+    // reached here by a different surface.
+    expect(options.length).toBe(125);
+
+    // THE CLAIM, through the SHIPPED predicate.
+    expect(options.filter((o) => isWordPlaceholderOption(o.displayText))).toHaveLength(0);
+
+    // AND THE ORDINALS SURVIVE: a proposal keyed on an ordinal must still name
+    // the document's own index, so the filter must not renumber.
+    expect(options.some((o) => o.ordinal === 0)).toBe(false);
+    expect(options.every((o) => Number.isInteger(o.ordinal) && o.ordinal >= 1)).toBe(true);
   });
 
   it('⚠️ the ORDINALS are unchanged by the reader’s filter — a shift is a wrong-control write', () => {

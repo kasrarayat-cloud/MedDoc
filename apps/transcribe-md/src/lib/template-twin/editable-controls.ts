@@ -104,10 +104,17 @@ export interface EditableFormControl {
  * already-compiled twin unfillable, production's included. See the long note at
  * `compiler.ts`.
  *
- * So this is the THIRD reader, and it now filters for itself like the other
- * two (`set-template-control.ts` the door, `clinician-override.ts` the
- * overlay). The treatment lives on each READER, where it cannot be forgotten by
- * whoever changes the compiler next.
+ * So this filters for itself, like every other reader. The treatment lives on
+ * each READER, where it cannot be forgotten by whoever changes the compiler
+ * next. ⚠️ The full reader list is enumerated in `compiler.ts` beside the
+ * persistence decision — **six**, not the three an earlier version of this
+ * comment named. Do not restate the count here; a second copy drifts.
+ *
+ * ⚠️ AND THIS SURFACE IS NOT "the list offered to the model", THOUGH IT WAS
+ * ONCE DESCRIBED THAT WAY. It is the list the CLINICIAN'S EDIT DOOR addresses
+ * by ordinal. The mapping-proposal payload in `semantic-mapping/index.ts` is a
+ * different surface with a different model on the other end — and it went
+ * unfiltered precisely because one phrase covered both.
  *
  * ⚠️ AND THE FILTER GOVERNS ELIGIBILITY, NOT ONLY THE LIST SHOWN. `ordinal` is
  * this function's index over `eligible`, so a control admitted here that should
