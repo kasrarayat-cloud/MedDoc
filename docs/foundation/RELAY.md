@@ -28451,3 +28451,127 @@ arms, and the pre-existing class confirmed empirically rather than by argument.
 - The census speaks about the **WM IOV** form. It is the only certified twin
   there is, and the classifier partition above is the evidence that the fixture
   and the live twin are the same form — but it is one form.
+
+### ✅ F24-S5 ITEM B — **MERGED AND CITED 2026-08-24.** `2a99b4f1`
+
+PR **#835** (head `0734ca61`, itself **7 of 7 check-runs**). Branch retired both
+sides.
+
+**Citation — 4 of 4 on `2a99b4f10db82d312f169e81c44bcbccabf2946e`**, produced by
+`scripts/check-citation.sh`, never typed:
+
+   · `CI` 32759345525 a1
+   · `e2e` 32759346438 a1
+   · `a11y-ci` 32759345557 a1
+   · `secrets-scan` 32759345526 a1
+
+Every line `a1` — no re-run, so nothing to explain. The partition reconciles:
+`4 = green 4 + red 0 + pending 0 + stale 0 + cancelled 0 + startup-fail 0 +
+foreign 0 + extra 0 + unreadable 0`.
+
+⚠️ **NOT DEPLOYED, AND IT NEEDS NO DEPLOY — TEST-ONLY.** No runtime file is
+touched, so nothing here changes what text reaches a note. **The F24-S5 deploy
+stays HELD** on ITEM A, exactly as the walk row says.
+
+#### ⚠️ THE MERGE WAS GATED ON THE CHECK-RUN, NOT THE WORKFLOW RUN
+
+Canon's *GATE ON THE OBJECT THE GATE READS*, applied to its own landing.
+`mergeStateStatus` read **`BLOCKED` / `MERGEABLE`** for ~50 minutes while
+`gh run list` showed three of four workflows green — and the check-run view
+showed `Playwright E2E (transcribe-md)` genuinely `in_progress`, which is what
+made the BLOCKED a real in-flight state rather than a stuck required context.
+It went `CLEAN` the moment the seventh check-run completed. **The two views
+agreed at every sample; the point is that the enforcer's object was the one
+read.**
+
+---
+
+## 🔵 ITEM A — RECON ONLY. The preconditions are MEASURED and the walk is UNRUN
+
+**Read-only, counts only, no note text left the database.** Filed so ITEM A's
+executor does not pay for it, and so the numbers carry their own date.
+
+| question | answer, measured 2026-08-24 |
+|---|---|
+| QA images vs today's `main` | **runtime-current** |
+| QA worker carries the S5 modules | **yes** — `clinician-override.ts`, `editable-controls.ts` |
+| QA compiled versions · CERTIFIED | **55 · 10** |
+| `template_twin_field_overrides` on QA | **table present, 0 rows** — a clean baseline |
+| QA visits bound to a CERTIFIED twin | **16** |
+| …of those: unsigned / signed | **16 / 0** — every one in the state the door accepts |
+
+⚠️ **"RUNTIME-CURRENT" IS A MEASUREMENT, NOT A HOPE.** The QA images were built
+`09:53–09:54Z`. `git diff --stat be9bce63..2a99b4f1` over everything OUTSIDE
+`docs/` is **EMPTY** — every merge since is docs-only (`INBOX.md` +47,
+`RELAY.md` +200, 2 files, 0 runtime). So the stack's binaries correspond to
+today's `main` runtime code. This is canon's *check the IMAGE, not only the
+migrations* discharged in advance, and the negative half got its own command
+rather than being implied by the positive one.
+
+⚠️ **AND `fill_manifests = 0` ON QA IS EXPECTED, NOT A FINDING.** Its `visitId`
+FK cascades on fixture re-seed — already recorded in `AGENTS.md`. Named here so
+ITEM A does not re-diagnose it.
+
+**WHAT THIS RECON DOES NOT DO: it does not run the walk.** Arms 2, 4 and 5 —
+a dropdown edit landing in the EXPORTED document, EXPORT-AFTER-OVERRIDE,
+SIGN-AFTER-OVERRIDE — remain **UNPERFORMED**. *An unverified step named honestly
+is worth more than a green tick.*
+
+---
+
+## 🔴 OPEN — `.env` BACKUPS ON THE DEPLOY SURFACE, AND THE LOOP CANNOT REAP THEM
+
+**Found by the pickup's scratch accounting, 2026-08-24. Owner action.**
+
+Three historical environment snapshots sit untracked at the repo root — i.e. on
+`/opt/meddoc-pro`, the deploy surface:
+
+    .env.pre-rotation-20260505T021903Z      <- 111 days old
+    .env.pre-keyrotation-20260725T134832Z
+    .env.bak-keyrotate-20260727T142205Z
+
+Their **names say they are pre-rotation snapshots**, so by construction they
+carry the credentials a rotation replaced. **Contents were NOT read — the
+permission layer refused, correctly — so this is a classification by filename
+and by the class, and it is stated as such.**
+
+⚠️ **THIS IS THE SHAPE CANON ALREADY PAID FOR:** *"a plaintext password in an
+untracked evidence tree that still authenticated against production 97 days
+later."* A rotated credential is only harmless if the rotation actually
+invalidated it, and nothing in the repository records that for these three.
+`shred` is denied to the loop **on purpose**, so this can only be an owner
+action.
+
+### AND THE ROOT SCRATCH IS 291 FILES, SWEPT WITH A CONTROL THAT FIRST CAME BACK BROKEN
+
+`0` credential-shape hits across the 291 `.a*/.b*/.t*/.f*` scratch files — and
+that zero is a measurement rather than a token-match, because:
+
+- **the traversal control ran and reported 226 files entered and matched**;
+- the **two** hits the matcher did produce were READ and classified, not counted:
+  `.f10-canary.txt` is a **deliberate negative-control canary** (`hunter2`,
+  `sk-AAAAAAAA`) and `.b7-probe.py` matches on the *word* "secret" in prose and
+  in a type annotation. Neither is a credential.
+
+⚠️ **THE FIRST VERSION OF THAT SWEEP WAS BLIND, AND ONLY THE CONTROL SAID SO.**
+`grep -r --include='.[abtf][0-9]*'` returned `0` for the credential shapes AND
+`0` for the traversal control — a pattern that cannot be true, since 226 of those
+files match it. The `--include` glob never matched a hidden basename under this
+`grep`. **Re-aimed at explicit shell globs, both numbers became real.** Two
+zeros with opposite meanings is one broken instrument, arriving for the
+umpteenth time and caught by the rule that names it.
+
+### STALE WORKTREES — CLASSIFIED, AND DELIBERATELY NOT REAPED
+
+Verified by `git worktree list`, `gh pr list` and `git status`, per *A
+DESTRUCTION LIST IS A CLAIM* — never by filename:
+
+| worktree | branch | disposition |
+|---|---|---|
+| `.f24s5-build` | `feat/f24-s5-content-control-edit` | ⛔ **DO NOT REAP — PR #824 is OPEN** (draft, superseded by the REBUILD). Recommend CLOSING #824 first |
+| `.a4-thirdsite` | `fix/f24-bridge-fill-label-offset` (**gone** on origin) | stale; carries **7 untracked** `zzadv1-*.test.ts` probes |
+| `.a4-base` | detached `cea1823c` | stale; carries **1 untracked** probe |
+
+**Not force-removed.** `git worktree remove` refuses while untracked files are
+present, and forcing it would destroy another session's evidence with `rm`
+semantics — the opposite of the shred discipline. Reported instead.
