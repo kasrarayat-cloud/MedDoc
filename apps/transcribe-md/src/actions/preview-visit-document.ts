@@ -283,6 +283,12 @@ export async function previewVisitDocumentAction(
 
   try {
     const { prepared } = await readAndPrepareTemplateTwinFill({
+      // ⚠️ F24-S5 — REQUIRED, AND THE PREVIEW IS WHY. The clinician's own
+      // form-control corrections are keyed by visit; a preview that omitted this
+      // would show the doctor a document that disagrees with the one the export
+      // and the signature will produce. The parameter is required on the shared
+      // function so forgetting it is a compile error rather than a divergence.
+      visitId,
       practiceId: visit.user.practiceId,
       // ⚠️ THE VISIT'S OWN DOCTOR, NOT THE REQUESTER. This read is
       // practice-scoped, so a colleague previewing the record would otherwise

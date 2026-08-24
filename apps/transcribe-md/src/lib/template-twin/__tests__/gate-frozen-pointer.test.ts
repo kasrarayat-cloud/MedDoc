@@ -16,11 +16,16 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 const visitFindFirst = vi.fn();
 const manifestFindFirst = vi.fn();
 const readOutput = vi.fn();
+/** F24-S5 — the override half of the bound identity. */
+const overrideFindMany = vi.fn();
 
 vi.mock('@meddoc/db', () => ({
   default: {
     transcribeVisit: { findFirst: (...a: unknown[]) => visitFindFirst(...a) },
     templateTwinFillManifest: { findFirst: (...a: unknown[]) => manifestFindFirst(...a) },
+    // F24-S5 — both the serve path and `resolveFrozenPointer` now read the
+    // override half of the bound identity.
+    templateTwinFieldOverride: { findMany: (...a: unknown[]) => overrideFindMany(...a) },
   },
 }));
 vi.mock('../storage', () => ({
@@ -54,6 +59,10 @@ beforeEach(() => {
   visitFindFirst.mockReset();
   manifestFindFirst.mockReset();
   readOutput.mockReset();
+  overrideFindMany.mockReset();
+  // No corrections on this visit — the pre-F24-S5 world, which must stay
+  // behaviourally identical.
+  overrideFindMany.mockResolvedValue([]);
   readOutput.mockResolvedValue(Buffer.from('DOCX'));
 });
 
@@ -92,6 +101,60 @@ describe('a SIGNED record resolves by pointer', () => {
     const where = manifestFindFirst.mock.calls[0][0].where;
     expect(where.id, 'an unsigned visit has no frozen pointer to obey').toBeUndefined();
     expect(where.visitId).toBe('v1');
+  });
+
+  it('⚠️ F24-S5 EXPORT-AFTER-OVERRIDE — a note-matching manifest is DECLINED once a correction exists', async () => {
+    // THE ACCEPTANCE ARM FOR THE ROOT FIX, at the surface that failed.
+    //
+    // Before the bound identity widened, this exact state served the stored
+    // bytes: the manifest's `noteSha256` matches (an override never touches
+    // `soapFinal`), so freshness answered `match` and the doctor's download
+    // showed the value they had just corrected. The pre-sign preview showed the
+    // correction and the export did not.
+    visitFindFirst.mockResolvedValueOnce({ status: 'READY', frozenFillManifestId: null });
+    manifestFindFirst.mockResolvedValueOnce({
+      ...(await manifestRow('m-current')),
+      // Filled when there were no corrections…
+      overridesSha256: null,
+    });
+    // …and a correction now exists.
+    overrideFindMany.mockResolvedValueOnce([
+      { fieldId: 'ttf_' + 'a'.repeat(24), selectedOptionOrdinal: 2 },
+    ]);
+
+    const { loadNativeTemplateDocxForVisit } = await import('../native-export');
+    const out = await loadNativeTemplateDocxForVisit('v1', 'p1');
+
+    // DECLINED — so the caller recomputes and the correction reaches the
+    // document, rather than the stale artifact being handed over.
+    expect(out).toBeNull();
+    expect(readOutput, 'the stale artifact must not even be READ').not.toHaveBeenCalled();
+    // And the override half really was consulted, scoped to this visit.
+    expect(overrideFindMany).toHaveBeenCalledTimes(1);
+    expect(overrideFindMany.mock.calls[0][0].where).toEqual({
+      visitId: 'v1',
+      practiceId: 'p1',
+    });
+  });
+
+  it('⚠️ and it still SERVES when the manifest ran against those same corrections', async () => {
+    // The other direction, and it is the one that keeps the gate honest: a
+    // widened identity that declined everything would "fix" the bug by breaking
+    // native export for every visit.
+    const { overridesIdentity } = await import('../note-identity');
+    const ov = [{ fieldId: 'ttf_' + 'a'.repeat(24), selectedOptionOrdinal: 2 }];
+    visitFindFirst.mockResolvedValueOnce({ status: 'READY', frozenFillManifestId: null });
+    manifestFindFirst.mockResolvedValueOnce({
+      ...(await manifestRow('m-current')),
+      overridesSha256: overridesIdentity(ov),
+    });
+    overrideFindMany.mockResolvedValueOnce(ov);
+    readOutput.mockResolvedValueOnce(new Uint8Array([1, 2, 3]));
+
+    const { loadNativeTemplateDocxForVisit } = await import('../native-export');
+    const out = await loadNativeTemplateDocxForVisit('v1', 'p1');
+    expect(out).not.toBeNull();
+    expect(readOutput).toHaveBeenCalledTimes(1);
   });
 
   it('⚠️ a signed record still serves after a post-sign edit to soapFinal', async () => {

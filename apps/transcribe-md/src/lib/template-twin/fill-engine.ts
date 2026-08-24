@@ -7,7 +7,7 @@
 // evidence. prisma singleton + injectable storage + logTwinAudit only.
 // ============================================================================
 import { visitByIdScope, asPracticeId } from '@/lib/practice-scope';
-import { noteIdentity } from './note-identity';
+import { noteIdentity, overridesIdentity } from './note-identity';
 import { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
 
@@ -39,6 +39,12 @@ import {
 } from './ir';
 import { templateTwinMappingsSha256 } from './mapping-hash';
 import { bridgeTemplateFill } from './bridge-fill';
+import {
+  applyClinicianOverrides,
+  declinedOverrideIssues,
+  type ClinicianFieldOverride,
+  type ClinicianOverrideDeclineReason,
+} from './clinician-override';
 import { withProcedureDateFact } from './procedure-date';
 import {
   resolveTemplateFields,
@@ -92,6 +98,14 @@ export interface PrepareTemplateTwinFillInput {
    *  onto the resolver baseline. When absent, only the evidence resolver runs
    *  (behaviour-identical to the pre-bridge fill path). */
   generatedNote?: string;
+  /**
+   * F24-S5 — the clinician's own corrections to enumerated form controls.
+   *
+   * ⚠️ AN INPUT, READ ON EVERY RUN. This is what makes a correction survive a
+   * recompute instead of being reverted by it. Absent or empty → byte-identical
+   * to the pre-override behaviour.
+   */
+  clinicianOverrides?: readonly ClinicianFieldOverride[];
 }
 
 export interface PreparedTemplateTwinFill {
@@ -105,6 +119,12 @@ export interface FinalizeTemplateTwinFillInput
   extends Omit<PrepareTemplateTwinFillInput, 'facts'> {
   facts: ReturnType<typeof projectEncounterFacts>;
   resolutions: readonly FieldResolution[];
+  /** F24-S5 — corrections that could not be applied, surfaced as manifest
+   *  warnings. See `declinedOverrideIssues`. */
+  declinedOverrides?: readonly {
+    fieldId: string;
+    reason: ClinicianOverrideDeclineReason;
+  }[];
 }
 
 export async function finalizeTemplateTwinFill(
@@ -113,7 +133,7 @@ export async function finalizeTemplateTwinFill(
   const ir = TemplateDocIRSchema.parse(input.ir);
   const mappings = input.mappings.map((mapping) => SemanticMappingSchema.parse(mapping));
   const fields = [...input.resolutions];
-  const validation = validateTemplateTwin({
+  const validated = validateTemplateTwin({
     fields: ir.fields,
     mappings,
     facts: input.facts,
@@ -124,6 +144,23 @@ export async function finalizeTemplateTwinFill(
     allowUncertifiedForSyntheticTest: input.allowUncertifiedForSyntheticTest,
     now: input.validationNow,
   });
+  // ⚠️ F24-S5 — A DECLINED CORRECTION IS REPORTED, NOT SWALLOWED, AND THIS IS
+  // THE CONSUMER THAT MAKES `declined` MORE THAN A `console.info`.
+  //
+  // The refuted slice's module header promised "the doctor is told through
+  // `declined` either way" while the caller destructured the result and dropped
+  // it — zero consumers, so a recompiled template silently lost a correction the
+  // chat had already reported as `ok: true`.
+  //
+  // ⚠️ APPENDED AS `warning`, AND `valid` IS DELIBERATELY NOT RECOMPUTED. These
+  // issues must never flip a valid fill to invalid: blocking the whole document
+  // because one control's correction could not be applied is strictly worse than
+  // serving the document with the loss named on it.
+  const declinedIssues = declinedOverrideIssues(input.declinedOverrides ?? []);
+  const validation =
+    declinedIssues.length === 0
+      ? validated
+      : { ...validated, issues: [...validated.issues, ...declinedIssues] };
   const counts = templateTwinCounts(fields, ir.fields);
   const manifest = TemplateTwinFillManifestSchema.parse({
     manifestVersion: 1,
@@ -205,12 +242,32 @@ export async function prepareTemplateTwinFill(
           mappings,
         })
       : { resolutions: baseline, facts: [] };
+  // ⚠️ THE CLINICIAN GOES LAST, AND WINS. Applied OUTSIDE the generated-note
+  // ternary above on purpose: a correction must land whether or not this run has
+  // a generated note to bridge from, and putting it inside would have made the
+  // feature quietly conditional on something unrelated to it — which is exactly
+  // the partial edit the WIRING arm now mutation-proves against.
+  //
+  // Precedence is ORDER, not a flag — `mergeFieldResolutions` keeps its
+  // unfilled-only rule untouched, so the evidence resolver still beats every AI
+  // bridge, and only the doctor beats the resolver.
+  const overridden = applyClinicianOverrides({
+    ir,
+    resolutions: bridged.resolutions,
+    overrides: input.clinicianOverrides ?? [],
+    mappings,
+    // Parity with the picks bridge: the note the correction was made against is
+    // part of the fact's identity. Empty when this run has no generated note —
+    // the fact is still uniquely keyed by field + option within its own set.
+    noteSha256: noteIdentity(input.generatedNote) ?? '',
+  });
   return finalizeTemplateTwinFill({
     ...input,
     ir,
     mappings,
-    facts: [...facts, ...bridged.facts],
-    resolutions: bridged.resolutions,
+    facts: [...facts, ...bridged.facts, ...overridden.facts],
+    resolutions: overridden.resolutions,
+    declinedOverrides: overridden.declined,
   });
 }
 
@@ -294,7 +351,14 @@ export interface ProcessTemplateTwinVisitInput {
  * would let a doctor sign a fill that predates their own adoptions.
  */
 export async function readAndPrepareTemplateTwinFill(
-  input: Omit<ProcessTemplateTwinVisitInput, 'visitId'>,
+  // ⚠️ `visitId` IS REQUIRED, AND THAT IS THE POINT. It used to be `Omit`ed,
+  // because nothing here needed it. F24-S5's clinician overrides are keyed by
+  // visit and must be read on EVERY fill — preview, worker, export and the sign
+  // freeze alike — so requiring it makes a path that forgets them a COMPILE
+  // ERROR rather than a document that silently drops the doctor's own
+  // correction. The behaviour lives on the shared function, not on four
+  // caller-side checklists that are kept complete by hand.
+  input: ProcessTemplateTwinVisitInput,
 ) {
     const row = await prisma.noteTemplate.findFirst({
       where: {
@@ -419,6 +483,21 @@ export async function readAndPrepareTemplateTwinFill(
       input.generatedNote != null
         ? (await docxToTextWithControls(source)).text
         : undefined;
+    // F24-S5 — the clinician's corrections, read as an INPUT to this fill.
+    // ⚠️ READ ONCE, AND RETURNED, so the manifest's `overridesSha256` is stamped
+    // from THE SAME LIST THIS FILL RAN AGAINST. Re-reading at write time would
+    // let a correction landing mid-fill stamp an identity the rendered document
+    // does not correspond to — a manifest asserting freshness for a document it
+    // never produced, which is the exact drift `note-identity.ts` exists to
+    // prevent.
+    //
+    // Ordered for determinism; the unique index on (visitId, fieldId) means
+    // there is at most one row per field, and `overridesIdentity` sorts anyway.
+    const clinicianOverrides = await prisma.templateTwinFieldOverride.findMany({
+      where: { visitId: input.visitId, practiceId: input.practiceId },
+      orderBy: { fieldId: 'asc' },
+      select: { fieldId: true, selectedOptionOrdinal: true },
+    });
     const prepared = await prepareTemplateTwinFill({
       compiledVersionId: compiled.id,
       noteTemplateId: row.id,
@@ -433,9 +512,10 @@ export async function readAndPrepareTemplateTwinFill(
       visitDate: input.visitDate,
       markerText,
       generatedNote: input.generatedNote,
+      clinicianOverrides,
     });
 
-  return { prepared, row, compiled, ir, storage };
+  return { prepared, row, compiled, ir, storage, clinicianOverrides };
 }
 
 /** Resolves, independently validates, conditionally renders, stores, and
@@ -479,6 +559,7 @@ export async function processTemplateTwinVisit(
     compiled,
     ir,
     storage,
+    clinicianOverrides,
   } = await readAndPrepareTemplateTwinFill(input);
   const existing = await prisma.templateTwinFillManifest.findUnique({
     where: { visitId: input.visitId },
@@ -565,6 +646,21 @@ export async function processTemplateTwinVisit(
     // VERIFIED manifest was served forever and a doctor's edit could silently
     // fail to reach their own download.
     noteSha256: noteIdentity(input.generatedNote),
+    // ⚠️ F24-S5 — THE OTHER HALF OF THE BOUND IDENTITY, STAMPED FROM THE LIST
+    // THIS FILL ACTUALLY USED, never from a fresh read.
+    //
+    // Without it, `noteSha256` alone could not see a form-control correction —
+    // an override never touches `soapFinal` — so every gate keyed on the note
+    // read `match`, the stored pre-override bytes were served, and signing
+    // pinned the pre-override manifest forever.
+    //
+    // ⚠️ ALWAYS NON-NULL ON A MANIFEST WRITTEN FROM HERE, INCLUDING WHEN THERE
+    // ARE NO OVERRIDES — `overridesIdentity([])` is a real hash, not null. NULL
+    // is reserved for manifests that predate the migration, and the gate asserts
+    // this write never produces one: a forgotten stamp would silently restore
+    // the "unknown" meaning that the null-is-empty rule depends on being
+    // impossible.
+    overridesSha256: overridesIdentity(clinicianOverrides),
     roundTripVerified: prepared.render?.verification.verified === true,
     roundTripVerification: prepared.render
       ? asJson(prepared.render.verification)

@@ -13,6 +13,7 @@ import {
 } from "../template-twin/ir";
 import { failTemplateDocx } from "./errors";
 import type { TemplateDocxLimits } from "./limits";
+import { withoutPlaceholderOptions } from "./placeholder-option";
 import {
   inspectDocxPackage,
   type InspectedDocxPackage,
@@ -376,8 +377,12 @@ function processContentControl(
   let ambiguousChoiceOptions = false;
   if (dropdown || comboBox) {
     const optionContainer = dropdown ?? comboBox!;
-    allowedOptions = directChildren(optionContainer, "listItem").map(
-      (item, ordinal) => {
+    // ⚠️ THE ORDINAL IS THE DOCUMENT'S OWN INDEX, ASSIGNED BEFORE ANY FILTERING.
+    // It is persisted on manifests and overrides and, on the legacy path, is
+    // written back as `w:result val` — an index into the document's untouched
+    // list. It must never be renumbered. See `placeholder-option.ts`.
+    allowedOptions = withoutPlaceholderOptions(
+      directChildren(optionContainer, "listItem").map((item, ordinal) => {
         const displayText =
           getAttribute(item, "displayText") ??
           getAttribute(item, "value") ??
@@ -387,8 +392,11 @@ function processContentControl(
           displayText,
           value: getAttribute(item, "value") ?? displayText,
         };
-      },
+      }),
     );
+    // Validation runs on the REAL option set, after the placeholder is gone: a
+    // control whose only entry was Word's placeholder offers no clinical choice
+    // at all, and SELECT_OPTIONS_INVALID is the honest verdict for it.
     if (
       allowedOptions.length === 0 ||
       allowedOptions.some((option) => !option.displayText)
@@ -553,11 +561,18 @@ function processLegacyField(
   let ambiguousChoiceOptions = false;
   if (dropdown) {
     kind = "single_select";
-    allowedOptions = descendants(dropdown, "listEntry").map(
-      (entry, ordinal) => {
+    // Same rule as the content-control path above, and applied HERE rather than
+    // on that path alone so a future legacy template cannot inherit the defect
+    // by being the case somebody forgot. ⚠️ POPULATION FACT: production holds
+    // ZERO legacy `ffData` choice fields today (measured 2026-08-24 — all 28
+    // single-selects on the certified twin are content controls), so this arm
+    // is currently UNEXERCISED. It re-arms the first time a doctor uploads a
+    // .doc-era template carrying `w:ddList` form fields, with no code change.
+    allowedOptions = withoutPlaceholderOptions(
+      descendants(dropdown, "listEntry").map((entry, ordinal) => {
         const value = getAttribute(entry, "val") ?? "";
         return { ordinal, displayText: value, value };
-      },
+      }),
     );
     if (
       allowedOptions.length === 0 ||

@@ -13,7 +13,7 @@
 // must belong to userId) on top of the route's own ownership gate.
 // ============================================================================
 
-import { manifestMatchesNote } from './note-identity';
+import { manifestMatchesDocument } from './note-identity';
 import prisma from '@meddoc/db';
 
 import { processTemplateTwinVisit } from './fill-engine';
@@ -95,6 +95,10 @@ export async function loadNativeTemplateDocxForVisit(
       // The note this fill ran against, so the caller can prove the artifact
       // still corresponds to the visit's CURRENT note before serving it.
       noteSha256: true,
+      // F24-S5 — the override half of the bound identity. A manifest that
+      // matches the note can still be stale, because a form-control correction
+      // never touches the note.
+      overridesSha256: true,
       visit: { select: { soapFinal: true } },
     },
   });
@@ -128,9 +132,29 @@ export async function loadNativeTemplateDocxForVisit(
   // So for a signed visit the pointer is authoritative and this check is
   // skipped, deliberately. For an unsigned one the note can still move and the
   // check is the only thing standing between a doctor and a stale download.
+  // ⚠️ F24-S5 — THE PAIR, NOT THE NOTE. This gate read `manifestMatchesNote`
+  // alone, and a clinician's form-control correction deliberately never touches
+  // `soapFinal` — so freshness answered `match` while the stored artifact was
+  // already out of date. Measured on the refuted slice: the pre-sign preview
+  // showed the correction and this path served the pre-override bytes.
+  //
+  // The gate is NOT loosened to admit the override; the bound identity is
+  // widened so the gate can SEE it. A new correction moves `overridesSha256`,
+  // this reads `overrides_changed`, and the caller recomputes.
+  const currentOverrides = isSigned
+    ? []
+    : await prisma.templateTwinFieldOverride.findMany({
+        where: { visitId, practiceId },
+        select: { fieldId: true, selectedOptionOrdinal: true },
+      });
   const freshness = isSigned
     ? ({ ok: true, reason: 'match' } as const)
-    : manifestMatchesNote(manifest.noteSha256, manifest.visit?.soapFinal);
+    : manifestMatchesDocument({
+        manifestNoteSha256: manifest.noteSha256,
+        manifestOverridesSha256: manifest.overridesSha256,
+        soapFinal: manifest.visit?.soapFinal,
+        currentOverrides,
+      });
   if (!freshness.ok) {
     console.info(
       `[template-twin:native] manifest declined visit=${visitId} reason=${freshness.reason}`,

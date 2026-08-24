@@ -67,7 +67,18 @@ function deterministicResolutions(ir: TemplateDocIR): FieldResolution[] {
         value: field.allowedOptions[0].value,
         sourceFactIds: [SYNTH_FACT],
         evidenceAnchorIds: ['synthetic-anchor'],
-        selectedOptionOrdinal: 0,
+        // ⚠️ THE FIRST OPTION'S OWN ORDINAL, NEVER A HARDCODED 0.
+        //
+        // This read `selectedOptionOrdinal: 0` while taking `allowedOptions[0]`,
+        // which agreed only because the two happened to coincide — and what it
+        // was actually filling every dropdown with was Word's "Choose an item."
+        // placeholder. The compiler now strips that (`placeholder-option.ts`)
+        // WITHOUT renumbering, so the surviving set starts at ordinal 1 and a
+        // hardcoded 0 correctly fails closed in `exactSelectedOption`.
+        //
+        // That refusal is the new behaviour working: an ordinal that no longer
+        // resolves is refused rather than silently mapped onto its neighbour.
+        selectedOptionOrdinal: field.allowedOptions[0].ordinal,
         reasonCode: 'synthetic_direct_evidence',
         clinicianReviewed: false,
       });

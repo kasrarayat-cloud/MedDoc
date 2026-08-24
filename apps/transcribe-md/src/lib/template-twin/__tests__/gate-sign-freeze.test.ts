@@ -17,9 +17,23 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
  */
 const findFirst = vi.fn();
 const processFill = vi.fn();
+/**
+ * F24-S5 — the override half of the bound identity.
+ *
+ * ⚠️ THIS SPY IS THE ARM THE REFUTATION ASKED FOR. The adversarial pass killed
+ * the first build by driving this very function and observing
+ * `templateTwinFieldOverride.findMany` called ZERO times: the freeze answered
+ * `already_fresh` on a note-only comparison and the correction never reached the
+ * document. Mocking it as a spy makes that observable here rather than only
+ * under a hand-built harness.
+ */
+const overrideFindMany = vi.fn();
 
 vi.mock('@meddoc/db', () => ({
-  default: { templateTwinFillManifest: { findFirst: (...a: unknown[]) => findFirst(...a) } },
+  default: {
+    templateTwinFillManifest: { findFirst: (...a: unknown[]) => findFirst(...a) },
+    templateTwinFieldOverride: { findMany: (...a: unknown[]) => overrideFindMany(...a) },
+  },
 }));
 vi.mock('../fill-engine', () => ({
   processTemplateTwinVisit: (...a: unknown[]) => processFill(...a),
@@ -42,6 +56,10 @@ const sha = async (s: string) =>
 beforeEach(() => {
   findFirst.mockReset();
   processFill.mockReset();
+  overrideFindMany.mockReset();
+  // Default: no corrections on this visit, which is the pre-F24-S5 world and
+  // must stay byte-identical in behaviour.
+  overrideFindMany.mockResolvedValue([]);
 });
 
 describe('the sign-time freeze', () => {
@@ -80,6 +98,67 @@ describe('the sign-time freeze', () => {
     expect(processFill.mock.calls[0][0]).toMatchObject({ doctorId: 'doc-1' });
     // ⚠️ And the claim is VERIFIED by a re-read, not assumed from a non-throw.
     expect(findFirst).toHaveBeenCalledTimes(2);
+  });
+
+  it('⚠️ F24-S5 SIGN-AFTER-OVERRIDE — a correction makes the freeze RE-FILL, not "already_fresh"', async () => {
+    // ⚠️ THIS IS THE LINE THE REFUTED SLICE DIED ON, and the arm is written to
+    // reproduce the pass's own harness. Driven under a mocked prisma, the old
+    // freeze returned `already_fresh` with `processTemplateTwinVisit` called
+    // ZERO times and `templateTwinFieldOverride.findMany` called ZERO times: the
+    // note matched, so the correction was never re-applied and the signature
+    // pinned the PRE-OVERRIDE manifest as the signed document, permanently.
+    const { overridesIdentity } = await import('../note-identity');
+    const ov = [{ fieldId: 'ttf_' + 'a'.repeat(24), selectedOptionOrdinal: 2 }];
+
+    findFirst
+      // The stored manifest matches the NOTE and ran against NO corrections…
+      .mockResolvedValueOnce({
+        noteSha256: await sha(NOTE),
+        overridesSha256: null,
+        visit: VISIT,
+      })
+      // …and after the re-fill it carries them.
+      .mockResolvedValueOnce({
+        noteSha256: await sha(NOTE),
+        overridesSha256: overridesIdentity(ov),
+        visit: { soapFinal: NOTE },
+      });
+    // A correction exists on both reads.
+    overrideFindMany.mockResolvedValue(ov);
+    processFill.mockResolvedValueOnce(undefined);
+
+    const { freezeNativeManifestForSigning } = await import('../sign-freeze');
+    const out = await freezeNativeManifestForSigning({ visitId: 'v1', practiceId: 'p1' });
+
+    // NOT `already_fresh`. The freeze CAPTURES the correction.
+    expect(out).toEqual({ state: 'regenerated' });
+    expect(processFill).toHaveBeenCalledTimes(1);
+    // The exact observation that condemned the previous build, inverted.
+    expect(overrideFindMany).toHaveBeenCalled();
+    expect(overrideFindMany.mock.calls[0][0].where).toEqual({
+      visitId: 'v1',
+      practiceId: 'p1',
+    });
+  });
+
+  it('⚠️ and a manifest that ALREADY ran against those corrections still costs NOTHING', async () => {
+    // The other direction. A widened identity that declined everything would
+    // make every signature pay for a re-fill — "fixing" the bug by breaking the
+    // common path.
+    const { overridesIdentity } = await import('../note-identity');
+    const ov = [{ fieldId: 'ttf_' + 'a'.repeat(24), selectedOptionOrdinal: 2 }];
+    findFirst.mockResolvedValueOnce({
+      noteSha256: await sha(NOTE),
+      overridesSha256: overridesIdentity(ov),
+      visit: VISIT,
+    });
+    overrideFindMany.mockResolvedValue(ov);
+
+    const { freezeNativeManifestForSigning } = await import('../sign-freeze');
+    const out = await freezeNativeManifestForSigning({ visitId: 'v1', practiceId: 'p1' });
+
+    expect(out).toEqual({ state: 'already_fresh', manifestId: undefined });
+    expect(processFill).not.toHaveBeenCalled();
   });
 
   it('⚠️ a fill that returns WITHOUT matching is a FAILURE, not a success', async () => {
