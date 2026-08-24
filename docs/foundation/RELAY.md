@@ -1128,6 +1128,39 @@ next session to go and rebuild one.
 
 Reference case: the quota exit above.
 
+#### ⚠️ AND A THIRD CASE, OBSERVED 2026-08-24 — REPORTED FULLY, WITHOUT THE HEADER
+
+**The split above is right and is still two-way where the world is three-way.**
+Session 02 of `20260823-230455-b2` was flagged `REPORT-MISSING` and its night
+**is in the log, in detail** — the F24-S5 refutation, four self-findings, and the
+park-for-a-rebuild disposition. What it lacked was the `MORNING REPORT` header
+and a readable last-line marker.
+
+So the banner's *"these sessions' nights are NOT in the record"* was **false
+about this session**, and the instruction to *reconstruct from git log, RELAY.md
+and the PRs* pointed at work already done, better, in the file the reader was
+holding.
+
+| marker | condition | what the next session owes |
+|---|---|---|
+| `REPORT-MISSING` | started, produced output, **no substantive content** | reconstruct from git log, RELAY and the PRs |
+| **`REPORT-UNHEADED`** | **started, produced a substantive account, header absent** | **READ THE LOG. Nothing to reconstruct** |
+| `SESSION-NEVER-STARTED` | non-zero rc with no invocation — quota, CLI failure, refused grant | **nothing.** Name the cause and move on |
+
+⚠️ **THE DISCRIMINATOR IS NOT THE LINE COUNT.** The existing branch already
+prints `$report_lines`, and session 02's read **11** — a number that looks like a
+stub and was a dense account. **A count answers *how much*; the question is
+*what kind*.** Whatever separates the two cases has to classify content, not
+measure it — the tokens-vs-rows family, arriving inside the loop's own reporting.
+
+⚠️ **AND THE COST IS THE OPPOSITE OF THE QUOTA CASE.** There, the marker
+manufactured work that did not exist. Here it **denies a record that does**, and
+a reader who believes it will re-derive a refutation already written down — or,
+worse, conclude the night produced nothing and re-run the slice that was just
+refuted.
+
+
+
 ⚠️ **AND IT IS THE THIRD MEMBER OF ONE FAMILY IN A SINGLE DAY** — worth stating
 together, because the shape is only legible from the set:
 
