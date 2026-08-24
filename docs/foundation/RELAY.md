@@ -26483,6 +26483,43 @@ by the author. Write the untested claim down *before* it runs.
 
 ---
 
+## ✅ F24-S5 RECON — MERGED AND CITED. Both commits, 4 of 4, produced by the checker
+
+**Citation — 4 of 4 on `dbebd6818f9889458df90fd26e32a7b16e8139b1`** (PR #819,
+the recon), produced by `scripts/check-citation.sh`, never typed:
+
+   · `CI` 32675730905 a1
+   · `e2e` 32675730896 a1
+   · `a11y-ci` 32675730942 a1
+   · `secrets-scan` 32675730950 a1
+
+**Citation — 4 of 4 on `6edd47bfe155382e50364461754b53dc274bbd22`** (PR #820,
+the addendum + the ledger-guard fix):
+
+   · `CI` 32678468272 a1
+   · `e2e` 32678468256 a1
+   · `a11y-ci` 32678468266 a1
+   · `secrets-scan` 32678468270 a1
+
+**Every line reads `a1` — no run was re-run.** Both branches retired on both
+sides by `scripts/retire-branch.sh`.
+
+⚠️ **NOT DEPLOYED, AND NOTHING HERE ASKS TO BE.** The recon is documentation and
+the ledger-guard fix is a `scripts/` check that runs by hand — no app code, no
+migration, no runtime change. **F24 stays OPEN**; F24-S5's BUILD slice has not
+started.
+
+⚠️ **A LIVE INSTANCE OF THE FABRICATED-SHA CLASS, CAUGHT BY ITS OWN GUARD.**
+Polling #820's head, this session passed `gh-runs.sh` a 40-character hex string
+it had **built rather than read** — `f58854b6a0c1…`, sharing the first eight
+characters with the real `f58854b63305…`. `gh-runs.sh` refused it:
+*"It is 40 hex characters, so it LOOKS full. It is not real… Read it, do not
+build it."* **Exit 2, CANNOT TELL — never `1`/not-cited**, which is exactly the
+distinction that entry exists to preserve. The mechanism worked on the first
+attempt and cost one command.
+
+---
+
 ## F24-S5 RECON — ADDENDUM, and it SHARPENS the blocker rather than softening it
 
 **Measured 2026-08-24 by the same session, after PR #819 was already merged.**
