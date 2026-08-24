@@ -27836,3 +27836,83 @@ record.
 
 The census ratchet is **not** flipped. F24-S5 closes the *editing* seam; the
 acceptance that would close the *item* is the walk above.
+
+### ✅ F26 — MERGED AND CITED. `f6326311`
+
+**Citation — 4 of 4 on `f6326311337fb8e757fcf886b4d5da979a471e0e`**, produced by
+`scripts/check-citation.sh`, never typed:
+
+   · `CI` 32720575392 a1
+   · `e2e` 32720575514 a1
+   · `a11y-ci` 32720575493 a1
+   · `secrets-scan` 32720575421 a1
+
+Every line `a1` — no re-run, so nothing to explain. PR **#829** (head
+`9a4f25fb`, itself 4 of 4). Branch retired both sides.
+
+⚠️ **The checker reported `12 runs = green 4 + extra 8`** — the eight are
+dependabot `npm_and_yarn` update runs on the same commit, correctly excluded
+from the citation as non-required workflows. **The partition reconciles**, which
+is the only reason a 12 where 4 was expected is legible rather than alarming.
+
+⚠️ **NOT DEPLOYED, and it does not need to be.** F26 is scripts and a gate;
+`scripts/` is read from the tree at invocation, so it is **effective for the
+next citation, wait and deploy-gate call** without any image being rebuilt. The
+same relationship F9 has to `deploy-prod.sh`.
+
+## ⚠️ `assert-migrations-applied` READS 🔴 ON PRODUCTION UNTIL F24-S5 DEPLOYS — AND ITS ADVICE IS WRONG IN THIS STATE
+
+**Standing until the supervised F24-S5 deploy. Recorded 2026-08-24 by session 03
+of run `20260824-073818-b1`, immediately after landing the migration on `main`.**
+
+STEP 0 runs `bash scripts/assert-migrations-applied.sh`. From the moment
+`54c82bff` merged, it exits **1** and prints:
+
+    🔴 UNAPPLIED MIGRATIONS — 1 in the repo never reached the database:
+         20260824080000_f24s5_clinician_field_overrides
+
+**That is CORRECT AND EXPECTED.** `main` carries F24-S5's migration; production
+does not, because ruling **#144** reserves that deploy for a supervised session.
+The check is comparing the repo against production and reporting a real gap.
+
+> ⚠️ **BUT THE REMEDIATION IT PRINTS IS WRONG HERE, AND ACTING ON IT WOULD SHIP
+> AN UNDEPLOYED SCHEMA CHANGE TO PRODUCTION OUTSIDE THE SUPERVISED DEPLOY.**
+
+The script's own message says:
+
+    Most likely cause: db-migrate ran from a STALE IMAGE that predates them.
+    Rebuild it and re-run:
+        docker compose build db-migrate && docker compose run --rm db-migrate
+
+That diagnosis is right for the case the script was written for — a deploy whose
+migrate step silently no-opped. **It is wrong for this one.** The cause is not a
+stale image; it is that the migration has deliberately not been deployed yet.
+Running the suggested command applies F24-S5's schema change to the production
+database **outside `deploy-prod.sh`, with no §2.5 declaration, no rollback tag,
+and no citation gate** — every control ruling #144 reserved.
+
+**THE SHAPE, because it is not the script's fault:** a check that reports a true
+finding and offers ONE cause for it. The cause is the common one; this is the
+uncommon one. *A remediation printed beside a red is read as the remediation for
+that red* — the same way `DEPLOYMENT_RUNBOOK.md §5.6` was read as a description
+of the running system.
+
+### WHAT A SESSION SHOULD DO WHEN IT MEETS THIS
+
+1. **Confirm it is exactly this one migration**, by name. Anything else is a
+   different finding.
+2. **Do NOT run the suggested command against production.** Note the red in the
+   report as EXPECTED-AND-KNOWN, with this entry as the pointer.
+3. **`--qa` is unaffected and stays 🟢 107 of 107** — session 03 applied it there,
+   which is what QA is for.
+
+**THIS ENTRY RETIRES THE MOMENT F24-S5 IS DEPLOYED.** At that point production
+reaches 107, the check returns to 🟢 by itself, and this paragraph is stale —
+delete it. ⚠️ *An exemption is written with the condition that retires it, in the
+same sentence, so checking whether it still applies is a lookup rather than a
+judgement.*
+
+⚠️ **AND IT IS A TRUE RED, NOT A SUPPRESSED ONE.** Nothing here asks anybody to
+weaken the check, add a flag, or exempt the migration. The check is right; only
+its suggested cause is wrong in this state, and the cure is a deploy rather than
+a silencer.
