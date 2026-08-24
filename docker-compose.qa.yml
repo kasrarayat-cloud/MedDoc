@@ -397,6 +397,56 @@ services:
       # Inert on SOAP content under MOCK: the flag appends an anchoring block to
       # L4's system prompt, and a mocked L4 returns a fixture regardless.
       TRANSCRIBE_MD_EVIDENCE_ANCHORS: "true"
+      # ⚠️ F27 — THE SAME CLASS AS THE ENTRY DIRECTLY ABOVE, ELEVEN MORE
+      # MEMBERS, NEVER ENUMERATED. That entry fixed ONE variable
+      # (TRANSCRIBE_MD_EVIDENCE_ANCHORS) because ONE variable had bitten. The
+      # predicate it should have been swept by is "every var production's
+      # WORKER carries at runtime that this stack does not" — naming a class is
+      # not enumerating it.
+      #
+      # THE MECHANISM, and it is a side effect of a control that is CORRECT.
+      # Production delivers each NEXT_PUBLIC_* flag by TWO paths:
+      #   1. build.args      -> Next INLINES it into the frontend bundle
+      #   2. env_file: .env  -> the WORKER's runtime process.env
+      # docker-compose.yml:561-573 says so in its own comments. This file
+      # declares the same names under `build.args` ONLY (:173-185) and has ZERO
+      # env_file declarations — deliberately, because inheriting the shared
+      # .env is exactly what put 298 real Anthropic calls through this stack.
+      # The severance is right. The flags rode .env to the worker, so the
+      # worker silently lost ALL of them.
+      #
+      # MEASURED 2026-08-24, both containers running `npx tsx src/worker.ts`
+      # (identical shape — so the env is the only difference):
+      #   prod worker: templateNativeDocxEnabled() = true   | 11 NEXT_PUBLIC_*
+      #   QA   worker: templateNativeDocxEnabled() = false   |  0 NEXT_PUBLIC_*
+      #
+      # CONSEQUENCE: worker/template-twin-fill-step.ts:76 returned
+      # `{status:'skipped', reason:'flag_off'}` for EVERY QA visit, so the
+      # per-visit twin fill could not run here at all and
+      # template_twin_fill_manifests sat at 0. Ruling #144's acceptance walk —
+      # override -> EXPORT-AFTER-OVERRIDE -> SIGN-AFTER-OVERRIDE — was
+      # UNPERFORMABLE on this stack, and a harness driven through the worker
+      # would have measured a system nobody ships.
+      #
+      # ⚠️ LITERALS, NEVER `${VAR:-default}`. Compose interpolation reads the
+      # project .env whether or not this file declares an env_file — the trap
+      # named at length in the credentials block below. `:-` applies only when
+      # UNSET, and production sets every one of these.
+      #
+      # The two URLs are QA's OWN (matching build.args :173-174), not
+      # production's — copying prod's values verbatim would point this stack at
+      # app.quillmd.com.
+      NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX: "true"
+      NEXT_PUBLIC_TEMPLATE_NATIVE_PDF: "true"
+      NEXT_PUBLIC_ULTRASOUND_SPECIALTY: "true"
+      NEXT_PUBLIC_REVIEW_DOC_VIEW: "true"
+      NEXT_PUBLIC_UX_SIMPLIFY: "true"
+      NEXT_PUBLIC_VISIT_DOC_PAGE: "true"
+      NEXT_PUBLIC_CHAT_EDITOR: "true"
+      NEXT_PUBLIC_DOC_PREVIEW: "true"
+      NEXT_PUBLIC_SETTINGS_SIMPLE_ROW: "true"
+      NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: "http://localhost:9020"
+      NEXT_PUBLIC_MARKETING_URL: "http://localhost:9010"
       # B4's closing gate. Default empty (off) so every other suite keeps the
       # `issues: []` critique it relies on. With it set, L5 returns ONE MINOR
       # issue, which is what makes L6 call its model instead of taking the
