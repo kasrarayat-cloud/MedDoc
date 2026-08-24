@@ -27253,6 +27253,66 @@ visits, which throw `SIGNED_MANIFEST_IMMUTABLE` above this line.
 > it — it is one lens, run by the author, on the author's own stated blind
 > spot.** The pass still owes this branch the lenses I cannot be.
 
+### 🔴 AND CI FOUND A SECOND ONE — THE COMPILER'S OUTPUT IS AN **INPUT** TO A PINNED FIXTURE
+
+**`e2e` went RED on the first citation attempt (`f340c589`), ten minutes into
+the job**, and it was my defect, caught exactly where it should be:
+
+    [twin-seed] FAILED: the compiler's structure hash moved:
+      compiled b416cbe4…, pin 37813a60…
+      The pin would be IGNORED and certification would try to call a live model.
+
+`tests/e2e/fixtures/twin-certified-pins.json` binds `templateSha256` to
+`compileTemplateDocx(sample-form.docx).structureSha256`. Stripping the
+placeholder from `allowedOptions` **moves that hash**, and
+`seed-certified-twin.ts:152` refuses rather than seeding — correctly, because
+`synthetic-test.ts` only reuses a pinned note when the hashes match, so a moved
+compiler would make the pin be **silently ignored and certification would reach
+for a LIVE MODEL in CI.** The fail-closed refusal worked.
+
+⚠️ **THE COUPLING WAS INVISIBLE TO EVERY UNIT ARM ON THE BRANCH.** The
+compiler's OUTPUT is an INPUT to a pinned fixture, and nothing in the fast suite
+watched that edge — so a two-second fact cost ten minutes of `e2e` and a whole
+citation cycle. `gate-twin-certified-pin-matches-compiler.test.ts` now asserts it
+in `CI`, and names its own remedy in its failure message. **The seed's refusal
+stays** — it is fail-closed at the point the live-model call would happen, which
+is a different job from this one.
+
+**RE-MINTED EXACTLY ONE FIELD, AND THE VALUE WAS RE-DERIVED RATHER THAN
+INHERITED.** CI reported the compiled hash; the new arm computes it locally; the
+two agree **byte-for-byte** — two routes, reconciled. The arm's second leg passes
+unchanged, which is the discriminating control: `sourceDocxSha256` is untouched,
+so the hash moved because of the **COMPILER**, not because the fixture was
+swapped.
+
+`note`, `entities`, `contextText` and `encounterSha256` bind to the **ENCOUNTER**
+rather than to the template structure and are deliberately NOT re-minted.
+Checked before deciding that, with a control: the pinned note **never** mentions
+`Choose an item` while it **does** mention `Bilateral` — so the matcher works and
+removing the placeholder cannot cost the pinned fill a single pick. Ordinals were
+preserved, so every real option keeps its number.
+
+⚠️ **HONEST LIMIT:** re-minting one field of a fixture originally minted on QA is
+narrower than re-running `scripts/prod-smoke/twin-ga-proof.ts`, deliberately —
+but it is the `e2e` pack, not this reasoning, that adjudicates it.
+
+### ⚠️ THE BLAST RADIUS IS UNFLAGGED, AND THAT IS WORTH SAYING BEFORE A DEPLOY
+
+Read from the RUNNING container, not from `.env`: `NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=true`,
+`NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true`, `TRANSCRIBE_MD_EVIDENCE_ANCHORS=true`,
+`NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true`.
+
+**None of this slice sits behind a flag.** The identity widening, the compiler
+exclusion and the write path all ship unconditionally, so there is **no flag
+rollback** — the rollback is the image plus the migration.
+
+The widest surface is the **compiler**: it runs on *every* `.docx` template
+upload (`docx-to-text.ts:39` imports the twin ingest), so every template compiled
+after this deploy has placeholder-free option sets. **Existing compiled versions
+are untouched** — which is precisely why the overlay and write-door layers exist,
+and why compile-time exclusion alone would have missed the only certified twin
+in production.
+
 ### ⚠️ HONEST LIMITS
 
 - **NOT CITED, NOT DEPLOYED, AND THE ADVERSARIAL PASS HAS NOT RUN.** This is a
