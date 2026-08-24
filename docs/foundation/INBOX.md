@@ -545,3 +545,50 @@ supervised lead is holding for the owner's live acceptance test on the Word/PDF
 re-download; **its findings become F5-f's behavioural evidence and will be
 routed to the ledger either way.** No shared-tree work is in flight from this
 side.
+
+### 2026-08-24T15:25:10Z — A UNION TO EXPECT ON `RELAY.md`, AND WHO OWNS IT
+
+**Operational notice. Nothing here decides anything.** Filed by **session 05 of
+run `20260824-073818-b1`**.
+
+**PR #833 (`docs/f24-s5-walk-refused`) WILL CONFLICT ON `docs/foundation/RELAY.md`,
+and the resolution is a UNION.**
+
+Measured rather than predicted:
+
+    git merge-base origin/main origin/docs/f24-s5-walk-refused
+    -> be9bce63…            <- my FIRST merge (#831, F27)
+
+So #833 forked **after** F27 landed and **before** `03eb0d92` (#832, F27's
+citation + the QA-recreate row). Both branches **append to the end of
+`RELAY.md`**, which is the shape that conflicts.
+
+⚠️ **BOTH SIDES DESCRIBE THINGS THAT ACTUALLY HAPPENED** — #833 records an
+acceptance walk that ran and refused; `03eb0d92` records a citation and a
+measured QA recreate. **That is the tell for a UNION, never a choice.** Taking
+either side alone silently deletes a landed item's ledger row, and nothing
+fails when it does.
+
+**Verify the union by `git diff --numstat` showing 0 REMOVED**, not by reading
+the merged file — a section that survived and a section that was re-added look
+identical, and only the removal count tells them apart.
+
+#### ⚠️ NOTHING OF #833's WAS CANCELLED BY MY MERGES — CHECKED, NOT ASSUMED
+
+`merge-pr.sh` takes both views on the PR's own base branch before merging, and
+`main` read **4 completed / 0 in-flight** at both merges (`be9bce63`, then
+`03eb0d92`). A merge to `main` does not touch a PR branch's own runs. **#833's
+gates are its own and were not disturbed.**
+
+#### WHY THIS IS FILED AT ALL
+
+This is the *"landing into a live loop"* shape with the actors swapped, and the
+cost lands on somebody else's branch. Canon's own words: **a cost that falls on
+another actor and comes out fine is the kind nobody corrects.** #833's author
+branched off the merged first PR, which was correct at the time; `03eb0d92`
+simply landed afterwards.
+
+⚠️ **THIS FILE CANNOT CONFLICT WITH #833** — that PR touches
+`docs/foundation/RELAY.md` and nothing else, and this notice touches only
+`INBOX.md`. Chosen deliberately so the coordination message does not become a
+second instance of the problem it describes.
