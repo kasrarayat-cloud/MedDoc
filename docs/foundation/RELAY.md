@@ -29033,12 +29033,25 @@ touched at any point.
 
     visit  f24a_walk_mt7p1ovu  (SIGNED — the first full 21-arm walk)
     visit  f24a_walk_mt7p2puj  (SIGNED — the re-run after ARM 4e was corrected)
+    visit  f24a_walk_mt7prxy9  (SIGNED — the re-run after the two reader filters)
 
-plus their patients. Both are SIGNED, which is the arm-5 outcome rather than an
-accident. ⚠️ **With the three from the finding above, the walk has now left FIVE
-visit/patient pairs on the synthetic QA database, and the "16 unsigned QA visits
-bound to a certified twin" figure is now 21 total / 19 unsigned.** Named here so
-the next recon reads a delta rather than drift.
+plus their patients. All three are SIGNED, which is the arm-5 outcome rather
+than an accident.
+
+⚠️ **AND THIS BLOCK SAID "FIVE PAIRS … 21 TOTAL" UNTIL IT WAS MEASURED.** That
+was arithmetic, not a reading, and it was wrong on two of its three numbers —
+the third walk run (after the reader filters) had not been counted. *ARITHMETIC
+THAT DOES NOT RECONCILE IS A FINDING*, caught here on its own author. Read from
+the database rather than computed:
+
+| | measured |
+|---|---|
+| walk visit/patient pairs left | **6** — 3 READY (the aborted runs) + 3 SIGNED |
+| QA visits bound to a CERTIFIED twin | **22 total / 19 unsigned** |
+
+The recon's *"16 unsigned"* plus 6 new gives 22, of which 3 are signed → 19
+unsigned. **The partition reconciles.** Named here so the next recon reads a
+delta rather than drift.
 
 ### ⚠️ ADDENDUM — I TESTED MY OWN UNTESTED CLAIM, AND IT FOUND TWO
 
