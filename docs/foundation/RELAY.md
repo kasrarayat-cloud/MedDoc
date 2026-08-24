@@ -28267,3 +28267,187 @@ measurement rather than a standing check.**
 - **The QA APP container was NOT recreated**, deliberately: its `NEXT_PUBLIC_*`
   are inlined at image-build time and are legitimately absent from its runtime
   env. Only the worker reads at runtime, which is why the gate is scoped to it.
+
+---
+
+## 🟡 F24-S5 ITEM B — **BUILT AND GATED 2026-08-24.** The other 28 are measured, and 5 refuse
+
+**Built by the FOUNDATION loop.** Branch `feat/f24-s5-census-widen`. **Not yet
+cited, not deployed — and it needs no deploy: TEST-ONLY, no runtime file is
+touched.**
+
+**THE ITEM.** The acceptance walk's **arm 1 read 52/80 and was filed as a
+REFUSAL**, correctly: the S3 census classifies every non-table-cell as
+`no_editor_intent` **unconditionally** and carries zero references to
+`edit_form_control`. It measured the pre-S5 world accurately and reported a
+number about a system that no longer exists.
+
+### WHAT SHIPS — two files, one partition, `52 + 28 = 80` asserted on both sides
+
+| file | half | arms |
+|---|---|---|
+| `gate-f24-s5-control-addressable-census.test.ts` | the 28 content controls | **14, NEW** |
+| `gate-f24-s3-editor-addressable-census.test.ts` | the 52 table cells | 7, bucket + ratchet corrected |
+
+**(a) REPLAY, NEVER RECLASSIFY.** Every bucket is earned by RUNNING the shipped
+addressing (`listEditableFormControls` — the list `chat-edit-visit.ts:348`
+resolves the model's ordinal against) and the shipped fill
+(`readAndPrepareTemplateTwinFill` — the function the worker, the preview, the
+export and the sign freeze all go through). No predicate is re-implemented.
+
+⚠️ **AND THE LAYER IT COVERS IS THE ONE EVERY OTHER S5 PROOF RUNS BELOW.**
+`gate-f24-s5-write-path.test.ts` calls the action with a `fieldId` already in
+hand; `gate-f24-s5-fill-wiring.test.ts` calls the fill with an override already
+in hand. **Neither touches the ORDINAL** — the only address the model may name,
+and the exact layer F24-S4 shipped an unkeepable promise on.
+
+### THE MEASUREMENT — two mapping universes, because one would be a fixture property
+
+Addressability turns on whether a control's mapping carries a
+`clinicalConcept`, and that is DATABASE state on a certified twin. A
+single-universe census would report a property of its own fixture.
+
+| universe | addressable | declined |
+|---|---|---|
+| `document-decided` — `fallbackSemanticMappings` alone | **1** | **27** `no_approved_concept` |
+| `certified-shaped` — non-manual fields carry a concept | **23** | **5** `no_approved_concept` |
+
+Both partitions reconcile to 28. **All 5 declines are the `manual` fields.**
+
+⚠️ **CONFIRMED BY A SECOND, INDEPENDENT ROUTE, AND THE RECONCILIATION IS THE
+EVIDENCE.** The shipped `classifyFieldSource` over the compiled FIXTURE gives
+**52 extraction + 23 verified_note_selection + 5 manual** — byte-identical to
+the read-only production measurement recorded at `set-template-control.ts`
+against the live certified twin's DATABASE rows. Two routes, two sources, one
+number. That is what makes the fixture usable as a stand-in at all, and an arm
+asserts it so the day they diverge the fixture has stopped being that form.
+
+### 🔴 THE ANSWER TO ITEM B(c) — THE RATCHET DOES **NOT** FLIP, AND THAT IS THE FINDING
+
+**(c) said the zero assertion lands ONLY IF the replay earns it. IT DOES NOT.**
+
+The joint census reads **75 of 80** — table 52 of 52, controls 23 of 28.
+
+> ⚠️ **F24's "ZERO GAPS" ACCEPTANCE CANNOT BE MET BY BUILDING MORE EDITOR.**
+> The 5 residual controls are `manual` fields that `mappings-readiness.ts`
+> **CERTIFIES with a null concept ON PURPOSE** — *"nothing dictates who the
+> technologist on shift was"* — and both the door and the overlay refuse them in
+> the **tighten-only** direction. Admitting one would mint a fact the validator
+> has nothing to check a citation against: a LOOSENING of a clinical validation
+> path.
+
+**So the remaining gap is a PRODUCT QUESTION** — *should a concept-less control
+be settable from chat at all?* — and not a build item. It is recorded here
+rather than decided, exactly as `set-template-control.ts` says.
+
+⚠️ **PRODUCTION READS 4, NOT 5 — A DIFFERENCE THIS CENSUS CANNOT SEE.** Four of
+the five manual mappings carry a null concept on the live twin, so a physician
+has confirmed a concept for one. That is database state; the fixture leaves all
+5 null. **The census is CONSERVATIVE by exactly one control, in the safe
+direction** — it under-reports addressability rather than claiming a control
+works that does not.
+
+### (b) RED IN BOTH DIRECTIONS — three arms, and none of them synthetic
+
+- **disable the intent → 23 becomes 0.** Run, not written: an empty override set
+  is both the pre-S5 world and what a regression that stops reading the rows
+  would produce.
+- **an unreachable control classifies as a GAP.** `document-decided` **is** the
+  unreachable state for 27 of the 28 — a real universe, not a planted one.
+- **the decline reaches the doctor**, on the manifest's own issue list, not only
+  a `console.info`.
+
+### 🔵 FOUND BY REFUTING MY OWN CENSUS RATHER THAN BY IT — the document-order blind spot
+
+**Nothing asserted that the ordinal follows DOCUMENT ORDER.** Every other arm
+addresses `fieldId → ordinal → fieldId`, so it round-trips whatever order the
+list is in.
+
+**Mutation-proved (M2):** sort `listEditableFormControls` by `fieldId` instead
+of `displayOrder` and **the census still reads 23** — ordinals still unique,
+still contiguous, still resolving to their own control — while ordinal 2 has
+stopped being the second control on the page. The prompt tells the doctor to
+count occurrences down their own form (*"the FIRST of the two identically-worded
+sentences, or the SECOND?"*), so that is a **wrong-control write reported as
+success**, one layer above every proof that watches the write.
+
+> **Under M2, exactly ONE arm reddens — the new one.** That is the measurement
+> that makes it necessary rather than decorative, and the complete-inverse proof
+> would never have produced it.
+
+### THE MUTATION PROOFS — each asserted APPLIED before its result was believed
+
+| # | mutation | result |
+|---|---|---|
+| **M1** | `applyClinicianOverrides` applies nothing (complete inverse) | **4 arms red**, incl. `silently_not_applied: 28` |
+| **M2** | the control list sorted by `fieldId`, not document order | **1 arm red — the new one only** |
+| **M3** | the overlay stops refusing a concept-less control (**the LOOSENING direction**) | **4 arms red** |
+
+**M1's red bucket is the point:** `silently_not_applied` exists to separate *the
+fill refused and said so* from *the value did not change and nothing explained
+why*. A census that counted only `addressable` would have read 0 for both.
+
+### ⚠️ THE GATE REDDENED AGAINST ITS AUTHOR FOUR TIMES ON FIRST EXECUTION
+
+Each caught by an incoherent value left loud, never by a test:
+
+1. **the wrong JSON key** — `manifest.issues`; the issues live at
+   `manifest.validation.issues`. It printed **`declines 0` against 27 declines
+   logged by the overlay in the same run.** The contradiction was the only
+   signal, and it is now an assertion rather than a memory.
+2. a decline-reason regex anchored `$` while the shipped message puts the reason
+   mid-sentence → `UNPARSEABLE_DECLINE_MESSAGE: 27` rather than a plausible `0`.
+3. a `bump()` incrementing by 1 over a **counted** map → the partition read 2,
+   not 28.
+4. `expect(x ?? 0).toBeUndefined()` — vacuous by construction.
+
+### STATED APPROXIMATIONS — so the numbers are not read wider than they are
+
+- ⚠️ **`setTemplateControlAction` is NOT driven.** It is a `'use server'` module
+  with three prisma reads. This file addresses by the ordinal the server issued
+  and hands the fill that ordinal; **the door's matching of a doctor's typed
+  words onto an ordinal is `gate-f24-s5-write-path.test.ts`'s and is not
+  re-asserted here.** Written down BEFORE the refutation pass, per canon.
+- **`certified-shaped` substitutes ONE registered concept** for the physician's
+  confirmation. It asserts a concept EXISTS, never that the value is right, and
+  an arm pins the substitution's extent so it cannot widen:
+  **28 = 1 already-decided + 22 substituted + 5 manual.**
+- The `@meddoc/db` / audit / `mapping-hash` stubs are the ones
+  `gate-f24-s5-fill-wiring.test.ts` already carries, for the same stated reason.
+
+### ⚠️ NO INDEPENDENT ADVERSARIAL PASS RAN, AND HERE IS WHY THAT IS NOT A GAP
+
+This session cannot spawn a second actor. **The mandatory pass covers changes to
+the clinical generation path — anything that decides what text reaches a note —
+and this change touches NO runtime file**, so it does not bind. The refutation
+that did run was the author's own, and it produced the document-order finding
+above.
+
+⚠️ **Said plainly rather than dressed up:** self-verification has a ceiling, and
+an independent pass over this diff would still be worth having. It is **not**
+claimed here.
+
+### THE SUITE — the controlled delta, not the raw number
+
+Run from a worktree, so the raw figure carries the documented
+`react/jsx-dev-runtime` alias class. Measured against a **clean detached
+worktree at `origin/main` carrying none of this change**:
+
+| | `origin/main` control | branch |
+|---|---|---|
+| files | 16 failed · 352 passed · 2 skipped (370) | 16 failed · **353** passed · 2 skipped (**371**) |
+| tests | 1 failed · 4883 passed · 4 skipped (4888) | 1 failed · **4897** passed · 4 skipped (**4902**) |
+
+**+1 file, +14 tests, and the failures are UNCHANGED at 16/1** — exactly the new
+arms, and the pre-existing class confirmed empirically rather than by argument.
+`tsc --noEmit` clean.
+
+### WHAT THIS ROW DOES NOT CLAIM
+
+- **ITEM A is NOT done.** The walk's arms 2, 4 and 5 — a dropdown edit landing in
+  the EXPORTED document, EXPORT-AFTER-OVERRIDE, SIGN-AFTER-OVERRIDE — remain
+  **UNPERFORMED**. This item is arm 1 only.
+- **THE DEPLOY STAYS HELD**, exactly as the walk row says.
+- The census speaks about the **WM IOV** form. It is the only certified twin
+  there is, and the classifier partition above is the evidence that the fixture
+  and the live twin are the same form — but it is one form.
