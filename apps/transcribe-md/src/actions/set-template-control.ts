@@ -107,7 +107,7 @@ export async function setTemplateControlAction(
     },
     select: {
       templateTwinCompiledVersion: {
-        select: { certificationStatus: true, compiledDocumentIr: true },
+        select: { id: true, certificationStatus: true, compiledDocumentIr: true },
       },
     },
   });
@@ -121,6 +121,55 @@ export async function setTemplateControlAction(
   const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
   const field = ir.fields.find((f) => f.fieldId === fieldId);
   if (!field) return { ok: false, error: 'That control is not part of this form.' };
+
+  // ⚠️ THE DOOR'S ADMISSION SET MUST MIRROR THE FILL'S, OR SUCCESS IS A LIE.
+  //
+  // `applyClinicianOverrides` declines on five reasons. This door already
+  // mirrors three of them — `field_not_in_template` above, `field_has_no_options`
+  // and `option_is_placeholder` below — and `ordinal_not_in_options` is a
+  // genuine recompile race that can only be judged at fill time. That left
+  // `no_approved_concept` as the one STATIC reason the door did not check, and
+  // an unchecked static decline is not a race: it fails identically forever.
+  //
+  // Without this, the sequence was: the door stores the override and returns
+  // `ok: true`, the chat reports the correction applied and redraws the page,
+  // and then EVERY fill declines it — so the document never changes, on this
+  // run and on every future one. The doctor is told their correction landed and
+  // it provably cannot.
+  //
+  // ⚠️ AND IT IS REACHABLE ON THE ONLY CERTIFIED TWIN IN PRODUCTION, measured
+  // read-only 2026-08-24 (counts only; no note text was read):
+  //
+  //     80 mappings = 52 extraction + 23 verified_note_selection
+  //                 + 5 manual  (4 of them with clinicalConcept NULL)
+  //
+  // All four NULL-concept fields are `single_select` / `content_control` with
+  // 5-8 options — Address, REFERRING PHYSICIAN, ULTRASOUND TECHNOLOGIST,
+  // LOCATION — so all four sit inside the 28 controls this surface offers.
+  // 4 of 28 addressable controls, reported as set and never applied.
+  //
+  // The cause is not a defect in certification: `mappings-readiness.ts` CERTIFIES
+  // a `manual` field with a null concept deliberately ("nothing dictates who the
+  // technologist on shift was"). So CERTIFIED does not imply every field carries
+  // a concept, and any surface that assumed it does was assuming.
+  //
+  // ⚠️ REFUSED, NOT ADMITTED — the tighten-only direction. Letting a
+  // concept-less override through would mint a fact the validator has nothing to
+  // check a citation against, which is a LOOSENING of a clinical validation path
+  // and not a call this layer may make. Whether these fields SHOULD become
+  // settable is a product question, recorded in the ledger rather than decided
+  // here.
+  const definition = await prisma.templateTwinFieldDefinition.findUnique({
+    where: { compiledVersionId_fieldId: { compiledVersionId: compiled.id, fieldId } },
+    select: { mapping: { select: { clinicalConcept: true } } },
+  });
+  if (!definition?.mapping?.clinicalConcept) {
+    return {
+      ok: false,
+      error: `${field.originalLabel} is filled in by hand on this form and cannot be set from chat.`,
+      label: field.originalLabel,
+    };
+  }
 
   // ⚠️ WORD'S "Choose an item." IS FURNITURE AND IS NEVER SELECTABLE — THE THIRD
   // LAYER, AT THE DOOR, AND IT IS THE ONE THAT COVERS THE TWIN THAT EXISTS.

@@ -23,6 +23,7 @@ import { isWordPlaceholderOption } from '@/lib/note-template-docx/placeholder-op
 const visitFindFirst = vi.fn();
 const templateFindFirst = vi.fn();
 const overrideUpsert = vi.fn();
+const defFindUnique = vi.fn();
 const invalidate = vi.fn();
 const audit = vi.fn();
 
@@ -31,6 +32,7 @@ vi.mock('@meddoc/db', () => ({
     transcribeVisit: { findFirst: (...a: unknown[]) => visitFindFirst(...a) },
     noteTemplate: { findFirst: (...a: unknown[]) => templateFindFirst(...a) },
     templateTwinFieldOverride: { upsert: (...a: unknown[]) => overrideUpsert(...a) },
+    templateTwinFieldDefinition: { findUnique: (...a: unknown[]) => defFindUnique(...a) },
   },
 }));
 vi.mock('@/lib/auth', () => ({
@@ -63,15 +65,20 @@ beforeEach(() => {
   visitFindFirst.mockReset();
   templateFindFirst.mockReset();
   overrideUpsert.mockReset();
+  defFindUnique.mockReset();
   invalidate.mockReset();
   audit.mockReset();
   visitFindFirst.mockResolvedValue(UNSIGNED);
   templateFindFirst.mockResolvedValue({
     templateTwinCompiledVersion: {
+      id: 'cv-1',
       certificationStatus: 'CERTIFIED',
       compiledDocumentIr: ir,
     },
   });
+  // The ORDINARY case: a field carrying an approved clinical concept, which is
+  // what `applyClinicianOverrides` requires before it will apply an override.
+  defFindUnique.mockResolvedValue({ mapping: { clinicalConcept: 'exam.side' } });
   overrideUpsert.mockResolvedValue({});
   invalidate.mockResolvedValue(undefined);
 });
@@ -162,6 +169,7 @@ describe('F24-S5 write path — the correction reaches the database', () => {
   it('⚠️ AN UNCERTIFIED TWIN OFFERS NOTHING — addressing into a structure that does not ship', async () => {
     templateFindFirst.mockResolvedValue({
       templateTwinCompiledVersion: {
+        id: 'cv-1',
         certificationStatus: 'NEEDS_CONFIRMATION',
         compiledDocumentIr: ir,
       },
@@ -193,6 +201,72 @@ describe('F24-S5 write path — the correction reaches the database', () => {
     expect(a.targetId).toBe('v1');
     expect(a.metadata.surface).toBe('template_control_override');
     expect(a.metadata.fieldId).toBe(field.fieldId);
+  });
+
+  // ==========================================================================
+  // ⚠️ THE DOOR'S ADMISSION SET MIRRORS THE FILL'S — found by the independent
+  // adversarial pass (run 20260824-073818-b1, session 02), which did not author
+  // this branch.
+  //
+  // `applyClinicianOverrides` declines `no_approved_concept` when the field's
+  // mapping carries no `clinicalConcept`. The door did not check it, so the
+  // sequence was: row written, `ok: true` returned, chat reports the correction
+  // applied and redraws — and then EVERY fill declines it. The document never
+  // changes, on this run and on every future one, because the decline is STATIC
+  // rather than a race.
+  //
+  // ⚠️ REACHABLE ON THE ONE CERTIFIED TWIN IN PRODUCTION, measured read-only
+  // 2026-08-24 (counts only; no note text read). 80 mappings partition as
+  // 52 extraction + 23 verified_note_selection + 5 manual, and FOUR of the
+  // manual ones carry `clinicalConcept = NULL`. All four are
+  // `single_select` / `content_control` with 5-8 options — Address, REFERRING
+  // PHYSICIAN, ULTRASOUND TECHNOLOGIST, LOCATION — so all four are inside the
+  // 28 this surface offers. 4 of 28, told they were set and never applied.
+  //
+  // The cause is not a certification defect: `mappings-readiness.ts` certifies a
+  // `manual` field with a null concept ON PURPOSE. So CERTIFIED does not imply
+  // "has a concept", and this door was assuming it did.
+  // ==========================================================================
+  it('⚠️ A CONCEPT-LESS CONTROL IS REFUSED AT THE DOOR — never stored and never claimed', async () => {
+    defFindUnique.mockResolvedValue({ mapping: { clinicalConcept: null } });
+    const field = selects[0];
+    const out = await run(field.fieldId, field.allowedOptions[0].displayText);
+
+    // The whole defect in one assertion pair: the reply must not say yes...
+    expect(out.ok).toBe(false);
+    // ...and nothing may reach the database, because a stored override that
+    // every fill declines is a correction the doctor believes is live.
+    expect(overrideUpsert).not.toHaveBeenCalled();
+    // The refusal names the control, so the doctor knows WHICH one and why.
+    expect(out.label).toBe(field.originalLabel);
+    expect(out.error).toMatch(/by hand|cannot be set/i);
+  });
+
+  it('⚠️ AND A MISSING MAPPING ROW IS THE SAME REFUSAL — absent is not permission', async () => {
+    // `mapping` is an optional 1:1 relation, so "no row" and "row with a null
+    // concept" are two distinct database states that must not diverge here.
+    // Fail closed on both: `applyClinicianOverrides` declines both identically.
+    defFindUnique.mockResolvedValue({ mapping: null });
+    const field = selects[0];
+    expect((await run(field.fieldId, field.allowedOptions[0].displayText)).ok).toBe(false);
+    expect(overrideUpsert).not.toHaveBeenCalled();
+
+    // ...and so is no field-definition row at all.
+    defFindUnique.mockResolvedValue(null);
+    expect((await run(field.fieldId, field.allowedOptions[0].displayText)).ok).toBe(false);
+    expect(overrideUpsert).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ THE CONCEPT IS READ FOR **THIS** COMPILED VERSION AND **THIS** FIELD', async () => {
+    // A lookup keyed on the wrong compiled version would read another
+    // template's mapping and admit or refuse on somebody else's answer.
+    const field = selects[2];
+    await run(field.fieldId, field.allowedOptions[0].displayText);
+    expect(defFindUnique).toHaveBeenCalledTimes(1);
+    const arg = defFindUnique.mock.calls[0][0] as { where: unknown };
+    expect(arg.where).toEqual({
+      compiledVersionId_fieldId: { compiledVersionId: 'cv-1', fieldId: field.fieldId },
+    });
   });
 
   it('⚠️ NON-VACUITY — the happy path really can succeed for every one of the 28', async () => {

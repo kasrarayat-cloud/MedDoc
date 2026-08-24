@@ -27367,3 +27367,123 @@ in production.
   earlier — would be invisible to that grep. **The refuted slice died of exactly
   that shape one layer up, and my enumeration is drawn from the same token
   list.** Aim the pass here first.
+
+
+## ✅ F24-S5 REBUILD — THE INDEPENDENT ADVERSARIAL PASS HAS RUN. One defect, fixed in branch
+
+**Run `20260824-073818-b1`, session 02 — a fresh process that did NOT author the
+diff, which is the property canon asks for.** Session 01 could not run the pass
+(subagents were disallowed) and correctly left it owed.
+
+**Verdict: ONE confirmed defect, fixed and mutation-proved. No clinical-write
+defect. Five hypotheses refuted and recorded.**
+
+### 🔴 THE DEFECT — the door reported success for a correction that could never land
+
+`applyClinicianOverrides` declines on **five** reasons. The write door
+(`set-template-control.ts`) mirrored **three** — `field_not_in_template`,
+`field_has_no_options`, `option_is_placeholder` — and `ordinal_not_in_options` is
+a genuine recompile race only the fill can judge. That left **`no_approved_concept`
+as the one STATIC reason the door never checked**, and an unchecked static decline
+is not a race: it fails identically forever.
+
+The sequence, before the fix:
+
+    door: stores the override, returns ok:true
+    chat: "LOCATION set to ..." + headerChanged -> the page redraws
+    fill: applyClinicianOverrides -> decline(no_approved_concept)
+    document: UNCHANGED, on this run and on every future one
+
+**The doctor is told their correction landed and it provably cannot.**
+
+⚠️ **REACHABLE ON THE ONLY CERTIFIED TWIN IN PRODUCTION.** Measured read-only
+2026-08-24 (counts only; no note text left the database), and the partition
+reconciles against canon's own 80:
+
+| mapping | count |
+|---|---|
+| `extraction` · CERTIFIED · concept present | 52 |
+| `verified_note_selection` · CERTIFIED · concept present | 23 |
+| `manual` · CERTIFIED · **concept NULL** | **4** |
+| `manual` · CERTIFIED · concept present | 1 |
+| | **80** |
+
+All four NULL-concept fields are `single_select` / `content_control` carrying
+5-8 options — **Address · REFERRING PHYSICIAN · ULTRASOUND TECHNOLOGIST ·
+LOCATION** — so all four sit inside the 28 controls this surface offers and
+lists to the model. **4 of 28 addressable controls.** The single-select rows sum
+to exactly 28 and 28 + 52 narrative_text = 80, so the census reconciles by a
+route that did not compute it.
+
+⚠️ **AND THE CAUSE IS NOT A CERTIFICATION DEFECT — WHICH IS WHY NOBODY LOOKED.**
+`mappings-readiness.ts:unreadyReason` certifies a `manual` field with a null
+concept **deliberately**: *"nothing dictates who the technologist on shift was,
+so there is no fact to cite."* So **CERTIFIED does not imply "every field carries
+a concept"**, and every surface that treated `certificationStatus === CERTIFIED`
+as sufficient was assuming a property certification never promised.
+
+### THE FIX — the door admission set mirrors the fill, in the tighten-only direction
+
+`set-template-control.ts` reads the field definition mapping for **this**
+compiled version and **this** field, and refuses when there is no approved
+concept, naming the control. Nothing is stored and nothing is claimed.
+
+⚠️ **REFUSED, NOT ADMITTED, AND THE DIRECTION IS THE POINT.** Letting a
+concept-less override through would mint a fact the validator has nothing to
+check a citation against — a **LOOSENING** of a clinical validation path, which
+fails the provisional-ruling test outright. The restriction is reversible; the
+admission would not have been.
+
+**Proofs — `gate-f24-s5-write-path.test.ts`, 11 arms to 14:**
+
+| direction | result |
+|---|---|
+| complete inverse (delete the refusal) | **2 arms RED**, the keying arm and all 11 pre-existing arms green — discrimination, not blanket failure |
+| ⚠️ **PARTIAL** — `if (definition && !...)`, the half-landed edit the code invites | **1 arm RED**, exactly the one written for it (`absent is not permission`) |
+| restored from a scratch backup, never from git | 14 / 14 green |
+
+`tsc --noEmit` 0 errors. `src/actions` + `src/lib/{template-twin,chat-edit,note-template-docx}`: **64 files / 663 tests green.**
+
+### 🔵 FIVE HYPOTHESES REFUTED — recorded because a refuted suspicion is evidence
+
+Canon: *a refuted hypothesis, recorded with its measurement, converts a question
+somebody will re-ask into a question somebody can look up.*
+
+| # | the suspicion | what refuted it |
+|---|---|---|
+| 1 | the sparse ordinals left by the placeholder filter break a positional consumer | **0** positional reads of `allowedOptions` outside tests, against a control of **19** total occurrences — every consumer is find-by-value or find-by-ordinal |
+| 2 | the manifest `overridesSha256` is stamped from a re-read, so a correction landing mid-fill stamps an identity the document does not carry | `fill-engine.ts:496` reads ONCE and RETURNS the list; the stamp uses that same list. Explicitly designed against |
+| 3 | an override row landing after signing breaks `resolveFrozenPointer` and costs native export permanently | `set-template-control.ts` is the **only** writer (by-table sweep: 0 raw SQL, 1 ORM upsert) and refuses SIGNED at the door. No deletes anywhere |
+| 4 | the model addresses controls by `n` while the dispatcher resolves by `.ordinal` — a renumbering would be a wrong-control write | `formControlsForModel` carries `n: c.ordinal` verbatim; the list is built once and used twice in one request |
+| 5 | **session 01 own pre-aim** — *"a surface deciding freshness by some OTHER predicate, a cache keyed elsewhere"* | the preview cache IS keyed on `soapVersion`, which an override never bumps — but the door invalidates explicitly, **after** the write and before the audit. Ordering correct |
+
+### 📋 FILED, NOT FIXED — one product question and one polish item
+
+- ⚠️ **PRODUCT QUESTION (owner class a): should a `manual` field be settable at
+  all?** A manual field exists precisely because only a human can supply it —
+  which is exactly what a clinician override is. So requiring a concept there is
+  arguably the real defect, and the honest fix might be to let a manual field
+  override apply while minting a fact that carries no concept. **That is a
+  LOOSENING of a clinical validation path and not a call this layer may make.**
+  Today those four controls refuse with a reason instead of lying; that is
+  strictly better than the prior behaviour either way.
+- 🟡 **The list still OFFERS all four.** `listEditableFormControls` filters on
+  `bindingType` and `allowedOptions.length` only, so the model is shown four
+  controls it will always be refused on. Deliberately **not** fixed here: the
+  filter needs mappings threaded into a function whose design note says it takes
+  only the IR, and removing entries **shifts every later control ordinal** — a
+  change with real wrong-control risk, made at the end of a pass, to close a
+  cosmetic gap. The refusal is truthful and immediate, which closes the defect;
+  this is polish.
+
+### ⚠️ WHAT THIS PASS DOES NOT CLAIM
+
+- **It did not run the QA end-to-end walk.** The acceptance 80/80 census by
+  replay and a dropdown edit landing in the EXPORTED document are still owed,
+  and QA IMAGES must be checked before anything behavioural there is believed —
+  a green `--qa` migrations check covers the database and not the build.
+- **The four labels were read from the template, not from any note.** The
+  production measurement was counts and template-derived labels only.
+- **The `no_approved_concept` decline was established by reading the shipped
+  predicate and measuring the population — not by driving a production fill.**
+  A real doctor visit is never a smoke target.
