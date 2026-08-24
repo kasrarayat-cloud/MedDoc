@@ -21,6 +21,7 @@
 import { createHash } from 'node:crypto';
 
 import { EMPTY_SECTION_PLACEHOLDER } from '@/lib/soap-format';
+import { withoutPlaceholderOptions } from '@/lib/note-template-docx/placeholder-option';
 
 import type { EncounterFact, SemanticMapping } from './ir';
 import {
@@ -265,7 +266,18 @@ export function bridgeChoiceSlotPicks(
 
     // (a) VERBATIM, never fuzzy: the value must BE one of this field's own
     // enumerated options. An off-list value is not a selection.
-    const opt = field.allowedOptions.find(
+    //
+    // ⚠️ AND WORD'S "Choose an item." IS NOT ONE OF THEM. The compiled IR
+    // carries the placeholder at ordinal 0 — it must, because the renderer
+    // re-compiles the source and hashes `fields`, so removing it orphans every
+    // already-compiled twin (F24-S5 ITEM A). The exclusion therefore lives on
+    // each READER, and this is a reader that writes a CLINICAL VALUE into a
+    // document.
+    //
+    // A placeholder pick now takes the `not_an_enumerated_option` exit
+    // immediately below — an existing, logged refusal — rather than being
+    // rendered as furniture the doctor never chose.
+    const opt = withoutPlaceholderOptions(field.allowedOptions).find(
       (o) => norm(o.displayText) === norm(pick.value!) || norm(o.value) === norm(pick.value!),
     );
     if (!opt) {

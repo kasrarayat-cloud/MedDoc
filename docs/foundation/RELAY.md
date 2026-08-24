@@ -29039,3 +29039,56 @@ accident. ⚠️ **With the three from the finding above, the walk has now left 
 visit/patient pairs on the synthetic QA database, and the "16 unsigned QA visits
 bound to a certified twin" figure is now 21 total / 19 unsigned.** Named here so
 the next recon reads a delta rather than drift.
+
+### ⚠️ ADDENDUM — I TESTED MY OWN UNTESTED CLAIM, AND IT FOUND TWO
+
+The row above wrote down, before any pass ran:
+
+> *"I have not tested that NO OTHER READER of `allowedOptions` was relying on
+> the compiler having pre-filtered it."*
+
+**So it was tested.** Every non-test reader of `allowedOptions` in
+`apps/transcribe-md/src` and `packages` was enumerated by grepping the FIELD
+(not the fix), and each classified by what it does with the option set:
+
+| reader | what it does | verdict |
+|---|---|---|
+| `renderer.ts:790,838` · `validation:487,503` · `certification-lifecycle:139` | `.find` / `.some` keyed on `value` | positional-safe |
+| `create-draft:178` · `ir.ts:252` · `concept-registry:256` | persists / counts | unaffected |
+| `clinician-override:260` · `set-template-control:183` | already filter for themselves | untouched |
+| `semantic-mapping:291` | shows the options to the model **for the CONCEPT proposal**, not to select a value | unaffected |
+| ⚠️ **`picks-bridge:268`** | matches the model's PICK against the option set — **writes a clinical value** | **FILTERED** |
+| ⚠️ **`resolver/index.ts:108`** | exact-option match — **writes a clinical value** | **FILTERED** |
+
+**The last two are real.** With the placeholder restored to the IR they would
+match a pick or a resolution whose literal text is `Choose an item.` and render
+it as a clinical selection. Both now take their own existing
+`not_an_enumerated_option` / null exit instead — a logged refusal that already
+existed, reused rather than invented.
+
+⚠️ **AND THE HONEST FRAMING OF WHAT THAT IS.** Relative to **production** this
+is a TIGHTENING: the pre-`f340c589` compiler kept the placeholder too, so those
+two paths have been able to match it for the whole life of the feature. Relative
+to the four-hour stripped world it closes a hole the strip had closed as a side
+effect. **Either way the direction is tighten-only**, which is what makes it
+landable without a ruling.
+
+**With those two closed, no path can produce a placeholder resolution at all** —
+the overlay refuses, the door refuses, the picks bridge refuses, the resolver
+refuses. So `validation:487`'s acceptance and `certification-lifecycle:139`'s
+are unreachable-with-a-placeholder by construction rather than by their own
+predicate. **Named as residual, not fixed:** they are the checkers, not the
+writers, and widening the diff further on a clinical path without an adversarial
+pass is the larger risk. ⚠️ **Re-arming condition: a NEW writer of a
+single-select resolution that does not filter.**
+
+**Re-proved after the change, and the control is the interesting part:** the
+walk re-ran **21 of 21** with all four files in place, and the exported DOCX sha
+is `3f5e556b84f1` — **byte-identical to the run before these two filters
+existed.** They changed no document. Suite unchanged at 16 / 1, 372 files,
+4908 tests. `tsc` clean.
+
+> **This is the untested-claim rule paying for itself in one grep.** The
+> sentence was written to aim the pass; writing it made the author look, and the
+> look found two writers the three-layer design never counted — the same way
+> `editable-controls.ts` had been missed.
