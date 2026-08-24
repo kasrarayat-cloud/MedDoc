@@ -27296,6 +27296,37 @@ preserved, so every real option keeps its number.
 narrower than re-running `scripts/prod-smoke/twin-ga-proof.ts`, deliberately —
 but it is the `e2e` pack, not this reasoning, that adjudicates it.
 
+### ✅ THE EXPORT LOOP CLOSES — read in the shipped composition, not assumed
+
+`loadOrComputeNativeTemplateDocxForVisit` composes correctly with the widened
+gate, and it is worth writing down because the widening only works if it does:
+
+1. `loadNativeTemplateDocxForVisit` declines — `overrides_changed`, logged;
+2. the compute path's gate holds — UNSIGNED (an override can only exist on an
+   unsigned visit, refused at the write door) and CERTIFIED;
+3. `processTemplateTwinVisit` re-fills, reading the overrides and stamping
+   `overridesSha256`;
+4. it calls `loadNativeTemplateDocxForVisit` **again**, the pair now matches, and
+   **the corrected document is served.**
+
+⚠️ **BUT IT CHANGES AN ASSUMPTION THE DESIGN NOTE MAKES, AND THE NOTE HAS NOT
+BEEN UPDATED.** That function documents the on-demand compute as *"a resilience
+fallback, not the hot path"*, firing *"only when the manifest never
+materialised (e.g. the template was certified after generation)"*. With
+corrections in the world it becomes a **REGULAR** path: **every correction makes
+the next download pay a full fill on the GET request thread.**
+
+The compute is still DETERMINISTIC (resolver + bridge + render, **no AI**),
+idempotent, gated and fail-safe — so the bound the note relies on holds. What
+has changed is the FREQUENCY, from *rare* to *once per correction*. Filed here
+rather than silently: a sentence describing an intended frequency in the present
+tense is the `DEPLOYMENT_RUNBOOK §5.6` shape, and this one is now describing the
+old world.
+
+**Not fixed in this slice** — the alternative is having the write path enqueue
+the re-fill, which is a scheduling change well outside a ruled identity fix, and
+it wants its own decision.
+
 ### ⚠️ THE BLAST RADIUS IS UNFLAGGED, AND THAT IS WORTH SAYING BEFORE A DEPLOY
 
 Read from the RUNNING container, not from `.env`: `NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=true`,
