@@ -26712,6 +26712,84 @@ by noticing the query was wrong. Without it the first zero would have read as
 
 ---
 
+## F24-S5 REBUILD — the identity widens · owner ruling, 2026-08-24
+
+**Supersedes the F24-S5 BUILD approach.** PR #824 stays a **DRAFT** and does not
+merge — **parked for a rebuild, not a patch.** Ruling recorded this commit
+(branch `docs/f24-s5-rebuild-ruling`; the row claims its number on landing).
+
+### WHY THE FIRST BUILD FAILED — verified in shipped source, not relayed
+
+`noteIdentity` is `sha256(soapFinal)` **and nothing else**
+(`note-identity.ts:25-27`). Both surfaces that decide whether a fill runs gate on
+`manifestMatchesNote`:
+
+| surface | line |
+|---|---|
+| `native-export.ts` | **133** |
+| `sign-freeze.ts` | **81** |
+
+An override changes a **form control**, never `soapFinal` — so the note still
+matches, the export serves the stored **pre-override** bytes, and signing pins
+the pre-override manifest by pointer forever.
+
+> ⚠️ **THE PRE-SIGN PREVIEW SHOWS THE CORRECTION AND THE DOWNLOAD DOES NOT.**
+
+The premise *"an INPUT read on every run, so a recompute re-applies it"* is TRUE
+of the fill engine and FALSE of the two gates in front of it. **`edit_form_control`
+is the first editor intent that changes the DOCUMENT without changing the NOTE**,
+which is why no prior surface needed this rule.
+
+### THE RULED SHAPE
+
+1. **THE IDENTITY WIDENS; THE GATES ARE NEVER LOOSENED.** Making a gate skip or
+   tolerate an override would admit every stale manifest those gates exist to
+   refuse. Instead the bound identity becomes **note + overrides**:
+   - `noteSha256` **unchanged** — `soapFinal` only, same meaning, no reader
+     re-interpreted;
+   - a **SIBLING** (`overridesSha256`, or a composed `documentSha256` —
+     builder's choice) binds the overlay state the fill ran against;
+   - ⚠️ **the derivation is ONE function in `note-identity.ts`, used by ALL
+     callers (#135).** Two derivations drift, and a drifted identity serves a
+     stale document as fresh.
+   - both gates compare the **pair** → a new override reads STALE → the
+     recompute re-applies it.
+2. **POINTER SEMANTICS UNTOUCHED.** A signed record still serves its frozen
+   manifest forever. `sign-freeze` regenerates-then-signs exactly as it already
+   does for a note edit — **what changes is only that the freeze CAPTURES the
+   override, because staleness can finally see it.**
+3. **LEGACY MANIFESTS: NULL SIBLING = VACUOUSLY FRESH, NEVER BACKFILLED.** Null
+   means no overrides existed when it was filled, which is true. A backfilled
+   identity asserts a correspondence nobody verified.
+4. ⚠️ **`Choose an item.` IS EXCLUDED AT COMPILE TIME.** All **28 of 28**
+   controls carry Word's placeholder as option 0; the refuted slice accepted it
+   as a `supported`, `clinicianReviewed` clinical value rendering into an imaging
+   report with every needs-review surface silent. **It is furniture, not a
+   choice.** Excluded from the compiled option set, so the overlay cannot accept
+   what the set never contained; an override naming it **refuses and lists the
+   real options**.
+
+   ⚠️ **THE TELL, REUSABLE:** the author's own gate helper **filtered the
+   placeholder out to pick test data.** The code knew it was not a real option
+   while the product treated it as one. **When a helper excludes a value to make
+   a test sensible, the production path owes the same exclusion.**
+5. **THE GATE GROWS TEETH BEFORE THE REBUILD LANDS.** Five plausible half-landed
+   edits left it **16/16 green** (three `tsc`-clean) and the clinical **write
+   path had no arm at all**. Each becomes a mutation arm; the write path gets
+   its own. A gate green under five partial applications is decoration.
+
+### ACCEPTANCE — unchanged, plus one arm
+
+- the exercised field MUST be a `supported` **laterality** control (11 of 13) —
+  a routine dropdown proves nothing;
+- ⚠️ **and it must survive EXPORT-AFTER-OVERRIDE and SIGN-AFTER-OVERRIDE** — the
+  two surfaces the refuted premise missed are the two the proof must walk;
+- census reads **80/80 by replay**, including a dropdown edit landing in the
+  **exported** document.
+
+**Rebuild is the loop's. The adversarial pass stays mandatory. The deploy
+(migration, 106 → 107) is supervised.** F24 stays OPEN; the census ratchet stays
+unflipped.
 ## 🔴 F24-S5 BUILD — **BUILT, GATED, AND REFUTED.** Do not merge PR #824
 
 **Run `20260823-230455-b2`, session 02, 2026-08-24.** Ruling **#143 (PROVISIONAL)**.
