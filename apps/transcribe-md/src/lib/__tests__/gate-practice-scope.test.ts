@@ -134,6 +134,25 @@ const SYSTEM_ALLOWLIST: Record<string, number> = {
   // — and the classifier still counts it, exactly as the note above predicts:
   // the whole `template-twin/` directory is bucketed as system before scoping
   // is considered. A declared line is the cost of the conservative direction.
+  // ⚠️ NEW 2026-08-24, F24-S5, DECLARED — and the guard caught it UNSCOPED on
+  // its first full run, which is the reason this line reads the way it does.
+  //
+  // `listVisitFormControls` reads the visit's note template to offer the chat
+  // editor the form controls a doctor may set. The first version filtered on
+  // `{ id, version }` ALONE. That is a template-structure read rather than a
+  // patient one, so nothing about it looked alarming — and it would have
+  // resolved ANOTHER PRACTICE'S template given a guessed id, handing back its
+  // control labels and option lists.
+  //
+  // Now bounded by `templateTwinCompiledVersion: { practiceId }`, DERIVED in
+  // the query rather than threaded as a value, so it cannot drift from the
+  // visit's own scope.
+  //
+  // It sits in the SYSTEM bucket for the reason `create-draft.ts` records
+  // above: `isSystem` classifies by PATH (`src/lib/template-twin/`) before it
+  // looks at scoping, so no amount of correct scoping moves it. The line is
+  // written rather than the classifier loosened.
+  'src/lib/template-twin/editable-controls.ts': 1,
   'src/lib/template-twin/fill-engine.ts': 2,
   // ⚠️ 1 -> 2 on 2026-08-21, DECLARED. The second is the FROZEN-POINTER read
   // added by ruling 2(b): a SIGNED record resolves its document by the id the

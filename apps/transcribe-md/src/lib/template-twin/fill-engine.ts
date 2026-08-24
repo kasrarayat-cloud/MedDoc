@@ -39,6 +39,10 @@ import {
 } from './ir';
 import { templateTwinMappingsSha256 } from './mapping-hash';
 import { bridgeTemplateFill } from './bridge-fill';
+import {
+  applyClinicianOverrides,
+  type ClinicianFieldOverride,
+} from './clinician-override';
 import { withProcedureDateFact } from './procedure-date';
 import {
   resolveTemplateFields,
@@ -92,6 +96,14 @@ export interface PrepareTemplateTwinFillInput {
    *  onto the resolver baseline. When absent, only the evidence resolver runs
    *  (behaviour-identical to the pre-bridge fill path). */
   generatedNote?: string;
+  /**
+   * F24-S5 — the clinician's own corrections to enumerated form controls.
+   *
+   * ⚠️ AN INPUT, READ ON EVERY RUN. This is what makes a correction survive the
+   * export's recompute instead of being reverted by it. Absent or empty →
+   * byte-identical to the pre-override behaviour.
+   */
+  clinicianOverrides?: readonly ClinicianFieldOverride[];
 }
 
 export interface PreparedTemplateTwinFill {
@@ -205,12 +217,30 @@ export async function prepareTemplateTwinFill(
           mappings,
         })
       : { resolutions: baseline, facts: [] };
+  // ⚠️ THE CLINICIAN GOES LAST, AND WINS. Applied OUTSIDE the generated-note
+  // branch above on purpose: a correction must land whether or not this run has
+  // a generated note to bridge from, and putting it inside that ternary would
+  // have made the feature quietly conditional on something unrelated to it.
+  //
+  // Precedence is ORDER, not a flag — `mergeFieldResolutions` keeps its
+  // unfilled-only rule untouched, so the evidence resolver still beats every AI
+  // bridge, and only the doctor beats the resolver.
+  const overridden = applyClinicianOverrides({
+    ir,
+    resolutions: bridged.resolutions,
+    overrides: input.clinicianOverrides ?? [],
+    mappings,
+    // Parity with the picks bridge: the note the correction was made against is
+    // part of the fact's identity. Empty when this run has no generated note —
+    // the fact is still uniquely keyed by field + option within its own set.
+    noteSha256: noteIdentity(input.generatedNote) ?? '',
+  });
   return finalizeTemplateTwinFill({
     ...input,
     ir,
     mappings,
-    facts: [...facts, ...bridged.facts],
-    resolutions: bridged.resolutions,
+    facts: [...facts, ...bridged.facts, ...overridden.facts],
+    resolutions: overridden.resolutions,
   });
 }
 
@@ -294,7 +324,14 @@ export interface ProcessTemplateTwinVisitInput {
  * would let a doctor sign a fill that predates their own adoptions.
  */
 export async function readAndPrepareTemplateTwinFill(
-  input: Omit<ProcessTemplateTwinVisitInput, 'visitId'>,
+  // ⚠️ `visitId` IS REQUIRED, AND THAT IS THE POINT. It used to be `Omit`ed,
+  // because nothing here needed it. F24-S5's clinician overrides are keyed by
+  // visit and must be read on EVERY fill — preview, worker, export and the
+  // sign freeze alike — so requiring it makes a path that forgets them a
+  // COMPILE ERROR rather than a document that silently drops the doctor's own
+  // correction. The behaviour lives on the shared function, not on four
+  // caller-side checklists that are kept complete by hand.
+  input: ProcessTemplateTwinVisitInput,
 ) {
     const row = await prisma.noteTemplate.findFirst({
       where: {
@@ -419,6 +456,14 @@ export async function readAndPrepareTemplateTwinFill(
       input.generatedNote != null
         ? (await docxToTextWithControls(source)).text
         : undefined;
+    // F24-S5 — the clinician's corrections, read as an INPUT to this fill.
+    // Ordered so the applied set is deterministic run to run; the unique index
+    // on (visitId, fieldId) means there is at most one row per field.
+    const clinicianOverrides = await prisma.templateTwinFieldOverride.findMany({
+      where: { visitId: input.visitId, practiceId: input.practiceId },
+      orderBy: { fieldId: 'asc' },
+      select: { fieldId: true, selectedOptionOrdinal: true },
+    });
     const prepared = await prepareTemplateTwinFill({
       compiledVersionId: compiled.id,
       noteTemplateId: row.id,
@@ -433,6 +478,7 @@ export async function readAndPrepareTemplateTwinFill(
       visitDate: input.visitDate,
       markerText,
       generatedNote: input.generatedNote,
+      clinicianOverrides,
     });
 
   return { prepared, row, compiled, ir, storage };

@@ -283,6 +283,11 @@ export async function previewVisitDocumentAction(
 
   try {
     const { prepared } = await readAndPrepareTemplateTwinFill({
+      // F24-S5. The preview must read the SAME clinician overrides the export
+      // will, or a doctor would confirm a correction on screen and download a
+      // document without it — the preview/export divergence this function was
+      // extracted verbatim to prevent.
+      visitId,
       practiceId: visit.user.practiceId,
       // ⚠️ THE VISIT'S OWN DOCTOR, NOT THE REQUESTER. This read is
       // practice-scoped, so a colleague previewing the record would otherwise

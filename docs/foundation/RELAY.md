@@ -26709,3 +26709,169 @@ result first** — wrong JSON key (`resolutions`, the key is `fields`), then
 were caught by a **non-vacuity control** (`160 = 2 manifests × 80 fields`), not
 by noticing the query was wrong. Without it the first zero would have read as
 *"the recon's population does not exist."*
+
+---
+
+## 🟡 F24-S5 BUILD — THE CLINICIAN OVERRIDE. Built and gated; the adversarial pass is OWED
+
+**Run `20260823-230455-b2`, session 02, 2026-08-24.** Ruling **#143
+(PROVISIONAL)**. `main` carries nothing yet; the PR is open and the mandatory
+adversarial pass has not run.
+
+### ⚠️ THE UNTESTED CLAIM, WRITTEN DOWN BEFORE THE PASS
+
+> **The claim I have NOT tested is: that a doctor's sentence reaches the
+> document. Every arm on this branch calls `applyClinicianOverrides` with an
+> override ALREADY IN HAND.**
+
+The fixture supplies, for free, precisely what production must manufacture: a
+model choosing a correct `controlOrdinal`, the action resolving it to a
+`fieldId`, a row landing in Postgres, and the fill reading it back. **No proof
+here executes the database round-trip** — `templateTwinFieldOverride.findMany`
+→ `applyClinicianOverrides` is wired and type-checked and never RUN against a
+database. Nor is `invalidateVisitFills` verified to clear what the preview and
+export actually serve, nor the model's behaviour given the injected list.
+
+That is canon's *WELL-CHOSEN FIXTURE DISGUISES A WRONG UNIVERSE* pointed at a
+LAYER, and it is the same geometry that beat F24-S4. It is stated here so the
+pass starts where the risk is.
+
+### WHAT WAS MEASURED, AND IT REFUTES THE OBVIOUS DESIGN
+
+**Read-only on production, structural metadata only; no note text left the
+database.**
+
+| the question | the answer |
+|---|---|
+| content controls on the certified twin | **28** |
+| **distinct `originalLabel`s among them** | **14** |
+| controls in an AMBIGUOUS label group | **18** (8 + 6 + 2 + 2) |
+| uniquely labelled | **10** ✔ `18 + 10 = 28`, `4 + 10 = 14` |
+
+**A LABEL CANNOT IDENTIFY A CONTROL, AND NEVER COULD.** The compiler labels
+these from surrounding text, so one sentence carrying four dropdowns yields four
+controls with the SAME label — *"The `Choose an item.` from the `Choose an item.`
+to the `Choose an item.` was found to have had previous treatment
+`Choose an item.`"* is **8** controls.
+
+⚠️ **AND THE OPTION SETS DO NOT RESCUE IT.** Within one sentence the four
+controls differ (vein / junction / location / status). The group is **two** such
+sentences, and across them the sets are identical in pairs — `displayOrder`
+**25≡30, 26≡31, 27≡32, 28≡33**. Neither the label nor the options separates 25
+from 30. Only document POSITION does.
+
+⇒ **Addressing is a SERVER-ISSUED ORDINAL** — the `rowOrdinal` echo doctrine,
+for the same reason.
+
+### ⚠️ THREE DORMANT SEAMS, AND THIS SLICE IS THE WRITER FOR ALL THREE
+
+The recon named two. There is a third, and it removes the need to widen any enum:
+
+| seam | state before this slice |
+|---|---|
+| `FieldResolution.clinicianReviewed` | `false` at all six construction sites, `true` nowhere |
+| `templateTwinFillManifest.reviewedAt` | zero writers, NULL on both production manifests |
+| **`EncounterFact.sourceType: 'clinician_correction'`** | **ONE occurrence in the entire source — its own declaration** |
+
+Positive-controlled against its sibling `verified_note_selection`: **24**
+occurrences. Declared, never constructed, never read.
+
+### ⚠️ A CORRECTION MUST CARRY PROVENANCE — WHICH THE ITEM DID NOT SAY
+
+`FieldResolutionSchema.superRefine` requires **every populated value** to carry
+`sourceFactIds` AND `evidenceAnchorIds`. So an override is **not** a bare
+overlay: it must MINT a citable fact, exactly as the picks bridge does. The item
+described the work as *"the mechanism exists; its PRECEDENCE is the work"* —
+true and incomplete. It is precedence **and provenance**.
+
+Verified by RUNNING the shipped validator, not by reading it: `validateTemplateTwin`
+returns **zero blocking issues** for the overridden field. Not one validator rule
+is relaxed.
+
+### WHAT SHIPS
+
+- **`template_twin_field_overrides`** — a new table, `@@unique(visitId, fieldId)`.
+  An **INPUT to every fill**, never part of a fill's output, which is what makes
+  a recompute RE-APPLY a correction instead of reverting it. Purely additive: no
+  column on any existing table, so there is no write-path sweep to run.
+- **`applyClinicianOverrides`** — a SEPARATE overlay applied AFTER the bridges.
+  `mergeFieldResolutions` is **byte-for-byte untouched**; precedence is ORDER,
+  not a flag, so the evidence resolver still beats every AI bridge and only the
+  doctor beats the resolver.
+- **`readAndPrepareTemplateTwinFill` now REQUIRES `visitId`** — it was `Omit`ed.
+  A fill path that forgets the overrides is now a COMPILE ERROR, not a document
+  that silently drops the correction. The compiler found the one caller.
+- **`setTemplateControlAction`** — validate-or-refuse against the control's own
+  compiled options, naming them on refusal; UNSIGNED only; audited.
+- **`edit_form_control`** — the intent, the prompt paragraph, and the control
+  list injected into the model's context, **built once per request and used for
+  both** the prompt and the resolution.
+
+### PROOF — `gate-f24-s5-clinician-override.test.ts`, 16 arms, on the REAL customer template
+
+Mutation-proved **four ways**, each against a PARTIAL application — the edit a
+tired author actually lands — never the complete inverse. Every mutation
+asserted its own application before its result was believed, and every restore
+read from a scratch backup, never from git.
+
+| mutation | result |
+|---|---|
+| WIN precedence weakened to unfilled-only — *the whole defect* | 🔴 the WIN arm **and** REACHES-THE-BYTES; 14 others correctly green |
+| ordinal fail-closed replaced by a stale-text fallback | 🔴 the fail-closed arm |
+| the prompt paragraph deleted — **F24-S4's own defect** | 🔴 the model-is-told arm |
+| `.describe()` stripped, JSDoc left intact | 🔴 the on-the-wire arm |
+
+The last two are the layers S4 was blind to, and the fourth is the exact shape
+that beat it: the ECHO rule visible to every human reader and absent from
+`z.toJSONSchema()`.
+
+**The byte arm carries a NEGATIVE CONTROL.** A dropdown's own definition lists
+every option inside `document.xml`, so `toContain` is true for all of them
+whatever is selected — presence proves nothing. The arm renders the document
+BEFORE and AFTER and requires the counts to move in opposite directions.
+
+### ⚠️ THE PRACTICE-SCOPE GUARD CAUGHT A REAL TENANCY GAP IN THIS DIFF, ON FIRST RUN
+
+`listVisitFormControls` filtered on `{ id, version }` ALONE. It is a
+template-STRUCTURE read rather than a patient one, so nothing about it looked
+alarming — and it would have resolved **another practice's template** given a
+guessed id, handing back its control labels and option lists. Now bounded by
+`templateTwinCompiledVersion: { practiceId }`, **derived in the query** rather
+than threaded so it cannot drift. Declared in `SYSTEM_ALLOWLIST` with its
+reason; the classifier buckets the whole `template-twin/` directory as system
+before it looks at scoping, exactly as `create-draft.ts` records.
+
+*A guard that reddens against its author on first execution is discriminating
+rather than agreeing.*
+
+### THE CONTROLLED DELTA — and it reconciles
+
+| | `origin/main` (worktree) | branch |
+|---|---|---|
+| test files | 16 failed · 346 passed (364) | 16 failed · **347** passed (365) |
+| tests | 1 failed · 4792 passed | 1 failed · **4809** passed |
+
+**+1 file, +17 tests, +0 failures.** 16 are this gate; the **17th** is
+`use-server-exports.test.ts` **25 → 26**, which enumerates `'use server'` files
+and picked up the new action automatically — and passes.
+
+⚠️ **THE 16 FAILED FILES AND THE 1 FAILED TEST ARE THE DOCUMENTED WORKTREE
+ARTIFACT, PRESENT IDENTICALLY ON A CLEAN DETACHED `origin/main`.** Established
+by control, not assumed. **REFINEMENT WORTH CARRYING:** session 01 recorded 16
+failed files; the artifact is actually **16 files that fail to LOAD plus one
+TEST that fails inside a file that loads** — `gate-devstates.test.ts` imports a
+`.tsx` inside a test body rather than at module top level, so the same
+`react/jsx-dev-runtime` resolution failure presents as an assertion failure. It
+is the same single cause, counted in two places.
+
+### NOT DONE, AND NAMED
+
+- **The adversarial pass is OWED.** It is mandatory on this path and the PR does
+  not merge without it.
+- **Not deployed, and nothing here asks to be.** This carries a MIGRATION and a
+  note-editing surface; a deploy is a supervised act under §2.5.
+- **The census is NOT flipped to 80/80.** The item's acceptance says the ratchet
+  becomes a zero-gap assertion *in this slice*, and that line is deliberately
+  untouched until the pass has run and the round trip has been executed. **Do
+  not read the census's green as closure** — it still asserts the gap, by design.
+- **F24 stays OPEN.**
