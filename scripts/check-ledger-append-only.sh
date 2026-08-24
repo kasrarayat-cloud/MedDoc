@@ -147,12 +147,48 @@ echo "✔ structural: all 4 triggers present and ENABLED on ledger_entries"
 
 # The CHECK constraints are part of the same guarantee — a vocabulary that has
 # quietly widened is a bucket nobody sums.
-CHECKS="$(psql_q "select count(*) from pg_constraint where conrelid='public.ledger_entries'::regclass and contype='c' and conname like 'ledger\_entries\_%'")"
-if [ "${CHECKS:-0}" != "5" ]; then
-  echo "🔴 expected 5 named CHECK constraints on ledger_entries, found ${CHECKS:-0}"
+#
+# ⚠️ THIS ASSERTS THE SET OF NAMES, NOT A COUNT — AND THE COUNT FORM WAS RED ON
+# BOTH ENVIRONMENTS FOR TWELVE DAYS. It read `!= "5"`, written correctly against
+# B5's five constraints. B6 (`20260811103000_b6_ledger_pricing_snapshot`) then
+# added a SIXTH, `ledger_entries_usage_has_pricing`, entirely legitimately — so
+# this guard went RED **because the guarantee it protects got STRONGER**. That is
+# canon's own rule: *a check that fails when the thing it guards starts working
+# is a check nobody keeps.* Measured 2026-08-24: prod 6, QA 6, identically —
+# which is what ruled out drift and named the constant as the defect.
+#
+# A count answers "how many"; the question is "WHICH". Naming them makes a
+# constraint DROPPED (a weakened guarantee) and a constraint ADDED (a migration
+# that forgot to update this list) two different findings instead of one number.
+EXPECTED_CHECKS="ledger_entries_bucket_vocabulary
+ledger_entries_kind_sign
+ledger_entries_kind_vocabulary
+ledger_entries_seq_positive
+ledger_entries_snapshot_agrees
+ledger_entries_usage_has_pricing"
+OBSERVED_CHECKS="$(psql_q "select conname from pg_constraint where conrelid='public.ledger_entries'::regclass and contype='c' and conname like 'ledger\_entries\_%' order by conname")"
+# ⚠️ NO `:-0` DEFAULT HERE, DELIBERATELY, AND THAT WAS THE SECOND DEFECT IN THE
+# THREE LINES THIS REPLACES. `${CHECKS:-0}` coalesced a FAILED QUERY into the
+# string `0` and printed "found 0" — a broken instrument wearing a finding's
+# clothes, and indistinguishable from a real answer of zero. The table's
+# existence is already asserted above, so it can never legitimately carry zero
+# named constraints: empty here is CANNOT TELL, never a count.
+if [ -z "$OBSERVED_CHECKS" ]; then
+  echo "🟡 CANNOT TELL — the CHECK-constraint query returned nothing for ledger_entries on '$PG_DB'."
+  echo "   The table exists (asserted above) and cannot carry zero named constraints,"
+  echo "   so this is an instrument failure, not a finding."
+  exit 2
+fi
+if [ "$OBSERVED_CHECKS" != "$EXPECTED_CHECKS" ]; then
+  echo "🔴 the named CHECK constraints on ledger_entries are not the set they should be on '$PG_DB'."
+  echo "   expected:"; printf '%s\n' "$EXPECTED_CHECKS" | sed 's/^/     /'
+  echo "   observed:"; printf '%s\n' "$OBSERVED_CHECKS" | sed 's/^/     /'
+  echo "   A constraint DROPPED is a weakened guarantee and is the serious direction."
+  echo "   A constraint ADDED is a migration whose name belongs in EXPECTED_CHECKS"
+  echo "   above — put it there in the SAME commit that adds the constraint."
   exit 1
 fi
-echo "✔ structural: 5 named CHECK constraints present"
+echo "✔ structural: 6 named CHECK constraints present, BY NAME (B5's five + B6's usage_has_pricing)"
 
 if [ "$ATTEMPT" -eq 0 ]; then
   echo

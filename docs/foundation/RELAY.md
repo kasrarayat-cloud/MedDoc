@@ -26480,3 +26480,143 @@ consecutive slices of this arc had a clinical defect found by the pass and not
 by the author. Write the untested claim down *before* it runs.
 
 **F8 stays shut until F24 closes.**
+
+---
+
+## F24-S5 RECON — ADDENDUM, and it SHARPENS the blocker rather than softening it
+
+**Measured 2026-08-24 by the same session, after PR #819 was already merged.**
+Held back deliberately: #819's runs were in flight and *work produced while a
+citation runs is staged, never pushed into it.*
+
+### ⚠️ THE OVERLAY BLOCKER IS WORSE THAN §4.1 STATED — IT WOULD HALF-WORK
+
+The recon said a clinician override routed through `mergeFieldResolutions`
+*"would silently do nothing"*. **Measured on the two real production fills, that
+is true of only PART of the field set — and the part it is true of is the worst
+possible one.**
+
+| status | rows | value |
+|---|---|---|
+| `not_mentioned` | **43** | all NULL → `currentUnfilled` TRUE → **an overlay WOULD apply** ✅ |
+| `supported` | **13** | all NON-NULL → `currentUnfilled` FALSE → **the overlay is REFUSED** ❌ |
+| | **56** ✔ | `= 28 content controls × 2 manifests` |
+
+`UNFILLED = {not_mentioned, needs_clinician_input, ambiguous}`
+(`bridge-fill.ts:646`) — **`supported` is not a member**, so a filled control
+refuses the overlay by construction.
+
+⚠️ **AND THE 13 ARE OVERWHELMINGLY LATERALITY:**
+
+| criticality | `not_mentioned` | `supported` |
+|---|---|---|
+| **laterality** | 3 | **11** |
+| routine | 40 | 2 |
+| | | **56** ✔ (3+11+40+2) |
+
+> **A doctor saying *"SIDE OF EXAM should be Left"* — the single most
+> safety-critical correction this form allows — is EXACTLY the case the existing
+> overlay refuses, silently. A developer testing the feature on a routine
+> dropdown (40 of 42 unfilled) would see it work perfectly.**
+
+**A uniformly broken feature is safer than this.** A half-working one is
+demonstrated green by its author and fails on the clinical case.
+
+### THE BYTE PATH IS ALREADY WIRED — and the MODEL is not told
+
+- ✅ **`selectedOptionOrdinal` is fully wired to the renderer** — 8 sites in
+  `note-template-docx/renderer.ts`, the option resolved BY ORDINAL at `:839`,
+  and validated as `DROPDOWN_ORDINAL_MISMATCH` (`validation/index.ts:490`). The
+  13 `supported` cells in production prove it renders. **The slice does not need
+  to build this.**
+- ⚠️ **`chat-edit/prompt.ts` mentions dropdowns / content controls / options
+  ZERO times**, positive-controlled in the same file against `rowOrdinal` (**2**)
+  and `tableCaption` (**1**). This is F24-S4's own lesson pre-registered for the
+  next slice: **the invoking actor is a MODEL, and a model is wired by its
+  prompt.**
+
+### HONEST LIMIT ON THE CORROBORATION
+
+`zz-tmp-repro3.test.ts` independently encodes the recon's §2.1 mechanism
+(*"processTemplateTwinVisit runs a FULL FILL for any UNSIGNED visit whose stored
+manifest does not match the current note"*) and was RUN green (14 tests). ⚠️ **It
+MOCKS prisma, so it corroborates by a second independent READING, not by
+executing the shipped path.** Two readings agreeing is weaker than a reading
+plus an execution, and the recon's §3 limit stands unchanged.
+
+---
+
+## 🔴 FINDING — `check-ledger-append-only.sh` WAS RED FOR TWELVE DAYS BECAUSE THE GUARANTEE GOT STRONGER. **Fixed here.**
+
+**Found 2026-08-24 while running it as a standing check.** Not previously
+recorded anywhere — no ledger row, no issue, no ruling.
+
+    🔴 expected 5 named CHECK constraints on ledger_entries, found 6
+
+**The database is right and the CHECK was stale**, and the partition reconciles:
+B5's migration defines **5** CHECK constraints; B6
+(`20260811103000_b6_ledger_pricing_snapshot`) adds
+`ledger_entries_usage_has_pricing` — **5 + 1 = 6** ✔. Measured **6 on production
+AND 6 on QA, identically**, which is what ruled out environment drift and named
+the hardcoded constant as the defect.
+
+> **This is canon's own rule, in a shipped guard: *a check that fails when the
+> thing it guards starts working is a check nobody keeps.*** B6 made the ledger
+> STRICTER and turned its own guard red.
+
+⚠️ **AND THE LEDGER ALREADY CONTAINED BOTH HALVES OF THE CONTRADICTION** —
+`RELAY.md:11631` records *"exactly 5 named CHECK constraints — 5 ✓"* (true when
+B5 shipped) and `RELAY.md:11726` records B6 adding the sixth. **Two statements
+that can disagree, in one file**, which is the failure the ledger design exists
+to prevent.
+
+⚠️ **A SECOND DEFECT IN THE SAME THREE LINES: `${CHECKS:-0}`.** A failed query
+was coalesced into the string `0` and printed as *"found 0"* — canon's
+**NEVER NORMALISE AN IMPOSSIBLE VALUE**, verbatim, converting a broken
+instrument into a plausible finding.
+
+**THE FIX — assert the SET of names, not a count; empty is CANNOT TELL.**
+A count answers *how many*; the question is *WHICH*, so a constraint DROPPED (a
+weakened guarantee) and one ADDED (a migration that forgot this list) are now
+two different findings instead of one number.
+
+**PROVED IN BOTH DIRECTIONS, and the success direction is the one that matters
+here:**
+
+| proof | result |
+|---|---|
+| **success direction** — does it MOVE when fixed? | **RED → GREEN on prod AND QA.** This is the arm everybody skips |
+| mutation A — a constraint ADDED but unlisted | 🔴 exit 1, prints both sets, names the extra |
+| mutation B — a constraint EXPECTED but absent from the DB | 🔴 exit 1, names it |
+| mutation C — the query made to fail while the table exists | 🟡 **exit 2 CANNOT TELL** (the old code printed *"found 0"* and exited 1 — a FALSE FINDING) |
+
+Every mutation asserted its own application before its result was believed, and
+each was restored **from a scratch backup, never from git**. The tree is back to
+the intended diff (40 insertions, 4 deletions) and the check exits **0**.
+
+---
+
+## 🟡 TWO SMALL FINDINGS, recorded so they are not re-derived
+
+**1 · A load-bearing TOCTOU regression test is named as disposable scratch.**
+`apps/transcribe-md/src/lib/template-twin/__tests__/zz-tmp-repro3.test.ts` is
+**TRACKED on `main`** (committed in `a7d48472`, *"the aimed TOCTOU pass found the
+two holes it was pointed at"*), 114 lines, 14 tests, green. Its name says
+*temporary reproduction 3*. ⚠️ **A reaper globbing `zz-tmp*` would destroy a real
+race guard**, and this repository's own rule is *classify by CONTENT, never by
+filename* — here the filename is actively lying in the dangerous direction.
+Filed, not renamed: renaming a tracked test is out of this item's scope.
+
+**2 · `tsc --noEmit` in the SHARED TREE is poisoned by stale build output.**
+`.next/types/validator.ts` (dated **Jul 23**, untracked) references
+`src/app/dev/rx-warnings/page.js` — a route **R5 deleted** — so a session
+type-checking `/opt/meddoc-pro` gets one phantom error. The same check in a
+worktree is clean.
+
+> ⚠️ **NOTE THE INVERSION, because it will catch the next session:** the
+> WORKTREE is the clean environment for `tsc` and broken for the unit suite
+> (16 files fail to resolve `react`); the SHARED TREE is exactly the reverse.
+> **Neither environment is trustworthy for both**, and the controlled numbers
+> this session measured are: shared tree **362 files / 5035 tests, 0 failed**;
+> worktree **16 failed + 346 passed = 362** ✔ — every worktree failure is the
+> documented import-resolution artifact, none is real.
