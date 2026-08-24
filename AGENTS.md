@@ -1146,6 +1146,33 @@ produced a proof aimed at the wrong field class, correctly built.
 > **If a decision changes what "done" means, it is not delivered until it is on
 > `main`.**
 
+## A CHECK'S REMEDIATION ADVICE IS WRITTEN FOR ITS COMMON STATE
+
+**Standing 2026-08-24.**
+
+> **In a HELD or STAGED state, following a check's printed advice can bypass the
+> very gate the state exists to protect.**
+
+A check that goes red prints what to do about it, and that text is written for
+the case that usually causes the red. It cannot know that this time the red is
+deliberate.
+
+⚠️ **REFERENCE CASE.** With the F24-S5 deploy deliberately HELD,
+`assert-migrations-applied` reads 🔴 `1 unapplied` on production at every STEP 0
+— correctly: the migration is on `main` and production has not been deployed.
+Its advice reads *"rebuild db-migrate and re-run"*, and following it would
+**apply a production migration outside the §2.5 declaration gate** — the one act
+that gate exists to prevent.
+
+**The check is right, the number is right, and the sentence under it is wrong for
+this state.**
+
+**The practice:** before acting on remediation text, establish WHY the check is
+red. A red that reconciles exactly with a known deliberate state is a
+confirmation, not an instruction. And when a hold is declared, say in the ledger
+which standing checks will read red because of it — otherwise the next session
+reads a real alarm and helpfully clears it.
+
 ## A SHARED NOUN IS NOT A SHARED SURFACE
 
 **Standing 2026-08-24. Found by a pass over a fix, on the arm that looked like
