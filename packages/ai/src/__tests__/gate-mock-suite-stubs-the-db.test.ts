@@ -150,6 +150,34 @@ const EXEMPT: Record<string, string> = {
   // is what caught it before this gate ever shipped.
   'packages/ai/src/__tests__/gate-mock-suite-stubs-the-db.test.ts':
     'this gate itself: a static scanner over the suite, executing no pipeline.',
+  // ⚠️ F27, 2026-08-24. This one is in scope for a reason the header did not
+  // anticipate, and saying so is the point of the entry.
+  //
+  // Arm 1's universe is documented above as "test files that SET
+  // MOCK_AI_CALLS", already flagged there as a PROXY rather than the
+  // predicate. This file does not set it in any sense: its only executable
+  // occurrence is `expect(env.MOCK_AI_CALLS).toBe('true')`, which reads a
+  // STRING KEY out of a YAML mapping parsed from docker-compose.qa.yml. The
+  // needle is a bare token, deliberately — narrowing it to `process.env.` or
+  // `vi.stubEnv(` would SHRINK the watched set, which is a loosening, so the
+  // exemption is the tighten-only door and the breadth stays.
+  //
+  // WHY THE METER IS UNREACHABLE — verified by reading the file's imports, not
+  // assumed. They are exactly three: `node:module` (createRequire),
+  // `node:fs` (readFileSync) and `vitest`. Nothing from `@meddoc/ai`,
+  // `@meddoc/db` or any pipeline module, so there is no path by which
+  // `logApiUsage` can be called and no setImmediate callback to outlive the
+  // file. Same class as the em-coding entry above: a static scanner that reads
+  // a file off disk and asserts on its contents.
+  //
+  // ⚠️ RETIREMENT CONDITION, so checking this is a LOOKUP and not a judgement:
+  // this exemption dies the moment that file's import list grows beyond
+  // node builtins + vitest. If it ever imports `@meddoc/ai`, `@meddoc/db`, or
+  // anything that transitively reaches api-usage.ts, DELETE this entry and make
+  // it stub `@meddoc/db` like everybody else — the reason above becomes false
+  // in exactly that event and in no other.
+  'apps/transcribe-md/src/lib/__tests__/gate-f27-qa-worker-flag-universe.test.ts':
+    'a static YAML scanner over docker-compose.qa.yml: it imports only node:module, node:fs and vitest, so it cannot reach logApiUsage. Its MOCK_AI_CALLS occurrence is a compose KEY it asserts on, not a flag it sets. RETIRES the moment that file imports anything beyond node builtins + vitest.',
 };
 
 type Bucket = 'exempt' | 'mocks-db' | 'mocks-ai' | 'mocks-api-usage' | 'EXPOSED';

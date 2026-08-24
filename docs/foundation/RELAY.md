@@ -27916,3 +27916,154 @@ judgement.*
 weaken the check, add a flag, or exempt the migration. The check is right; only
 its suggested cause is wrong in this state, and the cure is a deploy rather than
 a silencer.
+
+## 🟡 F27 — THE QA WORKER RAN WITH ALL ELEVEN PRODUCTION FLAGS OFF
+
+**Found by session 04 of run `20260824-073818-b1`. Verified, extended and
+carried by session 05.** PR **#831**. Not merged at the time of writing; the
+citation block is added by whoever lands it.
+
+### THE FINDING, RE-MEASURED RATHER THAN INHERITED
+
+Session 04 reported it; session 05 re-ran the measurement first-hand before
+building on it, because *a count carried forward from another session's report
+is inherited evidence*:
+
+    docker exec meddoc-pro-transcribe-md-worker-1 printenv | grep -c '^NEXT_PUBLIC_'  -> 11
+    docker exec meddoc-qa-transcribe-md-worker-1   printenv | grep -c '^NEXT_PUBLIC_'  ->  0
+
+⚠️ **POSITIVE-CONTROLLED, because a zero from a container probe is exactly the
+shape this programme has been wrong about before.** The QA worker answers
+`printenv` normally — **29** variables total, `MOCK_AI_CALLS` found (**1**). The
+traversal works; the flags are genuinely absent.
+
+Both containers run `npx tsx src/worker.ts` — identical shape, no build-time
+inlining to hide behind — so the runtime env is the only difference.
+`worker/template-twin-fill-step.ts:76` therefore returned
+`{status:'skipped', reason:'flag_off'}` for **every** QA visit.
+
+**THE MECHANISM IS A SIDE EFFECT OF A CONTROL THAT IS CORRECT.** Production
+delivers each flag twice — `build.args` (Next inlines it) **and**
+`env_file: .env` (the worker's runtime env). `docker-compose.qa.yml` declares
+them under `build.args` only and has **zero** `env_file` declarations,
+deliberately, because inheriting the shared `.env` is what once put 298 real
+Anthropic calls through that stack. The severance is right; the flags rode
+`.env` to the worker, so the worker lost them while the app kept them by
+inlining.
+
+**AND THE FILE HAD ALREADY FIXED THIS CLASS ONCE, ONE VARIABLE AT A TIME** —
+the `TRANSCRIBE_MD_EVIDENCE_ANCHORS` comment records it on 2026-08-10. *Naming a
+class is not enumerating it.*
+
+### THE SET RECONCILES — 11 NAMED, 11 CARRIED, NO RESIDUE
+
+Session 05 diffed the fix's declared set against production's measured set by
+name, not by count:
+
+| | |
+|---|---|
+| prod worker carries | 11 |
+| the compose fix declares | 11 |
+| **names present in one and not the other** | **0**, in either direction |
+
+`CHAT_EDITOR` · `DOC_PREVIEW` · `MARKETING_URL` · `REVIEW_DOC_VIEW` ·
+`SETTINGS_SIMPLE_ROW` · `TEMPLATE_NATIVE_DOCX` · `TEMPLATE_NATIVE_PDF` ·
+`TRANSCRIBE_MD_APP_URL` · `ULTRASOUND_SPECIALTY` · `UX_SIMPLIFY` ·
+`VISIT_DOC_PAGE`. The two URLs are QA's own, not production's — copying prod's
+verbatim would point the isolated stack at `app.quillmd.com`.
+
+### ⚠️ WHAT THE GATE CANNOT SEE, AND IT IS THE DEFECT'S OWN DIRECTION
+
+`gate-f27-qa-worker-flag-universe.test.ts` compares the worker block against a
+hand-kept `REQUIRED` list **in both directions**, so a flag added to QA and not
+to the list reddens. **It cannot see a flag added to PRODUCTION and not to QA —
+which is precisely how this defect arose.**
+
+**That is not fixable in the gate, and the reason is worth recording so nobody
+tries.** The obvious repair is a parity arm against `docker-compose.yml`. It
+would be WRONG: prod's app `build.args` names `NEXT_PUBLIC_SHOW_PIPELINE_TAB`
+and `NEXT_PUBLIC_SKIN_BETA`, and the prod **worker** carries neither at runtime
+(measured: 11, and neither is among them). The worker's runtime authority is
+`env_file: .env`, which is **not in the repository at all**, so no repo-only
+gate can derive the true set.
+
+> **The live-container half is the only thing that can close this direction, and
+> it is `scripts/check-qa-worker-flag-universe.sh` — which has NO GRANT.**
+> Measured: `grep -c check-qa-worker-flag-universe .claude/settings.json` → **0**,
+> positive-controlled against `check-qa-mock-posture` → **1**.
+
+**OWNER ACTION**, and it is the structurally-unreachable case canon already
+names: `.claude/settings.json` is protected from the layer it governs, so the
+loop cannot ship its own grant. **The vitest gate needs no grant and lands in CI
+regardless**, so protection is not contingent on this — what is lost is the
+recurring live-container check, not the compose-file one.
+
+### THE CI FAILURE ON `0d0bffa4`, AND WHY IT WAS NOT A FLAKE
+
+`CI` went **`failure`** on the first push (`gh-runs.sh wait` → exit 3,
+`2 of 4 success`). ⚠️ **The check-run API simultaneously read
+`unit tests | in_progress`** — the *gate on the object the gate reads*
+divergence, seen live and in the direction that hides a completed failure.
+
+Root cause, named rather than re-run:
+`packages/ai/src/__tests__/gate-mock-suite-stubs-the-db.test.ts` classified the
+new F27 gate as **EXPOSED**. Its universe is *"test files that set
+`MOCK_AI_CALLS`"* — documented **in its own header** as a PROXY rather than the
+predicate — and the F27 gate's only executable occurrence is
+`expect(env.MOCK_AI_CALLS).toBe('true')`, **reading a string key out of a parsed
+YAML mapping.** It does not set the flag in any sense.
+
+**FIXED BY AN `EXEMPT` ENTRY — the door the gate itself offers — WITH ITS
+RETIREMENT CONDITION IN THE SAME SENTENCE.** The premise was verified by reading
+the file's imports rather than asserted: exactly three, `node:module`,
+`node:fs`, `vitest`. Nothing from `@meddoc/ai`, `@meddoc/db`, or anything
+transitively reaching `api-usage.ts`, so `logApiUsage` is unreachable and there
+is no `setImmediate` callback to outlive the file.
+
+⚠️ **NARROWING THE NEEDLE WAS CONSIDERED AND REJECTED AS A LOOSENING.** Scoping
+`N_FLAG` to `process.env.MOCK_AI_CALLS` or `vi.stubEnv(` would shrink the
+watched set, and a test can set that flag in more ways than anyone can
+enumerate. The breadth is deliberate; the exemption is the tighten-only door.
+**Retirement condition:** the entry dies the moment that file's import list
+grows beyond node builtins + vitest.
+
+**MUTATION-PROVED, and the mutation was asserted APPLIED before its result was
+believed:**
+
+| step | result |
+|---|---|
+| with the exemption | `2 files, 21 tests` **passed** |
+| marker present after mutating | **1** — applied, so the proof is not void |
+| exemption removed | **1 failed / 6 passed**, naming `gate-f27-qa-worker-flag-universe.test.ts` — a local reproduction of CI's exact failure |
+| restored **from the scratch backup, never from git** | marker **0**; both gates green again, `21 passed` |
+
+### ⚠️ THE `e2e` CANCELLATION ON `0d0bffa4` WAS DELIBERATE, AND HERE IS THE COST
+
+At push time `e2e` (`32730141838`, created `13:00:11Z`) was still
+`in_progress`. It was cancelled knowingly, declared through
+`DECLARE_CANCELLATION`.
+
+**Why the cost is near zero rather than merely acceptable:** `CI` had already
+concluded `failure` on that sha, so it **can never reach a full citation** —
+`gh-runs.sh` says so in as many words, and waiting on it is an infinite loop.
+The one thing that `e2e` run was still worth was *information*: does the pack
+survive with the QA worker flags ON? ⚠️ **That information is preserved, not
+discarded** — this push touches only
+`gate-mock-suite-stubs-the-db.test.ts`, `RELAY.md` and a preflight report, and
+**leaves `docker-compose.qa.yml` byte-identical**, so the next `e2e` exercises
+the same flag universe and answers the same question.
+
+**READ THAT RESULT AS INFORMATION, NOT AS A REGRESSION TO REVERT.** If `e2e`
+moves red on the new head it would mean the pack had been green *because* the
+worker was flag-off — which is the finding, not a reason to undo the fix.
+
+### WHAT THIS ROW DOES NOT CLAIM
+
+- **Not merged, not cited, not deployed.** No production runtime is affected by
+  any of it: the change is a QA compose file and two test files.
+- **The QA stack has NOT been recreated on the fixed compose.** Until it is, the
+  running QA worker still carries 0 of 11 and the gate's green speaks only about
+  the FILE. *The bind-mount lesson at one remove: a declaration is not a
+  running container.*
+- **F24-S5's acceptance walk is still UNPERFORMED**, and this is its blocker
+  being cleared rather than the walk being done.
