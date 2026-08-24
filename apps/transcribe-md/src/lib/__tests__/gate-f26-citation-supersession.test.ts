@@ -65,10 +65,20 @@ interface Row {
 }
 
 /** Source the REAL lib and ask it for a verdict on these rows.
- *  Returns the exit code and stdout — the exit code IS the verdict. */
+ *  Returns the exit code and the COMBINED output — the exit code IS the verdict.
+ *
+ *  ⚠️ `2>&1` IS LOAD-BEARING AND ITS ABSENCE WAS A VACUOUS ASSERTION.
+ *  The TERMINAL banner and the "Offending runs:" list are written to STDERR.
+ *  The first version of this helper captured stdout only, so the arm asserting
+ *  `not.toMatch(/a11y-ci: cancelled/)` passed against a string that could never
+ *  have contained it — a negative assertion over an empty haystack, which is
+ *  this programme's most-repeated defect wearing a test's clothes. Caught by a
+ *  POSITIVE arm (`toMatch(/CI: failure/)`) failing, which is the only direction
+ *  that could have found it. */
 function verdict(rows: Row[]): { code: number; out: string } {
   const script = `
 set -uo pipefail
+exec 2>&1
 . ${JSON.stringify(LIB)}
 rows=$(cat)
 citation_state "$rows" deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
@@ -128,11 +138,44 @@ describe('CITED (0) — the green half, which is the one usually skipped', () =>
     expect(verdict(rows).code).toBe(0);
   });
 
-  it('a FAILED run superseded by a success of the same workflow -> 0', () => {
-    // A re-run that passes discharges a failure exactly as it discharges a
-    // cancellation. The distinction the old code drew was run-vs-workflow, and
-    // it was wrong for both conclusions.
-    expect(verdict([...allGreen(), failed('e2e')]).code).toBe(0);
+  it('a startup_failure superseded by a success of the same workflow -> 0', () => {
+    // startup_failure is the other supersedable conclusion: the run never
+    // produced evidence at all, so a re-run supplies what was missing.
+    const rows = [...allGreen(), { name: 'e2e', status: 'completed' as const, conclusion: 'startup_failure' }];
+    expect(verdict(rows).code).toBe(0);
+  });
+});
+
+// ── 1b · ⚠️ AND ONLY TWO CONCLUSIONS ARE SUPERSEDABLE ─────────────────────
+// THE FIRST DRAFT OF THIS FIX SUPERSEDED *EVERY* NON-SUCCESS CONCLUSION, AND
+// THIS BLOCK IS WHY THAT WAS WRONG — in the loosening direction, which is the
+// one a provisional ruling may not be wrong in.
+//
+//   cancelled / startup_failure -> evidence DESTROYED or never produced.
+//                                  A re-run legitimately supplies it.
+//   failure / timed_out         -> evidence PRODUCED, AND IT SAID NO.
+//                                  A later green is re-run-and-hope.
+//
+// `check-citation.sh:272-274` buckets the first pair separately and `:320`
+// fails on a red UNCONDITIONALLY — no supersession check on that branch.
+// Superseding a red here would make this script MORE PERMISSIVE THAN THE
+// AUTHORITY: the very divergence this lib exists to end, inverted.
+describe('⚠️ a RED is never superseded — the authority does not supersede it either', () => {
+  it('a FAILED run with a green re-run of the same workflow -> 3, NOT 0', () => {
+    expect(verdict([...allGreen(), failed('e2e')]).code).toBe(3);
+  });
+
+  it('a TIMED_OUT run with a green re-run of the same workflow -> 3, NOT 0', () => {
+    const rows = [...allGreen(), { name: 'e2e', status: 'completed' as const, conclusion: 'timed_out' }];
+    expect(verdict(rows).code).toBe(3);
+  });
+
+  it('a red and a superseded cancellation together -> 3, naming only the red', () => {
+    const rows = [...allGreen(), failed('CI'), cancelled('a11y-ci')];
+    const r = verdict(rows);
+    expect(r.code).toBe(3);
+    expect(r.out).toMatch(/CI: failure/);
+    expect(r.out).not.toMatch(/a11y-ci: cancelled/);
   });
 });
 
@@ -218,6 +261,24 @@ describe('CANNOT TELL (2)', () => {
     const r = verdict([]);
     expect(r.code).toBe(2);
     expect(r.out).toMatch(/vacuous/);
+  });
+
+  it('⚠️ a COMPLETED run with a NULL conclusion REFUSES — never cited', () => {
+    // Canon records `conclusion: null` on a "completed" check-run as an
+    // observed impossible value. It must never reach `0`.
+    //
+    // ⚠️ HONEST LIMIT, PINNED DELIBERATELY LOOSE: this asserts REFUSAL, not
+    // which refusal. The shipped code counts it as a live failure and returns
+    // `3` ("will never cite"), which is fail-closed and is a slightly stronger
+    // claim than the evidence supports — `2` = CANNOT TELL is arguably the
+    // honest code for an instrument anomaly. Both refuse the deploy under
+    // #134, so the distinction costs nothing today. Recorded rather than
+    // changed, so a future session finds the question already asked.
+    const rows = [
+      { name: 'CI', status: 'completed' as const, conclusion: null },
+      ...REQUIRED.filter((n) => n !== 'CI').map(ok),
+    ];
+    expect([2, 3]).toContain(verdict(rows).code);
   });
 });
 

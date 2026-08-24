@@ -56,7 +56,10 @@
 # THREE occurrences of one shape in this one function — which is why the states
 # are enumerated here, in a lib, with a gate that drives each of them.
 citation_state() {
-  local rows="$1" sha="$2" total ok done_ failed wf_total wf_green sup
+  # ⚠️ `total_seen` is deliberately NOT local — `gh-runs.sh`'s wait-grace logic
+  # reads it. Everything else is scoped, including SUPERSEDABLE: a sourced lib
+  # must not leak names into its caller's shell.
+  local rows="$1" sha="$2" total ok done_ failed wf_total wf_green sup SUPERSEDABLE
   total=$(echo "$rows"  | jq -r 'length')
   ok=$(echo "$rows"     | jq -r '[.[]|select(.conclusion=="success")]|length')
   done_=$(echo "$rows"  | jq -r '[.[]|select(.status=="completed")]|length')
@@ -90,17 +93,41 @@ citation_state() {
   # Measured 2026-08-24 on two REAL shas, opposite directions:
   #   f76242c4…  a11y-ci cancelled + a11y-ci success  -> superseded, NOT terminal
   #   82158f90…  CI + e2e cancelled, neither re-run   -> still terminal (unchanged)
-  failed=$(echo "$rows" | jq -r '
+  # ⚠️ AND ONLY TWO CONCLUSIONS ARE SUPERSEDABLE. THIS IS THE HALF THE FIRST
+  # DRAFT OF THIS FUNCTION GOT WRONG, AND IT GOT IT WRONG IN THE LOOSENING
+  # DIRECTION.
+  #
+  #   cancelled / startup_failure -> the evidence was DESTROYED or never
+  #                                  produced. A re-run legitimately supplies
+  #                                  the missing evidence. SUPERSEDABLE.
+  #   failure / timed_out / …     -> the evidence was PRODUCED AND IT SAID NO.
+  #                                  A later green on the same tree is
+  #                                  re-run-and-hope, which canon forbids
+  #                                  treating as clean without a written
+  #                                  reason. NEVER SUPERSEDABLE.
+  #
+  # `check-citation.sh` draws exactly this line and it is deliberate: `:272-274`
+  # buckets `cancelled` and `startup_failure` separately from everything else,
+  # and `:320` fails on `REDC > 0` UNCONDITIONALLY — no supersession check on
+  # that branch at all. Superseding a red here would have made this script MORE
+  # permissive than the authority, which is the very divergence this file was
+  # written to end, inverted.
+  SUPERSEDABLE='["cancelled","startup_failure"]'
+  failed=$(echo "$rows" | jq -r --argjson sup "$SUPERSEDABLE" '
     ([.[] | select(.conclusion=="success") | .name] | unique) as $green
     | [ .[]
         | select(.status=="completed" and .conclusion!="success")
-        | . as $r | select(($green | index($r.name)) == null)
+        | . as $r
+        | select( (($sup | index($r.conclusion)) == null)
+                  or (($green | index($r.name)) == null) )
       ] | length')
-  sup=$(echo "$rows" | jq -r '
+  sup=$(echo "$rows" | jq -r --argjson sup "$SUPERSEDABLE" '
     ([.[] | select(.conclusion=="success") | .name] | unique) as $green
     | [ .[]
         | select(.status=="completed" and .conclusion!="success")
-        | . as $r | select(($green | index($r.name)) != null)
+        | . as $r
+        | select( (($sup | index($r.conclusion)) != null)
+                  and (($green | index($r.name)) != null) )
       ] | length')
   # The CITED test is per WORKFLOW for the same reason. `ok -eq total` counts
   # RUNS, so a superseded row keeps the two totals apart forever and the verdict
@@ -126,16 +153,20 @@ citation_state() {
     echo "$ok of $total success"
   fi
   if [ "$failed" -gt 0 ]; then
-    echo "🔴 TERMINAL — $failed of $total concluded NON-SUCCESS with NO success of the" >&2
-    echo "   same workflow to supersede them. This sha can NEVER reach a full" >&2
-    echo "   citation; waiting on it is an infinite loop. Re-run the failed job" >&2
-    echo "   (and SAY WHY in the row — canon forbids re-run-and-hope), or push a" >&2
-    echo "   fix. Offending runs:" >&2
-    echo "$rows" | jq -r '
+    echo "🔴 TERMINAL — $failed of $total run(s) are LIVE non-success. This sha can" >&2
+    echo "   NEVER reach a full citation; waiting on it is an infinite loop." >&2
+    echo "   Push a fix, or re-run and SAY WHY in the row — canon forbids" >&2
+    echo "   re-run-and-hope." >&2
+    echo "   (A cancelled/startup_failure run IS discharged by a later success of" >&2
+    echo "    the same workflow. A failure/timed_out is NOT — the evidence was" >&2
+    echo "    produced and it said no.) Offending runs:" >&2
+    echo "$rows" | jq -r --argjson sup "$SUPERSEDABLE" '
       ([.[] | select(.conclusion=="success") | .name] | unique) as $green
       | .[]
       | select(.status=="completed" and .conclusion!="success")
-      | . as $r | select(($green | index($r.name)) == null)
+      | . as $r
+      | select( (($sup | index($r.conclusion)) == null)
+                or (($green | index($r.name)) == null) )
       | "     \(.name): \(.conclusion)"' >&2
     return 3
   fi
