@@ -28962,7 +28962,7 @@ compiled version would need if a shape change were ever genuinely intended.
 Run from a worktree, so the raw figure carries the documented
 `react/jsx-dev-runtime` alias class.
 
-| | base (`main`, ITEM B's measurement) | this branch |
+| | base `9b728afe` — **re-measured here, not inherited** | this branch |
 |---|---|---|
 | files | 16 failed · 353 passed · 2 skipped (371) | 16 failed · **354** passed · 2 skipped (**372**) |
 | tests | 1 failed · 4897 passed · 4 skipped (4902) | 1 failed · **4903** passed · 4 skipped (**4908**) |
@@ -29092,3 +29092,12 @@ existed.** They changed no document. Suite unchanged at 16 / 1, 372 files,
 > sentence was written to aim the pass; writing it made the author look, and the
 > look found two writers the three-layer design never counted — the same way
 > `editable-controls.ts` had been missed.
+
+⚠️ **AND THE BASE FIGURE WAS RE-MEASURED RATHER THAN INHERITED.** The row first
+carried ITEM B's numbers for `main`, which is a count from another session's
+report — canon's *"a count carried forward and then relied on is a fabricated
+number"*. Re-run in a detached worktree at `9b728afe` (the fix branch's actual
+base, not `main`): **16 failed · 353 passed · 2 skipped (371) files; 1 failed ·
+4897 passed · 4 skipped (4902) tests.** It agrees with the inherited figure
+exactly — which is the outcome that makes the check look unnecessary and is
+precisely why it is done.
