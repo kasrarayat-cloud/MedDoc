@@ -18,7 +18,10 @@ import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { compileTemplateDocx } from '@/lib/note-template-docx';
-import { isWordPlaceholderOption } from '@/lib/note-template-docx/placeholder-option';
+import {
+  isWordPlaceholderOption,
+  withoutPlaceholderOptions,
+} from '@/lib/note-template-docx/placeholder-option';
 
 const visitFindFirst = vi.fn();
 const templateFindFirst = vi.fn();
@@ -52,6 +55,22 @@ const ir = compileTemplateDocx(new Uint8Array(readFileSync(WM_IOV_PATH)));
 const selects = ir.fields.filter(
   (f) => f.rendererBinding.bindingType === 'content_control' && f.allowedOptions.length > 0,
 );
+
+/**
+ * The options this control actually offers — the door's own admission set.
+ *
+ * ⚠️ THESE ARMS USED TO READ `f.allowedOptions[0]` DIRECTLY, and that worked
+ * only because the compiler was deleting Word's "Choose an item." from the
+ * stored array. F24-S5 ITEM A proved that deletion orphans every
+ * already-compiled twin (`renderer.ts:assertSourceMatchesIr` re-compiles and
+ * hashes `fields` — 10 of 10 CERTIFIED twins on QA began refusing), so the IR
+ * carries the document's array verbatim and the exclusion lives on the readers.
+ *
+ * `allowedOptions[0]` is therefore FURNITURE, and the door refuses it — as it
+ * should. Asking the same question the door asks is the honest fixture.
+ */
+const selectableOf = (f: (typeof selects)[number]) =>
+  withoutPlaceholderOptions(f.allowedOptions);
 
 const UNSIGNED = {
   id: 'v1',
@@ -91,7 +110,7 @@ async function run(fieldId: string, value: string) {
 describe('F24-S5 write path — the correction reaches the database', () => {
   it('⚠️ KILLS "delete the upsert" — a successful reply means a ROW WAS WRITTEN', async () => {
     const field = selects[0];
-    const option = field.allowedOptions[0];
+    const option = selectableOf(field)[0];
     const out = await run(field.fieldId, option.displayText);
 
     expect(out.ok).toBe(true);
@@ -121,21 +140,21 @@ describe('F24-S5 write path — the correction reaches the database', () => {
     // overwrite another patient's correction to the same control on the same
     // form. Cross-PATIENT contamination, and the reply would say "done".
     const field = selects[1];
-    await run(field.fieldId, field.allowedOptions[0].displayText);
+    await run(field.fieldId, selectableOf(field)[0].displayText);
     const arg = overrideUpsert.mock.calls[0][0] as { where: { visitId_fieldId: unknown } };
     expect(arg.where.visitId_fieldId).toEqual({ visitId: 'v1', fieldId: field.fieldId });
   });
 
   it('⚠️ the cached document is INVALIDATED — a correction nobody can see is made twice', async () => {
     const field = selects[0];
-    await run(field.fieldId, field.allowedOptions[0].displayText);
+    await run(field.fieldId, selectableOf(field)[0].displayText);
     expect(invalidate).toHaveBeenCalledWith('v1');
   });
 
   it('⚠️ A SIGNED VISIT IS REFUSED AT THE DOOR, AND NOTHING IS WRITTEN', async () => {
     visitFindFirst.mockResolvedValue({ ...UNSIGNED, status: 'SIGNED' });
     const field = selects[0];
-    const out = await run(field.fieldId, field.allowedOptions[0].displayText);
+    const out = await run(field.fieldId, selectableOf(field)[0].displayText);
     expect(out.ok).toBe(false);
     expect(out.error).toMatch(/signed/i);
     expect(overrideUpsert).not.toHaveBeenCalled();
@@ -149,16 +168,24 @@ describe('F24-S5 write path — the correction reaches the database', () => {
     // The refusal must ASK AN ANSWERABLE QUESTION: name the options back.
     expect(out.options?.length).toBeGreaterThan(0);
     expect(out.options).toEqual(
-      field.allowedOptions.map((o) => o.displayText),
+      selectableOf(field).map((o) => o.displayText),
     );
   });
 
   it('⚠️ "Choose an item." IS NOT SETTABLE — the third layer, at the door', async () => {
-    // The compiler now strips the placeholder, so on THIS compiled IR it is
-    // already absent. The arm is written against the WRITE PATH's own filter so
-    // that it still refuses on a compiled version that predates the compiler
-    // change — which is the state of the ONE certified twin in production.
+    // *Previous wording:* "the compiler now strips the placeholder, so on THIS
+    // compiled IR it is already absent."
+    //
+    // ⚠️ NO LONGER TRUE, AND THE ARM IS STRONGER FOR IT. The compiler persists
+    // the document's array verbatim (F24-S5 ITEM A — stripping it orphaned
+    // every already-compiled twin), so the placeholder IS present here and this
+    // arm now exercises the door's own filter against a real one rather than
+    // against a fixture where the thing had already been removed for it.
     const field = selects[0];
+    expect(
+      field.allowedOptions.some((o) => isWordPlaceholderOption(o.displayText)),
+      'the fixture must carry the placeholder, or this arm proves nothing',
+    ).toBe(true);
     const out = await run(field.fieldId, 'Choose an item.');
     expect(out.ok).toBe(false);
     expect(overrideUpsert).not.toHaveBeenCalled();
@@ -174,7 +201,7 @@ describe('F24-S5 write path — the correction reaches the database', () => {
         compiledDocumentIr: ir,
       },
     });
-    const out = await run(selects[0].fieldId, selects[0].allowedOptions[0].displayText);
+    const out = await run(selects[0].fieldId, selectableOf(selects[0])[0].displayText);
     expect(out.ok).toBe(false);
     expect(overrideUpsert).not.toHaveBeenCalled();
   });
@@ -187,7 +214,7 @@ describe('F24-S5 write path — the correction reaches the database', () => {
 
   it('⚠️ ANOTHER PRACTICE’S VISIT DOES NOT RESOLVE — and nothing is written', async () => {
     visitFindFirst.mockResolvedValue(null);
-    const out = await run(selects[0].fieldId, selects[0].allowedOptions[0].displayText);
+    const out = await run(selects[0].fieldId, selectableOf(selects[0])[0].displayText);
     expect(out.ok).toBe(false);
     expect(out.error).toMatch(/not found/i);
     expect(overrideUpsert).not.toHaveBeenCalled();
@@ -195,7 +222,7 @@ describe('F24-S5 write path — the correction reaches the database', () => {
 
   it('the write is ATTRIBUTED and AUDITED', async () => {
     const field = selects[0];
-    await run(field.fieldId, field.allowedOptions[0].displayText);
+    await run(field.fieldId, selectableOf(field)[0].displayText);
     expect(audit).toHaveBeenCalledTimes(1);
     const a = audit.mock.calls[0][0] as { metadata: Record<string, unknown>; targetId: string };
     expect(a.targetId).toBe('v1');
@@ -230,7 +257,7 @@ describe('F24-S5 write path — the correction reaches the database', () => {
   it('⚠️ A CONCEPT-LESS CONTROL IS REFUSED AT THE DOOR — never stored and never claimed', async () => {
     defFindUnique.mockResolvedValue({ mapping: { clinicalConcept: null } });
     const field = selects[0];
-    const out = await run(field.fieldId, field.allowedOptions[0].displayText);
+    const out = await run(field.fieldId, selectableOf(field)[0].displayText);
 
     // The whole defect in one assertion pair: the reply must not say yes...
     expect(out.ok).toBe(false);
@@ -248,12 +275,12 @@ describe('F24-S5 write path — the correction reaches the database', () => {
     // Fail closed on both: `applyClinicianOverrides` declines both identically.
     defFindUnique.mockResolvedValue({ mapping: null });
     const field = selects[0];
-    expect((await run(field.fieldId, field.allowedOptions[0].displayText)).ok).toBe(false);
+    expect((await run(field.fieldId, selectableOf(field)[0].displayText)).ok).toBe(false);
     expect(overrideUpsert).not.toHaveBeenCalled();
 
     // ...and so is no field-definition row at all.
     defFindUnique.mockResolvedValue(null);
-    expect((await run(field.fieldId, field.allowedOptions[0].displayText)).ok).toBe(false);
+    expect((await run(field.fieldId, selectableOf(field)[0].displayText)).ok).toBe(false);
     expect(overrideUpsert).not.toHaveBeenCalled();
   });
 
@@ -261,7 +288,7 @@ describe('F24-S5 write path — the correction reaches the database', () => {
     // A lookup keyed on the wrong compiled version would read another
     // template's mapping and admit or refuse on somebody else's answer.
     const field = selects[2];
-    await run(field.fieldId, field.allowedOptions[0].displayText);
+    await run(field.fieldId, selectableOf(field)[0].displayText);
     expect(defFindUnique).toHaveBeenCalledTimes(1);
     const arg = defFindUnique.mock.calls[0][0] as { where: unknown };
     expect(arg.where).toEqual({
@@ -275,7 +302,7 @@ describe('F24-S5 write path — the correction reaches the database', () => {
     // green is the reference case.
     for (const field of selects) {
       overrideUpsert.mockClear();
-      const out = await run(field.fieldId, field.allowedOptions[0].displayText);
+      const out = await run(field.fieldId, selectableOf(field)[0].displayText);
       expect(out.ok, `${field.fieldId} could not be set`).toBe(true);
       expect(overrideUpsert).toHaveBeenCalledTimes(1);
     }

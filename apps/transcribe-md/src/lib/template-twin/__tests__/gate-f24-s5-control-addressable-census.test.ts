@@ -46,7 +46,10 @@ import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { compileTemplateDocx } from '@/lib/note-template-docx';
-import { isWordPlaceholderOption } from '@/lib/note-template-docx/placeholder-option';
+import {
+  isWordPlaceholderOption,
+  withoutPlaceholderOptions,
+} from '@/lib/note-template-docx/placeholder-option';
 
 const noteTemplateFindFirst = vi.fn();
 const overrideFindMany = vi.fn();
@@ -400,7 +403,12 @@ describe('F24-S5 control census — replay, over both mapping universes', () => 
     for (const c of listEditableFormControls(ir)) {
       const field = ir.fields.find((f) => f.fieldId === c.fieldId)!;
       const before = byId.get(c.fieldId);
-      const opt = [...field.allowedOptions]
+      // ⚠️ THE SELECTABLE SET, NOT THE STORED ONE. The IR carries Word's
+      // "Choose an item." at ordinal 0 (F24-S5 ITEM A — stripping it at compile
+      // time orphaned every already-compiled twin), and a doctor can never pick
+      // furniture. Planning over the stored array would make every arm below
+      // measure the placeholder refusal instead of addressability.
+      const opt = withoutPlaceholderOptions(field.allowedOptions)
         .sort((a, b) => a.ordinal - b.ordinal)
         .find((o) => o.value !== before?.value);
       if (!opt) {
@@ -616,7 +624,12 @@ describe('F24-S5 control census — the ratchet, and what it does NOT claim', ()
     const plan: { fieldId: string; selectedOptionOrdinal: number; want: string }[] = [];
     for (const c of listEditableFormControls(ir)) {
       const field = ir.fields.find((f) => f.fieldId === c.fieldId)!;
-      const opt = [...field.allowedOptions]
+      // ⚠️ THE SELECTABLE SET, NOT THE STORED ONE. The IR carries Word's
+      // "Choose an item." at ordinal 0 (F24-S5 ITEM A — stripping it at compile
+      // time orphaned every already-compiled twin), and a doctor can never pick
+      // furniture. Planning over the stored array would make every arm below
+      // measure the placeholder refusal instead of addressability.
+      const opt = withoutPlaceholderOptions(field.allowedOptions)
         .sort((a, b) => a.ordinal - b.ordinal)
         .find((o) => o.value !== byId.get(c.fieldId)?.value);
       if (opt) plan.push({ fieldId: c.fieldId, selectedOptionOrdinal: opt.ordinal, want: opt.value });

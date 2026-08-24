@@ -43,7 +43,7 @@
   "sourceDocx": "apps/transcribe-md/tests/e2e/fixtures/sample-form.docx",
   "sourceDocxSha256": "c1852a492221cfa0d144c9c0a60b700a7363a2cca7630aa988ee8b6329e1868b",
   "encounterSha256": "53ce5b4608cb7a6f565a43aadd946983d1614e660be1101a51214e57d6afeace",
-  "templateSha256": "b416cbe425c017a26e2afbaf58a66fcc241724686f96e87059446f5f20b17db6",
+  "templateSha256": "37813a6031d4ae560a892b4068f81c3dbc45e6f5789605d440db2b2fd9fffe36",
   "noteModelVersion": "claude-opus-4-8",
   "encounterText": "SYNTHETIC TEST ENCOUNTER — fictional data, not a real patient. Bilateral lower extremity venous duplex reflux study, bilateral detailed. Clinical indication: chronic venous insufficiency with aching, heaviness and swelling. Technique: patient examined standing, with augmentation and Valsalva maneuvers. Right leg. Great saphenous vein at the saphenofemoral junction: diameter 7 millimeters, reflux 2.4 seconds. Right great saphenous vein at the proximal thigh: diameter 6.4 millimeters, reflux 2.1 seconds. Right great saphenous vein at the knee: diameter 5.1 millimeters, reflux 1.6 seconds. Left leg. Great saphenous vein at the saphenofemoral junction: diameter 8 millimeters, reflux 3.1 seconds. Left great saphenous vein at the proximal thigh: diameter 6.9 millimeters, reflux 2.8 seconds. Left great saphenous vein at the knee: diameter 5.6 millimeters, reflux 1.2 seconds. The small saphenous veins and the accessory saphenous veins were not evaluated on this study. No deep venous thrombosis identified bilaterally. The deep system is competent. Impression: bilateral great saphenous vein incompetence, left greater than right. Diagnosis: Chronic venous hypertension with other complications of bilateral lower extremities.",
   "mappings": [

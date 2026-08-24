@@ -40,6 +40,7 @@
 
 import prisma from '@meddoc/db';
 
+import { withoutPlaceholderOptions } from '../note-template-docx/placeholder-option';
 import { TemplateDocIRSchema, type TemplateDocIR } from './ir';
 
 export interface EditableFormControl {
@@ -90,18 +91,46 @@ export interface EditableFormControl {
  * options cannot be validated against one, and this surface never free-texts
  * into a constrained field.
  *
- * ⚠️ AND THE OPTION SETS NO LONGER CARRY WORD'S "Choose an item." PLACEHOLDER —
- * the compiler strips it (`placeholder-option.ts`). A control whose ONLY entry
- * was the placeholder therefore has an empty set and is filtered out here,
- * which is correct: it offers no clinical choice. Measured on production: every
+ * ⚠️ WORD'S "Choose an item." PLACEHOLDER IS EXCLUDED **HERE**, BY THIS
+ * FUNCTION, AND NOT INHERITED FROM THE COMPILER.
+ *
+ * *Previous wording, kept because the correction is the point:* "the option
+ * sets no longer carry Word's placeholder — the compiler strips it."
+ *
+ * That was true for four hours and it was the wrong place for the filter. The
+ * compiler now PERSISTS the document's option array verbatim, because
+ * `renderer.ts:assertSourceMatchesIr` re-compiles the immutable source on every
+ * fill and hashes `fields` — so shrinking the stored array made every
+ * already-compiled twin unfillable, production's included. See the long note at
+ * `compiler.ts`.
+ *
+ * So this is the THIRD reader, and it now filters for itself like the other
+ * two (`set-template-control.ts` the door, `clinician-override.ts` the
+ * overlay). The treatment lives on each READER, where it cannot be forgotten by
+ * whoever changes the compiler next.
+ *
+ * ⚠️ AND THE FILTER GOVERNS ELIGIBILITY, NOT ONLY THE LIST SHOWN. `ordinal` is
+ * this function's index over `eligible`, so a control admitted here that should
+ * not be would shift EVERY LATER ORDINAL BY ONE — a wrong-control write
+ * reported as success, which is precisely the failure `gate-f24-s5-control-
+ * addressable-census`'s M2 mutation exists to catch. Both uses therefore read
+ * the same computed set rather than re-deriving it.
+ *
+ * A control whose ONLY entry was the placeholder has an empty selectable set and
+ * is filtered out, which is correct: it offers no clinical choice. (The compiler
+ * already refuses such a control with `SELECT_OPTIONS_INVALID` so it never
+ * reaches the IR — this does not depend on that.) Measured on production: every
  * one of the 28 retains 1..10 real options, so none is lost.
  */
 export function listEditableFormControls(ir: TemplateDocIR): EditableFormControl[] {
+  const selectableByFieldId = new Map(
+    ir.fields.map((f) => [f.fieldId, withoutPlaceholderOptions(f.allowedOptions)]),
+  );
   const eligible = ir.fields
     .filter(
       (f) =>
         f.rendererBinding.bindingType === 'content_control' &&
-        f.allowedOptions.length > 0,
+        (selectableByFieldId.get(f.fieldId)?.length ?? 0) > 0,
     )
     .slice()
     .sort((a, b) => a.displayOrder - b.displayOrder);
@@ -125,7 +154,7 @@ export function listEditableFormControls(ir: TemplateDocIR): EditableFormControl
       label: f.originalLabel,
       sameLabelIndex: total > 1 ? index : null,
       sameLabelTotal: total > 1 ? total : null,
-      options: f.allowedOptions
+      options: (selectableByFieldId.get(f.fieldId) ?? [])
         .slice()
         .sort((a, b) => a.ordinal - b.ordinal)
         .map((o) => o.displayText),

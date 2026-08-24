@@ -93,18 +93,28 @@ describe('0 · the fixture is the form these claims are about', () => {
     expect(selects.length).toBe(28);
   });
 
-  it('⚠️ and every one of the 28 has had Word’s placeholder REMOVED', () => {
-    // Measured on production before this change: 28 of 28 carried
+  it('⚠️ STORES Word’s placeholder — and the exclusion lives on the READERS', () => {
+    // *Previous assertion, kept because the correction is the point:* this arm
+    // asserted the placeholder was ABSENT from `allowedOptions`, because the
+    // compiler stripped it.
+    //
+    // ⚠️ THAT WAS THE DEFECT F24-S5 ITEM A FOUND, NOT THE PROPERTY.
+    // `renderer.ts:assertSourceMatchesIr` re-compiles the immutable source on
+    // every fill and hashes `fields`, so shrinking the stored array made EVERY
+    // already-compiled twin fail SOURCE_IR_MISMATCH — 10 of 10 on QA, and
+    // production's only certified twin carries the identical shape.
+    //
+    // The IR is now the document's own array, verbatim, and the placeholder is
+    // refused where it is READ. Measured on production: 28 of 28 carry
     // "Choose an item." at ordinal 0, and nowhere else.
     for (const f of selects) {
-      expect(
-        f.allowedOptions.some((o) => isWordPlaceholderOption(o.displayText)),
-        `${f.fieldId} still offers Word's placeholder as a clinical option`,
-      ).toBe(false);
+      const ph = f.allowedOptions.filter((o) => isWordPlaceholderOption(o.displayText));
+      expect(ph, `${f.fieldId} should store exactly one placeholder`).toHaveLength(1);
+      expect(ph[0].ordinal).toBe(0);
     }
   });
 
-  it('⚠️ ORDINALS ARE NOT RENUMBERED — the sets start at 1 and stay sparse', () => {
+  it('⚠️ ORDINALS ARE THE DOCUMENT’S OWN INDEX — contiguous from 0, never renumbered', () => {
     // THE POINT OF THE WHOLE DESIGN. `selectedOptionOrdinal` is persisted on
     // manifests and on override rows, and an override row outlives a recompile
     // (it is keyed by (visitId, fieldId), with no compiled-version reference).
@@ -115,16 +125,15 @@ describe('0 · the fixture is the form these claims are about', () => {
     // It also matters to the renderer: a legacy `w:ddList` write puts the
     // ordinal in `w:result val`, which Word resolves against the DOCUMENT's own
     // untouched list.
-    let sawSparse = 0;
+    //
+    // ⚠️ CONTIGUITY FROM 0 IS THE STRONGER STATEMENT, and it is what the IR now
+    // carries. The previous form asserted the sets START AT 1 and stay sparse —
+    // true only while the compiler removed element 0, and it would have gone on
+    // passing under a renumbering that shifted everything down by one.
     for (const f of selects) {
       const ords = f.allowedOptions.map((o) => o.ordinal);
-      expect(ords).toEqual([...ords].sort((a, b) => a - b));
-      // The placeholder was at 0 on every one of these, so the survivors start
-      // at 1. If this were renumbering, they would start at 0.
-      expect(Math.min(...ords)).toBe(1);
-      if (ords[0] !== 0) sawSparse += 1;
+      expect(ords).toEqual(ords.map((_, i) => i));
     }
-    expect(sawSparse).toBe(28);
   });
 
   it('⚠️ and no control was emptied by the exclusion', () => {
@@ -361,12 +370,31 @@ describe('2 · the clinician beats the resolver', () => {
     expect(out.resolutions.find((r) => r.fieldId === field.fieldId)!.value).toBe(a.value);
   });
 
-  it('⚠️ ordinal 0 — the placeholder’s old slot — resolves to NOTHING now', () => {
-    // Before this change ordinal 0 was "Choose an item." on all 28 controls, and
-    // the pass drove it end to end into a rendered imaging report with
-    // `clinicianReviewed: true` and no validator issue. It must now be
-    // unreachable rather than merely discouraged.
+  it('⚠️ ordinal 0 — Word’s placeholder — is REFUSED BY NAME, not by absence', () => {
+    // Before F24-S5 ordinal 0 was "Choose an item." on all 28 controls, and the
+    // pass drove it end to end into a rendered imaging report with
+    // `clinicianReviewed: true` and no validator issue. It must be unreachable
+    // rather than merely discouraged.
+    //
+    // *Previous assertion:* `ordinal_not_in_options` — because the compiler had
+    // removed the option, so the overlay simply could not find it. ITEM A
+    // proved that removal orphans every already-compiled twin, so the option is
+    // STORED again and the refusal now comes from the layer written for exactly
+    // this: `clinician-override.ts`'s placeholder check.
+    //
+    // ⚠️ THIS IS THE STRONGER OUTCOME, AND THE REASON IS THE EVIDENCE. A
+    // decline that says `option_is_placeholder` names the real cause; one that
+    // said `ordinal_not_in_options` was true only as a side effect of the
+    // compiler having deleted the row, and would have gone silent the moment
+    // anybody restored it — which is precisely what happened here.
     const field = selects[0];
+    expect(
+      isWordPlaceholderOption(
+        field.allowedOptions.find((o) => o.ordinal === 0)!.displayText,
+      ),
+      'the fixture must still carry the placeholder at ordinal 0, or this arm is vacuous',
+    ).toBe(true);
+
     const out = applyClinicianOverrides({
       ir,
       resolutions: resolutionsWith(ir.fields, null),
@@ -375,7 +403,7 @@ describe('2 · the clinician beats the resolver', () => {
       noteSha256: noteIdentity(NOTE)!,
     });
     expect(out.declined).toEqual([
-      { fieldId: field.fieldId, reason: 'ordinal_not_in_options' },
+      { fieldId: field.fieldId, reason: 'option_is_placeholder' },
     ]);
     expect(out.resolutions.find((r) => r.fieldId === field.fieldId)!.value).toBeNull();
   });
