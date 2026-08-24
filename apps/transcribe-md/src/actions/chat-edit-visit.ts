@@ -40,7 +40,12 @@ import { CHAT_EDIT_SYSTEM } from '@/lib/chat-edit/prompt';
 import { ChatReplySchema, type ChatIntent } from '@/lib/chat-edit/intent';
 
 import { editTableCell, TABLE_EDIT_REASON } from '@/lib/note-table-edit';
+import {
+  formControlsForModel,
+  listVisitFormControls,
+} from '@/lib/template-twin/editable-controls';
 import { saveNoteSectionAction } from './save-note-section';
+import { setTemplateControlAction } from './set-template-control';
 import { updateVisitHeaderAction } from './update-visit-header';
 
 const MODEL = process.env.TRANSCRIBE_MD_CHAT_MODEL || 'claude-opus-4-8';
@@ -116,6 +121,8 @@ export async function chatEditVisitAction(
       status: true,
       soapFinal: true,
       soapVersion: true,
+      noteTemplateId: true,
+      noteTemplateVersion: true,
       user: { select: { practiceId: true } },
     },
   });
@@ -130,6 +137,21 @@ export async function chatEditVisitAction(
     return fail('This note is still processing.');
   }
 
+  // F24-S5 — THE FORM CONTROLS, BUILT ONCE AND USED TWICE.
+  //
+  // This ONE list is what the model is shown and what its `controlOrdinal` is
+  // resolved against, in the same request. Deriving it a second time at
+  // dispatch would let the two orderings drift, and a drifted ordinal is a
+  // wrong-control write that nothing downstream could detect.
+  //
+  // Empty for every visit without a CERTIFIED twin — which is all but one
+  // template in production today — and an empty list prints nothing and offers
+  // the model no intent it could use.
+  const formControls = await listVisitFormControls(
+    visit.noteTemplateId,
+    visit.noteTemplateVersion,
+    visit.user.practiceId,
+  );
 
   // The model sees the note and the suggestions, wrapped as data — it is the
   // doctor's own visit, on the same server-side path as generation.
@@ -146,6 +168,12 @@ export async function chatEditVisitAction(
         note: visit.soapFinal,
         // No `suggestions` array: the verifier is audit-only and there is
         // nothing staged for the model to adopt or list.
+        //
+        // FORM CONTROLS — the dropdowns on the doctor's own form. Inside the
+        // data region like everything else: it is derived from a document the
+        // doctor uploaded, so it is content to be USED and never instructions
+        // to be obeyed. `n` is the only address; no fieldId crosses this line.
+        formControls: formControlsForModel(formControls),
         conversation: history.slice(-12),
       },
       null,
@@ -305,6 +333,52 @@ export async function chatEditVisitAction(
             soapFinal = r.soapFinal;
             soapVersion = r.soapVersion;
           }
+          break;
+        }
+
+        case 'edit_form_control': {
+          if (budget <= 0) {
+            capped += 1;
+            break;
+          }
+          budget -= 1;
+          // ⚠️ RESOLVED AGAINST THE LIST THE MODEL WAS ACTUALLY SHOWN, this
+          // turn, in this request. Never re-derived — see the note where
+          // `formControls` is built.
+          const control = formControls.find((c) => c.ordinal === intent.controlOrdinal);
+          if (!control) {
+            // REFUSED, NEVER CLAMPED. An ordinal that clamps writes into a real
+            // neighbouring control and reports success — the same reason
+            // `rowOrdinal` refuses.
+            actions.push({
+              kind: 'edit_form_control',
+              detail: `#${intent.controlOrdinal}`,
+              ok: false,
+              error: formControls.length
+                ? `There is no form control #${intent.controlOrdinal} on this form (it has ${formControls.length}).`
+                : 'This visit has no editable form controls.',
+            });
+            break;
+          }
+          const set = await setTemplateControlAction(visitId, control.fieldId, intent.value);
+          actions.push({
+            kind: 'edit_form_control',
+            // The control's LABEL comes from the doctor's own template, not
+            // from the patient — the same class as a column heading.
+            detail: control.label,
+            ok: set.ok,
+            // Name the options when the value was the problem, so the next turn
+            // can answer the question this refusal asks.
+            error: set.ok
+              ? undefined
+              : set.options?.length
+                ? `${set.error} (${set.options.join(' | ')})`
+                : set.error,
+          });
+          // A control change alters the DRAWN document without touching
+          // `soapFinal`, so the page needs the same redraw signal a header edit
+          // gets. Without it the doctor is told it changed and sees no change.
+          if (set.ok) headerChanged = true;
           break;
         }
 

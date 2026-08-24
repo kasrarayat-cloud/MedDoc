@@ -650,6 +650,7 @@ model Practice {
   // Template Twin native-DOCX (additive back-relations; no column change).
   templateTwinSources          TemplateTwinSourceArtifact[]
   templateTwinFills            TemplateTwinFillManifest[]
+  templateTwinFieldOverrides   TemplateTwinFieldOverride[]
   /// T8 — invites that admit into this practice.
   inviteCodes                  InviteCode[]
   visitDeliveries              VisitDelivery[]
@@ -828,6 +829,9 @@ model User {
   /// ways — owner, creator, signer — and Prisma cannot disambiguate unnamed ones.
   visitsCreated          TranscribeVisit[]   @relation("VisitCreatedBy")
   visitsSigned           TranscribeVisit[]   @relation("VisitSignedBy")
+  /// F24-S5 — form-control corrections this clinician made. A clinical write is
+  /// attributable or it is not made.
+  templateTwinFieldOverrides TemplateTwinFieldOverride[]
   userSessions           UserSession[]
   // T-M14.1: per-doctor edit tracking (one row per signed visit).
   doctorEditPatterns     DoctorEditPattern[]
@@ -2144,6 +2148,11 @@ model TranscribeVisit {
   frozenFillManifest   TemplateTwinFillManifest? @relation("VisitFrozenFill", fields: [frozenFillManifestId], references: [id], onDelete: SetNull)
   @@index([frozenFillManifestId])
 
+  /// F24-S5. The clinician's own corrections to this visit's enumerated form
+  /// controls. Read as an INPUT on every fill, and part of the manifest's bound
+  /// identity, so a recompute re-applies them rather than reverting them.
+  templateTwinFieldOverrides TemplateTwinFieldOverride[]
+
   // ── T-M4: review flag ──
   /// Layer 5/6 can set this when critical issues can't be auto-fixed,
   /// or Layer 2 can set it when any speaker's confidence < 0.7.
@@ -3201,6 +3210,24 @@ model TemplateTwinFillManifest {
   /// must be treated as UNPROVABLE — declined, not trusted.
   noteSha256            String? @db.Char(64)
 
+  /// ⚠️ F24-S5 — THE OTHER HALF OF THE BOUND IDENTITY: the OVERRIDE SET this
+  /// fill ran against, as `overridesIdentity()` in `note-identity.ts`.
+  ///
+  /// `noteSha256` alone could not see a clinician's form-control correction,
+  /// because an override deliberately never touches `soapFinal`. Every gate
+  /// keyed on the note alone therefore read `match` while the stored artifact
+  /// was already out of date — the pre-sign preview showed the correction and
+  /// the download did not, and signing pinned the pre-override manifest
+  /// forever.
+  ///
+  /// ⚠️ NULLABLE, AND NULL HAS EXACTLY ONE MEANING — unlike `noteSha256`'s.
+  /// A null here can only mean the manifest predates the migration that created
+  /// `template_twin_field_overrides`, and no override row can exist before its
+  /// own table. So null is read as the identity of the EMPTY set — true by
+  /// construction, never inferred, and NEVER backfilled: a backfilled identity
+  /// asserts a correspondence nobody verified.
+  overridesSha256       String? @db.Char(64)
+
   /// Back-relation for the visit's frozen pointer. A manifest may be the frozen
   /// document of at most one visit; the FK lives on the visit.
   frozenForVisits TranscribeVisit[] @relation("VisitFrozenFill")
@@ -3217,6 +3244,91 @@ model TemplateTwinFillManifest {
   @@index([compiledVersionId, status])
   @@index([status, criticalUnresolvedCount])
   @@map("template_twin_fill_manifests")
+}
+
+/// F24-S5 — A CLINICIAN'S CORRECTION TO ONE ENUMERATED FORM CONTROL.
+///
+/// ⚠️ WHY THIS IS A TABLE AND NOT A FIELD ON THE FILL MANIFEST. The manifest was
+/// measured and REFUTED as the home for an override, fatally in BOTH
+/// configurations (recon 2026-08-23, `RELAY.md` F24-S5):
+///
+///   • override written INTO the manifest, `reviewedAt` NULL — the export's
+///     recompute fires on an identity mismatch and SILENTLY REVERTS it;
+///   • override + `reviewedAt` set — `fill-engine.ts` throws MANIFEST_CONFLICT,
+///     native-export catches, and the doctor's own form stops coming back AT
+///     ALL. An accepted-capability loss manufactured by the fix itself.
+///
+/// So the override is not part of the fill's OUTPUT. It is an INPUT the fill
+/// reads on every single run, which makes a recompute re-apply it.
+///
+/// ⚠️ AND THE INPUT ALONE WAS NOT ENOUGH — that was the refuted slice's whole
+/// defect. The two surfaces that decide whether a fill runs AT ALL never reached
+/// the engine. `TemplateTwinFillManifest.overridesSha256` is the other half:
+/// these rows move the bound identity, so a new correction reads STALE and the
+/// recompute actually happens.
+///
+/// ONE LIVE OVERRIDE PER (visit, field) — `@@unique`. A correction replaces a
+/// correction; there is no stack to unwind and no ordering to get wrong.
+///
+/// ⚠️ UNSIGNED ONLY is enforced in the WRITE path, not here. The sign-freeze
+/// governs signed records unchanged: a signed visit serves its frozen document
+/// by pointer, so a row landing afterwards is inert rather than merely refused.
+model TemplateTwinFieldOverride {
+  id String @id @default(cuid())
+
+  practiceId String
+  practice   Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  visitId String
+  visit   TranscribeVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  /// The twin's OWN addressing. Never a label — 18 of this form's 28 content
+  /// controls share a label with at least one other, so a label cannot identify
+  /// a control and never could.
+  fieldId String
+
+  /// The chosen option's ordinal within the compiled field's `allowedOptions`.
+  /// THE ORDINAL IS THE VALUE — the renderer resolves the option by ordinal and
+  /// validation raises DROPDOWN_ORDINAL_MISMATCH on a disagreement.
+  ///
+  /// ⚠️ AN ORDINAL NAMES THE SAME OPTION ACROSS RECOMPILES, BY DESIGN. The
+  /// compiler excludes Word's `Choose an item.` placeholder from
+  /// `allowedOptions` while LEAVING EVERY SURVIVING ORDINAL AT ITS ORIGINAL
+  /// VALUE (so the set starts at 1, not 0). Renumbering would silently
+  /// re-point every stored ordinal at its neighbour — the wrong-cell write this
+  /// arc has already paid for twice — and would also corrupt legacy `w:ddList`
+  /// renders, where the ordinal is written as `w:result val` and indexes the
+  /// DOCUMENT's own untouched list.
+  selectedOptionOrdinal Int
+
+  /// The option's text, verbatim, as it stood when the doctor chose it.
+  /// DENORMALISED FOR AUDIT ONLY — never read back into a fill. If the template
+  /// is recompiled and the ordinal no longer resolves, the override is DROPPED
+  /// fail-closed rather than matched by this text.
+  optionValue String
+
+  /// Who made the correction. A clinical write is attributable or it is not made.
+  overriddenBy String
+  clinician    User   @relation(fields: [overriddenBy], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([visitId, fieldId])
+  @@index([visitId])
+  @@index([practiceId])
+  @@map("template_twin_field_overrides")
+
+  /// ⚠️ DRIFT, DECLARED IN PLACE — Prisma cannot express a CHECK constraint.
+  /// The migration also adds:
+  ///
+  ///   ALTER TABLE template_twin_field_overrides
+  ///     ADD CONSTRAINT template_twin_field_overrides_ordinal_nonnegative
+  ///     CHECK ("selectedOptionOrdinal" >= 0);
+  ///
+  /// A negative ordinal cannot address an option in `allowedOptions`. Do not
+  /// "close" this drift by deleting the constraint — the schema is the weaker
+  /// statement here, and `Int` admits negatives that the database refuses.
 }
 
 // ---------------------------------------------------------------------------

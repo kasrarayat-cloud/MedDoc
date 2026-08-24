@@ -27016,3 +27016,507 @@ mandatory pass, so landing it hastily is the failure this row exists to record.
 
 **F24 stays OPEN. The census is NOT flipped. Nothing is deployed and nothing
 asks to be.**
+
+---
+
+## 🟡 F24-S5 REBUILD — **BUILT AND GATED under ruling #144.** Not yet cited, not deployed
+
+**Run `20260824-073818-b1`, session 01.** Branch
+`feat/f24-s5-rebuild-identity`, built from `677b583f`. Executes the owner
+ruling **#144** (the bound identity widens to note + overrides; the gates are
+never loosened) and carries **provisional ruling #145** for one design decision
+the ruling left to the builder and which a future session could silently undo.
+
+**PR #824 stays a DRAFT and is superseded by this branch.** Its schema, its
+overlay and its addressing layer survive; its premise did not.
+
+### THE ROOT FIX — staleness can finally see an override
+
+`noteIdentity` is `sha256(soapFinal)` and nothing else, and an override changes
+a form control without touching the note. Every gate keyed on the note alone
+therefore answered `match` over an already-stale artifact.
+
+The bound identity is now the PAIR. `noteSha256` is unchanged and no reader of
+it is re-interpreted; a sibling `overridesSha256` binds the overlay state the
+fill ran against; and `overridesIdentity()` is **one derivation in
+`note-identity.ts` used by the writer and every reader** (#135).
+
+⚠️ **THERE ARE FOUR COMPARISON SITES, NOT THREE, AND THE FOURTH IS SQL.** A
+sweep for the FUNCTION finds `native-export.ts:133`, `sign-freeze.ts:81` and
+`sign-freeze.ts:168`. `resolveFrozenPointer` compares in a **Prisma `where`
+clause** (`noteSha256: wanted`) and is invisible to that sweep — it was found by
+grepping the COLUMN instead. Left alone it would have pinned a pre-override
+manifest at signing: the defect re-entering one layer below its own fix.
+
+⚠️ **NULL ON THE SIBLING MEANS THE EMPTY SET, AND THAT IS PROVABLE RATHER THAN
+ASSUMED.** It is NOT the same null as `noteSha256`'s, which means *we do not
+know which note this was* and fails closed. A null `overridesSha256` can only
+mean the manifest predates the migration that CREATES the override table, and
+no row can exist before its own table. So legacy manifests stay servable
+(measured: 2 in production, both on signed visits) and are **never backfilled**,
+per #144(c). ⚠️ **But null is not a free pass** — once a correction exists, the
+empty set disagrees with it and the manifest reads stale. Both directions have
+their own arm.
+
+### ⚠️ THE PLACEHOLDER EXCLUSION IS THREE LAYERS, AND ORDINALS ARE **NOT** RENUMBERED — provisional #145
+
+Ruling #144(d) orders `Choose an item.` excluded at compile time. Executing that
+as a plain `.filter()` — the obvious implementation — is **wrong twice over**,
+and both were established by reading the shipped code rather than by argument:
+
+1. **A stored ordinal would change what it names.** `selectedOptionOrdinal` is
+   persisted on fill manifests AND on override rows, and an override row is
+   keyed by `(visitId, fieldId)` with **no compiled-version reference**, so it
+   outlives a recompile. Shifting the set by one silently re-points every stored
+   ordinal at its NEIGHBOUR — which resolves successfully, so the fail-closed
+   `ordinal_not_in_options` decline never fires. That is the wrong-cell write
+   this arc has already paid for twice.
+2. **It would corrupt legacy `w:ddList` renders.** `renderer.ts:692-701` writes
+   the ordinal into the document as `w:result val`, which Word resolves as an
+   index into the DOCUMENT's own `listEntry` array — an array the compiler never
+   rewrites.
+
+So the placeholder is removed from `allowedOptions` while **every surviving
+ordinal keeps its original value** (the sets start at 1 and are sparse).
+Verified safe: every non-test consumer resolves by `.find(o => o.value === …)`
+or `.find(o => o.ordinal === …)` — value- or ordinal-keyed, never positional.
+
+⚠️ **AND COMPILE-TIME EXCLUSION ALONE WOULD HAVE PROTECTED EVERY TEMPLATE
+EXCEPT THE ONLY REAL ONE.** The single certified twin in production was compiled
+`2026-08-17` and still carries the placeholder at ordinal 0 on all 28 of its
+single-selects. A compiler-only fix is correct about every future upload and
+does nothing for the twin that exists — the wrong-universe failure. Hence three
+layers: the **compiler** (future compiles), the **overlay**
+(`option_is_placeholder`, covering existing IRs at fill time), and the **write
+door** (`set-template-control.ts` never offers it and never matches it).
+
+### 📊 MEASURED FIRST-HAND ON PRODUCTION, AND THE PARTITIONS RECONCILE
+
+Re-derived from the compiled IR rather than carried forward from the pass's
+report:
+
+| quantity | reading |
+|---|---|
+| compiled fields | **80** = 52 `narrative_text` (0 options) + 28 `single_select` ✔ |
+| single-selects carrying `Choose an item.` | **28 of 28**, at ordinal **0** and no other ordinal |
+| ordinal == array position, before the change | **0** mismatches across all 28 |
+| real options left after exclusion | **1..10** per control — **none emptied** |
+| distinct `originalLabel`s among the 28 | **14** |
+| controls in ambiguous label groups | **18** (groups of 8, 6, 2, 2) |
+| controls with a unique label | **10** — `18 + 10 = 28` ✔, `4 + 10 = 14` ✔ |
+| legacy `ffData` choice fields in production | **0** — the legacy arm is UNEXERCISED |
+
+⚠️ **POPULATION FACT WITH ITS RE-ARMING CONDITION:** the legacy `w:ddList` arm
+is unexercised today and re-arms the first time a doctor uploads a `.doc`-era
+template carrying form fields, **with no code change anywhere**.
+
+### ⚠️ THE ASK IS NOW ANSWERABLE — and it was not
+
+The pass found the mandated *"ask which"* unanswerable for 18 of 28: the labels
+are byte-identical and the option sets match in pairs, so *"did you mean #25
+'&lt;sentence&gt;' or #30 '&lt;the identical sentence&gt;'?"* is a question the
+doctor cannot answer. Each ambiguous control now carries an **occurrence index**
+derived from document order (*"2 of 8 with this wording"*), which a doctor can
+follow down their own form, and the prompt tells the model to ask with it.
+
+⚠️ **HONEST LIMIT, UNCHANGED FROM THE PASS'S FINDING: nothing server-side
+ENFORCES the ask.** The question is now answerable; whether the model asks
+rather than guesses is not enforced, and those eight are `criticality: routine`
+so there is no laterality token to fail closed on. Reported as an unenforced
+guarantee, exactly as the pass reported it.
+
+### ✅ `declined` HAS A CONSUMER NOW — the comment used to be false as shipped
+
+The refuted module header promised *"the doctor is told through `declined`
+either way"* while `prepareTemplateTwinFill` dropped it. A declined correction
+now becomes a `CLINICIAN_OVERRIDE_DECLINED` issue on the fill manifest —
+**`warning`, never `blocking`**, because stranding a whole document over one
+control is worse than serving it with the loss named on it. `validation.valid`
+is deliberately not recomputed.
+
+### 🔬 THE GATE HAS TEETH — every mutation the pass used, run again
+
+The previous gate read **16/16 green** under five partial edits, three of them
+`tsc`-clean. Each is now an arm, and each was re-run against mutated shipped
+source with its application asserted before any result was believed:
+
+| mutation | before | now |
+|---|---|---|
+| drop `clinicianOverrides` at the real call site | 16/16 green | **RED** (`gate-f24-s5-fill-wiring`) |
+| make the overlay conditional on `generatedNote` | 16/16 green | **RED** — 3 arms |
+| drop `visitId` from the override `where` | 16/16 green | **RED** — 2 arms |
+| move the `.describe()` echo rule onto `value` | 16/16 green | **RED** — read from `z.toJSONSchema()`, the WIRE form |
+| delete the `upsert` entirely | 16/16 green | **RED** — 3 arms |
+| **revert BOTH freshness gates to note-only** | — | **RED** — 5 arms across 3 files |
+
+⚠️ **AND THE BLINDNESS IS RECORDED AS A MEASUREMENT, NOT A WORRY.** Under the
+mutation that makes the feature 100% dead at the real call site, the overlay
+gate stays **27/27 GREEN** — because it calls `prepareTemplateTwinFill`
+directly, which is precisely the geometry that hid the refuted slice
+(*"all 16 arms call the overlay or the fill directly; the loss happens one layer
+ABOVE"*). `gate-f24-s5-fill-wiring.test.ts` exists to sit at that layer, and it
+is the only thing that reddens.
+
+⚠️ **AND A GUARD CAUGHT ITS OWN AUTHOR.**
+`gate-manifest-matches-the-note.test.ts` named `manifestMatchesNote` and went
+RED the moment the gate was widened — the watched-set arm working. Had the new
+call been ADDED beside the old one rather than replacing it, it would have
+stayed green while the note-only comparison went on deciding freshness.
+
+### 📊 THE CONTROLLED DELTA — measured against `origin/main` in an IDENTICAL worktree
+
+| | `origin/main` | branch |
+|---|---|---|
+| failed files | **16** | **16** |
+| failed tests | **1** | **1** |
+| passed files | 346 | **349** |
+| passed tests | 4792 | **4839** |
+
+**+3 files, +47 tests, ZERO new failures.** `tsc --noEmit` 0 errors.
+
+⚠️ The 16/1 is canon's documented worktree property (`react/jsx-dev-runtime`
+cannot resolve from a worktree) and it is **identical on both sides** — confirmed
+empirically here rather than inherited, because canon records the figure as
+"15 files / 1 test" and the real number in these conditions is 16/1. The one
+failed TEST is `gate-devstates`, which loads a `.tsx` client dynamically; its
+cause was read directly, not assumed.
+
+### 🗄️ THE MIGRATION — proved by APPLYING it, on a throwaway database
+
+`20260824080000_f24s5_clinician_field_overrides` (**106 → 107**). Applied to a
+scratch database cloned from the QA schema, then dropped:
+
+- 1 `CREATE TABLE`, 3 indexes, 3 FKs, 1 CHECK, 1 `ADD COLUMN` — reconciles with
+  the file exactly;
+- the CHECK **refuses** `selectedOptionOrdinal = -1` **by name**, with a
+  positive control (`= 1` accepted) proving the instrument discriminates;
+- the unique index **refuses** a second `(visitId, fieldId)` by name, with a
+  control (two different fields on one visit) proving it is about the PAIR.
+
+Both attempts ran inside `BEGIN … ROLLBACK`, on a database created for this and
+destroyed after (`shadow_still_present = 0`).
+
+⚠️ **DECLARED DRIFT, DOCUMENTED IN PLACE:** the CHECK is inexpressible in Prisma
+and is written beside the model in the `schema.prisma:1700` style. `Int` admits
+negatives the database refuses — the schema is the WEAKER statement, so do not
+"close" the drift by dropping the constraint.
+
+### 📋 THE §2.5 EXPECTED DELTA — written here so whoever deploys does not re-derive it
+
+**MUST CHANGE:** applied migrations **106 → 107**; image ids for **app and
+worker**. **And nothing else** — that negative half is its own assertion and
+needs its own measurement (the seven co-services keep their current image IDs;
+compare IDs, not start times).
+
+**MUST NOT CHANGE:** visit / patient / signature counts; `template_twin_fill_manifests`
+row count (**2**); `template_twin_compiled_versions` (**1**, `CERTIFIED`);
+`template_twin_field_overrides` must be **0** immediately after deploy — the
+table is new and nothing backfills it.
+
+**ABSENCE ROWS** — this change ADDS a capability, but it also REMOVES one
+(the placeholder as a settable value), and a presence-only declaration cannot
+detect over-admission:
+
+- `overridesSha256` must be **NULL on both existing manifests** (never
+  backfilled);
+- every manifest written AFTER the deploy must have it **NON-NULL**.
+
+### 🔎 FINDINGS THIS ITEM DID NOT GO LOOKING FOR
+
+- 🟡 **`zz-tmp-repro3.test.ts` IS TRACKED ON `main` AND RUNS IN CI.**
+  `apps/transcribe-md/src/lib/template-twin/__tests__/zz-tmp-repro3.test.ts`,
+  committed by `a7d48472`. The name says temporary repro; it is neither
+  gitignored nor named as a gate. Not touched by this branch — filed, not fixed,
+  because deleting somebody else's harness is a decision, not a tidy-up.
+- 🟡 **An existing test was filling every dropdown with the placeholder.**
+  `wm-iov-native.test.ts` took `allowedOptions[0].value` with a hardcoded
+  `selectedOptionOrdinal: 0`, which agreed only because the two coincided — and
+  what it was actually rendering into the document was `Choose an item.` It now
+  fails closed on the hardcoded 0, which is the new behaviour working; corrected
+  to read the option's own ordinal.
+- 🟡 **`| tail` can swallow a psql `ERROR` line**, making a constraint refusal
+  read as "no refusal". Caught only because statements 4 and 5 of the
+  transaction produced NO output at all — an impossible value. Re-run
+  untruncated, the refusal was there.
+
+### 🔴 A DEFECT I FOUND BY REFUTING MY OWN UNTESTED CLAIM — the no-op short-circuit
+
+**Found after the branch was pushed, by going after the one sentence I had
+written down as untested** (*"widening the identity makes EVERY surface
+recompute"*). The enumeration was drawn from `manifestMatchesNote` /
+`noteSha256`; re-running it over **`templateTwinFillManifest.` as a table** —
+the by-table discipline, not the by-API one — surfaced two readers the first
+sweep never listed.
+
+| reader | verdict |
+|---|---|
+| `actions/twin-first-fill.ts` | ✅ **benign** — a UI "first fill on this template" banner reading only `noteTemplateId` and `createdAt`. Makes no freshness or serve decision. Recorded because a refuted suspicion is evidence too |
+| `fill-engine.ts:585` — the persist's **no-op short-circuit** | 🔴 **REAL** |
+
+**THE DEFECT.** The persist returns WITHOUT writing when the prepared manifest
+is byte-identical to the stored one — and `overridesSha256` is stamped in
+`writeData`, *below* that return. Any state where the manifest sha matches while
+the override identity does NOT would leave the stamp stale **forever**:
+
+    export -> overrides_changed -> recompute -> short-circuit -> never converges
+
+⚠️ **AND AT SIGN TIME IT IS NOT MERELY CHURN.** The freeze re-fills, re-reads,
+still fails to match, and returns `refill_did_not_match` — so the visit signs
+**STYLED** and that record loses native export permanently. An
+accepted-capability loss, triggered by an ordinary correction.
+
+⚠️ **NO SUCH STATE IS REACHABLE TODAY, AND THAT IS EXACTLY WHY THE GUARD IS
+THERE.** Every override outcome currently perturbs the manifest *by accident of
+design*: an APPLIED one changes the resolution and mints a fact; a DECLINED one
+appends a `CLINICIAN_OVERRIDE_DECLINED` warning to `validation`. So *"override
+set changed ⇒ manifest sha changed"* holds — as an **EMERGENT COUPLING between
+three unrelated code paths**, not as a guarantee. A later tidy-up that stops
+emitting the declined warning breaks it silently, and the failure surfaces as a
+styled signature on a real doctor's record.
+
+**Fixed** by comparing the override identity directly in the short-circuit, and
+pinned by an arm that reads the CONDITION rather than the file (mutation-proved:
+removing the term reddens it). ⚠️ It **converges** for a legacy manifest rather
+than churning — a NULL stamp never equals `overridesIdentity([])`, so the first
+fill rewrites the row once and every later one short-circuits normally.
+Production is unaffected either way: both NULL-stamped manifests are on SIGNED
+visits, which throw `SIGNED_MANIFEST_IMMUTABLE` above this line.
+
+> **This is what the mandatory pass is for, and it is not a substitute for
+> it — it is one lens, run by the author, on the author's own stated blind
+> spot.** The pass still owes this branch the lenses I cannot be.
+
+### 🔴 AND CI FOUND A SECOND ONE — THE COMPILER'S OUTPUT IS AN **INPUT** TO A PINNED FIXTURE
+
+**`e2e` went RED on the first citation attempt (`f340c589`), ten minutes into
+the job**, and it was my defect, caught exactly where it should be:
+
+    [twin-seed] FAILED: the compiler's structure hash moved:
+      compiled b416cbe4…, pin 37813a60…
+      The pin would be IGNORED and certification would try to call a live model.
+
+`tests/e2e/fixtures/twin-certified-pins.json` binds `templateSha256` to
+`compileTemplateDocx(sample-form.docx).structureSha256`. Stripping the
+placeholder from `allowedOptions` **moves that hash**, and
+`seed-certified-twin.ts:152` refuses rather than seeding — correctly, because
+`synthetic-test.ts` only reuses a pinned note when the hashes match, so a moved
+compiler would make the pin be **silently ignored and certification would reach
+for a LIVE MODEL in CI.** The fail-closed refusal worked.
+
+⚠️ **THE COUPLING WAS INVISIBLE TO EVERY UNIT ARM ON THE BRANCH.** The
+compiler's OUTPUT is an INPUT to a pinned fixture, and nothing in the fast suite
+watched that edge — so a two-second fact cost ten minutes of `e2e` and a whole
+citation cycle. `gate-twin-certified-pin-matches-compiler.test.ts` now asserts it
+in `CI`, and names its own remedy in its failure message. **The seed's refusal
+stays** — it is fail-closed at the point the live-model call would happen, which
+is a different job from this one.
+
+**RE-MINTED EXACTLY ONE FIELD, AND THE VALUE WAS RE-DERIVED RATHER THAN
+INHERITED.** CI reported the compiled hash; the new arm computes it locally; the
+two agree **byte-for-byte** — two routes, reconciled. The arm's second leg passes
+unchanged, which is the discriminating control: `sourceDocxSha256` is untouched,
+so the hash moved because of the **COMPILER**, not because the fixture was
+swapped.
+
+`note`, `entities`, `contextText` and `encounterSha256` bind to the **ENCOUNTER**
+rather than to the template structure and are deliberately NOT re-minted.
+Checked before deciding that, with a control: the pinned note **never** mentions
+`Choose an item` while it **does** mention `Bilateral` — so the matcher works and
+removing the placeholder cannot cost the pinned fill a single pick. Ordinals were
+preserved, so every real option keeps its number.
+
+⚠️ **HONEST LIMIT:** re-minting one field of a fixture originally minted on QA is
+narrower than re-running `scripts/prod-smoke/twin-ga-proof.ts`, deliberately —
+but it is the `e2e` pack, not this reasoning, that adjudicates it.
+
+### ✅ THE EXPORT LOOP CLOSES — read in the shipped composition, not assumed
+
+`loadOrComputeNativeTemplateDocxForVisit` composes correctly with the widened
+gate, and it is worth writing down because the widening only works if it does:
+
+1. `loadNativeTemplateDocxForVisit` declines — `overrides_changed`, logged;
+2. the compute path's gate holds — UNSIGNED (an override can only exist on an
+   unsigned visit, refused at the write door) and CERTIFIED;
+3. `processTemplateTwinVisit` re-fills, reading the overrides and stamping
+   `overridesSha256`;
+4. it calls `loadNativeTemplateDocxForVisit` **again**, the pair now matches, and
+   **the corrected document is served.**
+
+⚠️ **BUT IT CHANGES AN ASSUMPTION THE DESIGN NOTE MAKES, AND THE NOTE HAS NOT
+BEEN UPDATED.** That function documents the on-demand compute as *"a resilience
+fallback, not the hot path"*, firing *"only when the manifest never
+materialised (e.g. the template was certified after generation)"*. With
+corrections in the world it becomes a **REGULAR** path: **every correction makes
+the next download pay a full fill on the GET request thread.**
+
+The compute is still DETERMINISTIC (resolver + bridge + render, **no AI**),
+idempotent, gated and fail-safe — so the bound the note relies on holds. What
+has changed is the FREQUENCY, from *rare* to *once per correction*. Filed here
+rather than silently: a sentence describing an intended frequency in the present
+tense is the `DEPLOYMENT_RUNBOOK §5.6` shape, and this one is now describing the
+old world.
+
+**Not fixed in this slice** — the alternative is having the write path enqueue
+the re-fill, which is a scheduling change well outside a ruled identity fix, and
+it wants its own decision.
+
+### ⚠️ THE BLAST RADIUS IS UNFLAGGED, AND THAT IS WORTH SAYING BEFORE A DEPLOY
+
+Read from the RUNNING container, not from `.env`: `NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX=true`,
+`NEXT_PUBLIC_SETTINGS_SIMPLE_ROW=true`, `TRANSCRIBE_MD_EVIDENCE_ANCHORS=true`,
+`NEXT_PUBLIC_ULTRASOUND_SPECIALTY=true`.
+
+**None of this slice sits behind a flag.** The identity widening, the compiler
+exclusion and the write path all ship unconditionally, so there is **no flag
+rollback** — the rollback is the image plus the migration.
+
+The widest surface is the **compiler**: it runs on *every* `.docx` template
+upload (`docx-to-text.ts:39` imports the twin ingest), so every template compiled
+after this deploy has placeholder-free option sets. **Existing compiled versions
+are untouched** — which is precisely why the overlay and write-door layers exist,
+and why compile-time exclusion alone would have missed the only certified twin
+in production.
+
+### ⚠️ HONEST LIMITS
+
+- **NOT CITED, NOT DEPLOYED, AND THE ADVERSARIAL PASS HAS NOT RUN.** This is a
+  clinical note-editing path, so the pass is MANDATORY before merge. Nothing
+  here asks to be deployed.
+- **No end-to-end walk.** Everything is proved at unit level against the real
+  compiled form and mocked persistence. The acceptance's **80/80 census by
+  replay** and a **dropdown edit landing in the EXPORTED document** have NOT
+  been performed — they need the QA stack, and QA's images must be checked
+  before anything behavioural there is believed.
+- **The `supported`-laterality acceptance case is exercised against the real
+  compiled IR, not against a production fill.** The arm overrides a resolution
+  the fixture set to `supported`; it does not prove production's 11 laterality
+  controls resolve `supported` today. That figure is inherited from the pass and
+  is **not re-measured here**.
+- ⚠️ **THE UNTESTED CLAIM, WRITTEN BEFORE THE PASS:** *"widening the identity
+  makes EVERY surface that can serve or freeze a document recompute."* I
+  enumerated four comparison sites by grepping `noteSha256` /
+  `manifestMatchesNote`. A surface deciding freshness by some OTHER predicate —
+  an `updatedAt` compare, a cache keyed elsewhere, a route short-circuiting
+  earlier — would be invisible to that grep. **The refuted slice died of exactly
+  that shape one layer up, and my enumeration is drawn from the same token
+  list.** Aim the pass here first.
+
+
+## ✅ F24-S5 REBUILD — THE INDEPENDENT ADVERSARIAL PASS HAS RUN. One defect, fixed in branch
+
+**Run `20260824-073818-b1`, session 02 — a fresh process that did NOT author the
+diff, which is the property canon asks for.** Session 01 could not run the pass
+(subagents were disallowed) and correctly left it owed.
+
+**Verdict: ONE confirmed defect, fixed and mutation-proved. No clinical-write
+defect. Five hypotheses refuted and recorded.**
+
+### 🔴 THE DEFECT — the door reported success for a correction that could never land
+
+`applyClinicianOverrides` declines on **five** reasons. The write door
+(`set-template-control.ts`) mirrored **three** — `field_not_in_template`,
+`field_has_no_options`, `option_is_placeholder` — and `ordinal_not_in_options` is
+a genuine recompile race only the fill can judge. That left **`no_approved_concept`
+as the one STATIC reason the door never checked**, and an unchecked static decline
+is not a race: it fails identically forever.
+
+The sequence, before the fix:
+
+    door: stores the override, returns ok:true
+    chat: "LOCATION set to ..." + headerChanged -> the page redraws
+    fill: applyClinicianOverrides -> decline(no_approved_concept)
+    document: UNCHANGED, on this run and on every future one
+
+**The doctor is told their correction landed and it provably cannot.**
+
+⚠️ **REACHABLE ON THE ONLY CERTIFIED TWIN IN PRODUCTION.** Measured read-only
+2026-08-24 (counts only; no note text left the database), and the partition
+reconciles against canon's own 80:
+
+| mapping | count |
+|---|---|
+| `extraction` · CERTIFIED · concept present | 52 |
+| `verified_note_selection` · CERTIFIED · concept present | 23 |
+| `manual` · CERTIFIED · **concept NULL** | **4** |
+| `manual` · CERTIFIED · concept present | 1 |
+| | **80** |
+
+All four NULL-concept fields are `single_select` / `content_control` carrying
+5-8 options — **Address · REFERRING PHYSICIAN · ULTRASOUND TECHNOLOGIST ·
+LOCATION** — so all four sit inside the 28 controls this surface offers and
+lists to the model. **4 of 28 addressable controls.** The single-select rows sum
+to exactly 28 and 28 + 52 narrative_text = 80, so the census reconciles by a
+route that did not compute it.
+
+⚠️ **AND THE CAUSE IS NOT A CERTIFICATION DEFECT — WHICH IS WHY NOBODY LOOKED.**
+`mappings-readiness.ts:unreadyReason` certifies a `manual` field with a null
+concept **deliberately**: *"nothing dictates who the technologist on shift was,
+so there is no fact to cite."* So **CERTIFIED does not imply "every field carries
+a concept"**, and every surface that treated `certificationStatus === CERTIFIED`
+as sufficient was assuming a property certification never promised.
+
+### THE FIX — the door admission set mirrors the fill, in the tighten-only direction
+
+`set-template-control.ts` reads the field definition mapping for **this**
+compiled version and **this** field, and refuses when there is no approved
+concept, naming the control. Nothing is stored and nothing is claimed.
+
+⚠️ **REFUSED, NOT ADMITTED, AND THE DIRECTION IS THE POINT.** Letting a
+concept-less override through would mint a fact the validator has nothing to
+check a citation against — a **LOOSENING** of a clinical validation path, which
+fails the provisional-ruling test outright. The restriction is reversible; the
+admission would not have been.
+
+**Proofs — `gate-f24-s5-write-path.test.ts`, 11 arms to 14:**
+
+| direction | result |
+|---|---|
+| complete inverse (delete the refusal) | **2 arms RED**, the keying arm and all 11 pre-existing arms green — discrimination, not blanket failure |
+| ⚠️ **PARTIAL** — `if (definition && !...)`, the half-landed edit the code invites | **1 arm RED**, exactly the one written for it (`absent is not permission`) |
+| restored from a scratch backup, never from git | 14 / 14 green |
+
+`tsc --noEmit` 0 errors. `src/actions` + `src/lib/{template-twin,chat-edit,note-template-docx}`: **64 files / 663 tests green.**
+
+### 🔵 FIVE HYPOTHESES REFUTED — recorded because a refuted suspicion is evidence
+
+Canon: *a refuted hypothesis, recorded with its measurement, converts a question
+somebody will re-ask into a question somebody can look up.*
+
+| # | the suspicion | what refuted it |
+|---|---|---|
+| 1 | the sparse ordinals left by the placeholder filter break a positional consumer | **0** positional reads of `allowedOptions` outside tests, against a control of **19** total occurrences — every consumer is find-by-value or find-by-ordinal |
+| 2 | the manifest `overridesSha256` is stamped from a re-read, so a correction landing mid-fill stamps an identity the document does not carry | `fill-engine.ts:496` reads ONCE and RETURNS the list; the stamp uses that same list. Explicitly designed against |
+| 3 | an override row landing after signing breaks `resolveFrozenPointer` and costs native export permanently | `set-template-control.ts` is the **only** writer (by-table sweep: 0 raw SQL, 1 ORM upsert) and refuses SIGNED at the door. No deletes anywhere |
+| 4 | the model addresses controls by `n` while the dispatcher resolves by `.ordinal` — a renumbering would be a wrong-control write | `formControlsForModel` carries `n: c.ordinal` verbatim; the list is built once and used twice in one request |
+| 5 | **session 01 own pre-aim** — *"a surface deciding freshness by some OTHER predicate, a cache keyed elsewhere"* | the preview cache IS keyed on `soapVersion`, which an override never bumps — but the door invalidates explicitly, **after** the write and before the audit. Ordering correct |
+
+### 📋 FILED, NOT FIXED — one product question and one polish item
+
+- ⚠️ **PRODUCT QUESTION (owner class a): should a `manual` field be settable at
+  all?** A manual field exists precisely because only a human can supply it —
+  which is exactly what a clinician override is. So requiring a concept there is
+  arguably the real defect, and the honest fix might be to let a manual field
+  override apply while minting a fact that carries no concept. **That is a
+  LOOSENING of a clinical validation path and not a call this layer may make.**
+  Today those four controls refuse with a reason instead of lying; that is
+  strictly better than the prior behaviour either way.
+- 🟡 **The list still OFFERS all four.** `listEditableFormControls` filters on
+  `bindingType` and `allowedOptions.length` only, so the model is shown four
+  controls it will always be refused on. Deliberately **not** fixed here: the
+  filter needs mappings threaded into a function whose design note says it takes
+  only the IR, and removing entries **shifts every later control ordinal** — a
+  change with real wrong-control risk, made at the end of a pass, to close a
+  cosmetic gap. The refusal is truthful and immediate, which closes the defect;
+  this is polish.
+
+### ⚠️ WHAT THIS PASS DOES NOT CLAIM
+
+- **It did not run the QA end-to-end walk.** The acceptance 80/80 census by
+  replay and a dropdown edit landing in the EXPORTED document are still owed,
+  and QA IMAGES must be checked before anything behavioural there is believed —
+  a green `--qa` migrations check covers the database and not the build.
+- **The four labels were read from the template, not from any note.** The
+  production measurement was counts and template-derived labels only.
+- **The `no_approved_concept` decline was established by reading the shipped
+  predicate and measuring the population — not by driving a production fill.**
+  A real doctor visit is never a smoke target.

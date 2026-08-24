@@ -93,11 +93,23 @@ describe('the serve gate', () => {
 });
 
 describe('the serve path and the write path use ONE derivation', () => {
-  it('⚠️ native-export declines via manifestMatchesNote, not a local comparison', () => {
+  it('⚠️ native-export declines via the shared derivation, not a local comparison', () => {
     const src = readFileSync(join(__dirname, '..', 'native-export.ts'), 'utf8');
     const code = src.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
-    expect(code).toMatch(/manifestMatchesNote\(/);
+    // ⚠️ WIDENED FOR F24-S5, IN THE SAME COMMIT THAT MOVED THE CARRIER. This arm
+    // named `manifestMatchesNote` and went RED when the gate was widened to
+    // `manifestMatchesDocument` — which is the arm doing its job, not a defect.
+    // Had the new call been ADDED beside the old one instead of replacing it,
+    // this would have stayed green while the note-only comparison went on
+    // deciding freshness: a guard's watched set does not grow on its own.
+    expect(code).toMatch(/manifestMatchesDocument\(/);
     expect(code).toMatch(/freshness\.ok/);
+    // The note-only predicate is now too narrow for this gate: it cannot see a
+    // form-control correction, because an override never touches `soapFinal`.
+    expect(code).not.toMatch(/manifestMatchesNote\(/);
+    // And the override half must actually be READ, or the widened call is fed a
+    // constant and answers `match` forever.
+    expect(code).toMatch(/templateTwinFieldOverride\.findMany/);
   });
 
   it('⚠️ fill-engine stamps via noteIdentity — the same function', () => {
