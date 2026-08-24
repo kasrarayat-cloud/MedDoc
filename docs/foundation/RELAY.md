@@ -27520,3 +27520,319 @@ somebody will re-ask into a question somebody can look up.*
 - **The `no_approved_concept` decline was established by reading the shipped
   predicate and measuring the population — not by driving a production fill.**
   A real doctor visit is never a smoke target.
+
+## 🟢 F26 — A SUPERSEDED CANCELLATION IS NOT A FAILURE · the citation instrument disagreed with itself
+
+**Run `20260824-073818-b1`, session 03, 2026-08-24.** Ruling **#146 (PROVISIONAL)**.
+Branch `fix/f26-gh-runs-supersession`. **Not a queue item — found while taking
+this session's own citation, on this session's own queue head.**
+
+### HOW IT WAS FOUND — two instruments disagreeing, which is this file's own diagnostic
+
+`bash scripts/gh-runs.sh wait` on PR #828's head returned **🔴 TERMINAL — this
+sha can NEVER reach a full citation**, naming `a11y-ci: cancelled`.
+`check-citation.sh` on the **same sha, seconds later**, returned **🟡 STILL
+RUNNING — WAIT**, and said in as many words that the cancelled run *"is
+superseded by a success of the same workflow on this commit."*
+
+> **Two sibling scripts, one question, opposite verdicts. The disagreement was
+> the only signal**, exactly as *"two zeroes with opposite meanings is ONE
+> broken instrument"* promises — here in its two-instruments form rather than
+> its two-results form.
+
+### ⚠️ IT WAS NOT A WAITER ANNOYANCE — IT REACHED THE DEPLOY GATE
+
+Ruling **#134** put `gh-runs.sh` on the deploy path.
+`lib/citation-gate.sh:44` maps `3 -> REFUSE`. So:
+
+| the state | what the deploy did |
+|---|---|
+| a required workflow cancelled and **re-run to success** | **REFUSED, permanently** — "the sha can never reach a full citation" |
+| the only escape | `--declare-citation-override`, i.e. **certifying past a gate on a false premise** |
+
+**That override is the sanctioned-hatch-becomes-the-undisciplined-door failure
+canon names explicitly.** A waiter that tells you to destroy the evidence it is
+waiting for is worse than no waiter.
+
+### THE TRIGGER IS THE LOOP'S OWN DOCUMENTED HABIT, NOT AN EXOTIC STATE
+
+`gh pr ready` emits `ready_for_review`; `a11y.yml` is its **only** subscriber;
+`cancel-in-progress` kills the push-triggered run and a fresh one succeeds.
+**Every PR opened as a DRAFT and then converted lands in this shape** — which is
+what session 02 did to PR #828, correctly, and recorded in its own report as a
+declared cost. The habit canon *prescribes* is what armed the defect.
+
+### ⚠️ POPULATION FACT, WITH ITS RE-ARMING CONDITION IN THE SAME SENTENCE
+
+| the question | the answer |
+|---|---|
+| commits on `main` carrying a superseded cancellation **today** | **0** |
+| the same query on the PR branch (positive control) | **3** — so the zero is ABSENCE, not blindness |
+
+**RE-ARMS WITH: one cancelled-and-re-run required workflow on a commit somebody
+deploys. No code change anywhere.** The defect was real and unexercised on the
+deploy path — both halves are load-bearing, and reporting only the zero would
+say it was never a problem.
+
+### WHAT SHIPS
+
+- **`scripts/lib/citation-state.sh`** — the verdict, extracted. Two copies of one
+  question drifted; `lib/inflight.sh` exists for exactly this reason on the
+  *other* pair. Extraction is also what makes the verdict drivable by a gate
+  **without an API**, which is why it had never been tested.
+- supersession keyed on the **WORKFLOW**, never on *"was anything re-run"*.
+- ⚠️ **the CITED test is per workflow too, and this is the half that would have
+  been missed.** `ok -eq total` counts RUNS, so a superseded row keeps the
+  totals apart forever and the verdict falls through to `2` = CANNOT TELL —
+  **which #134 also refuses.** Fixing the failure count alone leaves the deploy
+  blocked one state over, and that is the half-landed version a tired session
+  lands, because the failure count is where the symptom is visible.
+- **PENDING is still tested before CITED** — a workflow carrying an earlier green
+  does not answer for an attempt still in flight.
+
+**THE GATE DOES NOT WEAKEN.** A workflow that concluded non-success and was never
+re-run is still TERMINAL, and the terminal message now names only the runs that
+genuinely have no green. ⚠️ **And GitHub's own branch protection supersedes
+identically** — measured on the same sha, where a cancelled `axe-core sweep`
+check-run sits beside a successful one and does not block. **`gh-runs.sh` was
+the only actor in the system that did not.**
+
+### THE PROOF — four exit states on REAL shas, not fixtures
+
+| sha | shape | verdict |
+|---|---|---|
+| `04077428…` | 4 of 4, no supersession | **0** CITED |
+| `f76242c4…` | `a11y-ci` cancelled **+ re-run green** | **1** PENDING — *was 3* |
+| `82158f90…` | `CI` + `e2e` cancelled, neither re-run | **3** TERMINAL — unchanged |
+| `0000…0000` | fabricated 40-hex sha | **2** CANNOT TELL — unchanged |
+
+**Seven mutations, each asserted APPLIED before its run was believed, each
+restored from a scratch backup and never from git, all re-measured against the
+FINAL 23-arm gate rather than carried forward from an earlier draft:**
+
+| mutation | shape | result |
+|---|---|---|
+| complete inverse — the pre-fix failure predicate | total | **4 red / 19 green** |
+| PARTIAL: failure count fixed, CITED still per-run | half-landed | **3 red / 20 green** |
+| PARTIAL: lib sourced, inlined copy left in place | half-landed wiring | **1 red / 22 green** |
+| order swap — CITED tested before PENDING | ordering | **1 red / 22 green** |
+| over-broad — any green supersedes anything | loosening | **8 red / 15 green** |
+| the offending-runs LIST drops its filter | message only | **2 red / 21 green** |
+| **reds made supersedable** | **loosening** | **3 red / 20 green** |
+
+### ⚠️ THIS FIX WAS WRONG BEFORE IT WAS RIGHT — TWICE, BOTH CAUGHT HERE
+
+**1 · IT SUPERSEDED A RED, WHICH MADE IT MORE PERMISSIVE THAN THE AUTHORITY.**
+The first draft superseded **every** non-success conclusion. `check-citation.sh`
+does not: `:272-274` buckets `cancelled` and `startup_failure` separately from
+everything else, and **`:320` fails on a red UNCONDITIONALLY** — no supersession
+check on that branch at all. The line is deliberate and the reasoning is
+canon's own:
+
+| conclusion | meaning | superseded by a green re-run? |
+|---|---|---|
+| `cancelled` · `startup_failure` | evidence **DESTROYED or never produced** | ✅ yes — the re-run supplies what was missing |
+| `failure` · `timed_out` | evidence **PRODUCED, AND IT SAID NO** | ❌ never — a later green is **re-run-and-hope** |
+
+**So the fix for a divergence had introduced the same divergence, inverted** —
+and in the LOOSENING direction, which is the one a provisional ruling may not be
+wrong in. Found by refuting the change against the file it claims to align with
+rather than against my memory of having read it. Ruling #146 now states the
+two-conclusion rule explicitly, and `MUTATION 7` reddens 3 arms on it.
+
+**2 · AND AN ASSERTION IN THIS GATE WAS VACUOUS.** The harness captured
+**stdout only**, while the TERMINAL banner and the `Offending runs:` list are
+written to **stderr**. So the arm asserting
+`not.toMatch(/a11y-ci: cancelled/)` was a **negative assertion over an empty
+haystack** — it could not have failed. Fixed with `exec 2>&1` in the harness.
+
+> ⚠️ **IT WAS CAUGHT BY A *POSITIVE* ARM FAILING** (`toMatch(/CI: failure/)`),
+> which is the only direction that could have found it. **A negative assertion
+> never reports its own emptiness** — this file's most-repeated defect, wearing
+> a test's clothes, inside the gate written to enforce it.
+
+### ⚠️ AND THE ORDER-SWAP MUTATION CAUGHT A THIRD FALSE GREEN
+
+The arm written to pin the PENDING/CITED ordering **could not have come out
+otherwise**: with `e2e` running and never green, the workflow counts differ
+whichever order the two lines are in, so swapping them left **all 19 arms
+green**. The discriminating shape is a workflow that **already has a green with
+a SECOND run of itself still in flight**. Added as its own arm; the mutation now
+reddens exactly it.
+
+*An author's proof cannot surprise its owner — but a mutation aimed at a line he
+believed was load-bearing can.*
+
+⚠️ **The lib-sourced-but-copy-left mutation is the coverage lesson:** all 22 lib
+arms stay green under it, because the lib is perfect and production is
+unchanged. **Only the wiring arm sees a capability with no caller.**
+
+- **23 arms** in `gate-f26-citation-supersession.test.ts`
+- **348 green** across the `gate-*` sweep that includes it plus
+  `gate-f22-deploy-citation-gate` and `gate-f14b-merge-push-doors` — the two
+  siblings that consume these exit codes
+- `tsc --noEmit` **0 errors**
+
+### ⚠️ AND THE FIX PROVED ITSELF ON ITS OWN LANDING
+
+Canon: *apply a new entry to its own landing.* `gh-runs.sh wait` had declared PR
+#828's head **TERMINAL** at `09:14Z`. The fixed script, run on the same sha at
+`09:44Z`, waited correctly through `e2e` and returned **`0`** —
+`4 of 5 success (4 of 4 workflows green; 1 superseded by a re-run of the same
+workflow)`. **That is how F24-S5's citation was taken at all.**
+
+### HONEST LIMITS
+
+- The gate proves the **VERDICT** and the **WIRING**. It does not re-prove the
+  transport, the short-sha refusal or the fabricated-sha refusal — those are
+  `gh-runs.sh`'s own product and are asserted where they live.
+- The wiring arms read `gh-runs.sh` as **TEXT** and are defeated by a rename,
+  which is why `bash -n` parse arms sit beside them.
+- It watches **ONE side of the pair**. An arm asserts `check-citation.sh` still
+  carries its own supersession rule, so a "simplification" there diverges
+  loudly rather than silently.
+- ⚠️ **No adversarial pass was run.** This is deploy tooling, not the clinical
+  generation or note-editing path, so the mandatory pass is not owed — stated
+  rather than implied. The order-swap catch above was a self-refutation, which
+  canon is explicit has a ceiling.
+
+## ✅ F24-S5 REBUILD — **MERGED AND CITED 2026-08-24.** `54c82bff`
+
+**Run `20260824-073818-b1`. Built by session 01, adversarially passed and fixed
+by session 02, landed and cited by session 03.** Executes owner ruling **#144**;
+carries loop ruling **#145 (PROVISIONAL)**. PR **#828** (head `f76242c4…`,
+itself 4 of 4). Branch retired both sides.
+
+*Previous status, kept because the arc is the point:* 🟡 *BUILT AND GATED. NOT
+MERGED: the independent adversarial pass is OWED.* — session 01, which could not
+spawn subagents. The pass ran in session 02, **found one confirmed clinical
+defect and refuted five hypotheses**, and the fix is in the merged head.
+
+**Citation — 4 of 4 on `54c82bff497b4d36b760fc8c6059887c4838788c`**, produced by
+`scripts/check-citation.sh`, never typed:
+
+   · `CI` 32713378553 a1
+   · `e2e` 32713378521 a1
+   · `a11y-ci` 32713378589 a1
+   · `secrets-scan` 32713378519 a1
+
+Every line `a1` — no re-run, so nothing to explain.
+
+### ⚠️ NOT DEPLOYED, AND THE DEPLOY IS SUPERVISED — the row says so in advance
+
+This carries a **migration** (`20260824080000_f24s5_clinician_field_overrides`,
+**106 → 107**) and changes a **note-editing surface**. Ruling #144 reserves the
+deploy: *"the deploy (migration, 106 → 107) is supervised."* `main` now carries
+it; **nothing in production does.** The same posture F24-S4 and
+F24-caption-validation are already in.
+
+### WHAT THE SLICE FIXED — the premise was true of the ENGINE and false of both GATES
+
+`noteIdentity` was `sha256(soapFinal)` and nothing else, so a form-control
+override — which never touches the note — was **invisible to both gates that
+decide whether a fill runs** (`native-export.ts:133`, `sign-freeze.ts:81`). The
+pre-sign preview showed the correction and the download did not.
+
+The bound identity is now the **pair**. `noteSha256` is unchanged and no reader
+re-interpreted it; one derivation, all callers (#135). **The gates are not
+loosened — they are given something to see.**
+
+⚠️ **There were FOUR comparison sites, not three.** The fourth is a Prisma
+`where` clause — invisible to a sweep for the function, found by grepping the
+COLUMN. *By table, not by API*, arriving at a read path instead of a write one.
+
+### ⚠️ THE ADVERSARIAL PASS FOUND A DOOR THAT SAID YES TO A CORRECTION THAT COULD NEVER LAND
+
+`applyClinicianOverrides` declines on five reasons; the write door mirrored
+three. `ordinal_not_in_options` is a genuine recompile race only the fill can
+judge. That left **`no_approved_concept`** as the one **static** reason the door
+never checked — and a static decline is not a race: **it fails identically,
+forever.** So the door stored the override, returned `ok:true`, the chat
+reported the correction applied and redrew the page, and **every subsequent fill
+declined it. The document never changed.**
+
+Reachable on the only certified twin in production. ⚠️ **The table below is
+SESSION 02's measurement, restated with attribution rather than re-measured** —
+counts and template-derived labels only, no note text left the database. Session
+03 did not re-run it; *a count carried forward is inherited evidence, and saying
+whose it is is the whole discipline.*
+
+| mapping | count |
+|---|---|
+| extraction · CERTIFIED · concept present | 52 |
+| verified_note_selection · CERTIFIED · concept present | 23 |
+| **manual · CERTIFIED · concept NULL** | **4** |
+| manual · CERTIFIED · concept present | 1 |
+| | **80** |
+
+All four are `single_select` / `content_control` — **Address · REFERRING
+PHYSICIAN · ULTRASOUND TECHNOLOGIST · LOCATION** — so all four sit inside the 28
+this surface offers. **4 of 28.** The partition reconciles by a route that did
+not compute it: the single-selects sum to 28, and `28 + 52 narrative_text = 80`.
+
+⚠️ **The cause is NOT a certification defect, which is why nobody looked.**
+`mappings-readiness.ts` certifies a `manual` field with a null concept
+**deliberately** — *"nothing dictates who the technologist on shift was."*
+**CERTIFIED never promised every field carries a concept**, and this door assumed
+it did. The fix is **tighten-only**: refuse, name the control, store nothing.
+
+### ⚠️ THE ACCEPTANCE IS **NOT** MET, AND THIS ROW DOES NOT CLAIM IT IS
+
+Ruling #144's acceptance requires a walk that **exercises a `supported`
+LATERALITY control** (11 of 13) and **survives EXPORT-AFTER-OVERRIDE and
+SIGN-AFTER-OVERRIDE**, with the census reading 80/80 by replay including a
+dropdown edit landing in the **exported** document.
+
+**None of that has been performed.** What exists is unit-level: every gate arm
+calls the engine directly with the state already in hand.
+
+> ⚠️ **THAT IS CANON'S WRONG-UNIVERSE SHAPE POINTED AT A LAYER: the fixture
+> supplies, for free, precisely the thing production must produce for itself.**
+> F24-S4 shipped with exactly this gap and the pass found it one layer up.
+
+**THE BLOCKER WAS THE QA IMAGES, NOT THE QA DATABASE — AND IT IS NOW CLEARED.**
+`assert-migrations-applied --qa` read **106 of 106 🟢** and was correct; it says
+nothing about the images, and the two drift independently.
+
+**As found (session 02's finding, re-measured here rather than inherited):**
+
+| image | built |
+|---|---|
+| `meddoc-pro-db-migrate:qa` | 2026-08-21 |
+| `meddoc-pro-transcribe-md:qa` | **2026-08-18** |
+| `meddoc-pro-transcribe-md-worker:qa` | **2026-08-18** |
+
+Positive-controlled inside the running worker: the twin directory listed **33
+files** (traversal works) with `fill-engine.ts` present (known-present control),
+while `clinician-override.ts`, `editable-controls.ts`, `note-identity.ts` and
+`sign-freeze.ts` were **absent**. ⚠️ **The last two had been on `main` since
+BEFORE this slice** — so the staleness was wider than F24-S5 and predated it.
+
+**CLEARED BY SESSION 03, from the shared tree at `54c82bff`:**
+
+| step | result |
+|---|---|
+| rebuild app + worker + db-migrate `:qa` | all three **2026-08-24 09:53–09:54Z** |
+| recreate app + worker on the new images | started clean |
+| twin directory in the running worker | **41 files**; all four previously-absent files **present**, `fill-engine.ts` still present as the control |
+| `assert-migrations-applied --qa` | was **106 of 106** on a repo of 107 → applied `20260824080000_f24s5_clinician_field_overrides` → **107 of 107 🟢** |
+| `check-qa-mock-posture` **after** the recreate | 🟢 vendor-severed, flag manifest matches, in the live containers |
+
+⚠️ **THE POSTURE RE-CHECK IS NOT CEREMONY.** A recreate re-reads the shared
+`.env`, and `docker-compose.qa.yml`'s `${VAR:-default}` inheritance is the exact
+mechanism that once put **298 real Anthropic calls** through the stack whose
+header promised it could reach nothing. Re-running it *after* the recreate is
+what makes the green mean anything.
+
+**WHAT REMAINS: the walk itself.** Seed a certified twin, drive a **`supported`
+laterality** control (11 of 13), and take it through EXPORT-AFTER-OVERRIDE and
+SIGN-AFTER-OVERRIDE with the census read by replay. **Session 03 did NOT perform
+it** — it cleared the blocker and ran out of session. Until somebody walks it the
+acceptance is **UNVERIFIED, named honestly**, per the standing rule that an
+unverified step named is worth more than a green tick bought with a patient's
+record.
+
+### F24 STAYS OPEN
+
+The census ratchet is **not** flipped. F24-S5 closes the *editing* seam; the
+acceptance that would close the *item* is the walk above.
