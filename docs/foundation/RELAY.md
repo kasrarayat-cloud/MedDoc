@@ -28152,3 +28152,118 @@ own refutation:
 arm lands. Then §2.5 (106 → 107, the new table, the nullable manifest column,
 both image ids, negative half by id-comparison), judge, the census flip stands,
 F24 closes.
+### ✅ F27 — **MERGED 2026-08-24.** `be9bce63` · and the QA stack now CARRIES the flags
+
+**Landed by session 05 of run `20260824-073818-b1`.** PR **#831** (head
+`7638a657`, itself **4 of 4**). Branch retired both sides.
+
+**Citation — 4 of 4 on `be9bce63be564e74c9b3f95c05a8fa02c5f880fa`**, produced by
+`scripts/check-citation.sh`, never typed:
+
+   · `CI` 32735738722 a1
+   · `e2e` 32735738698 a1
+   · `a11y-ci` 32735738727 a1
+   · `secrets-scan` 32735738689 a1
+
+Every line `a1` — no re-run, so nothing to explain. The partition reconciles
+exactly: `4 = green 4 + red 0 + pending 0 + stale 0 + cancelled 0 +
+startup-fail 0 + foreign 0 + extra 0 + unreadable 0`, with no dependabot
+`extra` rows on this commit.
+
+### ⚠️ AND THE ROW ABOVE SAID THIS WAS STILL OPEN — IT NO LONGER IS
+
+The F27 row states, in its *"WHAT THIS ROW DOES NOT CLAIM"* section:
+
+> *"The QA stack has NOT been recreated on the fixed compose. Until it is, the
+> running QA worker still carries 0 of 11 and the gate's green speaks only about
+> the FILE."*
+
+**That was true when written and is now false.** Recreated
+`2026-08-24T13:58:53Z` (read from `docker inspect .State.StartedAt`, not from
+memory) from the SHARED tree at `be9bce63` — never from a worktree —
+after fast-forwarding it clean. *Closing the row in the same pass that closes
+the item*, which is the lesson this ledger has paid for three times.
+
+**Declared BEFORE the act, judged after — 5 of 5:**
+
+| | declared | measured |
+|---|---|---|
+| QA worker `NEXT_PUBLIC_*` | 0 → **11** | **0 → 11** ✅ |
+| QA worker total env vars | 29 → **40** | **29 → 40** ✅ (29 + 11 reconciles) |
+| `check-qa-mock-posture` **after** the recreate | stays 🟢 | 🟢 vendor-severed, both containers ✅ |
+| `assert-migrations-applied --qa` | stays 🟢 107/107 | 🟢 107 of 107 ✅ |
+| **production containers — the negative half** | **all 9 ids unchanged** | **9 of 9 byte-identical** ✅ |
+
+⚠️ **THE NEGATIVE HALF GOT ITS OWN MEASUREMENT rather than being implied by the
+positive one.** All nine `meddoc-pro-*` container ids were captured before the
+recreate and compared after — `231087c0dbc9`, `68b3f7fb759a`, `e1c4523df040`,
+`d0d72439aa4b`, `4f187aba1345`, `2b92c4347ad5`, `3a2194233ec5`, `fa7a10c0a94d`,
+`19c26bf16d45`, unchanged. *Verifying what DID happen feels like the work; the
+"and nothing else" clause is the half nobody checks.*
+
+⚠️ **THE POSTURE RE-CHECK IS NOT CEREMONY.** A recreate re-reads the shared
+`.env`, and `${VAR:-default}` inheritance is the mechanism that once put 298
+real Anthropic calls through the stack whose header promised it could reach
+nothing. Running it *after* is what makes the green mean anything.
+
+### THE BEHAVIOURAL CLOSE — the accessor, DRIVEN rather than approximated
+
+The compose file declaring a flag, the container carrying it, and the shipped
+code reading it are **three different claims**. All three are now measured:
+
+    docker exec meddoc-qa-transcribe-md-worker-1 node -e "…"
+    -> templateNativeDocxEnabled() = true
+    -> raw = "true"
+
+`template-native-docx.ts:20-22` is `process.env.NEXT_PUBLIC_TEMPLATE_NATIVE_DOCX
+=== 'true'`, so the expression above IS the shipped function's body — not a
+resemblance to it. `raw` is the exact string with no whitespace, which is what
+an `=== 'true'` comparison actually turns on.
+
+**Session 04 measured `false` / `raw = undefined` on the same container.** The
+inversion is complete and both ends of it were measured, not inferred.
+
+### ⚠️ `e2e` PASSED WITH THE FLAGS ON — THE QUESTION THAT WAS WORTH PRESERVING
+
+The F27 row flagged, in advance, that a red `e2e` on the new head would be
+**information rather than a regression to revert**: it would mean the pack had
+been green *because* the worker was flag-off.
+
+**It went green.** `e2e` on `7638a657` — the first run to exercise the QA stack
+with all eleven flags actually ON, since the previous attempt was the one
+knowingly cancelled — **succeeded**. So the pack does not depend on the twin
+fill short-circuiting, and the hypothesis is **refuted with its measurement**,
+recorded here precisely because it was refuted: the next session forms the same
+suspicion from the same partition otherwise.
+
+⚠️ **HONEST LIMIT: `e2e` builds its OWN ephemeral stack on the CI runner** and
+says nothing about this host's containers. The two measurements above are
+independent and neither substitutes for the other.
+
+### ⚠️ STILL OPEN — OWNER ACTION, AND IT IS THE DEFECT'S OWN DIRECTION
+
+`scripts/check-qa-worker-flag-universe.sh` is on `main` and has **no grant**:
+
+    grep -c check-qa-worker-flag-universe .claude/settings.json   -> 0
+    grep -c check-qa-mock-posture         .claude/settings.json   -> 1   (control)
+
+It is the **only** instrument that can catch a flag added to PRODUCTION and not
+to QA — the direction the vitest gate structurally cannot see, because the
+worker's runtime authority is `env_file: .env`, which is not in the repository.
+`.claude/settings.json` is protected from the layer it governs, so the loop
+cannot ship its own grant. **Until it is granted, this recreate is a one-off
+measurement rather than a standing check.**
+
+### WHAT THIS ROW STILL DOES NOT CLAIM
+
+- **Not deployed, and it needs no deploy.** F27 touches `docker-compose.qa.yml`
+  and two test files. No production runtime is affected — confirmed by the
+  9-of-9 container-id comparison above.
+- **F24-S5's acceptance walk is STILL UNPERFORMED.** F27 was its blocker and the
+  blocker is now cleared, on the file *and* in the running container. The walk
+  itself — a `supported` laterality control, EXPORT-AFTER-OVERRIDE,
+  SIGN-AFTER-OVERRIDE, census by replay — has not been run by anybody. *An
+  unverified step named honestly is worth more than a green tick.*
+- **The QA APP container was NOT recreated**, deliberately: its `NEXT_PUBLIC_*`
+  are inlined at image-build time and are legitimately absent from its runtime
+  env. Only the worker reads at runtime, which is why the gate is scoped to it.
