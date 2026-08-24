@@ -11,10 +11,25 @@
 // substrate recon is explicit that re-implementing a shipped matcher inside a
 // test is the F12-g failure.
 //
-// ⚠️ 28 OF THE 80 ROWS ARE A CLASSIFICATION, NOT A REPLAY, AND THE HEADER SAYS
-// SO BECAUSE AN EARLIER DRAFT DID NOT. Content controls have no editor intent
-// at all, so they never reach `editTableCell`. "Every row is produced by
-// running the shipped editor" was false for 35% of this census.
+// ⚠️ 28 OF THE 80 ROWS ARE NOT THIS FILE'S TO MEASURE, AND THE BUCKET USED TO
+// SAY SOMETHING FALSE ABOUT THEM. It read `no_editor_intent`, and that was true
+// until F24-S5 shipped `edit_form_control`: content controls now have an editor
+// intent, an addressing (a server-issued ordinal) and a write path. They still
+// never reach `editTableCell` — they render from the fill's
+// `selectedOptionOrdinal`, not from the note markdown — so this file correctly
+// declines to replay them, and it must not be read as saying they are
+// unreachable.
+//
+// ⚠️ THE ACCEPTANCE WALK'S ARM 1 READ 52/80 AND WAS REPORTED AS A REFUSAL FOR
+// EXACTLY THIS REASON: the number was true about a system that no longer
+// exists. THE OTHER 28 ARE MEASURED, BY REPLAY, IN
+// `gate-f24-s5-control-addressable-census.test.ts`. 52 + 28 = 80, and both
+// files assert their own half of that partition so neither can drift into the
+// other's territory.
+//
+// ⚠️ SO `bestAny` BELOW IS THE TABLE HALF ONLY. Read as a whole-form figure it
+// is the "check whose TITLE is narrower than what it MEASURES" failure with the
+// sign flipped — a number that is honest about 52 fields and silent about 28.
 //
 // ⚠️ THE UNIVERSE IS PINNED BY CONTENT, NOT BY A VERSION FIELD — FINDING B.
 // Two IR shapes exist in the wild at the IDENTICAL `compilerVersion` AND
@@ -351,9 +366,17 @@ describe('F24-S3 census — replay, over every candidate note shape', () => {
   }
 
   function replay(f: TemplateField, shape: NoteShape, useTwin: boolean): string {
-    // ⚠️ A CLASSIFICATION, NOT A REPLAY — see the file header. A content
-    // control never reaches the editor because no intent addresses one.
-    if (!isTableCell(f)) return 'no_editor_intent';
+    // ⚠️ OUT OF THIS FILE'S SCOPE, NOT UNREACHABLE — see the file header. A
+    // content control never reaches `editTableCell`, because it renders from the
+    // fill rather than from the note markdown. Since F24-S5 it IS addressable,
+    // through `edit_form_control`, and that is measured by replay in
+    // `gate-f24-s5-control-addressable-census.test.ts`.
+    //
+    // ⚠️ THE BUCKET IS NAMED AFTER THE FILE THAT OWNS IT, DELIBERATELY. The old
+    // name (`no_editor_intent`) was a CLAIM about the product, and it went false
+    // the minute S5 landed while this file went on printing it. A bucket named
+    // after its owner cannot make a claim that decays.
+    if (!isTableCell(f)) return 'content_control_measured_by_f24_s5_census';
     const row = rowsOfIr.find((r) => r.rowIndex === f.rendererBinding.rowIndex);
     if (!row) return 'no_ir_row';
     const columnLabel = f.labelSource === 'table_header' ? f.originalLabel : NOTE_COLUMNS[0];
@@ -490,9 +513,11 @@ describe('F24-S3 census — replay, over every candidate note shape', () => {
         expect(bare.get(bad) ?? 0, `${shape.name} (bare): ${bad}`).toBe(0);
       }
 
-      // The 28 are definitional in every cell of the matrix.
-      expect(bare.get('no_editor_intent')).toBe(28);
-      expect(twin.get('no_editor_intent')).toBe(28);
+      // The 28 are definitional in every cell of the matrix — this file's
+      // denominator is 52, and the moment that stops being true one of the two
+      // censuses has started measuring the other's fields.
+      expect(bare.get('content_control_measured_by_f24_s5_census')).toBe(28);
+      expect(twin.get('content_control_measured_by_f24_s5_census')).toBe(28);
 
       best.set(shape.name, twin.get('addressable') ?? 0);
     }
@@ -530,12 +555,24 @@ describe('F24-S3 census — replay, over every candidate note shape', () => {
       'the duplicate-label rows regressed on the shape production mostly holds',
     ).toBe(52);
 
-    // ⚠️ AND THE ACCEPTANCE IS NOT MET ON ANY SHAPE. RELAY asks for ZERO gaps.
-    // Asserted rather than commented, so the day it is met this line fails and
-    // forces the ledger row to be rewritten by somebody who has looked.
+    // ⚠️ AND THE RESIDUAL IS NOW ENTIRELY THE OTHER FILE'S HALF, WHICH IS A
+    // DIFFERENT SENTENCE FROM THE ONE THIS ASSERTION USED TO MAKE.
+    //
+    // *Previous message, kept because the correction is the point:* "ZERO gaps
+    // reached on some shape — F24-S3 acceptance may be met; update RELAY". That
+    // read as a whole-form claim while `bestAny` only ever ranged over the 52
+    // table-bound cells, so `80 - bestAny` could never reach 0 no matter how
+    // complete the table editor became — a close condition that was
+    // structurally unreachable, which is this repository's own "check whose
+    // TITLE is narrower than what it MEASURES".
+    //
+    // What it asserts now is the honest thing: the 28 this file does not
+    // measure are still 28, so the residual is exactly the other census's
+    // denominator. If this ever drops below 28, `bestAny` has started counting
+    // fields that are not table-bound and BOTH censuses are wrong.
     expect(
       80 - bestAny,
-      'ZERO gaps reached on some shape — F24-S3 acceptance may be met; update RELAY',
-    ).toBeGreaterThan(0);
+      'the table half is over-counting — bestAny has reached beyond the 52 table-bound cells',
+    ).toBe(28);
   });
 });
