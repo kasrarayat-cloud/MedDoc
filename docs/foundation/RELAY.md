@@ -26351,17 +26351,108 @@ day it closes the line reddens and forces the ledger to be rewritten **by
 somebody who looked**. Do not read its green as closure — and **do not flip that
 assertion except in the slice that earns it.**
 
-### RECON FIRST — the routing question IS the design work
+### ✅ RECON FIRST — **DONE 2026-08-23.** The routing question is ANSWERED.
 
-**Do not build before this is measured.** Where does a dropdown edit LAND?
+**Full report: `docs/qa-reports/f24-s5-content-control-routing-recon-20260823.md`.**
+Run by the loop, run `20260823-230455-b2` session 01, against `main` @ `922f18cd`.
+Read-only throughout — counts and structural metadata only; no note text left
+the database and nothing was built.
 
-- the fill **manifest**? — but a VERIFIED manifest is the frozen-pointer artifact
-- a **pending-fill** layer?
-- the **visit's own state**?
+*Previous wording:* **Do not build before this is measured.** Where does a
+dropdown edit LAND? — the fill **manifest**? a **pending-fill** layer? the
+**visit's own state**? *"Measure the existing write paths before choosing; the
+wrong choice here is the kind that is discovered at export time."* **That
+warning was exactly right, and §4.1 below is the thing it predicted.**
 
-Each has a different relationship to the freeze, to re-fill, and to export.
-Measure the existing write paths before choosing; the wrong choice here is the
-kind that is discovered at export time.
+| candidate | verdict |
+|---|---|
+| the fill **manifest** | ❌ **REFUTED** — fatal in BOTH configurations |
+| an **overlay** the fill engine consults every run | ✅ **THE ROUTE** — the mechanism exists; its PRECEDENCE is the work |
+| the **visit's own state** | ⚠️ **not a third option** — same answer, different address. The open question is KEYING |
+
+**WHY THE MANIFEST IS REFUTED — and note it is refuted for a reason nobody
+predicted.** The export serves **stored rendered bytes**, gated on
+`noteSha256 === sha256(soapFinal)`; and `loadOrComputeNativeTemplateDocxForVisit`
+falls through to a **recompute on STALE, not merely on absent** — its own
+docstring says *"only fires when the manifest never materialised"* and **the
+code is broader than its comment.** So:
+
+- **override in the manifest, no `reviewedAt`** → the next download-triggered
+  recompute **silently reverts it**;
+- **override + `reviewedAt`** → `fill-engine.ts:510` **throws**
+  `MANIFEST_CONFLICT`, `native-export` catches → `fill_failed` → **the doctor's
+  own form stops coming back, permanently.** An accepted-capability-loss
+  manufactured by the fix itself.
+
+### ⚠️ THE BLOCKER THE SLICE MUST SOLVE — the precedence is exactly backwards
+
+`mergeFieldResolutions` (`bridge-fill.ts:660`) already IS an overlay mechanism,
+and `FieldResolution` already carries **`selectedOptionOrdinal`** and
+**`clinicianReviewed`**. But the overlay applies **only where the baseline is
+UNFILLED** — deliberately, so the evidence resolver always wins over the AI
+overlays. **A clinician correcting a dropdown is correcting a field the resolver
+ALREADY FILLED — precisely the case the rule refuses.**
+
+> **Passing a clinician override through it as it stands would SILENTLY DO
+> NOTHING: edit accepted, manifest rewritten, census green, document unchanged.**
+
+The slice adds a clinician overlay with **WIN** precedence, named separately.
+⚠️ **It must NOT widen the existing rule** — that would let every bridge overlay
+overwrite resolver-supported values, a clinical-safety regression outside this
+slice.
+
+### ⚠️ TWO DORMANT SEAMS — designed, shipped, never given a writer
+
+| seam | state |
+|---|---|
+| `FieldResolution.clinicianReviewed` | `false` at **all six** construction sites, `true` **nowhere** |
+| `templateTwinFillManifest.reviewedAt` | **ZERO writers** (ORM *and* raw SQL, swept by table, positive-controlled), **zero test references**, and **NULL on both** production manifests |
+
+**F24-S5 is not inventing a layer. It is completing one that was left dormant.**
+
+### THE SUBSTRATE — measured on the one certified twin, and it reconciles
+
+| bindingType | n | non-empty `allowedOptions` |
+|---|---|---|
+| `content_control` | **28** | **28** |
+| `table_cell` | **52** | **0** |
+| | **80** ✔ | |
+
+**There is no residue class** — every one of the 28 is a genuine closed-option
+control, so clause 3's validate-or-refuse applies universally. Options run
+**2–11** per control (sums to 28 ✔), so a refusal can always NAME them; and
+`displayText` and `value` are **distinct within every one of the 28**, so
+matching needs no tie-breaker. ⚠️ **7 of the 28 are `criticality: laterality`** —
+the class this arc has already paid for twice. All 28 are `unknownPolicy: blank`,
+so **refusing is always safe** — a measured licence to fail closed.
+
+### HONEST LIMITS — carried, not buried
+
+- ⚠️ **THE `reviewedAt` CHAIN WAS ESTABLISHED BY READING CODE NOTHING HAS EVER
+  EXECUTED.** Zero writers, zero tests, NULL in production. It is enough to
+  DECLINE a route with two known-bad configurations and no known-good one; it is
+  **not** enough to cite as behaviour. The slice owes an executed proof or must
+  stop citing it.
+- ⚠️ **EVERY SUBSTRATE FIGURE IS A FACT ABOUT ONE FORM, NOT A PROPERTY OF THE
+  COMPILER.** Production holds **one** certified twin. **Re-arming condition: a
+  second template certifying end-to-end** — which can, with no code change
+  anywhere, produce an empty option set, duplicate display texts, or a
+  `requires_input` control, re-opening three of the four claims above. This
+  recon is downstream of **F5-i** and inherits its limit.
+- **The 52 / 28 / 80 census is not mine** — it is
+  `gate-f24-s3-editor-addressable-census`, which the session RAN (7 arms green,
+  from `apps/transcribe-md`, `setup: 114ms` — the real config, not the
+  wrong-cwd `0ms`). The 80-field total and the 28/52 split were re-derived
+  independently from production and **reconcile** with it. The reconciliation is
+  the evidence, not the agreement.
+
+**A HYPOTHESIS RECORDED BECAUSE IT WAS REFUTED.** The session first concluded
+that any chat edit would leave `noteSha256` stale and silently drop the doctor
+to the generic styled layout — a live defect in the ALREADY-SHIPPED F24
+table-edit path. **Wrong:** the recompute fires on stale, so it self-heals. The
+docstring produced the wrong answer and the control flow produced the right one.
+The same mechanism is what kills route (a) — so the refutation is what located
+the real finding.
 
 ### THE SHAPE, RULED
 
