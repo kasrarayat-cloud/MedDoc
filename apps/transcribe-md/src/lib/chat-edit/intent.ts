@@ -104,6 +104,48 @@ export const EditTableCellIntentSchema = z.object({
   rowOrdinal: z.number().int().min(1).max(50).optional(),
 });
 
+/**
+ * Set ONE enumerated form control — a dropdown on the doctor's own Word form.
+ *
+ * These are the 28 controls that render from the twin's fill, not from the note
+ * markdown, so no `edit_section` or `edit_table_cell` could ever reach them.
+ *
+ * ⚠️ `controlOrdinal` IS AN ECHO. It names a line in the numbered list the
+ * application puts in front of the model on every turn, and it is meaningless
+ * outside that list. It is NOT a count taken off the note and NOT a document
+ * position the model worked out — 18 of this form's 28 controls share a label
+ * with at least one other, and four pairs are indistinguishable by their
+ * options too, so a self-derived number would land on a real neighbouring
+ * control and the write would report success.
+ *
+ * ⚠️ AND THE RULE LIVES IN `.describe()`, NOT IN THIS COMMENT. `anthropic.ts`
+ * converts this schema with `z.toJSONSchema()`, and Zod emits `description`
+ * only from `.describe()`/`.meta()` — never from a TS doc comment. A constraint
+ * written here alone is documentation for readers and ABSENT FROM THE WIRE,
+ * which is exactly how `rowOrdinal` shipped its safety rule to nobody.
+ *
+ * The server refuses an out-of-range ordinal and never clamps, for the same
+ * reason `rowOrdinal` does not.
+ */
+export const EditFormControlIntentSchema = z.object({
+  kind: z.literal('edit_form_control'),
+  controlOrdinal: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .describe(
+      'The NUMBER of a control in the FORM CONTROLS list you were given this turn. Only ever a number from that list — never one you counted yourself. Many controls share a label, so a number you derive yourself lands on a different control and the change reports success.',
+    ),
+  value: z
+    .string()
+    .min(1)
+    .max(200)
+    .describe(
+      "One of that control's listed options, verbatim. Anything else is refused and the options are named back to you.",
+    ),
+});
+
 /** Correct a header field — the patient's name and the visit's own metadata.
  *  Dispatched into an audited action, never a raw column write. */
 export const EditHeaderIntentSchema = z.object({
@@ -142,6 +184,7 @@ export const CannotIntentSchema = z.object({
 export const ChatIntentSchema = z.discriminatedUnion('kind', [
   EditSectionIntentSchema,
   EditTableCellIntentSchema,
+  EditFormControlIntentSchema,
   EditHeaderIntentSchema,
   ScrollIntentSchema,
   RefuseIntentSchema,

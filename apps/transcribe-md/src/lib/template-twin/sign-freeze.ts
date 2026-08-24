@@ -18,7 +18,11 @@
 // response, so the doctor learns at SIGN time rather than at download time.
 // The same shape the E/M signedCode freeze twenty lines above already uses.
 import prisma from '@meddoc/db';
-import { manifestMatchesNote, noteIdentity } from './note-identity';
+import {
+  manifestMatchesDocument,
+  noteIdentity,
+  overridesIdentity,
+} from './note-identity';
 
 /** Bounded FILL-sized, not sweep-sized. A doctor is waiting on this request. */
 export const SIGN_FREEZE_BUDGET_MS = 20_000;
@@ -59,6 +63,8 @@ export async function freezeNativeManifestForSigning(input: {
     select: {
       id: true,
       noteSha256: true,
+      // F24-S5 — the override half of the bound identity.
+      overridesSha256: true,
       visit: {
         select: {
           soapFinal: true,
@@ -78,7 +84,27 @@ export async function freezeNativeManifestForSigning(input: {
   // a styled signature was always this visit's outcome.
   if (!manifest?.visit) return { state: 'not_applicable' };
 
-  if (manifestMatchesNote(manifest.noteSha256, manifest.visit.soapFinal).ok) {
+  // ⚠️ F24-S5 — THE PAIR, NOT THE NOTE, AND THIS LINE IS WHERE THE REFUTED
+  // SLICE ACTUALLY DIED. Driven under a mocked prisma it returned
+  // `already_fresh` with `processTemplateTwinVisit` called ZERO times, so a
+  // clinician's correction was never re-applied and the signature pinned the
+  // PRE-OVERRIDE manifest as the signed document, permanently.
+  //
+  // Reading the pair makes an override read STALE, which falls through to the
+  // re-fill below — the freeze then CAPTURES the correction, which is the only
+  // change to signing behaviour. Pointer semantics are untouched.
+  const currentOverrides = await prisma.templateTwinFieldOverride.findMany({
+    where: { visitId, practiceId },
+    select: { fieldId: true, selectedOptionOrdinal: true },
+  });
+  if (
+    manifestMatchesDocument({
+      manifestNoteSha256: manifest.noteSha256,
+      manifestOverridesSha256: manifest.overridesSha256,
+      soapFinal: manifest.visit.soapFinal,
+      currentOverrides,
+    }).ok
+  ) {
     return { state: 'already_fresh', manifestId: manifest.id };
   }
 
@@ -163,9 +189,32 @@ export async function freezeNativeManifestForSigning(input: {
       roundTripVerified: true,
       outputObjectKey: { not: null },
     },
-    select: { id: true, noteSha256: true, visit: { select: { soapFinal: true } } },
+    select: {
+      id: true,
+      noteSha256: true,
+      overridesSha256: true,
+      visit: { select: { soapFinal: true } },
+    },
   });
-  if (!after || !manifestMatchesNote(after.noteSha256, after.visit?.soapFinal).ok) {
+  // ⚠️ THE SAME PAIR THE SERVE PATH USES, RE-READ AFTER THE FILL. The override
+  // set is read AGAIN rather than reusing `currentOverrides` above: a correction
+  // that landed during the re-fill must not be able to pass this check on the
+  // strength of a list captured before it existed. If it did land, the pair
+  // disagrees and the freeze honestly reports `refill_did_not_match` rather
+  // than freezing a document that is already stale.
+  const overridesAfter = await prisma.templateTwinFieldOverride.findMany({
+    where: { visitId, practiceId },
+    select: { fieldId: true, selectedOptionOrdinal: true },
+  });
+  if (
+    !after ||
+    !manifestMatchesDocument({
+      manifestNoteSha256: after.noteSha256,
+      manifestOverridesSha256: after.overridesSha256,
+      soapFinal: after.visit?.soapFinal,
+      currentOverrides: overridesAfter,
+    }).ok
+  ) {
     return { state: 'failed', reason: 'refill_did_not_match' };
   }
   return { state: 'regenerated', manifestId: after.id };
@@ -190,6 +239,18 @@ export async function resolveFrozenPointer(
 ): Promise<string | null> {
   const wanted = noteIdentity(capturedNote);
   if (!wanted) return null;
+  // ⚠️ F24-S5 — THE FOURTH COMPARISON SITE, AND IT IS A SQL PREDICATE RATHER
+  // THAN A CALL TO `manifestMatchesNote`. A sweep for the FUNCTION finds the
+  // other three and silently misses this one; it was found by grepping the
+  // COLUMN. If the pointer bound on the note alone, a manifest filled before a
+  // correction would still satisfy it and the signature would pin the
+  // pre-override document — the very outcome the widened identity exists to
+  // stop, re-entering one layer down.
+  const currentOverrides = await prisma.templateTwinFieldOverride.findMany({
+    where: { visitId, practiceId },
+    select: { fieldId: true, selectedOptionOrdinal: true },
+  });
+  const wantedOverrides = overridesIdentity(currentOverrides);
   const m = await prisma.templateTwinFillManifest.findFirst({
     where: {
       visitId,
@@ -201,6 +262,14 @@ export async function resolveFrozenPointer(
       // The signature freezes the captured text; the pointer must agree with
       // THAT, or the pair is not one object.
       noteSha256: wanted,
+      // ⚠️ NULL IS ACCEPTED ONLY WHEN THERE ARE NO OVERRIDES, and that is not a
+      // convenience — it is the null-is-empty rule expressed in SQL. A legacy
+      // manifest predates the override table, so "no overrides" is true of it by
+      // construction; but once a correction EXISTS, a null-stamped manifest
+      // provably did not run against it and must not be pinned.
+      ...(currentOverrides.length === 0
+        ? { OR: [{ overridesSha256: wantedOverrides }, { overridesSha256: null }] }
+        : { overridesSha256: wantedOverrides }),
     },
     select: { id: true },
   });

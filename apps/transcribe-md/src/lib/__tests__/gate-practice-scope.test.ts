@@ -124,6 +124,25 @@ const SYSTEM_ALLOWLIST: Record<string, number> = {
   // 'scoped' would cost a leak — so the line is written rather than the
   // classifier loosened.
   'src/lib/template-twin/create-draft.ts': 2,
+  // ⚠️ NEW 2026-08-24, F24-S5. `listVisitFormControls` reads the note template
+  // to discover which enumerated controls a visit's certified twin offers.
+  //
+  // ⚠️ AND THIS COMMENT DELIBERATELY DOES NOT CLAIM THE GUARD CAUGHT AN
+  // UNSCOPED READ. The previous entry written on this file said exactly that
+  // and then, correctly, explained that `isSystem` classifies by PATH before it
+  // looks at scoping — two statements that cannot both be true, in one comment.
+  // What is true: this read IS practice-bound, the bound is DERIVED in the
+  // query (`templateTwinCompiledVersion: { practiceId }`) rather than threaded
+  // as a value that could drift, and it lands in the system bucket purely
+  // because the whole `template-twin/` directory is bucketed before scoping is
+  // considered.
+  //
+  // ⚠️ DECLARING A FILE HERE CONSUMES THE ONLY SIGNAL THAT EVER FIRED FOR IT —
+  // after this line, the practice bound could be deleted with this gate green.
+  // So the bound has its own assertion below ("the form-control lookup is
+  // PRACTICE-bound"), which is not a count and does not move when the allowlist
+  // does.
+  'src/lib/template-twin/editable-controls.ts': 1,
   // ⚠️ 1 -> 2 on 2026-08-21, DECLARED. The second is the post-signature
   // re-check added with the sign-freeze: the persist re-reads the visit's
   // status immediately before writing and REFUSES to land a manifest on a
@@ -664,6 +683,34 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
       byFile(system),
       'the system-context read map changed — update SYSTEM_ALLOWLIST deliberately',
     ).toEqual(SYSTEM_ALLOWLIST);
+  });
+
+  it('⚠️ the form-control lookup is PRACTICE-bound — an arm that is not a count', () => {
+    // F24-S5. `editable-controls.ts` is on SYSTEM_ALLOWLIST, and that line is
+    // what makes its read acceptable to the ratchet. The cost of declaring it is
+    // that the ratchet stops watching it: delete the practice bound and the
+    // allowlist count is UNCHANGED, so every gate stays green over a read that
+    // would hand one practice another's form structure.
+    //
+    // This arm is the replacement signal. It asserts the BOUND, not the COUNT,
+    // so it cannot be satisfied by the declaration that silenced the ratchet.
+    const src = readFileSync(
+      join(__dirname, '..', 'template-twin', 'editable-controls.ts'),
+      'utf8',
+    );
+    const code = src
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*'))
+      .join('\n');
+    // The bound is DERIVED in the query, through the compiled version's own
+    // practice — not threaded as a separate value that could drift from it.
+    expect(
+      code,
+      'listVisitFormControls lost its practice bound — one practice could be shown another practice’s form structure',
+    ).toMatch(/templateTwinCompiledVersion:\s*\{\s*practiceId\s*\}/);
+    // And the parameter it binds on must still be required, so a caller cannot
+    // simply stop passing one.
+    expect(code).toMatch(/practiceId:\s*string/);
   });
 
   it('matches living in COMMENTS are declared, not silently dropped', () => {
