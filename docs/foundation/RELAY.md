@@ -3383,7 +3383,46 @@ positive control is in the report. **A filled clinical artifact is PHI
 regardless of synthetic status** — if one is found, it is the history-rewrite
 path, not a delete.
 
-### F8 — THE ICD-10 CODING TAB — recon landed, build waits on the owner's Figma
+### F8 — THE ICD-10 CODING TAB — recon landed, **AND THE DESIGN CONTRACT LANDED 35 MINUTES LATER**
+
+⚠️ **THIS HEADING READ *"build waits on the owner's Figma"* UNTIL 2026-08-25, AND
+IT HAD BEEN FALSE FOR NINE DAYS.** The contract it was waiting for is
+**`docs/foundation/f8-icd-tab-design.md`**, on `main`, and this row never
+referenced it — which is exactly why nobody noticed.
+
+**Measured, and the ORDER is the whole finding:**
+
+| when | what |
+|---|---|
+| `2026-08-16T07:05:34Z` | `ead17891` lands this row. Its own commit title: *"F8 — the ICD-10 coding tab, recon measured **before any design**"* — **true at that moment** |
+| `2026-08-16T07:40:22Z` | `44242430` lands `f8-icd-tab-design.md`, whose first line is **"This document is the build's contract."** |
+| `2026-08-16T07:49:08Z` | `3f064814` corrects two counts inside it |
+
+So the row was **correct when written** and was overtaken **thirty-five minutes
+later** by the very delivery it was waiting for. `grep -c f8-icd-tab-design
+RELAY.md` → **0** before this edit: nothing linked the contract to the queue row,
+so every later reader inherited *"waits on the owner's Figma"* as a description
+of the present.
+
+> ⚠️ **THIS IS THE `DEPLOYMENT_RUNBOOK §5.6` SHAPE, AND IT COST THE QUEUE HEAD.**
+> A document asserting an intended state in the present tense, read by everyone
+> as a description of the running system. §5.6 was false for two months and cost
+> six hours. **This one was false for nine days and would have PARKED F8** — the
+> item the ledger's last line declares open.
+
+**HONEST LIMIT, STATED SO THE DISCHARGE IS NOT READ WIDER THAN IT IS.** No Figma
+FILE and no `figma.com` URL exists anywhere in `docs/` — measured, and reported
+as a zero with its control (the same sweep finds the design doc and the palette
+PNG, so the traversal is not blind). **The delivery took the form of a measured
+markdown contract, not a Figma frame.** What discharges the gate is not the
+medium but the CONTENT: the doc specifies the tab bar, the 65/35 split, every
+card element, the state table and the token set, declares itself *"the build's
+contract… supersedes any palette asserted in conversation"*, and its commit body
+records the owner in the loop (*"the owner caught it"*, *"per the owner's
+choreography"*).
+
+**AND THE ONE OPEN DESIGN QUESTION IS ANSWERED AND MARKED OWNER-DECIDED** — see
+the corrected section below.
 
 **Owner feature, queued AFTER F5 and BEFORE the billing tail** (re-prioritizable
 on design delivery). Doctor-stated need: **the most accurate possible ICD-10
@@ -3419,26 +3458,49 @@ a surface where a doctor ACTS on a code.
 shape**: accept/reject state, its persistence, its audit rows, its flow into
 note/export, and ranking. (a) and (b) are true before the tab exists.
 
-#### ⚠️ DESIGN QUESTION — awaiting the owner's Figma answer
+#### ✅ DESIGN QUESTION — **ANSWERED, AND THE ANSWER IS OWNER-DECIDED**
+
+*Previous heading, kept because the correction is the point:* **"⚠️ DESIGN
+QUESTION — awaiting the owner's Figma answer"**, closing *"Not decided here. The
+owner's design answers it."*
 
 **59 production rejections** means the suggester proposed 59 codes the billing
 floor refused, and today each one vanishes into an audit row the doctor never
 sees.
 
-**RECOMMENDED DEFAULT, recorded for the record:** rejected-by-validation codes
-**SHOW as a distinct muted state with the reason** — *"proposed K21.0 — not
-billable; K21.00 is"* — rather than vanishing. **A suggester that silently loses
-candidates teaches the doctor to distrust the list**, and the amber-header card
-in the owner's design brief is already this state's home.
+**THE RECOMMENDED DEFAULT WAS ADOPTED.** `f8-icd-tab-design.md` carries it under
+a heading that marks the decision explicitly — **"⚠️ THE AMBER RULE —
+owner-decided: SHOW, never hide"** — and it goes further than this row's
+recommendation did:
 
-Not decided here. The owner's design answers it.
+> A validation-rejected code renders as a **distinct warn-state card**
+> (`--rounds-em`, `--rounds-em-text` on dark) **naming the reason** — *"K21.0 is
+> a category header — not billable"* — with a one-tap **"Use K21.00 instead"**
+> chip when a billable child exists.
+
+The reasoning matches this row's verbatim (*"a suggester that silently loses
+candidates teaches the doctor to distrust the list"*), which is corroboration
+rather than coincidence: the contract was written against this recon.
+
+**So there is no open design question on F8.** The row above records how a
+discharged gate went on reading as open for nine days.
 
 #### Build constraints
 
-The tab builds **ONLY** on the Figma delivery — `frontend-design` SKILL.md +
-production tokens per the standing design rules, and **the adversarial pass is
-MANDATORY**: this is a clinical surface, and a code accepted into a signed record
-is exactly the class that pass exists for.
+*Previous wording:* **"The tab builds ONLY on the Figma delivery"** — discharged;
+see the heading block above.
+
+The tab builds on **`docs/foundation/f8-icd-tab-design.md`**, which is the
+contract, plus `frontend-design` SKILL.md and **live tokens only, never an
+invented value** — the doc's own closing constraint, and it references TOKENS
+rather than hex so the tab inherits the redesign whenever it ships. ⚠️ **Read its
+two token rules before writing a line**: there are **two** kicker classes and the
+dark surfaces want `.qm-rounds-kicker`, and a token naming a STATE or a FILL
+needs its `-text` variant before it is used as text (`--rounds-ready` is
+**3.392:1** on `--rounds-stage-bg-3` and fails AA as text).
+
+**The adversarial pass is MANDATORY**: this is a clinical surface, and a code
+accepted into a signed record is exactly the class that pass exists for.
 
 Then the **billing tail (B8 close, B9)** per the existing ledger below.
 
@@ -29686,6 +29748,13 @@ byte-identical build.
 
 **F8 OPENS.**
 
+⚠️ **AND F8 OPENS ONTO A DISCHARGED GATE, NOT A BLOCKED ONE — see the corrected
+F8 row above.** The heading read *"build waits on the owner's Figma"* until
+`2026-08-25`; the contract (`docs/foundation/f8-icd-tab-design.md`) landed
+**35 minutes after** that row and nothing ever linked the two. **A session
+reading this line and then the F8 row would have PARKED the queue head on a
+condition satisfied nine days earlier.**
+
 ---
 
 ### 🟢 F29 — ORPHAN-BRANCH SWEEP AT SESSION CLOSE. **Small, loop-eligible.**
@@ -29724,3 +29793,70 @@ enumeration returned a non-empty branch list before believing any zero.
 **Not a substitute for the habit.** The habit is *open the PR in the same breath
 as the push*; this is the net under it.
 
+---
+
+# 📋 SESSION 01 OF RUN `20260825-072925-b1` — RECONSTRUCTED, BECAUSE ITS REPORT IS GONE
+
+**Filed by session 02 of the same run**, per MASTER STEP 0.9: the runner flagged
+`⚠️ REPORT-MISSING — session 01 produced no morning report (8 non-empty lines;
+no 'MORNING REPORT' header)`.
+
+⚠️ **THIS IS THE THIRD RECORDED INSTANCE OF THE SAME SHAPE, AND IT IS THE
+"ENDED ITS TURN TO WAIT" HALF, NOT THE "WOKEN AFTER REPORTING" HALF.** Its
+surviving final message says so in its own words:
+
+> *"I have two background waiters armed to bring me back — I'll continue when
+> they fire."*
+
+**There is no `you` to come back.** The process exits on the final message.
+Canon's `⛔ YOU ARE ONE-SHOT` entry names exactly this and cost six hours the
+first time; the two prior instances (2026-08-09 batch 1 session 01,
+2026-08-10 batch 2 session 02) were the *woken-after-reporting* variant. **The
+runner's marker-recovery saved the run** — it classified `CONTINUE` from the
+session's output rather than halting on an unreadable marker.
+
+## WHAT SESSION 01 ACTUALLY LANDED — reconstructed from `git log`, the PRs and the branch, never from its prose
+
+| | |
+|---|---|
+| **branch** | `feat/f30-retirement-sweep`, **PR #849 OPEN**, `afcdbf9e` |
+| **commits** | `cd5c470a` *"F30 — a retirement condition is TESTED, not remembered"* · `afcdbf9e` *"a blind control was reporting a MET condition as NOT MET"* |
+| **payload** | `scripts/check-retirement-conditions.sh` (+323) · `gate-f30-retirement-conditions.test.ts` (+205) · `RELAY.md` (+214) · its own preflight report (+91) — **4 files, 833 insertions, 0 deletions** |
+| **renumber** | **F29 → F30**, because a supervised actor pushed `docs/backup-canon-and-f29` at `07:47:29Z` mid-session and claimed F29 for the orphan-branch sweep |
+
+**Its preflight report rode its own first commit, from its own worktree** — the
+seam canon names is closed on that session's behalf, and worth recording as a
+success rather than only recording failures.
+
+## THE TWO SELF-CORRECTIONS IT MADE, WHICH WOULD OTHERWISE BE LOST
+
+Both are the kind this programme exists to capture, and both were caught by the
+author against himself:
+
+1. **A FABRICATED SUITE DELTA.** It incremented another session's control figure
+   instead of measuring, and got **+13 for 8 arms** — arithmetic that does not
+   reconcile, which is canon's own detector, firing on its author.
+2. **A BLIND CONTROL REPORTING A MET CONDITION AS NOT MET** — the two-state
+   collapse `check-retirement-conditions.sh` exists to prevent, found **in that
+   very script**, by reviewing its own pushed diff. Fixed under a **declared**
+   cancellation at ~6 minutes (`afcdbf9e`).
+
+## ⚠️ WHAT IS OWED, AND ONE ITEM IS AN OWNER ACTION
+
+- **`check-retirement-conditions.sh` HAS NO GRANT.** Verified here rather than
+  inherited: `grep -c check-retirement-conditions .claude/settings.json` → **0**,
+  positive-controlled against `check-hooks-installed` → **1**. So the script is
+  **inert to the loop** — canon's *"an entry that names an instrument verifies
+  that instrument's grant in the same commit"* is **structurally unreachable
+  from the unattended side**, exactly as the `check-em-note-shape-artifacts`
+  entry already records. **OWNER ACTION.**
+- **PR #849 was left open with `e2e` in flight.** Session 02 carries it.
+
+## WHAT THIS ROW DOES NOT CLAIM
+
+- **It does not reproduce session 01's findings — only what it LANDED.** The
+  report is gone; a reconstruction from artifacts cannot recover reasoning that
+  was never committed, and inventing it would be worse than the gap.
+- **The `+214` RELAY lines are session 01's own F30 row**, unread by this
+  session beyond its diffstat — they land with #849 and speak for themselves.
+- **Nothing here re-measures F30's gate.** Its citation is #849's to earn.
