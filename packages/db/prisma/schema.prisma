@@ -279,6 +279,20 @@ enum AuditAction {
   // page load.
   EM_OVERRIDE_APPLIED
 
+  // F8-S1 — the physician's ICD-10 accept/reject. Constraint (d) of F8: every
+  // accept/reject writes an audit row. Metadata carries { code, fromState,
+  // toState } — the CODE only, never the AI-emitted description, which
+  // `07a-icd-coding.ts:471-473` already records can include patient context.
+  //
+  // THREE labels rather than two: CLEARED (Undo) is its own event, because
+  // "the doctor un-accepted a code" is a different clinical fact from "the
+  // doctor never accepted it", and a coding audit that cannot tell those apart
+  // cannot reconstruct what was decided. A no-op — re-asserting the state
+  // already stored — writes NOTHING, per the PROMO_GRANT_CREDITED precedent.
+  ICD_CODE_ACCEPTED
+  ICD_CODE_REJECTED
+  ICD_CODE_DECISION_CLEARED
+
   // §164.312(b) audit-row coverage extension surfaced by QA agent v3.2
   // deep walks (docs/qa-reports/v3.2-discovery-20260506T024044Z.md):
   //   - VIEWED_DASHBOARD: PHI read on the authenticated landing page
@@ -2008,6 +2022,30 @@ model TranscribeVisit {
   /// pass this was reserved for ultimately landed in `icdCodes`.
   soapNote              Json?
   icdCodes              Json?
+  /// F8-S1 — the DOCTOR's accept/reject over the suggested ICD-10 codes.
+  /// Shape: `{ "<CODE>": { state: "accepted"|"rejected", at: ISO, byUserId } }`.
+  ///
+  /// ⚠️ A SEPARATE COLUMN ON PURPOSE, AND `icdCodes` IS WHY.
+  /// `worker/layers/07a-icd-coding.ts:570-573` REPLACES `icdCodes` wholesale
+  /// (`data: { icdCodes: filtered }`, never a merge), so anything hung off that
+  /// blob is whatever the last L7a run says it is. A separate column removes
+  /// the coupling instead of relying on L7a never running again. The
+  /// suggester's output and the physician's decision are also two different
+  /// records, and a coding dispute needs them kept apart.
+  /// (⚠️ L7a is in fact SKIPPED whenever `icdCodes` has content —
+  /// `worker/layer-skip.ts:101` — so no shipped path rewrites it today. That is
+  /// a property to preserve, not a reason to merge the columns.)
+  ///
+  /// NULL = the doctor has never decided anything on this visit. `{}` = they
+  /// decided and then cleared, which is a different fact and stays legible.
+  /// Nullable by design — no write-path sweep is owed (AGENTS.md's required-
+  /// column rule is scoped to NOT NULL).
+  ///
+  /// Read/written ONLY through `lib/icd-decisions.ts`; a decision on a code the
+  /// suggester did not propose is refused there, and a decision whose code later
+  /// vanishes from `icdCodes` projects into the named `orphaned` bucket rather
+  /// than into `accepted`.
+  icdDecisions          Json?
   cptCodes              Json?
   rxDrafts              Json?
   referrals             Json?
