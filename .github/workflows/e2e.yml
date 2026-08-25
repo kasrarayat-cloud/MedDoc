@@ -45,8 +45,68 @@ env:
   NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: "120000"
 
 jobs:
+  # ==========================================================================
+  # DOCS-ONLY DETECTION — one cheap job, consumed by BOTH arms below.
+  # ==========================================================================
+  changes:
+    name: detect docs-only
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.d.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # the predicate diffs base...HEAD; a shallow clone would fail CLOSED
+      - id: d
+        name: is-docs-only
+        run: |
+          BASE="${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}"
+          if bash scripts/ci/is-docs-only.sh "$BASE" HEAD; then
+            echo "docs_only=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ==========================================================================
+  # ⚠️ TWO JOBS, ONE `name:` — AND THAT IS THE WHOLE DESIGN.
+  #
+  # `Playwright E2E (transcribe-md)` is a REQUIRED status context. A required
+  # check that never RUNS leaves a PR "expected" forever and unmergeable, so
+  # path filters on the trigger are not available to us. Instead exactly one of
+  # these two jobs runs, and both publish a check-run under the SAME name — so
+  # branch protection, the 7-check floor and `scripts/merge-pr.sh` see no
+  # difference whatsoever.
+  #
+  # If you rename one, rename BOTH, or a docs-only PR becomes unmergeable.
+  # ==========================================================================
+  e2e-skip:
+    name: Playwright E2E (transcribe-md)
+    needs: changes
+    if: needs.changes.outputs.docs_only == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # ⚠️ RE-ASSERT, DO NOT TRUST THE UPSTREAM OUTPUT. Defense in depth: this
+      # arm is the one that lets a change merge WITHOUT the suite, so it proves
+      # its own precondition rather than inheriting it. If the two ever
+      # disagree, this FAILS — and a red required check is the safe direction.
+      - name: RE-ASSERT the change is docs-only
+        run: |
+          BASE="${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}"
+          if ! bash scripts/ci/is-docs-only.sh "$BASE" HEAD; then
+            echo "::error::SKIP ARM REACHED ON A NON-DOCS CHANGE — refusing to report green."
+            exit 1
+          fi
+          echo "docs-only re-asserted independently; E2E legitimately skipped."
+
   e2e:
     name: Playwright E2E (transcribe-md)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     # 40 was sized for ONE image build and two projects. This job now builds
     # four images and runs four projects; recovering the doc-preview timeouts
