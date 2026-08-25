@@ -168,9 +168,19 @@ echo "   · parsed ${#HEADINGS[@]} entries · positive control: known member 202
 # ── instrument controls for the predicates that consult something external ───
 NET_OK=0
 if git ls-remote --heads origin main 2>/dev/null | grep -q 'refs/heads/main'; then NET_OK=1; fi
+# ⚠️ A SECOND, SEPARATE CONTROL — and it is not implied by the first.
+# `merged:` asks TWO questions: is the branch gone (network), and is the file on
+# `origin/main` (a LOCAL ref). A CI checkout is routinely shallow or
+# single-branch, so `origin/main` may not resolve even with the network up. With
+# no control, `git cat-file -e origin/main:<path>` failing for THAT reason is
+# indistinguishable from the file genuinely being absent — two states collapsed
+# into one, which is this house's most-repeated defect, and it would report a
+# met condition as NOT MET without ever saying it could not tell.
+REF_OK=0
+if git rev-parse --verify --quiet origin/main >/dev/null 2>&1; then REF_OK=1; fi
 LEDGER_OK=0
 if grep -qE '^#+ (✅|🟢) F[0-9]+ —' "$LEDGER"; then LEDGER_OK=1; fi
-echo "   · controls: origin reachable=$NET_OK · ledger closure-vocabulary present=$LEDGER_OK"
+echo "   · controls: origin reachable=$NET_OK · origin/main resolvable=$REF_OK · ledger closure-vocabulary present=$LEDGER_OK"
 echo
 
 declare -a B_DUE=() B_NOTDUE=() B_HUMAN=() B_NONE=() B_RETIRED=() B_UNREG=() B_CANT=()
@@ -221,6 +231,7 @@ for h in "${HEADINGS[@]}"; do
     merged:*)
       rest="${pred#merged:}"; br="${rest%%:*}"; path="${rest#*:}"
       if [ "$NET_OK" -ne 1 ]; then B_CANT+=("$ts  $title   (origin unreachable — a branch cannot be called GONE)")
+      elif [ "$REF_OK" -ne 1 ]; then B_CANT+=("$ts  $title   (origin/main does not resolve here — 'file absent' and 'ref missing' are NOT the same answer)")
       else
         gone=1; git ls-remote --heads origin "$br" 2>/dev/null | grep -q "refs/heads/$br" && gone=0
         landed=0; git cat-file -e "origin/main:$path" 2>/dev/null && landed=1
@@ -254,7 +265,9 @@ done
 declare -a ORPHANS=()
 for row in "${REGISTRY[@]}"; do
   rts="${row%%|*}"
-  printf '%s\n' "${HEADINGS[@]}" | grep -q "$rts" || ORPHANS+=("$rts")
+  # -F: a timestamp is a FIXED string, never a pattern. `grep -q` would also
+  # match it appearing anywhere in a heading's title text.
+  printf '%s\n' "${HEADINGS[@]}" | grep -qF "### $rts" || ORPHANS+=("$rts")
 done
 
 emit() {

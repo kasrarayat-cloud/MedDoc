@@ -146,6 +146,33 @@ describe('F30 · retirement conditions are tested, not remembered', () => {
     expect(bucket(out, NOT_DUE).trim().length).toBeGreaterThan(0);
   });
 
+  // ── ⚠️ A BROKEN INSTRUMENT MUST NOT LOOK LIKE AN UNMET CONDITION ─────────
+  // The `merged:` predicate asks two questions — is the branch gone (network),
+  // and is the file on `origin/main` (a LOCAL ref). A CI checkout is routinely
+  // shallow or single-branch, so the ref can be missing with the network up.
+  // Without a control, that failure reports NOT MET — "we could not look" and
+  // "the condition is unmet" collapsed into one answer, which is this house's
+  // most-repeated defect and would keep a retired entry alive forever.
+  //
+  // This arm is CONDITIONAL on the controls, so it is honest on a runner that
+  // genuinely cannot resolve the ref: there, the entry must be CANNOT-TELL.
+  it('a control failure routes to CANNOT-TELL, never to NOT-DUE', () => {
+    const out = SHARED.out;
+    const controls = out.match(/origin reachable=(\d) · origin\/main resolvable=(\d)/);
+    expect(controls, `no controls line in:\n${out}`).not.toBeNull();
+    const [, net, ref] = controls!;
+
+    const AUTOCERT = '2026-08-18T07:00:00Z';
+    if (net === '1' && ref === '1') {
+      // Both instruments answered, so the verdict must be a real one.
+      expect(bucket(out, DUE)).toContain(AUTOCERT);
+    } else {
+      // An instrument was blind — the ONLY legal answer is cannot-tell.
+      expect(bucket(out, NOT_DUE)).not.toContain(AUTOCERT);
+      expect(bucket(out, DUE)).not.toContain(AUTOCERT);
+    }
+  });
+
   // ── IT IS REPORT-ONLY. It must not be able to change the file it reads. ──
   it('is READ-ONLY — INBOX.md is byte-identical before and after a run', () => {
     const before = readFileSync(INBOX);

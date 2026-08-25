@@ -29802,10 +29802,44 @@ number is the fabricated-count rule wearing a retirement's clothes.
 | **M3** | add a registry row for an entry that does not exist | 🔴 **SET-EQUALITY**, naming the orphan |
 | **M4** | break the heading matcher | 🔴 **5 arms**; the script itself refuses — *"only 0 INBOX entries parsed — the matcher is not reading this file. Can't tell."* |
 | **M5** | ⚠️ **toward SUCCESS** — point `file_exists` at a path that does not exist | `due 4 · not-due 1` → **`due 3 · not-due 2`**, still reconciling at 15 |
+| **M6** | reproduce the pre-fix defect below — control blind, verdict issued anyway | 🔴 the **CANNOT-TELL** arm, naming the auto-certification entry |
 
 **M5 is the half everybody skips.** M1–M4 prove the gate can go red. M5 proves
 the predicate **consults the world** rather than always answering DUE — *a guard
 proven only in the RED direction is half-proven, and it is the cheaper half.*
+
+#### ⚠️ AND MY OWN REVIEW OF THE FINISHED DIFF FOUND THE DEFECT THIS SCRIPT EXISTS TO PREVENT
+
+**Found after the branch was pushed and its gates were running**, by re-reading
+my own diff rather than my memory of it.
+
+`merged:` asks **two** questions — *is the branch gone* (network) and *is the
+file on `origin/main`* (a **LOCAL ref**). `NET_OK` controlled only the first.
+A CI checkout is routinely shallow or single-branch, so `origin/main` can fail
+to resolve **with the network up** — and `git cat-file -e origin/main:<path>`
+then fails for a reason that has nothing to do with the file.
+
+> **"We could not look" and "the condition is unmet" were collapsed into one
+> answer — this house's most-repeated defect, committed inside the instrument
+> written to stop entries rotting.** It would have reported a MET condition as
+> NOT MET, silently, and kept a retired entry alive forever.
+
+**It errs safe** (an entry stays delivered rather than being wrongly retired),
+which is exactly why nothing would have surfaced it. Fixed with a **second,
+separate control** (`REF_OK`), routing to CANNOT-TELL; a ninth arm asserts it,
+**conditionally**, so it stays honest on a runner that genuinely cannot resolve
+the ref. Mutation-proved as **M6**.
+
+⚠️ **The gate as first written could NOT have caught this** — its CONTROL arm
+reads F10/F12, which are ledger-only. A re-bucketing of the network predicate
+was invisible to every arm. *A guard's watched set does not grow when you add a
+predicate.*
+
+⚠️ **THE SECOND PUSH WAS DECLARED, NOT SLIPPED IN.** It cancelled this branch's
+own four runs at **~5 minutes**, knowingly, via `DECLARE_CANCELLATION` — the
+sanctioned override. Canon prices this class *by how late the second push
+lands*, and five minutes is the cheapest moment there is; shipping a known
+two-state collapse inside a fresh instrument was the more expensive option.
 
 Restored from **scratch copies, never from git**, and verified: both files
 **byte-identical by sha256** to their backups, with all five mutation markers
