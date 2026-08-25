@@ -3482,7 +3482,16 @@ owner's design answers it."*
 floor refused, and today each one vanishes into an audit row the doctor never
 sees.
 
-**THE RECOMMENDED DEFAULT WAS ADOPTED.** `f8-icd-tab-design.md` carries it under
+**WHAT THIS ROW RECOMMENDED, kept verbatim so the adoption is checkable rather
+than asserted:**
+
+> **RECOMMENDED DEFAULT, recorded for the record:** rejected-by-validation codes
+> **SHOW as a distinct muted state with the reason** — *"proposed K21.0 — not
+> billable; K21.00 is"* — rather than vanishing. **A suggester that silently
+> loses candidates teaches the doctor to distrust the list**, and the
+> amber-header card in the owner's design brief is already this state's home.
+
+**AND IT WAS ADOPTED.** `f8-icd-tab-design.md` carries it under
 a heading that marks the decision explicitly — **"⚠️ THE AMBER RULE —
 owner-decided: SHOW, never hide"** — and it goes further than this row's
 recommendation did:
