@@ -23,8 +23,19 @@ set -uo pipefail
 REQUIRED=(pre-commit pre-push)
 HOOKS_DIR=scripts/hooks
 
-cd "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || {
-  echo "🟡 check-hooks-installed: not inside a git work tree — can't tell"; exit 2; }
+# ⚠️ F28: RESOLVE THE ROOT FROM THIS SCRIPT'S OWN LOCATION, NEVER FROM THE CWD.
+# The previous form was `cd "$(git rev-parse --show-toplevel)"`, which anchors to
+# whatever tree the CALLER happens to be standing in. Run from a worktree, it
+# checked THAT worktree's scripts/hooks and printed a green that was true about
+# a tree nobody deploys — while `core.hooksPath` is repo-level and shared, so the
+# two halves of the comparison could come from two different trees.
+# A persisted `cd` then produces a confident WRONG answer instead of a loud one.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || {
+  echo "🟡 check-hooks-installed: cannot resolve this script's own root — can't tell"; exit 2; }
+cd "$ROOT" || {
+  echo "🟡 check-hooks-installed: cannot enter $ROOT — can't tell"; exit 2; }
+git rev-parse --git-dir >/dev/null 2>&1 || {
+  echo "🟡 check-hooks-installed: $ROOT is not inside a git work tree — can't tell"; exit 2; }
 
 configured=$(git config --get core.hooksPath 2>/dev/null || true)
 if [ -z "$configured" ]; then

@@ -32,8 +32,19 @@ set -uo pipefail
 BR="${1:-}"
 [ -z "$BR" ] && { echo "usage: bash scripts/retire-branch.sh <branch>"; exit 2; }
 
-cd "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || {
-  echo "🟡 retire-branch: not inside a git work tree — can't tell"; exit 2; }
+# ⚠️ F28: ANCHOR ON THIS SCRIPT'S OWN LOCATION, NEVER ON THE CALLER'S CWD.
+# This used to be `cd "$(git rev-parse --show-toplevel)"`. Refs are SHARED across
+# worktrees, so the branch surgery below would reach the same refs either way —
+# but the tree it runs in decides which checkout is judged "in use", and this
+# script's whole contract is refusing to claim a success it did not earn.
+# A persisted `cd` must never be able to change which tree that question is
+# asked of.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || {
+  echo "🟡 retire-branch: cannot resolve this script's own root — can't tell"; exit 2; }
+cd "$ROOT" || {
+  echo "🟡 retire-branch: cannot enter $ROOT — can't tell"; exit 2; }
+git rev-parse --git-dir >/dev/null 2>&1 || {
+  echo "🟡 retire-branch: $ROOT is not inside a git work tree — can't tell"; exit 2; }
 
 # ── protected names, refused by shape and not by memory ─────────────────────
 case "$BR" in

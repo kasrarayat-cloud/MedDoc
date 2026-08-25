@@ -29398,3 +29398,143 @@ control showing the *old* form differs there.
 ⚠️ **Do not "fix" this by making the grants absolute.** The grant list is
 protected from the layer it governs; the hazard is the SCRIPT's assumption, not
 the grant's spelling.
+
+---
+
+### 🟢 F28 — SCRIPT-RELATIVE PATHS. **BUILT AND GATED 2026-08-25.**
+
+**Run `20260824-200552-b2`, session 03. Branch `fix/f28-script-relative-paths`.**
+
+**Not a runtime change — no application file is touched.**
+
+#### WHAT SHIPS — two scripts, one form
+
+| file | change |
+|---|---|
+| `scripts/check-hooks-installed.sh` | `cd "$(git rev-parse --show-toplevel)"` → `ROOT` from `BASH_SOURCE` |
+| `scripts/retire-branch.sh` | the same form, the same fix |
+
+Both anchored on the toplevel of whatever tree the **CALLER** was standing in.
+Run from a worktree, `check-hooks-installed` validated **that** tree's
+`scripts/hooks` while reading a **repo-level** `core.hooksPath` — two halves of
+one comparison taken from two different trees, printing a green that was true
+about a tree nobody deploys.
+
+#### THE CENSUS — 23 granted entry points, and it reconciles
+
+| bucket | n |
+|---|---|
+| already anchored on `BASH_SOURCE` | **10** |
+| resolve no repo path at all | **11** |
+| **VIOLATIONS** — both fixed here | **2** |
+| | **23** |
+
+The 11 were verified rather than assumed: they talk to Docker, Postgres or the
+network, or derive an absolute path — `check-claude-cli` via `command -v`,
+`ops/prune-rollback-tags` from caller-supplied files.
+
+#### ⚠️ MY HAND CENSUS SAID ONE. THE GATE SAID TWO.
+
+I swept the no-`BASH_SOURCE` scripts for repo-relative paths and **never put
+`git rev-parse --show-toplevel` in that pattern**, so `retire-branch.sh` sorted
+as not-applicable. The gate's predicate carried the form mine did not.
+
+> **A census is only as authoritative as its predicate's fidelity to the thing
+> it stands for** — caught here on its own author, by his own gate.
+
+#### THE GATE — `gate-f28-scripts-resolve-own-root.test.ts`, 5 arms
+
+It reads the watched set from `.claude/settings.json` **at run time**, never from
+a hand-kept list, so a script granted tomorrow inherits the invariant without
+anybody remembering the file exists. Every granted script sorts into exactly one
+of three named buckets and the three must **sum** to the number present on disk.
+
+⚠️ **IT REDDENED AGAINST ITS AUTHOR ON ITS FIRST RUN**, reporting three
+violations: one real and **two false positives that were defects in MY
+predicate** — it skipped a line *starting* with `cat <<` but not the heredoc
+**body**, and its echo filter was anchored at `^` so prose inside a compound line
+survived. Both fixed. *A gate that cries wolf on prose is a gate somebody
+switches off.*
+
+#### MUTATION-PROVED, EACH ASSERTED APPLIED BEFORE ANY RESULT WAS BELIEVED
+
+| # | mutation | applied | result |
+|---|---|---|---|
+| **M1** | complete inverse — revert `check-hooks-installed` | `grep -c` → 1 | **3 arms red** — census naming the file, the static arm, **and the behavioural arm** |
+| **M2** | **the PARTIAL fix** — revert **only** `retire-branch` | `grep -c` → 1 | **1 arm red**, naming `retire-branch.sh` |
+
+**M2 is the one that matters.** The half-landed edit is what a tired session
+actually lands, and a proof that exercises only the complete inverse has proved
+the tidy case. Both restored **from scratch copies, never from git**; both
+markers re-read `0`.
+
+#### THE CONTROL IS BUILT, NOT BORROWED
+
+Pointing the old form at another worktree would prove nothing in CI, where only
+one tree exists — *a control aimed where the answer is predetermined is not a
+control.* So the arm mints a **throwaway git repo** under `$TMPDIR`: there the
+old form provably resolves elsewhere and the `BASH_SOURCE` form provably does
+not. It discriminates on this host and on a runner alike. The gate reaps its own
+tmpdir, because the loop cannot.
+
+#### ⚠️ AND ONE ARM WAS WRITTEN, MUTATION-PROVED, AND DELETED BECAUSE IT COULD NOT FAIL
+
+`retire-branch.sh` has **no other behavioural test in the repository** —
+`gate-f14b-merge-push-doors` **names it in prose and never drives it**, so its 79
+green arms say nothing about this change. Checked, not assumed.
+
+So a behavioural arm was added: run it against a trunk ref from a foreign cwd and
+assert the refusal matches the repo-root run. **Under M3 — the CWD-derived form
+restored — it STAYED GREEN.**
+
+    cd "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null
+
+When git fails the substitution is empty, and **`cd ""` SUCCEEDS as a no-op**. The
+trunk-ref refusal is then reached **by SHAPE**, consulting no tree at all, so both
+forms answer identically from everywhere.
+
+**The arm was aimed where the answer was PREDETERMINED — the failure INSIDE the
+positive-control rule — and it is DELETED rather than reworded.** No safe offline
+arm discriminates: every tree-dependent path in that script sits past a network
+fetch and needs a real branch.
+
+> **A named gap beats a green that cannot go red.**
+
+#### THE SUITE, REPORTED AS A CONTROLLED DELTA
+
+| | files | passed | failed files | failed tests |
+|---|---|---|---|---|
+| control — `.f24a-fix`, carrying **none** of F28 | 372 | 4904 | 16 | 1 |
+| this branch | 373 | 4909 | 16 | 1 |
+| **delta** | **+1** | **+5** | **0** | **0** |
+
+**+1 file, +5 tests — exactly this gate's five arms.** The 16 pre-existing
+failures are Playwright `.spec.ts` files collected by vitest across the shared
+tree and all six worktrees; they are unchanged and are not this branch's.
+
+⚠️ **AND A NUMBER WAS WITHDRAWN AND THEN RE-INSTATED, WHICH IS RECORDED BECAUSE
+THE CORRECTION WAS MINE.** Seeing worktree-prefixed paths in the failure list, I
+withdrew the figure as a wrong-universe measurement — canon's recorded
+`npx vitest` cwd case. Re-run from `apps/transcribe-md` it was **byte-identical
+(16 / 355 / 373)**: this config globs from the repo root regardless of cwd, so
+the cwd never changed the universe here. **The withdrawal was wrong and the
+number stands.** Cited so nobody inherits a retraction of a good figure.
+
+#### WHAT THIS ROW DOES NOT CLAIM
+
+- **`retire-branch`'s half rests on the STATIC arm only**, and the gate header
+  says so in as many words.
+- **It watches the GRANTED entry points**, not scripts reached by `source`.
+- **The static arm classifies by reading source.** A repo path built by string
+  arithmetic the regex cannot see would sort as no-repo-paths.
+- **The behavioural arm drives ONE script**, because several of the other 22
+  deploy, migrate or merge.
+- **Nothing was measured about production.** This is tooling.
+
+#### ⚠️ THE HAZARD FIRED FIVE TIMES ON ITS OWN SESSION, WHICH IS THE ARGUMENT
+
+The cwd persisted into a worktree or into `apps/transcribe-md` **five separate
+times while F28 was being built** — producing two loud `No such file or
+directory` refusals (the lucky case this item documents), a `bash` grant refusal
+on an absolute path, and a green measured against the wrong tree. **The item is
+filed against a class that was actively biting the session filing it.**
