@@ -131,6 +131,12 @@ export type AuditAction =
   | 'EM_BUMP_APPLIED'
   // Coding-coach override persistence (Phase 5.2 orphan-completion)
   | 'EM_OVERRIDE_APPLIED'
+  // F8-S1 — the physician's ICD-10 accept/reject (F8 constraint (d)).
+  // Metadata: { code, fromState, toState }. The CODE only — never the
+  // AI-emitted description, which can carry patient context.
+  | 'ICD_CODE_ACCEPTED'
+  | 'ICD_CODE_REJECTED'
+  | 'ICD_CODE_DECISION_CLEARED'
   // §164.312(b) audit-row coverage extension (QA agent v3.2 F-09/F-10/F-11)
   | 'VIEWED_DASHBOARD'
   | 'VISIT_CREATED'

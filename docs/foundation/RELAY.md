@@ -30384,3 +30384,192 @@ which is the habit canon forbids.
 
 **Not un-parked or re-prioritised by this session** — recorded with its evidence
 so the next triage has the count rather than an impression.
+
+---
+
+# 🟡 F8-S1 — THE ICD DECISION SUBSTRATE. **BUILT AND GATED 2026-08-25. NOT DEPLOYED.**
+
+**Run `20260825-072925-b1` session 03. Branch `feat/f8-s1-icd-decisions`.
+Ruling #148 (PROVISIONAL) carries the slicing decision and four others.**
+
+F8 opened at the top of this session's queue with its gate discharged. Its
+contract — `docs/foundation/f8-icd-tab-design.md` — specifies an entire tab.
+This is the first slice of it, and **it is the SERVER half only.**
+
+## WHAT SHIPS
+
+| file | what |
+|---|---|
+| `apps/transcribe-md/src/lib/icd-decisions.ts` | **NEW.** The pure, client-safe decision model: the stored shape, `applyIcdDecision`, the projection, the summary chip |
+| `apps/transcribe-md/src/app/api/visits/[id]/icd-codes/decision/route.ts` | **NEW.** `POST` — the gated, locked, audited write |
+| `packages/db/prisma/migrations/20260825130000_f8s1_icd_decisions/` | **NEW.** `icdDecisions JSONB` + three `AuditAction` labels |
+| `packages/db/prisma/schema.prisma` | the column and the three labels, declared beside the migration (no drift) |
+| `apps/transcribe-md/src/lib/audit.ts` | the three labels in the TS union — **the third of three edits an enum value needs** |
+| two `__tests__` files | **44 arms**, five mutation proofs |
+
+## ⚠️ IT HAS NO CALLER, AND THIS ROW SAYS SO RATHER THAN CLAIMING F8 IS DONE
+
+`AGENTS.md` records this defect twice — F4's library capability with no caller,
+and F24-S4's model that was never told about the field wired through every
+other layer. **The mitigation is not to pretend otherwise. It is to name the
+consuming slice and to hand it the reader list, measured by CALL SITE rather
+than by vocabulary** (*a shared noun is not a shared surface*).
+
+**The 28 non-test files that read `icdCodes` today** — S2's list, produced by
+`grep -rln 'extractIcdRows\|icdCodes'` over `apps/transcribe-md/src` and
+`packages`, minus tests and minus the new module:
+
+    lib/         visit-export · visit-export-server · ehr-formatters ·
+                 docx-generator · em-coding/{icd-rows, seed-baseline,
+                 displayed-level, fallback-mdm, score, llm-mdm}
+    app/visits/  [id]/{page, visit-ready-view, review-document-view, codes-tab}
+    api/visits/  [id]/{route, status, retry, sign} ·
+                 [id]/em-score/{route, apply-additions, override}
+    actions/     soap · rescore-em
+    worker/      worker.ts · layer-skip · automation-incomplete · resume-state ·
+                 layers/07a-icd-coding
+
+⚠️ **NONE of them is changed by this slice, and that is the point.** An accepted
+code flows nowhere yet. Making it flow is a DOCUMENT-VISIBLE change and carries
+its own mandatory adversarial pass.
+
+## THE FOUR THINGS THIS SLICE ACTUALLY DECIDES
+
+1. **A decision is a SEPARATE FACT in a SEPARATE COLUMN.** `07a-icd-coding.ts:570-573`
+   replaces `icdCodes` wholesale, so anything hung off that blob is whatever the
+   last L7a run says it is.
+2. **The SUGGESTED SET is the authority for what may be decided.** A code the
+   suggester never proposed is refused — it has no `evidence_quote` and never
+   met `isValidIcd10`, so admitting it would bypass BOTH of F8's already-satisfied
+   constraints at once. ⚠️ **The contract's search-add typeahead therefore needs
+   its own allowlist check on the way in; it does not come free with this.**
+3. **The FREEZE is server-side and flag-independent** — a signed visit refuses
+   `VISIT_LOCKED`, and the refusal sits INSIDE the row lock so a signature
+   landing mid-request cannot race past it.
+4. **A NO-OP is not an event** — re-asserting the stored state writes no row and
+   emits no audit line, the `PROMO_GRANT_CREDITED` precedent.
+
+## ⚠️ THE ORPHAN BUCKET IS DEFENSIVE, AND MY FIRST DRAFT OVERSTATED WHY
+
+The projection carries a named `orphaned` bucket: a stored decision whose code
+is no longer suggested is neither `accepted` nor `undecided`. An orphaned
+ACCEPT must never flow into the record, and must not be silently discarded
+either.
+
+⚠️ **An earlier draft of the module header, the schema comment AND the migration
+comment all said a re-run *destroys* or *rewrites* the codes. Measured on the
+shipped writers, that is FALSE and the path is UNREACHABLE TODAY:**
+
+| measurement | reading |
+|---|---|
+| writers of `icdCodes` | **1** — `07a-icd-coding.ts:572` |
+| `layer-skip.ts:101` | skips L7a whenever `icdCodes` `hasContent`, and `hasContent` is true for ANY non-null JSON |
+| `POST /api/visits/[id]/retry` | re-enqueues **without clearing** the column |
+| `actions/soap.ts`, `actions/rescore-em.ts` | READ the column only |
+
+**So it is a property of the code, not a fact about the corpus.**
+**RE-ARMING CONDITION**, with no change to `icd-decisions.ts`: any path that
+clears or rewrites `icdCodes` on a visit that already has content — a "re-code
+this note" action, a force-rerun flag on L7a, a widening of
+`clearAutomationColumn` to a READY visit, or a manual data repair.
+⚠️ **HONEST LIMIT: established by READING those writers, never by exercising a
+re-run.** Corrected in all three source files before merge — *a wrong mechanism
+stated confidently in a source file outlives the session that wrote it.*
+
+## THE PASS FOUND A SECOND DEFECT, IN MY OWN DIFF, AND IT WAS FIXED
+
+**The untested claim, written down before the pass** (canon requires it): *"I
+have NOT tested that `icdDecisions` is unreachable by every pipeline write
+path — I established it by READING `07a` and grepping, not by running a
+re-run."* Aiming there produced the orphan correction above. Aiming at the
+WRITE produced this:
+
+> ⚠️ **`icdDecisions` was a WHOLE-COLUMN OVERWRITE BUILT FROM A VALUE THE
+> REQUEST HAD READ.** A doctor accepting two codes in quick succession has two
+> requests each read the map, each add one entry, and **the second write
+> silently drops the first** — a recorded clinical decision lost, with no error
+> and nothing to reconstruct it from.
+
+That is **F5-h's class exactly** — *read fresh, written stale* — which this
+repository has already paid for once on the E/M blob. **Fixed, not
+documented:** every gate and the write now run inside one interactive
+transaction behind a `SELECT … FOR UPDATE` on the practice-scoped row, and the
+audit row is emitted only after it commits.
+
+⚠️ **AND THE GATES MOVED INSIDE THE LOCK, NOT ONLY THE WRITE** — a visit signed
+between a gate read and the write would otherwise take a decision AFTER its
+signature, the freeze bypassed by a race rather than by a caller.
+
+## PROOF
+
+**44 arms** across two files. **`tsc --noEmit`: 0 errors.**
+
+**CONTROLLED SUITE DELTA** — the raw worktree number is not a measurement
+(`vitest.config.ts` aliases react to a path a worktree does not check out), so
+both sides were run in equivalent worktrees:
+
+| tree | files | tests |
+|---|---|---|
+| `origin/main` (detached control) | 356 passed · **16 failed** · 374 | 4918 passed · **1 failed** · 4923 |
+| this branch | 358 passed · **16 failed** · 376 | 4959 passed · **1 failed** · 4964 |
+| **delta** | **+2 files** | **+41 tests** |
+
+**The failures are IDENTICAL on both sides** — the pre-existing
+`react/jsx-dev-runtime` worktree property, not this branch's.
+
+⚠️ 44 arms but +41 tests: three of the 44 are the lock arms added after the
+first full-suite run, so the delta above under-counts by three. Said rather
+than silently reconciled — *arithmetic that does not reconcile is a finding.*
+
+### FIVE MUTATION PROOFS, each asserted APPLIED before its result was believed, and each restore asserting BOTH the marker gone AND the change's own symbol still present
+
+| # | mutation | result |
+|---|---|---|
+| **M1** | delete the signed-visit freeze | 🔴 2 arms. ⚠️ **And the tell:** the `status = SIGNED` arm fell through to `VISIT_NOT_READY` — so the READY gate is defence in depth for that case and **the freeze is load-bearing ONLY for `signedAt` set with status still READY.** A one-arm test would have proved the wrong half |
+| **M2** | stop enforcing the suggested set | 🔴 3 arms |
+| **M3** | fold an orphaned ACCEPT into `accepted` — the tempting shape, and the clinically dangerous one | 🔴 3 arms |
+| **M4** | drop normalisation on the intent code | 🔴 2 arms. ⚠️ **The FIRST version of M4 proved nothing** — it diverged the READ path, which already receives normalised keys, so it was a mutation aimed at the wrong form. Re-aimed at the write path, it discriminated |
+| **M6** | the HALF-LANDED fix canon says actually ships: schema + TS union land, the `ALTER TYPE` migration forgotten | 🔴 **the new gate AND the repo's standing `gate-audit-enum-migration`**, while `gate-audit-action-parity` stayed correctly GREEN — the three-layer picture, reproduced |
+| **M7** | remove the `FOR UPDATE` lock | 🔴 2 arms, on ORDER — the arms assert the lock precedes the read, because a lock taken after the read protects nothing |
+
+**Positive controls, because a guard proven only in the red direction is
+half-proven:** the happy path is asserted first so every refusal has a control;
+the `code_not_suggested` arms are paired with the same call on a suggested code;
+the migration-column arm carries a matcher control against `frozenFillManifestId`,
+a column that provably exists.
+
+## WHAT S2 OWES, NAMED
+
+- **The surface.** ⚠️ **PARKED, and the reason is measured** — see ruling #148.
+  The contract's `Note · Documents · Coding` tab bar **does not exist on the
+  shipped surface**: with `NEXT_PUBLIC_REVIEW_DOC_VIEW=true` an unsigned visit
+  renders the Rounds stage + read-only paper (`visit-ready-view.tsx:805`, `:1044`),
+  a signed visit renders `SignedDocumentView` (`:1151`), and the only
+  `role="tablist"` in the visit surface belongs to `ReviewTabsV2` — the FLAG-OFF
+  legacy path. The contract states an intended layout in the present tense; that
+  is the `DEPLOYMENT_RUNBOOK §5.6` shape, and S2 starts from this measurement
+  rather than from the sentence.
+- **Search-add** — needs its own `isValidIcd10` check on the way in.
+- **The amber rule** (owner-decided: SHOW, never hide) — ⚠️ **BLOCKED ON A
+  SUBSTRATE THAT DOES NOT EXIST.** `07a-icd-coding.ts:444-477` drops
+  validation-rejected candidates into a fire-and-forget audit row and stores
+  nothing, so **there is no rejected candidate to render.** Preserving them is a
+  worker change and its own slice. ⚠️ **And the drop reasons are FOUR, not one** —
+  `!isValidIcd10` (audited), plus incoherent-varicose, denial-contradicted and
+  unsupported-deficiency, which are CLINICAL drops with a `console.info` and no
+  row. The amber rule names only the first; showing the other three would be a
+  different product decision.
+- **Specialty-aware ranking**, the evidence panel, the mobile bottom sheet,
+  and the flow of an accepted code into note/export.
+
+## WHAT THIS ROW DOES NOT CLAIM
+
+- **It does not claim F8 is done.** One of five constraint-gaps is closed at the
+  server, and nothing a doctor can reach has changed.
+- **It does not claim the route has been exercised against a real database.**
+  Every arm mocks Prisma. The migration's SHAPE is proven by five precedents in
+  this repo that mix `ALTER TYPE "AuditAction"` with table DDL in one file and
+  are all applied (107/107); it has **not** been applied anywhere yet.
+- **It does not re-measure F8's population figures** — `604`, `59`, `131`, `42`.
+  Session 02 already marked the last three stale, and this slice depends on none
+  of them.
