@@ -29780,6 +29780,220 @@ condition satisfied nine days earlier.**
 
 ---
 
+### 🟢 F30 — A RETIREMENT CONDITION IS **TESTED**, NOT REMEMBERED. **Small, loop-eligible.**
+
+**Built 2026-08-25, run `20260825-072925-b1` session 01.** Files
+`scripts/check-retirement-conditions.sh` (READ-ONLY, report-only) and its gate
+`gate-f30-retirement-conditions.test.ts`.
+
+**The item is the INBOX entry of `2026-08-20T16:40:00Z`**, whose own retirement
+condition reads *"This entry retires when the sweep prints its first list."*
+**The list is below. It is the first one.**
+
+#### ⚠️ NUMBERED F30, NOT F29 — A LIVE COLLISION, RESOLVED THE WAY CANON SAYS
+
+`docs/backup-canon-and-f29` was **pushed to origin at `07:47:29Z`, eighteen
+minutes into this session**, and files **F29 = the orphan-branch sweep**. This
+item was being built as F29 at the same moment, by an actor that could not see
+it — canon's ruling-number collision (`#124`/`#125`/`#127`) one layer over:
+
+> **Two actors drafting from the same snapshot pick the same next number, and
+> neither can see the other's choice until a merge.**
+
+Theirs is pushed and carries a landed RELAY row on a branch; this one was not
+yet written anywhere. **A number is not a stable address until the row lands;
+the branch name is** — so this renumbered. Found by reading `git worktree list`
+while reaping a control worktree, **not by any check**.
+
+#### WHY IT EXISTS — FOUR HAND-DISCOVERIES, EACH FILED AND EACH LEFT IN PLACE
+
+`INBOX.md` is printed into **every** session's log at launch, so a stale entry
+is delivered to everybody, forever. Canon prices the two costs differently and
+the second is the expensive one:
+
+| | |
+|---|---|
+| an expired **TASK** | wastes a session — run04's session 04 spent its whole run establishing that finished work was finished, landed nothing, and the loop went dark |
+| an expired **PERMISSION** | **worse: a session that OBEYS it does the forbidden thing correctly.** The F10 carry-forward clause licenses writing a §2.5 declaration onto the SHARED TREE — the deploy surface |
+
+Every one of the four was found **by hand, while waiting on a gate** — which is
+precisely how the filing item predicted nobody would find them.
+
+> **A retirement condition nobody executes is the EXEMPTION-DECAY class one file
+> over. Canon already says the cure for a decaying exemption is to write its
+> retiring condition as a testable event. This is the other half: a testable
+> event that nothing tests is still prose.**
+
+#### ⚠️ THE OBVIOUS BUILD IS WRONG IN **BOTH** DIRECTIONS, MEASURED
+
+The filing item says to grep for **"retires when"**. Measured on today's file,
+that predicate is wrong twice over:
+
+| | |
+|---|---|
+| **OVER-counts** | three matching lines sit inside the entry that *proposed* this sweep and are **prose about retirement clauses** — `**"retires when"** clauses and TESTS each one`, plus a quotation of another entry's clause. A legend is not a row |
+| **UNDER-counts** | the F10 pointer's clause reads *"The exception retires **WITH** F10"*. Not "retires when" — and it is the single entry F23's session called **"the one that matters"** |
+
+That is canon's **COUNTING TOKENS INSTEAD OF CLASSIFYING ROWS**, and it would
+have been committed by the sweep written to cure that exact family. **So the
+unit is the ENTRY**, anchored on the `### <ISO8601>` heading the launcher itself
+counts, and every entry lands in exactly one named bucket.
+
+#### THE REGISTRY, AND WHY A HAND-KEPT LIST IS SAFE HERE
+
+Deciding what an English clause MEANS is a human judgement; executing it is not.
+The judgement is recorded once, in the script, reviewable in a PR. Canon says
+hand-kept lists go stale — **the defence is SET-EQUALITY**, the ratchet F24 just
+closed on: an entry with no registry row is a finding, and a registry row naming
+a vanished entry is a finding. **Neither direction can rot quietly.**
+
+⚠️ **Every row prints `STATED` or `INFERRED`.** `STATED` quotes the entry's own
+clause; `INFERRED` means the entry states none and the condition is the
+registry's *reading* — a judgement somebody must be able to disagree with.
+Hiding that distinction would let an inferred condition retire a live entry
+while wearing the entry's own words.
+
+#### 📋 THE FIRST LIST — 15 entries, the partition reconciles
+
+    due 4 · not-due 1 · needs-human 4 · no-condition 4 · retired 2
+    · unregistered 0 · cannot-tell 0        15 == 15 entries parsed
+
+**✅ DUE — met their own condition and are still being delivered:**
+
+| entry | why |
+|---|---|
+| `2026-08-16T19:30:00Z` F10 pointer | RELAY carries a closure heading for **F10**. ⚠️ **the expired PERMISSION** |
+| `2026-08-18T07:00:00Z` auto-certification | `feat/twin-auto-certification` gone from origin **AND** `auto-certify.ts` on `origin/main` |
+| `2026-08-20T16:40:00Z` this item | `scripts/check-retirement-conditions.sh` exists |
+| `2026-08-21T12:20:00Z` ruling #137 pointer | RELAY carries a closure heading for **F23**. ⚠️ **INFERRED** — it states no clause, but its point 2 reads *"The script does not exist yet — F23 builds it"*, which became **FALSE** when F23 landed. A false PRESENT-TENSE fact, delivered to every session — the `§5.6` shape canon has paid six hours for |
+
+**⛔ NOT DUE (1)** — `2026-08-17T12:00:00Z` F12 pointer: no closure heading for
+F12, and F12-g is open. **This bucket is the control.**
+
+**👤 NEEDS A HUMAN (4)** — F5-d, F5-e, F5-i and claim-first. Two need a
+production DB read the loop has no granted route to; two are behavioural
+judgements. **A refusal to guess, printed every run — never a pass.**
+
+⚠️ **IT FOUND TWO MORE THAN EITHER HAND PASS.** F23's session found 2; session
+03 of run `20260824-200552-b2` found 2. **The mechanism finds 4** — the two
+extra are this item's own entry and the F23 pointer.
+
+⚠️ **AND IT DISAGREES WITH SESSION 03 ON F5-d, DELIBERATELY.** That pass marked
+it **DUE**, citing canon's *"1 CERTIFIED in production"* — and said so honestly:
+*"cited from canon, NOT re-measured here."* This sweep answers **NEEDS A HUMAN**,
+because a citation of a canon measurement is not a measurement. **The
+conservative answer is the correct one**: retiring an entry on an inherited
+number is the fabricated-count rule wearing a retirement's clothes.
+
+#### PROOFS — five mutations, each asserted APPLIED before its result was read
+
+| # | mutation | result |
+|---|---|---|
+| **M1** | the ledger predicate always returns DUE (*"a sweep that returns everything"*) | 🔴 **CONTROL** arm — NOT-DUE emptied, F12 landed in DUE |
+| **M2** | drop one registry row — the stale-list direction | 🔴 **SET-EQUALITY**, naming `2026-08-21T12:20:00Z` |
+| **M3** | add a registry row for an entry that does not exist | 🔴 **SET-EQUALITY**, naming the orphan |
+| **M4** | break the heading matcher | 🔴 **5 arms**; the script itself refuses — *"only 0 INBOX entries parsed — the matcher is not reading this file. Can't tell."* |
+| **M5** | ⚠️ **toward SUCCESS** — point `file_exists` at a path that does not exist | `due 4 · not-due 1` → **`due 3 · not-due 2`**, still reconciling at 15 |
+| **M6** | reproduce the pre-fix defect below — control blind, verdict issued anyway | 🔴 the **CANNOT-TELL** arm, naming the auto-certification entry |
+
+**M5 is the half everybody skips.** M1–M4 prove the gate can go red. M5 proves
+the predicate **consults the world** rather than always answering DUE — *a guard
+proven only in the RED direction is half-proven, and it is the cheaper half.*
+
+#### ⚠️ AND MY OWN REVIEW OF THE FINISHED DIFF FOUND THE DEFECT THIS SCRIPT EXISTS TO PREVENT
+
+**Found after the branch was pushed and its gates were running**, by re-reading
+my own diff rather than my memory of it.
+
+`merged:` asks **two** questions — *is the branch gone* (network) and *is the
+file on `origin/main`* (a **LOCAL ref**). `NET_OK` controlled only the first.
+A CI checkout is routinely shallow or single-branch, so `origin/main` can fail
+to resolve **with the network up** — and `git cat-file -e origin/main:<path>`
+then fails for a reason that has nothing to do with the file.
+
+> **"We could not look" and "the condition is unmet" were collapsed into one
+> answer — this house's most-repeated defect, committed inside the instrument
+> written to stop entries rotting.** It would have reported a MET condition as
+> NOT MET, silently, and kept a retired entry alive forever.
+
+**It errs safe** (an entry stays delivered rather than being wrongly retired),
+which is exactly why nothing would have surfaced it. Fixed with a **second,
+separate control** (`REF_OK`), routing to CANNOT-TELL; a ninth arm asserts it,
+**conditionally**, so it stays honest on a runner that genuinely cannot resolve
+the ref. Mutation-proved as **M6**.
+
+⚠️ **The gate as first written could NOT have caught this** — its CONTROL arm
+reads F10/F12, which are ledger-only. A re-bucketing of the network predicate
+was invisible to every arm. *A guard's watched set does not grow when you add a
+predicate.*
+
+⚠️ **THE SECOND PUSH WAS DECLARED, NOT SLIPPED IN.** It cancelled this branch's
+own four runs at **~5 minutes**, knowingly, via `DECLARE_CANCELLATION` — the
+sanctioned override. Canon prices this class *by how late the second push
+lands*, and five minutes is the cheapest moment there is; shipping a known
+two-state collapse inside a fresh instrument was the more expensive option.
+
+Restored from **scratch copies, never from git**, and verified: both files
+**byte-identical by sha256** to their backups, with all five mutation markers
+absent.
+
+#### THE SUITE, AS A CONTROLLED DELTA
+
+| | files | passed | failed files | failed tests |
+|---|---|---|---|---|
+| control — detached worktree at `origin/main` (`216f886e`), carrying none of this | 373 | 4909 | 16 | 1 |
+| this branch | 374 | 4917 | 16 | 1 |
+| **delta** | **+1** | **+8** | **0** | **0** |
+
+**+1 file, +8 tests — exactly this gate's eight arms.** The 16 pre-existing
+failures are Playwright specs collected by vitest across the shared tree and
+every worktree; unchanged, and not this branch's.
+
+⚠️ **AND THE FIRST DELTA I COMPUTED WAS FABRICATED.** I read my branch's 4917
+against **session 03's** control figure of 4904 and got `+13` for a change that
+adds 8 arms. That is canon's *count carried forward from another session's
+report and then incremented* — their control described **their** tree, before
+F24's close landed. The arithmetic not reconciling is what caught it; the
+control above was then measured on **this** tree and gives `+8`.
+
+#### WHAT THIS ROW DOES **NOT** CLAIM
+
+- ⚠️ **IT SCANS `INBOX.md` ONLY.** The filing item named `RELAY.md` too. RELAY
+  is ~29k lines and its clauses sit mostly inside closed historical rows;
+  covering it by token-grep would re-commit the exact defect above, so it needs
+  its own registry and its own judgement pass. **Named residue, not a silent
+  cap.**
+- **`relay_closed:<ID>` approximates "closed"** by the ledger's own closure
+  vocabulary, not by the code. Verified to DISCRIMINATE today: F10 2 · F23 3 ·
+  F24 1 · **F12 0** — and sub-items (`F12-a`) never match their parent.
+- **It reports; it never retires anything.** `INBOX.md` is byte-identical before
+  and after a run, asserted by an arm. Retirement is a **supervised** action.
+- **The DUE set is a fact about today's file, not a property of the code.** It
+  re-arms whenever an entry is added or a condition comes due. The gate
+  therefore asserts DISCRIMINATION, never today's DUE set — *a check that fails
+  when the thing it guards starts working is a check nobody keeps.*
+
+#### 🔴 OWNER ACTION — THE GRANT, WHICH THIS LAYER CANNOT SHIP
+
+`.claude/settings.json` is **protected from the layer it governs**, so the
+unattended session that wrote the script could not add its own grant — the same
+structural gap already recorded for `check-em-note-shape-artifacts.sh`. Canon's
+*"an entry that names an instrument verifies that instrument's grant in the same
+commit"* is **unreachable from this side**, and the edit was attempted and
+refused rather than assumed.
+
+    "Bash(bash scripts/check-retirement-conditions.sh:*)"
+
+**Then, and only then, add it to `MASTER.md` STEP 0.5.** Adding it first would
+hand the loop a rule whose instrument is refused — the backfire canon names,
+where the entry makes the loop *less* safe than no entry at all.
+
+**GRANTED FALLBACK, working today:** the gate drives the script with
+`execFileSync`, so the sweep runs on **every PR** via
+`npx vitest run src/lib/__tests__/gate-f30-retirement-conditions.test.ts`.
+
+---
+
 ### 🟢 F29 — ORPHAN-BRANCH SWEEP AT SESSION CLOSE. **Small, loop-eligible.**
 
 **Filed 2026-08-25 after the SECOND bite in one session.**
