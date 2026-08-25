@@ -29685,3 +29685,42 @@ Production `acc4e4ef`, judged **5 of 5 · 10 of 10 · no finding**
 byte-identical build.
 
 **F8 OPENS.**
+
+---
+
+### 🟢 F29 — ORPHAN-BRANCH SWEEP AT SESSION CLOSE. **Small, loop-eligible.**
+
+**Filed 2026-08-25 after the SECOND bite in one session.**
+
+> **A branch pushed and never PR'd is invisible. Nothing lists it, nothing fails,
+> and the work simply does not exist as far as `main` is concerned.**
+
+| # | what was orphaned |
+|---|---|
+| 1 | `docs/f24-s3-judged` — the judgement of a production deploy. Found by the loop, landed as #806 |
+| 2 | `docs/deploy-judged-acc4e4ef` — **the judgement of the F24-S5 migration deploy.** Found by hand, landed as #847 |
+
+**Both were production records.** A deploy that is judged and whose judgement
+never reaches `main` is, to every future reader, a deploy that was never judged.
+
+**THE SWEEP** — one command, run at session close:
+
+    for each remote branch (excluding main and dependabot/*):
+      if it has NO open PR and NO merged PR  ->  FLAG IT
+
+**Distinguish the three cases rather than lumping them:**
+
+| case | disposition |
+|---|---|
+| merged, branch not retired | retire it |
+| **open work in progress** | fine — say so |
+| **pushed, never PR'd** | ⚠️ **the finding** |
+
+⚠️ **A POSITIVE CONTROL IS REQUIRED, because this sweep's healthy answer is
+zero** — and a zero from a broken enumeration is indistinguishable from a clean
+one. Push a throwaway branch, confirm it is flagged, delete it. Or assert the
+enumeration returned a non-empty branch list before believing any zero.
+
+**Not a substitute for the habit.** The habit is *open the PR in the same breath
+as the push*; this is the net under it.
+
