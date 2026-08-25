@@ -29860,3 +29860,106 @@ author against himself:
 - **The `+214` RELAY lines are session 01's own F30 row**, unread by this
   session beyond its diffstat — they land with #849 and speak for themselves.
 - **Nothing here re-measures F30's gate.** Its citation is #849's to earn.
+
+---
+
+# 🔵 THE `a2` ON `acc4e4ef`'s `e2e` — DISCHARGED BY ELIMINATION, AND IT IS **NOT** RE-RUN-AND-HOPE
+
+**Session 01 left this owed, in as many words:** *"`acc4e4ef` (the deployed
+commit) 4 of 4 but carrying an **`e2e` `a2`** whose reason I still need to locate
+in the record."* `check-citation.sh` refuses to let it pass silently — it prints
+*"the row must say WHY it was re-run — canon forbids re-run-and-hope, so an
+unexplained re-run is a finding of its own."* **This discharges it.**
+
+**The commit matters: `acc4e4ef` is what is RUNNING IN PRODUCTION.** An
+unexplained re-run on a deployed commit's citation is the highest-stakes place
+this class can appear.
+
+## THE MEASUREMENT — attempt 1 was **CANCELLED**, not FAILED
+
+    run 32808864629  attempt 1   created 2026-08-25T04:24:47Z
+      run  conclusion : failure
+      JOB  conclusion : cancelled          <- the two disagree, and the JOB is the truth
+      job  window     : 04:24:50Z -> 05:01:38Z   (36m48s)
+
+**48 of 55 steps SUCCEEDED.** Step **49** — *"Run E2E (visit-doc — the document
+page, incl. sidecar-down)"* — reads `cancelled` after **66 seconds**
+(`05:00:36Z → 05:01:42Z`); steps 50-55 read `skipped`.
+
+> ⚠️ **NO TEST FAILED ON ATTEMPT 1.** This is a cancelled run that was re-run,
+> **not a red test that was re-run until it went green.** The distinction is the
+> whole reason canon writes the rule the way it does, and collapsing the two
+> would have manufactured a far more serious finding than the one that exists.
+
+## FIVE MECHANISMS PROPOSED AND **REFUTED**, each by something RUN
+
+| candidate | refuted by |
+|---|---|
+| the job's `timeout-minutes` | it is **55**; the job was cancelled at **36m48s**, ~18 min of budget unspent |
+| a **step** timeout | step 49 ran **66s**; the only step timeouts in the file are **9 / 5 / 5** minutes |
+| `cancel-in-progress` | the group is **`e2e-${{ github.ref }}`** — per-**ref**. Across **ALL branches**, exactly **ONE** `e2e` run exists in `04:20Z–05:20Z`: the cancelled one itself |
+| a push or merge landing on `main` | **no commit** landed between `acc4e4ef` (`04:24:44Z`) and `751b6c79` (`06:08:02Z`) |
+| a self-hosted runner losing to the deploy on this host | **GitHub-hosted** — `runs-on: ubuntu-latest`, `runner_name: "GitHub Actions 1000015608"` |
+
+**What survives elimination: an EXTERNALLY-INITIATED cancellation** — an actor
+running `gh run cancel` or the equivalent — **and it is recorded NOWHERE.**
+`grep -rln 32808864629 docs/` returns **no file**, and the only mention of the
+`a2` anywhere is session 01's note that it could not find one.
+
+⚠️ **HONEST LIMIT, AND IT IS THE LOAD-BEARING ONE: THE CANCELLING ACTOR IS NOT
+ESTABLISHED.** The Actions API exposes the triggering actor of a run, not the
+identity of whoever cancelled an attempt. So *"a session cancelled it"* is
+**inference and is not claimed here**. What is measured is that the four
+mechanisms which would have cancelled it *automatically* are each refuted, and
+that no artifact in this repository mentions the run.
+
+> **This is elimination, not attribution.** Canon: *read to form a hypothesis;
+> RUN something to name a mechanism.* Five things were run; four mechanisms
+> died; the fifth is a hole in the record rather than a mechanism.
+
+## ⚠️ AND THE CITATION IS UNAFFECTED — SAID EXPLICITLY SO NOBODY RE-OPENS IT
+
+`acc4e4ef` cites **4 of 4**, verified here by `check-citation.sh` rather than
+typed, with the partition reconciling:
+
+    runs: 4 = green 4 + red 0 + pending 0 + stale 0 + cancelled 0
+              + startup-fail 0 + foreign 0 + extra 0 + unreadable 0
+
+   · `CI` 32808864566 a1 · `e2e` 32808864629 **a2** · `a11y-ci` 32808864582 a1
+   · `secrets-scan` 32808864692 a1
+
+**Attempt 2 succeeded on its own merits** (`updated 06:00:46Z`), and its duration
+sits inside the branch's measured norm — the ten preceding `main` `e2e` runs
+range **37m08s to 41m58s**.
+
+## ⚠️ THE PROCESS GAP THIS LEAVES, NAMED SO IT IS FIXABLE
+
+**A cancellation is invisible to every guard this programme owns.** The
+pre-push hook and `merge-pr.sh` both prevent an actor from *destroying somebody
+else's* in-flight runs. **Neither records a cancellation an actor performs
+directly on a run**, and `DECLARE_CANCELLATION` only reaches the log when the
+cancellation happens *through* one of those two doors.
+
+> **The `a2` is the only surviving trace, and it exists solely because
+> `check-citation.sh` prints the attempt number.** Had the checker printed run
+> ids alone — which is what a hand-typed row does — this would be unrecoverable.
+> **That is the strongest available argument for the checker-produced citation
+> row**, and it earned it here on a production commit.
+
+**Filed, not fixed:** a directly-cancelled run leaves no declared reason
+anywhere. Whoever builds that should note the constraint measured above — the
+API does not name the cancelling actor, so the record has to be written by the
+actor at the moment of cancelling, not reconstructed afterwards.
+
+### ⚠️ AND THE FABRICATED-SHA GUARD FIRED ON THIS SESSION, WHICH IS WORTH THE LINE
+
+Reaching for that citation I passed `check-citation.sh` a **40-character SHA I
+had built by padding `acc4e4ef`** rather than read. It answered:
+
+    🟡 NO SUCH COMMIT in kasrarayat-cloud/MedDoc — cannot tell.
+
+Exactly canon's *FULL-LOOKING IS NOT FULL*, reproduced on its own author, and
+the guard returned **cannot-tell rather than not-cited** — the distinction that
+entry was written to create. The real SHA came from `git rev-parse`.
+**A guard that catches a rule's own author on the day he cites it is the
+cheapest possible evidence that the mechanism works.**
