@@ -29620,3 +29620,68 @@ demonstrably NOT met must not appear in the expired list.*
 
 **The loop never writes `INBOX.md`**, so both DUE entries are flagged here for a
 supervised retirement rather than actioned.
+
+---
+
+# 🟢 F24 — **CLOSED** 2026-08-25, at 75 of 80
+
+**Opened on the owner's sentence.** *"The AI must be able to edit everything it
+shows me in the Word/PDF."* **Closed at 75 of 80**, with **5 refusing by design**
+and named forever.
+
+## THE ARC
+
+| slice | what it did |
+|---|---|
+| **S1 / S1b** | table-cell editing; the label-column widen — **withdrawn twice**, each time after it wrote into the wrong cell |
+| **S2** | one markdown-row primitive, five callers |
+| **S3** | the twin-supplied **ordinal**; addressability 40 → **52 of 52** table cells |
+| **caption-validation** | a caption is **validated**, not merely found — 20 of 28 bilateral tables unblocked |
+| **S4** | ordinal reachability; the no-caller defect caught **one layer up**, in the prompt |
+| **S5** | the **content-control edit intent** — built, **REFUTED**, rebuilt, walked, shipped |
+
+## THE FINAL CENSUS — 75 of 80, by replay
+
+| half | measured |
+|---|---|
+| table cells | **52 / 52** |
+| content controls | **23 / 28** |
+| **residual, refused BY DESIGN** | **5** (production: **4**) |
+
+**The residual, named forever** — `Address` · `REFERRING PHYSICIAN` ·
+`ULTRASOUND TECHNOLOGIST` · `MACHINE` · `LOCATION`.
+
+⚠️ **THE PATTERN IS THE ARGUMENT: every one is CLERICAL, not clinical.** Nothing
+in a dictation dictates who the technologist on shift was. `mappings-readiness`
+certifies them with a null `clinicalConcept` **on purpose**, and a null concept
+means the validator has **nothing to check a citation against**.
+
+> **An AI that writes unverifiable facts into a medical record is the defect, not
+> the gap.**
+
+## WHY CLOSING HERE IS NOT #142's FAILURE MODE
+
+#142 refused to close at 52/80 because those 28 were **refused by OMISSION** —
+unbuilt, and safely buildable. These 5 are **refused by DESIGN**.
+
+> **Closing on a re-read acceptance is legitimate ONLY when the residue is a
+> deliberate refusal. It is illegitimate when the residue is unbuilt work.**
+
+## RULING #147's MECHANICS — all four discharged
+
+1. ✅ census records **75/80**, residual **named forever** (`F24_RESIDUAL_MANUAL`)
+2. ✅ ratchet is **SET-EQUALITY**, flipped by the session that ran the census.
+   **Mutation-proved BOTH ways:** set grew → 🔴 `5 vs 6`; set shrank → 🔴
+   `5 vs 4`. ⚠️ **The old threshold stays GREEN under the shrink** (`28−23=5>0`)
+   — the blind direction, demonstrated rather than argued.
+3. ✅ a manual field refuses with a **named reason** —
+   *"Address is filled in by hand on this form"*, observed in the QA walk
+4. ✅ a concept-supply flow files **post-F24, unscheduled**, competing on merit
+
+## SHIPPED
+
+Production `acc4e4ef`, judged **5 of 5 · 10 of 10 · no finding**
+(`20260825-61b07e1f-JUDGED.md`). The walk ran **21 of 21** on QA against a
+byte-identical build.
+
+**F8 OPENS.**
