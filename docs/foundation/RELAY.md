@@ -30285,3 +30285,102 @@ exists; do not build a threshold on them.**
   the recon already marks them as not existing.
 - **No production write, and no database read, occurred.** Every figure here
   comes from git objects, the test runner, or a standing read-only watcher.
+
+---
+
+## ✅ BOTH MERGED AND CITED 2026-08-25 — run `20260825-072925-b1` session 02
+
+Every line below produced by `scripts/check-citation.sh`, **never typed.**
+
+### PR #850 — F8's discharged gate, session 01's record, the `a2`, the recon re-validation
+
+**Citation — 4 of 4 on `d57a139483ead0876befc8d7e30d5ee6faf3922c`:**
+
+   · `CI` 32830956147 a1
+   · `e2e` 32830956177 a1
+   · `a11y-ci` 32830956257 a1
+   · `secrets-scan` 32830956208 a1
+
+Every line `a1` — **no re-run, so nothing to explain.** Partition reconciles:
+`4 = green 4 + red 0 + pending 0 + stale 0 + cancelled 0 + startup-fail 0 +
+foreign 0 + extra 0 + unreadable 0`. Head `dfa37f7b` was itself **7 of 7**
+check-runs. Branch retired remote-side; local held by a worktree and
+`retire-branch.sh` **exited without claiming success**, correctly.
+
+### PR #849 — F30, the retirement-condition sweep
+
+**Citation — 4 of 4 on `911895023e8592a8e81447dbbc18a5dff42a1779`:**
+
+   · `CI` 32838532562 a1
+   · `e2e` 32838532544 a1
+   · `a11y-ci` 32838532563 a1
+   · `secrets-scan` 32838532630 a1
+
+**All `a1` on the MERGE COMMIT.** ⚠️ **The PR HEAD carried an `a2`, and the
+reason is recorded below — canon forbids an unexplained re-run.**
+
+⚠️ **NOT DEPLOYED. No runtime file is touched by either PR** — measured, not
+asserted: `git diff --name-only` filtered to non-`docs/`, non-`scripts/`,
+non-test → **0** on both.
+
+---
+
+## 🔵 #610 RECURRED ON F30's HEAD — THE `a2`, EXPLAINED, AND A CASCADE THAT IS NOT A SECOND DEFECT
+
+**This is the reason for `80721533`'s `e2e` `a2`.** Recorded because the
+checker prints the attempt number and canon requires the row to say WHY.
+
+### THE FAILURE, NAMED AT FILE:LINE BEFORE ANYTHING WAS RE-RUN
+
+    16-account-settings.spec.ts:38:5 — "account: profile edit persists across reload"
+    Error: the profile panel never showed its saved chip — updateProfileAction did not return ok
+    expect(locator).toBeVisible() failed · Timeout: 10000ms · line 111
+    ✘ 19 … ✘ 20 (retry #1)
+
+**That is open issue #610, matched clause by clause** — same file, same line
+38, same assertion at line 111, the same verbatim error string, the same
+`✘ 19 / ✘ 20 (retry #1)` shape. Open since 2026-08-19, *"recurs past its
+documented 12/12 mitigation"*. ⚠️ **It is also the identical signature F28's
+row records for ITS `a2` on 2026-08-25** — so this is the **second** recurrence
+inside one day, on two unrelated docs-only branches.
+
+### THREE INDEPENDENT REASONS IT IS NOT THIS BRANCH'S, STATED AS MEASUREMENTS
+
+| # | evidence | strength |
+|---|---|---|
+| 1 | `git diff --name-only` vs `main`, filtered to non-`docs/`, non-`scripts/`, non-test → **0**. The branch touches **4 files**: a vitest gate, `RELAY.md`, a preflight report, a shell script. **It cannot reach `updateProfileAction`** | **LOAD-BEARING — structural impossibility** |
+| 2 | already filed as **#610**, signature matched clause by clause | strong |
+| 3 | control: `main`'s own `e2e` on `d57a1394`, carrying none of F30, went green in the same window | ⚠️ **WEAKEST — a green control fails to REPRODUCE an intermittent failure and cannot exonerate alone.** Said plainly so nobody later cites it for more than it carries |
+
+**So the re-run was a reasoned act on a named mechanism, not re-run-and-hope.**
+Attempt 2 passed; every other workflow stayed `a1`; the merge commit is `a1`
+across all four.
+
+### ⚠️ AND THE SECOND FAILED STEP IS A CASCADE, NOT A SECOND FINDING
+
+`Upload Rounds screenshots (Gate B)` also read `failure`:
+
+    ##[error]No files were found with the provided path:
+             apps/transcribe-md/rounds-shots/. No artifacts will be uploaded.
+
+**Established by reading the step table rather than inferred:** step 21 failed →
+steps **22–37 all `skipped`** (every Rounds pack) → `rounds-shots/` was never
+produced → step 38 runs `if: always()` with `if-no-files-found: error` and
+therefore errors on an empty directory.
+
+> **Two red steps, ONE defect.** Reporting them as two would have manufactured a
+> finding that does not exist — and the discriminator was the *skipped* run of
+> steps 22–37, which is only visible in the step table.
+
+### 📌 FILED, NOT FIXED — #610 IS NOW A REPEAT OFFENDER ON THE GATE
+
+Two `a2`s in one day, on two branches that provably cannot touch the code under
+test, is a **tax on every docs-only PR**: each costs a ~40-minute `e2e` re-run.
+That is a real number and it is the argument for prioritising #610 above its
+current standing, **priced by the asset behind the symptom** — the asset here is
+the gate's own credibility, because a required check that fails for reasons
+unrelated to the diff trains every reader to re-run first and diagnose second,
+which is the habit canon forbids.
+
+**Not un-parked or re-prioritised by this session** — recorded with its evidence
+so the next triage has the count rather than an impression.
