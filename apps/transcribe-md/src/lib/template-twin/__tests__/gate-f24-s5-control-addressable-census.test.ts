@@ -91,6 +91,33 @@ const DERIVED: SemanticMapping[] = fallbackSemanticMappings(ir);
 const DERIVED_BY_ID = new Map(DERIVED.map((m) => [m.fieldId, m]));
 
 /**
+ * ⚠️ F24's RESIDUAL, NAMED FOREVER — ruling #147(1).
+ *
+ * F24 closes at **75 of 80**: 52 table cells + 23 content controls addressable,
+ * and these five REFUSED BY DESIGN. `mappings-readiness.ts` certifies a `manual`
+ * mapping with a null `clinicalConcept` deliberately, and a null concept means
+ * the validator has NOTHING TO CHECK A CITATION AGAINST. Admitting one would
+ * mint an unverifiable fact in a medical record — the defect, not the gap.
+ *
+ * ⚠️ AND THE PATTERN IS THE ARGUMENT: every one is CLERICAL, none is clinical.
+ * Nothing in the dictation dictates who the technologist on shift was.
+ *
+ * A FROZEN LITERAL rather than `sourceType === 'manual'` derived at run time,
+ * because deriving it would make the assertion tautological — it would agree
+ * with the fixture no matter what the fixture became.
+ *
+ * PRODUCTION READS 4 OF THESE 5: a physician has confirmed a concept for one, so
+ * the fixture is CONSERVATIVE by exactly one control, in the safe direction.
+ */
+const F24_RESIDUAL_MANUAL = [
+  'ttf_e3e4a4d7ecc6ecde78991e57', // Address
+  'ttf_b4e30cd696689beb73b7fc63', // REFERRING PHYSICIAN
+  'ttf_5d84f80e2fec3d0085ad6b33', // ULTRASOUND TECHNOLOGIST
+  'ttf_c884422f3a745f4eaa53c22d', // MACHINE
+  'ttf_7e45028e2b601ba0e4b0bd5c', // LOCATION
+] as const;
+
+/**
  * THE TWO MAPPING UNIVERSES, AND WHY ONE IS NOT ENOUGH.
  *
  * Addressability of a content control depends on whether its mapping carries a
@@ -612,10 +639,24 @@ describe('F24-S5 control census — the ratchet, and what it does NOT claim', ()
     // universe leaves all 5 null. The census is therefore CONSERVATIVE by
     // exactly one control, and the direction is the safe one: it under-reports
     // addressability rather than claiming a control works that does not.
-    const { buckets } = await census2();
+    const { buckets, declinedIds } = await census2();
     expect(buckets.addressable).toBe(23);
-    expect(28 - (buckets.addressable ?? 0), 'the control half reached ZERO gaps — re-read (c) and update RELAY')
-      .toBeGreaterThan(0);
+
+    // ⚠️ RULING #147(2) — SET-EQUALITY, NOT A THRESHOLD. Flipped 2026-08-25 by the
+    // session that ran the census, per the ruling's requirement that the flipper
+    // be somebody who looked.
+    //
+    // The previous form was `expect(28 - addressable).toBeGreaterThan(0)` — a
+    // THRESHOLD, and a threshold says nothing when the gap changes MEMBERSHIP.
+    // Both of these must redden:
+    //
+    //   · a SIXTH field falls out        -> the set GREW   -> red
+    //   · a manual field GAINS a concept -> the set SHRANK -> red
+    //
+    // The second is the one a threshold cannot see, and it is the direction that
+    // means the wall legitimately shrank and this file's story has gone stale.
+    expect([...declinedIds].sort(), 'the residual set MOVED — re-read ruling #147 and update RELAY')
+      .toEqual([...F24_RESIDUAL_MANUAL].sort());
   }, 180_000);
 
   async function census2() {
@@ -640,10 +681,12 @@ describe('F24-S5 control census — the ratchet, and what it does NOT claim', ()
     );
     const afterById = new Map(after.fields.map((f) => [f.fieldId, f]));
     let addressable = 0;
+    const declinedIds: string[] = [];
     for (const p of plan) {
       const f = afterById.get(p.fieldId);
       if (f?.value === p.want && f?.reasonCode === 'clinician_override') addressable += 1;
+      else declinedIds.push(p.fieldId);
     }
-    return { buckets: { addressable } };
+    return { buckets: { addressable }, declinedIds };
   }
 });
