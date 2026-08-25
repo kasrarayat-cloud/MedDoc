@@ -1060,7 +1060,23 @@ imaging report.
 
 ---
 
-### 🔴 F26 — #745 IS SECURITY-SHAPED AND HAS NEVER ENTERED THE LEDGER. **Filed 2026-08-22.**
+### 🟢 F26 — #745 IS SECURITY-SHAPED AND HAS NEVER ENTERED THE LEDGER. **Filed 2026-08-22. DISCHARGED 2026-08-25.**
+
+> ⚠️ **DISCHARGED BY: `# 🟢 F26 — #745's MECHANISM IS NAMED, AND IT IS NOT THE ONE
+> THE ISSUE'S TITLE CLAIMS` — the last block in this file**, run
+> `20260825-072925-b1` session 06. **The wrong-password submit never ran**; both
+> attempts failed inside `logoutViaMenu` at `12-auth-login.spec.ts:23`, and #745
+> is a **duplicate of #603**, now closed against it.
+>
+> ⚠️ **THE `DONE WHEN` BELOW IS UNSATISFIABLE AS WRITTEN** — both of its branches
+> assume the wrong-password submit reached `/board`, and it did not. Read the
+> discharging block, not this row's criteria. *Kept unedited, because the false
+> premise propagating from the alarm's title into the acceptance criteria is the
+> finding.*
+>
+> ⚠️ **THE SECURITY-SHAPED HALF IS NOT DISCHARGED AND DID NOT GO AWAY.** It lives
+> in **#603**, which is open, unfixed, and now carries a second occurrence: a
+> session cookie still present **10 seconds after sign-out**.
 
 **Not a new alarm. A durably unrecorded one — which is why every STEP 0 re-derives it.**
 
@@ -31391,3 +31407,272 @@ HEADROOM**, measured rather than inherited. F19's *"9m37s of headroom"* figure
 36m51s · 40m33s · 42m08s · 42m55s. **This is a POPULATION fact and its re-arming
 condition is any pack addition** — the ceiling itself is unchanged and must stay
 so.
+
+---
+
+# 🟢 F26 — #745's MECHANISM IS NAMED, AND IT IS NOT THE ONE THE ISSUE'S TITLE CLAIMS
+
+**Run `20260825-072925-b1` session 06, 2026-08-25. Branch
+`docs/f26-745-mechanism-named`.**
+
+**No ruling.** Naming a mechanism decides nothing; it is reversible, inside the
+envelope, and contradicts nothing in `RULINGS.md`. Recorded explicitly because a
+session that files a ruling for every finding makes `RULINGS.md` useless.
+
+## THE ANSWER, IN ONE LINE
+
+> **THE WRONG-PASSWORD SUBMIT NEVER RAN.** Both attempts failed inside
+> `logoutViaMenu`, called from `12-auth-login.spec.ts:23` — **eight lines before**
+> the wrong password is typed. The `19 × "/board"` samples are the state after a
+> **failed logout of a legitimately authenticated session**, which is exactly
+> where an authed user sits. They are not evidence about the wrong-password path,
+> because that code did not execute.
+
+**#745 IS A DUPLICATE OF #603**, which has been open since `2026-08-11` and names
+this same helper, this same call site, and this same two-arm split in its own
+body.
+
+## HOW IT WAS FOUND — A LINE NUMBER THAT COULD NOT BE WHERE IT CLAIMED
+
+The issue quotes its failing frame as:
+
+    > 71 |   await expect(page).toHaveURL(/\/login$/, { timeout: 15_000 });
+
+⚠️ **`12-auth-login.spec.ts` IS 53 LINES LONG. THERE IS NO LINE 71.** The frame
+is a HELPER, and the two are distinguishable by their own text — which is the
+whole discriminator:
+
+| file | assertion |
+|---|---|
+| `helpers/auth.ts:71` | `toHaveURL(/\/login$/, { timeout: 15_000 })` — **`$` anchor, explicit timeout** |
+| `12-auth-login.spec.ts:37,41` | `toHaveURL(/\/login/)` — **no anchor, no timeout** |
+
+The quoted frame matches the helper **byte for byte** and matches neither of the
+spec's own assertions. **Read at the failing commit, not today's tree** — `main`
+has moved since — and the tree claim was re-proved here rather than inherited:
+
+    61a249fc:apps/transcribe-md/tests  ->  6974712ca6de5001c247c6a812f4ad53fc62b25d
+    37a654f4:apps/transcribe-md/tests  ->  6974712ca6de5001c247c6a812f4ad53fc62b25d   identical
+
+## THE STACK, READ FROM THE FAILING JOB
+
+Run `32266134945` is at **`run_attempt=3`** and now reads `success`, so
+`/runs/<id>/jobs` serves the PASSING attempt. The failure is on **attempt 1**,
+job **`96110967996`** — reached by `/runs/<id>/attempts/1/jobs`.
+
+⚠️ **AND THE LOG CAME BACK ONLY VIA REST**, exactly as session 05's finding #2
+predicted: `gh api …/actions/jobs/96110967996/logs` → **3148 lines**, positive
+control `grep -c chromium` → **125**.
+
+**Both attempts, both frames, in full:**
+
+| attempt | site | assertion | received |
+|---|---|---|---|
+| initial | `auth.ts:72` | the cookie `expect.poll` → `toBe(false)` | **`true`** — session cookie STILL PRESENT after 10s |
+| retry #1 | `auth.ts:71` | `toHaveURL(/\/login$/)` | `19 × "http://localhost:9020/board"` |
+
+Both stacks read, verbatim:
+
+    at logoutViaMenu (…/tests/e2e/helpers/auth.ts:7{1,2})
+    at             (…/tests/e2e/scenarios/12-auth-login.spec.ts:23:3)
+
+`12-auth-login.spec.ts:23` is `await logoutViaMenu(page);`. The wrong password is
+typed at `:30` and the security assertions live at `:37` and `:41`. **Neither was
+reached in either attempt.**
+
+**POSITIVE CONTROL that the security assertion is not simply broken:** on
+attempt 3 (job `96123551554`) the same test reads
+`✓ 12 … grants no session (6.7s)`.
+
+## WHY THIS IS #603 AND NOT A NEW ALARM
+
+#603's body, filed eight days EARLIER, already contains the row:
+
+| test | site | assertion |
+|---|---|---|
+| `12-auth-login.spec.ts:23` | `auth.ts:72` | the cookie-clearing `expect.poll` — *Timeout 10000ms* |
+
+**Same spec line. Same helper line. Same failure.** #603 also states the two-arm
+property this run reproduced exactly — *"the two arms of one helper … failed
+independently in a single run"* — and #745 is that same pair, one arm per attempt.
+
+## ⚠️ F26's OWN `DONE WHEN` CARRIED A FALSE PREMISE IN **BOTH** BRANCHES
+
+The row asks for *"(a) a test-harness defect, **with the reason the wrong-password
+submit reached `/board`**"* or *"(b) a real auth defect"*. **Neither is
+answerable**, because the wrong-password submit did not reach `/board` — it did
+not run. The premise was inherited from the issue's title and propagated into the
+acceptance criteria of the item written to investigate it.
+
+> **A `DONE WHEN` inherits the framing of the alarm it is written from. When the
+> alarm's own headline is the thing in question, the acceptance criteria are the
+> LAST place the error will be noticed** — nothing re-reads them until somebody
+> tries to discharge them.
+
+## 🔴 THE RESIDUAL SECURITY QUESTION IS REAL — AND IT IS ON THE **LOGOUT** PATH
+
+**Said plainly so this row is not read as an all-clear.** The initial attempt
+failed because **the session cookie was still present 10 seconds after sign-out**,
+while the URL had already reached `/login`. That is the more security-shaped of
+the two arms, and #603 already names it and its history — *"the session-revocation
+race the repo has met before — `events.signOut` not revoking the DB `UserSession`,
+fixed 2026-06-09"*.
+
+⚠️ **WHAT THIS ROW DOES NOT CLAIM, AND THE UNTESTED CLAIM WRITTEN DOWN BEFORE
+ANYBODY ASKS:** *I have not tested that the wrong-password path is sound.* This
+row establishes only that **#745 is not evidence about it either way**. The
+security assertion remains unexercised **in that run**, and passes in every other
+one. Ruling out a regression is not ruling out a hole — the issue's own author
+said so, and that sentence survives intact.
+
+## 🔵 A HYPOTHESIS RAISED AND REFUTED — RECORDED BECAUSE IT WILL BE RAISED AGAIN
+
+**The `$` anchor is not the mechanism.** `toHaveURL(/\/login$/)` would never match
+a redirect carrying a query string, which would make the URL arm a DETERMINISTIC
+mismatch rather than a race — a tidier and more satisfying answer. Measured:
+`account-menu.tsx:134` calls `signOut({ callbackUrl: '/login' })` — a **bare**
+path, no query — and the received value was `"/board"`, not `"/login?…"`. **The
+anchor is sound.** Refuted, cheap, and worth the four minutes it cost.
+
+## DISPOSITION
+
+**#745 CLOSED AS A DUPLICATE OF #603**, with the stack and the reasoning posted to
+the issue rather than only to this ledger. The alarm is **not** discarded — it
+survives in #603, which is still open, still unfixed, and now carries a second
+confirmed occurrence and a named date.
+
+⚠️ **The point of F26 was that eight sessions each re-triaged #745 correctly and
+none of them owned it.** Closing a duplicate against a live parent is what stops
+the ninth session paying again — and the parent keeps the security-shaped half.
+
+## WHAT THIS ROW DOES NOT CLAIM
+
+- **It does not fix #603.** The helper is untouched; no code changed anywhere.
+- **NOT DEPLOYED, and it needs no deploy.** Documentation and an issue comment.
+  It does not extend the F8-S1 hold.
+- **No adversarial pass is owed.** Nothing on the clinical generation,
+  note-editing or export paths, where that pass is a gate.
+- ⚠️ **The mechanism was named WITHOUT re-running the pack**, which the row
+  forbids by name. Every fact above comes from the archived attempt-1 log, the
+  two commits' trees, and the shipped source.
+
+## 🔵 FINDINGS THIS ITEM DID NOT GO LOOKING FOR
+
+**1 · 🔴 `F26` IS A DUPLICATE ITEM ID — TWO DIFFERENT ITEMS CARRY IT.**
+`RELAY.md:1063` is *"#745 is security-shaped"* (filed 2026-08-22, this row's
+subject). `RELAY.md:27621` is *"A SUPERSEDED CANCELLATION IS NOT A FAILURE"* —
+**merged, cited `f6326311`, ruling #146**, from run `20260824-073818-b1` session
+03. Two items, one id, both real, ~26,000 lines apart.
+
+> **A grep for `F26` returns both, and the merged one reads as the live one
+> because it is the one with a citation attached.** A session told *"work F26"*
+> can correctly conclude it is already done. This is the ledger's own
+> *two-statements-that-can-disagree* failure arriving through an **identifier**
+> rather than through prose.
+
+Not renamed here — renaming an id that a merged citation already refers to is a
+change to the record, not a fix to it, and the correct disposition is a war-room
+question. **Named so the next session reads a known collision rather than
+discovering it.**
+
+**2 · `gh api …/runs/<id>/jobs` SERVES ONLY THE LATEST ATTEMPT.** With
+`run_attempt=3`, that endpoint returned **one job, `success`** — for a run whose
+whole interest is its attempt-1 failure. ⚠️ **A session reading it would conclude
+the run passed and the issue was stale.** The attempt-scoped route is
+`/runs/<id>/attempts/<n>/jobs`.
+
+⚠️ **AND THE FIRST DRAFT OF THIS FINDING SAID "no attempt field in the default
+view", WHICH IS MEASURED FALSE — CAUGHT BY CHECKING MY OWN CLAIM BEFORE PUSHING
+IT.** Each job **does** carry `run_attempt`, and it reads `3`:
+
+    …/runs/32266134945/jobs --jq '.jobs[] | "run_attempt=\(.run_attempt) …"'
+    -> run_attempt=3  id=96123551554  conclusion=success
+
+**So the disconfirming field is PRESENT and simply unread, which makes this the
+wrong-universe shape rather than a missing-data one** — and worse, not better. A
+filter like `select(.conclusion=="failure")` over `.jobs[]` returns **empty**,
+and empty reads as *"this run never failed"* when it means *"not on the attempt
+you were served."* The route answers correctly about a set the caller never
+chose. **`run_attempt` on every row is the free control, and I did not look at it
+until I went to verify the sentence I had already written.**
+
+**3 · SESSION 05's FINDING #2 REPRODUCED ON A SECOND JOB.** The REST route served
+3148 lines for `96110967996`. That finding was one job old; it is now a class with
+two members.
+
+**4 · 🟢 BOTH SESSION-CONTRACT MITIGATIONS FIRED THIS RUN, ON THE SAME SESSION —
+AND A SUSPICION ABOUT IT WAS REFUTED.** Session **01** of this run hit *both*
+failure modes canon warns about, together:
+
+    [loop] ⚠️ REPORT-MISSING — 8 non-empty lines; no 'MORNING REPORT' header
+    [loop] marker: 'Two things I am carrying to the report rather than acting on: …'
+
+⚠️ **MY FIRST READING WAS THAT THE LOOP HAD CONTINUED ON AN ILLEGAL MARKER** —
+`MASTER.md` says *"an absent or ambiguous marker halts the loop"*, and session 02
+plainly launched afterwards. **That would have been a kill switch failing to
+fire, and it is measured FALSE:**
+
+    [loop] marker unreadable — RECOVERY 1/2: classifying the session's own output
+    [loop] RECOVERED marker: 'CONTINUE' (classified from the session's output …)
+
+Kill switch 3's recovery budget (`foundation-loop.sh:438-461`) worked exactly as
+designed, and session 02 independently reconstructed session 01's lost report
+under its own `SESSION 01 — REPORT-MISSING, RECONSTRUCTED` heading. **Both
+mitigations fired; nothing was lost.** *Recorded because the next session will
+form the same suspicion from the same two log lines, and it is cheaper to look it
+up than to re-derive it.*
+
+**5 · ⚠️ SESSION LOGS ARE GITIGNORED, SO A MORNING REPORT IS NOT REPOSITORY
+RECORD.** `.gitignore:87` ignores `docs/foundation/logs/*.log`; `git ls-files`
+over that directory returns **1** entry, and it is `.gitkeep`.
+
+> **The morning report is durable on THIS HOST and exists in no clone.** MASTER
+> directs each session to reconstruct the run from `docs/foundation/logs/` — which
+> works for the loop and for nobody else.
+
+**Consequence, and it is why finding 4 above is in this file rather than only in
+my report:** a finding recorded solely in a morning report is one host-loss away
+from canon's own *"a finding that lives only in a transcript is not a finding"*.
+**Anything meant to survive belongs in `RELAY.md` or `RULINGS.md`.** Not proposed
+as a change — logs are operational output and ignoring them is defensible — but
+the *reporting habit* it implies was not written down anywhere.
+
+---
+
+## `51bf52cf` — SESSION 05's OWED ROW, **DISCHARGED**
+
+Session 05 closed with *"Owed to session 06: `51bf52cf`'s citation — one line."*
+This is that line.
+
+**Citation — 4 of 4 on `51bf52cf8812444a96eed614cd04f5b65ed2d040`**, produced by
+`scripts/check-citation.sh`, never typed:
+
+   · `CI` 32896024521 a1
+   · `e2e` 32896024560 a1
+   · `a11y-ci` 32896024575 a1
+   · `secrets-scan` 32896024607 a1
+
+Every line `a1` — **no re-run, so nothing to explain.** Partition reconciles:
+`4 = green 4 + red 0 + pending 0 + stale 0 + cancelled 0 + startup-fail 0 +
+foreign 0 + extra 0 + unreadable 0`.
+
+**And the merge commit reads 7 of 7 CHECK-RUNS** `completed/success`, read from
+`/commits/<sha>/check-runs` — *the object branch protection reads* — partitioned
+**status-first, conclusion-second** (`running 0 · failed 0 · passed 7`,
+reconciling to 7), because `conclusion != "success"` counts a RUNNING check as a
+failure and manufactures alarm.
+
+Session 05's own citation of `0118c76c` was re-verified here **with `--expect`**
+against the four run ids its row claims — 🟢 **4 of 4, no substitution.**
+
+⚠️ **THE `e2e` RAN 37m54s** (`20:33:43Z` → `21:11:37Z`) against the 55-minute
+ceiling — **17 minutes of headroom**, consistent with session 05's re-measured
+band (36m51s · 40m33s · 42m08s · 42m55s) and not with F19's stale *"9m37s"*.
+**Population fact; its re-arming condition is any pack addition.**
+
+### ⚠️ THIS ROW'S OWN CITATION IS OWED TO THE NEXT SESSION
+
+One line, the same way session 05 owed `51bf52cf` to me. Resolve the short sha
+first (`git rev-parse <short>`) — `check-citation.sh` refuses an abbreviation on
+purpose.
+
