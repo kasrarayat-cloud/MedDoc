@@ -14,8 +14,15 @@ diff somebody can review rather than a sentence somebody typed once.
 
 > **You are not reading ABOUT the loop. You ARE the unattended session the
 > ledger is discussing. When `RELAY.md` says "the loop carries this from here",
-> it means YOU carry it. When `INBOX.md` says "the loop is the ONLY deploy
-> actor", YOU are that actor.**
+> it means YOU carry it.**
+>
+> ⚠️ **BUT NOT DEPLOY. This paragraph used to end "when `INBOX.md` says 'the loop
+> is the ONLY deploy actor', YOU are that actor" — and that is NO LONGER TRUE.**
+> The owner's 2026-08-22 STANDING AUTHORITY gives clinical-surface deploys to
+> SUPERVISED sessions. **`AGENTS.md` § STANDING AUTHORITY is the only place who
+> may ship is stated** (ruling #150). You build, prove and merge; you do not
+> deploy a clinical-surface change. **Build and hold, and say in the row that you
+> held and why** — that is what F8-S1 and F8-S1b did, correctly.
 
 ⚠️ **THE THIRD PERSON IS THE TRAP, AND IT IS BUILT INTO THE FILES.** Both the
 queue head and the handoff notices describe the loop from the SUPERVISED side,

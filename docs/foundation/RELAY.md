@@ -11,8 +11,18 @@
 
 ## ⏭️ THE QUEUE — FIDELITY ARC AT THE HEAD — set 2026-08-15
 
-> **Supervised sessions are CLOSED. The loop carries this from here, and it is
-> the ONLY deploy actor.** Standard ceremony per item: citation by
+> ⚠️ **WHO MAY SHIP IS NOT STATED HERE. IT IS STATED IN EXACTLY ONE PLACE:**
+> **`AGENTS.md` § STANDING AUTHORITY.** Read it there.
+>
+> *This header said "the loop … is the ONLY deploy actor" from 2026-08-15 until
+> 2026-08-25. The owner's 2026-08-22 STANDING AUTHORITY superseded it — the loop
+> builds, proves and merges; **supervised sessions deploy and judge
+> clinical-surface changes**. For ten days two files could disagree about who may
+> ship, and a session reading this one first could have deployed believing it was
+> entitled to. Ruling #150 removed the restatement rather than correcting it,
+> because **restatement is the disease**.*
+>
+> Standard ceremony per item: citation by
 > `scripts/gh-runs.sh` on the FULL sha, merge by `scripts/merge-pr.sh`, §2.5
 > declaration for anything that changes runtime, and an **ADVERSARIAL PASS that
 > is MANDATORY on any note-surface or export change** — told to REFUTE, given
@@ -23299,7 +23309,9 @@ PROCEED.
 
 ⚠️ **IT IS A COMMAND-LINE FLAG AND NOT ONLY AN ENV VAR, AND THAT IS
 LOAD-BEARING.** `VAR=... cmd` is REFUSED to the unattended loop by
-`.claude/settings.json`, and **the loop is the only deploy actor** — an env-only
+`.claude/settings.json`, and — *as was true when this was written; see ruling
+#150 and `AGENTS.md` § STANDING AUTHORITY for who may ship now* — the loop was
+then the only deploy actor. An env-only
 hatch would be inert in exactly the sessions that could ever need it. That is the
 defect `gh-runs.sh --force-fallback` already exists to fix, and this is its
 second instance. `DEPLOY_CITATION_OVERRIDE` is honoured for a supervised
