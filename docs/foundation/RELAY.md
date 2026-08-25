@@ -30573,3 +30573,222 @@ a column that provably exists.
 - **It does not re-measure F8's population figures** — `604`, `59`, `131`, `42`.
   Session 02 already marked the last three stale, and this slice depends on none
   of them.
+
+---
+
+# ✅ F8-S1 IS MERGED AND CITED — AND THE DEPLOY IS **HELD**, DELIBERATELY
+
+**Run `20260825-072925-b1` session 03.** Every citation line below was produced
+by `scripts/check-citation.sh`, **never typed.**
+
+## CITATIONS
+
+### PR #852 — F8-S1, the ICD decision substrate
+
+**Citation — 4 of 4 on `54ab5aa7a2b25c2efc7c643f1edadf6744411163`:**
+
+   · `CI` 32852996708 a1
+   · `e2e` 32852996680 a1
+   · `a11y-ci` 32852996641 a1
+   · `secrets-scan` 32852996834 a1
+
+Every line `a1` — **no re-run, so nothing to explain.** Partition reconciles:
+`4 = green 4 + red 0 + pending 0 + stale 0 + cancelled 0 + startup-fail 0 +
+foreign 0 + extra 0 + unreadable 0`.
+
+The PR head `c6b601e2` was itself **4 of 4, all `a1`**, and **7 of 7 CHECK-RUNS**
+`completed/success` — read from
+`/commits/<sha>/check-runs`, which is what branch protection reads, rather than
+from the workflow-run view. `mergeStateStatus` went `BLOCKED → CLEAN` on the
+last check-run landing, exactly as canon's *gate on the object the gate reads*
+predicts.
+
+⚠️ **#610 did NOT recur on either run.** Worth saying explicitly: session 02
+recorded two recurrences in one day and priced the class by them, so a clean
+pair is the other half of that measurement rather than silence.
+
+Branch `feat/f8-s1-icd-decisions` retired **both sides** — remote by
+`retire-branch.sh`, local only after its worktree was reaped, and the script
+**refused to claim success** on the first attempt while the worktree still held
+it.
+
+### `fc41649a` — session 02's owed row, **DISCHARGED**
+
+Session 02 closed with *"`fc41649a`'s citation — one line, session 03."* This is
+that line.
+
+**Citation — 4 of 4 on `fc41649aeec0fede0c053f726387f369fa15ce91`:**
+
+   · `CI` 32845507683 a1
+   · `e2e` 32845507837 a1
+   · `a11y-ci` 32845507895 a1
+   · `secrets-scan` 32845507685 a1
+
+Every line `a1` — **no re-run, so nothing to explain.** Partition reconciles:
+`4 = green 4 + red 0 + pending 0 + stale 0 + cancelled 0 + startup-fail 0 +
+foreign 0 + extra 0 + unreadable 0`.
+
+Its `e2e` job ran **42m55s** (`started 12:03:18Z → completed 12:46:13Z`, read
+off the jobs API) — the top of the 37–42 min norm this ledger records, not
+outside it.
+
+---
+
+## ⚠️ THE DEPLOY IS HELD, AND A STANDING CHECK WILL READ RED BECAUSE OF IT
+
+**Declared here so the next session reads a KNOWN state rather than an alarm.**
+
+`main` now carries **108** migrations; production has **107**. So from this
+commit until F8-S1 is deployed:
+
+    bash scripts/assert-migrations-applied.sh        -> 🔴 1 unapplied
+    bash scripts/assert-migrations-applied.sh --qa   -> 🔴 1 unapplied
+
+⚠️ **BOTH REDS ARE THIS ENTRY, NOT A FINDING — AND THE CHECK'S OWN ADVICE IS
+WRONG FOR THIS STATE.** It prints *rebuild db-migrate and re-run*, and following
+it would apply a production migration **outside the §2.5 declaration gate** —
+the one act that gate exists to prevent. Canon already names this shape: *a
+check's remediation advice is written for its COMMON state.* A red that
+reconciles exactly with a declared hold is a confirmation, not an instruction.
+
+**WHY IT IS HELD.** Standing authority (2026-08-22) places the deploy of
+clinical-surface changes with supervised sessions. F8-S1 renders nothing — but
+it adds **three PERMANENT enum labels** (Postgres has no
+`ALTER TYPE … DROP VALUE`) and it has **no caller**, so shipping it today buys
+nothing and cannot be un-bought. **The deploy belongs with S2**, when the
+surface that invokes it exists.
+
+⚠️ **AND THE HOLD HAS A RETIREMENT CONDITION, SO CHECKING IT IS A LOOKUP:**
+this entry retires the moment `20260825130000_f8s1_icd_decisions` is applied to
+production under its own §2.5 declaration. Until then, the two reds above are
+expected and are the only two that are.
+
+## THE MIGRATION IS PROVED BY APPLYING IT — AND THE PROOF IS IN THE GATE
+
+Canon: *a data migration is proved by APPLYING it, on a throwaway database.*
+#852's `e2e` run **32848922134**, step **8 — "Migrate schema → meddoc_qa_test" —
+completed/success**, against a fresh Postgres 16 the job stands up itself.
+
+That is the migration actually running: `ALTER TABLE … ADD COLUMN` plus three
+`ALTER TYPE "AuditAction" ADD VALUE`, in one Prisma-wrapped transaction. Parsing
+was never the question — mixing those two DDL forms in a single transaction is,
+and PG12+ permits it. **Five migrations already on `main` do exactly that and
+are all applied in production**, so the shape had precedent; this is the shape
+being exercised rather than argued.
+
+⚠️ **It still does NOT mean the labels exist in the PRODUCTION enum.** That is
+the deploy, and the deploy is held.
+
+## ⚠️ A NUMBER IN #852's OWN LEDGER ROW IS SUPERSEDED — THE DELTA IS **+44**, NOT +41
+
+#852's row and PR body say **+41 tests**, with a caveat that it under-counts by
+three because the lock arms landed after that measurement. **Re-measured on the
+committed tree, against the SAME control** — `origin/main` was still `fc41649a`
+when the control ran, so the control is not stale:
+
+| tree | files | tests |
+|---|---|---|
+| control `origin/main` (detached worktree) | 374 | 4923 = 4918 passed · 1 failed · 4 skipped |
+| branch, as committed | 376 | 4967 = 4962 passed · 1 failed · 4 skipped |
+| **delta** | **+2** | **+44 — exactly the 44 arms** |
+
+Reproduced three times, identical. **The caveat is discharged and the arithmetic
+now reconciles.** The `+41` is not withdrawn — it was true of the tree it was
+measured on — it is superseded.
+
+The failing file/test counts are **identical on both sides**: the pre-existing
+`react/jsx-dev-runtime` worktree property, and it was identified BY NAME rather
+than by count — `gate-exported-medications-are-seen.test.ts` and
+`gate-devstates.test.ts`, both failing on that import.
+
+## RESIDUAL FOUND AFTER THE PUSH — FILED, NOT FIXED
+
+`readIcdDecisions` NARROWS each stored record to exactly
+`{state, at, byUserId}`. Two consequences, both benign today:
+
+- **(a)** a MALFORMED entry is dropped from the map, and because the next
+  decision rewrites the whole column, that entry is **deleted from the database
+  at that moment**. Intended — inventing a state for an unparseable record would
+  assert a clinical decision nobody made — but it is a deletion and the code
+  should say so where the next reader meets it.
+- **(b)** ⚠️ **FORWARD-COMPAT:** if a later slice ADDS a field to
+  `IcdDecisionRecord`, a deployment running the OLD narrower would strip it from
+  every decision it rewrites. **A new field must land in the narrower in the SAME
+  change, and a rollback window is a stripping window.**
+
+⚠️ **Filed rather than fixed because the branch was already pushed and its runs
+were in flight** — canon: *once a branch is pushed, it is CLOSED to this
+session.* Naming the cost of that choice: had the push waited for the whole pass
+to finish, this would have been a comment in the file instead of a row here.
+
+## THE FALSE-REJECTION LENS, AND ONE DELIBERATE NON-COPY
+
+The pass's last lens is the one that hurts a doctor: a legitimate action wrongly
+REFUSED. Eleven were enumerated against the shipped gates; ten are correct. The
+eleventh is a gate the route deliberately does **not** have:
+
+> ⚠️ **`POST /em-score/override` — the model for this route — refuses 409
+> `EM_NOT_APPLICABLE` via `emAppliesToVisit`. That gate was NOT copied, and
+> copying it would have been a false rejection on every imaging and procedure
+> note.**
+
+Ruling #123 suppresses the office E/M **level** on those note shapes; it says
+nothing about ICD-10 **diagnoses**, which an ultrasound report and a colonoscopy
+op-note both carry. A route that inherited its precedent's gate list wholesale
+would have blocked coding decisions on exactly the population F12 carved out —
+canon's *diff the callers before you replace them*, pointed at a gate list
+instead of a component.
+
+**Recorded as a decision rather than left as an absence, because an absent gate
+and a forgotten gate look identical in a diff.**
+
+## ⚠️ A SELF-FINDING: I LOADED A PRODUCTION HOST TO PASS TIME
+
+While waiting on a 43-minute `e2e`, I ran the unit suite repeatedly **purely to
+consume wall-clock**. Measured on this host, which serves patients:
+
+    load average before:  0.66  0.58  0.54
+    load average after:  16.26 12.98  7.45      <- 8 cores
+
+**That is past `preflight-health-check`'s own 🔴 BLOCK threshold (1-min load
+> 10)**, produced by the session that had just run preflight and read 🟢.
+Verified immediately afterwards and no harm was done — 9 of 9 containers
+healthy, all five co-tenants on their expected codes — **but that is luck, not a
+control.**
+
+> **Waiting inside the session is correct. MANUFACTURING CPU WORK TO WAIT WITH
+> is not.** The cheap wait is a poll; the correct wait is a blocking call to the
+> thing you are waiting for.
+
+**The mechanism that actually worked, recorded so nobody re-derives it:**
+`gh run watch <run-id> --interval 60` **blocks**, costs no local CPU, and buys
+~10 minutes of wall-clock per invocation before the harness backgrounds it.
+⚠️ **Collect the backgrounded watchers with `TaskStop` before writing the
+morning report** — canon's woken-after-reporting class, and both were collected
+here.
+
+## INSTRUMENT NOTES FROM THIS SESSION
+
+- ⚠️ **`gh run view --json updatedAt` STAYS FROZEN at the creation timestamp on
+  an in-flight run.** It is not a progress signal and reads exactly like a
+  stalled job. The step table is —
+  `gh api …/actions/runs/<id>/jobs`, counting steps with a non-null conclusion.
+- ⚠️ **`gh api …/check-runs` on a STALE sha fails LOUD** — `422 No commit found`
+  — where `gh run list --commit` on the same sha returns `[]` with exit 0. The
+  loud one caught a sha I had captured *before* a `git commit --amend`. **The
+  amend is the hazard: it mints a new sha and every id you already wrote down is
+  now about a commit that does not exist.**
+- ⚠️ **I computed elapsed times against a "now" I had EXTRAPOLATED from my own
+  poll cadence rather than read.** The clock was ~17 minutes ahead in my head,
+  and it produced two wrong numbers in a row: a `52 minute` e2e that was
+  `42m55s`, and a unit job I was about to report as a 3× overrun that was
+  running at exactly its `6m31s` norm. **Read the clock; never build one** —
+  canon's *full-looking is not full*, one instrument over. Every duration in
+  this row is taken from `started_at`/`completed_at`.
+- ⚠️ **`ls | grep -c` returned `0` for a directory I could see** — `ls` without
+  `-a` does not list dotfiles, so the scratch census read zero while
+  `.f8s1-wt` sat right there. An impossible value, caught because it was
+  impossible.
+- The row-anchor for the highest ruling number is `\*\*#[0-9]{1,3} —`; the
+  table-cell form `^\| \*\*#` matches **nothing** in `RULINGS.md`. Positive
+  control: `#141` must appear.
