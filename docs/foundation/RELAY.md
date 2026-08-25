@@ -29963,3 +29963,88 @@ the guard returned **cannot-tell rather than not-cited** — the distinction tha
 entry was written to create. The real SHA came from `git rev-parse`.
 **A guard that catches a rule's own author on the day he cites it is the
 cheapest possible evidence that the mechanism works.**
+
+---
+
+# 🟢 F8's RECON RE-VALIDATED BEFORE THE BUILD — CODE-SIDE HOLDS, POPULATION HAS DRIFTED
+
+**Canon: *a backlog that predates a rewrite is a list of guesses until it is
+re-validated.*** F8's recon and design contract are **nine days old** and F24-S5
+has shipped since. This re-checks them **before** a session builds on them, and
+the two halves came out differently — which is the reason to separate them.
+
+## ✅ THE CODE-SIDE CLAIMS HOLD — by BYTE-IDENTITY, not by re-approximation
+
+Both files the recon and the contract measure are **byte-identical to the tree
+they were measured on** (`44242430`, the design doc's own commit):
+
+| file | blob at the recon | blob on `main` |
+|---|---|---|
+| `packages/ai/src/data/icd10-allowlist.ts` | `7ce4dde4…` | **`7ce4dde4…`** |
+| `apps/transcribe-md/src/worker/layers/07a-icd-coding.ts` | `35c7a9b4…` | **`35c7a9b4…`** |
+
+Independently, `git log --since=2026-08-16` on each returns **nothing**, with a
+control proving the query works (the allowlist's last commit is `61e2e07b`,
+`2026-08-14` — before the recon). **Two routes, and they reconcile.**
+
+**And both cited anchors resolve at EXACTLY the lines the contract names:**
+
+    07a-icd-coding.ts:22    evidence_quote: z.string().min(1),
+    07a-icd-coding.ts:447     if (isValidIcd10(c.code)) {
+
+> **So constraints (a) evidence-mandatory and (b) allowlist-validated are still
+> satisfied by the existing engine, and the `604` figure stands.**
+
+⚠️ **STATED APPROXIMATION, because this matters: `604` was NOT re-measured
+here.** It is carried on **provenance** — the design doc records it as read
+through `ICD10_ALLOWLIST.size`, *"through the Set, never by counting lines"*, and
+the bytes it read are provably the bytes on `main` today. A fresh hand-count
+would have been the hand-approximated predicate canon warns about, and strictly
+worse evidence than byte-identity.
+
+**Membership was exercised rather than assumed** — `npx vitest run
+icd10-allowlist` from `apps/transcribe-md`: **4 files, 179 tests, all passing**.
+That is the structure answering, and it also proves the module *parses*, which
+is the failure text-presence checks cannot see.
+
+## ⚠️ THE POPULATION CLAIMS HAVE DRIFTED, AND ONE IS MEASURABLY STALE
+
+The recon's production figures are **population facts, not properties of the
+code**, and they carry no re-arming condition because none was written:
+
+| the recon said (2026-08-16) | status |
+|---|---|
+| **42 of 44** visits carry codes | ⚠️ **the denominator is stale — see below** |
+| **131** codes total (~3.1/visit) | unverified — scales with the denominator |
+| **59** `CODING_COACH_REJECTED_INVALID_ICD` audit rows | unverified |
+
+⚠️ **THE DENOMINATOR IS REFUTED BY AN INDEPENDENT, GRANTED ROUTE.**
+`check-em-note-shape-artifacts.sh`, run this session against production, opens
+with **`E/M artifact scan — 50 production visits`**. The recon's universe was
+**44**. So production has grown by **at least 6 visits** since, and every ratio
+derived from 44 is stale by construction.
+
+> **This is a cross-route reconciliation, not a database query.** The watcher
+> and the recon count the same table for different reasons, and they disagree —
+> which is enough to establish drift without needing the figure itself.
+
+⚠️ **HONEST LIMIT: THE LOOP HAS NO GRANTED DATABASE ROUTE**, so the three
+figures above are **not re-measured and are not corrected here.** They are
+marked stale rather than replaced, because replacing a measured number with an
+inferred one is the fabrication canon names.
+
+**WHAT THE BUILD SHOULD DO WITH THIS:** none of the three gates the build —
+(a) and (b) are code-side and hold. The population figures are **motivational**
+(*"59 rejections the doctor has never seen"* is why the amber rule exists), not
+load-bearing on any acceptance criterion. **Re-measure them when a route
+exists; do not build a threshold on them.**
+
+## WHAT THIS ROW DOES NOT CLAIM
+
+- **It does not re-measure `604`, `59`, `131` or `42`.** It establishes that the
+  first is about unchanged bytes and that the last has a refuted denominator.
+- **It says nothing about constraints (c), (d) or (e)** — the accept/reject
+  surface, its audit rows, and specialty-aware ranking remain **the build**, and
+  the recon already marks them as not existing.
+- **No production write, and no database read, occurred.** Every figure here
+  comes from git objects, the test runner, or a standing read-only watcher.
