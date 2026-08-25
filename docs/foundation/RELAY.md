@@ -29246,6 +29246,70 @@ the diff unreviewable against the defect it exists to close.
 
 ---
 
+## ✅ F24-S5 ITEM A — **MERGED AND CITED 2026-08-24.** `7d2c177e`
+
+PR **#837** (head `9b728afe`, itself **4 of 4** / 7 of 7 check-runs). Remote
+branch retired; **local left in place — held by the `.f24s5-itemA` worktree**,
+and `retire-branch.sh` exited `2` rather than claiming a success it had not
+earned.
+
+**Citation — 4 of 4 on `7d2c177ed75565489d617535f0e955ff48ffd6c1`**, produced by
+`scripts/check-citation.sh`, never typed:
+
+   · `CI` 32778102770 a1
+   · `e2e` 32778102759 a1
+   · `a11y-ci` 32778102761 a1
+   · `secrets-scan` 32778102788 a1
+
+Every line `a1` — no re-run, so nothing to explain. The partition reconciles:
+`4 = green 4 + red 0 + pending 0 + stale 0 + cancelled 0 + startup-fail 0 +
+foreign 0 + extra 0 + unreadable 0`.
+
+⚠️ **NOT DEPLOYED — the finding, the walk harness and a preflight report. No
+runtime file is touched.** The F24-S5 deploy stays **HELD**.
+
+## ✅ F24-S5 ITEM A(fix) — **MERGED AND CITED 2026-08-24.** `a7787509`
+
+PR **#838** (head `fc9d30dc`, itself **4 of 4** / **7 of 7** check-runs,
+partition `7 = 0 running + 0 failed + 7 passed`, `mergeStateStatus CLEAN`).
+Remote retired; local left in place for the same worktree reason.
+
+**Citation — 4 of 4 on `a7787509a9fbac1b88d209cf40291cfeda4979fb`**:
+
+   · `CI` 32782385403 a1
+   · `e2e` 32782385412 a1
+   · `a11y-ci` 32782385414 a1
+   · `secrets-scan` 32782385440 a1
+
+⚠️ **CARRIES RUNTIME CHANGE AND IS NOT DEPLOYED.** `compiler.ts`,
+`editable-controls.ts`, `picks-bridge.ts`, `resolver/index.ts` and
+`semantic-mapping/index.ts` all move. **The F24-S5 deploy stays HELD**, and
+migration `20260824080000_f24s5_clinician_field_overrides` remains unapplied on
+production **by design** — `assert-migrations-applied` therefore reads 🔴 `1
+unapplied` at every STEP 0 until that deploy happens. ⚠️ **Its remediation
+advice ("rebuild db-migrate and re-run") is WRONG IN THIS STATE and must not be
+followed**; the migration is on `main` and production has simply not been
+deployed since.
+
+### ⚠️ AND THE TWO E2E RUNS WERE WAITED THROUGH, NOT POLLED PAST
+
+Both merge commits' `e2e` ran **~40 minutes**, against the branch's measured
+41-minute norm. Session 01's report described #837's `e2e` as *"~90 min in
+flight"*; the branch view shows **four runs, all created `20:29:57Z` on that one
+head**, so the true figure at its close was **~33 minutes** and the run was never
+overdue. **Corrected here because a false slowness reading invites a re-run**,
+and canon forbids re-run-and-hope.
+
+⚠️ **A REFUSAL CAUGHT THE PERSISTING-`cd` TRAP MID-SESSION.**
+`bash scripts/check-citation.sh` returned **`127 — No such file or directory`**:
+the Bash cwd was still the worktree's `apps/transcribe-md` from an earlier
+`cd`, and **the grants are RELATIVE paths**. MASTER names this exact hazard.
+Caught by an exit code rather than by a wrong number — which is the lucky
+direction; the same trap has previously produced a *plausible* measurement from
+the wrong universe.
+
+---
+
 ## F24 CLOSE CONDITION — 75/80, and the residue is a REFUSAL not a GAP
 
 **Owner ruling, 2026-08-24** (branch `docs/f24-close-condition`; the row claims
