@@ -29538,3 +29538,85 @@ times while F28 was being built** — producing two loud `No such file or
 directory` refusals (the lucky case this item documents), a `bash` grant refusal
 on an absolute path, and a green measured against the wrong tree. **The item is
 filed against a class that was actively biting the session filing it.**
+
+#### ✅ F28 IS MERGED AND CITED — `61b07e1f`
+
+**Citation — 4 of 4 on `61b07e1f32c34e09fa7928c0d1ddd1aa22c09415`**, produced by
+`scripts/check-citation.sh`, never typed:
+
+   · `CI` 32801494228 a1
+   · `e2e` 32801494223 a1
+   · `a11y-ci` 32801494195 a1
+   · `secrets-scan` 32801494240 a1
+
+PR **#842**. Branch retired **both sides**, green earned by `retire-branch.sh`.
+
+##### ⚠️ THE PR HEAD CARRIED AN `a2`, AND HERE IS WHY — canon forbids an unexplained re-run
+
+The PR head `a6a6fa833b920426b3bb237aa1a1d9d1ba5b00c8` cited **4 of 4** with
+**`e2e` 32794720202 at `a2`**. Attempt 1 **FAILED**, and the checker correctly
+**withheld the citation** until it was resolved.
+
+**The failure, named at FILE:LINE before anything was re-run:**
+
+    16-account-settings.spec.ts:38 — "account: profile edit persists across reload"
+    Error: the profile panel never showed its saved chip — updateProfileAction did not return ok
+    expect(locator).toBeVisible() failed · Timeout: 10000ms · line 111
+    ✘ 19 … ✘ 20 (retry #1)
+
+**That is open issue #610, matched clause by clause** — same file, same line 38,
+same assertion at line 111, the same verbatim error string, the same
+`✘ 19 / ✘ 20 (retry #1)` shape. ⚠️ **And #610's own triage reasoning is
+identical to this one**: *"It is not the code under test… the commit adds one new
+file… imported by nothing… and docs."*
+
+**Three independent reasons it is not this branch's, stated as measurements:**
+
+| # | evidence |
+|---|---|
+| 1 | `git diff --name-only origin/main...HEAD` filtered to non-`scripts/`, non-`docs/`, non-`__tests__` files → **0**. The branch touches **no runtime file** and cannot reach `updateProfileAction` |
+| 2 | the failing test is **already filed** as #610, open since 2026-08-19, *"recurs past its documented 12/12 mitigation"* |
+| 3 | the **control passed**: `main`'s own `e2e` on `bd1eeb57` — carrying none of F28 — went green in the same window |
+
+⚠️ **THE CONTROL IS THE WEAKEST OF THE THREE AND IS LABELLED AS SUCH.** A green
+control **fails to reproduce** an intermittent failure; it cannot exonerate on
+its own. The load-bearing evidence is (1) — a structural impossibility, not a
+sample. Said plainly so nobody later cites the control for more than it carries.
+
+**So the re-run was a reasoned act on a named mechanism, not re-run-and-hope.**
+Attempt 2 passed; every other workflow stayed `a1`.
+
+#### ✅ AND `bd1eeb57` IS CITED — the merge of #839, which session 02 handed over
+
+**Citation — 4 of 4 on `bd1eeb57fd2eb6ec5c46abb754831cff4a946990`:**
+
+   · `CI` 32794585289 a1
+   · `e2e` 32794585297 a1
+   · `a11y-ci` 32794585354 a1
+   · `secrets-scan` 32794585269 a1
+
+Session 02 cited #839's **head** and was **correctly refused the merge** by
+`merge-pr.sh` — `main` had 3 runs in flight and it did not override. This session
+waited them out, merged, and verified the result **as a UNION by removal count**:
+`git diff --numstat` against **both** parents reads **0 removed** — 64 RELAY
+lines from #839, 27 AGENTS + 32 RELAY lines from `main`.
+
+#### 📌 TWO INBOX ENTRIES ARE DUE FOR RETIREMENT — the first pass of that sweep, by hand
+
+The queued item *"retirement conditions become mechanical"* has never printed a
+list. This is one, produced by hand, **with a negative control** so it is not
+merely a list of everything:
+
+| entry | its own retirement condition | verdict |
+|---|---|---|
+| `2026-08-18T07:00:00Z` auto-certification | *"retires when that branch merges"* | ✅ **DUE** — `feat/twin-auto-certification` is **gone from origin** and `auto-certify.ts` is **present on `main`**. Measured directly |
+| `2026-08-20T15:30:00Z` F5-d two `GSV at the SFJ` cells | *"retires when the owner's template certifies"* | ✅ **DUE** — canon records **1 CERTIFIED** compiled version in production, measured 2026-08-23. ⚠️ **Cited from canon, NOT re-measured here** — the loop has no granted database route |
+| `2026-08-20T16:40:00Z` the retirement sweep itself | *"retires when the sweep prints its first list"* | ⛔ **NOT DUE** — no sweep exists; this hand pass is not it |
+| `2026-08-21T09:00:00Z` F5-i multi-shape | *"retires when a second SHAPE certifies end-to-end"* | ⛔ **NOT DUE** — not established |
+
+⚠️ **THE TWO `NOT DUE` ROWS ARE THE POINT.** A pass that returned every entry
+would be indistinguishable from a broken one — *an entry whose condition is
+demonstrably NOT met must not appear in the expired list.*
+
+**The loop never writes `INBOX.md`**, so both DUE entries are flagged here for a
+supervised retirement rather than actioned.
