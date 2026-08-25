@@ -31119,3 +31119,228 @@ One line, the same way session 03 owed `8753207c` to session 04 and session 02
 owed `fc41649a` to session 03. Resolve the short sha first
 (`git rev-parse <short>`) — `check-citation.sh` refuses an abbreviation on
 purpose.
+
+---
+
+# 🟢 F31 — `e2e`'s PLAYWRIGHT INSTALL RAN FROM THE REPO ROOT. **BUILT AND GATED 2026-08-25.**
+
+**Run `20260825-072925-b1` session 05. Branch `fix/e2e-playwright-workdir`, PR #857.**
+
+**No ruling — this decides nothing.** A defect fix with a measured mechanism,
+reversible, inside the envelope, contradicting nothing in `RULINGS.md`. Recorded
+explicitly because a session that files a ruling for every change makes
+`RULINGS.md` useless.
+
+## THE DEFECT
+
+`e2e.yml`'s two Playwright install steps ran from the **repo ROOT**. The three
+sibling workflows that received the identical pair from the #739 split all run
+them from a package that DECLARES playwright. `e2e.yml` was the fourth site.
+
+    test.yml           working-directory: apps/meddoc-pro      ✅
+    a11y.yml           working-directory: apps/transcribe-md   ✅
+    nightly-tests.yml  cd apps/transcribe-md &&                ✅
+    e2e.yml            (repo root)                             ❌
+
+## THE MECHANISM, NAMED FROM THE LOG
+
+    2026-08-25T11:55:35.8901814Z ##[group]Run npx playwright install-deps chromium
+    2026-08-25T11:55:36.8209217Z sh: 1: playwright: not found
+    2026-08-25T11:55:36.8367411Z ##[error]Process completed with exit code 127.
+
+**ONE SECOND.**
+
+> **A HOISTED BIN IS NOT A DECLARED DEPENDENCY.** The ROOT `package.json` names
+> playwright **zero** times; root `node_modules/.bin/playwright` exists only
+> because npm workspaces HOISTS it. From the app directory `npx` searches the
+> app-local `.bin` **and walks up to the root**; from the root it can only ever
+> see the root. **The app directory is a strict SUPERSET** — it resolves under
+> either hoisting, where the root form resolves under only one.
+
+A dependabot bump of 37 **root** packages moved that hoisting and the root bin
+went away.
+
+**BOTH LEGS MEASURED, NOT ARGUED:**
+
+| leg | evidence |
+|---|---|
+| **no-worse** under today's hoisting | `npx --no-install playwright --version` → `1.59.1` from the repo root **AND** from `apps/transcribe-md`, whose local `.bin` **does not exist** — so that resolution provably walked UP |
+| **strictly better** under the bumped hoisting | `a11y` runs the identical command and **SUCCEEDS on the same commit** `e2e` dies on — **25s** against a **1s exit 127** — because it already carries the working directory |
+
+⚠️ **THE SECOND ROW IS NOT PROVABLE ON `main`.** This tree and `main` both have
+the root bin, so the branch's own green proves *no-worse* and **not** *better*.
+The *better* half rests on the `a11y`/`e2e` contrast, taken on the broken tree.
+
+## ⚠️ THE CENSUS CORRECTED THIS ITEM TWICE, AND BOTH ERRORS WERE MINE
+
+**CORRECTION 1 — A COUNT OVER THE WRONG AXIS.** I grouped `e2e` failures by
+**BRANCH**, saw most on dependabot branches, and let that slide into *"caused by
+this"*. **A count over the wrong axis cannot answer a question about KIND.**
+
+**CORRECTION 2 — A LIMIT WEARING A MEASUREMENT'S CLOTHES.** `--limit 200`
+returned **exactly 200** for three workflows. That is the cap, not the
+population. Re-queried at 1000: **882 runs** since the mitigation
+(e2e **290** · a11y **296** · test **290** · nightly **6**), and `e2e` failures
+are **23**, not the 13 I first reported.
+
+⚠️ **A partition summing to exactly the limit is the tell, and it is free** —
+`165 + 13 + 20 + 2 = 200` should never have been believed.
+
+**All 23 classified by failing STEP:**
+
+| kind | count | duration | where |
+|---|---|---|---|
+| install step, exit 127 — **THIS defect** | **5** | **~1s** | `monorepo-root-minor-patch` ONLY — **every run**, 08-19 → 08-25 |
+| install step — **#739's APT STALL** | **2** | **5m13s** | `main` (08-19 16:04), `noprogress-watches-origin` (08-19 16:21) |
+| `Build app + worker images` | **15** | — | marketing / transcribe-md / ai, 5 each |
+| the twin seed step | **1** | — | `feat/f24-s5-rebuild-identity` |
+| **total** | **23** | | 5 + 2 + 15 + 1 reconciles |
+
+⚠️ **AND MY "`main`: 0" WAS WRONG. `main` HAS ONE — AND READING IT PROPERLY IS
+THE WHOLE POINT.** It is an install-step failure, so a COUNT would have lumped it
+in with this defect. It ran **5m13s** — the step ceiling — **not one second**.
+Different mechanism.
+
+> **THE DURATION IS THE DISCRIMINATOR, AND THE #739 SPLIT IS THE ONLY REASON IT
+> EXISTS.** The split was built so *"the next stall names its own phase"*. It did
+> more than that: it made **two different failures at the same step** separable
+> at a glance. Before it, both were one silent bucket — and this defect would
+> still be undiagnosed.
+
+**THE CORRECTED NUMBERS STRENGTHEN THE DIAGNOSIS.** The defect is **5 of 5** on
+the root-bump branch, 100% reproducible for five days, and appears on **no other
+branch**. It is exactly the **ROOT** bump that fails — the only one of the four
+that moves root hoisting; the app-scoped bumps leave the root bin alone and fail
+at the image build. **A defect appearing on all four would have been evidence
+AGAINST this diagnosis.**
+
+## PROOF
+
+The check drives a real **YAML parse** and classifies **STEPS**, never greps
+lines. Exhaustive census across all four workflows, shared tree (pre-fix) against
+worktree (post-fix) as a paired control:
+
+| working directory | shared (pre-fix) | worktree (post-fix) |
+|---|---|---|
+| `apps/transcribe-md` | 15 | **17** |
+| `apps/meddoc-pro` | 2 | 2 |
+| inline `cd apps/…` | 2 | 2 |
+| **ROOT** | **2** | **0** |
+| **total** | **21** | **21** |
+
+**The total is unchanged at 21** — nothing added or lost — and `ROOT` moved
+`2 → 0`. That is the **mutate-toward-SUCCESS** control, the half everybody skips:
+the check MOVES when the fix lands rather than only reddening on a regression.
+
+⚠️ **`grep -c "npx playwright"` SAYS 15 ON THE FIXED FILE AND I DID NOT NORMALISE
+IT.** The 15th is the prose mention inside the comment the fix adds — **14 steps
++ 1 comment = 15 reconciles.** Canon's *counting tokens instead of classifying
+rows*, caught live by arithmetic.
+
+**MUTATION-PROVED TOWARD THE PARTIAL FIX** — one of the two steps, the
+half-landed version a tired human actually lands, **not** the complete inverse.
+Occurrence count asserted as exactly 1 before writing; **application asserted
+before any result was believed**; the check went RED and named the exact step.
+The backup was taken **AFTER** the change, so restore returns to the change
+rather than undoing it, and **both directions were asserted** — mutation gone AND
+the fix's own marker still present.
+
+**The branch's own `e2e` run is a positive control**: a `pull_request` run uses
+the BRANCH's workflow file, so the changed steps are exercised by the gate itself.
+
+## THE SWEEP IS BY PREDICATE AND EXHAUSTIVE
+
+`grep -rn "npx " .github/workflows/` returns **21** invocations and **every one
+is playwright**. No second tool relies on root hoisting — the class is closed
+rather than sampled.
+
+## WHAT THIS ROW DOES NOT CLAIM
+
+- **It does not fix #739.** The apt reach is untouched.
+- **It does not claim #743 now merges.** #743 also fails `unit tests` on its own
+  dependency changes. This removes one blocker of at least two.
+- **NOT DEPLOYED, and it needs no deploy.** `.github/` is CI configuration — no
+  runtime file, no migration, and it does not extend the F8-S1 hold.
+- **No adversarial pass is owed.** Nothing on the clinical generation,
+  note-editing or export paths, where that pass is a gate.
+- ⚠️ **POPULATION FACT WITH ITS RE-ARMING CONDITION.** `main` was never hit by
+  THIS defect because today's hoisting places the bin at the root. **What re-arms
+  it: any dependency change that moves root hoisting** — precisely what a
+  root-scoped dependabot bump is, and **one is open right now (#743).**
+
+## 🔵 FINDINGS THIS ITEM DID NOT GO LOOKING FOR
+
+**1 · THE #739 STALL RECURRED TWICE, AND THE MITIGATION DID ITS JOB.** Both on
+**2026-08-19**, seventeen minutes apart (`main` 16:04, `noprogress-watches-origin`
+16:21), **both bounded to 5m13s** by the step ceiling the mitigation added. **None
+in the six days since, across 882 runs.** So the mitigation behaves exactly as its
+author's comment promised — *"a stall costs ~5 minutes and says where it was,
+instead of 19 minutes and silence"* — and it remains explicitly **not a cure**.
+⚠️ **My first reading was "it held, zero recurrences." That was the capped-limit
+error, and the corrected answer is better evidence for the mitigation, not worse.**
+
+**2 · ⚠️ `gh run view --job <id> --log` RETURNS EMPTY, EXIT 0, FOR FAILED JOBS.**
+Measured: job `97788724159` → **0 lines**, exit 0. Positive control, a SUCCEEDED
+job `97880527661` → **5155 lines**. The log exists — the REST endpoint serves
+**189,633 bytes** of `text/plain` for that same id.
+
+> **The instrument returns a clean zero precisely on the jobs you need to read,
+> and that zero is indistinguishable from "the log was purged".** Without the
+> control this item's mechanism would have stayed unnamed and the row would have
+> said *"the stall recurred"* — which is false.
+
+**The working route is `gh api repos/<o>/<r>/actions/jobs/<id>/logs`.**
+
+**3 · `gh issue view <n>` FAILS on the projects-classic deprecation**, printing
+`GraphQL: Projects (classic) is being deprecated … (repository.issue.projectCards)`.
+`AGENTS.md` records this for `gh pr edit`; **it is the same sunset field reached
+through a different command**, so the class is wider than the row naming it. The
+working route is `gh api repos/<o>/<r>/issues/<n>`.
+
+**4 · A HAND-KEPT PER-CALLER LIST WENT STALE, AGAIN.** The #739 split touched
+four sites and three received a working directory. Canon's *a per-caller list is
+kept complete by hand, and hand-kept lists are wrong eventually*. The paired
+census above is what makes a future omission visible rather than quiet.
+
+**5 · 🔴 THIRD INSTANCE OF "AN ENTRY NAMES AN INSTRUMENT AND THE GRANT NEVER
+SHIPPED" — AND IT IS AN OWNER ACTION.**
+`bash scripts/check-retirement-conditions.sh` is **REFUSED** to the loop.
+Measured against the grant file, with a positive control:
+
+    grep -c check-retirement-conditions .claude/settings.json  -> 0   NOT GRANTED
+    grep -c check-cotenants             .claude/settings.json  -> 1   (granted; ran fine)
+
+Exhaustive census of the **21** instruments named by `AGENTS.md`, `MASTER.md` and
+the rulings — **20 granted · 1 gap · 0 named-but-missing**, and the partition
+reconciles.
+
+⚠️ **CANON'S NEWEST ENTRY NAMES THIS EXACT SCRIPT.** The 2026-08-25 entry
+*A BLOCKING ROW NAMES THE ARTIFACT THAT WOULD DISCHARGE IT* closes with
+**"SIBLING MECHANISM: F30's `check-retirement-conditions.sh`."** So a canon entry
+points the next session at an instrument that session cannot run — the precise
+failure canon already records twice (`gh-runs.sh`, `tmux has-session`), now a
+third time.
+
+**IT CANNOT BE FIXED FROM HERE.** `.claude/settings.json` is protected from the
+layer it governs, so the unattended side is structurally unable to ship its own
+grant. **OWNER ACTION, one line:**
+
+    "Bash(bash scripts/check-retirement-conditions.sh:*)"
+
+**Not worked around** — tunnelling a refused script through `node -e` or
+`python3 -c` is the sanctioned-hatch-becomes-the-undisciplined-door failure
+`AGENTS.md` forbids by name.
+
+**6 · A `cd` FROM AN EARLIER COMMAND SILENTLY RESCOPED A CHECK, AND THE PIPE ATE
+THE EXIT CODE.** `bash scripts/check-citation.sh …` returned
+`No such file or directory` because this session's shell cwd still held
+`apps/transcribe-md` from an unrelated command — canon's tree-relative-instrument
+entry, live. ⚠️ **And the trailing `; echo "--- exit: $?"` printed `0`** — the
+exit code of `tail`, not of the script. Two canon entries firing at once, on the
+session that had just read both.
+
+## 📌 OPEN ISSUES — STEP 0.8 CLASSIFICATION
+
+**8 open · 8 KNOWN · 0 NEW.** All eight predate this run (newest `#745`,
+2026-08-19T18:21Z). **`#739` is NOT closed by this item** — its apt reach is real
+and untouched, and this defect was a different mechanism wearing its costume.
