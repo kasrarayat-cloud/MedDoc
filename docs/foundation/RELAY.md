@@ -31344,3 +31344,38 @@ session that had just read both.
 **8 open · 8 KNOWN · 0 NEW.** All eight predate this run (newest `#745`,
 2026-08-19T18:21Z). **`#739` is NOT closed by this item** — its apt reach is real
 and untouched, and this defect was a different mechanism wearing its costume.
+
+---
+
+## `0118c76c` — SESSION 04's OWED ROW, **DISCHARGED**
+
+Session 04 closed with *"`0118c76c`'s citation — one line, session 05."* This is
+that line.
+
+**Citation — 4 of 4 on `0118c76cc0c3c8793b98b70a2a6313e9a4124953`**, produced by
+`scripts/check-citation.sh`, never typed:
+
+   · `CI` 32879820795 a1
+   · `e2e` 32879820658 a1
+   · `a11y-ci` 32879820694 a1
+   · `secrets-scan` 32879820691 a1
+
+Every line `a1` — **no re-run, so nothing to explain.** Partition reconciles:
+`4 = green 4 + red 0 + pending 0 + stale 0 + cancelled 0 + startup-fail 0 +
+foreign 0 + extra 0 + unreadable 0`.
+
+**And the merge commit reads 7 of 7 CHECK-RUNS** `completed/success`, read from
+`/commits/<sha>/check-runs` — *the object branch protection reads* — partitioned
+**status-first, conclusion-second** (`running 0 · failed 0 · passed 7`,
+reconciling to 7), because `conclusion != "success"` counts a RUNNING check as a
+failure and manufactures alarm.
+
+Session 04's own citation of `82a10e76` was re-verified here **with `--expect`**
+against the four run ids its row claims — 🟢 **4 of 4, no substitution.**
+
+⚠️ **AND THE `e2e` RAN 41m2s AGAINST A 55-MINUTE CEILING — 14 MINUTES OF
+HEADROOM**, measured rather than inherited. F19's *"9m37s of headroom"* figure
+(2026-08-18) is stale in the reassuring direction; today's four `main` runs read
+36m51s · 40m33s · 42m08s · 42m55s. **This is a POPULATION fact and its re-arming
+condition is any pack addition** — the ceiling itself is unchanged and must stay
+so.
