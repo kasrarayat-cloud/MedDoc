@@ -1173,6 +1173,43 @@ confirmation, not an instruction. And when a hold is declared, say in the ledger
 which standing checks will read red because of it — otherwise the next session
 reads a real alarm and helpfully clears it.
 
+## A MUTATION-PROOF BACKUP CAPTURES THE STATE YOU WANT TO **RETURN TO**
+
+**Standing 2026-08-25.** Canon already says *restore from BACKUP, never from
+git*. This is the refinement that rule was missing, and it cost the work twice
+in one pass.
+
+> **A PRE-CHANGE BACKUP TURNS "RESTORE" INTO "UNDO MY WORK".** The copy is taken
+> to survive the mutation, so it must be of the state the mutation is applied
+> TO — the finished change — not of whatever was there before you started.
+
+⚠️ **REFERENCE CASE — a three-failure chain, each one masking the next.**
+
+1. A change was written; a backup was taken **before** it, out of habit.
+2. A mutation script referenced an env var the heredoc never exported. It threw
+   — and **the suite ran anyway and printed `14 passed`.** An unapplied mutation
+   yielding a green, exactly as canon predicts.
+3. The "restore" copied the pre-change backup back — **destroying the change**
+   and leaving a file that looked untouched because it *was* untouched.
+
+**Only step 2's own assertion was working**; the green scrolled past beside it.
+The loss was found by grepping for the new symbol and getting `0`.
+
+**THE SHAPE THAT PREVENTS IT, and it is one line in a different order:**
+
+    <write the change>
+    cp <file> <scratch>/file.GOOD.bak      # <- AFTER the change, not before
+    <mutate>; assert the marker is present  # <- before believing ANY result
+    <run>; read the result
+    cp <scratch>/file.GOOD.bak <file>       # <- returns to the CHANGE
+    assert: marker gone AND the change's own symbol still present
+
+⚠️ **THE LAST LINE IS THE ONE PEOPLE SKIP.** Asserting the mutation marker is
+gone proves the mutation was undone. It says nothing about whether the thing you
+were proving is still there. **Assert both: what must be absent, and what must
+survive** — the same post-destruction discipline the reap rule already demands.
+
+
 ## A SHARED NOUN IS NOT A SHARED SURFACE
 
 **Standing 2026-08-24. Found by a pass over a fix, on the arm that looked like
@@ -4091,3 +4128,63 @@ permanently, in **300 `refs/pull/*` refs**, one per PR opened since. That last
 number is the one that does not come back down: `refs/pull/*` is GitHub-owned
 and unpushable, so the residual grew by one ref per PR for every day the files
 stayed. The cost of a tracked clinical file is not fixed. It compounds.
+
+## A BLOCKING ROW NAMES THE ARTIFACT THAT WOULD DISCHARGE IT — AND THE POINTER RUNS IN THE READER'S DIRECTION
+
+**Standing 2026-08-25.** Canon already says an exemption is written with the
+condition that retires it, so that checking is a **lookup rather than a
+judgement**. That rule governs how the condition is WRITTEN. This is the failure
+one step later: **the condition was met, the artifact that met it exists, and
+the row went on reading as blocked for nine days.**
+
+> **A LINK IN THE WRONG DIRECTION IS NOT A LINK. The reader travels from the
+> QUEUE to the world; a pointer from the world back to the queue is invisible to
+> them, because nothing tells them to go and look.**
+
+⚠️ **REFERENCE CASE — F8, and it was sitting under the ledger's own "F8 OPENS."**
+
+`RELAY.md`'s F8 row read *"build waits on the owner's Figma"* and *"The tab
+builds **ONLY** on the Figma delivery"*. Measured:
+
+| when | what |
+|---|---|
+| `2026-08-16T07:05:34Z` | the row lands — commit title *"recon measured **before any design**"*, **true at that moment** |
+| `2026-08-16T07:40:22Z` | `f8-icd-tab-design.md` lands: *"This document is the build's contract."* |
+
+**Thirty-five minutes.** Then nine days in which every reader inherited a
+satisfied condition as an open one.
+
+⚠️ **AND THE LINK EXISTED — POINTING UPSTREAM, WHICH IS THE PART THAT
+GENERALISES:**
+
+    f8-icd-tab-design.md:201  ->  "F8's row in docs/foundation/RELAY.md"     1
+    RELAY.md                  ->  f8-icd-tab-design.md                       0
+
+**The artifact knew about the row. The row did not know about the artifact.**
+The doc's author did the courteous thing and cited the row; nobody reads the doc
+to find out whether the queue is unblocked, because the row gives them no reason
+to open it.
+
+**THE PRACTICE, and it is one grep:**
+
+1. **A row that states a blocking condition NAMES THE ARTIFACT CLASS that would
+   discharge it** — a path, a filename pattern, a flag, a migration id. *"Waits
+   on the owner's Figma"* names a **medium**, not an artifact, and a medium
+   cannot be looked up. (The delivery here was markdown, not a Figma frame —
+   so even a diligent reader searching for `figma.com` would have found
+   **0**, correctly, and concluded the opposite of the truth.)
+2. **When you land the discharging artifact, EDIT THE ROW IN THE SAME COMMIT.**
+   Citing the row from the artifact is not the same act and does not substitute.
+   This is *"a ratified change of scope lands before the build finishes"* pointed
+   at a queue row: `RELAY.md` is the builder's input.
+3. **The check is `grep -c <artifact> <ledger>` → a zero is the finding.**
+
+⚠️ **IT IS THE `DEPLOYMENT_RUNBOOK §5.6` SHAPE AIMED AT THE QUEUE.** §5.6 was
+false for two months and cost six hours. This was false for nine days and its
+cost would have been **the queue head parked on a discharged gate** — a session
+reading *"F8 OPENS."*, then the row, and correctly standing down.
+
+**SIBLING MECHANISM:** F30's `check-retirement-conditions.sh` does exactly this
+for `INBOX.md` entries — registry, set-equality, report-only. **This entry is the
+same problem for `RELAY.md` queue rows and is NOT yet mechanized.** Filed as
+such: a row's blocking condition is prose, and prose decays silently.
