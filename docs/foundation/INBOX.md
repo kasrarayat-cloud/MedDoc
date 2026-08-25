@@ -80,6 +80,12 @@ fact outranks the sweep's schedule.
 
 ### 2026-08-15T04:18:34Z — HANDOFF: the fidelity arc is at RELAY's head, and the loop is the ONLY deploy actor
 
+> ⚠️ **SUPERSEDED ON ITS DEPLOY CLAUSE, 2026-08-25 (ruling #150).** The owner's
+> 2026-08-22 STANDING AUTHORITY gives clinical-surface deploys to SUPERVISED
+> sessions. **Who may ship is stated in `AGENTS.md` § STANDING AUTHORITY and
+> nowhere else.** The entry below is left intact as the record of what was true
+> on 2026-08-15 — it is not an instruction to follow today.
+
 **Supervised sessions are CLOSED.** The owner has stopped relaying; this loop
 carries the queue from here.
 
