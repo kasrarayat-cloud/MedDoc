@@ -31676,3 +31676,68 @@ One line, the same way session 05 owed `51bf52cf` to me. Resolve the short sha
 first (`git rev-parse <short>`) — `check-citation.sh` refuses an abbreviation on
 purpose.
 
+---
+
+## ⚠️ F26 — CORRECTION TO THE ROW ABOVE: MY OWN MERGE CLOSED #603, AND THE DISPOSITION DEFEATED ITSELF
+
+**Run `20260825-072925-b1` session 06, same session, 40 minutes later.** The F26
+block above states its disposition as *"#745 closed as a duplicate of #603 …
+which is still open, still unfixed"*. ⚠️ **That sentence was FALSE from the moment
+that block merged, and it was my merge that made it false.**
+
+**MEASURED:**
+
+    closed     at=2026-08-25T21:58:53Z
+    referenced at=2026-08-25T21:58:53Z commit=43ac4cd9…   <- the F26 merge itself
+
+`43ac4cd9` is a **documentation-only** commit — one file, `RELAY.md`, no helper,
+no test, no application code. It closed a live issue anyway.
+
+**THE SOURCE, LOCATED EXACTLY: PR #863's BODY, LINE 59.**
+
+> `- It does not fix #603. No helper was touched.`
+
+**GitHub's linked-issue parser has no concept of negation.** It matches
+`fix #603` and closes on merge. The commit message carried no keyword — checked
+with the same pattern — so the body was the sole source.
+
+### ⚠️ THE DISPOSITION PRODUCED THE EXACT OUTCOME IT EXISTED TO PREVENT
+
+The F26 row closed #745 against #603 **on the stated reasoning that the alarm
+must survive in a live parent rather than be discarded.** For forty minutes:
+
+| | |
+|---|---|
+| #745 | closed, pointing at #603 |
+| #603 | closed, pointing at **nothing** |
+| the security-shaped half — a session cookie alive 10s after sign-out | **no open home** |
+
+**And it is invisible from either issue** — both read as tidy, and the ledger row
+asserting otherwise had already merged.
+
+### HOW IT WAS CAUGHT — ARITHMETIC, NOT REVIEW
+
+Open issues read **8** at STEP 0 and **6** at close-out. I had deliberately closed
+**one**. *Arithmetic that does not reconcile is a finding*, and the unnamed bucket
+was exactly one issue wide. **No review, no gate and no check would have found
+it** — every instrument was green and both issues looked deliberately closed.
+
+### STATE NOW, VERIFIED RATHER THAN ASSERTED
+
+**#603 is REOPENED** (`state=open`, re-read from the API after the act), with the
+mechanism and its prevention posted to the issue. `logoutViaMenu` is unchanged;
+the 2026-08-19 occurrence stands. **#745 remains closed as a duplicate**, which is
+now once again a true statement about a live parent.
+
+### THE RULE, LANDED IN CANON IN THIS SAME COMMIT
+
+`AGENTS.md` § *PROSE IS NEVER A SHELL ARGUMENT* gains
+**"AND THE SHELL IS NOT THE ONLY READER — A NEGATED MENTION STILL CLOSES THE
+ISSUE"**. `--body-file` defeats the SHELL and does nothing about GitHub, which
+parses the same prose. The check is one grep over the body before `gh pr create`,
+and it discriminates — run against the offending body it returns exactly line 59.
+
+⚠️ **APPLIED TO ITS OWN LANDING:** this PR's body was grepped with that pattern
+before it was opened, and the entry names the check it was verified by. *An entry
+you cannot apply to the commit that lands it is an entry nobody will apply later.*
+
