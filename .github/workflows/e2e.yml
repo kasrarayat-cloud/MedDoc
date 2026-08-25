@@ -366,13 +366,38 @@ jobs:
           # malformed drop-in fails here rather than being silently ignored.
           sudo apt-get --version > /dev/null
 
+      # ⚠️ `working-directory` IS LOAD-BEARING, AND THIS FILE WAS THE ONLY ONE OF
+      # FOUR MISSING IT. `@playwright/test` is declared in `apps/transcribe-md`
+      # and `apps/meddoc-pro` — NEVER at the repo root. Root
+      # `node_modules/.bin/playwright` exists only because npm workspaces HOISTS
+      # it, which is an accident of resolution and not a declared dependency.
+      #
+      # From the app directory `npx` searches the app-local `.bin` AND walks UP
+      # to the root; from the root it can only ever see the root. So the app
+      # directory is a strict SUPERSET — it resolves under either hoisting,
+      # where the root form resolves under only one.
+      #
+      # MEASURED 2026-08-25 on PR #743 (dependabot, 37 root bumps), run
+      # 32843747130 job 97788724159, step failing in ONE SECOND — which is what
+      # distinguishes it from #739's stall, where the 5-minute ceiling is burned:
+      #
+      #     2026-08-25T11:55:36.8209217Z sh: 1: playwright: not found
+      #     2026-08-25T11:55:36.8367411Z ##[error]Process completed with exit code 127.
+      #
+      # The bump changed hoisting, the root bin vanished, and this job died at a
+      # step `a11y.yml` sailed through on the SAME COMMIT — because that file
+      # already carries `working-directory`. All 12 `npx playwright test` steps
+      # BELOW in this file carry it too; only these two install steps, added
+      # together by the #739 split, did not.
       - name: Install Playwright system deps (apt half of --with-deps)
         timeout-minutes: 5
         run: npx playwright install-deps chromium
+        working-directory: apps/transcribe-md
 
       - name: Install Playwright Chromium (browser half of --with-deps)
         timeout-minutes: 5
         run: npx playwright install chromium
+        working-directory: apps/transcribe-md
 
       # ── RULING #117(e) — the attestation footer as LIBREOFFICE paints it. ──
       # The unit suite's structural guard reads `word/footer1.xml` and the
