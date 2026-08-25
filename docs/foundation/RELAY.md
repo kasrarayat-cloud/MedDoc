@@ -31075,3 +31075,47 @@ NOT AN OVERSIGHT.** `review-document-view.tsx:389-404` says so in its own words:
 **That is why this is an owner question and not a build decision:** F8's contract
 and that comment are two landed intentions in direct conflict, and choosing
 between them is a statement about what the product IS.
+
+---
+
+## PR #854 — F8-S1b, the drop record: **MERGED AND CITED 2026-08-25.** `82a10e76`
+
+**Citation — 4 of 4 on `82a10e76880380985a614b690b3353765e231e6d`**, produced by
+`scripts/check-citation.sh`, never typed:
+
+   · `CI` 32871853948 a1
+   · `e2e` 32871854160 a1
+   · `a11y-ci` 32871854022 a1
+   · `secrets-scan` 32871853774 a1
+
+Every line `a1` — **no re-run, so nothing to explain.** Partition reconciles:
+`4 = green 4 + red 0 + pending 0 + stale 0 + cancelled 0 + startup-fail 0 +
+foreign 0 + extra 0 + unreadable 0`.
+
+**And the merge commit reads 7 of 7 CHECK-RUNS** `completed/success`, read from
+`/commits/<sha>/check-runs` — *the object branch protection reads* — rather than
+from the workflow-run view alone. Partitioned **status-first, conclusion-second**
+(`running 0 · failed 0 · passed 7`, reconciling to 7), because
+`conclusion != "success"` counts a RUNNING check as a failure and manufactures
+alarm.
+
+The PR head `e9b34497` was itself **4 of 4, all `a1`**, and **7 of 7 check-runs**.
+`mergeStateStatus` read `CLEAN` before the merge.
+
+Branch `feat/f8-s1b-icd-drop-record` retired **both sides** by
+`scripts/retire-branch.sh`, which reports each side separately because
+`gh pr merge --delete-branch` is not atomic.
+
+⚠️ **NOT DEPLOYED.** F8-S1b adds no migration and renders nothing, but it changes
+the clinical generation path (`07a-icd-coding.ts`), and standing authority
+(`AGENTS.md`, 2026-08-22) places the deploy of clinical-surface changes with
+supervised sessions. **It does not extend the F8-S1 hold** — that hold retires on
+`20260825130000_f8s1_icd_decisions` reaching production under its own §2.5
+declaration, and this slice adds nothing to it.
+
+### ⚠️ THIS ROW'S OWN CITATION IS OWED TO SESSION 05
+
+One line, the same way session 03 owed `8753207c` to session 04 and session 02
+owed `fc41649a` to session 03. Resolve the short sha first
+(`git rev-parse <short>`) — `check-citation.sh` refuses an abbreviation on
+purpose.
