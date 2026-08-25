@@ -82,7 +82,29 @@ jobs:
       # The preinstalled Android/.NET/GHC/CodeQL toolchains are ~25 GB and this
       # job uses none of them. Removing them is the standard remedy and it is
       # far cheaper than discovering the ceiling again at minute 18.
+      # ⚠️ GITHUB-HOSTED ONLY, AND THE GUARD IS LOAD-BEARING — DO NOT REMOVE IT.
+      #
+      # Every command in this step is safe ONLY because a hosted runner is
+      # DISPOSABLE. On a PERSISTENT runner the same two lines are destruction:
+      #
+      #   `docker image prune -af` removes every image not held by a RUNNING
+      #   container. On the QuillMD VPS that is the entire ROLLBACK ESTATE —
+      #   measured 2026-08-25: **164 `pre-*` tags**, the documented rollback path
+      #   for every past deploy, which ruling #137 explicitly forbids pruning.
+      #   A routine PR would have deleted all of them, silently, every run.
+      #
+      #   `rm -rf /usr/share/dotnet …` targets preinstalled toolchains that exist
+      #   on a hosted image and may be somebody's actual installation elsewhere.
+      #
+      # `runner.environment` is `github-hosted` or `self-hosted`, so this gates on
+      # exactly the assumption the step is built from. Hosted behaviour is
+      # unchanged — the ceiling this step exists to avoid is a hosted ceiling.
+      #
+      # THE GENERAL RULE: a step written for disposable infrastructure is a
+      # destruction command on persistent infrastructure. When a runner moves,
+      # re-audit every step's infrastructure assumptions.
       - name: Free runner disk
+        if: runner.environment == 'github-hosted'
         run: |
           echo "before:"; df -h / | tail -1
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc                       /usr/local/share/boost /opt/hostedtoolcache/CodeQL || true
