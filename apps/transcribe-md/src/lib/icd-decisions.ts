@@ -84,6 +84,48 @@ export interface IcdDecisionRecord {
   byUserId: string;
 }
 
+/**
+ * The runtime key list `readIcdDecisions` rebuilds each record from, and the
+ * compile-time proof that it is exactly `keyof IcdDecisionRecord`.
+ *
+ * ⚠️ F8-S1 FILED THIS AS A RESIDUAL AND COULD NOT FIX IT — its branch was
+ * already pushed with runs in flight, and canon closes a branch at that moment.
+ * This is the fix. The residual read:
+ *
+ *   > **FORWARD-COMPAT:** if a later slice ADDS a field to `IcdDecisionRecord`,
+ *   > a deployment running the OLD narrower would strip it from every decision
+ *   > it rewrites. A new field must land in the narrower in the SAME change,
+ *   > and a rollback window is a stripping window.
+ *
+ * ⚠️ **A COMMENT WOULD NOT HAVE BEEN A FIX.** The narrower rebuilds each record
+ * field by field, so a field added to the interface and forgotten here is
+ * stripped by every reader, silently, with `tsc` green — and then WRITTEN BACK
+ * NARROWED the next time any decision on that visit changes, because
+ * `applyIcdDecision` spreads the narrowed map. That is data loss with no error
+ * anywhere. The two assertions below convert it into a compile error:
+ * `_NoFieldUnwritten` fails when the interface gains a key this list lacks, and
+ * `_NoKeyUnknown` fails in the other direction.
+ *
+ * ⚠️ **THE ROLLBACK HALF OF THE RESIDUAL IS NOT CURED BY THIS AND CANNOT BE.**
+ * An old image running against a new column still narrows what it does not know
+ * about. What this buys is that the field can never be forgotten going FORWARD;
+ * the deploy-order rule stands and is restated at `readIcdDecisions`.
+ */
+export const ICD_DECISION_RECORD_KEYS = ['state', 'at', 'byUserId'] as const;
+
+type _NoFieldUnwritten =
+  Exclude<keyof IcdDecisionRecord, (typeof ICD_DECISION_RECORD_KEYS)[number]> extends never
+    ? true
+    : never;
+type _NoKeyUnknown =
+  Exclude<(typeof ICD_DECISION_RECORD_KEYS)[number], keyof IcdDecisionRecord> extends never
+    ? true
+    : never;
+/* eslint-disable @typescript-eslint/no-unused-vars */
+const _decisionFieldsAreWritten: _NoFieldUnwritten = true;
+const _decisionKeysAreKnown: _NoKeyUnknown = true;
+/* eslint-enable @typescript-eslint/no-unused-vars */
+
 export type IcdDecisionMap = Record<string, IcdDecisionRecord>;
 
 /** The only refusal the pure layer can produce. Everything else the route
@@ -162,6 +204,21 @@ export function duplicateSuggestionCount(rawIcdCodes: unknown): number {
  * written by `applyIcdDecision`, so a malformed entry means something else got
  * at it — and inventing a state for it would be asserting a clinical decision
  * nobody made.
+ *
+ * ⚠️ **DROPPING IS A DELETION, AND IT IS DEFERRED RATHER THAN IMMEDIATE — SAID
+ * HERE BECAUSE THIS IS WHERE THE NEXT READER MEETS IT.** The narrowed map is
+ * what `applyIcdDecision` spreads, so the malformed entry is not merely hidden:
+ * **the next decision the doctor makes on this visit writes the column back
+ * without it.** Intended — see above — but it is a deletion of stored data
+ * triggered by an unrelated action, which is not what "defensively narrowed"
+ * sounds like.
+ *
+ * ⚠️ **AND THE NARROWER IS FIELD-BY-FIELD, SO ADDING A FIELD IS A TWO-PLACE
+ * EDIT.** `ICD_DECISION_RECORD_KEYS` above makes forgetting the second place a
+ * `tsc` error. What it cannot make safe is the DEPLOY ORDER: an old image
+ * running against a column a new image has widened will strip the new field on
+ * every rewrite, so **a rollback window is a stripping window** and a field
+ * addition ships before anything writes it.
  */
 export function readIcdDecisions(rawIcdDecisions: unknown): IcdDecisionMap {
   if (!rawIcdDecisions || typeof rawIcdDecisions !== 'object') return {};

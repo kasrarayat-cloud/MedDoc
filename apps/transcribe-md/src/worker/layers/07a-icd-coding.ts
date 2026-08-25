@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { modelClient, isValidIcd10 } from '@meddoc/ai';
 import prisma from '@meddoc/db';
 import { logAudit } from '@/lib/audit';
+import { buildIcdDropRecords } from '@/lib/icd-drops';
 
 const MODEL = 'claude-sonnet-4-6';
 
@@ -567,9 +568,47 @@ export async function runLayer7aIcdCoding(
     });
   }
 
+  // ── F8-S1b — THE DROP RECORD ────────────────────────────────────────────
+  // Every exit's losers, each with its own reason token, deduped by code and
+  // EXCLUDING anything that survived into `codes[]`.
+  //
+  // ⚠️ THE SURVIVOR EXCLUSION IS NOT BELT-AND-BRACES. The three coherence floors
+  // decide PER CANDIDATE OBJECT on that object's `evidence_quote`, while a drop
+  // record is keyed by CODE — and `IcdResult` places no uniqueness constraint on
+  // the model's array. So one code emitted TWICE with different evidence has one
+  // instance kept and one dropped, and without this the blob would assert both
+  // "E63.9 is suggested" and "E63.9 was suppressed as unsupported". Found by the
+  // adversarial pass; see `lib/icd-drops.ts`.
+  //
+  // ⚠️ THE ACCUMULATION IS A PURE, EXPORTED FUNCTION AND NOT INLINE CODE, SO IT
+  // CAN BE DRIVEN. The first draft built the list here with four inline pushes,
+  // which left the gate no way to prove the reason↔exit binding except by
+  // regexing this file — and a source scan cannot see two tokens SWAPPED between
+  // their loops, which is this slice's entire product inverted. Named properties
+  // on `IcdDropInputs` are what a reader checks; the gate checks behaviour.
+  const dropped = buildIcdDropRecords({
+    notInVerifiedAllowlist: rejected.map((r) => r.code),
+    incoherentVaricose: droppedIncoherent.map((c) => c.code),
+    contradictedByDenial: droppedDenied.map((c) => c.code),
+    unsupportedDeficiency: droppedDeficiency.map((c) => c.code),
+    survivors: coherentFinal.map((c) => c.code),
+  });
+
+  // ⚠️ F8-S1b — THE STORED BLOB IS WIDER THAN THE RETURN VALUE, DELIBERATELY.
+  // `filtered` is what this layer RETURNS and its shape is unchanged, so
+  // `automation-incomplete.ts`'s `isIcdEmpty` and everything downstream of
+  // `runIcdCoding` see byte-identical input. Only the COLUMN gains `dropped`,
+  // and every reader of that column takes `.codes` or goes through
+  // `extractIcdRows` — enumerated by call site, and asserted by the gate rather
+  // than trusted here, because *a shared noun is not a shared surface*.
+  //
+  // `dropped` is written UNCONDITIONALLY, empty array included. A key that
+  // appears only when non-empty makes "this run dropped nothing" and "this blob
+  // predates the drop record" the same observation — the absent-vs-refused
+  // collapse this whole record exists to undo.
   await prisma.transcribeVisit.update({
     where: { id: input.visitId },
-    data: { icdCodes: filtered as unknown as object },
+    data: { icdCodes: { ...filtered, dropped } as unknown as object },
   });
 
   return filtered;

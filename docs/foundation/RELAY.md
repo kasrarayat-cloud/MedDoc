@@ -30792,3 +30792,286 @@ here.
 - The row-anchor for the highest ruling number is `\*\*#[0-9]{1,3} —`; the
   table-cell form `^\| \*\*#` matches **nothing** in `RULINGS.md`. Positive
   control: `#141` must appear.
+
+---
+
+# 🟡 F8-S1b — THE DROP RECORD. **BUILT AND GATED 2026-08-25. NOT DEPLOYED.**
+
+**Run `20260825-072925-b1` session 04. Branch `feat/f8-s1b-icd-drop-record`.
+Ruling #149 (PROVISIONAL) carries seven decisions, three of them written by the
+adversarial pass.**
+
+F8-S1 shipped the physician's DECISION. This is the other half of the same
+substrate: **the fact that a candidate was DISCARDED**, which the contract's
+owner-decided amber rule (*SHOW, never hide*) requires and which nothing stored.
+
+## WHAT SHIPS
+
+| file | what |
+|---|---|
+| `apps/transcribe-md/src/lib/icd-drops.ts` | **NEW.** Four reason tokens; `buildIcdDropRecords` (pure, exported, DRIVEN by the gate); the defensive narrower; the amber subset; the partition by reason |
+| `apps/transcribe-md/src/worker/layers/07a-icd-coding.ts` | each exit's losers now reach the builder; `dropped` written beside `codes` |
+| `apps/transcribe-md/src/lib/icd-decisions.ts` | **F8-S1's filed forward-compat residual, FIXED** with a compile-time mechanism |
+| `gate-f8-icd-drop-record.test.ts` | **40 arms**, seven mutation proofs |
+
+## THE PROBLEM, MEASURED
+
+`07a-icd-coding.ts` discards candidates at **FOUR** exits and stored **none**:
+the allowlist gate emits an audit row, the three coherence floors emit a
+`console.info`, and `icdCodes` was `{ codes: <survivors> }`. **64** production
+rejection rows exist and no doctor has seen one.
+
+⚠️ **THE 64 IS RE-MEASURED, NOT CARRIED FORWARD.** `f8-icd-tab-design.md` records
+**59**, measured 2026-08-16. It was true then and is stale by five. Canon: *a
+count carried forward from another session's report is a fabricated number.*
+
+## BACKWARD COMPATIBILITY IS MEASURED, AND THE PARTITION RECONCILES
+
+    transcribe_visits with icdCodes NOT NULL      49
+      jsonb_typeof = 'object'                     49   (no legacy bare arrays)
+      carrying key 'codes'                        49   <- the ONLY key present
+      carrying key 'dropped'                       0
+      any other top-level key                      0
+
+**No migration and no `schema.prisma` change** — `icdCodes` is `Json?` and the
+shape is unconstrained. Shape asked BEFORE quantity, per canon.
+
+## ⚠️ THE ADVERSARIAL PASS FOUND THREE DEFECTS, AND TWO WERE MINE BY DESIGN
+
+Three independent lenses over the finished diff. **The branch had already passed
+32 arms, five mutation proofs, `tsc` 0 and a controlled full-suite delta.** All
+three findings below survived my own verification against production or source.
+
+| # | what it refuted | the fix |
+|---|---|---|
+| **1** | the token `not_in_billable_set` | **RENAMED** `not_in_verified_allowlist` |
+| **2** | `billableChildren` — *"ALL of them, never one"* | **DELETED**, not repaired |
+| **3** | *"the buckets are disjoint by construction"* | survivors EXCLUDED; records DEDUPED |
+
+**(1) THE ALLOWLIST KNOWS MEMBERSHIP AND DOES NOT KNOW BILLABILITY — AND IT
+ANSWERED ANYWAY.** `isValidIcd10` is membership of a **604-code STARTER SET**
+whose own header says it *"does NOT replace the full CMS list"*. Measured over
+all 64 rows, 65 distinct codes, **12 + 2 + 51 = 65**:
+
+| bucket | count |
+|---|---|
+| since added to the allowlist — no longer refused | **12** |
+| genuinely category-header-shaped (`I83.89`, `I83.9`) | **2** |
+| **REAL, SUBMITTABLE codes absent from the starter set** | **51** |
+
+`Z48.815`, `I87.312`, `Z87.39`, `R59.0`, `F10.20`, `M17.11`, `D62`… Telling a
+physician those are *"not billable"* is FALSE and the harm direction is
+**UNDER-CODING**. ⚠️ **The contract's own verification badge already reads
+*"Not in verified set"*** — the honest token and the designed UI agreed all
+along; only my first draft disagreed with both. *This is the bucket-collapse
+class the slice exists to fix, reproduced inside the fix for it.*
+
+**(2) THE CHIP WOULD HAVE UPCODED.** `billableChildrenOf('E66.0')` → `['E66.01']`.
+`E66.0` is obesity due to excess calories; **`E66.01` is MORBID (severe)
+obesity**, and `E66.09` is simply absent from the allowlist. `E11.6` →
+`['E11.65']` offers hyperglycemia where the record may say hypoglycemia.
+**236** refused parents collapse to a singleton this way. The prefix scan is
+sound over the set it reads, and that set cannot enumerate siblings it does not
+contain — so `length === 1` means *"one made our list"* while the surface renders
+*"there is only one answer"*. **Deleted.** Re-arming condition: the allowlist
+becoming the full CMS set.
+
+**(3) A CODE COULD BE IN BOTH `codes[]` AND `dropped[]`.** The coherence floors
+decide per CANDIDATE OBJECT on its `evidence_quote`; a drop record is keyed by
+CODE; `IcdResult` places no uniqueness constraint on the model's array. One code
+emitted twice with different evidence → one kept, one dropped → the blob asserts
+both *"E63.9 is suggested"* and *"E63.9 was suppressed"*. `buildIcdDropRecords`
+now takes the SURVIVOR list and excludes it, so *a dropped code can never be
+accepted* is a property of the data rather than an accident of the model's
+output. Records are also DEDUPED — a real production payload emitted
+`["I87.312","I87.312", …]` and the accepted side already dedupes.
+
+## ⚠️ AND THE GATE ITSELF WAS REWRITTEN, WHICH IS THE HALF WORTH COPYING
+
+The pass demonstrated the first gate's reason-binding arm **stays GREEN when two
+reason tokens are SWAPPED between their loops** — four call sites, four tokens,
+one each, and every varicose suppression reported to the physician as *"the note
+explicitly denies this"*. It also went **RED** on
+`dropRecord(normalizeIcdCode(c.code), …)` because `[^)]*` cannot cross a nested
+paren. **False green on the regression that matters, false rejection on a
+tightening, from one line of regex.**
+
+> **THE CURE WAS NOT A BETTER REGEX.** The accumulation moved into
+> `buildIcdDropRecords` — pure, exported — and the gate now DRIVES it. *A source
+> scan cannot see a swap; an execution can.*
+
+The residual source arm that remains asserts an exact `field: local` PAIRING
+rather than a count, because the arm that was defeated counted tokens and a swap
+does not change a multiset. **Mutation-proved: the exact swap that beat the old
+gate now reddens two expectations.**
+
+## PROOF
+
+    tsc                0 errors        (run from apps/transcribe-md — see below)
+    gate               40 of 40
+    full suite         377 files / 5007 tests
+    control            origin/main 376 / 4967, 16 failed files / 1 failed test
+    delta              +1 file, +40 tests — exactly the new arms
+
+The 16/1 are the pre-existing worktree `react/jsx-dev-runtime` property,
+**IDENTICAL on both sides**, established by RUNNING a detached control worktree
+at `origin/main` rather than by inheriting session 03's figures.
+
+**Seven mutation proofs**, each asserted APPLIED before its result was believed,
+each restore asserted in BOTH directions (marker gone **and** the change's own
+symbol still present):
+
+| # | mutation | caught by |
+|---|---|---|
+| 1 | merge two exits into one bucket | reason-wiring arm |
+| 2 | `billableChildrenOf` picks one child | split-family arm *(both since deleted with the feature)* |
+| 3 | narrower leaks the model's description | PHI arm |
+| 4 | write `dropped` only when non-empty — the PARTIAL fix, not the complete inverse | unconditional-write arm |
+| 5 | add a field to `IcdDecisionRecord` | **`tsc`** |
+| 6 | **swap two exits at the CALL SITE — the mutation that beat the old gate** | caller-binding arm |
+| 7 | remove the survivor exclusion | three safety arms |
+
+⚠️ **THE GATE REDDENED AGAINST ITS AUTHOR TWICE ON FIRST EXECUTION** — the
+export-surface arm matched the English word *"dropped"* in four unrelated
+comments (the substring-trap family), and a bug I introduced put the `dropped`
+spread in the Prisma `data` payload rather than inside `icdCodes`.
+
+## ⚠️ IT HAS NO CALLER
+
+Same posture as F8-S1 and for the same reason: **where the coding surface lives
+is PARKED under ruling #148 and is an owner question.** The substrate is
+surface-independent — the amber rule is decided whatever the tab's home turns out
+to be — but nothing renders this yet.
+
+## ⚠️ POPULATION FACT, WITH ITS RE-ARMING CONDITION
+
+`layer-skip.ts:101` skips L7a whenever `icdCodes` has content, so **no visit that
+already carries codes will ever gain a drop record.** This populates on visits
+coded from here on and on nothing else. Re-arming condition for the
+back-catalogue: any path that clears `icdCodes` on an existing visit. **There is
+none today.**
+
+---
+
+## `8753207c` — SESSION 03's OWED ROW, **DISCHARGED**
+
+Session 03 closed with *"`8753207c`'s citation — one line, session 04."* This is
+that line.
+
+**Citation — 4 of 4 on `8753207cd45d078aa64d101fa427192eb3d1ee7f`:**
+
+   · `CI` 32862020455 a1
+   · `e2e` 32862020542 a1
+   · `a11y-ci` 32862020281 a1
+   · `secrets-scan` 32862020295 a1
+
+Every line `a1` — **no re-run, so nothing to explain.** Partition reconciles:
+`4 = green 4 + red 0 + pending 0 + stale 0 + cancelled 0 + startup-fail 0 +
+foreign 0 + extra 0 + unreadable 0`.
+
+Session 03's own citation of `54ab5aa7` was re-verified here **with `--expect`**
+against the four run ids its row claims — 🟢 4 of 4, no substitution.
+
+---
+
+## ⚠️ THE HOLD'S WORKING-TREE CLAUSE — LANDED, AND SHARPER THAN FILED
+
+Session 03 filed, *not fixed*: the hold row says the migrations red starts *"from
+this commit"*, but the script counts the WORKING TREE, not `main`.
+
+**Verified independently here, from the shipped script rather than from that
+sentence** — and it is narrower than "the working tree":
+
+    assert-migrations-applied.sh:79
+      REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+⚠️ **IT ANSWERS ABOUT THE TREE ITS OWN COPY LIVES IN.** MASTER's grants are
+relative-path prefixes (`bash scripts/…`), so **which copy runs is decided by
+your cwd.** Measured minutes apart, one host, one database:
+
+| invoked from | verdict |
+|---|---|
+| `/opt/meddoc-pro` (shared, at `main`) | 🔴 1 unapplied — `20260825130000_f8s1_icd_decisions` |
+| a worktree on an older branch | 🔴 1 unapplied — **a DIFFERENT migration**, and blind to the first |
+
+**Same check, same database, two different answers, neither wrong about the tree
+it read.** A session standing in a stale worktree can report
+`assert-migrations-applied 🟢` while production is genuinely behind — and that
+check gates `deploy-prod.sh`. **STEP 0 runs it from `/opt/meddoc-pro`, always.**
+Full entry in `AGENTS.md`, with the sibling `@meddoc/*` specimen.
+
+⚠️ **AND A HYPOTHESIS IT RAISED WAS REFUTED — recorded because the next session
+will raise it too.** The worktree run also reported
+`20260824080000_f24s5_clinician_field_overrides` as *"applied but not in the
+repo"*, which reads as **a migration applied to production that `main` lacks**.
+Measured: it **is** on `main` and finished in production at
+`2026-08-25T06:03:49Z`; its sibling `…040000_…` is on an unmerged branch and
+correctly unapplied. **Production and `main` agree.**
+
+**The declared F8-S1 hold is UNCHANGED and still retires the moment
+`20260825130000_f8s1_icd_decisions` is applied under its own §2.5 declaration.**
+F8-S1b adds no migration, so it does not extend it.
+
+---
+
+## ⚠️ THIS QUEUE'S HEADER AND `AGENTS.md` DISAGREE ABOUT WHO DEPLOYS
+
+**Filed as a finding, not resolved by me — it is a routing question.**
+
+| source | says |
+|---|---|
+| this file's queue header, set **2026-08-15** | *"the loop … is the ONLY deploy actor"* |
+| `AGENTS.md` STANDING AUTHORITY, owner directive **2026-08-22** | *"THE LOOP builds, proves and merges under its own gates. **SUPERVISED SESSIONS deploy and judge clinical-surface changes.**"* |
+
+The owner directive is **seven days newer** and ruling #148 already acts on it
+(F8-S1's deploy is held on exactly that ground). So the header is stale — but
+*"two files that can disagree"* is the failure the ledger design exists to
+prevent, and a session reading the header first could deploy a clinical-surface
+change believing it was the only actor entitled to.
+
+**Not edited here**: the header is the queue's own framing, and correcting it is
+a change to who may ship, which is not mine to make silently. **Named so the next
+session reads a known disagreement rather than discovering it mid-deploy.**
+
+---
+
+## ⚠️ F8-S2 — WHAT WOULD DISCHARGE THE PARK, NAMED
+
+Ruling #148 parks *where the coding surface lives*, and canon's newest entry says
+a blocking row must **name the artifact class that would discharge it**, with the
+pointer running in the READER's direction. Applying that to this park:
+
+**THE PARK IS DISCHARGED BY:** an owner decision recorded in
+`docs/foundation/RULINGS.md` naming **which surface hosts the coding tab**, OR a
+design artifact under `docs/foundation/f8-*` that supersedes
+`f8-icd-tab-design.md`'s tab-bar premise.
+
+⚠️ **IT IS NOT DISCHARGED BY A NEW FIGMA OR A CONVERSATION** — F8's previous
+blocking row named a *medium* rather than an artifact and read as blocked for
+nine days after its condition was met.
+
+**THE MEASUREMENT THE OWNER NEEDS, so the answer is a pick and not an
+investigation** (re-verified this session against the running container,
+`docker exec … printenv`):
+
+| production flag | value | consequence |
+|---|---|---|
+| `NEXT_PUBLIC_SKIN_BETA` | **`true`** (compose build-arg default; NOT in the runtime env) | the V2 tab-strip block is entered… |
+| `NEXT_PUBLIC_REVIEW_DOC_VIEW` | **`true`** | …but an UNSIGNED visit returns at `visit-ready-view.tsx:805` to the read-only paper |
+| `NEXT_PUBLIC_UX_SIMPLIFY` | **`true`** | and a SIGNED visit returns at `:1138` to `SignedDocumentView` |
+
+So the `Note · Billing · Codes · Extras` strip at `:657-715` — which **does**
+mount `CodesTab` — sits on a path production never reaches, and `CodesTab`'s
+other mount at `:1367` is the flag-OFF legacy path.
+
+⚠️ **AND THE READ-ONLY PAPER'S ABSENCE OF A CODING SURFACE IS A LANDED DECISION,
+NOT AN OVERSIGHT.** `review-document-view.tsx:389-404` says so in its own words:
+
+> *"NO BILLING PANEL, NO CODES TABLE, NO INPUT TRANSCRIPT. … This page is the
+> document being signed; a coding worksheet, an ICD table with confidence scores
+> and the raw dictation are reference material for three different jobs, none of
+> which is 'read this and sign it'."*
+
+**That is why this is an owner question and not a build decision:** F8's contract
+and that comment are two landed intentions in direct conflict, and choosing
+between them is a statement about what the product IS.
