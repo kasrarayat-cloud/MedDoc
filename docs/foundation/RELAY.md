@@ -3411,9 +3411,23 @@ of the present.
 > item the ledger's last line declares open.
 
 **HONEST LIMIT, STATED SO THE DISCHARGE IS NOT READ WIDER THAN IT IS.** No Figma
-FILE and no `figma.com` URL exists anywhere in `docs/` — measured, and reported
-as a zero with its control (the same sweep finds the design doc and the palette
-PNG, so the traversal is not blind). **The delivery took the form of a measured
+FILE and no `figma.com` URL exists anywhere in `docs/`, and **the zero carries a
+control of the same form over the same tree**:
+
+| `grep -rl … docs/` | files |
+|---|---|
+| `figma.com` | **0** ← the target |
+| `Figma` | **10** ← the control that discriminates |
+| `quillmd.com` | 344 ← traversal is not blind |
+
+⚠️ **The middle row is the one that matters, and an earlier draft of this
+paragraph did not have it.** That draft claimed *"the same sweep finds the design
+doc and the palette PNG"* — **it did not**; those came from a separate `find`,
+so the sentence described a control it had not run. **10 files discuss Figma and
+none of them carries a URL** — which is a far stronger statement than a blind
+zero, and it is the difference between an absence and a broken instrument.
+
+**The delivery took the form of a measured
 markdown contract, not a Figma frame.** What discharges the gate is not the
 medium but the CONTENT: the doc specifies the tab bar, the 65/35 split, every
 card element, the state table and the token set, declares itself *"the build's
