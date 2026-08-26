@@ -130,6 +130,64 @@ describe('ledger split — the five proofs', () => {
   });
 });
 
+describe('the generated head REPLACES its index, never appends', () => {
+  // Canon: a regeneration that prepends and never deletes leaves a file holding
+  // every value you assert, syntactically dead — and the newest on top reads as
+  // the only one. Rotation regenerates this block on every run, so an appending
+  // generator would grow an index of stale indexes.
+  function splitCopy(dir: string) {
+    const relay = join(dir, 'RELAY.md');
+    copyFileSync(RELAY, relay);
+    const r = spawnSync('python3', [SPLITTER, relay, join(dir, 'relay')], {
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+      env: { ...process.env, LIFT, WRITE_HEAD: '1' },
+    });
+    expect(r.status, r.stderr).toBe(0);
+    return { relay, out: JSON.parse(r.stdout) };
+  }
+
+  it('writes a head under budget, with exactly one index block', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'head-'));
+    const { relay, out } = splitCopy(dir);
+    expect(out.proof.P6_head_under_budget).toBe(true);
+    const head = readFileSync(relay, 'utf8');
+    expect(head.split('ARCHIVE-INDEX-BEGIN').length - 1).toBe(1);
+    expect(head.split('ARCHIVE-INDEX-END').length - 1).toBe(1);
+    // NON-VACUITY: the index must actually name archives, not be an empty shell.
+    expect(head).toMatch(/\| \[`20\d\d-\d\d-\d\d[^`]*\.md`\]/);
+    // and it must NOT point by line number
+    expect(head).not.toMatch(/ARCHIVE-INDEX-BEGIN[\s\S]*?\bL\d{3,}\b[\s\S]*?ARCHIVE-INDEX-END/);
+  });
+
+  it('IDEMPOTENT: a second run replaces the index rather than adding another', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'head2-'));
+    const { relay } = splitCopy(dir);
+    const r = spawnSync('python3', [SPLITTER, relay, join(dir, 'relay2')], {
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+      env: { ...process.env, LIFT, WRITE_HEAD: '1' },
+    });
+    expect(r.status, r.stderr).toBe(0);
+    const head = readFileSync(relay, 'utf8');
+    expect(head.split('ARCHIVE-INDEX-BEGIN').length - 1).toBe(1);
+  });
+
+  it('RED: a half-present marker pair is refused rather than guessed at', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'head3-'));
+    const { relay } = splitCopy(dir);
+    // amputate the END marker — the delete boundary is now ambiguous
+    writeFileSync(relay, readFileSync(relay, 'utf8').replace('<!-- ARCHIVE-INDEX-END -->', ''));
+    const r = spawnSync('python3', [SPLITTER, relay, join(dir, 'relay3')], {
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+      env: { ...process.env, LIFT, WRITE_HEAD: '1' },
+    });
+    expect(r.status).not.toBe(0);
+    expect(r.stdout + r.stderr).toContain('refusing to guess the boundary');
+  });
+});
+
 describe('rotation — banner-triggered, delegating, fail-closed', () => {
   it('DELEGATES the budget rather than re-implementing it', () => {
     const src = readFileSync(ROTATE, 'utf8');
