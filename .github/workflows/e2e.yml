@@ -758,7 +758,15 @@ jobs:
           name: rounds-shots
           path: apps/transcribe-md/rounds-shots/
           if-no-files-found: error
-          retention-days: 14
+          # ⚠️ 7, NOT 14 — this artifact is 88% of the repo's live storage.
+          # On 2026-08-26 the account hit "Artifact storage quota has been hit"
+          # and e2e FAILED at upload with every test green: 532 live rounds-shots
+          # holding 2.97 GB against a 2 GB allowance. 268 older than 7 days were
+          # deleted (1.52 GB freed, owner-authorised) and the window halved so it
+          # cannot regrow. These are regenerable outputs of SYNTHETIC QA walks —
+          # any run reproduces them — so a short window costs nothing and shrinks
+          # a retention surface nobody chose.
+          retention-days: 7
 
       - name: Build flag-ON image for the document surface
         run: >
