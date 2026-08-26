@@ -156,8 +156,13 @@ describe('the generated head REPLACES its index, never appends', () => {
     expect(head.split('ARCHIVE-INDEX-END').length - 1).toBe(1);
     // NON-VACUITY: the index must actually name archives, not be an empty shell.
     expect(head).toMatch(/\| \[`20\d\d-\d\d-\d\d[^`]*\.md`\]/);
-    // and it must NOT point by line number
-    expect(head).not.toMatch(/ARCHIVE-INDEX-BEGIN[\s\S]*?\bL\d{3,}\b[\s\S]*?ARCHIVE-INDEX-END/);
+    // It must carry BOTH: a TITLE (the durable pointer, since a line number in an
+    // append-only file is stale before it lands) AND the FROZEN pre-split line
+    // span (the one legitimate use of a line number here — that file can never
+    // grow again, so every pre-existing RELAY.md:NNNNN citation still resolves).
+    expect(head).toContain('first section (TITLE — the durable pointer)');
+    expect(head).toContain('pre-split lines');
+    expect(head).toMatch(/\|\s*\d+–\d+\s*\|/); // an en-dashed frozen span
   });
 
   it('IDEMPOTENT: a second run replaces the index rather than adding another', () => {
