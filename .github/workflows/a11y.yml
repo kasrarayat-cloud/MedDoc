@@ -59,7 +59,23 @@ env:
 jobs:
   axe:
     name: axe-core sweep (chromium x desktop+mobile)
-    runs-on: ubuntu-latest
+    # ⚠️ SELF-HOSTED — MIGRATION 2 OF 4, blast-radius order (secrets-scan · THIS ·
+    # CI · e2e). ~5.2 billable min/run.
+    #
+    # ⚠️ THIS JOB NEEDS MORE THAN THE FIRST ONE DID, and both were smoke-tested
+    # on the box BEFORE this edit rather than discovered by a red run:
+    #   · SERVICE CONTAINERS — pgvector/pgvector:pg16 + redis:7-alpine. Verified:
+    #     `pg_isready` accepting connections, redis `PONG`.
+    #   · PLAYWRIGHT BROWSERS — node is NOT preinstalled on this box; setup-node
+    #     installs it, and `actions/cache` warms ~/.cache/ms-playwright.
+    #
+    # ⚠️ AND A PERSISTENT RUNNER CHANGES THE CACHE STORY IN OUR FAVOUR: the box
+    # is not ephemeral, so the Playwright browser cache survives between runs.
+    # Expect the FIRST run to be slower (cold) and later runs faster than hosted.
+    # That is a prediction, and it will be reported as MEASURED cold vs warm.
+    #
+    #   REVERT: change this back to `ubuntu-latest`. One line, nothing else.
+    runs-on: [self-hosted, linux, x64, quillmd-ci]
     timeout-minutes: 25
 
     services:
