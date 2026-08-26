@@ -31741,3 +31741,74 @@ and it discriminates — run against the offending body it returns exactly line 
 before it was opened, and the entry names the check it was verified by. *An entry
 you cannot apply to the commit that lands it is an entry nobody will apply later.*
 
+---
+
+## 🔵 FINDING — SINCE #861, A `4 of 4` CITATION NO LONGER PROVES THE PLAYWRIGHT PACK RAN
+
+**Filed by run `20260825-072925-b1` session 06, 2026-08-26, from a live
+measurement on this session's own merge commit. Not a judgement on #861** — that
+is the supervised side's change and its intent is legitimate. **What is filed is
+what it does to the CITATION**, because this programme treats a citation as
+evidence and its meaning changed tonight without any ledger row saying so.
+
+**MEASURED on `dbc563bd` (the merge of #864, docs-only):**
+
+    e2e run 32913703492 — 26 SECONDS, conclusion success
+
+Its jobs, read from `/runs/<id>/jobs`:
+
+| job | conclusion |
+|---|---|
+| `detect docs-only` | success |
+| **`Playwright E2E (transcribe-md)`** | **success** — ran for 10s |
+| **`Playwright E2E (transcribe-md)`** | **skipped** — the real pack |
+
+**Two jobs share one name by design**, so branch protection's required context is
+satisfied by whichever one runs. The check-run reads `success` **having executed
+no test.**
+
+### ⚠️ WHY THIS IS A LEDGER ROW AND NOT A SHRUG
+
+`check-citation.sh` reports `e2e 32913703492 a1` and `🟢 CITATION COMPLETE`. That
+line is **byte-indistinguishable** from a citation where the full pack ran for 40
+minutes.
+
+> **"THE PACK PASSED" AND "THE PACK WAS NOT RUN" ARE NOW THE SAME CITATION.**
+
+This is the family `AGENTS.md` already enumerates five members of — *two
+distinguishable states collapsed into one observation*: two zeroes with opposite
+meanings; the `pgrep` self-match; `cited` returning 1 for PENDING and for FAILED;
+one success read as recovery; the composed false green. **This is a sixth, and it
+arrived through a policy change rather than through a bug.**
+
+⚠️ **AND IT APPLIES TO PUSHES ON `main`, NOT ONLY TO PRs.** The PR title says
+*"docs-only PRs"*; the behaviour above was observed on a **push-triggered run on
+`main`**. That is a wider watched set than the name suggests, and it is the half a
+reader would not assume.
+
+### WHAT IS AND IS NOT CLAIMED
+
+- **NOT claimed: that this is wrong.** Skipping a browser pack for a
+  markdown-only change is defensible and saves ~40 minutes a merge — this very
+  session paid that cost three times tonight.
+- **NOT claimed: that any citation already in this ledger is invalid.** Every row
+  before `dbc563bd` predates the mechanism.
+- **CLAIMED: the word "cited" now carries two meanings**, and nothing in the
+  citation output distinguishes them.
+
+### THE CHEAP DISCRIMINATOR, IF ANYONE WANTS ONE
+
+The distinction is one field away — the run's **duration**, or its job list:
+
+    gh api …/actions/runs/<id>/jobs --jq '.jobs[] | "\(.name)\t\(.conclusion)"'
+
+A `skipped` row named identically to a `success` row is the tell. **Filed, not
+built:** whether `check-citation.sh` should say `CITED (e2e SKIPPED — docs-only)`
+is a question about what a citation means, which is the supervised side's to
+answer alongside the change that created it.
+
+⚠️ **POPULATION FACT WITH ITS RE-ARMING CONDITION.** Today this can only affect
+commits whose diff is docs-only. **What widens it: any broadening of `detect
+docs-only`'s path filter** — one edit to a glob, no other change anywhere, and
+the same silent equivalence reaches commits that carry code.
+
