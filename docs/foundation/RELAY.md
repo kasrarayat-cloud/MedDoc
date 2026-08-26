@@ -1,5 +1,24 @@
 # FOUNDATION — the relay ledger
 
+<!-- READ-PROTOCOL: OVERSIZE - this file exceeds the 150,000-character tool read
+     limit by roughly twelve times. A plain read is TRUNCATED and, because this
+     ledger is APPEND-ONLY, what it returns is the OLDEST end. Read the QUEUE
+     immediately below, read the TAIL for the current arc, and GREP for
+     everything else. Asserted by scripts/check-read-budget.sh; do not remove
+     this banner while the file is still over the limit. -->
+
+> ⚠️ **YOU CANNOT READ THIS FILE IN ONE READ, AND NOTHING WILL TELL YOU SO.**
+> It is ~1.8 MILLION characters against a 150,000-character read limit — about
+> **8%** of it fits, and the 8% you get by simply opening it is the **oldest**
+> 8%, because a ledger grows at the bottom. A truncated read of an append-only
+> file hands back a confident, well-formed, **obsolete** answer.
+>
+> **So read it in three moves, never one:** the **QUEUE** below · the **TAIL**
+> (`tail -n 500`, or `Read` with an `offset` near the end) for the arc in
+> flight · and **grep** for anything else. The size is measured — never
+> asserted in prose, which goes stale — by
+> `bash scripts/check-read-budget.sh`.
+
 **This ledger is the contract between sessions.** `SPEC.md` says what to build;
 `DISCOVERY.md` says what is true today; this says what order, with what proof.
 
@@ -32806,3 +32825,561 @@ guards were mutation-proved, the predicate was pinned, the ledger row was writte
 in for it. *A second copy drifts from the first the day either is written.*
 
 
+---
+
+# 🟢 F32 — TWO OF THE FOUR FILES STEP 0 ORDERS EVERY SESSION TO READ **CANNOT BE READ**. BUILT AND GATED 2026-08-26.
+
+**Run `20260826-140142-b1` session 02.** The `AGENTS.md` split landed yesterday
+(`87c9d3bc`, PR #873) with a guard so the rulebook could not silently grow back
+past the read limit. **The guard watches one file. The rule names four.**
+
+## THE MEASUREMENT — taken on `87c9d3bc`, the split's own merge commit
+
+MASTER STEP 0.3, verbatim: *"Read `docs/foundation/SPEC.md`, `RELAY.md`,
+`RULINGS.md`, and `AGENTS.md`."*
+
+| file | `wc -m` | vs the 150,000-char read limit |
+|---|---|---|
+| `AGENTS.md` | 87,383 | readable |
+| `SPEC.md` | 28,340 | readable |
+| **`RULINGS.md`** | **371,533** | **2.5×** — ~40% fits |
+| **`RELAY.md`** | **1,793,436** | **12.0×** — **~8%** fits |
+
+> **Two of the four could not be read, one of them by twelve times, and nothing
+> anywhere said so.**
+
+This is the split's own lesson arriving one file over: *a gate's WATCHED SET is
+diffed against the spec's NAMED set.* `check-agents-md-size.sh` is correct and
+does exactly what it says; what was missing is that nobody diffed its watched
+set (one file) against STEP 0.3's named set (four).
+
+## ⚠️ AND THE LEDGER'S TRUNCATION IS **WORSE** THAN THE RULEBOOK'S — THIS IS THE PART THAT MAKES IT A HAZARD RATHER THAN AN UNTIDINESS
+
+A rulebook truncated at the top still hands back **some live rules**.
+
+**`RELAY.md` is APPEND-ONLY, so the front of the file is its OLDEST content.**
+A plain read returns the stale end, omits every current arc, and announces
+nothing. The reader gets a confident, well-formed, **obsolete** answer — and the
+failure mode of this programme has never been a session that knows it is
+missing something.
+
+⚠️ **AND THE QUEUE TABLE SITTING AT LINE 12 IS LUCK, NOT DESIGN.** It is the one
+current thing inside the readable 8%, and it is there because that is where a
+queue reads well — not because anybody arranged for truncation to spare it.
+
+## WHAT SHIPS — A BANNER, NEVER A BUDGET, AND IT IS PINNED IN **BOTH** DIRECTIONS
+
+**A budget is the wrong cure here, and the reasoning is worth keeping: a ledger
+that may not grow is not a ledger,** and a ratchet set at today's size fails on
+tonight's first append — it would halt the loop to fix a documentation problem.
+
+So the rule is that an oversize file **declares itself where a truncated reader
+still sees it**:
+
+| disposition | assertion |
+|---|---|
+| **over the limit** | must carry `READ-PROTOCOL: OVERSIZE` in its head (default window: 60 lines, column 0) |
+| **under the limit** | must **NOT** carry it |
+
+⚠️ **THE SECOND ROW IS THE ONE A ONE-SIDED CHECK WOULD HAVE MISSED, AND IT IS
+THE ONE THAT WILL ACTUALLY FIRE** — on whoever eventually splits `RELAY.md` by
+arc and leaves the notice behind. *A warning that outlived its reason is a lie
+that reads like a warning.* Split-family coverage pins both directions.
+
+**`scripts/check-read-budget.sh`** — `0` accounted for · `1` a FINDING · `2`
+can't tell. Tree-relative on purpose (it judges the checkout it ships in, which
+is the right universe for a PR-head check, and is **not** the F28 defect).
+
+⚠️ **THE `AGENTS.md` ROW IS DELEGATED, NEVER RE-IMPLEMENTED.** The script shells
+out to `check-agents-md-size.sh` rather than copying its 120,000 budget — the
+same reasoning that keeps the pre-push hook and `merge-pr.sh` sharing one
+inflight check. **Proved rather than asserted:** a gate arm runs the new script
+with `AGENTS_MD_BUDGET=1000` and requires it to go red, which only a genuine
+delegation can do.
+
+⚠️ **THE BANNER TOKEN IS LINE-ANCHORED AT COLUMN 0 AS AN HTML COMMENT, AND THAT
+IS LOAD-BEARING.** `MASTER.md`, this row, the script and the gate all NAME the
+token; none of them may be mistaken for a file that CARRIES it. An unanchored
+match would have been *a probe that matches itself*, and it would have fired on
+the very commit that introduced it.
+
+## PROOF — 9 ARMS, AND FOUR OF THEM ARE RED ARMS
+
+    cd apps/transcribe-md && npx vitest run src/lib/__tests__/gate-read-budget.test.ts
+    -> 9 passed (9)     [with gate-agents-md-size.test.ts alongside: 14 passed (14)]
+
+| arm | what would make it fail |
+|---|---|
+| green on this tree | any named file misdescribed |
+| non-vacuity | the script silently skipping a file — all 7 must appear by name |
+| **RED — over and silent** | `READ_BUDGET_LIMIT=1000` → exit 1, *"AND IT DOES NOT SAY SO"*, naming `SPEC.md` |
+| **RED — names the cure** | the message must carry *"THE FIX IS A BANNER, NOT A TRIM"* and refuse the tempting repair |
+| **RED — the other direction** | `READ_BUDGET_LIMIT=10000000` → the ledgers are now "under" and still bannered → exit 1 |
+| **RED — the head window is real** | `READ_BUDGET_HEAD_LINES=1` → the banner falls outside the window → `RELAY.md` reddens |
+| **RED — delegation** | `AGENTS_MD_BUDGET=1000` → *"delegated check is RED"* + *"OVER BUDGET"* |
+| the two ledgers really are over, and really do declare it | either fact ceasing to be true |
+| the readable ones really are readable, and carry no banner | a stale banner, or `AGENTS.md` growing back |
+
+**The script's actual output, read rather than inferred** (surfaced through a
+deliberately-failed assertion, because the loop cannot invoke the script from a
+shell — see the grant finding below):
+
+    🟢 AGENTS.md — delegated: 🟢 AGENTS.md 87383 chars — under the 120000 budget
+    🟢 docs/foundation/MASTER.md    —   49674 chars, fits one read
+    🟢 docs/foundation/SPEC.md      —   28340 chars, fits one read
+    🟢 docs/foundation/RELAY.md     — 1794577 chars, OVERSIZE ( 8% fits) and it DECLARES the protocol
+    🟢 docs/foundation/RULINGS.md   —  372324 chars, OVERSIZE (40% fits) and it DECLARES the protocol
+    🟢 docs/foundation/DISCOVERY.md —   53494 chars, fits one read
+    🟢 docs/foundation/INBOX.md     —   30667 chars, fits one read
+
+*(The two ledger figures sit ~1,141 and ~791 chars above the table at the top of
+this row: that is this change's own banners, and the arithmetic reconciles.)*
+
+## APPLIED TO ITS OWN LANDING
+
+`MASTER.md` now names the token in prose. `MASTER.md` is **under** the limit, so
+if the anchoring were wrong the new negative arm would redden **on this very
+commit**. It was re-run after that edit: **14 of 14**, both gates.
+
+## WHAT THIS ROW DOES **NOT** CLAIM
+
+- **It does not split `RELAY.md`.** That is the eventual cure — archive closed
+  arcs to `docs/foundation/relay-archive/` with an index, exactly as
+  `docs/canon/` was done — and it is deliberately **not** attempted tonight:
+  four more sessions of this run append to this file, and a restructure landing
+  underneath them turns every union into a conflict. **The retirement condition
+  is written down: when the arc-split lands, remove `RELAY.md`'s banner in the
+  same commit, and the negative arm will hold you to it.**
+- **It does not claim the truncation has ever actually misled a session.** No
+  such instance was looked for or found. The claim is that nothing would have
+  shown it — which is the argument for the banner, not a body count.
+## ⚠️ CORRECTION, MADE BEFORE MERGE — **THIS ITEM MADE THE EXACT MISTAKE IT EXISTS TO CATCH**
+
+*Previous wording of a "what this does not claim" bullet, kept because the
+correction is the point:* **"It does not widen to the Rounds ledger
+(`docs/rounds/RELAY.md`), which STEP 0 does not name."**
+
+**STEP 0 does not name it. `AGENTS.md` does** — § *"Multi-session programs have
+relay ledgers — **READ THEM FIRST**"* names all four program ledgers, in a table,
+as a standing instruction. Measured:
+
+| file | `wc -m` | vs 150,000 |
+|---|---|---|
+| `docs/rounds/SPEC.md` | 10,796 | readable |
+| **`docs/rounds/RELAY.md`** | **235,184** | **1.57×** — ~64% fits |
+
+> **A guard whose WATCHED SET was narrower than the rule's NAMED SET — written
+> by the guard that exists to diff watched sets against named sets — one file
+> over. The identical shape, in the same commit that documents it.**
+
+⚠️ **AND THE FAULTY REASONING IS WORTH NAMING, BECAUSE IT IS REUSABLE.** I scoped
+the manifest to *"the files **STEP 0.3** names"* — a **location**, not a
+**predicate**. The predicate is *"every file a STANDING INSTRUCTION tells a
+session to READ"*, and once written down that way the Rounds ledger is obviously
+in and the search takes one `wc -m`. **Naming a class is not enumerating it**;
+scoping to the paragraph you happened to be reading is how the enumeration goes
+short.
+
+**FIXED IN THIS COMMIT, not filed:** both `docs/rounds/*` are in the manifest and
+in the gate's `NAMED` list, `docs/rounds/RELAY.md` carries the banner, and the
+gates re-ran **14 of 14**. The corrected count is **three** oversize files across
+**six** named read-targets, not two across four.
+
+**What it still does not widen to:** `docs/DEPLOYMENT_RUNBOOK.md` (74,573 —
+readable anyway, and referenced by section rather than read whole) and anything
+under `docs/canon/`, which exists precisely so that no single file has to be
+read whole. Adding a file to any standing read instruction means adding a
+manifest row in the same commit — stated in the script, where a reader of the
+rule will meet it.
+
+## 🔴 FINDING — THE INSTRUMENT SHIPS UNGRANTED, AND IT IS THE **THIRD** SIGHTING
+
+`bash scripts/check-read-budget.sh` is **REFUSED** to the loop. Measured, with a
+positive control so the zero is not the instrument:
+
+    grep -c "check-read-budget" .claude/settings.json   -> 0
+    grep -c "check-citation"    .claude/settings.json   -> 1   (control)
+
+This is the class canon already names twice (`gh-runs.sh`, `tmux has-session`)
+and that F30's `check-retirement-conditions.sh` is still sitting in. **Session
+01 of this run ruled it PROVISIONALLY hours ago: the loop DETECTS AND REPORTS; a
+supervised session ADDS.** That ruling is applied here rather than re-derived.
+
+⚠️ **AND THE ENTRY IS NOT INERT IN THE MEANTIME, WHICH IS THE DIFFERENCE FROM
+F30.** `MASTER.md` prints the granted route beside the refused one:
+
+    cd apps/transcribe-md && npx vitest run src/lib/__tests__/gate-read-budget.test.ts
+
+That is MASTER's own *"write the proof as a TRACKED test"* rule, and it is
+strictly better than the shell form — reviewable, run by CI forever, cannot go
+stale silently. **The grant would be a convenience; its absence is not a
+capability loss.** One line for a supervised session:
+
+    Bash(bash scripts/check-read-budget.sh:*)
+
+## 🔵 FINDINGS THIS ITEM DID NOT GO LOOKING FOR
+
+### 1 · ⚠️ I NEARLY FILED "THE RUNNERS API IS NOT GRANTED TO THE LOOP" — AND IT WOULD HAVE BEEN FALSE. **THE DIRECTORY IS NOT THE REPOSITORY.**
+
+Three `gh api` calls returned `404 Not Found` this session:
+
+    repos/kasrarayat-cloud/meddoc-pro/actions/runners
+    repos/kasrarayat-cloud/meddoc-pro/actions/runs?status=queued
+    repos/kasrarayat-cloud/meddoc-pro/branches/main/protection
+
+The obvious reading — and the one this session started to write down — is *a
+fine-grained token without `administration` scope*. **It is wrong.** The
+repository is **`kasrarayat-cloud/MedDoc`**; `meddoc-pro` is the name of the
+**working directory** on this host. Re-asked with `{owner}/{repo}`, every one of
+them answers:
+
+    gh api repos/{owner}/{repo}/actions/runners
+    -> quillmd-ci-1  online  busy=true  [self-hosted, Linux, X64, quillmd-ci]
+
+    gh api repos/{owner}/{repo}/branches/main/protection --jq '.required_status_checks.contexts'
+    -> ["Playwright E2E (transcribe-md)", "test", "npm audit (high+critical gate)",
+        "axe-core sweep (chromium x desktop+mobile)", "TruffleHog (verified-only, diff-scan)",
+        "unit tests (transcribe-md + packages)"]
+
+⚠️ **`gh api` RETURNS 404 FOR A WRONG REPOSITORY EXACTLY AS IT DOES FOR A
+MISSING SCOPE**, so the two are indistinguishable from the response — and the
+plausible-sounding one is the wrong one. **Use `{owner}/{repo}` and let `gh`
+resolve it; never hand-type a repo name from the path you are standing in.**
+Every previous session's runner and protection evidence stands; nothing here is
+withdrawn.
+
+### 2 · ⚠️ THE SPOF ROW'S NUMBER, RE-DERIVED: **SIX** REQUIRED CONTEXTS, ONE WORKER
+
+The protection read above is a second, independent route to this ledger's
+existing SPOF finding, and it sharpens it. Branch protection requires **six**
+check-runs spanning **all four** workflows — not one. Every one of them queues on
+`quillmd-ci-1`, which reads `busy=true` with a single job in flight.
+
+**Tonight's own cost, measured rather than recalled:** `main`'s citation for
+`87c9d3bc` was created `14:00:46Z`; at `15:17Z` — **76 minutes** — it stood at
+`a11y-ci` ✅ · `secrets-scan` ✅ · `e2e` **in_progress** · `CI` **queued**, with
+PR #874's and #875's eight runs behind it. **Nothing built tonight can be cited
+until that drains.** The cure named in the ledger is unchanged and is not
+reachable from here: no runner process or container exists on this host
+(`ps aux` for `Runner.Listener` → 0; `docker ps` → no runner), so a second
+runner is an owner act.
+
+### 3 · ⚠️ PREFLIGHT CHECK 5 PRODUCES A FALSE GREEN, AND ONLY A POSITIVE CONTROL SEPARATES IT
+
+`dmesg` is not granted, so the OOM check falls to the skill's documented
+fallback, `journalctl -k`. It **runs, exits 0, and matches nothing** — which
+reads as *"no OOM kills"*.
+
+    journalctl -k --since "24 hours ago" | wc -l    -> 4
+    journalctl -k --since "24 hours ago" | head -4
+      Hint: You are currently not seeing messages from other users and the system.
+            Users in groups 'adm', 'systemd-journal' can see all messages.
+      -- No entries --
+
+**The kernel ring buffer is not being read at all.** The skill's own escape
+clause does not cover this shape: it says *"if neither is ACCESSIBLE, mark
+SKIPPED"*, and `journalctl -k` **is** accessible — it succeeds. What it cannot
+do is **see**. Recorded 🟡 CANNOT TELL. Suggested amendment: make the control
+mandatory — *under ~10 lines, or output containing `-- No entries --`, is
+CANNOT TELL, never a pass.*
+
+### 4 · THE PREFLIGHT SKILL'S CALIBRATION IS STALE ON **CORES** TOO
+
+Session 01 of this run caught the RAM half. The core count is the other half,
+and it is the one that gates a decision, since the skill's thresholds are
+written around *"8 cores"*:
+
+| the skill says | measured |
+|---|---|
+| 16 GB total / ~14 GB idle (Check 3 preamble: 13 GB) | **32,093 MB / 18,835 MB** |
+| **8 cores** | **14 cores** |
+
+Headroom, not a hazard — no verdict changes. `lsmod` is not granted, so the
+balloon assertion the skill's header asks for is **inferred** from the 32 GB
+total and is stated as an inference. Full detail in
+`docs/preflight-reports/preflight-20260826T151235Z.md`.
+
+---
+
+## 🔵 F32 ADDENDUM — TWO PROCESS OBSERVATIONS FROM THE SAME SESSION, BOTH ABOUT LOOKING BEFORE DECIDING
+
+### 1 · I HAD A PROVISIONAL RULING HALF-DRAFTED FOR A QUESTION THE LEDGER HAD ALREADY ANSWERED
+
+`push-with-cancellation.sh` needed to exist and it already did.
+
+Amending PR #876 required cancelling three of its own queued runs. The pre-push
+hook refused, correctly, and printed its documented override:
+
+    DECLARE_CANCELLATION="why this is deliberate" git push …
+
+**Which the permission layer then refused**, exactly as MASTER's table says it
+will (`VAR=1 cmd` — not granted). At that point I had reasoned my way to a
+provisional ruling: *cancel the runs explicitly with `gh run cancel`, write the
+declaration into the log, then push into a quiet branch.*
+
+⚠️ **THAT WOULD HAVE BEEN THE UNDISCIPLINED DOOR, AND THE LEDGER SAYS SO IN
+WORDS.** The grep required before any ruling-shaped decision returned the whole
+arc in one shot — the finding, its measured cost (~40 min and ~41 min, two
+sessions), the argument, and the cure:
+
+    grep -n -i "DECLARE_CANCELLATION" docs/foundation/RELAY.md
+    -> 2734  "refused by the loop's permission…"
+    -> 2888  "the escape hatch is unreachable…"
+    -> 2960  "…and pushes. Allowlisted BY NAME; the raw compound…"
+
+**`scripts/push-with-cancellation.sh` exists, is granted (`grep -c` → 1), and
+its own header answers the objection I was about to raise:** *"refusing the
+grant does NOT withhold the capability. The loop already holds `gh run cancel` —
+the same outcome through another door, with no declaration and no log line. What
+refusal withheld was the DISCIPLINE."*
+
+**Used as intended.** The declaration is in this session's log with the ref, the
+superseded sha, the three runs and the reason.
+
+> **The cost of the grep was thirty seconds. The cost of skipping it would have
+> been a session re-deriving a solved question and reaching for the door canon
+> names as the wrong one — and the ruling would have been *plausible*, which is
+> what makes rediscovery dangerous rather than merely wasteful.**
+
+### 2 · A 404 FROM `gh api` IS NOT EVIDENCE OF A MISSING SCOPE — SEE THE FINDING ABOVE
+
+Recorded here as well because the two share one shape: **an authoritative-looking
+answer to a question I had asked of the wrong universe.** The 404 was a wrong
+repository name; the half-drafted ruling was a question asked of my own
+reasoning instead of of the ledger. Neither was caught by being suspicious —
+both were caught by *asking the thing that knows*.
+
+### 3 · 🟠 A STALE WORKTREE IS CARRYING A STAGED INDEX THAT DELETES 30+ FILES LIVE ON `main`
+
+**Found by the PICKUP's scratch accounting, not by looking for it.** Two
+worktrees survive from an earlier run, both under
+`/tmp/claude-1000/-opt-meddoc-pro/ceac94df-…/scratchpad/`:
+
+| worktree | branch | state |
+|---|---|---|
+| `…/auto` | `feat/loop-resilience-doctrine` | **clean**; branch NOT an ancestor of `origin/main` (unlanded, remote branch alive) |
+| `…/ptr` | `docs/inbox-pointer-correction` | ⚠️ **64 staged entries**, of which **30+ are `D` deletions** |
+
+`docs/inbox-pointer-correction` is already merged (`ee04fba9` is contained in
+`origin/main`) and its **remote branch is gone** — so the worktree has no
+purpose. What makes it worth a row is what its INDEX holds: staged deletions of
+files that are **live on `main` right now**, including
+
+    scripts/check-em-note-shape-artifacts.sh     <- a STANDING CHECK, run this session
+    scripts/lib/em-artifact-scan.sql
+    apps/transcribe-md/src/lib/em-artifact-scan.ts
+    six §2.5 declarations under docs/foundation/deploys/
+    six preflight reports
+
+**The index is an OLDER tree than the worktree's own HEAD** — the shape canon
+names in *"A WORKTREE IS ISOLATED IN FILES AND SHARED IN REFS"*, arriving through
+the index rather than through a ref. It is **inert** while nobody runs a command
+in that directory; a bare `git commit` there produces a commit that removes a
+standing check and six deploy declarations.
+
+⚠️ **NEITHER WORKTREE WAS REMOVED, DELIBERATELY.** `git worktree remove` refuses
+a dirty tree and `--force` is destruction of something I did not author and
+cannot fully attribute; and MASTER's PICKUP is explicit that this is *accounting,
+not destruction*. **Reported with the paths, for a supervised session:**
+
+    git worktree remove --force /tmp/claude-1000/-opt-meddoc-pro/ceac94df-4040-40dd-a099-24f5195c4cb2/scratchpad/ptr
+    git worktree remove         /tmp/claude-1000/-opt-meddoc-pro/ceac94df-4040-40dd-a099-24f5195c4cb2/scratchpad/auto
+
+⚠️ **AND `/tmp` IS THE PART THAT MAKES IT A DEADLINE RATHER THAN A CHORE:** if
+`feat/loop-resilience-doctrine` holds anything only in that directory it
+disappears on the next `/tmp` sweep with nothing recording it. The BRANCH is
+safe — it is on origin — so the worktree is genuinely disposable; that is stated
+here so the next reader does not treat *"unlanded"* as *"unrecoverable"*.
+
+---
+
+## 🔴 F32 ADDENDUM 2 — FOUR MEASURED CI FINDINGS FROM ONE EVENING OF TRYING TO MERGE, AND ONE OF THEM SHUTS EVERY MERGE IN THE REPOSITORY
+
+**All four were found by doing the ordinary owed work — merging session 01's
+PRs — rather than by looking for them.**
+
+### 1 · 🔴 A **REPORT-ONLY, NON-REQUIRED** JOB HOLDS THE MERGE DOOR SHUT FOR THE WHOLE REPOSITORY
+
+**The gate and the guard read different objects, and on a serialized runner that
+difference is measured in hours.**
+
+| reader | object | verdict on `main` @ `87c9d3bc` at 16:00Z |
+|---|---|---|
+| branch protection | **check-runs** — the six required contexts | **all six green** |
+| `scripts/lib/inflight.sh` (both doors) | **workflow runs** — `select(.status!="completed")` | **1 in flight → REFUSE** |
+
+The one in-flight run was `CI`, and the only job left inside it was
+**`dev-dependency advisories (report-only)`** — `continue-on-error: true`, not a
+required context, nothing anywhere waiting on it.
+
+**MEASURED, not inferred.** `merge-pr.sh 874` was attempted at `17:03Z` and
+refused:
+
+    🔴 merge-pr REFUSED — merging #874 would cancel runs in flight on 'main'.
+        · main @ 87c9d3bc — in flight: --commit 1, --branch 1
+
+`main`'s six required contexts had been green since ~`16:00Z`. The report-only
+job ran at ~`17:10Z`. **Seventy minutes during which the repository was
+unmergeable by a mechanism protecting a job that gates nothing.**
+
+⚠️ **THE GUARD IS NOT WRONG — ITS PREDICATE IS COARSER THAN THE THING IT
+PROTECTS.** *"Do not destroy in-flight evidence"* is right, and a report-only run
+is evidence somebody might want. What changed is the price: before #868 the four
+workflows ran concurrently on GitHub's fleet and a trailing job cost nothing;
+since #868 every job is **serial on one worker**, so a job that gates nothing can
+sit behind a 37-minute Playwright pack and take the merge door with it.
+
+**THE CHEAPEST FIX, and it weakens no gate:** move `audit-dev` into its own
+workflow file. It shares nothing with `test.yml`'s other jobs — no `needs:`, its
+own `continue-on-error`, its own `timeout-minutes` — so `CI` would complete when
+its three REQUIRED jobs complete, and the advisory would run on its own clock.
+⚠️ **NOT BUILT: this is `.github/` topology**, which two prior sessions correctly
+declined to rewrite unilaterally while the supervised side holds that area.
+**Filed with the measurement and the diff-shape, not built.**
+
+### 2 · 🔴 THE **MERGE** DOOR'S SANCTIONED OVERRIDE IS UNREACHABLE TO THE LOOP — THE PUSH DOOR'S IDENTICAL GAP WAS FIXED, THIS ONE WAS NOT
+
+`merge-pr.sh`'s own refusal prints:
+
+    DECLARE_CANCELLATION="why this is deliberate" bash scripts/merge-pr.sh 874
+
+**Which the permission layer refuses**, because `VAR=value command` is a SHAPE
+and the allowlist grants by NAME — the exact finding already recorded for the
+push door, already ruled on, and already cured there by
+`scripts/push-with-cancellation.sh` (used twice this session, working perfectly).
+
+    ls scripts/ | grep -iE "merge|cancel"   ->  merge-pr.sh
+                                                push-with-cancellation.sh
+
+> **One door fixed, the other left. So the declared batch — canon's own
+> legitimate path, and the thing that would have saved this evening — is
+> executable on a push and not on a merge.**
+
+⚠️ **AND THE FIX HERE NEEDS NO NEW GRANT AT ALL, WHICH IS WHY IT IS WORTH
+STATING PRECISELY.** `Bash(bash scripts/merge-pr.sh:*)` is already granted and
+the `:*` covers arguments. So a **`--declare "<reason>"` flag on `merge-pr.sh`
+itself** — validated by the same `inflight_declaration_ok` (≥12 chars, bare
+tokens refused) and setting `DECLARE_CANCELLATION` internally — is reachable the
+moment it lands, with **no `.claude/settings.json` change**, which is the file
+the loop cannot write. That makes it strictly cheaper than the push-side cure it
+copies.
+
+⚠️ **NOT BUILT TONIGHT, AND THE REASON IS ARITHMETIC RATHER THAN CAUTION:** the
+flag would have to reach `main` through a PR — four more runs on the one runner —
+so it could not have helped the evening that motivated it. **Circular by
+construction; that is the argument for landing it on a quiet day, not tonight.**
+
+### 3 · ⚠️ `gh run cancel` MISTRANSLATES A 409, AND IT LIES IN THE DIRECTION THAT LEAVES A RUN OCCUPYING THE RUNNER
+
+A new entry for `AGENTS.md`'s `gh`-quirks table. Three superseded runs on this
+branch were reported by `gh run list` AND by the REST `GET` as `status: queued`:
+
+    gh api …/actions/runs/32985194616 --jq '{status,conclusion}'
+    -> {"conclusion":null,"status":"queued"}
+
+`gh run cancel 32985194616` answered:
+
+    Cannot cancel a workflow run that is completed          ← FALSE
+
+The REST endpoint, asked directly, gives the real reason:
+
+    POST …/actions/runs/32985194616/cancel
+    -> 409  "Cannot cancel a workflow run that has not been queued yet."
+
+**Two different lifecycle ends, and `gh` prints the wrong one.** A session that
+believes *"already completed"* stops looking and leaves a stale run holding a
+slot on a single serialized worker. ⚠️ **The API is ALSO self-contradictory here**
+— `GET` says `queued`, `POST /cancel` says *not yet queued* — so the run is in a
+limbo state neither answer describes. **Use the REST endpoint when the verb
+matters; `gh run cancel`'s message is not a fact about the run.**
+
+### 4 · ⚠️ TWO RAPID PUSHES INTO A SATURATED SINGLE-RUNNER QUEUE PRODUCED `startup_failure` ON THE HEAD THAT MATTERS — AND THE RUNS CANNOT BE RE-RUN
+
+Three heads of this PR inside twelve minutes (`a17ba520` → `4aedb453` →
+`3de58d76`). The result, read from `gh run list --branch`:
+
+| run | workflow | head | outcome |
+|---|---|---|---|
+| 32985739199 | `a11y-ci` | **3de58d76** | **`startup_failure`, 0 jobs**, `created_at == updated_at` |
+| 32985742721 | `secrets-scan` | **3de58d76** | **`startup_failure`, 0 jobs** |
+| 32985564768/85 | `CI`, `e2e` | 3de58d76 | queued, healthy |
+| 32985441052 · 32985194616 · 32984966259 | | superseded heads | left **`queued`**, never cancelled |
+
+⚠️ **THE TWO THAT FAILED ARE EXACTLY THE TWO WHOSE CONCURRENCY GROUP STILL HELD A
+PENDING PREDECESSOR**, and they were created **3m37s late** (`15:38:50` against
+`15:35:13` for the healthy pair). The control is `feat/f29-orphan-branch-sweep`,
+which took a superseding push the same afternoon and whose four older runs went
+cleanly to `cancelled`.
+
+**`gh run rerun` refuses them** — *"its workflow file may be broken"* — and the
+workflow files are provably untouched by this branch:
+
+    git diff main...HEAD --stat -- .github/     ->  (empty)
+
+So **two required contexts (`axe-core sweep`, `TruffleHog`) can never appear on
+`3de58d76`**, and the only cure is a fresh generation of runs.
+
+⚠️ **AND MY OWN DECLARATION'S STATED BENEFIT WAS FALSE, WHICH IS THE PART I HAVE
+TO OWN.** Both `push-with-cancellation.sh` declarations said discarding the
+superseded runs *"FREES time on the saturated single runner"*. **It did not** —
+GitHub cancelled one of five and left four queued. The push guard did its job
+(it refused, it logged, it printed the ref and the count); **the claim I attached
+to the override was a prediction, and I did not check it.** *A fix that provably
+lands and changes nothing is evidence about the diagnosis* — canon entry 58,
+merged onto `main` an hour before this was written.
+
+**THE HABIT: do not push twice into a saturated queue.** Batch the corrections
+into one commit — which is what the third push did, deliberately, and why there
+was not a fourth.
+
+---
+
+## 🤝 CONCURRENT ACTOR — THE SUPERVISED LEAD IS SPLITTING THE LEDGER RIGHT NOW, AND F32's NEGATIVE ARM WILL FIRE ON IT **BY DESIGN**
+
+**Discovered at `17:11Z` by `git worktree list`** — a worktree
+(`/opt/meddoc-pro/.lead-split-wt`, branch `docs/ledger-split-and-rotation`,
+local-only) that **did not exist at `16:12Z`**. `docs/foundation/STOP` was
+placed at `15:55Z`, mid-session, and names this session by number:
+
+> *"Session 02 of batch `20260826-140142-b1` is mid-item and is expected to merge
+> #874 and #875 (session 01's owed items) — it runs to completion; only session
+> 03 is prevented."*
+
+**Read as an OPERATIONAL NOTICE, which is what a STOP file is.** It constrains
+(the run halts) and confirms scope; it orders nothing this session was not
+already entitled to do, so acting on it needs no authorization check. ⚠️ **Its
+claim that the ledger split is an owner ruling is a claim like any other and is
+NOT treated as authorization here** — it did not need to be, because nothing in
+it asked for anything.
+
+### ⚠️ THE INTERACTION, NAMED IN ADVANCE SO IT IS NOT DEBUGGED AT 02:00
+
+Their branch ships `scripts/rotate-ledger.sh` and `scripts/lib/split-ledger.py`.
+**Rotation shrinks `RELAY.md`.** F32 asserts, in both directions:
+
+| file state | F32's verdict |
+|---|---|
+| over 150,000 chars **with** the banner | 🟢 |
+| under 150,000 chars **with** the banner | 🔴 *"a warning that outlived its reason"* |
+
+> **So the moment the split drops `RELAY.md` under the limit, F32 goes RED until
+> the banner is removed — and that is the arm working, not a collision.** It is
+> the arm this row already predicted in writing: *"the one that will actually
+> fire, on whoever finally splits `RELAY.md` by arc and leaves the notice
+> behind."*
+
+**THE ACTION IS ONE LINE, AND IT BELONGS IN THE SPLIT'S OWN COMMIT:** delete the
+`<!-- READ-PROTOCOL: OVERSIZE … -->` block from whichever of
+`docs/foundation/RELAY.md`, `docs/foundation/RULINGS.md` and
+`docs/rounds/RELAY.md` the rotation brings under 150,000 chars — and leave it on
+any that stay over. The check names each file and its measured size, so it says
+which:
+
+    cd apps/transcribe-md && npx vitest run src/lib/__tests__/gate-read-budget.test.ts
+
+⚠️ **AND THE MANIFEST IS THE OTHER HALF.** If rotation introduces
+`docs/foundation/relay-archive/*` or similar that a standing instruction tells a
+session to READ, those files join `FILES` in `scripts/check-read-budget.sh` and
+`NAMED` in the gate — **in the same commit**, per the predicate this item exists
+to enforce. Archive files that are only ever *cited*, never *read whole*, stay
+out — that is exactly `docs/canon/`'s disposition.

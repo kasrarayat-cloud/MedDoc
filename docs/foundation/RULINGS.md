@@ -1,5 +1,19 @@
 # RULINGS INDEX — every war-room decision, one line each
 
+<!-- READ-PROTOCOL: OVERSIZE - this file exceeds the 150,000-character tool read
+     limit by roughly two and a half times. A plain read is TRUNCATED. STEP 0
+     already prescribes the right instrument for this file — GREP IT — and that
+     is not a shortcut, it is the only complete access. Asserted by
+     scripts/check-read-budget.sh; do not remove this banner while the file is
+     still over the limit. -->
+
+> ⚠️ **YOU CANNOT READ THIS FILE IN ONE READ.** ~372,000 characters against a
+> 150,000-character read limit — about **40%** fits, and a ruling that does not
+> fit is not a weaker ruling, it is an **absent** one.
+>
+> **GREP IT.** That is what STEP 0 and `AGENTS.md` both say, and it is the only
+> access that sees every row. A read of the top is not a survey of the file.
+
 ## ⚠️ THE NUMBER-CLAIM PROTOCOL — a number is CLAIMED by LANDING, and only then
 
 **Standing 2026-08-18, after the SECOND collision in one day.**

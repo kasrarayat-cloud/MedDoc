@@ -1,5 +1,19 @@
 # Rounds — the relay ledger
 
+<!-- READ-PROTOCOL: OVERSIZE - this file exceeds the 150,000-character tool read
+     limit by roughly half again. A plain read is TRUNCATED and, because this
+     ledger is APPEND-ONLY, what it returns is the OLDEST end. Read the Rules
+     below, read the TAIL for the current arc, and GREP for everything else.
+     Asserted by scripts/check-read-budget.sh; do not remove this banner while
+     the file is still over the limit. -->
+
+> ⚠️ **YOU CANNOT READ THIS FILE IN ONE READ.** ~235,000 characters against a
+> 150,000-character read limit — about **64%** fits, and because a ledger grows
+> at the bottom, the part you get by simply opening it is the **oldest** part.
+> **Read the `## Rules` below · read the TAIL for the arc in flight · grep for
+> everything else.** Measured, never asserted in prose, by
+> `bash scripts/check-read-budget.sh`.
+
 **This ledger is the contract between sessions.** `docs/rounds/SPEC.md` says what
 to build; this says what is built, what is next, and what proof exists.
 
