@@ -35,7 +35,10 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # ⚠️ SELF-HOSTED (quillmd-ci-1, 4 vCPU / 8 GB, Docker 29.7.2). Job `name:`
+    # is UNCHANGED so every required context is preserved byte-for-byte.
+    # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
+    runs-on: [self-hosted, linux, x64, quillmd-ci]
     timeout-minutes: 20
 
     services:
@@ -221,7 +224,10 @@ jobs:
   # ──────────────────────────────────────────────────────────────────
   audit:
     name: npm audit (high+critical gate)
-    runs-on: ubuntu-latest
+    # ⚠️ SELF-HOSTED (quillmd-ci-1, 4 vCPU / 8 GB, Docker 29.7.2). Job `name:`
+    # is UNCHANGED so every required context is preserved byte-for-byte.
+    # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
+    runs-on: [self-hosted, linux, x64, quillmd-ci]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -332,7 +338,10 @@ jobs:
   # ──────────────────────────────────────────────────────────────────
   audit-dev:
     name: dev-dependency advisories (report-only)
-    runs-on: ubuntu-latest
+    # ⚠️ SELF-HOSTED (quillmd-ci-1, 4 vCPU / 8 GB, Docker 29.7.2). Job `name:`
+    # is UNCHANGED so every required context is preserved byte-for-byte.
+    # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
+    runs-on: [self-hosted, linux, x64, quillmd-ci]
     timeout-minutes: 5
     continue-on-error: true
     steps:
@@ -379,7 +388,10 @@ jobs:
   # not lengthen. apps/meddoc-pro (decommissioned) stays out of scope.
   unit:
     name: unit tests (transcribe-md + packages)
-    runs-on: ubuntu-latest
+    # ⚠️ SELF-HOSTED (quillmd-ci-1, 4 vCPU / 8 GB, Docker 29.7.2). Job `name:`
+    # is UNCHANGED so every required context is preserved byte-for-byte.
+    # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
+    runs-on: [self-hosted, linux, x64, quillmd-ci]
     timeout-minutes: 15
     env:
       CI: "true"

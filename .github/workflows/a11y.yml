@@ -59,7 +59,10 @@ env:
 jobs:
   axe:
     name: axe-core sweep (chromium x desktop+mobile)
-    runs-on: ubuntu-latest
+    # ⚠️ SELF-HOSTED (quillmd-ci-1, 4 vCPU / 8 GB, Docker 29.7.2). Job `name:`
+    # is UNCHANGED so every required context is preserved byte-for-byte.
+    # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
+    runs-on: [self-hosted, linux, x64, quillmd-ci]
     timeout-minutes: 25
 
     services:
