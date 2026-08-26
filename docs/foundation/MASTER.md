@@ -79,6 +79,13 @@ a pointer and go and read the ruling.**
 3. Read `docs/foundation/SPEC.md`, `RELAY.md`, `RULINGS.md`, and `AGENTS.md`.
    ⚠️ **Grep `RULINGS.md` before ANY ruling-shaped decision.** Rediscovery is a
    process smell; contradiction is the failure it precedes.
+   ⚠️ **`AGENTS.md` IS THE LIVE INSTRUCTION SET PLUS A CANON INDEX — NOT THE
+   WHOLE CANON.** It was split on 2026-08-26 because at 243,023 chars it
+   exceeded the 150,000-char read limit and a session could load a TRUNCATED
+   rulebook without being told. Every full canon body now lives verbatim in
+   **`docs/canon/`**, and an index row is a **POINTER, NEVER THE RULE** — when a
+   row and a body disagree, the body governs. Cite entries by TITLE as before;
+   the title still greps in `AGENTS.md` and names the file holding its body.
 4. **Verify the previous session's citation actually exists** — and verify it
    WITH THE CHECKER, not by eye:
 
