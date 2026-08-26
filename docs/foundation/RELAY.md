@@ -32763,3 +32763,46 @@ The index-executable bit is set with `git update-index --chmod=+x` and asserted
 from `git ls-files -s` — `core.fileMode` is false here, so `chmod +x` alone ships
 the script inert.
 
+### ⚠️ AND THE SHIPPED SCRIPT CORRECTED MY OWN CENSUS — 9 WAS THE NARROW ANSWER, 24 IS THE REAL ONE
+
+**The table above was measured with an ad-hoc `python3` reimplementation, before
+the script's own loop had ever executed. It is not wrong, and it is not what the
+script reports.** Driving the real script end to end (temporary arm, once):
+
+    111 remote branches, 89 in scope, 855 PR head refs known to GitHub
+    in progress (open PR) : 12
+    merged, not retired   : 37
+    landed another route  : 16
+    PUSHED, NEVER LANDED  : 24        <- exit 1
+    12 + 37 + 16 + 24 = 89 — the reconciliation guard passed
+
+⚠️ **THE GAP IS A PREDICATE DIFFERENCE, AND MINE WAS THE NARROWER ONE.** My python
+treated *"has any PR row"* as *not an orphan*. The script treats a branch whose
+only PRs are **CLOSED-UNMERGED** as a candidate — which is right, because a closed
+unmerged PR is precisely a branch whose work never landed. That class is invisible
+to the narrow predicate, and it is **15 more branches**, including:
+
+`release/template-twin-ga-20260719` (**154** patch-unique) ·
+`fix/template-twin-manual-certification-remediation-v1` (82) ·
+`fix/template-twin-provider-claim-ownership-v1` (81) ·
+`fix/template-twin-provider-layer-atomicity-v1` (77) ·
+`fix/template-twin-staging-transaction-integrity-v1` (70) ·
+`fix/template-twin-durable-staging-admission-v1` (65) ·
+`fix/template-twin-staging-release-gates-v1` (60) ·
+`feat/template-twin-staging-ui-v1` (57) · `feat/t-m24-ui` (9) ·
+`design/soap-tab-concepts-v2`/`-v3` · `feat/a11y-self-hosted` (#867, closed
+unmerged, superseded by #868 — **correctly flagged**) · `feat/citation-checker` ·
+`fix/f5d-canonical-derivation` · `fix/noprogress-watches-origin`
+
+**The 64% figure stands for the predicate it describes** (no-PR-at-all: 25 flagged,
+9 carrying work) **and must not be read as the script's own false-positive rate.**
+Recorded this way round deliberately: *a census is only as authoritative as its
+predicate's fidelity to the SHIPPED function*, and here the shipped function was
+the more faithful of the two. **I was the resemblance.**
+
+⚠️ **AND THE REASON IT WAS CAUGHT IS THAT THE SCRIPT'S LOOP HAD NEVER RUN.** The
+guards were mutation-proved, the predicate was pinned, the ledger row was written
+— and the main loop had executed exactly zero times, with a python twin standing
+in for it. *A second copy drifts from the first the day either is written.*
+
+

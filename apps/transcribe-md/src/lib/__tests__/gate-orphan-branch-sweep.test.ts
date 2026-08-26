@@ -17,15 +17,20 @@
 // So the arms below are about the SCRIPT, not about today's remote:
 //   1. it is executable IN THE INDEX  (core.fileMode is false here — chmod +x
 //      succeeds and the file still enters the index 100644)
-//   2. its GRANT is in .claude/settings.json
-//   3. every can't-tell path exits 2, never 0
+//   2. every can't-tell path exits 2, never 0
+//   3. the predicate and the probe seam cannot silently drift
 //
-// ⚠️ ARM 2 IS THE ONE WITH HISTORY. Canon: "AN ENTRY THAT NAMES AN INSTRUMENT
-// VERIFIES THAT INSTRUMENT'S GRANT, IN THE SAME COMMIT" — written after two
-// scripts shipped ungranted, and violated AGAIN by the very next entry, by the
-// same author, days apart. `check-retirement-conditions.sh` is ungranted on
-// `main` right now for exactly this reason. A rule obeyed by remembering is a
-// rule that fails on the tired night; this is the same rule, asserted.
+// ⚠️ A GRANT ARM WAS WRITTEN AND THEN REMOVED ON MEASUREMENT — the loop cannot
+// write .claude/settings.json, so it would ship permanently red. The full
+// reasoning, and the commented-out arm WITH its retirement condition, are at the
+// point where it would have gone. This list says three because three is what is
+// asserted; an earlier draft of this header said "its GRANT is in
+// .claude/settings.json" after the arm had already been cut, which is the
+// prose-decays-silently defect inside a file arguing against it.
+//
+// THE LIVE SWEEP WAS PROVED SEPARATELY, ONCE, BY A TEMPORARY ARM: 89 branches in
+// scope, partition 12 + 37 + 16 + 24 = 89 reconciling exactly, exit 1. It is not
+// kept, for the reason in the paragraph above.
 // ============================================================================
 
 import { readFileSync } from 'node:fs';
@@ -130,9 +135,12 @@ describe('F29 orphan-branch sweep', () => {
     const r = run({ SWEEP_BASE: 'HEAD', SWEEP_PROBE: '1' });
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('orphan-branch sweep');
-    expect(r.stdout).toContain('PROBE — setup reached');
+    expect(r.stdout).toContain('PROBE — local guards passed');
     expect(r.stdout).not.toContain('does not resolve');
     expect(r.stdout).not.toContain('CANNOT TELL');
+    // offline by construction: if the seam ever drifts past the gh call, this
+    // line appears and the arm's runtime becomes network latency.
+    expect(r.stdout).not.toContain('PR head refs known to GitHub');
   });
 
   // ⚠️ THE ANCHOR HERE IS THE CODE, NOT THE TOKEN, AND THAT IS THE WHOLE ARM.
@@ -147,12 +155,23 @@ describe('F29 orphan-branch sweep', () => {
   // in place of the cheap one written to catch exactly this. A structural
   // assertion anchored on a token matches the prose ABOUT the structure; the
   // substring family again, this time inside a gate about ordering.
-  it('the probe seam is BEFORE the network loop, not decoration after it', () => {
+  it('the probe seam is BEFORE every network call, not just before the loop', () => {
     const src = readFileSync(SCRIPT, 'utf8');
     const probeAt = src.indexOf('if [ "${SWEEP_PROBE:-}" = "1" ]');
+    // ⚠️ ANCHOR ON THE ASSIGNMENT, NOT THE COMMAND NAME. `gh pr list` appears in
+    // the prose above the seam explaining why the seam moved, 362 chars EARLIER
+    // than the probe — so `indexOf('gh pr list')` made this arm fail on correct
+    // code. THIRD time this token-vs-code trap has bitten inside this one file.
+    const firstGhAt = src.indexOf('PR_REFS="$(gh pr list');
     const loopAt = src.indexOf('while IFS= read -r b');
     expect(probeAt, 'the probe guard code was not found').toBeGreaterThan(-1);
+    expect(firstGhAt, 'no gh call found — the script cannot work').toBeGreaterThan(-1);
     expect(loopAt, 'the per-branch loop was not found').toBeGreaterThan(-1);
+    // ⚠️ probe < FIRST gh call is the assertion that matters. "probe < loop" was
+    // the v2 form and it was satisfied by a seam that still made one ~5 s network
+    // call — enough to put the arm above on a coin flip against vitest's 5000 ms
+    // default. Ordering against the loop is necessary and was not sufficient.
+    expect(probeAt).toBeLessThan(firstGhAt);
     expect(probeAt).toBeLessThan(loopAt);
   });
 

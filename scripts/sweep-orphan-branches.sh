@@ -80,6 +80,23 @@ IN_SCOPE="$(printf '%s\n' "$SCOPE" | grep -c . )"
 echo "orphan-branch sweep — base $BASE"
 echo "   · $TOTAL remote branches, $IN_SCOPE in scope (excludes main + dependabot/*)"
 
+# ⚠️ SWEEP_PROBE STOPS HERE — BEFORE ANY NETWORK CALL AT ALL, and the placement
+# was moved twice before it was right. It exists so a test can positive-control
+# the local guards (base resolves, enumeration non-empty, scope computed) without
+# touching GitHub.
+#
+# v1 had no seam: the arm drove the whole sweep and timed out at 124 s.
+# v2 put the seam after the PR-ref query below — one call, ~5 s, which sat exactly
+#    on vitest's 5000 ms default. It passed at 4.8 s and failed at 5.1 s on the
+#    very next run. A CI arm whose verdict is decided by network latency is a coin
+#    flip wearing a gate's clothes, and this file's own header argues against it.
+# v3 (this) is OFFLINE. Nothing above this line leaves the machine.
+if [ "${SWEEP_PROBE:-}" = "1" ]; then
+  echo
+  echo "🟢 PROBE — local guards passed, enumeration positive-controlled; no network, no loop"
+  exit 0
+fi
+
 # ---- what GitHub knows about ------------------------------------------------
 PR_REFS="$(gh pr list --state all --limit 1000 --json headRefName --jq '.[].headRefName' 2>/dev/null | sort -u)"
 if [ -z "$PR_REFS" ]; then
@@ -88,19 +105,6 @@ if [ -z "$PR_REFS" ]; then
   exit 2
 fi
 echo "   · $(printf '%s\n' "$PR_REFS" | grep -c .) distinct PR head refs known to GitHub"
-
-# ⚠️ SWEEP_PROBE stops HERE, before the per-branch loop, and exists so a test can
-# positive-control the setup without driving the whole sweep. The loop makes one
-# `gh` call per in-scope branch — ~88 today — which took a CI arm past its
-# timeout on the first attempt. A gate that runs the live sweep is both flaky and
-# WRONG-UNIVERSE: it would answer about whatever refs the CI checkout holds.
-# Everything above this line is local or one cheap call; everything below is the
-# network. The seam is the point.
-if [ "${SWEEP_PROBE:-}" = "1" ]; then
-  echo
-  echo "🟢 PROBE — setup reached, enumeration positive-controlled; per-branch loop not run"
-  exit 0
-fi
 echo
 
 retire=0; wip=0; landed=0; findings=0
