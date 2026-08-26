@@ -32689,3 +32689,77 @@ reads as *"the pile is gone"* — reassuring, plausible, and false.
 - **No merge of #868-adjacent CI work.** See item 4.
 - **No claim that the budget was restored.** See item 3.
 
+
+
+---
+
+## 🟢 F29 — THE ORPHAN-BRANCH SWEEP IS BUILT AND GATED — **2026-08-26, run `20260826-140142-b1` session 01**
+
+**`scripts/sweep-orphan-branches.sh` + `gate-orphan-branch-sweep.test.ts` (8 arms).**
+
+⚠️ **INERT FOR THE LOOP UNTIL ITS GRANT LANDS. This is F30's failure, named in
+advance rather than discovered in three months.** The script ships correct and
+proved, and the loop **cannot invoke it** — `Bash(bash scripts/sweep-orphan-branches.sh:*)`
+is not in `.claude/settings.json`, and **the loop cannot put it there.** See the
+proposed ruling on branch `feat/f29-orphan-branch-sweep`. Two grants are now
+owed, this one and F30's `check-retirement-conditions.sh`. Until then the sweep
+is reachable by a supervised session, and by CI through the gate.
+
+### ⚠️ THE LEDGER'S OWN PREDICATE WAS WRONG, AND IT WAS WRONG BY 64%
+
+The F29 spec above sketches the sweep as:
+
+    if it has NO open PR and NO merged PR  ->  FLAG IT
+
+**Measured against `origin` on 2026-08-26 that flags 25 branches. Only 9 carry
+anything at all.** A sweep that cries wolf sixteen times is a sweep nobody reads
+by the third night, and its healthy answer is zero — so a false positive is not
+noise, it is the entire signal inverted.
+
+**AND THE OBVIOUS REFINEMENT IS WORSE, NOT BETTER.** `git rev-list --count` said
+**all 25** carried unlanded commits:
+
+| predicate | branches flagged | correct? |
+|---|---|---|
+| no PR at all | 25 | over-flags by 16 |
+| `rev-list --count main..BRANCH` > 0 | **25** | **over-flags by 16 — and looks rigorous** |
+| `git cherry` (patch-id) | **9** | ✅ |
+
+⚠️ **A SQUASH MERGE LEAVES THE ORIGINAL COMMITS UNREACHABLE WHILE THEIR CONTENT
+IS FULLY IN `main`.** Counting COMMITS to answer a question about WORK is this
+house's own *"A CENSUS IS ONLY AS AUTHORITATIVE AS ITS PREDICATE'S FIDELITY TO
+THE SHIPPED FUNCTION"*, and the wrong predicate is the more confident-looking one.
+`git cherry` compares by patch-id, so squashed, rebased and cherry-picked content
+all read as landed.
+
+### THE SWEEP'S RESULT TODAY — 9 branches, and the split matters
+
+| what | n | disposition |
+|---|---|---|
+| `feature/phase4-*`, `phase5-*`, `phase5.1-*`, `phase5.2-*` (14) | **0 patch-unique** | pre-PR-discipline history; **retire, no work at risk** |
+| `feat/certification-door` | **0 patch-unique** (3 commits ahead) | ✅ confirms F4's row — rebased into `feat/f4-certification-door-land` and landed. **Retire.** |
+| `feat/template-twin-docx-v1` | **7** patch-unique, last 2026-07-15 | ⚠️ needs a read — Twin work, and Twin is PARKED |
+| `chore/host-soap-edit-mockup{,-v2}` | 1 and 3 | mockup hosting, 2026-05-11 |
+| `audit/*` (5) | 1 each, 2026-04-24/25 | audit reports, pre-discipline |
+| `feat/loop-resilience-doctrine` | 1, **2026-08-26** | ⚠️ **another actor's LIVE worktree — not mine to touch** |
+
+**None is a lost production record** — which is the good news, and is *not* what
+the sweep existing was contingent on.
+
+### THE GATE — 8 arms, and one of them is an apology
+
+It asserts the INSTRUMENT, deliberately **not** today's remote: a CI arm that
+queried `origin` + the GitHub API would be flaky *and* wrong-universe, answering
+about whatever refs the CI checkout happens to hold.
+
+⚠️ **THE FIRST VERSION OF THE POSITIVE-CONTROL ARM DID EXACTLY THAT AND TIMED OUT
+AT 124 SECONDS** — one `gh` call per in-scope branch — in a file whose own header
+argues against it. Corrected with a `SWEEP_PROBE=1` seam that stops before the
+network loop, **plus an arm asserting the seam stays ABOVE the loop**, because if
+it ever drifts below, the positive control silently becomes the 124-second live
+sweep again. Runtime **126s → 4.8s**.
+
+The index-executable bit is set with `git update-index --chmod=+x` and asserted
+from `git ls-files -s` — `core.fileMode` is false here, so `chmod +x` alone ships
+the script inert.
+
