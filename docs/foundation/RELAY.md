@@ -1,5 +1,24 @@
 # FOUNDATION — the relay ledger
 
+<!-- READ-PROTOCOL: OVERSIZE - this file exceeds the 150,000-character tool read
+     limit by roughly twelve times. A plain read is TRUNCATED and, because this
+     ledger is APPEND-ONLY, what it returns is the OLDEST end. Read the QUEUE
+     immediately below, read the TAIL for the current arc, and GREP for
+     everything else. Asserted by scripts/check-read-budget.sh; do not remove
+     this banner while the file is still over the limit. -->
+
+> ⚠️ **YOU CANNOT READ THIS FILE IN ONE READ, AND NOTHING WILL TELL YOU SO.**
+> It is ~1.8 MILLION characters against a 150,000-character read limit — about
+> **8%** of it fits, and the 8% you get by simply opening it is the **oldest**
+> 8%, because a ledger grows at the bottom. A truncated read of an append-only
+> file hands back a confident, well-formed, **obsolete** answer.
+>
+> **So read it in three moves, never one:** the **QUEUE** below · the **TAIL**
+> (`tail -n 500`, or `Read` with an `offset` near the end) for the arc in
+> flight · and **grep** for anything else. The size is measured — never
+> asserted in prose, which goes stale — by
+> `bash scripts/check-read-budget.sh`.
+
 **This ledger is the contract between sessions.** `SPEC.md` says what to build;
 `DISCOVERY.md` says what is true today; this says what order, with what proof.
 
@@ -32689,3 +32708,241 @@ reads as *"the pile is gone"* — reassuring, plausible, and false.
 - **No merge of #868-adjacent CI work.** See item 4.
 - **No claim that the budget was restored.** See item 3.
 
+---
+
+# 🟢 F32 — TWO OF THE FOUR FILES STEP 0 ORDERS EVERY SESSION TO READ **CANNOT BE READ**. BUILT AND GATED 2026-08-26.
+
+**Run `20260826-140142-b1` session 02.** The `AGENTS.md` split landed yesterday
+(`87c9d3bc`, PR #873) with a guard so the rulebook could not silently grow back
+past the read limit. **The guard watches one file. The rule names four.**
+
+## THE MEASUREMENT — taken on `87c9d3bc`, the split's own merge commit
+
+MASTER STEP 0.3, verbatim: *"Read `docs/foundation/SPEC.md`, `RELAY.md`,
+`RULINGS.md`, and `AGENTS.md`."*
+
+| file | `wc -m` | vs the 150,000-char read limit |
+|---|---|---|
+| `AGENTS.md` | 87,383 | readable |
+| `SPEC.md` | 28,340 | readable |
+| **`RULINGS.md`** | **371,533** | **2.5×** — ~40% fits |
+| **`RELAY.md`** | **1,793,436** | **12.0×** — **~8%** fits |
+
+> **Two of the four could not be read, one of them by twelve times, and nothing
+> anywhere said so.**
+
+This is the split's own lesson arriving one file over: *a gate's WATCHED SET is
+diffed against the spec's NAMED set.* `check-agents-md-size.sh` is correct and
+does exactly what it says; what was missing is that nobody diffed its watched
+set (one file) against STEP 0.3's named set (four).
+
+## ⚠️ AND THE LEDGER'S TRUNCATION IS **WORSE** THAN THE RULEBOOK'S — THIS IS THE PART THAT MAKES IT A HAZARD RATHER THAN AN UNTIDINESS
+
+A rulebook truncated at the top still hands back **some live rules**.
+
+**`RELAY.md` is APPEND-ONLY, so the front of the file is its OLDEST content.**
+A plain read returns the stale end, omits every current arc, and announces
+nothing. The reader gets a confident, well-formed, **obsolete** answer — and the
+failure mode of this programme has never been a session that knows it is
+missing something.
+
+⚠️ **AND THE QUEUE TABLE SITTING AT LINE 12 IS LUCK, NOT DESIGN.** It is the one
+current thing inside the readable 8%, and it is there because that is where a
+queue reads well — not because anybody arranged for truncation to spare it.
+
+## WHAT SHIPS — A BANNER, NEVER A BUDGET, AND IT IS PINNED IN **BOTH** DIRECTIONS
+
+**A budget is the wrong cure here, and the reasoning is worth keeping: a ledger
+that may not grow is not a ledger,** and a ratchet set at today's size fails on
+tonight's first append — it would halt the loop to fix a documentation problem.
+
+So the rule is that an oversize file **declares itself where a truncated reader
+still sees it**:
+
+| disposition | assertion |
+|---|---|
+| **over the limit** | must carry `READ-PROTOCOL: OVERSIZE` in its head (default window: 60 lines, column 0) |
+| **under the limit** | must **NOT** carry it |
+
+⚠️ **THE SECOND ROW IS THE ONE A ONE-SIDED CHECK WOULD HAVE MISSED, AND IT IS
+THE ONE THAT WILL ACTUALLY FIRE** — on whoever eventually splits `RELAY.md` by
+arc and leaves the notice behind. *A warning that outlived its reason is a lie
+that reads like a warning.* Split-family coverage pins both directions.
+
+**`scripts/check-read-budget.sh`** — `0` accounted for · `1` a FINDING · `2`
+can't tell. Tree-relative on purpose (it judges the checkout it ships in, which
+is the right universe for a PR-head check, and is **not** the F28 defect).
+
+⚠️ **THE `AGENTS.md` ROW IS DELEGATED, NEVER RE-IMPLEMENTED.** The script shells
+out to `check-agents-md-size.sh` rather than copying its 120,000 budget — the
+same reasoning that keeps the pre-push hook and `merge-pr.sh` sharing one
+inflight check. **Proved rather than asserted:** a gate arm runs the new script
+with `AGENTS_MD_BUDGET=1000` and requires it to go red, which only a genuine
+delegation can do.
+
+⚠️ **THE BANNER TOKEN IS LINE-ANCHORED AT COLUMN 0 AS AN HTML COMMENT, AND THAT
+IS LOAD-BEARING.** `MASTER.md`, this row, the script and the gate all NAME the
+token; none of them may be mistaken for a file that CARRIES it. An unanchored
+match would have been *a probe that matches itself*, and it would have fired on
+the very commit that introduced it.
+
+## PROOF — 9 ARMS, AND FOUR OF THEM ARE RED ARMS
+
+    cd apps/transcribe-md && npx vitest run src/lib/__tests__/gate-read-budget.test.ts
+    -> 9 passed (9)     [with gate-agents-md-size.test.ts alongside: 14 passed (14)]
+
+| arm | what would make it fail |
+|---|---|
+| green on this tree | any named file misdescribed |
+| non-vacuity | the script silently skipping a file — all 7 must appear by name |
+| **RED — over and silent** | `READ_BUDGET_LIMIT=1000` → exit 1, *"AND IT DOES NOT SAY SO"*, naming `SPEC.md` |
+| **RED — names the cure** | the message must carry *"THE FIX IS A BANNER, NOT A TRIM"* and refuse the tempting repair |
+| **RED — the other direction** | `READ_BUDGET_LIMIT=10000000` → the ledgers are now "under" and still bannered → exit 1 |
+| **RED — the head window is real** | `READ_BUDGET_HEAD_LINES=1` → the banner falls outside the window → `RELAY.md` reddens |
+| **RED — delegation** | `AGENTS_MD_BUDGET=1000` → *"delegated check is RED"* + *"OVER BUDGET"* |
+| the two ledgers really are over, and really do declare it | either fact ceasing to be true |
+| the readable ones really are readable, and carry no banner | a stale banner, or `AGENTS.md` growing back |
+
+**The script's actual output, read rather than inferred** (surfaced through a
+deliberately-failed assertion, because the loop cannot invoke the script from a
+shell — see the grant finding below):
+
+    🟢 AGENTS.md — delegated: 🟢 AGENTS.md 87383 chars — under the 120000 budget
+    🟢 docs/foundation/MASTER.md    —   49674 chars, fits one read
+    🟢 docs/foundation/SPEC.md      —   28340 chars, fits one read
+    🟢 docs/foundation/RELAY.md     — 1794577 chars, OVERSIZE ( 8% fits) and it DECLARES the protocol
+    🟢 docs/foundation/RULINGS.md   —  372324 chars, OVERSIZE (40% fits) and it DECLARES the protocol
+    🟢 docs/foundation/DISCOVERY.md —   53494 chars, fits one read
+    🟢 docs/foundation/INBOX.md     —   30667 chars, fits one read
+
+*(The two ledger figures sit ~1,141 and ~791 chars above the table at the top of
+this row: that is this change's own banners, and the arithmetic reconciles.)*
+
+## APPLIED TO ITS OWN LANDING
+
+`MASTER.md` now names the token in prose. `MASTER.md` is **under** the limit, so
+if the anchoring were wrong the new negative arm would redden **on this very
+commit**. It was re-run after that edit: **14 of 14**, both gates.
+
+## WHAT THIS ROW DOES **NOT** CLAIM
+
+- **It does not split `RELAY.md`.** That is the eventual cure — archive closed
+  arcs to `docs/foundation/relay-archive/` with an index, exactly as
+  `docs/canon/` was done — and it is deliberately **not** attempted tonight:
+  four more sessions of this run append to this file, and a restructure landing
+  underneath them turns every union into a conflict. **The retirement condition
+  is written down: when the arc-split lands, remove `RELAY.md`'s banner in the
+  same commit, and the negative arm will hold you to it.**
+- **It does not claim the truncation has ever actually misled a session.** No
+  such instance was looked for or found. The claim is that nothing would have
+  shown it — which is the argument for the banner, not a body count.
+- **It does not widen to the Rounds ledger** (`docs/rounds/RELAY.md`), which
+  STEP 0 does not name. Adding a file to that instruction means adding a row to
+  the manifest, in the same commit — stated in the script.
+
+## 🔴 FINDING — THE INSTRUMENT SHIPS UNGRANTED, AND IT IS THE **THIRD** SIGHTING
+
+`bash scripts/check-read-budget.sh` is **REFUSED** to the loop. Measured, with a
+positive control so the zero is not the instrument:
+
+    grep -c "check-read-budget" .claude/settings.json   -> 0
+    grep -c "check-citation"    .claude/settings.json   -> 1   (control)
+
+This is the class canon already names twice (`gh-runs.sh`, `tmux has-session`)
+and that F30's `check-retirement-conditions.sh` is still sitting in. **Session
+01 of this run ruled it PROVISIONALLY hours ago: the loop DETECTS AND REPORTS; a
+supervised session ADDS.** That ruling is applied here rather than re-derived.
+
+⚠️ **AND THE ENTRY IS NOT INERT IN THE MEANTIME, WHICH IS THE DIFFERENCE FROM
+F30.** `MASTER.md` prints the granted route beside the refused one:
+
+    cd apps/transcribe-md && npx vitest run src/lib/__tests__/gate-read-budget.test.ts
+
+That is MASTER's own *"write the proof as a TRACKED test"* rule, and it is
+strictly better than the shell form — reviewable, run by CI forever, cannot go
+stale silently. **The grant would be a convenience; its absence is not a
+capability loss.** One line for a supervised session:
+
+    Bash(bash scripts/check-read-budget.sh:*)
+
+## 🔵 FINDINGS THIS ITEM DID NOT GO LOOKING FOR
+
+### 1 · ⚠️ I NEARLY FILED "THE RUNNERS API IS NOT GRANTED TO THE LOOP" — AND IT WOULD HAVE BEEN FALSE. **THE DIRECTORY IS NOT THE REPOSITORY.**
+
+Three `gh api` calls returned `404 Not Found` this session:
+
+    repos/kasrarayat-cloud/meddoc-pro/actions/runners
+    repos/kasrarayat-cloud/meddoc-pro/actions/runs?status=queued
+    repos/kasrarayat-cloud/meddoc-pro/branches/main/protection
+
+The obvious reading — and the one this session started to write down — is *a
+fine-grained token without `administration` scope*. **It is wrong.** The
+repository is **`kasrarayat-cloud/MedDoc`**; `meddoc-pro` is the name of the
+**working directory** on this host. Re-asked with `{owner}/{repo}`, every one of
+them answers:
+
+    gh api repos/{owner}/{repo}/actions/runners
+    -> quillmd-ci-1  online  busy=true  [self-hosted, Linux, X64, quillmd-ci]
+
+    gh api repos/{owner}/{repo}/branches/main/protection --jq '.required_status_checks.contexts'
+    -> ["Playwright E2E (transcribe-md)", "test", "npm audit (high+critical gate)",
+        "axe-core sweep (chromium x desktop+mobile)", "TruffleHog (verified-only, diff-scan)",
+        "unit tests (transcribe-md + packages)"]
+
+⚠️ **`gh api` RETURNS 404 FOR A WRONG REPOSITORY EXACTLY AS IT DOES FOR A
+MISSING SCOPE**, so the two are indistinguishable from the response — and the
+plausible-sounding one is the wrong one. **Use `{owner}/{repo}` and let `gh`
+resolve it; never hand-type a repo name from the path you are standing in.**
+Every previous session's runner and protection evidence stands; nothing here is
+withdrawn.
+
+### 2 · ⚠️ THE SPOF ROW'S NUMBER, RE-DERIVED: **SIX** REQUIRED CONTEXTS, ONE WORKER
+
+The protection read above is a second, independent route to this ledger's
+existing SPOF finding, and it sharpens it. Branch protection requires **six**
+check-runs spanning **all four** workflows — not one. Every one of them queues on
+`quillmd-ci-1`, which reads `busy=true` with a single job in flight.
+
+**Tonight's own cost, measured rather than recalled:** `main`'s citation for
+`87c9d3bc` was created `14:00:46Z`; at `15:17Z` — **76 minutes** — it stood at
+`a11y-ci` ✅ · `secrets-scan` ✅ · `e2e` **in_progress** · `CI` **queued**, with
+PR #874's and #875's eight runs behind it. **Nothing built tonight can be cited
+until that drains.** The cure named in the ledger is unchanged and is not
+reachable from here: no runner process or container exists on this host
+(`ps aux` for `Runner.Listener` → 0; `docker ps` → no runner), so a second
+runner is an owner act.
+
+### 3 · ⚠️ PREFLIGHT CHECK 5 PRODUCES A FALSE GREEN, AND ONLY A POSITIVE CONTROL SEPARATES IT
+
+`dmesg` is not granted, so the OOM check falls to the skill's documented
+fallback, `journalctl -k`. It **runs, exits 0, and matches nothing** — which
+reads as *"no OOM kills"*.
+
+    journalctl -k --since "24 hours ago" | wc -l    -> 4
+    journalctl -k --since "24 hours ago" | head -4
+      Hint: You are currently not seeing messages from other users and the system.
+            Users in groups 'adm', 'systemd-journal' can see all messages.
+      -- No entries --
+
+**The kernel ring buffer is not being read at all.** The skill's own escape
+clause does not cover this shape: it says *"if neither is ACCESSIBLE, mark
+SKIPPED"*, and `journalctl -k` **is** accessible — it succeeds. What it cannot
+do is **see**. Recorded 🟡 CANNOT TELL. Suggested amendment: make the control
+mandatory — *under ~10 lines, or output containing `-- No entries --`, is
+CANNOT TELL, never a pass.*
+
+### 4 · THE PREFLIGHT SKILL'S CALIBRATION IS STALE ON **CORES** TOO
+
+Session 01 of this run caught the RAM half. The core count is the other half,
+and it is the one that gates a decision, since the skill's thresholds are
+written around *"8 cores"*:
+
+| the skill says | measured |
+|---|---|
+| 16 GB total / ~14 GB idle (Check 3 preamble: 13 GB) | **32,093 MB / 18,835 MB** |
+| **8 cores** | **14 cores** |
+
+Headroom, not a hazard — no verdict changes. `lsmod` is not granted, so the
+balloon assertion the skill's header asks for is **inferred** from the 32 GB
+total and is stated as an inference. Full detail in
+`docs/preflight-reports/preflight-20260826T151235Z.md`.

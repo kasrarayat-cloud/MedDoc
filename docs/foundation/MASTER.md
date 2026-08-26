@@ -86,6 +86,48 @@ a pointer and go and read the ruling.**
    **`docs/canon/`**, and an index row is a **POINTER, NEVER THE RULE** — when a
    row and a body disagree, the body governs. Cite entries by TITLE as before;
    the title still greps in `AGENTS.md` and names the file holding its body.
+
+   ⚠️ **AND TWO OF THE FOUR FILES THIS STEP NAMES CANNOT BE READ AT ALL. THE
+   INSTRUCTION IS THREE MOVES, NEVER ONE.** Measured on `87c9d3bc`, the commit
+   that landed the `AGENTS.md` split:
+
+   | file | chars | vs the 150,000 read limit |
+   |---|---|---|
+   | `AGENTS.md` | 87,383 | readable |
+   | `SPEC.md` | 28,340 | readable |
+   | **`RULINGS.md`** | **371,533** | **2.5×** — about 40% fits |
+   | **`RELAY.md`** | **1,793,436** | **12.0×** — about **8%** fits |
+
+   > **`RELAY.md` IS APPEND-ONLY, SO THE 8% YOU GET BY SIMPLY OPENING IT IS THE
+   > OLDEST 8%.** A truncated read of a chronological ledger hands back a
+   > confident, well-formed, **obsolete** answer, and nothing announces the
+   > truncation. That is strictly worse than a truncated rulebook, which at
+   > least returns *some* live rules.
+
+   **So: read the QUEUE at `RELAY.md`'s head · read the TAIL for the arc in
+   flight (`tail -n 500`, or a `Read` with an `offset` near the end) · and GREP
+   for everything else.** `RULINGS.md` is **grep-only**, which this step already
+   said and now says for a measured reason.
+
+   ⚠️ **DO NOT PUT THESE NUMBERS IN PROSE AND TRUST THEM.** A size written down
+   is stale the next time anyone appends. The measurement is
+   `bash scripts/check-read-budget.sh` (`0` accounted for · `1` a FINDING · `2`
+   can't tell), which also asserts that every oversize file carries its
+   `READ-PROTOCOL: OVERSIZE` banner — **and that every readable one does not**,
+   because a warning that outlived its reason is a lie that reads like a
+   warning. CI drives the same script through `gate-read-budget.test.ts`.
+
+   ⚠️ **THAT SCRIPT IS NOT YET IN `.claude/settings.json` — MEASURED, NOT
+   ASSUMED** (`grep -c check-read-budget .claude/settings.json` → `0` at the
+   time this landed), so a bare `bash scripts/check-read-budget.sh` is
+   **REFUSED** to the loop. Until a supervised session adds the grant, run it
+   the granted way, which is strictly better anyway:
+
+       cd apps/transcribe-md && npx vitest run src/lib/__tests__/gate-read-budget.test.ts
+
+   Filed under the standing rule that an entry naming an instrument verifies
+   that instrument's grant in the same commit — the loop **detects and
+   reports**; a supervised session **adds**.
 4. **Verify the previous session's citation actually exists** — and verify it
    WITH THE CHECKER, not by eye:
 
