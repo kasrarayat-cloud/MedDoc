@@ -54,3 +54,50 @@ parent. That citation is owed and will be produced by
   `in_progress` when this was written, and that work is being discarded
   knowingly rather than unknowingly. That distinction is the entire point of
   declaring.
+
+---
+
+## ⚠️ CORRECTION, 2026-08-26T19:45Z — THIS DECLARATION IS LARGELY MOOT, AND THAT IS RECORDED RATHER THAN QUIETLY DROPPED
+
+**The batch did not happen, because it did not need to.** Session 02 of run
+`20260826-140142-b1` merged two of the three PRs itself, under its own rules,
+before the STOP boundary:
+
+| PR | merged | |
+|---|---|---|
+| **#874** | `2026-08-26T17:11:01Z` | → `c21f8e25` |
+| **#875** | `2026-08-26T19:38:13Z` | → `a061e807` |
+
+**147 minutes apart — that is not a batch, it is a session waiting correctly**
+for the first merge commit's runs before taking the second, exactly as the merge
+rule prescribes. No citation was destroyed and nothing needed declaring.
+
+**#871 was CLOSED unmerged** at the same time, as session 01 had planned once
+#874 landed — its content having been re-split into #874 by the canon split.
+
+**What remains is #876 alone. A single merge needs no batch declaration**, so
+none of the cost this file accepted was ever incurred.
+
+### Why the file stays, struck through rather than deleted
+
+Two reasons, and the second is the load-bearing one:
+
+1. It is the **precedence artifact**. Its original commit (`d9eff53d`,
+   `2026-08-26T16:43:25Z`) provably predates every merge above, which is the
+   whole product a declaration buys — *"the file exists" is not "the file
+   existed first"*, and only a commit timestamp settles it.
+2. **A declaration that is quietly deleted once it turns out to be unnecessary
+   teaches the wrong lesson.** The next session would see only declarations that
+   were needed, and conclude declaring is a thing you do when you already know
+   you will cancel something. It is not: it is a thing you do *before* you know,
+   which is precisely why some of them end up moot.
+
+### ⚠️ AND THE THING IT GOT WRONG, NAMED
+
+This file asserted that sequential citation would cost *"the better part of a
+working day"* and used that to justify batching. **Session 02 then did it
+sequentially in 147 minutes** — while also building F32 — and lost nothing.
+The estimate was drawn from the worst measured queue (88 minutes) applied three
+times over, and the real queue was shorter. **The reasoning was sound and the
+number was pessimistic**; had the batch been executed on that number, it would
+have discarded two citations to buy time that was not actually needed.
