@@ -32120,3 +32120,186 @@ own contract: *"Append-only, from the supervised side. The loop never writes
 here."* So the stale F23 pointer is reported, not corrected — naming it is the
 most this side may do.
 
+---
+
+## 🟩 F5-i PART 1a's OWED QA WALK IS **DONE** — AND THE BLOCKER THAT HELD IT IS DISCHARGED BY MEASUREMENT — 2026-08-26, run `20260826-003350-b2` session 02
+
+**The row that blocked this is `🟠 SESSION FINDING — THE QA IMAGES ARE THREE DAYS
+STALE, AND F5-i PART 1a's OWED QA WALK CANNOT RUN ON THEM — 2026-08-22`. It is
+discharged.** Per canon's *a blocking row names the artifact that would discharge
+it*, the discharging artifact is named here rather than only upstream:
+**`apps/transcribe-md/tests/e2e/scenarios/f5i-operative-note-upload.spec.ts`.**
+
+### THE BLOCKER, RE-MEASURED BY ITS OWN PREDICATE
+
+That finding prescribed the exact check — *measure at the SYMBOL, with a positive
+control*. Re-run 2026-08-26, QA images now built `2026-08-24 09:53Z`, which
+**postdate** F5-i's `2026-08-21T14:14Z` deploy:
+
+| container | `grep -rc no_measurement_rows` in `lib/template-twin/` |
+|---|---|
+| `meddoc-qa-transcribe-md-worker-1` | **5 files** — `gate-derived-encounter…:4`, `fixtures/operative-note-source.ts:1`, `gate-f5i-second-shape…:5`, `synthetic-test.ts:1`, `verification-encounter.ts:2` |
+| `meddoc-pro-transcribe-md-worker-1` (control) | **identical, file for file and count for count** |
+
+On 2026-08-22 that read **QA 0 / prod 7-across-3**. It now reads **identical**.
+The measurement was taken **inside the running container**, not from
+`docker images` — the containers are `Up 36–40h`, which reconciles with the
+09:53Z build.
+
+### THE WALK — 2 ARMS, GREEN, AND MUTATION-PROVED IN BOTH DIRECTIONS
+
+Run against the live QA stack (`localhost:9020`, Playwright's default base URL —
+no env var, so no `VAR=cmd` grant was needed):
+
+| arm | result |
+|---|---|
+| venous duplex (**POSITIVE CONTROL**) | ✅ reaches the confirm step |
+| **the second shape** — `sample-operative-note.docx` | ✅ reaches the confirm step |
+
+**Mutation proof, and the backup was taken AFTER the change** (canon's
+return-to-the-change rule): the fixture was repointed at
+`fixtures/notes/scanned-no-text.pdf` — no text layer, so extraction yields
+nothing and the confirm step is never reached. Marker asserted present **before**
+believing the run. Result **1 failed / 1 passed** — the second shape red, the
+control still green, so the assertion discriminates and the harness is sound.
+Restored from backup and asserted **both** halves: marker `0`, and the change's
+own symbol `sample-operative-note.docx` still `1`. Re-run green, 2 passed.
+
+### ⚠️ WHAT THIS CLAIMS, AND THE TWO THINGS IT DOES NOT
+
+**CLAIMS:** the second SHAPE survives the real upload path end to end — a doctor
+dragging the committed operative-note fixture into the real manager gets real
+extraction and a parse that lands on the confirm step. That is the FRONT half
+the in-process gate's own header names as owed: *"it does NOT walk an upload
+through the UI or the worker."*
+
+⚠️ **DOES NOT CLAIM THE TWIN'S FAIL-CLOSED BOUNDARY WAS EXERCISED.**
+`docx-to-text.ts` says the flag-ON marker text is *"identical to the flag-OFF
+path for a clean dropdown template"*, and both paths run
+`docxToTextWithControls`. **For a clean template the two paths are byte-identical
+BY DESIGN**, so reaching review cannot discriminate them. Only a hostile fixture
+(macro/OLE/zip) would — a different fixture, a different item.
+
+⚠️ **AND A ZERO HERE THAT LOOKS LIKE EVIDENCE IS NOT.** The QA twin tables read
+**identical to baseline** across all seven (`note_templates 66 · source_artifacts
+57 · compiled_versions 55 · field_definitions 4400 · semantic_mappings 4400 ·
+certifications 10 · fill_manifests 3`). That is **NOT** proof that an upload
+persists nothing — **the walk stops at the confirm step and never saves, so the
+delta could not have come out otherwise.** *An unfalsifiable observation is not
+evidence.* What the zero *does* establish is that the walk left **no residue on
+QA**. The persistence claim rests on reading the shipped function:
+`ingest-docx-source.ts:54-82` returns an IR and performs **no database write**.
+
+⚠️ **A PREDICTION THIS SESSION GOT WRONG, RECORDED BECAUSE THE NEXT SESSION WILL
+FORM IT TOO.** From the table names I predicted the upload would move
+`field_definitions` by **+17** (the fixture's compiled field count) and leave
+`certifications` at +0. **Wrong, and caught by reading the function before
+running rather than after.** Had it run first, a correct zero would have read as
+*"the walk failed"*. Persistence belongs to the certification door, not to the
+ordinary upload path.
+
+### WHAT REMAINS OF F5-i — UNCHANGED
+
+- **1b — per-shape generators.** Untaken, owner's call. ⚠️ Never delivered by
+  restoring the fallback.
+- The census retires when a second shape genuinely **CERTIFIES**, which is 1b.
+  **This walk does not certify anything and does not retire it.**
+
+---
+
+## 🔴 SESSION FINDING — ONE SELF-HOSTED RUNNER IS A SINGLE POINT OF FAILURE FOR **EVERY MERGE IN THE REPOSITORY** — 2026-08-26
+
+**Session 01 parked the runner outage as an external fault. Correct. This row is
+the part it could not measure from inside the incident: WHY one idle runner
+stopped the whole repo, and what widens it.**
+
+**MEASURED ON `main`** — `grep -rn "runs-on" .github/workflows/*.yml`:
+
+| workflow | `runs-on` |
+|---|---|
+| `secrets-scan.yml:53` | **`[self-hosted, linux, x64, quillmd-ci]`** |
+| `test.yml` ×4 · `e2e.yml` ×3 · `a11y.yml` · `nightly-tests.yml` | `ubuntu-latest` |
+
+**`secrets-scan` is the ONLY workflow on `main` targeting the self-hosted
+runner** — and its check-run `TruffleHog (verified-only, diff-scan)` is a
+**REQUIRED context** in branch protection (read from
+`/branches/main/protection`, which is *the object the gate reads*). So:
+
+> **ONE runner, ONE workflow, and NOTHING merges. There is no fallback and no
+> second runner.**
+
+**THE OUTAGE, and the diagnosis is not "the runner died":** `quillmd-ci-1` read
+`online busy=false` — **idle** — throughout, while jobs queued behind it. The
+labels on the stuck job are **byte-identical** to a control that succeeded on
+that same runner at `00:40:29Z`: both `[self-hosted,linux,x64,quillmd-ci]`.
+
+⚠️ **AND THE TELL WAS ORDERING, WHICH REFUTES "IT IS SIMPLY BUSY".** A job queued
+`00:30:15Z` was still waiting while `main`'s job queued `00:38:40Z` **ran to
+completion**. The queue was being **skipped over**, not drained in order.
+
+**CURE ATTEMPTED, AND IT PRODUCED A DISCRIMINATING NEGATIVE.** The skip-over
+pattern suggested a stale queue entry, which is cheap and reversible to test:
+cancel → re-run → fresh attempt at `02:04:03Z`. **The fresh entry sat unpicked
+for ~9 minutes with the runner idle.** So the stuck-entry hypothesis is
+**REFUTED** — recorded per canon's *record a hypothesis BECAUSE it was refuted*,
+since it is the first thing the next session will also try.
+
+**NOT RESTARTABLE FROM THIS HOST, verified independently rather than inherited:**
+`ps aux` finds no `Runner.Listener`/`actions-runner` process, and `docker ps -a`
+finds no runner container. The runner lives elsewhere.
+
+**IT RECOVERED ON ITS OWN at ~`02:12Z`** — the re-run completed `success` on
+`quillmd-ci-1`, #869 went `BLOCKED` → `CLEAN`, and it merged. **Cause never
+established; it was not cured from here.**
+
+⚠️ **POPULATION FACT WITH ITS RE-ARMING CONDITION — and the widening is an OPEN
+PR, not a hypothetical.** Today the blast radius is one workflow. **PR #868
+(`feat/all-workflows-self-hosted`) migrates ALL workflows to that same single
+runner**, and #867 (`feat/a11y-self-hosted`) is the same move for `a11y-ci`.
+Merging them makes an identical outage block **every gate** rather than one — and
+tonight is the measured cost of the one-workflow version: **~85 minutes of a
+repo-wide merge block across two actors' branches.** ⚠️ **This is not a claim
+that #868 is wrong** — a self-hosted runner is cheaper and the migration may well
+be right. It is a claim that **the SPOF should be priced before it is widened**,
+and that a second runner or an `ubuntu-latest` fallback is the thing that makes
+the widening safe. *Priced by the asset behind the symptom: the asset is the
+merge gate on every branch in the repo.*
+
+**NOT ACTED ON BY THIS SESSION, DELIBERATELY.** CI topology on a required
+security gate, with another actor holding an open PR in exactly that area, is not
+the loop's to rewrite unilaterally — and moving `TruffleHog` off self-hosted has
+a billable-minutes consequence, which is the money envelope. **Filed, not built.**
+
+---
+
+## 🟠 SESSION FINDING — THE LOOP CANNOT DRIVE A BROWSER, AND MASTER'S PERMISSION TABLE HAS NO ROW FOR IT — 2026-08-26
+
+**Per MASTER: *"If you hit a refusal that is NOT in this table, that is a
+finding."*** This is one.
+
+The owed F5-i walk is, in the ledger's own words, *"upload the new fixture
+**through the real UI**"*. The obvious instrument is the Playwright **MCP**
+browser tools, and **every one of them is refused** —
+`mcp__plugin_playwright_playwright__browser_navigate` was denied on first use.
+
+**THE GRANTED ROUTE EXISTS, AND THIS SESSION USED IT** — recorded so the next
+session does not conclude the walk is impossible and stand down:
+
+> **`npx playwright test <spec>` is granted (`Bash(npx:*)`), and
+> `playwright.config.ts:35` already defaults `BASE_URL` to
+> `http://localhost:9020` — the QA stack. So a browser walk against QA needs
+> NO env var and NO MCP.**
+
+That matters because MASTER's own table records `VAR=1 cmd` as refused, which
+would otherwise have blocked pointing the pack anywhere. It does not need to be
+pointed; QA is already the default.
+
+⚠️ **AND THE GRANTED ROUTE IS STRICTLY BETTER THAN THE REFUSED ONE**, which is
+why this is filed as a table gap rather than a request for the MCP grant. An MCP
+walk is a one-off a human reads once; a tracked spec is reviewable, runs in CI
+forever, and cannot go stale silently. This is MASTER's own *"write the proof as
+a TRACKED test"* rule applying to browser work as well as to shell harnesses.
+**Proposed table row: "a browser walk of a real UI → Playwright MCP is refused →
+write a tracked spec under `tests/e2e/scenarios/` and run `npx playwright test`;
+QA is already the default base URL."**
+
