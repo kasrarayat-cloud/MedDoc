@@ -776,6 +776,24 @@ from memory, and not from what this session happens to have done:
 ### SHIPPED
 item · merge SHA · citation (4 of 4, by run id) · deployed? · §2.5 declaration judged N of N
 
+### THROUGHPUT — paste the output of `bash scripts/report-throughput.sh`
+⚠️ **Do not hand-derive these numbers and do not omit the section.** Ordered
+2026-08-26 after an audit found the loop scoring perfectly on every metric it
+had — 72.2% wall-clock utilisation, 105 of 109 sessions `rc=0` — while product
+throughput HALVED: 2 of the last 25 merges touched product source and both were
+held from deployment. **A loop that is 100% awake writing only rules about
+itself is, on those metrics, indistinguishable from one shipping the product.**
+This line is the counterweight.
+
+⚠️ **AND IT REPORTS RUNTIME FILES, NOT COMMITS, DELIBERATELY.** "71 commits
+undeployed" and "7 runtime files undeployed" are different claims and only the
+second says whether a deploy would change anything.
+
+**F8 LEADS THE QUEUE. Canon and process items ride along** — they are not the
+work, and this section is how that stays visible. If the product share is low
+because the owner directed infrastructure work, say so in the row; the metric
+watches, it does not accuse.
+
 ### PROVISIONAL RULINGS — the war room's batch review list
 what was decided · the alternatives · why this one · the REVERSAL PATH
 ⚠️ and what ELSE unwinds if it is reversed (the dependency chain)
