@@ -50,7 +50,10 @@ jobs:
   # ==========================================================================
   changes:
     name: detect docs-only
-    runs-on: ubuntu-latest
+    # ⚠️ SELF-HOSTED (quillmd-ci-1, 4 vCPU / 8 GB, Docker 29.7.2). Job `name:`
+    # is UNCHANGED so every required context is preserved byte-for-byte.
+    # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
+    runs-on: [self-hosted, linux, x64, quillmd-ci]
     timeout-minutes: 5
     outputs:
       docs_only: ${{ steps.d.outputs.docs_only }}
@@ -84,7 +87,10 @@ jobs:
     name: Playwright E2E (transcribe-md)
     needs: changes
     if: needs.changes.outputs.docs_only == 'true'
-    runs-on: ubuntu-latest
+    # ⚠️ SELF-HOSTED (quillmd-ci-1, 4 vCPU / 8 GB, Docker 29.7.2). Job `name:`
+    # is UNCHANGED so every required context is preserved byte-for-byte.
+    # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
+    runs-on: [self-hosted, linux, x64, quillmd-ci]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -107,13 +113,20 @@ jobs:
     name: Playwright E2E (transcribe-md)
     needs: changes
     if: needs.changes.outputs.docs_only != 'true'
-    runs-on: ubuntu-latest
+    # ⚠️ SELF-HOSTED (quillmd-ci-1, 4 vCPU / 8 GB, Docker 29.7.2). Job `name:`
+    # is UNCHANGED so every required context is preserved byte-for-byte.
+    # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
+    runs-on: [self-hosted, linux, x64, quillmd-ci]
     # 40 was sized for ONE image build and two projects. This job now builds
     # four images and runs four projects; recovering the doc-preview timeouts
     # above brings it back inside the budget, and this leaves headroom rather
     # than sitting on the line. Splitting the projects into parallel jobs is the
     # better long-term shape — noted, deliberately not bundled into a fix PR.
-    timeout-minutes: 55
+    # ⚠️ BOX-CALIBRATED, NOT A SPEED SETTING. A timeout is a HANG-GUARD;
+    # generous is free. quillmd-ci-1 (4 vCPU) is ~1.4-1.9x slower than a
+    # hosted runner on CPU-bound work, and every timeout in this repo was
+    # sized against hosted speed. Formula: measured 48m31s on quillmd-ci-1 x2.5 = 121 -> 120.
+    timeout-minutes: 120
 
     env:
       # Build args: point the client bundle + auth URL at the CI app (:9020)
@@ -745,7 +758,15 @@ jobs:
           name: rounds-shots
           path: apps/transcribe-md/rounds-shots/
           if-no-files-found: error
-          retention-days: 14
+          # ⚠️ 7, NOT 14 — this artifact is 88% of the repo's live storage.
+          # On 2026-08-26 the account hit "Artifact storage quota has been hit"
+          # and e2e FAILED at upload with every test green: 532 live rounds-shots
+          # holding 2.97 GB against a 2 GB allowance. 268 older than 7 days were
+          # deleted (1.52 GB freed, owner-authorised) and the window halved so it
+          # cannot regrow. These are regenerable outputs of SYNTHETIC QA walks —
+          # any run reproduces them — so a short window costs nothing and shrinks
+          # a retention surface nobody chose.
+          retention-days: 7
 
       - name: Build flag-ON image for the document surface
         run: >

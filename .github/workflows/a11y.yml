@@ -59,8 +59,15 @@ env:
 jobs:
   axe:
     name: axe-core sweep (chromium x desktop+mobile)
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # ⚠️ SELF-HOSTED (quillmd-ci-1, 4 vCPU / 8 GB, Docker 29.7.2). Job `name:`
+    # is UNCHANGED so every required context is preserved byte-for-byte.
+    # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
+    runs-on: [self-hosted, linux, x64, quillmd-ci]
+    # ⚠️ BOX-CALIBRATED, NOT A SPEED SETTING. A timeout is a HANG-GUARD;
+    # generous is free. quillmd-ci-1 (4 vCPU) is ~1.4-1.9x slower than a
+    # hosted runner on CPU-bound work, and every timeout in this repo was
+    # sized against hosted speed. Formula: measured 7m28s on quillmd-ci-1 x2.5 = 18.7 -> 20.
+    timeout-minutes: 25  # formula said 20; KEPT 25 — never TIGHTEN a hang-guard
 
     services:
       postgres:
