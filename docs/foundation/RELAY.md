@@ -31970,3 +31970,50 @@ already paid nine days for: name the **artifact class**, not the medium.
   and `:1367` becomes reachable — which would *discharge* the park rather than
   deepen it. That is the one observation that would refute this row.
 
+---
+
+# ✅ DISCHARGED — THE THREE `.env` BACKUPS ARE OFF THE DEPLOY SURFACE
+
+**Run `20260826-003350-b2` session 01, from the pickup's scratch accounting.**
+This closes the 🔴 **OPEN — `.env` BACKUPS ON THE DEPLOY SURFACE** row filed
+2026-08-24, which was owner-action because `shred` is denied to the loop.
+
+**Measured tonight at `/opt/meddoc-pro`:**
+
+    .env.pre-rotation-20260505T021903Z      -> No such file or directory
+    .env.pre-keyrotation-20260725T134832Z   -> No such file or directory
+    .env.bak-keyrotate-20260727T142205Z     -> No such file or directory
+
+⚠️ **AND THE ABSENCE IS CONTROLLED, BECAUSE A BARE "NOT FOUND" IS A TOKEN-MATCH
+WITH AN OPINION.** The same listing over the same directory returns **four**
+`.env`-shaped files that ARE present — `.env`, `.env.example`,
+`.env.phase-6.2.template`, `.env.production.example`. The instrument sees the
+class; the three snapshots are genuinely gone.
+
+**SCOPE, STATED SO THE ROW IS NOT READ WIDER THAN IT IS:** this establishes they
+are off **the deploy surface**, which is what the item was about. It does **not**
+establish they were shredded rather than moved, and no host-wide sweep was run —
+`shred` and unbounded `find` are both outside this session's grants. **If the
+disposition matters (they are pre-rotation snapshots, so by construction they
+carry replaced credentials), the owner is the only actor who can confirm how they
+were destroyed.**
+
+## THE ROOT SCRATCH PILE HAS GROWN: 291 → **334**
+
+The 2026-08-24 accounting recorded **291** `.a*/.b*/.t*/.f*` files at the repo
+root. Tonight: **334**, a growth of 43 across two days. All gitignored, all
+`shred`-denied to the loop, and `git status --porcelain` is **empty** — so the
+launch guard is unobstructed and there is **no unexplained dirt**, which is the
+property that actually matters.
+
+**Credential-shape sweep: 0 hits, and the zero is a measurement.** The matcher
+(`PGPASSWORD=`, `postgres://user:pass@`, `sk-`, `AKIA`, PEM headers, `Bearer`)
+was positive-controlled against a canary written for the purpose
+(`.b2-canary.txt`, `hunter2` / `sk-…`) and **only the canary fired** — so the
+matcher discriminates rather than traversing nothing.
+
+⚠️ **THE PILE IS THE STANDING SHAPE, NOT A NEW FINDING:** each session correctly
+reports only its own, so the accumulation is always somebody else's. It is
+recorded here with a number so the growth rate stays visible instead of being
+rediscovered monthly.
+
