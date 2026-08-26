@@ -31,6 +31,14 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_DIR" || { echo "🔴 rotate-ledger: cannot cd to repo root"; exit 2; }
 
 MODE="${1:---check}"
+# ⚠️ VALIDATE THE MODE FIRST. It used to be checked only after the "nothing to
+# rotate" early exit, so `rotate-ledger.sh --wat` returned 0 SUCCESS whenever
+# the ledgers happened to be small — a typo silently reporting health. An
+# argument check that only runs on the unhappy path is not a check.
+case "$MODE" in
+  --check|--apply) ;;
+  *) echo "🔴 rotate-ledger: unknown mode '$MODE' (use --check or --apply)"; exit 2 ;;
+esac
 TARGET="${ROTATE_TARGET:-90000}"     # deliberately under F32's limit, so rotation
                                      # fires BEFORE the banner is needed, not after
 BUDGET_CHECK="scripts/check-read-budget.sh"
@@ -106,8 +114,6 @@ if [ "$MODE" = "--check" ]; then
   echo "   run: bash scripts/rotate-ledger.sh --apply"
   exit 1
 fi
-
-[ "$MODE" = "--apply" ] || { echo "🔴 rotate-ledger: unknown mode '$MODE' (use --check or --apply)"; exit 2; }
 
 # ── STEP 3 · ROTATE, CHOOSING THE OLDEST CUTOFF THAT STILL FITS ─────────────
 # Keep as much live as the budget allows — a head trimmed harder than necessary

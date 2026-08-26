@@ -26,7 +26,7 @@
 // requires the specific proof that exists to catch it to actually fire.
 // ============================================================================
 
-import { copyFileSync, mkdtempSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -44,8 +44,37 @@ const LIFT = JSON.stringify([
   '## Invariants re-checked every item',
 ]);
 
-function runSplitter(script: string, outDir: string, env: Record<string, string> = {}) {
-  return spawnSync('python3', [script, RELAY, outDir], {
+// ⚠️ THE SPLITTER IS PROVED AGAINST A SYNTHETIC LEDGER, NOT THE REAL ONE.
+// These arms first drove docs/foundation/RELAY.md directly and asserted things
+// like "archives > 5". The split then landed, RELAY.md went 1,830,324 -> 20,317,
+// and six arms went red for the one reason that is not a defect: THE FILE GOT
+// BETTER. A gate whose fixture is the thing under repair breaks every time the
+// repair works, and rotation will shrink this file again and again by design.
+//
+// So the mechanism is proved on a fixture built here — big enough to force many
+// archives and a sub-section split — and the REAL ledger keeps exactly one arm,
+// asserting the durable invariant: it stays readable in one read.
+function buildSyntheticLedger(dir: string): string {
+  const L: string[] = ['# FOUNDATION — the relay ledger', '', 'preamble.', ''];
+  L.push('## Rules', '', 'rules body.', '');
+  L.push('## Invariants re-checked every item', '', 'invariants body.', '');
+  const filler = 'x'.repeat(400);
+  for (let d = 4; d <= 26; d++) {
+    const day = `2026-08-${String(d).padStart(2, '0')}`;
+    L.push(`## ✅ ITEM ${d} — SOMETHING LANDED — ${day}`, '');
+    for (let k = 0; k < 12; k++) L.push(`### sub ${d}.${k}`, '', filler, '');
+  }
+  // one deliberately oversize single section, to exercise sub-section chunking
+  L.push('## 🟢 A VERY LARGE SINGLE SECTION — 2026-08-27', '');
+  for (let k = 0; k < 60; k++) L.push(`### big ${k}`, '', 'y'.repeat(2000), '');
+  const p = join(dir, 'RELAY.md');
+  writeFileSync(p, L.join('\n'));
+  return p;
+}
+
+function runSplitter(script: string, outDir: string, env: Record<string, string> = {}, target?: string) {
+  const src = target ?? buildSyntheticLedger(mkdtempSync(join(tmpdir(), 'synth-')));
+  return spawnSync('python3', [script, src, outDir], {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
     env: { ...process.env, LIFT, ...env },
@@ -73,16 +102,18 @@ function outDir() {
 }
 
 describe('ledger split — the five proofs', () => {
-  it('GREEN: splits the real ledger with every proof passing, and non-vacuously', () => {
-    const r = runSplitter(SPLITTER, outDir(), { DRY_RUN: '1' });
+  it('GREEN: splits a ledger with every proof passing, and non-vacuously', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'synth-'));
+    const src = buildSyntheticLedger(dir);
+    const r = runSplitter(SPLITTER, outDir(), { DRY_RUN: '1' }, src);
     expect(r.status, r.stderr).toBe(0);
     const d = JSON.parse(r.stdout);
 
-    // NON-VACUITY: it must have actually processed the real file, not an empty one.
-    const actual = [...readFileSync(RELAY, 'utf8')].length;
+    // NON-VACUITY: it must have processed the whole fixture, not an empty one.
+    const actual = [...readFileSync(src, 'utf8')].length;
     expect(d.source_chars).toBe(actual);
     expect(d.archives).toBeGreaterThan(5);
-    expect(d.proof.P3_src_headings).toBeGreaterThan(500);
+    expect(d.proof.P3_src_headings).toBeGreaterThan(200);
 
     expect(d.proof.P1_exact_partition).toBe(true);
     expect(d.proof.P1_gaps).toEqual([]);
@@ -136,8 +167,7 @@ describe('the generated head REPLACES its index, never appends', () => {
   // the only one. Rotation regenerates this block on every run, so an appending
   // generator would grow an index of stale indexes.
   function splitCopy(dir: string) {
-    const relay = join(dir, 'RELAY.md');
-    copyFileSync(RELAY, relay);
+    const relay = buildSyntheticLedger(dir);
     const r = spawnSync('python3', [SPLITTER, relay, join(dir, 'relay')], {
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
@@ -190,6 +220,31 @@ describe('the generated head REPLACES its index, never appends', () => {
     });
     expect(r.status).not.toBe(0);
     expect(r.stdout + r.stderr).toContain('refusing to guess the boundary');
+  });
+});
+
+describe('the real ledgers stay readable — the durable invariant', () => {
+  // The only arm that touches the real files. It asserts the OUTCOME of the
+  // split rather than any particular size, so rotation shrinking them further
+  // can never break it.
+  it.each([['docs/foundation/RELAY.md'], ['docs/foundation/RULINGS.md']])(
+    '%s fits one read and carries no stale OVERSIZE banner',
+    (rel) => {
+      const txt = readFileSync(join(REPO, rel), 'utf8');
+      expect([...txt].length).toBeLessThan(150_000);
+      expect(txt.split('\n').slice(0, 60).join('\n')).not.toContain('READ-PROTOCOL: OVERSIZE');
+    },
+  );
+
+  it('every archived body is itself readable in one read', () => {
+    for (const d of ['relay', 'rulings']) {
+      const dir = join(REPO, 'docs', 'foundation', d);
+      const files = readdirSync(dir).filter((f) => f.endsWith('.md') && f !== 'README.md');
+      expect(files.length, `${d}/ has no archives`).toBeGreaterThan(0);
+      for (const f of files) {
+        expect([...readFileSync(join(dir, f), 'utf8')].length, `${d}/${f}`).toBeLessThan(150_000);
+      }
+    }
   });
 });
 
