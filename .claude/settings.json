@@ -85,6 +85,7 @@
       "Bash(bash scripts/ops/prune-rollback-tags.sh:*)",
       "Bash(bash scripts/check-em-note-shape-artifacts.sh:*)",
       "Bash(bash scripts/check-cotenants.sh:*)",
+      "Bash(bash scripts/check-agents-md-size.sh:*)",
       "Bash(tmux has-session:*)",
       "Bash(tmux list-panes:*)",
       "Bash(bash scripts/check-ledger-append-only.sh:*)",
