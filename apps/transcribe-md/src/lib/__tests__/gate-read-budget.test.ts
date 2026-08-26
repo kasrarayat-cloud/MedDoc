@@ -43,9 +43,15 @@ const REPO = join(__dirname, '..', '..', '..', '..', '..');
 const SCRIPT = join(REPO, 'scripts', 'check-read-budget.sh');
 const HARD_LIMIT = 150_000;
 
-// Every file MASTER STEP 0.3 / AGENTS.md tells a session to read. Kept here as
-// well as in the script deliberately: if the two lists ever disagree, one of
-// them was edited without the other, and that IS the defect this gate watches.
+// Every file a STANDING INSTRUCTION tells a session to read. Kept here as well
+// as in the script deliberately: if the two lists ever disagree, one of them
+// was edited without the other, and that IS the defect this gate watches.
+//
+// ⚠️ THE ROUNDS LEDGER IS IN THIS LIST BECAUSE THE FIRST DRAFT LEFT IT OUT.
+// MASTER STEP 0.3 does not name it; AGENTS.md § "Multi-session programs have
+// relay ledgers — READ THEM FIRST" does, and it measured 235,184 chars — 1.57x
+// the limit. The guard that exists to diff a WATCHED set against a NAMED set
+// had a watched set narrower than the named set, one file over.
 const NAMED = [
   'AGENTS.md',
   'docs/foundation/MASTER.md',
@@ -54,6 +60,8 @@ const NAMED = [
   'docs/foundation/RULINGS.md',
   'docs/foundation/DISCOVERY.md',
   'docs/foundation/INBOX.md',
+  'docs/rounds/SPEC.md',
+  'docs/rounds/RELAY.md',
 ];
 
 const OVERSIZE_BANNER = /^<!-- READ-PROTOCOL: OVERSIZE/m;
@@ -133,8 +141,12 @@ describe('STEP 0 read budget', () => {
 
   // the facts the whole item rests on, asserted rather than quoted, so the
   // ledger rows above cannot quietly stop being true.
-  it('the two ledgers really are over the read limit, and really do declare it', () => {
-    for (const rel of ['docs/foundation/RELAY.md', 'docs/foundation/RULINGS.md']) {
+  it('the three ledgers really are over the read limit, and really do declare it', () => {
+    for (const rel of [
+      'docs/foundation/RELAY.md',
+      'docs/foundation/RULINGS.md',
+      'docs/rounds/RELAY.md',
+    ]) {
       const n = chars(rel);
       expect(n).toBeGreaterThan(HARD_LIMIT);
       const head = readFileSync(join(REPO, rel), 'utf8').split('\n').slice(0, 60).join('\n');
@@ -143,7 +155,12 @@ describe('STEP 0 read budget', () => {
   });
 
   it('and the readable ones really are readable, and carry no banner', () => {
-    for (const rel of ['AGENTS.md', 'docs/foundation/SPEC.md', 'docs/foundation/MASTER.md']) {
+    for (const rel of [
+      'AGENTS.md',
+      'docs/foundation/SPEC.md',
+      'docs/foundation/MASTER.md',
+      'docs/rounds/SPEC.md',
+    ]) {
       expect(chars(rel)).toBeLessThan(HARD_LIMIT);
       expect(readFileSync(join(REPO, rel), 'utf8')).not.toMatch(OVERSIZE_BANNER);
     }

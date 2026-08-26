@@ -32836,9 +32836,44 @@ commit**. It was re-run after that edit: **14 of 14**, both gates.
 - **It does not claim the truncation has ever actually misled a session.** No
   such instance was looked for or found. The claim is that nothing would have
   shown it — which is the argument for the banner, not a body count.
-- **It does not widen to the Rounds ledger** (`docs/rounds/RELAY.md`), which
-  STEP 0 does not name. Adding a file to that instruction means adding a row to
-  the manifest, in the same commit — stated in the script.
+## ⚠️ CORRECTION, MADE BEFORE MERGE — **THIS ITEM MADE THE EXACT MISTAKE IT EXISTS TO CATCH**
+
+*Previous wording of a "what this does not claim" bullet, kept because the
+correction is the point:* **"It does not widen to the Rounds ledger
+(`docs/rounds/RELAY.md`), which STEP 0 does not name."**
+
+**STEP 0 does not name it. `AGENTS.md` does** — § *"Multi-session programs have
+relay ledgers — **READ THEM FIRST**"* names all four program ledgers, in a table,
+as a standing instruction. Measured:
+
+| file | `wc -m` | vs 150,000 |
+|---|---|---|
+| `docs/rounds/SPEC.md` | 10,796 | readable |
+| **`docs/rounds/RELAY.md`** | **235,184** | **1.57×** — ~64% fits |
+
+> **A guard whose WATCHED SET was narrower than the rule's NAMED SET — written
+> by the guard that exists to diff watched sets against named sets — one file
+> over. The identical shape, in the same commit that documents it.**
+
+⚠️ **AND THE FAULTY REASONING IS WORTH NAMING, BECAUSE IT IS REUSABLE.** I scoped
+the manifest to *"the files **STEP 0.3** names"* — a **location**, not a
+**predicate**. The predicate is *"every file a STANDING INSTRUCTION tells a
+session to READ"*, and once written down that way the Rounds ledger is obviously
+in and the search takes one `wc -m`. **Naming a class is not enumerating it**;
+scoping to the paragraph you happened to be reading is how the enumeration goes
+short.
+
+**FIXED IN THIS COMMIT, not filed:** both `docs/rounds/*` are in the manifest and
+in the gate's `NAMED` list, `docs/rounds/RELAY.md` carries the banner, and the
+gates re-ran **14 of 14**. The corrected count is **three** oversize files across
+**six** named read-targets, not two across four.
+
+**What it still does not widen to:** `docs/DEPLOYMENT_RUNBOOK.md` (74,573 —
+readable anyway, and referenced by section rather than read whole) and anything
+under `docs/canon/`, which exists precisely so that no single file has to be
+read whole. Adding a file to any standing read instruction means adding a
+manifest row in the same commit — stated in the script, where a reader of the
+rule will meet it.
 
 ## 🔴 FINDING — THE INSTRUMENT SHIPS UNGRANTED, AND IT IS THE **THIRD** SIGHTING
 

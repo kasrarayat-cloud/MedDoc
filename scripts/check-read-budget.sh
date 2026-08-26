@@ -77,8 +77,20 @@ BANNER_RE='^<!-- READ-PROTOCOL: OVERSIZE'
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# The manifest: every file a FOUNDATION session is INSTRUCTED to read at STEP 0.
-# Adding a file to that instruction means adding a row here, in the same commit.
+# THE MANIFEST: every file a STANDING INSTRUCTION tells a session to READ.
+# Adding a file to any such instruction means adding a row here, in the same
+# commit.
+#
+# ⚠️ IT IS NOT "the files STEP 0.3 names", AND THAT DISTINCTION WAS EARNED THE
+# HARD WAY — BY THIS SCRIPT MAKING THE EXACT MISTAKE IT EXISTS TO CATCH.
+# The first draft scoped itself to MASTER STEP 0.3's four files and wrote, in
+# its own ledger row, "it does not widen to the Rounds ledger, which STEP 0 does
+# not name." STEP 0 does not. **`AGENTS.md` does** — § "Multi-session programs
+# have relay ledgers — READ THEM FIRST" names all four program ledgers — and
+# `docs/rounds/RELAY.md` measured 235,184 chars, 1.57x the limit. A guard whose
+# watched set is narrower than the rule's named set, written by the guard that
+# exists to diff watched sets against named sets, one file over. Caught before
+# merge; recorded because in this programme the correction is the point.
 FILES=(
   "docs/foundation/MASTER.md"
   "docs/foundation/SPEC.md"
@@ -86,6 +98,8 @@ FILES=(
   "docs/foundation/RULINGS.md"
   "docs/foundation/DISCOVERY.md"
   "docs/foundation/INBOX.md"
+  "docs/rounds/SPEC.md"
+  "docs/rounds/RELAY.md"
 )
 
 findings=0

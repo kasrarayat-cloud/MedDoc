@@ -109,6 +109,14 @@ a pointer and go and read the ruling.**
    for everything else.** `RULINGS.md` is **grep-only**, which this step already
    said and now says for a measured reason.
 
+   ⚠️ **AND IT IS THREE FILES, NOT TWO — `AGENTS.md` NAMES A LEDGER THIS STEP
+   DOES NOT.** § *"Multi-session programs have relay ledgers — READ THEM FIRST"*
+   names all four program ledgers, and **`docs/rounds/RELAY.md` is 235,184
+   chars — 1.57×**, ~64% of it readable. The manifest's predicate is therefore
+   *"every file a STANDING INSTRUCTION tells a session to read"*, never *"the
+   files this paragraph lists"* — **scoping to the paragraph you happen to be
+   reading is how an enumeration goes short.**
+
    ⚠️ **DO NOT PUT THESE NUMBERS IN PROSE AND TRUST THEM.** A size written down
    is stale the next time anyone appends. The measurement is
    `bash scripts/check-read-budget.sh` (`0` accounted for · `1` a FINDING · `2`
