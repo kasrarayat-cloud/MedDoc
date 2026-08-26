@@ -261,11 +261,21 @@ for (( n=1; n<=batch_size; n++ )); do
   ledger_before="$(ledger_progress_hash "$LEDGER")"
   ledger_before_rc=$?
 
+  # ⚠️ THIS COMMIT IS READ BEFORE THE SYNC BELOW, AND IS THEREFORE THE **PRE-SYNC**
+  # HEAD — label it as such, because an unlabelled "commit :" line is read by every
+  # later reader as "the tree this session worked on", and it frequently is not.
+  #
+  # MEASURED 2026-08-26, run 20260826-072351-b1 session 01: the header read
+  # `e0e1389b` and the session worked at `44929454` — TEN commits apart — because
+  # the launch sync ran between this block and the session. The post-sync line
+  # added after the sync block is the one that answers the question a reader is
+  # actually asking, and the two together make the distance visible instead of
+  # invisible.
   {
     echo "════════════════════════════════════════════════════════════════"
     echo "FOUNDATION session $RUN of $MAX_SESSIONS"
     echo "started : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    echo "commit  : $(git rev-parse --short HEAD 2>/dev/null)"
+    echo "commit  : $(git rev-parse --short HEAD 2>/dev/null) (PRE-SYNC)"
     echo "branch  : $(git branch --show-current 2>/dev/null)"
     echo "ledger  : ${ledger_before:0:12} (origin/main)"
     echo "════════════════════════════════════════════════════════════════"
@@ -319,20 +329,46 @@ for (( n=1; n<=batch_size; n++ )); do
   _branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')
   _dirty=$(git status --porcelain 2>/dev/null | wc -l)
   _behind=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo '?')
+  # ⚠️ EVERY LINE IN THIS BLOCK IS `tee`d INTO "$LOG", AND THAT IS THE POINT.
+  # These echoes were bare, so they reached the runner's stdout — the tmux pane —
+  # and NEVER the session log. Measured 2026-08-26 with a row anchor and a
+  # positive control, over 103+ logs:
+  #
+  #   "[loop] marker:"                     -> 103 logs   <- tee'd; the control
+  #   "[loop] shared tree fast-forwarded"  ->   0 logs
+  #   "[loop] shared tree is"              ->   0 logs
+  #
+  # So the ONE line that explains why the header's commit is not the session's
+  # commit — and the two that warn the INBOX may be STALE — had never once been
+  # readable in the artifact anybody reconstructs a night from. That matters most
+  # in exactly the case the reconstruction is needed: a REPORT-MISSING session,
+  # where the log is all there is.
+  #
+  # ⚠️ A bare grep for "fast-forwarded" over the logs returns NINE hits and would
+  # have refuted this. All nine are session PROSE ("I fast-forwarded the shared
+  # tree…"). Anchor on the row, not the word.
   if [ "$_behind" = "0" ]; then
     :
   elif [ "$_branch" = "main" ] && [ "$_dirty" = "0" ]; then
     if git merge --ff-only origin/main >/dev/null 2>&1; then
-      echo "[loop] shared tree fast-forwarded $_behind commit(s) → $(git rev-parse --short HEAD)"
+      echo "[loop] shared tree fast-forwarded $_behind commit(s) → $(git rev-parse --short HEAD)" | tee -a "$LOG"
     else
-      echo "[loop] ⚠️ shared tree is $_behind commit(s) behind origin/main and the ff FAILED."
-      echo "[loop]    The INBOX and MASTER below may be STALE. Sync it by hand."
+      echo "[loop] ⚠️ shared tree is $_behind commit(s) behind origin/main and the ff FAILED." | tee -a "$LOG"
+      echo "[loop]    The INBOX and MASTER below may be STALE. Sync it by hand." | tee -a "$LOG"
     fi
   else
-    echo "[loop] ⚠️ shared tree is $_behind commit(s) behind origin/main and NOT synced:"
-    echo "[loop]    branch=$_branch dirty=$_dirty — refusing to move it under a session."
-    echo "[loop]    The INBOX and MASTER below may be STALE."
+    echo "[loop] ⚠️ shared tree is $_behind commit(s) behind origin/main and NOT synced:" | tee -a "$LOG"
+    echo "[loop]    branch=$_branch dirty=$_dirty — refusing to move it under a session." | tee -a "$LOG"
+    echo "[loop]    The INBOX and MASTER below may be STALE." | tee -a "$LOG"
   fi
+
+  # ⚠️ AND THE POST-SYNC COMMIT IS PRINTED UNCONDITIONALLY, INCLUDING WHEN THE
+  # TREE WAS ALREADY CURRENT. The `_behind = 0` arm above is a silent `:`, so on a
+  # tree that needed no sync there would otherwise be NO line at all naming the
+  # commit the session actually works on — and "no line" is indistinguishable from
+  # "the header was right". One line, always, is what makes the header's PRE-SYNC
+  # label checkable rather than decorative.
+  echo "[loop] commit (POST-SYNC — the tree this session works on): $(git rev-parse --short HEAD 2>/dev/null)" | tee -a "$LOG"
 
   # "Holding no entries" is COUNTED, not assumed — entries are
   # `### <ISO8601> — <title>` headings, so a file carrying only its own header

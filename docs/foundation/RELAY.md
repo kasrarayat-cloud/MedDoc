@@ -32303,3 +32303,389 @@ a TRACKED test"* rule applying to browser work as well as to shell harnesses.
 write a tracked spec under `tests/e2e/scenarios/` and run `npx playwright test`;
 QA is already the default base URL."**
 
+---
+
+# 🟢 THE ACTIONS-BUDGET WALL IS CURED, `main` IS CITABLE AGAIN — AND THE CURE IS A ROUTE-AROUND WITH ONE HOLE LEFT IN IT
+
+**Run `20260826-072351-b1` session 01, 2026-08-26.** The previous run halted
+`03:08:02Z` on `OWNER ACTION` — *"the GitHub Actions budget is exhausted, the
+repository cannot merge"*. **The owner acted, and this row records what changed,
+what it discharges, and the one thing it does not.**
+
+## 1 · WHAT THE OWNER DID, READ FROM `git log` RATHER THAN INFERRED
+
+| commit | what |
+|---|---|
+| `44929454` | **merge of PR #868 — `feat/all-workflows-self-hosted`** |
+| `4d5cbd24` | `fix(ci): halve rounds-shots retention` |
+| `62cfe71f` | `fix(ci): box-calibrate every timeout` |
+
+That is the cure session 02 recommended, taken from the supervised side. **It is
+STANDING AUTHORITY class (d)** — an Actions budget is a spending decision — and
+routing around the meter rather than raising it is the cheaper half of that
+class.
+
+## 2 · IT WORKS, AND THE EVIDENCE IS A JOB THAT RAN RATHER THAN A CONFIG THAT READS RIGHT
+
+    gh api …/actions/runs/32942455638/jobs
+    -> unit tests (transcribe-md + packages)  completed/success  quillmd-ci-1
+                                              07:22:42Z -> 07:27:46Z   (5m04s)
+    -> dev-dependency advisories              in_progress        quillmd-ci-1
+                                              07:27:48Z
+
+**Before**: every `ubuntu-latest` job died in **3–4 seconds with an empty step
+list** (`main` at `03:04:09Z` — `CI`, `e2e`, `a11y-ci` all failure; only
+`secrets-scan` survived, because it was already self-hosted).
+**After**: jobs start, run for minutes, and complete.
+
+## 3 · ⚠️ THE CURE IS A ROUTE-AROUND — BUT THE BUDGET LOOKS RESTORED TOO, AND THE TWO ARE DIFFERENT CLAIMS
+
+> **#868 establishes that the required gates no longer ASK for GitHub-hosted
+> minutes. That is independent of whether the minutes came back.**
+
+### ⚠️ MY FIRST DRAFT OF THIS ITEM WAS WRONG, AND THE COUNTEREXAMPLE WAS IN THE OUTPUT I HAD ALREADY READ
+
+*Previous wording, kept because the correction is the point:* **"no
+`ubuntu-latest` job has run anywhere in this repository since `03:04:09Z` …
+there is no observation that could tell a restored budget from an exhausted
+one."**
+
+That was a **zero produced from a 30-row `gh run list`**, and the row that
+refutes it was **in the same listing** — I had classified `Dependabot Updates`
+as *not a workflow* and skipped past it. Measured at the JOB level:
+
+    …/runs/32942568255/jobs
+    -> Dependabot   completed/success   runner: "GitHub Actions 1000015994"
+                    labels: ubuntu-latest
+                    07:24:05Z -> 07:24:55Z          (50 SECONDS)
+
+**A GitHub-hosted `ubuntu-latest` job picked up work and ran for fifty seconds,
+after the wall.** The wall's signature is unmistakably different — **3–4 seconds
+with an EMPTY step list** and *"the job was not started because an Actions budget
+is preventing further use."* Fifty seconds of real execution is not that.
+
+⚠️ **AND THE HONEST LIMIT, BECAUSE THIS IS SUGGESTIVE AND NOT DECISIVE:**
+Dependabot's runs may draw on a **different quota** from ordinary repository
+workflows. So the correct claim is bounded:
+
+| claim | status |
+|---|---|
+| a GitHub-hosted `ubuntu-latest` job executed successfully at `07:24:05Z` | ✅ **MEASURED** |
+| ordinary repository workflows can once again run on `ubuntu-latest` | ⚠️ **LIKELY, NOT ESTABLISHED** — no repo workflow has been asked to since |
+
+**THE DECISIVE OBSERVATION IS ALREADY SCHEDULED**, which is why nothing needs to
+be spent to get it — see item 4.
+
+⚠️ **THE LESSON IS CANON'S OWN, CAUGHT ON ITSELF:** *every zero you produce is
+your instrument until proven otherwise.* I produced *"no ubuntu-latest job has
+run"* by **classifying rows by their NAME** — the workflow-vs-not distinction —
+instead of by the FIELD that answers the question, which is `labels`. *Counting
+tokens instead of classifying rows*, one more time, and the catch came from
+opening the job list rather than from re-reading the run list.
+
+## 4 · 🟠 AND THE ROUTE-AROUND IS **INCOMPLETE**. `nightly-tests` IS STILL `ubuntu-latest` — WHICH MAKES IT THE FREE EXPERIMENT.
+
+**MEASURED ON `main`** — `grep -rn "runs-on" .github/workflows/*.yml`, the same
+predicate session 02 used, re-run rather than inherited:
+
+| workflow | `runs-on` |
+|---|---|
+| `test.yml` ×4 · `e2e.yml` ×3 · `a11y.yml` · `secrets-scan.yml` | `[self-hosted, linux, x64, quillmd-ci]` |
+| **`nightly-tests.yml:45`** | **`ubuntu-latest`** — the only one left |
+
+**It is not a required context**, which is why it was correctly out of scope for
+a PR whose job was to unblock merges. It is also **the one workflow that
+auto-files an issue when it fails.**
+
+> **PREDICTION, DATED AND FALSIFIABLE: at `02:00Z` on 2026-08-27, `nightly-tests`
+> becomes the first REPOSITORY WORKFLOW on `ubuntu-latest` since the wall. It is
+> therefore the experiment that settles item 3 at zero cost — nobody has to spend
+> anything to run it, because it is already scheduled.**
+
+**READ IT BY DURATION, NOT BY CONCLUSION:**
+
+| what `nightly-tests` does at `02:00Z` | what it means |
+|---|---|
+| runs **~2 minutes** (its recent norm: `02:27:51Z`, 1m54s, success) | **the budget is genuinely restored** — item 3's bounded claim is upgraded |
+| fails in **~3 seconds with an empty step list** | the budget is still exhausted and #868 is load-bearing indefinitely |
+| fails after minutes of real execution | an ordinary test regression, unrelated to any of this |
+
+**Three named outcomes, and the DURATION discriminates all three where the
+conclusion discriminates none of them.**
+
+⚠️ **AND THAT IS THE CHANNEL CANON ALREADY PAID THREE NIGHTS FOR.** The
+auto-filed issue from a budget failure is **indistinguishable in its title from a
+real test regression**, and MASTER's STEP 0.8 exists precisely because
+`nightly-tests` rang correctly for three nights into a channel nobody read. **The
+discriminator is one field — the run's duration.** A 3-second `nightly-tests` is
+a budget failure; a 2-minute one is a test result.
+
+**NOT FIXED BY THIS SESSION, DELIBERATELY.** Moving `nightly-tests` onto the
+self-hosted runner is a CI-topology change on the supervised side's own PR area,
+and it also loads a **nightly full pack** onto a runner this ledger has just
+measured as serial and as a SPOF. That trade is not the loop's to make
+unilaterally. **Filed with its discriminator, not built.**
+
+## 5 · ⚠️ CORRECTION TO THIS LEDGER'S OWN SPOF ROW — CARRIED FORWARD, AS ITS AUTHOR ASKED
+
+The row **`🔴 SESSION FINDING — ONE SELF-HOSTED RUNNER IS A SINGLE POINT OF
+FAILURE FOR EVERY MERGE IN THE REPOSITORY — 2026-08-26`** (above) closes with
+*"the SPOF should be priced before it is widened [via #868]"*. **Its own author
+withdrew that framing hours later and could not land the correction, because
+nothing could merge.** Restated here so it travels with the row:
+
+> *"The real trade is not **one-runner SPOF vs many runners** — it is
+> **one-runner SPOF vs no CI at all**, which makes #868 a cure rather than a
+> gratuitous widening."*
+
+**Both halves stand.** #868 was the right act. The SPOF is still real and is now
+**wider by measurement**, which is the part the correction does not erase:
+
+### THE NEW NUMBER — THE COST IS NOW A **SUM**, NOT A **MAX**
+
+`quillmd-ci-1` executes **strictly one job at a time**: `unit tests` finished
+`07:27:46Z` and `dev-dependency advisories` started `07:27:48Z`. Before #868,
+four workflows ran concurrently on GitHub's fleet and a citation's latency was
+the **slowest single job**. Now it is the **sum of every job**, serialized.
+
+### ⚠️ AND A HYPOTHESIS THIS RAISED WAS REFUTED BY ITS OWN MEASUREMENT — RECORDED BECAUSE IT IS THE FIRST THING THE NEXT SESSION WILL THINK
+
+**#868's own four runs, read at the WORKFLOW-RUN level, look like a disaster:**
+
+| workflow | created → updated | wall clock |
+|---|---|---|
+| `secrets-scan` | `05:47:30Z → 05:53:17Z` | 5m47s |
+| `a11y-ci` | `05:47:30Z → 06:00:07Z` | 12m37s |
+| `CI` | `05:47:30Z → 06:02:23Z` | 14m53s |
+| **`e2e`** | `05:47:30Z → 07:22:10Z` | **1h34m40s** |
+
+Against the GitHub-hosted `e2e` on #870 hours earlier — **41 minutes** — that
+reads as a **2.3× slowdown**, and the obvious conclusion is *"the self-hosted box
+is slower than GitHub's fleet."*
+
+⚠️ **IT IS NOT. Measured at the JOB level, which is the object that actually has
+a duration:**
+
+    …/runs/32935429315/jobs
+    -> detect docs-only               05:47:32Z -> 05:47:39Z      7s   quillmd-ci-1
+    -> Playwright E2E (transcribe-md) 06:45:08Z -> 07:22:09Z   37m01s  quillmd-ci-1
+    -> Playwright E2E (transcribe-md) SKIPPED                          (the stand-in)
+
+**The pack ran for 37 minutes — FASTER than the 41-minute GitHub-hosted run. It
+then sat in QUEUE for 57m29s**, from `05:47:39Z` to `06:45:08Z`, waiting for the
+other three workflows' jobs to clear the one worker.
+
+> **`1h34m = 57m of QUEUE + 37m of WORK.` The runner is not slow. The runner is
+> SINGULAR.**
+
+**This changes the prescription, which is why it is worth the paragraph.** A
+"slow runner" diagnosis points at a bigger box; the real cost is **concurrency**,
+and the only thing that buys it back is **a second runner** — the same fix the
+SPOF half already asks for, now with a latency number attached rather than only a
+risk. *A count over the wrong object cannot answer a question about the right
+one*: the workflow run has no duration of its own, it has a window.
+
+⚠️ **AND THE JOB LIST CARRIED AN IMPOSSIBLE VALUE, LEFT LOUD RATHER THAN
+TIDIED.** The `skipped` stand-in reads `started_at 06:45:07Z -> completed_at
+05:47:39Z` — **completed 57 minutes before it started.** Benign (GitHub stamps
+skipped jobs oddly), and it is also the previous session's *two jobs share one
+name* mechanism visible in the raw data. Recorded because normalising it away is
+how the real finding under it would have been lost.
+
+⚠️ **AND THE QUEUE IS ALREADY DEEPER THAN THE CHANGE THAT CAUSED IT.** At
+`07:25:00Z` — 2m20s after `main`'s four were created — dependabot's #460 pushed
+**four more**, all targeting the same runner. **Eight workflows, one worker.**
+
+**This is a POPULATION FACT with its re-arming condition:** the serialization
+cost scales with how many refs are active at once, and **nothing in the repo
+bounds that** — a dependabot batch, two actors, or a re-run all widen it with no
+code change anywhere. **What would retire it: a second runner registered with the
+`quillmd-ci` label, or an `ubuntu-latest` fallback on a non-required workflow.**
+
+### AND ONE FACTUAL TIDY ON THAT ROW — `#867` WAS ALREADY CLOSED WHEN IT WAS NAMED
+
+The row names *"#867 (`feat/a11y-self-hosted`) is the same move for `a11y-ci`"*
+as though it were a second pending widening. Measured:
+
+    gh pr view 867 -> state CLOSED, mergedAt null, closedAt 2026-08-26T00:30:14Z
+
+**Closed UNMERGED at `00:30:14Z`** — roughly two and a half hours *before* the row
+was written — and superseded by #868, which carries `a11y.yml:65` itself. Nothing
+turns on it; recorded because *"I filed it" is not "it is still open"* cuts the
+same way for a PR somebody else opened, and because a queue row naming a dead PR
+sends the next reader to look for work that does not exist.
+
+## 6 · ⚠️ REPORT-MISSING — SESSION 01 OF RUN `20260826-003350-b2` LEFT NO MORNING REPORT
+
+Per MASTER STEP 0.9, the runner's halt footer flags it:
+
+    REPORT-MISSING: 01  ← these sessions' nights are NOT in the record
+
+**Reconstructed from disk, and the news is good: its WORK is in the ledger even
+though its REPORT is not.** Three sections above carry its name
+(`run 20260826-003350-b2 session 01`):
+
+- **`⚠️ F8-S2 — THE RATIFIED DEFAULT DOES NOT DISCHARGE THE PARK`** — the flag
+  census, the bundle-inlining measurement, the reachable partition
+- **`✅ DISCHARGED — THE THREE .env BACKUPS ARE OFF THE DEPLOY SURFACE`**
+- **`🟢 #859 LANDED — RULINGS #148/#149 ARE RATIFIED`** (merge `e0e1389b`)
+
+**WHAT IS GENUINELY LOST is its SCRATCH LIST** — the one artifact that cannot be
+reconstructed from `git log`, and the same thing lost by the two earlier
+REPORT-MISSING sessions canon records. Session 02 partially covers it: its own
+list names `.b2-canary.txt` as *"session 01's DELIBERATE credential canary"*, so
+at least one of 01's paths is recorded by a witness. **The rest are inside the
+`334 → 336` root-scratch count and cannot be attributed.**
+
+## 7 · 🟢 BUILT AND GATED — THE LAUNCH LOG NOW NAMES THE TREE THE SESSION WORKED ON
+
+**Found while reconstructing item 6's REPORT-MISSING session, which is the only
+job that depends on a log being truthful about its own base commit.**
+
+### THE DEFECT
+
+`foundation-loop.sh` printed its session header — including `commit :` — and
+**then** fast-forwarded the shared tree. Measured on **this session's own log**:
+
+| | |
+|---|---|
+| `docs/foundation/logs/20260826-072351-b1-run01.log` header | `commit  : e0e1389b` |
+| `git rev-parse HEAD` in `/opt/meddoc-pro` | **`44929454`** |
+| `git rev-list --count e0e1389b..44929454` | **10** |
+| `git merge-base --is-ancestor e0e1389b 44929454` | exit **0** — a real ancestor, not a fabricated sha |
+
+⚠️ **AND THE LINE THAT WOULD HAVE EXPLAINED IT HAD NEVER ONCE REACHED A LOG.**
+The sync block's echoes were bare — no `tee` — so they went to the runner's
+stdout (the tmux pane) and never to `"$LOG"`. Row-anchored over every file in
+`docs/foundation/logs/`, with a control:
+
+| pattern | logs |
+|---|---|
+| `[loop] marker:` — **tee'd; the POSITIVE CONTROL** | **103** |
+| `[loop] shared tree fast-forwarded` | **0** |
+| `[loop] shared tree is` (the not-synced warning) | **0** |
+
+The control fires and both targets do not, so the zeroes are measurements.
+
+**This is the `DEPLOYMENT_RUNBOOK §5.6` shape aimed at the loop's own audit
+trail** — a document stating something in the present tense, read by everyone as
+a description of the running system. The session log is what a morning report is
+reconstructed FROM, and it is *all there is* when a session ends without one.
+
+### ⚠️ AND MY OWN FIRST READING OF IT WAS WRONG, TWICE, IN OPPOSITE DIRECTIONS
+
+Recorded because both are cheap to repeat:
+
+1. I grepped three logs for `fast-forwarded`, got **0**, and nearly concluded
+   *"never"* from a three-file sample.
+2. I then grepped **all** logs for `fast-forwarded`, got **9**, and nearly
+   concluded the mechanism was refuted. **All nine are session PROSE** — *"I
+   fast-forwarded the shared tree…"*, written by sessions in their own reports.
+   *Counting tokens instead of classifying rows*, and the file's own prose is
+   exactly where the string appears without the kind. The row anchor
+   (`[loop] shared tree fast-forwarded`) settled it at **0**.
+
+### THE FIX — three edits, all additive, none removing information
+
+| | |
+|---|---|
+| the header's commit line | labelled **`(PRE-SYNC)`**, so an unlabelled sha cannot be read as the worked tree |
+| all six `[loop]` echoes in the sync block | `\| tee -a "$LOG"` |
+| **new**: a `[loop] commit (POST-SYNC …)` line | **outside** the `if/else`, so it prints even when the tree needed no sync |
+
+⚠️ **THE THIRD ITEM'S PLACEMENT IS THE LOAD-BEARING PART.** The `_behind = 0`
+arm is a silent `:`. A POST-SYNC line placed *inside* the conditional would print
+on a tree that MOVED and stay silent on a tree that was already current — and
+**"no line" is indistinguishable from "the header was right"**, which is the
+exact collapse this fix exists to undo.
+
+### THE GATE — `gate-launch-log-names-the-worked-tree.test.ts`, 8 arms, mutation-proved
+
+Backup taken **AFTER** the change (canon's return-to-the-change rule), marker
+asserted present before believing any run, and **both halves** asserted on every
+restore — marker gone AND the change's own symbol still present.
+
+| # | mutation | asserted applied | result |
+|---|---|---|---|
+| **M1** | the **HALF-LANDED** fix canon says actually ships: `tee` added to the ff-success arm, forgotten on the three not-synced lines | `grep -c MUTATION-M1` → 1 | 🔴 **1 arm**, naming all three offending lines individually |
+| **M2** | the POST-SYNC line placed **INSIDE** the `if/else` — the careless placement | `grep -c MUTATION-M2-APPLIED` → 1 | 🔴 **1 arm** — the outside-the-`fi` arm |
+| **M4** | rename the extraction anchor (`git fetch --quiet origin` → `git fetch -q origin`) — a plausible refactor that silently blinds the gate | `grep -c MUTATION-M4` → 1 | 🔴 **3 arms**, including NON-VACUITY |
+
+⚠️ **M4 IS THE ONE WORTH READING, BECAUSE OF WHAT STAYED GREEN.** With the
+anchor broken, the arm titled *"EVERY `[loop]` line in the sync block is tee'd"*
+**PASSED** — it iterated an empty extraction and found zero offenders. **The
+vacuity is demonstrated rather than asserted**, and the NON-VACUITY arm is the
+only thing standing between that and a gate that reports success having looked
+at nothing.
+
+⚠️ **AND M2's FIRST VERSION PROVED NOTHING — RE-AIMED, PER CANON.** It added a
+second POST-SYNC line inside the `fi` while leaving the correct one outside, and
+named it `MUTATION-M2 commit (POST-SYNC…)`. The gate's anchor is
+`[loop] commit (POST-SYNC`, which that string does not contain, so `indexOf`
+still found the correct line and every arm stayed green. *A mutation aimed at
+the wrong form produces a green as empty as one that never landed.* Re-aimed —
+delete the outside copy, put the exact text inside — it discriminated.
+
+### THE SUITE — THE CONTROLLED DELTA, NOT THE RAW NUMBER
+
+Run from a worktree, so the raw figure carries the documented
+`react/jsx-dev-runtime` alias class. **The base was re-measured in THIS tree
+with the new gate excluded**, rather than inherited from another session's
+report — same config, same node_modules, one variable changed:
+
+| | base (`--exclude` the new gate) | this branch |
+|---|---|---|
+| files | 16 failed · 359 passed · 2 skipped (377) | 16 failed · **360** passed · 2 skipped (**378**) |
+| tests | 1 failed · 5002 passed · 4 skipped (5007) | 1 failed · **5010** passed · 4 skipped (**5015**) |
+
+**+1 file, +8 tests — exactly the new gate — and the failures are UNCHANGED at
+16 / 1.** `npx tsc --noEmit` clean (no output). The 16 file-level failures are
+the worktree alias class and the 1 test failure is `gate-devstates`, both
+pre-existing and both present identically in the base column.
+
+### HONEST LIMIT, STATED IN THE GATE'S OWN HEADER
+
+**It reads the runner as TEXT.** It proves the lines are present, tee'd and
+positioned; it does **not** prove a live launch emitted them. Driving a real
+launch means starting the loop, which is not something a test may do.
+
+### ⚠️ AND EDITING THE RUNNER WHILE IT IS EXECUTING IS SAFE HERE — FOR A REASON THIS HOUSE ALREADY DOCUMENTS
+
+The loop is **live in tmux right now** and bash reads a script lazily by byte
+offset, so rewriting it in place would corrupt a running session. It does not
+happen: `git merge --ff-only` **replaces the file via rename**, creating a NEW
+inode, and the running bash holds its descriptor on the OLD one. **Same
+mechanic as the bind-mount inode trap**, pointed at a script instead of a
+config. The hazard is real and this particular instance is not.
+
+## 8 · FOUR INSTRUMENT DEFECTS THIS SESSION CAUGHT ON ITSELF, NONE BY A TEST
+
+Every one was caught by a value that could not be true — the mechanism canon
+names, and it is free only if the impossible value is allowed to reach a human.
+
+| # | what I ran | what it said | why it was impossible | the real answer |
+|---|---|---|---|---|
+| 1 | `ls -1 \| grep -cE '^\.[abtf][0-9]'` | **0** root scratch files | the previous session's close-out says **336** | `ls -1` hides dotfiles; `ls -1a` → **336**, reconciling exactly |
+| 2 | `grep -c "MUTATION\|tee -a \"\$LOG\"" <backup>` | **0** | I had just written 14 `tee` lines into that file | my own quote-escaping; plain `grep -c 'tee -a'` → **14** |
+| 3 | `grep -rl fast-forwarded docs/foundation/logs/` | **9** logs | contradicted a no-`tee` reading of the source | all nine are session PROSE; the row anchor → **0** |
+| 4 | `npx vitest run --reporter=basic` | **exit 0**, no summary | a suite cannot pass without printing a test count | the reporter does not exist in vitest v4; it died in `loadCustomReporterModule` and **the pipeline still exited 0** |
+
+⚠️ **#4 IS A FRESH INSTANCE OF *A TASK'S EXIT CODE DESCRIBES ITS LAST COMMAND,
+NOT THE WORK*, and it is the false-SUCCESS direction** — the dangerous one. The
+suite never ran; `| tail -18` was the last command and it succeeded. Had I read
+the exit code instead of looking for the test count, this row would have carried
+a suite figure for a suite that never executed.
+
+⚠️ **AND #1 IS THE ONE THAT SHOULD WORRY THE NEXT SESSION MOST**, because the
+scratch count is exactly the kind of number that gets copied forward. A `0` there
+reads as *"the pile is gone"* — reassuring, plausible, and false.
+
+## 9 · WHAT THIS SESSION DID **NOT** DO
+
+- **No deploy.** F8-S1's migration hold stands; `assert-migrations-applied`
+  reads 🔴 `1 unapplied` on prod AND QA, which is that hold and **not an
+  instruction** (canon: *a check's remediation advice is written for its common
+  state*).
+- **No merge of #868-adjacent CI work.** See item 4.
+- **No claim that the budget was restored.** See item 3.
+
