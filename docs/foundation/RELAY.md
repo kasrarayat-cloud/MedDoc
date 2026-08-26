@@ -32017,3 +32017,106 @@ reports only its own, so the accumulation is always somebody else's. It is
 recorded here with a number so the growth rate stays visible instead of being
 rediscovered monthly.
 
+---
+
+## CITATION — #859's MERGE, AND WHAT THE WORD MEANS TONIGHT
+
+**Citation — 4 of 4 on `e0e1389b9f3331c2291b9074024fd01c95aecb84`**, produced by
+`scripts/check-citation.sh`, never typed:
+
+   · `CI` 32915904741 a1
+   · `e2e` 32915904746 a1
+   · `a11y-ci` 32915904710 a1
+   · `secrets-scan` 32915904725 a1
+
+Every line `a1` — **no re-run, so nothing to explain.** Partition reconciles:
+`4 = green 4 + red 0 + pending 0 + stale 0 + cancelled 0 + startup-fail 0 +
+foreign 0 + extra 0 + unreadable 0`.
+
+⚠️ **AND THE `e2e` PACK DID NOT RUN — STATED, BECAUSE THE PREVIOUS SESSION'S
+FINDING SAYS THE CITATION CANNOT SAY IT.** #859 is docs-only (`AGENTS.md`,
+`RULINGS.md`), so `detect docs-only` skipped the real pack:
+
+    …/runs/32915904746/jobs
+    -> detect docs-only                 success   a1
+    -> Playwright E2E (transcribe-md)   success   a1     <- the 10s stand-in
+    -> Playwright E2E (transcribe-md)   skipped   a1     <- the real pack
+
+**This is the first citation in this ledger taken with the finding already
+recorded**, so it is the first that can name its own meaning. The row above it —
+`b9accba1`, the previous session's own landing commit — was **re-measured tonight
+and has the identical shape** (`e2e` run 32915050321, **30 seconds**, the pack
+`skipped`). *The finding reproduces on the commit that landed it*, which is the
+strongest evidence it is a mechanism and not an anecdote.
+
+**No adversarial pass is owed** — nothing here touches the clinical generation,
+note-editing or export paths. **Not deployed, and it needs no deploy:**
+documentation and rulings only. **It does not extend the F8-S1 hold.**
+
+---
+
+## 🔴 FINDING — F30's INSTRUMENT IS **INERT TO THE LOOP**: the script shipped, the grant did not
+
+**Third instance of a class canon has already paid for twice**, and it was found
+the only way it can be — by the loop trying to run the thing it was told to run.
+
+`scripts/check-retirement-conditions.sh` **exists** (17,820 bytes, built
+2026-08-25 by F30, with its gate at
+`apps/transcribe-md/src/lib/__tests__/gate-f30-retirement-conditions.test.ts`).
+Invoking it is **REFUSED** — it is not named in `.claude/settings.json`.
+
+**Measured, with the grep positive-controlled because a self-authored-prose zero
+is the highest-risk kind:**
+
+| grep over `.claude/settings.json` | count |
+|---|---|
+| `check-imaging-em-artifacts` — control A, known granted | **1** |
+| `check-cotenants` — control B, known granted | **1** |
+| **`check-retirement-conditions`** | **0** |
+
+The controls fire and the target does not, so the instrument discriminates and
+the zero is a measurement.
+
+### ⚠️ WHY THIS IS WORSE THAN AN ORDINARY MISSING GRANT
+
+**F30 exists so that a retirement condition is TESTED rather than remembered**,
+and its own filing says every one of the four stale entries it was built for was
+found *by hand, while waiting on a gate.* **The sweep built to end hand-discovery
+can only be run by hand.**
+
+**And its absence is self-concealing.** A sweep nobody can run produces no
+output, and no output is indistinguishable from a clean sweep. Nothing anywhere
+would have said so — canon's *a guard nobody asserted is a guard that is off*,
+one layer out.
+
+**LIVE PROOF THAT THE SWEEP IS OWED, FOUND WITHOUT IT TONIGHT:** the INBOX entry
+`2026-08-21T12:20:00Z` still reads *"The script does not exist yet — F23 builds
+it"*. **F23 was built, merged and cited 2026-08-21.** That sentence is a false
+PRESENT-TENSE fact printed into **every** session's log at launch — the
+`DEPLOYMENT_RUNBOOK §5.6` shape canon has already paid six hours for. It is
+`RELAY.md:29896`'s known stale entry, still delivered five days later.
+
+### THIS IS **OWNER ACTION**, STRUCTURALLY — NOT AN OVERSIGHT THE LOOP CAN FIX
+
+`.claude/settings.json` is protected from the layer it governs, so **the session
+that builds a script cannot ship its own grant.** Canon's rule — *an entry that
+names an instrument verifies that instrument's grant in the same commit* — is
+**structurally unreachable from the unattended side**, exactly as the
+`check-em-note-shape-artifacts.sh` entry already records.
+
+**THE FIX IS ONE LINE, and it is the owner's to add:**
+
+    "Bash(bash scripts/check-retirement-conditions.sh:*)"
+
+⚠️ **AND THE FORBIDDEN WORKAROUND IS NAMED SO NOBODY REACHES FOR IT:** `node -e`
+and `python3 -c` are both granted and both would run the file. **Using them to
+reach a form the allow list withholds is the sanctioned-hatch-becomes-the-
+undisciplined-door failure**, and MASTER forbids it by name. **This session did
+not tunnel it, and reported the refusal instead** — which is the whole point of
+the refusal being visible.
+
+⚠️ **NOR IS RETIRING THE STALE ENTRY THE LOOP'S TO DO.** `INBOX.md` states its
+own contract: *"Append-only, from the supervised side. The loop never writes
+here."* So the stale F23 pointer is reported, not corrected — naming it is the
+most this side may do.
+
