@@ -31812,3 +31812,161 @@ commits whose diff is docs-only. **What widens it: any broadening of `detect
 docs-only`'s path filter** — one edit to a glob, no other change anywhere, and
 the same silent equivalence reaches commits that carry code.
 
+---
+
+# 🟢 #859 LANDED — RULINGS #148/#149 ARE **RATIFIED**, AND THE RATIFICATION HAD BEEN SITTING UNMERGED FOR SIX HOURS
+
+**Run `20260826-003350-b2` session 01.** PR **#859** (`docs/ratify-148-149`),
+merged `e0e1389b`. Branch retired both sides. Two files: `AGENTS.md`,
+`docs/foundation/RULINGS.md`.
+
+**It was `CLEAN` and `MERGEABLE` the whole time**, 7 of 7 check-runs
+`completed/success`, no comment, no review, no hold marker — opened
+`2026-08-25T18:36:42Z` and still open at this session's STEP 0 while **six later
+PRs (#861–#866) merged straight past it.**
+
+### ⚠️ WHY THIS IS A ROW AND NOT A HOUSEKEEPING LINE
+
+**#859 is the BUILDER'S INPUT for the queue head.** It carries the owner's
+returned-clause decisions on **#148** and **#149**, and one of them changes what
+"done" means for F8-S2:
+
+> ⚠️ **"The tab-location park stands, WITH A DEFAULT: the coding surface follows
+> the app's EXISTING visit navigation as measured. Only if the UI slice needs a
+> NEW navigation primitive does that question return as owner-class."**
+
+That is canon's *A RATIFIED CHANGE OF SCOPE LANDS BEFORE THE BUILD FINISHES, NOT
+AFTER* — **`RELAY.md`/`RULINGS.md` is what an unattended session reads; a
+transcript is not.** A session opening tonight and grepping `RULINGS.md` would
+have found #148 still `PROVISIONAL` with the park unqualified, and correctly
+stood the queue head down on a condition the owner had already answered.
+
+**This is the F8 shape a second time in nine days** — the F8 row read *"waits on
+the owner's Figma"* for nine days after `f8-icd-tab-design.md` landed. There the
+discharging artifact existed and nothing pointed at it; here the discharging
+artifact existed **and was not merged.** Same failure, one step earlier.
+
+---
+
+## ⚠️ F8-S2 — THE RATIFIED DEFAULT DOES **NOT** DISCHARGE THE PARK, AND HERE IS THE MEASUREMENT
+
+**The park STANDS. It returns as owner-class, and the reason is now exact rather
+than general.**
+
+#148's default unblocks F8-S2 **only if** an existing visit navigation on the
+**reachable** path can host the coding surface. Measured tonight against the
+running system and the shipped source, not inherited from the row above:
+
+### 1 · THE FLAG UNIVERSE, FROM THE RUNNING CONTAINER
+
+    docker exec meddoc-pro-transcribe-md-1 printenv
+    -> NEXT_PUBLIC_UX_SIMPLIFY=true
+    -> NEXT_PUBLIC_REVIEW_DOC_VIEW=true
+    -> NEXT_PUBLIC_SKIN_BETA        ABSENT from the runtime env
+
+### 2 · ⚠️ `isSkinBeta()` IS THE LOAD-BEARING ONE, AND IT IS NOT IN THE ENV
+
+It is a **build-time** constant (`config/skin-beta.ts` reads
+`process.env.NEXT_PUBLIC_SKIN_BETA === 'true'`). `docker-compose.yml:554` passes
+`${NEXT_PUBLIC_SKIN_BETA:-true}`; the Dockerfile's own `ARG` default is
+**`false`**. **The two defaults disagree**, so neither file settles it.
+
+**Bundle measurement — all three flag literals are ABSENT from the built chunks,
+i.e. all three were INLINED:**
+
+| grep over `/app/apps/transcribe-md/.next/` (686 `.js` files) | count |
+|---|---|
+| `Extras` — **the re-aimed positive control** | **60** |
+| `NEXT_PUBLIC_SKIN_BETA` | 0 |
+| `NEXT_PUBLIC_UX_SIMPLIFY` | 0 |
+| `NEXT_PUBLIC_REVIEW_DOC_VIEW` | 0 |
+
+⚠️ **MY FIRST POSITIVE CONTROL WAS `ReviewTabsV2` AND IT RETURNED 0 TOO** — a
+component identifier, **minified out of a production build**, so it could not
+have been found whatever the instrument did. *A control aimed where the answer is
+predetermined is not a control.* Re-aimed onto a **string literal**, which
+survives minification, and it then discriminated (60 vs 0).
+
+**Absence proves INLINING, never the VALUE.** So the value was established by a
+second, independent route that does not share the bundle grep's failure mode:
+
+> **The read-only review paper is LIVE in production** (shipped 2026-07-28).
+> It renders at **`visit-ready-view.tsx:805` ONLY**, and `:805` sits at 4-space
+> indent **inside** `if (isSkinBeta())` at `:626` (2-space indent).
+> **A surface that is live cannot be behind a false condition. Therefore
+> `isSkinBeta()` is TRUE in production** — which also reconciles with compose's
+> `:-true`, by a route that never consulted it.
+
+### 3 · SO THE REACHABLE PARTITION IS EXHAUSTIVE, AND NEITHER HALF CARRIES A CODING SURFACE
+
+Indentation read directly, so the nesting is measured and not assumed:
+
+    626: [  if (isSkinBeta()) {]                      <- 2 spaces, top level
+    805: [    if (isReviewDocView() && !isSigned) {]  <- 4 spaces, INSIDE 626
+   1138: [    if (isUxSimplify() && isSigned) {]      <- 4 spaces, INSIDE 626
+   1367: [            <CodesTab]                      <- 12 spaces, flag-OFF legacy JSX
+
+| a production visit is… | it returns at | coding surface? |
+|---|---|---|
+| **UNSIGNED** | `:805` → the read-only paper | **none** |
+| **SIGNED** | `:1138` → `SignedDocumentView` | **none** |
+
+**Every visit is signed or unsigned, so the partition is 100% of the
+population** — there is no third reachable branch.
+
+**`CodesTab` has two mounts and production reaches NEITHER:**
+
+- `:708` — pushed into the `Note · Billing · Codes · Extras` strip **inside the
+  `isSkinBeta()` block, ABOVE both returns.** The tab list is *built* and the
+  strip is never *rendered*.
+- `:1367` — the **flag-OFF legacy** path, dead while `isSkinBeta()` is true.
+
+### 4 · AND THE PAPER HAS NO NAVIGATION PRIMITIVE AT ALL — CONTROLLED
+
+    review-document-view.tsx
+      role="tab" | <Tabs | TabsList | activeTab | setActiveTab   ->  0
+      control (must be present: `export function` / `return`)    ->  6
+
+The zero is a measurement rather than a token-match: the control fires on the
+same file with the same matcher form.
+
+⚠️ **AND ITS ABSENCE IS A LANDED DECISION, NOT AN OVERSIGHT** —
+`review-document-view.tsx:389-404` says so in its own words: *"NO BILLING PANEL,
+NO CODES TABLE, NO INPUT TRANSCRIPT. … This page is the document being signed."*
+
+### THE CONCLUSION, STATED AS THE RULING'S OWN TEST
+
+> **There is no existing visit navigation on the reachable path that can host a
+> coding tab. Building F8-S2 therefore REQUIRES A NEW NAVIGATION PRIMITIVE —
+> which is precisely the condition #148 names for the question to RETURN as
+> owner-class.**
+
+**F8-S2 stays PARKED, and the park is now falsifiable rather than vague.**
+
+**WHAT DISCHARGES IT — an owner decision recorded in `RULINGS.md` choosing one
+of these three**, because they are statements about what the product IS:
+
+| option | what it costs |
+|---|---|
+| **(a)** add a navigation primitive to the read-only paper | reverses the landed *"this page is the document being signed"* decision |
+| **(b)** host the coding surface on a **separate route**, not a tab | contradicts `f8-icd-tab-design.md`'s tab-bar premise — the design contract would need superseding |
+| **(c)** re-reach the V2 tab strip in production | a flag change with blast radius far beyond F8 |
+
+⚠️ **NOT DISCHARGED BY A CONVERSATION OR A NEW FIGMA** — same trap the F8 row
+already paid nine days for: name the **artifact class**, not the medium.
+
+### WHAT THIS ROW DOES NOT CLAIM
+
+- **It does not claim F8-S2 is impossible** — only that all three routes to it
+  are owner-class under the ruling as ratified.
+- **It does not touch F8-S1's hold.** That hold retires on
+  `20260825130000_f8s1_icd_decisions` reaching production under its own §2.5
+  declaration, and nothing here adds to it.
+- ⚠️ **`isSkinBeta()` was established by INFERENCE FROM A LIVE SURFACE plus a
+  bundle-inlining measurement — NOT by executing the branch.** The direct proof
+  would be a DOM read on a real visit route, and a real doctor's visit is never a
+  smoke target. **An honest limit, named rather than papered over:** if anyone
+  later measures `isSkinBeta()` false in production, item 3's partition inverts
+  and `:1367` becomes reachable — which would *discharge* the park rather than
+  deepen it. That is the one observation that would refute this row.
+
