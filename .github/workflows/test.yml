@@ -228,7 +228,11 @@ jobs:
     # is UNCHANGED so every required context is preserved byte-for-byte.
     # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
     runs-on: [self-hosted, linux, x64, quillmd-ci]
-    timeout-minutes: 5
+    # ⚠️ BOX-CALIBRATED, NOT A SPEED SETTING. A timeout is a HANG-GUARD;
+    # generous is free. quillmd-ci-1 (4 vCPU) is ~1.4-1.9x slower than a
+    # hosted runner on CPU-bound work, and every timeout in this repo was
+    # sized against hosted speed. Formula: UNMEASURED on this box; hosted ~1-2m baseline x3.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -342,7 +346,11 @@ jobs:
     # is UNCHANGED so every required context is preserved byte-for-byte.
     # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
     runs-on: [self-hosted, linux, x64, quillmd-ci]
-    timeout-minutes: 5
+    # ⚠️ BOX-CALIBRATED, NOT A SPEED SETTING. A timeout is a HANG-GUARD;
+    # generous is free. quillmd-ci-1 (4 vCPU) is ~1.4-1.9x slower than a
+    # hosted runner on CPU-bound work, and every timeout in this repo was
+    # sized against hosted speed. Formula: UNMEASURED on this box; hosted ~1-2m baseline x3.
+    timeout-minutes: 15
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -392,7 +400,11 @@ jobs:
     # is UNCHANGED so every required context is preserved byte-for-byte.
     # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
     runs-on: [self-hosted, linux, x64, quillmd-ci]
-    timeout-minutes: 15
+    # ⚠️ BOX-CALIBRATED, NOT A SPEED SETTING. A timeout is a HANG-GUARD;
+    # generous is free. quillmd-ci-1 (4 vCPU) is ~1.4-1.9x slower than a
+    # hosted runner on CPU-bound work, and every timeout in this repo was
+    # sized against hosted speed. Formula: measured >15m0s on quillmd-ci-1 (hit the old 15m cap) x2.5.
+    timeout-minutes: 40
     env:
       CI: "true"
     steps:

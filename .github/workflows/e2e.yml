@@ -122,7 +122,11 @@ jobs:
     # above brings it back inside the budget, and this leaves headroom rather
     # than sitting on the line. Splitting the projects into parallel jobs is the
     # better long-term shape — noted, deliberately not bundled into a fix PR.
-    timeout-minutes: 55
+    # ⚠️ BOX-CALIBRATED, NOT A SPEED SETTING. A timeout is a HANG-GUARD;
+    # generous is free. quillmd-ci-1 (4 vCPU) is ~1.4-1.9x slower than a
+    # hosted runner on CPU-bound work, and every timeout in this repo was
+    # sized against hosted speed. Formula: measured 48m31s on quillmd-ci-1 x2.5 = 121 -> 120.
+    timeout-minutes: 120
 
     env:
       # Build args: point the client bundle + auth URL at the CI app (:9020)
