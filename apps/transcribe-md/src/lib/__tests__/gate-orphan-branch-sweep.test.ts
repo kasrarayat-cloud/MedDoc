@@ -135,14 +135,24 @@ describe('F29 orphan-branch sweep', () => {
     expect(r.stdout).not.toContain('CANNOT TELL');
   });
 
+  // ⚠️ THE ANCHOR HERE IS THE CODE, NOT THE TOKEN, AND THAT IS THE WHOLE ARM.
+  //
+  // The first version anchored on `src.indexOf('SWEEP_PROBE')` — and the header
+  // comment that DOCUMENTS the seam contains that token, 1600 characters above
+  // the code. Mutation-proved: moving the real `if` block below the loop left
+  // this arm GREEN, because the comment still sat where the code should have.
+  //
+  // The regression surfaced only as the positive-control arm falling through to
+  // the live sweep and timing out at 76.6 SECONDS — the slow, unspecific alarm,
+  // in place of the cheap one written to catch exactly this. A structural
+  // assertion anchored on a token matches the prose ABOUT the structure; the
+  // substring family again, this time inside a gate about ordering.
   it('the probe seam is BEFORE the network loop, not decoration after it', () => {
-    // If SWEEP_PROBE's exit ever drifts below the per-branch loop, the arm above
-    // silently becomes the 124-second live sweep again and CI starts flaking.
     const src = readFileSync(SCRIPT, 'utf8');
-    const probeAt = src.indexOf('SWEEP_PROBE');
+    const probeAt = src.indexOf('if [ "${SWEEP_PROBE:-}" = "1" ]');
     const loopAt = src.indexOf('while IFS= read -r b');
-    expect(probeAt).toBeGreaterThan(-1);
-    expect(loopAt).toBeGreaterThan(-1);
+    expect(probeAt, 'the probe guard code was not found').toBeGreaterThan(-1);
+    expect(loopAt, 'the per-branch loop was not found').toBeGreaterThan(-1);
     expect(probeAt).toBeLessThan(loopAt);
   });
 
