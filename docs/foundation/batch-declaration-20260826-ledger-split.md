@@ -101,3 +101,72 @@ The estimate was drawn from the worst measured queue (88 minutes) applied three
 times over, and the real queue was shorter. **The reasoning was sound and the
 number was pessimistic**; had the batch been executed on that number, it would
 have discarded two citations to buy time that was not actually needed.
+
+---
+
+## ⚠️ SECOND CORRECTION, 2026-08-26T22:00Z — A DECLARATION I MADE WAS FALSE, AND HERE IS THE MEASUREMENT
+
+Pushing the union merge to `feat/f32-read-budget-guard` required a
+`DECLARE_CANCELLATION`, because the pre-push hook read **`--commit 0,
+--branch 3`**. My declaration asserted:
+
+> *"cancelling them RELEASES queue slots rather than destroying evidence"*
+
+**That did not happen. The three runs were not cancelled by the push, and they
+are not cancelled now.** Checked rather than assumed, twice — immediately after
+the push and again after the new head's runs had registered.
+
+### WHAT THEY ACTUALLY ARE — zombie runs
+
+| run | workflow | sha | created | updated | jobs |
+|---|---|---|---|---|---|
+| `32985441052` | secrets-scan | `4aedb453` | 15:32:43Z | *unchanged* | **0** |
+| `32985194616` | e2e | `a17ba520` | 15:27:38Z | *unchanged* | **0** |
+| `32984966259` | secrets-scan | `a17ba520` | 15:23:46Z | *unchanged* | **0** |
+
+`created_at == updated_at` six and a half hours later, **zero jobs**,
+`status: queued`, `conclusion: null`. The server created the run record and never
+touched it again. **They will never start and never finish.**
+
+⚠️ **This is the same zero-jobs signature as the two `startup_failure` runs on
+`3de58d76`** recorded earlier this day — which were, at the time, the only two
+`startup_failure` runs in 300. Same branch, same afternoon, same shape. Whatever
+produced one produced the other; that mechanism is not named here because it has
+not been established, and this file will not invent one.
+
+### AND TWO INSTRUMENTS DISAGREE ABOUT THEM, WHICH IS THE FINDING
+
+    gh run cancel 32985194616   -> "Cannot cancel a workflow run that is completed"
+    gh api  .../runs/32985194616 -> status: queued, conclusion: null
+
+**Contradictory readings of one run's state means ONE broken instrument, not two
+facts.** The control settles which: a genuinely completed run
+(`32994363117`, `completed/success`) produces the *identical* cancel message —
+so that message is **generic refusal text, not a status report**, and it must
+never be read as evidence that a run completed.
+
+### WHY IT MATTERS BEYOND THIS PUSH
+
+The pre-push hook is fail-closed on the `--branch` view. A zombie sits in that
+view permanently, so **every subsequent push to an affected branch demands a
+`DECLARE_CANCELLATION` for runs that cannot be cancelled** — which converts a
+safety mechanism into a ritual, and a ritual is the state in which nobody reads
+the reason any more.
+
+⚠️ **Bounded honestly: not "forever".** The hook's view is a bounded query — at
+`--limit 12` these three are invisible; at `--limit 60` they appear. As newer
+runs accumulate they will age out of the window. So the effect is *"until they
+fall off the list"*, and I did not measure where that boundary is.
+
+**It does NOT block the merge.** Branch protection reads check runs on the head
+SHA, and `merge-pr.sh` reads the PR's *base* branch. Neither consults the branch
+view. Verified: #876 went `CONFLICTING/DIRTY` → **`MERGEABLE`** after the union
+merge, with only its own head checks outstanding.
+
+### THE DECLARATION STANDS, MINUS THE FALSE CLAUSE
+
+Everything else in it was accurate: the SHAs were superseded, the runs could
+never discharge a citation, the loop was dark and the PR was mine to take. The
+one sentence that claimed an effect is withdrawn. **A declaration is worth having
+only if its author corrects it when the effect it promised does not arrive** —
+otherwise it is a narration with better formatting.
