@@ -32981,3 +32981,95 @@ Headroom, not a hazard — no verdict changes. `lsmod` is not granted, so the
 balloon assertion the skill's header asks for is **inferred** from the 32 GB
 total and is stated as an inference. Full detail in
 `docs/preflight-reports/preflight-20260826T151235Z.md`.
+
+---
+
+## 🔵 F32 ADDENDUM — TWO PROCESS OBSERVATIONS FROM THE SAME SESSION, BOTH ABOUT LOOKING BEFORE DECIDING
+
+### 1 · I HAD A PROVISIONAL RULING HALF-DRAFTED FOR A QUESTION THE LEDGER HAD ALREADY ANSWERED
+
+`push-with-cancellation.sh` needed to exist and it already did.
+
+Amending PR #876 required cancelling three of its own queued runs. The pre-push
+hook refused, correctly, and printed its documented override:
+
+    DECLARE_CANCELLATION="why this is deliberate" git push …
+
+**Which the permission layer then refused**, exactly as MASTER's table says it
+will (`VAR=1 cmd` — not granted). At that point I had reasoned my way to a
+provisional ruling: *cancel the runs explicitly with `gh run cancel`, write the
+declaration into the log, then push into a quiet branch.*
+
+⚠️ **THAT WOULD HAVE BEEN THE UNDISCIPLINED DOOR, AND THE LEDGER SAYS SO IN
+WORDS.** The grep required before any ruling-shaped decision returned the whole
+arc in one shot — the finding, its measured cost (~40 min and ~41 min, two
+sessions), the argument, and the cure:
+
+    grep -n -i "DECLARE_CANCELLATION" docs/foundation/RELAY.md
+    -> 2734  "refused by the loop's permission…"
+    -> 2888  "the escape hatch is unreachable…"
+    -> 2960  "…and pushes. Allowlisted BY NAME; the raw compound…"
+
+**`scripts/push-with-cancellation.sh` exists, is granted (`grep -c` → 1), and
+its own header answers the objection I was about to raise:** *"refusing the
+grant does NOT withhold the capability. The loop already holds `gh run cancel` —
+the same outcome through another door, with no declaration and no log line. What
+refusal withheld was the DISCIPLINE."*
+
+**Used as intended.** The declaration is in this session's log with the ref, the
+superseded sha, the three runs and the reason.
+
+> **The cost of the grep was thirty seconds. The cost of skipping it would have
+> been a session re-deriving a solved question and reaching for the door canon
+> names as the wrong one — and the ruling would have been *plausible*, which is
+> what makes rediscovery dangerous rather than merely wasteful.**
+
+### 2 · A 404 FROM `gh api` IS NOT EVIDENCE OF A MISSING SCOPE — SEE THE FINDING ABOVE
+
+Recorded here as well because the two share one shape: **an authoritative-looking
+answer to a question I had asked of the wrong universe.** The 404 was a wrong
+repository name; the half-drafted ruling was a question asked of my own
+reasoning instead of of the ledger. Neither was caught by being suspicious —
+both were caught by *asking the thing that knows*.
+
+### 3 · 🟠 A STALE WORKTREE IS CARRYING A STAGED INDEX THAT DELETES 30+ FILES LIVE ON `main`
+
+**Found by the PICKUP's scratch accounting, not by looking for it.** Two
+worktrees survive from an earlier run, both under
+`/tmp/claude-1000/-opt-meddoc-pro/ceac94df-…/scratchpad/`:
+
+| worktree | branch | state |
+|---|---|---|
+| `…/auto` | `feat/loop-resilience-doctrine` | **clean**; branch NOT an ancestor of `origin/main` (unlanded, remote branch alive) |
+| `…/ptr` | `docs/inbox-pointer-correction` | ⚠️ **64 staged entries**, of which **30+ are `D` deletions** |
+
+`docs/inbox-pointer-correction` is already merged (`ee04fba9` is contained in
+`origin/main`) and its **remote branch is gone** — so the worktree has no
+purpose. What makes it worth a row is what its INDEX holds: staged deletions of
+files that are **live on `main` right now**, including
+
+    scripts/check-em-note-shape-artifacts.sh     <- a STANDING CHECK, run this session
+    scripts/lib/em-artifact-scan.sql
+    apps/transcribe-md/src/lib/em-artifact-scan.ts
+    six §2.5 declarations under docs/foundation/deploys/
+    six preflight reports
+
+**The index is an OLDER tree than the worktree's own HEAD** — the shape canon
+names in *"A WORKTREE IS ISOLATED IN FILES AND SHARED IN REFS"*, arriving through
+the index rather than through a ref. It is **inert** while nobody runs a command
+in that directory; a bare `git commit` there produces a commit that removes a
+standing check and six deploy declarations.
+
+⚠️ **NEITHER WORKTREE WAS REMOVED, DELIBERATELY.** `git worktree remove` refuses
+a dirty tree and `--force` is destruction of something I did not author and
+cannot fully attribute; and MASTER's PICKUP is explicit that this is *accounting,
+not destruction*. **Reported with the paths, for a supervised session:**
+
+    git worktree remove --force /tmp/claude-1000/-opt-meddoc-pro/ceac94df-4040-40dd-a099-24f5195c4cb2/scratchpad/ptr
+    git worktree remove         /tmp/claude-1000/-opt-meddoc-pro/ceac94df-4040-40dd-a099-24f5195c4cb2/scratchpad/auto
+
+⚠️ **AND `/tmp` IS THE PART THAT MAKES IT A DEADLINE RATHER THAN A CHORE:** if
+`feat/loop-resilience-doctrine` holds anything only in that directory it
+disappears on the next `/tmp` sweep with nothing recording it. The BRANCH is
+safe — it is on origin — so the worktree is genuinely disposable; that is stated
+here so the next reader does not treat *"unlanded"* as *"unrecoverable"*.

@@ -54,6 +54,25 @@
 # same reason the pre-push hook and merge-pr.sh share one inflight check: a
 # second copy of a threshold drifts from the first the day either is changed.
 #
+# ⚠️ HONEST LIMIT, STATED WHERE A READER OF THE RULE MEETS IT: THE MANIFEST IS
+# A HAND-KEPT LIST, AND THIS CHECK CANNOT SEE A FILE THAT IS NOT ON IT. If a
+# future instruction says "read docs/foo.md" and nobody adds the row, foo.md can
+# grow past the limit and this script will stay green — which is precisely the
+# failure it was written about, one level up. It was not automated away because
+# every automatic route is worse: deriving the list by grepping MASTER.md and
+# AGENTS.md for markdown paths matches every CITATION too (docs/canon/* is named
+# dozens of times and is deliberately never read whole), so the derived manifest
+# would be noisy in the direction that trains people to ignore it.
+#
+# WHAT MAKES THE HAND-KEPT LIST SURVIVABLE, AND IT IS NOT DISCIPLINE:
+#   · the list is duplicated in gate-read-budget.test.ts as NAMED, so a change
+#     to one and not the other fails CI rather than passing quietly;
+#   · the rule is stated at the point of edit — adding a file to a standing read
+#     instruction means adding a manifest row IN THE SAME COMMIT, which is the
+#     same shape as "an entry that names an instrument verifies its grant".
+# Neither closes the gap. Saying so is the point; a limit nobody wrote down is
+# indistinguishable from coverage.
+#
 # ⚠️ TREE-RELATIVE ON PURPOSE. It resolves the files from its OWN location, so
 # it judges the checkout it ships in — the correct universe for a check CI runs
 # on a PR head. This is not the F28 defect; the standing PRODUCTION checks must
