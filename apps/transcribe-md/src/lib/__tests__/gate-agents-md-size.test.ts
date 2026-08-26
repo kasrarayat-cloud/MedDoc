@@ -29,7 +29,7 @@
 // it is the cheaper half.
 // ============================================================================
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -88,5 +88,52 @@ describe('AGENTS.md size budget', () => {
       }
     });
     expect(missing).toEqual([]);
+  });
+
+  // ==========================================================================
+  // ⚠️ THE ARM ABOVE CHECKS ONE DIRECTION ONLY — row → file. Added 2026-08-26.
+  //
+  // A row pointing at nothing is the LOUD failure: a reader follows it and gets
+  // a missing file. The silent one is the inverse — a BODY nobody points at.
+  // The README's rule is "the full body goes here and its one-line row goes in
+  // the index, IN THE SAME COMMIT", and until now only half of that was
+  // asserted. An orphaned body is an entry no grep of AGENTS.md can reach,
+  // which is the same stale-authority hazard the split was performed to cure,
+  // reintroduced one file at a time.
+  // ==========================================================================
+  it('every docs/canon body is reachable FROM the index — no orphans', () => {
+    const agents = readFileSync(join(REPO, 'AGENTS.md'), 'utf8');
+    const indexed = new Set(
+      [...agents.matchAll(/→ `docs\/canon\/([^`]+\.md)`/g)].map((m) => m[1]),
+    );
+    const onDisk = readdirSync(join(REPO, 'docs', 'canon'))
+      .filter((f) => f.endsWith('.md') && f !== 'README.md');
+
+    expect(onDisk.length).toBeGreaterThan(50); // non-vacuity: we actually read the directory
+    const orphaned = onDisk.filter((f) => !indexed.has(f));
+    expect(orphaned).toEqual([]);
+  });
+
+  // ⚠️ AND THE COUNT IN THE PROSE IS A CLAIM, SO IT IS MEASURED. Added
+  // 2026-08-26 by the first session to add canon AFTER the split — which had to
+  // hand-edit "92 entries" to "95" with nothing anywhere able to catch the
+  // omission. ARITHMETIC THAT DOES NOT RECONCILE IS A FINDING; a header that
+  // silently drifts from the list beneath it is how a reader learns to stop
+  // trusting the numbers in this file.
+  it('the stated entry count reconciles with the rows actually in the index', () => {
+    const agents = readFileSync(join(REPO, 'AGENTS.md'), 'utf8');
+
+    const claim = agents.match(/\*\*(\d+) entries live in full at `docs\/canon\/`\.\*\*/);
+    expect(claim, 'the CANON INDEX header must state an entry count').not.toBeNull();
+
+    const index = agents.slice(agents.indexOf('## CANON INDEX'));
+    const rows = index.split('\n').filter((l) => /^(- | {2}- ↳ )/.test(l));
+
+    expect(rows.length).toBeGreaterThan(50); // non-vacuity: the rows matched
+    expect(Number(claim![1])).toBe(rows.length);
+
+    // every row carries its pointer — a row without one is a dead end, and it
+    // would also slip past the row → file arm above, which only sees arrows.
+    expect(rows.filter((l) => !l.includes('→ `docs/canon/'))).toEqual([]);
   });
 });
