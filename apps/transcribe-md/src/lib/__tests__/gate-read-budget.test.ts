@@ -141,10 +141,19 @@ describe('STEP 0 read budget', () => {
 
   // the facts the whole item rests on, asserted rather than quoted, so the
   // ledger rows above cannot quietly stop being true.
-  it('the three ledgers really are over the read limit, and really do declare it', () => {
+  // ⚠️ THIS LIST SHRANK FROM THREE TO ONE ON 2026-08-26, AND THAT IS THIS ARM
+  // DOING ITS JOB. F32 shipped predicting exactly this: "the negative arm will
+  // hold you to it — on whoever eventually splits RELAY.md by arc and leaves the
+  // notice behind." The split landed; docs/foundation/RELAY.md went 1,830,324 ->
+  // 20,317 and RULINGS.md 375,008 -> 39,238, so both moved to the readable list
+  // below and their banners were removed IN THE SAME COMMIT. The gate went red
+  // until they were, which is the whole design.
+  //
+  // docs/rounds/RELAY.md stays here deliberately: it belongs to the Rounds
+  // programme, not Foundation, and is scheduled as a named, triggered item
+  // rather than swept up for tidiness.
+  it('the oversize ledger really is over the read limit, and really does declare it', () => {
     for (const rel of [
-      'docs/foundation/RELAY.md',
-      'docs/foundation/RULINGS.md',
       'docs/rounds/RELAY.md',
     ]) {
       const n = chars(rel);
@@ -156,6 +165,8 @@ describe('STEP 0 read budget', () => {
 
   it('and the readable ones really are readable, and carry no banner', () => {
     for (const rel of [
+      'docs/foundation/RELAY.md',
+      'docs/foundation/RULINGS.md',
       'AGENTS.md',
       'docs/foundation/SPEC.md',
       'docs/foundation/MASTER.md',

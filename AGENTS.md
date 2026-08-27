@@ -897,9 +897,27 @@ made three sessions ago.**
 | **Rounds** — the shipped skin | `docs/rounds/SPEC.md` | `docs/rounds/RELAY.md` |
 | **Foundation** — teams → billing → admin | `docs/foundation/SPEC.md` | `docs/foundation/RELAY.md` |
 
-⚠️ **AND BEFORE DECIDING ANYTHING RULING-SHAPED, GREP
-`docs/foundation/RULINGS.md`.** It is a one-line index of every war-room
-decision — date, verdict, pointer — and it exists because a session
+⚠️ **AND BEFORE DECIDING ANYTHING RULING-SHAPED, GREP THE RULINGS — AND SINCE
+2026-08-26 THAT IS TWO PATHS, NOT ONE:**
+
+    grep -n '<what you want>' docs/foundation/RULINGS.md docs/foundation/rulings/*.md
+
+**The head answers *which ruling and what status*; the archive answers *why*.**
+The 2026-08-26 split moved every ruling BODY into `docs/foundation/rulings/`,
+so a grep of the head alone finds the row and not the reasoning — and it
+**returns zero rather than saying it looked in the wrong place.** Measured:
+`grep -c laterality` scores **0** against the head and **3** across head +
+archives — and ruling #127 is the one that forbids the model asserting it.
+
+⚠️ **The example is deliberately NOT `#96(b)`, which this rule cited first.**
+`RULINGS.md`'s own banner now explains the two-path route and names `#96(b)`
+while doing so, so a head-only grep for it scores **1** — off the banner's
+prose, not off a ruling. *A probe whose pattern appears in the searcher cannot
+return false*, and an example that quietly stopped demonstrating its own point
+is worse than no example.
+
+`RULINGS.md` is a one-line index of every war-room
+decision — date, number, STATUS, verdict, pointer — and it exists because a session
 rediscovered a standing ruling on 2026-08-06 and wrote a fresh argument for a
 question already answered two days earlier. That instance cost nothing; the
 failure mode is not duplicated effort but **CONTRADICTION**, because a session

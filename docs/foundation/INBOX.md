@@ -542,8 +542,27 @@ Two things a session starting tonight needs to know:
    deploy. If any instruction you meet still says to run it, that instruction
    is stale; #137 supersedes it.
 2. **`scripts/ops/prune-rollback-tags.sh` is already GRANTED** in
-   `.claude/settings.json`, shipped with the ruling. The script does not exist
-   yet — F23 builds it. Do not re-add the grant.
+   `.claude/settings.json`, shipped with the ruling. ~~The script does not exist
+   yet — F23 builds it.~~ Do not re-add the grant.
+
+   > ⚠️ **CORRECTED 2026-08-26 BY THE SUPERVISED LEAD — the struck sentence had
+   > been FALSE for five days and was printed into the head of EVERY session log
+   > in that window.** F23 landed **2026-08-21**; the script exists
+   > (`scripts/ops/prune-rollback-tags.sh`). The grant half was always true —
+   > `grep -c prune-rollback-tags .claude/settings.json` → 1 — so only the
+   > existence claim was wrong, which is what made it survive: the row read
+   > mostly-correct.
+   >
+   > **The original wording is kept, struck, not deleted** — this file is a
+   > record as well as an instruction, and the correction is the point.
+   >
+   > **Why the loop could not fix this itself, and it is not laziness:** the loop
+   > never writes `INBOX.md` by design (append-only from the supervised side), so
+   > a false premise here is structurally beyond it. It is the same shape as the
+   > grant rule the loop cannot obey — *an actor cannot be ordered to do what it
+   > is structurally denied* — ratified this day. **The loop DETECTS
+   > (`scripts/check-retirement-conditions.sh`, whose grant ships in this same
+   > change); a supervised session CORRECTS.**
 
 **Supervised-side state, so the loop does not collide with it:** F5-f + F5-h +
 the residual are LIVE (`1e7245b0`, 15 of 15 judged, PR #777 merged). The
