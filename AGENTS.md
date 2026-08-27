@@ -1073,7 +1073,7 @@ because the two errors are not symmetric.
 
 ## CANON INDEX — every archived entry, one row each
 
-**100 entries live in full at `docs/canon/`.**
+**103 entries live in full at `docs/canon/`.**
 Each row is a **POINTER, never the authority** — the archived body governs, and
 it is verbatim. A row exists so that a grep for an entry's title still lands
 here and tells you where the body went; the tell is that entry's OWN words.
@@ -1153,6 +1153,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
   - ↳ ⚠️ AND A SIXTH — **TWO WEAK DEFECTS COMPOSED INTO A CONFIDENT FALSE GREEN** — Two weak defects composed into a confident false green — a short sha returning `[]`, plus `OK == T`, vacuous at zero. A success check needs a FLOOR, not a ratio. → `docs/canon/31-a-detector-can-be-blind-to-the-thing-it-most-exists-to-wat.md`
   - ↳ **⚠️ AND A THIRD MEMBER: A TREE THAT CANNOT RESOLVE ITS OWN IMPORTS** — "A number printed from a tree that cannot resolve its own imports is not a measurement." Report the CONTROLLED DELTA against a clean checkout. → `docs/canon/31-a-detector-can-be-blind-to-the-thing-it-most-exists-to-wat.md`
 - **A DOCUMENTED DEFECT IS THE MOST CONVENIENT SUSPECT** — "When an instrument disagrees with you, CHECK YOUR OWN INPUT BEFORE YOU CHECK THE PRECEDENT." The mirror of *a documented-unreliable instrument is not a permanently-wrong one*: one reflex discards true reports, this one MANUFACTURES false ones. Carries the DENOMINATOR rule. → `docs/canon/61-a-documented-defect-is-the-most-convenient-suspect.md`
+- **A DENY MATCHES THE AGENT, NOT THE SCRIPT** — "'X is in the deny list' is a fact about a FILE; 'X cannot happen' is a claim about BEHAVIOUR." A row said `retire-branch.sh`'s remote leg *can never succeed*; the deny entry is real, the script works, and the gap between them was one command nobody ran. **Before recording that something is denied, RUN it** — a refusal is loud, instant and free. → `docs/canon/64-a-deny-matches-the-agent-not-the-script.md`
 - **And a reassurance check needs a POSITIVE CONTROL like any other** — "A check run to prove nothing happened is the most likely to be believed and the least likely to be controlled." `find -newermt` said 0; `stat` disagreed. → `docs/canon/49-and-a-reassurance-check-needs-a-positive-control-like-any.md`
 
 ### GATES, GUARDS, SWEEPS & MUTATION PROOFS
@@ -1195,6 +1196,8 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
   - ↳ **THE GUARD IS A BICONDITIONAL PLUS FIELD PARITY, AND PRESENCE IS NOT ENOUGH** — Presence is not parity: the guard stayed green through the action defect. State it as a biconditional PLUS field parity, and assert the card is actually mounted. → `docs/canon/03-a-deletion-is-scoped-by-what-the-component-does-not-by-wha.md`
   - ↳ **HONEST LIMITS, RECORDED SO THE GATE IS NOT READ WIDER THAN IT IS** — That gate's honest limits — one of three medication emitters, a mount leg defeated by a conditional render, a mirrored condition that is not byte-faithful. → `docs/canon/03-a-deletion-is-scoped-by-what-the-component-does-not-by-wha.md`
 - **Shared components — diff the callers BEFORE you replace them** — "A shared component must accept every context its predecessors carried." Diff every call site first; put the behaviour ON the component, never on a hand-kept caller list. → `docs/canon/04-shared-components-diff-the-callers-before-you-replace-them.md`
+- **A VIEW SWITCH THAT UNMOUNTS DESTROYS LOCAL STATE — AND THE GATE IT WAS HOLDING** — "The obvious two-view switch is a ternary, and a ternary UNMOUNTS." F8-S2: switching to Coding and back would have destroyed the in-session E/M confirm and silently re-blocked Sign — no error, no log line, nothing to click. HIDE, and hide **twice** (`hidden` + inline `display:none`), because `hidden` is a UA-stylesheet rule any author rule defeats silently. → `docs/canon/63-a-view-switch-that-unmounts-destroys-local-state.md`
+  - ↳ **⚠️ AND THE ASSERTION IS A MOUNT COUNT — "STILL IN THE DOM" IS SATISFIED BY A REMOUNT** — The obvious presence check **passes on the exact defect it was written to catch**. When the property is IDENTITY OVER TIME rather than presence at a moment, count the transitions, not the occupants. → `docs/canon/63-a-view-switch-that-unmounts-destroys-local-state.md`
 - **ERR TOWARD THE EDGE — THE EDGE HAS A FENCE** — "When an indexed clinical write can err, err toward the EDGE — the edge has a fence." Over-shoot fails closed to a visible blank; under-shoot silently reads the neighbour. → `docs/canon/14-err-toward-the-edge-the-edge-has-a-fence.md`
 
 ### HYGIENE, PHI & PURGES
