@@ -66,8 +66,9 @@
 #     token-grep would re-commit the exact defect described above. **Named
 #     residue, not a silent cap** — a named gap beats a green that cannot fail.
 #   · `relay_closed:<ID>` APPROXIMATES "the item is closed" by looking for a
-#     `#+ (✅|🟢) <ID> —` heading in `RELAY.md`. It is a predicate over the
-#     ledger's own vocabulary, not over the code. Verified to DISCRIMINATE on
+#     `#+ (✅|🟢) <ID> —` heading across the ledger's live head AND its archives
+#     under `docs/foundation/relay/` (see the watched-set note below). It is a
+#     predicate over the ledger's own vocabulary, not over the code. Verified to DISCRIMINATE on
 #     today's file: F10 2, F23 3, F24 1, and **F12 0 while F12-g is open** —
 #     sub-items (`F12-a`) do not match their parent.
 #   · A `human:` row is a REFUSAL to guess, not a pass. Those entries are
@@ -107,9 +108,34 @@ cd "$ROOT" || {
 
 INBOX="docs/foundation/INBOX.md"
 LEDGER="docs/foundation/RELAY.md"
+LEDGER_DIR="docs/foundation/relay"
 
 [ -r "$INBOX" ]  || { echo "🟡 $INBOX is not readable — can't tell";  exit 2; }
 [ -r "$LEDGER" ] || { echo "🟡 $LEDGER is not readable — can't tell"; exit 2; }
+
+# ── ⚠️ THE WATCHED SET IS THE LIVE HEAD **PLUS** THE ARCHIVES ───────────────
+# The 2026-08-26 split moved every CLOSED arc out of `RELAY.md` and into
+# `docs/foundation/relay/`. A closure heading is BY DEFINITION in a closed arc,
+# so after the split the live head carries almost none of them — and this
+# script's whole `relay_closed:` predicate is a search for closure headings.
+#
+# Read against the head alone the sweep did not err loudly, which is the part
+# worth remembering: its vocabulary control went to 0, it fail-closed at exit 2,
+# and the DUE list quietly went 4 -> 2. F10's and F23's MET conditions became
+# invisible — the exact "an expired entry is still delivered to every session"
+# harm this sweep was built to price.
+#
+# The set degrades correctly in BOTH directions: where the archive directory
+# does not exist (any pre-split tree, and any other checkout of this repo) the
+# set is exactly `$LEDGER` and behaviour is byte-identical to before.
+declare -a LEDGER_SET=("$LEDGER")
+if [ -d "$LEDGER_DIR" ]; then
+  while IFS= read -r _f; do
+    [ -r "$_f" ] && LEDGER_SET+=("$_f")
+  done < <(find "$LEDGER_DIR" -maxdepth 1 -type f -name '*.md' | sort)
+fi
+LEDGER_LABEL="$LEDGER"
+[ "${#LEDGER_SET[@]}" -gt 1 ] && LEDGER_LABEL="the ledger (head + $(( ${#LEDGER_SET[@]} - 1 )) archive files)"
 
 # ----------------------------------------------------------------------------
 # THE REGISTRY — one row per INBOX entry. `<timestamp>|<predicate>|<note>`
@@ -179,8 +205,8 @@ if git ls-remote --heads origin main 2>/dev/null | grep -q 'refs/heads/main'; th
 REF_OK=0
 if git rev-parse --verify --quiet origin/main >/dev/null 2>&1; then REF_OK=1; fi
 LEDGER_OK=0
-if grep -qE '^#+ (✅|🟢) F[0-9]+ —' "$LEDGER"; then LEDGER_OK=1; fi
-echo "   · controls: origin reachable=$NET_OK · origin/main resolvable=$REF_OK · ledger closure-vocabulary present=$LEDGER_OK"
+if grep -qE '^#+ (✅|🟢) F[0-9]+ —' "${LEDGER_SET[@]}"; then LEDGER_OK=1; fi
+echo "   · controls: origin reachable=$NET_OK · origin/main resolvable=$REF_OK · ledger closure-vocabulary present=$LEDGER_OK ($LEDGER_LABEL)"
 echo
 
 declare -a B_DUE=() B_NOTDUE=() B_HUMAN=() B_NONE=() B_RETIRED=() B_UNREG=() B_CANT=()
@@ -221,12 +247,12 @@ for h in "${HEADINGS[@]}"; do
     relay_closed:*)
       id="${pred#relay_closed:}"
       if [ "$LEDGER_OK" -ne 1 ]; then B_CANT+=("$ts  $title   (ledger vocabulary control failed)")
-      elif grep -qE "^#+ (✅|🟢) ${id} —" "$LEDGER"; then B_DUE+=("$ts  $title
+      elif grep -qE "^#+ (✅|🟢) ${id} —" "${LEDGER_SET[@]}"; then B_DUE+=("$ts  $title
         └─ $note
-        └─ MET: $LEDGER carries a closure heading for ${id}")
+        └─ MET: $LEDGER_LABEL carries a closure heading for ${id}")
       else B_NOTDUE+=("$ts  $title
         └─ $note
-        └─ NOT MET: no closure heading for ${id} in $LEDGER — the item is still open"); fi
+        └─ NOT MET: no closure heading for ${id} in $LEDGER_LABEL — the item is still open"); fi
       ;;
     merged:*)
       rest="${pred#merged:}"; br="${rest%%:*}"; path="${rest#*:}"
