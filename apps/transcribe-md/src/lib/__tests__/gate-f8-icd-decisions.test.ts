@@ -73,13 +73,16 @@ describe('F8-S1 — the projection is a PARTITION that reconciles', () => {
   it('accepted + rejected + undecided === suggested, on every state', () => {
     let decisions: unknown = null;
     const seen: string[] = [];
-    for (const [code, intent] of [
-      ['K21.00', 'accepted'],
-      ['I10', 'rejected'],
+    // F8-S2 / ruling #154 — a rejection carries a reason token. The partition
+    // itself is unchanged and that is the point of leaving this arm alone
+    // otherwise: the reason rides along, it does not re-bucket anything.
+    for (const [code, intent, reason] of [
+      ['K21.00', 'accepted', undefined],
+      ['I10', 'rejected', 'not_supported_by_note'],
     ] as const) {
       const r = applyIcdDecision(
         { rawIcdCodes: THREE, rawIcdDecisions: decisions },
-        { code, decision: intent, userId: USER, at: AT },
+        { code, decision: intent, userId: USER, at: AT, reason },
       );
       expect(r.ok).toBe(true);
       if (!r.ok) return;
@@ -237,14 +240,17 @@ describe('F8-S1 — a NO-OP is not an event', () => {
   it('re-asserting the stored state reports changed:false and the SAME map', () => {
     const first = applyIcdDecision(
       { rawIcdCodes: THREE, rawIcdDecisions: null },
-      { code: 'I10', decision: 'rejected', userId: USER, at: AT },
+      { code: 'I10', decision: 'rejected', userId: USER, at: AT, reason: 'other' },
     );
     expect(first.ok).toBe(true);
     if (!first.ok) return;
 
+    // ⚠️ THE SAME REASON ON BOTH CALLS, OR IT IS NOT A NO-OP. F8-S2 makes a
+    // no-op sameness of the whole RECORD, not just of the state — see the
+    // reason-change arm added below, which asserts the other direction.
     const again = applyIcdDecision(
       { rawIcdCodes: THREE, rawIcdDecisions: first.decisions },
-      { code: 'I10', decision: 'rejected', userId: USER, at: '2026-08-25T14:00:00.000Z' },
+      { code: 'I10', decision: 'rejected', userId: USER, at: '2026-08-25T14:00:00.000Z', reason: 'other' },
     );
     expect(again.ok).toBe(true);
     if (!again.ok) return;

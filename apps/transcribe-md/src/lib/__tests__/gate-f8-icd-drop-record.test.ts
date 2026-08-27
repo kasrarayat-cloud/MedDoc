@@ -464,11 +464,73 @@ describe('the narrowers are EXHAUSTIVE at runtime, not only at compile time', ()
     expect(Object.keys(d[0]).sort()).toEqual([...ICD_DROP_RECORD_KEYS].sort());
   });
 
-  it('⚠️ readIcdDecisions emits exactly ICD_DECISION_RECORD_KEYS — F8-S1s residual', () => {
+  // ⚠️ F8-S2 SPLIT THIS ARM IN TWO, AND THE SPLIT MAKES IT STRONGER.
+  //
+  // It used to assert that EVERY narrowed record carries EVERY key. Ruling
+  // #154 added `reason`, which is present on `rejected` and absent on
+  // `accepted` BY DESIGN — so the single arm became false for a reason that
+  // was not a defect, and "make it pass" would have meant deleting the
+  // exhaustiveness proof F8-S1 filed this residual to get.
+  //
+  // Instead both sides are asserted. The REJECTED arm keeps the original
+  // guarantee in full — all four keys, so a field added to the interface and
+  // forgotten in the narrower is still caught. The ACCEPTED arm adds what the
+  // old one could not express: that `reason` is genuinely ABSENT, not merely
+  // undefined, which is the half of #154's biconditional a stored
+  // `{state:'accepted', reason:'…'}` would violate.
+  it('⚠️ readIcdDecisions emits exactly ICD_DECISION_RECORD_KEYS on a REJECTED record', () => {
+    const m = readIcdDecisions({
+      'K21.00': {
+        state: 'rejected',
+        at: '2026-08-25T00:00:00.000Z',
+        byUserId: 'u1',
+        reason: 'not_supported_by_note',
+      },
+    });
+    expect(Object.keys(m['K21.00']).sort()).toEqual([...ICD_DECISION_RECORD_KEYS].sort());
+  });
+
+  it('⚠️ an ACCEPTED record emits the required keys and NO `reason` key at all', () => {
     const m = readIcdDecisions({
       'K21.00': { state: 'accepted', at: '2026-08-25T00:00:00.000Z', byUserId: 'u1' },
     });
-    expect(Object.keys(m['K21.00']).sort()).toEqual([...ICD_DECISION_RECORD_KEYS].sort());
+    const required = [...ICD_DECISION_RECORD_KEYS].filter((k) => k !== 'reason');
+    expect(Object.keys(m['K21.00']).sort()).toEqual(required.sort());
+    // `in`, not `=== undefined`: a present-but-undefined key serialises into
+    // JSONB as `"reason": null` and would be a state-contradicting artefact.
+    expect('reason' in m['K21.00']).toBe(false);
+  });
+
+  it('⚠️ a stray `reason` on an ACCEPTED record is STRIPPED, and the decision SURVIVES', () => {
+    // The asymmetry is deliberate and is documented at the narrower: the state
+    // is well formed and is a real clinical decision, so the uninterpretable
+    // annotation goes and the decision stays. Deleting the record would
+    // destroy a doctor's accept to punish a stray field beside it.
+    const m = readIcdDecisions({
+      'K21.00': {
+        state: 'accepted',
+        at: '2026-08-25T00:00:00.000Z',
+        byUserId: 'u1',
+        reason: 'not_supported_by_note',
+      },
+    });
+    expect(m['K21.00']?.state).toBe('accepted');
+    expect('reason' in m['K21.00']).toBe(false);
+  });
+
+  it('⚠️ a REJECTED record with an UNKNOWN reason is DROPPED, not repaired', () => {
+    // Dropping returns the code to UNDECIDED, so it surfaces to the doctor
+    // again — over-shooting to the edge, where there is a fence. Inventing a
+    // reason would assert a clinical rationale nobody gave.
+    const m = readIcdDecisions({
+      'K21.00': {
+        state: 'rejected',
+        at: '2026-08-25T00:00:00.000Z',
+        byUserId: 'u1',
+        reason: 'because_i_said_so',
+      },
+    });
+    expect(m['K21.00']).toBeUndefined();
   });
 
   it('⚠️ a field added to the stored decision and NOT to the narrower is STRIPPED', () => {

@@ -216,16 +216,20 @@ describe('the happy path — and it is asserted FIRST so every refusal below has
   });
 
   it('each intent writes its OWN label — CLEARED is a real event', async () => {
-    const cases: Array<[string, string, unknown]> = [
-      ['accepted', 'ICD_CODE_ACCEPTED', null],
-      ['rejected', 'ICD_CODE_REJECTED', null],
+    // F8-S2 / ruling #154 — `rejected` carries a reason token; the other two
+    // intents must NOT (`reason_not_allowed`), which the dedicated arms below
+    // assert in both directions.
+    const cases: Array<[string, string, unknown, string | undefined]> = [
+      ['accepted', 'ICD_CODE_ACCEPTED', null, undefined],
+      ['rejected', 'ICD_CODE_REJECTED', null, 'not_supported_by_note'],
       [
         'cleared',
         'ICD_CODE_DECISION_CLEARED',
         { 'K21.00': { state: 'accepted', at: '2026-08-25T10:00:00.000Z', byUserId: DOCTOR } },
+        undefined,
       ],
     ];
-    for (const [decision, label, stored] of cases) {
+    for (const [decision, label, stored, reason] of cases) {
       vi.clearAllMocks();
       mocks.auth.mockResolvedValue({
         user: { id: DOCTOR, email: 'doc@test.dev', practiceId: PRACTICE },
@@ -233,7 +237,11 @@ describe('the happy path — and it is asserted FIRST so every refusal below has
       mocks.updateMany.mockResolvedValue({ count: 1 });
       mocks.findFirst.mockResolvedValue(visitRow({ icdDecisions: stored }));
 
-      const res = (await call({ code: 'K21.00', decision })) as unknown as Res;
+      const res = (await call({
+        code: 'K21.00',
+        decision,
+        ...(reason ? { reason } : {}),
+      })) as unknown as Res;
       expect(res.status, `${decision} did not succeed`).toBe(200);
       expect(res.body.changed, `${decision} was a no-op`).toBe(true);
       expect(mocks.logAudit.mock.calls[0][0].action).toBe(label);
@@ -241,7 +249,7 @@ describe('the happy path — and it is asserted FIRST so every refusal below has
   });
 
   it('a differently-cased code resolves, and the audit row records the NORMALISED code', async () => {
-    await call({ code: ' k21.00 ', decision: 'rejected' });
+    await call({ code: ' k21.00 ', decision: 'rejected', reason: 'other' });
     expect(mocks.updateMany).toHaveBeenCalledTimes(1);
     expect(mocks.logAudit.mock.calls[0][0].metadata.code).toBe('K21.00');
   });
@@ -251,23 +259,39 @@ describe('⚠️ THE FREEZE — a signed visit refuses, server-side', () => {
   it.each([
     ['signedAt set', { signedAt: new Date('2026-08-25T09:00:00.000Z') }],
     ['status SIGNED', { status: TranscribeVisitStatus.SIGNED }],
-  ])('%s → 409 VISIT_LOCKED, and NOTHING is written', async (_label, over) => {
+  ])('%s → 409 VISIT_LOCKED, NO decision is written, and the refusal IS audited', async (_label, over) => {
     mocks.findFirst.mockResolvedValue(visitRow(over));
     const res = (await call({ code: 'K21.00', decision: 'accepted' })) as unknown as Res;
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('VISIT_LOCKED');
+    // THE CLAIM THAT MUST SURVIVE: no DECISION reaches the visit row.
     expect(mocks.updateMany).not.toHaveBeenCalled();
-    expect(mocks.logAudit).not.toHaveBeenCalled();
+    // ⚠️ AND THE CLAIM F8-S2 REVERSES, DELIBERATELY. S1 asserted no audit row
+    // here and said why: it matched `POST /em-score/override`, which audits
+    // its write and not its 409s. #148(e) recorded the re-arming condition in
+    // the same breath — *"the moment a UI can invoke this route, a refused
+    // decision becomes an event somebody will ask about"* — and this slice is
+    // that UI. An attempt to re-code a SIGNED record is the single most
+    // dispute-relevant refusal on this route, so it is now a row.
+    expect(mocks.logAudit).toHaveBeenCalledTimes(1);
+    expect(mocks.logAudit.mock.calls[0][0].action).toBe('ICD_CODE_DECISION_REFUSED');
+    expect(mocks.logAudit.mock.calls[0][0].metadata).toEqual({
+      code: 'K21.00',
+      attempted: 'accepted',
+      refusal: 'visit_locked',
+    });
   });
 });
 
 describe('the suggested set is the authority', () => {
-  it('a code the suggester never proposed → 409, and NOTHING is written', async () => {
+  it('a code the suggester never proposed → 409, no decision written, refusal audited', async () => {
     const res = (await call({ code: 'Z99.9', decision: 'accepted' })) as unknown as Res;
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('ICD_CODE_NOT_SUGGESTED');
     expect(mocks.updateMany).not.toHaveBeenCalled();
-    expect(mocks.logAudit).not.toHaveBeenCalled();
+    expect(mocks.logAudit).toHaveBeenCalledTimes(1);
+    expect(mocks.logAudit.mock.calls[0][0].action).toBe('ICD_CODE_DECISION_REFUSED');
+    expect(mocks.logAudit.mock.calls[0][0].metadata.refusal).toBe('code_not_suggested');
   });
 
   it('a visit with NO codes at all refuses every decision', async () => {

@@ -75,6 +75,56 @@ export type IcdDecisionState = (typeof ICD_DECISION_STATES)[number];
 export const ICD_DECISION_INTENTS = ['accepted', 'rejected', 'cleared'] as const;
 export type IcdDecisionIntent = (typeof ICD_DECISION_INTENTS)[number];
 
+/**
+ * ⚠️ THE REJECTION REASON IS A CLOSED VOCABULARY OF TOKENS. IT IS NEVER FREE
+ * TEXT, AND THAT IS RULING #154 (PROVISIONAL), NOT A STYLE CHOICE.
+ *
+ * F8-S2's acceptance walk requires *"reject one code WITH A REASON"*, so a
+ * reason had to exist. The only question was its SHAPE, and this column is
+ * read by client components and mirrored into audit metadata — the two places
+ * this repository has been most careful to keep free of patient context.
+ *
+ * ⚠️ A DOCTOR-TYPED REASON IS PHI-CAPABLE, AND NOTHING DOWNSTREAM COULD TELL.
+ * `#148(d)` already stores `{code, fromState, toState}` and NOTHING else,
+ * reasoning verbatim that `07a-icd-coding.ts:471-473` records that a free-form
+ * description "can carry patient context". `#149(d)` forbids storing a
+ * model-authored string for the same reason. A free-text box on a rejection is
+ * the same hazard wearing the clinician's hand instead of the model's — *"not
+ * relevant, patient's mother had this not him"* is a sentence a real doctor
+ * would type, and it would land in a JSONB column the browser reads.
+ *
+ * So the reason is a TOKEN. A token cannot carry a patient detail, it is
+ * greppable, it aggregates, and widening the set later is a visible edit.
+ *
+ * ⚠️ HONEST LIMIT, STATED RATHER THAN DESIGNED AROUND: `other` records that the
+ * doctor's reason was none of the four, and the actual reason is then NOT
+ * RECONSTRUCTABLE. That is the accepted cost of refusing a free-text field, and
+ * it is the safe direction — an unrecoverable *reason* is cheaper than an
+ * unrecoverable *disclosure*.
+ *
+ * ⚠️ AND THE ORDER OF THIS ARRAY IS NOT COSMETIC — it is the order the surface
+ * offers, so a change here changes what a doctor reaches for first.
+ */
+export const ICD_REJECTION_REASONS = [
+  /** The evidence quote does not support the code. */
+  'not_supported_by_note',
+  /** Real for this patient, but not addressed at this encounter. */
+  'not_this_encounter',
+  /** Right family, wrong code — laterality, severity, episode. */
+  'wrong_specificity',
+  /** Already covered by another code on this visit. */
+  'duplicate_of_another_code',
+  /** None of the above. See the honest limit above. */
+  'other',
+] as const;
+export type IcdRejectionReason = (typeof ICD_REJECTION_REASONS)[number];
+
+export function isIcdRejectionReason(raw: unknown): raw is IcdRejectionReason {
+  return (
+    typeof raw === 'string' && (ICD_REJECTION_REASONS as readonly string[]).includes(raw)
+  );
+}
+
 export interface IcdDecisionRecord {
   state: IcdDecisionState;
   /** ISO-8601. When the doctor made this decision. */
@@ -82,6 +132,13 @@ export interface IcdDecisionRecord {
   /** The user id of the actor. A user id, never a name — this column is read
    *  by client components and an id is not PHI. */
   byUserId: string;
+  /**
+   * ⚠️ PRESENT ON `rejected` AND ABSENT ON `accepted` — a BICONDITIONAL, and
+   * both directions are enforced in `applyIcdDecision` rather than left to the
+   * caller. Optional in the TYPE because an accepted record genuinely has no
+   * reason; "optional" here means *state-dependent*, never *nice to have*.
+   */
+  reason?: IcdRejectionReason;
 }
 
 /**
@@ -111,7 +168,7 @@ export interface IcdDecisionRecord {
  * about. What this buys is that the field can never be forgotten going FORWARD;
  * the deploy-order rule stands and is restated at `readIcdDecisions`.
  */
-export const ICD_DECISION_RECORD_KEYS = ['state', 'at', 'byUserId'] as const;
+export const ICD_DECISION_RECORD_KEYS = ['state', 'at', 'byUserId', 'reason'] as const;
 
 type _NoFieldUnwritten =
   Exclude<keyof IcdDecisionRecord, (typeof ICD_DECISION_RECORD_KEYS)[number]> extends never
@@ -128,9 +185,25 @@ const _decisionKeysAreKnown: _NoKeyUnknown = true;
 
 export type IcdDecisionMap = Record<string, IcdDecisionRecord>;
 
-/** The only refusal the pure layer can produce. Everything else the route
- *  refuses before it gets here (auth, ownership, signed, status, payload). */
-export type IcdDecisionRefusal = 'code_not_suggested';
+/**
+ * The refusals the pure layer can produce. Everything else the route refuses
+ * before it gets here (auth, ownership, signed, status, payload).
+ *
+ * ⚠️ THE TWO REASON REFUSALS ARE A BICONDITIONAL, AND BOTH HALVES ARE REAL.
+ * `reason_required` is the obvious one. `reason_not_allowed` exists because a
+ * caller that attaches a reason to an ACCEPT would otherwise have it stored,
+ * and a reader meeting `{state:'accepted', reason:'not_supported_by_note'}`
+ * cannot tell whether it is a stale artefact or a decision that means the
+ * opposite of what its state says. A record that contradicts itself is worse
+ * than a refused request — the same asymmetry `#149(g)` applies to a code that
+ * is both suggested and dropped.
+ */
+export const ICD_DECISION_REFUSALS = [
+  'code_not_suggested',
+  'reason_required',
+  'reason_not_allowed',
+] as const;
+export type IcdDecisionRefusal = (typeof ICD_DECISION_REFUSALS)[number];
 
 export type ApplyIcdDecisionResult =
   | {
@@ -233,7 +306,29 @@ export function readIcdDecisions(rawIcdDecisions: unknown): IcdDecisionMap {
     if (state !== 'accepted' && state !== 'rejected') continue;
     if (typeof rec.at !== 'string' || rec.at.length === 0) continue;
     if (typeof rec.byUserId !== 'string' || rec.byUserId.length === 0) continue;
-    out[code] = { state, at: rec.at, byUserId: rec.byUserId };
+
+    // ── THE REASON, AND THE TWO SIDES ARE DELIBERATELY NOT SYMMETRIC ────────
+    //
+    // ⚠️ A `rejected` RECORD WITH NO USABLE REASON IS DROPPED, AND THE HARM
+    // DIRECTION IS WHY. Dropping returns the code to UNDECIDED, so it surfaces
+    // to the doctor again and is decided a second time — over-shooting to the
+    // edge, where there is a fence. Keeping it would mean rendering a rejection
+    // whose stated rationale is missing or unreadable, and INVENTING one would
+    // be asserting a clinical rationale nobody gave. Same policy as every other
+    // malformed field above: dropped, never repaired.
+    //
+    // ⚠️ AN `accepted` RECORD CARRYING A STRAY REASON KEEPS THE RECORD AND
+    // DROPS THE FIELD — the opposite resolution, on purpose. The STATE is well
+    // formed and it is a real clinical decision a doctor made; deleting it
+    // because of an uninterpretable annotation beside it would destroy the
+    // decision to punish the annotation. The annotation cannot be honoured
+    // (see `reason_not_allowed`), so it is the annotation that goes.
+    if (state === 'rejected') {
+      if (!isIcdRejectionReason(rec.reason)) continue;
+      out[code] = { state, at: rec.at, byUserId: rec.byUserId, reason: rec.reason };
+    } else {
+      out[code] = { state, at: rec.at, byUserId: rec.byUserId };
+    }
   }
   return out;
 }
@@ -254,23 +349,68 @@ export function readIcdDecisions(rawIcdDecisions: unknown): IcdDecisionMap {
  */
 export function applyIcdDecision(
   input: { rawIcdCodes: unknown; rawIcdDecisions: unknown },
-  intent: { code: string; decision: IcdDecisionIntent; userId: string; at: string },
+  intent: {
+    code: string;
+    decision: IcdDecisionIntent;
+    userId: string;
+    at: string;
+    /** Required when `decision === 'rejected'`, forbidden otherwise. */
+    reason?: unknown;
+  },
 ): ApplyIcdDecisionResult {
   const code = normalizeIcdCode(intent.code);
   const suggested = new Set(suggestedIcdCodes(input.rawIcdCodes));
   if (!code || !suggested.has(code)) return { ok: false, reason: 'code_not_suggested' };
 
+  // ⚠️ THE REASON GATE RUNS BEFORE THE NO-OP CHECK, AND THE ORDER IS
+  // LOAD-BEARING. Were it after, re-rejecting an already-rejected code with a
+  // GARBAGE reason would take the `from === to` early return and answer
+  // `ok: true, changed: false` — a malformed payload reported as a successful
+  // no-op. A caller cannot distinguish that from a legitimate re-assertion, so
+  // an invalid request would be silently absorbed. Validate the payload, then
+  // decide whether it changes anything.
+  const hasReason = intent.reason !== undefined && intent.reason !== null;
+  if (intent.decision === 'rejected') {
+    if (!isIcdRejectionReason(intent.reason)) return { ok: false, reason: 'reason_required' };
+  } else if (hasReason) {
+    return { ok: false, reason: 'reason_not_allowed' };
+  }
+
   const decisions = readIcdDecisions(input.rawIcdDecisions);
-  const from = decisions[code]?.state ?? null;
+  const existing = decisions[code] ?? null;
+  const from = existing?.state ?? null;
   const to = intent.decision === 'cleared' ? null : intent.decision;
 
-  if (from === to) {
+  // ⚠️ A NO-OP IS SAMENESS OF THE WHOLE RECORD, NOT JUST OF THE STATE.
+  // `rejected(not_supported_by_note) -> rejected(wrong_specificity)` is a
+  // DIFFERENT clinical statement about the same code, and a state-only
+  // comparison would call it unchanged: nothing written, no audit row, and the
+  // doctor's correction discarded while the UI reports success. That is the
+  // silent-no-op class this repository has already shipped once.
+  const sameState = from === to;
+  const sameReason =
+    to !== 'rejected' || existing?.reason === (intent.reason as IcdRejectionReason);
+  if (sameState && sameReason) {
     return { ok: true, changed: false, decisions, from, to };
   }
 
   const next: IcdDecisionMap = { ...decisions };
   if (to === null) delete next[code];
-  else next[code] = { state: to, at: intent.at, byUserId: intent.userId };
+  else if (to === 'rejected') {
+    next[code] = {
+      state: to,
+      at: intent.at,
+      byUserId: intent.userId,
+      reason: intent.reason as IcdRejectionReason,
+    };
+  } else {
+    // No `reason` key at all on an accept — not `reason: undefined`. The two
+    // serialise differently through `JSON.stringify` into JSONB, and a stored
+    // `"reason": null` would survive the narrower's `isIcdRejectionReason`
+    // check as "not a valid reason" on a state that is not supposed to have
+    // one — noise in a clinical column with no reader.
+    next[code] = { state: to, at: intent.at, byUserId: intent.userId };
+  }
 
   return { ok: true, changed: true, decisions: next, from, to };
 }
@@ -303,6 +443,17 @@ export interface IcdDecisionProjection {
   orphaned: string[];
   /** Raw suggested rows that collapsed into an earlier one by code. */
   duplicateSuggestions: number;
+  /**
+   * The narrowed decision map itself, so a surface can render WHY a code was
+   * rejected without a second read of the raw column.
+   *
+   * ⚠️ EXPOSED SO THERE IS ONE NARROWER, NOT TWO. The alternative — the surface
+   * calling `readIcdDecisions` itself — is a read path and a write path
+   * resolving the same data with two matchers, which this file's own header
+   * names as a shipped defect in this repository. The projection is already the
+   * one thing every consumer reads; the reason travels with it.
+   */
+  decisions: IcdDecisionMap;
 }
 
 /**
@@ -339,6 +490,7 @@ export function projectIcdDecisions(
     undecided,
     orphaned,
     duplicateSuggestions: duplicateSuggestionCount(rawIcdCodes),
+    decisions,
   };
 }
 

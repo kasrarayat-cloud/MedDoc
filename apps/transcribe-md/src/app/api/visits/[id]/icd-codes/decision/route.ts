@@ -36,10 +36,12 @@ import { visitByIdScope, scopedUpdate, type PracticeId } from '@/lib/practice-sc
 import { logAudit, type AuditAction } from '@/lib/audit';
 import {
   ICD_DECISION_INTENTS,
+  ICD_REJECTION_REASONS,
   applyIcdDecision,
   icdDecisionSummary,
   projectIcdDecisions,
   type IcdDecisionIntent,
+  type IcdDecisionRefusal,
 } from '@/lib/icd-decisions';
 
 export const runtime = 'nodejs';
@@ -55,6 +57,13 @@ const MAX_CODE_LENGTH = 10;
 const BodySchema = z.object({
   code: z.string().trim().min(2).max(MAX_CODE_LENGTH),
   decision: z.enum(ICD_DECISION_INTENTS),
+  // ⚠️ A CLOSED ENUM AT THE EDGE, NEVER A STRING — RULING #154 (PROVISIONAL).
+  // `z.enum` REFUSES anything outside the vocabulary at the boundary, so a
+  // free-text rejection reason cannot reach the column even if a client sends
+  // one. `z.string()` here with validation deeper in would have left one
+  // forgotten call site between a doctor's prose and a JSONB blob the browser
+  // reads. The pure layer re-checks it anyway; this is the outer of two.
+  reason: z.enum(ICD_REJECTION_REASONS).optional(),
 });
 
 /** One label per intent. `cleared` is its own event — see the migration. */
@@ -63,6 +72,35 @@ const AUDIT_ACTION: Record<IcdDecisionIntent, AuditAction> = {
   rejected: 'ICD_CODE_REJECTED',
   cleared: 'ICD_CODE_DECISION_CLEARED',
 };
+
+/**
+ * ⚠️ #148(e)'s OBLIGATION, FALLING DUE EXACTLY WHERE IT SAID IT WOULD.
+ *
+ * S1 deliberately did not audit refusals, and wrote its own re-arming
+ * condition down: *"the moment a UI can invoke this route, a refused decision
+ * becomes an event somebody will ask about — S2 revisits this."* **This slice
+ * is that UI.** So refusals are audited now, under a fourth label.
+ *
+ * ⚠️ WHAT MAKES A REFUSAL WORTH A ROW, AND WHY IT IS NOT ALL OF THEM. A row is
+ * written when an AUTHENTICATED, PRACTICE-SCOPED caller was refused a decision
+ * on a visit they can see. Those are the ones a coding dispute asks about:
+ * *"the doctor says they rejected that code — what happened?"*
+ *
+ * **401 is NOT audited**: there is no actor to attribute it to, and
+ * `logAudit` needs one. **404 is NOT audited**: it is the ownership gate, it
+ * fires on a foreign or non-existent id, and writing a row would let an
+ * unauthorised prober append to the audit log of a practice they cannot read —
+ * turning an information-leak refusal into an information-leak WRITE.
+ */
+const REFUSAL_AUDIT_LABEL: AuditAction = 'ICD_CODE_DECISION_REFUSED';
+
+/** The refusal tokens that reach the audit row. Every one of them is emitted
+ *  by code in this file or by `applyIcdDecision`, never composed from prose. */
+type RefusalToken =
+  | IcdDecisionRefusal
+  | 'visit_not_active'
+  | 'visit_locked'
+  | 'visit_not_ready';
 
 export const POST = withApiHandler<{ id: string }>(
   'api:visits:icd-codes:decision',
@@ -116,14 +154,26 @@ export const POST = withApiHandler<{ id: string }>(
         userId,
         code: parsed.data.code,
         decision: parsed.data.decision,
+        reason: parsed.data.reason,
       });
     });
 
     // ⚠️ THE AUDIT ROW IS EMITTED OUTSIDE THE TRANSACTION, ON PURPOSE.
     // `logAudit` is fire-and-forget so an audit failure can never refuse a
     // clinical action; running it inside would attach that fire-and-forget
-    // promise to a transaction that has already resolved. It fires only when
-    // the write actually committed, because `decide` returns it only then.
+    // promise to a transaction that has already resolved.
+    //
+    // ⚠️ THIS COMMENT USED TO END "it fires only when the write actually
+    // committed, because `decide` returns it only then." F8-S2 MADE THAT
+    // FALSE and the adversarial pass caught it on a re-read. Since #148(e)'s
+    // refusal audit landed, `decide` returns a row in TWO cases:
+    //
+    //   · a COMMITTED decision      -> ICD_CODE_ACCEPTED / _REJECTED / _CLEARED
+    //   · a REFUSED one, no write   -> ICD_CODE_DECISION_REFUSED
+    //
+    // What is still true, and is the invariant worth stating: a NO-OP returns
+    // no row at all, because re-asserting the stored state is not an event.
+    // The discriminator is the LABEL, never the presence of a row.
     if (audit) void logAudit(audit);
 
     return response;
@@ -136,6 +186,33 @@ interface DecideInput {
   userId: string;
   code: string;
   decision: IcdDecisionIntent;
+  reason?: string;
+}
+
+/**
+ * The refusal audit row. Metadata carries the SAME fields the success rows do
+ * plus the refusal token — the code only, never the description, exactly as
+ * `#148(d)` requires and for the identical reason.
+ *
+ * ⚠️ `attempted` IS THE INTENT, NOT A STATE TRANSITION. A refused request made
+ * no transition, so there is no `fromState`/`toState` to report and inventing a
+ * pair would make a refusal look like a decision in the one log a coding
+ * dispute reads. Different event, different metadata shape.
+ */
+function refusalAudit(
+  input: DecideInput,
+  refusal: RefusalToken,
+): Parameters<typeof logAudit>[0] {
+  return {
+    action: REFUSAL_AUDIT_LABEL,
+    targetType: 'transcribe_visit',
+    targetId: input.visitId,
+    metadata: {
+      code: input.code.trim().toUpperCase(),
+      attempted: input.decision,
+      refusal,
+    },
+  };
 }
 
 /**
@@ -146,6 +223,9 @@ interface DecideInput {
  * Returns the response plus the audit row to emit, if any. A NO-OP returns no
  * audit row: re-asserting the stored state is not an event, the same reasoning
  * `PROMO_GRANT_CREDITED` uses for its own already-granted case.
+ *
+ * ⚠️ A RETURNED ROW NO LONGER IMPLIES A WRITE — see the call site. Since
+ * #148(e)'s refusal audit, a refusal returns a row too, under its own label.
  */
 async function decide(
   // The interactive-transaction client. Annotated because the `@meddoc/db`
@@ -174,7 +254,7 @@ async function decide(
   if (visit.deletedAt !== null || visit.archivedAt !== null) {
     return {
       response: apiError('Visit is no longer active.', 400, { code: 'VISIT_NOT_ACTIVE' }),
-      audit: null,
+      audit: refusalAudit(input, 'visit_not_active'),
     };
   }
 
@@ -192,7 +272,10 @@ async function decide(
         409,
         { code: 'VISIT_LOCKED' },
       ),
-      audit: null,
+      // ⚠️ THE MOST IMPORTANT ROW OF THE FOUR. An attempt to change coding on
+      // a SIGNED record is precisely the event a coding dispute asks about, and
+      // until this slice it left no trace anywhere.
+      audit: refusalAudit(input, 'visit_locked'),
     };
   }
 
@@ -206,17 +289,46 @@ async function decide(
         409,
         { code: 'VISIT_NOT_READY' },
       ),
-      audit: null,
+      audit: refusalAudit(input, 'visit_not_ready'),
     };
   }
 
   const at = new Date().toISOString();
   const result = applyIcdDecision(
     { rawIcdCodes: visit.icdCodes, rawIcdDecisions: visit.icdDecisions },
-    { code: input.code, decision: input.decision, userId: input.userId, at },
+    {
+      code: input.code,
+      decision: input.decision,
+      userId: input.userId,
+      at,
+      reason: input.reason,
+    },
   );
 
   if (!result.ok) {
+    // ⚠️ ONE ARM PER REFUSAL, AND THE STATUS CODES DIFFER ON PURPOSE.
+    // `code_not_suggested` is a CONFLICT with this visit's state — the code is
+    // well formed and simply not on this note (409). The two reason refusals
+    // are malformed REQUESTS: the caller sent a payload that is invalid for the
+    // intent it declared, which no amount of retrying against a different visit
+    // would fix (400). Collapsing them into one status would tell a client to
+    // retry a request that can never succeed.
+    if (result.reason === 'reason_required') {
+      return {
+        response: apiError('A rejection requires a reason.', 400, {
+          code: 'ICD_REASON_REQUIRED',
+        }),
+        audit: refusalAudit(input, 'reason_required'),
+      };
+    }
+    if (result.reason === 'reason_not_allowed') {
+      return {
+        response: apiError('A reason may only accompany a rejection.', 400, {
+          code: 'ICD_REASON_NOT_ALLOWED',
+        }),
+        audit: refusalAudit(input, 'reason_not_allowed'),
+      };
+    }
     // ⚠️ THE ONLY WAY A CODE ENTERS THE RECORD IS BY HAVING BEEN SUGGESTED.
     // The suggester's output carries a mandatory `evidence_quote` and has
     // already passed `isValidIcd10`. A code arriving from anywhere else has
@@ -228,7 +340,7 @@ async function decide(
       response: apiError('That code is not among this visit’s suggested codes.', 409, {
         code: 'ICD_CODE_NOT_SUGGESTED',
       }),
-      audit: null,
+      audit: refusalAudit(input, 'code_not_suggested'),
     };
   }
 
@@ -264,6 +376,13 @@ async function decide(
             code: input.code.trim().toUpperCase(),
             fromState: result.from,
             toState: result.to,
+            // ⚠️ A TOKEN FROM A CLOSED SET, WHICH IS THE ONLY REASON IT MAY BE
+            // HERE. `#148(d)` excludes the AI-emitted DESCRIPTION from this row
+            // because free-form prose can carry patient context; ruling #154
+            // makes the rejection reason an enum precisely so it cannot. Spread
+            // conditionally so an accept's metadata is byte-identical to what
+            // S1 wrote — an absent key, not `reason: null`.
+            ...(result.to === 'rejected' ? { reason: input.reason } : {}),
           },
         }
       : null,

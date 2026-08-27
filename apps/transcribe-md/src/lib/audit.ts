@@ -137,6 +137,12 @@ export type AuditAction =
   | 'ICD_CODE_ACCEPTED'
   | 'ICD_CODE_REJECTED'
   | 'ICD_CODE_DECISION_CLEARED'
+  // F8-S2 — the fourth label, discharging #148(e)'s recorded obligation: S1
+  // left refusals unaudited BECAUSE no UI could invoke the route, and named
+  // this slice as the one that revisits it. See the route for which refusals
+  // earn a row and which two deliberately do not (401 has no actor; 404 would
+  // let a prober write into a practice's log).
+  | 'ICD_CODE_DECISION_REFUSED'
   // §164.312(b) audit-row coverage extension (QA agent v3.2 F-09/F-10/F-11)
   | 'VIEWED_DASHBOARD'
   | 'VISIT_CREATED'
