@@ -146,7 +146,7 @@ than a rediscovery, and rediscovery is the failure this file exists to stop.
 >
 > The head answers *which ruling and what status*. The archive answers *why*.
 
-**121 rulings.** **23 OWNER-RULING** · **4 RATIFIED** · **43 PROVISIONAL** · **1 SUPERSEDED** · **50 RECORDED**
+**122 rulings.** **24 OWNER-RULING** · **4 RATIFIED** · **43 PROVISIONAL** · **1 SUPERSEDED** · **50 RECORDED**
 
 | date | # | status | ruling | verdict, in one line | full body |
 |---|---|---|---|---|---|
@@ -271,6 +271,7 @@ than a rediscovery, and rediscovery is the failure this file exists to stop.
 | 2026-08-25 | #150 | OWNER-RULING | AUTHORITY LIVES IN EXACTLY ONE FILE. AGENTS.md § STANDING AUTHORITY IS THE SINGLE SOURCE FOR WH… | **THE QUESTION.** The loop found and NAMED a live contradiction rather than resolving it: `RELAY.md`'s queue h… | [`2026-08-20--2026-08-26.md`](rulings/2026-08-20--2026-08-26.md) |
 | 2026-08-26 | #151 | PROVISIONAL | (PROPOSED — unlanded, refer to it as feat/f29-orphan-branch-sweep until it lands) — A GRANT RUL… | **THE QUESTION.** Canon's *"AN ENTRY THAT NAMES AN INSTRUMENT VERIFIES THAT INSTRUMENT'S GRANT, IN THE SAME CO… | [`2026-08-20--2026-08-26.md`](rulings/2026-08-20--2026-08-26.md) |
 | 2026-08-27 | #152 | PROVISIONAL | THE SIGNED DOCUMENT CARRIES THE LEVEL THE DOCTOR ATTESTED, AND THE FREEZE IS GATED ON emApplies… | **THE QUESTION.** F12-e was filed as *"a shape flip leaves the signed document with no E/M while the screen sh… | [`2026-08-27.md`](rulings/2026-08-27.md) |
+| 2026-08-27 | #153 | OWNER-RULING | THE CODING SURFACE LIVES ON THE VISIT PAGE, VIA THE SMALLEST NAVIGATION PRIMITIVE THAT WORKS | **THE QUESTION, AND WHY IT WAS OWNER-CLASS.** #148 sliced F8 and parked ONE thing deliberately: *where the cod… | [`2026-08-27.md`](rulings/2026-08-27.md) |
 
 <!-- RULINGS-INDEX-END -->
 
