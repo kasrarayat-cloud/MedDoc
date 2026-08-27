@@ -1,0 +1,48 @@
+-- ===========================================================================
+-- F8-S2 — THE REFUSAL AUDIT LABEL.
+-- ---------------------------------------------------------------------------
+-- The THIRD of the three edits a new AuditAction label needs. The other two —
+-- the TypeScript union in `apps/transcribe-md/src/lib/audit.ts` and the Prisma
+-- enum in `schema.prisma` — are in the same commit as this file, deliberately,
+-- because each of them looks sufficient from the layer above it:
+--
+--   the TypeScript union   -> `tsc` is happy without this file
+--   the Prisma enum        -> `prisma validate` is happy without this file
+--   THIS FILE              -> the enum Postgres actually holds
+--
+-- That has shipped broken three times in this repository (`535d30d9` on
+-- 2026-08-03, and twice on 2026-08-06 — the second passing `prisma validate`,
+-- `tsc` and 3192 unit tests). `logAudit` is fire-and-forget so an audit write
+-- can never refuse a clinical action, which means a missing label produces
+-- `invalid input value for enum "AuditAction"` in a log nobody reads and
+-- nothing anywhere else. A refusal audit that silently fails to write is worse
+-- than no refusal audit, because the gap is invisible.
+--
+-- ---------------------------------------------------------------------------
+-- WHY A FOURTH LABEL AT ALL — #148(e)'s OWN RE-ARMING CONDITION
+-- ---------------------------------------------------------------------------
+-- F8-S1 did not audit refusals, and said why in as many words: it matched
+-- `POST /em-score/override`, which audits its write and not its 409s. It then
+-- wrote down the condition that would bring the question back:
+--
+--   > the moment a UI can invoke this route, a refused decision becomes an
+--   > event somebody will ask about — S2 revisits this and, if it changes,
+--   > adds a fourth label with its own migration.
+--
+-- F8-S2 IS that UI. Ruling #153 restates the obligation as falling due in the
+-- same change, and gates only ever gain.
+--
+-- ⚠️ Postgres has no `ALTER TYPE … DROP VALUE`, so this label is PERMANENT.
+-- That is the whole reason it is one label carrying a `refusal` token in its
+-- metadata rather than four labels — the token set can be widened for free and
+-- the enum cannot.
+--
+-- ⚠️ AND IT DEPLOYS WITH `20260825130000_f8s1_icd_decisions`, NOT BEFORE IT.
+-- Ruling #153(g): S1's migration has sat unapplied since 2026-08-25 because S1
+-- shipped with no caller, and migration and caller now go together as ONE
+-- supervised deploy. Until then `assert-migrations-applied.sh` reads red on
+-- prod and QA — DECLARED, not a finding — and its printed remediation advice
+-- must not be followed.
+-- ===========================================================================
+
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'ICD_CODE_DECISION_REFUSED';

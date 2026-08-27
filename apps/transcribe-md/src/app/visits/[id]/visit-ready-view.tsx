@@ -48,6 +48,8 @@ import { createDeferredScroll } from '@/lib/rounds/deferred-scroll';
 import { ReviewDocumentView } from './review-document-view';
 import { ReviewSignBar } from './review-sign-bar';
 import { SignedDocumentView } from './signed-document-view';
+import { VisitViewSwitch } from './visit-view-switch';
+import { IcdCodingView } from './icd-coding-view';
 import { extractIcdRows } from '@/lib/em-coding/icd-rows';
 import { BillingCardC3 } from './billing-card-c3';
 import { SoapEditor } from './soap-editor';
@@ -182,6 +184,8 @@ export interface VisitReadyViewProps {
   } | null;
   /** T-M6 automation-layer outputs. */
   icdCodes: unknown;
+  /** F8-S2 — the clinician decision map backing the Coding view. */
+  icdDecisions: unknown;
   cptCodes: unknown;
   /** Still read: the EXPORT path prints the medication list. Owner ruling #109
    *  deleted the surface that displayed prescription SAFETY, not the data. */
@@ -1036,6 +1040,38 @@ export function VisitReadyView(props: VisitReadyViewProps) {
         />
       );
 
+      // ── F8-S2 — THE CODING VIEW, ON THE VISIT'S PAPER ────────────────────
+      //
+      // Ruling #153(a)/(b): the doctor reaches coding WITHOUT LEAVING THE
+      // VISIT, through the smallest navigation primitive that works. Composed
+      // HERE, around the hoisted `paper`, so BOTH returns below — the Rounds
+      // stage and the plain one — get it from one place. Building it at each
+      // return would be the "second copies" defect this const was hoisted to
+      // avoid in the first place.
+      //
+      // ⚠️ `paper` KEEPS ITS REACT IDENTITY, WHICH IS THE WHOLE REASON
+      // `VisitViewSwitch` HIDES RATHER THAN UNMOUNTS. See that file's header:
+      // `ReviewDocumentView` holds the in-session E/M confirm in local state,
+      // so a ternary here would destroy a doctor's E/M confirmation every time
+      // they glanced at the coding list, and silently re-block Sign.
+      const paperWithCoding = (
+        <VisitViewSwitch
+          note={paper}
+          coding={
+            <IcdCodingView
+              visitId={props.visitId}
+              icdCodes={props.icdCodes}
+              icdDecisions={props.icdDecisions}
+              // This whole branch is `!isSigned`, so the only way to be
+              // read-only here is the view-level `readonly` prop. The server
+              // refuses regardless — the UI is the second line, never the
+              // first (#153(e)).
+              readonly={props.readonly}
+            />
+          }
+        />
+      );
+
       // ── ROUNDS, Screen 2 — the stage ────────────────────────────────────
       // The SAME `paper` node passes through the sheet slot. It is never keyed
       // and never conditionally mounted: `ReviewDocumentView` holds the
@@ -1068,7 +1104,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               onChatBeforeClose={handleChatBeforeClose}
               onChatOpenChange={handleChatOpenChange}
             >
-              {paper}
+              {paperWithCoding}
             </RoundsStage>
 
             {/* A SIBLING OF THE STAGE, never a wrapper around the paper — the
@@ -1130,7 +1166,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           {missLine}
             {firstFillLine}
           {chatPanel}
-          {paper}
+          {paperWithCoding}
         </div>
       );
     }
@@ -1187,6 +1223,35 @@ export function VisitReadyView(props: VisitReadyViewProps) {
           />
       );
 
+      // ── F8-S2 — THE SIGNED VISIT SHOWS CODING, READ-ONLY — #153(e) ───────
+      //
+      // The coding view is reachable on a signed visit and offers NO controls.
+      // Two separate reasons, and the second is the one that matters:
+      //
+      //  1. A signed note is what a coding dispute is ABOUT. Hiding the tab
+      //     entirely would mean the one moment somebody most needs to see what
+      //     was accepted is the one moment the surface disappears.
+      //  2. `readonly` is hard-coded TRUE rather than threaded from a prop.
+      //     This whole branch is `isSigned`, so any expression that could
+      //     evaluate false here would be a bug wearing a variable's clothes —
+      //     and the failure mode is offering a doctor an action the server
+      //     answers with 409 VISIT_LOCKED. The server is the authority either
+      //     way (and now AUDITS that refusal); this makes the UI incapable of
+      //     asking.
+      const signedPaperWithCoding = (
+        <VisitViewSwitch
+          note={signedPaper}
+          coding={
+            <IcdCodingView
+              visitId={props.visitId}
+              icdCodes={props.icdCodes}
+              icdDecisions={props.icdDecisions}
+              readonly
+            />
+          }
+        />
+      );
+
       if (roundsActive && roundsView) {
         return (
           <div className="w-full qm-c3-rev2-root">
@@ -1214,7 +1279,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
                 roundsView.queue.headVisitId ? handleContinueToNext : undefined
               }
             >
-              {signedPaper}
+              {signedPaperWithCoding}
             </RoundsSigned>
           </div>
         );
@@ -1222,7 +1287,7 @@ export function VisitReadyView(props: VisitReadyViewProps) {
 
       return (
         <div className="w-full qm-c3-rev2-root">
-          {signedPaper}
+          {signedPaperWithCoding}
         </div>
       );
     }

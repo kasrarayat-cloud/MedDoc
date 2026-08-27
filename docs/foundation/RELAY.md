@@ -72,7 +72,7 @@ work.** The morning report's `### THROUGHPUT` line exists to keep that visible.
 | **F8** | 🔴 **OPEN — QUEUE HEAD** | The ICD-10 coding tab. Recon re-validated: code-side claims hold by byte-identity, population claims have drifted. Design contract `docs/foundation/f8-icd-tab-design.md` is landed and live. | **UNBLOCKED IN FULL 2026-08-27.** The last open question — *where the coding surface lives* — was answered by **ruling #153**: the visit page, smallest primitive. S1 and S1b are merged; **F8-S2 is the only remaining work and it is now startable.** Done when S2's acceptance walk passes end to end. |
 | **F8-S1** | 🟡 **MERGED · DEPLOY HELD — now SCOPED to S2** | The ICD decision substrate + migration `20260825130000_f8s1_icd_decisions`. Cited 4 of 4. | ⚠️ **RULING #153(g), 2026-08-27: the migration deploys *WITH* S2's landing, as ONE supervised deploy — migration and caller together.** That is this hold's own stated retirement condition, not a new decision: S1 shipped with no caller deliberately, and S2 is the caller. **VERIFIED HELD**: `assert-migrations-applied.sh` reads 🔴 `1 unapplied` on prod AND QA — **declared, not a finding**, and it stands until S2 lands. ⚠️ **Its printed remediation advice must NOT be followed** — applying a migration outside the §2.5 gate is exactly what this hold prevents. Deploy is a supervised act. |
 | **F8-S1b** | 🟡 **MERGED · NOT DEPLOYED** | The ICD drop record — four exits, four reason tokens (ruling #149). | Does **not** extend S1's hold. Deploy is supervised. |
-| **F8-S2** | 🔴 **OPEN — UNPARKED 2026-08-27 by ruling #153 (OWNER)** | Wire S1/S1b's substrate to a surface **on the visit page**: a segmented `Note \| Coding` control, or an equivalent two-view switch, on the visit's paper. The doctor reaches coding **without leaving the visit**. | ⚠️ **RECON FIRST** — measure the REAL component tree and propose the insertion point; do NOT start from the contract's tab-bar premise, which is already measured not to exist. **The return path is narrow and named:** if the paper *structurally cannot* host a second view, THAT finding returns — **never a re-litigation of the choice.** ⛔ **Never a separate route; never re-reaching the V2 strip** (both refused explicitly, so silence cannot be read as permission). **Constraints:** decisions flow ONLY through `icdDecisions` + the three audit labels + provenance separation (#149(a)); a **SIGNED** visit shows coding **READ-ONLY**; the primitive stays **minimal** — structure now, style at Phase-1. ⚠️ **#148(e)'s obligation falls due here by its own re-arming condition: the refusal audit is owed IN THE SAME CHANGE.** **DONE WHEN, end to end on a real visit:** reach coding → accept one code → reject one **with a reason** → both land in `icdDecisions` with correct audit labels → **sign** → the coding view reads **frozen**. |
+| **F8-S2** | 🟡 **BUILT 2026-08-27 · GATED · DEPLOY HELD — see the section below** | Wire S1/S1b's substrate to a surface **on the visit page**: a segmented `Note \| Coding` control, or an equivalent two-view switch, on the visit's paper. The doctor reaches coding **without leaving the visit**. | ⚠️ **RECON FIRST** — measure the REAL component tree and propose the insertion point; do NOT start from the contract's tab-bar premise, which is already measured not to exist. **The return path is narrow and named:** if the paper *structurally cannot* host a second view, THAT finding returns — **never a re-litigation of the choice.** ⛔ **Never a separate route; never re-reaching the V2 strip** (both refused explicitly, so silence cannot be read as permission). **Constraints:** decisions flow ONLY through `icdDecisions` + the three audit labels + provenance separation (#149(a)); a **SIGNED** visit shows coding **READ-ONLY**; the primitive stays **minimal** — structure now, style at Phase-1. ⚠️ **#148(e)'s obligation falls due here by its own re-arming condition: the refusal audit is owed IN THE SAME CHANGE.** **DONE WHEN, end to end on a real visit:** reach coding → accept one code → reject one **with a reason** → both land in `icdDecisions` with correct audit labels → **sign** → the coding view reads **frozen**. |
 | **F12-e** | 🟢 **MERGED · CITED 4 of 4 · DEPLOY HELD** | The **signed document carried no E/M while the screen showed one**. Fixed at `sign/route.ts`: the freeze is gated on `emApplies` ALONE — `emBlob &&` was the defect, not the guard. Ruling **#152** (PROVISIONAL). Merge `4895decfa5453e4688626992bf60229e9fac4df6` (PR #879). | **Cited, and HELD.** Deploy is a SUPERVISED act (`AGENTS.md` § STANDING AUTHORITY, ruling #150) — the loop does not ship a clinical-surface change, so it built, proved, merged and HELD, and this row says so. **§2.5 is owed by the deploying session, which takes its own baseline.** |
 | **F6.5** | 🔴 **OPEN — RECON DONE 2026-08-27, and the item is NOT what the row said** | `gate-r1`'s *"BOTH sides"* test asserts one side. **Re-measured:** `gate-r1-paper-structure.test.ts:188` is titled *"the lockup gaps are absolute points on BOTH sides"* and makes exactly ONE assertion, on `toTwip(LOCKUP_PT.ruleToBody)`. `eyebrowToTitle` and `titleToRule` are live and unguarded at **`docx-generator.ts:168` and `:191`** — ⚠️ **not `:106`/`:129` as this row said; the line numbers had drifted.** | Done when the guard exists. Explicitly **a guard, not a deletion**. ⚠️ **AND THE NAME IS A FOSSIL: there is no longer a second side.** `lib/pdf-generator.ts` **does not exist** — ruling #113 retired `generateVisitPdf`, and PDF now renders DOCX→Gotenberg. So the fix is not "add the missing side"; it is *guard the two live tokens on the ONE surviving generator and stop the title claiming a generator that was deleted.* |
 | **F18** | 🔵 **OPEN** | Three counts on one screen; the largest is frozen at compile time — banner reads *"79 of 80"* while the button reads *"6 of 80"*. | One count from one source, or three counts that each say which question they answer. ⚠️ Do **not** repoint the banner at mapping rows without establishing what `detectionStatus` is FOR. |
@@ -89,6 +89,122 @@ work.** The morning report's `### THROUGHPUT` line exists to keep that visible.
 | **F7** | 🟢 **OPEN — supervised, low priority** | The one-time root-scratch sweep (342 files). | ⚠️ **Re-priced 2026-08-16: F7 is TIDYING, NOT A BLOCKER — "F7 must not hold the queue."** `shred` is denied to the loop by design. |
 | **F33** *(unclaimed — this change)* | 🟠 **IN FLIGHT** | The ledger split + rotation, **plus its reader sweep**. ⚠️ **Referred to by BRANCH, not by number, until it lands** — the NUMBER-CLAIM PROTOCOL: a number is claimed by landing on `main`. Branch: `docs/ledger-split-and-rotation`. | This PR, cited. |
 | **F33-R** *(same change)* | 🟢 **BUILT — the reader sweep** | **A CENSUS PROVES CONTENT, NOT REACHABILITY.** The split was content-preserving and every reader of the two paths still broke. Fixed in this PR: `check-retirement-conditions.sh` (watched set = head + archives), `rotate-ledger.sh` (3 phantom manifest anchors; `WRITE_HEAD` never passed, so `--apply` reported success while duplicating content), the `RULINGS.md` live index (status token per row — `OWNER RULING` was 23 → **0**, `PROVISIONAL` 47 → **1**), the archive spans (2 of 25 were hulls over a promoted section, so their citations resolved past EOF), and the mandated routes in `MASTER.md` + `AGENTS.md`. | **Done.** Guarded by `gate-ledger-reachability.test.ts` — 23 arms, mutation-proved. |
+
+### 🟡 F8-S2 — THE CODING SURFACE REACHES THE VISIT PAGE — **2026-08-27, run `20260827-041645-b1` session 02**
+
+**Ruling #153 (OWNER) built; ruling #154 (PROVISIONAL) recorded. Branch
+`feat/f8-s2-coding-view`.** S1 and S1b have had no caller since 2026-08-25 —
+this is that caller.
+
+**THE RECON CAME FIRST, AS #153(f) REQUIRES, AND IT CORRECTED THE ROW IT STARTED
+FROM.** The contract's `Note · Documents · Coding` tab bar still does not exist;
+the only two `role="tablist"` elements in the visit surface
+(`visit-ready-view.tsx:1656`, `review-tabs-v2.tsx:162`) are both on the
+**flag-OFF legacy path**, which #153 refuses to re-reach. What the measurement
+found instead is **favourable and was not predicted**: both papers are already
+hoisted into single consts — `paper` (unsigned, `ReviewDocumentView`) and
+`signedPaper` (signed, `SignedDocumentView`) — each composed by **two** returns,
+a Rounds one and a plain one. They were hoisted for an unrelated reason (*"so
+the Rounds branch composes the SAME nodes instead of building second copies"*).
+**So wrapping ONE const reaches all four render paths**, and the paper's React
+identity is preserved for free.
+
+⚠️ **AND THAT IDENTITY IS THE WHOLE CLINICAL RISK OF THIS SLICE.**
+`visit-ready-view.tsx:1040-1043` states it in its own words: the paper *"is never
+keyed and never conditionally mounted: `ReviewDocumentView` holds the in-session
+E/M confirm in local state, so anything that changed its React identity would
+silently re-block Sign and read as a flaky gate."* **The obvious two-view switch
+— `{view === 'note' ? note : coding}` — unmounts the paper the moment the doctor
+looks at coding.** The walk that would have shipped:
+
+    1. doctor confirms the E/M level      -> in-session confirm held in state
+    2. doctor switches to Coding          -> paper unmounts, state destroyed
+    3. doctor switches back to Note       -> paper remounts, confirm GONE
+    4. Sign is blocked again, no explanation, nothing to click
+
+No error, no log line, and no existing gate watching. `VisitViewSwitch`
+therefore **HIDES and never unmounts**, and hides **two ways** — `hidden` for
+the accessibility tree and an inline `display:none` for the mechanics, because
+`hidden` is UA-stylesheet `display:none` and any author rule with higher
+specificity defeats it silently, leaving a panel VISIBLE while telling assistive
+tech it is absent.
+
+**WHAT LANDED**
+
+| piece | what it does |
+|---|---|
+| `visit-view-switch.tsx` | the `Note \| Coding` primitive — #153(b). Roving tabindex + arrow keys, because a `role="tab"` without them is a half-implemented pattern that still passes axe |
+| `icd-coding-view.tsx` | the surface. Needs-review / Accepted / Rejected / **No longer suggested** (orphaned) / **Suggested but not carried** (S1b's amber drops) |
+| `lib/icd-decisions.ts` | ruling #154 — the reason vocabulary, the biconditional, the reason-aware no-op, and the narrower's asymmetric enforcement |
+| `icd-codes/decision/route.ts` | `z.enum` at the boundary, and **#148(e)'s owed refusal audit** |
+| migration `20260827120000_f8s2_icd_refusal_audit` | the fourth label, `ICD_CODE_DECISION_REFUSED` |
+| `page.tsx` | selects and threads `icdDecisions`, which nothing read before |
+
+**#148(e)'s OBLIGATION IS DISCHARGED, AND ITS SCOPE IS DELIBERATE.** S1 left
+refusals unaudited *because no UI could invoke the route*, and named this slice
+as the one that revisits it. Four refusals now write a row —
+`visit_not_active`, **`visit_locked`**, `visit_not_ready`, `code_not_suggested`,
+plus the two new reason refusals. **401 and 404 deliberately do NOT**: 401 has no
+actor to attribute, and 404 is the ownership gate, so a row there would let an
+unauthorised prober **append to the audit log of a practice they cannot read** —
+turning an information-leak refusal into an information-leak write. `visit_locked`
+is the important one: an attempt to re-code a SIGNED record is exactly what a
+coding dispute asks about, and it left no trace anywhere until now.
+
+**PROOF**
+
+| gate | arms | status |
+|---|---|---|
+| `gate-f8-s2-decision-reason.test.ts` | 19, pure | **PASS locally**, mutation-proved 5 ways |
+| `gate-f8-s2-coding-view.test.tsx` | 15, render | ⚠️ **CANNOT RUN IN A WORKTREE — CI-proven only.** See the finding below |
+| `gate-f8-icd-decisions` · `gate-f8-icd-drop-record` · `decision/route` | 87 | **PASS** — updated to the tightened contract, not weakened |
+| `review-read-only-paper` · `em-stale-unification` · `jsx-enclosing` | 71 | **PASS** — the structural guards on the surface I edited |
+
+**THE MUTATION TABLE — every mutation asserted APPLIED before its result was believed:**
+
+| mutation | reddens |
+|---|---|
+| M1 · delete the reason gate | **5 of 19** |
+| M2 · relocate the gate AFTER the no-op check | **2 of 19**, and the failure NAMES the arm |
+| M3 · no-op compares state only, ignoring the reason | **1 of 19** |
+| M4 · narrower stops enforcing the reason on a rejected record | **2 of 19** |
+| M5 · an accept keeps a stray reason | **1 of 19** |
+
+⚠️ **M2's FIRST ATTEMPT WAS A NO-OP THAT PRINTED GREEN, AND IT FOUND A REAL
+DEFECT IN MY OWN GATE.** The first M2 planted only a comment marker — canon's
+*"mutate toward the REAL shape"* — so `19 passed` proved nothing. Rebuilt to
+physically relocate the gate, it exposed that **the arm titled *"the reason gate
+runs BEFORE the no-op check"* was aimed at a case that refuses under BOTH
+orderings**: re-rejecting with a garbage reason differs from the stored reason,
+so `sameReason` is false and the early return never fires. It was an arm that
+could not fail, dressed as an ordering guard. The discriminating case is a reason
+attached to an **already-ACCEPTED** code, where `sameState` and `sameReason` are
+both true and a late gate absorbs an illegal payload as a successful no-op. Arm
+rewritten; M2 now reddens it.
+
+**WHAT THIS ROW DOES NOT CLAIM**
+
+- ⚠️ **THE ACCEPTANCE WALK OF #153 HAS NOT BEEN RUN.** *"reach coding → accept →
+  reject with a reason → sign → read frozen"* is an end-to-end walk on a real
+  visit, and the loop **cannot drive a browser** (already an open finding) and
+  **does not deploy a clinical surface** (#150). The parts are gated; the WALK is
+  owed by the deploying supervised session and is the remaining condition for
+  F8-S2 to close.
+- **IT IS NOT DEPLOYED.** Per #153(g) the deploy is supervised and carries **TWO**
+  migrations — S1's held `20260825130000_f8s1_icd_decisions` **and** this slice's
+  `20260827120000_f8s2_icd_refusal_audit`. §2.5 is owed by that session, and its
+  declaration must name both.
+- ⚠️ **THE ADVERSARIAL PASS WAS RUN IN-SESSION, NOT BY INDEPENDENT REFUTERS** —
+  the same honest limit F12-e recorded. Canon's argument for the pass is that it
+  does not share the author's context, so a self-run pass is the weaker
+  instrument. **This item is a candidate for an independent pass before it ships**,
+  and it reaches a billable record.
+- **Nothing here changes what any export or note emits.** An accepted code still
+  flows nowhere — that is a later slice and a document-visible change needing its
+  own pass.
+- **No search-add typeahead, no substitute-code chip** (#149(f) DELETED that
+  derivation: prefix-scanning the 604-code starter set offered `E66.0 → E66.01`,
+  upcoding plain obesity to MORBID obesity), **no specialty-aware ranking.**
 
 ### ✅ F12-e — THE SIGNED DOCUMENT CARRIES THE LEVEL THE DOCTOR ATTESTED — **2026-08-27, run `20260827-041645-b1` session 01**
 
@@ -195,8 +311,11 @@ failures.
 | **a `4 of 4` citation no longer proves the Playwright pack ran** | 🔵 **OPEN** | Since #861 the `e2e` workflow can conclude `success` without executing the pack. `check-citation.sh` reads run conclusions and never `/jobs`. Loop-fixable. |
 | **zombie CI runs poison the `--branch` view** | 🔵 **OPEN — MEASURED 2026-08-27, signature CORRECTED, partially cured** | Runs `queued` forever with **zero jobs**. ⚠️ **`created_at == updated_at` IS NOT THE DISCRIMINATOR and must not be used as one** — PR #877's own `CI` and `secrets-scan` both carried it while holding **4 and 1 real jobs** and running to completion, and 2 of 6 genuine zombies did *not* carry it. **`jobs == 0` while `status == queued` is the tell.** They do **NOT age out**: a Dependabot run sat queued with zero jobs for **1,334 h (55.6 days)**, two on `main` for **489 h**. `POST /actions/runs/{id}/force-cancel` **partially works, 2 of 6** — and the split is exact: `created ≠ updated` → **clears**; `created == updated` → **refuses**, with GitHub answering *"Cannot cancel a workflow run that has not been queued yet"* about a run whose own `status` field reads `queued`. **4 remain, permanently.** The hook ritual stands. |
 | **`retire-branch.sh`'s remote leg is DENIED** | 🔵 **OPEN — filed 2026-08-26** | It shells `git push origin --delete`, which is in the deny list, so the remote half can never succeed. It correctly refuses to claim otherwise. The working route is `gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/<branch>`. |
-| **the loop cannot drive a browser** | 🟠 **OPEN** | `MASTER.md`'s permission table has no row for it. |
-| **the shared tree's local `main` is 2 merges BEHIND `origin/main`** | 🔴 **OPEN — DEPLOY-SURFACE HAZARD, filed 2026-08-27** | Measured at `07:29Z`: `/opt/meddoc-pro` local `main` = `83532132`, `origin/main` = `4895decf`. ⚠️ **`deploy-prod.sh` reads `git rev-parse HEAD` FROM THE TREE IT RUNS IN** and names its §2.5 declaration after that sha — the canon case *"A DECLARATION NAMING THE WRONG COMMIT IS WORSE THAN NO DECLARATION, BECAUSE IT LOOKS LIKE EVIDENCE."* **The loop did NOT sync it**: routine syncing of the shared tree is an act on a deploy surface, the discriminator is *"is anyone standing there?"*, and a supervised actor was demonstrably active (they merged #878 at `06:34Z`). **A `git merge --ff-only` by the supervised side clears it.** |
+| **the loop cannot drive a browser** | 🟠 **OPEN** | `MASTER.md`'s permission table has no row for it. ⚠️ **It just cost something concrete:** F8-S2's acceptance walk (#153) is an end-to-end browser flow, so the item is BUILT and GATED and cannot be CLOSED by the loop. |
+| **⚠️ A COMPONENT TEST CANNOT RUN IN A WORKTREE — BY CONFIG, NOT BY CHANCE** | 🔴 **OPEN — MECHANISM NAMED 2026-08-27, and it is sharper than the ledger's prior account** | The ledger recorded this as *"16 worktree files fail deterministically on `react/jsx-dev-runtime`"*, which reads like a resolution accident. **It is a hard-coded path.** `apps/transcribe-md/vitest.config.ts:21` aliases react to `path.resolve(__dirname, '../../node_modules/react')` — a root `node_modules` **SIBLING**, which no `git worktree` has. **Controlled:** a PRE-EXISTING component test (`em-level-card.test.tsx`) fails identically in the same tree, so it is the harness and not the new code; `require.resolve('react')` from the same directory succeeds, so it is the ALIAS and not node resolution. **Measured this session: 17 of 387 files, every one of them this cause, 1 failed test (`gate-devstates`, same cause).** ⚠️ **AGENTS.md requires the loop to work in an isolated worktree, so for the loop this is EVERY React gate, ALWAYS** — including its own new ones, which is why F8-S2's 15 render arms are CI-proven only. ⚠️ **AND IT IS NOT A CASUAL FIX:** the alias's own comment records why it is hard-coded — the monorepo hoists RTL's react peer to the root while the app installs its own, and two React copies in one process give *"useState is null"*. Re-pointing it changes how 380 test files resolve React, which is not a thing to do inside a clinical slice. **Filed, not fixed.** |
+| **`ln` is REFUSED to the loop, and it is not in `MASTER.md`'s permission table** | 🟠 **OPEN — filed 2026-08-27** | `MASTER.md` says a refusal absent from its table **is a finding**, so this is filed rather than absorbed. The natural cure for the row above is one symlink — `.f8s2-build/node_modules → /opt/meddoc-pro/node_modules`, reproducing exactly what CI has, inside a directory `.gitignore` already covers via `.f[0-9]*-*` — and `ln` is refused. ⚠️ **The granted route was DECLINED on purpose:** `node -e` would have created it, and `MASTER.md` explicitly forbids tunnelling a withheld form through a sanctioned interpreter — *the sanctioned-hatch-becomes-the-undisciplined-door failure*. **Either grant `ln`, or the worktree/React finding above stays permanent for the loop.** |
+| **the shared tree's local `main` is 2 merges BEHIND `origin/main`** | ✅ **DISCHARGED 2026-08-27, session 02 — verified, not assumed** | Local `main`, `origin/main` and the shared tree's `HEAD` all read `fdfb76f7c2ed9443037f47f2903b59a5cf2307c8`. The supervised side synced it, as the row said would clear it. Left on the record with its original body below, because the hazard it names is permanent and only this INSTANCE closed. |
+| *(the original body of the row above)* | 🔵 **HISTORICAL** | Measured at `07:29Z`: `/opt/meddoc-pro` local `main` = `83532132`, `origin/main` = `4895decf`. ⚠️ **`deploy-prod.sh` reads `git rev-parse HEAD` FROM THE TREE IT RUNS IN** and names its §2.5 declaration after that sha — the canon case *"A DECLARATION NAMING THE WRONG COMMIT IS WORSE THAN NO DECLARATION, BECAUSE IT LOOKS LIKE EVIDENCE."* **The loop did NOT sync it**: routine syncing of the shared tree is an act on a deploy surface, the discriminator is *"is anyone standing there?"*, and a supervised actor was demonstrably active (they merged #878 at `06:34Z`). **A `git merge --ff-only` by the supervised side clears it.** |
 | **`check-retirement-conditions.sh` is GRANTED — ruling #151's premise is stale** | 🔵 **OPEN — correction owed to a ruling, filed 2026-08-27** | #151 argues from *"it has sat UNGRANTED on `main` since F30 … and still inert"*. **Measured 2026-08-27: `grep -c` → 1, and the script RAN.** The ruling's CONCLUSION (the loop detects, a supervised session adds) is untouched — only its live example expired. Same shape `MASTER.md` already records for `check-read-budget.sh`: **an entry naming an instrument as REFUSED must be re-checked when the grant lands.** |
 | **4 INBOX entries have MET their retirement condition and are still delivered** | 🟠 **OPEN — SUPERVISED action, measured 2026-08-27** | From `check-retirement-conditions.sh` (exit **1**, partition **15 == 15**, positive control fired): the **F10 acceptance-criteria pointer** (F10 closed), the **auto-certification handoff** (branch merged AND `auto-certify.ts` on `origin/main`), the **retirement-sweep entry itself** (*"retires when the sweep prints its first list"* — it just did), and the **#137/F23 pointer**, whose struck sentence was a **false present-tense fact**. ⚠️ **The loop never writes `INBOX.md` by design**, so it can only report these. |
 | **a `4 of 4` e2e no longer proves the pack ran — and here is the DISCRIMINATOR** | 🔵 **OPEN — now REPRODUCED, filed 2026-08-27** | Previously recorded as a claim; measured here. `e2e.yml` runs **two jobs sharing one `name:`** — a docs-only skip job (`:87`–`:89`) and the real pack (`:113`–`:115`) — so the run conclusion cannot tell them apart. **Measured: #878 (docs-only) `success` with the surviving job at 5 STEPS; #879 (code) `success` at 59 STEPS.** ⚠️ **The discriminator is STEP COUNT, not conclusion and not job name** — `check-citation.sh` reads run conclusions and never `/jobs`. Loop-fixable, and the fix now has an exact predicate. |

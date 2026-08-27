@@ -139,6 +139,9 @@ export default async function VisitPage({
     processingFinishedAt: Date | null;
     processingCostCents: number | null;
     icdCodes: unknown;
+    /** F8-S2 — the clinician decision map. Selected here because the coding
+     *  view is on the visit page and nothing else reads it. */
+    icdDecisions: unknown;
     cptCodes: unknown;
     rxDrafts: unknown;
     referrals: unknown;
@@ -206,6 +209,7 @@ export default async function VisitPage({
         processingFinishedAt: true,
         processingCostCents: true,
         icdCodes: true,
+        icdDecisions: true,
         cptCodes: true,
         rxDrafts: true,
         referrals: true,
@@ -335,6 +339,7 @@ export default async function VisitPage({
           processingFinishedAt={visit.processingFinishedAt}
           processingCostCents={visit.processingCostCents}
           icdCodes={visit.icdCodes}
+          icdDecisions={visit.icdDecisions}
           cptCodes={visit.cptCodes}
           rxDrafts={visit.rxDrafts}
           referrals={visit.referrals}
@@ -432,6 +437,7 @@ interface VisitBodyProps {
   processingFinishedAt: Date | null;
   processingCostCents: number | null;
   icdCodes: unknown;
+  icdDecisions: unknown;
   cptCodes: unknown;
   /** Still read: the EXPORT path prints the medication list. Owner ruling #109
    *  deleted the surface that displayed prescription SAFETY, not the data. */
@@ -779,6 +785,7 @@ async function VisitBody(props: VisitBodyProps) {
       entities={props.entities}
       critique={critique}
       icdCodes={props.icdCodes}
+      icdDecisions={props.icdDecisions}
       cptCodes={props.cptCodes}
       rxDrafts={props.rxDrafts}
       referrals={props.referrals}
