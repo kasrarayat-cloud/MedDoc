@@ -481,9 +481,62 @@ describe('sign — E/M parity freeze (#315 obs#2): the confirmed displayed level
     expect('cptCodes' in data).toBe(false);
   });
 
-  it('a visit with NO em block does not compute or write a signed code (backward compatible)', async () => {
+  // ⚠️ THIS SPEC WAS INVERTED BY F12-e, 2026-08-27, AND THE OLD ASSERTION IS
+  // QUOTED RATHER THAN DELETED — IT WAS THE DEFECT, WRITTEN DOWN AS A CONTRACT.
+  //
+  // It used to read:
+  //
+  //     it('a visit with NO em block does not compute or write a signed code
+  //         (backward compatible)', …)
+  //       expect(mocks.computeDisplayedEmCode).not.toHaveBeenCalled();
+  //       expect('cptCodes' in …data).toBe(false);
+  //
+  // That was written when the freeze shipped, and its guard — "did L7b emit a
+  // blob?" — was standing in for the question nobody could ask yet: "does an
+  // E/M level belong on this note at all?". `emAppliesToVisit` (F12-a, ruling
+  // #126) did not exist then. It does now, the route consults it, and it is a
+  // strictly better predicate: it reads the SPECIALTY and the NOTE SHAPE
+  // rather than inferring intent from whether a model returned a field.
+  //
+  // Keeping the old assertion cost real clinical records. Measured read-only
+  // on production 2026-08-27: **12 visits** carry `cptCodes.em = null` AND a
+  // non-null `emScoredCode` — **10 SIGNED** — so the rail displayed a level
+  // (`page.tsx:649` seeds that column from the displayed projection, inside
+  // `if (!emNotApplicable)`) and the signed PDF/DOCX/EHR exports printed none,
+  // because `projectEmForDisplay(null, …)` returns null.
+  //
+  // The concern the old spec actually protected — never invent an E/M on a
+  // note that should not carry one — is now asserted DIRECTLY, below, on the
+  // axis that can express it. Full arms: `gate-f12e-em-freeze-parity.test.ts`.
+  it('a visit with NO em block DOES freeze the attested level when E/M applies', async () => {
     mocks.findUnique
       .mockResolvedValueOnce(visitRow({ cptCodes: { procedures: [] } }))
+      .mockResolvedValue({ signedAt: new Date(), status: TranscribeVisitStatus.SIGNED });
+
+    const res = await call({ destinations: [] });
+    expect(res.status).toBe(200);
+    expect(mocks.computeDisplayedEmCode).toHaveBeenCalled();
+    expect(mocks.updateMany.mock.calls[0][0].data.cptCodes.em.signedCode).toBe('99214');
+  });
+
+  it('a visit whose NOTE SHAPE suppresses E/M still writes nothing — the guard the spec above was really for', async () => {
+    // An operative note: the real predicate refuses it, so no level is computed
+    // and no blob is written. This is the arm that stops the inversion above
+    // from being a loosening.
+    mocks.findUnique
+      .mockResolvedValueOnce(
+        visitRow({
+          cptCodes: { procedures: [] },
+          soapFinal: [
+            '## Preoperative Diagnosis',
+            'Screening colonoscopy.',
+            '## Description of Procedure',
+            'The scope was advanced to the cecum.',
+            '## Postoperative Findings',
+            'One sessile polyp removed by snare.',
+          ].join('\n'),
+        })
+      )
       .mockResolvedValue({ signedAt: new Date(), status: TranscribeVisitStatus.SIGNED });
 
     const res = await call({ destinations: [] });

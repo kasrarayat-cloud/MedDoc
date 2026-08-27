@@ -528,10 +528,14 @@ export const POST = withApiHandler<{ id: string }>(
         cptBlob && cptBlob.em && typeof cptBlob.em === 'object'
           ? (cptBlob.em as Record<string, unknown>)
           : null;
-      // ⚠️ `&& emApplies` — F12-a / ruling #126, found by the independent
+      // ⚠️ `emApplies` — F12-a / ruling #126, found by the independent
       // adversarial pass. This branch used to read `if (emBlob)` alone, and
       // `emApplies` has been sitting in scope since `:335` without being
-      // consulted here. On an operative note the pipeline still WRITES a
+      // consulted here. (F12-a added it as `emBlob && emApplies`; F12-e then
+      // DROPPED the `emBlob` conjunct — see the F12-e block below. The reason
+      // `emApplies` must be consulted at all is unchanged and is recorded
+      // here; what changed is that it is now the ONLY term.)
+      // On an operative note the pipeline still WRITES a
       // `cptCodes.em` blob (see the FOLLOW-UP note below), so this freeze
       // stamped a **frozen office E/M level onto the signed record** of a
       // colonoscopy — invisible, because display and export both suppress it.
@@ -550,16 +554,56 @@ export const POST = withApiHandler<{ id: string }>(
       // PROCEDURE CPT codes from a colonoscopy, which is the one code that
       // encounter genuinely bills. That is a bigger change than a one-line
       // conjunction and it is filed as its own item rather than guessed at.
-      if (emBlob && emApplies) {
+      // ⚠️ F12-e — THE GATE IS `emApplies` ALONE. `emBlob &&` WAS THE DEFECT,
+      // NOT THE GUARD, AND IT IS MEASURED RATHER THAN ARGUED.
+      //
+      // The freeze used to require that L7b had emitted an `em` blob. But the
+      // level the doctor REVIEWED does not come from that blob — `page.tsx:649`
+      // seeds `emScoredCode` from `initialEmScore.override ?? suggestedCode`,
+      // i.e. the rubric engine scored against the note, and that seed sits
+      // INSIDE `if (!emNotApplicable)`. So the rail can display a level on a
+      // visit whose `cptCodes.em` is null, and then:
+      //
+      //   emBlob === null  ->  no signedCode frozen
+      //   -> `projectEmForDisplay(null, …)` returns null at visit-export.ts:107
+      //   -> the signed PDF, DOCX and EVERY EHR clipboard format print NO E/M,
+      //      while the screen showed one and the doctor attested it.
+      //
+      // ⚠️ THIS IS LIVE IN PRODUCTION, NOT A HYPOTHETICAL, AND NOT MERELY
+      // ARMED BY F12-c. Measured read-only on prod, 2026-08-27: **12** visits
+      // carry `cptCodes.em = null` AND a non-null `emScoredCode` — **10 of
+      // them SIGNED** — `bariatric-surgery` and `gastroenterology`, **zero**
+      // imaging. `emScoredCode` is only ever written under `!emNotApplicable`,
+      // so its presence is structural proof the predicate said E/M APPLIES,
+      // established without reading one byte of note text.
+      //
+      // The filing expected `cptCodes.emSuppressed` to be the hook. It is not
+      // needed: `emSuppressed` distinguishes *why* the blob is absent, and the
+      // freeze does not care. E/M PARITY (#315 obs#2) says the artifact prints
+      // the level the doctor reviewed and attested; the CURRENT verdict on the
+      // note being signed is `emApplies`, and that is the whole gate. Keeping
+      // `emBlob &&` would make a standing ruling contingent on whether a model
+      // happened to return a field.
+      //
+      // Direction of harm, stated because this house ranks them: this moves an
+      // ABSENT field to the level the doctor confirmed. It cannot introduce the
+      // WRONG-field harm — `emApplies` is the same predicate the export seam
+      // already trusts (`visit-export-server.ts:151-163`), so a suppressed note
+      // shape is still suppressed, and #123 / #126 / #128 are untouched.
+      if (emApplies) {
         try {
           const signedCode = await computeDisplayedEmCode(
             visit.soapFinal ?? '',
             { icdCodes: visit.icdCodes, rxDrafts: visit.rxDrafts, cptCodes: visit.cptCodes },
             { practiceId: session?.user?.practiceId, visitId, userId }
           );
+          // `cptBlob`/`emBlob` may both be null now that the gate no longer
+          // requires them. Spreading null yields `{}`, which is the intended
+          // shape — but it is written explicitly so a reader does not have to
+          // know that, and so a future edit cannot silently depend on it.
           cptWrite = {
-            ...cptBlob,
-            em: { ...emBlob, signedCode },
+            ...(cptBlob ?? {}),
+            em: { ...(emBlob ?? {}), signedCode },
           } as Prisma.InputJsonValue;
         } catch (err) {
           log.warn('api:visits:sign', 'em signedCode freeze failed — export falls back to override ?? code', {

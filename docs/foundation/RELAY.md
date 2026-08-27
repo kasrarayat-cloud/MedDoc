@@ -73,7 +73,7 @@ work.** The morning report's `### THROUGHPUT` line exists to keep that visible.
 | **F8-S1** | 🟡 **MERGED · DEPLOY HELD** | The ICD decision substrate + migration `20260825130000_f8s1_icd_decisions`. Cited 4 of 4. | Hold retires when the migration reaches production under its own §2.5. **VERIFIED HELD**: `assert-migrations-applied.sh` reads 🔴 `1 unapplied` on prod AND QA. ⚠️ **Its printed remediation advice is WRONG in this state** — do not follow it. Deploy is a supervised act. |
 | **F8-S1b** | 🟡 **MERGED · NOT DEPLOYED** | The ICD drop record — four exits, four reason tokens (ruling #149). | Does **not** extend S1's hold. Deploy is supervised. |
 | **F8-S2** | ⏸️ **PARKED — owner-class** | Wire the substrate to a surface. | **TRIGGER NAMED:** an owner decision in `RULINGS.md` choosing (a) a nav primitive on the read-only paper, (b) a separate route, or (c) re-reaching the V2 tab strip. ⚠️ *Not discharged by a conversation or a new Figma.* Measured: every production visit returns at `visit-ready-view.tsx:805`/`:1138`; neither carries a coding surface. |
-| **F12-e** | 🔴 **OPEN — CLINICAL** | A shape flip leaves the **signed document with no E/M while the screen showed one** (`sign/route.ts:538`). Introduced by F12-c, stated plainly. | Needs its own §2.5 **and** its own adversarial pass — it touches the signing and export surfaces of a signed record. The stored `emSuppressed` marker is the hook a fix needs. |
+| **F12-e** | 🟡 **BUILT · MERGED-PENDING · DEPLOY HELD** | The **signed document carried no E/M while the screen showed one**. Fixed at `sign/route.ts`: the freeze is gated on `emApplies` ALONE — `emBlob &&` was the defect, not the guard. Ruling **#152** (PROVISIONAL). | **Built, gated and held.** Deploy is a SUPERVISED act (`AGENTS.md` § STANDING AUTHORITY, ruling #150) — the loop does not ship a clinical-surface change, so it built and HELD, and this row says so. §2.5 is owed by the deploying session, which takes its own baseline. |
 | **F6.5** | 🔴 **OPEN** | `gate-r1`'s *"BOTH sides"* test asserts one side. `LOCKUP_PT.eyebrowToTitle`/`titleToRule` are **live and UNGUARDED** (`docx-generator.ts:106`, `:129`) — not dead code. | Done when the guard exists. Explicitly **a guard, not a deletion**. |
 | **F18** | 🔵 **OPEN** | Three counts on one screen; the largest is frozen at compile time — banner reads *"79 of 80"* while the button reads *"6 of 80"*. | One count from one source, or three counts that each say which question they answer. ⚠️ Do **not** repoint the banner at mapping rows without establishing what `detectionStatus` is FOR. |
 | **F6.3-followup** | 🔵 **OPEN** | The render sidecar is bounded but **not fair**: F6.3 stops one archive monopolising the renderer; two archives can still starve an interactive render. | A cross-request admission gate, or a second sidecar for bulk work. *Do not read F6.3's green as fairness.* |
@@ -90,6 +90,84 @@ work.** The morning report's `### THROUGHPUT` line exists to keep that visible.
 | **F33** *(unclaimed — this change)* | 🟠 **IN FLIGHT** | The ledger split + rotation, **plus its reader sweep**. ⚠️ **Referred to by BRANCH, not by number, until it lands** — the NUMBER-CLAIM PROTOCOL: a number is claimed by landing on `main`. Branch: `docs/ledger-split-and-rotation`. | This PR, cited. |
 | **F33-R** *(same change)* | 🟢 **BUILT — the reader sweep** | **A CENSUS PROVES CONTENT, NOT REACHABILITY.** The split was content-preserving and every reader of the two paths still broke. Fixed in this PR: `check-retirement-conditions.sh` (watched set = head + archives), `rotate-ledger.sh` (3 phantom manifest anchors; `WRITE_HEAD` never passed, so `--apply` reported success while duplicating content), the `RULINGS.md` live index (status token per row — `OWNER RULING` was 23 → **0**, `PROVISIONAL` 47 → **1**), the archive spans (2 of 25 were hulls over a promoted section, so their citations resolved past EOF), and the mandated routes in `MASTER.md` + `AGENTS.md`. | **Done.** Guarded by `gate-ledger-reachability.test.ts` — 23 arms, mutation-proved. |
 
+### ✅ F12-e — THE SIGNED DOCUMENT CARRIES THE LEVEL THE DOCTOR ATTESTED — **2026-08-27, run `20260827-041645-b1` session 01**
+
+**Ruling #152 (PROVISIONAL). Branch `fix/f12e-em-freeze-parity`.**
+
+**THE MECHANISM, NAMED BY RUNNING SOMETHING RATHER THAN BY READING.** The freeze
+at `sign/route.ts` required L7b to have emitted an `em` blob. The level the
+doctor REVIEWS does not come from that blob — `visits/[id]/page.tsx:649` seeds
+`emScoredCode` from `initialEmScore.override ?? suggestedCode`, **inside**
+`if (!emNotApplicable)`. So:
+
+    emBlob === null  ->  no signedCode frozen
+      -> projectEmForDisplay(null, …) returns null   (visit-export.ts:107)
+      -> the signed PDF, DOCX and EVERY EHR clipboard format print NO E/M,
+         while the screen showed one and the doctor attested it.
+
+⚠️ **THE FILING'S TWO LOAD-BEARING CLAIMS WERE BOTH CORRECTED BY BUILDING IT.**
+
+| the filing said | measured |
+|---|---|
+| *"Introduced by F12-c"* | **No — live in production today.** F12-c widens the population; it did not create it. F12-c is not even deployed. |
+| *"`emSuppressed` is exactly the hook a fix needs"* | **Not needed, and deliberately not consulted.** It says *why* the blob is absent; the freeze does not care. |
+
+**THE POPULATION, READ-ONLY ON PROD, POSITIVE-CONTROLLED:**
+
+| measure | n |
+|---|---|
+| `cptCodes.em = null` AND `emScoredCode` non-null | **12** |
+| …of those, **SIGNED** | **10** |
+| …imaging (where an absent E/M would be CORRECT) | **0** |
+| control: rows with `cptCodes` / an `em` key / `em = null` / SIGNED | 28 / 27 / 17 / 32 |
+
+All `bariatric-surgery` and `gastroenterology`. ⚠️ **AND THE VERDICT WAS
+ESTABLISHED WITHOUT READING ONE BYTE OF NOTE TEXT** — because the `emScoredCode`
+seed sits inside `if (!emNotApplicable)`, its presence is *structural proof* the
+predicate said E/M APPLIES. A predicate run over production note bodies would
+have been a PHI read; this is the same answer by a route that never needed one.
+
+**⚠️ THE ADVERSARIAL PASS FOUND A DEFECT THE FIX ITSELF INTRODUCED — AND IT IS
+THE `99214 — undefined` STRING THIS REPOSITORY HAS ALREADY SHIPPED ONCE.**
+Freezing on a blob-less visit synthesises `{ signedCode }` with no
+`description`, and `CptEm.description` was declared REQUIRED, so
+`ehr-formatters.ts:231` and `docx-generator.ts:259` interpolated it blind.
+**Unrepaired, the fix would have traded an ABSENT field for a WRONG one.** No
+prose is invented (there is no non-AMA descriptor set here, and #149(d) forbids
+authoring a billing string): the separator is conditional at both sites, and
+`CptEm.description` is now **OPTIONAL** — which is the load-bearing half,
+because it made a third consumer (`codes-tab.tsx:148`) fail to typecheck rather
+than wait to be grepped for.
+
+**THE GATES, BOTH MUTATION-PROVED, EVERY MUTATION ASSERTED APPLIED FIRST:**
+
+| gate | arms | mutation → reddens |
+|---|---|---|
+| `gate-f12e-em-freeze-parity.test.ts` | 11, behavioural — real route, real `emAppliesToVisit` | `emBlob && emApplies` → **4**; `emBlob` alone → **5**, incl. F12-a's own suppression arm |
+| `gate-f12e-frozen-level-prints-no-undefined.test.ts` | 8 — four EHR formats + a **real rendered DOCX** | restore either interpolation → **4** (EHR) / **1** (DOCX), output showing `99214 — undefined` |
+
+⚠️ **A VACUITY DEFECT IN MY OWN GATE, FOUND BY THE SAME PASS AND FIXED:** every
+suppression arm asserts an ABSENCE, and an absence is also what you get when the
+route refused or never reached the write. `expectSigned()` now asserts the
+SIGNED write happened first — **proved to discriminate** by mutating the harness
+to omit the attestation, which turned three silent passes into three named
+failures.
+
+**WHAT THIS ROW DOES NOT CLAIM.**
+
+- **It is FORWARD-ONLY.** The **10 already-signed rows keep their absent E/M.**
+  Changing a signed clinical record is owner-class and was not attempted.
+- **It is NOT DEPLOYED**, and the loop is not the actor that would deploy it.
+- ⚠️ **THE ADVERSARIAL PASS WAS RUN IN-SESSION, NOT BY INDEPENDENT REFUTERS.**
+  Canon's whole argument for that pass is that it does not share the author's
+  context, so a self-run pass is the weaker instrument. Named, not papered over:
+  **this item is a candidate for an independent pass before it ships.**
+- **The full-suite number from the worktree is not a measurement** — no root
+  `node_modules`, so 16 files cannot resolve `react/jsx-dev-runtime`. The
+  controlled delta against the same tree before the change is **+1 file, +8
+  tests, zero new failures**, and the one failing test (`gate-devstates`) passes
+  10/10 on clean `main` in the shared checkout.
+
 ### Open findings carrying no item id
 
 | Finding | State | Note |
@@ -100,6 +178,7 @@ work.** The morning report's `### THROUGHPUT` line exists to keep that visible.
 | **zombie CI runs poison the `--branch` view** | 🔵 **OPEN — MEASURED 2026-08-27, signature CORRECTED, partially cured** | Runs `queued` forever with **zero jobs**. ⚠️ **`created_at == updated_at` IS NOT THE DISCRIMINATOR and must not be used as one** — PR #877's own `CI` and `secrets-scan` both carried it while holding **4 and 1 real jobs** and running to completion, and 2 of 6 genuine zombies did *not* carry it. **`jobs == 0` while `status == queued` is the tell.** They do **NOT age out**: a Dependabot run sat queued with zero jobs for **1,334 h (55.6 days)**, two on `main` for **489 h**. `POST /actions/runs/{id}/force-cancel` **partially works, 2 of 6** — and the split is exact: `created ≠ updated` → **clears**; `created == updated` → **refuses**, with GitHub answering *"Cannot cancel a workflow run that has not been queued yet"* about a run whose own `status` field reads `queued`. **4 remain, permanently.** The hook ritual stands. |
 | **`retire-branch.sh`'s remote leg is DENIED** | 🔵 **OPEN — filed 2026-08-26** | It shells `git push origin --delete`, which is in the deny list, so the remote half can never succeed. It correctly refuses to claim otherwise. The working route is `gh api -X DELETE repos/{owner}/{repo}/git/refs/heads/<branch>`. |
 | **the loop cannot drive a browser** | 🟠 **OPEN** | `MASTER.md`'s permission table has no row for it. |
+| **10 SIGNED visits carry no E/M in their exported document** | 🔴 **OPEN — OWNER-CLASS, filed 2026-08-27 by F12-e** | The back-catalogue F12-e's fix cannot reach: `cptCodes.em = null` + a real `emScoredCode` (99212–99215), `bariatric-surgery` / `gastroenterology`, **zero imaging**. The screen showed a level; the signed PDF/DOCX/EHR print none. **Remediation touches SIGNED CLINICAL RECORDS, so it is owner class (b)/(d), not the loop's.** ⚠️ **The direction of harm is UNDER-CODING**, which is the safe direction and is why this is filed rather than rushed. **TRIGGER:** an owner decision on whether a signed record may gain a frozen level after the fact, and under what audit. |
 | **the logout-path residual under F26** | 🔴 **OPEN** | Session cookie still present 10s after sign-out while the URL had reached `/login`. |
 | **F3's twelfth declared row** | 🔵 **OPEN** | A visit row vanished unaudited; actor later named as the BullMQ stale-visits cron. Carried, unclosed. |
 | **the concept-supply flow** | 🔵 **OPEN — unscheduled, no id** | Ruled into existence by #147 mechanic 4 and F24's close. Competes with F8. |

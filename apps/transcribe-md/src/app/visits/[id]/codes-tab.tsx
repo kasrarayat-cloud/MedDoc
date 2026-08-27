@@ -48,7 +48,12 @@ interface EmReasoning {
 
 interface EmCode {
   code: string;
-  description: string;
+  /** Optional since F12-e — mirrors `CptEm.description` in `visit-export.ts`,
+   *  which is the shape this is assigned from at `:148`. A level frozen on a
+   *  visit whose L7b run emitted no `em` blob carries a code and no prose.
+   *  React renders `undefined` as nothing, so the two render sites below are
+   *  already safe; the type simply stops claiming otherwise. */
+  description?: string;
   reasoning: EmReasoning;
   evidence_quote: string;
 }
