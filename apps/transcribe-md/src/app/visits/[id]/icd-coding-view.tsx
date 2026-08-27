@@ -297,7 +297,7 @@ export function IcdCodingView(props: IcdCodingViewProps) {
 
   const section = (title: string, count: number, children: React.ReactNode) => (
     <section className="mb-5" data-testid={`icd-section-${title.toLowerCase().replace(/\s+/g, '-')}`}>
-      <h3 className={`${kicker} mb-2`} style={{ color: 'var(--rounds-text-3)' }}>
+      <h3 className={`${kicker} mb-2`} style={{ color: 'var(--rounds-ink-muted)' }}>
         {title} · {count}
       </h3>
       {children}
@@ -308,12 +308,12 @@ export function IcdCodingView(props: IcdCodingViewProps) {
     <div className="w-full" data-testid="icd-coding-view">
       <div
         className="mb-4 text-[13px]"
-        style={{ color: 'var(--rounds-text-2)' }}
+        style={{ color: 'var(--rounds-ink-muted)' }}
         data-testid="icd-summary-chip"
       >
-        <strong style={{ color: 'var(--rounds-text-1)' }}>{summary.suggested}</strong> suggested ·{' '}
-        <strong style={{ color: 'var(--rounds-text-1)' }}>{summary.accepted}</strong> accepted ·{' '}
-        <strong style={{ color: 'var(--rounds-text-1)' }}>{summary.needsReview}</strong> needs review
+        <strong style={{ color: 'var(--rounds-ink)' }}>{summary.suggested}</strong> suggested ·{' '}
+        <strong style={{ color: 'var(--rounds-ink)' }}>{summary.accepted}</strong> accepted ·{' '}
+        <strong style={{ color: 'var(--rounds-ink)' }}>{summary.needsReview}</strong> needs review
       </div>
 
       {error ? (
@@ -335,14 +335,14 @@ export function IcdCodingView(props: IcdCodingViewProps) {
           className="mb-4 text-[13px]"
           role="status"
           data-testid="icd-frozen-notice"
-          style={{ color: 'var(--rounds-signed-text)' }}
+          style={{ color: 'var(--rounds-ink-muted)' }}
         >
           This visit is signed — coding decisions are frozen.
         </p>
       ) : null}
 
       {projection.suggested.length === 0 ? (
-        <p className="text-[13px]" style={{ color: 'var(--rounds-text-3)' }} data-testid="icd-empty">
+        <p className="text-[13px]" style={{ color: 'var(--rounds-ink-muted)' }} data-testid="icd-empty">
           The suggester proposed no codes for this note.
         </p>
       ) : null}
@@ -560,7 +560,7 @@ export function IcdCodingView(props: IcdCodingViewProps) {
           )),
         )}
 
-      <p className="mt-6 text-[12px]" style={{ color: 'var(--rounds-text-3)' }}>
+      <p className="mt-6 text-[12px]" style={{ color: 'var(--rounds-ink-muted)' }}>
         Suggestions are validated against this build’s verified ICD-10-CM set. The physician makes
         the final coding decision.
       </p>

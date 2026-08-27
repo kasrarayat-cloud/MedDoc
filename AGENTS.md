@@ -271,6 +271,36 @@ important one: a clean two-view check is **not a guarantee** either, and **one
 tidy test is not grounds to delete this rule.** The two-view form is strictly
 better than one view, and that is the entire claim being made for it.
 
+⚠️ **AND ON 2026-08-27 IT WAS OBSERVED LIVE, WHICH PARTLY CLOSES THAT GAP.** The
+FOUNDATION loop's session 02 (run `20260827-041645-b1`) reported, in its
+close-out:
+
+> *"I observed the `--commit` vs `--branch` **propagation-window divergence
+> live** (by-commit empty, by-branch 4 runs, seven seconds apart, on a
+> `git rev-parse`-verified SHA)."*
+
+**GRADED PROVENANCE, STATED SO IT IS NOT READ AS MORE THAN IT IS.** This is a
+**report of an observation** lifted from a session log — not raw command output.
+The log carries the loop's own summary; the underlying two-view transcript did
+not survive, and session logs are gitignored, so lifting it here is what makes it
+a finding at all rather than a lost transcript. It is stronger than memory and
+weaker than a captured terminal, and it is filed as such.
+
+**What it changes:** the paragraph above says a deliberate reproduction attempt
+did NOT observe the divergence, and that stands. The phenomenon now has **one
+live observation with a verified input** beside **one failed reproduction** — so
+the two-view form remains the practice for exactly the reason already given. One
+clean test was never grounds to drop it; one sighting is not grounds to call it
+reliable either.
+
+⚠️ **AND A WITHDRAWN CLAIM STAYS WITHDRAWN.** A supervised session the same day
+recorded this same divergence as observed and then withdrew it: its `--commit`
+was empty because the SHA had been **fabricated from memory**, so the instrument
+was answering correctly about a commit that does not exist. The loop's sighting
+does not reinstate that claim — they are different events, and only the loop's
+carries a verified input. Full account:
+`docs/canon/61-a-documented-defect-is-the-most-convenient-suspect.md`.
+
 ⚠️ **AND NO POSITIVE CONTROL CATCHES IT** — which is why it survived a rule that
 already demanded one. The standing control asks whether the instrument works;
 this instrument works perfectly. It is answering, correctly, about a set the
@@ -1073,7 +1103,7 @@ because the two errors are not symmetric.
 
 ## CANON INDEX — every archived entry, one row each
 
-**103 entries live in full at `docs/canon/`.**
+**108 entries live in full at `docs/canon/`.**
 Each row is a **POINTER, never the authority** — the archived body governs, and
 it is verbatim. A row exists so that a grep for an entry's title still lands
 here and tells you where the body went; the tell is that entry's OWN words.
@@ -1091,6 +1121,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 - **⚠️ AND APPLY A NEW ENTRY TO ITS OWN LANDING** — "An entry you cannot apply to the commit that lands it is an entry nobody will apply later." Run a new rule once, immediately, on your own work. → `docs/canon/20-and-apply-a-new-entry-to-its-own-landing.md`
   - ↳ **4 · A RATIFIED CHANGE OF SCOPE LANDS BEFORE THE BUILD FINISHES, NOT AFTER** — "If a decision changes what 'done' means, it is not delivered until it is on `main`." `RELAY.md` is the builder's input; a transcript is not. → `docs/canon/20-and-apply-a-new-entry-to-its-own-landing.md`
   - ↳ **⚠️ AND THE SAME SHAPE IN A KILL SWITCH: IT HALTED A LOOP THAT WAS WORKING** — "A progress signal must be read where progress LANDS." Piping a command into a hasher discards its exit code and turns a FAILURE into a stable, plausible VALUE. → `docs/canon/28-a-gate-s-watched-set-is-diffed-against-the-spec-s-named-se.md`
+- **A SPEC CAN BE FALSIFIED BY THE VERY RULING THAT WROTE IT** — "An order's QUANTITIES are a snapshot; its INSTRUCTIONS are the authority." #153 said *107→108, three labels*; its own required refusal audit made it **107→109, four**. ⚠️ The failure mode is OBEDIENCE — matching the measurement to the order produces a false declaration. → `docs/canon/66-a-spec-can-be-falsified-by-its-own-ruling.md`
 - **THE LOOP DECLINED ITS SUPERVISOR'S FIX WITH BETTER REASONING, AND CI ENFORCED IT** — Supervision runs BOTH ways — the loop declined its supervisor's fix with better reasoning and CI enforced it. "I FILED IT" IS NOT "IT IS STILL OPEN." → `docs/canon/29-the-loop-declined-its-supervisor-s-fix-with-better-reasoni.md`
 - **A FIX IS PRICED BY THE ASSET BEHIND THE SYMPTOM, NOT BY THE SYMPTOM'S VOLUME** — "Ask 'what is this a symptom OF?' before 'how annoying is this?'" A 🟢 "Caddy ACME noise" row was a certificate on the only path in — 65 days later, 6h15m down. → `docs/canon/40-a-fix-is-priced-by-the-asset-behind-the-symptom-not-by-the.md`
 - **THREE ACTORS, ONE DIAGNOSIS — THE STANDING AUTHORITY'S THIRD-ACTOR PROOF** — "An authority boundary is only proven by the case where stopping is expensive." The loop classified an exhausted Actions budget as class (d) — money — and stayed dark four hours rather than spend. → `docs/canon/58-an-error-message-names-a-cause-not-the-cause.md`
@@ -1127,6 +1158,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
   - ↳ **⚠️ AND THE PASS THAT FOUND IT ALSO CAUGHT A CITATION OF THIS FILE OVER-REACHING** — "CITING CANON IS A CLAIM, AND A CLAIM NEEDS EVIDENCE." Check the entry says what your argument needs, on the axis the argument is using. → `docs/canon/14-err-toward-the-edge-the-edge-has-a-fence.md`
 - **A CENSUS IS ONLY AS AUTHORITATIVE AS ITS PREDICATE'S FIDELITY TO THE SHIPPED FUNCTION** — "DRIVE THE REAL FUNCTION, OR STATE THE APPROXIMATION AND HOW IT DIFFERS." A predicate that merely resembles the shipped one gave 670 for 441, and 25 for 9. → `docs/canon/15-a-census-is-only-as-authoritative-as-its-predicate-s-fidel.md`
 - **A MEASUREMENT OF TODAY'S CORPUS IS A FACT ABOUT THE POPULATION, NOT A PROPERTY OF THE CODE** — A census answers "is this happening?", never "can this happen?". If it is a population fact, state what RE-ARMS the path in the same sentence. → `docs/canon/16-a-measurement-of-today-s-corpus-is-a-fact-about-the-popula.md`
+- **THE MOST DANGEROUS WRONG NUMBER IS THE ONE THE PREDICTION EXPECTS** — "A wrong measurement that equals what you predicted cannot be caught by reconciliation — there is nothing left to disagree with." A stale tree read `1 unapplied` where the truth was **2**, and `1` was exactly what the standing hold predicted. **A confirmed prediction is not a control.** → `docs/canon/65-the-most-dangerous-wrong-number-is-the-one-expected.md`
 - **RECORD A HYPOTHESIS *BECAUSE* IT WAS REFUTED** — "A refuted hypothesis, recorded with its measurement, converts a question somebody will re-ask into one somebody can look up." Its value does not depend on being right. → `docs/canon/17-record-a-hypothesis-because-it-was-refuted.md`
 - **CONFIRM A FIGURE YOU WILL BUILD ON BY A SECOND, INDEPENDENT ROUTE** — "Re-derive by a route that does not share the first one's failure mode, then check the two RECONCILE — not merely that they agree." → `docs/canon/18-confirm-a-figure-you-will-build-on-by-a-second-independent.md`
   - ↳ **⚠️ THE THREE-LAYER ECHO — one lesson, three altitudes, one arc** — One lesson at three altitudes — editor, predicate, measurement: ask the thing that knows; do not classify what resembles. → `docs/canon/25-counting-tokens-instead-of-classifying-rows-and-the-detect.md`
@@ -1153,7 +1185,9 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
   - ↳ ⚠️ AND A SIXTH — **TWO WEAK DEFECTS COMPOSED INTO A CONFIDENT FALSE GREEN** — Two weak defects composed into a confident false green — a short sha returning `[]`, plus `OK == T`, vacuous at zero. A success check needs a FLOOR, not a ratio. → `docs/canon/31-a-detector-can-be-blind-to-the-thing-it-most-exists-to-wat.md`
   - ↳ **⚠️ AND A THIRD MEMBER: A TREE THAT CANNOT RESOLVE ITS OWN IMPORTS** — "A number printed from a tree that cannot resolve its own imports is not a measurement." Report the CONTROLLED DELTA against a clean checkout. → `docs/canon/31-a-detector-can-be-blind-to-the-thing-it-most-exists-to-wat.md`
 - **A DOCUMENTED DEFECT IS THE MOST CONVENIENT SUSPECT** — "When an instrument disagrees with you, CHECK YOUR OWN INPUT BEFORE YOU CHECK THE PRECEDENT." The mirror of *a documented-unreliable instrument is not a permanently-wrong one*: one reflex discards true reports, this one MANUFACTURES false ones. Carries the DENOMINATOR rule. → `docs/canon/61-a-documented-defect-is-the-most-convenient-suspect.md`
+  - ↳ **⚠️ TWO ACTORS, SAME DEFECT, SAME DAY — WHICH MAKES IT STRUCTURAL, NOT PERSONAL** — Four fabricated-identifier instances across two independent actors in one day. **A property of the WORK, not the worker** — so the cure must be MECHANICAL: an identifier reaches a command from `rev-parse` in the same breath that uses it. → `docs/canon/61-a-documented-defect-is-the-most-convenient-suspect.md`
 - **A DENY MATCHES THE AGENT, NOT THE SCRIPT** — "'X is in the deny list' is a fact about a FILE; 'X cannot happen' is a claim about BEHAVIOUR." A row said `retire-branch.sh`'s remote leg *can never succeed*; the deny entry is real, the script works, and the gap between them was one command nobody ran. **Before recording that something is denied, RUN it** — a refusal is loud, instant and free. → `docs/canon/64-a-deny-matches-the-agent-not-the-script.md`
+- **A SCANNER'S `incomplete` IS NOT A PASS** — it is the set the tool ADMITS it could not judge, and the worst violations hid there: axe reported 5 contrast failures while the true worst, at **1.16:1**, sat in `incomplete`. An a11y claim on a clinical surface needs that bucket **resolved to zero or independently measured**, and reports BOTH numbers. → `docs/canon/67-a-scanner-s-incomplete-is-not-a-pass.md`
 - **And a reassurance check needs a POSITIVE CONTROL like any other** — "A check run to prove nothing happened is the most likely to be believed and the least likely to be controlled." `find -newermt` said 0; `stat` disagreed. → `docs/canon/49-and-a-reassurance-check-needs-a-positive-control-like-any.md`
 
 ### GATES, GUARDS, SWEEPS & MUTATION PROOFS
@@ -1162,6 +1196,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 - **A WELL-CHOSEN FIXTURE DISGUISES A WRONG UNIVERSE** — "A pipeline proof runs in the PRODUCTION UNIVERSE: production's FLAG SET and ROUTES." A fixture from the right domain is not a route. Count the production rows the proof covers. → `docs/canon/09-a-well-chosen-fixture-disguises-a-wrong-universe.md`
 - **A MUTATION PROOF THAT EXERCISES THE COMPLETE INVERSE HAS PROVED THE TIDY CASE** — "The failure that ships is a HALF-LANDED fix." Mutate to each PARTIAL application of your own fix; a present-but-empty fallback makes one invisible. → `docs/canon/10-a-mutation-proof-that-exercises-the-complete-inverse-has-p.md`
 - **OVERLAPPING GUARDS MUST NOT LAUNDER AN UNPROVED ARM** — "Caught by a DIFFERENT guard than the one you were proving? The arm is still unproved — and the red run is the most convincing possible evidence that it works." APPLICATION IS NOT EXERCISE. Re-mutate to the minimal shape the arm can see; ask whether the failure message names YOUR arm. → `docs/canon/62-overlapping-guards-must-not-launder-an-unproved-arm.md`
+- **FIX BY GROUND, NOT BY HIT** — "A fix covers the MECHANISM'S CLASS, not the nodes the measurement happened to exercise." `icd-empty` was fixed having failed in no scan, in either state, because it sits on the same wrong side of the same boundary. ⚠️ And the inverse binds too: the passing cards were left untouched. → `docs/canon/68-fix-by-ground-not-by-hit.md`
 - **A CHECK'S REMEDIATION ADVICE IS WRITTEN FOR ITS COMMON STATE** — "In a HELD or STAGED state, following a check's printed advice can bypass the gate the state exists to protect." Establish WHY it is red first. → `docs/canon/21-a-check-s-remediation-advice-is-written-for-its-common-sta.md`
 - A MUTATION-PROOF BACKUP CAPTURES THE STATE YOU WANT TO **RETURN TO** — "A PRE-CHANGE BACKUP TURNS 'RESTORE' INTO 'UNDO MY WORK'." Copy AFTER the change; assert the marker landed before believing a result; on restore assert BOTH marker-gone and change-survives. → `docs/canon/23-a-mutation-proof-backup-captures-the-state-you-want-to-ret.md`
 - **A SHARED NOUN IS NOT A SHARED SURFACE** — "ENUMERATE READERS BY CALL SITE, NEVER BY VOCABULARY." A shared noun — "the model", "the export" — is a vocabulary inventory, not coverage. → `docs/canon/24-a-shared-noun-is-not-a-shared-surface.md`

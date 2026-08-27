@@ -60,3 +60,36 @@ is one clause and it makes the two states distinguishable.**
 **AND THE HABIT THAT PREVENTS THE WHOLE FAMILY:** an identifier reaches a command
 from `rev-parse`, or from a JSON field, **in the same breath that uses it**.
 Never from a variable set earlier, never from a display line, never from memory.
+
+---
+
+## ⚠️ TWO ACTORS, SAME DEFECT, SAME DAY — WHICH MAKES IT STRUCTURAL, NOT PERSONAL
+
+**Appended 2026-08-27, hours after this entry was written.**
+
+The FOUNDATION loop's session 02 close-out, filed independently and without
+sight of this entry's drafting, reports:
+
+> *"**I fabricated a 40-character SHA** and was one step from blaming the
+> documented propagation window — second occurrence of a canon entry written
+> *the same day*. I did it **three times** this session (a SHA, a run id, and an
+> assertion count); the reflex is mine and recurring."*
+
+So on one day: a supervised session invented a SHA and credited the empty result
+to a documented instrument defect; and the loop did the same thing **three
+times**, catching itself each time, and named the pattern as recurring.
+
+⚠️ **THAT CHANGES WHAT THIS ENTRY IS.** A single instance reads as one actor
+being careless on a long night — something a reader can file under *"I would
+have checked."* **Four instances across two independent actors in one day is a
+property of the WORK, not of the worker**: long sessions, dozens of 40-character
+identifiers, a rich library of documented instrument defects that fit almost any
+symptom, and no syntactic difference whatsoever between a real SHA and an
+invented one.
+
+**The consequence is that the cure must be MECHANICAL, not attentional.** "Be
+careful with SHAs" has now failed four times in a day, twice by people who had
+just written down the rule. What works is the habit stated at the top of this
+entry — an identifier reaches a command from `rev-parse` or a JSON field **in
+the same breath that uses it** — because that removes the opportunity rather
+than asking for vigilance against it.
