@@ -228,7 +228,22 @@ function cptSection(data: VisitExportData, label = 'PROCEDURES / E&M'): string[]
   if (!any) return [];
   lines.push(`${label}:`);
   if (data.em) {
-    lines.push(`  ${data.em.code} — ${data.em.description}`);
+    // ⚠️ THE SEPARATOR IS CONDITIONAL BECAUSE THE DESCRIPTION CAN BE ABSENT,
+    // AND THIS EXACT LINE HAS PRINTED `99212 — undefined` INTO AN EHR BEFORE
+    // (`projectDisplayedEmCode`'s own comment records it).
+    //
+    // A frozen level does not always arrive with the model's prose: F12-e
+    // freezes `signedCode` whenever E/M applies to the note, including on
+    // visits where L7b emitted no `em` blob at all — and there is no
+    // non-AMA descriptor set in this repository to fill it from. Inventing
+    // one would be authoring a billing string, which ruling #149(d) forbids.
+    //
+    // So the honest artifact is the CODE ALONE. An absent description is a
+    // field the doctor did not see; the word "undefined" beside a billing
+    // code is a WRONG field, and this house ranks the second worse.
+    lines.push(
+      `  ${data.em.code}${data.em.description ? ` — ${data.em.description}` : ''}`
+    );
   }
   for (const p of data.procedures) {
     const note = procedureProvenanceNote(p);

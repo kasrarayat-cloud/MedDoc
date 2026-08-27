@@ -31,7 +31,22 @@ export interface CptEm {
    *  override ?? raw) so every artifact prints what the doctor reviewed —
    *  NOT the raw L7b suggestion. See visit-export-server.loadVisitExportData. */
   code: string;
-  description: string;
+  /** The model's prose for the level. ⚠️ OPTIONAL SINCE F12-e, AND THE TYPE
+   *  WAS LYING BEFORE THAT.
+   *
+   *  It is written by L7b, and F12-e freezes a `signedCode` whenever E/M
+   *  applies to the note being signed — including on visits where L7b emitted
+   *  no `em` blob at all, which is 12 production rows (10 SIGNED) as measured
+   *  2026-08-27. Those blobs carry a code and no prose, and this field was
+   *  declared REQUIRED, so every renderer was entitled to interpolate it
+   *  blind. `ehr-formatters.ts` did, and `projectDisplayedEmCode`'s own
+   *  comment records the result reaching an EHR: `99212 — undefined`.
+   *
+   *  Marking it optional is the point, not a concession: it makes the two
+   *  renderers that string-interpolate it fail to TYPECHECK until they handle
+   *  the absence, which is the same reason `emApplies` is a required
+   *  parameter rather than a defaulted one. */
+  description?: string;
   reasoning: {
     problems: { description: string; status: string }[];
     data: string;

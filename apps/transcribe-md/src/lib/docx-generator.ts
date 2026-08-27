@@ -254,9 +254,17 @@ export async function generateVisitDocx(
       children.push(
         new Paragraph({
           spacing: { after: 60 },
+          // ⚠️ THE DESCRIPTION RUN IS OMITTED WHEN THERE IS NO DESCRIPTION —
+          // same reason as `ehr-formatters.ts`, which has printed
+          // `99212 — undefined` into an EHR once already. F12-e freezes a
+          // `signedCode` on visits where L7b emitted no `em` blob, so the
+          // prose is genuinely absent and there is no non-AMA descriptor set
+          // here to fill it from. The code alone is the honest artifact.
           children: [
             new TextRun({ text: data.em.code, bold: true }),
-            new TextRun({ text: `   ${data.em.description}` }),
+            ...(data.em.description
+              ? [new TextRun({ text: `   ${data.em.description}` })]
+              : []),
           ],
         })
       );
