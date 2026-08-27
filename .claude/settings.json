@@ -98,6 +98,7 @@
       "Bash(bash scripts/sweep-orphan-branches.sh:*)",
       "Bash(bash scripts/check-read-budget.sh:*)",
       "Bash(bash scripts/rotate-ledger.sh:*)",
+      "Bash(python3 scripts/lib/rulings-index.py:*)",
       "Bash(bash scripts/report-throughput.sh:*)",
       "Bash(cd:*)",
       "Bash(echo:*)",

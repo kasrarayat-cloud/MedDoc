@@ -228,8 +228,36 @@ def main():
         return
     os.makedirs(outdir, exist_ok=True)
     index = []
+
+    def spans_of(rs):
+        """The TRUE line ranges an archive covers, merged where adjacent.
+
+        ⚠️ `rs[0][0]–rs[-1][1]` is a HULL, not a span, and the difference is not
+        cosmetic. A LIFTED section sitting between two archived ones splits the
+        archive's coverage in two, and the hull silently claims the lifted lines
+        as well. Measured on the 2026-08-26 split: `2026-08-04-part1.md` declared
+        lines 5087–6758 while its body stopped 37 lines short, because `## Rules`
+        and `## Invariants re-checked every item` were promoted into the head
+        from inside that range. Resolving a pre-split citation of `RELAY.md:6000`
+        against that row lands ~35 lines off, and `RELAY.md:6758` — the declared
+        LAST line — falls past end-of-file and returns nothing.
+
+        That is the one column the index promises is safe to trust: *"the FROZEN
+        pre-split file can never grow again, so these numbers cannot go stale."*
+        True — and a number can be wrong without ever going stale."""
+        merged = []
+        for (a, b) in sorted(rs):
+            if merged and a == merged[-1][1]:
+                merged[-1] = (merged[-1][0], b)
+            else:
+                merged.append([a, b])
+        return [(a, b) for a, b in merged]
+
     for name, rs in files:
+        merged = spans_of(rs)
         first, last = rs[0][0] + 1, rs[-1][1]
+        span_txt = ", ".join("%d–%d" % (a + 1, b) for (a, b) in merged)
+        span_lines = sum(b - a for (a, b) in merged)
         body = '\n'.join('\n'.join(lines[a:b]) for (a, b) in rs)
         header = (
             f"> **ARCHIVED LEDGER — moved verbatim from `docs/foundation/{base}` on {SPLIT_DATE}.**\n>\n"
@@ -237,7 +265,8 @@ def main():
             f"> pointing here; that row is a POINTER, never the record. Nothing here is rewritten —\n"
             f"> corrections are appended and dated and superseded wording is kept, because in this\n"
             f"> programme the correction is the point.\n>\n"
-            f"> Original position: lines **{first}–{last}** of the pre-split `{base}`.\n"
+            f"> Original position: lines **{span_txt}** of the pre-split `{base}`"
+            f"{'' if len(merged) == 1 else ' — NOT ONE CONTIGUOUS RANGE: a section between them was promoted into the live head'}.\n"
             f"> Why the split: `docs/foundation/relay/README.md`.\n\n{SENTINEL}\n")
         p = os.path.join(outdir, f"{name}.md")
         open(p, 'w', encoding='utf-8').write(header + body)
@@ -246,7 +275,17 @@ def main():
         got_body = disk[disk.find(SENTINEL) + len(SENTINEL) + 1:]
         if got_body != body:
             raise SystemExit(f"FATAL: {name}.md on disk differs from the proved slice")
+        # ⚠️ PER-ARCHIVE ARITHMETIC, ASSERTED. The declared span must account for
+        # exactly the lines the body holds — no more (a hull over a promoted
+        # section) and no fewer. This is the check that would have caught the
+        # 2026-08-04 rows at the moment they were written.
+        body_lines = len(body.split('\n'))
+        if body_lines != span_lines:
+            raise SystemExit(
+                f"FATAL: {name}.md declares {span_lines} lines across {span_txt} "
+                f"but its body holds {body_lines} — the span does not describe the file")
         index.append({"file": f"{name}.md", "first_line": first, "last_line": last,
+                      "span": span_txt, "span_lines": span_lines, "contiguous": len(merged) == 1,
                       "chars": len(body), "ranges": len(rs),
                       "headings": [lines[a] for (a, b) in rs if re.match(r'^#{1,3} ', lines[a])][:4]})
 
@@ -288,7 +327,7 @@ def main():
             first_title = (a["headings"][0] if a["headings"] else "(untitled)").lstrip('#').strip()
             first_title = first_title.replace('|', '\\|')
             idx.append(f"| [`{a['file']}`]({os.path.basename(outdir)}/{a['file']}) "
-                       f"| {first_title[:92]} | {a['first_line']}–{a['last_line']} | {a['chars']:,} |")
+                       f"| {first_title[:92]} | {a['span']} | {a['chars']:,} |")
         idx += ["", f"**{len(index)} archives · "
                     f"{sum(a['chars'] for a in index):,} chars · "
                     f"largest {max((a['chars'] for a in index), default=0):,}.**", "", IDX_END]

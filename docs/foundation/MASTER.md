@@ -93,21 +93,51 @@ a pointer and go and read the ruling.**
 
    | file | chars | vs the 150,000 read limit |
    |---|---|---|
-   | `AGENTS.md` | 87,383 | readable |
+   | `AGENTS.md` | 88,386 | readable |
    | `SPEC.md` | 28,340 | readable |
-   | **`RULINGS.md`** | **371,533** | **2.5×** — about 40% fits |
-   | **`RELAY.md`** | **1,793,436** | **12.0×** — about **8%** fits |
+   | **`RULINGS.md`** | **44,935** | **readable — the whole file, in one read** |
+   | **`RELAY.md`** | **20,339** | **readable — the whole file, in one read** |
+   | `docs/rounds/RELAY.md` | 236,036 | **1.57×** — still oversize, still grep-only |
 
-   > **`RELAY.md` IS APPEND-ONLY, SO THE 8% YOU GET BY SIMPLY OPENING IT IS THE
-   > OLDEST 8%.** A truncated read of a chronological ledger hands back a
-   > confident, well-formed, **obsolete** answer, and nothing announces the
-   > truncation. That is strictly worse than a truncated rulebook, which at
-   > least returns *some* live rules.
+   ⚠️ **BOTH FOUNDATION LEDGERS WERE SPLIT ON 2026-08-26, AND THIS STEP USED TO
+   SAY THE OPPOSITE.** Until then `RULINGS.md` was 371,533 chars and `RELAY.md`
+   was 1,793,436, and this paragraph told you to GREP rather than read. **Both
+   halves of that instruction are now false, and false in the direction that
+   costs:** the heads fit in one read, and *grep alone has stopped being complete
+   access* — because the content did not shrink, it MOVED.
 
-   **So: read the QUEUE at `RELAY.md`'s head · read the TAIL for the arc in
-   flight (`tail -n 500`, or a `Read` with an `offset` near the end) · and GREP
-   for everything else.** `RULINGS.md` is **grep-only**, which this step already
-   said and now says for a measured reason.
+   | you want | where it is | how to get it |
+   |---|---|---|
+   | the live QUEUE, open items, `## Rules`, `## Invariants` | `docs/foundation/RELAY.md` | **READ IT WHOLE** |
+   | which ruling, what STATUS, what it decided | `docs/foundation/RULINGS.md` | **READ IT WHOLE** |
+   | any CLOSED arc — a deploy, a citation, a past item's proof | `docs/foundation/relay/` (26 files) | grep **head AND archives** |
+   | any ruling's REASONING — argument, measurements, reversal path | `docs/foundation/rulings/` (5 files) | grep **head AND archives** |
+
+   > **THE MANDATED GREP IS NOW TWO PATHS, AND IT IS STILL ONE COMMAND:**
+   >
+   >     grep -n '<what you want>' docs/foundation/RELAY.md docs/foundation/relay/*.md
+   >     grep -n '<what you want>' docs/foundation/RULINGS.md docs/foundation/rulings/*.md
+   >
+   > ⚠️ **A HEAD-ONLY GREP RETURNS ZERO RATHER THAN SAYING IT LOOKED IN THE WRONG
+   > PLACE.** Measured on the split branch before this correction: `grep -n
+   > rollback docs/foundation/RELAY.md` returned **145 lines before the split and
+   > 0 after**, with all 146 hits sitting in the archive directory. `AGENTS.md`
+   > cites ruling `#96(b)`; a head-only grep for that string found **nothing**.
+   > **A ledger you cannot reach is not a smaller ledger, it is an absent one** —
+   > which is the same sentence the split was performed to make false, pointed at
+   > the split's own new shape.
+
+   **The STATUS greps the morning report depends on are answered by the HEAD
+   alone**, because every index row now carries its status in a column of its
+   own — `grep -c '[|] PROVISIONAL [|]' docs/foundation/RULINGS.md`. Before this
+   correction that returned **1** where the pre-split file returned 47, and
+   `OWNER RULING` returned **0** where it returned 23; the markers had been
+   truncated out of the rows at 72 characters.
+
+   ⚠️ **`docs/rounds/RELAY.md` IS STILL OVERSIZE AND IS STILL GREP-ONLY.** It
+   belongs to the Rounds programme; a Rounds session rotates it with
+   `bash scripts/rotate-ledger.sh` once its manifest gains a row. Named here so
+   that "the ledgers are fixed" is not read wider than it is.
 
    ⚠️ **AND IT IS THREE FILES, NOT TWO — `AGENTS.md` NAMES A LEDGER THIS STEP
    DOES NOT.** § *"Multi-session programs have relay ledgers — READ THEM FIRST"*
@@ -125,17 +155,21 @@ a pointer and go and read the ruling.**
    because a warning that outlived its reason is a lie that reads like a
    warning. CI drives the same script through `gate-read-budget.test.ts`.
 
-   ⚠️ **THAT SCRIPT IS NOT YET IN `.claude/settings.json` — MEASURED, NOT
-   ASSUMED** (`grep -c check-read-budget .claude/settings.json` → `0` at the
-   time this landed), so a bare `bash scripts/check-read-budget.sh` is
-   **REFUSED** to the loop. Until a supervised session adds the grant, run it
-   the granted way, which is strictly better anyway:
+   ⚠️ **THE GRANT HAS SHIPPED — RUN THE SCRIPT DIRECTLY.** This paragraph used
+   to say `check-read-budget.sh` was **REFUSED** to the loop and to route around
+   it through vitest. That was true when it was written and measured then;
+   `grep -c check-read-budget .claude/settings.json` now returns **1**.
 
-       cd apps/transcribe-md && npx vitest run src/lib/__tests__/gate-read-budget.test.ts
+       bash scripts/check-read-budget.sh
 
-   Filed under the standing rule that an entry naming an instrument verifies
-   that instrument's grant in the same commit — the loop **detects and
-   reports**; a supervised session **adds**.
+   ⚠️ **AND THE STALE VERSION IS THE MORE INTERESTING HALF, SO IT IS RECORDED
+   RATHER THAN QUIETLY DELETED.** A correctly-measured, correctly-filed note
+   that an instrument was ungranted became, once the grant landed, an
+   instruction to spend a full test-runner spin-up in place of a one-second
+   script — *and it still read as rigour.* The rule that an entry naming an
+   instrument verifies that instrument's GRANT has a second half: **an entry
+   naming an instrument as REFUSED must be re-checked when the grant lands, or
+   it silently becomes the slower path with a reason attached.**
 4. **Verify the previous session's citation actually exists** — and verify it
    WITH THE CHECKER, not by eye:
 
