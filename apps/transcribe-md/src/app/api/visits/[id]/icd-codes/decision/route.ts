@@ -161,8 +161,19 @@ export const POST = withApiHandler<{ id: string }>(
     // ⚠️ THE AUDIT ROW IS EMITTED OUTSIDE THE TRANSACTION, ON PURPOSE.
     // `logAudit` is fire-and-forget so an audit failure can never refuse a
     // clinical action; running it inside would attach that fire-and-forget
-    // promise to a transaction that has already resolved. It fires only when
-    // the write actually committed, because `decide` returns it only then.
+    // promise to a transaction that has already resolved.
+    //
+    // ⚠️ THIS COMMENT USED TO END "it fires only when the write actually
+    // committed, because `decide` returns it only then." F8-S2 MADE THAT
+    // FALSE and the adversarial pass caught it on a re-read. Since #148(e)'s
+    // refusal audit landed, `decide` returns a row in TWO cases:
+    //
+    //   · a COMMITTED decision      -> ICD_CODE_ACCEPTED / _REJECTED / _CLEARED
+    //   · a REFUSED one, no write   -> ICD_CODE_DECISION_REFUSED
+    //
+    // What is still true, and is the invariant worth stating: a NO-OP returns
+    // no row at all, because re-asserting the stored state is not an event.
+    // The discriminator is the LABEL, never the presence of a row.
     if (audit) void logAudit(audit);
 
     return response;
@@ -212,6 +223,9 @@ function refusalAudit(
  * Returns the response plus the audit row to emit, if any. A NO-OP returns no
  * audit row: re-asserting the stored state is not an event, the same reasoning
  * `PROMO_GRANT_CREDITED` uses for its own already-granted case.
+ *
+ * ⚠️ A RETURNED ROW NO LONGER IMPLIES A WRITE — see the call site. Since
+ * #148(e)'s refusal audit, a refusal returns a row too, under its own label.
  */
 async function decide(
   // The interactive-transaction client. Annotated because the `@meddoc/db`
