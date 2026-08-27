@@ -1073,7 +1073,7 @@ because the two errors are not symmetric.
 
 ## CANON INDEX — every archived entry, one row each
 
-**98 entries live in full at `docs/canon/`.**
+**100 entries live in full at `docs/canon/`.**
 Each row is a **POINTER, never the authority** — the archived body governs, and
 it is verbatim. A row exists so that a grep for an entry's title still lands
 here and tells you where the body went; the tell is that entry's OWN words.
@@ -1152,6 +1152,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
   - ↳ **⚠️ A CONTROL AIMED WHERE THE ANSWER IS PREDETERMINED IS NOT A CONTROL** — "STATE WHAT THE CORRECT MACHINERY WOULD DO AT THAT TARGET." If you can predict the control's result from the target alone, it measures the target, not the instrument. → `docs/canon/31-a-detector-can-be-blind-to-the-thing-it-most-exists-to-wat.md`
   - ↳ ⚠️ AND A SIXTH — **TWO WEAK DEFECTS COMPOSED INTO A CONFIDENT FALSE GREEN** — Two weak defects composed into a confident false green — a short sha returning `[]`, plus `OK == T`, vacuous at zero. A success check needs a FLOOR, not a ratio. → `docs/canon/31-a-detector-can-be-blind-to-the-thing-it-most-exists-to-wat.md`
   - ↳ **⚠️ AND A THIRD MEMBER: A TREE THAT CANNOT RESOLVE ITS OWN IMPORTS** — "A number printed from a tree that cannot resolve its own imports is not a measurement." Report the CONTROLLED DELTA against a clean checkout. → `docs/canon/31-a-detector-can-be-blind-to-the-thing-it-most-exists-to-wat.md`
+- **A DOCUMENTED DEFECT IS THE MOST CONVENIENT SUSPECT** — "When an instrument disagrees with you, CHECK YOUR OWN INPUT BEFORE YOU CHECK THE PRECEDENT." The mirror of *a documented-unreliable instrument is not a permanently-wrong one*: one reflex discards true reports, this one MANUFACTURES false ones. Carries the DENOMINATOR rule. → `docs/canon/61-a-documented-defect-is-the-most-convenient-suspect.md`
 - **And a reassurance check needs a POSITIVE CONTROL like any other** — "A check run to prove nothing happened is the most likely to be believed and the least likely to be controlled." `find -newermt` said 0; `stat` disagreed. → `docs/canon/49-and-a-reassurance-check-needs-a-positive-control-like-any.md`
 
 ### GATES, GUARDS, SWEEPS & MUTATION PROOFS
@@ -1159,6 +1160,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 - **A check whose TITLE is narrower than what it MEASURES** — Read a check's name as a claim, then confirm the code makes exactly that claim — no wider, no narrower. Mutate toward SUCCESS as well as failure. → `docs/canon/08-a-check-whose-title-is-narrower-than-what-it-measures.md`
 - **A WELL-CHOSEN FIXTURE DISGUISES A WRONG UNIVERSE** — "A pipeline proof runs in the PRODUCTION UNIVERSE: production's FLAG SET and ROUTES." A fixture from the right domain is not a route. Count the production rows the proof covers. → `docs/canon/09-a-well-chosen-fixture-disguises-a-wrong-universe.md`
 - **A MUTATION PROOF THAT EXERCISES THE COMPLETE INVERSE HAS PROVED THE TIDY CASE** — "The failure that ships is a HALF-LANDED fix." Mutate to each PARTIAL application of your own fix; a present-but-empty fallback makes one invisible. → `docs/canon/10-a-mutation-proof-that-exercises-the-complete-inverse-has-p.md`
+- **OVERLAPPING GUARDS MUST NOT LAUNDER AN UNPROVED ARM** — "Caught by a DIFFERENT guard than the one you were proving? The arm is still unproved — and the red run is the most convincing possible evidence that it works." APPLICATION IS NOT EXERCISE. Re-mutate to the minimal shape the arm can see; ask whether the failure message names YOUR arm. → `docs/canon/62-overlapping-guards-must-not-launder-an-unproved-arm.md`
 - **A CHECK'S REMEDIATION ADVICE IS WRITTEN FOR ITS COMMON STATE** — "In a HELD or STAGED state, following a check's printed advice can bypass the gate the state exists to protect." Establish WHY it is red first. → `docs/canon/21-a-check-s-remediation-advice-is-written-for-its-common-sta.md`
 - A MUTATION-PROOF BACKUP CAPTURES THE STATE YOU WANT TO **RETURN TO** — "A PRE-CHANGE BACKUP TURNS 'RESTORE' INTO 'UNDO MY WORK'." Copy AFTER the change; assert the marker landed before believing a result; on restore assert BOTH marker-gone and change-survives. → `docs/canon/23-a-mutation-proof-backup-captures-the-state-you-want-to-ret.md`
 - **A SHARED NOUN IS NOT A SHARED SURFACE** — "ENUMERATE READERS BY CALL SITE, NEVER BY VOCABULARY." A shared noun — "the model", "the export" — is a vocabulary inventory, not coverage. → `docs/canon/24-a-shared-noun-is-not-a-shared-surface.md`

@@ -55,8 +55,15 @@ granted its $10 promo automatically — practice `cmsrzdmp6000001leg3eb8rgi`, ke
 ⚠️ **IT IS A REAL PRACTICE CARRYING A REAL $10 PROMO LIABILITY — not synthetic,
 not a fixture.** The account is the owner's own. B9 must reconcile it as real.
 
-**Full record: `RELAY.md` § "THE 176th GRANT — A REAL SIGNUP THROUGH THE WIRED
-DOOR".** The 175 / $1,750.00 figures elsewhere in `RELAY.md` and `RULINGS.md` are
+**Full record: `docs/foundation/relay/2026-08-13.md` § "THE 176th GRANT — A REAL
+SIGNUP THROUGH THE WIRED DOOR".** ⚠️ **Repointed 2026-08-27:** this said
+`RELAY.md`, which was correct until the 2026-08-26 split moved every closed arc
+into `docs/foundation/relay/`. Measured after the split — `grep "THE 176th
+GRANT" docs/foundation/RELAY.md` returned **0**, and the archives returned **1**.
+This notice is printed into EVERY session's log and is the full record of a real
+$10 promo liability, so a pointer that silently resolves to nothing is the
+expensive kind. The 175 / $1,750.00 figures elsewhere in the ledger and in
+`RULINGS.md` are
 NOT wrong — they were true when written, and every one of them predates this.
 
 ### 2026-08-14T20:09:13Z — ✅ RETIRED: "RC-2 IS ON `main` AND NOT DEPLOYED"
