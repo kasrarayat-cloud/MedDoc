@@ -128,3 +128,58 @@ second push genuinely must happen, it is gated by the **two-view check at the to
 of this section** — both views, the full 40-character SHA, and a zero believed
 only when both are empty.
 
+
+---
+
+## ⚠️ FRESH INSTANCE, 2026-08-27 — I PADDED AN ABBREVIATION INTO A 40-CHARACTER STRING, AND IT PASSED EVERY LENGTH CHECK
+
+**Appended, not rewritten.** This entry already said *"never pad or remember
+one."* Here is what happens when you do it anyway, from a session that had
+quoted this very rule earlier the same night.
+
+Waiting on PR #877's citation, I wrote the head sha into a shell variable **from
+memory** rather than from `git rev-parse`:
+
+    real : a29c3c66d29a08cbda888fae757e189ee63659b8
+    mine : a29c3c667bd8c7b73f0f21bd0e6f0ba1b1f9dbdc
+           ^^^^^^^^ the abbreviation is correct; every character after it is invented
+
+**It is 40 characters. It is lower-case hex. It shares the displayed prefix.** It
+passes `${#SHA} -eq 40`, which is the check this house already installed against
+abbreviated shas — *and that check is exactly what made it feel verified.*
+
+⚠️ **TWO FAILURES, AND THE SECOND IS THE ONE TO REMEMBER.**
+
+**1 · A BACKGROUND WAIT EXITED ON A FALSE ZERO.** The loop asked *"how many runs
+on this sha are not completed?"*, got `0` because **no run matched the sha at
+all**, and reported `ALL RUNS COMPLETE` 48 seconds after `e2e` had been observed
+`queued`. Had the arithmetic not been implausible, the next step was a merge on
+a citation nobody had read. *"No incomplete runs" and "no runs" are two states
+collapsed into one number* — this house's most-repeated defect, committed by me,
+in a loop I wrote to enforce rigour.
+
+**THE CURE IS A DENOMINATOR.** A completion check needs a **non-vacuity floor**,
+never a ratio:
+
+    [ "$TOTAL" -ge 4 ] && [ "$INCOMPLETE" = "0" ]      # not just INCOMPLETE == 0
+
+**2 · I BLAMED A DOCUMENTED INSTRUMENT DEFECT FOR MY OWN BAD INPUT.** Earlier,
+`gh run list --commit <fabricated>` returned `[]` while `--branch` showed four
+runs. I recorded that, in the session log, as *"a live sighting of the
+propagation-window divergence"* this file documents — a precedent that predicted
+the symptom exactly. **It was not a sighting.** Re-run against the real sha,
+`--commit` returned all four immediately. The instrument was flawless; the
+question was fiction.
+
+> **A PRECEDENT THAT FITS THE SYMPTOM IS THE MOST EXPENSIVE PLACE TO STOP
+> LOOKING.** The existing entry *"a documented-unreliable instrument is not a
+> permanently-wrong one"* warns that reaching for the precedent instead of the
+> data discards true reports. This is its mirror: reaching for the precedent
+> instead of the data **manufactured** a false one — and wrote it into the
+> record as corroboration for a rule that did not apply.
+
+**THE HABIT, mechanically:** a sha reaches a command from `rev-parse` or from a
+JSON field, in the same breath that uses it. Never from a variable set earlier,
+never from a display line, never from memory. And when an instrument disagrees
+with a precedent, **check your own input before you check the precedent** — the
+precedent has no way to tell you that you asked it the wrong question.

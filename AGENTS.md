@@ -1073,7 +1073,7 @@ because the two errors are not symmetric.
 
 ## CANON INDEX — every archived entry, one row each
 
-**95 entries live in full at `docs/canon/`.**
+**98 entries live in full at `docs/canon/`.**
 Each row is a **POINTER, never the authority** — the archived body governs, and
 it is verbatim. A row exists so that a grep for an entry's title still lands
 here and tells you where the body went; the tell is that entry's OWN words.
@@ -1108,8 +1108,10 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 - **GATE ON THE OBJECT THE GATE READS** — "`gh run list` reports the WORKFLOW RUN. Branch protection reads the CHECK RUN." Measure what the ENFORCER reads: `/commits/<sha>/check-runs`. → `docs/canon/11-gate-on-the-object-the-gate-reads.md`
 - **WORK PRODUCED WHILE A CITATION RUNS IS STAGED, NEVER PUSHED INTO IT** — "Once a branch is pushed and its runs are in flight, that branch is CLOSED to this session." Stage further work; land it as its own PR. → `docs/canon/19-work-produced-while-a-citation-runs-is-staged-never-pushed.md`
 - ⚠️ AND THE GENERAL FORM: AN IDENTIFIER IS QUERIED IN ITS **FULL** FORM, EVERYWHERE — "An ABBREVIATED identifier can return 'no matches' instead of 'ambiguous', with exit 0." Abbreviation is a display convenience, never a query key. → `docs/canon/37-and-the-general-form-an-identifier-is-queried-in-its-full.md`
+  - ↳ **⚠️ FRESH INSTANCE, 2026-08-27 — I PADDED AN ABBREVIATION INTO A 40-CHARACTER STRING** — A fabricated sha passes every length check, exits a wait loop on a FALSE zero, and gets its emptiness blamed on a documented instrument defect. **Check your own input before you check the precedent.** → `docs/canon/37-and-the-general-form-an-identifier-is-queried-in-its-full.md`
   - ↳ ⚠️ AND THE THIRD: **FULL-LOOKING IS NOT FULL** — "FULL-LOOKING IS NOT FULL. A 40-character hex string is not a commit." Read it with `git rev-parse`; never pad or remember one. `gh-runs.sh` fails 2 = CANNOT TELL. → `docs/canon/37-and-the-general-form-an-identifier-is-queried-in-its-full.md`
 - **AN EXTERNAL REACH IN THE BUILD IS REMOVED, NOT RETRIED** — An external reach in the build is REMOVED, not retried. `next/font/google` masks as a turbopack module-not-found in `layout.tsx` — it is the network, not your code. → `docs/canon/39-an-external-reach-in-the-build-is-removed-not-retried.md`
+- **GREEN MUST NOT OUTRUN TRUTH** — "A fix that would turn a PR green while its siblings' promises stay false is WITHHELD." Ask what the green will MEAN once it lands; if you can name anything false, stage it and draft the PR. → `docs/canon/59-green-must-not-outrun-truth.md`
 - **⚠️ AND THE SHELL IS NOT THE ONLY READER — A NEGATED MENTION STILL CLOSES THE ISSUE** — GitHub's linked-issue parser has no concept of negation: "it does not fix #603" closes it. Grep the body file for close/fix/resolve + `#N` before `gh pr create`. → `docs/canon/48-and-the-shell-is-not-the-only-reader-a-negated-mention-sti.md`
 
 ### EVIDENCE, CENSUSES & MEASUREMENT
@@ -1129,6 +1131,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 - **CONFIRM A FIGURE YOU WILL BUILD ON BY A SECOND, INDEPENDENT ROUTE** — "Re-derive by a route that does not share the first one's failure mode, then check the two RECONCILE — not merely that they agree." → `docs/canon/18-confirm-a-figure-you-will-build-on-by-a-second-independent.md`
   - ↳ **⚠️ THE THREE-LAYER ECHO — one lesson, three altitudes, one arc** — One lesson at three altitudes — editor, predicate, measurement: ask the thing that knows; do not classify what resembles. → `docs/canon/25-counting-tokens-instead-of-classifying-rows-and-the-detect.md`
   - ↳ **⚠️ AND THE AUTHORITY ANSWERS SOME OF YOUR QUESTIONS, NOT ALL OF THEM** — "ENUMERATE WHICH QUESTIONS THE AUTHORITY CAN ANSWER BEFORE ROUTING ANY QUESTION TO IT." It answers anyway — with a resemblance wearing an authority's credibility. → `docs/canon/25-counting-tokens-instead-of-classifying-rows-and-the-detect.md`
+- **A CENSUS PROVES CONTENT, NOT REACHABILITY** — "A census answers *was anything LOST?*. It cannot answer *can anything still be FOUND?*" Every ledger split ships WITH its reader sweep; watched set = **head + archives**. → `docs/canon/60-a-census-proves-content-not-reachability.md`
 - **EVIDENCE IS ONLY EVIDENCE ON THE TREE IT DESCRIBES** — Guard the state transition — rebase/merge exit code, clean `git status` — BEFORE any number counts; withdraw explicitly anything printed from a broken tree. → `docs/canon/36-evidence-is-only-evidence-on-the-tree-it-describes.md`
   - ↳ **A count inherited from another report, then incremented by assumption** — "A count carried forward from another session's report and then incremented by assumption is a fabricated number, however small the increment." → `docs/canon/36-evidence-is-only-evidence-on-the-tree-it-describes.md`
 
