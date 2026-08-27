@@ -182,6 +182,28 @@ attached to an **already-ACCEPTED** code, where `sameState` and `sameReason` are
 both true and a late gate absorbs an illegal payload as a successful no-op. Arm
 rewritten; M2 now reddens it.
 
+**⚠️ THE ADVERSARIAL PASS FOUND THREE DEFECTS IN MY OWN FINISHED DIFF.**
+Fifth consecutive slice in this programme where that is true.
+
+| # | what it found | why it mattered |
+|---|---|---|
+| **1** | **A comment asserting a mechanism that is measurably FALSE.** It said `props.readonly` was *"the only way to be read-only in this branch"*. `:631` computes `isSigned = props.readonly \|\| props.signedAt !== null`, and the branch is gated on `!isSigned` — so `props.readonly` **cannot be true where it is read.** | *A wrong mechanism in a source comment outlives the session that wrote it.* The prop is still forwarded rather than hard-coded `false`, because the two fail in OPPOSITE directions if that gate ever changes — forwarding stays correct, a literal `false` would silently offer accept/reject on a visit the caller declared read-only. |
+| **2** | **A concurrency defect that makes a doctor's decision APPEAR TO VANISH.** Controls were disabled per-code, so two decisions could be in flight at once. The SERVER serialises them correctly under S1's row lock — the defect is on the CLIENT: every response carries a full projection, and whichever lands **last** wins the render. Response A arriving after B renders a projection computed before B existed. | The server is right and the screen is wrong until reload. **That is the same "your work vanished" perception the entire view switch exists to prevent**, arriving through a different door. Fixed by allowing ONE in-flight request — removing the race rather than reconciling it. New gate arm; the mutation that reddens it is named in the test. |
+| **3** | **A `useState` initialiser that runs once beside two `useMemo`s that do not.** If `props.icdCodes` changed under the component, the cards would re-derive from the new blob while the partition still described the old one. | **Unreachable today by measurement** — `icdCodes` has one writer and `layer-skip.ts:101` skips L7a whenever it has content — so it is recorded WITH ITS RE-ARMING CONDITION rather than fixed with an untestable synchronisation mechanism on a clinical surface. |
+
+**AND FOUR REFUTATION TARGETS THAT SURVIVED, each checked rather than assumed:**
+`readIcdDrops` really reads the `dropped` key my fixture writes · `apiError`
+really returns `{error}`, which the view's error path reads · **both flags are
+`true` in production** (`NEXT_PUBLIC_UX_SIMPLIFY` and
+`NEXT_PUBLIC_REVIEW_DOC_VIEW`, read from the running container — they are
+DIFFERENT flags, and the signed branch keys on the first, so a flag-off there
+would have left #153(e) unmet in the only universe that matters) · and the
+migration's `ALTER TYPE … ADD VALUE` form is **proven in this exact database**:
+three prior `AuditAction` migrations are applied with `finished_at` set and
+`PROMO_GRANT_CREDITED` is present in the live enum. ⚠️ **That last one was
+established WITHOUT applying anything to QA** — doing so would have discharged
+#153(g)'s declared hold, which is not this session's to discharge.
+
 **WHAT THIS ROW DOES NOT CLAIM**
 
 - ⚠️ **THE ACCEPTANCE WALK OF #153 HAS NOT BEEN RUN.** *"reach coding → accept →

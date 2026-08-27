@@ -159,9 +159,43 @@ export function IcdCodingView(props: IcdCodingViewProps) {
   // Server truth on first paint, then replaced by whatever each response
   // returns. The route projects from what it just computed rather than
   // re-reading, so the rendered state is the state the write produced.
+  //
+  // ⚠️ THE INITIALISER RUNS ONCE, AND `detail`/`drops` BELOW DO NOT — so if
+  // `props.icdCodes` ever changed under this component, the two would disagree:
+  // the cards would re-derive from the new blob while the partition kept
+  // describing the old one. **Unreachable today, by measurement rather than by
+  // hope:** `icdCodes` has exactly ONE writer (`07a-icd-coding.ts:572`) and
+  // `layer-skip.ts:101` skips L7a whenever that column has content, so within a
+  // page session the prop is fixed by the server render.
+  //
+  // ⚠️ WHAT RE-ARMS IT, so this is a lookup and not a judgement: any path that
+  // clears or rewrites `icdCodes` on a visit that already has content — a
+  // "re-code this note" action, a force-rerun flag on L7a, or a manual repair.
+  // The cure at that point is to key this component on the blob, or to lift the
+  // projection to a prop; it is deliberately NOT built now, because a
+  // synchronisation mechanism with no trigger is untestable code on a clinical
+  // surface.
   const [projection, setProjection] = useState<IcdDecisionProjection>(() =>
     projectIcdDecisions(props.icdCodes, props.icdDecisions),
   );
+  /**
+   * The code with a decision in flight — and EVERY control is disabled while it
+   * is set, not just this code's.
+   *
+   * ⚠️ THE ADVERSARIAL PASS FOUND THIS, AND A PER-CODE DISABLE WAS THE FIRST
+   * DRAFT. Two decisions in flight at once are serialised correctly by the
+   * SERVER — the route takes a row lock, so the second request reads the map
+   * after the first commits. The defect is on the CLIENT: each response carries
+   * a full projection, and whichever arrives LAST wins the render. If response
+   * A lands after response B, the screen shows a projection computed before B
+   * existed, and **the doctor watches a decision they just made disappear.**
+   *
+   * The server is right and the screen is wrong until a reload — which is
+   * exactly the "your work vanished" perception this whole slice's view switch
+   * was built to avoid. One in-flight request at a time removes the race
+   * outright rather than reconciling it, which is the minimal fix and the one
+   * that cannot be subtly wrong.
+   */
   const [pending, setPending] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -334,7 +368,7 @@ export function IcdCodingView(props: IcdCodingViewProps) {
                             key={r}
                             type="button"
                             data-testid={`icd-reason-${code}-${r}`}
-                            disabled={pending === code}
+                            disabled={pending !== null}
                             onClick={() => void send(code, 'rejected', r)}
                             className="rounded-md px-2 py-1 text-[12px]"
                             style={{
@@ -361,7 +395,7 @@ export function IcdCodingView(props: IcdCodingViewProps) {
                       <button
                         type="button"
                         data-testid={`icd-accept-${code}`}
-                        disabled={pending === code}
+                        disabled={pending !== null}
                         onClick={() => void send(code, 'accepted')}
                         className="rounded-md px-2.5 py-1 text-[12px] font-medium"
                         style={{
@@ -374,7 +408,7 @@ export function IcdCodingView(props: IcdCodingViewProps) {
                       <button
                         type="button"
                         data-testid={`icd-reject-${code}`}
-                        disabled={pending === code}
+                        disabled={pending !== null}
                         onClick={() => setRejecting(code)}
                         className="rounded-md px-2.5 py-1 text-[12px]"
                         style={{
@@ -405,7 +439,7 @@ export function IcdCodingView(props: IcdCodingViewProps) {
                   <button
                     type="button"
                     data-testid={`icd-undo-${code}`}
-                    disabled={pending === code}
+                    disabled={pending !== null}
                     onClick={() => void send(code, 'cleared')}
                     className="mt-2 rounded-md px-2.5 py-1 text-[12px]"
                     style={{
@@ -445,7 +479,7 @@ export function IcdCodingView(props: IcdCodingViewProps) {
                   <button
                     type="button"
                     data-testid={`icd-undo-${code}`}
-                    disabled={pending === code}
+                    disabled={pending !== null}
                     onClick={() => void send(code, 'cleared')}
                     className="mt-2 rounded-md px-2.5 py-1 text-[12px]"
                     style={{

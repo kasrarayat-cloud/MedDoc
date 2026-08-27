@@ -267,6 +267,40 @@ describe('F8-S2 — the coding view', () => {
     });
   });
 
+  it('⚠️ while ANY decision is in flight, EVERY control is disabled', () => {
+    // Found by the adversarial pass. A per-code disable lets two decisions be
+    // in flight at once; the SERVER serialises them correctly under a row lock,
+    // but each response carries a full projection and whichever lands LAST wins
+    // the render — so an earlier response can overwrite a later one and the
+    // doctor watches a decision they just made disappear.
+    //
+    // The mutation that reddens this: change any `disabled={pending !== null}`
+    // back to `disabled={pending === code}`.
+    let release: (v: Response) => void = () => {};
+    vi.spyOn(globalThis, 'fetch').mockReturnValue(
+      new Promise<Response>((res) => {
+        release = res;
+      }),
+    );
+    view();
+    fireEvent.click(screen.getByTestId('icd-accept-K21.00'));
+
+    // The OTHER code's controls must be disabled too — that is the whole claim.
+    expect(
+      (screen.getByTestId('icd-accept-E11.9') as HTMLButtonElement).disabled,
+      'a second decision could be started while the first was in flight',
+    ).toBe(true);
+    expect((screen.getByTestId('icd-reject-E11.9') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('icd-accept-K21.00') as HTMLButtonElement).disabled).toBe(true);
+
+    release(
+      new Response(JSON.stringify({ ok: true, changed: true, projection: projectIcdDecisions(BLOB, null) }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+  });
+
   it('Accept sends no reason key at all', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ ok: true, changed: true, projection: projectIcdDecisions(BLOB, null) }), {

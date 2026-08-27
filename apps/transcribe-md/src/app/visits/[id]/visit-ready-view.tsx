@@ -1062,10 +1062,21 @@ export function VisitReadyView(props: VisitReadyViewProps) {
               visitId={props.visitId}
               icdCodes={props.icdCodes}
               icdDecisions={props.icdDecisions}
-              // This whole branch is `!isSigned`, so the only way to be
-              // read-only here is the view-level `readonly` prop. The server
-              // refuses regardless — the UI is the second line, never the
-              // first (#153(e)).
+              // ⚠️ THIS IS PROVABLY `false` HERE TODAY, AND THE PROP IS PASSED
+              // ANYWAY — ON PURPOSE. An earlier draft of this comment claimed
+              // `props.readonly` was "the only way to be read-only in this
+              // branch"; the adversarial pass refuted it. `:631` computes
+              // `isSigned = props.readonly || props.signedAt !== null`, and
+              // this whole branch is gated on `!isSigned` — so `props.readonly`
+              // CANNOT be true where it is read. It is a constant, not a
+              // variable.
+              //
+              // It is still forwarded rather than hard-coded `false`, because
+              // the two choices fail in opposite directions if that gate is
+              // ever changed: forwarding stays correct, while a literal `false`
+              // would silently offer accept/reject controls on a visit the
+              // caller had declared read-only. The server refuses either way —
+              // the UI is the second line, never the first (#153(e)).
               readonly={props.readonly}
             />
           }
