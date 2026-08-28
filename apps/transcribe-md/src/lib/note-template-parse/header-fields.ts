@@ -62,7 +62,22 @@ const HEADER_FIELD_PATTERNS: ReadonlyArray<{ key: string; re: RegExp }> = [
  *  ⚠️ THE PHI GUARD IS UNCHANGED. A generic label is still LABEL-ONLY, still
  *  PHI-scanned, and still dropped if it trips the detector. Capturing more
  *  SHAPES must never mean capturing more CONTENT. */
-export function genericHeaderKey(label: string): string {
+/** ⚠️ LETTERHEAD IS NOT A HEADER FIELD, AND THIS IS WHERE THE FIRST VERSION WAS
+ *  WRONG. R3(b) exists because the operative-note allowlist DROPPED clinically
+ *  meaningful labels — "Referring MD", "Age" — so the fix admits labels the
+ *  allowlist does not know. Admitting EVERYTHING then captured
+ *  "Referring Clinic Phone" from the practice's own letterhead, caught by
+ *  `header-fields.test.ts`'s letterhead arm in CI.
+ *
+ *  A contact CHANNEL is the discriminator, not the word "clinic" and not the
+ *  word "referring" — "Referring MD" must still be captured, and it shares both
+ *  of those tokens with the thing being refused. The channel token is what makes
+ *  a line letterhead: it addresses the practice, never the patient or the
+ *  encounter. */
+const CONTACT_CHANNEL = /\b(phone|fax|tel|telephone|mobile|cell|email|e-mail|website|url|www|address|street|suite|zip|postcode)\b/i;
+
+export function genericHeaderKey(label: string): string | null {
+  if (CONTACT_CHANNEL.test(label)) return null;
   const slug = label
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
@@ -119,6 +134,10 @@ export function extractHeaderFields(
     // old `if (!key) continue` deleted the doctor's own form fields — "Referring
     // MD" and "Age" off a GI consultation form — without a word.
     const key = canonicalHeaderKey(rawLabel) ?? genericHeaderKey(rawLabel);
+    // A null here is a DELIBERATE refusal, not the old blanket drop: the label
+    // is practice letterhead (a contact channel), which is not a header field on
+    // anyone's form. Clinically meaningful unknowns still return a `custom_` key.
+    if (key === null) continue;
     if (seenKeys.has(key)) continue;
     // The label is generic form text — but guard anyway: a label that trips the
     // structured-PHI detector (e.g. a value glued into the label) is dropped.

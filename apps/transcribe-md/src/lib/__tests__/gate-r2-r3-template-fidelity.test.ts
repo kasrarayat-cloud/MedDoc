@@ -187,3 +187,28 @@ describe('R2 · EVERY save door surfaces the notice, not just the one that was w
     expect(src).toMatch(/\.twinNotice\b/);
   });
 });
+
+describe('R3(b) · letterhead is refused, and the near-miss pair is the proof', () => {
+  // CI caught the first version of R3(b) capturing "Referring Clinic Phone" off
+  // the practice's own letterhead. The fix must not be a blanket ban on the
+  // words in that label: "Referring MD" is EXACTLY what R3(b) exists to stop
+  // dropping, and it shares "Referring" with the thing being refused. The
+  // CONTACT CHANNEL token is the discriminator, so the pair is asserted together
+  // — a one-sided test would pass on a fix that broke the other side.
+  it('captures the clinically meaningful unknowns R3(b) was built for', () => {
+    for (const label of ['Referring MD', 'Age', 'Marital status', 'Occupation']) {
+      expect(genericHeaderKey(label), label).not.toBeNull();
+    }
+  });
+
+  it('refuses contact-channel letterhead', () => {
+    for (const label of ['Referring Clinic Phone', 'Fax', 'Office Phone', 'Email', 'Website']) {
+      expect(genericHeaderKey(label), label).toBeNull();
+    }
+  });
+
+  it('the pair differs ONLY by the channel token', () => {
+    expect(genericHeaderKey('Referring MD')).not.toBeNull();
+    expect(genericHeaderKey('Referring Clinic Phone')).toBeNull();
+  });
+});
