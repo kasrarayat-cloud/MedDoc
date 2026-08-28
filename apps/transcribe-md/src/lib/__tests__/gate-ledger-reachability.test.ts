@@ -226,6 +226,10 @@ describe('the standing instructions name the archive directories', () => {
     expect(s).not.toMatch(/grep -qE '\^#\+ \(✅\|🟢\) F\[0-9\]\+ —' "\$LEDGER"/);
   });
 
+  // The sweep shells out and walks head + archives: ~3.0s warm, and a COLD
+  // worktree measured 4.5s — past vitest's 5s default, which turned a passing
+  // gate red on a fresh checkout. A false red costs a citation; the arm is not
+  // faster for having a tighter clock, so the clock is the thing that moves.
   it('and it actually answers — the sweep discriminates on this tree', () => {
     if (!existsSync(join(REPO, 'scripts/check-retirement-conditions.sh'))) return;
     let out = '';
@@ -240,7 +244,7 @@ describe('the standing instructions name the archive directories', () => {
       out = String((e as { stdout?: string }).stdout ?? '');
     }
     expect(out).toContain('ledger closure-vocabulary present=1');
-  });
+  }, 20_000);
 });
 
 describe('RULINGS — one number, one ruling', () => {

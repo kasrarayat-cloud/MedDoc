@@ -32,6 +32,7 @@ import { requireManualCertification } from '@/config/require-manual-certificatio
 /** An upload must never wait longer than this on the queue. See the call site. */
 const ENQUEUE_TIMEOUT_MS = 3000;
 import { requireSession } from '@/lib/auth';
+import { asPracticeId, visitScope } from '@/lib/practice-scope';
 import { isTenantOwnedArtifactKey } from '@/lib/template-twin/storage';
 import { applyPhiGate } from '@/lib/note-template-parse/phi-gate';
 import {
@@ -546,12 +547,87 @@ export async function duplicateNoteTemplateAction(id: string): Promise<SimpleRes
   return { ok: true, id: created.id };
 }
 
-/** Delete an owned template (any status). Scoped deleteMany — can never reach
- *  another doctor's row or the system default (doctorId IS NULL). */
+/** Delete an owned template. Scoped — can never reach another doctor's row or
+ *  the system default (doctorId IS NULL).
+ *
+ *  ⚠️ R1 — A TEMPLATE THAT ANY VISIT REFERENCES IS NOT DELETABLE. It is archived.
+ *
+ *  This used to be a bare `deleteMany`. The FK was `ON DELETE SET NULL`, so one
+ *  click silently erased `noteTemplateId` on every visit written against the
+ *  template — INCLUDING SIGNED MEDICAL RECORDS — with no warning, no audit row,
+ *  and no way afterwards to tell an erased binding from a note that never had
+ *  one. Measured on production the day this landed: 29 of 52 visits had their
+ *  provenance destroyed this way, 18 of them SIGNED.
+ *
+ *  The FK is now `ON DELETE RESTRICT`, which is the floor under this check for
+ *  every path that does not come through here. This function refuses FIRST so
+ *  the doctor gets a sentence rather than a database error.
+ *
+ *  ⚠️ THE COUNT IS PART OF THE MESSAGE. "It is used by 12 visits" is a fact the
+ *  clinician can act on; "cannot delete" is a wall. */
 export async function deleteNoteTemplateAction(id: string): Promise<SimpleResult> {
   const session = await requireSession();
   const doctorId = session.user.id;
+
+  // Ownership first, so a foreign id cannot be probed for its visit count.
+  const owned = await prisma.noteTemplate.findFirst({
+    where: { id, doctorId },
+    select: { id: true, status: true },
+  });
+  if (!owned) return { ok: false, error: "That template doesn't exist or isn't yours." };
+
+  // ⚠️ PRACTICE-SCOPED, and the ratchet in gate-practice-scope caught that the
+  // first version was not. `transcribeVisit` is a clinical table: an unscoped
+  // count crosses tenants, and this number is not kept private — it is spoken
+  // back to the doctor in the refusal message below. Ownership of the TEMPLATE
+  // (checked above) does not scope a read of VISITS.
+  const referencing = await prisma.transcribeVisit.count({
+    where: { ...visitScope(asPracticeId(session.user.practiceId)), noteTemplateId: id },
+  });
+  if (referencing > 0) {
+    return {
+      ok: false,
+      error:
+        `This format is the record of how ${referencing} ` +
+        `${referencing === 1 ? 'note was' : 'notes were'} written, so it can't be deleted — ` +
+        `those notes would lose track of the form they came from. ` +
+        `Activating a different format retires this one instead, and it stops being used.`,
+    };
+  }
+
   const res = await prisma.noteTemplate.deleteMany({ where: { id, doctorId } });
+  if (res.count === 0) return { ok: false, error: "That template doesn't exist or isn't yours." };
+  revalidatePath('/settings');
+  return { ok: true };
+}
+
+/** Archive an owned template: the replacement for deleting one that visits
+ *  reference. It stops being offered as a choice and every note that cites it
+ *  keeps its provenance.
+ *
+ *  ⚠️ ARCHIVAL REUSES THE EXISTING `inactive` STATUS RATHER THAN INVENTING A
+ *  THIRD ONE. `status` is a plain string with two values in production
+ *  (active 7, inactive 4) and 73 source sites mention 'active'; adding a third
+ *  state is a sweep of every one of those readers, and a sweep is not something
+ *  to bundle into an urgent fence. `inactive` is already handled everywhere.
+ *  ⚠️ HONEST LIMIT, NAMED: an inactive template is still selectable by an
+ *  explicit per-visit pick (worker.ts:758 applies no status filter), so
+ *  "archived" here means "not offered", not "unreachable". A distinct archived
+ *  state that is also unpickable is a follow-up, not this change.
+ *
+ *  ⚠️ AND THE DOCTOR ALREADY HAS THIS ROUTE WITHOUT A NEW BUTTON: activating a
+ *  different format for the same encounter type sets the previous one
+ *  `inactive` in the same transaction (see activateNoteTemplateAction). So the
+ *  refusal message above promises nothing that does not exist today. A dedicated
+ *  Archive control is a VISUAL decision and is deliberately NOT invented here —
+ *  it is filed as an owner design request. */
+export async function archiveNoteTemplateAction(id: string): Promise<SimpleResult> {
+  const session = await requireSession();
+  const doctorId = session.user.id;
+  const res = await prisma.noteTemplate.updateMany({
+    where: { id, doctorId },
+    data: { status: 'inactive' },
+  });
   if (res.count === 0) return { ok: false, error: "That template doesn't exist or isn't yours." };
   revalidatePath('/settings');
   return { ok: true };

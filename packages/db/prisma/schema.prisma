@@ -2284,7 +2284,13 @@ model TranscribeVisit {
   /// NoteTemplate row is later deleted. NO behavior depends on these in
   /// Phase 0.
   noteTemplateId      String?
-  noteTemplate        NoteTemplate? @relation(fields: [noteTemplateId], references: [id], onDelete: SetNull)
+  /// ⚠️ R1: `onDelete: Restrict`, NEVER SetNull. This is a PROVENANCE link from a
+  /// clinical note to the template it was written against. Under SetNull, deleting a
+  /// template silently erased that link on every bound visit — 29 of 52 production
+  /// visits, 18 of them SIGNED — with no warning and no audit row. Restrict refuses
+  /// the delete instead; the application refuses first with a readable message and
+  /// offers archival. Cascade would be worse still: it would delete the records.
+  noteTemplate        NoteTemplate? @relation(fields: [noteTemplateId], references: [id], onDelete: Restrict)
   noteTemplateVersion Int?
 
   createdAt        DateTime                  @default(now())

@@ -63,17 +63,20 @@ which could be read.** This is that queue, rebuilt from what is actually open.
 > AUTHORITY** (ruling #150). Not here. The loop builds, proves and merges;
 > supervised sessions deploy clinical-surface changes.
 
-**F8 LEADS THE QUEUE** — ruling #147 (*"F24 CLOSES → F8 opens"*), and F24 closed
-2026-08-25 at 75 of 80. **Canon and process items ride along; they are not the
+**F5-i-2 LEADS THE QUEUE** — owner ruling **#156**, class (a)/(b), 2026-08-28.
+It displaced F8, which **CLOSED 2026-08-27** on the judged deploy of `eec8685b`
+(ruling #147's *"F24 CLOSES → F8 opens"* is therefore discharged, and F24 closed
+2026-08-25 at 75 of 80). **Canon and process items ride along; they are not the
 work.** The morning report's `### THROUGHPUT` line exists to keep that visible.
 
 | Item | State | What it is | Blocked on / Done when |
 |---|---|---|---|
+| **F5-i-2** | 🔴 **OPEN — TOP OF QUEUE, the loop takes it immediately** | **SHAPE-AWARE VERIFICATION ENCOUNTERS.** The certification engine learns to derive a self-test per template **SHAPE**, not only the venous/measurement shape. For consult/SOAP forms — the owner's among them — the synthetic encounter is derived from the **compiled field set** (histories, social fields, impressions, plan lines, HPI narratives), and the coverage floor is **SHAPE-APPROPRIATE**: the measurement-cell requirement applies only to shapes that HAVE measurement cells. A shape with no generator stays an **HONEST LOUD REFUSAL** — today's state, now visible. **It ABSORBS R4** (prose-template support). ⚠️ **THE GATE NEVER LOOSENS.** No certification without a round-trip self-test. The option *"certify measurement-less forms without proof"* is **REJECTED BY NAME** — that is the fake-certified state the gate exists to kill, and it is what F5-i removed when it deleted the fallback that proved a leg-vein study and called it the doctor's template. | **Done when the owner's R5 form certifies END-TO-END on QA** with **REALISTIC per-field concept mappings — never a blanket substitution** (the walk's own lesson: [canon 69](../canon/71-a-refusal-caused-by-my-own-substitution.md)), a synthetic visit fills, and the export is **byte-faithful on his layout**. **Half two of the R5 walk re-runs to completion as the proof.** Build + **MANDATORY adversarial pass** — this is the F5-c derivation generalized, so its wrong-fill traps are known cousins. |
 | **F8** | 🟢 **CLOSED 2026-08-27** | The ICD-10 coding tab. | **CLOSED on the judged deploy of `eec8685b`.** S1's substrate, S1b's drop record and S2's coding surface are LIVE. The acceptance walk passed on a QA build proven byte-identical to what shipped (blob `3aa08f9f`, empty runtime diff). **18 declared rows, 18 matched, no unnamed movement** — `docs/foundation/deploys/20260827-b439dcbb-JUDGED.md`. |
 | **F8-S1** | 🟢 **MERGED · DEPLOYED 2026-08-27** | The ICD decision substrate + migration `20260825130000_f8s1_icd_decisions`. | **HOLD DISCHARGED** under #153(g) — migration and caller shipped as one supervised act. `assert-migrations-applied` flipped 🔴 2 unapplied → 🟢 109/109. |
 | **F8-S1b** | 🟢 **MERGED · DEPLOYED 2026-08-27** | The ICD drop record — four exits, four reason tokens (ruling #149). | Shipped inside the same judged deploy. |
 | **F8-S2** | 🟢 **CLOSED — DEPLOYED 2026-08-27** | The coding surface on the visit page (#153). | Walk passed; contrast defect found by the added axe-panel-open arm and fixed by ground (5 reported, 8 real, worst **1.16:1** hidden in axe's `incomplete`); re-proved 5→0, incomplete 1→0, elements 41→49. Live and structurally verified in the shipped bundle. |
-| **F12-e** | 🟢 **MERGED · CITED 4 of 4 · DEPLOY HELD** | The **signed document carried no E/M while the screen showed one**. Fixed at `sign/route.ts`: the freeze is gated on `emApplies` ALONE — `emBlob &&` was the defect, not the guard. Ruling **#152** (PROVISIONAL). Merge `4895decfa5453e4688626992bf60229e9fac4df6` (PR #879). | **Cited, and HELD.** Deploy is a SUPERVISED act (`AGENTS.md` § STANDING AUTHORITY, ruling #150) — the loop does not ship a clinical-surface change, so it built, proved, merged and HELD, and this row says so. **§2.5 is owed by the deploying session, which takes its own baseline.** |
+| **F12-e** | 🟢 **MERGED · CITED 4 of 4 · DEPLOYED 2026-08-27 — AS AN UNJUDGED RIDER** | The **signed document carried no E/M while the screen showed one**. Fixed at `sign/route.ts`: the freeze is gated on `emApplies` ALONE — `emBlob &&` was the defect, not the guard. Ruling **#152** (PROVISIONAL). Merge `4895decfa5453e4688626992bf60229e9fac4df6` (PR #879). | ⚠️ **THE HOLD WAS OVERTAKEN BY A TREE.** This row read *"DEPLOY HELD"* until 2026-08-28 and that was **STALE**: the merge is a `rev-parse`-verified ancestor of the DEPLOYED commit `eec8685bfabd6d45614461d77a12aeeb272bc7b2`, and production runs that deploy's image `32a43656`. **It is LIVE.** This is [a declaration is bound to a CHANGE, a deploy ships a TREE](../../AGENTS.md) exactly: the F8 deploy's **18 declared rows were about ICD work, and not one could have detected an F12-e regression.** So the EVIDENCE half is missing, not the code. **Owed:** the F12-e comparison run after the fact, per that entry — and it is surfaced to the owner because a clinical-surface change reached production while its supervised judgement was still being held for it. |
 | **F6.5** | 🔴 **OPEN — RECON DONE 2026-08-27, and the item is NOT what the row said** | `gate-r1`'s *"BOTH sides"* test asserts one side. **Re-measured:** `gate-r1-paper-structure.test.ts:188` is titled *"the lockup gaps are absolute points on BOTH sides"* and makes exactly ONE assertion, on `toTwip(LOCKUP_PT.ruleToBody)`. `eyebrowToTitle` and `titleToRule` are live and unguarded at **`docx-generator.ts:168` and `:191`** — ⚠️ **not `:106`/`:129` as this row said; the line numbers had drifted.** | Done when the guard exists. Explicitly **a guard, not a deletion**. ⚠️ **AND THE NAME IS A FOSSIL: there is no longer a second side.** `lib/pdf-generator.ts` **does not exist** — ruling #113 retired `generateVisitPdf`, and PDF now renders DOCX→Gotenberg. So the fix is not "add the missing side"; it is *guard the two live tokens on the ONE surviving generator and stop the title claiming a generator that was deleted.* |
 | **F18** | 🔵 **OPEN** | Three counts on one screen; the largest is frozen at compile time — banner reads *"79 of 80"* while the button reads *"6 of 80"*. | One count from one source, or three counts that each say which question they answer. ⚠️ Do **not** repoint the banner at mapping rows without establishing what `detectionStatus` is FOR. |
 | **F6.3-followup** | 🔵 **OPEN** | The render sidecar is bounded but **not fair**: F6.3 stops one archive monopolising the renderer; two archives can still starve an interactive render. | A cross-request admission gate, or a second sidecar for bulk work. *Do not read F6.3's green as fairness.* |
@@ -82,7 +85,7 @@ work.** The morning report's `### THROUGHPUT` line exists to keep that visible.
 | **F17** | ⏸️ **PARKED** | Four non-billable ICD-10 headers (`I87.30`–`.33`) admitted by the billing floor. Measured through `isValidIcd10()` with controls. | **TRIGGER NAMED** — see the archived body. |
 | **F12-h** | ⏸️ **PARKED** | The templated-operative E2E class. | **TRIGGER NAMED:** the `e2e` headroom question (F19). |
 | **F12-b** | ⏸️ **PARKED** | E/M item hosted by R4b 2026-08-14. | Parked on the **OWNER PING**. ⚠️ Single mention in the whole ledger. |
-| **F5-i part 1b** | ⏸️ **PARKED — owner's call** | Per-shape certification generators. | ⚠️ **Never delivered by restoring the fallback.** The census retires when a second shape lands. |
+| **F5-i part 1b** | 🔴 **UN-PARKED 2026-08-28 — now F5-i-2, at the top of this table** | Per-shape certification generators. **The owner's call, which this row waited on, was made:** ruling #156. | ⚠️ **Never delivered by restoring the fallback.** The census retires when a second shape lands. **This row is a POINTER now; F5-i-2 is the item.** |
 | **F19** | ⏸️ **DEFERRED — owner decision owed** | The `e2e` ceiling (`e2e.yml` `timeout-minutes: 55`). | Decision owed after the auto-cert ping. ⚠️ **Do not raise or lower the ceiling** without it. |
 | **F20** *(swap)* | 🔧 **OPEN — owner-approved, awaits a quiet window** | Swap pinned at 4.0Gi with ~20 GB RAM free; historical pages never faulted back. ⚠️ **Two items carry the id `F20`** — see the reconciliation below. | `swapoff -a && swapon -a` in a quiet window. |
 | **F11** *(third grant)* | 🔴 **OPEN — owner question** | Two of three STEP-0/canon instruments were granted 2026-08-17; the third is an owner question. | An owner decision. |
@@ -344,6 +347,17 @@ failures.
   controlled delta against the same tree before the change is **+1 file, +8
   tests, zero new failures**, and the one failing test (`gate-devstates`) passes
   10/10 on clean `main` in the shared checkout.
+
+> ⚠️ **WHERE THE BILLING ARC IS, AND WHY THE QUEUE LOOKS EMPTY OF IT.** The
+> B-series (B8 wallet/admission, B9 grants) has **zero OPEN rows in this head** —
+> measured, not assumed. Its bodies live in `docs/foundation/relay/` (`2026-08-10`,
+> `-11-part2`, `-12`, `-13`, `-15-part2`), and every row there is CLOSED or LIVE.
+> **So "the billing tail is next" is a PROGRAM-SPINE statement, not a queue row**:
+> whoever takes it opens it by reading those archives and filing a fresh item
+> here, because *a ledger row is the builder's input and an archive is not*.
+> ⚠️ Do not read the absence as "billing is done" — read it as "billing has no
+> open row **yet**". Naming which of the two it is was the whole point of the
+> reader sweep.
 
 ### Open findings carrying no item id
 
