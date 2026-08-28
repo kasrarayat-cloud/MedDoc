@@ -44,7 +44,19 @@ import type { TemplateReviewModel } from '@/lib/note-template-persist/types';
 import type { Prisma } from '@prisma/client';
 
 export type SaveTemplateResult =
-  | { ok: true; id: string; status: 'draft' | 'active'; flags: string[] }
+  | {
+      ok: true;
+      id: string;
+      status: 'draft' | 'active';
+      flags: string[];
+      /** ⚠️ R2 — whether the exact-form (twin) path is available for this
+       *  template. 'failed' means the doctor's exports will come from the
+       *  STYLED path, which he must be told before he signs against it. */
+      twinCompile?: 'skipped' | 'compiled' | 'failed';
+      /** Doctor-facing sentence naming the reason AND the consequence, or
+       *  null when the exact-form path is fine. Never a raw error code. */
+      twinNotice?: string | null;
+    }
   | { ok: false; error: string };
 
 export type SimpleResult =
@@ -273,6 +285,7 @@ export async function saveNoteTemplateAction(
     // effect nothing reads back is a comment (AGENTS.md, the fire-and-forget
     // rule), and `attemptedTwinCompile` is what the reachability test asserts.
     let twinCompile: 'skipped' | 'compiled' | 'failed' = 'skipped';
+    let twinFailureCode = '';
     if (isNewUpload && sourceRef) {
       try {
         const [{ createTemplateTwinDraft }, { createTemplateTwinArtifactStore }] =
@@ -392,6 +405,14 @@ export async function saveNoteTemplateAction(
         // so a failed compile loses nothing that was not already recoverable —
         // which is precisely why part 1 had to land before this.
         twinCompile = 'failed';
+        // ⚠️ R2 — SILENCE IS ILLEGAL. The REASON travels to the doctor.
+        // NO_FILLABLE_FIELDS is not a fault in his document: it means his form is prose
+        // rather than a Word form, so it cannot be certified and his exports come from
+        // the styled path. That is a CONSEQUENCE he must know BEFORE he signs.
+        twinFailureCode =
+          error && typeof error === 'object' && 'code' in error
+            ? String((error as { code?: unknown }).code ?? '')
+            : '';
         console.warn(
           `[template-twin:compile-on-upload] template=${result.id} FAILED — ` +
             'the upload is saved and the source .docx is kept; the twin was not ' +
@@ -426,7 +447,27 @@ export async function saveNoteTemplateAction(
     }
 
     revalidatePath('/settings');
-    return { ok: true, id: result.id, status: result.status, flags };
+    // ⚠️ R2: the twin outcome is RETURNED, not merely logged. It was computed into
+    // `twinCompile`, written to console.warn as "loud, and non-fatal", and dropped
+    // on the floor. The owner uploaded a prose GI form at 20:53:57, it quarantined
+    // with NO_FILLABLE_FIELDS, and he signed a note against it 12m34s later having
+    // been told nothing. A guarantee that is OFF must say so.
+    return {
+      ok: true,
+      id: result.id,
+      status: result.status,
+      flags,
+      twinCompile,
+      twinNotice:
+        twinCompile === 'failed'
+          ? twinFailureCode === 'NO_FILLABLE_FIELDS'
+            ? "This format was saved, but it can't be certified for exact-form export: it's written as " +
+              'prose, with no Word form fields to fill. Notes will export in the standard layout rather ' +
+              'than on your own form. To get your exact form, add form fields in Word and re-upload.'
+            : 'This format was saved, but it could not be prepared for exact-form export. Notes will ' +
+              'export in the standard layout rather than on your own form.'
+          : null,
+    };
   } catch {
     // e.g. a concurrent-activation race tripping the partial-unique index.
     return {

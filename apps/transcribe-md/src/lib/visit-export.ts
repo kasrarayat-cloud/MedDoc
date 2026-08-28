@@ -530,19 +530,37 @@ export function sanitizeExportedSoap(soap: string): string {
   if (!soap || !soap.trim()) return soap;
   const SECTION_RE = /^\s*#{1,6}\s/;
   // Pass 1: drop the set-aside placeholder line; normalise empty table cells.
+  // ⚠️ R3(a) — THE EM-DASH REWRITE IS TABLE-CELL SCOPED, AS THIS FUNCTION'S OWN
+  // CONTRACT ALWAYS SAID. It used to be an unconditional `.map()` over EVERY
+  // line, so a PROSE section whose body was "[not documented]" collapsed to a
+  // bare "—". The owner met exactly that in a signed Gastroenterology export
+  // and reported it as "the AI emptied my sections": his uploaded template
+  // contains ZERO em-dashes, and so does the stored note — the character was
+  // manufactured here, at export.
+  //
+  // A table row is a pipe row. Everything else is prose, and an undocumented
+  // prose section is handled by pass 2, which writes the full sentence
+  // "Not documented." — legible, and never mistaken for deleted content.
+  const isTableRow = (l: string) => l.includes('|');
   const lines = soap
     .split('\n')
     .filter((l) => l.trim() !== EMPTY_SECTION_PLACEHOLDER)
-    .map((l) => l.replace(/\[not documented\]/gi, EXPORT_EMPTY_CELL));
+    .map((l) => (isTableRow(l) ? l.replace(/\[not documented\]/gi, EXPORT_EMPTY_CELL) : l));
   // Pass 2: any section whose body has no remaining content → "Not documented."
   const out: string[] = [];
   for (let i = 0; i < lines.length; i++) {
+    // the marker itself never reaches the doctor; pass 2 replaces it below
+    if (/^\[not documented\]$/i.test(lines[i].trim())) continue;
     out.push(lines[i]);
     if (!SECTION_RE.test(lines[i])) continue;
     let j = i + 1;
     let hasContent = false;
     while (j < lines.length && !SECTION_RE.test(lines[j])) {
-      if (lines[j].trim()) hasContent = true;
+      // ⚠️ A prose "[not documented]" is ABSENCE, not content. Pass 1 no longer
+      // rewrites it to "—", so this test has to recognise it directly —
+      // otherwise the marker would survive into the doctor's export verbatim.
+      const t = lines[j].trim();
+      if (t && !/^\[not documented\]$/i.test(t)) hasContent = true;
       j++;
     }
     if (!hasContent) out.push(EXPORT_EMPTY_SECTION_TEXT);

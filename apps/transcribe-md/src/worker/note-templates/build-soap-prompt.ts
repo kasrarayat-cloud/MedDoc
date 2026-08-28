@@ -48,8 +48,48 @@ const SAFETY = SYSTEM_DEFAULT_NOTE_TEMPLATE.styleProfile;
 /** Marker appended after a `scaffold_confirm` default — signals the clinician
  *  (and L5's normals-scrutiny) that the text was inserted as a scaffold and
  *  must be verified against the transcript or removed. */
+/** ⚠️ R3(c) — the fence around a doctor's template scaffold in the prompt.
+ *
+ *  Everything between these two lines is the doctor's OWN form text, shown so
+ *  the note matches his house style. It is REFERENCE, and the model is told in
+ *  the same breath that reproducing it verbatim is not permitted unless the
+ *  encounter actually supports the statement. Without the fence the scaffold is
+ *  indistinguishable from content, and the model copies it. */
+export const SCAFFOLD_REFERENCE_OPEN =
+  '--- TEMPLATE SCAFFOLD (reference only — the doctor\'s form wording) ---';
+export const SCAFFOLD_REFERENCE_CLOSE =
+  '--- END TEMPLATE SCAFFOLD. Do NOT reproduce the above verbatim. Write this section from the ENCOUNTER; borrow only phrasing and order. If the encounter does not support a statement in the scaffold, omit that statement entirely. ---';
+
 export const SCAFFOLD_CONFIRM_MARKER =
   '[SCAFFOLD — confirm this against the transcript or remove it; it was inserted as a template default, not derived from the encounter.]';
+
+/** ⚠️ R3(c) — THE STORAGE BOUNDARY. No prompt scaffolding may reach a note.
+ *
+ *  `SCAFFOLD_CONFIRM_MARKER` and the reference fence are instructions to the
+ *  MODEL. They are not clinical content and they have no business in a stored
+ *  note, let alone a signed one — and one signed production note carries the
+ *  marker today, which is how we know the leak was real rather than theoretical.
+ *
+ *  ⚠️ THIS IS A BELT, NOT THE FIX. The fix is that the marker is no longer
+ *  appended to the prompt at all. This exists because the previous design made
+ *  a clinician-facing signal depend on a model choosing to copy it, and the
+ *  lesson is that anything a model MIGHT emit must be removable at the boundary
+ *  where text becomes a record.
+ *
+ *  Line-scoped and idempotent: it removes whole marker/fence lines and leaves
+ *  every other byte of the doctor's note untouched. */
+export function stripScaffoldMarkers(text: string): string {
+  if (!text) return text;
+  const drop = [SCAFFOLD_CONFIRM_MARKER, SCAFFOLD_REFERENCE_OPEN, SCAFFOLD_REFERENCE_CLOSE];
+  return text
+    .split('\n')
+    .filter((l) => {
+      const t = l.trim();
+      if (!t) return true;
+      return !drop.some((d) => t === d.trim() || t.startsWith('[SCAFFOLD —') || t.startsWith('--- TEMPLATE SCAFFOLD') || t.startsWith('--- END TEMPLATE SCAFFOLD'));
+    })
+    .join('\n');
+}
 
 /** Directive for inline dropdown menus rendered as `{{one of: A | B | C}}`
  *  choice slots (from Word content-control dropdowns; see
@@ -465,7 +505,30 @@ export function renderSectionBody(
       // the transcript's own numbers.
       out.push(s.defaultText);
     } else if (s.defaultTextMode === 'scaffold_confirm') {
-      out.push(`${s.defaultText}\n${SCAFFOLD_CONFIRM_MARKER}`);
+      // ⚠️ R3(c) — THE DOCTOR'S SCAFFOLD IS A REFERENCE, NOT WRITABLE PROSE.
+      //
+      // This used to push `${defaultText}\n${SCAFFOLD_CONFIRM_MARKER}` straight
+      // into the system prompt as ordinary content. A model handed prose in its
+      // prompt reproduces that prose — so the doctor's own template scaffold came
+      // back inside the generated note, and read to him as text the AI had
+      // written about his patient. It is the "content added" half of the
+      // custom-template report, and the marker line rode along with it into
+      // stored notes, one of them SIGNED.
+      //
+      // The scaffold still has to be VISIBLE to the model — it is the doctor's
+      // house style and phrasing, and generating without it produces a note that
+      // does not look like his form. So it is fenced and labelled as reference
+      // material with an explicit non-emission rule, rather than being deleted
+      // from the prompt outright.
+      //
+      // ⚠️ AND THE MARKER IS NO LONGER APPENDED HERE. It was a note TO THE
+      // CLINICIAN that only ever had one delivery route: the model choosing to
+      // copy it. A signal that depends on a model's cooperation is not a signal.
+      // `stripScaffoldMarkers` at the storage boundary is the belt to this
+      // brace — neither the scaffold framing nor the marker may reach a note.
+      out.push(SCAFFOLD_REFERENCE_OPEN);
+      out.push(s.defaultText);
+      out.push(SCAFFOLD_REFERENCE_CLOSE);
     }
     // omit_unless_supported → never inject the default.
   }
