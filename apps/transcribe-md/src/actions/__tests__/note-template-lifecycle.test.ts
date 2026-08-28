@@ -211,7 +211,14 @@ describe('deleteNoteTemplateAction', () => {
     expect(r.ok).toBe(false);
     expect(r.ok === false && r.error).toContain('12');
     expect(mocks.deleteMany).not.toHaveBeenCalled();
-    expect(mocks.visitCount.mock.calls[0][0]).toEqual({ where: { noteTemplateId: CUID } });
+    // ⚠️ THE PROPERTIES, NOT THE OBJECT — canon 70. This asserted the exact
+    // where-shape `{ noteTemplateId }`, which is the UNSCOPED form, so it FAILED
+    // the practice-scoped fix and would have held the cross-tenant read in place.
+    // `transcribeVisit` is clinical and this count is spoken back to the doctor,
+    // so BOTH claims are asserted and neither of them is the spelling.
+    const countWhere = mocks.visitCount.mock.calls[0][0].where;
+    expect(countWhere.noteTemplateId).toBe(CUID); // filters to the template
+    expect(countWhere.practiceId).toBe('p1');     // and does not cross tenants
   });
 
   it('deletes an unreferenced owned template, still scoped to the doctor', async () => {
