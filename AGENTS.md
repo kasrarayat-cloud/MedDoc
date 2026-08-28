@@ -1103,7 +1103,7 @@ because the two errors are not symmetric.
 
 ## CANON INDEX — every archived entry, one row each
 
-**108 entries live in full at `docs/canon/`.**
+**109 entries live in full at `docs/canon/`.**
 Each row is a **POINTER, never the authority** — the archived body governs, and
 it is verbatim. A row exists so that a grep for an entry's title still lands
 here and tells you where the body went; the tell is that entry's OWN words.
