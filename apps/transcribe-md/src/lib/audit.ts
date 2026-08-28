@@ -298,7 +298,23 @@ export type AuditAction =
   //
   // ⚠️ AND IT NEEDS THE PRISMA ENUM **AND** A MIGRATION
   // (`20260812200000_b7s3c_promo_grant_audit_action`).
-  | 'PROMO_GRANT_CREDITED';
+  | 'PROMO_GRANT_CREDITED'
+  // ── BATCHED LABEL MIGRATION, 2026-08-28 ──────────────────────────────────
+  // ⚠️ THIS UNION IS A HAND-MIRROR OF A POSTGRES ENUM — TWO SOURCES OF TRUTH.
+  // Adding a label to `schema.prisma` alone type-checks nowhere and fails at
+  // RUN time; adding it here alone type-checks fine and fails at the DATABASE.
+  // Both moved together in one commit, and `gate-audit-enum-mirror` now asserts
+  // they cannot drift apart again.
+  /// Ruling #155(b) — visibility without mutation. One append-only row per
+  /// affected SIGNED visit; no visit row, fill manifest or document byte moves.
+  | 'EM_OMITTED_IN_SIGNED_ARTIFACT'
+  /// R1 — written on BOTH the refusal and the SUCCESSFUL delete. The successful
+  /// path is the point: it used to write nothing at all.
+  | 'TEMPLATE_DELETED'
+  /// R1 — the non-destructive alternative, distinguishable from a deletion.
+  | 'TEMPLATE_ARCHIVED'
+  /// F8-S3 — reserved in this batch; the threshold is NOT settled by the label.
+  | 'ICD_CODE_AUTO_ACCEPTED';
 
 export interface AuditLogInput {
   action: AuditAction;

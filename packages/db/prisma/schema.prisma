@@ -537,6 +537,40 @@ enum AuditAction {
   /// ⚠️ AND IT NEEDS ITS MIGRATION —
   /// `20260812200000_b7s3c_promo_grant_audit_action`.
   PROMO_GRANT_CREDITED
+
+  // ── BATCHED LABEL MIGRATION, 2026-08-28 ────────────────────────────────────
+  // ⚠️ FOUR LABELS IN ONE MIGRATION, DELIBERATELY. Postgres has no
+  // `ALTER TYPE … DROP VALUE`, so every enum addition is IRREVERSIBLE. Three
+  // separate needs had each accumulated their own pending migration; batching
+  // them means ONE irreversible act to declare and judge instead of three.
+
+  /// Ruling #155(b) — VISIBILITY WITHOUT MUTATION. F12-e (#152) established that
+  /// a visit whose `cptCodes.em` is null still displayed and attested an E/M, so
+  /// the signed artifact printed none. Ruled (a): those records STAY AS SIGNED —
+  /// the freeze is this product's deepest promise, and retroactively inserting an
+  /// E/M the artifact never carried would make the SERVED document differ from
+  /// what was ATTESTED. So the gap is made visible by an append-only row ABOUT
+  /// the event: one per affected SIGNED visit, touching no visit row, no fill
+  /// manifest and no document bytes. Measured 2026-08-28, unchanged from #155:
+  /// 12 carry the shape, 10 SIGNED, 0 imaging.
+  EM_OMITTED_IN_SIGNED_ARTIFACT
+
+  /// R1's delete fence writes an audit row on BOTH paths — the refusal AND the
+  /// successful delete. ⚠️ THE SUCCESSFUL PATH IS THE POINT: before R1 a hard
+  /// delete wrote NOTHING, which is why 29 servable visits lost their template
+  /// provenance invisibly and why audit adjacency could not classify them
+  /// afterwards. A fence that stops the deletion still leaves a permitted
+  /// deletion traceless.
+  TEMPLATE_DELETED
+  /// The non-destructive alternative R1 offers instead of deleting a referenced
+  /// template. Recorded so "archived" and "deleted" are distinguishable in the
+  /// audit trail rather than inferred from what is missing.
+  TEMPLATE_ARCHIVED
+
+  /// F8-S3 auto-decide. Reserved in this batch because the label is irreversible
+  /// and the alternative is a second irreversible migration later; the threshold
+  /// itself is proposed from data and is NOT settled by this label existing.
+  ICD_CODE_AUTO_ACCEPTED
 }
 
 /// Document lifecycle status
