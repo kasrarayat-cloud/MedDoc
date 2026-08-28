@@ -13,6 +13,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  // R1: the delete fence counts referencing visits before deleting anything.
+  visitCount: vi.fn(),
   findFirst: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
@@ -29,8 +31,10 @@ vi.mock('@meddoc/db', () => {
     updateMany: mocks.updateMany,
     deleteMany: mocks.deleteMany,
   };
+  const transcribeVisit = { count: mocks.visitCount };
   const prisma = {
     noteTemplate,
+    transcribeVisit,
     // Run the callback synchronously with a tx that shares the same mocks.
     $transaction: async (fn: (tx: unknown) => unknown) => fn({ noteTemplate }),
   };
@@ -44,6 +48,7 @@ import {
   activateNoteTemplateAction,
   duplicateNoteTemplateAction,
   deleteNoteTemplateAction,
+  archiveNoteTemplateAction,
   getNoteTemplateForEditAction,
 } from '../note-template-lifecycle';
 
@@ -194,13 +199,47 @@ describe('activateNoteTemplateAction', () => {
 });
 
 describe('deleteNoteTemplateAction', () => {
-  it('scoped deleteMany; count 0 → error, count 1 → ok', async () => {
-    mocks.deleteMany.mockResolvedValueOnce({ count: 0 });
-    expect((await deleteNoteTemplateAction(CUID)).ok).toBe(false);
-    expect(mocks.deleteMany.mock.calls[0][0]).toEqual({ where: { id: CUID, doctorId: DOCTOR } });
+  // ⚠️ R1 CHANGED THIS CONTRACT ON PURPOSE. It was a bare scoped `deleteMany`,
+  // and the FK was ON DELETE SET NULL — so one click silently erased
+  // `noteTemplateId` on every bound visit. Measured on production: 29 of 52
+  // visits had their provenance destroyed that way, 18 of them SIGNED. The
+  // original test's scoping intent is preserved verbatim in the second case.
+  it('refuses when any visit references the template, and does NOT delete', async () => {
+    mocks.findFirst.mockResolvedValueOnce({ id: CUID, status: 'active' });
+    mocks.visitCount.mockResolvedValueOnce(12);
+    const r = await deleteNoteTemplateAction(CUID);
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.error).toContain('12');
+    expect(mocks.deleteMany).not.toHaveBeenCalled();
+    expect(mocks.visitCount.mock.calls[0][0]).toEqual({ where: { noteTemplateId: CUID } });
+  });
 
+  it('deletes an unreferenced owned template, still scoped to the doctor', async () => {
+    mocks.findFirst.mockResolvedValueOnce({ id: CUID, status: 'inactive' });
+    mocks.visitCount.mockResolvedValueOnce(0);
     mocks.deleteMany.mockResolvedValueOnce({ count: 1 });
     expect((await deleteNoteTemplateAction(CUID)).ok).toBe(true);
+    expect(mocks.deleteMany.mock.calls[0][0]).toEqual({ where: { id: CUID, doctorId: DOCTOR } });
+  });
+
+  it('refuses a foreign template without revealing its usage', async () => {
+    mocks.findFirst.mockResolvedValueOnce(null);
+    expect((await deleteNoteTemplateAction(CUID)).ok).toBe(false);
+    // ownership is checked FIRST, so a foreign id cannot be probed for a count
+    expect(mocks.visitCount).not.toHaveBeenCalled();
+    expect(mocks.deleteMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('archiveNoteTemplateAction', () => {
+  it('sets the row inactive and never deletes', async () => {
+    mocks.updateMany.mockResolvedValueOnce({ count: 1 });
+    expect((await archiveNoteTemplateAction(CUID)).ok).toBe(true);
+    expect(mocks.updateMany.mock.calls[0][0]).toEqual({
+      where: { id: CUID, doctorId: DOCTOR },
+      data: { status: 'inactive' },
+    });
+    expect(mocks.deleteMany).not.toHaveBeenCalled();
   });
 });
 
