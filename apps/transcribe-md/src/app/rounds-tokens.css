@@ -2905,3 +2905,65 @@ body[data-skin='rounds'] {
   color: var(--rounds-text-3);
   cursor: default;
 }
+
+/* ============================================================================
+ * THE PAPER-CHROME GROUND BRIDGE — the note page's own 1.16:1s
+ * ----------------------------------------------------------------------------
+ * ⚠️ SAME MECHANISM AS THE CODING PANEL, WIDER BLAST RADIUS. The visit paper
+ * grounds at `--rounds-paper-1` (#fcfcfa). Three class families render ON that
+ * paper and every one of them colours from the DARK ramp:
+ *
+ *     .qm-rdoc-*   the read-only review document chrome
+ *     .qm-rx-*     the prescriptions card
+ *     .qm-vdoc-*   the visit-document toolbar and tap-to-edit
+ *
+ * Measured on the running build, per node, against the resolved ancestor
+ * ground — 14 failures, 13 of them on paper, and they are clinical text:
+ *
+ *     Lisinopril 20mg          .qm-rx-name           1.16:1   ← a DRUG NAME
+ *     99214                    .qm-rdoc-em-code      1.16:1   ← the E/M LEVEL
+ *     Adjust                   .qm-rdoc-gate-btn     1.16:1
+ *     20 mg PO daily           .qm-rx-sig            2.51:1   ← the DOSE
+ *     INCREASE                 .qm-rx-action         2.51:1   ← the ACTION
+ *     Qty / Refills            .qm-rx-meta           3.59:1
+ *     Documentation level      .qm-rdoc-gate-head    3.59:1
+ *
+ * ⚠️ AND THE FIX IS BY GROUND, NOT BY HIT — canon 68. A source parse of all
+ * three families found **34** rules colouring from the dark ramp; only 14 nodes
+ * happened to be rendering. Fixing the 14 would have left twenty rules one
+ * empty state away from the same defect, which is `icd-empty` at scale.
+ *
+ * ⚠️ WHY A BRIDGE AND NOT 34 EDITS. One remap covers every member of the
+ * families, including the ones no scan has met. It is scoped to the three
+ * prefixes, which are paper-only BY CONSTRUCTION — verified: no rule in any of
+ * them paints a dark background.
+ *
+ * ⚠️ AND IT CANNOT REACH THE DARK CARDS NESTED IN THE PAPER. The coding panel's
+ * cards paint `--rounds-surface-1` and colour from `--rounds-text-*` INLINE.
+ * This block remaps only the `--color-linear-text*` family, which those cards
+ * do not use — verified 0 uses of the rounds ramp in the card components. So
+ * the passing surface stays passing, which is canon 68's inverse and is as much
+ * the rule as the fix.
+ *
+ * ⚠️ HONEST LIMIT, STATED RATHER THAN HIDDEN: the paper palette has exactly TWO
+ * ink tokens, so three dark display tiers collapse to two. That is a visible
+ * flattening of hierarchy and it is deliberate — the owner's ruling is
+ * "≥4.5 using the existing token palette, no redesign". Restoring a third
+ * paper tier is Phase-1's job, not this fix's.
+ *
+ * ⚠️ AND ONE OF THE 34 REFERENCES A TOKEN THAT DOES NOT EXIST:
+ * `--color-linear-text-muted` has **0 definitions and 2 uses** (positive
+ * control: `--color-linear-text-3` has 9 definitions). An invalid `var()` in a
+ * `color:` declaration is INVALID AT COMPUTED-VALUE TIME — the element silently
+ * inherits instead, with no error anywhere. It is mapped here too, so the
+ * fallback becomes deliberate rather than accidental.
+ * ========================================================================== */
+[data-skin='rounds'] [class^='qm-rdoc-'], [data-skin='rounds'] [class*=' qm-rdoc-'],
+[data-skin='rounds'] [class^='qm-rx-'],   [data-skin='rounds'] [class*=' qm-rx-'],
+[data-skin='rounds'] [class^='qm-vdoc-'], [data-skin='rounds'] [class*=' qm-vdoc-'] {
+  --color-linear-text: var(--rounds-ink);
+  --color-linear-text-2: var(--rounds-ink-muted);
+  --color-linear-text-3: var(--rounds-ink-muted);
+  --color-linear-text-4: var(--rounds-ink-muted);
+  --color-linear-text-muted: var(--rounds-ink-muted);
+}
