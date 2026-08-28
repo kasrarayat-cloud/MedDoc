@@ -72,3 +72,41 @@ the list — but do not mistake a sweep for the thing that proves coverage.
 
 ---
 
+
+---
+
+## ⚠️ AND THE SAME SHAPE WHILE VERIFYING A DEPLOY, 2026-08-27 — A `NOT FOUND` THAT WAS MY SEARCH
+
+**Appended.** This entry's own rule — *a composed identifier has no literal in
+source* — met while doing structural production verification, and it produced a
+scare rather than a defect.
+
+Confirming the newly deployed coding surface was actually in the shipped bundle,
+four tokens were grepped against `.next` inside the running container:
+
+| token | result |
+|---|---|
+| `icd-summary-chip` | found |
+| `icd-frozen-notice` | found |
+| `rounds-ink-muted` | found |
+| **`visit-view-tab-coding`** | **NOT FOUND** |
+
+**Three surfaces present and the fourth missing** reads exactly like a partial
+deploy — the shape this house treats as more dangerous than a total failure.
+
+**It was the search.** The id is built as `` `visit-view-tab-${view}` ``, so the
+full string exists nowhere: not in the source, not in the bundle. Grepping the
+**prefix** `visit-view-tab-` found it in *both* the SSR chunk and the client
+chunk, which is a stronger result than the literal would have been.
+
+> **A `NOT FOUND` IS A MEASUREMENT OF YOUR PATTERN BEFORE IT IS A FACT ABOUT THE
+> ARTIFACT.** And the tell was available without any thought: **three of four
+> tokens from the same component resolved.** A deploy does not ship three
+> quarters of one file. *Arithmetic that does not reconcile is a finding* —
+> here it was a finding about the instrument.
+
+**THE HABIT, and it costs nothing:** when a bundle grep comes back empty, before
+believing it, **open the source and check whether the string is assembled.** If
+it is, search the longest literal prefix. And when some tokens from one component
+resolve and others do not, suspect the pattern first — the artifact is a single
+file and does not have opinions about which of its strings to include.

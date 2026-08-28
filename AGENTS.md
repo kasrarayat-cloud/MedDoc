@@ -1103,7 +1103,7 @@ because the two errors are not symmetric.
 
 ## CANON INDEX — every archived entry, one row each
 
-**109 entries live in full at `docs/canon/`.**
+**112 entries live in full at `docs/canon/`.**
 Each row is a **POINTER, never the authority** — the archived body governs, and
 it is verbatim. A row exists so that a grep for an entry's title still lands
 here and tells you where the body went; the tell is that entry's OWN words.
@@ -1164,6 +1164,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 - **CONFIRM A FIGURE YOU WILL BUILD ON BY A SECOND, INDEPENDENT ROUTE** — "Re-derive by a route that does not share the first one's failure mode, then check the two RECONCILE — not merely that they agree." → `docs/canon/18-confirm-a-figure-you-will-build-on-by-a-second-independent.md`
   - ↳ **⚠️ THE THREE-LAYER ECHO — one lesson, three altitudes, one arc** — One lesson at three altitudes — editor, predicate, measurement: ask the thing that knows; do not classify what resembles. → `docs/canon/25-counting-tokens-instead-of-classifying-rows-and-the-detect.md`
   - ↳ **⚠️ AND THE AUTHORITY ANSWERS SOME OF YOUR QUESTIONS, NOT ALL OF THEM** — "ENUMERATE WHICH QUESTIONS THE AUTHORITY CAN ANSWER BEFORE ROUTING ANY QUESTION TO IT." It answers anyway — with a resemblance wearing an authority's credibility. → `docs/canon/25-counting-tokens-instead-of-classifying-rows-and-the-detect.md`
+- **A BYTE-IDENTITY ROW NEEDS A BEFORE-HASH** — "A CONTENT claim needs a CONTENT baseline." A row required *any stored note's text — byte-identical* while only a row COUNT had been captured. Downgrade honestly to structural incapability, **so labeled** — never let a structural argument wear a measurement's clothes. → `docs/canon/69-a-byte-identity-row-needs-a-before-hash.md`
 - **A CENSUS PROVES CONTENT, NOT REACHABILITY** — "A census answers *was anything LOST?*. It cannot answer *can anything still be FOUND?*" Every ledger split ships WITH its reader sweep; watched set = **head + archives**. → `docs/canon/60-a-census-proves-content-not-reachability.md`
 - **EVIDENCE IS ONLY EVIDENCE ON THE TREE IT DESCRIBES** — Guard the state transition — rebase/merge exit code, clean `git status` — BEFORE any number counts; withdraw explicitly anything printed from a broken tree. → `docs/canon/36-evidence-is-only-evidence-on-the-tree-it-describes.md`
   - ↳ **A count inherited from another report, then incremented by assumption** — "A count carried forward from another session's report and then incremented by assumption is a fabricated number, however small the increment." → `docs/canon/36-evidence-is-only-evidence-on-the-tree-it-describes.md`
@@ -1206,6 +1207,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 - **⚠️ WRITE THE UNTESTED CLAIM DOWN BEFORE THE PASS RUNS** — Before the adversarial pass, the author writes one sentence: "the claim I have NOT tested is ___." If it cannot be written, that is the finding. → `docs/canon/27-write-the-untested-claim-down-before-the-pass-runs.md`
 - **A gate's WATCHED SET is diffed against the spec's NAMED set** — "Before any gate's zero is believed, diff what it WATCHES against what the acceptance criteria NAME." List both, in writing, before claiming the gate is met. → `docs/canon/28-a-gate-s-watched-set-is-diffed-against-the-spec-s-named-se.md`
 - A SWEEP IS DEFEATED BY AN INCOMPLETE **TOKEN LIST** AT LEAST AS OFTEN AS BY A MISSING **FORM** — A sweep dies on an incomplete TOKEN LIST as often as a missing FORM. A composed identifier has no literal in source — enumerate tokens from the CONSUMERS. → `docs/canon/30-a-sweep-is-defeated-by-an-incomplete-token-list-at-least-a.md`
+  - ↳ **⚠️ AND THE SAME SHAPE WHILE VERIFYING A DEPLOY — A `NOT FOUND` THAT WAS MY SEARCH** — Three of four tokens from ONE component resolved in the bundle and the fourth did not, reading like a partial deploy. The id was composed; the prefix was in both chunks. **A `NOT FOUND` measures your PATTERN before it is a fact about the artifact.** → `docs/canon/30-a-sweep-is-defeated-by-an-incomplete-token-list-at-least-a.md`
   - ↳ **THE DISCIPLINE, AND THE FIRST ITEM IS THE ONE USUALLY SKIPPED** — The full form list one sweep actually had to touch — test id, class family, ARIA name, element id, text, `data-*`, query-param value, enums, fixtures, project names. "A four-item checklist reads as complete and is not." → `docs/canon/30-a-sweep-is-defeated-by-an-incomplete-token-list-at-least-a.md`
   - ↳ **⚠️ FRESH SELF-APPLICATION, 2026-08-20 — I SEARCHED FOR THE FIX I IMAGINED** — "When checking whether something is DONE, search for the PROBLEM, not for your solution to it." A grep for your own fix tests your memory, not the file. → `docs/canon/30-a-sweep-is-defeated-by-an-incomplete-token-list-at-least-a.md`
 - **THE LIST IS THE DRIVER, NOT THE CONTEXT** — "A LIST THAT IS PRODUCED AND NOT WORKED FROM IS A COMMENT." "The errors stopped appearing" describes your detectors, not completion. → `docs/canon/35-the-list-is-the-driver-not-the-context.md`
@@ -1238,6 +1240,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 
 ### HYGIENE, PHI & PURGES
 
+- **AN EXONERATION IS A CLAIM TOO** — "Clearing your own deploy needs the same scoped instruments as indicting it." A glob swept unrelated migrations and returned **5** write verbs against my own deploy; scoped by NAME it was **0**, positive-controlled at 7. ⚠️ The exonerating direction is the dangerous one — **a clean result ends the enquiry.** → `docs/canon/70-an-exoneration-is-a-claim-too.md`
 - **⚠️ A DESTRUCTION LIST IS A CLAIM** — "A destruction list is a CLAIM." Verify before executing — `git worktree list`, `gh pr list`, `git ls-files` — and afterwards assert what must SURVIVE, not only what is gone. → `docs/canon/52-a-destruction-list-is-a-claim.md`
   - ↳ **Session evidence trees are EXTRACT-THEN-SHRED, at session end** — Session evidence trees are EXTRACT-THEN-SHRED at session end: land the reports first, check admission for credentials by shape, READ what you are about to destroy. → `docs/canon/52-a-destruction-list-is-a-claim.md`
   - ↳ **A history purge does not clear the filesystem** — A history purge does not clear the filesystem — a directory snapshot has no `.git`, so a blob scan is blind to it. Unbounded depth, `-xdev`, and state the boundary. → `docs/canon/52-a-destruction-list-is-a-claim.md`

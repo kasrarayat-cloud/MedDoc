@@ -76,7 +76,7 @@ work.** The morning report's `### THROUGHPUT` line exists to keep that visible.
 | **F8-S1** | 🟢 **MERGED · DEPLOYED 2026-08-27** | The ICD decision substrate + migration `20260825130000_f8s1_icd_decisions`. | **HOLD DISCHARGED** under #153(g) — migration and caller shipped as one supervised act. `assert-migrations-applied` flipped 🔴 2 unapplied → 🟢 109/109. |
 | **F8-S1b** | 🟢 **MERGED · DEPLOYED 2026-08-27** | The ICD drop record — four exits, four reason tokens (ruling #149). | Shipped inside the same judged deploy. |
 | **F8-S2** | 🟢 **CLOSED — DEPLOYED 2026-08-27** | The coding surface on the visit page (#153). | Walk passed; contrast defect found by the added axe-panel-open arm and fixed by ground (5 reported, 8 real, worst **1.16:1** hidden in axe's `incomplete`); re-proved 5→0, incomplete 1→0, elements 41→49. Live and structurally verified in the shipped bundle. |
-| **F12-e** | 🟢 **MERGED · CITED 4 of 4 · DEPLOY HELD** | The **signed document carried no E/M while the screen showed one**. Fixed at `sign/route.ts`: the freeze is gated on `emApplies` ALONE — `emBlob &&` was the defect, not the guard. Ruling **#152** (PROVISIONAL). Merge `4895decfa5453e4688626992bf60229e9fac4df6` (PR #879). | **Cited, and HELD.** Deploy is a SUPERVISED act (`AGENTS.md` § STANDING AUTHORITY, ruling #150) — the loop does not ship a clinical-surface change, so it built, proved, merged and HELD, and this row says so. **§2.5 is owed by the deploying session, which takes its own baseline.** |
+| **F12-e** | 🟢 **MERGED · CITED 4 of 4 · DEPLOYED 2026-08-27 — AS AN UNJUDGED RIDER** | The **signed document carried no E/M while the screen showed one**. Fixed at `sign/route.ts`: the freeze is gated on `emApplies` ALONE — `emBlob &&` was the defect, not the guard. Ruling **#152** (PROVISIONAL). Merge `4895decfa5453e4688626992bf60229e9fac4df6` (PR #879). | ⚠️ **THE HOLD WAS OVERTAKEN BY A TREE.** This row read *"DEPLOY HELD"* until 2026-08-28 and that was **STALE**: the merge is a `rev-parse`-verified ancestor of the DEPLOYED commit `eec8685bfabd6d45614461d77a12aeeb272bc7b2`, and production runs that deploy's image `32a43656`. **It is LIVE.** This is [a declaration is bound to a CHANGE, a deploy ships a TREE](../../AGENTS.md) exactly: the F8 deploy's **18 declared rows were about ICD work, and not one could have detected an F12-e regression.** So the EVIDENCE half is missing, not the code. **Owed:** the F12-e comparison run after the fact, per that entry — and it is surfaced to the owner because a clinical-surface change reached production while its supervised judgement was still being held for it. |
 | **F6.5** | 🔴 **OPEN — RECON DONE 2026-08-27, and the item is NOT what the row said** | `gate-r1`'s *"BOTH sides"* test asserts one side. **Re-measured:** `gate-r1-paper-structure.test.ts:188` is titled *"the lockup gaps are absolute points on BOTH sides"* and makes exactly ONE assertion, on `toTwip(LOCKUP_PT.ruleToBody)`. `eyebrowToTitle` and `titleToRule` are live and unguarded at **`docx-generator.ts:168` and `:191`** — ⚠️ **not `:106`/`:129` as this row said; the line numbers had drifted.** | Done when the guard exists. Explicitly **a guard, not a deletion**. ⚠️ **AND THE NAME IS A FOSSIL: there is no longer a second side.** `lib/pdf-generator.ts` **does not exist** — ruling #113 retired `generateVisitPdf`, and PDF now renders DOCX→Gotenberg. So the fix is not "add the missing side"; it is *guard the two live tokens on the ONE surviving generator and stop the title claiming a generator that was deleted.* |
 | **F18** | 🔵 **OPEN** | Three counts on one screen; the largest is frozen at compile time — banner reads *"79 of 80"* while the button reads *"6 of 80"*. | One count from one source, or three counts that each say which question they answer. ⚠️ Do **not** repoint the banner at mapping rows without establishing what `detectionStatus` is FOR. |
 | **F6.3-followup** | 🔵 **OPEN** | The render sidecar is bounded but **not fair**: F6.3 stops one archive monopolising the renderer; two archives can still starve an interactive render. | A cross-request admission gate, or a second sidecar for bulk work. *Do not read F6.3's green as fairness.* |
@@ -347,6 +347,17 @@ failures.
   controlled delta against the same tree before the change is **+1 file, +8
   tests, zero new failures**, and the one failing test (`gate-devstates`) passes
   10/10 on clean `main` in the shared checkout.
+
+> ⚠️ **WHERE THE BILLING ARC IS, AND WHY THE QUEUE LOOKS EMPTY OF IT.** The
+> B-series (B8 wallet/admission, B9 grants) has **zero OPEN rows in this head** —
+> measured, not assumed. Its bodies live in `docs/foundation/relay/` (`2026-08-10`,
+> `-11-part2`, `-12`, `-13`, `-15-part2`), and every row there is CLOSED or LIVE.
+> **So "the billing tail is next" is a PROGRAM-SPINE statement, not a queue row**:
+> whoever takes it opens it by reading those archives and filing a fresh item
+> here, because *a ledger row is the builder's input and an archive is not*.
+> ⚠️ Do not read the absence as "billing is done" — read it as "billing has no
+> open row **yet**". Naming which of the two it is was the whole point of the
+> reader sweep.
 
 ### Open findings carrying no item id
 
