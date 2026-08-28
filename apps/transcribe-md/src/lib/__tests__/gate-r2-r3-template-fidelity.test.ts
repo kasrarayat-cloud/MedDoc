@@ -27,7 +27,7 @@
 // needs a database, a model and a browser — and the WALK is what exercises it.
 // Saying which is which is the point.
 // ============================================================================
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -154,5 +154,36 @@ describe('R2 · silence is illegal', () => {
   it('positive control: these matchers can fail', () => {
     const src = R('apps/transcribe-md/src/actions/note-template-lifecycle.ts');
     expect(src).not.toContain('aStringThatIsNotInThisFile');
+  });
+});
+
+describe('R2 · EVERY save door surfaces the notice, not just the one that was walked', () => {
+  // Found on the QA walk: `saveNoteTemplateAction` has TWO callers. The notice
+  // was surfaced on the quick-confirm path and NOT on the review editor, so a
+  // doctor who edited before saving was told "Format activated" and never told
+  // his form cannot carry his layout. R2 says silence is illegal; it was still
+  // legal through the second door.
+  //
+  // This arm is BY ENUMERATION, not by filename: a third caller added later is
+  // caught without anyone remembering to widen a list.
+  const dir = join(__dirname, '..', '..', 'app', 'settings', 'note-format');
+
+  const callers = readdirSync(dir)
+    .filter((f) => f.endsWith('.tsx'))
+    .map((f) => ({ file: f, src: readFileSync(join(dir, f), 'utf8') }))
+    .filter(({ src }) => /\bsaveNoteTemplateAction\s*\(/.test(src));
+
+  it('finds more than one caller — the arm is not vacuous', () => {
+    // A floor, not a ratio: if the enumeration silently found nothing, every
+    // per-caller assertion below would pass by having nothing to check.
+    expect(callers.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it.each(callers.map((c) => c.file))('%s surfaces twinNotice', (file) => {
+    const { src } = callers.find((c) => c.file === file)!;
+    // The PROPERTY, on any receiver — the local name (`res` / `saved`) is an
+    // implementation detail, and pinning it makes the gate fail on a rename
+    // rather than on the defect.
+    expect(src).toMatch(/\.twinNotice\b/);
   });
 });

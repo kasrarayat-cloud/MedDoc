@@ -296,6 +296,18 @@ export function TemplateReviewEditor({
             description: res.flags[0],
           });
         }
+        // R2 - SILENCE IS ILLEGAL, AND THIS IS THE SECOND DOOR.
+        // saveNoteTemplateAction has TWO callers: the quick confirm in
+        // note-format-manager and this editor. The notice was surfaced on the
+        // first and not here, so a doctor who edited before saving was told his
+        // format was activated and NOT told it cannot carry his own layout.
+        // A shared action is not a shared surface (AGENTS.md).
+        if (res.twinNotice) {
+          toast.warning('Saved - but not on your own form', {
+            description: res.twinNotice,
+            duration: 12000,
+          });
+        }
         onSaved(res.status);
       } else {
         toast.error('Could not save', { description: res.error });
