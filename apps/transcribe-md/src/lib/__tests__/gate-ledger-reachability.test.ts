@@ -246,3 +246,97 @@ describe('the standing instructions name the archive directories', () => {
     expect(out).toContain('ledger closure-vocabulary present=1');
   }, 20_000);
 });
+
+describe('RULINGS — one number, one ruling', () => {
+  // The canon half of this lives in gate-agents-md-size. Rulings need their own
+  // arm because their collision has ALREADY happened: RULINGS.md's own preamble
+  // records that "the loop and a supervised session collided on #124, then on
+  // #125". Two actors, one counter, no lock.
+  //
+  // ⚠️ A NUMBER MAY LEGITIMATELY CARRY SEVERAL ROWS, and a naive
+  // no-duplicate-numbers arm would red main on arrival — measured: five numbers
+  // (#106 #109 #115 #116 #131) hold multiple rows, and every one is a lawful
+  // multi-part ruling. An amendment is a NEW ROW under the SAME number with a
+  // part marker in its title. So the invariant is narrower than "unique", and
+  // getting that wrong would have meant shipping a gate that had to be disabled.
+  //
+  // ⚠️ THE MARKER'S FORMAT VARIES IN PRACTICE — `(g) —`, `b —`, `(c)-CORRECTED —`
+  // are all in use. The first pattern written here matched only the parenthesised
+  // form and reported #115/#116 as violations. They were not; the probe was.
+  const PART = /^\(?([a-z0-9]{1,2})\)?[-\s)]*(?:—|-)/;
+
+  function rulingRows(): { num: string; title: string }[] {
+    const src = readFileSync(join(REPO, 'docs/foundation/RULINGS.md'), 'utf8');
+    return src
+      .split('\n')
+      .filter((l) => /^\| [0-9-]+ \| #\d+/.test(l))
+      .map((l) => {
+        const c = l.split('|').map((x) => x.trim());
+        return { num: c[2], title: c[4] ?? '' };
+      });
+  }
+
+  it('reads a populated table — the arm is not vacuous', () => {
+    expect(rulingRows().length).toBeGreaterThan(40);
+  });
+
+  it('every ruling number has exactly ONE base row', () => {
+    const base = new Map<string, number>();
+    for (const r of rulingRows()) {
+      if (PART.test(r.title)) continue;
+      base.set(r.num, (base.get(r.num) ?? 0) + 1);
+    }
+    const dupes = [...base.entries()].filter(([, c]) => c !== 1);
+    expect(
+      dupes.map(([n, c]) => `${n}: ${c} base rows`),
+      'two rulings claim the same number — an amendment carries a part marker, a collision does not',
+    ).toEqual([]);
+  });
+
+  it('a part letter is never reused within one ruling number', () => {
+    const seen = new Map<string, string[]>();
+    for (const r of rulingRows()) {
+      const m = PART.exec(r.title);
+      if (!m) continue;
+      seen.set(r.num, [...(seen.get(r.num) ?? []), m[1]]);
+    }
+    const dupes = [...seen.entries()]
+      .map(([n, v]) => [n, v.filter((p, i) => v.indexOf(p) !== i)] as const)
+      .filter(([, v]) => v.length > 0);
+    expect(dupes.map(([n, v]) => `${n}: ${v.join(',')}`)).toEqual([]);
+  });
+
+  it('base + part rows reconcile against the total', () => {
+    // Arithmetic that does not reconcile is a finding: a row landing in neither
+    // bucket means the parser stopped describing the file.
+    const rows = rulingRows();
+    const parts = rows.filter((r) => PART.test(r.title)).length;
+    const base = rows.length - parts;
+    expect(base + parts).toBe(rows.length);
+    expect(parts).toBeGreaterThan(0); // the multi-part shape really is in use
+  });
+});
+
+describe('RELAY canon links — the label agrees with the path', () => {
+  // ⚠️ FOUND IN THE QUEUE-HEAD ROW ITSELF, one step before the loop was relit to
+  // execute it. A renumber moved the PATH from canon 69 to 71 and left the LABEL
+  // reading "canon 69" — and on main, canon 69 is now a completely different
+  // entry. A reader following the link lands correctly; a reader following the
+  // TEXT, or grepping for the number it names, lands on the wrong lesson.
+  //
+  // "An index row is a POINTER, never the rule" — and a pointer whose two halves
+  // disagree is worse than a broken one, because a broken link announces itself.
+  const LINK = /\[canon (\d+)\]\(\.\.\/canon\/(\d+)-[a-z0-9-]*\.md\)/g;
+
+  it('every canon link in RELAY resolves AND its label matches its number', () => {
+    const src = readFileSync(join(REPO, 'docs/foundation/RELAY.md'), 'utf8');
+    const links = [...src.matchAll(LINK)];
+    // Non-vacuity: if the pattern stops matching, every assertion below passes by
+    // having nothing to check. This is the arm that would hide the arm.
+    expect(links.length).toBeGreaterThan(0);
+    const wrong = links
+      .filter((m) => m[1] !== m[2])
+      .map((m) => `label canon ${m[1]} points at canon ${m[2]}`);
+    expect(wrong).toEqual([]);
+  });
+});

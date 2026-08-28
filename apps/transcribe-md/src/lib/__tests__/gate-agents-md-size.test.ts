@@ -120,6 +120,54 @@ describe('AGENTS.md size budget', () => {
   // omission. ARITHMETIC THAT DOES NOT RECONCILE IS A FINDING; a header that
   // silently drifts from the list beneath it is how a reader learns to stop
   // trusting the numbers in this file.
+  // ==========================================================================
+  // ⚠️ DUPLICATE NUMBERS — ordered 2026-08-28, after a collision that would have
+  // landed silently. Three branches were open, each adding canon entries. Two
+  // independently claimed 69 and two claimed 70. The SLUGS differ, so git merges
+  // all four cleanly and main ends up holding two entries numbered 69 and two
+  // numbered 70, with the index pointing at whichever a reader finds first.
+  // Nothing fails. The numbering simply stops meaning anything.
+  //
+  // ⚠️ AND EVERY BRANCH RECONCILED INDIVIDUALLY — all four were checked and each
+  // one's stated count matched its own row count. A PER-BRANCH INVARIANT IS NOT
+  // A MERGE INVARIANT: nothing any single branch can assert about itself catches
+  // a collision that only exists in the union. This arm is on main for exactly
+  // that reason — it is the first thing that sees the union, and it reds the
+  // first post-merge run instead of letting the collision live forever.
+  // ==========================================================================
+  it('no two canon bodies share a number', () => {
+    const files = readdirSync(join(REPO, 'docs/canon'))
+      .filter((f) => /^\d+-.*\.md$/.test(f));
+    expect(files.length).toBeGreaterThan(50); // non-vacuity: the directory was read
+    const byNumber = new Map<string, string[]>();
+    for (const f of files) {
+      const n = f.match(/^(\d+)-/)![1];
+      byNumber.set(n, [...(byNumber.get(n) ?? []), f]);
+    }
+    const dupes = [...byNumber.entries()].filter(([, v]) => v.length > 1);
+    expect(
+      dupes.map(([n, v]) => `${n}: ${v.join(' vs ')}`),
+      'two canon bodies claim the same number — a cross-branch collision landed',
+    ).toEqual([]);
+  });
+
+  it('no two index rows point at different files with the same number', () => {
+    const agents = readFileSync(join(REPO, 'AGENTS.md'), 'utf8');
+    const pointers = [...agents.matchAll(/→ `docs\/canon\/(\d+)-([^`]+\.md)`/g)];
+    expect(pointers.length).toBeGreaterThan(50); // non-vacuity
+    const byNumber = new Map<string, Set<string>>();
+    for (const m of pointers) {
+      const set = byNumber.get(m[1]) ?? new Set<string>();
+      set.add(m[2]);
+      byNumber.set(m[1], set);
+    }
+    const dupes = [...byNumber.entries()].filter(([, v]) => v.size > 1);
+    expect(
+      dupes.map(([n, v]) => `${n}: ${[...v].join(' vs ')}`),
+      'the index points at two different bodies under one number',
+    ).toEqual([]);
+  });
+
   it('the stated entry count reconciles with the rows actually in the index', () => {
     const agents = readFileSync(join(REPO, 'AGENTS.md'), 'utf8');
 
