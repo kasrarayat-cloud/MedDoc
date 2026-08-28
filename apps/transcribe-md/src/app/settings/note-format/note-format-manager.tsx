@@ -388,6 +388,20 @@ export function NoteFormatManager({
             return;
           }
           templateId = saved.id;
+          // ⚠️ R2 — SILENCE IS ILLEGAL. If the exact-form (twin) path could not be
+          // prepared, the doctor is told HERE, at upload, with the reason AND the
+          // consequence — not left to discover it in a signed export. The owner
+          // uploaded a prose GI form, it quarantined with NO_FILLABLE_FIELDS, and he
+          // signed against it 12m34s later having been shown nothing.
+          //
+          // It is a WARNING, not an error: the format IS saved and usable. What is
+          // unavailable is exact-form export, and that distinction is the message.
+          if (saved.twinNotice) {
+            toast.warning('Saved — but not on your own form', {
+              description: saved.twinNotice,
+              duration: 12000,
+            });
+          }
           setActivatedId(saved.id);
         }
 

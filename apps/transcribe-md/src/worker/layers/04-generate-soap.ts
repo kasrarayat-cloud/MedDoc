@@ -31,6 +31,7 @@ import {
   requiredSectionLabels,
   templateHasChoiceSlots,
   type ResolvedNoteTemplate,
+  stripScaffoldMarkers,
 } from '../note-templates/build-soap-prompt';
 import {
   composeNote,
@@ -376,7 +377,9 @@ export async function runLayer4GenerateSoap(
     // demoted lines removed and emptied sections back-filled with a placeholder
     // — the shape that existed to feed the lane. There is no lane now, so
     // serving it would silently drop content the physician never got to see.
-    text = verified.fullBody;
+    // ⚠️ R3(c): prompt scaffolding never becomes a record. Belt to the brace of
+    // no longer injecting the marker at all — see stripScaffoldMarkers.
+    text = stripScaffoldMarkers(verified.fullBody);
     filledEmptySections = verified.stats.filledEmptySections ?? [];
     // ── AUDIT-ONLY ───────────────────────────────────────────────────────────
     // The verifier still runs and still judges, but nothing it finds becomes

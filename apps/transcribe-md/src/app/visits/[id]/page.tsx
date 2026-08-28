@@ -152,7 +152,10 @@ export default async function VisitPage({
   emScoredCode: string | null;
     /** F12 / ruling #123 — the bound template's section labels, which carry
      *  the note-SHAPE axis of E/M applicability. `Json`, so `unknown`. */
-    noteTemplate: { sections: unknown } | null;
+    noteTemplate: {
+      sections: unknown;
+      templateTwinCompiledVersion: { certificationStatus: string } | null;
+    } | null;
     patientSummary: string | null;
     confidenceScores: unknown;
   };
@@ -219,7 +222,17 @@ export default async function VisitPage({
         // F12 / ruling #123 — the note-SHAPE axis. An operative note carries
         // no office-visit E/M level, and a specialty id cannot say so: a GI
         // doctor does office visits AND colonoscopies under one specialty.
-        noteTemplate: { select: { sections: true } },
+        // ⚠️ R2 — the visit must be able to SAY when the exact-form guarantee
+        // is off. `compiledVersions` is pulled so the surface can tell a
+        // certified template from one that quarantined at upload. The owner
+        // signed a note 12m34s after his template quarantined, with nothing on
+        // screen to tell him his own form was not being used.
+        noteTemplate: {
+          select: {
+            sections: true,
+            templateTwinCompiledVersion: { select: { certificationStatus: true } },
+          },
+        },
         patientSummary: true,
         confidenceScores: true,
       },
@@ -315,6 +328,14 @@ export default async function VisitPage({
           specialty={specialtyLabel(visit.specialty)}
           specialtyId={specialtyId(visit.specialty)}
           templateSections={visit.noteTemplate?.sections ?? null}
+          // ⚠️ R2 — a visit whose template never certified says so on its face.
+          // True only when the visit HAS a bound template that is not CERTIFIED:
+          // a visit with no template at all is a different situation and gets no
+          // banner, because this one names a broken PROMISE, not an absent one.
+          templateUncertified={
+            !!visit.noteTemplate &&
+            visit.noteTemplate.templateTwinCompiledVersion?.certificationStatus !== 'CERTIFIED'
+          }
           emailEnabled={isEmailDeliveryEnabled()}
           inputMode={visit.inputMode}
           status={visit.status}
@@ -411,6 +432,9 @@ interface VisitBodyProps {
    *  when the visit has no template, which is 30 of 45 production rows and is
    *  explicitly NOT an operative note. */
   templateSections: unknown;
+  /** ⚠️ R2 — the visit's template is bound but was never CERTIFIED, so the
+   *  exact-form guarantee is OFF and exports come from the styled path. */
+  templateUncertified: boolean;
   emailEnabled: boolean;
   inputMode: string;
   status: TranscribeVisitStatus;
@@ -764,8 +788,39 @@ async function VisitBody(props: VisitBodyProps) {
     },
   };
 
+  // ⚠️ R2 — SILENCE IS ILLEGAL, ON THE SURFACE TOO.
+  // A template that never certified means the exact-form guarantee is OFF and
+  // this note will export in the standard layout, not on the doctor's own
+  // form. That was true for the owner's GI template and NOTHING said so: it
+  // quarantined at 20:53:57 and he signed against it 12m34s later.
+  //
+  // Chrome is copied verbatim from the shipped TrashedBanner in
+  // visit-lifecycle-actions.tsx — same amber, same radius, same type scale.
+  // ⚠️ NO NEW VISUAL LANGUAGE IS INVENTED HERE: a banner's EXISTENCE was
+  // ruled, its DESIGN was not, and inventing one would be designing solo.
+  const uncertifiedBanner = props.templateUncertified ? (
+    <div
+      className="mb-6 flex flex-wrap items-center gap-2 rounded-lg px-4 py-3 text-[13px]"
+      style={{
+        background: 'rgba(212,164,55,0.07)',
+        border: '1px solid rgba(212,164,55,0.32)',
+        color: 'var(--color-linear-text-2)',
+      }}
+      role="status"
+      data-testid="visit-uncertified-template-banner"
+    >
+      <span>
+        This note will export in the standard layout, not on your own form — the
+        uploaded format could not be certified for exact-form export.
+      </span>
+    </div>
+  ) : null;
+  
+
   return (
-    <VisitReadyView
+    <>
+      {uncertifiedBanner}
+      <VisitReadyView
       rounds={rounds}
       visitActions={props.visitActions}
       visitId={props.visitId}
@@ -853,5 +908,6 @@ async function VisitBody(props: VisitBodyProps) {
         props.createdAt ? props.createdAt.toISOString() : null
       }
     />
+    </>
   );
 }

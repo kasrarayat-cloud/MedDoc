@@ -19,6 +19,8 @@ import {
   normalizeTemplate,
   requiredSectionLabels,
   SCAFFOLD_CONFIRM_MARKER,
+  SCAFFOLD_REFERENCE_CLOSE,
+  SCAFFOLD_REFERENCE_OPEN,
   type ResolvedNoteTemplate,
 } from '../build-soap-prompt';
 
@@ -120,10 +122,21 @@ describe('buildSoapSystemPrompt — IMMUTABLE safety boundary', () => {
 });
 
 describe('buildSoapSystemPrompt — normals handling per defaultTextMode', () => {
-  it('scaffold_confirm inserts the default text WITH the confirm marker', () => {
+  it('scaffold_confirm FENCES the default text as reference, and appends NO marker', () => {
+    // ⚠️ R3(c) INVERTED THIS TEST, and the inversion is the point. It used to
+    // assert the confirm marker was appended to the prompt. That marker was a
+    // note TO THE CLINICIAN whose only delivery route was the model choosing to
+    // copy it into the note — and when the model obliged, the marker line reached
+    // stored notes, one of them SIGNED. A signal that depends on a model's
+    // cooperation is not a signal.
+    //
+    // The scaffold itself still has to be VISIBLE (it is the doctor's house
+    // style), so it is FENCED as reference material rather than deleted.
     const prompt = buildSoapSystemPrompt(CUSTOM, OPTS);
     expect(prompt).toContain('Appearance: WNL. Mood: euthymic. Affect: full.');
-    expect(prompt).toContain(SCAFFOLD_CONFIRM_MARKER);
+    expect(prompt).toContain(SCAFFOLD_REFERENCE_OPEN);
+    expect(prompt).toContain(SCAFFOLD_REFERENCE_CLOSE);
+    expect(prompt).not.toContain(SCAFFOLD_CONFIRM_MARKER);
   });
 
   // ⚠️ THIS TEST USED TO ASSERT THE OPPOSITE, AND ITS INVERSION IS THE PROOF.
@@ -151,6 +164,11 @@ describe('buildSoapSystemPrompt — normals handling per defaultTextMode', () =>
     const prompt = buildSoapSystemPrompt(t, OPTS);
     expect(prompt).not.toContain('Generated with AI assistance.');
     expect(prompt).toContain('SYSTEM-COMPOSED SECTION');
+    // ⚠️ RE-POINTED BY R3(c). `not.toContain(SCAFFOLD_CONFIRM_MARKER)` became
+    // VACUOUS the moment the marker stopped being emitted anywhere — it would
+    // pass for every template, including one that wrongly fenced this section as
+    // a scaffold. The fence is what discriminates this case now.
+    expect(prompt).not.toContain(SCAFFOLD_REFERENCE_OPEN);
     expect(prompt).not.toContain(SCAFFOLD_CONFIRM_MARKER);
   });
 
@@ -333,7 +351,9 @@ describe('Phase 2b — activated custom template keeps the safety boundary', () 
   it('(b) L5 normals-scrutiny runs on the inserted default (scaffold marker present)', () => {
     expect(insertedDefaultSections(tmpl).map((s) => s.key)).toEqual(['objective']);
     expect(prompt).toContain('General: well-appearing. CV: RRR. Resp: CTAB.');
-    expect(prompt).toContain(SCAFFOLD_CONFIRM_MARKER);
+    // R3(c): the inserted default is FENCED, not marker-appended — L5 still sees it.
+    expect(prompt).toContain(SCAFFOLD_REFERENCE_OPEN);
+    expect(prompt).not.toContain(SCAFFOLD_CONFIRM_MARKER);
   });
 
   it('(c) the COMBINED Impression & Plan stays one section (intact for L7)', () => {
