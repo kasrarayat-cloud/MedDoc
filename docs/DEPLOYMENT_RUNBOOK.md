@@ -210,6 +210,57 @@ For a code-only deploy the declaration is one line — **"nothing but the image
 ids"** — and it is still written down, because that is what makes any other
 movement a finding rather than a discussion.
 
+#### ⚠️ MANDATORY STEP — CROSS-REFERENCE THE DEPLOY RANGE AGAINST EVERY HELD DECLARATION
+
+**Ratified 2026-08-28, owner ruling, after F12-e reached production inside
+somebody else's deploy.** A declaration is bound to a **CHANGE**. A deploy ships
+a **TREE**. When more than one change reaches `main` before either ships, the
+deploy discharges only the declaration whose author ran the comparison — and the
+other rides along **unjudged**, with nothing anywhere saying so.
+
+> **THE HAZARD HAS A NAME: *OVERTAKEN, NOT OVERRIDDEN*.** Nobody bypasses a hold.
+> The hold is attached to a change; a later act carries that change past its own
+> gate; and both parties behave correctly throughout. That is what makes it
+> invisible — there is no wrongdoing to notice.
+
+**Before any deploy, and BEFORE the declaration is committed:**
+
+1. **Enumerate the deploy range** — every commit between what is running and
+   what is about to ship:
+
+       git log --oneline <deployed-sha>..<about-to-deploy-sha>
+
+2. **List the RUNTIME files that range touches** — application code, migrations,
+   worker code. Docs and tests do not arm this step:
+
+       git diff --name-only <deployed-sha>..<about-to-deploy-sha> \
+         | grep -vE '^docs/|__tests__|\.test\.'
+
+3. **Cross-reference against every OPEN or HELD declaration.** A held
+   declaration whose files appear in that range **BLOCKS THIS DEPLOY** until it
+   is resolved, exactly two ways:
+
+   - **JUDGED JOINTLY** — its rows are folded into this declaration and measured
+     in the same act; or
+   - **EXPLICITLY DEFERRED** — and *the deferral is named in the deploying
+     declaration itself*, so the next reader finds it where they are already
+     looking.
+
+⚠️ **A THIRD OPTION IS REJECTED BY NAME: shipping it silently because it is
+"only an ancestor".** That is precisely what happened, and it produced a true
+sentence — *"18 declared rows, 18 matched"* — doing misleading work, because not
+one of those rows measured the change that rode along.
+
+⚠️ **AND "I DEPLOYED `main`" IS NOT THE SAME CLAIM AS "I JUDGED WHAT I
+DEPLOYED."** The first is about a ref. The second is about evidence. This step
+exists so the two cannot be confused in either direction.
+
+**If it happens anyway, the unjudged declaration is still worth running** — see
+`docs/foundation/deploys/20260827-b439dcbb-F12E-RETROSPECTIVE.md`, which
+recovered every row because the declaration's commit provably preceded the act.
+**What a retrospective recovers is the EVIDENCE, never the GATE**, and it says so
+in its own header.
+
 #### Why this is a rule and not a nicety
 
 A post-deploy check written AFTER the deploy is unfalsifiable. Every number has

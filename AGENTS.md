@@ -583,6 +583,17 @@ reading what the commit actually contained, rather than trusting `git add -A`).
 **A verification written to the ignored path looks committed and is invisible**,
 which is the worst of both: the work was done and the record does not exist.
 
+⚠️ **AND A DEPLOY CROSS-REFERENCES ITS RANGE AGAINST EVERY HELD DECLARATION,
+BEFORE THE DECLARATION IS COMMITTED — `DEPLOYMENT_RUNBOOK.md` §2.5.** A held
+declaration whose runtime files appear in the deploy range **BLOCKS the deploy**
+until it is judged jointly or explicitly deferred **by name in the deploying
+declaration**. ⚠️ **THE HAZARD IS CALLED *OVERTAKEN, NOT OVERRIDDEN*:** nobody
+bypasses the hold — the hold is bound to a CHANGE, the deploy ships a TREE, and
+both parties behave correctly while a clinical fix reaches production unjudged.
+Reference case: F12-e, recovered retrospectively at
+`docs/foundation/deploys/20260827-b439dcbb-F12E-RETROSPECTIVE.md`. **A
+retrospective recovers the EVIDENCE, never the GATE.**
+
 **A post-deploy check written afterwards is unfalsifiable.** Every number has a
 story available to it, and a migration supplies a ready-made excuse for *any*
 movement — *"the migration touched that table"*. Declaring first removes the
@@ -1103,7 +1114,7 @@ because the two errors are not symmetric.
 
 ## CANON INDEX — every archived entry, one row each
 
-**108 entries live in full at `docs/canon/`.**
+**109 entries live in full at `docs/canon/`.**
 Each row is a **POINTER, never the authority** — the archived body governs, and
 it is verbatim. A row exists so that a grep for an entry's title still lands
 here and tells you where the body went; the tell is that entry's OWN words.
@@ -1214,6 +1225,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 - **⚠️ AND WHEN THE ARTIFACT IS GENERATED: THE GENERATOR MUST DELETE WHAT IT REPLACES** — A regeneration that PREPENDS and never deletes leaves a file holding every value you assert, syntactically dead. Assert a generated file's STRUCTURE, bound to code. → `docs/canon/46-and-when-the-artifact-is-generated-the-generator-must-dele.md`
 - **⚠️ AND THE SAME SHAPE OUTSIDE `.replace()`: AN OPERATION THAT SUCCEEDS AND DOES NOT LAND** — `core.fileMode` is false here: `chmod +x` succeeds and the file still enters the index 100644. Set the bit in the INDEX; verify with `git ls-files -s`. → `docs/canon/47-and-the-same-shape-outside-replace-an-operation-that-succe.md`
 - **The substring trap — fourth sighting, same family** — The substring trap: `'practice-scope' in source` matched "practice-scoped" in a comment. Prefer `toBe`; for is-it-present checks match the EXACT token. → `docs/canon/50-the-substring-trap-fourth-sighting-same-family.md`
+- **PIN PROPERTIES, NOT SPELLINGS** — "A source-text gate that asserts an exact SPELLING can lock a defect in place." Three same-week specimens; the middle one **demanded the unscoped cross-tenant read** and reported green for it, while `gate-practice-scope`'s ratchet caught it in CI. ⚠️ The leaked count was **spoken to the doctor** in a refusal string — cross-tenant data in a UI string is the weight. The tell: *if somebody IMPROVED this code, would my gate fail?* → `docs/canon/70-pin-properties-not-spellings.md`
 
 ### WRITE PATHS, MIGRATIONS & CONSTRAINTS
 
