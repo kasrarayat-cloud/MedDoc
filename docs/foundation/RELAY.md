@@ -63,12 +63,15 @@ which could be read.** This is that queue, rebuilt from what is actually open.
 > AUTHORITY** (ruling #150). Not here. The loop builds, proves and merges;
 > supervised sessions deploy clinical-surface changes.
 
-**F8 LEADS THE QUEUE** — ruling #147 (*"F24 CLOSES → F8 opens"*), and F24 closed
-2026-08-25 at 75 of 80. **Canon and process items ride along; they are not the
+**F5-i-2 LEADS THE QUEUE** — owner ruling **#156**, class (a)/(b), 2026-08-28.
+It displaced F8, which **CLOSED 2026-08-27** on the judged deploy of `eec8685b`
+(ruling #147's *"F24 CLOSES → F8 opens"* is therefore discharged, and F24 closed
+2026-08-25 at 75 of 80). **Canon and process items ride along; they are not the
 work.** The morning report's `### THROUGHPUT` line exists to keep that visible.
 
 | Item | State | What it is | Blocked on / Done when |
 |---|---|---|---|
+| **F5-i-2** | 🔴 **OPEN — TOP OF QUEUE, the loop takes it immediately** | **SHAPE-AWARE VERIFICATION ENCOUNTERS.** The certification engine learns to derive a self-test per template **SHAPE**, not only the venous/measurement shape. For consult/SOAP forms — the owner's among them — the synthetic encounter is derived from the **compiled field set** (histories, social fields, impressions, plan lines, HPI narratives), and the coverage floor is **SHAPE-APPROPRIATE**: the measurement-cell requirement applies only to shapes that HAVE measurement cells. A shape with no generator stays an **HONEST LOUD REFUSAL** — today's state, now visible. **It ABSORBS R4** (prose-template support). ⚠️ **THE GATE NEVER LOOSENS.** No certification without a round-trip self-test. The option *"certify measurement-less forms without proof"* is **REJECTED BY NAME** — that is the fake-certified state the gate exists to kill, and it is what F5-i removed when it deleted the fallback that proved a leg-vein study and called it the doctor's template. | **Done when the owner's R5 form certifies END-TO-END on QA** with **REALISTIC per-field concept mappings — never a blanket substitution** (the walk's own lesson: [canon 69](../canon/71-a-refusal-caused-by-my-own-substitution.md)), a synthetic visit fills, and the export is **byte-faithful on his layout**. **Half two of the R5 walk re-runs to completion as the proof.** Build + **MANDATORY adversarial pass** — this is the F5-c derivation generalized, so its wrong-fill traps are known cousins. |
 | **F8** | 🟢 **CLOSED 2026-08-27** | The ICD-10 coding tab. | **CLOSED on the judged deploy of `eec8685b`.** S1's substrate, S1b's drop record and S2's coding surface are LIVE. The acceptance walk passed on a QA build proven byte-identical to what shipped (blob `3aa08f9f`, empty runtime diff). **18 declared rows, 18 matched, no unnamed movement** — `docs/foundation/deploys/20260827-b439dcbb-JUDGED.md`. |
 | **F8-S1** | 🟢 **MERGED · DEPLOYED 2026-08-27** | The ICD decision substrate + migration `20260825130000_f8s1_icd_decisions`. | **HOLD DISCHARGED** under #153(g) — migration and caller shipped as one supervised act. `assert-migrations-applied` flipped 🔴 2 unapplied → 🟢 109/109. |
 | **F8-S1b** | 🟢 **MERGED · DEPLOYED 2026-08-27** | The ICD drop record — four exits, four reason tokens (ruling #149). | Shipped inside the same judged deploy. |
@@ -82,7 +85,7 @@ work.** The morning report's `### THROUGHPUT` line exists to keep that visible.
 | **F17** | ⏸️ **PARKED** | Four non-billable ICD-10 headers (`I87.30`–`.33`) admitted by the billing floor. Measured through `isValidIcd10()` with controls. | **TRIGGER NAMED** — see the archived body. |
 | **F12-h** | ⏸️ **PARKED** | The templated-operative E2E class. | **TRIGGER NAMED:** the `e2e` headroom question (F19). |
 | **F12-b** | ⏸️ **PARKED** | E/M item hosted by R4b 2026-08-14. | Parked on the **OWNER PING**. ⚠️ Single mention in the whole ledger. |
-| **F5-i part 1b** | ⏸️ **PARKED — owner's call** | Per-shape certification generators. | ⚠️ **Never delivered by restoring the fallback.** The census retires when a second shape lands. |
+| **F5-i part 1b** | 🔴 **UN-PARKED 2026-08-28 — now F5-i-2, at the top of this table** | Per-shape certification generators. **The owner's call, which this row waited on, was made:** ruling #156. | ⚠️ **Never delivered by restoring the fallback.** The census retires when a second shape lands. **This row is a POINTER now; F5-i-2 is the item.** |
 | **F19** | ⏸️ **DEFERRED — owner decision owed** | The `e2e` ceiling (`e2e.yml` `timeout-minutes: 55`). | Decision owed after the auto-cert ping. ⚠️ **Do not raise or lower the ceiling** without it. |
 | **F20** *(swap)* | 🔧 **OPEN — owner-approved, awaits a quiet window** | Swap pinned at 4.0Gi with ~20 GB RAM free; historical pages never faulted back. ⚠️ **Two items carry the id `F20`** — see the reconciliation below. | `swapoff -a && swapon -a` in a quiet window. |
 | **F11** *(third grant)* | 🔴 **OPEN — owner question** | Two of three STEP-0/canon instruments were granted 2026-08-17; the third is an owner question. | An owner decision. |
