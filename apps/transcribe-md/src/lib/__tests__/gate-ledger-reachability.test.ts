@@ -316,3 +316,27 @@ describe('RULINGS — one number, one ruling', () => {
     expect(parts).toBeGreaterThan(0); // the multi-part shape really is in use
   });
 });
+
+describe('RELAY canon links — the label agrees with the path', () => {
+  // ⚠️ FOUND IN THE QUEUE-HEAD ROW ITSELF, one step before the loop was relit to
+  // execute it. A renumber moved the PATH from canon 69 to 71 and left the LABEL
+  // reading "canon 69" — and on main, canon 69 is now a completely different
+  // entry. A reader following the link lands correctly; a reader following the
+  // TEXT, or grepping for the number it names, lands on the wrong lesson.
+  //
+  // "An index row is a POINTER, never the rule" — and a pointer whose two halves
+  // disagree is worse than a broken one, because a broken link announces itself.
+  const LINK = /\[canon (\d+)\]\(\.\.\/canon\/(\d+)-[a-z0-9-]*\.md\)/g;
+
+  it('every canon link in RELAY resolves AND its label matches its number', () => {
+    const src = readFileSync(join(REPO, 'docs/foundation/RELAY.md'), 'utf8');
+    const links = [...src.matchAll(LINK)];
+    // Non-vacuity: if the pattern stops matching, every assertion below passes by
+    // having nothing to check. This is the arm that would hide the arm.
+    expect(links.length).toBeGreaterThan(0);
+    const wrong = links
+      .filter((m) => m[1] !== m[2])
+      .map((m) => `label canon ${m[1]} points at canon ${m[2]}`);
+    expect(wrong).toEqual([]);
+  });
+});
