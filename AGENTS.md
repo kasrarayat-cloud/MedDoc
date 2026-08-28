@@ -1114,7 +1114,7 @@ because the two errors are not symmetric.
 
 ## CANON INDEX — every archived entry, one row each
 
-**109 entries live in full at `docs/canon/`.**
+**110 entries live in full at `docs/canon/`.**
 Each row is a **POINTER, never the authority** — the archived body governs, and
 it is verbatim. A row exists so that a grep for an entry's title still lands
 here and tells you where the body went; the tell is that entry's OWN words.
@@ -1205,6 +1205,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 
 - **A check whose TITLE is narrower than what it MEASURES** — Read a check's name as a claim, then confirm the code makes exactly that claim — no wider, no narrower. Mutate toward SUCCESS as well as failure. → `docs/canon/08-a-check-whose-title-is-narrower-than-what-it-measures.md`
 - **A WELL-CHOSEN FIXTURE DISGUISES A WRONG UNIVERSE** — "A pipeline proof runs in the PRODUCTION UNIVERSE: production's FLAG SET and ROUTES." A fixture from the right domain is not a route. Count the production rows the proof covers. → `docs/canon/09-a-well-chosen-fixture-disguises-a-wrong-universe.md`
+- **A PER-BRANCH INVARIANT IS NOT A MERGE INVARIANT** — "Nothing a single branch can assert about itself catches a collision that exists only in the UNION." Three branches each added canon entries; two claimed 69 and two claimed 70. **Git merges all four cleanly** — different slugs, no conflict — and the numbering silently stops meaning anything. ⚠️ All four branches reconciled INDIVIDUALLY, so the one watching instrument reported green four times. The gate must live on `main`, where the union first exists. ⚠️ And measure the population first: the obvious "unique numbers" arm reds `main` on arrival. → `docs/canon/73-a-per-branch-invariant-is-not-a-merge-invariant.md`
 - **A MUTATION PROOF THAT EXERCISES THE COMPLETE INVERSE HAS PROVED THE TIDY CASE** — "The failure that ships is a HALF-LANDED fix." Mutate to each PARTIAL application of your own fix; a present-but-empty fallback makes one invisible. → `docs/canon/10-a-mutation-proof-that-exercises-the-complete-inverse-has-p.md`
 - **OVERLAPPING GUARDS MUST NOT LAUNDER AN UNPROVED ARM** — "Caught by a DIFFERENT guard than the one you were proving? The arm is still unproved — and the red run is the most convincing possible evidence that it works." APPLICATION IS NOT EXERCISE. Re-mutate to the minimal shape the arm can see; ask whether the failure message names YOUR arm. → `docs/canon/62-overlapping-guards-must-not-launder-an-unproved-arm.md`
 - **FIX BY GROUND, NOT BY HIT** — "A fix covers the MECHANISM'S CLASS, not the nodes the measurement happened to exercise." `icd-empty` was fixed having failed in no scan, in either state, because it sits on the same wrong side of the same boundary. ⚠️ And the inverse binds too: the passing cards were left untouched. → `docs/canon/68-fix-by-ground-not-by-hit.md`

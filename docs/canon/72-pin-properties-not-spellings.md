@@ -64,6 +64,33 @@ against code the author believed was finished.
 that is the most valuable single data point in the change, and the temptation is
 to fix it quietly and never mention it happened.
 
+## ⚠️ THE ASYMMETRY — A LOOSE-SHAPE PIN IS THE DANGEROUS DIRECTION
+
+**Added after a THIRD specimen, found by sweeping `toEqual({ where:` across every
+test file rather than fixing only the one CI named.**
+
+That sweep returned exactly one other site — `deleteMany` pinned at
+`{ id, doctorId }` — and it **stays**, which is the point:
+
+> **Pinning a shape that is already maximally tight is close to harmless, because
+> the improvement it blocks does not exist. Pinning a LOOSE shape is the
+> dangerous direction, because the thing it forbids is precisely the tightening
+> somebody will later need to make.**
+
+Doctor scope is NARROWER than practice scope and is what `gate-practice-scope`
+explicitly sanctions, so that pin forbids nothing worth doing. Both of the
+failures in this entry were the loose kind: each demanded the unscoped form and
+would have refused the fix.
+
+**So the sweep is not "unpin every shape."** It is: find the pins that sit on the
+loose side of a boundary, because those are the ones holding a defect in place.
+
+⚠️ **AND LET THE TYPE CHANGE DO THE SWEEPING.** Changing `genericHeaderKey` from
+`string` to `string | null` made tsc enumerate all three call sites instead of
+letting a falsy value slip silently through one of them. A signature change that
+forces the compiler to re-check every caller is a better sweep than any grep —
+grep finds what you thought to look for, the type checker finds what exists.
+
 ## The tell, so this is checkable rather than remembered
 
 **When writing a source-text assertion, ask: "if somebody IMPROVED this code,
