@@ -69,8 +69,22 @@ describe('R1 · the template-delete fence', () => {
     const fn = src.slice(src.indexOf('export async function deleteNoteTemplateAction'));
     const body = fn.slice(0, fn.indexOf('\nexport '));
 
+    // ⚠️ THE PROPERTY, NOT THE SHAPE — and the first version of this arm pinned
+    // the shape and thereby PINNED A DEFECT. It required the count to be written
+    // exactly `{ where: { noteTemplateId: id } }`, which is the UNSCOPED form;
+    // `gate-practice-scope`'s ratchet failed on that same code in CI. A
+    // source-text gate that fixes an implementation spelling will happily hold a
+    // bug in place and report green for doing it.
     expect(body, 'the action must count referencing visits').toMatch(
-      /transcribeVisit\.count\(\s*\{\s*where:\s*\{\s*noteTemplateId:\s*id\s*\}/,
+      /transcribeVisit\.count\(/,
+    );
+    expect(body, 'the count must filter by the template being deleted').toMatch(
+      /noteTemplateId:\s*id\b/,
+    );
+    // `transcribeVisit` is clinical, and this number is spoken back to the
+    // doctor — so the count is practice-scoped, not merely template-filtered.
+    expect(body, 'the visit count must be practice-scoped').toMatch(
+      /visitScope\(/,
     );
     // it must RETURN on the referenced case, not merely log
     expect(body).toMatch(/referencing\s*>\s*0[\s\S]{0,240}?ok:\s*false/);

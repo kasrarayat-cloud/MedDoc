@@ -32,6 +32,7 @@ import { requireManualCertification } from '@/config/require-manual-certificatio
 /** An upload must never wait longer than this on the queue. See the call site. */
 const ENQUEUE_TIMEOUT_MS = 3000;
 import { requireSession } from '@/lib/auth';
+import { asPracticeId, visitScope } from '@/lib/practice-scope';
 import { isTenantOwnedArtifactKey } from '@/lib/template-twin/storage';
 import { applyPhiGate } from '@/lib/note-template-parse/phi-gate';
 import {
@@ -575,7 +576,14 @@ export async function deleteNoteTemplateAction(id: string): Promise<SimpleResult
   });
   if (!owned) return { ok: false, error: "That template doesn't exist or isn't yours." };
 
-  const referencing = await prisma.transcribeVisit.count({ where: { noteTemplateId: id } });
+  // ⚠️ PRACTICE-SCOPED, and the ratchet in gate-practice-scope caught that the
+  // first version was not. `transcribeVisit` is a clinical table: an unscoped
+  // count crosses tenants, and this number is not kept private — it is spoken
+  // back to the doctor in the refusal message below. Ownership of the TEMPLATE
+  // (checked above) does not scope a read of VISITS.
+  const referencing = await prisma.transcribeVisit.count({
+    where: { ...visitScope(asPracticeId(session.user.practiceId)), noteTemplateId: id },
+  });
   if (referencing > 0) {
     return {
       ok: false,

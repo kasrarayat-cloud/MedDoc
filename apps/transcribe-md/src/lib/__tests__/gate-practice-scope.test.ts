@@ -459,7 +459,11 @@ const PERSONAL_SCOPE: Record<string, number> = {
 const DOCTOR_SCOPE: Record<string, number> = {
   'src/actions/certify-pdf-template.ts': 1,
   'src/actions/visits.ts': 1,
-  'src/actions/note-template-lifecycle.ts': 4,
+  // 4 -> 5 on 2026-08-28: R1's delete fence reads the template by { id, doctorId }
+  // before refusing, so a foreign id cannot be probed for its visit count. The
+  // sibling `updateMany` in archiveNoteTemplateAction is a WRITE and is counted
+  // by clinicalWrites(), which is why this moved by one and not by two.
+  'src/actions/note-template-lifecycle.ts': 5,
   'src/actions/preview-native-document.ts': 1,
   'src/app/settings/page.tsx': 1,
   'src/app/visits/new/page.tsx': 1,
