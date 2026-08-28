@@ -202,6 +202,30 @@ docker-compose.*key*.yml
 # dirty") over scratch it was not permitted to reap.
 .f[0-9]*-*
 
+# ⚠️ AND THE CLASS, NOT THE NEXT PREFIX — 2026-08-28, after the THIRD blocked
+# relight in one day. `.f[0-9]*-*` encodes an assumption that worktrees are named
+# after F-items. The ruling arc broke it (`.r1-fence`, `.r23-fix`) and so did a
+# plain noun (`.judge`, no digit, no dash). Each time the loop's launch guard —
+# which counts UNTRACKED files — refused to start over scratch it cannot reap.
+#
+# ⚠️ THE OBVIOUS FIX IS THE DANGEROUS ONE. A blanket `.*/` would ignore
+# `.github/`, `.claude/` and `.agents/`, which are TRACKED. Already-tracked files
+# would survive, but every NEW workflow or agent file would land ignored and
+# silently never be committed. So the pattern is broad AND the three tracked
+# directories are re-included immediately below, where the next reader meets them
+# in the same breath as the rule that would have eaten them.
+#
+# ⚠️ IGNORED IS NOT ACCOUNTED-FOR. This pattern stops a worktree BLOCKING a
+# relight; it also hides it from `git status`, which is how `.f5i2-queue` sat
+# attached to a merged branch unnoticed. `bash scripts/list-worktrees.sh` is the
+# other half — it lists every worktree WITH its merge state, so "invisible to
+# status" never again means "gone".
+.[a-z][a-z0-9]*-*/
+.[a-z][a-z0-9]*/
+!.github/
+!.claude/
+!.agents/
+
 # ⚠️ THE LOOP HALT SWITCH IS LOCAL, NEVER TRACKED. A committed STOP halts the
 # FOUNDATION loop in every clone and on every future checkout — and it arrives
 # through `git add -A` in a session that had it sitting untracked, which is
