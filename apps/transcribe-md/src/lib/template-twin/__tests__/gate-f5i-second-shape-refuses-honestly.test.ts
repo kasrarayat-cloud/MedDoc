@@ -137,12 +137,48 @@ describe('F5-i part 1a — a second SHAPE reaches a named refusal from real .doc
     );
   });
 
-  it('REFUSES with `no_measurement_rows` — named, not thrown, not fabricated', async () => {
+  /**
+   * ⚠️ THE REASON TOKEN CHANGED WITH F5-i-2 (#156); THE REFUSAL DID NOT.
+   * `no_measurement_rows` was retired and replaced by `no_addressable_fields`,
+   * because once a narrative generator exists "you have no measurement rows" is
+   * no longer why a form cannot be self-tested — "no field on this form carries
+   * a concept the engine can speak to" is.
+   *
+   * ⚠️ AND THIS ARM STILL REFUSING IS A RESULT, NOT A FORMALITY. #156 adds a
+   * generator for measurement-less forms, and this fixture IS a measurement-less
+   * form — so the naive expectation is that it now derives. It does not, and the
+   * reason is the honest-limit arm at the bottom of this file: on the
+   * deterministic FALLBACK mapping path every field here carries
+   * `clinicalConcept: null`, and the narrative generator refuses a form whose
+   * fields nobody has mapped rather than dictating a generic consult at it.
+   * That boundary is asserted directly below.
+   */
+  it('REFUSES with `no_addressable_fields` — named, not thrown, not fabricated', async () => {
     const ir = await irFromFile(OPERATIVE_NOTE);
     expect(deriveVerificationEncounter(encounterSourceFields(ir))).toEqual({
       ok: false,
-      reason: 'no_measurement_rows',
+      reason: 'no_addressable_fields',
     });
+  });
+
+  it('⚠️ and the refusal is because the CONCEPTS ARE NULL, not because the generator is absent', async () => {
+    // The discriminating measurement behind the arm above. If this ever comes
+    // back non-empty, the fallback path has started proposing concepts and the
+    // refusal above will change meaning — which is exactly when somebody should
+    // be made to re-read what this gate concludes.
+    const ir = await irFromFile(OPERATIVE_NOTE);
+    const fields = encounterSourceFields(ir);
+    expect(fields.length).toBeGreaterThan(0);
+    expect(fields.filter((f) => f.clinicalConcept !== null)).toEqual([]);
+
+    // POSITIVE CONTROL, so "it refused" is not read as "the generator does not
+    // work". The SAME generator, handed the SAME labels with concepts a
+    // physician would confirm, derives.
+    const confirmed = fields.map((f, i) => ({
+      originalLabel: f.originalLabel,
+      clinicalConcept: i === 0 ? 'chief_complaint' : null,
+    }));
+    expect(deriveVerificationEncounter(confirmed).ok).toBe(true);
   });
 
   it('⚠️ the bucket is decided by the CONCEPT, never by the compiler KIND', async () => {
@@ -165,7 +201,7 @@ describe('F5-i part 1a — a second SHAPE reaches a named refusal from real .doc
     expect(fields.filter((f) => f.clinicalConcept?.startsWith('measurement.'))).toEqual([]);
     expect(deriveVerificationEncounter(fields)).toEqual({
       ok: false,
-      reason: 'no_measurement_rows',
+      reason: 'no_addressable_fields',
     });
   });
 

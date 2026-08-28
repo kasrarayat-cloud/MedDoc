@@ -38,6 +38,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { ENCOUNTER_NOT_DERIVABLE_REASONS } from '@/lib/template-twin/verification-encounter';
+
 const h = vi.hoisted(() => {
   // Faithful stubs for the classes the action only ever `instanceof`-checks.
   // Spreading the real modules would drag prisma and the twin runtime into a
@@ -352,7 +354,7 @@ describe('F5-i action gate — an undeclarable self-test never displaces actiona
       new TemplateTwinSyntheticTestError(
         'ENCOUNTER_NOT_DERIVABLE',
         'We could not generate a self-test that matches this form, so nothing was certified.',
-        { blocking: ['no_measurement_rows'], totalFields: 12 },
+        { blocking: ['no_addressable_fields'], totalFields: 12 },
       ),
     );
 
@@ -388,10 +390,16 @@ describe('F5-i action gate — an undeclarable self-test never displaces actiona
     // fans this row out to every subscribed SUPER_ADMIN, so `blocking` may
     // carry opaque ids and closed reason codes and NOTHING else. A field label
     // arriving here would be a customer's form leaking across tenants.
+    // ⚠️ THE SET IS IMPORTED, NOT RETYPED — F5-i-2. This array used to be three
+    // string literals copied from the union by hand, so it could drift from the
+    // vocabulary in BOTH directions without anything failing: a new reason would
+    // be rejected as though it were a leak, and a RETIRED one would go on being
+    // admitted. It drifted the moment `no_measurement_rows` was replaced.
+    // `ENCOUNTER_NOT_DERIVABLE_REASONS` is now the single source and the union
+    // is derived from it.
+    expect(ENCOUNTER_NOT_DERIVABLE_REASONS.length).toBeGreaterThan(0);
     for (const b of entry.metadata.blocking) {
-      expect(['no_measurement_rows', 'only_placeholder_rows', 'unsupported_study_type']).toContain(
-        b,
-      );
+      expect([...ENCOUNTER_NOT_DERIVABLE_REASONS]).toContain(b);
     }
   });
 });

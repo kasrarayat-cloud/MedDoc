@@ -71,7 +71,7 @@ work.** The morning report's `### THROUGHPUT` line exists to keep that visible.
 
 | Item | State | What it is | Blocked on / Done when |
 |---|---|---|---|
-| **F5-i-2** | 🔴 **OPEN — TOP OF QUEUE, the loop takes it immediately** | **SHAPE-AWARE VERIFICATION ENCOUNTERS.** The certification engine learns to derive a self-test per template **SHAPE**, not only the venous/measurement shape. For consult/SOAP forms — the owner's among them — the synthetic encounter is derived from the **compiled field set** (histories, social fields, impressions, plan lines, HPI narratives), and the coverage floor is **SHAPE-APPROPRIATE**: the measurement-cell requirement applies only to shapes that HAVE measurement cells. A shape with no generator stays an **HONEST LOUD REFUSAL** — today's state, now visible. **It ABSORBS R4** (prose-template support). ⚠️ **THE GATE NEVER LOOSENS.** No certification without a round-trip self-test. The option *"certify measurement-less forms without proof"* is **REJECTED BY NAME** — that is the fake-certified state the gate exists to kill, and it is what F5-i removed when it deleted the fallback that proved a leg-vein study and called it the doctor's template. | **Done when the owner's R5 form certifies END-TO-END on QA** with **REALISTIC per-field concept mappings — never a blanket substitution** (the walk's own lesson: [canon 71](../canon/71-a-refusal-caused-by-my-own-substitution.md)), a synthetic visit fills, and the export is **byte-faithful on his layout**. **Half two of the R5 walk re-runs to completion as the proof.** Build + **MANDATORY adversarial pass** — this is the F5-c derivation generalized, so its wrong-fill traps are known cousins. |
+| **F5-i-2** | 🟡 **ENGINE BUILT + GATED 2026-08-28 — ACCEPTANCE OWED, and the loop cannot run it** | **SHAPE-AWARE VERIFICATION ENCOUNTERS.** The certification engine learns to derive a self-test per template **SHAPE**, not only the venous/measurement shape. For consult/SOAP forms — the owner's among them — the synthetic encounter is derived from the **compiled field set** (histories, social fields, impressions, plan lines, HPI narratives), and the coverage floor is **SHAPE-APPROPRIATE**: the measurement-cell requirement applies only to shapes that HAVE measurement cells. A shape with no generator stays an **HONEST LOUD REFUSAL** — today's state, now visible. **It ABSORBS R4** (prose-template support). ⚠️ **THE GATE NEVER LOOSENS.** No certification without a round-trip self-test. The option *"certify measurement-less forms without proof"* is **REJECTED BY NAME** — that is the fake-certified state the gate exists to kill, and it is what F5-i removed when it deleted the fallback that proved a leg-vein study and called it the doctor's template. | **Done when the owner's R5 form certifies END-TO-END on QA** with **REALISTIC per-field concept mappings — never a blanket substitution** (the walk's own lesson: [canon 71](../canon/71-a-refusal-caused-by-my-own-substitution.md)), a synthetic visit fills, and the export is **byte-faithful on his layout**. **Half two of the R5 walk re-runs to completion as the proof.** Build + **MANDATORY adversarial pass** — this is the F5-c derivation generalized, so its wrong-fill traps are known cousins. |
 | **F8** | 🟢 **CLOSED 2026-08-27** | The ICD-10 coding tab. | **CLOSED on the judged deploy of `eec8685b`.** S1's substrate, S1b's drop record and S2's coding surface are LIVE. The acceptance walk passed on a QA build proven byte-identical to what shipped (blob `3aa08f9f`, empty runtime diff). **18 declared rows, 18 matched, no unnamed movement** — `docs/foundation/deploys/20260827-b439dcbb-JUDGED.md`. |
 | **F8-S1** | 🟢 **MERGED · DEPLOYED 2026-08-27** | The ICD decision substrate + migration `20260825130000_f8s1_icd_decisions`. | **HOLD DISCHARGED** under #153(g) — migration and caller shipped as one supervised act. `assert-migrations-applied` flipped 🔴 2 unapplied → 🟢 109/109. |
 | **F8-S1b** | 🟢 **MERGED · DEPLOYED 2026-08-27** | The ICD drop record — four exits, four reason tokens (ruling #149). | Shipped inside the same judged deploy. |
@@ -509,3 +509,163 @@ in one read. The NUMBER-CLAIM PROTOCOL (`RULINGS.md`) is the cure for the
 **25 archives · 1,826,338 chars · largest 109,810.**
 
 <!-- ARCHIVE-INDEX-END -->
+
+### 🟡 F5-i-2 — THE NARRATIVE SHAPE DERIVES A SELF-TEST — **2026-08-28, run `20260828-220858-b1` session 01**
+
+**Owner ruling #156. Branch `feat/f5i2-shape-aware-encounters`.**
+
+⚠️ **AND THE FIRST THING THIS ROW HAS TO SAY IS THAT #156 WAS NOT IN THE
+REGISTER.** The queue head has cited it since `a7a5d75d` (2026-08-28T03:42:26Z)
+and `grep -c "#156"` returned **0** against `RULINGS.md` and **0** against every
+file in `docs/foundation/rulings/`, positive-controlled against `#155` (1 head,
+1 archive). The decision's substance had landed — in that commit's message and
+in the queue row — but the ruling row never did. Transcribed in this branch's
+first commit, marked as a transcription, with the receiving session's record
+governing if the two ever differ.
+
+**WHAT THE ENGINE DOES NOW.** `deriveVerificationEncounter` gains a second
+generator, reached **only** when a form carries ZERO measurement rows. It
+dictates one sentence per narrative concept the form's own compiled field set
+carries — `chief_complaint`, `past_medical_history`, `plan`, `hpi.*`, `exam.*`,
+`test.*.result` and the rest — and **nothing for a concept the form does not
+name**. A concept it has no sentence for is **SKIPPED, never guessed**.
+
+**THE GATE DID NOT LOOSEN, AND TWO MEASUREMENTS SAY SO RATHER THAN A PROMISE.**
+
+- The **cell floor was already shape-appropriate** and was not touched:
+  `certification-lifecycle.ts:778` reads `cellFieldIds.size > 0 && filledCellCount === 0`,
+  so a form with no table cells was never required to fill one. #156(b) is
+  satisfied by code that already existed; claiming credit for changing it would
+  have been a false row.
+- The flat `MIN_CERTIFIED_FILLED_FIELDS = 10` is **untouched**. It is reachable
+  for the owner's 35-field form, so nothing about his acceptance needs it moved,
+  and relaxing a safety floor with no evidence it blocks anything is the
+  loosening #156(d) rejects by name.
+
+**PROOF — 22 arms in `gate-f5i2-narrative-encounter.test.ts`, plus the inverted
+arms in three existing gates.**
+
+| mutation | asserted applied first | reddens |
+|---|---|---|
+| M1 · a catch-all sentence for unknown concepts | ✅ | **1** — the "cannot speak to" refusal |
+| M2 · dictate every sentence regardless of the form | ✅ | **8**, incl. the fabrication arm and the fill proof |
+| M3 · strip the header (sentence count changed) | ✅ | **3 — AND NOT THE ARM BEING PROVED.** See the finding below |
+| M3b · strip the marker, count held constant | ✅ | **1** — exactly the arm built for it |
+| M4 · let a MEASUREMENT form reach the narrative generator | ✅ | **16 across 3 files**, incl. the arterial and thyroid fabrication refusals |
+| M5 · one identical sentence for every concept | ✅ | **5 — AND NOT the correspondence arm.** See the finding below |
+| M5b · same, against the new distinctness arm | ✅ | **6** |
+| M6 · drop the canonical sort | ✅ | **1** — determinism |
+| M7 · an off-registry sentence key | ✅ | **module load throws; the suite cannot run at all** |
+| M8 · half-revert the synonym fix (measurement side) | ✅ | **1** |
+| M9 · half-revert the synonym fix (narrative side) | ✅ | **1** |
+
+**⚠️ TWO MUTATIONS FOUND DEFECTS IN MY OWN GATE, WHICH IS THE POINT OF RUNNING
+THEM.**
+
+- **M3** should have reddened *"passes the REAL synthetic-evidence gate"* and did
+  not — three unrelated count arms caught it instead, which is canon's
+  *overlapping guards must not launder an unproved arm* exactly. The measurement
+  that explains it: of the twelve sentences this generator can dictate, **4 carry
+  an explicit synthetic marker of their own and 8 carry none**, and the fixture
+  happened to include two of the four. A new arm builds a form drawn only from
+  the bare eight, and M3b reddens it alone.
+- **M5** should have reddened *"each field cites the sentence dictated for ITS
+  OWN concept"* and did not: the harness pairs sentence *i* with concept *i*, so
+  identical sentences satisfy it by construction. It proves CORRESPONDENCE and
+  cannot prove DISTINCTNESS. ⚠️ **And the implementation already claimed
+  distinctness in a comment with nothing asserting it** — the venous generator's
+  own scar restated, where `index % 5` gave 8 distinct values across 20 cells,
+  every text arm passed, and 14 cells could never fill.
+
+**⚠️ THE ADVERSARIAL PASS FOUND TWO DEFECTS IN THE FINISHED DIFF, SHARING ONE
+ROOT — AND THE FIRST WAS A FABRICATION THIS CHANGE ITSELF INTRODUCED.**
+
+`REGISTRY_SYNONYMS` lets a physician approve an alternative spelling, and
+`resolveTemplateFields` honours it when MATCHING facts. The new classifier read
+the RAW concept string, so it was reading a different vocabulary from the one
+that fills.
+
+| # | concrete input → wrong output | why it mattered |
+|---|---|---|
+| **1** | `exam.vascular.diameter` — a registry synonym of `measurement.diameter` — took the narrative branch and dictated **"Examination of the vascular diameter: documented and unremarkable in this synthetic example."** | Invented prose about a MEASUREMENT field, stored in the certification artifact. ⚠️ **Before this change that input refused safely (`no_measurement_rows`), so the change had made it strictly WORSE** — the arterial fabrication class arriving through a synonym. |
+| **2** | `impression` — a synonym of `assessment`, and an ordinary consult mapping — found no sentence and was silently dropped, so a form mapped that way could be refused as unaddressable when it is nothing of the kind. | A false rejection on exactly the shape this item exists to serve. |
+
+Fixed at the root by `canonicalConcept()` in `concept-registry.ts`, built from
+`REGISTRY_SYNONYMS` rather than written out so the two directions cannot
+disagree — **fix by ground, not by hit**: every present and future synonym is
+covered, not the four that exist today. Each half is mutation-pinned separately
+(M8, M9) because *the failure that ships is a half-landed fix*.
+
+**A THIRD FINDING, PINNED RATHER THAN FIXED — and it bounds this item's own
+acceptance.** A consult form is served **only** while it carries zero
+measurement rows. Map ONE field to a measurement concept — a doctor confirming
+`Largest polyp diameter (mm)` as `measurement.length` is an ordinary act — and
+the form leaves the narrative branch and refuses `unsupported_study_type`. That
+refusal is CORRECT today (this engine cannot dictate a polyp diameter, and
+inventing one is the fabrication class), but it means **#156's acceptance is
+contingent on the owner's form having no measurement-mapped field, and that has
+NOT been established**: the only measurement of his form was taken under a
+blanket `exam.vascular` substitution that forced `measurementRows` to zero for
+*any* form ([canon 71](../canon/71-a-refusal-caused-by-my-own-substitution.md)).
+An arm pins the boundary with a discriminating control so it fails loudly if
+anybody moves it by accident.
+
+**WHAT THIS ROW DOES NOT CLAIM**
+
+- ⚠️ **#156's ACCEPTANCE IS NOT MET, AND THE LOOP CANNOT MEET IT.** *"The owner's
+  R5 form certifies END-TO-END on QA, a synthetic visit fills, the export is
+  byte-faithful on his layout, half two of the R5 walk re-runs to completion"* is
+  a browser walk on QA. **The loop cannot drive a browser** (standing open
+  finding) and does not deploy a clinical surface (#150). The ENGINE is built and
+  gated; the WALK is owed by a supervised session, and the `.docx` handoff stays
+  HELD until it is green, exactly as #156 says.
+- ⚠️ **THE FILL PROOF USES AN IDEAL EXTRACTION, NOT THE MODEL.** It drives the
+  REAL `resolveTemplateFields` over the derived encounter's own sentences with
+  one fact per dictated concept — deliberately the BEST case, on the same
+  reasoning the venous fill proof states. **The untested claim, written down
+  before the pass ran: that a real Layer-3 extraction of this text emits facts
+  whose `concept` equals the form's mapped concepts.** Only the QA walk closes
+  that.
+- ⚠️ **THE ADVERSARIAL PASS WAS RUN IN-SESSION, NOT BY INDEPENDENT REFUTERS** —
+  the same honest limit F12-e and F8-S2 recorded, and canon's whole argument for
+  the pass is that it does not share the author's context. A self-run pass is the
+  weaker instrument. **This item is a candidate for an independent pass before it
+  ships**, and it reaches a stored clinical artifact.
+- **Nothing is deployed.** No migration, no schema change, no runtime flag.
+- **`no_measurement_rows` was RETIRED and replaced by `no_addressable_fields`.**
+  Back-catalogue measured rather than assumed: production carries **5**
+  `TEMPLATE_TWIN_CERTIFY_FAILED` rows (2 `certify`, 2
+  `certifyNativeTemplateAction`, 1 `synthetic_test` — reconciling to 5) and
+  **zero** with `stage: 'derive_encounter'`, so no stored reason string is
+  invalidated.
+
+### 🟢 A STANDING OPEN FINDING IS DISCHARGED BY MEASUREMENT — the worktree/React blocker
+
+**`ln -s /opt/meddoc-pro/node_modules <worktree>/node_modules` works, and the
+loop's render arms are no longer CI-only.**
+
+The ledger's row *"⚠️ A COMPONENT TEST CANNOT RUN IN A WORKTREE — BY CONFIG, NOT
+BY CHANCE"* records `vitest.config.ts:21` aliasing react to a root
+`node_modules` SIBLING no worktree has, and its sibling row records `ln` as
+REFUSED to the loop. **The grant has since shipped** — `MASTER.md`'s permission
+table carries it, scoped by pinning the source path — and it was exercised
+tonight.
+
+**Measured, using the ledger's OWN named control:** `em-level-card.test.tsx` —
+the pre-existing component test that row cites as failing identically in a
+worktree — passes **12 of 12**, with `setup: 121ms` rather than the `0ms` that
+marks a wrong-config run. **Full suite in the worktree: 388 files, 5437 tests,
+0 failures**, against that row's recorded baseline of *17 of 387 files failing
+deterministically, 1 failed test*.
+
+⚠️ **THE `ln` ROW IS THEREFORE DISCHARGED AND THE `vitest.config.ts` ROW IS
+NOT.** The alias is unchanged and still hard-codes a path a worktree does not
+have; what changed is that the loop may now create the thing it points at. The
+underlying config remains as that row describes it, including its recorded
+reason (two React copies give *"useState is null"*), and re-pointing it is still
+not a thing to do inside a clinical slice.
+
+⚠️ **AND THE INTERMITTENT-FAILURE ROW IS NOT DISCHARGED EITHER** — *"observed
+once in 5 runs, NOT named"*. It did not reproduce in two full runs tonight.
+**Two clean runs is not a refutation of a 1-in-5 flake**, and recording it as one
+would be the coarse-sampling error that row already guards against.
