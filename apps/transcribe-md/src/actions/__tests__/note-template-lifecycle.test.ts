@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   updateMany: vi.fn(),
   deleteMany: vi.fn(),
   requireSession: vi.fn(),
+  logAudit: vi.fn(async () => {}),
 }));
 
 vi.mock('@meddoc/db', () => {
@@ -41,6 +42,12 @@ vi.mock('@meddoc/db', () => {
   return { default: prisma, prisma };
 });
 vi.mock('@/lib/auth', () => ({ requireSession: mocks.requireSession }));
+// ⚠️ MOCKED FOR A REASON WORTH RECORDING. R1's audit writers made this action
+// import `@/lib/audit`, which reaches `@/lib/nextauth` -> next-auth ->
+// `next/server`. Unmocked, that chain fails to RESOLVE and the whole file stops
+// COLLECTING — 0 tests run, which in a summary reads as "no failures". Mocking
+// it also lets the audit rows be ASSERTED rather than merely tolerated.
+vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import {
@@ -216,6 +223,16 @@ describe('deleteNoteTemplateAction', () => {
     // the practice-scoped fix and would have held the cross-tenant read in place.
     // `transcribeVisit` is clinical and this count is spoken back to the doctor,
     // so BOTH claims are asserted and neither of them is the spelling.
+    // ⚠️ THE REFUSAL WRITES AN AUDIT ROW. A fence that blocks silently teaches
+    // nobody it exists.
+    expect(mocks.logAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'TEMPLATE_DELETED',
+        success: false,
+        errorCode: 'REFERENCED_BY_VISITS',
+        metadata: expect.objectContaining({ referencingVisits: 12, outcome: 'refused' }),
+      }),
+    );
     const countWhere = mocks.visitCount.mock.calls[0][0].where;
     expect(countWhere.noteTemplateId).toBe(CUID); // filters to the template
     expect(countWhere.practiceId).toBe('p1');     // and does not cross tenants
@@ -227,6 +244,15 @@ describe('deleteNoteTemplateAction', () => {
     mocks.deleteMany.mockResolvedValueOnce({ count: 1 });
     expect((await deleteNoteTemplateAction(CUID)).ok).toBe(true);
     expect(mocks.deleteMany.mock.calls[0][0]).toEqual({ where: { id: CUID, doctorId: DOCTOR } });
+    // ⚠️ AND THE SUCCESSFUL DELETE LEAVES A TRACE — the row that did NOT exist
+    // before R1, whose absence is why 29 visits lost provenance invisibly.
+    expect(mocks.logAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'TEMPLATE_DELETED',
+        success: true,
+        metadata: expect.objectContaining({ outcome: 'deleted' }),
+      }),
+    );
   });
 
   it('refuses a foreign template without revealing its usage', async () => {

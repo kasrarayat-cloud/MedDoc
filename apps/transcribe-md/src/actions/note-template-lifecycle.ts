@@ -31,6 +31,7 @@ import { requireManualCertification } from '@/config/require-manual-certificatio
 
 /** An upload must never wait longer than this on the queue. See the call site. */
 const ENQUEUE_TIMEOUT_MS = 3000;
+import { logAudit } from '@/lib/audit';
 import { requireSession } from '@/lib/auth';
 import { asPracticeId, visitScope } from '@/lib/practice-scope';
 import { isTenantOwnedArtifactKey } from '@/lib/template-twin/storage';
@@ -626,6 +627,18 @@ export async function deleteNoteTemplateAction(id: string): Promise<SimpleResult
     where: { ...visitScope(asPracticeId(session.user.practiceId)), noteTemplateId: id },
   });
   if (referencing > 0) {
+    // ⚠️ THE REFUSAL IS AUDITED TOO, not only the destructive path. A fence that
+    // blocks silently teaches nobody it exists, and "the doctor tried to delete a
+    // bound template" is a fact worth having when he later asks why the format is
+    // still there.
+    await logAudit({
+      action: 'TEMPLATE_DELETED',
+      targetType: 'note_template',
+      targetId: id,
+      success: false,
+      errorCode: 'REFERENCED_BY_VISITS',
+      metadata: { referencingVisits: referencing, outcome: 'refused' },
+    });
     return {
       ok: false,
       error:
@@ -638,6 +651,20 @@ export async function deleteNoteTemplateAction(id: string): Promise<SimpleResult
 
   const res = await prisma.noteTemplate.deleteMany({ where: { id, doctorId } });
   if (res.count === 0) return { ok: false, error: "That template doesn't exist or isn't yours." };
+  // ⚠️ THIS IS THE ROW THAT DID NOT EXIST, AND ITS ABSENCE IS THE WHOLE STORY.
+  // Before R1 a hard delete wrote NOTHING. That is why 29 servable visits lost
+  // their template provenance invisibly, and why — when the loss was finally
+  // measured — audit adjacency could not classify a single one of them. The fence
+  // stops the deletions that would destroy provenance; a PERMITTED deletion still
+  // has to leave a trace, or the next investigation starts from the same blank
+  // page this one did.
+  await logAudit({
+    action: 'TEMPLATE_DELETED',
+    targetType: 'note_template',
+    targetId: id,
+    success: true,
+    metadata: { outcome: 'deleted', referencingVisits: 0, priorStatus: owned.status },
+  });
   revalidatePath('/settings');
   return { ok: true };
 }
@@ -670,6 +697,15 @@ export async function archiveNoteTemplateAction(id: string): Promise<SimpleResul
     data: { status: 'inactive' },
   });
   if (res.count === 0) return { ok: false, error: "That template doesn't exist or isn't yours." };
+  // Distinguishable from a deletion in the trail, rather than inferred from what
+  // is missing.
+  await logAudit({
+    action: 'TEMPLATE_ARCHIVED',
+    targetType: 'note_template',
+    targetId: id,
+    success: true,
+    metadata: { outcome: 'archived', newStatus: 'inactive' },
+  });
   revalidatePath('/settings');
   return { ok: true };
 }
