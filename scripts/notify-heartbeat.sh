@@ -35,7 +35,13 @@ if [ "${HEARTBEAT_FORCE:-}" != "1" ]; then
   hour_local="$(TZ=America/Los_Angeles date +%H 2>/dev/null || echo '')"
   [ "$hour_local" = "08" ] || exit 0
 fi
-cd "$(dirname "$(dirname "$(readlink -f "$0")")")" 2>/dev/null || exit 0
+# ⚠️ ANCHORED TO BASH_SOURCE, NOT $0 — F28, and `gate-f28-scripts-resolve-own-root`
+# caught the first version using `readlink -f "$0"`. The two are equivalent when a
+# script is EXECUTED and differ when it is SOURCED, where `$0` is the caller's
+# name. Cron executes, so this would have worked — and would have been the one
+# granted script not following the house anchor, which is how the next one gets
+# written wrong too.
+cd "$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")" 2>/dev/null || exit 0
 
 # LIVE vs DARK — `tmux has-session` is the authority. `pgrep -f` matched itself
 # once and called a dark loop LIVE for three hours; that mistake is not repeated.
