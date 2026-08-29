@@ -67,7 +67,7 @@ describe('AuditAction — schema and mirror cannot drift', () => {
     ).toEqual([]);
   });
 
-  it('the four batched labels are present on BOTH sides', () => {
+  it('the five batched labels are present on BOTH sides', () => {
     const schema = new Set(schemaLabels());
     const mirror = new Set(mirrorLabels());
     for (const l of [
@@ -75,6 +75,7 @@ describe('AuditAction — schema and mirror cannot drift', () => {
       'TEMPLATE_DELETED',
       'TEMPLATE_ARCHIVED',
       'ICD_CODE_AUTO_ACCEPTED',
+      'TEMPLATE_PROVENANCE_LOST',
     ]) {
       expect(schema.has(l), `${l} missing from schema.prisma`).toBe(true);
       expect(mirror.has(l), `${l} missing from the audit.ts mirror`).toBe(true);
@@ -88,11 +89,12 @@ describe('AuditAction — schema and mirror cannot drift', () => {
       'utf8',
     );
     for (const l of ['EM_OMITTED_IN_SIGNED_ARTIFACT', 'TEMPLATE_DELETED',
-                     'TEMPLATE_ARCHIVED', 'ICD_CODE_AUTO_ACCEPTED']) {
+                     'TEMPLATE_ARCHIVED', 'ICD_CODE_AUTO_ACCEPTED',
+                     'TEMPLATE_PROVENANCE_LOST']) {
       expect(sql).toContain(`ADD VALUE IF NOT EXISTS '${l}'`);
     }
     // Postgres has no DROP VALUE; a migration that is not idempotent can wedge
     // a four-statement change half-way through.
-    expect(sql.match(/ADD VALUE IF NOT EXISTS/g)?.length).toBe(4);
+    expect(sql.match(/ADD VALUE IF NOT EXISTS/g)?.length).toBe(5);
   });
 });

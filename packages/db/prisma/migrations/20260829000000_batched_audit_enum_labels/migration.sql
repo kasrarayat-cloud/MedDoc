@@ -12,10 +12,17 @@
 --   TEMPLATE_DELETED               R1 — the SUCCESSFUL delete, previously traceless
 --   TEMPLATE_ARCHIVED              R1 — the non-destructive alternative
 --   ICD_CODE_AUTO_ACCEPTED         F8-S3 — reserved; the threshold is NOT settled
+--   TEMPLATE_PROVENANCE_LOST       the 29 retrospective annotations — NOT a deletion
 --
--- 148 -> 152.
+-- ⚠️ THE FIFTH LABEL EXISTS BECAUSE A PROVENANCE LOSS IS NOT A DELETION EVENT.
+-- Annotating the 29 with TEMPLATE_DELETED would have made an append-only trail
+-- assert that 29 deletions happened today. It has NO RUNTIME WRITER by design:
+-- ruled mutation acts write it, the annotation backfill being the first.
+--
+-- 148 -> 153.
 
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'EM_OMITTED_IN_SIGNED_ARTIFACT';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'TEMPLATE_DELETED';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'TEMPLATE_ARCHIVED';
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'ICD_CODE_AUTO_ACCEPTED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'TEMPLATE_PROVENANCE_LOST';

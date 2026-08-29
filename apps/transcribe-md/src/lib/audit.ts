@@ -314,7 +314,11 @@ export type AuditAction =
   /// R1 — the non-destructive alternative, distinguishable from a deletion.
   | 'TEMPLATE_ARCHIVED'
   /// F8-S3 — reserved in this batch; the threshold is NOT settled by the label.
-  | 'ICD_CODE_AUTO_ACCEPTED';
+  | 'ICD_CODE_AUTO_ACCEPTED'
+  /// ⚠️ A PROVENANCE LOSS IS NOT A DELETION EVENT. Written ONLY by ruled mutation
+  /// acts — no runtime writer, by design — so the append-only trail never claims
+  /// 29 deletions happened on the day they were merely annotated.
+  | 'TEMPLATE_PROVENANCE_LOST';
 
 export interface AuditLogInput {
   action: AuditAction;

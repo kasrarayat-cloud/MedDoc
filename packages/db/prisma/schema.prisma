@@ -571,6 +571,19 @@ enum AuditAction {
   /// and the alternative is a second irreversible migration later; the threshold
   /// itself is proposed from data and is NOT settled by this label existing.
   ICD_CODE_AUTO_ACCEPTED
+
+  /// ⚠️ A PROVENANCE LOSS IS NOT A DELETION EVENT, AND THE TRAIL MUST NOT SAY IT
+  /// IS. The 29 servable visits whose `noteTemplateId` was nulled by the old
+  /// `ON DELETE SET NULL` need a retrospective annotation, and `TEMPLATE_DELETED`
+  /// would have asserted that a deletion happened NOW — permanently, because
+  /// `audit_logs` is append-only and a query filtering on `action` would count 29
+  /// deletions that never occurred. So the vocabulary gets its own word.
+  ///
+  /// ⚠️ NO RUNTIME WRITER, BY DESIGN. Nothing in the application emits this; it is
+  /// written ONLY by ruled mutation acts, the #155(b)/R1 annotation backfill being
+  /// the first. That satisfies the label-nothing-writes rule rather than excusing
+  /// it — the ruled act IS the writer, and the deploy declaration says so.
+  TEMPLATE_PROVENANCE_LOST
 }
 
 /// Document lifecycle status
