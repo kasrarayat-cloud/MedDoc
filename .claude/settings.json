@@ -91,6 +91,8 @@
       "Bash(bash scripts/check-ledger-append-only.sh:*)",
       "Bash(bash scripts/check-hooks-installed.sh:*)",
       "Bash(bash scripts/list-worktrees.sh:*)",
+      "Bash(bash scripts/notify-heartbeat.sh:*)",
+      "Bash(bash scripts/notify.sh:*)",
       "Bash(bash scripts/retire-branch.sh:*)",
       "Bash(bash scripts/merge-pr.sh:*)",
       "Bash(bash scripts/run-ruled-mutation.sh:*)",

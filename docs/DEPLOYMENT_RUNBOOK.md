@@ -370,6 +370,83 @@ failure rather than removing it.
 2026-08-28: a **13-second** job sat behind **69 minutes** of queue, and a ~5-minute
 suite took 2h06m wall. The SPOF was recorded in the ledger before it was fixed.
 
+## 2.10 THE NOTIFICATION CHANNEL — the ping half of park-and-ping
+
+**Added 2026-08-29.** Park-and-ping had a park and no ping: a session could stop
+correctly, record why, and reach nobody until someone thought to look.
+
+| | |
+|---|---|
+| transport | **ntfy.sh** (no account, no key) |
+| **topic** | **`quillmd-46taoo2esklz`** |
+| script | `scripts/notify.sh <class> <one-line message>` |
+| heartbeat | `scripts/notify-heartbeat.sh` — cron `0 15,16 * * *` (see below) |
+
+### ⚠️ THE HEARTBEAT SCHEDULE, AND WHY IT LOOKS ODD
+
+The owner is in **Burbank, California** — the heartbeat is **08:00
+America/Los_Angeles**.
+
+**`CRON_TZ` IS NOT SUPPORTED BY THIS CRON.** Measured: `cron 3.0pl1-184ubuntu2`,
+whose `man 5 crontab` (302 lines) never mentions it and whose **binary does not
+contain the string**. Setting it is **silently ignored**, and the job would fire
+at 08:00 UTC = **01:00 Pacific**. *A scheduling bug that looks scheduled is the
+worst kind*, so it is not used.
+
+Instead cron fires at **both** UTC hours that can be 08:00 in Los Angeles —
+**15:00 (PDT)** and **16:00 (PST)** — and `notify-heartbeat.sh` exits silently
+unless it really is the 08:00 hour there. Exactly one of the two fires per day,
+and **DST is tracked by the tz database** rather than by anyone remembering to
+shift a crontab twice a year.
+
+    0 15,16 * * *  [ -x /opt/meddoc-pro/scripts/notify-heartbeat.sh ] && \
+                   bash /opt/meddoc-pro/scripts/notify-heartbeat.sh
+
+⚠️ **THE GUARD AND THE ACTION NAME THE SAME ABSOLUTE PATH.** The first version
+guarded an absolute path and invoked a relative one; cron's cwd is `$HOME`, so it
+would have passed the guard and then failed to find the file — scheduled-looking
+and dead. Verified by simulating cron from `$HOME` with an empty environment.
+
+`HEARTBEAT_FORCE=1` bypasses the hour gate for a manual test.
+
+### The owner's phone, in two steps
+
+1. Install **ntfy** (iOS App Store / Google Play / F-Droid).
+2. **Subscribe to topic** → paste `quillmd-46taoo2esklz` → done.
+
+### Classes
+
+| class | | priority | used for |
+|---|---|---|---|
+| `halt` | 🔴 | urgent | the loop stopped and will not resume itself |
+| `needs-you` | 🟡 | high | an owner-class park — a decision only he can make |
+| `waiting` | 🟡 | default | a WAITING state that may clear on its own |
+| `ok` | 🟢 | low | a milestone landed |
+| `heartbeat` | ⚪ | min | the daily "still alive" |
+
+⚠️ **THE TOPIC IS THE ONLY CREDENTIAL.** Anyone holding it can both publish to
+and subscribe to this channel. It is recorded here because the repository is
+private and the alternative — an ignored file — makes a fresh clone SILENTLY MUTE,
+which is the failure mode where a notifier "works" and reaches nobody. If it ever
+leaks, generate a new random topic, update `scripts/notify.sh` and this row, and
+re-subscribe on the phone; there is nothing else to revoke.
+
+⚠️ **A NOTIFIER MUST NEVER BLOCK OR CRASH THE THING IT REPORTS ON.** Every send is
+bounded at **5s** and `notify.sh` exits **0** unconditionally — verified against a
+dead transport, a missing `curl`, no arguments, and a blackholed host (exactly 5s,
+exit 0). The loop wraps it in a second `|| true` because it runs unattended, and a
+notifier that could kill the loop would be strictly worse than no notifier.
+
+**Wired at:** all four loop halt/refusal paths through one `ping()` helper (so
+every future halt reason is covered without new wiring), and the daily heartbeat.
+
+⚠️ **THE HEARTBEAT EXISTS BECAUSE SILENCE HAS TWO MEANINGS** that look identical
+on a phone — *nothing needed you* and *the channel is dead*. One is fine; the
+other is a park nobody is coming to.
+
+**Swapping transport:** if the owner prefers Telegram, only `send_transport()` in
+`notify.sh` changes. Every call site, class and wiring stays.
+
 ## 3. Rollback
 
 Reverting a bad deploy:
