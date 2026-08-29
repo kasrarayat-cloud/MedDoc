@@ -40,7 +40,22 @@ jobs:
     # the figures this comment carried as a purchase spec. Job `name:`
     # is UNCHANGED so every required context is preserved byte-for-byte.
     # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
-    runs-on: [self-hosted, linux, x64, quillmd-ci-light]
+    # ⚠️ THIS JOB IS PINNED TO THE HEAVY LANE BECAUSE IT DECLARES SERVICE
+    # CONTAINERS WITH FIXED HOST PORTS (5432, 6379). Both runners live on the
+    # SAME BOX and share its network namespace, so two concurrent jobs binding
+    # 5432 collide: `failed to set up container networking: driver failed
+    # programming external connectivity`. Before the second runner existed, jobs
+    # serialised and only one ever bound the port — the split removed the
+    # accidental mutual exclusion the fixed ports had been relying on.
+    #
+    # ⚠️ THE LIGHT LANE IS THEREFORE FOR JOBS WITH NO SERVICE CONTAINERS. Both
+    # service-declaring jobs (`test` here, `axe` in a11y.yml) sit on quillmd-ci,
+    # which runs one job at a time — restoring the exclusion deliberately instead
+    # of by luck. The better fix is dynamic ports via
+    # `job.services.postgres.ports['5432']`, which would let this rejoin the light
+    # lane; it is a real change to how the job reaches its database and is filed
+    # rather than rushed into a hotfix.
+    runs-on: [self-hosted, linux, x64, quillmd-ci]
     timeout-minutes: 20
 
     services:
