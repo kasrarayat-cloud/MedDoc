@@ -380,7 +380,34 @@ correctly, record why, and reach nobody until someone thought to look.
 | transport | **ntfy.sh** (no account, no key) |
 | **topic** | **`quillmd-46taoo2esklz`** |
 | script | `scripts/notify.sh <class> <one-line message>` |
-| heartbeat | `scripts/notify-heartbeat.sh` — cron `0 8 * * *` |
+| heartbeat | `scripts/notify-heartbeat.sh` — cron `0 15,16 * * *` (see below) |
+
+### ⚠️ THE HEARTBEAT SCHEDULE, AND WHY IT LOOKS ODD
+
+The owner is in **Burbank, California** — the heartbeat is **08:00
+America/Los_Angeles**.
+
+**`CRON_TZ` IS NOT SUPPORTED BY THIS CRON.** Measured: `cron 3.0pl1-184ubuntu2`,
+whose `man 5 crontab` (302 lines) never mentions it and whose **binary does not
+contain the string**. Setting it is **silently ignored**, and the job would fire
+at 08:00 UTC = **01:00 Pacific**. *A scheduling bug that looks scheduled is the
+worst kind*, so it is not used.
+
+Instead cron fires at **both** UTC hours that can be 08:00 in Los Angeles —
+**15:00 (PDT)** and **16:00 (PST)** — and `notify-heartbeat.sh` exits silently
+unless it really is the 08:00 hour there. Exactly one of the two fires per day,
+and **DST is tracked by the tz database** rather than by anyone remembering to
+shift a crontab twice a year.
+
+    0 15,16 * * *  [ -x /opt/meddoc-pro/scripts/notify-heartbeat.sh ] && \
+                   bash /opt/meddoc-pro/scripts/notify-heartbeat.sh
+
+⚠️ **THE GUARD AND THE ACTION NAME THE SAME ABSOLUTE PATH.** The first version
+guarded an absolute path and invoked a relative one; cron's cwd is `$HOME`, so it
+would have passed the guard and then failed to find the file — scheduled-looking
+and dead. Verified by simulating cron from `$HOME` with an empty environment.
+
+`HEARTBEAT_FORCE=1` bypasses the hour gate for a manual test.
 
 ### The owner's phone, in two steps
 
