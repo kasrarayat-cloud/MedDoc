@@ -89,6 +89,49 @@ export function synonymsFor(concept: string): readonly string[] {
   return REGISTRY_SYNONYMS[concept.trim().toLowerCase()] ?? [];
 }
 
+/**
+ * Synonym -> canonical. Built once from `REGISTRY_SYNONYMS` rather than written
+ * out, so the two directions cannot disagree.
+ */
+const CANONICAL_BY_SYNONYM: ReadonlyMap<string, string> = new Map(
+  Object.entries(REGISTRY_SYNONYMS).flatMap(([canonical, syns]) =>
+    syns.map((s) => [s.trim().toLowerCase(), canonical] as const),
+  ),
+);
+
+/**
+ * THE CONCEPT A MAPPING REALLY MEANS.
+ *
+ * ⚠️ ADDED BY F5-i-2's ADVERSARIAL PASS, WHICH FOUND TWO DEFECTS SHARING THIS
+ * ROOT — one of them a CLINICAL FABRICATION the change had just introduced.
+ *
+ * `REGISTRY_SYNONYMS` exists because a physician may legitimately approve an
+ * alternative spelling, and `resolveTemplateFields` already honours it when
+ * matching facts. Anything that CLASSIFIES a concept by reading its raw string
+ * therefore sees a different vocabulary from the one that matches it.
+ *
+ * The two measured consequences, both with concrete inputs:
+ *
+ *   · `exam.vascular.diameter` is a synonym of `measurement.diameter` — it IS a
+ *     measurement. A `startsWith('measurement.')` test says it is not, so it
+ *     was classified as narrative and dictated as *"Examination of the vascular
+ *     diameter: documented and unremarkable"* — invented prose about a
+ *     measurement field, in an artifact the certification stores. Same for
+ *     `exam.vascular.reflux_time`.
+ *   · `impression` is a synonym of `assessment` and is an ordinary mapping on a
+ *     consult form. A lookup keyed on the raw string finds no sentence for it,
+ *     so the field is silently skipped and the form can be refused as
+ *     unaddressable when it is nothing of the kind.
+ *
+ * Canonicalising first fixes both, and fixes them by GROUND rather than by hit:
+ * every present and future synonym is covered, not the four that happen to
+ * exist today.
+ */
+export function canonicalConcept(concept: string): string {
+  const c = concept.trim().toLowerCase();
+  return CANONICAL_BY_SYNONYM.get(c) ?? c;
+}
+
 export class OffRegistryConceptError extends Error {
   readonly code = 'OFF_REGISTRY_CONCEPT';
   readonly concepts: readonly string[];

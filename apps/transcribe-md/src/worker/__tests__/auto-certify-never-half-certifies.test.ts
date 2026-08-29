@@ -190,7 +190,7 @@ describe('auto-certify never half-certifies', () => {
       new TemplateTwinSyntheticTestError(
         'ENCOUNTER_NOT_DERIVABLE',
         'We could not generate a self-test that matches this form, so nothing was certified.',
-        { blocking: ['no_measurement_rows'] },
+        { blocking: ['no_addressable_fields'] },
       ),
     );
     const { runAutoCertifyTwin } = await import('../auto-certify-twin-job');
@@ -198,7 +198,7 @@ describe('auto-certify never half-certifies', () => {
 
     expect(certifySpy).not.toHaveBeenCalled();
     expect(res.status).toBe('proof_failed');
-    expect(res.reason).toBe('ENCOUNTER_NOT_DERIVABLE:no_measurement_rows');
+    expect(res.reason).toBe('ENCOUNTER_NOT_DERIVABLE:no_addressable_fields');
 
     const calls = auditSpy.mock.calls.map((c) => c[0]);
     expect(calls.some((c) => c.metadata?.stage === 'derive_encounter')).toBe(true);

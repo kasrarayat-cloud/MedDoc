@@ -146,7 +146,7 @@ than a rediscovery, and rediscovery is the failure this file exists to stop.
 >
 > The head answers *which ruling and what status*. The archive answers *why*.
 
-**124 rulings.** **25 OWNER-RULING** · **5 RATIFIED** · **43 PROVISIONAL** · **1 SUPERSEDED** · **50 RECORDED**
+**125 rulings.** **26 OWNER-RULING** · **5 RATIFIED** · **43 PROVISIONAL** · **1 SUPERSEDED** · **50 RECORDED**
 
 | date | # | status | ruling | verdict, in one line | full body |
 |---|---|---|---|---|---|
@@ -274,6 +274,7 @@ than a rediscovery, and rediscovery is the failure this file exists to stop.
 | 2026-08-27 | #154 | RATIFIED | THE ICD REJECTION REASON IS A CLOSED VOCABULARY OF TOKENS, NEVER FREE TEXT | **THE QUESTION.** Ruling #153's acceptance walk for F8-S2 requires *"reject one code **WITH A REASON**"*. A re… | [`2026-08-27.md`](rulings/2026-08-27.md) |
 | 2026-08-27 | #153 | OWNER-RULING | THE CODING SURFACE LIVES ON THE VISIT PAGE, VIA THE SMALLEST NAVIGATION PRIMITIVE THAT WORKS | **THE QUESTION, AND WHY IT WAS OWNER-CLASS.** #148 sliced F8 and parked ONE thing deliberately: *where the cod… | [`2026-08-27.md`](rulings/2026-08-27.md) |
 | 2026-08-27 | #155 | OWNER-RULING | THE TEN ALREADY-SIGNED RECORDS STAY AS SIGNED; THE GAP IS MADE VISIBLE WITHOUT TOUCHING A BYTE | **THE QUESTION.** F12-e (#152) established that a visit whose `cptCodes.em` is null still displays and attests… | [`2026-08-27.md`](rulings/2026-08-27.md) |
+| 2026-08-28 | #156 | OWNER-RULING | SHAPE-AWARE VERIFICATION ENCOUNTERS: THE CERTIFICATION ENGINE LEARNS A SELF-TEST PER TEMPLATE S… | **⚠️ PROVENANCE, STATED FIRST, BECAUSE THIS ROW WAS NOT WRITTEN BY THE SESSION THAT RECEIVED THE RULING.** The… | [`2026-08-28.md`](rulings/2026-08-28.md) |
 
 <!-- RULINGS-INDEX-END -->
 

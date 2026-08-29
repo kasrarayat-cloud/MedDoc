@@ -155,21 +155,64 @@ describe('the derived encounter speaks to the template it certifies', () => {
  * WHICH one it is.
  */
 describe('a template this generator cannot speak to is REFUSED, never faked', () => {
-  it('a SOAP-shaped template refuses — there are no measurement rows at all', () => {
+  /**
+   * ⚠️ THIS ARM WAS INVERTED BY F5-i-2 (#156), AND THE INVERSION IS THE ITEM.
+   * It asserted that a SOAP-shaped template REFUSES with `no_measurement_rows`,
+   * which was the correct and honest behaviour when the engine could speak to
+   * exactly one shape. #156 gives that shape a generator, so the same input now
+   * derives — and the arm is rewritten to assert what it derives rather than
+   * deleted, because the INPUT was always the right input.
+   *
+   * ⚠️ AND IT ASSERTS THE CONVERSE TOO. "It derives" alone would pass on a
+   * generator that dictated anything at all, including the venous fallback this
+   * whole arc removed. The discriminating half is that the text speaks to the
+   * form's OWN two concepts and to nothing else.
+   */
+  it('⚠️ INVERTED BY #156 — a SOAP-shaped template now DERIVES, speaking only to its own concepts', () => {
     const soap: EncounterSourceField[] = [
       { originalLabel: 'Subjective', clinicalConcept: 'chief_complaint' },
       { originalLabel: 'Assessment', clinicalConcept: 'assessment' },
     ];
-    expect(deriveVerificationEncounter(soap)).toEqual({
-      ok: false,
-      reason: 'no_measurement_rows',
-    });
+    const out = deriveVerificationEncounter(soap);
+    expect(out.ok).toBe(true);
+    if (!out.ok) throw new Error('unreachable — asserted above');
+
+    // It spoke to BOTH of the form's concepts.
+    expect(out.text).toContain('Chief complaint:');
+    expect(out.text).toContain('Assessment:');
+    // The synthetic marker the evidence gate requires, before any model call.
+    expect(out.text).toContain('fictional example data');
+    // ⚠️ AND IT SPOKE TO NOTHING ELSE. This form named no history, no
+    // medication and no plan, so dictating any of them would be content the
+    // form never asked for — the fabrication class the arterial bug taught.
+    expect(out.text).not.toContain('Past medical history');
+    expect(out.text).not.toContain('Medications:');
+    expect(out.text).not.toContain('Plan:');
   });
 
   it('an empty field set refuses rather than emitting a bare marker', () => {
     expect(deriveVerificationEncounter([])).toEqual({
       ok: false,
-      reason: 'no_measurement_rows',
+      reason: 'no_addressable_fields',
+    });
+  });
+
+  /**
+   * ⚠️ THE CASE #156 MAKES THE COMMON ONE, so it gets an arm of its own.
+   * On the deterministic fallback mapping path every non-vein-grid field
+   * carries `clinicalConcept: null`, so an UNCONFIRMED consult form reaches the
+   * narrative generator with nothing to say. It must refuse — deriving a
+   * generic encounter for a form whose fields nobody has mapped would certify
+   * against concepts the doctor never confirmed.
+   */
+  it('a form whose fields carry NO concept refuses — unconfirmed is not addressable', () => {
+    const unconfirmed: EncounterSourceField[] = [
+      { originalLabel: 'Subjective', clinicalConcept: null },
+      { originalLabel: 'History of Present Illness', clinicalConcept: null },
+    ];
+    expect(deriveVerificationEncounter(unconfirmed)).toEqual({
+      ok: false,
+      reason: 'no_addressable_fields',
     });
   });
 
@@ -201,9 +244,15 @@ describe('a template this generator cannot speak to is REFUSED, never faked', ()
    * title now says that rather than implying a general guarantee.
    */
   it('⚠️ every unaddressable form REFUSES, and no refusal smuggles the venous text alongside', () => {
+    // ⚠️ THE SECOND ENTRY CHANGED WITH #156, AND THE SWAP IS DELIBERATE.
+    // It used to be a lone `chief_complaint` field, which the narrative
+    // generator now serves — so leaving it here would have made this arm assert
+    // that a DERIVABLE form refuses, i.e. it would have failed for the right
+    // reason and been "fixed" by whoever weakened it. It is replaced by the
+    // shape that is genuinely unaddressable today: a field nobody has mapped.
     const refusals: EncounterSourceField[][] = [
       [],
-      [{ originalLabel: 'Subjective', clinicalConcept: 'chief_complaint' }],
+      [{ originalLabel: 'Subjective', clinicalConcept: null }],
       PLACEHOLDERS.map((l) => ({ originalLabel: l, clinicalConcept: 'measurement.diameter' })),
       [{ originalLabel: 'Right thyroid lobe', clinicalConcept: 'measurement.length' }],
     ];
@@ -240,7 +289,7 @@ describe('a template this generator cannot speak to is REFUSED, never faked', ()
     // is now a COMPILE error here until somebody adds the input that produces
     // it. That is a property `tsc` enforces, not one this file asserts.
     const PRODUCED = {
-      no_measurement_rows: [],
+      no_addressable_fields: [],
       only_placeholder_rows: PLACEHOLDERS.map((l) => ({
         originalLabel: l,
         clinicalConcept: 'measurement.diameter',

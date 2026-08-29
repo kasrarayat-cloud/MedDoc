@@ -25,6 +25,12 @@
  * proved something the manual path never did, and neither reader could say
  * what their template actually passed.
  */
+// ⚠️ `concept-registry` IS A LEAF — it imports nothing. Chosen deliberately:
+// this module is loaded by a `'use server'` action's dependency graph, and the
+// last shared value pulled in from `certification-lifecycle.ts` dragged
+// next-auth into every consumer and broke the test environment outright.
+import { canonicalConcept, isRegisteredConcept } from './concept-registry';
+
 export const VERIFICATION_ENCOUNTER = [
   // ⚠️ THE FIRST LINE IS LOAD-BEARING, NOT A COMMENT ABOUT THE DATA.
   // `assertTemplateTwinSyntheticEvidencePhiFree` requires an EXPLICIT synthetic
@@ -243,13 +249,188 @@ const MAX_ENCOUNTER_CHARS = 9_000;
  * top of this; it must never be delivered by restoring the fallback.
  */
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * F5-i-2 — A SECOND SHAPE: THE NARRATIVE GENERATOR (ruling #156)
+ * ──────────────────────────────────────────────────────────────────────────
+ *
+ * ⚠️ ADDITIVE, AND NEVER BY RESTORING THE FALLBACK. #156(d) rejects
+ * "certify measurement-less forms without proof" BY NAME. This does not
+ * certify anything: it derives a self-test the round-trip proof still has to
+ * pass, for a shape that previously had no self-test at all.
+ *
+ * THE SHAPE IT SERVES: a form with ZERO measurement rows — the consult/SOAP
+ * family, and the owner's GI consult form among them. Its fields carry
+ * NARRATIVE concepts (`chief_complaint`, `past_medical_history`, `plan`, …)
+ * and no `measurement.*` at all.
+ *
+ * ⚠️ IT DELIBERATELY DOES NOT TOUCH MEASUREMENT-CARRYING FORMS, AND THAT IS A
+ * DESIGN DECISION RATHER THAN AN OVERSIGHT. A thyroid study reaches
+ * `unsupported_study_type` today. Serving its narrative half instead would
+ * produce an `ok: true` encounter that then fails the lifecycle's CELL floor
+ * (`certification-lifecycle.ts:778` — a form WITH table cells must fill one),
+ * so the doctor would trade a clear "we cannot self-test this study type" for
+ * an obscure fill-coverage blocker. The refusal is the better answer, and it
+ * stays.
+ *
+ * ⚠️ THE FABRICATION RULE IS THE VENOUS GENERATOR'S, INHERITED VERBATIM: the
+ * encounter speaks ONLY to concepts the form's own compiled field set carries.
+ * A concept with no sentence is SKIPPED, never guessed — because the failure
+ * that matters here is the arterial one, where a plausible-looking generator
+ * asserted reflux times about vessels that have no valves.
+ *
+ * The content is deliberately CONSTITUTIONAL and non-organ-specific wherever
+ * the concept does not itself name an organ. `chief_complaint` dictates
+ * fatigue, not abdominal pain: a chief complaint is a slot every form has, and
+ * filling it with an organ-specific symptom would assert something about a body
+ * system the form never named. Where the concept DOES name the system —
+ * `exam.abdomen`, `hpi.onset` — the system is read off the concept slug, which
+ * is evidence from the form rather than a guess about the doctor, and the
+ * finding dictated is UNREMARKABLE rather than a specific pathology.
+ */
+
+/**
+ * The sentence dictated for each narrative concept.
+ *
+ * ⚠️ BOUND TO THE REGISTRY, NOT COPIED FROM IT. `assertNarrativeKeysAreRegistered`
+ * below drives `isRegisteredConcept` over every key at module load, so a key
+ * that is not in the extractor's vocabulary cannot ship: such a concept can
+ * never be matched by any fact, so the sentence would be dictated into an
+ * encounter that fills nothing and nobody would see why.
+ *
+ * ⚠️ AND THE VALUES ARE GLOBALLY DISTINCT, WHICH IS THE VENOUS GENERATOR'S OWN
+ * SCAR. Identical values across cells made `bridge-evidence.ts` refuse on
+ * `ambiguous_laterality`, and the gate could not see it. Nothing here shares a
+ * number or a distinguishing noun with anything else here.
+ */
+const NARRATIVE_SENTENCES: ReadonlyMap<string, string> = new Map([
+  ['chief_complaint', 'Chief complaint: fatigue and reduced exercise tolerance for three months.'],
+  [
+    'past_medical_history',
+    'Past medical history: hypertension and type 2 diabetes mellitus, both longstanding.',
+  ],
+  ['family_history', 'Family history: hypertension in one parent; no other significant family history.'],
+  [
+    'social_history',
+    'Social history: never smoker, occasional alcohol, sedentary office occupation.',
+  ],
+  ['medication', 'Medications: lisinopril ten milligrams daily and metformin five hundred milligrams twice daily.'],
+  ['allergy', 'Allergies: no known drug allergies.'],
+  [
+    'assessment',
+    'Assessment: stable chronic conditions with no acute change in this synthetic example.',
+  ],
+  ['plan', 'Plan: continue current medications and review again in three months.'],
+  ['test.name', 'Test performed: the synthetic example study this form documents.'],
+]);
+
+/** Registry families whose concept slug NAMES its own subject, so the subject
+ *  is read from the form rather than guessed. `test.<slug>.result` is matched
+ *  before `exam.` so a study result never reads as an examination. */
+const HPI_CONCEPT = /^hpi\.([a-z0-9_]+)$/;
+const EXAM_CONCEPT = /^exam\.([a-z0-9_.]+)$/;
+const TEST_RESULT_CONCEPT = /^test\.([a-z0-9_]+)\.result$/;
+
+/** `past_medical_history` -> `past medical history`; `exam.upper_gi` -> `upper gi`. */
+function spellSlug(slug: string): string {
+  return slug.replace(/[._]+/g, ' ').trim();
+}
+
+/**
+ * The sentence for a patterned narrative concept, or null when this generator
+ * cannot speak to it.
+ *
+ * ⚠️ EVERY BRANCH DICTATES AN UNREMARKABLE FINDING, NEVER A PATHOLOGY. The
+ * generator knows the SUBJECT from the slug and knows nothing whatever about
+ * what a normal or abnormal result would be for it, so asserting anything more
+ * specific than "documented, unremarkable" would be invented clinical content
+ * in an artifact the certification stores.
+ */
+function patternedNarrativeSentence(concept: string): string | null {
+  const result = TEST_RESULT_CONCEPT.exec(concept);
+  if (result) {
+    return `Result of the ${spellSlug(result[1])} study: documented, no abnormality identified in this synthetic example.`;
+  }
+  const hpi = HPI_CONCEPT.exec(concept);
+  if (hpi) {
+    return `History of present illness, ${spellSlug(hpi[1])}: gradual, moderate, unchanged over three months.`;
+  }
+  const exam = EXAM_CONCEPT.exec(concept);
+  if (exam) {
+    return `Examination of the ${spellSlug(exam[1])}: documented and unremarkable in this synthetic example.`;
+  }
+  return null;
+}
+
+/** The sentence this generator dictates for a concept, or null. */
+function narrativeSentence(concept: string): string | null {
+  return NARRATIVE_SENTENCES.get(concept) ?? patternedNarrativeSentence(concept);
+}
+
+/**
+ * ⚠️ A KEY THE EXTRACTOR NEVER EMITS IS A SENTENCE THAT FILLS NOTHING.
+ * Driven at module load rather than asserted in a test, because a test proves
+ * the shipped table on the day it runs and this proves it on the day it loads.
+ * `gate-f5i2-narrative-encounter.test.ts` also asserts it, with a mutation that
+ * reddens both.
+ */
+function assertNarrativeKeysAreRegistered(): void {
+  const offRegistry = [...NARRATIVE_SENTENCES.keys()].filter((c) => !isRegisteredConcept(c));
+  if (offRegistry.length > 0) {
+    throw new Error(
+      `NARRATIVE_SENTENCES carries concepts the extractor never emits: ${offRegistry.join(', ')}. ` +
+        'A sentence for an unregistered concept can never be matched by any fact, so the ' +
+        'field it was written for would be permanently unfillable.',
+    );
+  }
+}
+assertNarrativeKeysAreRegistered();
+
 /** Why this template could not have a self-test generated FOR IT. Displayed to
  *  the doctor via needs-review, so each value names a real, distinguishable
- *  situation rather than one catch-all. */
-export type EncounterNotDerivable =
-  | 'no_measurement_rows'
-  | 'only_placeholder_rows'
-  | 'unsupported_study_type';
+ *  situation rather than one catch-all.
+ *
+ *  ⚠️ `no_measurement_rows` WAS RETIRED BY F5-i-2 AND REPLACED, NOT RENAMED FOR
+ *  TIDINESS. Once the narrative generator exists, a form with no measurement
+ *  rows is usually derivable, so the only surviving terminal case is "no field
+ *  on this form carries a concept this engine can speak to" — and telling a
+ *  doctor "no measurement rows" about a consult form whose real problem is
+ *  unconfirmed mappings sends them to look for a table they never had. The
+ *  member is REPLACED rather than kept-and-dead so `tsc` names every site.
+ *
+ *  Back-catalogue checked rather than assumed: production carries **5**
+ *  `TEMPLATE_TWIN_CERTIFY_FAILED` rows (2 `certify`, 2 `certifyNativeTemplateAction`,
+ *  1 `synthetic_test`, reconciling to 5) and **zero** with `stage:
+ *  'derive_encounter'`, so no stored reason string is invalidated. */
+/**
+ * ⚠️ THE VOCABULARY IS ONE VALUE, AND THE TYPE IS DERIVED FROM IT — not the
+ * other way round, and not two lists.
+ *
+ * `gate-f16-certify-refusal-is-actionable.test.ts` enforces a CROSS-TENANT
+ * constraint with this set: `logAudit` fans the `blocking` array out to every
+ * subscribed SUPER_ADMIN, so it may carry closed reason codes and nothing else
+ * — a field label arriving there is a customer's form leaking across tenants.
+ * That check was policing the constraint against a HAND-COPIED array of the
+ * three strings, which is the *"two constants for one threshold"* defect this
+ * module already carries a scar from, sitting on the one path where being wrong
+ * is a disclosure. A member added to the type and forgotten in the array would
+ * have made the guard silently reject a legitimate reason; a member REMOVED
+ * from the type and left in the array would have made it silently admit a
+ * retired one.
+ *
+ * Exporting the tuple and deriving the union means a new reason widens the
+ * runtime check automatically, while
+ * `gate-derived-encounter-exercises-the-form.test.ts`'s `satisfies
+ * Record<EncounterNotDerivable, …>` still refuses to compile until somebody
+ * supplies the input that PRODUCES it. Neither half is redundant: one keeps the
+ * set honest, the other keeps it reachable.
+ */
+export const ENCOUNTER_NOT_DERIVABLE_REASONS = [
+  'no_addressable_fields',
+  'only_placeholder_rows',
+  'unsupported_study_type',
+] as const;
+
+export type EncounterNotDerivable = (typeof ENCOUNTER_NOT_DERIVABLE_REASONS)[number];
 
 export type DerivedEncounter =
   | { readonly ok: true; readonly text: string }
@@ -271,7 +452,15 @@ export function deriveVerificationEncounter(
    *  under one reason, and they need different answers from the doctor. */
   let measurementRows = 0;
   for (const f of fields) {
-    if (!f.clinicalConcept || !f.clinicalConcept.startsWith(MEASUREMENT_PREFIX)) continue;
+    // ⚠️ CANONICALISE BEFORE CLASSIFYING — F5-i-2's adversarial pass.
+    // `exam.vascular.diameter` is a REGISTRY SYNONYM of `measurement.diameter`,
+    // so it IS a measurement row; reading the raw string sent it to the
+    // narrative generator, which dictated an "examination" sentence about a
+    // diameter field. `resolveTemplateFields` has always honoured synonyms when
+    // MATCHING, so a classifier that does not honour them is reading a
+    // different vocabulary from the one that fills.
+    if (!f.clinicalConcept) continue;
+    if (!canonicalConcept(f.clinicalConcept).startsWith(MEASUREMENT_PREFIX)) continue;
     measurementRows += 1;
     const label = (f.originalLabel ?? '').trim();
     if (!label || PLACEHOLDER.test(label)) continue;
@@ -296,7 +485,11 @@ export function deriveVerificationEncounter(
   // cannot speak to them — but the buckets are defined by the FIELD SET, never
   // by what the document is called. A reader who maps them to document kinds
   // will be wrong about exactly the forms F5-i's second half must handle.
-  if (measurementRows === 0) return { ok: false, reason: 'no_measurement_rows' };
+  //
+  // ⚠️ F5-i-2 (#156): THIS IS WHERE THE SECOND SHAPE IS SERVED, AND IT IS THE
+  // ONLY PLACE. A measurement-carrying form never reaches here, so the venous
+  // path below is untouched by construction rather than by careful editing.
+  if (measurementRows === 0) return deriveNarrativeEncounter(fields);
 
   // Measurement rows exist but none of them name anatomy, so any dictation
   // would address a location nobody wrote down.
@@ -339,6 +532,75 @@ export function deriveVerificationEncounter(
   // window degrades to fewer segments — still far above the fill threshold —
   // instead of being refused with a security-shaped error.
   let take = labels.length;
+  let text = build(take);
+  while (text.length > MAX_ENCOUNTER_CHARS && take > 1) {
+    take -= 1;
+    text = build(take);
+  }
+  return { ok: true, text };
+}
+
+/**
+ * F5-i-2 — the NARRATIVE shape. Reached only when the form carries ZERO
+ * measurement rows.
+ *
+ * ⚠️ THE ORDER IS CANONICAL, NOT FIELD ORDER, AND THAT IS LOAD-BEARING.
+ * `deriveVerificationEncounter` feeds a PINNED synthetic note keyed on the
+ * encounter's own sha256 (`pinnedNoteEncounterSha256`), so two runs over the
+ * same form must produce byte-identical text. Field order is stable today but
+ * is a property of the compiler, not of this function; sorting the concept set
+ * makes the determinism this generator's own rather than borrowed.
+ */
+function deriveNarrativeEncounter(
+  fields: readonly EncounterSourceField[],
+): DerivedEncounter {
+  const concepts = new Set<string>();
+  for (const f of fields) {
+    // ⚠️ CANONICAL, for the same reason the measurement partition is: a field
+    // a physician mapped to `impression` means `assessment`, and a lookup keyed
+    // on the raw spelling finds no sentence and silently drops the field.
+    const c = f.clinicalConcept ? canonicalConcept(f.clinicalConcept) : null;
+    // ⚠️ A field with NO concept contributes nothing, and that is the honest
+    // behaviour rather than a gap. On the deterministic fallback mapping path
+    // every non-vein-grid field carries `clinicalConcept: null`
+    // (`semantic-mapping/index.ts:240`), so an unconfirmed form refuses here —
+    // which is correct: the doctor still has mappings to confirm, and #156's
+    // acceptance requires REALISTIC per-field concepts, never a blanket one.
+    if (!c) continue;
+    concepts.add(c);
+  }
+
+  const sentences: string[] = [];
+  for (const concept of [...concepts].sort()) {
+    const sentence = narrativeSentence(concept);
+    // ⚠️ SKIPPED, NEVER GUESSED. A concept this generator cannot speak to
+    // contributes nothing at all — the arterial lesson, one shape over.
+    if (sentence) sentences.push(sentence);
+  }
+
+  // Nothing on this form is addressable: either no field carries a concept, or
+  // every concept it carries is one this generator has no sentence for. Both
+  // are the same answer to the doctor — we could not write a self-test for
+  // THIS form — and neither is served by inventing one.
+  if (sentences.length === 0) return { ok: false, reason: 'no_addressable_fields' };
+
+  const build = (take: number): string =>
+    [
+      // ⚠️ LOAD-BEARING, EXACTLY AS IN THE VENOUS BUILDER. The evidence gate
+      // requires an explicit synthetic marker and throws
+      // SYNTHETIC_EVIDENCE_REJECTED, before any model call, without it. The
+      // string is duplicated rather than shared because the two builders'
+      // openings are allowed to diverge; the GATE's own regex is what both are
+      // proved against, imported rather than copied.
+      'Synthetic certification test encounter — fictional example data, no real patient.',
+      'Office consultation, synthetic example, documented for template verification only.',
+      ...sentences.slice(0, take),
+    ].join(' ');
+
+  // Same degrade-rather-than-refuse contract as the venous builder: a form
+  // large enough to exceed the evidence gate's scan window loses sentences
+  // instead of being refused with a security-shaped error.
+  let take = sentences.length;
   let text = build(take);
   while (text.length > MAX_ENCOUNTER_CHARS && take > 1) {
     take -= 1;
