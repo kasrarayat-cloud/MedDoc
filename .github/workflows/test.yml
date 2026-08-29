@@ -35,10 +35,12 @@ env:
 
 jobs:
   test:
-    # ⚠️ SELF-HOSTED (quillmd-ci-1, 4 vCPU / 8 GB, Docker 29.7.2). Job `name:`
+    # ⚠️ SELF-HOSTED. MEASURED 2026-08-28 on white-gorilla-87822 (Ubuntu 24.04.4):
+    # nproc=4, 7.8 GiB total / 5.7 GiB available, Docker 29.7.2 — which CONFIRMS
+    # the figures this comment carried as a purchase spec. Job `name:`
     # is UNCHANGED so every required context is preserved byte-for-byte.
     # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
-    runs-on: [self-hosted, linux, x64, quillmd-ci]
+    runs-on: [self-hosted, linux, x64, quillmd-ci-light]
     timeout-minutes: 20
 
     services:
@@ -224,10 +226,12 @@ jobs:
   # ──────────────────────────────────────────────────────────────────
   audit:
     name: npm audit (high+critical gate)
-    # ⚠️ SELF-HOSTED (quillmd-ci-1, 4 vCPU / 8 GB, Docker 29.7.2). Job `name:`
+    # ⚠️ SELF-HOSTED. MEASURED 2026-08-28 on white-gorilla-87822 (Ubuntu 24.04.4):
+    # nproc=4, 7.8 GiB total / 5.7 GiB available, Docker 29.7.2 — which CONFIRMS
+    # the figures this comment carried as a purchase spec. Job `name:`
     # is UNCHANGED so every required context is preserved byte-for-byte.
     # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
-    runs-on: [self-hosted, linux, x64, quillmd-ci]
+    runs-on: [self-hosted, linux, x64, quillmd-ci-light]
     # ⚠️ BOX-CALIBRATED, NOT A SPEED SETTING. A timeout is a HANG-GUARD;
     # generous is free. quillmd-ci-1 (4 vCPU) is ~1.4-1.9x slower than a
     # hosted runner on CPU-bound work, and every timeout in this repo was
@@ -342,10 +346,12 @@ jobs:
   # ──────────────────────────────────────────────────────────────────
   audit-dev:
     name: dev-dependency advisories (report-only)
-    # ⚠️ SELF-HOSTED (quillmd-ci-1, 4 vCPU / 8 GB, Docker 29.7.2). Job `name:`
+    # ⚠️ SELF-HOSTED. MEASURED 2026-08-28 on white-gorilla-87822 (Ubuntu 24.04.4):
+    # nproc=4, 7.8 GiB total / 5.7 GiB available, Docker 29.7.2 — which CONFIRMS
+    # the figures this comment carried as a purchase spec. Job `name:`
     # is UNCHANGED so every required context is preserved byte-for-byte.
     # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
-    runs-on: [self-hosted, linux, x64, quillmd-ci]
+    runs-on: [self-hosted, linux, x64, quillmd-ci-light]
     # ⚠️ BOX-CALIBRATED, NOT A SPEED SETTING. A timeout is a HANG-GUARD;
     # generous is free. quillmd-ci-1 (4 vCPU) is ~1.4-1.9x slower than a
     # hosted runner on CPU-bound work, and every timeout in this repo was
@@ -396,7 +402,9 @@ jobs:
   # not lengthen. apps/meddoc-pro (decommissioned) stays out of scope.
   unit:
     name: unit tests (transcribe-md + packages)
-    # ⚠️ SELF-HOSTED (quillmd-ci-1, 4 vCPU / 8 GB, Docker 29.7.2). Job `name:`
+    # ⚠️ SELF-HOSTED. MEASURED 2026-08-28 on white-gorilla-87822 (Ubuntu 24.04.4):
+    # nproc=4, 7.8 GiB total / 5.7 GiB available, Docker 29.7.2 — which CONFIRMS
+    # the figures this comment carried as a purchase spec. Job `name:`
     # is UNCHANGED so every required context is preserved byte-for-byte.
     # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
     runs-on: [self-hosted, linux, x64, quillmd-ci]

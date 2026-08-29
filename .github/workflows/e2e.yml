@@ -50,10 +50,12 @@ jobs:
   # ==========================================================================
   changes:
     name: detect docs-only
-    # ⚠️ SELF-HOSTED (quillmd-ci-1, 4 vCPU / 8 GB, Docker 29.7.2). Job `name:`
+    # ⚠️ SELF-HOSTED. MEASURED 2026-08-28 on white-gorilla-87822 (Ubuntu 24.04.4):
+    # nproc=4, 7.8 GiB total / 5.7 GiB available, Docker 29.7.2 — which CONFIRMS
+    # the figures this comment carried as a purchase spec. Job `name:`
     # is UNCHANGED so every required context is preserved byte-for-byte.
     # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
-    runs-on: [self-hosted, linux, x64, quillmd-ci]
+    runs-on: [self-hosted, linux, x64, quillmd-ci-light]
     timeout-minutes: 5
     outputs:
       docs_only: ${{ steps.d.outputs.docs_only }}
@@ -87,10 +89,12 @@ jobs:
     name: Playwright E2E (transcribe-md)
     needs: changes
     if: needs.changes.outputs.docs_only == 'true'
-    # ⚠️ SELF-HOSTED (quillmd-ci-1, 4 vCPU / 8 GB, Docker 29.7.2). Job `name:`
+    # ⚠️ SELF-HOSTED. MEASURED 2026-08-28 on white-gorilla-87822 (Ubuntu 24.04.4):
+    # nproc=4, 7.8 GiB total / 5.7 GiB available, Docker 29.7.2 — which CONFIRMS
+    # the figures this comment carried as a purchase spec. Job `name:`
     # is UNCHANGED so every required context is preserved byte-for-byte.
     # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
-    runs-on: [self-hosted, linux, x64, quillmd-ci]
+    runs-on: [self-hosted, linux, x64, quillmd-ci-light]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -113,7 +117,9 @@ jobs:
     name: Playwright E2E (transcribe-md)
     needs: changes
     if: needs.changes.outputs.docs_only != 'true'
-    # ⚠️ SELF-HOSTED (quillmd-ci-1, 4 vCPU / 8 GB, Docker 29.7.2). Job `name:`
+    # ⚠️ SELF-HOSTED. MEASURED 2026-08-28 on white-gorilla-87822 (Ubuntu 24.04.4):
+    # nproc=4, 7.8 GiB total / 5.7 GiB available, Docker 29.7.2 — which CONFIRMS
+    # the figures this comment carried as a purchase spec. Job `name:`
     # is UNCHANGED so every required context is preserved byte-for-byte.
     # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
     runs-on: [self-hosted, linux, x64, quillmd-ci]

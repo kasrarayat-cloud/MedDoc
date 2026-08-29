@@ -323,6 +323,53 @@ picks up; a restart mid-job triggers BullMQ retry.
 
 ---
 
+## 2.9 THE CI RUNNER BOX — recorded so no session hunts for it again
+
+**Added 2026-08-28.** Two sessions independently spent recon establishing that the
+self-hosted runner is **not on the app VPS**. It is a separate, dedicated box, and
+nothing tracked said where. That is fixed here.
+
+| fact | value |
+|---|---|
+| host | `white-gorilla-87822` |
+| IP | `194.156.90.209` |
+| OS | Ubuntu 24.04.4 LTS |
+| capacity (**measured** 2026-08-28) | **nproc 4 · 7.8 GiB RAM · Docker 29.7.2** |
+| runner installs | `/home/runner/actions-runner` (ci-1) · `/home/runner/actions-runner-2` (ci-2) |
+| services | `actions.runner.kasrarayat-cloud-MedDoc.quillmd-ci-{1,2}.service` |
+| SSH key (this environment) | `~/.ssh/quillmd_ci_ed25519` |
+| key fingerprint | `SHA256:xav/uBC1ObR/8E5j2aY31KknZHW8ARnRKv9WMibJwuU` |
+| host key fingerprint (**pin this**) | `SHA256:JYypFvk+IXyVI7jOT/qPhx0981Gt7MUGYqS8+B8BDNY` (ED25519) |
+
+    ssh -i ~/.ssh/quillmd_ci_ed25519 root@194.156.90.209
+
+⚠️ **PASSWORD AUTH IS OFF AND ROOT'S PASSWORD IS DEAD.** `sshd -T` reports
+`passwordauthentication no` and `permitrootlogin without-password`. Root's console
+password was rotated 2026-08-28 to a value generated **on the host** and never
+transmitted or stored — so **the key above is the only way in**. If it is lost, the
+recovery path is the provider panel, not a password.
+
+### The two lanes — and why e2e is pinned
+
+| runner | labels | takes |
+|---|---|---|
+| `quillmd-ci-1` | `quillmd-ci`, `quillmd-ci-light` | everything, including the heavy lane |
+| `quillmd-ci-2` | `quillmd-ci-light` | the light lane only |
+
+**Heavy lane (`quillmd-ci`, ci-1 ONLY):** the real Playwright arm, unit tests, the
+axe sweep. ⚠️ **e2e is PINNED deliberately** — two concurrent Playwright runs with
+their docker stacks would contend on 4 vCPU / 7.8 GiB and make both slower than
+one. Pinning is the point, not a limitation.
+
+**Light lane (`quillmd-ci-light`, EITHER runner):** secrets-scan, the npm audits,
+docs-only detection, the e2e skip arm. ⚠️ **Both runners carry this label on
+purpose** — routing light jobs to ci-2 alone would have moved the single point of
+failure rather than removing it.
+
+**Why this exists:** one runner made every required check serialise. Measured
+2026-08-28: a **13-second** job sat behind **69 minutes** of queue, and a ~5-minute
+suite took 2h06m wall. The SPOF was recorded in the ledger before it was fixed.
+
 ## 3. Rollback
 
 Reverting a bad deploy:
