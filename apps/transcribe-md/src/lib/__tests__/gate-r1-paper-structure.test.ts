@@ -36,6 +36,7 @@ import { generateVisitDocx } from '../docx-generator';
 import {
   TYPE_PT,
   RULE_PT,
+  LOCKUP_PT,
   SECTION_MARK,
   SECTION_TRACKING_PT,
   EMPTY_VALUE,
@@ -91,6 +92,23 @@ async function docxXml(data = fixture()): Promise<string> {
   return zip.file('word/document.xml')!.async('string');
 }
 
+
+/**
+ * The enclosing `<w:p>` for a piece of text.
+ *
+ * ⚠️ Anchored on `'<w:p '` and `'<w:p>'`, never on the bare `'<w:p'` — that
+ * prefix is a substring of `<w:pPr>` and `<w:pBdr>`, so a bare match silently
+ * returns a slice that STARTS INSIDE the paragraph's own properties. Found by
+ * writing it the wrong way first: the title slice began at `<w:pBdr>`.
+ * `Math.max` because either form may be the nearer one.
+ */
+function paragraphAround(xml: string, text: string): string | null {
+  const at = xml.indexOf(text);
+  if (at === -1) return null;
+  const start = Math.max(xml.lastIndexOf('<w:p ', at), xml.lastIndexOf('<w:p>', at));
+  const end = xml.indexOf('</w:p>', at);
+  return start === -1 || end === -1 ? null : xml.slice(start, end + 6);
+}
 
 /** The paragraph XML for a named section heading, run properties included. */
 function headingParagraph(xml: string, name: string): string | null {
@@ -185,11 +203,57 @@ describe('R1.4 — the title lockup', () => {
     expect(para, `title paragraph:\n${para}`).toMatch(/<w:pBdr>/);
   });
 
-  it('the lockup gaps are absolute points on BOTH sides', () => {
-    // pdfkit's `moveDown(n)` is n × the CURRENT line height, so the same call
-    // produced a different gap depending on the font size in effect. The Word
-    // file used fixed twips. Same lockup, two unrelated units.
-    expect(DOCX_SRC).toContain('toTwip(LOCKUP_PT.ruleToBody)');
+  // ⚠️ THIS READ `the lockup gaps are absolute points on BOTH sides` AND
+  // ASSERTED ONE GAP, AGAINST THE SOURCE TEXT, ON A SIDE THAT NO LONGER EXISTS.
+  //
+  // Three separate defects, all invisible while it was green:
+  //
+  //  1. `BOTH sides` is a FOSSIL. Ruling #113 retired `pdf-generator.ts`; the
+  //     PDF is now LibreOffice's render of these very bytes. There is one side.
+  //  2. It asserted `ruleToBody` and left `eyebrowToTitle` and `titleToRule`
+  //     — both live, at `docx-generator.ts:168` and `:191` — unguarded.
+  //  3. ⚠️ IT PINNED A SPELLING, NOT A PROPERTY — it asserted the SOURCE TEXT
+  //     of `docx-generator.ts` contained `toTwip(LOCKUP_PT.ruleToBody)`.
+  //     Extracting that call into a named const — an improvement — reddens it,
+  //     while any change that leaves the call site spelled the same but emits
+  //     different bytes stays green. It failed for improvements and passed for
+  //     regressions, which is the wrong way round.
+  //
+  // What is load-bearing is that each gap REACHES the rendered document, and
+  // reaches it BY DERIVATION FROM THE TOKEN. `pdfkit`'s `moveDown(n)` was
+  // n × the CURRENT line height, so the same call drew a different gap
+  // depending on the font size in effect; the Word file has always used fixed
+  // units. That is the property, and it is pinned against the bytes.
+  //
+  // ⚠️ WHAT THIS DELIBERATELY DOES NOT CLAIM, BECAUSE THE FIRST MUTATION
+  // CAUGHT ME ASSERTING IT: it cannot detect a change to a token's VALUE.
+  // The expectation is computed from the same `LOCKUP_PT` the generator reads,
+  // so both sides move together and `eyebrowToTitle: 3 -> 5` stays green. That
+  // is correct — the value is a design decision, not an invariant — but it
+  // means the discriminating mutation is BREAKING THE DERIVATION (hard-coding
+  // a literal in the generator), never editing the token. Proved that way.
+  it('every lockup gap reaches the document as an absolute measure', async () => {
+    const xml = await docxXml();
+
+    // Word's unit differs per attribute, and that is not a slip: paragraph
+    // spacing is twentieths of a point, a border's `space` is whole points.
+    const eyebrow = paragraphAround(xml, 'QUILLMD');
+    expect(eyebrow, 'the wordmark paragraph is not in the document').not.toBeNull();
+    expect(eyebrow!).toContain(`<w:spacing w:after="${toTwip(LOCKUP_PT.eyebrowToTitle)}"/>`);
+
+    const title = paragraphAround(xml, 'Ada Lovelace');
+    expect(title, 'the title paragraph is not in the document').not.toBeNull();
+    expect(title!).toContain(`w:space="${LOCKUP_PT.titleToRule}"`);
+    expect(title!).toContain(`<w:spacing w:after="${toTwip(LOCKUP_PT.ruleToBody)}"/>`);
+  });
+
+  it('the three lockup gaps are positive and distinct — the guard cannot go vacuous', () => {
+    // A zero gap would still render an attribute, and two equal gaps would let
+    // one paragraph's value satisfy the other's assertion if the anchoring
+    // ever slipped. Both are stated here rather than assumed.
+    const gaps = [LOCKUP_PT.eyebrowToTitle, LOCKUP_PT.titleToRule, LOCKUP_PT.ruleToBody];
+    for (const gap of gaps) expect(gap).toBeGreaterThan(0);
+    expect(new Set(gaps).size).toBe(gaps.length);
   });
 });
 

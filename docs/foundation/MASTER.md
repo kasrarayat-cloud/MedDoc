@@ -131,8 +131,19 @@ a pointer and go and read the ruling.**
    alone**, because every index row now carries its status in a column of its
    own — `grep -c '[|] PROVISIONAL [|]' docs/foundation/RULINGS.md`. Before this
    correction that returned **1** where the pre-split file returned 47, and
-   `OWNER RULING` returned **0** where it returned 23; the markers had been
+   `OWNER-RULING` returned **0** where it returned 23; the markers had been
    truncated out of the rows at 72 characters.
+
+   ⚠️ **AND THAT TOKEN IS HYPHENATED — THIS PARAGRAPH SPELLED IT `OWNER RULING`
+   AND ITS OWN WORKED GREP THEREFORE SCORED ZERO.** Measured 2026-08-28 against
+   the live head: **`OWNER-RULING` = 26 · `OWNER RULING` = 0.** ⚠️ **The false
+   alarm is the exact one this paragraph exists to prevent** — its subject is
+   the split having truncated the status markers out of the rows, so a session
+   that runs the printed string gets `0`, reads it against the prose's *"returned
+   0"*, and concludes the ledger is **still broken** when it is fine. A wrong
+   number that matches the expectation has nothing left to disagree with it.
+   The rows are `| <date> | #NNN | <STATUS> | … |`, so a pattern anchored
+   `^| #` cannot match either.
 
    ⚠️ **`docs/rounds/RELAY.md` IS STILL OVERSIZE AND IS STILL GREP-ONLY.** It
    belongs to the Rounds programme; a Rounds session rotates it with
