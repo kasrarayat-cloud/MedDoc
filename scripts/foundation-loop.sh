@@ -143,6 +143,7 @@ if ! bash scripts/check-claude-cli.sh; then
   echo "🔴 REFUSING TO LAUNCH — the claude CLI cannot run (see above)."
   echo "   Every session would die on startup and the loop would go dark"
   echo "   without saying why. Fix the CLI, then relight."
+    ping halt "loop REFUSED TO LAUNCH — the claude CLI cannot run"
   exit 1
 fi
 
@@ -151,6 +152,12 @@ if [ -f "$STOP_FILE" ]; then
   echo "   It was created $(date -u -r "$STOP_FILE" +%Y-%m-%dT%H:%M:%SZ). Contents:"
   sed 's/^/     /' "$STOP_FILE"
   echo "   Remove it to re-enable: rm $STOP_FILE"
+    # ⚠️ A DELIBERATE STOP IS STILL WORTH SAYING OUT LOUD. Someone placed this
+    # file, so the ping is not news to them — but a STALE STOP left behind means
+    # every relight silently refuses, and "the loop is quiet" then looks identical
+    # to "the loop is working". `waiting`, not `halt`: it clears by itself the
+    # moment the file is removed.
+    ping waiting "loop is DISABLED — $STOP_FILE is present; every relight refuses until it is removed"
   exit 2
 fi
 
