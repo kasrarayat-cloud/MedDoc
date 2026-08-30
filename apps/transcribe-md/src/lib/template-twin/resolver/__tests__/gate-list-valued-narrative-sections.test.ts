@@ -181,6 +181,144 @@ describe('list-valued narrative sections', () => {
     expect(resolved?.status).toBe('conflict');
   });
 
+  // ── EVERY ROW BELOW WAS A DEFECT FOUND BY THE ADVERSARIAL PASS ──────────────
+  // The first version of this guard was a DENYLIST (`!concept.startsWith
+  // ('measurement.')`). Each of these joined on a doctor's form with ZERO
+  // blocking issues, and each was a FIELD_CONFLICT before the change. They are
+  // pinned individually so no future "simplification" back to a prefix rule can
+  // pass this file.
+
+  it.each([
+    // The CONCEPT arm alone. The original fixture was kind:'measurement' AND
+    // concept:'measurement.*', failing BOTH arms — so either could be deleted
+    // with the gate still green. This one is narrative_text, so only the
+    // concept arm can hold it.
+    ['measurement.diameter', '3.1 cm', '4.2 cm'],
+    // Registry SYNONYMS of a measurement. concept-registry.ts's own docstring
+    // records that a raw startsWith() test already shipped this bug once.
+    ['exam.vascular.diameter', '3.1 mm', '4.2 mm'],
+    ['exam.vascular.reflux_time', '2.4 seconds', '0.4 seconds'],
+    // A severity is one value; an onset is one time.
+    ['hpi.severity', 'moderate', 'severe'],
+    ['hpi.onset', 'three days ago', 'two weeks ago'],
+    // A study is one study, and a result is one result. "Normal; Abnormal" is a
+    // contradiction wearing the costume of prose.
+    ['test.name', 'Bilateral Detailed', 'Unilateral - Right Leg Limited'],
+    ['test.venous_duplex.result', 'Normal', 'Abnormal'],
+    // One coarse concept per exam system fans into EVERY field bound to it.
+    ['exam.vascular', 'Vein patent and compressible', 'Vein shows chronic thickening'],
+    // Reachable through the mapping editor, which does not registry-check.
+    ['medication.dose', '10 mg', '20 mg'],
+  ])('refuses to join %s — it is not an accumulating section', (concept, a, b) => {
+    const definition = field('f', 'narrative_text');
+    const semantic = mapping(definition, concept);
+    const [resolved] = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts: [fact('a', concept, a), fact('b', concept, b)],
+    });
+    expect(resolved?.status).toBe('conflict');
+  });
+
+  it('canonicalises INTO the allowlist — a synonym of a listed section joins', () => {
+    // ⚠️ THIS IS THE ROW THAT PINS canonicalConcept(), AND IT POINTS THE OTHER
+    // WAY. Under an allowlist, a synonym of an EXCLUDED concept conflicts
+    // whether or not you canonicalise — so the excluded rows above cannot see
+    // the call at all. Mutating canonicalConcept() away left them all green.
+    // `impression` is a REGISTRY_SYNONYMS entry for `assessment`, an ordinary
+    // mapping on a consult form; without canonicalisation it falls out of the
+    // allowlist and the section silently goes back to blocking.
+    const definition = field('5', 'narrative_text');
+    const semantic = mapping(definition, 'impression');
+    const [resolved] = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts: [
+        fact('a', 'impression', 'Chronic venous insufficiency'),
+        fact('b', 'impression', 'Superficial reflux, left leg'),
+      ],
+    });
+    expect(resolved).toMatchObject({
+      status: 'supported',
+      value: 'Chronic venous insufficiency; Superficial reflux, left leg',
+      reasonCode: 'list_valued_narrative_joined',
+    });
+  });
+
+  it('classifies by canonical concept, not raw text — NFKC included', () => {
+    // A full-width 'm'. The fact matcher NFKC-normalises, so these facts DO
+    // match the mapping; a classifier that does not would read a different
+    // vocabulary from the one that fills.
+    const concept = '\uFF4Deasurement.diameter';
+    const definition = field('1', 'narrative_text');
+    const semantic = mapping(definition, concept);
+    const [resolved] = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts: [
+        fact('a', 'measurement.diameter', '3.1 cm'),
+        fact('b', 'measurement.diameter', '4.2 cm'),
+      ],
+    });
+    expect(resolved?.status).toBe('conflict');
+  });
+
+  it('refuses to join across DIFFERENT lateralities, even in a listed section', () => {
+    // The resolver's own laterality guard only fires when the mapping demands
+    // laterality, and narrative mappings are 'optional' or null — so the refusal
+    // inside joinListValuedNarrative is the only thing standing here. Without
+    // it, a right-leg control asserts the left leg's finding.
+    const definition = field('2', 'narrative_text');
+    const semantic = mapping(definition, 'assessment', { laterality: 'optional' });
+    const [resolved] = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts: [
+        fact('a', 'assessment', 'Reflux present', { laterality: 'right' }),
+        fact('b', 'assessment', 'No reflux', { laterality: 'left' }),
+      ],
+    });
+    expect(resolved?.status).toBe('conflict');
+  });
+
+  it('does not write two DENIED facts into the form as an affirmative section', () => {
+    const definition = field('3', 'narrative_text');
+    const semantic = mapping(definition, 'past_medical_history', {
+      polarityBehavior: 'explicit_denial_allowed',
+    });
+    const [resolved] = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts: [
+        fact('a', 'past_medical_history', 'Hypertension', { polarity: 'denied' }),
+        fact('b', 'past_medical_history', 'Type 2 diabetes', { polarity: 'denied' }),
+      ],
+    });
+    expect(resolved?.value).not.toBe('Hypertension; Type 2 diabetes');
+  });
+
+  it('keeps byte-identity strict for a SINGLE-fact narrative (the join trims)', () => {
+    // The validator arm is gated on citedFacts.length > 1 precisely so a
+    // one-fact section cannot be accepted merely because it TRIMS to the fact.
+    const definition = field('4', 'narrative_text');
+    const semantic = mapping(definition, 'assessment');
+    const untrimmed = fact('a', 'assessment', 'Chronic venous insufficiency ');
+    const [resolved] = resolveTemplateFields({
+      fields: [definition],
+      mappings: [semantic],
+      facts: [untrimmed],
+    });
+    const result = validateTemplateTwin({
+      fields: [definition],
+      mappings: [semantic],
+      facts: [untrimmed],
+      resolutions: [{ ...resolved!, value: 'Chronic venous insufficiency' }],
+    });
+    expect(
+      result.issues.some((i) => i.code === 'ASSERTION_NOT_SUPPORTED'),
+    ).toBe(true);
+  });
+
   it('leaves a single-fact narrative exactly as it was', () => {
     const definition = field('e', 'narrative_text');
     const semantic = mapping(definition, 'assessment');

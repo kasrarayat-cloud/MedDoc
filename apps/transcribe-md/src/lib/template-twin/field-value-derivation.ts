@@ -67,6 +67,7 @@
 
 import type { EncounterFact, SemanticMapping, TemplateField } from './ir';
 import { parseExplicitNumberAndUnit } from './encounter-facts';
+import { canonicalConcept } from './concept-registry';
 
 export function isStrictIsoDate(value: string): boolean {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -185,38 +186,69 @@ export function deriveFieldValueFromFact(
 }
 
 // ============================================================================
-// LIST-VALUED NARRATIVE CONCEPTS — the same "one rule, every caller" discipline
-// applied to a field that legitimately carries MORE THAN ONE fact.
+// LIST-VALUED NARRATIVE SECTIONS — the concepts that genuinely ACCUMULATE.
 // ----------------------------------------------------------------------------
 // A past medical history is "hypertension AND type 2 diabetes". A plan is
-// "continue medications AND review in three months". Those are not conflicting
-// claims about one value — they are the normal clinical shape of the section,
-// and the resolver was calling every one of them `multiple_distinct_supported_
-// values` -> FIELD_CONFLICT -> blocking. The owner's own form could not certify
-// for exactly this reason: two PMH conditions and two plan items in the
-// synthetic encounter, each pair reported as a conflict.
+// "continue medications AND review in three months". Those are not competing
+// answers to one question, and the resolver was calling every such pair
+// `multiple_distinct_supported_values` -> FIELD_CONFLICT -> blocking. The owner's
+// own form could not certify for exactly that reason.
 //
-// ⚠️ THE MEASUREMENT CASE IS THE OPPOSITE AND MUST STAY A CONFLICT. Two distinct
-// diameters for one vein IS contradictory evidence, and joining them would
-// launder a real conflict into a plausible-looking string. The discriminator is
-// therefore the CONCEPT'S SHAPE, not the field's convenience: `measurement.*` is
-// single-valued by nature, every other registry concept is a section that
-// accumulates. That split is already stated in concept-registry.ts's own
-// comments; this encodes it rather than restating it.
+// ⚠️ THIS IS AN ALLOWLIST BECAUSE THE DENYLIST FAILED OPEN, MEASURABLY. The first
+// version of this asked `!concept.startsWith('measurement.')` — "everything that
+// is not a measurement accumulates". Four independent refutation lenses broke it
+// with concrete inputs, and the premise is simply false:
 //
-// ⚠️ AND THE JOIN IS DEFINED HERE, ONCE, BECAUSE BOTH SIDES MUST AGREE BYTE FOR
-// BYTE. The resolver BUILDS the joined value; assertionSupported RE-DERIVES it.
-// A second copy of the separator or the ordering in either place reproduces the
-// "3.1" vs "3.10" defect this module was created for -- the value would be
-// refused as ASSERTION_NOT_SUPPORTED, which trades one blocking code for
-// another and looks like the fix failed rather than moved.
+//   · `hpi.severity`  -> joined "moderate; severe"        (a severity is ONE value)
+//   · `test.name`     -> joined two study types           (a study is ONE study)
+//   · `test.*.result` -> joined "Normal; Abnormal"        (a contradiction, as prose)
+//   · `exam.vascular` -> the SAME joined text in a "Right" control and a "Left"
+//                        control, laterality discarded, so the right-leg field
+//                        asserted the left leg's reflux. Zero blocking issues.
+//   · `medication.dose` via the mapping editor -> joined "10 mg; 20 mg"
+//
+// Every one of those printed onto a doctor's form with nothing blocking, and
+// every one was a `FIELD_CONFLICT` before. A denylist also cannot be completed:
+// `updateTemplateTwinMappings` does not registry-check, so an edited mapping can
+// carry ANY string, and each concept the registry gains later joins by default.
+// An allowlist fails closed — a new concept conflicts until somebody decides it
+// accumulates, which is the direction this decision should fail in.
+//
+// ⚠️ AND `exam.*` / `test.*` ARE DELIBERATELY ABSENT. One lens proposed including
+// them; two others demonstrated the harm above with concrete inputs. A
+// demonstration outranks a suggestion, so they conflict until a per-region or
+// per-study concept exists to bind them safely.
+//
+// ⚠️ MEASUREMENTS ARE EXCLUDED BY GROUND, NOT BY SPELLING. `canonicalConcept`
+// runs FIRST: `exam.vascular.diameter` is a registry SYNONYM of
+// `measurement.diameter` and IS a measurement, and concept-registry.ts's own
+// docstring records that a raw `startsWith('measurement.')` test already shipped
+// this bug once. NFKC first as well, matching the fact matcher — a full-width
+// `\uFF4Deasurement.diameter` matches ASCII facts and must not classify differently.
 
 /** Separator for a joined narrative section. */
 export const NARRATIVE_LIST_SEPARATOR = '; ';
 
 /**
- * Whether this (field, mapping) is a narrative SECTION that accumulates facts
- * rather than a single-valued slot.
+ * Canonical concepts whose clinical shape is a SECTION that accumulates several
+ * facts, rather than a slot holding one answer.
+ *
+ * Exact canonical strings only — no prefixes, no patterns. A prefix rule is how
+ * `exam.*` and `test.*` leaked in.
+ */
+export const ACCUMULATING_NARRATIVE_CONCEPTS: ReadonlySet<string> = new Set([
+  'assessment',
+  'chief_complaint',
+  'past_medical_history',
+  'family_history',
+  'social_history',
+  'plan',
+  'medication',
+  'allergy',
+]);
+
+/**
+ * Whether this (field, mapping) is a narrative SECTION that accumulates facts.
  *
  * Deliberately conservative: prose fields only. A `single_select` bound to
  * `allergy` still cannot hold two answers, so it keeps conflicting.
@@ -228,9 +260,11 @@ export function isListValuedNarrative(
   if (field.kind !== 'narrative_text') return false;
   // Repeating rows already have their own accumulating path (rowPrototypeValue).
   if (field.rowPrototype) return false;
-  const concept = (mapping?.clinicalConcept ?? '').trim().toLowerCase();
-  if (!concept) return false;
-  return !concept.startsWith('measurement.');
+  const raw = mapping?.clinicalConcept ?? '';
+  if (!raw.trim()) return false;
+  // NFKC first (the fact matcher's normalisation), then canonicalise synonyms.
+  const canonical = canonicalConcept(raw.normalize('NFKC'));
+  return ACCUMULATING_NARRATIVE_CONCEPTS.has(canonical);
 }
 
 /**
@@ -238,15 +272,36 @@ export function isListValuedNarrative(
  *
  * Built out of `deriveFieldValueFromFact` — the very function the validator
  * re-derives with — so the two cannot disagree. Order follows the cited facts;
- * exact repeats collapse (a section should not say "Hypertension; Hypertension"),
- * and blanks are skipped. Returns null when nothing derivable remains, which the
- * caller treats as "not populated" rather than as an empty string.
+ * exact repeats collapse (a section should not read "Hypertension;
+ * Hypertension").
+ *
+ * ⚠️ RETURNS NULL — MEANING "REFUSE THE JOIN" — RATHER THAN A PARTIAL SECTION.
+ * Every caller treats null as "fall through", which lands on the conflict the
+ * join was avoiding. That is the safe direction: a blocked fill is visible and a
+ * quietly incomplete history is not. Two refusals are load-bearing:
+ *
+ *   · ANY cited fact that does not derive. Skipping it would drop clinical
+ *     content from a section the note presents as complete — and the validator
+ *     would accept it, because it re-derives with this same function.
+ *   · MORE THAN ONE laterality among the cited facts. `projectEncounterFacts`
+ *     emits one coarse concept per exam system and the laterality rides on the
+ *     FACT, so a join would silently merge a left-leg and a right-leg finding
+ *     into one unattributed string. The resolver's own laterality guard only
+ *     fires when `mapping.laterality === 'required'`, and narrative mappings are
+ *     `optional` or null — so this is the only thing standing there.
  */
 export function joinListValuedNarrative(
   field: TemplateField,
   mapping: SemanticMapping | undefined,
   facts: ReadonlyArray<EncounterFact>,
 ): string | null {
+  const lateralities = new Set(
+    facts
+      .map((fact) => fact.laterality)
+      .filter((side) => side !== 'not_applicable' && side !== 'unknown'),
+  );
+  if (lateralities.size > 1) return null;
+
   const parts: string[] = [];
   for (const fact of facts) {
     const derived = deriveFieldValueFromFact(field, mapping, fact);
