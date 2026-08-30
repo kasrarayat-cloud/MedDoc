@@ -51,6 +51,7 @@ vi.mock('@/lib/note-template-parse/phi-gate', async (orig) => {
   return { ...actual, applyPhiGate: h.applyPhiGate };
 });
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+vi.mock('@/lib/audit', () => ({ logAudit: vi.fn(async () => {}) }));
 
 import {
   duplicateNoteTemplateAction,

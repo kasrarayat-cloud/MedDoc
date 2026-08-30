@@ -14,17 +14,51 @@
 // `page.evaluate` callback is serialised to the browser: it cannot close over
 // a module-scope import. So `ownedByDom`, `resolve`, `project`, `FOCUSABLE`,
 // the dialog scan and the aria-hidden probe can only move together, with
-// `AXE_CDN` riding along as the evaluate argument.
+// the axe SOURCE riding along as the evaluate argument.
 //
-// ⚠️ THIS FILE PULLS axe-core FROM A CDN AT RUN TIME (`AXE_CDN`). It is now on
-// the critical path of TWO CI steps rather than one, and a jsdelivr outage
-// surfaces as a pack-level error, not as an a11y result. Named here so the next
-// red run is diagnosed in seconds rather than treated as a Rounds regression.
+// ⚠️ THIS FILE USED TO PULL axe-core FROM A CDN AT RUN TIME, and the warning that
+// stood here — "a jsdelivr outage surfaces as a pack-level error, not as an a11y
+// result" — described its own future incident. It happened on 2026-08-28 and
+// red-ed a merge. The prose is kept in the past tense rather than deleted,
+// because the lesson is that NAMING a hazard is not FIXING it; the fix is below,
+// in `axeSource()`, which reads the pinned package off disk.
 // ============================================================================
+
+import { readFileSync } from 'node:fs';
 
 import type { Page } from '@playwright/test';
 
-export const AXE_CDN = 'https://cdn.jsdelivr.net/npm/axe-core@4.10.0/axe.min.js';
+/** ⚠️ AXE IS LOADED FROM node_modules, NOT A CDN — 2026-08-28.
+ *
+ *  This file used to fetch axe-core from jsdelivr AT RUN TIME, on the critical
+ *  path of TWO required CI steps. The hazard was written in this very file — "a
+ *  jsdelivr outage surfaces as a pack-level error" — and then happened:
+ *  `axe-core CDN load failed` red-ed a merge on 2026-08-28. Writing a hazard
+ *  down is not fixing it.
+ *
+ *  ⚠️ AND THE OBVIOUS SWAP WOULD HAVE CHANGED THE ANALYSER SILENTLY. The only
+ *  local copy was 4.11.3, hoisted transitively through
+ *  `marketing -> eslint-config-next -> eslint-plugin-jsx-a11y`. Reading "the
+ *  local file" would have moved these gates from 4.10.0 to 4.11.3 — different
+ *  rules, possibly different impacts — inside a change advertised as
+ *  infrastructure, and left a REQUIRED GATE depending on an eslint plugin's
+ *  dependency tree. So axe-core is now an EXPLICIT, EXACT devDependency at
+ *  4.10.0 and the version is asserted below: a future bump is loud, not silent.
+ */
+const AXE_EXPECTED_VERSION = '4.10.0';
+
+function axeSource(): string {
+   
+  const pkg = require('axe-core/package.json') as { version: string };
+  if (pkg.version !== AXE_EXPECTED_VERSION) {
+    throw new Error(
+      `axe-core version drift: resolved ${pkg.version}, gates calibrated on ` +
+        `${AXE_EXPECTED_VERSION}. Re-baseline the a11y expectations deliberately, ` +
+        `or pin the dependency back — do NOT silently accept a new analyser.`,
+    );
+  }
+  return readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+}
 
 export interface AxeEntry {
   id: string;
@@ -162,7 +196,7 @@ export async function settleEntrances(
 
 /** Inject axe and return BOTH buckets. */
 export async function runAxe(page: Page): Promise<AxeRun> {
-  return page.evaluate(async (cdnUrl) => {
+  return page.evaluate(async (axeSrc) => {
     interface AxeWindow extends Window {
       __rounds_axe__?: boolean;
       axe?: {
@@ -177,13 +211,11 @@ export async function runAxe(page: Page): Promise<AxeRun> {
     }
     const w = window as unknown as AxeWindow;
     if (!w.__rounds_axe__) {
+      // Injected as SOURCE TEXT — synchronous, no network, nothing to time out.
       const script = document.createElement('script');
-      script.src = cdnUrl;
-      await new Promise<void>((resolve, reject) => {
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error(`axe-core CDN load failed: ${cdnUrl}`));
-        document.head.appendChild(script);
-      });
+      script.textContent = axeSrc;
+      document.head.appendChild(script);
+      if (!w.axe) throw new Error('axe-core injected but window.axe is absent');
       w.__rounds_axe__ = true;
     }
     const res = await w.axe!.run(document, { resultTypes: ['violations', 'incomplete'] });
@@ -300,7 +332,7 @@ export async function runAxe(page: Page): Promise<AxeRun> {
       ariaHiddenFocusable,
       modal,
     };
-  }, AXE_CDN);
+  }, axeSource());
 }
 
 /**

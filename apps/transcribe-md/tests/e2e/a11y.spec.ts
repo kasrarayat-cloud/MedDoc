@@ -36,6 +36,8 @@
 // `node_modules/axe-core/axe.min.js`.
 // ============================================================================
 
+import { readFileSync } from 'node:fs';
+
 import { test, expect } from '@playwright/test';
 import type { BrowserContext, Page } from '@playwright/test';
 
@@ -152,7 +154,25 @@ const ROUTES: RouteSpec[] = [
 
 // ----- axe-core injection ---------------------------------------------------
 
-const AXE_CDN_URL = 'https://cdn.jsdelivr.net/npm/axe-core@4.10.0/axe.min.js';
+// ⚠️ THE SECOND CDN REACH — and it was a DUPLICATE, which is why fixing the
+// helper alone would not have fixed the class. `helpers/rounds-axe.ts` had its
+// own `AXE_CDN`; this file had its own `AXE_CDN_URL`. One outage, two red paths,
+// and a sweep that stopped at the first would have reported the problem solved.
+// Both now read the same pinned package off disk. See `axeSource()` there for
+// why the version is asserted rather than merely resolved.
+const AXE_EXPECTED_VERSION = '4.10.0';
+
+function axeSource(): string {
+   
+  const pkg = require('axe-core/package.json') as { version: string };
+  if (pkg.version !== AXE_EXPECTED_VERSION) {
+    throw new Error(
+      `axe-core version drift: resolved ${pkg.version}, gates calibrated on ` +
+        `${AXE_EXPECTED_VERSION}. Re-baseline deliberately, or pin it back.`,
+    );
+  }
+  return readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
+}
 
 /** AxeViolation — projection of axe-core's full result object,
  *  trimmed to the fields we need for reporting. */
@@ -180,7 +200,7 @@ interface AxeViolation {
   targets: string[];
 }
 
-/** Inject axe-core via <script src="…cdn…">, run axe.run on the
+/** Inject axe-core from the PINNED LOCAL PACKAGE, run axe.run on the
  *  document, and return the trimmed violation list. Sets
  *  window.__axe_loaded__ once so a second injection on the same page
  *  is a no-op (currently unused since we run one axe pass per page,
@@ -189,7 +209,7 @@ async function runAxeViolations(page: Page): Promise<AxeViolation[]> {
   // Use evaluate with a string template so we don't have to depend on
   // `axe-core`'s TypeScript types in the test runner — page.evaluate
   // runs in the browser, where the global is created at runtime.
-  return page.evaluate(async (cdnUrl) => {
+  return page.evaluate(async (axeSrc) => {
     interface AxeWindow extends Window {
       __axe_loaded__?: boolean;
       // axe-core attaches `axe.run()` to the global; we type it
@@ -211,14 +231,10 @@ async function runAxeViolations(page: Page): Promise<AxeViolation[]> {
     }
     const w = window as unknown as AxeWindow;
     if (!w.__axe_loaded__) {
+      // Injected as SOURCE TEXT — synchronous, no network, nothing to time out.
       const script = document.createElement('script');
-      script.src = cdnUrl;
-      await new Promise<void>((resolve, reject) => {
-        script.onload = () => resolve();
-        script.onerror = () =>
-          reject(new Error(`axe-core CDN load failed: ${cdnUrl}`));
-        document.head.appendChild(script);
-      });
+      script.textContent = axeSrc;
+      document.head.appendChild(script);
       w.__axe_loaded__ = true;
     }
     if (!w.axe) {
@@ -238,7 +254,7 @@ async function runAxeViolations(page: Page): Promise<AxeViolation[]> {
         .map((n) => (Array.isArray(n.target) ? n.target.join(' ') : String(n.target)))
         .filter((t) => Boolean(t) && t !== 'undefined'),
     }));
-  }, AXE_CDN_URL);
+  }, axeSource());
 }
 
 /** Rule IDs that are tracked as known design debt rather than CI

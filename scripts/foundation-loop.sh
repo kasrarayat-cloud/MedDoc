@@ -107,14 +107,23 @@ LOG_DIR="docs/foundation/logs"
 # monotonic forever and erases where one launch ends and the next begins —
 # "session 3" would stop meaning "the third session of this run".
 
+# ⚠️ THE PING IS FIRE-AND-FORGET AND MUST STAY THAT WAY. `notify.sh` already
+# bounds itself at 5s and exits 0 unconditionally; the `|| true` here is the
+# SECOND belt, because this loop runs unattended and a notifier that could kill it
+# would be strictly worse than no notifier at all. If the script is missing —
+# an old checkout, a partial clone — this is a silent no-op by design.
+ping() { [ -x scripts/notify.sh ] && bash scripts/notify.sh "$@" >/dev/null 2>&1 || true; return 0; }
+
 mkdir -p "$LOG_DIR"
 
 if [ ! -f "$PROMPT_FILE" ]; then
   echo "🔴 $PROMPT_FILE is missing — refusing to run a loop with no brief."
+  ping halt "loop REFUSED TO START — the brief is missing"
   exit 2
 fi
 if ! command -v claude >/dev/null 2>&1; then
   echo "🔴 the claude CLI is not on PATH."
+  ping halt "loop REFUSED TO START — the claude CLI is not on PATH"
   exit 2
 fi
 
@@ -134,6 +143,7 @@ if ! bash scripts/check-claude-cli.sh; then
   echo "🔴 REFUSING TO LAUNCH — the claude CLI cannot run (see above)."
   echo "   Every session would die on startup and the loop would go dark"
   echo "   without saying why. Fix the CLI, then relight."
+    ping halt "loop REFUSED TO LAUNCH — the claude CLI cannot run"
   exit 1
 fi
 
@@ -142,6 +152,12 @@ if [ -f "$STOP_FILE" ]; then
   echo "   It was created $(date -u -r "$STOP_FILE" +%Y-%m-%dT%H:%M:%SZ). Contents:"
   sed 's/^/     /' "$STOP_FILE"
   echo "   Remove it to re-enable: rm $STOP_FILE"
+    # ⚠️ A DELIBERATE STOP IS STILL WORTH SAYING OUT LOUD. Someone placed this
+    # file, so the ping is not news to them — but a STALE STOP left behind means
+    # every relight silently refuses, and "the loop is quiet" then looks identical
+    # to "the loop is working". `waiting`, not `halt`: it clears by itself the
+    # moment the file is removed.
+    ping waiting "loop is DISABLED — $STOP_FILE is present; every relight refuses until it is removed"
   exit 2
 fi
 
@@ -165,6 +181,7 @@ if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
   echo
   echo "   The loop cannot tell a half-applied edit from a deliberate one, and it"
   echo "   is about to run sessions that can deploy. Commit, stash or revert first."
+  ping halt "loop REFUSED TO START — the working tree is dirty"
   exit 2
 fi
 if [ "$START_BRANCH" != "main" ]; then
@@ -606,4 +623,5 @@ FINAL="$(ls -1t "$LOG_DIR"/*.log 2>/dev/null | head -1)"
   echo "════════════════════════════════════════════════════════════════"
 } | tee -a "$FINAL"
 
+ping halt "loop halted: $halt_reason"
 echo "[loop] halted: $halt_reason"

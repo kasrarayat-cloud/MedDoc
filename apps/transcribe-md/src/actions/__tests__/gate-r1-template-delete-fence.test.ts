@@ -86,8 +86,32 @@ describe('R1 · the template-delete fence', () => {
     expect(body, 'the visit count must be practice-scoped').toMatch(
       /visitScope\(/,
     );
-    // it must RETURN on the referenced case, not merely log
-    expect(body).toMatch(/referencing\s*>\s*0[\s\S]{0,240}?ok:\s*false/);
+    // It must RETURN on the referenced case, not merely log.
+    //
+    // ⚠️ THIS ASSERTED A CHARACTER DISTANCE AND BROKE ON A LEGITIMATE CHANGE.
+    // The original was `/referencing > 0[\s\S]{0,240}?ok:\s*false/` — a 240-char
+    // window standing in for "in the same branch". Adding the refusal's audit row
+    // pushed `ok: false` past it, so the gate went red on code that satisfies the
+    // property perfectly. A distance bound pins LAYOUT, not behaviour, and every
+    // future insertion in that branch would have re-broken it.
+    //
+    // The block is parsed instead: take the `if (referencing > 0) { … }` body and
+    // assert the refusal is inside it. That is the claim the gate always meant.
+    const guardStart = body.indexOf('if (referencing > 0)');
+    expect(guardStart, 'the referenced-visits guard is gone').toBeGreaterThan(-1);
+    const afterGuard = body.slice(guardStart);
+    let depth = 0;
+    let end = afterGuard.length;
+    for (let i = afterGuard.indexOf('{'); i < afterGuard.length; i += 1) {
+      if (afterGuard[i] === '{') depth += 1;
+      else if (afterGuard[i] === '}') {
+        depth -= 1;
+        if (depth === 0) { end = i; break; }
+      }
+    }
+    const guardBody = afterGuard.slice(0, end);
+    expect(guardBody, 'the guard must RETURN, not merely log').toMatch(/ok:\s*false/);
+    expect(guardBody, 'the refusal must be a return, not a fallthrough').toContain('return');
     // ⚠️ and the count must reach the doctor — "cannot delete" is a wall,
     // "used by 12 visits" is something they can act on
     expect(body).toContain('${referencing}');

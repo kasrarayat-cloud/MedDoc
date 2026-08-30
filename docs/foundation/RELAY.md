@@ -77,7 +77,7 @@ work.** The morning report's `### THROUGHPUT` line exists to keep that visible.
 | **F8-S1b** | 🟢 **MERGED · DEPLOYED 2026-08-27** | The ICD drop record — four exits, four reason tokens (ruling #149). | Shipped inside the same judged deploy. |
 | **F8-S2** | 🟢 **CLOSED — DEPLOYED 2026-08-27** | The coding surface on the visit page (#153). | Walk passed; contrast defect found by the added axe-panel-open arm and fixed by ground (5 reported, 8 real, worst **1.16:1** hidden in axe's `incomplete`); re-proved 5→0, incomplete 1→0, elements 41→49. Live and structurally verified in the shipped bundle. |
 | **F12-e** | 🟢 **MERGED · CITED 4 of 4 · DEPLOYED 2026-08-27 — AS AN UNJUDGED RIDER** | The **signed document carried no E/M while the screen showed one**. Fixed at `sign/route.ts`: the freeze is gated on `emApplies` ALONE — `emBlob &&` was the defect, not the guard. Ruling **#152** (PROVISIONAL). Merge `4895decfa5453e4688626992bf60229e9fac4df6` (PR #879). | ⚠️ **THE HOLD WAS OVERTAKEN BY A TREE.** This row read *"DEPLOY HELD"* until 2026-08-28 and that was **STALE**: the merge is a `rev-parse`-verified ancestor of the DEPLOYED commit `eec8685bfabd6d45614461d77a12aeeb272bc7b2`, and production runs that deploy's image `32a43656`. **It is LIVE.** This is [a declaration is bound to a CHANGE, a deploy ships a TREE](../../AGENTS.md) exactly: the F8 deploy's **18 declared rows were about ICD work, and not one could have detected an F12-e regression.** So the EVIDENCE half is missing, not the code. **Owed:** the F12-e comparison run after the fact, per that entry — and it is surfaced to the owner because a clinical-surface change reached production while its supervised judgement was still being held for it. |
-| **F6.5** | 🔴 **OPEN — RECON DONE 2026-08-27, and the item is NOT what the row said** | `gate-r1`'s *"BOTH sides"* test asserts one side. **Re-measured:** `gate-r1-paper-structure.test.ts:188` is titled *"the lockup gaps are absolute points on BOTH sides"* and makes exactly ONE assertion, on `toTwip(LOCKUP_PT.ruleToBody)`. `eyebrowToTitle` and `titleToRule` are live and unguarded at **`docx-generator.ts:168` and `:191`** — ⚠️ **not `:106`/`:129` as this row said; the line numbers had drifted.** | Done when the guard exists. Explicitly **a guard, not a deletion**. ⚠️ **AND THE NAME IS A FOSSIL: there is no longer a second side.** `lib/pdf-generator.ts` **does not exist** — ruling #113 retired `generateVisitPdf`, and PDF now renders DOCX→Gotenberg. So the fix is not "add the missing side"; it is *guard the two live tokens on the ONE surviving generator and stop the title claiming a generator that was deleted.* |
+| **F6.5** | 🟢 **BUILT 2026-08-28, run `20260828-220858-b1` session 02 — see the section below.** The recon below was re-verified against `main` before building and every line of it held | 🔴 was: **OPEN — RECON DONE 2026-08-27, and the item is NOT what the row said** | `gate-r1`'s *"BOTH sides"* test asserts one side. **Re-measured:** `gate-r1-paper-structure.test.ts:188` is titled *"the lockup gaps are absolute points on BOTH sides"* and makes exactly ONE assertion, on `toTwip(LOCKUP_PT.ruleToBody)`. `eyebrowToTitle` and `titleToRule` are live and unguarded at **`docx-generator.ts:168` and `:191`** — ⚠️ **not `:106`/`:129` as this row said; the line numbers had drifted.** | Done when the guard exists. Explicitly **a guard, not a deletion**. ⚠️ **AND THE NAME IS A FOSSIL: there is no longer a second side.** `lib/pdf-generator.ts` **does not exist** — ruling #113 retired `generateVisitPdf`, and PDF now renders DOCX→Gotenberg. So the fix is not "add the missing side"; it is *guard the two live tokens on the ONE surviving generator and stop the title claiming a generator that was deleted.* |
 | **F18** | 🔵 **OPEN** | Three counts on one screen; the largest is frozen at compile time — banner reads *"79 of 80"* while the button reads *"6 of 80"*. | One count from one source, or three counts that each say which question they answer. ⚠️ Do **not** repoint the banner at mapping rows without establishing what `detectionStatus` is FOR. |
 | **F6.3-followup** | 🔵 **OPEN** | The render sidecar is bounded but **not fair**: F6.3 stops one archive monopolising the renderer; two archives can still starve an interactive render. | A cross-request admission gate, or a second sidecar for bulk work. *Do not read F6.3's green as fairness.* |
 | **F34** | 🟢 **OPEN — loop-eligible, and the loop owns the script** | **NO-PROGRESS GAINS A THIRD WORLD: `BLOCKED-ON-CI`.** Before halting, the probe checks for the loop's OWN open PRs whose citations are pending or already green. If any exist, the state is **BLOCKED-ON-CI** — a distinct marker that AUTO-RELIGHTS when they land or the queue drains — not a malfunction halt. ⚠️ **WORK THAT EXISTS BUT CANNOT LAND IS STARVATION, NOT SPIN**, and the switch currently cannot tell them apart. | **SPECIMEN, QUOTED — run `20260828-220858-b1`, halted `2026-08-29T00:00:20Z`:** *"The session reported CONTINUE, but `docs/foundation/RELAY.md` on origin/main is byte-identical from the start of the session to its end, for a second consecutive run."* The switch was RIGHT by its own rule — an item is not finished until its ledger row lands. But the loop had closed **F6.5** and built **F5-i-2** (#899, later merged 4-of-4). Its row could not land because #899's citation sat behind ~16 runs on the single self-hosted runner — **and the fix for that queue (#900, the second runner) was stuck in the same queue.** Done when the probe distinguishes the two worlds and a starved session relights itself instead of halting. ⚠️ The check is about the LOOP'S OWN PRs specifically; another actor's queue is not the loop's starvation. |
@@ -253,6 +253,78 @@ established WITHOUT applying anything to QA** — doing so would have discharged
   derivation: prefix-scanning the 604-code starter set offered `E66.0 → E66.01`,
   upcoding plain obesity to MORBID obesity), **no specialty-aware ranking.**
 
+### 🟢 F6.5 — THE LOCKUP GUARD, AND THE FIRST MUTATION REFUTED MY OWN CLAIM ABOUT IT — **2026-08-28, run `20260828-220858-b1` session 02**
+
+**Branch `fix/f65-lockup-guard`.** Citation owed — see HALTED below; the runner
+was saturated when this was built.
+
+**THE RECON WAS RE-VERIFIED BEFORE BUILDING, AND IT HELD.** The row's own line
+numbers had drifted once before, so nothing was taken on trust: `pdf-generator.ts`
+genuinely does not exist, `LOCKUP_PT` lives at `export-page.ts:175`, and
+`eyebrowToTitle` / `titleToRule` are live and unguarded at `docx-generator.ts:168`
+and `:191`. The single surviving assertion sat at `:192`, not `:188` — `:188` is
+the `it(...)` title line.
+
+**THE OLD TEST HAD THREE DEFECTS, ALL INVISIBLE WHILE IT WAS GREEN.**
+
+| # | defect |
+|---|---|
+| 1 | **`BOTH sides` is a FOSSIL.** Ruling #113 retired the PDF generator; the PDF is now LibreOffice's render of these very bytes. There is one side. The file HEADER had already been corrected for this; the `it()` title had not |
+| 2 | **One of three gaps asserted.** `ruleToBody` only; `eyebrowToTitle` and `titleToRule` unguarded |
+| 3 | ⚠️ **IT PINNED A SPELLING.** `expect(DOCX_SRC).toContain('toTwip(LOCKUP_PT.ruleToBody)')` — a SOURCE-TEXT check. **`LOCKUP_PT` was not even imported by the test**; it appeared only inside a string. Extracting that call into a named const — an improvement — reddens it, while a change that keeps the spelling and emits different bytes stays green. **It failed for improvements and passed for regressions** ([canon 72](../canon/72-pin-properties-not-spellings.md)) |
+
+**WHAT LANDED.** The gap assertions now run against the RENDERED bytes, for all
+three tokens, plus a non-vacuity arm. Measured first, never assumed — the three
+tokens reach the document in **two different Word units**, which is not a slip:
+
+| token | reaches the XML as | unit |
+|---|---|---|
+| `eyebrowToTitle: 3` | `<w:spacing w:after="60"/>` | twips |
+| `titleToRule: 6` | `w:space="6"` on the border | **whole points** |
+| `ruleToBody: 12` | `<w:spacing w:after="240"/>` | twips |
+
+⚠️ **AND THE HELPER CARRIES A TRAP I WALKED INTO FIRST.** Anchoring on the bare
+`'<w:p'` matches inside `<w:pPr>` and `<w:pBdr>`, so my probe's title slice began
+*inside the paragraph's own properties*. `paragraphAround()` anchors on `'<w:p '`
+and `'<w:p>'` and takes the `Math.max` — the substring trap, [fifth sighting](../canon/50-the-substring-trap-fourth-sighting-same-family.md).
+
+**THE MUTATION TABLE — every mutation asserted APPLIED (by line number) before
+its result was believed.**
+
+| mutation | result |
+|---|---|
+| **M1 · `eyebrowToTitle: 3 → 5`** | ⚠️ **GREEN — 15 passed. This REFUTED a claim I had already written into the comment.** |
+| M2 · hard-code the eyebrow gap (`after: 80`) | **REDDENS**, naming the arm and printing the real paragraph |
+| M3 · hard-code the border space (`space: 9`) | **REDDENS** |
+| M4 · hard-code the rule→body gap (`after: 300`) | **REDDENS** |
+| M5 · collapse `titleToRule` to `0` | **REDDENS the non-vacuity arm** — and the derivation arm stayed green, which is the division of labour working |
+
+⚠️ **M1 IS THE ENTRY IN THIS ROW WORTH READING.** My comment claimed the new
+guard fixed *"changing `eyebrowToTitle: 3` to `5` left it green"*. **It does
+not.** The expectation is computed from the same `LOCKUP_PT` the generator
+reads, so **both sides move together and no token edit can ever redden it** —
+[a control aimed where the answer is predetermined is not a control](../canon/31-a-detector-can-be-blind-to-the-thing-it-most-exists-to-wat.md).
+The guard was fine; **the claim about it was false**, and it would have shipped
+as a comment asserting a mechanism that does not exist — the exact defect F8-S2's
+adversarial pass found twice in one diff. The comment now states the limit in its
+own words, and the discriminating mutation is **breaking the DERIVATION**, never
+editing the token.
+
+**WHAT THIS ROW DOES NOT CLAIM**
+
+- **It changes NOTHING a doctor receives.** Test-only: `git diff` touches one
+  file, and `export-page.ts` / `docx-generator.ts` are byte-clean — verified by
+  `git diff --numstat` after every mutation was restored, not by re-reading them.
+- **It does not pin the tokens' VALUES**, deliberately — those are a design
+  decision, not an invariant. Stated above and in the source.
+- **No adversarial pass by an independent refuter.** The mandatory pass binds
+  changes to the clinical generation / note / export path; this alters no
+  emitter. M1 was self-caught, which is the weaker instrument by canon's own
+  argument, and is named as such.
+- `tsc --noEmit` clean; **100 files / 1618 tests pass** in `src/lib/__tests__/`,
+  run in a worktree with `node_modules` symlinked (`setup: 108ms` — React
+  resolves, so these are real local runs, not the CI-only case).
+
 ### ✅ F12-e — THE SIGNED DOCUMENT CARRIES THE LEVEL THE DOCTOR ATTESTED — **2026-08-27, run `20260827-041645-b1` session 01**
 
 **Ruling #152 (PROVISIONAL). Branch `fix/f12e-em-freeze-parity`, PR #879, retired both sides.**
@@ -364,6 +436,12 @@ failures.
 
 | Finding | State | Note |
 |---|---|---|
+| **✅ `main` IS `strict: false` — #899 IS BEHIND `main` AND THAT DOES **NOT** BLOCK ITS MERGE. DO NOT "HELPFULLY" MERGE `main` INTO IT.** | 🟢 **MEASURED 2026-08-28, session 02 — a trap DISARMED before anyone stepped in it** | `git merge-base --is-ancestor origin/main origin/feat/f5i2-shape-aware-encounters` returns **1** — #899 does not contain #898's merge — and `gh pr view 899` reads `mergeable=UNKNOWN`. **Together those look exactly like *"this PR must be updated before it can merge."*** It must not. `gh api …/branches/main/protection` reads **`"strict": false`**, so *require-branches-up-to-date* is **OFF**. ⚠️ **THE TRAP IS THAT THE HELPFUL ACT IS THE EXPENSIVE ONE:** merging `main` into #899 is a push to its ref, which **cancels its four runs** — runs that have held a queue position since `22:39:17Z` behind a single saturated runner — and buys **nothing**, because protection never asked for it. **Merge #899 on its own green, unrebased.** |
+| **the gate reads SIX check runs; the citation ceremony cites FOUR workflow runs — and that is why the `e2e` skip-twin exists** | 🔵 **MEASURED 2026-08-28, session 02 — sharpens two open rows, competes with neither** | Branch protection's required contexts, read from the API: **`Playwright E2E (transcribe-md)` · `test` · `npm audit (high+critical gate)` · `axe-core sweep (chromium x desktop+mobile)` · `TruffleHog (verified-only, diff-scan)` · `unit tests (transcribe-md + packages)`** — **six JOB names**, while `check-citation.sh` cites four WORKFLOW names. [Gate on the object the gate reads](../canon/11-gate-on-the-object-the-gate-reads.md), confirmed live rather than recalled. ⚠️ **AND IT EXPLAINS THE MECHANISM BEHIND THE OPEN *"a 4 of 4 no longer proves the pack ran"* ROW, WHICH WAS RECORDED AS A SHAPE WITHOUT A REASON.** `Playwright E2E (transcribe-md)` is a REQUIRED CONTEXT, so **something with that exact name must report success on every PR — including a docs-only one.** The skip-twin sharing the real pack's `name:` is not an accident or sloppiness; **it is what lets a docs-only PR satisfy branch protection at all.** Any fix to the step-count discriminator must therefore keep a job of that name reporting success on docs-only PRs, or it will make every docs-only PR unmergeable. **That constraint was not written down anywhere and it bounds the fix.** |
+| **⚠️ `MASTER.md`'s OWN WORKED GREP SCORES ZERO — the status token is `OWNER-RULING`, and STEP 0 writes it `OWNER RULING`** | 🔴 **MEASURED 2026-08-28, session 02 — one-line fix, applied in this change** | `MASTER.md:134` teaches the post-split verification with the string **`OWNER RULING`** (spaced). **Measured against the live head: spaced = `0`, hyphenated `OWNER-RULING` = `26`.** ⚠️ **THE FALSE ALARM IS THE EXACT ONE THAT PARAGRAPH EXISTS TO PREVENT.** Its subject is the split having truncated the status markers out of the rows — so a session that runs the printed string gets `0`, matches it against the prose's *"returned 0"*, and concludes the ledger is **still broken** when it is fine. **A wrong number that matches the expectation is invisible** — [the most dangerous wrong number is the one the prediction expects](../canon/65-the-most-dangerous-wrong-number-is-the-one-expected.md), arriving through the instruction that teaches the check. Same class `MASTER.md` already records for `check-read-budget.sh`: a correctly-measured note that decayed and kept reading as rigour. ⚠️ **AND IT COST ME TWO WRONG GREPS BEFORE I READ THE ROW FORMAT** — I also tried `^\| #15`, which cannot match because rows begin `\| <date> \| #NNN \|`. *Read the format before trusting a pattern; a zero measures YOUR PATTERN first.* |
+| **⚠️ `main`'s QUEUE HEAD CITES RULING #156 AS ITS AUTHORITY, AND #156 IS NOT IN THE REGISTER ON `main`** | 🟠 **MEASURED 2026-08-28, session 02 — NOT a defect by session 01; it is #899's blockage propagating** | `RELAY.md:66` opens the live queue with *"**F5-i-2 LEADS THE QUEUE** — owner ruling **#156**"*, and `:88` cites it again. **`grep -c "#156"` on `main`: `RELAY.md` = 2, `RULINGS.md` = 0**, across the head AND every archive, positive-controlled with `#155` (1 head + 1 archive). ⚠️ **I NEARLY FILED THIS AS SESSION 01 FAILING TO TRANSCRIBE, AND THAT WOULD HAVE BEEN FALSE.** The transcription EXISTS — commit **`5fab2a24`**, *"#156 was cited by the queue head and was not in the register"* — and `git branch --contains` puts it on **`feat/f5i2-shape-aware-encounters` ALONE**; `git merge-base --is-ancestor 5fab2a24 origin/main` returns **1**. Session 01 did precisely what canon orders — *the receiving session records the ruling in its first commit* — and bundled it with the work it authorises. **So the ruling is correctly written and inherits #899's blockage.** The live consequence stands and is worth naming: **until #899 merges, `main` carries a queue head whose stated authority a reader cannot resolve.** It discharges itself on that merge; no separate action is owed. |
+| **⚠️ A THIRD-PARTY MERGE DESTROYED A CITATION MID-PACK — 1h04m37s of EXECUTED work, and the canon reference case was 33m39s** | 🔴 **MEASURED 2026-08-28, run `20260828-220858-b1` session 02** | Session 01 merged #897 → `8f5320311b4e61d1b137d2d99ec7c8095619664f` and handed its citation to me. At **23:47:52Z** a supervised session merged **#898** → `3030e957034fd0828be1f4414ac843287d2999c9`, and that push **cancelled three of `8f532031`'s four runs**: `CI` 33215808366, `e2e` 33215808323, `secrets-scan` 33215808410. Only `a11y-ci` 33215808322 survived, `success`. ⚠️ **The `e2e`'s Playwright job 99005441277 had been EXECUTING for `1h04m37s`** — not queued, executing — which is **double** the 33m39s of `AGENTS.md`'s own reference case for this exact shape. **`8f532031` can now never be cited 4 of 4.** ⚠️ **NOBODY MISBEHAVED, WHICH IS THE POINT:** *a merge IS a push*, `merge-pr.sh` guards the base branch's runs and a merge to `main` legitimately lands there. **THE RECOVERY IS CANON'S AND IT IS ALREADY AVAILABLE:** cite the **DESCENDANT** — `3030e957` contains `8f532031`, so a full citation on it covers #897's code **plus** #898's, and certifies the tree that actually ships rather than its parent. Its four runs were queued at `23:47:52Z`. **Do not re-run the cancelled past.** |
+| **the shared tree was DIRTY and the loop REFUSED to sync it — sessions read a STALE `MASTER.md` and `INBOX.md`** | ✅ **DISCHARGED 2026-08-28 by #898 + a supervised ff-merge — INSTANCE only** | My own launch header recorded it: *"shared tree is 2 commit(s) behind origin/main and NOT synced: branch=main dirty=3 — refusing to move it under a session. The INBOX and MASTER below may be STALE."* The three dirty entries were `.axe/`, `.ci-labels/`, `.enum/` — **live supervised WORKTREES**, untracked because `.gitignore` did not cover the class. ⚠️ **So the loop's own relight guard was being tripped by other sessions' correctly-created worktrees, and the cost was silent: a session reads a rulebook two commits stale and is TOLD so in one line it may not act on.** #898 (`fix/gitignore-worktree-class`) landed the class rule and `scripts/list-worktrees.sh`; a supervised session then synced the tree. **Verified, not assumed:** shared-tree `HEAD` = `3030e957` = `origin/main`, `git status --porcelain` **empty**, `grep -c worktree .gitignore` = **4**, and `.f0-ignore` retired. ⚠️ **The HAZARD is not closed** — it re-arms whenever an actor creates a root directory the ignore class does not name. |
 | **one self-hosted runner is a SPOF** | 🔴 **OPEN — trigger met** | `quillmd-ci-1` is a single point of failure for every merge. Measured 57–88 min queues; 12 runs deep on 2026-08-26. **The owner has authorized a second light-jobs runner; the measured pain has arrived.** |
 | **`nightly-tests` on `ubuntu-latest`** | 🟠 **FILED, NOT BUILT** | The only workflow left GitHub-hosted after #868 (`nightly-tests.yml:45`). Not a required context. |
 | **a `4 of 4` citation no longer proves the Playwright pack ran** | 🔵 **OPEN** | Since #861 the `e2e` workflow can conclude `success` without executing the pack. `check-citation.sh` reads run conclusions and never `/jobs`. Loop-fixable. |
