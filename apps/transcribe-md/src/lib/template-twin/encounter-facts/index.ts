@@ -151,8 +151,85 @@ const HPI_FIELDS = [
   'associated_symptoms',
 ] as const;
 
-const EXPLICIT_DENIAL =
-  /(?:^|[\s,;:])(?:den(?:y|ies|ied)|without|negative\s+for|no\s+(?:known|current|evidence\s+of)?|not\s+taking|never)(?:\b|$)/i;
+// ── DENIAL VOCABULARY — ONE LIST, TWO QUESTIONS ─────────────────────────────
+// ⚠️ THE VOCABULARY IS UNCHANGED, DELIBERATELY. This is a fix to the SCOPE a
+// denial is allowed to reach, not to the tokens. `EXPLICIT_DENIAL` below is
+// REBUILT from this list and is byte-identical to the literal it replaced —
+// `gate-polarity-scope` asserts its `.source` and `.flags` against that
+// literal, so editing a token here reds CI.
+//
+// The list carries a ROLE, because the same vocabulary answers two different
+// questions and asking the wrong one is the whole defect:
+//
+//   determiner — negates the NOUN PHRASE it heads. "no chest pain",
+//                "never smoker", "no known drug allergies".
+//   predicate  — negates the CLAUSE it sits in. "patient denies dysphagia",
+//                "negative for melena", "not taking warfarin".
+//
+// ⚠️ WHAT WENT WRONG: `no\s+(?:known|current|evidence\s+of)?` has an OPTIONAL
+// qualifier, so it collapses to a bare `no\s+`; tested against the FLAT
+// `${value} ${quote}` concatenation — which is what shipped — ANY mid-sentence
+// " no " flipped the WHOLE fact to 'denied'. Measured on compiled version
+// 070090d3: "Stable chronic conditions with no acute change" resolved
+// `explicitly_denied` with `value: null` on a narrative field, and
+// `assertResolutionStatus` (note-template-docx/renderer.ts) refuses that pair.
+// The doctor lost the WHOLE DOCUMENT — FIELD_RESOLUTION_INVALID — not one
+// field, and no validation issue named the field on the way there.
+export const DENIAL_VOCABULARY = [
+  { token: 'den(?:y|ies|ied)', role: 'predicate' },
+  { token: 'without', role: 'predicate' },
+  { token: 'negative\\s+for', role: 'predicate' },
+  { token: 'no\\s+(?:known|current|evidence\\s+of)?', role: 'determiner' },
+  { token: 'not\\s+taking', role: 'predicate' },
+  { token: 'never', role: 'determiner' },
+] as const;
+
+type DenialRole = (typeof DENIAL_VOCABULARY)[number]['role'];
+
+function denialAlternation(role?: DenialRole): string {
+  return DENIAL_VOCABULARY.filter(
+    (entry) => role === undefined || entry.role === role,
+  )
+    .map((entry) => entry.token)
+    .join('|');
+}
+
+/** Byte-identical to the literal that shipped. It is still the arm-(c)
+ *  fallback, and it is the source of every cue the positional scan looks for —
+ *  so the scan can never see a denial the old unscoped test could not. */
+export const EXPLICIT_DENIAL = new RegExp(
+  `(?:^|[\\s,;:])(?:${denialAlternation()})(?:\\b|$)`,
+  'i',
+);
+/** The same pattern, global: arm (b) needs every cue AND its offsets. */
+const DENIAL_CUES = new RegExp(EXPLICIT_DENIAL.source, 'gi');
+/** Arm (a) — a denial that HEADS the value and negates it. */
+const HEAD_DETERMINER = new RegExp(
+  `^(?:${denialAlternation('determiner')})(?:\\b|$)`,
+  'i',
+);
+/** Arm (d) — a denial that negates the CLAUSE it sits in.
+ *  ⚠️ DELIBERATELY THE PREDICATE SUBSET, AGAINST THE ADVERSARIAL PASS'S
+ *  RECOMMENDATION, AND THE REASON IS MEASURED. Widening this to the full
+ *  vocabulary closes a checkbox-only false affirmation (D2) — but production
+ *  has ZERO checkbox fields (112 narrative_text / 28 single_select / 10
+ *  number), while the widening turns 18 LIVE facts (11 `assessment`, 2 `plan`,
+ *  5 exam) from correctly affirmed back into `denied`. On a narrative field a
+ *  denial is not a blank box, it is `explicitly_denied` + null and the renderer
+ *  REFUSES THE WHOLE DOCUMENT. Measured: "Lungs clear to auscultation, no
+ *  wheezes or rales." reads denied under the wide form.
+ *  RETIRED WHEN: any uploaded .docx introduces a Word checkbox
+ *  (note-template-docx/compiler.ts:492 modern SDT, :661 legacy), at which point
+ *  the wide form becomes correct and this comment becomes wrong. */
+const CLAUSE_PREDICATE = new RegExp(
+  `(?:^|[\\s,;:])(?:${denialAlternation('predicate')})(?:\\b|$)`,
+  'i',
+);
+/** "Allergies: no known drug allergies" — L3 keeps the section label on some
+ *  values, and the determiner sits behind it. */
+const VALUE_LABEL_PREFIX = /^\s*[A-Za-z][^:\n]{0,39}:\s*/;
+const CLAUSE_BREAK = /[.;\n]/;
+const REGEXP_METACHARACTERS = /[.*+?^${}()|[\]\\]/g;
 const UNCERTAINTY =
   /\b(?:possible|possibly|maybe|may|might|uncertain|unclear|suspected|question\s+of)\b/i;
 const CONDITIONAL = /\b(?:if|unless|in\s+case)\b/i;
@@ -181,12 +258,110 @@ export function conceptSegment(value: string): string {
   return segment || 'unspecified';
 }
 
+/**
+ * Case-INSENSITIVE offset of the value inside its own evidence quote, or -1.
+ *
+ * ⚠️ CASE-INSENSITIVITY IS LOAD-BEARING, NOT POLITENESS. L3 CAPITALISES the
+ * finding while the quote keeps the sentence's own casing, so a case-sensitive
+ * `indexOf` returns -1 for EVERY pinned entity on compiled version 070090d3
+ * ("Stable chronic conditions…" vs "…stable chronic conditions…"), and every
+ * positional arm below would fall through to the unscoped answer this entry
+ * exists to stop using. A regex match rather than
+ * `quote.toLowerCase().indexOf(value.toLowerCase())`, because lowercasing can
+ * change a string's LENGTH and therefore every offset after it — and offsets
+ * are precisely what arm (b) reasons about.
+ */
+function locateValueInQuote(value: string, quote: string): number {
+  const match = new RegExp(
+    value.replace(REGEXP_METACHARACTERS, '\\$&'),
+    'i',
+  ).exec(quote);
+  return match ? match.index : -1;
+}
+
+/** End of the clause containing `from`, or the end of the text. */
+function firstClauseEnd(text: string, from: number): number {
+  const offset = text.slice(from).search(CLAUSE_BREAK);
+  return offset === -1 ? text.length : from + offset;
+}
+
+/**
+ * Does a denial GOVERN this value, or does it merely share a sentence with it?
+ *
+ * ⚠️ EVERY ARM IS A NARROWING OF THE OLD UNSCOPED TEST. Arms (a), (b) and (d)
+ * all match with the SAME vocabulary and the same surrounding context as
+ * `EXPLICIT_DENIAL`, over a SUBSET of the text it used to see, and (c) IS that
+ * test. So this function's denied-set is a subset of the shipped one: it can
+ * turn a denial into an affirmation, and it can never invent a denial that the
+ * shipped code did not already make. `gate-polarity-scope` asserts that
+ * relation over every fixture it carries.
+ */
+function denialGovernsValue(value: string, quote: string): boolean {
+  const unscoped = (): boolean => EXPLICIT_DENIAL.test(`${value} ${quote}`);
+  const stated = value.trim();
+  if (!stated) return unscoped();
+
+  // (a) DETERMINER AT THE HEAD OF THE VALUE, past an optional "Label:" prefix.
+  if (HEAD_DETERMINER.test(stated)) return true;
+  const unlabelled = stated.replace(VALUE_LABEL_PREFIX, '');
+  if (unlabelled !== stated && HEAD_DETERMINER.test(unlabelled)) return true;
+
+  // (c) THE VALUE IS NOT LOCATABLE IN ITS OWN QUOTE. Nothing positional can be
+  // said, so keep the answer that shipped. Deliberately conservative: this is
+  // where a paraphrased or joined value lands, and guessing there would be a
+  // second defect rather than a fix for the first.
+  const start = locateValueInQuote(stated, quote);
+  if (start < 0) return unscoped();
+
+  const clauseEnd = firstClauseEnd(quote, start);
+
+  // (d) THE VALUE IS THE WHOLE STATEMENT, so (b) has nothing in front of it to
+  // scan and would be vacuous. A denial PREDICATE in that statement's first
+  // clause governs it. Without this arm "Patient denies dysphagia." reads
+  // affirmed and a checkbox is TICKED for a denial.
+  if (start === 0 && stated.length >= clauseEnd) {
+    // ⚠️ PREDICATE ONLY — see CLAUSE_PREDICATE's own note. A determiner-carried
+    // whole-statement denial ("There is no evidence of DVT.") reads AFFIRMED
+    // here and that is a RECORDED RESIDUAL, pinned as gate rows h1-h4, not an
+    // oversight. Widening it costs 18 live narrative facts a whole document.
+    return CLAUSE_PREDICATE.test(quote.slice(0, clauseEnd));
+  }
+
+  // (b) POSITIONAL IN-CLAUSE SCAN. The nearest cue ENDING at or before the
+  // value governs it, unless a clause break stands between the two. A cue
+  // AFTER the value does not reach back — that is the entire bug.
+  DENIAL_CUES.lastIndex = 0;
+  let governingEnd = -1;
+  let cue: RegExpExecArray | null;
+  while ((cue = DENIAL_CUES.exec(quote)) !== null) {
+    if (cue[0].length === 0) {
+      DENIAL_CUES.lastIndex += 1;
+      continue;
+    }
+    const end = cue.index + cue[0].length;
+    // ⚠️ BREAK ON WHERE THE CUE *STARTS*, NOT WHERE IT ENDS. A cue that begins
+    // BEFORE the value and ends INSIDE it aborted the whole scan, leaving
+    // `governingEnd` unset and the fact AFFIRMED — "Denies chest pain" sits at
+    // offset 5 in "ROS: denies chest pain." while its cue spans 4..11. That is
+    // the SILENT direction: `convertValue` keys a checkbox on polarity alone,
+    // so the box is TICKED for a finding the record explicitly denies. Five
+    // shapes hit it (`Denies…`, `Negative for…`, `Not taking…`,
+    // `known drug allergies`, `evidence of…`) and six live production facts.
+    if (cue.index >= start) break;
+    governingEnd = end;
+  }
+  if (governingEnd < 0) return false;
+  return !CLAUSE_BREAK.test(quote.slice(governingEnd, start));
+}
+
 function inferPolarity(value: string | number | boolean, quote: string): EncounterFact['polarity'] {
   const text = `${String(value)} ${quote}`;
+  // UNCERTAINTY and CONDITIONAL are UNCHANGED and still evaluated first, still
+  // on the flat concatenation. This entry is about the denial arm alone.
   if (UNCERTAINTY.test(text)) return 'uncertain';
   if (CONDITIONAL.test(text)) return 'conditional';
-  if (value === false || EXPLICIT_DENIAL.test(text)) return 'denied';
-  return 'affirmed';
+  if (value === false) return 'denied';
+  return denialGovernsValue(String(value), quote) ? 'denied' : 'affirmed';
 }
 
 function inferTemporality(
