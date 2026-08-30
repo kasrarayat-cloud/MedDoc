@@ -183,3 +183,77 @@ export function deriveFieldValueFromFact(
     }
   }
 }
+
+// ============================================================================
+// LIST-VALUED NARRATIVE CONCEPTS — the same "one rule, every caller" discipline
+// applied to a field that legitimately carries MORE THAN ONE fact.
+// ----------------------------------------------------------------------------
+// A past medical history is "hypertension AND type 2 diabetes". A plan is
+// "continue medications AND review in three months". Those are not conflicting
+// claims about one value — they are the normal clinical shape of the section,
+// and the resolver was calling every one of them `multiple_distinct_supported_
+// values` -> FIELD_CONFLICT -> blocking. The owner's own form could not certify
+// for exactly this reason: two PMH conditions and two plan items in the
+// synthetic encounter, each pair reported as a conflict.
+//
+// ⚠️ THE MEASUREMENT CASE IS THE OPPOSITE AND MUST STAY A CONFLICT. Two distinct
+// diameters for one vein IS contradictory evidence, and joining them would
+// launder a real conflict into a plausible-looking string. The discriminator is
+// therefore the CONCEPT'S SHAPE, not the field's convenience: `measurement.*` is
+// single-valued by nature, every other registry concept is a section that
+// accumulates. That split is already stated in concept-registry.ts's own
+// comments; this encodes it rather than restating it.
+//
+// ⚠️ AND THE JOIN IS DEFINED HERE, ONCE, BECAUSE BOTH SIDES MUST AGREE BYTE FOR
+// BYTE. The resolver BUILDS the joined value; assertionSupported RE-DERIVES it.
+// A second copy of the separator or the ordering in either place reproduces the
+// "3.1" vs "3.10" defect this module was created for -- the value would be
+// refused as ASSERTION_NOT_SUPPORTED, which trades one blocking code for
+// another and looks like the fix failed rather than moved.
+
+/** Separator for a joined narrative section. */
+export const NARRATIVE_LIST_SEPARATOR = '; ';
+
+/**
+ * Whether this (field, mapping) is a narrative SECTION that accumulates facts
+ * rather than a single-valued slot.
+ *
+ * Deliberately conservative: prose fields only. A `single_select` bound to
+ * `allergy` still cannot hold two answers, so it keeps conflicting.
+ */
+export function isListValuedNarrative(
+  field: TemplateField,
+  mapping: SemanticMapping | undefined,
+): boolean {
+  if (field.kind !== 'narrative_text') return false;
+  // Repeating rows already have their own accumulating path (rowPrototypeValue).
+  if (field.rowPrototype) return false;
+  const concept = (mapping?.clinicalConcept ?? '').trim().toLowerCase();
+  if (!concept) return false;
+  return !concept.startsWith('measurement.');
+}
+
+/**
+ * THE joined value for a list-valued narrative, composed from the cited facts.
+ *
+ * Built out of `deriveFieldValueFromFact` — the very function the validator
+ * re-derives with — so the two cannot disagree. Order follows the cited facts;
+ * exact repeats collapse (a section should not say "Hypertension; Hypertension"),
+ * and blanks are skipped. Returns null when nothing derivable remains, which the
+ * caller treats as "not populated" rather than as an empty string.
+ */
+export function joinListValuedNarrative(
+  field: TemplateField,
+  mapping: SemanticMapping | undefined,
+  facts: ReadonlyArray<EncounterFact>,
+): string | null {
+  const parts: string[] = [];
+  for (const fact of facts) {
+    const derived = deriveFieldValueFromFact(field, mapping, fact);
+    if (derived === null) return null;
+    const text = String(derived).trim();
+    if (!text) continue;
+    if (!parts.includes(text)) parts.push(text);
+  }
+  return parts.length > 0 ? parts.join(NARRATIVE_LIST_SEPARATOR) : null;
+}

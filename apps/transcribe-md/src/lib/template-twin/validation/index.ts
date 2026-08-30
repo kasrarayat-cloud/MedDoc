@@ -29,6 +29,8 @@ import {
   deriveFieldValueFromFact,
   exactOption,
   isStrictIsoDate,
+  isListValuedNarrative,
+  joinListValuedNarrative,
 } from '../field-value-derivation';
 import { isMappingTypeCompatible } from '../semantic-mapping';
 import {
@@ -237,6 +239,21 @@ function assertionSupported(
           deriveFieldValueFromFact(field, mapping, fact) === selected,
       ),
     );
+  }
+
+  // A list-valued narrative section is re-derived AS A WHOLE: the joined value
+  // must be exactly what the shared composer produces from these same cited
+  // facts, in this same order. Built from one function so the build side and
+  // this verify side cannot drift -- the defect this module was created for.
+  if (isListValuedNarrative(field, mapping)) {
+    const joined = joinListValuedNarrative(field, mapping, citedFacts);
+    if (
+      joined !== null &&
+      joined === value &&
+      citedFacts.every((fact) => factMatchesMapping(fact, mapping))
+    ) {
+      return true;
+    }
   }
 
   return citedFacts.some(

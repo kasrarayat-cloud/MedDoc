@@ -25,6 +25,10 @@ import {
   approvedPracticeDefaultAnchorId,
   approvedPracticeDefaultFactId,
 } from '../practice-default';
+import {
+  isListValuedNarrative,
+  joinListValuedNarrative,
+} from '../field-value-derivation';
 
 export interface ResolveTemplateFieldsInput {
   fields: ReadonlyArray<TemplateField>;
@@ -695,6 +699,22 @@ function resolveOne(
     convertedPairs.map(({ converted }) => JSON.stringify(converted.value)),
   );
   if (distinctValues.length > 1) {
+    // A narrative SECTION accumulates; it does not contradict itself. Two past
+    // medical conditions are not two answers to one question. See
+    // field-value-derivation.ts for why measurements deliberately keep
+    // conflicting here rather than joining.
+    if (!allDenied && isListValuedNarrative(field, mapping)) {
+      const joined = joinListValuedNarrative(field, mapping, temporalCandidates);
+      if (joined !== null) {
+        return makeResolution(
+          field.fieldId,
+          'supported',
+          joined,
+          temporalCandidates,
+          'list_valued_narrative_joined',
+        );
+      }
+    }
     return makeResolution(
       field.fieldId,
       'conflict',
