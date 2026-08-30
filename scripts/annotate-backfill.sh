@@ -112,5 +112,22 @@ AFTER=$(q "SELECT count(*) FROM audit_logs;")
 echo "  audit_logs after       : $AFTER   (delta $((AFTER-BEFORE)), expect 39)"
 # ⚠️ THE VISIT TABLE MUST BE UNTOUCHED — the whole point of #155(a).
 echo "  visits/signed unchanged: $(q "SELECT count(*)||'/'||count(*) FILTER (WHERE \"signedAt\" IS NOT NULL) FROM transcribe_visits;")"
-[ "$rc" = "0" ] && [ "$((AFTER-BEFORE))" = "39" ] && echo "  ✅ 39 rows appended, nothing else moved" || echo "  🔴 delta is not 39 — investigate before re-running"
+# ⚠️ ASSERT THE END STATE, NOT THE TRANSITION. The first version required a
+# delta of exactly 39 — which is right on the first run and WRONG on every
+# idempotent re-run, where the correct delta is 0. It printed a red for correct
+# behaviour, and a false red teaches people to ignore reds. The invariant that
+# holds on BOTH runs is the final count: 10 + 29 rows exist, no more, no fewer.
+EM=$(q "SELECT count(*) FROM audit_logs WHERE action::text='EM_OMITTED_IN_SIGNED_ARTIFACT';")
+PV=$(q "SELECT count(*) FROM audit_logs WHERE action::text='TEMPLATE_PROVENANCE_LOST';")
+VIS=$(q "SELECT count(DISTINCT \"targetId\") FROM audit_logs WHERE action::text IN ('EM_OMITTED_IN_SIGNED_ARTIFACT','TEMPLATE_PROVENANCE_LOST');")
+echo "  end state: EM_OMITTED=$EM (want 10) · PROVENANCE_LOST=$PV (want 29) · distinct visits=$VIS (want 38)"
+if [ "$rc" = "0" ] && [ "$EM" = "10" ] && [ "$PV" = "29" ] && [ "$VIS" = "38" ]; then
+  if [ "$((AFTER-BEFORE))" = "0" ]; then
+    echo "  ✅ already applied — idempotent re-run wrote nothing, end state correct"
+  else
+    echo "  ✅ $((AFTER-BEFORE)) rows appended, end state correct, nothing else moved"
+  fi
+else
+  echo "  🔴 END STATE WRONG — investigate before re-running"
+fi
 exit 0
