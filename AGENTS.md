@@ -783,8 +783,40 @@ the rule's first application is to itself.
 
 ## LANDING INTO A LIVE LOOP — PREFER THE STOP FILE, AND OWN THE COST IF YOU DO NOT
 
-**Standing 2026-08-12.** The FOUNDATION loop runs unattended and continuously,
-so there is no idle window to wait for. A supervised session landing an owner
+### ⚠️ SUPERSEDED IN ITS PREMISE, 2026-08-30 — THE LOOP IS DECOMMISSIONED
+
+**Owner directive 2026-08-30, recorded as ruling #161's sibling #160.** The
+FOUNDATION loop **is not running and is not to be relit.** The product board is
+executed directly by supervised sessions. Loop machinery — budgets, NO-PROGRESS
+probes, F34, the queue-head ceremony — is **PARKED-INFRA**: left untouched, not
+deleted.
+
+> **Resumption is an OWNER decision, not a housekeeping one.** No session below
+> the owner may relight it, and removing the halt switch is not a way to.
+
+⚠️ **THIS AMENDMENT EXISTS BECAUSE THE DECISION HAD NO TRACKED RECORD, AND THAT
+IS THE GENERALISABLE HALF.** For most of 2026-08-30 the decommission lived
+**only** in `docs/foundation/STOP` — which is deliberately **untracked and
+gitignored** (`06da801c`: *"the STOP file must never be tracked"*, because a
+committed halt switch halts every clone) — and in a `~/.claude` paste cache at
+mode 0600. Meanwhile **this file still asserted the opposite**, in the very next
+paragraph, and `MASTER.md` said *"You ARE the unattended session"*. **A session
+opening on the tracked canon would have relit a loop the owner had stood down,
+and one `shred` of `~/.claude` would have erased the only surviving record of
+the decision.**
+
+> **A HALT SWITCH AND A DECISION ARE DIFFERENT ARTIFACTS ANSWERING DIFFERENT
+> QUESTIONS** — *is the loop halted here and now* versus *was the loop stood
+> down, by whom, and when*. The first is local by design and stays untracked.
+> The second is canon and belongs in git. Conflating them is how a directive
+> ends up depending on one machine's home directory.
+
+**The paragraph below is KEPT, superseded, because the mid-cycle-landing
+discipline it records still applies the moment any long-running unattended
+actor exists again — and because its reference case is evidence.**
+
+**Standing 2026-08-12, premise superseded 2026-08-30.** The FOUNDATION loop runs
+unattended and continuously, so there is no idle window to wait for. A supervised session landing an owner
 ruling therefore has two honest options, and the preferred one is cheap.
 
 > **PREFER: `touch docs/foundation/STOP` → land at the batch boundary →

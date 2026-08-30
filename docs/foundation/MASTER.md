@@ -7,7 +7,20 @@ diff somebody can review rather than a sentence somebody typed once.
 
 ---
 
-## ⚠️ IF YOU ARE READING THIS, YOU ARE THE LOOP
+## ⚠️ THE LOOP IS DECOMMISSIONED — THIS SECTION IS NOW A POINTER
+
+> **⚠️ DO NOT ACT ON THE PARAGRAPH BELOW WITHOUT READING
+> `AGENTS.md` § LANDING INTO A LIVE LOOP FIRST.** Owner directive 2026-08-30
+> (ruling #160) stood the FOUNDATION loop down. It is not running and is not to
+> be relit; the product board is executed directly by supervised sessions, and
+> resumption is an OWNER decision. **`AGENTS.md` is the single source for who
+> may do what** — ruling #150 — and this file does not get a second opinion.
+
+**The text below is KEPT, superseded, because its lesson survives its premise:
+a session that halts in three minutes to ask which of three options to take has
+not done the work either way.**
+
+## ⚠️ IF YOU ARE READING THIS, YOU ARE THE LOOP  *(superseded 2026-08-30)*
 
 **Ruled 2026-08-16, after a session halted in THREE MINUTES having done no work
 — by asking the owner which of three options to take.**
