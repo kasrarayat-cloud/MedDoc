@@ -84,3 +84,27 @@ deliberately by choosing the safe one: a denial whose quote does not itself read
 as a denial renders **BLANK with a named reason**, never a guess. **A blank is a
 visible absence; an inverted sentence is a signed assertion.** When only one
 direction can be cheap, buy the loud one.
+
+---
+
+## ⚠️ THE CAVEAT, ADDED 2026-08-31 BY #157(c) — GRANULARITY
+
+**Both properties were asserted, and #157(c) satisfied both while printing a
+false clinical assertion.**
+
+    Chest pain / DENIED / "Denies chest pain at rest. Chest pain on exertion, 8 out of 10."
+      -> rendered whole. Subset of the quote: TRUE. Contains a negation cue: TRUE.
+      -> the signed field asserts 8/10 exertional chest pain under a DENIED fact.
+
+The predicate scoped the cue to **one clause**; the printer printed **every
+clause**. Both properties were true *of the whole text*, and the claim they stood
+for was about *each clause*.
+
+> **A PROPERTY CHECK MUST BE APPLIED AT THE GRANULARITY THE PROPERTY CLAIMS —
+> WHOLE-TEXT CHECKS CANNOT PROVE PER-CLAUSE SCOPING.**
+
+Two properties are better than one and neither count is the point: **ask what
+UNIT your rule quantifies over, and assert at that unit.** This is the third
+consecutive layer at which a green gate accompanied a live harm, which is
+[canon 75](75-three-falsifications-is-data-about-the-instrument.md) — and it is
+why #157(d) deletes the heuristic rather than adding a third property.
