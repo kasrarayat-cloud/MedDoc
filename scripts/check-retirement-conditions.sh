@@ -190,6 +190,22 @@ fi
 
 echo "retirement-condition sweep — $INBOX"
 echo "   · parsed ${#HEADINGS[@]} entries · positive control: known member 2026-08-20T16:40:00Z found"
+# ⚠️ INSTRUMENTATION, ADDED 2026-08-31 — NO VERDICT LOGIC DEPENDS ON IT.
+#
+# `gate-f30` went RED twice in CI on one unchanged tree, naming a DIFFERENT
+# orphan each time (2026-08-20T15:30:00Z, then 2026-08-16T19:30:00Z) — and both
+# entries are present. A CI-shaped shallow clone of the exact merge ref parses
+# 15/15 with no orphan; 25 consecutive local runs are clean; a static sweep of
+# the suite finds NO writer to this file, no chdir, and no shell redirect into
+# it. So the failure is real, non-deterministic, and unexplained.
+#
+# Every hypothesis died for want of ONE fact: what the sweep actually READ in
+# CI. The census below is that fact. It prints the timestamps this run parsed,
+# in order, so a future red carries its own evidence instead of requiring the
+# reader to reconstruct it — the difference between "an entry is missing" and
+# "the registry has rotted" is exactly what these two lines settle.
+echo "   · census(${#HEADINGS[@]}): $(printf '%s\n' "${HEADINGS[@]}" | sed -E 's/^### ([0-9T:-]+Z).*/\1/' | tr '\n' ' ')"
+echo "   · registry(${#REGISTRY[@]}): $(printf '%s\n' "${REGISTRY[@]}" | cut -d'|' -f1 | tr '\n' ' ')"
 
 # ── instrument controls for the predicates that consult something external ───
 NET_OK=0

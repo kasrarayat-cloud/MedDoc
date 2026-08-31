@@ -124,8 +124,18 @@ describe('F30 · retirement conditions are tested, not remembered', () => {
   // quietly: an unregistered entry is a finding, and so is an orphan row.
   it('registry ⟷ INBOX is a SET EQUALITY — no unregistered entry, no orphan row', () => {
     const out = SHARED.out;
-    expect(bucket(out, UNREG).trim(), `unregistered entries:\n${bucket(out, UNREG)}`).toBe('');
-    expect(bucket(out, ORPHAN).trim(), `orphan registry rows:\n${bucket(out, ORPHAN)}`).toBe('');
+    // ⚠️ THE FAILURE CARRIES THE CENSUS, AND THAT IS THE WHOLE POINT OF THIS
+    // MESSAGE. This arm went RED twice in CI on one unchanged tree, naming a
+    // DIFFERENT entry each time, while every local and CI-shaped reproduction
+    // was clean. The bucket alone says WHICH row was called an orphan; it does
+    // not say what the sweep READ. Without that, "an entry went missing from
+    // the file" and "the registry rotted" are the same red — two states
+    // collapsed into one, which is this house's most-repeated defect.
+    const census = out.match(/· census\([0-9]+\):.*/)?.[0] ?? '(no census line — an OLD sweep)';
+    const registry = out.match(/· registry\([0-9]+\):.*/)?.[0] ?? '(no registry line — an OLD sweep)';
+    const evidence = `\n${census}\n${registry}`;
+    expect(bucket(out, UNREG).trim(), `unregistered entries:\n${bucket(out, UNREG)}${evidence}`).toBe('');
+    expect(bucket(out, ORPHAN).trim(), `orphan registry rows:\n${bucket(out, ORPHAN)}${evidence}`).toBe('');
   });
 
   // ── ⚠️ THE CONTROL THE FILING ITEM DEMANDED ──────────────────────────────
