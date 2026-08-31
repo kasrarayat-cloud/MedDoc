@@ -1,5 +1,31 @@
 // ============================================================================
-// OWNER RULING #157(b) — THE DENIAL CONTRACT, DRIVEN END TO END.
+// OWNER RULING #157(c) — THE DENIAL CONTRACT, DRIVEN END TO END.
+// ----------------------------------------------------------------------------
+// ⚠️ #157(c) AMENDS #157(b)'s RULE (1) AND THIS GATE CARRIES BOTH. Everything
+// #157(b) proved still holds and is still asserted here; what changed is that a
+// denied narrative fact no longer prints its quote merely because it is denied.
+//
+//   Q1  a denial prints its quote ONLY when the quote ITSELF carries a negation
+//       scoping the finding. Otherwise BLANK, reason `denial_quote_not_self_negating`.
+//       ⚠️ BOTH PROPERTIES ARE ASSERTED ON EVERY PRINT ROW: the rendered text is
+//       a SUBSET of the doctor's quote (nothing MANUFACTURED) and it CONTAINS a
+//       negation token scoping the finding (nothing DESTROYED). Arm (1h) pins
+//       the exact string that satisfies the first and inverts the second, so a
+//       gate carrying only property (i) is demonstrably not enough.
+//   Q2  the certification blocker exempts an ENUMERATED allowlist. Arm (7a)
+//       asserts SET EQUALITY against what the pipeline really emits for the
+//       rule-(4)-approved behaviours, in both directions.
+//   Q3  mixed polarity resolves PER FACT, in dictation order — arms (8a)-(8e).
+//       `polarity_conflict` as a document-killer dies with its sibling.
+//
+// ⚠️ AND ARM (1f) WAS REBUILT BECAUSE IT WAS A CONTROL AIMED WHERE THE ANSWER
+// WAS PREDETERMINED. Its five KEEP fixtures were all `DENIAL_VOCABULARY` tokens
+// and the guard was built from that same list, so it measured its own target
+// and stayed green while twelve of fourteen negating headings were stripped and
+// printed their inverse. Its KEEP set is now out of vocabulary BY CONSTRUCTION
+// and each row asserts that it is.
+// ----------------------------------------------------------------------------
+// #157(b), unchanged and still gated below:
 // ----------------------------------------------------------------------------
 // ⚠️ THIS FILE REPLACES A GATE BUILT ON A FALSIFIED PREMISE, AND THE PREMISE IS
 // RECORDED HERE BECAUSE THE CORRECTION IS THE POINT.
@@ -68,6 +94,9 @@
 //     stated in arm (2d) rather than quietly skipped.
 // ============================================================================
 
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -96,11 +125,17 @@ import { validateTemplateTwin } from '../validation';
 import { projectEncounterFacts } from '../encounter-facts';
 import { bridgeTemplateFill } from '../bridge-fill';
 import {
+  CERTIFICATION_EXEMPT_DENIAL_REASONS,
   denialOutcome,
   denialWithheldMaterialFieldIds,
   isPrintableDenial,
+  mixedPolarityNarrative,
+  selfNegationCues,
+  selfNegationScopingFinding,
   stripLeadingDictationHeading,
 } from '../denial-contract';
+import { EXPLICIT_DENIAL } from '../encounter-facts';
+import { MIN_CERTIFIED_FILLED_FIELDS } from '../certification-thresholds';
 
 // ── the source document ──────────────────────────────────────────────────────
 // The shared synthetic package plus the labels this gate needs. The compiler
@@ -123,6 +158,7 @@ const EXTRA_CONTROLS = `
 <w:p><w:sdt><w:sdtPr><w:id w:val="304"/><w:alias w:val="Impression"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Enter impression</w:t></w:r></w:sdtContent></w:sdt></w:p>
 <w:p><w:sdt><w:sdtPr><w:id w:val="305"/><w:alias w:val="Polyp count"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Enter count</w:t></w:r></w:sdtContent></w:sdt></w:p>
 <w:p><w:sdt><w:sdtPr><w:id w:val="306"/><w:alias w:val="Lesion diameter"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Enter diameter</w:t></w:r></w:sdtContent></w:sdt></w:p>
+<w:p><w:sdt><w:sdtPr><w:id w:val="307"/><w:alias w:val="Review of systems"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Enter ROS</w:t></w:r></w:sdtContent></w:sdt></w:p>
 `;
 const DATA_BOUND_CONTROL =
   '<w:p><w:sdt><w:sdtPr><w:id w:val="108"/><w:alias w:val="Data-bound synthetic value"/><w:text/><w:dataBinding w:xpath="/root/value" w:storeItemID="{00000000-0000-0000-0000-000000000000}"/></w:sdtPr><w:sdtContent><w:r><w:t>Unapproved bound value</w:t></w:r></w:sdtContent></w:sdt></w:p>';
@@ -260,6 +296,40 @@ const NARRATIVE: readonly NarrativeCase[] = [
     printed: 'No evidence of pulmonary embolism.',
     headingStripped: false,
   },
+  {
+    // ⚠️ #157(c). ROS IS THE ONLY ENTITY TYPE L3 STATES A POLARITY ON
+    // (encounter-facts/index.ts:705), which is what makes it the route to the
+    // R1 harm. This ROW does NOT state one — it is the ordinary, self-negating
+    // ROS dictation, so rule (1) still prints it and every PLAN-iterating arm
+    // gets a real denial here. The arms that need the STATED-polarity shape
+    // supply it themselves and `omit` this default, by name.
+    label: 'Review of systems',
+    controlId: '307',
+    concept: 'ros.constitutional',
+    deniedText: 'No fever or chills.',
+    deniedEntities: {
+      ros: [
+        {
+          system: 'constitutional',
+          finding: 'Fever',
+          evidence_quote: 'No fever or chills.',
+        },
+      ],
+    },
+    affirmedText: 'Reports fever and chills.',
+    affirmedEntities: {
+      ros: [
+        {
+          system: 'constitutional',
+          finding: 'Fever',
+          evidence_quote: 'Reports fever and chills.',
+        },
+      ],
+    },
+    deniedEntity: 'Fever',
+    printed: 'No fever or chills.',
+    headingStripped: false,
+  },
 ];
 
 function projected(text: string, entities: unknown): EncounterFact[] {
@@ -392,6 +462,57 @@ const PLAN: Record<string, { concept: string; polarityBehavior: Behavior }> = {
   'Polyp count': { concept: 'finding.polyp_count', polarityBehavior: 'explicit_denial_allowed' },
   'Lesion diameter': { concept: 'measurement.lesion', polarityBehavior: 'explicit_denial_allowed' },
   'Repeat finding': { concept: ROW_CONCEPT, polarityBehavior: 'explicit_denial_allowed' },
+  // ⚠️ #157(c). `ros.*` is the ONLY entity type L3 states a polarity on
+  // (encounter-facts/index.ts:705), so it is the only route to a fact that is
+  // `denied` on a quote carrying no negation — the R1 harm. It carries an
+  // ORDINARY self-negating default (see NARRATIVE) so the PLAN-iterating arms
+  // exercise it like any other narrative; the R1 arms `omit` that default and
+  // supply the stated-polarity fact themselves.
+  'Review of systems': { concept: 'ros.constitutional', polarityBehavior: 'explicit_denial_allowed' },
+};
+
+// ── #157(c) FIXTURES ────────────────────────────────────────────────────────
+
+/** THE R1 HARM: polarity STATED as denied on a sentence that reads as an
+ *  assertion. Driven through the real projection, not hand-built, so the
+ *  bypass at `options.polarity ?? inferPolarity(...)` is the thing exercised. */
+function statedPolarityRos(): EncounterFact[] {
+  return projected('Fever, chills, and night sweats.', {
+    ros: [
+      {
+        system: 'constitutional',
+        finding: 'Fever',
+        polarity: 'denied',
+        evidence_quote: 'Fever, chills, and night sweats.',
+      },
+    ],
+  });
+}
+
+/** The narrative field and mapping arm (8f) asks the mixed contract about
+ *  directly. Everything else drives the compiled IR; this one row needs a fact
+ *  QUALITY the projection will not produce for an assessment entity. */
+const FIELD_STUB = {
+  fieldId: `ttf_${'a'.repeat(24)}`,
+  kind: 'narrative_text',
+  rowPrototype: false,
+} as unknown as TemplateField;
+const MAPPING_STUB = {
+  clinicalConcept: 'assessment',
+  polarityBehavior: 'explicit_denial_allowed',
+} as unknown as SemanticMapping;
+
+/** Q3's mixed-polarity dictation: one affirmed finding, one denied, one field. */
+const MIXED_TEXT =
+  'Findings consistent with pneumonia. No evidence of pulmonary embolism.';
+const MIXED_ENTITIES = {
+  assessment_discussed: [
+    { finding: 'Pneumonia', evidence_quote: 'Findings consistent with pneumonia.' },
+    {
+      finding: 'Pulmonary embolism',
+      evidence_quote: 'No evidence of pulmonary embolism.',
+    },
+  ],
 };
 
 const ALL_CONCEPTS: readonly string[] = Object.values(PLAN).map((p) => p.concept);
@@ -778,7 +899,23 @@ describe('#157(b) — the denial contract, end to end', () => {
       expect(quote.includes(printed)).toBe(true);
       expect(quote.endsWith(printed)).toBe(true);
 
-      // (iii) THE FALSIFIED #157's OUTPUT IS ABSENT. This is the assertion that
+
+      // (iii) ⚠️ #157(c) Q1 — AND IT CARRIES A NEGATION SCOPING THE FINDING.
+      // BOTH PROPERTIES, OR THE GUARD REPORTS GREEN ON THE INVERSION OF THE
+      // THING IT GUARDS. (ii) proves nothing was MANUFACTURED; it CANNOT prove
+      // nothing was DESTROYED — every one of the twelve heading-strip
+      // inversions satisfies (ii) exactly, because an inverted output is still
+      // a strict suffix of the doctor's own quote. A row that satisfies only
+      // (ii) must RED here, and arm (1h) pins one such string.
+      const fact = driven.factsFor(narrative.concept)[0]!;
+      const cue = selfNegationScopingFinding(printed, fact.value);
+      expect([narrative.label, cue === null]).toEqual([narrative.label, false]);
+      expect([narrative.label, printed.includes(cue!.match)]).toEqual([
+        narrative.label,
+        true,
+      ]);
+
+      // (iv) THE FALSIFIED #157's OUTPUT IS ABSENT. This is the assertion that
       // would have caught it: the AFFIRMED ENTITY must not reach the document.
       expect(control).not.toContain(`<w:t>${narrative.deniedEntity}</w:t>`);
     });
@@ -809,61 +946,264 @@ describe('#157(b) — the denial contract, end to end', () => {
     }
   });
 
-  // ⚠️ THIS ARM IS A CONTROL AIMED WHERE THE ANSWER IS PREDETERMINED, AND THAT
-  // IS A KNOWN DEFECT IN IT — recorded here rather than left for the next
-  // reader to rediscover. All five KEEP fixtures below are `DENIAL_VOCABULARY`
-  // tokens, and the guard at `denial-contract.ts` is built from exactly that
-  // list — so the arm's result is fixed by its own target and it measures the
-  // fixture, not the rule. Mutating the guard out leaves every OTHER denial
-  // shape byte-identical.
+  // ⚠️ REBUILT FOR #157(c) Q1. THE PREDECESSOR OF THIS ARM WAS A CONTROL AIMED
+  // WHERE THE ANSWER WAS PREDETERMINED, AND THAT IS THE REASON IT IS REBUILT.
   //
-  // ⚠️ AND THE RULE IT GUARDS IS ITSELF UNSOUND, which is why this is not
-  // repaired here. L3 states polarity as a REQUIRED enum
-  // (03-extract-entities.ts:193) and is INSTRUCTED that "absence of the word
-  // 'no' is not absence of a denial" (:446); a stated polarity then bypasses
-  // the vocabulary entirely (encounter-facts/index.ts:507). So a fact can be
-  // `denied` on a quote carrying no negation at all, and rule (1) prints it:
-  //     ros finding "Fever", polarity denied,
-  //     quote "Fever, chills, and night sweats."  -> PRINTS THAT SENTENCE.
-  // No heading, so no strip-side guard reaches it. Closing that needs an OWNER
-  // decision about what rule (1) prints when the quote does not itself read as
-  // a denial — it is not a wider guard.
-  it('(1f) ⚠️ A HEADING THAT CARRIES THE NEGATION IS NEVER STRIPPED', () => {
-    // ⚠️ THIS ARM EXISTS BECAUSE (1e) IS NOT ENOUGH, AND THE GAP WAS MEASURED.
-    // `LEADING_DICTATION_HEADING`'s class admits SPACES, and every token in
-    // `DENIAL_VOCABULARY` is letters-and-spaces — so ordinary structured
-    // dictation puts the negation exactly where the pattern looks for a label.
-    // Five shapes rendered a FALSE CLINICAL ASSERTION into a signed document,
-    // `valid: true`, zero issues at every layer. The third is the argument:
-    // an anticoagulant list printed for a patient said NOT to be taking them.
-    //
-    // ⚠️ AND THE ZERO-COMPOSITION ASSERTION CANNOT SEE THIS. Every inverted
-    // output is still a strict SUFFIX of the doctor's own quote, so
-    // `quote.endsWith(printed)` is TRUE for all five. A substring check proves
-    // nothing was MANUFACTURED; it cannot prove nothing was DESTROYED. Both
-    // properties are needed and only one of them was asserted.
+  // All five of its KEEP fixtures were `DENIAL_VOCABULARY` tokens and the guard
+  // was built from exactly that list, so the arm measured its own target.
+  // Mutating the guard out left every OTHER denial shape byte-identical and the
+  // arm still went green. Measured afterwards: of fourteen negating headings the
+  // old guard kept TWO and STRIPPED TWELVE, each of which then printed its own
+  // inverse into a signed note.
+  //
+  // ⚠️ SO THE KEEP SET IS NOW OUT OF VOCABULARY BY CONSTRUCTION, AND THE ARM
+  // ASSERTS THAT IT IS. Each out-of-vocabulary row also asserts
+  // `EXPLICIT_DENIAL.test(heading) === false`, so the fixtures cannot silently
+  // drift back onto the guard's own list and re-predetermine the answer.
+  it('(1f) ⚠️ A HEADING THAT CARRIES THE NEGATION IS NEVER STRIPPED — OUT-OF-VOCABULARY FIXTURES', () => {
+    // ── KEEP · OUT OF VOCABULARY. `EXPLICIT_DENIAL` cannot see any of these.
+    const OUT_OF_VOCABULARY = [
+      'Absent: fever, chills, or night sweats.',
+      'Ruled out: pulmonary embolism.',
+      'Free of: chest pain.',
+      'Not currently taking: warfarin, aspirin, or clopidogrel.',
+      'None: drug allergies.',
+      'Nil: acute distress.',
+      'Unremarkable: cardiovascular exam.',
+      'Within normal limits: respiratory exam.',
+      'Negative: melena.',
+      'Excluded: pulmonary embolism.',
+      'Not present: hepatomegaly.',
+      'Clear of: consolidation.',
+      'Resolved: pneumonia.',
+      'WNL: neurological exam.',
+    ];
+    for (const quote of OUT_OF_VOCABULARY) {
+      const heading = `${quote.slice(0, quote.indexOf(':') + 1)}`;
+      // ⚠️ THE ARM IS NOT MEASURING ITS OWN TARGET — asserted, per row.
+      expect([heading, EXPLICIT_DENIAL.test(heading)]).toEqual([heading, false]);
+      expect([quote, stripLeadingDictationHeading(quote)]).toEqual([quote, quote]);
+    }
+
+    // ── KEEP · IN VOCABULARY. These are the five the predecessor carried, plus
+    // the two the census found. They must ALSO still be kept — a rebuilt guard
+    // that traded the old cases for new ones has fixed nothing.
     for (const quote of [
       'Negative for: diabetes, hypertension, and coronary artery disease.',
       'Patient denies: chest pain and dyspnea.',
       'Not taking: warfarin, aspirin, or clopidogrel.',
       'No history of: diabetes, hypertension.',
       'Without: fever, chills, or night sweats.',
+      'Denied: chest pain.',
+      'No longer taking: warfarin.',
     ]) {
-      expect(stripLeadingDictationHeading(quote)).toBe(quote);
+      expect([quote, stripLeadingDictationHeading(quote)]).toEqual([quote, quote]);
     }
-    // THE COUNTERWEIGHT — the allowance must still work, or the fix has simply
-    // disabled rule (1). These are the ruling's own examples plus the ONLY
-    // strippable heading measured in the production corpus.
-    expect(stripLeadingDictationHeading('Allergies: no known drug allergies')).toBe(
-      'no known drug allergies',
-    );
-    expect(stripLeadingDictationHeading('Indication: screening colonoscopy.')).toBe(
-      'screening colonoscopy.',
-    );
-    // NON-VACUITY — a denial cue AFTER the colon must not block the strip.
-    expect(stripLeadingDictationHeading('Plan: no further imaging is required.')).toBe(
-      'no further imaging is required.',
-    );
+
+    // ── REFUSE · ORDINARY HEADINGS MUST STILL BE STRIPPED. Without this set the
+    // arm passes for a guard that has simply disabled the allowance, which
+    // would delete rule (1)'s one formatting concession rather than fix it.
+    const STRIPPED: ReadonlyArray<readonly [string, string]> = [
+      ['Allergies: no known drug allergies', 'no known drug allergies'],
+      ['Indication: screening colonoscopy.', 'screening colonoscopy.'],
+      ['Plan: no further imaging is required.', 'no further imaging is required.'],
+      ['Assessment/Plan: no change.', 'no change.'],
+      ['Impression: pneumonia.', 'pneumonia.'],
+      ['Past medical history: diabetes.', 'diabetes.'],
+      ['Chief complaint: chest pain.', 'chest pain.'],
+      ['Medications: warfarin.', 'warfarin.'],
+      ['Review of systems: fatigue.', 'fatigue.'],
+      ['Physical exam: normal.', 'normal.'],
+      ['Nose: patent.', 'patent.'],
+      ['Neuro: intact.', 'intact.'],
+    ];
+    for (const [quote, expected] of STRIPPED) {
+      expect([quote, stripLeadingDictationHeading(quote)]).toEqual([quote, expected]);
+    }
+  });
+
+  it('(1g) ⚠️ A STATED-POLARITY DENIAL ON AN AFFIRMATIVE QUOTE RENDERS BLANK — THE #157(b) FALSIFICATION', async () => {
+    // ⚠️ THIS IS THE HARM THAT FALSIFIED RULE (1) AS WRITTEN, AND NO HEADING IS
+    // INVOLVED. L3 states polarity as a REQUIRED enum
+    // (03-extract-entities.ts:193), is INSTRUCTED that "absence of the word
+    // 'no' is not absence of a denial" (:446), and a stated polarity BYPASSES
+    // the vocabulary entirely (encounter-facts/index.ts:507). So a fact is
+    // `denied` on a sentence that reads as an ASSERTION, and "print the quote
+    // verbatim" printed its opposite under `valid: true`.
+    const facts = statedPolarityRos();
+    expect(facts).toHaveLength(1);
+    expect(facts[0]!.polarity).toBe('denied');
+    expect(facts[0]!.concept).toBe('ros.constitutional');
+    // ⚠️ NON-VACUITY: the quote carries no negation the SHIPPED vocabulary can
+    // see either, so this fixture is not one that was denied by its own words.
+    expect(EXPLICIT_DENIAL.test(facts[0]!.evidenceQuote)).toBe(false);
+
+    const driven = await drive({ omit: ['ros.constitutional'], extraFacts: facts });
+    const { field, resolution } = driven.byLabel('Review of systems');
+    expect(field.kind).toBe('narrative_text');
+    expect(resolution.status).toBe('denial_withheld');
+    expect(resolution.value).toBeNull();
+    expect(resolution.reasonCode).toBe('denial_quote_not_self_negating');
+    // The citation SURVIVES — the manifest can still say what was denied.
+    expect(resolution.sourceFactIds).toHaveLength(1);
+
+    // ⚠️ AND RULE (3) IS UNTOUCHED: the document still renders and nothing
+    // blocks. Q1 converts a false assertion into a VISIBLE ABSENCE, never into
+    // a refused export.
+    const xml = await driven.render();
+    expect(renderedTextOf(controlById(xml, '307'))).toBe(BLANK);
+    expect(xml).not.toContain('Fever, chills, and night sweats.');
+    expect(xml).not.toContain('<w:t>Fever</w:t>');
+  });
+
+  it('(1h) ⚠️ AN OUT-OF-VOCABULARY NEGATING HEADING REACHES THE DOCUMENT INTACT — END TO END', async () => {
+    // The strip guard's own end-to-end row, and it is NOT the same claim as
+    // (1g). (1g) proves a print is REFUSED when the text carries no negation;
+    // this proves a print is PRESERVED when the negation lives in the prefix
+    // that the allowance would otherwise remove. Mutating either one out reds
+    // exactly one of these two arms — which is what makes them independent
+    // rather than one property asserted twice.
+    const quote = 'Absent: fever, chills, or night sweats.';
+    const facts = projected(quote, {
+      ros: [
+        {
+          system: 'constitutional',
+          finding: 'Fever',
+          polarity: 'denied',
+          evidence_quote: quote,
+        },
+      ],
+    });
+    expect(facts[0]!.polarity).toBe('denied');
+    expect(EXPLICIT_DENIAL.test('Absent:')).toBe(false); // out of vocabulary
+
+    const driven = await drive({ omit: ['ros.constitutional'], extraFacts: facts });
+    const { resolution } = driven.byLabel('Review of systems');
+    expect(resolution.status).toBe('explicitly_denied');
+    expect(resolution.value).toBe(quote); // the heading is PART OF THE CLAIM
+    expect(resolution.reasonCode).toBe('explicit_denial_dictated_quote');
+
+    const printed = renderedTextOf(controlById(await driven.render(), '307'));
+    expect(printed).toBe(quote);
+    // BOTH PROPERTIES, again: a suffix of the quote, AND carrying its negation.
+    expect(quote.endsWith(printed)).toBe(true);
+    const cue = selfNegationScopingFinding(printed, facts[0]!.value);
+    expect(cue).not.toBeNull();
+    expect(printed.includes(cue!.match)).toBe(true);
+    // ⚠️ THE INVERSION THAT SHIPPED: without the guard the strip leaves
+    // "fever, chills, or night sweats." — a suffix of the doctor's own quote,
+    // so the zero-composition property is TRUE for it, and it says the
+    // OPPOSITE. Property (ii) is the only thing that can see this.
+    expect(quote.endsWith('fever, chills, or night sweats.')).toBe(true);
+    expect(
+      selfNegationScopingFinding('fever, chills, or night sweats.', 'Fever'),
+    ).toBeNull();
+  });
+
+  it('(1j) ⚠️ A NEGATION IN ANOTHER CLAUSE DOES NOT SCOPE THE FINDING — END TO END', async () => {
+    // ⚠️ CONTAINMENT ALONE IS NOT THE PREDICATE, AND THIS IS THE ROW THAT
+    // PROVES IT. The quote carries a real negation — "No acute distress." — and
+    // it negates something else entirely. A containment test prints the whole
+    // sentence under a DENIED fact, which asserts the fever the record denies.
+    // Only the clause test can tell the two apart, and mutating the clause
+    // bounds out reds exactly here and at (1i).
+    const quote = 'No acute distress. Fever, chills, and night sweats.';
+    const facts = projected(quote, {
+      ros: [
+        {
+          system: 'constitutional',
+          finding: 'Fever',
+          polarity: 'denied',
+          evidence_quote: quote,
+        },
+      ],
+    });
+    expect(facts).toHaveLength(1);
+    expect(facts[0]!.polarity).toBe('denied');
+    // NON-VACUITY: the quote really does carry a negation. Without this the arm
+    // could pass because the fixture had no cue at all — which is (1g)'s case,
+    // not this one.
+    expect(selfNegationCues(quote).length).toBeGreaterThan(0);
+
+    const driven = await drive({ omit: ['ros.constitutional'], extraFacts: facts });
+    const { resolution } = driven.byLabel('Review of systems');
+    expect(resolution.status).toBe('denial_withheld');
+    expect(resolution.reasonCode).toBe('denial_quote_not_self_negating');
+
+    const xml = await driven.render();
+    expect(renderedTextOf(controlById(xml, '307'))).toBe(BLANK);
+    expect(xml).not.toContain('Fever, chills, and night sweats.');
+    expect(xml).not.toContain('No acute distress.');
+  });
+
+  it('(1i) THE DISCRIMINATOR ITSELF — KEEP, REFUSE, and the limits it fails toward BLANK on', () => {
+    // ⚠️ THE UNIT-LEVEL TABLE, so a regression names the shape rather than one
+    // rendered document. Every KEEP row is a sentence a doctor would recognise
+    // as a denial; every REFUSE row must BLANK.
+    const KEEP: ReadonlyArray<readonly [string, string]> = [
+      ['Absent fever, chills, or night sweats.', 'Fever'],
+      ['Ruled out pulmonary embolism.', 'Pulmonary embolism'],
+      ['Free of chest pain.', 'Chest pain'],
+      ['None of the above symptoms.', 'Symptoms'],
+      ['Nil acute distress.', 'Acute distress'],
+      ['Cardiovascular exam unremarkable.', 'Cardiovascular abnormality'],
+      ['Respiratory exam within normal limits.', 'Respiratory abnormality'],
+      ['Melena negative.', 'Melena'],
+      ['Chest pain was denied by the patient.', 'Chest pain'],
+      ['The study rules out pulmonary embolism.', 'Pulmonary embolism'],
+      ['No longer taking warfarin.', 'Warfarin'],
+      ['The pneumonia has resolved.', 'Pneumonia'],
+      ['Hepatomegaly is not present.', 'Hepatomegaly'],
+      ['Absence of pulmonary embolism.', 'Pulmonary embolism'],
+      ['Pulmonary embolism excluded.', 'Pulmonary embolism'],
+      ['Lungs clear of consolidation.', 'Consolidation'],
+      ['Troponin -ve.', 'Troponin elevation'],
+      ['Never a smoker.', 'Smoking'],
+      ['Patient denies chest pain.', 'Chest pain'],
+      ['Without fever or chills.', 'Fever'],
+      ['Negative for melena.', 'Melena'],
+      ['Not currently taking anticoagulation.', 'Anticoagulation'],
+      ['The patient has no history of diabetes.', 'Diabetes'],
+      ['no known drug allergies', 'No known drug allergies'],
+    ];
+    for (const [text, finding] of KEEP) {
+      const cue = selfNegationScopingFinding(text, finding);
+      expect([text, cue === null]).toEqual([text, false]);
+      // The reported token is REALLY IN the text — that is what lets the
+      // rendering arms assert property (ii) rather than take a boolean on trust.
+      expect([text, text.includes(cue!.match)]).toEqual([text, true]);
+    }
+
+    const REFUSE: ReadonlyArray<readonly [string, string, string]> = [
+      // THE R1 HARM — a denied fact whose quote carries no negation at all.
+      ['Fever, chills, and night sweats.', 'Fever', 'no negation token'],
+      ['Findings consistent with pneumonia.', 'Pneumonia', 'no negation token'],
+      ['The patient has a history of diabetes.', 'Diabetes', 'no negation token'],
+      // BARE `not` IS NOT A NEGATION TOKEN — the counterexample, pinned.
+      ['It is not severe, but it is there.', 'Chest pain', 'bare not'],
+      // THE HEADING-STRIP RESIDUE — every one of these is a strict SUFFIX of a
+      // real dictation and every one of them says the opposite of it.
+      ['warfarin, aspirin, or clopidogrel.', 'Warfarin', 'strip residue'],
+      ['fever, chills, or night sweats.', 'Fever', 'strip residue'],
+      ['diabetes, hypertension, and coronary artery disease.', 'Diabetes', 'strip residue'],
+      ['chest pain and dyspnea.', 'Chest pain', 'strip residue'],
+      ['pulmonary embolism.', 'Pulmonary embolism', 'strip residue'],
+      // SCOPE — the cue belongs to another clause.
+      ['No acute findings. Pneumonia is present.', 'Pneumonia', 'other clause'],
+      ['No fever. Patient smokes daily.', 'Smoking', 'unlocatable, two clauses'],
+      // ⚠️ RECORDED HONEST LIMITS, NOT OVERSIGHTS. A hedge is not a denial and
+      // an ambiguous object is not a denial, so both FAIL TOWARD BLANK. A blank
+      // is a visible absence; an inverted sentence is a signed assertion.
+      ['Doubt pulmonary embolism.', 'Pulmonary embolism', 'hedge — refused by choice'],
+      ['Cannot identify a lesion.', 'Lesion', 'ambiguous object — refused by choice'],
+    ];
+    for (const [text, finding, why] of REFUSE) {
+      expect([why, text, selfNegationScopingFinding(text, finding)]).toEqual([
+        why,
+        text,
+        null,
+      ]);
+    }
   });
 
   // ── RULE 2 — selection-shaped fields never select on a denial ─────────────
@@ -1129,10 +1469,16 @@ describe('#157(b) — the denial contract, end to end', () => {
         ]);
         expect([label, resolution.reasonCode.length > 0]).toEqual([label, true]);
         if (resolution.status === 'denial_withheld') {
-          expect([label, resolution.reasonCode.startsWith('denial_withheld_')]).toEqual([
+          // ⚠️ TWO PREFIXES, NOT ONE, AND THE SECOND IS DELIBERATE. #157(c)'s
+          // Q1 token is spelled `denial_quote_not_self_negating` — the
+          // ruling's own wording — so a prefix assertion naming only the
+          // sibling family would red on a correct token. Recorded here rather
+          // than "tidied" into line, because the ruling names the identifier.
+          expect([
             label,
-            true,
-          ]);
+            resolution.reasonCode.startsWith('denial_withheld_') ||
+              resolution.reasonCode === 'denial_quote_not_self_negating',
+          ]).toEqual([label, true]);
         }
       }
     });
@@ -1404,11 +1750,29 @@ describe('#157(b) — the denial contract, end to end', () => {
   });
 
   it('(5c) CERTIFICATION CANNOT GO GREEN with a clinically material section silently blank', async () => {
-    const driven = await drive({ denied: ['allergy.substance'], behavior: 'value_only' });
+    // ⚠️ REWRITTEN FOR #157(c) Q2, AND THE FIXTURE CHANGE IS THE POINT. This
+    // arm used a `value_only` denial — which Q2 now EXEMPTS, because a mapping
+    // that correctly refuses to carry a denial is behaving exactly as ruled and
+    // must not be unable to certify for it. So the blocker is now proved with a
+    // NON-EXEMPT token: two genuinely different denied sentences have no
+    // verbatim rendering, the section blanks, and THAT is a hole a certificate
+    // must not attest.
+    const facts = projected('No history of diabetes. The patient denies hypertension.', {
+      past_medical_history: [
+        { condition: 'Diabetes', evidence_quote: 'No history of diabetes.' },
+        { condition: 'Hypertension', evidence_quote: 'The patient denies hypertension.' },
+      ],
+    });
+    const driven = await drive({ omit: ['past_medical_history'], extraFacts: facts });
+    const { field, resolution } = driven.byLabel('Past medical history');
+    expect(resolution.status).toBe('denial_withheld');
+    expect(resolution.reasonCode).toBe('denial_withheld_multiple_distinct_quotes');
+    expect(CERTIFICATION_EXEMPT_DENIAL_REASONS.has(resolution.reasonCode)).toBe(false);
+    expect(field.clinicallyMaterial || field.criticality !== 'routine').toBe(true);
 
     // The certification gate reads THIS, and it is non-empty.
     const blocked = denialWithheldMaterialFieldIds(driven.ir.fields, driven.resolutions);
-    expect(blocked).toContain(driven.byLabel('Allergies').field.fieldId);
+    expect(blocked).toContain(field.fieldId);
 
     // ⚠️ AND THE POINT OF THE NEW STATUS: certification's own relaxation does
     // NOT reach it. `allowUncertifiedForSyntheticTest` downgrades
@@ -1437,6 +1801,418 @@ describe('#157(b) — the denial contract, end to end', () => {
     expect(denialWithheldMaterialFieldIds(affirmed.ir.fields, affirmed.resolutions)).toEqual(
       [],
     );
+  });
+
+  // ══ OWNER RULING #157(c) Q2 — THE CERTIFICATION BLOCKER EXEMPTS AN
+  // ENUMERATED ALLOWLIST, NEVER A BLANKET ═════════════════════════════════
+
+  it('(7a) ⚠️ SET EQUALITY, BOTH DIRECTIONS — the exemption IS rule (4)’s approved list', async () => {
+    // ⚠️ THE TWO SIDES COME FROM DIFFERENT PLACES, WHICH IS THE ONLY THING THAT
+    // MAKES THIS A GATE RATHER THAN A TAUTOLOGY. One side is the CONSTANT the
+    // blocker reads. The other is derived by DRIVING the real pipeline for
+    // every behaviour #157(c) Q2 names and collecting the reason token the
+    // resolver actually emitted. Comparing the constant with a copy of itself
+    // would pass for any pair of values.
+    //
+    //   · a future token added to the constant that no approved behaviour
+    //     produces -> the constant is a superset -> RED
+    //   · an approved behaviour that starts emitting a new token -> the driven
+    //     set is a superset -> RED
+    const emitted = new Set<string>();
+
+    // rule (4): value_only -> BLANK, affirmative_only -> BLANK
+    for (const behavior of ['value_only', 'affirmative_only'] as const) {
+      const driven = await drive({ denied: ['allergy.substance'], behavior });
+      const { resolution } = driven.byLabel('Allergies');
+      expect([behavior, resolution.status]).toEqual([behavior, 'denial_withheld']);
+      emitted.add(resolution.reasonCode);
+    }
+    // rule (2): the selection-shaped withholding
+    {
+      const driven = await drive({ denied: ['exam.side'] });
+      const { resolution } = driven.byLabel('Exam side');
+      expect(resolution.status).toBe('denial_withheld');
+      emitted.add(resolution.reasonCode);
+    }
+    // Q1: the quote that does not negate itself
+    {
+      const driven = await drive({
+        omit: ['ros.constitutional'],
+        extraFacts: statedPolarityRos(),
+      });
+      const { resolution } = driven.byLabel('Review of systems');
+      expect(resolution.status).toBe('denial_withheld');
+      emitted.add(resolution.reasonCode);
+    }
+
+    expect([...emitted].sort()).toEqual([...CERTIFICATION_EXEMPT_DENIAL_REASONS].sort());
+    // NON-VACUITY: four distinct tokens, not one token measured four times.
+    expect(emitted.size).toBe(4);
+  });
+
+  it('(7b) EVERY denial reason token is exempt or blocking, and the enumeration RECONCILES', async () => {
+    // ⚠️ THE ARITHMETIC IS THE POINT. A thirteenth token added to
+    // `denial-contract.ts` and to nothing else would join neither column, and
+    // the reconciliation below is what makes that a RED rather than a silence.
+    // The scan is over quoted TOKEN LITERALS in the module's own source — an
+    // identifier check, not a prose-spelling check.
+    const EXEMPT = [
+      'denial_withheld_value_only',
+      'denial_withheld_affirmative_only',
+      'denial_withheld_selection_asserts_presence',
+      'denial_quote_not_self_negating',
+    ];
+    const BLOCKING = [
+      'denial_withheld_quote_not_dictated',
+      'denial_withheld_fact_not_denied',
+      'denial_withheld_quote_empty_after_heading_strip',
+      'denial_withheld_quote_unrenderable',
+      'denial_withheld_kind_cannot_carry_denial',
+      'denial_withheld_no_cited_denial',
+      'denial_withheld_multiple_distinct_quotes',
+      // ⚠️ RECORDED AS AN OPEN QUESTION, NOT AS A SETTLED ANSWER. #157(c) Q2
+      // names "the selection-shaped withholding", singular; a repeating row
+      // asserts presence by the same rule-(2) logic, and the ruling does not
+      // say whether it joins the exemption. It keeps blocking because that is
+      // the direction that costs a certificate rather than attesting a hole.
+      'denial_withheld_repeating_rows_assert_presence',
+    ];
+
+    // ⚠️ `import.meta.url` IS NOT A `file:` URL UNDER THIS RUNNER — measured,
+    // `fileURLToPath` throws "The URL must be of scheme file". So the path is
+    // resolved from the process cwd and the resolution is ASSERTED: a guess
+    // that landed on nothing would make the scan below return an empty set and
+    // the whole reconciliation vacuous.
+    const candidates = [
+      'src/lib/template-twin/denial-contract.ts',
+      'apps/transcribe-md/src/lib/template-twin/denial-contract.ts',
+    ].map((relative) => resolve(process.cwd(), relative));
+    const resolved = candidates.filter((path) => existsSync(path));
+    expect(resolved).toHaveLength(1);
+    const source = readFileSync(resolved[0]!, 'utf8');
+    const scanned = new Set(
+      [...source.matchAll(/'(denial_(?:withheld|quote)_[a-z_]+)'/g)].map((m) => m[1]!),
+    );
+    // POSITIVE CONTROL for the scanner itself: a pattern that finds nothing is
+    // indistinguishable from a module with no tokens.
+    expect(scanned.size).toBeGreaterThan(0);
+    expect([...scanned].sort()).toEqual([...EXEMPT, ...BLOCKING].sort());
+    expect(EXEMPT.length + BLOCKING.length).toBe(scanned.size);
+    expect(new Set([...EXEMPT, ...BLOCKING]).size).toBe(EXEMPT.length + BLOCKING.length);
+
+    // And each column behaves as its name claims, through the real predicate on
+    // a real clinically material field.
+    const driven = await drive({ denied: ['allergy.substance'], behavior: 'value_only' });
+    const { field } = driven.byLabel('Allergies');
+    expect(field.clinicallyMaterial || field.criticality !== 'routine').toBe(true);
+    for (const reasonCode of [...EXEMPT, ...BLOCKING]) {
+      const patched = withResolution(driven, field.fieldId, { reasonCode });
+      const blocked = denialWithheldMaterialFieldIds(driven.ir.fields, patched);
+      expect([reasonCode, blocked.includes(field.fieldId)]).toEqual([
+        reasonCode,
+        !EXEMPT.includes(reasonCode),
+      ]);
+    }
+  });
+
+  it('(7c) an EXEMPT withheld field stops BLOCKING and never counts toward the FILL FLOOR', async () => {
+    const driven = await drive({ denied: ['allergy.substance'], behavior: 'value_only' });
+    const { field, resolution } = driven.byLabel('Allergies');
+    expect(resolution.status).toBe('denial_withheld');
+    expect(resolution.reasonCode).toBe('denial_withheld_value_only');
+
+    // HALF ONE — it no longer blocks certification. This is the change.
+    expect(denialWithheldMaterialFieldIds(driven.ir.fields, driven.resolutions)).toEqual([]);
+
+    // HALF TWO — and it STILL does not count as filled. Asserted at the SCHEMA,
+    // not merely at the count: `ir.ts`'s refine makes "withheld AND holding a
+    // value" unrepresentable, so this half cannot regress through the resolver.
+    // It could only regress if somebody relaxed that refine, which is what the
+    // second assertion watches.
+    expect(resolution.value).toBeNull();
+    const forged = FieldResolutionSchema.safeParse({ ...resolution, value: 'anything' });
+    expect(forged.success).toBe(false);
+    expect(JSON.stringify(forged.error?.issues ?? [])).toContain(
+      'A withheld denial must carry no value',
+    );
+
+    // ⚠️ HONEST LIMIT, RECORDED RATHER THAN GLOSSED: the filled predicate below
+    // is MIRRORED from `certification-lifecycle.ts:763` (`r != null && r.value
+    // !== null`) rather than imported. Importing that module drags `next-auth`
+    // into the test environment and breaks it outright — the same reason
+    // `certification-thresholds.ts` exists as a leaf. The THRESHOLD is imported
+    // from that leaf, so at least the number cannot drift; the predicate is a
+    // mirror and is not byte-faithful.
+    const filled = driven.resolutions.filter((r) => r != null && r.value !== null);
+    expect(filled.map((r) => r.fieldId)).not.toContain(field.fieldId);
+    expect(MIN_CERTIFIED_FILLED_FIELDS).toBe(10);
+    // NON-VACUITY for that predicate: the affirmed run DOES fill this field, so
+    // "not in the filled set" is a measurement rather than a constant.
+    const affirmed = await drive();
+    expect(
+      affirmed.resolutions.filter((r) => r.value !== null).map((r) => r.fieldId),
+    ).toContain(field.fieldId);
+  });
+
+  // ══ OWNER RULING #157(c) Q3 — MIXED POLARITY RESOLVES PER FACT ══════════
+
+  it('(8a) ⚠️ THE DOCUMENT-KILLER DIES — one affirmed + one denied fact RENDER, per fact', async () => {
+    // Before this change: status=conflict, reason=polarity_conflict,
+    // valid=false, blocking=[FIELD_CONFLICT], renderTemplateDocx REJECTED.
+    // One affirmed fact plus one denied fact in one narrative field and the
+    // doctor lost the whole document.
+    const facts = projected(MIXED_TEXT, MIXED_ENTITIES);
+    expect(facts.map((f) => f.polarity)).toEqual(['affirmed', 'denied']);
+    expect(facts.map((f) => f.value)).toEqual(['Pneumonia', 'Pulmonary embolism']);
+
+    const driven = await drive({ omit: ['assessment'], extraFacts: facts });
+    const { field, resolution } = driven.byLabel('Impression');
+    expect(field.kind).toBe('narrative_text');
+    expect(resolution.status).toBe('supported');
+    expect(resolution.reasonCode).toBe('mixed_polarity_per_fact');
+    expect(resolution.sourceFactIds).toHaveLength(2);
+    expect(driven.validation.issues.filter((i) => i.severity === 'blocking')).toEqual([]);
+
+    // THE EXACT RENDERED TEXT, out of a really-rendered word/document.xml.
+    const printed = renderedTextOf(controlById(await driven.render(), '304'));
+    expect(printed).toBe('Pneumonia; No evidence of pulmonary embolism.');
+
+    // ⚠️ ZERO COMPOSITION, ASSERTED PER SEGMENT — because it CANNOT be asserted
+    // over the whole field. The joined string is a substring of no single
+    // quote, so a field-level `endsWith` would be either vacuous or wrong. Each
+    // segment is checked against the fact it came from, and the only
+    // house-authored characters in the entire value are the separator the
+    // affirmed path has always used.
+    const segments = printed.split('; ');
+    expect(segments).toHaveLength(2);
+    expect(segments.join('; ')).toBe(printed); // nothing lives between segments
+    // segment 0 — the AFFIRMED fact's DERIVED VALUE, exactly.
+    expect(segments[0]).toBe(facts[0]!.value);
+    // segment 1 — a SUFFIX of the DENIED fact's own quote (nothing manufactured)
+    // AND carrying a negation scoping the finding (nothing destroyed). BOTH.
+    expect(facts[1]!.evidenceQuote.endsWith(segments[1]!)).toBe(true);
+    const cue = selfNegationScopingFinding(segments[1]!, facts[1]!.value);
+    expect(cue).not.toBeNull();
+    expect(segments[1]!.includes(cue!.match)).toBe(true);
+  });
+
+  it('(8b) DICTATION ORDER IS PRESERVED — proved by a reversal control', async () => {
+    // Reading the code cannot prove an ordering. Reversing the INPUT and
+    // measuring the OUTPUT can, and it is the only thing that distinguishes
+    // "kept the order" from "happened to sort that way".
+    const forward = await drive({
+      omit: ['assessment'],
+      extraFacts: projected(MIXED_TEXT, MIXED_ENTITIES),
+    });
+    expect(renderedTextOf(controlById(await forward.render(), '304'))).toBe(
+      'Pneumonia; No evidence of pulmonary embolism.',
+    );
+
+    const reversedText =
+      'No evidence of pulmonary embolism. Findings consistent with pneumonia.';
+    const reversed = await drive({
+      omit: ['assessment'],
+      extraFacts: projected(reversedText, {
+        assessment_discussed: [
+          {
+            finding: 'Pulmonary embolism',
+            evidence_quote: 'No evidence of pulmonary embolism.',
+          },
+          { finding: 'Pneumonia', evidence_quote: 'Findings consistent with pneumonia.' },
+        ],
+      }),
+    });
+    expect(renderedTextOf(controlById(await reversed.render(), '304'))).toBe(
+      'No evidence of pulmonary embolism.; Pneumonia',
+    );
+  });
+
+  it('(8c) A NON-SELF-NEGATING DENIAL IN A MIXED FIELD CONTRIBUTES NOTHING BUT ITS TOKEN', async () => {
+    // ⚠️ THE OWNER'S OWN ROS IS MIXED-POLARITY, AND ROS IS THE ONE ENTITY TYPE
+    // THAT STATES POLARITY — so this is the exact shape Q1 and Q3 meet in.
+    const facts = projected(
+      'Fatigue and malaise. Fever, chills, and night sweats.',
+      {
+        ros: [
+          {
+            system: 'constitutional',
+            finding: 'Fatigue',
+            polarity: 'affirmed',
+            evidence_quote: 'Fatigue and malaise.',
+          },
+          {
+            system: 'constitutional',
+            finding: 'Fever',
+            polarity: 'denied',
+            evidence_quote: 'Fever, chills, and night sweats.',
+          },
+        ],
+      },
+    );
+    expect(facts.map((f) => f.polarity)).toEqual(['affirmed', 'denied']);
+
+    const driven = await drive({ omit: ['ros.constitutional'], extraFacts: facts });
+    const { field, resolution } = driven.byLabel('Review of systems');
+    expect(resolution.status).toBe('supported');
+    // THE AFFIRMED HALF PRINTS; THE DENIAL CONTRIBUTES ONLY ITS REASON TOKEN.
+    expect(resolution.value).toBe('Fatigue');
+    expect(resolution.reasonCode).toBe(
+      'mixed_polarity_per_fact:denial_quote_not_self_negating',
+    );
+    expect(resolution.sourceFactIds).toHaveLength(2); // the citation SURVIVES
+
+    // THE MANIFEST IS NOT SILENT — and the issue is a WARNING, never blocking.
+    const mine = driven.validation.issues.filter((i) => i.fieldId === field.fieldId);
+    expect(mine.map((i) => i.code)).toEqual(['FIELD_MIXED_POLARITY_DENIAL_WITHHELD']);
+    expect(mine[0]!.severity).toBe('warning');
+    expect(mine[0]!.message).toContain('denial_quote_not_self_negating');
+
+    const xml = await driven.render();
+    expect(renderedTextOf(controlById(xml, '307'))).toBe('Fatigue');
+    // THE AFFIRMATIVE SENTENCE REACHES NO PART OF THE PACKAGE.
+    expect(xml).not.toContain('Fever, chills, and night sweats.');
+    expect(xml).not.toContain('<w:t>Fever</w:t>');
+  });
+
+  it('(8d) THE NEVER-BETTER-THAN-AFFIRMED-ALONE INVARIANT — a refusal leaves the field where it was', async () => {
+    // Two DISTINCT affirmed values on a narrative that is not an accumulating
+    // SECTION are a genuine conflict, and adding a denial must not launder them
+    // into a rendered field. `ros.*` is deliberately absent from
+    // `ACCUMULATING_NARRATIVE_CONCEPTS`, so this is the live shape.
+    const ros = (
+      rows: ReadonlyArray<{ finding: string; polarity: string; quote: string }>,
+    ) =>
+      projected(rows.map((r) => r.quote).join(' '), {
+        ros: rows.map((r) => ({
+          system: 'constitutional',
+          finding: r.finding,
+          polarity: r.polarity,
+          evidence_quote: r.quote,
+        })),
+      });
+
+    const AFFIRMED_TWO = [
+      { finding: 'Fatigue', polarity: 'affirmed', quote: 'Fatigue and malaise.' },
+      { finding: 'Headache', polarity: 'affirmed', quote: 'Headache since Tuesday.' },
+    ];
+    const DENIED_ONE = {
+      finding: 'Fever',
+      polarity: 'denied',
+      quote: 'No fever or chills.',
+    };
+
+    // WITH the denial -> the mixed contract REFUSES and the field is exactly
+    // the conflict it already was.
+    const mixed = await drive({
+      omit: ['ros.constitutional'],
+      extraFacts: ros([...AFFIRMED_TWO, DENIED_ONE]),
+    });
+    const withDenial = mixed.byLabel('Review of systems').resolution;
+    expect(withDenial.status).toBe('conflict');
+    expect(withDenial.reasonCode).toBe('polarity_conflict');
+
+    // ⚠️ THE ISOLATING CONTROL, AND IT IS THE WHOLE ARM. Without the denial the
+    // SAME two affirmed facts conflict too — so the mixed path took nothing
+    // away. A refusal that merely looked correct would pass the row above.
+    const affirmedOnly = await drive({
+      omit: ['ros.constitutional'],
+      extraFacts: ros(AFFIRMED_TWO),
+    });
+    const noDenial = affirmedOnly.byLabel('Review of systems').resolution;
+    expect(noDenial.status).toBe('conflict');
+    expect(noDenial.reasonCode).toBe('multiple_distinct_supported_values');
+
+    // Both are blocking, in both runs, exactly as before this ruling.
+    for (const run of [mixed, affirmedOnly]) {
+      const { field } = run.byLabel('Review of systems');
+      expect(
+        run.validation.issues
+          .filter((i) => i.fieldId === field.fieldId && i.severity === 'blocking')
+          .map((i) => i.code),
+      ).toEqual(['FIELD_CONFLICT']);
+    }
+  });
+
+  it('(8f) NON-DIRECT EVIDENCE REFUSES THE MIXED PATH — no `supported` status that blocks', async () => {
+    // ⚠️ FOUND BY ADVERSARIAL PASS ON THIS SLICE, NOT BY THE RULING. A
+    // `conflicting`-quality fact composed a value, the resolution became
+    // `supported`, and `SUPPORTED_STATUS_CONFLICTS_WITH_QUALITY` then blocked
+    // it — a field carrying a VALUE while blocked, through a code that has
+    // nothing to do with polarity. The mixed contract refuses instead, which
+    // leaves the case exactly where this ruling found it.
+    const facts = projected(MIXED_TEXT, MIXED_ENTITIES);
+    const conflicting = facts.map((fact, index) =>
+      index === 0
+        ? ({
+            ...fact,
+            quality: { ...fact.quality, evidence: 'conflicting' as const },
+          } as EncounterFact)
+        : fact,
+    );
+    expect(conflicting.map((f) => f.quality.evidence)).toEqual(['conflicting', 'direct']);
+    expect(mixedPolarityNarrative(FIELD_STUB, MAPPING_STUB, conflicting)).toEqual({
+      kind: 'refused',
+    });
+    // ISOLATING CONTROL — the SAME facts at `direct` quality DO compose, so the
+    // refusal above is about the quality and not about the fixture.
+    expect(mixedPolarityNarrative(FIELD_STUB, MAPPING_STUB, facts)).toEqual({
+      kind: 'text',
+      text: 'Pneumonia; No evidence of pulmonary embolism.',
+      reasonCode: 'mixed_polarity_per_fact',
+      withheldReasonCodes: [],
+    });
+  });
+
+  it('(8e) THE EVIDENCE RAIL REACHES THE MIXED VALUE — a value that is not the shared derivation is BLOCKED', async () => {
+    const driven = await drive({
+      omit: ['assessment'],
+      extraFacts: projected(MIXED_TEXT, MIXED_ENTITIES),
+    });
+    const { field, resolution } = driven.byLabel('Impression');
+    expect(resolution.value).toBe('Pneumonia; No evidence of pulmonary embolism.');
+
+    for (const forged of [
+      'No evidence of pulmonary embolism.; Pneumonia', // right parts, WRONG ORDER
+      'Pneumonia; No pulmonary embolism.', // a plausible synthesis
+      'Pneumonia', // the denial silently DROPPED
+      'Pneumonia; Findings consistent with pneumonia.', // the affirmed quote
+      'Pneumonia;No evidence of pulmonary embolism.', // one character of drift
+    ]) {
+      const validation = validateTemplateTwin({
+        fields: driven.ir.fields,
+        mappings: driven.mappings,
+        facts: driven.facts,
+        resolutions: withResolution(driven, resolution.fieldId, { value: forged }),
+        tables: driven.ir.tables,
+        unsupported: driven.ir.unsupported,
+        certifiedFieldIds: driven.ir.fields.map((f) => f.fieldId),
+        now: '2026-01-01T00:00:00.000Z',
+      });
+      expect([forged, validation.valid]).toEqual([forged, false]);
+      expect([
+        forged,
+        validation.issues
+          .filter((i) => i.fieldId === field.fieldId && i.severity === 'blocking')
+          .map((i) => i.code),
+      ]).toEqual([forged, ['ASSERTION_NOT_SUPPORTED']]);
+    }
+
+    // ⚠️ MUTATE TOWARD SUCCESS TOO. The correct value must still be ACCEPTED,
+    // or the four rows above would pass on a rail that refuses everything.
+    const honest = validateTemplateTwin({
+      fields: driven.ir.fields,
+      mappings: driven.mappings,
+      facts: driven.facts,
+      resolutions: withResolution(driven, resolution.fieldId, {
+        value: 'Pneumonia; No evidence of pulmonary embolism.',
+      }),
+      tables: driven.ir.tables,
+      unsupported: driven.ir.unsupported,
+      certifiedFieldIds: driven.ir.fields.map((f) => f.fieldId),
+      now: '2026-01-01T00:00:00.000Z',
+    });
+    expect(honest.issues.filter((i) => i.severity === 'blocking')).toEqual([]);
+    expect(honest.valid).toBe(true);
   });
 
   // ── THE WALLS THAT MUST STILL REFUSE ─────────────────────────────────────

@@ -33,7 +33,11 @@ import {
   joinListValuedNarrative,
 } from '../field-value-derivation';
 import { isMappingTypeCompatible } from '../semantic-mapping';
-import { denialOutcome } from '../denial-contract';
+import {
+  denialOutcome,
+  mixedPolarityNarrative,
+  MIXED_POLARITY_REASON,
+} from '../denial-contract';
 import {
   approvedPracticeDefaultAnchorId,
   approvedPracticeDefaultFactId,
@@ -229,6 +233,30 @@ function assertionSupported(
   if (resolution.status === 'explicitly_denied') {
     const expected = denialOutcome(field, mapping, citedFacts);
     return expected.status === 'explicitly_denied' && expected.value === value;
+  }
+
+  // ══ #157(c) Q3 — A MIXED-POLARITY NARRATIVE IS RE-DERIVED, NOT RE-DESCRIBED.
+  //
+  // Same shape as the denial branch above and for the same reason: the resolver
+  // COMPOSES this value from several facts, and the only honest verification is
+  // byte-identity against the SAME function that composed it. `citedFacts` is in
+  // `sourceFactIds` order — which is the resolver's `judged` order, which is
+  // DICTATION order — so the re-derivation reproduces the segments in the same
+  // sequence or it does not reproduce them at all.
+  //
+  // ⚠️ A REFUSAL FALLS THROUGH RATHER THAN RETURNING FALSE. If no legal mixed
+  // path could have produced this value, the existing rails judge it exactly as
+  // they always have. Inventing a new way to REFUSE inside a slice about not
+  // refusing is how a fix becomes the next incident.
+  const citedPolarities = new Set(citedFacts.map((fact) => fact.polarity));
+  if (
+    field.kind === 'narrative_text' &&
+    !field.rowPrototype &&
+    citedPolarities.has('affirmed') &&
+    citedPolarities.has('denied')
+  ) {
+    const expected = mixedPolarityNarrative(field, mapping, citedFacts);
+    if (expected.kind === 'text') return expected.text === value;
   }
 
   if (field.rowPrototype) {
@@ -574,6 +602,27 @@ export function validateTemplateTwin(
       (field.required || mapping.required || mapping.unknownPolicy === 'requires_input')
     ) {
       add('REQUIRED_FIELD_NOT_MENTIONED', 'blocking', 'A required field was not mentioned.', field.fieldId);
+    }
+
+    // ══ #157(c) Q3 — THE MANIFEST MUST NOT BE SILENT ABOUT A DENIAL THAT
+    // CONTRIBUTED NOTHING. ═════════════════════════════════════════════════
+    //
+    // A mixed field renders, and rule (3) says it must. But a denial that was
+    // withheld inside it left the document with NO trace of itself — the
+    // affirmed half prints and the denied half is simply absent. The reason
+    // token rides on `resolution.reasonCode` (persisted per field to
+    // `template_twin_fill_manifests`), and this issue names the field so a
+    // reader who is scanning issues rather than reason codes sees it too.
+    //
+    // ⚠️ A WARNING, NEVER BLOCKING — the same unconditional severity as
+    // FIELD_DENIAL_WITHHELD, and for the same reason. Blocking here would
+    // reintroduce, through a new code, exactly the document-killer this ruling
+    // removes.
+    if (
+      resolution.status === 'supported' &&
+      resolution.reasonCode.startsWith(`${MIXED_POLARITY_REASON}:`)
+    ) {
+      add('FIELD_MIXED_POLARITY_DENIAL_WITHHELD', 'warning', `A denial in this mixed-polarity field contributed no text (${resolution.reasonCode}).`, field.fieldId);
     }
 
     if (field.kind === 'single_select' && populated && !field.rowPrototype) {

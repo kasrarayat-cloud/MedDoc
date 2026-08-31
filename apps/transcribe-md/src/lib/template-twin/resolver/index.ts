@@ -29,7 +29,7 @@ import {
   isListValuedNarrative,
   joinListValuedNarrative,
 } from '../field-value-derivation';
-import { denialOutcome } from '../denial-contract';
+import { denialOutcome, mixedPolarityNarrative } from '../denial-contract';
 
 export interface ResolveTemplateFieldsInput {
   fields: ReadonlyArray<TemplateField>;
@@ -593,6 +593,46 @@ function resolveOne(
     );
   }
   if (polarities.includes('affirmed') && polarities.includes('denied')) {
+    // ══ OWNER RULING #157(c) Q3 — MIXED POLARITY RESOLVES PER FACT, AND
+    // `polarity_conflict` DIES WITH ITS SIBLING. ══════════════════════════
+    //
+    // ⚠️ THIS RETURN IS THE DOCUMENT-KILLER #157(b) DID NOT REACH, AND IT IS
+    // STRICTLY MORE COMMON THAN THE ONE IT DID. It fires BEFORE `allDenied` is
+    // computed, so a field carrying ONE affirmed and ONE denied fact never saw
+    // the denial contract at all: `conflict` -> FIELD_CONFLICT (always
+    // blocking) -> `renderTemplateDocx` REJECTED, and the doctor loses the
+    // WHOLE DOCUMENT. Measured, before this change:
+    //
+    //   [assessment "Pneumonia" affirmed, assessment "Pulmonary embolism" denied]
+    //     -> conflict / polarity_conflict, valid=false, [FIELD_CONFLICT],
+    //        render REJECTED
+    //
+    // A slice whose promise is that denials stop killing documents cannot ship
+    // with this alive. `past_medical_history`, `family_history`, `allergy` and
+    // `medication` are accumulating narratives in production and
+    // "history of diabetes, no history of hypertension" is exactly this shape —
+    // and the OWNER'S OWN ROS is mixed-polarity by construction.
+    //
+    // ⚠️ THE VERDICT IS PER FACT, NEVER PER FIELD, AND IT LIVES IN
+    // `denial-contract.ts` BECAUSE THE VALIDATOR RE-DERIVES IT FROM THERE. A
+    // second copy of this composition on the verify side would drift from this
+    // one the day either is fixed, and what drifts is what reaches a signature.
+    //
+    // ⚠️ A REFUSAL LEAVES THE FIELD EXACTLY WHERE IT WAS. Everything the mixed
+    // contract cannot resolve — a selection kind, a repeating section, two
+    // distinct affirmed values on a narrative that is not an accumulating
+    // SECTION, mixed laterality — falls through to the same `polarity_conflict`
+    // it produced before. This widens what resolves; it narrows nothing.
+    const mixed = mixedPolarityNarrative(field, mapping, judged);
+    if (mixed.kind === 'text') {
+      return makeResolution(
+        field.fieldId,
+        'supported',
+        mixed.text,
+        judged,
+        mixed.reasonCode,
+      );
+    }
     return makeResolution(
       field.fieldId,
       'conflict',
