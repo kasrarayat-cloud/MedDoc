@@ -29,6 +29,7 @@ import {
   isListValuedNarrative,
   joinListValuedNarrative,
 } from '../field-value-derivation';
+import { denialOutcome, mixedPolarityNarrative } from '../denial-contract';
 
 export interface ResolveTemplateFieldsInput {
   fields: ReadonlyArray<TemplateField>;
@@ -592,6 +593,46 @@ function resolveOne(
     );
   }
   if (polarities.includes('affirmed') && polarities.includes('denied')) {
+    // ══ OWNER RULING #157(c) Q3 — MIXED POLARITY RESOLVES PER FACT, AND
+    // `polarity_conflict` DIES WITH ITS SIBLING. ══════════════════════════
+    //
+    // ⚠️ THIS RETURN IS THE DOCUMENT-KILLER #157(b) DID NOT REACH, AND IT IS
+    // STRICTLY MORE COMMON THAN THE ONE IT DID. It fires BEFORE `allDenied` is
+    // computed, so a field carrying ONE affirmed and ONE denied fact never saw
+    // the denial contract at all: `conflict` -> FIELD_CONFLICT (always
+    // blocking) -> `renderTemplateDocx` REJECTED, and the doctor loses the
+    // WHOLE DOCUMENT. Measured, before this change:
+    //
+    //   [assessment "Pneumonia" affirmed, assessment "Pulmonary embolism" denied]
+    //     -> conflict / polarity_conflict, valid=false, [FIELD_CONFLICT],
+    //        render REJECTED
+    //
+    // A slice whose promise is that denials stop killing documents cannot ship
+    // with this alive. `past_medical_history`, `family_history`, `allergy` and
+    // `medication` are accumulating narratives in production and
+    // "history of diabetes, no history of hypertension" is exactly this shape —
+    // and the OWNER'S OWN ROS is mixed-polarity by construction.
+    //
+    // ⚠️ THE VERDICT IS PER FACT, NEVER PER FIELD, AND IT LIVES IN
+    // `denial-contract.ts` BECAUSE THE VALIDATOR RE-DERIVES IT FROM THERE. A
+    // second copy of this composition on the verify side would drift from this
+    // one the day either is fixed, and what drifts is what reaches a signature.
+    //
+    // ⚠️ A REFUSAL LEAVES THE FIELD EXACTLY WHERE IT WAS. Everything the mixed
+    // contract cannot resolve — a selection kind, a repeating section, two
+    // distinct affirmed values on a narrative that is not an accumulating
+    // SECTION, mixed laterality — falls through to the same `polarity_conflict`
+    // it produced before. This widens what resolves; it narrows nothing.
+    const mixed = mixedPolarityNarrative(field, mapping, judged);
+    if (mixed.kind === 'text') {
+      return makeResolution(
+        field.fieldId,
+        'supported',
+        mixed.text,
+        judged,
+        mixed.reasonCode,
+      );
+    }
     return makeResolution(
       field.fieldId,
       'conflict',
@@ -601,17 +642,51 @@ function resolveOne(
     );
   }
   const allDenied = polarities.length === 1 && polarities[0] === 'denied';
-  if (
-    allDenied &&
-    mapping.polarityBehavior !== 'explicit_denial_allowed' &&
-    mapping.polarityBehavior !== 'affirmative_only'
-  ) {
+  // ══ OWNER RULING #157(b) — EVERY DENIAL RETURNS HERE, AND NOTHING BELOW EVER
+  // SEES ONE. ════════════════════════════════════════════════════════════════
+  //
+  // Denial used to be decided in FOUR places — this arm, the multi_select
+  // producer, the rowPrototype producer, and the scalar `mayPopulateDenial`
+  // ternary — and each of the four reached a different wrong answer:
+  //
+  //   value_only        -> `ambiguous` -> FIELD_AMBIGUOUS is BLOCKING on any
+  //                        critical/required field -> the doctor's WHOLE
+  //                        DOCUMENT is refused, because one sentence was
+  //                        dictated in the negative.
+  //   affirmative_only  -> `explicitly_denied` + null -> the renderer's arm A
+  //                        refuses a populated status carrying no value.
+  //   explicit_denial   -> value KEPT -> the renderer's arm C refuses any
+  //                        non-checkbox -> refused again, by a third route.
+  //   multi-fact         -> did not reach any of them: `!allDenied` at the
+  //                        list-join below diverted an accumulating denied
+  //                        narrative into `multiple_distinct_supported_values`
+  //                        -> FIELD_CONFLICT -> blocking. That is the measured
+  //                        28-of-31 killed-documents harm.
+  //
+  // ⚠️ THE EARLY RETURN IS THE FIX FOR THE FOURTH ONE. Every path below this
+  // line now runs on affirmed evidence only, so `allDenied` is false
+  // everywhere downstream and the ternaries that used to test it are gone
+  // rather than left as dead code that reads like live policy.
+  //
+  // The outcome itself lives in `denial-contract.ts`, which the VALIDATOR
+  // re-derives from — one implementation for the write side and the verify
+  // side, because that is the defect `field-value-derivation.ts` was extracted
+  // to remove and this is the same shape one polarity over.
+  if (allDenied) {
+    // ⚠️ `judged`, NOT `temporalCandidates`. `allDenied` is computed from
+    // `judged` — the exact-option subset — and the VALIDATOR re-asks the
+    // question of the set this resolution CITES. Citing the wider set made a
+    // resolution whose own evidence contained an affirmed bystander fact, so
+    // `DENIAL_WITHHELD_WITHOUT_DENIAL` fired blocking and the whole export was
+    // lost on every one of the 28 production single_selects. The two arms
+    // directly above already cite `judged`; this one did not.
+    const denial = denialOutcome(field, mapping);
     return makeResolution(
       field.fieldId,
-      'ambiguous',
-      null,
-      temporalCandidates,
-      'denial_behavior_not_approved',
+      denial.status,
+      denial.value,
+      judged,
+      denial.reasonCode,
     );
   }
 
@@ -651,12 +726,14 @@ function resolveOne(
     const values = [...selected.entries()]
       .sort(([left], [right]) => left - right)
       .map(([, value]) => value);
+    // #157(b) rule (2): a denied multi_select never reaches here — selecting an
+    // option ASSERTS ITS PRESENCE, so a denial is withheld above.
     return makeResolution(
       field.fieldId,
-      allDenied ? 'explicitly_denied' : 'supported',
+      'supported',
       values,
       temporalCandidates,
-      allDenied ? 'explicit_denial_exact_options' : 'exact_options_supported',
+      'exact_options_supported',
     );
   }
 
@@ -686,12 +763,14 @@ function resolveOne(
   }
 
   if (field.rowPrototype) {
+    // #157(b) rule (2): a denied repeating section never reaches here — every
+    // row it would expand asserts the presence of what was denied.
     return makeResolution(
       field.fieldId,
-      allDenied ? 'explicitly_denied' : 'supported',
+      'supported',
       rowPrototypeValue(convertedPairs),
       temporalCandidates,
-      allDenied ? 'repeating_rows_explicitly_denied' : 'repeating_rows_supported',
+      'repeating_rows_supported',
     );
   }
 
@@ -703,7 +782,12 @@ function resolveOne(
     // medical conditions are not two answers to one question. See
     // field-value-derivation.ts for why measurements deliberately keep
     // conflicting here rather than joining.
-    if (!allDenied && isListValuedNarrative(field, mapping)) {
+    // ⚠️ `!allDenied` IS GONE, NOT RELAXED. It was the guard that sent a
+    // multi-fact DENIED narrative into `multiple_distinct_supported_values`,
+    // and a denial can no longer arrive here at all — it returned at the
+    // #157(b) block above. Re-adding a polarity test here would be dead code
+    // that looks like a safety property.
+    if (isListValuedNarrative(field, mapping)) {
       const joined = joinListValuedNarrative(field, mapping, temporalCandidates);
       if (joined !== null) {
         return makeResolution(
@@ -726,15 +810,18 @@ function resolveOne(
 
   const selected = convertedPairs[0]?.converted;
   if (!selected) return missingResolution(field, mapping, allFacts);
-  const mayPopulateDenial =
-    field.kind === 'checkbox' ||
-    mapping.polarityBehavior === 'explicit_denial_allowed';
+  // #157(b): affirmed evidence only. `mayPopulateDenial` is gone — the two
+  // shapes it permitted (a checkbox's `false`, a narrative's denial text) are
+  // decided by `denialOutcome`, and the shapes it permitted BY ACCIDENT (a
+  // denied date, number or measurement keeping its value under
+  // `explicit_denial_allowed`) were refused by the renderer and are now
+  // withheld with a named reason instead.
   return makeResolution(
     field.fieldId,
-    allDenied ? 'explicitly_denied' : 'supported',
-    allDenied && !mayPopulateDenial ? null : selected.value,
+    'supported',
+    selected.value,
     temporalCandidates,
-    allDenied ? 'explicit_denial_supported' : 'direct_evidence_supported',
+    'direct_evidence_supported',
     selected.optionOrdinal,
   );
 }

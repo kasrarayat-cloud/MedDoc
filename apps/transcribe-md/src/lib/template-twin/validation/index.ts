@@ -34,6 +34,11 @@ import {
 } from '../field-value-derivation';
 import { isMappingTypeCompatible } from '../semantic-mapping';
 import {
+  denialOutcome,
+  mixedPolarityNarrative,
+  MIXED_POLARITY_REASON,
+} from '../denial-contract';
+import {
   approvedPracticeDefaultAnchorId,
   approvedPracticeDefaultFactId,
 } from '../practice-default';
@@ -204,6 +209,60 @@ function assertionSupported(
 ): boolean {
   const value = resolution.value;
   if (value === null) return true;
+
+  // ══ OWNER RULING #157(b) — A DENIAL IS RE-DERIVED, NOT RE-DESCRIBED. ══════
+  //
+  // ⚠️ THE EXISTING RAIL CANNOT VERIFY A DENIAL, AND THAT IS MEASURED, NOT
+  // ASSUMED. `deriveFieldValueFromFact` returns `fact.value` for a
+  // narrative_text — the AFFIRMED ENTITY. So the rail below refuses the
+  // doctor's own sentence with ASSERTION_NOT_SUPPORTED (blocking) and ACCEPTS
+  // the entity. Driven end to end through the real compiler -> resolver ->
+  // validator -> awaited renderer:
+  //
+  //   value "The patient has no history of diabetes."  -> valid=false, blocked
+  //   value "Diabetes"                                 -> valid=true, RENDERED
+  //
+  // The second row is the harm: a signed past-medical-history section reading
+  // "Diabetes" for a patient who was said not to have it, with nothing
+  // blocking. So a denial is verified against `denialOutcome` — the SAME
+  // function the resolver wrote it with, given the same field and mapping —
+  // and the two cannot disagree without one of them being edited.
+  //
+  // ⚠️ #157(d) TOOK THE CITED FACTS AWAY FROM THAT FUNCTION ENTIRELY, WHICH IS
+  // RULE (1) AS A STRUCTURAL PROPERTY RATHER THAN A DESCRIBED ONE. A function
+  // that cannot see the dictation cannot decide anything from its text, so
+  // there is no heuristic left here to be defeated by the next sentence
+  // somebody dictates. This is a TIGHTENING: it is byte-identity against a shared
+  // derivation, exactly like the list-valued narrative case below, and it does
+  // not widen what the affirmed path accepts by a single character.
+  if (resolution.status === 'explicitly_denied') {
+    const expected = denialOutcome(field, mapping);
+    return expected.status === 'explicitly_denied' && expected.value === value;
+  }
+
+  // ══ #157(c) Q3 — A MIXED-POLARITY NARRATIVE IS RE-DERIVED, NOT RE-DESCRIBED.
+  //
+  // Same shape as the denial branch above and for the same reason: the resolver
+  // COMPOSES this value from several facts, and the only honest verification is
+  // byte-identity against the SAME function that composed it. `citedFacts` is in
+  // `sourceFactIds` order — which is the resolver's `judged` order, which is
+  // DICTATION order — so the re-derivation reproduces the segments in the same
+  // sequence or it does not reproduce them at all.
+  //
+  // ⚠️ A REFUSAL FALLS THROUGH RATHER THAN RETURNING FALSE. If no legal mixed
+  // path could have produced this value, the existing rails judge it exactly as
+  // they always have. Inventing a new way to REFUSE inside a slice about not
+  // refusing is how a fix becomes the next incident.
+  const citedPolarities = new Set(citedFacts.map((fact) => fact.polarity));
+  if (
+    field.kind === 'narrative_text' &&
+    !field.rowPrototype &&
+    citedPolarities.has('affirmed') &&
+    citedPolarities.has('denied')
+  ) {
+    const expected = mixedPolarityNarrative(field, mapping, citedFacts);
+    if (expected.kind === 'text') return expected.text === value;
+  }
 
   if (field.rowPrototype) {
     if (!isRowValueArray(value)) return false;
@@ -418,7 +477,16 @@ export function validateTemplateTwin(
     }
 
     const populated = resolution.value !== null;
-    const unresolved = new Set(['ambiguous', 'conflict', 'needs_clinician_input']);
+    // #157(b) — `denial_withheld` joins this set so UNRESOLVED_VALUE_PRESENT
+    // covers it: the one status that MEANS "blank" must never be found holding
+    // a value. `ir.ts`'s schema already refuses that shape, so this is the
+    // second wall rather than the first.
+    const unresolved = new Set([
+      'ambiguous',
+      'conflict',
+      'needs_clinician_input',
+      'denial_withheld',
+    ]);
     if (populated && unresolved.has(resolution.status)) {
       add('UNRESOLVED_VALUE_PRESENT', 'blocking', 'An unresolved field contains a renderable value.', field.fieldId);
     }
@@ -496,11 +564,84 @@ export function validateTemplateTwin(
         !input.allowUncertifiedForSyntheticTest &&
         (critical || field.required || mapping.required);
       add('FIELD_NEEDS_CLINICIAN_INPUT', needsInputBlocks ? 'blocking' : 'warning', 'The field needs clinician input.', field.fieldId);
+    } else if (resolution.status === 'denial_withheld') {
+      // ══ #157(b) RULE (3) — NO DENIAL MAY REFUSE AN EXPORT. ════════════════
+      //
+      // ⚠️ A WARNING **UNCONDITIONALLY** — not "unless critical", not "unless
+      // required". Every conditional severity in this function is a route back
+      // to the harm this ruling ends: FIELD_AMBIGUOUS blocks when
+      // `critical || field.required || mapping.required`, and that clause alone
+      // is why a `value_only` denial on a clinically material narrative took
+      // the doctor's whole document down. A field left blank is a field left
+      // blank; refusing the OTHER hundred and forty-nine fields does not fill
+      // it.
+      //
+      // ⚠️ AND THE SILENCE RULE IS SATISFIED ELSEWHERE, DELIBERATELY, BECAUSE A
+      // WARNING IS EASY TO SKIM. The blank is named in THREE durable places, so
+      // no single reader has to notice this line:
+      //   · `resolution.reasonCode` — the manifest's own field-level token,
+      //     persisted to `template_twin_fill_manifests`;
+      //   · `counts.needsReview` / `counts.criticalUnresolved` — `ir.ts`'s
+      //     `templateTwinCounts`, widened in the same commit;
+      //   · ⚠️ NOT a certification blocker for a NARRATIVE denial — #157(d) Q2
+      //     exempts `denial_withheld_narrative_always_blank` by name, so the two
+      //     DURABLE places are the reason token and the counts. This comment
+      //     used to say the opposite, and it was falsified in the same commit
+      //     that made the narrative blank unconditional. It still holds for the
+      //     NON-exempt tokens —
+      //     `denialWithheldMaterialFieldIds`, which is what stops a template
+      //     certifying green with a material section quietly empty.
+      //
+      // That last one is the reason this is not `needs_clinician_input`: that
+      // status is DOWNGRADED to a warning at certification by
+      // `allowUncertifiedForSyntheticTest`, so reusing it would have bought the
+      // non-blocking export at the price of a certificate that lies.
+      add('FIELD_DENIAL_WITHHELD', 'warning', 'The field is blank because the encounter denied it.', field.fieldId);
+      if (
+        citedFacts.length === 0 ||
+        citedFacts.some((fact) => fact.polarity !== 'denied')
+      ) {
+        // The status asserts "this blank is a DENIAL". An uncited or
+        // non-denied citation makes that assertion false, and a false reason
+        // in the manifest is worse than no reason — it is the audit trail
+        // saying something the evidence does not.
+        add('DENIAL_WITHHELD_WITHOUT_DENIAL', 'blocking', 'A withheld denial does not cite denied evidence.', field.fieldId);
+      }
     } else if (
       resolution.status === 'not_mentioned' &&
       (field.required || mapping.required || mapping.unknownPolicy === 'requires_input')
     ) {
       add('REQUIRED_FIELD_NOT_MENTIONED', 'blocking', 'A required field was not mentioned.', field.fieldId);
+    }
+
+    // ══ #157(c) Q3 — THE MANIFEST MUST NOT BE SILENT ABOUT A DENIAL THAT
+    // CONTRIBUTED NOTHING. ═════════════════════════════════════════════════
+    //
+    // A mixed field renders, and rule (3) says it must. But a denial that was
+    // withheld inside it left the document with NO trace of itself — the
+    // affirmed half prints and the denied half is simply absent. The reason
+    // token rides on `resolution.reasonCode` (persisted per field to
+    // `template_twin_fill_manifests`), and this issue names the field so a
+    // reader who is scanning issues rather than reason codes sees it too.
+    //
+    // ⚠️ A WARNING, NEVER BLOCKING — the same unconditional severity as
+    // FIELD_DENIAL_WITHHELD, and for the same reason. Blocking here would
+    // reintroduce, through a new code, exactly the document-killer this ruling
+    // removes.
+    //
+    // ⚠️ #157(d) C3 — RE-KEYED FROM `startsWith(`${MIXED_POLARITY_REASON}:`)` TO
+    // EXACT EQUALITY, IN THE SAME COMMIT THAT STOPPED COMPOSING THE TOKEN. The
+    // prefix test was the composed token's only consumer; leaving it would have
+    // made this warning SILENTLY DEAD while the code still read as though the
+    // silence rule held. And the context it used to carry in the identifier now
+    // comes from the CITED FACTS, which is where it always belonged: the count
+    // is re-derived here, not persisted in a reason string.
+    if (
+      resolution.status === 'supported' &&
+      resolution.reasonCode === MIXED_POLARITY_REASON
+    ) {
+      const withheldDenials = citedFacts.filter((fact) => fact.polarity === 'denied').length;
+      add('FIELD_MIXED_POLARITY_DENIAL_WITHHELD', 'warning', `A denial in this mixed-polarity field contributed no text (${withheldDenials} denied fact${withheldDenials === 1 ? '' : 's'} withheld under ${MIXED_POLARITY_REASON}).`, field.fieldId);
     }
 
     if (field.kind === 'single_select' && populated && !field.rowPrototype) {

@@ -428,6 +428,34 @@ export const FieldResolutionStatusSchema = z.enum([
   'conflict',
   'needs_clinician_input',
   'approved_practice_default',
+  /**
+   * OWNER RULING #157(b) — THE FIELD IS BLANK **BECAUSE** THE ENCOUNTER DENIED
+   * IT, AND THE MANIFEST SAYS SO BY NAME.
+   *
+   * ⚠️ A NEW STATUS WAS REQUIRED; NOTHING IN THE ENUM ABOVE COULD CARRY THIS.
+   * Rule (3) needs one that is simultaneously (i) legal at the renderer,
+   * (ii) NON-BLOCKING at validation, and (iii) reason-carrying. Measured
+   * against every existing member:
+   *
+   *   not_mentioned          NOT_MENTIONED_HAS_EVIDENCE is BLOCKING the moment
+   *                          `sourceFactIds` is non-empty, so reusing it means
+   *                          DISCARDING the citation — destroying the audit
+   *                          trail and making the manifest silent, which is the
+   *                          one thing rule (3) forbids outright.
+   *   ambiguous              FIELD_AMBIGUOUS is blocking when the field is
+   *                          critical/required. That IS today's harm.
+   *   conflict               always blocking.
+   *   needs_clinician_input  DOWNGRADED TO A WARNING at certification
+   *                          (`allowUncertifiedForSyntheticTest`), so a
+   *                          template would certify GREEN with a clinically
+   *                          material section silently blank.
+   *
+   * `denial_withheld` carries its evidence, never blocks a document, is counted
+   * as `needsReview` (and `criticalUnresolved` where the field is not routine),
+   * and BLOCKS CERTIFICATION on a clinically material field. Blank at the
+   * document; loud everywhere a human or a gate can read it.
+   */
+  'denial_withheld',
 ]);
 export type FieldResolutionStatus = z.infer<typeof FieldResolutionStatusSchema>;
 
@@ -465,6 +493,22 @@ export const FieldResolutionSchema = z
         code: 'custom',
         message: 'Every populated clinical value requires evidence anchors',
         path: ['evidenceAnchorIds'],
+      });
+    }
+    // #157(b) — A WITHHELD DENIAL IS BLANK BY CONSTRUCTION, NOT BY CONVENTION.
+    // The renderer's `assertResolutionStatus` already refuses a null value that
+    // carries an ordinal, but nothing stopped a caller minting this status WITH
+    // a value — which would be a denial printing something, through the one
+    // status invented to mean the opposite. The schema is the cheapest place to
+    // make that unrepresentable, and every producer parses through it.
+    if (
+      resolution.status === 'denial_withheld' &&
+      (resolution.value !== null || resolution.selectedOptionOrdinal !== null)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A withheld denial must carry no value and select no option',
+        path: ['value'],
       });
     }
   });
@@ -522,10 +566,17 @@ export function templateTwinCounts(
   definitions: readonly TemplateField[],
 ): TemplateTwinFillManifest['counts'] {
   const critical = new Map(definitions.map((field) => [field.fieldId, field.criticality]));
+  // ⚠️ #157(b) — `denial_withheld` IS COUNTED, IN THE SAME COMMIT THAT
+  // INTRODUCES IT. A new status is silently uncounted by default: `filled`
+  // counts `value !== null`, so a blank-with-a-reason would land in NO bucket
+  // and the manifest's own summary would report a document that is quietly
+  // missing a section as though nothing had happened. Rule (3) permits a blank;
+  // it forbids a SILENT one, and the counts are where silence would live.
   const unresolved = new Set<FieldResolutionStatus>([
     'ambiguous',
     'conflict',
     'needs_clinician_input',
+    'denial_withheld',
   ]);
   return {
     filled: fields.filter((field) => field.value !== null).length,
