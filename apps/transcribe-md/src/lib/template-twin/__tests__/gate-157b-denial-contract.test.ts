@@ -133,7 +133,10 @@ import {
 // ⚠️ THE AFFIRMED PATH'S OWN JOIN, IMPORTED SO C4 CAN BE ASSERTED AS A
 // BYTE-IDENTITY RATHER THAN DESCRIBED. After #157(d) a mixed field's value must
 // be exactly what this function returns for the AFFIRMED facts alone.
-import { joinListValuedNarrative } from '../field-value-derivation';
+import {
+  isListValuedNarrative,
+  joinListValuedNarrative,
+} from '../field-value-derivation';
 import { EXPLICIT_DENIAL } from '../encounter-facts';
 import { MIN_CERTIFIED_FILLED_FIELDS } from '../certification-thresholds';
 
@@ -1342,10 +1345,70 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
       } as SemanticMapping);
       expect([behavior, outcome.status]).toEqual([behavior, 'denial_withheld']);
       expect([behavior, outcome.value]).toEqual([behavior, null]);
+      // ⚠️ THE REASON CODE — ADDED BY #157(d)'s SECOND ADVERSARIAL PASS, AND IT
+      // IS (2b)'s LESSON LEFT UNAPPLIED ONE ARM OVER. Without this row,
+      // deleting `|| field.kind === 'multi_select'` from rule (2)'s selection
+      // wall left the gate 52/52 GREEN: the multi_select simply fell through to
+      // the `kind_cannot_carry_denial` arm, which is ALSO `denial_withheld` +
+      // null, so both rows above stayed true while the guard they exist to
+      // prove was gone. Mutation-proved: without this row 52/52, with it RED.
+      // Asserting WHICH rule refused is what makes the arm about rule (2).
+      //
+      // ⚠️ AND THE EXPECTED TOKEN IS PER-BEHAVIOUR, WHICH IS THE SECOND HALF OF
+      // THE SAME FINDING. `denialOutcome` tests the mapping's BEHAVIOUR before
+      // the field's KIND, so on `value_only` and `affirmative_only` the
+      // behaviour guard answers first and rule (2)'s wall is never reached —
+      // those two rows are LAUNDERED BY AN OVERLAPPING GUARD (canon 62) and
+      // cannot prove anything about selections. Exactly ONE of the three
+      // behaviours exercises the wall, and naming that here is what stops the
+      // arm reading as three times the evidence it is.
+      expect([behavior, outcome.reasonCode]).toEqual([
+        behavior,
+        behavior === 'explicit_denial_allowed'
+          ? 'denial_withheld_selection_asserts_presence'
+          : `denial_withheld_${behavior}`,
+      ]);
     }
     // And the RENDERER's own wall refuses a multi_select denial carrying values,
     // whoever hands it over.
     expect(isPrintableDenial(multi, ['Reflux'])).toBe(false);
+  });
+
+  it('(2g) ⚠️ RULE (2) ON THE **MIXED** PATH — a selection or a repeating row never accumulates', () => {
+    // ⚠️ FOUND BY #157(d)'s SECOND ADVERSARIAL PASS. Every rule-(2) arm above —
+    // (2a),(2b),(2c),(2d),(2f) — drives the ALL-DENIED path. `resolveOne`
+    // reaches `mixedPolarityNarrative` for ANY field kind (the mixed branch
+    // precedes the kind dispatch), and the line that carries rule (2) there had
+    // NO arm at all: mutating it to `if (false)` left the gate 52/52 GREEN.
+    // Claim A3 was proved for all-denied and unproved for mixed.
+    const facts = projected(MIXED_TEXT, MIXED_ENTITIES);
+    expect([...facts.map((f) => f.polarity)].sort()).toEqual(['affirmed', 'denied']);
+
+    // ISOLATING CONTROL FIRST — the SAME facts on a narrative_text field DO
+    // compose. So every refusal below is about the KIND, not about the fixture.
+    expect(mixedPolarityNarrative(FIELD_STUB, MAPPING_STUB, facts)).toEqual({
+      kind: 'text',
+      text: 'Pneumonia',
+      reasonCode: MIXED_POLARITY_REASON,
+    });
+
+    for (const kind of [
+      'single_select',
+      'multi_select',
+      'checkbox',
+      'number',
+      'measurement',
+      'date',
+    ] as const) {
+      const field = { ...FIELD_STUB, kind } as unknown as TemplateField;
+      expect([kind, mixedPolarityNarrative(field, MAPPING_STUB, facts)]).toEqual([
+        kind,
+        { kind: 'refused' },
+      ]);
+    }
+    // A repeating section expands ROWS, and a row asserts presence.
+    const proto = { ...FIELD_STUB, rowPrototype: true } as unknown as TemplateField;
+    expect(mixedPolarityNarrative(proto, MAPPING_STUB, facts)).toEqual({ kind: 'refused' });
   });
 
   it('(2e) CHECKBOX — value === false still renders unchecked: UNCHANGED', async () => {
@@ -2371,6 +2434,116 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
           .map((i) => i.code),
       ).toEqual(['FIELD_CONFLICT']);
     }
+  });
+
+  it('(8h) ⚠️ THE NEVER-BETTER-THAN-AFFIRMED-ALONE TEST USES THE AFFIRMED PATH\'S OWN BASIS', () => {
+    // ⚠️ FOUND BY #157(d)'s SECOND ADVERSARIAL PASS, AND (8d) COULD NOT SEE IT.
+    // (8d) uses two findings that are genuinely different words, so trimming
+    // cannot collapse them. The guard counted TRIMMED, DEDUPED segments while
+    // the resolver decides the same question on the RAW converted value — so
+    // two affirmed facts differing only in WHITESPACE collapsed to one segment
+    // here and stayed two distinct values there, and adding a DENIAL made the
+    // field RENDER where the affirmed facts alone are BLOCKED. That is "better
+    // than affirmed alone", the one direction this module forbids by name.
+    const base = projected(MIXED_TEXT, MIXED_ENTITIES);
+    const affirmed = base.find((f) => f.polarity === 'affirmed')!;
+    const denied = base.find((f) => f.polarity === 'denied')!;
+
+    // The concept must NOT be an accumulating section, or the guard is skipped
+    // and this arm measures nothing. Asserted, never assumed.
+    const nonAccumulating = {
+      clinicalConcept: 'exam.vascular',
+      polarityBehavior: 'explicit_denial_allowed',
+    } as unknown as SemanticMapping;
+    expect(isListValuedNarrative(FIELD_STUB, nonAccumulating)).toBe(false);
+
+    const twin = {
+      ...affirmed,
+      factId: `${affirmed.factId}b`,
+      value: `${String(affirmed.value)} `,
+    } as EncounterFact;
+    // TWO DISTINCT RAW VALUES that TRIM TO ONE — the exact shape the old guard
+    // could not see. Both halves asserted, so the fixture cannot rot silently.
+    expect(twin.value).not.toBe(affirmed.value);
+    expect(String(twin.value).trim()).toBe(String(affirmed.value).trim());
+
+    expect(mixedPolarityNarrative(FIELD_STUB, nonAccumulating, [affirmed, twin, denied])).toEqual({
+      kind: 'refused',
+    });
+
+    // ISOLATING CONTROL — the SAME field and mapping with ONE affirmed value
+    // composes. So the refusal above is about the second value, not the mapping.
+    expect(
+      mixedPolarityNarrative(FIELD_STUB, nonAccumulating, [affirmed, denied]),
+    ).toEqual({ kind: 'text', text: 'Pneumonia', reasonCode: MIXED_POLARITY_REASON });
+  });
+
+  it('(8i) ⚠️ C4 AS A PROPERTY OVER MANY FIXTURES, NOT AS ONE — mixed text IS the affirmed join', () => {
+    // ⚠️ FOUND BY #157(d)'s SECOND ADVERSARIAL PASS. `mixedPolarityNarrative`
+    // RE-IMPLEMENTS `joinListValuedNarrative` — same laterality guard, same
+    // derive-null refusal, same trim, same dedupe — and A6 was asserted at
+    // exactly ONE place, arm (8a), on ONE fixture with ONE affirmed fact.
+    // Measured: deleting the derive-null refusal, deleting the dedupe, or
+    // deleting the laterality guard each left the gate 52/52 GREEN.
+    //
+    // So the claim is asserted as a PROPERTY here — for every fixture, the
+    // mixed value is EXACTLY what the affirmed path's own function returns for
+    // the affirmed facts alone, with `refused` <-> `null`. One row per guard,
+    // and the guards cannot be deleted independently of it.
+    const base = projected(MIXED_TEXT, MIXED_ENTITIES);
+    const affirmed = base.find((f) => f.polarity === 'affirmed')!;
+    const denied = base.find((f) => f.polarity === 'denied')!;
+    const clone = (over: Partial<EncounterFact>, tag: string) =>
+      ({ ...affirmed, factId: `${affirmed.factId}${tag}`, ...over }) as EncounterFact;
+
+    // MAPPING_STUB's concept is `assessment`, an ACCUMULATING section — which is
+    // precisely when the affirmed path uses `joinListValuedNarrative` at all.
+    expect(isListValuedNarrative(FIELD_STUB, MAPPING_STUB)).toBe(true);
+
+    const CASES: ReadonlyArray<readonly [string, readonly EncounterFact[]]> = [
+      ['one affirmed', [affirmed, denied]],
+      ['two distinct affirmed', [affirmed, clone({ value: 'Effusion' }, 'x'), denied]],
+      // DEDUPE — two affirmed facts deriving the same text must render once.
+      ['duplicate affirmed', [affirmed, clone({}, 'd'), denied]],
+      // TRIM — a trailing space must not survive into the joined section.
+      ['whitespace affirmed', [affirmed, clone({ value: 'Effusion ' }, 'w'), denied]],
+      // ⚠️ DERIVE-NULL — AN AFFIRMED FACT THAT DOES NOT DERIVE. Added because
+      // my own first version of this arm did NOT catch the mutation that
+      // replaced the refusal with `continue`: no fixture had a non-deriving
+      // fact, so the property held vacuously on that guard. `EncounterFact`
+      // values are `string | number | boolean` (`ir.ts:376`) and
+      // `deriveFieldValueFromFact` returns null for a non-string on a
+      // `narrative_text` field (`field-value-derivation.ts:150`), so a numeric
+      // value is the live shape. Dropping it would silently remove clinical
+      // content from a section the note presents as COMPLETE — and the
+      // validator, which re-derives with this same function, would accept the
+      // loss.
+      ['non-deriving affirmed', [affirmed, clone({ value: 42 }, 'n'), denied]],
+      // LATERALITY — two sides among the AFFIRMED facts refuse on both paths.
+      [
+        'two lateralities',
+        [
+          clone({ laterality: 'left' }, 'l'),
+          clone({ value: 'Effusion', laterality: 'right' }, 'r'),
+          denied,
+        ],
+      ],
+    ];
+
+    for (const [name, facts] of CASES) {
+      const affirmedOnly = facts.filter((f) => f.polarity === 'affirmed');
+      const mixed = mixedPolarityNarrative(FIELD_STUB, MAPPING_STUB, facts);
+      const join = joinListValuedNarrative(FIELD_STUB, MAPPING_STUB, affirmedOnly);
+      expect([name, mixed.kind === 'text' ? mixed.text : null]).toEqual([name, join]);
+    }
+
+    // NON-VACUITY — the fixture set must actually exercise BOTH outcomes, or the
+    // loop above passes by never reaching a refusal (or never reaching a value).
+    const outcomes = CASES.map(([, facts]) =>
+      mixedPolarityNarrative(FIELD_STUB, MAPPING_STUB, facts).kind,
+    );
+    expect(outcomes).toContain('text');
+    expect(outcomes).toContain('refused');
   });
 
   it('(8g) ⚠️ A DENIAL\'S LATERALITY MUST NOT VETO THE DOCUMENT', async () => {

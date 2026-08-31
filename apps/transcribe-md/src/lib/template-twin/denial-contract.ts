@@ -286,18 +286,33 @@ export function mixedPolarityNarrative(
   // ⚠️ NON-DIRECT EVIDENCE REFUSES, BECAUSE A `supported` STATUS THAT BLOCKS IS
   // AN INCOHERENT STATE AND A NEW ROUTE TO A BLOCKING ISSUE.
   //
-  // MEASURED while writing this: a `conflicting`-quality fact
-  // (`encounter-facts/index.ts:645` — `superseded` or `conflict_note`) reaches
-  // here and composes a value, the resolution becomes `supported`, and the
-  // validator's `SUPPORTED_STATUS_CONFLICTS_WITH_QUALITY` then blocks it. The
-  // doctor's outcome is identical to the `conflict` this replaces — both block
-  // — but the field would carry a VALUE while blocked, and the blocking would
-  // arrive through a code that has nothing to do with polarity. Refusing keeps
-  // the case exactly where #157(c) found it.
+  // ⚠️ THE MECHANISM THIS COMMENT USED TO ASSERT IS FALSE, AND THE CORRECTION
+  // IS KEPT RATHER THAN THE CLAIM. It read: "MEASURED while writing this: a
+  // `conflicting`-quality fact reaches here and composes a value, the
+  // resolution becomes `supported`, and the validator's
+  // SUPPORTED_STATUS_CONFLICTS_WITH_QUALITY then blocks it." The resolution
+  // demonstrably never becomes `supported` by that route. Re-measured:
   //
-  // `unclear`/`review` never reach this line: the resolver answers those with
-  // `ambiguous` well above. `conflicting` is the live shape, and it is the one
-  // this guard was written for.
+  //   · `quality.evidence` is exactly `direct | conflicting | unclear`
+  //     (`ir.ts:415`);
+  //   · `resolver/index.ts:539` returns `conflict` /
+  //     `source_evidence_conflict` on ANY `conflicting` candidate, and `:548`
+  //     returns `ambiguous` on `unclear` — BOTH well before the mixed branch at
+  //     `:626`.
+  //
+  // So from the RESOLVER, no fact reaching this line can be non-direct and this
+  // guard cannot fire.
+  //
+  // ⚠️ IT IS NOT DEAD CODE, AND THAT IS WHY IT STAYS. `mixedPolarityNarrative`
+  // has a SECOND live caller — `validation/index.ts:263`, the re-derivation —
+  // and it passes `citedFacts` straight in with NO quality filter. A stored
+  // resolution whose cited facts are not all `direct` is re-derived through
+  // here, and this guard is what makes that re-derivation REFUSE (fall through
+  // to the existing rails) instead of accepting a value the resolver would
+  // never have produced.
+  //
+  // A wrong mechanism in a source comment outlives the session that wrote it,
+  // so the measurement is recorded here rather than the intention.
   if (facts.some((fact) => fact.quality.evidence !== 'direct')) return mixedRefused();
 
   // ⚠️ LATERALITY ACROSS THE **AFFIRMED** FACTS ONLY — AND THE CORRECTION IS THE
@@ -340,21 +355,53 @@ export function mixedPolarityNarrative(
   // affirmed)` — the affirmed path's own function — which is asserted as a
   // PROPERTY by the gate rather than described as an intention here.
   const segments: string[] = [];
+  // ⚠️ THE RAW DERIVED VALUES, KEPT SO THE CONFLICT TEST BELOW CAN USE THE
+  // AFFIRMED-ALONE PATH'S OWN BASIS. Read the comment on
+  // `affirmedDistinctValues` — and note this reads NO new property of a fact,
+  // which is what keeps arm (9)'s no-heuristic wall intact.
+  const rawDerived = new Set<string>();
   for (const fact of affirmed) {
     const derived = deriveFieldValueFromFact(field, mapping, fact);
     // A cited fact that does not derive would be DROPPED from a section the
     // note presents as complete, and the validator — which re-derives with
     // this same function — would accept the loss. Refuse the whole thing.
     if (derived === null) return mixedRefused();
+    rawDerived.add(JSON.stringify(derived));
     const text = String(derived).trim();
     if (!text) continue;
     if (!segments.includes(text)) segments.push(text);
   }
 
-  // ⚠️ THE NEVER-BETTER-THAN-AFFIRMED-ALONE INVARIANT. Two distinct affirmed
-  // values on a narrative that is not an accumulating SECTION are a genuine
-  // conflict — `multiple_distinct_supported_values` — and they stay one.
-  if (segments.length > 1 && !isListValuedNarrative(field, mapping)) {
+  // ⚠️ THE NEVER-BETTER-THAN-AFFIRMED-ALONE INVARIANT — AND IT IS MEASURED ON
+  // THE AFFIRMED-ALONE PATH'S OWN BASIS, NOT ON THIS ONE'S.
+  //
+  // Two distinct affirmed values on a narrative that is not an accumulating
+  // SECTION are a genuine conflict — `multiple_distinct_supported_values` — and
+  // they stay one.
+  //
+  // ⚠️ THIS COUNTED `segments` UNTIL #157(d)'s SECOND PASS, AND THAT WAS THE
+  // INVARIANT'S OWN DEFECT. `segments` are TRIMMED and DEDUPED, while the
+  // resolver decides the same question on
+  // `JSON.stringify(convertValue(...).value)`. So two affirmed facts differing
+  // only in whitespace — `"Fatigue"` and `"Fatigue "` — collapsed to ONE
+  // segment here and stayed TWO distinct values there: adding a DENIAL made the
+  // field RENDER where the affirmed facts alone are BLOCKED. That is "better
+  // than affirmed alone", the one direction this module forbids by name.
+  //
+  // ⚠️ AND THE BASIS IS THE UNTRIMMED **DERIVED** VALUE, NOT `fact.value`,
+  // WHICH IS NOT A COMPROMISE — IT IS EXACT. Rule (2) at the top of this
+  // function guarantees `field.kind === 'narrative_text'`, and on that kind
+  // BOTH `deriveFieldValueFromFact` (`field-value-derivation.ts:150`) and
+  // `convertValue` (`resolver/index.ts:136`) return the fact's own value
+  // VERBATIM on that kind. So
+  // this set is byte-identical to the resolver's `distinctValues` while reading
+  // no new property of a fact — arm (9)'s no-heuristic wall is untouched, and
+  // it is the arm that caught the first version of this fix.
+  //
+  // Counting raw values is strictly STRONGER than counting segments — distinct
+  // trimmed texts imply distinct raw values, never the reverse — so this can
+  // only ever refuse MORE, which is the honest-blank direction.
+  if (rawDerived.size > 1 && !isListValuedNarrative(field, mapping)) {
     return mixedRefused();
   }
   if (segments.length === 0) return mixedRefused();
