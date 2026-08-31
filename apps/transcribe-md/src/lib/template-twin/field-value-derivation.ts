@@ -246,11 +246,30 @@ export const ACCUMULATING_NARRATIVE_CONCEPTS: ReadonlySet<string> = new Set([
   'medication',
   'allergy',
 
-  // ⚠️ #159(b) — THE ENTITY-NAMING SUB-CONCEPTS, AND ONLY THOSE THREE.
+  // ⚠️ #159(b) — THE ENTITY-NAMING SUB-CONCEPTS, AND ONLY THOSE **TWO**.
   // A field the doctor maps to `allergy.substance` is an ALLERGY LIST and must
   // accumulate, exactly as a field mapped to bare `allergy` does. Without these
   // rows the second allergen becomes `multiple_distinct_supported_values` and
   // the section conflicts instead of listing.
+  //
+  // ⚠️ AND `family_history.condition` WAS HERE UNTIL THE ADVERSARIAL PASS
+  // MEASURED WHAT IT DOES. A condition is meaningless without its RELATIVE, and
+  // the relation travels on a SEPARATE fact (`family_history.relation`), so no
+  // code path can bind them. Driven end to end: two entries — Mother/Diabetes,
+  // Father/Hypertension — render `"Diabetes; Hypertension"`, `supported`,
+  // `valid:true`, ZERO blocking issues. The WHO the doctor dictated is
+  // destroyed, and on a form with per-relation fields BOTH print the same
+  // joined text.
+  //
+  // That is precisely the shape this file's own header bans `exam.*` for — "the
+  // SAME joined text in a 'Right' control and a 'Left' control, laterality
+  // discarded... Zero blocking issues." A discriminator that cannot be carried
+  // is not a discriminator, and an honest blank beats a lossy assertion on a
+  // document somebody signs.
+  //
+  // FILED, NOT BUILT: relation-binding as a DECLARED COMPOSITION — relative +
+  // condition, template-owned, zero NLP. Same family as DECLARED DENIAL TEXT.
+  // Until it exists, a family-history field stays where `main` left it.
   //
   // ⚠️ AND THE ATTRIBUTE MEMBERS ARE ABSENT ON PURPOSE. `medication.dose`,
   // `.route`, `.frequency`, `allergy.reaction`, `family_history.relation` and
@@ -261,7 +280,6 @@ export const ACCUMULATING_NARRATIVE_CONCEPTS: ReadonlySet<string> = new Set([
   // nothing blocking. These three rows must never grow into the attributes.
   'allergy.substance',
   'medication.name',
-  'family_history.condition',
 ]);
 
 /**

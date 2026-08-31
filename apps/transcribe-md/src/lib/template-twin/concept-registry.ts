@@ -131,6 +131,26 @@ const ALL_SUBCONCEPTS: ReadonlySet<string> = new Set(
   Object.values(REGISTRY_SUBCONCEPTS).flat(),
 );
 
+/**
+ * Is this string a registered SUB-CONCEPT rather than a spelling?
+ *
+ * ⚠️ EXPORTED BECAUSE `approvedSynonyms` HAS A SECOND AUTHOR AND THE FIRST
+ * VERSION OF #159(b) FORGOT IT. `synonymsFor` returns spellings only, which
+ * made "no bare family offers its members" true of THIS module and false of the
+ * SYSTEM: the proposer unions the MODEL's own `approvedSynonyms` into the
+ * mapping, so a model answering `{clinicalConcept:'medication', approvedSynonyms:
+ * ['medication.name','medication.dose', …]}` re-creates the destruction the
+ * redesign exists to prevent — measured, `"Lisinopril; 10 mg; by mouth; daily;
+ * Amlodipine"`, supported, zero blocking, a drug printed with no dose.
+ *
+ * A SYNONYM IS ANOTHER SPELLING OF THE SAME THING. A sub-concept is a finer
+ * granularity, so it is never a legitimate synonym of its family — whoever
+ * proposes it.
+ */
+export function isSubConcept(concept: string): boolean {
+  return ALL_SUBCONCEPTS.has(concept.trim().toLowerCase());
+}
+
 export function isRegisteredConcept(concept: string): boolean {
   const c = concept.trim().toLowerCase();
   if (REGISTRY_CONCEPTS.includes(c)) return true;

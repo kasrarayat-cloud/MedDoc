@@ -8,6 +8,7 @@
 
 import {
   classifyFieldSource,
+  isSubConcept,
   conceptOverrideFor,
   veinGridCellConcept,
   isRegisteredConcept,
@@ -509,8 +510,26 @@ export async function proposeSemanticMappings(
       // rather than certifying a dead field. Approved synonyms come from the
       // registry, not the model.
       clinicalConcept: proposedConcept,
+      // ⚠️ THE MODEL'S SYNONYMS ARE FILTERED, AND THE LINE ABOVE IS WHY IT WAS
+      // NOT OBVIOUS: the comment has always said "Approved synonyms come from
+      // the registry, not the model", and the code has always unioned in the
+      // model's array anyway. Harmless while every entry was a label guess
+      // ("Drug Allergies"); NOT harmless once #159(b) registered the
+      // sub-concepts, because `factSatisfiesMapping` matches on this exact set.
+      // A model answering `medication` + `['medication.name','medication.dose',
+      // …]` makes the bare family stand in for its members and the accumulator
+      // joins one drug's ATTRIBUTES into a list of drugs — measured,
+      // "Lisinopril; 10 mg; by mouth; daily; Amlodipine", supported, zero
+      // blocking, a drug printed with NO DOSE. Found by the adversarial pass on
+      // the finished diff, after the redesign had closed the same hole in
+      // `synonymsFor` alone.
       approvedSynonyms: proposedConcept
-        ? [...new Set([...(mapping.approvedSynonyms ?? []), ...synonymsFor(proposedConcept)])]
+        ? [
+            ...new Set([
+              ...(mapping.approvedSynonyms ?? []).filter((syn) => !isSubConcept(syn)),
+              ...synonymsFor(proposedConcept),
+            ]),
+          ]
         : [],
       practiceDefault: null,
       status:

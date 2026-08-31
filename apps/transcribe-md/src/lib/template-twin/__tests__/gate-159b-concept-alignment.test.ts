@@ -10,6 +10,7 @@ import {
   synonymsFor,
 } from '../concept-registry';
 import { projectEncounterFacts } from '../encounter-facts';
+import { proposeSemanticMappings } from '../semantic-mapping';
 import { isListValuedNarrative } from '../field-value-derivation';
 import { resolveTemplateFields } from '../resolver';
 import { MIN_CERTIFIED_FILLED_FIELDS } from '../certification-thresholds';
@@ -172,23 +173,41 @@ describe('#159(b) — concept alignment: the emitter and the registry agree', ()
       path.join(__dirname, '..', 'encounter-facts', 'index.ts'),
       'utf8',
     );
-    // Emission sites: `concept: 'literal'` and `concept: `composed.${...}``.
+    // Literal sites: `concept: 'past_medical_history'`.
     const literals = [...src.matchAll(/concept: '([^']+)'/g)].map((m) => m[1]!);
-    const composed = [...src.matchAll(/concept: `([a-z_]+)\./g)].map((m) => m[1]!);
-    const sites = [...new Set([...literals, ...composed.map((p) => `${p}.*`)])].sort();
+    // COMPOSED SITES ARE KEYED ON THE WHOLE TEMPLATE, NOT ITS PREFIX, AND THE
+    // ADVERSARIAL PASS IS WHY. Keying on the prefix collapsed every `test.*`
+    // site onto one bucket, and that bucket was discharged by the LITERAL
+    // `test.name` emitted somewhere else entirely — so a brand-new unregistered
+    // site left this arm GREEN while being wholly unexercised. An arm that
+    // reports "covered" for a site the fixture never reached is the exact
+    // defect this arm exists to prevent, one level up.
+    const composed = [...src.matchAll(/concept: `([^`]+)`/g)].map((m) => m[1]!);
+    const sites = [...new Set([...literals, ...composed])].sort();
 
-    // POSITIVE CONTROL for the scan — if the regexes stop matching, this reds
-    // rather than reporting a vacuous zero.
+    // POSITIVE CONTROL for the scan — a regex that stopped matching would make
+    // this arm vacuous rather than red.
     expect(sites.length).toBeGreaterThan(12);
+    expect(composed.length).toBeGreaterThan(3);
 
     const emitted = [...new Set(emittedFacts().map((f) => f.concept))];
-    const covered = (site: string) =>
-      site.endsWith('.*')
-        ? emitted.some((c) => c.startsWith(site.slice(0, -1)))
-        : emitted.includes(site);
+    const covered = (site: string): boolean => {
+      if (!site.includes('${')) return emitted.includes(site);
+      const parts: string[] = site.split(/\$\{[^}]*\}/);
+      const rx = new RegExp(
+        '^' + parts.map((lit: string) => lit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[a-z0-9_]+') + '$',
+      );
+      return emitted.some((c) => rx.test(c));
+    };
 
-    const missed = sites.filter((s) => !covered(s));
-    expect({ missed, sites: sites.length }).toEqual({ missed: [], sites: sites.length });
+    // FILED, NOT BUILT — `ros.<system>` is emitted and unregistered by
+    // decision, so it is named rather than silently passing.
+    const FILED_SITES = sites.filter((s) => s.startsWith('ros.'));
+    expect(FILED_SITES).toHaveLength(1);
+    const inScope = sites.filter((s) => !FILED_SITES.includes(s));
+
+    const missed = inScope.filter((s) => !covered(s));
+    expect({ missed, sites: inScope.length }).toEqual({ missed: [], sites: inScope.length });
   });
 
   it('(3a) ⚠️ A BARE FAMILY MUST NOT STAND IN FOR ITS MEMBERS — the destruction guard', () => {
@@ -215,6 +234,70 @@ describe('#159(b) — concept alignment: the emitter and the registry agree', ()
     expect(synonymsFor('measurement.diameter')).toContain('exam.vascular.diameter');
   });
 
+  it('(3c) ⚠️ THE **MODEL** CANNOT SEED SUB-CONCEPTS EITHER — the production carrier', async () => {
+    // ⚠️ (3a) WATCHES `synonymsFor`. THE PRODUCTION CARRIER IS `approvedSynonyms`,
+    // AND IT HAS A SECOND AUTHOR. The proposer unions the MODEL's own array in,
+    // so "no bare family offers its members" was true of the registry module and
+    // FALSE of the system: a model answering `medication` +
+    // ['medication.name','medication.dose', …] re-creates the destruction —
+    // "Lisinopril; 10 mg; by mouth; daily; Amlodipine", supported, zero
+    // blocking, a drug printed with NO DOSE.
+    //
+    // This arm drives the REAL proposer with a stubbed client, which is the only
+    // way to watch the seam where the model's array actually enters.
+    const field = {
+      fieldId: `ttf_${'c'.repeat(24)}`,
+      kind: 'narrative_text',
+      originalLabel: 'Current Medications',
+      labelSource: 'alias',
+      displayOrder: 0,
+      detectionStatus: 'recognized',
+      allowedOptions: [],
+      rendererBinding: {
+        partName: 'word/document.xml', bindingType: 'content_control',
+        path: '/x/meds', ordinal: 0, sdtId: '1', tag: null, alias: null,
+        legacyName: null, rowLaterality: 'unknown', tableIndex: null,
+        rowIndex: null, cellIndex: null, repeatAncestorPath: null,
+        sourceControlSha256: 'b'.repeat(64), originalContentSha256: 'b'.repeat(64),
+      },
+      required: false, unknownPolicy: 'blank', clinicallyMaterial: true,
+      criticality: 'medication', tableId: null, rowPrototype: false,
+    } as unknown as TemplateField;
+
+    const POISON = ['medication.name', 'medication.dose', 'medication.route', 'medication.frequency'];
+    const client = {
+      complete: async () => ({
+        mappings: [{
+          fieldId: field.fieldId,
+          clinicalConcept: 'medication',
+          approvedSynonyms: [...POISON, 'Current Medications'],
+          expectedDataType: 'text',
+          polarityBehavior: 'value_only',
+          temporality: null, laterality: null, unitPolicy: null,
+          required: false, blankPolicy: 'blank', unknownPolicy: 'blank',
+          practiceDefault: null, status: 'needs_confirmation',
+        }],
+      }),
+    };
+
+    const [mapping] = await proposeSemanticMappings(
+      { fields: [field] },
+      { practiceId: 'p', userId: null, client: client as never },
+    );
+
+    // The concept the model chose SURVIVES — this arm is about synonyms only.
+    expect(mapping!.clinicalConcept).toBe('medication');
+    // NON-VACUITY — the stub really did offer them, or the row below is empty
+    // of meaning.
+    expect(POISON.every((p) => isRegisteredConcept(p))).toBe(true);
+    // ⚠️ AND NOT ONE REACHES THE MAPPING.
+    const leaked = mapping!.approvedSynonyms.filter((sy) => POISON.includes(sy));
+    expect(leaked).toEqual([]);
+    // ISOLATING CONTROL — a NON-sub-concept synonym the model proposed is KEPT,
+    // so the row above measures the filter and not a blanket wipe.
+    expect(mapping!.approvedSynonyms).toContain('Current Medications');
+  });
+
   it('(3b) SUB-CONCEPTS ARE REGISTERED, AND ONLY THE ENTITY-NAMING ONES ACCUMULATE', () => {
     const narrative = {
       fieldId: `ttf_${'a'.repeat(24)}`,
@@ -226,10 +309,17 @@ describe('#159(b) — concept alignment: the emitter and the registry agree', ()
 
     // An ENTITY-NAMING member is a LIST — a doctor's allergy section holds
     // several allergens — so it must accumulate.
-    const ACCUMULATES = ['allergy.substance', 'medication.name', 'family_history.condition'];
+    const ACCUMULATES = ['allergy.substance', 'medication.name'];
     // An ATTRIBUTE member is single-valued. `medication.dose` is the one four
     // refutation lenses caught printing "10 mg; 20 mg" onto a form.
     const SINGLE = [
+      // ⚠️ `family_history.condition` IS HERE, NOT IN ACCUMULATES, AND THE
+      // ADVERSARIAL PASS IS WHY. Joining conditions destroys the RELATION —
+      // "Diabetes; Hypertension" with no indication of whose — and the relation
+      // rides a separate fact that nothing can bind back. Same shape this
+      // file's header bans `exam.*` for. Moving it back into ACCUMULATES reds
+      // this arm.
+      'family_history.condition',
       'allergy.reaction',
       'medication.dose',
       'medication.route',
