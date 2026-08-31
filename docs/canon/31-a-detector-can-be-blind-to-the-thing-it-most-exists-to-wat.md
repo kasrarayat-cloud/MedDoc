@@ -258,3 +258,41 @@ DELTA, NOT THE RAW NUMBER.** `origin/main` 308 files / 3741 passed, branch 309 /
 **empirically**, where reading the config would only have confirmed it by
 argument.
 
+
+---
+
+### ⚠️ A FRESH SPECIMEN, 2026-08-31 — THE CONTROL WAS DRAWN FROM THE GUARD'S OWN LIST
+
+**Ratified with ruling #157(c). It is the same defect, one layer inside the fix
+for the defect it was written to catch, and it stayed green through both.**
+
+Ruling #157(b)'s adversarial pass found that a heading-strip was deleting the
+negation out of a denied clinical sentence — printing an anticoagulant list for
+a patient the encounter said was **not taking them**. The repair refused the
+strip whenever the removed prefix matched the exported `EXPLICIT_DENIAL`, which
+is built from the repo's `DENIAL_VOCABULARY`. A gate arm was written to prove
+the repair, with five KEEP fixtures:
+
+    Negative for: · Patient denies: · Not taking: · No history of: · Without:
+
+**All five are `DENIAL_VOCABULARY` tokens.** The guard is built from that list,
+so the arm's result was fixed by its own target before a line of it ran. It
+proved that the guard protects the words the guard is made of.
+
+⚠️ **AND THE MEASUREMENT THAT EXPOSED IT IS THE ONE TO COPY: MUTATE THE GUARD
+OUT AND DIFF THE WHOLE POPULATION, NOT THE FIXTURES.** With the guard removed,
+**every denial shape outside the vocabulary was byte-identical** — only the five
+protected rows moved. The arm went red, correctly, and the rule it stood for was
+still broken for `Absent:`, `Ruled out:`, `Not currently taking:`, and for
+stated-polarity denials carrying no negation token at all. **Gate: 34 of 34
+green with the harm live.**
+
+> **A VOCABULARY GUARD'S FIXTURES COME FROM OUTSIDE THE VOCABULARY.** If every
+> case you test is a case the implementation enumerates, you have measured the
+> enumeration. The cases that matter are the ones nobody wrote down — which is
+> why the arm must also carry a REFUSE set, and why #157(c) requires `(1f)`'s
+> fixtures to use out-of-vocabulary negations.
+
+Its sibling half — that the arm's other assertion, a substring check, was
+*satisfied by the inversion* — is
+[canon 74](74-a-substring-check-cannot-prove-nothing-was-destroyed.md).
