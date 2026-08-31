@@ -225,13 +225,18 @@ function assertionSupported(
   // The second row is the harm: a signed past-medical-history section reading
   // "Diabetes" for a patient who was said not to have it, with nothing
   // blocking. So a denial is verified against `denialOutcome` — the SAME
-  // function the resolver wrote it with, given the same field, mapping and
-  // cited facts — and the two cannot disagree without one of them being
-  // edited. This is a TIGHTENING: it is byte-identity against a shared
+  // function the resolver wrote it with, given the same field and mapping —
+  // and the two cannot disagree without one of them being edited.
+  //
+  // ⚠️ #157(d) TOOK THE CITED FACTS AWAY FROM THAT FUNCTION ENTIRELY, WHICH IS
+  // RULE (1) AS A STRUCTURAL PROPERTY RATHER THAN A DESCRIBED ONE. A function
+  // that cannot see the dictation cannot decide anything from its text, so
+  // there is no heuristic left here to be defeated by the next sentence
+  // somebody dictates. This is a TIGHTENING: it is byte-identity against a shared
   // derivation, exactly like the list-valued narrative case below, and it does
   // not widen what the affirmed path accepts by a single character.
   if (resolution.status === 'explicitly_denied') {
-    const expected = denialOutcome(field, mapping, citedFacts);
+    const expected = denialOutcome(field, mapping);
     return expected.status === 'explicitly_denied' && expected.value === value;
   }
 
@@ -578,7 +583,12 @@ export function validateTemplateTwin(
       //     persisted to `template_twin_fill_manifests`;
       //   · `counts.needsReview` / `counts.criticalUnresolved` — `ir.ts`'s
       //     `templateTwinCounts`, widened in the same commit;
-      //   · a CERTIFICATION BLOCKER on any clinically material field —
+      //   · ⚠️ NOT a certification blocker for a NARRATIVE denial — #157(d) Q2
+      //     exempts `denial_withheld_narrative_always_blank` by name, so the two
+      //     DURABLE places are the reason token and the counts. This comment
+      //     used to say the opposite, and it was falsified in the same commit
+      //     that made the narrative blank unconditional. It still holds for the
+      //     NON-exempt tokens —
       //     `denialWithheldMaterialFieldIds`, which is what stops a template
       //     certifying green with a material section quietly empty.
       //
@@ -618,11 +628,20 @@ export function validateTemplateTwin(
     // FIELD_DENIAL_WITHHELD, and for the same reason. Blocking here would
     // reintroduce, through a new code, exactly the document-killer this ruling
     // removes.
+    //
+    // ⚠️ #157(d) C3 — RE-KEYED FROM `startsWith(`${MIXED_POLARITY_REASON}:`)` TO
+    // EXACT EQUALITY, IN THE SAME COMMIT THAT STOPPED COMPOSING THE TOKEN. The
+    // prefix test was the composed token's only consumer; leaving it would have
+    // made this warning SILENTLY DEAD while the code still read as though the
+    // silence rule held. And the context it used to carry in the identifier now
+    // comes from the CITED FACTS, which is where it always belonged: the count
+    // is re-derived here, not persisted in a reason string.
     if (
       resolution.status === 'supported' &&
-      resolution.reasonCode.startsWith(`${MIXED_POLARITY_REASON}:`)
+      resolution.reasonCode === MIXED_POLARITY_REASON
     ) {
-      add('FIELD_MIXED_POLARITY_DENIAL_WITHHELD', 'warning', `A denial in this mixed-polarity field contributed no text (${resolution.reasonCode}).`, field.fieldId);
+      const withheldDenials = citedFacts.filter((fact) => fact.polarity === 'denied').length;
+      add('FIELD_MIXED_POLARITY_DENIAL_WITHHELD', 'warning', `A denial in this mixed-polarity field contributed no text (${withheldDenials} denied fact${withheldDenials === 1 ? '' : 's'} withheld under ${MIXED_POLARITY_REASON}).`, field.fieldId);
     }
 
     if (field.kind === 'single_select' && populated && !field.rowPrototype) {

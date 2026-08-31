@@ -1,5 +1,5 @@
 // ============================================================================
-// Template Twin — THE DENIAL CONTRACT.  Owner ruling #157(b), standing.
+// Template Twin — THE DENIAL CONTRACT.  Owner ruling #157(d), FINAL.
 // ----------------------------------------------------------------------------
 // ONE MODULE, EVERY READER. The resolver WRITES a denial, the validator
 // RE-DERIVES it, the renderer decides whether the pair may be PRINTED, and the
@@ -8,46 +8,70 @@
 // from the first the day either is fixed, and the thing that drifts is what
 // reaches a signed clinical document.
 //
-// ⚠️ THE PREMISE THE ORIGINAL #157 WAS BUILT ON WAS FALSE, AND IT IS RECORDED
-// HERE RATHER THAN QUIETLY CORRECTED.
+// ⚠️ RULE (1), FINAL: A DENIED NARRATIVE FACT ALWAYS RENDERS BLANK, CARRYING
+// ITS REASON TOKEN. NO TEXT HEURISTIC EVER DECIDES WHAT PRINTS ON A CLINICAL
+// DOCUMENT.
 //
-// #157 said a narrative field "renders its denial's text verbatim". It does
-// not — `projectEncounterFacts` puts the AFFIRMED ENTITY in `fact.value` and
-// the doctor's sentence in `fact.evidenceQuote`. Measured, on the real
-// projection:
+// ⚠️ THE MACHINERY IS DELETED, NOT GATED — AND THAT IS THE RULING, NOT A
+// TIDY-UP. A rule that still CONTAINS the predicate keeps the failure mode
+// alive behind a narrower gate, and the next reader repairs the machinery
+// rather than questioning it. There is therefore no self-negation predicate,
+// no negation vocabulary, no clause-scoping, no heading strip, and no
+// `dictatedDenialText` in this file to repair.
 //
-//   "The patient has no history of diabetes."  -> value "Diabetes"
-//   "No evidence of pulmonary embolism."       -> value "Pulmonary embolism"
-//   "Plan: no further imaging is required."    -> value "Further imaging"
-//   "Allergies: no known drug allergies"       -> value "No known drug allergies"
+// ⚠️ THE ARC IS RECORDED BECAUSE THE CORRECTION IS THE POINT. One rule — what
+// should a clinical document print for a DENIED fact — was formulated three
+// times, and each formulation was falsified BY MEASUREMENT, not by review:
 //
-// Only the last carries prose. Implementing #157 as written would have printed
-// **"Diabetes"** into the past-medical-history section of a document the doctor
-// then signed, with `validateTemplateTwin` returning `valid: true`. Three of
-// the four dictations above assert the OPPOSITE of what was said.
+//   #157     print the fact VALUE verbatim.
+//            FALSE: `projectEncounterFacts` puts the AFFIRMED ENTITY in
+//            `fact.value`. "The patient has no history of diabetes." carries
+//            value "Diabetes", and #157 would have printed that word into a
+//            signed past-medical-history section with `valid: true`.
 //
-// So #157(b): the doctor's own sentence — `evidenceQuote` — is the ONLY text
-// the house may print for a denial.
+//   #157(b)  print the evidence QUOTE verbatim.
+//            FALSE: L3 states polarity as a REQUIRED enum and a stated
+//            polarity BYPASSES the denial vocabulary entirely
+//            (`options.polarity ?? inferPolarity(…)`), so a fact can be
+//            `denied` on a quote carrying no negation at all. A ROS finding
+//            "Fever" denied on the quote "Fever, chills, and night sweats."
+//            PRINTED THAT SENTENCE, valid=true, verified=true, zero issues.
 //
-// ⚠️ ZERO COMPOSITION. NOT "MINIMAL", NOT "CAREFUL" — ZERO.
-// Nothing here synthesizes, templates, prefixes, joins or rewrites a single
-// word. "No <entity>" manufactures clinical phrasing that nobody dictated, and
-// "no further imaging REQUIRED" is not "No further imaging". The one
-// deterministic allowance is `stripLeadingDictationHeading`, and it removes a
-// PREFIX — so the printed text is always a SUFFIX of the doctor's quote. That
-// property is asserted in this module and again, end to end against a real
-// rendered .docx, by the gate.
+//   #157(c)  print the quote when the quote SELF-NEGATES.
+//            FALSE: a comma defeats the scoping. `past_medical_history`,
+//            value "Hypertension", quote
+//            "No history of diabetes, hypertension is well established."
+//            renders THAT SENTENCE under a DENIED fact, valid=true, zero
+//            issues — because the cue and the finding share one comma-joined
+//            clause. And the predicate scoped the cue to ONE clause while the
+//            printer printed EVERY clause, so
+//            "Denies chest pain at rest. Chest pain on exertion, 8 out of 10."
+//            SATISFIED BOTH GATE PROPERTIES AT ONCE — the printed text was a
+//            subset of the doctor's quote AND contained a negation cue — and
+//            reached the document whole.
 //
-// ⚠️ AND FOUR PRODUCERS SYNTHESIZE AN `evidenceQuote` THAT IS NOT DICTATION —
-// which is why `dictatedDenialText` gates on `sourceType` before anything else:
+// Each fix was correct. Each moved the failure one layer down. The gate was
+// GREEN with the harm live every single time. A deterministic heuristic doing
+// SEMANTICS always has a next counterexample, and the honest response is not a
+// better predicate — it is to stop asking the question. The fail-closed answer
+// IS the rule.
 //
-//   resolver/index.ts          "Physician-approved practice default for this …"
-//   verified-note-selection.ts "Selected from the template's enumerated options…"
-//   procedure-date.ts          "Procedure date derived from the visit (encounter) date."
-//   clinician-override.ts      `Clinician set this control to "<option>".`
+// ⚠️ THE CONCEDED COST IS DELIBERATE AND IT IS PINNED IN THE GATE. Fourteen
+// realistic clinical denials that #157(b) would have printed now blank —
+// "Patient is afebrile.", "Lungs are clear to auscultation bilaterally.",
+// "NKDA.", "Family history non-contributory.", and the rest. They are recorded
+// as a KNOWN AND ACCEPTED LOSS in the gate's conceded-loss arm rather than left
+// for a future reader to rediscover as a regression. A blank is a VISIBLE
+// ABSENCE; an inverted sentence is a SIGNED ASSERTION. The two errors are not
+// symmetric, and after three falsifications the asymmetry is the whole design.
 //
-// Printing any of those as a clinical denial would put HOUSE PROSE in a signed
-// note wearing the doctor's voice. `encounter_evidence` only.
+// ⚠️ WHAT A DENIAL MAY STILL DO, unchanged by this ruling:
+//   · a CHECKBOX resolves `false` and renders unchecked. It is the one control
+//     whose blank state IS the denial, and nothing here touches it.
+//   · a MIXED-POLARITY narrative still renders: the AFFIRMED facts print by the
+//     NORMAL path in DICTATION ORDER, and the denied facts contribute NOTHING
+//     but the resolution's reason token (#157(c) Q3's document-killer fix,
+//     which stands).
 //
 // ⚠️ EVERY OTHER OUTCOME IS A BLANK CARRYING A NAMED REASON — NEVER A REFUSED
 // EXPORT. Rule (3): a denial must not be able to kill a document. Before this
@@ -75,346 +99,41 @@ import {
 export const DENIAL_WITHHELD = 'denial_withheld' as const;
 
 /**
- * A denial quote longer than this is withheld rather than printed.
+ * ⚠️ RULING #157(d) RULE (1) — THE REASON A NARRATIVE DENIAL IS BLANK.
  *
- * The renderer refuses above `MAX_RENDERED_FIELD_CHARACTERS` (32_767) with
- * FIELD_VALUE_TOO_LARGE — which is a REFUSED EXPORT, exactly what rule (3)
- * forbids. So the ceiling is enforced HERE, well below the renderer's, where
- * the outcome is a named blank instead of a lost document. A dictated sentence
- * is a sentence; 2_000 characters is already far outside that shape.
+ * Unconditional, on every `polarityBehavior`, for every narrative shape. It
+ * replaces the six tokens #157(b)/(c) needed to describe WHY a particular
+ * quote could not be printed — provenance, empty-after-strip, unrenderable,
+ * multiple distinct quotes, not-self-negating, no-cited-denial. None of those
+ * questions is asked any more, so none of those tokens can be emitted.
+ *
+ * ⚠️ IT IS CERTIFICATION-EXEMPT BECAUSE IT IS RULED BEHAVIOUR, NOT A BROKEN
+ * FILL. A template whose narrative section blanks on a denial is doing exactly
+ * what #157(d) orders. Blocking on it would recreate the Q2 defect — a correct
+ * blank that cannot certify — one ruling later, which is the specific mistake
+ * this programme keeps making and this line refuses to repeat.
  */
-export const MAX_DENIAL_QUOTE_CHARACTERS = 2_000;
+export const DENIAL_WITHHELD_NARRATIVE_ALWAYS_BLANK =
+  'denial_withheld_narrative_always_blank';
 
-/**
- * Byte-identical in effect to `note-template-docx/renderer.ts`'s own
- * `INVALID_XML_CHARACTER_RE`. Duplicated deliberately and narrowly: importing
- * it would point a leaf module at the renderer, and the renderer's copy is the
- * one that must stay authoritative. Its only use here is to WITHHOLD early
- * rather than let the renderer refuse the package.
- */
-const INVALID_XML_CHARACTER_RE =
-  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\ud800-\udfff]/u;
-
-// ══ OWNER RULING #157(c) Q1 — THE DISCRIMINATOR IS SELF-NEGATION, CHECKED AND
-// NEVER ASSUMED. ═══════════════════════════════════════════════════════════
+// ══ RULING #157(d) — THE Q1 HEURISTIC IS GONE. ═══════════════════════════════
 //
-// ⚠️ #157(b)'s RULE (1) WAS FALSIFIED, AND THIS IS THE AMENDMENT. "A denied
-// narrative fact prints its evidence quote VERBATIM" is sound ONLY when the
-// quote ITSELF carries the denial. Measured on this tree, it frequently does
-// not:
+// This is where `SELF_NEGATION_VOCABULARY`, `selfNegationCues`,
+// `clauseBoundsAround`, `locateFinding`, `selfNegationScopingFinding`,
+// `LEADING_DICTATION_HEADING`, `stripLeadingDictationHeading` and
+// `DENIAL_QUOTE_NOT_SELF_NEGATING` used to live — a twenty-token negation
+// vocabulary, a clause scoper and a heading stripper, all deciding whether a
+// doctor's sentence could be printed under a DENIED fact.
 //
-//   · L3 states polarity as a REQUIRED enum
-//     (worker/layers/03-extract-entities.ts:193)
-//   · and is INSTRUCTED that "absence of the word 'no' is not absence of a
-//     denial" (:446)
-//   · and a stated polarity BYPASSES the denial vocabulary entirely
-//     (encounter-facts/index.ts:507 — `options.polarity ?? inferPolarity(…)`)
+// ⚠️ THE HEADING STRIP WAS MEASURED FOR A NON-DENIAL CALLER BEFORE IT WAS
+// DELETED, BECAUSE THE RULING REQUIRED THAT CHECK RATHER THAN THAT ASSUMPTION.
+// `grep -rn` across `apps/` and `packages/` found ONE call site —
+// `dictatedDenialText`, inside this file — and `LEADING_DICTATION_HEADING` had
+// exactly one declaration and one use, both here. There was no non-denial
+// caller to keep it for. (`encounter-facts`'s `VALUE_LABEL_PREFIX` is a
+// separate pattern with its own callers and is untouched.)
 //
-// So a fact can be `denied` on a quote carrying no negation at all, and rule
-// (1) as written prints its OPPOSITE. Driven end to end through the real
-// projection -> compiler -> resolver -> validator -> awaited renderer:
-//
-//   ros finding "Fever", polarity denied,
-//   quote "Fever, chills, and night sweats."
-//     -> the document PRINTS THAT SENTENCE. valid=true, verified=true, zero
-//        issues at every layer. No heading is involved, so no strip-side guard
-//        reaches it.
-//
-// ⚠️ AND IT CLOSES A SECOND PATH THE FIRST FIX ONLY THOUGHT IT HAD CLOSED.
-// #157(b) refused the heading strip when the removed prefix matched
-// `EXPLICIT_DENIAL` — six spellings, built from `DENIAL_VOCABULARY`. Measured
-// against fourteen negating headings, TWELVE were still stripped and printed
-// their inverse:
-//
-//   Absent:  Ruled out:  Free of:  None:  Nil:  Unremarkable:
-//   Within normal limits:  Negative:  Excluded:  Not present:
-//   Clear of:  Resolved:            ← all stripped, all inverted
-//   Denied:  No longer taking:      ← the only two in vocabulary
-//
-// Both paths are closed by ONE predicate applied in TWO places, and the two
-// placements are NOT redundant — each is mutation-proved separately:
-//
-//   · `stripLeadingDictationHeading` PRESERVES a print that would otherwise be
-//     destroyed. A prefix that carries a negation is the CLAIM, not a heading.
-//   · `dictatedDenialText` REFUSES a print that carries no negation at all.
-//     This is the wall R1 walks into, and it also catches anything the strip
-//     destroys for a reason nobody anticipated — the printed text is what is
-//     tested, so a negation removed by any means fails here.
-//
-// ⚠️ COMPOSITION STAYS FORBIDDEN FOREVER. Nothing here synthesizes, templates,
-// prefixes or rewrites a word. The discriminator only ever answers YES or NO
-// about text the doctor already said; a NO is a BLANK, never a repair.
-//
-// ⚠️ HONEST LIMIT, RECORDED RATHER THAN IMPLIED. This is a heuristic about
-// TEXT. There is no clinical NER in this repository (`redactPhi` is a log
-// scrubber, not an entity recogniser), so it can be wrong in both directions
-// and it is built to FAIL TOWARD BLANK:
-//
-//   no negation token anywhere in the printed text        -> BLANK   (the R1 harm)
-//   a locatable finding, negation only in ANOTHER clause  -> BLANK
-//   an unlocatable finding, and more than one clause      -> BLANK
-//   a negation in the finding's own clause                -> PRINT
-//   an unlocatable finding in a single clause, negated    -> PRINT
-//
-// A blank is a VISIBLE ABSENCE. An inverted sentence is a SIGNED ASSERTION.
-// The two errors are not symmetric, and the asymmetry is deliberate.
-//
-// ⚠️ IT IS NOT `EXPLICIT_DENIAL` AND IT IS NOT `denialGovernsValue`, AND THAT
-// IS MEASURED, NOT STYLISTIC:
-//   · `EXPLICIT_DENIAL` is SIX tokens. Seventeen out-of-vocabulary negation
-//     families are invisible to it — that is the twelve-of-fourteen row above.
-//   · `denialGovernsValue`'s positional scan (arm (b), encounter-facts:341)
-//     deliberately refuses a cue that sits AFTER the value, so
-//     "Chest pain was denied by the patient." reads AFFIRMED there. Reusing it
-//     would blank a legitimate print, and post-positive negation
-//     ("Melena negative.", "PE excluded.", "Hepatomegaly is not present.") is
-//     ordinary clinical dictation. Same-CLAUSE, not before-the-value, is the
-//     line this predicate draws.
-
-/**
- * The negation tokens that make a sentence read as a denial of something in it.
- *
- * ⚠️ DELIBERATELY WIDER THAN `DENIAL_VOCABULARY` AND DELIBERATELY NARROWER THAN
- * "ANYTHING NEGATIVE-SOUNDING". Wider, because that list is tuned for INFERRING
- * a polarity nobody stated and its six tokens miss most structured dictation.
- * Narrower, because a false positive here LICENSES A PRINT — the one direction
- * this must not fail in.
- *
- * ⚠️ BARE `not` IS NOT A TOKEN, AND THE COUNTEREXAMPLE IS PINNED IN THE GATE:
- * "It is not severe, but it is there." is an AFFIRMATION. `not` earns its place
- * only in collocation with a word that carries the negation's object.
- *
- * ⚠️ AND FOUR CANDIDATES ARE REFUSED ON PURPOSE, WITH THEIR REASON, so the next
- * reader does not "complete" the list:
- *   `doubt`     — a hedge. "Doubt pulmonary embolism." is a probability, not a
- *                 denial, and #157(c)'s honest limit says fail toward BLANK.
- *   `cannot`    — ambiguous object. "Cannot identify a lesion." negates;
- *                 "Cannot tolerate aspirin." AFFIRMS an intolerance.
- *   `unlikely`  — a hedge, as `doubt`.
- *   `normal`    — "Normal:" as a heading is not a claim about the finding, and
- *                 admitting it would keep every "Normal:" prefix unstripped.
- */
-export const SELF_NEGATION_VOCABULARY = [
-  // ⚠️ ORDER IS LOAD-BEARING FOR THE REPORTED MATCH, NOT FOR THE ANSWER.
-  // Longer alternatives first so a shared prefix reports the longer token.
-  { name: 'within normal limits', token: 'within\\s+normal\\s+limits' },
-  { name: 'not <negated object>', token: 'not\\s+(?:currently\\s+|presently\\s+|actively\\s+|routinely\\s+|clinically\\s+)?(?:taking|on|present|appreciated|identified|seen|noted|observed|detected|demonstrated|visuali[sz]ed|elicited|palpable|reported|endorsed|found|evident|apparent|indicated|performed)' },
-  { name: 'ruled out', token: 'rule[sd]?\\s+out' },
-  { name: 'absence of / absent', token: 'absen(?:ce|t)' },
-  { name: 'unremarkable', token: 'unremarkable' },
-  { name: 'excluded', token: 'exclude[sd]' },
-  { name: 'negative', token: 'negative' },
-  { name: 'resolved', token: 'resolved' },
-  { name: 'denies', token: 'den(?:y|ies|ied|ying)' },
-  { name: 'without', token: 'without' },
-  { name: 'clear of', token: 'clear\\s+of' },
-  { name: 'free of', token: 'free\\s+of' },
-  { name: 'neither', token: 'neither' },
-  { name: 'never', token: 'never' },
-  { name: 'none', token: 'none' },
-  { name: 'wnl', token: 'wnl' },
-  { name: 'nor', token: 'nor' },
-  { name: 'nil', token: 'nil' },
-  { name: 'no', token: 'no' },
-  { name: '-ve', token: '-ve' },
-] as const;
-
-/**
- * ⚠️ THE LEADING CLASS IS A BOUNDARY, NOT PART OF THE TOKEN — and the match
- * this module reports is the TOKEN, so a caller (and the gate) can assert the
- * rendered text CONTAINS it. `(?:\b|$)` closes it, exactly as `EXPLICIT_DENIAL`
- * does, so "Nose:" does not match `no` and "not severe" does not match `not`.
- */
-const SELF_NEGATION_CUE = new RegExp(
-  `(?:^|[\\s,;:(\\["'])(${SELF_NEGATION_VOCABULARY.map((e) => e.token).join('|')})(?:\\b|$)`,
-  'gi',
-);
-
-/** One negation cue: the token as it appears, its vocabulary name, its offset. */
-export interface SelfNegationCue {
-  readonly name: string;
-  readonly match: string;
-  readonly index: number;
-}
-
-const CLAUSE_BREAK_CHARACTERS = '.;\n';
-
-/** Every negation cue in `text`, in order of appearance. */
-export function selfNegationCues(text: string): SelfNegationCue[] {
-  const cues: SelfNegationCue[] = [];
-  SELF_NEGATION_CUE.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = SELF_NEGATION_CUE.exec(text)) !== null) {
-    const token = match[1];
-    if (token === undefined || match[0].length === 0) {
-      SELF_NEGATION_CUE.lastIndex += 1;
-      continue;
-    }
-    // The token always sits at the END of the whole match — the leading class
-    // is one character or nothing, and the trailing assertion is zero-width.
-    // Computing the offset by subtraction rather than by `indexOf` cannot pick
-    // up a coincidental earlier occurrence of the token inside its own boundary.
-    const index = match.index + match[0].length - token.length;
-    const name =
-      SELF_NEGATION_VOCABULARY.find((entry) =>
-        new RegExp(`^(?:${entry.token})$`, 'i').test(token),
-      )?.name ?? 'unnamed';
-    cues.push({ name, match: token, index });
-  }
-  return cues;
-}
-
-/** The clause containing `at`, delimited by `.`, `;` or a newline. */
-function clauseBoundsAround(text: string, at: number): [number, number] {
-  let begin = 0;
-  for (let i = Math.min(at, text.length) - 1; i >= 0; i -= 1) {
-    if (CLAUSE_BREAK_CHARACTERS.includes(text.charAt(i))) {
-      begin = i + 1;
-      break;
-    }
-  }
-  let end = text.length;
-  for (let i = Math.max(at, 0); i < text.length; i += 1) {
-    if (CLAUSE_BREAK_CHARACTERS.includes(text.charAt(i))) {
-      end = i;
-      break;
-    }
-  }
-  return [begin, end];
-}
-
-const SELF_NEGATION_METACHARACTERS = /[.*+?^${}()|[\]\\]/g;
-
-/** Case-insensitive offset of `finding` inside `text`, or -1. Mirrors
- *  `encounter-facts`'s `locateValueInQuote`: L3 CAPITALISES the finding while
- *  the quote keeps the sentence's own casing, so a case-sensitive search
- *  returns -1 for essentially every real fact. */
-function locateFinding(text: string, finding: string): number {
-  if (!finding.trim()) return -1;
-  const match = new RegExp(
-    finding.replace(SELF_NEGATION_METACHARACTERS, '\\$&'),
-    'i',
-  ).exec(text);
-  return match ? match.index : -1;
-}
-
-/**
- * THE Q1 PREDICATE: does `text` — the text that would actually be PRINTED —
- * carry a negation scoping `finding`?
- *
- * Returns the cue, so a caller can assert containment rather than take the
- * boolean on trust. `null` means BLANK.
- */
-export function selfNegationScopingFinding(
-  text: string,
-  finding: unknown,
-): SelfNegationCue | null {
-  const cues = selfNegationCues(text);
-  if (cues.length === 0) return null;
-
-  const stated = typeof finding === 'string' ? finding.trim() : '';
-  const start = locateFinding(text, stated);
-
-  if (start < 0) {
-    // Nothing positional can be said about a finding that is not in its own
-    // printed text — L3 normalises "Never a smoker." to the entity "Smoking".
-    // A SINGLE clause carrying a negation is that clause's own claim, so it
-    // prints; more than one clause and the cue may belong to a different
-    // sentence entirely, so it BLANKS.
-    // ⚠️ "SINGLE CLAUSE" IS "NOTHING FOLLOWS THE FIRST BREAK", NOT "THE BREAK IS
-    // AT THE END". A sentence-final full stop IS a clause break, so comparing
-    // the break's offset against the trimmed length called EVERY ordinary
-    // sentence multi-clause and blanked four legitimate prints — measured:
-    // "Never a smoker.", "Troponin -ve.", "Cardiovascular exam unremarkable.",
-    // "Respiratory exam within normal limits.". What matters is whether there
-    // is a SECOND clause for the cue to have belonged to.
-    const [, firstClauseEnd] = clauseBoundsAround(text, 0);
-    const rest = text.slice(firstClauseEnd + 1).trim();
-    return rest.length === 0 ? (cues[0] ?? null) : null;
-  }
-
-  const [begin, end] = clauseBoundsAround(text, start);
-  return cues.find((cue) => cue.index >= begin && cue.index < end) ?? null;
-}
-
-/**
- * THE ONE FORMATTING ALLOWANCE — a leading "<heading>:" token.
- *
- * L3 keeps a section label on some dictations: "Allergies: no known drug
- * allergies", "Plan: no further imaging is required." The label is the form's
- * own heading, not the doctor's clinical sentence, and printing it back into
- * the field beneath that same heading reads as a transcription error.
- *
- * ⚠️ DELIBERATELY STRICTER THAN `encounter-facts`'s `VALUE_LABEL_PREFIX`
- * (its pattern is `^\s`-star`[A-Za-z][^:\n]{0,39}:\s`-star, written without
- * its delimiters because the closing pair would end this comment block early),
- * AND THE REASON IS A COUNTEREXAMPLE, NOT
- * A PREFERENCE. That pattern is applied to short L3 VALUES; this one is applied
- * to a whole dictated SENTENCE, where `[^:\n]` happily eats a clock. Measured:
- *
- *   "At 10:30 the patient denied chest pain."
- *      VALUE_LABEL_PREFIX -> "30 the patient denied chest pain."   ← mangled
- *      this pattern       -> unchanged (the heading may not contain a digit)
- *
- * A heading here is letters, spaces, hyphens and slashes only, and something
- * non-blank must follow it — so the strip can never empty the quote and can
- * never cut into a sentence that merely contains a colon.
- */
-export const LEADING_DICTATION_HEADING = /^\s*[A-Za-z][A-Za-z /-]{0,39}:[ \t]*(?=\S)/;
-
-/**
- * The quote with at most one leading heading removed.
- *
- * ⚠️ THE RETURN IS ALWAYS A SUFFIX OF THE INPUT — asserted, not assumed. That
- * is what makes "zero composition" CHECKABLE rather than merely intended: a
- * caller (and the gate) can assert `quote.endsWith(printed)` and no
- * synthesized, templated or joined text can satisfy it.
- */
-export function stripLeadingDictationHeading(quote: string): string {
-  const heading = LEADING_DICTATION_HEADING.exec(quote);
-  if (!heading) return quote;
-  // ⚠️ A HEADING THAT CARRIES THE NEGATION IS NOT A HEADING — IT IS THE CLAIM.
-  //
-  // `LEADING_DICTATION_HEADING`'s class admits SPACES, and every token in
-  // `DENIAL_VOCABULARY` is letters-and-spaces, so structured dictation puts the
-  // negation exactly where this pattern looks for a label:
-  //
-  //   "Not taking: warfarin, aspirin, or clopidogrel."
-  //    ^^^^^^^^^^^ matched as a heading -> stripped
-  //   -> "warfarin, aspirin, or clopidogrel."  printed into a SIGNED note for a
-  //      patient the encounter says is NOT taking them.
-  //
-  // ⚠️ AND THE ZERO-COMPOSITION PROPERTY CANNOT SEE THIS. The inverted output is
-  // still a strict SUFFIX of the doctor's own quote, so `quote.endsWith(printed)`
-  // is `true` for every one of these. A substring check proves nothing was
-  // MANUFACTURED; it cannot prove nothing was DESTROYED. Both are needed.
-  const removed = heading[0];
-  // ⚠️ #157(c) Q1 — THE PREDICATE IS `selfNegationScopingFinding`, NOT
-  // `EXPLICIT_DENIAL`, AND THE WIDENING IS MEASURED. `EXPLICIT_DENIAL` is built
-  // from `DENIAL_VOCABULARY`'s SIX spellings; against fourteen negating headings
-  // it kept two and STRIPPED TWELVE, each of which then printed its own inverse
-  // into a signed note. `Absent:`, `Ruled out:`, `Free of:`, `None:`, `Nil:`,
-  // `Unremarkable:`, `Within normal limits:`, `Negative:`, `Excluded:`,
-  // `Not present:`, `Clear of:` and `Resolved:` are all claims, not labels.
-  //
-  // The finding is not known here — this function sees only the quote — so the
-  // prefix is asked the UNSCOPED question: does this text carry a negation at
-  // all? A prefix is a handful of words and there is no second clause for a cue
-  // to belong to, so scoping has nothing to add.
-  if (selfNegationCues(removed).length > 0) return quote;
-  const stripped = quote.slice(removed.length);
-  return quote.endsWith(stripped) ? stripped : quote;
-}
-
-/**
- * ⚠️ #157(c) Q1's REASON TOKEN, SPELLED EXACTLY AS THE RULING SPELLS IT.
- *
- * It does NOT carry the `denial_withheld_` prefix the sibling tokens use. That
- * is the ruling's own wording, twice, and a token is an identifier a ruling
- * names — not a naming convention to be tidied into line. Recorded here so the
- * divergence reads as deliberate rather than as a slip somebody should "fix".
- */
-export const DENIAL_QUOTE_NOT_SELF_NEGATING = 'denial_quote_not_self_negating';
+// Nothing replaces them. That is the ruling.
 
 // ══ OWNER RULING #157(c) Q2 — THE CERTIFICATION BLOCKER EXEMPTS AN ENUMERATED
 // ALLOWLIST, NEVER A BLANKET. ══════════════════════════════════════════════
@@ -427,117 +146,38 @@ export const DENIAL_QUOTE_NOT_SELF_NEGATING = 'denial_quote_not_self_negating';
 // ⚠️ AN ENUMERATED SET, AND THE GATE ASSERTS SET EQUALITY IN BOTH DIRECTIONS.
 // A blanket "any reason code exempts" would let a FUTURE token join the
 // exemption silently — and the tokens this set does NOT carry are the ones that
-// mean the fill is broken (`denial_withheld_quote_not_dictated`,
+// mean the fill is broken.
+//
+// ⚠️ #157(d) SHRANK BOTH SIDES, AND THE REASON IS THE POINT. Six of the seven
+// blocking tokens named here — `denial_withheld_quote_not_dictated`,
 // `…_quote_empty_after_heading_strip`, `…_quote_unrenderable`,
-// `…_multiple_distinct_quotes`, `…_no_cited_denial`,
-// `…_kind_cannot_carry_denial`, `…_fact_not_denied`). Those must keep blocking.
+// `…_multiple_distinct_quotes`, `…_no_cited_denial` and `…_fact_not_denied` —
+// existed to explain why a particular QUOTE could not be printed. No quote is
+// printed any more, so not one of them can be emitted, and a set that still
+// named them would be an allowlist reconciling against tokens that do not
+// exist. What remains blocking is `denial_withheld_kind_cannot_carry_denial`
+// and `denial_withheld_repeating_rows_assert_presence`.
 //
 // ⚠️ `denial_withheld_repeating_rows_assert_presence` IS DELIBERATELY ABSENT,
 // AND IT IS AN OPEN QUESTION RATHER THAN A DECISION. It is rule-(2)-shaped by
 // the same "a row asserts presence" logic as the selection token, but #157(c)
-// says "*the* selection-shaped withholding", singular, and the text does not
-// settle whether the repeating-row token joins it. Anything the ruling does not
-// name is a decision being MADE, not one that was GIVEN — and the safe
+// says "*the* selection-shaped withholding", singular, and neither it nor
+// #157(d) settles whether the repeating-row token joins it. Anything the ruling
+// does not name is a decision being MADE, not one that was GIVEN — and the safe
 // direction for a certificate is to keep blocking, because blocking costs a
-// certificate and exempting can attest a hole. Flagged upward, not resolved
-// here.
+// certificate and exempting can attest a hole. Still flagged upward, still not
+// resolved here.
 export const CERTIFICATION_EXEMPT_DENIAL_REASONS: ReadonlySet<string> = new Set([
   'denial_withheld_value_only',
   'denial_withheld_affirmative_only',
   'denial_withheld_selection_asserts_presence',
-  DENIAL_QUOTE_NOT_SELF_NEGATING,
+  DENIAL_WITHHELD_NARRATIVE_ALWAYS_BLANK,
 ]);
 
-export type DenialText =
-  | { readonly kind: 'text'; readonly text: string }
-  | { readonly kind: 'withheld'; readonly reasonCode: string };
-
-function withheld(reasonCode: string): DenialText {
-  return { kind: 'withheld', reasonCode };
-}
-
-/**
- * The text ONE denied fact licenses the house to print, or a named refusal.
- *
- * Gates, in order, on: dictated provenance, denied polarity, a non-blank
- * remainder after the heading strip, and renderability.
- */
-export function dictatedDenialText(fact: EncounterFact): DenialText {
-  if (fact.sourceType !== 'encounter_evidence') {
-    return withheld('denial_withheld_quote_not_dictated');
-  }
-  if (fact.polarity !== 'denied') {
-    return withheld('denial_withheld_fact_not_denied');
-  }
-  const text = stripLeadingDictationHeading(fact.evidenceQuote);
-  if (text.trim().length === 0) {
-    return withheld('denial_withheld_quote_empty_after_heading_strip');
-  }
-  if (
-    text.length > MAX_DENIAL_QUOTE_CHARACTERS ||
-    INVALID_XML_CHARACTER_RE.test(text)
-  ) {
-    return withheld('denial_withheld_quote_unrenderable');
-  }
-  // ⚠️ #157(c) Q1 — THE WALL R1 WALKS INTO. A denied fact whose PRINTED text
-  // carries no negation scoping the finding renders BLANK. This is the second
-  // and independent placement of the discriminator: the strip guard above
-  // PRESERVES a print, this one REFUSES one, and neither substitutes for the
-  // other. It is tested against `text` — what would actually reach the
-  // document — so a negation destroyed by ANY means, anticipated or not, fails
-  // here rather than reaching a signature.
-  if (selfNegationScopingFinding(text, fact.value) === null) {
-    return withheld(DENIAL_QUOTE_NOT_SELF_NEGATING);
-  }
-  return { kind: 'text', text };
-}
-
-/**
- * The text a NARRATIVE denial licenses, across every fact the resolution cites.
- *
- * ⚠️ MORE THAN ONE DISTINCT QUOTE IS WITHHELD, NOT JOINED — and this is the
- * decision that keeps rule (1) absolute.
- *
- * An accumulating section ("no diabetes and no hypertension") normally yields
- * SEVERAL facts carrying ONE quote, and that collapses to the single sentence
- * the doctor actually said. Two GENUINELY different denied sentences have no
- * verbatim rendering: `"A."` + `"B."` is a composition, however small the
- * separator, and the affirmed path's `"; "` join is exactly the manufacturing
- * rule (1) forbids. So the honest outcome is a named blank.
- *
- * The alternative was measured and rejected before this was written: today the
- * multi-fact denial falls through to `multiple_distinct_supported_values` ->
- * FIELD_CONFLICT -> blocking, and the doctor loses the WHOLE DOCUMENT. Blank
- * with a reason is strictly better than that and strictly safer than a join.
- */
-export function narrativeDenialText(
-  field: TemplateField,
-  mapping: SemanticMapping | undefined,
-  facts: ReadonlyArray<EncounterFact>,
-): DenialText {
-  if (field.kind !== 'narrative_text' || field.rowPrototype) {
-    return withheld('denial_withheld_kind_cannot_carry_denial');
-  }
-  if (mapping?.polarityBehavior !== 'explicit_denial_allowed') {
-    return withheld(
-      mapping?.polarityBehavior === 'affirmative_only'
-        ? 'denial_withheld_affirmative_only'
-        : 'denial_withheld_value_only',
-    );
-  }
-  if (facts.length === 0) return withheld('denial_withheld_no_cited_denial');
-  const distinct: string[] = [];
-  for (const fact of facts) {
-    const one = dictatedDenialText(fact);
-    if (one.kind === 'withheld') return one;
-    if (!distinct.includes(one.text)) distinct.push(one.text);
-  }
-  const only = distinct[0];
-  if (distinct.length !== 1 || only === undefined) {
-    return withheld('denial_withheld_multiple_distinct_quotes');
-  }
-  return { kind: 'text', text: only };
-}
+// ⚠️ RULING #157(d) — `DenialText`, `withheld()`, `dictatedDenialText` and
+// `narrativeDenialText` ARE DELETED. Between them they were the only functions
+// in this repository whose job was to decide whether a denial may print, and
+// rule (1) removes the question. Nothing here converts a denied fact into text.
 
 
 // ══ OWNER RULING #157(c) Q3 — MIXED POLARITY RESOLVES PER FACT. ════════════
@@ -563,27 +203,27 @@ export function narrativeDenialText(
 // ⚠️ PER FACT, IN DICTATION ORDER, AND NEVER PER FIELD. Each fact contributes
 // its own segment and the segments keep the order the facts arrived in:
 //
-//   affirmed                  -> its DERIVED VALUE (`deriveFieldValueFromFact`,
-//                                the same function the validator re-derives
-//                                with, so the two cannot disagree)
-//   denied, self-negating     -> its QUOTE, per Q1
-//   denied, not self-negating -> NOTHING, and its reason token rides on the
-//                                resolution's own `reasonCode`
+//   affirmed -> its DERIVED VALUE (`deriveFieldValueFromFact`, the same
+//               function the validator re-derives with and the same one
+//               `joinListValuedNarrative` uses, so all three agree by
+//               construction)
+//   denied   -> NOTHING. Rule (1), #157(d): the reason token rides on the
+//               resolution's own `reasonCode` and the validator names the
+//               field on the issue channel.
 //
-// ⚠️ TWO REGISTERS IN ONE SECTION, AND IT IS DELIBERATE RATHER THAN OVERLOOKED.
-// The affirmed side prints a VALUE and the denied side prints a QUOTE, so a
-// mixed field reads "Pneumonia; No evidence of pulmonary embolism." That is
-// honest — every character came from the encounter — and it is an OWNER-VISIBLE
-// product decision, recorded here and surfaced in the slice report rather than
-// buried. The alternative (printing the affirmed quotes too) would restate a
-// whole sentence for every entity and is a bigger change than this ruling asks.
+// ⚠️ #157(d) DELETED THE SECOND REGISTER. #157(c) had the affirmed side print
+// a VALUE and the denied side print a QUOTE, so a mixed field read
+// "Pneumonia; No evidence of pulmonary embolism." — two registers in one
+// section, recorded at the time as a deliberate product decision. It rested on
+// the same falsified premise as rule (1) and dies with it: the denied side now
+// prints nothing at all, and the field reads "Pneumonia".
 //
-// ⚠️ AND THE ZERO-COMPOSITION ASSERTION CANNOT BE APPLIED TO THE WHOLE FIELD —
-// the joined output is a substring of no single quote. The property is asserted
-// PER SEGMENT by the gate: each denied segment is a suffix of its own fact's
-// quote, each affirmed segment is exactly its own fact's derived value, and the
-// only house-authored characters in the whole string are the separator the
-// affirmed path has always used.
+// ⚠️ AND THE ZERO-COMPOSITION PROPERTY IS NOW STRONGER, NOT WEAKER. Every
+// segment is an affirmed fact's derived value, so the whole string is
+// byte-identical to `joinListValuedNarrative(field, mapping, affirmed)` — the
+// AFFIRMED PATH'S OWN OUTPUT, reachable with no denial in the picture at all.
+// The gate asserts that equality rather than asserting a per-segment property
+// about text this function can no longer produce.
 //
 // ⚠️ THE INVARIANT THAT KEEPS THIS FROM WIDENING ANYTHING: THE MIXED PATH NEVER
 // DOES BETTER FOR THE AFFIRMED SET THAN THE AFFIRMED-ONLY PATH WOULD. If two
@@ -591,20 +231,26 @@ export function narrativeDenialText(
 // that is not an accumulating SECTION), the mixed case REFUSES and falls back
 // to the conflict it already was. Removing a denial from the picture can never
 // turn a rejected fill into an accepted one.
+// ⚠️ #157(d) C3/C4 — THE REASON TOKEN IS THE ENUMERATED BASE, AND THE TYPE
+// ENFORCES IT. `reasonCode` is typed `typeof MIXED_POLARITY_REASON`, so a
+// composed string does not compile. The previous shape emitted
+// `mixed_polarity_per_fact:<token>` by concatenation, which appears as a
+// literal NOWHERE — so the reconciliation arm's source scan was structurally
+// blind to it and a Q2 BLOCKING token
+// (`mixed_polarity_per_fact:denial_withheld_quote_not_dictated`, measured live)
+// rode a `supported` resolution straight past certification. Context about the
+// withheld denials belongs on the ISSUE channel, which the validator fills from
+// the cited facts; it never belongs in an identifier.
 export type MixedPolarityOutcome =
   | {
       readonly kind: 'text';
       readonly text: string;
-      readonly reasonCode: string;
-      /** Distinct reason tokens of the denials that contributed nothing. */
-      readonly withheldReasonCodes: readonly string[];
+      readonly reasonCode: typeof MIXED_POLARITY_REASON;
     }
   | { readonly kind: 'refused' };
 
-/** The reason token a per-fact mixed resolution carries. */
+/** The reason token a per-fact mixed resolution carries. The ONLY one. */
 export const MIXED_POLARITY_REASON = 'mixed_polarity_per_fact';
-
-const MAX_REASON_CODE_CHARACTERS = 120;
 
 function mixedRefused(): MixedPolarityOutcome {
   return { kind: 'refused' };
@@ -654,88 +300,77 @@ export function mixedPolarityNarrative(
   // this guard was written for.
   if (facts.some((fact) => fact.quality.evidence !== 'direct')) return mixedRefused();
 
-  // ⚠️ LATERALITY ACROSS *ALL* CITED FACTS, WHICH IS STRICTER THAN
-  // `joinListValuedNarrative`'s OWN GUARD, AND ON PURPOSE. That function only
-  // sees the facts it joins; here a left-leg affirmation and a right-leg denial
-  // would be merged into one unattributed section with nothing else watching —
-  // `mapping.laterality` is `optional` or null on narrative mappings, so the
-  // resolver's laterality arm never fires.
+  // ⚠️ LATERALITY ACROSS THE **AFFIRMED** FACTS ONLY — AND THE CORRECTION IS THE
+  // WHOLE POINT OF #157(d).
+  //
+  // This guard used to read every cited fact, and its stated reason was that
+  // "a left-leg affirmation and a right-leg denial would be merged into one
+  // unattributed section". Under #157(c) that was true: the denied fact printed
+  // its quote. **#157(d) deleted that.** A denied fact now contributes ZERO
+  // characters to this value — measured, and asserted by the C4 arm — so there
+  // is nothing of the denial left to merge, and no unattributed section can
+  // form. The hazard is gone.
+  //
+  // ⚠️ THE AMENDMENT REMOVED THE REASON AND LEFT THE VETO, WHICH COST THE WHOLE
+  // DOCUMENT. Measured on the modal vascular impression:
+  //   "Findings consistent with right leg deep vein thrombosis.
+  //    No evidence of left leg deep vein thrombosis."
+  //   -> affirmed/right + denied/left -> lateralities.size === 2 -> refused
+  //   -> polarity_conflict -> FIELD_CONFLICT -> the export is LOST.
+  // The affirmed fact ALONE renders. So the denial's laterality, and nothing
+  // else, destroyed the document — on the owner's own specialty, and on a
+  // branch whose headline promise is that denials stop killing documents.
+  //
+  // Reading only the affirmed side restores the module's own "never better than
+  // affirmed alone" invariant EXACTLY: the value is byte-identical to what the
+  // affirmed facts produce by themselves.
   const lateralities = new Set(
-    facts
+    affirmed
       .map((fact) => fact.laterality)
       .filter((side) => side !== 'not_applicable' && side !== 'unknown'),
   );
   if (lateralities.size > 1) return mixedRefused();
 
+  // ⚠️ #157(d) C4 — THE DENIED BRANCH IS GONE, SO NO COMPOSITION OF DENIAL
+  // TEXT CAN EXIST HERE. The affirmed facts derive by the NORMAL path in
+  // DICTATION ORDER (`facts.filter` preserves order, and nothing between the
+  // resolver's candidate filters and here sorts), and the denied facts
+  // contribute nothing but the resolution's reason token. What this loop
+  // produces is byte-identical to `joinListValuedNarrative(field, mapping,
+  // affirmed)` — the affirmed path's own function — which is asserted as a
+  // PROPERTY by the gate rather than described as an intention here.
   const segments: string[] = [];
-  const withheldReasonCodes: string[] = [];
-  const affirmedSegments: string[] = [];
-
-  for (const fact of facts) {
-    if (fact.polarity === 'affirmed') {
-      const derived = deriveFieldValueFromFact(field, mapping, fact);
-      // A cited fact that does not derive would be DROPPED from a section the
-      // note presents as complete, and the validator — which re-derives with
-      // this same function — would accept the loss. Refuse the whole thing.
-      if (derived === null) return mixedRefused();
-      const text = String(derived).trim();
-      if (!text) continue;
-      if (!affirmedSegments.includes(text)) affirmedSegments.push(text);
-      if (!segments.includes(text)) segments.push(text);
-      continue;
-    }
-    // The denied side is decided by the SAME rule (4) split the all-denied path
-    // uses, so a `value_only` or `affirmative_only` mapping withholds here for
-    // the identical reason it withholds there.
-    const one =
-      mapping?.polarityBehavior === 'explicit_denial_allowed'
-        ? dictatedDenialText(fact)
-        : withheld(
-            mapping?.polarityBehavior === 'affirmative_only'
-              ? 'denial_withheld_affirmative_only'
-              : 'denial_withheld_value_only',
-          );
-    if (one.kind === 'withheld') {
-      if (!withheldReasonCodes.includes(one.reasonCode)) {
-        withheldReasonCodes.push(one.reasonCode);
-      }
-      continue;
-    }
-    if (!segments.includes(one.text)) segments.push(one.text);
+  for (const fact of affirmed) {
+    const derived = deriveFieldValueFromFact(field, mapping, fact);
+    // A cited fact that does not derive would be DROPPED from a section the
+    // note presents as complete, and the validator — which re-derives with
+    // this same function — would accept the loss. Refuse the whole thing.
+    if (derived === null) return mixedRefused();
+    const text = String(derived).trim();
+    if (!text) continue;
+    if (!segments.includes(text)) segments.push(text);
   }
 
   // ⚠️ THE NEVER-BETTER-THAN-AFFIRMED-ALONE INVARIANT. Two distinct affirmed
   // values on a narrative that is not an accumulating SECTION are a genuine
   // conflict — `multiple_distinct_supported_values` — and they stay one.
-  if (affirmedSegments.length > 1 && !isListValuedNarrative(field, mapping)) {
+  if (segments.length > 1 && !isListValuedNarrative(field, mapping)) {
     return mixedRefused();
   }
   if (segments.length === 0) return mixedRefused();
 
-  const text = segments.join(NARRATIVE_LIST_SEPARATOR);
-  if (
-    text.length > MAX_DENIAL_QUOTE_CHARACTERS ||
-    INVALID_XML_CHARACTER_RE.test(text)
-  ) {
-    // Same ceiling as a single denial quote, for the same reason: the renderer
-    // refuses above its own limit and rule (3) forbids a denial refusing an
-    // export. Falling back to the conflict is not ideal, but it is the state
-    // this field was already in.
-    return mixedRefused();
-  }
-
-  const composed =
-    withheldReasonCodes.length === 0
-      ? MIXED_POLARITY_REASON
-      : `${MIXED_POLARITY_REASON}:${withheldReasonCodes.join(',')}`;
-  // A TRUNCATED TOKEN IS A LIE. If the composed reason cannot fit the schema's
-  // ceiling, name the SHAPE instead of half-naming the reasons.
-  const reasonCode =
-    composed.length <= MAX_REASON_CODE_CHARACTERS
-      ? composed
-      : `${MIXED_POLARITY_REASON}:denials_withheld`;
-
-  return { kind: 'text', text, reasonCode, withheldReasonCodes };
+  // ⚠️ NO CEILING AND NO XML CLASS, DELIBERATELY, BECAUSE THE AFFIRMED PATH HAS
+  // NEITHER. `joinListValuedNarrative` imposes no length limit, so a ceiling
+  // here would refuse a mixed field that the SAME affirmed facts alone would
+  // render — falling back to `polarity_conflict`, FIELD_CONFLICT, and the dead
+  // document Q3 exists to prevent. The value this returns is now an affirmed
+  // value like any other, and it is bounded exactly as every other affirmed
+  // value is: by the renderer, at `MAX_RENDERED_FIELD_CHARACTERS`.
+  return {
+    kind: 'text',
+    text: segments.join(NARRATIVE_LIST_SEPARATOR),
+    reasonCode: MIXED_POLARITY_REASON,
+  };
 }
 
 export type DenialOutcome =
@@ -766,8 +401,8 @@ function withheldOutcome(reasonCode: string): DenialOutcome {
  *                              not "blocks the export".
  *   affirmative_only        -> BLANK. A real meaning again, rather than the
  *                              second route to a refusal it had been.
- *   explicit_denial_allowed -> the doctor's quote on a narrative field;
- *                              `false` on a checkbox; BLANK on everything else.
+ *   explicit_denial_allowed -> `false` on a checkbox; BLANK on EVERYTHING
+ *                              else, narrative_text included — rule (1).
  *
  * ⚠️ SELECTION-SHAPED FIELDS NEVER SELECT ON A DENIAL — rule (2). A
  * single_select, a multi_select and a rowPrototype expansion all ASSERT
@@ -790,7 +425,6 @@ function withheldOutcome(reasonCode: string): DenialOutcome {
 export function denialOutcome(
   field: TemplateField,
   mapping: SemanticMapping | undefined,
-  facts: ReadonlyArray<EncounterFact>,
 ): DenialOutcome {
   const behavior = mapping?.polarityBehavior;
   if (behavior !== 'explicit_denial_allowed') {
@@ -816,13 +450,11 @@ export function denialOutcome(
   if (field.kind !== 'narrative_text') {
     return withheldOutcome('denial_withheld_kind_cannot_carry_denial');
   }
-  const text = narrativeDenialText(field, mapping, facts);
-  if (text.kind === 'withheld') return withheldOutcome(text.reasonCode);
-  return {
-    status: 'explicitly_denied',
-    value: text.text,
-    reasonCode: 'explicit_denial_dictated_quote',
-  };
+  // ⚠️ RULING #157(d) RULE (1), AND IT IS THE LAST LINE OF THIS FUNCTION ON
+  // PURPOSE: there is nothing after it to consult. A denied narrative fact is
+  // BLANK, unconditionally, whatever the quote says and however many facts are
+  // cited.
+  return withheldOutcome(DENIAL_WITHHELD_NARRATIVE_ALWAYS_BLANK);
 }
 
 /**
@@ -838,12 +470,13 @@ export function isPrintableDenial(
   field: TemplateField,
   value: FieldResolution['value'],
 ): boolean {
+  // ⚠️ #157(d) — THE `narrative_text` ARM IS DELETED AND THE WALL IS BACK TO
+  // ONE SHAPE. A narrative denial is `denial_withheld` with a null value long
+  // before the renderer sees it, so an `explicitly_denied` narrative is a
+  // resolution no legal path can mint — a BUG — and this refuses it rather than
+  // laundering it into a quiet blank.
   if (field.rowPrototype) return false;
-  if (field.kind === 'checkbox') return value === false;
-  if (field.kind === 'narrative_text') {
-    return typeof value === 'string' && value.length > 0;
-  }
-  return false;
+  return field.kind === 'checkbox' && value === false;
 }
 
 /**
@@ -858,7 +491,12 @@ export function isPrintableDenial(
  * `allowUncertifiedForSyntheticTest` already produces for
  * `needs_clinician_input`.
  *
- * So the export renders and CERTIFICATION BLOCKS, by name. Same shape as the
+ * So the export renders and the blank is NAMED in two durable places — the
+ * reason token and the counts. ⚠️ IT DOES NOT BLOCK CERTIFICATION for a
+ * narrative denial: #157(d) Q2 exempts that token by name, and a comment here
+ * claimed the opposite until the pass measured
+ * `denialWithheldMaterialFieldIds = 0` against five denied material concepts.
+ * Blocking still holds for the NON-exempt tokens. Same shape as the
  * fill-coverage and blank-verification invariants beside it: an invariant that
  * gates the certificate without gating the visit.
  */

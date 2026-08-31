@@ -680,7 +680,7 @@ function resolveOne(
     // `DENIAL_WITHHELD_WITHOUT_DENIAL` fired blocking and the whole export was
     // lost on every one of the 28 production single_selects. The two arms
     // directly above already cite `judged`; this one did not.
-    const denial = denialOutcome(field, mapping, judged);
+    const denial = denialOutcome(field, mapping);
     return makeResolution(
       field.fieldId,
       denial.status,

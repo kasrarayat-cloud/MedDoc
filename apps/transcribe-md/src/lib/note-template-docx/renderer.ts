@@ -302,15 +302,16 @@ function assertResolutionStatus(
   if (!populatedStatuses.has(resolution.status)) {
     failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
   }
-  // ⚠️ OWNER RULING #157(b) — THE WALL MOVED BY EXACTLY ONE SHAPE, AND IT IS
-  // STILL A WALL.
+  // ⚠️ OWNER RULING #157(d) — THE WALL ADMITS EXACTLY ONE SHAPE AGAIN.
   //
-  // It admitted only `checkbox` + `false`. It now also admits `narrative_text`
-  // + a string, because that string is the doctor's own dictated sentence and
-  // `validateTemplateTwin` has already re-derived it byte-for-byte through
-  // `denialOutcome`. Everything else is refused exactly as before — a
-  // single_select, a multi_select, a repeating section, a date, a number, a
-  // measurement, and a checkbox holding anything but `false`.
+  // #157(b) widened it to admit `narrative_text` + a string, on the reasoning
+  // that the string was the doctor's own dictated sentence. That reasoning was
+  // falsified three times (see `denial-contract.ts`'s header), and #157(d)
+  // deletes narrative denial printing altogether — so the arm is back to
+  // `checkbox` + `false`, the one control whose blank state IS the denial.
+  // Everything else is refused: a narrative_text, a single_select, a
+  // multi_select, a repeating section, a date, a number, a measurement, and a
+  // checkbox holding anything but `false`.
   //
   // ⚠️ THIS ARM REFUSES THE PACKAGE, AND THAT DOES NOT CONTRADICT RULE (3).
   // Rule (3) says no DENIAL may refuse an export, and no legal resolver path
