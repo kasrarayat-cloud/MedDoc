@@ -683,7 +683,15 @@ export function mergeFieldResolutions(
     for (const r of overlay) {
       const current = byId.get(r.fieldId);
       if (!current) continue; // field not in this IR — ignore
-      const currentUnfilled = current.value === null || UNFILLED.has(current.status);
+      // ⚠️ A WITHHELD DENIAL IS NULL BY CONSTRUCTION, AND IT IS NOT UNFILLED.
+      // Rule (2) is decided in the resolver and was undone here one function
+      // later: `denial_withheld` carries `value === null` by schema refine, so
+      // an overlay pick overwrote it and the dropdown rendered the very finding
+      // the encounter DENIED — with validation green and every count blank.
+      // Withholding is a DECISION; absence is not.
+      const currentUnfilled =
+        current.status !== 'denial_withheld' &&
+        (current.value === null || UNFILLED.has(current.status));
       if (currentUnfilled && r.value !== null) byId.set(r.fieldId, r);
     }
   }

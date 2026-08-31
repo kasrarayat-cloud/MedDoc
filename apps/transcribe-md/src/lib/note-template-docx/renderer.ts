@@ -13,6 +13,7 @@ import {
   type TemplateField,
   type TemplateTwinValidationResult,
 } from '../template-twin/ir';
+import { isPrintableDenial } from '../template-twin/denial-contract';
 import { compileTemplateDocx } from './compiler';
 import type { TemplateDocxLimits } from './limits';
 import { inspectDocxPackage } from './package-security';
@@ -301,9 +302,26 @@ function assertResolutionStatus(
   if (!populatedStatuses.has(resolution.status)) {
     failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
   }
+  // ⚠️ OWNER RULING #157(b) — THE WALL MOVED BY EXACTLY ONE SHAPE, AND IT IS
+  // STILL A WALL.
+  //
+  // It admitted only `checkbox` + `false`. It now also admits `narrative_text`
+  // + a string, because that string is the doctor's own dictated sentence and
+  // `validateTemplateTwin` has already re-derived it byte-for-byte through
+  // `denialOutcome`. Everything else is refused exactly as before — a
+  // single_select, a multi_select, a repeating section, a date, a number, a
+  // measurement, and a checkbox holding anything but `false`.
+  //
+  // ⚠️ THIS ARM REFUSES THE PACKAGE, AND THAT DOES NOT CONTRADICT RULE (3).
+  // Rule (3) says no DENIAL may refuse an export, and no legal resolver path
+  // can now reach here: a denial that cannot be printed is `denial_withheld`
+  // with a null value long before the renderer sees it. Reaching this line
+  // means a resolution no producer can mint — a BUG — and laundering a bug
+  // into a quiet blank is how a dropdown ends up ticked for a finding the
+  // encounter denied.
   if (
     resolution.status === 'explicitly_denied' &&
-    (field.kind !== 'checkbox' || resolution.value !== false)
+    !isPrintableDenial(field, resolution.value)
   ) {
     failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
   }

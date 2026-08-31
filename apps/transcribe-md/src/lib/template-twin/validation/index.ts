@@ -33,6 +33,7 @@ import {
   joinListValuedNarrative,
 } from '../field-value-derivation';
 import { isMappingTypeCompatible } from '../semantic-mapping';
+import { denialOutcome } from '../denial-contract';
 import {
   approvedPracticeDefaultAnchorId,
   approvedPracticeDefaultFactId,
@@ -204,6 +205,31 @@ function assertionSupported(
 ): boolean {
   const value = resolution.value;
   if (value === null) return true;
+
+  // ══ OWNER RULING #157(b) — A DENIAL IS RE-DERIVED, NOT RE-DESCRIBED. ══════
+  //
+  // ⚠️ THE EXISTING RAIL CANNOT VERIFY A DENIAL, AND THAT IS MEASURED, NOT
+  // ASSUMED. `deriveFieldValueFromFact` returns `fact.value` for a
+  // narrative_text — the AFFIRMED ENTITY. So the rail below refuses the
+  // doctor's own sentence with ASSERTION_NOT_SUPPORTED (blocking) and ACCEPTS
+  // the entity. Driven end to end through the real compiler -> resolver ->
+  // validator -> awaited renderer:
+  //
+  //   value "The patient has no history of diabetes."  -> valid=false, blocked
+  //   value "Diabetes"                                 -> valid=true, RENDERED
+  //
+  // The second row is the harm: a signed past-medical-history section reading
+  // "Diabetes" for a patient who was said not to have it, with nothing
+  // blocking. So a denial is verified against `denialOutcome` — the SAME
+  // function the resolver wrote it with, given the same field, mapping and
+  // cited facts — and the two cannot disagree without one of them being
+  // edited. This is a TIGHTENING: it is byte-identity against a shared
+  // derivation, exactly like the list-valued narrative case below, and it does
+  // not widen what the affirmed path accepts by a single character.
+  if (resolution.status === 'explicitly_denied') {
+    const expected = denialOutcome(field, mapping, citedFacts);
+    return expected.status === 'explicitly_denied' && expected.value === value;
+  }
 
   if (field.rowPrototype) {
     if (!isRowValueArray(value)) return false;
@@ -418,7 +444,16 @@ export function validateTemplateTwin(
     }
 
     const populated = resolution.value !== null;
-    const unresolved = new Set(['ambiguous', 'conflict', 'needs_clinician_input']);
+    // #157(b) — `denial_withheld` joins this set so UNRESOLVED_VALUE_PRESENT
+    // covers it: the one status that MEANS "blank" must never be found holding
+    // a value. `ir.ts`'s schema already refuses that shape, so this is the
+    // second wall rather than the first.
+    const unresolved = new Set([
+      'ambiguous',
+      'conflict',
+      'needs_clinician_input',
+      'denial_withheld',
+    ]);
     if (populated && unresolved.has(resolution.status)) {
       add('UNRESOLVED_VALUE_PRESENT', 'blocking', 'An unresolved field contains a renderable value.', field.fieldId);
     }
@@ -496,6 +531,44 @@ export function validateTemplateTwin(
         !input.allowUncertifiedForSyntheticTest &&
         (critical || field.required || mapping.required);
       add('FIELD_NEEDS_CLINICIAN_INPUT', needsInputBlocks ? 'blocking' : 'warning', 'The field needs clinician input.', field.fieldId);
+    } else if (resolution.status === 'denial_withheld') {
+      // ══ #157(b) RULE (3) — NO DENIAL MAY REFUSE AN EXPORT. ════════════════
+      //
+      // ⚠️ A WARNING **UNCONDITIONALLY** — not "unless critical", not "unless
+      // required". Every conditional severity in this function is a route back
+      // to the harm this ruling ends: FIELD_AMBIGUOUS blocks when
+      // `critical || field.required || mapping.required`, and that clause alone
+      // is why a `value_only` denial on a clinically material narrative took
+      // the doctor's whole document down. A field left blank is a field left
+      // blank; refusing the OTHER hundred and forty-nine fields does not fill
+      // it.
+      //
+      // ⚠️ AND THE SILENCE RULE IS SATISFIED ELSEWHERE, DELIBERATELY, BECAUSE A
+      // WARNING IS EASY TO SKIM. The blank is named in THREE durable places, so
+      // no single reader has to notice this line:
+      //   · `resolution.reasonCode` — the manifest's own field-level token,
+      //     persisted to `template_twin_fill_manifests`;
+      //   · `counts.needsReview` / `counts.criticalUnresolved` — `ir.ts`'s
+      //     `templateTwinCounts`, widened in the same commit;
+      //   · a CERTIFICATION BLOCKER on any clinically material field —
+      //     `denialWithheldMaterialFieldIds`, which is what stops a template
+      //     certifying green with a material section quietly empty.
+      //
+      // That last one is the reason this is not `needs_clinician_input`: that
+      // status is DOWNGRADED to a warning at certification by
+      // `allowUncertifiedForSyntheticTest`, so reusing it would have bought the
+      // non-blocking export at the price of a certificate that lies.
+      add('FIELD_DENIAL_WITHHELD', 'warning', 'The field is blank because the encounter denied it.', field.fieldId);
+      if (
+        citedFacts.length === 0 ||
+        citedFacts.some((fact) => fact.polarity !== 'denied')
+      ) {
+        // The status asserts "this blank is a DENIAL". An uncited or
+        // non-denied citation makes that assertion false, and a false reason
+        // in the manifest is worse than no reason — it is the audit trail
+        // saying something the evidence does not.
+        add('DENIAL_WITHHELD_WITHOUT_DENIAL', 'blocking', 'A withheld denial does not cite denied evidence.', field.fieldId);
+      }
     } else if (
       resolution.status === 'not_mentioned' &&
       (field.required || mapping.required || mapping.unknownPolicy === 'requires_input')

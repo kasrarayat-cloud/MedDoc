@@ -6,6 +6,7 @@
 // (TemplateTwinActor value-object); uses the prisma singleton + logTwinAudit only.
 // ============================================================================
 import { MIN_CERTIFIED_FILLED_FIELDS } from './certification-thresholds';
+import { denialWithheldMaterialFieldIds } from './denial-contract';
 import { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
 
@@ -780,6 +781,35 @@ export async function certifyAndActivateTemplateTwin(input: {
           'fillCoverage=false (no measurement CELL was filled — that is the path ' +
             'that silently produced empty documents; a template with table cells must ' +
             'prove at least one)',
+        );
+      }
+
+      // ── DENIAL-WITHHELD INVARIANT (owner ruling #157(b), rule 3) ─────────
+      // A denial must never refuse a doctor's EXPORT — so `FIELD_DENIAL_WITHHELD`
+      // is a warning and the document always renders. That is a statement about
+      // the visit, not about the TEMPLATE, and the two must not be conflated:
+      // certifying a template whose clinically material section blanks itself
+      // the moment the encounter says "no" is a certificate attesting a hole.
+      //
+      // ⚠️ THIS IS THE ROW THAT STOPS `denial_withheld` BECOMING THE NEXT
+      // `needs_clinician_input`. That status is deliberately downgraded to a
+      // warning here by `allowUncertifiedForSyntheticTest`, which is correct for
+      // a field nobody could infer — and would have been catastrophic for this
+      // one, because it would certify GREEN with a material section silently
+      // blank. Blocking lives HERE, where it costs a certificate and not a
+      // document.
+      const withheldMaterialFieldIds = denialWithheldMaterialFieldIds(
+        ir.fields,
+        [...syntheticResolutions.values()],
+      );
+      if (testReady && withheldMaterialFieldIds.length > 0) {
+        blockers.push(
+          `denialWithheld=false (${withheldMaterialFieldIds.length} clinically material ` +
+            `field${withheldMaterialFieldIds.length === 1 ? '' : 's'} blank because the ` +
+            'encounter denied them: ' +
+            `${withheldMaterialFieldIds.slice(0, 10).join(',')}` +
+            `${withheldMaterialFieldIds.length > 10 ? ',…' : ''} — a certificate must not ` +
+            'attest a template whose material section empties on a denial)',
         );
       }
 
