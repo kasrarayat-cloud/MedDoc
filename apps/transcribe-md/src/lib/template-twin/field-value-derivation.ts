@@ -245,6 +245,23 @@ export const ACCUMULATING_NARRATIVE_CONCEPTS: ReadonlySet<string> = new Set([
   'plan',
   'medication',
   'allergy',
+
+  // ⚠️ #159(b) — THE ENTITY-NAMING SUB-CONCEPTS, AND ONLY THOSE THREE.
+  // A field the doctor maps to `allergy.substance` is an ALLERGY LIST and must
+  // accumulate, exactly as a field mapped to bare `allergy` does. Without these
+  // rows the second allergen becomes `multiple_distinct_supported_values` and
+  // the section conflicts instead of listing.
+  //
+  // ⚠️ AND THE ATTRIBUTE MEMBERS ARE ABSENT ON PURPOSE. `medication.dose`,
+  // `.route`, `.frequency`, `allergy.reaction`, `family_history.relation` and
+  // every `social_history.*` are SINGLE-VALUED: a dose field holds one dose, a
+  // Tobacco field holds one status. `gate-list-valued-narrative-sections`'s arm
+  // "refuses to join medication.dose" exists because four refutation lenses
+  // demonstrated a dose field printing "10 mg; 20 mg" onto a doctor's form with
+  // nothing blocking. These three rows must never grow into the attributes.
+  'allergy.substance',
+  'medication.name',
+  'family_history.condition',
 ]);
 
 /**
