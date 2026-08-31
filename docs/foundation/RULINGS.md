@@ -276,6 +276,11 @@ than a rediscovery, and rediscovery is the failure this file exists to stop.
 | 2026-08-27 | #155 | OWNER-RULING | THE TEN ALREADY-SIGNED RECORDS STAY AS SIGNED; THE GAP IS MADE VISIBLE WITHOUT TOUCHING A BYTE | **THE QUESTION.** F12-e (#152) established that a visit whose `cptCodes.em` is null still displays and attests… | [`2026-08-27.md`](rulings/2026-08-27.md) |
 | 2026-08-28 | #156 | OWNER-RULING | SHAPE-AWARE VERIFICATION ENCOUNTERS: THE CERTIFICATION ENGINE LEARNS A SELF-TEST PER TEMPLATE S… | **⚠️ PROVENANCE, STATED FIRST, BECAUSE THIS ROW WAS NOT WRITTEN BY THE SESSION THAT RECEIVED THE RULING.** The… | [`2026-08-28.md`](rulings/2026-08-28.md) |
 
+| 2026-08-30 | #157 | OWNER-RULING | A NARRATIVE FIELD PRINTS THE DENIAL'S PROSE; THE REFUSAL SURVIVES ONLY WHERE PRINTIN… | **THE QUESTION, AND WHY IT WAS OWNER-CLASS.** `assertResolutionStatus` accepts `explicitly_denied` on EXACTLY one shape… | [`2026-08-30.md`](rulings/2026-08-30.md) |
+| 2026-08-30 | #158 | OWNER-RULING | THE RE-ATTESTATION RETARGETS TO THE LIVE TEMPLATE; THE DEAD TEMPLATE'S ROWS ARE RECO… | **THE QUESTION.** All 35 confirmations were written AFTER their template went inactive at 06:16:29.499, 29 of them by ra… | [`2026-08-30.md`](rulings/2026-08-30.md) |
+| 2026-08-30 | #159 | OWNER-RULING | THE CERTIFICATION SEQUENCE IS ORDERED, AND THE FILL FLOOR NEVER LOWERS WITHOUT ITS O… | **THE QUESTION.** PR #914 cleared the render refusal but moved filled resolutions only 2 → 3 against MIN_CERTIFIED_FILL… | [`2026-08-30.md`](rulings/2026-08-30.md) |
+| 2026-08-30 | #160 | OWNER-RULING | THE LOOP'S DECOMMISSION IS A TRACKED AMENDMENT; AN UNTRACKED FILE AND A PASTE CACHE … | **THE QUESTION.** The decommission existed ONLY in an untracked `STOP` and a 0600 paste cache, while the TRACKED rulebo… | [`2026-08-30.md`](rulings/2026-08-30.md) |
+| 2026-08-30 | #161 | OWNER-RULING | PR #915 MERGES ON `main`'s `e2e` COMPLETING — ⚠️ OPERATIONAL, one merge, NOT standing | **THE QUESTION.** Merging #915 would have cancelled `8b6418c5`'s citation; the session waited instead so a clinical-path… | [`2026-08-30.md`](rulings/2026-08-30.md) |
 <!-- RULINGS-INDEX-END -->
 
 ## What is NOT in here, deliberately
