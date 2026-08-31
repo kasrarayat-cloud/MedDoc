@@ -726,13 +726,30 @@ function resolveOne(
 
   const selected = convertedPairs[0]?.converted;
   if (!selected) return missingResolution(field, mapping, allFacts);
-  const mayPopulateDenial =
-    field.kind === 'checkbox' ||
-    mapping.polarityBehavior === 'explicit_denial_allowed';
+  // ⚠️ RULING #157 — A DENIAL CARRIES ITS OWN PROSE, ON EVERY FIELD KIND.
+  //
+  // Nulling the value here was the FIRST half of a whole-document refusal: the
+  // renderer rejects a populated status carrying no value, so a denied
+  // narrative under `affirmative_only` died on that arm exactly as a denied
+  // narrative under `explicit_denial_allowed` died on the checkbox arm. Both
+  // routes lost the entire export; neither produced a validation issue naming
+  // the field.
+  //
+  // ⚠️ THE ACCEPTED COST, RECORDED RATHER THAN BURIED. `affirmative_only` and
+  // `explicit_denial_allowed` no longer differ on the non-checkbox denial path.
+  // They never differed USEFULLY — `affirmative_only`'s only effect here was to
+  // null the value and refuse the document by a different arm, which is a
+  // second route to the same failure rather than a narrower behaviour. The
+  // behaviour that actually WITHHOLDS a denial is `value_only`, which exits
+  // above at `denial_behavior_not_approved` and is untouched; it covers 88 of
+  // the 150 fields in the production corpus, so a mapping can still refuse
+  // denials. A CHECKBOX is unaffected in both directions: `convertValue` gives
+  // it `false`, and the renderer still refuses `explicitly_denied` on a
+  // checkbox whose value is not `false`.
   return makeResolution(
     field.fieldId,
     allDenied ? 'explicitly_denied' : 'supported',
-    allDenied && !mayPopulateDenial ? null : selected.value,
+    selected.value,
     temporalCandidates,
     allDenied ? 'explicit_denial_supported' : 'direct_evidence_supported',
     selected.optionOrdinal,

@@ -301,9 +301,30 @@ function assertResolutionStatus(
   if (!populatedStatuses.has(resolution.status)) {
     failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
   }
+  // ⚠️ RULING #157 — A NARRATIVE FIELD PRINTS THE DENIAL'S PROSE, AND THE
+  // REFUSAL REMAINS ONLY WHERE PRINTING WOULD ASSERT FALSELY.
+  //
+  // A CHECKBOX has exactly two printable states, so `explicitly_denied` on one
+  // can only mean the unchecked box; any other value would tick a box the
+  // encounter denied, and that is the one place this pair prints a LIE. It
+  // still refuses.
+  //
+  // EVERY OTHER KIND PRINTS ITS DENIAL. "No known drug allergies" is the
+  // clinical CONTENT of the denial, not a checkbox-false — denial is a polarity
+  // of a fact — and the resolver's evidence rails have already bound the
+  // sentence to a cited, dictated fact before it reaches here.
+  //
+  // ⚠️ WHAT THIS REPLACED, so the cost of the old shape is not re-paid: the old
+  // arm refused `explicitly_denied` on ANY non-checkbox. Production has ZERO
+  // checkbox fields, so its accept branch was dead against the real corpus and
+  // a single denied sentence in a narrative section — "Stable chronic
+  // conditions with no acute change" — took the doctor's WHOLE DOCUMENT down
+  // with FIELD_RESOLUTION_INVALID, with no validation issue naming the field on
+  // the way there.
   if (
     resolution.status === 'explicitly_denied' &&
-    (field.kind !== 'checkbox' || resolution.value !== false)
+    field.kind === 'checkbox' &&
+    resolution.value !== false
   ) {
     failTemplateDocxRender('FIELD_RESOLUTION_INVALID');
   }
