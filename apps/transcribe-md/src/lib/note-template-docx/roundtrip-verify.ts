@@ -361,164 +361,6 @@ export function applyApprovedXmlPatches(
  * requires one entry per expected field, so every honestly-blank field silently
  * had none and certification could not close.
  */
-/**
- * ⚠️ #162(b) — WHERE CONTENT RENDERS, DECLARED PER BINDING KIND, FAIL-CLOSED.
- *
- * "Read what the artifact contains" is only half an instruction until it names
- * WHERE. #162's first implementation read the element the binding PATH points
- * at, and for a `legacy_form_field` that is the `w:fldChar` BEGIN marker —
- * which holds `w:ffData` metadata and STRUCTURALLY CANNOT CONTAIN `w:t`. The
- * check therefore returned "empty" for every legacy field on every input,
- * including an ordinary single-paragraph FORMTEXT, and a stale
- * `WARFARIN 5 MG DAILY` survived into a rendered document attested as proven
- * blank. A flawless check asked about the wrong universe.
- *
- * ⚠️ AN UNKNOWN KIND REFUSES. It does NOT fall back to "the bound element",
- * because that fallback is exactly what produced the defect. A binding kind
- * added later must DECLARE its locus here or blank-proof is unearnable for it —
- * which costs a certification and never a false attestation.
- */
-type ContentLocus = (bound: XmlElementSpan) => readonly XmlElementSpan[] | null;
-
-const CONTENT_LOCUS_BY_BINDING: Readonly<Record<string, ContentLocus>> = {
-  // An SDT renders inside its own content element; the bound node encloses it.
-  content_control: (bound) => [bound],
-  // A table cell renders inside the cell.
-  table_cell: (bound) => [bound],
-  // A repeating row renders inside the row.
-  repeating_row: (bound) => [bound],
-  // ⚠️ A LEGACY FORM FIELD RENDERS BETWEEN `separate` AND `end`, NOT INSIDE THE
-  // BEGIN MARKER THE PATH NAMES. The result runs are siblings AFTER the begin,
-  // and they may cross paragraph boundaries — which is why this walks the
-  // enclosing body rather than the begin's own paragraph.
-  legacy_form_field: (bound) => legacyResultSpans(bound),
-};
-
-/**
- * The RESULT runs of a legacy form field: everything between this field's
- * `separate` (or its `begin`, when Word omitted the separate) and its `end`.
- *
- * ⚠️ RETURNS NULL WHEN IT CANNOT TELL — an unbalanced or nested field, or an
- * `end` it cannot find. Null means "no locus", which the caller treats as NOT
- * PROVEN EMPTY. A field whose structure we cannot read must never earn a blank
- * proof by default.
- */
-function legacyResultSpans(begin: XmlElementSpan): readonly XmlElementSpan[] | null {
-  let root: XmlElementSpan | null = begin;
-  while (root && root.parent) root = root.parent;
-  if (!root) return null;
-
-  const flat: XmlElementSpan[] = [];
-  const walk = (n: XmlElementSpan): void => {
-    flat.push(n);
-    for (const c of n.children) walk(c);
-  };
-  walk(root);
-  flat.sort((a, b) => a.start - b.start);
-
-  const beginIndex = flat.findIndex((n) => n === begin);
-  if (beginIndex < 0) return null;
-
-  // Depth-count nested fields so an inner field's `end` cannot close ours.
-  let depth = 0;
-  let from: XmlElementSpan | null = null;
-  for (let i = beginIndex; i < flat.length; i += 1) {
-    const node = flat[i]!;
-    if (xmlLocalNameOf(node.name) !== 'fldChar') continue;
-    const type = fldCharTypeOf(node);
-    if (type === 'begin') {
-      depth += 1;
-      continue;
-    }
-    if (type === 'separate' && depth === 1 && !from) {
-      from = node;
-      continue;
-    }
-    if (type === 'end') {
-      depth -= 1;
-      if (depth === 0) {
-        const start = (from ?? begin).end;
-        const stop = node.start;
-        if (stop < start) return null;
-        // Every element that begins inside the result window.
-        return flat.filter((n) => n.start >= start && n.end <= stop);
-      }
-    }
-  }
-  return null; // no matching end — cannot tell
-}
-
-function xmlLocalNameOf(name: string): string {
-  const i = name.indexOf(':');
-  return i === -1 ? name : name.slice(i + 1);
-}
-
-function fldCharTypeOf(node: XmlElementSpan): string | null {
-  const m = /fldCharType\s*=\s*"([^"]*)"/.exec(node.name);
-  return m ? m[1]! : null;
-}
-
-/**
- * ⚠️ #162(b) — EMPTINESS IS AN INERT ALLOWLIST, NEVER A VISIBLE-ELEMENT
- * ENUMERATION.
- *
- * The first implementation asserted "no `w:t`". That enumerates the VISIBLE
- * kinds, and the list grows forever — the pass named `w:sym`, `w:pict` and
- * `w:fldSimple` immediately, and OOXML has more (`w:drawing`, `w:object`,
- * `w:instrText`, `mc:AlternateContent`). An incomplete token list is defeated
- * by the first member nobody thought of, and it fails OPEN: the unknown element
- * is silently treated as invisible.
- *
- * SO THE TEST IS INVERTED. The locus is proven empty only when EVERY element
- * inside it is INERT — formatting and bookkeeping that render nothing. Anything
- * unrecognised means NOT PROVEN EMPTY, and refuses. Unknown content fails
- * CLOSED, which costs a certification rather than an attestation nobody checked.
- */
-const INERT_ELEMENTS: ReadonlySet<string> = new Set([
-  'r', 'rPr', 'pPr', 'p', 'sdt', 'sdtPr', 'sdtContent', 'sdtEndPr',
-  'rFonts', 'sz', 'szCs', 'lang', 'color', 'b', 'i', 'u', 'spacing', 'ind',
-  'jc', 'shd', 'noProof', 'proofErr', 'lastRenderedPageBreak',
-  'bookmarkStart', 'bookmarkEnd', 'commentRangeStart', 'commentRangeEnd',
-  'fldChar', 'ffData', 'name', 'enabled', 'calcOnExit', 'textInput',
-  'checkBox', 'ddList', 'default', 'maxLength', 'format', 'type', 'size',
-  'tc', 'tcPr', 'tcW', 'tr', 'trPr', 'gridSpan', 'vMerge', 'tcBorders',
-  'alias', 'tag', 'id', 'lock', 'placeholder', 'docPartObj', 'docPartGallery',
-  'showingPlcHdr', 'dataBinding', 'temporary', 'appearance', 'text',
-]);
-
-/**
- * Is every element inside these spans inert, and is there no character data?
- * Returns the first offending element name, or null when genuinely empty.
- */
-function firstNonInert(
-  spans: readonly XmlElementSpan[],
-  partText: string,
-): string | null {
-  for (const span of spans) {
-    const local = xmlLocalNameOf(span.name.split(/[\s>/]/)[0] ?? span.name);
-    if (!INERT_ELEMENTS.has(local)) return local;
-  }
-  // ⚠️ AND CHARACTER DATA BETWEEN THE ELEMENTS COUNTS. An inert element set
-  // with loose text between the tags is not empty, and enumerating elements
-  // alone would miss it.
-  for (const span of spans) {
-    if (span.selfClosing) continue;
-    const inner = partText.slice(span.startTagEnd, span.endTagStart);
-    const stripped = inner.replace(/<[^>]*>/g, '');
-    if (decodeXmlEntities(stripped).length > 0) return '#text';
-  }
-  return null;
-}
-
-function decodeXmlEntities(v: string): string {
-  return v
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, '&');
-}
-
 export type RenderedFieldProof =
   | {
       readonly kind: 'filled';
@@ -540,23 +382,29 @@ export type RenderedFieldProof =
     }
   | {
       /**
-       * ⚠️ RULING #162 — THE OUTCOME-BASED BLANK PROOF.
+       * ⚠️ RULING #162(c) — EMPTINESS IS BYTE-EQUALITY AGAINST THE WRITER'S OWN
+       * EXPECTATION, NEVER PARSING.
        *
-       * A field the resolver left NULL whose control the renderer DID patch —
-       * it cleared the template's placeholder to nothing. `blank` cannot
-       * describe it (that arm requires zero patches) and `filled` is a lie
-       * about a field that carries no value.
+       * A field the resolver left EMPTY whose control the renderer DID patch —
+       * it cleared the template's placeholder. `blank` cannot describe it (that
+       * arm means zero patches) and `filled` asserts a value that does not
+       * exist.
        *
-       * ⚠️ AND THE OLD PROXY NEVER LOOKED AT THE OUTPUT. `kind: 'blank'` asks
-       * "did the renderer write nothing?" — a fact about a CODE PATH. On a form
-       * whose fields are content controls a blank field is still patched, so no
-       * field could ever earn it and `blankVerification` was UNSATISFIABLE BY
-       * CONSTRUCTION. Measured on the owner's GI consult form: 20 fields null
-       * in the manifest, all 35 round-trip entries `filled`, blankProofCount 0.
+       * ⚠️ TWO EARLIER INSTRUMENTS FOR THIS FAILED, EACH A LAYER DEEPER, AND
+       * BOTH TRIED TO READ THE DOCUMENT: first "does the control contain no
+       * `w:t`", which never looked at the right span for a legacy field and
+       * enumerated the VISIBLE element kinds — a list that grows forever; then
+       * a locus table plus an inert allowlist, whose attribute regex read a
+       * field the scanner never populates, so every empty legacy field
+       * hard-failed the render. 29 findings, 29 survived.
        *
-       * This arm asks the question the invariant always meant: **does the
-       * rendered control contain nothing?** — verified against the OUTPUT
-       * BYTES, not inferred from the resolution.
+       * So this one does not read the document at all. `expectedSha256` is the
+       * hash of the binding span AS THE WRITER MEANT TO LEAVE IT — the SOURCE
+       * span with this field's own patches applied, computed with the same
+       * `applyApprovedXmlPatches` the renderer uses. Verification is one
+       * comparison. Stale content, `w:sym`, a junk fill and tampering all
+       * diverge identically; a correct empty passes by construction, which is
+       * what kills the false-refusal direction the allowlist introduced.
        */
       readonly kind: 'emptied';
       readonly fieldId: string;
@@ -564,6 +412,8 @@ export type RenderedFieldProof =
       readonly bindingPath: string;
       readonly valueSha256: string;
       readonly occurrences: number;
+      /** sha256 of the binding span as the writer intended to leave it. */
+      readonly expectedSha256: string;
     };
 
 export interface RenderedPartProof {
@@ -693,9 +543,8 @@ export function verifyRenderedTemplateDocx(
     proofFieldIds.add(field.fieldId);
     if (field.kind === 'blank') blankProofs.push(field);
     else {
-      // ⚠️ `emptied` IS PATCHED, so it belongs in the patched-set equality
-      // below exactly as a fill does. What distinguishes it is not whether the
-      // renderer acted, but WHAT THE OUTPUT CONTAINS — checked further down.
+      // `emptied` IS patched, so it joins the patched-set equality like a fill.
+      // What distinguishes it is the byte comparison below.
       filledFieldIds.add(field.fieldId);
       if (field.kind === 'emptied') emptiedProofs.push(field);
     }
@@ -751,45 +600,30 @@ export function verifyRenderedTemplateDocx(
     }
   }
 
-  // ── #162 — THE OUTCOME-BASED BLANK PROOF, VERIFIED IN THE OUTPUT BYTES ────
-  // For every field the resolver left NULL and the renderer nonetheless
-  // patched, the rendered control must contain NOTHING. This is the direction
-  // the invariant exists for: a renderer that junk-fills a blank — a stale
-  // placeholder left behind, a prompt string, a stray glyph — is exactly the
-  // harm, and the old proxy could not see it because it never read the output.
-  //
-  // ⚠️ IT ASSERTS EMPTINESS, NOT "SHORTNESS" OR "LOOKS BLANK". Zero characters
-  // of `w:t` content, after entity decoding. A field that renders a single
-  // space is NOT blank and must fail here.
+  // ── #162(c) — ONE COMPARISON, AND IT READS NOTHING ──────────────────────
+  // The writer recorded what it meant to leave at this binding. If the output
+  // differs by a single byte, something the writer did not intend is there:
+  // stale content it failed to clear, a glyph, another field's patch, or
+  // tampering. All refuse identically, and a correct empty cannot fail.
   if (emptiedProofs.length > 0) {
     const outScans = new Map<string, ScannedXmlPart>();
-    const scanOut = (partName: string): ScannedXmlPart => {
-      const hit = outScans.get(partName);
-      if (hit) return hit;
-      const entry = outputPackage.zip.entries.get(partName);
-      if (!entry) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
-      const scanned = scanXmlPart(entry.bytes);
-      outScans.set(partName, scanned);
-      return scanned;
-    };
-    const bindingKindOf = new Map(
-      input.ir.fields.map((f) => [f.fieldId, f.rendererBinding.bindingType]),
-    );
     for (const emptied of emptiedProofs) {
-      const out = scanOut(emptied.partName);
-      const bound = out.byPath.get(emptied.bindingPath);
-      if (!bound) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
-
-      // ⚠️ THE LOCUS IS DECLARED PER KIND AND AN UNKNOWN KIND REFUSES. No
-      // fallback to "the bound element" — that fallback IS the #162 defect.
-      const kind = bindingKindOf.get(emptied.fieldId);
-      const locus = kind ? CONTENT_LOCUS_BY_BINDING[kind] : undefined;
-      if (!locus) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
-
-      const spans = locus(bound);
-      // Null means the structure could not be read — NOT PROVEN EMPTY.
-      if (spans === null) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
-      if (firstNonInert(spans, out.text) !== null) {
+      let out = outScans.get(emptied.partName);
+      if (!out) {
+        const entry = outputPackage.zip.entries.get(emptied.partName);
+        if (!entry) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+        out = scanXmlPart(entry.bytes);
+        outScans.set(emptied.partName, out);
+      }
+      const span = out.byPath.get(emptied.bindingPath);
+      if (!span) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      const actual = createHash('sha256')
+        .update(out.text.slice(span.start, span.end))
+        .digest('hex');
+      // ⚠️ FAIL-CLOSED ON A MISSING EXPECTATION. A proof that does not carry
+      // one cannot be checked, and an uncheckable claim is not a proof.
+      const expected = (emptied as { expectedSha256?: string }).expectedSha256;
+      if (!expected || actual !== expected) {
         failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
       }
     }

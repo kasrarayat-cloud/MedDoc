@@ -146,9 +146,26 @@ export async function renderTemplateDocx(
     // `blankVerification` unsatisfiable on every content-control form.
     // The verifier proves this arm by reading the OUTPUT control and requiring
     // it to be empty, which is the question the invariant always meant to ask.
-    fieldProofs.push(
-      fieldProof(field, resolution.value, 1, isEmptyRenderValue(field, resolution.value) ? 'emptied' : 'filled'),
-    );
+    // ⚠️ #162(c) — THE WRITER RECORDS WHAT IT MEANT TO LEAVE.
+    // For an emptied field the expectation is this binding's SOURCE span with
+    // THIS FIELD'S OWN patches applied, hashed. The verifier then makes one
+    // byte comparison against the output and reads nothing. Computed with
+    // `applyApprovedXmlPatches` — the renderer's own function, so there is ONE
+    // span authority and no parallel scanner to drift from it. A duplicated
+    // helper that dropped an argument is exactly what broke the last attempt.
+    if (isEmptyRenderValue(field, resolution.value)) {
+      fieldProofs.push({
+        kind: 'emptied',
+        fieldId: field.fieldId,
+        partName: field.rendererBinding.partName,
+        bindingPath: field.rendererBinding.path,
+        valueSha256: canonicalSha256({ fieldId: field.fieldId, value: resolution.value }),
+        occurrences: 1,
+        expectedSha256: expectedEmptiedSpanSha256(part.scan, field, patches),
+      });
+    } else {
+      fieldProofs.push(fieldProof(field, resolution.value, 1));
+    }
   }
 
   const partProofs: RenderedPartProof[] = [];
@@ -1267,11 +1284,37 @@ function isEmptyRenderValue(
   return false;
 }
 
+/**
+ * The binding span AS THE WRITER MEANT TO LEAVE IT: the SOURCE span with this
+ * field's own patches applied, hashed.
+ *
+ * ⚠️ IT REUSES `applyApprovedXmlPatches` RATHER THAN RE-IMPLEMENTING THE EDIT.
+ * #162(b) failed because a copied helper drifted from the original — it read an
+ * attribute off a field the scanner does not populate — and every empty legacy
+ * field then hard-failed the render. One authority, no second copy.
+ */
+function expectedEmptiedSpanSha256(
+  scan: ScannedXmlPart,
+  field: TemplateField,
+  patches: readonly ApprovedXmlPatch[],
+): string {
+  const span = scan.byPath.get(field.rendererBinding.path);
+  if (!span) failTemplateDocxRender('BINDING_NOT_FOUND');
+  const patchedPart = applyApprovedXmlPatches(scan.text, patches);
+  // The span's own bounds shift by whatever the patches inside it changed.
+  const delta = patches
+    .filter((p) => p.start >= span.start && p.end <= span.end)
+    .reduce((acc, p) => acc + (p.replacement.length - (p.end - p.start)), 0);
+  return createHash('sha256')
+    .update(patchedPart.slice(span.start, span.end + delta))
+    .digest('hex');
+}
+
 function fieldProof(
   field: TemplateField,
   value: FieldResolution['value'],
   occurrences: number,
-  kind: RenderedFieldProof['kind'] = 'filled',
+  kind: 'filled' | 'blank' = 'filled',
 ): RenderedFieldProof {
   return {
     kind,
