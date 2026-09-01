@@ -75,17 +75,128 @@ export const REGISTRY_SYNONYMS: Readonly<Record<string, readonly string[]>> = {
   ],
   assessment: ['assessment_discussed', 'impression'],
   'exam.vascular': ['exam_findings.vascular'],
+
 };
+
+/**
+ * SUB-CONCEPT MEMBERS — ruling #159(b).
+ *
+ * ⚠️ THESE ARE NOT `REGISTRY_SYNONYMS`, AND THE SEPARATION IS THE WHOLE POINT.
+ * A SYNONYM is another SPELLING of the same concept: `impression` IS
+ * `assessment`, so it folds through `canonicalConcept` and inherits everything
+ * the canonical concept has — including whether it accumulates.
+ *
+ * A SUB-CONCEPT is a FINER GRANULARITY of a family: `medication.dose` is not
+ * another word for `medication`, it is one field of one medication. It must
+ * MATCH a mapping that cites the family, and it must NOT inherit the family's
+ * accumulating behaviour.
+ *
+ * ⚠️ AND THAT DISTINCTION WAS FOUND BY A FULL-SUITE FAILURE, NOT BY REASONING.
+ * The first version of #159(b) put these in `REGISTRY_SYNONYMS`. Because
+ * `isListValuedNarrative` canonicalises FIRST, `medication.dose` folded to
+ * `medication` — which IS on the accumulating allowlist — and
+ * `gate-list-valued-narrative-sections` went red on the arm named "refuses to
+ * join medication.dose". That arm exists because four refutation lenses
+ * demonstrated the harm with concrete inputs: a dose field printing
+ * "10 mg; 20 mg" onto a doctor's form with nothing blocking. Folding these
+ * would have RE-OPENED a defect a previous adversarial pass had closed.
+ *
+ * `social_history.smoking` is the same shape and the same risk: on the owner's
+ * live consult form, "Tobacco" is one status, not a section.
+ *
+ * So: they satisfy `isRegisteredConcept`, they are seeded into a mapping's
+ * `approvedSynonyms` so `factSatisfiesMapping` accepts them, and
+ * `canonicalConcept` DOES NOT fold them. Accumulation is decided by the
+ * allowlist alone, exactly as it was.
+ */
+export const REGISTRY_SUBCONCEPTS: Readonly<Record<string, readonly string[]>> = {
+  allergy: ['allergy.substance', 'allergy.reaction'],
+  medication: [
+    'medication.name',
+    'medication.dose',
+    'medication.route',
+    'medication.frequency',
+  ],
+  family_history: ['family_history.relation', 'family_history.condition'],
+  social_history: [
+    'social_history.smoking',
+    'social_history.alcohol',
+    'social_history.drugs',
+    'social_history.occupation',
+  ],
+};
+
+/** Flat set of every sub-concept, for the registry predicate. */
+const ALL_SUBCONCEPTS: ReadonlySet<string> = new Set(
+  Object.values(REGISTRY_SUBCONCEPTS).flat(),
+);
+
+/**
+ * Is this string a registered SUB-CONCEPT rather than a spelling?
+ *
+ * ⚠️ EXPORTED BECAUSE `approvedSynonyms` HAS A SECOND AUTHOR AND THE FIRST
+ * VERSION OF #159(b) FORGOT IT. `synonymsFor` returns spellings only, which
+ * made "no bare family offers its members" true of THIS module and false of the
+ * SYSTEM: the proposer unions the MODEL's own `approvedSynonyms` into the
+ * mapping, so a model answering `{clinicalConcept:'medication', approvedSynonyms:
+ * ['medication.name','medication.dose', …]}` re-creates the destruction the
+ * redesign exists to prevent — measured, `"Lisinopril; 10 mg; by mouth; daily;
+ * Amlodipine"`, supported, zero blocking, a drug printed with no dose.
+ *
+ * A SYNONYM IS ANOTHER SPELLING OF THE SAME THING. A sub-concept is a finer
+ * granularity, so it is never a legitimate synonym of its family — whoever
+ * proposes it.
+ */
+export function isSubConcept(concept: string): boolean {
+  return ALL_SUBCONCEPTS.has(concept.trim().toLowerCase());
+}
 
 export function isRegisteredConcept(concept: string): boolean {
   const c = concept.trim().toLowerCase();
   if (REGISTRY_CONCEPTS.includes(c)) return true;
   if (REGISTRY_PATTERNS.some((p) => p.test(c))) return true;
+  if (ALL_SUBCONCEPTS.has(c)) return true;
   return Object.values(REGISTRY_SYNONYMS).some((list) => list.includes(c));
 }
 
 /** Every concept a mapping for this registry entry may legitimately cite. */
 export function synonymsFor(concept: string): readonly string[] {
+  // ⚠️ SPELLINGS ONLY — SUB-CONCEPTS ARE DELIBERATELY **NOT** RETURNED HERE, AND
+  // THAT IS THE WHOLE SAFETY PROPERTY OF #159(b).
+  //
+  // The second version of this ruling returned sub-concepts too, so a mapping
+  // citing the bare family had all four members seeded into its
+  // `approvedSynonyms` and `factSatisfiesMapping` accepted every one. The
+  // mandatory adversarial pass measured what that does, and every case below
+  // was an honest BLANK before and `supported` with ZERO BLOCKING after — i.e.
+  // it renders onto a document the clinician signs:
+  //
+  //   "Current Medications" -> `medication`, 8 facts in
+  //        "Lisinopril; 10 mg; by mouth; daily; Amlodipine"
+  //        Amlodipine's dose, route and frequency are DESTROYED, because the
+  //        join de-duplicates exact repeats and every drug shares "by mouth"
+  //        and "daily". The form states a drug with NO DOSE.
+  //   "Allergies" -> `allergy`, 4 facts in
+  //        "Penicillin; anaphylaxis; Cephalexin"
+  //        anaphylaxis reads as an ALLERGEN, and cephalexin reads as having no
+  //        recorded reaction.
+  //   "Tobacco" -> `social_history`, 4 facts in
+  //        "Occasional; Accountant"
+  //        a TOBACCO field asserting the alcohol status and the occupation.
+  //
+  // The de-dup (`field-value-derivation.ts`) is CORRECT for what it was written
+  // for: one fact per section ITEM, so a section never reads
+  // "Hypertension; Hypertension". Seeding sub-concepts changes the population
+  // to FOUR facts per item, and a legitimately repeating ATTRIBUTE value
+  // becomes indistinguishable from a duplicate item. That is canon 74: the
+  // assertion constrains manufacturing, and nothing was measuring destruction.
+  //
+  // ⚠️ AND THE SEEDING WAS NEVER NEEDED. What #159(b) must fix is that the
+  // PROPOSER could not assign `social_history.smoking` to a "Tobacco" field at
+  // all — it was off-registry, so it was silently nulled. Registering the
+  // sub-concepts fixes that. A field then cites the sub-concept it actually
+  // means, and matches facts DIRECTLY. Nothing needs the bare family to stand
+  // in for its members, and letting it do so is what fabricates.
   return REGISTRY_SYNONYMS[concept.trim().toLowerCase()] ?? [];
 }
 
