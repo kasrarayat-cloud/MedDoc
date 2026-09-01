@@ -370,6 +370,61 @@ failure rather than removing it.
 2026-08-28: a **13-second** job sat behind **69 minutes** of queue, and a ~5-minute
 suite took 2h06m wall. The SPOF was recorded in the ledger before it was fixed.
 
+### ⚠️ INCIDENT 2026-09-01 — THE BOX STOPPED SERVICING SSH, AND BOTH LANES WENT DARK
+
+**This is the case §2.9 was written for, and §2.9 worked** — no session hunted
+for the host, and nothing was routed to the owner until SSH itself failed. What
+follows is the symptom set, so the next reader recognises it in one look.
+
+**HOW IT PRESENTED, in order:**
+
+1. PR #928's `e2e` failed with *"The self-hosted runner lost communication with
+   the server."* — read as flaky, correctly, at the time.
+2. `quillmd-ci-2` reported **offline**; `ci-1` still **online, busy=false**.
+3. Eight required runs sat **queued** across two PRs while ci-1 reported itself
+   idle — *an idle runner that takes no work is already a finding*.
+4. Minutes later `ci-1` went **offline** too. Both lanes dark.
+
+**WHAT THE BOX LOOKED LIKE FROM OUTSIDE — measured, with a positive control:**
+
+| probe | result | reading |
+|---|---|---|
+| `ping -c 3` | **3/3, 0.42–0.63 ms** | alive at the network layer, same segment |
+| TCP/22 connect ×3 | **OPEN in 0.01s each** | the KERNEL is accepting on the listen socket |
+| `ssh -vv` | `Connection established` → **`Connection timed out during banner exchange`** (10s, 30s and 45s `ConnectTimeout`) | **sshd never writes its banner** |
+| control: `ssh git@github.com` from the app VPS | completed key exchange, `Permission denied (publickey)` | outbound SSH from this environment is **fine** — the fault is at the far end |
+
+⚠️ **THE CONTROL IS WHAT MAKES THIS A DIAGNOSIS RATHER THAN A GUESS.** A banner
+timeout is equally consistent with a broken local client or a filtered path; the
+GitHub handshake rules both out, and the ICMP + TCP evidence rules out the box
+being down. **Kernel up, networking up, userland not scheduling sshd** — the
+signature of an OOM cascade, a full disk, or an I/O stall, and consistent with
+the runner services dying one after the other rather than together.
+
+**WHY IT COULD NOT BE FIXED FROM HERE, AND WHAT THE PATH IS.** §2.9 records that
+password auth is off and root's console password was rotated to a value never
+transmitted or stored, so **the key is the only way in** — and the key is
+provably correct (fingerprint `SHA256:xav/uBC1ObR/8E5j2aY31KknZHW8ARnRKv9WMibJwuU`,
+verified against this table before connecting). The box will not talk, so
+`systemctl restart` is unreachable.
+
+> **THE RECOVERY PATH IS THE PROVIDER PANEL** — console or hard reboot — exactly
+> as §2.9 already states for a lost key. That is an owner console item; it is
+> the ONLY part of this that is.
+
+**AFTER RECOVERY, ESTABLISH THE CAUSE BEFORE RE-ENABLING WORK** — a reboot that
+clears the symptom and leaves the cause is a scheduled repeat:
+
+    journalctl -k -b -1 | grep -iE "out of memory|killed process|oom"
+    df -h / ; journalctl -b -1 --no-pager | tail -100
+    systemctl status actions.runner.kasrarayat-cloud-MedDoc.quillmd-ci-{1,2}.service
+
+⚠️ **AND CHECK THE HEAVY LANE'S ARITHMETIC WHILE YOU ARE THERE.** §2.9 pins
+`e2e` to ci-1 precisely because two Playwright stacks would contend on 4 vCPU /
+7.8 GiB. If the cause is memory, the question is whether ONE stack plus the rest
+of the light lane still fits — the pinning decision was measured against
+contention, not against a ceiling.
+
 ## 2.10 THE NOTIFICATION CHANNEL — the ping half of park-and-ping
 
 **Added 2026-08-29.** Park-and-ping had a park and no ping: a session could stop
