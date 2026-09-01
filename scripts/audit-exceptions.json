@@ -1,0 +1,31 @@
+{
+  "$comment": [
+    "DOCUMENTED EXCEPTIONS TO THE npm-audit HIGH/CRITICAL GATE.",
+    "",
+    "⚠️ THIS IS EXCEPTION-WITH-DEBT, NOT AN OVERRIDE. The standing rule is that a",
+    "gate override requires an immediate debt-payment task; 'precedent' was",
+    "retired on 2026-07-23 after the auth/babel bump. So every entry here MUST",
+    "carry a retirement condition naming the work that removes it, and the gate",
+    "refuses an entry that does not.",
+    "",
+    "⚠️ KEYED BY ADVISORY ID, NEVER BY PACKAGE NAME. An exception for a package",
+    "would silently absorb the NEXT advisory published against it — which is the",
+    "one nobody has read. A new id fails the gate even on an excepted package.",
+    "",
+    "⚠️ AND A STALE ENTRY FAILS THE GATE TOO. An exception that no longer matches",
+    "any advisory is a justification nobody has re-read, sitting where a reader",
+    "will take it for a live decision. Prose decays silently; the gate does not",
+    "let it. Delete the entry when the advisory is gone."
+  ],
+  "exceptions": [
+    {
+      "id": "GHSA-3f6p-5ww8-9rcr",
+      "package": "mysql2",
+      "added": "2026-09-01",
+      "ruling": "#163 B(ii)",
+      "justification": "This is a POSTGRES application and the driver never loads. MEASURED, not asserted: packages/db/prisma/schema.prisma declares provider = \"postgresql\"; no file under apps/*/src or packages/*/src imports mysql2 or mysql; and mysql2 is declared by node_modules/prisma — the CLI — which is a devDependency in every package.json that names it (root, apps/meddoc-pro, packages/db). The SHIPPED runtime is @prisma/client, which this advisory is not about. The advisory describes an auth-plugin downgrade leaking plaintext credentials to a MySQL server; there is no MySQL server, no MySQL connection string, and no code path that constructs one. prisma is nonetheless reported by `npm audit --omit=dev` as a direct HIGH, which is why an exception is needed at all rather than the finding simply not appearing.",
+      "retires_when": "The Prisma major upgrade lands. mysql2's only offered fix is a Prisma major, which touches the ORM for the entire clinical database and is scheduled under the clinical-DB bar rather than taken as a lockfile bump. This exception dies with that item.",
+      "debt_item": "docs/backlog/prisma-major-upgrade.md"
+    }
+  ]
+}

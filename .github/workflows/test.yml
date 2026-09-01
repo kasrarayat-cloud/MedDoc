@@ -345,7 +345,17 @@ jobs:
           fi
           args=(); for w in "${WS[@]}"; do args+=(--workspace "$w"); done
           echo "Auditing ${#WS[@]} in-scope workspaces, PRODUCTION deps only (meddoc-pro excluded): ${WS[*]}"
-          npm audit --audit-level=high --omit=dev "${args[@]}" --include-workspace-root
+          # ⚠️ #163 B(ii) — THE GATE RUNS THROUGH `audit-gate.mjs`, NOT BARE.
+          # `npm audit` is all-or-nothing, and one advisory on a build-time
+          # CLI's bundled driver for a database engine this product does not use
+          # held EVERY merge on the repo, a security fix included. The wrapper
+          # applies exceptions that are keyed BY ADVISORY ID, each carrying a
+          # justification and a retirement condition, and it fails on anything
+          # not excepted, on a malformed exception, on a STALE one, and on
+          # cannot-tell. It is strictly stricter than the bare command in three
+          # of those four directions.
+          gate_args=(); for w in "${WS[@]}"; do gate_args+=("--workspace=$w"); done
+          node scripts/audit-gate.mjs "${gate_args[@]}"
 
   # ──────────────────────────────────────────────────────────────────
   # Dev-dependency advisory visibility (2026-07-25). NON-BLOCKING.
