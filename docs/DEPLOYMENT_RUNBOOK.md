@@ -425,6 +425,52 @@ machine livelocked *before* the killer engaged. The real signature is
 `Under memory pressure, flushing caches` from journald and systemd-resolved.
 **Searching for the symptom you expect is how a true theory gets closed.**
 
+### ✅ CURED GUEST-SIDE, 2026-09-01 — UNBIND THE DEVICE, DO NOT BLACKLIST THE MODULE
+
+**The fix, and it is one line:**
+
+    echo virtio0 > /sys/bus/virtio/drivers/virtio_balloon/unbind
+
+⚠️ **UNBIND WORKS FOR A BUILT-IN; BLACKLISTING DOES NOT.** The app VPS was cured
+by blacklisting the balloon MODULE. There is no module here
+(`CONFIG_VIRTIO_BALLOON=y`), so that door does not exist — but **binding a driver
+to a device is a sysfs operation and needs no module at all.** Unbinding calls
+`virtballoon_remove`, which releases every page the balloon was holding.
+
+**MEASURED, BEFORE AND AFTER, seconds apart:**
+
+| | MemTotal | MemAvailable |
+|---|---|---|
+| before unbind | **1,840,324 kB** (1.75 GiB) | 791 MB |
+| after unbind | **8,131,780 kB** (7.75 GiB) | ~7.4 GiB |
+
+Stable across 60 s with no re-inflation, and swap-in fell 2,336 MB → 287 MB as
+the pages faulted back. That also explains the 2026-08-28 reading of 7.8 GiB —
+it was taken while the balloon happened to be deflated.
+
+**PERSISTED: `unbind-virtio-balloon.service`**, a oneshot enabled at
+`basic.target`, idempotent, naming this incident in its header.
+
+⚠️ **A UNIT, BECAUSE AN UNBIND THAT LIVES ONLY IN A SHELL IS A COMMENT** — and on
+this host a panel restart also rotates the cloud-init instance-id, so anything
+not in a unit does not survive.
+
+⚠️ **AND THE UNIT WAS PROVED ON THE PATH THAT MATTERS, NOT THE EMPTY ONE.**
+Running it with nothing bound exits 0 and proves only the no-op branch. So the
+device was deliberately RE-BOUND and the unit re-run:
+
+    devices bound: 1  ->  journal: "unbound virtio0"  ->  devices bound: 0
+    MemTotal 8,125,636 kB -> 8,131,780 kB
+
+**FALLBACK, NOT NEEDED BUT RECORDED:** if a future kernel refuses the unbind,
+add `initcall_blacklist=virtballoon_driver_init` to the kernel cmdline and
+reboot — second door, same house.
+
+⚠️ **THE BELT STAYS ON. The balloon losing this round does not retire the
+armor** — the 12 GiB of swap and the e2e pre-flight memory guard are permanent.
+The unbind is a guest-side defence against a host-side behaviour, and the
+provider could change that behaviour at any time.
+
 **MITIGATIONS IN PLACE (2026-09-01):**
 
 - **12 GiB of swap** — a pre-existing 4 GiB `/swap.img` plus a new 8 GiB

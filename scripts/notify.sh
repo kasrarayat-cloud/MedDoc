@@ -48,7 +48,29 @@ main() {
     waiting)   emoji="🟡"; prio="default"; tags="hourglass"      ;;
     ok)        emoji="🟢"; prio="low";     tags="white_check_mark" ;;
     heartbeat) emoji="⚪"; prio="min";     tags="heartbeat"      ;;
-    *)         emoji="⚪"; prio="low";     tags="information_source" ;;
+    # ⚠️ AN UNKNOWN CLASS IS NOT A LOW-PRIORITY MESSAGE. IT IS A BUG IN THE
+    # CALLER, AND IT MUST NOT BE DELIVERED QUIETLY.
+    #
+    # MEASURED 2026-09-01: a session paged the owner about a live CI outage and
+    # passed the EMOJI (`🟡`) instead of the class NAME. It matched nothing, fell
+    # to this arm, and went out at LOW priority — which on a phone is silent. The
+    # alarm was correct, the routing was correct, and it would simply never have
+    # been seen. The session caught it only by reading its own output.
+    #
+    #     A MISADDRESSED ALARM MUST FAIL LOUD. The failure mode of a notifier is
+    #     silence, and silence is exactly what a wrong class bought here.
+    #
+    # So an unrecognised class is escalated to `needs-you`, not demoted — the
+    # sender clearly wanted attention, and the safe error is a message that is
+    # too loud rather than one nobody sees. The refusal goes to stderr WITH the
+    # valid class list, so the caller learns; the message is still delivered,
+    # because dropping somebody's alarm to punish their typo is worse than both.
+    *)
+      echo "[notify] ⚠️ UNKNOWN CLASS '$class' — sending as needs-you." >&2
+      echo "[notify]    valid: halt | needs-you | waiting | ok | heartbeat" >&2
+      echo "[notify]    (pass the NAME, not the emoji)" >&2
+      class="needs-you"; emoji="🟡"; prio="high"; tags="raising_hand"
+      ;;
   esac
   # One line. A phone notification that needs scrolling has already failed.
   send_transport "$emoji QuillMD · $class" "$msg" "$prio" "$tags"
