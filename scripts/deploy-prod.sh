@@ -175,6 +175,42 @@ declaration_gate "$DECL" "$DECLARATION_MODE" "deploy declaration" || {
 }
 
 # ============================================================================
+# STEP 0-RECORDS — THE PREVIOUS DEPLOY'S RECORD MUST BE IN GIT. #163 C.
+# ----------------------------------------------------------------------------
+# ⚠️ THE CASE: `a8ead1cb`'s declaration and judgement were written, placed, and
+# printed into the deploy transcript — and never committed. They sat untracked
+# while the pair from the deploy one earlier was tracked on `main`, and nothing
+# said so. A session reporting on the arc stated both had landed, because both
+# were present on disk and presence is what an eye checks.
+#
+#     A DEPLOY THAT REACHED PRODUCTION WITH NO TRACKED RECORD HAS NO EVIDENCE
+#     THAT ITS DECLARATION PRECEDED THE ACT.
+#
+# The check runs HERE, at the next deploy, because that is where an unlanded
+# record is still cheap to fix and where somebody is already paying attention.
+# A CI arm could never catch it: a CI checkout is clean, so an untracked file
+# cannot exist there and the arm would be green forever.
+#
+# ⚠️ IT REFUSES ON `CANNOT TELL` TOO — a missing directory or a git that cannot
+# answer is not "all clear", and the script positive-controls that git sees the
+# records directory at all before believing an empty untracked list.
+RECORDS_CHECK="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/check-deploy-records-tracked.sh"
+if [ -x "$RECORDS_CHECK" ] || [ -r "$RECORDS_CHECK" ]; then
+  bash "$RECORDS_CHECK" || {
+    echo "🔴 deploy: a previous §2.5 record is not in git. REFUSING."
+    echo "   Land it as its own docs PR — stating any lateness honestly — and"
+    echo "   re-run. A retrospective recovers the EVIDENCE, never the GATE."
+    echo "   Nothing has been built, migrated or recreated. Production is untouched."
+    exit 1
+  }
+else
+  echo "🔴 deploy: scripts/check-deploy-records-tracked.sh is missing or unreadable."
+  echo "   Refusing — a gate that cannot run is not a gate that passed."
+  echo "   Nothing has been built, migrated or recreated. Production is untouched."
+  exit 1
+fi
+
+# ============================================================================
 # STEP 0a — THE CITATION GATE. OWNER-RULED 2026-08-20, AND IT IS FAIL-CLOSED.
 # ----------------------------------------------------------------------------
 # ⚠️ ON 2026-08-20 THIS SCRIPT DEPLOYED A COMMIT FOUR SECONDS AFTER THE ONLY
