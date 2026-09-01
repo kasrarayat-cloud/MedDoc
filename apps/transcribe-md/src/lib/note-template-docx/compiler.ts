@@ -14,8 +14,11 @@ import {
 import { failTemplateDocx } from "./errors";
 import {
   detectFieldHygiene,
+  detectRestingOptionCollision,
   fieldHygieneDetail,
+  restingOptionCollisionDetail,
   FIELD_LEFTOVER_CONTENT,
+  FIELD_RESTING_CONTENT_IS_OPTION,
 } from "./field-hygiene";
 import type { TemplateDocxLimits } from "./limits";
 import { withoutPlaceholderOptions } from "./placeholder-option";
@@ -153,7 +156,9 @@ export function compileTemplateDocx(
     tables: state.tables,
     nodes: state.nodes,
     unsupported: state.unsupported.filter(
-      (item) => item.code !== FIELD_LEFTOVER_CONTENT,
+      (item) =>
+        item.code !== FIELD_LEFTOVER_CONTENT &&
+        item.code !== FIELD_RESTING_CONTENT_IS_OPTION,
     ),
   });
 
@@ -597,7 +602,7 @@ function processContentControl(
     tableId: context.table?.tableId ?? null,
     rowPrototype: context.repeatAncestorPath !== null,
   };
-  pushField(field, context, state, content);
+  pushField(field, context, state, content, properties);
   addNode(
     state,
     {
@@ -1181,6 +1186,11 @@ function pushField(
    * every empty legacy field in a shipped build.
    */
   locus: OrderedXmlNode | null,
+  /**
+   * The field's PROPERTIES element (`w:sdtPr`), where Word records
+   * `w:showingPlcHdr`. Optional because only content controls have one.
+   */
+  properties: OrderedXmlNode | null = null,
 ): void {
   if (state.fields.length >= state.limits.maxFields) {
     failTemplateDocx("DOCUMENT_STRUCTURE_LIMIT_EXCEEDED");
@@ -1192,7 +1202,32 @@ function pushField(
   // field kind cannot be added without the check coming with it. A hygiene
   // sweep wired per-emitter is a sweep that is one emitter short the day
   // somebody adds the fourth.
-  const hygiene = detectFieldHygiene(locus);
+  // ⚠️ THE BLOCKING CASE IS TESTED FIRST AND RETURNS, because it SUBSUMES the
+  // hygiene one. A control resting on its own option value is leftover content
+  // AND a false assertion; reporting both would put two findings on one field
+  // and let the softer wording be the one a reader remembers.
+  const collision = detectRestingOptionCollision(
+    locus,
+    field.allowedOptions,
+    properties,
+  );
+  if (collision) {
+    addUnsupported(state, {
+      code: FIELD_RESTING_CONTENT_IS_OPTION,
+      partName: field.rendererBinding.partName,
+      path: field.rendererBinding.path,
+      label: field.originalLabel,
+      detail: restingOptionCollisionDetail(field.originalLabel, collision),
+      // BOTH TRUE. This is clinically material and it blocks — the generic
+      // validator arm grades it blocking on either, which is the behaviour
+      // wanted here and the reason it needs no named arm of its own.
+      clinicallyMaterial: true,
+      blocksCertification: true,
+    });
+    return;
+  }
+
+  const hygiene = detectFieldHygiene(locus, properties);
   if (hygiene) {
     addUnsupported(state, {
       code: FIELD_LEFTOVER_CONTENT,

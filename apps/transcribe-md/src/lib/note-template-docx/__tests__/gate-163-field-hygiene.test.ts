@@ -16,17 +16,24 @@
 // detector that fires on everything is as useless as one that fires on
 // nothing, and only the clean-field arm can tell them apart.
 // ============================================================================
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { canonicalSha256 } from '../../template-twin/canonical';
 import { validateTemplateTwin } from '../../template-twin/validation';
 import { compileTemplateDocx } from '../compiler';
-import { FIELD_LEFTOVER_CONTENT } from '../field-hygiene';
+import {
+  FIELD_LEFTOVER_CONTENT,
+  FIELD_RESTING_CONTENT_IS_OPTION,
+} from '../field-hygiene';
 import { buildSyntheticDocx } from './synthetic-docx';
 
 const doc = (body: string) =>
   `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-  `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+  `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ` +
+  `xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">` +
   `<w:body>${body}</w:body></w:document>`;
 
 /** One `w:text` content control, with whatever content the arm needs. */
@@ -104,6 +111,108 @@ describe('#163 rule (2) — leftover content is flagged at compile', () => {
     expect(issues.length).toBeGreaterThan(0);
     expect(issues.every((i) => i.severity === 'warning')).toBe(true);
     expect(issues.some((i) => i.message.includes('Enter assessment'))).toBe(true);
+  });
+
+  // ══ A(ii) — THE ONE SHAPE THAT BLOCKS ═════════════════════════════════════
+
+  it('BLOCKS: a selection control resting on ONE OF ITS OWN OPTIONS', async () => {
+    // ⚠️ THE FIXTURE IS THE PROOF. `synthetic-docx`'s comboBox rests on
+    // "Initial", which is one of its own two options — so on a note where the
+    // encounter said nothing, that control prints as if the choice had been
+    // made. This is the seventeenth failure of the #157(d) collision: the only
+    // one of them that was a real defect rather than a definition change.
+    const ir = compileTemplateDocx(await buildSyntheticDocx());
+    const blocking = ir.unsupported.filter(
+      (u) => u.code === FIELD_RESTING_CONTENT_IS_OPTION,
+    );
+    expect(blocking.length).toBe(1);
+    expect(blocking[0]!.label).toBe('Encounter category');
+    expect(blocking[0]!.blocksCertification).toBe(true);
+    // The refusal NAMES the offending value, or the doctor cannot act on it.
+    expect(blocking[0]!.detail).toContain('Initial');
+    expect(ir.stats.blockingUnsupported).toBeGreaterThan(0);
+  });
+
+  it('⚠️ AND IT IS SET MEMBERSHIP, NOT RESEMBLANCE — a near-miss does NOT block', async () => {
+    // Without this the rule could be a substring or fuzzy match and both arms
+    // above would still pass. "Initial assessment" CONTAINS an option value and
+    // is not one, so it is ordinary hygiene.
+    const ir = await compile(
+      `<w:p><w:sdt><w:sdtPr><w:alias w:val="Category"/><w:id w:val="210"/>` +
+        `<w:comboBox><w:listItem w:displayText="Initial" w:value="initial"/>` +
+        `<w:listItem w:displayText="Follow-up" w:value="follow_up"/></w:comboBox>` +
+        `</w:sdtPr><w:sdtContent><w:r><w:t>Initial assessment</w:t></w:r></w:sdtContent></w:sdt></w:p>`,
+    );
+    expect(fieldNamed(ir, 'Category').length).toBe(1);
+    expect(
+      ir.unsupported.filter(
+        (u) => u.code === FIELD_RESTING_CONTENT_IS_OPTION && u.label === 'Category',
+      ).length,
+    ).toBe(0);
+    expect(hygieneOf(ir, 'Category').length).toBe(1);
+  });
+
+  it('⚠️ THE REAL CUSTOMER TEMPLATE: 28 dropdowns, and NOT ONE of them blocks', async () => {
+    // ⚠️ THIS ARM EXISTS BECAUSE THE FIRST VERSION OF A(ii) FAILED IT, HARD.
+    //
+    // Word seeds every dropdown with a first `listItem` reading "Choose an
+    // item." — stored exactly like a real option. The rule matched it and
+    // BLOCKED ALL 28 DROPDOWNS of the only real form this programme has,
+    // refusing the customer's entire template on Word's own furniture. A(iii)
+    // rules stock scaffolding a non-blocking flag; A(ii) blocks only a REAL
+    // option value. The synthetic fixture could never have shown this, because
+    // its comboBox rests on a genuine option.
+    // Same resolution the other WM_IOV suites use, rather than a hand-counted
+    // chain of `..` that breaks the day this file moves.
+    const bytes = new Uint8Array(
+      readFileSync(resolve(process.cwd(), '../../WM IOV Template.docx')),
+    );
+    const ir = compileTemplateDocx(bytes);
+    expect(ir.fields.length, 'fixture is not the expected template').toBe(80);
+    expect(
+      ir.unsupported.filter((u) => u.code === FIELD_RESTING_CONTENT_IS_OPTION).length,
+    ).toBe(0);
+    // NON-VACUITY: the dropdowns really are dirty, they are just dirty in the
+    // way A(iii) covers — so this is "flagged, not blocked", not "nothing seen".
+    expect(
+      ir.unsupported.filter((u) => u.code === FIELD_LEFTOVER_CONTENT).length,
+    ).toBe(28);
+    expect(ir.stats.blockingUnsupported).toBe(0);
+  });
+
+  // ══ A(iii) — WORD SCAFFOLDING, AND THE CHECKBOX THAT MUST NOT BE FLAGGED ══
+
+  it('an UNCHECKED checkbox is the blank state, NOT leftover content', async () => {
+    // ⚠️ THIS ARM EXISTS BECAUSE THE FIRST VERSION GOT IT WRONG. It flagged
+    // every checkbox, since an unfilled one holds `☐` and that is visible text.
+    // But `☐` is exactly what a blank checkbox should look like — the doctor's
+    // own blank representation, which is the thing #163 rule (1) preserves. A
+    // check that fires on every checkbox is one nobody reads.
+    const ir = compileTemplateDocx(await buildSyntheticDocx());
+    expect(
+      ir.fields.some((f) => f.originalLabel === 'Medication reviewed'),
+      'fixture has no checkbox — the arm would be vacuous',
+    ).toBe(true);
+    expect(hygieneOf(ir, 'Medication reviewed').length).toBe(0);
+  });
+
+  it('a CHECKED checkbox blocks — it prints as an answer nobody gave', async () => {
+    // The other direction, and it is the same rule: a checkbox's two declared
+    // states ARE its option values, so resting on the CHECKED one is a false
+    // assertion exactly as resting on a dropdown option is. Read from the
+    // control's own `w:checkedState`, never from a list of known glyphs.
+    const ir = await compile(
+      `<w:p><w:sdt><w:sdtPr><w:alias w:val="Anticoagulated"/><w:id w:val="211"/>` +
+        `<w14:checkbox><w14:checked w14:val="1"/><w14:checkedState w14:val="2612"/>` +
+        `<w14:uncheckedState w14:val="2610"/></w14:checkbox>` +
+        `</w:sdtPr><w:sdtContent><w:r><w:t>\u2612</w:t></w:r></w:sdtContent></w:sdt></w:p>`,
+    );
+    expect(fieldNamed(ir, 'Anticoagulated').length).toBe(1);
+    expect(
+      ir.unsupported.filter(
+        (u) => u.code === FIELD_RESTING_CONTENT_IS_OPTION && u.label === 'Anticoagulated',
+      ).length,
+    ).toBe(1);
   });
 
   it('⚠️ THE OUTAGE GUARD: hygiene findings are EXCLUDED from structureSha256', async () => {

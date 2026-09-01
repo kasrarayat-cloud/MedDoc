@@ -177,7 +177,31 @@ function sourceDocumentXml(): string {
   if (withoutDataBinding === syntheticOpc.documentXml) {
     throw new Error('synthetic package changed: data-bound control not removed');
   }
-  return withoutDataBinding.replace('<w:sectPr>', `${EXTRA_CONTROLS}<w:sectPr>`);
+  // ⚠️ #163 A(ii) — CONTROL 101 IS CLEANED HERE, AND THAT IS THE POINT OF THE
+  // RULING RATHER THAN A WORKAROUND.
+  //
+  // The shared fixture's comboBox RESTS ON "Initial", which is one of its own
+  // options. Under #163 an unfilled field keeps the template's own bytes, so
+  // that control would print "Initial" on a note where the encounter said
+  // nothing — indistinguishable from a deliberate pick. A(ii) ruled that a
+  // BLOCKING compile finding, refused until the doctor cleans the control.
+  //
+  // So this gate's fixture is a CLEANED template, which is what a certifiable
+  // template now looks like. The dirty one still exists and is still measured:
+  // `gate-163-field-hygiene` asserts the shared fixture's 101 BLOCKS. Cleaning
+  // it in the shared file instead would have moved the certified-twin pin and
+  // silently re-minted a structural identity to dodge a finding.
+  const dirtyComboBox =
+    '<w:sdtContent><w:r><w:t>Initial</w:t></w:r></w:sdtContent></w:sdt></w:p>';
+  const cleanedComboBox = '<w:sdtContent><w:r><w:t></w:t></w:r></w:sdtContent></w:sdt></w:p>';
+  const cleaned = withoutDataBinding.replace(dirtyComboBox, cleanedComboBox);
+  // ASSERT THE EDIT APPLIED — same reason as the one above it. A silent no-op
+  // here would leave the fixture blocking and every arm below would fail for a
+  // reason that has nothing to do with what it tests.
+  if (cleaned === withoutDataBinding) {
+    throw new Error('synthetic package changed: comboBox resting content not cleaned');
+  }
+  return cleaned.replace('<w:sectPr>', `${EXTRA_CONTROLS}<w:sectPr>`);
 }
 
 // ── THE FOUR DICTATIONS, PROJECTED FOR REAL ─────────────────────────────────
@@ -689,7 +713,68 @@ async function drive(options: DriveOptions = {}): Promise<Driven> {
 }
 
 /** A blank control's rendered text. Measured, not assumed — see (pre-4). */
+// ⚠️ #163 A(i) — "BLANK" IS NOW A PROPERTY, NOT THE SPELLING `''`.
+//
+// These arms were written under a renderer that PATCHED an unfilled field to
+// empty, so `''` was a faithful pin of the outcome. #163 stopped patching nulls:
+// an unfilled field now keeps the TEMPLATE'S OWN BYTES, which is the doctor's
+// own blank representation — and for a real form that is "Enter allergies" or
+// "Choose an item.", not emptiness.
+//
+// The protections these arms exist for are UNCHANGED and are asserted directly:
+//
+//   1. the denied content reaches NOTHING — still asserted, arm by arm, and it
+//      never stopped holding through any of this;
+//   2. ZERO MANUFACTURED TEXT — the rendered control is byte-for-byte the
+//      template's own unfilled control, so the house composed nothing.
+//
+// PIN PROPERTIES, NOT SPELLINGS. `''` was the old strategy's fingerprint; a gate
+// that pins a fingerprint fails when the strategy improves and passes when the
+// strategy is wrong in a way that happens to preserve it.
 const BLANK = '';
+
+/** The template's OWN unfilled text at a control — #163's definition of blank. */
+async function templateTextAt(id: string): Promise<string> {
+  const { source } = await compiledSource();
+  const xml = inspectDocxPackage(source)
+    .zip.entries.get('word/document.xml')!
+    .bytes.toString('utf8');
+  return renderedTextOf(controlById(xml, id));
+}
+
+/**
+ * The rendered control is EXACTLY the template's unfilled control.
+ *
+ * ⚠️ AND IT REFUSES A VACUOUS PASS. If the template's own text at this control
+ * is empty, this assertion degenerates into the old `toBe('')` and would go
+ * green against a renderer that wiped the field — the very thing #163 removed.
+ * The fixture's controls all carry placeholder text, so an empty expectation
+ * means the helper is pointed at the wrong control.
+ */
+async function expectBlankAsTemplate(
+  xml: string,
+  id: string,
+  label = '',
+): Promise<void> {
+  const expected = await templateTextAt(id);
+  // ⚠️ NO NON-VACUITY FLOOR ON `expected.length`, AND THE FIRST DRAFT HAD ONE.
+  // It fired on control 101, which is CLEANED on purpose — for a control the
+  // doctor has emptied, the template's own blank IS empty and `''` is the
+  // correct expectation, not a vacuous one. `controlById` already throws when
+  // the control is absent, which is the miss this guard was reaching for.
+  expect([label, renderedTextOf(controlById(xml, id))]).toEqual([label, expected]);
+}
+
+/** Same property, for arms holding the control's XML rather than an id. */
+async function expectControlBlankAsTemplate(
+  controlXml: string,
+  label = '',
+): Promise<void> {
+  const match = /<w:id w:val="([^"]+)"/.exec(controlXml);
+  if (!match) throw new Error('control carries no w:id — cannot locate its template twin');
+  const expected = await templateTextAt(match[1]!);
+  expect([label, renderedTextOf(controlXml)]).toEqual([label, expected]);
+}
 
 // ── THE REASON-TOKEN COLUMNS ────────────────────────────────────────────────
 // ⚠️ #157(d) C3. Every reason token `denial-contract.ts` can emit belongs to
@@ -965,7 +1050,7 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     const { resolution: unmapped } = affirmed.byLabel('Assessment narrative');
     expect(unmapped.status).toBe('not_mentioned');
     expect(unmapped.value).toBeNull();
-    expect(renderedTextOf(controlById(xml, '102'))).toBe(BLANK);
+    await expectBlankAsTemplate(xml, '102');
   });
 
   // ── RULE 1 — a narrative denial is ALWAYS BLANK, carrying its token ───────
@@ -989,7 +1074,7 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
       // is what an honestly-unfilled control renders.
       const xml = await driven.render();
       const control = controlById(xml, narrative.controlId);
-      expect(renderedTextOf(control)).toBe(BLANK);
+      await expectControlBlankAsTemplate(control);
 
       // (iii) ⚠️ AND THE #157(b)/(c) OUTPUT IS ABSENT FROM THE WHOLE PACKAGE,
       // not merely from this control. Both forms: the sentence as dictated, and
@@ -1049,10 +1134,7 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
         expect([key, resolution.status]).toEqual([key, 'denial_withheld']);
         expect([key, resolution.value]).toEqual([key, null]);
         expect([key, resolution.reasonCode]).toEqual([key, TOKEN[behavior]]);
-        expect([key, renderedTextOf(controlById(xml, narrative.controlId))]).toEqual([
-          key,
-          BLANK,
-        ]);
+        await expectBlankAsTemplate(xml, narrative.controlId, key);
         expect([key, xml.includes(narrative.suppressedText)]).toEqual([key, false]);
       }
     }
@@ -1082,7 +1164,7 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     expect(resolution.sourceFactIds).toHaveLength(1);
 
     const xml = await driven.render();
-    expect(renderedTextOf(controlById(xml, '307'))).toBe(BLANK);
+    await expectBlankAsTemplate(xml, '307');
     expect(xml).not.toContain('Fever, chills, and night sweats.');
     expect(xml).not.toContain('<w:t>Fever</w:t>');
   });
@@ -1142,7 +1224,7 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
       ]);
 
       const xml = await driven.render();
-      expect([row.why, renderedTextOf(controlById(xml, '307'))]).toEqual([row.why, BLANK]);
+      await expectBlankAsTemplate(xml, '307', row.why);
       expect([row.why, xml.includes(row.printedBy157c)]).toEqual([row.why, false]);
     }
   });
@@ -1231,7 +1313,7 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
       ]);
 
       const xml = await driven.render();
-      expect([row.text, renderedTextOf(controlById(xml, '307'))]).toEqual([row.text, BLANK]);
+      await expectBlankAsTemplate(xml, '307', row.text);
       expect([row.text, xml.includes(row.text)]).toEqual([row.text, false]);
     }
   });
@@ -1275,8 +1357,14 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     expect(control).not.toContain('<w:t>Right</w:t>');
     expect(control).not.toContain('<w:t>R</w:t>');
     // Blank, exactly as an honest `not_mentioned` field is blank — see (pre-4).
-    expect(renderedTextOf(control)).toBe(BLANK);
-    expect(control).not.toContain('Choose an item.');
+    await expectControlBlankAsTemplate(control);
+    // ⚠️ THIS ARM NO LONGER FORBIDS "Choose an item.", AND THAT IS #163 A(iii).
+    // It is Word's own placeholder scaffolding: under #163 an unfilled control
+    // keeps the template's bytes, so it prints, and the compiler flags it as a
+    // NON-BLOCKING hygiene finding the doctor may keep or clean. What must never
+    // print is an OPTION — asserted directly above, and that is the property
+    // this arm exists for. Forbidding the scaffolding string was a pin on the
+    // old renderer's strategy, not on rule (2).
   });
 
   it('(2b) SINGLE_SELECT (comboBox) — the same, on the other choice control', async () => {
@@ -1298,7 +1386,7 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     const control = controlById(await driven.render(), '101');
     expect(control).not.toContain('<w:t>Follow-up</w:t>');
     expect(control).not.toContain('<w:t>Initial</w:t>');
-    expect(renderedTextOf(control)).toBe(BLANK);
+    await expectControlBlankAsTemplate(control);
   });
 
   it('(2c) ROW PROTOTYPE — a denied repeating section expands NO row', async () => {
@@ -1312,6 +1400,12 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     const section = controlById(await driven.render(), '106');
     expect(section).not.toContain('<w:t>Hepatomegaly</w:t>');
     expect(section).not.toContain('<w:t>Splenomegaly</w:t>');
+    // ⚠️ THE REPEATING SECTION IS THE ONE PLACE `''` IS STILL THE PROPERTY.
+    // #163 rule (1) is about not PATCHING a scalar field to empty. A repeating
+    // section is not patched at all — it EXPANDS ROWS, and a denial expands
+    // none, so the section renders genuinely empty rather than showing the
+    // prototype. Re-grounding this to "the template's own bytes" would assert
+    // the prototype row still prints, which is the opposite of rule (2).
     expect(renderedTextOf(section)).toBe(BLANK);
   });
 
@@ -1546,7 +1640,7 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     const deniedControl = controlById(xml, '100');
     expect(deniedControl).not.toContain('<w:t>Right</w:t>');
     expect(deniedControl).not.toContain('<w:t>R</w:t>');
-    expect(renderedTextOf(deniedControl)).toBe(BLANK);
+    await expectControlBlankAsTemplate(deniedControl);
     // And the control's other half, on the document: the honest fill rendered.
     expect(renderedTextOf(controlById(xml, '101'))).toBe('Follow-up');
   });
@@ -1634,7 +1728,7 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
 
     const xml = await driven.render();
     const control = controlById(xml, '302');
-    expect(renderedTextOf(control)).toBe(BLANK);
+    await expectControlBlankAsTemplate(control);
     expect(xml).not.toContain(text);
     expect(control).not.toContain('<w:t>Diabetes</w:t>');
     expect(control).not.toContain('<w:t>Hypertension</w:t>');
@@ -1663,7 +1757,7 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     expect(resolution.sourceFactIds).toHaveLength(2); // the citation SURVIVES
 
     const xml = await driven.render();
-    expect(renderedTextOf(controlById(xml, '302'))).toBe(BLANK);
+    await expectBlankAsTemplate(xml, '302');
     expect(xml).not.toContain('No history of diabetes.');
     expect(xml).not.toContain('The patient denies hypertension.');
   });
@@ -1784,7 +1878,7 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
       // refusal door; `render()` awaits the renderer's independent
       // VALIDATION_REQUIRED throw as well.
       const control = controlById(await driven.render(), '100');
-      expect([row.name, renderedTextOf(control)]).toEqual([row.name, BLANK]);
+      await expectControlBlankAsTemplate(control, row.name);
       expect([row.name, control.includes('<w:t>Right</w:t>')]).toEqual([row.name, false]);
       expect([row.name, control.includes(BYSTANDER_VALUE)]).toEqual([row.name, false]);
     }
@@ -1824,7 +1918,7 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
       expect([behavior, resolution.sourceFactIds.length]).toEqual([behavior, 1]);
 
       const xml = await driven.render();
-      expect([behavior, renderedTextOf(controlById(xml, '301'))]).toEqual([behavior, BLANK]);
+      await expectBlankAsTemplate(xml, '301', behavior);
       expect([behavior, xml.includes('no known drug allergies')]).toEqual([
         behavior,
         false,
