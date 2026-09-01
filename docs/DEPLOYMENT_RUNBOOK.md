@@ -401,6 +401,17 @@ being down. **Kernel up, networking up, userland not scheduling sshd** — the
 signature of an OOM cascade, a full disk, or an I/O stall, and consistent with
 the runner services dying one after the other rather than together.
 
+⚠️ **AND THE SYMPTOM EVOLVED WHILE THE INCIDENT WAS BEING WRITTEN UP — RECORDED
+BECAUSE A RECORD THAT NAMES ONE MECHANISM OUTLIVES THE SESSION THAT WROTE IT.**
+After roughly forty minutes the failure changed from a **banner-exchange
+timeout** to **`Connection reset by 194.156.90.209 port 22`**, stable at 3 of 3
+attempts. A reset is not a timeout: something is now actively closing the
+connection rather than never answering. That is consistent with `sshd` being
+reaped at fork (an OOM still in progress) or crash-looping, and it means the box
+is *changing state* rather than simply wedged — but it is **not** recovery, and
+both runners stayed `offline` throughout. Do not read a changed error as a fixed
+box.
+
 **WHY IT COULD NOT BE FIXED FROM HERE, AND WHAT THE PATH IS.** §2.9 records that
 password auth is off and root's console password was rotated to a value never
 transmitted or stored, so **the key is the only way in** — and the key is
