@@ -139,7 +139,16 @@ export async function renderTemplateDocx(
       continue;
     }
     part.patches.push(...patches);
-    fieldProofs.push(fieldProof(field, resolution.value, 1));
+    // ⚠️ #162 — A PATCHED FIELD WITH NO VALUE IS `emptied`, NOT `filled`.
+    // The renderer DID act (it cleared the template's placeholder), so `blank`
+    // — which means "no patch" — cannot describe it; but calling it `filled`
+    // asserts a value that does not exist, and that is what made
+    // `blankVerification` unsatisfiable on every content-control form.
+    // The verifier proves this arm by reading the OUTPUT control and requiring
+    // it to be empty, which is the question the invariant always meant to ask.
+    fieldProofs.push(
+      fieldProof(field, resolution.value, 1, isEmptyRenderValue(field, resolution.value) ? 'emptied' : 'filled'),
+    );
   }
 
   const partProofs: RenderedPartProof[] = [];
@@ -1226,6 +1235,36 @@ function legacyResultTextNodes(
   return descendantXmlElements(paragraph, 't').filter(
     (node) => node.start >= separate!.end && node.end <= end!.start,
   );
+}
+
+/**
+ * Did this resolution carry NOTHING to render? #162's `emptied` proof turns on
+ * this, so it is written once rather than inlined.
+ *
+ * ⚠️ AN EMPTY ARRAY COUNTS. A `multi_select` resolving to `[]` selects nothing
+ * and renders nothing, so it is as empty as `null`. A `false` checkbox does NOT
+ * count — it renders a real unchecked glyph, which is content.
+ */
+function isEmptyRenderValue(
+  field: TemplateField,
+  value: FieldResolution['value'],
+): boolean {
+  // ⚠️ THE KIND DECIDES, NOT ONLY THE VALUE — AND THE SUITE IS WHAT TAUGHT ME.
+  // The first version of this keyed on the value alone, and a null CHECKBOX
+  // still renders the unchecked glyph `☐` (`renderer.ts`, the checkbox branch:
+  // `selected = value === true`, then a glyph is written either way). Claiming
+  // `emptied` for it made the verifier read real content where it had been
+  // promised none, and seven existing arms went red — including
+  // `blank-proof`'s own CANARY. A proof that lies about the artifact is worse
+  // than no proof, and the artifact is what a doctor signs.
+  //
+  // So a checkbox is NEVER `emptied`: unchecked is a rendered STATE, not an
+  // absence. Every other kind clears its text container to '' when it has no
+  // value, which is genuine emptiness and is what the verifier then proves.
+  if (field.kind === 'checkbox') return false;
+  if (value === null || value === undefined) return true;
+  if (Array.isArray(value)) return value.length === 0;
+  return false;
 }
 
 function fieldProof(

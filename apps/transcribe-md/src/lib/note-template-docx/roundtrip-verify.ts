@@ -361,6 +361,32 @@ export function applyApprovedXmlPatches(
  * requires one entry per expected field, so every honestly-blank field silently
  * had none and certification could not close.
  */
+/**
+ * The TEXT a rendered control actually carries — every `w:t` run concatenated
+ * and entity-decoded. #162's blank proof is asserted against THIS, so it must
+ * read the document the way a reader does rather than the way the code hoped.
+ *
+ * ⚠️ ENTITIES ARE DECODED BEFORE THE COMPARISON. `&amp;` is one character of
+ * content, not five, and a check that missed that would call a control
+ * carrying `&amp;` empty.
+ */
+function renderedTextContentOf(controlXml: string): string {
+  const parts: string[] = [];
+  const re = /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g;
+  let match = re.exec(controlXml);
+  while (match !== null) {
+    parts.push(match[1]!);
+    match = re.exec(controlXml);
+  }
+  return parts
+    .join('')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
 export type RenderedFieldProof =
   | {
       readonly kind: 'filled';
@@ -379,6 +405,33 @@ export type RenderedFieldProof =
       readonly valueSha256: string;
       /** One verified binding site. The gate requires > 0 and is untouched. */
       readonly occurrences: number;
+    }
+  | {
+      /**
+       * ⚠️ RULING #162 — THE OUTCOME-BASED BLANK PROOF.
+       *
+       * A field the resolver left NULL whose control the renderer DID patch —
+       * it cleared the template's placeholder to nothing. `blank` cannot
+       * describe it (that arm requires zero patches) and `filled` is a lie
+       * about a field that carries no value.
+       *
+       * ⚠️ AND THE OLD PROXY NEVER LOOKED AT THE OUTPUT. `kind: 'blank'` asks
+       * "did the renderer write nothing?" — a fact about a CODE PATH. On a form
+       * whose fields are content controls a blank field is still patched, so no
+       * field could ever earn it and `blankVerification` was UNSATISFIABLE BY
+       * CONSTRUCTION. Measured on the owner's GI consult form: 20 fields null
+       * in the manifest, all 35 round-trip entries `filled`, blankProofCount 0.
+       *
+       * This arm asks the question the invariant always meant: **does the
+       * rendered control contain nothing?** — verified against the OUTPUT
+       * BYTES, not inferred from the resolution.
+       */
+      readonly kind: 'emptied';
+      readonly fieldId: string;
+      readonly partName: string;
+      readonly bindingPath: string;
+      readonly valueSha256: string;
+      readonly occurrences: number;
     };
 
 export interface RenderedPartProof {
@@ -395,7 +448,7 @@ export interface VerifiedRenderedField {
   /** Which contract this entry attests — a fill, or a proven-blank. Persisted
    *  into the roundtrip proof so the certification gate can require at least
    *  one blank-verified field. */
-  readonly kind: 'filled' | 'blank';
+  readonly kind: 'filled' | 'blank' | 'emptied';
   readonly fieldId: string;
   readonly partName: string;
   readonly bindingPath: string;
@@ -500,13 +553,20 @@ export function verifyRenderedTemplateDocx(
   const proofFieldIds = new Set<string>();
   const filledFieldIds = new Set<string>();
   const blankProofs: RenderedFieldProof[] = [];
+  const emptiedProofs: RenderedFieldProof[] = [];
   for (const field of input.plan.fields) {
     if (proofFieldIds.has(field.fieldId) || field.occurrences < 1) {
       failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
     }
     proofFieldIds.add(field.fieldId);
     if (field.kind === 'blank') blankProofs.push(field);
-    else filledFieldIds.add(field.fieldId);
+    else {
+      // ⚠️ `emptied` IS PATCHED, so it belongs in the patched-set equality
+      // below exactly as a fill does. What distinguishes it is not whether the
+      // renderer acted, but WHAT THE OUTPUT CONTAINS — checked further down.
+      filledFieldIds.add(field.fieldId);
+      if (field.kind === 'emptied') emptiedProofs.push(field);
+    }
   }
   const patchedFieldIds = new Set(
     input.plan.parts.flatMap((part) =>
@@ -556,6 +616,38 @@ export function verifyRenderedTemplateDocx(
       const srcBytes = src.text.slice(srcSpan.start, srcSpan.end);
       const outBytes = out.text.slice(outSpan.start, outSpan.end);
       if (srcBytes !== outBytes) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    }
+  }
+
+  // ── #162 — THE OUTCOME-BASED BLANK PROOF, VERIFIED IN THE OUTPUT BYTES ────
+  // For every field the resolver left NULL and the renderer nonetheless
+  // patched, the rendered control must contain NOTHING. This is the direction
+  // the invariant exists for: a renderer that junk-fills a blank — a stale
+  // placeholder left behind, a prompt string, a stray glyph — is exactly the
+  // harm, and the old proxy could not see it because it never read the output.
+  //
+  // ⚠️ IT ASSERTS EMPTINESS, NOT "SHORTNESS" OR "LOOKS BLANK". Zero characters
+  // of `w:t` content, after entity decoding. A field that renders a single
+  // space is NOT blank and must fail here.
+  if (emptiedProofs.length > 0) {
+    const outScans = new Map<string, ScannedXmlPart>();
+    const scanOut = (partName: string): ScannedXmlPart => {
+      const hit = outScans.get(partName);
+      if (hit) return hit;
+      const entry = outputPackage.zip.entries.get(partName);
+      if (!entry) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      const scanned = scanXmlPart(entry.bytes);
+      outScans.set(partName, scanned);
+      return scanned;
+    };
+    for (const emptied of emptiedProofs) {
+      const out = scanOut(emptied.partName);
+      const span = out.byPath.get(emptied.bindingPath);
+      if (!span) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      const controlXml = out.text.slice(span.start, span.end);
+      if (renderedTextContentOf(controlXml) !== '') {
+        failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      }
     }
   }
 

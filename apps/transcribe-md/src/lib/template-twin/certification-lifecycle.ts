@@ -747,8 +747,26 @@ export async function certifyAndActivateTemplateTwin(input: {
       const roundTripFields = isRecord(compiled.latestTestRoundTrip)
         ? (compiled.latestTestRoundTrip.fields as unknown[]) ?? []
         : [];
+      // ⚠️ #162 — THE UNION OF TWO PROOFS, AND THE GATE GAINS BY IT.
+      //
+      //   'blank'   the legacy path — the renderer produced NO patch, and the
+      //             output bytes at that binding still ARE the source's.
+      //             Unchanged; the venous template still certifies on it.
+      //   'emptied' NEW — the renderer DID patch (it cleared a placeholder) and
+      //             the OUTPUT control was read and proven to hold ZERO
+      //             characters.
+      //
+      // The old predicate counted only the first, which asks "did a code path
+      // run?" and never once looked at the document. On a content-control form
+      // no field can produce zero patches, so `blankVerification` was
+      // UNSATISFIABLE BY CONSTRUCTION: measured on the owner's GI consult form,
+      // 20 fields null in the manifest and all 35 round-trip entries `filled`.
+      //
+      // ⚠️ THIS ADDS A REQUIREMENT AND REMOVES NONE (#156(d)). Emptiness is now
+      // BYTE-VERIFIED in the output where before it was inferred from the
+      // absence of an action. The threshold is unchanged at >= 1.
       const blankProofCount = roundTripFields.filter(
-        (entry) => isRecord(entry) && entry.kind === 'blank',
+        (entry) => isRecord(entry) && (entry.kind === 'blank' || entry.kind === 'emptied'),
       ).length;
       // ── FILL-COVERAGE INVARIANT ──────────────────────────────────────────
       // A template must not certify with a dead fill path. WM_IOV certified
