@@ -120,7 +120,40 @@ export async function renderTemplateDocx(
     }
     const prepared = prepareScalarResolution(field, resolution);
     const part = getPartPlan(field.rendererBinding.partName);
-    const patches = createFieldPatches(part.scan, field, prepared);
+    // ⚠️ #163 — A NULL IS LEFT UNPATCHED. NO PATCH-TO-EMPTY, EVER.
+    //
+    // The field keeps the TEMPLATE'S OWN BYTES — the doctor's own blank
+    // representation — and thereby earns the `blank` proof below through
+    // source-byte-identity, which is the one proof this programme has never had
+    // falsified. It becomes universal across shapes instead of being available
+    // only to fields nothing happened to touch, which is what made consult
+    // forms uncertifiable.
+    //
+    // WHAT THIS REPLACES, AND WHY IT IS AN INVERSION RATHER THAN A FIX. Ruling
+    // #162 spent three formulations trying to PROVE that a patched-to-empty
+    // field is empty, and each was falsified a layer deeper — paragraph, part,
+    // field balance, element type. The fourth layer showed the target is
+    // unreachable in principle: a renderer that deletes what it can classify
+    // will always miss what it cannot (a `w:sym`, a `w:pict`, a `w:delText`
+    // survived every version), and every guard built on top inherits that
+    // blind spot — the byte comparison agreed with the writer because both
+    // carried the same mistake. Measured at its worst, the widened clearing
+    // walk ERASED a patient's allergy line from a document that would be
+    // signed, with every guard green. Deleting the cause retires all four
+    // layers at once.
+    //
+    // ⚠️ OVERWRITE-ON-FILL IS UNTOUCHED. A field carrying a value still
+    // overwrites the template's content exactly as before; nothing here reaches
+    // it. The narrow reading is deliberate — `value === null` and nothing else,
+    // because widening a rule mid-repair is how #162 got where it did.
+    //
+    // Leftover content in an unfilled field is real, and it is now answered
+    // where the doctor can act on it: `compileTemplateDocx` flags it at UPLOAD.
+    // Runtime never deletes what it cannot classify.
+    const patches =
+      resolution.value === null
+        ? []
+        : createFieldPatches(part.scan, field, prepared);
     if (patches.length === 0) {
       // BLANK PROOF. No patch means the field keeps the template's own unfilled
       // state — a dropdown placeholder, an empty cell. That is a real outcome

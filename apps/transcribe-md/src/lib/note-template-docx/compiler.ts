@@ -12,6 +12,11 @@ import {
   type UnsupportedElement,
 } from "../template-twin/ir";
 import { failTemplateDocx } from "./errors";
+import {
+  detectFieldHygiene,
+  fieldHygieneDetail,
+  FIELD_LEFTOVER_CONTENT,
+} from "./field-hygiene";
 import type { TemplateDocxLimits } from "./limits";
 import { withoutPlaceholderOptions } from "./placeholder-option";
 import {
@@ -126,11 +131,30 @@ export function compileTemplateDocx(
       staticSha256: part.staticSha256,
     })),
   );
+  // ⚠️ THE HYGIENE FINDINGS ARE EXCLUDED FROM THE STRUCTURE HASH, AND THIS IS
+  // NOT AN OPTIMISATION — IT IS THE DIFFERENCE BETWEEN A NEW ADVISORY AND AN
+  // OUTAGE.
+  //
+  // `structureSha256` is what `assertSourceMatchesIr` compares on EVERY fill,
+  // against the STORED IR of every template already compiled. Moving it does
+  // not stale a fixture: it makes every CERTIFIED TWIN IN THE DATABASE
+  // unfillable — production's included — and each recompute path degrades
+  // SILENTLY to the styled export. `gate-twin-certified-pin-matches-compiler`
+  // caught this the moment #163's findings joined the register, and its own
+  // remediation is the rule followed here: *if the change is only about what a
+  // READER shows, filter at the reader and leave the stored identity alone.*
+  //
+  // A hygiene finding IS a reader concern. It describes what a doctor will SEE
+  // in an unfilled field; it says nothing about the document's STRUCTURE, which
+  // is what this hash identifies. Two templates differing only in whether a
+  // placeholder was cleaned are structurally the same template.
   const structureSha256 = canonicalSha256({
     fields: state.fields,
     tables: state.tables,
     nodes: state.nodes,
-    unsupported: state.unsupported,
+    unsupported: state.unsupported.filter(
+      (item) => item.code !== FIELD_LEFTOVER_CONTENT,
+    ),
   });
 
   const candidate: TemplateDocIR = {
@@ -573,7 +597,7 @@ function processContentControl(
     tableId: context.table?.tableId ?? null,
     rowPrototype: context.repeatAncestorPath !== null,
   };
-  pushField(field, context, state);
+  pushField(field, context, state, content);
   addNode(
     state,
     {
@@ -723,7 +747,7 @@ function processLegacyField(
     tableId: context.table?.tableId ?? null,
     rowPrototype: context.repeatAncestorPath !== null,
   };
-  pushField(field, context, state);
+  pushField(field, context, state, formData);
   addNode(
     state,
     {
@@ -962,7 +986,7 @@ function createAmbiguousTableCellField(
     tableId: context.table?.tableId ?? null,
     rowPrototype: context.repeatAncestorPath !== null,
   };
-  pushField(field, context, state);
+  pushField(field, context, state, cell);
   addNode(
     state,
     {
@@ -1146,12 +1170,46 @@ function pushField(
   field: TemplateField,
   context: WalkContext,
   state: CompilerState,
+  /**
+   * ⚠️ #163 RULE (2) — THE FIELD'S OWN CONTENT REGION, PASSED BY ITS EMITTER.
+   *
+   * Each emitter already knows where its field lives: the `w:sdtContent` of a
+   * content control, the `w:tc` of a table cell, the `w:ffData` of a legacy
+   * form field. It is passed in rather than re-derived here, and that is the
+   * lesson of #162(b) rather than a style preference — a second implementation
+   * of "where does this field live" drifted from the first and hard-failed
+   * every empty legacy field in a shipped build.
+   */
+  locus: OrderedXmlNode | null,
 ): void {
   if (state.fields.length >= state.limits.maxFields) {
     failTemplateDocx("DOCUMENT_STRUCTURE_LIMIT_EXCEEDED");
   }
   state.fields.push(field);
   context.table?.cellFieldIds.push(field.fieldId);
+
+  // ⚠️ RAISED AT THE ONE CHOKE POINT EVERY FIELD PASSES THROUGH, so a future
+  // field kind cannot be added without the check coming with it. A hygiene
+  // sweep wired per-emitter is a sweep that is one emitter short the day
+  // somebody adds the fourth.
+  const hygiene = detectFieldHygiene(locus);
+  if (hygiene) {
+    addUnsupported(state, {
+      code: FIELD_LEFTOVER_CONTENT,
+      partName: field.rendererBinding.partName,
+      path: field.rendererBinding.path,
+      label: field.originalLabel,
+      detail: fieldHygieneDetail(field.originalLabel, hygiene),
+      // ⚠️ BOTH FALSE, DELIBERATELY, AND THE SECOND IS THE LOAD-BEARING ONE.
+      // This does not block certification — #163 ruled it loud, not fatal — and
+      // `clinicallyMaterial` is what the generic validator arm reads to decide
+      // severity, so `true` here would make it blocking. `validation/index.ts`
+      // grades this code BY NAME instead, and carries `detail` verbatim, so the
+      // honest sentence survives the false flag.
+      clinicallyMaterial: false,
+      blocksCertification: false,
+    });
+  }
 }
 
 function addNode(

@@ -7,6 +7,7 @@
 // shape, unsupported elements, and source-anchor coverage.
 // ============================================================================
 
+import { FIELD_LEFTOVER_CONTENT } from '../../note-template-docx/field-hygiene';
 import {
   EncounterFactSchema,
   FieldResolutionSchema,
@@ -381,6 +382,26 @@ export function validateTemplateTwin(
   }
 
   for (const element of unsupported) {
+    // ⚠️ #163 RULE (2) — THE HYGIENE FINDING IS LOUD AND NON-BLOCKING, AND IT
+    // NEEDS ITS OWN ARM TO BE EITHER.
+    //
+    // The generic grading below reads `blocksCertification || clinicallyMaterial`,
+    // and `clinicallyMaterial` is TRUE at every compiler site that sets it —
+    // measured 12 of 12, and 150 of 150 production fields — so it cannot
+    // distinguish anything. A hygiene finding routed through it would be graded
+    // BLOCKING and would refuse every template carrying so much as an "Enter
+    // assessment" placeholder, which is the exact opposite of what #163 ruled.
+    // Setting `clinicallyMaterial: false` to dodge that would buy the right
+    // severity with a false sentence — the generic detail then reads "a
+    // NON-CLINICAL document element is unsupported", and leftover content in a
+    // clinical field is neither non-clinical nor unsupported.
+    //
+    // So it is graded by NAME, and carries the compiler's own doctor-facing
+    // sentence rather than a canned one.
+    if (element.code === FIELD_LEFTOVER_CONTENT) {
+      add(element.code, 'warning', element.detail);
+      continue;
+    }
     add(
       element.code,
       element.blocksCertification || element.clinicallyMaterial
