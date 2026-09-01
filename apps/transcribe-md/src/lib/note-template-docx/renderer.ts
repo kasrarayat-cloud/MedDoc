@@ -23,6 +23,9 @@ import {
   directXmlChild,
   encodeXmlPart,
   failTemplateDocxRender,
+  findXmlAttribute,
+  legacyFieldWindow,
+  readXmlAttribute,
   scanXmlPart,
   TemplateDocxRenderError,
   verifyRenderedTemplateDocx,
@@ -1042,46 +1045,6 @@ function escapeXmlAttribute(value: string): string {
     .replaceAll("'", '&apos;');
 }
 
-interface AttributeLocation {
-  name: string;
-  fullStart: number;
-  fullEnd: number;
-  valueStart: number;
-  valueEnd: number;
-}
-
-function findXmlAttribute(
-  xml: string,
-  node: XmlElementSpan,
-  localName: string,
-): AttributeLocation | null {
-  const tag = xml.slice(node.start, node.startTagEnd);
-  const expression = /\s+([^\s=/>]+)\s*=\s*(["'])([\s\S]*?)\2/g;
-  for (const match of tag.matchAll(expression)) {
-    const name = match[1]!;
-    if (xmlLocalName(name) !== localName || match.index === undefined) continue;
-    const quoteOffset = match[0].indexOf(match[2]!);
-    const valueStart = node.start + match.index + quoteOffset + 1;
-    return {
-      name,
-      fullStart: node.start + match.index,
-      fullEnd: node.start + match.index + match[0].length,
-      valueStart,
-      valueEnd: valueStart + match[3]!.length,
-    };
-  }
-  return null;
-}
-
-function readXmlAttribute(
-  xml: string,
-  node: XmlElementSpan,
-  localName: string,
-): string | null {
-  const location = findXmlAttribute(xml, node, localName);
-  return location ? xml.slice(location.valueStart, location.valueEnd) : null;
-}
-
 function setXmlAttributePatch(
   xml: string,
   node: XmlElementSpan,
@@ -1217,40 +1180,29 @@ function legacyResultTextNodes(
   xml: string,
   begin: XmlElementSpan,
 ): XmlElementSpan[] {
-  let paragraph: XmlElementSpan | null = begin.parent;
-  while (paragraph && xmlLocalName(paragraph.name) !== 'p') {
-    paragraph = paragraph.parent;
-  }
-  if (!paragraph) return [];
-  const fieldCharacters = descendantXmlElements(paragraph, 'fldChar');
-  const beginIndex = fieldCharacters.findIndex((candidate) => candidate === begin);
-  if (beginIndex < 0) failTemplateDocxRender('BINDING_AMBIGUOUS');
-  let depth = 0;
-  let separate: XmlElementSpan | null = null;
-  let end: XmlElementSpan | null = null;
-  for (const character of fieldCharacters.slice(beginIndex)) {
-    const type = readXmlAttribute(xml, character, 'fldCharType');
-    if (type === 'begin') {
-      depth += 1;
-      continue;
-    }
-    if (type === 'separate' && depth === 1) {
-      if (separate) failTemplateDocxRender('BINDING_AMBIGUOUS');
-      separate = character;
-      continue;
-    }
-    if (type === 'end') {
-      depth -= 1;
-      if (depth === 0) {
-        end = character;
-        break;
-      }
-      if (depth < 0) failTemplateDocxRender('BINDING_AMBIGUOUS');
-    }
-  }
-  if (!separate || !end) return [];
-  return descendantXmlElements(paragraph, 't').filter(
-    (node) => node.start >= separate!.end && node.end <= end!.start,
+  // ⚠️ #162(c) — THE SCOPE IS THE FIELD, NOT THE PARAGRAPH.
+  //
+  // This walked `begin`'s own `w:p`, so a FORMTEXT whose result sits in the
+  // NEXT paragraph — which Word produces the moment a paragraph mark is entered
+  // inside a field result — had no `separate`/`end` in view. The function
+  // returned `[]`, no result run was cleared, and the template's stale
+  // `w:default` survived into the rendered document. MEASURED on a two-
+  // paragraph FORMTEXT: SOURCE has "WARFARIN 5 MG DAILY" -> OUTPUT has it too,
+  // `verified: true`, proof `emptied`. A medication the encounter never
+  // mentioned, on a page somebody signs, attested as a proven-blank field.
+  //
+  // The depth counting was always right; only the SET it counted over was too
+  // small. The walk now lives in `roundtrip-verify` because the VERIFIER needs
+  // the same window to decide which bytes this binding may touch — one walk,
+  // two callers, so a widened renderer cannot outrun its own guard.
+  // ⚠️ THE SCOPE COMES BACK FROM THE WALK, rather than being re-derived here.
+  // Re-deriving it would put a second copy of "which element is the scope?" one
+  // function away from the first — the exact drift this consolidation exists to
+  // remove, reintroduced by the change that removed it.
+  const { scope, separate, end } = legacyFieldWindow(xml, begin);
+  if (!scope || !separate || !end) return [];
+  return descendantXmlElements(scope, 't').filter(
+    (node) => node.start >= separate.end && node.end <= end.start,
   );
 }
 

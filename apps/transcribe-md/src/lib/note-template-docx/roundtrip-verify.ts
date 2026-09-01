@@ -304,6 +304,112 @@ export function descendantXmlElements(
   return result;
 }
 
+interface AttributeLocation {
+  name: string;
+  fullStart: number;
+  fullEnd: number;
+  valueStart: number;
+  valueEnd: number;
+}
+
+/**
+ * Locate one attribute inside an element's START TAG.
+ *
+ * Moved here from `renderer.ts` by #162(c) so the renderer and the verifier
+ * share ONE reader. The verifier now has to answer the same question the
+ * renderer does — "where does this legacy field end?" — and that answer turns
+ * on `w:fldCharType`. A second copy of an attribute reader is a second thing to
+ * drift; #162(b) already shipped a bespoke `fldCharTypeOf` that regexed
+ * `span.name` (which the scanner fills with the element name ALONE) and hard-
+ * failed every empty legacy field in production.
+ */
+export function findXmlAttribute(
+  xml: string,
+  node: XmlElementSpan,
+  localName: string,
+): AttributeLocation | null {
+  const tag = xml.slice(node.start, node.startTagEnd);
+  const expression = /\s+([^\s=/>]+)\s*=\s*(["'])([\s\S]*?)\2/g;
+  for (const match of tag.matchAll(expression)) {
+    const name = match[1]!;
+    if (xmlLocalName(name) !== localName || match.index === undefined) continue;
+    const quoteOffset = match[0].indexOf(match[2]!);
+    const valueStart = node.start + match.index + quoteOffset + 1;
+    return {
+      name,
+      fullStart: node.start + match.index,
+      fullEnd: node.start + match.index + match[0].length,
+      valueStart,
+      valueEnd: valueStart + match[3]!.length,
+    };
+  }
+  return null;
+}
+
+export function readXmlAttribute(
+  xml: string,
+  node: XmlElementSpan,
+  localName: string,
+): string | null {
+  const location = findXmlAttribute(xml, node, localName);
+  return location ? xml.slice(location.valueStart, location.valueEnd) : null;
+}
+
+/**
+ * The begin -> end window of ONE legacy (`w:fldChar`) form field.
+ *
+ * ⚠️ #162(c) — THE FIELD IS THE UNIT, NOT THE PARAGRAPH. A Word FORMTEXT whose
+ * result carries a paragraph mark has its `separate` in one `w:p` and its `end`
+ * in the next; a walk scoped to the begin's own paragraph sees neither. So the
+ * walk ranges over the part ROOT, and the DEPTH COUNT — unchanged — is what
+ * keeps a nested field from closing the outer one.
+ *
+ * The renderer uses it to find the result runs it must clear; the verifier uses
+ * it to compute the region those patches are allowed to touch. ONE walk, two
+ * callers, because a second copy would answer differently the day either is
+ * fixed — and the two answers disagreeing is exactly a false green or a false
+ * rejection on a field a doctor signs.
+ */
+export function legacyFieldWindow(
+  xml: string,
+  begin: XmlElementSpan,
+): {
+  scope: XmlElementSpan | null;
+  separate: XmlElementSpan | null;
+  end: XmlElementSpan | null;
+} {
+  let scope: XmlElementSpan | null = begin.parent;
+  while (scope && scope.parent) scope = scope.parent;
+  if (!scope) return { scope: null, separate: null, end: null };
+  const fieldCharacters = descendantXmlElements(scope, 'fldChar');
+  const beginIndex = fieldCharacters.findIndex((candidate) => candidate === begin);
+  if (beginIndex < 0) failTemplateDocxRender('BINDING_AMBIGUOUS');
+  let depth = 0;
+  let separate: XmlElementSpan | null = null;
+  let end: XmlElementSpan | null = null;
+  for (const character of fieldCharacters.slice(beginIndex)) {
+    const type = readXmlAttribute(xml, character, 'fldCharType');
+    if (type === 'begin') {
+      depth += 1;
+      continue;
+    }
+    if (type === 'separate' && depth === 1) {
+      if (separate) failTemplateDocxRender('BINDING_AMBIGUOUS');
+      separate = character;
+      continue;
+    }
+    if (type === 'end') {
+      depth -= 1;
+      if (depth === 0) {
+        end = character;
+        break;
+      }
+      if (depth < 0) failTemplateDocxRender('BINDING_AMBIGUOUS');
+    }
+  }
+  return { scope, separate, end };
+}
+
 export interface ApprovedXmlPatch {
   readonly start: number;
   readonly end: number;
@@ -691,20 +797,54 @@ function assertPatchesWithinApprovedBindings(
       }
 
       let allowed = scanned.byPath.get(field.rendererBinding.path);
+      // The approved region, as OFFSETS — because for a legacy field it is not
+      // any single element: it runs from the `begin` fldChar to its matching
+      // `end`, which may sit in a later paragraph.
+      let allowedStart = allowed?.start ?? -1;
+      let allowedEnd = allowed?.end ?? -1;
       if (patch.kind === 'repeating_row') {
         if (!field.rowPrototype || !field.rendererBinding.repeatAncestorPath) {
           failTemplateDocxRender('STATIC_INVARIANCE_FAILED');
         }
         allowed = scanned.byPath.get(field.rendererBinding.repeatAncestorPath);
+        allowedStart = allowed?.start ?? -1;
+        allowedEnd = allowed?.end ?? -1;
       } else if (field.rendererBinding.bindingType === 'legacy_form_field') {
-        while (allowed && xmlLocalName(allowed.name) !== 'p') {
-          allowed = allowed.parent ?? undefined;
+        // ⚠️ #162(c) — THE APPROVED REGION IS THE FIELD, NOT ITS FIRST
+        // PARAGRAPH. This walked up to the enclosing `w:p`, which is the right
+        // answer only while a field cannot outlive one. The renderer now clears
+        // result runs across the whole begin -> end window, so a two-paragraph
+        // FORMTEXT produced a legitimate patch OUTSIDE the begin's paragraph
+        // and this guard rejected the render outright.
+        //
+        // The window is computed by the SAME walk the renderer patches with
+        // (`legacyFieldWindow`), so the two cannot disagree. Note it is STRICTLY
+        // TIGHTER than the paragraph in the ordinary case: every patch this
+        // binding can emit lives either inside the `begin` element (the
+        // `w:ffData` subtree) or between `separate` and `end`, so text elsewhere
+        // in the paragraph is no longer inside the approved region at all.
+        const window =
+          allowed && xmlLocalName(allowed.name) === 'fldChar'
+            ? legacyFieldWindow(scanned.text, allowed)
+            : null;
+        if (window?.end) {
+          allowedEnd = window.end.end;
+        } else {
+          // A field with no matching `end` is malformed; fall back to the
+          // paragraph rather than widen or fail on a shape that rendered fine
+          // before this change.
+          while (allowed && xmlLocalName(allowed.name) !== 'p') {
+            allowed = allowed.parent ?? undefined;
+          }
+          allowedStart = allowed?.start ?? -1;
+          allowedEnd = allowed?.end ?? -1;
         }
       }
       if (
         !allowed ||
-        patch.start < allowed.start ||
-        patch.end > allowed.end
+        allowedStart < 0 ||
+        patch.start < allowedStart ||
+        patch.end > allowedEnd
       ) {
         failTemplateDocxRender('STATIC_INVARIANCE_FAILED');
       }
