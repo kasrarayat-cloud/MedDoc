@@ -49,4 +49,20 @@ fi
 # a future cwd change cannot silently pick up a different compose file. Belt and
 # braces, because this hazard has already survived being written down.
 cd "$SHARED" || { echo "🔴 dc: cannot cd to $SHARED. Refusing."; exit 1; }
+
+# ⚠️ A CALLER'S OWN `-f` WINS, AND THAT IS NOT A HOLE — IT IS THE QA STACK.
+# `docker-compose.qa.yml` is a real, sanctioned target (project `meddoc-qa`,
+# 127.0.0.1:9020, synthetic DB). Hardcoding the prod file would make QA
+# unreachable through the only granted door, which is how a guard gets bypassed
+# rather than obeyed. The cd still happens either way, so the relative binds
+# resolve against the shared tree whichever compose file is chosen — the hazard
+# this script exists for is closed in BOTH cases.
+for arg in "$@"; do
+  case "$arg" in
+    -f|--file|--project-directory)
+      echo "   dc: caller supplied its own $arg — honouring it, from $SHARED."
+      exec docker compose "$@"
+      ;;
+  esac
+done
 exec docker compose -f "$COMPOSE" "$@"

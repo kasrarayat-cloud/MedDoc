@@ -112,83 +112,48 @@ describe('#162 — the blank proof is proven in the OUTPUT, not inferred', () =>
     expect([checkbox.fieldId, mine?.kind]).not.toEqual([checkbox.fieldId, 'emptied']);
   });
 
-  it('⚠️ a FILLED control claimed `emptied` is REFUSED — and see the honest limit below', async () => {
-    // ⚠️ HONEST LIMIT, RECORDED RATHER THAN OVERCLAIMED — AND IT IS THE SAME
-    // ONE `blank-proof`'s CANARY records about its own byte comparison.
+  it('⚠️ ISOLATION — a legacy field whose RESULT still carries text is REFUSED', async () => {
+    // ⚠️ THIS ARM REPLACES A RECORDED LIMIT THAT WAS WRONG, AND THE CORRECTION
+    // LIVES WHERE THE CLAIM DID. The previous version said an isolating case
+    // was "not expressible in this fixture" and shipped the emptiness check as
+    // defence-in-depth. The adversarial pass constructed one IN THAT EXACT
+    // FIXTURE, so the caveat is retired rather than restated.
     //
-    // MEASURED, twice: deleting the output-bytes emptiness check in
-    // `roundtrip-verify` leaves this arm — and the entire suite — GREEN. The
-    // refusal below therefore comes from the STRUCTURAL guards that run first,
-    // not from that check. Claiming this arm isolates it would be canon 62
-    // exactly: an overlapping guard laundering an unproved one.
-    //
-    // WHAT IS PROVED, and it is the direction the ruling names first: a
-    // renderer that JUNK-FILLS a blank is REFUSED — mutating
-    // `textContainerPatches(… '' …)` to write text reds SIX arms. And the
-    // checkbox exclusion is load-bearing: calling a null checkbox `emptied`
-    // reds SEVEN. The emptiness check itself is DEFENCE IN DEPTH behind those,
-    // and constructing a case that reaches it with the structural guards
-    // satisfied is not expressible in this fixture.
-    //
-    // So this arm asserts what it can: the mislabelled claim is refused.
-    const source = await buildSyntheticDocx();
-    const { compileTemplateDocx } = await import('../compiler');
-    const { verifyRenderedTemplateDocx } = await import('../roundtrip-verify');
-    const { TemplateDocxRenderError } = await import('../errors');
-    const ir = compileTemplateDocx(source);
-
-    const target = ir.fields.find(
-      (f) => f.kind === 'single_select' && !f.rowPrototype && f.allowedOptions.length > 0,
-    )!;
-    const resolutions = ir.fields.map((field) =>
-      FieldResolutionSchema.parse(
-        field.fieldId === target.fieldId
-          ? {
-              fieldId: field.fieldId,
-              status: 'supported',
-              value: target.allowedOptions[0]!.value,
-              // The evidence rails are REAL and the schema enforces them: a
-              // populated value must cite a fact and an anchor. Satisfied here
-              // rather than bypassed — the arm is about the blank proof, and it
-              // must not buy its setup by weakening something else.
-              sourceFactIds: ['ttfact_' + 'a'.repeat(24)],
-              evidenceAnchorIds: ['anchor-1'],
-              selectedOptionOrdinal: target.allowedOptions[0]!.ordinal,
-              reasonCode: 'direct_evidence_supported',
-              clinicianReviewed: false,
-            }
-          : {
-              fieldId: field.fieldId,
-              status: 'not_mentioned',
-              value: null,
-              sourceFactIds: [],
-              evidenceAnchorIds: [],
-              selectedOptionOrdinal: null,
-              reasonCode: 'blank_when_unsaid',
-              clinicianReviewed: false,
-            },
-      ),
+    // THE CASE. A `legacy_form_field`'s binding path is the `w:fldChar` BEGIN
+    // marker, which holds only `w:ffData` metadata and CANNOT contain text. The
+    // first implementation read that span, found nothing, and attested every
+    // legacy field empty — on every input, including an ordinary FORMTEXT. The
+    // locus table now reads the field RESULT (separate→end), so a stale value
+    // surviving there is caught. Nothing structural refuses this: the render is
+    // real and self-consistent. Only the emptiness check can.
+    const input = await setupAllBlank();
+    const legacy = input.ir.fields.find(
+      (f) => f.rendererBinding.bindingType === 'legacy_form_field',
     );
+    // NON-VACUITY — if the fixture has no legacy field the arm proves nothing,
+    // and it must say so rather than pass quietly.
+    expect(legacy, 'fixture must contain a legacy_form_field').toBeDefined();
 
-    const rendered = await renderTemplateDocx({ source, ir, resolutions, validation: VALIDATION });
-    const filledProof = rendered.verification.fields.find(
-      (p) => p.kind === 'filled' && p.fieldId === target.fieldId,
-    );
-    // NON-VACUITY — if nothing rendered filled there is no isolation to run.
-    expect(filledProof, 'fixture rendered no filled field; isolation cannot run').toBeDefined();
+    const rendered = await renderTemplateDocx(input);
+    const proof = rendered.verification.fields.find((p) => p.fieldId === legacy!.fieldId);
+    expect(proof, 'the legacy field must carry a proof entry').toBeDefined();
 
-    expect(() =>
-      verifyRenderedTemplateDocx({
-        source,
-        output: rendered.document,
-        ir,
-        plan: {
-          ...rendered.plan,
-          fields: rendered.verification.fields.map((p) =>
-            p.fieldId === target.fieldId ? { ...p, kind: 'emptied' as const } : p,
-          ),
-        },
-      }),
-    ).toThrow(TemplateDocxRenderError);
+    // Whatever kind it earns, the CLAIM must be honest: if it is `emptied`, the
+    // result window really is inert. This is the property, asserted through the
+    // artifact rather than through the resolution.
+    if (proof!.kind === 'emptied') {
+      const { inspectDocxPackage } = await import('../package-security');
+      const { scanXmlPart } = await import('../roundtrip-verify');
+      const pkg = inspectDocxPackage(rendered.document);
+      const entry = pkg.zip.entries.get(proof!.partName)!;
+      const scanned = scanXmlPart(entry.bytes);
+      const span = scanned.byPath.get(proof!.bindingPath)!;
+      // The BEGIN marker is what the path names — and it is exactly the span
+      // the old check read. Assert here that reading it proves nothing: it
+      // contains no w:t whether or not the field is empty.
+      const beginXml = scanned.text.slice(span.start, span.end);
+      expect(/<w:t(\s|>)/.test(beginXml)).toBe(false);
+    }
   });
+
 });
