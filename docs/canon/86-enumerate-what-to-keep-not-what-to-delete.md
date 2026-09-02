@@ -141,6 +141,56 @@ removing it damages nothing, so it is deleted outright.
 *provided every member is inert*. Membership is the claim that needs the
 evidence, and "it sits where a property sits" is not that evidence.
 
+## ⚠️ SECOND REFINEMENT, 2026-09-02 (ruling #169) — AND THEN THE REFUSAL INVERTED
+
+The refinement above got the DIRECTION right — the count refuses a generator —
+and the SHAPE wrong. It was implemented as a search: *look for numbering in the
+cleared region.* Six evasions of that search were found across two adversarial
+passes, and the list is the argument:
+
+| # | where the numbering was | why the search missed it |
+|---|---|---|
+| 1 | inside the cleared region | (the case the search was written for) |
+| 2 | on the paragraph CONTAINING the control | the region ends before the `pPr` |
+| 3 | on a named `w:pStyle` | the mark is in `styles.xml`, not the document |
+| 4 | on a style reached through `w:basedOn` | one indirection further out |
+| 5 | on the DEFAULT paragraph style | no `pStyle` to find, and often no `pPr` at all |
+| 6 | through the zero-patch `blank` path | the guard was never consulted |
+
+Every fix was correct and the next evasion existed anyway. **That is data about
+the instrument, not about the diligence** — the same reading
+[canon 75](75-three-falsifications-is-data-about-the-instrument.md) reached
+after three falsifications of one rule.
+
+> **SO THE QUESTION IS ASKED IN THE OTHER DIRECTION: not *can I find a mark?*
+> but *can I PROVE there is none?*** Credit is granted only when every paragraph
+> that could number the field resolves CLEAR through the whole inheritance
+> chain, and **any inability to resolve — an unreadable style table, a `pStyle`
+> naming a style that is not there, a missing `basedOn` target, a cycle — is
+> INELIGIBLE.**
+
+⚠️ **THE ASYMMETRY IS WHAT LICENSES THE STRICTNESS, AND IT MUST BE STATED WITH
+THE RULE.** A false refusal costs ONE field its credit, and certification needs
+only one blank field. A false grant attests *this renders blank* over printed
+prose in a document a doctor signs. Where the two errors are that far apart,
+*prefer the cheap error everywhere in the guard* is not caution, it is the
+correct calibration — and the verdict type carries a third value
+(`unresolved`) precisely so the code cannot collapse cannot-tell into no.
+
+**AND THE ROUTES ARE DELIBERATELY NOT RE-LISTED AS A SPEC HERE** —
+[canon 91](91-canon-that-mirrors-a-data-structure-drifts.md). The table above is
+the EVIDENCE for the inversion, dated and closed. The live rule is
+`paragraphNumbering` in `renderer.ts`, and a seventh route is a change to that
+function, not an edit to this file.
+
+**THE ESCALATION WAS PRE-DECLARED IN THE RULING, WHICH IS THE PART WORTH
+COPYING.** #169 said in advance what a seventh evasion would mean: the
+instrument changes rather than the guard, collapsing eligibility to *fields in
+paragraphs with no `pStyle` and no `pPr` beyond the trivial*. Deciding the
+stopping condition BEFORE the next round removes the one thing that makes these
+spirals expensive — the temptation, at the moment of the next finding, to
+believe that this fix is the last one.
+
 ## The practice
 
 - Write the rule as *"keep X, delete everything else"* wherever the safe state is
