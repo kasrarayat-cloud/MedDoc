@@ -755,7 +755,7 @@ export async function certifyAndActivateTemplateTwin(input: {
       // proof this programme has never had falsified, and it is untouched.
       // `emptied` is a field the renderer cleared by replacing its whole
       // `w:sdtContent` subtree, whose output is then byte-identical to the empty
-      // form the writer recorded (`expectedSha256`). The renderer will not emit
+      // form the writer recorded (`expectedSpanSha256`). The renderer will not emit
       // the kind unless it actually performed that replacement.
       //
       // ⚠️ #164 COUNTED A LABEL AND WAS BROKEN IN BOTH DIRECTIONS. It derived
@@ -773,10 +773,18 @@ export async function certifyAndActivateTemplateTwin(input: {
       const bindingByFieldId = new Map(
         ir.fields.map((f) => [f.fieldId, f.rendererBinding.bindingType as string]),
       );
+      // ⚠️ A `blank` OR `emptied` LABEL IS CROSS-CHECKED AGAINST THE MANIFEST.
+      // Both are claims that the encounter said nothing about the field, and the
+      // manifest is the record of what it actually said. A field the manifest
+      // shows as FILLED cannot be either, whatever the stored proof claims.
+      const resolvedNull = (fieldId: string): boolean => {
+        const resolution = syntheticResolutions.get(fieldId);
+        return resolution !== undefined && resolution.value === null;
+      };
       const blankProofCount = roundTripFields.filter(
         (entry) =>
           isRecord(entry) &&
-          countsAsBlankProof(entry, (id) => bindingByFieldId.get(id)),
+          countsAsBlankProof(entry, (id) => bindingByFieldId.get(id), resolvedNull),
       ).length;
       // ── FILL-COVERAGE INVARIANT ──────────────────────────────────────────
       // A template must not certify with a dead fill path. WM_IOV certified

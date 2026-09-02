@@ -538,8 +538,13 @@ describe('#165 product — remove the `emptied` evidence and certification refus
 describe('#165 product — the census the gate runs, driven directly on the same proof', () => {
   it('blank-only counts 0; blank ∪ emptied counts at least 2', () => {
     const blankOnly = fixture.proofFields.filter((p) => p.kind === 'blank').length;
+    // ⚠️ THE NULL PREDICATE COMES FROM THE FIXTURE'S OWN RESOLUTIONS, not a
+    // stub — the gate builds it from the synthetic manifest, so a stub here
+    // would measure something the product never runs.
+    const resolvedNull = (id: string) =>
+      fixture.resolutions.find((r) => r.fieldId === id)?.value === null;
     const union = fixture.proofFields.filter((p) =>
-      countsAsBlankProof(p as never, fixture.bindingOf),
+      countsAsBlankProof(p as never, fixture.bindingOf, resolvedNull),
     ).length;
 
     // #164's reverted predicate scores this. Zero is why the PASS arm above is
@@ -611,17 +616,37 @@ describe('#165 product — an `emptied` label with no expectation is refused', (
   it('a malformed expectation is refused too — well-formed means 64 hex', async () => {
     const { countsAsBlankProof } = await import('../blank-proof-count');
     const bindingOf = () => 'content_control';
+    const wasNull = () => true;
     const base = { kind: 'emptied', fieldId: 'f1' };
     const good = 'a'.repeat(64);
-    expect(countsAsBlankProof({ ...base, expectedSpanSha256: good }, bindingOf)).toBe(true);
+    expect(countsAsBlankProof({ ...base, expectedSpanSha256: good }, bindingOf, wasNull)).toBe(true);
     for (const bad of ['', 'A'.repeat(64), 'a'.repeat(63), 'a'.repeat(65), 'z'.repeat(64), 123]) {
       expect(
-        countsAsBlankProof({ ...base, expectedSpanSha256: bad as never }, bindingOf),
+        countsAsBlankProof({ ...base, expectedSpanSha256: bad as never }, bindingOf, wasNull),
         `accepted a malformed expectation: ${String(bad).slice(0, 12)}`,
       ).toBe(false);
     }
-    // ⚠️ AND `blank` IS UNTOUCHED BY ALL OF THIS. It is unpatched and proven by
-    // source-byte-identity; it carries no expectation and must never need one.
-    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f2' }, bindingOf)).toBe(true);
+    // `blank` needs no expectation — it is unpatched and proven by
+    // source-byte-identity.
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f2' }, bindingOf, wasNull)).toBe(true);
+
+    // ⚠️ BUT NEITHER LABEL SURVIVES A FIELD THE MANIFEST SAYS WAS FILLED — and
+    // `blank` is the one that had NO read-path check at all before this. The
+    // pass certified a template by relabelling a field whose rendered value was
+    // "Bilateral leg heaviness" to `blank`.
+    const wasFilled = () => false;
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f3' }, bindingOf, wasFilled)).toBe(false);
+    expect(
+      countsAsBlankProof({ ...base, expectedSpanSha256: good }, bindingOf, wasFilled),
+    ).toBe(false);
+    // and a well-formed but MEANINGLESS hash on a filled field is refused too —
+    // shape was all the expectation check could ever judge.
+    expect(
+      countsAsBlankProof(
+        { kind: 'emptied', fieldId: 'f4', expectedSpanSha256: 'deadbeef'.repeat(8) },
+        bindingOf,
+        wasFilled,
+      ),
+    ).toBe(false);
   });
 });

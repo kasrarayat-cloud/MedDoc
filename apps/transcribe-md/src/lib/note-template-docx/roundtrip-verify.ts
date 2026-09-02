@@ -380,25 +380,35 @@ export type RenderedFieldProof =
       /** One verified binding site. The gate requires > 0 and is untouched. */
       readonly occurrences: number;
     }
-  // ⚠️ #164 — `emptied` IS A CLASSIFICATION, NOT A NEW VERIFICATION.
+  // ⚠️ #165 — `emptied` IS A CLAIM THE WRITER EARNS AND THE VERIFIER CHECKS.
   //
-  // A null-valued narrative field IS patched, to empty — that is main's proven
-  // production behaviour and #164 rule 1 keeps it. So an `emptied` proof is
-  // verified by EXACTLY the machinery a `filled` proof is: it must appear in the
-  // patched set, and the part's rendered bytes must equal
-  // `applyApprovedXmlPatches(source, patches)` byte for byte. No extra emptiness
-  // check, no locus table, no allowlist.
+  // ⚠️ THE PARAGRAPH THAT STOOD HERE SAID THE OPPOSITE, AND IT WAS WRONG IN THE
+  // SAME COMMIT THAT ADDED THE FIELD BELOW. It read: "`emptied` IS A
+  // CLASSIFICATION, NOT A NEW VERIFICATION … No extra emptiness check, no locus
+  // table, no allowlist … Anything a `filled` proof cannot detect, an `emptied`
+  // proof cannot detect either, BY CONSTRUCTION." All three clauses are now
+  // false — there IS an extra emptied-only byte comparison further down this
+  // file, `PROVEN_EMPTIABLE_BINDINGS` IS an allowlist, and an `emptied` proof
+  // detects precisely what a `filled` one cannot. The adversarial pass found it
+  // sitting directly above the field the same commit introduced.
   //
-  // ⚠️ THAT ABSENCE IS DELIBERATE AND IS THE LESSON OF #162 AND #163. #162(c)
-  // added a second, bespoke emptiness proof on top of these structural guards,
-  // and an isolation experiment showed the extra check was decoration behind
-  // them. #163 then tried to remove the clearing outright and regressed worse
-  // than what it replaced. What was missing was never a VERIFIER — it was a
-  // COUNTING RULE.
+  // That is worth leaving on the record rather than quietly overwriting: a
+  // comment does not fail a build, so stale prose survives exactly as long as
+  // nobody re-reads it, and the reader most likely to trust it is the next
+  // person changing this union.
   //
-  // The kind exists ONLY so certification can count these toward its blank
-  // requirement. Anything a `filled` proof cannot detect, an `emptied` proof
-  // cannot detect either, BY CONSTRUCTION — and that is the honest claim.
+  // WHAT IS TRUE NOW. An `emptied` proof is BOTH:
+  //   · patched like a fill — it joins `filledFieldIds`, so the patched set and
+  //     the proof set must be exactly equal, and the part's rendered bytes must
+  //     equal `applyApprovedXmlPatches(source, patches)`; AND
+  //   · checked by one additional comparison — the output span at this binding
+  //     must be byte-identical to `expectedSpanSha256`, the span as the writer
+  //     recorded it would be left.
+  //
+  // The second is what a `filled` proof does not have, and it is only
+  // meaningful because the WRITER is bounded: `sdtBoundedClearPatches` replaces
+  // the control's whole subtree, so "what the writer meant to leave" cannot
+  // itself contain something stale. Byte-equality alone would be writer-blind.
   | {
       readonly kind: 'emptied';
       readonly fieldId: string;

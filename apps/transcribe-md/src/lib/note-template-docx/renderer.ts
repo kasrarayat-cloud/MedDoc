@@ -672,42 +672,134 @@ function createFieldPatches(
  * is inside the approved binding span, so removing it is bounded too.
  */
 function sdtBoundedClearPatches(
+  xml: string,
   control: XmlElementSpan,
   properties: XmlElementSpan,
   content: XmlElementSpan,
   fieldId: string,
 ): ApprovedXmlPatch[] | null {
-  if (content.selfClosing) return null;
-
-  // ⚠️ THE LEVEL COMES FROM THE SDT'S PARENT, NOT FROM WHAT IT CONTAINS — and
-  // that is the same principle as the clearing itself: ask the document's
-  // structure, do not infer from content. An INLINE control sits inside a
-  // `w:p`, so its replacement must be a run; a BLOCK control is a sibling of
-  // paragraphs, so its replacement must be a paragraph.
+  // ⚠️ THE SDT MUST CONTAIN NOTHING BUT ITS PROPERTIES AND ITS CONTENT.
   //
-  // Inferring from the children instead has a silent hole: an ALREADY-EMPTY
-  // block-level `w:sdtContent` has no children at all, so a child scan calls it
-  // inline and writes a bare `w:r` between two paragraphs — invalid OOXML that
-  // Word may refuse to open. The parent always knows.
-  const parentLocal = control.parent ? xmlLocalName(control.parent.name) : '';
-  // A row-level control (parent `w:tbl`) would have its table structure
-  // destroyed by either replacement, so it is refused outright.
-  if (parentLocal === 'tbl') return null;
-  const blockLevel = !INLINE_SDT_PARENTS.has(parentLocal);
+  // The claim this makes is "nothing inside the control survives". The bound it
+  // actually uses is the FIRST `w:sdtContent`, so anything inside `w:sdt` but
+  // OUTSIDE that element is untouched — a stale run trailing the container, or a
+  // second `sdtContent`. The adversarial pass built both and rendered
+  // `WARFARIN 5 MG DAILY` out of a control proofed `emptied`.
+  //
+  // Rather than widen the bound to the whole `w:sdt` — which would mean
+  // rebuilding `sdtPr`, writing more of somebody's document from a template of
+  // our own, the move that erased a patient's allergy line under #163 — REFUSE
+  // the shape. A control with unexpected children is one we cannot honestly
+  // claim to have emptied.
+  for (const child of control.children) {
+    const local = xmlLocalName(child.name);
+    if (local !== 'sdtPr' && local !== 'sdtContent' && local !== 'sdtEndPr') {
+      return null;
+    }
+  }
 
-  // Cross-check against the content, and refuse on disagreement rather than
-  // pick a winner: row or cell children mean this is not a container we can
-  // safely flatten, whatever the parent said.
+  // ⚠️ AN ALREADY-EMPTY CONTAINER NEEDS NO PATCH, AND SAYING SO FIXES TWO
+  // DEFECTS AT ONCE.
+  //
+  // An empty `w:sdtContent` was the ONLY reason an earlier version read the
+  // level from the SDT's PARENT — with no children there is nothing to infer
+  // from. But there is also nothing to CLEAR: the field is already empty, so the
+  // honest answer is to write nothing and let it earn a `blank` proof by
+  // source-byte-identity, which is the strongest proof available. It also
+  // removes a documented-but-false fallback: the old `null` here reached
+  // `textContainerPatches`, found no `w:t`, and aborted the WHOLE render.
+  //
+  // An EMPTY ARRAY means "already empty, nothing to do"; `null` means "cannot
+  // bound this safely, fall back". Different answers, treated differently.
+  if (content.selfClosing || content.children.length === 0) return [];
+
+  // ⚠️ AND THE LEVEL COMES FROM THE CONTENT, WHICH DELETES AN ENUMERATION
+  // RATHER THAN EXTENDING ONE.
+  //
+  // The previous version enumerated INLINE parents (`p`, `hyperlink`,
+  // `smartTag`, `ins`, `del`) and called everything else block. TWO independent
+  // lenses found the same four it missed — `w:fldSimple`, `w:moveTo`, `w:bdo`,
+  // and the `sdtContent` of an inline SDT — each writing a `w:p` inside a `w:p`,
+  // verified, `emptied`, and buying the blank requirement. `w:moveFrom`,
+  // `w:dir`, `w:customXml` and `w:rt` are the same class.
+  //
+  // That is exactly the failure canon 85 is about, committed by the entry that
+  // documents it: a list that never closes. The CONTENT already says what may
+  // legally sit here, because it is what the document's author put there — so
+  // replace like with like and there is nothing left to enumerate.
+  let blockLevel = false;
   for (const child of content.children) {
     const local = xmlLocalName(child.name);
+    // Table structure cannot be flattened into either shape.
     if (local === 'tr' || local === 'tc') return null;
-    if (!blockLevel && (local === 'p' || local === 'tbl')) return null;
+    // ⚠️ A WRAPPED TABLE IS REFUSED, NOT FLATTENED. Replacing a `w:tbl` with an
+    // empty paragraph DELETES THE GRID — borders, columns, row count — turning
+    // an empty bordered results table into nothing. Measured by the pass. The
+    // fallback blanks the cell text exactly as `main` always did, and the field
+    // earns no `emptied` proof, which is the conservative answer.
+    if (local === 'tbl') return null;
+    if (local === 'p') blockLevel = true;
   }
+
+  // ⚠️ THE PREFIX IS THE DOCUMENT'S, NOT OURS. Every other writer in this file
+  // resolves it with `qualifiedPrefix`; hardcoding `w:` injected an UNDECLARED
+  // prefix into any template whose wordprocessingml namespace is bound to a
+  // different name. Measured: the rendered part failed XML namespace parsing,
+  // and Gotenberg/LibreOffice — the product's OWN PDF engine — returned 400 on a
+  // document it had converted happily before the render, while
+  // `renderTemplateDocx` reported `verified: true`.
+  //
+  // ⚠️ AND THE BYTE-EQUALITY PROOF IS BLIND TO IT BY CONSTRUCTION, because it
+  // hashes OUR OWN bytes. Rule 1 — "the writer is correct by construction" — is
+  // the half that was supposed to cover this, and a hardcoded prefix is exactly
+  // what "by construction" does not survive.
+  const prefix = qualifiedPrefix(content.name);
+
+  // ⚠️ THE EMPTY FIELD INHERITS THE CONTAINER'S FORMATTING, AND THIS IS THE
+  // CORRECTION THE PASS FORCED. Replacing the subtree with a BARE run threw away
+  // `w:pPr` and `w:rPr`, which the old text-node path preserved because it only
+  // ever edited `w:t` inner text. Measured through the product's own PDF
+  // converter: row pitch 10.75pt -> 14.20pt, table height +32.5%, and a 48-row
+  // form that fitted on ONE page spilled onto TWO. On the real customer template
+  // it changes no glyph positions — 27 of its 28 controls are inline — but a
+  // doctor typing into an emptied control got the document default instead of
+  // the template's Times New Roman, on all 28.
+  //
+  // ⚠️ AND THE DIRECTION OF THIS ENUMERATION IS THE WHOLE ARGUMENT. The four
+  // falsified instruments enumerated what to DELETE, so an unknown carrier
+  // survived — fail-OPEN, and clinical content printed. This enumerates what to
+  // KEEP, and only property containers are on it, so an unknown element is
+  // DELETED. An incomplete list here costs FORMATTING and can never let content
+  // survive. `w:pPr` and `w:rPr` hold no printable children by definition —
+  // pStyle, spacing, jc, rFonts, sz, and `w:sectPr`, whose loss was its own
+  // finding (page size and margins for the section).
+  const raw = (span: XmlElementSpan) => xml.slice(span.start, span.end);
+  const firstChild = (parent: XmlElementSpan, local: string) =>
+    parent.children.find((c) => xmlLocalName(c.name) === local);
+
+  let replacement: string;
+  if (blockLevel) {
+    const sourceParagraph = firstChild(content, 'p');
+    const paragraphProps = sourceParagraph ? directXmlChild(sourceParagraph, 'pPr') : undefined;
+    const sourceRun = sourceParagraph ? firstChild(sourceParagraph, 'r') : undefined;
+    const runProps = sourceRun ? directXmlChild(sourceRun, 'rPr') : undefined;
+    replacement =
+      `<${prefix}p>${paragraphProps ? raw(paragraphProps) : ''}` +
+      `<${prefix}r>${runProps ? raw(runProps) : ''}` +
+      `<${prefix}t xml:space="preserve"></${prefix}t></${prefix}r></${prefix}p>`;
+  } else {
+    const sourceRun = firstChild(content, 'r');
+    const runProps = sourceRun ? directXmlChild(sourceRun, 'rPr') : undefined;
+    replacement =
+      `<${prefix}r>${runProps ? raw(runProps) : ''}` +
+      `<${prefix}t xml:space="preserve"></${prefix}t></${prefix}r>`;
+  }
+
   const patches: ApprovedXmlPatch[] = [
     {
       start: content.startTagEnd,
       end: content.endTagStart,
-      replacement: blockLevel ? EMPTY_BLOCK_PARAGRAPH : EMPTY_INLINE_RUN,
+      replacement,
       fieldIds: [fieldId],
       kind: 'field_content',
     },
@@ -719,21 +811,6 @@ function sdtBoundedClearPatches(
   return patches;
 }
 
-/**
- * Parents that make a `w:sdt` INLINE — its content is run-level, so clearing it
- * must leave a run. Anything else (`w:body`, `w:tc`, a nested `w:sdtContent`)
- * is block-level and must leave a paragraph.
- */
-const INLINE_SDT_PARENTS: ReadonlySet<string> = new Set([
-  'p',
-  'hyperlink',
-  'smartTag',
-  'ins',
-  'del',
-]);
-
-const EMPTY_INLINE_RUN = '<w:r><w:t xml:space="preserve"></w:t></w:r>';
-const EMPTY_BLOCK_PARAGRAPH = `<w:p>${EMPTY_INLINE_RUN}</w:p>`;
 
 /**
  * What the writer DID, reported back so the proof can be a fact about the write
@@ -813,7 +890,7 @@ function contentControlPatches(
             field.fieldId,
           );
     if (resolution.value === null) {
-      const cleared = sdtBoundedClearPatches(control, properties, content, field.fieldId);
+      const cleared = sdtBoundedClearPatches(xml, control, properties, content, field.fieldId);
       if (cleared) {
         return {
           patches: [...(statePatch ? [statePatch] : []), ...cleared],
@@ -840,7 +917,7 @@ function contentControlPatches(
       // Its comment claimed "a selection control that renders anything asserts
       // a choice". Measured: a null `single_select` renders NOTHING. It is the
       // dropdown-dominated forms (WM_IOV is 28 of them) that most need this.
-      const cleared = sdtBoundedClearPatches(control, properties, content, field.fieldId);
+      const cleared = sdtBoundedClearPatches(xml, control, properties, content, field.fieldId);
       if (cleared) {
         return {
           patches: [
@@ -884,7 +961,7 @@ function contentControlPatches(
   }
 
   if (resolution.value === null) {
-    const cleared = sdtBoundedClearPatches(control, properties, content, field.fieldId);
+    const cleared = sdtBoundedClearPatches(xml, control, properties, content, field.fieldId);
     if (cleared) return { patches: cleared, boundedClear: true };
   }
   const display = displayValue(field, resolution);

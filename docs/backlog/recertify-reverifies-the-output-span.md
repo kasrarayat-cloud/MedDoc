@@ -9,13 +9,13 @@
 `latest_test_round_trip` JSON column and gates on `isVerifiedSyntheticProof`.
 That function compares exactly five per-field properties — `status`, `partName`,
 `bindingPath`, `valueSha256`, `occurrences` — and reads `kind` and
-`expectedSha256` **zero** times.
+`expectedSpanSha256` **zero** times.
 
 So the two fields that decide *whether a clearing actually happened* are the two
 nobody re-checks at the point of use.
 
 **Measured:** relabelling the genuine `emptied` entries to `filled`, and forging
-one `filled` entry into `emptied` with `expectedSha256` deleted, still produced
+one `filled` entry into `emptied` with `expectedSpanSha256` deleted, still produced
 `CERTIFIED`.
 
 ⚠️ **THIS IS #165's OWN DEFECT SHAPE, ONE BOUNDARY DOWN.** #164 counted a label
@@ -25,7 +25,7 @@ certification path trusts the label read from a database where no renderer ran.
 ## What was done now, and what it does not buy
 
 `countsAsBlankProof` refuses an `emptied` entry that does not carry a
-well-formed 64-hex `expectedSha256` (`blank-proof-count.ts`). That closes the
+well-formed 64-hex `expectedSpanSha256` (`blank-proof-count.ts`). That closes the
 measured case: a stored label that could not have come from the real writer.
 
 **It does NOT re-verify the document.** A forger who also supplies a plausible
@@ -35,7 +35,7 @@ is true.
 ## Definition of done
 
 Re-fetch the stored output artifact at certification time, re-scan the part, and
-re-compare each `emptied` proof's binding span against its `expectedSha256` —
+re-compare each `emptied` proof's binding span against its `expectedSpanSha256` —
 the same single comparison the renderer's verifier already performs, moved to
 the read path where the trust decision is actually made.
 

@@ -69,10 +69,33 @@ const SHA256_HEX = /^[0-9a-f]{64}$/;
 export function countsAsBlankProof(
   entry: BlankProofEntry,
   bindingOf: (fieldId: string) => string | undefined,
+  resolvedNull: (fieldId: string) => boolean,
 ): boolean {
-  if (entry.kind === 'blank') return true;
-  if (entry.kind !== 'emptied') return false;
+  if (entry.kind !== 'blank' && entry.kind !== 'emptied') return false;
   if (typeof entry.fieldId !== 'string') return false;
+
+  // ⚠️ THE STRONGEST READ-PATH CHECK AVAILABLE, AND THE GATE ALREADY HELD THE
+  // DATA FOR IT — WHICH IS WHY THIS COSTS NOTHING.
+  //
+  // Both labels are claims that the encounter said NOTHING about this field. So
+  // cross-check the claim against the synthetic manifest, which records what the
+  // encounter actually resolved. A field the manifest says was FILLED cannot
+  // honestly be blank or emptied, whatever its stored label says.
+  //
+  // ⚠️ IT CLOSES A CHEAPER FORGERY THAN THE ONE THE EXPECTATION CHECK CLOSED,
+  // AND THE PASS FOUND IT BY GOING ROUND THE SIDE. `blank` had NO read-path
+  // check at all — no binding, no expectation, nothing — so relabelling one
+  // genuinely-filled entry to `blank` certified a template outright. Measured:
+  // a field whose rendered value was "Bilateral leg heaviness", relabelled
+  // `blank`, produced CERTIFIED. Guarding only `emptied` was guarding the door
+  // the previous finding happened to come through.
+  //
+  // It also kills the forged-`emptied`-on-a-filled-field case that a
+  // well-formed but meaningless hash (`deadbeef` x8) otherwise walked straight
+  // past, because shape was all the expectation check could judge.
+  if (!resolvedNull(entry.fieldId)) return false;
+
+  if (entry.kind === 'blank') return true;
   // ⚠️ THE EXPECTATION IS REQUIRED HERE TOO, NOT ONLY AT RENDER TIME — and this
   // line exists because the adversarial pass MEASURED its absence.
   //

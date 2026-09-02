@@ -36,11 +36,21 @@ const VALIDATION: TemplateTwinValidationResult = {
   validatorVersion: 'template-field-validator/1.0.0',
 };
 
-/** Every visible carrier the four falsified instruments failed to enumerate. */
+/**
+ * Every visible carrier the four falsified instruments failed to enumerate.
+ *
+ * ⚠️ THIS LIST MUST MATCH THE ONE `docs/backlog/renderer-legacy-clearing.md`
+ * NAMES, AND IT DID NOT. The adversarial pass caught `w:object` present in the
+ * prose and absent here, under this very comment claiming "every". An
+ * enumeration that does not reconcile with its own stated list is exactly the
+ * defect this whole arc keeps paying for — so the count is asserted below
+ * rather than trusted.
+ */
 const CARRIERS: ReadonlyArray<readonly [string, string, string]> = [
   ['w:sym', '<w:r><w:sym w:font="Wingdings" w:char="F0FE"/></w:r>', 'w:sym'],
   ['w:pict', '<w:r><w:pict><v:shape id="s1"/></w:pict></w:r>', 'w:pict'],
   ['w:drawing', '<w:r><w:drawing><wp:inline/></w:drawing></w:r>', 'w:drawing'],
+  ['w:object', '<w:r><w:object><v:shape id="o1"/></w:object></w:r>', 'w:object'],
   ['w:delText', '<w:r><w:delText>WARFARIN 5 MG DAILY</w:delText></w:r>', 'WARFARIN'],
   [
     'w:instrText',
@@ -129,7 +139,7 @@ describe('#165 rule 1 — the writer clears the whole subtree, so nothing inside
       // and only THEN may it buy a blank proof.
       const proof = proofs.find((p) => p.kind === 'emptied');
       expect(proof, `${name}: no emptied proof was produced`).toBeDefined();
-      expect(countsAsBlankProof(proof as never, bindingOf)).toBe(true);
+      expect(countsAsBlankProof(proof as never, bindingOf, () => true)).toBe(true);
       expect(rendered.verification.verified).toBe(true);
     });
   }
@@ -211,7 +221,7 @@ describe('#165 — what the writer does decides the label, not a list of kinds',
     );
     const proof = proofs.find((p) => p.kind === 'emptied');
     expect(proof, 'a null selection produced no emptied proof').toBeDefined();
-    expect(countsAsBlankProof(proof as never, bindingOf)).toBe(true);
+    expect(countsAsBlankProof(proof as never, bindingOf, () => true)).toBe(true);
     expect(outputXml.includes('Choose an item.')).toBe(false);
   });
 
@@ -269,4 +279,153 @@ describe('renderer slice — legacy clearing (FILED, docs/backlog/renderer-legac
   it.todo(
     'non-w:t content in a cleared LEGACY region survives — the whole-subtree cure needs a real container first',
   );
+});
+
+// ============================================================================
+// WHAT THE ADVERSARIAL PASS FORCED — five defects in the bounded clear itself.
+// ----------------------------------------------------------------------------
+// Every arm below reds against the version of `sdtBoundedClearPatches` that
+// shipped in the first draft of this commit. They are here because the pass
+// measured each one, not because they seemed prudent.
+// ============================================================================
+function sdtDoc(opts: {
+  prefix?: string;
+  parent?: string;
+  content: string;
+  extraSdtChild?: string;
+  /** Place the control as a sibling of paragraphs (block level) rather than
+   *  inside one. This is the shape the formatting regression was measured on —
+   *  27 of the customer template's 28 controls are inline, and the page-spill
+   *  came from a block-level control in a table cell. */
+  block?: boolean;
+}): string {
+  const p = opts.prefix ?? 'w';
+  const inner =
+    `<${p}:sdt><${p}:sdtPr><${p}:id ${p}:val="950"/>` +
+    `<${p}:alias ${p}:val="Anticoagulation"/><${p}:text/></${p}:sdtPr>` +
+    `<${p}:sdtContent>${opts.content}</${p}:sdtContent>` +
+    `${opts.extraSdtChild ?? ''}</${p}:sdt>`;
+  const body = opts.block
+    ? inner
+    : opts.parent
+      ? `<${p}:p><${p}:${opts.parent}>${inner}</${p}:${opts.parent}></${p}:p>`
+      : `<${p}:p>${inner}</${p}:p>`;
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<${p}:document xmlns:${p}="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+    `<${p}:body>${body}</${p}:body></${p}:document>`
+  );
+}
+
+describe('#165 — the bounded clear, after the adversarial pass', () => {
+  it('the namespace PREFIX is the document’s, not a hardcoded `w:`', async () => {
+    // Measured by the pass: a hardcoded `w:` injected an UNDECLARED prefix, the
+    // rendered part failed XML namespace parsing, and LibreOffice — the
+    // product's own PDF engine — returned 400 on a document it had converted
+    // happily moments before, while the render reported `verified: true`.
+    const { outputXml, rendered } = await renderAllNull(
+      sdtDoc({ prefix: 'x', content: '<x:r><x:t>Enter anticoagulation</x:t></x:r>' }),
+    );
+    expect(rendered.verification.verified).toBe(true);
+    // THE PROPERTY: no `w:`-prefixed element may appear in a document that
+    // never declared that prefix.
+    expect(outputXml.includes('<w:r>')).toBe(false);
+    expect(outputXml.includes('<w:t')).toBe(false);
+    expect(outputXml.includes('<x:t')).toBe(true);
+  });
+
+  it('an SDT carrying children beyond sdtPr/sdtContent is REFUSED, not half-cleared', async () => {
+    // The bound is the FIRST `w:sdtContent`. A stale run trailing it is inside
+    // `w:sdt` and outside that element, so it survived a control proofed
+    // `emptied` — the pass rendered WARFARIN out of one.
+    const { outputXml, bodyProofs } = await renderAllNull(
+      sdtDoc({
+        content: '<w:r><w:t>placeholder</w:t></w:r>',
+        extraSdtChild: '<w:r><w:t>WARFARIN 5 MG DAILY</w:t></w:r>',
+      }),
+    );
+    // It is NOT claimed empty. (The fallback still blanks the container's text,
+    // which is main's long-standing behaviour; what must not happen is an
+    // `emptied` proof buying a blank requirement for a control that prints.)
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+    expect(outputXml.includes('WARFARIN')).toBe(true);
+  });
+
+  for (const parent of ['fldSimple', 'moveTo', 'bdo']) {
+    it(`a control inside w:${parent} does not get a paragraph written into a paragraph`, async () => {
+      // Two independent lenses found the same four run-level parents missing
+      // from an INLINE_SDT_PARENTS enumeration. The level now comes from the
+      // CONTENT, so there is no list left to be short.
+      const { outputXml } = await renderAllNull(
+        sdtDoc({ parent, content: '<w:r><w:t>Enter anticoagulation</w:t></w:r>' }),
+      );
+      expect([parent, /<w:p>(?:(?!<\/w:p>)[\s\S])*<w:p>/.test(outputXml)]).toEqual([parent, false]);
+    });
+  }
+
+  it('an ALREADY-EMPTY container needs no patch and earns a `blank` proof', async () => {
+    // The documented fallback for this case aborted the WHOLE render:
+    // `textContainerPatches` found no `w:t` and threw BINDING_NOT_FOUND.
+    const { bodyProofs, rendered } = await renderAllNull(sdtDoc({ content: '' }));
+    expect(rendered.verification.verified).toBe(true);
+    expect(bodyProofs.length).toBe(1);
+    expect(bodyProofs[0].kind).toBe('blank');
+  });
+
+  it('the emptied field KEEPS its paragraph and run formatting', async () => {
+    // Measured through the product's own converter: dropping `w:pPr`/`w:rPr`
+    // moved row pitch 10.75pt -> 14.20pt and pushed a 48-row form onto a second
+    // page; on the customer's template a doctor typing into an emptied control
+    // got the document default instead of Times New Roman.
+    const { outputXml } = await renderAllNull(
+      sdtDoc({
+        block: true,
+        content:
+          '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:line="200" w:lineRule="exact"/></w:pPr>' +
+          '<w:r><w:rPr><w:rFonts w:ascii="Times New Roman"/><w:sz w:val="14"/></w:rPr>' +
+          '<w:t>Enter anticoagulation</w:t></w:r></w:p>',
+      }),
+    );
+    const inner = outputXml.slice(
+      outputXml.indexOf('<w:sdtContent>'),
+      outputXml.indexOf('</w:sdtContent>'),
+    );
+    expect(inner.includes('Enter anticoagulation')).toBe(false);
+    // THE PROPERTIES SURVIVE — the field is empty, not restyled.
+    expect([
+      inner.includes('w:jc'),
+      inner.includes('w:lineRule="exact"'),
+      inner.includes('Times New Roman'),
+      inner.includes('w:sz w:val="14"'),
+    ]).toEqual([true, true, true, true]);
+  });
+
+  it('a control WRAPPING A TABLE is refused — the grid is not flattened away', async () => {
+    // Replacing a `w:tbl` with an empty paragraph deleted borders, columns and
+    // rows: an empty bordered results table became nothing.
+    const { outputXml, bodyProofs } = await renderAllNull(
+      sdtDoc({
+        block: true,
+        content:
+          '<w:tbl><w:tblPr><w:tblBorders><w:top w:val="single"/></w:tblBorders></w:tblPr>' +
+          '<w:tr><w:tc><w:p><w:r><w:t>Diameter</w:t></w:r></w:p></w:tc></w:tr></w:tbl>',
+      }),
+    );
+    expect(outputXml.includes('<w:tbl>')).toBe(true);
+    expect(outputXml.includes('w:tblBorders')).toBe(true);
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+  });
+
+  it('`w:sectPr` inside the cleared paragraph survives, because it lives in w:pPr', async () => {
+    const { outputXml } = await renderAllNull(
+      sdtDoc({
+        block: true,
+        content:
+          '<w:p><w:pPr><w:sectPr><w:pgSz w:w="12240" w:h="15840"/>' +
+          '<w:pgMar w:left="1440"/></w:sectPr></w:pPr>' +
+          '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
+      }),
+    );
+    expect([outputXml.includes('w:sectPr'), outputXml.includes('w:pgSz')]).toEqual([true, true]);
+  });
 });
