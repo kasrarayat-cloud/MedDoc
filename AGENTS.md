@@ -293,6 +293,29 @@ the two-view form remains the practice for exactly the reason already given. One
 clean test was never grounds to drop it; one sighting is not grounds to call it
 reliable either.
 
+⚠️ **SECOND FIRST-HAND SIGHTING, 2026-09-02 — CAPTURED IN THIS SESSION'S OWN
+TERMINAL, WHICH IS THE PROVENANCE THE FIRST ONE LACKED.** On the merge commit of
+PR #932, `396d869bf0734ae5710779680d1229d584e8dd43` (resolved with
+`git rev-parse <sha>^{commit}`, 40 characters, subject and commit date read back
+from `git log` before either query):
+
+| at | `--commit <FULL sha>` | `--branch main`, filtered to that sha |
+|---|---|---|
+| `08:51:04Z` | **0** | **4** |
+| `08:51:31Z` | 4 | 4 |
+
+**The window closed in under thirty seconds** — which is exactly why a
+coarsely-sampled reproduction attempt can miss it entirely, as the recorded one
+did. This sighting is a captured transcript rather than a summary lifted from a
+log, so it is the stronger of the two; and it was found by taking BOTH views out
+of habit on a commit nobody was worried about, not by hunting for it.
+
+**What it changes: nothing about the practice, and that is the point.** The
+two-view form was already the rule. What it adds is that the divergence is now
+observed first-hand twice, against one failed reproduction — so a future session
+meeting a `--commit` zero should reach for the branch view before concluding the
+branch is quiet.
+
 ⚠️ **AND A WITHDRAWN CLAIM STAYS WITHDRAWN.** A supervised session the same day
 recorded this same divergence as observed and then withdrew it: its `--commit`
 was empty because the SHA had been **fabricated from memory**, so the instrument
