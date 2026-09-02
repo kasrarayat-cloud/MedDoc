@@ -195,9 +195,26 @@ relevant to current state:
 ## Known operational gotchas (active)
 
 - **virtio-balloon blacklisted** at
-  `/etc/modprobe.d/blacklist-virtio-balloon.conf`. If
-  `lsmod | grep balloon` ever returns a hit, the blacklist was
-  overridden — reapply before continuing.
+  `/etc/modprobe.d/blacklist-virtio-balloon.conf`.
+  ⚠️ **DO NOT USE `lsmod | grep balloon` AS THE CHECK — IT IS BLIND TO A
+  BUILT-IN DRIVER, AND THIS EXACT PROBE HAS ALREADY MISLED A SESSION ON THIS
+  PROGRAMME.** `lsmod` lists loadable MODULES only; where the kernel is built
+  with `CONFIG_VIRTIO_BALLOON=y` it prints nothing while the balloon is bound
+  and actively reclaiming. On 2026-09-01 that silence nearly closed a correct
+  diagnosis on the CI box, where the balloon had taken 6.3 GB of 8 GB and
+  livelocked the machine — see
+  [canon 80](canon/80-lsmod-is-silent-about-built-ins.md). Note also
+  `POST_MERGE_TODO.md`'s 2026-05 entry, which recorded RAM regressing
+  11 Gi → 5.5 Gi and reasoned past it on the strength of this same probe.
+  **Ask the device, not the module list:**
+
+      cat /sys/bus/virtio/devices/*/device        # 0x0005 = balloon
+      ls -l /sys/bus/virtio/drivers/virtio_balloon/   # bound devices
+      grep CONFIG_VIRTIO_BALLOON /boot/config-$(uname -r)
+
+  A blacklist only works where the driver IS a module. Where it is built in the
+  remedy is an UNBIND (`echo <dev> > /sys/bus/virtio/drivers/virtio_balloon/unbind`),
+  persisted by a boot unit — the CI box's `unbind-virtio-balloon.service`.
 - **Prisma migration workflow** — `migrate dev` BLOCKED by the
   `t_m24_smart_inject` checksum drift. Use `migrate diff` +
   hand-write folder + `db-migrate` profile (`migrate deploy`).
