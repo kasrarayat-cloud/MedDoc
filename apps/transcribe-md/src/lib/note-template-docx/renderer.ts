@@ -899,126 +899,150 @@ function structureKeepDeletions(
  * doctor their certification.
  */
 /**
+ * #169 — BLANK CREDIT ONLY BY POSITIVE PROOF OF NO NUMBERING.
+ *
+ * Six evasions of a "is it numbered?" guard were found across two passes, each
+ * a route the search did not cover: numbering inside the region, on the
+ * containing paragraph, on a named style, on a style reached through
+ * `basedOn`, on the DEFAULT style, and through the zero-patch `blank` path.
+ * A guard that must ENUMERATE the routes to a mark is the shape this arc has
+ * falsified over and over.
+ *
+ * So the question is inverted. A field earns blank credit only if every
+ * paragraph that could number it is PROVEN clear, and **any inability to
+ * resolve is INELIGIBLE** — an unreadable `styles.xml`, a `w:pStyle` naming a
+ * style that is not in the table, a `w:basedOn` pointing at a missing style, a
+ * cycle.
+ *
+ * ⚠️ THE ASYMMETRY IS THE WHOLE ARGUMENT, and it is not close. A false REFUSAL
+ * costs one field its credit, and certification needs only ONE blank field —
+ * on the owner's form, 35 are eligible. A false GRANT attests "this renders
+ * blank" over printed prose in a signed clinical note. Prefer the cheap error
+ * everywhere in this guard.
+ */
+type NumberingVerdict = 'numbered' | 'clear' | 'unresolved';
+
+interface StyleNumbering {
+  /** `numbered` = a live numPr; `clear` = numId="0"; `none` = says nothing. */
+  readonly own: 'numbered' | 'clear' | 'none';
+  readonly basedOn: string | null;
+}
+
+/**
  * What `styles.xml` says about numbering, for ONE document.
  *
- * ⚠️ RETURNED, NOT KEPT IN A MODULE-LEVEL VARIABLE. The first version stored the
- * default style id in a `let` at module scope — a cross-document contamination
- * bug in a clinical renderer: document A's default style would still be set
- * while document B, which declares none, was rendered, so B's unstyled
- * paragraphs would inherit A's numbering. Nothing in a single render reveals it.
+ * ⚠️ RETURNED, NOT KEPT IN A MODULE-LEVEL VARIABLE. An earlier version stored
+ * the default style id in a `let` at module scope — a cross-document
+ * contamination bug in a clinical renderer: document A's default style would
+ * still be set while document B, which declares none, was rendered, so B's
+ * unstyled paragraphs would inherit A's numbering. Nothing in a single render
+ * reveals it.
  */
 interface NumberingStyles {
-  readonly numbered: ReadonlySet<string>;
+  readonly byId: ReadonlyMap<string, StyleNumbering>;
   /** Id of the `w:default="1"` paragraph style; `''` when none is declared. */
   readonly defaultId: string;
+  /** False when `styles.xml` is absent or unparseable — everything is then
+   *  UNRESOLVED, which under #169 means ineligible. */
+  readonly readable: boolean;
 }
 
 function numberedStyleIds(pkg: ReturnType<typeof inspectDocxPackage>): NumberingStyles {
+  const empty = { byId: new Map<string, StyleNumbering>(), defaultId: '', readable: false };
   const entry = pkg.zip.entries.get('word/styles.xml');
-  if (!entry) return { numbered: new Set(), defaultId: '' };
+  if (!entry) return empty;
   let scan: ScannedXmlPart;
   try {
     scan = scanXmlPart(entry.bytes);
   } catch {
-    // ⚠️ FAIL-CLOSED IS NOT AVAILABLE HERE, so fail LOUD-BY-OMISSION instead:
-    // an unreadable styles part means we cannot say a style is numbered, and
-    // refusing every field on that basis would break every render of a document
-    // whose styles we merely failed to parse. The direct `w:numPr` check still
-    // applies; this only widens it.
-    return { numbered: new Set(), defaultId: '' };
+    // ⚠️ FAIL-CLOSED, REVERSING THE EARLIER CHOICE. This used to return an
+    // empty set and let the direct check carry on — widening-only, and wrong
+    // under #169: an unreadable style table is exactly an inability to resolve.
+    return empty;
   }
+  const byId = new Map<string, StyleNumbering>();
   let defaultId = '';
-  const direct = new Set<string>();
-  const basedOn = new Map<string, string>();
   const styles: XmlElementSpan[] = [];
-  for (const root of scan.roots) {
-    styles.push(...descendantXmlElements(root, 'style'));
-  }
+  for (const root of scan.roots) styles.push(...descendantXmlElements(root, 'style'));
   for (const style of styles) {
     const id = readXmlAttribute(scan.text, style, 'styleId');
     if (!id) continue;
-    // ⚠️ THE DEFAULT STYLE IS AN IMPLICIT EDGE THE CLOSURE OTHERWISE MISSES.
-    // A paragraph with no `w:pStyle` inherits `w:default="1"`, so numbering on
-    // that style reaches a paragraph that names nothing. Measured: identical
-    // `styles.xml` and identical PDF, but the paragraph naming the style was
-    // refused and the one naming nothing earned `emptied` and counted.
     if (
       readXmlAttribute(scan.text, style, 'type') === 'paragraph' &&
       readXmlAttribute(scan.text, style, 'default') === '1'
     ) {
       defaultId = id;
     }
-    const numbering = descendantXmlElements(style, 'numPr');
-    // ⚠️ A `w:numPr` WITH NO `w:numId` IS NOT NUMBERING. It carries only an
-    // `w:ilvl` — an outline level — and numbering requires a list to point at.
-    // Scoring a MISSING numId as live is the opposite direction from the
-    // deliberate `numId="0"` exclusion beside it, and it costs a FALSE REFUSAL:
-    // Word's built-in `Subtitle` has exactly this shape, byte-identical in BOTH
-    // tracked customer templates, so it is in the style table of essentially
-    // every real upload.
-    const live = numbering.some((numPr) => {
+    let own: StyleNumbering['own'] = 'none';
+    for (const numPr of descendantXmlElements(style, 'numPr')) {
       const numId = descendantXmlElements(numPr, 'numId')[0];
-      return numId !== undefined && readXmlAttribute(scan.text, numId, 'val') !== '0';
-    });
-    if (live) direct.add(id);
-    const parent = directXmlChild(style, 'basedOn');
-    const parentId = parent ? readXmlAttribute(scan.text, parent, 'val') : null;
-    if (parentId) basedOn.set(id, parentId);
-  }
-  // Transitive closure over `basedOn`, bounded by the number of styles so a
-  // cyclic `basedOn` chain cannot spin.
-  const resolved = new Set(direct);
-  for (let pass = 0; pass < basedOn.size + 1; pass += 1) {
-    let grew = false;
-    for (const [id, parent] of basedOn) {
-      if (!resolved.has(id) && resolved.has(parent)) {
-        resolved.add(id);
-        grew = true;
-      }
+      // ⚠️ `numId="0"` IS THE ONE EXCLUSION THAT SURVIVES #169 — Word's
+      // documented "no list", deterministic and explicit. A MISSING `numId` is
+      // no longer an exclusion: the `ilvl`-only shape now counts as numbered,
+      // reversed because "probably harmless" is a guess and this guard does
+      // not make guesses.
+      own = numId && readXmlAttribute(scan.text, numId, 'val') === '0' ? 'clear' : 'numbered';
+      break;
     }
-    if (!grew) break;
+    const parent = directXmlChild(style, 'basedOn');
+    byId.set(id, { own, basedOn: parent ? readXmlAttribute(scan.text, parent, 'val') : null });
   }
-  return { numbered: resolved, defaultId };
+  return { byId, defaultId, readable: true };
 }
 
-/**
- * Does this paragraph carry LIVE numbering — directly, or through its style?
- *
- * ⚠️ `w:pPrChange` IS SKIPPED. It records a paragraph's FORMER properties for
- * revision history and renders nothing, so numbering inside it is a fact about
- * the document's past. Counting it refuses blank credit to a field that prints
- * nothing.
- */
-function paragraphIsNumbered(
+/** Walk a style's `basedOn` chain. Anything unknown or cyclic is UNRESOLVED. */
+function styleNumbering(styleId: string, styles: NumberingStyles): NumberingVerdict {
+  const seen = new Set<string>();
+  let current: string | null = styleId;
+  while (current) {
+    if (seen.has(current)) return 'unresolved';
+    seen.add(current);
+    const style: StyleNumbering | undefined = styles.byId.get(current);
+    if (!style) return 'unresolved';
+    if (style.own === 'numbered') return 'numbered';
+    if (style.own === 'clear') return 'clear';
+    current = style.basedOn;
+  }
+  return 'clear';
+}
+
+/** Can this paragraph be PROVEN free of numbering? */
+function paragraphNumbering(
   xml: string,
   paragraph: XmlElementSpan,
-  numberedStyles: NumberingStyles,
-): boolean {
+  styles: NumberingStyles,
+): NumberingVerdict {
+  if (!styles.readable) return 'unresolved';
   const properties = directXmlChild(paragraph, 'pPr');
-  // ⚠️ NO `w:pPr` IS NOT "NOT NUMBERED". A paragraph that declares nothing still
-  // inherits the `w:default="1"` style, so this early return defeated the
-  // default-style rule entirely — on the very shape the rule was added for.
-  if (!properties) {
-    return numberedStyles.defaultId !== '' &&
-      numberedStyles.numbered.has(numberedStyles.defaultId);
-  }
-  for (const numPr of descendantXmlElements(properties, 'numPr')) {
-    let ancestor: XmlElementSpan | null = numPr.parent;
-    let historical = false;
-    while (ancestor && ancestor !== properties) {
-      if (xmlLocalName(ancestor.name) === 'pPrChange') { historical = true; break; }
-      ancestor = ancestor.parent;
+  if (properties) {
+    for (const numPr of descendantXmlElements(properties, 'numPr')) {
+      // `w:pPrChange` records the paragraph's FORMER properties for revision
+      // history and renders nothing.
+      let ancestor: XmlElementSpan | null = numPr.parent;
+      let historical = false;
+      while (ancestor && ancestor !== properties) {
+        if (xmlLocalName(ancestor.name) === 'pPrChange') { historical = true; break; }
+        ancestor = ancestor.parent;
+      }
+      if (historical) continue;
+      const numId = descendantXmlElements(numPr, 'numId')[0];
+      if (numId && readXmlAttribute(xml, numId, 'val') === '0') return 'clear';
+      return 'numbered';
     }
-    if (historical) continue;
-    const numId = descendantXmlElements(numPr, 'numId')[0];
-    // Same rule as `numberedStyleIds`: no `numId` means no list to number from.
-    if (numId !== undefined && readXmlAttribute(xml, numId, 'val') !== '0') return true;
+    const styleRef = directXmlChild(properties, 'pStyle');
+    const styleId = styleRef ? readXmlAttribute(xml, styleRef, 'val') : null;
+    if (styleId) return styleNumbering(styleId, styles);
   }
-  const styleRef = directXmlChild(properties, 'pStyle');
-  const styleId = styleRef
-    ? readXmlAttribute(xml, styleRef, 'val')
-    : numberedStyles.defaultId;
-  return styleId !== null && styleId !== '' && numberedStyles.numbered.has(styleId);
+  // ⚠️ NO `w:pPr`, OR ONE NAMING NO STYLE, INHERITS THE DEFAULT — it is not
+  // proof of absence. Returning early here defeated the default-style rule on
+  // exactly the shape it was added for.
+  //
+  // A document that declares NO default paragraph style has nothing to inherit
+  // FROM, which is a determinate answer rather than an unresolvable one: with a
+  // readable style table and no default declared, no style-based numbering can
+  // reach this paragraph.
+  if (styles.defaultId) return styleNumbering(styles.defaultId, styles);
+  return 'clear';
 }
 
 /** Control kinds whose emptied region can render a value nobody chose. */
@@ -1103,8 +1127,11 @@ function sdtBoundedClearPatches(
     containing = containing.parent;
   }
   if (containing) paragraphs.push(containing);
-  const numbered = paragraphs.some((paragraph) =>
-    paragraphIsNumbered(xml, paragraph, numberedStyles),
+  // ⚠️ #169 — EVERY PARAGRAPH IN SCOPE MUST BE PROVEN CLEAR. Not "none is known
+  // to be numbered" — that is the enumerating shape six evasions defeated. An
+  // `unresolved` verdict is as disqualifying as a `numbered` one.
+  const numbered = paragraphs.some(
+    (paragraph) => paragraphNumbering(xml, paragraph, numberedStyles) !== 'clear',
   );
 
   // ⚠️ #168(b) — SELECTION CONTROLS ARE EXCLUDED, REVERSING #165.

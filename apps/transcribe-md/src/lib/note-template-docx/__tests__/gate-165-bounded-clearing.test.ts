@@ -1223,11 +1223,24 @@ describe('#168(a) — the numbering decision reaches the `blank` label too', () 
     expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
   });
 
-  it('⚠️ a w:numPr with an ilvl and NO numId is not numbering — Word’s own Subtitle', async () => {
-    // A FALSE REFUSAL, and not a hypothetical shape: this is Word's built-in
-    // `Subtitle`, present BYTE-IDENTICALLY in both tracked customer templates,
-    // so it is in the style table of essentially every real upload. It carries
-    // an outline level and no list to number from, and prints nothing.
+  it('⚠️ REVERSED by #169 — an ilvl with NO numId is INELIGIBLE, not exempt', async () => {
+    // This arm previously asserted the opposite, and #169 reverses it on the
+    // asymmetry rather than on new evidence about what prints:
+    //
+    //   a false REFUSAL costs ONE field its credit, and certification needs
+    //   only one blank — the owner's form has 35 eligible;
+    //   a false GRANT attests "renders blank" over printed prose in a signed
+    //   clinical note.
+    //
+    // A `w:numPr` with only an `ilvl` was measured as printing nothing, and
+    // "measured as harmless on the engine I could drive" is exactly the kind of
+    // guess this guard stopped making. The one exclusion that survives is
+    // `numId="0"` — Word's documented "no list", deterministic.
+    //
+    // ⚠️ AND THE COST IS REAL, NOT NOTIONAL: this is Word's built-in `Subtitle`,
+    // byte-identical in both tracked customer templates. Neither applies it to
+    // a control-bearing paragraph today, so nothing loses credit now — but the
+    // trade is accepted knowingly, not by accident.
     const styles =
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
       `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
@@ -1242,7 +1255,86 @@ describe('#168(a) — the numbering decision reaches the `blank` label too', () 
       }),
       styles,
     );
-    expect(bodyProofs.map((p) => p.kind)).toContain('emptied');
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+  });
+
+  it('an UNKNOWN pStyle is INELIGIBLE — inability to resolve is not proof of absence', async () => {
+    // #169's core: the guard answers "can I PROVE there is no numbering?", so a
+    // style that is not in the table is disqualifying rather than ignorable.
+    const styles =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:style w:type="paragraph" w:styleId="Normal"/></w:styles>`;
+    const { bodyProofs } = await renderAllNull(
+      sdtDoc({
+        block: true,
+        content:
+          '<w:p><w:pPr><w:pStyle w:val="NotInTheTable"/></w:pPr>' +
+          '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
+      }),
+      styles,
+    );
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+  });
+
+  it('a basedOn pointing at a MISSING style is INELIGIBLE', async () => {
+    const styles =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:style w:type="paragraph" w:styleId="Body">` +
+      `<w:basedOn w:val="Vanished"/></w:style></w:styles>`;
+    const { bodyProofs } = await renderAllNull(
+      sdtDoc({
+        block: true,
+        content:
+          '<w:p><w:pPr><w:pStyle w:val="Body"/></w:pPr>' +
+          '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
+      }),
+      styles,
+    );
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+  });
+
+  it('a basedOn CYCLE is INELIGIBLE rather than spinning', async () => {
+    const styles =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:style w:type="paragraph" w:styleId="A"><w:basedOn w:val="B"/></w:style>` +
+      `<w:style w:type="paragraph" w:styleId="B"><w:basedOn w:val="A"/></w:style></w:styles>`;
+    const { bodyProofs } = await renderAllNull(
+      sdtDoc({
+        block: true,
+        content:
+          '<w:p><w:pPr><w:pStyle w:val="A"/></w:pPr>' +
+          '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
+      }),
+      styles,
+    );
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+  });
+
+  it('an UNPARSEABLE styles.xml refuses the whole render, one layer earlier', async () => {
+    // ⚠️ THE ARM MEASURES WHAT ACTUALLY HAPPENS, NOT WHAT I EXPECTED.
+    // `numberedStyleIds` has a `catch` that returns `readable: false`, which
+    // under #169 makes every field ineligible — but the package inspection
+    // rejects a malformed part FIRST, with `XML_INVALID`, so the render never
+    // reaches it. That is strictly more fail-closed than ineligibility.
+    //
+    // ⚠️ HONEST LIMIT, STATED RATHER THAN CLAIMED: I could not construct an
+    // input that reaches that `catch`, so the branch is defence-in-depth
+    // against a future change in which the package layer stops validating this
+    // part — not a path with a demonstrated caller. It is left in place and
+    // labelled, rather than described as a guard that has been exercised.
+    let code = 'NO THROW';
+    try {
+      await renderAllNull(
+        sdtDoc({ content: '<w:r><w:t>Enter anticoagulation</w:t></w:r>' }),
+        '<w:styles><w:style w:styleId="Broken"',
+      );
+    } catch (error) {
+      code = (error as { code?: string }).code ?? String(error);
+    }
+    expect(code).toBe('XML_INVALID');
   });
 
   it('⚠️ and a STYLE whose numPr carries numId="0" does not disqualify either', async () => {
