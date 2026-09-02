@@ -1169,7 +1169,7 @@ because the two errors are not symmetric.
 
 ## CANON INDEX — every archived entry, one row each
 
-**129 entries live in full at `docs/canon/`.**
+**130 entries live in full at `docs/canon/`.**
 Each row is a **POINTER, never the authority** — the archived body governs, and
 it is verbatim. A row exists so that a grep for an entry's title still lands
 here and tells you where the body went; the tell is that entry's OWN words.
@@ -1324,6 +1324,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 ### HYGIENE, PHI & PURGES
 
 - **AN EXONERATION IS A CLAIM TOO** — "Clearing your own deploy needs the same scoped instruments as indicting it." A glob swept unrelated migrations and returned **5** write verbs against my own deploy; scoped by NAME it was **0**, positive-controlled at 7. ⚠️ The exonerating direction is the dangerous one — **a clean result ends the enquiry.** → `docs/canon/70-an-exoneration-is-a-claim-too.md`
+- **A SURVIVAL CHECK MUST RUN IN THE TREE YOU DESTROYED IN** — a scratch sweep ate **27 tracked BLANK FIXTURES** out of four git worktrees, and canon 52's survival assertion PASSED because it ran in the feature worktree the sweep never touched. ⚠️ Two paths that read identically in a report are different files on disk. Every file was tracked so nothing was lost; the hazard was a `git add -A` committing the removals. **No care at the call site can tell a scratch `.docx` from a committed fixture — only git can**, so the reaper refuses anything `git ls-files` claims. → `docs/canon/89-a-survival-check-must-run-where-you-destroyed.md`
 - **⚠️ A DESTRUCTION LIST IS A CLAIM** — "A destruction list is a CLAIM." Verify before executing — `git worktree list`, `gh pr list`, `git ls-files` — and afterwards assert what must SURVIVE, not only what is gone. → `docs/canon/52-a-destruction-list-is-a-claim.md`
   - ↳ **Session evidence trees are EXTRACT-THEN-SHRED, at session end** — Session evidence trees are EXTRACT-THEN-SHRED at session end: land the reports first, check admission for credentials by shape, READ what you are about to destroy. → `docs/canon/52-a-destruction-list-is-a-claim.md`
   - ↳ **A history purge does not clear the filesystem** — A history purge does not clear the filesystem — a directory snapshot has no `.git`, so a blob scan is blind to it. Unbounded depth, `-xdev`, and state the boundary. → `docs/canon/52-a-destruction-list-is-a-claim.md`

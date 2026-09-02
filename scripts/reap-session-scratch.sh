@@ -56,6 +56,32 @@ for target in "$@"; do
   if [ ! -e "$resolved" ]; then
     echo "   skipped (absent): $resolved"; continue
   fi
+  # ⚠️ NEVER DESTROY A FILE GIT IS TRACKING, AND THIS EXISTS BECAUSE I DID.
+  #
+  # A scratch sweep ran `find` over four git WORKTREES living under the sandbox
+  # and shredded 27 tracked, committed BLANK FIXTURES — `sample-form.docx`,
+  # `colon_blank_answers.pdf`, the adjudicated audit PDF, every
+  # `tests/e2e/fixtures/**` and `__fixtures__/**` entry. Precisely the allowlist
+  # AGENTS.md names, and precisely the outcome it warns of: "a sweep that eats
+  # the blank fixtures breaks the twin work".
+  #
+  # ⚠️ THE ASSERTION THAT SHOULD HAVE CAUGHT IT RAN AGAINST THE WRONG TREE.
+  # Canon 52 requires asserting what must SURVIVE, and it was asserted — in the
+  # feature worktree, which was never swept — while the sweep was deleting the
+  # same filenames in the four worktrees it did touch. Two paths that look
+  # identical in a report and are different files on disk. Canon 87's lesson in
+  # a new costume: the survival check must run in the tree that was destroyed
+  # in, not in one that happens to hold a file of the same name.
+  #
+  # A path check cannot express this — the sandbox legitimately CONTAINS git
+  # worktrees. Only git knows. So ask git, and fail closed when it cannot say.
+  target_dir="$(dirname -- "$resolved")"
+  if git -C "$target_dir" rev-parse --git-dir >/dev/null 2>&1; then
+    if git -C "$target_dir" ls-files --error-unmatch -- "$resolved" >/dev/null 2>&1; then
+      echo "🔴 REFUSED (TRACKED by git — a committed fixture, not scratch): $resolved"
+      rc=1; continue
+    fi
+  fi
   if shred -u -n 3 -z -- "$resolved"; then
     echo "   shredded: $resolved"
   else
