@@ -650,3 +650,83 @@ describe('#165 product — an `emptied` label with no expectation is refused', (
     ).toBe(false);
   });
 });
+
+// ============================================================================
+// #167 GATE ARMS — the two the pass showed were unpinned.
+// ============================================================================
+describe('#167 — the blank census guards are pinned to PRODUCTION, not to a helper', () => {
+  it('a LEGACY `emptied` proof does NOT count — the negative arm for the proven set', async () => {
+    // ⚠️ THIS ARM WENT MISSING WHEN #164's GATE FILE WAS DELETED, and nothing
+    // carried it forward — so widening `PROVEN_EMPTIABLE_BINDINGS` to include
+    // `legacy_form_field` redded NOTHING across 703 tests. A lens then showed
+    // the widened set certifies a spanning-FORMTEXT field whose drug name still
+    // prints. The set is the SOLE guard for that case; this is its tripwire.
+    //
+    // ⚠️ AND IT WATCHES THE SET, NOT THE RENDERER'S LABEL. The backlog nominated
+    // `gate-165-bounded-clearing`'s "a LEGACY form field is never emptied" arm
+    // as the tripwire, but that watches what the RENDERER emits, which widening
+    // the set does not change — it stayed green through the mutation.
+    const { countsAsBlankProof, PROVEN_EMPTIABLE_BINDINGS } = await import('../blank-proof-count');
+    const wasNull = () => true;
+    const emptied = { kind: 'emptied', fieldId: 'f1', expectedSpanSha256: 'a'.repeat(64) };
+
+    expect(countsAsBlankProof(emptied, () => 'content_control', wasNull)).toBe(true);
+    for (const binding of ['legacy_form_field', 'table_cell', 'repeating_row']) {
+      expect(
+        countsAsBlankProof(emptied, () => binding, wasNull),
+        `${binding} bought a blank proof`,
+      ).toBe(false);
+    }
+    // NON-VACUITY: the set really does hold exactly the one proven binding, so
+    // the loop above is testing exclusion rather than an empty set.
+    expect([...PROVEN_EMPTIABLE_BINDINGS]).toEqual(['content_control']);
+  });
+
+  it('⚠️ resolvedNull is pinned THROUGH certifyAndActivateTemplateTwin, not through its helper', async () => {
+    // ⚠️ THE FIX FOR ROUND ONE'S FORGERY WAS ITSELF UNPINNED. Mutating
+    // `certification-lifecycle.ts`'s `resolvedNull` to `() => true` redded
+    // nothing, and the original forgery replayed — relabel one genuinely-FILLED
+    // proof entry to `blank` and the template certifies.
+    //
+    // This is the file header's own stated failure mode recurring inside the
+    // fix that header shipped: a rule reachable only through its own helper is
+    // a rule whose arms prove the HELPER. So this arm goes through the gate.
+    const { certifyAndActivateTemplateTwin } = await import('../certification-lifecycle');
+    const row = cloneRow(fixture.row) as never as {
+      templateTwinCompiledVersion: { latestTestRoundTrip: { fields: Array<Record<string, unknown>> } };
+    };
+    const proof = row.templateTwinCompiledVersion.latestTestRoundTrip;
+
+    // Relabel a FILLED entry — a field the manifest shows carrying a value — to
+    // `blank`. Only the label moves; arity and every other property stay intact,
+    // so `isVerifiedSyntheticProof` still passes and the run reaches the census.
+    const filled = proof.fields.find((f) => f.kind === 'filled');
+    expect(filled, 'fixture has no filled proof — this arm would be vacuous').toBeDefined();
+    const targetId = filled!.fieldId as string;
+    expect(fixture.resolutions.find((r) => r.fieldId === targetId)?.value).not.toBeNull();
+
+    // ⚠️ THE GENUINE BLANK EVIDENCE IS REMOVED FIRST, OR THE ARM IS NOT
+    // DECISIVE. With the fixture's real `emptied` proofs still counting, the
+    // census is non-zero whatever the forged entry does, and the arm would pass
+    // for a reason that has nothing to do with `resolvedNull`.
+    proof.fields = proof.fields.map((f) => {
+      if (f.fieldId === targetId) return { ...f, kind: 'blank' };
+      return f.kind === 'emptied' ? { ...f, kind: 'filled' } : f;
+    });
+    expect(proof.fields.filter((f) => f.kind === 'emptied').length).toBe(0);
+    expect(proof.fields.filter((f) => f.kind === 'blank').length).toBe(1);
+    dbState.row = row;
+
+    const error = await certifyAndActivateTemplateTwin({
+      noteTemplateId: NOTE_TEMPLATE_ID,
+      actor: ACTOR,
+      expectedMappingsSha256: fixture.mappingsSha256,
+    }).then(
+      () => null,
+      (caught: unknown) => caught as { code?: string; blockers?: readonly string[] },
+    );
+
+    expect(error, 'a `blank` label on a FILLED field was accepted').not.toBeNull();
+    expect(error!.blockers?.join(' | ')).toMatch(/blankVerification=false/);
+  });
+});

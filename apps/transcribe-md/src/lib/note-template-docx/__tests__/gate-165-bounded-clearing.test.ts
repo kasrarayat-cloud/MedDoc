@@ -385,8 +385,14 @@ describe('#165 — the bounded clear, after the adversarial pass', () => {
       sdtDoc({
         block: true,
         content:
-          '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:line="200" w:lineRule="exact"/></w:pPr>' +
-          '<w:r><w:rPr><w:rFonts w:ascii="Times New Roman"/><w:sz w:val="14"/></w:rPr>' +
+          '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:line="200" w:lineRule="exact"/>' +
+          // ⚠️ THE PARAGRAPH-MARK rPr IS THE ONE THAT MATTERS FOR AN EMPTIED
+          // FIELD. Under #167 the RUN is deleted, so a run's own `w:rPr` goes
+          // with it — correctly, since the run is content. What a doctor typing
+          // into the emptied paragraph inherits is `w:pPr/w:rPr`, and that is
+          // skeleton, so it survives.
+          '<w:rPr><w:rFonts w:ascii="Times New Roman"/><w:sz w:val="14"/></w:rPr></w:pPr>' +
+          '<w:r><w:rPr><w:rFonts w:ascii="Courier New"/></w:rPr>' +
           '<w:t>Enter anticoagulation</w:t></w:r></w:p>',
       }),
     );
@@ -402,16 +408,23 @@ describe('#165 — the bounded clear, after the adversarial pass', () => {
       inner.includes('Times New Roman'),
       inner.includes('w:sz w:val="14"'),
     ]).toEqual([true, true, true, true]);
+    // and the RUN — content, not skeleton — is gone with its own properties.
+    expect([inner.includes('Courier New'), inner.includes('<w:r>')]).toEqual([false, false]);
   });
 
-  it('an INLINE emptied field keeps its run formatting — the majority path', async () => {
-    // ⚠️ THIS ARM EXISTS BECAUSE THE FIRST ONE PROVED THE MINORITY PATH.
-    // The formatting arm above uses `block: true`, and deleting `runProps` from
-    // the INLINE branch passed 702/702 — while 27 of the customer template's 28
-    // controls are inline, and the doctor-visible harm the fix was written for
-    // (typing into an emptied control and getting the document default instead
-    // of the template's Times New Roman) is on THIS branch.
-    const { outputXml } = await renderAllNull(
+  it('an INLINE emptied field is EMPTY — its run goes, and that is an accepted delta', async () => {
+    // ⚠️ RETARGETED UNDER #167, AND THE DELTA IS STATED RATHER THAN HIDDEN.
+    // v2 rebuilt an empty run carrying the source run's `w:rPr`. v3 writes
+    // nothing, so an inline control's run is DELETED and its properties go with
+    // it. `6220e0ea` kept the run and emptied its `w:t`, so it preserved them.
+    //
+    // That is a real difference on the inline path, which is 27 of the customer
+    // template's 28 controls. It is accepted here on ONE condition, and the
+    // condition is measured elsewhere, not assumed: the PDF-parity harness
+    // against the real template must show no change. An empty field prints
+    // nothing either way; what the delta can affect is what a doctor inherits
+    // when they TYPE into the control afterwards.
+    const { outputXml, bodyProofs } = await renderAllNull(
       sdtDoc({
         content:
           '<w:r><w:rPr><w:rFonts w:ascii="Times New Roman"/><w:sz w:val="22"/>' +
@@ -423,16 +436,11 @@ describe('#165 — the bounded clear, after the adversarial pass', () => {
       outputXml.indexOf('</w:sdtContent>'),
     );
     expect(inner.includes('Enter anticoagulation')).toBe(false);
-    // NON-VACUITY: it really is the inline shape — a run, not a paragraph.
-    expect(inner.includes('<w:p>')).toBe(false);
-    expect([
-      inner.includes('Times New Roman'),
-      inner.includes('w:sz w:val="22"'),
-      inner.includes('<w:b/>'),
-    ]).toEqual([true, true, true]);
+    expect(inner.includes('<w:r>')).toBe(false);
+    expect(bodyProofs[0]?.kind).toBe('emptied');
   });
 
-  it('a control WRAPPING A TABLE is refused — the grid is not flattened away', async () => {
+  it('a control WRAPPING A TABLE keeps the grid and empties the cells', async () => {
     // Replacing a `w:tbl` with an empty paragraph deleted borders, columns and
     // rows: an empty bordered results table became nothing.
     const { outputXml, bodyProofs } = await renderAllNull(
@@ -443,9 +451,17 @@ describe('#165 — the bounded clear, after the adversarial pass', () => {
           '<w:tr><w:tc><w:p><w:r><w:t>Diameter</w:t></w:r></w:p></w:tc></w:tr></w:tbl>',
       }),
     );
-    expect(outputXml.includes('<w:tbl>')).toBe(true);
-    expect(outputXml.includes('w:tblBorders')).toBe(true);
-    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+    // ⚠️ #167 KEEPS THE STRUCTURE AND EMPTIES IT, where v2 flattened the grid
+    // away entirely and an earlier version refused the shape. `w:tbl`, `w:tr`,
+    // `w:tc` and their properties are skeleton; the cell's runs are not.
+    expect([
+      outputXml.includes('<w:tbl>'),
+      outputXml.includes('w:tblBorders'),
+      outputXml.includes('<w:tr>'),
+      outputXml.includes('<w:tc>'),
+    ]).toEqual([true, true, true, true]);
+    expect(outputXml.includes('Diameter')).toBe(false);
+    expect(bodyProofs.map((p) => p.kind)).toContain('emptied');
   });
 
   it('`w:sectPr` inside the cleared paragraph survives, because it lives in w:pPr', async () => {
@@ -585,5 +601,143 @@ describe('#165 — "already empty" is not "cleared"', () => {
     // It IS patched — the `w:fullDate` attribute is stripped — so it is not
     // `blank` either. What it must not be is `emptied`, because nothing cleared.
     expect(bodyProofs[0].kind).not.toBe('emptied');
+  });
+});
+
+// ============================================================================
+// #167 RULE 1 v3 — STRUCTURE-KEEP. The six shapes two passes broke v2 on, plus
+// the two the ruling named as the reason the mechanism must be a KEEP-list.
+// ============================================================================
+describe('#167 — structure survives, content does not', () => {
+  it('a SECOND w:sdtContent is emptied too — v2 matched by NAME and let it through', async () => {
+    const { outputXml, bodyProofs } = await renderAllNull(
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+        `<w:body><w:p><w:sdt><w:sdtPr><w:id w:val="980"/>` +
+        `<w:alias w:val="Anticoagulation"/><w:text/></w:sdtPr>` +
+        `<w:sdtContent><w:r><w:t>placeholder</w:t></w:r></w:sdtContent>` +
+        `<w:sdtContent><w:r><w:t>WARFARIN 5 MG DAILY</w:t></w:r></w:sdtContent>` +
+        `</w:sdt></w:p></w:body></w:document>`,
+    );
+    // v2 proofed this `emptied` while the drug name printed.
+    expect(outputXml.includes('WARFARIN')).toBe(false);
+    expect(outputXml.includes('placeholder')).toBe(false);
+    expect(bodyProofs[0]?.kind).toBe('emptied');
+  });
+
+  it('w:sectPr on the LAST paragraph survives — where it conventionally sits', async () => {
+    const { outputXml } = await renderAllNull(
+      sdtDoc({
+        block: true,
+        content:
+          '<w:p><w:r><w:t>first</w:t></w:r></w:p>' +
+          '<w:p><w:pPr><w:sectPr><w:pgSz w:w="15840" w:h="12240"/>' +
+          '<w:pgMar w:left="360"/></w:sectPr></w:pPr>' +
+          '<w:r><w:t>second</w:t></w:r></w:p>',
+      }),
+    );
+    // v2 rebuilt only the FIRST paragraph, so a landscape section became portrait.
+    expect([
+      outputXml.includes('w:sectPr'),
+      outputXml.includes('w:w="15840"'),
+      outputXml.includes('first'),
+      outputXml.includes('second'),
+    ]).toEqual([true, true, false, false]);
+  });
+
+  it('MULTI-PARAGRAPH content keeps every paragraph', async () => {
+    const { outputXml } = await renderAllNull(
+      sdtDoc({
+        block: true,
+        content:
+          '<w:p><w:r><w:t>one</w:t></w:r></w:p>' +
+          '<w:p><w:r><w:t>two</w:t></w:r></w:p>' +
+          '<w:p><w:r><w:t>three</w:t></w:r></w:p>',
+      }),
+    );
+    const inner = outputXml.slice(
+      outputXml.indexOf('<w:sdtContent>'),
+      outputXml.indexOf('</w:sdtContent>'),
+    );
+    // v2 collapsed three paragraphs to one and moved a signature block 164pt.
+    expect((inner.match(/<w:p>/g) ?? []).length).toBe(3);
+    expect([inner.includes('one'), inner.includes('two'), inner.includes('three')])
+      .toEqual([false, false, false]);
+  });
+
+  it('a NAMESPACE declared on the content paragraph survives — nothing is rewritten', async () => {
+    const { outputXml, rendered } = await renderAllNull(
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+        `<w:body><w:sdt><w:sdtPr><w:id w:val="981"/>` +
+        `<w:alias w:val="Anticoagulation"/><w:text/></w:sdtPr><w:sdtContent>` +
+        `<w:p xmlns:zz="urn:example:zz"><w:pPr><w:jc w:val="center"/></w:pPr>` +
+        `<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>` +
+        `</w:sdtContent></w:sdt></w:body></w:document>`,
+    );
+    // v2 re-emitted a bare `<w:p>`, dropping the declaration and producing a
+    // part that failed namespace parsing and that LibreOffice refused with 400.
+    expect(outputXml.includes('xmlns:zz')).toBe(true);
+    expect(rendered.verification.verified).toBe(true);
+  });
+
+  it('OMML is deleted — the named counterexample to "delete the runs"', async () => {
+    // `m:oMath` prints mathematics and is not a `w:r`. A delete-the-runs rule
+    // leaves an equation standing in a field proofed blank; a keep-list does
+    // not, because OMML is simply not skeleton.
+    const { sourceXml, outputXml, bodyProofs } = await renderAllNull(
+      sdtDoc({
+        block: true,
+        content:
+          '<w:p><m:oMathPara xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">' +
+          '<m:oMath><m:r><m:t>INR 3.5</m:t></m:r></m:oMath></m:oMathPara>' +
+          '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
+      }),
+    );
+    expect(sourceXml.includes('m:oMath')).toBe(true);
+    expect([outputXml.includes('m:oMath'), outputXml.includes('INR 3.5')]).toEqual([false, false]);
+    expect(bodyProofs[0]?.kind).toBe('emptied');
+  });
+
+  it('w:fldSimple is deleted — an empty simple field can be RECOMPUTED', async () => {
+    // Leaving the wrapper behind is not inert: the PDF engine may recompute it
+    // from `w:instr` and print a value nobody wrote.
+    const { sourceXml, outputXml } = await renderAllNull(
+      sdtDoc({
+        content:
+          '<w:fldSimple w:instr=" DOCPROPERTY Patient "><w:r><w:t>J. DOE</w:t></w:r></w:fldSimple>' +
+          '<w:r><w:t>Enter anticoagulation</w:t></w:r>',
+      }),
+    );
+    expect(sourceXml.includes('w:fldSimple')).toBe(true);
+    expect([outputXml.includes('w:fldSimple'), outputXml.includes('DOCPROPERTY')])
+      .toEqual([false, false]);
+  });
+
+  it('bare CHARACTER DATA inside the control REFUSES THE RENDER — base parity', async () => {
+    // A walk cannot see raw text, and an element count reads it as "already
+    // empty" — v2 measured a control holding this earning a `blank` proof while
+    // printing, turning a refusal into a false blank: fail-closed -> fail-open.
+    //
+    // v3 refuses the shape, which falls back to text patching, which finds no
+    // `w:t` and aborts. ⚠️ THAT IS EXACTLY WHAT `6220e0ea` DID — measured,
+    // BINDING_NOT_FOUND — so this restores base behaviour rather than inventing
+    // a new refusal. The input is schema-invalid; Word will not author it.
+    const documentXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:body><w:p><w:sdt><w:sdtPr><w:id w:val="982"/>` +
+      `<w:alias w:val="Anticoagulation"/><w:text/></w:sdtPr>` +
+      `<w:sdtContent>WARFARIN 5 MG DAILY</w:sdtContent></w:sdt></w:p></w:body></w:document>`;
+    let code = 'NO THROW';
+    try {
+      await renderAllNull(documentXml);
+    } catch (error) {
+      code = (error as { code?: string }).code ?? String(error);
+    }
+    // ⚠️ ASSERTED BY NAME. "It threw" would be satisfied by any of the
+    // renderer's other refusals, several of which this fixture could plausibly
+    // trip — and the point is that the field is never CLAIMED empty.
+    expect(code).toBe('BINDING_NOT_FOUND');
   });
 });
