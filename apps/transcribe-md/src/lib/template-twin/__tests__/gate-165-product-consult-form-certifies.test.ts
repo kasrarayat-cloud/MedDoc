@@ -767,8 +767,23 @@ describe('#167 — the blank census guards', () => {
     // DECISIVE. With the fixture's real `emptied` proofs still counting, the
     // census is non-zero whatever the forged entry does, and the arm would pass
     // for a reason that has nothing to do with `resolvedNull`.
+    // ⚠️ THE FORGERY IS MADE MAXIMALLY CAPABLE — THE CLASS RULE, NOT A PATCH.
+    //
+    // A forged entry must satisfy EVERY guard except the one under test, or the
+    // arm measures a neighbour. `blankEligible` is required because the source
+    // entry is `filled`, and a `filled` proof carries no eligibility at all —
+    // so without it #170's read path refuses this entry as an ABSENT sentinel
+    // BEFORE `resolvedNull` is ever consulted.
+    //
+    // ⚠️ MEASURED: this arm was armed before #170 and silently disarmed by it.
+    // Neutralising `resolvedNull` redded 0 of 757 while the arm named for
+    // pinning it sat green. That is the third instance of this laundering in
+    // one arc — the first two were fixed one at a time, which is why the rule
+    // is now written here as a rule rather than applied as a repair.
     proof.fields = proof.fields.map((f) => {
-      if (f.fieldId === targetId) return { ...f, kind: 'blank' };
+      if (f.fieldId === targetId) {
+        return { ...f, kind: 'blank', blankEligible: 'eligible' };
+      }
       return f.kind === 'emptied' ? { ...f, kind: 'filled' } : f;
     });
     expect(proof.fields.filter((f) => f.kind === 'emptied').length).toBe(0);

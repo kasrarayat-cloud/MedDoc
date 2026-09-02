@@ -680,30 +680,52 @@ function createFieldPatches(
       return {
         patches: legacyFieldPatches(part.text, bound, field, resolution),
         boundedClear: false,
-        // ⚠️ #170 — IT ASKS NOW. This was a hardcoded `true`, and a hardcoded
-        // `true` is how a binding goes unguarded while every test reports
-        // green: the flag was indistinguishable from a guard that approved.
-        blankEligible: blankEligibilityOf(
-          [containingParagraph(bound)].filter((n): n is XmlElementSpan => n !== null),
-          inherited,
-        ),
+        // ⚠️ #171(2) — LEGACY LEAVES THIS SLICE; THE GUARD CODE IS DELETED,
+        // NOT PATCHED. #170 gave this arm a guard over
+        // `containingParagraph(bound)`, and `bound` is the `begin` fldChar — so
+        // it judged only the paragraph holding `begin`, while a FORMTEXT result
+        // legitimately crosses into the next one. Measured: numbering on the
+        // `end` paragraph returned eligible and COUNTED.
+        //
+        // The repair is not a better walk. The comment directly above says this
+        // span cannot be bounded by walking — that is why it earns no `emptied`
+        // proof — so a guard over one paragraph of it is an approximation of an
+        // unboundable span, and approximations of this shape have been
+        // falsified repeatedly here.
+        //
+        // ⚠️ IT KEEPS `main`'s BEHAVIOUR VERBATIM: the unpatched `blank` path,
+        // no `emptied`, NO NEW CREDIT. THIS LITERAL IS NOT A VERDICT — no guard
+        // ran — it is `main`'s hardcoded value preserved while the binding is
+        // out of scope, so nothing anybody already had is taken away. The
+        // `eligible ≠ empty` limit here PREDATES this arc and is filed.
+        blankEligible: 'eligible',
       };
     case 'table_cell':
       if (xmlLocalName(bound.name) !== 'tc') {
         failTemplateDocxRender('BINDING_NOT_FOUND');
       }
-      // ⚠️ `table_cell` HAS a bounded container (`w:tc`) and could take the
-      // same treatment — ruling #165 rule 2 names it as the next candidate.
-      // Until that write exists and is proved, it earns no `emptied` proof.
+      // ⚠️ #171(2) — `table_cell` LEAVES THIS SLICE TOO, WITH ITS CURE NAMED.
+      // #170 routed it through the paragraph guard, which answers *"could a
+      // list marker print?"* — the wrong question here. NOTHING CLEARS A CELL:
+      // `tableCellPatches` rewrites `w:t` only, so a cell holding a Wingdings
+      // glyph, a drawing or a picture and no `w:t` yields ZERO patches and the
+      // region is left exactly as the template had it. Eligible is not empty.
+      //
+      // ⚠️ THE LIMIT PREDATES THIS ARC — `main` counted those cells too — and is
+      // POPULATION ZERO on every certified template, measured: the real
+      // customer form carries none of `w:sym`, `w:drawing`, `w:pict`,
+      // `w:object`, `w:fldSimple` in any of its 52 blank-bearing cells. It
+      // RE-ARMS on any upload with a glyph checkbox, a logo, or a signature
+      // image in an otherwise-empty cell.
+      //
+      // ⚠️ AND THE CURE IS ALREADY NAMED, WHICH MAKES THIS A DEFERRAL AND NOT A
+      // SHRUG: `w:tc` IS A BOUNDED CONTAINER, so the structure-keep clear that
+      // made content controls provable applies to it directly. Its own slice.
       return {
         patches: tableCellPatches(part.text, bound, field, resolution),
         boundedClear: false,
-        // ⚠️ #170 — AND THIS IS THE ARM THAT MATTERED MOST. On the only real
-        // customer template `table_cell` supplies 52 of 52 counted blanks and
-        // `content_control` supplies none, so while this returned a hardcoded
-        // `true` the entire guard was measuring nothing there. EVERY paragraph
-        // in the cell is asked, not merely the first.
-        blankEligible: blankEligibilityOf(descendantXmlElements(bound, 'p'), inherited),
+        // Keeps `main`'s behaviour verbatim. NOT A VERDICT — see above.
+        blankEligible: 'eligible',
       };
     case 'repeating_row':
       failTemplateDocxRender('UNSUPPORTED_BINDING');
@@ -1032,12 +1054,34 @@ function defaultParagraphNumbering(
       // respelling one attribute.
       const flag = (readXmlAttribute(scan.text, style, 'default') ?? '').toLowerCase();
       if (flag !== '1' && flag !== 'true' && flag !== 'on') continue;
-      // ⚠️ AN OMITTED `w:type` IS TREATED AS A CANDIDATE, NOT SKIPPED. The old
-      // code required `type === 'paragraph'` exactly, so omitting the attribute
-      // — or casing it differently — walked straight past a numbered default.
-      // Fail-closed means an unstated type is a type that might apply.
-      const type = readXmlAttribute(scan.text, style, 'type');
-      if (type !== null && type.toLowerCase() !== 'paragraph') continue;
+      // ⚠️ #171 R1 — A DEFAULT STYLE THAT INHERITS IS UNRESOLVABLE, AND WE
+      // REFUSE RATHER THAN WALK. #170 deleted the `w:pStyle` chain walk and
+      // said so in this file's own security argument — but the DEFAULT style's
+      // chain was still live, and a paragraph with NO `w:pPr` at all (the shape
+      // `paragraphIsInert` calls the cleanest possible answer) inherits it.
+      // Measured: `Normal basedOn <numbered>` returned `emptied` + eligible +
+      // counted, over live numbering.
+      //
+      // The fix is NOT to walk `basedOn` here — that reinstates the exact
+      // surface #170 deleted, one level over. A default style carrying
+      // `w:basedOn` simply cannot be resolved by a rule that does not walk, so
+      // it is UNRESOLVED, which means ineligible.
+      //
+      // COST, MEASURED BEFORE RULING: `WM IOV Template.docx`'s `Normal` carries
+      // no `basedOn` (42 of its 46 styles do; the default is not one), and
+      // Word's built-in `Normal` is the root of the chain by construction, so
+      // it conventionally has none. Zero on both real artifacts.
+      if (directXmlChild(style, 'basedOn')) return 'unresolved';
+      // ⚠️ #171 R4 — THE `w:type` FILTER INVERTS TO FAIL-CLOSED. It used to
+      // skip any style whose type was not `paragraph`, which was one-sided in
+      // the OPPOSITE direction from the ST_OnOff widening directly above it:
+      // a `w:type="table"` default carrying `w:pPr/w:numPr` applies to
+      // paragraphs in cells of tables naming no style, and was skipped.
+      //
+      // There is no filter now. ANY default style of ANY type that carries
+      // numbering disqualifies. A style whose numbering cannot reach this
+      // paragraph costs one field its credit; a style whose numbering CAN and
+      // was skipped attests blank over a printed marker.
       // ⚠️ ANY qualifying default that is numbered disqualifies — this is NOT
       // last-wins. Duplicate `w:default` declarations used to make the verdict
       // depend on DOCUMENT ORDER alone, granting credit in half the orderings.
@@ -1081,6 +1125,15 @@ function blankEligibilityOf(
   inherited: DefaultNumbering,
 ): BlankEligibility {
   if (inherited !== 'clear') return 'ineligible';
+  // ⚠️ #171 — `every()` ON AN EMPTY SET IS VACUOUS APPROVAL. A GUARD THAT
+  // EXAMINED NOTHING REPORTS `unevaluated`, NEVER `eligible`.
+  //
+  // `[].every(...)` is `true`, so an empty paragraph set produced the
+  // computed-and-approved value from a guard that inspected no paragraph —
+  // which is precisely the defect the three-state sentinel exists to abolish,
+  // reproduced one layer inside the fix that introduced it. Reachable today
+  // from a block-level control whose `w:sdtContent` is already empty.
+  if (paragraphs.length === 0) return 'unevaluated';
   return paragraphs.every(paragraphIsInert) ? 'eligible' : 'ineligible';
 }
 

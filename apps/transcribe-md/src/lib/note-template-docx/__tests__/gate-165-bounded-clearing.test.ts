@@ -1195,16 +1195,82 @@ describe('#170 — the ONE surviving resolution: the inherited default', () => {
         'ineligible',
       );
     }
-    // NON-VACUITY: a NON-paragraph default must not disqualify, or the arm
-    // above would pass for any style at all.
-    const { bodyProofs } = await renderAllNull(
+    // ⚠️ #171 R4 — THE NON-VACUITY CONTROL CHANGED WITH THE RULE, AND THE OLD
+    // ONE IS KEPT BELOW AS THE REVERSAL IT IS. It used to assert that a
+    // NON-paragraph default does not disqualify. That filter was one-sided in
+    // the opposite direction from the ST_OnOff widening two lines above it: a
+    // `w:type="table"` default carrying `w:pPr/w:numPr` applies to paragraphs
+    // in cells of tables naming no style, and was skipped. There is no type
+    // filter now — ANY default carrying numbering disqualifies.
+    const { bodyProofs: tableDefault } = await renderAllNull(
       plainDoc,
       stylesWith(
-        `<w:style w:type="character" w:default="1" w:styleId="Emph">` +
+        `<w:style w:type="table" w:default="1" w:styleId="TableGrid">` +
           `<w:pPr><w:numPr><w:numId w:val="7"/></w:numPr></w:pPr></w:style>`,
       ),
     );
+    expect(tableDefault[0]?.blankEligible, 'a default TABLE style was skipped').toBe(
+      'ineligible',
+    );
+    // NON-VACUITY, RE-AIMED: a default style carrying NO numbering must still
+    // grant credit, or the arm above would pass with the guard refusing
+    // everything — which is the other way to be wrong.
+    const { bodyProofs } = await renderAllNull(
+      plainDoc,
+      stylesWith(`<w:style w:type="paragraph" w:default="1" w:styleId="Normal"/>`),
+    );
     expect(bodyProofs[0]?.blankEligible).toBe('eligible');
+  });
+
+  it('⚠️ #171 R1 — a DEFAULT style carrying w:basedOn is UNRESOLVED, and we do not walk it', async () => {
+    // ⚠️ #170 DELETED THE `w:pStyle` CHAIN WALK AND LEFT THE DEFAULT STYLE'S
+    // CHAIN LIVE. The pass measured `Normal basedOn <numbered>` returning
+    // `emptied` + eligible + COUNTED over live numbering, on a paragraph with no
+    // `w:pPr` at all — the shape `paragraphIsInert` calls the cleanest possible
+    // answer.
+    //
+    // The fix is a REFUSAL, not a walk: walking here would reinstate exactly the
+    // surface #170 deleted, one level up. #171 permits refusing-instead-of-
+    // walking as a fix class precisely so this cannot become a chain resolver.
+    const numbered = await renderAllNull(
+      plainDoc,
+      stylesWith(
+        `<w:style w:type="paragraph" w:default="1" w:styleId="Normal">` +
+          `<w:basedOn w:val="ListPara"/></w:style>` +
+          `<w:style w:type="paragraph" w:styleId="ListPara">` +
+          `<w:pPr><w:numPr><w:numId w:val="7"/></w:numPr></w:pPr></w:style>`,
+      ),
+    );
+    expect(
+      numbered.bodyProofs[0]?.blankEligible,
+      'a default style inheriting numbering bought credit',
+    ).toBe('ineligible');
+
+    // ⚠️ AND THE ACCEPTED COST, ARMED SO IT CANNOT BE QUIETLY "FIXED" BY A WALK.
+    // A default style based on a perfectly innocent one is ALSO ineligible: the
+    // rule refuses what it cannot resolve without walking, and a future reader
+    // who repairs this by resolving the parent has reinstated the surface.
+    //
+    // COST MEASURED BEFORE RULING: `WM IOV Template.docx`'s `Normal` carries no
+    // `basedOn`, and Word's built-in `Normal` is the root of the chain by
+    // construction — zero on both real artifacts.
+    const innocent = await renderAllNull(
+      plainDoc,
+      stylesWith(
+        `<w:style w:type="paragraph" w:default="1" w:styleId="Normal">` +
+          `<w:basedOn w:val="Body"/></w:style>` +
+          `<w:style w:type="paragraph" w:styleId="Body"><w:name w:val="Body"/></w:style>`,
+      ),
+    );
+    expect(innocent.bodyProofs[0]?.blankEligible).toBe('ineligible');
+
+    // NON-VACUITY: the SAME default style WITHOUT `basedOn` still grants credit,
+    // so the two arms above measure the attribute and not the fixture.
+    const control = await renderAllNull(
+      plainDoc,
+      stylesWith(`<w:style w:type="paragraph" w:default="1" w:styleId="Normal"/>`),
+    );
+    expect(control.bodyProofs[0]?.blankEligible).toBe('eligible');
   });
 
   it('⚠️ w:docDefaults/w:pPrDefault numbering disqualifies — no style names it', async () => {
@@ -1298,22 +1364,86 @@ describe('#170 — the ONE surviving resolution: the inherited default', () => {
   });
 });
 
-describe('#170 — THE ROUTING: every binding that can earn blank credit asks', () => {
-  // ⚠️ THIS IS THE BLOCK THE WHOLE RULING TURNS ON.
+describe('#171 — the quantifier and the third state, OBSERVED leaving the renderer', () => {
+  // ⚠️ BOTH ARMS EXIST BECAUSE A MUTATION MATRIX OF TEN FOUND NOTHING AND A
+  // SECOND MATRIX FOUND THESE. Mine tested the fixes wholesale; these are the
+  // quantifier and the never-observed-value shapes, which is what actually
+  // ships. Neither property had an arm, and both are load-bearing claims made
+  // in this file's own comments.
+
+  it('⚠️ EVERY paragraph in scope is asked — a two-paragraph control with ONE numbered', async () => {
+    // ⚠️ THE ALL-QUANTIFIER HAD NO ARM. Replacing `every` with
+    // `length === 0 || some` redded 0 of 757, because — instrumented — 2 171 of
+    // 2 174 calls in the whole suite had exactly ONE paragraph in scope. A
+    // universal claim tested only on singletons is not tested.
+    //
+    // This fixture is the smallest thing that distinguishes them: a block-level
+    // control holding two paragraphs, the FIRST inert and the SECOND numbered.
+    // Under `some`, the first paragraph alone would grant credit.
+    const { bodyProofs } = await renderAllNull(
+      sdtDoc({
+        block: true,
+        content:
+          '<w:p><w:pPr><w:jc w:val="left"/></w:pPr><w:r><w:rPr><w:b/></w:rPr></w:r></w:p>' +
+          '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr>' +
+          '<w:r><w:rPr><w:b/></w:rPr></w:r></w:p>',
+      }),
+    );
+    expect(bodyProofs[0]?.blankEligible, 'a numbered SECOND paragraph bought credit').toBe(
+      'ineligible',
+    );
+  });
+
+  it('⚠️ `unevaluated` is OBSERVED coming out of the renderer, and does not count', async () => {
+    // ⚠️ THE THIRD STATE HAD NEVER BEEN SEEN. Instrumented across all 62 files:
+    // 1 160 `eligible`, 20 `ineligible`, ZERO `unevaluated` — and flipping all
+    // five `'unevaluated'` literals to `'eligible'` redded 0 of 757. The only
+    // arm naming the value fed hand-built objects to the READ path, which says
+    // nothing about the WRITE path ever producing one.
+    //
+    // A block-level control whose content is already empty gives the guard an
+    // EMPTY paragraph set. `[].every(...)` is `true`, so that used to yield
+    // `eligible` — a guard that examined nothing reporting approval, the exact
+    // defect the third state exists to abolish, one layer inside the fix.
+    const { bodyProofs, bindingOf, kindOf } = await renderAllNull(
+      sdtDoc({ block: true, content: '' }),
+    );
+    expect(bodyProofs.length, 'fixture produced no body proof').toBeGreaterThan(0);
+    expect(bodyProofs[0]?.blankEligible).toBe('unevaluated');
+    // AND THE OUTCOME: an unevaluated verdict must not buy credit.
+    expect(
+      countsAsBlankProof(bodyProofs[0] as never, {
+        bindingOf,
+        resolvedNull: () => true,
+        kindOf,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('#171 — table_cell and legacy LEFT THE SLICE, and the limit is pinned', () => {
+  // ⚠️ THIS BLOCK PINS AN ACCEPTED LIMIT, NOT A GUARANTEE, AND SAYS SO LOUDLY.
   //
-  // `table_cell` and `legacy_form_field` returned `blankEligible: true`
-  // HARDCODED and never consulted the guard. Measured on the real customer
-  // template: `table_cell` supplies 52 of 52 counted blank credits and
-  // `content_control` supplies ZERO — so for the entire #168(a)/#169 arc the
-  // numbering guard was not detecting weakly on that document, it was NOT
-  // RUNNING. Two adversarial lenses found it independently, from opposite
-  // directions, in the same pass.
+  // #170 routed these two bindings through the paragraph guard. The pass then
+  // showed the guard was answering the wrong question for them: NOTHING CLEARS
+  // a cell or a legacy result — `tableCellPatches` and `legacyFieldPatches`
+  // rewrite `w:t` only — so "could a list marker print?" is beside the point
+  // when the region may still hold a glyph, a drawing or a picture untouched.
+  // And legacy's guard judged the paragraph holding `begin`, one paragraph of a
+  // span this codebase says cannot be bounded by walking.
   //
-  // The arms below are per BINDING KIND, because that is the axis the defect
-  // lived on and no content-control arm could ever have seen it.
+  // #171 deletes that guard code rather than improving it. Both bindings keep
+  // `main`'s behaviour verbatim — the unpatched `blank` path, no `emptied`, no
+  // NEW credit — and the `eligible ≠ empty` limit, which PREDATES this arc, is
+  // filed with its cure named (`w:tc` is a bounded container, so structure-keep
+  // applies to it later).
+  //
+  // ⚠️ THE ARMS BELOW ASSERT THE LIMIT ITSELF. That is deliberate: a limit
+  // recorded only in prose decays, and one recorded in a test reds the day
+  // somebody changes it in either direction — closing it (good, and it should
+  // come with its own slice) or widening it (bad, and nothing else would say).
 
   const NUM = '<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr>';
-
   const tableDoc = (cellPPr: string) =>
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
@@ -1323,43 +1453,27 @@ describe('#170 — THE ROUTING: every binding that can earn blank credit asks', 
     `<w:tc><w:p>${cellPPr}</w:p></w:tc>` +
     `</w:tr></w:tbl></w:body></w:document>`;
 
-  it('a TABLE CELL in a numbered paragraph earns NO blank credit', async () => {
-    const { bodyProofs, bindingOf, kindOf } = await renderAllNull(tableDoc(NUM));
-    const cell = bodyProofs.find((p) => bindingOf(String(p.fieldId)) === 'table_cell');
-    // NON-VACUITY: the fixture really produced a table_cell binding, so a
-    // "no credit" result cannot come from there being nothing to judge.
-    expect(cell, 'fixture produced no table_cell field').toBeDefined();
-    expect(cell?.blankEligible).toBe('ineligible');
-    expect(
-      countsAsBlankProof(cell as never, { bindingOf, resolvedNull: () => true, kindOf }),
-    ).toBe(false);
+  it('a TABLE CELL keeps main behaviour — it counts, numbered or not, and that is the LIMIT', async () => {
+    for (const [label, doc] of [
+      ['unnumbered', tableDoc('')],
+      ['NUMBERED — the accepted limit', tableDoc(NUM)],
+    ] as const) {
+      const { bodyProofs, bindingOf, kindOf } = await renderAllNull(doc);
+      const cell = bodyProofs.find((p) => bindingOf(String(p.fieldId)) === 'table_cell');
+      expect(cell, 'fixture produced no table_cell field').toBeDefined();
+      expect(cell?.kind, label).toBe('blank');
+      expect(
+        countsAsBlankProof(cell as never, { bindingOf, resolvedNull: () => true, kindOf }),
+        label,
+      ).toBe(true);
+    }
   });
 
-  it('an UNNUMBERED table cell still earns credit — the control for the arm above', async () => {
-    // ⚠️ WITHOUT THIS, "no credit" would hold for any reason at all — including
-    // the routing fix accidentally refusing every cell, which would take the
-    // real template from 52 blank credits to zero and break certification.
-    const { bodyProofs, bindingOf, kindOf } = await renderAllNull(tableDoc(''));
-    const cell = bodyProofs.find((p) => bindingOf(String(p.fieldId)) === 'table_cell');
-    expect(cell?.blankEligible).toBe('eligible');
-    expect(
-      countsAsBlankProof(cell as never, { bindingOf, resolvedNull: () => true, kindOf }),
-    ).toBe(true);
-  });
-
-  it('a table cell whose pPr carries an UNKNOWN child is refused too', async () => {
-    const { bodyProofs, bindingOf } = await renderAllNull(
-      tableDoc('<w:pPr><w:zzzNotARealProperty/></w:pPr>'),
-    );
-    const cell = bodyProofs.find((p) => bindingOf(String(p.fieldId)) === 'table_cell');
-    expect(cell?.blankEligible).toBe('ineligible');
-  });
-
-  it('a LEGACY form field in a numbered paragraph earns NO blank credit', async () => {
-    const doc =
+  it('a LEGACY form field likewise keeps main behaviour, numbered or not', async () => {
+    const legacyDoc = (pPr: string) =>
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
       `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-      `<w:body><w:p>${NUM}` +
+      `<w:body><w:p>${pPr}` +
       `<w:r><w:fldChar w:fldCharType="begin"><w:ffData>` +
       `<w:name w:val="Anticoagulation"/><w:enabled/><w:textInput/>` +
       `</w:ffData></w:fldChar></w:r>` +
@@ -1367,15 +1481,29 @@ describe('#170 — THE ROUTING: every binding that can earn blank credit asks', 
       `<w:r><w:fldChar w:fldCharType="separate"/></w:r>` +
       `<w:r><w:fldChar w:fldCharType="end"/></w:r>` +
       `</w:p></w:body></w:document>`;
-    const { bodyProofs, bindingOf, kindOf } = await renderAllNull(doc);
-    const legacy = bodyProofs.find(
-      (p) => bindingOf(String(p.fieldId)) === 'legacy_form_field',
-    );
-    expect(legacy, 'fixture produced no legacy field').toBeDefined();
-    expect(legacy?.blankEligible).toBe('ineligible');
-    expect(
-      countsAsBlankProof(legacy as never, { bindingOf, resolvedNull: () => true, kindOf }),
-    ).toBe(false);
+    for (const [label, doc] of [
+      ['unnumbered', legacyDoc('')],
+      ['NUMBERED — the accepted limit', legacyDoc(NUM)],
+    ] as const) {
+      const { bodyProofs, bindingOf, kindOf } = await renderAllNull(doc);
+      const legacy = bodyProofs.find(
+        (p) => bindingOf(String(p.fieldId)) === 'legacy_form_field',
+      );
+      expect(legacy, 'fixture produced no legacy field').toBeDefined();
+      expect(
+        countsAsBlankProof(legacy as never, { bindingOf, resolvedNull: () => true, kindOf }),
+        label,
+      ).toBe(true);
+    }
+  });
+
+  it('neither binding ever earns an `emptied` proof — that half is unchanged', async () => {
+    // The half that was never in question and stays pinned: no bounded clear
+    // exists for either, so neither can claim the byte-verified label.
+    const { bodyProofs, bindingOf } = await renderAllNull(tableDoc(''));
+    for (const p of bodyProofs) {
+      if (bindingOf(String(p.fieldId)) === 'table_cell') expect(p.kind).not.toBe('emptied');
+    }
   });
 });
 

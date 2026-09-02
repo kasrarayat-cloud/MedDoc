@@ -174,8 +174,19 @@ describe('blank verification mode', () => {
     // a repeating row is accounted for by `renderRepeatingRows` separately.
     // That is pre-existing and correct; an arm asserting 11 would red on a
     // truth it had simply never checked.
+    // ⚠️ `blank` ONLY. Including `emptied` here made this arm VACUOUS and the
+    // adversarial pass proved it: `emptied` comes from the PATCHED path, which
+    // `if (patches.length === 0) continue;` never touches, so under the exact
+    // regression this arm names the count fell 6 -> 4, stayed above zero, and
+    // THE ARM PASSED. Only a neighbour redded, with no message, so the
+    // diagnostic written below never printed.
+    //
+    // This is the same laundering canon 62 describes, in the one arm that had
+    // just been rewritten BECAUSE it was measuring the wrong thing — a
+    // source-text gate replaced by a behavioural assertion that a neighbouring
+    // code path satisfies.
     expect(
-      proofs.filter((p) => p.kind === 'blank' || p.kind === 'emptied').length,
+      proofs.filter((p) => p.kind === 'blank').length,
       'the renderer skips unfilled fields again — every honestly-blank field ' +
         'loses its proof entry and certification can never close',
     ).toBeGreaterThan(0);
