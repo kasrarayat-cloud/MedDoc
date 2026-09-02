@@ -147,6 +147,48 @@ jobs:
       # `name: meddoc-qa` project (images are global, looked up by name).
 
     steps:
+      # ── PRE-FLIGHT MEMORY GUARD — REFUSE FAST, LOUDLY, WITH A REASON ─────
+      # ⚠️ RULING #163. On 2026-09-01 this box livelocked mid-queue and took
+      # BOTH runners offline for ~40 minutes. The cause was not a full disk and
+      # not a clean OOM kill — the kernel's OOM killer NEVER FIRED. The
+      # hypervisor's virtio-balloon reclaimed memory from under a running job
+      # (booted 8388064 kB, measured 2284740 kB and still falling), available
+      # memory collapsed 883 MB -> 143 MB -> 26 MB, and the box thrashed until
+      # sshd could no longer complete a banner exchange.
+      #
+      #     A WORKFLOW THAT REFUSES LOUDLY BEATS A BOX THAT DIES SILENTLY.
+      #
+      # A livelocked runner reports "lost communication" — which reads as a
+      # flaky test, not as an exhausted machine — and every queued job behind it
+      # stalls with no explanation anywhere. This step converts that into one
+      # named refusal, in one second, naming the number that caused it.
+      #
+      # ⚠️ IT READS `MemAvailable`, NOT `free`. MemTotal is HYPERVISOR-VARIABLE
+      # on this host: the balloon driver is BUILT INTO THE KERNEL
+      # (CONFIG_VIRTIO_BALLOON=y), so it cannot be blacklisted the way the app
+      # VPS's module was, and the capacity a runbook records is true only at the
+      # moment it was measured. MemAvailable is the only figure that describes
+      # what this job can actually have.
+      #
+      # THE THRESHOLD IS A FLOOR, NOT A FORECAST. It cannot promise the job
+      # fits — the balloon can reclaim mid-run, which is exactly what happened.
+      # It promises that a job which CANNOT POSSIBLY fit fails in one second
+      # with a reason, instead of taking the runner down with it.
+      - name: Pre-flight memory guard
+        if: runner.environment != 'github-hosted'
+        shell: bash
+        run: |
+          MIN_MB=2500
+          AVAIL_MB=$(( $(awk '/MemAvailable/{print $2}' /proc/meminfo) / 1024 ))
+          TOTAL_MB=$(( $(awk '/MemTotal/{print $2}' /proc/meminfo) / 1024 ))
+          SWAP_MB=$(( $(awk '/SwapTotal/{print $2}' /proc/meminfo) / 1024 ))
+          echo "MemAvailable=${AVAIL_MB}MB  MemTotal=${TOTAL_MB}MB  SwapTotal=${SWAP_MB}MB  floor=${MIN_MB}MB"
+          if [ "$AVAIL_MB" -lt "$MIN_MB" ]; then
+            echo "::error title=Insufficient memory::REFUSING to start the e2e stack: ${AVAIL_MB}MB available, floor is ${MIN_MB}MB (MemTotal ${TOTAL_MB}MB — this host's balloon driver is built-in and reclaims memory at runtime). This is a MACHINE capacity refusal, NOT a test failure. See DEPLOYMENT_RUNBOOK.md 2.9."
+            exit 1
+          fi
+          echo "::notice title=Memory guard passed::${AVAIL_MB}MB available, floor ${MIN_MB}MB."
+
       - uses: actions/checkout@v4
 
       # ── RECLAIM RUNNER DISK, BEFORE ANYTHING BUILDS ──────────────────────

@@ -334,12 +334,17 @@ nothing tracked said where. That is fixed here.
 | host | `white-gorilla-87822` |
 | IP | `194.156.90.209` |
 | OS | Ubuntu 24.04.4 LTS |
-| capacity (**measured** 2026-08-28) | **nproc 4 · 7.8 GiB RAM · Docker 29.7.2** |
+| capacity | **nproc 4 · Docker 29.7.2 · RAM is HYPERVISOR-VARIABLE — MEASURE, NEVER RELY** |
+| RAM, measured 2026-08-28 | 7.8 GiB |
+| RAM, measured 2026-09-01 | booted **8.0 GiB**, fell to **2.08 GiB** in 16 minutes, still falling |
 | runner installs | `/home/runner/actions-runner` (ci-1) · `/home/runner/actions-runner-2` (ci-2) |
 | services | `actions.runner.kasrarayat-cloud-MedDoc.quillmd-ci-{1,2}.service` |
 | SSH key (this environment) | `~/.ssh/quillmd_ci_ed25519` |
 | key fingerprint | `SHA256:xav/uBC1ObR/8E5j2aY31KknZHW8ARnRKv9WMibJwuU` |
-| host key fingerprint (**pin this**) | `SHA256:JYypFvk+IXyVI7jOT/qPhx0981Gt7MUGYqS8+B8BDNY` (ED25519) |
+| host key fingerprint, ED25519 (**re-pinned 2026-09-01**) | `SHA256:r343lq1XEmFGtJ/8sJ6YaBEWk5L1NO2C8HIrg8i2tpY` |
+| host key fingerprint, RSA | `SHA256:XiUSX39TdItXZT/PfW/Mxjd9Sw2pKb3LKel9M5kH5Sk` |
+| host key fingerprint, ECDSA | `SHA256:kKxTST/xqc/WQ2yJtW26+HlMwx133+LYy7Pl1Jt9wBw` |
+| ⚠️ SUPERSEDED pins (2026-08-28 → 2026-09-01) | ED25519 `SHA256:JYypFvk+IXyVI7jOT/qPhx0981Gt7MUGYqS8+B8BDNY` · RSA `SHA256:akmLPqpp/YO6+QphjE2uvgrtaOtwHNaQ76z0rqau7zY` · ECDSA `SHA256:XeZW1t0KuLTZfPSpvcstGZGFOcDZESR3/H0leNO+rZU` — kept, because a fingerprint that simply CHANGES with no record is indistinguishable from one that was tampered with |
 
     ssh -i ~/.ssh/quillmd_ci_ed25519 root@194.156.90.209
 
@@ -348,6 +353,147 @@ nothing tracked said where. That is fixed here.
 password was rotated 2026-08-28 to a value generated **on the host** and never
 transmitted or stored — so **the key above is the only way in**. If it is lost, the
 recovery path is the provider panel, not a password.
+
+### ⚠️ THE HOST KEY ROTATES ON PANEL RESTARTS — DO NOT READ IT AS A COMPROMISE
+
+**Measured 2026-09-01.** A panel *Restart* — nothing else — changed **all three**
+host keys. The owner confirmed reboot only, which made the change alarming until
+it was explained. It is benign, and the mechanism is worth knowing before it
+happens again at 02:00 to somebody who has not seen it:
+
+    /var/lib/cloud/instances/615d6c986d383ba6924c371cc88604c2a6ef8372   ← old
+    /var/lib/cloud/instances/559f7b481b1fd738b727be7c45a4b5b1a388e94c   ← current
+
+**The cloud-init INSTANCE-ID changed across the reboot.** cloud-init treats a new
+instance-id as a FIRST BOOT and its ssh module regenerates every host key. The
+file mtimes confirm it exactly: boot `18:44:37`, all three keys written
+`18:44:52` — fifteen seconds later.
+
+> **A ROTATING PIN IS STILL WORTH PINNING — but the pin's job changes.** It can
+> no longer mean *"this must never change"*; it means *"if this changed, go and
+> establish WHY before you type yes."*
+
+⚠️ **AND THE VERIFICATION THAT SETTLES IT IS PERSISTENT IDENTITY, NOT THE KEY.**
+A reimage and a cloud-init rotation both present new keys. What tells them apart
+is whether the machine's own state survived:
+
+| check | reimage | cloud-init rotation |
+|---|---|---|
+| GitHub runner registration IDs | **new ids** (re-registration) | **unchanged** — measured `id=21` / `id=22` |
+| runner labels | rebuilt or absent | unchanged |
+| `/var/lib/cloud/instances/` | one directory | **two** — old and new |
+| filesystem, installs, `/home/runner` | gone | intact |
+
+On 2026-09-01 every one of those said *rotation*, not *rebuild*. **Check
+identity before accepting a key; never accept a key because the box answered.**
+
+### ⚠️ RAM IS HYPERVISOR-VARIABLE HERE, AND THE BALLOON CANNOT BE BLACKLISTED
+
+**The 2026-09-01 outage's root cause, and it is still live.** The guest booted
+seeing 8 GiB and was reduced to **2.08 GiB in sixteen minutes**, measured falling
+in real time:
+
+    dmesg:     Memory: 8047804K/8388064K available     ← 8.0 GiB at boot
+    MemTotal:  2694340 → 2489540 → 2284740 → 2182340 kB   ← over ~4 minutes
+
+    virtio0   device=0x0005   driver=virtio_balloon      ← device id 5 = balloon
+
+⚠️ **THE APP VPS'S FIX DOES NOT TRANSFER, AND THAT IS THE TRAP.** There the
+balloon was a MODULE — unbound and blacklisted in
+`/etc/modprobe.d/blacklist-virtio-balloon.conf`. Here:
+
+    CONFIG_VIRTIO_BALLOON=y      ← BUILT INTO THE KERNEL
+
+A built-in driver cannot be blacklisted, and **`lsmod | grep balloon` returns
+NOTHING on this box** — which reads exactly like "no balloon" and nearly closed
+the investigation. `lsmod` lists MODULES; it is silent about built-ins. The
+authority is `/sys/bus/virtio/devices/*/device` (id `0x0005`) and
+`/boot/config-$(uname -r)`.
+
+**HOW IT KILLED THE BOX, and why the obvious grep found nothing:**
+
+1. balloon reclaims memory from under running jobs;
+2. available collapses — `sar` recorded **883 MB → 143 MB → 26 MB**, buff/cache
+   crushed to 364 KB;
+3. docker healthchecks degrade `19.7s → 34.3s → 1m9.5s` → *"failed fatally"*;
+4. journald stops writing (last entry `18:39:23`); sshd cannot complete a banner
+   exchange; both runners drop offline.
+
+⚠️ **THE OOM KILLER NEVER FIRED.** `journalctl -b -1 | grep -i "oom-kill|killed
+process"` returns **0**, and that zero is NOT evidence of a healthy box — the
+machine livelocked *before* the killer engaged. The real signature is
+`Under memory pressure, flushing caches` from journald and systemd-resolved.
+**Searching for the symptom you expect is how a true theory gets closed.**
+
+### ✅ CURED GUEST-SIDE, 2026-09-01 — UNBIND THE DEVICE, DO NOT BLACKLIST THE MODULE
+
+**The fix, and it is one line:**
+
+    echo virtio0 > /sys/bus/virtio/drivers/virtio_balloon/unbind
+
+⚠️ **UNBIND WORKS FOR A BUILT-IN; BLACKLISTING DOES NOT.** The app VPS was cured
+by blacklisting the balloon MODULE. There is no module here
+(`CONFIG_VIRTIO_BALLOON=y`), so that door does not exist — but **binding a driver
+to a device is a sysfs operation and needs no module at all.** Unbinding calls
+`virtballoon_remove`, which releases every page the balloon was holding.
+
+**MEASURED, BEFORE AND AFTER, seconds apart:**
+
+| | MemTotal | MemAvailable |
+|---|---|---|
+| before unbind | **1,840,324 kB** (1.75 GiB) | 791 MB |
+| after unbind | **8,131,780 kB** (7.75 GiB) | ~7.4 GiB |
+
+Stable across 60 s with no re-inflation, and swap-in fell 2,336 MB → 287 MB as
+the pages faulted back. That also explains the 2026-08-28 reading of 7.8 GiB —
+it was taken while the balloon happened to be deflated.
+
+**PERSISTED: `unbind-virtio-balloon.service`**, a oneshot enabled at
+`basic.target`, idempotent, naming this incident in its header.
+
+⚠️ **A UNIT, BECAUSE AN UNBIND THAT LIVES ONLY IN A SHELL IS A COMMENT** — and on
+this host a panel restart also rotates the cloud-init instance-id, so anything
+not in a unit does not survive.
+
+⚠️ **AND THE UNIT WAS PROVED ON THE PATH THAT MATTERS, NOT THE EMPTY ONE.**
+Running it with nothing bound exits 0 and proves only the no-op branch. So the
+device was deliberately RE-BOUND and the unit re-run:
+
+    devices bound: 1  ->  journal: "unbound virtio0"  ->  devices bound: 0
+    MemTotal 8,125,636 kB -> 8,131,780 kB
+
+**FALLBACK, NOT NEEDED BUT RECORDED:** if a future kernel refuses the unbind,
+add `initcall_blacklist=virtballoon_driver_init` to the kernel cmdline and
+reboot — second door, same house.
+
+⚠️ **THE BELT STAYS ON. The balloon losing this round does not retire the
+armor** — the 12 GiB of swap and the e2e pre-flight memory guard are permanent.
+The unbind is a guest-side defence against a host-side behaviour, and the
+provider could change that behaviour at any time.
+
+**MITIGATIONS IN PLACE (2026-09-01):**
+
+- **12 GiB of swap** — a pre-existing 4 GiB `/swap.img` plus a new 8 GiB
+  `/swapfile`, `vm.swappiness=20`, both persisted. ⚠️ **Note the 4 GiB was
+  ALREADY THERE during the outage and did not prevent it** — swap converts
+  livelock-death into slow-but-alive; it does not create capacity.
+- **A pre-flight memory guard in `e2e.yml`** that refuses fast, with a named
+  reason, below a `MemAvailable` floor. A workflow that refuses loudly beats a
+  box that dies silently.
+- **The provider fix — disable ballooning or guarantee a reservation — is the
+  only actual cure** and is filed as the owner's parallel item.
+
+### ⚠️ LANE ARITHMETIC, RE-DECIDED 2026-09-01 AT THE MEASURED CAPACITY
+
+The pinning decision below was made against **7.8 GiB**. That capacity no longer
+exists, so the question changed from CONTENTION to **CEILING**:
+
+> **`e2e` RUNS EXCLUSIVE — one at a time, no concurrent heavy work.** The queue
+> drains **light-lane merges FIRST**, then e2e jobs **serially, under watch**.
+
+The evidence for the change is one line: `npm ci` alone was measured at
+**1.87 GB RSS** while the whole machine held 2.08 GiB. Two Playwright stacks was
+never the live question.
 
 ### The two lanes — and why e2e is pinned
 
@@ -369,6 +515,72 @@ failure rather than removing it.
 **Why this exists:** one runner made every required check serialise. Measured
 2026-08-28: a **13-second** job sat behind **69 minutes** of queue, and a ~5-minute
 suite took 2h06m wall. The SPOF was recorded in the ledger before it was fixed.
+
+### ⚠️ INCIDENT 2026-09-01 — THE BOX STOPPED SERVICING SSH, AND BOTH LANES WENT DARK
+
+**This is the case §2.9 was written for, and §2.9 worked** — no session hunted
+for the host, and nothing was routed to the owner until SSH itself failed. What
+follows is the symptom set, so the next reader recognises it in one look.
+
+**HOW IT PRESENTED, in order:**
+
+1. PR #928's `e2e` failed with *"The self-hosted runner lost communication with
+   the server."* — read as flaky, correctly, at the time.
+2. `quillmd-ci-2` reported **offline**; `ci-1` still **online, busy=false**.
+3. Eight required runs sat **queued** across two PRs while ci-1 reported itself
+   idle — *an idle runner that takes no work is already a finding*.
+4. Minutes later `ci-1` went **offline** too. Both lanes dark.
+
+**WHAT THE BOX LOOKED LIKE FROM OUTSIDE — measured, with a positive control:**
+
+| probe | result | reading |
+|---|---|---|
+| `ping -c 3` | **3/3, 0.42–0.63 ms** | alive at the network layer, same segment |
+| TCP/22 connect ×3 | **OPEN in 0.01s each** | the KERNEL is accepting on the listen socket |
+| `ssh -vv` | `Connection established` → **`Connection timed out during banner exchange`** (10s, 30s and 45s `ConnectTimeout`) | **sshd never writes its banner** |
+| control: `ssh git@github.com` from the app VPS | completed key exchange, `Permission denied (publickey)` | outbound SSH from this environment is **fine** — the fault is at the far end |
+
+⚠️ **THE CONTROL IS WHAT MAKES THIS A DIAGNOSIS RATHER THAN A GUESS.** A banner
+timeout is equally consistent with a broken local client or a filtered path; the
+GitHub handshake rules both out, and the ICMP + TCP evidence rules out the box
+being down. **Kernel up, networking up, userland not scheduling sshd** — the
+signature of an OOM cascade, a full disk, or an I/O stall, and consistent with
+the runner services dying one after the other rather than together.
+
+⚠️ **AND THE SYMPTOM EVOLVED WHILE THE INCIDENT WAS BEING WRITTEN UP — RECORDED
+BECAUSE A RECORD THAT NAMES ONE MECHANISM OUTLIVES THE SESSION THAT WROTE IT.**
+After roughly forty minutes the failure changed from a **banner-exchange
+timeout** to **`Connection reset by 194.156.90.209 port 22`**, stable at 3 of 3
+attempts. A reset is not a timeout: something is now actively closing the
+connection rather than never answering. That is consistent with `sshd` being
+reaped at fork (an OOM still in progress) or crash-looping, and it means the box
+is *changing state* rather than simply wedged — but it is **not** recovery, and
+both runners stayed `offline` throughout. Do not read a changed error as a fixed
+box.
+
+**WHY IT COULD NOT BE FIXED FROM HERE, AND WHAT THE PATH IS.** §2.9 records that
+password auth is off and root's console password was rotated to a value never
+transmitted or stored, so **the key is the only way in** — and the key is
+provably correct (fingerprint `SHA256:xav/uBC1ObR/8E5j2aY31KknZHW8ARnRKv9WMibJwuU`,
+verified against this table before connecting). The box will not talk, so
+`systemctl restart` is unreachable.
+
+> **THE RECOVERY PATH IS THE PROVIDER PANEL** — console or hard reboot — exactly
+> as §2.9 already states for a lost key. That is an owner console item; it is
+> the ONLY part of this that is.
+
+**AFTER RECOVERY, ESTABLISH THE CAUSE BEFORE RE-ENABLING WORK** — a reboot that
+clears the symptom and leaves the cause is a scheduled repeat:
+
+    journalctl -k -b -1 | grep -iE "out of memory|killed process|oom"
+    df -h / ; journalctl -b -1 --no-pager | tail -100
+    systemctl status actions.runner.kasrarayat-cloud-MedDoc.quillmd-ci-{1,2}.service
+
+⚠️ **AND CHECK THE HEAVY LANE'S ARITHMETIC WHILE YOU ARE THERE.** §2.9 pins
+`e2e` to ci-1 precisely because two Playwright stacks would contend on 4 vCPU /
+7.8 GiB. If the cause is memory, the question is whether ONE stack plus the rest
+of the light lane still fits — the pinning decision was measured against
+contention, not against a ceiling.
 
 ## 2.10 THE NOTIFICATION CHANNEL — the ping half of park-and-ping
 
