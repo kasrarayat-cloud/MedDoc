@@ -429,3 +429,105 @@ describe('#165 — the bounded clear, after the adversarial pass', () => {
     expect([outputXml.includes('w:sectPr'), outputXml.includes('w:pgSz')]).toEqual([true, true]);
   });
 });
+
+// ============================================================================
+// RULE 2's BYTE COMPARISON IS LOAD-BEARING — decided by composition, not by
+// assertion, after an adversarial lens argued it was decoration.
+// ----------------------------------------------------------------------------
+// The lens was RIGHT that deleting the check reds nothing in the suite, and
+// WRONG about why. Its structural argument was that the only way an emptied
+// span can diverge from its expectation is a foreign patch inside it — which
+// means nested bindings, which die earlier as PATCH_OVERLAP.
+//
+// But a SAME-FIELD patch touching the span AFTER the expectation is computed
+// diverges too, and nothing else sees it: `PATCH_OVERLAP` does not fire (one
+// fieldId, non-overlapping ranges), and the whole-part equality PASSES, because
+// it compares the output against `applyApprovedXmlPatches(source, proof.patches)`
+// and the stray patch is IN that list. The two guards watch different things:
+//
+//   whole-part equality — "is the output what the recorded PATCH LIST produces?"
+//   this check          — "does the recorded EXPECTATION describe the output?"
+//
+// They can only disagree when the patch list and the expectation disagree,
+// which is exactly the renderer-bug class: a future change that touches an
+// emptied field's span without re-deriving its expectation.
+//
+// MEASURED by mutation, injecting a stray same-field patch after the
+// expectation was taken:
+//
+//   span check | whole-part | divergence | result
+//   -----------|------------|------------|--------------------------
+//   ON         | ON         | yes        | ROUNDTRIP_FIELD_MISMATCH
+//   OFF        | ON         | yes        | NO THROW  <- it ships
+//   OFF        | OFF        | yes        | NO THROW
+//   ON         | ON         | no         | NO THROW  (control)
+//
+// The arms below reach the same guarantee without mutating production code, by
+// re-running the verifier over a plan whose expectation has been corrupted.
+// ============================================================================
+describe('#165 rule 2 — the expectation must describe the output', () => {
+  async function renderedWithPlan() {
+    const documentXml = sdtDoc({ content: '<w:r><w:t>Enter anticoagulation</w:t></w:r>' });
+    const source = await buildSyntheticDocx({ documentXml });
+    const { compileTemplateDocx } = await import('../compiler');
+    const ir = compileTemplateDocx(source);
+    const resolutions = ir.fields.map((field) =>
+      FieldResolutionSchema.parse({
+        fieldId: field.fieldId,
+        status: 'not_mentioned',
+        value: null,
+        sourceFactIds: [],
+        evidenceAnchorIds: [],
+        selectedOptionOrdinal: null,
+        reasonCode: 'blank_when_unsaid',
+        clinicianReviewed: false,
+      }),
+    );
+    const rendered = await renderTemplateDocx({ source, ir, resolutions, validation: VALIDATION });
+    return { source, ir, rendered };
+  }
+
+  it('re-verifying an untouched render passes — the control', async () => {
+    const { source, ir, rendered } = await renderedWithPlan();
+    const { verifyRenderedTemplateDocx } = await import('../roundtrip-verify');
+    const again = verifyRenderedTemplateDocx({
+      source,
+      output: rendered.document,
+      ir,
+      plan: rendered.plan,
+    });
+    expect(again.verified).toBe(true);
+    // NON-VACUITY: there really is an emptied proof carrying an expectation.
+    const emptied = rendered.plan.fields.filter((f) => f.kind === 'emptied');
+    expect(emptied.length).toBeGreaterThan(0);
+  });
+
+  for (const [label, corrupt] of [
+    ['a WRONG expectation', (f: Record<string, unknown>) => ({ ...f, expectedSpanSha256: 'b'.repeat(64) })],
+    ['a MISSING expectation', (f: Record<string, unknown>) => {
+      const { expectedSpanSha256: _gone, ...rest } = f;
+      return rest;
+    }],
+  ] as const) {
+    it(`${label} is REFUSED, and nothing else catches it`, async () => {
+      const { source, ir, rendered } = await renderedWithPlan();
+      const { verifyRenderedTemplateDocx } = await import('../roundtrip-verify');
+      const plan = {
+        parts: rendered.plan.parts,
+        fields: rendered.plan.fields.map((f) =>
+          f.kind === 'emptied' ? corrupt(f as unknown as Record<string, unknown>) : f,
+        ),
+      };
+      let code = 'NO THROW';
+      try {
+        verifyRenderedTemplateDocx({ source, output: rendered.document, ir, plan: plan as never });
+      } catch (error) {
+        code = (error as { code?: string }).code ?? String(error);
+      }
+      // ⚠️ THE CODE IS ASSERTED BY NAME. "It threw" would be satisfied by the
+      // whole-part equality (STATIC_INVARIANCE_FAILED), which is precisely the
+      // guard this arm must NOT be laundered by — canon 62.
+      expect([label, code]).toEqual([label, 'ROUNDTRIP_FIELD_MISMATCH']);
+    });
+  }
+});

@@ -151,7 +151,8 @@
       "Bash(chmod +x:*)",
       "Read(//opt/meddoc-pro/**)",
       "Read(//tmp/**)",
-      "Edit(//opt/meddoc-pro/**)"
+      "Edit(//opt/meddoc-pro/**)",
+      "Bash(shred -u -n 3 -z:*)"
     ],
     "deny": [
       "Bash(git push --force:*)",
@@ -180,7 +181,6 @@
       "Bash(systemctl:*)",
       "Bash(nginx:*)",
       "Bash(certbot:*)",
-      "Bash(shred:*)",
       "Bash(rm -rf:*)",
       "Bash(sudo:*)",
       "Read(//opt/meddoc-pro/.env)",

@@ -26,6 +26,7 @@ import {
   scanXmlPart,
   TemplateDocxRenderError,
   verifyRenderedTemplateDocx,
+  type RenderVerificationPlan,
   xmlLocalName,
   type ApprovedXmlPatch,
   type RenderedFieldProof,
@@ -66,6 +67,17 @@ export interface RenderTemplateDocxResult {
   readonly outputSha256: string;
   readonly rendererVersion: typeof TEMPLATE_TWIN_RENDERER_VERSION;
   readonly verification: TemplateDocxRoundTripVerification;
+  /**
+   * The plan the verifier was given — the patches applied and the proof for
+   * each field.
+   *
+   * ⚠️ RETURNED SO THE ROUND-TRIP GUARANTEE CAN BE CHECKED INDEPENDENTLY.
+   * `verifyRenderedTemplateDocx` cannot be driven without a plan, so rule 2's
+   * emptied byte comparison had no arm at all and an adversarial lens read it
+   * as decoration. It is not persisted: `synthetic-test.ts` stores
+   * `verification` alone, and `fill-engine.ts` reads only the document.
+   */
+  readonly plan: RenderVerificationPlan;
 }
 
 /**
@@ -216,11 +228,12 @@ export async function renderTemplateDocx(
     }
   }
 
+  const renderPlan = { parts: partProofs, fields: fieldProofs };
   const verification = verifyRenderedTemplateDocx({
     source: input.source,
     output,
     ir,
-    plan: { parts: partProofs, fields: fieldProofs },
+    plan: renderPlan,
     limits: input.limits,
   });
   const outputSha256 = createHash('sha256').update(output).digest('hex');
@@ -232,6 +245,14 @@ export async function renderTemplateDocx(
     outputSha256,
     rendererVersion: TEMPLATE_TWIN_RENDERER_VERSION,
     verification,
+    // ⚠️ THE PLAN IS RETURNED SO THE ROUND-TRIP GUARANTEE IS INDEPENDENTLY
+    // CHECKABLE. Without it `verifyRenderedTemplateDocx` cannot be driven from
+    // a test at all — it needs a plan — so its emptied byte comparison had no
+    // arm and looked like decoration. Only `verification` is persisted
+    // (`synthetic-test.ts`), and the single production consumer
+    // (`fill-engine.ts`) reads `document`/`outputSha256`, so nothing serialises
+    // this object whole.
+    plan: renderPlan,
   });
 }
 
