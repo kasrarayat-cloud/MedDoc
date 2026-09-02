@@ -426,35 +426,42 @@ describe('#165 — the bounded clear, after the adversarial pass', () => {
       inner.includes('Times New Roman'),
       inner.includes('w:sz w:val="14"'),
     ]).toEqual([true, true, true, true]);
-    // and the RUN — content, not skeleton — is gone with its own properties.
-    expect([inner.includes('Courier New'), inner.includes('<w:r>')]).toEqual([false, false]);
+    // ⚠️ #168 — THE RUN SHELL AND ITS `w:rPr` NOW SURVIVE. An empty run with
+    // properties prints nothing and is what a doctor typing into the cleared
+    // control inherits. What must be gone is the run's CONTENT.
+    expect([inner.includes('<w:r>'), inner.includes('Courier New')]).toEqual([true, true]);
+    expect(inner.includes('<w:t>Enter anticoagulation</w:t>')).toBe(false);
   });
 
-  it('an INLINE emptied field is EMPTY — its run goes, and that is an accepted delta', async () => {
-    // ⚠️ RETARGETED UNDER #167, AND THE DELTA IS STATED RATHER THAN HIDDEN.
-    // v2 rebuilt an empty run carrying the source run's `w:rPr`. v3 writes
-    // nothing, so an inline control's run is DELETED and its properties go with
-    // it. `6220e0ea` kept the run and emptied its `w:t`, so it preserved them.
-    //
-    // That is a real difference on the inline path, which is 27 of the customer
-    // template's 28 controls. It is accepted here on ONE condition, and the
-    // condition is measured elsewhere, not assumed: the PDF-parity harness
-    // against the real template must show no change. An empty field prints
-    // nothing either way; what the delta can affect is what a doctor inherits
-    // when they TYPE into the control afterwards.
+  it('an INLINE emptied field KEEPS its run shell and properties — #168', async () => {
+    // ⚠️ RETARGETED TWICE, AND THE SECOND TIME RESTORES A CAPABILITY.
+    // v2 rebuilt an empty run carrying the source `w:rPr`. v3 deleted the run
+    // outright, which cost `w:rPr` on all 28 controls of the real template
+    // (307 -> 279) — a measured delta against base on the majority path, since
+    // 27 of 28 controls are inline. #168 keeps the run SHELL and its properties
+    // and deletes every other child, so the field is empty AND a doctor typing
+    // into it inherits what the template author specified.
     const { outputXml, bodyProofs } = await renderAllNull(
       sdtDoc({
         content:
           '<w:r><w:rPr><w:rFonts w:ascii="Times New Roman"/><w:sz w:val="22"/>' +
-          '<w:b/></w:rPr><w:t>Enter anticoagulation</w:t></w:r>',
+          '<w:b/></w:rPr><w:t>Enter anticoagulation</w:t><w:sym w:font="Wingdings" w:char="F0FE"/></w:r>',
       }),
     );
     const inner = outputXml.slice(
       outputXml.indexOf('<w:sdtContent>'),
       outputXml.indexOf('</w:sdtContent>'),
     );
-    expect(inner.includes('Enter anticoagulation')).toBe(false);
-    expect(inner.includes('<w:r>')).toBe(false);
+    // CONTENT gone — including a non-`w:t` carrier inside the very run we keep.
+    expect([inner.includes('Enter anticoagulation'), inner.includes('w:sym')])
+      .toEqual([false, false]);
+    // PROPERTIES kept.
+    expect([
+      inner.includes('<w:r>'),
+      inner.includes('Times New Roman'),
+      inner.includes('w:sz w:val="22"'),
+      inner.includes('<w:b/>'),
+    ]).toEqual([true, true, true, true]);
     expect(bodyProofs[0]?.kind).toBe('emptied');
   });
 
@@ -926,6 +933,67 @@ describe('#167 — the two shapes the pass left unarmed', () => {
       }),
     );
     expect(outputXml.includes('w:sym')).toBe(true);
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+  });
+});
+
+// ============================================================================
+// #168 — FAIL-CLOSED ON THE COUNT, NOT ON THE RENDER.
+// ----------------------------------------------------------------------------
+// Two kept-list members can still put something on the page. Neither is removed
+// — removing either damages the doctor's document BEYOND the field — so the
+// clear still happens and the field simply cannot CLAIM blank.
+// ============================================================================
+describe('#168 — a cleared region that can still render buys no blank credit', () => {
+  it('NUMBERING survives and the field cannot claim blank', async () => {
+    // `w:numPr` rides inside the kept-whole `w:pPr` and drives a marker from
+    // `numbering.xml`. Measured: with `lvlText="ANTICOAGULATED %1."` the
+    // exported PDF printed `ANTICOAGULATED 1.` for a field proofed `emptied` —
+    // arbitrary template-authored text, not a bullet.
+    //
+    // ⚠️ NO PARSING OF `lvlText`, AND THAT IS THE POINT: the rule cannot be
+    // wrong about which markers are "just" markers, because it never looks.
+    const { outputXml, bodyProofs } = await renderAllNull(
+      sdtDoc({
+        block: true,
+        content:
+          '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr>' +
+          '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
+      }),
+    );
+    // The numbering STAYS — removing it renumbers the doctor's list beyond
+    // this field, which is damage outside the thing being cleared.
+    expect(outputXml.includes('w:numPr')).toBe(true);
+    expect(outputXml.includes('Enter anticoagulation')).toBe(false);
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+  });
+
+  it('a SELECTION clears but earns no blank credit — #165 reversed on measurement', async () => {
+    // #165 included selections because they clear identically in the XML —
+    // true, and the wrong axis. Measured on the real template: an emptied
+    // dropdown makes the PDF engine fall back to `w:listItem[0]`, so
+    // "Choose an item." prints while the field buys blank credit. Base prints
+    // it too, so this is not a new visual — it is a TRUE statement turned into
+    // a FALSE ATTESTATION, which is worse.
+    const { outputXml, bodyProofs } = await renderAllNull(
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+        `<w:body><w:p><w:sdt><w:sdtPr><w:id w:val="995"/><w:alias w:val="Exam side"/>` +
+        `<w:dropDownList><w:listItem w:displayText="Choose an item." w:value="X"/>` +
+        `<w:listItem w:displayText="Left" w:value="L"/></w:dropDownList></w:sdtPr>` +
+        `<w:sdtContent><w:r><w:t>Choose an item.</w:t></w:r></w:sdtContent>` +
+        `</w:sdt></w:p></w:body></w:document>`,
+    );
+    // It IS still cleared — that is what stops a previously SELECTED value
+    // printing, and it is why the exclusion is on the COUNT and not the render.
+    const inner = outputXml.slice(
+      outputXml.indexOf('<w:sdtContent>'),
+      outputXml.indexOf('</w:sdtContent>'),
+    );
+    expect(inner.includes('Choose an item.')).toBe(false);
+    // NON-VACUITY: the list definition survives — that is what the engine falls
+    // back to, and the reason this may not buy blank credit.
+    expect(outputXml.includes('w:listItem')).toBe(true);
     expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
   });
 });

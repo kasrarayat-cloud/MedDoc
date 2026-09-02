@@ -138,6 +138,10 @@ const CONSULT_FORM_XML =
   NARRATIVE(305, 'Plan', 'Enter plan') +
   NARRATIVE(306, 'Physical exam', 'Enter exam') +
   NARRATIVE(307, 'Review of systems', 'Enter review of systems') +
+  // ⚠️ #168(b) EXCLUDES SELECTIONS FROM THE COUNT, so the fixture needs a
+  // SECOND non-selection null or the union arm measures one field. The
+  // selection null below STAYS, because the exclusion must be exercised too.
+  NARRATIVE(313, 'Family history', 'Enter family history') +
   SELECT(308, 'Exam side', ['Left', 'Right', 'Bilateral']) +
   SELECT(309, 'Encounter category', ['Initial', 'Follow-up']) +
   SELECT(310, 'Severity', ['Mild', 'Moderate', 'Severe']) +
@@ -179,6 +183,7 @@ const PLAN: ReadonlyArray<{
   // and refuted. If that exclusion ever returns, this fixture drops to one
   // blank proof and arm 4's arithmetic notices.
   { label: 'Tobacco status', concept: 'social_history.tobacco', value: null },
+  { label: 'Family history', concept: 'family_history', value: null },
   { label: 'Practice display name', concept: 'practice.display_name', value: 'Synthetic Practice' },
 ];
 

@@ -93,6 +93,40 @@ is a claim about validated input. Where nothing validates, the keep-list is a
 judgement about the document like any other, and it should say so — or the copy
 should be reconstructed from parsed properties rather than sliced raw.
 
+## ⚠️ REFINEMENT, 2026-09-02 (ruling #168) — SOME PROPERTIES ARE CONTENT GENERATORS
+
+The asymmetry above says a wrong keep-list makes the output **emptier**. That
+holds for properties that only DESCRIBE how content looks. It fails for a
+property that CAUSES content to appear, and there are at least three:
+
+| kept as a property | what it generates |
+|---|---|
+| `w:numPr` | a list marker from `numbering.xml` — and `w:lvlText` is arbitrary literal text, measured printing `ANTICOAGULATED 1.` |
+| `w:dropDownList` / `w:comboBox` | the engine falls back to `w:listItem[0]`, printing a value nobody chose |
+| `w:showingPlcHdr` | tells Word to re-display the template's own prompt |
+
+For these, keeping is **not** the safe direction: the output gets FULLER.
+
+> **BEFORE PUTTING SOMETHING ON A KEEP-LIST, ASK NOT "IS IT A PROPERTY?" BUT
+> "CAN IT PUT A MARK ON THE PAGE BY ITSELF?"** A property that generates is
+> content wearing a property's schema position.
+
+**AND THE RESOLUTION IS NOT ALWAYS TO DELETE IT.** Removing `w:numPr` renumbers
+the doctor's list *beyond* the field — damage outside the thing being cleared,
+which is the failure mode #163 died of. So #168 splits the question:
+
+- **the RENDER keeps it**, because deleting it damages more than it fixes;
+- **the COUNT refuses it** — a field whose cleared region carries a generator
+  cannot claim blank, with no parsing and no heuristic about which generators
+  are "harmless".
+
+`w:showingPlcHdr` is the third case and resolves the other way: it generates,
+removing it damages nothing, so it is deleted outright.
+
+**The asymmetry survives, restated:** an incomplete keep-list costs formatting
+*provided every member is inert*. Membership is the claim that needs the
+evidence, and "it sits where a property sits" is not that evidence.
+
 ## The practice
 
 - Write the rule as *"keep X, delete everything else"* wherever the safe state is

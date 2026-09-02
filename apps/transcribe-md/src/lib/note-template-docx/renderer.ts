@@ -708,6 +708,12 @@ const STRUCTURE_KEEP_WHOLE: ReadonlySet<string> = new Set([
   // All three are properties, none renders content, and losing them is the
   // inverse failure v1 and v2 died of.
   'tblPrEx', 'permStart', 'permEnd',
+  // ⚠️ #168 — A RUN'S OWN PROPERTIES ARE SKELETON. v3 deleted the whole run, so
+  // an emptied inline control lost `w:rPr` on all 28 controls of the real
+  // template (307 -> 279). An EMPTY run with properties prints nothing, and it
+  // is what a doctor TYPING into the cleared control inherits — the capability
+  // v3 was silently costing.
+  'rPr',
 ]);
 
 /** Structural containers — kept, and recursed into so their content clears. */
@@ -727,6 +733,12 @@ const STRUCTURE_RECURSE: ReadonlySet<string> = new Set([
   // tracked-inserted paragraph entirely.
   'AlternateContent', 'Choice', 'Fallback', 'customXml',
   'ins', 'del', 'moveTo', 'moveFrom',
+  // ⚠️ #168 — THE RUN SHELL IS KEPT AND RECURSED, not deleted. Its `w:rPr` is
+  // kept whole above; every OTHER child — `w:t`, `w:sym`, `w:tab`, `w:br`,
+  // `w:pict`, `w:drawing`, `w:fldChar`, `w:instrText`, and anything nobody has
+  // named — is not skeleton and goes. Still a keep-list, still writes nothing,
+  // still rewrites no tag.
+  'r',
 ]);
 
 /**
@@ -845,11 +857,28 @@ function structureKeepDeletions(
  * `emptied` proof), or the deletion patches — possibly EMPTY, meaning the
  * control already held nothing but skeleton and there was nothing to clear.
  */
+/** Control kinds whose emptied region can render a value nobody chose. */
+const SELECTION_KINDS: ReadonlySet<TemplateField['kind']> = new Set([
+  'single_select',
+  'multi_select',
+]);
+
+interface BoundedClear {
+  readonly patches: ApprovedXmlPatch[];
+  /**
+   * May this clear earn an `emptied` proof that COUNTS toward the certification
+   * blank requirement? Separate from whether the clear happened, because #168
+   * rules two cases fail-closed ON THE COUNT rather than on the render.
+   */
+  readonly blankEligible: boolean;
+}
+
 function sdtBoundedClearPatches(
   xml: string,
   control: XmlElementSpan,
+  field: TemplateField,
   fieldId: string,
-): ApprovedXmlPatch[] | null {
+): BoundedClear | null {
   // The control itself must hold nothing but its properties and its content.
   // A stray run directly inside `w:sdt` is malformed and is refused rather than
   // reasoned about.
@@ -874,6 +903,36 @@ function sdtBoundedClearPatches(
     if (!structureKeepDeletions(xml, content, fieldId, out)) return null;
   }
 
+  // ⚠️ #168(a) — NUMBERING STAYS, BUT THE FIELD CANNOT CLAIM BLANK.
+  //
+  // `w:numPr` rides inside the kept-whole `w:pPr` and drives a marker from
+  // `numbering.xml`. Measured: with `lvlText="ANTICOAGULATED %1."` the exported
+  // PDF prints `ANTICOAGULATED 1.` for a field proofed `emptied` — arbitrary
+  // template-authored text, not a bullet.
+  //
+  // Removing `numPr` is NOT the answer: it renumbers the doctor's list beyond
+  // this field, damage outside the thing being cleared. So the numbering stays
+  // and the COUNT fails closed instead — no parsing of `lvlText`, no heuristic
+  // about which markers are "just" markers. If a cleared region carries
+  // numbering at all, the field simply cannot claim blank.
+  const numbered = contents.some(
+    (content) => descendantXmlElements(content, 'numPr').length > 0,
+  );
+
+  // ⚠️ #168(b) — SELECTION CONTROLS ARE EXCLUDED, REVERSING #165.
+  //
+  // #165 included them because they clear identically at the XML level, which
+  // is true and was the wrong axis. Measured on the real template: an emptied
+  // dropdown makes the PDF engine fall back to `w:listItem[0]`, so
+  // "Choose an item." prints while the field buys blank credit. Base printed it
+  // too — so this does not create a new visual, it turns a TRUE statement into a
+  // FALSE ATTESTATION, which is worse.
+  //
+  // The fallback itself is an EXPORT defect independent of certification and is
+  // filed as its own item; this line only stops the certificate asserting a
+  // blank that is not one.
+  const selection = SELECTION_KINDS.has(field.kind);
+
   // ⚠️ ONE DELIBERATE EXCEPTION TO `sdtPr` BEING KEPT WHOLE, AND IT IS
   // MEASURED. `w:showingPlcHdr` is not an inert property: it asserts "what you
   // are looking at IS the placeholder", and Word acts on it by re-displaying
@@ -893,7 +952,8 @@ function sdtBoundedClearPatches(
   for (const flag of descendantXmlElements(control, 'showingPlcHdr')) {
     out.push(removeXmlElementPatch(flag, fieldId));
   }
-  return out;
+
+  return { patches: out, blankEligible: !numbered && !selection };
 }
 
 /**
@@ -974,13 +1034,13 @@ function contentControlPatches(
             field.fieldId,
           );
     if (resolution.value === null) {
-      const cleared = sdtBoundedClearPatches(xml, control, field.fieldId);
+      const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId);
       if (cleared) {
         return {
-          patches: [...(statePatch ? [statePatch] : []), ...cleared],
+          patches: [...(statePatch ? [statePatch] : []), ...cleared.patches],
           // ⚠️ AN EMPTY ARRAY IS TRUTHY. `[]` means "already empty, nothing to
           // do" — no clearing write happened, so it cannot earn `emptied`.
-          boundedClear: cleared.length > 0,
+          boundedClear: cleared.patches.length > 0 && cleared.blankEligible,
         };
       }
     }
@@ -1003,14 +1063,18 @@ function contentControlPatches(
       // Its comment claimed "a selection control that renders anything asserts
       // a choice". Measured: a null `single_select` renders NOTHING. It is the
       // dropdown-dominated forms (WM_IOV is 28 of them) that most need this.
-      const cleared = sdtBoundedClearPatches(xml, control, field.fieldId);
+      const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId);
       if (cleared) {
         return {
           patches: [
             ...(lastValue ? [removeXmlElementPatch(lastValue, field.fieldId)] : []),
-            ...cleared,
+            ...cleared.patches,
           ],
-          boundedClear: cleared.length > 0,
+          // ⚠️ `blankEligible` is FALSE here by construction — #168(b) excludes
+          // selection kinds — so this clears the control and earns no blank
+          // credit. The clearing still matters: it is what stops the previously
+          // SELECTED text printing.
+          boundedClear: cleared.patches.length > 0 && cleared.blankEligible,
         };
       }
       return {
@@ -1047,8 +1111,13 @@ function contentControlPatches(
   }
 
   if (resolution.value === null) {
-    const cleared = sdtBoundedClearPatches(xml, control, field.fieldId);
-    if (cleared) return { patches: cleared, boundedClear: cleared.length > 0 };
+    const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId);
+    if (cleared) {
+      return {
+        patches: cleared.patches,
+        boundedClear: cleared.patches.length > 0 && cleared.blankEligible,
+      };
+    }
   }
   const display = displayValue(field, resolution);
   return {
