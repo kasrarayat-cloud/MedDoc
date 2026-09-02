@@ -27,8 +27,22 @@ to check.
 
 Each was closed the same way and the pattern is the rule:
 
-> **Re-derive the decision at the point of use, from a source the stored
-> artifact cannot rewrite.**
+> **Re-derive the decision at the point of use — and when it cannot be
+> re-derived, CARRY it and say which one you have.**
+
+⚠️ **THE FIRST VERSION OF THIS ENTRY SAID "from a source the stored artifact
+cannot rewrite", AND THAT WAS MEASURABLY FALSE.** The source the gate re-derives
+from is `compiledDocumentIr`, a mutable JSON column on the SAME row as the proof
+it adjudicates — a forger editing one can edit the other. It is caught today
+only because two independent gates hash the manifest against the IR, which makes
+it a MULTI-column forgery rather than an unforgeable derivation.
+
+And re-derivation is not always available. A field's KIND is in the compiled IR,
+so it can be re-derived. Whether the field's paragraph carries NUMBERING is not:
+it lives in the source document's `w:pPr` and in `styles.xml`, neither of which
+the certification path reads. That decision has to travel WITH the proof, and
+the honest limit is stated where it is carried — a forger editing the stored
+proof can flip it.
 
 The certification gate already opens the compiled IR to resolve bindings, so the
 field's KIND and its RESOLVED VALUE were in hand at no extra cost. Three checks,

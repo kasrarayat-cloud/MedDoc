@@ -135,7 +135,12 @@ export async function renderTemplateDocx(
     }
     const prepared = prepareScalarResolution(field, resolution);
     const part = getPartPlan(field.rendererBinding.partName);
-    const { patches, boundedClear } = createFieldPatches(part.scan, field, prepared, numberedStyles);
+    const { patches, boundedClear, blankEligible } = createFieldPatches(
+      part.scan,
+      field,
+      prepared,
+      numberedStyles,
+    );
     if (patches.length === 0) {
       // BLANK PROOF. No patch means the field keeps the template's own unfilled
       // state — a dropdown placeholder, an empty cell. That is a real outcome
@@ -150,7 +155,20 @@ export async function renderTemplateDocx(
       //
       // occurrences = 1: one binding site, verified. The gate's
       // `expected.occurrences > 0` is satisfied without touching the gate.
-      fieldProofs.push(fieldProof(field, resolution.value, 1, 'blank'));
+      // ⚠️ A ZERO-PATCH FIELD IS ONLY `blank` IF IT MAY CLAIM BLANKNESS.
+      // A numbered paragraph whose run is already gone needs no patch, and
+      // emitting `blank` unconditionally handed it the credit the numbering
+      // rule exists to deny — the same document the patched case correctly
+      // refuses, minus an empty run shell.
+      // ⚠️ IT STAYS `blank` — THE LABEL IS ABOUT THE WRITE, NOT THE CREDIT.
+      // Emitting `filled` here to deny credit broke the verifier outright:
+      // `filled` joins the PATCHED set, the patched set must equal the proof
+      // set exactly, and this field has no patches. `blank` is the honest
+      // label for an unpatched field; the ineligibility rides alongside it.
+      fieldProofs.push({
+        ...fieldProof(field, resolution.value, 1, 'blank'),
+        ...(blankEligible ? {} : { blankEligible: false }),
+      });
       continue;
     }
     part.patches.push(...patches);
@@ -407,7 +425,7 @@ function renderRepeatingRows(input: {
   resolutions: ReadonlyMap<string, FieldResolution>;
   getPartPlan(partName: string): MutablePartPlan;
   fieldProofs: RenderedFieldProof[];
-  numberedStyles: ReadonlySet<string>;
+  numberedStyles: NumberingStyles;
 }): void {
   const byTable = new Map<string, TemplateField[]>();
   for (const field of input.fields) {
@@ -629,7 +647,7 @@ function createFieldPatches(
   part: ScannedXmlPart,
   field: TemplateField,
   resolution: PreparedResolution,
-  numberedStyles: ReadonlySet<string>,
+  numberedStyles: NumberingStyles,
 ): FieldPatchResult {
   const binding = field.rendererBinding;
   const bound = part.byPath.get(binding.path);
@@ -651,6 +669,7 @@ function createFieldPatches(
       return {
         patches: legacyFieldPatches(part.text, bound, field, resolution),
         boundedClear: false,
+        blankEligible: true,
       };
     case 'table_cell':
       if (xmlLocalName(bound.name) !== 'tc') {
@@ -662,6 +681,7 @@ function createFieldPatches(
       return {
         patches: tableCellPatches(part.text, bound, field, resolution),
         boundedClear: false,
+        blankEligible: true,
       };
     case 'repeating_row':
       failTemplateDocxRender('UNSUPPORTED_BINDING');
@@ -878,9 +898,24 @@ function structureKeepDeletions(
  * credit to a field that renders nothing, which is a false refusal costing a
  * doctor their certification.
  */
-function numberedStyleIds(pkg: ReturnType<typeof inspectDocxPackage>): ReadonlySet<string> {
+/**
+ * What `styles.xml` says about numbering, for ONE document.
+ *
+ * ⚠️ RETURNED, NOT KEPT IN A MODULE-LEVEL VARIABLE. The first version stored the
+ * default style id in a `let` at module scope — a cross-document contamination
+ * bug in a clinical renderer: document A's default style would still be set
+ * while document B, which declares none, was rendered, so B's unstyled
+ * paragraphs would inherit A's numbering. Nothing in a single render reveals it.
+ */
+interface NumberingStyles {
+  readonly numbered: ReadonlySet<string>;
+  /** Id of the `w:default="1"` paragraph style; `''` when none is declared. */
+  readonly defaultId: string;
+}
+
+function numberedStyleIds(pkg: ReturnType<typeof inspectDocxPackage>): NumberingStyles {
   const entry = pkg.zip.entries.get('word/styles.xml');
-  if (!entry) return new Set();
+  if (!entry) return { numbered: new Set(), defaultId: '' };
   let scan: ScannedXmlPart;
   try {
     scan = scanXmlPart(entry.bytes);
@@ -890,8 +925,9 @@ function numberedStyleIds(pkg: ReturnType<typeof inspectDocxPackage>): ReadonlyS
     // refusing every field on that basis would break every render of a document
     // whose styles we merely failed to parse. The direct `w:numPr` check still
     // applies; this only widens it.
-    return new Set();
+    return { numbered: new Set(), defaultId: '' };
   }
+  let defaultId = '';
   const direct = new Set<string>();
   const basedOn = new Map<string, string>();
   const styles: XmlElementSpan[] = [];
@@ -901,10 +937,28 @@ function numberedStyleIds(pkg: ReturnType<typeof inspectDocxPackage>): ReadonlyS
   for (const style of styles) {
     const id = readXmlAttribute(scan.text, style, 'styleId');
     if (!id) continue;
+    // ⚠️ THE DEFAULT STYLE IS AN IMPLICIT EDGE THE CLOSURE OTHERWISE MISSES.
+    // A paragraph with no `w:pStyle` inherits `w:default="1"`, so numbering on
+    // that style reaches a paragraph that names nothing. Measured: identical
+    // `styles.xml` and identical PDF, but the paragraph naming the style was
+    // refused and the one naming nothing earned `emptied` and counted.
+    if (
+      readXmlAttribute(scan.text, style, 'type') === 'paragraph' &&
+      readXmlAttribute(scan.text, style, 'default') === '1'
+    ) {
+      defaultId = id;
+    }
     const numbering = descendantXmlElements(style, 'numPr');
+    // ⚠️ A `w:numPr` WITH NO `w:numId` IS NOT NUMBERING. It carries only an
+    // `w:ilvl` — an outline level — and numbering requires a list to point at.
+    // Scoring a MISSING numId as live is the opposite direction from the
+    // deliberate `numId="0"` exclusion beside it, and it costs a FALSE REFUSAL:
+    // Word's built-in `Subtitle` has exactly this shape, byte-identical in BOTH
+    // tracked customer templates, so it is in the style table of essentially
+    // every real upload.
     const live = numbering.some((numPr) => {
       const numId = descendantXmlElements(numPr, 'numId')[0];
-      return !numId || readXmlAttribute(scan.text, numId, 'val') !== '0';
+      return numId !== undefined && readXmlAttribute(scan.text, numId, 'val') !== '0';
     });
     if (live) direct.add(id);
     const parent = directXmlChild(style, 'basedOn');
@@ -924,7 +978,7 @@ function numberedStyleIds(pkg: ReturnType<typeof inspectDocxPackage>): ReadonlyS
     }
     if (!grew) break;
   }
-  return resolved;
+  return { numbered: resolved, defaultId };
 }
 
 /**
@@ -938,10 +992,16 @@ function numberedStyleIds(pkg: ReturnType<typeof inspectDocxPackage>): ReadonlyS
 function paragraphIsNumbered(
   xml: string,
   paragraph: XmlElementSpan,
-  numberedStyles: ReadonlySet<string>,
+  numberedStyles: NumberingStyles,
 ): boolean {
   const properties = directXmlChild(paragraph, 'pPr');
-  if (!properties) return false;
+  // ⚠️ NO `w:pPr` IS NOT "NOT NUMBERED". A paragraph that declares nothing still
+  // inherits the `w:default="1"` style, so this early return defeated the
+  // default-style rule entirely — on the very shape the rule was added for.
+  if (!properties) {
+    return numberedStyles.defaultId !== '' &&
+      numberedStyles.numbered.has(numberedStyles.defaultId);
+  }
   for (const numPr of descendantXmlElements(properties, 'numPr')) {
     let ancestor: XmlElementSpan | null = numPr.parent;
     let historical = false;
@@ -951,11 +1011,14 @@ function paragraphIsNumbered(
     }
     if (historical) continue;
     const numId = descendantXmlElements(numPr, 'numId')[0];
-    if (!numId || readXmlAttribute(xml, numId, 'val') !== '0') return true;
+    // Same rule as `numberedStyleIds`: no `numId` means no list to number from.
+    if (numId !== undefined && readXmlAttribute(xml, numId, 'val') !== '0') return true;
   }
   const styleRef = directXmlChild(properties, 'pStyle');
-  const styleId = styleRef ? readXmlAttribute(xml, styleRef, 'val') : null;
-  return styleId !== null && numberedStyles.has(styleId);
+  const styleId = styleRef
+    ? readXmlAttribute(xml, styleRef, 'val')
+    : numberedStyles.defaultId;
+  return styleId !== null && styleId !== '' && numberedStyles.numbered.has(styleId);
 }
 
 /** Control kinds whose emptied region can render a value nobody chose. */
@@ -979,7 +1042,7 @@ function sdtBoundedClearPatches(
   control: XmlElementSpan,
   field: TemplateField,
   fieldId: string,
-  numberedStyles: ReadonlySet<string>,
+  numberedStyles: NumberingStyles,
 ): BoundedClear | null {
   // The control itself must hold nothing but its properties and its content.
   // A stray run directly inside `w:sdt` is malformed and is refused rather than
@@ -1094,8 +1157,24 @@ function sdtBoundedClearPatches(
  */
 interface FieldPatchResult {
   readonly patches: ApprovedXmlPatch[];
-  /** True ONLY when the null was cleared by whole-subtree replacement above. */
+  /** True ONLY when the clear happened AND may earn a counted `emptied` proof. */
   readonly boundedClear: boolean;
+  /**
+   * May this field claim blankness AT ALL — by either label?
+   *
+   * ⚠️ IT HAS TO LEAVE THIS FUNCTION, because a control whose content is
+   * ALREADY skeleton produces ZERO patches, and the zero-patch path emits
+   * `blank` unconditionally. The eligibility was computed and thrown away, so
+   * two documents printing the identical list marker got opposite verdicts:
+   *
+   *   numbered paragraph WITH a run    -> patches -> `filled`, no credit
+   *   numbered paragraph, run ALREADY gone -> none -> `blank`,  CREDIT
+   *
+   * The second is the first's output. And unlike the KIND, numbering cannot be
+   * re-derived at the read path — the stored proof carries no numbering signal
+   * — so this is the only place the decision can be made.
+   */
+  readonly blankEligible: boolean;
 }
 
 function contentControlPatches(
@@ -1103,7 +1182,7 @@ function contentControlPatches(
   control: XmlElementSpan,
   field: TemplateField,
   resolution: PreparedResolution,
-  numberedStyles: ReadonlySet<string>,
+  numberedStyles: NumberingStyles,
 ): FieldPatchResult {
   const properties = directXmlChild(control, 'sdtPr');
   const content = directXmlChild(control, 'sdtContent');
@@ -1142,6 +1221,7 @@ function contentControlPatches(
         ...textContainerPatches(xml, content, glyph, field.fieldId),
       ],
       boundedClear: false,
+      blankEligible: true,
     };
   }
 
@@ -1167,6 +1247,7 @@ function contentControlPatches(
           // ⚠️ AN EMPTY ARRAY IS TRUTHY. `[]` means "already empty, nothing to
           // do" — no clearing write happened, so it cannot earn `emptied`.
           boundedClear: cleared.patches.length > 0 && cleared.blankEligible,
+          blankEligible: cleared.blankEligible,
         };
       }
     }
@@ -1176,6 +1257,7 @@ function contentControlPatches(
         ...textContainerPatches(xml, content, display, field.fieldId),
       ],
       boundedClear: false,
+      blankEligible: true,
     };
   }
 
@@ -1201,6 +1283,7 @@ function contentControlPatches(
           // credit. The clearing still matters: it is what stops the previously
           // SELECTED text printing.
           boundedClear: cleared.patches.length > 0 && cleared.blankEligible,
+          blankEligible: cleared.blankEligible,
         };
       }
       return {
@@ -1209,6 +1292,7 @@ function contentControlPatches(
           ...textContainerPatches(xml, content, '', field.fieldId),
         ],
         boundedClear: false,
+      blankEligible: true,
       };
     }
     const option = exactSelectedOption(field, resolution);
@@ -1233,6 +1317,7 @@ function contentControlPatches(
         ),
       ],
       boundedClear: false,
+      blankEligible: true,
     };
   }
 
@@ -1242,6 +1327,7 @@ function contentControlPatches(
       return {
         patches: cleared.patches,
         boundedClear: cleared.patches.length > 0 && cleared.blankEligible,
+          blankEligible: cleared.blankEligible,
       };
     }
   }
@@ -1249,6 +1335,7 @@ function contentControlPatches(
   return {
     patches: textContainerPatches(xml, content, display, field.fieldId),
     boundedClear: false,
+      blankEligible: true,
   };
 }
 

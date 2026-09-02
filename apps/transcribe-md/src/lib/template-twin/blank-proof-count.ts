@@ -54,6 +54,7 @@ export interface BlankProofEntry {
   readonly kind?: unknown;
   readonly fieldId?: unknown;
   readonly expectedSpanSha256?: unknown;
+  readonly blankEligible?: unknown;
 }
 
 /** A sha256 as the renderer writes it: 64 lowercase hex characters. */
@@ -105,8 +106,29 @@ export function countsAsBlankProof(
   // Measured: a `single_select` whose control needed no patch earned `blank`
   // and COUNTED, while its rendered PDF printed `Mild`, list entry 0. Same
   // harm, different proof path.
+  // ⚠️ AN UNKNOWN KIND REFUSES. The first version read
+  // `kind !== undefined && INELIGIBLE.has(kind)`, which SKIPS the check when the
+  // kind cannot be resolved — fail-OPEN. Two lines below, `bindingOf` handles
+  // the identical condition the opposite way, as an allowlist that fails
+  // CLOSED. One helper, one input condition, two directions.
+  //
+  // Failing closed is safe here and not merely cautious: `isVerifiedSyntheticProof`
+  // already forces the proof's field set to equal `ir.fields` exactly, so every
+  // entry that reaches this line HAS a kind. An `undefined` therefore means the
+  // gate's view of the template and the proof have diverged — which is the last
+  // moment to grant credit, not the natural moment to skip a check.
   const kind = kindOf(entry.fieldId);
-  if (kind !== undefined && BLANK_INELIGIBLE_KINDS.has(kind)) return false;
+  if (kind === undefined || BLANK_INELIGIBLE_KINDS.has(kind)) return false;
+
+  // ⚠️ AN EXPLICIT `false` REFUSES, ON EITHER LABEL. The renderer sets this when
+  // a field is unpatched yet still cannot claim blankness — today, a paragraph
+  // carrying live numbering, which prints a marker beside an empty field. That
+  // decision cannot be re-derived here: numbering lives in the source document
+  // and `styles.xml`, and the certification path reads neither.
+  //
+  // Absent means eligible, so proofs written before this field existed keep
+  // their meaning rather than silently losing credit.
+  if (entry.blankEligible === false) return false;
 
   // ⚠️ THE STRONGEST READ-PATH CHECK AVAILABLE, AND THE GATE ALREADY HELD THE
   // DATA FOR IT — WHICH IS WHY THIS COSTS NOTHING.

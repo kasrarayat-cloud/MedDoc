@@ -372,6 +372,24 @@ export type RenderedFieldProof =
     }
   | {
       readonly kind: 'blank';
+      /**
+       * `false` when this UNPATCHED field may not claim blankness anyway —
+       * today, because its paragraph carries live numbering that will print a
+       * marker beside an otherwise empty field.
+       *
+       * ⚠️ IT IS STORED BECAUSE IT CANNOT BE RE-DERIVED. Canon 92 says prefer
+       * re-deriving a write-time decision at the point of use, and for the
+       * field's KIND that works — the compiled IR carries it. Numbering is not
+       * in the IR at all: it lives in the source document's `w:pPr` and
+       * `styles.xml`, neither of which the certification path reads. So the
+       * decision travels with the proof, and the honest limit is that a forger
+       * editing the stored proof could flip it — the already-filed
+       * proof-integrity-at-rest item, not a new hole.
+       *
+       * Absent means eligible, so every proof written before this field existed
+       * keeps its meaning.
+       */
+      readonly blankEligible?: boolean;
       readonly fieldId: string;
       readonly partName: string;
       readonly bindingPath: string;

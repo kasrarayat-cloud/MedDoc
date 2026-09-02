@@ -107,6 +107,11 @@ async function renderAllNull(documentXml: string, stylesXml?: string) {
     ir.fields.find((f) => f.fieldId === fieldId)?.rendererBinding.bindingType as
       | string
       | undefined;
+  // ⚠️ THE REAL KIND, FROM THE COMPILED IR — not a stub. `kindOf` fails CLOSED
+  // on `undefined`, so a stub would make every arm below refuse for a reason
+  // that has nothing to do with what it is testing.
+  const kindOf = (fieldId: string) =>
+    ir.fields.find((f) => f.fieldId === fieldId)?.kind as string | undefined;
   return {
     ir,
     rendered,
@@ -122,6 +127,7 @@ async function renderAllNull(documentXml: string, stylesXml?: string) {
       (rendered.verification.fields ?? []) as unknown as Array<Record<string, unknown>>
     ).filter((p) => p.partName === 'word/document.xml'),
     bindingOf,
+    kindOf,
   };
 }
 
@@ -130,7 +136,7 @@ describe('#165 rule 1 — the writer clears the whole subtree, so nothing inside
   // these rows produced `emptied` + counts=true with the carrier STILL PRESENT.
   for (const [name, extra, needle] of CARRIERS) {
     it(`a null control containing ${name} renders EMPTY — the carrier is GONE`, async () => {
-      const { sourceXml, outputXml, bodyProofs, bindingOf, rendered } = await renderAllNull(
+      const { sourceXml, outputXml, bodyProofs, bindingOf, kindOf, rendered } = await renderAllNull(
         docWith(extra),
       );
 
@@ -148,7 +154,9 @@ describe('#165 rule 1 — the writer clears the whole subtree, so nothing inside
       // index-dependence, and this file uses `bodyProofs` everywhere else.
       const proof = bodyProofs.find((p) => p.kind === 'emptied');
       expect(proof, `${name}: no emptied proof was produced`).toBeDefined();
-      expect(countsAsBlankProof(proof as never, { bindingOf, resolvedNull: () => true, kindOf: () => undefined })).toBe(true);
+      expect(
+        countsAsBlankProof(proof as never, { bindingOf, resolvedNull: () => true, kindOf }),
+      ).toBe(true);
       expect(rendered.verification.verified).toBe(true);
     });
   }
@@ -1131,5 +1139,130 @@ describe('#168(a) — the DATE branch carries the eligibility check too', () => 
         `</w:sdtContent></w:sdt></w:body></w:document>`,
     );
     expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+  });
+});
+
+describe('#168(a) — the numbering decision reaches the `blank` label too', () => {
+  const numberedDoc = (content: string, styles?: string) => ({
+    documentXml:
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:body><w:p>` +
+      `<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr>` +
+      `<w:sdt><w:sdtPr><w:id w:val="999"/><w:alias w:val="Anticoagulation"/><w:text/></w:sdtPr>` +
+      `<w:sdtContent>${content}</w:sdtContent></w:sdt>` +
+      `</w:p></w:body></w:document>`,
+    stylesXml: styles,
+  });
+
+  it('a numbered control whose content needs NO patch is not `blank` either', async () => {
+    // ⚠️ THE ELIGIBILITY WAS COMPUTED AND THROWN AWAY. A control whose content
+    // is already skeleton produces ZERO patches, and the zero-patch branch
+    // pushed `blank` unconditionally — so two documents printing the identical
+    // list marker got opposite verdicts, and the one that needed no work got
+    // the credit:
+    //
+    //   run WITH a w:t      -> patches -> `filled`, refused (correct)
+    //   run ALREADY empty   -> none    -> `blank`,  CREDIT  (the defect)
+    //
+    // The second is the first's own output. Both lenses found this
+    // independently, and the read path cannot rescue it: the stored proof
+    // carries no numbering signal, so this is the only place it can be decided.
+    const { documentXml } = numberedDoc('<w:r><w:rPr><w:b/></w:rPr></w:r>');
+    const { bodyProofs, bindingOf, kindOf } = await renderAllNull(documentXml);
+    expect(bodyProofs.length).toBe(1);
+    // ⚠️ THE LABEL STAYS `blank`, AND THE CREDIT IS WHAT MUST BE FALSE.
+    // Emitting `filled` here to deny credit broke the verifier: `filled` joins
+    // the PATCHED set, which must equal the proof set exactly, and this field
+    // has no patches. `blank` is the honest label for an unpatched field; the
+    // ineligibility rides beside it and the COUNT is where it bites.
+    expect(bodyProofs[0].kind).toBe('blank');
+    expect(bodyProofs[0].blankEligible).toBe(false);
+    expect(
+      countsAsBlankProof(bodyProofs[0] as never, {
+        bindingOf,
+        resolvedNull: () => true,
+        kindOf,
+      }),
+    ).toBe(false);
+  });
+
+  it('an UNnumbered control whose content needs no patch IS still `blank`', async () => {
+    // NON-VACUITY for the arm above: the zero-patch path must still produce a
+    // real `blank` proof, or "not blank" would hold for any reason at all.
+    const { bodyProofs, bindingOf, kindOf } = await renderAllNull(
+      sdtDoc({ content: '<w:r><w:rPr><w:b/></w:rPr></w:r>' }),
+    );
+    expect(bodyProofs[0]?.kind).toBe('blank');
+    expect(bodyProofs[0]?.blankEligible).toBeUndefined();
+    expect(
+      countsAsBlankProof(bodyProofs[0] as never, {
+        bindingOf,
+        resolvedNull: () => true,
+        kindOf,
+      }),
+    ).toBe(true);
+  });
+
+  it('numbering on the DEFAULT paragraph style reaches a paragraph that names none', async () => {
+    // ⚠️ AN IMPLICIT EDGE THE `basedOn` CLOSURE DOES NOT CARRY. A paragraph with
+    // no `w:pStyle` inherits `w:default="1"`. Measured: identical `styles.xml`
+    // and identical PDF, but the paragraph NAMING the numbered style was
+    // refused while the one naming nothing earned `emptied` and counted.
+    const { documentXml } = numberedDoc('<w:r><w:t>Enter anticoagulation</w:t></w:r>');
+    const plain = documentXml.replace(
+      '<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr>',
+      '',
+    );
+    const styles =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:pPr>` +
+      `<w:numPr><w:numId w:val="7"/></w:numPr></w:pPr></w:style></w:styles>`;
+    const { bodyProofs } = await renderAllNull(plain, styles);
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+  });
+
+  it('⚠️ a w:numPr with an ilvl and NO numId is not numbering — Word’s own Subtitle', async () => {
+    // A FALSE REFUSAL, and not a hypothetical shape: this is Word's built-in
+    // `Subtitle`, present BYTE-IDENTICALLY in both tracked customer templates,
+    // so it is in the style table of essentially every real upload. It carries
+    // an outline level and no list to number from, and prints nothing.
+    const styles =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:style w:type="paragraph" w:styleId="Subtitle"><w:pPr>` +
+      `<w:numPr><w:ilvl w:val="1"/></w:numPr></w:pPr></w:style></w:styles>`;
+    const { bodyProofs } = await renderAllNull(
+      sdtDoc({
+        block: true,
+        content:
+          '<w:p><w:pPr><w:pStyle w:val="Subtitle"/></w:pPr>' +
+          '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
+      }),
+      styles,
+    );
+    expect(bodyProofs.map((p) => p.kind)).toContain('emptied');
+  });
+
+  it('⚠️ and a STYLE whose numPr carries numId="0" does not disqualify either', async () => {
+    // The `numId="0"` exclusion exists TWICE — in `paragraphIsNumbered` and in
+    // `numberedStyleIds` — and only the first had an arm. Deleting the second
+    // redded 0 of 65. Same false-refusal cost, in the half nobody armed.
+    const styles =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:style w:type="paragraph" w:styleId="ListParagraph"><w:pPr>` +
+      `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="0"/></w:numPr></w:pPr></w:style></w:styles>`;
+    const { bodyProofs } = await renderAllNull(
+      sdtDoc({
+        block: true,
+        content:
+          '<w:p><w:pPr><w:pStyle w:val="ListParagraph"/></w:pPr>' +
+          '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
+      }),
+      styles,
+    );
+    expect(bodyProofs.map((p) => p.kind)).toContain('emptied');
   });
 });

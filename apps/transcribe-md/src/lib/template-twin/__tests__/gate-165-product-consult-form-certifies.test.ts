@@ -199,6 +199,7 @@ interface Fixture {
   proofFields: Array<Record<string, unknown>>;
   row: Record<string, unknown>;
   bindingOf: (fieldId: string) => string | undefined;
+  kindOf: (fieldId: string) => string | undefined;
 }
 
 /**
@@ -401,6 +402,7 @@ async function buildCertifiableConsultForm(): Promise<Fixture> {
     row,
     bindingOf: (fieldId) =>
       ir.fields.find((f) => f.fieldId === fieldId)?.rendererBinding.bindingType,
+    kindOf: (fieldId) => ir.fields.find((f) => f.fieldId === fieldId)?.kind,
   };
 }
 
@@ -549,7 +551,14 @@ describe('#165 product — the census the gate runs, driven directly on the same
     const resolvedNull = (id: string) =>
       fixture.resolutions.find((r) => r.fieldId === id)?.value === null;
     const union = fixture.proofFields.filter((p) =>
-      countsAsBlankProof(p as never, { bindingOf: fixture.bindingOf, resolvedNull, kindOf: () => undefined }),
+      // ⚠️ THE REAL KIND, FROM THE FIXTURE'S OWN IR. A `() => undefined` stub
+      // here contradicted this arm's own comment three lines above — and now
+      // that `kindOf` fails CLOSED it would make the census measure nothing.
+      countsAsBlankProof(p as never, {
+        bindingOf: fixture.bindingOf,
+        resolvedNull,
+        kindOf: fixture.kindOf,
+      }),
     ).length;
 
     // #164's reverted predicate scores this. Zero is why the PASS arm above is
@@ -767,5 +776,69 @@ describe('#168(b) — the kind exclusion binds the `blank` label too', () => {
     const emptied = { kind: 'emptied', fieldId: 'f1', expectedSpanSha256: 'a'.repeat(64) };
     expect(countsAsBlankProof(emptied, ctx('single_select'))).toBe(false);
     expect(countsAsBlankProof(emptied, ctx('narrative_text'))).toBe(true);
+
+    // ⚠️ AN UNRESOLVABLE KIND REFUSES, ON BOTH LABELS — and this arm exists
+    // because the fix that made it fail closed had NONE. Reverting the
+    // condition to `kind !== undefined && …` (the fail-OPEN form) redded 0 of
+    // 69 arms: every other arm supplies a real kind, so the `undefined` branch
+    // was never exercised. `bindingOf` two lines below is an allowlist that
+    // already fails closed; this makes the two agree.
+    const unknown = {
+      bindingOf: () => 'content_control',
+      resolvedNull: () => true,
+      kindOf: () => undefined,
+    };
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f1' }, unknown)).toBe(false);
+    expect(countsAsBlankProof(emptied, unknown)).toBe(false);
+  });
+});
+
+describe('#168(b) — the kind check is pinned THROUGH the gate, not through its helper', () => {
+  it('a forged `emptied` on a SELECTION is refused by certifyAndActivateTemplateTwin', async () => {
+    // ⚠️ THE FIX HAD NO PRODUCTION ARM. Gutting `kindByFieldId` in
+    // `certification-lifecycle.ts` redded 0 of 5623 — the only arm exercising
+    // the rule called `countsAsBlankProof` with a hand-built context, never
+    // through the gate. That is the failure mode this file's own header records
+    // for #164, reproduced in the commit that cites it, and the sibling arm two
+    // describes up is titled "pinned THROUGH certifyAndActivateTemplateTwin"
+    // precisely to stop it.
+    //
+    // `blankEligible` is a RENDER decision the stored proof cannot express for
+    // the kind, so the read path re-derives it from the compiled IR. This arm is
+    // what proves that re-derivation is wired.
+    const { certifyAndActivateTemplateTwin } = await import('../certification-lifecycle');
+    const row = cloneRow(fixture.row) as never as {
+      templateTwinCompiledVersion: { latestTestRoundTrip: { fields: Array<Record<string, unknown>> } };
+    };
+    const proof = row.templateTwinCompiledVersion.latestTestRoundTrip;
+
+    // The selection the fixture nulls deliberately — its real proof is `filled`
+    // because #168(b) excluded it at render time.
+    const selectionId = fixture.ir.fields.find((f) => f.kind === 'single_select')?.fieldId;
+    expect(selectionId, 'fixture has no selection — this arm would be vacuous').toBeDefined();
+
+    // Strip the genuine blank evidence so the forged entry is the ONLY thing
+    // that could satisfy the census — otherwise the arm passes for a reason
+    // unrelated to the kind check.
+    proof.fields = proof.fields.map((f) => {
+      if (f.fieldId === selectionId) {
+        return { ...f, kind: 'emptied', expectedSpanSha256: 'c'.repeat(64) };
+      }
+      return f.kind === 'emptied' || f.kind === 'blank' ? { ...f, kind: 'filled' } : f;
+    });
+    expect(proof.fields.filter((f) => f.kind === 'emptied').length).toBe(1);
+    dbState.row = row;
+
+    const error = await certifyAndActivateTemplateTwin({
+      noteTemplateId: NOTE_TEMPLATE_ID,
+      actor: ACTOR,
+      expectedMappingsSha256: fixture.mappingsSha256,
+    }).then(
+      () => null,
+      (caught: unknown) => caught as { code?: string; blockers?: readonly string[] },
+    );
+
+    expect(error, 'a forged `emptied` on a selection was accepted').not.toBeNull();
+    expect(error!.blockers?.join(' | ')).toMatch(/blankVerification=false/);
   });
 });
