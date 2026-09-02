@@ -66,13 +66,47 @@ const SHA256_HEX = /^[0-9a-f]{64}$/;
  * IR — the proof itself deliberately does not carry it, so nothing about the
  * stored proof shape changes.
  */
+/**
+ * Field kinds whose cleared control can render a value nobody chose, and which
+ * therefore may never satisfy the blank requirement — ruling #168(b).
+ *
+ * ⚠️ THIS LIVES AT THE READ PATH AS WELL AS THE RENDERER, and that is the whole
+ * point of it being here. The renderer decides `blankEligible` at RENDER time
+ * and the decision is NOT stored in the proof, so a proof read back out of the
+ * database carries no trace of it. Measured: relabelling a `single_select`'s
+ * stored entry from `filled` to `emptied` certified a template outright.
+ *
+ * The gate already builds a field map from the compiled IR to resolve bindings,
+ * so the kind is in hand at no extra cost — the same argument that put
+ * `resolvedNull` here.
+ */
+const BLANK_INELIGIBLE_KINDS: ReadonlySet<string> = new Set([
+  'single_select',
+  'multi_select',
+]);
+
+export interface BlankProofContext {
+  readonly bindingOf: (fieldId: string) => string | undefined;
+  readonly resolvedNull: (fieldId: string) => boolean;
+  readonly kindOf: (fieldId: string) => string | undefined;
+}
+
 export function countsAsBlankProof(
   entry: BlankProofEntry,
-  bindingOf: (fieldId: string) => string | undefined,
-  resolvedNull: (fieldId: string) => boolean,
+  ctx: BlankProofContext,
 ): boolean {
+  const { bindingOf, resolvedNull, kindOf } = ctx;
   if (entry.kind !== 'blank' && entry.kind !== 'emptied') return false;
   if (typeof entry.fieldId !== 'string') return false;
+
+  // ⚠️ THE KIND CHECK APPLIES TO **BOTH** LABELS, and it did not before.
+  // #168(b) excluded selections in the RENDERER, which only reaches the
+  // `emptied` path — `blank` returned true here with no kind check at all.
+  // Measured: a `single_select` whose control needed no patch earned `blank`
+  // and COUNTED, while its rendered PDF printed `Mild`, list entry 0. Same
+  // harm, different proof path.
+  const kind = kindOf(entry.fieldId);
+  if (kind !== undefined && BLANK_INELIGIBLE_KINDS.has(kind)) return false;
 
   // ⚠️ THE STRONGEST READ-PATH CHECK AVAILABLE, AND THE GATE ALREADY HELD THE
   // DATA FOR IT — WHICH IS WHY THIS COSTS NOTHING.

@@ -773,6 +773,10 @@ export async function certifyAndActivateTemplateTwin(input: {
       const bindingByFieldId = new Map(
         ir.fields.map((f) => [f.fieldId, f.rendererBinding.bindingType as string]),
       );
+      // ⚠️ THE KIND TOO — #168(b) is a RENDER-time decision the stored proof
+      // cannot express, so it has to be re-applied here from the compiled IR,
+      // which the gate already has open.
+      const kindByFieldId = new Map(ir.fields.map((f) => [f.fieldId, f.kind as string]));
       // ⚠️ A `blank` OR `emptied` LABEL IS CROSS-CHECKED AGAINST THE MANIFEST.
       // Both are claims that the encounter said nothing about the field, and the
       // manifest is the record of what it actually said. A field the manifest
@@ -784,7 +788,11 @@ export async function certifyAndActivateTemplateTwin(input: {
       const blankProofCount = roundTripFields.filter(
         (entry) =>
           isRecord(entry) &&
-          countsAsBlankProof(entry, (id) => bindingByFieldId.get(id), resolvedNull),
+          countsAsBlankProof(entry, {
+            bindingOf: (id) => bindingByFieldId.get(id),
+            resolvedNull,
+            kindOf: (id) => kindByFieldId.get(id),
+          }),
       ).length;
       // ── FILL-COVERAGE INVARIANT ──────────────────────────────────────────
       // A template must not certify with a dead fill path. WM_IOV certified

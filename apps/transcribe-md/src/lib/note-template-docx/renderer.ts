@@ -98,6 +98,8 @@ export async function renderTemplateDocx(
   }
 
   const inspected = inspectDocxPackage(input.source, input.limits);
+  // Read once: a paragraph's numbering can live entirely in `styles.xml`.
+  const numberedStyles = numberedStyleIds(inspected);
   assertSourceMatchesIr(input.source, ir, inspected.sourceSha256, input.limits);
   const resolutions = parseResolutions(ir, input.resolutions);
   const partPlans = new Map<string, MutablePartPlan>();
@@ -121,6 +123,7 @@ export async function renderTemplateDocx(
     resolutions,
     getPartPlan,
     fieldProofs,
+    numberedStyles,
   });
 
   for (const field of ir.fields) {
@@ -132,7 +135,7 @@ export async function renderTemplateDocx(
     }
     const prepared = prepareScalarResolution(field, resolution);
     const part = getPartPlan(field.rendererBinding.partName);
-    const { patches, boundedClear } = createFieldPatches(part.scan, field, prepared);
+    const { patches, boundedClear } = createFieldPatches(part.scan, field, prepared, numberedStyles);
     if (patches.length === 0) {
       // BLANK PROOF. No patch means the field keeps the template's own unfilled
       // state — a dropdown placeholder, an empty cell. That is a real outcome
@@ -404,6 +407,7 @@ function renderRepeatingRows(input: {
   resolutions: ReadonlyMap<string, FieldResolution>;
   getPartPlan(partName: string): MutablePartPlan;
   fieldProofs: RenderedFieldProof[];
+  numberedStyles: ReadonlySet<string>;
 }): void {
   const byTable = new Map<string, TemplateField[]>();
   for (const field of input.fields) {
@@ -472,7 +476,7 @@ function renderRepeatingRows(input: {
           continue;
         }
         const prepared = rowPreparedResolution(field, resolution, rowOrdinal);
-        rowPatches.push(...createFieldPatches(part.scan, field, prepared).patches);
+        rowPatches.push(...createFieldPatches(part.scan, field, prepared, input.numberedStyles).patches);
       }
       const relativePatches = rowPatches.map((patch) => ({
         ...patch,
@@ -625,6 +629,7 @@ function createFieldPatches(
   part: ScannedXmlPart,
   field: TemplateField,
   resolution: PreparedResolution,
+  numberedStyles: ReadonlySet<string>,
 ): FieldPatchResult {
   const binding = field.rendererBinding;
   const bound = part.byPath.get(binding.path);
@@ -634,7 +639,7 @@ function createFieldPatches(
       if (xmlLocalName(bound.name) !== 'sdt') {
         failTemplateDocxRender('BINDING_NOT_FOUND');
       }
-      return contentControlPatches(part.text, bound, field, resolution);
+      return contentControlPatches(part.text, bound, field, resolution, numberedStyles);
     case 'legacy_form_field':
       if (xmlLocalName(bound.name) !== 'fldChar') {
         failTemplateDocxRender('BINDING_NOT_FOUND');
@@ -857,6 +862,102 @@ function structureKeepDeletions(
  * `emptied` proof), or the deletion patches — possibly EMPTY, meaning the
  * control already held nothing but skeleton and there was nothing to clear.
  */
+/**
+ * Style ids whose paragraph style carries LIVE numbering, resolved transitively
+ * through `w:basedOn`.
+ *
+ * ⚠️ WITHOUT THIS THE NUMBERING GUARD READS THE WRONG DOCUMENT. A paragraph's
+ * numbering can live entirely in `styles.xml`: the cleared region then contains
+ * only `<w:pStyle w:val="ListParagraph"/>` and no `w:numPr` at all, so a search
+ * of the region finds nothing. Measured to PDF — the field printed
+ * `ANTICOAGULATED 1.` while proofed `emptied` and holding blank credit.
+ *
+ * ⚠️ `numId="0"` IS EXCLUDED, and that is not a detail. It is Word's own "no
+ * list" marker — precisely what it writes when a user REMOVES numbering from a
+ * paragraph whose style carries it. Treating it as numbered refuses blank
+ * credit to a field that renders nothing, which is a false refusal costing a
+ * doctor their certification.
+ */
+function numberedStyleIds(pkg: ReturnType<typeof inspectDocxPackage>): ReadonlySet<string> {
+  const entry = pkg.zip.entries.get('word/styles.xml');
+  if (!entry) return new Set();
+  let scan: ScannedXmlPart;
+  try {
+    scan = scanXmlPart(entry.bytes);
+  } catch {
+    // ⚠️ FAIL-CLOSED IS NOT AVAILABLE HERE, so fail LOUD-BY-OMISSION instead:
+    // an unreadable styles part means we cannot say a style is numbered, and
+    // refusing every field on that basis would break every render of a document
+    // whose styles we merely failed to parse. The direct `w:numPr` check still
+    // applies; this only widens it.
+    return new Set();
+  }
+  const direct = new Set<string>();
+  const basedOn = new Map<string, string>();
+  const styles: XmlElementSpan[] = [];
+  for (const root of scan.roots) {
+    styles.push(...descendantXmlElements(root, 'style'));
+  }
+  for (const style of styles) {
+    const id = readXmlAttribute(scan.text, style, 'styleId');
+    if (!id) continue;
+    const numbering = descendantXmlElements(style, 'numPr');
+    const live = numbering.some((numPr) => {
+      const numId = descendantXmlElements(numPr, 'numId')[0];
+      return !numId || readXmlAttribute(scan.text, numId, 'val') !== '0';
+    });
+    if (live) direct.add(id);
+    const parent = directXmlChild(style, 'basedOn');
+    const parentId = parent ? readXmlAttribute(scan.text, parent, 'val') : null;
+    if (parentId) basedOn.set(id, parentId);
+  }
+  // Transitive closure over `basedOn`, bounded by the number of styles so a
+  // cyclic `basedOn` chain cannot spin.
+  const resolved = new Set(direct);
+  for (let pass = 0; pass < basedOn.size + 1; pass += 1) {
+    let grew = false;
+    for (const [id, parent] of basedOn) {
+      if (!resolved.has(id) && resolved.has(parent)) {
+        resolved.add(id);
+        grew = true;
+      }
+    }
+    if (!grew) break;
+  }
+  return resolved;
+}
+
+/**
+ * Does this paragraph carry LIVE numbering — directly, or through its style?
+ *
+ * ⚠️ `w:pPrChange` IS SKIPPED. It records a paragraph's FORMER properties for
+ * revision history and renders nothing, so numbering inside it is a fact about
+ * the document's past. Counting it refuses blank credit to a field that prints
+ * nothing.
+ */
+function paragraphIsNumbered(
+  xml: string,
+  paragraph: XmlElementSpan,
+  numberedStyles: ReadonlySet<string>,
+): boolean {
+  const properties = directXmlChild(paragraph, 'pPr');
+  if (!properties) return false;
+  for (const numPr of descendantXmlElements(properties, 'numPr')) {
+    let ancestor: XmlElementSpan | null = numPr.parent;
+    let historical = false;
+    while (ancestor && ancestor !== properties) {
+      if (xmlLocalName(ancestor.name) === 'pPrChange') { historical = true; break; }
+      ancestor = ancestor.parent;
+    }
+    if (historical) continue;
+    const numId = descendantXmlElements(numPr, 'numId')[0];
+    if (!numId || readXmlAttribute(xml, numId, 'val') !== '0') return true;
+  }
+  const styleRef = directXmlChild(properties, 'pStyle');
+  const styleId = styleRef ? readXmlAttribute(xml, styleRef, 'val') : null;
+  return styleId !== null && numberedStyles.has(styleId);
+}
+
 /** Control kinds whose emptied region can render a value nobody chose. */
 const SELECTION_KINDS: ReadonlySet<TemplateField['kind']> = new Set([
   'single_select',
@@ -878,6 +979,7 @@ function sdtBoundedClearPatches(
   control: XmlElementSpan,
   field: TemplateField,
   fieldId: string,
+  numberedStyles: ReadonlySet<string>,
 ): BoundedClear | null {
   // The control itself must hold nothing but its properties and its content.
   // A stray run directly inside `w:sdt` is malformed and is refused rather than
@@ -915,8 +1017,31 @@ function sdtBoundedClearPatches(
   // and the COUNT fails closed instead — no parsing of `lvlText`, no heuristic
   // about which markers are "just" markers. If a cleared region carries
   // numbering at all, the field simply cannot claim blank.
-  const numbered = contents.some(
-    (content) => descendantXmlElements(content, 'numPr').length > 0,
+  // ⚠️ THE SEARCH REACHES EVERY PARAGRAPH THAT COULD NUMBER THIS FIELD — the
+  // ones INSIDE the control, and the one CONTAINING it.
+  //
+  // Scoping it to the control's own content missed both of the shapes that
+  // matter. For an INLINE control the numbering sits on the `w:pPr` of the
+  // paragraph HOLDING it; and for either, the numbering can live in
+  // `styles.xml` behind a `w:pStyle`, so the region contains no `w:numPr` at
+  // all. Both were measured printing `ANTICOAGULATED 1.` from a field proofed
+  // `emptied` with blank credit — the same string, three different routes.
+  //
+  // `WM IOV Template.docx` has FOUR paragraphs carrying both `w:numPr` and an
+  // inline `w:sdt`, masked today only because its controls are dropdowns, which
+  // #168(b) denies for an unrelated reason. The owner's form — 30
+  // `narrative_text` + 5 `number`, no selections — has nothing masking it.
+  const paragraphs: XmlElementSpan[] = [];
+  for (const content of contents) {
+    paragraphs.push(...descendantXmlElements(content, 'p'));
+  }
+  let containing: XmlElementSpan | null = control.parent;
+  while (containing && xmlLocalName(containing.name) !== 'p') {
+    containing = containing.parent;
+  }
+  if (containing) paragraphs.push(containing);
+  const numbered = paragraphs.some((paragraph) =>
+    paragraphIsNumbered(xml, paragraph, numberedStyles),
   );
 
   // ⚠️ #168(b) — SELECTION CONTROLS ARE EXCLUDED, REVERSING #165.
@@ -978,6 +1103,7 @@ function contentControlPatches(
   control: XmlElementSpan,
   field: TemplateField,
   resolution: PreparedResolution,
+  numberedStyles: ReadonlySet<string>,
 ): FieldPatchResult {
   const properties = directXmlChild(control, 'sdtPr');
   const content = directXmlChild(control, 'sdtContent');
@@ -1034,7 +1160,7 @@ function contentControlPatches(
             field.fieldId,
           );
     if (resolution.value === null) {
-      const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId);
+      const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId, numberedStyles);
       if (cleared) {
         return {
           patches: [...(statePatch ? [statePatch] : []), ...cleared.patches],
@@ -1063,7 +1189,7 @@ function contentControlPatches(
       // Its comment claimed "a selection control that renders anything asserts
       // a choice". Measured: a null `single_select` renders NOTHING. It is the
       // dropdown-dominated forms (WM_IOV is 28 of them) that most need this.
-      const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId);
+      const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId, numberedStyles);
       if (cleared) {
         return {
           patches: [
@@ -1111,7 +1237,7 @@ function contentControlPatches(
   }
 
   if (resolution.value === null) {
-    const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId);
+    const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId, numberedStyles);
     if (cleared) {
       return {
         patches: cleared.patches,

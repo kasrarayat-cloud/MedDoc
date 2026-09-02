@@ -16,14 +16,28 @@ printed into a document a doctor signs**.
 The sixth instrument enumerated **what to KEEP** — the structural skeleton — and
 deleted everything else.
 
-⚠️ **AMENDED 2026-09-02: the keep-list is no longer `w:pPr`/`w:rPr`.** That was
-v2, which rebuilt the container and copied two property elements into what it
-wrote. Ruling #167's v3 writes nothing, so the keep-list is thirteen STRUCTURAL
-kinds — `p tbl tr tc sdt sdtContent` recursed, `pPr tblPr tblGrid trPr tcPr
-sectPr sdtPr sdtEndPr tblPrEx permStart permEnd bookmarkStart bookmarkEnd
-proofErr commentRange*` kept whole — and **`w:rPr` is not among them**: a run's
-own properties go when the run goes, because the run is content. The asymmetry
-argument is untouched by that; only the list changed.
+⚠️ **AMENDED TWICE ON 2026-09-02, AND THE SECOND AMENDMENT REVERSES THE
+FIRST — read to the end before acting on either.**
+
+**#167:** v3 stopped rebuilding the container and started DELETING, so the
+keep-list became structural kinds rather than the two property elements v2
+copied into what it wrote.
+
+**#168, which is what ships:** the RUN SHELL and its `w:rPr` are back on the
+keep-list. The #167 amendment said *"`w:rPr` is not among them: a run's own
+properties go when the run goes"* — **that is now false**, and it was false in a
+governing canon body for one commit while the code said otherwise. Deleting the
+run cost `w:rPr` on all 28 controls of the real template and changed what a
+doctor typing into a cleared field inherits; measured through the PDF, the
+`/DA` moved from the template's grey 11pt to black 12pt.
+
+⚠️ **THE LISTS ARE NOT ENUMERATED HERE ANY MORE, DELIBERATELY.** Both amendments
+stated a COUNT ("thirteen") and a membership list, and both went stale within a
+commit — the count was 13, then 16/14, then 17/15 across three rulings in one
+day. **A canon entry that mirrors a data structure is a second copy that drifts.**
+The lists live in `renderer.ts` as `STRUCTURE_KEEP_WHOLE` and
+`STRUCTURE_RECURSE`; read them there. What belongs here is the ARGUMENT, which
+has not changed.
 
 > **AN INCOMPLETE DELETE-LIST PRINTS CLINICAL CONTENT.**
 > **AN INCOMPLETE KEEP-LIST COSTS FORMATTING.**

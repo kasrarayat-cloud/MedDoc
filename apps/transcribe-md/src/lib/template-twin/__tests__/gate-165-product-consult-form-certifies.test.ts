@@ -549,7 +549,7 @@ describe('#165 product — the census the gate runs, driven directly on the same
     const resolvedNull = (id: string) =>
       fixture.resolutions.find((r) => r.fieldId === id)?.value === null;
     const union = fixture.proofFields.filter((p) =>
-      countsAsBlankProof(p as never, fixture.bindingOf, resolvedNull),
+      countsAsBlankProof(p as never, { bindingOf: fixture.bindingOf, resolvedNull, kindOf: () => undefined }),
     ).length;
 
     // #164's reverted predicate scores this. Zero is why the PASS arm above is
@@ -624,33 +624,32 @@ describe('#165 product — an `emptied` label with no expectation is refused', (
     const wasNull = () => true;
     const base = { kind: 'emptied', fieldId: 'f1' };
     const good = 'a'.repeat(64);
-    expect(countsAsBlankProof({ ...base, expectedSpanSha256: good }, bindingOf, wasNull)).toBe(true);
+    expect(countsAsBlankProof({ ...base, expectedSpanSha256: good }, { bindingOf, resolvedNull: wasNull, kindOf: () => 'narrative_text' })).toBe(true);
     for (const bad of ['', 'A'.repeat(64), 'a'.repeat(63), 'a'.repeat(65), 'z'.repeat(64), 123]) {
       expect(
-        countsAsBlankProof({ ...base, expectedSpanSha256: bad as never }, bindingOf, wasNull),
+        countsAsBlankProof({ ...base, expectedSpanSha256: bad as never }, { bindingOf, resolvedNull: wasNull, kindOf: () => 'narrative_text' }),
         `accepted a malformed expectation: ${String(bad).slice(0, 12)}`,
       ).toBe(false);
     }
     // `blank` needs no expectation — it is unpatched and proven by
     // source-byte-identity.
-    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f2' }, bindingOf, wasNull)).toBe(true);
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f2' }, { bindingOf, resolvedNull: wasNull, kindOf: () => 'narrative_text' })).toBe(true);
 
     // ⚠️ BUT NEITHER LABEL SURVIVES A FIELD THE MANIFEST SAYS WAS FILLED — and
     // `blank` is the one that had NO read-path check at all before this. The
     // pass certified a template by relabelling a field whose rendered value was
     // "Bilateral leg heaviness" to `blank`.
     const wasFilled = () => false;
-    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f3' }, bindingOf, wasFilled)).toBe(false);
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f3' }, { bindingOf, resolvedNull: wasFilled, kindOf: () => 'narrative_text' })).toBe(false);
     expect(
-      countsAsBlankProof({ ...base, expectedSpanSha256: good }, bindingOf, wasFilled),
+      countsAsBlankProof({ ...base, expectedSpanSha256: good }, { bindingOf, resolvedNull: wasFilled, kindOf: () => 'narrative_text' }),
     ).toBe(false);
     // and a well-formed but MEANINGLESS hash on a filled field is refused too —
     // shape was all the expectation check could ever judge.
     expect(
       countsAsBlankProof(
         { kind: 'emptied', fieldId: 'f4', expectedSpanSha256: 'deadbeef'.repeat(8) },
-        bindingOf,
-        wasFilled,
+        { bindingOf, resolvedNull: wasFilled, kindOf: () => 'narrative_text' },
       ),
     ).toBe(false);
   });
@@ -675,10 +674,10 @@ describe('#167 — the blank census guards', () => {
     const wasNull = () => true;
     const emptied = { kind: 'emptied', fieldId: 'f1', expectedSpanSha256: 'a'.repeat(64) };
 
-    expect(countsAsBlankProof(emptied, () => 'content_control', wasNull)).toBe(true);
+    expect(countsAsBlankProof(emptied, { bindingOf: () => 'content_control', resolvedNull: wasNull, kindOf: () => 'narrative_text' })).toBe(true);
     for (const binding of ['legacy_form_field', 'table_cell', 'repeating_row']) {
       expect(
-        countsAsBlankProof(emptied, () => binding, wasNull),
+        countsAsBlankProof(emptied, { bindingOf: () => binding, resolvedNull: wasNull, kindOf: () => 'narrative_text' }),
         `${binding} bought a blank proof`,
       ).toBe(false);
     }
@@ -741,5 +740,32 @@ describe('#167 — the blank census guards', () => {
 
     expect(error, 'a `blank` label on a FILLED field was accepted').not.toBeNull();
     expect(error!.blockers?.join(' | ')).toMatch(/blankVerification=false/);
+  });
+});
+
+describe('#168(b) — the kind exclusion binds the `blank` label too', () => {
+  it('a SELECTION cannot buy blank credit through the `blank` path either', async () => {
+    // ⚠️ #168(b) EXCLUDED SELECTIONS IN THE RENDERER, WHICH ONLY REACHES
+    // `emptied`. `blank` returned true here with no kind check at all — so a
+    // selection control that needed NO patch (its content already skeleton, or
+    // a legacy dropdown) earned `blank` and COUNTED, while its rendered PDF
+    // printed list entry 0. Same harm, the proof path the ruling did not touch.
+    const { countsAsBlankProof } = await import('../blank-proof-count');
+    const ctx = (kind: string) => ({
+      bindingOf: () => 'content_control',
+      resolvedNull: () => true,
+      kindOf: () => kind,
+    });
+    // The label that has no expectation and no binding gate is exactly the one
+    // that must still refuse a selection.
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f1' }, ctx('single_select'))).toBe(false);
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f1' }, ctx('multi_select'))).toBe(false);
+    // NON-VACUITY: a narrative `blank` still counts, so the arm tests the KIND
+    // and not the label.
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f1' }, ctx('narrative_text'))).toBe(true);
+    // and the same exclusion still binds `emptied`.
+    const emptied = { kind: 'emptied', fieldId: 'f1', expectedSpanSha256: 'a'.repeat(64) };
+    expect(countsAsBlankProof(emptied, ctx('single_select'))).toBe(false);
+    expect(countsAsBlankProof(emptied, ctx('narrative_text'))).toBe(true);
   });
 });

@@ -62,8 +62,10 @@ last; multi-paragraph content collapsed to one, moving a signature block 164pt; 
 wrapped table deleted outright.
 
 **v3 writes NOTHING and rewrites no start tag.** It emits deletion patches for
-every node inside the control that is not structural skeleton, and keeps thirteen
-element kinds. So *"nothing inside survives"* is replaced by something weaker and
+every node inside the control that is not structural skeleton, and keeps a
+declared set of structural kinds — read `STRUCTURE_KEEP_WHOLE` and
+`STRUCTURE_RECURSE` in `renderer.ts` rather than a count repeated here, which
+went stale three times in one day. So *"nothing inside survives"* is replaced by something weaker and
 true: **nothing inside survives EXCEPT declared skeleton, and skeleton is
 required to be non-printing.**
 

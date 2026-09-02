@@ -61,7 +61,24 @@ engine's behaviour and Word is untested.
 
 ## Scope
 
-Every `single_select` / `multi_select` content control that resolves null. The
-production corpus carries **28** of them, all on `WM IOV Template.docx`. The
-owner's form `87223c49` (30 `narrative_text` + 5 `number`) contains none, so its
-certification path is unaffected either way.
+⚠️ **NARROWER THAN THIS FILE FIRST CLAIMED, AND THE CORRECTION IS THE USEFUL
+PART.** The Scope originally read "every `single_select`/`multi_select` content
+control that resolves null … 28 of them", which reads as 28 affected. Measured by
+mutating `w:listItem[0]` on three separate controls and re-converting:
+
+    control 0 (Address, BLOCK-level)  -> probe PRINTED, x=265.55 y=682.4 page 1
+    control 1 (inline)                -> probe NOT printed
+    control 5 (inline)                -> probe NOT printed
+
+**1 of 28 prints; the other 27 render nothing at all.** The distinguishing
+property is that control 0 is the only one whose `sdtContent` holds a `w:p` —
+the only BLOCK-level control on the template. The diagnosis above already named
+only `Address`; the Scope paragraph contradicted it.
+
+That does not shrink the certification decision — #168(b) excludes selections by
+KIND, which is fix-by-ground and correct: the mechanism is a property of how an
+empty selection renders, not of which one happened to be measured. But it does
+shrink the EXPORT defect: one visible string on one control, not 28.
+
+The owner's form `87223c49` (30 `narrative_text` + 5 `number`) contains no
+selections at all, so its certification path is unaffected either way.

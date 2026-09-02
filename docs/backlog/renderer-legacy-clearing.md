@@ -52,7 +52,8 @@ sequence. There is no `w:sdtContent` equivalent to replace — which is exactly
 why every attempt to bound it by walking has been falsified, and why #165's
 whole-subtree replacement has nothing to grip.
 
-So the slice is not "port the SDT fix". It is: **give the legacy result a
+So the slice is not "port the SDT fix" (whichever of the four SDT mechanisms
+this arc shipped is meant). It is: **give the legacy result a
 principled extent model** that is correct for a spanning result AND cannot
 over-reach on a malformed document. Those two must be solved together, since the
 naive fix for one causes the other.

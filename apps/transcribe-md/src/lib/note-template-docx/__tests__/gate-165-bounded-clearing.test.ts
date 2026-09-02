@@ -75,8 +75,13 @@ function docWith(extra: string, opts: { placeholder?: boolean } = {}): string {
   );
 }
 
-async function renderAllNull(documentXml: string) {
-  const source = await buildSyntheticDocx({ documentXml });
+async function renderAllNull(documentXml: string, stylesXml?: string) {
+  // `extraEntries` is applied after the defaults, so this overrides
+  // `word/styles.xml` — which is where a paragraph's numbering can live.
+  const source = await buildSyntheticDocx({
+    documentXml,
+    ...(stylesXml ? { extraEntries: { 'word/styles.xml': stylesXml } } : {}),
+  });
   const { compileTemplateDocx } = await import('../compiler');
   const ir = compileTemplateDocx(source);
   const resolutions = ir.fields.map((field) =>
@@ -143,7 +148,7 @@ describe('#165 rule 1 — the writer clears the whole subtree, so nothing inside
       // index-dependence, and this file uses `bodyProofs` everywhere else.
       const proof = bodyProofs.find((p) => p.kind === 'emptied');
       expect(proof, `${name}: no emptied proof was produced`).toBeDefined();
-      expect(countsAsBlankProof(proof as never, bindingOf, () => true)).toBe(true);
+      expect(countsAsBlankProof(proof as never, { bindingOf, resolvedNull: () => true, kindOf: () => undefined })).toBe(true);
       expect(rendered.verification.verified).toBe(true);
     });
   }
@@ -210,11 +215,20 @@ describe('#165 — the replacement matches the control LEVEL, read from its pare
 });
 
 describe('#165 — what the writer does decides the label, not a list of kinds', () => {
-  it('a null SELECTION is emptied and counts — #164 excluded it on a FALSE premise', async () => {
-    // #164's comment claimed a selection "renders anything, so it asserts a
-    // choice". Measured: a null single_select clears to empty exactly like a
-    // narrative control. The 28 WM_IOV dropdowns are the target population.
-    const { proofs, bindingOf, outputXml } = await renderAllNull(
+  it('⚠️ a null SELECTION is NOT emptied — #165 included them, #168 reversed it', async () => {
+    // ⚠️ THIS ARM PREVIOUSLY ASSERTED THE OPPOSITE AND STAYED GREEN THROUGH THE
+    // REVERSAL, because its `proofs.find(kind === 'emptied')` was UNSCOPED and
+    // matched the header control the fixture package always ships. Measured:
+    //
+    //   word/document.xml  Exam side (single_select)      proof=filled   counts=false
+    //   word/header1.xml   Practice display name (narr.)  proof=emptied  counts=true
+    //   the arm's find() -> the HEADER field
+    //
+    // That is the exact hazard this file's own `bodyProofs` comment warns
+    // about, in the arm that most needed the scoping — an arm asserting a rule
+    // the codebase had already reversed, kept green by measuring a different
+    // field in a different part.
+    const { bodyProofs, outputXml } = await renderAllNull(
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
         `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
         `<w:body><w:p><w:sdt><w:sdtPr><w:id w:val="901"/><w:alias w:val="Exam side"/>` +
@@ -223,10 +237,11 @@ describe('#165 — what the writer does decides the label, not a list of kinds',
         `</w:sdtPr><w:sdtContent><w:r><w:t>Choose an item.</w:t></w:r>` +
         `</w:sdtContent></w:sdt></w:p></w:body></w:document>`,
     );
-    const proof = proofs.find((p) => p.kind === 'emptied');
-    expect(proof, 'a null selection produced no emptied proof').toBeDefined();
-    expect(countsAsBlankProof(proof as never, bindingOf, () => true)).toBe(true);
+    // NON-VACUITY: exactly one BODY field, and it is the selection.
+    expect(bodyProofs.length).toBe(1);
+    // It still CLEARS — the exclusion is on the count, not the render.
     expect(outputXml.includes('Choose an item.')).toBe(false);
+    expect(bodyProofs[0].kind).not.toBe('emptied');
   });
 
   it('a null CHECKBOX is NOT emptied — both its states PRINT', async () => {
@@ -994,6 +1009,127 @@ describe('#168 — a cleared region that can still render buys no blank credit',
     // NON-VACUITY: the list definition survives — that is what the engine falls
     // back to, and the reason this may not buy blank credit.
     expect(outputXml.includes('w:listItem')).toBe(true);
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+  });
+});
+
+describe('#168(a) — numbering OUTSIDE the control disqualifies it too', () => {
+  it('an INLINE control under a numbered paragraph cannot claim blank', async () => {
+    // ⚠️ THE GUARD WAS SCOPED TO THE CONTROL'S INSIDE AND WAS EVADED BY ONE
+    // NESTING LEVEL. For an inline control the numbering sits on the `w:pPr` of
+    // the paragraph HOLDING it. Measured: two documents printing the identical
+    // line — "ANTICOAGULATED 1." — got opposite verdicts, the outside one
+    // earning `emptied` AND blank credit.
+    //
+    // Live on the real template: 4 of its 133 paragraphs carry both `w:numPr`
+    // and an inline `w:sdt`, masked only because those controls are dropdowns.
+    const { outputXml, bodyProofs } = await renderAllNull(
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+        `<w:body><w:p>` +
+        `<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr>` +
+        `<w:sdt><w:sdtPr><w:id w:val="996"/><w:alias w:val="Anticoagulation"/><w:text/></w:sdtPr>` +
+        `<w:sdtContent><w:r><w:t>Enter anticoagulation</w:t></w:r></w:sdtContent></w:sdt>` +
+        `</w:p></w:body></w:document>`,
+    );
+    // The numbering stays, the content clears — and the field cannot claim blank.
+    expect(outputXml.includes('w:numPr')).toBe(true);
+    expect(outputXml.includes('Enter anticoagulation')).toBe(false);
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+  });
+
+  it('a control with NO numbering anywhere still earns its blank credit', async () => {
+    // NON-VACUITY for the arm above: the widened search must not disqualify
+    // every field. Without this, "not emptied" could be true for any reason.
+    const { bodyProofs } = await renderAllNull(
+      sdtDoc({ content: '<w:r><w:t>Enter anticoagulation</w:t></w:r>' }),
+    );
+    expect(bodyProofs.map((p) => p.kind)).toContain('emptied');
+  });
+});
+
+describe('#168(a) — numbering reached through a STYLE, and two false refusals', () => {
+  const styledDoc = (pPrInner: string, styles: string) => ({
+    documentXml:
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:body><w:sdt><w:sdtPr><w:id w:val="997"/><w:alias w:val="Anticoagulation"/>` +
+      `<w:text/></w:sdtPr><w:sdtContent>` +
+      `<w:p><w:pPr>${pPrInner}</w:pPr><w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>` +
+      `</w:sdtContent></w:sdt></w:body></w:document>`,
+    stylesXml:
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      styles + `</w:styles>`,
+  });
+
+  it('numbering carried by w:pStyle disqualifies the field — the region has no w:numPr at all', async () => {
+    // ⚠️ MEASURED TO PDF: the cleared region contained only
+    // `<w:pStyle w:val="ListParagraph"/>`, the guard found no `w:numPr`, and the
+    // field printed `ANTICOAGULATED 1.` while proofed `emptied` with blank
+    // credit. The numbering lived entirely in `styles.xml`.
+    const { documentXml, stylesXml } = styledDoc(
+      '<w:pStyle w:val="ListParagraph"/>',
+      `<w:style w:type="paragraph" w:styleId="ListParagraph"><w:pPr>` +
+        `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr></w:style>`,
+    );
+    const { bodyProofs, outputXml } = await renderAllNull(documentXml, stylesXml);
+    expect(outputXml.includes('Enter anticoagulation')).toBe(false);
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+  });
+
+  it('a style based on a numbered style is caught too — basedOn is resolved transitively', async () => {
+    const { documentXml, stylesXml } = styledDoc(
+      '<w:pStyle w:val="ClinicalList"/>',
+      `<w:style w:type="paragraph" w:styleId="ListParagraph"><w:pPr>` +
+        `<w:numPr><w:numId w:val="7"/></w:numPr></w:pPr></w:style>` +
+        `<w:style w:type="paragraph" w:styleId="ClinicalList">` +
+        `<w:basedOn w:val="ListParagraph"/></w:style>`,
+    );
+    const { bodyProofs } = await renderAllNull(documentXml, stylesXml);
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+  });
+
+  it('⚠️ numId="0" is NOT numbering — it is Word’s "no list" marker', async () => {
+    // A FALSE REFUSAL costs a doctor their certification. `numId="0"` is exactly
+    // what Word writes when a user REMOVES numbering from a paragraph whose
+    // style carries it — measured to print nothing.
+    const { documentXml, stylesXml } = styledDoc(
+      '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="0"/></w:numPr>',
+      '<w:style w:type="paragraph" w:styleId="Normal"/>',
+    );
+    const { bodyProofs } = await renderAllNull(documentXml, stylesXml);
+    expect(bodyProofs.map((p) => p.kind)).toContain('emptied');
+  });
+
+  it('⚠️ numbering inside w:pPrChange is HISTORY, not numbering', async () => {
+    // `w:pPrChange` records the paragraph's FORMER properties for revision
+    // tracking and renders nothing.
+    const { documentXml, stylesXml } = styledDoc(
+      '<w:pPrChange w:id="9" w:author="Dr"><w:pPr>' +
+        '<w:numPr><w:numId w:val="7"/></w:numPr></w:pPr></w:pPrChange>',
+      '<w:style w:type="paragraph" w:styleId="Normal"/>',
+    );
+    const { bodyProofs } = await renderAllNull(documentXml, stylesXml);
+    expect(bodyProofs.map((p) => p.kind)).toContain('emptied');
+  });
+});
+
+describe('#168(a) — the DATE branch carries the eligibility check too', () => {
+  it('a numbered DATE control cannot claim blank', async () => {
+    // ⚠️ THE `date` BRANCH'S `blankEligible` WAS UNPROVED: deleting
+    // ` && cleared.blankEligible` there redded 0 of 57 arms, while the other two
+    // sites each redded one. It is load-bearing, not dead — this is its arm.
+    const { bodyProofs } = await renderAllNull(
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+        `<w:body><w:sdt><w:sdtPr><w:id w:val="998"/><w:alias w:val="Encounter date"/>` +
+        `<w:date w:fullDate="2026-01-01T00:00:00Z"><w:dateFormat w:val="yyyy-MM-dd"/></w:date>` +
+        `</w:sdtPr><w:sdtContent>` +
+        `<w:p><w:pPr><w:numPr><w:numId w:val="7"/></w:numPr></w:pPr>` +
+        `<w:r><w:t>2026-01-01</w:t></w:r></w:p>` +
+        `</w:sdtContent></w:sdt></w:body></w:document>`,
+    );
     expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
   });
 });
