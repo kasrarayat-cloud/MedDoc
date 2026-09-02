@@ -132,6 +132,52 @@ reading lands on the tracked fixture.
 
 ---
 
+## LENS D — THE ARMS, AND A CORRECTION TO WHAT I ALREADY REPORTED
+
+⚠️ **I TOLD THE OWNER "THE THREE NOW-ARMED FIXES". ONE OF THE THREE IS NOT ARMED
+FOR ITS ACTUAL DEFECT SHAPE.** Correcting it here because the claim was evidence.
+
+`kindByFieldId` is armed against the **fail-CLOSED** mutation (empty map — 1 test
+reds) and **NOT** against the **fail-OPEN** one that is the real defect: return
+`'narrative_text'` for every field and **0 of 652 template-twin tests red.**
+
+**The cause is canon 62, which I have already written down and repeated anyway.**
+`gate-165-product-consult-form-certifies.test.ts:817`:
+
+```js
+const selectionId = fixture.ir.fields.find((f) => f.kind === 'single_select')?.fieldId;
+```
+
+An unscoped `find()`. The fixture holds five `single_select` fields; the first
+four resolve NON-NULL and only the fifth is nulled. So the forged `emptied`
+lands on a field the manifest says was FILLED, and it is refused by the #167
+`resolvedNull` cross-check — **never by the kind check the arm exists to
+prove.** Instrumented, the verdict is identical and the guard is different:
+`kind-reject` at baseline, `resolvedNull-reject` under the mutation.
+
+⚠️ **AND IT IS THE SAME DEFECT, IN A SECOND FILE, IN THE SAME DELTA.** The
+unscoped-`find()` hazard was found and fixed in the RENDERER test earlier in
+this arc, and this file's own `bodyProofs` comment warns about it. Fixing an
+instance is not fixing the class, and the `expect(selectionId, 'fixture has no
+selection — this arm would be vacuous').toBeDefined()` non-vacuity guard
+**passes happily on the wrong element** — a guard aimed at the wrong question.
+
+**The other findings:**
+
+| # | what | evidence |
+|---|---|---|
+| F2 | #169's `ilvl`-without-`numId` reversal is armed at ONE of its two sites — widening the PARAGRAPH check reds **0 of 742**; only the STYLE site has an arm | both sites armed for *removal*, one for *widening* |
+| F3 | the `date` branch (`renderer.ts:1277`) is **live, reachable and unarmed** — hardcoding `blankEligible: true` reds 0 | I re-measured baseline myself: a `date` control with no `w:fullDate`, skeleton content, in a numbered paragraph reaches the zero-patch path and correctly yields `blank / elig=false / COUNTS=false`. **Correct today, undefended tomorrow.** |
+| F4 | same shape at the selection branch (`:1313`) — unarmed, currently double-covered by the read-path kind check; exploitable the moment a kind leaves `BLANK_INELIGIBLE_KINDS` | mutation reds 0 |
+| F5 | the "unreadable `styles.xml` ⇒ all ineligible" claim has **no arm at all** — two independent mutations each red 0 | and the *absent*-`styles.xml` half was never disclosed; I disclosed only the *unparseable* half |
+| F6 | fix 2's arm reds with a bare `expected true to be false`, under a test NAMED for selections — a reader triaging it is pointed at the wrong rule | |
+
+**WHAT DOES MEASURE, verified by mutation rather than assumed:** disabling
+`paragraphNumbering` entirely (always `clear`) reds **11** arms; forcing it
+always `numbered` reds **29**. So the false-refusal anchors and every
+ineligibility arm are non-vacuous — the guard's own coverage is real. It is the
+three *newly added* fixes whose arms are uneven.
+
 ## HONEST LIMITS
 
 - **Every claim about what WORD or the PDF ENGINE would render is UNVERIFIED.**
