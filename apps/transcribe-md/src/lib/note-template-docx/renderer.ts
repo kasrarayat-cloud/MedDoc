@@ -798,7 +798,25 @@ function structureKeepDeletions(
     cursor = child.end;
     const local = xmlLocalName(child.name);
     if (required?.has(local)) survivingRequired += 1;
-    if (STRUCTURE_KEEP_WHOLE.has(local)) continue;
+    if (STRUCTURE_KEEP_WHOLE.has(local)) {
+      // ⚠️ A PROPERTY CONTAINER MUST NOT HOLD A RUN, AND THIS IS THE ONE CHECK
+      // THAT KEEPS THE KEEP-LIST HONEST.
+      //
+      // Canon 86's correction records that the keep-list is a claim about the
+      // FORMAT while the code copies subtrees VERBATIM and nothing validates
+      // them. A lens then confirmed the gap is live: a `w:r` smuggled inside
+      // `w:pPr` survives a clear, prints, and the field is still proofed
+      // `emptied` with blank credit — #164's shape, one layer inside the fix.
+      //
+      // `w:r` is the universal carrier of printable content in OOXML, and no
+      // property container legitimately contains one (`w:pPr/w:rPr` is run
+      // PROPERTIES, not a run). So this is a single structural rule rather than
+      // another enumeration of carriers — and it REFUSES rather than repairs,
+      // because a property block holding a run is a document we do not
+      // understand.
+      if (descendantXmlElements(child, 'r').length > 0) return false;
+      continue;
+    }
     if (STRUCTURE_RECURSE.has(local)) {
       if (!structureKeepDeletions(xml, child, fieldId, out)) return false;
       continue;

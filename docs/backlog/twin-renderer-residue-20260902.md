@@ -49,11 +49,12 @@ structural observation rather than a demonstrated harm.
 A `w:bookmarkStart` inside `sdtContent` whose `w:bookmarkEnd` is outside it is
 deleted by the clear, leaving an end with no start. `main` kept the start.
 
-**Accepted for now:** Word tolerates the orphan; the cost is a broken
-cross-reference to that bookmark. The fix is to carry `w:bookmarkStart` /
-`w:bookmarkEnd` through the replacement alongside `w:pPr` / `w:rPr` — they are
-non-printing, so they belong on the same allow-list. Not done here only because
-no measured document exercises it.
+⚠️ **CLOSED 2026-09-02 by ruling #167, incidentally.** v3 keeps
+`w:bookmarkStart` / `w:bookmarkEnd` as skeleton, so the orphan cannot arise —
+measured by a lens: `bookmarkStart_survives=true`, the id intact. The proposed
+fix and the mechanism that made it unnecessary are the same idea arrived at from
+two directions. **Retired per the standing rule that a closed item still being
+reported trains readers to skim the open list.**
 
 ## ⚠️ RESOLVED 2026-09-02 — rule 2's check IS load-bearing. THIS SECTION IS SUPERSEDED.
 
@@ -84,7 +85,9 @@ renderer that touches a span without re-deriving its expectation.
 The check now has two arms asserting `ROUNDTRIP_FIELD_MISMATCH` **by name**, and
 both red when it is disabled.
 
-## THE ONE THE OWNER SHOULD SEE — #165 rule 2's check may be unfalsifiable
+### ⚠️ SUPERSEDED — DO NOT ACT ON THIS SECTION (see the resolution directly above)
+
+#### THE ONE THE OWNER SHOULD SEE — #165 rule 2's check may be unfalsifiable
 
 `roundtrip-verify.ts`'s emptied-only byte comparison **reds nothing when
 deleted** (measured: 687 passed with it replaced by `void expected; void actual;`),

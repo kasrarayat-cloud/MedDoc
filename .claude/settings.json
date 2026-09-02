@@ -153,7 +153,7 @@
       "Read(//opt/meddoc-pro/**)",
       "Read(//tmp/**)",
       "Edit(//opt/meddoc-pro/**)",
-      "Bash(shred -u -n 3 -z /tmp/claude-1000/:*)"
+      "Bash(bash scripts/reap-session-scratch.sh:*)"
     ],
     "deny": [
       "Bash(git push --force:*)",
@@ -185,7 +185,8 @@
       "Bash(rm -rf:*)",
       "Bash(sudo:*)",
       "Read(//opt/meddoc-pro/.env)",
-      "Read(//etc/letsencrypt/**)"
+      "Read(//etc/letsencrypt/**)",
+      "Bash(shred:*)"
     ]
   }
 }

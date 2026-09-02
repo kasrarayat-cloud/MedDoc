@@ -322,19 +322,30 @@ function sdtDoc(opts: {
 }
 
 describe('#165 — the bounded clear, after the adversarial pass', () => {
-  it('the namespace PREFIX is the document’s, not a hardcoded `w:`', async () => {
-    // Measured by the pass: a hardcoded `w:` injected an UNDECLARED prefix, the
-    // rendered part failed XML namespace parsing, and LibreOffice — the
-    // product's own PDF engine — returned 400 on a document it had converted
-    // happily moments before, while the render reported `verified: true`.
+  it('the clear emits ONLY DELETIONS — nothing is written, so no prefix can be wrong', async () => {
+    // ⚠️ RETARGETED — THE PREVIOUS ASSERTION WAS VACUOUS AND A LENS PROVED IT.
+    // It asserted no `w:`-prefixed element appears in an `x:`-prefixed document.
+    // Under v3 nothing is EVER written, so that cannot fail: hardcoding
+    // `qualifiedPrefix` to return `'w:'`, and even making it THROW, redded zero
+    // arms — the function is not called from this file at all.
+    //
+    // The honest arm is the property that makes it vacuous, and that property IS
+    // falsifiable: every patch this path emits is a DELETION. Reintroduce any
+    // writing — a rebuilt run, a synthesised paragraph — and this reds.
     const { outputXml, rendered } = await renderAllNull(
       sdtDoc({ prefix: 'x', content: '<x:r><x:t>Enter anticoagulation</x:t></x:r>' }),
     );
     expect(rendered.verification.verified).toBe(true);
-    // THE PROPERTY: no `w:`-prefixed element may appear in a document that
-    // never declared that prefix.
-    expect(outputXml.includes('<w:r>')).toBe(false);
-    expect(outputXml.includes('<w:t')).toBe(false);
+    const emptied = rendered.plan.fields.find((f) => f.kind === 'emptied');
+    expect(emptied, 'no emptied proof — the arm would be vacuous').toBeDefined();
+    const patches = rendered.plan.parts
+      .flatMap((part) => part.patches)
+      .filter((patch) => patch.fieldIds.includes(emptied!.fieldId));
+    expect(patches.length).toBeGreaterThan(0);
+    // THE PROPERTY: every patch is a pure deletion.
+    expect(patches.map((patch) => patch.replacement)).toEqual(patches.map(() => ''));
+    // and the content really did clear, in the document's own prefix.
+    expect(outputXml.includes('Enter anticoagulation')).toBe(false);
     expect(outputXml.includes('<x:t')).toBe(true);
   });
 
@@ -356,14 +367,21 @@ describe('#165 — the bounded clear, after the adversarial pass', () => {
   });
 
   for (const parent of ['fldSimple', 'moveTo', 'bdo']) {
-    it(`a control inside w:${parent} does not get a paragraph written into a paragraph`, async () => {
-      // Two independent lenses found the same four run-level parents missing
-      // from an INLINE_SDT_PARENTS enumeration. The level now comes from the
-      // CONTENT, so there is no list left to be short.
-      const { outputXml } = await renderAllNull(
+    it(`a control inside w:${parent} clears by DELETION, with no level to infer`, async () => {
+      // ⚠️ RETARGETED — the old assertion (`no <w:p> inside a <w:p>`) was VACUOUS
+      // under v3 and a lens proved it: v3 writes no `w:p` at all, so the regex
+      // cannot match, and all three survived `sdtBoundedClearPatches` returning
+      // `null` unconditionally.
+      //
+      // These three parents mattered because v2 inferred a block/inline LEVEL
+      // from an enumeration that was short by four. v3 infers no level, so the
+      // arm now pins that: the content clears, and every patch is a deletion.
+      const { outputXml, rendered } = await renderAllNull(
         sdtDoc({ parent, content: '<w:r><w:t>Enter anticoagulation</w:t></w:r>' }),
       );
-      expect([parent, /<w:p>(?:(?!<\/w:p>)[\s\S])*<w:p>/.test(outputXml)]).toEqual([parent, false]);
+      expect([parent, outputXml.includes('Enter anticoagulation')]).toEqual([parent, false]);
+      const patches = rendered.plan.parts.flatMap((part) => part.patches);
+      expect([parent, patches.every((patch) => patch.replacement === '')]).toEqual([parent, true]);
     });
   }
 
@@ -847,5 +865,67 @@ describe('#167 — structure the clear must not destroy', () => {
     );
     expect([outputXml.includes('inserted finding'), outputXml.includes('<w:p>')])
       .toEqual([false, true]);
+  });
+});
+
+describe('#167 — the two shapes the pass left unarmed', () => {
+  it('CHARACTER DATA INTERLEAVED with elements refuses — the guard nothing watched', async () => {
+    // ⚠️ THE GUARD WAS LOAD-BEARING AND UNARMED: disabling the sibling-gap check
+    // redded 0 of 5610 tests, while the shape it stops restores #164 exactly —
+    // measured, `emptied` with the drug name still printing. The existing
+    // character-data arm covers only the NO-CHILDREN case, caught by a
+    // different (trailing) check.
+    const documentXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:body><w:p><w:sdt><w:sdtPr><w:id w:val="994"/>` +
+      `<w:alias w:val="Anticoagulation"/><w:text/></w:sdtPr>` +
+      `<w:sdtContent>WARFARIN 5 MG DAILY<w:r><w:t>prompt</w:t></w:r></w:sdtContent>` +
+      `</w:sdt></w:p></w:body></w:document>`;
+    const { outputXml, bodyProofs } = await renderAllNull(documentXml);
+    // It still prints — the fallback only blanks `w:t` — but it must NEVER be
+    // claimed empty, which is the whole difference.
+    expect(outputXml.includes('WARFARIN')).toBe(true);
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+  });
+
+  it('a RUN smuggled into w:pPr refuses — a property container may not hold one', async () => {
+    // ⚠️ CANON 86's CORRECTION, CONFIRMED LIVE AND PREVIOUSLY UNARMED. The
+    // keep-list is a claim about the FORMAT; the code copies subtrees verbatim
+    // and nothing validates them. Measured: the run survives, prints, and the
+    // field is proofed `emptied` with blank credit — #164's shape one layer
+    // inside the fix for it.
+    const { outputXml, bodyProofs } = await renderAllNull(
+      sdtDoc({
+        block: true,
+        content:
+          '<w:p><w:pPr><w:jc w:val="center"/>' +
+          '<w:r><w:t>WARFARIN 5 MG DAILY</w:t></w:r></w:pPr>' +
+          '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
+      }),
+    );
+    // ⚠️ THE ESSENTIAL PROPERTY IS THE LABEL, NOT THE TEXT. The refusal falls
+    // back to text patching, which happens to blank this run's `w:t` as well —
+    // better than required, and NOT what the arm rests on, because that
+    // fallback cannot reach a non-`w:t` carrier smuggled the same way.
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+    expect(outputXml.includes('WARFARIN')).toBe(false);
+  });
+
+  it('and a NON-w:t carrier in w:pPr is refused too — where the fallback cannot help', async () => {
+    // The sibling arm's fallback blanks `w:t`. This one cannot be rescued that
+    // way, so it isolates the refusal itself: a `w:sym` inside `w:pPr` survives
+    // whatever we do, and the only correct outcome is to refuse the blank claim.
+    const { outputXml, bodyProofs } = await renderAllNull(
+      sdtDoc({
+        block: true,
+        content:
+          '<w:p><w:pPr><w:jc w:val="center"/>' +
+          '<w:r><w:sym w:font="Wingdings" w:char="F0FE"/></w:r></w:pPr>' +
+          '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
+      }),
+    );
+    expect(outputXml.includes('w:sym')).toBe(true);
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
   });
 });

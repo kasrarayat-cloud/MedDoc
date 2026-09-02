@@ -46,6 +46,34 @@ the binding span as it intended to leave it; verification is one comparison
 against the output. Stale content, a glyph, another field's patch and tampering
 all diverge identically, and a correct empty passes by construction.
 
+## ⚠️ AMENDED 2026-09-02 — THE MECHANISM ABOVE IS v2 AND WAS ITSELF FALSIFIED
+
+**Superseded wording is kept, because in this programme the correction is the
+point.** The entry says *"a null now replaces the whole `w:sdtContent` subtree"*
+and *"nothing inside the control can survive, because NOTHING inside the control
+survives."* Ruling #167 replaced that mechanism, and both sentences are now
+false as written.
+
+**What was wrong with it:** replacing a subtree means WRITING one, and a writer
+must model everything it rebuilds. Two adversarial passes found seventeen ways it
+did not — a hardcoded namespace prefix that made LibreOffice refuse the document;
+`w:sectPr` kept only from the first paragraph when it conventionally sits on the
+last; multi-paragraph content collapsed to one, moving a signature block 164pt; a
+wrapped table deleted outright.
+
+**v3 writes NOTHING and rewrites no start tag.** It emits deletion patches for
+every node inside the control that is not structural skeleton, and keeps thirteen
+element kinds. So *"nothing inside survives"* is replaced by something weaker and
+true: **nothing inside survives EXCEPT declared skeleton, and skeleton is
+required to be non-printing.**
+
+**What SURVIVES from this entry, and it is the durable half:** *bound the edit
+with the document's own element, not with your scan.* v3 still does exactly that
+— the bounds are the control's own children, from the scanner. And the composition
+argument below is unchanged: a correct write with no proof is an assertion, and a
+proof with a blind writer is writer-blind. Only the shape of "correct write"
+moved, from REBUILD to DELETE.
+
 ## ⚠️ NEITHER HALF IS SUFFICIENT, AND THAT IS THE PART TO CARRY
 
 Byte-equality alone is **WRITER-BLIND**: it certifies faithfulness to the

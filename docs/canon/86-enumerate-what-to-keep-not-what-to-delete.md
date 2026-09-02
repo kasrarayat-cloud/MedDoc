@@ -13,9 +13,17 @@ carrier nobody named: `w:sym`, `w:pict`, `w:drawing`, `w:object`, `w:delText`,
 `w:instrText`. The list never closes, and each miss meant **clinical content
 printed into a document a doctor signs**.
 
-The sixth instrument enumerated **what to KEEP** — the property containers
-(`w:pPr`, `w:rPr`) that define how an empty field looks — and deleted everything
-else.
+The sixth instrument enumerated **what to KEEP** — the structural skeleton — and
+deleted everything else.
+
+⚠️ **AMENDED 2026-09-02: the keep-list is no longer `w:pPr`/`w:rPr`.** That was
+v2, which rebuilt the container and copied two property elements into what it
+wrote. Ruling #167's v3 writes nothing, so the keep-list is thirteen STRUCTURAL
+kinds — `p tbl tr tc sdt sdtContent` recursed, `pPr tblPr tblGrid trPr tcPr
+sectPr sdtPr sdtEndPr tblPrEx permStart permEnd bookmarkStart bookmarkEnd
+proofErr commentRange*` kept whole — and **`w:rPr` is not among them**: a run's
+own properties go when the run goes, because the run is content. The asymmetry
+argument is untouched by that; only the list changed.
 
 > **AN INCOMPLETE DELETE-LIST PRINTS CLINICAL CONTENT.**
 > **AN INCOMPLETE KEEP-LIST COSTS FORMATTING.**
@@ -89,8 +97,13 @@ should be reconstructed from parsed properties rather than sliced raw.
 
 - Write the rule as *"keep X, delete everything else"* wherever the safe state is
   an absence.
-- Put only structurally-guaranteed-safe things on the keep-list. `w:pPr` and
-  `w:rPr` qualify because the schema gives them no printable children — that is
-  a property of the format, not a judgement about a document.
+- Put only structurally-guaranteed-safe things on the keep-list — **and read the
+  2026-09-02 correction above before trusting that phrase.** The schema gives
+  property containers no printable children; the CODE copies them verbatim and
+  validates nothing, so the guarantee is about the FORMAT and not about the
+  input. v3 therefore adds one structural check rather than trusting the claim:
+  **a kept-whole property container must contain no `w:r`.** A run is the
+  universal carrier of printable content, no property block legitimately holds
+  one, and a document that does is refused rather than repaired.
 - Say the asymmetry out loud in the code, because the next reader's instinct will
   be to "improve" it by enumerating the other way.
