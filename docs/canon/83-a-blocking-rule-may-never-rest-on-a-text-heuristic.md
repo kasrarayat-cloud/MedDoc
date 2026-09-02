@@ -38,13 +38,28 @@ DECLARES** — an element's presence, a flag the authoring tool sets, an
 enumerated schema value. Never on matching TEXT, in any language, however
 carefully.
 
-⚠️ **AND THE AUTHORITATIVE SIGNAL WAS USUALLY ALREADY IN HAND.** `w:showingPlcHdr`
-— Word's own "this control still holds its placeholder" marker — was present on
-**28 of 28** affected controls and was passed into the very function that
-ignored it in favour of a string match. `w14:checked` was likewise available and
-unread. That is [canon 80](80-lsmod-is-silent-about-built-ins.md)'s *ask the
-owner of the state* one layer up: the heuristic was not chosen because the
-authoritative answer was missing, but because it was easier to reach for.
+⚠️ **AND THE AUTHORITATIVE SIGNAL WAS ALREADY IN HAND.** `w:showingPlcHdr` —
+Word's own "this control still holds its placeholder" marker — is present on
+**28 of 28** affected controls. **MEASURED 2026-09-02**, by unzipping
+`WM IOV Template.docx` and counting `word/document.xml`: `showingPlcHdr` 28,
+`dropDownList` 56 (two per control), `sdt` 28. That is
+[canon 80](80-lsmod-is-silent-about-built-ins.md)'s *ask the owner of the state*
+one layer up: the heuristic was not chosen because the authoritative answer was
+missing, but because it was easier to reach for.
+
+⚠️ **GRADED PROVENANCE, AND ONE CLAIM WITHDRAWN.** An earlier draft of this
+paragraph added *"`w14:checked` was likewise available and unread."* **That is
+withdrawn: the same measurement scores `w14:checkbox` 0 and `w14:checked` 0 on
+that document** — it has no checkboxes at all, only dropdowns. The withdrawn
+sentence was a plausible generalisation from a sibling defect (an
+unchecked-checkbox false positive, which was real and was fixed elsewhere) onto
+a document that cannot exhibit it.
+
+And the claim that the marker *"was passed into the very function that ignored
+it"* is **not verifiable from `main`**: the detector lived only on the held
+`fix/ruling-163-nulls-unpatched` branch and never merged, so `showingPlcHdr`
+has zero hits under `apps/` here. It is recorded as a report about code that was
+written and withdrawn — weaker than a measurement, and filed as such.
 
 ## The practice
 

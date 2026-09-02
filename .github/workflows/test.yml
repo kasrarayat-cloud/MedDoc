@@ -432,12 +432,23 @@ jobs:
     # the figures this comment carried as a purchase spec. Job `name:`
     # is UNCHANGED so every required context is preserved byte-for-byte.
     # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
-    # ⚠️ #164 item 6 — MOVED TO THE LIGHT LANE, ON A MEASURED CONDITION.
-    # The heavy lane is ONE runner (ci-1 alone carries `quillmd-ci`), and it
-    # also carries e2e and `test`. Measured across the 2026-09-01 merge queue:
-    # ci-2 sat `busy=false` while three CI runs queued, because every job in
-    # this workflow that could have used it was pinned heavy. That is one lane
-    # plus a scanner, not two lanes.
+    # ⚠️ #164 item 6 — THIS WIDENS `unit`'s ELIGIBLE RUNNER SET. It does NOT
+    # relocate the job, and the difference matters: ci-1 carries BOTH labels.
+    #
+    #   quillmd-ci-1  labels=self-hosted,Linux,X64,quillmd-ci,quillmd-ci-light
+    #   quillmd-ci-2  labels=self-hosted,Linux,X64,quillmd-ci-light
+    #
+    # So `quillmd-ci` resolves to exactly ONE machine while `quillmd-ci-light`
+    # resolves to TWO. Pinning `unit` heavy made it compete with `test` and e2e
+    # for that one machine; light makes it eligible for either. It may still
+    # land on ci-1 — that is fine, and is why the claim is "eligible for two",
+    # never "runs on ci-2".
+    #
+    # ⚠️ MEASURED LIVE, 2026-09-02T07:35Z, on PR #932's own CI run: `unit tests`
+    # in_progress on ci-1 (busy=true) with `test` QUEUED BEHIND IT, while ci-2
+    # sat busy=false because every job it could legally take had already
+    # finished. Two jobs serialised on one machine with the other idle — the
+    # exact contention this line removes.
     #
     # ⚠️ THE CONDITION IS SERVICE CONTAINERS, AND IT WAS CHECKED, NOT ASSUMED:
     # this job declares NO `services:` block — it installs, generates the Prisma
