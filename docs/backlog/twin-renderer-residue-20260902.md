@@ -55,6 +55,35 @@ cross-reference to that bookmark. The fix is to carry `w:bookmarkStart` /
 non-printing, so they belong on the same allow-list. Not done here only because
 no measured document exercises it.
 
+## ⚠️ RESOLVED 2026-09-02 — rule 2's check IS load-bearing. THIS SECTION IS SUPERSEDED.
+
+**The section below is kept because superseded wording is kept, and because the
+argument it makes was reasonable and wrong in an instructive way.** It should
+NOT be acted on.
+
+The composition settles it. A **same-field** patch touching an emptied span
+AFTER its expectation is computed diverges, and nothing else catches it:
+
+    stray=1  span=ON   wholepart=ON   -> ROUNDTRIP_FIELD_MISMATCH
+    stray=1  span=OFF  wholepart=ON   -> NO THROW   <- it ships
+    stray=1  span=ON   wholepart=OFF  -> ROUNDTRIP_FIELD_MISMATCH
+    stray=0  span=ON   wholepart=ON   -> NO THROW   (control)
+
+The third row is the one that matters: the span check fires with the whole-part
+equality DISABLED, so it is not being laundered by `STATIC_INVARIANCE_FAILED`.
+`PATCH_OVERLAP` never fires. Reproduced independently by a second lens.
+
+**Where the original argument went wrong:** it assumed the only divergence path
+is a FOREIGN patch inside the span, which means nested bindings, which die as
+`PATCH_OVERLAP`. A same-field patch is neither foreign nor overlapping, and the
+whole-part equality passes because that patch is IN the recorded list. The two
+guards ask different questions — *is the output what the PATCH LIST produces*
+versus *does the EXPECTATION describe the output* — and only the second sees a
+renderer that touches a span without re-deriving its expectation.
+
+The check now has two arms asserting `ROUNDTRIP_FIELD_MISMATCH` **by name**, and
+both red when it is disabled.
+
 ## THE ONE THE OWNER SHOULD SEE — #165 rule 2's check may be unfalsifiable
 
 `roundtrip-verify.ts`'s emptied-only byte comparison **reds nothing when

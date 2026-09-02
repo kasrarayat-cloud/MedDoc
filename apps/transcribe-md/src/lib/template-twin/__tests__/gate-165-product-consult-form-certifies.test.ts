@@ -479,7 +479,7 @@ describe('#165 product — remove the `emptied` evidence and certification refus
     };
     // ⚠️ RELABELLED, NOT DELETED — AND THE REASON IS MEASURED, NOT STYLISTIC.
     // Deleting the two entries outright makes the proof carry 11 fields for a
-    // 13-field IR, so `isVerifiedSyntheticProof` fails on its own arity check
+    // 13-field IR, so `isVerifiedSyntheticProof` fails on its per-field lookup (NOT its arity check — removing that reds nothing; the `.every()` lookup is what catches it)
     // and the run stops at `testReady=false` — a DIFFERENT gate, reached before
     // the blank census runs (the blank blocker is guarded by `testReady`). The
     // sibling arm below measures exactly that. To isolate ONE variable, the

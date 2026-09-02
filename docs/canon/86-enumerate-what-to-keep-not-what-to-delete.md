@@ -52,6 +52,39 @@ spilling from one page to two, and a doctor typing into an emptied control
 getting the document default instead of the template's Times New Roman. **Real,
 visible, and worth fixing — and not once did content survive.**
 
+## ⚠️ CORRECTION, 2026-09-02 — THE JUSTIFICATION ABOVE OVERSTATES ITS GUARANTEE
+
+The entry says property containers are safe *"because the schema gives them no
+printable children — that is a property of the format, not a judgement about a
+document."* **The first clause is true of the FORMAT and false of this
+IMPLEMENTATION**, because the code copies the property subtree **verbatim**
+without validating it against the schema. Nothing in the pipeline does.
+
+Measured by an adversarial lens, a block-level control with a run smuggled
+inside `w:pPr`:
+
+    KEEPLIST  src_has_WARFARIN=true  out_has_WARFARIN=true
+              proofKinds=emptied  verified=true  countsAsBlank=true
+
+Content survives a control proofed `emptied` and buys the certification blank
+requirement — the #164 shape, re-created one layer inside the fix for it.
+
+**HONEST LIMIT, because the severity must not be overstated either:** that input
+is schema-invalid, Word will not author it, and no production document is known
+to contain it. What is refuted is the entry's ABSOLUTE claim, not the practice.
+
+**What survives, and it is the whole point of the entry:** the ASYMMETRY. A
+keep-list that is wrong makes the output emptier; a delete-list that is wrong
+prints clinical content. That argument does not depend on the keep-list being
+infallible, and this correction is an instance of it — the failure mode of a
+wrong keep-list turned out to be "something survived a schema-invalid input",
+not "the doctor's note is wrong".
+
+**What must change in how the entry is read:** *"structurally guaranteed safe"*
+is a claim about validated input. Where nothing validates, the keep-list is a
+judgement about the document like any other, and it should say so — or the copy
+should be reconstructed from parsed properties rather than sliced raw.
+
 ## The practice
 
 - Write the rule as *"keep X, delete everything else"* wherever the safe state is

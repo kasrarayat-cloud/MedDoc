@@ -125,7 +125,7 @@ describe('#165 rule 1 — the writer clears the whole subtree, so nothing inside
   // these rows produced `emptied` + counts=true with the carrier STILL PRESENT.
   for (const [name, extra, needle] of CARRIERS) {
     it(`a null control containing ${name} renders EMPTY — the carrier is GONE`, async () => {
-      const { sourceXml, outputXml, proofs, bindingOf, rendered } = await renderAllNull(
+      const { sourceXml, outputXml, bodyProofs, bindingOf, rendered } = await renderAllNull(
         docWith(extra),
       );
 
@@ -137,7 +137,11 @@ describe('#165 rule 1 — the writer clears the whole subtree, so nothing inside
       expect([name, outputXml.includes(needle)]).toEqual([name, false]);
 
       // and only THEN may it buy a blank proof.
-      const proof = proofs.find((p) => p.kind === 'emptied');
+      // ⚠️ SCOPED TO THE BODY. The fixture package always ships a header
+      // control that ALSO earns an `emptied` proof, so `proofs.find` measures
+      // whichever comes first. It is the body today — verified — but that is
+      // index-dependence, and this file uses `bodyProofs` everywhere else.
+      const proof = bodyProofs.find((p) => p.kind === 'emptied');
       expect(proof, `${name}: no emptied proof was produced`).toBeDefined();
       expect(countsAsBlankProof(proof as never, bindingOf, () => true)).toBe(true);
       expect(rendered.verification.verified).toBe(true);
@@ -145,8 +149,8 @@ describe('#165 rule 1 — the writer clears the whole subtree, so nothing inside
   }
 
   it('an emptied proof carries `expectedSpanSha256` — an uncheckable claim is not a proof', async () => {
-    const { proofs } = await renderAllNull(docWith(CARRIERS[0][1]));
-    const emptied = proofs.filter((p) => p.kind === 'emptied');
+    const { bodyProofs } = await renderAllNull(docWith(CARRIERS[0][1]));
+    const emptied = bodyProofs.filter((p) => p.kind === 'emptied');
     expect(emptied.length).toBeGreaterThan(0);
     for (const p of emptied) {
       expect(typeof p.expectedSpanSha256, JSON.stringify(p)).toBe('string');
@@ -398,6 +402,34 @@ describe('#165 — the bounded clear, after the adversarial pass', () => {
       inner.includes('Times New Roman'),
       inner.includes('w:sz w:val="14"'),
     ]).toEqual([true, true, true, true]);
+  });
+
+  it('an INLINE emptied field keeps its run formatting — the majority path', async () => {
+    // ⚠️ THIS ARM EXISTS BECAUSE THE FIRST ONE PROVED THE MINORITY PATH.
+    // The formatting arm above uses `block: true`, and deleting `runProps` from
+    // the INLINE branch passed 702/702 — while 27 of the customer template's 28
+    // controls are inline, and the doctor-visible harm the fix was written for
+    // (typing into an emptied control and getting the document default instead
+    // of the template's Times New Roman) is on THIS branch.
+    const { outputXml } = await renderAllNull(
+      sdtDoc({
+        content:
+          '<w:r><w:rPr><w:rFonts w:ascii="Times New Roman"/><w:sz w:val="22"/>' +
+          '<w:b/></w:rPr><w:t>Enter anticoagulation</w:t></w:r>',
+      }),
+    );
+    const inner = outputXml.slice(
+      outputXml.indexOf('<w:sdtContent>'),
+      outputXml.indexOf('</w:sdtContent>'),
+    );
+    expect(inner.includes('Enter anticoagulation')).toBe(false);
+    // NON-VACUITY: it really is the inline shape — a run, not a paragraph.
+    expect(inner.includes('<w:p>')).toBe(false);
+    expect([
+      inner.includes('Times New Roman'),
+      inner.includes('w:sz w:val="22"'),
+      inner.includes('<w:b/>'),
+    ]).toEqual([true, true, true]);
   });
 
   it('a control WRAPPING A TABLE is refused — the grid is not flattened away', async () => {
