@@ -121,6 +121,100 @@ form.
 
 ---
 
+## R4 — a default TABLE style is skipped by the `w:type` filter
+
+`if (type !== null && type.toLowerCase() !== 'paragraph') continue;` skips a
+`w:style w:type="table" w:default="1"` carrying `w:pPr/w:numPr`, which applies to
+paragraphs in cells of tables naming no style. ⚠️ **The filter is one-sided in
+the opposite direction from the ST_OnOff fix immediately above it** — that one
+was widened to fail closed, this one still narrows. Two lenses found it.
+Whether Word prints the marker for that construct is **UNVERIFIED**; what is
+measured is our guard's blind spot.
+
+---
+
+## AND THE ARMS — SIX DEFECTS, ALL DEMONSTRATED BY MUTATION, TWO VERIFIED BY ME
+
+⚠️ **THE MUTATION MATRIX I RAN BEFORE COMMITTING WAS 10 OF 10 GREEN, AND IT WAS
+NOT ENOUGH.** A second matrix over the same code found five mutations that red
+NOTHING. Mine tested the fixes wholesale; these are the partial and quantifier
+shapes — the ones that actually ship.
+
+### A1 — the rewritten `blank-proof` MUTATION arm does not red on the regression it NAMES *(verified by me)*
+
+Applying `if (patches.length === 0) continue;` verbatim: **the arm passes.** Its
+filter is `p.kind === 'blank' || p.kind === 'emptied'`, and `emptied` comes from
+the PATCHED path which the regression does not touch — so the count falls 6 → 4
+and stays `> 0`. Only the neighbour reds, with a bare `expected 0 to be greater
+than 0`, so the diagnostic message I wrote never prints.
+
+⚠️ **THIS IS THE ARM I REWROTE *BECAUSE* IT WAS MEASURING THE WRONG THING** —
+a canon-72 source-text gate replaced by a behavioural assertion that is laundered
+by a neighbouring path. Repair is one edit: drop `|| p.kind === 'emptied'`.
+
+### A2 — ⚠️ THIS DELTA DISARMED A PRE-EXISTING GATE ARM *(verified by me)*
+
+Neutralising `resolvedNull` in `certification-lifecycle.ts` reds **0 of 757** —
+including the arm named *"⚠️ `resolvedNull` is pinned THROUGH
+`certifyAndActivateTemplateTwin`, not through its helper"*.
+
+**Mechanism, verified in both directions:** that arm's forgery relabels a
+genuinely `filled` proof to `blank`. A `filled` proof carries no
+`blankEligible`, so #170's new read path refuses it **as an absent sentinel,
+before `resolvedNull` is ever consulted**. It was armed before this commit and
+is not armed after it.
+
+⚠️ **AND IT IS THE IDENTICAL LAUNDERING I FOUND AND FIXED IN THE SIBLING ARM IN
+THE SAME COMMIT** — by adding `blankEligible: 'eligible'` to a forged `emptied`.
+I fixed the instance and did not sweep the class, which is the defect canon
+already names, committed by the session that had just written it down.
+
+### A3 — "EVERY paragraph in the cell is asked, not merely the first" is unarmed
+
+`descendantXmlElements(bound, 'p')` → `.slice(0, 1)` reds **0 of 757**. The
+routing fixture puts exactly ONE paragraph in the answer cell, so no arm can
+distinguish *every* from *the first*. Measured on a two-paragraph cell, the
+mutation flips a numbered cell from `ineligible` to `eligible`.
+
+### A4 — the ALL-quantifier itself is unarmed, and the empty set is unpinned
+
+`every` → `length === 0 || some` reds **0 of 757**. Instrumented: of **2 174**
+calls in the whole suite, **2 171 have exactly one paragraph in scope**. The only
+mixed set is produced by an arm that asserts nothing about eligibility. So
+`renderer.ts`'s own sentence — *every paragraph in scope must be a shape nothing
+can hide in* — has no arm behind it, and R3's empty-set behaviour is pinned in
+neither direction.
+
+### A5 — the RENDERER half of the three-state sentinel is unarmed
+
+All **five** `blankEligible: 'unevaluated'` literals flipped to `'eligible'` in
+one pass: **0 of 757 red.** Instrumented across all 62 files: **1 160
+`eligible`, 20 `ineligible`, 0 `unevaluated`** — no test ever observes the third
+state coming out of the renderer. The only arm naming `unevaluated` feeds
+hand-built literals to the READ path; it says nothing about the write path ever
+producing one.
+
+### A6 — three arms were converted from non-vacuous to vacuous by this delta
+
+Forcing `bodyProofs` to `[]` reds 36 of 79 arms; **41 survive an empty proof
+set.** Among them, four assert only via
+`expect(bodyProofs.map(p => p.kind)).not.toContain('emptied')` — satisfied by an
+empty array. Three were `toContain` before this commit (a form that cannot pass
+vacuously) and I reversed them; the fourth is new. **Reversing them was correct
+on the merits and it flipped them from a positive existence claim to a negative
+one**, and none gained the non-vacuity guard or the `countsAsBlankProof` outcome
+check that the sibling `#170` arms all carry.
+
+---
+
+## ⚠️ AND A CLAIM IN MY OWN COMMIT MESSAGE IS OVERSTATED
+
+It lists among the proven behaviours: *"treats an absent or unparseable
+`styles.xml` as INELIGIBLE"*. **Only the ABSENT half is proven.** Flipping the
+`catch` to return `'clear'` — fail-OPEN on an unparseable style table — reds
+**0 of 757**. The limit is disclosed honestly in a comment inside a different
+arm, and the commit message still asserted both halves as measured.
+
 ## WHAT HELD, recorded so the report is falsifiable
 
 - **The value axis of the sentinel is type-safe at runtime.** 21 values probed —
