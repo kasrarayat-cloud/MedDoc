@@ -120,15 +120,25 @@ export function countsAsBlankProof(
   const kind = kindOf(entry.fieldId);
   if (kind === undefined || BLANK_INELIGIBLE_KINDS.has(kind)) return false;
 
-  // ⚠️ AN EXPLICIT `false` REFUSES, ON EITHER LABEL. The renderer sets this when
-  // a field is unpatched yet still cannot claim blankness — today, a paragraph
-  // carrying live numbering, which prints a marker beside an empty field. That
-  // decision cannot be re-derived here: numbering lives in the source document
-  // and `styles.xml`, and the certification path reads neither.
+  // ⚠️ #170 — THREE-STATE, AND ONLY `eligible` COUNTS. ABSENCE MEANS NO.
   //
-  // Absent means eligible, so proofs written before this field existed keep
-  // their meaning rather than silently losing credit.
-  if (entry.blankEligible === false) return false;
+  // This used to read `if (entry.blankEligible === false) return false;` — a
+  // boolean whose `true` was encoded as ABSENCE, on the grounds that older
+  // proofs should keep their meaning. That kindness was the defect. A binding
+  // that NEVER COMPUTED the verdict produced exactly the same absent flag as
+  // one that computed it and approved, so two of the three bindings that can
+  // earn blank credit went unguarded and no test could see it — on the only
+  // real customer template, those two supplied 100% of the counted blanks.
+  //
+  // **A sentinel that cannot tell NO from DON'T-KNOW must resolve to
+  // DON'T-COUNT.** The cost is that proofs written before this field existed
+  // stop counting until the template is re-tested, which is a re-run; the
+  // alternative was a certificate that cannot distinguish a guard's approval
+  // from its absence.
+  //
+  // The decision cannot be re-derived here: it depends on the source document
+  // and `styles.xml`, and the certification path reads neither.
+  if (entry.blankEligible !== 'eligible') return false;
 
   // ⚠️ THE STRONGEST READ-PATH CHECK AVAILABLE, AND THE GATE ALREADY HELD THE
   // DATA FOR IT — WHICH IS WHY THIS COSTS NOTHING.

@@ -92,6 +92,43 @@ vi.mock('@meddoc/db', () => {
 // writes two audit rows; nothing in this gate is a claim about them.
 vi.mock('../twin-audit', () => ({ logTwinAudit: vi.fn(async () => undefined) }));
 
+
+/**
+ * ⚠️ THE CLASS FIX FOR AN UNSCOPED `find()`, NOT A PATCH FOR ONE ARM.
+ *
+ * `Array.prototype.find` on a NON-UNIQUE predicate silently returns the first
+ * match, so a test that then reasons about "the" match is reasoning about an
+ * element it did not choose. This has now cost this codebase twice — once in
+ * the renderer suite, and again, in the same delta, here — and in the second
+ * case the arm's own non-vacuity guard (`expect(x).toBeDefined()`) passed
+ * happily on the WRONG element while the rule under test was fully neutralised.
+ *
+ * `theOnlyMatch` refuses ambiguity: zero matches and two-or-more matches are
+ * both failures, and the message says which. Use it wherever the predicate is
+ * a PROPERTY (a kind, a label class) rather than a unique key.
+ */
+function theOnlyMatch<T>(
+  items: readonly T[],
+  predicate: (item: T) => boolean,
+  described: string,
+): T {
+  const matches = items.filter(predicate);
+  if (matches.length !== 1) {
+    throw new Error(
+      `expected exactly ONE ${described}, found ${matches.length} — ` +
+        'an unscoped match makes this arm a statement about an element it did not choose',
+    );
+  }
+  return matches[0]!;
+}
+
+/** Field ids the fixture's synthetic resolutions leave null. */
+function nulledFieldIds(fixture: { resolutions: ReadonlyArray<{ fieldId: string; value: unknown }> }) {
+  return new Set(
+    fixture.resolutions.filter((r) => r.value === null).map((r) => r.fieldId),
+  );
+}
+
 const ACTOR = {
   userId: 'doctor-165',
   userEmail: 'synthetic.doctor@example.test',
@@ -631,7 +668,7 @@ describe('#165 product — an `emptied` label with no expectation is refused', (
     const { countsAsBlankProof } = await import('../blank-proof-count');
     const bindingOf = () => 'content_control';
     const wasNull = () => true;
-    const base = { kind: 'emptied', fieldId: 'f1' };
+    const base = { kind: 'emptied', fieldId: 'f1', blankEligible: 'eligible' as const };
     const good = 'a'.repeat(64);
     expect(countsAsBlankProof({ ...base, expectedSpanSha256: good }, { bindingOf, resolvedNull: wasNull, kindOf: () => 'narrative_text' })).toBe(true);
     for (const bad of ['', 'A'.repeat(64), 'a'.repeat(63), 'a'.repeat(65), 'z'.repeat(64), 123]) {
@@ -642,14 +679,14 @@ describe('#165 product — an `emptied` label with no expectation is refused', (
     }
     // `blank` needs no expectation — it is unpatched and proven by
     // source-byte-identity.
-    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f2' }, { bindingOf, resolvedNull: wasNull, kindOf: () => 'narrative_text' })).toBe(true);
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f2', blankEligible: 'eligible' as const }, { bindingOf, resolvedNull: wasNull, kindOf: () => 'narrative_text' })).toBe(true);
 
     // ⚠️ BUT NEITHER LABEL SURVIVES A FIELD THE MANIFEST SAYS WAS FILLED — and
     // `blank` is the one that had NO read-path check at all before this. The
     // pass certified a template by relabelling a field whose rendered value was
     // "Bilateral leg heaviness" to `blank`.
     const wasFilled = () => false;
-    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f3' }, { bindingOf, resolvedNull: wasFilled, kindOf: () => 'narrative_text' })).toBe(false);
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f3', blankEligible: 'eligible' as const }, { bindingOf, resolvedNull: wasFilled, kindOf: () => 'narrative_text' })).toBe(false);
     expect(
       countsAsBlankProof({ ...base, expectedSpanSha256: good }, { bindingOf, resolvedNull: wasFilled, kindOf: () => 'narrative_text' }),
     ).toBe(false);
@@ -657,7 +694,7 @@ describe('#165 product — an `emptied` label with no expectation is refused', (
     // shape was all the expectation check could ever judge.
     expect(
       countsAsBlankProof(
-        { kind: 'emptied', fieldId: 'f4', expectedSpanSha256: 'deadbeef'.repeat(8) },
+        { kind: 'emptied', fieldId: 'f4', expectedSpanSha256: 'deadbeef'.repeat(8), blankEligible: 'eligible' as const },
         { bindingOf, resolvedNull: wasFilled, kindOf: () => 'narrative_text' },
       ),
     ).toBe(false);
@@ -681,7 +718,7 @@ describe('#167 — the blank census guards', () => {
     // the set does not change — it stayed green through the mutation.
     const { countsAsBlankProof, PROVEN_EMPTIABLE_BINDINGS } = await import('../blank-proof-count');
     const wasNull = () => true;
-    const emptied = { kind: 'emptied', fieldId: 'f1', expectedSpanSha256: 'a'.repeat(64) };
+    const emptied = { kind: 'emptied', fieldId: 'f1', expectedSpanSha256: 'a'.repeat(64), blankEligible: 'eligible' as const };
 
     expect(countsAsBlankProof(emptied, { bindingOf: () => 'content_control', resolvedNull: wasNull, kindOf: () => 'narrative_text' })).toBe(true);
     for (const binding of ['legacy_form_field', 'table_cell', 'repeating_row']) {
@@ -767,13 +804,13 @@ describe('#168(b) — the kind exclusion binds the `blank` label too', () => {
     });
     // The label that has no expectation and no binding gate is exactly the one
     // that must still refuse a selection.
-    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f1' }, ctx('single_select'))).toBe(false);
-    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f1' }, ctx('multi_select'))).toBe(false);
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f1', blankEligible: 'eligible' as const }, ctx('single_select'))).toBe(false);
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f1', blankEligible: 'eligible' as const }, ctx('multi_select'))).toBe(false);
     // NON-VACUITY: a narrative `blank` still counts, so the arm tests the KIND
     // and not the label.
-    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f1' }, ctx('narrative_text'))).toBe(true);
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f1', blankEligible: 'eligible' as const }, ctx('narrative_text'))).toBe(true);
     // and the same exclusion still binds `emptied`.
-    const emptied = { kind: 'emptied', fieldId: 'f1', expectedSpanSha256: 'a'.repeat(64) };
+    const emptied = { kind: 'emptied', fieldId: 'f1', expectedSpanSha256: 'a'.repeat(64), blankEligible: 'eligible' as const };
     expect(countsAsBlankProof(emptied, ctx('single_select'))).toBe(false);
     expect(countsAsBlankProof(emptied, ctx('narrative_text'))).toBe(true);
 
@@ -788,8 +825,58 @@ describe('#168(b) — the kind exclusion binds the `blank` label too', () => {
       resolvedNull: () => true,
       kindOf: () => undefined,
     };
-    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f1' }, unknown)).toBe(false);
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f1', blankEligible: 'eligible' as const }, unknown)).toBe(false);
     expect(countsAsBlankProof(emptied, unknown)).toBe(false);
+  });
+});
+
+describe('#170 — the THREE-STATE sentinel: absence means NO', () => {
+  it('⚠️ an ABSENT blankEligible does NOT count, and neither does `unevaluated`', async () => {
+    // ⚠️ THIS IS THE ARM FOR THE DEFECT #170 EXISTS TO FIX, AND IT WAS MISSING
+    // FROM THE FIRST IMPLEMENTATION — the mutation matrix caught that: reverting
+    // the read path to `blankEligible === 'ineligible'` (i.e. absence means yes
+    // again) redded NOTHING.
+    //
+    // The old encoding was a boolean whose `true` was ABSENCE. That made a
+    // binding which never computed the verdict indistinguishable from one that
+    // computed it and approved — and on the only real customer template, the
+    // two bindings in that state supplied 100% of the counted blank credit.
+    // A sentinel that cannot tell NO from DON'T-KNOW must resolve to DON'T-COUNT.
+    const { countsAsBlankProof } = await import('../blank-proof-count');
+    const ctx = {
+      bindingOf: () => 'content_control',
+      resolvedNull: () => true,
+      kindOf: () => 'narrative_text',
+    };
+    // ABSENT — the shape every pre-#170 proof has, and the shape an unguarded
+    // binding produced.
+    expect(
+      countsAsBlankProof({ kind: 'blank', fieldId: 'f1' } as never, ctx as never),
+      'an absent eligibility bought blank credit',
+    ).toBe(false);
+    // EXPLICIT `unevaluated` — a path that reached the emitter without a verdict.
+    expect(
+      countsAsBlankProof(
+        { kind: 'blank', fieldId: 'f1', blankEligible: 'unevaluated' } as never,
+        ctx as never,
+      ),
+      '`unevaluated` bought blank credit',
+    ).toBe(false);
+    // and `ineligible` still refuses, on both labels.
+    expect(
+      countsAsBlankProof(
+        { kind: 'blank', fieldId: 'f1', blankEligible: 'ineligible' } as never,
+        ctx as never,
+      ),
+    ).toBe(false);
+    // ⚠️ NON-VACUITY: `eligible` must still COUNT, or this arm would pass with
+    // the census refusing everything — which is the other way to be wrong.
+    expect(
+      countsAsBlankProof(
+        { kind: 'blank', fieldId: 'f1', blankEligible: 'eligible' } as never,
+        ctx as never,
+      ),
+    ).toBe(true);
   });
 });
 
@@ -812,17 +899,44 @@ describe('#168(b) — the kind check is pinned THROUGH the gate, not through its
     };
     const proof = row.templateTwinCompiledVersion.latestTestRoundTrip;
 
-    // The selection the fixture nulls deliberately — its real proof is `filled`
-    // because #168(b) excluded it at render time.
-    const selectionId = fixture.ir.fields.find((f) => f.kind === 'single_select')?.fieldId;
-    expect(selectionId, 'fixture has no selection — this arm would be vacuous').toBeDefined();
+    // ⚠️ SCOPED TO THE SELECTION THE FIXTURE ACTUALLY NULLS — and the old
+    // `find(f => f.kind === 'single_select')` is exactly why this arm proved
+    // nothing. The fixture holds FIVE selections; four resolve to real values
+    // and only one is nulled. The unscoped `find` returned the first, so the
+    // forged `emptied` landed on a field the manifest says was FILLED and was
+    // refused by the #167 `resolvedNull` cross-check — NEVER by the kind check
+    // this arm exists to prove. Measured: neutralising the kind rule entirely
+    // redded 0 of 652.
+    //
+    // ⚠️ AND THE NON-VACUITY GUARD BELOW PASSED HAPPILY ON THE WRONG ELEMENT,
+    // which is the part worth remembering: a guard aimed at "is there a
+    // selection at all?" cannot notice that it picked the wrong selection.
+    // `theOnlyMatch` refuses ambiguity instead of silently taking the first.
+    const selectionId = theOnlyMatch(
+      fixture.ir.fields,
+      (f) =>
+        f.kind === 'single_select' &&
+        nulledFieldIds(fixture).has(f.fieldId),
+      'single_select field that the fixture resolves to null',
+    ).fieldId;
 
     // Strip the genuine blank evidence so the forged entry is the ONLY thing
     // that could satisfy the census — otherwise the arm passes for a reason
     // unrelated to the kind check.
     proof.fields = proof.fields.map((f) => {
       if (f.fieldId === selectionId) {
-        return { ...f, kind: 'emptied', expectedSpanSha256: 'c'.repeat(64) };
+        // ⚠️ THE FORGERY IS MADE MAXIMALLY CAPABLE ON PURPOSE, and the first
+        // version of this arm was not. Without `blankEligible: 'eligible'` the
+        // entry is refused by the THREE-STATE SENTINEL — a `filled` proof
+        // carries no eligibility — so the kind rule is never reached and
+        // neutralising it reds nothing. Every guard except the one under test
+        // must be satisfied, or the arm is measuring a neighbour.
+        return {
+          ...f,
+          kind: 'emptied',
+          expectedSpanSha256: 'c'.repeat(64),
+          blankEligible: 'eligible',
+        };
       }
       return f.kind === 'emptied' || f.kind === 'blank' ? { ...f, kind: 'filled' } : f;
     });

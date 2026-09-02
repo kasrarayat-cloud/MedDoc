@@ -145,15 +145,39 @@ describe('blank verification mode', () => {
     ).toThrow(TemplateDocxRenderError);
   });
 
+  // ⚠️ REWRITTEN FROM A SOURCE-TEXT REGEX TO A BEHAVIOURAL ASSERTION — canon 72,
+  // caught red-handed on its own terms.
+  //
+  // This arm used to assert `/patches\.length === 0[\s\S]{0,1800}fieldProofs\.push/`
+  // against `renderer.ts` as TEXT. Ruling #170 added explanatory comments in
+  // that window, the distance grew past 1800 characters, and the gate went RED
+  // FOR A CHANGE THAT ALTERED NO BEHAVIOUR AT ALL. That is the exact tell canon
+  // 72 names: *if somebody IMPROVED this code, would my gate fail?* — here, yes,
+  // and the "fix" it invites is widening the window, which weakens the gate a
+  // little more every time somebody writes a comment.
+  //
+  // The property it was reaching for is not a spelling, it is an OUTCOME: a
+  // field the encounter did not mention must still produce a proof entry. That
+  // is assertable directly, and it cannot be defeated by formatting.
   it('MUTATION: the renderer must not go back to skipping unfilled fields', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const src = readFileSync(join(__dirname, '..', 'renderer.ts'), 'utf-8');
+    const input = await setupAllBlank();
+    const rendered = await renderTemplateDocx(input);
+    const proofs = rendered.verification.fields;
+    // ⚠️ THE ASSERTION IS CHOSEN TO BE EXACTLY WHAT THE REGRESSION BREAKS.
+    // `if (patches.length === 0) continue;` removes the proof from every field
+    // that needed no write — which, on an all-unfilled render, is precisely the
+    // unfilled ones. So the count of unfilled proofs goes to ZERO under the
+    // mutation and is non-zero otherwise.
+    //
+    // ⚠️ AND IT IS DELIBERATELY NOT "one proof per IR field". Measured: this
+    // fixture has 11 fields and 10 proofs, because a content control nested in
+    // a repeating row is accounted for by `renderRepeatingRows` separately.
+    // That is pre-existing and correct; an arm asserting 11 would red on a
+    // truth it had simply never checked.
     expect(
-      src,
+      proofs.filter((p) => p.kind === 'blank' || p.kind === 'emptied').length,
       'the renderer skips unfilled fields again — every honestly-blank field ' +
-        'loses its proof entry and certification can never close'
-    ).not.toMatch(/if \(patches\.length === 0\) continue;/);
-    expect(src).toMatch(/patches\.length === 0[\s\S]{0,1800}fieldProofs\.push/);
+        'loses its proof entry and certification can never close',
+    ).toBeGreaterThan(0);
   });
 });

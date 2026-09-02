@@ -386,10 +386,13 @@ export type RenderedFieldProof =
        * editing the stored proof could flip it — the already-filed
        * proof-integrity-at-rest item, not a new hole.
        *
-       * Absent means eligible, so every proof written before this field existed
-       * keeps its meaning.
        */
-      readonly blankEligible?: boolean;
+      /**
+       * #170 — THREE-STATE. `unevaluated` means no guard ran for this binding,
+       * and it does NOT count: absence means no. Optional on the wire only so
+       * that older stored proofs parse; they read as absent and are refused.
+       */
+      readonly blankEligible?: 'eligible' | 'ineligible' | 'unevaluated';
       readonly fieldId: string;
       readonly partName: string;
       readonly bindingPath: string;
@@ -429,6 +432,16 @@ export type RenderedFieldProof =
   // itself contain something stale. Byte-equality alone would be writer-blind.
   | {
       readonly kind: 'emptied';
+      /**
+       * #170 — CARRIED ON `emptied` AS WELL AS `blank`, AND THE ACCEPTANCE RUN
+       * IS WHY. When three-state landed it was attached only to the zero-patch
+       * `blank` path, so every `emptied` proof read as `unevaluated` and the
+       * owner's form went from 35 counted blanks to ZERO. A sentinel whose
+       * absence means "no" must actually be WRITTEN on every path that earns a
+       * yes; adding the third state without adding the emitter is a silent,
+       * total revocation of credit.
+       */
+      readonly blankEligible?: 'eligible' | 'ineligible' | 'unevaluated';
       readonly fieldId: string;
       readonly partName: string;
       readonly bindingPath: string;
