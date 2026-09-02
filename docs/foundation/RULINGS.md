@@ -146,7 +146,7 @@ than a rediscovery, and rediscovery is the failure this file exists to stop.
 >
 > The head answers *which ruling and what status*. The archive answers *why*.
 
-**125 rulings.** **26 OWNER-RULING** · **5 RATIFIED** · **43 PROVISIONAL** · **1 SUPERSEDED** · **50 RECORDED**
+**130 rulings.** **31 OWNER-RULING** · **5 RATIFIED** · **43 PROVISIONAL** · **1 SUPERSEDED** · **50 RECORDED**
 
 | date | # | status | ruling | verdict, in one line | full body |
 |---|---|---|---|---|---|
@@ -275,12 +275,12 @@ than a rediscovery, and rediscovery is the failure this file exists to stop.
 | 2026-08-27 | #153 | OWNER-RULING | THE CODING SURFACE LIVES ON THE VISIT PAGE, VIA THE SMALLEST NAVIGATION PRIMITIVE THAT WORKS | **THE QUESTION, AND WHY IT WAS OWNER-CLASS.** #148 sliced F8 and parked ONE thing deliberately: *where the cod… | [`2026-08-27.md`](rulings/2026-08-27.md) |
 | 2026-08-27 | #155 | OWNER-RULING | THE TEN ALREADY-SIGNED RECORDS STAY AS SIGNED; THE GAP IS MADE VISIBLE WITHOUT TOUCHING A BYTE | **THE QUESTION.** F12-e (#152) established that a visit whose `cptCodes.em` is null still displays and attests… | [`2026-08-27.md`](rulings/2026-08-27.md) |
 | 2026-08-28 | #156 | OWNER-RULING | SHAPE-AWARE VERIFICATION ENCOUNTERS: THE CERTIFICATION ENGINE LEARNS A SELF-TEST PER TEMPLATE S… | **⚠️ PROVENANCE, STATED FIRST, BECAUSE THIS ROW WAS NOT WRITTEN BY THE SESSION THAT RECEIVED THE RULING.** The… | [`2026-08-28.md`](rulings/2026-08-28.md) |
+| 2026-08-30 | #157 | OWNER-RULING | ⚠️ FINAL FORM #157(d), 2026-08-31 — A DENIED NARRATIVE ALWAYS RENDERS BLANK; no text heuristic… | **THE QUESTION, AND WHY IT WAS OWNER-CLASS.** The recovery established that certification of the owner's GI co… | [`2026-08-30.md`](rulings/2026-08-30.md) |
+| 2026-08-30 | #158 | OWNER-RULING | THE RE-ATTESTATION RETARGETS TO THE LIVE TEMPLATE; THE DEAD TEMPLATE'S ROWS ARE RECORDED, NEVER… | **THE QUESTION.** The recovery measured that all 35 confirmations of 2026-08-30 were written **after** their t… | [`2026-08-30.md`](rulings/2026-08-30.md) |
+| 2026-08-30 | #159 | OWNER-RULING | THE CERTIFICATION SEQUENCE IS ORDERED, AND THE FILL FLOOR NEVER LOWERS WITHOUT ITS OWN RULING | **THE QUESTION.** The polarity fix (PR #914) cleared the render refusal on the owner's form — refusing fields… | [`2026-08-30.md`](rulings/2026-08-30.md) |
+| 2026-08-30 | #160 | OWNER-RULING | THE LOOP'S DECOMMISSION IS A TRACKED AMENDMENT; AN UNTRACKED FILE AND A PASTE CACHE ARE NOT A R… | **THE QUESTION.** The recovery measured that the 2026-08-30 decommission of the FOUNDATION loop — an owner dir… | [`2026-08-30.md`](rulings/2026-08-30.md) |
+| 2026-08-30 | #161 | OWNER-RULING | PR #915 MERGES ON main's e2e COMPLETING — ⚠️ OPERATIONAL, one merge, NOT standing | **THE QUESTION.** With #914 (the polarity fix) merged as `8b6418c5` and its merge-commit runs still in flight,… | [`2026-08-30.md`](rulings/2026-08-30.md) |
 
-| 2026-08-31 | #157 | OWNER-RULING | ⚠️ FINAL FORM #157(d) — A DENIED NARRATIVE ALWAYS RENDERS BLANK; no text heuristic … | **THE QUESTION, AND WHY IT WAS OWNER-CLASS.** `assertResolutionStatus` accepts `explicitly_denied` on EXACTLY one shape… | [`2026-08-30.md`](rulings/2026-08-30.md) |
-| 2026-08-30 | #158 | OWNER-RULING | THE RE-ATTESTATION RETARGETS TO THE LIVE TEMPLATE; THE DEAD TEMPLATE'S ROWS ARE RECO… | **THE QUESTION.** All 35 confirmations were written AFTER their template went inactive at 06:16:29.499, 29 of them by ra… | [`2026-08-30.md`](rulings/2026-08-30.md) |
-| 2026-08-30 | #159 | OWNER-RULING | THE CERTIFICATION SEQUENCE IS ORDERED, AND THE FILL FLOOR NEVER LOWERS WITHOUT ITS O… | **THE QUESTION.** PR #914 cleared the render refusal but moved filled resolutions only 2 → 3 against MIN_CERTIFIED_FILL… | [`2026-08-30.md`](rulings/2026-08-30.md) |
-| 2026-08-30 | #160 | OWNER-RULING | THE LOOP'S DECOMMISSION IS A TRACKED AMENDMENT; AN UNTRACKED FILE AND A PASTE CACHE … | **THE QUESTION.** The decommission existed ONLY in an untracked `STOP` and a 0600 paste cache, while the TRACKED rulebo… | [`2026-08-30.md`](rulings/2026-08-30.md) |
-| 2026-08-30 | #161 | OWNER-RULING | PR #915 MERGES ON `main`'s `e2e` COMPLETING — ⚠️ OPERATIONAL, one merge, NOT standing | **THE QUESTION.** Merging #915 would have cancelled `8b6418c5`'s citation; the session waited instead so a clinical-path… | [`2026-08-30.md`](rulings/2026-08-30.md) |
 <!-- RULINGS-INDEX-END -->
 
 ## What is NOT in here, deliberately

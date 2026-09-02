@@ -88,7 +88,38 @@ NUM_RE   = re.compile(r"\*\*#(\d+)\b")
 CLEAN_RE = re.compile(r"\*\*|__|`")
 
 
+# ⚠️ AN EXPLICIT HEAD TITLE, BECAUSE A HAND AMENDMENT WAS NOT DURABLE DATA.
+#
+# MEASURED 2026-09-01: running this generator on `main`, against `main`'s own
+# archives and changing nothing else, reverted #157's head row from
+#   "⚠️ FINAL FORM #157(d) — A DENIED NARRATIVE ALWAYS RENDERS BLANK"
+# to its ORIGINAL, explicitly-falsified wording
+#   "A NARRATIVE FIELD PRINTS THE DENIAL'S PROSE".
+# `grep -c '157(d)'` went 1 -> 0, so the mandated citation route stopped
+# resolving, and a session reading the head would have believed the exact claim
+# #157(b) was written to withdraw.
+#
+# ⚠️ AND IT IS STRUCTURAL, NOT CARELESSNESS. An amended ruling APPENDS its
+# amendments into the same archive row, so the row's opening text is forever the
+# ORIGINAL title — the final form is unreachable to a title-derivation by
+# construction. `main`'s correct row was a hand edit, and this file's own
+# doctrine says a hand-edited row does not survive the next run. It was right:
+# it ate one, and it would eat the next.
+#
+# So an archive row may declare its head title explicitly. The hand amendment
+# stops being something the generator overwrites and becomes DATA the generator
+# reads — which is the only shape that survives a regeneration nobody remembers
+# is destructive.
+HEAD_TITLE_RE = re.compile(r"<!--\s*head:\s*(.+?)\s*-->", re.S)
+
+
 def short_title(ruling_cell):
+    explicit = HEAD_TITLE_RE.search(ruling_cell)
+    if explicit:
+        t = CLEAN_RE.sub("", explicit.group(1)).strip()
+        if len(t) > TITLE_MAX:
+            t = t[: TITLE_MAX - 1].rstrip() + "…"
+        return t.replace("|", "\\|")
     t = ruling_cell
     t = NUM_RE.sub("", t, count=1)
     t = re.sub(r"^\s*[—–-]\s*", "", CLEAN_RE.sub("", t)).strip()
