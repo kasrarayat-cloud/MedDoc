@@ -5,6 +5,7 @@
 // test-then-edit activation). Authorization is supplied by the caller
 // (TemplateTwinActor value-object); uses the prisma singleton + logTwinAudit only.
 // ============================================================================
+import { countsAsBlankProof } from './blank-proof-count';
 import { MIN_CERTIFIED_FILLED_FIELDS } from './certification-thresholds';
 import { denialWithheldMaterialFieldIds } from './denial-contract';
 import { Prisma } from '@prisma/client';
@@ -747,8 +748,36 @@ export async function certifyAndActivateTemplateTwin(input: {
       const roundTripFields = isRecord(compiled.latestTestRoundTrip)
         ? (compiled.latestTestRoundTrip.fields as unknown[]) ?? []
         : [];
+      // ⚠️ #164 — blankProofCount = blank ∪ emptied, AND `emptied` COUNTS ONLY
+      // WHERE THE CLEARING IS PROVEN.
+      //
+      // `blank` is an UNPATCHED field verified by source-byte-identity — the one
+      // proof this programme has never had falsified, and it is untouched.
+      // `emptied` is a null-valued narrative field that WAS patched to empty and
+      // verified by the same round-trip equality any fill gets.
+      //
+      // ⚠️ THE PER-KIND RESTRICTION IS THE FAIL-CLOSED PART, AND IT IS DONE BY
+      // COUNTING RATHER THAN BY A NEW CHECK. `content_control` clearing is
+      // proven. `legacy_form_field` clearing has TWO MEASURED DEFECTS — a
+      // paragraph-spanning result is not cleared, and non-`w:t` content is never
+      // cleared — so a legacy `emptied` proof does NOT buy a blank. It is not
+      // refused, not warned about and not parsed: it simply does not COUNT.
+      // That is the cheapest possible way to be conservative and the only one
+      // that cannot itself be wrong about a document.
+      //
+      // When the renderer slice lands and legacy clearing is proven, the single
+      // change here is adding it to this set.
+      // The predicate lives in `blank-proof-count.ts` so a gate can drive it
+      // DIRECTLY rather than reaching it only through a database-backed
+      // certification run — a rule reachable only by mutation is a rule whose
+      // arms prove the mutation, not the rule.
+      const bindingByFieldId = new Map(
+        ir.fields.map((f) => [f.fieldId, f.rendererBinding.bindingType as string]),
+      );
       const blankProofCount = roundTripFields.filter(
-        (entry) => isRecord(entry) && entry.kind === 'blank',
+        (entry) =>
+          isRecord(entry) &&
+          countsAsBlankProof(entry, (id) => bindingByFieldId.get(id)),
       ).length;
       // ── FILL-COVERAGE INVARIANT ──────────────────────────────────────────
       // A template must not certify with a dead fill path. WM_IOV certified

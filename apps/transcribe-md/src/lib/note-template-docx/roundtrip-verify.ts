@@ -379,6 +379,33 @@ export type RenderedFieldProof =
       readonly valueSha256: string;
       /** One verified binding site. The gate requires > 0 and is untouched. */
       readonly occurrences: number;
+    }
+  // ⚠️ #164 — `emptied` IS A CLASSIFICATION, NOT A NEW VERIFICATION.
+  //
+  // A null-valued narrative field IS patched, to empty — that is main's proven
+  // production behaviour and #164 rule 1 keeps it. So an `emptied` proof is
+  // verified by EXACTLY the machinery a `filled` proof is: it must appear in the
+  // patched set, and the part's rendered bytes must equal
+  // `applyApprovedXmlPatches(source, patches)` byte for byte. No extra emptiness
+  // check, no locus table, no allowlist.
+  //
+  // ⚠️ THAT ABSENCE IS DELIBERATE AND IS THE LESSON OF #162 AND #163. #162(c)
+  // added a second, bespoke emptiness proof on top of these structural guards,
+  // and an isolation experiment showed the extra check was decoration behind
+  // them. #163 then tried to remove the clearing outright and regressed worse
+  // than what it replaced. What was missing was never a VERIFIER — it was a
+  // COUNTING RULE.
+  //
+  // The kind exists ONLY so certification can count these toward its blank
+  // requirement. Anything a `filled` proof cannot detect, an `emptied` proof
+  // cannot detect either, BY CONSTRUCTION — and that is the honest claim.
+  | {
+      readonly kind: 'emptied';
+      readonly fieldId: string;
+      readonly partName: string;
+      readonly bindingPath: string;
+      readonly valueSha256: string;
+      readonly occurrences: number;
     };
 
 export interface RenderedPartProof {
@@ -395,7 +422,7 @@ export interface VerifiedRenderedField {
   /** Which contract this entry attests — a fill, or a proven-blank. Persisted
    *  into the roundtrip proof so the certification gate can require at least
    *  one blank-verified field. */
-  readonly kind: 'filled' | 'blank';
+  readonly kind: 'filled' | 'blank' | 'emptied';
   readonly fieldId: string;
   readonly partName: string;
   readonly bindingPath: string;
@@ -505,6 +532,10 @@ export function verifyRenderedTemplateDocx(
       failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
     }
     proofFieldIds.add(field.fieldId);
+    // ⚠️ `emptied` JOINS THE PATCHED SET, NOT THE BLANK SET. It IS patched, so
+    // it must satisfy the filled-proof equality below — the patched field set
+    // and the proof set must be exactly equal. Filing it with the blanks would
+    // exempt it from the one check that actually verifies it.
     if (field.kind === 'blank') blankProofs.push(field);
     else filledFieldIds.add(field.fieldId);
   }

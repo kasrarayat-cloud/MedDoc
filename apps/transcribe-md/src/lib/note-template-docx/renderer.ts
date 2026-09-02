@@ -139,7 +139,30 @@ export async function renderTemplateDocx(
       continue;
     }
     part.patches.push(...patches);
-    fieldProofs.push(fieldProof(field, resolution.value, 1));
+    // ⚠️ #164 — A NULL THAT PATCHED IS `emptied`, AND THE KIND EXCLUSIONS ARE
+    // THE RULING'S OWN.
+    //
+    // Nothing about the RENDER changes here: the field is patched exactly as
+    // before, by exactly the same code, and verified by exactly the same
+    // round-trip equality. Only the proof's LABEL changes, so certification can
+    // count it toward the blank requirement — which is what consult forms
+    // needed, and what two previous rulings tried to buy with new machinery.
+    //
+    // ⚠️ CHECKBOX AND SELECTION NULLS ARE EXCLUDED, and that is not tidiness.
+    // Clearing a narrative control removes text. A checkbox renders a GLYPH
+    // whichever way it resolves, and a selection control that renders anything
+    // asserts a choice — #157(d) rule (2)'s reasoning. Neither is "empty" in
+    // the sense the certification gate means, so neither may buy a blank proof.
+    fieldProofs.push(
+      fieldProof(
+        field,
+        resolution.value,
+        1,
+        resolution.value === null && !NON_EMPTIABLE_KINDS.has(field.kind)
+          ? 'emptied'
+          : 'filled',
+      ),
+    );
   }
 
   const partProofs: RenderedPartProof[] = [];
@@ -1227,6 +1250,19 @@ function legacyResultTextNodes(
     (node) => node.start >= separate!.end && node.end <= end!.start,
   );
 }
+
+/**
+ * Kinds whose null does NOT count as "emptied" — #164 rule 2, verbatim.
+ *
+ * A `checkbox` renders a glyph in both states, so a null one is not empty; a
+ * `single_select` / `multi_select` that renders anything asserts a choice.
+ * Only a narrative-shaped control's null clears to genuinely nothing.
+ */
+const NON_EMPTIABLE_KINDS = new Set<TemplateField['kind']>([
+  'checkbox',
+  'single_select',
+  'multi_select',
+]);
 
 function fieldProof(
   field: TemplateField,
