@@ -915,7 +915,9 @@ function contentControlPatches(
       if (cleared) {
         return {
           patches: [...(statePatch ? [statePatch] : []), ...cleared],
-          boundedClear: true,
+          // ⚠️ AN EMPTY ARRAY IS TRUTHY. `[]` means "already empty, nothing to
+          // do" — no clearing write happened, so it cannot earn `emptied`.
+          boundedClear: cleared.length > 0,
         };
       }
     }
@@ -945,7 +947,7 @@ function contentControlPatches(
             ...(lastValue ? [removeXmlElementPatch(lastValue, field.fieldId)] : []),
             ...cleared,
           ],
-          boundedClear: true,
+          boundedClear: cleared.length > 0,
         };
       }
       return {
@@ -983,7 +985,7 @@ function contentControlPatches(
 
   if (resolution.value === null) {
     const cleared = sdtBoundedClearPatches(xml, control, properties, content, field.fieldId);
-    if (cleared) return { patches: cleared, boundedClear: true };
+    if (cleared) return { patches: cleared, boundedClear: cleared.length > 0 };
   }
   const display = displayValue(field, resolution);
   return {

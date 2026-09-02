@@ -153,7 +153,7 @@
       "Read(//opt/meddoc-pro/**)",
       "Read(//tmp/**)",
       "Edit(//opt/meddoc-pro/**)",
-      "Bash(shred -u -n 3 -z:*)"
+      "Bash(shred -u -n 3 -z /tmp/claude-1000/:*)"
     ],
     "deny": [
       "Bash(git push --force:*)",

@@ -531,3 +531,27 @@ describe('#165 rule 2 — the expectation must describe the output', () => {
     });
   }
 });
+
+describe('#165 — "already empty" is not "cleared"', () => {
+  it('a DATE control with empty content and a fullDate to strip is NOT `emptied`', async () => {
+    // ⚠️ `[]` IS TRUTHY. `sdtBoundedClearPatches` returns `[]` for "already
+    // empty, nothing to do" and `null` for "cannot bound this, fall back" — and
+    // the comment said they were "treated differently" while all three call
+    // sites took the same branch. So a field where NO clearing write happened
+    // was labelled `emptied`, falsifying the invariant three files rely on:
+    // "the renderer refuses to label anything `emptied` unless it actually
+    // performed the whole-subtree replacement."
+    const { bodyProofs, rendered } = await renderAllNull(
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+        `<w:body><w:p><w:sdt><w:sdtPr><w:id w:val="970"/><w:alias w:val="Encounter date"/>` +
+        `<w:date w:fullDate="2026-01-01T00:00:00Z"><w:dateFormat w:val="yyyy-MM-dd"/></w:date>` +
+        `</w:sdtPr><w:sdtContent></w:sdtContent></w:sdt></w:p></w:body></w:document>`,
+    );
+    expect(rendered.verification.verified).toBe(true);
+    expect(bodyProofs.length).toBe(1);
+    // It IS patched — the `w:fullDate` attribute is stripped — so it is not
+    // `blank` either. What it must not be is `emptied`, because nothing cleared.
+    expect(bodyProofs[0].kind).not.toBe('emptied');
+  });
+});
