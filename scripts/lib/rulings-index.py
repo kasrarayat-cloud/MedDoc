@@ -237,6 +237,46 @@ def main():
             die("'## The index' has no following section — refusing to write to EOF")
         new = src[:a] + "\n## The index\n\n" + block + "\n" + src[b:]
 
+    # ═══ RULING #171 — IT REFUSES, IT NEVER OVERWRITES ═══════════════════════
+    #
+    # ⚠️ MEASURED HARM, TWICE IN TWO DAYS. A plain regeneration REPLACED NINE
+    # HAND-WRITTEN VERDICT LINES with truncated body excerpts and turned the
+    # number cell `#162(c)` into `#162`, breaking a citation route. The day
+    # before, the same regeneration reverted #157's row to its explicitly
+    # FALSIFIED original wording — on a ruling about what may be printed into a
+    # signed clinical document. `check-amendment-reachability.sh` exists because
+    # of the second one.
+    #
+    # A head row is HAND-CURATED: the archive is the authority on WHY, the head
+    # on WHICH and WHAT STATUS, and a human writes that line so a session can
+    # find the ruling in one read. Recomputing it from a truncated excerpt
+    # destroys exactly the property the row exists for.
+    #
+    # So the tool is ADDITIVE-ONLY. It may introduce lines. It may not remove or
+    # alter one. Anything else is a hand edit, deliberately.
+    #
+    # ⚠️ AND AN EARLIER ATTEMPT AT A CLEVERER RULE — carry each prior row through
+    # by its number — FAILED TWICE IN ONE SITTING and destroyed the file both
+    # times: once because the reader used the wrong column and silently returned
+    # an empty map, once because archive rows whose number cell is an em-dash
+    # all collided on one key and were appended as duplicates. A line-set
+    # comparison has no keys to get wrong, which is the whole argument for it.
+    def _rows(text):
+        return [l for l in text.splitlines()
+                if l.startswith("| ") and not l.startswith("| date |")
+                and not l.startswith("|---")]
+    lost = [l for l in _rows(src) if l not in set(_rows(new))]
+    if lost:
+        sys.stderr.write(
+            "🔴 rulings-index: REFUSING — %d existing row(s) would be altered or "
+            "removed.\n   The head is hand-curated; this tool may only ADD.\n"
+            "   Edit docs/foundation/RULINGS.md by hand instead.\n" % len(lost))
+        for l in lost[:6]:
+            sys.stderr.write("     %s\n" % l[:150])
+        if len(lost) > 6:
+            sys.stderr.write("     … and %d more\n" % (len(lost) - 6))
+        return 1
+
     if check:
         if new == src:
             print("🟢 rulings-index: index is current — %d rows, %s" % (
