@@ -120,7 +120,7 @@ export async function renderTemplateDocx(
     }
     const prepared = prepareScalarResolution(field, resolution);
     const part = getPartPlan(field.rendererBinding.partName);
-    const patches = createFieldPatches(part.scan, field, prepared);
+    const { patches, boundedClear } = createFieldPatches(part.scan, field, prepared);
     if (patches.length === 0) {
       // BLANK PROOF. No patch means the field keeps the template's own unfilled
       // state — a dropdown placeholder, an empty cell. That is a real outcome
@@ -139,29 +139,27 @@ export async function renderTemplateDocx(
       continue;
     }
     part.patches.push(...patches);
-    // ⚠️ #164 — A NULL THAT PATCHED IS `emptied`, AND THE KIND EXCLUSIONS ARE
-    // THE RULING'S OWN.
+    // ⚠️ #165 — THE LABEL IS A FACT ABOUT THE WRITE, NOT A CLAIM ABOUT THE KIND.
     //
-    // Nothing about the RENDER changes here: the field is patched exactly as
-    // before, by exactly the same code, and verified by exactly the same
-    // round-trip equality. Only the proof's LABEL changes, so certification can
-    // count it toward the blank requirement — which is what consult forms
-    // needed, and what two previous rulings tried to buy with new machinery.
+    // `boundedClear` is true only where `sdtBoundedClearPatches` replaced the
+    // control's whole `w:sdtContent` subtree. There is no kind list to keep
+    // correct and nothing to enumerate: a checkbox is excluded because we
+    // deliberately WRITE its glyph, a selection is included because we
+    // demonstrably clear it, and a binding with no bounded container is
+    // excluded because no such write happened.
     //
-    // ⚠️ CHECKBOX AND SELECTION NULLS ARE EXCLUDED, and that is not tidiness.
-    // Clearing a narrative control removes text. A checkbox renders a GLYPH
-    // whichever way it resolves, and a selection control that renders anything
-    // asserts a choice — #157(d) rule (2)'s reasoning. Neither is "empty" in
-    // the sense the certification gate means, so neither may buy a blank proof.
+    // An `emptied` proof carries `expectedSpanSha256` — the binding span as this
+    // writer meant to leave it. The verifier's single comparison is what makes
+    // the claim checkable; a proof without an expectation is refused there.
     fieldProofs.push(
-      fieldProof(
-        field,
-        resolution.value,
-        1,
-        resolution.value === null && !NON_EMPTIABLE_KINDS.has(field.kind)
-          ? 'emptied'
-          : 'filled',
-      ),
+      boundedClear
+        ? emptiedProof(
+            field,
+            resolution.value,
+            1,
+            expectedEmptiedSpanSha256(part.scan, field, patches),
+          )
+        : fieldProof(field, resolution.value, 1),
     );
   }
 
@@ -453,7 +451,7 @@ function renderRepeatingRows(input: {
           continue;
         }
         const prepared = rowPreparedResolution(field, resolution, rowOrdinal);
-        rowPatches.push(...createFieldPatches(part.scan, field, prepared));
+        rowPatches.push(...createFieldPatches(part.scan, field, prepared).patches);
       }
       const relativePatches = rowPatches.map((patch) => ({
         ...patch,
@@ -482,7 +480,19 @@ function renderRepeatingRows(input: {
     for (const field of fields) {
       if (field.detectionStatus === 'unsupported') continue;
       const resolution = input.resolutions.get(field.fieldId)!;
-      input.fieldProofs.push(fieldProof(field, resolution.value, rowCount));
+      // ⚠️ #165 RULE 3 — THIS EMITTER CLASSIFIES DELIBERATELY, AND THE ANSWER
+      // IS `filled`. Until #164 this was `filled` only by DEFAULT — the 4th
+      // argument was simply never passed — so an identical field got the
+      // opposite label purely for sitting in a repeating table. Stating it is
+      // the fix; the value is unchanged.
+      //
+      // It cannot be `emptied`, and the reason is structural rather than a
+      // policy choice: these fields are merged into ONE `repeating_row` patch
+      // that replaces the prototype with `rowCount` CLONED rows, so there is no
+      // 1:1 output span at this field's `bindingPath` to compare against. The
+      // byte-equality proof is per-binding-path and simply does not exist here.
+      // Fails closed — it under-counts, never over-counts.
+      input.fieldProofs.push(fieldProof(field, resolution.value, rowCount, 'filled'));
     }
   }
 }
@@ -594,7 +604,7 @@ function createFieldPatches(
   part: ScannedXmlPart,
   field: TemplateField,
   resolution: PreparedResolution,
-): ApprovedXmlPatch[] {
+): FieldPatchResult {
   const binding = field.rendererBinding;
   const bound = part.byPath.get(binding.path);
   if (!bound) failTemplateDocxRender('BINDING_NOT_FOUND');
@@ -608,15 +618,138 @@ function createFieldPatches(
       if (xmlLocalName(bound.name) !== 'fldChar') {
         failTemplateDocxRender('BINDING_NOT_FOUND');
       }
-      return legacyFieldPatches(part.text, bound, field, resolution);
+      // ⚠️ LEGACY IS NEVER BOUNDED-CLEARED. Its result has no enclosing
+      // element — it is a SPAN between `separate` and `end` fldChars, which is
+      // exactly why every attempt to bound it by walking was falsified. It gets
+      // no `emptied` proof until its own slice gives it a real container.
+      return {
+        patches: legacyFieldPatches(part.text, bound, field, resolution),
+        boundedClear: false,
+      };
     case 'table_cell':
       if (xmlLocalName(bound.name) !== 'tc') {
         failTemplateDocxRender('BINDING_NOT_FOUND');
       }
-      return tableCellPatches(part.text, bound, field, resolution);
+      // ⚠️ `table_cell` HAS a bounded container (`w:tc`) and could take the
+      // same treatment — ruling #165 rule 2 names it as the next candidate.
+      // Until that write exists and is proved, it earns no `emptied` proof.
+      return {
+        patches: tableCellPatches(part.text, bound, field, resolution),
+        boundedClear: false,
+      };
     case 'repeating_row':
       failTemplateDocxRender('UNSUPPORTED_BINDING');
   }
+}
+
+/**
+ * #165 RULE 1 — A NULL CLEARS A CONTENT CONTROL BY REPLACING ITS WHOLE
+ * `w:sdtContent` SUBTREE. THE BOUNDARY IS THE DOCUMENT'S OWN ELEMENT.
+ *
+ * ⚠️ THIS IS THE DISTINCTION FROM THE FOUR-TIMES-FALSIFIED INSTRUMENT, and it
+ * is the entire point of the ruling. Every previous attempt bounded the edit
+ * with a scan WE performed — "find the `w:t` descendants", "walk separate→end",
+ * "check the region against a list of visible elements". Each was falsified by
+ * the next carrier nobody enumerated: `w:sym`, `w:pict`, `w:drawing`,
+ * `w:object`, `w:delText`, `w:instrText`. The list never closes.
+ *
+ * Here nothing is enumerated and nothing is searched. `startTagEnd..endTagStart`
+ * are the inner bounds of the control's OWN element, produced by the XML
+ * scanner. A glyph, an image, a field code or a tracked deletion inside the
+ * control cannot survive, because NOTHING inside the control survives.
+ *
+ * ⚠️ IT RETURNS `null` — FAIL-CLOSED — WHERE THE CONTAINER IS NOT SAFELY
+ * REPLACEABLE, and the caller then falls back to text-node patching and does
+ * NOT earn an `emptied` proof:
+ *   - a self-closing `w:sdtContent` is already empty; there is nothing to clear
+ *     and no write to prove;
+ *   - a row- or cell-level control (`w:tr` / `w:tc` children) would have its
+ *     table structure destroyed by an inline run, so it is left alone.
+ *
+ * `w:showingPlcHdr` is removed with the content: it is Word's "what you see is
+ * the PLACEHOLDER" flag, and leaving it set on a control we just emptied invites
+ * Word to re-display the template's own prompt text. It lives in `sdtPr`, which
+ * is inside the approved binding span, so removing it is bounded too.
+ */
+function sdtBoundedClearPatches(
+  control: XmlElementSpan,
+  properties: XmlElementSpan,
+  content: XmlElementSpan,
+  fieldId: string,
+): ApprovedXmlPatch[] | null {
+  if (content.selfClosing) return null;
+
+  // ⚠️ THE LEVEL COMES FROM THE SDT'S PARENT, NOT FROM WHAT IT CONTAINS — and
+  // that is the same principle as the clearing itself: ask the document's
+  // structure, do not infer from content. An INLINE control sits inside a
+  // `w:p`, so its replacement must be a run; a BLOCK control is a sibling of
+  // paragraphs, so its replacement must be a paragraph.
+  //
+  // Inferring from the children instead has a silent hole: an ALREADY-EMPTY
+  // block-level `w:sdtContent` has no children at all, so a child scan calls it
+  // inline and writes a bare `w:r` between two paragraphs — invalid OOXML that
+  // Word may refuse to open. The parent always knows.
+  const parentLocal = control.parent ? xmlLocalName(control.parent.name) : '';
+  // A row-level control (parent `w:tbl`) would have its table structure
+  // destroyed by either replacement, so it is refused outright.
+  if (parentLocal === 'tbl') return null;
+  const blockLevel = !INLINE_SDT_PARENTS.has(parentLocal);
+
+  // Cross-check against the content, and refuse on disagreement rather than
+  // pick a winner: row or cell children mean this is not a container we can
+  // safely flatten, whatever the parent said.
+  for (const child of content.children) {
+    const local = xmlLocalName(child.name);
+    if (local === 'tr' || local === 'tc') return null;
+    if (!blockLevel && (local === 'p' || local === 'tbl')) return null;
+  }
+  const patches: ApprovedXmlPatch[] = [
+    {
+      start: content.startTagEnd,
+      end: content.endTagStart,
+      replacement: blockLevel ? EMPTY_BLOCK_PARAGRAPH : EMPTY_INLINE_RUN,
+      fieldIds: [fieldId],
+      kind: 'field_content',
+    },
+  ];
+  const placeholderFlag = directXmlChild(properties, 'showingPlcHdr');
+  if (placeholderFlag) {
+    patches.push(removeXmlElementPatch(placeholderFlag, fieldId));
+  }
+  return patches;
+}
+
+/**
+ * Parents that make a `w:sdt` INLINE — its content is run-level, so clearing it
+ * must leave a run. Anything else (`w:body`, `w:tc`, a nested `w:sdtContent`)
+ * is block-level and must leave a paragraph.
+ */
+const INLINE_SDT_PARENTS: ReadonlySet<string> = new Set([
+  'p',
+  'hyperlink',
+  'smartTag',
+  'ins',
+  'del',
+]);
+
+const EMPTY_INLINE_RUN = '<w:r><w:t xml:space="preserve"></w:t></w:r>';
+const EMPTY_BLOCK_PARAGRAPH = `<w:p>${EMPTY_INLINE_RUN}</w:p>`;
+
+/**
+ * What the writer DID, reported back so the proof can be a fact about the write
+ * rather than a claim about the field's kind.
+ *
+ * ⚠️ #164 DERIVED THE LABEL FROM A KIND BLACKLIST AND WAS WRONG THREE WAYS:
+ * it excluded selections on the false premise that a null one "asserts a
+ * choice" (measured: a null `single_select` clears to empty exactly like
+ * narrative), its prose said "narrative" while the blacklist admitted `date`,
+ * `number` and `measurement`, and it labelled repeating-row fields by omission.
+ * `boundedClear` cannot drift from the write, because it IS the write.
+ */
+interface FieldPatchResult {
+  readonly patches: ApprovedXmlPatch[];
+  /** True ONLY when the null was cleared by whole-subtree replacement above. */
+  readonly boundedClear: boolean;
 }
 
 function contentControlPatches(
@@ -624,7 +757,7 @@ function contentControlPatches(
   control: XmlElementSpan,
   field: TemplateField,
   resolution: PreparedResolution,
-): ApprovedXmlPatch[] {
+): FieldPatchResult {
   const properties = directXmlChild(control, 'sdtPr');
   const content = directXmlChild(control, 'sdtContent');
   if (!properties || !content) failTemplateDocxRender('BINDING_NOT_FOUND');
@@ -650,10 +783,19 @@ function contentControlPatches(
       : selected
         ? '☒'
         : '☐';
-    return [
-      setXmlAttributePatch(xml, checked, 'val', selected ? '1' : '0', field.fieldId),
-      ...textContainerPatches(xml, content, glyph, field.fieldId),
-    ];
+    // ⚠️ A CHECKBOX IS NEVER BOUNDED-CLEARED, AND THAT IS DELIBERATE. Both of
+    // its states PRINT — `☒` and `☐` are equally visible marks — so a null
+    // checkbox is not an empty field, it is an unticked one. We write the
+    // unchecked glyph on purpose, so there is no clearing to prove and it must
+    // never buy a blank proof. Note this now falls out of what the writer DOES,
+    // rather than from a list of kinds somebody has to keep correct.
+    return {
+      patches: [
+        setXmlAttributePatch(xml, checked, 'val', selected ? '1' : '0', field.fieldId),
+        ...textContainerPatches(xml, content, glyph, field.fieldId),
+      ],
+      boundedClear: false,
+    };
   }
 
   if (field.kind === 'date') {
@@ -670,10 +812,22 @@ function contentControlPatches(
             `${String(resolution.value)}T00:00:00Z`,
             field.fieldId,
           );
-    return [
-      ...(statePatch ? [statePatch] : []),
-      ...textContainerPatches(xml, content, display, field.fieldId),
-    ];
+    if (resolution.value === null) {
+      const cleared = sdtBoundedClearPatches(control, properties, content, field.fieldId);
+      if (cleared) {
+        return {
+          patches: [...(statePatch ? [statePatch] : []), ...cleared],
+          boundedClear: true,
+        };
+      }
+    }
+    return {
+      patches: [
+        ...(statePatch ? [statePatch] : []),
+        ...textContainerPatches(xml, content, display, field.fieldId),
+      ],
+      boundedClear: false,
+    };
   }
 
   if (field.kind === 'single_select') {
@@ -682,35 +836,62 @@ function contentControlPatches(
       ? descendantXmlElements(comboBox, 'lastValue')[0]
       : undefined;
     if (resolution.value === null) {
-      return [
-        ...(lastValue ? [removeXmlElementPatch(lastValue, field.fieldId)] : []),
-        ...textContainerPatches(xml, content, '', field.fieldId),
-      ];
+      // ⚠️ SELECTIONS ARE INCLUDED — #164 EXCLUDED THEM ON A FALSE PREMISE.
+      // Its comment claimed "a selection control that renders anything asserts
+      // a choice". Measured: a null `single_select` renders NOTHING. It is the
+      // dropdown-dominated forms (WM_IOV is 28 of them) that most need this.
+      const cleared = sdtBoundedClearPatches(control, properties, content, field.fieldId);
+      if (cleared) {
+        return {
+          patches: [
+            ...(lastValue ? [removeXmlElementPatch(lastValue, field.fieldId)] : []),
+            ...cleared,
+          ],
+          boundedClear: true,
+        };
+      }
+      return {
+        patches: [
+          ...(lastValue ? [removeXmlElementPatch(lastValue, field.fieldId)] : []),
+          ...textContainerPatches(xml, content, '', field.fieldId),
+        ],
+        boundedClear: false,
+      };
     }
     const option = exactSelectedOption(field, resolution);
-    return [
-      ...(lastValue
-        ? [
-            setXmlAttributePatch(
-              xml,
-              lastValue,
-              'val',
-              option.value,
-              field.fieldId,
-            ),
-          ]
-        : []),
-      ...textContainerPatches(
-        xml,
-        content,
-        safeDisplayText(option.displayText),
-        field.fieldId,
-      ),
-    ];
+    return {
+      patches: [
+        ...(lastValue
+          ? [
+              setXmlAttributePatch(
+                xml,
+                lastValue,
+                'val',
+                option.value,
+                field.fieldId,
+              ),
+            ]
+          : []),
+        ...textContainerPatches(
+          xml,
+          content,
+          safeDisplayText(option.displayText),
+          field.fieldId,
+        ),
+      ],
+      boundedClear: false,
+    };
   }
 
+  if (resolution.value === null) {
+    const cleared = sdtBoundedClearPatches(control, properties, content, field.fieldId);
+    if (cleared) return { patches: cleared, boundedClear: true };
+  }
   const display = displayValue(field, resolution);
-  return textContainerPatches(xml, content, display, field.fieldId);
+  return {
+    patches: textContainerPatches(xml, content, display, field.fieldId),
+    boundedClear: false,
+  };
 }
 
 function legacyFieldPatches(
@@ -1252,23 +1433,44 @@ function legacyResultTextNodes(
 }
 
 /**
- * Kinds whose null does NOT count as "emptied" — #164 rule 2, verbatim.
+ * #165 RULE 2 — sha256 OF THE BINDING SPAN AS THE WRITER MEANT TO LEAVE IT.
  *
- * A `checkbox` renders a glyph in both states, so a null one is not empty; a
- * `single_select` / `multi_select` that renders anything asserts a choice.
- * Only a narrative-shaped control's null clears to genuinely nothing.
+ * Ported verbatim in shape from the held #162(c) branch, whose instrument was
+ * isolation-proven. Its one gap was WRITER-BLINDNESS: it faithfully compared
+ * the output against the writer's own intention, so a writer that failed to
+ * clear something encoded that failure into the expectation and the comparison
+ * still passed. Rule 1 closes exactly that gap for SDTs — the writer can no
+ * longer leave anything behind, because it replaces the whole subtree.
+ *
+ * Together: rule 1 makes the write correct by construction, and this makes the
+ * OUTPUT provably equal to that write. Neither half is sufficient alone, which
+ * is why both falsified attempts that shipped one of them failed.
  */
-const NON_EMPTIABLE_KINDS = new Set<TemplateField['kind']>([
-  'checkbox',
-  'single_select',
-  'multi_select',
-]);
+function expectedEmptiedSpanSha256(
+  scan: ScannedXmlPart,
+  field: TemplateField,
+  patches: readonly ApprovedXmlPatch[],
+): string {
+  const span = scan.byPath.get(field.rendererBinding.path);
+  if (!span) failTemplateDocxRender('BINDING_NOT_FOUND');
+  const patchedPart = applyApprovedXmlPatches(scan.text, patches);
+  // The span's own end shifts by whatever the patches INSIDE it changed.
+  const delta = patches
+    .filter((patch) => patch.start >= span.start && patch.end <= span.end)
+    .reduce(
+      (acc, patch) => acc + (patch.replacement.length - (patch.end - patch.start)),
+      0,
+    );
+  return createHash('sha256')
+    .update(patchedPart.slice(span.start, span.end + delta))
+    .digest('hex');
+}
 
 function fieldProof(
   field: TemplateField,
   value: FieldResolution['value'],
   occurrences: number,
-  kind: RenderedFieldProof['kind'] = 'filled',
+  kind: 'filled' | 'blank' = 'filled',
 ): RenderedFieldProof {
   return {
     kind,
@@ -1277,5 +1479,29 @@ function fieldProof(
     bindingPath: field.rendererBinding.path,
     valueSha256: canonicalSha256({ fieldId: field.fieldId, value }),
     occurrences,
+  };
+}
+
+/**
+ * `emptied` has its OWN builder because it has its own obligation: it cannot be
+ * constructed without `expectedSpanSha256`. The type system therefore refuses an
+ * uncheckable emptied proof at compile time, which is a stronger guarantee than
+ * the verifier's run-time refusal — and both are kept, because the proof also
+ * arrives from the database on the read path where no compiler was present.
+ */
+function emptiedProof(
+  field: TemplateField,
+  value: FieldResolution['value'],
+  occurrences: number,
+  expectedSpanSha256: string,
+): RenderedFieldProof {
+  return {
+    kind: 'emptied',
+    fieldId: field.fieldId,
+    partName: field.rendererBinding.partName,
+    bindingPath: field.rendererBinding.path,
+    valueSha256: canonicalSha256({ fieldId: field.fieldId, value }),
+    occurrences,
+    expectedSpanSha256,
   };
 }

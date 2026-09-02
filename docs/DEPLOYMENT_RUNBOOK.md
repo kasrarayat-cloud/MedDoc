@@ -236,9 +236,34 @@ other rides along **unjudged**, with nothing anywhere saying so.
        git diff --name-only <deployed-sha>..<about-to-deploy-sha> \
          | grep -vE '^docs/|__tests__|\.test\.'
 
-3. **Cross-reference against every OPEN or HELD declaration.** A held
-   declaration whose files appear in that range **BLOCKS THIS DEPLOY** until it
-   is resolved, exactly two ways:
+3. **Cross-reference against every OPEN or HELD declaration.**
+
+   ⚠️ **AND THE DECLARATIONS LIVE IN TWO DIRECTORIES. SEARCH BOTH, BY NAME —
+   amended 2026-09-02, ruling #165 rule 5.** This step previously said
+   "every OPEN or HELD declaration" and named no path, so a session searched
+   whichever one it thought of first:
+
+       docs/deploy-reports/        # 21 tracked files
+       docs/foundation/deploys/    # 82 tracked files
+
+   **THE SPECIMEN IS THIS STEP'S OWN AUTHOR.** Preparing a deploy on
+   2026-09-02, a session grepped the four runtime files it was shipping against
+   `docs/deploy-reports/` alone and got **four clean zeros** — *"no declaration
+   names it"* — for all four. Re-run across both paths, two declarations named
+   them (`20260830-6debaadf-JUDGED.md` for `renderer.ts`,
+   `20260820-b3459390.md` for `certification-lifecycle.ts`). Both happened to
+   be discharged, so the deploy was genuinely clear; **that was luck, not the
+   check working.** The smaller directory holds 20% of the corpus, so the wrong
+   guess misses four fifths of it and says nothing.
+
+   ⚠️ **A ZERO HERE IS THE WHOLE POINT OF THE STEP, WHICH IS EXACTLY WHY IT
+   NEEDS A POSITIVE CONTROL.** Grep a path you KNOW is named — `deploy-prod.sh`
+   scores 38 across both directories — before believing any zero the real query
+   returns. An empty result and a mis-aimed instrument are indistinguishable
+   without one.
+
+   A held declaration whose files appear in that range **BLOCKS THIS DEPLOY**
+   until it is resolved, exactly two ways:
 
    - **JUDGED JOINTLY** — its rows are folded into this declaration and measured
      in the same act; or

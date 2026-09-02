@@ -748,29 +748,28 @@ export async function certifyAndActivateTemplateTwin(input: {
       const roundTripFields = isRecord(compiled.latestTestRoundTrip)
         ? (compiled.latestTestRoundTrip.fields as unknown[]) ?? []
         : [];
-      // ⚠️ #164 — blankProofCount = blank ∪ emptied, AND `emptied` COUNTS ONLY
-      // WHERE THE CLEARING IS PROVEN.
+      // ⚠️ #165 — blankProofCount = blank ∪ emptied, AND `emptied` IS EARNED
+      // BY THE WRITE, NOT BY A LABEL.
       //
       // `blank` is an UNPATCHED field verified by source-byte-identity — the one
       // proof this programme has never had falsified, and it is untouched.
-      // `emptied` is a null-valued narrative field that WAS patched to empty and
-      // verified by the same round-trip equality any fill gets.
+      // `emptied` is a field the renderer cleared by replacing its whole
+      // `w:sdtContent` subtree, whose output is then byte-identical to the empty
+      // form the writer recorded (`expectedSha256`). The renderer will not emit
+      // the kind unless it actually performed that replacement.
       //
-      // ⚠️ THE PER-KIND RESTRICTION IS THE FAIL-CLOSED PART, AND IT IS DONE BY
-      // COUNTING RATHER THAN BY A NEW CHECK. `content_control` clearing is
-      // proven. `legacy_form_field` clearing has TWO MEASURED DEFECTS — a
-      // paragraph-spanning result is not cleared, and non-`w:t` content is never
-      // cleared — so a legacy `emptied` proof does NOT buy a blank. It is not
-      // refused, not warned about and not parsed: it simply does not COUNT.
-      // That is the cheapest possible way to be conservative and the only one
-      // that cannot itself be wrong about a document.
+      // ⚠️ #164 COUNTED A LABEL AND WAS BROKEN IN BOTH DIRECTIONS. It derived
+      // `emptied` from a list of KINDS while the renderer still cleared only
+      // `w:t` nodes, so a control holding a Wingdings tick beside its prompt was
+      // proofed `emptied`, verified, and BOUGHT THIS REQUIREMENT while still
+      // printing the tick — the gate flipped BLOCKED->PASS on a field that
+      // renders a mark. It also excluded selections on a premise measurement
+      // refuted, and missed the repeating-row emitter entirely.
       //
-      // When the renderer slice lands and legacy clearing is proven, the single
-      // change here is adding it to this set.
-      // The predicate lives in `blank-proof-count.ts` so a gate can drive it
-      // DIRECTLY rather than reaching it only through a database-backed
-      // certification run — a rule reachable only by mutation is a rule whose
-      // arms prove the mutation, not the rule.
+      // The predicate lives in `blank-proof-count.ts`, and it is driven end to
+      // end from `gate-165-product-consult-form-certifies.test.ts` — through
+      // THIS function, not around it. #164's arms asserted the helper and the
+      // label only, and reverting this very wiring redded nothing.
       const bindingByFieldId = new Map(
         ir.fields.map((f) => [f.fieldId, f.rendererBinding.bindingType as string]),
       );
