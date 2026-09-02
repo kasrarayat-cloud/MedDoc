@@ -654,7 +654,7 @@ describe('#165 product — an `emptied` label with no expectation is refused', (
 // ============================================================================
 // #167 GATE ARMS — the two the pass showed were unpinned.
 // ============================================================================
-describe('#167 — the blank census guards are pinned to PRODUCTION, not to a helper', () => {
+describe('#167 — the blank census guards', () => {
   it('a LEGACY `emptied` proof does NOT count — the negative arm for the proven set', async () => {
     // ⚠️ THIS ARM WENT MISSING WHEN #164's GATE FILE WAS DELETED, and nothing
     // carried it forward — so widening `PROVEN_EMPTIABLE_BINDINGS` to include
@@ -677,9 +677,17 @@ describe('#167 — the blank census guards are pinned to PRODUCTION, not to a he
         `${binding} bought a blank proof`,
       ).toBe(false);
     }
-    // NON-VACUITY: the set really does hold exactly the one proven binding, so
-    // the loop above is testing exclusion rather than an empty set.
-    expect([...PROVEN_EMPTIABLE_BINDINGS]).toEqual(['content_control']);
+    // NON-VACUITY: the set is not empty, so the loop above tests EXCLUSION
+    // rather than a vacuous no-op.
+    //
+    // ⚠️ ASSERTED AS A PROPERTY, NOT A SPELLING (canon 72). Pinning the set to
+    // exactly `['content_control']` would red the day `table_cell` is legitimately
+    // added — which both `blank-proof-count.ts` and the renderer explicitly
+    // anticipate — so the gate would fail because somebody IMPROVED the code.
+    // What must hold is that the set is non-empty and that legacy stays out.
+    expect(PROVEN_EMPTIABLE_BINDINGS.size).toBeGreaterThan(0);
+    expect(PROVEN_EMPTIABLE_BINDINGS.has('content_control')).toBe(true);
+    expect(PROVEN_EMPTIABLE_BINDINGS.has('legacy_form_field')).toBe(false);
   });
 
   it('⚠️ resolvedNull is pinned THROUGH certifyAndActivateTemplateTwin, not through its helper', async () => {

@@ -741,3 +741,111 @@ describe('#167 — structure survives, content does not', () => {
     expect(code).toBe('BINDING_NOT_FOUND');
   });
 });
+
+// ============================================================================
+// #167 — the five defects the v3 pass found IN v3, all measured before fixing.
+// ============================================================================
+describe('#167 — structure the clear must not destroy', () => {
+  const cellDoc = (inner: string, trExtra = '') =>
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ` +
+    `xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" ` +
+    `xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w:body>` +
+    `<w:sdt><w:sdtPr><w:id w:val="991"/><w:alias w:val="Findings"/><w:text/></w:sdtPr>` +
+    `<w:sdtContent><w:tbl><w:tblPr><w:tblBorders><w:top w:val="single"/></w:tblBorders></w:tblPr>` +
+    `<w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr>${trExtra}` +
+    `<w:tc><w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr>${inner}</w:tc></w:tr>` +
+    `</w:tbl></w:sdtContent></w:sdt></w:body></w:document>`;
+
+  it('a block-level mc:AlternateContent is RECURSED — the cell keeps a paragraph', async () => {
+    // Deleting the wrapper whole took the cell's ONLY paragraph with it and left
+    // `<w:tc><w:tcPr/></w:tc>` — `CT_Tc` requires a block-level child, so that is
+    // the "Word found unreadable content" shape. Measured before the fix.
+    const { outputXml } = await renderAllNull(
+      cellDoc(
+        '<mc:AlternateContent><mc:Choice Requires="w14">' +
+          '<w:p><w:r><w:t>PSV 340</w:t></w:r></w:p></mc:Choice></mc:AlternateContent>',
+      ),
+    );
+    const cell = /<w:tc>[\s\S]*?<\/w:tc>/.exec(outputXml)?.[0] ?? '';
+    expect(cell.includes('PSV 340')).toBe(false);
+    // THE PROPERTY: the cell still holds a block-level child.
+    expect(cell.includes('<w:p>')).toBe(true);
+  });
+
+  it('w:tblPrEx survives — per-row borders are properties, not content', async () => {
+    const { outputXml } = await renderAllNull(
+      cellDoc(
+        '<w:p><w:r><w:t>PSV 340</w:t></w:r></w:p>',
+        '<w:tblPrEx><w:tblBorders><w:top w:val="single" w:sz="8"/></w:tblBorders></w:tblPrEx>',
+      ),
+    );
+    expect([outputXml.includes('tblPrEx'), outputXml.includes('PSV 340')]).toEqual([true, false]);
+  });
+
+  it('a NESTED control’s showingPlcHdr is removed too, not just the outer one', async () => {
+    // The exception was applied only to `control.children.find(sdtPr)`, so an
+    // inner control kept its flag AND its docPart inside a span proofed
+    // `emptied` — the same hazard, one level down, with blank credit attached.
+    const { outputXml, bodyProofs } = await renderAllNull(
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+        `<w:body><w:p><w:sdt><w:sdtPr><w:id w:val="992"/><w:alias w:val="Outer"/><w:text/></w:sdtPr>` +
+        // ⚠️ THE INNER CONTROL IS A QUICK-PARTS GALLERY, DELIBERATELY. A nested
+        // control the compiler BINDS as its own field makes both fields patch
+        // the same span and the render throws PATCH_OVERLAP — pre-existing,
+        // identical at `6220e0ea`, and not what this arm is about. A
+        // `w:docPartObj` control is not bound, so it is carried as structure and
+        // its placeholder flag is the thing under test.
+        `<w:sdtContent><w:sdt><w:sdtPr><w:showingPlcHdr/><w:id w:val="993"/>` +
+        `<w:alias w:val="Inner"/><w:placeholder><w:docPart w:val="WARFARIN_DEFAULT"/></w:placeholder>` +
+        `<w:docPartObj><w:docPartGallery w:val="Quick Parts"/></w:docPartObj>` +
+        `</w:sdtPr><w:sdtContent><w:r><w:t>inner text</w:t></w:r></w:sdtContent></w:sdt>` +
+        `</w:sdtContent></w:sdt></w:p></w:body></w:document>`,
+    );
+    expect([outputXml.includes('showingPlcHdr'), outputXml.includes('inner text')])
+      .toEqual([false, false]);
+    expect(bodyProofs[0]?.kind).toBe('emptied');
+  });
+
+  it('showingPlcHdr goes even when the content was ALREADY pure skeleton', async () => {
+    // Gating the removal on "something else was deleted" left the flag set on a
+    // control whose content held only a `w:p` — a regression against the
+    // previous commit, which removed it there.
+    const { outputXml } = await renderAllNull(
+      sdtDoc({ block: true, content: '<w:p><w:pPr><w:jc w:val="center"/></w:pPr></w:p>' })
+        .replace('<w:sdtPr>', '<w:sdtPr><w:showingPlcHdr/>'),
+    );
+    expect(outputXml.includes('showingPlcHdr')).toBe(false);
+  });
+
+  it('an XML COMMENT does not silently disarm the clear', async () => {
+    // The character-data refusal is a whole-control veto, and `scanXmlPart`
+    // skips comments without registering a child — so their raw bytes landed in
+    // the sibling gap and one comment anywhere below the control turned the fix
+    // OFF, degrading to pre-fix behaviour with no warning and no distinguishable
+    // proof.
+    const { outputXml, bodyProofs } = await renderAllNull(
+      sdtDoc({
+        content: '<!-- a Word comment --><w:r><w:t>Enter anticoagulation</w:t></w:r>',
+      }),
+    );
+    expect(outputXml.includes('Enter anticoagulation')).toBe(false);
+    expect(bodyProofs[0]?.kind).toBe('emptied');
+  });
+
+  it('a tracked-change INSERTED PARAGRAPH survives as structure', async () => {
+    // `w:ins`/`w:del` hold RUNS inline and PARAGRAPHS at block level. Deleting
+    // them whole removed a tracked-inserted paragraph entirely; recursing gets
+    // both right — the runs go as content, the paragraph stays as structure.
+    const { outputXml } = await renderAllNull(
+      sdtDoc({
+        block: true,
+        content:
+          '<w:ins w:id="5" w:author="Dr"><w:p><w:r><w:t>inserted finding</w:t></w:r></w:p></w:ins>',
+      }),
+    );
+    expect([outputXml.includes('inserted finding'), outputXml.includes('<w:p>')])
+      .toEqual([false, true]);
+  });
+});

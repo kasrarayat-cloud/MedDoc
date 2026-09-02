@@ -702,11 +702,31 @@ const STRUCTURE_KEEP_WHOLE: ReadonlySet<string> = new Set([
   'pPr', 'tblPr', 'tblGrid', 'trPr', 'tcPr', 'sectPr', 'sdtPr', 'sdtEndPr',
   'bookmarkStart', 'bookmarkEnd', 'proofErr',
   'commentRangeStart', 'commentRangeEnd',
+  // ⚠️ ADDED AFTER THE PASS MEASURED THEIR LOSS. `w:tblPrEx` carries per-row
+  // border and shading exceptions, so deleting it silently dropped row borders
+  // inside any cleared control; `w:permStart`/`w:permEnd` mark editable ranges.
+  // All three are properties, none renders content, and losing them is the
+  // inverse failure v1 and v2 died of.
+  'tblPrEx', 'permStart', 'permEnd',
 ]);
 
 /** Structural containers — kept, and recursed into so their content clears. */
 const STRUCTURE_RECURSE: ReadonlySet<string> = new Set([
   'p', 'tbl', 'tr', 'tc', 'sdt', 'sdtContent',
+  // ⚠️ BLOCK-LEVEL WRAPPERS ARE RECURSED, NOT DELETED WHOLE — measured.
+  // `mc:AlternateContent` is emitted by Word routinely, and deleting it took a
+  // table cell's ONLY paragraph with it, leaving `<w:tc><w:tcPr/></w:tc>`:
+  // `CT_Tc` requires at least one block-level child, so that is the classic
+  // "Word found unreadable content" shape. `w:customXml` did the same to a
+  // whole row.
+  //
+  // ⚠️ AND TRACKED-CHANGE WRAPPERS TOO, for the same reason at a different
+  // level: `w:ins`/`w:del`/`w:moveTo`/`w:moveFrom` hold RUNS inline and
+  // PARAGRAPHS at block level. Recursing gets both right — the runs go as
+  // content, the paragraphs stay as structure — where deleting whole removed a
+  // tracked-inserted paragraph entirely.
+  'AlternateContent', 'Choice', 'Fallback', 'customXml',
+  'ins', 'del', 'moveTo', 'moveFrom',
 ]);
 
 /**
@@ -736,17 +756,48 @@ const STRUCTURE_RECURSE: ReadonlySet<string> = new Set([
  * bare `WARFARIN 5 MG DAILY` earned a `blank` proof while printing. It is
  * schema-invalid, so rather than invent a rule for it we refuse the control.
  */
+/**
+ * Containers OOXML requires to keep at least one child of a given kind. Emptying
+ * one of these produces a document Word refuses to open, so the clear REFUSES
+ * rather than emit it.
+ */
+const REQUIRED_CONTENT: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  // CT_Tc requires EG_BlockLevelElts minOccurs=1.
+  ['tc', new Set(['p', 'tbl', 'sdt', 'AlternateContent', 'customXml'])],
+  // CT_Tbl requires at least one row.
+  ['tbl', new Set(['tr', 'sdt', 'AlternateContent', 'customXml'])],
+]);
+
+/**
+ * Text between elements that a reader would not see: XML comments, CDATA and
+ * processing instructions. `scanXmlPart` skips them without registering a child,
+ * so their raw bytes land in the gap between siblings — and a naive
+ * non-whitespace test then refuses the whole control over a comment Word never
+ * displays, silently disarming the clear.
+ */
+function gapIsInvisible(gap: string): boolean {
+  return gap
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '')
+    .replace(/<\?[\s\S]*?\?>/g, '')
+    .trim().length === 0;
+}
+
 function structureKeepDeletions(
   xml: string,
   node: XmlElementSpan,
   fieldId: string,
   out: ApprovedXmlPatch[],
 ): boolean {
+  const nodeLocal = xmlLocalName(node.name);
+  const required = REQUIRED_CONTENT.get(nodeLocal);
+  let survivingRequired = 0;
   let cursor = node.startTagEnd;
   for (const child of node.children) {
-    if (xml.slice(cursor, child.start).trim().length > 0) return false;
+    if (!gapIsInvisible(xml.slice(cursor, child.start))) return false;
     cursor = child.end;
     const local = xmlLocalName(child.name);
+    if (required?.has(local)) survivingRequired += 1;
     if (STRUCTURE_KEEP_WHOLE.has(local)) continue;
     if (STRUCTURE_RECURSE.has(local)) {
       if (!structureKeepDeletions(xml, child, fieldId, out)) return false;
@@ -760,7 +811,12 @@ function structureKeepDeletions(
       kind: 'field_content',
     });
   }
-  return xml.slice(cursor, node.endTagStart).trim().length === 0;
+  // ⚠️ REFUSE RATHER THAN EMIT AN INVALID CONTAINER. Measured: an
+  // `mc:AlternateContent` holding a cell's only paragraph was deleted whole and
+  // left `<w:tc><w:tcPr/></w:tc>`. Recursing into that wrapper fixes the
+  // measured case; this refuses the ones nobody has constructed yet.
+  if (required && survivingRequired === 0) return false;
+  return gapIsInvisible(xml.slice(cursor, node.endTagStart));
 }
 
 /**
@@ -805,21 +861,19 @@ function sdtBoundedClearPatches(
   // are looking at IS the placeholder", and Word acts on it by re-displaying
   // the template's own prompt from `w:placeholder`/`w:docPart`. Once the
   // content is deleted that assertion is false, and leaving it set is how
-  // "Choose an item." reappears in a field the certificate attests as blank —
-  // a lens measured `6220e0ea` leaving it set on 28 of the customer template's
-  // controls, every one of which also carries a `w:placeholder` docPart.
+  // "Choose an item." reappears in a field the certificate attests as blank.
   //
-  // So it is removed. It is a flag that PRINTS, which is the one thing the
-  // skeleton may not contain, and stating the exception here is cheaper than a
-  // reader later "restoring" it for consistency with the keep-list.
-  const properties = control.children.find(
-    (child) => xmlLocalName(child.name) === 'sdtPr',
-  );
-  const placeholderFlag = properties
-    ? directXmlChild(properties, 'showingPlcHdr')
-    : undefined;
-  if (placeholderFlag && out.length > 0) {
-    out.push(removeXmlElementPatch(placeholderFlag, fieldId));
+  // ⚠️ EVERY `sdtPr` IN THE CONTROL, NOT JUST THE OUTER ONE. A NESTED control
+  // kept its own flag AND its `w:placeholder`/`w:docPart` inside a span proofed
+  // `emptied` — the same hazard this exception exists for, un-applied one level
+  // down, with the blank credit now attached.
+  //
+  // ⚠️ AND UNCONDITIONALLY, NOT ONLY WHEN SOMETHING ELSE WAS DELETED. Gating it
+  // on `out.length > 0` meant a control whose content was already pure skeleton
+  // kept the flag — measured as a regression against the previous commit, which
+  // removed it there.
+  for (const flag of descendantXmlElements(control, 'showingPlcHdr')) {
+    out.push(removeXmlElementPatch(flag, fieldId));
   }
   return out;
 }
