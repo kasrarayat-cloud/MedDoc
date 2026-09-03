@@ -13,6 +13,7 @@ import { getSession } from '@/lib/auth';
 import { filenameSlug, formatVisitDate } from '@/lib/visit-export';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { renderVisitPdfFromDocx, VisitPdfUnavailableError } from '@/lib/visit-pdf';
+import type { FlattenOutcome } from '@/lib/docx-preview/convert';
 import { resolveVisitDocx } from '@/lib/visit-docx-source';
 import { nativePdfExport } from '@/lib/pdf-native/export';
 import { logDelivery } from '@/lib/deliveries';
@@ -44,6 +45,7 @@ export const GET = withApiHandler<{ id: string }>(
     // (e.g. an orphaned cert after template-id rotation surfaces as stale_cert /
     // no_canvas instead of vanishing). Logged + returned on the response.
     let nativeApplied = false;
+    let pdfFlatten: FlattenOutcome = 'not_needed';
     let nativeTwinDocx = false;
     let nativeReason = 'flag_off';
     try {
@@ -51,6 +53,11 @@ export const GET = withApiHandler<{ id: string }>(
       // CERTIFIED flat PDF, return the doctor's OWN page with answers drawn into
       // its blanks; otherwise fall through to the styled generator. Fail-open —
       // any native-fill error falls back to the styled export, never a 500.
+      // ⚠️ RULED 2026-09-03 — THE FAIL-OPEN MUST BE LOUD. If flattening throws,
+      // the converter is handed the ORIGINAL bytes and the PDF may come back
+      // with every content control EMPTY. That is acceptable only because the
+      // doctor can still take the Word export — and only if the degradation is
+      // NAMED on the export rather than shipped as a normal-looking PDF.
       let nativePdf: Buffer | null = null;
       try {
         const native = await nativePdfExport(visitId, session.user.practiceId);
@@ -89,7 +96,9 @@ export const GET = withApiHandler<{ id: string }>(
         );
         nativeTwinDocx = source.native;
         if (!source.native) nativeReason = source.reason ?? nativeReason;
-        pdf = await renderVisitPdfFromDocx(source.bytes);
+        const rendered = await renderVisitPdfFromDocx(source.bytes);
+        pdf = rendered.pdf;
+        pdfFlatten = rendered.flatten;
       }
     } catch (err) {
       // Ruling #113/#116 — the styled PDF is now a Gotenberg render of the Word
@@ -132,6 +141,10 @@ export const GET = withApiHandler<{ id: string }>(
         // Native-PDF visibility — structured, non-PHI (a boolean + a coded reason).
         nativePdfApplied: nativeApplied,
         nativePdfReason: nativeReason,
+        // ⚠️ THE HOLLOW-PDF SIGNAL. `failed` means this PDF was rendered from
+        // unflattened bytes and its content controls may be empty. It is the
+        // ONLY durable record that this export is degraded.
+        pdfFlatten,
       },
     });
 

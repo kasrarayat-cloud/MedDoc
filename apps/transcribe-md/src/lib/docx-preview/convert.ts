@@ -59,11 +59,32 @@ export type ConvertFailure =
   /** The response exceeded MAX_PDF_BYTES and was abandoned. */
   | 'too_large';
 
+/**
+ * How the conversion INPUT was prepared — THREE states, not two.
+ *
+ * ⚠️ `not_needed` AND `applied` ARE DELIBERATELY DISTINCT. A document with no
+ * content controls and a document whose controls were successfully unwrapped
+ * are both "fine", but only one of them exercised the flattener. Collapsing
+ * them to a boolean would make a package that silently flattened NOTHING
+ * indistinguishable from one that had nothing to flatten — the same
+ * unexamined-versus-examined-and-approved conflation canon 94 was written for.
+ *
+ * ⚠️ `failed` MEANS THE PDF WAS RENDERED FROM UNFLATTENED BYTES, and its
+ * content controls may therefore be EMPTY. It is not a crash; it is a
+ * DEGRADED SUCCESS, which is exactly the kind that gets shipped silently.
+ */
+export type FlattenOutcome = 'applied' | 'not_needed' | 'failed';
+
 export interface ConvertResult {
   /** The rendered PDF, or null when the caller must fall back. */
   pdf: Uint8Array | null;
   /** Always present when pdf is null. Named, surfaced, PHI-free. */
   reason: ConvertFailure | null;
+  /**
+   * How the input was prepared. ⚠️ A caller that renders an EXPORT must
+   * RECORD this: `failed` is a hollow-PDF risk and the only signal of it.
+   */
+  flatten: FlattenOutcome;
 }
 
 /**
@@ -76,6 +97,11 @@ export async function convertDocxToPdf(
 ): Promise<ConvertResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CONVERT_TIMEOUT_MS);
+  // ⚠️ DECLARED OUTSIDE THE `try` ON PURPOSE. The outer catch returns a result
+  // too, and a `flatten` scoped to the try would leave that one path unable to
+  // report what happened — the single return site out of six that a regex
+  // sweep missed, which is why it is spelt out rather than left to the reader.
+  let flatten: FlattenOutcome = 'not_needed';
   try {
     // ⚠️ THE CONVERSION INPUT IS FLATTENED — HERE, AT THE ONE CHOKE POINT.
     //
@@ -105,10 +131,18 @@ export async function convertDocxToPdf(
     // worse, and this function's fail-open contract predates this change.
     let toConvert = docx;
     try {
-      toConvert = await flattenDocxForConversion(docx);
+      const flattened = await flattenDocxForConversion(docx);
+      toConvert = flattened.docx;
+      flatten = flattened.controlsRemoved > 0 ? 'applied' : 'not_needed';
     } catch (flattenErr) {
-      console.warn(
-        '[docx-preview] flatten failed; converting the original bytes:',
+      // ⚠️ LOUD, NOT SILENT — ruled 2026-09-03. Converting as-is is acceptable
+      // BECAUSE the DOCX is always available to the doctor; it is NOT
+      // acceptable for the resulting PDF to look like every other one. The
+      // outcome travels back on the result so the EXPORT can name it in its
+      // audit row, and the console line keeps the detail the code cannot.
+      flatten = 'failed';
+      console.error(
+        '[docx-preview] flatten FAILED; converting the original bytes — content controls may render EMPTY:',
         flattenErr instanceof Error ? flattenErr.message : flattenErr,
       );
     }
@@ -127,27 +161,27 @@ export async function convertDocxToPdf(
     });
     if (!res.ok) {
       console.warn(`[docx-preview] converter returned ${res.status}; falling back`);
-      return { pdf: null, reason: 'converter_error' };
+      return { pdf: null, reason: 'converter_error', flatten };
     }
     const declared = Number(res.headers.get('content-length') ?? '0');
     if (declared > MAX_PDF_BYTES) {
       console.warn('[docx-preview] converter response over cap; falling back');
-      return { pdf: null, reason: 'too_large' };
+      return { pdf: null, reason: 'too_large', flatten };
     }
     const buf = new Uint8Array(await res.arrayBuffer());
-    if (buf.byteLength === 0) return { pdf: null, reason: 'empty_result' };
+    if (buf.byteLength === 0) return { pdf: null, reason: 'empty_result', flatten };
     if (buf.byteLength > MAX_PDF_BYTES) {
       console.warn('[docx-preview] converter response over cap; falling back');
-      return { pdf: null, reason: 'too_large' };
+      return { pdf: null, reason: 'too_large', flatten };
     }
-    return { pdf: buf, reason: null };
+    return { pdf: buf, reason: null, flatten };
   } catch (err) {
     const timedOut = err instanceof Error && err.name === 'AbortError';
     console.warn(
       `[docx-preview] ${timedOut ? 'timeout' : 'converter unreachable'}; falling back to ` +
         'client-side rendering of the true bytes',
     );
-    return { pdf: null, reason: timedOut ? 'timeout' : 'converter_error' };
+    return { pdf: null, reason: timedOut ? 'timeout' : 'converter_error', flatten };
   } finally {
     clearTimeout(timer);
   }

@@ -46,7 +46,11 @@
 // ============================================================================
 
 import { generateVisitDocx } from './docx-generator';
-import { convertDocxToPdf, type ConvertFailure } from './docx-preview/convert';
+import {
+  convertDocxToPdf,
+  type ConvertFailure,
+  type FlattenOutcome,
+} from './docx-preview/convert';
 import type { VisitExportData } from './visit-export';
 
 /**
@@ -131,17 +135,32 @@ export function unavailableNote(visitId: string, err: unknown): string {
  * twin visit's PDF was the styled layout while its Word download was the
  * doctor's letterhead — one record, two documents.
  */
-export async function renderVisitPdfFromDocx(docx: Buffer): Promise<Buffer> {
+/**
+ * A rendered PDF and HOW ITS INPUT WAS PREPARED.
+ *
+ * ⚠️ THE OUTCOME IS RETURNED RATHER THAN LOGGED HERE, AND THAT IS THE POINT.
+ * `flatten: 'failed'` means the PDF was produced from unflattened bytes and its
+ * content controls may be EMPTY — a DEGRADED SUCCESS, indistinguishable from a
+ * good PDF at the byte level. Returning it makes every caller's compiler ask
+ * what it intends to do about that; a `console.warn` in here would have let all
+ * three of them ignore it without anyone noticing.
+ */
+export interface RenderedVisitPdf {
+  pdf: Buffer;
+  flatten: FlattenOutcome;
+}
+
+export async function renderVisitPdfFromDocx(docx: Buffer): Promise<RenderedVisitPdf> {
   return convertOrThrow(docx);
 }
 
-export async function renderVisitPdf(data: VisitExportData): Promise<Buffer> {
+export async function renderVisitPdf(data: VisitExportData): Promise<RenderedVisitPdf> {
   const docx = await generateVisitDocx(data);
   return convertOrThrow(docx);
 }
 
-async function convertOrThrow(docx: Buffer): Promise<Buffer> {
-  const { pdf, reason } = await convertDocxToPdf(
+async function convertOrThrow(docx: Buffer): Promise<RenderedVisitPdf> {
+  const { pdf, reason, flatten } = await convertDocxToPdf(
     new Uint8Array(docx),
     'visit.docx',
   );
@@ -171,7 +190,7 @@ async function convertOrThrow(docx: Buffer): Promise<Buffer> {
   if (!isPdf(pdf)) {
     throw new VisitPdfUnavailableError('converter_error');
   }
-  return Buffer.from(pdf);
+  return { pdf: Buffer.from(pdf), flatten };
 }
 
 /** `%PDF` — the five-byte header every PDF starts with. */

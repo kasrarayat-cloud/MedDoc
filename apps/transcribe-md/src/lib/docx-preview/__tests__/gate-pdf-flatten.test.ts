@@ -97,7 +97,9 @@ describe('flattening the conversion input', () => {
     expect(beforeCount, 'the fixture carries no content controls').toBeGreaterThan(20);
 
     const flat = await flattenDocxForConversion(src);
-    const afterXml = xmlOf(flat);
+    // the count the caller uses to tell `applied` from `not_needed`
+    expect(flat.controlsRemoved).toBe(beforeCount);
+    const afterXml = xmlOf(flat.docx);
     expect((afterXml.match(/<w:sdt[ >]/g) ?? []).length, 'controls survived').toBe(0);
     expect(afterXml).not.toMatch(/<w:sdtPr[ >]/);
     // the content-preserving property, on the real document

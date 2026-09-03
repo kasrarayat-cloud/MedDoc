@@ -224,7 +224,17 @@ export const GET = withApiHandler('api:settings:export-data', async (req) => {
           );
 
           if (outcome.status === 'rendered') {
-            archive.append(outcome.value, {
+            // ⚠️ RULED 2026-09-03 — A DEGRADED PDF IS NAMED, NOT SHIPPED
+            // QUIETLY. `failed` means flattening threw and this render may
+            // carry EMPTY content controls. Same reasoning as the skip branch
+            // below: a file nobody flagged cannot be told apart from a good one.
+            if (outcome.value.flatten === 'failed') {
+              log.error('api:settings:export-data', 'pdf rendered UNFLATTENED', {
+                userId,
+                visitId: v.id,
+              });
+            }
+            archive.append(outcome.value.pdf, {
               name: `visits/${v.id}/signed.pdf`,
             });
           } else if (outcome.status === 'skipped') {

@@ -311,12 +311,19 @@ describe('F3 — the renderer REFUSES rather than substituting', () => {
     // assertion above while breaking the download for every doctor.
     vi.resetModules();
     vi.doMock('../docx-preview/convert', () => ({
-      convertDocxToPdf: async () => ({ pdf: new Uint8Array([0x25, 0x50, 0x44, 0x46]), reason: null }),
+      convertDocxToPdf: async () => ({
+        pdf: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+        reason: null,
+        flatten: 'applied',
+      }),
     }));
     const { renderVisitPdf: subject } = await import('../visit-pdf');
 
     const out = await subject(DATA);
-    expect(out.subarray(0, 4).toString('ascii')).toBe('%PDF');
+    expect(out.pdf.subarray(0, 4).toString('ascii')).toBe('%PDF');
+    // the outcome travels with the bytes — see the loudness arm in
+    // `gate-pdf-flatten-is-loud.test.ts`
+    expect(out.flatten).toBe('applied');
     vi.doUnmock('../docx-preview/convert');
     vi.resetModules();
   });

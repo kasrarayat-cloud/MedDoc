@@ -30,7 +30,20 @@ const FLATTENABLE = /^word\/(document|header\d*|footer\d*|footnotes|endnotes)\.x
  * `convertDocxToPdf` catches it and sends the original bytes — a PDF with empty
  * controls is the defect being fixed, but NO PDF is worse.
  */
-export async function flattenDocxForConversion(docx: Uint8Array): Promise<Uint8Array> {
+export interface FlattenedPackage {
+  docx: Uint8Array;
+  /**
+   * ⚠️ HOW MANY WRAPPERS CAME OUT — so the caller can tell `applied` from
+   * `not_needed`. A flattener that silently matched nothing returns 0 here and
+   * is therefore distinguishable from one that had nothing to match; without
+   * this number those two are the same green.
+   */
+  controlsRemoved: number;
+}
+
+export async function flattenDocxForConversion(
+  docx: Uint8Array,
+): Promise<FlattenedPackage> {
   const zip = await JSZip.loadAsync(docx);
   const names = Object.keys(zip.files).filter((n) => FLATTENABLE.test(n));
   // ⚠️ NON-VACUITY, AND IT IS A REAL GUARD RATHER THAN A COMMENT. A package
@@ -40,12 +53,14 @@ export async function flattenDocxForConversion(docx: Uint8Array): Promise<Uint8A
   if (!names.includes('word/document.xml')) {
     throw new Error('flattenDocxForConversion: word/document.xml not found');
   }
+  let controlsRemoved = 0;
   for (const name of names) {
     const file = zip.file(name);
     if (!file) continue;
     const xml = await file.async('string');
     if (!xml.includes('<w:sdt')) continue;
+    controlsRemoved += (xml.match(/<w:sdt[ >]/g) ?? []).length;
     zip.file(name, flattenContentControls(xml));
   }
-  return zip.generateAsync({ type: 'uint8array' });
+  return { docx: await zip.generateAsync({ type: 'uint8array' }), controlsRemoved };
 }

@@ -232,7 +232,16 @@ export const GET = withApiHandler<{ id: string }>(
             );
 
             if (outcome.status === 'rendered') {
-              archive.append(outcome.value, {
+              // ⚠️ RULED 2026-09-03 — see the sibling archive route. A PDF
+              // whose controls may be empty is NAMED, never appended silently.
+              if (outcome.value.flatten === 'failed') {
+                log.error('api:patients:export', 'pdf rendered UNFLATTENED', {
+                  userId,
+                  patientId,
+                  visitId: v.id,
+                });
+              }
+              archive.append(outcome.value.pdf, {
                 name: `visits/${v.id}/signed.pdf`,
               });
             } else if (outcome.status === 'skipped') {
