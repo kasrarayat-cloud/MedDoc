@@ -322,6 +322,34 @@ export const CONTENT_CARRIERS: ReadonlySet<string> = new Set([
   "tab",
   "continuationSeparator", "footnoteReference", "endnoteReference",
   "commentReference", "ruby",
+  // ⚠️ #175 FINAL PASS — THE SET WAS MEANT TO BE `EG_RunInnerContent` AND WAS
+  // MISSING FOURTEEN OF ITS MEMBERS. Every name below is a legal child of
+  // `w:r`, i.e. a thing that PRINTS, and every one was ADMITTED inside a
+  // kept-whole `w:rPr` — the exact position the #174 pass measured a `w:sym`
+  // surviving and printing from.
+  //
+  // Measured on this branch, one row per name: the control compiled to a
+  // `narrative_text` field, the element survived VERBATIM into the rendered
+  // `word/document.xml` inside the field's own binding span, the field earned
+  // an `emptied` proof with `blankEligible: 'eligible'`, `countsAsBlankProof`
+  // returned TRUE and `verification.verified` was TRUE. Six of them render
+  // TEXT — `w:pgNum` a page number, the six date elements TODAY'S DATE into a
+  // clinical note — and `w:contentPart`/`w:subDoc`/`w:altChunk` pull in a whole
+  // external part.
+  //
+  // ⚠️ AND THE COMPILER ALREADY KNEW ABOUT ONE OF THEM. `visibleText` in
+  // `xml.ts` maps `w:cr` to a newline beside `w:br` — the text extractor
+  // classified it as content while this set did not. Two lists, one set, the
+  // #175 defect one file over.
+  //
+  // ⚠️ FIXED BY GROUND, NOT BY HIT (canon 68): the enumeration is completed
+  // against the schema group, not against the rows that happened to be probed.
+  // `w:lastRenderedPageBreak` is inert and is added anyway, because it sits on
+  // the same wrong side of the same boundary and nothing conformant can put it
+  // in a property block.
+  "cr", "pgNum", "contentPart", "subDoc", "altChunk", "delInstrText",
+  "dayShort", "dayLong", "monthShort", "monthLong", "yearShort", "yearLong",
+  "annotationRef", "footnoteRef", "endnoteRef", "lastRenderedPageBreak",
 ]);
 
 /**
@@ -357,11 +385,45 @@ const PROPERTY_BLOCKS = STRUCTURE_KEEP_WHOLE;
  * mutation matrix sees "removing this reds nothing" and the only argument
  * against deleting it is a sentence that is not true.
  */
+/**
+ * ⚠️ #175 FINAL PASS — CHARACTER DATA IN A PROPERTY BLOCK IS A REFUSAL, AND IT
+ * HAS NO ELEMENT NAME, WHICH IS WHY NO ADDITION TO `CONTENT_CARRIERS` COULD
+ * EVER HAVE CLOSED IT.
+ *
+ * The renderer has refused character data inside a kept-whole container since
+ * #173 (`subtreeHasNoCharacterData`) and in a sibling gap since #172(3)
+ * (`gapIsInvisible`, with CDATA deliberately NOT stripped). Both of those run
+ * only on what `structureKeepDeletions` walks — the control's `w:sdtContent`.
+ *
+ * `sdtBoundedClearPatches` SKIPS the outer `w:sdtPr` and `w:sdtEndPr`
+ * (`if (local === 'sdtPr' || local === 'sdtEndPr') continue;`), so neither
+ * guard has ever looked at them; and this function skipped `#text`, so
+ * admission had not either. Measured: `<w:sdtPr>…<w:text/>WARFARIN 5 MG
+ * DAILY</w:sdtPr>` was ADMITTED, survived verbatim into the output, and the
+ * field earned a counted `emptied` proof with `verified === true`. The same
+ * bytes as CDATA, and the same bytes inside a `w:delInstrText`, did likewise.
+ * The byte-identical string one element over — inside `w:sdtContent` — is a
+ * hard refusal.
+ *
+ * WHITESPACE-ONLY text is NOT a refusal: pretty-printed XML puts a newline and
+ * an indent between every pair of elements, and refusing that would refuse
+ * every control in a formatted document. Same threshold the renderer's
+ * `gapIsInvisible` already uses.
+ */
+const CHARACTER_DATA = "#character-data";
+
+function nonWhitespaceText(node: OrderedXmlNode): boolean {
+  const tag = tagOf(node);
+  if (tag !== "#text") return false;
+  return String(node[tag] ?? "").trim().length > 0;
+}
+
 function propertyBlockCarrier(
   node: OrderedXmlNode,
   parentName: string,
 ): string | null {
   for (const child of childrenOf(node)) {
+    if (nonWhitespaceText(child)) return CHARACTER_DATA;
     const tag = tagOf(child);
     if (!tag || tag === "#text") continue;
     const local = localName(tag);
@@ -401,6 +463,9 @@ function admissionRefusal(node: OrderedXmlNode): string | null {
     const local = localName(tag);
     if (PROPERTY_BLOCKS.has(local)) {
       const carrier = propertyBlockCarrier(current, local);
+      if (carrier === CHARACTER_DATA) {
+        return `a w:${local} block contains raw character data`;
+      }
       if (carrier) return `a w:${local} block contains a w:${carrier}`;
       continue;
     }
