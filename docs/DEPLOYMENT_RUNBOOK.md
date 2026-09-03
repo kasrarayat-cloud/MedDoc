@@ -271,6 +271,83 @@ other rides along **unjudged**, with nothing anywhere saying so.
      declaration itself*, so the next reader finds it where they are already
      looking.
 
+#### ⚠️ AND *HELD* IS DEFINED HERE — BECAUSE THE WRONG PREDICATE HAS NOW BEEN RUN TWICE
+
+**Added 2026-09-03.** The step above has said "every OPEN or HELD declaration"
+since it was ratified, and it has never said what makes one **HELD**. Two
+sessions filled that gap with the same guess, and it was wrong both times.
+
+> **THE WRONG PREDICATE, NAMED SO IT IS NOT REACHED FOR A THIRD TIME:
+> *"a declaration with no `-JUDGED.md` sibling is unjudged, therefore held."***
+
+| run | what it returned | verdict |
+|---|---|---|
+| first — recorded inside `docs/foundation/deploys/20260901-a8ead1cb.md` | **56 hits** | **ALL FALSE**, and withdrawn in that same file |
+| second — 2026-09-03 | **3 hits**: `20260821-973de22f`, `20260821-b86f2a0b`, `20260825-bd1eeb57` | **ALL THREE FALSE** |
+
+⚠️ **AND THE SECOND SESSION HAD READ THE FIRST'S WITHDRAWAL EARLIER IN THE
+SAME SITTING.** It still re-derived the predicate and still believed the answer.
+Reading a withdrawal is not the same as holding the right rule: the withdrawal
+said what was wrong and nothing anywhere said what right looked like, so the
+obvious guess was available again an hour later. **A rediscovered wrong
+predicate is what an undefined term costs**, and defining it is the only thing
+that stops the third run.
+
+**WHY IT IS WRONG — JUDGEMENTS LIVE IN THREE PLACES, AND THE SIBLING CONVENTION
+IS ONLY THE MOST RECENT:**
+
+| where a judgement lives | example |
+|---|---|
+| a `-JUDGED.md` sibling file | `20260901-a8ead1cb-JUDGED.md` |
+| **INLINE, inside the declaration itself** | most of the programme's history |
+| `docs/deploy-reports/*-judgement.md` | the older convention |
+
+Any predicate that knows about one of the three will keep producing confident
+false holds — and it produces them in the direction that wears rigour's
+clothes, because a spurious hold reads as caution rather than as an error.
+
+**AND THERE IS A DISCHARGE THAT IS NOT A VERDICT AT ALL. THIS IS THE NEW RULE:**
+
+> **A DECLARATION EXPLICITLY SUPERSEDED BY A LATER DECLARATION THAT IS ITSELF
+> JUDGED IS DISCHARGED, AND IS NOT HELD.**
+
+**THE REFERENCE CASE.** `20260825-bd1eeb57.md` carries MUST CHANGE and MUST NOT
+CHANGE rows and **no verdict of its own**, so the sibling predicate flags it.
+But `20260825-61b07e1f.md` — same day, and JUDGED — carries a heading reading
+*"⚠️ THIS SUPERSEDES `20260825-bd1eeb57.md`, AND THE REASON IS MECHANISM NOT
+ERROR"*, explaining that bd1eeb57 had become unresolvable: the declaration
+resolver's non-runtime allowlist is fail-closed, and three intervening
+non-shipping files defeated a carry-forward. It is discharged **by
+supersession**, not by a verdict of its own — and no sibling search can see
+that, because the sentence that discharges it lives in a different file.
+
+⚠️ **AND THIS IS THE ONE CANDIDATE WHOSE ANSWER CHANGED ANYTHING.** bd1eeb57
+NAMES `note-template-docx/compiler.ts`, which **WAS in the deploy range being
+prepared**. Had it truly been held, it would have **BLOCKED that deploy**. Of
+the three false hits, the predicate got most wrong the only one that mattered —
+which is the shape to expect: a wrong predicate is not uniformly wrong, it is
+wrongest where the corpus is richest, and that is where the live candidates are.
+
+**THE PREDICATE THAT IS RIGHT — a declaration is HELD only if ALL FOUR hold:**
+
+1. it has **no verdict of its own, in ANY of the three places above**; AND
+2. **no later declaration explicitly supersedes it**; AND
+3. **its sha is NOT an ancestor of what is already running** — an ancestor has
+   already shipped, so it cannot be overtaken by this deploy; AND
+4. **at least one RUNTIME file it names appears in this deploy's range.**
+
+Only then is it HELD, and only then does it block.
+
+⚠️ **THE HONEST LIMIT, STATED SO THIS IS NOT READ AS A QUERY: IT IS A
+CHECKLIST FOR A HUMAN, NOT A SCRIPT.** Rows 2, 3 and 4 are mechanical — a grep
+for the filename across both declaration directories, a `git merge-base
+--is-ancestor`, the range listing this step already produced. **Row 1 is not**:
+an inline verdict has no filename, no fixed heading and no convention older than
+the file it sits in, so the only instrument that settles it is opening the
+declaration and reading it. **The first item is the one that requires actually
+opening the file** — and both false runs are exactly what skipping it looks
+like.
+
 ⚠️ **A THIRD OPTION IS REJECTED BY NAME: shipping it silently because it is
 "only an ancestor".** That is precisely what happened, and it produced a true
 sentence — *"18 declared rows, 18 matched"* — doing misleading work, because not
