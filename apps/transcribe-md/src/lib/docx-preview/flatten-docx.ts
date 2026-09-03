@@ -7,6 +7,7 @@
 // ============================================================================
 import JSZip from 'jszip';
 
+import { DEFAULT_TEMPLATE_DOCX_LIMITS } from '../note-template-docx/limits';
 import { flattenContentControls } from './flatten-sdt';
 
 /**
@@ -40,10 +41,31 @@ export async function flattenDocxForConversion(docx: Uint8Array): Promise<Uint8A
   if (!names.includes('word/document.xml')) {
     throw new Error('flattenDocxForConversion: word/document.xml not found');
   }
+  // ⚠️ THE SAME CEILINGS THE HARDENED TEMPLATE READER USES — IMPORTED, NOT
+  // RETYPED. This function unzips a doctor-supplied package into the app's own
+  // heap and rebuilds it, which the previous code did with no ceiling at all.
+  // The refutation pass measured a document whose XML deflates **218:1**: a
+  // 92 KB upload carrying 20 MB of XML. `note-template-docx`'s reader REFUSES
+  // that archive; this path would have inflated it. Reusing the constants
+  // rather than inventing new ones means the two cannot drift apart.
+  const { maxEntryUncompressedBytes, maxTotalUncompressedBytes } =
+    DEFAULT_TEMPLATE_DOCX_LIMITS;
+
+  let total = 0;
   for (const name of names) {
     const file = zip.file(name);
     if (!file) continue;
     const xml = await file.async('string');
+    // Byte length, not string length — a multi-byte part is bigger than it
+    // looks, and the cap is about memory.
+    const bytes = Buffer.byteLength(xml, 'utf8');
+    total += bytes;
+    if (bytes > maxEntryUncompressedBytes || total > maxTotalUncompressedBytes) {
+      throw new Error(
+        `flattenDocxForConversion: ${name} exceeds the uncompressed ceiling ` +
+          `(${bytes} bytes, ${total} total)`,
+      );
+    }
     if (!xml.includes('<w:sdt')) continue;
     zip.file(name, flattenContentControls(xml));
   }

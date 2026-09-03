@@ -23,6 +23,8 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { XMLValidator } from 'fast-xml-parser';
+
 import { flattenContentControls } from '../flatten-sdt';
 
 const APP = resolve(__dirname, '..', '..', '..', '..');
@@ -77,6 +79,140 @@ describe('flattening the conversion input', () => {
   it('a document with no controls is returned unchanged', () => {
     const before = doc('<w:p><w:r><w:t>plain</w:t></w:r></w:p>');
     expect(flattenContentControls(before)).toBe(before);
+  });
+
+  // ==========================================================================
+  // ⚠️ THE THREE SHAPES THE REFUTATION PASS DEMONSTRATED, AND WHY THEY ARE HERE.
+  // The FIRST version of this flattener SELECTED A SUBTREE — it captured
+  // `w:sdtContent`'s children and replaced the control with them. Every arm
+  // above passed. All three of these failed, and the first one DELETED A DRUG
+  // NAME from a document that was well-formed afterwards, so nothing threw and
+  // the fail-open never engaged.
+  //
+  // They are anchored to ruling #174's own adjudicated shapes, not invented:
+  // #174 REFUSES such controls at admission and keeps the doctor's text
+  // verbatim as static content, which is exactly how they reach the converter.
+  // ==========================================================================
+  const wellFormed = (xml: string) => XMLValidator.validate(xml) === true;
+
+  it('⚠️ CLINICAL: a run AFTER w:sdtContent survives — it used to be deleted', () => {
+    const before = doc(
+      `<w:p><w:sdt><w:sdtPr><w:id w:val="980"/></w:sdtPr>` +
+        `<w:sdtContent><w:r><w:t>placeholder</w:t></w:r></w:sdtContent>` +
+        `<w:r><w:t>WARFARIN 5 MG DAILY</w:t></w:r></w:sdt></w:p>`,
+    );
+    const after = flattenContentControls(before);
+    expect(after, 'the drug name was deleted').toContain('WARFARIN 5 MG DAILY');
+    expect(runs(after)).toEqual(runs(before));
+    expect(wellFormed(after), 'output is not well-formed XML').toBe(true);
+  });
+
+  it('⚠️ TWO w:sdtContent children unwrap to WELL-FORMED xml, not orphan tags', () => {
+    const before = doc(
+      `<w:p><w:sdt><w:sdtPr><w:id w:val="7"/></w:sdtPr>` +
+        `<w:sdtContent><w:r><w:t>ASPIRIN</w:t></w:r></w:sdtContent>` +
+        `<w:sdtContent><w:r><w:t>WARFARIN</w:t></w:r></w:sdtContent></w:sdt></w:p>`,
+    );
+    const after = flattenContentControls(before);
+    // the previous version kept both drugs and emitted an orphan close plus an
+    // unclosed open — the converter then refused, so the doctor got NO pdf
+    expect(wellFormed(after), 'output is not well-formed XML').toBe(true);
+    expect(runs(after)).toEqual(runs(before));
+  });
+
+  it('⚠️ a SELF-CLOSING `<w:sdt />` (with a space) deletes nothing', () => {
+    const before = doc(
+      `<w:p><w:sdt><w:sdtPr><w:id w:val="1"/></w:sdtPr><w:sdtContent>` +
+        `<w:sdt />` +
+        `<w:r><w:t>PATIENT ALLERGIC TO PENICILLIN</w:t></w:r>` +
+        `</w:sdtContent></w:sdt></w:p>`,
+    );
+    const after = flattenContentControls(before);
+    expect(after, 'the allergy line was deleted').toContain('PATIENT ALLERGIC TO PENICILLIN');
+    expect(runs(after)).toEqual(runs(before));
+    expect(wellFormed(after)).toBe(true);
+  });
+
+  // ⚠️ TWO REFUSALS, TWO GUARDS, PROVED SEPARATELY. The first draft of this
+  // pair used ONE fixture and asserted the balance message — and it was caught
+  // by the CARRIER TRIPWIRE instead, because the fixture was MISNESTED rather
+  // than unbalanced (counts 1/1). A red run from the wrong guard is the most
+  // convincing possible evidence that the right one works, so each arm now
+  // asserts the message that names ITS OWN guard.
+
+  it('⚠️ UNBALANCED control metadata is REFUSED (the COUNT guard)', () => {
+    // a lone `<w:sdtPr>` would let a non-greedy delete run on to some LATER
+    // `</w:sdtPr>` and swallow a paragraph on the way. Refusing means the
+    // ORIGINAL bytes convert — hollow, but nothing is destroyed.
+    const before = doc(
+      `<w:p><w:sdt><w:sdtPr><w:id w:val="1"/></w:sdtPr>` +
+        `<w:sdtContent><w:r><w:t>KEEP ME</w:t></w:r></w:sdtContent></w:sdt></w:p>` +
+        `<w:sdtPr>`,
+    );
+    expect(() => flattenContentControls(before)).toThrow(/unbalanced control metadata/);
+  });
+
+  it('⚠️ MISNESTED metadata is REFUSED too (the CARRIER TRIPWIRE)', () => {
+    // counts reconcile (1 open, 1 close) so the count guard is satisfied; what
+    // catches this is the ordered carrier comparison, which notices that
+    // `KEEP ME` and `LATER` did not survive the splice.
+    const before = doc(
+      `<w:p><w:sdt><w:sdtPr><w:id w:val="1"/><w:sdtContent><w:r><w:t>KEEP ME</w:t></w:r>` +
+        `</w:sdtContent></w:sdt></w:p><w:p><w:r><w:t>LATER</w:t></w:r></w:p></w:sdtPr>`,
+    );
+    expect(() => flattenContentControls(before)).toThrow(/text carriers changed/);
+  });
+
+  it('⚠️ the TRIPWIRE fires rather than shipping a changed run set', () => {
+    // `w:delText` and `w:instrText` are carriers this codebase has been bitten
+    // by; they are watched too, so a future pattern that eats one goes red.
+    const before = doc(
+      `<w:p><w:sdt><w:sdtPr><w:id w:val="1"/></w:sdtPr><w:sdtContent>` +
+        `<w:del><w:r><w:delText>OLD DOSE</w:delText></w:r></w:del>` +
+        `</w:sdtContent></w:sdt></w:p>`,
+    );
+    const after = flattenContentControls(before);
+    expect(after).toContain('OLD DOSE');
+    expect(wellFormed(after)).toBe(true);
+  });
+
+  it('flattening is LINEAR — 5,000 controls in well under a second', () => {
+    // the subtree-selecting version rescanned the whole part per removal and
+    // measured ~34 SECONDS of blocked event loop on this input
+    const body = Array.from(
+      { length: 5000 },
+      (_, i) =>
+        `<w:p><w:sdt><w:sdtPr><w:id w:val="${i}"/></w:sdtPr><w:sdtContent>` +
+        `<w:r><w:t>V${i}</w:t></w:r></w:sdtContent></w:sdt></w:p>`,
+    ).join('');
+    const before = doc(body);
+    const t0 = Date.now();
+    const after = flattenContentControls(before);
+    const ms = Date.now() - t0;
+    expect(runs(after)).toHaveLength(5000);
+    expect(after).not.toMatch(/<w:sdt[ />]/);
+    expect(ms, `flatten took ${ms}ms`).toBeLessThan(2000);
+  });
+
+  it('⚠️ an ARCHIVE THAT INFLATES past the hardened ceiling is REFUSED', async () => {
+    const JSZip = (await import('jszip')).default;
+    const { flattenDocxForConversion } = await import('../flatten-docx');
+    const { DEFAULT_TEMPLATE_DOCX_LIMITS } = await import('../../note-template-docx/limits');
+
+    // one part just over the per-entry ceiling. It deflates to almost nothing —
+    // which is the point: the COMPRESSED upload is tiny and passes every size
+    // check upstream, while the INFLATED part is what lands in the app's heap.
+    const big =
+      doc('<w:p><w:r><w:t>' + 'A'.repeat(DEFAULT_TEMPLATE_DOCX_LIMITS.maxEntryUncompressedBytes) + '</w:t></w:r></w:p>');
+    const zip = new JSZip();
+    zip.file('word/document.xml', big);
+    // ⚠️ DEFLATE EXPLICITLY. JSZip defaults to STORE, so the first draft of
+    // this arm produced a 16 MB "bomb" that was not compressed at all — the
+    // non-vacuity assertion below is what caught it.
+    const bytes = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+    expect(bytes.byteLength, 'the bomb should compress small').toBeLessThan(1_000_000);
+
+    await expect(flattenDocxForConversion(bytes)).rejects.toThrow(/uncompressed ceiling/);
   });
 
   // ⚠️ THE REAL DOCUMENT, not a fixture of my own shape. The owner's blank form
