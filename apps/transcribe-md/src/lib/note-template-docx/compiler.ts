@@ -278,6 +278,107 @@ function processParagraph(
   );
 }
 
+/**
+ * #174 — ADMIT ONLY CONTROLS WE FULLY UNDERSTAND. REFUSE LOUDLY, AT UPLOAD.
+ *
+ * ⚠️ THIS RULE EXISTS BECAUSE FOUR SEPARATE FINDINGS TURNED OUT TO BE ONE. An
+ * adversarial pass found a Wingdings tick surviving inside `w:rPr`, a dropdown
+ * hidden in `mc:AlternateContent`, a second `w:sdtPr` carrying a live list, and
+ * a `w:fldSimple` inside `w:pPr` — each earning a certified blank proof. They
+ * are not four bugs. They are four consequences of admitting shapes nobody had
+ * characterised, and then trying to prove things about them afterwards.
+ *
+ * **THE REFUSAL BELONGS HERE**: at compile, visible to the doctor as a per-field
+ * finding, BEFORE any certificate exists — not at proof time, invisibly, after.
+ * A refused control keeps the doctor's own text verbatim as static content; it
+ * simply never becomes a field.
+ *
+ * ⚠️ AND "A SECOND ELEMENT OF THE SAME NAME" HAS COST THIS CODEBASE THREE
+ * TIMES — a second `w:sdtContent` rendered WARFARIN out of a control proofed
+ * `emptied`; a second `w:pPr` defeated the numbering guard; a second `w:sdtPr`
+ * defeated the selection exclusion. It is now one rule, once.
+ */
+
+/** Elements that carry content, wherever they appear inside a property block. */
+const CONTENT_CARRIERS: ReadonlySet<string> = new Set([
+  "r", "t", "delText", "instrText", "sym", "drawing", "pict", "object",
+  "fldSimple", "fldChar", "txbxContent", "oMath", "oMathPara", "p", "tbl",
+  "sdt", "br", "ptab", "noBreakHyphen", "softHyphen", "separator",
+  // ⚠️ `tab` IS HERE AND THAT IS WHAT MAKES THE `w:tabs` EXEMPTION BELOW REAL.
+  // The mutation matrix caught it: with `tab` absent from this set the
+  // exemption was dead code — removing it redded nothing — while its comment
+  // claimed to be protecting 52 real fields. A bare `w:tab` directly inside a
+  // property block is a tab CHARACTER and is refused; inside `w:tabs` it is a
+  // tab STOP and is not.
+  "tab",
+  "continuationSeparator", "footnoteReference", "endnoteReference",
+  "commentReference", "ruby",
+]);
+
+/** Property blocks whose subtree must contain no content carrier. */
+const PROPERTY_BLOCKS: ReadonlySet<string> = new Set([
+  "sdtPr", "sdtEndPr", "pPr", "rPr", "tblPr", "trPr", "tcPr", "tblPrEx",
+]);
+
+/**
+ * ⚠️ `w:tab` IS THE ONE AMBIGUOUS NAME AND IT IS EXEMPTED BY POSITION, NOT BY
+ * NAME. Inside `w:tabs` it is a tab-stop DEFINITION — pure formatting, and the
+ * real customer template carries 52 of them. Inside a run it is a tab
+ * CHARACTER. A flat denylist would refuse every one of those 52 fields, which
+ * is exactly the shape of the false refusal that killed the previous rule.
+ */
+function propertyBlockCarrier(
+  node: OrderedXmlNode,
+  parentName: string,
+): string | null {
+  for (const child of childrenOf(node)) {
+    const tag = tagOf(child);
+    if (!tag || tag === "#text") continue;
+    const local = localName(tag);
+    if (local === "tab" && parentName === "tabs") {
+      // a tab STOP, not a tab character
+    } else if (CONTENT_CARRIERS.has(local)) {
+      return local;
+    }
+    const nested = propertyBlockCarrier(child, local);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+/** The first admission failure, or null when the control is understood. */
+function admissionRefusal(node: OrderedXmlNode): string | null {
+  const named = (child: OrderedXmlNode, wanted: string): boolean => {
+    const tag = tagOf(child);
+    return tag !== null && tag !== "#text" && localName(tag) === wanted;
+  };
+  const propertyBlocks = childrenOf(node).filter((c) => named(c, "sdtPr"));
+  const contents = childrenOf(node).filter((c) => named(c, "sdtContent"));
+  if (propertyBlocks.length > 1) {
+    return "the control declares more than one w:sdtPr";
+  }
+  if (contents.length > 1) {
+    return "the control declares more than one w:sdtContent";
+  }
+  // ⚠️ EVERY property block in the whole control, not only the outer `sdtPr` —
+  // the surviving carriers were found inside `w:rPr` and `w:pPr` within the
+  // CONTENT, where the renderer copies them verbatim.
+  const stack = [...childrenOf(node)];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    const tag = tagOf(current);
+    if (!tag || tag === "#text") continue;
+    const local = localName(tag);
+    if (PROPERTY_BLOCKS.has(local)) {
+      const carrier = propertyBlockCarrier(current, local);
+      if (carrier) return `a w:${local} block contains a w:${carrier}`;
+      continue;
+    }
+    stack.push(...childrenOf(current));
+  }
+  return null;
+}
+
 function processContentControl(
   node: OrderedXmlNode,
   nodePath: string,
@@ -339,12 +440,40 @@ function processContentControl(
   }
 
   const identity = contentControlIdentity(properties);
+
+  // ⚠️ #174 — ADMISSION FIRST, BEFORE ANY MARKER IS READ.
+  const refusal = admissionRefusal(node);
+  if (refusal) {
+    addUnsupportedContentControl(
+      state,
+      context,
+      nodePath,
+      identity.label,
+      "UNSUPPORTED_CONTROL_STRUCTURE",
+      `Unsupported control structure: ${refusal}. The text stays exactly as ` +
+        `written; this control will not be filled automatically.`,
+    );
+    walkNodes(
+      childrenOf(content),
+      contentPath,
+      { ...context, insideFieldContent: true },
+      state,
+    );
+    return;
+  }
+
   const dataBound = descendants(properties, "dataBinding").length > 0;
-  const dropdown = directChild(properties, "dropDownList");
-  const comboBox = directChild(properties, "comboBox");
+  // ⚠️ #174 — ONE CONSISTENT METHOD FOR ALL FIVE MARKERS, AND THE ASYMMETRY WAS
+  // THE BUG. `checkbox` already used `descendants` *because Word wraps it in
+  // `mc:AlternateContent`* — so this file already knew the wrapper was real —
+  // while the other four used `directChild`. Measured: a `w:dropDownList`
+  // inside that same wrapper compiled as `narrative_text`, earned a counted
+  // `emptied` proof with its live list intact, and CERTIFIED a template.
+  const dropdown = descendants(properties, "dropDownList")[0];
+  const comboBox = descendants(properties, "comboBox")[0];
   const checkBox = descendants(properties, "checkbox")[0];
-  const date = directChild(properties, "date");
-  const plainText = directChild(properties, "text");
+  const date = descendants(properties, "date")[0];
+  const plainText = descendants(properties, "text")[0];
   const unsupportedType = [
     "picture",
     "group",

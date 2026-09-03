@@ -674,7 +674,7 @@ describe('#165 — "already empty" is not "cleared"', () => {
 // the two the ruling named as the reason the mechanism must be a KEEP-list.
 // ============================================================================
 describe('#167 — structure survives, content does not', () => {
-  it('a SECOND w:sdtContent is emptied too — v2 matched by NAME and let it through', async () => {
+  it('⚠️ MOVED BY #174 — a SECOND w:sdtContent is REFUSED AT COMPILE, not emptied at render', async () => {
     const { outputXml, bodyProofs } = await renderAllNull(
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
         `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
@@ -684,10 +684,18 @@ describe('#167 — structure survives, content does not', () => {
         `<w:sdtContent><w:r><w:t>WARFARIN 5 MG DAILY</w:t></w:r></w:sdtContent>` +
         `</w:sdt></w:p></w:body></w:document>`,
     );
-    // v2 proofed this `emptied` while the drug name printed.
-    expect(outputXml.includes('WARFARIN')).toBe(false);
-    expect(outputXml.includes('placeholder')).toBe(false);
-    expect(bodyProofs[0]?.kind).toBe('emptied');
+    // ⚠️ THE REFUSAL MOVED EARLIER, AND THAT IS THE RULING. v2 proofed this
+    // `emptied` while the drug name printed; the renderer was then taught to
+    // clear EVERY `w:sdtContent`. #174 refuses the shape at ADMISSION instead:
+    // a control declaring two content containers is not a control we
+    // understand, so it never becomes a field at all.
+    //
+    // The doctor's own text is KEPT VERBATIM — it is simply static content now,
+    // and the finding says so at upload where they can act on it.
+    expect(bodyProofs.length, 'the control still compiled to a field').toBe(0);
+    expect(outputXml.includes('WARFARIN 5 MG DAILY'), 'the doctor text was destroyed').
+      toBe(true);
+    expect(outputXml.includes('placeholder'), 'the doctor text was destroyed').toBe(true);
   });
 
   it('w:sectPr on the LAST paragraph survives — where it conventionally sits', async () => {
@@ -937,11 +945,17 @@ describe('#167 — the two shapes the pass left unarmed', () => {
   });
 
   it('a RUN smuggled into w:pPr refuses — a property container may not hold one', async () => {
-    // ⚠️ CANON 86's CORRECTION, CONFIRMED LIVE AND PREVIOUSLY UNARMED. The
-    // keep-list is a claim about the FORMAT; the code copies subtrees verbatim
-    // and nothing validates them. Measured: the run survives, prints, and the
-    // field is proofed `emptied` with blank credit — #164's shape one layer
-    // inside the fix for it.
+    // ⚠️ CANON 86's CORRECTION — AND #174 MOVED THE REFUSAL TO COMPILE TIME.
+    // The keep-list is a claim about the FORMAT; the code copies subtrees
+    // verbatim and nothing validates them. Measured: the run survives, prints,
+    // and the field was proofed `emptied` with blank credit — #164's shape one
+    // layer inside the fix for it.
+    //
+    // The renderer's no-`w:r` refusal still stands, but this document no longer
+    // reaches it: admission refuses a property block holding a content carrier,
+    // so the control never becomes a field. The property asserted below is
+    // therefore the STRONGER one — no field, no proof, no credit — and the
+    // doctor's text survives verbatim.
     const { outputXml, bodyProofs } = await renderAllNull(
       sdtDoc({
         block: true,
@@ -951,12 +965,14 @@ describe('#167 — the two shapes the pass left unarmed', () => {
           '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
       }),
     );
-    // ⚠️ THE ESSENTIAL PROPERTY IS THE LABEL, NOT THE TEXT. The refusal falls
-    // back to text patching, which happens to blank this run's `w:t` as well —
-    // better than required, and NOT what the arm rests on, because that
-    // fallback cannot reach a non-`w:t` carrier smuggled the same way.
-    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
-    expect(outputXml.includes('WARFARIN')).toBe(false);
+    // ⚠️ THE PROPERTY IS NOW STRONGER THAN THE OLD ONE, which is what moving a
+    // refusal earlier buys. Previously the renderer refused the bounded clear
+    // and fell back to text patching — which happened to blank this run's
+    // `w:t`, better than required, and could not have reached a non-`w:t`
+    // carrier smuggled the same way. Now the control is never a field.
+    expect(bodyProofs.length, 'the control still compiled to a field').toBe(0);
+    expect(outputXml.includes('WARFARIN 5 MG DAILY'), 'the doctor text was destroyed').
+      toBe(true);
   });
 
   it('and a NON-w:t carrier in w:pPr is refused too — where the fallback cannot help', async () => {
@@ -1114,6 +1130,125 @@ describe('#172 — the noun, the one hop, the character data, the subtree', () =
   });
 
 
+describe('#174 — the compiler admits only controls it fully understands', () => {
+  const W =
+    'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ' +
+    'xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"';
+  const LIST =
+    '<w:dropDownList><w:listItem w:displayText="Left" w:value="L"/>' +
+    '<w:listItem w:displayText="Right" w:value="R"/></w:dropDownList>';
+  const ctl = (sdtPr: string, content: string) =>
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W}><w:body><w:p>` +
+    `<w:sdt>${sdtPr}<w:sdtContent>${content}</w:sdtContent></w:sdt></w:p></w:body></w:document>`;
+  const HEAD = '<w:id w:val="1760"/><w:alias w:val="Side"/><w:tag w:val="side"/>';
+  const TEXT = '<w:r><w:t>DOCTOR TEXT HERE</w:t></w:r>';
+
+  async function admission(documentXml: string) {
+    const { buildSyntheticDocx } = await import('./synthetic-docx');
+    const { compileTemplateDocx } = await import('../compiler');
+    const ir = compileTemplateDocx(await buildSyntheticDocx({ documentXml }));
+    const body = ir.fields.filter((f) => f.rendererBinding.partName === 'word/document.xml');
+    // ⚠️ THE KEY IS `unsupported`. My first reader said `unsupportedElements`,
+    // which does not exist — so it returned [] for every input and reported a
+    // clean zero for the acceptance measurement too. A zero from a missing key
+    // is indistinguishable from a zero that is true.
+    const refused = (ir.unsupported as Array<Record<string, unknown>>).filter(
+      (u) => u.code === 'UNSUPPORTED_CONTROL_STRUCTURE',
+    );
+    return { fields: body, refused, ir };
+  }
+
+  it('⚠️ A SECOND w:sdtPr IS REFUSED — the class that has cost three times', async () => {
+    // A second `w:sdtContent` once rendered WARFARIN out of a control proofed
+    // `emptied`. A second `w:pPr` defeated the numbering guard. A second
+    // `w:sdtPr` defeated the selection exclusion — measured CERTIFIED against a
+    // BLOCKED control. It is one rule now, once.
+    const { fields, refused } = await admission(
+      ctl(`<w:sdtPr>${HEAD}<w:text/></w:sdtPr><w:sdtPr>${LIST}</w:sdtPr>`, TEXT),
+    );
+    expect(refused.length, 'a second w:sdtPr was admitted').toBe(1);
+    expect(fields.length, 'the refused control still became a field').toBe(0);
+    expect(String(refused[0]!.detail)).toContain('more than one w:sdtPr');
+  });
+
+  it('⚠️ A CONTENT CARRIER INSIDE A PROPERTY BLOCK IS REFUSED, at any depth', async () => {
+    // The pass found a Wingdings tick, a drawing and a `w:fldSimple` surviving
+    // inside `w:rPr`/`w:pPr` and earning counted blank credit — #164's harm one
+    // element deeper. The existing no-`w:r` check, widened to its invariant.
+    for (const [where, xml] of [
+      ['w:sym in rPr', ctl(`<w:sdtPr>${HEAD}<w:text/></w:sdtPr>`,
+        '<w:r><w:rPr><w:sym w:font="Wingdings" w:char="F0FE"/></w:rPr><w:t>x</w:t></w:r>')],
+      ['w:drawing in rPr', ctl(`<w:sdtPr>${HEAD}<w:text/></w:sdtPr>`,
+        '<w:r><w:rPr><w:drawing/></w:rPr><w:t>x</w:t></w:r>')],
+      ['w:fldSimple in pPr', ctl(`<w:sdtPr>${HEAD}<w:text/></w:sdtPr>`,
+        '<w:p><w:pPr><w:fldSimple w:instr=" PAGE "/></w:pPr><w:r><w:t>x</w:t></w:r></w:p>')],
+      ['w:r in the outer sdtPr', ctl(`<w:sdtPr>${HEAD}<w:text/>${TEXT}</w:sdtPr>`, TEXT)],
+    ] as const) {
+      const { fields, refused } = await admission(xml);
+      expect(refused.length, `${where} was admitted`).toBe(1);
+      expect(fields.length, `${where} still became a field`).toBe(0);
+    }
+  });
+
+  it('⚠️ ONE MARKER METHOD — a WRAPPED dropdown compiles as a selection, not narrative', async () => {
+    // ⚠️ THIS ONE IS ADMITTED AND RE-KINDED, NOT REFUSED, and that distinction
+    // is the fix. `mc:AlternateContent` is how Word legitimately wraps a
+    // marker — this file already used `descendants` for `checkbox` for exactly
+    // that reason, while the other four used `directChild`. THE ASYMMETRY WAS
+    // THE BUG: the wrapped dropdown compiled `narrative_text`, earned a counted
+    // `emptied` proof with its live list intact, and CERTIFIED a template.
+    const { fields, refused } = await admission(
+      ctl(
+        `<w:sdtPr>${HEAD}<mc:AlternateContent><mc:Choice Requires="w14">${LIST}` +
+          `</mc:Choice></mc:AlternateContent></w:sdtPr>`,
+        '<w:r><w:t>Choose an item.</w:t></w:r>',
+      ),
+    );
+    expect(refused.length, 'a legitimate Word wrapper was refused').toBe(0);
+    expect(fields.length).toBe(1);
+    expect(fields[0]?.kind, 'the wrapper hid the marker').toBe('single_select');
+  });
+
+  it('⚠️ ADMISSION REFUSES NONE OF THE REAL CUSTOMER TEMPLATE — the cost, pinned', async () => {
+    // ⚠️ THE HALF THAT MATTERS. A refusal rule is worthless if it refuses real
+    // documents, and this arc has already shipped one that refused 56 of 56
+    // real named tables. `WM IOV Template.docx` is the only real-world template
+    // in the tree; its 28 controls are ordinary Word dropdowns.
+    const { readFileSync } = await import('node:fs');
+    const { compileTemplateDocx } = await import('../compiler');
+    const ir = compileTemplateDocx(readFileSync('/opt/meddoc-pro/WM IOV Template.docx'));
+    const refused = (ir.unsupported as Array<Record<string, unknown>>).filter(
+      (u) => u.code === 'UNSUPPORTED_CONTROL_STRUCTURE',
+    );
+    const controls = ir.fields.filter(
+      (f) => f.rendererBinding.bindingType === 'content_control',
+    );
+    expect(controls.length, 'the fixture stopped producing its 28 controls').toBe(28);
+    expect(refused.length, 'admission refused a real customer control').toBe(0);
+  });
+
+  it('a w:tab inside w:tabs is a tab STOP, not a carrier — 52 real fields depend on it', async () => {
+    // ⚠️ THE ONE AMBIGUOUS NAME, EXEMPTED BY POSITION RATHER THAN BY NAME. A
+    // flat denylist would refuse every cell in the real template, which is the
+    // exact shape of false refusal that killed the previous rule.
+    const { fields, refused } = await admission(
+      ctl(
+        `<w:sdtPr>${HEAD}<w:text/></w:sdtPr>`,
+        '<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="720"/></w:tabs></w:pPr>' +
+          '<w:r><w:t>x</w:t></w:r></w:p>',
+      ),
+    );
+    expect(refused.length, 'a tab STOP was read as a tab character').toBe(0);
+    expect(fields.length).toBe(1);
+    // NON-VACUITY: a tab CHARACTER in the same property block still refuses.
+    const asCharacter = await admission(
+      ctl(`<w:sdtPr>${HEAD}<w:text/></w:sdtPr>`,
+        '<w:p><w:pPr><w:r><w:tab/></w:r></w:pPr><w:r><w:t>x</w:t></w:r></w:p>'),
+    );
+    expect(asCharacter.refused.length).toBe(1);
+  });
+});
+
 describe('#173 — the guard is gone; the proof is scoped to what the prover does', () => {
   const sdtIn = (pPr: string, content: string) =>
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
@@ -1183,6 +1318,45 @@ describe('#173 — the guard is gone; the proof is scoped to what the prover doe
         countsAsBlankProof(p as never, { bindingOf, resolvedNull: () => true, kindOf }),
       ),
     ).toBe(false);
+  });
+
+  it('⚠️ THE FULL BRANCH SET — every gap POSITION, not just the one the fixture used', async () => {
+    // ⚠️ SWEEP THE SET, NOT THE INSTANCE. `subtreeHasNoCharacterData` has four
+    // branches: the leading gap, the between-sibling gaps, the trailing gap,
+    // and the recursion. This commit's first three arms all landed on the
+    // TRAILING gap and the recursion — neutering the LEADING/between-sibling
+    // check redded 0 of 2377, and the input it then admitted was a verified
+    // `emptied` proof with the drug string still in the document.
+    //
+    // That is the second time in one arc the same shape slipped: the recursion
+    // was unarmed because a fixture tested depth one. Fixing the instance is
+    // not fixing the branch set, so every position is exercised here.
+    const positions = [
+      ['LEADING gap   ', '<![CDATA[WARFARIN 5 MG DAILY]]><w:b/><w:i/>'],
+      ['BETWEEN gap   ', '<w:b/><![CDATA[WARFARIN 5 MG DAILY]]><w:i/>'],
+      ['TRAILING gap  ', '<w:b/><w:i/><![CDATA[WARFARIN 5 MG DAILY]]>'],
+      ['raw, LEADING  ', 'WARFARIN 5 MG DAILY<w:b/>'],
+      ['raw, BETWEEN  ', '<w:b/>WARFARIN 5 MG DAILY<w:i/>'],
+    ] as const;
+    for (const [where, inner] of positions) {
+      const { bodyProofs, bindingOf, kindOf } = await renderAllNull(
+        sdtIn('', `<w:p><w:r><w:rPr>${inner}</w:rPr><w:t>Enter impression</w:t></w:r></w:p>`),
+      );
+      expect(bodyProofs.map((p) => p.kind), `${where} was not seen`).not.toContain('emptied');
+      expect(
+        bodyProofs.some((p) =>
+          countsAsBlankProof(p as never, { bindingOf, resolvedNull: () => true, kindOf }),
+        ),
+        `${where} bought blank credit`,
+      ).toBe(false);
+    }
+    // ⚠️ AND A SELF-CLOSING KEPT-WHOLE NODE MUST STILL CLEAR — the early return
+    // is a branch too, and refusing there would cost every empty property block.
+    const { bodyProofs } = await renderAllNull(
+      sdtIn('', '<w:p><w:pPr/><w:r><w:rPr/><w:t>Enter impression</w:t></w:r></w:p>'),
+    );
+    expect(bodyProofs.map((p) => p.kind), 'a self-closing property block was refused').
+      toContain('emptied');
   });
 
   it('raw text at depth, and a clean nested subtree — both directions', async () => {

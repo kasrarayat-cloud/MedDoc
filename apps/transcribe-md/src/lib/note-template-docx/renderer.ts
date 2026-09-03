@@ -1052,12 +1052,24 @@ const SELECTION_KINDS: ReadonlySet<TemplateField['kind']> = new Set([
  * only thing the writer is in a position to know.
  */
 function blankEligibilityFor(field: TemplateField): BlankEligibility {
-  // ⚠️ #168(b) SURVIVES ON ITS OWN MEASUREMENT, NOT BY INHERITANCE. An emptied
-  // dropdown makes the PDF engine fall back to `w:listItem[0]`, so a value
-  // nobody chose prints while the field claims blank. That is a false
-  // attestation produced by THE RENDERER'S OWN WRITE — squarely inside what a
-  // prover must answer for — which is why this one exclusion is not template
-  // formatting and does not die with the rest.
+  // ⚠️ #168(b) SURVIVES, RE-JUSTIFIED CORRECTLY BY #174 — the first reason given
+  // for it was wrong, and the correction matters.
+  //
+  // It was defended as "a false attestation produced by THE RENDERER'S OWN
+  // WRITE". An adversarial pass falsified that: a dropdown whose content is
+  // already skeleton produces ZERO patches, so there IS no write, and the
+  // justification did not reach the case where the exclusion still applies.
+  //
+  // The real reason is simpler and does not depend on us writing anything.
+  // **THE PDF ENGINE DISPLAYS `w:listItem[0]` FOR AN EMPTY SELECTION
+  // REGARDLESS — measured on BASE, before any of this work.** So for a
+  // selection, "blank" is not what the page shows, whoever emptied it. That is
+  // a fact about the export path, not about template formatting, which is why
+  // this one exclusion does not die with the numbering guard.
+  //
+  // ⚠️ AND IT IS A DEFERRAL WITH A NAMED DISCHARGE, not a permanent rule:
+  // dropdowns earn credit once the filed export fix lands. Until then the
+  // certificate must not claim a blank the reader will not see.
   return SELECTION_KINDS.has(field.kind) ? 'ineligible' : 'eligible';
 }
 
