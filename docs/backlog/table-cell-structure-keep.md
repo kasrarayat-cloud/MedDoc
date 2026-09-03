@@ -32,6 +32,33 @@ output. The harm is specific to the two bindings that perform no clearing write.
 counted, so this counted then too. It is **not** a regression introduced by the
 #165–#171 work; that work is what made it visible.
 
+## ⚠️ CORRECTION — THIS DOC MEASURED THE WRONG LIMIT
+
+**Added 2026-09-03 (#172(5)), because the original defect statement was
+mis-scoped and the population claim was made about the wrong set.**
+
+The section below measures the **CARRIER** limit (`w:sym`, `w:drawing`, …) and
+names its re-arming condition as a glyph, a logo or a signature image. That is
+one true limit. **But the guard #171 deleted from these bindings watched
+NUMBERING**, and this doc never named a numbered cell.
+
+*"The limit predates this arc"* is true of `main` and obscures that the
+immediately preceding commit had closed the numbering half. Both halves are
+open again, deliberately, and both belong here:
+
+| shape | `main` | #170 | now |
+|---|---|---|---|
+| a cell in a `w:numPr` paragraph | counted | **refused** | counted |
+| a cell naming a numbered `w:pStyle` | counted | **refused** | counted |
+| a legacy field in a `w:numPr` paragraph | counted | **refused** | counted |
+| a cell holding `w:sym` / `w:drawing` and no `w:t` | counted | counted | counted |
+
+**THE MEASUREMENT THAT WAS MISSING, supplied by the pass:** of WM IOV's 52
+`table_cell` fields, cell paragraphs carrying `w:numPr` = **0** and `w:pStyle` =
+**0** — positive-controlled, since **6** body paragraphs in the same file DO
+carry `w:numPr`, so the probe is not blind. The population claim is true. It was
+made about the carrier set and is now made about both.
+
 ## Population, with its re-arming condition
 
 **Zero on every certified template**, measured: the real customer form carries

@@ -857,9 +857,21 @@ const REQUIRED_CONTENT: ReadonlyMap<string, ReadonlySet<string>> = new Map([
  * displays, silently disarming the clear.
  */
 function gapIsInvisible(gap: string): boolean {
+  // ⚠️ #172(3) — CDATA IS NOT STRIPPED HERE, AND ITS REMOVAL FROM THIS LIST IS
+  // THE FIX. A comment and a processing instruction are genuinely invisible to
+  // a renderer; CDATA IS CHARACTER DATA — a conformant parser yields the
+  // identical text node as bare text, and `structureKeepDeletions` refuses bare
+  // text three lines below, with a comment reading *CHARACTER DATA IS A
+  // REFUSAL, NOT A DELETION* and citing the measurement that it PRINTS.
+  //
+  // Measured before the fix: `<![CDATA[WARFARIN 5 MG DAILY]]>` in a sibling gap
+  // produced a VERIFIED `emptied` proof holding blank credit, the placeholder
+  // correctly cleared and the drug string still in the rendered document. The
+  // byte-identical string written as raw text was refused and the render threw.
+  // The guard refused those bytes in one syntax and certified them blank in the
+  // other, which is not a policy — it is an oversight in a list.
   return gap
     .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '')
     .replace(/<\?[\s\S]*?\?>/g, '')
     .trim().length === 0;
 }
@@ -988,6 +1000,7 @@ function structureKeepDeletions(
  * exists to end.
  */
 const INERT_PARAGRAPH_PROPERTIES: ReadonlySet<string> = new Set([
+  // depth 1 — direct children of `w:pPr`
   'widowControl',
   'tabs',
   'autoSpaceDE',
@@ -995,6 +1008,24 @@ const INERT_PARAGRAPH_PROPERTIES: ReadonlySet<string> = new Set([
   'adjustRightInd',
   'jc',
   'rPr',
+  // ⚠️ #172(4) — DEEPER, AND THESE WERE ALWAYS IN THE MEASURED SET. The first
+  // version of this list took the DIRECT CHILDREN of the 52 cells' `w:pPr` and
+  // the membership check ran at depth 1 to match — which is exactly why a
+  // `w:sym` or a `w:drawing` nested inside `w:rPr` or `w:tabs` passed a list it
+  // was never compared against. The census that produced the seven above
+  // reported SIXTEEN names in that subtree; the nine below are the rest of it.
+  //
+  // The list did not grow. Its SCOPE was wrong, and the scope is now the whole
+  // subtree — which is what the list always claimed to describe.
+  'tab', // inside w:tabs
+  'rFonts', // the eight below are inside w:rPr
+  'b',
+  'bCs',
+  'color',
+  'kern',
+  'sz',
+  'szCs',
+  'ligatures', // w14:ligatures — matched on the LOCAL name
 ]);
 
 /**
@@ -1012,7 +1043,28 @@ const INERT_PARAGRAPH_PROPERTIES: ReadonlySet<string> = new Set([
 type BlankEligibility = 'eligible' | 'ineligible' | 'unevaluated';
 
 /** What the document's INHERITED paragraph properties say. Resolved ONCE. */
-type DefaultNumbering = 'clear' | 'numbered' | 'unresolved';
+type DefaultVerdict = 'clear' | 'numbered' | 'unresolved';
+
+/** One hop of the style table — deliberately NOT a resolver. */
+interface StyleFacts {
+  readonly hasBasedOn: boolean;
+  readonly hasNumPr: boolean;
+}
+
+/**
+ * The document-level inheritance answer, plus the ONE HOP of style lookup
+ * #172(2) permits.
+ *
+ * ⚠️ `byId` IS NOT A CHAIN WALKER AND MUST NOT BECOME ONE. It answers exactly
+ * two yes/no questions about a single named style. Every walk this arc has
+ * built — `pStyle` chains, `basedOn` closures — was falsified, and #170 deleted
+ * the last of them. A style that names a parent is UNRESOLVABLE by one hop, so
+ * it is refused rather than followed.
+ */
+interface DefaultNumbering {
+  readonly verdict: DefaultVerdict;
+  readonly byId: ReadonlyMap<string, StyleFacts>;
+}
 
 /**
  * The one resolution that survives #170's deletion: a paragraph naming no style
@@ -1027,25 +1079,44 @@ type DefaultNumbering = 'clear' | 'numbered' | 'unresolved';
 function defaultParagraphNumbering(
   pkg: ReturnType<typeof inspectDocxPackage>,
 ): DefaultNumbering {
+  const byId = new Map<string, StyleFacts>();
   const entry = pkg.zip.entries.get('word/styles.xml');
   // ⚠️ ABSENT IS UNRESOLVED, NOT CLEAR. A missing style table is an inability to
   // answer the question, and the previous version's `return empty` treated it
   // as proof of absence. The absent case was never disclosed as untested; only
   // the unparseable one was.
-  if (!entry) return 'unresolved';
+  if (!entry) return { verdict: 'unresolved', byId };
   let scan: ScannedXmlPart;
   try {
     scan = scanXmlPart(entry.bytes);
   } catch {
-    return 'unresolved';
+    return { verdict: 'unresolved', byId };
   }
 
+  // ⚠️ BUILT FOR EVERY STYLE, INCLUDING NON-PARAGRAPH ONES, because #172(2)'s
+  // one hop starts from a `w:tblStyle` — a TABLE style id.
+  for (const root of scan.roots) {
+    for (const style of descendantXmlElements(root, 'style')) {
+      const id = readXmlAttribute(scan.text, style, 'styleId');
+      if (!id) continue;
+      byId.set(id, {
+        // ⚠️ TRUTHINESS, NOT `!== null`. `directXmlChild` returns
+        // `XmlElementSpan | undefined`, so `!== null` is TRUE for every style
+        // that has no such child — which made `hasBasedOn` true for ALL of
+        // them and refused every named table style, including clean ones.
+        // `tsc` cannot see it: `undefined !== null` is valid TypeScript.
+        // Caught by the arm's own "a clean style is ELIGIBLE" control.
+        hasBasedOn: Boolean(directXmlChild(style, 'basedOn')),
+        hasNumPr: descendantXmlElements(style, 'numPr').length > 0,
+      });
+    }
+  }
   for (const root of scan.roots) {
     // `w:docDefaults/w:pPrDefault` — numbering set for the whole document
     // without any style naming it. Invisible to every style-id lookup, which is
     // how it survived six versions of this guard.
     for (const def of descendantXmlElements(root, 'pPrDefault')) {
-      if (descendantXmlElements(def, 'numPr').length > 0) return 'numbered';
+      if (descendantXmlElements(def, 'numPr').length > 0) return { verdict: 'numbered', byId };
     }
     for (const style of descendantXmlElements(root, 'style')) {
       // ⚠️ ST_OnOff, NOT THE LITERAL "1". `w:default` admits `1|0|true|false|
@@ -1054,6 +1125,23 @@ function defaultParagraphNumbering(
       // respelling one attribute.
       const flag = (readXmlAttribute(scan.text, style, 'default') ?? '').toLowerCase();
       if (flag !== '1' && flag !== 'true' && flag !== 'on') continue;
+      // ⚠️ #172(1) — THE `basedOn` REFUSAL IS FOR A DEFAULT **PARAGRAPH**
+      // STYLE, AND THE NOUN IS PART OF THE RULE.
+      //
+      // It was applied here to a default of ANY type, and R4 directly below had
+      // just removed the type filter that used to run first — so the two
+      // composed into a document-wide refusal. Measured on pandoc 3.1.3's
+      // shipped `reference.docx`, whose styles table contains ZERO `w:numPr`
+      // anywhere and whose `Table` default (type=table) carries a `w:basedOn`:
+      // every content control came back ineligible, blank proofs went to zero,
+      // and such a template could NEVER CERTIFY — silently, with no error, just
+      // `filled` labels.
+      //
+      // A default TABLE or CHARACTER style's `basedOn` cannot introduce
+      // paragraph numbering to a paragraph that names no style. Only the
+      // default PARAGRAPH style is inherited that way.
+      const styleType = readXmlAttribute(scan.text, style, 'type');
+      const isParagraphDefault = styleType === null || styleType.toLowerCase() === 'paragraph';
       // ⚠️ #171 R1 — A DEFAULT STYLE THAT INHERITS IS UNRESOLVABLE, AND WE
       // REFUSE RATHER THAN WALK. #170 deleted the `w:pStyle` chain walk and
       // said so in this file's own security argument — but the DEFAULT style's
@@ -1071,7 +1159,7 @@ function defaultParagraphNumbering(
       // no `basedOn` (42 of its 46 styles do; the default is not one), and
       // Word's built-in `Normal` is the root of the chain by construction, so
       // it conventionally has none. Zero on both real artifacts.
-      if (directXmlChild(style, 'basedOn')) return 'unresolved';
+      if (isParagraphDefault && directXmlChild(style, 'basedOn')) return { verdict: 'unresolved', byId };
       // ⚠️ #171 R4 — THE `w:type` FILTER INVERTS TO FAIL-CLOSED. It used to
       // skip any style whose type was not `paragraph`, which was one-sided in
       // the OPPOSITE direction from the ST_OnOff widening directly above it:
@@ -1085,10 +1173,10 @@ function defaultParagraphNumbering(
       // ⚠️ ANY qualifying default that is numbered disqualifies — this is NOT
       // last-wins. Duplicate `w:default` declarations used to make the verdict
       // depend on DOCUMENT ORDER alone, granting credit in half the orderings.
-      if (descendantXmlElements(style, 'numPr').length > 0) return 'numbered';
+      if (descendantXmlElements(style, 'numPr').length > 0) return { verdict: 'numbered', byId };
     }
   }
-  return 'clear';
+  return { verdict: 'clear', byId };
 }
 
 /**
@@ -1098,10 +1186,34 @@ function defaultParagraphNumbering(
  * owner's form uses on all 35 of its control paragraphs.
  */
 function paragraphIsInert(paragraph: XmlElementSpan): boolean {
-  const properties = directXmlChild(paragraph, 'pPr');
+  // ⚠️ #172(4) — A PARAGRAPH WITH TWO `pPr` CHILDREN IS A REFUSAL.
+  // `directXmlChild` returns the FIRST, so a second `w:pPr` carrying `w:numPr`
+  // was invisible: measured `eligible` + counted with the `numPr` live in the
+  // rendered document. The shape is schema-invalid, which is exactly why the
+  // guard cannot reason about it — and every other unresolvable shape in this
+  // file fails closed.
+  const allProperties = paragraph.children.filter(
+    (child) => xmlLocalName(child.name) === 'pPr',
+  );
+  if (allProperties.length > 1) return false;
+  const properties = allProperties[0];
   if (!properties) return true;
-  for (const child of properties.children) {
+  // ⚠️ #172(4) — EVERY DESCENDANT, NOT THE DIRECT CHILDREN. The allowlist's
+  // claim is about the whole `w:pPr` subtree, and checking depth 1 certified a
+  // subtree it never inspected: a `w:sym` or a `w:drawing` nested inside
+  // `w:rPr` or `w:tabs` passed both this list AND the single `w:r` backstop,
+  // and survived into a region under a verified `emptied` proof.
+  //
+  // ⚠️ THE WALK IS WRITTEN OUT RATHER THAN CALLED. `descendantXmlElements`
+  // matches ONE exact local name and has no wildcard; passing `'*'` returns an
+  // EMPTY array, so the loop would iterate nothing and declare every paragraph
+  // inert — a silent no-op that passes everything, which is the worst possible
+  // direction for this particular check.
+  const pending: XmlElementSpan[] = [...properties.children];
+  while (pending.length > 0) {
+    const child = pending.pop()!;
     if (!INERT_PARAGRAPH_PROPERTIES.has(xmlLocalName(child.name))) return false;
+    pending.push(...child.children);
   }
   // ⚠️ A STRUCTURAL BACKSTOP THAT DOES NOT DEPEND ON THE LIST BEING RIGHT.
   // `w:r` is the universal carrier of printable content and no paragraph
@@ -1120,11 +1232,59 @@ function paragraphIsInert(paragraph: XmlElementSpan): boolean {
  * two supplied 100% of the counted blanks — so the guard was, there, measuring
  * nothing at all.
  */
+/**
+ * #172(2) — THE TABLE-STYLE LAYER, RESOLVED BY NAME FOR EXACTLY ONE HOP.
+ *
+ * A control in a table cell inherits the table's style, and that layer of the
+ * OOXML chain (docDefaults → table style → numbering style → paragraph style →
+ * direct) was read by nothing. Measured: a control in a cell whose paragraph
+ * has NO `w:pPr`, in a table naming a style carrying `w:numPr`, produced a
+ * verified `emptied` proof holding blank credit. The A/B was one attribute —
+ * the same style body marked `w:default="1"` was correctly refused.
+ *
+ * ⚠️ AND THIS IS WHY IT COULD NOT WAIT FOR THE COLLAPSE: the terminal fallback
+ * would have declared that shape MAXIMALLY eligible, since its paragraph has no
+ * `w:pPr` at all. Measured under the blunt rule and it still counted.
+ *
+ * **ONE HOP, NEVER A WALK.** `basedOn` ⇒ ineligible (unresolvable without a
+ * walk); `numPr` ⇒ ineligible; the named style not in the table ⇒ ineligible;
+ * otherwise eligible. A table naming no style is not in scope here at all.
+ */
+function tableStyleAllows(
+  xml: string,
+  paragraph: XmlElementSpan,
+  byId: ReadonlyMap<string, StyleFacts>,
+): boolean {
+  let ancestor: XmlElementSpan | null = paragraph;
+  while (ancestor) {
+    if (xmlLocalName(ancestor.name) === 'tbl') {
+      const properties = directXmlChild(ancestor, 'tblPr');
+      const named = properties ? directXmlChild(properties, 'tblStyle') : null;
+      if (named) {
+        // ⚠️ THE DOCUMENT TEXT IS THREADED IN, NOT FAKED. `readXmlAttribute`
+        // SLICES from the string it is given, so passing `''` returns null for
+        // every attribute — which here would refuse every table that names a
+        // style, silently and for the wrong reason.
+        const id = readXmlAttribute(xml, named, 'val');
+        if (id === null) return false;
+        const facts = byId.get(id);
+        // not found is an inability to resolve, which is ineligible — the same
+        // direction every other unresolvable shape in this file takes.
+        if (!facts) return false;
+        if (facts.hasBasedOn || facts.hasNumPr) return false;
+      }
+    }
+    ancestor = ancestor.parent;
+  }
+  return true;
+}
+
 function blankEligibilityOf(
+  xml: string,
   paragraphs: readonly XmlElementSpan[],
   inherited: DefaultNumbering,
 ): BlankEligibility {
-  if (inherited !== 'clear') return 'ineligible';
+  if (inherited.verdict !== 'clear') return 'ineligible';
   // ⚠️ #171 — `every()` ON AN EMPTY SET IS VACUOUS APPROVAL. A GUARD THAT
   // EXAMINED NOTHING REPORTS `unevaluated`, NEVER `eligible`.
   //
@@ -1134,7 +1294,12 @@ function blankEligibilityOf(
   // reproduced one layer inside the fix that introduced it. Reachable today
   // from a block-level control whose `w:sdtContent` is already empty.
   if (paragraphs.length === 0) return 'unevaluated';
-  return paragraphs.every(paragraphIsInert) ? 'eligible' : 'ineligible';
+  return paragraphs.every(
+    (paragraph) =>
+      paragraphIsInert(paragraph) && tableStyleAllows(xml, paragraph, inherited.byId),
+  )
+    ? 'eligible'
+    : 'ineligible';
 }
 
 /** The paragraph containing a bound element, if any. */
@@ -1226,7 +1391,7 @@ function sdtBoundedClearPatches(
   // ⚠️ #170 — EVERY PARAGRAPH IN SCOPE MUST BE A SHAPE NOTHING CAN HIDE IN.
   // Not "none is known to be numbered": that is the enumerating form six
   // evasions defeated, and a seventh pass found it guarding one door of three.
-  const eligibility = blankEligibilityOf(paragraphs, inherited);
+  const eligibility = blankEligibilityOf(xml, paragraphs, inherited);
 
   // ⚠️ #168(b) — SELECTION CONTROLS ARE EXCLUDED, REVERSING #165.
   //

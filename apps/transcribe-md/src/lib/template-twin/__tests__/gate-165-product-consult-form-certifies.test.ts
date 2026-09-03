@@ -758,9 +758,25 @@ describe('#167 — the blank census guards', () => {
     // Relabel a FILLED entry — a field the manifest shows carrying a value — to
     // `blank`. Only the label moves; arity and every other property stay intact,
     // so `isVerifiedSyntheticProof` still passes and the run reaches the census.
-    const filled = proof.fields.find((f) => f.kind === 'filled');
-    expect(filled, 'fixture has no filled proof — this arm would be vacuous').toBeDefined();
-    const targetId = filled!.fieldId as string;
+    // ⚠️ `kind === 'filled'` IS A LABEL CLASS — it matches TWELVE entries here,
+    // five of them selections. A bare `find` takes the first, and taking a
+    // DIFFERENT member of the same class makes this arm pass with the manifest
+    // cross-check fully neutralised, because the refusal then comes from the
+    // selection-kind rule instead. That is the laundering `theOnlyMatch` exists
+    // to prevent, and it was still live in the very arm re-armed for it.
+    const nonSelectionFilled = proof.fields.filter(
+      (f) =>
+        f.kind === 'filled' &&
+        !['single_select', 'multi_select'].includes(
+          String(fixture.kindOf(f.fieldId as string)),
+        ) &&
+        fixture.resolutions.find((r) => r.fieldId === f.fieldId)?.value !== null,
+    );
+    expect(
+      nonSelectionFilled.length,
+      'fixture has no non-selection filled proof — this arm would be vacuous',
+    ).toBeGreaterThan(0);
+    const targetId = nonSelectionFilled[0]!.fieldId as string;
     expect(fixture.resolutions.find((r) => r.fieldId === targetId)?.value).not.toBeNull();
 
     // ⚠️ THE GENUINE BLANK EVIDENCE IS REMOVED FIRST, OR THE ARM IS NOT
