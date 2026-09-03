@@ -10,7 +10,7 @@
 // Each arm builds a throwaway repo, stages a real diff, and runs the script.
 // ============================================================================
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, cpSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, cpSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -62,6 +62,68 @@ function scenario(opts: {
 
 const LEDGER_WITH_174 = '# Rulings\n\n| date | # | status |\n| 2026-09-01 | #174 | STANDING |\n';
 const LEDGER_EMPTY = '# Rulings\n\n| date | # | status |\n';
+
+// ============================================================================
+// ⚠️ THE CORRECTION THIS PR CARRIES: THE HOOK DID NOT FIRE ON ITS OWN LANDING.
+// ----------------------------------------------------------------------------
+// The session that built this guard reported that "the live hook allowed the
+// commit, so the cure passed its own gate." THAT WAS FALSE, and it is corrected
+// here rather than quietly dropped.
+//
+// `core.hooksPath` had been set to an ABSOLUTE path — `/opt/meddoc-pro/
+// scripts/hooks` — out of band. It is a repo-level setting SHARED by every
+// worktree, so an absolute value pins all of them to the shared checkout's
+// hooks. The commit was made from a worktree; the hook git actually ran was the
+// shared tree's, on `main`, which carries none of this wiring (`grep -c` = 0
+// there, 1 in the commit).
+//
+//   The check WAS run — by hand, against the staged diff. It refused, naming
+//   three false positives, was fixed, and re-ran green with a positive control.
+//   The substance happened. The MECHANISM was manual, and saying otherwise
+//   claimed a property nothing had established.
+//
+// ⚠️ AND THE FAILURE IS SILENT IN THE DIRECTION THAT MATTERS. A worktree with a
+// BROKEN hook is covered by the shared tree's WORKING one, so nothing fails and
+// the author concludes their hook works. It only surfaces later, when the shared
+// tree catches up and the untested hook becomes the live one.
+//
+// The setting was corrected to the relative form the repo already prescribes,
+// and the fix was PROVEN rather than asserted: a hook planted in a worktree
+// fired from that worktree. The arm below guards the half a repository can
+// guard — that `prepare` never starts handing out an absolute path.
+// ============================================================================
+describe('the hook that runs this guard', () => {
+  it('⚠️ `prepare` sets core.hooksPath to a RELATIVE path, never an absolute one', () => {
+    const pkg = JSON.parse(
+      readFileSync(join(REPO, 'package.json'), 'utf8'),
+    ) as { scripts?: Record<string, string> };
+    const prepare = pkg.scripts?.prepare ?? '';
+    expect(prepare, 'the prepare script no longer sets core.hooksPath at all').
+      toContain('core.hooksPath');
+    const value = /core\.hooksPath\s+(\S+)/.exec(prepare)?.[1] ?? '';
+    expect(value, 'no value could be read from the prepare script').not.toBe('');
+    expect(
+      value.startsWith('/'),
+      `prepare sets an ABSOLUTE hooksPath (${value}) — it is repo-level and ` +
+        'shared, so every worktree would run the shared checkout\'s hooks and ' +
+        'no worktree could ever run, or test, its own',
+    ).toBe(false);
+    expect(value).toBe('scripts/hooks');
+  });
+
+  // ⚠️ HONEST LIMIT, STATED SO THE ARM IS NOT READ WIDER THAN IT IS. This
+  // guards what the REPOSITORY controls. The value that actually bit was set
+  // out of band, in local git config, which no committed file can constrain and
+  // no CI checkout can observe — a CI clone is configured by `prepare` and is
+  // therefore always correct there. `scripts/check-hooks-installed.sh` is the
+  // instrument for the local half, and it is deliberately a LOCAL check.
+  it('the local checker exists and is the instrument for the half CI cannot see', () => {
+    const sh = readFileSync(join(REPO, 'scripts', 'check-hooks-installed.sh'), 'utf8');
+    expect(sh).toContain('core.hooksPath');
+    expect(sh, 'the checker no longer compares against the relative form').
+      toContain('HOOKS_DIR=scripts/hooks');
+  });
+});
 
 describe('the record-first cure', () => {
   it('⚠️ REFUSES a ruling cited in SOURCE with no row', () => {
