@@ -26,9 +26,24 @@ import { describe, expect, it } from 'vitest';
 import JSZip from 'jszip';
 import { extractText, getDocumentProxy } from 'unpdf';
 
-import { convertDocxToPdf } from '../convert';
-
 const APP = resolve(__dirname, '..', '..', '..', '..');
+
+// ⚠️ `GOTENBERG_URL` CARRIES TWO DIFFERENT CONTRACTS, AND THAT COST THIS ARM A
+// CI RUN. `convert.ts` treats it as the FULL convert endpoint (its own default
+// ends in `/forms/libreoffice/convert`, and production sets it that way).
+// `docker-compose.qa.rendered.yml` sets it to the BASE — `http://gotenberg:3000`
+// — because the sibling rendered tests append the path themselves. Calling the
+// SHIPPED function from this tier therefore POSTs to `/` and gets **405**,
+// which surfaces as a generic `converter_error`.
+//
+// So the endpoint is normalised here, accepting either spelling, and the
+// normalised value is put back on the environment BEFORE `convert.ts` is
+// imported — its URL is a module-level const read at import time.
+const BASE = (process.env.GOTENBERG_URL ?? 'http://gotenberg:3000').replace(/\/$/, '');
+const CONVERT_URL = BASE.endsWith('/forms/libreoffice/convert')
+  ? BASE
+  : `${BASE}/forms/libreoffice/convert`;
+process.env.GOTENBERG_URL = CONVERT_URL;
 const FIXTURE = join(APP, 'tests', 'e2e', 'fixtures', 'sample-form.docx');
 
 /**
@@ -85,9 +100,7 @@ async function fillEveryControl(src: Buffer): Promise<{ docx: Uint8Array; values
 }
 
 /** The unflattened control: the fixture's own bytes, straight at LibreOffice. */
-async function rawConvert(docx: Uint8Array): Promise<Uint8Array | null> {
-  const url =
-    process.env.GOTENBERG_URL ?? 'http://gotenberg:3000/forms/libreoffice/convert';
+async function rawConvert(docx: Uint8Array): Promise<Uint8Array> {
   const form = new FormData();
   form.set(
     'files',
@@ -96,8 +109,18 @@ async function rawConvert(docx: Uint8Array): Promise<Uint8Array | null> {
     }),
     'document.docx',
   );
-  const res = await fetch(url, { method: 'POST', body: form });
-  if (!res.ok) return null;
+  const res = await fetch(CONVERT_URL, { method: 'POST', body: form });
+  // ⚠️ IT THROWS. IT MUST NEVER RETURN NULL. The first version returned null on
+  // a non-OK response, the caller turned that into `text = ''`, and the arm
+  // printed `unflattened: 0/28 survived` — a FABRICATED measurement of a
+  // conversion that never happened. It shipped to CI and read as a clean
+  // reproduction of the defect **because 0/28 was exactly what I predicted**;
+  // the real figure, measured locally, is 1/28. A failed conversion is a failed
+  // MEASUREMENT, and it has to be louder than the number it would otherwise
+  // invent.
+  if (!res.ok) {
+    throw new Error(`converter returned ${res.status} for the unflattened control`);
+  }
   return new Uint8Array(await res.arrayBuffer());
 }
 
@@ -113,6 +136,7 @@ describe('the PDF a doctor sends carries what his DOCX carries', () => {
     async () => {
       const { docx, values } = await fillEveryControl(readFileSync(FIXTURE));
 
+      const { convertDocxToPdf } = await import('../convert');
       const { pdf, reason } = await convertDocxToPdf(docx);
       expect(reason ?? null, 'the converter refused').toBeNull();
       expect(pdf, 'the converter returned no PDF').not.toBeNull();
@@ -143,16 +167,26 @@ describe('the PDF a doctor sends carries what his DOCX carries', () => {
       // the sole benefit of a diagnostic. This arm measures LibreOffice, not our
       // code, so it is the right place to own the transport.
       const pdf = await rawConvert(docx);
-      const text = pdf ? await pdfText(pdf) : '';
+      // ⚠️ THE ANTI-FABRICATION ASSERTION. Without it, ANY route to an empty
+      // `text` yields `survived = 0` and prints a confident reproduction of the
+      // very defect being measured. The number may only be reported if a REAL
+      // PDF was really produced.
+      expect(Buffer.from(pdf.subarray(0, 4)).toString('ascii')).toBe('%PDF');
+      expect(pdf.byteLength, 'the control PDF is implausibly small').toBeGreaterThan(1000);
+
+      const text = await pdfText(pdf);
       const survived = values.filter((v) => text.includes(v)).length;
 
       // eslint-disable-next-line no-console
       console.log(
         `[sdt-quirk] unflattened: ${survived}/${values.length} filled values survived conversion`,
       );
-      // The only thing asserted is that the measurement HAPPENED — a silent
-      // skip here would leave the runbook entry citing a number nobody re-took.
+      // The measurement is now guarded at both ends: a real PDF above, and a
+      // real denominator here. What is deliberately NOT asserted is the value
+      // of `survived` — pinning LibreOffice's behaviour would red the day it is
+      // fixed, and the quirk is FILED, not required.
       expect(values.length).toBeGreaterThan(20);
+      expect(survived).toBeLessThanOrEqual(values.length);
     },
     120_000,
   );
