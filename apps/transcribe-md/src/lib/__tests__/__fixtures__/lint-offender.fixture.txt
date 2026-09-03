@@ -19,3 +19,8 @@ const keyed = ir.fields.find((f) => f.fieldId === wantedId);
 // failure message says "filter + an EXPLICIT COUNT"; this is that minus the
 // count, and it is the identical laundering.
 const firstOfMany = proof.fields.filter((f) => f.kind === 'emptied')[0];
+
+// ⚠️ THE TWO-STATEMENT FORM — the spelling all three compliant sites in the
+// corpus actually use, and the one the single-expression check could not see.
+const many = proof.fields.filter((f) => f.kind === 'blank');
+const firstOne = many[0];

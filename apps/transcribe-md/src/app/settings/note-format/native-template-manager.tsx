@@ -790,6 +790,33 @@ function ReviewWorkspace({
         >
           {blockingUnsupported.length} element{blockingUnsupported.length === 1 ? '' : 's'} can&apos;t be
           safely reproduced and block certification. Simplify the template in Word and re-upload.
+          {/*
+            ⚠️ #175(2) — THE REFUSAL NAMES ITSELF. Until now this block rendered
+            a COUNT and nothing else, while the compiler's finding — the
+            control's label and the reason it was refused — sat unused in the
+            payload. A doctor was told "simplify the template in Word" without
+            being told WHICH control, which is a refusal that cannot be acted
+            on. Listed from `unsupported`, never from `fields`: a refused
+            control is deliberately absent from the field list, which is exactly
+            why the count was all the old chrome could reach.
+          */}
+          <ul
+            data-testid="twin-unsupported-findings"
+            style={{ margin: '8px 0 0', paddingLeft: 18, listStyle: 'disc' }}
+          >
+            {blockingUnsupported.map((finding, index) => (
+              <li
+                key={`${finding.partName}\u0000${finding.path}\u0000${finding.code}`}
+                data-testid="twin-unsupported-finding"
+                style={{ marginTop: index === 0 ? 0 : 4 }}
+              >
+                <strong style={{ color: 'var(--color-linear-text)' }}>
+                  {finding.label ?? 'Unnamed control'}
+                </strong>{' '}
+                — {finding.detail} Simplify this control in Word.
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

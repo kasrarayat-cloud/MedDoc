@@ -87,6 +87,41 @@ function comparesLabelClass(node: ts.Node): boolean {
 function isUncountedFirstOfFilter(call: ts.CallExpression): boolean {
   const parent = call.parent;
   if (ts.isElementAccessExpression(parent) && parent.expression === call) return true;
+  // ⚠️ #175 — THE TWO-STATEMENT FORM, WHICH IS THE SPELLING THE HOUSE ACTUALLY
+  // WRITES. All three compliant sites in this corpus are
+  // `const m = xs.filter(...);` followed by `m[0]` / `m.at(0)` — so the version
+  // that only saw the single-expression `filter(...)[0]` was blind to the
+  // idiom it was written to police. A `filter` bound to a name whose FIRST
+  // element is then taken, with no length assertion in between, is the same
+  // uncounted selection.
+  if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+    const bound = parent.name.text;
+    const fn = call.getSourceFile();
+    let takesFirst = false;
+    let asserts = false;
+    const scan = (n: ts.Node): void => {
+      if (
+        ts.isElementAccessExpression(n) &&
+        ts.isIdentifier(n.expression) &&
+        n.expression.text === bound &&
+        n.argumentExpression.getText() === '0'
+      ) {
+        takesFirst = true;
+      }
+      if (
+        ts.isPropertyAccessExpression(n) &&
+        ts.isIdentifier(n.expression) &&
+        n.expression.text === bound &&
+        (n.name.text === 'length' || n.name.text === 'at')
+      ) {
+        if (n.name.text === 'length') asserts = true;
+        else takesFirst = true;
+      }
+      ts.forEachChild(n, scan);
+    };
+    scan(fn);
+    if (takesFirst && !asserts) return true;
+  }
   if (
     ts.isPropertyAccessExpression(parent) &&
     parent.name.text === 'at' &&
@@ -125,10 +160,11 @@ describe('#174 — the lint asks the COMPILER, and its control touches a FILE', 
   it('⚠️ THE CONTROL RUNS AGAINST A FIXTURE ON DISK, not a string in memory', () => {
     const path = join(__dirname, '__fixtures__', 'lint-offender.fixture.txt');
     const found = offendersIn(path, readFileSync(path, 'utf8'));
-    // the fixture holds THREE offenders — a wrapped `find`, a `findLast`, and
-    // a `filter(...)[0]` — plus a unique-key selection, a comment and a string
-    // holding the shape, none of which may be flagged.
-    expect(found.length, 'the scanner missed the planted offenders').toBe(3);
+    // FOUR offenders now — a wrapped `find`, a `findLast`, a single-expression
+    // `filter(...)[0]`, and the TWO-STATEMENT form — plus a unique-key
+    // selection, a comment and a string holding the shape, none of which may be
+    // flagged.
+    expect(found.length, 'the scanner missed the planted offenders').toBe(4);
     expect(
       found.some((f) => /fieldId/.test(f.snippet)),
       'a unique-key selection was wrongly flagged',
@@ -208,10 +244,19 @@ describe('#172(5) — every canon BODY has its INDEX ROW', () => {
     // leaving a `↳` sub-row that points at the same file used to pass, and 22
     // of 96 entries carry more than one reference, so ~23% of the corpus could
     // lose its headline pointer undetected.
-    const headlineRows = index
-      .split('\n')
-      .filter((line) => line.startsWith('- '));
-    const missing = bodies.filter((n) => !headlineRows.some((r) => r.includes(n)));
+    // ⚠️ #175 — ANCHORED ON THE ENTRY'S OWN ROW, BLIND TO CROSS-REFERENCES.
+    // The previous version asked whether the filename appeared in ANY headline
+    // row, so canon 31 passed with its own row deleted — because canon 74's row
+    // links to it. A row belongs to the entry whose POINTER it ends with, which
+    // is the `→ \`docs/canon/…\`` at the end of the line; an inline
+    // `[canon 31](…)` mid-sentence is a citation, not a row.
+    const ownedBy = new Map<string, boolean>();
+    for (const line of index.split('\n')) {
+      if (!line.startsWith('- ')) continue;
+      const pointer = /→\s*`docs\/canon\/([^`]+)`/.exec(line);
+      if (pointer) ownedBy.set(pointer[1]!, true);
+    }
+    const missing = bodies.filter((n) => !ownedBy.has(n));
     expect(
       missing,
       'these canon entries have a body and no index row, so a grep of the ' +

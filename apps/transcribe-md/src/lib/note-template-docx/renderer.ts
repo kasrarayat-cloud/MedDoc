@@ -15,6 +15,7 @@ import {
 } from '../template-twin/ir';
 import { isPrintableDenial } from '../template-twin/denial-contract';
 import { compileTemplateDocx } from './compiler';
+import { STRUCTURE_KEEP_WHOLE } from './structure-keep';
 import type { TemplateDocxLimits } from './limits';
 import { inspectDocxPackage } from './package-security';
 import {
@@ -756,29 +757,7 @@ function createFieldPatches(
  * Word to re-display the template's own prompt text. It lives in `sdtPr`, which
  * is inside the approved binding span, so removing it is bounded too.
  */
-/**
- * Nodes KEPT WHOLE — structural properties. Never recursed into, never deleted.
- * `w:sectPr` is here because it lives inside `w:pPr`, so keeping `pPr` whole
- * keeps the section wherever the author put it — including the LAST paragraph,
- * which is where it conventionally sits and where v2 lost it.
- */
-const STRUCTURE_KEEP_WHOLE: ReadonlySet<string> = new Set([
-  'pPr', 'tblPr', 'tblGrid', 'trPr', 'tcPr', 'sectPr', 'sdtPr', 'sdtEndPr',
-  'bookmarkStart', 'bookmarkEnd', 'proofErr',
-  'commentRangeStart', 'commentRangeEnd',
-  // ⚠️ ADDED AFTER THE PASS MEASURED THEIR LOSS. `w:tblPrEx` carries per-row
-  // border and shading exceptions, so deleting it silently dropped row borders
-  // inside any cleared control; `w:permStart`/`w:permEnd` mark editable ranges.
-  // All three are properties, none renders content, and losing them is the
-  // inverse failure v1 and v2 died of.
-  'tblPrEx', 'permStart', 'permEnd',
-  // ⚠️ #168 — A RUN'S OWN PROPERTIES ARE SKELETON. v3 deleted the whole run, so
-  // an emptied inline control lost `w:rPr` on all 28 controls of the real
-  // template (307 -> 279). An EMPTY run with properties prints nothing, and it
-  // is what a doctor TYPING into the cleared control inherits — the capability
-  // v3 was silently costing.
-  'rPr',
-]);
+
 
 /** Structural containers — kept, and recursed into so their content clears. */
 const STRUCTURE_RECURSE: ReadonlySet<string> = new Set([
@@ -922,6 +901,18 @@ function structureKeepDeletions(
       // another enumeration of carriers — and it REFUSES rather than repairs,
       // because a property block holding a run is a document we do not
       // understand.
+      // ⚠️ #175 — HONEST REACHABILITY, STATED RATHER THAN FAKED. Since #174 the
+      // COMPILER refuses any control whose property blocks hold a content
+      // carrier, and `w:r` is one — so no document that compiles through this
+      // codebase can reach this line any more, and an arm written against a
+      // compiled fixture would be exercising admission, not this guard.
+      //
+      // It is kept, not deleted, because the renderer also runs against IRs
+      // COMPILED BEFORE #174 and stored: those were admitted under the old
+      // rules and this is the only thing standing between them and the harm.
+      // ⚠️ Its previous arm was rewritten to assert the new compile-time
+      // refusal and thereby left it unwatched — canon 98 — which is why the
+      // limit is written here instead of a fixture that would prove nothing.
       if (descendantXmlElements(child, 'r').length > 0) return false;
       // ⚠️ #173 — AND THE SAME BACKSTOP WIDENED TO ITS TRUE INVARIANT: A
       // KEPT-WHOLE CONTAINER MAY HOLD NO CHARACTER DATA AT ANY DEPTH.

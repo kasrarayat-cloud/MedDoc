@@ -12,6 +12,7 @@ import {
   type UnsupportedElement,
 } from "../template-twin/ir";
 import { failTemplateDocx } from "./errors";
+import { STRUCTURE_KEEP_WHOLE } from "./structure-keep";
 import type { TemplateDocxLimits } from "./limits";
 import { withoutPlaceholderOptions } from "./placeholder-option";
 import {
@@ -288,8 +289,16 @@ function processParagraph(
  * are not four bugs. They are four consequences of admitting shapes nobody had
  * characterised, and then trying to prove things about them afterwards.
  *
- * **THE REFUSAL BELONGS HERE**: at compile, visible to the doctor as a per-field
- * finding, BEFORE any certificate exists — not at proof time, invisibly, after.
+ * **THE REFUSAL BELONGS HERE**: at compile, BEFORE any certificate exists —
+ * not at proof time, invisibly, after.
+ *
+ * ⚠️ AND IT IS SHOWN, WHICH THIS COMMENT ONCE CLAIMED WITHOUT IT BEING TRUE.
+ * The doctor sees each refused control by NAME with its reason, rendered from
+ * `ir.unsupported` in `native-template-manager.tsx`. It cannot come from the
+ * field list — a refused control is deliberately absent from `ir.fields` — and
+ * for a while the UI rendered only a COUNT while the label and reason sat
+ * unused in the payload. A refusal nobody can act on is not fail-closed, it is
+ * just closed.
  * A refused control keeps the doctor's own text verbatim as static content; it
  * simply never becomes a field.
  *
@@ -300,7 +309,7 @@ function processParagraph(
  */
 
 /** Elements that carry content, wherever they appear inside a property block. */
-const CONTENT_CARRIERS: ReadonlySet<string> = new Set([
+export const CONTENT_CARRIERS: ReadonlySet<string> = new Set([
   "r", "t", "delText", "instrText", "sym", "drawing", "pict", "object",
   "fldSimple", "fldChar", "txbxContent", "oMath", "oMathPara", "p", "tbl",
   "sdt", "br", "ptab", "noBreakHyphen", "softHyphen", "separator",
@@ -315,17 +324,38 @@ const CONTENT_CARRIERS: ReadonlySet<string> = new Set([
   "commentReference", "ruby",
 ]);
 
-/** Property blocks whose subtree must contain no content carrier. */
-const PROPERTY_BLOCKS: ReadonlySet<string> = new Set([
-  "sdtPr", "sdtEndPr", "pPr", "rPr", "tblPr", "trPr", "tcPr", "tblPrEx",
-]);
+/**
+ * ⚠️ #175 — NOT A SECOND LIST. The set of containers admission must scan is
+ * BY DEFINITION the set the clear copies verbatim, so it is the same symbol,
+ * imported. The two were re-listed by hand and drifted by nine names; the
+ * divergence admitted a `w:fldSimple` inside a `w:bookmarkStart` that survived
+ * the clear and counted as blank credit.
+ */
+const PROPERTY_BLOCKS = STRUCTURE_KEEP_WHOLE;
 
 /**
- * ⚠️ `w:tab` IS THE ONE AMBIGUOUS NAME AND IT IS EXEMPTED BY POSITION, NOT BY
- * NAME. Inside `w:tabs` it is a tab-stop DEFINITION — pure formatting, and the
- * real customer template carries 52 of them. Inside a run it is a tab
- * CHARACTER. A flat denylist would refuse every one of those 52 fields, which
- * is exactly the shape of the false refusal that killed the previous rule.
+ * ⚠️ `w:tab` IS THE ONE AMBIGUOUS NAME, EXEMPTED BY POSITION RATHER THAN BY
+ * NAME: inside `w:tabs` it is a tab-stop DEFINITION, inside a run it is a tab
+ * CHARACTER.
+ *
+ * ⚠️ THE JUSTIFICATION THIS COMMENT FIRST GAVE WAS FALSE IN BOTH HALVES, and
+ * the correction is the point. It claimed *"the real customer template carries
+ * 52 of them"* and that a flat denylist *"would refuse every one of those 52
+ * fields"*. Measured on that exact file: `WM IOV Template.docx` has **128**
+ * `w:tabs` blocks and **ZERO of them inside a `w:sdt`** — and admission only
+ * ever inspects property blocks inside a control, so not one can reach here.
+ * The "52" was that template's `table_cell` count, lifted from the wrong row of
+ * an earlier measurement.
+ *
+ * ⚠️ THE EXEMPTION IS STILL NECESSARY, AND THIS IS ITS REAL JUSTIFICATION: a
+ * genuine Word document on this host — `artifact-template-design-report`'s
+ * `reference.docx`, `Application=Microsoft Office Word` — has **12 of 12** of
+ * its `w:tabs` blocks INSIDE its two content controls. Real Word emits the
+ * shape; without the exemption that document loses both its fields.
+ *
+ * **A FALSE JUSTIFICATION IS WORSE THAN NONE.** The next reader running a
+ * mutation matrix sees "removing this reds nothing" and the only argument
+ * against deleting it is a sentence that is not true.
  */
 function propertyBlockCarrier(
   node: OrderedXmlNode,
