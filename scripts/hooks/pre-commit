@@ -32,6 +32,15 @@
 
 set -euo pipefail
 
+# ── THE RECORD-FIRST CURE — a ruling cited in source must already be recorded ──
+#
+# ⚠️ IT RUNS FIRST, AND DELIBERATELY ABOVE THE `ALLOW_CLINICAL_DOC` EXIT. The two
+# guards answer different questions and must not share an escape hatch: if this
+# sat below that line, `ALLOW_CLINICAL_DOC=1` — whose name promises one thing —
+# would silently disable BOTH. That is how a guard stops guarding without anyone
+# deciding to switch it off. This check has its own door, named for its own job.
+"$(dirname "${BASH_SOURCE[0]}")/../check-ruling-recorded.sh" || exit 1
+
 [ "${ALLOW_CLINICAL_DOC:-}" = "1" ] && exit 0
 
 # Only ADDED files — renames and edits of existing fixtures are not the risk.
