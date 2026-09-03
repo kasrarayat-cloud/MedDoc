@@ -21,7 +21,29 @@
 import { cn } from '@/lib/cn';
 import { SoapInlineEdit } from './SoapInlineEdit';
 
-export type SoapSectionStatus = 'drafted' | 'reviewed' | 'signed';
+/**
+ * ⚠️ THE WORD IS WHAT IT MEASURES. Owner-ruled 2026-09-03, class (a).
+ *
+ * This union used to be `'drafted' | 'reviewed' | 'signed'`, and the badge said
+ * REVIEWED for any section containing text. Generation writes text into every
+ * section, so every section read REVIEWED the instant the note existed — on the
+ * PRE-SIGN screen, where the doctor is being asked to attest that he reviewed
+ * it. Nothing was persisted and nothing was clicked: the predicate was
+ * `body.trim()`, i.e. "this section is not empty".
+ *
+ * That is a false attestation of review on a clinical document, and the fix is
+ * NOT to build per-section review machinery. Per the ruling, and consistent with
+ * the attestation model already ruled for coding and confirmations:
+ *
+ *     THE DOCTOR DOES NOT CLICK FOURTEEN "REVIEWED" BUTTONS. SIGNING IS THE
+ *     REVIEW.
+ *
+ * So a generated non-empty section reads DRAFT, an empty one reads EMPTY, and
+ * the review claim is carried by the signature — the one place the attestation
+ * actually happened. No flag is stored, because there is no flag: the state is
+ * derived from {non-empty, signed} and nothing else.
+ */
+export type SoapSectionStatus = 'draft' | 'empty' | 'signed';
 
 export interface SoapPulseHint {
   /** sage when this section's content satisfies its E&M criteria;
@@ -60,14 +82,26 @@ export interface SoapSectionProps {
 }
 
 const STATUS_LABEL: Record<SoapSectionStatus, string> = {
-  drafted: 'DRAFTED',
-  reviewed: 'REVIEWED',
+  draft: 'DRAFT',
+  empty: 'EMPTY',
   signed: 'SIGNED',
 };
 
+/**
+ * ⚠️ THE CHROME IS DELIBERATELY UNCHANGED PER STATE — this is a VOCABULARY
+ * correction, not a visual one, and the ruling says so explicitly: the redesign
+ * arc decides the final look. Each state therefore keeps exactly the pill it
+ * rendered before, so the only difference on screen is the word.
+ *
+ * ⚠️ AND THE ONE THING THAT IS ODD IS NAMED RATHER THAN QUIETLY FIXED: `draft`
+ * inherits the sage pill, because the non-empty state wore sage when it said
+ * REVIEWED. Sage reads as positive/settled, which is not what DRAFT means.
+ * Changing it here would be a design decision taken in a hotfix. It belongs to
+ * the redesign arc, and it is written down so that arc finds it.
+ */
 const STATUS_PILL_CLASS: Record<SoapSectionStatus, string> = {
-  drafted: 'qm-lin-pill--draft',
-  reviewed: 'qm-lin-pill--sage',
+  draft: 'qm-lin-pill--sage',
+  empty: 'qm-lin-pill--draft',
   signed: 'qm-lin-pill--signed',
 };
 

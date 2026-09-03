@@ -269,9 +269,14 @@ export function SoapEditor({
   const statusFor = useCallback(
     (key: SoapSectionKey | null, body?: string): SoapSectionStatus => {
       if (isSigned) return 'signed';
-      if (key === null) return body && body.trim() ? 'reviewed' : 'drafted';
+      // ⚠️ THE PREDICATE IS AND ALWAYS WAS `body.trim()` — "this section is not
+      // empty". It used to return 'reviewed' for that, which said REVIEWED on
+      // every section of every generated note, before the doctor had looked at
+      // anything. Owner-ruled 2026-09-03: the word becomes what it measures.
+      // SIGNING is the review; a non-empty AI-drafted section is a DRAFT.
+      if (key === null) return body && body.trim() ? 'draft' : 'empty';
       const sec = sections.find((s) => s.key === key);
-      return sec && sec.body.trim() ? 'reviewed' : 'drafted';
+      return sec && sec.body.trim() ? 'draft' : 'empty';
     },
     [sections, isSigned]
   );
