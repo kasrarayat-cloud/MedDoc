@@ -15,6 +15,7 @@ import {
 } from '../template-twin/ir';
 import { isPrintableDenial } from '../template-twin/denial-contract';
 import { compileTemplateDocx } from './compiler';
+import { STRUCTURE_KEEP_WHOLE } from './structure-keep';
 import type { TemplateDocxLimits } from './limits';
 import { inspectDocxPackage } from './package-security';
 import {
@@ -26,6 +27,7 @@ import {
   scanXmlPart,
   TemplateDocxRenderError,
   verifyRenderedTemplateDocx,
+  type RenderVerificationPlan,
   xmlLocalName,
   type ApprovedXmlPatch,
   type RenderedFieldProof,
@@ -66,6 +68,17 @@ export interface RenderTemplateDocxResult {
   readonly outputSha256: string;
   readonly rendererVersion: typeof TEMPLATE_TWIN_RENDERER_VERSION;
   readonly verification: TemplateDocxRoundTripVerification;
+  /**
+   * The plan the verifier was given — the patches applied and the proof for
+   * each field.
+   *
+   * ⚠️ RETURNED SO THE ROUND-TRIP GUARANTEE CAN BE CHECKED INDEPENDENTLY.
+   * `verifyRenderedTemplateDocx` cannot be driven without a plan, so rule 2's
+   * emptied byte comparison had no arm at all and an adversarial lens read it
+   * as decoration. It is not persisted: `synthetic-test.ts` stores
+   * `verification` alone, and `fill-engine.ts` reads only the document.
+   */
+  readonly plan: RenderVerificationPlan;
 }
 
 /**
@@ -86,6 +99,7 @@ export async function renderTemplateDocx(
   }
 
   const inspected = inspectDocxPackage(input.source, input.limits);
+  // Read once: a paragraph's numbering can live entirely in `styles.xml`.
   assertSourceMatchesIr(input.source, ir, inspected.sourceSha256, input.limits);
   const resolutions = parseResolutions(ir, input.resolutions);
   const partPlans = new Map<string, MutablePartPlan>();
@@ -120,7 +134,11 @@ export async function renderTemplateDocx(
     }
     const prepared = prepareScalarResolution(field, resolution);
     const part = getPartPlan(field.rendererBinding.partName);
-    const patches = createFieldPatches(part.scan, field, prepared);
+    const { patches, boundedClear, blankEligible } = createFieldPatches(
+      part.scan,
+      field,
+      prepared,
+      );
     if (patches.length === 0) {
       // BLANK PROOF. No patch means the field keeps the template's own unfilled
       // state — a dropdown placeholder, an empty cell. That is a real outcome
@@ -135,11 +153,56 @@ export async function renderTemplateDocx(
       //
       // occurrences = 1: one binding site, verified. The gate's
       // `expected.occurrences > 0` is satisfied without touching the gate.
-      fieldProofs.push(fieldProof(field, resolution.value, 1, 'blank'));
+      // ⚠️ A ZERO-PATCH FIELD IS ONLY `blank` IF IT MAY CLAIM BLANKNESS.
+      // A numbered paragraph whose run is already gone needs no patch, and
+      // emitting `blank` unconditionally handed it the credit the numbering
+      // rule exists to deny — the same document the patched case correctly
+      // refuses, minus an empty run shell.
+      // ⚠️ IT STAYS `blank` — THE LABEL IS ABOUT THE WRITE, NOT THE CREDIT.
+      // Emitting `filled` here to deny credit broke the verifier outright:
+      // `filled` joins the PATCHED set, the patched set must equal the proof
+      // set exactly, and this field has no patches. `blank` is the honest
+      // label for an unpatched field; the ineligibility rides alongside it.
+      // ⚠️ BUILT AS AN EXPLICIT `blank` LITERAL, not spread from the shared
+      // helper. `fieldProof` returns the whole proof union and only the `blank`
+      // arm carries `blankEligible`, so spreading loses the narrowing and the
+      // eligibility silently has nowhere to land.
+      const base = fieldProof(field, resolution.value, 1, 'blank');
+      fieldProofs.push({
+        kind: 'blank',
+        fieldId: base.fieldId,
+        partName: base.partName,
+        bindingPath: base.bindingPath,
+        valueSha256: base.valueSha256,
+        occurrences: base.occurrences,
+        blankEligible,
+      });
       continue;
     }
     part.patches.push(...patches);
-    fieldProofs.push(fieldProof(field, resolution.value, 1));
+    // ⚠️ #165 — THE LABEL IS A FACT ABOUT THE WRITE, NOT A CLAIM ABOUT THE KIND.
+    //
+    // `boundedClear` is true only where `sdtBoundedClearPatches` replaced the
+    // control's whole `w:sdtContent` subtree. There is no kind list to keep
+    // correct and nothing to enumerate: a checkbox is excluded because we
+    // deliberately WRITE its glyph, a selection is included because we
+    // demonstrably clear it, and a binding with no bounded container is
+    // excluded because no such write happened.
+    //
+    // An `emptied` proof carries `expectedSpanSha256` — the binding span as this
+    // writer meant to leave it. The verifier's single comparison is what makes
+    // the claim checkable; a proof without an expectation is refused there.
+    fieldProofs.push(
+      boundedClear
+        ? emptiedProof(
+            field,
+            resolution.value,
+            1,
+            expectedEmptiedSpanSha256(part.scan, field, patches),
+            blankEligible,
+          )
+        : fieldProof(field, resolution.value, 1),
+    );
   }
 
   const partProofs: RenderedPartProof[] = [];
@@ -195,11 +258,12 @@ export async function renderTemplateDocx(
     }
   }
 
+  const renderPlan = { parts: partProofs, fields: fieldProofs };
   const verification = verifyRenderedTemplateDocx({
     source: input.source,
     output,
     ir,
-    plan: { parts: partProofs, fields: fieldProofs },
+    plan: renderPlan,
     limits: input.limits,
   });
   const outputSha256 = createHash('sha256').update(output).digest('hex');
@@ -211,6 +275,14 @@ export async function renderTemplateDocx(
     outputSha256,
     rendererVersion: TEMPLATE_TWIN_RENDERER_VERSION,
     verification,
+    // ⚠️ THE PLAN IS RETURNED SO THE ROUND-TRIP GUARANTEE IS INDEPENDENTLY
+    // CHECKABLE. Without it `verifyRenderedTemplateDocx` cannot be driven from
+    // a test at all — it needs a plan — so its emptied byte comparison had no
+    // arm and looked like decoration. Only `verification` is persisted
+    // (`synthetic-test.ts`), and the single production consumer
+    // (`fill-engine.ts`) reads `document`/`outputSha256`, so nothing serialises
+    // this object whole.
+    plan: renderPlan,
   });
 }
 
@@ -430,7 +502,7 @@ function renderRepeatingRows(input: {
           continue;
         }
         const prepared = rowPreparedResolution(field, resolution, rowOrdinal);
-        rowPatches.push(...createFieldPatches(part.scan, field, prepared));
+        rowPatches.push(...createFieldPatches(part.scan, field, prepared).patches);
       }
       const relativePatches = rowPatches.map((patch) => ({
         ...patch,
@@ -459,7 +531,19 @@ function renderRepeatingRows(input: {
     for (const field of fields) {
       if (field.detectionStatus === 'unsupported') continue;
       const resolution = input.resolutions.get(field.fieldId)!;
-      input.fieldProofs.push(fieldProof(field, resolution.value, rowCount));
+      // ⚠️ #165 RULE 3 — THIS EMITTER CLASSIFIES DELIBERATELY, AND THE ANSWER
+      // IS `filled`. Until #164 this was `filled` only by DEFAULT — the 4th
+      // argument was simply never passed — so an identical field got the
+      // opposite label purely for sitting in a repeating table. Stating it is
+      // the fix; the value is unchanged.
+      //
+      // It cannot be `emptied`, and the reason is structural rather than a
+      // policy choice: these fields are merged into ONE `repeating_row` patch
+      // that replaces the prototype with `rowCount` CLONED rows, so there is no
+      // 1:1 output span at this field's `bindingPath` to compare against. The
+      // byte-equality proof is per-binding-path and simply does not exist here.
+      // Fails closed — it under-counts, never over-counts.
+      input.fieldProofs.push(fieldProof(field, resolution.value, rowCount, 'filled'));
     }
   }
 }
@@ -571,7 +655,7 @@ function createFieldPatches(
   part: ScannedXmlPart,
   field: TemplateField,
   resolution: PreparedResolution,
-): ApprovedXmlPatch[] {
+): FieldPatchResult {
   const binding = field.rendererBinding;
   const bound = part.byPath.get(binding.path);
   if (!bound) failTemplateDocxRender('BINDING_NOT_FOUND');
@@ -585,15 +669,503 @@ function createFieldPatches(
       if (xmlLocalName(bound.name) !== 'fldChar') {
         failTemplateDocxRender('BINDING_NOT_FOUND');
       }
-      return legacyFieldPatches(part.text, bound, field, resolution);
+      // ⚠️ LEGACY IS NEVER BOUNDED-CLEARED. Its result has no enclosing
+      // element — it is a SPAN between `separate` and `end` fldChars, which is
+      // exactly why every attempt to bound it by walking was falsified. It gets
+      // no `emptied` proof until its own slice gives it a real container.
+      return {
+        patches: legacyFieldPatches(part.text, bound, field, resolution),
+        boundedClear: false,
+        // ⚠️ #171(2) — LEGACY LEAVES THIS SLICE; THE GUARD CODE IS DELETED,
+        // NOT PATCHED. #170 gave this arm a guard over
+        // the paragraph holding `bound`, and `bound` is the `begin` fldChar — so
+        // it judged only the paragraph holding `begin`, while a FORMTEXT result
+        // legitimately crosses into the next one. Measured: numbering on the
+        // `end` paragraph returned eligible and COUNTED.
+        //
+        // The repair is not a better walk. The comment directly above says this
+        // span cannot be bounded by walking — that is why it earns no `emptied`
+        // proof — so a guard over one paragraph of it is an approximation of an
+        // unboundable span, and approximations of this shape have been
+        // falsified repeatedly here.
+        //
+        // ⚠️ IT KEEPS `main`'s BEHAVIOUR VERBATIM: the unpatched `blank` path,
+        // no `emptied`, NO NEW CREDIT. THIS LITERAL IS NOT A VERDICT — no guard
+        // ran — it is `main`'s hardcoded value preserved while the binding is
+        // out of scope, so nothing anybody already had is taken away. The
+        // `eligible ≠ empty` limit here PREDATES this arc and is filed.
+        blankEligible: 'eligible',
+      };
     case 'table_cell':
       if (xmlLocalName(bound.name) !== 'tc') {
         failTemplateDocxRender('BINDING_NOT_FOUND');
       }
-      return tableCellPatches(part.text, bound, field, resolution);
+      // ⚠️ #171(2) — `table_cell` LEAVES THIS SLICE TOO, WITH ITS CURE NAMED.
+      // #170 routed it through the paragraph guard, which answers *"could a
+      // list marker print?"* — the wrong question here. NOTHING CLEARS A CELL:
+      // `tableCellPatches` rewrites `w:t` only, so a cell holding a Wingdings
+      // glyph, a drawing or a picture and no `w:t` yields ZERO patches and the
+      // region is left exactly as the template had it. Eligible is not empty.
+      //
+      // ⚠️ THE LIMIT PREDATES THIS ARC — `main` counted those cells too — and is
+      // POPULATION ZERO on every certified template, measured: the real
+      // customer form carries none of `w:sym`, `w:drawing`, `w:pict`,
+      // `w:object`, `w:fldSimple` in any of its 52 blank-bearing cells. It
+      // RE-ARMS on any upload with a glyph checkbox, a logo, or a signature
+      // image in an otherwise-empty cell.
+      //
+      // ⚠️ AND THE CURE IS ALREADY NAMED, WHICH MAKES THIS A DEFERRAL AND NOT A
+      // SHRUG: `w:tc` IS A BOUNDED CONTAINER, so the structure-keep clear that
+      // made content controls provable applies to it directly. Its own slice.
+      return {
+        patches: tableCellPatches(part.text, bound, field, resolution),
+        boundedClear: false,
+        // Keeps `main`'s behaviour verbatim. NOT A VERDICT — see above.
+        blankEligible: 'eligible',
+      };
     case 'repeating_row':
       failTemplateDocxRender('UNSUPPORTED_BINDING');
   }
+}
+
+/**
+ * #165 RULE 1 — A NULL CLEARS A CONTENT CONTROL BY REPLACING ITS WHOLE
+ * `w:sdtContent` SUBTREE. THE BOUNDARY IS THE DOCUMENT'S OWN ELEMENT.
+ *
+ * ⚠️ THIS IS THE DISTINCTION FROM THE FOUR-TIMES-FALSIFIED INSTRUMENT, and it
+ * is the entire point of the ruling. Every previous attempt bounded the edit
+ * with a scan WE performed — "find the `w:t` descendants", "walk separate→end",
+ * "check the region against a list of visible elements". Each was falsified by
+ * the next carrier nobody enumerated: `w:sym`, `w:pict`, `w:drawing`,
+ * `w:object`, `w:delText`, `w:instrText`. The list never closes.
+ *
+ * Here nothing is enumerated and nothing is searched. `startTagEnd..endTagStart`
+ * are the inner bounds of the control's OWN element, produced by the XML
+ * scanner. A glyph, an image, a field code or a tracked deletion inside the
+ * control cannot survive, because NOTHING inside the control survives.
+ *
+ * ⚠️ IT RETURNS `null` — FAIL-CLOSED — WHERE THE CONTAINER IS NOT SAFELY
+ * REPLACEABLE, and the caller then falls back to text-node patching and does
+ * NOT earn an `emptied` proof:
+ *   - a self-closing `w:sdtContent` is already empty; there is nothing to clear
+ *     and no write to prove;
+ *   - a row- or cell-level control (`w:tr` / `w:tc` children) would have its
+ *     table structure destroyed by an inline run, so it is left alone.
+ *
+ * `w:showingPlcHdr` is removed with the content: it is Word's "what you see is
+ * the PLACEHOLDER" flag, and leaving it set on a control we just emptied invites
+ * Word to re-display the template's own prompt text. It lives in `sdtPr`, which
+ * is inside the approved binding span, so removing it is bounded too.
+ */
+
+
+/** Structural containers — kept, and recursed into so their content clears. */
+const STRUCTURE_RECURSE: ReadonlySet<string> = new Set([
+  'p', 'tbl', 'tr', 'tc', 'sdt', 'sdtContent',
+  // ⚠️ BLOCK-LEVEL WRAPPERS ARE RECURSED, NOT DELETED WHOLE — measured.
+  // `mc:AlternateContent` is emitted by Word routinely, and deleting it took a
+  // table cell's ONLY paragraph with it, leaving `<w:tc><w:tcPr/></w:tc>`:
+  // `CT_Tc` requires at least one block-level child, so that is the classic
+  // "Word found unreadable content" shape. `w:customXml` did the same to a
+  // whole row.
+  //
+  // ⚠️ AND TRACKED-CHANGE WRAPPERS TOO, for the same reason at a different
+  // level: `w:ins`/`w:del`/`w:moveTo`/`w:moveFrom` hold RUNS inline and
+  // PARAGRAPHS at block level. Recursing gets both right — the runs go as
+  // content, the paragraphs stay as structure — where deleting whole removed a
+  // tracked-inserted paragraph entirely.
+  'AlternateContent', 'Choice', 'Fallback', 'customXml',
+  'ins', 'del', 'moveTo', 'moveFrom',
+  // ⚠️ #168 — THE RUN SHELL IS KEPT AND RECURSED, not deleted. Its `w:rPr` is
+  // kept whole above; every OTHER child — `w:t`, `w:sym`, `w:tab`, `w:br`,
+  // `w:pict`, `w:drawing`, `w:fldChar`, `w:instrText`, and anything nobody has
+  // named — is not skeleton and goes. Still a keep-list, still writes nothing,
+  // still rewrites no tag.
+  'r',
+]);
+
+/**
+ * #167 RULE 1 v3 — STRUCTURE-KEEP. Delete every node that is not skeleton.
+ *
+ * ⚠️ NOTHING IS WRITTEN AND NO START TAG IS REWRITTEN. That single property is
+ * what retires most of two passes' findings by construction rather than by
+ * patch: namespaces declared on a `w:p` survive because that `w:p` is never
+ * re-emitted; tables survive because `w:tbl` is skeleton; `w:sectPr` survives
+ * wherever it sits because it rides inside `w:pPr`; every paragraph survives
+ * because paragraphs are skeleton. v2 lost all four by rebuilding the container
+ * from a template of its own.
+ *
+ * ⚠️ AND IT IS A KEEP-LIST, NOT "DELETE THE RUNS" — the intuition is runs, the
+ * mechanism must be the keep-list. OMML is the named counterexample: `m:oMath`
+ * and `m:oMathPara` print mathematics and are NOT `w:r`, so a delete-the-runs
+ * rule leaves an equation standing in a field proofed blank. Under a keep-list
+ * they are simply not skeleton, and go — as does anything nobody has thought
+ * of, which is the entire point (canon 86).
+ *
+ * `w:fldSimple` goes too: an EMPTY simple field is not inert, because the PDF
+ * engine may recompute it from its `w:instr` and print a value nobody wrote.
+ *
+ * ⚠️ CHARACTER DATA IS A REFUSAL, NOT A DELETION. Raw text directly inside a
+ * container is not an element, so a walk cannot see it and an emptiness check
+ * counting ELEMENTS reads it as "already empty" — measured, a control holding
+ * bare `WARFARIN 5 MG DAILY` earned a `blank` proof while printing. It is
+ * schema-invalid, so rather than invent a rule for it we refuse the control.
+ */
+/**
+ * Containers OOXML requires to keep at least one child of a given kind. Emptying
+ * one of these produces a document Word refuses to open, so the clear REFUSES
+ * rather than emit it.
+ */
+const REQUIRED_CONTENT: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  // CT_Tc requires EG_BlockLevelElts minOccurs=1.
+  ['tc', new Set(['p', 'tbl', 'sdt', 'AlternateContent', 'customXml'])],
+  // CT_Tbl requires at least one row.
+  ['tbl', new Set(['tr', 'sdt', 'AlternateContent', 'customXml'])],
+]);
+
+/**
+ * Text between elements that a reader would not see: XML comments, CDATA and
+ * processing instructions. `scanXmlPart` skips them without registering a child,
+ * so their raw bytes land in the gap between siblings — and a naive
+ * non-whitespace test then refuses the whole control over a comment Word never
+ * displays, silently disarming the clear.
+ */
+function gapIsInvisible(gap: string): boolean {
+  // ⚠️ #172(3) — CDATA IS NOT STRIPPED HERE, AND ITS REMOVAL FROM THIS LIST IS
+  // THE FIX. A comment and a processing instruction are genuinely invisible to
+  // a renderer; CDATA IS CHARACTER DATA — a conformant parser yields the
+  // identical text node as bare text, and `structureKeepDeletions` refuses bare
+  // text three lines below, with a comment reading *CHARACTER DATA IS A
+  // REFUSAL, NOT A DELETION* and citing the measurement that it PRINTS.
+  //
+  // Measured before the fix: `<![CDATA[WARFARIN 5 MG DAILY]]>` in a sibling gap
+  // produced a VERIFIED `emptied` proof holding blank credit, the placeholder
+  // correctly cleared and the drug string still in the rendered document. The
+  // byte-identical string written as raw text was refused and the render threw.
+  // The guard refused those bytes in one syntax and certified them blank in the
+  // other, which is not a policy — it is an oversight in a list.
+  return gap
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<\?[\s\S]*?\?>/g, '')
+    .trim().length === 0;
+}
+
+/**
+ * Does this element's subtree contain any character data — text or CDATA, at
+ * any depth?
+ *
+ * ⚠️ IT WALKS THE GAPS, NOT THE ELEMENTS, which is the only way to see text in
+ * an element-only position. Everything between a container's start tag and its
+ * first child, between consecutive children, and after the last child, is
+ * character data by definition; the same question is then asked of every child.
+ */
+function subtreeHasNoCharacterData(xml: string, node: XmlElementSpan): boolean {
+  if (node.selfClosing) return true;
+  let cursor = node.startTagEnd;
+  for (const child of node.children) {
+    if (!gapIsInvisible(xml.slice(cursor, child.start))) return false;
+    if (!subtreeHasNoCharacterData(xml, child)) return false;
+    cursor = child.end;
+  }
+  return gapIsInvisible(xml.slice(cursor, node.endTagStart));
+}
+
+function structureKeepDeletions(
+  xml: string,
+  node: XmlElementSpan,
+  fieldId: string,
+  out: ApprovedXmlPatch[],
+): boolean {
+  const nodeLocal = xmlLocalName(node.name);
+  const required = REQUIRED_CONTENT.get(nodeLocal);
+  let survivingRequired = 0;
+  let cursor = node.startTagEnd;
+  for (const child of node.children) {
+    if (!gapIsInvisible(xml.slice(cursor, child.start))) return false;
+    cursor = child.end;
+    const local = xmlLocalName(child.name);
+    if (required?.has(local)) survivingRequired += 1;
+    if (STRUCTURE_KEEP_WHOLE.has(local)) {
+      // ⚠️ A PROPERTY CONTAINER MUST NOT HOLD A RUN, AND THIS IS THE ONE CHECK
+      // THAT KEEPS THE KEEP-LIST HONEST.
+      //
+      // Canon 86's correction records that the keep-list is a claim about the
+      // FORMAT while the code copies subtrees VERBATIM and nothing validates
+      // them. A lens then confirmed the gap is live: a `w:r` smuggled inside
+      // `w:pPr` survives a clear, prints, and the field is still proofed
+      // `emptied` with blank credit — #164's shape, one layer inside the fix.
+      //
+      // `w:r` is the universal carrier of printable content in OOXML, and no
+      // property container legitimately contains one (`w:pPr/w:rPr` is run
+      // PROPERTIES, not a run). So this is a single structural rule rather than
+      // another enumeration of carriers — and it REFUSES rather than repairs,
+      // because a property block holding a run is a document we do not
+      // understand.
+      // ⚠️ #175 — HONEST REACHABILITY, STATED RATHER THAN FAKED. Since #174 the
+      // COMPILER refuses any control whose property blocks hold a content
+      // carrier, and `w:r` is one — so no document that compiles through this
+      // codebase can reach this line any more, and an arm written against a
+      // compiled fixture would be exercising admission, not this guard.
+      //
+      // It is kept, not deleted, because the renderer also runs against IRs
+      // COMPILED BEFORE #174 and stored: those were admitted under the old
+      // rules and this is the only thing standing between them and the harm.
+      // ⚠️ Its previous arm was rewritten to assert the new compile-time
+      // refusal and thereby left it unwatched — canon 98 — which is why the
+      // limit is written here instead of a fixture that would prove nothing.
+      if (descendantXmlElements(child, 'r').length > 0) return false;
+      // ⚠️ #173 — AND THE SAME BACKSTOP WIDENED TO ITS TRUE INVARIANT: A
+      // KEPT-WHOLE CONTAINER MAY HOLD NO CHARACTER DATA AT ANY DEPTH.
+      //
+      // The `w:r` rule above was one carrier. The pass found the general case:
+      // `<w:r><w:rPr><![CDATA[WARFARIN 5 MG DAILY]]></w:rPr>…` produced a
+      // VERIFIED `emptied` proof holding blank credit, the placeholder
+      // correctly cleared — and the drug string still in the rendered document.
+      // The identical bytes as a SIBLING GAP are refused, because
+      // `gapIsInvisible` runs between siblings at a recursed level and a
+      // kept-whole subtree is copied verbatim without ever being looked into.
+      //
+      // So the character-data refusal — which this file already states as
+      // "CHARACTER DATA IS A REFUSAL, NOT A DELETION" — is applied to the whole
+      // subtree, not merely to the gaps between its siblings. ONE RECURSIVE
+      // CHECK, NO SEMANTICS: it does not ask what the text is or whether it
+      // would print, only whether the container we are about to copy verbatim
+      // contains any.
+      if (!subtreeHasNoCharacterData(xml, child)) return false;
+      continue;
+    }
+    if (STRUCTURE_RECURSE.has(local)) {
+      if (!structureKeepDeletions(xml, child, fieldId, out)) return false;
+      continue;
+    }
+    out.push({
+      start: child.start,
+      end: child.end,
+      replacement: '',
+      fieldIds: [fieldId],
+      kind: 'field_content',
+    });
+  }
+  // ⚠️ REFUSE RATHER THAN EMIT AN INVALID CONTAINER. Measured: an
+  // `mc:AlternateContent` holding a cell's only paragraph was deleted whole and
+  // left `<w:tc><w:tcPr/></w:tc>`. Recursing into that wrapper fixes the
+  // measured case; this refuses the ones nobody has constructed yet.
+  if (required && survivingRequired === 0) return false;
+  return gapIsInvisible(xml.slice(cursor, node.endTagStart));
+}
+
+/**
+ * Clear a content control by DELETING everything inside it that is not
+ * structural skeleton.
+ *
+ * Returns `null` when the shape cannot be cleared safely (fall back, earn no
+ * `emptied` proof), or the deletion patches — possibly EMPTY, meaning the
+ * control already held nothing but skeleton and there was nothing to clear.
+ */
+/**
+ * Style ids whose paragraph style carries LIVE numbering, resolved transitively
+ * through `w:basedOn`.
+ *
+ * ⚠️ WITHOUT THIS THE NUMBERING GUARD READS THE WRONG DOCUMENT. A paragraph's
+ * numbering can live entirely in `styles.xml`: the cleared region then contains
+ * only `<w:pStyle w:val="ListParagraph"/>` and no `w:numPr` at all, so a search
+ * of the region finds nothing. Measured to PDF — the field printed
+ * `ANTICOAGULATED 1.` while proofed `emptied` and holding blank credit.
+ *
+ * ⚠️ `numId="0"` IS EXCLUDED, and that is not a detail. It is Word's own "no
+ * list" marker — precisely what it writes when a user REMOVES numbering from a
+ * paragraph whose style carries it. Treating it as numbered refuses blank
+ * credit to a field that renders nothing, which is a false refusal costing a
+ * doctor their certification.
+ */
+/**
+ * #173 — THE NUMBERING-ELIGIBILITY GUARD IS GONE, AND THIS IS ITS HEADSTONE.
+ * READ IT BEFORE REBUILDING ANY PART OF IT.
+ *
+ * Six formulations of one rule lived here — *is this field's paragraph
+ * numbered?* — and every one was falsified by measurement:
+ *
+ *   1 search the cleared region          2 add the containing paragraph
+ *   3 resolve a named `w:pStyle`         4 walk the `w:basedOn` chain
+ *   5 read the default paragraph style   6 invert to a `w:pPr` inert allowlist
+ *
+ * Each fix was correct and the next route existed anyway: `w:docDefaults`, the
+ * ST_OnOff spellings of `w:default`, an omitted `w:type`, the table-style
+ * layer, entity-encoded attribute values, a second `w:pPr`, a carrier nested
+ * one level deeper than the check looked.
+ *
+ * ⚠️ THE DELETION IS AN ENDING, NOT A RETREAT, AND THESE ARE THE MEASUREMENTS
+ * THAT MAKE IT ONE:
+ *
+ *   · it NEVER REACHED `main` — the whole apparatus lived on one branch;
+ *   · on the only real customer template it guarded NOTHING — all 52 counted
+ *     blank proofs there come from `table_cell`, which never called it;
+ *   · it REFUSED 56 OF 56 real named tables in a 91-document census, because
+ *     85.9% of table styles carry `w:basedOn` and `TableGrid` — what Word
+ *     applies to every inserted table — is one of them.
+ *
+ * Deleting it therefore removes no shipped protection.
+ *
+ * ⚠️ AND THE REASON IT COULD NEVER WORK IS A STATEMENT ABOUT THE PRODUCT, NOT
+ * ABOUT THE CODE. **TEMPLATE-AUTHORED FORMATTING IS THE TEMPLATE'S OWN
+ * CONTENT.** A list marker, a border, a shaded cell, a style's `lvlText` are
+ * the doctor's authoring choices, visible in the doctor's own form — the same
+ * class as the doctor-authored default text this renderer has always been
+ * allowed to leave in place.
+ *
+ * **A PROOF IS SCOPED TO WHAT THE PROVER DOES.** What this renderer can prove,
+ * and now claims exactly, is: *the renderer wrote nothing into this field, and
+ * its region is byte-identical to the empty form the doctor uploaded.* The
+ * certification record says so in those words.
+ *
+ * WHAT SURVIVES, each held under adversarial attack rather than assumed:
+ * structure-keep clearing; byte-equality `emptied` proofs; the `showingPlcHdr`
+ * exception; the kind exclusion below; `table_cell`/`legacy` on `main`'s
+ * unchanged path; and, on the READ path, that an unevaluated verdict never
+ * counts.
+ */
+
+/** Three-state, kept as a principle: `unevaluated` never counts. */
+type BlankEligibility = 'eligible' | 'ineligible' | 'unevaluated';
+
+/** Control kinds whose emptied region can render a value nobody chose. */
+const SELECTION_KINDS: ReadonlySet<TemplateField['kind']> = new Set([
+  'single_select',
+  'multi_select',
+]);
+
+/**
+ * ELIGIBILITY IS A PURE TABLE — kind in, verdict out, NO DOCUMENT READING.
+ *
+ * ⚠️ THE ABSENCE OF AN `xml` PARAMETER IS THE POINT. Every falsified version of
+ * this decision took the document as input and tried to answer a question about
+ * the rendered PAGE. This one answers a question about the WRITE, which is the
+ * only thing the writer is in a position to know.
+ */
+function blankEligibilityFor(field: TemplateField): BlankEligibility {
+  // ⚠️ #168(b) SURVIVES, RE-JUSTIFIED CORRECTLY BY #174 — the first reason given
+  // for it was wrong, and the correction matters.
+  //
+  // It was defended as "a false attestation produced by THE RENDERER'S OWN
+  // WRITE". An adversarial pass falsified that: a dropdown whose content is
+  // already skeleton produces ZERO patches, so there IS no write, and the
+  // justification did not reach the case where the exclusion still applies.
+  //
+  // The real reason is simpler and does not depend on us writing anything.
+  // **THE PDF ENGINE DISPLAYS `w:listItem[0]` FOR AN EMPTY SELECTION
+  // REGARDLESS — measured on BASE, before any of this work.** So for a
+  // selection, "blank" is not what the page shows, whoever emptied it. That is
+  // a fact about the export path, not about template formatting, which is why
+  // this one exclusion does not die with the numbering guard.
+  //
+  // ⚠️ AND IT IS A DEFERRAL WITH A NAMED DISCHARGE, not a permanent rule:
+  // dropdowns earn credit once the filed export fix lands. Until then the
+  // certificate must not claim a blank the reader will not see.
+  return SELECTION_KINDS.has(field.kind) ? 'ineligible' : 'eligible';
+}
+
+interface BoundedClear {
+  readonly patches: ApprovedXmlPatch[];
+  /**
+   * May this clear earn an `emptied` proof that COUNTS toward the certification
+   * blank requirement? Separate from whether the clear happened — a selection
+   * clears correctly and still earns nothing, because the PDF engine falls back
+   * to `w:listItem[0]` and prints a value nobody chose.
+   */
+  readonly blankEligible: BlankEligibility;
+}
+
+function sdtBoundedClearPatches(
+  xml: string,
+  control: XmlElementSpan,
+  field: TemplateField,
+  fieldId: string,
+): BoundedClear | null {
+  // The control itself must hold nothing but its properties and its content.
+  // A stray run directly inside `w:sdt` is malformed and is refused rather than
+  // reasoned about.
+  const contents: XmlElementSpan[] = [];
+  for (const child of control.children) {
+    const local = xmlLocalName(child.name);
+    if (local === 'sdtPr' || local === 'sdtEndPr') continue;
+    // ⚠️ EVERY `sdtContent` IS CLEARED, NOT JUST THE FIRST. v2's guard matched
+    // by NAME, so a SECOND `w:sdtContent` passed it and survived intact —
+    // rendering WARFARIN out of a control proofed `emptied`.
+    if (local === 'sdtContent') {
+      contents.push(child);
+      continue;
+    }
+    return null;
+  }
+  if (contents.length === 0) return null;
+
+  const out: ApprovedXmlPatch[] = [];
+  for (const content of contents) {
+    if (content.selfClosing) continue;
+    if (!structureKeepDeletions(xml, content, fieldId, out)) return null;
+  }
+
+  // ⚠️ #173 — NO DOCUMENT IS READ HERE ANY MORE. Six versions of this decision
+  // collected paragraphs and interrogated them; the whole apparatus is gone,
+  // and the headstone above `blankEligibilityFor` says why. The verdict is now
+  // a fact about the FIELD, not about the page.
+  const eligibility = blankEligibilityFor(field);
+
+
+  // ⚠️ ONE DELIBERATE EXCEPTION TO `sdtPr` BEING KEPT WHOLE, AND IT IS
+  // MEASURED. `w:showingPlcHdr` is not an inert property: it asserts "what you
+  // are looking at IS the placeholder", and Word acts on it by re-displaying
+  // the template's own prompt from `w:placeholder`/`w:docPart`. Once the
+  // content is deleted that assertion is false, and leaving it set is how
+  // "Choose an item." reappears in a field the certificate attests as blank.
+  //
+  // ⚠️ EVERY `sdtPr` IN THE CONTROL, NOT JUST THE OUTER ONE. A NESTED control
+  // kept its own flag AND its `w:placeholder`/`w:docPart` inside a span proofed
+  // `emptied` — the same hazard this exception exists for, un-applied one level
+  // down, with the blank credit now attached.
+  //
+  // ⚠️ AND UNCONDITIONALLY, NOT ONLY WHEN SOMETHING ELSE WAS DELETED. Gating it
+  // on `out.length > 0` meant a control whose content was already pure skeleton
+  // kept the flag — measured as a regression against the previous commit, which
+  // removed it there.
+  for (const flag of descendantXmlElements(control, 'showingPlcHdr')) {
+    out.push(removeXmlElementPatch(flag, fieldId));
+  }
+
+  return { patches: out, blankEligible: eligibility };
+}
+
+/**
+ * What the writer DID, reported back so the proof can be a fact about the write
+ * rather than a claim about the field's kind.
+ *
+ * ⚠️ #164 DERIVED THE LABEL FROM A KIND BLACKLIST AND WAS WRONG THREE WAYS:
+ * it excluded selections on the false premise that a null one "asserts a
+ * choice" (measured: a null `single_select` clears to empty exactly like
+ * narrative), its prose said "narrative" while the blacklist admitted `date`,
+ * `number` and `measurement`, and it labelled repeating-row fields by omission.
+ * `boundedClear` cannot drift from the write, because it IS the write.
+ */
+interface FieldPatchResult {
+  readonly patches: ApprovedXmlPatch[];
+  /** True ONLY when the clear happened AND may earn a counted `emptied` proof. */
+  readonly boundedClear: boolean;
+  /**
+   * May this field claim blankness AT ALL — by either label?
+   *
+   * ⚠️ IT HAS TO LEAVE THIS FUNCTION, because a control whose content is
+   * ALREADY skeleton produces ZERO patches, and the zero-patch path emits
+   * `blank` unconditionally. The eligibility was computed and thrown away, so
+   * two documents printing the identical list marker got opposite verdicts:
+   *
+   *   numbered paragraph WITH a run    -> patches -> `filled`, no credit
+   *   numbered paragraph, run ALREADY gone -> none -> `blank`,  CREDIT
+   *
+   * The second is the first's output. And unlike the KIND, numbering cannot be
+   * re-derived at the read path — the stored proof carries no numbering signal
+   * — so this is the only place the decision can be made.
+   */
+  readonly blankEligible: BlankEligibility;
 }
 
 function contentControlPatches(
@@ -601,7 +1173,7 @@ function contentControlPatches(
   control: XmlElementSpan,
   field: TemplateField,
   resolution: PreparedResolution,
-): ApprovedXmlPatch[] {
+): FieldPatchResult {
   const properties = directXmlChild(control, 'sdtPr');
   const content = directXmlChild(control, 'sdtContent');
   if (!properties || !content) failTemplateDocxRender('BINDING_NOT_FOUND');
@@ -627,10 +1199,22 @@ function contentControlPatches(
       : selected
         ? '☒'
         : '☐';
-    return [
-      setXmlAttributePatch(xml, checked, 'val', selected ? '1' : '0', field.fieldId),
-      ...textContainerPatches(xml, content, glyph, field.fieldId),
-    ];
+    // ⚠️ A CHECKBOX IS NEVER BOUNDED-CLEARED, AND THAT IS DELIBERATE. Both of
+    // its states PRINT — `☒` and `☐` are equally visible marks — so a null
+    // checkbox is not an empty field, it is an unticked one. We write the
+    // unchecked glyph on purpose, so there is no clearing to prove and it must
+    // never buy a blank proof. Note this now falls out of what the writer DOES,
+    // rather than from a list of kinds somebody has to keep correct.
+    return {
+      patches: [
+        setXmlAttributePatch(xml, checked, 'val', selected ? '1' : '0', field.fieldId),
+        ...textContainerPatches(xml, content, glyph, field.fieldId),
+      ],
+      boundedClear: false,
+      // #170 — the guard never ran on this path; `unevaluated` is the
+      // honest value and it does not count. Absence means no.
+      blankEligible: 'unevaluated',
+    };
   }
 
   if (field.kind === 'date') {
@@ -647,10 +1231,28 @@ function contentControlPatches(
             `${String(resolution.value)}T00:00:00Z`,
             field.fieldId,
           );
-    return [
-      ...(statePatch ? [statePatch] : []),
-      ...textContainerPatches(xml, content, display, field.fieldId),
-    ];
+    if (resolution.value === null) {
+      const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId);
+      if (cleared) {
+        return {
+          patches: [...(statePatch ? [statePatch] : []), ...cleared.patches],
+          // ⚠️ AN EMPTY ARRAY IS TRUTHY. `[]` means "already empty, nothing to
+          // do" — no clearing write happened, so it cannot earn `emptied`.
+          boundedClear: cleared.patches.length > 0 && cleared.blankEligible === 'eligible',
+          blankEligible: cleared.blankEligible,
+        };
+      }
+    }
+    return {
+      patches: [
+        ...(statePatch ? [statePatch] : []),
+        ...textContainerPatches(xml, content, display, field.fieldId),
+      ],
+      boundedClear: false,
+      // #170 — the guard never ran on this path; `unevaluated` is the
+      // honest value and it does not count. Absence means no.
+      blankEligible: 'unevaluated',
+    };
   }
 
   if (field.kind === 'single_select') {
@@ -659,35 +1261,82 @@ function contentControlPatches(
       ? descendantXmlElements(comboBox, 'lastValue')[0]
       : undefined;
     if (resolution.value === null) {
-      return [
-        ...(lastValue ? [removeXmlElementPatch(lastValue, field.fieldId)] : []),
-        ...textContainerPatches(xml, content, '', field.fieldId),
-      ];
+      // ⚠️ SELECTIONS ARE INCLUDED — #164 EXCLUDED THEM ON A FALSE PREMISE.
+      // Its comment claimed "a selection control that renders anything asserts
+      // a choice". Measured: a null `single_select` renders NOTHING. It is the
+      // dropdown-dominated forms (WM_IOV is 28 of them) that most need this.
+      const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId);
+      if (cleared) {
+        return {
+          patches: [
+            ...(lastValue ? [removeXmlElementPatch(lastValue, field.fieldId)] : []),
+            ...cleared.patches,
+          ],
+          // ⚠️ `blankEligible` is FALSE here by construction — #168(b) excludes
+          // selection kinds — so this clears the control and earns no blank
+          // credit. The clearing still matters: it is what stops the previously
+          // SELECTED text printing.
+          boundedClear: cleared.patches.length > 0 && cleared.blankEligible === 'eligible',
+          blankEligible: cleared.blankEligible,
+        };
+      }
+      return {
+        patches: [
+          ...(lastValue ? [removeXmlElementPatch(lastValue, field.fieldId)] : []),
+          ...textContainerPatches(xml, content, '', field.fieldId),
+        ],
+        boundedClear: false,
+      // #170 — the guard never ran on this path; `unevaluated` is the
+      // honest value and it does not count. Absence means no.
+      blankEligible: 'unevaluated',
+      };
     }
     const option = exactSelectedOption(field, resolution);
-    return [
-      ...(lastValue
-        ? [
-            setXmlAttributePatch(
-              xml,
-              lastValue,
-              'val',
-              option.value,
-              field.fieldId,
-            ),
-          ]
-        : []),
-      ...textContainerPatches(
-        xml,
-        content,
-        safeDisplayText(option.displayText),
-        field.fieldId,
-      ),
-    ];
+    return {
+      patches: [
+        ...(lastValue
+          ? [
+              setXmlAttributePatch(
+                xml,
+                lastValue,
+                'val',
+                option.value,
+                field.fieldId,
+              ),
+            ]
+          : []),
+        ...textContainerPatches(
+          xml,
+          content,
+          safeDisplayText(option.displayText),
+          field.fieldId,
+        ),
+      ],
+      boundedClear: false,
+      // #170 — the guard never ran on this path; `unevaluated` is the
+      // honest value and it does not count. Absence means no.
+      blankEligible: 'unevaluated',
+    };
   }
 
+  if (resolution.value === null) {
+    const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId);
+    if (cleared) {
+      return {
+        patches: cleared.patches,
+        boundedClear: cleared.patches.length > 0 && cleared.blankEligible === 'eligible',
+          blankEligible: cleared.blankEligible,
+      };
+    }
+  }
   const display = displayValue(field, resolution);
-  return textContainerPatches(xml, content, display, field.fieldId);
+  return {
+    patches: textContainerPatches(xml, content, display, field.fieldId),
+    boundedClear: false,
+      // #170 — the guard never ran on this path; `unevaluated` is the
+      // honest value and it does not count. Absence means no.
+      blankEligible: 'unevaluated',
+  };
 }
 
 function legacyFieldPatches(
@@ -1228,11 +1877,45 @@ function legacyResultTextNodes(
   );
 }
 
+/**
+ * #165 RULE 2 — sha256 OF THE BINDING SPAN AS THE WRITER MEANT TO LEAVE IT.
+ *
+ * Ported verbatim in shape from the held #162(c) branch, whose instrument was
+ * isolation-proven. Its one gap was WRITER-BLINDNESS: it faithfully compared
+ * the output against the writer's own intention, so a writer that failed to
+ * clear something encoded that failure into the expectation and the comparison
+ * still passed. Rule 1 closes exactly that gap for SDTs — the writer can no
+ * longer leave anything behind, because it replaces the whole subtree.
+ *
+ * Together: rule 1 makes the write correct by construction, and this makes the
+ * OUTPUT provably equal to that write. Neither half is sufficient alone, which
+ * is why both falsified attempts that shipped one of them failed.
+ */
+function expectedEmptiedSpanSha256(
+  scan: ScannedXmlPart,
+  field: TemplateField,
+  patches: readonly ApprovedXmlPatch[],
+): string {
+  const span = scan.byPath.get(field.rendererBinding.path);
+  if (!span) failTemplateDocxRender('BINDING_NOT_FOUND');
+  const patchedPart = applyApprovedXmlPatches(scan.text, patches);
+  // The span's own end shifts by whatever the patches INSIDE it changed.
+  const delta = patches
+    .filter((patch) => patch.start >= span.start && patch.end <= span.end)
+    .reduce(
+      (acc, patch) => acc + (patch.replacement.length - (patch.end - patch.start)),
+      0,
+    );
+  return createHash('sha256')
+    .update(patchedPart.slice(span.start, span.end + delta))
+    .digest('hex');
+}
+
 function fieldProof(
   field: TemplateField,
   value: FieldResolution['value'],
   occurrences: number,
-  kind: RenderedFieldProof['kind'] = 'filled',
+  kind: 'filled' | 'blank' = 'filled',
 ): RenderedFieldProof {
   return {
     kind,
@@ -1241,5 +1924,31 @@ function fieldProof(
     bindingPath: field.rendererBinding.path,
     valueSha256: canonicalSha256({ fieldId: field.fieldId, value }),
     occurrences,
+  };
+}
+
+/**
+ * `emptied` has its OWN builder because it has its own obligation: it cannot be
+ * constructed without `expectedSpanSha256`. The type system therefore refuses an
+ * uncheckable emptied proof at compile time, which is a stronger guarantee than
+ * the verifier's run-time refusal — and both are kept, because the proof also
+ * arrives from the database on the read path where no compiler was present.
+ */
+function emptiedProof(
+  field: TemplateField,
+  value: FieldResolution['value'],
+  occurrences: number,
+  expectedSpanSha256: string,
+  blankEligible: BlankEligibility,
+): RenderedFieldProof {
+  return {
+    kind: 'emptied',
+    fieldId: field.fieldId,
+    partName: field.rendererBinding.partName,
+    bindingPath: field.rendererBinding.path,
+    valueSha256: canonicalSha256({ fieldId: field.fieldId, value }),
+    occurrences,
+    expectedSpanSha256,
+    blankEligible,
   };
 }

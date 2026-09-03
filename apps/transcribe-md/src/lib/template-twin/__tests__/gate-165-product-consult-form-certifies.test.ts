@@ -1,0 +1,989 @@
+// ============================================================================
+// RULING #165 — THE PRODUCT, END TO END: A CONSULT FORM CERTIFIES ON `emptied`
+// PROOFS ALONE.
+// ----------------------------------------------------------------------------
+// ⚠️ WHY THIS FILE EXISTS, STATED AS A MEASUREMENT RATHER THAN AS AN INTENTION.
+//
+// #164 changed WHAT CERTIFICATION COUNTS — `blankProofCount` became
+// `blank ∪ emptied` — and every test it shipped asserted a PROOF'S LABEL:
+// "the renderer emits `emptied`", "`countsAsBlankProof` returns true for it".
+// Those are facts about a helper and about a string. They are not facts about
+// the product.
+//
+// The consequence was measured, not imagined. An adversarial lens reverted the
+// entire production wiring in `certification-lifecycle.ts` — putting the old
+//
+//     roundTripFields.filter((entry) => (entry as { kind?: string }).kind === 'blank')
+//
+// back in place of the `countsAsBlankProof` census — and **1678 tests still
+// passed**. The counting rule that decides whether a doctor's form may be
+// certified had NO test between it and `main`.
+//
+// ⚠️ THE DISTINCTION THIS FILE IS BUILT ON: a rule reachable only through its
+// own helper is a rule whose arms prove the HELPER. This file drives
+// `certifyAndActivateTemplateTwin` — the exported product function, the one the
+// certify action and the auto-certify worker both call — and reads its verdict.
+// The only way it can pass is if the shipped census actually counts `emptied`.
+//
+// THE VERDICT FLIP IT PINS, which is the whole of #165's product claim:
+//
+//   · a consult form whose ONLY blank evidence is `emptied` → CERTIFIES;
+//   · the same form with that evidence removed from the census → BLOCKED, with
+//     `blankVerification=false` named in the blockers.
+//
+// ⚠️ AND THE FIXTURE IS DELIBERATELY A FORM WITH **NO `blank` PROOF ANYWHERE**.
+// That is what makes the arms non-vacuous: under #164's reverted predicate the
+// census scores 0 and certification refuses. A fixture carrying even one
+// unpatched field would certify under BOTH predicates and prove nothing — so
+// arm 1 measures that property FIRST and fails loudly if it ever stops holding.
+// ============================================================================
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { buildSyntheticDocx } from '../../note-template-docx/__tests__/synthetic-docx';
+import { canonicalSha256 } from '../canonical';
+import { countsAsBlankProof } from '../blank-proof-count';
+import { MIN_CERTIFIED_FILLED_FIELDS } from '../certification-thresholds';
+import {
+  EncounterFactSchema,
+  FieldResolutionSchema,
+  SemanticMappingSchema,
+  TEMPLATE_TWIN_RENDERER_VERSION,
+  TEMPLATE_TWIN_RESOLVER_VERSION,
+  TemplateTwinFillManifestSchema,
+  templateTwinCounts,
+  type EncounterFact,
+  type FieldResolution,
+  type SemanticMapping,
+  type TemplateDocIR,
+} from '../ir';
+import { templateTwinMappingsSha256 } from '../mapping-hash';
+import { createOutputArtifactKey } from '../storage/keys';
+import { validateTemplateTwin } from '../validation';
+
+// ── THE DATABASE SEAM ───────────────────────────────────────────────────────
+// `certifyAndActivateTemplateTwin` reaches persistence twice and only twice:
+// `prisma.$transaction(cb)` -> `loadOwnedCompilation(tx, …)`, which is ONE
+// `noteTemplate.findFirst`; and afterwards `readTemplateTwinWorkspace`, which
+// is the SAME call on the singleton. One row therefore serves both, and the
+// mock returns whatever `dbState.row` currently holds — which is what lets the
+// BLOCK arm re-run the identical fixture with one field of the stored proof
+// changed and nothing else.
+const dbState = vi.hoisted(() => ({ row: null as unknown }));
+
+vi.mock('@meddoc/db', () => {
+  const client = {
+    noteTemplate: {
+      findFirst: vi.fn(async () => dbState.row),
+      update: vi.fn(async () => ({})),
+      updateMany: vi.fn(async () => ({ count: 0 })),
+    },
+    templateTwinCertification: { create: vi.fn(async () => ({})) },
+    templateTwinCompiledVersion: { update: vi.fn(async () => ({})) },
+    templateTwinFieldDefinition: { updateMany: vi.fn(async () => ({ count: 0 })) },
+    $transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => cb(client)),
+  };
+  return { default: client };
+});
+
+// ⚠️ MOCKED TO KEEP `next-auth` OUT OF THE MODULE GRAPH, NOT FOR CONVENIENCE.
+// `twin-audit` -> `@/lib/audit` -> `@/lib/nextauth` + `next/headers`, which is
+// the exact edge `certification-thresholds.ts` records as having broken this
+// test environment outright ("Cannot find module .../next/server"). Certifying
+// writes two audit rows; nothing in this gate is a claim about them.
+vi.mock('../twin-audit', () => ({ logTwinAudit: vi.fn(async () => undefined) }));
+
+
+/**
+ * ⚠️ THE CLASS FIX FOR AN UNSCOPED `find()`, NOT A PATCH FOR ONE ARM.
+ *
+ * `Array.prototype.find` on a NON-UNIQUE predicate silently returns the first
+ * match, so a test that then reasons about "the" match is reasoning about an
+ * element it did not choose. This has now cost this codebase twice — once in
+ * the renderer suite, and again, in the same delta, here — and in the second
+ * case the arm's own non-vacuity guard (`expect(x).toBeDefined()`) passed
+ * happily on the WRONG element while the rule under test was fully neutralised.
+ *
+ * `theOnlyMatch` refuses ambiguity: zero matches and two-or-more matches are
+ * both failures, and the message says which. Use it wherever the predicate is
+ * a PROPERTY (a kind, a label class) rather than a unique key.
+ */
+function theOnlyMatch<T>(
+  items: readonly T[],
+  predicate: (item: T) => boolean,
+  described: string,
+): T {
+  const matches = items.filter(predicate);
+  if (matches.length !== 1) {
+    throw new Error(
+      `expected exactly ONE ${described}, found ${matches.length} — ` +
+        'an unscoped match makes this arm a statement about an element it did not choose',
+    );
+  }
+  return matches[0]!;
+}
+
+/** Field ids the fixture's synthetic resolutions leave null. */
+function nulledFieldIds(fixture: { resolutions: ReadonlyArray<{ fieldId: string; value: unknown }> }) {
+  return new Set(
+    fixture.resolutions.filter((r) => r.value === null).map((r) => r.fieldId),
+  );
+}
+
+const ACTOR = {
+  userId: 'doctor-165',
+  userEmail: 'synthetic.doctor@example.test',
+  practiceId: 'practice-165',
+};
+const NOTE_TEMPLATE_ID = 'note-template-165';
+const COMPILED_VERSION_ID = 'compiled-version-165';
+const CHECKED_AT = '2026-01-01T00:00:00.000Z';
+
+// ── THE FIXTURE: A CONSULT FORM, NOT A VENOUS GRID ──────────────────────────
+// Twelve content controls in the body — seven `w:text` narrative sections and
+// five `w:dropDownList` selections — plus the header control that
+// `buildSyntheticDocx` always ships. NO table cells and NO legacy `w:fldChar`
+// fields, deliberately: `table_cell` and `legacy_form_field` have no bounded
+// container the writer clears, so an `emptied` proof from either does not count
+// (`PROVEN_EMPTIABLE_BINDINGS`). A fixture containing them would leave the
+// reader unable to say which binding bought the blank.
+const NARRATIVE = (id: number, alias: string, placeholder: string): string =>
+  `<w:p><w:sdt><w:sdtPr><w:id w:val="${id}"/><w:alias w:val="${alias}"/>` +
+  `<w:text/></w:sdtPr><w:sdtContent><w:r><w:t>${placeholder}</w:t></w:r>` +
+  `</w:sdtContent></w:sdt></w:p>`;
+
+const SELECT = (
+  id: number,
+  alias: string,
+  options: ReadonlyArray<string>,
+): string =>
+  `<w:p><w:sdt><w:sdtPr><w:id w:val="${id}"/><w:alias w:val="${alias}"/>` +
+  `<w:dropDownList>` +
+  options.map((o) => `<w:listItem w:displayText="${o}" w:value="${o}"/>`).join('') +
+  `</w:dropDownList></w:sdtPr><w:sdtContent><w:r><w:t>Choose an item.</w:t></w:r>` +
+  `</w:sdtContent></w:sdt></w:p>`;
+
+const CONSULT_FORM_XML =
+  `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+  `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ` +
+  `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+  `<w:body>` +
+  `<w:p><w:r><w:t>Synthetic consult form — fictional example data.</w:t></w:r></w:p>` +
+  NARRATIVE(301, 'Chief complaint', 'Enter chief complaint') +
+  NARRATIVE(302, 'History of present illness', 'Enter history') +
+  NARRATIVE(303, 'Past medical history', 'Enter past medical history') +
+  NARRATIVE(304, 'Assessment', 'Enter assessment') +
+  NARRATIVE(305, 'Plan', 'Enter plan') +
+  NARRATIVE(306, 'Physical exam', 'Enter exam') +
+  NARRATIVE(307, 'Review of systems', 'Enter review of systems') +
+  // ⚠️ #168(b) EXCLUDES SELECTIONS FROM THE COUNT, so the fixture needs a
+  // SECOND non-selection null or the union arm measures one field. The
+  // selection null below STAYS, because the exclusion must be exercised too.
+  NARRATIVE(313, 'Family history', 'Enter family history') +
+  SELECT(308, 'Exam side', ['Left', 'Right', 'Bilateral']) +
+  SELECT(309, 'Encounter category', ['Initial', 'Follow-up']) +
+  SELECT(310, 'Severity', ['Mild', 'Moderate', 'Severe']) +
+  SELECT(311, 'Disposition', ['Discharge', 'Admit', 'Refer']) +
+  SELECT(312, 'Tobacco status', ['Never', 'Former', 'Current']) +
+  `<w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/>` +
+  `<w:footerReference w:type="default" r:id="rIdFooter"/></w:sectPr>` +
+  `</w:body></w:document>`;
+
+/**
+ * What each compiled field is mapped to, and what the synthetic encounter says
+ * about it. `null` means the encounter did not mention it — which is the whole
+ * point of the fixture: those two fields are what the renderer CLEARS, and
+ * their `emptied` proofs are the only blank evidence this certification has.
+ *
+ * ⚠️ KEYED BY THE COMPILER'S OWN LABEL, never by index. `ir.fields` order is
+ * the compiler's business, and the header field arrives from a different part.
+ */
+const PLAN: ReadonlyArray<{
+  label: string;
+  concept: string;
+  value: string | null;
+}> = [
+  { label: 'Chief complaint', concept: 'chief_complaint', value: 'Bilateral leg heaviness' },
+  { label: 'History of present illness', concept: 'hpi.narrative', value: 'Six months of aching, worse standing' },
+  { label: 'Past medical history', concept: 'past_medical_history', value: 'Hypertension' },
+  { label: 'Assessment', concept: 'assessment', value: 'Chronic venous insufficiency' },
+  { label: 'Plan', concept: 'plan', value: 'Compression stockings and review in three months' },
+  { label: 'Physical exam', concept: 'exam.general', value: 'Visible varicosities, no ulceration' },
+  // ⚠️ NULL ON PURPOSE — one of the two fields whose `emptied` proof is the
+  // only thing standing between this fixture and `blankVerification=false`.
+  { label: 'Review of systems', concept: 'ros.narrative', value: null },
+  { label: 'Exam side', concept: 'exam.laterality', value: 'Bilateral' },
+  { label: 'Encounter category', concept: 'encounter.category', value: 'Initial' },
+  { label: 'Severity', concept: 'hpi.severity', value: 'Moderate' },
+  { label: 'Disposition', concept: 'plan.disposition', value: 'Discharge' },
+  // ⚠️ NULL ON PURPOSE — the second, and a SELECTION rather than a narrative,
+  // because #164 excluded selections from `emptied` on a premise #165 measured
+  // and refuted. If that exclusion ever returns, this fixture drops to one
+  // blank proof and arm 4's arithmetic notices.
+  { label: 'Tobacco status', concept: 'social_history.tobacco', value: null },
+  { label: 'Family history', concept: 'family_history', value: null },
+  { label: 'Practice display name', concept: 'practice.display_name', value: 'Synthetic Practice' },
+];
+
+/** `ttfact_[a-f0-9]{24}` — the schema's own shape, derived so it is stable. */
+const factIdFor = (label: string): string =>
+  `ttfact_${canonicalSha256(`fact:${label}`).slice(0, 24)}`;
+
+interface Fixture {
+  ir: TemplateDocIR;
+  mappings: SemanticMapping[];
+  resolutions: FieldResolution[];
+  mappingsSha256: string;
+  proofFields: Array<Record<string, unknown>>;
+  row: Record<string, unknown>;
+  bindingOf: (fieldId: string) => string | undefined;
+  kindOf: (fieldId: string) => string | undefined;
+}
+
+/**
+ * Compile -> map -> resolve -> render -> assemble the persisted row, using the
+ * REAL compiler, validator and renderer at every step. Nothing here is a stand
+ * in for the pipeline: the round-trip proof this stores is the one
+ * `renderTemplateDocx` produced from these exact bytes.
+ */
+async function buildCertifiableConsultForm(): Promise<Fixture> {
+  const source = await buildSyntheticDocx({ documentXml: CONSULT_FORM_XML });
+  const { compileTemplateDocx } = await import('../../note-template-docx/compiler');
+  const { renderTemplateDocx } = await import('../../note-template-docx/renderer');
+  const ir = compileTemplateDocx(source);
+
+  const planByLabel = new Map(PLAN.map((entry) => [entry.label, entry]));
+
+  const mappings: SemanticMapping[] = [];
+  const facts: EncounterFact[] = [];
+  const resolutions: FieldResolution[] = [];
+
+  for (const field of ir.fields) {
+    const plan = planByLabel.get(field.originalLabel);
+    if (!plan) {
+      throw new Error(`fixture drift: compiler produced an unplanned field "${field.originalLabel}"`);
+    }
+    mappings.push(
+      SemanticMappingSchema.parse({
+        fieldId: field.fieldId,
+        sourceType: 'extraction',
+        clinicalConcept: plan.concept,
+        // The gate requires COMPATIBILITY, so the type is read from the
+        // compiled kind rather than asserted: narrative -> text, dropdown ->
+        // single_select. Hard-coding either would be a fixture that agrees with
+        // itself and not with the compiler.
+        expectedDataType: field.kind === 'single_select' ? 'single_select' : 'text',
+        polarityBehavior: 'affirmative_only',
+        temporality: null,
+        laterality: null,
+        unitPolicy: null,
+        approvedSynonyms: [],
+        required: false,
+        blankPolicy: 'blank',
+        unknownPolicy: 'blank',
+        // ⚠️ NULL, AND IT IS NOT AN OMISSION. `updateTemplateTwinMappings`
+        // REFUSES any non-null practice default outright ("a standing default
+        // would put content the clinician never said into a signed note"), so a
+        // fixture carrying one could never have been produced by the product.
+        practiceDefault: null,
+        status: 'certified',
+      }),
+    );
+
+    if (plan.value === null) {
+      resolutions.push(
+        FieldResolutionSchema.parse({
+          fieldId: field.fieldId,
+          status: 'not_mentioned',
+          value: null,
+          sourceFactIds: [],
+          evidenceAnchorIds: [],
+          selectedOptionOrdinal: null,
+          reasonCode: 'blank_when_unsaid',
+          clinicianReviewed: false,
+        }),
+      );
+      continue;
+    }
+
+    const factId = factIdFor(plan.label);
+    const anchorId = `anchor-${field.displayOrder}`;
+    facts.push(
+      EncounterFactSchema.parse({
+        factId,
+        sourceType: 'encounter_evidence',
+        concept: plan.concept,
+        value: plan.value,
+        polarity: 'affirmed',
+        temporality: 'current',
+        experiencer: 'patient',
+        laterality: 'unknown',
+        number: null,
+        unit: null,
+        speaker: null,
+        sourceTranscriptOffsets: null,
+        audioTimestampSeconds: null,
+        evidenceAnchorIds: [anchorId],
+        evidenceQuote: `Synthetic example dictation: ${plan.value}.`,
+        segment: null,
+        quality: { asr: 'high', evidence: 'direct' },
+      }),
+    );
+    const option = field.allowedOptions.find((o) => o.value === plan.value);
+    resolutions.push(
+      FieldResolutionSchema.parse({
+        fieldId: field.fieldId,
+        status: 'supported',
+        value: plan.value,
+        sourceFactIds: [factId],
+        evidenceAnchorIds: [anchorId],
+        selectedOptionOrdinal: option ? option.ordinal : null,
+        reasonCode: 'supported_by_direct_evidence',
+        clinicianReviewed: false,
+      }),
+    );
+  }
+
+  // ⚠️ THE REAL VALIDATOR, AND ITS OUTPUT IS WHAT THE MANIFEST STORES.
+  // `isVerifiedSyntheticManifest` re-runs this exact call and compares the
+  // canonical hashes, so a hand-written `{valid:true, issues:[]}` would be
+  // rejected by the gate rather than accepted by it.
+  const validation = validateTemplateTwin({
+    fields: ir.fields,
+    mappings,
+    facts,
+    resolutions,
+    tables: ir.tables,
+    unsupported: ir.unsupported,
+    allowUncertifiedForSyntheticTest: true,
+    now: CHECKED_AT,
+  });
+
+  const rendered = await renderTemplateDocx({ source, ir, resolutions, validation });
+
+  const manifest = TemplateTwinFillManifestSchema.parse({
+    manifestVersion: 1,
+    compiledVersionId: COMPILED_VERSION_ID,
+    noteTemplateId: NOTE_TEMPLATE_ID,
+    noteTemplateVersion: 1,
+    compilerVersion: ir.compilerVersion,
+    resolverVersion: TEMPLATE_TWIN_RESOLVER_VERSION,
+    resolverModelVersion: null,
+    rendererVersion: TEMPLATE_TWIN_RENDERER_VERSION,
+    facts,
+    fields: resolutions,
+    validation,
+    counts: templateTwinCounts(resolutions, ir.fields),
+  });
+
+  const mappingsSha256 = templateTwinMappingsSha256(mappings);
+  // The gate parses this key and requires practice, kind and digest to agree
+  // with the actor and the stored output — `createOutputArtifactKey` is the
+  // product's own minter, so the shape cannot drift from the parser.
+  const outputObjectKey = createOutputArtifactKey({
+    practiceId: ACTOR.practiceId,
+    visitId: 'synthetic-certification-visit',
+    manifestSha256: canonicalSha256(manifest),
+    outputSha256: rendered.outputSha256,
+    idFactory: () => 'synthetic-output-artifact',
+  });
+
+  const proofFields = (rendered.verification.fields ?? []) as unknown as Array<
+    Record<string, unknown>
+  >;
+
+  const mappingByFieldId = new Map(mappings.map((m) => [m.fieldId, m]));
+  const row = {
+    id: NOTE_TEMPLATE_ID,
+    doctorId: ACTOR.userId,
+    encounterType: 'consult',
+    version: 1,
+    name: 'Synthetic consult form',
+    status: 'draft',
+    templateTwinCompiledVersion: {
+      id: COMPILED_VERSION_ID,
+      compilerVersion: ir.compilerVersion,
+      compiledAt: new Date(CHECKED_AT),
+      compiledDocumentIr: ir,
+      certificationStatus: 'NEEDS_CONFIRMATION',
+      blockingUnsupportedCount: 0,
+      latestSyntheticTestManifest: manifest,
+      latestTestMappingsSha256: mappingsSha256,
+      latestTestOutputObjectKey: outputObjectKey,
+      latestTestOutputSha256: rendered.outputSha256,
+      latestTestStaticContentSha256: ir.staticContentSha256,
+      latestTestRoundTrip: rendered.verification,
+      latestTestVerifiedAt: new Date(CHECKED_AT),
+      certification: null,
+      sourceArtifact: {
+        practiceId: ACTOR.practiceId,
+        lineageId: 'lineage-165',
+        sha256: ir.source.sha256,
+        sizeBytes: ir.source.sizeBytes,
+        mimeType: ir.source.mimeType,
+      },
+      fields: ir.fields.map((field, index) => ({
+        id: `field-def-${index}`,
+        fieldId: field.fieldId,
+        detectionStatus: 'CERTIFIED',
+        mapping: { id: `mapping-${index}`, ...toMappingRow(mappingByFieldId.get(field.fieldId)!) },
+      })),
+    },
+  };
+
+  return {
+    ir,
+    mappings,
+    resolutions,
+    mappingsSha256,
+    proofFields,
+    row,
+    bindingOf: (fieldId) =>
+      ir.fields.find((f) => f.fieldId === fieldId)?.rendererBinding.bindingType,
+    kindOf: (fieldId) => ir.fields.find((f) => f.fieldId === fieldId)?.kind,
+  };
+}
+
+/** The persisted column shape `fromPersistedMapping` reads back. */
+function toMappingRow(mapping: SemanticMapping): Record<string, unknown> {
+  return {
+    sourceType: mapping.sourceType,
+    clinicalConcept: mapping.clinicalConcept,
+    expectedDataType: mapping.expectedDataType,
+    polarityBehavior: mapping.polarityBehavior,
+    temporality: mapping.temporality,
+    laterality: mapping.laterality,
+    unitPolicy: mapping.unitPolicy,
+    approvedSynonyms: mapping.approvedSynonyms,
+    required: mapping.required,
+    blankPolicy: mapping.blankPolicy,
+    unknownPolicy: mapping.unknownPolicy,
+    practiceDefault: mapping.practiceDefault,
+    mappingStatus: 'CERTIFIED',
+  };
+}
+
+/** Deep-clones the row so an arm's edit cannot leak into the next arm. */
+function cloneRow(row: Record<string, unknown>): Record<string, unknown> {
+  return structuredClone(row);
+}
+
+let fixture: Fixture;
+
+beforeEach(async () => {
+  fixture = await buildCertifiableConsultForm();
+  dbState.row = cloneRow(fixture.row);
+});
+
+// ── ARM 1 — NON-VACUITY, AND IT RUNS FIRST BY DESIGN ────────────────────────
+describe('#165 product — the fixture has NO `blank` proof, so `emptied` is load-bearing', () => {
+  it('the rendered proof carries zero `blank` entries and at least one `emptied`', () => {
+    const kinds = fixture.proofFields.map((p) => p.kind);
+    // ⚠️ IF A GENUINE `blank` EVER APPEARS HERE, EVERY OTHER ARM IN THIS FILE
+    // BECOMES VACUOUS: the certification would pass under #164's reverted
+    // `kind === 'blank'` predicate too, and the mutation proof would go green
+    // while the product regression it exists to catch shipped. That failure is
+    // silent, so this assertion is loud and it is first.
+    expect(kinds.filter((k) => k === 'blank')).toEqual([]);
+    expect(kinds.filter((k) => k === 'emptied').length).toBeGreaterThanOrEqual(1);
+    // and the whole field set is accounted for — no proof went missing.
+    expect(fixture.proofFields.length).toBe(fixture.ir.fields.length);
+  });
+
+  it('the synthetic encounter fills enough fields to clear the fill-coverage floor', () => {
+    const filled = fixture.resolutions.filter((r) => r.value !== null);
+    expect(filled.length).toBeGreaterThanOrEqual(MIN_CERTIFIED_FILLED_FIELDS);
+    // and it genuinely leaves something unmentioned, or there is nothing to clear.
+    expect(fixture.resolutions.filter((r) => r.value === null).length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ── ARM 2 — THE PRODUCT PASSES ──────────────────────────────────────────────
+describe('#165 product — a consult form certifies on `emptied` proofs alone', () => {
+  it('certifyAndActivateTemplateTwin resolves', async () => {
+    const { certifyAndActivateTemplateTwin } = await import('../certification-lifecycle');
+    // ⚠️ NO try/catch AND NO `.rejects`. A thrown TemplateTwinLifecycleError
+    // carries `blockers`, and vitest prints it — which is what makes a failure
+    // here diagnosable rather than merely red.
+    const workspace = await certifyAndActivateTemplateTwin({
+      noteTemplateId: NOTE_TEMPLATE_ID,
+      actor: ACTOR,
+      expectedMappingsSha256: fixture.mappingsSha256,
+    });
+    expect(workspace.template.id).toBe(NOTE_TEMPLATE_ID);
+    expect(workspace.fields.length).toBe(fixture.ir.fields.length);
+  });
+});
+
+// ── ARM 3 — THE PRODUCT BLOCKS WHEN THE BLANK EVIDENCE IS TAKEN AWAY ────────
+describe('#165 product — remove the `emptied` evidence and certification refuses', () => {
+  it('blocks with blankVerification=false', async () => {
+    const { certifyAndActivateTemplateTwin } = await import('../certification-lifecycle');
+    const row = cloneRow(fixture.row) as never as {
+      templateTwinCompiledVersion: { latestTestRoundTrip: { fields: Array<Record<string, unknown>> } };
+    };
+    // ⚠️ RELABELLED, NOT DELETED — AND THE REASON IS MEASURED, NOT STYLISTIC.
+    // Deleting the two entries outright makes the proof carry 11 fields for a
+    // 13-field IR, so `isVerifiedSyntheticProof` fails on its per-field lookup (NOT its arity check — removing that reds nothing; the `.every()` lookup is what catches it)
+    // and the run stops at `testReady=false` — a DIFFERENT gate, reached before
+    // the blank census runs (the blank blocker is guarded by `testReady`). The
+    // sibling arm below measures exactly that. To isolate ONE variable, the
+    // entries stay structurally intact and lose only the property under test:
+    // they stop being blank evidence.
+    const proof = row.templateTwinCompiledVersion.latestTestRoundTrip;
+    const relabelled = proof.fields.filter((f) => f.kind === 'emptied').length;
+    expect(relabelled).toBeGreaterThanOrEqual(1);
+    proof.fields = proof.fields.map((f) => (f.kind === 'emptied' ? { ...f, kind: 'filled' } : f));
+    dbState.row = row;
+
+    const error = await certifyAndActivateTemplateTwin({
+      noteTemplateId: NOTE_TEMPLATE_ID,
+      actor: ACTOR,
+      expectedMappingsSha256: fixture.mappingsSha256,
+    }).then(
+      () => null,
+      (caught: unknown) => caught as { code?: string; blockers?: readonly string[] },
+    );
+
+    expect(error, 'certification passed with no blank evidence at all').not.toBeNull();
+    expect(error!.code).toBe('CERTIFICATION_BLOCKED');
+    // ⚠️ THE BLOCKER IS MATCHED BY NAME. "It threw" is satisfied by any of the
+    // gate's fifteen other refusals, several of which this edit could plausibly
+    // trip — so asserting the throw alone would not distinguish the blank
+    // invariant from a fixture that simply broke.
+    expect(error!.blockers?.join(' | ')).toMatch(/blankVerification=false/);
+  });
+
+  it('deleting the entries instead stops one gate EARLIER — testReady, not blankVerification', async () => {
+    // Recorded because it is the arm somebody will reach for first, and it
+    // would look like a passing blank check while measuring arity.
+    const { certifyAndActivateTemplateTwin } = await import('../certification-lifecycle');
+    const row = cloneRow(fixture.row) as never as {
+      templateTwinCompiledVersion: { latestTestRoundTrip: { fields: Array<Record<string, unknown>> } };
+    };
+    const proof = row.templateTwinCompiledVersion.latestTestRoundTrip;
+    proof.fields = proof.fields.filter((f) => f.kind !== 'emptied');
+    dbState.row = row;
+
+    const error = await certifyAndActivateTemplateTwin({
+      noteTemplateId: NOTE_TEMPLATE_ID,
+      actor: ACTOR,
+      expectedMappingsSha256: fixture.mappingsSha256,
+    }).then(
+      () => null,
+      (caught: unknown) => caught as { code?: string; blockers?: readonly string[] },
+    );
+
+    expect(error).not.toBeNull();
+    expect(error!.blockers?.join(' | ')).toMatch(/testReady=false.*proofReady/);
+  });
+});
+
+// ── ARM 4 — THE ARITHMETIC, ON THE REAL PROOF ───────────────────────────────
+describe('#165 product — the census the gate runs, driven directly on the same proof', () => {
+  it('blank-only counts 0; blank ∪ emptied counts at least 2', () => {
+    const blankOnly = fixture.proofFields.filter((p) => p.kind === 'blank').length;
+    // ⚠️ THE NULL PREDICATE COMES FROM THE FIXTURE'S OWN RESOLUTIONS, not a
+    // stub — the gate builds it from the synthetic manifest, so a stub here
+    // would measure something the product never runs.
+    const resolvedNull = (id: string) =>
+      fixture.resolutions.find((r) => r.fieldId === id)?.value === null;
+    const union = fixture.proofFields.filter((p) =>
+      // ⚠️ THE REAL KIND, FROM THE FIXTURE'S OWN IR. A `() => undefined` stub
+      // here contradicted this arm's own comment three lines above — and now
+      // that `kindOf` fails CLOSED it would make the census measure nothing.
+      countsAsBlankProof(p as never, {
+        bindingOf: fixture.bindingOf,
+        resolvedNull,
+        kindOf: fixture.kindOf,
+      }),
+    ).length;
+
+    // #164's reverted predicate scores this. Zero is why the PASS arm above is
+    // a real measurement of the shipped census and not of the fixture.
+    expect(blankOnly).toBe(0);
+    // #165's shipped predicate scores this, on the same entries.
+    expect(union).toBeGreaterThanOrEqual(2);
+    // and the difference is entirely `emptied`, which is the counting rule.
+    expect(union - blankOnly).toBe(
+      fixture.proofFields.filter((p) => p.kind === 'emptied').length,
+    );
+  });
+});
+
+// ============================================================================
+// THE PERSISTENCE BOUNDARY — a stored label is not a proof.
+// ----------------------------------------------------------------------------
+// ⚠️ FOUND BY THE ADVERSARIAL PASS, ON #165's OWN CHANGE, AND MEASURED.
+// `isVerifiedSyntheticProof` is the gate that decides whether a stored proof is
+// trustworthy. It compares exactly five per-field properties — `status`,
+// `partName`, `bindingPath`, `valueSha256`, `occurrences` — and reads `kind`
+// and `expectedSpanSha256` ZERO times. So the two fields that decide whether a
+// clearing actually happened were the two nobody re-checked at the point of
+// use, and a forged `emptied` with no expectation certified.
+//
+// That is #165's own label-versus-write defect one boundary down: the renderer
+// now EARNS the label, and the read path was trusting it anyway.
+// ============================================================================
+describe('#165 product — an `emptied` label with no expectation is refused', () => {
+  it('stripping `expectedSpanSha256` blocks with blankVerification=false', async () => {
+    const { certifyAndActivateTemplateTwin } = await import('../certification-lifecycle');
+    const row = cloneRow(fixture.row) as never as {
+      templateTwinCompiledVersion: { latestTestRoundTrip: { fields: Array<Record<string, unknown>> } };
+    };
+    const proof = row.templateTwinCompiledVersion.latestTestRoundTrip;
+
+    // ⚠️ STRUCTURALLY INTACT, ONE PROPERTY REMOVED — the same isolation the
+    // relabelling arm above uses. The entries keep `kind: 'emptied'` and their
+    // arity, so `isVerifiedSyntheticProof` still passes and the run reaches the
+    // blank census. ONLY the expectation is gone.
+    const forged = proof.fields.filter((f) => f.kind === 'emptied').length;
+    expect(forged, 'fixture produced no emptied proof — this arm would be vacuous')
+      .toBeGreaterThanOrEqual(1);
+    proof.fields = proof.fields.map((f) => {
+      if (f.kind !== 'emptied') return f;
+      const { expectedSpanSha256: _dropped, ...rest } = f;
+      return rest;
+    });
+    // NON-VACUITY: the property really is gone from every emptied entry.
+    expect(
+      proof.fields.filter((f) => f.kind === 'emptied' && 'expectedSpanSha256' in f).length,
+    ).toBe(0);
+    dbState.row = row;
+
+    const error = await certifyAndActivateTemplateTwin({
+      noteTemplateId: NOTE_TEMPLATE_ID,
+      actor: ACTOR,
+      expectedMappingsSha256: fixture.mappingsSha256,
+    }).then(
+      () => null,
+      (caught: unknown) => caught as { code?: string; blockers?: readonly string[] },
+    );
+
+    expect(error, 'a forged `emptied` with no expectation still certified').not.toBeNull();
+    expect(error!.code).toBe('CERTIFICATION_BLOCKED');
+    expect(error!.blockers?.join(' | ')).toMatch(/blankVerification=false/);
+  });
+
+  it('a malformed expectation is refused too — well-formed means 64 hex', async () => {
+    const { countsAsBlankProof } = await import('../blank-proof-count');
+    const bindingOf = () => 'content_control';
+    const wasNull = () => true;
+    const base = { kind: 'emptied', fieldId: 'f1', blankEligible: 'eligible' as const };
+    const good = 'a'.repeat(64);
+    expect(countsAsBlankProof({ ...base, expectedSpanSha256: good }, { bindingOf, resolvedNull: wasNull, kindOf: () => 'narrative_text' })).toBe(true);
+    for (const bad of ['', 'A'.repeat(64), 'a'.repeat(63), 'a'.repeat(65), 'z'.repeat(64), 123]) {
+      expect(
+        countsAsBlankProof({ ...base, expectedSpanSha256: bad as never }, { bindingOf, resolvedNull: wasNull, kindOf: () => 'narrative_text' }),
+        `accepted a malformed expectation: ${String(bad).slice(0, 12)}`,
+      ).toBe(false);
+    }
+    // `blank` needs no expectation — it is unpatched and proven by
+    // source-byte-identity.
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f2', blankEligible: 'eligible' as const }, { bindingOf, resolvedNull: wasNull, kindOf: () => 'narrative_text' })).toBe(true);
+
+    // ⚠️ BUT NEITHER LABEL SURVIVES A FIELD THE MANIFEST SAYS WAS FILLED — and
+    // `blank` is the one that had NO read-path check at all before this. The
+    // pass certified a template by relabelling a field whose rendered value was
+    // "Bilateral leg heaviness" to `blank`.
+    const wasFilled = () => false;
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f3', blankEligible: 'eligible' as const }, { bindingOf, resolvedNull: wasFilled, kindOf: () => 'narrative_text' })).toBe(false);
+    expect(
+      countsAsBlankProof({ ...base, expectedSpanSha256: good }, { bindingOf, resolvedNull: wasFilled, kindOf: () => 'narrative_text' }),
+    ).toBe(false);
+    // and a well-formed but MEANINGLESS hash on a filled field is refused too —
+    // shape was all the expectation check could ever judge.
+    expect(
+      countsAsBlankProof(
+        { kind: 'emptied', fieldId: 'f4', expectedSpanSha256: 'deadbeef'.repeat(8), blankEligible: 'eligible' as const },
+        { bindingOf, resolvedNull: wasFilled, kindOf: () => 'narrative_text' },
+      ),
+    ).toBe(false);
+  });
+});
+
+// ============================================================================
+// #167 GATE ARMS — the two the pass showed were unpinned.
+// ============================================================================
+describe('#167 — the blank census guards', () => {
+  it('a LEGACY `emptied` proof does NOT count — the negative arm for the proven set', async () => {
+    // ⚠️ THIS ARM WENT MISSING WHEN #164's GATE FILE WAS DELETED, and nothing
+    // carried it forward — so widening `PROVEN_EMPTIABLE_BINDINGS` to include
+    // `legacy_form_field` redded NOTHING across 703 tests. A lens then showed
+    // the widened set certifies a spanning-FORMTEXT field whose drug name still
+    // prints. The set is the SOLE guard for that case; this is its tripwire.
+    //
+    // ⚠️ AND IT WATCHES THE SET, NOT THE RENDERER'S LABEL. The backlog nominated
+    // `gate-165-bounded-clearing`'s "a LEGACY form field is never emptied" arm
+    // as the tripwire, but that watches what the RENDERER emits, which widening
+    // the set does not change — it stayed green through the mutation.
+    const { countsAsBlankProof, PROVEN_EMPTIABLE_BINDINGS } = await import('../blank-proof-count');
+    const wasNull = () => true;
+    const emptied = { kind: 'emptied', fieldId: 'f1', expectedSpanSha256: 'a'.repeat(64), blankEligible: 'eligible' as const };
+
+    expect(countsAsBlankProof(emptied, { bindingOf: () => 'content_control', resolvedNull: wasNull, kindOf: () => 'narrative_text' })).toBe(true);
+    for (const binding of ['legacy_form_field', 'table_cell', 'repeating_row']) {
+      expect(
+        countsAsBlankProof(emptied, { bindingOf: () => binding, resolvedNull: wasNull, kindOf: () => 'narrative_text' }),
+        `${binding} bought a blank proof`,
+      ).toBe(false);
+    }
+    // NON-VACUITY: the set is not empty, so the loop above tests EXCLUSION
+    // rather than a vacuous no-op.
+    //
+    // ⚠️ ASSERTED AS A PROPERTY, NOT A SPELLING (canon 72). Pinning the set to
+    // exactly `['content_control']` would red the day `table_cell` is legitimately
+    // added — which both `blank-proof-count.ts` and the renderer explicitly
+    // anticipate — so the gate would fail because somebody IMPROVED the code.
+    // What must hold is that the set is non-empty and that legacy stays out.
+    expect(PROVEN_EMPTIABLE_BINDINGS.size).toBeGreaterThan(0);
+    expect(PROVEN_EMPTIABLE_BINDINGS.has('content_control')).toBe(true);
+    expect(PROVEN_EMPTIABLE_BINDINGS.has('legacy_form_field')).toBe(false);
+  });
+
+  it('⚠️ resolvedNull is pinned THROUGH certifyAndActivateTemplateTwin, not through its helper', async () => {
+    // ⚠️ THE FIX FOR ROUND ONE'S FORGERY WAS ITSELF UNPINNED. Mutating
+    // `certification-lifecycle.ts`'s `resolvedNull` to `() => true` redded
+    // nothing, and the original forgery replayed — relabel one genuinely-FILLED
+    // proof entry to `blank` and the template certifies.
+    //
+    // This is the file header's own stated failure mode recurring inside the
+    // fix that header shipped: a rule reachable only through its own helper is
+    // a rule whose arms prove the HELPER. So this arm goes through the gate.
+    const { certifyAndActivateTemplateTwin } = await import('../certification-lifecycle');
+    const row = cloneRow(fixture.row) as never as {
+      templateTwinCompiledVersion: { latestTestRoundTrip: { fields: Array<Record<string, unknown>> } };
+    };
+    const proof = row.templateTwinCompiledVersion.latestTestRoundTrip;
+
+    // Relabel a FILLED entry — a field the manifest shows carrying a value — to
+    // `blank`. Only the label moves; arity and every other property stay intact,
+    // so `isVerifiedSyntheticProof` still passes and the run reaches the census.
+    // ⚠️ `kind === 'filled'` IS A LABEL CLASS — it matches TWELVE entries here,
+    // five of them selections. A bare `find` takes the first, and taking a
+    // DIFFERENT member of the same class makes this arm pass with the manifest
+    // cross-check fully neutralised, because the refusal then comes from the
+    // selection-kind rule instead. That is the laundering `theOnlyMatch` exists
+    // to prevent, and it was still live in the very arm re-armed for it.
+    const nonSelectionFilled = proof.fields.filter(
+      (f) =>
+        f.kind === 'filled' &&
+        !['single_select', 'multi_select'].includes(
+          String(fixture.kindOf(f.fieldId as string)),
+        ) &&
+        fixture.resolutions.find((r) => r.fieldId === f.fieldId)?.value !== null,
+    );
+    expect(
+      nonSelectionFilled.length,
+      'fixture has no non-selection filled proof — this arm would be vacuous',
+    ).toBeGreaterThan(0);
+    const targetId = nonSelectionFilled[0]!.fieldId as string;
+    expect(fixture.resolutions.find((r) => r.fieldId === targetId)?.value).not.toBeNull();
+
+    // ⚠️ THE GENUINE BLANK EVIDENCE IS REMOVED FIRST, OR THE ARM IS NOT
+    // DECISIVE. With the fixture's real `emptied` proofs still counting, the
+    // census is non-zero whatever the forged entry does, and the arm would pass
+    // for a reason that has nothing to do with `resolvedNull`.
+    // ⚠️ THE FORGERY IS MADE MAXIMALLY CAPABLE — THE CLASS RULE, NOT A PATCH.
+    //
+    // A forged entry must satisfy EVERY guard except the one under test, or the
+    // arm measures a neighbour. `blankEligible` is required because the source
+    // entry is `filled`, and a `filled` proof carries no eligibility at all —
+    // so without it #170's read path refuses this entry as an ABSENT sentinel
+    // BEFORE `resolvedNull` is ever consulted.
+    //
+    // ⚠️ MEASURED: this arm was armed before #170 and silently disarmed by it.
+    // Neutralising `resolvedNull` redded 0 of 757 while the arm named for
+    // pinning it sat green. That is the third instance of this laundering in
+    // one arc — the first two were fixed one at a time, which is why the rule
+    // is now written here as a rule rather than applied as a repair.
+    proof.fields = proof.fields.map((f) => {
+      if (f.fieldId === targetId) {
+        return { ...f, kind: 'blank', blankEligible: 'eligible' };
+      }
+      return f.kind === 'emptied' ? { ...f, kind: 'filled' } : f;
+    });
+    expect(proof.fields.filter((f) => f.kind === 'emptied').length).toBe(0);
+    expect(proof.fields.filter((f) => f.kind === 'blank').length).toBe(1);
+    dbState.row = row;
+
+    const error = await certifyAndActivateTemplateTwin({
+      noteTemplateId: NOTE_TEMPLATE_ID,
+      actor: ACTOR,
+      expectedMappingsSha256: fixture.mappingsSha256,
+    }).then(
+      () => null,
+      (caught: unknown) => caught as { code?: string; blockers?: readonly string[] },
+    );
+
+    expect(error, 'a `blank` label on a FILLED field was accepted').not.toBeNull();
+    expect(error!.blockers?.join(' | ')).toMatch(/blankVerification=false/);
+  });
+});
+
+describe('#168(b) — the kind exclusion binds the `blank` label too', () => {
+  it('a SELECTION cannot buy blank credit through the `blank` path either', async () => {
+    // ⚠️ #168(b) EXCLUDED SELECTIONS IN THE RENDERER, WHICH ONLY REACHES
+    // `emptied`. `blank` returned true here with no kind check at all — so a
+    // selection control that needed NO patch (its content already skeleton, or
+    // a legacy dropdown) earned `blank` and COUNTED, while its rendered PDF
+    // printed list entry 0. Same harm, the proof path the ruling did not touch.
+    const { countsAsBlankProof } = await import('../blank-proof-count');
+    const ctx = (kind: string) => ({
+      bindingOf: () => 'content_control',
+      resolvedNull: () => true,
+      kindOf: () => kind,
+    });
+    // The label that has no expectation and no binding gate is exactly the one
+    // that must still refuse a selection.
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f1', blankEligible: 'eligible' as const }, ctx('single_select'))).toBe(false);
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f1', blankEligible: 'eligible' as const }, ctx('multi_select'))).toBe(false);
+    // NON-VACUITY: a narrative `blank` still counts, so the arm tests the KIND
+    // and not the label.
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f1', blankEligible: 'eligible' as const }, ctx('narrative_text'))).toBe(true);
+    // and the same exclusion still binds `emptied`.
+    const emptied = { kind: 'emptied', fieldId: 'f1', expectedSpanSha256: 'a'.repeat(64), blankEligible: 'eligible' as const };
+    expect(countsAsBlankProof(emptied, ctx('single_select'))).toBe(false);
+    expect(countsAsBlankProof(emptied, ctx('narrative_text'))).toBe(true);
+
+    // ⚠️ AN UNRESOLVABLE KIND REFUSES, ON BOTH LABELS — and this arm exists
+    // because the fix that made it fail closed had NONE. Reverting the
+    // condition to `kind !== undefined && …` (the fail-OPEN form) redded 0 of
+    // 69 arms: every other arm supplies a real kind, so the `undefined` branch
+    // was never exercised. `bindingOf` two lines below is an allowlist that
+    // already fails closed; this makes the two agree.
+    const unknown = {
+      bindingOf: () => 'content_control',
+      resolvedNull: () => true,
+      kindOf: () => undefined,
+    };
+    expect(countsAsBlankProof({ kind: 'blank', fieldId: 'f1', blankEligible: 'eligible' as const }, unknown)).toBe(false);
+    expect(countsAsBlankProof(emptied, unknown)).toBe(false);
+  });
+});
+
+describe('#170 — the THREE-STATE sentinel: absence means NO', () => {
+  it('⚠️ an ABSENT blankEligible does NOT count, and neither does `unevaluated`', async () => {
+    // ⚠️ THIS IS THE ARM FOR THE DEFECT #170 EXISTS TO FIX, AND IT WAS MISSING
+    // FROM THE FIRST IMPLEMENTATION — the mutation matrix caught that: reverting
+    // the read path to `blankEligible === 'ineligible'` (i.e. absence means yes
+    // again) redded NOTHING.
+    //
+    // The old encoding was a boolean whose `true` was ABSENCE. That made a
+    // binding which never computed the verdict indistinguishable from one that
+    // computed it and approved — and on the only real customer template, the
+    // two bindings in that state supplied 100% of the counted blank credit.
+    // A sentinel that cannot tell NO from DON'T-KNOW must resolve to DON'T-COUNT.
+    const { countsAsBlankProof } = await import('../blank-proof-count');
+    const ctx = {
+      bindingOf: () => 'content_control',
+      resolvedNull: () => true,
+      kindOf: () => 'narrative_text',
+    };
+    // ABSENT — the shape every pre-#170 proof has, and the shape an unguarded
+    // binding produced.
+    expect(
+      countsAsBlankProof({ kind: 'blank', fieldId: 'f1' } as never, ctx as never),
+      'an absent eligibility bought blank credit',
+    ).toBe(false);
+    // EXPLICIT `unevaluated` — a path that reached the emitter without a verdict.
+    expect(
+      countsAsBlankProof(
+        { kind: 'blank', fieldId: 'f1', blankEligible: 'unevaluated' } as never,
+        ctx as never,
+      ),
+      '`unevaluated` bought blank credit',
+    ).toBe(false);
+    // and `ineligible` still refuses, on both labels.
+    expect(
+      countsAsBlankProof(
+        { kind: 'blank', fieldId: 'f1', blankEligible: 'ineligible' } as never,
+        ctx as never,
+      ),
+    ).toBe(false);
+    // ⚠️ NON-VACUITY: `eligible` must still COUNT, or this arm would pass with
+    // the census refusing everything — which is the other way to be wrong.
+    expect(
+      countsAsBlankProof(
+        { kind: 'blank', fieldId: 'f1', blankEligible: 'eligible' } as never,
+        ctx as never,
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('#168(b) — the kind check is pinned THROUGH the gate, not through its helper', () => {
+  it('a forged `emptied` on a SELECTION is refused by certifyAndActivateTemplateTwin', async () => {
+    // ⚠️ THE FIX HAD NO PRODUCTION ARM. Gutting `kindByFieldId` in
+    // `certification-lifecycle.ts` redded 0 of 5623 — the only arm exercising
+    // the rule called `countsAsBlankProof` with a hand-built context, never
+    // through the gate. That is the failure mode this file's own header records
+    // for #164, reproduced in the commit that cites it, and the sibling arm two
+    // describes up is titled "pinned THROUGH certifyAndActivateTemplateTwin"
+    // precisely to stop it.
+    //
+    // `blankEligible` is a RENDER decision the stored proof cannot express for
+    // the kind, so the read path re-derives it from the compiled IR. This arm is
+    // what proves that re-derivation is wired.
+    const { certifyAndActivateTemplateTwin } = await import('../certification-lifecycle');
+    const row = cloneRow(fixture.row) as never as {
+      templateTwinCompiledVersion: { latestTestRoundTrip: { fields: Array<Record<string, unknown>> } };
+    };
+    const proof = row.templateTwinCompiledVersion.latestTestRoundTrip;
+
+    // ⚠️ SCOPED TO THE SELECTION THE FIXTURE ACTUALLY NULLS — and the old
+    // `find(f => f.kind === 'single_select')` is exactly why this arm proved
+    // nothing. The fixture holds FIVE selections; four resolve to real values
+    // and only one is nulled. The unscoped `find` returned the first, so the
+    // forged `emptied` landed on a field the manifest says was FILLED and was
+    // refused by the #167 `resolvedNull` cross-check — NEVER by the kind check
+    // this arm exists to prove. Measured: neutralising the kind rule entirely
+    // redded 0 of 652.
+    //
+    // ⚠️ AND THE NON-VACUITY GUARD BELOW PASSED HAPPILY ON THE WRONG ELEMENT,
+    // which is the part worth remembering: a guard aimed at "is there a
+    // selection at all?" cannot notice that it picked the wrong selection.
+    // `theOnlyMatch` refuses ambiguity instead of silently taking the first.
+    const selectionId = theOnlyMatch(
+      fixture.ir.fields,
+      (f) =>
+        f.kind === 'single_select' &&
+        nulledFieldIds(fixture).has(f.fieldId),
+      'single_select field that the fixture resolves to null',
+    ).fieldId;
+
+    // Strip the genuine blank evidence so the forged entry is the ONLY thing
+    // that could satisfy the census — otherwise the arm passes for a reason
+    // unrelated to the kind check.
+    proof.fields = proof.fields.map((f) => {
+      if (f.fieldId === selectionId) {
+        // ⚠️ THE FORGERY IS MADE MAXIMALLY CAPABLE ON PURPOSE, and the first
+        // version of this arm was not. Without `blankEligible: 'eligible'` the
+        // entry is refused by the THREE-STATE SENTINEL — a `filled` proof
+        // carries no eligibility — so the kind rule is never reached and
+        // neutralising it reds nothing. Every guard except the one under test
+        // must be satisfied, or the arm is measuring a neighbour.
+        return {
+          ...f,
+          kind: 'emptied',
+          expectedSpanSha256: 'c'.repeat(64),
+          blankEligible: 'eligible',
+        };
+      }
+      return f.kind === 'emptied' || f.kind === 'blank' ? { ...f, kind: 'filled' } : f;
+    });
+    expect(proof.fields.filter((f) => f.kind === 'emptied').length).toBe(1);
+    dbState.row = row;
+
+    const error = await certifyAndActivateTemplateTwin({
+      noteTemplateId: NOTE_TEMPLATE_ID,
+      actor: ACTOR,
+      expectedMappingsSha256: fixture.mappingsSha256,
+    }).then(
+      () => null,
+      (caught: unknown) => caught as { code?: string; blockers?: readonly string[] },
+    );
+
+    expect(error, 'a forged `emptied` on a selection was accepted').not.toBeNull();
+    expect(error!.blockers?.join(' | ')).toMatch(/blankVerification=false/);
+  });
+});

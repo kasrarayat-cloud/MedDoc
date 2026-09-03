@@ -94,6 +94,7 @@ async function loadNativeTemplates(doctorId: string): Promise<NativeTemplateList
       templateTwinCompiledVersion: {
         select: {
           certificationStatus: true,
+          blockingUnsupportedCount: true,
           compiledAt: true,
           fields: { select: { id: true } },
         },
@@ -108,6 +109,12 @@ async function loadNativeTemplates(doctorId: string): Promise<NativeTemplateList
     version: number;
     templateTwinCompiledVersion: {
       certificationStatus: string;
+      // ⚠️ ADDING A COLUMN TO THE `select` ABOVE DOES NOT REACH THE MAPPING —
+      // `rows as Row[]` casts the inferred shape away, so this hand-written
+      // type is a SECOND description of the same query and the two can drift
+      // silently. `tsc` caught it here only because the new field was READ;
+      // a column added and unread would have gone unnoticed.
+      blockingUnsupportedCount: number;
       compiledAt: Date | null;
       fields: { id: string }[];
     } | null;
@@ -138,8 +145,33 @@ async function loadNativeTemplates(doctorId: string): Promise<NativeTemplateList
       t.templateTwinCompiledVersion?.certificationStatus ?? 'NEEDS_CONFIRMATION'
     ).toLowerCase(),
     fieldCount: t.templateTwinCompiledVersion?.fields.length ?? 0,
+    // ⚠️ #175 FINAL PASS — "PREPARING" MUST MATCH THE PREDICATE THAT DECIDES
+    // WHETHER ANYTHING IS ACTUALLY BEING PREPARED.
+    //
+    // Auto-certify is enqueued ONLY when there are no blocking findings; with
+    // any, it logs SKIPPED and nothing further happens. This computation did
+    // not consult that count, and `preparing` REPLACES the status pill — so a
+    // template the system had already decided never to certify showed
+    // "Preparing your format…" for ten minutes, suppressing the one signal that
+    // leads to the findings list.
+    //
+    // ⚠️ IT IS THE MIRROR OF THE DEFECT THE COMMENT ABOVE THIS BLOCK NAMES —
+    // there, "Needs review" was false because the system WAS working; here
+    // "Preparing" is false because it never will be, and the wrong direction is
+    // the worse one: it tells the doctor to wait instead of to act.
+    //
+    // ⚠️ THE `?? 1` BELOW IS FAIL-CLOSED AND DELIBERATE: an unknown count must
+    // not read as "nothing is blocking", which is the direction that hides a
+    // refusal.
+    //
+    // ⚠️ AND THE PROSE STAYS ABOVE THE KEY. `gate-preparing-is-bounded` asserts
+    // `PREPARING_WINDOW_MS` appears within 300 characters of `preparing:`, so a
+    // comment INSIDE the derivation reds a gate for a change that alters no
+    // behaviour — canon 72, third sighting this session. The derivation stays
+    // compact; the explanation lives here.
     preparing:
       (t.templateTwinCompiledVersion?.certificationStatus ?? '') !== 'CERTIFIED' &&
+      (t.templateTwinCompiledVersion?.blockingUnsupportedCount ?? 1) === 0 &&
       t.templateTwinCompiledVersion?.compiledAt != null &&
       now - new Date(t.templateTwinCompiledVersion.compiledAt).getTime() < PREPARING_WINDOW_MS,
   }));

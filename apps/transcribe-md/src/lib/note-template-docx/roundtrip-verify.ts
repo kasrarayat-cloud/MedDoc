@@ -372,6 +372,27 @@ export type RenderedFieldProof =
     }
   | {
       readonly kind: 'blank';
+      /**
+       * `false` when this UNPATCHED field may not claim blankness anyway —
+       * today, because its paragraph carries live numbering that will print a
+       * marker beside an otherwise empty field.
+       *
+       * ⚠️ IT IS STORED BECAUSE IT CANNOT BE RE-DERIVED. Canon 92 says prefer
+       * re-deriving a write-time decision at the point of use, and for the
+       * field's KIND that works — the compiled IR carries it. Numbering is not
+       * in the IR at all: it lives in the source document's `w:pPr` and
+       * `styles.xml`, neither of which the certification path reads. So the
+       * decision travels with the proof, and the honest limit is that a forger
+       * editing the stored proof could flip it — the already-filed
+       * proof-integrity-at-rest item, not a new hole.
+       *
+       */
+      /**
+       * #170 — THREE-STATE. `unevaluated` means no guard ran for this binding,
+       * and it does NOT count: absence means no. Optional on the wire only so
+       * that older stored proofs parse; they read as absent and are refused.
+       */
+      readonly blankEligible?: 'eligible' | 'ineligible' | 'unevaluated';
       readonly fieldId: string;
       readonly partName: string;
       readonly bindingPath: string;
@@ -379,6 +400,61 @@ export type RenderedFieldProof =
       readonly valueSha256: string;
       /** One verified binding site. The gate requires > 0 and is untouched. */
       readonly occurrences: number;
+    }
+  // ⚠️ #165 — `emptied` IS A CLAIM THE WRITER EARNS AND THE VERIFIER CHECKS.
+  //
+  // ⚠️ THE PARAGRAPH THAT STOOD HERE SAID THE OPPOSITE, AND IT WAS WRONG IN THE
+  // SAME COMMIT THAT ADDED THE FIELD BELOW. It read: "`emptied` IS A
+  // CLASSIFICATION, NOT A NEW VERIFICATION … No extra emptiness check, no locus
+  // table, no allowlist … Anything a `filled` proof cannot detect, an `emptied`
+  // proof cannot detect either, BY CONSTRUCTION." All three clauses are now
+  // false — there IS an extra emptied-only byte comparison further down this
+  // file, `PROVEN_EMPTIABLE_BINDINGS` IS an allowlist, and an `emptied` proof
+  // detects precisely what a `filled` one cannot. The adversarial pass found it
+  // sitting directly above the field the same commit introduced.
+  //
+  // That is worth leaving on the record rather than quietly overwriting: a
+  // comment does not fail a build, so stale prose survives exactly as long as
+  // nobody re-reads it, and the reader most likely to trust it is the next
+  // person changing this union.
+  //
+  // WHAT IS TRUE NOW. An `emptied` proof is BOTH:
+  //   · patched like a fill — it joins `filledFieldIds`, so the patched set and
+  //     the proof set must be exactly equal, and the part's rendered bytes must
+  //     equal `applyApprovedXmlPatches(source, patches)`; AND
+  //   · checked by one additional comparison — the output span at this binding
+  //     must be byte-identical to `expectedSpanSha256`, the span as the writer
+  //     recorded it would be left.
+  //
+  // The second is what a `filled` proof does not have, and it is only
+  // meaningful because the WRITER is bounded: `sdtBoundedClearPatches` replaces
+  // the control's whole subtree, so "what the writer meant to leave" cannot
+  // itself contain something stale. Byte-equality alone would be writer-blind.
+  | {
+      readonly kind: 'emptied';
+      /**
+       * #170 — CARRIED ON `emptied` AS WELL AS `blank`, AND THE ACCEPTANCE RUN
+       * IS WHY. When three-state landed it was attached only to the zero-patch
+       * `blank` path, so every `emptied` proof read as `unevaluated` and the
+       * owner's form went from 35 counted blanks to ZERO. A sentinel whose
+       * absence means "no" must actually be WRITTEN on every path that earns a
+       * yes; adding the third state without adding the emitter is a silent,
+       * total revocation of credit.
+       */
+      readonly blankEligible?: 'eligible' | 'ineligible' | 'unevaluated';
+      readonly fieldId: string;
+      readonly partName: string;
+      readonly bindingPath: string;
+      readonly valueSha256: string;
+      readonly occurrences: number;
+      /**
+       * sha256 of the binding span as the WRITER intended to leave it.
+       *
+       * ⚠️ THIS FIELD IS THE PROOF. Without it an `emptied` claim is
+       * uncheckable, so the verifier REFUSES a proof that lacks one rather
+       * than waving it through — an uncheckable claim is not a proof.
+       */
+      readonly expectedSpanSha256: string;
     };
 
 export interface RenderedPartProof {
@@ -395,7 +471,7 @@ export interface VerifiedRenderedField {
   /** Which contract this entry attests — a fill, or a proven-blank. Persisted
    *  into the roundtrip proof so the certification gate can require at least
    *  one blank-verified field. */
-  readonly kind: 'filled' | 'blank';
+  readonly kind: 'filled' | 'blank' | 'emptied';
   readonly fieldId: string;
   readonly partName: string;
   readonly bindingPath: string;
@@ -500,13 +576,23 @@ export function verifyRenderedTemplateDocx(
   const proofFieldIds = new Set<string>();
   const filledFieldIds = new Set<string>();
   const blankProofs: RenderedFieldProof[] = [];
+  const emptiedProofs: RenderedFieldProof[] = [];
   for (const field of input.plan.fields) {
     if (proofFieldIds.has(field.fieldId) || field.occurrences < 1) {
       failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
     }
     proofFieldIds.add(field.fieldId);
+    // ⚠️ `emptied` JOINS THE PATCHED SET, NOT THE BLANK SET. It IS patched, so
+    // it must satisfy the filled-proof equality below — the patched field set
+    // and the proof set must be exactly equal. Filing it with the blanks would
+    // exempt it from the one check that actually verifies it.
     if (field.kind === 'blank') blankProofs.push(field);
-    else filledFieldIds.add(field.fieldId);
+    else {
+      // `emptied` IS patched, so it joins the patched-set equality like a fill
+      // AND additionally carries the byte-equality check below.
+      if (field.kind === 'emptied') emptiedProofs.push(field);
+      filledFieldIds.add(field.fieldId);
+    }
   }
   const patchedFieldIds = new Set(
     input.plan.parts.flatMap((part) =>
@@ -556,6 +642,49 @@ export function verifyRenderedTemplateDocx(
       const srcBytes = src.text.slice(srcSpan.start, srcSpan.end);
       const outBytes = out.text.slice(outSpan.start, outSpan.end);
       if (srcBytes !== outBytes) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+    }
+  }
+
+  // ── #165 RULE 2 — ONE COMPARISON, AND IT READS NOTHING ────────────────────
+  //
+  // Every falsified attempt tried to PROVE blankness by READING the output:
+  // "does this control contain a `w:t`", "walk separate→end", "is the region
+  // free of [list of visible elements]". Each died on the next carrier nobody
+  // enumerated. The instrument that was never falsified is comparing bytes we
+  // WROTE — so that is the whole of this check.
+  //
+  // The writer recorded what it meant to leave at this binding. If the output
+  // differs by a single byte, something the writer did not intend is there:
+  // content it failed to clear, a glyph, another field's patch, or tampering.
+  // All refuse identically, and a correct empty cannot fail.
+  //
+  // ⚠️ AND THIS IS ONLY HALF THE GUARANTEE. On its own it is WRITER-BLIND: it
+  // certifies faithfulness to the writer's intention, so a writer that left a
+  // glyph behind would bake that glyph into the expectation and pass. The other
+  // half is `sdtBoundedClearPatches`, which makes the intention correct by
+  // construction — nothing inside the control survives. Byte-equality proves we
+  // got what we asked for; whole-subtree replacement is what makes asking for
+  // it sufficient.
+  if (emptiedProofs.length > 0) {
+    const outScans = new Map<string, ScannedXmlPart>();
+    for (const emptied of emptiedProofs) {
+      let out = outScans.get(emptied.partName);
+      if (!out) {
+        const entry = outputPackage.zip.entries.get(emptied.partName);
+        if (!entry) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+        out = scanXmlPart(entry.bytes);
+        outScans.set(emptied.partName, out);
+      }
+      const span = out.byPath.get(emptied.bindingPath);
+      if (!span) failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      const actual = createHash('sha256')
+        .update(out.text.slice(span.start, span.end))
+        .digest('hex');
+      // ⚠️ FAIL-CLOSED ON A MISSING EXPECTATION.
+      const expected = (emptied as { expectedSpanSha256?: string }).expectedSpanSha256;
+      if (!expected || actual !== expected) {
+        failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
+      }
     }
   }
 

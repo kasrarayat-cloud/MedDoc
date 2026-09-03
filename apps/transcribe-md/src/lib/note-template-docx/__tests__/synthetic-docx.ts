@@ -62,6 +62,8 @@ const FOOTER_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Page </w:t></w:r><w:fldSimple w:instr=" PAGE "><w:r><w:t>1</w:t></w:r></w:fldSimple></w:p></w:ftr>`;
 
 export interface SyntheticDocxOptions {
+  /** Parts to REMOVE after the defaults and `extraEntries` are applied. */
+  omitEntries?: readonly string[];
   contentTypes?: string;
   rootRelationships?: string;
   documentRelationships?: string;
@@ -93,6 +95,14 @@ export async function buildSyntheticDocx(
   );
   for (const [name, value] of Object.entries(options.extraEntries ?? {})) {
     zip.file(name, value);
+  }
+  // ⚠️ #170 — REMOVING A PART IS A FIXTURE CAPABILITY THE ARMS NEED. The guard
+  // treats an ABSENT `word/styles.xml` as an inability to resolve the inherited
+  // paragraph properties, hence INELIGIBLE; that branch cannot be exercised at
+  // all while the builder unconditionally writes the part. An undisclosed
+  // untestable branch is exactly what the last pass found here.
+  for (const name of options.omitEntries ?? []) {
+    zip.remove(name);
   }
   return zip.generateAsync({
     type: "nodebuffer",

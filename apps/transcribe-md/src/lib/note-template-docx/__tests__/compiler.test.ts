@@ -63,9 +63,12 @@ describe("deterministic Template Twin DOCX compiler", () => {
     const outerTable = compiled.tables.find((table) =>
       table.cells.some((cell) => cell.gridSpan === 2),
     );
-    const repeatingTable = compiled.tables.find(
+    // ⚠️ FILTER-AND-COUNT — `kind` is a label class, not a key.
+    const repeatingTables = compiled.tables.filter(
       (table) => table.kind === "repeating_table",
     );
+    expect(repeatingTables.length).toBe(1);
+    const repeatingTable = repeatingTables[0];
     const repeatField = compiled.fields.find(
       (field) => field.originalLabel === "Repeat finding",
     );

@@ -5,6 +5,7 @@
 // test-then-edit activation). Authorization is supplied by the caller
 // (TemplateTwinActor value-object); uses the prisma singleton + logTwinAudit only.
 // ============================================================================
+import { countsAsBlankProof } from './blank-proof-count';
 import { MIN_CERTIFIED_FILLED_FIELDS } from './certification-thresholds';
 import { denialWithheldMaterialFieldIds } from './denial-contract';
 import { Prisma } from '@prisma/client';
@@ -747,8 +748,51 @@ export async function certifyAndActivateTemplateTwin(input: {
       const roundTripFields = isRecord(compiled.latestTestRoundTrip)
         ? (compiled.latestTestRoundTrip.fields as unknown[]) ?? []
         : [];
+      // ⚠️ #165 — blankProofCount = blank ∪ emptied, AND `emptied` IS EARNED
+      // BY THE WRITE, NOT BY A LABEL.
+      //
+      // `blank` is an UNPATCHED field verified by source-byte-identity — the one
+      // proof this programme has never had falsified, and it is untouched.
+      // `emptied` is a field the renderer cleared by replacing its whole
+      // `w:sdtContent` subtree, whose output is then byte-identical to the empty
+      // form the writer recorded (`expectedSpanSha256`). The renderer will not emit
+      // the kind unless it actually performed that replacement.
+      //
+      // ⚠️ #164 COUNTED A LABEL AND WAS BROKEN IN BOTH DIRECTIONS. It derived
+      // `emptied` from a list of KINDS while the renderer still cleared only
+      // `w:t` nodes, so a control holding a Wingdings tick beside its prompt was
+      // proofed `emptied`, verified, and BOUGHT THIS REQUIREMENT while still
+      // printing the tick — the gate flipped BLOCKED->PASS on a field that
+      // renders a mark. It also excluded selections on a premise measurement
+      // refuted, and missed the repeating-row emitter entirely.
+      //
+      // The predicate lives in `blank-proof-count.ts`, and it is driven end to
+      // end from `gate-165-product-consult-form-certifies.test.ts` — through
+      // THIS function, not around it. #164's arms asserted the helper and the
+      // label only, and reverting this very wiring redded nothing.
+      const bindingByFieldId = new Map(
+        ir.fields.map((f) => [f.fieldId, f.rendererBinding.bindingType as string]),
+      );
+      // ⚠️ THE KIND TOO — #168(b) is a RENDER-time decision the stored proof
+      // cannot express, so it has to be re-applied here from the compiled IR,
+      // which the gate already has open.
+      const kindByFieldId = new Map(ir.fields.map((f) => [f.fieldId, f.kind as string]));
+      // ⚠️ A `blank` OR `emptied` LABEL IS CROSS-CHECKED AGAINST THE MANIFEST.
+      // Both are claims that the encounter said nothing about the field, and the
+      // manifest is the record of what it actually said. A field the manifest
+      // shows as FILLED cannot be either, whatever the stored proof claims.
+      const resolvedNull = (fieldId: string): boolean => {
+        const resolution = syntheticResolutions.get(fieldId);
+        return resolution !== undefined && resolution.value === null;
+      };
       const blankProofCount = roundTripFields.filter(
-        (entry) => isRecord(entry) && entry.kind === 'blank',
+        (entry) =>
+          isRecord(entry) &&
+          countsAsBlankProof(entry, {
+            bindingOf: (id) => bindingByFieldId.get(id),
+            resolvedNull,
+            kindOf: (id) => kindByFieldId.get(id),
+          }),
       ).length;
       // ── FILL-COVERAGE INVARIANT ──────────────────────────────────────────
       // A template must not certify with a dead fill path. WM_IOV certified

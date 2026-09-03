@@ -425,6 +425,45 @@ jobs:
   # assert the fail-closed "DATABASE_URL is not set" path. Runs in parallel
   # with `test` / `audit` / the e2e workflow, so the CI critical path does
   # not lengthen. apps/meddoc-pro (decommissioned) stays out of scope.
+  typecheck:
+    name: typecheck (tsc --noEmit)
+    # ⚠️ THIS CLOSES A GATE GAP, IT IS NOT NEW TOOLING. `tsc --noEmit` has been
+    # run locally all through this arc and cited as evidence — and there was NO
+    # tsc step anywhere in `.github/workflows/*`. An adversarial lens auditing
+    # something else measured the zero. Types reached CI only as a side effect
+    # of `next build`, which runs in a different job, on a different trigger
+    # path, and does not typecheck test files at all.
+    #
+    # ⚠️ AND VITEST CANNOT SUBSTITUTE FOR IT: it transpiles without typechecking,
+    # so a green suite says nothing about types. This exact gap let a cast error
+    # in a new gate file sit green under vitest and fail only on a local tsc.
+    #
+    # LIGHT LANE: it installs, generates the Prisma client and typechecks. No
+    # `services:` block, no database, no browser — the same condition on which
+    # `unit` moved. `quillmd-ci-light` resolves to two machines where
+    # `quillmd-ci` resolves to one.
+    runs-on: [self-hosted, linux, x64, quillmd-ci-light]
+    # Box-calibrated like every other timeout here: a hang-guard, not a speed
+    # setting. Measured ~40-50s locally on a faster box; 15m is generous.
+    timeout-minutes: 15
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate Prisma client
+        # `@meddoc/db` imports resolve to the generated `@prisma/client`, so the
+        # typecheck cannot resolve them until this runs. Schema only — no
+        # DATABASE_URL and no connection.
+        run: npm run db:generate
+      - name: Typecheck transcribe-md
+        run: npx tsc --noEmit -p apps/transcribe-md/tsconfig.json
+
   unit:
     name: unit tests (transcribe-md + packages)
     # ⚠️ SELF-HOSTED. MEASURED 2026-08-28 on white-gorilla-87822 (Ubuntu 24.04.4):
@@ -432,7 +471,30 @@ jobs:
     # the figures this comment carried as a purchase spec. Job `name:`
     # is UNCHANGED so every required context is preserved byte-for-byte.
     # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
-    runs-on: [self-hosted, linux, x64, quillmd-ci]
+    # ⚠️ #164 item 6 — THIS WIDENS `unit`'s ELIGIBLE RUNNER SET. It does NOT
+    # relocate the job, and the difference matters: ci-1 carries BOTH labels.
+    #
+    #   quillmd-ci-1  labels=self-hosted,Linux,X64,quillmd-ci,quillmd-ci-light
+    #   quillmd-ci-2  labels=self-hosted,Linux,X64,quillmd-ci-light
+    #
+    # So `quillmd-ci` resolves to exactly ONE machine while `quillmd-ci-light`
+    # resolves to TWO. Pinning `unit` heavy made it compete with `test` and e2e
+    # for that one machine; light makes it eligible for either. It may still
+    # land on ci-1 — that is fine, and is why the claim is "eligible for two",
+    # never "runs on ci-2".
+    #
+    # ⚠️ MEASURED LIVE, 2026-09-02T07:35Z, on PR #932's own CI run: `unit tests`
+    # in_progress on ci-1 (busy=true) with `test` QUEUED BEHIND IT, while ci-2
+    # sat busy=false because every job it could legally take had already
+    # finished. Two jobs serialised on one machine with the other idle — the
+    # exact contention this line removes.
+    #
+    # ⚠️ THE CONDITION IS SERVICE CONTAINERS, AND IT WAS CHECKED, NOT ASSUMED:
+    # this job declares NO `services:` block — it installs, generates the Prisma
+    # client and runs vitest. The `test` job DOES (`pgvector/pgvector:pg16`) and
+    # stays heavy, as do e2e and the axe sweep. A job that needs a database
+    # server does not belong on the light lane however fast it looks.
+    runs-on: [self-hosted, linux, x64, quillmd-ci-light]
     # ⚠️ BOX-CALIBRATED, NOT A SPEED SETTING. A timeout is a HANG-GUARD;
     # generous is free. quillmd-ci-1 (4 vCPU) is ~1.4-1.9x slower than a
     # hosted runner on CPU-bound work, and every timeout in this repo was

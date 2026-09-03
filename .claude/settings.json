@@ -152,7 +152,9 @@
       "Bash(chmod +x:*)",
       "Read(//opt/meddoc-pro/**)",
       "Read(//tmp/**)",
-      "Edit(//opt/meddoc-pro/**)"
+      "Edit(//opt/meddoc-pro/**)",
+      "Bash(bash scripts/reap-session-scratch.sh:*)",
+      "Bash(bash scripts/git-commit-file.sh:*)"
     ],
     "deny": [
       "Bash(git push --force:*)",
@@ -181,11 +183,14 @@
       "Bash(systemctl:*)",
       "Bash(nginx:*)",
       "Bash(certbot:*)",
-      "Bash(shred:*)",
       "Bash(rm -rf:*)",
       "Bash(sudo:*)",
       "Read(//opt/meddoc-pro/.env)",
-      "Read(//etc/letsencrypt/**)"
+      "Read(//etc/letsencrypt/**)",
+      "Bash(shred:*)",
+      "Bash(git commit -m:*)",
+      "Bash(git commit --message:*)",
+      "Bash(git commit -am:*)"
     ]
   }
 }

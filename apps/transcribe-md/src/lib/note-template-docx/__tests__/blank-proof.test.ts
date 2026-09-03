@@ -91,9 +91,21 @@ describe('blank verification mode', () => {
     const { compileTemplateDocx } = await import('../compiler');
     const ir = compileTemplateDocx(source);
 
-    const target = ir.fields.find(
+    // ⚠️ FILTER-AND-COUNT — `kind` is a LABEL CLASS. `find` says "give me one
+    // of these" where the arm means "there is exactly one of these", and this
+    // codebase has paid four times for the difference.
+    const candidates = ir.fields.filter(
       (f) => f.kind === 'single_select' && !f.rowPrototype && f.allowedOptions.length > 0,
-    )!;
+    );
+    // ⚠️ MEASURED: THERE ARE THREE, so the old `find` was taking one of three by
+    // position. This canary needs *a* fillable selection and any of them serves
+    // — what it proves is that the VERIFIER throws when a field claimed blank
+    // was in fact changed, which is a property of the verifier, not of which
+    // field was picked. So the choice is made DETERMINISTIC by a stable key
+    // rather than by array order, and the count is asserted so the arm reds if
+    // the fixture ever stops supplying one.
+    expect(candidates.length, 'no fillable selection in the fixture').toBeGreaterThan(0);
+    const target = [...candidates].sort((a, b) => a.fieldId.localeCompare(b.fieldId))[0]!;
     const filled = ir.fields.map((field) =>
       field.fieldId === target.fieldId
         ? FieldResolutionSchema.parse({
@@ -145,15 +157,50 @@ describe('blank verification mode', () => {
     ).toThrow(TemplateDocxRenderError);
   });
 
+  // ⚠️ REWRITTEN FROM A SOURCE-TEXT REGEX TO A BEHAVIOURAL ASSERTION — canon 72,
+  // caught red-handed on its own terms.
+  //
+  // This arm used to assert `/patches\.length === 0[\s\S]{0,1800}fieldProofs\.push/`
+  // against `renderer.ts` as TEXT. Ruling #170 added explanatory comments in
+  // that window, the distance grew past 1800 characters, and the gate went RED
+  // FOR A CHANGE THAT ALTERED NO BEHAVIOUR AT ALL. That is the exact tell canon
+  // 72 names: *if somebody IMPROVED this code, would my gate fail?* — here, yes,
+  // and the "fix" it invites is widening the window, which weakens the gate a
+  // little more every time somebody writes a comment.
+  //
+  // The property it was reaching for is not a spelling, it is an OUTCOME: a
+  // field the encounter did not mention must still produce a proof entry. That
+  // is assertable directly, and it cannot be defeated by formatting.
   it('MUTATION: the renderer must not go back to skipping unfilled fields', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const src = readFileSync(join(__dirname, '..', 'renderer.ts'), 'utf-8');
+    const input = await setupAllBlank();
+    const rendered = await renderTemplateDocx(input);
+    const proofs = rendered.verification.fields;
+    // ⚠️ THE ASSERTION IS CHOSEN TO BE EXACTLY WHAT THE REGRESSION BREAKS.
+    // `if (patches.length === 0) continue;` removes the proof from every field
+    // that needed no write — which, on an all-unfilled render, is precisely the
+    // unfilled ones. So the count of unfilled proofs goes to ZERO under the
+    // mutation and is non-zero otherwise.
+    //
+    // ⚠️ AND IT IS DELIBERATELY NOT "one proof per IR field". Measured: this
+    // fixture has 11 fields and 10 proofs, because a content control nested in
+    // a repeating row is accounted for by `renderRepeatingRows` separately.
+    // That is pre-existing and correct; an arm asserting 11 would red on a
+    // truth it had simply never checked.
+    // ⚠️ `blank` ONLY. Including `emptied` here made this arm VACUOUS and the
+    // adversarial pass proved it: `emptied` comes from the PATCHED path, which
+    // `if (patches.length === 0) continue;` never touches, so under the exact
+    // regression this arm names the count fell 6 -> 4, stayed above zero, and
+    // THE ARM PASSED. Only a neighbour redded, with no message, so the
+    // diagnostic written below never printed.
+    //
+    // This is the same laundering canon 62 describes, in the one arm that had
+    // just been rewritten BECAUSE it was measuring the wrong thing — a
+    // source-text gate replaced by a behavioural assertion that a neighbouring
+    // code path satisfies.
     expect(
-      src,
+      proofs.filter((p) => p.kind === 'blank').length,
       'the renderer skips unfilled fields again — every honestly-blank field ' +
-        'loses its proof entry and certification can never close'
-    ).not.toMatch(/if \(patches\.length === 0\) continue;/);
-    expect(src).toMatch(/patches\.length === 0[\s\S]{0,1800}fieldProofs\.push/);
+        'loses its proof entry and certification can never close',
+    ).toBeGreaterThan(0);
   });
 });

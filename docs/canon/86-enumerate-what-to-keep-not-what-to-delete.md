@@ -1,0 +1,207 @@
+# ENUMERATE WHAT TO KEEP, NEVER WHAT TO DELETE
+
+**Recorded 2026-09-02, owner ruling #165.** The companion to
+[canon 85](85-bound-the-edit-with-the-document-s-own-element.md): that entry says
+bound the edit with the document's own element, and this one says what to do
+when you must still enumerate something inside that boundary.
+
+## Both directions are lists. Only one of them fails safely.
+
+Five instruments in this arc enumerated **what to DELETE** — the visible carriers
+that must not survive a cleared field. Every one was falsified by the next
+carrier nobody named: `w:sym`, `w:pict`, `w:drawing`, `w:object`, `w:delText`,
+`w:instrText`. The list never closes, and each miss meant **clinical content
+printed into a document a doctor signs**.
+
+The sixth instrument enumerated **what to KEEP** — the structural skeleton — and
+deleted everything else.
+
+⚠️ **AMENDED TWICE ON 2026-09-02, AND THE SECOND AMENDMENT REVERSES THE
+FIRST — read to the end before acting on either.**
+
+**#167:** v3 stopped rebuilding the container and started DELETING, so the
+keep-list became structural kinds rather than the two property elements v2
+copied into what it wrote.
+
+**#168, which is what ships:** the RUN SHELL and its `w:rPr` are back on the
+keep-list. The #167 amendment said *"`w:rPr` is not among them: a run's own
+properties go when the run goes"* — **that is now false**, and it was false in a
+governing canon body for one commit while the code said otherwise. Deleting the
+run cost `w:rPr` on all 28 controls of the real template and changed what a
+doctor typing into a cleared field inherits; measured through the PDF, the
+`/DA` moved from the template's grey 11pt to black 12pt.
+
+⚠️ **THE LISTS ARE NOT ENUMERATED HERE ANY MORE, DELIBERATELY.** Both amendments
+stated a COUNT ("thirteen") and a membership list, and both went stale within a
+commit — the count was 13, then 16/14, then 17/15 across three rulings in one
+day. **A canon entry that mirrors a data structure is a second copy that drifts.**
+The lists live in `renderer.ts` as `STRUCTURE_KEEP_WHOLE` and
+`STRUCTURE_RECURSE`; read them there. What belongs here is the ARGUMENT, which
+has not changed.
+
+> **AN INCOMPLETE DELETE-LIST PRINTS CLINICAL CONTENT.**
+> **AN INCOMPLETE KEEP-LIST COSTS FORMATTING.**
+
+Same shape, same fallibility, incomparable consequence. The keep-list is
+*allowed* to be wrong, because being wrong makes the output emptier rather than
+fuller.
+
+## ⚠️ AND THE TEST IS NOT WHICH LIST IS SHORTER
+
+The delete-list is usually shorter and always more tempting: it names exactly the
+thing you just saw go wrong. That is why five attempts reached for it. Ask
+instead:
+
+> **When this list is missing an entry — and it will be — does the mistake make
+> the output MORE like the safe state, or LESS?**
+
+Here the safe state is *empty*. A keep-list that forgets `w:rPr` yields a field
+that is empty and unstyled. A delete-list that forgets `w:sym` yields a field
+that prints a tick beside "Anticoagulation reviewed" while being proofed blank.
+
+## The evidence, both directions measured
+
+**The delete-list direction**, over four rulings: #157(d) matched `w:t` only;
+#162(c) added a locus table and an allowlist whose regex read a field the scanner
+never populates, hard-failing every empty legacy field; #163 stopped patching and
+printed a stale line; #164 counted a label and certified a control holding a
+Wingdings tick.
+
+**The keep-list direction**, the same night it shipped: the first version kept
+nothing, and an adversarial lens measured the cost through the product's own PDF
+converter — row pitch 10.75pt → 14.20pt, table height +32.5%, a 48-row form
+spilling from one page to two, and a doctor typing into an emptied control
+getting the document default instead of the template's Times New Roman. **Real,
+visible, and worth fixing — and not once did content survive.**
+
+## ⚠️ CORRECTION, 2026-09-02 — THE JUSTIFICATION ABOVE OVERSTATES ITS GUARANTEE
+
+The entry says property containers are safe *"because the schema gives them no
+printable children — that is a property of the format, not a judgement about a
+document."* **The first clause is true of the FORMAT and false of this
+IMPLEMENTATION**, because the code copies the property subtree **verbatim**
+without validating it against the schema. Nothing in the pipeline does.
+
+Measured by an adversarial lens, a block-level control with a run smuggled
+inside `w:pPr`:
+
+    KEEPLIST  src_has_WARFARIN=true  out_has_WARFARIN=true
+              proofKinds=emptied  verified=true  countsAsBlank=true
+
+Content survives a control proofed `emptied` and buys the certification blank
+requirement — the #164 shape, re-created one layer inside the fix for it.
+
+**HONEST LIMIT, because the severity must not be overstated either:** that input
+is schema-invalid, Word will not author it, and no production document is known
+to contain it. What is refuted is the entry's ABSOLUTE claim, not the practice.
+
+**What survives, and it is the whole point of the entry:** the ASYMMETRY. A
+keep-list that is wrong makes the output emptier; a delete-list that is wrong
+prints clinical content. That argument does not depend on the keep-list being
+infallible, and this correction is an instance of it — the failure mode of a
+wrong keep-list turned out to be "something survived a schema-invalid input",
+not "the doctor's note is wrong".
+
+**What must change in how the entry is read:** *"structurally guaranteed safe"*
+is a claim about validated input. Where nothing validates, the keep-list is a
+judgement about the document like any other, and it should say so — or the copy
+should be reconstructed from parsed properties rather than sliced raw.
+
+## ⚠️ REFINEMENT, 2026-09-02 (ruling #168) — SOME PROPERTIES ARE CONTENT GENERATORS
+
+The asymmetry above says a wrong keep-list makes the output **emptier**. That
+holds for properties that only DESCRIBE how content looks. It fails for a
+property that CAUSES content to appear, and there are at least three:
+
+| kept as a property | what it generates |
+|---|---|
+| `w:numPr` | a list marker from `numbering.xml` — and `w:lvlText` is arbitrary literal text, measured printing `ANTICOAGULATED 1.` |
+| `w:dropDownList` / `w:comboBox` | the engine falls back to `w:listItem[0]`, printing a value nobody chose |
+| `w:showingPlcHdr` | tells Word to re-display the template's own prompt |
+
+For these, keeping is **not** the safe direction: the output gets FULLER.
+
+> **BEFORE PUTTING SOMETHING ON A KEEP-LIST, ASK NOT "IS IT A PROPERTY?" BUT
+> "CAN IT PUT A MARK ON THE PAGE BY ITSELF?"** A property that generates is
+> content wearing a property's schema position.
+
+**AND THE RESOLUTION IS NOT ALWAYS TO DELETE IT.** Removing `w:numPr` renumbers
+the doctor's list *beyond* the field — damage outside the thing being cleared,
+which is the failure mode #163 died of. So #168 splits the question:
+
+- **the RENDER keeps it**, because deleting it damages more than it fixes;
+- **the COUNT refuses it** — a field whose cleared region carries a generator
+  cannot claim blank, with no parsing and no heuristic about which generators
+  are "harmless".
+
+`w:showingPlcHdr` is the third case and resolves the other way: it generates,
+removing it damages nothing, so it is deleted outright.
+
+**The asymmetry survives, restated:** an incomplete keep-list costs formatting
+*provided every member is inert*. Membership is the claim that needs the
+evidence, and "it sits where a property sits" is not that evidence.
+
+## ⚠️ SECOND REFINEMENT, 2026-09-02 (ruling #169) — AND THEN THE REFUSAL INVERTED
+
+The refinement above got the DIRECTION right — the count refuses a generator —
+and the SHAPE wrong. It was implemented as a search: *look for numbering in the
+cleared region.* Six evasions of that search were found across two adversarial
+passes, and the list is the argument:
+
+| # | where the numbering was | why the search missed it |
+|---|---|---|
+| 1 | inside the cleared region | (the case the search was written for) |
+| 2 | on the paragraph CONTAINING the control | the region ends before the `pPr` |
+| 3 | on a named `w:pStyle` | the mark is in `styles.xml`, not the document |
+| 4 | on a style reached through `w:basedOn` | one indirection further out |
+| 5 | on the DEFAULT paragraph style | no `pStyle` to find, and often no `pPr` at all |
+| 6 | through the zero-patch `blank` path | the guard was never consulted |
+
+Every fix was correct and the next evasion existed anyway. **That is data about
+the instrument, not about the diligence** — the same reading
+[canon 75](75-three-falsifications-is-data-about-the-instrument.md) reached
+after three falsifications of one rule.
+
+> **SO THE QUESTION IS ASKED IN THE OTHER DIRECTION: not *can I find a mark?*
+> but *can I PROVE there is none?*** Credit is granted only when every paragraph
+> that could number the field resolves CLEAR through the whole inheritance
+> chain, and **any inability to resolve — an unreadable style table, a `pStyle`
+> naming a style that is not there, a missing `basedOn` target, a cycle — is
+> INELIGIBLE.**
+
+⚠️ **THE ASYMMETRY IS WHAT LICENSES THE STRICTNESS, AND IT MUST BE STATED WITH
+THE RULE.** A false refusal costs ONE field its credit, and certification needs
+only one blank field. A false grant attests *this renders blank* over printed
+prose in a document a doctor signs. Where the two errors are that far apart,
+*prefer the cheap error everywhere in the guard* is not caution, it is the
+correct calibration — and the verdict type carries a third value
+(`unresolved`) precisely so the code cannot collapse cannot-tell into no.
+
+**AND THE ROUTES ARE DELIBERATELY NOT RE-LISTED AS A SPEC HERE** —
+[canon 91](91-canon-that-mirrors-a-data-structure-drifts.md). The table above is
+the EVIDENCE for the inversion, dated and closed. The live rule is
+`paragraphNumbering` in `renderer.ts`, and a seventh route is a change to that
+function, not an edit to this file.
+
+**THE ESCALATION WAS PRE-DECLARED IN THE RULING, WHICH IS THE PART WORTH
+COPYING.** #169 said in advance what a seventh evasion would mean: the
+instrument changes rather than the guard, collapsing eligibility to *fields in
+paragraphs with no `pStyle` and no `pPr` beyond the trivial*. Deciding the
+stopping condition BEFORE the next round removes the one thing that makes these
+spirals expensive — the temptation, at the moment of the next finding, to
+believe that this fix is the last one.
+
+## The practice
+
+- Write the rule as *"keep X, delete everything else"* wherever the safe state is
+  an absence.
+- Put only structurally-guaranteed-safe things on the keep-list — **and read the
+  2026-09-02 correction above before trusting that phrase.** The schema gives
+  property containers no printable children; the CODE copies them verbatim and
+  validates nothing, so the guarantee is about the FORMAT and not about the
+  input. v3 therefore adds one structural check rather than trusting the claim:
+  **a kept-whole property container must contain no `w:r`.** A run is the
+  universal carrier of printable content, no property block legitimately holds
+  one, and a document that does is refused rather than repaired.
+- Say the asymmetry out loud in the code, because the next reader's instinct will
+  be to "improve" it by enumerating the other way.

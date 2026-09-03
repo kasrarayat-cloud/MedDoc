@@ -12,6 +12,7 @@ import {
   type UnsupportedElement,
 } from "../template-twin/ir";
 import { failTemplateDocx } from "./errors";
+import { STRUCTURE_KEEP_WHOLE } from "./structure-keep";
 import type { TemplateDocxLimits } from "./limits";
 import { withoutPlaceholderOptions } from "./placeholder-option";
 import {
@@ -278,6 +279,201 @@ function processParagraph(
   );
 }
 
+/**
+ * #174 — ADMIT ONLY CONTROLS WE FULLY UNDERSTAND. REFUSE LOUDLY, AT UPLOAD.
+ *
+ * ⚠️ THIS RULE EXISTS BECAUSE FOUR SEPARATE FINDINGS TURNED OUT TO BE ONE. An
+ * adversarial pass found a Wingdings tick surviving inside `w:rPr`, a dropdown
+ * hidden in `mc:AlternateContent`, a second `w:sdtPr` carrying a live list, and
+ * a `w:fldSimple` inside `w:pPr` — each earning a certified blank proof. They
+ * are not four bugs. They are four consequences of admitting shapes nobody had
+ * characterised, and then trying to prove things about them afterwards.
+ *
+ * **THE REFUSAL BELONGS HERE**: at compile, BEFORE any certificate exists —
+ * not at proof time, invisibly, after.
+ *
+ * ⚠️ AND IT IS SHOWN, WHICH THIS COMMENT ONCE CLAIMED WITHOUT IT BEING TRUE.
+ * The doctor sees each refused control by NAME with its reason, rendered from
+ * `ir.unsupported` in `native-template-manager.tsx`. It cannot come from the
+ * field list — a refused control is deliberately absent from `ir.fields` — and
+ * for a while the UI rendered only a COUNT while the label and reason sat
+ * unused in the payload. A refusal nobody can act on is not fail-closed, it is
+ * just closed.
+ * A refused control keeps the doctor's own text verbatim as static content; it
+ * simply never becomes a field.
+ *
+ * ⚠️ AND "A SECOND ELEMENT OF THE SAME NAME" HAS COST THIS CODEBASE THREE
+ * TIMES — a second `w:sdtContent` rendered WARFARIN out of a control proofed
+ * `emptied`; a second `w:pPr` defeated the numbering guard; a second `w:sdtPr`
+ * defeated the selection exclusion. It is now one rule, once.
+ */
+
+/** Elements that carry content, wherever they appear inside a property block. */
+export const CONTENT_CARRIERS: ReadonlySet<string> = new Set([
+  "r", "t", "delText", "instrText", "sym", "drawing", "pict", "object",
+  "fldSimple", "fldChar", "txbxContent", "oMath", "oMathPara", "p", "tbl",
+  "sdt", "br", "ptab", "noBreakHyphen", "softHyphen", "separator",
+  // ⚠️ `tab` IS HERE AND THAT IS WHAT MAKES THE `w:tabs` EXEMPTION BELOW REAL.
+  // The mutation matrix caught it: with `tab` absent from this set the
+  // exemption was dead code — removing it redded nothing — while its comment
+  // claimed to be protecting 52 real fields. A bare `w:tab` directly inside a
+  // property block is a tab CHARACTER and is refused; inside `w:tabs` it is a
+  // tab STOP and is not.
+  "tab",
+  "continuationSeparator", "footnoteReference", "endnoteReference",
+  "commentReference", "ruby",
+  // ⚠️ #175 FINAL PASS — THE SET WAS MEANT TO BE `EG_RunInnerContent` AND WAS
+  // MISSING FOURTEEN OF ITS MEMBERS. Every name below is a legal child of
+  // `w:r`, i.e. a thing that PRINTS, and every one was ADMITTED inside a
+  // kept-whole `w:rPr` — the exact position the #174 pass measured a `w:sym`
+  // surviving and printing from.
+  //
+  // Measured on this branch, one row per name: the control compiled to a
+  // `narrative_text` field, the element survived VERBATIM into the rendered
+  // `word/document.xml` inside the field's own binding span, the field earned
+  // an `emptied` proof with `blankEligible: 'eligible'`, `countsAsBlankProof`
+  // returned TRUE and `verification.verified` was TRUE. Six of them render
+  // TEXT — `w:pgNum` a page number, the six date elements TODAY'S DATE into a
+  // clinical note — and `w:contentPart`/`w:subDoc`/`w:altChunk` pull in a whole
+  // external part.
+  //
+  // ⚠️ AND THE COMPILER ALREADY KNEW ABOUT ONE OF THEM. `visibleText` in
+  // `xml.ts` maps `w:cr` to a newline beside `w:br` — the text extractor
+  // classified it as content while this set did not. Two lists, one set, the
+  // #175 defect one file over.
+  //
+  // ⚠️ FIXED BY GROUND, NOT BY HIT (canon 68): the enumeration is completed
+  // against the schema group, not against the rows that happened to be probed.
+  // `w:lastRenderedPageBreak` is inert and is added anyway, because it sits on
+  // the same wrong side of the same boundary and nothing conformant can put it
+  // in a property block.
+  "cr", "pgNum", "contentPart", "subDoc", "altChunk", "delInstrText",
+  "dayShort", "dayLong", "monthShort", "monthLong", "yearShort", "yearLong",
+  "annotationRef", "footnoteRef", "endnoteRef", "lastRenderedPageBreak",
+]);
+
+/**
+ * ⚠️ #175 — NOT A SECOND LIST. The set of containers admission must scan is
+ * BY DEFINITION the set the clear copies verbatim, so it is the same symbol,
+ * imported. The two were re-listed by hand and drifted by nine names; the
+ * divergence admitted a `w:fldSimple` inside a `w:bookmarkStart` that survived
+ * the clear and counted as blank credit.
+ */
+const PROPERTY_BLOCKS = STRUCTURE_KEEP_WHOLE;
+
+/**
+ * ⚠️ `w:tab` IS THE ONE AMBIGUOUS NAME, EXEMPTED BY POSITION RATHER THAN BY
+ * NAME: inside `w:tabs` it is a tab-stop DEFINITION, inside a run it is a tab
+ * CHARACTER.
+ *
+ * ⚠️ THE JUSTIFICATION THIS COMMENT FIRST GAVE WAS FALSE IN BOTH HALVES, and
+ * the correction is the point. It claimed *"the real customer template carries
+ * 52 of them"* and that a flat denylist *"would refuse every one of those 52
+ * fields"*. Measured on that exact file: `WM IOV Template.docx` has **128**
+ * `w:tabs` blocks and **ZERO of them inside a `w:sdt`** — and admission only
+ * ever inspects property blocks inside a control, so not one can reach here.
+ * The "52" was that template's `table_cell` count, lifted from the wrong row of
+ * an earlier measurement.
+ *
+ * ⚠️ THE EXEMPTION IS STILL NECESSARY, AND THIS IS ITS REAL JUSTIFICATION: a
+ * genuine Word document on this host — `artifact-template-design-report`'s
+ * `reference.docx`, `Application=Microsoft Office Word` — has **12 of 12** of
+ * its `w:tabs` blocks INSIDE its two content controls. Real Word emits the
+ * shape; without the exemption that document loses both its fields.
+ *
+ * **A FALSE JUSTIFICATION IS WORSE THAN NONE.** The next reader running a
+ * mutation matrix sees "removing this reds nothing" and the only argument
+ * against deleting it is a sentence that is not true.
+ */
+/**
+ * ⚠️ #175 FINAL PASS — CHARACTER DATA IN A PROPERTY BLOCK IS A REFUSAL, AND IT
+ * HAS NO ELEMENT NAME, WHICH IS WHY NO ADDITION TO `CONTENT_CARRIERS` COULD
+ * EVER HAVE CLOSED IT.
+ *
+ * The renderer has refused character data inside a kept-whole container since
+ * #173 (`subtreeHasNoCharacterData`) and in a sibling gap since #172(3)
+ * (`gapIsInvisible`, with CDATA deliberately NOT stripped). Both of those run
+ * only on what `structureKeepDeletions` walks — the control's `w:sdtContent`.
+ *
+ * `sdtBoundedClearPatches` SKIPS the outer `w:sdtPr` and `w:sdtEndPr`
+ * (`if (local === 'sdtPr' || local === 'sdtEndPr') continue;`), so neither
+ * guard has ever looked at them; and this function skipped `#text`, so
+ * admission had not either. Measured: `<w:sdtPr>…<w:text/>WARFARIN 5 MG
+ * DAILY</w:sdtPr>` was ADMITTED, survived verbatim into the output, and the
+ * field earned a counted `emptied` proof with `verified === true`. The same
+ * bytes as CDATA, and the same bytes inside a `w:delInstrText`, did likewise.
+ * The byte-identical string one element over — inside `w:sdtContent` — is a
+ * hard refusal.
+ *
+ * WHITESPACE-ONLY text is NOT a refusal: pretty-printed XML puts a newline and
+ * an indent between every pair of elements, and refusing that would refuse
+ * every control in a formatted document. Same threshold the renderer's
+ * `gapIsInvisible` already uses.
+ */
+const CHARACTER_DATA = "#character-data";
+
+function nonWhitespaceText(node: OrderedXmlNode): boolean {
+  const tag = tagOf(node);
+  if (tag !== "#text") return false;
+  return String(node[tag] ?? "").trim().length > 0;
+}
+
+function propertyBlockCarrier(
+  node: OrderedXmlNode,
+  parentName: string,
+): string | null {
+  for (const child of childrenOf(node)) {
+    if (nonWhitespaceText(child)) return CHARACTER_DATA;
+    const tag = tagOf(child);
+    if (!tag || tag === "#text") continue;
+    const local = localName(tag);
+    if (local === "tab" && parentName === "tabs") {
+      // a tab STOP, not a tab character
+    } else if (CONTENT_CARRIERS.has(local)) {
+      return local;
+    }
+    const nested = propertyBlockCarrier(child, local);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+/** The first admission failure, or null when the control is understood. */
+function admissionRefusal(node: OrderedXmlNode): string | null {
+  const named = (child: OrderedXmlNode, wanted: string): boolean => {
+    const tag = tagOf(child);
+    return tag !== null && tag !== "#text" && localName(tag) === wanted;
+  };
+  const propertyBlocks = childrenOf(node).filter((c) => named(c, "sdtPr"));
+  const contents = childrenOf(node).filter((c) => named(c, "sdtContent"));
+  if (propertyBlocks.length > 1) {
+    return "the control declares more than one w:sdtPr";
+  }
+  if (contents.length > 1) {
+    return "the control declares more than one w:sdtContent";
+  }
+  // ⚠️ EVERY property block in the whole control, not only the outer `sdtPr` —
+  // the surviving carriers were found inside `w:rPr` and `w:pPr` within the
+  // CONTENT, where the renderer copies them verbatim.
+  const stack = [...childrenOf(node)];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    const tag = tagOf(current);
+    if (!tag || tag === "#text") continue;
+    const local = localName(tag);
+    if (PROPERTY_BLOCKS.has(local)) {
+      const carrier = propertyBlockCarrier(current, local);
+      if (carrier === CHARACTER_DATA) {
+        return `a w:${local} block contains raw character data`;
+      }
+      if (carrier) return `a w:${local} block contains a w:${carrier}`;
+      continue;
+    }
+    stack.push(...childrenOf(current));
+  }
+  return null;
+}
+
 function processContentControl(
   node: OrderedXmlNode,
   nodePath: string,
@@ -339,12 +535,50 @@ function processContentControl(
   }
 
   const identity = contentControlIdentity(properties);
+
+  // ⚠️ #174 — ADMISSION FIRST, BEFORE ANY MARKER IS READ.
+  const refusal = admissionRefusal(node);
+  if (refusal) {
+    // ⚠️ #175 FINAL PASS — THE SAME LABEL DERIVATION AS THE ADMITTED PATH.
+    // This passed `identity.label` — `alias ?? tag` and nothing else — while
+    // `chooseFieldLabel`, forty lines below in the same function, falls back to
+    // the container's own text. Measured on the real customer template: 28
+    // controls, ONE alias, ONE tag, TWENTY-SEVEN with neither. So every refused
+    // control there would have rendered as "Unnamed control", and #175(2)(b)'s
+    // whole point — that a count became a list a doctor can act on — would have
+    // survived exactly one layer down: three identical rows carrying no more
+    // information than the number did.
+    addUnsupportedContentControl(
+      state,
+      context,
+      nodePath,
+      chooseFieldLabel(identity, context.containerText, state.fields.length + 1)
+        .label,
+      "UNSUPPORTED_CONTROL_STRUCTURE",
+      `Unsupported control structure: ${refusal}. The text stays exactly as ` +
+        `written; this control will not be filled automatically.`,
+    );
+    walkNodes(
+      childrenOf(content),
+      contentPath,
+      { ...context, insideFieldContent: true },
+      state,
+    );
+    return;
+  }
+
   const dataBound = descendants(properties, "dataBinding").length > 0;
-  const dropdown = directChild(properties, "dropDownList");
-  const comboBox = directChild(properties, "comboBox");
+  // ⚠️ #174 — ONE CONSISTENT METHOD FOR ALL FIVE MARKERS, AND THE ASYMMETRY WAS
+  // THE BUG. `checkbox` already used `descendants` *because Word wraps it in
+  // `mc:AlternateContent`* — so this file already knew the wrapper was real —
+  // while the other four used `directChild`. Measured: a `w:dropDownList`
+  // inside that same wrapper compiled as `narrative_text`, earned a counted
+  // `emptied` proof with its live list intact, and CERTIFIED a template.
+  const dropdown = descendants(properties, "dropDownList")[0];
+  const comboBox = descendants(properties, "comboBox")[0];
   const checkBox = descendants(properties, "checkbox")[0];
-  const date = directChild(properties, "date");
-  const plainText = directChild(properties, "text");
+  const date = descendants(properties, "date")[0];
+  const plainText = descendants(properties, "text")[0];
   const unsupportedType = [
     "picture",
     "group",

@@ -1,0 +1,26 @@
+// A FILE FIXTURE FOR THE #173 LINT CONTROL. Not a test — the `.txt` extension
+// keeps it out of the runner while leaving it real bytes on disk.
+//
+// ⚠️ IT IS WRAPPED ON PURPOSE. The previous lint scanned line by line and its
+// "positive control" tested a single-line string literal in memory, so it
+// passed while the scan found none of the four real (wrapped) offenders in its
+// own watched directories. A control that never touches a file cannot guard
+// files.
+const chosen = proof.fields.find(
+  (entry) => entry.kind === 'filled' && entry.partName === 'word/document.xml',
+);
+const other = list.findLast((f) => f.kind !== 'blank');
+// a string and a comment holding the shape must NOT be flagged:
+// list.find((f) => f.kind === 'x')
+const msg = "list.find((f) => f.kind === 'x')";
+const keyed = ir.fields.find((f) => f.fieldId === wantedId);
+
+// ⚠️ THE FORM THE GATE'S OWN ADVICE PRODUCES IF THE COUNT IS OMITTED. The
+// failure message says "filter + an EXPLICIT COUNT"; this is that minus the
+// count, and it is the identical laundering.
+const firstOfMany = proof.fields.filter((f) => f.kind === 'emptied')[0];
+
+// ⚠️ THE TWO-STATEMENT FORM — the spelling all three compliant sites in the
+// corpus actually use, and the one the single-expression check could not see.
+const many = proof.fields.filter((f) => f.kind === 'blank');
+const firstOne = many[0];

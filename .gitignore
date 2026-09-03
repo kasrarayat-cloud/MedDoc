@@ -231,3 +231,7 @@ docker-compose.*key*.yml
 # through `git add -A` in a session that had it sitting untracked, which is
 # exactly how it reached `main` in c86f0a9e on 2026-08-14.
 docs/foundation/STOP
+
+# python bytecode from ad-hoc imports of scripts/lib/*.py
+__pycache__/
+*.pyc
