@@ -42,6 +42,8 @@
  *  wedged sidecar can never hold a request open longer than this. */
 const CONVERT_TIMEOUT_MS = 12_000;
 
+import { flattenDocxForConversion } from './flatten-docx';
+
 const GOTENBERG_URL =
   process.env.GOTENBERG_URL ?? 'http://gotenberg:3000/forms/libreoffice/convert';
 
@@ -75,10 +77,45 @@ export async function convertDocxToPdf(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CONVERT_TIMEOUT_MS);
   try {
+    // ⚠️ THE CONVERSION INPUT IS FLATTENED — HERE, AT THE ONE CHOKE POINT.
+    //
+    // This converter renders every paragraph OUTSIDE a content control and
+    // NONE of the text inside one. Measured on the owner's own signed export:
+    // the DOCX carried 22 filled controls and 7,603 visible characters; the PDF
+    // carried 0 of the 22 and 2,199 characters. The same emptiness reproduces
+    // on his BLANK uploaded form — 0 of 35 — so the cause predates any fill of
+    // ours.
+    //
+    // Flattening unwraps every `w:sdt`, keeping `w:sdtContent`'s runs verbatim,
+    // so the input is made of the plain paragraph text that rendered in EVERY
+    // experiment. On his document: 35 controls -> 0, `w:t` runs 79 -> 79
+    // unchanged, and the filled values went 0/22 -> 22/22 in the rendered PDF,
+    // with the character count moving 2,199 -> 7,668 against a DOCX visible
+    // count of 7,603.
+    //
+    // ⚠️ IT IS APPLIED TO THE CONVERSION INPUT AND NOWHERE ELSE. The bytes served
+    // to Word keep their controls; only what Gotenberg is shown is flattened.
+    // Doing it at this boundary rather than in each caller is deliberate — there
+    // are three callers today, and a fix applied per-caller is a list somebody
+    // has to keep. `gate-pdf-flatten.test.ts` enumerates them.
+    //
+    // ⚠️ AND IT FAILS OPEN. A part this cannot parse must not cost the doctor a
+    // PDF: flattening is best-effort and the ORIGINAL bytes are sent if it
+    // throws. A PDF with empty controls is the defect we are fixing; NO PDF is
+    // worse, and this function's fail-open contract predates this change.
+    let toConvert = docx;
+    try {
+      toConvert = await flattenDocxForConversion(docx);
+    } catch (flattenErr) {
+      console.warn(
+        '[docx-preview] flatten failed; converting the original bytes:',
+        flattenErr instanceof Error ? flattenErr.message : flattenErr,
+      );
+    }
     const form = new FormData();
     form.set(
       'files',
-      new Blob([docx as unknown as BlobPart], {
+      new Blob([toConvert as unknown as BlobPart], {
         type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       }),
       filename,
