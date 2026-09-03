@@ -81,29 +81,14 @@ export async function flattenDocxForConversion(docx: Uint8Array): Promise<Flatte
     // same commit that fixed it, the "one odd header costs the body its 28
     // filled values" defect. A refusal that is not caught is not per-part.
     try {
-      // ⚠️ SHAPES THIS FLATTENER CANNOT REASON ABOUT ARE REFUSED, NOT GUESSED
-      // AT. A `w:sdt` inside a comment or a CDATA section is TEXT, not a tag,
-      // and the tag-removal patterns cannot tell the difference — round three
-      // demonstrated character data inside CDATA being discarded. Word emits
-      // neither in a document part, so refusing costs nothing real.
-      if (xml.includes('<![CDATA[')) {
-        throw new Error('CDATA section');
-      }
-      if (/<!--[\s\S]*?<w:sdt[\s\S]*?-->/.test(xml)) {
-        throw new Error('a comment mentions a control');
-      }
-      if (!xml.includes('<w:sdt')) {
-        // ⚠️ AND A DIFFERENTLY-PREFIXED CONTROL IS NAMED RATHER THAN IGNORED.
-        // The wordprocessingml namespace may legally bind to a prefix other
-        // than `w`; the patterns would then match nothing and this function
-        // would report a clean success over a document it never touched — a
-        // SILENT no-op. The bytes are unflattened either way; the difference is
-        // that somebody can now see why.
-        if (/<[A-Za-z][\w.-]*:sdt[ />]/.test(xml)) {
-          throw new Error('content controls use a non-`w` namespace prefix');
-        }
-        continue;
-      }
+      // ⚠️ THE STRING-LEVEL PRE-CHECKS THAT USED TO LIVE HERE ARE GONE, AND
+      // THEIR REMOVAL IS THE POINT. They tried to recognise CDATA sections,
+      // comments naming a control, and namespace prefixes by pattern — and
+      // round four demonstrated a defect in each: a comment regex that spanned
+      // BETWEEN two comments and refused the whole part; a prefix test that
+      // read a SPELLING and no-opped silently on a default-namespace document.
+      // The parser answers all three questions correctly, so asking them here
+      // was strictly worse than not asking.
       zip.file(name, flattenContentControls(xml));
     } catch (err) {
       // A part we cannot flatten safely keeps its ORIGINAL bytes; its own

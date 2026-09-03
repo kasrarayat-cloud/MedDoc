@@ -208,17 +208,22 @@ describe('flattening the conversion input', () => {
     expect(carrierList(wrecked)).not.toEqual(carrierList(before));
   });
 
-  it('⚠️ ARMED: an ATTRIBUTE-BEARING wrapper is REFUSED, never half-removed', () => {
-    // Neither element takes an attribute in the schema (the real form is 56 of
-    // 56 bare). Admitting them means stopping at the FIRST `>`, so a value
-    // containing `>` leaves its tail behind as character data — text
-    // MANUFACTURED into a clinical document. The survivor check refuses
-    // instead, and the original bytes convert.
-    const odd = doc(
-      `<w:p><w:sdt w:foo="a>b"><w:sdtContent><w:r><w:t>X</w:t></w:r>` +
+  // ⚠️ THIS ARM USED TO ASSERT A REFUSAL, AND THAT WAS A SPELLING, NOT A
+  // PROPERTY. The string version could not read an attribute value containing
+  // `>` without leaving its tail behind as character data, so it refused
+  // attribute-bearing wrappers outright. A parser has no such difficulty, and
+  // an arm demanding the old refusal would have RED-ed the improvement — the
+  // exact shape canon 72 warns about. What is asserted now is the property:
+  // the content survives and the document stays well-formed.
+  it('⚠️ an ATTRIBUTE-BEARING wrapper is handled, not refused', () => {
+    const before = doc(
+      `<w:p><w:sdt w:foo="a&gt;b"><w:sdtContent><w:r><w:t>DIGOXIN</w:t></w:r>` +
         `</w:sdtContent></w:sdt></w:p>`,
     );
-    expect(() => flattenContentControls(odd)).toThrow(/wrapper survived/);
+    const after = flattenContentControls(before);
+    expect(after).toContain('DIGOXIN');
+    expect(after).not.toMatch(/<w:sdt[ >/]/);
+    expect(wellFormed(after)).toBe(true);
   });
 
   it('⚠️ the TRIPWIRE fires rather than shipping a changed run set', () => {
@@ -309,26 +314,25 @@ describe('flattening the conversion input', () => {
   it('⚠️ ONE un-flattenable part does not discard the WHOLE package', async () => {
     const JSZip = (await import('jszip')).default;
     const { flattenDocxForConversion } = await import('../flatten-docx');
-    const { inspectDocxPackage } = await import('../../note-template-docx/package-security');
 
     const src = readFileSync(join(APP, 'tests', 'e2e', 'fixtures', 'sample-form.docx'));
     const zip = await JSZip.loadAsync(src);
-    // one attribute-bearing control — the refusal the design intends — in a header
-    zip.file(
-      'word/header1.xml',
-      `<?xml version="1.0"?><w:hdr ${W}><w:p><w:sdt w:foo="a"><w:sdtContent>` +
-        `<w:r><w:t>LETTERHEAD</w:t></w:r></w:sdtContent></w:sdt></w:p></w:hdr>`,
-    );
-    const bytes = await zip.generateAsync({ type: 'uint8array' });
+    // ⚠️ THE TRIGGER IS MALFORMED XML, NOT AN ATTRIBUTE. Under the parser an
+    // attribute is ordinary; what genuinely cannot be unwrapped is a part the
+    // parser rejects. The PROPERTY under test is unchanged: one bad part must
+    // not cost the body its flatten.
+    zip.file('word/header1.xml', '<w:hdr><w:p><w:r><w:t>UNCLOSED');
+    const bytes = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
 
     const out = await flattenDocxForConversion(bytes);
-    // the odd part is named, not silently swallowed ...
-    expect(out.skipped).toEqual(['word/header1.xml']);
-    // ... and the BODY is still flattened. Before this, one odd header cost the
-    // doctor all 28 filled values in the document itself.
-    const body = Buffer.from(
-      inspectDocxPackage(out.docx).zip.entries.get('word/document.xml')!.bytes,
-    ).toString('utf8');
+    expect(out.skipped, 'the bad part was not named').toEqual(['word/header1.xml']);
+    // ⚠️ READ THE BODY WITH JSZip, NOT THE HARDENED INSPECTOR. The inspector
+    // validates EVERY part, so it throws on the header this arm deliberately
+    // broke — a failure of the instrument, not of the subject. The first draft
+    // of this arm read `An OOXML part is malformed` and looked like a real red.
+    const body = await (await JSZip.loadAsync(out.docx))
+      .file('word/document.xml')!
+      .async('string');
     expect((body.match(/<w:sdt[ >]/g) ?? []).length, 'the body lost its flatten').toBe(0);
   });
 
@@ -342,22 +346,74 @@ describe('flattening the conversion input', () => {
     expect(out.docx.byteLength, 'the package was re-STORED').toBeLessThan(src.byteLength * 2);
   });
 
-  it('⚠️ a CDATA section or a comment naming a control is REFUSED, not guessed at', async () => {
-    const JSZip = (await import('jszip')).default;
-    const { flattenDocxForConversion } = await import('../flatten-docx');
-    for (const [what, part] of [
-      ['CDATA', `<w:document ${W}><w:body><![CDATA[<w:sdt>]]><w:p><w:sdt><w:sdtContent><w:r><w:t>A</w:t></w:r></w:sdtContent></w:sdt></w:p></w:body></w:document>`],
-      ['a comment', `<w:document ${W}><w:body><!-- <w:sdt> --><w:p><w:sdt><w:sdtContent><w:r><w:t>A</w:t></w:r></w:sdtContent></w:sdt></w:p></w:body></w:document>`],
+  // ⚠️ ROUND FOUR'S SURVIVING DEFECTS, AND THEY WERE IN THE GUARDS RATHER THAN
+  // IN THE UNWRAPPING. A comment regex spanned BETWEEN two comments and refused
+  // the whole part; a carrier check read comment text as markup. A parser knows
+  // what a comment is, so both are now questions nobody has to answer by hand.
+  it('⚠️ comments and CDATA are HANDLED, not mis-read as markup', () => {
+    for (const [what, body] of [
+      [
+        'two ordinary comments',
+        `<w:p><w:sdt><w:sdtContent><!-- c1 --><w:r><w:t>ASPIRIN</w:t></w:r></w:sdtContent></w:sdt></w:p>` +
+          `<w:p><w:sdt><w:sdtContent><!-- c2 --><w:r><w:t>WARFARIN</w:t></w:r></w:sdtContent></w:sdt></w:p>`,
+      ],
+      [
+        'a comment holding an unclosed w:t',
+        `<w:p><!-- <w:t>oops --><w:sdt><w:sdtContent><w:r><w:t>DIGOXIN</w:t></w:r></w:sdtContent></w:sdt></w:p>`,
+      ],
+      [
+        'a comment naming a control',
+        `<w:p><!-- <w:sdt> --><w:sdt><w:sdtContent><w:r><w:t>HEPARIN</w:t></w:r></w:sdtContent></w:sdt></w:p>`,
+      ],
     ] as Array<[string, string]>) {
-      const zip = new JSZip();
-      zip.file('[Content_Types].xml', '<Types/>');
-      zip.file('_rels/.rels', '<Relationships/>');
-      zip.file('word/document.xml', part);
-      const bytes = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
-      const out = await flattenDocxForConversion(bytes);
-      // per-part: named and left alone, never silently half-processed
-      expect(out.skipped, `${what} was not refused`).toEqual(['word/document.xml']);
+      const before = doc(body);
+      const after = flattenContentControls(before);
+      expect(after, `${what}: content lost`).toMatch(/ASPIRIN|DIGOXIN|HEPARIN/);
+      expect(after).not.toMatch(/<w:sdt[ >/]/);
+      expect(wellFormed(after), `${what}: not well-formed`).toBe(true);
     }
+  });
+
+  it('⚠️ a part that does not DECLARE the WordprocessingML namespace is refused', () => {
+    // the previous version read a PREFIX SPELLING and reported clean success on
+    // a default-namespace document — a silent no-op, the outcome its own
+    // comment claimed to prevent. The binding is now read from the root.
+    expect(() => flattenContentControls('<w:document><w:body/></w:document>')).toThrow(
+      /does not declare the WordprocessingML namespace/,
+    );
+  });
+
+  it('⚠️ a NON-`w` prefix is unwrapped, not silently ignored', () => {
+    const before =
+      `<x:document xmlns:x="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<x:body><x:p><x:sdt><x:sdtContent><x:r><x:t>ZLEVOTHYROXINE</x:t></x:r>` +
+      `</x:sdtContent></x:sdt></x:p></x:body></x:document>`;
+    const after = flattenContentControls(before);
+    expect(after).toContain('ZLEVOTHYROXINE');
+    expect(after, 'the control was left in place').not.toMatch(/<x:sdt[ >/]/);
+  });
+
+  it('⚠️ the doctor\'s ESCAPES survive verbatim — nothing is silently decoded', () => {
+    // ⚠️ ARMED BECAUSE A MUTATION FOUND NOTHING WATCHING IT. Flipping
+    // `processEntities` to true redded ZERO arms, and it is not a backstop —
+    // it silently rewrites the doctor's text. `5 &lt; 10` must not become
+    // `5 < 10`, and `&amp;` must not collapse to `&`: one changes the meaning
+    // of a clinical statement, the other can invalidate the XML downstream.
+    // ⚠️ NUMERIC REFERENCES, NOT NAMED ONES — AND THE FIRST DRAFT USED NAMED
+    // ONES AND PROVED NOTHING. `&lt;` survives `processEntities` in either
+    // setting, so the mutation still passed. A NUMERIC reference does not:
+    // with entity processing ON, `&#60;` is re-emitted as `&amp;#60;`, so the
+    // doctor's `Dose < 5 mg` prints as the literal text `Dose &#60; 5 mg`.
+    // Measured both ways before this arm was written.
+    const before = doc(
+      `<w:p><w:sdt><w:sdtContent><w:r>` +
+        `<w:t>Dose &#60; 5 mg &#38; hold if INR &lt; 3</w:t>` +
+        `</w:r></w:sdtContent></w:sdt></w:p>`,
+    );
+    const after = flattenContentControls(before);
+    expect(after).toContain('Dose &#60; 5 mg &#38; hold if INR &lt; 3');
+    expect(after, 'an entity was double-escaped into visible text').not.toContain('&amp;#');
+    expect(wellFormed(after)).toBe(true);
   });
 
   // ⚠️ THE REAL DOCUMENT, not a fixture of my own shape. The owner's blank form

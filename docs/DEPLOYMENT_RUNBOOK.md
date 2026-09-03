@@ -2061,10 +2061,35 @@ are surprised, and neither is discoverable from the code alone.
 
 ### 11.1 THE TRADE: the DOCX remains the structured artifact; the PDF becomes presentation-only
 
-Everything sent to Gotenberg is now a **flattened copy** of the served DOCX —
-every `w:sdt` unwrapped, `w:sdtContent`'s children kept verbatim
-(`src/lib/docx-preview/flatten-sdt.ts`, applied once at
-`convertDocxToPdf`'s input boundary and nowhere else).
+Everything sent to Gotenberg is now an **unwrapped copy** of the served DOCX —
+every `w:sdt` dissolved into its parent, `w:sdtContent`'s children hoisted and
+every other child (`w:sdtPr`, `w:sdtEndPr`, and the trailing runs ruling #174
+keeps as static content) passed through untouched
+(`src/lib/docx-preview/flatten-sdt.ts`, applied once at `convertDocxToPdf`'s
+input boundary and nowhere else).
+
+⚠️ **IT IS DONE BY DOM, NOT BY STRING, AND THAT WAS RULED AFTER FOUR ROUNDS OF
+EVIDENCE.** Three successive string-level designs were refuted — a subtree
+selection that deleted a drug name, a property-block deletion that removed a
+Wingdings tick and a signature image, a carrier check that mis-read
+`<w:t xml:space="preserve"/>` and falsely refused, and finally comment and
+namespace-prefix guards that a fuzz of 728 variants broke while it could not
+break the unwrapping itself. Every one was the same class: **a regex reading
+XML.** The instrument was replaced rather than the pattern.
+
+Nodes are **moved, never re-created**, so content preservation is a property of
+the construction rather than of a list that can be incomplete. The trade is
+that serialization is no longer byte-identical: a no-op parse/build round trip
+on the real form moves 163,002 bytes to 196,270 while preserving all 138 `w:t`
+runs in identical sequence. That is acceptable **here and nowhere else** — this
+output is the converter's input only. Measured against the design it replaced,
+with a no-op round trip as the positive control:
+
+| conversion input | fills | PDF | chars |
+|---|---|---|---|
+| string flatten (superseded) | 28/28 | 54,821 B | 2,329 |
+| **DOM unwrap (shipped)** | **28/28** | **54,821 B** | **2,329** |
+| no-op round trip (control) | 1/28 | 82,061 B | 2,154 |
 
 **What that costs, named so it is not discovered later:** unwrapping removes the
 STRUCTURE that marks which text is a filled field. For a PDF that is correct —
