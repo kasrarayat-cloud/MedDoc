@@ -17,6 +17,16 @@ const ROW = readFileSync(
   'utf8',
 );
 
+// ⚠️ COMMENT-STRIPPED, AND THAT IS NOT TIDINESS — IT IS THE GATE'S CORRECTNESS.
+// The first two arms below were written against raw `PAGE` and BOTH FAILED on
+// correct code: the earliest `preparing:` in the file sits inside a comment
+// explaining this very gate, so the extracted window was prose. A gate that
+// reads its own documentation measures the author's writing, not the program
+// (canon 96, and canon 20's "self-authored prose is the highest-risk grep
+// target"). The arms that pass on raw PAGE do so only because `toMatch` scans
+// every position; anything that EXTRACTS a window has to strip first.
+const CODE = PAGE.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+
 describe('the preparing state is bounded', () => {
   it('a window constant exists and is a finite number of minutes', () => {
     const m = PAGE.match(/PREPARING_WINDOW_MS\s*=\s*(\d+)\s*\*\s*60_000/);
@@ -46,6 +56,33 @@ describe('the preparing state is bounded', () => {
 
   it('the derivation is time-bounded, not a bare boolean', () => {
     expect(PAGE).toMatch(/preparing:[\s\S]{0,300}PREPARING_WINDOW_MS/);
+  });
+
+  // ⚠️ #175 FINAL PASS — "PREPARING" MUST AGREE WITH THE PREDICATE THAT DECIDES
+  // WHETHER ANYTHING IS BEING PREPARED. Auto-certify is enqueued ONLY when the
+  // blocking count is 0; with any blocking finding it logs SKIPPED and stops.
+  // The derivation did not consult that count, and `preparing` REPLACES the
+  // status pill — so a template the system had already decided never to certify
+  // showed "Preparing your format…" for the full window, suppressing the one
+  // signal that leads the doctor to the findings list. It tells them to WAIT
+  // when the correct instruction is to ACT.
+  it('⚠️ preparing consults the blocking count that gates auto-certify', () => {
+    expect(CODE).toMatch(/preparing:[\s\S]{0,300}blockingUnsupportedCount/);
+  });
+
+  // ⚠️ PINS THE DIRECTION, NOT THE SPELLING (canon 72). Any fail-closed default
+  // passes; the ONE value that must not appear is a default of 0, which reads an
+  // unknown count as "nothing is blocking" — the direction that hides a refusal.
+  it('⚠️ the unknown-count default is FAIL-CLOSED, never 0', () => {
+    const window_ = CODE.match(/preparing:[\s\S]{0,300}/)?.[0] ?? '';
+    expect(window_.length, 'no preparing derivation was found at all').toBeGreaterThan(50);
+    expect(
+      /blockingUnsupportedCount\s*\?\?\s*0\b/.test(window_),
+      'an absent count would read as "nothing is blocking"',
+    ).toBe(false);
+    // and it IS defaulted — an undefined compared with === 0 is silently false,
+    // which happens to fail closed here, but by accident rather than by design.
+    expect(window_).toMatch(/blockingUnsupportedCount\s*\?\?/);
   });
 
   it('the row renders the preparing pill INSTEAD of the status pill', () => {

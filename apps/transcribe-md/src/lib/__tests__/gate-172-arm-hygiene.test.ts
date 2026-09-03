@@ -96,31 +96,104 @@ function isUncountedFirstOfFilter(call: ts.CallExpression): boolean {
   // uncounted selection.
   if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
     const bound = parent.name.text;
-    const fn = call.getSourceFile();
-    let takesFirst = false;
-    let asserts = false;
+
+    // ⚠️ #175 FINAL PASS — THE ESCAPE IS NOW AN EXPLICIT MARKER, NOT AN
+    // INFERENCE, AND IT IS SCOPED AND ORDERED. The previous form scanned the
+    // WHOLE source file for any `<bound>.length`, by identifier text, with no
+    // scope and no ordering. Eleven probes through this same function measured
+    // it wrong in BOTH directions:
+    //
+    //   FALSE NEGATIVES (an offender called clean) — a same-named variable in
+    //   ANOTHER function carrying the `.length`; `.length` as a truthiness
+    //   guard (`if (rows.length) return rows[0]`); `.length` as a for-loop
+    //   bound; a `.length` asserted AFTER the take; a weak
+    //   `toBeGreaterThan(0)`.
+    //   FALSE POSITIVES (clean code called an offender) — a compliant site plus
+    //   an unrelated same-named `rows[0]` elsewhere in the file; `.at(3)`
+    //   counted as taking the first because the argument was ignored.
+    //
+    // In situ: planting a genuine offender in a watched gate file left the gate
+    // GREEN because `refused.length` appeared elsewhere in that file; renaming
+    // the variable to `zzRows` — same code — redded it. The gate's zero was a
+    // fact about a variable's NAME. `rows`, `fields`, `refused` and `proofs`
+    // are exactly the names this corpus reuses across dozens of `it()` blocks.
+    //
+    // ⚠️ SO THE SEMANTIC QUESTION IS ABANDONED RATHER THAN REFINED (canon 75).
+    // Deciding whether a `.length` reference constitutes an ASSERTION is the
+    // judgement that was falsified five times; the next counterexample always
+    // exists. The escape now requires the one spelling that cannot mean
+    // anything else — `expect(<bound>.length` — inside the SAME enclosing
+    // function, textually BEFORE the take. A guard, a loop bound and a later
+    // assertion are all correctly refused, because none of them is that.
+    const scope: ts.Node =
+      (function enclosing(n: ts.Node): ts.Node {
+        const up = n.parent;
+        if (!up) return n;
+        if (
+          ts.isFunctionDeclaration(up) ||
+          ts.isFunctionExpression(up) ||
+          ts.isArrowFunction(up) ||
+          ts.isMethodDeclaration(up)
+        ) {
+          return up;
+        }
+        return enclosing(up);
+      })(parent);
+
+    let takeAt: number | null = null;
+    let assertAt: number | null = null;
     const scan = (n: ts.Node): void => {
+      // `bound[0]` — the argument must BE zero; `.at(3)` is not taking first.
       if (
         ts.isElementAccessExpression(n) &&
         ts.isIdentifier(n.expression) &&
         n.expression.text === bound &&
-        n.argumentExpression.getText() === '0'
+        n.argumentExpression.getText() === '0' &&
+        (takeAt === null || n.getStart() < takeAt)
       ) {
-        takesFirst = true;
+        takeAt = n.getStart();
       }
       if (
-        ts.isPropertyAccessExpression(n) &&
-        ts.isIdentifier(n.expression) &&
-        n.expression.text === bound &&
-        (n.name.text === 'length' || n.name.text === 'at')
+        ts.isCallExpression(n) &&
+        ts.isPropertyAccessExpression(n.expression) &&
+        ts.isIdentifier(n.expression.expression) &&
+        n.expression.expression.text === bound &&
+        n.expression.name.text === 'at' &&
+        n.arguments.length === 1 &&
+        n.arguments[0]!.getText() === '0' &&
+        (takeAt === null || n.getStart() < takeAt)
       ) {
-        if (n.name.text === 'length') asserts = true;
-        else takesFirst = true;
+        takeAt = n.getStart();
+      }
+      // the ONLY accepted discharge: `expect(<bound>.length` …
+      if (
+        ts.isCallExpression(n) &&
+        ts.isIdentifier(n.expression) &&
+        n.expression.text === 'expect' &&
+        n.arguments.length > 0 &&
+        ts.isPropertyAccessExpression(n.arguments[0]!) &&
+        ts.isIdentifier(n.arguments[0]!.expression) &&
+        (n.arguments[0]! as ts.PropertyAccessExpression).expression.getText() === bound &&
+        (n.arguments[0]! as ts.PropertyAccessExpression).name.text === 'length' &&
+        (assertAt === null || n.getStart() < assertAt) &&
+        // ⚠️ AND AN "AT LEAST" MATCHER DOES NOT DISCHARGE IT. The gate's own
+        // message asks for an EXPLICIT COUNT; `toBeGreaterThan(0)` asserts only
+        // that the set is non-empty, so `rows[0]` can still be one of several —
+        // the exact laundering this predicate exists to police, wearing the
+        // remediation's clothes. This is a CLOSED list of matchers that bound
+        // the count from below only, not a pinned spelling: `toBe`,
+        // `toEqual`, `toHaveLength` and the rest all still discharge.
+        !(
+          ts.isPropertyAccessExpression(n.parent) &&
+          /^toBeGreaterThan(OrEqual)?$/.test(n.parent.name.text)
+        )
+      ) {
+        assertAt = n.getStart();
       }
       ts.forEachChild(n, scan);
     };
-    scan(fn);
-    if (takesFirst && !asserts) return true;
+    scan(scope);
+    if (takeAt !== null && (assertAt === null || assertAt > takeAt)) return true;
   }
   if (
     ts.isPropertyAccessExpression(parent) &&
@@ -184,6 +257,73 @@ describe('#174 — the lint asks the COMPILER, and its control touches a FILE', 
     expect(
       offendersIn('probe.ts', "const x = list.find((f) => f.kind === 'filled');").length,
     ).toBe(1);
+  });
+
+  // ⚠️ THE LINT'S OWN BEHAVIOUR IS NOW WATCHED, IN BOTH DIRECTIONS.
+  //
+  // "Every gate file is clean" is a fact about the CORPUS. It says nothing
+  // about whether the predicate works, and the pass measured that it did not:
+  // eleven probes found FIVE false negatives and TWO false positives, and the
+  // in-situ demonstration was worse than either number. A genuine offender
+  // planted in a watched gate file left this gate GREEN — because
+  // `refused.length` appears twelve times elsewhere in that file — and
+  // renaming the variable to `zzRows`, with the code otherwise identical,
+  // redded it. The gate's zero was a fact about a variable's NAME.
+  //
+  // A predicate with no probes of its own is a green that means "nobody wrote
+  // the shape I happen to catch". These rows are the acceptance.
+  const PROBES: ReadonlyArray<readonly [string, string, number]> = (() => {
+    const F = 'xs.filter((f) => f.kind === "emptied")';
+    return [
+      // ── FALSE NEGATIVES the file-wide, unordered, name-only scan allowed ──
+      ['a same-named variable in ANOTHER function carries the count',
+       `function a(){const rows=${F};return rows[0];}
+        function b(){const rows=${F};expect(rows.length).toBe(1);return rows;}`, 1],
+      ['.length as a truthiness guard is not an assertion',
+       `function a(){const rows=${F};if(rows.length)return rows[0];return null;}`, 1],
+      ['.length as a for-loop bound is not an assertion',
+       `function a(){const rows=${F};for(let i=0;i<rows.length;i++){}return rows[0];}`, 1],
+      ['a count asserted AFTER the take does not discharge it',
+       `function a(){const rows=${F};const x=rows[0];expect(rows.length).toBe(1);return x;}`, 1],
+      ['an "at least" matcher does not bound the count',
+       `function a(){const rows=${F};expect(rows.length).toBeGreaterThan(0);return rows[0];}`, 1],
+      // ── FALSE POSITIVES it produced on correct code ──
+      ['a compliant site plus an unrelated same-named take elsewhere',
+       `function a(){const rows=${F};expect(rows.length).toBe(1);return rows[0];}
+        function b(){const rows=[1,2];return rows[0];}`, 0],
+      ['.at(3) is not taking the first',
+       `function a(){const rows=${F};return rows.at(3);}`, 0],
+      // ── CONTROLS, so a predicate that flagged NOTHING could not pass ──
+      ['CONTROL — the compliant two-statement form', 
+       `function a(){const rows=${F};expect(rows.length).toBe(1);return rows[0];}`, 0],
+      ['CONTROL — a keyed find is not an offender',
+       `function a(){return ir.fields.find((f) => f.fieldId === wantedId);}`, 0],
+      ['CONTROL — the single-expression offender',
+       `function a(){return ${F}[0];}`, 1],
+      ['CONTROL — the destructured offender',
+       `function a(){const [only]=${F};return only;}`, 1],
+      ['CONTROL — an uncounted .at(0)',
+       `function a(){const rows=${F};return rows.at(0);}`, 1],
+    ] as const;
+  })();
+
+  it('⚠️ THE PREDICATE ITSELF IS PROBED — five past false negatives, two false positives', () => {
+    const wrong = PROBES.flatMap(([name, code, expected]) => {
+      const got = offendersIn('probe.ts', code).length;
+      return got === expected ? [] : [`${name}: expected ${expected}, got ${got}`];
+    });
+    expect(
+      wrong,
+      'the lint disagrees with its own acceptance — a zero from it is a fact ' +
+        'about the shapes it happens to catch, not about the corpus',
+    ).toEqual([]);
+  });
+
+  // ⚠️ NON-VACUITY FOR THE TABLE ITSELF: it must contain rows of BOTH verdicts,
+  // or a predicate stuck on one answer would pass the arm above.
+  it('⚠️ the probe table exercises both verdicts', () => {
+    expect(PROBES.filter(([, , n]) => n === 1).length).toBeGreaterThanOrEqual(5);
+    expect(PROBES.filter(([, , n]) => n === 0).length).toBeGreaterThanOrEqual(4);
   });
 
   it('every gate file is clean', () => {
@@ -250,10 +390,23 @@ describe('#172(5) — every canon BODY has its INDEX ROW', () => {
     // links to it. A row belongs to the entry whose POINTER it ends with, which
     // is the `→ \`docs/canon/…\`` at the end of the line; an inline
     // `[canon 31](…)` mid-sentence is a citation, not a row.
-    const ownedBy = new Map<string, boolean>();
+    // ⚠️ ROWS ARE REASSEMBLED BEFORE THEY ARE READ, because a row is a logical
+    // unit and `\n` is not its boundary. The previous form tested
+    // `line.startsWith('- ')`, so a markdown reflow that wrapped a row's
+    // pointer onto a continuation line dropped that row from the map and redded
+    // with *"these canon entries have a body and no index row"* — naming a
+    // cause that is not the one. A gate whose failure message misdirects costs
+    // more than the reflow it is complaining about.
+    const rows: string[] = [];
     for (const line of index.split('\n')) {
-      if (!line.startsWith('- ')) continue;
-      const pointer = /→\s*`docs\/canon\/([^`]+)`/.exec(line);
+      if (/^\s*- /.test(line)) rows.push(line);
+      else if (rows.length > 0 && line.trim() !== '') rows[rows.length - 1] += ' ' + line.trim();
+    }
+    const ownedBy = new Map<string, boolean>();
+    for (const row of rows) {
+      // headline rows only — an indented `↳` sub-row belongs to its parent.
+      if (!row.startsWith('- ')) continue;
+      const pointer = /→\s*`docs\/canon\/([^`]+)`/.exec(row);
       if (pointer) ownedBy.set(pointer[1]!, true);
     }
     const missing = bodies.filter((n) => !ownedBy.has(n));
@@ -262,5 +415,23 @@ describe('#172(5) — every canon BODY has its INDEX ROW', () => {
       'these canon entries have a body and no index row, so a grep of the ' +
         'index cannot find them',
     ).toEqual([]);
+
+    // ⚠️ AND THE OTHER DIRECTION, WHICH NOTHING WATCHED. The arm above asks
+    // "does every body have a row?". A row pointing at a file that does not
+    // exist is the same pointer failure with the arrow reversed — a reader
+    // greps the index, finds the entry, follows the pointer and lands on
+    // nothing — and it was invisible. Renaming a canon file without updating
+    // its row would have passed.
+    const bodySet = new Set(bodies);
+    const dangling = [...ownedBy.keys()].filter((n) => !bodySet.has(n));
+    expect(
+      dangling,
+      'these index rows point at canon files that do not exist — the pointer ' +
+        'resolves to nothing for anyone who follows it',
+    ).toEqual([]);
+
+    // ⚠️ NON-VACUITY: the reassembly must actually have found rows, or both
+    // directions above are comparing empty sets and agreeing.
+    expect(ownedBy.size, 'no index rows were parsed at all').toBeGreaterThanOrEqual(90);
   });
 });

@@ -84,6 +84,26 @@ const SHA256_HEX = /^[0-9a-f]{64}$/;
 const BLANK_INELIGIBLE_KINDS: ReadonlySet<string> = new Set([
   'single_select',
   'multi_select',
+  // ⚠️ #175 FINAL PASS — A CHECKBOX IS ALWAYS PATCHED, SO IT CAN NEVER
+  // HONESTLY CLAIM THE RENDERER WROTE NOTHING.
+  //
+  // The renderer writes TWO things for a null checkbox — `w:val="0"` and the
+  // `☐` glyph — and says so: *"A CHECKBOX IS NEVER BOUNDED-CLEARED … it must
+  // never buy a blank proof."* It could not reach the zero-patch `blank` path
+  // honestly; but a forged proof could, and all three guards written to catch
+  // exactly that pass for a checkbox BY CONSTRUCTION: `resolvedNull` is
+  // satisfied (it genuinely is null), `blankEligible` is whatever the forger
+  // writes, and the kind check did not name it.
+  //
+  // Measured through the real `certifyAndActivateTemplateTwin`: relabelling one
+  // null checkbox entry to `blank` and adding `blankEligible: 'eligible'` —
+  // two token edits, no hash, because `blank` returns before the expectation
+  // check — took a template from BLOCKED to CERTIFIED. The same two edits on a
+  // filled field or a null selection are refused.
+  //
+  // ⚠️ AND NO ARM ANYWHERE PASSED `'checkbox'` as a kind, which is why the gap
+  // sat unwatched: every unit arm supplies `narrative_text`.
+  'checkbox',
 ]);
 
 export interface BlankProofContext {

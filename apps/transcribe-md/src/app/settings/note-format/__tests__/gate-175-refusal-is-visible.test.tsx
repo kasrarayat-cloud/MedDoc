@@ -170,6 +170,52 @@ describe('ruling 175(2)(b) — each refused control names itself', () => {
     expect(screen.queryByTestId('twin-unsupported-findings')).toBeNull();
   });
 
+  // ⚠️ A MIXED LIST — THE ONE SHAPE NO ARM USED, AND THE ONE THAT SEPARATES
+  // "filters correctly" FROM "happens to be given a pre-filtered list".
+  //
+  // The existing non-blocking arm passes a list where EVERY entry is
+  // non-blocking, so the outer `blockingUnsupported.length > 0` condition hides
+  // the whole block and the `.map` is never reached. Swapping the map's source
+  // to the unfiltered `workspace.unsupported` therefore redded 0 of 39 — while
+  // rendering "1 element ... can't be reproduced" above a list of TWO rows.
+  //
+  // Arithmetic that does not reconcile, on a clinical surface, invisible to the
+  // gate that exists to watch that surface.
+  it('⚠️ A MIXED LIST: the count and the rows must agree', async () => {
+    await openWorkspace([
+      REFUSALS[0],
+      { ...REFUSALS[1], blocksCertification: false, label: 'Cosmetic only' },
+    ]);
+    const list = await screen.findByTestId('twin-unsupported-findings');
+    const rows = screen.getAllByTestId('twin-unsupported-finding');
+    expect(rows.length, 'the list shows entries the count excluded').toBe(1);
+    expect(
+      list.textContent,
+      'a NON-blocking finding was listed under a blocking count',
+    ).not.toContain('Cosmetic only');
+    expect(list.textContent).toContain('Anticoagulation');
+  });
+
+  // ⚠️ THE REASON MUST BE BOUND TO ITS OWN ROW. The arm above this block reads
+  // `list.textContent` — the whole <ul> — so one hard-coded sentence containing
+  // every expected fragment satisfies it while every refused control shows an
+  // identical generic reason. Pairing is a per-ROW property and has to be
+  // asserted per row.
+  it('⚠️ EACH ROW CARRIES ITS OWN REASON, not a shared sentence', async () => {
+    await openWorkspace(REFUSALS);
+    const rows = screen.getAllByTestId('twin-unsupported-finding');
+    expect(rows.length).toBe(2);
+    const named = rows.find((r) => r.textContent?.includes('Anticoagulation'));
+    const unnamed = rows.find((r) => r.textContent?.includes('Unnamed control'));
+    expect(named, 'the labelled control has no row').toBeTruthy();
+    expect(unnamed, 'the unlabelled control has no row').toBeTruthy();
+    // each row carries ITS detail and NOT the other's
+    expect(named!.textContent).toContain('more than one w:sdtContent');
+    expect(named!.textContent).not.toContain('a w:rPr block contains a w:sym');
+    expect(unnamed!.textContent).toContain('a w:rPr block contains a w:sym');
+    expect(unnamed!.textContent).not.toContain('more than one w:sdtContent');
+  });
+
   it('a NON-blocking unsupported entry is not listed as a blocker', async () => {
     await openWorkspace([{ ...REFUSALS[0], blocksCertification: false }]);
     expect(screen.queryByTestId('twin-unsupported-findings')).toBeNull();

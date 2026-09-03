@@ -1227,7 +1227,19 @@ describe('#174 — the compiler admits only controls it fully understands', () =
     expect(refused.length, 'admission refused a real customer control').toBe(0);
   });
 
-  it('a w:tab inside w:tabs is a tab STOP, not a carrier — 52 real fields depend on it', async () => {
+  // ⚠️ THE TITLE USED TO READ "— 52 real fields depend on it", AND THAT NUMBER
+  // WAS FALSE IN BOTH HALVES. The real template carries 128 `w:tabs` blocks and
+  // ZERO of them sit inside a `w:sdt`, so no field depends on this exemption;
+  // the "52" was a `table_cell` count lifted from the wrong row of a different
+  // measurement. The compiler comment was corrected when that was measured —
+  // and the refuted figure survived here, in a test NAME, where anyone grepping
+  // for the justification would still find it stated as fact.
+  //
+  // The exemption is kept on its own merits: a tab STOP is paragraph geometry
+  // and prints nothing, so refusing it would refuse formatting every real
+  // template uses. That argument needs no field count, which is why the number
+  // is gone rather than corrected to 0.
+  it('a w:tab inside w:tabs is a tab STOP, not a carrier', async () => {
     // ⚠️ THE ONE AMBIGUOUS NAME, EXEMPTED BY POSITION RATHER THAN BY NAME. A
     // flat denylist would refuse every cell in the real template, which is the
     // exact shape of false refusal that killed the previous rule.
@@ -1561,3 +1573,109 @@ describe('#170 — the DATE and SELECTION branches, each on its own merit', () =
 
 
 
+
+// ============================================================================
+// #175 FINAL PASS — THE KEEP-LIST IS PROVED WHERE IT ACTS: THE RENDERER.
+// ----------------------------------------------------------------------------
+// ⚠️ THE TWO ARMS THAT WATCHED `STRUCTURE_KEEP_WHOLE` BOTH MISSED ITS REAL
+// FAILURE, AND THE PASS MEASURED BOTH:
+//
+//   1 · a SIZE FLOOR of `>= 15` on a 17-member set licenses losing exactly two.
+//     Removing `permStart`/`permEnd` redded 0 of 756 — and the renderer then
+//     deletes them from every cleared control, which is the inverse failure
+//     (silent capability loss) that v1 and v2 died of.
+//
+//   2 · the structural arm forbids re-declaring `const STRUCTURE_KEEP_WHOLE`
+//     BY NAME. The historical drift was called `PROPERTY_BLOCKS`, so the
+//     regex is pinned to a spelling the bug has never worn: importing the
+//     shared symbol, ignoring it, and reading a local `KEEP_WHOLE_LOCAL`
+//     satisfies both regexes and redded 0 of 756.
+//
+// Both are the same defect one level up — they assert things ABOUT the list
+// instead of the property the list exists to buy. That property is a fact
+// about the OUTPUT DOCUMENT and it is cheap to state directly: clear a control
+// holding each container, and the container is still there afterwards.
+//
+// A member removed from the set — by deletion, by a size the floor tolerates,
+// or by a local copy under any name — now reds here, because the renderer
+// really does delete it and this really does look.
+// ============================================================================
+describe('#175 — every keep-list member SURVIVES a clear, in the rendered document', () => {
+  /** Each container placed where it legally sits inside the control content. */
+  const PLACEMENT: Record<string, string> = {
+    pPr: '<w:p><w:pPr><w:jc w:val="left"/></w:pPr><w:r><w:t>x</w:t></w:r></w:p>',
+    rPr: '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>x</w:t></w:r></w:p>',
+    sectPr: '<w:p><w:pPr><w:sectPr><w:type w:val="continuous"/></w:sectPr></w:pPr></w:p>',
+    tblPr: '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>' +
+      '<w:tr><w:tc><w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc></w:tr></w:tbl>',
+    tblGrid: '<w:tbl><w:tblGrid><w:gridCol w:w="4680"/></w:tblGrid>' +
+      '<w:tr><w:tc><w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc></w:tr></w:tbl>',
+    tblPrEx: '<w:tbl><w:tr><w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr>' +
+      '<w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc></w:tr>' +
+      '<w:tr><w:tblPrEx><w:tblBorders/></w:tblPrEx>' +
+      '<w:tc><w:p><w:r><w:t>y</w:t></w:r></w:p></w:tc></w:tr></w:tbl>',
+    trPr: '<w:tbl><w:tr><w:trPr><w:trHeight w:val="240"/></w:trPr>' +
+      '<w:tc><w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc></w:tr></w:tbl>',
+    tcPr: '<w:tbl><w:tr><w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/></w:tcPr>' +
+      '<w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc></w:tr></w:tbl>',
+    bookmarkStart: '<w:p><w:bookmarkStart w:id="7" w:name="bm"/><w:r><w:t>x</w:t></w:r></w:p>',
+    bookmarkEnd: '<w:p><w:bookmarkEnd w:id="7"/><w:r><w:t>x</w:t></w:r></w:p>',
+    proofErr: '<w:p><w:proofErr w:type="spellStart"/><w:r><w:t>x</w:t></w:r></w:p>',
+    commentRangeStart: '<w:p><w:commentRangeStart w:id="3"/><w:r><w:t>x</w:t></w:r></w:p>',
+    commentRangeEnd: '<w:p><w:commentRangeEnd w:id="3"/><w:r><w:t>x</w:t></w:r></w:p>',
+    permStart: '<w:p><w:permStart w:id="9" w:edGrp="everyone"/><w:r><w:t>x</w:t></w:r></w:p>',
+    permEnd: '<w:p><w:permEnd w:id="9"/><w:r><w:t>x</w:t></w:r></w:p>',
+  };
+
+  async function clearedOutput(inner: string) {
+    const documentXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:body><w:p><w:r><w:t>Impression:</w:t></w:r></w:p>` +
+      `<w:sdt><w:sdtPr><w:id w:val="4100"/><w:alias w:val="Impression"/>` +
+      `<w:tag w:val="imp"/><w:text/></w:sdtPr>` +
+      `<w:sdtContent>${inner}</w:sdtContent></w:sdt>` +
+      `</w:body></w:document>`;
+    return renderAllNull(documentXml);
+  }
+
+  it('⚠️ EACH CONTAINER IS STILL IN THE CLEARED DOCUMENT', async () => {
+    // ⚠️ WATCHED-SET DIFF FIRST (canon 28): every member of the SHIPPED set must
+    // have a placement here. A member added to the set without one would
+    // otherwise be silently unproved — the exact way the two arms above failed.
+    const { STRUCTURE_KEEP_WHOLE } = await import('../structure-keep');
+    const unplaced = [...STRUCTURE_KEEP_WHOLE].filter(
+      (c) => c !== 'sdtPr' && c !== 'sdtEndPr' && !(c in PLACEMENT),
+    );
+    expect(
+      unplaced,
+      'these are in the shipped keep-list and no fixture here proves the ' +
+        'renderer preserves them — add a placement, do not widen the skip',
+    ).toEqual([]);
+
+    const deleted: string[] = [];
+    for (const [container, inner] of Object.entries(PLACEMENT)) {
+      const { outputXml } = await clearedOutput(inner);
+      if (!outputXml.includes(`<w:${container}`)) deleted.push(container);
+    }
+    expect(
+      deleted,
+      'the clear DELETED these from the rendered document — a doctor loses ' +
+        'the formatting, bookmark, comment anchor or editable range that was ' +
+        'in their own template, silently and on every cleared control',
+    ).toEqual([]);
+  });
+
+  it('⚠️ NON-VACUITY: the clear really does remove content, so survival means something', async () => {
+    // If the clear were a no-op this whole arm would pass while measuring
+    // nothing. The doctor's stale text MUST be gone from the same document.
+    const { outputXml, sourceXml } = await clearedOutput(
+      '<w:p><w:bookmarkStart w:id="7" w:name="bm"/>' +
+        '<w:r><w:t>WARFARIN 5 MG DAILY</w:t></w:r></w:p>',
+    );
+    expect(sourceXml).toContain('WARFARIN 5 MG DAILY');
+    expect(outputXml, 'the clear is a no-op — every survival above is vacuous').
+      not.toContain('WARFARIN 5 MG DAILY');
+    expect(outputXml).toContain('<w:bookmarkStart');
+  });
+});
