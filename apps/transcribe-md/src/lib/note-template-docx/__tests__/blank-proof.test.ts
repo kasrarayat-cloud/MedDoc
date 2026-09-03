@@ -91,9 +91,21 @@ describe('blank verification mode', () => {
     const { compileTemplateDocx } = await import('../compiler');
     const ir = compileTemplateDocx(source);
 
-    const target = ir.fields.find(
+    // ⚠️ FILTER-AND-COUNT — `kind` is a LABEL CLASS. `find` says "give me one
+    // of these" where the arm means "there is exactly one of these", and this
+    // codebase has paid four times for the difference.
+    const candidates = ir.fields.filter(
       (f) => f.kind === 'single_select' && !f.rowPrototype && f.allowedOptions.length > 0,
-    )!;
+    );
+    // ⚠️ MEASURED: THERE ARE THREE, so the old `find` was taking one of three by
+    // position. This canary needs *a* fillable selection and any of them serves
+    // — what it proves is that the VERIFIER throws when a field claimed blank
+    // was in fact changed, which is a property of the verifier, not of which
+    // field was picked. So the choice is made DETERMINISTIC by a stable key
+    // rather than by array order, and the count is asserted so the arm reds if
+    // the fixture ever stops supplying one.
+    expect(candidates.length, 'no fillable selection in the fixture').toBeGreaterThan(0);
+    const target = [...candidates].sort((a, b) => a.fieldId.localeCompare(b.fieldId))[0]!;
     const filled = ir.fields.map((field) =>
       field.fieldId === target.fieldId
         ? FieldResolutionSchema.parse({

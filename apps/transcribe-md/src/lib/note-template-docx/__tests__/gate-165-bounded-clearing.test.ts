@@ -985,29 +985,7 @@ describe('#167 — the two shapes the pass left unarmed', () => {
 // clear still happens and the field simply cannot CLAIM blank.
 // ============================================================================
 describe('#168 — a cleared region that can still render buys no blank credit', () => {
-  it('NUMBERING survives and the field cannot claim blank', async () => {
-    // `w:numPr` rides inside the kept-whole `w:pPr` and drives a marker from
-    // `numbering.xml`. Measured: with `lvlText="ANTICOAGULATED %1."` the
-    // exported PDF printed `ANTICOAGULATED 1.` for a field proofed `emptied` —
-    // arbitrary template-authored text, not a bullet.
-    //
-    // ⚠️ NO PARSING OF `lvlText`, AND THAT IS THE POINT: the rule cannot be
-    // wrong about which markers are "just" markers, because it never looks.
-    const { outputXml, bodyProofs } = await renderAllNull(
-      sdtDoc({
-        block: true,
-        content:
-          '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr>' +
-          '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
-      }),
-    );
-    // The numbering STAYS — removing it renumbers the doctor's list beyond
-    // this field, which is damage outside the thing being cleared.
-    expect(outputXml.includes('w:numPr')).toBe(true);
-    expect(outputXml.includes('Enter anticoagulation')).toBe(false);
-    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
-  });
-
+  
   it('a SELECTION clears but earns no blank credit — #165 reversed on measurement', async () => {
     // #165 included selections because they clear identically in the XML —
     // true, and the wrong axis. Measured on the real template: an emptied
@@ -1038,40 +1016,6 @@ describe('#168 — a cleared region that can still render buys no blank credit',
   });
 });
 
-describe('#168(a) — numbering OUTSIDE the control disqualifies it too', () => {
-  it('an INLINE control under a numbered paragraph cannot claim blank', async () => {
-    // ⚠️ THE GUARD WAS SCOPED TO THE CONTROL'S INSIDE AND WAS EVADED BY ONE
-    // NESTING LEVEL. For an inline control the numbering sits on the `w:pPr` of
-    // the paragraph HOLDING it. Measured: two documents printing the identical
-    // line — "ANTICOAGULATED 1." — got opposite verdicts, the outside one
-    // earning `emptied` AND blank credit.
-    //
-    // Live on the real template: 4 of its 133 paragraphs carry both `w:numPr`
-    // and an inline `w:sdt`, masked only because those controls are dropdowns.
-    const { outputXml, bodyProofs } = await renderAllNull(
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-        `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-        `<w:body><w:p>` +
-        `<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr>` +
-        `<w:sdt><w:sdtPr><w:id w:val="996"/><w:alias w:val="Anticoagulation"/><w:text/></w:sdtPr>` +
-        `<w:sdtContent><w:r><w:t>Enter anticoagulation</w:t></w:r></w:sdtContent></w:sdt>` +
-        `</w:p></w:body></w:document>`,
-    );
-    // The numbering stays, the content clears — and the field cannot claim blank.
-    expect(outputXml.includes('w:numPr')).toBe(true);
-    expect(outputXml.includes('Enter anticoagulation')).toBe(false);
-    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
-  });
-
-  it('a control with NO numbering anywhere still earns its blank credit', async () => {
-    // NON-VACUITY for the arm above: the widened search must not disqualify
-    // every field. Without this, "not emptied" could be true for any reason.
-    const { bodyProofs } = await renderAllNull(
-      sdtDoc({ content: '<w:r><w:t>Enter anticoagulation</w:t></w:r>' }),
-    );
-    expect(bodyProofs.map((p) => p.kind)).toContain('emptied');
-  });
-});
 
 
 // ============================================================================
@@ -1109,277 +1053,7 @@ const stylesWith = (inner: string) =>
   `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
   inner + `</w:styles>`;
 
-describe('#170 — the inert allowlist over w:pPr', () => {
-  it('the MEASURED inert set is eligible — all seven, exactly as the real template writes them', async () => {
-    // ⚠️ THE POSITIVE CONTROL FOR EVERY REFUSAL BELOW. These are the seven
-    // direct `w:pPr` children measured on the 52 blank-bearing cells of
-    // `WM IOV Template.docx`. If this arm ever reds, the allowlist has stopped
-    // matching the artifact it was derived from and 52 real blank credits have
-    // silently gone with it.
-    const { bodyProofs } = await renderAllNull(
-      pPrDoc(
-        '<w:widowControl/><w:tabs><w:tab w:val="left" w:pos="720"/></w:tabs>' +
-          '<w:autoSpaceDE/><w:autoSpaceDN/><w:adjustRightInd/><w:jc w:val="left"/>' +
-          '<w:rPr><w:rFonts w:ascii="Arial"/><w:b/><w:bCs/><w:color w:val="000000"/>' +
-          '<w:kern w:val="0"/><w:sz w:val="20"/><w:szCs w:val="20"/>' +
-          '<w14:ligatures w14:val="none"/></w:rPr>',
-      ),
-    );
-    expect(bodyProofs[0]?.blankEligible).toBe('eligible');
-    expect(bodyProofs[0]?.kind).toBe('blank');
-  });
 
-  it('⚠️ AN UNKNOWN pPr CHILD IS INELIGIBLE — an INVENTED element name proves it', async () => {
-    // ⚠️ THE ELEMENT IS DELIBERATELY FICTIONAL. Using a real-but-unlisted
-    // property (`w:spacing`, say) would leave the arm ambiguous the day
-    // somebody argues that property onto the list. `w:zzzNotARealProperty`
-    // can never be argued onto it, so this arm tests the RULE — unknown means
-    // refuse — rather than one property's membership.
-    //
-    // This is the whole safety property of #170: the guard does not need to
-    // know what a child DOES, only that it was not measured to be inert.
-    const { bodyProofs, bindingOf, kindOf } = await renderAllNull(
-      pPrDoc('<w:zzzNotARealProperty w:val="1"/>'),
-    );
-    expect(bodyProofs[0]?.blankEligible).toBe('ineligible');
-    // AND THE OUTCOME, not only the flag: the census must actually refuse it.
-    expect(
-      countsAsBlankProof(bodyProofs[0] as never, {
-        bindingOf,
-        resolvedNull: () => true,
-        kindOf,
-      }),
-    ).toBe(false);
-  });
-
-  it('a run hiding inside w:pPr is refused even though every child name is inert', async () => {
-    // The structural backstop that does not depend on the list being right:
-    // `w:r` is the universal carrier of printable content and no property block
-    // legitimately holds one.
-    const { bodyProofs } = await renderAllNull(
-      pPrDoc('<w:rPr><w:r><w:t>ANTICOAGULATED</w:t></w:r></w:rPr>'),
-    );
-    expect(bodyProofs[0]?.blankEligible).toBe('ineligible');
-  });
-
-  it('no w:pPr at all is eligible — the shape the owner’s form uses on all 35', async () => {
-    const { bodyProofs } = await renderAllNull(
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-        `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-        `<w:body><w:p><w:sdt><w:sdtPr><w:id w:val="771"/><w:alias w:val="Impression"/>` +
-        `<w:text/></w:sdtPr><w:sdtContent><w:r><w:t>Enter impression</w:t></w:r>` +
-        `</w:sdtContent></w:sdt></w:p></w:body></w:document>`,
-    );
-    expect(bodyProofs[0]?.blankEligible).toBe('eligible');
-  });
-});
-
-describe('#170 — the ONE surviving resolution: the inherited default', () => {
-  const plainDoc = pPrDoc('<w:jc w:val="left"/>');
-
-  it('⚠️ w:default is ST_OnOff — "1", "true" and "on" ALL disqualify', async () => {
-    // ⚠️ THIS IS NOT A MISSED ROUTE, IT IS A RATIFIED ROUTE RE-OPENED BY A
-    // RESPELLING. The old code compared the literal `"1"`, so a numbered
-    // default style written `w:default="true"` — which `ST_OnOff` explicitly
-    // permits (ECMA-376 §22.9.2.7) — granted credit over live numbering.
-    for (const spelling of ['1', 'true', 'on', 'TRUE', 'On']) {
-      const { bodyProofs } = await renderAllNull(
-        plainDoc,
-        stylesWith(
-          `<w:style w:type="paragraph" w:default="${spelling}" w:styleId="Normal">` +
-            `<w:pPr><w:numPr><w:numId w:val="7"/></w:numPr></w:pPr></w:style>`,
-        ),
-      );
-      expect(bodyProofs[0]?.blankEligible, `w:default="${spelling}" granted credit`).toBe(
-        'ineligible',
-      );
-    }
-  });
-
-  it('⚠️ an OMITTED or oddly-cased w:type is still a candidate default', async () => {
-    // Requiring `w:type === "paragraph"` exactly meant omitting the attribute
-    // walked straight past a numbered default. Fail-closed means an unstated
-    // type is a type that MIGHT apply.
-    for (const attr of ['', ' w:type="Paragraph"', ' w:type="paragraph"']) {
-      const { bodyProofs } = await renderAllNull(
-        plainDoc,
-        stylesWith(
-          `<w:style${attr} w:default="1" w:styleId="Normal">` +
-            `<w:pPr><w:numPr><w:numId w:val="7"/></w:numPr></w:pPr></w:style>`,
-        ),
-      );
-      expect(bodyProofs[0]?.blankEligible, `w:type "${attr}" granted credit`).toBe(
-        'ineligible',
-      );
-    }
-    // ⚠️ #171 R4 — THE NON-VACUITY CONTROL CHANGED WITH THE RULE, AND THE OLD
-    // ONE IS KEPT BELOW AS THE REVERSAL IT IS. It used to assert that a
-    // NON-paragraph default does not disqualify. That filter was one-sided in
-    // the opposite direction from the ST_OnOff widening two lines above it: a
-    // `w:type="table"` default carrying `w:pPr/w:numPr` applies to paragraphs
-    // in cells of tables naming no style, and was skipped. There is no type
-    // filter now — ANY default carrying numbering disqualifies.
-    const { bodyProofs: tableDefault } = await renderAllNull(
-      plainDoc,
-      stylesWith(
-        `<w:style w:type="table" w:default="1" w:styleId="TableGrid">` +
-          `<w:pPr><w:numPr><w:numId w:val="7"/></w:numPr></w:pPr></w:style>`,
-      ),
-    );
-    expect(tableDefault[0]?.blankEligible, 'a default TABLE style was skipped').toBe(
-      'ineligible',
-    );
-    // NON-VACUITY, RE-AIMED: a default style carrying NO numbering must still
-    // grant credit, or the arm above would pass with the guard refusing
-    // everything — which is the other way to be wrong.
-    const { bodyProofs } = await renderAllNull(
-      plainDoc,
-      stylesWith(`<w:style w:type="paragraph" w:default="1" w:styleId="Normal"/>`),
-    );
-    expect(bodyProofs[0]?.blankEligible).toBe('eligible');
-  });
-
-  it('⚠️ #171 R1 — a DEFAULT style carrying w:basedOn is UNRESOLVED, and we do not walk it', async () => {
-    // ⚠️ #170 DELETED THE `w:pStyle` CHAIN WALK AND LEFT THE DEFAULT STYLE'S
-    // CHAIN LIVE. The pass measured `Normal basedOn <numbered>` returning
-    // `emptied` + eligible + COUNTED over live numbering, on a paragraph with no
-    // `w:pPr` at all — the shape `paragraphIsInert` calls the cleanest possible
-    // answer.
-    //
-    // The fix is a REFUSAL, not a walk: walking here would reinstate exactly the
-    // surface #170 deleted, one level up. #171 permits refusing-instead-of-
-    // walking as a fix class precisely so this cannot become a chain resolver.
-    const numbered = await renderAllNull(
-      plainDoc,
-      stylesWith(
-        `<w:style w:type="paragraph" w:default="1" w:styleId="Normal">` +
-          `<w:basedOn w:val="ListPara"/></w:style>` +
-          `<w:style w:type="paragraph" w:styleId="ListPara">` +
-          `<w:pPr><w:numPr><w:numId w:val="7"/></w:numPr></w:pPr></w:style>`,
-      ),
-    );
-    expect(
-      numbered.bodyProofs[0]?.blankEligible,
-      'a default style inheriting numbering bought credit',
-    ).toBe('ineligible');
-
-    // ⚠️ AND THE ACCEPTED COST, ARMED SO IT CANNOT BE QUIETLY "FIXED" BY A WALK.
-    // A default style based on a perfectly innocent one is ALSO ineligible: the
-    // rule refuses what it cannot resolve without walking, and a future reader
-    // who repairs this by resolving the parent has reinstated the surface.
-    //
-    // COST MEASURED BEFORE RULING: `WM IOV Template.docx`'s `Normal` carries no
-    // `basedOn`, and Word's built-in `Normal` is the root of the chain by
-    // construction — zero on both real artifacts.
-    const innocent = await renderAllNull(
-      plainDoc,
-      stylesWith(
-        `<w:style w:type="paragraph" w:default="1" w:styleId="Normal">` +
-          `<w:basedOn w:val="Body"/></w:style>` +
-          `<w:style w:type="paragraph" w:styleId="Body"><w:name w:val="Body"/></w:style>`,
-      ),
-    );
-    expect(innocent.bodyProofs[0]?.blankEligible).toBe('ineligible');
-
-    // NON-VACUITY: the SAME default style WITHOUT `basedOn` still grants credit,
-    // so the two arms above measure the attribute and not the fixture.
-    const control = await renderAllNull(
-      plainDoc,
-      stylesWith(`<w:style w:type="paragraph" w:default="1" w:styleId="Normal"/>`),
-    );
-    expect(control.bodyProofs[0]?.blankEligible).toBe('eligible');
-  });
-
-  it('⚠️ w:docDefaults/w:pPrDefault numbering disqualifies — no style names it', async () => {
-    // The seventh route. It is invisible to every style-id lookup because no
-    // style is involved: numbering is set for the whole document at the
-    // defaults level, and a paragraph naming no style inherits it.
-    const { bodyProofs } = await renderAllNull(
-      plainDoc,
-      stylesWith(
-        `<w:docDefaults><w:pPrDefault><w:pPr>` +
-          `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr>` +
-          `</w:pPr></w:pPrDefault></w:docDefaults>` +
-          `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"/>`,
-      ),
-    );
-    expect(bodyProofs[0]?.blankEligible).toBe('ineligible');
-  });
-
-  it('⚠️ duplicate defaults do NOT resolve last-wins — ANY numbered default disqualifies', async () => {
-    // The old scanner overwrote `defaultId` as it went, so the verdict depended
-    // on DOCUMENT ORDER alone and granted credit in half the orderings.
-    const numbered =
-      `<w:style w:type="paragraph" w:default="1" w:styleId="A">` +
-      `<w:pPr><w:numPr><w:numId w:val="7"/></w:numPr></w:pPr></w:style>`;
-    const clear = `<w:style w:type="paragraph" w:default="1" w:styleId="B"/>`;
-    for (const [label, xml] of [
-      ['numbered FIRST', numbered + clear],
-      ['numbered LAST', clear + numbered],
-    ] as const) {
-      const { bodyProofs } = await renderAllNull(plainDoc, stylesWith(xml));
-      expect(bodyProofs[0]?.blankEligible, label).toBe('ineligible');
-    }
-  });
-
-  it('⚠️ an ABSENT styles.xml is INELIGIBLE — the branch nobody could reach before', async () => {
-    // ⚠️ THE UNDISCLOSED HALF. The previous arm disclosed that an UNPARSEABLE
-    // styles.xml is refused one layer earlier by package inspection, and
-    // honestly said the `catch` had no demonstrated caller. It never mentioned
-    // the ABSENT case — and the fixture builder wrote the part unconditionally,
-    // so no arm in this file could reach it. It is reachable now.
-    // ⚠️ THE CONTENT-TYPES DECLARATION GOES WITH THE PART. Removing the part
-    // alone leaves `[Content_Types].xml` declaring an override for a file that
-    // is not there, and the package layer correctly rejects THAT instead —
-    // which would have made this arm pass for the wrong reason.
-    const source = await buildSyntheticDocx({
-      documentXml: plainDoc,
-      contentTypes: syntheticOpc.contentTypes.replace(
-        /\s*<Override PartName="\/word\/styles\.xml"[^>]*\/>/,
-        '',
-      ),
-      // ⚠️ AND THE RELATIONSHIP TOO — THREE DECLARATIONS POINT AT ONE PART.
-      // A `.docx` names `word/styles.xml` in the content types, in
-      // `document.xml.rels`, AND by its presence in the zip. Each omission the
-      // package layer catches first would have made this arm green for a reason
-      // that has nothing to do with the guard.
-      documentRelationships: syntheticOpc.documentRelationships.replace(
-        /\s*<Relationship Id="rIdStyles"[^>]*\/>/,
-        '',
-      ),
-      omitEntries: ['word/styles.xml'],
-    });
-    const { compileTemplateDocx } = await import('../compiler');
-    const ir = compileTemplateDocx(source);
-    const rendered = await renderTemplateDocx({
-      source,
-      ir,
-      resolutions: ir.fields.map((field) =>
-        FieldResolutionSchema.parse({
-          fieldId: field.fieldId,
-          status: 'not_mentioned',
-          value: null,
-          sourceFactIds: [],
-          evidenceAnchorIds: [],
-          selectedOptionOrdinal: null,
-          reasonCode: 'blank_when_unsaid',
-          clinicianReviewed: false,
-        }),
-      ),
-      validation: VALIDATION,
-    });
-    const body = rendered.verification.fields.filter(
-      (p) => p.partName === 'word/document.xml',
-    );
-    expect(body.length).toBeGreaterThan(0);
-    for (const proof of body) {
-      expect(
-        (proof as { blankEligible?: string }).blankEligible,
-        'an unresolvable style table granted credit',
-      ).toBe('ineligible');
-    }
-  });
-});
 
 describe('#172 — the noun, the one hop, the character data, the subtree', () => {
   const tblDoc = (tblPr: string) =>
@@ -1392,80 +1066,9 @@ describe('#172 — the noun, the one hop, the character data, the subtree', () =
   const NUMPR = '<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr>';
 
   // ── #172(1) — R1's NOUN, ARMED ON BOTH AXES ──────────────────────────────
-  it('⚠️ R1 × R4 CROSS-AXIS — the basedOn refusal is for a PARAGRAPH default only', async () => {
-    // ⚠️ THIS ARM EXISTS BECAUSE THE COMPOSITION WAS INVISIBLE. R1's arms all
-    // used a paragraph default; R4's used a table default with no `basedOn`.
-    // Nothing crossed, so applying R1 to a default of ANY type — which is what
-    // shipped — redded nothing, and a real third-party document (pandoc's
-    // `reference.docx`, ZERO `w:numPr` anywhere, `Table` default carrying
-    // `basedOn`) could never certify. Silently.
-    //
-    // A RULING'S NOUN IS PART OF ITS RULE. The noun was "paragraph".
-    const cases = [
-      // [label, style xml, expected]
-      [
-        'paragraph default + basedOn -> REFUSED (R1)',
-        `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:basedOn w:val="X"/></w:style>` +
-          `<w:style w:type="paragraph" w:styleId="X"/>`,
-        'ineligible',
-      ],
-      [
-        'TABLE default + basedOn, no numbering anywhere -> ELIGIBLE',
-        `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"/>` +
-          `<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:basedOn w:val="X"/></w:style>` +
-          `<w:style w:type="table" w:styleId="X"/>`,
-        'eligible',
-      ],
-      [
-        'CHARACTER default + basedOn -> ELIGIBLE',
-        `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"/>` +
-          `<w:style w:type="character" w:default="1" w:styleId="DPF"><w:basedOn w:val="X"/></w:style>` +
-          `<w:style w:type="character" w:styleId="X"/>`,
-        'eligible',
-      ],
-      [
-        'TABLE default carrying numPr -> REFUSED (R4, type-blind)',
-        `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"/>` +
-          `<w:style w:type="table" w:default="1" w:styleId="TableNormal">${NUMPR}</w:style>`,
-        'ineligible',
-      ],
-      [
-        'default with an OMITTED type + basedOn -> REFUSED (a type that might apply)',
-        `<w:style w:default="1" w:styleId="Normal"><w:basedOn w:val="X"/></w:style>` +
-          `<w:style w:type="paragraph" w:styleId="X"/>`,
-        'ineligible',
-      ],
-    ] as const;
-    for (const [label, styleXml, expected] of cases) {
-      const { bodyProofs } = await renderAllNull(pPrDoc('<w:jc w:val="left"/>'), stylesWith(styleXml));
-      expect(bodyProofs[0]?.blankEligible, label).toBe(expected);
-    }
-  });
-
+  
   // ── #172(2) — THE TABLE-STYLE LAYER, ONE HOP ─────────────────────────────
-  it('⚠️ a w:tblStyle resolves ONE HOP — numPr, basedOn and not-found all refuse', async () => {
-    // The route the terminal fallback could NOT have closed: the cell
-    // paragraph has no `w:pPr` at all, which the blunt rule calls maximally
-    // eligible. Measured under that rule and it still counted.
-    const plain = `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"/>`;
-    const cases = [
-      ['table names a style carrying numPr -> REFUSED', `<w:style w:type="table" w:styleId="Grid">${NUMPR}</w:style>`, 'ineligible'],
-      ['table names a style carrying basedOn -> REFUSED (one hop, no walk)', `<w:style w:type="table" w:styleId="Grid"><w:basedOn w:val="Y"/></w:style><w:style w:type="table" w:styleId="Y"/>`, 'ineligible'],
-      ['table names a style NOT IN THE TABLE -> REFUSED', ``, 'ineligible'],
-      ['table names a clean style -> ELIGIBLE', `<w:style w:type="table" w:styleId="Grid"/>`, 'eligible'],
-    ] as const;
-    for (const [label, styleXml, expected] of cases) {
-      const { bodyProofs } = await renderAllNull(
-        tblDoc('<w:tblPr><w:tblStyle w:val="Grid"/></w:tblPr>'),
-        stylesWith(plain + styleXml),
-      );
-      expect(bodyProofs[0]?.blankEligible, label).toBe(expected);
-    }
-    // NON-VACUITY: a table naming NO style is untouched by this rule.
-    const { bodyProofs } = await renderAllNull(tblDoc('<w:tblPr/>'), stylesWith(plain));
-    expect(bodyProofs[0]?.blankEligible, 'a table naming no style was refused').toBe('eligible');
-  });
-
+  
   // ── #172(3) — CHARACTER DATA IN ANY FORM ─────────────────────────────────
   it('⚠️ CDATA in a sibling gap is a REFUSAL, exactly as raw text already was', async () => {
     // ⚠️ MEASURED BEFORE THE FIX: the placeholder cleared, `WARFARIN 5 MG DAILY`
@@ -1507,94 +1110,170 @@ describe('#172 — the noun, the one hop, the character data, the subtree', () =
   });
 
   // ── #172(4) — THE SUBTREE, AND THE DOUBLE pPr ────────────────────────────
-  it('⚠️ a carrier NESTED inside an allowlisted property is refused', async () => {
-    // The allowlist's claim is about the whole `w:pPr` subtree; checking depth 1
-    // certified a subtree it never inspected. Both shapes measured `eligible`
-    // with the carrier surviving into the rendered region.
-    for (const inner of [
-      '<w:rPr><w:sym w:font="Wingdings" w:char="F0FE"/></w:rPr>',
-      '<w:tabs><w:drawing/></w:tabs>',
-    ]) {
-      const { bodyProofs } = await renderAllNull(pPrDoc(inner));
-      expect(bodyProofs[0]?.blankEligible, inner).toBe('ineligible');
-    }
-    // NON-VACUITY: the legitimately-nested inert members still pass, or the
-    // real template's 52 credits would be gone.
-    const { bodyProofs } = await renderAllNull(
-      pPrDoc('<w:rPr><w:rFonts w:ascii="Arial"/><w:b/><w:sz w:val="20"/></w:rPr>'),
+  
+  });
+
+
+describe('#173 — the guard is gone; the proof is scoped to what the prover does', () => {
+  const sdtIn = (pPr: string, content: string) =>
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+    `<w:body><w:p>${pPr}<w:sdt><w:sdtPr><w:id w:val="1730"/><w:alias w:val="Impression"/>` +
+    `<w:text/></w:sdtPr><w:sdtContent>${content}</w:sdtContent></w:sdt></w:p></w:body></w:document>`;
+
+  // ── THE ONE CLEARING-SIDE RULE THAT SURVIVES ─────────────────────────────
+  it('⚠️ CHARACTER DATA ANYWHERE IN A KEPT-WHOLE SUBTREE REFUSES THE CLEAR', async () => {
+    // ⚠️ THE FIXTURE IS THE ONE THE PASS FOUND, VERBATIM. `gapIsInvisible` runs
+    // between siblings at a RECURSED level; a kept-whole container is copied
+    // verbatim and was inspected for exactly one thing, `w:r`. So the drug
+    // string one element deeper produced a VERIFIED `emptied` proof holding
+    // blank credit, the placeholder correctly cleared — and `WARFARIN 5 MG
+    // DAILY` still in the rendered document.
+    //
+    // The rule this file already states — CHARACTER DATA IS A REFUSAL, NOT A
+    // DELETION — now applies to the whole subtree. One recursive check, no
+    // semantics: it never asks what the text is or whether it would print.
+    const doc = sdtIn(
+      '',
+      '<w:p><w:r><w:rPr><![CDATA[WARFARIN 5 MG DAILY]]></w:rPr>' +
+        '<w:t>Enter impression</w:t></w:r></w:p>',
     );
+    const { bodyProofs, outputXml, bindingOf, kindOf } = await renderAllNull(doc);
+    expect(bodyProofs.map((p) => p.kind), 'the clear did not refuse').not.toContain('emptied');
+    expect(
+      bodyProofs.some((p) =>
+        countsAsBlankProof(p as never, { bindingOf, resolvedNull: () => true, kindOf }),
+      ),
+      'character data in a kept-whole subtree bought blank credit',
+    ).toBe(false);
+    // ⚠️ AND THE OUTPUT IS ASSERTED, WITH THE OBSERVABLE CORRECTED. My first
+    // version asserted the region was left untouched; measured, it is not. The
+    // bounded clear REFUSES, and the field then takes the ordinary fill path,
+    // which rewrites `w:t` to the null display value — so the placeholder does
+    // go and the character data stays.
+    //
+    // That is the pre-existing behaviour for any refused clear, and it is
+    // acceptable for the reason that matters here: NOTHING CLAIMS THE REGION IS
+    // BLANK. The harm this rule exists to stop is the attestation, not the
+    // residue — and the residue is the template author's own bytes, untouched
+    // by us.
+    expect(outputXml.includes('WARFARIN 5 MG DAILY'), 'the fixture proved nothing').toBe(true);
+  });
+
+  it('⚠️ AND AT DEPTH — the check RECURSES, which the WARFARIN fixture alone does not prove', async () => {
+    // ⚠️ THE MUTATION MATRIX CAUGHT THIS. Making the check non-recursive — gaps
+    // at the kept-whole node only — redded NOTHING, because the WARFARIN
+    // fixture puts its CDATA DIRECTLY inside `w:rPr`, one level down. The claim
+    // is "no character data at ANY depth" and the fixture tested depth one:
+    // a universal claim exercised only on the shallow case.
+    //
+    // Here the text sits two levels in, under a property that is itself a child
+    // of the kept-whole container.
+    const doc = sdtIn(
+      '',
+      '<w:p><w:r><w:rPr><w:rFonts><![CDATA[WARFARIN 5 MG DAILY]]></w:rFonts></w:rPr>' +
+        '<w:t>Enter impression</w:t></w:r></w:p>',
+    );
+    const { bodyProofs, bindingOf, kindOf } = await renderAllNull(doc);
+    expect(bodyProofs.map((p) => p.kind), 'depth-2 character data was not seen').not.toContain(
+      'emptied',
+    );
+    expect(
+      bodyProofs.some((p) =>
+        countsAsBlankProof(p as never, { bindingOf, resolvedNull: () => true, kindOf }),
+      ),
+    ).toBe(false);
+  });
+
+  it('raw text at depth, and a clean nested subtree — both directions', async () => {
+    // Raw text is the same class as CDATA and must refuse identically.
+    const raw = sdtIn('', '<w:p><w:r><w:rPr>WARFARIN</w:rPr><w:t>Enter impression</w:t></w:r></w:p>');
+    const { bodyProofs: rawProofs } = await renderAllNull(raw);
+    expect(rawProofs.map((p) => p.kind)).not.toContain('emptied');
+
+    // ⚠️ NON-VACUITY, AND IT IS THE HALF THAT MATTERS: a kept-whole subtree with
+    // real nested PROPERTIES and no character data must still clear, or this
+    // rule would refuse every formatted paragraph in every real template.
+    const clean = sdtIn(
+      '<w:pPr><w:rPr><w:rFonts w:ascii="Arial"/><w:b/></w:rPr></w:pPr>',
+      '<w:p><w:pPr><w:rPr><w:sz w:val="20"/></w:rPr></w:pPr>' +
+        '<w:r><w:t>Enter impression</w:t></w:r></w:p>',
+    );
+    const { bodyProofs } = await renderAllNull(clean);
+    expect(bodyProofs.map((p) => p.kind)).toContain('emptied');
+  });
+
+  // ── THE DELIBERATE REVERSAL, PINNED SO NOBODY REBUILDS THE GUARD ─────────
+  it('⚠️ A NUMBERED PARAGRAPH NOW EARNS BLANK CREDIT — deliberately', async () => {
+    // ⚠️ THIS ARM ASSERTS THE OPPOSITE OF SIX PREVIOUS RULINGS AND THAT IS THE
+    // POINT. A list marker is TEMPLATE-AUTHORED FORMATTING — the doctor's own
+    // authoring choice, visible in the doctor's own form — the same class as
+    // the doctor-authored default text this renderer has always left in place.
+    //
+    // The guard that refused it was falsified six times, never reached `main`,
+    // never ran on the bindings that supply the real credit, and refused 56 of
+    // 56 real named tables. A future reader who "fixes" this arm has rebuilt
+    // it; read the headstone above `blankEligibilityFor` first.
+    const numbered = sdtIn(
+      '<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr>',
+      '<w:r><w:t>Enter impression</w:t></w:r>',
+    );
+    const { bodyProofs, bindingOf, kindOf } = await renderAllNull(numbered);
     expect(bodyProofs[0]?.blankEligible).toBe('eligible');
-  });
-
-  it('⚠️ a paragraph with TWO w:pPr children is a refusal', async () => {
-    // `directXmlChild` returns the FIRST, so a second `pPr` carrying `numPr`
-    // was invisible: measured eligible + counted with the numbering live.
-    const doc =
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-      `<w:body><w:p><w:pPr/><w:pPr><w:numPr><w:numId w:val="7"/></w:numPr></w:pPr>` +
-      `<w:sdt><w:sdtPr><w:id w:val="992"/><w:alias w:val="Impression"/><w:text/></w:sdtPr>` +
-      `<w:sdtContent><w:r><w:rPr><w:b/></w:rPr></w:r></w:sdtContent></w:sdt>` +
-      `</w:p></w:body></w:document>`;
-    const { bodyProofs } = await renderAllNull(doc);
-    expect(bodyProofs[0]?.blankEligible).toBe('ineligible');
-  });
-});
-
-describe('#171 — the quantifier and the third state, OBSERVED leaving the renderer', () => {
-  // ⚠️ BOTH ARMS EXIST BECAUSE A MUTATION MATRIX OF TEN FOUND NOTHING AND A
-  // SECOND MATRIX FOUND THESE. Mine tested the fixes wholesale; these are the
-  // quantifier and the never-observed-value shapes, which is what actually
-  // ships. Neither property had an arm, and both are load-bearing claims made
-  // in this file's own comments.
-
-  it('⚠️ EVERY paragraph in scope is asked — a two-paragraph control with ONE numbered', async () => {
-    // ⚠️ THE ALL-QUANTIFIER HAD NO ARM. Replacing `every` with
-    // `length === 0 || some` redded 0 of 757, because — instrumented — 2 171 of
-    // 2 174 calls in the whole suite had exactly ONE paragraph in scope. A
-    // universal claim tested only on singletons is not tested.
-    //
-    // This fixture is the smallest thing that distinguishes them: a block-level
-    // control holding two paragraphs, the FIRST inert and the SECOND numbered.
-    // Under `some`, the first paragraph alone would grant credit.
-    const { bodyProofs } = await renderAllNull(
-      sdtDoc({
-        block: true,
-        content:
-          '<w:p><w:pPr><w:jc w:val="left"/></w:pPr><w:r><w:rPr><w:b/></w:rPr></w:r></w:p>' +
-          '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr>' +
-          '<w:r><w:rPr><w:b/></w:rPr></w:r></w:p>',
-      }),
-    );
-    expect(bodyProofs[0]?.blankEligible, 'a numbered SECOND paragraph bought credit').toBe(
-      'ineligible',
-    );
-  });
-
-  it('⚠️ `unevaluated` is OBSERVED coming out of the renderer, and does not count', async () => {
-    // ⚠️ THE THIRD STATE HAD NEVER BEEN SEEN. Instrumented across all 62 files:
-    // 1 160 `eligible`, 20 `ineligible`, ZERO `unevaluated` — and flipping all
-    // five `'unevaluated'` literals to `'eligible'` redded 0 of 757. The only
-    // arm naming the value fed hand-built objects to the READ path, which says
-    // nothing about the WRITE path ever producing one.
-    //
-    // A block-level control whose content is already empty gives the guard an
-    // EMPTY paragraph set. `[].every(...)` is `true`, so that used to yield
-    // `eligible` — a guard that examined nothing reporting approval, the exact
-    // defect the third state exists to abolish, one layer inside the fix.
-    const { bodyProofs, bindingOf, kindOf } = await renderAllNull(
-      sdtDoc({ block: true, content: '' }),
-    );
-    expect(bodyProofs.length, 'fixture produced no body proof').toBeGreaterThan(0);
-    expect(bodyProofs[0]?.blankEligible).toBe('unevaluated');
-    // AND THE OUTCOME: an unevaluated verdict must not buy credit.
     expect(
       countsAsBlankProof(bodyProofs[0] as never, {
         bindingOf,
         resolvedNull: () => true,
         kindOf,
       }),
+    ).toBe(true);
+  });
+
+  it('a SELECTION is still ineligible — the one exclusion that is not formatting', async () => {
+    // ⚠️ IT SURVIVES ON ITS OWN MEASUREMENT, NOT BY INHERITANCE. An emptied
+    // dropdown makes the PDF engine fall back to `w:listItem[0]`, so a value
+    // NOBODY CHOSE prints while the field claims blank. That is a false
+    // attestation produced by the renderer's own write — inside what a prover
+    // answers for — unlike a marker the template author put there.
+    const doc =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:body><w:p><w:sdt><w:sdtPr><w:id w:val="1731"/><w:alias w:val="Side"/>` +
+      `<w:dropDownList><w:listItem w:displayText="Left" w:value="L"/></w:dropDownList>` +
+      `</w:sdtPr><w:sdtContent><w:r><w:t>Choose an item.</w:t></w:r></w:sdtContent>` +
+      `</w:sdt></w:p></w:body></w:document>`;
+    const { bodyProofs, bindingOf, kindOf } = await renderAllNull(doc);
+    // ⚠️ ASSERTED AS THE OUTCOME, NOT THE FLAG. A selection whose clear is
+    // denied credit surfaces as `filled`, and `filled` carries no eligibility
+    // at all — so reading the flag here measures the label, not the rule.
+    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
+    expect(
+      bodyProofs.some((p) =>
+        countsAsBlankProof(p as never, { bindingOf, resolvedNull: () => true, kindOf }),
+      ),
+      'a selection bought blank credit',
     ).toBe(false);
+  });
+
+  it('⚠️ THE VERDICT READS NO DOCUMENT — identical fields, wildly different documents', async () => {
+    // The structural claim, asserted rather than described: eligibility is a
+    // function of the FIELD alone. Two documents whose paragraphs differ in
+    // every way the deleted guard used to interrogate — numbering, styles,
+    // tables, borders — produce the same verdict for the same kind of field.
+    const bare = sdtIn('', '<w:r><w:t>Enter impression</w:t></w:r>');
+    const loud = sdtIn(
+      '<w:pPr><w:pStyle w:val="ListParagraph"/>' +
+        '<w:numPr><w:ilvl w:val="2"/><w:numId w:val="9"/></w:numPr>' +
+        '<w:pBdr><w:top w:val="single" w:sz="4"/></w:pBdr>' +
+        '<w:shd w:val="clear" w:fill="FFFF00"/></w:pPr>',
+      '<w:r><w:t>Enter impression</w:t></w:r>',
+    );
+    const a = await renderAllNull(bare);
+    const b = await renderAllNull(loud);
+    expect([a.bodyProofs[0]?.blankEligible, b.bodyProofs[0]?.blankEligible]).toEqual([
+      'eligible',
+      'eligible',
+    ]);
   });
 });
 
@@ -1685,32 +1364,7 @@ describe('#171 — table_cell and legacy LEFT THE SLICE, and the limit is pinned
 });
 
 describe('#170 — the DATE and SELECTION branches, each on its own merit', () => {
-  it('a DATE control with NO w:fullDate, already skeleton, in a numbered paragraph', async () => {
-    // ⚠️ THE SHAPE THE PREVIOUS PASS FOUND UNARMED. The existing date arm uses
-    // `w:fullDate="…"`, which forces a state patch, so the zero-patch branch
-    // was unreachable from it — hardcoding that branch's eligibility redded
-    // nothing. With no `w:fullDate` and skeleton content there is no patch at
-    // all, and the field takes the `blank` path where the credit is decided.
-    const { bodyProofs, bindingOf, kindOf } = await renderAllNull(
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-        `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-        `<w:body><w:p><w:pPr><w:numPr><w:numId w:val="7"/></w:numPr></w:pPr>` +
-        `<w:sdt><w:sdtPr><w:id w:val="772"/><w:alias w:val="Procedure date"/>` +
-        `<w:date><w:dateFormat w:val="yyyy-MM-dd"/></w:date></w:sdtPr>` +
-        `<w:sdtContent><w:r><w:rPr><w:b/></w:rPr></w:r></w:sdtContent></w:sdt>` +
-        `</w:p></w:body></w:document>`,
-    );
-    expect(bodyProofs[0]?.kind).toBe('blank');
-    expect(bodyProofs[0]?.blankEligible).toBe('ineligible');
-    expect(
-      countsAsBlankProof(bodyProofs[0] as never, {
-        bindingOf,
-        resolvedNull: () => true,
-        kindOf,
-      }),
-    ).toBe(false);
-  });
-
+  
   it('a SELECTION is ineligible on its OWN merit, not by the read-path kind check', async () => {
     // ⚠️ TWO GUARDS OVERLAP HERE AND ONLY ONE IS BEING PROVED — canon 62.
     // `countsAsBlankProof` refuses selections by KIND, so a census-level
@@ -1731,345 +1385,5 @@ describe('#170 — the DATE and SELECTION branches, each on its own merit', () =
   });
 });
 
-describe('#170 — a `pStyle` is INELIGIBLE outright, and the style walk is gone', () => {
-  const styledDoc = (pPrInner: string, styles: string) => ({
-    documentXml:
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-      `<w:body><w:sdt><w:sdtPr><w:id w:val="997"/><w:alias w:val="Anticoagulation"/>` +
-      `<w:text/></w:sdtPr><w:sdtContent>` +
-      `<w:p><w:pPr>${pPrInner}</w:pPr><w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>` +
-      `</w:sdtContent></w:sdt></w:body></w:document>`,
-    stylesXml:
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-      styles + `</w:styles>`,
-  });
 
-  it('numbering carried by w:pStyle disqualifies the field — the region has no w:numPr at all', async () => {
-    // ⚠️ MEASURED TO PDF: the cleared region contained only
-    // `<w:pStyle w:val="ListParagraph"/>`, the guard found no `w:numPr`, and the
-    // field printed `ANTICOAGULATED 1.` while proofed `emptied` with blank
-    // credit. The numbering lived entirely in `styles.xml`.
-    const { documentXml, stylesXml } = styledDoc(
-      '<w:pStyle w:val="ListParagraph"/>',
-      `<w:style w:type="paragraph" w:styleId="ListParagraph"><w:pPr>` +
-        `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr></w:style>`,
-    );
-    const { bodyProofs, outputXml } = await renderAllNull(documentXml, stylesXml);
-    expect(outputXml.includes('Enter anticoagulation')).toBe(false);
-    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
-  });
 
-  it('a style based on a numbered style is caught — and NOT by walking basedOn', async () => {
-    // ⚠️ THIS ARM SURVIVES #170 WITH ITS MECHANISM DELETED, WHICH IS THE POINT.
-    // It used to prove that `basedOn` was resolved transitively. There is no
-    // transitive resolution any more: `w:pStyle` is simply not an inert
-    // property, so the paragraph is ineligible without anybody looking up a
-    // style id. The OUTCOME is identical and the attack surface is gone.
-    const { documentXml, stylesXml } = styledDoc(
-      '<w:pStyle w:val="ClinicalList"/>',
-      `<w:style w:type="paragraph" w:styleId="ListParagraph"><w:pPr>` +
-        `<w:numPr><w:numId w:val="7"/></w:numPr></w:pPr></w:style>` +
-        `<w:style w:type="paragraph" w:styleId="ClinicalList">` +
-        `<w:basedOn w:val="ListParagraph"/></w:style>`,
-    );
-    const { bodyProofs } = await renderAllNull(documentXml, stylesXml);
-    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
-  });
-
-  it('⚠️ AND A `pStyle` NAMING A PERFECTLY INNOCENT STYLE IS ALSO INELIGIBLE', async () => {
-    // ⚠️ THE ACCEPTED COST, ARMED SO IT CANNOT BE QUIETLY "FIXED". This style
-    // carries no numbering whatsoever, and the field still earns nothing. That
-    // is the deal #170 makes: one field's credit in exchange for deleting an
-    // entire resolution surface that was falsified six times. A future reader
-    // who "repairs" this by looking the style up has reinstated the surface.
-    const { documentXml, stylesXml } = styledDoc(
-      '<w:pStyle w:val="BodyText"/>',
-      `<w:style w:type="paragraph" w:styleId="BodyText"><w:name w:val="Body Text"/></w:style>`,
-    );
-    const { bodyProofs } = await renderAllNull(documentXml, stylesXml);
-    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
-  });
-
-  it('⚠️ REVERSED BY #170 — `numId="0"` no longer buys an exemption', async () => {
-    // ⚠️ THIS ARM ASSERTED THE OPPOSITE UNTIL #170, AND THE REVERSAL IS
-    // DELIBERATE. `numId="0"` really is Word's documented "no list", and the
-    // old arm was correct about the XML. It was the LAST PLACE IN THIS GUARD
-    // WHERE A JUDGEMENT LIVED — a rule that had to be right about what a
-    // numbering value means — and every previous judgement in this guard was
-    // eventually falsified. #170 pays one field's credit to have none left.
-    //
-    // `w:numPr` is not on the inert list. No exception, no value inspected.
-    const { documentXml, stylesXml } = styledDoc(
-      '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="0"/></w:numPr>',
-      '<w:style w:type="paragraph" w:styleId="Normal"/>',
-    );
-    const { bodyProofs } = await renderAllNull(documentXml, stylesXml);
-    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
-  });
-
-  it('⚠️ REVERSED BY #170 — `w:pPrChange` is INELIGIBLE, though it renders nothing', async () => {
-    // ⚠️ ALSO REVERSED, AND ALSO ON PURPOSE. `w:pPrChange` genuinely records
-    // former properties for revision tracking and renders nothing — the old arm
-    // was right, and honouring it required a walk up from each `w:numPr` to ask
-    // whether it was historical. That walk was a JUDGEMENT, and its absence
-    // from the sibling style-scanner was itself a finding in the last pass.
-    //
-    // #170 keeps no such walk. An unknown `pPr` child is ineligible, and
-    // `pPrChange` is simply not on the list.
-    const { documentXml, stylesXml } = styledDoc(
-      '<w:pPrChange w:id="9" w:author="Dr"><w:pPr>' +
-        '<w:numPr><w:numId w:val="7"/></w:numPr></w:pPr></w:pPrChange>',
-      '<w:style w:type="paragraph" w:styleId="Normal"/>',
-    );
-    const { bodyProofs } = await renderAllNull(documentXml, stylesXml);
-    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
-  });
-});
-
-describe('#168(a) — the DATE branch carries the eligibility check too', () => {
-  it('a numbered DATE control cannot claim blank', async () => {
-    // ⚠️ THE `date` BRANCH'S `blankEligible` WAS UNPROVED: deleting
-    // ` && cleared.blankEligible` there redded 0 of 57 arms, while the other two
-    // sites each redded one. It is load-bearing, not dead — this is its arm.
-    const { bodyProofs } = await renderAllNull(
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-        `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-        `<w:body><w:sdt><w:sdtPr><w:id w:val="998"/><w:alias w:val="Encounter date"/>` +
-        `<w:date w:fullDate="2026-01-01T00:00:00Z"><w:dateFormat w:val="yyyy-MM-dd"/></w:date>` +
-        `</w:sdtPr><w:sdtContent>` +
-        `<w:p><w:pPr><w:numPr><w:numId w:val="7"/></w:numPr></w:pPr>` +
-        `<w:r><w:t>2026-01-01</w:t></w:r></w:p>` +
-        `</w:sdtContent></w:sdt></w:body></w:document>`,
-    );
-    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
-  });
-});
-
-describe('#168(a) — the numbering decision reaches the `blank` label too', () => {
-  const numberedDoc = (content: string, styles?: string) => ({
-    documentXml:
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-      `<w:body><w:p>` +
-      `<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr>` +
-      `<w:sdt><w:sdtPr><w:id w:val="999"/><w:alias w:val="Anticoagulation"/><w:text/></w:sdtPr>` +
-      `<w:sdtContent>${content}</w:sdtContent></w:sdt>` +
-      `</w:p></w:body></w:document>`,
-    stylesXml: styles,
-  });
-
-  it('a numbered control whose content needs NO patch is not `blank` either', async () => {
-    // ⚠️ THE ELIGIBILITY WAS COMPUTED AND THROWN AWAY. A control whose content
-    // is already skeleton produces ZERO patches, and the zero-patch branch
-    // pushed `blank` unconditionally — so two documents printing the identical
-    // list marker got opposite verdicts, and the one that needed no work got
-    // the credit:
-    //
-    //   run WITH a w:t      -> patches -> `filled`, refused (correct)
-    //   run ALREADY empty   -> none    -> `blank`,  CREDIT  (the defect)
-    //
-    // The second is the first's own output. Both lenses found this
-    // independently, and the read path cannot rescue it: the stored proof
-    // carries no numbering signal, so this is the only place it can be decided.
-    const { documentXml } = numberedDoc('<w:r><w:rPr><w:b/></w:rPr></w:r>');
-    const { bodyProofs, bindingOf, kindOf } = await renderAllNull(documentXml);
-    expect(bodyProofs.length).toBe(1);
-    // ⚠️ THE LABEL STAYS `blank`, AND THE CREDIT IS WHAT MUST BE FALSE.
-    // Emitting `filled` here to deny credit broke the verifier: `filled` joins
-    // the PATCHED set, which must equal the proof set exactly, and this field
-    // has no patches. `blank` is the honest label for an unpatched field; the
-    // ineligibility rides beside it and the COUNT is where it bites.
-    expect(bodyProofs[0].kind).toBe('blank');
-    // #170 — three-state. `ineligible` is a decision; `unevaluated` would mean
-    // no guard ran, and both refuse. This arm needs the DECISION.
-    expect(bodyProofs[0].blankEligible).toBe('ineligible');
-    expect(
-      countsAsBlankProof(bodyProofs[0] as never, {
-        bindingOf,
-        resolvedNull: () => true,
-        kindOf,
-      }),
-    ).toBe(false);
-  });
-
-  it('an UNnumbered control whose content needs no patch IS still `blank`', async () => {
-    // NON-VACUITY for the arm above: the zero-patch path must still produce a
-    // real `blank` proof, or "not blank" would hold for any reason at all.
-    const { bodyProofs, bindingOf, kindOf } = await renderAllNull(
-      sdtDoc({ content: '<w:r><w:rPr><w:b/></w:rPr></w:r>' }),
-    );
-    expect(bodyProofs[0]?.kind).toBe('blank');
-    // ⚠️ #170 — AN EXPLICIT `eligible`, NEVER AN ABSENCE. Under the old boolean
-    // this asserted `toBeUndefined()`, i.e. yes-encoded-as-absence — the exact
-    // encoding that let two whole bindings go unguarded while looking approved.
-    expect(bodyProofs[0]?.blankEligible).toBe('eligible');
-    expect(
-      countsAsBlankProof(bodyProofs[0] as never, {
-        bindingOf,
-        resolvedNull: () => true,
-        kindOf,
-      }),
-    ).toBe(true);
-  });
-
-  it('numbering on the DEFAULT paragraph style reaches a paragraph that names none', async () => {
-    // ⚠️ AN IMPLICIT EDGE THE `basedOn` CLOSURE DOES NOT CARRY. A paragraph with
-    // no `w:pStyle` inherits `w:default="1"`. Measured: identical `styles.xml`
-    // and identical PDF, but the paragraph NAMING the numbered style was
-    // refused while the one naming nothing earned `emptied` and counted.
-    const { documentXml } = numberedDoc('<w:r><w:t>Enter anticoagulation</w:t></w:r>');
-    const plain = documentXml.replace(
-      '<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="7"/></w:numPr></w:pPr>',
-      '',
-    );
-    const styles =
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-      `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:pPr>` +
-      `<w:numPr><w:numId w:val="7"/></w:numPr></w:pPr></w:style></w:styles>`;
-    const { bodyProofs } = await renderAllNull(plain, styles);
-    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
-  });
-
-  it('⚠️ REVERSED by #169 — an ilvl with NO numId is INELIGIBLE, not exempt', async () => {
-    // This arm previously asserted the opposite, and #169 reverses it on the
-    // asymmetry rather than on new evidence about what prints:
-    //
-    //   a false REFUSAL costs ONE field its credit, and certification needs
-    //   only one blank — the owner's form has 35 eligible;
-    //   a false GRANT attests "renders blank" over printed prose in a signed
-    //   clinical note.
-    //
-    // A `w:numPr` with only an `ilvl` was measured as printing nothing, and
-    // "measured as harmless on the engine I could drive" is exactly the kind of
-    // guess this guard stopped making. The one exclusion that survives is
-    // `numId="0"` — Word's documented "no list", deterministic.
-    //
-    // ⚠️ AND THE COST IS REAL, NOT NOTIONAL: this is Word's built-in `Subtitle`,
-    // byte-identical in both tracked customer templates. Neither applies it to
-    // a control-bearing paragraph today, so nothing loses credit now — but the
-    // trade is accepted knowingly, not by accident.
-    const styles =
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-      `<w:style w:type="paragraph" w:styleId="Subtitle"><w:pPr>` +
-      `<w:numPr><w:ilvl w:val="1"/></w:numPr></w:pPr></w:style></w:styles>`;
-    const { bodyProofs } = await renderAllNull(
-      sdtDoc({
-        block: true,
-        content:
-          '<w:p><w:pPr><w:pStyle w:val="Subtitle"/></w:pPr>' +
-          '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
-      }),
-      styles,
-    );
-    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
-  });
-
-  it('an UNKNOWN pStyle is INELIGIBLE — inability to resolve is not proof of absence', async () => {
-    // #169's core: the guard answers "can I PROVE there is no numbering?", so a
-    // style that is not in the table is disqualifying rather than ignorable.
-    const styles =
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-      `<w:style w:type="paragraph" w:styleId="Normal"/></w:styles>`;
-    const { bodyProofs } = await renderAllNull(
-      sdtDoc({
-        block: true,
-        content:
-          '<w:p><w:pPr><w:pStyle w:val="NotInTheTable"/></w:pPr>' +
-          '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
-      }),
-      styles,
-    );
-    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
-  });
-
-  it('a basedOn pointing at a MISSING style is INELIGIBLE', async () => {
-    const styles =
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-      `<w:style w:type="paragraph" w:styleId="Body">` +
-      `<w:basedOn w:val="Vanished"/></w:style></w:styles>`;
-    const { bodyProofs } = await renderAllNull(
-      sdtDoc({
-        block: true,
-        content:
-          '<w:p><w:pPr><w:pStyle w:val="Body"/></w:pPr>' +
-          '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
-      }),
-      styles,
-    );
-    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
-  });
-
-  it('a basedOn CYCLE is INELIGIBLE rather than spinning', async () => {
-    const styles =
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-      `<w:style w:type="paragraph" w:styleId="A"><w:basedOn w:val="B"/></w:style>` +
-      `<w:style w:type="paragraph" w:styleId="B"><w:basedOn w:val="A"/></w:style></w:styles>`;
-    const { bodyProofs } = await renderAllNull(
-      sdtDoc({
-        block: true,
-        content:
-          '<w:p><w:pPr><w:pStyle w:val="A"/></w:pPr>' +
-          '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
-      }),
-      styles,
-    );
-    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
-  });
-
-  it('an UNPARSEABLE styles.xml refuses the whole render, one layer earlier', async () => {
-    // ⚠️ THE ARM MEASURES WHAT ACTUALLY HAPPENS, NOT WHAT I EXPECTED.
-    // `numberedStyleIds` has a `catch` that returns `readable: false`, which
-    // under #169 makes every field ineligible — but the package inspection
-    // rejects a malformed part FIRST, with `XML_INVALID`, so the render never
-    // reaches it. That is strictly more fail-closed than ineligibility.
-    //
-    // ⚠️ HONEST LIMIT, STATED RATHER THAN CLAIMED: I could not construct an
-    // input that reaches that `catch`, so the branch is defence-in-depth
-    // against a future change in which the package layer stops validating this
-    // part — not a path with a demonstrated caller. It is left in place and
-    // labelled, rather than described as a guard that has been exercised.
-    let code = 'NO THROW';
-    try {
-      await renderAllNull(
-        sdtDoc({ content: '<w:r><w:t>Enter anticoagulation</w:t></w:r>' }),
-        '<w:styles><w:style w:styleId="Broken"',
-      );
-    } catch (error) {
-      code = (error as { code?: string }).code ?? String(error);
-    }
-    expect(code).toBe('XML_INVALID');
-  });
-
-  it('⚠️ REVERSED BY #170 — a `pStyle` is ineligible whatever the style says', async () => {
-    // ⚠️ THIS ARM ONCE PROVED THE `numId="0"` EXCLUSION IN THE STYLE SCANNER —
-    // the half nobody had armed until #169. #170 deletes the scanner and the
-    // exclusion together: the paragraph names a `w:pStyle`, and that alone is
-    // disqualifying, so the style's contents are never consulted.
-    //
-    // Kept rather than deleted because a reversed arm records that the old
-    // behaviour was deliberate and is now deliberately gone. A deleted arm just
-    // looks like coverage nobody wrote.
-    const styles =
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-      `<w:style w:type="paragraph" w:styleId="ListParagraph"><w:pPr>` +
-      `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="0"/></w:numPr></w:pPr></w:style></w:styles>`;
-    const { bodyProofs } = await renderAllNull(
-      sdtDoc({
-        block: true,
-        content:
-          '<w:p><w:pPr><w:pStyle w:val="ListParagraph"/></w:pPr>' +
-          '<w:r><w:t>Enter anticoagulation</w:t></w:r></w:p>',
-      }),
-      styles,
-    );
-    expect(bodyProofs.map((p) => p.kind)).not.toContain('emptied');
-  });
-});
