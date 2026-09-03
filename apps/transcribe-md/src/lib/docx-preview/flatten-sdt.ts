@@ -50,9 +50,23 @@
 // same pass measured at 34 seconds of blocked event loop on 5,000 controls.
 //
 // ── WHAT IT PRESERVES, AND WHAT IT COSTS ───────────────────────────────────
-// `w:sdtPr` / `w:sdtEndPr` are the control's METADATA — alias, id, dropdown
-// list items, placeholder reference — and they carry no rendered text, which is
-// why they go with the wrapper. Everything else survives byte-for-byte.
+// EVERYTHING survives byte-for-byte except the four wrapper tags. `w:sdtPr` and
+// `w:sdtEndPr` are KEPT, children and all.
+//
+// ⚠️ THIS PARAGRAPH USED TO SAY THE OPPOSITE, AND THE SUPERSEDED WORDING IS
+// NAMED RATHER THAN QUIETLY REPLACED, BECAUSE IT IS THE LESSON. It read: *"they
+// carry no rendered text, which is why they go with the wrapper."* That premise
+// was false — this codebase's own `CONTENT_CARRIERS` enumerates ~40 printing
+// elements and exists because a Wingdings tick was measured inside `w:rPr` —
+// and acting on it deleted a tick, a signature `w:drawing` and a drug name.
+// Documentation asserting a design that no longer exists is read by everyone as
+// a description of the running system.
+//
+// Keeping them costs nothing, and that was MEASURED before it was chosen: three
+// variants through real LibreOffice — delete the subtree, delete only the tags,
+// delete nothing — produced a byte-identical 54,821-byte PDF, 28/28 filled
+// values, 2,329 characters. A later pass rendered 14 more constructed documents
+// and found nothing inside a surviving property block ever printed.
 //
 // ⚠️ THE COST, NAMED SO IT IS NOT DISCOVERED LATER: unwrapping removes the
 // STRUCTURE that marks which text is a filled field. For a PDF that is correct —
@@ -74,7 +88,19 @@
  * rest. Safety comes from deleting no content at all; this only catches a
  * wrapper pattern that has started matching something it should not.
  */
-const TEXT_CARRIERS = /<w:(?:t|delText|instrText)(?:\s[^>]*)?>[\s\S]*?<\/w:(?:t|delText|instrText)>/g;
+const CARRIER = '(?:t|delText|instrText)';
+const TEXT_CARRIERS = new RegExp(
+  // ⚠️ SELF-CLOSING FIRST, AND WHITESPACE IN THE CLOSE. Round three demonstrated
+  // that `<w:t xml:space="preserve"/>`, `<w:t />` and `</w:t >` — all legal XML,
+  // and this codebase's own renderer carries a `selfClosing` branch for `w:t` —
+  // were read as an OPEN with no close. The non-greedy match then ran on to the
+  // NEXT carrier, SPANNING the wrapper tags between them, so removing those tags
+  // changed the matched string and this backstop threw on a perfectly good
+  // document. Every such refusal costs the doctor exactly the defect being
+  // fixed: a complete-looking PDF with every filled value empty.
+  `<w:${CARRIER}(?:\\s[^>]*?)?/>|<w:${CARRIER}(?:\\s[^>]*)?>[\\s\\S]*?</w:${CARRIER}\\s*>`,
+  'g',
+);
 
 const carriers = (xml: string): string[] => xml.match(TEXT_CARRIERS) ?? [];
 
@@ -125,15 +151,22 @@ export function flattenContentControls(xml: string): string {
   // ORDERED list BOTH ways, because a rule about faithfulness forbids removing
   // as well as manufacturing.
   //
-  // ⚠️ AND NO INPUT CAN TRIP IT — SAID PLAINLY, BECAUSE DELETING IT REDS ZERO
-  // ARMS AND A READER WILL EVENTUALLY NOTICE THAT. It is a CODE-CHANGE
-  // detector, not an input detector: with tag-only removal there is no document
-  // that reaches it, which is the point of the design. Its proof is a mutation,
-  // recorded here rather than left to be rediscovered — widening WRAPPER_TAGS
-  // to also match `<w:r>`/`<w:t>` makes it, and ONLY it, refuse:
+  // ⚠️ AN EARLIER VERSION OF THIS COMMENT CLAIMED, IN BOLD, THAT NO INPUT COULD
+  // TRIP IT. THAT WAS FALSE, and round three produced the counterexamples:
+  // three legal spellings of `w:t` were mis-parsed by the carrier pattern and
+  // this check refused a perfectly good document. The claim is corrected rather
+  // than deleted, because the failure it caused is the instructive part — a
+  // FALSE REFUSAL here is not a safe direction. It costs the doctor exactly the
+  // defect this whole change exists to fix: a complete-looking PDF with every
+  // filled value empty, announced by nothing but a console line.
+  //
+  // So this backstop is held to the same standard as the wrapper patterns: it
+  // must not fire on anything legal. Deleting it still reds zero arms, because
+  // the shapes that reach it are precisely the ones now fixed; what it catches
+  // is a CODE CHANGE, and its proof is a mutation recorded here rather than
+  // left to be rediscovered — widening WRAPPER_TAGS to also match
+  // `<w:r>`/`<w:t>` makes it, and ONLY it, refuse:
   //     flattenContentControls: text carriers changed (1 -> 0)
-  // If you are tempted to delete it because nothing exercises it, that mutation
-  // is what you are removing.
   const after = carriers(out);
   if (after.length !== before.length || after.some((c, i) => c !== before[i])) {
     throw new Error(

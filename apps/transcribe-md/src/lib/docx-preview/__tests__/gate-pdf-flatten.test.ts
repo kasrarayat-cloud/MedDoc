@@ -270,7 +270,94 @@ describe('flattening the conversion input', () => {
     const bytes = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
     expect(bytes.byteLength, 'the bomb should compress small').toBeLessThan(1_000_000);
 
-    await expect(flattenDocxForConversion(bytes)).rejects.toThrow(/uncompressed ceiling/);
+    // the hardened reader refuses from the CENTRAL DIRECTORY, before a byte is
+    // decompressed — the ordering is the point, not merely the refusal
+    await expect(flattenDocxForConversion(bytes)).rejects.toThrow(
+      /package entry exceeds|compression ratio|package exceeds/i,
+    );
+  });
+
+  // ==========================================================================
+  // ⚠️ ROUND THREE. Lens 1 REFUTED its own hypothesis through real LibreOffice —
+  // nothing inside a surviving `w:sdtPr` printed across 14 constructed
+  // documents, and the real form gained 81 tokens and lost ZERO. The
+  // stop-deleting design is measured, not argued. These two arms cover what it
+  // DID find.
+  // ==========================================================================
+
+  it('⚠️ legal spellings of w:t do NOT falsely refuse a good document', () => {
+    // The backstop read `<w:t xml:space="preserve"/>`, `<w:t />` and `</w:t >`
+    // as an OPEN with no close; the match then spanned the wrapper tags to the
+    // next carrier and this check refused. A FALSE REFUSAL is not a safe
+    // direction — it costs the doctor exactly the defect being fixed.
+    const ctl =
+      `<w:sdt><w:sdtPr><w:id w:val="1"/></w:sdtPr><w:sdtContent>` +
+      `<w:r><w:t xml:space="preserve">WARFARIN 5 MG DAILY</w:t></w:r></w:sdtContent></w:sdt>`;
+    for (const pre of [
+      `<w:p><w:r><w:t xml:space="preserve"/></w:r></w:p>`,
+      `<w:p><w:r><w:t /></w:r></w:p>`,
+      `<w:p><w:r><w:t>A</w:t ></w:r></w:p>`,
+      `<w:p><w:r><w:t/></w:r></w:p>`,
+      `<w:p><w:r><w:t></w:t></w:r></w:p>`,
+    ]) {
+      const after = flattenContentControls(doc(`${pre}<w:p>${ctl}</w:p>`));
+      expect(after, `falsely refused for: ${pre}`).toContain('WARFARIN 5 MG DAILY');
+      expect(wellFormed(after)).toBe(true);
+    }
+  });
+
+  it('⚠️ ONE un-flattenable part does not discard the WHOLE package', async () => {
+    const JSZip = (await import('jszip')).default;
+    const { flattenDocxForConversion } = await import('../flatten-docx');
+    const { inspectDocxPackage } = await import('../../note-template-docx/package-security');
+
+    const src = readFileSync(join(APP, 'tests', 'e2e', 'fixtures', 'sample-form.docx'));
+    const zip = await JSZip.loadAsync(src);
+    // one attribute-bearing control — the refusal the design intends — in a header
+    zip.file(
+      'word/header1.xml',
+      `<?xml version="1.0"?><w:hdr ${W}><w:p><w:sdt w:foo="a"><w:sdtContent>` +
+        `<w:r><w:t>LETTERHEAD</w:t></w:r></w:sdtContent></w:sdt></w:p></w:hdr>`,
+    );
+    const bytes = await zip.generateAsync({ type: 'uint8array' });
+
+    const out = await flattenDocxForConversion(bytes);
+    // the odd part is named, not silently swallowed ...
+    expect(out.skipped).toEqual(['word/header1.xml']);
+    // ... and the BODY is still flattened. Before this, one odd header cost the
+    // doctor all 28 filled values in the document itself.
+    const body = Buffer.from(
+      inspectDocxPackage(out.docx).zip.entries.get('word/document.xml')!.bytes,
+    ).toString('utf8');
+    expect((body.match(/<w:sdt[ >]/g) ?? []).length, 'the body lost its flatten').toBe(0);
+  });
+
+  it('⚠️ the flattened package is DEFLATED, not re-STORED', async () => {
+    const { flattenDocxForConversion } = await import('../flatten-docx');
+    const src = readFileSync(join(APP, 'tests', 'e2e', 'fixtures', 'sample-form.docx'));
+    const out = await flattenDocxForConversion(src);
+    expect(out.skipped).toEqual([]);
+    // JSZip re-emits STORED unless told otherwise; that took the real form from
+    // 52,884 to 378,054 bytes, and every byte crosses to the sidecar per export
+    expect(out.docx.byteLength, 'the package was re-STORED').toBeLessThan(src.byteLength * 2);
+  });
+
+  it('⚠️ a CDATA section or a comment naming a control is REFUSED, not guessed at', async () => {
+    const JSZip = (await import('jszip')).default;
+    const { flattenDocxForConversion } = await import('../flatten-docx');
+    for (const [what, part] of [
+      ['CDATA', `<w:document ${W}><w:body><![CDATA[<w:sdt>]]><w:p><w:sdt><w:sdtContent><w:r><w:t>A</w:t></w:r></w:sdtContent></w:sdt></w:p></w:body></w:document>`],
+      ['a comment', `<w:document ${W}><w:body><!-- <w:sdt> --><w:p><w:sdt><w:sdtContent><w:r><w:t>A</w:t></w:r></w:sdtContent></w:sdt></w:p></w:body></w:document>`],
+    ] as Array<[string, string]>) {
+      const zip = new JSZip();
+      zip.file('[Content_Types].xml', '<Types/>');
+      zip.file('_rels/.rels', '<Relationships/>');
+      zip.file('word/document.xml', part);
+      const bytes = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+      const out = await flattenDocxForConversion(bytes);
+      // per-part: named and left alone, never silently half-processed
+      expect(out.skipped, `${what} was not refused`).toEqual(['word/document.xml']);
+    }
   });
 
   // ⚠️ THE REAL DOCUMENT, not a fixture of my own shape. The owner's blank form
@@ -291,7 +378,8 @@ describe('flattening the conversion input', () => {
     expect(beforeCount, 'the fixture carries no content controls').toBeGreaterThan(20);
 
     const flat = await flattenDocxForConversion(src);
-    const afterXml = xmlOf(flat);
+    expect(flat.skipped, 'the real form must flatten completely').toEqual([]);
+    const afterXml = xmlOf(flat.docx);
     expect((afterXml.match(/<w:sdt[ >]/g) ?? []).length, 'controls survived').toBe(0);
     // property blocks are KEPT — see the CLINICAL arm above
     expect((afterXml.match(/<w:sdtPr[ >]/g) ?? []).length).toBe(beforeCount);

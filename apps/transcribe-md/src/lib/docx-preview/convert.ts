@@ -105,7 +105,14 @@ export async function convertDocxToPdf(
     // worse, and this function's fail-open contract predates this change.
     let toConvert = docx;
     try {
-      toConvert = await flattenDocxForConversion(docx);
+      const flattened = await flattenDocxForConversion(docx);
+      toConvert = flattened.docx;
+      if (flattened.skipped.length > 0) {
+        console.warn(
+          `[docx-preview] ${flattened.skipped.length} part(s) left unflattened:`,
+          flattened.skipped.join(', '),
+        );
+      }
     } catch (flattenErr) {
       console.warn(
         '[docx-preview] flatten failed; converting the original bytes:',
