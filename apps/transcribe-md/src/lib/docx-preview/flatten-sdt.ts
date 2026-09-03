@@ -63,30 +63,51 @@
 // else: the bytes served to Word keep their controls.
 // ============================================================================
 
-/** Every text carrier this codebase has been bitten by. Used as a TRIPWIRE. */
+/**
+ * Every text carrier this codebase has been bitten by, used as a BACKSTOP only.
+ *
+ * ⚠️ IT IS NOT THE SAFETY ARGUMENT, AND IT MUST NOT BE READ AS ONE. Round two
+ * of the refutation pass showed this list is three names out of the ~40 that
+ * PRINT (`note-template-docx/compiler.ts`'s `CONTENT_CARRIERS`, a set that
+ * exists because a Wingdings tick was measured surviving inside `w:rPr`). A
+ * guard built on it would be blind to `w:sym`, `w:drawing`, `w:pict` and the
+ * rest. Safety comes from deleting no content at all; this only catches a
+ * wrapper pattern that has started matching something it should not.
+ */
 const TEXT_CARRIERS = /<w:(?:t|delText|instrText)(?:\s[^>]*)?>[\s\S]*?<\/w:(?:t|delText|instrText)>/g;
 
 const carriers = (xml: string): string[] => xml.match(TEXT_CARRIERS) ?? [];
 
-// Metadata subtrees. Self-closing forms are removed FIRST, so that by the time
-// the paired form runs, every remaining `<w:sdtPr` provably has a partner —
-// otherwise a lone `<w:sdtPr/>` would let the non-greedy match run on to some
-// LATER `</w:sdtPr>` and swallow a doctor's paragraph on the way.
-const SDT_PR_SELF = /<w:sdt(?:End)?Pr(?:\s[^>]*?)?\/>/g;
-const SDT_PR_PAIR = /<w:sdtPr(?:\s[^>]*)?>[\s\S]*?<\/w:sdtPr>/g;
-const SDT_ENDPR_PAIR = /<w:sdtEndPr(?:\s[^>]*)?>[\s\S]*?<\/w:sdtEndPr>/g;
+/**
+ * The four wrapper tag forms, and NOTHING else.
+ *
+ * ⚠️ `(?![A-Za-z])` IS LOAD-BEARING TWICE OVER. It stops `<w:sdt` matching
+ * `<w:sdtPr>`, `<w:sdtEndPr>` or `<w:sdtContent>` — the property blocks are
+ * KEPT, and a pattern that ate them would be the exact defect this version
+ * exists to remove.
+ *
+ * ⚠️ AND NO ATTRIBUTES ARE ADMITTED. Neither element takes an attribute in the
+ * OOXML schema, and the real customer form is 56 of 56 bare — measured, not
+ * assumed. Admitting them would mean `[^>]*` stopping at the FIRST `>`, so a
+ * value containing `>` would leave the tail behind as character data: text
+ * MANUFACTURED into a clinical document. An unrecognised form is left in place
+ * and then caught by the survivor check below, which refuses the part.
+ *
+ * ⚠️ `\s*` IN THE CLOSING FORMS IS ALSO LOAD-BEARING. `</w:sdt >`, `<w:sdt\t>`
+ * and `<w:sdtContent >` are legal XML, and an earlier version matched the
+ * partner tag while leaving these — shipping malformed XML with no throw, so
+ * the converter refused and the doctor got NO pdf at all.
+ */
+const WRAPPER_TAGS =
+  /<w:sdt(?![A-Za-z])\s*\/?>|<\/w:sdt\s*>|<w:sdtContent(?![A-Za-z])\s*\/?>|<\/w:sdtContent\s*>/g;
 
-// ⚠️ `[^>]*[^/]` IS LOAD-BEARING: it stops the OPEN patterns matching a
-// self-closing `<w:sdt />`, which is defect 3 above. `<w:sdtContent>` is not
-// matched by the `w:sdt` pattern either — the character after `sdt` is `C`,
-// neither whitespace nor `>`.
-const SDT_SELF = /<w:sdt(?:\s[^>]*?)?\/>/g;
-const SDT_CONTENT_SELF = /<w:sdtContent(?:\s[^>]*?)?\/>/g;
-const WRAPPER_TAGS = /<w:sdt(?:\s[^>]*[^/])?>|<\/w:sdt>|<w:sdtContent(?:\s[^>]*[^/])?>|<\/w:sdtContent>/g;
+/** The same forms, for asserting none survived. */
+const ANY_WRAPPER =
+  /<w:sdt(?![A-Za-z])|<\/w:sdt\s*>|<w:sdtContent(?![A-Za-z])|<\/w:sdtContent\s*>/;
 
 /**
- * Unwrap every `w:sdt` in a WordprocessingML part by deleting its wrapper tags
- * and metadata, leaving ALL other content exactly where it was.
+ * Unwrap every `w:sdt` in a WordprocessingML part by removing its wrapper TAGS.
+ * Nothing else is touched: no subtree is selected, examined, or deleted.
  *
  * @throws when the part cannot be flattened safely — the caller
  * (`convertDocxToPdf`) catches and converts the ORIGINAL bytes. A hollow PDF is
@@ -96,41 +117,31 @@ export function flattenContentControls(xml: string): string {
   if (!xml.includes('<w:sdt')) return xml;
 
   const before = carriers(xml);
+  const out = xml.replace(WRAPPER_TAGS, '');
 
-  let out = xml.replace(SDT_PR_SELF, '');
-
-  // ⚠️ ADMIT ONLY WHAT YOU UNDERSTAND. An unbalanced metadata block is a shape
-  // nobody here has characterised, and the non-greedy delete would silently
-  // reach past it. Refuse the part instead — the original bytes still convert.
-  const prOpens = (out.match(/<w:sdtPr(?:\s[^>]*)?>/g) ?? []).length;
-  const prCloses = (out.match(/<\/w:sdtPr>/g) ?? []).length;
-  const endOpens = (out.match(/<w:sdtEndPr(?:\s[^>]*)?>/g) ?? []).length;
-  const endCloses = (out.match(/<\/w:sdtEndPr>/g) ?? []).length;
-  if (prOpens !== prCloses || endOpens !== endCloses) {
-    throw new Error(
-      `flattenContentControls: unbalanced control metadata (sdtPr ${prOpens}/${prCloses}, sdtEndPr ${endOpens}/${endCloses})`,
-    );
-  }
-
-  out = out.replace(SDT_PR_PAIR, '').replace(SDT_ENDPR_PAIR, '');
-  // An empty control carries nothing; the tag itself is all there is to remove.
-  out = out.replace(SDT_SELF, '').replace(SDT_CONTENT_SELF, '');
-  out = out.replace(WRAPPER_TAGS, '');
-
-  // ⚠️ THE TRIPWIRE, NOT THE GUARANTEE. Content preservation is a property of
-  // removing only tags; this catches the case where one of those patterns
-  // matches something that is NOT a wrapper tag. It compares the ORDERED list
-  // both ways, because a rule about faithfulness forbids REMOVING as well as
-  // manufacturing, and a subset check only ever constrains one direction.
+  // ⚠️ A BACKSTOP, NOT THE GUARANTEE — see TEXT_CARRIERS. Content preservation
+  // is a property of removing only tags. This fires if a wrapper pattern has
+  // started matching something that is not a wrapper tag, and it compares the
+  // ORDERED list BOTH ways, because a rule about faithfulness forbids removing
+  // as well as manufacturing.
+  //
+  // ⚠️ AND NO INPUT CAN TRIP IT — SAID PLAINLY, BECAUSE DELETING IT REDS ZERO
+  // ARMS AND A READER WILL EVENTUALLY NOTICE THAT. It is a CODE-CHANGE
+  // detector, not an input detector: with tag-only removal there is no document
+  // that reaches it, which is the point of the design. Its proof is a mutation,
+  // recorded here rather than left to be rediscovered — widening WRAPPER_TAGS
+  // to also match `<w:r>`/`<w:t>` makes it, and ONLY it, refuse:
+  //     flattenContentControls: text carriers changed (1 -> 0)
+  // If you are tempted to delete it because nothing exercises it, that mutation
+  // is what you are removing.
   const after = carriers(out);
   if (after.length !== before.length || after.some((c, i) => c !== before[i])) {
     throw new Error(
       `flattenContentControls: text carriers changed (${before.length} -> ${after.length}); refusing to convert this part`,
     );
   }
-  // Nothing may survive that would put us back where we started.
-  if (/<w:sdt[ />]|<\/w:sdt>/.test(out)) {
-    throw new Error('flattenContentControls: a control survived flattening');
+  if (ANY_WRAPPER.test(out)) {
+    throw new Error('flattenContentControls: a control wrapper survived flattening');
   }
   return out;
 }

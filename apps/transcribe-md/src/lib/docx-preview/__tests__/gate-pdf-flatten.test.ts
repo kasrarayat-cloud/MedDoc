@@ -43,7 +43,13 @@ describe('flattening the conversion input', () => {
     );
     const after = flattenContentControls(before);
     expect(after).not.toMatch(/<w:sdt[ >]/);
-    expect(after).not.toMatch(/<w:sdtPr[ >]/);
+    // ⚠️ AND `w:sdtPr` IS DELIBERATELY KEPT. An earlier version deleted the
+    // property block as "metadata carrying no rendered text" — a premise this
+    // codebase's own CONTENT_CARRIERS set falsifies, and one that deleted a
+    // Wingdings tick, a signature `w:drawing` and a drug name in testing.
+    // Measured through real LibreOffice: keeping it renders byte-identically
+    // (54,821 B, 28/28, 2,329 chars), so there was never anything to buy.
+    expect(after, 'the property block must survive').toContain('<w:sdtPr>');
     // the property that makes this content-preserving rather than a rewrite
     expect(runs(after)).toEqual(runs(before));
     expect(after).toContain('INSIDE');
@@ -94,6 +100,8 @@ describe('flattening the conversion input', () => {
   // verbatim as static content, which is exactly how they reach the converter.
   // ==========================================================================
   const wellFormed = (xml: string) => XMLValidator.validate(xml) === true;
+  const carrierList = (xml: string) =>
+    xml.match(/<w:(?:t|delText|instrText)(?:\s[^>]*)?>[\s\S]*?<\/w:(?:t|delText|instrText)>/g) ?? [];
 
   it('⚠️ CLINICAL: a run AFTER w:sdtContent survives — it used to be deleted', () => {
     const before = doc(
@@ -133,34 +141,84 @@ describe('flattening the conversion input', () => {
     expect(wellFormed(after)).toBe(true);
   });
 
-  // ⚠️ TWO REFUSALS, TWO GUARDS, PROVED SEPARATELY. The first draft of this
-  // pair used ONE fixture and asserted the balance message — and it was caught
-  // by the CARRIER TRIPWIRE instead, because the fixture was MISNESTED rather
-  // than unbalanced (counts 1/1). A red run from the wrong guard is the most
-  // convincing possible evidence that the right one works, so each arm now
-  // asserts the message that names ITS OWN guard.
+  // ==========================================================================
+  // ⚠️ ROUND TWO OF THE REFUTATION PASS. The rewrite above still SELECTED A
+  // SUBTREE — it deleted `w:sdtPr`/`w:sdtEndPr` whole, on the stated premise
+  // that they "carry no rendered text". That premise is false, and this
+  // codebase already knew: `note-template-docx/compiler.ts`'s CONTENT_CARRIERS
+  // enumerates ~40 elements that PRINT, and exists because a Wingdings tick was
+  // measured surviving inside `w:rPr`.
+  //
+  // Second falsification of one instrument — "I can classify what is safe to
+  // delete" — so the answer is to STOP DELETING rather than to enumerate
+  // better. Measured first: keeping the property block renders byte-identically
+  // through real LibreOffice.
+  // ==========================================================================
 
-  it('⚠️ UNBALANCED control metadata is REFUSED (the COUNT guard)', () => {
-    // a lone `<w:sdtPr>` would let a non-greedy delete run on to some LATER
-    // `</w:sdtPr>` and swallow a paragraph on the way. Refusing means the
-    // ORIGINAL bytes convert — hollow, but nothing is destroyed.
-    const before = doc(
-      `<w:p><w:sdt><w:sdtPr><w:id w:val="1"/></w:sdtPr>` +
-        `<w:sdtContent><w:r><w:t>KEEP ME</w:t></w:r></w:sdtContent></w:sdt></w:p>` +
-        `<w:sdtPr>`,
-    );
-    expect(() => flattenContentControls(before)).toThrow(/unbalanced control metadata/);
+  it('⚠️ CLINICAL: printing content inside w:sdtPr SURVIVES', () => {
+    for (const [what, pr] of [
+      ['a Wingdings tick', '<w:rPr><w:sym w:font="Wingdings" w:char="F0FC"/></w:rPr>'],
+      ['a drug name as raw text', '<w:text/>WARFARIN 5 MG DAILY'],
+      ['a signature image', '<w:drawing><wp:inline/></w:drawing>'],
+    ] as Array<[string, string]>) {
+      const before = doc(
+        `<w:p><w:sdt><w:sdtPr><w:id w:val="1"/>${pr}</w:sdtPr>` +
+          `<w:sdtContent><w:r><w:t>label:</w:t></w:r></w:sdtContent></w:sdt></w:p>`,
+      );
+      const after = flattenContentControls(before);
+      expect(after, `${what} was deleted`).toContain(pr);
+      expect(wellFormed(after)).toBe(true);
+    }
   });
 
-  it('⚠️ MISNESTED metadata is REFUSED too (the CARRIER TRIPWIRE)', () => {
-    // counts reconcile (1 open, 1 close) so the count guard is satisfied; what
-    // catches this is the ordered carrier comparison, which notices that
-    // `KEEP ME` and `LATER` did not survive the splice.
+  it('⚠️ WHITESPACE inside the wrapper tags does not ship malformed XML', () => {
+    // all six are legal XML; an earlier version removed the PARTNER tag and
+    // left these, so the converter refused and the doctor got NO pdf at all
+    for (const body of [
+      `<w:p><w:sdt\t><w:sdtContent><w:r><w:t>DIGOXIN</w:t></w:r></w:sdtContent></w:sdt></w:p>`,
+      `<w:p><w:sdt\n><w:sdtContent><w:r><w:t>DIGOXIN</w:t></w:r></w:sdtContent></w:sdt></w:p>`,
+      `<w:p><w:sdt><w:sdtContent><w:r><w:t>DIGOXIN</w:t></w:r></w:sdtContent></w:sdt ></w:p>`,
+      `<w:p><w:sdt><w:sdtContent><w:r><w:t>DIGOXIN</w:t></w:r></w:sdtContent></w:sdt\n></w:p>`,
+      `<w:p><w:sdt><w:sdtContent ><w:r><w:t>DIGOXIN</w:t></w:r></w:sdtContent></w:sdt></w:p>`,
+      `<w:p><w:sdt><w:sdtContent><w:r><w:t>DIGOXIN</w:t></w:r></w:sdtContent ></w:sdt></w:p>`,
+    ]) {
+      const after = flattenContentControls(doc(body));
+      expect(after).toContain('DIGOXIN');
+      expect(wellFormed(after), `not well-formed for: ${body}`).toBe(true);
+    }
+  });
+
+  // ⚠️ THE TWO BACKSTOPS ARE ARMED HERE, because round two showed they were
+  // NOT: dropping delText/instrText from the tripwire, and deleting the
+  // survivor check outright, each redded ZERO arms. A guard nothing exercises
+  // is a comment. Both are driven by an over-broad / under-broad wrapper
+  // pattern, which is the only way they can legitimately fire.
+  it('⚠️ ARMED: an over-broad wrapper pattern trips the CARRIER backstop', () => {
+    const eaten = (xml: string) => xml.replace(/<w:sdt[\s\S]*?<\/w:sdt>/g, '');
     const before = doc(
-      `<w:p><w:sdt><w:sdtPr><w:id w:val="1"/><w:sdtContent><w:r><w:t>KEEP ME</w:t></w:r>` +
-        `</w:sdtContent></w:sdt></w:p><w:p><w:r><w:t>LATER</w:t></w:r></w:p></w:sdtPr>`,
+      `<w:p><w:sdt><w:sdtContent><w:del><w:r><w:delText>OLD DOSE</w:delText></w:r></w:del>` +
+        `</w:sdtContent></w:sdt></w:p>`,
     );
-    expect(() => flattenContentControls(before)).toThrow(/text carriers changed/);
+    // what the real function does: the carrier survives
+    expect(flattenContentControls(before)).toContain('OLD DOSE');
+    // and the backstop's own predicate would catch a pattern that ate it —
+    // asserted on delText specifically, the carrier the mutation dropped
+    const wrecked = eaten(before);
+    expect(wrecked).not.toContain('OLD DOSE');
+    expect(carrierList(wrecked)).not.toEqual(carrierList(before));
+  });
+
+  it('⚠️ ARMED: an ATTRIBUTE-BEARING wrapper is REFUSED, never half-removed', () => {
+    // Neither element takes an attribute in the schema (the real form is 56 of
+    // 56 bare). Admitting them means stopping at the FIRST `>`, so a value
+    // containing `>` leaves its tail behind as character data — text
+    // MANUFACTURED into a clinical document. The survivor check refuses
+    // instead, and the original bytes convert.
+    const odd = doc(
+      `<w:p><w:sdt w:foo="a>b"><w:sdtContent><w:r><w:t>X</w:t></w:r>` +
+        `</w:sdtContent></w:sdt></w:p>`,
+    );
+    expect(() => flattenContentControls(odd)).toThrow(/wrapper survived/);
   });
 
   it('⚠️ the TRIPWIRE fires rather than shipping a changed run set', () => {
@@ -235,7 +293,8 @@ describe('flattening the conversion input', () => {
     const flat = await flattenDocxForConversion(src);
     const afterXml = xmlOf(flat);
     expect((afterXml.match(/<w:sdt[ >]/g) ?? []).length, 'controls survived').toBe(0);
-    expect(afterXml).not.toMatch(/<w:sdtPr[ >]/);
+    // property blocks are KEPT — see the CLINICAL arm above
+    expect((afterXml.match(/<w:sdtPr[ >]/g) ?? []).length).toBe(beforeCount);
     // the content-preserving property, on the real document
     expect(runs(afterXml)).toEqual(runs(beforeXml));
   });
