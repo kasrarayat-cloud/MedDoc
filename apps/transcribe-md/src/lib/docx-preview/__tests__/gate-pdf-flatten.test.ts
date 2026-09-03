@@ -350,7 +350,7 @@ describe('flattening the conversion input', () => {
   // IN THE UNWRAPPING. A comment regex spanned BETWEEN two comments and refused
   // the whole part; a carrier check read comment text as markup. A parser knows
   // what a comment is, so both are now questions nobody has to answer by hand.
-  it('⚠️ comments and CDATA are HANDLED, not mis-read as markup', () => {
+  it('⚠️ comments are HANDLED, not mis-read as markup', () => {
     for (const [what, body] of [
       [
         'two ordinary comments',
@@ -414,6 +414,96 @@ describe('flattening the conversion input', () => {
     expect(after).toContain('Dose &#60; 5 mg &#38; hold if INR &lt; 3');
     expect(after, 'an entity was double-escaped into visible text').not.toContain('&amp;#');
     expect(wellFormed(after)).toBe(true);
+  });
+
+  // ⚠️ THIS ARM EXISTS BECAUSE A ROUND-FOUR REWRITE OF MINE DELETED THE SUITE'S
+  // ONLY CDATA COVERAGE WHILE LEAVING THE WORD "CDATA" IN THE ARM'S TITLE. A
+  // title is a claim; every case under it was a comment. That is exactly the
+  // check-narrower-than-its-name defect, in a test rather than in a gate.
+  it('⚠️ CDATA that cannot be re-emitted faithfully is REFUSED, not shipped', () => {
+    // the parser collapses CDATA to a text node and the builder re-emits it
+    // UNESCAPED — `INR < 3 & rising` then breaks well-formedness, the converter
+    // answers 400 and the EXPORT REFUSES, which is worse than a hollow PDF
+    const before = doc(
+      `<w:p><w:r><w:t><![CDATA[INR < 3 & rising]]></w:t></w:r></w:p>` +
+        `<w:p><w:sdt><w:sdtContent><w:r><w:t>ZWARFARIN</w:t></w:r></w:sdtContent></w:sdt></w:p>`,
+    );
+    expect(() => flattenContentControls(before)).toThrow(/does not re-parse|serialization changed/);
+  });
+
+  it('⚠️ CDATA that DOES round-trip is still handled — the refusal is not blanket', () => {
+    const before = doc(
+      `<w:p><w:r><w:t><![CDATA[HELLO]]></w:t></w:r></w:p>` +
+        `<w:p><w:sdt><w:sdtContent><w:r><w:t>ZWARFARIN</w:t></w:r></w:sdtContent></w:sdt></w:p>`,
+    );
+    const after = flattenContentControls(before);
+    expect(after).toContain('HELLO');
+    expect(after).toContain('ZWARFARIN');
+    expect(wellFormed(after)).toBe(true);
+  });
+
+  it('⚠️ a SECOND prefix bound to the same namespace is unwrapped, not left behind', () => {
+    // found while trying to ARM the survivor check: taking only the first
+    // binding left every control under the other prefix in place, and the
+    // survivor check — asking the same question the same way — did not notice.
+    const before =
+      `<w:document ${W} xmlns:v="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:body><w:p><v:sdt><v:sdtContent><v:r><v:t>ZHEPARIN</v:t></v:r>` +
+      `</v:sdtContent></v:sdt></w:p></w:body></w:document>`;
+    const after = flattenContentControls(before);
+    expect(after).toContain('ZHEPARIN');
+    expect(after, 'a control under the second binding survived').not.toMatch(/<v:sdt[ >/]/);
+  });
+
+  it('⚠️ NUMBERS in the doctor\'s text are not re-typed — 007 stays 007', () => {
+    // ⚠️ THE VALUE MUST BE THE WHOLE TEXT NODE, AND THE FIRST DRAFT MISSED THAT.
+    // `parseTagValue` only re-types a node that is ENTIRELY numeric, so
+    // `Room 007, dose 0.50 mg` survives either way and armed nothing. Measured
+    // on a pure value: `007` -> `7` and `0.50` -> `0.5`. A dose field holding
+    // just the number is exactly that shape, and 0.50 becoming 0.5 is a
+    // clinical value change.
+    const before = doc(
+      `<w:p><w:sdt><w:sdtContent><w:r><w:t>0.50</w:t></w:r></w:sdtContent></w:sdt></w:p>` +
+        `<w:p><w:sdt><w:sdtContent><w:r><w:t>007</w:t></w:r></w:sdtContent></w:sdt></w:p>`,
+    );
+    const after = flattenContentControls(before);
+    expect(after).toContain('<w:t>0.50</w:t>');
+    expect(after).toContain('<w:t>007</w:t>');
+  });
+
+  it('⚠️ a part declaring a NON-UTF-8 encoding is left alone, not mangled', async () => {
+    const JSZip = (await import('jszip')).default;
+    const { flattenDocxForConversion } = await import('../flatten-docx');
+    const src = readFileSync(join(APP, 'tests', 'e2e', 'fixtures', 'sample-form.docx'));
+    const zip = await JSZip.loadAsync(src);
+    // JSZip decodes as UTF-8; a windows-1252 part comes back as mojibake and
+    // would be re-serialized that way, so `José Muñoz` reaches the PDF broken.
+    // Those bytes previously went to the converter untouched — decoding them
+    // here would be a regression introduced by this fix.
+    zip.file(
+      'word/header1.xml',
+      `<?xml version="1.0" encoding="windows-1252"?><w:hdr ${W}><w:p><w:sdt><w:sdtContent>` +
+        `<w:r><w:t>Jose</w:t></w:r></w:sdtContent></w:sdt></w:p></w:hdr>`,
+    );
+    const bytes = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
+    const out = await flattenDocxForConversion(bytes);
+    expect(out.skipped).toEqual(['word/header1.xml']);
+    // and the BODY is still flattened
+    const body = await (await JSZip.loadAsync(out.docx)).file('word/document.xml')!.async('string');
+    expect((body.match(/<w:sdt[ >]/g) ?? []).length).toBe(0);
+  });
+
+  it('⚠️ a control in an UNBOUND prefix is REFUSED, not silently left in place', () => {
+    // this is what arms the survivor check: `z:` is not bound to the
+    // WordprocessingML namespace, so the unwrapper correctly declines to touch
+    // it — and the survivor check, asking by LOCAL NAME rather than sharing
+    // that resolution, is the only thing that then refuses the part. Sharing
+    // the resolution makes it agree with the unwrapper and stay silent.
+    const before =
+      `<w:document ${W} xmlns:z="urn:something-else">` +
+      `<w:body><w:p><z:sdt><z:sdtContent><z:r><z:t>ZUNKNOWN</z:t></z:r>` +
+      `</z:sdtContent></z:sdt></w:p></w:body></w:document>`;
+    expect(() => flattenContentControls(before)).toThrow(/survived unwrapping/);
   });
 
   // ⚠️ THE REAL DOCUMENT, not a fixture of my own shape. The owner's blank form

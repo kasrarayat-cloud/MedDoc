@@ -72,6 +72,22 @@ export async function flattenDocxForConversion(docx: Uint8Array): Promise<Flatte
   for (const name of names) {
     const file = zip.file(name);
     if (!file) continue;
+    // ⚠️ THE ENCODING IS READ FROM THE BYTES, BEFORE THEY ARE DECODED. JSZip's
+    // `.async('string')` assumes UTF-8; a part declaring windows-1252 comes back
+    // as mojibake, gets re-serialized that way, and a patient named `José Muñoz`
+    // reaches the doctor's PDF as `Jos� Mu�oz`. Before this change those bytes
+    // went to the converter untouched, so decoding them here would be a
+    // REGRESSION introduced by the fix. Word emits UTF-8; anything else is a
+    // shape this function has not characterised, so the part keeps its bytes.
+    const head = Buffer.from(await file.async('uint8array')).subarray(0, 256).toString('latin1');
+    const declared = /<\?xml[^>]*encoding\s*=\s*["']([^"']+)["']/i.exec(head)?.[1];
+    if (declared && !/^utf-?8$/i.test(declared)) {
+      skipped.push(name);
+      console.warn(
+        `[docx-preview] ${name} left unflattened; declared encoding ${declared} is not UTF-8`,
+      );
+      continue;
+    }
     const xml = await file.async('string');
 
     // ⚠️ EVERY PER-PART DECISION LIVES INSIDE THIS TRY, AND THAT PLACEMENT IS

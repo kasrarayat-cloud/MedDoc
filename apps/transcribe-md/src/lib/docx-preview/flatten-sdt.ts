@@ -116,21 +116,24 @@ function localName(tag: string): string {
  * using another prefix: a SILENT no-op, which is the outcome its own comment
  * claimed to prevent. A default-namespace document defeated it entirely.
  */
-function wordPrefix(tree: Node[]): { prefix: string | null; bound: boolean } {
+function wordPrefixes(tree: Node[]): { prefixes: Set<string>; bound: boolean } {
+  const prefixes = new Set<string>();
   for (const node of tree) {
     const tag = tagOf(node);
     if (!tag || tag === '?xml' || tag === '#text' || tag === '#comment') continue;
     const attrs = (node[':@'] ?? {}) as Record<string, string>;
     for (const [name, value] of Object.entries(attrs)) {
       if (value !== W_NS) continue;
-      if (name === '@_xmlns') return { prefix: null, bound: true };
-      if (name.startsWith('@_xmlns:')) return { prefix: name.slice('@_xmlns:'.length), bound: true };
+      if (name === '@_xmlns') prefixes.add('');
+      else if (name.startsWith('@_xmlns:')) prefixes.add(name.slice('@_xmlns:'.length));
     }
-    // only the root element is inspected; a part that does not declare the
-    // namespace at all is reported unbound so the caller can refuse it
-    return { prefix: null, bound: false };
+    // ⚠️ ALL BINDINGS, NOT THE FIRST. A document may legally bind the same
+    // namespace to more than one prefix. Taking only the first left every
+    // control under the OTHER prefix unwrapped — and the survivor check, which
+    // asked the same question the same way, did not notice.
+    return { prefixes, bound: prefixes.size > 0 };
   }
-  return { prefix: null, bound: false };
+  return { prefixes, bound: false };
 }
 
 /** Every text value in the tree, in document order. Comments are NOT text. */
@@ -185,16 +188,31 @@ function unwrap(nodes: Node[], isSdt: (t: string) => boolean, isContent: (t: str
   return out;
 }
 
-function anyControlRemains(nodes: Node[], isSdt: (t: string) => boolean, isContent: (t: string) => boolean): boolean {
+function anyControlRemains(nodes: Node[], match: (t: string) => boolean): boolean {
   for (const node of nodes) {
     const tag = tagOf(node);
     if (tag === undefined) continue;
-    if (isSdt(tag) || isContent(tag)) return true;
+    if (match(tag)) return true;
     const kids = node[tag];
-    if (Array.isArray(kids) && anyControlRemains(kids as Node[], isSdt, isContent)) return true;
+    if (Array.isArray(kids) && anyControlRemains(kids as Node[], match)) return true;
   }
   return false;
 }
+
+/**
+ * ⚠️ THE SURVIVOR CHECK'S OWN QUESTION, ASKED BY LOCAL NAME AND THEREFORE
+ * INDEPENDENTLY OF HOW THE UNWRAPPER RESOLVED THE NAMESPACE.
+ *
+ * It used to share the unwrapper's resolution, so it could not disagree with
+ * it: a document binding the WordprocessingML namespace to a SECOND prefix had
+ * every control under that prefix left in place, and this check — asking the
+ * same question the same way — reported success. A guard that derives its
+ * authority from the thing it guards cannot refuse it.
+ */
+const isControlLocalName = (tag: string) => {
+  const local = localName(tag);
+  return local === 'sdt' || local === 'sdtContent';
+};
 
 /**
  * Unwrap every content control in a WordprocessingML part.
@@ -205,41 +223,73 @@ function anyControlRemains(nodes: Node[], isSdt: (t: string) => boolean, isConte
  * hollow PDF, so both directions are held to the same standard.
  */
 export function flattenContentControls(xml: string): string {
-  const tree = new XMLParser(XML_OPTIONS).parse(xml, true) as Node[];
+  const parser = new XMLParser(XML_OPTIONS);
+  const tree = parser.parse(xml, true) as Node[];
 
-  const { prefix, bound } = wordPrefix(tree);
+  const { prefixes, bound } = wordPrefixes(tree);
   if (!bound) {
     throw new Error('flattenContentControls: the part does not declare the WordprocessingML namespace');
   }
-  const qualified = (name: string) => (prefix === null ? name : `${prefix}:${name}`);
-  const sdtTag = qualified('sdt');
-  const contentTag = qualified('sdtContent');
-  const isSdt = (t: string) => t === sdtTag;
-  const isContent = (t: string) => t === contentTag;
+  const inNamespace = (tag: string) => {
+    const colon = tag.indexOf(':');
+    return prefixes.has(colon === -1 ? '' : tag.slice(0, colon));
+  };
+  const isSdt = (t: string) => localName(t) === 'sdt' && inNamespace(t);
+  const isContent = (t: string) => localName(t) === 'sdtContent' && inNamespace(t);
 
   // Fast path AFTER parsing, so it is a fact about the DOCUMENT rather than
-  // about a spelling. The string version's equivalent check read literal text
-  // and no-opped silently on any other prefix.
-  if (!anyControlRemains(tree, isSdt, isContent)) return xml;
+  // about a spelling. Asked by LOCAL NAME so a control this function would not
+  // unwrap still reaches the refusal below rather than being called "absent".
+  if (!anyControlRemains(tree, isControlLocalName)) return xml;
 
   const before = textNodes(tree);
   const unwrapped = unwrap(tree, isSdt, isContent);
-  const after = textNodes(unwrapped);
 
-  // ⚠️ THE GUARD THAT MAKES SERIALIZATION DRIFT SAFE RATHER THAN HOPEFUL. It
-  // compares the ORDERED text sequence BOTH ways, because a rule about
-  // faithfulness forbids REMOVING as well as manufacturing, and it reads the
-  // PARSED tree — so a comment, a CDATA section or an escaped entity is
-  // whatever the parser says it is, not whatever a pattern guessed. Every
-  // round-four string-level defect lived in the version of this check that
-  // read raw text.
-  if (after.length !== before.length || after.some((t, i) => t !== before[i])) {
+  // ⚠️ THIS PAIR GUARDS THE NODE MOVES ONLY — SAID PLAINLY, BECAUSE AN EARLIER
+  // COMMENT HERE CLAIMED IT GUARDED SERIALIZATION AND IT COULD NOT. Both sides
+  // are computed from the SAME parse and BOTH before the builder runs, so no
+  // serialization defect is visible to it, by construction rather than by
+  // omission. The round-trip check below is what covers the builder.
+  const moved = textNodes(unwrapped);
+  if (moved.length !== before.length || moved.some((t, i) => t !== before[i])) {
     throw new Error(
-      `flattenContentControls: text changed (${before.length} -> ${after.length}); refusing to convert this part`,
+      `flattenContentControls: text changed while moving nodes (${before.length} -> ${moved.length})`,
     );
   }
-  if (anyControlRemains(unwrapped, isSdt, isContent)) {
+  if (anyControlRemains(unwrapped, isControlLocalName)) {
     throw new Error('flattenContentControls: a control survived unwrapping');
   }
-  return new XMLBuilder(XML_OPTIONS).build(unwrapped) as string;
+
+  const built = new XMLBuilder(XML_OPTIONS).build(unwrapped) as string;
+
+  // ⚠️ THE SERIALIZATION GUARD, AND IT MUST RE-PARSE WHAT WAS BUILT. Anything
+  // the parser accepts but the builder cannot re-emit faithfully lands here and
+  // nowhere else. Measured example: a CDATA section is collapsed to a text node
+  // and re-emitted UNESCAPED, so `<![CDATA[INR < 3 & rising]]>` produced
+  // non-well-formed XML — the converter answers 400 and the EXPORT REFUSES,
+  // which is worse than the hollow PDF this change exists to fix. Refusing here
+  // keeps the part's original bytes instead.
+  let roundTripped: string[];
+  try {
+    roundTripped = textNodes(parser.parse(built, true) as Node[]);
+  } catch (cause) {
+    throw new Error(
+      `flattenContentControls: the serialized part does not re-parse (${
+        cause instanceof Error ? cause.message : cause
+      })`,
+    );
+  }
+  // ⚠️ THIS COMPARISON REDS ZERO ARMS IF DELETED, AND THAT IS REPORTED RATHER
+  // THAN HIDDEN. No input reaches it: anything the builder cannot re-emit
+  // faithfully breaks well-formedness first and is caught by the re-parse
+  // above. It is a CODE-CHANGE detector, and its value is measured rather than
+  // asserted — with a builder mutated to drop one text node, 18 arms red with
+  // this comparison present and 12 without, so it earns SIX of them and fires
+  // by name. The node-move guard above is the same shape for the same reason.
+  if (roundTripped.length !== before.length || roundTripped.some((t, i) => t !== before[i])) {
+    throw new Error(
+      `flattenContentControls: serialization changed the text (${before.length} -> ${roundTripped.length})`,
+    );
+  }
+  return built;
 }
