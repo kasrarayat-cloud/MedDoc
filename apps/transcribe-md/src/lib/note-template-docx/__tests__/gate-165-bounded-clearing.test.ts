@@ -1214,9 +1214,22 @@ describe('#174 — the compiler admits only controls it fully understands', () =
     // documents, and this arc has already shipped one that refused 56 of 56
     // real named tables. `WM IOV Template.docx` is the only real-world template
     // in the tree; its 28 controls are ordinary Word dropdowns.
+    //
+    // ⚠️ READ FROM THE COMMITTED IN-APP FIXTURE, NOT AN ABSOLUTE HOST PATH.
+    // This opened `/opt/meddoc-pro/WM IOV Template.docx` and passed on the VPS
+    // for the whole arc, because the arc was never pushed — 46 commits met CI
+    // for the first time in one go, and this was the only red: on a runner the
+    // repo lives at `/home/runner/.../MedDoc` and the read is ENOENT.
+    //
+    // `tests/e2e/fixtures/sample-form.docx` is BYTE-IDENTICAL to the root
+    // template (verified by sha256) and both are tracked; AGENTS.md records the
+    // copy existing for exactly this reason. Resolving from `__dirname` keeps
+    // the path inside the app, so it survives any checkout location.
     const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
     const { compileTemplateDocx } = await import('../compiler');
-    const ir = compileTemplateDocx(readFileSync('/opt/meddoc-pro/WM IOV Template.docx'));
+    const FIXTURE = join(__dirname, '..', '..', '..', '..', 'tests', 'e2e', 'fixtures', 'sample-form.docx');
+    const ir = compileTemplateDocx(readFileSync(FIXTURE));
     const refused = (ir.unsupported as Array<Record<string, unknown>>).filter(
       (u) => u.code === 'UNSUPPORTED_CONTROL_STRUCTURE',
     );

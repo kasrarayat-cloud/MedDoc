@@ -351,6 +351,54 @@ describe('#174 — the lint asks the COMPILER, and its control touches a FILE', 
 });
 
 describe('#172(5) — every canon BODY has its INDEX ROW', () => {
+  // ⚠️ NO TEST READS AN ABSOLUTE HOST PATH. Ratified after a whole ten-ruling
+  // arc met CI for the first time in one push and produced exactly one red:
+  // a gate that opened `/opt/meddoc-pro/WM IOV Template.docx`. It had passed
+  // locally for days — the VPS working tree IS `/opt/meddoc-pro` — and on a
+  // runner the repo lives elsewhere, so the read is ENOENT.
+  //
+  // ⚠️ THE HAZARD IS THAT IT LOOKS FINE FROM WHERE IT WAS WRITTEN. A path that
+  // is correct on the authoring machine and nowhere else is invisible to every
+  // local instrument, including a full green suite; only a different checkout
+  // location disagrees, and the fix by hit would have been one line.
+  //
+  // Comments and strings that merely NAME the path are fine — dozens of them
+  // document VPS layout. What is refused is a filesystem CALL taking one.
+  it('⚠️ NO TEST OPENS AN ABSOLUTE HOST PATH — it passes only where it was written', () => {
+    const offenders: string[] = [];
+    let scanned = 0;
+    const walk = (dir: string): void => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, e.name);
+        if (e.isDirectory()) {
+          if (e.name === 'node_modules' || e.name === '.next') continue;
+          walk(full);
+        } else if (/\.(test|spec)\.tsx?$/.test(e.name)) {
+          scanned += 1;
+          const text = readFileSync(full, 'utf8');
+          // strip comments first, or this gate reports its own documentation
+          const code = text
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/^[ \t]*\/\/.*$/gm, '');
+          // a read/open/stat whose argument STARTS with an absolute host root
+          const re = /\b(?:readFileSync|readFile|createReadStream|openSync|statSync|existsSync)\s*\(\s*['"`]\/(?:opt|home|Users|var|srv)\//g;
+          if (re.test(code)) offenders.push(full.replace(APP + '/', ''));
+        }
+      }
+    };
+    walk(join(APP, 'src'));
+    walk(join(APP, 'tests'));
+    // ⚠️ NON-VACUITY: the walk must actually have read files, or an empty
+    // offender list is a fact about the walk (canon 20 — every zero is your
+    // instrument until proven otherwise).
+    expect(scanned, 'the walk found no test files at all').toBeGreaterThanOrEqual(200);
+    expect(
+      offenders,
+      'these read an absolute host path, so they pass only on a machine whose ' +
+        'checkout happens to live there — resolve from __dirname instead',
+    ).toEqual([]);
+  });
+
   it('nothing checks that — now something does', () => {
     // ⚠️ THE RULE HAS EXISTED ALL ALONG AND WAS MISSED IN THIS VERY ARC: canon
     // 94's body landed and its index row did not, caught only by re-reading the
