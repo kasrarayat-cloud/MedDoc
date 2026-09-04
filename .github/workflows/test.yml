@@ -258,6 +258,25 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # ⚠️ npm 11+, AND IT IS THE WHOLE REASON THIS GATE FAILED IN CI WHILE
+      # PASSING LOCALLY. `setup-node` with node-version 22 bundles npm 10.x,
+      # which audits through the RETIRING
+      # `registry.npmjs.org/-/npm/v1/security/audits/quick` endpoint. npm 11
+      # uses `/security/advisories/bulk`. Measured both ways on the same
+      # command: CI's failing run printed npm's own "this endpoint is being
+      # retired" notice next to a 500 from `quick`; locally, npm 11.10.0 hit
+      # `bulk` and returned a usable report.
+      #
+      # ⚠️ SO THE RETRY ALONE WOULD NOT HAVE HELD. Retrying a call to an
+      # endpoint on its way out buys time, not correctness — the fix is to stop
+      # calling it. The retry stays: it covers a transient 5xx on the bulk path,
+      # which is a different failure from a retired endpoint.
+      #
+      # Scoped to THIS job deliberately. It is the only job that audits, and a
+      # global npm bump would change the resolver for every install in the repo
+      # — one variable per change.
+      - name: Pin npm 11 (the audit endpoint depends on it)
+        run: npm i -g npm@^11
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: Assert sharp survived install
