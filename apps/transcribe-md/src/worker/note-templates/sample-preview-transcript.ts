@@ -68,9 +68,20 @@ export const SAMPLE_PREVIEW_ENTITIES: z.infer<typeof ExtractedEntities> =
     // ulceration": ONE row conflating an affirmed finding with a denied one,
     // which is precisely the collapse structured polarity exists to prevent.
     // Split, because they are two different claims about the patient.
+    // ⚠️ ON THE CLOSED ROS LEXICON (#179). `system` is an enum and `finding`
+    // must be one of that system's symptoms, so this sample moves onto the
+    // vocabulary rather than the schema being loosened to fit it.
+    //   · 'Foot tingling' -> `numbness`, the standard ROS pairing for
+    //     paresthesia; the doctor's own words survive in `evidence_quote`.
+    //   · 'Ulceration' -> `other`, because it is genuinely NOT a neurologic
+    //     ROS symptom. `other` exists for exactly this: it carries the finding
+    //     so nothing is dropped, and is unaddressable by construction so it
+    //     cannot answer a clause it does not cover. Re-filing it under `skin`
+    //     would move a finding between systems, which is a clinical claim this
+    //     migration is not entitled to make.
     ros: [
-      { system: 'Neurological', finding: 'Foot tingling', polarity: 'affirmed', laterality: 'bilateral', evidence_quote: 'neuropathic tingling in both feet over the last two months without ulceration' },
-      { system: 'Neurological', finding: 'Ulceration', polarity: 'denied', laterality: 'bilateral', evidence_quote: 'neuropathic tingling in both feet over the last two months without ulceration' },
+      { system: 'neurologic', finding: 'numbness', polarity: 'affirmed', laterality: 'bilateral', evidence_quote: 'neuropathic tingling in both feet over the last two months without ulceration' },
+      { system: 'neurologic', finding: 'other', polarity: 'denied', laterality: 'bilateral', evidence_quote: 'neuropathic tingling in both feet over the last two months without ulceration' },
     ],
     exam_findings: [
       { system: 'Vitals', finding: 'Blood pressure 138/82', evidence_quote: 'Blood pressure today 138 over 82' },

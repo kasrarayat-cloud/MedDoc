@@ -51,7 +51,13 @@ function giDictationFacts() {
         },
         {
           system: 'gastrointestinal',
-          finding: 'nausea or vomiting',
+          finding: 'nausea',
+          polarity: 'denied',
+          evidence_quote: 'He denies nausea or vomiting.',
+        },
+        {
+          system: 'gastrointestinal',
+          finding: 'vomiting',
           polarity: 'denied',
           evidence_quote: 'He denies nausea or vomiting.',
         },
@@ -95,27 +101,37 @@ function matches(fact: unknown, concept: string): boolean {
 describe('a dictated ROS symptom reaches a mapped field, with polarity intact', () => {
   it('⚠️ NON-VACUITY: the dictation actually produces the three facts', () => {
     const facts = giDictationFacts();
-    expect(facts.length, 'the projector produced nothing — the arm cannot run').toBe(3);
+    // ⚠️ FOUR, NOT THREE, AND THE EXTRA ONE IS THE RULING. "nausea or vomiting"
+    // was ONE free-text finding; #179 addresses each symptom separately, so it
+    // is now two facts. A doctor who denies both has denied both.
+    expect(facts.length, 'the projector produced nothing — the arm cannot run').toBe(4);
   });
 
   it('⚠️ ros.* is ASSIGNABLE to a mapping — the gate that was closed', () => {
     // this is the line that was missing, expressed as the thing it gates:
     // `semantic-mapping` sets clinicalConcept to null unless this is true, and
     // a null concept can never match any fact.
-    expect(isRegisteredConcept('ros.gastrointestinal')).toBe(true);
-    expect(isRegisteredConcept('ros.constitutional')).toBe(true);
+    expect(isRegisteredConcept('ros.gastrointestinal.heartburn')).toBe(true);
+    expect(isRegisteredConcept('ros.constitutional.fever')).toBe(true);
+    // ⚠️ AND THE SYSTEM-LEVEL FORM IS NOW REFUSED, WHICH IS #179 ITSELF.
+    // `ros.<system>` is what let ONE dictated symptom tick every clause in the
+    // system: the checkbox arm reads only `fact.polarity`, so a concept that
+    // cannot ADDRESS a specific clause affirms all of them alike. Keeping this
+    // representable is the defect; refusing it is the fix.
+    expect(isRegisteredConcept('ros.gastrointestinal')).toBe(false);
     // and the pattern must not have opened the door to anything
     expect(isRegisteredConcept('ros')).toBe(false);
     expect(isRegisteredConcept('rosacea.face')).toBe(false);
+    expect(isRegisteredConcept('rosacea.face.itch')).toBe(false);
   });
 
   it('⚠️ the AFFIRMED symptom reaches a ros mapping, still affirmed', () => {
     const facts = giDictationFacts();
     const affirmed = facts.find(
-      (f) => String(f.concept) === 'ros.gastrointestinal' && f.polarity === 'affirmed',
+      (f) => String(f.concept) === 'ros.gastrointestinal.heartburn' && f.polarity === 'affirmed',
     );
     expect(affirmed, 'no affirmed ROS fact was produced').toBeDefined();
-    expect(matches(affirmed, 'ros.gastrointestinal')).toBe(true);
+    expect(matches(affirmed, 'ros.gastrointestinal.heartburn')).toBe(true);
     // THE CLINICAL POINT: this is the fact that must be able to OVERRIDE a
     // template's printed "the patient denies heartburn".
     expect(affirmed!.polarity).toBe('affirmed');
@@ -125,10 +141,10 @@ describe('a dictated ROS symptom reaches a mapped field, with polarity intact', 
   it('⚠️ the DENIED symptom reaches the same mapping, still denied', () => {
     const facts = giDictationFacts();
     const denied = facts.find(
-      (f) => String(f.concept) === 'ros.gastrointestinal' && f.polarity === 'denied',
+      (f) => String(f.concept) === 'ros.gastrointestinal.nausea' && f.polarity === 'denied',
     );
     expect(denied, 'no denied ROS fact was produced').toBeDefined();
-    expect(matches(denied, 'ros.gastrointestinal')).toBe(true);
+    expect(matches(denied, 'ros.gastrointestinal.nausea')).toBe(true);
     // and it must NOT have been flattened into the affirmed one: two facts,
     // one concept, opposite polarity, both reaching the same mapping
     expect(denied!.polarity).toBe('denied');
@@ -172,12 +188,21 @@ describe('a dictated ROS symptom reaches a mapped field, with polarity intact', 
     const facts = giDictationFacts();
     const exam = facts.find((f) => String(f.concept) === 'exam.abdomen');
     expect(exam).toBeDefined();
-    expect(matches(exam, 'ros.gastrointestinal'), 'an exam fact matched a ROS mapping').toBe(
-      false,
-    );
-    const ros = facts.find((f) => String(f.concept) === 'ros.gastrointestinal');
+    expect(
+      matches(exam, 'ros.gastrointestinal.heartburn'),
+      'an exam fact matched a ROS mapping',
+    ).toBe(false);
+    const ros = facts.find((f) => String(f.concept) === 'ros.gastrointestinal.heartburn');
     expect(matches(ros, 'exam.abdomen'), 'a ROS fact matched an exam mapping').toBe(false);
     expect(matches(ros, 'past_medical_history')).toBe(false);
+    // ⚠️ THE INPUT THAT ONLY EXISTS AFTER #179, AND IT IS THE CLINICAL ONE.
+    // Affirmed heartburn must NOT satisfy a clause about nausea. Under the old
+    // `ros.<system>` concept both were the same string, so this could not even
+    // be expressed — one symptom answered for the whole system.
+    expect(
+      matches(ros, 'ros.gastrointestinal.nausea'),
+      'affirmed heartburn satisfied a nausea clause — the #179 defect',
+    ).toBe(false);
   });
 
   it('⚠️ exam.* reaches a consult-shaped mapping too — proven, not assumed', () => {
