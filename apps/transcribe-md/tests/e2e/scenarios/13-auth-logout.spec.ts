@@ -75,7 +75,7 @@ test('#181: the LOGOUT audit row is written — the revoke path was actually rea
   // gate — so before #181 a failed CSRF skipped BOTH, and the incident left no
   // artefact anywhere. A sign-out with no audit row is indistinguishable from a
   // sign-out that never happened, which is precisely how this hid.
-  const email = await signupFreshUser(page, 'logout-audit');
+  await signupFreshUser(page, 'logout-audit');
 
   const before = Number(
     psqlScalar("select count(*) from audit_logs where action::text like '%LOGOUT%'"),
@@ -90,7 +90,12 @@ test('#181: the LOGOUT audit row is written — the revoke path was actually rea
     )
     .toBeGreaterThan(before);
 
-  expect(typeof email).toBe('string');
+  // ⚠️ THE ARM ENDS AT THE AUDIT-ROW POLL. An earlier draft closed with
+  // `expect(typeof email).toBe('string')` on `signupFreshUser`'s return, which
+  // is a `SignupResult` object, not a string — so the arm FAILED on its own
+  // decoration while the assertion it existed for had already passed. A
+  // trailing check that tests the harness rather than the product is not a
+  // safety net; it is a second thing that can be wrong.
 });
 
 test('#181: a CSRF blip no longer reaches the sign-out path at all', async ({ page }) => {

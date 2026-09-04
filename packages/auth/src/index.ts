@@ -217,6 +217,40 @@ export const authConfig: NextAuthConfig = {
           });
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (token as any).sessionId = sessionToken;
+
+          // ⚠️ #182(4) — THE RECOVERY CODE IS CONSUMED HERE, AFTER THE SESSION
+          // ROW EXISTS, AND NOWHERE ELSE. `authorize()` used to burn it on a
+          // match, which is BEFORE this callback can refuse the sign-in — so a
+          // session-tracking failure destroyed a single-use code and then told
+          // the doctor it was invalid, and every retry burned another.
+          //
+          // Reaching this line means `recordSessionLogin` succeeded, so the
+          // sign-in is completing. ⚠️ The hash is never copied onto the token:
+          // a recovery-code hash must not travel in a JWT.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const pendingHash = (user as any).pendingRecoveryHash as string | null | undefined;
+          if (pendingHash) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const codes = ((user as any).mfaBackupCodes ?? []) as string[];
+            const { default: prisma } = await import('@meddoc/db');
+            await prisma.user
+              .update({
+                where: { id: user.id as string },
+                data: { mfaBackupCodes: { set: codes.filter((h) => h !== pendingHash) } },
+              })
+              .catch((e: unknown) => {
+                // Best effort, and deliberately non-fatal: the sign-in HAS
+                // completed by now. Failing here would refuse a login that
+                // already has a valid session row, and the worst case is a
+                // recovery code that can be used once more — strictly better
+                // than the previous worst case, which was a code destroyed by
+                // a sign-in that never happened.
+                console.error(
+                  '[auth] RECOVERY_CODE_CONSUME_FAILED: the code remains usable.',
+                  { error: e instanceof Error ? e.message : String(e) },
+                );
+              });
+          }
         } catch (err) {
           // ⚠️ #181(c) — THIS FAILS CLOSED NOW. The line that died promised
           // that a login would still succeed when session tracking did not.
@@ -268,53 +302,50 @@ export const authConfig: NextAuthConfig = {
           const { validateSession } = await import('./user-session');
           const valid = await validateSession(sessionId);
           if (!valid) {
-            // Row is gone (revoked by a newer login on another device)
-            // or expired. Returning null invalidates the JWT — the next
-            // request sees no session and the authorized() middleware
-            // redirects to /login.
+            // ⚠️ A DEFINITIVE ANSWER — ruling #182(1). The database replied and
+            // the row is gone, expired, inactive, suspended, soft-deleted or
+            // past forceLogoutAt. The session IS invalid, so returning null is
+            // right AND clearing the cookie is right: there is nothing to
+            // re-validate later.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             return null as any;
           }
+          // A clean verification clears any prior unverified marker, so one
+          // blip does not persist into a token that later validates fine.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          delete (token as any).sessionVerifyFailed;
         } catch (err) {
-          // ⚠️ #181(d) — THE FAIL-OPEN IS RULED INVALID. The previous comment
-          // named the consequence exactly and then declined to act on it:
-          // "revocation, expiry, isActive, suspendedAt, softDeletedAt and
-          // forceLogoutAt were ALL skipped for this request; the JWT was
-          // honoured." It said the trade-off was a pending war-room ruling.
+          // ⚠️ THE DATABASE COULD NOT ANSWER — ruling #182(1), AND THIS IS THE
+          // CASE #181(d) GOT WRONG IN BOTH DIRECTIONS BEFORE IT.
           //
-          // THE RULING CAME: a validateSession throw is INVALID, never a
-          // pass-through. The observability that entry added is what made the
-          // ruling possible, and it is kept — the log line still fires, with
-          // the same greppable token, so one alert still covers both sites.
-          // What changed is the RETURN.
+          // Before #181(d) this failed OPEN: the JWT was honoured and every
+          // revocation gate was skipped. #181(d) made it `return null`, which
+          // fixed the honouring and introduced a second defect the pass caught:
+          // `@auth/core` responds to a null token with `sessionStore.clean()`,
+          // so a TRANSIENT pool timeout DELETED the browser's cookie and
+          // ejected a working doctor permanently rather than for one request.
           //
-          // ⚠️ THE COST OF FAILING CLOSED IS REAL, AND AN EARLIER DRAFT OF
-          // THIS COMMENT TALKED IT AWAY. It claimed the availability being
-          // protected "does not exist in the state where this branch runs",
-          // because a DB outage makes the product unusable anyway.
+          // Neither is right, because "revoked" and "cannot tell" are different
+          // answers. This branch is CANNOT TELL:
+          //   · the token is RETAINED, so the cookie survives and the very next
+          //     request re-validates — a blip costs a retry, not a re-login;
+          //   · it is MARKED, and `getSession` refuses the request 503 rather
+          //     than serving anything from JWT claims alone.
           //
-          // THAT IS FALSE, and the refutation was already written next door in
-          // `auth-failopen-observability.test.ts`: `PRISMA_POOL_MAX=10` with a
-          // 20s pool timeout makes failures PER-QUERY UNDER LOAD. This lookup
-          // can time out while the clinical queries after it succeed — so a
-          // doctor CAN be signed out mid-dictation while the product is
-          // otherwise working. "The DB was down so nothing worked anyway" is
-          // not a reassurance and must not be used as one.
-          //
-          // The trade is therefore made with its price named, not denied: a
-          // revoked session that stays live on a shared workstation is a
-          // clinical-record exposure with no upper bound on who uses it, and
-          // an interrupted dictation is recoverable by signing in again. The
-          // owner ruled this direction knowing both halves.
+          // ⚠️ THE MARKER IS LOAD-BEARING AND MUST NOT BE READ AS A SESSION.
+          // Returning the token here is NOT "the session is fine"; it is "ask
+          // again". Any consumer that reads this token without checking the
+          // marker has reintroduced the original fail-open.
           console.error(
-            '[auth] SESSION_FAILOPEN: validateSession threw — the session is ' +
-              'treated as INVALID and the JWT is REJECTED. Revocation, expiry, ' +
-              'isActive, suspendedAt, softDeletedAt and forceLogoutAt could not ' +
-              'be evaluated, so none of them can be assumed to pass.',
+            '[auth] SESSION_UNVERIFIABLE: validateSession threw — the database ' +
+              'could not answer, so revocation, expiry, isActive, suspendedAt, ' +
+              'softDeletedAt and forceLogoutAt are UNKNOWN. The request will be ' +
+              'REFUSED (503) and the cookie KEPT for re-validation. This is not ' +
+              'a sign-out and must not be served as a session.',
             { sessionId, error: err instanceof Error ? err.message : String(err) }
           );
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          return null as any;
+          (token as any).sessionVerifyFailed = true;
         }
       }
       return token;
@@ -329,6 +360,14 @@ export const authConfig: NextAuthConfig = {
         session.user.practiceId = (token as any).practiceId;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (session.user as any).sessionId = (token as any).sessionId;
+        // ⚠️ #182(1) — THE MARKER MUST CROSS INTO THE SESSION, OR THE REFUSAL
+        // NEVER HAPPENS. The jwt callback sets `sessionVerifyFailed` when the
+        // database could not answer; `getSession` refuses the request on it.
+        // If it were not propagated here, the jwt half would be a no-op and the
+        // session would be served exactly as it was under the old fail-open —
+        // a two-part fix that silently applies only its first half.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (session.user as any).sessionVerifyFailed = (token as any).sessionVerifyFailed === true;
       }
       return session;
     },
@@ -351,6 +390,39 @@ export const authConfig: NextAuthConfig = {
 //                    and user within it.
 //   SUPER_ADMIN    — bypass all tenant scoping. Platform ops only.
 // ---------------------------------------------------------------------------
+
+/**
+ * The database could not answer whether this session is still valid.
+ *
+ * ⚠️ THIS IS "CANNOT TELL", NOT "INVALID", AND THE DIFFERENCE IS THE WHOLE OF
+ * RULING #182(1). An invalid session is ended and its cookie cleared. An
+ * unverifiable one is REFUSED for this request — 503 — with the cookie kept, so
+ * the next request re-validates. Serving it from JWT claims admits a revoked
+ * account; clearing the cookie ejects a working doctor on a transient blip.
+ * Both were shipped before, in that order.
+ */
+export class SessionUnverifiableError extends Error {
+  readonly status = 503;
+  /**
+   * ⚠️ A STABLE MARKER, BECAUSE `message` DOES NOT SURVIVE THE BOUNDARY.
+   * Next.js strips server error messages before they reach a client error
+   * boundary in production — deliberately, so internals do not leak. A boundary
+   * that branches on `error.message` therefore works in dev and silently falls
+   * through to the generic "something went wrong" in production, which is the
+   * one environment this refusal has to be legible in.
+   *
+   * `digest` IS forwarded, so the marker rides on that.
+   */
+  static readonly DIGEST = 'SESSION_UNVERIFIABLE';
+  readonly digest = SessionUnverifiableError.DIGEST;
+  constructor(readonly detail: string) {
+    super(
+      'SESSION_UNVERIFIABLE: the session could not be verified against the ' +
+        'database. The request is refused; the session is NOT ended.',
+    );
+    this.name = 'SessionUnverifiableError';
+  }
+}
 
 export class TenantScopeError extends Error {
   constructor(message: string) {

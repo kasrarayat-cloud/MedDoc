@@ -34,6 +34,7 @@
 //   (d)     a validateSession throw is INVALID, not a pass-through
 //   (e)     a token carrying no sessionId at all is REJECTED
 // ============================================================================
+import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -46,55 +47,87 @@ const read = (p: string) => readFileSync(join(REPO, p), 'utf8');
 const SHARED_AUTH = 'packages/auth/src/index.ts';
 const ACTION = 'apps/transcribe-md/src/actions/session.ts';
 
-describe('#181 (a)/(b) — every client sign-out door is the server action', () => {
-  // ⚠️ THE DOORS ARE ENUMERATED FROM THE TREE, NOT FROM MEMORY. Hardening the
-  // account menu alone would have left the admin overview and the
-  // delete-account dialog on the broken path — the bug was REPORTED from one
-  // surface and lived on three.
-  const DOORS = [
-    'apps/transcribe-md/src/components/rounds/account-menu.tsx',
-    'apps/transcribe-md/src/app/admin/_components/AdminOverview.client.tsx',
-    'apps/transcribe-md/src/app/settings/delete-account-dialog.tsx',
-    'apps/transcribe-md/src/app/settings/session-panel.tsx',
-  ];
+describe('#182(3) — every sign-out door, ENUMERATED FROM THE TREE', () => {
+  // ⚠️ THE LIST IS GREPPED, NOT AUTHORED, AND THAT CHANGE IS THE FINDING.
+  // The previous version hard-coded four paths — the four the fix had touched —
+  // and was 12/12 GREEN while TWO live doors ignored the result, one of them
+  // `command-palette.tsx`, mounted in the ROOT LAYOUT and reachable by Cmd+K on
+  // every page. The adversarial pass found both; this gate could not, because a
+  // hand-written watched set can only ever contain what its author already knew.
+  //
+  // A door that appears tomorrow is watched tomorrow, with no edit here.
+  const doors = execSync(
+    "grep -rl 'signOutAction\\|signOutAllDevicesAction' apps/transcribe-md/src " +
+      "--include='*.tsx' --include='*.ts' | grep -v '__tests__' | grep -v 'actions/session.ts'",
+    { cwd: REPO, encoding: 'utf8' },
+  )
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
 
-  it('NON-VACUITY: every enumerated door exists and mentions signing out', () => {
-    for (const d of DOORS) {
-      const src = read(d);
-      expect(src.length, `${d} is empty`).toBeGreaterThan(200);
-      expect(src.toLowerCase(), `${d} does not sign out at all`).toMatch(/sign\s?out/i);
-    }
+  it('NON-VACUITY: the enumeration finds a plausible number of doors', () => {
+    // If the grep breaks, it returns nothing and every arm below passes over an
+    // empty set — the exact vacuity this gate was rewritten to escape.
+    expect(doors.length, 'the door enumeration found nothing — the arms are vacuous').toBeGreaterThanOrEqual(5);
+    expect(doors.some((d) => d.includes('command-palette'))).toBe(true);
+    expect(doors.some((d) => d.includes('user-menu'))).toBe(true);
   });
 
-  it('NO client surface imports signOut from next-auth/react', () => {
-    for (const d of DOORS) {
-      expect(read(d), `${d} still calls the CSRF-gated client POST`).not.toContain(
-        "from 'next-auth/react'",
+  it('NO door imports signOut from next-auth/react', () => {
+    for (const d of doors) {
+      expect(read(d), `${d} is back on the CSRF-gated client POST`).not.toMatch(
+        /from\s+['"]next-auth\/react['"]/,
       );
     }
   });
 
-  it('every door calls signOutAction and CHECKS the result', () => {
-    for (const d of DOORS) {
+  it('every door BINDS the result and BRANCHES on it — not `.ok` somewhere in the file', () => {
+    // ⚠️ THE OLD ARM MATCHED /\.ok/ ANYWHERE, so an unrelated `res.ok` from a
+    // fetch elsewhere in the same file satisfied it. It was already vacuous for
+    // delete-account-dialog.tsx on the day it was written.
+    for (const d of doors) {
       const src = read(d);
-      expect(src, `${d} does not use the hardened action`).toMatch(
-        /signOutAction|signOutAllDevicesAction/,
-      );
-      // ⚠️ CALLING IT IS NOT CHECKING IT. `settings/session-panel.tsx` used to
-      // `await signOutAction()` and then announce "Signed out" unconditionally
-      // — a success message asserted rather than observed.
-      expect(src, `${d} ignores the result`).toMatch(/\.ok|result\.ok|signedOut\.ok/);
+      const m = /(?:const|let)\s+(\w+)\s*=\s*await\s+signOut(?:AllDevices)?Action\s*\(/.exec(src);
+      expect(m, `${d} does not BIND the SignOutResult — it discards it`).not.toBeNull();
+      const name = m![1];
+      expect(
+        new RegExp(`if\\s*\\(\\s*!\\s*${name}\\.ok`).test(src),
+        `${d} binds the result but never branches on ${name}.ok`,
+      ).toBe(true);
     }
   });
 
-  it('the action returns a FAILURE VALUE rather than throwing or redirecting', () => {
+  it('every door RENDERS the failure — a branch that returns silently is the same bug', () => {
+    for (const d of doors) {
+      const src = read(d);
+      expect(
+        /toast\.error|setSignOutError|setError|role="alert"/.test(src),
+        `${d} branches on failure but shows the doctor nothing`,
+      ).toBe(true);
+    }
+  });
+
+  it('the action returns a FAILURE VALUE and never reports unconfirmed success', () => {
     const src = read(ACTION);
     expect(src).toContain('ok: false');
     expect(src).toContain('SIGNOUT_REVOKE_FAILED');
-    // and it must not swallow the revoke the way it used to
-    expect(src, 'the revoke failure is swallowed again').not.toContain(
-      'revokeSession(sessionId).catch(() => {',
+    // #182(2) — an unresolvable session id is a FAILURE, not a silent skip
+    expect(src).toContain('session id unresolvable');
+    // and every attempt leaves a receipt, with its outcome
+    expect(src).toContain('recordLogoutAttempt');
+    expect(src).toMatch(/recordLogoutAttempt\('FAILED'/);
+    expect(src).toMatch(/recordLogoutAttempt\('SUCCESS'/);
+    expect(src, 'the old guard that fell through to success is back').not.toMatch(
+      /if \(sessionId\) \{\s*try \{\s*await revokeSession/,
     );
+  });
+
+  it('⚠️ the meddoc-pro app is OUT OF SCOPE, recorded rather than silently skipped', () => {
+    // The pass found two client sign-out surfaces in apps/meddoc-pro still on
+    // the CSRF-gated path. That app is being deleted, so they are not fixed —
+    // but "not fixed" and "not noticed" must not look the same in the record.
+    // This arm exists so the exclusion is a written decision with an owner.
+    expect(doors.every((d) => d.startsWith('apps/transcribe-md/'))).toBe(true);
   });
 });
 
@@ -122,13 +155,19 @@ describe('#181 (c)(d)(e) — the shared jwt callback fails closed', () => {
     expect(signInCatch, 'the sign-in catch swallows the failure again').toContain('throw new Error(');
   });
 
-  it('(d) a validateSession throw is INVALID, and stays observable', () => {
-    // the log is KEPT — it is what made the ruling possible — but the RETURN moved
-    expect(src).toContain('SESSION_FAILOPEN');
-    expect(src).toContain('treated as INVALID and the JWT is REJECTED');
-    expect(src, 'the old pass-through wording is back').not.toContain(
-      'the JWT was honoured.',
+  it('(d)/#182(1) a validateSession throw is CANNOT-TELL: marked, not null, and loud', () => {
+    // ⚠️ THE RETURN IS ASSERTED BEHAVIOURALLY IN gate-182-session-fails-closed,
+    // which CALLS the callback. This arm only pins the shape that arm depends
+    // on. The previous version of this arm asserted LOG TEXT alone, and the
+    // adversarial pass showed it stayed green while the pre-fix pass-through
+    // was restored verbatim — a rule about a RETURN cannot be tested by reading
+    // a string.
+    expect(src).toContain('SESSION_UNVERIFIABLE');
+    expect(src).toContain('sessionVerifyFailed');
+    expect(src, 'the #181(d) null-on-throw is back — it clears the cookie on a blip').not.toContain(
+      'treated as INVALID and the JWT is REJECTED',
     );
+    expect(src, 'the original fail-open wording is back').not.toContain('the JWT was honoured.');
   });
 
   it('(e) a token with no sessionId is REJECTED, not waved through as legacy', () => {
@@ -138,13 +177,18 @@ describe('#181 (c)(d)(e) — the shared jwt callback fails closed', () => {
     );
   });
 
-  it('⚠️ the justification does not claim a DB outage makes the product unusable', () => {
-    // That claim was in an earlier draft and is FALSE: PRISMA_POOL_MAX=10 with a
-    // 20s pool timeout makes failures PER-QUERY, so this lookup can time out
-    // while clinical queries succeed. A comment that argues from a false premise
-    // is how the next reader talks themselves back into the fail-open.
-    expect(src).toContain('PER-QUERY UNDER LOAD');
-    expect(src).not.toContain('The availability we were protecting does not exist');
+  it('⚠️ the reserved isActive fail-open is SETTLED the same way — #182(1)', () => {
+    // It served a deactivated, suspended or soft-deleted account from JWT
+    // claims when its lookup threw, under a comment saying the trade was "a
+    // war-room ruling, not a code decision — it is pending". The ruling came.
+    const appAuth = read('apps/transcribe-md/src/lib/auth.ts');
+    expect(appAuth, 'the fail-open still serves JWT-claimed values').not.toContain(
+      'serving JWT-claimed values',
+    );
+    expect(appAuth).toContain('SessionUnverifiableError');
+    // and the per-query argument is KEPT, because it is what makes ejecting on
+    // a blip wrong as well — both directions were wrong, in that order
+    expect(appAuth).toContain('PER-QUERY under load');
   });
 });
 

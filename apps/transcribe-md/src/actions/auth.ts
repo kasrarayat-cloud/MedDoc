@@ -309,7 +309,34 @@ export async function loginAction(
       totpToken: parsed.data.totpToken ?? '',
       recoveryCode: parsed.data.recoveryCode ?? '',
     });
-  } catch {
+  } catch (err) {
+    // ⚠️ #182(4) — A SESSION-TRACKING REFUSAL IS NOT A CREDENTIALS FAILURE, AND
+    // SAYING SO WAS ACTIVELY HARMFUL. This `catch` used to swallow EVERY error
+    // from `nextAuthSignIn` and report "Invalid email or password." — so when
+    // #182(c) made the jwt callback refuse a sign-in whose UserSession insert
+    // failed, a doctor with CORRECT credentials was told their password was
+    // wrong. On the MFA path it was worse: they were told the recovery code was
+    // invalid, and each retry burned another single-use code.
+    //
+    // The message is checked through the CAUSE CHAIN because Auth.js wraps the
+    // error thrown by a callback; matching only `err.message` misses it.
+    if (isSessionTrackingRefusal(err)) {
+      return {
+        ok: false,
+        errors: {
+          _form:
+            "Sign-in couldn't be completed — session tracking failed. Your " +
+            'credentials were accepted. Please try again.',
+        },
+        values: { email: parsed.data.email },
+        // Keep the form in MFA mode if that is where they were, so a retry does
+        // not send them back to the start of the flow.
+        ...(credentialsValidForMfaCheck && mfaUser?.mfaEnabled
+          ? { mfaRequired: true }
+          : {}),
+      };
+    }
+
     // If MFA was required and we got here, the second factor is
     // wrong. Surface a specific message + keep the form in MFA mode.
     if (credentialsValidForMfaCheck && mfaUser?.mfaEnabled) {
@@ -332,6 +359,25 @@ export async function loginAction(
   }
 
   return { ok: true, redirect: await postLoginRedirectFor() };
+}
+
+/**
+ * Is this error the jwt callback's refusal to mint a session it could not
+ * track — as opposed to a credentials failure?
+ *
+ * ⚠️ THE CAUSE CHAIN IS WALKED, NOT JUST `err.message`. Auth.js wraps an error
+ * thrown from a callback, so the marker is one or more levels down. A check
+ * that reads only the top-level message returns false for every real instance
+ * and the truthful branch is never taken — a fix that compiles and does
+ * nothing.
+ */
+function isSessionTrackingRefusal(err: unknown): boolean {
+  let cur: unknown = err;
+  for (let depth = 0; cur instanceof Error && depth < 8; depth += 1) {
+    if (cur.message.includes('SESSION_TRACKING_FAILED')) return true;
+    cur = (cur as { cause?: unknown }).cause;
+  }
+  return false;
 }
 
 /** Computes the post-login destination based on the request host. The

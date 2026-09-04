@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { revokeSession, revokeAllUserSessions } from '@meddoc/auth';
 import { getCurrentSessionId } from '@/lib/auth';
 import { auth, signOut as nextAuthSignOut } from '@/lib/nextauth';
+import { logAudit } from '@/lib/audit';
 
 // ============================================================================
 // SIGN-OUT IS A SERVER ACTION, AND THAT IS THE FIX — RULING #181(a)/(b).
@@ -52,48 +53,135 @@ export type SignOutResult =
   | { ok: false; reason: string };
 
 /**
+ * ⚠️ RULING #182(2) — THE AUDIT ROW IS WRITTEN ON EVERY ATTEMPT, WITH ITS
+ * OUTCOME. Before, the only LOGOUT row lived in `events.signOut`, which is
+ * reached only on the SUCCESS path — so a sign-out that failed left no artefact
+ * at all, and "the doctor never clicked it" and "it failed silently" were
+ * indistinguishable in the record forever.
+ *
+ * ⚠️ AND IT NEVER CHANGES THE RESULT. The audit write goes to the same database
+ * that may have just failed; if it throws too, that is logged and swallowed
+ * DELIBERATELY. A sign-out must not start failing because its receipt could not
+ * be filed — and equally, a filed receipt must never be mistaken for a
+ * successful revocation.
+ */
+async function recordLogoutAttempt(
+  outcome: 'SUCCESS' | 'FAILED',
+  detail: string,
+  userId?: string | null,
+  practiceId?: string | null,
+): Promise<void> {
+  try {
+    await logAudit({
+      action: 'LOGOUT',
+      ...(userId ? { userId } : {}),
+      ...(practiceId ? { practiceId } : {}),
+      metadata: { outcome, detail },
+    } as Parameters<typeof logAudit>[0]);
+  } catch (err) {
+    console.error(
+      '[auth] LOGOUT_AUDIT_WRITE_FAILED: the sign-out receipt could not be ' +
+        'filed. The sign-out result itself is unchanged.',
+      { outcome, error: err instanceof Error ? err.message : String(err) },
+    );
+  }
+}
+
+/** Who is signing out, tolerating a session layer that cannot answer. */
+async function currentActor(): Promise<{ userId: string | null; practiceId: string | null }> {
+  try {
+    const session = await auth();
+    return {
+      userId: session?.user?.id ?? null,
+      practiceId: (session?.user as { practiceId?: string } | undefined)?.practiceId ?? null,
+    };
+  } catch {
+    // `auth()` can now throw SessionUnverifiableError (#182(1)). That is a
+    // reason to refuse, handled by the caller — not a reason to crash here.
+    return { userId: null, practiceId: null };
+  }
+}
+
+/**
  * Sign out the current user.
  *
- * ⚠️ FAILS CLOSED ON REVOCATION. The previous version wrapped `revokeSession`
- * in `.catch(() => {})` under the note "non-fatal — cookie clearing below still
- * signs them out locally". That reasoning holds only for the browser in front
- * of you: clearing a cookie here does nothing to a COPY of that token, and the
- * surviving row means the copy keeps validating. If we cannot revoke, we say
- * so and we do NOT report success.
+ * ⚠️ #182(2) — SUCCESS IS REPORTED ONLY WHEN REVOCATION IS CONFIRMED, AND THE
+ * COOKIE IS NOT CLEARED OTHERWISE. Clearing the cookie over a live server
+ * session is the specific lie this forbids: the doctor's browser forgets a
+ * session that the server still honours, so the UI says "signed out" while any
+ * copy of that token keeps working for the rest of its 7-day life.
+ *
+ * ⚠️ AND AN UNRESOLVABLE SESSION ID IS A FAILURE, NOT A NO-OP. The previous
+ * version guarded the revoke with `if (sessionId)` and fell through to success
+ * when it was null — which is exactly what happens when the database is
+ * blipping, because `auth()` cannot answer then either. The adversarial pass
+ * found that path: {ok:true}, "Signed out" toasted, row alive.
  */
 export async function signOutAction(): Promise<SignOutResult> {
-  const sessionId = await getCurrentSessionId();
+  const { userId, practiceId } = await currentActor();
 
-  if (sessionId) {
-    try {
-      await revokeSession(sessionId);
-    } catch (err) {
-      console.error(
-        '[auth] SIGNOUT_REVOKE_FAILED: the UserSession row could not be ' +
-          'revoked; refusing to report a successful sign-out.',
-        { error: err instanceof Error ? err.message : String(err) },
-      );
-      return {
-        ok: false,
-        reason:
-          'We could not end your session on the server. You are still signed ' +
-          'in. Please try again.',
-      };
-    }
+  let sessionId: string | null = null;
+  try {
+    sessionId = await getCurrentSessionId();
+  } catch (err) {
+    console.error('[auth] SIGNOUT_SESSION_ID_UNRESOLVABLE', {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
+  if (!sessionId) {
+    await recordLogoutAttempt('FAILED', 'session id unresolvable', userId, practiceId);
+    return {
+      ok: false,
+      reason:
+        'We could not confirm your sign-out — your session could not be ' +
+        'identified. You may still be signed in. Please try again.',
+    };
+  }
+
+  try {
+    await revokeSession(sessionId);
+  } catch (err) {
+    console.error(
+      '[auth] SIGNOUT_REVOKE_FAILED: the UserSession row could not be ' +
+        'revoked; refusing to report a successful sign-out and KEEPING the ' +
+        'cookie, because a cleared cookie over a live session is the lie.',
+      { error: err instanceof Error ? err.message : String(err) },
+    );
+    await recordLogoutAttempt('FAILED', 'revokeSession threw', userId, practiceId);
+    return {
+      ok: false,
+      reason:
+        'We could not confirm your sign-out — the server could not end your ' +
+        'session. You are still signed in. Please try again.',
+    };
+  }
+
+  await recordLogoutAttempt('SUCCESS', 'session revoked', userId, practiceId);
   await nextAuthSignOut({ redirect: false });
   revalidatePath('/', 'layout');
   return { ok: true };
 }
 
-/** Revoke every session for this user (settings → "Sign out all devices").
- *  Same fail-closed contract as `signOutAction`. */
+/**
+ * Revoke every session for this user (settings → "Sign out all devices").
+ *
+ * ⚠️ #182(2) — IT NEVER SAYS "You are not signed in." That was the old reply
+ * when `auth()` returned null, which is precisely what a DB blip produces — so
+ * the one control a doctor has for a suspected compromise answered a transient
+ * fault by telling them there was nothing to revoke, and revoked nothing.
+ */
 export async function signOutAllDevicesAction(): Promise<SignOutResult> {
-  const session = await auth();
-  const userId = session?.user?.id;
+  const { userId, practiceId } = await currentActor();
+
   if (!userId) {
-    return { ok: false, reason: 'You are not signed in.' };
+    await recordLogoutAttempt('FAILED', 'actor unresolvable (all devices)', null, null);
+    return {
+      ok: false,
+      reason:
+        'We could not confirm your sign-out — your account could not be ' +
+        'identified. Your sessions may still be active. Please try again.',
+    };
   }
 
   try {
@@ -101,17 +189,19 @@ export async function signOutAllDevicesAction(): Promise<SignOutResult> {
   } catch (err) {
     console.error(
       '[auth] SIGNOUT_ALL_REVOKE_FAILED: sessions could not be revoked; ' +
-        'refusing to report a successful sign-out.',
+        'refusing to report success and KEEPING the cookie.',
       { error: err instanceof Error ? err.message : String(err) },
     );
+    await recordLogoutAttempt('FAILED', 'revokeAllUserSessions threw', userId, practiceId);
     return {
       ok: false,
       reason:
-        'We could not end your sessions on the server. You are still signed ' +
-        'in. Please try again.',
+        'We could not confirm your sign-out — the server could not end your ' +
+        'sessions. They may still be active. Please try again.',
     };
   }
 
+  await recordLogoutAttempt('SUCCESS', 'all sessions revoked', userId, practiceId);
   await nextAuthSignOut({ redirect: false });
   revalidatePath('/', 'layout');
   return { ok: true };
