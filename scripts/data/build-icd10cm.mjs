@@ -29,25 +29,129 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, '..', '..');
 const OUT_DIR = join(REPO, 'packages', 'ai', 'src', 'data');
 
-// ── PINNED PROVENANCE ───────────────────────────────────────────────────────
-// Retrieved 2026-09-04 from the URL the official CMS page links (verified: the
-// page at cms.gov/medicare/coding-billing/icd-10-codes lists this exact path
-// under "FY 2026 ... 2026 Code Descriptions in Tabular Order (ZIP)").
-const SOURCE = {
-  url: 'https://www.cms.gov/files/zip/2026-code-descriptions-tabular-order.zip',
-  page: 'https://www.cms.gov/medicare/coding-billing/icd-10-codes',
-  retrieved: '2026-09-04',
-  zipSha256: '55a9124a27ca78a4a5c41e1101eda064ec2e08d105ff9e78d1fbd1a83298ef11',
-  zipBytes: 2204985,
-  codesFile: 'icd10cm_codes_2026.txt',
-  orderFile: 'icd10cm_order_2026.txt',
-  codesSha256: 'a7e2a77e4627ed55c8afe2b8a7ae22efcbab6b6b162d96cf145213772c1246ba',
-  orderSha256: '6dc95c9c7e96c734806e1682f4bf9df76251d60e99199bba0d375ba3dd11026b',
-  effectiveFrom: '2025-10-01',
-  effectiveTo: '2026-09-30',
+const argv = process.argv.slice(2);
+const zipPath = argv[argv.indexOf('--zip') + 1];
+const checkOnly = argv.includes('--check');
+if (!zipPath || argv.indexOf('--zip') === -1) {
+  console.error('usage: build-icd10cm.mjs --zip <path-to-cms-zip> [--edition fy2026] [--check]');
+  process.exit(2);
+}
+
+// ── EDITIONS — ONE ENTRY PER FISCAL YEAR ────────────────────────────────────
+// ⚠️ THE URL IS RECORDED PER YEAR, NEVER DERIVED BY SUBSTITUTING THE YEAR.
+// Measured 2026-09-04 against the live CMS host:
+//
+//   FY2026 tables:  2026-code-tables-tabular-and-index.zip   200
+//   FY2027 tables:  2027-code-tables-tabular-index.zip       200   <- no "and-"
+//   FY2027 tables:  2027-code-tables-tabular-and-index.zip   404
+//   FY2026 tables:  2026-code-tables-tabular-index.zip       404
+//
+// CMS dropped `and-` from the code-tables filename between the two years. The
+// DESCRIPTIONS file — the one this generator reads — does follow the pattern
+// today, but a helper that built either URL from a year would have produced a
+// 404 for one of them, silently, in the year it mattered. So each edition
+// carries its own literal URL and its own digests, and adding a year is adding
+// a row rather than trusting a rule.
+//
+// ⚠️ AND A DIGEST IS NEVER GUESSED FORWARD. FY2027's entry has its URL and its
+// effective window — both knowable now — and NULL digests. `--edition fy2027`
+// therefore REFUSES until somebody downloads the archive and pins what they
+// actually got. A generator that would run against unpinned bytes is not a
+// generator with provenance.
+//
+// ── THE CADENCE, so the next reader does not rediscover it ──────────────────
+// CMS publishes ICD-10-CM twice per fiscal year:
+//   · the OCTOBER release, effective Oct 1 – Sep 30, published ~June
+//   · an APRIL 1 mid-year update, effective Apr 1 – Sep 30, published ~December
+// The April 1 2026 update was checked for FY2026 and carried NO code changes:
+// its `icd10cm_codes_2026.txt` and `icd10cm_order_2026.txt` are BYTE-IDENTICAL
+// to October's (same sha256) and its own addenda read "0 additions, 0
+// deletions, 0 revisions". That is a fact about FY2026, NOT a rule — an April
+// update CAN carry codes, and the next one must be checked the same way.
+// `april-1-2027-...` was 404 on 2026-09-04, i.e. not yet published.
+const EDITIONS = {
+  fy2026: {
+    url: 'https://www.cms.gov/files/zip/2026-code-descriptions-tabular-order.zip',
+    page: 'https://www.cms.gov/medicare/coding-billing/icd-10-codes',
+    retrieved: '2026-09-04',
+    zipSha256: '55a9124a27ca78a4a5c41e1101eda064ec2e08d105ff9e78d1fbd1a83298ef11',
+    zipBytes: 2204985,
+    codesFile: 'icd10cm_codes_2026.txt',
+    orderFile: 'icd10cm_order_2026.txt',
+    codesSha256: 'a7e2a77e4627ed55c8afe2b8a7ae22efcbab6b6b162d96cf145213772c1246ba',
+    orderSha256: '6dc95c9c7e96c734806e1682f4bf9df76251d60e99199bba0d375ba3dd11026b',
+    effectiveFrom: '2025-10-01',
+    effectiveTo: '2026-09-30',
+    // CMS's OWN published counts, quoted from icd10cm_order_addenda_2026.txt.
+    expect: { billable: 74719, headers: 23467, total: 98186 },
+  },
+  fy2027: {
+    // ⚠️ LIVE AND UNPINNED. Measured 2026-09-04: HTTP 200, content-length
+    // 2,208,022 — 3,037 bytes larger than FY2026, so the content HAS changed.
+    // Effective 2026-10-01. Everything below that is null must be filled in by
+    // whoever runs the ingestion, from the archive they actually downloaded.
+    url: 'https://www.cms.gov/files/zip/2027-code-descriptions-tabular-order.zip',
+    page: 'https://www.cms.gov/medicare/coding-billing/icd-10-codes',
+    retrieved: null,
+    zipSha256: null,
+    zipBytes: null,
+    codesFile: 'icd10cm_codes_2027.txt',
+    orderFile: 'icd10cm_order_2027.txt',
+    codesSha256: null,
+    orderSha256: null,
+    effectiveFrom: '2026-10-01',
+    effectiveTo: '2027-09-30',
+    // ⚠️ NOT GUESSED. CMS publishes these in the release's own addenda; read
+    // them out of the archive rather than carrying FY2026's forward.
+    expect: null,
+  },
 };
 
-// ⚠️ EXPECTED QUANTITIES, FIXED BEFORE THE FILE IS READ.
+const editionKey = argv.includes('--edition')
+  ? argv[argv.indexOf('--edition') + 1]
+  : 'fy2026';
+if (!Object.prototype.hasOwnProperty.call(EDITIONS, editionKey)) {
+  console.error(`unknown --edition ${editionKey}; known: ${Object.keys(EDITIONS).join(', ')}`);
+  process.exit(2);
+}
+const SOURCE_RAW = EDITIONS[editionKey];
+
+// ⚠️ FAIL CLOSED ON AN UNPINNED EDITION. This is the whole point of the split:
+// FY2027's URL and dates are knowable today and its BYTES are not, so the
+// generator refuses rather than running against whatever the network returns.
+for (const field of ['retrieved', 'zipSha256', 'zipBytes', 'codesSha256', 'orderSha256']) {
+  if (SOURCE_RAW[field] === null || SOURCE_RAW[field] === undefined) {
+    console.error(
+      `\nABORT: edition ${editionKey} has no pinned ${field}.\n` +
+        `  Download ${SOURCE_RAW.url}, record its sha256/bytes and the members'\n` +
+        `  digests into EDITIONS.${editionKey}, take the counts from the release's\n` +
+        `  own addenda file, and re-run. Provenance is pinned BEFORE the act, not\n` +
+        `  discovered by it.\n`,
+    );
+    process.exit(1);
+  }
+}
+if (!SOURCE_RAW.expect) {
+  console.error(`\nABORT: edition ${editionKey} has no expected counts. Read them from the release's addenda.\n`);
+  process.exit(1);
+}
+
+const SOURCE = {
+  url: SOURCE_RAW.url,
+  page: SOURCE_RAW.page,
+  retrieved: SOURCE_RAW.retrieved,
+  zipSha256: SOURCE_RAW.zipSha256,
+  zipBytes: SOURCE_RAW.zipBytes,
+  codesFile: SOURCE_RAW.codesFile,
+  orderFile: SOURCE_RAW.orderFile,
+  codesSha256: SOURCE_RAW.codesSha256,
+  orderSha256: SOURCE_RAW.orderSha256,
+  effectiveFrom: SOURCE_RAW.effectiveFrom,
+  effectiveTo: SOURCE_RAW.effectiveTo,
+  edition: editionKey,
+};
+
+// ⚠️ EXPECTED QUANTITIES, FIXED BEFORE THE FILE IS READ, AND PER EDITION.
 // These are not "what we measured"; they are CMS's OWN published counts, taken
 // verbatim from icd10cm_order_addenda_2026.txt in the April 1 2026 release:
 //     "23467 headers in icd10cm_order_2026.txt"
@@ -55,15 +159,8 @@ const SOURCE = {
 // The point of writing them down here is that the comparison has exactly ONE
 // correct answer, fixed before the evidence existed. Same discipline as the
 // §2.5 deploy declaration.
-const EXPECT = { billable: 74719, headers: 23467, total: 98186 };
+const EXPECT = { ...SOURCE_RAW.expect };
 
-const argv = process.argv.slice(2);
-const zipPath = argv[argv.indexOf('--zip') + 1];
-const checkOnly = argv.includes('--check');
-if (!zipPath || argv.indexOf('--zip') === -1) {
-  console.error('usage: build-icd10cm.mjs --zip <path-to-cms-zip> [--check]');
-  process.exit(2);
-}
 
 const sha = (buf) => createHash('sha256').update(buf).digest('hex');
 const die = (msg) => { console.error(`\nABORT: ${msg}\n`); process.exit(1); };
@@ -205,6 +302,7 @@ const banner = (what, count, constName) => `// =================================
 //   listed on   ${SOURCE.page}
 //   retrieved   ${SOURCE.retrieved}
 //   zip sha256  ${SOURCE.zipSha256}
+//   edition     ${SOURCE.edition}
 //   effective   ${SOURCE.effectiveFrom} .. ${SOURCE.effectiveTo}
 //   count       ${count}
 //
