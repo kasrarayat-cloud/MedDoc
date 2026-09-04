@@ -752,3 +752,61 @@ not a thing to do inside a clinical slice.
 once in 5 runs, NOT named"*. It did not reproduce in two full runs tonight.
 **Two clean runs is not a refutation of a 1-in-5 flake**, and recording it as one
 would be the coarse-sampling error that row already guards against.
+
+---
+
+## BOARD FILINGS — 2026-09-04, from the clinical lane to Design/Admin and Data/Audit
+
+Filed here rather than relayed, because **authorization travels owner → session
+and never through a peer**. These are items and reasoning, not orders; the
+receiving lane decides what to do with them.
+
+### (a) Design / Admin — T10 intake
+
+1. **`3.43:1` on "View the original transcript".** ⚠️ **CONFIRM BEFORE FOLDING,
+   because a same-named control is not the same control.** The open question is
+   whether this is the *disclosure* control **#948 already fixes** or a second
+   surface that merely shares its label. If #948 covers it, this row is
+   discharged by that PR and needs nothing; if it does not, fold it in there
+   rather than opening a third contrast PR. **Do not assume from the name** —
+   this repo has paid for a shared noun read as a shared surface more than
+   once.
+2. **Three 20px mobile nav links, against WCAG 44×44.** Folds into the
+   signed-paper / T5 sweep. Recorded as a SIZE finding, not a contrast one:
+   they are different success criteria with different remedies, and a sweep that
+   merges them will fix one and report both.
+3. **The design doc still names sage as the primary accent.** Documentation
+   asserting a design that no longer ships is read by everyone as a description
+   of the running system — the `DEPLOYMENT_RUNBOOK.md` §5.6 failure, which was
+   false for two months. Correct it with the superseded value kept and dated,
+   the way this programme keeps corrections rather than overwriting them.
+
+### (b) Data / Audit
+
+- **T8 / T10 ratified as filed.** No action from this lane.
+- **Next: the `billableChildren` follow-up (#149(f) repair), under the mandatory
+  pass** — it decides which codes a clinician may bill, so it is on the gated
+  path.
+- ⚠️ **AND IT CARRIES A VISIBLE-CHANGE ROW INTO WHATEVER DEPLOY SHIPS IT** —
+  recorded here so the declaration cannot be written without it:
+
+  > **38 previously-accepted codes are now refused (32 headers, 6
+  > non-existent), ruled by #149(f); Z83.71 stays refused with children named.**
+
+  A deploy that changes what a doctor may bill has a visible delta, and a
+  declaration listing only image ids would be true and misleading. This row
+  belongs in the declaration's table, not its prose.
+
+### From this lane, for anyone reading the ledger
+
+- **`ros.*` was emitted and unregistered.** L3 has stated ROS with polarity
+  since §02.9 and the projector emitted `ros.<system>` throughout; the registry
+  had no pattern, so every dictated symptom was discarded one step before it
+  could reach a field. Ruling #179 took it to **symptom granularity**
+  (`ros.<system>.<symptom>`, closed lexicon, 13 systems / 72 symptoms) because
+  a system-level concept could not address a clause: one affirmed symptom
+  ticked every checkbox in its system, and two conflicted the whole export.
+- ⚠️ **THE CLAIM THAT SAID OTHERWISE WAS MINE AND WAS FALSE.** I reported the
+  extractor emitting 22 concepts with no `ros.*` — grepped as quoted literals,
+  while every composed concept uses a TEMPLATE literal. Canon 30: a composed
+  identifier has no literal in source; enumerate from the CONSUMERS.
