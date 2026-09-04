@@ -35,11 +35,6 @@ env:
 
 jobs:
   test:
-    # ⚠️ SELF-HOSTED. MEASURED 2026-08-28 on white-gorilla-87822 (Ubuntu 24.04.4):
-    # nproc=4, 7.8 GiB total / 5.7 GiB available, Docker 29.7.2 — which CONFIRMS
-    # the figures this comment carried as a purchase spec. Job `name:`
-    # is UNCHANGED so every required context is preserved byte-for-byte.
-    # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
     # ⚠️ THIS JOB IS PINNED TO THE HEAVY LANE BECAUSE IT DECLARES SERVICE
     # CONTAINERS WITH FIXED HOST PORTS (5432, 6379). Both runners live on the
     # SAME BOX and share its network namespace, so two concurrent jobs binding
@@ -55,7 +50,24 @@ jobs:
     # `job.services.postgres.ports['5432']`, which would let this rejoin the light
     # lane; it is a real change to how the job reaches its database and is filed
     # rather than rushed into a hotfix.
-    runs-on: [self-hosted, linux, x64, quillmd-ci]
+    # ⚠️ GITHUB-HOSTED — OWNER RULING 2026-09-04, REVERSING THE COST-ARC MOVE.
+    # This job ran on `[self-hosted, linux, x64, quillmd-ci]`, and the reason it
+    # was pinned to the HEAVY label has now evaporated by construction: both
+    # self-hosted runners live on ONE BOX and share its network namespace, so
+    # two concurrent jobs binding a fixed host port (5432, 6379) collided. A
+    # GitHub-hosted job gets its OWN VM, so there is no namespace to share and
+    # no exclusion to restore.
+    #
+    # WHAT IT COSTS AND WHAT IT BUYS: billable minutes, accepted by the owner,
+    # against a single heavy lane that had 10 runs queued behind 1 executing and
+    # held a ratified accessibility fix out of production for over a day.
+    #
+    # ⚠️ SPEC: this repo is PRIVATE on a User plan, so `ubuntu-latest` is
+    # 2 vCPU / 7 GB / 14 GB SSD — FEWER cores and less disk than the self-hosted
+    # box (4 vCPU / 7.8 GiB). Larger runners need Team/Enterprise and are not
+    # available here. If this job dies on memory or disk, that is the reason,
+    # and the remedy is to shrink the job, not to raise the size.
+    runs-on: ubuntu-latest
     timeout-minutes: 20
 
     services:
