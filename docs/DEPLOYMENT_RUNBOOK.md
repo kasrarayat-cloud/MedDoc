@@ -244,6 +244,42 @@ itself what moves HEAD.
 STEP 0 costs one short citation, not a full one. That is the entire price of the
 gate, and it is cheaper than discovering it with a deploy staged.
 
+#### ⚠️ THE CLINICAL ROW IS DECLARED AS *ATTRIBUTABLE MOVEMENT*, NOT AS ZERO
+
+**Standing 2026-09-04.** Every declaration records the clinical counts — visits,
+signed visits, patients, templates, compiled versions, mappings, deliveries —
+and every declaration before this one asserted they **must not move**. That form
+was true and it is now dangerous, for a reason that is good news: **the product
+has a doctor using it.**
+
+> **The counts are recorded AT CAPTURE. Every post-deploy delta must be
+> explained ROW BY ROW: `createdAt` inside the deploy window, AND the owner's
+> practice, AND a real clinical actor. Anything else is THE FINDING — another
+> practice, a system actor, or a row dated outside the window.**
+
+⚠️ **THE STRICT FORM IS THE SPECIAL CASE OF AN IDLE SYSTEM, NOT THE RULE.** The
+`80b04992` deploy matched exactly on all sixteen rows, and it ran at 03:00 with
+nobody signing anything. Carrying that form into a working day would red the
+declaration the moment the doctor signs a note mid-build — and a row that cries
+wolf is worse than no row, because the next reader discounts it. Measured on the
+very next deploy: between `a71e6902` and its successor the counts moved
+57→58 visits, 37→39 signed, 45→46 patients, 132→140 deliveries, entirely from
+live use.
+
+**What the row still buys, and it is the whole point:** a deploy that moves
+clinical data has done something nobody asked for. Attribution keeps that
+detectable. A migration that back-fills rows, a job that re-creates deliveries,
+a seed that leaks into production — none of those can produce a row that is
+inside the window AND in the owner's practice AND authored by a clinician, so
+none of them survives the check. What changes is only that a doctor working
+while you deploy no longer looks like a defect.
+
+⚠️ **AND "IT WAS PROBABLY THE DOCTOR" IS NOT AN EXPLANATION.** The rule is
+row-by-row against three predicates, run as a query, not a plausible story told
+after the fact. A difference that is not in the declaration is the finding —
+whatever its explanation sounds like afterwards — and that sentence is older
+than this amendment.
+
 #### ⚠️ MANDATORY STEP — CROSS-REFERENCE THE DEPLOY RANGE AGAINST EVERY HELD DECLARATION
 
 **Ratified 2026-08-28, owner ruling, after F12-e reached production inside
@@ -2189,3 +2225,52 @@ remembered, and a harness that fails to inject fails loudly instead of
 reporting a plausible zero. Both defects in this arm's own first two drafts
 (a paragraph nested in a paragraph; a bare run where a block belonged) were
 caught by exactly that property.
+
+---
+
+## 12. The CI runner pool — one heavy lane, and what that costs
+
+**Measured 2026-09-04, because a queue nobody has characterised gets blamed on
+whatever else changed that day.**
+
+    quillmd-ci-1   labels: self-hosted, Linux, X64, quillmd-ci, quillmd-ci-light
+    quillmd-ci-2   labels: self-hosted, Linux, X64,             quillmd-ci-light
+
+⚠️ **THERE IS EXACTLY ONE RUNNER FOR THE HEAVY LABEL.** `quillmd-ci-1` carries
+both labels; `quillmd-ci-2` carries only the light one. So every `CI`, `e2e` and
+`a11y-ci` run in the repository serialises through a single machine, while light
+jobs may use either. With eight active branches the heavy queue grows faster
+than it drains, and **depth measured on this date: 20 pending runs.**
+
+**WHAT THIS IS NOT.** It is not a wedge, a stuck job, or a broken runner — both
+runners were `online` and `busy` throughout. It is FIFO saturation of a
+single-server pool, which looks identical to a hang from the outside and is
+cured by waiting rather than by intervention. ⚠️ **That resemblance is the
+hazard**: a session that reads a two-hour queue as a stuck run will cancel
+somebody's evidence to "clear" it, and the cancellation is the only irreversible
+thing in the situation.
+
+**HOW TO TELL THEM APART, and it is two commands:**
+
+    gh api repos/<owner>/<repo>/actions/runners --jq '.runners[]|"\(.name) busy=\(.busy) \(.status)"'
+    gh run list --limit 30 --json status --jq '[.[]|select(.status!="completed")]|length'
+
+A runner `online` and `busy` with a deep queue is saturation — **wait**. A
+runner `offline`, or `busy` with nothing progressing for longer than the job's
+`timeout-minutes`, is a genuine wedge.
+
+⚠️ **AND A JOB'S `timeout-minutes` COUNTS QUEUE TIME, WHICH IS ALREADY A FILED
+DEFECT.** A job that waits ninety minutes for the lane and then runs for five can
+trip a fifteen-minute timeout without ever having been slow. That interacts with
+this section directly: under saturation, timeouts stop measuring the job.
+
+**COSTS OBSERVED IN ONE SESSION, recorded so the next reader can price a
+decision rather than guess at one:** a ratified accessibility fix — the doctor's
+own HPI and ROS at 1.15:1 — sat merged-ready for over a day on a five-second
+flake plus lane contention, and every subsequent PR queued behind it. The fix
+was not the bottleneck; the lane was.
+
+**The obvious remedy is a second `quillmd-ci` runner**, and it is not taken here
+because runner capacity is money — class (d) — and therefore the owner's.
+Recorded as a costed observation, not a request.
+
