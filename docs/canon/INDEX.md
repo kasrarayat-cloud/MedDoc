@@ -27,7 +27,7 @@
 
 ## CANON INDEX — every archived entry, one row each
 
-**146 entries live in full at `docs/canon/`.**
+**148 entries live in full at `docs/canon/`.**
 Each row is a **POINTER, never the authority** — the archived body governs, and
 it is verbatim. A row exists so that a grep for an entry's title still lands
 here and tells you where the body went; the tell is that entry's OWN words.
@@ -168,6 +168,8 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 - **⚠️ AND WHEN THE ARTIFACT IS GENERATED: THE GENERATOR MUST DELETE WHAT IT REPLACES** — A regeneration that PREPENDS and never deletes leaves a file holding every value you assert, syntactically dead. Assert a generated file's STRUCTURE, bound to code. → `docs/canon/46-and-when-the-artifact-is-generated-the-generator-must-dele.md`
 - **⚠️ AND THE SAME SHAPE OUTSIDE `.replace()`: AN OPERATION THAT SUCCEEDS AND DOES NOT LAND** — `core.fileMode` is false here: `chmod +x` succeeds and the file still enters the index 100644. Set the bit in the INDEX; verify with `git ls-files -s`. → `docs/canon/47-and-the-same-shape-outside-replace-an-operation-that-succe.md`
 - **The substring trap — fourth sighting, same family** — The substring trap: `'practice-scope' in source` matched "practice-scoped" in a comment. Prefer `toBe`; for is-it-present checks match the EXACT token. → `docs/canon/50-the-substring-trap-fourth-sighting-same-family.md`
+- **CORRECT BY ACCIDENT IS A DEFECT WAITING FOR A TIDY-UP** — a middleware gate read `!!auth?.user`, which is truthy for an IDENTITY-LESS user object, so an unverifiable session was correctly let through to the page that refuses it 503. Entirely unintentional — and tightening it to `?.user?.id`, an obvious-looking improvement, would have redirected the doctor to `/login` and reintroduced eject-on-a-blip one layer above the code forbidding it. ⚠️ **Name the accident in a comment and make the MUTATION be the tidy-up.** Prefer REMOVING the accident to documenting it. → `docs/canon/106-correct-by-accident-is-a-defect-waiting-for-a-tidy-up.md`
+- **FINDING THE READERS IS NOT REPOINTING THEM** — canon 60's failure one step later: #183's sweep ran, returned seven readers, and the split shipped with `gate-agents-md-size` still slicing a region of `AGENTS.md` that no longer existed. Four arms reported **zero rows**. ⚠️ It was loud ONLY because those arms carried non-vacuity floors — without them, zero rows means zero bad rows and the gate passes. Re-run the enumeration afterwards and require it EMPTY. → `docs/canon/107-finding-the-readers-is-not-repointing-them.md`
 - **PIN PROPERTIES, NOT SPELLINGS** — "A source-text gate that asserts an exact SPELLING can lock a defect in place." Three same-week specimens; the middle one **demanded the unscoped cross-tenant read** and reported green for it, while `gate-practice-scope`'s ratchet caught it in CI. ⚠️ The leaked count was **spoken to the doctor** in a refusal string — cross-tenant data in a UI string is the weight. The tell: *if somebody IMPROVED this code, would my gate fail?* → `docs/canon/72-pin-properties-not-spellings.md`
 
 ### WRITE PATHS, MIGRATIONS & CONSTRAINTS
