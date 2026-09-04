@@ -9,6 +9,8 @@
 
 import { createHash } from 'node:crypto';
 
+import { rosConcept } from '../ros-lexicon';
+
 import {
   EncounterFactSchema,
   type EncounterFact,
@@ -695,7 +697,14 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
   for (const [index, item] of (entities.ros ?? []).entries()) {
     add({
       path: `ros.${index}.finding`,
-      concept: `ros.${conceptSegment(item.system)}`,
+      // ⚠️ #179(2) — SYMPTOM GRANULARITY. This emitted `ros.<system>` and every
+      // clause in a system shared one concept, so the checkbox arm (which reads
+      // polarity and discards the finding) ticked all of them from one fact,
+      // and a second affirmed symptom conflicted the export. The symptom now
+      // travels IN the concept, so a clause can address exactly what it covers.
+      // Both halves come from the CLOSED lexicon the L3 schema enforces, so
+      // this cannot produce a concept the registry will refuse.
+      concept: rosConcept(conceptSegment(item.system), conceptSegment(item.finding)),
       value: item.finding,
       evidence: item,
       defaultTemporality: 'current',

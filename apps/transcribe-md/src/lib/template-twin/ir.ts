@@ -342,6 +342,34 @@ export const SemanticMappingSchema = z
     laterality: z.enum(['required', 'optional', 'not_applicable']).nullable(),
     unitPolicy: z.enum(['required', 'optional', 'forbidden', 'not_applicable']).nullable(),
     approvedSynonyms: z.array(z.string().min(1).max(120)).max(50),
+    /**
+     * ⚠️ #179(3) — THE CLOSED SET OF CONCEPTS THIS SCAFFOLDED CLAUSE COVERS.
+     *
+     * A scaffolded ROS sentence names specific symptoms — "The patient denies
+     * heartburn, odynophagia, dysphagia" covers three and NOT the other eleven
+     * in its system. `clinicalConcept` alone cannot express that: it is one
+     * concept, and matching on it made every clause in a system interchangeable.
+     * Measured consequences before this existed: one affirmed symptom ticked
+     * EVERY clause in the system, and two affirmed symptoms conflicted the
+     * whole export.
+     *
+     * ⚠️ MATCHING IS SET MEMBERSHIP, NEVER TEXT. The scope is PROPOSED from the
+     * sentence's own words by the mapping proposer and CONFIRMED before use —
+     * it is never derived at render. That ordering is the whole safety
+     * argument: #157(a–d) falsified three successive attempts to decide
+     * clinical meaning from prose at render time, and #157(d) deleted the
+     * machinery rather than gate it.
+     *
+     * Empty means "not a scaffolded clause" — ordinary `clinicalConcept`
+     * matching applies, unchanged.
+     * ⚠️ OPTIONAL, NOT `.default([])`, AND THE FALLBACK IS SAFE NOW. Absent
+     * means "not a scaffolded clause" and ordinary `clinicalConcept` matching
+     * applies — which is no longer the old defect, because #179(2) made the
+     * concepts themselves symptom-granular. A clause mapped to
+     * `ros.gastrointestinal.heartburn` already matches only heartburn. The
+     * scope exists for a sentence covering SEVERAL symptoms at once.
+     */
+    conceptScope: z.array(z.string().min(1).max(160)).max(64).optional(),
     required: z.boolean(),
     blankPolicy: z.enum(['blank', 'not_documented', 'requires_input']),
     unknownPolicy: z.enum(['blank', 'not_documented', 'requires_input']),

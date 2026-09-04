@@ -327,6 +327,7 @@ const NARRATIVE_SENTENCES: ReadonlyMap<string, string> = new Map([
  *  is read from the form rather than guessed. `test.<slug>.result` is matched
  *  before `exam.` so a study result never reads as an examination. */
 const HPI_CONCEPT = /^hpi\.([a-z0-9_]+)$/;
+const ROS_CONCEPT = /^ros\.([a-z0-9_]+)\.([a-z0-9_]+)$/;
 const EXAM_CONCEPT = /^exam\.([a-z0-9_.]+)$/;
 const TEST_RESULT_CONCEPT = /^test\.([a-z0-9_]+)\.result$/;
 
@@ -353,6 +354,20 @@ function patternedNarrativeSentence(concept: string): string | null {
   const hpi = HPI_CONCEPT.exec(concept);
   if (hpi) {
     return `History of present illness, ${spellSlug(hpi[1])}: gradual, moderate, unchanged over three months.`;
+  }
+  // ⚠️ #179(6) — ROS GETS A SENTENCE, OR THE SELF-TEST CANNOT SPEAK TO IT.
+  // The refutation pass found `ros.*` was the only registered patterned family
+  // with no narrative sentence, so NO ros mapping was ever exercised before a
+  // template certified. A family the certification proof cannot drive is a
+  // family whose fields certify on somebody else's evidence.
+  //
+  // The sentence AFFIRMS, deliberately. A denial would be indistinguishable
+  // from the template's own printed denial, so the proof would pass whether or
+  // not the fill worked — the fixture must be able to CONTRADICT the scaffold,
+  // which is the behaviour under test.
+  const ros = ROS_CONCEPT.exec(concept);
+  if (ros) {
+    return `Review of systems, ${spellSlug(ros[1])}: the patient reports ${spellSlug(ros[2])}.`;
   }
   const exam = EXAM_CONCEPT.exec(concept);
   if (exam) {

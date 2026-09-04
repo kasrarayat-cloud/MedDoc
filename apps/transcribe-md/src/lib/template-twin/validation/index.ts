@@ -191,19 +191,46 @@ export function factMatchesMapping(
   fact: EncounterFact,
   mapping: SemanticMapping,
 ): boolean {
+  // ⚠️ #179(3) — A DECLARED SCOPE MATCHES BY SET MEMBERSHIP, AND IT IS CHECKED
+  // FIRST. A scaffolded clause covers a named set of symptom concepts; a fact
+  // satisfies it only by being IN that set. No text is compared, at render or
+  // anywhere else.
+  //
+  // ⚠️ THE SCOPE DOES NOT WIDEN `clinicalConcept` — IT REPLACES IT for these
+  // fields. Falling through to the concept check as well would let a
+  // system-level concept satisfy a clause that scopes three of its fourteen
+  // symptoms, which is the defect this exists to end.
+  if (mapping.conceptScope && mapping.conceptScope.length > 0) {
+    const scope = new Set(mapping.conceptScope.map(normalizeConcept));
+    if (!scope.has(normalizeConcept(fact.concept))) return false;
+    return temporalityMatches(fact, mapping);
+  }
   if (!mapping.clinicalConcept) return false;
   const concepts = new Set(
     [mapping.clinicalConcept, ...mapping.approvedSynonyms].map(normalizeConcept),
   );
   if (!concepts.has(normalizeConcept(fact.concept))) return false;
-  if (
-    mapping.temporality !== null &&
-    mapping.temporality !== 'any' &&
-    fact.temporality !== mapping.temporality
-  ) {
-    return false;
-  }
-  return true;
+  return temporalityMatches(fact, mapping);
+}
+
+/**
+ * ⚠️ ONE IMPLEMENTATION, SHARED BY BOTH MATCH PATHS. A second copy would drift
+ * the day either is fixed, and a scoped clause silently accepting a different
+ * tense from an unscoped one is the kind of divergence nothing would report.
+ *
+ * ⚠️ AND A NULL MAPPING TEMPORALITY MEANS `current`, NOT `any` — #179(6). The
+ * shipped compiler emits null for scaffolded clauses, and the refutation pass
+ * demonstrated that a HISTORICAL, resolved symptom then matched a
+ * present-tense sentence. "The patient denies chest pain" must not be
+ * contradicted by chest pain the patient had in 2019.
+ */
+function temporalityMatches(
+  fact: EncounterFact,
+  mapping: SemanticMapping,
+): boolean {
+  if (mapping.temporality === 'any') return true;
+  const want = mapping.temporality ?? 'current';
+  return fact.temporality === want;
 }
 
 /** Returns true only when the output can be re-derived from cited facts. */

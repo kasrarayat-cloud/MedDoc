@@ -13,6 +13,8 @@
 // ============================================================================
 
 import { z } from 'zod';
+
+import { ROS_SYSTEMS, symptomsFor } from '@/lib/template-twin/ros-lexicon';
 import {
   modelClient,
   type DeepgramUtterance,
@@ -172,7 +174,30 @@ export const ExtractedEntities = z.object({
     .array(
       z.object({
         // Q2 fix-pack — both system and finding meaningful.
-        system: z.string().min(1),
+        /**
+         * ⚠️ #179(1) — A CLOSED PER-SYSTEM LEXICON, NOT FREE TEXT. The system
+         * must be one the lexicon names; the SYMPTOM below is meaningless
+         * without it.
+         */
+        system: z.enum(ROS_SYSTEMS as [string, ...string[]]),
+        /**
+         * ⚠️ THE MODEL PICKS FROM A LIST AND THE SCHEMA ENFORCES IT. Free text
+         * here was the root of two MEASURED defects, both of them the same
+         * root — a concept that could not ADDRESS a clause:
+         *
+         *   · the projector slugged this into `ros.<system>`, and
+         *     `field-value-derivation`'s checkbox arm reads ONLY
+         *     `fact.polarity` — the finding is discarded — so one affirmed
+         *     symptom ticked EVERY clause in that system;
+         *   · `ros` is not in ACCUMULATING_NARRATIVE_CONCEPTS, so a SECOND
+         *     affirmed symptom became `multiple_distinct_supported_values`
+         *     and the whole export conflicted.
+         *
+         * No amount of text matching downstream fixes that safely; #157(d)
+         * deleted that machinery rather than gate it. `other` is admitted so a
+         * symptom outside the list is never silently dropped, and it is
+         * excluded from every clause scope by construction.
+         */
         finding: z.string().min(1),
         /**
          * WHETHER THE PATIENT HAS THIS OR NOT — as DATA (Q1 audit §02.9).
@@ -199,6 +224,26 @@ export const ExtractedEntities = z.object({
         timestamp: z.number().nonnegative().optional(),
       })
     )
+    .superRefine((items, ctx) => {
+      // ⚠️ #179(1) — THE SYMPTOM MUST BELONG TO ITS OWN SYSTEM. A per-field
+      // enum cannot express this (the legal set DEPENDS on `system`), so it is
+      // a refinement rather than a type. Without it the schema would admit
+      // `{ system: 'cardiovascular', finding: 'heartburn' }` and the projector
+      // would emit `ros.cardiovascular.heartburn` — a concept the registry
+      // admits and no clause can honestly cover.
+      items.forEach((item, index) => {
+        const allowed = symptomsFor(item.system);
+        if (!allowed.includes(item.finding)) {
+          ctx.addIssue({
+            code: 'custom',
+            message:
+              `finding "${item.finding}" is not in the ${item.system} review-of-systems ` +
+              `lexicon; use one of ${allowed.join(', ')}`,
+            path: [index, 'finding'],
+          });
+        }
+      });
+    })
     .default([]),
   exam_findings: z
     .array(

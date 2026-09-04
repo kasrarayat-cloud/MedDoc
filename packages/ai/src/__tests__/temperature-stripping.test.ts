@@ -145,3 +145,60 @@ describe('anthropicCompleteText — Opus 4.x temperature stripping', () => {
     expect(captured[0]!.payload.temperature).toBe(0.2);
   });
 });
+
+// ============================================================================
+// ⚠️ #179(7) — THE PER-FAMILY DECISION TABLE, AND THE REFUSAL.
+// ----------------------------------------------------------------------------
+// The family prefix above is KEPT — it is forward-compat within a family known
+// to reject the parameter, and `claude-opus-4-6` arms exactly that. What it
+// could not do is cross a family boundary: `claude-opus-5` does not match
+// `claude-opus-4`, so a model switch would have changed the WIRE SHAPE and the
+// MODEL in one act.
+//
+// Opus 5 strips NOT because it rejects temperature — that is unmeasured — but
+// because production 4.8 already runs stripped and a switch must move ONE
+// VARIABLE. And a model in neither family is a NAMED REFUSAL: nobody measured
+// it, and guessing either way is a guess about a clinical request.
+// ============================================================================
+describe('#179(7) — temperature policy is a table, and the unknown refuses', () => {
+  it('⚠️ claude-opus-5 STRIPS — the switch must not change the wire shape too', async () => {
+    await anthropicComplete({
+      ...baseArgs,
+      model: 'claude-opus-5',
+      schema: trivialSchema,
+      temperature: 0.5,
+    });
+    expect(captured).toHaveLength(1);
+    expect(captured[0]!.payload).not.toHaveProperty('temperature');
+  });
+
+  it('the whole Opus 4.x family still strips — unchanged behaviour', async () => {
+    for (const model of ['claude-opus-4-6', 'claude-opus-4-7', 'claude-opus-4-8']) {
+      captured.length = 0;
+      await anthropicComplete({ ...baseArgs, model, schema: trivialSchema, temperature: 0.5 });
+      expect(captured[0]!.payload, `${model} sent temperature`).not.toHaveProperty('temperature');
+    }
+  });
+
+  it('sonnet and haiku still RECEIVE temperature — the table is not a blanket strip', async () => {
+    for (const model of ['claude-sonnet-4-6', 'claude-haiku-4-5']) {
+      captured.length = 0;
+      await anthropicComplete({ ...baseArgs, model, schema: trivialSchema, temperature: 0.5 });
+      expect(captured[0]!.payload, `${model} lost temperature`).toHaveProperty('temperature', 0.5);
+    }
+  });
+
+  it('⚠️ an UNLISTED model REFUSES BY NAME rather than passing through silently', async () => {
+    await expect(
+      anthropicComplete({
+        ...baseArgs,
+        model: 'claude-zzunmeasured-9',
+        schema: trivialSchema,
+        temperature: 0.5,
+      }),
+    ).rejects.toThrow(/no temperature policy for model/);
+    // and nothing reached the wire
+    expect(captured).toHaveLength(0);
+  });
+});
+

@@ -156,12 +156,30 @@ export function deriveFieldValueFromFact(
       return typeof fact.value === 'string'
         ? exactOption(field, fact.value)?.value ?? null
         : null;
-    case 'checkbox':
+    case 'checkbox': {
+      // ⚠️ #179(5) — A CHECKBOX ANSWERS FOR EXACTLY ONE SYMPTOM.
+      //
+      // This arm reads only `fact.polarity`; the finding is discarded, and
+      // that is correct ONLY when the fact could not have been about a
+      // different symptom. Before #179(2) it could: every clause in a system
+      // shared `ros.<system>`, so one affirmed heartburn ticked nausea,
+      // dysphagia and every other box — measured, and the exact class of false
+      // assertion the owner reported.
+      //
+      // Symptom-granular concepts fix that BY CONSTRUCTION: a box mapped to
+      // `ros.gastrointestinal.heartburn` is only ever reached by a heartburn
+      // fact. What construction cannot rule out is a MIS-CONFIGURED box — one
+      // whose declared scope covers several symptoms, where "affirmed" is
+      // ambiguous between them. That is refused rather than guessed: a null
+      // leaves the doctor's own default standing, and an unticked box a
+      // clinician can tick is recoverable where a wrongly-ticked one is not.
+      if (mapping?.conceptScope && mapping.conceptScope.length > 1) return null;
       return fact.polarity === 'affirmed'
         ? true
         : fact.polarity === 'denied'
           ? false
           : null;
+    }
     case 'date':
       return typeof fact.value === 'string' && isStrictIsoDate(fact.value.trim())
         ? fact.value.trim()

@@ -80,7 +80,14 @@ export const REGISTRY_PATTERNS: readonly RegExp[] = [
    * The sibling patterns above are the precedent: `exam.*` and `hpi.*` are
    * composed the same way by the same projector and have always been admitted.
    */
-  /^ros\.[a-z0-9_.]+$/,
+  // ⚠️ #179(2) — THREE PARTS, NOT TWO. The first version of this line was
+  // `/^ros\.[a-z0-9_.]+$/`, which admitted the bare `ros.<system>` the
+  // projector then emitted — and a system-level concept cannot address a
+  // clause. The refutation pass demonstrated both consequences: one affirmed
+  // symptom ticked every checkbox in the system, and two affirmed symptoms
+  // refused the whole document. Requiring the symptom segment makes the
+  // system-level shape unrepresentable rather than merely discouraged.
+  /^ros\.[a-z0-9_]+\.[a-z0-9_]+$/,
 ];
 
 /**
