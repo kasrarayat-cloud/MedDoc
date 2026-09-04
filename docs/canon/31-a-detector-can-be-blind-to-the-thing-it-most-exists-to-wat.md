@@ -118,6 +118,55 @@ This is the positive-control rule with a free control already in hand: any sweep
 that contains at least one must-exist row carries its own tripwire, and a
 must-not-appear table without one cannot tell absence from blindness.
 
+
+##### THE REMEDY, RATIFIED 2026-09-04 — BUILD THE PATTERN SO THE LITERAL NEVER EXISTS
+
+**This entry named the disease and left the cure to improvisation, and the
+improvisations fail.** Recorded after a session flip-flopped TWICE inside five
+minutes on the question *"are the CI runners on this box?"* — while holding this
+very entry in context.
+
+| attempt | result | why |
+|---|---|---|
+| `pgrep -c -f 'Runner.Listener'` | **2** | matched its own command line |
+| `pgrep -c -f 'Runner[.]Listener'` | **2** | ⚠️ the bracket was correct, and the SAME shell line also contained a literal `Runner.Listener` inside an `echo` — so the regex matched *that* |
+| `ps` → file, then `grep` the file | **0** | the pattern was built by concatenation; the literal never appeared |
+
+⚠️ **THE SECOND ROW IS THE FINDING.** `pgrep -f 'X[.]Y'` is the folk remedy, and
+it is only as good as the *whole command line* it runs in. One unrelated `echo`
+mentioning the thing you are looking for re-arms the defect — and it re-arms it
+**silently**, because a self-match looks exactly like a hit.
+
+**THE FORM THAT CANNOT SELF-MATCH:**
+
+```bash
+# Build the pattern from pieces. The literal is never present to be matched.
+PAT="Runner"".""Listener"
+ps -eo pid,etime,user,args > /tmp/snap.txt      # captured BEFORE any grep runs
+grep -c "$PAT" /tmp/snap.txt
+```
+
+**AND CARRY A NONSENSE CONTROL, WHICH IS WHAT ACTUALLY CAUGHT IT.** In the run
+above the control was decisive:
+
+```
+  zzqqNoSuchProcess : 1     ← must be 0. It is 1 because MY OWN command line
+                              is in the snapshot, carrying every literal I typed.
+  dockerd           : 2     ← the method does find real things
+```
+
+A nonsense pattern scoring **1** proves the snapshot is contaminated by the
+searcher. Once that was visible, the two zeros — built by concatenation, so never
+literal — could be read as **true zeros**, and `dockerd: 2` proved the method
+was not simply blind. *Three probes disagreed; only the controls settled which
+one was lying.*
+
+⚠️ **AND THE COST OF NOT HAVING THIS WAS A WRONG REPORT TO THE OWNER.** The
+session stated "the runners are not on this box", corrected itself to "they are",
+then corrected back — publishing the middle claim. **A retraction is cheap; a
+claim about where infrastructure lives, acted on, is not.** The first answer was
+right, and the detour was entirely manufactured by the probe.
+
 #### ⚠️ AND A FIFTH: **ONE SUCCESS IS NOT RECOVERY, AS ONE ZERO IS NOT ABSENCE**
 
 **Standing 2026-08-17. Written by the author of the other four, hours after
