@@ -50,6 +50,23 @@ vi.mock('@/lib/note-template-parse/phi-gate', async (orig) => {
   const actual = await orig<Record<string, unknown>>();
   return { ...actual, applyPhiGate: h.applyPhiGate };
 });
+// ⚠️ THE QUEUE IS MOCKED BECAUSE ITS ABSENCE COST 3 SECONDS PER TEST, AND THE
+// MARGIN — NOT THE BOX — WAS THE DEFECT. `saveNoteTemplateAction` enqueues the
+// auto-certify job behind a `Promise.race` with ENQUEUE_TIMEOUT_MS = 3000, so an
+// upload never blocks the doctor on a sick queue. Left unmocked here, the real
+// `enqueueAutoCertifyTwin` reached for a Redis that does not exist in a unit run
+// and lost that race EVERY time: four source-carrying tests each burned the full
+// 3000ms, and `stores objectKey + sha on create` landed at 3907ms against
+// vitest's 5000ms ceiling — 1.1s of margin on an IDLE machine.
+//
+// It duly failed CI on a contended runner (#943, job 100946908929, 18m04s for a
+// suite that takes 89s locally) and read as a mystery flake. The comment at the
+// race's call site records the SAME test timing out at 5000ms once before, which
+// is the tell: the race bounded the damage and left the cause in place.
+//
+// Mocking the queue is also simply correct — a unit test has no business opening
+// a Redis connection. File time 15.28s -> 2.48s; the failing test 3907ms -> 3ms.
+vi.mock('@/lib/queue', () => ({ enqueueAutoCertifyTwin: vi.fn(async () => {}) }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/audit', () => ({ logAudit: vi.fn(async () => {}) }));
 
