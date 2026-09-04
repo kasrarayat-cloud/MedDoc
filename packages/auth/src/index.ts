@@ -218,10 +218,25 @@ export const authConfig: NextAuthConfig = {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (token as any).sessionId = sessionToken;
         } catch (err) {
-          // Fail OPEN: login succeeds even if session tracking fails.
-          // The alternative (blocking login on a DB hiccup) would be a
-          // worse UX than a temporarily-unenforced single-session rule.
+          // ⚠️ #181(c) — THIS FAILS CLOSED NOW. The line that died promised
+          // that a login would still succeed when session tracking did not.
+          //
+          // That trade read as a kindness — don't block a doctor on a DB
+          // hiccup — and its real effect was to mint a token with NO
+          // `sessionId` claim. Every revocation gate in this callback lives
+          // behind `if (sessionId)`: sign-out, sign-out-all-devices,
+          // `isActive`, `suspendedAt`, `softDeletedAt`, `forceLogoutAt`. A
+          // claim-less token skipped ALL of them, for its entire 7-day life,
+          // and nothing could revoke it by any mechanism.
+          //
+          // The availability we were buying was one login. The price was a
+          // session nobody could end. Refusing the login is the cheaper
+          // failure by a wide margin: the doctor retries and it works.
           console.error('[auth] UserSession record on sign-in failed:', err);
+          throw new Error(
+            'SESSION_TRACKING_FAILED: refusing to mint a session token that ' +
+              'could never be revoked. Sign-in was not completed; retry.',
+          );
         }
         return token;
       }
@@ -229,7 +244,26 @@ export const authConfig: NextAuthConfig = {
       // ── Subsequent-request path — validate the existing sessionId ──
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sessionId = (token as any).sessionId as string | undefined;
-      if (sessionId) {
+
+      // ⚠️ #181(e) — A TOKEN WITHOUT A sessionId IS REJECTED. It used to fall
+      // through to `return token` under a comment about legacy pre-T-M2 JWTs,
+      // which made "minted before the claim existed" and "minted while session
+      // tracking was broken" INDISTINGUISHABLE — and waved both through
+      // unvalidated. There is no longer a way to reach production without the
+      // claim, because (c) refuses to mint one, so the only tokens that can
+      // land here are stale. Every user signs in once more; the release note
+      // says so plainly.
+      if (!sessionId) {
+        console.warn(
+          '[auth] SESSION_NO_ID: a token carrying no sessionId claim was ' +
+            'REJECTED. Pre-#181 tokens are invalid by design; the user signs ' +
+            'in again once.',
+        );
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return null as any;
+      }
+
+      {
         try {
           const { validateSession } = await import('./user-session');
           const valid = await validateSession(sessionId);
@@ -242,32 +276,47 @@ export const authConfig: NextAuthConfig = {
             return null as any;
           }
         } catch (err) {
-          // Fail OPEN on DB errors — don't kick users off for a transient
-          // outage; the row will be re-validated on the next request.
+          // ⚠️ #181(d) — THE FAIL-OPEN IS RULED INVALID. The previous comment
+          // named the consequence exactly and then declined to act on it:
+          // "revocation, expiry, isActive, suspendedAt, softDeletedAt and
+          // forceLogoutAt were ALL skipped for this request; the JWT was
+          // honoured." It said the trade-off was a pending war-room ruling.
           //
-          // ⚠️ THE OLD MESSAGE NAMED THE OPERATION, NOT THE CONSEQUENCE.
-          // "UserSession validate failed" reads as a background-write hiccup.
-          // What actually happens is that EVERY revocation gate on this path is
-          // skipped for this request: session revoked by a newer login, session
-          // expired, `isActive === false`, `suspendedAt`, `softDeletedAt`, and
-          // `forceLogoutAt` (user-session.ts:124-135). The JWT survives and the
-          // request proceeds.
+          // THE RULING CAME: a validateSession throw is INVALID, never a
+          // pass-through. The observability that entry added is what made the
+          // ruling possible, and it is kept — the log line still fires, with
+          // the same greppable token, so one alert still covers both sites.
+          // What changed is the RETURN.
           //
-          // Behaviour deliberately unchanged — the availability-vs-revocation
-          // trade-off is a pending war-room ruling. This makes it OBSERVABLE, so
-          // the ruling can be made against evidence rather than speculation.
-          // Same greppable token as the other fail-open in
-          // `apps/transcribe-md/src/lib/auth.ts`, so one alert covers both.
+          // ⚠️ THE COST OF FAILING CLOSED IS REAL, AND AN EARLIER DRAFT OF
+          // THIS COMMENT TALKED IT AWAY. It claimed the availability being
+          // protected "does not exist in the state where this branch runs",
+          // because a DB outage makes the product unusable anyway.
+          //
+          // THAT IS FALSE, and the refutation was already written next door in
+          // `auth-failopen-observability.test.ts`: `PRISMA_POOL_MAX=10` with a
+          // 20s pool timeout makes failures PER-QUERY UNDER LOAD. This lookup
+          // can time out while the clinical queries after it succeed — so a
+          // doctor CAN be signed out mid-dictation while the product is
+          // otherwise working. "The DB was down so nothing worked anyway" is
+          // not a reassurance and must not be used as one.
+          //
+          // The trade is therefore made with its price named, not denied: a
+          // revoked session that stays live on a shared workstation is a
+          // clinical-record exposure with no upper bound on who uses it, and
+          // an interrupted dictation is recoverable by signing in again. The
+          // owner ruled this direction knowing both halves.
           console.error(
-            '[auth] SESSION_FAILOPEN: validateSession threw — revocation, ' +
-              'expiry, isActive, suspendedAt, softDeletedAt and forceLogoutAt ' +
-              'were ALL skipped for this request; the JWT was honoured.',
+            '[auth] SESSION_FAILOPEN: validateSession threw — the session is ' +
+              'treated as INVALID and the JWT is REJECTED. Revocation, expiry, ' +
+              'isActive, suspendedAt, softDeletedAt and forceLogoutAt could not ' +
+              'be evaluated, so none of them can be assumed to pass.',
             { sessionId, error: err instanceof Error ? err.message : String(err) }
           );
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return null as any;
         }
       }
-      // Legacy tokens (minted before T-M2) have no sessionId — they pass
-      // through until their natural JWT expiry, then re-login gains one.
       return token;
     },
 
