@@ -2050,3 +2050,108 @@ After any change hits main:
 - [ ] If you changed `.env`: confirm `docker compose exec <service> printenv VAR_NAME` matches, container was recreated (not just restarted).
 - [ ] Sentry dashboard shows the test-deploy release tag (if `SENTRY_RELEASE` was bumped).
 - [ ] External uptime monitor reports both health endpoints green.
+
+---
+
+## 11. The PDF conversion input is FLATTENED — the trade, and the open question
+
+**Standing 2026-09-03.** Two entries, recorded here rather than in a commit
+message because both are things a future operator will need at the moment they
+are surprised, and neither is discoverable from the code alone.
+
+### 11.1 THE TRADE: the DOCX remains the structured artifact; the PDF becomes presentation-only
+
+Everything sent to Gotenberg is now an **unwrapped copy** of the served DOCX —
+every `w:sdt` dissolved into its parent, `w:sdtContent`'s children hoisted and
+every other child (`w:sdtPr`, `w:sdtEndPr`, and the trailing runs ruling #174
+keeps as static content) passed through untouched
+(`src/lib/docx-preview/flatten-sdt.ts`, applied once at `convertDocxToPdf`'s
+input boundary and nowhere else).
+
+⚠️ **IT IS DONE BY DOM, NOT BY STRING, AND THAT WAS RULED AFTER FOUR ROUNDS OF
+EVIDENCE.** Three successive string-level designs were refuted — a subtree
+selection that deleted a drug name, a property-block deletion that removed a
+Wingdings tick and a signature image, a carrier check that mis-read
+`<w:t xml:space="preserve"/>` and falsely refused, and finally comment and
+namespace-prefix guards that a fuzz of 728 variants broke while it could not
+break the unwrapping itself. Every one was the same class: **a regex reading
+XML.** The instrument was replaced rather than the pattern.
+
+Nodes are **moved, never re-created**, so content preservation is a property of
+the construction rather than of a list that can be incomplete. The trade is
+that serialization is no longer byte-identical: a no-op parse/build round trip
+on the real form moves 163,002 bytes to 196,270 while preserving all 138 `w:t`
+runs in identical sequence. That is acceptable **here and nowhere else** — this
+output is the converter's input only. Measured against the design it replaced,
+with a no-op round trip as the positive control:
+
+| conversion input | fills | PDF | chars |
+|---|---|---|---|
+| string flatten (superseded) | 28/28 | 54,821 B | 2,329 |
+| **DOM unwrap (shipped)** | **28/28** | **54,821 B** | **2,329** |
+| no-op round trip (control) | 1/28 | 82,061 B | 2,154 |
+
+**What that costs, named so it is not discovered later:** unwrapping removes the
+STRUCTURE that marks which text is a filled field. For a PDF that is correct —
+it is a RENDERING, not a data carrier — but **anything that ever re-reads a
+generated PDF expecting content controls will not find them.** The DOCX served
+to Word keeps its controls and is unchanged; only the converter's input is
+flattened. If a future feature wants to round-trip a PDF back into fields, it
+must read the DOCX, not the PDF.
+
+**Why the boundary and not the callers:** there are three producers of a visit
+document today, and a fix applied per-caller is a list somebody has to keep.
+`src/lib/docx-preview/__tests__/gate-pdf-flatten.test.ts` enumerates them as a
+ratchet, so a fourth caller cannot reintroduce the split silently.
+
+### 11.2 THE OPEN QUESTION: the SDT rendering quirk is FILED, not diagnosed
+
+**This is a workaround with a clean measurement, not a diagnosis.** What is
+established, first-hand, through the real converter on the real customer form
+(`gate-pdf-carries-filled-controls.test.ts`, the rendered tier):
+
+| input | filled values reaching the PDF |
+|---|---|
+| unflattened | **1 of 28** — the one block-level control; every inline one empty |
+| flattened | **28 of 28** |
+
+and on the owner's own signed export, DOCX 22 filled controls / 7,603 visible
+characters against a PDF carrying **0 of the 22** and 2,199 characters — moving
+to 7,668 characters once flattened, which reconciles against 7,603 plus the
+form's static text.
+
+⚠️ **THE FALSIFYING RENDER HAS NOT BEEN RUN.** The remaining question is whether
+LibreOffice drops *all* content controls or only the ones this template
+carries. The experiment that would answer it is **a Word-authored plain-text
+SDT** — authored in Word, not synthesised — rendered unflattened. Until that is
+run, no claim is made about LibreOffice in general, and none should be quoted
+from this file.
+
+⚠️ **FOUR BISECTION HARNESSES WERE BUILT TO NAME THE OFFENDING SUB-FEATURE AND
+ALL FOUR WERE INVALIDATED BY THEIR OWN CONTROLS.** They are listed because the
+next operator will be tempted by the same four:
+
+1. **synthetic minimal pairs with no positive arm** — both sides rendered empty,
+   so the experiment could not distinguish its hypothesis from its own
+   construction. No-positive-arm experiments produce no evidence.
+2. **a splice whose `indexOf('</w:sdt>')` closed the wrong tag** when controls
+   nest — which reported an EMPTY `w:sdtPr` as fatal, a conclusion that was
+   purely an artifact of the splice. The nesting case is now an arm in
+   `gate-pdf-flatten.test.ts`.
+3. **a donor-copy harness contradicting its own baseline** — the result
+   disagreed with a measurement taken minutes earlier on the same bytes.
+4. **an in-place edit harness** that contradicted (3), leaving two results that
+   could not both be true.
+
+⚠️ **AND A CLAIM MADE FROM THEM IS WITHDRAWN:** an earlier report in this arc
+stated that **28 of 28** controls had been established as rendering empty by
+bisection. That number came from harness (2) and is retracted. The `1 of 28`
+above is the measured figure, taken through the shipped path.
+
+**The positional unique-text instrument** is the one that did work, and is the
+one to reach for: give every control a distinct sentinel, render, and count
+which sentinels survive — the denominator is then measured rather than
+remembered, and a harness that fails to inject fails loudly instead of
+reporting a plausible zero. Both defects in this arm's own first two drafts
+(a paragraph nested in a paragraph; a bare run where a block belonged) were
+caught by exactly that property.
