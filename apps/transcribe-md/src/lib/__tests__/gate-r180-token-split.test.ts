@@ -184,12 +184,51 @@ describe('#180 — the new field is not a prose channel', () => {
         {
           code: 'M54.5',
           reason: 'header_use_billable_child',
-          children: ['M54.50', 'Mrs Patient of 4 Elm Street', 'she reports burning', '', 'M54.50'],
+          // ⚠️ THE FOURTH ENTRY ISOLATES THE SHAPE CHECK FROM THE DESCENDANT
+          // CHECK. Prose fails BOTH (it is not code-shaped and does not extend
+          // M54.5), so with two overlapping guards a prose-only fixture cannot
+          // tell which one fired — removing the shape check stayed green,
+          // caught by its neighbour. 'M54.5ZZZZZZ' IS a strict extension of the
+          // code and is NOT code-shaped, so only the shape check can refuse it.
+          children: ['M54.50', 'Mrs Patient of 4 Elm Street', 'M54.5ZZZZZZ', '', 'M54.50'],
         },
       ],
     });
     expect(back[0].children).toEqual(['M54.50']);
     expect(JSON.stringify(back)).not.toMatch(/Elm Street|burning/);
+  });
+
+  it('⚠️ a code-SHAPED non-descendant is refused — the hostile arm only had prose', () => {
+    // The pass's finding: shape validation alone let the refused header back
+    // into its own substitute list, plus an ancestor and an unrelated chapter.
+    const back = readIcdDrops({
+      codes: [],
+      dropped: [
+        {
+          code: 'M54.5',
+          reason: 'header_use_billable_child',
+          children: ['M54.5', 'A00.0', 'M54', 'ZZZ.9999', 'M54.50'],
+        },
+      ],
+    });
+    // only the genuine descendant survives
+    expect(back[0].children).toEqual(['M54.50']);
+  });
+
+  it('⚠️ the WRITER validates too — not only the reader', () => {
+    // buildIcdDropRecords called directly with prose stored it verbatim, so the
+    // "not a prose channel" claim held on one path out of two.
+    const out = buildIcdDropRecords({
+      ...NONE,
+      headerUseBillableChild: [
+        {
+          code: 'M54.5',
+          children: ['M54.51', 'Mrs Patient of 4 Elm Street', 'M54.5', 'A00.0'],
+        },
+      ],
+    });
+    expect(out[0].children).toEqual(['M54.51']);
+    expect(JSON.stringify(out)).not.toMatch(/Elm Street/);
   });
 
   it('a non-array children field does not crash or leak', () => {

@@ -658,6 +658,13 @@ describe('⚠️ THE CALLER IS WIRED — a capability with no caller passes ever
     // fields, and swapping two of THOSE inverts the product exactly as swapping
     // the tokens would have.
     //
+    // ⚠️ AND THE MATCHER ALLOWS `local` OR `local.map(...)` AND NOTHING ELSE.
+    // An intermediate `\b` draft was WEAKER than what it replaced: it matched
+    // `droppedDeficiency.slice(0, 0).map(...)`, so a mutation that silently
+    // emptied a bucket stayed green where the old `.map`-anchored regex would
+    // have gone red. Loosening a spelling is right; loosening the PROPERTY is
+    // not, and the difference is one the adversarial pass had to point out.
+    //
     // ⚠️ AND THE `.map` SUFFIX WAS A SPELLING, NOT THE PROPERTY. Ruling #180
     // splits the allowlist exit into two locals that are already arrays, so
     // neither needs `.map` — and the old regex red-lined that as though it were
@@ -678,9 +685,18 @@ describe('⚠️ THE CALLER IS WIRED — a capability with no caller passes ever
       ['unsupportedDeficiency', 'droppedDeficiency'],
     ];
     for (const [field, local] of binding) {
-      expect(code, `${field} must be fed by ${local}`).toMatch(
-        new RegExp(`${field}:\\s*${local}\\b`),
-      );
+      // Pull the binding EXPRESSION and check it is `local` optionally followed
+      // by exactly one `.map(...)` — nothing else. A regex alternation cannot do
+      // this cleanly because `.map((c) => c.code)` contains parentheses.
+      const m = new RegExp(`${field}:\\s*([^\\n]*?),\\s*\\n`).exec(code);
+      expect(m, `${field} must appear as a binding`).toBeTruthy();
+      const expr = m![1];
+      expect(expr.startsWith(local), `${field} must be fed by ${local}, got: ${expr}`).toBe(true);
+      const rest = expr.slice(local.length);
+      expect(
+        rest === '' || /^\.map\(.*\)$/.test(rest),
+        `${field} must bind ${local} directly or via one .map(...), got: ${expr}`,
+      ).toBe(true);
     }
     // ⚠️ NON-VACUITY: the two allowlist-exit locals share the `rejected`
     // prefix, so prove the matcher discriminates them rather than matching on

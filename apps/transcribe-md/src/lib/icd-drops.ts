@@ -131,16 +131,24 @@ import { normalizeIcdCode } from './icd-decisions';
 // ---------------------------------------------------------------------------
 
 /**
- * Why a candidate did not survive to `codes[]`. One token per EXIT in
- * `07a-icd-coding.ts`, deliberately not merged.
+ * Why a candidate did not survive to `codes[]`. FIVE tokens across FOUR
+ * exits in `07a-icd-coding.ts` — the allowlist exit carries two sub-reasons
+ * under #180 — and no two EXITS share one, which is the property #149(b)
+ * protects.
  *
- * ⚠️ Only `not_in_verified_allowlist` is the amber rule's case. The three
+ * ⚠️ BOTH allowlist-exit tokens are the amber rule's case (#149(c) scopes
+ * amber to the EXIT, and #180 split that exit's reason in two). The three
  * coherence floors are clinical suppressions and whether they surface at all is
  * a SURFACE decision that nothing has ruled on — recording them is not a
  * commitment to showing them.
  *
- * ⚠️ ORDER IS LOAD-BEARING: `buildIcdDropRecords` resolves a code claimed by
- * two exits to the FIRST reason in this array. Unreachable today (the buckets
+ * ⚠️ ORDER IS LOAD-BEARING, AND THE ARRAY IS NO LONGER THE ORDER. A code
+ * claimed twice resolves to whichever bucket `buildIcdDropRecords` visits
+ * first, and that function puts `header_use_billable_child` ahead of
+ * `not_in_verified_allowlist` regardless of their positions here — deliberately,
+ * because between those two the ACTIONABLE reason is the one worth keeping. The
+ * resolution order lives at the `byReason` array in that function; this
+ * declaration order is not it. Unreachable today (the buckets
  * are disjoint upstream) and deterministic if it ever is.
  */
 export const ICD_DROP_REASONS = [
@@ -345,7 +353,18 @@ export function buildIcdDropRecords(inputs: IcdDropInputs): IcdDropRecord[] {
       if (seen.has(code)) continue;
       seen.add(code);
       if (reason === 'header_use_billable_child') {
-        const kids = headerChildren.get(code) ?? [];
+        // ⚠️ THE WRITER VALIDATES TOO, AND THE FIRST DRAFT DID NOT. Only the
+        // reader shape-checked, so `buildIcdDropRecords` called directly with
+        // prose children stored the prose verbatim — and the claim "children
+        // cannot become a prose channel" was true of one path out of two. Its
+        // real input is `billableDescendantsOf`, which is trusted; this is
+        // defence in depth on a field that is rendered to a doctor.
+        const kids = (headerChildren.get(code) ?? []).filter((raw) => {
+          const k = normalizeIcdCode(raw);
+          return (
+            !!k && ICD_CODE_SHAPE.test(k) && k.startsWith(code) && k.length > code.length
+          );
+        });
         out.push({ code, reason, children: kids });
       } else {
         out.push({ code, reason });
@@ -422,7 +441,19 @@ export function readIcdDrops(rawIcdCodes: unknown): IcdDropRecord[] {
       if (Array.isArray(rec.children)) {
         for (const raw of rec.children) {
           const k = normalizeIcdCode(raw);
+          // ⚠️ AND IT MUST BE A DESCENDANT OF `code`, WHICH THIS LEAF CAN CHECK.
+          // The first draft validated SHAPE only, so a hand-edited blob could
+          // put the refused header back in its own substitute list, or an
+          // ANCESTOR that is even less submittable: children
+          // ['M54.5','A00.0','M54'] came straight back, and a surface would
+          // print "M54.5 — not billable as written, use one of: M54.5, M54, …".
+          // The stated "this leaf cannot re-derive the true set" limit is real
+          // but does NOT cover this: strict prefix extension is pure string
+          // logic and needs no allowlist. It cannot prove a child is BILLABLE;
+          // it can prove it is not the code itself, not an ancestor, and not
+          // from an unrelated chapter.
           if (!k || !ICD_CODE_SHAPE.test(k) || kseen.has(k)) continue;
+          if (!k.startsWith(code) || k.length <= code.length) continue;
           kseen.add(k);
           kids.push(k);
         }
