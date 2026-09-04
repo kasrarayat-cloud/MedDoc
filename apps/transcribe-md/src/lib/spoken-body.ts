@@ -45,10 +45,39 @@ export function spokenBody(body: string, note: string): string {
     // markup on this surface, sitting in the middle of a section that had
     // otherwise been turned into sentences. Dropping it loses nothing: every
     // data row already carries its own column names ("diameter 6.2 mm").
-    .filter(
-      (l, i) => !RULE_RE.test(l) && !(ROW_RE.test(l) && RULE_RE.test(lines[i + 1] ?? '')),
-    )
-    .map((l) => claimProse(l.trim(), note))
+    .map((l, i) => {
+      // The alignment rule is never content.
+      if (RULE_RE.test(l)) return null;
+      const isHeader = ROW_RE.test(l) && RULE_RE.test(lines[i + 1] ?? '');
+      if (!isHeader) return claimProse(l.trim(), note);
+
+      // ⚠️ THE HEADER IS DROPPED ONLY WHEN ITS RESTORATION ACTUALLY HAPPENED.
+      // The old rule deleted it unconditionally, justified by "every data row
+      // already carries its own column names". That is true only while
+      // `claimProse` can rewrite the rows — and it cannot when two rows of the
+      // same section share their text, because `headerFor` requires a UNIQUE
+      // hit. A bilateral study whose legs carry identical rows then reached a
+      // listener as `| GSV at the Knee | 6.2 | 1.8 |`: numbers with no column,
+      // no unit, and raw pipes, while the drawn document showed the full
+      // header. The claim was checkable and was not checked.
+      //
+      // So: look ahead at this table's own rows. If every one of them comes
+      // back from `claimProse` without pipes, the columns did survive inside
+      // the sentences and the header is redundant — drop it, as before. If any
+      // row still carries markup, the header is the only thing naming those
+      // numbers, and it is spoken instead of deleted.
+      const body: string[] = [];
+      for (let k = i + 2; k < lines.length && ROW_RE.test(lines[k]); k++) body.push(lines[k]);
+      const allRewritten =
+        body.length > 0 && body.every((r) => !claimProse(r.trim(), note).includes('|'));
+      if (allRewritten) return null;
+      const cols = l
+        .split('|')
+        .map((c) => c.trim())
+        .filter(Boolean);
+      return cols.length ? `Columns: ${cols.join(', ')}.` : null;
+    })
+    .filter((l): l is string => l !== null)
     .join('\n')
     .trim();
 

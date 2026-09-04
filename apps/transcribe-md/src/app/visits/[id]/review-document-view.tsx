@@ -34,7 +34,7 @@ import { AlertTriangle, Check, FileSignature, RefreshCw } from 'lucide-react';
 
 import { PrescriptionsCard } from './prescriptions-card';
 
-import { spokenBody } from '@/lib/spoken-body';
+import { spokenSections } from '@/lib/spoken-sections';
 import { parseNoteSections, type NoteSection } from '@/lib/parse-note-sections';
 import { emChangeEq } from '@/lib/suggestion-labels';
 import { ReviewSignBar } from './review-sign-bar';
@@ -246,12 +246,20 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
                   note a doctor is about to sign would exist nowhere in the DOM,
                   which is not a degraded experience but an absent one. The text
                   is here, in reading order, for anyone whose reader needs it. */}
+              {/* ⚠️ `spokenSections`, NOT `sections.map(spokenBody)`. The
+                  display list is built for the four-pane render: it drops
+                  anything above the first SOAP heading and pads absent headings
+                  with empty bodies, which `spokenBody` then speaks as
+                  "Not documented." Both were reaching a listener as claims the
+                  note does not make — an addendum carrying an allergy going
+                  silent, and an assessment being reported as undocumented when
+                  the record never had that heading. See lib/spoken-sections.ts. */}
               <div className="qm-sr-only" data-testid="visit-document-text">
                 <h2>The note this document was filled from</h2>
-                {sections.map((sec) => (
+                {spokenSections(props.soapFinal).map((sec) => (
                   <section key={sec.id}>
                     <h3>{sec.label}</h3>
-                    <p>{spokenBody(sec.body, props.soapFinal)}</p>
+                    <p>{sec.body}</p>
                   </section>
                 ))}
               </div>
