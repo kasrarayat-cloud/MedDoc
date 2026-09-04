@@ -204,3 +204,96 @@ describe('blank verification mode', () => {
     ).toBeGreaterThan(0);
   });
 });
+
+// ============================================================================
+// ⚠️ THE kept_default EMISSION AND ITS VERIFICATION, DRIVEN THROUGH A REAL
+// RENDER — because the schema and read-path arms did NOT reach them.
+// ----------------------------------------------------------------------------
+// The first mutation matrix for `kept_default` redded four of seven. The three
+// that redded ZERO were exactly the ones no arm drove: emit `blank` instead of
+// `kept_default`; stop carrying `blankEligible`; stop requiring
+// `evaluatedFactIds` at verification. A guard nothing exercises is a comment,
+// and these three are the guards that make the stronger word honest.
+// ============================================================================
+describe('kept_default — evaluated and kept, not never looked at', () => {
+  /** Every field a KEPT DEFAULT: evaluated, uncontradicted, nothing written. */
+  function allKept(ir: TemplateDocIR): FieldResolution[] {
+    return ir.fields.map((field) =>
+      FieldResolutionSchema.parse({
+        fieldId: field.fieldId,
+        status: 'default_kept',
+        value: null,
+        sourceFactIds: [`ttfact_${'c'.repeat(24)}`],
+        evidenceAnchorIds: ['anchor-kept'],
+        selectedOptionOrdinal: null,
+        reasonCode: 'template_default_uncontradicted',
+        clinicianReviewed: false,
+      }),
+    );
+  }
+
+  it('⚠️ the renderer EMITS kept_default, and the render still verifies', async () => {
+    const source = await buildSyntheticDocx();
+    const { compileTemplateDocx } = await import('../compiler');
+    const ir = compileTemplateDocx(source);
+    const rendered = await renderTemplateDocx({
+      source,
+      ir,
+      resolutions: allKept(ir),
+      validation: VALIDATION,
+    });
+
+    const kept = rendered.verification.fields.filter((p) => p.kind === 'kept_default');
+    expect(kept.length, 'no kept_default proof was emitted at all').toBeGreaterThan(0);
+    expect(rendered.verification.verified).toBe(true);
+    expect(rendered.verification.fieldCheck).toBe('verified');
+
+    // ⚠️ THE EVIDENCE IS THE CLAIM. A kept_default without it is a `blank`
+    // wearing a stronger word.
+    for (const p of kept) {
+      expect(
+        (p as { evaluatedFactIds?: readonly string[] }).evaluatedFactIds ?? [],
+        'a kept_default proof carried no evaluated facts',
+      ).not.toHaveLength(0);
+    }
+  });
+
+  it('⚠️ kept_default carries blankEligible — the #170 sentinel, on the new path', async () => {
+    const source = await buildSyntheticDocx();
+    const { compileTemplateDocx } = await import('../compiler');
+    const ir = compileTemplateDocx(source);
+    const rendered = await renderTemplateDocx({
+      source,
+      ir,
+      resolutions: allKept(ir),
+      validation: VALIDATION,
+    });
+    const kept = rendered.verification.fields.filter((p) => p.kind === 'kept_default');
+    expect(kept.length).toBeGreaterThan(0);
+    // #170: a sentinel whose ABSENCE means "no" must be written on every path
+    // that earns a yes. Adding a proof kind is adding a path.
+    for (const p of kept) {
+      expect(
+        (p as { blankEligible?: string }).blankEligible,
+        'the new proof path does not carry the eligibility sentinel',
+      ).toBeDefined();
+    }
+  });
+
+  // ⚠️ THE VERIFICATION-SIDE EVIDENCE CHECK IS NOT ARMED BY ANY INPUT, AND THAT
+  // IS RECORDED RATHER THAN DRESSED UP. Two drafts tried and both LAUNDERED:
+  // the first invented a verifier input shape and threw on malformed input; the
+  // second used the real shape and threw from STATIC INVARIANCE, which runs
+  // first — the identical trap the canary three tests above documents for the
+  // blank byte-comparison. Deleting the check reds nothing either way.
+  //
+  // WHAT ACTUALLY DEFENDS THE CLAIM, and it is the stronger of the two: a
+  // `kept_default` with no evaluated facts CANNOT BE CONSTRUCTED. The schema
+  // refuses it (`gate-kept-default-proof.test.ts`, and the mutation that drops
+  // that constraint reds). The verification check is defence-in-depth for a
+  // proof arriving from somewhere other than the schema — a stored manifest,
+  // say — and its proof is inspection plus the schema arm, not a green test.
+  //
+  // Stated so nobody later reads the absence of an arm as an absence of a
+  // guard, and so nobody deletes the guard because "nothing exercises it".
+});

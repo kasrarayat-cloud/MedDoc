@@ -168,6 +168,35 @@ export async function renderTemplateDocx(
       // arm carries `blankEligible`, so spreading loses the narrowing and the
       // eligibility silently has nowhere to land.
       const base = fieldProof(field, resolution.value, 1, 'blank');
+
+      // ⚠️ THE SAME UNPATCHED WRITE, TWO DIFFERENT CLAIMS. A field nobody
+      // examined and a field whose template clause was examined and found
+      // uncontradicted both leave the doctor's scaffold untouched, and both
+      // reach this branch. `blank` asserts only "not patched"; it cannot tell
+      // "the patient denies chest pain" from "nobody asked about chest pain",
+      // and on ROS and exam that difference IS the clinical claim.
+      //
+      // `default_kept` carries the facts that were evaluated — enforced
+      // non-empty by the schema and again at verification — so the stronger
+      // word is earned rather than asserted.
+      if (resolution.status === 'default_kept') {
+        fieldProofs.push({
+          kind: 'kept_default',
+          evaluatedFactIds: [...resolution.sourceFactIds],
+          // #170 AGAIN, AND I WALKED INTO IT. That ruling exists because a third
+          // state was added to `blank` without adding its EMITTER, and the owner's
+          // form went from 35 counted blanks to ZERO. A sentinel whose absence
+          // means "no" must be written on every path that earns a yes — and a new
+          // proof KIND is a new path. Caught by the read-path arm.
+          blankEligible,
+          fieldId: base.fieldId,
+          partName: base.partName,
+          bindingPath: base.bindingPath,
+          valueSha256: base.valueSha256,
+          occurrences: base.occurrences,
+        });
+        continue;
+      }
       fieldProofs.push({
         kind: 'blank',
         fieldId: base.fieldId,

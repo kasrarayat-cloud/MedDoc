@@ -456,6 +456,38 @@ export const FieldResolutionStatusSchema = z.enum([
    * document; loud everywhere a human or a gate can read it.
    */
   'denial_withheld',
+  /**
+   * THE SCAFFOLD'S OWN SENTENCE WAS EVALUATED AND KEPT, RATHER THAN NEVER
+   * LOOKED AT.
+   *
+   * ⚠️ A NEW STATUS WAS REQUIRED, AND THE ENUM ABOVE ALREADY SAYS WHY. The
+   * distinguishing fact is that this field CARRIES EVIDENCE and is still blank:
+   * the encounter was searched, nothing contradicted the template's pre-printed
+   * clause, so the doctor's own default stands. Measured against every existing
+   * member:
+   *   not_mentioned            `NOT_MENTIONED_HAS_EVIDENCE` is BLOCKING the
+   *                            moment `sourceFactIds` is non-empty — which is
+   *                            exactly the state this status describes. Reusing
+   *                            it means discarding the citation, and the
+   *                            citation IS the claim.
+   *   approved_practice_default a PRACTICE-wide policy default, chosen by the
+   *                            practice. This is the TEMPLATE's own printed
+   *                            text, chosen by the doctor who authored the
+   *                            form. Different author, different audit trail.
+   *   denial_withheld          the encounter DENIED the thing. Here nothing
+   *                            denied and nothing affirmed; the default was
+   *                            simply not contradicted.
+   *   supported                would demand a value and a patch. There is no
+   *                            value — the point is that nothing was written.
+   *
+   * ⚠️ AND THE DISTINCTION IS THE WHOLE CLINICAL CLAIM. "The patient denies
+   * chest pain" and "nobody asked about chest pain" must not produce the same
+   * proof. Today both render as an untouched scaffold and both earn `blank`,
+   * which asserts only that the field was not patched. This status, and the
+   * `kept_default` proof kind it drives, separate them — evaluated-and-kept
+   * from never-looked-at.
+   */
+  'default_kept',
 ]);
 export type FieldResolutionStatus = z.infer<typeof FieldResolutionStatusSchema>;
 
@@ -487,6 +519,30 @@ export const FieldResolutionSchema = z
         message: 'Every populated clinical value requires sourceFactIds',
         path: ['sourceFactIds'],
       });
+    }
+    // ⚠️ THE INVERSE CONSTRAINT, AND IT IS WHAT GIVES THE STATUS ITS MEANING.
+    // Everywhere else evidence is required BECAUSE there is a value. Here it is
+    // required because there is NOT one: a kept default with no cited facts is
+    // indistinguishable from a field nobody examined, which is the exact
+    // conflation this status exists to end. And a value would be a
+    // contradiction — nothing was written.
+    if (resolution.status === 'default_kept') {
+      if (resolution.sourceFactIds.length === 0) {
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            'A kept default must cite the facts that were evaluated — without them it is ' +
+            'indistinguishable from a field nobody examined',
+          path: ['sourceFactIds'],
+        });
+      }
+      if (resolution.value !== null || resolution.selectedOptionOrdinal !== null) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'A kept default writes nothing: it must carry no value and select no option',
+          path: ['value'],
+        });
+      }
     }
     if (evidenceRequired && resolution.evidenceAnchorIds.length === 0) {
       ctx.addIssue({

@@ -117,7 +117,16 @@ export function countsAsBlankProof(
   ctx: BlankProofContext,
 ): boolean {
   const { bindingOf, resolvedNull, kindOf } = ctx;
-  if (entry.kind !== 'blank' && entry.kind !== 'emptied') return false;
+  // ⚠️ `kept_default` COUNTS, AND IT IS THE STRONGER OF THE THREE. `blank`
+  // asserts only that the field was not patched; `kept_default` asserts that
+  // AND that the encounter was searched and found nothing contradicting the
+  // template's own clause, carrying the evaluated facts to prove it. Refusing
+  // it here would deny credit to the better-evidenced proof — and would send
+  // any per-clause ROS or exam field back to `blank`, erasing the distinction
+  // the kind exists to make.
+  if (entry.kind !== 'blank' && entry.kind !== 'emptied' && entry.kind !== 'kept_default') {
+    return false;
+  }
   if (typeof entry.fieldId !== 'string') return false;
 
   // ⚠️ THE KIND CHECK APPLIES TO **BOTH** LABELS, and it did not before.
@@ -181,7 +190,12 @@ export function countsAsBlankProof(
   // past, because shape was all the expectation check could judge.
   if (!resolvedNull(entry.fieldId)) return false;
 
-  if (entry.kind === 'blank') return true;
+  // `kept_default` RETURNS HERE WITH `blank`, NOT BELOW WITH `emptied`. The
+  // trailing checks are the EMPTIED contract — a span hash and a
+  // proven-emptiable binding — because that path WROTE something and must show
+  // what it replaced. A kept default wrote nothing, exactly like a blank, so
+  // demanding a span hash of it would refuse every one of them.
+  if (entry.kind === 'blank' || entry.kind === 'kept_default') return true;
   // ⚠️ THE EXPECTATION IS REQUIRED HERE TOO, NOT ONLY AT RENDER TIME — and this
   // line exists because the adversarial pass MEASURED its absence.
   //
