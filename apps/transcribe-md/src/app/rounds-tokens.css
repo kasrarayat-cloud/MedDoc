@@ -204,6 +204,44 @@ body[data-skin='rounds'] {
    laid on. `.rounds-paper` sets `color: var(--rounds-ink)` on ITSELF (below), so
    prose inside the signed paper still inherits paper ink and nothing regresses;
    prose on a dark card now inherits the dark surface's own text token. */
+/* ── THE DISCLOSURE THAT VANISHES UNDER THE POINTER ─────────────────────────
+ * `.qm-ux-doc-disclosure` is "View original dictation" on the SIGNED note —
+ * the control that reveals the source the doctor actually produced. It is the
+ * sibling of the accessibility fix in this same change: one makes the note
+ * readable by a screen reader, this one makes its disclosure visible to an eye.
+ *
+ * `globals.css:5379` colours it `--color-linear-text-3` (#828995) and `:5393`
+ * hovers it to `--color-linear-text` (#f7f8f8). Both are correct on the DARK
+ * canvas they were written for. Under Rounds the same control sits on #fcfcfa
+ * paper, and the rule is not wrong — its GROUND moved:
+ *
+ *     rest    #828995 on #fcfcfa   3.43:1   — under the 4.5 floor
+ *     hover   #f7f8f8 on #fcfcfa   **1.04:1** — the control DISAPPEARS
+ *
+ * ⚠️ THE HOVER ROW IS NOT A CONTRAST NIT. At 1.04:1 the label is gone at the
+ * exact moment the pointer lands on it, and the chevron strokes `currentColor`
+ * so the affordance icon goes with it. A control that vanishes when you point
+ * at it reads as a broken page, not as a low-contrast one.
+ *
+ * ⚠️ AND IT WAS NEARLY MISSED BY A PROBE OF MY OWN. The element carries
+ * `transition: color .16s`, so reading computed style immediately after hover
+ * returns the OLD colour and a working `:hover` looks dead. The first
+ * measurement said "no change"; its positive control agreed, because that
+ * control had no transition — a control that differs from its target in the
+ * dimension that matters is not a control. Re-measured with a transition-aware
+ * control and a settle: 1.04:1, confirmed.
+ *
+ * Fixed on the PAPER, which is where the property lives: both Rounds paper hosts
+ * carry `.rounds-paper`, so the signed and unsigned surfaces move together and a
+ * third paper host inherits it. Hover now DARKENS the control — 6.78:1 → 16.29:1
+ * — which is what the dark-canvas rule was doing in its own world.
+ * `globals.css` is untouched: it is the flag-OFF surface's real chrome. */
+[data-skin='rounds'] .rounds-paper .qm-ux-doc-disclosure {
+  color: var(--rounds-ink-muted);
+}
+[data-skin='rounds'] .rounds-paper .qm-ux-doc-disclosure:hover {
+  color: var(--rounds-ink);
+}
 [data-skin='rounds'] .rounds-clinical {
   font-family: var(--rounds-font-clinical);
   font-size: var(--rounds-clinical-size);
