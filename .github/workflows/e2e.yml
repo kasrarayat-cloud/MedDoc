@@ -117,12 +117,24 @@ jobs:
     name: Playwright E2E (transcribe-md)
     needs: changes
     if: needs.changes.outputs.docs_only != 'true'
-    # ⚠️ SELF-HOSTED. MEASURED 2026-08-28 on white-gorilla-87822 (Ubuntu 24.04.4):
-    # nproc=4, 7.8 GiB total / 5.7 GiB available, Docker 29.7.2 — which CONFIRMS
-    # the figures this comment carried as a purchase spec. Job `name:`
-    # is UNCHANGED so every required context is preserved byte-for-byte.
-    # REVERT: `ubuntu-latest`, one line per job, nothing else depends on it.
-    runs-on: [self-hosted, linux, x64, quillmd-ci]
+    # ⚠️ GITHUB-HOSTED — OWNER RULING 2026-09-04, REVERSING THE COST-ARC MOVE.
+    # This job ran on `[self-hosted, linux, x64, quillmd-ci]`, and the reason it
+    # was pinned to the HEAVY label has now evaporated by construction: both
+    # self-hosted runners live on ONE BOX and share its network namespace, so
+    # two concurrent jobs binding a fixed host port (5432, 6379) collided. A
+    # GitHub-hosted job gets its OWN VM, so there is no namespace to share and
+    # no exclusion to restore.
+    #
+    # WHAT IT COSTS AND WHAT IT BUYS: billable minutes, accepted by the owner,
+    # against a single heavy lane that had 10 runs queued behind 1 executing and
+    # held a ratified accessibility fix out of production for over a day.
+    #
+    # ⚠️ SPEC: this repo is PRIVATE on a User plan, so `ubuntu-latest` is
+    # 2 vCPU / 7 GB / 14 GB SSD — FEWER cores and less disk than the self-hosted
+    # box (4 vCPU / 7.8 GiB). Larger runners need Team/Enterprise and are not
+    # available here. If this job dies on memory or disk, that is the reason,
+    # and the remedy is to shrink the job, not to raise the size.
+    runs-on: ubuntu-latest
     # 40 was sized for ONE image build and two projects. This job now builds
     # four images and runs four projects; recovering the doc-preview timeouts
     # above brings it back inside the budget, and this leaves headroom rather
