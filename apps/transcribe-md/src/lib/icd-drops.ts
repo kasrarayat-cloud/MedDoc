@@ -144,9 +144,22 @@ import { normalizeIcdCode } from './icd-decisions';
  * are disjoint upstream) and deterministic if it ever is.
  */
 export const ICD_DROP_REASONS = [
-  /** Failed `isValidIcd10` — absent from the 604-code verified allowlist. NOT
-   *  a claim that the code is unbillable; see the header. */
+  /** Failed `isValidIcd10` AND the code is not an ICD-10-CM entry in any form —
+   *  a fabrication or a typo. There is no substitute to offer. */
   'not_in_verified_allowlist',
+  /** ⚠️ RULING #180 — THE SAME EXIT, A SUB-REASON WITHIN IT. Failed
+   *  `isValidIcd10` because the code is a category HEADER: a real ICD-10-CM
+   *  entry that is not valid for submission. Unlike a fabrication this is
+   *  ACTIONABLE — a billable descendant always exists (0 of 23,467 headers have
+   *  none, measured against FY2026) and `children` carries the enumerated set.
+   *
+   *  ⚠️ FIVE TOKENS, FOUR EXITS, AND #149(b) IS INTACT. That ruling forbids
+   *  COLLAPSING exits into one bucket (`notMentionedCount` routed five exits
+   *  into one, so a REFUSAL and an ABSENCE became the same number). It does not
+   *  forbid sub-dividing one exit, and #149(e) permits exactly this re-reading.
+   *  The property that matters is that no two EXITS share a token, and the gate
+   *  asserts that rather than asserting a token count. */
+  'header_use_billable_child',
   /** `dropIncoherentVaricoseCodes` — an asymptomatic varicose code alongside a
    *  symptomatic one. */
   'incoherent_asymptomatic_varicose',
@@ -165,6 +178,30 @@ export interface IcdDropRecord {
    *  with two matchers is a recorded failure class in this repository. */
   code: string;
   reason: IcdDropReason;
+  /**
+   * The billable codes beneath a header, enumerated by `billableDescendantsOf`.
+   * Present only on `header_use_billable_child`; absent on every other reason.
+   *
+   * ⚠️ #149(d) RULED THE RECORD IS `{code, reason}` AND NOTHING ELSE, AND #180
+   * ADDS THIS FIELD. The property #149(d) protects is that **no MODEL-AUTHORED
+   * string is stored** — the model's `evidence_quote` and descriptions stay
+   * out. These children are not model-authored: they are derived
+   * deterministically from the CMS release by a pure function of `code`. So the
+   * rule's product survives the addition, and saying which property is being
+   * preserved is the point of writing this down rather than quietly widening
+   * the shape.
+   *
+   * ⚠️ AND IT IS A WRITE-TIME SNAPSHOT OF AN ICD EDITION. Canon: *a decision
+   * made at write time must be re-derived where it is used.* **FY2027 takes
+   * effect 2026-10-01**, so a record written today can outlive the edition that
+   * produced it, and a surface rendering a stale child list would offer a code
+   * that no longer exists. A reader that can reach `billableDescendantsOf`
+   * SHOULD prefer a fresh derivation from `code`; this field is the value at
+   * the time of coding, not a promise about today. Filed rather than solved —
+   * the ruling says carry them, and inventing an edition stamp is not something
+   * this session was asked to decide.
+   */
+  children?: readonly string[];
 }
 
 /**
@@ -180,7 +217,7 @@ export interface IcdDropRecord {
  * The same mechanism guards `IcdDecisionRecord` next door, where F8-S1 filed
  * this exact forward-compatibility residual and could not fix it.
  */
-export const ICD_DROP_RECORD_KEYS = ['code', 'reason'] as const;
+export const ICD_DROP_RECORD_KEYS = ['code', 'reason', 'children'] as const;
 
 type _NoFieldUnwritten =
   Exclude<keyof IcdDropRecord, (typeof ICD_DROP_RECORD_KEYS)[number]> extends never
@@ -210,9 +247,42 @@ const _dropKeysAreKnown: _NoKeyUnknown = true;
  * reader, which is the best the type system offers here; the gate asserts the
  * binding by BEHAVIOUR on top of it.
  */
+/**
+ * The ICD-10-CM dotted shape: three characters, optionally a dot and up to four
+ * more. Covers every real form — `I10`, `M54.51`, `I1A.0`, `S06.1X7A`,
+ * `T82.6XXA`, `QA0.0151`.
+ *
+ * ⚠️ THIS IS A SHAPE CHECK, NOT A VALIDITY CHECK, AND THE DIFFERENCE IS THE
+ * POINT. This module cannot ask whether a code exists — it is a client-safe
+ * leaf with no allowlist access. What it CAN do is refuse anything that is not
+ * code-shaped, which is what stops `children` becoming a prose channel.
+ */
+const ICD_CODE_SHAPE = /^[0-9A-Z]{3}(\.[0-9A-Z]{1,4})?$/;
+
+/** One header drop: the refused code and the billable codes beneath it. */
+export interface IcdHeaderDrop {
+  code: string;
+  children: readonly string[];
+}
+
 export interface IcdDropInputs {
-  /** Failed `isValidIcd10`. */
+  /** Failed `isValidIcd10` AND is not an ICD-10-CM entry in any form. */
   notInVerifiedAllowlist: readonly string[];
+  /**
+   * ⚠️ RULING #180. Failed `isValidIcd10` because the code is a category
+   * HEADER, with its billable descendants enumerated.
+   *
+   * ⚠️ THE CLASSIFICATION IS THE CALLER'S JOB, DELIBERATELY, AND THIS FILE
+   * CANNOT DO IT. Splitting here would need `isIcd10Header` and
+   * `billableDescendantsOf` from `@meddoc/ai` — and this module is a CLIENT-SAFE
+   * LEAF whose only import is `./icd-decisions`. `icd-coding-view.tsx` is a
+   * `'use client'` component that imports `amberIcdDrops` from here, and no
+   * client file imports `@meddoc/ai` today, so that import would pull the
+   * Anthropic/OpenAI/Deepgram SDKs and ~700 KB of ICD data into a browser
+   * bundle. `07a-icd-coding.ts` runs on the worker, already imports
+   * `@meddoc/ai`, and owns the exit — so it classifies and passes both buckets.
+   */
+  headerUseBillableChild: readonly IcdHeaderDrop[];
   incoherentVaricose: readonly string[];
   contradictedByDenial: readonly string[];
   unsupportedDeficiency: readonly string[];
@@ -245,7 +315,20 @@ export function buildIcdDropRecords(inputs: IcdDropInputs): IcdDropRecord[] {
     inputs.survivors.map((c) => normalizeIcdCode(c)).filter((c) => c.length > 0),
   );
 
+  // ⚠️ THE HEADER BUCKET IS FIRST, AND THE ORDER IS LOAD-BEARING (see the header
+  // comment on ICD_DROP_REASONS): a code claimed by two buckets resolves to the
+  // FIRST. A code cannot be both a header and a fabrication — the classifier is
+  // a total function on one exit — but if a caller ever passed both, the
+  // ACTIONABLE reason is the one worth keeping.
+  const headerChildren = new Map<string, readonly string[]>();
+  for (const h of inputs.headerUseBillableChild) {
+    const code = normalizeIcdCode(h.code);
+    if (!code) continue;
+    headerChildren.set(code, h.children);
+  }
+
   const byReason: ReadonlyArray<readonly [IcdDropReason, readonly string[]]> = [
+    ['header_use_billable_child', [...headerChildren.keys()]],
     ['not_in_verified_allowlist', inputs.notInVerifiedAllowlist],
     ['incoherent_asymptomatic_varicose', inputs.incoherentVaricose],
     ['contradicted_by_denial', inputs.contradictedByDenial],
@@ -261,7 +344,12 @@ export function buildIcdDropRecords(inputs: IcdDropInputs): IcdDropRecord[] {
       if (survivors.has(code)) continue;
       if (seen.has(code)) continue;
       seen.add(code);
-      out.push({ code, reason });
+      if (reason === 'header_use_billable_child') {
+        const kids = headerChildren.get(code) ?? [];
+        out.push({ code, reason, children: kids });
+      } else {
+        out.push({ code, reason });
+      }
     }
   }
   return out;
@@ -311,7 +399,38 @@ export function readIcdDrops(rawIcdCodes: unknown): IcdDropRecord[] {
     // pre-dedupe row cannot make the surface render one code twice.
     if (seen.has(code)) continue;
     seen.add(code);
-    out.push({ code, reason: rec.reason });
+    if (rec.reason === 'header_use_billable_child') {
+      // ⚠️ SHAPE-VALIDATED, NOT MERELY NORMALISED — AND THE FIRST DRAFT WAS NOT.
+      // `normalizeIcdCode` is `trim().toUpperCase()` and nothing else, so
+      // "Mrs Patient of 4 Elm Street" survives it as a non-empty string. Passing
+      // children through it alone made this field a PROSE CHANNEL into a record
+      // whose entire posture (#149(d)) is that no model-authored string is
+      // stored — and a surface would have rendered that prose as a billing code.
+      // Caught by this file's own hostile-blob arm, which is why that arm was
+      // widened to cover `children` when the field was added.
+      //
+      // The blob is JSONB and can have been hand-edited, and this leaf
+      // deliberately cannot re-derive the true set (it has no allowlist access —
+      // see IcdDropInputs). So each entry must match the ICD-10-CM SHAPE, be
+      // deduped, and keep its order. Anything else is dropped silently, exactly
+      // as a malformed `code` is.
+      //
+      // ⚠️ NOT TRUNCATED, deliberately: the real maximum is 3,096 (S82), and
+      // capping the list is the shape #149(f) died on, one layer down.
+      const kids: string[] = [];
+      const kseen = new Set<string>();
+      if (Array.isArray(rec.children)) {
+        for (const raw of rec.children) {
+          const k = normalizeIcdCode(raw);
+          if (!k || !ICD_CODE_SHAPE.test(k) || kseen.has(k)) continue;
+          kseen.add(k);
+          kids.push(k);
+        }
+      }
+      out.push({ code, reason: rec.reason, children: kids });
+    } else {
+      out.push({ code, reason: rec.reason });
+    }
   }
   return out;
 }
@@ -334,7 +453,17 @@ export function readIcdDrops(rawIcdCodes: unknown): IcdDropRecord[] {
  * this function inherits that staleness**, and that is the re-arming condition.
  */
 export function amberIcdDrops(rawIcdCodes: unknown): IcdDropRecord[] {
-  return readIcdDrops(rawIcdCodes).filter((d) => d.reason === 'not_in_verified_allowlist');
+  // ⚠️ BOTH ALLOWLIST-EXIT TOKENS, AND OMITTING THE NEW ONE WOULD BE A SILENT
+  // REGRESSION WORSE THAN THE STATUS QUO. #149(c) rules that the amber case is
+  // the ALLOWLIST EXIT — not one token — and #180 splits that exit's reason in
+  // two without moving the exit. A filter still naming only the fabrication
+  // token would make every HEADER drop invisible: the one case that is
+  // actionable would be the one the doctor never sees.
+  const AMBER: ReadonlySet<IcdDropReason> = new Set([
+    'not_in_verified_allowlist',
+    'header_use_billable_child',
+  ]);
+  return readIcdDrops(rawIcdCodes).filter((d) => AMBER.has(d.reason));
 }
 
 /**

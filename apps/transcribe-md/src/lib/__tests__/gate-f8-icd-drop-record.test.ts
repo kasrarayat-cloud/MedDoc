@@ -93,6 +93,7 @@ function blob(codes: string[], dropped: IcdDropRecord[] = []) {
 
 const NO_DROPS: IcdDropInputs = {
   notInVerifiedAllowlist: [],
+  headerUseBillableChild: [],
   incoherentVaricose: [],
   contradictedByDenial: [],
   unsupportedDeficiency: [],
@@ -116,9 +117,25 @@ describe('NON-VACUITY — the instruments read real data, not a barrel', () => {
     expect(isValidIcd10('ZZZ.99')).toBe(false);
   });
 
-  it('the reason set is the four exits, distinct', () => {
-    expect(ICD_DROP_REASONS.length).toBe(4);
-    expect(new Set(ICD_DROP_REASONS).size).toBe(4);
+  it('⚠️ NO TWO EXITS SHARE A TOKEN — the property #149(b) actually protects', () => {
+    // ⚠️ THIS ASSERTED `length === 4` AND RULING #180 MADE THAT FALSE: five
+    // tokens now, because the ALLOWLIST exit carries two sub-reasons. The count
+    // was a PROXY; the property is that a REFUSAL and an ABSENCE can never
+    // become the same number — distinct exits stay distinguishable. #149(b)'s
+    // cited precedent is `notMentionedCount` collapsing FIVE exits into ONE
+    // bucket; sub-dividing one exit is the opposite operation and #149(e)
+    // permits it. Asserting the count made a ruled improvement look like a
+    // regression, which is what a spelling-shaped gate does.
+    expect(new Set(ICD_DROP_REASONS).size).toBe(ICD_DROP_REASONS.length);
+    for (const t of [
+      'incoherent_asymptomatic_varicose',
+      'contradicted_by_denial',
+      'unsupported_deficiency',
+    ] as const) {
+      expect(ICD_DROP_REASONS).toContain(t);
+    }
+    expect(ICD_DROP_REASONS).toContain('not_in_verified_allowlist');
+    expect(ICD_DROP_REASONS).toContain('header_use_billable_child');
   });
 
   it('⚠️ the token names COVERAGE, not billability — the name is the finding', () => {
@@ -141,6 +158,7 @@ describe('buildIcdDropRecords — DRIVEN, because a source scan cannot see a swa
     // scan the pass defeated by swapping two tokens.
     const out = buildIcdDropRecords({
       notInVerifiedAllowlist: ['A00.0'],
+      headerUseBillableChild: [],
       incoherentVaricose: ['I83.90'],
       contradictedByDenial: ['K21.9'],
       unsupportedDeficiency: ['E53.8'],
@@ -158,6 +176,13 @@ describe('buildIcdDropRecords — DRIVEN, because a source scan cannot see a swa
     const reached = new Set(
       buildIcdDropRecords({
         notInVerifiedAllowlist: ['A00.0'],
+        // ⚠️ RULING #180's token. THIS GATE IS WHAT CAUGHT IT UNWIRED: it
+        // asserts `reached` equals ICD_DROP_REASONS exactly, so a fifth
+        // token with no bucket that produces it fails here rather than
+        // shipping a reason nothing can emit.
+        headerUseBillableChild: [
+          { code: 'M54.5', children: ['M54.50', 'M54.51', 'M54.59'] },
+        ],
         incoherentVaricose: ['I83.90'],
         contradictedByDenial: ['K21.9'],
         unsupportedDeficiency: ['E53.8'],
@@ -239,8 +264,22 @@ describe('buildIcdDropRecords — DRIVEN, because a source scan cannot see a swa
   });
 
   it('the built list carries EXACTLY the record keys — no model prose can ride in', () => {
-    const out = buildIcdDropRecords({ ...NO_DROPS, notInVerifiedAllowlist: ['K21.9'] });
-    expect(Object.keys(out[0]).sort()).toEqual([...ICD_DROP_RECORD_KEYS].sort());
+    // ⚠️ `children` is present ONLY on the header sub-reason (#180), so the key
+    // set is reason-dependent; asserting one shape for both would be false.
+    const notCode = buildIcdDropRecords({ ...NO_DROPS, notInVerifiedAllowlist: ['K21.9'] });
+    expect(Object.keys(notCode[0]).sort()).toEqual(['code', 'reason']);
+
+    const header = buildIcdDropRecords({
+      ...NO_DROPS,
+      headerUseBillableChild: [{ code: 'M54.5', children: ['M54.50'] }],
+    });
+    expect(Object.keys(header[0]).sort()).toEqual(['children', 'code', 'reason']);
+
+    for (const rec of [notCode[0], header[0]]) {
+      for (const k of Object.keys(rec)) {
+        expect(ICD_DROP_RECORD_KEYS as readonly string[]).toContain(k);
+      }
+    }
   });
 });
 
@@ -397,6 +436,7 @@ describe('the partition by reason reconciles, and every bucket is named', () => 
     [],
     buildIcdDropRecords({
       notInVerifiedAllowlist: ['A00.0'],
+      headerUseBillableChild: [],
       incoherentVaricose: ['I83.90'],
       contradictedByDenial: ['K21.9'],
       unsupportedDeficiency: ['E53.8'],
@@ -432,12 +472,30 @@ describe('the partition by reason reconciles, and every bucket is named', () => 
 
 // ---------------------------------------------------------------------------
 describe('⚠️ NO MODEL-AUTHORED STRING IS STORED — the PHI posture', () => {
-  it('the record type carries exactly two fields, and neither is free text', () => {
-    expect([...ICD_DROP_RECORD_KEYS].sort()).toEqual(['code', 'reason'].sort());
+  it('no field is model-authored free text — #149(d) property, #180 shape', () => {
+    // ⚠️ THIS ASSERTED EXACTLY TWO FIELDS. #180 adds `children`, and the
+    // property #149(d) protects is NOT the field count — it is that no
+    // MODEL-AUTHORED string is stored. `children` is derived deterministically
+    // from the CMS release by a pure function of `code`; the model never sees
+    // it. The rule's product survives; the count did not.
+    expect([...ICD_DROP_RECORD_KEYS].sort()).toEqual(['children', 'code', 'reason']);
     // `description` is the model's prose and 07a:471-473 already rules it can
     // carry patient context.
     expect(ICD_DROP_RECORD_KEYS as readonly string[]).not.toContain('description');
     expect(ICD_DROP_RECORD_KEYS as readonly string[]).not.toContain('evidence_quote');
+
+    // ⚠️ AND `children` MUST NOT BECOME A PROSE CHANNEL. Every entry is
+    // code-shaped, so free text cannot ride in through the new field.
+    const header = buildIcdDropRecords({
+      ...NO_DROPS,
+      headerUseBillableChild: [
+        { code: 'M54.5', children: ['M54.50', 'M54.51', 'M54.59'] },
+      ],
+    });
+    expect(header[0].children?.length).toBe(3);
+    for (const c of header[0].children ?? []) {
+      expect(c, `${c} must be code-shaped`).toMatch(/^[0-9A-Z]{3}(\.[0-9A-Z]{1,4})?$/);
+    }
   });
 
   it('a hostile record carrying prose has that prose STRIPPED by the narrower', () => {
@@ -452,16 +510,48 @@ describe('⚠️ NO MODEL-AUTHORED STRING IS STORED — the PHI posture', () => 
         },
       ],
     });
-    expect(Object.keys(d[0]).sort()).toEqual([...ICD_DROP_RECORD_KEYS].sort());
+    // A fabrication carries no `children`, so its key set is the two-field one.
+    expect(Object.keys(d[0]).sort()).toEqual(['code', 'reason']);
     expect(JSON.stringify(d)).not.toMatch(/Elm Street|burning after meals/);
+
+    // ⚠️ AND THE SAME HOSTILITY THROUGH THE NEW FIELD. #180 opened a second
+    // channel into the record; a hostile blob putting prose in `children` must
+    // have it dropped by the same narrower, not rendered as a substitute code.
+    const h = readIcdDrops({
+      codes: [],
+      dropped: [
+        {
+          code: 'M54.5',
+          reason: 'header_use_billable_child',
+          children: ['M54.51', 'Mrs Patient of 4 Elm Street', '', '   ', 'M54.51'],
+        },
+      ],
+    });
+    expect(h[0].children).toEqual(['M54.51']);
+    expect(JSON.stringify(h)).not.toMatch(/Elm Street/);
   });
 });
 
 // ---------------------------------------------------------------------------
 describe('the narrowers are EXHAUSTIVE at runtime, not only at compile time', () => {
-  it('readIcdDrops emits exactly ICD_DROP_RECORD_KEYS', () => {
+  it('readIcdDrops emits exactly the keys its reason declares', () => {
+    // ⚠️ `children` rides only on the header sub-reason, so the narrower's key
+    // set is reason-dependent. Both shapes are asserted; neither may carry a
+    // key outside ICD_DROP_RECORD_KEYS.
     const d = readIcdDrops(blob([], [{ code: 'K21.0', reason: 'not_in_verified_allowlist' }]));
-    expect(Object.keys(d[0]).sort()).toEqual([...ICD_DROP_RECORD_KEYS].sort());
+    expect(Object.keys(d[0]).sort()).toEqual(['code', 'reason']);
+
+    const h = readIcdDrops({
+      codes: [],
+      dropped: [{ code: 'M54.5', reason: 'header_use_billable_child', children: ['M54.50'] }],
+    });
+    expect(Object.keys(h[0]).sort()).toEqual(['children', 'code', 'reason']);
+
+    for (const rec of [d[0], h[0]]) {
+      for (const k of Object.keys(rec)) {
+        expect(ICD_DROP_RECORD_KEYS as readonly string[]).toContain(k);
+      }
+    }
   });
 
   // ⚠️ F8-S2 SPLIT THIS ARM IN TWO, AND THE SPLIT MAKES IT STRONGER.
@@ -564,9 +654,15 @@ describe('⚠️ THE CALLER IS WIRED — a capability with no caller passes ever
 
   it('⚠️ L7a binds each named input to the RIGHT local — a swap here is the same defect', () => {
     // The builder's own reason binding is proven by DRIVING it, above. This is
-    // the other half: the caller maps four local variables onto four named
+    // the other half: the caller maps five local variables onto five named
     // fields, and swapping two of THOSE inverts the product exactly as swapping
     // the tokens would have.
+    //
+    // ⚠️ AND THE `.map` SUFFIX WAS A SPELLING, NOT THE PROPERTY. Ruling #180
+    // splits the allowlist exit into two locals that are already arrays, so
+    // neither needs `.map` — and the old regex red-lined that as though it were
+    // a defect. AGENTS.md, "PIN PROPERTIES, NOT SPELLINGS": the property is the
+    // field->local PAIRING, which still fails on a swap.
     //
     // ⚠️ This is a source assertion and it is deliberately a PAIRING, not a
     // count. The arm the pass defeated counted `dropRecord(… 'token')` sites and
@@ -575,16 +671,22 @@ describe('⚠️ THE CALLER IS WIRED — a capability with no caller passes ever
     // four expectations fail.
     expect(code).toMatch(/buildIcdDropRecords\(\{/);
     const binding: ReadonlyArray<readonly [string, string]> = [
-      ['notInVerifiedAllowlist', 'rejected'],
+      ['notInVerifiedAllowlist', 'rejectedNotCodes'],
+      ['headerUseBillableChild', 'rejectedHeaders'],
       ['incoherentVaricose', 'droppedIncoherent'],
       ['contradictedByDenial', 'droppedDenied'],
       ['unsupportedDeficiency', 'droppedDeficiency'],
     ];
     for (const [field, local] of binding) {
       expect(code, `${field} must be fed by ${local}`).toMatch(
-        new RegExp(`${field}:\\s*${local}\\.map`),
+        new RegExp(`${field}:\\s*${local}\\b`),
       );
     }
+    // ⚠️ NON-VACUITY: the two allowlist-exit locals share the `rejected`
+    // prefix, so prove the matcher discriminates them rather than matching on
+    // the prefix.
+    expect(code).not.toMatch(/notInVerifiedAllowlist:\s*rejectedHeaders\b/);
+    expect(code).not.toMatch(/headerUseBillableChild:\s*rejectedNotCodes\b/);
   });
 
   it('positive + negative control on the matcher itself', () => {
