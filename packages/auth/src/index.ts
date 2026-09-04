@@ -151,7 +151,29 @@ export const authConfig: NextAuthConfig = {
     authorized({ auth, request: { nextUrl } }) {
       if (process.env.AUTH_USE_MOCK === 'true') return true;
 
-      const isLoggedIn = !!auth?.user;
+      // ⚠️ #182(1) / ROUND THREE — AN UNVERIFIED SESSION IS LET THROUGH, AND
+      // THAT IS DELIBERATE RATHER THAN INCIDENTAL.
+      //
+      // When the database could not answer, the session callback withholds the
+      // identity but leaves `user` present. `!!auth?.user` was therefore TRUE
+      // and this gate already did the right thing — BY ACCIDENT. Tightening it
+      // to `!!auth?.user?.id`, which reads like an obvious improvement, would
+      // have flipped an unverifiable session to `false` and REDIRECTED THE
+      // DOCTOR TO /login: the eject-on-a-blip #182(1) forbids, one layer above
+      // the code that forbids it.
+      //
+      // So the case is named. The request proceeds to the page, whose
+      // `getSession()` refuses with a 503 "verifying your session" and the
+      // cookie intact. A redirect here would tell the doctor they are signed
+      // out; they are not, and the next request may well succeed.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const unverified = (auth?.user as any)?.sessionVerifyFailed === true;
+      if (unverified) return true;
+
+      // ⚠️ AND THE GENERAL CHECK IS NOW THE IDENTITY, NOT THE OBJECT. With the
+      // unverified case handled above, a `user` carrying no id is genuinely
+      // unusable and SHOULD be sent to /login.
+      const isLoggedIn = !!auth?.user?.id;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const role = (auth?.user as any)?.role as string | undefined;
       const path = nextUrl.pathname;
@@ -392,6 +414,19 @@ export const authConfig: NextAuthConfig = {
           (session.user as any).practiceId = undefined;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (session.user as any).sessionId = undefined;
+          // ⚠️ NAME AND EMAIL GO TOO — ROUND THREE. The first strip took the
+          // authorization fields and left the display ones, on the reasoning
+          // that a doctor's own email in their own browser is not a leak. It
+          // is not a leak, but leaving it created an EXEMPTION: `AppFrame`
+          // reads `user.name || user.email` and makes no identity check, so it
+          // was the one `auth()` consumer of twenty that could not be held to
+          // "refuses an unverified token". Removing the field removes the
+          // exemption instead of documenting it — the frame falls back to
+          // 'Doctor', which is what it already does for a signed-out render.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (session.user as any).name = undefined;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (session.user as any).email = undefined;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (session.user as any).sessionVerifyFailed = true;
         }
