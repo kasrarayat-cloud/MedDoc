@@ -138,36 +138,78 @@ describe('#182(1) — the jwt callback distinguishes CANNOT TELL from INVALID', 
     ).toBeUndefined();
   });
 
-  it('⚠️ THE MARKER CROSSES INTO THE SESSION — the half nothing was watching', async () => {
-    // ⚠️ THIS ARM EXISTS BECAUSE A MUTATION PROVED ITS ABSENCE. Deleting the
-    // propagation line in the `session` callback redded NOTHING: 19 of 19 arms
-    // stayed green while the fix was fully disarmed. The jwt half sets the
-    // marker, `getSession` refuses on it — and if it never crosses between the
-    // two, the token is served exactly as it was under the original fail-open.
+  it('⚠️ AN UNVERIFIED TOKEN YIELDS NO IDENTITY — fail-closed at the SOURCE', async () => {
+    // ⚠️ THIS ARM REPLACES ONE THAT ASSERTED THE WRONG CONTRACT. It used to
+    // check only that the marker CROSSED into the session — which it did, while
+    // `session.user.id` was still populated. The second adversarial pass showed
+    // what that meant in the real tree: every consumer that reads `auth()`
+    // WITHOUT knowing about the marker got a working session. A suspended
+    // doctor was served a patient chart in apps/meddoc-pro, and six
+    // account-control routes in this app accepted a force-logged-out attacker.
+    // All of them refused at the parent commit.
     //
-    // A two-part fix needs an arm on the JOIN, not one on each half. The
-    // author's own comment predicted this and did not arm it.
+    // Checking the marker was OPT-IN. Withholding the identity is not.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sessionCb = (authConfig as any).callbacks.session as (a: {
       session: { user: Record<string, unknown> };
       token: Record<string, unknown>;
     }) => Promise<{ user: Record<string, unknown> }>;
 
-    const marked = await sessionCb({
-      session: { user: {} },
-      token: { id: 'u1', sessionId: 's1', sessionVerifyFailed: true },
+    // ⚠️ THE FIXTURE PRE-POPULATES THE IDENTITY, AND AN EARLIER VERSION DID
+    // NOT — so the arm passed whether the code stripped the id or merely never
+    // set it, and deleting the strip redded NOTHING. An arm needs the input
+    // that DISTINGUISHES the two explanations; here that means handing it a
+    // session that already carries an identity and requiring it to be gone.
+    const unverified = await sessionCb({
+      session: {
+        user: {
+          email: 'doc@example.invalid',
+          id: 'u1',
+          role: 'DOCTOR',
+          practiceId: 'prac_1',
+          sessionId: 's1',
+        },
+      },
+      token: {
+        id: 'u1',
+        sessionId: 's1',
+        role: 'DOCTOR',
+        practiceId: 'prac_1',
+        sessionVerifyFailed: true,
+      },
     });
-    expect(
-      marked.user.sessionVerifyFailed,
-      'the unverified marker did not reach the session — getSession can never refuse',
-    ).toBe(true);
 
-    // and the negative direction, or the arm passes on a callback that hard-codes true
-    const clean = await sessionCb({
+    // THE PROPERTY EVERY CONSUMER ALREADY GATES ON — `if (!userId) return 401`
+    expect(
+      unverified.user.id,
+      'an unverified token still yields an identity — every auth() consumer is open',
+    ).toBeUndefined();
+    // and nothing else usable comes through either
+    expect(unverified.user.role).toBeUndefined();
+    expect(unverified.user.practiceId).toBeUndefined();
+    expect(unverified.user.sessionId).toBeUndefined();
+    // the marker DOES survive, so getSession can raise a truthful 503 rather
+    // than letting the request look like an ordinary signed-out one
+    expect(unverified.user.sessionVerifyFailed).toBe(true);
+  });
+
+  it('POSITIVE CONTROL: a VERIFIED token still yields a full identity', async () => {
+    // Without this, the arm above is satisfied by a session callback that
+    // withholds the identity from everyone — which would sign the whole product
+    // out rather than fail closed on one request.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sessionCb = (authConfig as any).callbacks.session as (a: {
+      session: { user: Record<string, unknown> };
+      token: Record<string, unknown>;
+    }) => Promise<{ user: Record<string, unknown> }>;
+
+    const ok = await sessionCb({
       session: { user: {} },
-      token: { id: 'u1', sessionId: 's1' },
+      token: { id: 'u1', sessionId: 's1', role: 'DOCTOR', practiceId: 'prac_1' },
     });
-    expect(clean.user.sessionVerifyFailed, 'a healthy session is marked unverified').toBe(false);
+    expect(ok.user.id, 'a healthy session was stripped — the product is signed out').toBe('u1');
+    expect(ok.user.practiceId).toBe('prac_1');
+    expect(ok.user.sessionVerifyFailed).toBe(false);
   });
 
   it('(e) a token with NO sessionId is rejected', async () => {

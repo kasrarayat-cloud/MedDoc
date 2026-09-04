@@ -352,6 +352,52 @@ export const authConfig: NextAuthConfig = {
     },
 
     async session({ session, token }) {
+      // ⚠️ #182(1), CORRECTED BY THE SECOND ADVERSARIAL PASS — AN UNVERIFIED
+      // TOKEN YIELDS NO IDENTITY. THIS IS THE FAIL-CLOSED HALF.
+      //
+      // The first version RETAINED the token (right — that keeps the cookie so
+      // a blip costs a retry) and MARKED it, expecting consumers to check the
+      // mark. That made the check OPT-IN, and the pass found what opt-in means
+      // in a real tree:
+      //
+      //   · `apps/meddoc-pro/src/lib/auth.ts` never reads the marker, so a
+      //     SUSPENDED doctor was served a patient chart;
+      //   · six account-control routes read `auth()` directly —
+      //     change-password, mfa/disable, delete-account, change-email,
+      //     mfa/enroll, verify-enrollment — so a FORCE-LOGGED-OUT attacker
+      //     could rotate the password (deleting every session but their own),
+      //     disable MFA, or delete the account.
+      //
+      // ⚠️ EVERY ONE OF THOSE REFUSED AT THE PARENT COMMIT. Returning null had
+      // made `auth()` yield nothing; marking-and-returning handed them a
+      // working session. The fix introduced the hole at callers it never
+      // opened — the same shape as round one's finding, one layer down.
+      //
+      // So the identity is withheld HERE, once, at the source. Every consumer
+      // already gates on `session.user.id` (`if (!userId) return 401`), so they
+      // all refuse with no edit — including the app this branch does not touch.
+      // The marker still rides along so `getSession` can turn the refusal into
+      // a truthful 503 rather than a silent "signed out".
+      //
+      // The cookie is untouched: the TOKEN was retained by the jwt callback.
+      // Withholding an identity is not ending a session.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((token as any)?.sessionVerifyFailed === true) {
+        if (session.user) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (session.user as any).id = undefined;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (session.user as any).role = undefined;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (session.user as any).practiceId = undefined;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (session.user as any).sessionId = undefined;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (session.user as any).sessionVerifyFailed = true;
+        }
+        return session;
+      }
+
       if (session.user && token) {
         session.user.id = token.id as string;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
