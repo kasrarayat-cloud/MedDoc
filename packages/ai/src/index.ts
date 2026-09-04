@@ -78,6 +78,7 @@ export {
   ICD10_EDITION,
   isValidIcd10,
   isIcd10Header,
+  billableDescendantsOf,
 } from './data/icd10-allowlist';
 export {
   CPT_ALLOWLIST,

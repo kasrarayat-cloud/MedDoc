@@ -1,7 +1,37 @@
 # `billableChildrenOf` — the repair ruling #149(f) named, now that its condition is met
 
 **Filed 2026-09-04 by the Data/Audit session, as the T8 follow-up.**
-**Status: FILED, NOT BUILT. Two clauses inside it are owner-shaped.**
+
+> **STATUS UPDATED 2026-09-04 — THE DERIVATION IS BUILT; THE TWO OWNER-SHAPED
+> CLAUSES ARE NOT.** `billableDescendantsOf` ships in
+> `packages/ai/src/data/icd10-allowlist.ts` **with no caller**, gated by
+> `gate-billable-descendants.test.ts` (17 assertions, 6 mutation arms proved).
+> Ratified for build by the owner, scoped explicitly to *"the #149(f) repair"*.
+>
+> **What is still NOT decided and was NOT touched:** clause (a), the reason-token
+> split in `icd-drops.ts`; and clause (b), whether the substitute chip ships at
+> all, which is parked under #148 and belongs to the Coding tab surface. Both
+> remain owner questions. Nothing in `icd-drops.ts`, `07a-icd-coding.ts` or the
+> Coding tab was edited by this work.
+>
+> ⚠️ **AND AN EARLIER DRAFT OF THIS BLOCK SAID #149(b) *FORBIDS* THE RENAME.
+> THAT IS FALSE ON BOTH HALVES, AND THE LABEL DECIDES THE ROUTING.** Measured
+> against the shipped code: `ICD_DROP_REASONS` holds exactly four tokens, one
+> per exit, and a header (`M54.5`) and a fabrication (`K58.3`) **already share
+> `not_in_verified_allowlist`** because both leave through the same exit —
+> `isValidIcd10` failing at `07a-icd-coding.ts:462`. A rename therefore merges
+> nothing; the partition stays four exits, four tokens, byte-identical. And
+> #149(b) is scoped to those FOUR EXITS, its cited precedent being five exits
+> collapsing into one bucket — it says nothing about SUB-DIVIDING one exit.
+> #149(e) explicitly *permits* the re-reading ("may be re-read as
+> `not_billable`"), so the earlier draft cited a ruling as a prohibition
+> against something a sibling clause allows.
+>
+> **The honest status is UNDECIDED — no ruled precedent covers the split.** That
+> distinction is not cosmetic: under AGENTS.md's standing-authority table, *"a
+> ruling forbids it"* closes an item, while *"no ruled precedent covers it"* is
+> **class (a)** and must reach the owner. Mislabelling it would have routed an
+> owner question into the wrong bucket, in the artifact the next session greps.
 
 ## Why this exists
 
@@ -92,23 +122,72 @@ wrong, and #149(b) is why.** There are now **two** distinguishable refusals:
   - a string that is not a code in any form (`K58.3`, `Z99.999`) — a
     fabrication or a typo, and there is nothing to offer.
 
-#149(b) ruled **"FOUR EXITS, FOUR REASON TOKENS, NEVER ONE BUCKET"**, citing the
-`notMentionedCount` collapse where a REFUSAL and an ABSENCE became one number.
-Renaming one token into `not_billable` merges exactly those two. **The honest
-move is a SPLIT, not a rename** — and splitting a shipped token is a ruling, not
-a refactor.
+⚠️ **AND THE FIRST DRAFT OF THIS SECTION GOT THE RULING WRONG.** It claimed
+#149(b) forbids the rename because renaming "merges exactly those two". Measured
+against the shipped code, **they are already merged**: both refusals leave
+through the SAME exit (`isValidIcd10` failing), so both already carry
+`not_in_verified_allowlist`, and `ICD_DROP_REASONS` is four tokens for four
+exits either way. A rename changes a label, not a partition.
+
+#149(b) — *"FOUR EXITS, FOUR REASON TOKENS, NEVER ONE BUCKET"* — is about the
+four EXITS, and its cited precedent is five exits collapsing into one bucket. It
+does not speak to sub-dividing a single exit. **So the split is UNDECIDED, not
+forbidden**, and #149(e) already *permits* the re-reading.
+
+**What remains genuinely owner-shaped is the PRODUCT question**, and it is worth
+stating plainly because it survives the correction: a header refusal is
+*actionable* (bill a descendant — and one always exists), while a fabrication
+refusal has nothing to offer. Those are different things to tell a doctor. Today
+they are one token and one message. Whether to separate them, and what the
+surface should say, is a decision about what the product claims — **class (a),
+no ruled precedent** — and this file does not make it.
 
 **(b) Whether the substitute chip ships at all.** #149(f) refused a product
 surface. The condition it named is met, which makes the surface *possible*; it
 does not make it *decided*. Where the coding surface lives is PARKED under #148
 and is an owner question.
 
+## What the built derivation actually guarantees, and what it does not
+
+Measured against the complete FY2026 release, all four re-derived for the build:
+
+| measurement | value | why it matters |
+|---|---|---|
+| headers with **zero** billable descendants | **0** | *"bill one of these"* is always answerable |
+| headers with **exactly one** | **45 (0.19%)** | each is a COMPLETE set of one rather than a truncated one — the property that was false before. By shape: 43 gain a 7th-character extension, **2 gain a 4th character carrying a distinct concept** (`I1A` → `I1A.0`, other → **resistant** hypertension; `U09` → `U09.9`). An earlier draft called all 45 "only a 7th-character extension", inferred from the majority rather than measured. |
+| billable codes with a billable descendant | **0** | billable codes are leaves, so a submittable code correctly offers no substitute |
+| dotted vs undotted prefix agreement | **242,114 pairs, 0 disagreements**, both directions | scanning the stored dotted form is *sound*, not merely convenient |
+
+⚠️ **THE FIRST ROW IS A POPULATION FACT ABOUT FY2026, NOT A PROPERTY OF
+ICD-10-CM**, and it re-arms on every future edition. The implementation still
+fails closed on the empty case and the gate asserts the fact explicitly, so an
+edition that breaks it says so loudly instead of silently producing empty
+substitute lists.
+
+⚠️ **AND `S82.62X`-SHAPED INPUT IS WHY THE FUNCTION REFUSES WHAT IT CANNOT
+CHARACTERISE.** 4,553 strings in FY2026 are a prefix of a billable code while
+being neither billable nor a header — **6,257 once the codes are dotted, which
+is the form the guard actually reads** (the extra 1,704 are `A00.`-shaped
+trailing-dot prefixes that exist only after a dot is inserted; an earlier draft
+quoted the undotted 4,553, a universe this module never sees). `S82.62X` alone
+prefixes sixteen. Those
+are exactly what you get by dropping a required 7th character, which is a
+plausible model or dictation error. Answering one would present a confident
+substitute list for a category that does not exist, so the function returns `[]`
+for any input that is not itself a known code.
+
+**Cost, measured rather than assumed:** +20 MB heap and ~0.3 ms for the first
+call (a sorted array built once at module load); ~1.5 µs per lookup; all 23,467
+headers resolve in 35 ms. The worker container sits ~220 MiB against a 1 GiB
+limit.
+
 ## What T8 already shipped toward this
 
 `isIcd10Header(code)` exists in `packages/ai/src/data/icd10-allowlist.ts` and
 **ships with no caller**, the same way #148(b) and #149 did. It is the predicate
 the split in (a) would key on. Nothing reads it, so nothing changes until
-somebody rules that it should.
+somebody rules that it should. `billableDescendantsOf` now sits beside it on the
+same terms.
 
 ## ⚠️ SIX LIVE COMMENTS NOW ASSERT A FALSE PREMISE — and they are not this session's to edit
 
