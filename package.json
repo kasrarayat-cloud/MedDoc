@@ -23,6 +23,8 @@
     "seed:e2e-admin": "npm run seed:e2e-admin -w meddoc-pro",
     "eval:doc-editor": "npm run eval:doc-editor -w meddoc-pro",
     "eval:clinical-notes": "npm run eval:clinical-notes -w meddoc-pro",
+    "data:icd10": "node scripts/data/build-icd10cm.mjs",
+    "data:icd10:check": "node scripts/data/build-icd10cm.mjs --check",
     "db:generate": "npm run generate -w @meddoc/db",
     "db:migrate:deploy": "npm run migrate:deploy -w @meddoc/db",
     "db:migrate:status": "npm run migrate:status -w @meddoc/db",

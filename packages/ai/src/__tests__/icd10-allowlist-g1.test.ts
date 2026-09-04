@@ -80,7 +80,10 @@ describe('G1 — Site-specific abdominal pain (R10.1x / .3x)', () => {
 
 describe('G1 — Personal-history Z-codes (Z86.7x)', () => {
   it.each([
-    ['Z86.71', 'history of VTE / PE'],
+    // ⚠️ 'Z86.71' REMOVED by T8 — it is a category HEADER (flag=0 in
+    // icd10cm_order_2026.txt), not valid for submission. Its two billable
+    // children were already on the very next lines, so nothing is lost: the
+    // row asserted a code that could never be billed.
     ['Z86.711', 'history of PE specifically'],
     ['Z86.718', 'history of other venous thrombosis'],
     ['Z86.73', 'history of TIA / cerebral infarction w/o residual'],
@@ -152,6 +155,10 @@ describe('G1 — Allowlist sanity (no regressions)', () => {
     // is the deduped count. Guard against a future copy-paste error
     // that introduces a duplicate (which would silently lower the
     // count and might hide a real drop elsewhere).
+    // ⚠️ Same caveat as the 540 floor in icd10-allowlist-procedure-dominant:
+    // against 74,719 codes this cannot detect the duplicate-collapse it names.
+    // The exact-count + digest assertions in icd10-fy2026-ingestion.test.ts
+    // are what actually guard that now.
     expect(ICD10_ALLOWLIST.size).toBeGreaterThan(450);
   });
 });

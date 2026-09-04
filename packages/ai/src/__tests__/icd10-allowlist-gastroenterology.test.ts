@@ -29,7 +29,10 @@ const GI_COHORT: Record<string, readonly string[]> = {
   'colonoscopy findings + surveillance drivers': [
     'K63.5',
     'D12.0', 'D12.1', 'D12.2', 'D12.3', 'D12.4', 'D12.5', 'D12.6', 'D12.7', 'D12.8',
-    'Z86.010', 'Z80.0',
+    // ⚠️ WAS 'Z86.010'. It is a category HEADER, not billable — so this cohort,
+    // in the same file that asserts headers must be refused, was admitting one.
+    // The surveillance interval is driven by these four billable children.
+    'Z86.0100', 'Z86.0101', 'Z86.0102', 'Z86.0109', 'Z80.0',
   ],
   'inflammatory bowel disease (was uncovered entirely)': ['K50.90', 'K51.90'],
   'GI bleeding + anorectal': ['K92.1', 'K92.2', 'K62.5', 'K64.0', 'K64.1', 'K64.8', 'K64.9'],
@@ -38,7 +41,11 @@ const GI_COHORT: Record<string, readonly string[]> = {
     'K22.70', 'K22.710', 'K22.711', 'K22.719',
     'K20.0', 'B96.81', 'K29.70', 'K31.89',
   ],
-  'functional + half-covered families': ['K58.1', 'K58.2', 'K58.3', 'K58.9', 'K57.32', 'R19.7'],
+  // ⚠️ 'K58.3' WAS HERE AND IS NOT AN ICD-10-CM CODE. The allowlist entry it
+  // mirrored was commented "Other irritable bowel syndrome" — which is **K58.8**.
+  // So the phantom was admitted AND the real code was never carried: a gap that
+  // read as coverage in the one file written to stop exactly that.
+  'functional + half-covered families': ['K58.1', 'K58.2', 'K58.8', 'K58.9', 'K57.32', 'R19.7'],
   hepatology: ['K74.60'],
 };
 
@@ -57,7 +64,10 @@ describe('GI ICD-10 cohort — every code is allowed', () => {
     // Assert what we COUNTED, not only what we found: a cohort that shrank to
     // nothing would satisfy every filter above while checking nothing.
     const all = Object.values(GI_COHORT).flat();
-    expect(all.length, 'GI cohort collapsed — the loops above check nothing').toBe(38);
+    // 38 -> 41: Z86.010 (one header) was replaced by its FOUR billable
+    // children; K58.3 -> K58.8 is one-for-one. The count is re-derived, not
+    // relaxed — a floor here would let the cohort shrink silently.
+    expect(all.length, 'GI cohort collapsed — the loops above check nothing').toBe(41);
     for (const c of all) {
       expect(isValidIcd10(c), `${c} rejected by isValidIcd10`).toBe(true);
       expect(isValidIcd10(c.toLowerCase()), `${c} lowercase must normalise`).toBe(true);
@@ -93,6 +103,10 @@ describe('NON-BILLABLE CATEGORY HEADERS ARE REFUSED — the defect this file mad
   const HEADERS_THAT_MUST_NOT_BE_ALLOWED: ReadonlyArray<readonly [string, string]> = [
     ['K21.0', 'expanded FY2023 into K21.00 / K21.01'],
     ['K22.7', 'expanded FY2017 into K22.70 / K22.710 / K22.711 / K22.719'],
+    // ⚠️ ADDED BY T8, AND IT WAS IN THIS FILE'S OWN COHORT UNTIL NOW. This
+    // block already stated the rule; the cohort above broke it. Pinning the
+    // header here makes the file agree with itself.
+    ['Z86.010', 'expanded into Z86.0100 / .0101 / .0102 / .0109'],
   ];
 
   for (const [header, why] of HEADERS_THAT_MUST_NOT_BE_ALLOWED) {
