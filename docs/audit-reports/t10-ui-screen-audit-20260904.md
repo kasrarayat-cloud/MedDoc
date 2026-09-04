@@ -1,175 +1,222 @@
-# T10 — every-screen UI audit, first pass
+# T10 — every-screen UI audit
 
-**Run 2026-09-04 by the Data/Audit session. READ-ONLY: no code was changed by this item.**
+**Run 2026-09-04 by the Data/Audit session. READ-ONLY: no product code was changed.**
 **Filed for the UI/design session. Nothing here is actioned by the auditing session.**
 
 Walked the isolated **`meddoc-qa`** stack (`127.0.0.1:9020`), never production. QA posture
-was asserted before the walk with `scripts/check-qa-mock-posture.sh`:
-`MOCK_AI_CALLS=true` in both live containers, every vendor key a dummy, DB
-`meddoc_qa_test`. The walk signs up a **fresh synthetic user** and seeds its own
-visits, so no existing record — synthetic or otherwise — was read or mutated.
+was asserted first with `scripts/check-qa-mock-posture.sh`: `MOCK_AI_CALLS=true` in both
+live containers, every vendor key a dummy, DB `meddoc_qa_test`. The walk signs up
+**fresh synthetic users** and seeds their own visits, so no existing record was read or
+mutated.
+
+**26 screens censused**, including all six `/admin/*` (as a real `SUPER_ADMIN`), a
+`FAILED` visit, an open dialog, four unauthenticated screens and four mobile viewports.
 
 ---
 
-## ⚠️ READ THIS BEFORE THE FINDINGS: three of the five classes are UNMEASURED
+## ⚠️ THIS REPORT SUPERSEDES ITS OWN FIRST DRAFT — 3 of 5 findings were mine, not the app's
 
-The item named five defect classes. Two produced trustworthy results, three did not,
-and saying which is which is the point of this section. **A class reported as "0
-findings" by a detector nobody has seen fire is not a clean bill of health.**
+The first pass of this audit reported **5 contrast violations**. **Three of them do not
+exist.** They are recorded here rather than quietly dropped, because the correction is
+more useful than the original claim.
 
-| class | status | why |
-|---|---|---|
-| **contrast** | ✅ **MEASURED** — 5 findings | detector positive-controlled: 3 planted offenders at 4.48 / 1.92 / 1.00:1 all caught, with correct ratios |
-| **dead controls** | ✅ **MEASURED** — 0 findings, a *controlled* zero | a planted `<a href="#">` was caught, so the zero is a fact about the app |
-| **black-frame** | ❌ **UNMEASURED** | see below — the detector cannot tell a dark theme from an artifact |
-| **old-design remnants** | ⚠️ **CANDIDATES ONLY** | the detector flags the design system itself; needs adjudication |
-| **lying labels** | ⚠️ **COLLECTED, NOT ADJUDICATED** | 218 label/behaviour pairs captured; judging them is not something the collector can do |
+The contrast detector resolved a text node's background by walking ancestors for the
+first opaque `background-color`. **It ignored `background-image`.** The user avatars on
+`/admin/users` are painted with a *light* `linear-gradient` over a transparent
+background-color, so the walk went straight past the gradient to the dark page
+background and compared dark text against it — producing **12 confident "1.06:1"
+violations on invisible text that renders perfectly well.**
 
-### Why "black-frame" is unmeasured rather than clean
+Verified against the live element before changing anything:
 
-The detector flagged any large box with a near-black fill (`luminance < 0.02`). It
-returned **34 hits across 23 routes — and all 34 are the design system's own dark
-surfaces**: `rgb(18,22,30)`, `rgb(22,27,36)`, `rgb(30,37,48)` and the `--color-linear-bg`
-token `#08090a` itself. In a dark-themed app that threshold cannot discriminate.
+```
+div.flex.h-full.w-full   backgroundColor: rgba(0, 0, 0, 0)
+                         backgroundImage: linear-gradient(135deg, rgb(185,178,217), …)
+```
 
-**Reporting those 34 as defects would have been a false alarm; reporting "0 real
-black frames" would have been a false clean.** The class is real — this repo carries a
-live branch named `fix/t3-signed-note-black-frame` — so the correct next step is to take
-the signature from that branch's actual defect (most likely *a surface-coloured box where
-CONTENT is expected*, i.e. large + zero text + zero children) and re-run. The collector
-already records `textLen` per hit, so that refinement is small.
-
-### Why "old-design remnants" is candidates only
-
-The detector compares every rendered colour against the resolved `--color-linear-*`
-palette. **Only 22 of 37 declared token names resolve on `:root`** — Tailwind v4's
-`@theme` prunes unused tokens — and much of the real palette is defined in component
-classes (`.qm-c3-*`, `.qm-rounds-*`) rather than as tokens at all. So the top "legacy"
-hits are the app's own foreground (`231,235,241`), muted text (`124,134,148`) and border
-(`44,52,66`) colours. **The detector is flagging the design system.**
-
-**One candidate does survive that objection and is worth a human look:**
-
-> `button.qm-rounds-btn-primary` renders `background: rgb(91,91,214)` — indigo `#5B5BD6` —
-> on **22 of 23 routes**. The recorded design system is *"dark #08090a, sage #7AA68C"*.
-> A primary button that is not the accent colour is either a deliberate Linear-style
-> accent or exactly the remnant class this item is hunting. **I cannot tell from the
-> outside, and guessing is how a false finding gets filed.**
+**A gradient has no single background colour, so there is no honest ratio to report.**
+The detector now returns *undeterminable* for those nodes and **counts them** — 112
+across 26 screens — instead of inventing a number. That count is the report's own
+`incomplete` bucket, and it is stated rather than hidden (canon 67: *a scanner's
+`incomplete` is not a pass*).
 
 ---
 
-## The findings that ARE measured
+## Findings
 
-### Contrast — 5 violations of WCAG AA, all on small text
+### Contrast — 2 violations, both surviving the corrected instrument
 
-Ratios computed in-page against the first opaque ancestor background — which is the
-step axe declines to take, and why its `incomplete` bucket hides the worst offenders
-(canon 67, *"A SCANNER'S `incomplete` IS NOT A PASS"*).
+| screen | ratio | needs | size | colours | text |
+|---|---|---|---|---|---|
+| `visit-SIGNED` | **3.43:1** | 4.5:1 | 12.5px | `rgb(130,137,149)` on `rgb(252,252,250)` | **"View the original transcript"** |
+| `visit-READY` | **3.76:1** | 4.5:1 | 10px | `rgb(124,134,148)` on `rgb(37,45,58)` | `🔒` |
 
-| screen | ratio | needs | size | colours | selector | text |
+⚠️ **The first row is the one to fix.** It is a **functional, labelled control on a signed
+clinical note** — the document a doctor is legally attesting to — and it is the only
+finding here on a real action rather than an ornament. The second is a 10px lock glyph.
+
+### Tap targets — 3 primary navigation links are 20px tall on mobile
+
+WCAG 2.5.5 asks for 44×44 CSS px. Measured at a 390×844 mobile viewport:
+
+| link | size | selector | seen on |
+|---|---|---|---|
+| `Board` | **36x20px** | `a.qm-rounds-topbar-link` | 15 screens, 4 mobile |
+| `Patients` | **48x20px** | `a.qm-rounds-topbar-link` | 15 screens, 4 mobile |
+| `Settings` | **49x20px** | `a.qm-rounds-topbar-link` | 15 screens, 4 mobile |
+
+All three are the **primary top-bar navigation**, so this is every mobile screen's main
+way of moving around the app. (The `sr-only` "Skip to main content" link also measures
+1×1 and is **excluded by design** — that is the standard visually-hidden pattern, and
+flagging it would be a false positive on an accessibility *feature*.)
+
+### Black frames — 0, and this zero is proven
+
+The pass-1 detector flagged **34** and every one was a false positive: it caught the
+design system's own dark surfaces (`rgb(18,22,30)`, `rgb(22,27,36)`, `rgb(30,37,48)`).
+Refined to the real signature — *large, dark, and empty of any content* — and re-proved
+with **three negative controls**: a themed surface with text, a light empty box, and an
+empty `<textarea>`. All three must stay unflagged; the planted black box must be caught.
+
+⚠️ **The empty-textarea arm exists because the refined detector's only hit across 26
+screens was `textarea#nf-paste`** — a working input, which matches "empty" by definition.
+
+### Dead controls — 0, and this zero is proven
+
+Across **~330 interactive elements on 26 screens**: no anchor with a missing, empty, `#`
+or `javascript:void(0)` destination, and no control lacking both an accessible name and
+an icon. A planted `<a href="#">` is caught, so the zero is a fact about the app.
+
+⚠️ **Honest limit:** it deliberately does not try to prove a button has a handler. React
+attaches via delegation, so an absent inline `onclick` proves nothing.
+
+### Old-design remnants — one question, not a finding
+
+The detector compares rendered colours against the resolved `--color-linear-*` palette.
+Only **22 of 37** token names resolve on `:root` (Tailwind v4's `@theme` prunes unused
+ones) and much of the real palette lives in component classes, so its top hits are the
+app's own foreground and border colours. **The detector flags the design system.** One
+candidate survives that objection:
+
+> `button.qm-rounds-btn-primary` renders **`#5B5BD6` indigo** on nearly every screen,
+> while the recorded design system is *"dark #08090a, sage #7AA68C"*. Deliberate accent,
+> or remnant? **An outside measurement cannot settle it, and guessing is how a false
+> finding gets filed.**
+
+### Dialogs — 1 opened, correctly labelled
+
+Only one modal was reachable by a non-destructive trigger: **Settings → "Change"** (email
+change). It carries `aria-labelledby`. ⚠️ It does **not** set `aria-modal`, which is worth
+a look but is not a defect on its own.
+
+**Why only one:** triggers are filtered by a deny list — nothing that could sign, delete,
+archive, send, discard or revoke is ever clicked, even on synthetic data. Most dialogs in
+this product sit behind exactly those verbs. **31 components match `Dialog|Modal|Drawer`,
+so dialog coverage remains largely open**, and closing it needs a human deciding which
+triggers are safe to exercise.
+
+---
+
+## Per-screen census
+
+| screen | contrast | undeterminable | black-frame | dead | tap<24px | controls |
 |---|---|---|---|---|---|---|
-| `settings-mfa` | **4.18:1** | 4.5:1 | 10.5px | `rgb(124, 134, 148)` on `rgb(30,37,48)` | `span` | "2" |
-| `settings-mfa` | **4.18:1** | 4.5:1 | 10.5px | `rgb(124, 134, 148)` on `rgb(30,37,48)` | `span` | "3" |
-| `visit-READY` | **3.76:1** | 4.5:1 | 10px | `rgb(124, 134, 148)` on `rgb(37,45,58)` | `span.qm-rounds-strip-dot` | "🔒" |
-| `visit-SIGNED` | **3.43:1** | 4.5:1 | 12.5px | `rgb(130, 137, 149)` on `rgb(252,252,250)` | `span` | "View the original transcript" |
-| `visit-record` | **3.76:1** | 4.5:1 | 10px | `rgb(124, 134, 148)` on `rgb(37,45,58)` | `span.qm-rounds-strip-dot` | "🔒" |
-
-**⚠️ The `visit-SIGNED` row is the one to fix first.** *"View the original transcript"*
-at **3.43:1** is a functional control on a **signed clinical note** — the document a
-doctor is legally attesting to — and it is the only finding here on a real, labelled,
-user-facing action rather than an ornament or a step number. The other four are a lock
-glyph and two step numerals at 10–10.5px.
-
-### Dead controls — 0, and this zero is controlled
-
-Across **218 interactive elements on 21 distinct screens**: no anchor with a missing,
-empty, `#` or `javascript:void(0)` destination, and no control lacking both an
-accessible name and an icon. The detector caught a planted `<a href="#">`, so it works.
-
-⚠️ **Honest limit:** it deliberately does NOT try to prove a button has a click handler.
-React attaches via delegation, so an absent inline `onclick` proves nothing, and a
-detector that flagged it would produce noise on every screen. **A control that is wired
-but wired to the wrong thing is the "lying labels" class, and that is not settled here.**
+| `admin` | 0 | 1 | 0 | 0 | 0 | 13 |
+| `admin-hipaa` | 0 | 1 | 0 | 0 | 0 | 12 |
+| `admin-queues` | 0 | 1 | 0 | 0 | 0 | 1 |
+| `admin-threats` | 0 | 1 | 0 | 0 | 0 | 10 |
+| `admin-usage` | 0 | 2 | 0 | 0 | 1 | 9 |
+| `admin-users` | 0 | 21 | 0 | 0 | 0 | 9 |
+| `anon-forgot-password` | 0 | 2 | 0 | 0 | 1 | 3 |
+| `anon-login` | 0 | 2 | 0 | 0 | 2 | 4 |
+| `anon-signup` | 0 | 2 | 0 | 0 | 4 | 6 |
+| `board` | 0 | 4 | 0 | 0 | 3 | 9 |
+| `check-email` | 0 | 2 | 0 | 0 | 1 | 3 |
+| `dlg-settings:Change` | 0 | 1 | 0 | 0 | 3 | 28 |
+| `mobile-board` | 0 | 4 | 0 | 0 | 3 | 9 |
+| `mobile-patients` | 0 | 4 | 0 | 0 | 3 | 7 |
+| `mobile-settings` | 0 | 1 | 0 | 0 | 3 | 25 |
+| `mobile-visits` | 0 | 4 | 0 | 0 | 3 | 8 |
+| `patients-list` | 0 | 4 | 0 | 0 | 3 | 7 |
+| `settings` | 0 | 1 | 0 | 0 | 3 | 25 |
+| `settings-mfa` | 0 | 1 | 0 | 0 | 3 | 7 |
+| `settings-note-format` | 0 | 4 | 0 | 0 | 3 | 25 |
+| `visit-FAILED` | 0 | 4 | 0 | 0 | 3 | 8 |
+| `visit-READY` | 1 | 16 | 0 | 0 | 4 | 16 |
+| `visit-SIGNED` | 1 | 20 | 0 | 0 | 3 | 15 |
+| `visits-list` | 0 | 4 | 0 | 0 | 3 | 8 |
+| `visits-new` | 0 | 3 | 0 | 0 | 3 | 8 |
+| `waitlist` | 0 | 2 | 0 | 0 | 1 | 3 |
 
 ---
 
-## Coverage — what was walked, and what was NOT
+## Coverage
 
-**21 distinct screens captured**, 23 screenshots at 1440×900 (full-page).
-
-| walked | |
+| covered | |
 |---|---|
-| unauthenticated | `/login`, `/signup`, `/forgot-password`, `/` (→ login) |
-| pre-auth flow | `/check-email`, `/waitlist` |
+| unauthenticated | `/login`, `/signup`, `/forgot-password` |
+| pre-auth | `/check-email`, `/waitlist` |
 | app | `/board`, `/visits`, `/visits/new`, `/patients`, `/settings`, `/settings/note-format`, `/settings/security/mfa` |
-| visit states | READY, SIGNED, PROCESSING (seeded synthetic) |
+| **admin (as SUPER_ADMIN)** | `/admin`, `/usage`, `/users`, `/queues`, `/hipaa`, `/threats` — all **200** |
+| visit states | READY, SIGNED, **FAILED** |
+| mobile 390×844 | board, visits, patients, settings |
 
-### ⚠️ NOT covered — named so nobody reads this as a full sweep
+### Still NOT covered
 
-1. **All six `/admin/*` screens returned 404 and were never rendered.** The audit user is
-   a `DOCTOR`; admin is gated on `SUPER_ADMIN` + `mfaEnabled` + 12h session freshness.
-   What is in the census for those rows is the **404 page, six times**.
-2. **`/visits/[id]/record` was never seen.** It redirects to the visit page for a READY
-   visit. Reaching it needs a visit in a recordable state.
-3. **`/dashboard` is not a distinct screen** — it redirects to `/board` under this skin.
-   ⚠️ An earlier run of this collector listed `/login`, `/signup`, `/forgot-password` and
-   `/dashboard` as authenticated routes; **all four redirected to `/board`, so it captured
-   the same screen four times and audited zero unauthenticated screens.** Corrected by
-   walking them in a genuinely anonymous browser context. Recorded because the failure
-   was invisible in the output — four rows, four screenshots, one screen.
-4. **Mobile viewports were not walked.** Desktop 1440×900 only.
-5. **No modal, drawer, dialog or error state was opened.** 31 components in the tree match
-   `Dialog|Modal|Drawer|Sheet`; a walk that only visits routes sees none of them.
-6. **No `FAILED`-state visit was rendered**, though QA holds 18 of them.
+1. **Dialog states beyond one** — see above; 31 candidate components.
+2. **`/visits/[id]/record`** redirects for a READY visit; needs a recordable state.
+3. **Error and empty states** — no 500, no network-failure, no empty-list rendering.
+4. **Keyboard-only and focus-visible traversal** — not attempted.
+5. **`/dashboard` is not a distinct screen** — it redirects to `/board`.
+
+⚠️ Pass 1 listed `/login`, `/signup`, `/forgot-password` and `/dashboard` as
+*authenticated* routes. **All four redirect to `/board` for a signed-in user**, so it
+captured the same screen four times and audited zero unauthenticated screens — invisible
+in the output, which showed four rows and four screenshots. They are now walked in a
+genuinely anonymous context.
 
 ---
 
-## ⚠️ THE SCREENSHOTS ARE NOT ATTACHED, AND THAT IS DELIBERATE
+## ⚠️ The screenshots are not attached, and that is deliberate
 
-The item asked for a *screenshot inventory*. **23 full-page screenshots were captured
-(2.7 MB) and they are NOT in this commit.** Three of them — `visit-SIGNED.png`,
-`visit-READY.png`, `visit-record.png` — are full-page renders of a **clinical note**.
-
-AGENTS.md is unambiguous and does not leave this to judgement:
+Full-page renders of a **clinical note** were captured. AGENTS.md:
 
 > *"A filled clinical export outside a sanctioned path is treated as PHI — regardless of
 > whether the patient is real or synthetic. **The posture does not depend on knowing
-> which**, because by the time you are asking, the file already exists somewhere it
-> should not."*
+> which.**"*
 
-A committed render of a signed note is the same class as a committed filled `.docx`,
-and that class has already cost this repository **two full `filter-repo` history
-rewrites** — the second one ~200× the first, purely because it sat longer. The visits
-here were seeded synthetic and the account was a fresh signup, so the *content* is
-almost certainly harmless. **"Almost certainly harmless" is not the standard the rule
-sets**, and a screenshot is not made safe by the auditor's confidence about what is in it.
-
-**What is preserved instead:** every number in this report is derived from the DOM, not
-from a picture, and the section above records exactly how to re-derive each one. The
-findings do not depend on the images. The images were reaped with the scratch worktree.
-
-If the design session wants the visuals, the right move is to re-run the collector
-locally against QA and look at them **without committing them** — the walk takes 50
-seconds.
+That class has already cost this repository **two `filter-repo` history rewrites**. Every
+number in this report is derived from the DOM rather than from a picture, and the section
+below records how to re-derive each one. The images were shredded with the scratch tree.
 
 ## How to re-run
 
-The collector is **not committed** — this item forbids code changes, and a throwaway
-harness in the tree is a maintenance liability. It lived in a scratch worktree and was
-reaped. What matters for reproduction is recorded here:
+The collector is **not committed** — this item forbids product-code changes, and a
+throwaway harness in the tree is a maintenance liability. What matters for reproduction:
 
-- signs up via `tests/e2e/helpers/signup.ts`, seeds via `helpers/seedVisitStates.ts`
-- one `page.evaluate` per route computing all five classes from the CSSOM
-- **the positive control must import the same census string, not re-read it off disk.**
-  An earlier control extracted it as raw file text; the template literal's escapes were
-  left unprocessed, the `rgb()` regex could not match, and **every detector reported
-  zero**. That verdict was a fact about the control, and it very nearly got recorded as
-  "the detectors are broken". *A refusal caused by your own substitution is evidence
-  about your substitution.*
+- `tests/e2e/helpers/signup.ts` → fresh user; `helpers/admin.ts` `promoteToSuperAdmin()`
+  → grants `SUPER_ADMIN` **and** `mfaEnabled`, which is what makes `/admin/*` render;
+  `helpers/seedVisitStates.ts` → READY/SIGNED/PROCESSING.
+- one `page.evaluate` per screen computing every class from the CSSOM.
+- **the positive control must import the same census string, not re-read it from disk.**
 
-## Suggested order for whoever picks this up
+### Three instrument defects, each caught by controlling a zero
 
-1. `visit-SIGNED` contrast on *"View the original transcript"* — 3.43:1, signed-note surface.
-2. Decide the `#5B5BD6` primary-button question; it is one answer that settles 22 screens.
-3. Re-point the black-frame detector using the real signature from `fix/t3-signed-note-black-frame`.
-4. Extend coverage to admin (needs a `SUPER_ADMIN` fixture), modals, mobile, and `FAILED` visits.
+Every one would have produced a confident, wrong report:
+
+1. **The gradient blindness above** — 12 fabricated violations.
+2. **`getComputedStyle(el)[i]` does not enumerate custom properties in Chromium.** The
+   token reader found 0 tokens on every route, then skipped the whole legacy-colour check
+   behind an `if (size > 0)` — emitting an empty finding list that read as a clean result.
+3. **A single-escaped `\(` inside a template literal collapses to `(`.** The colour regex
+   then captured `"(255, 255, 255"`, `parseFloat` returned `NaN`, and **every comparison
+   silently went false** — including the luminance filter, since `NaN > 0.06` is false. A
+   *light* empty box would have been reported as a black frame. Only a negative control
+   aimed at the opposite answer could see it, which is why one now exists.
+
+## Suggested order
+
+1. `visit-SIGNED` — "View the original transcript" at 3.43:1, on a signed clinical note.
+2. The three 20px mobile nav links.
+3. Decide the `#5B5BD6` primary-button question; one answer settles every screen.
+4. Extend to dialogs (needs a human safety call on triggers), error states, keyboard.
