@@ -2250,14 +2250,49 @@ hazard**: a session that reads a two-hour queue as a stuck run will cancel
 somebody's evidence to "clear" it, and the cancellation is the only irreversible
 thing in the situation.
 
-**HOW TO TELL THEM APART, and it is two commands:**
+**HOW TO TELL THEM APART — AND THE FIRST VERSION OF THIS SECTION GOT IT WRONG,
+WHICH IS WHY THE SPECIMEN IS ITS OWN FALSE POSITIVE.**
 
+⚠️ **NEVER ASK WITH A LIMIT. ASK WITH A STATUS.** `gh run list --limit N`
+returns the N MOST RECENT runs, so a long queue evicts the in-progress ones from
+the window entirely — and the answer comes back `in_progress: 0` with no
+warning that it counted the wrong universe.
+
+    # ✅ the world
+    gh run list --status in_progress --limit 30 --json name,headBranch,createdAt
     gh api repos/<owner>/<repo>/actions/runners --jq '.runners[]|"\(.name) busy=\(.busy) \(.status)"'
-    gh run list --limit 30 --json status --jq '[.[]|select(.status!="completed")]|length'
 
-A runner `online` and `busy` with a deep queue is saturation — **wait**. A
-runner `offline`, or `busy` with nothing progressing for longer than the job's
-`timeout-minutes`, is a genuine wedge.
+    # ⛔ the window — this CANNOT answer the question it looks like it answers
+    gh run list --limit 40 --json status --jq '[.[]|select(.status!="completed")]|length'
+
+**AND CONFIRM ON THE BOX, because the API describes slots and the box describes
+work:**
+
+    ps -eo pid,etimes,rss,comm --sort=-etimes | grep -E 'Runner\.(Listener|Worker)'
+    uptime          # load average
+    systemctl list-units 'actions.runner*' --all
+
+**Two live `Runner.Worker` processes and a load average near the core count is a
+box DOING WORK.** Zero workers, services `active`, and a deep queue that has not
+moved past any job's `timeout-minutes` is a genuine wedge.
+
+#### ⚠️ THE DISCRIMINATOR'S FIRST REAL USE WAS A FALSE POSITIVE, FROM ITS OWN COMMAND
+
+**2026-09-04, hours after this section was written.** A session read
+`busy=true, busy=true` on both runners alongside `in_progress: 0` from the
+`--limit 40` form above, and concluded a genuine wedge. It was saturation. The
+window held 22 completed + 18 queued and had evicted the one in-progress run,
+which was **38 minutes into an `e2e`**.
+
+⚠️ **THE COST OF ACTING ON IT WOULD HAVE BEEN THE TWO LIVE JOBS.** Recovery was
+authorised on the standing rule that restarting runner services is safe *when
+zero jobs are executing*. That rule was sound; the measurement of *zero* was
+not. Read-only diagnosis first is what caught it: memory, balloon and unit were
+clean, and then `ps` showed two `Runner.Worker` processes and a load of 2.48 —
+a box working, not a box stuck.
+
+**So: READ-ONLY DIAGNOSIS BEFORE ANY INFRASTRUCTURE ACT, always, and the
+diagnosis is not complete until the BOX agrees with the API.**
 
 ⚠️ **AND A JOB'S `timeout-minutes` COUNTS QUEUE TIME, WHICH IS ALREADY A FILED
 DEFECT.** A job that waits ninety minutes for the lane and then runs for five can
