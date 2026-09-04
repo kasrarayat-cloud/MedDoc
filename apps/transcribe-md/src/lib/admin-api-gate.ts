@@ -75,12 +75,40 @@ export function adminApi(
     // after a SUPER_ADMIN revocation. Cheap (indexed PK lookup).
     const userRow = await prisma.user.findUnique({
       where: { id: sessionOrNull.user.id },
-      select: { products: true, isActive: true },
+      select: { products: true, isActive: true, mfaEnabled: true },
     });
     if (!userRow || !userRow.isActive) return notFoundResponse();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const products = (userRow.products as any[] | undefined) ?? [];
     if (!products.includes(Product.SUPER_ADMIN)) return notFoundResponse();
+
+    // ── MFA PARITY WITH THE PAGE GATE ────────────────────────────────────
+    // `app/admin/layout.tsx:69-86` requires MFA before any /admin/* PAGE
+    // renders, and its own comment says that closes shadow-audit
+    // HIPAA_FINDING_001. This gate did not check it at all: measured
+    // `grep -ci mfa admin-api-gate.ts` -> 0, positive-controlled against the
+    // page gate. So every one of the 29 /api/admin/* endpoints — including the
+    // 12 POSTs that suspend, soft-delete, force-logout, reset a password and
+    // grant or revoke SUPER_ADMIN — was reachable by a session the pages
+    // refuse. The control existed on one door of two.
+    //
+    // ⚠️ READ FRESH FROM THE DB, NEVER FROM THE JWT, for the same reason the
+    // page gate states: enrolment happens IN-SESSION, so a cached flag is stale
+    // exactly when it matters — the moment an operator enrols to get in.
+    // It costs no extra query; `mfaEnabled` rides the row already being read.
+    //
+    // ⚠️ THIS LOCKS OUT EVERY SUPER_ADMIN WHO HAS NOT ENROLLED, AND THAT IS
+    // SURVIVABLE ONLY BECAUSE ENROLMENT IS NOT BEHIND THIS GATE. Verified:
+    // /settings/security/mfa and all three routes it calls — /api/mfa/enroll,
+    // /api/mfa/verify-enrollment, /api/mfa/disable — carry no `adminApi`
+    // wrapper, so the recovery path stays open. Measured on production
+    // 2026-09-04: 3 SUPER_ADMIN accounts, 0 with MFA enrolled, so this
+    // genuinely closes the surface until somebody enrols. That is the point;
+    // the pages already refuse them.
+    //
+    // Silent 404 like every other refusal here — same disclosure-minimising
+    // posture, deliberately consistent rather than a special case.
+    if (!userRow.mfaEnabled) return notFoundResponse();
 
     // Phase 19 — h16-admin-session-7day. Reject admin API calls on
     // sessions older than 12 h even though the cookie stays valid
