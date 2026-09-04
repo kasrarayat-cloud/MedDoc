@@ -312,9 +312,39 @@ This migration policy is also embedded in `docs/REMODEL_PHASE1_PLAN.md` as the o
 
 ---
 
-## H. Clinician tokens (PHASE 2 — the chosen direction)
+## H. Clinician tokens — ⚠️ **NOT SHIPPED. HISTORICAL.** (was: "PHASE 2 — the chosen direction")
 
-Added to `apps/transcribe-md/src/app/globals.css` on 2026-04-29 as the start of Phase 2. Source of truth: `docs/design-directions-v3/clinician/{landing-and-recording,dashboard,visit-detail}.html` — tokens ported 1:1 from the mockups' `:root` blocks.
+> ⚠️ **THIS SECTION DESCRIBES A DIRECTION THAT NEVER REACHED THE PRODUCT, AND IT
+> IS THE MOST MISREADABLE PAGE IN THIS FILE.** It is accurate about the Clinician
+> mockups and it is not a description of anything a user can see. A reader
+> arriving at *"sage (primary accent)"* below, in a file whose title is
+> "Design Tokens", will build sage — and the shipping accent is the Rounds
+> indigo `#5B5BD6`.
+>
+> **Measured on `main`, 2026-09-04, each with a positive control:**
+>
+> | probe | result | control |
+> |---|---|---|
+> | `.qm-cl-app` (this section's root class) in `src/` | **0 files** | `qm-rounds-` → **60 files** |
+> | any `qm-cl-` class in `src/**/*.tsx` | **0 files** | same |
+> | `--color-clinician-*` in `globals.css` | **0** | `color-linear-sage` → present |
+>
+> So the sentence that used to open this section — *"Added to
+> `apps/transcribe-md/src/app/globals.css` on 2026-04-29"* — **is no longer
+> true**: those tokens are not in that file, and the root class that would scope
+> them is emitted nowhere.
+>
+> **THE SHIPPING TOKENS ARE IN `docs/design-tokens.md`** (lowercase), whose
+> `--rounds-accent | #5B5BD6 | primary actions, focus rings` row is correct.
+>
+> ⚠️ **CORRECTED BY MARKING, NOT BY REWRITING.** The obvious edit — swap sage for
+> indigo here — was rejected: it would make a section that is *truthful about the
+> Clinician mockups* into one that is false about them, and would destroy the
+> record of a direction that was genuinely chosen and genuinely dropped. What was
+> wrong was never the colour; it was the **absence of a status**. Ruling: build in
+> Rounds tokens, map by role — a design colour maps to every token role it plays.
+
+Added to `apps/transcribe-md/src/app/globals.css` on 2026-04-29 as the start of Phase 2, and **since removed**. Source of truth for the mockups: `docs/design-directions-v3/clinician/{landing-and-recording,dashboard,visit-detail}.html` — tokens ported 1:1 from the mockups' `:root` blocks.
 
 ### Architecture
 
@@ -351,7 +381,7 @@ Tailwind utilities: `bg-clinician-cream`, `bg-clinician-cream-card`, `bg-clinici
 | `--color-clinician-ink-3` | `--ink-3` | `#8A8278` | Tertiary — labels / captions |
 | `--color-clinician-ink-4` | `--ink-4` | `#B5AE9F` | Muted — placeholders / disabled |
 
-### H.4 Color — sage (primary accent) + sage tints
+### H.4 Color — sage (primary accent **of the unshipped Clinician direction**) + sage tints
 
 | Token | Alias | Value |
 |---|---|---|
