@@ -29,8 +29,12 @@
 // nothing, and touches neither the sign route nor the audit trail.
 // ============================================================================
 
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { ChevronRight, Lock, Send } from 'lucide-react';
+
+import { parseNoteSections } from '@/lib/parse-note-sections';
+import { spokenBody } from '@/lib/spoken-body';
+
 import { SignAndSendModal } from './sign-and-send-modal';
 
 export interface SignedSummary {
@@ -56,6 +60,14 @@ export interface SignedDocumentViewProps {
    *  visit has no native document or it could not be produced, in which case
    *  the note renders exactly as before. */
   documentNode?: React.ReactNode;
+  /** THE SIGNED NOTE AS TEXT, for the accessibility tree — see the block that
+   *  renders it below. This is `soapText`, which `page.tsx:588-591` computes as
+   *  `signedSoap ?? soapFinal` for a SIGNED visit: the frozen record, never a
+   *  draft. Deliberately NOT `adoption?.text ?? soapText` the way the unsigned
+   *  path passes it — an adopted draft must never be what a screen reader hears
+   *  from a signed document. Absent → the block does not render, rather than
+   *  rendering empty. */
+  signedNoteText?: string;
   /** Transcript / dictation / raw-text view — the old "Input" tab, collapsed. */
   dictationNode: React.ReactNode;
   dictationLabel: string;
@@ -66,6 +78,23 @@ export function SignedDocumentView(props: SignedDocumentViewProps) {
   const [openDictation, setOpenDictation] = useState(false);
   const dictationPanelId = useId();
   const { summary } = props;
+
+  // The document is what renders whenever we HAVE one; `??` falls through only
+  // on null/undefined. So this is exactly the condition under which the note
+  // exists solely as canvas bitmaps.
+  const usingDocument = props.documentNode != null;
+  // ⚠️ GUARD ON THE TEXT, NOT ON THE SECTION COUNT. `parseNoteSections('')`
+  // returns FOUR sections — the empty SOAP skeleton, S/O/A/P with blank bodies —
+  // measured, not assumed. So `sections.length > 0` is vacuously true and would
+  // have announced four empty headings to a screen reader on a note with no
+  // text: structure that is not there. The condition is whether there is a note
+  // at all, which is a fact about the string.
+  const hasNoteText = (props.signedNoteText ?? '').trim().length > 0;
+  const spokenSections = useMemo(
+    () =>
+      usingDocument && hasNoteText ? parseNoteSections(props.signedNoteText ?? '') : [],
+    [usingDocument, hasNoteText, props.signedNoteText]
+  );
 
   const hasIcd = summary.icd.length > 0;
   const hasEm = summary.emCode !== null || summary.emNotApplicable;
@@ -80,6 +109,40 @@ export function SignedDocumentView(props: SignedDocumentViewProps) {
           when it was signed is the thing worth showing. Falls back to the note
           whenever the file cannot be produced. */}
       <article className="qm-ux-doc-note">{props.documentNode ?? props.noteNode}</article>
+
+      {/* ── THE SIGNED NOTE, STILL READABLE ────────────────────────────────
+          The document above renders as <canvas> bitmaps (document-pages.tsx
+          paints each page and sets role="img"), so to a screen reader it is one
+          unlabelled raster per page and nothing else.
+
+          ⚠️ THE UNSIGNED PATH ALREADY DOES THIS, AND SAYS WHY IN ITS OWN WORDS
+          (review-document-view.tsx:243-249): "Without this the entire clinical
+          note a doctor is about to sign would exist nowhere in the DOM, which is
+          not a degraded experience but an absent one." That reasoning does not
+          weaken once the note is signed — the signed note is the PERMANENT
+          record, and it was the only one of the two surfaces without the block.
+          Measured: `qm-sr-only` occurred in exactly ONE source file in the whole
+          app, and it was not this one.
+
+          ⚠️ RENDERED ONLY WHEN THE DOCUMENT IS. On the fallback path
+          `props.noteNode` mounts a real SoapEditor whose text is already in the
+          DOM, and a second copy would make a screen reader read the note twice.
+
+          Presentation only: `spokenBody` is the same pure function the unsigned
+          path uses, it touches no stored text, and nothing here is interactive —
+          so this adds reading matter to the accessibility tree and no controls
+          to it. */}
+      {usingDocument && hasNoteText && (
+        <div className="qm-sr-only" data-testid="signed-document-text">
+          <h2>The signed note, as text</h2>
+          {spokenSections.map((sec) => (
+            <section key={sec.id}>
+              <h3>{sec.label}</h3>
+              <p>{spokenBody(sec.body, props.signedNoteText ?? '')}</p>
+            </section>
+          ))}
+        </div>
+      )}
 
       {/* One slim summary row. Everything the Codes / Billing tabs carried
           for a SIGNED note, in a single glance-able strip. */}

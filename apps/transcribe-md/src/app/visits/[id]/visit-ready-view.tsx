@@ -1211,6 +1211,12 @@ export function VisitReadyView(props: VisitReadyViewProps) {
             visitId={props.visitId}
             doctorEmail={props.doctorEmail}
             emailEnabled={props.emailEnabled}
+            // THE FROZEN NOTE, for the accessibility tree. `props.soapText` is
+            // `signedSoap ?? soapFinal` on a signed visit (page.tsx:588-591) —
+            // the record itself. NOT `adoption?.text ?? props.soapText`, which
+            // every other call site in this branch uses: an adopted draft must
+            // never be what a screen reader hears from a signed document.
+            signedNoteText={props.soapText}
             // The signed-lock banner already rides inside the note node
             // (SignedStateCard), so it is not duplicated here.
             lockBanner={null}
