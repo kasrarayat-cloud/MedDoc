@@ -909,6 +909,59 @@ body[data-skin='rounds'] {
  * The `qm-npv-` family is NOT reachable by the paper-ink bridge at the foot of
  * this file: that bridge enumerates `qm-rdoc-` / `qm-rx-` / `qm-vdoc-`, and
  * widening it would repaint surfaces this item never looked at. */
+/* ── T5 — THE TWO DARK SLABS THE BLACK FRAME WAS SITTING NEXT TO ────────────
+ * These are NOT the T3 frame. They are surfaces `SignedDocumentView` emits, all
+ * styled from the DARK ramp in `globals.css` — which is correct flag-OFF chrome
+ * and is left alone exactly as T3 left `.qm-vdoc` alone.
+ *
+ * They render INSIDE the white Rounds paper. Measured in chromium against the
+ * CSS shipped in the running production container:
+ *
+ *     .qm-ux-doc-summary    background rgb(19,20,22)       the coding strip
+ *     .qm-c3-rev2-signbar   background rgba(13,14,16,.96)  sticky, full width
+ *
+ * ⚠️ NEITHER IS NEUTRALISED BY T3, AND THAT IS NOT AN OVERSIGHT: T3's family is
+ * scoped to the visit-DOCUMENT classes (`qm-vdoc` / `qm-npv` / `qm-docxp`), and
+ * these two are `qm-ux-` — a prefix the paper-ink bridge at the foot of this file
+ * does not carry either (it enumerates `qm-rdoc-` / `qm-rx-` / `qm-vdoc-`).
+ *
+ * Scoped to `.rounds-paper`, the property T3 established: both paper hosts carry
+ * it, so a third paper host inherits these too.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/* The coding strip. It KEEPS its border and radius — it is a distinct block and
+ * removing the block would be a design change, not a fix. What it stops doing is
+ * painting a near-black ground inside white paper. Its ink moves with its ground,
+ * or the strip keeps dark-canvas text on a light surface: `--color-linear-text`
+ * is #f7f8f8, which measures 1.04:1 on paper. */
+[data-skin='rounds'] .rounds-paper .qm-ux-doc-summary {
+  background: var(--rounds-paper-2);
+  border-color: var(--rounds-paper-line-1);
+}
+[data-skin='rounds'] .rounds-paper .qm-ux-sum-val {
+  color: var(--rounds-ink);
+}
+[data-skin='rounds'] .rounds-paper .qm-ux-sum-key,
+[data-skin='rounds'] .rounds-paper .qm-ux-sum-muted {
+  color: var(--rounds-ink-muted);
+}
+
+/* The pinned export bar. It STAYS sticky and keeps its blur — it is a real
+ * affordance and removing it would be a capability loss, not a fix. It grounds in
+ * paper so it reads as the foot of the sheet rather than a slab lying across it.
+ *
+ * ⚠️ THE ALPHA IS KEPT. `rgba(13,14,16,0.96)` is translucent ON PURPOSE — content
+ * scrolling under a `backdrop-filter: blur(12px)` bar should show through. An
+ * opaque paper fill would silently retire that, so the replacement is a
+ * color-mix at the same order of transparency rather than a flat token. */
+[data-skin='rounds'] .rounds-paper .qm-c3-rev2-signbar {
+  background: color-mix(in srgb, var(--rounds-paper-1) 92%, transparent);
+  border-top-color: var(--rounds-paper-line-1);
+}
+[data-skin='rounds'] .rounds-paper .qm-c3-rev2-sign-msg {
+  color: var(--rounds-ink-muted);
+}
+
 [data-skin='rounds'] .rounds-paper .qm-npv-note {
   color: var(--rounds-ink-muted);
 }
