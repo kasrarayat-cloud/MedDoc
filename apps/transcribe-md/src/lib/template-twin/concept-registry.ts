@@ -59,6 +59,28 @@ export const REGISTRY_PATTERNS: readonly RegExp[] = [
   /^test\.[a-z0-9_]+\.result$/,
   /^exam\.[a-z0-9_.]+$/,
   /^hpi\.[a-z0-9_]+$/,
+  /**
+   * ⚠️ ROS WAS EMITTED AND UNREGISTERED, AND THAT ASYMMETRY WAS THE DEFECT.
+   *
+   * `projectEncounterFacts` has emitted `ros.${system}` since §02.9, with
+   * polarity STATED by L3 rather than inferred. Measured end-to-end on a
+   * GI-shaped dictation before this line was added:
+   *
+   *   ros.gastrointestinal  polarity=affirmed  registered=FALSE
+   *   ros.gastrointestinal  polarity=denied    registered=FALSE
+   *   exam.abdomen          polarity=affirmed  registered=true
+   *
+   * `isRegisteredConcept` gates which concept a MAPPING may be assigned
+   * (`semantic-mapping/index.ts:243,495`), so a review-of-systems field was
+   * given `clinicalConcept: null` — and `factMatchesMapping` returns false on
+   * a null concept. The doctor saying "the patient reports heartburn" produced
+   * a well-formed, correctly-polarised fact that nothing could ever match,
+   * one step before it could contradict a template's printed denial.
+   *
+   * The sibling patterns above are the precedent: `exam.*` and `hpi.*` are
+   * composed the same way by the same projector and have always been admitted.
+   */
+  /^ros\.[a-z0-9_.]+$/,
 ];
 
 /**

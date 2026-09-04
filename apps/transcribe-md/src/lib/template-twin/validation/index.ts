@@ -181,7 +181,13 @@ function practiceDefaultMatches(
   }
 }
 
-function factMatchesMapping(
+/**
+ * ⚠️ EXPORTED SO AN ARM CAN DRIVE IT RATHER THAN RE-IMPLEMENT IT. It is a pure
+ * predicate over a fact and a mapping; exporting changes no behaviour. The
+ * alternative was an arm that reproduced this rule inline, which is a control
+ * that reimplements its subject — it passes whatever the shipped matcher does.
+ */
+export function factMatchesMapping(
   fact: EncounterFact,
   mapping: SemanticMapping,
 ): boolean {
