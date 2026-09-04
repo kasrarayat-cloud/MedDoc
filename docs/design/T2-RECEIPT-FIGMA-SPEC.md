@@ -31,9 +31,57 @@ standing no-solo-design rule. The raw extract is beside this file at
 ⚠️ **THE ACCENT IS THE LEGACY SAGE, NOT THE ROUNDS INDIGO.** `#7aa68c` is
 `--color-linear-sage`; the Rounds skin's accent is `#5b5bd6`, and
 `rounds-tokens.css` deliberately retints legacy sage to the Rounds accent
-wherever it appears on the visit surface. **The frames were drawn in the legacy
-palette.** Which one T2 should ship in is a question for the owner, not a choice
-for this session — it is the first item on the request list below.
+wherever it appears on the visit surface. **These frames were drawn in the legacy
+palette.**
+
+## ✅ RULED 2026-09-04 — BUILD IN ROUNDS TOKENS, MAP BY ROLE
+
+Owner ruling: **the frames are the spec for structure, spacing, type, hierarchy
+and copy; COLOURS map by ROLE.** Sage maps to the surface's accent token, because
+`rounds-tokens.css` deliberately retired sage on this page and *a green panel on
+an indigo visit page reads as a bug, not a design.* If sage is later ruled back
+in for the Receipt, it is **one token change**.
+
+⚠️ **AND THE T4 FRAMES INDEPENDENTLY CORROBORATE IT.** The Sign & deliver file
+(`Zvgz37i6jVoNYy9BzAAtoQ`) uses **`#5b5bd6` — the Rounds indigo — natively**, for
+every checked checkbox, the primary button and the DOCUMENT SIGNED badge. So the
+two files disagree with each other about the accent, and the newer one already
+agrees with the shipped skin. That is evidence, not preference.
+
+### The mapping table
+
+| role in the frame | frame value | Rounds token | measured |
+|---|---|---|---|
+| card ground | `#0d0e0f` | `--rounds-surface-1` `#161b24` | the ground the coding view already ships |
+| card + row hairline | `#ffffff` @0.04 | `--rounds-line-1` `#2c3442` | — |
+| primary heading | `#ffffff` @0.90 | `--rounds-text-1` `#e7ebf1` | **14.43:1** |
+| row description | `#ffffff` @0.75 | `--rounds-text-2` `#98a2b1` | **6.69:1** |
+| section header · confidence · caption · archive footer | `#ffffff` @0.20–0.30 | `--rounds-text-3` `#7c8694` | **4.68:1** |
+| accent — code, badge stroke, CTA fill | `#7aa68c` | `--rounds-accent` `#5b5bd6` | 3.22:1 on card — **fill/stroke only, never body text** |
+| accent as TEXT (badge label) | `#7aa68c` | `--rounds-accent-text` `#a5a5f0` | **7.60:1** |
+| CTA label on accent | `#08090a` | `--rounds-on-accent` `#ffffff` | **5.37:1** on the accent |
+
+⚠️ **EVERY RATIO IN THAT TABLE IS COMPUTED, NOT TRANSCRIBED.** The first draft of
+it carried five numbers I had written from memory — 7.98, 5.28, 3.29, 8.06, 5.90
+— against measured values of 6.69, 4.68, 3.22, 7.60 and 5.37. All five were
+wrong, all five were wrong in the *flattering* direction, and one of them
+(`--rounds-text-3` at a real **4.68:1**) sits close enough to the 4.5 floor that
+the invented figure would have hidden how little headroom it has. The table is
+now generated from the token values in `rounds-tokens.css`.
+
+⚠️ **THE ACCENT SPLITS IN TWO, AND THAT IS THE WHOLE REASON THIS TABLE EXISTS.**
+`--rounds-accent` measures **3.22:1** on the card — fine for a fill, a stroke or a
+CTA ground, and **below the 4.5 floor for text**. The frame uses sage for both the
+row's CODE (text) and the CTA (fill). Mapping one token to both would ship a
+1-in-2 contrast failure on every row. `--rounds-accent-text` exists for exactly
+this and measures **7.60:1**.
+
+⚠️ **THE RECEIPT IS A DARK CARD ON WHITE PAPER, AND THAT IS ALREADY TRUE TODAY.**
+`icd-coding-view.tsx:249` paints `--rounds-surface-1` with light
+`--rounds-text-*` inside it, sitting inside the Rounds paper. Verified: ink on
+that ground measures **14.43:1**, so the surface passes and canon's
+paper-chrome bridge deliberately does not reach it. The frames' dark card is
+therefore structurally what ships — no ground question to answer.
 
 ---
 
@@ -110,15 +158,18 @@ Card height 559 → **612** (the badge row and the archive footer).
 Per the standing rule, **none of this is invented**. Each item is a state the
 build needs and the file does not describe.
 
-### Blocking T4 entirely
+### ✅ DISCHARGED 2026-09-04 — T4's frames arrived in a SECOND file
 
-1. **`Sign & deliver` (pre-sign)** — **no such frame exists.**
-2. **`Export signed note` (post-sign)** — **no such frame exists.**
+1. ~~`Sign & deliver` (pre-sign)~~ → **`sign-deliver-pre`** `18:5`, 1440×1024
+2. ~~`Export signed note` (post-sign)~~ → **`sign-deliver-post`** `18:81`, 1440×1024
 
-Measured, not assumed: across all 8 pages and 521 nodes, **zero** node names
-match `deliver|export|pre-sign|post-sign`. The only `sign`-matching names are the
-four in this page plus two unrelated `signal` frames on another page. T4 cannot
-start.
+⚠️ **THEY ARE IN A DIFFERENT FIGMA FILE — `Zvgz37i6jVoNYy9BzAAtoQ`, not the file
+that carries the Receipt.** The original search was not wrong: across all 8 pages
+and 521 nodes of `vDPGIxwPmm08BTzBD99vfQ`, zero node names matched
+`deliver|export|pre-sign|post-sign`, and that remains true. Two files, one spec —
+worth stating so a later reader does not conclude the first search was faulty.
+
+Full extraction: **`T4-SIGN-DELIVER-FIGMA-SPEC.md`**, beside this file.
 
 ### Blocking the ruled auto-accept behaviour in T2
 
