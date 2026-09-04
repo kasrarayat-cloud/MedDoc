@@ -181,11 +181,33 @@ body[data-skin='rounds'] {
   max-width: 820px;
 }
 
+/* ⚠️ A TYPE CLASS DOES NOT OWN THE INK — THE SURFACE DOES.
+   Measured 2026-09-03, owner-reported: this rule bound `--rounds-ink` (#191e26,
+   PAPER ink) to clinical prose unconditionally. Its only consumer is
+   `SoapBody`, which renders inside `.qm-lin-soap-section-v6` —
+   `background: var(--color-linear-surface-1)`, #0d0e10. That is
+   **#191e26 on #0d0e10 = 1.15:1**, below the 1.16:1 this programme already
+   records as the worst contrast failure it had ever found. The doctor's HPI and
+   ROS prose was effectively invisible.
+
+   ⚠️ THE JUSTIFICATION THAT FAILED IS WORTH KEEPING. `SoapBody`'s comment read
+   "under Rounds it renders inside `.rounds-paper`, which is why the rule's
+   `--rounds-ink` (dark) is the right colour here". That premise is FALSE:
+   `.rounds-paper` has exactly one consumer in the whole app — the SIGNED
+   document in `components/rounds/signed.tsx` — and the SOAP view is not inside
+   it. The reasoning was sound about a container that was never there, and the
+   section card repaints the surface dark underneath the prose. Two decisions,
+   each defensible alone, composing into unreadable text.
+
+   The ink is removed here rather than overridden at the call site, because the
+   defect is the CLASS: a font/size/leading class cannot know what it will be
+   laid on. `.rounds-paper` sets `color: var(--rounds-ink)` on ITSELF (below), so
+   prose inside the signed paper still inherits paper ink and nothing regresses;
+   prose on a dark card now inherits the dark surface's own text token. */
 [data-skin='rounds'] .rounds-clinical {
   font-family: var(--rounds-font-clinical);
   font-size: var(--rounds-clinical-size);
   line-height: var(--rounds-clinical-leading);
-  color: var(--rounds-ink);
 }
 
 [data-skin='rounds'] .rounds-kicker {

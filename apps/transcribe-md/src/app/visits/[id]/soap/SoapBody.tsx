@@ -92,11 +92,24 @@ export function SoapBody({
        15–16.5px/1.7. `.rounds-clinical` has carried exactly that since the
        tokens landed and had ZERO consumers — declared, never applied.
 
-       This is the node: SoapBody is the clinical prose, and under Rounds it
-       renders inside `.rounds-paper`, which is why the rule's `--rounds-ink`
-       (dark) is the right colour here rather than a stage tier. The class is
+       This is the node: SoapBody is the clinical prose. The class is
        unconditional because every `.rounds-clinical` declaration is
-       `[data-skin='rounds']`-scoped, so with the flag off it is inert. */
+       `[data-skin='rounds']`-scoped, so with the flag off it is inert.
+
+       ⚠️ CORRECTED 2026-09-03, OWNER-REPORTED. This comment used to read
+       "under Rounds it renders inside `.rounds-paper`, which is why the rule's
+       `--rounds-ink` (dark) is the right colour here". THAT PREMISE WAS FALSE.
+       `.rounds-paper` has exactly one consumer in the app — the signed document
+       in `components/rounds/signed.tsx` — and this view is not inside it. The
+       section card `.qm-lin-soap-section-v6` paints `--color-linear-surface-1`
+       (#0d0e10) underneath, so the prose rendered #191e26 on #0d0e10:
+       **1.15:1**, unreadable, and it stood for a month.
+
+       `.rounds-clinical` no longer carries a colour at all — a font/size/
+       leading class cannot know what surface it will be laid on. The ink comes
+       from the SURFACE now: `.qm-lin-soap-body-v6` binds the dark-surface
+       token, and `.rounds-paper` sets paper ink on itself. This class is kept
+       here for the TYPE, which is what it was always for. */
     <div className="qm-lin-soap-body-v6 rounds-clinical">
       {sections.map((section) => {
         const node = (
