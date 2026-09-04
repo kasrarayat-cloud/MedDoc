@@ -210,6 +210,40 @@ For a code-only deploy the declaration is one line — **"nothing but the image
 ids"** — and it is still written down, because that is what makes any other
 movement a finding rather than a discussion.
 
+#### ⚠️ STEP 0 — LAND THE DECLARATION AS A DOCS PR *BEFORE* RUNNING `deploy-prod.sh`
+
+**Written into the steps 2026-09-04, because two deploys in a row paid a full
+cycle rediscovering this gate.** The declaration is not a note you keep beside
+the deploy. `deploy-prod.sh` REFUSES while any §2.5 record under
+`docs/foundation/deploys/` is untracked:
+
+    🔴 deploy-records: UNTRACKED §2.5 record(s) under docs/foundation/deploys
+    🔴 deploy: a previous §2.5 record is not in git. REFUSING.
+       Nothing has been built, migrated or recreated. Production is untouched.
+
+**A deploy record that is not in git is not a record.** Writing it before the
+act preserves the half of §2.5 that matters most — the answer was fixed before
+the evidence existed — but an untracked file is the
+`docs/deploy-reports` vs `docs/deploy-logs` failure one directory over: the work
+done, the record invisible.
+
+> **So the order is: write the declaration → commit it on its own branch → PR →
+> cite → merge → THEN run `deploy-prod.sh`.**
+
+⚠️ **AND MERGING IT DOES NOT INVALIDATE IT, WHICH IS THE PART THAT LOOKS WRONG
+THE FIRST TIME.** The merge moves `main`, so the declaration is named after an
+ANCESTOR of the new HEAD rather than after HEAD itself. `declaration_resolve`
+accepts exactly that: an ancestor whose **runtime diff to HEAD is provably
+empty**. A docs-only merge cannot arm that check, so the declaration you just
+landed still governs the deploy you are about to run. This is ruling #121's
+fixed-point problem, already solved — the naming was deliberately decoupled from
+the deploying tree's HEAD *because* the commit that carries the declaration is
+itself what moves HEAD.
+
+⚠️ **A docs-only PR is skip-fast** — `detect docs-only` skips the E2E leg — so
+STEP 0 costs one short citation, not a full one. That is the entire price of the
+gate, and it is cheaper than discovering it with a deploy staged.
+
 #### ⚠️ MANDATORY STEP — CROSS-REFERENCE THE DEPLOY RANGE AGAINST EVERY HELD DECLARATION
 
 **Ratified 2026-08-28, owner ruling, after F12-e reached production inside
