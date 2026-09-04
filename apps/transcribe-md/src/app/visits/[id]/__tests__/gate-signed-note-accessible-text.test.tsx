@@ -68,6 +68,83 @@ function renderSigned(over: Partial<React.ComponentProps<typeof SignedDocumentVi
   );
 }
 
+import { parseNoteSections } from '@/lib/parse-note-sections';
+import { spokenBody } from '@/lib/spoken-body';
+
+/** What this block would say for a given note — the real shipped pipeline. */
+const spokenFor = (note: string) =>
+  parseNoteSections(note)
+    .map((sec) => `[${sec.label}] ${spokenBody(sec.body, note)}`)
+    .join(' ');
+
+// ============================================================================
+// THE LIMITS, AS EXECUTABLE FACTS RATHER THAN PROSE
+// ----------------------------------------------------------------------------
+// The adversarial pass proved the claim "the signed note's TEXT is in the
+// accessibility tree" false in three ways. All three are INHERITED from the
+// shared parse/spoken pipeline — the unsigned review surface has carried them
+// since before this change — and none is introduced here: before this block the
+// signed note had NO accessible copy at all.
+//
+// ⚠️ THEY ARE PINNED RATHER THAN DESCRIBED BECAUSE A COMMENT DECAYS AND AN ARM
+// DOES NOT. Each of these will RED when somebody fixes the underlying defect,
+// which is the point: the arm names the follow-up, and whoever closes it is told
+// by a failing test that this file's promise just got bigger.
+// ============================================================================
+describe('KNOWN LIMITS of the accessible copy — inherited, pinned, not accepted', () => {
+  it('LIMIT: content above the first SOAP heading is dropped', () => {
+    // `parse-soap-sections.ts` states this in its own docstring. The clinical
+    // shape of it: an addendum carrying an allergy, above the first heading,
+    // reaches the drawn document and not the listener.
+    const note = [
+      'ADDENDUM 2026-09-04: patient is ALLERGIC TO PENICILLIN — anaphylaxis.',
+      '',
+      '## Subjective',
+      'Two weeks of dry cough.',
+    ].join('\n');
+    expect(note).toContain('ALLERGIC TO PENICILLIN');
+    expect(
+      spokenFor(note),
+      'FIXED? Good — content above the first SOAP heading now survives. Update ' +
+        'this arm and the comment in signed-document-view.tsx, which documents it as a limit.'
+    ).not.toContain('ALLERGIC TO PENICILLIN');
+
+    // CONTROL — the trigger is classic-SOAP mode specifically, not "any
+    // preamble". One non-SOAP heading first flips the parser to generic mode and
+    // the same line survives. Without this the arm above would misname the bug.
+    expect(spokenFor('# Visit Note\n' + note)).toContain('ALLERGIC TO PENICILLIN');
+  });
+
+  it('LIMIT: SOAP headings the record does not contain are announced as "Not documented."', () => {
+    const note = '## Subjective\nPatient declined further workup today.';
+    expect(note.toLowerCase()).not.toContain('assessment');
+    expect(
+      spokenFor(note),
+      'FIXED? Then absent-vs-empty is now discriminated — update this arm.'
+    ).toContain('Not documented');
+
+    // CONTROL — where the heading is PRESENT but empty, the export says the same
+    // thing, so the two agree and nothing is being asserted that the record does
+    // not. That parity is what makes this a bounded defect rather than a general
+    // one, and an arm that skipped empties would BREAK it.
+    expect(spokenFor('## Subjective\nx\n\n## Assessment\n')).toContain('Not documented');
+  });
+
+  it('LIMIT: a table header is deleted, and restored only when its rows are unique', () => {
+    const table = [
+      '| Vein | Diameter (mm) | Reflux Time (seconds) |',
+      '| --- | --- | --- |',
+      '| GSV at the Knee | 6.2 | 1.8 |',
+    ].join('\n');
+    const collide = ['## Findings', 'Right Leg', '', table, '', 'Left Leg', '', table].join('\n');
+    const spoken = spokenFor(collide);
+    // The column names are gone and raw pipes reach the listener: numbers with
+    // no unit and no column identity.
+    expect(spoken).not.toContain('Diameter');
+    expect(spoken).toContain('|');
+  });
+});
+
 describe('the signed note reaches the accessibility tree', () => {
   it('renders the note as text when the DOCUMENT is what is displayed', () => {
     renderSigned();
@@ -91,9 +168,18 @@ describe('the signed note reaches the accessibility tree', () => {
     expect(spoken.textContent).toContain('Not taking warfarin.');
   });
 
-  it('does NOT duplicate the note when the fallback note node is displayed', () => {
-    // On the fallback path the SoapEditor mounts and its text is already in the
+  it('does NOT duplicate the note when the fallback NOTE NODE is displayed', () => {
+    // On the note fallback the SoapEditor mounts and its text is already in the
     // DOM. A second copy makes a screen reader read the whole note twice.
+    //
+    // ⚠️ THIS ARM DOES NOT COVER THE WORD PATH, AND THE COMMIT ORIGINALLY
+    // CLAIMED IT DID. `usingDocument` tests whether a documentNode ELEMENT was
+    // passed, never how it draws. On `docx_fallback` the document renders as
+    // REAL DOM TEXT inside that element, so the note IS in the tree twice — and
+    // this test cannot see it, because the element it is handed here is a stub.
+    // Reaching the real render mode means threading it out of
+    // VisitDocumentSurface, which touches the renderer seam; that is a
+    // follow-up, not an accessibility change.
     renderSigned({ documentNode: undefined });
     expect(screen.getByTestId('the-note-node')).toBeTruthy();
     expect(screen.queryByTestId('signed-document-text')).toBeNull();

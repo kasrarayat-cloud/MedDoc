@@ -115,6 +115,43 @@ export function SignedDocumentView(props: SignedDocumentViewProps) {
           paints each page and sets role="img"), so to a screen reader it is one
           unlabelled raster per page and nothing else.
 
+          ⚠️ WHAT THIS BLOCK CARRIES IS THE NOTE'S SOAP-HEADING SECTIONS, NOT THE
+          NOTE. An earlier version of this comment said "the signed note's text",
+          and the adversarial pass proved that false in three ways — all three
+          INHERITED from the shared parse/spoken pipeline this reuses, all three
+          reproduced against the real shipped functions, and all three now pinned
+          as executable facts in gate-signed-note-accessible-text.test.tsx so
+          they cannot be forgotten:
+
+            · CONTENT ABOVE THE FIRST SOAP HEADING IS DROPPED.
+              `parse-soap-sections.ts` says so in its own docstring — "anything
+              before the first SOAP heading is dropped". Measured: an
+              "ADDENDUM … ALLERGIC TO PENICILLIN" line above `## Subjective`
+              is absent from this block while the drawn document renders it.
+            · ABSENT SOAP HEADINGS ARE ANNOUNCED AS "Not documented."
+              The parser returns all four of S/O/A/P unconditionally, so a note
+              carrying only `## Subjective` tells a listener the physician
+              documented no assessment and no plan. The export prints those words
+              only under a heading that EXISTS, so the two disagree.
+            · TABLE HEADERS ARE DELETED and only conditionally restored, so a
+              measurement table whose rows collide can reach a listener as
+              unlabelled, unitless numbers in raw pipe markup.
+
+          None of that is introduced here — before this block the signed note had
+          NO accessible copy at all, so this is strictly more of the record than
+          zero. It is written down because the next session will read this
+          comment as the specification, and a false record about clinical text is
+          how the next incident starts.
+
+          ⚠️ AND IT CAN DUPLICATE ON THE WORD PATH. `usingDocument` tests whether
+          a documentNode ELEMENT was passed, never how it draws; `format` is
+          state held inside VisitDocumentSurface. On `docx_fallback` — one click
+          of the Word toggle, or any signed visit whose signature froze no native
+          document, or Gotenberg being down — the document renders as REAL DOM
+          TEXT and a screen reader meets the note twice. Threading the render
+          mode out of that component is the fix and it is a follow-up: it reaches
+          the renderer seam, which does not belong in an accessibility change.
+
           ⚠️ THE UNSIGNED PATH ALREADY DOES THIS, AND SAYS WHY IN ITS OWN WORDS
           (review-document-view.tsx:243-249): "Without this the entire clinical
           note a doctor is about to sign would exist nowhere in the DOM, which is
