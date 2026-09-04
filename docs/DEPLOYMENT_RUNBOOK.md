@@ -2189,3 +2189,58 @@ remembered, and a harness that fails to inject fails loudly instead of
 reporting a plausible zero. Both defects in this arm's own first two drafts
 (a paragraph nested in a paragraph; a bare run where a block belonged) were
 caught by exactly that property.
+
+### ⚠️ REVERSED 2026-09-04 — THE HEAVY LANE MOVED TO GITHUB-HOSTED RUNNERS
+
+**Owner ruling. This reverses the cost-arc decision that put CI on self-hosted
+boxes, and the reversal is recorded rather than the old reasoning quietly
+deleted — the cost argument was sound when it was made and the constraint
+changed.**
+
+| job | was | now |
+|---|---|---|
+| `test` (service containers) | `[self-hosted, …, quillmd-ci]` | **`ubuntu-latest`** |
+| `axe-core sweep` | `[self-hosted, …, quillmd-ci]` | **`ubuntu-latest`** |
+| `Playwright E2E` | `[self-hosted, …, quillmd-ci]` | **`ubuntu-latest`** |
+| everything else | `quillmd-ci-light` | **unchanged** |
+
+**WHAT FORCED IT.** One runner carried the heavy label. Ten runs queued behind
+one executing; wall-clock medians including queue reached `CI 518m`,
+`a11y 387m`, `e2e 183m` against execution medians of `36m / 8m / 26m`. A
+ratified accessibility fix — the doctor's own HPI and ROS rendering at
+**1.15:1** — sat merged on `main` and could not reach production for over a day.
+The lane, not the work, was the constraint.
+
+⚠️ **AND THE REASON THOSE THREE JOBS WERE PINNED TO THE HEAVY LABEL EVAPORATES
+BY CONSTRUCTION, WHICH IS THE PART WORTH UNDERSTANDING.** They declared service
+containers on FIXED host ports (5432, 6379). Both self-hosted runners live on
+ONE BOX and share its network namespace, so two concurrent jobs binding 5432
+collided — *"failed to set up container networking"*. Pinning them to the
+single-slot heavy label restored, deliberately, an exclusion that had previously
+existed by luck. **A GitHub-hosted job gets its own VM.** There is no shared
+namespace, so there is nothing to exclude, and the filed "better fix" (dynamic
+ports via `job.services.postgres.ports['5432']`) is no longer needed for this
+reason.
+
+⚠️ **THE SPEC IS SMALLER, NOT BIGGER, AND THAT IS THE RISK TO WATCH.** This repo
+is PRIVATE on a **User** plan, so `ubuntu-latest` is **2 vCPU / 7 GB / 14 GB
+SSD** against the self-hosted box's 4 vCPU / 7.8 GiB. Larger runners require
+Team/Enterprise and are **not available** here. The `e2e` job builds four ~435 MB
+images and the Dockerfile bakes `--max-old-space-size=6144`. If these jobs fail
+on memory or disk, that is the reason — **and the remedy is to shrink the job,
+not to raise the size, because the size cannot be raised.**
+
+**Two things already anticipated this move and needed no change:** the e2e
+pre-flight memory guard is conditioned `if: runner.environment != 'github-hosted'`
+so it self-disables, and the `Free runner disk` step targets GitHub's
+preinstalled toolchains (`/usr/share/dotnet`, `/opt/ghc`) — a no-op on
+self-hosted, and real space on hosted.
+
+**PROVISIONING OF A SECOND SELF-HOSTED BOX IS CANCELLED.** The existing two
+runners keep the light lane.
+
+⚠️ **§12's saturation-vs-wedge discriminator above still stands and still
+applies** — the light lane is two runners on one box and can still saturate. What
+changed is that the jobs which took 26–36 minutes each no longer queue behind
+each other.
+
