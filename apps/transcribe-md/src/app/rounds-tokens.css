@@ -693,12 +693,49 @@ body[data-skin='rounds'] {
  * `hostSignbar={false}` (visit-ready-view.tsx) and the signature now lives in
  * Gate 3. If a future change re-homes the bar back onto the stage, this padding
  * has to come back with it — they are one decision, not two. */
-[data-skin='rounds'] .qm-rounds-sheet .qm-rdoc {
+/* ── T3 — THE NEUTRALISERS BELOW ARE SCOPED TO **PAPER**, NOT TO ONE HOST ────
+ * The family that follows strips the visit document's DARK-CANVAS chrome so it
+ * can sit on Rounds' white paper. It used to be scoped to `.qm-rounds-sheet`,
+ * which is the class `RoundsStage` emits (stage.tsx:196).
+ *
+ * ⚠️ `RoundsSigned` DOES NOT EMIT IT — it emits `qm-rounds-signed-paper
+ * rounds-paper` (signed.tsx:175). So the moment a note was signed the whole
+ * family stopped matching and the dark matting came back, ON WHITE PAPER.
+ * That is the black frame the owner reported. Measured in a real browser
+ * against the CSS actually shipped in production, signed vs unsigned:
+ *
+ *     .qm-vdoc         bg rgb(8,9,10) · 1px solid rgb(33,35,42) · r10 · 40px pad
+ *                      vs  transparent · 0px none · r0 · 0 pad
+ *     .qm-npv-stage    the same, PLUS `overflow: auto` and `max-height: 780px`
+ *                      ← FUNCTIONAL, not cosmetic
+ *     .qm-npv-page     dark-ground shadow rgba(0,0,0,.4)/.45
+ *                      vs  paper shadow rgba(25,30,38,.1)/.16
+ *     section.qm-docxp the same pair
+ *     .qm-vdoc-format-on  legacy sage rgb(122,166,140) vs accent rgb(91,91,214)
+ *
+ * ⚠️ THE FIX IS A SCOPE, NOT A SECOND COPY. Adding a mirrored
+ * `.qm-rounds-signed-paper` arm to each rule would have worked today and
+ * drifted the first time either half was edited. BOTH hosts carry
+ * `.rounds-paper`, and `[data-skin='rounds'] .rounds-paper` (:174) is the rule
+ * that paints the white ground — so `.rounds-paper` IS the property these
+ * neutralisers are about: *a document surface sitting on Rounds paper must not
+ * keep its dark-canvas chrome*. A third paper host added tomorrow inherits it.
+ *
+ * The unsigned path is provably unmoved: `.rounds-paper` and `.qm-rounds-sheet`
+ * are both single-class selectors, so specificity is unchanged, source order is
+ * unchanged, and the stage's element carries BOTH classes.
+ *
+ * Pinned by `components/rounds/__tests__/gate-paper-chrome-parity.test.tsx`,
+ * which parses these selectors at run time and asserts each reaches the same
+ * set under both hosts — so rewriting a selector is free and half-wiring one
+ * is what reds.
+ * ────────────────────────────────────────────────────────────────────────── */
+[data-skin='rounds'] .rounds-paper .qm-rdoc {
   padding-bottom: 0;
 }
 
-[data-skin='rounds'] .qm-rounds-sheet .qm-rdoc-page,
-[data-skin='rounds'] .qm-rounds-sheet .qm-vdoc {
+[data-skin='rounds'] .rounds-paper .qm-rdoc-page,
+[data-skin='rounds'] .rounds-paper .qm-vdoc {
   border: 0;
   border-radius: 0;
   background: none;
@@ -737,16 +774,20 @@ body[data-skin='rounds'] {
  * its `ResizeObserver` re-fits when the host widens, which is why removing the
  * padding is sufficient rather than merely necessary.
  *
- * ⚠️ SCOPED TO THE ROUNDS SHEET. `.qm-npv-stage` is the flag-OFF preview's real
- * chrome and the default `chromium` pack builds flag-OFF. */
-[data-skin='rounds'] .qm-rounds-sheet .qm-npv-stage {
+ * ⚠️ SCOPED TO ROUNDS PAPER — `.rounds-paper`, not one host's own class. See
+ * the T3 block above. `.qm-npv-stage` is the flag-OFF preview's real chrome
+ * and the default `chromium` pack builds flag-OFF, so this stays scoped. */
+[data-skin='rounds'] .rounds-paper .qm-npv-stage {
   background: none;
   border: 0;
   border-radius: 0;
   padding: 0 0 20px;
-  /* The Rounds sheet is the scroller. A nested `overflow: auto` box inside the
+  /* The Rounds PAPER is the scroller. A nested `overflow: auto` box inside the
    * paper is a viewer INSIDE a document — the exact chrome this item removes,
-   * and it also traps the page at `max-height: min(72vh, 780px)`. */
+   * and it also traps the page at `max-height: min(72vh, 780px)`.
+   * ⚠️ T3: while this was scoped to `.qm-rounds-sheet` a SIGNED note kept both
+   * — the nested scroller AND the 780px cap — so a multi-page signed Word
+   * document was trapped in a box inside the paper. Measured, not inferred. */
   overflow: visible;
   max-height: none;
 }
@@ -756,7 +797,7 @@ body[data-skin='rounds'] {
  * a grey band above and below the page: the "gray viewer chrome band" the
  * walkthrough reported. The horizontal gutter was already zeroed in
  * `globals.css`; the ground and the vertical band were not. */
-[data-skin='rounds'] .qm-rounds-sheet .qm-docxp-wrapper {
+[data-skin='rounds'] .rounds-paper .qm-docxp-wrapper {
   background: none;
   padding-top: 0;
   padding-bottom: 0;
@@ -765,7 +806,7 @@ body[data-skin='rounds'] {
 /* The focus ring on the stage takes the LEGACY sage. It is a real focus
  * affordance and must not simply be removed — retinted to the Rounds accent,
  * which is also what the census's composite arm would otherwise keep finding. */
-[data-skin='rounds'] .qm-rounds-sheet .qm-npv-stage:focus-visible {
+[data-skin='rounds'] .rounds-paper .qm-npv-stage:focus-visible {
   outline-color: var(--rounds-accent);
 }
 
@@ -791,12 +832,12 @@ body[data-skin='rounds'] {
  * surfacing it (a border colour the exact-match arm sampled, and a
  * `box-shadow` blend it did not). The Rounds accent says the same thing in the
  * skin's own vocabulary. */
-[data-skin='rounds'] .qm-rounds-sheet .qm-vdoc-format .qm-vdoc-format-on {
+[data-skin='rounds'] .rounds-paper .qm-vdoc-format .qm-vdoc-format-on {
   border-color: var(--rounds-accent);
   color: var(--rounds-ink);
 }
 
-[data-skin='rounds'] .qm-rounds-sheet section.qm-docxp {
+[data-skin='rounds'] .rounds-paper section.qm-docxp {
   box-shadow:
     0 1px 2px rgba(25, 30, 38, 0.1),
     0 4px 14px -6px rgba(25, 30, 38, 0.16);
@@ -807,7 +848,7 @@ body[data-skin='rounds'] {
  * `.qm-vdoc`'s #08090a matting, and far too heavy now that the same canvas sits
  * on #fcfcfa paper. Softened rather than removed: the pages are still discrete
  * sheets and need an edge, or a multi-page export reads as one long column. */
-[data-skin='rounds'] .qm-rounds-sheet .qm-npv-page {
+[data-skin='rounds'] .rounds-paper .qm-npv-page {
   box-shadow:
     0 1px 2px rgba(25, 30, 38, 0.1),
     0 4px 14px -6px rgba(25, 30, 38, 0.16);
