@@ -16,14 +16,29 @@
 // INSTRUCTION IS NOT THE SPEC.
 // ============================================================================
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
+
+vi.mock('sonner', () => ({
+  toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), warning: vi.fn() }),
+}));
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
 }));
 
+import { toast } from 'sonner';
+
 import { SignAndSendModal } from '../sign-and-send-modal';
+
+// ⚠️ MODULE MOCKS ACCUMULATE ACROSS TESTS, AND THE FIRST VERSION OF THE ARMS
+// BELOW COUNTED THE PREVIOUS TEST'S CALLS — `toast.success` read 2 where the
+// arm asserted 1, and `fetch` read 4 where it asserted 1. Both reds were the
+// INSTRUMENT, not the component: a per-test count is only a measurement if the
+// counter starts at zero.
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 type Props = Parameters<typeof SignAndSendModal>[0];
 
@@ -306,5 +321,197 @@ describe('⚠️ #188(4) — after signing, every row commits itself', () => {
     expect(screen.getByTestId('t4-caption-email').textContent).toContain(
       "Don't use for patient communication",
     );
+  });
+});
+
+// ============================================================================
+// ⚠️ THE POST-STATE PASS'S FINDINGS, AS ARMS.
+// ----------------------------------------------------------------------------
+// Three of these were regressions this change introduced on the surface that
+// DELIVERS a signed clinical note, and none of the six arms above could see
+// any of them.
+// ============================================================================
+
+describe('⚠️ the post state never claims a delivery it did not make', () => {
+  const post = (over: Partial<Props> = {}) =>
+    open({ signOnSubmit: false, triggerLabel: 'Export again', ...over });
+
+  const okJson = (body: unknown) =>
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+  it('⚠️ THE DELIVERY SUMMARY IS GONE AFTER SIGNING — it named a set nobody sends', () => {
+    // It was rendered UNGATED while only the line beneath it was gated, so a
+    // signed visit permanently showed "Delivery: Copy for Epic • Download PDF"
+    // — the DEFAULT set — naming two destinations that received nothing and
+    // omitting whichever one the doctor had just clicked. `selected` cannot
+    // move post-sign because the checkboxes are gone, so it was a CONSTANT
+    // false claim, not a stale one.
+    post();
+    expect(screen.queryByTestId('t4-delivery-summary')).toBeNull();
+    expect(screen.getByTestId('t4-post-footer')).toBeTruthy();
+    // Non-vacuity: it IS still there before signing, where it is true.
+    open();
+    expect(screen.getByTestId('t4-delivery-summary')).toBeTruthy();
+  });
+
+  it('⚠️ A BLOCKED CLIPBOARD DOES NOT REPORT "Delivered"', async () => {
+    // `applyBrowserSideDeliveries` reports a blocked clipboard by toast and
+    // does NOT throw — right for the sign path, which must not fail a
+    // signature over it. But the row's success toast fires AFTER, so the
+    // doctor saw "Copy blocked" and then "Delivered — Copy for Epic", with the
+    // affirmative one last, while the clipboard still held whatever it held
+    // before.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(okJson({ text: 'note text' }));
+    const write = vi.fn().mockRejectedValue(new Error('NotAllowedError'));
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: { writeText: write }, configurable: true,
+    });
+    post();
+    fireEvent.click(screen.getByTestId('t4-action-clipboard_epic'));
+    await new Promise((r) => setTimeout(r, 50));
+
+    const successes = (toast.success as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    expect(
+      successes.length,
+      `the row claimed success after a blocked clipboard: ${JSON.stringify(successes)}`,
+    ).toBe(0);
+    expect((toast.error as unknown as { mock: { calls: unknown[][] } }).mock.calls.length)
+      .toBeGreaterThan(0);
+  });
+
+  it('⚠️ A DOWNLOAD SAYS "Download started", NOT "Delivered" — nothing observed it', async () => {
+    // `pdf`/`docx` fire an `<a download>` with NO error channel, and
+    // `prepareDeliverOnly` makes no request for them at all. A 503 from the
+    // PDF route (Gotenberg down), a 401 on an expired session, a 500 — every
+    // one returns JSON the anchor silently discards. "Delivered" asserts
+    // something this code cannot see; the honest fix is filed as F-T4-2.
+    post();
+    fireEvent.click(screen.getByTestId('t4-action-pdf'));
+    await new Promise((r) => setTimeout(r, 50));
+    const calls = (toast.success as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    expect(calls.length).toBe(1);
+    expect(calls[0][0]).toBe('Download started');
+    expect(calls[0][0]).not.toBe('Delivered');
+  });
+
+  it('a CLIPBOARD success still says "Delivered" — the distinction is observability', async () => {
+    // Non-vacuity for the arm above: the honest label is not applied to
+    // everything, only to what cannot be observed.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(okJson({ text: 'note text' }));
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockResolvedValue(undefined) }, configurable: true,
+    });
+    post();
+    fireEvent.click(screen.getByTestId('t4-action-clipboard_athena'));
+    await new Promise((r) => setTimeout(r, 50));
+    const calls = (toast.success as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    expect(calls.length).toBe(1);
+    expect(calls[0][0]).toBe('Delivered');
+  });
+
+  it('⚠️ TWO CLICKS IN ONE BATCH DELIVER ONCE — the state read was a stale closure', async () => {
+    // `if (rowPending !== null) return` reads whatever the value was when the
+    // callback was last memoised, so two clicks dispatched inside one React
+    // batch both saw `null` and both proceeded. The rendered `disabled` is the
+    // guard a real user hits; the ref is the guard for anything faster than a
+    // render.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(okJson({ text: 't' }));
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockResolvedValue(undefined) }, configurable: true,
+    });
+    post();
+    const row = screen.getByTestId('t4-action-clipboard_cerner');
+    // ⚠️ NATIVE DISPATCH, NOT `fireEvent` — and that difference is the arm.
+    // `fireEvent` wraps each click in `act()`, which flushes the state update
+    // and re-renders the button as `disabled`, so the second click lands on a
+    // dead control and the arm passes WITH OR WITHOUT the guard. Dispatching
+    // twice in one tick is what actually puts two handler invocations inside a
+    // single React batch, which is the condition the ref exists for.
+    row.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    row.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 60));
+    expect(
+      (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.length,
+      'two clicks in one batch started two deliveries',
+    ).toBe(1);
+  });
+});
+
+// ============================================================================
+// ⚠️ THE HALF THIS CHANGE ASSERTS AND DOES NOT TOUCH.
+// ----------------------------------------------------------------------------
+// `applyBrowserSideDeliveries` was widened from `Promise<void>` to
+// `Promise<Destination[]>` so the per-row action could SEE a browser-side
+// failure it previously only toasted. That is a signature change on a function
+// the SIGN path also calls — the surface that commits a clinical signature.
+//
+// The claim "the sign path is unchanged" was written in a comment on the
+// function and in the PR's §2.5 row, and measured NOWHERE. An asserted
+// negative half needs its own measurement.
+// ============================================================================
+
+describe('⚠️ widening the return type did not change the SIGN path', () => {
+  const okJson = (body: unknown) =>
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+  it('⚠️ A BLOCKED CLIPBOARD STILL REPORTS A CLEAN "Signed"', async () => {
+    // ⚠️ THE FIRST VERSION OF THIS ARM NAMED THE WRONG PROPERTY, AND THE
+    // MUTATION IS WHAT SAID SO. It claimed to prove "a rethrow cannot fail the
+    // signature" — but the sign path calls `applyBrowserSideDeliveries` as a
+    // VOIDED fire-and-forget with its own `.catch`, AFTER the outcome toast has
+    // already fired. Rethrowing there is structurally unable to reach the
+    // signature, so that mutation redded nothing and proved nothing.
+    //
+    // The refactor the widened return type actually invites is different, and
+    // it is the one worth a gate: *now that it reports failures, fold them into
+    // the outcome*. Hoist the call above the classification, add its failures
+    // to `failedEntries`, and a doctor whose browser blocked the clipboard is
+    // told "Signed — some destinations failed" about a signature that was
+    // committed cleanly server-side.
+    //
+    // So the property is not "the submit does not throw". It is: THE OUTCOME
+    // TOAST FOR THE SIGNATURE IS INDEPENDENT OF BROWSER-SIDE DELIVERY RESULTS.
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      okJson({
+        signedAt: '2026-09-05T00:00:00.000Z',
+        clipboardTexts: { clipboard_epic: 'note text' },
+      }),
+    );
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockRejectedValue(new Error('NotAllowedError')) },
+      configurable: true,
+    });
+
+    open({ attested: true });
+    fireEvent.click(screen.getByTestId('t4-submit'));
+    await new Promise((r) => setTimeout(r, 60));
+
+    const successes = (toast.success as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const warnings = (toast.warning as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    expect(
+      successes.some((c) => c[0] === 'Signed'),
+      `the signature was not reported cleanly: success=${JSON.stringify(successes)} warning=${JSON.stringify(warnings)}`,
+    ).toBe(true);
+    // And it is not ALSO downgraded — a fold-in refactor emits the warning
+    // instead, so pinning both directions is what makes the arm bite.
+    expect(
+      warnings.some((c) => typeof c[0] === 'string' && /some destinations failed/i.test(c[0] as string)),
+      'the browser-side block was folded into the signature outcome',
+    ).toBe(false);
+
+    // ⚠️ NON-VACUITY, AND IT IS THE WHOLE ARM. Without this the test passes
+    // just as happily when the clipboard was never reached at all — in which
+    // case it measures nothing about swallowing, only that signing works.
+    expect(
+      (toast.error as unknown as { mock: { calls: unknown[][] } }).mock.calls
+        .some((c) => c[0] === 'Copy blocked'),
+      'the clipboard never failed, so this arm proved nothing about the swallow',
+    ).toBe(true);
   });
 });

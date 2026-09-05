@@ -11,7 +11,7 @@
 // browser delivery semantics are unchanged from Phase 2.
 // ============================================================================
 
-import { useCallback, useState, useTransition } from 'react';
+import { useCallback, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
@@ -194,16 +194,47 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
   // discard, so the post state cannot exhibit it. The PRE-sign state still
   // can, and F-T4-1 stays open for it.
   const [rowPending, setRowPending] = useState<Destination | null>(null);
+  /** The synchronous half of the one-at-a-time guard — see `deliverOne`. */
+  const deliveringRef = useRef<Destination | null>(null);
 
   const deliverOne = useCallback(
     async (dest: Destination) => {
-      if (rowPending !== null) return;
+      // ⚠️ A REF, NOT THE STATE VALUE — the state read is a STALE CLOSURE.
+      // `rowPending` here is whatever it was when this callback was last
+      // memoised, so two clicks dispatched inside ONE React batch both saw
+      // `null` and both proceeded: measured as two anchor clicks and two
+      // "Delivered" toasts. The rendered `disabled` attribute is the guard a
+      // real user hits; this is the guard for everything faster than a render.
+      //
+      // This codebase has shipped the same shape before — a memoised submit
+      // missing a gate from its dep array lit up and did nothing.
+      if (deliveringRef.current) return;
+      deliveringRef.current = dest;
       setRowPending(dest);
       try {
         const res = await prepareDeliverOnly(props.visitId, [dest]);
-        await applyBrowserSideDeliveries(res, [dest]);
-        toast.success('Delivered', {
-          description: DESTINATIONS.find((d) => d.key === dest)?.label ?? dest,
+        const failed = await applyBrowserSideDeliveries(res, [dest]);
+        const label = DESTINATIONS.find((d) => d.key === dest)?.label ?? dest;
+
+        // ⚠️ A BROWSER-SIDE FAILURE IS NOT A DELIVERY. `applyBrowserSideDeliveries`
+        // reports a blocked clipboard by toast and does not throw, so without
+        // this the row said "Delivered" immediately after "Copy blocked".
+        if (failed.length > 0) return;
+
+        // ⚠️ AND A DOWNLOAD IS NOT OBSERVED, SO IT IS NOT CLAIMED.
+        // `pdf`/`docx` fire an `<a download>` which has NO error channel:
+        // `prepareDeliverOnly` makes no request for them, and a 503 from the
+        // PDF route (Gotenberg down), a 401 on an expired session or a 500 all
+        // return JSON that the anchor quietly discards. Saying "Delivered"
+        // there asserts something this code cannot see.
+        //
+        // Fixing it properly means fetching the export, checking `res.ok` and
+        // downloading the blob — a change to the download mechanism, filed as
+        // F-T4-2 rather than smuggled into this one. Until then the row says
+        // only what it knows.
+        const observed = dest !== 'pdf' && dest !== 'docx';
+        toast.success(observed ? 'Delivered' : 'Download started', {
+          description: label,
         });
       } catch (err) {
         // ⚠️ A FAILED DELIVERY IS SAID OUT LOUD. The frames draw no error state
@@ -215,6 +246,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
           description: err instanceof Error ? err.message : String(err),
         });
       } finally {
+        deliveringRef.current = null;
         setRowPending(null);
       }
     },
@@ -696,9 +728,19 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                 ⚠️ THE UNDERLYING BEHAVIOUR IS NOT CHANGED HERE — that is a
                 capability question, filed rather than fixed inside a re-skin.
                 What is fixed is the surface CLAIMING something untrue. */}
-            <p className="qm-t4-summary" data-testid="t4-delivery-summary">
-              {deliverySummary}
-            </p>
+            {/* ⚠️ PRE-SIGN ONLY, AND MY COMMENT BELOW USED TO CLAIM THIS AND
+                BE FALSE. This element was ungated while only the line under it
+                was gated, so a signed visit showed "Delivery: Copy for Epic •
+                Download PDF" — the DEFAULT set — permanently, naming two
+                destinations that received nothing and omitting whichever one
+                the doctor had just clicked. `selected` cannot move after
+                signing because the checkboxes are gone, so it was a CONSTANT
+                false claim on every signed note, not a stale one. */}
+            {props.signOnSubmit && (
+              <p className="qm-t4-summary" data-testid="t4-delivery-summary">
+                {deliverySummary}
+              </p>
+            )}
             {/* "Locked notes can still be re-exported later" was the answer to
                 *if I sign now, can I still get the PDF?* — and it was deleted
                 with the footer copy it lived in. The pass caught the doctor
@@ -1003,10 +1045,24 @@ async function prepareDeliverOnly(
   };
 }
 
+/**
+ * ⚠️ RETURNS WHAT FAILED. It used to return `void`, and the browser-side
+ * failures it handles — a blocked clipboard, a lapsed user activation — were
+ * REPORTED to the doctor by toast and then INVISIBLE to the caller.
+ *
+ * That was harmless while the only caller was the sign submit, which
+ * deliberately does not fail a signature over a clipboard block and whose own
+ * toast fired BEFORE this ran, leaving the failure as the last word. The
+ * per-row action inverted that: its success toast fires AFTER, so the doctor
+ * saw "Copy blocked" and then "Delivered — Copy for Epic".
+ *
+ * The list is advisory: the sign path still ignores it and still does not fail.
+ */
 async function applyBrowserSideDeliveries(
   res: SignResponse,
   destinations: Destination[]
-): Promise<void> {
+): Promise<Destination[]> {
+  const failed: Destination[] = [];
   // 1. Download URLs fire FIRST — so if the clipboard write fails the
   //    doctor has already gotten the file as a fallback. When both PDF
   //    and DOCX are selected we gap them: Chrome drops the second
@@ -1048,6 +1104,13 @@ async function applyBrowserSideDeliveries(
           description:
             'Your browser blocked clipboard access. Re-open the export modal and try again.',
         });
+        // ⚠️ REPORTED, NOT RETHROWN — and the caller must be able to SEE it.
+        // Swallowing here is right for the SIGN path: a blocked clipboard must
+        // not fail a signature that already happened. But the per-row action
+        // then toasted "Delivered" straight after "Copy blocked", with the
+        // success emitted LAST, while the clipboard still held whatever it held
+        // before — plausibly the previous patient's note.
+        failed.push(lastKey);
       }
     }
   }
@@ -1058,6 +1121,7 @@ async function applyBrowserSideDeliveries(
     // accepted-for-delivery at this point.
     toast.success('Email sent');
   }
+  return failed;
 }
 
 function triggerDownload(href: string, kind: 'pdf' | 'docx') {
