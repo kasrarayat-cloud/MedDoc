@@ -376,8 +376,15 @@ function patternedNarrativeSentence(concept: string): string | null {
   return null;
 }
 
-/** The sentence this generator dictates for a concept, or null. */
-function narrativeSentence(concept: string): string | null {
+/**
+ * The sentence this generator dictates for a concept, or null.
+ *
+ * ⚠️ EXPORTED SO AN ARM CAN DRIVE IT RATHER THAN RE-IMPLEMENT IT — the same
+ * reasoning as `factMatchesMapping`, and exporting changes no behaviour. The
+ * alternative is an arm that reproduces the table-then-pattern lookup inline,
+ * which is a control that passes whatever the shipped lookup happens to do.
+ */
+export function narrativeSentence(concept: string): string | null {
   return NARRATIVE_SENTENCES.get(concept) ?? patternedNarrativeSentence(concept);
 }
 
@@ -385,8 +392,15 @@ function narrativeSentence(concept: string): string | null {
  * ⚠️ A KEY THE EXTRACTOR NEVER EMITS IS A SENTENCE THAT FILLS NOTHING.
  * Driven at module load rather than asserted in a test, because a test proves
  * the shipped table on the day it runs and this proves it on the day it loads.
- * `gate-f5i2-narrative-encounter.test.ts` also asserts it, with a mutation that
- * reddens both.
+ * ⚠️ CORRECTED 2026-09-05: this comment previously claimed
+ * `gate-f5i2-narrative-encounter.test.ts` "also asserts it, with a mutation
+ * that reddens both". IT DOES NOT — that file has ZERO references to this
+ * table, to `offRegistry`, or to this function. The load-time call below is
+ * real and does fire; the claimed test arm never existed. A source comment
+ * asserting coverage that does not exist is worse than no comment, because it
+ * is exactly what the next reader checks INSTEAD of the tests.
+ *
+ * The arm that does assert it is `gate-179-narrative-and-temporality.test.ts`.
  */
 function assertNarrativeKeysAreRegistered(): void {
   const offRegistry = [...NARRATIVE_SENTENCES.keys()].filter((c) => !isRegisteredConcept(c));
