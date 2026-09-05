@@ -174,7 +174,17 @@ const ROUTES: RouteSpec[] = [
     open: async (page) => {
       await openSignFlow(page);
     },
-    opened: 'sign-attestation-toggle',
+    // ⚠️ NOT `sign-attestation-toggle`, AND THE OPENER IS WHY. `openSignFlow`
+    // goes rail -> gate flow -> `rounds-gate-attest` -> signbar, so by the time
+    // the modal mounts the signbar has passed it `attested={true}` and
+    // `attestationNeededHere` is FALSE — the toggle is DELIBERATELY not
+    // rendered. Asserting it made the guard demand a control the opener had
+    // just satisfied away, and the guard correctly refused the whole row.
+    //
+    // `t4-group-download` is what the modal always renders, in every gate state
+    // and on both sides of the post-state change — the same sentinel the
+    // post-sign row uses, for the same reason.
+    opened: 't4-group-download',
   },
   {
     path: '/visits/:SIGNED',
