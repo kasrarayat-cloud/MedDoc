@@ -24,7 +24,7 @@
 // ============================================================================
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { useEffect, useState } from 'react';
 
 import { VisitViewSwitch } from '../visit-view-switch';
@@ -368,15 +368,19 @@ describe('F8-S2 — the coding view', () => {
     // ⚠️ SCOPED TO EACH RENDER'S OWN CONTAINER. `screen` queries
     // `document.body`, which holds BOTH renders — the second would satisfy an
     // absence assertion written about the first.
-    const a = view({ icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } } });
+    const a = within(
+      view({ icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } } }).container,
+    );
     expect(a.getByTestId('icd-undo-K21.00')).toBeTruthy();
     expect(a.queryByTestId('icd-undo-E11.9'), 'a HELD row must not offer Undo').toBeNull();
 
     // A REJECTED row is the other decided state and reaches the branch by a
     // different arm of the same condition — deleting either half must red.
-    const b = view({
-      icdDecisions: { 'E11.9': { state: 'rejected', at: AT, byUserId: USER, reason: 'not_supported_by_note' } },
-    });
+    const b = within(
+      view({
+        icdDecisions: { 'E11.9': { state: 'rejected', at: AT, byUserId: USER, reason: 'not_supported_by_note' } },
+      }).container,
+    );
     expect(b.getByTestId('icd-undo-E11.9')).toBeTruthy();
   });
 
@@ -430,6 +434,33 @@ describe('F8-S2 — the coding view', () => {
     expect(dx.textContent, 'a Z code is not a diagnosis').not.toContain('Z13.220');
     expect(hx.textContent).toContain('Z13.220');
     expect(hx.textContent, 'a diagnosis is not history or screening').not.toContain('K21.00');
+  });
+
+  it('⚠️ an ORPHANED AUTO-ACCEPT is not described as the doctor’s decision', () => {
+    // An auto-accepted code becomes an orphan when `icdCodes` is rewritten on a
+    // visit that already has content. Saying "You decided this code" to a
+    // doctor who never saw it is the WRONG-field harm — worse than saying
+    // nothing, because it asserts an attestation that did not happen.
+    // ⚠️ `within(container)`, NOT the render's own queries — those are bound to
+    // `baseElement` (document.body), which holds BOTH renders. The first draft
+    // of this arm used them and died on "found multiple elements", which is the
+    // LOUD form of a trap whose quiet form is an absence assertion satisfied by
+    // the other render.
+    const auto = within(
+      view({
+        icdDecisions: { 'Z00.00': { state: 'accepted', at: AT, byUserId: USER, auto: true } },
+      }).container,
+    );
+    const sec = auto.getByTestId('icd-section-no-longer-suggested');
+    expect(sec.textContent).toContain('accepted automatically at signing');
+    expect(sec.textContent).not.toContain('You decided');
+
+    // The doctor's OWN orphaned decision still says so — otherwise this passes
+    // by the surface never using the human wording at all.
+    const human = within(
+      view({ icdDecisions: { 'Z00.00': { state: 'accepted', at: AT, byUserId: USER } } }).container,
+    );
+    expect(human.getByTestId('icd-section-no-longer-suggested').textContent).toContain('You decided');
   });
 
   it('an ORPHANED decision is surfaced and is nobody’s default', () => {

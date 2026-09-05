@@ -37,6 +37,7 @@ import {
   isImagingReportSpecialty,
   ultrasoundSpecialtyEnabled,
 } from '@meddoc/shared/specialties';
+import { autoAcceptIcdDecisions } from '@/lib/icd-auto-accept';
 import { emAppliesToVisit } from '@/lib/note-shape';
 import { templateNativeDocxEnabled } from '@/config/template-native-docx';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
@@ -726,7 +727,20 @@ export const POST = withApiHandler<{ id: string }>(
         prisma.$transaction(async (tx) => {
           const fresh = await tx.transcribeVisit.findFirst({
             where: visitByIdScope(visitId, session.user.practiceId),
-            select: { cptCodes: true, emPendingChange: true },
+            // ⚠️ `icdCodes`/`icdDecisions` ARE READ HERE AND NOT FROM THE
+            // CAPTURE AT ENTRY, for the same reason `emPendingChange` is. The
+            // compare-and-swap below keys on `soapVersion`, and a coding
+            // decision does not move it — so a doctor rejecting a code in the
+            // seconds between entry and this write is INVISIBLE to the CAS.
+            // Auto-accepting from the captured map would then overwrite that
+            // rejection with a machine-written acceptance, on a signed record,
+            // with nothing anywhere reporting it.
+            select: {
+              cptCodes: true,
+              emPendingChange: true,
+              icdCodes: true,
+              icdDecisions: true,
+            },
           });
           const freshBlob = (fresh?.cptCodes ?? null) as {
             em?: { override?: { code?: string } };
@@ -798,6 +812,34 @@ export const POST = withApiHandler<{ id: string }>(
                   },
                 } as Prisma.InputJsonValue);
 
+          // ── SIGN-TIME AUTO-ACCEPT ────────────────────────────────────
+          // A suggested code the doctor never touched is written ACCEPTED with
+          // `auto: true`, so the signed record says what was coded instead of
+          // leaving the question open forever. The rule lives in
+          // `icd-auto-accept.ts`; it ADDS and never REPLACES, so a decision the
+          // doctor made — a REJECTION above all — passes through untouched.
+          //
+          // ⚠️ WRITTEN ONLY WHEN IT ADDED SOMETHING. An unconditional write
+          // would rewrite the whole column on every signature, which is the
+          // narrowing hazard `ICD_DECISION_RECORD_KEYS` exists for: any field a
+          // deployed reader does not know about would be stripped on a
+          // signature that changed nothing.
+          const autoIcd = autoAcceptIcdDecisions(
+            fresh?.icdCodes ?? null,
+            fresh?.icdDecisions ?? null,
+            { at: new Date().toISOString(), byUserId: userId },
+          );
+          if (autoIcd.added.length > 0) {
+            log.info('api:visits:sign', 'icd auto-accept at signature', {
+              visitId,
+              // COUNT and CODES — an ICD code is not patient context, and the
+              // codes are what makes a later dispute answerable. No quote, no
+              // description, nothing the note said.
+              added: autoIcd.added.length,
+              codes: autoIcd.added,
+            });
+          }
+
           return tx.transcribeVisit.updateMany({
         where: {
           ...visitByIdScope(visitId, session.user.practiceId),
@@ -844,6 +886,13 @@ export const POST = withApiHandler<{ id: string }>(
           // unrepresentable anyway — this is the code side of the same rule, so
           // the constraint never has to fire in normal operation.
           signedBy: userId,
+          // ⚠️ IN THE SAME `updateMany` AS THE SIGNATURE, deliberately — the
+          // same argument `signedBy` carries one field up. A follow-up update
+          // would leave a window in which the record is SIGNED and the codes it
+          // attests to are still undecided.
+          ...(autoIcd.added.length > 0
+            ? { icdDecisions: autoIcd.decisions as unknown as Prisma.InputJsonValue }
+            : {}),
           ...(mergedCpt !== undefined ? { cptCodes: mergedCpt } : {}),
           // E/M visible-confirm: the gate above verified the explicit
           // acknowledgement — MARK (not clear) the record so the row

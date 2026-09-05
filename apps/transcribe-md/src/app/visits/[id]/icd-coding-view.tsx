@@ -500,8 +500,17 @@ export function IcdCodingView(props: IcdCodingViewProps) {
             ledgerRow(
               code,
               'orphaned',
+              // ⚠️ "YOU DECIDED" IS FALSE OF A MACHINE-WRITTEN RECORD, and an
+              // orphaned auto-accept is reachable: `icdCodes` can be rewritten
+              // on a visit that already has content (the re-arming paths named
+              // in `icd-decisions.ts`), which turns yesterday's auto-accepted
+              // code into today's orphan. Telling a doctor they decided
+              // something they never saw is the wrong-field harm, not the
+              // absent-field one — so the sentence follows the provenance.
               <p className="qm-icd-row-note">
-                You decided this code, and the suggester no longer proposes it for this note.
+                {projection.decisions[code]?.auto
+                  ? 'This code was accepted automatically at signing, and the suggester no longer proposes it for this note.'
+                  : 'You decided this code, and the suggester no longer proposes it for this note.'}
               </p>,
             ),
           ),
