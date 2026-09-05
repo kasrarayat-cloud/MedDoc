@@ -59,7 +59,7 @@ vi.mock('@/lib/note-template-parse/phi-gate', async (orig) => {
 // 3000ms, and `stores objectKey + sha on create` landed at 3907ms against
 // vitest's 5000ms ceiling — 1.1s of margin on an IDLE machine.
 //
-// It duly failed CI on a contended runner (#943, job 100946908929, 18m04s for a
+// It duly failed CI on a contended runner (PR #943, job 100946908929, 18m04s for a
 // suite that takes 89s locally) and read as a mystery flake. The comment at the
 // race's call site records the SAME test timing out at 5000ms once before, which
 // is the tell: the race bounded the damage and left the cause in place.

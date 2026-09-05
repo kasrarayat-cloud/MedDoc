@@ -697,3 +697,46 @@ describe('#192 — THE FAIL-CLOSED PROPERTY, from the adversarial pass', () => {
     expect(surface).toContain('kept from your template');
   });
 });
+
+describe('#193 — keep is never model-authored and never auto-confirmed', () => {
+  it('(30) ⚠️ A PLANTED MODEL PROPOSAL CARRYING `keep` IS REJECTED', async () => {
+    // The model schema OMITS the field, so a proposal that carries it anyway
+    // must not survive parsing. `.strict()` is what makes the rejection real:
+    // without it an unknown key is silently dropped, and "dropped" would mean
+    // the offer vanishes rather than being refused.
+    const { z } = await import('zod');
+    const src = readFileSync(join(__dirname, '../semantic-mapping/index.ts'), 'utf-8');
+    expect(src).toContain('omit({ unmentionedPolicy: true })');
+    expect(src.slice(src.indexOf('const ModelSemanticMappingSchema'))).toContain('.strict()');
+
+    // and the base schema DOES accept it — otherwise this arm proves nothing
+    const { SemanticMappingSchema } = await import('../ir');
+    const scaffold = field('1', { fieldId: `ttf_${'1'.repeat(24)}` });
+    const withKeep = mapping(scaffold, 'ros.cardiovascular', { unmentionedPolicy: 'keep' });
+    expect(SemanticMappingSchema.safeParse(withKeep).success).toBe(true);
+    const modelShape = SemanticMappingSchema.omit({ unmentionedPolicy: true }).strict();
+    expect(modelShape.safeParse(withKeep).success).toBe(false);
+    expect(z).toBeDefined();
+  });
+
+  it('(31) ⚠️ A `keep` NEVER REACHES `certified` WITHOUT A HUMAN — auto-confirm DECLINES it', async () => {
+    // A kept default prints the template's own prose on a signed note. That is
+    // a clinical assertion no automated step may make for a doctor -- the same
+    // class as `practiceDefault`, which the model is forbidden from authoring.
+    // Measured cost of not doing this: 11 of 11 model proposals came back
+    // `keep`, `planAutoConfirm` spread them into `certified`, and a control
+    // containing `Enter assessment` rendered onto a note with no human at all.
+    const src = readFileSync(join(__dirname, '../auto-certify-eligibility.ts'), 'utf-8');
+    const fn = src.slice(src.indexOf('function planAutoConfirm'));
+    const body = fn.slice(0, fn.indexOf('\n}'));
+    // the decline must come BEFORE the certify, or it is not a decline
+    const declineAt = body.indexOf("mapping.unmentionedPolicy === 'keep'");
+    const certifyAt = body.indexOf("status: 'certified' as const");
+    expect(declineAt).toBeGreaterThan(-1);
+    expect(certifyAt).toBeGreaterThan(-1);
+    expect(declineAt).toBeLessThan(certifyAt);
+    // ⚠️ AND IT IS A DECLINE, NOT A SILENT STRIP — the field must reach the
+    // doctor's confirm-list, not certify quietly without its offer.
+    expect(body.slice(declineAt, certifyAt)).toContain('declined.push');
+  });
+});

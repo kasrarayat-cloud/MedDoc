@@ -210,6 +210,32 @@ export function planAutoConfirm(workspace: TemplateTwinWorkspace): AutoConfirmOu
       return mapping;
     }
 
+    // ⚠️ #193 — AUTO-CONFIRM NEVER CONFIRMS A `keep`, AND THE CLEAR IS THE
+    // POINT OF THE DECLINE. A kept default PRINTS THE TEMPLATE'S OWN PROSE ON A
+    // SIGNED NOTE, which is a clinical assertion no automated step may make on
+    // a doctor's behalf. It is the same class as `practiceDefault`, which the
+    // model is forbidden from authoring for exactly this reason.
+    //
+    // ⚠️ THE PASS MEASURED THE COST OF NOT DOING THIS: with the offer reaching
+    // the model's schema, 11 of 11 proposals returned `keep`, this function
+    // spread them into `status: 'certified'`, and a control containing
+    // `Enter assessment` rendered that string onto a note with NO HUMAN
+    // ANYWHERE and validation GREEN.
+    //
+    // ⚠️ AND IT IS A DECLINE, NOT A SILENT STRIP. Dropping the policy and
+    // certifying the rest would hide the offer from the doctor entirely — the
+    // field would certify with no keep and nobody would ever be asked. The
+    // decline puts it on the confirm-list, where one click covers every offer.
+    if (mapping.unmentionedPolicy === 'keep') {
+      declined.push({
+        label: field.originalLabel ?? '(unnamed field)',
+        reason:
+          'this field would keep your template’s own sentence when nothing is ' +
+          'dictated about it, so it needs your confirmation',
+      });
+      return mapping;
+    }
+
     if (decision.provenance) provenanceCounts[decision.provenance] += 1;
     // ⚠️ THE CONCEPT IS NOT REWRITTEN, AND THAT IS THE POINT. `confirmed()` on the
     // manual screen takes a concept because the DOCTOR may be changing it there.
