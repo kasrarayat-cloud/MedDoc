@@ -3340,3 +3340,12 @@ body[data-skin='rounds'] {
 [data-skin='rounds'] .qm-icd-row[data-state='not-carried'] .qm-icd-row-desc {
   color: var(--rounds-text-3);
 }
+
+[data-skin='rounds'] .qm-icd-ledger-caption {
+  margin: 16px 0 0;
+  font-family: var(--rounds-font-ui);
+  font-size: 12px;
+  line-height: 15px;
+  text-align: center;
+  color: var(--rounds-text-3);
+}

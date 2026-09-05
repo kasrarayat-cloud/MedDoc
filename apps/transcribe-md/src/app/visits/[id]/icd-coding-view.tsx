@@ -304,6 +304,20 @@ export function IcdCodingView(props: IcdCodingViewProps) {
     </section>
   );
 
+  // ── THE RECEIPT ─────────────────────────────────────────────────────────
+  // The owner's frames put the ledger on a single card: `claim-summary-ready` /
+  // `claim-summary-signed` (vDPGIxwPmm08BTzBD99vfQ) for the shell, and
+  // `icd-code-row-states` (24:2, Zvgz37i6jVoNYy9BzAAtoQ) for the five row
+  // states. Geometry, type and copy are the frames'; colours map by ROLE to
+  // Rounds tokens, per the standing ruling.
+  //
+  // ⚠️ THE COUNTS LINE STAYS, AND IT IS NOT IN THE FRAMES. The frames put patient
+  // identity above the card — which this component does not own; the Rounds
+  // stage renders it — leaving that slot free. The chip carries a property a
+  // gate asserts and a doctor needs: an ORPHANED accept reads "0 accepted",
+  // because it is a decision about a code this note no longer carries. Dropping
+  // it to match a mockup would delete a tested clinical claim, so it keeps its
+  // slot and the frames' caption is added below the card where the frames put it.
   return (
     <div className="w-full" data-testid="icd-coding-view">
       <div
@@ -346,6 +360,12 @@ export function IcdCodingView(props: IcdCodingViewProps) {
           The suggester proposed no codes for this note.
         </p>
       ) : null}
+
+      <div className="qm-icd-ledger" data-testid="icd-ledger">
+        <div className="qm-icd-ledger-title" data-testid="icd-ledger-title">
+          {props.readonly ? 'Coding — signed' : 'Coding — ready to sign'}
+        </div>
+        <hr className="qm-icd-ledger-rule" />
 
       {projection.undecided.length > 0 &&
         section(
@@ -560,7 +580,12 @@ export function IcdCodingView(props: IcdCodingViewProps) {
           )),
         )}
 
-      <p className="mt-6 text-[12px]" style={{ color: 'var(--rounds-ink-muted)' }}>
+      </div>
+
+      {/* The frames' caption, below the card, in their own words. It is the one
+          place the surface names quantities rather than showing them, so both
+          numbers are COMPUTED from the projection — never written down. */}
+      <p className="qm-icd-ledger-caption" data-testid="icd-ledger-caption">
         Suggestions are validated against this build’s verified ICD-10-CM set. The physician makes
         the final coding decision.
       </p>
