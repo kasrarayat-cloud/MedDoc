@@ -345,6 +345,15 @@ export const SemanticMappingSchema = z
     required: z.boolean(),
     blankPolicy: z.enum(['blank', 'not_documented', 'requires_input']),
     unknownPolicy: z.enum(['blank', 'not_documented', 'requires_input']),
+    /**
+     * ⚠️ `.optional()`, NOT `.default('keep')`. `z.infer` gives the OUTPUT type,
+     * where a defaulted field is REQUIRED — which made every hand-built
+     * `SemanticMapping` fixture in the suite a type error, for a field none of
+     * them care about. Optional says the same thing where it matters: ABSENCE
+     * MEANS KEEP, and the column's own `DEFAULT 'keep'` carries it in the
+     * database.
+     */
+    unmentionedPolicy: z.enum(['keep', 'omit']).optional(),
     practiceDefault: z.string().max(500).nullable(),
     status: TemplateTwinDetectionStatusSchema,
   })

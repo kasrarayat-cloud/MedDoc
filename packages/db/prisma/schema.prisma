@@ -3210,6 +3210,12 @@ model TemplateTwinSemanticMapping {
   required         Boolean                     @default(false)
   blankPolicy      String
   unknownPolicy    String
+  /// #191 — for a SCAFFOLDED control (non-empty default content at compile),
+  /// what happens when NO fact matches. `keep` leaves the doctor's own clause
+  /// standing and earns `default_kept` (which requires a citation); `omit`
+  /// clears it through the proven bounded clear. Defaults to `keep` so no
+  /// existing mapping changes behaviour.
+  unmentionedPolicy String @default("keep")
   practiceDefault  String?
   mappingStatus    TemplateTwinDetectionStatus @default(NEEDS_CONFIRMATION)
   proposedByModel  String?

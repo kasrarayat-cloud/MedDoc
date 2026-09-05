@@ -246,6 +246,10 @@ function missingResolution(
    *  specific than "nothing was said" — the reason must survive, the false
    *  evidence trail must not. */
   reason?: { unfilled: string; required: string },
+  /** TRUE at exactly one call site: the one reached because NO fact carries
+   *  this field's approved concept. That is the only site where "the encounter
+   *  said nothing about this" is a true statement rather than a deferral. */
+  conceptUnmatched = false,
 ): FieldResolution {
   const practiceDefault = practiceDefaultResolution(field, mapping, facts);
   if (practiceDefault) return practiceDefault;
@@ -255,6 +259,51 @@ function missingResolution(
     field.unknownPolicy === 'requires_input' ||
     mapping.unknownPolicy === 'requires_input' ||
     mapping.blankPolicy === 'requires_input';
+  // ── RULING #191 — THE SCAFFOLDED-FIELD POLICY, AND THIS IS ITS EMITTER ──
+  //
+  // ⚠️ `default_kept` SHIPPED WITH NO EMITTER. Its status, its validator and its
+  // renderer proof all landed together and NOTHING PRODUCED IT — #170's exact
+  // shape, the ruling that exists because a third state was added to `blank`
+  // without its emitter and the owner's form went from 35 counted blanks to
+  // ZERO. A sentinel whose absence means "no" must be written on every path
+  // that earns a yes.
+  //
+  // ⚠️ SKIPPED WHEN THE FIELD DEMANDS CLINICIAN INPUT. A required field must
+  // still ask; a kept default would silently answer for it.
+  //
+  // ⚠️ AND IT REQUIRES EVALUATED FACTS — which is exactly what makes `keep` safe
+  // as the default. A mapping that evaluated nothing cannot reach this branch
+  // and falls through unchanged, so no existing template's output moves. The
+  // citation IS the claim: a kept default citing nothing is indistinguishable
+  // from a field nobody examined.
+  //
+  // ⚠️ AND ONLY WHEN THE FIELD IS UNFILLED FOR NO NAMED REASON. `reason` is
+  // passed exactly when the field is unfilled for something MORE SPECIFIC than
+  // "nothing was said" — a withheld denial above all. Without this guard the
+  // first version of this emitter kept the template's pre-printed sentence OVER
+  // A DOCTOR'S DENIAL: "The patient denies heartburn" would have stood on a
+  // note where the doctor denied it, because a denial also arrives here with
+  // facts in hand. Measured: it redded 20+ arms of the denial contract, which
+  // is the only reason it is not in this commit.
+  if (
+    conceptUnmatched &&
+    !requiresInput &&
+    mapping.unmentionedPolicy !== 'omit' &&
+    facts.length > 0
+  ) {
+    return makeResolution(
+      field.fieldId,
+      'default_kept',
+      null,
+      // ⚠️ CITES THE EVALUATED SET, AND THE IR SCHEMA REQUIRES IT TO: "a kept
+      // default must cite the facts that were evaluated — without them it is
+      // indistinguishable from a field nobody examined". Emptying this array
+      // is therefore not an option; it is a parse error.
+      facts,
+      'default_kept_uncontradicted',
+    );
+  }
+
   return makeResolution(
     field.fieldId,
     requiresInput ? 'needs_clinician_input' : 'not_mentioned',
@@ -262,7 +311,11 @@ function missingResolution(
     [],
     requiresInput
       ? (reason?.required ?? 'required_fact_not_mentioned')
-      : (reason?.unfilled ?? 'fact_not_mentioned'),
+      : mapping.unmentionedPolicy === 'omit'
+        // #191 — the scaffold was cleared ON PURPOSE and the reason says so.
+        // `fact_not_mentioned` would read as "nobody looked".
+        ? 'omitted_unsupported_default'
+        : (reason?.unfilled ?? 'fact_not_mentioned'),
   );
 }
 
@@ -446,7 +499,13 @@ function resolveOne(
       approvedConcepts.has(normalizeConcept(fact.concept)),
   );
   if (conceptCandidates.length === 0) {
-    return missingResolution(field, mapping, allFacts);
+    // The ONLY site that earns #191's kept default: no fact in the encounter
+    // carries this field's approved concept, so the template's own sentence
+    // stands uncontradicted. The three other `missingResolution` sites are
+    // DEFERRALS with facts in hand — a grid row the resolver cannot address, a
+    // temporality the mapping did not approve — and a kept default there would
+    // answer a question that was actually asked.
+    return missingResolution(field, mapping, allFacts, undefined, true);
   }
 
   // A FIXED-GRID TABLE CELL IS ADDRESSED BY ITS ROW, AND THE RESOLVER CANNOT
