@@ -52,7 +52,17 @@ const REPO_ROOT = join(__dirname, '../../../../..');
 const SCRIPT = join(REPO_ROOT, 'scripts/check-retirement-conditions.sh');
 const INBOX = join(REPO_ROOT, 'docs/foundation/INBOX.md');
 
-function run(cwd: string = REPO_ROOT, env: NodeJS.ProcessEnv = {}): { code: number; out: string } {
+// ⚠️ `Record<string, string>`, NOT `NodeJS.ProcessEnv`. That type REQUIRES
+// `NODE_ENV`, so `{ RETIREMENT_SWEEP_OFFLINE: '1' }` does not satisfy it, and
+// CI's typecheck said so.
+//
+// ⚠️ AND THE HONEST REASON IT REACHED CI: I never ran `tsc` on this branch. The
+// suite was green and I took that as sufficient — but vitest transpiles without
+// typechecking, so a green suite says nothing about types. Not an instrument
+// that lied; a check that was skipped. CI runs
+// `npx tsc --noEmit -p apps/transcribe-md/tsconfig.json`, and running exactly
+// that afterwards reproduces green.
+function run(cwd: string = REPO_ROOT, env: Record<string, string> = {}): { code: number; out: string } {
   try {
     const out = execFileSync('bash', [SCRIPT], {
       cwd,
