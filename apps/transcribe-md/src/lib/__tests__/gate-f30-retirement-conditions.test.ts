@@ -287,3 +287,80 @@ describe('F30 · retirement conditions are tested, not remembered', () => {
     else expect(code).toBe(0);
   });
 });
+
+// ============================================================================
+// ⚠️ THE ROOT CAUSE OF THIS GATE'S OWN RECURRING FLAKE.
+// ----------------------------------------------------------------------------
+// The census line above was added because this arm went RED in CI on unchanged
+// trees, naming a DIFFERENT entry each time, while every local reproduction was
+// clean. It printed what the sweep READ — and the answer settled it: the census
+// and the registry held the SAME 18 timestamps, and one of them was still being
+// called an orphan. A set that equals itself cannot have an orphan, so the
+// defect was never in the data.
+//
+// It was in the pipeline:
+//
+//     printf '%s\n' "${HEADINGS[@]}" | grep -qF "### $rts" || ORPHANS+=("$rts")
+//
+// `grep -q` exits 0 the instant it matches and closes the pipe. `printf` then
+// dies of SIGPIPE (141). `set -o pipefail` promotes the PIPELINE's status to
+// that 141 — so a MATCH is reported as a MISS and the `||` fires.
+//
+// MEASURED, as a controlled A/B on the exact construct, same loop and data:
+//     printf | grep -q          21 false misses / 54,000 certain matches
+//     [[ blob == *needle* ]]     0 false misses / 54,000
+//
+// ~1 in 2,500 per probe × 18 rows ≈ 0.7% per run — which is exactly why 25
+// consecutive clean local runs never refuted it, and why CI, which runs it far
+// more often and under more scheduling pressure, saw it repeatedly.
+//
+// ⚠️ WHAT IS AND IS NOT PROVED. The MECHANISM is measured and the fix is an A/B.
+// The CI red itself was not reproduced on demand — a 0.7% event is not
+// reproducible on demand, which is the whole reason it survived this long. What
+// ties them is the signature: identical sets, a different victim each time, and
+// a census that matches this tree's byte for byte.
+// ============================================================================
+
+describe('⚠️ no early-exit pipeline can misreport a match as a miss', () => {
+  const PIPE_INTO_GREP_Q = /\|\s*grep\s+-[a-zA-Z]*q/;
+
+  it('the sweep contains no pipeline into `grep -q`', () => {
+    const body = readFileSync(SCRIPT, 'utf8');
+    // Comments are stripped first, or this gate reports its OWN documentation.
+    const code = body
+      .split('\n')
+      .filter((l) => !l.trimStart().startsWith('#'))
+      .join('\n');
+    const offenders = code
+      .split('\n')
+      .filter((l) => PIPE_INTO_GREP_Q.test(l));
+    expect(
+      offenders,
+      'each of these can report a MATCH as a MISS under `pipefail`; use ' +
+        '`[[ "$blob" == *"$needle"* ]]`, or capture then match',
+    ).toEqual([]);
+  });
+
+  it('CONTROL — the check SEES a planted offender in a real file', () => {
+    // ⚠️ A CONTROL THAT NEVER TOUCHES A FILE CANNOT GUARD FILES. The arm above
+    // reads from disk, so this one plants the offending line into the real
+    // text and confirms the same predicate reds on it — otherwise a typo in
+    // the regex would leave a permanently green no-op.
+    const body = readFileSync(SCRIPT, 'utf8');
+    const planted = `${body}\nprintf '%s\\n' "\${X[@]}" | grep -qF "needle"\n`;
+    const offenders = planted
+      .split('\n')
+      .filter((l) => !l.trimStart().startsWith('#'))
+      .filter((l) => PIPE_INTO_GREP_Q.test(l));
+    expect(offenders.length).toBeGreaterThan(0);
+  });
+
+  it('and `pipefail` is still ON — the hazard only exists because it is', () => {
+    // ⚠️ THE FIX IS NOT "TURN OFF pipefail". `pipefail` is what makes every
+    // OTHER pipeline in this script honest; the repair is to stop piping into
+    // a command that exits early, not to stop noticing when a pipeline fails.
+    // Asserting it stays on is what keeps a future reader from "fixing" this
+    // the cheap way.
+    expect(readFileSync(SCRIPT, 'utf8')).toMatch(/^set -[a-z]*o pipefail/m);
+  });
+});

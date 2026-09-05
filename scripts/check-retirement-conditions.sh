@@ -182,11 +182,19 @@ mapfile -t HEADINGS < <(grep -E '^### [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{
 # ⚠️ NON-VACUITY FIRST. A regex that silently matched nothing would make every
 # bucket below empty and the partition would reconcile perfectly at zero.
 # NEVER normalise an impossible value into a plausible one.
+# One string, built once, so no reader of HEADINGS needs a subprocess at all.
+# Newline-delimited on both ends is what keeps `*"### $ts"*` a line-anchored
+# question rather than a substring one.
+HEADINGS_BLOB="$(printf '%s\n' "${HEADINGS[@]}")"
+
 if [ "${#HEADINGS[@]}" -lt 5 ]; then
   echo "🟡 only ${#HEADINGS[@]} INBOX entries parsed — the matcher is not reading this file. Can't tell."
   exit 2
 fi
-if ! printf '%s\n' "${HEADINGS[@]}" | grep -q '2026-08-20T16:40:00Z'; then
+# Same SIGPIPE hazard as the orphan loop below — and here a false miss aborts
+# the whole sweep with "can't tell", which is the failure mode a positive
+# control exists to make impossible.
+if [[ "$HEADINGS_BLOB" != *'2026-08-20T16:40:00Z'* ]]; then
   echo "🟡 positive control FAILED — the known entry 2026-08-20T16:40:00Z was not parsed. Can't tell."
   exit 2
 fi
@@ -243,8 +251,9 @@ if [ "${RETIREMENT_SWEEP_OFFLINE:-0}" = "1" ]; then
   # it certifies.
   NET_OK=0
   NET_FORCED=" · OFFLINE FORCED"
-elif git ls-remote --heads origin main 2>/dev/null | grep -q 'refs/heads/main'; then
-  NET_OK=1
+else
+  _ls_main="$(git ls-remote --heads origin main 2>/dev/null || true)"
+  [[ "$_ls_main" == *'refs/heads/main'* ]] && NET_OK=1
 fi
 # ⚠️ A SECOND, SEPARATE CONTROL — and it is not implied by the first.
 # `merged:` asks TWO questions: is the branch gone (network), and is the file on
@@ -284,7 +293,7 @@ for h in "${HEADINGS[@]}"; do
   case "$pred" in
     retired)
       # Cross-checked against the FILE, never taken from the registry's word.
-      if printf '%s' "$h" | grep -q 'RETIRED'; then B_RETIRED+=("$ts  $title")
+      if [[ "$h" == *'RETIRED'* ]]; then B_RETIRED+=("$ts  $title")
       else B_UNREG+=("$ts  $title   ⚠️ registry says RETIRED; the heading does not"); fi
       ;;
     none)
@@ -311,7 +320,10 @@ for h in "${HEADINGS[@]}"; do
       if [ "$NET_OK" -ne 1 ]; then B_CANT+=("$ts  $title   (origin unreachable — a branch cannot be called GONE)")
       elif [ "$REF_OK" -ne 1 ]; then B_CANT+=("$ts  $title   (origin/main does not resolve here — 'file absent' and 'ref missing' are NOT the same answer)")
       else
-        gone=1; git ls-remote --heads origin "$br" 2>/dev/null | grep -q "refs/heads/$br" && gone=0
+        # ⚠️ CAPTURE THEN MATCH. A false miss here calls a LIVE branch gone
+        # and can mark a retirement DUE — the expensive direction.
+        gone=1; _ls_br="$(git ls-remote --heads origin "$br" 2>/dev/null || true)"
+        [[ "$_ls_br" == *"refs/heads/$br"* ]] && gone=0
         landed=0; git cat-file -e "origin/main:$path" 2>/dev/null && landed=1
         if [ "$gone" -eq 1 ] && [ "$landed" -eq 1 ]; then
           B_DUE+=("$ts  $title
@@ -345,7 +357,19 @@ for row in "${REGISTRY[@]}"; do
   rts="${row%%|*}"
   # -F: a timestamp is a FIXED string, never a pattern. `grep -q` would also
   # match it appearing anywhere in a heading's title text.
-  printf '%s\n' "${HEADINGS[@]}" | grep -qF "### $rts" || ORPHANS+=("$rts")
+  # ⚠️ BASH-NATIVE, NOT `printf | grep -q`, AND THAT PIPELINE IS THE BUG.
+  # `grep -q` exits 0 the instant it matches and CLOSES the pipe; `printf` then
+  # dies of SIGPIPE (141); `set -o pipefail` (line 101) promotes the pipeline's
+  # status to that 141 — so a MATCH is reported as a MISS and the `||` records
+  # an orphan that is not one. Measured at 21 false misses in 54,000 probes
+  # where the match certainly existed: ~1 in 2,500, which over 18 rows is a
+  # ~0.7% chance per run of a red naming a DIFFERENT entry each time.
+  #
+  # That is every recorded symptom of this gate's flake, including the one the
+  # census line was added to expose: census and registry holding the SAME 18
+  # timestamps while a row is called an orphan. 25 clean local runs are exactly
+  # what a 1-in-2,500 rate predicts, so they never refuted it.
+  [[ "$HEADINGS_BLOB" == *"### $rts"* ]] || ORPHANS+=("$rts")
 done
 
 emit() {
