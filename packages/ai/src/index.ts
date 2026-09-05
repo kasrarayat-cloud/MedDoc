@@ -7,6 +7,22 @@
 // Editor + Clinical Notes.
 // ============================================================================
 
+// ── RULING #188 — THE CONFIGURED MODEL ID IS VALIDATED AT STARTUP ──────────
+//
+// ⚠️ HERE, AND NOT IN THE APP AND THE WORKER SEPARATELY. Both import this
+// package — 112 files and 53 files respectively — so one call covers both
+// processes. Two call sites would be two places to forget, and the one that
+// gets forgotten is always the one that matters.
+//
+// The check runs at MODULE LOAD, which is what "refuses to start" means for a
+// library: the first import fails loudly, NAMING THE ID, instead of the first
+// clinical request failing obscurely somewhere inside the pipeline.
+import { assertClinicalModelEnv } from './anthropic';
+
+assertClinicalModelEnv(process.env);
+
+export { assertClinicalModelEnv, temperaturePolicyFor } from './anthropic';
+
 export * from './types';
 export * from './model-client';
 export * from './deepgram-batch';

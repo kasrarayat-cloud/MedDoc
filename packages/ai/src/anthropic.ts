@@ -224,9 +224,58 @@ export class UnknownTemperaturePolicyError extends Error {
   }
 }
 
+/**
+ * RULING #188 — THE SAME QUESTION, ASKED WITHOUT THROWING.
+ *
+ * The refusal below is right and stays. But a STARTUP check cannot be built on
+ * a function whose only way of saying "no policy" is to throw on the clinical
+ * path, so the lookup is split out as a predicate and the throwing wrapper is
+ * rewritten in terms of it.
+ *
+ * ⚠️ ONE TABLE, TWO READERS. A second copy of these patterns would drift from
+ * this one the day either is edited, and the drift would be INVISIBLE in the
+ * dangerous direction: the startup check would admit a model the request path
+ * then refuses.
+ */
+export function temperaturePolicyFor(model: string): 'strip' | 'accept' | null {
+  if (TEMPERATURE_STRIPPED.some((re) => re.test(model))) return 'strip';
+  if (TEMPERATURE_ACCEPTED.some((re) => re.test(model))) return 'accept';
+  return null;
+}
+
+/**
+ * RULING #188 — THE CONFIGURED MODEL ID IS VALIDATED AT STARTUP.
+ *
+ * ⚠️ THE FAIL-CLOSED REFUSAL IS KEPT; ITS TIMING MOVES. Every clinical layer
+ * passes a temperature — L2 `0`, L4 `0.2`, L6 `0.1`, L7a `0`, L7b `0`, L7e
+ * `0.3`, 04b `0`, 06b `0` — and `TRANSCRIBE_MD_CLINICAL_MODEL` is read by
+ * PRODUCTION code (`parse-note-to-template.ts`, `synthetic-test.ts`), not only
+ * by eval scripts. So a one-character typo — `claude-sonnet5` for the real
+ * `claude-sonnet-5` — throws uncaught on the FIRST CLINICAL REQUEST, inside the
+ * pipeline, wearing the costume of a generation failure.
+ *
+ * **A CONFIGURATION ERROR MUST NOT MASQUERADE AS A CLINICAL ONE.** The two are
+ * diagnosed by different people, in different places, at different hours.
+ *
+ * ⚠️ IT VALIDATES ONLY WHAT IS SET. An unset variable is not an error: the
+ * default is a literal in the code and is covered by the same table. Refusing
+ * on absence would refuse every normal boot, which is how a fail-closed check
+ * gets deleted by whoever is on call.
+ *
+ * Pure, and takes its environment as an argument, so an arm can drive it
+ * without mutating `process.env` for a whole test run.
+ */
+export function assertClinicalModelEnv(env: Record<string, string | undefined>): void {
+  const model = env.TRANSCRIBE_MD_CLINICAL_MODEL;
+  if (model === undefined || model === '') return;
+  if (temperaturePolicyFor(model) !== null) return;
+  throw new UnknownTemperaturePolicyError(model);
+}
+
 function shouldOmitTemperature(model: string): boolean {
-  if (TEMPERATURE_STRIPPED.some((re) => re.test(model))) return true;
-  if (TEMPERATURE_ACCEPTED.some((re) => re.test(model))) return false;
+  const policy = temperaturePolicyFor(model);
+  if (policy === 'strip') return true;
+  if (policy === 'accept') return false;
   throw new UnknownTemperaturePolicyError(model);
 }
 
