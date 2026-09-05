@@ -30,6 +30,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { SessionUnverifiableError } from '@meddoc/auth';
 import { redactPhi } from '@meddoc/ai';
 
 export interface ApiErrorBody {
@@ -98,6 +99,32 @@ export function withApiHandler<P extends Record<string, string>>(
       response.headers.set('Server-Timing', `app;dur=${ms}`);
       return response;
     } catch (err) {
+      // ⚠️ #182(1) / #186(a) — "CANNOT TELL" ANSWERS 503, NOT 500.
+      //
+      // `SessionUnverifiableError` declared `readonly status = 503` and three
+      // comments said the request was "REFUSED (503)". NOTHING MAPPED IT TO A
+      // RESPONSE. The throw fell through to the catch-all below and the caller
+      // received a generic 500 — so the prose asserted a status the system did
+      // not send, and a client could not distinguish "retry in a moment" from
+      // "this request is broken". Found by an adversarial lens re-reading the
+      // author's own comments against the code.
+      //
+      // 503 is the honest code: the service could not verify the session right
+      // now. `Retry-After` is set because that is the whole content of the
+      // answer — the session is NOT ended and the next attempt may well work.
+      if (err instanceof SessionUnverifiableError) {
+        const ms = Date.now() - t0;
+        console.error(`[${prefix}] SESSION_UNVERIFIABLE after ${ms}ms — answering 503`);
+        const response = apiError(
+          'session could not be verified — you have not been signed out; please retry',
+          503,
+        );
+        response.headers.set('Retry-After', '2');
+        response.headers.set('X-Response-Time', `${ms}ms`);
+        response.headers.set('Server-Timing', `app;dur=${ms}`);
+        return response;
+      }
+
       // T-M18.1 A1: scrub before stdout. `err` here is whatever slipped
       // past the handler's own try/catch — Prisma errors in particular
       // quote failing column values in their `.message`, which for

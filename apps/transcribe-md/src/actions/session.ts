@@ -76,6 +76,16 @@ async function recordLogoutAttempt(
       action: 'LOGOUT',
       ...(userId ? { userId } : {}),
       ...(practiceId ? { practiceId } : {}),
+      // ⚠️ #186(b) — `success` IS PASSED EXPLICITLY, AND THE ROW USED TO
+      // CONTRADICT ITSELF. `logAudit` applies `success: input.success ?? true`,
+      // so a FAILED sign-out was filed with `success = true` while its own
+      // `metadata.outcome` said FAILED. An auditor reading the column — which
+      // is the indexed, greppable half — would have counted it as a success.
+      //
+      // Strictly better than the state before #182, where a failed sign-out
+      // left NO row at all. But a row that disagrees with itself is a poor
+      // artefact, and the disagreement was silent.
+      success: outcome === 'SUCCESS',
       metadata: { outcome, detail },
     } as Parameters<typeof logAudit>[0]);
   } catch (err) {
