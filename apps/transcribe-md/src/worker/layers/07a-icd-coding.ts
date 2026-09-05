@@ -8,7 +8,12 @@
 // ============================================================================
 
 import { z } from 'zod';
-import { modelClient, isValidIcd10 } from '@meddoc/ai';
+import {
+  modelClient,
+  isValidIcd10,
+  isIcd10Header,
+  billableDescendantsOf,
+} from '@meddoc/ai';
 import prisma from '@meddoc/db';
 import { logAudit } from '@/lib/audit';
 import { buildIcdDropRecords } from '@/lib/icd-drops';
@@ -68,6 +73,39 @@ export type IcdResult = z.infer<typeof IcdResult>;
  * a genuine asymptomatic code (a truly asymptomatic-but-present varicosity) is
  * left untouched. Pure + deterministic. Preserves input order.
  */
+/**
+ * RULING #180 — split one exit's refusals into its two sub-reasons.
+ *
+ * ⚠️ EXPORTED AND PURE SO A GATE CAN DRIVE IT. An earlier draft did this inline
+ * and the mutation proof caught the consequence: collapsing the split changed
+ * NOTHING the gate could see, because the gate reproduced the classification in
+ * a local helper. *A copy of the logic cannot witness the logic.* It follows the
+ * pattern this file already uses for its three coherence floors.
+ *
+ * ⚠️ AND IT LIVES HERE, NOT IN `icd-drops.ts`, because that module is a
+ * CLIENT-SAFE LEAF — `icd-coding-view.tsx` is a `'use client'` component that
+ * imports from it, and no client file imports `@meddoc/ai` today. Doing this
+ * there would pull the Anthropic/OpenAI/Deepgram SDKs and ~700 KB of ICD data
+ * into a browser bundle.
+ *
+ * Total by construction: every input lands in exactly one bucket.
+ */
+export function classifyAllowlistRefusals(codes: readonly string[]): {
+  headers: Array<{ code: string; children: readonly string[] }>;
+  notCodes: string[];
+} {
+  const headers: Array<{ code: string; children: readonly string[] }> = [];
+  const notCodes: string[] = [];
+  for (const code of codes) {
+    if (isIcd10Header(code)) {
+      headers.push({ code, children: billableDescendantsOf(code) });
+    } else {
+      notCodes.push(code);
+    }
+  }
+  return { headers, notCodes };
+}
+
 export function dropIncoherentVaricoseCodes(codes: readonly IcdCode[]): IcdCode[] {
   const hasSymptomaticVaricose = codes.some((c) => /^I83\.[0128]/i.test(c.code));
   if (!hasSymptomaticVaricose) return [...codes];
@@ -600,8 +638,25 @@ export async function runLayer7aIcdCoding(
   // regexing this file — and a source scan cannot see two tokens SWAPPED between
   // their loops, which is this slice's entire product inverted. Named properties
   // on `IcdDropInputs` are what a reader checks; the gate checks behaviour.
+  // ⚠️ RULING #180 — ONE EXIT, TWO SUB-REASONS, CLASSIFIED HERE.
+  // `rejected` is the output of a SINGLE exit (`isValidIcd10` failing at the
+  // accept loop above), so #149(b)'s four exits are unchanged. What #180 adds
+  // is that the exit's reason is not one thing: a category HEADER is a real
+  // ICD-10-CM entry with billable descendants — actionable, and one always
+  // exists — while a fabrication has nothing to offer. Telling a doctor the
+  // same sentence for both is the defect the ruling closes.
+  //
+  // ⚠️ THE SPLIT LIVES HERE AND NOT IN `icd-drops.ts` BECAUSE THAT MODULE IS A
+  // CLIENT-SAFE LEAF. `icd-coding-view.tsx` is a `'use client'` component that
+  // imports from it, and no client file imports `@meddoc/ai` today — doing the
+  // classification there would pull the Anthropic/OpenAI/Deepgram SDKs and
+  // ~700 KB of ICD data into a browser bundle. This layer is the worker.
+  const { headers: rejectedHeaders, notCodes: rejectedNotCodes } =
+    classifyAllowlistRefusals(rejected.map((r) => r.code));
+
   const dropped = buildIcdDropRecords({
-    notInVerifiedAllowlist: rejected.map((r) => r.code),
+    notInVerifiedAllowlist: rejectedNotCodes,
+    headerUseBillableChild: rejectedHeaders,
     incoherentVaricose: droppedIncoherent.map((c) => c.code),
     contradictedByDenial: droppedDenied.map((c) => c.code),
     unsupportedDeficiency: droppedDeficiency.map((c) => c.code),
