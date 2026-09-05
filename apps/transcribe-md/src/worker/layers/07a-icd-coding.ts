@@ -18,7 +18,21 @@ const MODEL = 'claude-sonnet-4-6';
 export const IcdCode = z.object({
   code: z
     .string()
-    .regex(/^[A-Z][0-9][0-9A-Z](?:\.[0-9A-Z]{1,4})?$/i, 'ICD-10-CM format'),
+    // ⚠️ POSITION 2 ACCEPTS A LETTER. It used to be `[0-9]`, which was true of
+    // every ICD-10-CM code until FY2026 introduced the QA0 neurodevelopmental
+    // chapter — 13 valid-for-submission codes (QA0.0101 … QA0.8, the SCN2A- /
+    // CACNA1A- / SLC6A1- / STXBP1- / DLG4- / FOXG1-related disorders) with a
+    // LETTER there. Found by the adversarial pass on the FY2026 ingestion:
+    // against the 604-code starter set the invariant "every allowlist member
+    // satisfies this regex" held with 0 violations; against the complete CMS
+    // set it had 13. That mattered because `IcdResult` parses the model's
+    // WHOLE array at once, so a single QA0 code failed the parse and discarded
+    // every OTHER code in the same response.
+    //
+    // This only widens the SHAPE pre-filter. `isValidIcd10` remains the actual
+    // floor, and `gate-icd-schema-allowlist-parity.test.ts` now pins the two
+    // together so this cannot silently drift again.
+    .regex(/^[A-Z][0-9A-Z][0-9A-Z](?:\.[0-9A-Z]{1,4})?$/i, 'ICD-10-CM format'),
   description: z.string().min(1),
   evidence_quote: z.string().min(1),
   /** 0-1 confidence — the UI maps <0.5 red, 0.5-0.8 amber, >0.8 green. */
@@ -370,7 +384,7 @@ export const L7A_SYSTEM_PROMPT: string = [
     '  code. Map by the documented complication: pain → I83.81x; swelling /',
     '  heaviness / aching / edema / cramps / fatigue / other complications →',
     '  I83.89x. For THESE TWO families ONLY, the final digit encodes laterality',
-    '  (right = ...1, left = ...2, bilateral = ...3; unspecified = I83.810 for',
+    '  (right = ...1, left = ...2, bilateral = ...3; unspecified = I83.819 for',
     '  pain, I83.899 for other complications). With inflammation → I83.1x and',
     '  with an ulcer → I83.0x, chosen by the documented laterality and (for',
     '  ulcers) the ulcer SITE — the "final digit = laterality" shortcut does',
