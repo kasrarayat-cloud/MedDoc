@@ -199,14 +199,6 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
           data-fill-sha={result.fillSha ?? ''}
         >
           {result.counts.filled} field{result.counts.filled === 1 ? '' : 's'} filled
-          {/* ⚠️ #192 — KEPT DEFAULTS ARE DISCLOSED SEPARATELY, AND NOT AS BLANKS.
-              They were briefly folded into the blank count, which told the
-              doctor a field was empty while its page asserted a clinical fact.
-              A bucket nobody reads is the same failure one step later, so the
-              number reaches this line rather than stopping at the manifest. */}
-          {result.counts.defaultsKept > 0
-            ? ` · ${result.counts.defaultsKept} kept from your template — nothing dictated contradicted them`
-            : ''}
           {result.counts.notMentioned > 0
             ? ` · ${result.counts.notMentioned} still blank — nothing dictated for those yet`
             : ''}

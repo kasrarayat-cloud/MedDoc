@@ -122,9 +122,6 @@ export interface CachedFill {
     filled: number;
     needsReview: number;
     notMentioned: number;
-    /** #192 — kept defaults are NOT blank; they print the template's own
-     *  declared clause. Carried so the doctor is told about them. */
-    defaultsKept: number;
   } | null;
   fillSha: string;
   /** The named reason the PDF path was missed, when it was. */

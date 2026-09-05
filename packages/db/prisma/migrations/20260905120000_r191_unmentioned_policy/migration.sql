@@ -1,20 +1,26 @@
--- RULING #192 — `unmentionedPolicy` is a per-field DECLARATION, and its absence
--- is a MEANING, not a missing value.
+-- RULING #194 — `unmentionedPolicy` is NULL | 'omit'. THERE IS NO 'keep'.
 --
--- ⚠️ NULLABLE WITH NO DEFAULT, AND THAT IS THE WHOLE CORRECTION. #191 shipped
--- this as `TEXT NOT NULL DEFAULT 'keep'`, which was right while `keep` and
--- absent were semantically identical. #192 makes them OPPOSITES: absent is
--- today's bounded clear (fail-closed — a prompt can never print), `keep` keeps
--- the doctor's own clause. A `DEFAULT 'keep'` would therefore have silently
--- opted EVERY EXISTING MAPPING into keeping, and printed template prompts onto
--- notes nobody re-certified.
+--   NULL    the bounded clear, COUNTED as still blank — the doctor is told.
+--   'omit'  the bounded clear, NOT counted and with no prompt — a field the
+--           doctor RULED blank, such as a telehealth consent line on an
+--           in-person visit.
 --
--- ⚠️ AND IT IS WHAT KEEPS EVERY CERTIFIED SHA STILL. `templateTwinMappingsSha256`
--- hashes the mapping; `fill-engine` throws TEMPLATE_PROVENANCE_MISMATCH when it
--- moves. Pre-existing rows are NULL and contribute NOTHING to the hash, so no
--- certification breaks — while both explicit values DO move it, which is
--- correct, because each is a declaration that changes what the document says.
+-- ⚠️ NULLABLE WITH NO DEFAULT, AND NULL IS A MEANING. A default of any kind
+-- would opt every existing mapping into a policy nobody chose. It is also what
+-- holds every certified sha still: pre-existing rows are NULL and contribute
+-- nothing to the attestation hash, while an explicit 'omit' correctly moves it,
+-- because it changes what the document says.
 --
--- The #191 form of this migration was never applied in any environment.
+-- ⚠️ THE 'keep' VALUE WAS DESIGNED, BUILT, ADVERSARIALLY TESTED THREE ROUNDS,
+-- AND DELETED. Six formulations of the mechanism were falsified; then the
+-- premise itself. Keep fired when NO fact carried the field's concept, and
+-- concept equality is the only test this pipeline performs, so "nothing
+-- dictated contradicted this clause" was always a claim about the empty set.
+-- Measured: a scaffold reading "no varicosities, no oedema and no ulceration"
+-- was kept on a visit dictated as a large weeping ulcer with gross bilateral
+-- oedema and prominent varicosities. The machine never prints an undictated
+-- default; a doctor's own default is a human act at review.
+--
+-- No form of this migration was ever applied in any environment.
 ALTER TABLE "template_twin_semantic_mappings"
   ADD COLUMN "unmentionedPolicy" TEXT;

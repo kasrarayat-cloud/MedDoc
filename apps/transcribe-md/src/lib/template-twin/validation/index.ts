@@ -502,31 +502,11 @@ export function validateTemplateTwin(
     ) {
       add('NOT_MENTIONED_HAS_EVIDENCE', 'blocking', 'A not-mentioned field unexpectedly retains clinical evidence.', field.fieldId);
     }
-    // ⚠️ #191 — `default_kept` IS EXEMPT, AND THE EXEMPTION IS WHAT THE STATUS
-    // MEANS. Everywhere else a citation asserts THIS EVIDENCE SUPPORTS THIS
-    // VALUE, so a fact outside the mapping's concept is a real defect and stays
-    // blocking. `default_kept` carries NO VALUE — `ir.ts` refuses one outright —
-    // and its citation asserts something different: THESE ARE THE FACTS I
-    // EXAMINED, AND NONE OF THEM SPOKE TO THIS FIELD. At the single site that
-    // emits it, no cited fact CAN match the concept, because having no concept
-    // match is the entire reason the field is unfilled.
-    //
-    // ⚠️ TWO SHIPPED VALIDATORS CONTRADICTED EACH OTHER HERE, WHICH IS HOW THIS
-    // WAS FOUND. `ir.ts` REQUIRES a kept default to cite the evaluated facts;
-    // this line REFUSED any citation that does not match the concept. Both
-    // cannot hold at the emitting site, so `default_kept` was unemittable —
-    // which is precisely why it shipped with no emitter and nobody noticed.
-    // Measured: 39 arms of the denial contract failed blocking, meaning a
-    // status invented to PRESERVE the doctor's template would instead have
-    // refused their whole document.
-    //
-    // The exemption is narrow by construction: it turns off ONE check for ONE
-    // valueless status, and every other rule above — coverage, traceability,
-    // the no-value rule — still applies to it unchanged.
-    if (
-      resolution.status !== 'default_kept' &&
-      citedFacts.some((fact) => !factMatchesMapping(fact, mapping))
-    ) {
+    // ⚠️ #194 — THE `default_kept` EXEMPTION IS GONE WITH THE STATUS. It
+    // existed because that one status cited the facts it EXAMINED rather than
+    // the facts that SUPPORTED a value. No status does that any more, so the
+    // check is unconditional again.
+    if (citedFacts.some((fact) => !factMatchesMapping(fact, mapping))) {
       add('SOURCE_FACT_CONCEPT_MISMATCH', 'blocking', 'A cited fact does not match the approved semantic mapping.', field.fieldId);
     }
 

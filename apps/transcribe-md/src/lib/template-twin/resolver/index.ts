@@ -17,7 +17,6 @@ import {
   type FieldResolutionStatus,
   type SemanticMapping,
   type TemplateField,
-  fieldMayKeep,
 } from '../ir';
 import { withoutPlaceholderOptions } from '../../note-template-docx/placeholder-option';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
@@ -321,51 +320,21 @@ function missingResolution(
   // dictated vessel rows printed `Enter comment` THREE TIMES on the note.
   // "Keep the doctor's clause" has no meaning for a template fragment that is
   // duplicated per row; the honest outcome there is the bounded clear.
-  // ⚠️ #193 — KEEP APPLIES TO NARRATIVE TEXT AND NOTHING ELSE, AND THIS IS AN
-  // ALLOWLIST OF WHAT MAY KEEP, NEVER A LIST OF WHAT MAY NOT.
-  //
-  // "Return zero patches" is only the same as "leave the field unchanged" when
-  // the field's default content is PROSE. For every other kind the template's
-  // default state is itself an assertion, and NOT writing is a decision:
-  //
-  //   · a CHECKBOX — the renderer writes `w14:val="0"` + `☐` for a null, so
-  //     skipping leaves a pre-ticked box TICKED. Measured by the adversarial
-  //     pass: a signed note asserted `Anticoagulated ☒` on the strength of an
-  //     unrelated dictated headache. A ticked box is not a sentence; it is an
-  //     affirmative clinical fact.
-  //   · a DATE — skipping printed the TEMPLATE'S OWN hardcoded date onto the
-  //     note, as though it were the encounter's.
-  //   · a SELECT — the placeholder survives.
-  //
-  // ⚠️ AND THE GUARD'S OWN SAFETY ARGUMENT WAS FALSE BECAUSE OF THIS. It said
-  // the guard "can only ever SKIP a write" and so risks nothing worse than a
-  // declared sentence surviving. That is true only for prose. The measurement
-  // is what corrected it, not the reasoning.
-  //
-  // ⚠️ FIFTH FALSIFICATION IN THIS FAMILY, so the answer is a NARROWING rather
-  // than another layer: a text heuristic, then `w:showingPlcHdr`, then the
-  // guard placed below the kind branches, then below the binding dispatch, and
-  // now "skipping a write is itself a write". Each previous fix widened what
-  // the mechanism had to be right about. An ALLOWLIST is the only shape whose
-  // failure mode is losing formatting rather than printing a clinical claim:
-  // a kind nobody has thought about is EXCLUDED by default.
-  const declaredKeep = mapping.unmentionedPolicy === 'keep' && fieldMayKeep(field);
   const unmentionedScaffold =
     conceptUnmatched && reason === undefined && facts.length > 0;
 
-  if (declaredKeep && unmentionedScaffold && !requiresInput) {
-    return makeResolution(
-      field.fieldId,
-      'default_kept',
-      null,
-      // ⚠️ CITES THE EVALUATED SET, AND THE IR SCHEMA REQUIRES IT TO: "a kept
-      // default must cite the facts that were evaluated — without them it is
-      // indistinguishable from a field nobody examined". Emptying this array
-      // is therefore not an option; it is a parse error.
-      facts,
-      'default_kept_uncontradicted',
-    );
-  }
+  // ⚠️ #194 — THE KEEP BRANCH IS DELETED. It used to return `default_kept`
+  // here. Its premise was refuted, not merely its mechanism: it fired when
+  // `conceptCandidates.length === 0` -- when NO fact carried the field's
+  // concept -- and concept equality is the only test performed anywhere, so
+  // "nothing dictated contradicted this clause" was always a claim about the
+  // EMPTY SET. A scaffold reading "no varicosities, no oedema and no
+  // ulceration" was kept on a visit dictated as a large weeping ulcer with
+  // oedema and varicosities, because that fact carried `chief_complaint`.
+  //
+  // The machine never prints an undictated default. A doctor's own default is
+  // now a HUMAN act at review (REVIEW-DEFAULTS), where the click is their
+  // assertion and it fills through the normal human-typed path.
 
   return makeResolution(
     field.fieldId,

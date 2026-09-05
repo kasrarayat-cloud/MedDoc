@@ -179,34 +179,11 @@ export async function renderTemplateDocx(
       // eligibility silently has nowhere to land.
       const base = fieldProof(field, resolution.value, 1, 'blank');
 
-      // ⚠️ THE SAME UNPATCHED WRITE, TWO DIFFERENT CLAIMS. A field nobody
-      // examined and a field whose template clause was examined and found
-      // uncontradicted both leave the doctor's scaffold untouched, and both
-      // reach this branch. `blank` asserts only "not patched"; it cannot tell
-      // "the patient denies chest pain" from "nobody asked about chest pain",
-      // and on ROS and exam that difference IS the clinical claim.
-      //
-      // `default_kept` carries the facts that were evaluated — enforced
-      // non-empty by the schema and again at verification — so the stronger
-      // word is earned rather than asserted.
-      if (resolution.status === 'default_kept') {
-        fieldProofs.push({
-          kind: 'kept_default',
-          evaluatedFactIds: [...resolution.sourceFactIds],
-          // #170 AGAIN, AND I WALKED INTO IT. That ruling exists because a third
-          // state was added to `blank` without adding its EMITTER, and the owner's
-          // form went from 35 counted blanks to ZERO. A sentinel whose absence
-          // means "no" must be written on every path that earns a yes — and a new
-          // proof KIND is a new path. Caught by the read-path arm.
-          blankEligible,
-          fieldId: base.fieldId,
-          partName: base.partName,
-          bindingPath: base.bindingPath,
-          valueSha256: base.valueSha256,
-          occurrences: base.occurrences,
-        });
-        continue;
-      }
+      // ⚠️ #194 — THERE IS NO `kept_default` BRANCH ANY MORE. A field the
+      // renderer did not patch is `blank`, full stop. The stronger label was
+      // deleted with the keep half: it asserted the template's clause had been
+      // "found not to contradict" the encounter, and that check never existed —
+      // the status fired precisely when NO fact carried the field's concept.
       fieldProofs.push({
         kind: 'blank',
         fieldId: base.fieldId,
@@ -706,51 +683,6 @@ function createFieldPatches(
   const binding = field.rendererBinding;
   const bound = part.byPath.get(binding.path);
   if (!bound) failTemplateDocxRender('BINDING_NOT_FOUND');
-
-  // ⚠️ #192 — A KEPT DEFAULT RETURNS ZERO PATCHES, AND IT SITS ABOVE THE
-  // BINDING DISPATCH BECAUSE THAT IS WHERE "DO NOT TOUCH THIS FIELD" BELONGS.
-  //
-  // This guard has now been placed WRONG TWICE, each time one level too deep,
-  // and each time the symptom was the same: a DECLARED keep silently ignored
-  // for whatever the dispatch reached first.
-  //
-  //   1st  after the `checkbox`/`date`/`single_select` branches inside
-  //        `contentControlPatches` -- a date control lost
-  //        `Date of procedure: 12 March 2026`, a select was overwritten.
-  //   2nd  inside `contentControlPatches` at all -- so `legacy_form_field`
-  //        never reached it. Measured: a FORMTEXT field's declared-keep content
-  //        was DESTROYED while the manifest still reported it as a kept
-  //        default, so it appeared in neither the blank count nor the page.
-  //
-  // Nothing about "the doctor asked for their own clause to stand" is specific
-  // to a binding type or a control kind. Every time this decision was expressed
-  // inside a branch, the branch made it specific by accident.
-  //
-  // ⚠️ AND IT IS FAIL-SAFE IN THE ONLY DIRECTION THAT MATTERS: it can only ever
-  // SKIP a write. The failure it risks is a template's own DECLARED sentence
-  // surviving; it can never remove a doctor's dictated text, because a field
-  // carrying a value never reaches it.
-  if (resolution.value === null && resolution.status === 'default_kept') {
-    // ⚠️ `blankEligibilityFor(field)`, NOT A HARDCODED `'unevaluated'`, AND THE
-    // HARDCODE BLOCKED CERTIFICATION. `blank-proof-count.ts` admits
-    // `kept_default` and says in bold that it "COUNTS, AND IT IS THE STRONGER
-    // OF THE THREE" -- and then requires `blankEligible === 'eligible'`. With
-    // the constant, 0 of 9 genuine kept defaults counted, and the adversarial
-    // pass measured the repo's own fixture going from ONE qualifying blank
-    // proof to NONE: `certification-lifecycle` blocks on zero, so a template
-    // whose unfilled fields are kept defaults COULD NOT CERTIFY AT ALL.
-    //
-    // A kept default is an UNPATCHED field, which is exactly what a blank proof
-    // attests -- the renderer wrote nothing here, verified against the source
-    // bytes. Its eligibility is therefore the same question the blank path
-    // asks, and it is asked with the same function rather than answered with a
-    // constant.
-    return {
-      patches: [],
-      boundedClear: false,
-      blankEligible: blankEligibilityFor(field),
-    };
-  }
 
   switch (binding.bindingType) {
     case 'content_control':

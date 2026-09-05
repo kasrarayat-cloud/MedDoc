@@ -22,7 +22,7 @@ export const TEMPLATE_TWIN_COMPILER_VERSION = 'template-docx-compiler/1.0.0';
 // certified before the narrowing kept a certification whose stored manifest no
 // longer describes what the resolver produces — this file's own recorded
 // failure mode, re-armed by the commit that cites it.
-export const TEMPLATE_TWIN_RESOLVER_VERSION = 'template-field-resolver/1.2.0';
+export const TEMPLATE_TWIN_RESOLVER_VERSION = 'template-field-resolver/2.0.0';
 export const TEMPLATE_TWIN_RENDERER_VERSION = 'template-docx-renderer/1.0.0';
 
 export const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -405,7 +405,20 @@ export const SemanticMappingSchema = z
      * requires `=== 'keep'`, and a column that is NULL is a control nobody
      * ruled on, which must never print.
      */
-    unmentionedPolicy: z.enum(['keep', 'omit']).nullish(),
+    /**
+     * ⚠️ #194 — THERE IS NO `'keep'`. NULL is the bounded clear COUNTED as
+     * still blank (the doctor is told); `'omit'` is the bounded clear NOT
+     * counted and with no prompt (the telehealth consent line).
+     *
+     * The keep half was deleted after its PREMISE was refuted, not merely its
+     * mechanism: it fired when NO fact carried the field's concept, and concept
+     * equality is the only test performed anywhere, so "nothing contradicted
+     * this" was always a claim about the empty set. Measured — a scaffold
+     * reading "no varicosities, no oedema and no ulceration" was kept on a
+     * visit dictated as a large weeping ulcer with oedema and varicosities.
+     * The machine never prints an undictated default.
+     */
+    unmentionedPolicy: z.literal('omit').nullish(),
     practiceDefault: z.string().max(500).nullable(),
     status: TemplateTwinDetectionStatusSchema,
   })
@@ -548,7 +561,6 @@ export const FieldResolutionStatusSchema = z.enum([
    * `kept_default` proof kind it drives, separate them — evaluated-and-kept
    * from never-looked-at.
    */
-  'default_kept',
 ]);
 export type FieldResolutionStatus = z.infer<typeof FieldResolutionStatusSchema>;
 
@@ -580,30 +592,6 @@ export const FieldResolutionSchema = z
         message: 'Every populated clinical value requires sourceFactIds',
         path: ['sourceFactIds'],
       });
-    }
-    // ⚠️ THE INVERSE CONSTRAINT, AND IT IS WHAT GIVES THE STATUS ITS MEANING.
-    // Everywhere else evidence is required BECAUSE there is a value. Here it is
-    // required because there is NOT one: a kept default with no cited facts is
-    // indistinguishable from a field nobody examined, which is the exact
-    // conflation this status exists to end. And a value would be a
-    // contradiction — nothing was written.
-    if (resolution.status === 'default_kept') {
-      if (resolution.sourceFactIds.length === 0) {
-        ctx.addIssue({
-          code: 'custom',
-          message:
-            'A kept default must cite the facts that were evaluated — without them it is ' +
-            'indistinguishable from a field nobody examined',
-          path: ['sourceFactIds'],
-        });
-      }
-      if (resolution.value !== null || resolution.selectedOptionOrdinal !== null) {
-        ctx.addIssue({
-          code: 'custom',
-          message: 'A kept default writes nothing: it must carry no value and select no option',
-          path: ['value'],
-        });
-      }
     }
     if (evidenceRequired && resolution.evidenceAnchorIds.length === 0) {
       ctx.addIssue({
@@ -671,10 +659,11 @@ export const TemplateTwinFillManifestSchema = z
         needsReview: z.number().int().nonnegative(),
         notMentioned: z.number().int().nonnegative(),
         /**
-         * ⚠️ #192 — ITS OWN BUCKET, BECAUSE A KEPT DEFAULT IS NOT BLANK.
-         * `.optional()` so every manifest already persisted still parses.
+         * ⚠️ #194 — RULED-BLANK FIELDS, COUNTED SEPARATELY SO THEY ARE NEITHER
+         * REPORTED AS UNDICTATED NOR SILENTLY UNCOUNTED. `.optional()` so every
+         * manifest already persisted still parses.
          */
-        defaultsKept: z.number().int().nonnegative().optional(),
+        omitted: z.number().int().nonnegative().optional(),
         conflicts: z.number().int().nonnegative(),
         criticalUnresolved: z.number().int().nonnegative(),
       })
@@ -682,30 +671,6 @@ export const TemplateTwinFillManifestSchema = z
   })
   .strict();
 export type TemplateTwinFillManifest = z.infer<typeof TemplateTwinFillManifestSchema>;
-
-/**
- * ⚠️ ONE PREDICATE FOR "CAN THIS FIELD KEEP AT ALL", BECAUSE THE OFFER AND THE
- * RENDER DRIFTED APART THE MOMENT THEY WERE WRITTEN TWICE.
- *
- * The proposer gated on `scaffolded && kind === 'narrative_text'`; the resolver
- * gated on `keep && kind === 'narrative_text' && rowPrototype !== true`. The
- * `rowPrototype` half was not copied, so the confirm screen offered a keep on a
- * repeating prototype, quoted its sentence to the doctor, took the click — and
- * the resolver then refused it. A confirmation that silently does nothing is
- * worse than no offer, because the doctor believes they decided; that sentence
- * is in the proposer's own comment, describing the defect it then had.
- *
- * ⚠️ THIS FUNCTION IS NOT A DEFENCE OF THE `kind` TEST, WHICH IS UNDER REVIEW.
- * `inferTextKind` assigns `narrative_text` by a LABEL REGEX and never looks at
- * content, so it is both insufficient (a `w:sym` tick inside a "narrative"
- * control survives a keep) and over-refusing (a real ROS line reading
- * "…or weight loss" is classified `measurement`). That is escalated. What this
- * function fixes is the SECOND defect — that two places asked the question and
- * gave different answers — which is wrong under every option.
- */
-export function fieldMayKeep(field: TemplateField): boolean {
-  return field.kind === 'narrative_text' && field.rowPrototype !== true;
-}
 
 export function templateTwinCounts(
   fields: readonly FieldResolution[],
@@ -727,45 +692,38 @@ export function templateTwinCounts(
   return {
     filled: fields.filter((field) => field.value !== null).length,
     needsReview: fields.filter((field) => unresolved.has(field.status)).length,
-    // ⚠️ #191 — `default_kept` COUNTS AS A BLANK, AND OMITTING IT WAS A LIVE
-    // DOCTOR-FACING REGRESSION. The status was introduced without widening this
-    // function, so a kept default matched NO bucket: not `filled` (its value is
-    // null), not `unresolved`, not `not_mentioned`, not `conflict`. Because the
-    // emitter fires on the ordinary "the encounter said nothing about this"
-    // case, ONE unrelated dictated sentence collapsed an entire form's blank
-    // count. Measured on an 11-field template: `notMentioned` 11 -> 0, with the
-    // rendered document BYTE-IDENTICAL. The doctor's
-    // "N still blank — nothing dictated for those yet" line simply vanished,
-    // and `notMentionedCount` persisted as 0.
+    // ⚠️ #194 — AN `omit` IS NOT COUNTED, AND A NULL POLICY IS. Both take the
+    // bounded clear, so the PAGE is identical; the difference is what the doctor
+    // is told. A NULL policy is a field nobody ruled on, and it must appear in
+    // "N still blank — nothing dictated for those yet" so the blank is visible.
+    // An `omit` was RULED blank — the telehealth consent line on an in-person
+    // visit — so prompting about it every time is noise about a decision
+    // already made.
     //
-    // ⚠️ IT IS #170's SHAPE, REINTRODUCED BY THE FIX WRITTEN TO PREVENT IT —
-    // and the comment fifteen lines above forbade it in this very file. Three
-    // independent lenses of the adversarial pass found it; one proved it a
-    // REGRESSION by running the same arm against the parent commit.
+    // ⚠️ THE COUNT MUST NOT SILENTLY SWALLOW EITHER. `default_kept` fell into no
+    // bucket once and one unrelated dictated sentence collapsed a form's blank
+    // count 11 -> 0; the reconciliation arm exists because of that.
+    // ⚠️ #194 — A RULED `omit` IS NOT COUNTED; EVERY OTHER BLANK IS. Both take
+    // the bounded clear, so the PAGE is identical and the difference is only
+    // what the doctor is told. A NULL policy is a field nobody ruled on and
+    // must appear in "N still blank — nothing dictated for those yet", so the
+    // blank stays visible. An `omit` was RULED blank — the telehealth consent
+    // line on an in-person visit — and prompting about it every visit is noise
+    // about a decision already made.
     //
-    // A kept default IS a blank: nothing was written, and the doctor should see
-    // it in the same number as before. Counting it here restores the pre-#191
-    // figure exactly rather than inventing a sixth bucket nobody reads.
-    notMentioned: fields.filter((field) => field.status === 'not_mentioned').length,
-    // ⚠️ #192 — A KEPT DEFAULT IS COUNTED, AND IT IS *NOT* COUNTED AS BLANK.
-    // Both halves of that sentence are corrections of my own earlier fix.
-    //
-    // It was uncounted first: the status matched NO bucket, so ONE unrelated
-    // dictated sentence collapsed a form's blank count 11 -> 0. I folded it
-    // into `notMentioned`, and that was right for exactly as long as the
-    // renderer IGNORED the status.
-    //
-    // ⚠️ THE SAME DIFF THEN MADE THE RENDERER HONOUR IT, AND THE COUNT BECAME A
-    // LIE IN THE OTHER DIRECTION. Measured by the adversarial pass: the
-    // pre-sign surface printed "1 still blank — nothing dictated for those yet"
-    // about a control whose page reads *"The patient reports no known drug
-    // allergies and is taking no anticoagulants."* Telling a doctor a field is
-    // blank while it asserts a clinical fact is worse than the miscount it
-    // replaced.
-    //
-    // A kept default is a THIRD state — nothing was written AND the page is not
-    // empty — so it gets a third bucket rather than borrowing a wrong one.
-    defaultsKept: fields.filter((field) => field.status === 'default_kept').length,
+    // ⚠️ NOTHING MAY FALL INTO NO BUCKET. `default_kept` did exactly that once,
+    // and one unrelated dictated sentence collapsed a form's blank count from
+    // 11 to 0 with the document byte-identical. The reconciliation arm exists
+    // because of that, and it counts the omitted set explicitly rather than
+    // letting it vanish.
+    notMentioned: fields.filter(
+      (field) =>
+        field.status === 'not_mentioned' &&
+        field.reasonCode !== 'omitted_unsupported_default',
+    ).length,
+    omitted: fields.filter(
+      (field) => field.reasonCode === 'omitted_unsupported_default',
+    ).length,
     conflicts: fields.filter((field) => field.status === 'conflict').length,
     criticalUnresolved: fields.filter(
       (field) =>

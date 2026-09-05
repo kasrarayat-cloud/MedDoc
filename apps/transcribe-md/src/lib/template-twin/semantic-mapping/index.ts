@@ -32,7 +32,6 @@ import {
   type TemplateDocIR,
   type TemplateField,
   type TemplateTwinFieldKind,
-  fieldMayKeep,
 } from '../ir';
 
 const DEFAULT_MODEL =
@@ -284,39 +283,6 @@ export function fallbackSemanticMappings(
         blankPolicy: field.unknownPolicy,
         unknownPolicy: field.unknownPolicy,
         practiceDefault: null,
-        // ⚠️ #192 — PROPOSED, NEVER DECIDED. A control compiled as a scaffold
-        // carries the template's own default content, and the doctor may want
-        // that clause to stand when an encounter says nothing about it. So the
-        // proposer OFFERS `keep`; the render consults only what was CONFIRMED.
-        //
-        // ⚠️ THE DISTINCTION IS THE WHOLE RULING. Deciding this from content at
-        // render time was falsified three times, the last one printing
-        // `Enter assessment` onto a rendered note. As a PROPOSAL the same
-        // signal is safe: a wrong offer is visible next to the sentence itself
-        // (`field.scaffoldText`) and a human rejects it. Same shape as
-        // `conceptScope` — proposed, confirmed, never decided at render.
-        //
-        // An unconfirmed or rejected proposal leaves the column NULL, which is
-        // the bounded clear. Absence stays fail-closed.
-        // ⚠️ THE OFFER MATCHES WHAT THE RENDER CAN HONOUR. Offering `keep` on a
-        // checkbox or a date invited a doctor to confirm something the resolver
-        // now refuses -- a confirmation that silently does nothing is worse
-        // than no offer, because the doctor believes they decided.
-        // ⚠️ AND THE RESOLVER REFUSES SOME FIELDS *BEFORE* IT EVER REACHES THE
-        // KEEP DECISION, so matching `fieldMayKeep` alone is not enough. A
-        // `manual` source returns `not_mentioned` at the top of `resolveOne`;
-        // an `unsupported` field returns `needs_clinician_input`. Round three
-        // measured both being OFFERED a keep: the settings row quoted
-        // "Referred by Dr. A. Mehta, Riverside Family Practice." to the doctor,
-        // took the click, persisted the policy into the ATTESTATION HASH — and
-        // the page rendered empty. The row made two statements and the second
-        // was false.
-        ...(field.scaffolded === true &&
-        fieldMayKeep(field) &&
-        classifyFieldSource(field.originalLabel, field) !== 'manual' &&
-        field.detectionStatus !== 'unsupported'
-          ? { unmentionedPolicy: 'keep' as const }
-          : {}),
         // ⚠️ THE SAME CLASSIFIER THE MODEL PATH USES, FOR THE SAME REASON.
         // `classifyFieldSource` reads the COMPILER's label and the field's own
         // shape — it is not an inference, so it does not belong to the model

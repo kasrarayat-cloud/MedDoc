@@ -667,35 +667,6 @@ function ReviewWorkspace({
                       ? ` → ${m.clinicalConcept}`
                       : ' · no concept yet'}
                 </div>
-                {/* ⚠️ #193 — THE KEEP OFFER IS SHOWN WITH ITS SENTENCE, AND
-                    WITHOUT THIS THE RULING'S SAFETY IS UNDELIVERABLE. The
-                    ruling routes a keep to a HUMAN precisely because printing
-                    template prose on a signed note is a clinical assertion no
-                    automated step may make. Round two measured this screen
-                    rendering NEITHER the policy NOR the sentence — zero hits
-                    for `unmentionedPolicy` or `scaffoldText` in any .tsx — so
-                    `confirmed()` carried the keep through on the same click
-                    that confirmed the CONCEPT. A doctor authorised text they
-                    had never been shown: consent theatre rather than consent.
-                    The sentence is quoted verbatim, because "this field keeps
-                    its default" is not a thing anyone can evaluate. */}
-                {m.unmentionedPolicy === 'keep' && (
-                  <div
-                    data-testid={`twin-keep-offer-${m.fieldId}`}
-                    style={{
-                      fontFamily: sans,
-                      fontSize: 10.5,
-                      color: 'var(--color-linear-text-2)',
-                      marginTop: 3,
-                      whiteSpace: 'normal',
-                    }}
-                  >
-                    Keeps your template’s own wording when nothing is dictated:{' '}
-                    <span style={{ fontFamily: mono }}>
-                      “{f.field.scaffoldText ?? '(no default text compiled)'}”
-                    </span>
-                  </div>
-                )}
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>

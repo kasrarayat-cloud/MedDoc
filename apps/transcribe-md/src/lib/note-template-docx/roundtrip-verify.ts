@@ -371,29 +371,6 @@ export type RenderedFieldProof =
       readonly occurrences: number;
     }
   | {
-      readonly kind: 'kept_default';
-      /**
-       * THE FACTS THAT WERE EVALUATED AND FOUND NOT TO CONTRADICT THE
-       * TEMPLATE'S OWN CLAUSE.
-       *
-       * ⚠️ NON-EMPTY IS THE ENTIRE POINT, AND IT IS ENFORCED AT VERIFICATION
-       * RATHER THAN TRUSTED. `blank` already proves a field was not patched —
-       * with the static-invariance check that is a complete proof the doctor's
-       * scaffold survived byte-identically. What it CANNOT say is whether
-       * anybody looked. A `kept_default` with no cited facts is a `blank`
-       * wearing a stronger word, which would be worse than not having the kind
-       * at all.
-       */
-      readonly evaluatedFactIds: readonly string[];
-      /** Carried for the same reason `blank` and `emptied` carry it — #170. */
-      readonly blankEligible?: 'eligible' | 'ineligible' | 'unevaluated';
-      readonly fieldId: string;
-      readonly partName: string;
-      readonly bindingPath: string;
-      readonly valueSha256: string;
-      readonly occurrences: number;
-    }
-  | {
       readonly kind: 'blank';
       /**
        * `false` when this UNPATCHED field may not claim blankness anyway —
@@ -494,7 +471,7 @@ export interface VerifiedRenderedField {
   /** Which contract this entry attests — a fill, or a proven-blank. Persisted
    *  into the roundtrip proof so the certification gate can require at least
    *  one blank-verified field. */
-  readonly kind: 'filled' | 'blank' | 'emptied' | 'kept_default';
+  readonly kind: 'filled' | 'blank' | 'emptied';
   readonly fieldId: string;
   readonly partName: string;
   readonly bindingPath: string;
@@ -609,25 +586,12 @@ export function verifyRenderedTemplateDocx(
     // it must satisfy the filled-proof equality below — the patched field set
     // and the proof set must be exactly equal. Filing it with the blanks would
     // exempt it from the one check that actually verifies it.
-    // ⚠️ `kept_default` FILES WITH THE BLANKS BECAUSE IT MAKES THE SAME
-    // STRUCTURAL CLAIM: nothing was written. It must satisfy the
-    // not-in-the-patch-set check below exactly as `blank` does — a kept default
-    // that patched something is the same contradiction, told with a stronger
-    // word.
-    if (field.kind === 'kept_default') {
-      if (!Array.isArray(field.evaluatedFactIds) || field.evaluatedFactIds.length === 0) {
-        // A kept default with no evidence is a `blank` claiming to be more than
-        // it is. Refuse rather than downgrade: the label is the claim.
-        failTemplateDocxRender('ROUNDTRIP_FIELD_MISMATCH');
-      }
-      // ⚠️ NO CAST. `blankProofs` is `RenderedFieldProof[]` — the full union —
-      // so this arm is assignable on its own terms. The first draft wrote
-      // `as unknown as typeof blankProofs[number]`, which was a hand-written
-      // type shadowing an inferred one: it would have compiled just as happily
-      // after either arm drifted, and a proof that compiles is not a proof that
-      // holds.
-      blankProofs.push(field);
-    } else if (field.kind === 'blank') blankProofs.push(field);
+    //
+    // ⚠️ #194 — THE `kept_default` ARM IS GONE WITH THE STATUS. It filed here
+    // too, making the same structural claim (nothing was written) with a
+    // stronger word: that the template's clause had been found not to
+    // contradict the encounter. That check never existed.
+    if (field.kind === 'blank') blankProofs.push(field);
     else {
       // `emptied` IS patched, so it joins the patched-set equality like a fill
       // AND additionally carries the byte-equality check below.
