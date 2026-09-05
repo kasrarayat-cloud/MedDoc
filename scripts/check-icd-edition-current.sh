@@ -86,6 +86,37 @@ case "$P_TO" in
   *) echo "🟡 CANNOT TELL — effectiveTo '$P_TO' is not an ISO date"; exit 2 ;;
 esac
 
+# ---- the FILENAME is a third claim, and it lied once ---------------------
+# ⚠️ ADDED 2026-09-05 AFTER A REAL MISLABELLING. The generator wrote FY2027's
+# 74,879 codes into files named icd10cm-fy2026-*, with the provenance JSON
+# inside declaring "edition": "fy2027". This check reads that JSON, so it would
+# have reported "current, 390 days left" over a dataset that is live 25 days
+# before its effective date — a drift check built for one reason, certifying
+# the very thing it exists to prevent.
+#
+# The filename is not decoration: it is what the allowlist imports by. So the
+# edition the JSON claims must equal the edition its own filename carries.
+PROV_BASE="$(basename "$PROV_FILE")"
+FILE_EDITION="$(printf '%s' "$PROV_BASE" | sed -n 's/^icd10cm-\(fy[0-9]\{4\}\)-provenance\.json$/\1/p')"
+if [ -z "$FILE_EDITION" ]; then
+  echo "🟡 CANNOT TELL — provenance filename '$PROV_BASE' does not name an edition"
+  exit 2
+fi
+if [ "$FILE_EDITION" != "$P_EDITION" ]; then
+  cat <<MSG
+🔴 MISLABELLED DATASET — the provenance says edition '$P_EDITION' and lives in a
+   file named for '$FILE_EDITION'.
+
+  The allowlist imports by FILENAME, so the shipped set is whatever
+  '$FILE_EDITION' names while its own provenance describes '$P_EDITION'. No
+  staleness verdict is reported, because neither label can be trusted.
+
+  This is the 2026-09-05 generator defect's signature. Regenerate with a
+  build-icd10cm.mjs that carries the DESTINATION arm.
+MSG
+  exit 1
+fi
+
 # ---- the second copy, and they must agree -------------------------------
 ALLOWLIST="$REPO_DIR/packages/ai/src/data/icd10-allowlist.ts"
 [ -r "$ALLOWLIST" ] || { echo "🟡 CANNOT TELL — cannot read $ALLOWLIST"; exit 2; }
