@@ -1225,6 +1225,36 @@ function contentControlPatches(
   const content = directXmlChild(control, 'sdtContent');
   if (!properties || !content) failTemplateDocxRender('BINDING_NOT_FOUND');
 
+  // ⚠️ #192 — A KEPT DEFAULT RETURNS ZERO PATCHES, AND IT IS FIRST BECAUSE THE
+  // KIND BRANCHES BELOW WRITE UNCONDITIONALLY.
+  //
+  // This is the whole delivery of the keep half, and it reaches a field ONLY
+  // because the doctor's mapping DECLARED `unmentionedPolicy: 'keep'`. It is
+  // never inferred from content: three content-derived formulations were
+  // falsified, the last printing `Enter assessment` onto a rendered note.
+  //
+  // ⚠️ ITS FIRST PLACEMENT WAS AFTER the `checkbox`, `date` and `single_select`
+  // branches, so a DECLARED keep was SILENTLY IGNORED for those three kinds
+  // while the resolution still said `default_kept`. Measured by the adversarial
+  // pass: a date control lost `Date of procedure: 12 March 2026` and a select
+  // was overwritten, both under a status claiming their content was kept. The
+  // resolver applies no kind restriction, so all three reach here. Nothing is
+  // kind-specific about "the doctor asked for their own clause to stand", and
+  // placing the guard after a kind branch made it kind-specific by accident.
+  //
+  // ⚠️ RETURNING IS NOT THE SAME AS SKIPPING A CLEAR, WHICH COST THIS SLICE ITS
+  // FIRST ATTEMPT: guarding only the bounded clear let the field FALL THROUGH
+  // to the ordinary write, which writes the empty display value and blanked the
+  // control by a second route. The tell was arithmetic — one patch on a part
+  // meant to be untouched. Returning also puts the field on the
+  // `patches.length === 0` branch, the only place `kept_default` is emitted.
+  //
+  // ⚠️ AND IT ONLY EVER SKIPS A DELETION. The failure direction is a template's
+  // own DECLARED sentence surviving, never a doctor's dictated text removed.
+  if (resolution.value === null && resolution.status === 'default_kept') {
+    return { patches: [], boundedClear: false, blankEligible: 'unevaluated' };
+  }
+
   if (field.kind === 'checkbox') {
     const checkbox = descendantXmlElements(properties, 'checkbox')[0];
     const checked = checkbox
@@ -1375,12 +1405,12 @@ function contentControlPatches(
   // adversarial pass measured it: `kept_default` proofs landed only on
   // controls that were ALREADY EMPTY, i.e. the ones with nothing to keep.
   //
-  // ⚠️ THE BLAST RADIUS IS BOUNDED BY THE COMPILER, NOT BY THIS LINE. The
-  // resolver emits `default_kept` only when `field.scaffolded === true` —
-  // non-empty default content that does NOT declare `w:showingPlcHdr`. Without
-  // that gate this change would print a dropdown's `Choose an item.` onto a
-  // signed note. Measured: 0 of 28 controls on the real customer template are
-  // scaffolded; 53 of 53 on the regenerated consult form are.
+  // ⚠️ THE BLAST RADIUS IS BOUNDED BY THE DECLARATION, NOT BY SCAFFOLDEDNESS.
+  // An earlier draft of this comment said the resolver gates on
+  // `field.scaffolded`; under #192 IT DOES NOT, and saying so was a safety
+  // argument naming a guard that does not exist. What bounds this is that a
+  // mapping must carry `unmentionedPolicy: 'keep'`, which only a confirmation
+  // writes. Scaffoldedness informs the PROPOSAL and nothing else.
   //
   // ⚠️ AND IT ONLY EVER *SKIPS* A DELETION. The failure direction is a
   // template's own sentence surviving, never a doctor's dictated text being
@@ -1396,26 +1426,6 @@ function contentControlPatches(
   //
   // Returning here is also what puts the field on the `patches.length === 0`
   // branch above, which is the only place the `kept_default` proof is emitted.
-  // ⚠️ #192 — A KEPT DEFAULT RETURNS ZERO PATCHES. This is the whole delivery
-  // of the keep half, and it reaches a field ONLY when the doctor's mapping
-  // DECLARED `unmentionedPolicy: 'keep'`. It is never inferred from content:
-  // three content-derived formulations were falsified, the last one printing
-  // `Enter assessment` onto a rendered note.
-  //
-  // ⚠️ RETURNING IS NOT THE SAME AS SKIPPING THE CLEAR, AND THAT MISTAKE COST
-  // THIS SLICE ITS FIRST ATTEMPT. Guarding only the bounded clear let the field
-  // FALL THROUGH to the ordinary write below, which writes `displayValue` — the
-  // empty string for a null — and blanked the control by a second route. The
-  // tell was arithmetic: one patch on a part that was meant to be untouched.
-  // Returning here also puts the field on the `patches.length === 0` branch,
-  // which is the only place the `kept_default` proof is emitted.
-  //
-  // ⚠️ AND IT ONLY EVER SKIPS A DELETION. The failure direction is a template's
-  // own declared sentence surviving, never a doctor's dictated text being
-  // removed.
-  if (resolution.value === null && resolution.status === 'default_kept') {
-    return { patches: [], boundedClear: false, blankEligible: 'unevaluated' };
-  }
   if (resolution.value === null) {
     const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId);
     if (cleared) {

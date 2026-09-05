@@ -172,3 +172,44 @@ describe('#192 — A STORED IR MUST NOT ORPHAN', () => {
     ).resolves.toBeDefined();
   });
 });
+
+describe('#192 — A DECLARED KEEP IS HONOURED FOR EVERY KIND', () => {
+  // ⚠️ THIS ARM EXISTS BECAUSE ITS ABSENCE WAS THE DEFECT. The keep guard was
+  // first placed AFTER the `checkbox`, `date` and `single_select` branches, all
+  // of which write unconditionally — so a DECLARED keep was silently ignored for
+  // those three kinds while the resolution still said `default_kept`. Measured
+  // by the adversarial pass: a date control lost `Date of procedure: 12 March
+  // 2026`; a select was overwritten. Every arm at the time built a
+  // `narrative_text`, so 5740 tests could not see it.
+  const KINDS = [
+    ['date', '<w:date w:fullDate="2026-03-12T00:00:00Z"/>', 'Date of procedure: 12 March 2026'],
+    ['select', '<w:dropDownList><w:listItem w:displayText="Normal" w:value="N"/></w:dropDownList>', 'Normal'],
+    ['text', '<w:text/>', 'The patient denies chest pain.'],
+  ] as const;
+
+  it.each(KINDS)('a declared keep survives on a %s control', async (_kind, pr, text) => {
+    const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+<w:p><w:sdt><w:sdtPr><w:alias w:val="Kept"/><w:id w:val="777"/>${pr}</w:sdtPr>
+<w:sdtContent><w:r><w:t>${text}</w:t></w:r></w:sdtContent></w:sdt></w:p></w:body></w:document>`;
+    const source = await buildSyntheticDocx({ documentXml: doc });
+    const { compileTemplateDocx } = await import('../compiler');
+    const ir = compileTemplateDocx(source);
+    const rendered = await renderTemplateDocx({
+      source, ir,
+      resolutions: ir.fields.map((f) =>
+        FieldResolutionSchema.parse({
+          fieldId: f.fieldId, status: 'default_kept', value: null,
+          sourceFactIds: [`ttfact_${'a'.repeat(24)}`], evidenceAnchorIds: ['anchor-a'],
+          selectedOptionOrdinal: null, reasonCode: 'default_kept_uncontradicted',
+          clinicianReviewed: false,
+        }),
+      ),
+      validation: VALIDATION,
+    });
+    const JSZip = (await import('jszip')).default;
+    const xml = await (await JSZip.loadAsync(rendered.document))
+      .file('word/document.xml')!.async('string');
+    expect(xml).toContain(text);
+  });
+});

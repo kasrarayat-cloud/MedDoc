@@ -364,9 +364,15 @@ describe('#191 — THE COUNT REGRESSION the pass found (three lenses, independen
     // because ONE dictated fact of an unrelated concept armed the emitter. The
     // rendered document was byte-identical; only the doctor's
     // "N still blank" line vanished.
+    // ⚠️ COUNTED, AND NOT AS BLANK. The first fix folded it into `notMentioned`,
+    // which was right only while the renderer ignored the status; once keep was
+    // honoured, that told the doctor a field was blank while its page asserted a
+    // clinical fact. A kept default is a THIRD state and gets a third bucket.
     const { resolutions } = scenario();
     expect(resolutions[0]!.status).toBe('default_kept');
-    expect(templateTwinCounts(resolutions, defs()).notMentioned).toBe(1);
+    const c = templateTwinCounts(resolutions, defs());
+    expect(c.defaultsKept).toBe(1);
+    expect(c.notMentioned).toBe(0);
   });
 
   it('(13) the SILENT encounter and the one-unrelated-sentence encounter report the SAME blank count', () => {
@@ -378,10 +384,17 @@ describe('#191 — THE COUNT REGRESSION the pass found (three lenses, independen
       facts: [], allowUncertifiedForSyntheticTest: true,
     });
     const oneUnrelated = scenario().resolutions;
+    // ⚠️ THE PROPERTY IS *ACCOUNTED FOR*, NOT *EQUAL*. The original regression
+    // was that a kept default fell into NO bucket, so one unrelated sentence
+    // erased the form's count. The two encounters legitimately differ in WHICH
+    // bucket — the silent one is blank, the other keeps a declared clause — but
+    // neither may vanish.
+    const sc = templateTwinCounts(silent, defs());
+    const oc = templateTwinCounts(oneUnrelated, defs());
     expect(silent[0]!.status).toBe('not_mentioned');
     expect(oneUnrelated[0]!.status).toBe('default_kept');
-    expect(templateTwinCounts(silent, defs()).notMentioned)
-      .toBe(templateTwinCounts(oneUnrelated, defs()).notMentioned);
+    expect(sc.notMentioned + (sc.defaultsKept ?? 0))
+      .toBe(oc.notMentioned + (oc.defaultsKept ?? 0));
   });
 
   it('(14) ⚠️ THE BUCKETS RECONCILE — every field lands in exactly one accounted state', () => {
@@ -391,7 +404,8 @@ describe('#191 — THE COUNT REGRESSION the pass found (three lenses, independen
     // doctor's summary.
     const { resolutions } = scenario();
     const c = templateTwinCounts(resolutions, defs());
-    expect(c.filled + c.needsReview + c.notMentioned).toBe(resolutions.length);
+    expect(c.filled + c.needsReview + c.notMentioned + (c.defaultsKept ?? 0))
+      .toBe(resolutions.length);
   });
 
   it('(15) the resolver VERSION moved — its output changed for identical input', () => {

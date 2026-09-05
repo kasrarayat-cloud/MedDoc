@@ -663,6 +663,11 @@ export const TemplateTwinFillManifestSchema = z
         filled: z.number().int().nonnegative(),
         needsReview: z.number().int().nonnegative(),
         notMentioned: z.number().int().nonnegative(),
+        /**
+         * ⚠️ #192 — ITS OWN BUCKET, BECAUSE A KEPT DEFAULT IS NOT BLANK.
+         * `.optional()` so every manifest already persisted still parses.
+         */
+        defaultsKept: z.number().int().nonnegative().optional(),
         conflicts: z.number().int().nonnegative(),
         criticalUnresolved: z.number().int().nonnegative(),
       })
@@ -710,9 +715,26 @@ export function templateTwinCounts(
     // A kept default IS a blank: nothing was written, and the doctor should see
     // it in the same number as before. Counting it here restores the pre-#191
     // figure exactly rather than inventing a sixth bucket nobody reads.
-    notMentioned: fields.filter(
-      (field) => field.status === 'not_mentioned' || field.status === 'default_kept',
-    ).length,
+    notMentioned: fields.filter((field) => field.status === 'not_mentioned').length,
+    // ⚠️ #192 — A KEPT DEFAULT IS COUNTED, AND IT IS *NOT* COUNTED AS BLANK.
+    // Both halves of that sentence are corrections of my own earlier fix.
+    //
+    // It was uncounted first: the status matched NO bucket, so ONE unrelated
+    // dictated sentence collapsed a form's blank count 11 -> 0. I folded it
+    // into `notMentioned`, and that was right for exactly as long as the
+    // renderer IGNORED the status.
+    //
+    // ⚠️ THE SAME DIFF THEN MADE THE RENDERER HONOUR IT, AND THE COUNT BECAME A
+    // LIE IN THE OTHER DIRECTION. Measured by the adversarial pass: the
+    // pre-sign surface printed "1 still blank — nothing dictated for those yet"
+    // about a control whose page reads *"The patient reports no known drug
+    // allergies and is taking no anticoagulants."* Telling a doctor a field is
+    // blank while it asserts a clinical fact is worse than the miscount it
+    // replaced.
+    //
+    // A kept default is a THIRD state — nothing was written AND the page is not
+    // empty — so it gets a third bucket rather than borrowing a wrong one.
+    defaultsKept: fields.filter((field) => field.status === 'default_kept').length,
     conflicts: fields.filter((field) => field.status === 'conflict').length,
     criticalUnresolved: fields.filter(
       (field) =>
