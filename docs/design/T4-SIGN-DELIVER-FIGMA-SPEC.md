@@ -255,6 +255,41 @@ must **not** match the post-sign `Deliver`. Two specs anchor "did the modal
 close?" on the TITLE precisely because the submit relabels to `Signing…` while
 pending.
 
+## T4 FOLLOW-UPS — capability items, filed not fixed
+
+### F-T4-1 · Only ONE clipboard format is ever copied
+
+**Filed by ruling #188's board filing: a capability question, not a re-skin fix.**
+
+`applyBrowserSideDeliveries` in `sign-and-send-modal.tsx` copies exactly one
+clipboard format — the **last selected** — and discards the rest:
+
+```ts
+const lastKey = clipboardChoices[clipboardChoices.length - 1];
+const text = res.clipboardTexts[lastKey];
+```
+
+So a doctor who ticks **Copy for Epic** and **Copy for Athena** gets Athena's
+text only, and which one wins depends on `Set` insertion order — re-tick Epic
+last and the winner flips. The server returns text for **all** selected formats;
+the browser throws the others away.
+
+⚠️ **The surface no longer LIES about it** — the delivery summary names only the
+format that wins and says how many are skipped, which is what a re-skin is
+allowed to change. **The behaviour is untouched**, because "should selecting two
+clipboard formats be possible at all, and if so what should happen" is a product
+question:
+
+- one clipboard write is a browser constraint, not a bug — a second
+  `writeText` overwrites the first;
+- so the honest options are **make the group single-select**, **offer the others
+  as a follow-up action**, or **keep last-wins and say so** (what ships today);
+- the function's own comment already claims a toast offering the other formats,
+  and **there is no such toast** — so the code's stated design was never built.
+
+**Found by** T4's adversarial pass, which caught the new summary asserting all of
+them were delivered.
+
 ## Still on the batched request list, for T4
 
 1. **Row states.** No hover, focus-visible, disabled, pending or error state is

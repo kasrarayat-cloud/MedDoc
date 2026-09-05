@@ -83,6 +83,7 @@ import { test, expect } from '@playwright/test';
 import { attestAndSubmit, openSignFlow } from '../helpers/sign';
 import { signupFreshUser } from '../helpers/signup';
 import { createReadyTextVisit } from '../helpers/visit-setup';
+import { psqlOne } from '../helpers/seedReviewDocVisit';
 
 /** The default pack runs `devices['Desktop Chrome']` — 1280×720. 720 is the
  *  number that matters: the overflow was vertical. */
@@ -316,6 +317,124 @@ test.describe('the sign modal keeps its signature controls on screen', () => {
           'the handler returned early (a stale closure over a gate, a guard ' +
           'the UI is not showing, or a server refusal the modal swallowed)',
       ).toBeHidden({ timeout: 15_000 });
+    });
+  }
+});
+
+// ============================================================================
+// ⚠️ THE PANEL CLIPS, AND THE VIEWPORT ASSERTION ABOVE CANNOT SEE IT.
+// ----------------------------------------------------------------------------
+// FOUND BY T4's ADVERSARIAL PASS, WHICH REFUTED THE AUTHOR'S OWN CLAIM. The
+// sign card is capped at `max-h-[76vh]` from `top-[12vh]`, so its BOX always
+// ends at 88vh — and the author argued the submit was therefore safe "by
+// construction". The cap bounds the CARD, not the CONTENT:
+// `.qm-lin-spotlight-panel` carries `overflow: hidden` (globals.css), so once
+// the `flex-none` siblings out-sum the cap the excess is CLIPPED WITH NO
+// SCROLLBAR ANYWHERE.
+//
+// `boundingBox()` still returns the laid-out coordinates of a clipped element,
+// so `y + height <= vh` passes while the button is not there. Measured on the
+// T4 skin at 1280x640: 15.1px clipped, and
+// `document.elementFromPoint(cx, bottom - 5)` returned `HTML` instead of the
+// button — the pixels were not merely ugly, they were not hit-testable.
+//
+// TWO THINGS THIS ADDS, and each catches what the other cannot:
+//
+//   1. CONTAINMENT IN THE CLIPPER — the submit's box must be inside the
+//      panel's box, which is the element that actually does the clipping.
+//   2. HIT-TESTABILITY — `elementFromPoint` at the button's own bottom edge
+//      must land ON the button. That is the doctor's question, not a number.
+//
+// AND THE STATE IT WALKS IS THE ONE THE ORIGINAL FIXTURE COULD NOT REACH:
+// `createReadyTextVisit` never produces an `emPendingChange`, so the E/M
+// confirm block — a `flex-none` sibling that is live at TWO call sites
+// (`review-tabs-v2.tsx`, `soap-editor.tsx`, neither of which passes `attested`)
+// — was never in the measured tree at all.
+// ============================================================================
+
+test.describe('the sign modal is not CLIPPED by its own panel', () => {
+  for (const vp of VIEWPORTS) {
+    test(`submit survives an E/M confirm block @${vp.name}`, async ({ page }) => {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await signupFreshUser(page, `signclip-${vp.height}`);
+      const visitId = await createReadyTextVisit(page, {
+        patientName: 'Sign Clip',
+      });
+
+      // ⚠️ PLANTED, NOT WAITED FOR. The E/M scorer is a real model and we do
+      // not get to choose its answer, so the only deterministic way to put the
+      // confirm block on screen is to write the record the modal renders from.
+      // Skipped rather than failed where psql is unavailable — an unmeasured
+      // state named honestly beats a red that means "no database".
+      let planted = false;
+      try {
+        psqlOne(
+          `update transcribe_visits set "emPendingChange"=` +
+            `'{"from":"99213","to":"99214","at":"2026-09-05T00:00:00.000Z"}'::jsonb ` +
+            `where id='${visitId}'`,
+        );
+        planted = true;
+      } catch {
+        planted = false;
+      }
+      test.skip(!planted, 'psql seeding unavailable — the E/M state cannot be planted');
+
+      await page.goto(`/visits/${visitId}`);
+      await expect(
+        page
+          .getByTestId('rounds-review-sign')
+          .or(page.getByRole('button', { name: /sign & send/i }))
+          .first(),
+        'visit reached READY but neither sign opener ever rendered',
+      ).toBeVisible({ timeout: 30_000 });
+
+      await openSignFlow(page);
+      await expect(
+        page.getByRole('heading', { name: 'Sign and deliver your note', exact: true }),
+        'openSignFlow completed but the sign modal never opened',
+      ).toBeVisible({ timeout: 10_000 });
+
+      // NON-VACUITY: the E/M block really is on screen, so the geometry below
+      // is measured in the state this test exists for and not in the easy one.
+      await expect(
+        page.getByTestId('em-change-confirm'),
+        'the E/M confirm block is absent — the planted emPendingChange did not ' +
+          'reach the modal, so this test is measuring the SAME tree the ' +
+          'viewport assertion already covers',
+      ).toBeVisible({ timeout: 10_000 });
+
+      const submit = page.getByRole('button', { name: /sign & deliver/i }).first();
+      await expect(submit).toBeVisible();
+
+      // ── 1 · CONTAINED BY THE ELEMENT THAT CLIPS ──────────────────────────
+      const panel = page.locator('.qm-lin-spotlight-panel').first();
+      const [sBox, pBox] = [await submit.boundingBox(), await panel.boundingBox()];
+      expect(sBox, 'sign submit has no box — it is not laid out at all').not.toBeNull();
+      expect(pBox, 'the spotlight panel has no box').not.toBeNull();
+      expect(
+        Math.round(sBox!.y + sBox!.height),
+        `sign submit ends at y=${Math.round(sBox!.y + sBox!.height)} inside a panel ` +
+          `that ends at y=${Math.round(pBox!.y + pBox!.height)} and has ` +
+          `overflow:hidden — the difference is CLIPPED AWAY, with no scrollbar ` +
+          `anywhere, on a ${vp.height}px viewport`,
+      ).toBeLessThanOrEqual(Math.round(pBox!.y + pBox!.height));
+
+      // ── 2 · AND IT IS ACTUALLY HIT-TESTABLE ──────────────────────────────
+      // The box test above is arithmetic; this is the doctor's question. A
+      // clipped element keeps its coordinates, so only a hit test can tell
+      // whether the pixels the doctor aims at belong to the button.
+      const hit = await page.evaluate(
+        ([x, y]) => {
+          const el = document.elementFromPoint(x as number, y as number);
+          return el ? `${el.tagName}.${(el as HTMLElement).className || ''}`.slice(0, 80) : 'NONE';
+        },
+        [sBox!.x + sBox!.width / 2, sBox!.y + sBox!.height - 4],
+      );
+      expect(
+        hit.toLowerCase(),
+        `the point at the bottom edge of "Sign & Deliver" resolves to ${hit} — ` +
+          `the doctor cannot click the control that signs the note`,
+      ).toContain('button');
     });
   }
 });
