@@ -91,7 +91,8 @@ DECLARATION_NONRUNTIME_RE='^(docs/|[^/]+\.md$)'
 
 # declaration_resolve <decl_dir>
 #   Sets DECLARATION_PATH and DECLARATION_MODE on success.
-#   0 = resolved   1 = nothing covers the shipped tree   2 = AMBIGUOUS
+#   0 = resolved   1 = nothing covers the shipped tree
+#   2 = CANNOT TELL — ambiguous, duplicated, or a malformed entry in <decl_dir>
 declaration_resolve() {
   local dir="${1:?}"
   DECLARATION_PATH=""; DECLARATION_MODE=""
@@ -113,13 +114,65 @@ declaration_resolve() {
   for f in "$dir"/*.md; do
     [ -e "$f" ] || continue
     base=$(basename "$f" .md)
-    # the sha is the text after the LAST dash. `README.md` and any prose name
-    # fail the hex test below and are skipped — they are not declarations.
-    shapart="${base##*-}"
-    case "$shapart" in
-      ""|*[!0-9a-fA-F]*) continue ;;
+
+    # ⚠️ RECOGNISED NON-DECLARATION KINDS, ENUMERATED — A KEEP-LIST, NOT A
+    # DELETE-LIST. Anything NOT matched here and not a valid sha REFUSES loudly
+    # below. Enumerating what to KEEP is the direction that fails safely: a
+    # missing entry here costs one loud, one-line-to-fix refusal, whereas a
+    # missing entry in a skip-list is a declaration silently ignored.
+    #
+    # Measured against the whole corpus before shipping (87 files): 13 `-JUDGED`
+    # judgements, 1 `-RETROSPECTIVE` (F12-e, named in AGENTS.md), 1 `README`,
+    # 1 `BASELINE-note-content`, and 1 `-backfill-declaration` (a MUTATION
+    # declaration, which this deploy resolver is right to ignore). Zero of the
+    # 87 refuse today. A blocking rule is measured against every real input
+    # BEFORE it ships — a text rule that refuses the real corpus is the failure
+    # this project has already paid for once, at 28 of 28 dropdowns.
+    case "$base" in
+      README|BASELINE-*) continue ;;
+      *-JUDGED|*-RETROSPECTIVE) continue ;;
+      *-backfill-declaration) continue ;;
     esac
-    [ "${#shapart}" -ge 7 ] || continue
+
+    # the sha is the text after the LAST dash.
+    shapart="${base##*-}"
+
+    # ⚠️ AN UNRECOGNISED ENTRY REFUSES LOUDLY, NAMING THE FILE. It used to
+    # `continue` — and SILENT SKIPPING IS THE SILENCE CLASS. A declaration
+    # written as `20260904-c436b8cd-INTERIM.md` was not rejected, not warned
+    # about, and not considered: `${base##*-}` read `INTERIM`, failed the hex
+    # test, and the file simply never existed as far as this resolver was
+    # concerned. The deploy would then have refused for the WRONG reason —
+    # "no declaration covers this tree" — sending the author to write a second
+    # declaration rather than to fix a filename.
+    #
+    # A guard whose failure mode is silence cannot be told apart from one that
+    # worked. This one now says what it found and what it wanted.
+    case "$shapart" in
+      ""|*[!0-9a-fA-F]*)
+        echo
+        echo "🔴 REFUSING — $f is not a recognised entry for $dir."
+        echo "   Its last dash-separated segment is '${shapart}', which is not a"
+        echo "   commit sha, and the name matches no recognised kind."
+        echo
+        echo "   A DECLARATION must be named:  <date>-<sha>.md"
+        echo "   Its judgement:                <date>-<sha>-JUDGED.md"
+        echo
+        echo "   Rename it, or if it is a new KIND of file, add it to the"
+        echo "   recognised-kinds list in $(basename "${BASH_SOURCE[0]}") so the"
+        echo "   next reader inherits the decision instead of re-making it."
+        echo "   Nothing has been changed."
+        return 2
+        ;;
+    esac
+    if [ "${#shapart}" -lt 7 ]; then
+      echo
+      echo "🔴 REFUSING — $f names '${shapart}', which is hex but shorter than 7"
+      echo "   characters. An abbreviation that short is ambiguous, and this"
+      echo "   resolver never pads, completes or guesses at an identifier."
+      echo "   Nothing has been changed."
+      return 2
+    fi
 
     # ⚠️ RESOLVED THROUGH GIT, NEVER PARSED AND TRUSTED. A fabricated sha, a
     # sha from another repository, or an AMBIGUOUS abbreviation all fail here

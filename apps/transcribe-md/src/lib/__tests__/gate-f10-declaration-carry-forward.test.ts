@@ -492,6 +492,86 @@ describe('F10 · the deploy actually uses it', () => {
     expect(deploy()).not.toContain('DECL="$DECL_DIR/$(date -u +%Y%m%d)-${DEPLOY_SHA}.md"');
   });
 
+  it('REFUSES LOUDLY on an unrecognised entry, NAMING it — silent skipping is the silence class', () => {
+    // ⚠️ THE DEFECT THIS CLOSES, MEASURED ON A REAL FILE. A §2.5 declaration was
+    // committed as `20260904-c436b8cd-INTERIM.md`. `${base##*-}` reads `INTERIM`,
+    // which failed the hex test, so the resolver SKIPPED IT — not rejected, not
+    // warned about, never considered. The deploy would then have refused for the
+    // WRONG REASON ("nothing covers this tree"), sending the author to write a
+    // SECOND declaration instead of to fix a filename.
+    //
+    // A guard whose failure mode is silence cannot be told apart from one that
+    // worked. This arm asserts it now speaks, and that it says WHICH file.
+    const dir = newRepo();
+    const head = git(dir, 'rev-parse', '--short', 'HEAD');
+    write(dir, `${DECL_DIR}/20260817-${head}.md`, '# a perfectly good declaration');
+    commit(dir, 'docs: a valid declaration');
+
+    // ⚠️ AND IT REFUSES EVEN THOUGH A VALID DECLARATION IS PRESENT — fail-closed.
+    // Ignoring the malformed one and quietly taking the good one is precisely
+    // the silence being removed.
+    write(dir, `${DECL_DIR}/20260817-deadbeef-INTERIM.md`, '# malformed');
+    commit(dir, 'docs: an entry nothing recognises');
+
+    const r = resolve(dir);
+    expect(r.code).toBe(2);
+    expect(r.path).toBe('');
+    expect(r.out).toContain('20260817-deadbeef-INTERIM.md');
+    expect(r.out).toContain('INTERIM');
+    expect(r.out).toContain('<date>-<sha>.md');
+  });
+
+  it('a hex-but-TOO-SHORT segment refuses too — an abbreviation is never padded', () => {
+    const dir = newRepo();
+    const head = git(dir, 'rev-parse', '--short', 'HEAD');
+    write(dir, `${DECL_DIR}/20260817-${head}.md`, '# valid');
+    write(dir, `${DECL_DIR}/20260817-abc.md`, '# three hex chars');
+    commit(dir, 'docs: a too-short sha');
+    const r = resolve(dir);
+    expect(r.code).toBe(2);
+    expect(r.out).toContain('shorter than 7');
+  });
+
+  it('⚠️ THE KEEP-LIST HOLDS — every recognised companion is still skipped QUIETLY', () => {
+    // ⚠️ THIS IS THE ARM THAT STOPS THE CURE BEING WORSE THAN THE DEFECT. A
+    // blanket "refuse anything non-hex" would have refused SEVENTEEN real files
+    // in `docs/foundation/deploys` — 13 judgements, a retrospective, a README, a
+    // baseline note and a backfill declaration — and blocked every deploy until
+    // someone deleted history. A blocking rule is measured against every real
+    // input BEFORE it ships; this project has already paid for the other order
+    // once, at 28 of 28 dropdowns.
+    const dir = newRepo();
+    const head = git(dir, 'rev-parse', '--short', 'HEAD');
+    write(dir, `${DECL_DIR}/20260817-${head}.md`, '# the declaration');
+    for (const companion of [
+      `20260817-${head}-JUDGED.md`,
+      '20260827-b439dcbb-F12E-RETROSPECTIVE.md',
+      'README.md',
+      'BASELINE-note-content.md',
+      '20260812-b7s3c-backfill-declaration.md',
+    ]) {
+      write(dir, `${DECL_DIR}/${companion}`, '# a recognised non-declaration');
+    }
+    commit(dir, 'docs: the declaration and every recognised companion');
+
+    const r = resolve(dir);
+    expect(r.code, 'a recognised companion was treated as malformed').toBe(0);
+    expect(r.path).toContain(`20260817-${head}.md`);
+    // ⚠️ `strict`, NOT `present`, AND THE REASON IS F10 ITSELF. The commit that
+    // ADDS the declaration is what MOVES HEAD, so the file names an ancestor and
+    // resolves through the CARRY-FORWARD door — the stricter of the two. Getting
+    // this arm onto the strict path is a bonus rather than a compromise: it
+    // proves the keep-list holds on the door that demands more, not less.
+    expect(r.mode).toBe('strict');
+  });
+
+  it('names the recognised kinds as a KEEP-list in source — the shape is the guarantee', () => {
+    const lib = readFileSync(LIB, 'utf8');
+    // an inverted rule (skip-list) would silently swallow declarations again
+    expect(lib).toContain('README|BASELINE-*)');
+    expect(lib).toContain('*-JUDGED|*-RETROSPECTIVE)');
+  });
+
   it('keeps the non-runtime allowlist FAIL-CLOSED — an allowlist, never a denylist', () => {
     // If this ever becomes a denylist, everything not named becomes non-runtime
     // and a carry-forward would sail past real code changes. The shape is the
