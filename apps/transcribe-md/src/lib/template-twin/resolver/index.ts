@@ -17,6 +17,7 @@ import {
   type FieldResolutionStatus,
   type SemanticMapping,
   type TemplateField,
+  fieldMayKeep,
 } from '../ir';
 import { withoutPlaceholderOptions } from '../../note-template-docx/placeholder-option';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
@@ -348,10 +349,7 @@ function missingResolution(
   // the mechanism had to be right about. An ALLOWLIST is the only shape whose
   // failure mode is losing formatting rather than printing a clinical claim:
   // a kind nobody has thought about is EXCLUDED by default.
-  const declaredKeep =
-    mapping.unmentionedPolicy === 'keep' &&
-    field.kind === 'narrative_text' &&
-    field.rowPrototype !== true;
+  const declaredKeep = mapping.unmentionedPolicy === 'keep' && fieldMayKeep(field);
   const unmentionedScaffold =
     conceptUnmatched && reason === undefined && facts.length > 0;
 

@@ -869,3 +869,42 @@ describe('#193 — the offer is SHOWN, with its sentence', () => {
     expect(src).toContain('Keeps your template');
   });
 });
+
+describe('#193 — the OFFER and the RENDER ask one question', () => {
+  it('(41) ⚠️ A FIELD THE RESOLVER WILL REFUSE IS NEVER OFFERED — one predicate, two callers', async () => {
+    // ⚠️ ROUND THREE MEASURED THE DRIFT. The proposer gated on
+    // `scaffolded && kind === 'narrative_text'`; the resolver additionally
+    // required `rowPrototype !== true`. So a repeating prototype was OFFERED a
+    // keep, its sentence was quoted to the doctor, the click was taken — and
+    // the resolver refused it. "A confirmation that silently does nothing is
+    // worse than no offer, because the doctor believes they decided" is the
+    // proposer's OWN comment, describing the defect it then had.
+    const { fallbackSemanticMappings } = await import('../semantic-mapping');
+    const proto = field('1', { fieldId: `ttf_${'1'.repeat(24)}`, rowPrototype: true });
+    expect(fallbackSemanticMappings({ fields: [proto] })[0]?.unmentionedPolicy ?? null)
+      .toBeNull();
+    // and the resolver agrees — the two must not merely both refuse, they must
+    // refuse for the SAME reason, which sharing the predicate is what buys
+    const [r] = resolveTemplateFields({
+      fields: [proto],
+      mappings: [mapping(proto, 'ros.cardiovascular', { unmentionedPolicy: 'keep' })],
+      facts: [factFor('2', 'chief_complaint', 'Patient here for a rash.')],
+      allowUncertifiedForSyntheticTest: true,
+    });
+    expect(r!.status).not.toBe('default_kept');
+    // ⚠️ AND THEY SHARE ONE IMPLEMENTATION, not two agreeing copies
+    for (const rel of ['resolver/index.ts', 'semantic-mapping/index.ts']) {
+      expect(`${rel}:${readFileSync(join(__dirname, '..', rel), 'utf-8').includes('fieldMayKeep(field)')}`)
+        .toBe(`${rel}:true`);
+    }
+  });
+
+  it('(42) the resolver VERSION moved again — its output changed for identical input', () => {
+    // The narrowing flipped `default_kept` -> `not_mentioned` for every
+    // non-narrative scaffold. `certification-lifecycle` compares this string
+    // exactly to invalidate stale manifests, so leaving it meant every
+    // previously certified template kept a certification whose manifest no
+    // longer describes what the resolver produces.
+    expect(TEMPLATE_TWIN_RESOLVER_VERSION).toBe('template-field-resolver/1.2.0');
+  });
+});

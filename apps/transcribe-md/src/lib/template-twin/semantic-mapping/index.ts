@@ -32,6 +32,7 @@ import {
   type TemplateDocIR,
   type TemplateField,
   type TemplateTwinFieldKind,
+  fieldMayKeep,
 } from '../ir';
 
 const DEFAULT_MODEL =
@@ -301,7 +302,7 @@ export function fallbackSemanticMappings(
         // checkbox or a date invited a doctor to confirm something the resolver
         // now refuses -- a confirmation that silently does nothing is worse
         // than no offer, because the doctor believes they decided.
-        ...(field.scaffolded === true && field.kind === 'narrative_text'
+        ...(field.scaffolded === true && fieldMayKeep(field)
           ? { unmentionedPolicy: 'keep' as const }
           : {}),
         // ⚠️ THE SAME CLASSIFIER THE MODEL PATH USES, FOR THE SAME REASON.

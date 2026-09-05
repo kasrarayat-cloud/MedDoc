@@ -15,7 +15,14 @@ export const TEMPLATE_TWIN_COMPILER_VERSION = 'template-docx-compiler/1.0.0';
 // this string exactly to invalidate stale manifests. Left at 1.0.0 it could not
 // see the change, so a manifest produced by the old resolver would have been
 // accepted as current. Found by the adversarial pass, not by any arm.
-export const TEMPLATE_TWIN_RESOLVER_VERSION = 'template-field-resolver/1.1.0';
+// ⚠️ BUMPED AGAIN. The narrowing changed the resolver's output for IDENTICAL
+// input in the other direction (`default_kept` -> `not_mentioned` for every
+// non-narrative scaffold), and `certification-lifecycle` compares this string
+// exactly to invalidate stale manifests. Leaving it meant every template
+// certified before the narrowing kept a certification whose stored manifest no
+// longer describes what the resolver produces — this file's own recorded
+// failure mode, re-armed by the commit that cites it.
+export const TEMPLATE_TWIN_RESOLVER_VERSION = 'template-field-resolver/1.2.0';
 export const TEMPLATE_TWIN_RENDERER_VERSION = 'template-docx-renderer/1.0.0';
 
 export const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -675,6 +682,30 @@ export const TemplateTwinFillManifestSchema = z
   })
   .strict();
 export type TemplateTwinFillManifest = z.infer<typeof TemplateTwinFillManifestSchema>;
+
+/**
+ * ⚠️ ONE PREDICATE FOR "CAN THIS FIELD KEEP AT ALL", BECAUSE THE OFFER AND THE
+ * RENDER DRIFTED APART THE MOMENT THEY WERE WRITTEN TWICE.
+ *
+ * The proposer gated on `scaffolded && kind === 'narrative_text'`; the resolver
+ * gated on `keep && kind === 'narrative_text' && rowPrototype !== true`. The
+ * `rowPrototype` half was not copied, so the confirm screen offered a keep on a
+ * repeating prototype, quoted its sentence to the doctor, took the click — and
+ * the resolver then refused it. A confirmation that silently does nothing is
+ * worse than no offer, because the doctor believes they decided; that sentence
+ * is in the proposer's own comment, describing the defect it then had.
+ *
+ * ⚠️ THIS FUNCTION IS NOT A DEFENCE OF THE `kind` TEST, WHICH IS UNDER REVIEW.
+ * `inferTextKind` assigns `narrative_text` by a LABEL REGEX and never looks at
+ * content, so it is both insufficient (a `w:sym` tick inside a "narrative"
+ * control survives a keep) and over-refusing (a real ROS line reading
+ * "…or weight loss" is classified `measurement`). That is escalated. What this
+ * function fixes is the SECOND defect — that two places asked the question and
+ * gave different answers — which is wrong under every option.
+ */
+export function fieldMayKeep(field: TemplateField): boolean {
+  return field.kind === 'narrative_text' && field.rowPrototype !== true;
+}
 
 export function templateTwinCounts(
   fields: readonly FieldResolution[],
