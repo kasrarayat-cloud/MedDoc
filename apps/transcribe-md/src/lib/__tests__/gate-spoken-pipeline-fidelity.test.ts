@@ -44,15 +44,67 @@ describe('LOSS — the doctor\'s words must survive', () => {
     // Row-text collision: `claimProse` needs a UNIQUE hit, so a bilateral study
     // whose legs carry identical rows came back as raw pipes with no column
     // names — numbers with no unit and no identity.
+    //
+    // ⚠️ THE FIXTURE IS THE GENERATOR'S REAL HEADER, NOT A TIDY ONE.
+    // `build-soap-prompt.ts:411-416` deliberately emits an UNNAMED leading cell
+    // whenever the template's first column is a data column — which is the real
+    // customer form. The first version of this arm used `| Vein | … |`, a named
+    // and width-matched header, and so passed while the shipped shape spoke two
+    // names over a three-value row.
     const table = [
-      '| Vein | Diameter (mm) | Reflux Time (seconds) |',
+      '|  | DIAMETER (mm) | REFLUX TIME (ms) |',
       '| --- | --- | --- |',
-      '| GSV at the Knee | 6.2 | 1.8 |',
+      '| GSV at the SFJ | 6.2 | 3.4 |',
     ].join('\n');
     const note = ['## Findings', 'Right Leg', '', table, '', 'Left Leg', '', table].join('\n');
     const out = spoken(note);
-    expect(out, 'the column names must reach the listener').toContain('Diameter (mm)');
-    expect(out).toContain('Reflux Time (seconds)');
+    expect(out, 'the column names must reach the listener').toContain('DIAMETER (mm)');
+    expect(out).toContain('REFLUX TIME (ms)');
+
+    // ⚠️ AND THE NAMES MUST LINE UP WITH THE VALUES. Three cells, three names —
+    // the unnamed column is spoken in position rather than compacted away, or a
+    // listener pairs left-to-right and hears a diameter as a reflux time.
+    const line = out.split('\n').find((l) => l.startsWith('Columns:'))!;
+    expect(line, 'no Columns line was spoken').toBeTruthy();
+    expect(line.replace(/^Columns: |\.$/g, '').split(', ')).toHaveLength(3);
+  });
+
+  it('a header is NOT named when it cannot be aligned to the rows', () => {
+    // ⚠️ A PARTIAL MAPPING IS WORSE THAN NONE — `claim-prose.ts:60-64` and `:123`
+    // both refuse for exactly this reason. A ragged header must produce silence
+    // about columns, not a confident subset.
+    const ragged = [
+      '| DIAMETER (mm) | REFLUX TIME (s) |',
+      '| --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3.4 |',
+    ].join('\n');
+    const note = ['## Findings', ragged, '', 'x', '', ragged].join('\n');
+    expect(spoken(note)).not.toContain('Columns:');
+
+    // …and a header of nothing but blanks names nothing.
+    const blank = ['|  |  |  |', '| --- | --- | --- |', '| GSV at the SFJ | 6.2 | 3.4 |'].join('\n');
+    const n2 = ['## Findings', blank, '', 'y', '', blank].join('\n');
+    expect(spoken(n2)).not.toContain('Columns:');
+  });
+
+  it('an ANNOTATED row mid-table does not truncate the scan', () => {
+    // `claimProse` reads rows through the tolerant `parseMarkdownRow`, which
+    // accepts a trailing annotation that spoken-body's strict ROW_RE rejects.
+    // Terminating on the first strict miss decided the drop over a PREFIX and
+    // deleted the header while a later row still spoke as raw pipes — and the
+    // truncation is unidirectional toward that harm.
+    const table = [
+      '| Segment | DIAMETER (mm) | REFLUX TIME (s) |',
+      '| --- | --- | --- |',
+      '| GSV at the SFJ | 6.2 | 3.4 |',
+      '| SSV at the Proximal Calf | 3.1 | 0.4 | [S1: "small saphenous"]',
+      '| PTV at the Ankle | 2.9 | 0.2 |',
+    ].join('\n');
+    const note = ['## Findings', 'Right Leg', '', table, '', 'Left Leg', '', table].join('\n');
+    const out = spoken(note);
+    // both legs named, and named the SAME way — not one spoken and one silent
+    expect(out.split('Columns:').length - 1, 'both legs must be named').toBe(2);
+    expect(out).toContain('PTV at the Ankle');
   });
 });
 
@@ -73,7 +125,21 @@ describe('FABRICATION — the spoken copy must not assert what the record does n
     const note = '## Subjective\nx\n\n## Assessment\n';
     const out = spoken(note);
     expect(out).toContain('Not documented');
+    // ⚠️ THE OTHER DIRECTION, OR THE ARM IS HALF A CLAIM. Without this, a
+    // mutation that replaced most of the note with "Not documented." would
+    // satisfy every arm in this file while erasing the doctor's words.
+    expect(out, "the doctor's own text must still be spoken").toContain('[Subjective] x');
     expect(spokenSections(note).map((s) => s.label)).toEqual(['Subjective', 'Assessment']);
+  });
+});
+
+describe('the header rules cannot be satisfied vacuously', () => {
+  it('a table with NO data rows does not collapse the section to "Not documented."', () => {
+    // `body.length > 0` guards `[].every()`, which is vacuously true. Without
+    // it a header-and-rule-only table takes the drop path, the section empties,
+    // and `spokenBody`'s fallback announces an absence the note never states.
+    const t = ['| Vein | Diameter (mm) |', '| --- | --- |'].join('\n');
+    expect(spokenBody(t, '## Findings\n' + t)).not.toBe('Not documented.');
   });
 });
 
@@ -91,6 +157,11 @@ describe('BLAST RADIUS — the shared parser\'s existing output is unchanged', (
     expect(secs.find((s) => s.key === 'O')!.body).toBe('');
     // the preamble is NOT smuggled into any section body
     for (const s of secs) expect(s.body).not.toContain('preamble text');
+    // ⚠️ AND THE FIELD SET IS PINNED. The design rests on the change being
+    // ADDITIVE — an extra field appearing where a consumer spreads, stringifies
+    // or key-counts the object is exactly what would break E/M scoring, and
+    // nothing else in 5,730 tests measures it.
+    expect(Object.keys(secs[0]).sort()).toEqual(['body', 'key', 'label', 'letter', 'present']);
   });
 
   it('the new fields carry the information the spoken path needs', () => {
@@ -120,7 +191,11 @@ describe('BLAST RADIUS — the shared parser\'s existing output is unchanged', (
       ['| Vein | Diameter (mm) |', '| --- | --- |', '| GSV at the Knee | 6.2 |'].join('\n'),
       note
     );
-    // whichever way claimProse resolves it, no ALIGNMENT RULE may ever survive
+    // ⚠️ ASSERT WHAT THE TITLE CLAIMS. The first version asserted only
+    // `not.toContain('---')`, which passes on an implementation that NEVER drops
+    // the header — the arm was named for a behaviour it did not measure.
+    expect(body).not.toContain('Columns:');
+    // and no ALIGNMENT RULE may ever survive
     expect(body).not.toContain('---');
   });
 });

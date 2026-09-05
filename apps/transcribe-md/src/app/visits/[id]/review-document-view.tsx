@@ -35,7 +35,7 @@ import { AlertTriangle, Check, FileSignature, RefreshCw } from 'lucide-react';
 import { PrescriptionsCard } from './prescriptions-card';
 
 import { spokenSections } from '@/lib/spoken-sections';
-import { parseNoteSections, type NoteSection } from '@/lib/parse-note-sections';
+import { type NoteSection } from '@/lib/parse-note-sections';
 import { emChangeEq } from '@/lib/suggestion-labels';
 import { ReviewSignBar } from './review-sign-bar';
 import { EmLevelCard } from './em-level-card';
@@ -209,7 +209,6 @@ export function ReviewDocumentView(props: ReviewDocumentViewProps) {
     <div data-gate-slot={id}>{node}</div>
   );
 
-  const sections = useMemo(() => parseNoteSections(props.soapFinal), [props.soapFinal]);
 
   const emBlocking = props.emPendingChange != null && !emConfirmed;
   // Every gate the rail counts, not a hand-maintained subset of them.

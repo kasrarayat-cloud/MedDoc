@@ -106,7 +106,23 @@ describe('⚠️ the FROZEN-MANIFEST SERVE never routes through the row reader',
     }
   });
 
-  it('and the caller set is EXACTLY five — a sixth is a decision, not a drift', () => {
+  // ⚠️ SIX SINCE 2026-09-05, AND THE SIXTH WAS A DECISION — THIS ARM MADE IT ONE.
+  // `spoken-body.ts` joined the caller set when the spoken accessible copy
+  // stopped deleting table headers unconditionally. It had to READ a header and
+  // its rows to decide whether the column names could be trusted, and the first
+  // version of that used its own `split('|').filter(Boolean)` — a SIXTH
+  // hand-rolled splitter, which compacted away the deliberately-unnamed leading
+  // cell the SOAP generator emits (`build-soap-prompt.ts:411-416`) and announced
+  // two column names over a three-value row.
+  //
+  // This arm is why that became a considered change rather than a quiet one: the
+  // suite went red the moment `spoken-body` imported the shared reader, and the
+  // fix was to state the decision here. That is the arm working, not obstructing.
+  //
+  // ⚠️ IT IS A READER, NOT A SERVE PATH. `spoken-body` produces the DOM text a
+  // screen reader hears; it writes nothing, and the SERVE list above — which
+  // must never acquire an opinion about markdown — is unchanged at five.
+  it('and the caller set is EXACTLY six — a seventh is a decision, not a drift', () => {
     const walk = (dir: string): string[] =>
       readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
         e.name === '__tests__'
@@ -129,6 +145,7 @@ describe('⚠️ the FROZEN-MANIFEST SERVE never routes through the row reader',
       'docx-generator.ts',
       'ehr-formatters.ts',
       'note-table-edit.ts',
+      'spoken-body.ts',
       'template-twin/bridge-fill.ts',
     ]);
   });

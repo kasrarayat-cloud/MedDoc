@@ -114,9 +114,14 @@ export function parseSoapSections(markdown: string): SoapSection[] {
 
 /** `parseSoapSections`, plus the preamble it discards.
  *
- *  A separate entry point rather than a changed return type, so the twelve
- *  existing call sites — E/M scoring included — keep the exact array they
- *  have always received. */
+ *  A separate entry point rather than a changed return type, so the FIVE
+ *  existing call sites — the two E/M scorers, the SOAP editor, the status route
+ *  and `parseNoteSections` — keep the exact array they have always received.
+ *
+ *  ⚠️ The count read "twelve" until the adversarial pass checked it: measured,
+ *  it is five. A number nobody verified, overstating the blast radius this
+ *  design avoids, is the kind of detail that gets cited later as if it were
+ *  measured. */
 export function parseSoapSplit(markdown: string): SoapSplit {
   const sections = parseSoapSections(markdown);
   if (!markdown || markdown.trim() === '') return { sections, preamble: '' };
