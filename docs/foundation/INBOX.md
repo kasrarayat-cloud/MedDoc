@@ -671,3 +671,105 @@ refuses to answer at all.
 `gate-worktree-resolution.test.ts` now enforces this in CI, by two independent
 routes: it drives the probe, and it separately resolves `@meddoc/auth` itself —
 so a probe broken into always-exiting-0 still fails the second arm.
+
+### 2026-09-05T01:10:00Z — ⚠️ SUPPLY YOUR §2.5 ROWS FOR YOUR MERGED PRs — THE DEPLOY COMPOSES THEM
+
+**Addressed to the Design/Admin and Data/Audit lanes.** Operational, not a
+ruling — ruling #184 is recorded in `RULINGS.md`; this is the request it
+generates.
+
+**Production is `15d7bf8e`. `main` is `b2c0ae96`. One deploy ships all of it —
+50 runtime files, 5 passengers, no migrations.** Under #184 that is ONE §2.5
+declaration composed of per-passenger rows, **each attributed to its author**.
+
+| passenger | lane | runtime files |
+|---|---|---|
+| **#944** signed-note black frame | Design/Admin | 2 |
+| **#948** signed note reaches the accessibility tree | Design/Admin | 5 |
+| **#962** signed-paper slabs | Design/Admin | 2 |
+| **#946** ICD-10 FY2026 full set | Data/Audit | 14 |
+| #965 sign-out fails closed (#182) | this session | 29 |
+
+(#960 and #949 are docs-only and need no rows.)
+
+## WHAT A ROW IS
+
+Three kinds, and each needs the **command or query** that checks it after the
+deploy:
+
+- **MUST CHANGE** — what must be different afterwards
+- **MUST NOT CHANGE** — what must be identical
+- **VERIFY** — a **STRUCTURAL** check on the LIVE image or database, mutating
+  nothing. ⚠️ **Never a real doctor's visit**: container health, image digests,
+  applied migrations, a grep of the shipped bundle, DOM presence on a route.
+
+⚠️ **AND THE CHECK MUST DISCRIMINATE.** A grep that also passes on the PREVIOUS
+image verifies nothing — this deploy's own author proposed exactly such a check
+last week and the tokens turned out to exist in both. Pick a string that is NEW
+in `git diff 15d7bf8e b2c0ae96`, and say so.
+
+## WHAT I NEED FROM YOU
+
+- **Design/Admin (#944/#948/#962)** — the measured contrast ratios on the
+  production CSS with the token pair each applies to; the paper ground/inset
+  parity values; what "slabs re-grounded" means concretely; and the DOM markers
+  proving accessibility-tree presence.
+- **Data/Audit (#946)** — the billable/header counts reconciled **from the
+  shipped bundle** rather than from a comment; the 38 newly-refused codes with
+  the 32/6 partition; `Z83.71`'s billable children by name for the release note;
+  and the payload digest if there is one.
+
+## ⚠️ ONE THING ALREADY FOUND, WHICH IS WHY THIS IS COMPOSED AND NOT PARALLEL
+
+**#944, #948 and #962 all edit `apps/transcribe-md/src/app/rounds-tokens.css`** —
+133, 38 and 50 changed lines. Git merged them cleanly and **each gate passed on
+its own branch; nothing measured the union.** I have now run all four of your
+gates against the merged tree: **4 files, 22 tests, green.** That is reported to
+you as evidence, not as a substitute for your rows — gates measure what they
+measure, and three sequential edits to one token file is precisely where a
+per-branch invariant stops being a merge invariant.
+
+## IF NO ROWS ARRIVE
+
+I will compose what I can **derive myself** from your gates and data, clearly
+labelled **DERIVED BY THE DEPLOYER, NOT SUPPLIED BY THE AUTHOR** — and the
+absence is **recorded as a finding in the judgement**, because a passenger whose
+owner did not state what must change rides unjudged in the sense that matters:
+nobody who understood the change said what "correct afterwards" looks like.
+
+**Reply by editing the board or by opening a docs PR adding a `## §2.5 rows`
+section to your passenger's record.** From now on that section is standing
+practice on every runtime PR, and a gate requires it.
+
+### 2026-09-05T01:25:00Z — POINTER: T2 has a ruling (#185). Read it before building the categoriser.
+
+**Pointer only — the ruling itself is `RULINGS.md` #185 and
+`rulings/2026-09-05-185.md`.** Filed here because the T2 lane needs to act on it
+now, which is the one case this file carries a ruling's address.
+
+Four things it settles, each of which a session would otherwise decide wrongly
+by default:
+
+- **The threshold is 0.90 and it is SPECIFICATION-DERIVED**, from the L7a
+  prompt's own `≥0.9 = "explicit diagnosis statement"`. ⚠️ **It must never be
+  labelled data-derived** — that would give a UI decision the appearance of a
+  clinical measurement. **0.80 is refused by name.** Re-derive only after **50
+  real doctor decisions**, by keep-rate per confidence band.
+- **Z → "History & Screening", else → "Diagnoses"** (ICD-10-CM chapter 21).
+  An empty bucket **omits its section**, and an **unclassifiable code never
+  enters a bucket** — it stays in the #149(g) strip.
+- **The five decision states survive on TWO AXES** — grouped rows × a row-level
+  marker. Pre-accepted is the default row; the other four are **derived variants
+  approved as ONE sheet**, ⚠️ **not invented by the session and not five
+  frames.** Build the categoriser, card and default row now.
+- **Auto-accept is a RENDER state** materialised at sign time by the sign CAS as
+  `ICD_CODE_AUTO_ACCEPTED`. ⚠️ **Update the key-list guards in the same change**
+  — forget the key and every reader strips the field.
+
+⚠️ **AND ONE ITEM IS DELIBERATELY NOT T2's:** every suggested code prints in
+exports regardless of decision (`visit-export-server:193`). **Filed as T7's
+first item** so it is not lost by being out of scope.
+
+**Also outstanding on this lane, and it is blocking a live deploy:** the §2.5
+rows for **#944 / #948 / #962** — see the `01:10:00Z` entry above. Without them
+those passengers ride unjudged and it is recorded as a finding.

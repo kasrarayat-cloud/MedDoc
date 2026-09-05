@@ -130,17 +130,28 @@ describe('#182 round 3 — the MIDDLEWARE surfaces 503, never a /login redirect'
     }
   };
 
-  it('⚠️ an UNVERIFIED session is ALLOWED THROUGH — a redirect here is eject-on-a-blip', async () => {
-    // It must reach the page, whose getSession() refuses 503 with the cookie
-    // intact. Returning false would send the doctor to /login and tell them
-    // they are signed out — which they are not, and the next request may
-    // succeed. This behaviour was CORRECT BY ACCIDENT before round three:
-    // `!!auth?.user` is truthy for an identity-less user object, so tightening
-    // it to `?.user?.id` — an obvious-looking improvement — would have broken it.
-    expect(
-      await run({ user: { sessionVerifyFailed: true } }),
-      'an unverifiable session is being redirected to /login',
-    ).toBe(true);
+  it('⚠️ an UNVERIFIED session is ANSWERED WITH A REAL 503 — not a redirect, not a 500', async () => {
+    // ⚠️ THIS ARM'S SUBJECT CHANGED UNDER #186(a), SO IT IS REWRITTEN AND
+    // RE-PROVED. Round three asserted `true` here: the request reached the page,
+    // whose getSession() threw and rendered the verifying-session surface. Right
+    // in substance, wrong in STATUS — a thrown error reaches Next's boundary as
+    // a 500, so the system never sent the 503 that three of its own comments
+    // claimed. `next-auth/lib/index.js:151` accepts a Response from this
+    // callback, which makes it the boundary that ANSWERS the request.
+    //
+    // A redirect would be the eject-on-a-blip #182(1) forbids. A 500 would say
+    // something is broken. 503 says: not now, try again, you are still signed in.
+    const res = await run({ user: { sessionVerifyFailed: true } });
+    expect(res, 'the middleware no longer answers the request itself').toBeInstanceOf(Response);
+    expect((res as Response).status, 'an unverifiable session is not answered 503').toBe(503);
+    expect((res as Response).headers.get('retry-after')).toBe('2');
+    const body = await (res as Response).clone().text();
+    // the body must say it is NOT a sign-out, or the doctor reads it as one
+    expect(body).toMatch(/have not been signed out/i);
+    // ⚠️ AND IT MUST NOT BE A REDIRECT — `next-auth` reads a Location header off
+    // a returned Response and follows it, which would silently restore the
+    // exact behaviour this forbids.
+    expect((res as Response).headers.get('Location'), 'the 503 carries a redirect').toBeNull();
   });
 
   it('a genuinely SIGNED-OUT request is still refused', async () => {

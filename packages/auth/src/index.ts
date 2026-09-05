@@ -168,7 +168,38 @@ export const authConfig: NextAuthConfig = {
       // out; they are not, and the next request may well succeed.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const unverified = (auth?.user as any)?.sessionVerifyFailed === true;
-      if (unverified) return true;
+      if (unverified) {
+        // ⚠️ #186(a) — MIDDLEWARE ANSWERS WITH A REAL 503. Round three returned
+        // `true` here so the request reached the page, whose `getSession()`
+        // throws and renders the verifying-session surface. That was right in
+        // substance and wrong in STATUS: a thrown error reaches Next's error
+        // boundary as a 500, so the system never sent the 503 that three of its
+        // own comments claimed it sent.
+        //
+        // `next-auth/lib/index.js:151` — `if (authorized instanceof Response)`
+        // — makes this callback the boundary that ANSWERS the request, so the
+        // status can be correct here and nowhere else.
+        //
+        // ⚠️ IT IS STILL NOT A SIGN-OUT, AND THE BODY SAYS SO. The cookie is
+        // untouched, the session is not ended, and the next request
+        // re-validates. A redirect to /login would be the eject-on-a-blip
+        // #182(1) forbids; a 500 would tell the doctor something is broken.
+        return new Response(
+          '<!doctype html><meta charset="utf-8">' +
+            '<title>Verifying your session</title>' +
+            '<main role="alert" style="max-width:32rem;margin:4rem auto;padding:1.5rem;' +
+            'text-align:center;font-family:system-ui,sans-serif;line-height:1.6">' +
+            '<h1 style="font-size:1.125rem">Verifying your session…</h1>' +
+            '<p>We could not confirm your session with the server just now, so ' +
+            'nothing is being shown. <strong>You have not been signed out</strong> — ' +
+            'this is usually brief. Please reload to try again.</p></main>',
+          {
+            status: 503,
+            headers: { 'content-type': 'text/html; charset=utf-8', 'retry-after': '2' },
+          },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ) as any;
+      }
 
       // ⚠️ AND THE GENERAL CHECK IS NOW THE IDENTITY, NOT THE OBJECT. With the
       // unverified case handled above, a `user` carrying no id is genuinely

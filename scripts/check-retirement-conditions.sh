@@ -172,6 +172,8 @@ REGISTRY=(
 "2026-08-21T12:20:00Z|relay_closed:F23|INFERRED — states no clause, but its point 2 reads 'The script does not exist yet — F23 builds it', which became FALSE when F23 landed. A false PRESENT-TENSE fact, delivered to every session"
 "2026-08-24T15:25:10Z|none|STATED none — one-shot union notice for a single named PR"
 "2026-09-04T22:05:00Z|file_exists:scripts/check-worktree-resolution.sh|STATED 're-run after the harness fix' — the notice retires once every affected lane has re-run its packages/* measurements. The probe existing is the CONDITION being pointed at, not the retirement itself: the lanes must still re-run. Retire by hand once Design/Admin and Data/Audit confirm, and not before"
+"2026-09-05T01:10:00Z|human:the composed deploy of b2c0ae96 is judged|STATED — the request retires when the deploy it feeds has been judged. Either the lanes supplied rows and they were composed, or the absence was recorded as a finding; both discharge it. Retire by hand with the judgement, not before"
+"2026-09-05T01:25:00Z|relay_closed:T2|STATED none — a POINTER to ruling #185. It retires when the T2 categoriser slice closes, because after that the ruling is history rather than something a session must read before building"
 )
 
 # ── read the entries the LAUNCHER counts: `### <ISO8601> — <title>` ──────────
