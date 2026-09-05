@@ -908,3 +908,36 @@ describe('#193 — the OFFER and the RENDER ask one question', () => {
     expect(TEMPLATE_TWIN_RESOLVER_VERSION).toBe('template-field-resolver/1.2.0');
   });
 });
+
+describe('#193 — nothing is OFFERED a keep the resolver refuses earlier', () => {
+  it('(43) ⚠️ A `manual` OR `unsupported` FIELD IS NEVER OFFERED A KEEP', async () => {
+    // ⚠️ ROUND THREE MEASURED BOTH. `resolveOne` returns before the keep
+    // decision for a `manual` source (`not_mentioned`) and for an unsupported
+    // field (`needs_clinician_input`), so matching the keep predicate alone was
+    // not enough. The settings row quoted a real sentence to the doctor, took
+    // the click, and persisted the policy INTO THE ATTESTATION HASH — while the
+    // page rendered empty. The row made two statements and the second was false,
+    // and the certificate then attested a behaviour that never happens.
+    const { fallbackSemanticMappings } = await import('../semantic-mapping');
+
+    // `MANUAL_LABEL_PATTERNS` matches /referring\s+physician/i
+    const manual = field('1', {
+      fieldId: `ttf_${'1'.repeat(24)}`,
+      originalLabel: 'Referring physician',
+    });
+    expect(fallbackSemanticMappings({ fields: [manual] })[0]?.unmentionedPolicy ?? null)
+      .toBeNull();
+
+    const unsupported = field('1', {
+      fieldId: `ttf_${'1'.repeat(24)}`,
+      detectionStatus: 'unsupported',
+    });
+    expect(fallbackSemanticMappings({ fields: [unsupported] })[0]?.unmentionedPolicy ?? null)
+      .toBeNull();
+
+    // non-vacuity: an ordinary prose scaffold IS still offered
+    const ordinary = field('1', { fieldId: `ttf_${'1'.repeat(24)}` });
+    expect(fallbackSemanticMappings({ fields: [ordinary] })[0]?.unmentionedPolicy)
+      .toBe('keep');
+  });
+});

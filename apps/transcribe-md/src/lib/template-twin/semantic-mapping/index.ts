@@ -302,7 +302,19 @@ export function fallbackSemanticMappings(
         // checkbox or a date invited a doctor to confirm something the resolver
         // now refuses -- a confirmation that silently does nothing is worse
         // than no offer, because the doctor believes they decided.
-        ...(field.scaffolded === true && fieldMayKeep(field)
+        // ⚠️ AND THE RESOLVER REFUSES SOME FIELDS *BEFORE* IT EVER REACHES THE
+        // KEEP DECISION, so matching `fieldMayKeep` alone is not enough. A
+        // `manual` source returns `not_mentioned` at the top of `resolveOne`;
+        // an `unsupported` field returns `needs_clinician_input`. Round three
+        // measured both being OFFERED a keep: the settings row quoted
+        // "Referred by Dr. A. Mehta, Riverside Family Practice." to the doctor,
+        // took the click, persisted the policy into the ATTESTATION HASH — and
+        // the page rendered empty. The row made two statements and the second
+        // was false.
+        ...(field.scaffolded === true &&
+        fieldMayKeep(field) &&
+        classifyFieldSource(field.originalLabel, field) !== 'manual' &&
+        field.detectionStatus !== 'unsupported'
           ? { unmentionedPolicy: 'keep' as const }
           : {}),
         // ⚠️ THE SAME CLASSIFIER THE MODEL PATH USES, FOR THE SAME REASON.
