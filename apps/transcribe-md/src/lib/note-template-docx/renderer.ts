@@ -46,16 +46,6 @@ type ScalarRenderValue = string | number | boolean | string[] | null;
 interface PreparedResolution {
   value: ScalarRenderValue;
   selectedOptionOrdinal: number | null;
-  /**
-   * ⚠️ #191 — CARRIED BECAUSE THE CLEAR DECISION NEEDS IT, AND ITS ABSENCE WAS
-   * SILENT UNDER TEST. `contentControlPatches` receives this PREPARED shape,
-   * not the raw `FieldResolution`, so a guard written as
-   * `resolution.status !== 'default_kept'` compared `undefined` and was
-   * ALWAYS TRUE — the bounded clear ran on every kept default and the whole
-   * `keep` half stayed inert. 5731 tests passed throughout, because vitest does
-   * not typecheck; `tsc --noEmit` named it in one line.
-   */
-  status: FieldResolution['status'];
 }
 
 interface MutablePartPlan {
@@ -440,13 +430,11 @@ function prepareScalarResolution(
       failTemplateDocxRender('FIELD_VALUE_INVALID');
     }
     return {
-      status: resolution.status,
       value: resolution.value as string[],
       selectedOptionOrdinal: resolution.selectedOptionOrdinal,
     };
   }
   return {
-      status: resolution.status,
     value: resolution.value,
     selectedOptionOrdinal: resolution.selectedOptionOrdinal,
   };
@@ -627,7 +615,7 @@ function rowPreparedResolution(
   rowOrdinal: number,
 ): PreparedResolution {
   if (resolution.value === null) {
-    return { value: null, selectedOptionOrdinal: null, status: resolution.status };
+    return { value: null, selectedOptionOrdinal: null };
   }
   if (!isRowRecordArray(resolution.value)) {
     failTemplateDocxRender('FIELD_VALUE_INVALID');
@@ -665,7 +653,7 @@ function rowPreparedResolution(
   } else if (field.kind === 'multi_select') {
     value = row.value.split(';').map((entry) => entry.trim());
   }
-  return { value, selectedOptionOrdinal: ordinal, status: resolution.status };
+  return { value, selectedOptionOrdinal: ordinal };
 }
 
 function parseNonnegativeInteger(value: string): number {
@@ -1091,13 +1079,48 @@ function blankEligibilityFor(field: TemplateField): BlankEligibility {
 
 interface BoundedClear {
   readonly patches: ApprovedXmlPatch[];
-  /**
+  
+/**
    * May this clear earn an `emptied` proof that COUNTS toward the certification
    * blank requirement? Separate from whether the clear happened — a selection
    * clears correctly and still earns nothing, because the PDF engine falls back
    * to `w:listItem[0]` and prints a value nobody chose.
    */
   readonly blankEligible: BlankEligibility;
+}
+
+/**
+ * ⚠️ `w:showingPlcHdr` IS REMOVED WHENEVER THE CONTENT STOPS BEING THE
+ * PLACEHOLDER — WHICH IS ON THE FILLED PATH TOO, NOT ONLY THE CLEAR.
+ *
+ * The flag asserts "what you are looking at IS the placeholder", and Word acts
+ * on it by re-displaying the template's own prompt from
+ * `w:placeholder`/`w:docPart`. Writing a value makes that assertion false in
+ * exactly the way deleting the content does.
+ *
+ * ⚠️ IT LIVED INSIDE `sdtBoundedClearPatches`, SO ONLY NULLS EVER GOT IT, AND
+ * THE FAILURE DIRECTION WAS THE DOCTOR'S OWN WORDS. Measured on
+ * `WM IOV Template.docx`, the real customer form: 28 source flags, 28 fields
+ * filled, **28 flags surviving** — so a dictated `Bilateral Detailed` displays
+ * as `Choose an item.`, and `Maged S. Mikhail, MD, RPVI, RVT` as a prompt. The
+ * verification passed and no warning was emitted, because every check compares
+ * the CONTENT and this is a property beside it.
+ *
+ * ⚠️ AND THE GATE THAT NAMES THIS INVARIANT WATCHED HALF OF IT.
+ * `gate-165-bounded-clearing` is titled "`w:showingPlcHdr` is removed with the
+ * content, so Word cannot re-show the prompt" and asserts it only on the blank
+ * narrative path. The title states the invariant; the arm states one branch.
+ *
+ * ⚠️ EVERY `sdtPr` IN THE CONTROL, NOT JUST THE OUTER ONE — a nested control
+ * kept its own flag inside a span proofed `emptied`.
+ */
+function placeholderFlagPatches(
+  control: XmlElementSpan,
+  fieldId: string,
+): ApprovedXmlPatch[] {
+  return descendantXmlElements(control, 'showingPlcHdr').map((flag) =>
+    removeXmlElementPatch(flag, fieldId),
+  );
 }
 
 function sdtBoundedClearPatches(
@@ -1153,10 +1176,6 @@ function sdtBoundedClearPatches(
   // on `out.length > 0` meant a control whose content was already pure skeleton
   // kept the flag — measured as a regression against the previous commit, which
   // removed it there.
-  for (const flag of descendantXmlElements(control, 'showingPlcHdr')) {
-    out.push(removeXmlElementPatch(flag, fieldId));
-  }
-
   return { patches: out, blankEligible: eligibility };
 }
 
@@ -1203,6 +1222,14 @@ function contentControlPatches(
   const content = directXmlChild(control, 'sdtContent');
   if (!properties || !content) failTemplateDocxRender('BINDING_NOT_FOUND');
 
+  // ⚠️ ONCE, FOR EVERY PATH — filled, cleared and kind-specific alike. It used
+  // to live inside `sdtBoundedClearPatches`, which only the `value === null`
+  // branches call, so every FILLED control kept the flag and Word re-displayed
+  // the prompt over the doctor's own words. Emitted here rather than in each
+  // branch because "the content is no longer the placeholder" is true of all of
+  // them, and putting it in a branch is what made it branch-specific before.
+  const placeholderPatches = placeholderFlagPatches(control, field.fieldId);
+
   if (field.kind === 'checkbox') {
     const checkbox = descendantXmlElements(properties, 'checkbox')[0];
     const checked = checkbox
@@ -1232,6 +1259,7 @@ function contentControlPatches(
     // rather than from a list of kinds somebody has to keep correct.
     return {
       patches: [
+        ...placeholderPatches,
         setXmlAttributePatch(xml, checked, 'val', selected ? '1' : '0', field.fieldId),
         ...textContainerPatches(xml, content, glyph, field.fieldId),
       ],
@@ -1270,6 +1298,7 @@ function contentControlPatches(
     }
     return {
       patches: [
+        ...placeholderPatches,
         ...(statePatch ? [statePatch] : []),
         ...textContainerPatches(xml, content, display, field.fieldId),
       ],
@@ -1294,6 +1323,7 @@ function contentControlPatches(
       if (cleared) {
         return {
           patches: [
+        ...placeholderPatches,
             ...(lastValue ? [removeXmlElementPatch(lastValue, field.fieldId)] : []),
             ...cleared.patches,
           ],
@@ -1307,6 +1337,7 @@ function contentControlPatches(
       }
       return {
         patches: [
+        ...placeholderPatches,
           ...(lastValue ? [removeXmlElementPatch(lastValue, field.fieldId)] : []),
           ...textContainerPatches(xml, content, '', field.fieldId),
         ],
@@ -1319,6 +1350,7 @@ function contentControlPatches(
     const option = exactSelectedOption(field, resolution);
     return {
       patches: [
+        ...placeholderPatches,
         ...(lastValue
           ? [
               setXmlAttributePatch(
@@ -1344,41 +1376,11 @@ function contentControlPatches(
     };
   }
 
-  // ⚠️ #191 — A KEPT DEFAULT IS NOT CLEARED, AND THIS LINE IS THE WHOLE
-  // DELIVERY OF THE `keep` HALF. The clear was keyed on `value === null`
-  // ALONE, and a kept default carries a null value, so a scaffolded control's
-  // prose was bounded-cleared before its status was ever consulted — the
-  // `default_kept` branch below lives inside `if (patches.length === 0)` and
-  // was unreachable for exactly the population the ruling targets. The
-  // adversarial pass measured it: `kept_default` proofs landed only on
-  // controls that were ALREADY EMPTY, i.e. the ones with nothing to keep.
-  //
-  // ⚠️ THE BLAST RADIUS IS BOUNDED BY THE DECLARATION, NOT BY SCAFFOLDEDNESS.
-  // An earlier draft of this comment said the resolver gates on
-  // `field.scaffolded`; under #192 IT DOES NOT, and saying so was a safety
-  // argument naming a guard that does not exist. What bounds this is that a
-  // mapping must carry `unmentionedPolicy: 'keep'`, which only a confirmation
-  // writes. Scaffoldedness informs the PROPOSAL and nothing else.
-  //
-  // ⚠️ AND IT ONLY EVER *SKIPS* A DELETION. The failure direction is a
-  // template's own sentence surviving, never a doctor's dictated text being
-  // removed — the safe side of the boundary that four falsified clearing rules
-  // were written about.
-  // ⚠️ A KEPT DEFAULT RETURNS ZERO PATCHES — SKIPPING THE CLEAR IS NOT ENOUGH,
-  // AND THAT MISTAKE COST THIS SLICE ITS FIRST ATTEMPT. Guarding only the
-  // bounded clear let the field FALL THROUGH to the ordinary write below,
-  // which writes `displayValue` -- the empty string for a null -- and patches
-  // the control blank by a second route. The measured tell was arithmetic: the
-  // render still reported ONE patch on `word/document.xml` for a field that was
-  // supposed to be untouched. Two exits had to be closed, not one.
-  //
-  // Returning here is also what puts the field on the `patches.length === 0`
-  // branch above, which is the only place the `kept_default` proof is emitted.
   if (resolution.value === null) {
     const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId);
     if (cleared) {
       return {
-        patches: cleared.patches,
+        patches: [...placeholderPatches, ...cleared.patches],
         boundedClear: cleared.patches.length > 0 && cleared.blankEligible === 'eligible',
           blankEligible: cleared.blankEligible,
       };
@@ -1386,7 +1388,7 @@ function contentControlPatches(
   }
   const display = displayValue(field, resolution);
   return {
-    patches: textContainerPatches(xml, content, display, field.fieldId),
+    patches: [...placeholderPatches, ...textContainerPatches(xml, content, display, field.fieldId)],
     boundedClear: false,
       // #170 — the guard never ran on this path; `unevaluated` is the
       // honest value and it does not count. Absence means no.

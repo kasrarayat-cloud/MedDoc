@@ -259,67 +259,6 @@ function missingResolution(
     field.unknownPolicy === 'requires_input' ||
     mapping.unknownPolicy === 'requires_input' ||
     mapping.blankPolicy === 'requires_input';
-  // ── RULING #191 — THE SCAFFOLDED-FIELD POLICY, AND THIS IS ITS EMITTER ──
-  //
-  // ⚠️ `default_kept` SHIPPED WITH NO EMITTER. Its status, its validator and its
-  // renderer proof all landed together and NOTHING PRODUCED IT — #170's exact
-  // shape, the ruling that exists because a third state was added to `blank`
-  // without its emitter and the owner's form went from 35 counted blanks to
-  // ZERO. A sentinel whose absence means "no" must be written on every path
-  // that earns a yes.
-  //
-  // ⚠️ SKIPPED WHEN THE FIELD DEMANDS CLINICIAN INPUT. A required field must
-  // still ask; a kept default would silently answer for it.
-  //
-  // ⚠️ AND IT REQUIRES EVALUATED FACTS — which is exactly what makes `keep` safe
-  // as the default. A mapping that evaluated nothing cannot reach this branch
-  // and falls through unchanged, so no existing template's output moves. The
-  // citation IS the claim: a kept default citing nothing is indistinguishable
-  // from a field nobody examined.
-  //
-  // ⚠️ AND ONLY WHEN THE FIELD IS UNFILLED FOR NO NAMED REASON. `reason` is
-  // passed exactly when the field is unfilled for something MORE SPECIFIC than
-  // "nothing was said" — a withheld denial above all. Without this guard the
-  // first version of this emitter kept the template's pre-printed sentence OVER
-  // A DOCTOR'S DENIAL: "The patient denies heartburn" would have stood on a
-  // note where the doctor denied it, because a denial also arrives here with
-  // facts in hand. Measured: it redded 20+ arms of the denial contract, which
-  // is the only reason it is not in this commit.
-  // ⚠️ ONE PREDICATE, TWO POLICIES — AND WRITTEN TWICE THEY DRIFTED IMMEDIATELY.
-  // The keep branch below and the `omit` reason code further down describe the
-  // SAME population: a field the encounter never spoke to, evaluated against
-  // real facts, unfilled for no more specific reason. They differ only in what
-  // the mapping asked for. The first version tested the policy ALONE on the
-  // omit side, so:
-  //
-  //   · a TEMPORALITY DEFERRAL carrying a named reason had that reason
-  //     OVERWRITTEN with `omitted_unsupported_default` — the doctor DID speak
-  //     to that concept, and the manifest then said nothing supported it;
-  //   · a field evaluated against ZERO facts claimed a deliberate clearing.
-  //
-  // Both are false statements about what happened, and the adversarial pass
-  // measured that 779 tests could not tell the corrected code from the shipped
-  // code. Sharing the predicate is what makes that undrift-able.
-  // ⚠️ `field.scaffolded === true`, NOT `!== false`. The flag is OPTIONAL and
-  // absent means the compiler that produced this IR predates it and CANNOT SAY
-  // — every compiled version already in the database is in that state. Absent
-  // must therefore behave exactly as today (no kept default), which is what an
-  // explicit `=== true` gives and what `!== false` would silently invert.
-  // ⚠️ #192 — `=== 'keep'`, AN EXPLICIT DECLARATION, NEVER INFERRED. `field
-  // .scaffolded` is COMPILED METADATA and is deliberately NOT consulted here:
-  // it informs the mapping PROPOSER at confirmation time and never the render.
-  // Three content-derived formulations of "is this a scaffold?" were falsified,
-  // the last one printing `Enter assessment` onto a rendered note.
-  //
-  // Absence is fail-closed by construction: no declaration means today's
-  // bounded clear, so a prompt can never print through a field nobody ruled on.
-  // ⚠️ #192 — A REPEATING PROTOTYPE NEVER KEEPS, AND THE REASON IS ARITHMETIC.
-  // `renderRepeatingRows` calls the patch builder ONCE PER DATA ROW, so a kept
-  // default's zero patches leave the PROTOTYPE'S OWN TEXT in every clone.
-  // Measured: a `Comment` prototype reading `Enter comment` beside three
-  // dictated vessel rows printed `Enter comment` THREE TIMES on the note.
-  // "Keep the doctor's clause" has no meaning for a template fragment that is
-  // duplicated per row; the honest outcome there is the bounded clear.
   const unmentionedScaffold =
     conceptUnmatched && reason === undefined && facts.length > 0;
 

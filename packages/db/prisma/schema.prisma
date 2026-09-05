@@ -3210,18 +3210,20 @@ model TemplateTwinSemanticMapping {
   required         Boolean                     @default(false)
   blankPolicy      String
   unknownPolicy    String
-  /// #192 — an EXPLICIT per-field declaration of what happens when NO fact
-  /// matches. `keep` leaves the doctor's own clause standing and earns
-  /// `default_kept` (which requires a citation); `omit` clears it through the
-  /// proven bounded clear.
+  /// #194 — what happens when NO fact matches. NULL is the bounded clear,
+  /// COUNTED as still blank so the doctor is told; 'omit' is the bounded clear,
+  /// NOT counted and with no prompt — a control the doctor RULED blank, such as
+  /// a telehealth consent line on an in-person visit.
   ///
-  /// ⚠️ NULLABLE WITH NO DEFAULT, AND NULL IS A MEANING. Absence is today's
-  /// bounded clear — fail-closed, so a control nobody ruled on can never print
-  /// its content onto a note. #191 shipped this `NOT NULL DEFAULT 'keep'`,
-  /// which was right while `keep` and absent were identical; #192 makes them
-  /// OPPOSITES, and that default would have opted EVERY EXISTING MAPPING into
-  /// keeping. It is also what holds every certified sha still: pre-existing
-  /// rows are NULL and contribute nothing to the attestation hash.
+  /// ⚠️ NULLABLE WITH NO DEFAULT, AND NULL IS A MEANING. Any default would opt
+  /// every existing mapping into a policy nobody chose. It is also what holds
+  /// every certified sha still: pre-existing rows are NULL and contribute
+  /// nothing to the attestation hash.
+  ///
+  /// ⚠️ THERE IS NO 'keep'. That half was built, adversarially tested across
+  /// three rounds and DELETED — its premise was refuted, not merely its
+  /// mechanism. This text is emitted into the generated client, so it is the
+  /// hover a future developer gets; it said the opposite until #194.
   unmentionedPolicy String?
   practiceDefault  String?
   mappingStatus    TemplateTwinDetectionStatus @default(NEEDS_CONFIRMATION)

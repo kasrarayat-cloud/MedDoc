@@ -305,10 +305,9 @@ function mappingFromRow(fieldId: string, row: PersistedMappingRow): SemanticMapp
     // survives the Zod parse and `canonicalSha256` refuses it outright
     // ("Canonical JSON does not support undefined object values"), which broke
     // six certification arms.
-    // ⚠️ #192 — `keep` NOW SURVIVES. The #191 form elided it too, because
-    // `keep` and absent were then identical. They are opposites now: absent is
-    // the bounded clear, `keep` keeps. Eliding it would have read every
-    // doctor's declared keep back as "clear it".
+    // ⚠️ #194 — AN EXPLICIT `'omit'` SURVIVES THE ROUND TRIP; NULL IS ELIDED.
+    // Eliding a ruled `omit` would read the doctor's decision back as "nobody
+    // ruled", which is a different behaviour and a different count.
     ...(row.unmentionedPolicy ? { unmentionedPolicy: row.unmentionedPolicy } : {}),
     unknownPolicy: row.unknownPolicy,
     practiceDefault: row.practiceDefault,

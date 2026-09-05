@@ -349,3 +349,141 @@ describe('#194 — the column, the hash, and the projections still hold', () => 
     expect(TEMPLATE_TWIN_RESOLVER_VERSION).toBe('template-field-resolver/2.0.0');
   });
 });
+
+// ============================================================================
+// ⚠️ ARMS THE DELETION TOOK WITH IT. They were written for the keep half and
+// they guard code that SURVIVED — the deletion removed the feature and its
+// watchers together, and each of the three mutations below redded 0 of 5934
+// until these were restored. A deletion is as capable of partial application as
+// an edit; this is that rule one level up, applied to the ARMS rather than the
+// code.
+// ============================================================================
+
+describe('#194 — guards the deletion nearly took', () => {
+  it('(14) ⚠️ A POPULATED FIELD CITING FOREIGN EVIDENCE IS STILL BLOCKED', () => {
+    // The `default_kept` exemption to `SOURCE_FACT_CONCEPT_MISMATCH` went with
+    // the status, correctly. Its arm went too — and what that arm actually
+    // asserted was the SURVIVING half: that every OTHER status still refuses a
+    // fact about a different concept. Disabling the check now reds nothing.
+    const scaffold = field('1', { fieldId: `ttf_${'1'.repeat(24)}` });
+    const mapped = mapping(scaffold, 'ros.cardiovascular');
+    const foreign = factFor('2', 'chief_complaint', 'Patient here for a rash.');
+    const supported = FieldResolutionSchema.parse({
+      fieldId: scaffold.fieldId,
+      status: 'supported',
+      value: 'Patient here for a rash.',
+      sourceFactIds: [foreign.factId],
+      evidenceAnchorIds: foreign.evidenceAnchorIds,
+      selectedOptionOrdinal: null,
+      reasonCode: 'direct_evidence_supported',
+      clinicianReviewed: false,
+    });
+    const result = validateTemplateTwin({
+      fields: [scaffold], mappings: [mapped], facts: [foreign],
+      resolutions: [supported], allowUncertifiedForSyntheticTest: true,
+    });
+    expect(
+      result.issues.some(
+        (i) => i.code === 'SOURCE_FACT_CONCEPT_MISMATCH' && i.severity === 'blocking',
+      ),
+    ).toBe(true);
+  });
+
+  it('(15) ⚠️ AN IR COMPILED BEFORE `scaffolded` EXISTED STILL RENDERS', async () => {
+    // `assertSourceMatchesIr` recompiles the source on EVERY fill and compares
+    // it against the STORED IR. Stripping the derived fields from
+    // `structureSha256` was correct and INSUFFICIENT — that function also does
+    // an INDEPENDENT raw comparison over the field arrays. Restoring the raw
+    // form throws SOURCE_IR_MISMATCH, which `native-export` swallows into the
+    // generic styled export: the doctor silently loses their own form. Measured
+    // once at 10 of 10 twins.
+    //
+    // ⚠️ AND THIS WATCHES THE OUTCOME, NOT THE STRIP. Arm (12) tests
+    // `fieldForStructuralIdentity` in isolation — which is precisely the
+    // "watched the wrong set" mistake the compiler's own headstone records.
+    const { buildSyntheticDocx } = await import(
+      '../../note-template-docx/__tests__/synthetic-docx');
+    const { compileTemplateDocx } = await import('../../note-template-docx/compiler');
+    const { renderTemplateDocx } = await import('../../note-template-docx/renderer');
+    const source = await buildSyntheticDocx();
+    const head = compileTemplateDocx(source);
+    const stored = JSON.parse(JSON.stringify(head)) as typeof head;
+    (stored as { fields: unknown[] }).fields = head.fields.map((f) => {
+      const { scaffolded: _a, scaffoldText: _b, ...rest } = f;
+      return rest;
+    });
+    // non-vacuity: HEAD really does emit them, and the stored shape really lacks them
+    expect(head.fields.some((f) => f.scaffolded !== undefined)).toBe(true);
+    await expect(
+      renderTemplateDocx({
+        source, ir: stored,
+        resolutions: stored.fields.map((f) =>
+          FieldResolutionSchema.parse({
+            fieldId: f.fieldId, status: 'not_mentioned', value: null,
+            sourceFactIds: [], evidenceAnchorIds: [], selectedOptionOrdinal: null,
+            reasonCode: 'fact_not_mentioned', clinicianReviewed: false,
+          }),
+        ),
+        validation: {
+          valid: true, issues: [], checkedAt: '2026-01-01T00:00:00.000Z',
+          validatorVersion: 'template-field-validator/1.0.0',
+        },
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('(16) ⚠️ THE SURVIVING METADATA IS EMITTED, AND ITS DISCRIMINATOR IS THE DECLARED SIGNAL', async () => {
+    // `scaffolded`/`scaffoldText` were preserved ON PURPOSE for REVIEW-DEFAULTS
+    // and were left completely unarmed: `scaffolded: false` and never emitting
+    // `scaffoldText` both redded 0 of 5934.
+    const { buildSyntheticDocx } = await import(
+      '../../note-template-docx/__tests__/synthetic-docx');
+    const { compileTemplateDocx } = await import('../../note-template-docx/compiler');
+    const SENT = 'The patient denies chest pain.';
+    const ir = compileTemplateDocx(
+      await buildSyntheticDocx({
+        documentXml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+<w:p><w:sdt><w:sdtPr><w:alias w:val="ROS"/><w:id w:val="901"/><w:text/></w:sdtPr>
+<w:sdtContent><w:r><w:t>${SENT}</w:t></w:r></w:sdtContent></w:sdt></w:p>
+<w:p><w:sdt><w:sdtPr><w:alias w:val="Pick"/><w:id w:val="902"/><w:showingPlcHdr/>
+<w:dropDownList><w:listItem w:displayText="Left" w:value="L"/></w:dropDownList></w:sdtPr>
+<w:sdtContent><w:r><w:t>Choose an item.</w:t></w:r></w:sdtContent></w:sdt></w:p>
+</w:body></w:document>`,
+      }),
+    );
+    const ros = ir.fields.find((f) => f.originalLabel === 'ROS');
+    const pick = ir.fields.find((f) => f.originalLabel === 'Pick');
+    expect(ros?.scaffolded).toBe(true);
+    expect(ros?.scaffoldText).toBe(SENT);
+    // ⚠️ THE DISCRIMINATOR IS `w:showingPlcHdr`, WHICH THE DOCUMENT DECLARES —
+    // never the placeholder TEXT. Canon 83: a rule matching "Choose an item."
+    // blocked 28 of 28 dropdowns of the real customer form, and its English-only
+    // repair blocked all 28 again in fr/de/es. This control carries BOTH the
+    // flag and that exact string, so a text-matching predicate would score
+    // identically and only the declared signal separates them.
+    expect(pick?.scaffolded).toBe(false);
+    expect(pick?.scaffoldText).toBeUndefined();
+
+    // ⚠️ AND A CASE ONLY THE DECLARED SIGNAL CAN GET RIGHT. The control above
+    // carries BOTH the flag and the literal "Choose an item.", so a text-matching
+    // predicate scores identically on it — a control aimed where the answer is
+    // predetermined proves nothing about the instrument. This one declares the
+    // flag with LOCALISED prompt text, which is exactly canon 83's reference
+    // defect: the English-only repair blocked all 28 real dropdowns again in
+    // fr/de/es. A text matcher calls it a scaffold; the declared signal does not.
+    const fr = compileTemplateDocx(
+      await buildSyntheticDocx({
+        documentXml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+<w:p><w:sdt><w:sdtPr><w:alias w:val="Cote"/><w:id w:val="903"/><w:showingPlcHdr/>
+<w:dropDownList><w:listItem w:displayText="Gauche" w:value="G"/></w:dropDownList></w:sdtPr>
+<w:sdtContent><w:r><w:t>Choisissez un élément.</w:t></w:r></w:sdtContent></w:sdt></w:p>
+</w:body></w:document>`,
+      }),
+    );
+    const localised = fr.fields.find((f) => f.originalLabel === 'Cote');
+    expect(localised, 'the localised control must compile').toBeDefined();
+    expect(localised!.scaffolded).toBe(false);
+  });
+});

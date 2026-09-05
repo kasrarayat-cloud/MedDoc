@@ -2,28 +2,21 @@ import type { SemanticMapping } from './ir';
 import { canonicalSha256 } from './canonical';
 
 /**
- * ⚠️ ONLY AN UNSET POLICY IS ELIDED. `null`/absent means NO ONE DECLARED, which
- * is the state every pre-existing row is in and the state that must contribute
- * nothing — that is what holds every certified `approvedMappingsSha256` still
- * when the column arrives. `fill-engine` compares this sha against the
+ * ⚠️ ONLY AN UNSET POLICY IS ELIDED. NULL means NO ONE RULED, which is the
+ * state every pre-existing row is in and the state that must contribute
+ * nothing — that is what held every certified `approvedMappingsSha256` still
+ * when the column arrived. `fill-engine` compares this sha against the
  * certification and throws `TEMPLATE_PROVENANCE_MISMATCH` on a mismatch, so a
  * moved hash refuses a doctor's fill.
  *
- * ⚠️ AND `'keep'` MUST *NOT* BE ELIDED, WHICH IS THE OPPOSITE OF WHAT THIS
- * COMMENT SAID UNDER #191. Then, `keep` and absent were semantically identical
- * — both readers tested only for `'omit'` — so collapsing them was consistency.
- * #192 makes them OPPOSITES: absent clears, `keep` keeps. Eliding `'keep'`
- * would let a doctor's DECLARED keep be removed from a certified mapping
- * WITHOUT MOVING THE ATTESTATION, so the certificate would attest to behaviour
- * it never saw. Both explicit values move the sha, and that is correct: each is
- * a declaration that changes what the document says, and changing it is exactly
- * what should demand re-certification.
+ * ⚠️ AN EXPLICIT `'omit'` MUST MOVE IT. A doctor ruling a control blank changes
+ * what the document says, and a certificate that did not notice would be
+ * attesting to behaviour it never saw. Re-certification is the correct cost
+ * there; it is not a cost anyone should pay for a value nobody set.
  *
- * ⚠️ THE STALE VERSION OF THIS PARAGRAPH WAS FOUND BY THE ADVERSARIAL PASS,
- * NOT BY A TEST. The code was already right; its stated reason was not, and a
- * maintainer following the reason would have widened the elision to `'keep'`
- * and silently broken the attestation. An exemption's justification decays
- * separately from the code it justifies.
+ * ⚠️ #194 DELETED THE `'keep'` VALUE THIS COMMENT USED TO ARGUE ABOUT. The
+ * argument is kept in the ruling, not here: a justification that names a value
+ * the schema no longer admits is how somebody reintroduces it.
  */
 function forAttestation(mapping: SemanticMapping): SemanticMapping {
   if (mapping.unmentionedPolicy == null) {
