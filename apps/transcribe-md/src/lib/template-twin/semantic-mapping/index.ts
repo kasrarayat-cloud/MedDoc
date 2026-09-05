@@ -297,7 +297,13 @@ export function fallbackSemanticMappings(
         //
         // An unconfirmed or rejected proposal leaves the column NULL, which is
         // the bounded clear. Absence stays fail-closed.
-        ...(field.scaffolded === true ? { unmentionedPolicy: 'keep' as const } : {}),
+        // ⚠️ THE OFFER MATCHES WHAT THE RENDER CAN HONOUR. Offering `keep` on a
+        // checkbox or a date invited a doctor to confirm something the resolver
+        // now refuses -- a confirmation that silently does nothing is worse
+        // than no offer, because the doctor believes they decided.
+        ...(field.scaffolded === true && field.kind === 'narrative_text'
+          ? { unmentionedPolicy: 'keep' as const }
+          : {}),
         // ⚠️ THE SAME CLASSIFIER THE MODEL PATH USES, FOR THE SAME REASON.
         // `classifyFieldSource` reads the COMPILER's label and the field's own
         // shape — it is not an inference, so it does not belong to the model

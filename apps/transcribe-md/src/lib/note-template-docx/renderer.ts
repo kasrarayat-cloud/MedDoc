@@ -731,7 +731,25 @@ function createFieldPatches(
   // surviving; it can never remove a doctor's dictated text, because a field
   // carrying a value never reaches it.
   if (resolution.value === null && resolution.status === 'default_kept') {
-    return { patches: [], boundedClear: false, blankEligible: 'unevaluated' };
+    // ⚠️ `blankEligibilityFor(field)`, NOT A HARDCODED `'unevaluated'`, AND THE
+    // HARDCODE BLOCKED CERTIFICATION. `blank-proof-count.ts` admits
+    // `kept_default` and says in bold that it "COUNTS, AND IT IS THE STRONGER
+    // OF THE THREE" -- and then requires `blankEligible === 'eligible'`. With
+    // the constant, 0 of 9 genuine kept defaults counted, and the adversarial
+    // pass measured the repo's own fixture going from ONE qualifying blank
+    // proof to NONE: `certification-lifecycle` blocks on zero, so a template
+    // whose unfilled fields are kept defaults COULD NOT CERTIFY AT ALL.
+    //
+    // A kept default is an UNPATCHED field, which is exactly what a blank proof
+    // attests -- the renderer wrote nothing here, verified against the source
+    // bytes. Its eligibility is therefore the same question the blank path
+    // asks, and it is asked with the same function rather than answered with a
+    // constant.
+    return {
+      patches: [],
+      boundedClear: false,
+      blankEligible: blankEligibilityFor(field),
+    };
   }
 
   switch (binding.bindingType) {

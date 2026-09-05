@@ -595,7 +595,7 @@ describe('#191 — THE STRUCTURE HASH MUST NOT MOVE', () => {
 });
 
 describe('#192 — the proposer OFFERS keep; the render obeys only what was CONFIRMED', () => {
-  it('(24) ⚠️ THE PROPOSER OFFERS `keep` FOR A SCAFFOLD, AND CARRIES THE SENTENCE AS ITS REASON', async () => {
+  it('(24) ⚠️ THE PROPOSER OFFERS `keep` FOR A SCAFFOLD, AND THE COMPILER CARRIES THE SENTENCE', async () => {
     // A doctor confirming `keep` agrees that this exact text prints when the
     // encounter says nothing, so the proposal must SHOW it. Without
     // `scaffoldText` the offer would be "keep this control's content" about
@@ -606,7 +606,25 @@ describe('#192 — the proposer OFFERS keep; the render obeys only what was CONF
       'The patient denies chest pain.';
     const [proposed] = fallbackSemanticMappings({ fields: [scaffold] });
     expect(proposed?.unmentionedPolicy).toBe('keep');
-    expect(scaffold.scaffoldText).toContain('denies chest pain');
+    // ⚠️ THE SECOND ASSERTION USED TO BE VACUOUS AND ROUND TWO SAID SO: it read
+    // back `scaffold.scaffoldText`, the value this test had just written, and
+    // stood in for the claim that the offer SHOWS the sentence. It proved only
+    // that assignment works. The real claim is about the COMPILER — that a
+    // scaffolded control carries its own text — so it is asserted there.
+    const { compileTemplateDocx } = await import('../../note-template-docx/compiler');
+    const { buildSyntheticDocx } = await import(
+      '../../note-template-docx/__tests__/synthetic-docx');
+    const SENT = 'The patient denies chest pain.';
+    const ir = compileTemplateDocx(
+      await buildSyntheticDocx({
+        documentXml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+<w:p><w:sdt><w:sdtPr><w:alias w:val="ROS"/><w:id w:val="801"/><w:text/></w:sdtPr>
+<w:sdtContent><w:r><w:t>${SENT}</w:t></w:r></w:sdtContent></w:sdt></w:p></w:body></w:document>`,
+      }),
+    );
+    const compiled = ir.fields.find((f) => f.originalLabel === 'ROS');
+    expect(compiled?.scaffoldText).toBe(SENT);
   });
 
   it('(25) ⚠️ AND IT DOES NOT OFFER IT FOR A NON-SCAFFOLD', async () => {
@@ -738,5 +756,91 @@ describe('#193 — keep is never model-authored and never auto-confirmed', () =>
     // ⚠️ AND IT IS A DECLINE, NOT A SILENT STRIP — the field must reach the
     // doctor's confirm-list, not certify quietly without its offer.
     expect(body.slice(declineAt, certifyAt)).toContain('declined.push');
+  });
+});
+
+describe('#193 — KEEP IS NARRATIVE-ONLY, because skipping a write is itself a write', () => {
+  // ⚠️ THIS TABLE IS THE ARM THE GATE DID NOT HAVE. Round two measured that
+  // every `kind:` in this whole file was `narrative_text`, so a kept CHECKBOX
+  // went unwatched — and the renderer writes `w14:val="0"` + `☐` for a null,
+  // meaning SKIPPING that write leaves a pre-ticked box TICKED. A signed note
+  // asserted `Anticoagulated ☒` on the strength of an unrelated dictated
+  // headache. A ticked box is not a sentence; it is an affirmative clinical
+  // fact. A date printed the TEMPLATE's own hardcoded date as the encounter's.
+  // The property is NEVER KEPT, not a particular replacement status: a
+  // non-narrative kind may legitimately resolve `needs_clinician_input` or
+  // `not_mentioned` depending on its own type rules, and pinning one of those
+  // would make this arm fail on an unrelated change.
+  const NON_PROSE = ['checkbox', 'date', 'single_select', 'number', 'measurement'] as const;
+
+  // ⚠️ THE MAPPING'S `expectedDataType` MATCHES THE KIND, AND THAT IS WHAT
+  // MAKES THIS ARM PROVE ANYTHING. The first version left it at `'text'` for
+  // every kind, so a checkbox resolved `needs_clinician_input` on a TYPE
+  // MISMATCH — and removing the kind guard changed nothing, because a different
+  // guard was doing the work. The mutation caught the arm, not the code.
+  const TYPE_FOR: Record<string, string> = {
+    narrative_text: 'text', checkbox: 'boolean', date: 'date',
+    single_select: 'single_select', number: 'number', measurement: 'measurement',
+  };
+  const resolveKind = (kind: string) => {
+    const f = field('1', {
+      fieldId: `ttf_${'1'.repeat(24)}`,
+      kind: kind as 'narrative_text',
+      ...(kind === 'single_select'
+        ? { allowedOptions: [{ ordinal: 0, displayText: 'Normal', value: 'Normal' }] }
+        : {}),
+    });
+    return resolveTemplateFields({
+      fields: [f],
+      mappings: [
+        mapping(f, 'ros.cardiovascular', {
+          unmentionedPolicy: 'keep',
+          expectedDataType: TYPE_FOR[kind] as 'text',
+          ...(kind === 'checkbox' ? { polarityBehavior: 'affirmative_only' as const } : {}),
+          ...(kind === 'measurement' ? { unitPolicy: 'required' as const } : {}),
+        }),
+      ],
+      facts: [factFor('2', 'chief_complaint', 'Patient here for a rash.')],
+      allowUncertifiedForSyntheticTest: true,
+    })[0]!;
+  };
+
+  it.each(NON_PROSE)('a DECLARED keep on a %s is NEVER kept', (kind) => {
+    expect(`${kind}: ${resolveKind(kind).status}`).not.toBe(`${kind}: default_kept`);
+  });
+
+  it('and narrative_text IS kept — otherwise the table above is vacuous', () => {
+    expect(resolveKind('narrative_text').status).toBe('default_kept');
+  });
+
+  it('⚠️ AND THE PROPOSER OFFERS ONLY WHERE THE RENDER CAN HONOUR IT', async () => {
+    // A confirmation that silently does nothing is worse than no offer: the
+    // doctor believes they decided. Round two measured the proposer offering
+    // keep on checkboxes and dates that the resolver now refuses.
+    const { fallbackSemanticMappings } = await import('../semantic-mapping');
+    for (const kind of ['checkbox', 'date', 'single_select'] as const) {
+      const f = field('1', { fieldId: `ttf_${'1'.repeat(24)}`, kind });
+      const [p] = fallbackSemanticMappings({ fields: [f] });
+      expect(`${kind}: ${p?.unmentionedPolicy ?? null}`).toBe(`${kind}: null`);
+    }
+    const prose = field('1', { fieldId: `ttf_${'1'.repeat(24)}` });
+    expect(fallbackSemanticMappings({ fields: [prose] })[0]?.unmentionedPolicy).toBe('keep');
+  });
+
+  it('⚠️ A KEPT DEFAULT CAN EARN BLANK CREDIT — the hardcode blocked certification', async () => {
+    // `blank-proof-count.ts` admits `kept_default` and calls it "the STRONGER of
+    // the three", then requires `blankEligible === 'eligible'`. The guard
+    // hardcoded `'unevaluated'`, so 0 of 9 genuine kept defaults counted and a
+    // template whose unfilled fields are kept defaults could not certify at all.
+    const src = readFileSync(
+      join(__dirname, '../../note-template-docx/renderer.ts'), 'utf-8');
+    // anchor on the GUARD, not the first mention of the status — the proof
+    // branch names it 500 lines earlier and would make this arm measure that
+    const i = src.indexOf(
+      "resolution.value === null && resolution.status === 'default_kept'");
+    expect(i).toBeGreaterThan(-1);
+    const block = src.slice(i, i + 1400);
+    expect(block).toContain('blankEligibilityFor(field)');
+    expect(block).not.toMatch(/blankEligible:\s*'unevaluated'/);
   });
 });
