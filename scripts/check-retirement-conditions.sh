@@ -171,6 +171,9 @@ REGISTRY=(
 "2026-08-21T09:00:00Z|human:needs a PRODUCTION DB READ (has a SECOND template shape certified end to end)|STATED 'when a second SHAPE certifies end-to-end'"
 "2026-08-21T12:20:00Z|relay_closed:F23|INFERRED — states no clause, but its point 2 reads 'The script does not exist yet — F23 builds it', which became FALSE when F23 landed. A false PRESENT-TENSE fact, delivered to every session"
 "2026-08-24T15:25:10Z|none|STATED none — one-shot union notice for a single named PR"
+"2026-09-04T22:05:00Z|file_exists:scripts/check-worktree-resolution.sh|STATED 're-run after the harness fix' — the notice retires once every affected lane has re-run its packages/* measurements. The probe existing is the CONDITION being pointed at, not the retirement itself: the lanes must still re-run. Retire by hand once Design/Admin and Data/Audit confirm, and not before"
+"2026-09-05T01:10:00Z|human:the composed deploy of b2c0ae96 is judged|STATED — the request retires when the deploy it feeds has been judged. Either the lanes supplied rows and they were composed, or the absence was recorded as a finding; both discharge it. Retire by hand with the judgement, not before"
+"2026-09-05T01:25:00Z|relay_closed:T2|STATED none — a POINTER to ruling #185. It retires when the T2 categoriser slice closes, because after that the ruling is history rather than something a session must read before building"
 )
 
 # ── read the entries the LAUNCHER counts: `### <ISO8601> — <title>` ──────────
@@ -208,8 +211,41 @@ echo "   · census(${#HEADINGS[@]}): $(printf '%s\n' "${HEADINGS[@]}" | sed -E '
 echo "   · registry(${#REGISTRY[@]}): $(printf '%s\n' "${REGISTRY[@]}" | cut -d'|' -f1 | tr '\n' ' ')"
 
 # ── instrument controls for the predicates that consult something external ───
+# ⚠️ THE NETWORK OBSERVATION IS INJECTABLE **IN ONE DIRECTION ONLY** — OFFLINE.
+#
+# `git ls-remote` is a LIVE call, and its result reaches stdout twice: on the
+# controls line below, and through the bucket assignment further down (an
+# unreachable origin moves `merged:` entries into cannot-tell, and the
+# per-branch probe at the `gone=` line never runs). So ANY caller that runs this
+# script twice and compares the two outputs is comparing the NETWORK as much as
+# the thing it meant to measure.
+#
+# That is not hypothetical: `gate-f30`'s cwd arm did exactly that and became an
+# intermittent CI red — passing 8 of 8 in isolation, failing roughly 1 in 4 in a
+# loaded batch, and reddening PR #952 on a change that had nothing to do with it.
+#
+# ⚠️ AND THE OVERRIDE CAN ONLY EVER MAKE THIS SWEEP **MORE** CONSERVATIVE. It
+# forces the OFFLINE path, which can only move entries INTO cannot-tell; there
+# is deliberately no way to force `NET_OK=1`. An override that could assert
+# "the network is fine" while it is not would make the per-branch probe return
+# nothing, read every branch as GONE, and report entries DUE FOR RETIREMENT that
+# are not — a manufactured green, which is the one thing a bypass must never be
+# able to do.
 NET_OK=0
-if git ls-remote --heads origin main 2>/dev/null | grep -q 'refs/heads/main'; then NET_OK=1; fi
+NET_FORCED=""
+if [ "${RETIREMENT_SWEEP_OFFLINE:-0}" = "1" ]; then
+  # ⚠️ THE MARKER IS SET **INSIDE THE BRANCH**, not from the variable's presence.
+  # Its first version read `${RETIREMENT_SWEEP_OFFLINE:+ · OFFLINE FORCED}` —
+  # which announces that the env var EXISTS, not that it took effect. A mutation
+  # that made the script ignore the override entirely left the marker printing,
+  # so the caller's non-vacuity check ("the pin actually took") passed on a
+  # script that had discarded the pin. A control must be downstream of the thing
+  # it certifies.
+  NET_OK=0
+  NET_FORCED=" · OFFLINE FORCED"
+elif git ls-remote --heads origin main 2>/dev/null | grep -q 'refs/heads/main'; then
+  NET_OK=1
+fi
 # ⚠️ A SECOND, SEPARATE CONTROL — and it is not implied by the first.
 # `merged:` asks TWO questions: is the branch gone (network), and is the file on
 # `origin/main` (a LOCAL ref). A CI checkout is routinely shallow or
@@ -222,7 +258,7 @@ REF_OK=0
 if git rev-parse --verify --quiet origin/main >/dev/null 2>&1; then REF_OK=1; fi
 LEDGER_OK=0
 if grep -qE '^#+ (✅|🟢) F[0-9]+ —' "${LEDGER_SET[@]}"; then LEDGER_OK=1; fi
-echo "   · controls: origin reachable=$NET_OK · origin/main resolvable=$REF_OK · ledger closure-vocabulary present=$LEDGER_OK ($LEDGER_LABEL)"
+echo "   · controls: origin reachable=$NET_OK · origin/main resolvable=$REF_OK · ledger closure-vocabulary present=$LEDGER_OK ($LEDGER_LABEL)${NET_FORCED}"
 echo
 
 declare -a B_DUE=() B_NOTDUE=() B_HUMAN=() B_NONE=() B_RETIRED=() B_UNREG=() B_CANT=()

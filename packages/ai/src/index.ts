@@ -73,7 +73,12 @@ export { ModelOutputMalformedError, AnthropicRefusalError } from './errors';
 export {
   ICD10_ALLOWLIST,
   ICD10_ALLOWLIST_SIZE,
+  ICD10_HEADERS,
+  ICD10_HEADERS_SIZE,
+  ICD10_EDITION,
   isValidIcd10,
+  isIcd10Header,
+  billableDescendantsOf,
 } from './data/icd10-allowlist';
 export {
   CPT_ALLOWLIST,

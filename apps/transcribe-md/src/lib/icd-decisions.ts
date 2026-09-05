@@ -139,6 +139,19 @@ export interface IcdDecisionRecord {
    * reason; "optional" here means *state-dependent*, never *nice to have*.
    */
   reason?: IcdRejectionReason;
+  /**
+   * ⚠️ TRUE ONLY ON A RECORD THIS SYSTEM WROTE WITHOUT THE DOCTOR — the
+   * sign-time auto-accept. ABSENT on every decision a doctor made, and that
+   * asymmetry is the point: `auto` is a claim about PROVENANCE, so the safe
+   * default when it is missing or malformed is *a human decided this*, which
+   * is the reading that gets a record looked at rather than trusted.
+   *
+   * ⚠️ THE LITERAL TYPE IS `true`, NOT `boolean`. `auto: false` is a third
+   * thing to mean "a doctor decided", and the absence of the key already means
+   * that — two spellings of one fact is how a reader ends up asking which is
+   * authoritative. There is one spelling.
+   */
+  auto?: true;
 }
 
 /**
@@ -168,7 +181,7 @@ export interface IcdDecisionRecord {
  * about. What this buys is that the field can never be forgotten going FORWARD;
  * the deploy-order rule stands and is restated at `readIcdDecisions`.
  */
-export const ICD_DECISION_RECORD_KEYS = ['state', 'at', 'byUserId', 'reason'] as const;
+export const ICD_DECISION_RECORD_KEYS = ['state', 'at', 'byUserId', 'reason', 'auto'] as const;
 
 type _NoFieldUnwritten =
   Exclude<keyof IcdDecisionRecord, (typeof ICD_DECISION_RECORD_KEYS)[number]> extends never
@@ -323,11 +336,22 @@ export function readIcdDecisions(rawIcdDecisions: unknown): IcdDecisionMap {
     // because of an uninterpretable annotation beside it would destroy the
     // decision to punish the annotation. The annotation cannot be honoured
     // (see `reason_not_allowed`), so it is the annotation that goes.
+    // ⚠️ `=== true`, NEVER TRUTHY. `auto` is a provenance claim, and the
+    // direction of harm is not symmetric: reading a stray `"yes"` or `1` as
+    // auto marks a DOCTOR'S decision as machine-made, which is the reading
+    // that invites a later sweep to discard it. Anything that is not the
+    // literal `true` falls back to the safe default — a human decided this.
+    const auto = rec.auto === true ? ({ auto: true } as const) : {};
+
     if (state === 'rejected') {
       if (!isIcdRejectionReason(rec.reason)) continue;
-      out[code] = { state, at: rec.at, byUserId: rec.byUserId, reason: rec.reason };
+      // ⚠️ A REJECTION IS NEVER AUTOMATIC TODAY — nothing writes one — but the
+      // field is carried rather than dropped here, because a narrower that
+      // silently discards a key it can read is the exact defect
+      // `ICD_DECISION_RECORD_KEYS` exists to prevent, one field over.
+      out[code] = { state, at: rec.at, byUserId: rec.byUserId, reason: rec.reason, ...auto };
     } else {
-      out[code] = { state, at: rec.at, byUserId: rec.byUserId };
+      out[code] = { state, at: rec.at, byUserId: rec.byUserId, ...auto };
     }
   }
   return out;

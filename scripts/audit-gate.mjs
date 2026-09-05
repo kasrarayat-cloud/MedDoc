@@ -39,6 +39,29 @@ const EXCEPTIONS_PATH = new URL('./audit-exceptions.json', import.meta.url);
  * The decision, as a pure function so it can be tested without a network or a
  * lockfile. Returns { code, lines } — never throws, never prints.
  */
+/**
+ * Is this stdout an ANSWER, or an outage wearing one's clothes?
+ *
+ * ⚠️ THE TEST IS THE `vulnerabilities` OBJECT, NOT THE EXIT CODE AND NOT
+ * NON-EMPTINESS. A registry failure still writes JSON to stdout — it simply has
+ * no findings in it — so "did it print something" cannot tell an all-clear from
+ * an outage. That is the exact confusion this gate exists to refuse.
+ */
+export function isUsableReport(raw) {
+  if (typeof raw !== 'string' || raw.trim() === '') return false;
+  try {
+    const parsed = JSON.parse(raw);
+    return Boolean(parsed) && typeof parsed === 'object' && 'vulnerabilities' in parsed;
+  } catch {
+    return false;
+  }
+}
+
+/** Block the thread. This is a CLI gate; there is nothing else to serve. */
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 export function judgeAudit(report, exceptionsFile) {
   const lines = [];
   const vulns = report && typeof report === 'object' ? report.vulnerabilities : null;
@@ -162,13 +185,44 @@ function main() {
       .map((a) => a.slice('--workspace='.length));
     const args = ['audit', '--json', '--audit-level=high', '--omit=dev', '--include-workspace-root'];
     for (const w of workspaces) args.push('--workspace', w);
-    try {
-      // ⚠️ npm audit EXITS NON-ZERO when it finds anything, so a throw here is
-      // the NORMAL path and its stdout is the report. Only an empty stdout is a
-      // real failure — the distinction a bare `set -e` cannot make.
-      raw = execFileSync('npm', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-    } catch (error) {
-      raw = error.stdout ?? '';
+    // ⚠️ RETRIED WITH BACKOFF, BECAUSE THE REGISTRY IS A DEPENDENCY OF A
+    // REQUIRED CHECK. On 2026-09-04 this gate redded a deploy commit with
+    // CANNOT TELL: npm's advisory endpoint answered 500, so the report carried
+    // no `vulnerabilities` object. No vulnerability was found — the gate simply
+    // could not tell, which is the correct refusal and the wrong outcome for a
+    // one-second blip. A re-run minutes later was green.
+    //
+    // ⚠️ AND THE FIX IS *NOT* "MOVE TO THE BULK ENDPOINT", WHICH IS WHAT THE
+    // FAILURE LOG APPEARS TO ASK FOR. Measured on npm 11.10.0: the bulk path is
+    // ALREADY what npm uses —
+    //     npm http fetch POST 200 …/-/npm/v1/security/advisories/bulk
+    // — and `audits/quick`, with its "this endpoint is being retired" notice,
+    // is npm's OWN FALLBACK once bulk has failed. The notice is a symptom of
+    // the outage, not its cause, and a reader who fixes what the log names
+    // would change nothing. (That same measurement clocked bulk at 76.5s, so
+    // the timeouts below are generous on purpose.)
+    //
+    // Only an UNUSABLE report is retried. A report that parses is an answer —
+    // including an answer that BLOCKS — and must never be re-rolled.
+    const ATTEMPTS = 3;
+    const BACKOFF_MS = [0, 5_000, 20_000];
+    for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
+      if (BACKOFF_MS[attempt] > 0) {
+        console.error(
+          `   audit-gate: unusable report; retrying in ${BACKOFF_MS[attempt] / 1000}s ` +
+            `(attempt ${attempt + 1} of ${ATTEMPTS})`,
+        );
+        sleepSync(BACKOFF_MS[attempt]);
+      }
+      try {
+        // ⚠️ npm audit EXITS NON-ZERO when it finds anything, so a throw here is
+        // the NORMAL path and its stdout is the report. Only an empty stdout is a
+        // real failure — the distinction a bare `set -e` cannot make.
+        raw = execFileSync('npm', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+      } catch (error) {
+        raw = error.stdout ?? '';
+      }
+      if (isUsableReport(raw)) break;
     }
   }
 
@@ -176,7 +230,11 @@ function main() {
   try {
     report = JSON.parse(raw);
   } catch {
-    console.error('🔴 audit-gate: CANNOT TELL — npm audit produced no parseable JSON.');
+    console.error(
+      '🔴 audit-gate: CANNOT TELL — npm audit produced no parseable JSON after ' +
+        'every attempt. This is fail-closed ON PURPOSE: a broken instrument and a ' +
+        'clean tree produce the same silence, and this gate declines to confuse them.',
+    );
     process.exit(2);
   }
 

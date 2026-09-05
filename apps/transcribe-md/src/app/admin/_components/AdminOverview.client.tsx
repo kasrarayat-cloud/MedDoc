@@ -17,7 +17,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { signOutAction } from '@/actions/session';
 import {
   Database,
   Server,
@@ -219,6 +219,7 @@ function DashboardHeader({
 function UserMenu({ userEmail }: { userEmail: string }) {
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const initial = userEmail.slice(0, 1).toUpperCase();
 
@@ -243,11 +244,21 @@ function UserMenu({ userEmail }: { userEmail: string }) {
     if (signingOut) return;
     setSigningOut(true);
     try {
-      // signOut from next-auth/react clears the JWT cookie + redirects.
-      // callbackUrl is host-relative on purpose: an admin signing out
-      // from admin.quillmd.com should land on admin.quillmd.com/login,
-      // not on app.quillmd.com (cookies are host-only).
-      await signOut({ callbackUrl: '/login', redirect: true });
+      // ⚠️ #181 — THROUGH THE SERVER ACTION, NOT next-auth/react. The client
+      // POST path runs `events.signOut` (the revoke + the LOGOUT audit row)
+      // strictly AFTER @auth/core's CSRF gate, so a CSRF blip answered 200
+      // while revoking nothing. An ADMIN session surviving a sign-out is the
+      // worst instance of that class, not the mildest.
+      //
+      // The redirect stays host-relative on purpose: an admin signing out from
+      // admin.quillmd.com must land on admin.quillmd.com/login, not on
+      // app.quillmd.com — the cookies are host-only.
+      const result = await signOutAction();
+      if (!result.ok) {
+        setSignOutError(result.reason);
+        return;
+      }
+      window.location.href = '/login';
     } finally {
       setSigningOut(false);
     }
@@ -288,6 +299,18 @@ function UserMenu({ userEmail }: { userEmail: string }) {
             <LogOut className="h-3.5 w-3.5 text-linear-text-3" />
             {signingOut ? 'Signing out…' : 'Sign out'}
           </button>
+          {signOutError ? (
+            // ⚠️ VISIBLE, AND THE MENU STAYS OPEN. A failed sign-out that
+            // redirects looks exactly like a successful one; that is how the
+            // original defect hid for its whole life.
+            <p
+              role="alert"
+              data-testid="admin-signout-error"
+              className="px-3 pb-2 text-xs font-medium text-red-400"
+            >
+              {signOutError}
+            </p>
+          ) : null}
         </div>
       )}
     </div>

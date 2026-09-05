@@ -2285,6 +2285,14 @@ body {
    viewports (≈1012 px on 1440 monitors, ≈1108 px on 1920+ monitors). */
 .qm-lin-soap-body-v6 {
   min-width: 0;
+  /* ⚠️ THE SURFACE OWNS THE INK, AND THIS BODY SITS ON A DARK ONE.
+     `.qm-lin-soap-section-v6` paints `--color-linear-surface-1` (#0d0e10), so
+     the prose inside it needs the dark-surface text token — the same one the
+     non-v6 `.qm-lin-soap-body` has always used. Stated here rather than left to
+     inheritance, because inheritance is exactly how this went wrong: the body
+     carried no colour of its own and picked up paper ink from a type class.
+     #f7f8f8 on #0d0e10 = 18.15:1. */
+  color: var(--color-linear-text);
 }
 
 /* Section block — hairline-bordered card on --surface-1. */

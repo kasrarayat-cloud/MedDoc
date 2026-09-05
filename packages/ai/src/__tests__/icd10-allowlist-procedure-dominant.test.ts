@@ -68,9 +68,23 @@ describe('OB-GYN postpartum + delivery codes', () => {
 describe('Dermatology benign-lesion + biopsy + skin-cancer hx codes', () => {
   it.each([
     ['D22.0', 'lip'],
-    ['D22.1', 'eyelid'],
-    ['D22.2', 'ear + canal'],
-    ['D22.3', 'face'],
+    // ⚠️ D22.1 / D22.2 / D22.3 WERE LISTED HERE AND ARE CATEGORY HEADERS —
+    // not valid for submission. Eyelid and ear nevi split by LATERALITY;
+    // face nevi (D22.3) split by SITE instead — D22.30 unspecified part vs
+    // D22.39 other parts — so "always laterality" would be wrong. What is
+    // true of all three is that the billable answer is always a CHILD. A
+    // dermatologist billing "D22.1" would have had a non-submittable code
+    // accepted by the floor. Replaced with the real children by T8.
+    ['D22.10', 'eyelid, unspecified'],
+    ['D22.111', 'right upper eyelid'],
+    ['D22.112', 'right lower eyelid'],
+    ['D22.121', 'left upper eyelid'],
+    ['D22.122', 'left lower eyelid'],
+    ['D22.20', 'ear + canal, unspecified'],
+    ['D22.21', 'right ear + canal'],
+    ['D22.22', 'left ear + canal'],
+    ['D22.30', 'face, unspecified'],
+    ['D22.39', 'other parts of face'],
     ['D22.4', 'scalp + neck'],
     ['D22.5', 'trunk'],
     ['D22.60', 'upper limb'],
@@ -161,7 +175,10 @@ describe('Orthopedics joint-pain + aftercare + acute-injury codes', () => {
 
 describe('General encounter Z-codes (procedure-dominant fallback)', () => {
   it.each([
-    'Z48.0', 'Z48.00', 'Z48.01', 'Z48.02', 'Z48.03', 'Z48.298',
+    // ⚠️ 'Z48.0' REMOVED — a category header. Its four billable children were
+    // already listed immediately after it, so the row asserted a code that
+    // could never be submitted while the real ones sat beside it.
+    'Z48.00', 'Z48.01', 'Z48.02', 'Z48.03', 'Z48.298',
   ])('Z48.x post-procedural follow-up %s', (code) => {
     expect(isValidIcd10(code)).toBe(true);
   });
@@ -171,7 +188,10 @@ describe('General encounter Z-codes (procedure-dominant fallback)', () => {
   });
 
   it.each([
-    'Z71.3', 'Z71.4', 'Z71.5', 'Z71.82', 'Z71.89',
+    // ⚠️ 'Z71.4' and 'Z71.5' WERE HERE AND ARE CATEGORY HEADERS. Alcohol and
+    // drug abuse counseling split by WHO is counselled — the patient or a
+    // family member — and only those children bill.
+    'Z71.3', 'Z71.41', 'Z71.42', 'Z71.51', 'Z71.52', 'Z71.82', 'Z71.89',
   ])('Z71.x counseling encounter %s', (code) => {
     expect(isValidIcd10(code)).toBe(true);
   });
@@ -195,7 +215,13 @@ describe('Pre-existing entries (no regression)', () => {
     'I50.32',        // HFpEF chronic (G1)
     'Z98.84',        // bariatric status (bariatric cohort)
     'Z90.3',         // acquired absence of stomach (bariatric + G1)
-    'I71.4',         // AAA (vascular)
+    // ⚠️ WAS 'I71.4', a category header. FY2021 split abdominal aortic
+    // aneurysm without rupture by location (pararenal / juxtarenal /
+    // infrarenal / unspecified); '.40' is the unspecified billable code this
+    // legacy row meant. SEVEN of the twelve I71.x entries the starter set
+    // carried were headers; I71.00/.02/.03/.8/.9 were correct billable codes
+    // all along (an earlier draft here said "the whole family", which is false).
+    'I71.40',        // AAA without rupture, unspecified (vascular)
     'R10.11',        // RUQ pain (G1)
     'K80.20',        // gallstones (starter)
   ])('legacy code %s still resolves', (code) => {
@@ -208,8 +234,14 @@ describe('Pre-existing entries (no regression)', () => {
   });
 
   it('allowlist size sanity (procedure-dominant batch added ~70 codes)', () => {
-    // Audit-time floor was ~500; this PR adds ~70. Set floor at 540
-    // to flag any future cleanup that accidentally drops a chunk.
+    // ⚠️ THIS FLOOR NO LONGER GUARDS WHAT ITS COMMENT CLAIMS. It was written
+    // against a ~600-code set, where 540 was a meaningful floor. Against the
+    // full CMS release (74,719) it cannot fire until 99.3% of the data is
+    // gone — the adversarial pass deleted a real billable code and watched
+    // this assertion pass at size 74,718. It is kept because it still pins
+    // "this set is not empty", and REPLACED as a regression guard by the
+    // exact-count and payload-digest assertions in
+    // icd10-fy2026-ingestion.test.ts. Do not read it as coverage.
     expect(ICD10_ALLOWLIST.size).toBeGreaterThan(540);
   });
 });

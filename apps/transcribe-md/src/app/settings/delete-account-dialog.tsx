@@ -16,7 +16,7 @@
 import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
-import { signOut } from 'next-auth/react';
+import { signOutAction } from '@/actions/session';
 import { toast } from 'sonner';
 
 interface DeleteResponse {
@@ -89,7 +89,18 @@ export function DeleteAccountDialog() {
       toast.success('Account deleted');
       const fallback =
         body.redirectTo ?? `${window.location.origin}/?deleted=1`;
-      await signOut({ callbackUrl: fallback, redirect: true });
+      // ⚠️ #181 — THROUGH THE SERVER ACTION, AND A FAILURE IS SURFACED EVEN
+      // HERE. It is tempting to treat a post-deletion sign-out as
+      // best-effort — the account is gone, what is left to protect? — but a
+      // surviving UserSession row still VALIDATES: `validateSession` reads the
+      // row, not the user. A deleted account with a live session is worse than
+      // a live account with one, not better.
+      const signedOut = await signOutAction();
+      if (!signedOut.ok) {
+        setError({ message: `Account deleted, but ${signedOut.reason}` });
+        return;
+      }
+      window.location.href = fallback;
     } catch {
       setError({ message: 'Network error. Please try again.' });
     } finally {

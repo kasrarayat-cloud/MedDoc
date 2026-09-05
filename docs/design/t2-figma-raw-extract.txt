@@ -1,0 +1,113 @@
+====================================================================================================
+FRAME     'claim-summary-ready' [3719,-44 1440x1024] fill=#08090a [VERTICAL gap0 pad 80 0 80 0 main:CENTER cross:CENTER]
+  TEXT      'Sarah Chen · Follow-up · Aug 27, 2026' [4322,173 235x16] fill=#ffffff op0.25 type=Inter 400 13.0px/16 ls0.0 LEFT text='Sarah Chen · Follow-up · Aug 27, 2026'
+  FRAME     'ledger-card-unsigned' [4079,189 720x559] fill=#0d0e0f stroke=1.0px #ffffff radius=12.0 [VERTICAL gap16.0 pad 36 40 32 40]
+    FRAME     'card-header' [4119,225 640x40] [VERTICAL gap16.0 pad 0 0 0 0]
+      TEXT      'Coding — ready to sign' [4119,225 640x24] fill=#ffffff op0.90 type=Inter 500 20.0px/24 ls0.0 LEFT text='Coding — ready to sign'
+      LINE      'Line' [4119,265 640x0] stroke=1.0px #ffffff
+    FRAME     'ledger-content' [4119,281 640x435] [VERTICAL gap12.0 pad 0 0 0 0]
+      FRAME     'section-header-Diagnoses' [4119,281 640x33] [HORIZONTAL gap0 pad 12 0 8 0]
+        TEXT      'Diagnoses' [4119,293 640x13] fill=#ffffff op0.25 type=Inter 500 11.0px/13 ls0.0 LEFT UPPER text='Diagnoses'
+      FRAME     'Frame' [4119,326 640x222] [VERTICAL gap0 pad 0 0 0 0]
+        FRAME     'ledger-row-K21.9' [4119,326 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'K21.9' [4119,336 96x17] fill=#7aa68c type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='K21.9'
+          TEXT      'Gastroesophageal reflux disease' [4215,336 484x17] fill=#ffffff op0.75 type=Inter 400 14.0px/17 ls0.0 LEFT text='Gastroesophageal reflux disease'
+          TEXT      '95%' [4699,336 60x16] fill=#ffffff op0.30 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='95%'
+        FRAME     'ledger-row-I10' [4119,363 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'I10' [4119,373 96x17] fill=#7aa68c type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='I10'
+          TEXT      'Essential hypertension' [4215,373 484x17] fill=#ffffff op0.75 type=Inter 400 14.0px/17 ls0.0 LEFT text='Essential hypertension'
+          TEXT      '95%' [4699,374 60x16] fill=#ffffff op0.30 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='95%'
+        FRAME     'ledger-row-R10.13' [4119,400 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'R10.13' [4119,410 96x17] fill=#7aa68c type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='R10.13'
+          TEXT      'Epigastric pain' [4215,410 484x17] fill=#ffffff op0.75 type=Inter 400 14.0px/17 ls0.0 LEFT text='Epigastric pain'
+          TEXT      '85%' [4699,410 60x16] fill=#ffffff op0.30 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='85%'
+        FRAME     'ledger-row-R63.4' [4119,437 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'R63.4' [4119,447 96x17] fill=#7aa68c type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='R63.4'
+          TEXT      'Abnormal weight loss' [4215,447 484x17] fill=#ffffff op0.75 type=Inter 400 14.0px/17 ls0.0 LEFT text='Abnormal weight loss'
+          TEXT      '82%' [4699,448 60x16] fill=#ffffff op0.30 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='82%'
+        FRAME     'ledger-row-K29.70' [4119,474 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'K29.70' [4119,484 96x17] fill=#7aa68c type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='K29.70'
+          TEXT      'Gastritis, unspecified' [4215,484 484x17] fill=#ffffff op0.75 type=Inter 400 14.0px/17 ls0.0 LEFT text='Gastritis, unspecified'
+          TEXT      '72%' [4699,484 60x16] fill=#ffffff op0.30 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='72%'
+        FRAME     'ledger-row-M25.561' [4119,511 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'M25.561' [4119,521 96x17] fill=#7aa68c type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='M25.561'
+          TEXT      'Pain in right knee' [4215,521 484x17] fill=#ffffff op0.75 type=Inter 400 14.0px/17 ls0.0 LEFT text='Pain in right knee'
+          TEXT      '70%' [4699,522 60x16] fill=#ffffff op0.30 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='70%'
+      FRAME     'section-header-History & Screening' [4119,560 640x33] [HORIZONTAL gap0 pad 12 0 8 0]
+        TEXT      'History & Screening' [4119,572 640x13] fill=#ffffff op0.25 type=Inter 500 11.0px/13 ls0.0 LEFT UPPER text='History & Screening'
+      FRAME     'Frame' [4119,605 640x111] [VERTICAL gap0 pad 0 0 0 0]
+        FRAME     'ledger-row-Z87.891' [4119,605 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'Z87.891' [4119,615 96x17] fill=#7aa68c type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='Z87.891'
+          TEXT      'Personal history of nicotine dependence' [4215,615 484x17] fill=#ffffff op0.75 type=Inter 400 14.0px/17 ls0.0 LEFT text='Personal history of nicotine dependence'
+          TEXT      '95%' [4699,616 60x16] fill=#ffffff op0.30 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='95%'
+        FRAME     'ledger-row-Z12.11' [4119,642 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'Z12.11' [4119,652 96x17] fill=#7aa68c type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='Z12.11'
+          TEXT      'Encounter for screening for malignant neoplasm of colon' [4215,652 484x17] fill=#ffffff op0.75 type=Inter 400 14.0px/17 ls0.0 LEFT text='Encounter for screening for malignant neoplasm of colon'
+          TEXT      '92%' [4699,652 60x16] fill=#ffffff op0.30 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='92%'
+        FRAME     'ledger-row-Z79.01' [4119,679 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'Z79.01' [4119,689 96x17] fill=#7aa68c type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='Z79.01'
+          TEXT      'Long-term use of anticoagulants' [4215,689 484x17] fill=#ffffff op0.75 type=Inter 400 14.0px/17 ls0.0 LEFT text='Long-term use of anticoagulants'
+          TEXT      '55%' [4699,690 60x16] fill=#ffffff op0.30 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='55%'
+  TEXT      '5 suggestions outside the verified set · 1 low-confidence code included — tap any line to change' [4079,748 720x15] fill=#ffffff op0.20 type=Inter 400 12.0px/15 ls0.0 CENTER text='5 suggestions outside the verified set · 1 low-confidence code included — tap any line to change'
+  FRAME     'button-sign-finalize' [3719,808 720x52] fill=#7aa68c radius=26.0 [HORIZONTAL gap0 pad 24 0 0 0 main:CENTER cross:CENTER]
+    TEXT      'Sign & finalize' [4028,837 101x18] fill=#08090a type=Inter 500 15.0px/18 ls0.0 LEFT text='Sign & finalize'
+
+====================================================================================================
+FRAME     'claim-summary-signed' [5199,-44 1440x1024] fill=#08090a [VERTICAL gap0 pad 80 0 80 0 main:CENTER cross:CENTER]
+  TEXT      'Sarah Chen · Follow-up · Aug 27, 2026' [5802,104 235x16] fill=#ffffff op0.25 type=Inter 400 13.0px/16 ls0.0 LEFT text='Sarah Chen · Follow-up · Aug 27, 2026'
+  FRAME     'ledger-card-signed' [5559,120 720x612] fill=#0d0e0f stroke=1.0px #ffffff radius=12.0 [VERTICAL gap16.0 pad 36 40 32 40]
+    FRAME     'card-header-signed' [5599,156 640x40] [VERTICAL gap16.0 pad 0 0 0 0]
+      FRAME     'header-top-row' [5599,156 640x24] [HORIZONTAL gap0 pad 0 0 0 0 main:SPACE_BETWEEN cross:CENTER]
+        TEXT      'Coding — signed' [5599,156 164x24] fill=#ffffff op0.90 type=Inter 500 20.0px/24 ls0.0 LEFT text='Coding — signed'
+        FRAME     'signed-badge' [6163,156 76x23] stroke=1.0px #7aa68c radius=4.0 [HORIZONTAL gap6.0 pad 4 10 4 10 cross:CENTER]
+          FRAME     'check-circle' [6173,163 10x10]
+            VECTOR    'Vector' [6174,164 8x8] stroke=2.0px #7aa68c
+          TEXT      'Signed' [6189,160 40x15] fill=#7aa68c type=Inter 500 12.0px/15 ls0.0 LEFT text='Signed'
+      LINE      'Line' [5599,196 640x0] stroke=1.0px #ffffff
+    FRAME     'ledger-content' [5599,212 640x435] [VERTICAL gap12.0 pad 0 0 0 0]
+      FRAME     'section-header-Diagnoses' [5599,212 640x33] [HORIZONTAL gap0 pad 12 0 8 0]
+        TEXT      'Diagnoses' [5599,224 640x13] fill=#ffffff op0.25 type=Inter 500 11.0px/13 ls0.0 LEFT UPPER text='Diagnoses'
+      FRAME     'Frame' [5599,257 640x222] [VERTICAL gap0 pad 0 0 0 0]
+        FRAME     'ledger-row-K21.9' [5599,257 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'K21.9' [5599,267 96x17] fill=#ffffff op0.40 type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='K21.9'
+          TEXT      'Gastroesophageal reflux disease' [5695,267 484x17] fill=#ffffff op0.50 type=Inter 400 14.0px/17 ls0.0 LEFT text='Gastroesophageal reflux disease'
+          TEXT      '95%' [6179,268 60x16] fill=#ffffff op0.20 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='95%'
+        FRAME     'ledger-row-I10' [5599,294 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'I10' [5599,304 96x17] fill=#ffffff op0.40 type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='I10'
+          TEXT      'Essential hypertension' [5695,304 484x17] fill=#ffffff op0.50 type=Inter 400 14.0px/17 ls0.0 LEFT text='Essential hypertension'
+          TEXT      '95%' [6179,304 60x16] fill=#ffffff op0.20 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='95%'
+        FRAME     'ledger-row-R10.13' [5599,331 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'R10.13' [5599,341 96x17] fill=#ffffff op0.40 type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='R10.13'
+          TEXT      'Epigastric pain' [5695,341 484x17] fill=#ffffff op0.50 type=Inter 400 14.0px/17 ls0.0 LEFT text='Epigastric pain'
+          TEXT      '85%' [6179,342 60x16] fill=#ffffff op0.20 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='85%'
+        FRAME     'ledger-row-R63.4' [5599,368 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'R63.4' [5599,378 96x17] fill=#ffffff op0.40 type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='R63.4'
+          TEXT      'Abnormal weight loss' [5695,378 484x17] fill=#ffffff op0.50 type=Inter 400 14.0px/17 ls0.0 LEFT text='Abnormal weight loss'
+          TEXT      '82%' [6179,378 60x16] fill=#ffffff op0.20 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='82%'
+        FRAME     'ledger-row-K29.70' [5599,405 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'K29.70' [5599,415 96x17] fill=#ffffff op0.40 type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='K29.70'
+          TEXT      'Gastritis, unspecified' [5695,415 484x17] fill=#ffffff op0.50 type=Inter 400 14.0px/17 ls0.0 LEFT text='Gastritis, unspecified'
+          TEXT      '72%' [6179,416 60x16] fill=#ffffff op0.20 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='72%'
+        FRAME     'ledger-row-M25.561' [5599,442 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'M25.561' [5599,452 96x17] fill=#ffffff op0.40 type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='M25.561'
+          TEXT      'Pain in right knee' [5695,452 484x17] fill=#ffffff op0.50 type=Inter 400 14.0px/17 ls0.0 LEFT text='Pain in right knee'
+          TEXT      '70%' [6179,452 60x16] fill=#ffffff op0.20 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='70%'
+      FRAME     'section-header-History & Screening' [5599,491 640x33] [HORIZONTAL gap0 pad 12 0 8 0]
+        TEXT      'History & Screening' [5599,503 640x13] fill=#ffffff op0.25 type=Inter 500 11.0px/13 ls0.0 LEFT UPPER text='History & Screening'
+      FRAME     'Frame' [5599,536 640x111] [VERTICAL gap0 pad 0 0 0 0]
+        FRAME     'ledger-row-Z87.891' [5599,536 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'Z87.891' [5599,546 96x17] fill=#ffffff op0.40 type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='Z87.891'
+          TEXT      'Personal history of nicotine dependence' [5695,546 484x17] fill=#ffffff op0.50 type=Inter 400 14.0px/17 ls0.0 LEFT text='Personal history of nicotine dependence'
+          TEXT      '95%' [6179,546 60x16] fill=#ffffff op0.20 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='95%'
+        FRAME     'ledger-row-Z12.11' [5599,573 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'Z12.11' [5599,583 96x17] fill=#ffffff op0.40 type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='Z12.11'
+          TEXT      'Encounter for screening for malignant neoplasm of colon' [5695,583 484x17] fill=#ffffff op0.50 type=Inter 400 14.0px/17 ls0.0 LEFT text='Encounter for screening for malignant neoplasm of colon'
+          TEXT      '92%' [6179,584 60x16] fill=#ffffff op0.20 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='92%'
+        FRAME     'ledger-row-Z79.01' [5599,610 640x37] stroke=1.0px #ffffff [HORIZONTAL gap0 pad 10 0 10 0 cross:CENTER]
+          TEXT      'Z79.01' [5599,620 96x17] fill=#ffffff op0.40 type=JetBrains Mono 400 13.0px/17 ls0.0 LEFT text='Z79.01'
+          TEXT      'Long-term use of anticoagulants' [5695,620 484x17] fill=#ffffff op0.50 type=Inter 400 14.0px/17 ls0.0 LEFT text='Long-term use of anticoagulants'
+          TEXT      '55%' [6179,620 60x16] fill=#ffffff op0.20 type=JetBrains Mono 400 12.0px/16 ls0.0 RIGHT text='55%'
+    FRAME     'archive-footer' [5599,663 640x37] [HORIZONTAL gap0 pad 24 0 0 0 main:MAX]
+      TEXT      'Signed Aug 27, 2026 at 2:47 PM by Dr. Marcus Vance' [5962,687 277x13] fill=#ffffff op0.20 type=Inter 400 11.0px/13 ls0.0 LEFT text='Signed Aug 27, 2026 at 2:47 PM by Dr. Marcus Vance'
+  FRAME     'Frame' [5559,732 720x100] [VERTICAL gap0 pad 0 0 0 0]
+
