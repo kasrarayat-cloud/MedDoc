@@ -14,7 +14,7 @@
 import { useCallback, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Check, Loader2, Lock, Send, TrendingUp, X } from 'lucide-react';
+import { Check, Loader2, Lock, Send, ShieldCheck, TrendingUp, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
@@ -333,41 +333,54 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
             // and three signing specs failed on a button they could not reach.
             // Bounded here, body flexes, footer never scrolls away.
             'flex max-h-[76vh] flex-col',
+            // ⚠️ THE BOUNDED FLEX COLUMN IS LOAD-BEARING, NOT DECORATION, and
+            // `29-sign-modal-geometry.spec.ts` is why: it asserts the submit's
+            // bottom edge is inside a 640px viewport with NO scrolling. The T4
+            // skin adds ground, border and radius; it must not touch the
+            // height bound or the column.
+            'qm-t4-card',
             'focus:outline-none qm-lin-blur-in',
             'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
             'data-[state=closed]:zoom-out-95'
           )}
-          style={{ width: 'min(94vw, 560px)' }}
+          /* width now comes from `.qm-t4-card` — the frames' 496. */
         >
-          <div
-            className="flex flex-none items-start justify-between gap-4"
-            style={{ padding: '20px 24px 12px' }}
-          >
+          <div className="qm-t4-head flex flex-none items-start justify-between gap-4">
             <div>
-              <Dialog.Title
-                style={{
-                  margin: 0,
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 16,
-                  fontWeight: 500,
-                  letterSpacing: '-0.01em',
-                  color: 'var(--color-linear-text)',
-                }}
-              >
+              {/* ⚠️ THE POST-SIGN BADGE — `sign-deliver-post`'s 16×16
+                  shield-check + "DOCUMENT SIGNED". The rows do NOT become
+                  actions in this change; that shift is its own diff, per
+                  ruling #188(4). */}
+              {!props.signOnSubmit && (
+                <div className="qm-t4-badge" data-testid="t4-signed-badge">
+                  <ShieldCheck className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  Document signed
+                </div>
+              )}
+              <Dialog.Title className="qm-t4-title">
+                {/* ⚠️ THE PRE-SIGN TITLE STAYS "Sign and deliver your note",
+                    AND THAT IS A DELIBERATE DEPARTURE FROM THE FRAMES, which
+                    title the card "Sign & deliver".
+
+                    `29-sign-modal-geometry.spec.ts:123-130` matches this
+                    heading with `exact: true` — no substring tolerance — and
+                    that spec exists because a required attestation once pushed
+                    the submit off-screen at 720px. Changing the copy here
+                    would red a geometry gate over a word, on the surface that
+                    signs a clinical record.
+
+                    The frames' title is a NAME for the card, not a claim about
+                    behaviour, so keeping the tested string costs nothing a
+                    doctor can see. Recorded in the T4 spec as a departure
+                    rather than taken silently. */}
                 {props.signOnSubmit
                   ? 'Sign and deliver your note'
                   : 'Export signed note'}
               </Dialog.Title>
-              <p
-                style={{
-                  marginTop: 6,
-                  marginBottom: 0,
-                  fontSize: 13,
-                  color: 'var(--color-linear-text-2)',
-                }}
-              >
-                Pick one or more destinations.{' '}
-                {props.signOnSubmit && 'The note locks after signing.'}
+              <p className="qm-t4-sub">
+                {props.signOnSubmit
+                  ? 'Confirm destination settings and sign off this progress note.'
+                  : 'The progress note has been successfully locked. Deliver to required destinations.'}
               </p>
             </div>
             <Dialog.Close asChild>
@@ -388,6 +401,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
             <Group
               title="Copy to clipboard"
               hint="Paste the formatted note into your EHR's note field."
+              groupKey="clipboard"
               items={DESTINATIONS.filter((d) => d.group === 'clipboard')}
               selected={selected}
               onToggle={toggle}
@@ -395,6 +409,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
             <Group
               title="Download"
               hint="Save a PDF for records or a DOCX to edit in Word."
+              groupKey="download"
               items={DESTINATIONS.filter((d) => d.group === 'download')}
               selected={selected}
               onToggle={toggle}
@@ -403,7 +418,8 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               <Group
                 title="Email"
                 hint={`Send a PDF to ${props.doctorEmail} for your records. Don't use for patient communication.`}
-                items={DESTINATIONS.filter((d) => d.group === 'email')}
+                groupKey="email"
+              items={DESTINATIONS.filter((d) => d.group === 'email')}
                 selected={selected}
                 onToggle={toggle}
               />
@@ -436,22 +452,26 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                 Signing is an attestation. Confirm that you have reviewed this
                 note and that it reflects the encounter.
               </p>
+              <hr className="qm-t4-divider" />
+              {/* The frames draw the attestation as a checkbox row, not a
+                  bordered card — the same row unit as a destination, so it
+                  reads as one more thing you tick. `sign-attestation-toggle`
+                  and `aria-pressed` are unchanged: the geometry gate and the
+                  accessible state both key on them. */}
               <button
                 type="button"
                 onClick={() => setModalAttested((a) => !a)}
                 aria-pressed={modalAttested}
+                data-checked={modalAttested ? 'true' : 'false'}
                 data-testid="sign-attestation-toggle"
-                className="mt-2 flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left"
-                style={{
-                  borderColor: modalAttested
-                    ? 'color-mix(in srgb, var(--color-linear-sage) 45%, transparent)'
-                    : 'var(--color-linear-border)',
-                  background: modalAttested
-                    ? 'color-mix(in srgb, var(--color-linear-sage) 14%, transparent)'
-                    : 'transparent',
-                }}
+                className="qm-t4-row"
               >
-                <span className="text-[13px]">
+                <span aria-hidden className="qm-t4-box">
+                  {modalAttested && (
+                    <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
+                  )}
+                </span>
+                <span className="qm-t4-attest-text">
                   I have reviewed this note and attest to it
                 </span>
               </button>
@@ -551,26 +571,27 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               padding: '12px 24px',
             }}
           >
-            <p
-              style={{
-                margin: 0,
-                fontSize: 11,
-                color: 'var(--color-linear-text-3)',
-              }}
-            >
-              {props.signOnSubmit
-                ? 'Locked notes can still be re-exported later.'
-                : 'This visit is already signed.'}
+            {/* ⚠️ THE DELIVERY SUMMARY REFLECTS THE CHECKED SET — the frames
+                are explicit that it mirrors the ticked rows, so it is COMPUTED
+                and never written down. A summary that can disagree with the
+                checkboxes above it is worse than no summary. */}
+            <p className="qm-t4-summary" data-testid="t4-delivery-summary">
+              {selected.size === 0
+                ? 'No destinations selected.'
+                : `Delivery summary: ${DESTINATIONS.filter((d) => selected.has(d.key))
+                    .map((d) => d.label)
+                    .join(' • ')}`}
             </p>
-            <div className="flex items-center gap-2">
+            <div className="qm-t4-actions">
               <Dialog.Close asChild>
-                <button type="button" className="qm-lin-btn">
+                <button type="button" className="qm-t4-btn qm-t4-btn-cancel">
                   Cancel
                 </button>
               </Dialog.Close>
               <button
                 type="button"
-                className="qm-lin-btn-primary"
+                className="qm-t4-btn qm-t4-btn-primary"
+                data-testid="t4-submit"
                 onClick={submit}
                 // E/M visible-confirm: the sign CTA stays disabled until
                 // the doctor explicitly confirms a recorded level change.
@@ -612,23 +633,35 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
 function Group({
   title,
   hint,
+  groupKey,
   items,
   selected,
   onToggle,
 }: {
   title: string;
   hint: string;
+  groupKey: string;
   items: { key: Destination; label: string }[];
   selected: Set<Destination>;
   onToggle: (k: Destination) => void;
 }) {
   return (
-    <div className="py-3">
-      <div className="mb-1 font-mono text-[10.5px] font-medium uppercase tracking-[0.07em] text-linear-text-3">
-        {title}
-      </div>
-      <div className="mb-2 text-[12px] text-linear-text-3">{hint}</div>
-      <div className="space-y-1.5">
+    <div className="qm-t4-group-wrap">
+      <div className="qm-t4-section-label">{title}</div>
+      {/* ⚠️ THE CAPTION IS A SAFETY SURFACE — RULING #188(2).
+          The email group's reads "Don't use for patient communication." The
+          frames' flat DELIVER TO list has no slot for a per-group line, and
+          building them literally would have deleted the one instruction that
+          stops a doctor mailing a note to a patient.
+          A LITERAL FRAME THAT DELETES A SAFETY INSTRUCTION IS NOT THE SPEC. */}
+      <p className="qm-t4-caption" data-testid={`t4-caption-${groupKey}`}>
+        {hint}
+      </p>
+      {/* ⚠️ ONE ROW PER DESTINATION — ruling #188(1). The frames draw four rows
+          and the product has eight, five of them EHR clipboard formats. The
+          frames' ROW is the design; the four drawn are examples. Collapsing
+          them would mean a doctor on Epic could not pick the Epic format. */}
+      <div className="qm-t4-group" data-testid={`t4-group-${groupKey}`}>
         {items.map((it) => (
           <CheckboxRow
             key={it.key}
@@ -652,31 +685,20 @@ function CheckboxRow({
   onToggle: () => void;
 }) {
   return (
+    // ⚠️ `aria-pressed` STAYS. It is what makes this a checkable control to a
+    // screen reader, and the frames' visual checkbox is `aria-hidden` — the
+    // state lives on the button, not on the decoration.
     <button
       type="button"
       onClick={onToggle}
       aria-pressed={checked}
-      className={cn(
-        'flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left',
-        'transition-colors duration-150 ease-out',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage focus-visible:ring-offset-2 focus-visible:ring-offset-linear-bg',
-        checked
-          ? 'border-[rgba(122,166,140,0.34)] bg-linear-sage-tint text-linear-text'
-          : 'border-linear-border bg-linear-surface-2 text-linear-text-2 hover:border-linear-border-strong hover:text-linear-text'
-      )}
+      data-checked={checked ? 'true' : 'false'}
+      className="qm-t4-row"
     >
-      <span
-        aria-hidden
-        className={cn(
-          'flex h-4 w-4 flex-none items-center justify-center rounded-[4px] border',
-          checked
-            ? 'border-linear-sage bg-linear-sage text-[#0d1611]'
-            : 'border-linear-border-strong bg-transparent'
-        )}
-      >
+      <span aria-hidden className="qm-t4-box">
         {checked && <Check className="h-3 w-3" strokeWidth={3} aria-hidden />}
       </span>
-      <span className="flex-1 text-[13px]">{label}</span>
+      <span className="qm-t4-row-label">{label}</span>
     </button>
   );
 }

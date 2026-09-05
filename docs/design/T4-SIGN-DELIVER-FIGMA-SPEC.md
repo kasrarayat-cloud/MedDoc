@@ -216,6 +216,45 @@ Recorded so the build starts from the surface as it is, not from a memory of it.
    change, with its own proofs. Not folded into the skin, because a re-skin that
    also changes what a click DOES is two claims wearing one diff.
 
+## ⚠️ THE ONE DEPARTURE THE SKIN TAKES — the card's TITLE
+
+**The frames title the pre-sign card `Sign & deliver`. The build keeps
+`Sign and deliver your note`.**
+
+`29-sign-modal-geometry.spec.ts:123-130` matches that heading with
+**`exact: true`** — no substring tolerance — and so do
+`1-audio-upload-full.spec.ts:103` and `3-text-to-soap.spec.ts:90`. That spec
+exists because a required attestation once pushed the submit off-screen at
+720px and three signing specs failed on a control they could not reach.
+
+> **A geometry gate on the surface that signs a clinical record outranks a card
+> name.** The frames' title is a NAME for the card, not a claim about
+> behaviour, so keeping the tested string costs nothing a doctor can see.
+
+Retire this departure by changing the string in all four places at once — the
+component and the three specs — as its own change, not as a rider.
+
+### What the skin did NOT touch, and why each one is load-bearing
+
+Measured from the specs before the first edit, not remembered:
+
+| kept | why |
+|---|---|
+| `top-[12vh]`, `max-h-[76vh]`, `flex-col` | the height bound. The submit's in-viewport assertion holds **by construction**: a card capped at 76vh from a 12vh offset ends at 88vh, whatever the padding inside it |
+| the footer's `flex-none` | it must never scroll away — that is the 2026-08-02 regression |
+| `min-h-0 flex-1 overflow-y-auto` on the body | the only scrolling region |
+| `qm-lin-spotlight-panel` | shared with four other dialogs, and `10-visit-lifecycle.spec.ts:147` matches it **by class name** |
+| `aria-pressed` on every row | six specs read it; the visual checkbox is `aria-hidden` decoration, so the state lives on the button |
+| `sign-attestation`, `sign-attestation-toggle`, `em-change-confirm-toggle` | asserted by the geometry spec and the sign helper |
+| `Download PDF`, `Download DOCX`, `Copy for Epic` | matched `exact: true` by name in four specs |
+| `role="dialog"` on `Dialog.Content` | `rounds-gates.spec.ts:426` is the one spec that scopes by it |
+
+⚠️ **AND ONE NEGATIVE CONSTRAINT, WHICH IS EASY TO BREAK BY BEING TIDY:**
+`Sign & Deliver` must **not** become the pending label, and `/sign & deliver/i`
+must **not** match the post-sign `Deliver`. Two specs anchor "did the modal
+close?" on the TITLE precisely because the submit relabels to `Signing…` while
+pending.
+
 ## Still on the batched request list, for T4
 
 1. **Row states.** No hover, focus-visible, disabled, pending or error state is
