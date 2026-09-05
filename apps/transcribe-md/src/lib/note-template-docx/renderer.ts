@@ -706,6 +706,34 @@ function createFieldPatches(
   const binding = field.rendererBinding;
   const bound = part.byPath.get(binding.path);
   if (!bound) failTemplateDocxRender('BINDING_NOT_FOUND');
+
+  // ⚠️ #192 — A KEPT DEFAULT RETURNS ZERO PATCHES, AND IT SITS ABOVE THE
+  // BINDING DISPATCH BECAUSE THAT IS WHERE "DO NOT TOUCH THIS FIELD" BELONGS.
+  //
+  // This guard has now been placed WRONG TWICE, each time one level too deep,
+  // and each time the symptom was the same: a DECLARED keep silently ignored
+  // for whatever the dispatch reached first.
+  //
+  //   1st  after the `checkbox`/`date`/`single_select` branches inside
+  //        `contentControlPatches` -- a date control lost
+  //        `Date of procedure: 12 March 2026`, a select was overwritten.
+  //   2nd  inside `contentControlPatches` at all -- so `legacy_form_field`
+  //        never reached it. Measured: a FORMTEXT field's declared-keep content
+  //        was DESTROYED while the manifest still reported it as a kept
+  //        default, so it appeared in neither the blank count nor the page.
+  //
+  // Nothing about "the doctor asked for their own clause to stand" is specific
+  // to a binding type or a control kind. Every time this decision was expressed
+  // inside a branch, the branch made it specific by accident.
+  //
+  // ⚠️ AND IT IS FAIL-SAFE IN THE ONLY DIRECTION THAT MATTERS: it can only ever
+  // SKIP a write. The failure it risks is a template's own DECLARED sentence
+  // surviving; it can never remove a doctor's dictated text, because a field
+  // carrying a value never reaches it.
+  if (resolution.value === null && resolution.status === 'default_kept') {
+    return { patches: [], boundedClear: false, blankEligible: 'unevaluated' };
+  }
+
   switch (binding.bindingType) {
     case 'content_control':
       if (xmlLocalName(bound.name) !== 'sdt') {
@@ -1224,36 +1252,6 @@ function contentControlPatches(
   const properties = directXmlChild(control, 'sdtPr');
   const content = directXmlChild(control, 'sdtContent');
   if (!properties || !content) failTemplateDocxRender('BINDING_NOT_FOUND');
-
-  // ⚠️ #192 — A KEPT DEFAULT RETURNS ZERO PATCHES, AND IT IS FIRST BECAUSE THE
-  // KIND BRANCHES BELOW WRITE UNCONDITIONALLY.
-  //
-  // This is the whole delivery of the keep half, and it reaches a field ONLY
-  // because the doctor's mapping DECLARED `unmentionedPolicy: 'keep'`. It is
-  // never inferred from content: three content-derived formulations were
-  // falsified, the last printing `Enter assessment` onto a rendered note.
-  //
-  // ⚠️ ITS FIRST PLACEMENT WAS AFTER the `checkbox`, `date` and `single_select`
-  // branches, so a DECLARED keep was SILENTLY IGNORED for those three kinds
-  // while the resolution still said `default_kept`. Measured by the adversarial
-  // pass: a date control lost `Date of procedure: 12 March 2026` and a select
-  // was overwritten, both under a status claiming their content was kept. The
-  // resolver applies no kind restriction, so all three reach here. Nothing is
-  // kind-specific about "the doctor asked for their own clause to stand", and
-  // placing the guard after a kind branch made it kind-specific by accident.
-  //
-  // ⚠️ RETURNING IS NOT THE SAME AS SKIPPING A CLEAR, WHICH COST THIS SLICE ITS
-  // FIRST ATTEMPT: guarding only the bounded clear let the field FALL THROUGH
-  // to the ordinary write, which writes the empty display value and blanked the
-  // control by a second route. The tell was arithmetic — one patch on a part
-  // meant to be untouched. Returning also puts the field on the
-  // `patches.length === 0` branch, the only place `kept_default` is emitted.
-  //
-  // ⚠️ AND IT ONLY EVER SKIPS A DELETION. The failure direction is a template's
-  // own DECLARED sentence surviving, never a doctor's dictated text removed.
-  if (resolution.value === null && resolution.status === 'default_kept') {
-    return { patches: [], boundedClear: false, blankEligible: 'unevaluated' };
-  }
 
   if (field.kind === 'checkbox') {
     const checkbox = descendantXmlElements(properties, 'checkbox')[0];

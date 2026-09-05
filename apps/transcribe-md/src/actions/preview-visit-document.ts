@@ -50,7 +50,14 @@ export interface VisitPreviewResult extends Omit<NativePreviewResult, 'reason'> 
   reason: NativePreviewResult['reason'] | VisitPreviewMiss | null;
   /** How much of their form is actually filled — shown honestly above the page
    *  so blanks read as "not dictated yet" rather than "the export is broken". */
-  counts: { filled: number; needsReview: number; notMentioned: number } | null;
+  counts: {
+    filled: number;
+    needsReview: number;
+    notMentioned: number;
+    /** #192 — kept defaults are NOT blank; they print the template's own
+     *  declared clause. Carried so the doctor is told about them. */
+    defaultsKept: number;
+  } | null;
   /** Changes whenever the underlying fill changes. The client uses it to tell
    *  a genuine update from a re-fetch that produced the same document. */
   fillSha: string | null;
@@ -315,6 +322,7 @@ export async function previewVisitDocumentAction(
       filled: prepared.manifest.counts.filled,
       needsReview: prepared.manifest.counts.needsReview,
       notMentioned: prepared.manifest.counts.notMentioned,
+      defaultsKept: prepared.manifest.counts.defaultsKept ?? 0,
     };
     fillSha = prepared.manifestSha256;
   } catch (err) {

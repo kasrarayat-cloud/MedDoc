@@ -632,3 +632,68 @@ describe('#192 — the proposer OFFERS keep; the render obeys only what was CONF
     expect(r!.status).toBe('not_mentioned');
   });
 });
+
+describe('#192 — THE FAIL-CLOSED PROPERTY, from the adversarial pass', () => {
+  it('(27) ⚠️ THE MODEL IS NEVER OFFERED `unmentionedPolicy` — it may not author a render policy', async () => {
+    // ⚠️ THE WORST FINDING OF THE PASS. The model schema EXTENDS
+    // `SemanticMappingSchema`, and the tool's `input_schema` is generated from
+    // it — so adding a field there silently handed the model a settable enum
+    // deciding whether a template's sentence prints on a signed note. Measured
+    // end to end with no human and validation GREEN: 11 of 11 proposals came
+    // back `keep`, and a control containing `Enter assessment` rendered that
+    // string into the note. `practiceDefault` is forced null two lines away for
+    // exactly this reason, with the comment "never authored by AI".
+    //
+    // It is OMITTED rather than nulled: the field never appears in the schema,
+    // so there is no value to choose and nothing to re-assert after parsing.
+    const src = readFileSync(join(__dirname, '../semantic-mapping/index.ts'), 'utf-8');
+    const decl = src.slice(src.indexOf('const ModelSemanticMappingSchema'));
+    const body = decl.slice(0, decl.indexOf('.strict();'));
+    expect(body).toContain('omit({ unmentionedPolicy: true })');
+    // non-vacuity: the base schema really does carry it
+    const ir = readFileSync(join(__dirname, '../ir.ts'), 'utf-8');
+    expect(ir).toContain("unmentionedPolicy: z.enum(['keep', 'omit']).nullish()");
+  });
+
+  it('(28) ⚠️ A REPEATING PROTOTYPE NEVER KEEPS — its text would clone into every row', () => {
+    // Measured by the pass: a `Comment` prototype reading `Enter comment`
+    // beside three dictated rows printed it THREE TIMES, because the patch
+    // builder runs once per row and a kept default's zero patches leave the
+    // prototype's own text in each clone.
+    const proto = field('1', { fieldId: `ttf_${'1'.repeat(24)}`, rowPrototype: true });
+    const [r] = resolveTemplateFields({
+      fields: [proto],
+      mappings: [mapping(proto, 'ros.cardiovascular', { unmentionedPolicy: 'keep' })],
+      facts: [factFor('2', 'chief_complaint', 'Patient here for a rash.')],
+      allowUncertifiedForSyntheticTest: true,
+    });
+    expect(r!.status).not.toBe('default_kept');
+  });
+
+  it('(29) ⚠️ `defaultsKept` REACHES THE DOCTOR — a bucket nobody reads is the same failure one step later', () => {
+    // The pass found the count written and then dropped by both transport
+    // types, so the pre-sign surface disclosed NOTHING about a note printing
+    // template prose. #170's shape a third time: the value existed and no
+    // reader could see it.
+    const action = readFileSync(join(__dirname, '../../../actions/preview-visit-document.ts'), 'utf-8');
+    const cache = readFileSync(join(__dirname, '../../docx-preview/fill-cache.ts'), 'utf-8');
+    const surface = readFileSync(
+      join(__dirname, '../../../app/visits/[id]/visit-document-surface.tsx'), 'utf-8');
+    for (const [name, src] of [['action', action], ['cache', cache], ['surface', surface]] as const) {
+      expect(`${name}:${src.includes('defaultsKept')}`).toBe(`${name}:true`);
+    }
+    // ⚠️ AND THE SURFACE MUST ACTUALLY RENDER IT. The first version of this
+    // assertion was `toContain('counts.defaultsKept > 0')`, and the mutation
+    // `false && result.counts.defaultsKept > 0` PASSED IT — the substring
+    // survives a short-circuit that disables the whole disclosure. The
+    // substring trap, in the arm written to prevent the disclosure going
+    // missing.
+    const line = surface
+      .split('\n')
+      .find((l) => l.includes('counts.defaultsKept > 0'));
+    expect(line, 'the disclosure condition must exist').toBeDefined();
+    expect(line!.trim().startsWith('{result.counts.defaultsKept > 0')).toBe(true);
+    // and the doctor-facing words themselves, so deleting the branch reds too
+    expect(surface).toContain('kept from your template');
+  });
+});

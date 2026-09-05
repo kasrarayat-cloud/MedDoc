@@ -313,7 +313,15 @@ function missingResolution(
   //
   // Absence is fail-closed by construction: no declaration means today's
   // bounded clear, so a prompt can never print through a field nobody ruled on.
-  const declaredKeep = mapping.unmentionedPolicy === 'keep';
+  // ⚠️ #192 — A REPEATING PROTOTYPE NEVER KEEPS, AND THE REASON IS ARITHMETIC.
+  // `renderRepeatingRows` calls the patch builder ONCE PER DATA ROW, so a kept
+  // default's zero patches leave the PROTOTYPE'S OWN TEXT in every clone.
+  // Measured: a `Comment` prototype reading `Enter comment` beside three
+  // dictated vessel rows printed `Enter comment` THREE TIMES on the note.
+  // "Keep the doctor's clause" has no meaning for a template fragment that is
+  // duplicated per row; the honest outcome there is the bounded clear.
+  const declaredKeep =
+    mapping.unmentionedPolicy === 'keep' && field.rowPrototype !== true;
   const unmentionedScaffold =
     conceptUnmatched && reason === undefined && facts.length > 0;
 

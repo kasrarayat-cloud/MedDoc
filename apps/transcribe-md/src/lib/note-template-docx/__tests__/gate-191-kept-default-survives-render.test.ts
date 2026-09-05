@@ -213,3 +213,51 @@ describe('#192 — A DECLARED KEEP IS HONOURED FOR EVERY KIND', () => {
     expect(xml).toContain(text);
   });
 });
+
+describe('#192 — A DECLARED KEEP IS HONOURED FOR EVERY *BINDING*, not just content controls', () => {
+  it('⚠️ A LEGACY FORM FIELD HONOURS A DECLARED KEEP', async () => {
+    // ⚠️ THE GUARD WAS PLACED WRONG TWICE, EACH TIME ONE LEVEL TOO DEEP. Inside
+    // `contentControlPatches` it never reached `legacy_form_field` at all,
+    // because `createFieldPatches` dispatches on binding type FIRST. Measured
+    // by the pass: a FORMTEXT field's declared-keep content was DESTROYED while
+    // the manifest still reported it as a kept default — so it appeared in
+    // neither the blank count nor on the page. Both directions false at once.
+    const KEPT = 'Moderate';
+    const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+<w:p><w:r><w:fldChar w:fldCharType="begin"><w:ffData><w:name w:val="Severity"/>
+<w:textInput><w:default w:val="${KEPT}"/></w:textInput></w:ffData></w:fldChar></w:r>
+<w:r><w:instrText> FORMTEXT </w:instrText></w:r>
+<w:r><w:fldChar w:fldCharType="separate"/></w:r>
+<w:r><w:t>${KEPT}</w:t></w:r>
+<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:body></w:document>`;
+    const source = await buildSyntheticDocx({ documentXml: doc });
+    const { compileTemplateDocx } = await import('../compiler');
+    const ir = compileTemplateDocx(source);
+    const legacy = ir.fields.filter(
+      (f) => f.rendererBinding.bindingType === 'legacy_form_field',
+    );
+    // non-vacuity: the fixture really did compile a legacy binding
+    expect(legacy.length).toBeGreaterThan(0);
+
+    const render = async (status: string, reason: string) => {
+      const out = await renderTemplateDocx({
+        source, ir,
+        resolutions: ir.fields.map((f) =>
+          FieldResolutionSchema.parse({
+            fieldId: f.fieldId, status, value: null,
+            sourceFactIds: status === 'default_kept' ? [`ttfact_${'a'.repeat(24)}`] : [],
+            evidenceAnchorIds: status === 'default_kept' ? ['anchor-a'] : [],
+            selectedOptionOrdinal: null, reasonCode: reason, clinicianReviewed: false,
+          }),
+        ),
+        validation: VALIDATION,
+      });
+      const JSZip = (await import('jszip')).default;
+      return (await JSZip.loadAsync(out.document)).file('word/document.xml')!.async('string');
+    };
+    expect(await render('default_kept', 'default_kept_uncontradicted')).toContain(KEPT);
+    // the other half of the discriminator — without a declaration it still clears
+    expect(await render('not_mentioned', 'fact_not_mentioned')).not.toContain(`<w:t>${KEPT}</w:t>`);
+  });
+});
