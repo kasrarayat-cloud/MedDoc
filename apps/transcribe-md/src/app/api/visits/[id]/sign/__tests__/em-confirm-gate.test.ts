@@ -69,7 +69,6 @@ vi.mock('@meddoc/db', () => {
     // T6: the sign gate reads the SIGNER's practice role. Without this the
     // route throws before any gate under test runs, and 13 specs report 500.
     user: { findUnique: mocks.userFindUnique },
-    auditLog: { findMany: vi.fn().mockResolvedValue([]) },
     rxWarningOverride: { findMany: mocks.rxOverrideFindMany },
     // F5-h: the signature write now runs inside a transaction so the E/M blob
     // is RE-READ next to the CAS-guarded update — a concurrent override must
