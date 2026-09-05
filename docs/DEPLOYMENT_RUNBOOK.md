@@ -210,7 +210,7 @@ For a code-only deploy the declaration is one line — **"nothing but the image
 ids"** — and it is still written down, because that is what makes any other
 movement a finding rather than a discussion.
 
-#### ⚠️ THE STRICTNESS SPLIT — RULING #187, 2026-09-05
+#### ⚠️ THE STRICTNESS SPLIT — RULING #188, 2026-09-05
 
 **A deploy that APPLIES A MIGRATION requires the `strict` declaration: TRACKED,
 UNMODIFIED and COMMITTED before the act — the standard

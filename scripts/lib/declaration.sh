@@ -409,7 +409,7 @@ declaration_gate() {
 }
 
 # ============================================================================
-# RULING #187 — IS THIS DEPLOY MIGRATION-CARRYING, AND THEREFORE `strict`?
+# RULING #188 — IS THIS DEPLOY MIGRATION-CARRYING, AND THEREFORE `strict`?
 # ----------------------------------------------------------------------------
 #   declaration_strictness_for_migrations <repo_count> <applied_count>
 #     echoes:  strict|<reason>   or   present|<reason>
@@ -428,16 +428,16 @@ declaration_strictness_for_migrations() {
   local repo="${1:-}" applied="${2:-}"
 
   case "$applied" in
-    ''|*[!0-9]*) echo "strict|the applied-migration count could not be read ('${applied}') — treating this as migration-carrying (#187 fail-closed)"; return 0 ;;
+    ''|*[!0-9]*) echo "strict|the applied-migration count could not be read ('${applied}') — treating this as migration-carrying (#188 fail-closed)"; return 0 ;;
   esac
   case "$repo" in
-    ''|*[!0-9]*) echo "strict|the repo migration count could not be read ('${repo}') — treating this as migration-carrying (#187 fail-closed)"; return 0 ;;
+    ''|*[!0-9]*) echo "strict|the repo migration count could not be read ('${repo}') — treating this as migration-carrying (#188 fail-closed)"; return 0 ;;
   esac
   if [ "$repo" -eq 0 ]; then
-    echo "strict|the repo reports ZERO migration directories, which is not a state this tree can be in — treating this as migration-carrying (#187 fail-closed)"; return 0
+    echo "strict|the repo reports ZERO migration directories, which is not a state this tree can be in — treating this as migration-carrying (#188 fail-closed)"; return 0
   fi
   if [ "$repo" -gt "$applied" ]; then
-    echo "strict|this deploy APPLIES $(( repo - applied )) migration(s) — repo $repo, production has applied $applied (#187)"; return 0
+    echo "strict|this deploy APPLIES $(( repo - applied )) migration(s) — repo $repo, production has applied $applied (#188)"; return 0
   fi
   echo "present|code-only: repo $repo migration(s), production has applied $applied — answerable by an image rollback, so #96(b) proportionality holds"
 }

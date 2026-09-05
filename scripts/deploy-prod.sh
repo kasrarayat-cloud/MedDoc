@@ -176,7 +176,7 @@ DECL="$DECLARATION_PATH"
 #
 # ⚠️ A CARRY-FORWARD IS RESOLVED AT `strict`, WHICH IS STRICTLY STRONGER. #121's
 # criterion (1) says the gate must not weaken; this is the direction it moves.
-# ── RULING #187: A MIGRATION-CARRYING DEPLOY IS `strict`, WHATEVER THE RESOLVER SAID ──
+# ── RULING #188: A MIGRATION-CARRYING DEPLOY IS `strict`, WHATEVER THE RESOLVER SAID ──
 #
 # ⚠️ #96(b) IS APPLIED ONE LEVEL FINER, NOT OVERTURNED. Strictness is
 # proportional to reversibility, and the paragraph above is right about a
@@ -212,7 +212,7 @@ _strictness=$(declaration_strictness_for_migrations "$_repo_migrations" "$_appli
 _want_mode="${_strictness%%|*}"
 _why="${_strictness#*|}"
 
-echo "=== §2.5 STRICTNESS — RULING #187 ==="
+echo "=== §2.5 STRICTNESS — RULING #188 ==="
 echo "   $_why"
 if [ "$_want_mode" = "strict" ]; then
   echo "   Declaration mode raised: ${DECLARATION_MODE:-present} -> strict."
