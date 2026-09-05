@@ -210,6 +210,52 @@ For a code-only deploy the declaration is one line — **"nothing but the image
 ids"** — and it is still written down, because that is what makes any other
 movement a finding rather than a discussion.
 
+#### ⚠️ THE STRICTNESS SPLIT — RULING #187, 2026-09-05
+
+**A deploy that APPLIES A MIGRATION requires the `strict` declaration: TRACKED,
+UNMODIFIED and COMMITTED before the act — the standard
+`run-ruled-mutation.sh` already uses. A code-only deploy keeps `present` and the
+ancestor carry-forward path.**
+
+⚠️ **THIS APPLIES #96(b), IT DOES NOT OVERTURN IT.** Strictness is proportional
+to reversibility. A code-only deploy is answerable by an image rollback, so
+requiring a prior commit there would refuse every deploy whose author lands the
+declaration in the same PR — a real habit, and halting the programme to fix the
+weaker case. **A migration is not answerable by a rollback.**
+
+**THE SPECIMEN, and it is why this is mechanism rather than advice.** From the
+August retrospective (`20260808-20260820-SEVEN-RETROSPECTIVE.md`):
+
+| | migration finished | declaration committed | gap |
+|---|---|---|---|
+| `079b9205` | 2026-08-09 00:01:00 | 00:05:42 | **+4m42s** |
+| `50b02832` | 2026-08-11 09:06:35 | 09:12:21 | **+5m46s** |
+
+In both, the irreversible act had **already completed** when the declaration
+landed — so the record cannot distinguish an honest declaration from one
+composed once the outcome was known, which is the entire product §2.5 buys.
+⚠️ **The gate accepted both, correctly, by its own rules.** Nobody bypassed
+anything; the rule was simply not strict enough for the irreversible half.
+
+**Evidence recoverable, gate not.** Three further August declarations were
+committed after their deploy STARTED but before the post-deploy numbers existed
+— late, not tainted, and recorded as the lesser thing they are.
+
+⚠️ **THE QUESTION THE GATE ASKS IS "WILL THIS DEPLOY APPLY A MIGRATION?", NOT
+"DOES THE RANGE CONTAIN A MIGRATION FILE."** A range-diff needs a base, and the
+base is whatever production happens to be running — the very thing the deploy is
+about to change and the thing nobody reliably records. Comparing the repo's
+migration directories against the rows production has APPLIED answers the real
+question with no base at all.
+
+⚠️ **AND IT IS FAIL-CLOSED TOWARD `strict`.** An unreadable count, a database
+that will not answer, or a repo reporting ZERO migration directories all resolve
+to `strict`. A zero there is a broken `find`, not a fact — this tree cannot be in
+that state — and cannot-tell must never hand back the weaker gate. The decision
+is `declaration_strictness_for_migrations` in `scripts/lib/declaration.sh`, kept
+pure and separate from the gathering so an arm can drive it:
+`gate-187-migration-strict.test.ts`, mutation-proved in both directions.
+
 #### ⚠️ STEP 0 — LAND THE DECLARATION AS A DOCS PR *BEFORE* RUNNING `deploy-prod.sh`
 
 **Written into the steps 2026-09-04, because two deploys in a row paid a full

@@ -176,6 +176,53 @@ DECL="$DECLARATION_PATH"
 #
 # ⚠️ A CARRY-FORWARD IS RESOLVED AT `strict`, WHICH IS STRICTLY STRONGER. #121's
 # criterion (1) says the gate must not weaken; this is the direction it moves.
+# ── RULING #187: A MIGRATION-CARRYING DEPLOY IS `strict`, WHATEVER THE RESOLVER SAID ──
+#
+# ⚠️ #96(b) IS APPLIED ONE LEVEL FINER, NOT OVERTURNED. Strictness is
+# proportional to reversibility, and the paragraph above is right about a
+# CODE-ONLY deploy: it is answerable by an image rollback, so `present` stays.
+# A MIGRATION is not answerable by a rollback. It is the same irreversibility
+# that already makes `run-ruled-mutation.sh` strict, so it takes the same
+# standard — the declaration must be COMMITTED BEFORE THE ACT.
+#
+# THE SPECIMEN, from the August retrospective: `079b9205`'s migration finished
+# at 00:01:00 and its declaration was committed at 00:05:42; `50b02832`'s
+# finished at 09:06:35 and its declaration at 09:12:21. In both the irreversible
+# act had ALREADY COMPLETED, so the record cannot tell an honest declaration
+# from one composed once the outcome was known — which is the entire product
+# §2.5 buys. The gate accepted both, correctly, by its own rules.
+#
+# ⚠️ THE QUESTION ASKED IS "WILL THIS DEPLOY APPLY A MIGRATION?", NOT "DOES THE
+# RANGE CONTAIN A MIGRATION FILE." A range-diff needs a base, and the base is
+# whatever production happens to be running — which is exactly the thing a
+# deploy is about to change and the thing nobody reliably records. Comparing the
+# repo's migration directories against the rows production has APPLIED answers
+# the real question with no base at all.
+#
+# ⚠️ AND IT IS FAIL-CLOSED TOWARD STRICT. If the count cannot be established —
+# no psql, an unreachable database, a non-numeric answer — the deploy is treated
+# as migration-carrying. Cannot-tell must not resolve to the weaker gate.
+_repo_migrations=$(find packages/db/prisma/migrations -mindepth 2 -name migration.sql 2>/dev/null | wc -l | tr -d '[:space:]')
+_applied_migrations=$(docker exec meddoc-pro-postgres-1 psql -U meddoc -d meddoc -tAc \
+  'select count(*) from _prisma_migrations where finished_at is not null' 2>/dev/null | tr -d '[:space:]')
+
+# The DECISION lives in the library so an arm can drive it with injected counts;
+# only the GATHERING above is I/O.
+_strictness=$(declaration_strictness_for_migrations "$_repo_migrations" "$_applied_migrations")
+_want_mode="${_strictness%%|*}"
+_why="${_strictness#*|}"
+
+echo "=== §2.5 STRICTNESS — RULING #187 ==="
+echo "   $_why"
+if [ "$_want_mode" = "strict" ]; then
+  echo "   Declaration mode raised: ${DECLARATION_MODE:-present} -> strict."
+  echo "   A migration is irreversible, so its declaration must be COMMITTED"
+  echo "   before the act — the standard run-ruled-mutation.sh already uses."
+  DECLARATION_MODE="strict"
+else
+  echo "   Mode stays '${DECLARATION_MODE:-present}'."
+fi
+
 declaration_gate "$DECL" "$DECLARATION_MODE" "deploy declaration" || {
   echo "   Nothing has been built, migrated or recreated. Production is untouched."
   exit 1
