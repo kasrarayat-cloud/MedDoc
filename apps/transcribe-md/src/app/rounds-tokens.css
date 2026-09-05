@@ -3186,3 +3186,205 @@ body[data-skin='rounds'] {
   --color-linear-text-4: var(--rounds-ink-muted);
   --color-linear-text-muted: var(--rounds-ink-muted);
 }
+
+/* ── T2 — THE RECEIPT: the ICD ledger and its five row states ────────────────
+ * Built from the owner's frames: `claim-summary-ready` / `claim-summary-signed`
+ * (file vDPGIxwPmm08BTzBD99vfQ) and `icd-code-row-states` (24:2, file
+ * Zvgz37i6jVoNYy9BzAAtoQ). Geometry, spacing, type and copy are the frames';
+ * COLOURS MAP BY ROLE to Rounds tokens, per the standing ruling — sage was
+ * deliberately retired on this page, and a green panel on an indigo visit page
+ * reads as a bug rather than a design.
+ *
+ * The row is a THREE-COLUMN GRID, not a flex row: 96 + 484 + 60 = 640, which is
+ * exactly the card's 720 less its 40px side padding. If a build ever produces a
+ * leftover, it has mis-read the padding.
+ *
+ * ⚠️ TWO OF THE FIVE STATES SHIP A CONTRAST FAILURE IN THE FRAME ITSELF, and
+ * mapping by role is what fixes them — measured against the card ground
+ * `--rounds-surface-1` (#161b24):
+ *
+ *     role                 frame               role token
+ *     pre-accepted         #7aa68c  6.30:1     --rounds-accent-text       7.60:1
+ *     held for review      #c9a84c  7.55:1     --rounds-em-text           8.98:1
+ *     rejected             #a85555  3.37:1 ✗   --rounds-critical-on-dark  7.70:1
+ *     not carried          #7a8fa6  5.19:1     --rounds-signed-text       6.85:1
+ *     no longer suggested  @0.15    1.21:1 ✗   --rounds-text-3            4.68:1
+ *
+ * ⚠️ THE LAST ROW IS A DELIBERATE DEPARTURE, RECORDED RATHER THAN SMUGGLED. The
+ * frame ghosts "no longer suggested" to `#ffffff` at 15% alpha, which lands at
+ * **1.21:1** — a code and its description, effectively invisible. The intent is
+ * plainly "this no longer applies", and that intent survives with the faintest
+ * token that is still READABLE. I am not shipping 1.21:1 clinical text on the
+ * strength of a mockup; if the owner wants it fainter than `--rounds-text-3`,
+ * that is a ruling and a one-token change.
+ *
+ * ⚠️ AND `--rounds-critical` IS NOT USED HERE. It is a FILL (#c93a2e); its text
+ * variant is `--rounds-critical-on-dark`. This file records SIX instances of a
+ * state/fill token being used as a text colour, and the rejected row is exactly
+ * where a seventh would land. */
+
+[data-skin='rounds'] .qm-icd-ledger {
+  max-width: 720px;
+  padding: 36px 40px 32px;
+  background: var(--rounds-surface-1);
+  border: 1px solid var(--rounds-line-1);
+  border-radius: 12px;
+}
+
+[data-skin='rounds'] .qm-icd-ledger-title {
+  font-family: var(--rounds-font-ui);
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 500;
+  color: var(--rounds-text-1);
+}
+
+[data-skin='rounds'] .qm-icd-ledger-rule {
+  height: 1px;
+  margin: 16px 0 0;
+  background: var(--rounds-line-1);
+  border: 0;
+}
+
+/* Section headers — the frame's own labels, uppercased by CSS so the DOM keeps
+ * the readable form for assistive technology. */
+[data-skin='rounds'] .qm-icd-section-label {
+  padding: 12px 0 8px;
+  font-family: var(--rounds-font-ui);
+  font-size: 11px;
+  line-height: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--rounds-text-3);
+}
+
+/* THE ROW. Identical geometry in every state — only colour and the optional
+ * tint change, which is what makes the five states read as one object. */
+[data-skin='rounds'] .qm-icd-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 60px;
+  align-items: center;
+  gap: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rounds-line-1);
+}
+
+[data-skin='rounds'] .qm-icd-row-code {
+  font-family: var(--rounds-font-mono, var(--font-mono));
+  font-size: 13px;
+  line-height: 17px;
+  color: var(--rounds-text-2);
+}
+
+[data-skin='rounds'] .qm-icd-row-desc {
+  font-family: var(--rounds-font-ui);
+  font-size: 14px;
+  line-height: 17px;
+  color: var(--rounds-text-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The rejected row's second line — the doctor's reason, under the description. */
+[data-skin='rounds'] .qm-icd-row-reason {
+  display: block;
+  color: var(--rounds-text-3);
+}
+
+[data-skin='rounds'] .qm-icd-row-pct {
+  font-family: var(--rounds-font-mono, var(--font-mono));
+  font-size: 12px;
+  line-height: 16px;
+  text-align: right;
+  color: var(--rounds-text-3);
+}
+
+/* ── The five states ─────────────────────────────────────────────────────── */
+
+/* 1 · PRE-ACCEPTED — the accent, as TEXT. */
+[data-skin='rounds'] .qm-icd-row[data-state='pre-accepted'] .qm-icd-row-code {
+  color: var(--rounds-accent-text);
+}
+
+/* 2 · HELD FOR REVIEW — the only state carrying a row tint, because it is the
+ * only one asking the doctor for something. */
+[data-skin='rounds'] .qm-icd-row[data-state='held'] {
+  background: color-mix(in srgb, var(--rounds-em-text) 6%, transparent);
+}
+[data-skin='rounds'] .qm-icd-row[data-state='held'] .qm-icd-row-code {
+  color: var(--rounds-em-text);
+}
+
+/* 3 · REJECTED BY DOCTOR — the critical TEXT token, never the fill. */
+[data-skin='rounds'] .qm-icd-row[data-state='rejected'] .qm-icd-row-code {
+  color: var(--rounds-critical-on-dark);
+}
+[data-skin='rounds'] .qm-icd-row[data-state='rejected'] .qm-icd-row-pct {
+  opacity: 0.7;
+}
+
+/* 4 · NO LONGER SUGGESTED — faded to the faintest READABLE token. See the
+ * departure recorded in the header above. */
+[data-skin='rounds'] .qm-icd-row[data-state='orphaned'] .qm-icd-row-code,
+[data-skin='rounds'] .qm-icd-row[data-state='orphaned'] .qm-icd-row-desc {
+  color: var(--rounds-text-3);
+}
+
+/* 5 · SUGGESTED, NOT CARRIED — the slate role. Its confidence column shows an
+ * em dash, not a number: the code never reached the note, so a confidence would
+ * be a claim about something that did not happen. */
+[data-skin='rounds'] .qm-icd-row[data-state='not-carried'] .qm-icd-row-code {
+  color: var(--rounds-signed-text);
+}
+[data-skin='rounds'] .qm-icd-row[data-state='not-carried'] .qm-icd-row-desc {
+  color: var(--rounds-text-3);
+}
+
+[data-skin='rounds'] .qm-icd-ledger-caption {
+  margin: 16px 0 0;
+  font-family: var(--rounds-font-ui);
+  font-size: 12px;
+  line-height: 15px;
+  text-align: center;
+  color: var(--rounds-text-3);
+}
+
+/* The evidence quote sits under its row, indented to the description column so
+ * it reads as belonging to that code rather than to the section. */
+[data-skin='rounds'] .qm-icd-row-evidence {
+  margin: 0 0 0 96px;
+  padding: 6px 0 0;
+  font-family: var(--rounds-font-ui);
+  font-size: 12px;
+  line-height: 16px;
+  font-style: italic;
+  color: var(--rounds-text-3);
+}
+
+/* The note beneath a row that is not awaiting a decision — the orphaned
+ * explanation and the amber label. Same left inset as the row's description
+ * column (96px code + 16px gap) so the prose hangs off the description rather
+ * than off the card edge.
+ *
+ * ⚠️ `--rounds-text-3`, the same token the pre-ledger prose carried. The amber
+ * caller overrides it to `--rounds-em-text` inline; `--rounds-em` itself is a
+ * FILL token and fails AA as text. */
+[data-skin='rounds'] .qm-icd-row-note {
+  margin: 2px 0 0 112px;
+  font-family: var(--rounds-font-ui);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--rounds-text-3);
+}
+
+/* The controls a HELD row offers, beneath it — the ruled Accept / Reject /
+ * reason-picker flow, unchanged in behaviour and re-skinned to the card. */
+[data-skin='rounds'] .qm-icd-row-actions {
+  margin: 0 0 0 96px;
+  padding: 8px 0 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
