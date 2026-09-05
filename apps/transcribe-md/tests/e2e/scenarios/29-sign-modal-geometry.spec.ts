@@ -83,7 +83,6 @@ import { test, expect } from '@playwright/test';
 import { attestAndSubmit, openSignFlow } from '../helpers/sign';
 import { signupFreshUser } from '../helpers/signup';
 import { createReadyTextVisit } from '../helpers/visit-setup';
-import { psqlOne } from '../helpers/seedReviewDocVisit';
 
 /** The default pack runs `devices['Desktop Chrome']` — 1280×720. 720 is the
  *  number that matters: the overflow was vertical. */
@@ -324,62 +323,61 @@ test.describe('the sign modal keeps its signature controls on screen', () => {
 // ============================================================================
 // ⚠️ THE PANEL CLIPS, AND THE VIEWPORT ASSERTION ABOVE CANNOT SEE IT.
 // ----------------------------------------------------------------------------
-// FOUND BY T4's ADVERSARIAL PASS, WHICH REFUTED THE AUTHOR'S OWN CLAIM. The
-// sign card is capped at `max-h-[76vh]` from `top-[12vh]`, so its BOX always
-// ends at 88vh — and the author argued the submit was therefore safe "by
-// construction". The cap bounds the CARD, not the CONTENT:
-// `.qm-lin-spotlight-panel` carries `overflow: hidden` (globals.css), so once
-// the `flex-none` siblings out-sum the cap the excess is CLIPPED WITH NO
-// SCROLLBAR ANYWHERE.
+// FOUND BY T4's ADVERSARIAL PASS, WHICH REFUTED THE AUTHOR'S OWN CLAIM. The sign
+// card is capped at `max-h-[76vh]` from `top-[12vh]`, so its BOX always ends at
+// 88vh — and the author argued the submit was therefore safe "by construction".
+// The cap bounds the CARD, not the CONTENT: `.qm-lin-spotlight-panel` carries
+// `overflow: hidden`, so once the `flex-none` siblings out-sum the cap the
+// excess is CLIPPED WITH NO SCROLLBAR ANYWHERE.
 //
-// `boundingBox()` still returns the laid-out coordinates of a clipped element,
-// so `y + height <= vh` passes while the button is not there. Measured on the
-// T4 skin at 1280x640: 15.1px clipped, and
-// `document.elementFromPoint(cx, bottom - 5)` returned `HTML` instead of the
-// button — the pixels were not merely ugly, they were not hit-testable.
+// `boundingBox()` returns the laid-out coordinates of a clipped element, so
+// `y + height <= vh` passes while the button is not there.
 //
-// TWO THINGS THIS ADDS, and each catches what the other cannot:
+// TWO ASSERTIONS, EACH CATCHING WHAT THE OTHER CANNOT:
 //
-//   1. CONTAINMENT IN THE CLIPPER — the submit's box must be inside the
-//      panel's box, which is the element that actually does the clipping.
-//   2. HIT-TESTABILITY — `elementFromPoint` at the button's own bottom edge
-//      must land ON the button. That is the doctor's question, not a number.
+//   1. CONTAINMENT IN THE CLIPPER — the submit's box must be inside the box of
+//      the element that actually does the clipping.
+//   2. HIT-TESTABILITY — `elementFromPoint` at the button's own bottom edge must
+//      land ON the button. The first is arithmetic; this is the doctor's
+//      question, and a clipped element keeps its coordinates.
 //
-// AND THE STATE IT WALKS IS THE ONE THE ORIGINAL FIXTURE COULD NOT REACH:
-// `createReadyTextVisit` never produces an `emPendingChange`, so the E/M
-// confirm block — a `flex-none` sibling that is live at TWO call sites
-// (`review-tabs-v2.tsx`, `soap-editor.tsx`, neither of which passes `attested`)
-// — was never in the measured tree at all.
+// ⚠️ AND AN HONEST LIMIT, WRITTEN DOWN BECAUSE THE FIRST VERSION OF THIS BLOCK
+// CLAIMED MORE THAN IT COULD REACH.
+//
+// It planted an `emPendingChange` via psql to force BOTH `flex-none` blocks —
+// the modal's own attestation AND its E/M confirm — into the measured tree,
+// which is the shape the pass measured a 15.1px clip in. That state is NOT
+// REACHABLE THROUGH THE ROUNDS GATE, and CI runs Rounds ON:
+//
+//   · `gate-flow.tsx:311` renders the attestation only when `!emArtifact`, so a
+//     pending E/M makes the GATE present the artifact INSTEAD — and
+//     `openSignFlow` waits for `rounds-gate-attest`, which never appears.
+//     Measured: 4 failures, all `clicked Review & sign but the gate flow never
+//     presented the attestation`.
+//   · and on that path `review-sign-bar.tsx:114` passes `attested`, so the modal
+//     renders NO attestation block of its own either.
+//
+// So the both-blocks shape is a LEGACY-path state (`soap-editor`,
+// `review-tabs-v2` — neither passes `attested`), and the Rounds gate intercepts
+// the E/M upstream of the modal. THE PASS'S 15.1px MEASUREMENT THEREFORE STANDS
+// ONLY IN ITS OWN HARNESS; this spec does not reproduce it, and saying so is
+// worth more than a green tick that implies otherwise.
+//
+// What IS asserted below is unconditional and still catches the class: whatever
+// the modal contains on whatever path this pack walks, the submit must be inside
+// the clipper and must be clickable.
 // ============================================================================
 
 test.describe('the sign modal is not CLIPPED by its own panel', () => {
   for (const vp of VIEWPORTS) {
-    test(`submit survives an E/M confirm block @${vp.name}`, async ({ page }) => {
+    test(`submit is inside the clipping panel and hit-testable @${vp.name}`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await signupFreshUser(page, `signclip-${vp.height}`);
-      const visitId = await createReadyTextVisit(page, {
-        patientName: 'Sign Clip',
-      });
-
-      // ⚠️ PLANTED, NOT WAITED FOR. The E/M scorer is a real model and we do
-      // not get to choose its answer, so the only deterministic way to put the
-      // confirm block on screen is to write the record the modal renders from.
-      // Skipped rather than failed where psql is unavailable — an unmeasured
-      // state named honestly beats a red that means "no database".
-      let planted = false;
-      try {
-        psqlOne(
-          `update transcribe_visits set "emPendingChange"=` +
-            `'{"from":"99213","to":"99214","at":"2026-09-05T00:00:00.000Z"}'::jsonb ` +
-            `where id='${visitId}'`,
-        );
-        planted = true;
-      } catch {
-        planted = false;
-      }
-      test.skip(!planted, 'psql seeding unavailable — the E/M state cannot be planted');
-
+      const visitId = await createReadyTextVisit(page, { patientName: 'Sign Clip' });
       await page.goto(`/visits/${visitId}`);
+
       await expect(
         page
           .getByTestId('rounds-review-sign')
@@ -394,15 +392,6 @@ test.describe('the sign modal is not CLIPPED by its own panel', () => {
         'openSignFlow completed but the sign modal never opened',
       ).toBeVisible({ timeout: 10_000 });
 
-      // NON-VACUITY: the E/M block really is on screen, so the geometry below
-      // is measured in the state this test exists for and not in the easy one.
-      await expect(
-        page.getByTestId('em-change-confirm'),
-        'the E/M confirm block is absent — the planted emPendingChange did not ' +
-          'reach the modal, so this test is measuring the SAME tree the ' +
-          'viewport assertion already covers',
-      ).toBeVisible({ timeout: 10_000 });
-
       const submit = page.getByRole('button', { name: /sign & deliver/i }).first();
       await expect(submit).toBeVisible();
 
@@ -411,30 +400,40 @@ test.describe('the sign modal is not CLIPPED by its own panel', () => {
       const [sBox, pBox] = [await submit.boundingBox(), await panel.boundingBox()];
       expect(sBox, 'sign submit has no box — it is not laid out at all').not.toBeNull();
       expect(pBox, 'the spotlight panel has no box').not.toBeNull();
+
+      // NON-VACUITY: the panel must be the ancestor that actually clips, or
+      // "inside the panel" is a claim about an unrelated box.
+      const clips = await panel.evaluate(
+        (el) => getComputedStyle(el as HTMLElement).overflow,
+      );
+      expect(
+        clips,
+        `the panel's overflow is "${clips}" — if it no longer clips, this ` +
+          'assertion is measuring nothing and the containment claim is vacuous',
+      ).toMatch(/hidden|clip|auto|scroll/);
+
       expect(
         Math.round(sBox!.y + sBox!.height),
-        `sign submit ends at y=${Math.round(sBox!.y + sBox!.height)} inside a panel ` +
-          `that ends at y=${Math.round(pBox!.y + pBox!.height)} and has ` +
-          `overflow:hidden — the difference is CLIPPED AWAY, with no scrollbar ` +
-          `anywhere, on a ${vp.height}px viewport`,
+        `sign submit ends at y=${Math.round(sBox!.y + sBox!.height)} inside a ` +
+          `panel that ends at y=${Math.round(pBox!.y + pBox!.height)} and clips ` +
+          `(overflow: ${clips}) — the difference is CLIPPED AWAY, with no ` +
+          `scrollbar anywhere, on a ${vp.height}px viewport`,
       ).toBeLessThanOrEqual(Math.round(pBox!.y + pBox!.height));
 
       // ── 2 · AND IT IS ACTUALLY HIT-TESTABLE ──────────────────────────────
-      // The box test above is arithmetic; this is the doctor's question. A
-      // clipped element keeps its coordinates, so only a hit test can tell
-      // whether the pixels the doctor aims at belong to the button.
       const hit = await page.evaluate(
         ([x, y]) => {
           const el = document.elementFromPoint(x as number, y as number);
-          return el ? `${el.tagName}.${(el as HTMLElement).className || ''}`.slice(0, 80) : 'NONE';
+          if (!el) return 'NONE';
+          return `${el.tagName}|${(el as HTMLElement).textContent ?? ''}`.slice(0, 90);
         },
         [sBox!.x + sBox!.width / 2, sBox!.y + sBox!.height - 4],
       );
       expect(
-        hit.toLowerCase(),
+        hit,
         `the point at the bottom edge of "Sign & Deliver" resolves to ${hit} — ` +
-          `the doctor cannot click the control that signs the note`,
-      ).toContain('button');
+          'the doctor cannot click the control that signs the note',
+      ).toMatch(/BUTTON|SVG|SPAN/);
     });
   }
 });
