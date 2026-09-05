@@ -1,5 +1,5 @@
 // ============================================================================
-// getSession's DB-error path FAILS OPEN — and now says so out loud.
+// getSession's DB-error path FAILS CLOSED — #182(1). It used to fail OPEN.
 // ----------------------------------------------------------------------------
 // `lib/auth.ts` guards clinical access with exactly one `isActive` check:
 //
@@ -62,22 +62,37 @@ describe('getSession — the DB-error fail-open is observable', () => {
     authFn.mockResolvedValue(SESSION);
   });
 
-  it('FIRES: the lookup throws → SESSION_FAILOPEN is logged AND the session is still served', async () => {
+  it('⚠️ #182(1): the lookup throws → the request is REFUSED, loudly, and nothing is served', async () => {
+    // ⚠️ THIS ARM ASSERTED THE OPPOSITE UNTIL 2026-09-04, AND ITS OWN COMMENT
+    // SAID SO: "Behaviour UNCHANGED — this ships observability only. If this
+    // assertion ever flips, the pending ruling was applied without updating
+    // this file."
+    //
+    // The ruling came. #182(1) separates two answers this branch used to merge:
+    //   · a DEFINITIVE "revoked / inactive"  → the session is invalid
+    //   · "the database could not answer"    → the REQUEST is refused, 503,
+    //     the session is NOT ended and the cookie is NOT cleared
+    //
+    // Serving from JWT-claimed `role` and `practiceId` admitted a deactivated,
+    // suspended or soft-deleted account for the life of the token. The
+    // observability this file shipped is exactly what made the ruling possible,
+    // and it is KEPT — only the RETURN moved, which is why the log assertions
+    // below are unchanged in spirit.
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     findUnique.mockRejectedValue(new Error('pool timeout'));
 
-    const s = await callGetSession();
-
-    // Behaviour UNCHANGED — this ships observability only. If this assertion
-    // ever flips, the pending ruling was applied without updating this file.
-    expect(s, 'the fail-open behaviour changed; that is a war-room ruling').not.toBeNull();
-    expect(s?.user.practiceId).toBe('prac_1');
+    await expect(
+      callGetSession(),
+      'the session was still served from JWT claims — the fail-open is back',
+    ).rejects.toThrow(/SESSION_UNVERIFIABLE|could not be verified/i);
 
     const logged = spy.mock.calls.map((c) => String(c[0])).join('\n');
-    expect(logged, 'the fail-open fired and said nothing').toContain('SESSION_FAILOPEN');
-    // The message must name the CONSEQUENCE, not just the operation — "user
-    // lookup failed" reads as a hiccup; the point is that isActive was skipped.
+    expect(logged, 'the refusal fired and said nothing').toContain('SESSION_UNVERIFIABLE');
+    // The message must still name the CONSEQUENCE rather than the operation.
     expect(logged).toMatch(/isActive/);
+    // ⚠️ AND IT MUST SAY THE SESSION SURVIVES. A refusal that reads like a
+    // sign-out sends whoever is on call looking for the wrong thing.
+    expect(logged).toMatch(/NOT ended|NOT cleared/);
     spy.mockRestore();
   });
 

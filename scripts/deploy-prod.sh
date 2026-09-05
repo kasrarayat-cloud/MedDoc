@@ -130,6 +130,13 @@ echo
 # Convention:  docs/foundation/deploys/<UTC-date>-<short-sha>.md
 # ============================================================================
 DEPLOY_SHA="$(git rev-parse --short HEAD)"
+# ⚠️ ruling #181/1 — STAMP THE SHIPPED COMMIT INTO THE IMAGES. A judgement could
+# previously establish only a chain (the tree was at X, the script deploys its
+# tree's HEAD, the image id moved) and could not read the commit back OFF the
+# running container. Exported, not passed, because docker compose reads build
+# args from the environment.
+GIT_REVISION="$(git rev-parse HEAD)"
+export GIT_REVISION
 DECL_DIR="docs/foundation/deploys"
 
 # ⚠️ THE GATE IS SOURCED, NOT CARRIED. `scripts/lib/declaration.sh` is shared

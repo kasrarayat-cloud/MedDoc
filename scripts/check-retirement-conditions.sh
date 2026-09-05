@@ -171,6 +171,7 @@ REGISTRY=(
 "2026-08-21T09:00:00Z|human:needs a PRODUCTION DB READ (has a SECOND template shape certified end to end)|STATED 'when a second SHAPE certifies end-to-end'"
 "2026-08-21T12:20:00Z|relay_closed:F23|INFERRED — states no clause, but its point 2 reads 'The script does not exist yet — F23 builds it', which became FALSE when F23 landed. A false PRESENT-TENSE fact, delivered to every session"
 "2026-08-24T15:25:10Z|none|STATED none — one-shot union notice for a single named PR"
+"2026-09-04T22:05:00Z|file_exists:scripts/check-worktree-resolution.sh|STATED 're-run after the harness fix' — the notice retires once every affected lane has re-run its packages/* measurements. The probe existing is the CONDITION being pointed at, not the retirement itself: the lanes must still re-run. Retire by hand once Design/Admin and Data/Audit confirm, and not before"
 )
 
 # ── read the entries the LAUNCHER counts: `### <ISO8601> — <title>` ──────────

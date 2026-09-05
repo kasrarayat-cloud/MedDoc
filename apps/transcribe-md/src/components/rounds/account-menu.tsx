@@ -43,12 +43,15 @@
 // ⋯-less quiet trigger; only the mechanics are explicit.
 // ============================================================================
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { signOut } from 'next-auth/react';
+
+import { signOutAction } from '@/actions/session';
 
 export function RoundsAccountMenu({ userName }: { userName: string }) {
   const [open, setOpen] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [pending, startSignOut] = useTransition();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuId = useId();
@@ -124,18 +127,45 @@ export function RoundsAccountMenu({ userName }: { userName: string }) {
             role="menuitem"
             className="qm-rounds-account-item qm-rounds-account-item-exit"
             data-testid="rounds-account-signout"
+            disabled={pending}
             onClick={() => {
-              // Same call the legacy shells made — `signOut` from
-              // next-auth/react, callbackUrl `/login`. The server-side
-              // UserSession revoke happens in the `signOut` EVENT
-              // (`lib/nextauth.ts`), not here, so this stays a one-liner and
-              // the revoke cannot be forgotten by a new caller.
-              close(false);
-              void signOut({ callbackUrl: '/login' });
+              // ⚠️ THE COMMENT THAT USED TO BE HERE SAID THE REVOKE "CANNOT BE
+              // FORGOTTEN BY A NEW CALLER", BECAUSE IT LIVED IN THE `signOut`
+              // EVENT. It could not be forgotten and it could not be REACHED:
+              // `events.signOut` runs strictly after `@auth/core`'s CSRF gate,
+              // so a failed CSRF check skipped the revoke AND the audit row
+              // while answering 200. See `actions/session.ts` for the full
+              // chain. A guarantee written in a comment is not a guarantee.
+              //
+              // The server action revokes in-process, so there is no CSRF token
+              // to lose and no 200 that means nothing.
+              setSignOutError(null);
+              startSignOut(async () => {
+                const result = await signOutAction();
+                if (!result.ok) {
+                  // ⚠️ NEVER A SILENT REDIRECT ON FAILURE. The old path sent the
+                  // doctor to /login, which bounced them back to /board still
+                  // signed in — indistinguishable from a successful sign-out
+                  // followed by a fresh visit. The menu STAYS OPEN and says so.
+                  setSignOutError(result.reason);
+                  return;
+                }
+                close(false);
+                window.location.href = '/login';
+              });
             }}
           >
-            Sign out
+            {pending ? 'Signing out…' : 'Sign out'}
           </button>
+          {signOutError ? (
+            <p
+              role="alert"
+              className="qm-rounds-account-error"
+              data-testid="rounds-account-signout-error"
+            >
+              {signOutError}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>
