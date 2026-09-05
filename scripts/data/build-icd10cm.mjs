@@ -86,24 +86,25 @@ const EDITIONS = {
     expect: { billable: 74719, headers: 23467, total: 98186 },
   },
   fy2027: {
-    // ⚠️ LIVE AND UNPINNED. Measured 2026-09-04: HTTP 200, content-length
-    // 2,208,022 — 3,037 bytes larger than FY2026, so the content HAS changed.
-    // Effective 2026-10-01. Everything below that is null must be filled in by
-    // whoever runs the ingestion, from the archive they actually downloaded.
+    // ⚠️ PINNED 2026-09-05 from the archive actually downloaded. HELD, NOT
+    // ACTIVE: FY2027 takes effect 2026-10-01 and the switch lands as its own
+    // declared deploy on that date. Counts are CMS's own, read verbatim from
+    // icd10cm_order_addenda_2027.txt, and reconciled by two independent routes
+    // (the order file's flag column, and the codes file's line count).
     url: 'https://www.cms.gov/files/zip/2027-code-descriptions-tabular-order.zip',
     page: 'https://www.cms.gov/medicare/coding-billing/icd-10-codes',
-    retrieved: null,
-    zipSha256: null,
-    zipBytes: null,
+    retrieved: '2026-09-05',
+    zipSha256: '91c6c9d1117764ce72375a0f3a5493b1725dafbc1ab283b55799076c9e194965',
+    zipBytes: 2208022,
     codesFile: 'icd10cm_codes_2027.txt',
     orderFile: 'icd10cm_order_2027.txt',
-    codesSha256: null,
-    orderSha256: null,
+    codesSha256: '3c0583a38ee0e848f7dc0ac8ce88e8f001bbba8c6385ed825d44d46f6e5297c9',
+    orderSha256: '38981fb2c1226e2b92393cef7d921d2293494dd184b5ad039dde08e4b364265f',
     effectiveFrom: '2026-10-01',
     effectiveTo: '2027-09-30',
     // ⚠️ NOT GUESSED. CMS publishes these in the release's own addenda; read
     // them out of the archive rather than carrying FY2026's forward.
-    expect: null,
+    expect: { billable: 74879, headers: 23524, total: 98403 },
   },
 };
 
@@ -170,7 +171,7 @@ const ok = (label, actual, expected) => {
   if (!good) die(`${label} mismatch — expected ${expected}, measured ${actual}`);
 };
 
-console.log('ICD-10-CM FY2026 ingestion\n');
+console.log(`ICD-10-CM ${editionKey.toUpperCase()} ingestion\n`);
 console.log('[1/7] verifying the source archive against pinned provenance');
 const zipBuf = readFileSync(zipPath);
 ok('zip bytes', zipBuf.length, SOURCE.zipBytes);
@@ -316,15 +317,25 @@ const banner = (what, count, constName) => `// =================================
 export const ${constName} = \``;
 
 console.log('[6/7] emitting generated modules');
-const billableFile = join(OUT_DIR, 'icd10cm-fy2026-billable.generated.ts');
-const headersFile = join(OUT_DIR, 'icd10cm-fy2026-headers.generated.ts');
-const provFile = join(OUT_DIR, 'icd10cm-fy2026-provenance.json');
+// ⚠️ THE OUTPUT IS EDITION-DERIVED, AND IT WAS NOT ALWAYS. Until 2026-09-05
+// these three paths and the two symbol names below were hard-coded to fy2026
+// while the INPUT was parameterised, so `--edition fy2027` overwrote FY2026's
+// tracked files IN PLACE with FY2027 data under FY2026 names — 74,879 codes
+// exported as ICD10CM_FY2026_BILLABLE_RAW, effective 2026-10-01, live 25 days
+// early on a billing surface. Every one of this script's 29 assertions passed,
+// because they check the DATA against CMS and never the DESTINATION.
+const EDITION_UC = editionKey.toUpperCase();
+const billableFile = join(OUT_DIR, `icd10cm-${editionKey}-billable.generated.ts`);
+const headersFile = join(OUT_DIR, `icd10cm-${editionKey}-headers.generated.ts`);
+const provFile = join(OUT_DIR, `icd10cm-${editionKey}-provenance.json`);
+const BILLABLE_SYM = `ICD10CM_${EDITION_UC}_BILLABLE_RAW`;
+const HEADERS_SYM = `ICD10CM_${EDITION_UC}_HEADERS_RAW`;
 
 const billableOut =
-  banner('BILLABLE / valid-for-submission codes', EXPECT.billable, 'ICD10CM_FY2026_BILLABLE_RAW') +
+  banner('BILLABLE / valid-for-submission codes', EXPECT.billable, BILLABLE_SYM) +
   billablePayload + '`;\n';
 const headersOut =
-  banner('HEADER codes — NOT valid for submission', EXPECT.headers, 'ICD10CM_FY2026_HEADERS_RAW') +
+  banner('HEADER codes — NOT valid for submission', EXPECT.headers, HEADERS_SYM) +
   headersPayload + '`;\n';
 const provOut = JSON.stringify({
   ...SOURCE,
@@ -349,8 +360,8 @@ if (checkOnly) {
     ok(label + ' committed count', m[1].split('\n').length, expected.split('\n').length);
     ok(label + ' committed digest', sha(Buffer.from(m[1], 'utf8')), sha(Buffer.from(expected, 'utf8')));
   };
-  cmp(billableFile, 'ICD10CM_FY2026_BILLABLE_RAW', billablePayload, 'billable');
-  cmp(headersFile, 'ICD10CM_FY2026_HEADERS_RAW', headersPayload, 'headers');
+  cmp(billableFile, BILLABLE_SYM, billablePayload, 'billable');
+  cmp(headersFile, HEADERS_SYM, headersPayload, 'headers');
   const committedProv = JSON.parse(readFileSync(provFile, 'utf8'));
   ok('committed provenance billable digest', committedProv.payloadSha256 && committedProv.payloadSha256.billable, sha(Buffer.from(billablePayload, 'utf8')));
   ok('committed provenance headers digest', committedProv.payloadSha256 && committedProv.payloadSha256.headers, sha(Buffer.from(headersPayload, 'utf8')));
@@ -377,8 +388,8 @@ if (!checkOnly) {
     if (!m) die(`${path}: could not re-parse the emitted template literal`);
     return m[1].split('\n');
   };
-  const rb = reread(billableFile, 'ICD10CM_FY2026_BILLABLE_RAW');
-  const rh = reread(headersFile, 'ICD10CM_FY2026_HEADERS_RAW');
+  const rb = reread(billableFile, BILLABLE_SYM);
+  const rh = reread(headersFile, HEADERS_SYM);
   ok('re-read billable', rb.length, EXPECT.billable);
   ok('re-read headers', rh.length, EXPECT.headers);
   ok('re-read billable has no empty member', rb.filter((x) => x === '').length, 0);
