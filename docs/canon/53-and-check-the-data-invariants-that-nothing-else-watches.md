@@ -321,3 +321,30 @@ a doctor really made and **cannot be paired with a confidence**, so counting it
 toward fifty fires the trigger early and buys a re-derivation on fewer labelled
 examples than the ruling asked for. The check counts PAIRABLE, prints all three
 buckets, and refuses if the partition does not reconcile.
+## ⚠️ AND A DATASET WITH AN EXPIRY DATE IS THE SAME SHAPE AGAIN
+
+**Appended 2026-09-05, the second of this pair.**
+
+    bash scripts/check-icd-edition-current.sh  # READ-ONLY. 0 = current, 1 = DUE/STALE/DISAGREE, 2 = can't tell
+
+CMS publishes ICD-10-CM by fiscal year. FY2026 is effective until
+**2026-09-30**; on 2026-10-01 every code in `ICD10_ALLOWLIST` becomes a
+previous-year code.
+
+⚠️ **AND EVERY GATE STAYS GREEN THROUGH IT.** The ingestion gates assert
+FY2026's counts against FY2026's data — `74_719`, `23_467`, `98_186` are
+hard-coded across three test files — so a stale set is indistinguishable from a
+correct one to everything that currently runs. The cost lands on a billing
+surface: deleted codes still accepted, added codes still refused, and a code
+whose billable/header status flipped handled wrongly in both directions.
+
+⚠️ **IT CROSS-CHECKS TWO COPIES OF ONE FACT, BECAUSE THERE ARE TWO.** The
+effective window is written in `icd10cm-<edition>-provenance.json` AND repeated
+in prose in `ICD10_EDITION`. Two copies drift, silently, because nothing reads
+them together. A disagreement is reported as a finding rather than resolved by
+picking one.
+
+**It fires with LEAD TIME, not on the expiry date** — default 30 days — because
+the next ingestion is a six-step job that includes re-certifying every twin
+whose mapping names a code that changed status. On the day it landed it
+reported **DUE, 25 days left**, which is the answer that made it worth writing.
