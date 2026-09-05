@@ -844,3 +844,28 @@ describe('#193 — KEEP IS NARRATIVE-ONLY, because skipping a write is itself a 
     expect(block).not.toMatch(/blankEligible:\s*'unevaluated'/);
   });
 });
+
+describe('#193 — the offer is SHOWN, with its sentence', () => {
+  it('(40) ⚠️ THE CONFIRM SCREEN DISCLOSES A KEEP AND QUOTES THE TEXT IT WILL PRINT', () => {
+    // ⚠️ WITHOUT THIS THE RULING'S SAFETY IS UNDELIVERABLE. #193 routes a keep
+    // to a HUMAN because printing template prose on a signed note is a clinical
+    // assertion no automated step may make. Round two measured the confirm
+    // screen rendering NEITHER the policy NOR the sentence — zero hits for
+    // `unmentionedPolicy` or `scaffoldText` in any `.tsx` — so `confirmed()`
+    // carried the keep through on the same click that confirmed the CONCEPT.
+    // The doctor authorised text they had never been shown. That is consent
+    // theatre, and it fails in the direction the ruling exists to prevent.
+    const src = readFileSync(
+      join(__dirname, '../../../app/settings/note-format/native-template-manager.tsx'),
+      'utf-8',
+    );
+    // the condition must exist and must not be short-circuited
+    const line = src.split('\n').find((l) => l.includes("m.unmentionedPolicy === 'keep'"));
+    expect(line, 'the confirm screen must branch on a declared keep').toBeDefined();
+    expect(line!.trim().startsWith('{m.unmentionedPolicy === ')).toBe(true);
+    // ⚠️ AND IT MUST QUOTE THE SENTENCE — "this field keeps its default" is not
+    // something a doctor can evaluate.
+    expect(src).toContain('f.field.scaffoldText');
+    expect(src).toContain('Keeps your template');
+  });
+});
