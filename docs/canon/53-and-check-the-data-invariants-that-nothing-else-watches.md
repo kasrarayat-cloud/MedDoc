@@ -293,3 +293,31 @@ frozen `cptCodes.em.signedCode` are three different findings and only the first
 is a routine clear. Remediation is a deliberate transactional act with an
 abort-on-mismatch guard and an audit row, never a side effect of a check.
 
+
+---
+
+## ⚠️ AND A RULING'S OWN DUE DATE IS A DATA INVARIANT NOBODY WAS WATCHING
+
+**Appended 2026-09-05.** The list above watches for states that are WRONG. This
+adds one that watches for a moment that has ARRIVED — and the argument is the
+same, because both are invisible until something looks.
+
+    bash scripts/check-icd-rederivation-trigger.sh  # READ-ONLY. 0 = not yet owed, 1 = DUE, 2 = can't tell
+
+Ruling #185 fixes the ICD auto-accept threshold at **0.90** and labels it
+SPECIFICATION-DERIVED — it comes from the L7a prompt's own *"0.9 or above =
+explicit diagnosis statement"* clause, a statement about what the model was
+ASKED to mean rather than a measurement of how often it is right. The ruling
+then owes a **re-derivation after 50 real doctor decisions**, and on the day it
+was written the T9 recon measured **zero** decisions against 58 visits.
+
+**A due date with no watcher is a wish.** Nothing in the codebase would ever
+have said *"the fifty are here."*
+
+⚠️ **AND THE NUMBER THAT GATES IS NOT THE OBVIOUS ONE.** A re-derivation needs
+`(confidence, outcome)` PAIRS. A decision whose code has left that visit's
+proposals — the `orphaned` bucket in `lib/icd-decisions.ts` — is a real decision
+a doctor really made and **cannot be paired with a confidence**, so counting it
+toward fifty fires the trigger early and buys a re-derivation on fewer labelled
+examples than the ruling asked for. The check counts PAIRABLE, prints all three
+buckets, and refuses if the partition does not reconcile.
