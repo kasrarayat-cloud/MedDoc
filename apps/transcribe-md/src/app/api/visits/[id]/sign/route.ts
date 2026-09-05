@@ -707,6 +707,56 @@ export const POST = withApiHandler<{ id: string }>(
       // that is how a formatting concern becomes a database incident. Only the
       // PRECEDENCE is applied inside — `override.code ?? engine.code`, the same
       // projection the rail and the gate use.
+      /**
+       * ⚠️ A SERIALIZATION FAILURE IS NOT A VANISHED MANIFEST — RULING #187(a).
+       *
+       * This transaction is `Serializable`, and a coding decision on the same
+       * visit is enough to make Postgres abort it with SQLSTATE **40001**
+       * (`could not serialize access due to concurrent update`). Prisma
+       * surfaces that as `P2034`.
+       *
+       * That abort used to fall into the manifest-fallback catch below, which
+       * signs the note **STYLED** and stamps `frozen_manifest_vanished`. Both
+       * halves are wrong and neither is recoverable:
+       *
+       *   · the manifest never vanished — `resolveFrozenPointer` had just
+       *     returned it, and the retry discards it;
+       *   · a visit signed styled is styled FOREVER (canon 02: there is no
+       *     re-attestation path), so a doctor loses their own letterhead
+       *     because somebody clicked a code at the wrong moment;
+       *   · and the audit row plus the doctor-facing notice both name a cause
+       *     that did not happen, which is worse than no reason at all.
+       *
+       * 40001 is the one error class here that is EXPECTED and RETRYABLE — it
+       * is how Serializable reports "take your snapshot again", and the retry
+       * re-reads everything because `signWrite` is the whole transaction.
+       */
+      const isSerializationFailure = (err: unknown): boolean => {
+        // ⚠️ THE CODE IS READ STRUCTURALLY, NOT THROUGH `instanceof` ALONE.
+        //
+        // `err instanceof Prisma.PrismaClientKnownRequestError` is the obvious
+        // test and it is not sufficient: `instanceof` compares constructor
+        // identity, and a Prisma error that crosses a bundling boundary — two
+        // copies of the client, a re-export, a mocked module — is the right
+        // shape with the wrong prototype. Reading `.code` answers the question
+        // actually being asked. `P2034` is unambiguous: "Transaction failed due
+        // to a write conflict or a deadlock".
+        const code = (err as { code?: unknown } | null)?.code;
+        if (code === 'P2034') return true;
+
+        // ⚠️ AND THE RAW SQLSTATE, because the driver does not always map it —
+        // and because P2034's MESSAGE does not contain `40001` at all, so a
+        // message-only check would have missed the mapped form entirely. The
+        // two branches cover different populations; neither subsumes the other.
+        // Matched as a WORD and as postgres's own sentence, never as a bare
+        // substring — `40001` alone would match an id or a byte count.
+        const m = err instanceof Error ? err.message : String(err);
+        return /\b40001\b/.test(m) || /could not serialize access/i.test(m);
+      };
+
+      /** Retries exhausted. Refuse loudly; never downgrade the document. */
+      class SignSerializationExhausted extends Error {}
+
       class EmChangedWhileSigning extends Error {
         constructor(readonly emFrom: string, readonly emTo: string) {
           super('EM_CHANGED_WHILE_SIGNING');
@@ -903,8 +953,45 @@ export const POST = withApiHandler<{ id: string }>(
           // Another actor produced it. The downgrade notice would be a lie.
           nativeFreeze = { state: 'regenerated', manifestId: pointer };
         }
-        updated = await signWrite(pointer);
+        // ⚠️ BOUNDED RETRY ON 40001 ONLY, AND IT KEEPS THE POINTER.
+        //
+        // Three attempts. Each re-runs the WHOLE transaction, so it re-reads
+        // the visit, the coding columns and the E/M record — a retry that
+        // reused the old snapshot would defeat the isolation level it exists to
+        // satisfy. The pointer is deliberately unchanged: it was resolved from
+        // the database moments ago, and if the NOTE moved underneath, the CAS
+        // on `soapVersion` returns `count: 0` and the existing race-loser path
+        // answers precisely. Nothing here can sign a stale note.
+        const MAX_SERIALIZATION_ATTEMPTS = 3;
+        for (let attempt = 1; ; attempt += 1) {
+          try {
+            updated = await signWrite(pointer);
+            break;
+          } catch (err) {
+            if (!isSerializationFailure(err)) throw err;
+            if (attempt >= MAX_SERIALIZATION_ATTEMPTS) {
+              log.warn(
+                'api:visits:sign',
+                'serialization failure persisted — REFUSING, not signing styled',
+                { visitId, attempts: attempt }
+              );
+              // ⚠️ REFUSE, DO NOT DOWNGRADE. Err toward the edge — the edge has
+              // a fence. A refusal is loud, recoverable and honest; a styled
+              // signature is silent, permanent, and blames a manifest that was
+              // there the whole time.
+              throw new SignSerializationExhausted();
+            }
+            log.info('api:visits:sign', 'serialization failure — retrying the signature', {
+              visitId,
+              attempt,
+            });
+            await new Promise((r) => setTimeout(r, 25 * attempt));
+          }
+        }
       } catch (err) {
+        // ⚠️ NEITHER SENTINEL IS A MANIFEST FAILURE. Both are rethrown so the
+        // outer handler answers them precisely, exactly as the E/M refusal is.
+        if (err instanceof SignSerializationExhausted) throw err;
         // ⚠️ THE E/M REFUSAL IS NOT A MANIFEST FAILURE AND MUST NOT BE
         // RETRIED STYLED. Falling through here would re-run the identical
         // transaction, hit the identical divergence, and — because the second
@@ -926,6 +1013,35 @@ export const POST = withApiHandler<{ id: string }>(
         updated = await signWrite(null);
        }
       } catch (err) {
+        if (err instanceof SignSerializationExhausted) {
+          // ⚠️ 409, LIKE EVERY OTHER SIGN RACE ON THIS ROUTE. A retryable write
+          // conflict used to become an internal 500 with the note left READY,
+          // on a route whose whole job is to be precise about why a signature
+          // did not happen. The doctor can simply sign again.
+          // ⚠️ NO AUDIT ROW, AND THAT IS DELIBERATE — TWICE OVER.
+          //
+          // First, nothing happened: this is a REFUSAL, the visit is still
+          // READY, and the route's existing sign-race refusal one branch down
+          // (`sign race lost — please refresh and retry`) writes no row either.
+          // Matching it keeps one class of event recorded one way.
+          //
+          // Second, and this is the reason it was not simply added: there is no
+          // sign-refusal member in `AuditAction`, and minting one is THREE
+          // edits — the TS union, the Prisma enum, and its own migration. This
+          // fix rides a COMPOSED CODE-ONLY DEPLOY as a passenger; adding an
+          // enum value would make that deploy migration-carrying, which is a
+          // change to somebody else's declared act. The `log.warn` above
+          // carries the event, and the doctor sees the refusal immediately.
+          return NextResponse.json(
+            {
+              ok: false,
+              error:
+                'Another change landed on this visit while you were signing — please sign again.',
+              code: 'SIGN_RACE_LOST',
+            },
+            { status: 409 }
+          );
+        }
         if (!(err instanceof EmChangedWhileSigning)) throw err;
         // ⚠️ THE SAME `code` THE ENTRY GATE USES, DELIBERATELY.
         //
