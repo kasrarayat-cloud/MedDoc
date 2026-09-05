@@ -10,6 +10,7 @@
   "orderSha256": "6dc95c9c7e96c734806e1682f4bf9df76251d60e99199bba0d375ba3dd11026b",
   "effectiveFrom": "2025-10-01",
   "effectiveTo": "2026-09-30",
+  "edition": "fy2026",
   "counts": {
     "billable": 74719,
     "headers": 23467,
