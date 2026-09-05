@@ -959,19 +959,19 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     // clears a null value's text container, so an honestly-unfilled field
     // renders EMPTY — the template's placeholder does not survive into a signed
     // document. `Assessment narrative` (w:id 102) carries a concept no fact
-    // names, so it is `default_kept`, and every withheld-denial arm below
+    // names, so it is `not_mentioned`, and every withheld-denial arm below
     // asserts EXACTLY this same rendering. That is what makes "a withheld
     // denial is a blank" a claim about the document rather than about a status.
     const { resolution: unmapped } = affirmed.byLabel('Assessment narrative');
-    // ⚠️ #191 MOVED THIS STATUS AND MOVED NOTHING ELSE. It reads `default_kept`
-    // now because the encounter WAS evaluated against this field and nothing in
-    // it spoke to the concept — the stronger of the two claims that used to share
-    // the word `not_mentioned`. The RENDER assertion below is unchanged and is
-    // the one that matters: `createFieldPatches` runs BEFORE any status is
-    // consulted, so both statuses reach the same zero-patch branch and the
-    // document is byte-identical. The status got more honest; the doctor's
-    // document did not move.
-    expect(unmapped.status).toBe('default_kept');
+    // ⚠️ #192 RETURNED THIS ARM TO ITS ORIGINAL FORM, AND THAT IS THE RULING
+    // WORKING. #191 briefly made this `default_kept`, on the theory that a
+    // scaffold could be recognised from its content. It cannot -- the falsifying
+    // case is pinned in `gate-191-kept-default-survives-render`. Under #192 a
+    // kept default requires an EXPLICIT `unmentionedPolicy: 'keep'` on the
+    // mapping, this fixture declares none, and so the field behaves exactly as
+    // it did before the slice began. An undeclared control is unchanged by all
+    // of #191/#192, which is the fail-closed property the ruling buys.
+    expect(unmapped.status).toBe('not_mentioned');
     expect(unmapped.value).toBeNull();
     expect(renderedTextOf(controlById(xml, '102'))).toBe(BLANK);
   });
@@ -1465,15 +1465,15 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     //     predicate could not tell them apart.
     expect(side.resolution.status).toBe('denial_withheld');
     expect(side.resolution.value).toBeNull();
-    // ⚠️ #191 MOVED THIS STATUS AND MOVED NOTHING ELSE. It reads `default_kept`
-    // now because the encounter WAS evaluated against this field and nothing in
-    // it spoke to the concept — the stronger of the two claims that used to share
-    // the word `not_mentioned`. The RENDER assertion below is unchanged and is
-    // the one that matters: `createFieldPatches` runs BEFORE any status is
-    // consulted, so both statuses reach the same zero-patch branch and the
-    // document is byte-identical. The status got more honest; the doctor's
-    // document did not move.
-    expect(category.resolution.status).toBe('default_kept');
+    // ⚠️ #192 RETURNED THIS ARM TO ITS ORIGINAL FORM, AND THAT IS THE RULING
+    // WORKING. #191 briefly made this `default_kept`, on the theory that a
+    // scaffold could be recognised from its content. It cannot -- the falsifying
+    // case is pinned in `gate-191-kept-default-survives-render`. Under #192 a
+    // kept default requires an EXPLICIT `unmentionedPolicy: 'keep'` on the
+    // mapping, this fixture declares none, and so the field behaves exactly as
+    // it did before the slice began. An undeclared control is unchanged by all
+    // of #191/#192, which is the fail-closed property the ruling buys.
+    expect(category.resolution.status).toBe('not_mentioned');
     expect(category.resolution.value).toBeNull();
 
     // THE REAL BRIDGE, driven the way `fill-engine` drives it: the compiled

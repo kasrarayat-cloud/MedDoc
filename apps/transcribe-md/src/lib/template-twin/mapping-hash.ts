@@ -26,9 +26,11 @@ import { canonicalSha256 } from './canonical';
  * not a cost anyone should pay for a value identical to the default.
  */
 function forAttestation(mapping: SemanticMapping): SemanticMapping {
-  if (mapping.unmentionedPolicy !== 'keep') return mapping;
-  const { unmentionedPolicy: _keep, ...rest } = mapping;
-  return rest as SemanticMapping;
+  if (mapping.unmentionedPolicy == null) {
+    const { unmentionedPolicy: _unset, ...rest } = mapping;
+    return rest as SemanticMapping;
+  }
+  return mapping;
 }
 
 export function templateTwinMappingsSha256(

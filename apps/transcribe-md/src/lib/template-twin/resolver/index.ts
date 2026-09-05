@@ -305,13 +305,19 @@ function missingResolution(
   // — every compiled version already in the database is in that state. Absent
   // must therefore behave exactly as today (no kept default), which is what an
   // explicit `=== true` gives and what `!== false` would silently invert.
+  // ⚠️ #192 — `=== 'keep'`, AN EXPLICIT DECLARATION, NEVER INFERRED. `field
+  // .scaffolded` is COMPILED METADATA and is deliberately NOT consulted here:
+  // it informs the mapping PROPOSER at confirmation time and never the render.
+  // Three content-derived formulations of "is this a scaffold?" were falsified,
+  // the last one printing `Enter assessment` onto a rendered note.
+  //
+  // Absence is fail-closed by construction: no declaration means today's
+  // bounded clear, so a prompt can never print through a field nobody ruled on.
+  const declaredKeep = mapping.unmentionedPolicy === 'keep';
   const unmentionedScaffold =
-    field.scaffolded === true &&
-    conceptUnmatched &&
-    reason === undefined &&
-    facts.length > 0;
+    conceptUnmatched && reason === undefined && facts.length > 0;
 
-  if (unmentionedScaffold && !requiresInput && mapping.unmentionedPolicy !== 'omit') {
+  if (declaredKeep && unmentionedScaffold && !requiresInput) {
     return makeResolution(
       field.fieldId,
       'default_kept',

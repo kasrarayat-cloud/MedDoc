@@ -146,6 +146,18 @@ export const TemplateFieldSchema = z
      * reconciling exactly to the total in both.
      */
     scaffolded: z.boolean().optional(),
+    /**
+     * ⚠️ #192 — THE SENTENCE THE PROPOSER SHOWS AS ITS REASON. A doctor
+     * confirming `keep` is agreeing that this exact text prints when the
+     * encounter says nothing, so they must SEE it. Without this the proposal
+     * would be "keep this control's content" about content nobody displayed.
+     *
+     * Blank-template prose, never patient data — the same class as the tracked
+     * blank fixtures. Capped, and EXCLUDED from `structureSha256` with
+     * `scaffolded`, because both are pure functions of bytes that hash already
+     * covers.
+     */
+    scaffoldText: z.string().max(2000).optional(),
     required: z.boolean(),
     unknownPolicy: z.enum(['blank', 'not_documented', 'requires_input']),
     clinicallyMaterial: z.boolean(),
@@ -382,7 +394,7 @@ export const SemanticMappingSchema = z
      * MEANS KEEP, and the column's own `DEFAULT 'keep'` carries it in the
      * database.
      */
-    unmentionedPolicy: z.enum(['keep', 'omit']).optional(),
+    unmentionedPolicy: z.enum(['keep', 'omit']).nullish(),
     practiceDefault: z.string().max(500).nullable(),
     status: TemplateTwinDetectionStatusSchema,
   })

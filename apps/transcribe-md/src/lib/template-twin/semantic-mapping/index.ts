@@ -260,6 +260,21 @@ export function fallbackSemanticMappings(
         blankPolicy: field.unknownPolicy,
         unknownPolicy: field.unknownPolicy,
         practiceDefault: null,
+        // ⚠️ #192 — PROPOSED, NEVER DECIDED. A control compiled as a scaffold
+        // carries the template's own default content, and the doctor may want
+        // that clause to stand when an encounter says nothing about it. So the
+        // proposer OFFERS `keep`; the render consults only what was CONFIRMED.
+        //
+        // ⚠️ THE DISTINCTION IS THE WHOLE RULING. Deciding this from content at
+        // render time was falsified three times, the last one printing
+        // `Enter assessment` onto a rendered note. As a PROPOSAL the same
+        // signal is safe: a wrong offer is visible next to the sentence itself
+        // (`field.scaffoldText`) and a human rejects it. Same shape as
+        // `conceptScope` — proposed, confirmed, never decided at render.
+        //
+        // An unconfirmed or rejected proposal leaves the column NULL, which is
+        // the bounded clear. Absence stays fail-closed.
+        ...(field.scaffolded === true ? { unmentionedPolicy: 'keep' as const } : {}),
         // ⚠️ THE SAME CLASSIFIER THE MODEL PATH USES, FOR THE SAME REASON.
         // `classifyFieldSource` reads the COMPILER's label and the field's own
         // shape — it is not an inference, so it does not belong to the model

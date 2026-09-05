@@ -3215,7 +3215,7 @@ model TemplateTwinSemanticMapping {
   /// standing and earns `default_kept` (which requires a citation); `omit`
   /// clears it through the proven bounded clear. Defaults to `keep` so no
   /// existing mapping changes behaviour.
-  unmentionedPolicy String @default("keep")
+  unmentionedPolicy String?
   practiceDefault  String?
   mappingStatus    TemplateTwinDetectionStatus @default(NEEDS_CONFIRMATION)
   proposedByModel  String?

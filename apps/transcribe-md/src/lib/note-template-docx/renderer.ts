@@ -1390,35 +1390,26 @@ function contentControlPatches(
   //
   // Returning here is also what puts the field on the `patches.length === 0`
   // branch above, which is the only place the `kept_default` proof is emitted.
-  // ⚠️ #191's `keep` HALF IS NOT ACTIVATED HERE, AND THAT IS A DELIBERATE STOP.
-  // The code to keep a scaffold is one early return -- `if (value === null &&
-  // status === 'default_kept') return { patches: [] }` -- and it WORKED: a
-  // scaffolded control's sentence survived the render while `not_mentioned`
-  // still cleared it, both measured.
+  // ⚠️ #192 — A KEPT DEFAULT RETURNS ZERO PATCHES. This is the whole delivery
+  // of the keep half, and it reaches a field ONLY when the doctor's mapping
+  // DECLARED `unmentionedPolicy: 'keep'`. It is never inferred from content:
+  // three content-derived formulations were falsified, the last one printing
+  // `Enter assessment` onto a rendered note.
   //
-  // It is not shipped because THE SCOPE CANNOT BE ESTABLISHED. Keeping is only
-  // safe for a genuine scaffold -- the template's own clinical prose -- and
-  // every attempt to tell that apart from a PROMPT has been falsified:
+  // ⚠️ RETURNING IS NOT THE SAME AS SKIPPING THE CLEAR, AND THAT MISTAKE COST
+  // THIS SLICE ITS FIRST ATTEMPT. Guarding only the bounded clear let the field
+  // FALL THROUGH to the ordinary write below, which writes `displayValue` — the
+  // empty string for a null — and blanked the control by a second route. The
+  // tell was arithmetic: one patch on a part that was meant to be untouched.
+  // Returning here also puts the field on the `patches.length === 0` branch,
+  // which is the only place the `kept_default` proof is emitted.
   //
-  //   · text heuristic ("Choose an item.") -- canon 83, blocked 28 of 28
-  //     dropdowns of the real customer form; the English-only repair blocked
-  //     all 28 again in fr/de/es.
-  //   · `w:showingPlcHdr`, the signal the DOCUMENT declares -- measured 28/28
-  //     on `WM IOV Template.docx`, which looked conclusive. It is a POPULATION
-  //     FACT, not a property of the format: this repository's own synthetic
-  //     template carries `Enter assessment` AND `Choose an item.` with no such
-  //     flag. Activating the keep half printed **"Enter assessment"** onto a
-  //     rendered note -- an instruction to the user, on a document a doctor
-  //     signs.
-  //
-  // That is the four-times-falsified clearing-rule family arriving from the
-  // other side, and the standing answer is to ESCALATE rather than build the
-  // next layer. The owner has the counterexample and the question: whether
-  // `keep` becomes an EXPLICIT per-field opt-in rather than the default, since
-  // content cannot be classified.
-  //
-  // Everything else in #191 ships: the count fix, the carried column, the
-  // shared omit predicate, and `scaffolded` as compiled metadata.
+  // ⚠️ AND IT ONLY EVER SKIPS A DELETION. The failure direction is a template's
+  // own declared sentence surviving, never a doctor's dictated text being
+  // removed.
+  if (resolution.value === null && resolution.status === 'default_kept') {
+    return { patches: [], boundedClear: false, blankEligible: 'unevaluated' };
+  }
   if (resolution.value === null) {
     const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId);
     if (cleared) {

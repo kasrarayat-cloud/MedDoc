@@ -104,6 +104,10 @@ function mapping(
     unknownPolicy: 'blank',
     practiceDefault: null,
     status: 'certified',
+    // ⚠️ #192 — DECLARED, NOT INFERRED. `keep` is now an explicit per-field
+    // decision; absence means today's bounded clear. These fixtures exercise
+    // the keep path, so they must say so. Arm (4) covers absence.
+    unmentionedPolicy: 'keep' as const,
     ...overrides,
   };
 }
@@ -184,12 +188,25 @@ describe('#191 — the scaffolded-field policy has an EMITTER', () => {
     expect(resolution.selectedOptionOrdinal).toBeNull();
   });
 
-  it('(4) KEEP IS THE DEFAULT — a mapping that never mentions the policy keeps', () => {
-    // The owner's inversion: keep is the urgent half, so absence of a policy
-    // must not clear a doctor's prose. `scenario()` sets no policy at all.
-    const { mappings, resolution } = scenario();
-    expect(mappings[0]!.unmentionedPolicy).toBeUndefined();
-    expect(resolution.status).toBe('default_kept');
+  it('(4) ⚠️ ABSENCE IS NOT KEEP — an undeclared policy takes the bounded clear', () => {
+    // ⚠️ THIS ARM IS INVERTED FROM ITS #191 FORM, AND THE INVERSION IS THE
+    // RULING. It used to assert that a mapping mentioning no policy KEEPS.
+    // #192 makes absence mean today's behaviour, fail-closed: a control nobody
+    // ruled on can never print its content onto a note. The falsifying case is
+    // pinned in `gate-191-kept-default-survives-render`: a control carrying
+    // `Enter assessment` with no placeholder flag, which the content-derived
+    // predicate called a scaffold.
+    const scaffold = field('1', { fieldId: `ttf_${'1'.repeat(24)}` });
+    const undeclared = mapping(scaffold, 'ros.cardiovascular');
+    delete (undeclared as { unmentionedPolicy?: string }).unmentionedPolicy;
+    const [r] = resolveTemplateFields({
+      fields: [scaffold],
+      mappings: [undeclared],
+      facts: [factFor('2', 'chief_complaint', 'Patient here for a rash.')],
+      allowUncertifiedForSyntheticTest: true,
+    });
+    expect(r!.status).toBe('not_mentioned');
+    expect(r!.reasonCode).toBe('fact_not_mentioned');
   });
 
   it('(5) OMIT clears, and says the clearing was DELIBERATE', () => {
@@ -454,47 +471,60 @@ describe('#191 — THE COLUMN WAS DEAD IN BOTH DIRECTIONS', () => {
     expect(r!.reasonCode).toBe('omitted_unsupported_default');
   });
 
-  it('(20) ⚠️ `keep` AND ABSENT HASH IDENTICALLY; `omit` DOES NOT', () => {
+  it('(20) ⚠️ ONLY AN UNSET POLICY IS ELIDED — `keep` AND `omit` BOTH MOVE THE SHA', () => {
     // Carrying the column without this normalisation moves every certified sha
     // and throws TEMPLATE_PROVENANCE_MISMATCH on every certified template —
     // measured, and it would have taken the one active production form with it.
     // `omit` moving the sha is correct: the document's behaviour changed.
     const scaffold = field('1', { fieldId: `ttf_${'1'.repeat(24)}` });
+    // ⚠️ INVERTED FROM ITS #191 FORM. Then, `keep` and absent were
+    // SEMANTICALLY IDENTICAL, so hashing them the same was consistency. #192
+    // makes them OPPOSITES, and hashing them the same would let a doctor's
+    // declared `keep` be removed from a certified mapping WITHOUT MOVING THE
+    // ATTESTATION — a certificate attesting to behaviour it never saw.
+    //
+    // ⚠️ AND NO CERTIFIED SHA MOVES ANYWAY, by a better mechanism: the column
+    // is NULLABLE WITH NO DEFAULT, so every pre-existing row is NULL rather
+    // than `'keep'`, and NULL is what gets elided.
     const absent = mapping(scaffold, 'ros.cardiovascular');
+    delete (absent as { unmentionedPolicy?: string }).unmentionedPolicy;
     const keep = mapping(scaffold, 'ros.cardiovascular', { unmentionedPolicy: 'keep' });
     const omit = mapping(scaffold, 'ros.cardiovascular', { unmentionedPolicy: 'omit' });
-    expect(templateTwinMappingsSha256([keep])).toBe(templateTwinMappingsSha256([absent]));
+    expect(templateTwinMappingsSha256([keep])).not.toBe(templateTwinMappingsSha256([absent]));
     expect(templateTwinMappingsSha256([omit])).not.toBe(templateTwinMappingsSha256([absent]));
+    expect(templateTwinMappingsSha256([keep])).not.toBe(templateTwinMappingsSha256([omit]));
   });
 });
 
 describe('#191 — THE SCAFFOLD SCOPE, which the pass found unimplemented', () => {
-  it('(21) ⚠️ A NON-SCAFFOLD NEVER EARNS A KEPT DEFAULT, AND ABSENT FAILS CLOSED', () => {
-    // The ruling scopes the whole policy to scaffolded controls -- "an empty
-    // underscore run is not scaffolded; there is nothing to keep or omit" --
-    // and that scope was not implemented, so a kept default applied to
-    // checkboxes and dates alike and would have kept a dropdown's
-    // `Choose an item.` on a signed note.
+  it('(21) ⚠️ SCAFFOLDEDNESS DOES NOT DECIDE ANYTHING AT RENDER — only the declaration does', () => {
+    // ⚠️ REWRITTEN BY #192, AND THE REWRITE IS THE RULING. Its #191 form
+    // asserted that a NON-scaffold never keeps, which made `scaffolded` a
+    // render-time decision. It is now COMPILED METADATA that informs the
+    // mapping PROPOSER and nothing else -- the `conceptScope` pattern:
+    // proposed, confirmed, never decided at render.
     //
-    // ⚠️ THE THIRD STATE IS THE ONE THAT MATTERS. `scaffolded` is optional
-    // because every compiled IR already in the database predates it; ABSENT
-    // means the compiler could not say, and must behave exactly as before.
-    // `!== false` would have silently inverted that for every stored template.
-    const base = { fieldId: `ttf_${'1'.repeat(24)}` };
-    const cases: Array<[string, boolean | undefined]> = [
-      ['explicitly not a scaffold', false],
-      ['absent — an IR compiled before this field existed', undefined],
+    // So both directions must hold: a scaffolded control with no declaration
+    // does NOT keep, and a NON-scaffolded control with a declaration DOES.
+    // Together they say the render consults the declaration alone.
+    const cases: Array<[string, boolean | undefined, 'keep' | undefined, string]> = [
+      ['scaffolded but undeclared', true, undefined, 'not_mentioned'],
+      ['not scaffolded but DECLARED', false, 'keep', 'default_kept'],
+      ['scaffoldedness absent, declared', undefined, 'keep', 'default_kept'],
     ];
-    for (const [label, flag] of cases) {
-      const f = field('1', flag === undefined ? base : { ...base, scaffolded: flag });
+    for (const [label, flag, policy, expected] of cases) {
+      const f = field('1', { fieldId: `ttf_${'1'.repeat(24)}` });
       if (flag === undefined) delete (f as { scaffolded?: boolean }).scaffolded;
+      else (f as { scaffolded?: boolean }).scaffolded = flag;
+      const m = mapping(f, 'ros.cardiovascular');
+      if (policy === undefined) delete (m as { unmentionedPolicy?: string }).unmentionedPolicy;
+      else (m as { unmentionedPolicy?: string }).unmentionedPolicy = policy;
       const [r] = resolveTemplateFields({
-        fields: [f],
-        mappings: [mapping(f, 'ros.cardiovascular')],
+        fields: [f], mappings: [m],
         facts: [factFor('2', 'chief_complaint', 'Patient here for a rash.')],
         allowUncertifiedForSyntheticTest: true,
       });
-      expect(`${label}: ${r!.status}`).toBe(`${label}: not_mentioned`);
+      expect(`${label}: ${r!.status}`).toBe(`${label}: ${expected}`);
     }
   });
 
@@ -535,7 +565,50 @@ describe('#191 — THE STRUCTURE HASH MUST NOT MOVE', () => {
     const call = src.slice(src.indexOf('const structureSha256 = canonicalSha256('));
     const body = call.slice(0, call.indexOf('});'));
     // the fields entry must strip it rather than pass `state.fields` whole
-    expect(body).toMatch(/scaffolded:\s*_\w+,\s*\.\.\.rest/);
+    // BOTH derived members are excluded — `scaffoldText` was added by #192 and
+    // this arm caught its omission from the strip on the first run.
+    expect(body).toMatch(/scaffolded:\s*_\w+/);
+    expect(body).toMatch(/scaffoldText:\s*_\w+/);
+    expect(body).toMatch(/\.\.\.rest/);
     expect(body).not.toMatch(/fields:\s*state\.fields,/);
+  });
+});
+
+describe('#192 — the proposer OFFERS keep; the render obeys only what was CONFIRMED', () => {
+  it('(24) ⚠️ THE PROPOSER OFFERS `keep` FOR A SCAFFOLD, AND CARRIES THE SENTENCE AS ITS REASON', async () => {
+    // A doctor confirming `keep` agrees that this exact text prints when the
+    // encounter says nothing, so the proposal must SHOW it. Without
+    // `scaffoldText` the offer would be "keep this control's content" about
+    // content nobody displayed.
+    const { fallbackSemanticMappings } = await import('../semantic-mapping');
+    const scaffold = field('1', { fieldId: `ttf_${'1'.repeat(24)}` });
+    (scaffold as { scaffoldText?: string }).scaffoldText =
+      'The patient denies chest pain.';
+    const [proposed] = fallbackSemanticMappings({ fields: [scaffold] });
+    expect(proposed?.unmentionedPolicy).toBe('keep');
+    expect(scaffold.scaffoldText).toContain('denies chest pain');
+  });
+
+  it('(25) ⚠️ AND IT DOES NOT OFFER IT FOR A NON-SCAFFOLD', async () => {
+    const { fallbackSemanticMappings } = await import('../semantic-mapping');
+    const plain = field('1', { fieldId: `ttf_${'1'.repeat(24)}` });
+    delete (plain as { scaffolded?: boolean }).scaffolded;
+    const [proposed] = fallbackSemanticMappings({ fields: [plain] });
+    expect(proposed?.unmentionedPolicy ?? null).toBeNull();
+  });
+
+  it('(26) ⚠️ AN UNCONFIRMED PROPOSAL IS A NULL COLUMN, AND NULL IS THE BOUNDED CLEAR', () => {
+    // The fail-closed property in one assertion: a proposal that nobody
+    // confirmed leaves the column unset, and unset never keeps. A rejected
+    // offer therefore cannot print a prompt onto a note.
+    const scaffold = field('1', { fieldId: `ttf_${'1'.repeat(24)}` });
+    const unconfirmed = mapping(scaffold, 'ros.cardiovascular');
+    delete (unconfirmed as { unmentionedPolicy?: string }).unmentionedPolicy;
+    const [r] = resolveTemplateFields({
+      fields: [scaffold], mappings: [unconfirmed],
+      facts: [factFor('2', 'chief_complaint', 'Patient here for a rash.')],
+      allowUncertifiedForSyntheticTest: true,
+    });
+    expect(r!.status).toBe('not_mentioned');
   });
 });

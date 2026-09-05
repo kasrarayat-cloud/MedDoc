@@ -198,7 +198,10 @@ function fieldCreateInput(
           approvedSynonyms: asJson(mapping.approvedSynonyms),
           required: mapping.required,
           blankPolicy: mapping.blankPolicy,
-          unmentionedPolicy: mapping.unmentionedPolicy ?? 'keep',
+          // ⚠️ #192 — NO COERCION. `?? 'keep'` would have opted every mapping
+          // nobody ruled on into keeping, which is exactly the inference this
+          // ruling forbids. Absent stays absent, and absent is fail-closed.
+          unmentionedPolicy: mapping.unmentionedPolicy ?? null,
           unknownPolicy: mapping.unknownPolicy,
           practiceDefault: null,
           mappingStatus: enumStatus(mapping.status),

@@ -106,10 +106,12 @@ function fromPersistedMapping(
     // ⚠️ THE KEY IS OMITTED, NOT SET TO `undefined`. An explicit undefined
     // survives the Zod parse and `canonicalSha256` refuses it outright
     // ("Canonical JSON does not support undefined object values"), which broke
-    // six certification arms. Absence is the representation of `keep`.
-    ...(row.unmentionedPolicy && row.unmentionedPolicy !== 'keep'
-      ? { unmentionedPolicy: row.unmentionedPolicy }
-      : {}),
+    // six certification arms.
+    // ⚠️ #192 — `keep` NOW SURVIVES. The #191 form elided it too, because
+    // `keep` and absent were then identical. They are opposites now: absent is
+    // the bounded clear, `keep` keeps. Eliding it would have read every
+    // doctor's declared keep back as "clear it".
+    ...(row.unmentionedPolicy ? { unmentionedPolicy: row.unmentionedPolicy } : {}),
     unknownPolicy: row.unknownPolicy,
     practiceDefault: row.practiceDefault,
     status: row.mappingStatus.toLowerCase(),
@@ -514,7 +516,10 @@ export async function updateTemplateTwinMappings(input: {
             approvedSynonyms: asJson(mapping.approvedSynonyms),
             required: mapping.required,
             blankPolicy: mapping.blankPolicy,
-            unmentionedPolicy: mapping.unmentionedPolicy ?? 'keep',
+            // ⚠️ #192 — NO COERCION. `?? 'keep'` would have opted every mapping
+            // nobody ruled on into keeping, which is exactly the inference this
+            // ruling forbids. Absent stays absent, and absent is fail-closed.
+            unmentionedPolicy: mapping.unmentionedPolicy ?? null,
             unknownPolicy: mapping.unknownPolicy,
             practiceDefault: mapping.practiceDefault,
             mappingStatus: dbStatus(mapping.status),

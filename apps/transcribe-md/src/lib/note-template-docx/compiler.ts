@@ -143,7 +143,9 @@ export function compileTemplateDocx(
   // scaffoldedness differs necessarily differs in those, so the hash cannot
   // miss a real structural change by omitting a value derived from them.
   const structureSha256 = canonicalSha256({
-    fields: state.fields.map(({ scaffolded: _derived, ...rest }) => rest),
+    fields: state.fields.map(
+      ({ scaffolded: _derived, scaffoldText: _text, ...rest }) => rest,
+    ),
     tables: state.tables,
     nodes: state.nodes,
     unsupported: state.unsupported,
@@ -836,6 +838,9 @@ function processContentControl(
     fieldId,
     kind,
     scaffolded: isScaffolded(properties, content),
+    ...(isScaffolded(properties, content)
+      ? { scaffoldText: visibleText(content).trim().slice(0, 2000) }
+      : {}),
     originalLabel: label.label,
     labelSource: label.source,
     displayOrder: state.nextDisplayOrder++,

@@ -88,23 +88,12 @@ describe('#191 — a kept default survives the render', () => {
     expect(ir.fields.filter((f) => f.scaffolded === true).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('⚠️ `default_kept` IS WITHHELD — it clears, exactly as `not_mentioned` does', async () => {
-    // ⚠️ THIS ARM PINS A DELIBERATE NON-DELIVERY, AND IT WILL RED THE DAY
-    // SOMEBODY ACTIVATES THE KEEP HALF. That is its whole purpose: activation
-    // must not be possible without someone reading the reason below.
-    //
-    // The activation is ONE early return in `contentControlPatches` and it
-    // WORKS -- measured: the sentence survived while `not_mentioned` still
-    // cleared. It is withheld because the SCOPE cannot be established. Keeping
-    // is safe only for a genuine scaffold (the template's own clinical prose),
-    // and every attempt to tell that from a PROMPT has been falsified:
-    // a text heuristic blocked 28 of 28 real dropdowns, and `w:showingPlcHdr`
-    // -- present 28/28 on the real customer template -- is a POPULATION FACT,
-    // not a property of the format. This repository's own synthetic template
-    // carries `Enter assessment` with no such flag, and activating keep printed
-    // that instruction onto a rendered note.
+  it("⚠️ A DECLARED `keep` LEAVES THE DOCTOR'S SENTENCE STANDING", async () => {
+    // #192's delivery. The status reaches this field only because the mapping
+    // DECLARED `unmentionedPolicy: 'keep'` -- never because anything inspected
+    // the control's content.
     const { xml } = await renderAs('default_kept', 'default_kept_uncontradicted');
-    expect(xml).not.toContain(SENTENCE);
+    expect(xml).toContain(SENTENCE);
   });
 
   it('⚠️ AND THE COUNTEREXAMPLE IS PINNED — a prompt with no placeholder flag', async () => {
