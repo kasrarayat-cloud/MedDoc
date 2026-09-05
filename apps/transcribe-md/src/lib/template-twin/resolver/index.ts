@@ -285,12 +285,25 @@ function missingResolution(
   // note where the doctor denied it, because a denial also arrives here with
   // facts in hand. Measured: it redded 20+ arms of the denial contract, which
   // is the only reason it is not in this commit.
-  if (
-    conceptUnmatched &&
-    !requiresInput &&
-    mapping.unmentionedPolicy !== 'omit' &&
-    facts.length > 0
-  ) {
+  // ⚠️ ONE PREDICATE, TWO POLICIES — AND WRITTEN TWICE THEY DRIFTED IMMEDIATELY.
+  // The keep branch below and the `omit` reason code further down describe the
+  // SAME population: a field the encounter never spoke to, evaluated against
+  // real facts, unfilled for no more specific reason. They differ only in what
+  // the mapping asked for. The first version tested the policy ALONE on the
+  // omit side, so:
+  //
+  //   · a TEMPORALITY DEFERRAL carrying a named reason had that reason
+  //     OVERWRITTEN with `omitted_unsupported_default` — the doctor DID speak
+  //     to that concept, and the manifest then said nothing supported it;
+  //   · a field evaluated against ZERO facts claimed a deliberate clearing.
+  //
+  // Both are false statements about what happened, and the adversarial pass
+  // measured that 779 tests could not tell the corrected code from the shipped
+  // code. Sharing the predicate is what makes that undrift-able.
+  const unmentionedScaffold =
+    conceptUnmatched && reason === undefined && facts.length > 0;
+
+  if (unmentionedScaffold && !requiresInput && mapping.unmentionedPolicy !== 'omit') {
     return makeResolution(
       field.fieldId,
       'default_kept',
@@ -311,9 +324,12 @@ function missingResolution(
     [],
     requiresInput
       ? (reason?.required ?? 'required_fact_not_mentioned')
-      : mapping.unmentionedPolicy === 'omit'
+      : unmentionedScaffold && mapping.unmentionedPolicy === 'omit'
         // #191 — the scaffold was cleared ON PURPOSE and the reason says so.
         // `fact_not_mentioned` would read as "nobody looked".
+        // ⚠️ GATED ON THE SHARED PREDICATE, not on the policy alone: a named
+        // reason must survive, and a clearing nothing evaluated is not
+        // deliberate.
         ? 'omitted_unsupported_default'
         : (reason?.unfilled ?? 'fact_not_mentioned'),
   );

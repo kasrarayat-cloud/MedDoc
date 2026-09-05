@@ -198,6 +198,7 @@ function fieldCreateInput(
           approvedSynonyms: asJson(mapping.approvedSynonyms),
           required: mapping.required,
           blankPolicy: mapping.blankPolicy,
+          unmentionedPolicy: mapping.unmentionedPolicy ?? 'keep',
           unknownPolicy: mapping.unknownPolicy,
           practiceDefault: null,
           mappingStatus: enumStatus(mapping.status),

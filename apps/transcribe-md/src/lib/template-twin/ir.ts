@@ -10,7 +10,12 @@ import { z } from 'zod';
 
 export const TEMPLATE_TWIN_IR_SCHEMA_VERSION = 1 as const;
 export const TEMPLATE_TWIN_COMPILER_VERSION = 'template-docx-compiler/1.0.0';
-export const TEMPLATE_TWIN_RESOLVER_VERSION = 'template-field-resolver/1.0.0';
+// ⚠️ BUMPED FOR #191. The resolver's output changed for IDENTICAL input
+// (`not_mentioned` -> `default_kept`), and `certification-lifecycle` compares
+// this string exactly to invalidate stale manifests. Left at 1.0.0 it could not
+// see the change, so a manifest produced by the old resolver would have been
+// accepted as current. Found by the adversarial pass, not by any arm.
+export const TEMPLATE_TWIN_RESOLVER_VERSION = 'template-field-resolver/1.1.0';
 export const TEMPLATE_TWIN_RENDERER_VERSION = 'template-docx-renderer/1.0.0';
 
 export const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -646,7 +651,28 @@ export function templateTwinCounts(
   return {
     filled: fields.filter((field) => field.value !== null).length,
     needsReview: fields.filter((field) => unresolved.has(field.status)).length,
-    notMentioned: fields.filter((field) => field.status === 'not_mentioned').length,
+    // ⚠️ #191 — `default_kept` COUNTS AS A BLANK, AND OMITTING IT WAS A LIVE
+    // DOCTOR-FACING REGRESSION. The status was introduced without widening this
+    // function, so a kept default matched NO bucket: not `filled` (its value is
+    // null), not `unresolved`, not `not_mentioned`, not `conflict`. Because the
+    // emitter fires on the ordinary "the encounter said nothing about this"
+    // case, ONE unrelated dictated sentence collapsed an entire form's blank
+    // count. Measured on an 11-field template: `notMentioned` 11 -> 0, with the
+    // rendered document BYTE-IDENTICAL. The doctor's
+    // "N still blank — nothing dictated for those yet" line simply vanished,
+    // and `notMentionedCount` persisted as 0.
+    //
+    // ⚠️ IT IS #170's SHAPE, REINTRODUCED BY THE FIX WRITTEN TO PREVENT IT —
+    // and the comment fifteen lines above forbade it in this very file. Three
+    // independent lenses of the adversarial pass found it; one proved it a
+    // REGRESSION by running the same arm against the parent commit.
+    //
+    // A kept default IS a blank: nothing was written, and the doctor should see
+    // it in the same number as before. Counting it here restores the pre-#191
+    // figure exactly rather than inventing a sixth bucket nobody reads.
+    notMentioned: fields.filter(
+      (field) => field.status === 'not_mentioned' || field.status === 'default_kept',
+    ).length,
     conflicts: fields.filter((field) => field.status === 'conflict').length,
     criticalUnresolved: fields.filter(
       (field) =>

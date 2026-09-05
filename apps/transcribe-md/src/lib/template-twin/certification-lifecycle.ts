@@ -79,6 +79,7 @@ interface PersistedMappingRow {
   approvedSynonyms: unknown;
   required: boolean;
   blankPolicy: string;
+  unmentionedPolicy: string | null;
   unknownPolicy: string;
   practiceDefault: string | null;
   mappingStatus: string;
@@ -102,6 +103,13 @@ function fromPersistedMapping(
       : [],
     required: row.required,
     blankPolicy: row.blankPolicy,
+    // ⚠️ THE KEY IS OMITTED, NOT SET TO `undefined`. An explicit undefined
+    // survives the Zod parse and `canonicalSha256` refuses it outright
+    // ("Canonical JSON does not support undefined object values"), which broke
+    // six certification arms. Absence is the representation of `keep`.
+    ...(row.unmentionedPolicy && row.unmentionedPolicy !== 'keep'
+      ? { unmentionedPolicy: row.unmentionedPolicy }
+      : {}),
     unknownPolicy: row.unknownPolicy,
     practiceDefault: row.practiceDefault,
     status: row.mappingStatus.toLowerCase(),
@@ -207,6 +215,7 @@ async function loadOwnedCompilation(
                   approvedSynonyms: true,
                   required: true,
                   blankPolicy: true,
+                  unmentionedPolicy: true,
                   unknownPolicy: true,
                   practiceDefault: true,
                   mappingStatus: true,
@@ -505,6 +514,7 @@ export async function updateTemplateTwinMappings(input: {
             approvedSynonyms: asJson(mapping.approvedSynonyms),
             required: mapping.required,
             blankPolicy: mapping.blankPolicy,
+            unmentionedPolicy: mapping.unmentionedPolicy ?? 'keep',
             unknownPolicy: mapping.unknownPolicy,
             practiceDefault: mapping.practiceDefault,
             mappingStatus: dbStatus(mapping.status),

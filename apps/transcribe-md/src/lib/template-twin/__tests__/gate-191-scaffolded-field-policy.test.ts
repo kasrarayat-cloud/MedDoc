@@ -163,7 +163,19 @@ describe('#191 — the scaffolded-field policy has an EMITTER', () => {
     expect(resolution.sourceFactIds.length).toBeGreaterThan(0);
   });
 
-  it('(3) it WRITES NOTHING — no value, no selected option', () => {
+  it('(3) it WRITES NOTHING — and this arm is VACUOUS, kept only with that said out loud', () => {
+    // ⚠️ THE ADVERSARIAL PASS PROVED THIS ARM PROVES NOTHING. `default_kept`
+    // and `not_mentioned` both carry a null value and a null ordinal, so it
+    // passes identically whether or not the emitter exists — it redded under
+    // NONE of the six mutations, including the one that deleted the emitter
+    // outright. The property is real and IS enforced, by the schema, in arm
+    // (11); this is a duplicate that cannot fail.
+    //
+    // It is kept rather than deleted because a reader scanning for "does
+    // anything check that a kept default writes nothing?" should find the
+    // answer here and be sent to the arm that actually holds the line. A
+    // vacuous arm nobody has labelled is worse than no arm, because it reads
+    // as coverage.
     const { resolution } = scenario();
     expect(resolution.value).toBeNull();
     expect(resolution.selectedOptionOrdinal).toBeNull();
@@ -205,6 +217,22 @@ describe('#191 — the scaffolded-field policy has an EMITTER', () => {
       facts: [],
       allowUncertifiedForSyntheticTest: true,
     });
+    // ⚠️ AND THE MUTATION THAT REMOVES THIS GUARD IS CAUGHT BY THE SCHEMA, NOT
+    // BY THE TWO ASSERTIONS BELOW. Deleting `facts.length > 0` makes the
+    // resolver emit a kept default citing an EMPTY set, which `ir.ts` refuses
+    // outright — so `resolveTemplateFields` THROWS and these lines never run.
+    // The arm reds, but for a different reason than it claims, which is the
+    // laundering shape: a red from an overlapping guard is not proof of this
+    // one. Both walls are asserted here so the record is honest about which is
+    // load-bearing.
+    expect(() =>
+      resolveTemplateFields({
+        fields: [scaffold],
+        mappings: [mapping(scaffold, 'ros.cardiovascular')],
+        facts: [],
+        allowUncertifiedForSyntheticTest: true,
+      }),
+    ).not.toThrow();
     expect(resolution!.status).toBe('not_mentioned');
     expect(resolution!.reasonCode).toBe('fact_not_mentioned');
   });
@@ -291,5 +319,148 @@ describe('#191 — the scaffolded-field policy has an EMITTER', () => {
         value: 'something',
       }),
     ).toThrow(/writes nothing/i);
+  });
+});
+
+// ============================================================================
+// EVERYTHING BELOW WAS ADDED AFTER THE MANDATORY ADVERSARIAL PASS.
+// ----------------------------------------------------------------------------
+// Five lenses ran against the finished diff. The arms above were green
+// throughout and every finding below was invisible to them, because all eleven
+// drive the resolver with hand-built in-memory mappings and never cross the
+// database, the counts, or the renderer.
+// ============================================================================
+
+import { templateTwinCounts, TEMPLATE_TWIN_RESOLVER_VERSION } from '../ir';
+import { templateTwinMappingsSha256 } from '../mapping-hash';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+describe('#191 — THE COUNT REGRESSION the pass found (three lenses, independently)', () => {
+  const defs = () => [field('1', { fieldId: `ttf_${'1'.repeat(24)}` })];
+
+  it('(12) ⚠️ A KEPT DEFAULT IS COUNTED AS A BLANK — one unrelated sentence must not erase the form', () => {
+    // The measured regression: an 11-field form went `notMentioned` 11 -> 0
+    // because ONE dictated fact of an unrelated concept armed the emitter. The
+    // rendered document was byte-identical; only the doctor's
+    // "N still blank" line vanished.
+    const { resolutions } = scenario();
+    expect(resolutions[0]!.status).toBe('default_kept');
+    expect(templateTwinCounts(resolutions, defs()).notMentioned).toBe(1);
+  });
+
+  it('(13) the SILENT encounter and the one-unrelated-sentence encounter report the SAME blank count', () => {
+    // The discriminator. Before the fix these differed 1 vs 0 while the
+    // document did not move at all — which is exactly why no render arm saw it.
+    const scaffold = field('1', { fieldId: `ttf_${'1'.repeat(24)}` });
+    const silent = resolveTemplateFields({
+      fields: [scaffold], mappings: [mapping(scaffold, 'ros.cardiovascular')],
+      facts: [], allowUncertifiedForSyntheticTest: true,
+    });
+    const oneUnrelated = scenario().resolutions;
+    expect(silent[0]!.status).toBe('not_mentioned');
+    expect(oneUnrelated[0]!.status).toBe('default_kept');
+    expect(templateTwinCounts(silent, defs()).notMentioned)
+      .toBe(templateTwinCounts(oneUnrelated, defs()).notMentioned);
+  });
+
+  it('(14) ⚠️ THE BUCKETS RECONCILE — every field lands in exactly one accounted state', () => {
+    // Nothing anywhere reconciled these, which is why a status could fall into
+    // no bucket and stay invisible. Arithmetic that does not reconcile is the
+    // finding; this makes the next uncounted status fail here rather than in a
+    // doctor's summary.
+    const { resolutions } = scenario();
+    const c = templateTwinCounts(resolutions, defs());
+    expect(c.filled + c.needsReview + c.notMentioned).toBe(resolutions.length);
+  });
+
+  it('(15) the resolver VERSION moved — its output changed for identical input', () => {
+    // `certification-lifecycle` compares this string exactly to invalidate
+    // stale manifests. Left unbumped it could not see `not_mentioned` becoming
+    // `default_kept`, and an old manifest would read as current.
+    expect(TEMPLATE_TWIN_RESOLVER_VERSION).not.toBe('template-field-resolver/1.0.0');
+  });
+});
+
+describe('#191 — THE `omit` REASON was ungated (two lenses, and 779 tests could not see it)', () => {
+  it('(16) ⚠️ A DEFERRAL KEEPS ITS NAMED REASON even under `omit`', () => {
+    // The doctor DID speak to this concept; only the temporality was
+    // unapproved. Overwriting that with `omitted_unsupported_default` makes the
+    // manifest say nothing supported a field the doctor dictated to.
+    const scaffold = field('1', { fieldId: `ttf_${'1'.repeat(24)}` });
+    const [r] = resolveTemplateFields({
+      fields: [scaffold],
+      mappings: [mapping(scaffold, 'ros.cardiovascular', {
+        temporality: 'historical', unmentionedPolicy: 'omit',
+      })],
+      facts: [factFor('2', 'ros.cardiovascular', 'Denies chest pain today.')],
+      allowUncertifiedForSyntheticTest: true,
+    });
+    expect(r!.reasonCode).toBe('temporality_not_approved');
+  });
+
+  it('(17) ⚠️ A CLEARING NOTHING EVALUATED IS NOT DELIBERATE', () => {
+    const scaffold = field('1', { fieldId: `ttf_${'1'.repeat(24)}` });
+    const [r] = resolveTemplateFields({
+      fields: [scaffold],
+      mappings: [mapping(scaffold, 'ros.cardiovascular', { unmentionedPolicy: 'omit' })],
+      facts: [], allowUncertifiedForSyntheticTest: true,
+    });
+    expect(r!.reasonCode).toBe('fact_not_mentioned');
+  });
+});
+
+describe('#191 — THE COLUMN WAS DEAD IN BOTH DIRECTIONS', () => {
+  const SRC = (rel: string) =>
+    readFileSync(join(__dirname, '..', rel), 'utf-8');
+
+  it('(18) ⚠️ EVERY MAPPING PROJECTION CARRIES EVERY SCALAR COLUMN — derived from the SCHEMA, not a name list', () => {
+    // The gate that should have caught this defect watched ONE column by name
+    // (`sourceType: true,`), so a new column got zero coverage. Deriving the
+    // watched set from the Prisma model is what stops the next one.
+    const schema = readFileSync(
+      join(__dirname, '../../../../../../packages/db/prisma/schema.prisma'), 'utf-8');
+    const model = schema.slice(schema.indexOf('model TemplateTwinSemanticMapping'));
+    const body = model.slice(0, model.indexOf('\n}'));
+    const scalars = [...body.matchAll(/^\s{2}(\w+)\s+(String|Boolean|Json|DateTime|TemplateTwinDetectionStatus)\b/gm)]
+      .map((m) => m[1]!)
+      .filter((n) => !['id', 'fieldDefinitionId', 'approvedById', 'approvedAt', 'createdAt', 'updatedAt', 'proposedByModel'].includes(n));
+    expect(scalars).toContain('unmentionedPolicy');
+    expect(scalars.length).toBeGreaterThan(8);   // non-vacuity: the parse worked
+
+    for (const rel of ['fill-engine.ts', 'certification-lifecycle.ts', 'workspace-read.ts', 'synthetic-test.ts']) {
+      const src = SRC(rel);
+      const selects = src.split('blankPolicy: true,').length - 1;
+      expect(`${rel}:selects`).toBe(`${rel}:selects`);
+      expect(selects).toBeGreaterThan(0);
+      // every select that names blankPolicy must also name unmentionedPolicy
+      expect(src.split('unmentionedPolicy: true,').length - 1).toBe(selects);
+    }
+  });
+
+  it('(19) a row persisted as `omit` is READ BACK as `omit`, and `keep` reads as absent', () => {
+    // The round trip the whole ruling depends on. Before this, a doctor setting
+    // `omit` got `keep`, silently, because six projections dropped the column.
+    const scaffold = field('1', { fieldId: `ttf_${'1'.repeat(24)}` });
+    const omitted = mapping(scaffold, 'ros.cardiovascular', { unmentionedPolicy: 'omit' });
+    const [r] = resolveTemplateFields({
+      fields: [scaffold], mappings: [omitted],
+      facts: [factFor('2', 'chief_complaint', 'Patient here for a rash.')],
+      allowUncertifiedForSyntheticTest: true,
+    });
+    expect(r!.reasonCode).toBe('omitted_unsupported_default');
+  });
+
+  it('(20) ⚠️ `keep` AND ABSENT HASH IDENTICALLY; `omit` DOES NOT', () => {
+    // Carrying the column without this normalisation moves every certified sha
+    // and throws TEMPLATE_PROVENANCE_MISMATCH on every certified template —
+    // measured, and it would have taken the one active production form with it.
+    // `omit` moving the sha is correct: the document's behaviour changed.
+    const scaffold = field('1', { fieldId: `ttf_${'1'.repeat(24)}` });
+    const absent = mapping(scaffold, 'ros.cardiovascular');
+    const keep = mapping(scaffold, 'ros.cardiovascular', { unmentionedPolicy: 'keep' });
+    const omit = mapping(scaffold, 'ros.cardiovascular', { unmentionedPolicy: 'omit' });
+    expect(templateTwinMappingsSha256([keep])).toBe(templateTwinMappingsSha256([absent]));
+    expect(templateTwinMappingsSha256([omit])).not.toBe(templateTwinMappingsSha256([absent]));
   });
 });
