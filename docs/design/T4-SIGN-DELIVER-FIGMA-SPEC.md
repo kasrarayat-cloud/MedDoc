@@ -168,16 +168,31 @@ undecorated rows. There is no slot in that geometry for a per-group warning, so
 a literal build **deletes a PHI-safety instruction** — the one that stops a
 doctor mailing a note to a patient.
 
-### What is being built, and what is being left alone
+### ✅ ALL THREE RULED — ruling #188, 2026-09-05
 
-**The frames' ROW and CARD are the design; the four rows are examples.** So the
-card, its ground, border, radius, spacing and typography, the section label, the
-row geometry, the checkbox, the attestation line, the delivery summary and the
-action row are all applied to the REAL destination list.
+**The frames' ROW and CARD are the design; the four rows drawn are examples.**
 
-**Not collapsed, not relabelled, not deleted:** the five clipboard formats, the
-email recipient, and the group hints. Items 1–3 are owner decisions — each
-removes something a doctor has today — and are surfaced rather than resolved.
+| # | ruled |
+|---|---|
+| 1 | **The five EHR formats survive.** The row is applied PER FORMAT — a `Copy to clipboard` group in the row skin with the EHR picker inside it. **Nothing collapses.** |
+| 2 | **Email ships as `Email to me`** — the shipped link-never-attachment behaviour, in the frames' skin — and *"Don't use for patient communication"* **stays, as the row's caption.** |
+| 3 | **`Send to referring physician` is its own product item**, filed right after ADMIN. Not a T4 rider. |
+
+> ⚠️ **A LITERAL FRAME THAT DELETES A SAFETY INSTRUCTION IS NOT THE SPEC.**
+>
+> That is the generalisable half of #188(2), and it is worth carrying past this
+> file. The frames' flat `DELIVER TO` list had no slot for a per-group warning,
+> so building them literally would have removed the one line that stops a doctor
+> mailing a note to a patient. Fidelity to a mockup does not outrank a safety
+> instruction the mockup did not know about.
+
+**What #3 actually requires**, so nobody re-scopes it as a label change: a
+`referringPhysician` field on the visit (name + secure contact), populated from
+the dictated **Referring MD** fact the custom-file batch already maps (row 7);
+an explicit **recipient confirmation** by the signing doctor; delivery as an
+**authenticated secure link, never an attachment**; and an audit row naming
+**recipient and purpose** (treatment disclosure). Design pending the owner's
+frame for the recipient step.
 
 ## THE BUILD CONSTRAINTS, MEASURED FROM THE SHIPPED COMPONENT
 
