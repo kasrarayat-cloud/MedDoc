@@ -213,3 +213,162 @@ export const ICD10_ALLOWLIST_SIZE = ICD10_ALLOWLIST.size;
 
 /** Total size of the header set. */
 export const ICD10_HEADERS_SIZE = ICD10_HEADERS.size;
+
+// ============================================================================
+// billableDescendantsOf — the derivation ruling #149(f) DELETED, rebuilt now
+// that the condition that ruling named has been met.
+// ----------------------------------------------------------------------------
+// #149(f) refused a one-tap "use K21.00 instead" chip and deleted the
+// `billableChildren` prefix scan rather than repairing it. The scan was sound
+// OVER THE SET IT READ, and that set was a 604-code starter list — so it
+// returned every child WE HAPPENED TO CARRY, and `length === 1` meant "only one
+// sibling made our list" while the surface rendered it as "there is only one
+// answer". Measured then:
+//
+//     billableChildrenOf('E66.0')  ->  ['E66.01']
+//
+// `E66.0` is obesity due to excess calories; `E66.01` is MORBID (severe)
+// obesity, and `E66.09` was simply absent. The chip would have upcoded plain
+// obesity to morbid obesity — the False Claims Act direction. 236 refused
+// parents collapsed to a singleton that way.
+//
+// The ruling wrote its own re-arming condition, so this is a lookup and not a
+// judgement:
+//
+//   > "RE-ARMING CONDITION, so this is a lookup: the allowlist becoming the
+//   >  full CMS billable set (its own header's "PHASE 7 PATH") — at which point
+//   >  membership and billability coincide, (e)'s token may be re-read as
+//   >  `not_billable`, and (f)'s derivation becomes sound."
+//
+// T8 met it. Re-measured against the complete FY2026 release:
+//
+//     billableDescendantsOf('E66.0')  ->  ['E66.01', 'E66.09']   both siblings
+//     billableDescendantsOf('K21.0')  ->  ['K21.00', 'K21.01']
+//     billableDescendantsOf('M54.5')  ->  ['M54.50', 'M54.51', 'M54.59']
+//
+// ⚠️ IT IS NAMED FOR WHAT IT COMPUTES, AND THE OLD NAME WAS WRONG. `I71.0` is a
+// header whose child `I71.01` is ALSO a header, so a prefix scan returns
+// GRANDCHILDREN. For a substitute list that is the right answer — every entry
+// is submittable — but "children" was a claim the code did not honour, and this
+// programme has already paid for one name that outlived its accuracy.
+//
+// ── FOUR MEASUREMENTS THIS RESTS ON, ALL RE-DERIVED AGAINST FY2026 ──────────
+//
+//   1. ZERO of the 23,467 headers have zero billable descendants. So "this is a
+//      header — bill one of these" is an answer that ALWAYS EXISTS. ⚠️ That is a
+//      POPULATION FACT about FY2026, not a property of ICD-10-CM, and it
+//      re-arms on every future edition — which is why the empty case below
+//      still fails closed rather than being treated as unreachable.
+//   2. Only 45 headers (0.19%) have EXACTLY ONE billable descendant, and every
+//      one is a COMPLETE set of one rather than a truncated set — which is the
+//      property that was false before. Measured by shape: 43 are a 6-character
+//      header gaining a 7th-character extension (`S06.1X7` -> `S06.1X7A`); the
+//      other TWO gain a 4th character carrying a distinct clinical concept —
+//      `I1A` (other hypertension) -> `I1A.0` (RESISTANT hypertension), and
+//      `U09` -> `U09.9`.
+//      ⚠️ An earlier draft called all 45 "a parent whose only specificity is a
+//      7th-character extension". That is true of 43 and was inferred from the
+//      majority rather than measured — and `I1A.0` is exactly the case it would
+//      have waved through, since a lone descendant that ESCALATES the parent is
+//      the shape #149(f) died on. It is still the complete and correct answer;
+//      what it is not is clinically neutral. See "BILLABLE IS NOT APPROPRIATE".
+//   3. ZERO billable codes have a billable descendant — billable codes are
+//      leaves. So a submittable code correctly yields NO substitutes.
+//   4. Dotted-prefix and undotted-prefix agree on all 242,114 real
+//      (header, billable) descendant pairs, in BOTH directions. The stored form
+//      is dotted; the hierarchy is defined undotted; scanning the dotted form
+//      is therefore sound rather than merely convenient.
+//
+// ── WHAT THIS DOES NOT KNOW, STATED SO NOBODY READS IT WIDER ────────────────
+//
+// **BILLABLE IS NOT APPROPRIATE.** Every entry returned is valid for
+// submission. Which one the chart supports is a clinical question this set
+// cannot answer. A surface may PRESENT these; it may NEVER AUTO-APPLY one.
+//
+// ⚠️ THE REFUSED POPULATION IS 6,257, AND AN EARLIER DRAFT SAID 4,553. That
+// figure counted prefixes of the UNDOTTED CMS strings — a universe this module
+// never sees. The guard reads the DOTTED form, where the same enumeration
+// yields 6,257: the extra 1,704 are the `A00.`-shaped trailing-dot prefixes
+// that exist only once a dot has been inserted. The number was measured
+// correctly and then quoted about the wrong set.
+//
+// **AND "ALL OF THEM, NEVER ONE" IS NOW THE UI'S OBLIGATION.** This returns the
+// complete set — the largest header expands to 3,096 entries. A surface that
+// shows the first three of those has reintroduced #149(f)'s defect one layer up,
+// with the data blameless.
+//
+// ⚠️ SHIPS WITH NO CALLER, as `isIcd10Header`, #148(b) and #149 all did.
+// Whether the substitute chip exists at all is a product decision parked under
+// #148, and this file does not make it.
+// ============================================================================
+
+/**
+ * Billable codes sorted for binary search. Built once at module load; the
+ * lookup is O(log n + k) rather than a 74,719-entry scan per call.
+ */
+const BILLABLE_SORTED: readonly string[] = Object.freeze(
+  [...ICD10_ALLOWLIST].sort()
+);
+
+/**
+ * The single frozen empty result.
+ *
+ * ⚠️ EVERY RETURN PATH IS FROZEN, AND THE REFUSAL PATHS WERE NOT. The scan path
+ * returned `Object.freeze(out)` while the three refusal paths returned a bare
+ * `[]`, so `push()` SUCCEEDED on a refusal and THREW on an answer — the same
+ * caller operation behaving differently by input. The path where a caller could
+ * write a fabricated substitute into the array was precisely the path the
+ * function had refused to answer. The gate now has an arm for this; it had none.
+ */
+const NO_DESCENDANTS: readonly string[] = Object.freeze([]);
+
+/**
+ * Every VALID-FOR-SUBMISSION code that sits underneath `code` in the ICD-10-CM
+ * hierarchy — the complete set, sorted, never truncated.
+ *
+ * - a **header** returns its billable descendants (at least one, in FY2026)
+ * - a **billable** code returns `[]` — it is a leaf, and needs no substitute
+ * - **anything else** returns `[]`
+ *
+ * ⚠️ THE INPUT MUST BE A CODE THIS MODULE KNOWS. A string that is neither a
+ * header nor billable returns `[]` even when it is a prefix of real codes, so
+ * `S82.62X` — what you get by dropping a required 7th character, and a prefix
+ * of sixteen real billable codes — can never be answered as though it were a
+ * real category. *Admit only what you understand.*
+ *
+ * ⚠️ AN EARLIER DRAFT USED `I83.8` AS THAT EXAMPLE AND IT IS A REAL HEADER:
+ * `billableDescendantsOf('I83.8')` correctly returns EIGHT codes. The same
+ * wrong guess was made in the gate's fixture, caught there by an assertion,
+ * and **fixed in the test while this sentence kept the false claim** — the
+ * exact prose-decay this module's own epitaph is about, committed inside the
+ * commit that diagnoses it. Recorded rather than quietly corrected.
+ *
+ * @param code e.g. "M54.5". Whitespace and case are normalised exactly as
+ *             {@link isValidIcd10} normalises them, and no more.
+ */
+export function billableDescendantsOf(
+  code: string | null | undefined
+): readonly string[] {
+  if (!code) return NO_DESCENDANTS;
+  const trimmed = code.trim().toUpperCase();
+  if (trimmed.length === 0) return NO_DESCENDANTS;
+  // Refuse to answer about a string we cannot characterise.
+  if (!ICD10_HEADERS.has(trimmed) && !ICD10_ALLOWLIST.has(trimmed)) return NO_DESCENDANTS;
+
+  // Binary search to the first candidate, then walk while the prefix holds.
+  let lo = 0;
+  let hi = BILLABLE_SORTED.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (BILLABLE_SORTED[mid] < trimmed) lo = mid + 1;
+    else hi = mid;
+  }
+  const out: string[] = [];
+  for (let i = lo; i < BILLABLE_SORTED.length; i++) {
+    const c = BILLABLE_SORTED[i];
+    if (!c.startsWith(trimmed)) break;
+    // STRICTLY longer: a code is never its own descendant.
+    if (c.length > trimmed.length) out.push(c);
+  }
+  return Object.freeze(out);
+}
