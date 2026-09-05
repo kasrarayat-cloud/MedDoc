@@ -91,6 +91,7 @@ vi.mock('@meddoc/db', () => {
       updateMany: mocks.updateMany,
     },
     user: { findUnique: mocks.userFindUnique },
+    auditLog: { findMany: vi.fn().mockResolvedValue([]) },
     rxWarningOverride: { findMany: mocks.rxOverrideFindMany },
     $transaction: (fn: (tx: unknown) => unknown) =>
       typeof fn === 'function' ? fn(prisma) : Promise.all(fn as never),

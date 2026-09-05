@@ -293,12 +293,84 @@ describe('F8-S2 — the coding view', () => {
     expect((screen.getByTestId('icd-reject-E11.9') as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByTestId('icd-accept-K21.00') as HTMLButtonElement).disabled).toBe(true);
 
+
     release(
       new Response(JSON.stringify({ ok: true, changed: true, projection: projectIcdDecisions(BLOB, null) }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
     );
+  });
+
+  it('⚠️ the REASON buttons are disabled in flight — the third control family', () => {
+    // ⚠️ "ANY" IS NOT "EACH". The arm above says to mutate "any"
+    // `disabled={pending !== null}`, and it reaches only accept and reject.
+    // Reverting the REASON buttons to `pending === code` left this file green
+    // and produced TWO concurrent requests — the last-response-wins race the
+    // component's own comment describes, where the doctor watches a decision
+    // they just made disappear.
+    //
+    // Its own arm because opening a row's picker REPLACES that row's
+    // Accept/Reject, so the two assertions cannot share a render.
+    let release: (v: Response) => void = () => {};
+    vi.spyOn(globalThis, 'fetch').mockReturnValue(
+      new Promise<Response>((res) => {
+        release = res;
+      }),
+    );
+    view();
+    fireEvent.click(screen.getByTestId('icd-reject-E11.9')); // open E11.9's picker
+    fireEvent.click(screen.getByTestId('icd-accept-K21.00')); // start a decision on the OTHER code
+    expect(
+      (screen.getByTestId('icd-reason-E11.9-other') as HTMLButtonElement).disabled,
+      'a reason button stayed live while another decision was in flight',
+    ).toBe(true);
+    release(
+      new Response(JSON.stringify({ ok: true, changed: true, projection: projectIcdDecisions(BLOB, null) }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+  });
+
+  it('⚠️ UNDO is disabled in flight too — the fourth control family', () => {
+    // Separate arm because it needs a DECIDED row, which the arm above has not
+    // got. Reverting this one control to `pending === code` left the file green
+    // and produced two concurrent requests.
+    let release: (v: Response) => void = () => {};
+    vi.spyOn(globalThis, 'fetch').mockReturnValue(
+      new Promise<Response>((res) => {
+        release = res;
+      }),
+    );
+    view({ icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } } });
+    fireEvent.click(screen.getByTestId('icd-accept-E11.9'));
+    expect(
+      (screen.getByTestId('icd-undo-K21.00') as HTMLButtonElement).disabled,
+      'Undo stayed live while another decision was in flight',
+    ).toBe(true);
+    release(
+      new Response(JSON.stringify({ ok: true, changed: true, projection: projectIcdDecisions(BLOB, null) }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+  });
+
+  it('⚠️ the FROZEN notice and the SIGNED title are ABSENT on an unsigned visit', () => {
+    // The absence partner. Presence was asserted; absence was not, so forcing
+    // `readonly` true left the file green — and the surface then tells a doctor
+    // the visit is signed and frozen while the Accept button beside it works.
+    // An absent field is content they did not see; a WRONG field says the
+    // opposite of the record in front of them.
+    const v = within(view().container);
+    expect(v.queryByTestId('icd-frozen-notice')).toBeNull();
+    expect(v.getByTestId('icd-ledger-title').textContent).toContain('ready to sign');
+    expect(v.getByTestId('icd-ledger-title').textContent).not.toContain('signed');
+    // Non-vacuity: the same two flip on a signed visit.
+    const r = within(view({ readonly: true }).container);
+    expect(r.getByTestId('icd-frozen-notice')).toBeTruthy();
+    expect(r.getByTestId('icd-ledger-title').textContent).toContain('signed');
   });
 
   it('Accept sends no reason key at all', () => {
@@ -434,6 +506,52 @@ describe('F8-S2 — the coding view', () => {
     expect(dx.textContent, 'a Z code is not a diagnosis').not.toContain('Z13.220');
     expect(hx.textContent).toContain('Z13.220');
     expect(hx.textContent, 'a diagnosis is not history or screening').not.toContain('K21.00');
+  });
+
+  it('⚠️ THE ROW STATE REACHES THE ACCESSIBILITY TREE AS TEXT, not colour alone', () => {
+    // Found by the adversarial pass. The three sections this row replaced
+    // carried the state in a HEADING; moving it onto the row moved it into
+    // `data-state` and a CSS tint, and `ICD_ROW_STATE_LABEL` was rendered
+    // nowhere. On a signed visit an accepted row and a held row were
+    // byte-identical in text. WCAG 1.4.1, on the surface a doctor attests from.
+    const v = within(
+      view({
+        readonly: true,
+        icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } },
+      }).container,
+    );
+    // K21.00 is decided, E11.9 is not — and the two must differ IN TEXT.
+    const decided = v.getByTestId('icd-card-K21.00').textContent ?? '';
+    const held = v.getByTestId('icd-card-E11.9').textContent ?? '';
+    expect(decided).toContain('Pre-accepted');
+    expect(held).toContain('Held for review');
+    expect(decided, 'the two states were byte-identical in text').not.toEqual(held);
+  });
+
+  it('⚠️ A MACHINE-WRITTEN ACCEPTANCE SAYS SO, where every auto-accept lands', () => {
+    // The orphaned sentence was made provenance-aware and the ROW was not — but
+    // `orphaned` is documented as unreachable today, while every auto-accept
+    // lands here as `pre-accepted`. So the surface distinguished machine from
+    // doctor only in the one bucket that cannot fire.
+    const machine = within(
+      view({
+        readonly: true,
+        icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER, auto: true } },
+      }).container,
+    );
+    expect(machine.getByTestId('icd-card-K21.00').textContent).toContain(
+      'accepted automatically at signing',
+    );
+
+    // The doctor's OWN acceptance must NOT say it — otherwise this passes by
+    // labelling everything as machine-written, which is the mirror harm.
+    const human = within(
+      view({
+        readonly: true,
+        icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } },
+      }).container,
+    );
+    expect(human.getByTestId('icd-card-K21.00').textContent).not.toContain('automatically');
   });
 
   it('⚠️ an ORPHANED AUTO-ACCEPT is not described as the doctor’s decision', () => {

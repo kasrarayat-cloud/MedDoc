@@ -78,3 +78,37 @@ describe('the ledger buckets match the frames', () => {
     expect(isHistoryOrScreeningCode('i10')).toBe(false);
   });
 });
+
+// ============================================================================
+// ⚠️ THE SECTION ORDER FOLLOWS THE PRIMARY DIAGNOSIS — a pass finding.
+// ----------------------------------------------------------------------------
+// A FIXED section order re-ranks the claim, which this file's header forbids in
+// bold. The counterexample is the product's commonest encounter.
+// ============================================================================
+
+describe('the section order follows the suggester, not a constant', () => {
+  it('⚠️ a SCREENING COLONOSCOPY keeps its Z code first', () => {
+    const out = ledgerSections(['Z12.11', 'D12.5', 'K64.8']);
+    expect(out.map((s) => s.id)).toEqual(['history-screening', 'diagnoses']);
+    expect(out.flatMap((s) => s.codes)).toEqual(['Z12.11', 'D12.5', 'K64.8']);
+  });
+
+  it('a diagnosis-led visit still puts Diagnoses first', () => {
+    const out = ledgerSections(['K21.00', 'Z79.01']);
+    expect(out.map((s) => s.id)).toEqual(['diagnoses', 'history-screening']);
+    expect(out.flatMap((s) => s.codes)).toEqual(['K21.00', 'Z79.01']);
+  });
+
+  it('⚠️ the suggester’s ORDER survives the round trip whichever section leads', () => {
+    // The property the header actually states: the first code the suggester
+    // emitted is the first code the doctor reads.
+    for (const order of [
+      ['Z12.11', 'D12.5', 'K64.8'],
+      ['K21.00', 'Z79.01', 'E11.9'],
+      ['Z00.00'],
+      ['K21.00'],
+    ]) {
+      expect(ledgerSections(order)[0]?.codes[0], `first code changed for ${order.join()}`).toBe(order[0]);
+    }
+  });
+});

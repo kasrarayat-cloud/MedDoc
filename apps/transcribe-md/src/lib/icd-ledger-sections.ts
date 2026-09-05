@@ -67,10 +67,39 @@ export function ledgerSections(codes: readonly string[]): LedgerSection[] {
   for (const code of codes) {
     (isHistoryOrScreeningCode(code) ? history : diagnoses).push(code);
   }
+  // ⚠️ THE SECTION THE PRIMARY DIAGNOSIS FALLS IN LEADS. FOUND BY THE
+  // ADVERSARIAL PASS, AND IT FALSIFIED THIS FILE'S OWN HEADER.
+  //
+  // The header says, in bold, that ORDER IS PRESERVED, NEVER SORTED — that the
+  // suggester emits codes in an order carrying meaning, the primary diagnosis
+  // leads, and a display that re-sorts them silently re-ranks a claim. A FIXED
+  // section order does exactly that, and the counterexample is this product's
+  // commonest encounter:
+  //
+  //     in   Z12.11 (screening for colon neoplasm), D12.5 (benign neoplasm), K64.8
+  //     out  D12.5, K64.8, Z12.11
+  //
+  // For a screening colonoscopy Z12.11 IS the first-listed diagnosis and the
+  // reason for the encounter; the polyp is secondary. A fixed
+  // Diagnoses-then-History order demotes it to last, under a heading that reads
+  // like an aside.
+  //
+  // Ordering the SECTIONS by where the suggester's FIRST code falls restores
+  // "the primary leads" while keeping the frames' grouping intact — within a
+  // section the order is still the suggester's, untouched.
+  //
+  // ⚠️ RECORDED AS A DEPARTURE FROM THE FRAMES, which draw Diagnoses first. The
+  // frames do not rule on what happens when the primary IS a Z code, and a
+  // tested clinical claim outranks a mockup — the precedent this arc already
+  // set with the counts chip. Flagged to the owner rather than assumed settled.
+  const historyLeads = codes.length > 0 && isHistoryOrScreeningCode(codes[0]);
+
+  const dx: LedgerSection = { id: 'diagnoses', label: 'Diagnoses', codes: diagnoses };
+  const hx: LedgerSection = { id: 'history-screening', label: 'History & Screening', codes: history };
+
   const out: LedgerSection[] = [];
-  if (diagnoses.length) out.push({ id: 'diagnoses', label: 'Diagnoses', codes: diagnoses });
-  if (history.length) {
-    out.push({ id: 'history-screening', label: 'History & Screening', codes: history });
+  for (const sec of historyLeads ? [hx, dx] : [dx, hx]) {
+    if (sec.codes.length) out.push(sec);
   }
   return out;
 }

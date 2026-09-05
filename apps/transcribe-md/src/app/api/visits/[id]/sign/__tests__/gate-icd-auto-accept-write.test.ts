@@ -19,6 +19,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   findFirst: vi.fn(),
+  txFindFirst: vi.fn(),
+  txUpdateMany: vi.fn(),
+  auditFindMany: vi.fn(),
+  txAuditFindMany: vi.fn(),
+  logWarn: vi.fn(),
   userFindUnique: vi.fn(),
   updateMany: vi.fn(),
   rxOverrideFindMany: vi.fn(),
@@ -51,16 +56,39 @@ vi.mock('next/server', () => {
   return { NextResponse: FakeNextResponse };
 });
 
+// ⚠️ THE TRANSACTION CLIENT IS A **DIFFERENT OBJECT** FROM THE OUTER ONE, AND
+// THAT IS THE POINT. The first version of this harness handed `$transaction`
+// the very client it was mocking — `fn(prisma)` — so `tx.x` and `prisma.x` were
+// the same spy. The adversarial pass moved BOTH ICD statements off the
+// transaction (`tx.…findFirst` -> `prisma.…findFirst`, `tx.…updateMany` ->
+// `prisma.…updateMany`) and this file stayed 100% green.
+//
+// The property that escapes is ATOMICITY — the one the whole route is built on.
+// `route.ts` prices the alternative in its own words: at READ COMMITTED the
+// re-read and the CAS take two snapshots, "the original erasure race with a
+// smaller window, which is not the same as a closed one." A gate whose header
+// says THE ARM THAT MATTERS IS THE RACE could prove the route consults a fresh
+// snapshot and could not prove the snapshot and the write are the same one.
 vi.mock('@meddoc/db', () => {
+  const tx: Record<string, unknown> = {
+    transcribeVisit: {
+      findFirst: mocks.txFindFirst,
+      updateMany: mocks.txUpdateMany,
+    },
+    user: { findUnique: mocks.userFindUnique },
+    auditLog: { findMany: mocks.txAuditFindMany },
+    rxWarningOverride: { findMany: mocks.rxOverrideFindMany },
+  };
   const prisma: Record<string, unknown> = {
     transcribeVisit: {
       findFirst: mocks.findFirst,
       updateMany: mocks.updateMany,
     },
     user: { findUnique: mocks.userFindUnique },
+    auditLog: { findMany: mocks.auditFindMany },
     rxWarningOverride: { findMany: mocks.rxOverrideFindMany },
-    $transaction: (fn: (tx: unknown) => unknown) =>
-      typeof fn === 'function' ? fn(prisma) : Promise.all(fn as never),
+    $transaction: (fn: (t: unknown) => unknown) =>
+      typeof fn === 'function' ? fn(tx) : Promise.all(fn as never),
   };
   return { default: prisma, prisma };
 });
@@ -68,7 +96,7 @@ vi.mock('@/lib/nextauth', () => ({ auth: mocks.auth }));
 vi.mock('@/lib/auth', () => ({ getSession: mocks.auth }));
 vi.mock('@/lib/audit', () => ({ logAudit: mocks.logAudit }));
 vi.mock('@/lib/log', () => ({
-  log: { warn: vi.fn(), info: mocks.logInfo, error: vi.fn() },
+  log: { warn: mocks.logWarn, info: mocks.logInfo, error: vi.fn() },
 }));
 vi.mock('@meddoc/ai', () => ({ redactPhi: (x: unknown) => x }));
 vi.mock('@/lib/visit-export', () => ({ formatVisitDate: () => '2026-09-05' }));
@@ -145,7 +173,7 @@ function call() {
 }
 
 function signedWrite(): Record<string, unknown> | undefined {
-  const c = mocks.updateMany.mock.calls.find(
+  const c = mocks.txUpdateMany.mock.calls.find(
     (x) => (x[0] as { data?: Record<string, unknown> })?.data?.status === TranscribeVisitStatus.SIGNED,
   );
   return (c?.[0] as { data?: Record<string, unknown> })?.data;
@@ -159,7 +187,8 @@ function expectSigned(): Record<string, unknown> {
   expect(
     d,
     `no SIGNED write happened — the assertions below would pass vacuously. ` +
-      `updateMany calls: ${mocks.updateMany.mock.calls.length}`,
+      `tx.updateMany calls: ${mocks.txUpdateMany.mock.calls.length}, ` +
+      `outer updateMany calls: ${mocks.updateMany.mock.calls.length}`,
   ).toBeTruthy();
   return d!;
 }
@@ -185,12 +214,17 @@ const written = () => signedWrite()?.icdDecisions as IcdDecisionMap | undefined;
  *   post-write       — `signedAt` alone
  */
 function serveReads(entry: Record<string, unknown>, fresh: Record<string, unknown>) {
-  mocks.findFirst.mockImplementation(async (args: unknown) => {
+  const serve = async (args: unknown) => {
     const sel = ((args as { select?: Record<string, unknown> })?.select ?? {}) as Record<string, unknown>;
     if (sel.icdDecisions) return fresh;
     if (sel.signedAt && Object.keys(sel).length === 1) return { signedAt: new Date() };
     return entry;
-  });
+  };
+  // Both clients answer identically. Which SPY recorded the call is the whole
+  // measurement — if the route reads off the outer client, `txFindFirst` stays
+  // at zero and the atomicity arm reds.
+  mocks.findFirst.mockImplementation(serve);
+  mocks.txFindFirst.mockImplementation(serve);
 }
 
 beforeEach(() => {
@@ -199,6 +233,9 @@ beforeEach(() => {
   mocks.userFindUnique.mockResolvedValue({ practiceRole: 'CLINICIAN' });
   serveReads(visitRow(), visitRow());
   mocks.updateMany.mockResolvedValue({ count: 1 });
+  mocks.txUpdateMany.mockResolvedValue({ count: 1 });
+  mocks.auditFindMany.mockResolvedValue([]);
+  mocks.txAuditFindMany.mockResolvedValue([]);
   mocks.rxOverrideFindMany.mockResolvedValue([]);
   mocks.criticalWarningRefs.mockReturnValue([]);
   mocks.computeDisplayedEmCode.mockResolvedValue('99214');
@@ -279,22 +316,132 @@ describe('the sign-time auto-accept WRITE', () => {
     expect(signedWrite()?.icdDecisions).toBeUndefined();
   });
 
+  it('⚠️ A CODE THE DOCTOR **CLEARED** IS NEVER RE-ACCEPTED BY THE MACHINE', async () => {
+    // Found by the adversarial pass, and the only finding reachable through the
+    // shipped UI with no rollback and no repair. `cleared` DELETES the record —
+    // it is "the ABSENCE of a state", not a state — so the column cannot tell
+    // "never touched" from "the doctor took this code OFF the record". Accept
+    // I10, click Undo, sign: the machine put it straight back and stamped the
+    // reversal `auto: true`, while `audit_logs` ended with
+    // ICD_CODE_DECISION_CLEARED. The record and the trail disagreed.
+    mocks.auditFindMany.mockResolvedValue([{ metadata: { code: 'I10', toState: null } }]);
+    mocks.txAuditFindMany.mockResolvedValue([{ metadata: { code: 'I10', toState: null } }]);
+    await call();
+    expectSigned();
+    expect(written()?.['I10'], 'the doctor un-decided this code; the machine put it back').toBeUndefined();
+    expect(signedWrite()?.icdDecisions).toBeUndefined();
+  });
+
+  it('the cleared trail is matched on the SAME normalised code', async () => {
+    // A trail row written in another case must still block — one identifier,
+    // one matcher, on the read path and the write path both.
+    mocks.auditFindMany.mockResolvedValue([{ metadata: { code: 'i10' } }]);
+    mocks.txAuditFindMany.mockResolvedValue([{ metadata: { code: 'i10' } }]);
+    await call();
+    expectSigned();
+    expect(written()?.['I10']).toBeUndefined();
+  });
+
+  it('non-vacuity: an UNRELATED cleared code does not block the auto-accept', async () => {
+    // Without this the two arms above pass on a route that never auto-accepts.
+    mocks.auditFindMany.mockResolvedValue([{ metadata: { code: 'E11.9' } }]);
+    mocks.txAuditFindMany.mockResolvedValue([{ metadata: { code: 'E11.9' } }]);
+    await call();
+    expectSigned();
+    expect(written()?.['I10']?.auto).toBe(true);
+  });
+
+  it('⚠️ an UNREADABLE trail SKIPS the auto-accept and still SIGNS the note', async () => {
+    // Three behaviours were available and only one is right. Proceeding with an
+    // empty set silently re-arms the defect above; failing the request stops a
+    // doctor signing a finished note because of a bookkeeping table.
+    mocks.auditFindMany.mockRejectedValue(new Error('audit_logs unreachable'));
+    mocks.txAuditFindMany.mockRejectedValue(new Error('audit_logs unreachable'));
+    await call();
+    const d = expectSigned();
+    expect(d.signedAt, 'the signature must survive an unreadable trail').toBeTruthy();
+    expect('icdDecisions' in d, 'nothing is auto-accepted when provenance cannot be checked').toBe(false);
+    expect(mocks.logWarn.mock.calls.some((c) => String(c[1]).includes('SKIPPED'))).toBe(true);
+  });
+
+  it('⚠️ THE MACHINE\'S DECISION WRITES AN AUDIT ROW, like the doctor\'s', async () => {
+    // Every DOCTOR decision writes ICD_CODE_ACCEPTED / _REJECTED / _CLEARED,
+    // and the decision route calls that trail "the one log a coding dispute
+    // reads". The machine wrote nothing there, so a reconstruction attributed
+    // its acceptances to the doctor BY OMISSION. `auto: true` is no substitute
+    // — it lives in the same mutable column, strippable in a rollback window.
+    await call();
+    expectSigned();
+    const rows = mocks.logAudit.mock.calls
+      .map((c) => c[0] as { action?: string; metadata?: Record<string, unknown> })
+      .filter((r) => r.action === 'ICD_CODE_AUTO_ACCEPTED');
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.metadata?.code).toBe('I10');
+    expect(rows[0]?.metadata?.toState).toBe('accepted');
+    expect(rows[0]?.metadata?.fromState).toBeNull();
+  });
+
+  it('⚠️ A LOST SIGN RACE CLAIMS NOTHING — no log line, no audit row', async () => {
+    // The log used to fire from INSIDE the transaction, before `updateMany`, so
+    // a rolled-back or CAS-lost signature still asserted the acceptance. This
+    // route already names that defect one field over: "⚠️ NOT `VISIT_SIGNED` —
+    // THIS REQUEST SIGNED NOTHING."
+    mocks.txUpdateMany.mockResolvedValue({ count: 0 });
+    await call();
+    expect(
+      mocks.logInfo.mock.calls.some((c) => String(c[1]).includes('auto-accept')),
+      'this request wrote nothing and claimed an acceptance',
+    ).toBe(false);
+    expect(
+      mocks.logAudit.mock.calls.some((c) => (c[0] as { action?: string }).action === 'ICD_CODE_AUTO_ACCEPTED'),
+    ).toBe(false);
+  });
+
   it('the fresh re-read actually SELECTS the two ICD columns', async () => {
     // The arms above are only meaningful if the route asks for these columns.
     // A `select` missing them yields `undefined` — which reads as "no prior
     // decisions" and would auto-accept straight over a rejection.
     await call();
-    const selects = mocks.findFirst.mock.calls.map(
+    const selects = [...mocks.findFirst.mock.calls, ...mocks.txFindFirst.mock.calls].map(
       (c) => ((c[0] as { select?: Record<string, unknown> })?.select ?? {}) as Record<string, unknown>,
     );
-    // The route reads the visit three times. Named by CONTENT, not by index.
-    expect(selects.length).toBe(3);
+    // ⚠️ NOT `selects.length === 3`. That pinned a count of UNRELATED reads:
+    // adding a fourth visit read anywhere in this 1100-line route redded the
+    // gate while every property named below stayed true. A gate that reds on a
+    // correct change is a false rejection, and the three lines that follow
+    // already carry the entire claim.
     const inTx = selects.filter((s) => s.icdDecisions === true);
     expect(inTx.length, 'exactly one read asks for the decision column').toBe(1);
     expect(inTx[0]?.icdCodes, 'the codes and the decisions must come from ONE snapshot').toBe(true);
     // And the ENTRY read does NOT carry it — which is what makes the fresh
     // read a different snapshot rather than a duplicate of the capture.
     expect(selects.some((s) => s.emStale === true && s.icdDecisions === undefined)).toBe(true);
+  });
+
+  it('⚠️ THE ICD READ AND THE SIGNED WRITE ARE BOTH ON THE **TRANSACTION** CLIENT', async () => {
+    // The atomicity claim, asserted directly. `route.ts` states that at READ
+    // COMMITTED the re-read and the CAS take two snapshots — "the original
+    // erasure race with a smaller window, which is not the same as a closed
+    // one." Consulting a fresh snapshot is worth nothing if the write that acts
+    // on it is a separate statement outside the transaction.
+    await call();
+    const txReads = mocks.txFindFirst.mock.calls.filter(
+      (c) => (c[0] as { select?: Record<string, unknown> })?.select?.icdDecisions === true,
+    );
+    expect(txReads.length, 'the ICD re-read escaped the transaction').toBe(1);
+    expect(mocks.txUpdateMany.mock.calls.length, 'the signed write escaped the transaction').toBe(1);
+    // ⚠️ AND THE CLEARED-TRAIL READ. Its own comment says it must be in the
+    // same transaction as the read it guards — outside it, a clear committing
+    // in between is invisible exactly when it matters most.
+    expect(mocks.txAuditFindMany.mock.calls.length, 'the cleared-trail read escaped the transaction').toBe(1);
+    expect(mocks.auditFindMany.mock.calls.length).toBe(0);
+    // And the outer client saw NEITHER — otherwise both could be firing.
+    expect(mocks.updateMany.mock.calls.length).toBe(0);
+    expect(
+      mocks.findFirst.mock.calls.some(
+        (c) => (c[0] as { select?: Record<string, unknown> })?.select?.icdDecisions === true,
+      ),
+    ).toBe(false);
   });
 
   it('logs the codes it decided for the doctor, and no note content', async () => {

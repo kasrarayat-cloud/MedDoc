@@ -57,7 +57,7 @@
 import { useCallback, useMemo, useState } from 'react';
 
 import { ledgerSections } from '@/lib/icd-ledger-sections';
-import { icdRowState, type IcdRowState } from '@/lib/icd-row-state';
+import { ICD_ROW_STATE_LABEL, icdRowState, type IcdRowState } from '@/lib/icd-row-state';
 import {
   ICD_REJECTION_REASONS,
   icdDecisionSummary,
@@ -271,6 +271,42 @@ export function IcdCodingView(props: IcdCodingViewProps) {
           data-testid={`icd-card-${code}`}
           data-code={code}
         >
+          {/* ⚠️ THE STATE, AS TEXT. FOUND BY THE ADVERSARIAL PASS.
+              The three sections this row replaced carried the decision state in
+              a HEADING — "Needs review · 1", "Accepted · 1". Moving the state
+              onto the row moved it into `data-state` and a CSS tint, and
+              `ICD_ROW_STATE_LABEL` — defined in this slice — was rendered
+              NOWHERE. Measured on a signed visit: an accepted row and a held
+              row were byte-identical in text, and the only accessible name was
+              `null`.
+
+              That is an accepted-capability loss on the surface a doctor
+              attests from, and it is WCAG 1.4.1 (colour as the sole carrier of
+              information): invisible to a screen reader, to greyscale print,
+              to a PDF of the tab, and to a colour-vision-deficient physician.
+              The auto-accept in this same slice makes the mixed state the
+              NORMAL case — codes at or above the threshold become accepted at
+              signature and the rest stay held forever — so every signed note
+              now carries both kinds side by side.
+
+              ⚠️ VISUALLY HIDDEN, NOT VISIBLE, AND THAT IS A DELIBERATE LIMIT.
+              This restores the accessibility-tree parity that existed before
+              the conversion without moving one pixel of the ratified frames. It
+              does NOT help the sighted colour-blind reader or a greyscale
+              print — that needs a visible marker, which is a DESIGN decision
+              and is on the owner's batched list rather than invented here. */}
+          <span className="qm-sr-only">
+            {ICD_ROW_STATE_LABEL[state]}
+            {/* ⚠️ AND THE PROVENANCE, IN THE ONE PLACE IT LANDS. The orphaned
+                sentence below was made provenance-aware and the ROW was not —
+                but `orphaned` is documented as unreachable today, while every
+                auto-accept lands HERE as `pre-accepted`. A machine-written
+                acceptance and a doctor's own were indistinguishable in text,
+                on a signed claim, under a caption that says the physician
+                makes the final coding decision. */}
+            {projection.decisions[code]?.auto ? ' — accepted automatically at signing' : ''}
+            {'. '}
+          </span>
           <span className="qm-icd-row-code">{code}</span>
           <span className="qm-icd-row-desc">
             {d?.description ?? ''}

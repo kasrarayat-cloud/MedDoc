@@ -31,12 +31,7 @@
 // make changing it a one-line edit with the reasoning attached.
 // ============================================================================
 
-import {
-  normalizeIcdCode,
-  readIcdDecisions,
-  suggestedIcdCodes,
-  type IcdDecisionMap,
-} from './icd-decisions';
+import { normalizeIcdCode, suggestedIcdCodes, type IcdDecisionMap } from './icd-decisions';
 
 export const ICD_AUTO_ACCEPT_MIN_CONFIDENCE = 0.9;
 
@@ -58,6 +53,7 @@ export const ICD_AUTO_ACCEPT_MIN_CONFIDENCE = 0.9;
  */
 export function readSuggestedConfidence(rawIcdCodes: unknown): Record<string, number> {
   const out: Record<string, number> = {};
+  const seen = new Set<string>();
   const rows = Array.isArray(rawIcdCodes)
     ? rawIcdCodes
     : rawIcdCodes && typeof rawIcdCodes === 'object'
@@ -68,10 +64,16 @@ export function readSuggestedConfidence(rawIcdCodes: unknown): Record<string, nu
     if (!row || typeof row !== 'object') continue;
     const r = row as Record<string, unknown>;
     const code = normalizeIcdCode(r.code);
-    // FIRST WINS, matching `suggestedIcdCodes` — a duplicated code collapses
-    // into its first row there, so reading a LATER row's confidence here would
-    // score one code against another code's number.
-    if (!code || code in out) continue;
+    if (!code) continue;
+    // ⚠️ FIRST WINS, AND `seen` IS WHY — MY FIRST VERSION GUARDED ON `out` AND
+    // THE ADVERSARIAL PASS BROKE IT. An invalid confidence `continue`s without
+    // writing `out[code]`, so the code stayed unseen and the NEXT duplicate row
+    // was read instead: `[{I10, 95}, {I10, 0.95}]` yielded `0.95` and
+    // auto-accepted a code whose first row this function had just REFUSED as
+    // uninterpretable. A rejected value must still consume the code's turn, or
+    // the refusal is a filter that keeps trying until something passes.
+    if (seen.has(code)) continue;
+    seen.add(code);
     const c = r.confidence;
     if (typeof c !== 'number' || !Number.isFinite(c) || c < 0 || c > 1) continue;
     out[code] = c;
@@ -92,9 +94,29 @@ export interface IcdAutoAcceptResult {
  * ⚠️ IT ADDS AND IT NEVER REPLACES. A code already carrying a record is left
  * exactly as it is — and the case that matters is a REJECTION, because
  * overwriting one would put a code the doctor threw out onto the signed record
- * as accepted, by a machine, with no trace that they had said no. The guard is
+ * as accepted, by a machine, with no trace that they had said no.
+ *
+ * ⚠️ AND THE GUARD READS THE **RAW STORED KEYS**, NOT THE NARROWED MAP — WHICH
+ * IS THE CORRECTION THE ADVERSARIAL PASS FORCED. This said "the guard is
  * `code in existing`, which is presence, not state: it cannot be defeated by a
- * state this file has not heard of.
+ * state this file has not heard of." That was FALSE, because `existing` was
+ * `readIcdDecisions(...)` — the NARROWED map — and the narrower DROPS records
+ * it cannot interpret. Demonstrated: a rejection carrying a reason token this
+ * build does not know
+ *
+ *     {E11.9: {state:'rejected', at:…, byUserId:'dr-smith', reason:'patient_declined'}}
+ *
+ * narrows to `{}`, so the code read as undecided and came out as
+ * `{state:'accepted', auto:true}` — the doctor's rejection replaced by the
+ * opposite clinical statement, unattended, at signature.
+ *
+ * ⚠️ AND THE NARROWER'S OWN SAFETY ARGUMENT IS WHAT THIS BROKE. It justifies
+ * dropping a malformed rejection because "dropping returns the code to
+ * UNDECIDED, so it surfaces to the doctor again and is decided a second time —
+ * over-shooting to the edge, where there is a fence." The sign-time auto-accept
+ * IS the removal of that fence: it is the thing that now decides undecided
+ * codes with nobody present. A new feature can falsify an old comment's
+ * premise without touching its file.
  *
  * ⚠️ ORPHANED AND DROPPED CODES CANNOT BE REACHED FROM HERE, structurally
  * rather than by a check: the loop iterates `suggestedIcdCodes`, and an
@@ -105,11 +127,55 @@ export function autoAcceptIcdDecisions(
   rawIcdCodes: unknown,
   rawIcdDecisions: unknown,
   actor: { at: string; byUserId: string },
+  /**
+   * ⚠️ CODES THE DOCTOR HAS EVER **CLEARED**, FROM THE AUDIT TRAIL — the second
+   * correction the adversarial pass forced, and the only one reachable through
+   * the shipped UI with no rollback and no repair.
+   *
+   * `cleared` is deliberately NOT a state: it DELETES the record
+   * (`icd-decisions.ts` — *"the ABSENCE of one"*). So the column cannot
+   * distinguish *"never touched"* from *"the doctor took this code OFF the
+   * record"*, and this function treated the second as the first. Measured:
+   *
+   *     accept I10 -> Undo -> sign
+   *       => {I10: {state:'accepted', …, auto:true}}
+   *
+   * The doctor touched that code twice and the record says a machine decided
+   * it. The audit trail even disagreed with the column — it ended with
+   * `ICD_CODE_DECISION_CLEARED` while the signed record said `accepted`.
+   *
+   * ⚠️ THE AUTHORITY IS THE APPEND-ONLY TRAIL, NOT THE COLUMN, because the
+   * column is the thing that forgets by design. The caller reads it; this stays
+   * pure. An EMPTY set is honest ("nobody ever cleared anything here"), so a
+   * caller that cannot read the trail must say so rather than pass `[]` — see
+   * the route.
+   */
+  everCleared: ReadonlySet<string> = new Set(),
   minConfidence: number = ICD_AUTO_ACCEPT_MIN_CONFIDENCE,
 ): IcdAutoAcceptResult {
-  const existing = readIcdDecisions(rawIcdDecisions);
   const confidence = readSuggestedConfidence(rawIcdCodes);
-  const decisions: IcdDecisionMap = { ...existing };
+
+  // Every code the stored column mentions AT ALL, however malformed its record.
+  const stored = new Set<string>();
+  const rawMap =
+    rawIcdDecisions && typeof rawIcdDecisions === 'object' && !Array.isArray(rawIcdDecisions)
+      ? (rawIcdDecisions as Record<string, unknown>)
+      : {};
+  for (const key of Object.keys(rawMap)) {
+    const n = normalizeIcdCode(key);
+    if (n) stored.add(n);
+  }
+
+  // ⚠️ THE CARRIER IS THE RAW MAP, NOT THE NARROWED ONE — the second half of
+  // the same correction. This write replaces the whole column, including the
+  // records it did not touch, so narrowing here would DESTROY any field a
+  // concurrently-deployed or later image knows about on a record the
+  // auto-accept correctly declined to touch. Demonstrated: an untouched
+  // rejection carrying `supersededBy` lost it to a signature that only added a
+  // different code. Spreading the raw map keeps every stored byte and adds
+  // strictly new keys — and it cannot collide, because a code with ANY stored
+  // key is refused above.
+  const decisions = { ...rawMap } as IcdDecisionMap;
   const added: string[] = [];
 
   // A malformed actor is a refusal, not a repair. `byUserId` lands in a column
@@ -126,7 +192,9 @@ export function autoAcceptIcdDecisions(
   }
 
   for (const code of suggestedIcdCodes(rawIcdCodes)) {
-    if (code in existing) continue;
+    if (stored.has(code)) continue;
+    // A code the doctor deliberately un-decided is not an undecided code.
+    if (everCleared.has(code)) continue;
     const c = confidence[code];
     // An ABSENT confidence is not a high one. `undefined >= 0.9` is false, but
     // it is written as an explicit presence test so the fail-closed reading is

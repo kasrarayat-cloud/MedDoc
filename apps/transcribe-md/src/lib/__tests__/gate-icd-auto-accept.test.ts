@@ -116,6 +116,97 @@ describe('⚠️ a confidence it cannot interpret is REFUSED, never rescaled', (
   });
 });
 
+// ============================================================================
+// ⚠️ THE ADVERSARIAL PASS'S FINDINGS, AS ARMS.
+// ----------------------------------------------------------------------------
+// None of the arms above could see any of these. Each is written so it RED-s
+// on the code as it was, and each names the wrong output it produced.
+// ============================================================================
+
+describe('⚠️ a stored record the NARROWER cannot read still blocks the auto-accept', () => {
+  // The guard used to read `readIcdDecisions(...)` — the NARROWED map — while
+  // its own comment claimed it "cannot be defeated by a state this file has not
+  // heard of". The narrower DROPS what it cannot interpret, so the code read as
+  // undecided and the doctor's rejection was replaced by its opposite.
+  it.each([
+    ['a reason token this build does not know', { state: 'rejected', at: '2026-09-01T00:00:00.000Z', byUserId: 'dr', reason: 'patient_declined' }],
+    ['a state a later slice adds', { state: 'deferred', at: '2026-09-01T00:00:00.000Z', byUserId: 'dr' }],
+    ['a rejection written before `reason` existed', { state: 'rejected', at: '2026-09-01T00:00:00.000Z', byUserId: 'dr' }],
+    ['an empty actor', { state: 'rejected', at: '2026-09-01T00:00:00.000Z', byUserId: '', reason: 'other' }],
+    ['a malformed timestamp', { state: 'rejected', at: 0, byUserId: 'dr', reason: 'other' }],
+  ])('%s is NOT overwritten by a machine acceptance', (_label, stored) => {
+    const r = autoAcceptIcdDecisions(
+      blob([{ code: 'E11.9', confidence: 0.99 }]),
+      { 'E11.9': stored },
+      ACTOR,
+    );
+    expect(r.added, 'the narrower dropped it, so the guard read it as undecided').toEqual([]);
+    // And the stored bytes survive the write untouched.
+    expect(r.decisions['E11.9']).toEqual(stored);
+  });
+
+  it('the key is matched with the SAME normaliser the suggested set uses', () => {
+    // A raw key of a different case must still block — two matchers on one
+    // identifier is a recorded failure class in this repo.
+    const r = autoAcceptIcdDecisions(
+      blob([{ code: 'E11.9', confidence: 0.99 }]),
+      { 'e11.9': { state: 'rejected', at: 'A', byUserId: 'dr', reason: 'other' } },
+      ACTOR,
+    );
+    expect(r.added).toEqual([]);
+  });
+
+  it('non-vacuity: with NOTHING stored, the same code IS auto-accepted', () => {
+    expect(autoAcceptIcdDecisions(blob([{ code: 'E11.9', confidence: 0.99 }]), {}, ACTOR).added)
+      .toEqual(['E11.9']);
+  });
+});
+
+describe('⚠️ the write carries every stored byte on records it did not touch', () => {
+  it('a field this build does not know SURVIVES on an untouched record', () => {
+    // The write replaces the whole column. Narrowing the carrier destroyed any
+    // field a concurrently-deployed or later image knows about — on a record
+    // the auto-accept had correctly DECLINED to touch.
+    const stored = {
+      I10: { state: 'rejected', at: 'A', byUserId: 'dr', reason: 'other', supersededBy: 'I10.9' },
+    };
+    const r = autoAcceptIcdDecisions(
+      blob([{ code: 'E11.9', confidence: 0.95 }, { code: 'I10', confidence: 0.95 }]),
+      stored,
+      ACTOR,
+    );
+    expect(r.added).toEqual(['E11.9']);
+    expect(
+      (r.decisions['I10'] as unknown as Record<string, unknown>)?.supersededBy,
+      'an untouched record lost a field to a signature that only added a different code',
+    ).toBe('I10.9');
+  });
+});
+
+describe('⚠️ a refused confidence CONSUMES the code’s turn', () => {
+  it('a malformed FIRST row does not let a later duplicate win', () => {
+    // `if (code in out)` guarded on the OUTPUT, and an invalid confidence
+    // `continue`d without writing it — so the code stayed unseen and the next
+    // duplicate was read. `[{I10,95},{I10,0.95}]` yielded 0.95 and
+    // auto-accepted a code whose first row had just been REFUSED.
+    const raw = { codes: [{ code: 'I10', confidence: 95 }, { code: 'I10', confidence: 0.95 }] };
+    expect(readSuggestedConfidence(raw)['I10']).toBeUndefined();
+    expect(autoAcceptIcdDecisions(raw, null, ACTOR).added).toEqual([]);
+  });
+
+  it('and the same for a non-numeric first row', () => {
+    const raw = { codes: [{ code: 'I10', confidence: '0.40' }, { code: 'I10', confidence: 0.99 }] };
+    expect(readSuggestedConfidence(raw)['I10']).toBeUndefined();
+    expect(autoAcceptIcdDecisions(raw, null, ACTOR).added).toEqual([]);
+  });
+
+  it('non-vacuity: a VALID first row still wins over a later duplicate', () => {
+    const raw = { codes: [{ code: 'I10', confidence: 0.99 }, { code: 'I10', confidence: 0.1 }] };
+    expect(readSuggestedConfidence(raw)['I10']).toBe(0.99);
+    expect(autoAcceptIcdDecisions(raw, null, ACTOR).added).toEqual(['I10']);
+  });
+});
+
 describe('the written record', () => {
   it('carries auto:true, the actor, and NO reason', () => {
     const r = autoAcceptIcdDecisions(blob([{ code: 'E11.9', confidence: 0.93 }]), null, ACTOR);
