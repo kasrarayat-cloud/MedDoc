@@ -983,6 +983,30 @@ the delimiter (`<<'MSG'`) so the shell expands nothing.
 
 ## Multi-session programs have relay ledgers — READ THEM FIRST
 
+### ⚠️ SESSION-START CHECKLIST — READ THE BOARD AS THE FIRST ACT OF EVERY TURN
+
+**Standing 2026-09-05, ordered after a miss that cost a deploy its evidence.**
+
+> **BEFORE ACTING, READ `docs/foundation/INBOX.md` AND THE RELAY'S LIVE QUEUE.**
+> Not once at session start — **at the start of every turn**, because the board
+> moves while you work.
+
+⚠️ **THE MISS THIS REPLACES.** A request for §2.5 rows went out at `01:10Z` and
+was reinforced by the owner at `01:25Z`. It went unseen for **four hours** while
+the lane it was addressed to worked productively on something else. The deploy
+went out with **ten runtime passengers**, two of them that lane's, every row
+DERIVED BY THE DEPLOYER rather than supplied by its author — recorded as a
+finding, correctly.
+
+**Nothing was disputed and nothing was forgotten. Nothing forced the read.**
+A derived row says *"here is what I can measure about your change"*; an authored
+row says *"here is what correct looks like, from someone who knew the intent"* —
+and only one of those can be produced by somebody else.
+
+**The lane that acts before reading the board is the mechanism that makes "one
+paste" fail** — a request can be perfectly written, correctly addressed and
+owner-reinforced, and still arrive nowhere.
+
 A relay ledger is the contract between sessions. It says what is built, what is
 next, and what proof exists. **Nothing in this file used to point at one, which
 is how a session can open, do good work, and duplicate or contradict a ruling

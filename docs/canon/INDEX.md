@@ -27,7 +27,7 @@
 
 ## CANON INDEX — every archived entry, one row each
 
-**152 entries live in full at `docs/canon/`.**
+**154 entries live in full at `docs/canon/`.**
 Each row is a **POINTER, never the authority** — the archived body governs, and
 it is verbatim. A row exists so that a grep for an entry's title still lands
 here and tells you where the body went; the tell is that entry's OWN words.
@@ -70,6 +70,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 - **A BRANCH THAT NEVER MET CI CARRIES AN UNMEASURED CLASS** — 46 commits met CI at once and produced ONE red: a gate opened the template by ABSOLUTE HOST PATH, green locally for days because the VPS tree IS `/opt/meddoc-pro`. **Push long branches early as DRAFTS.** → `docs/canon/103-a-branch-that-never-met-ci-carries-an-unmeasured-class.md`
 - **⚠️ AND THE SHELL IS NOT THE ONLY READER — A NEGATED MENTION STILL CLOSES THE ISSUE** — GitHub's linked-issue parser has no concept of negation: "it does not fix #603" closes it. Grep the body file for close/fix/resolve + `#N` before `gh pr create`. → `docs/canon/48-and-the-shell-is-not-the-only-reader-a-negated-mention-sti.md`
 - **THE CHECK AND THE MERGE ARE NOT ATOMIC** — a correct two-view check still cancels somebody's runs: the wrapper reads `main` quiet, then GitHub merges server-side onto whatever the head is by then. ⚠️ Not closable from the client — so PIN A DEPLOY TO A COMMIT rather than chasing `main`, which is a race with no terminating condition. → `docs/canon/109-the-check-and-the-merge-are-not-atomic.md`
+- **RETIRING A BRANCH CLOSES EVERY OPEN PR THAT NAMES IT AS BASE — AND THAT CLOSE IS NOT REVERSIBLE** — "RETARGET BEFORE YOU RETIRE." #946 merged; its branch was tidied away seconds later; GitHub closed #951 **17 seconds** after, and both reopen and retarget were refused. ⚠️ `retire-branch.sh` confirms the deletion LANDED — **a guard that confirms an act SUCCEEDED cannot say it should not have been PERFORMED.** → `docs/canon/112-retiring-a-branch-closes-every-open-pr-based-on-it.md`
 
 ### EVIDENCE, CENSUSES & MEASUREMENT
 
@@ -105,6 +106,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
   - ↳ **2 · CHECK QUERIES PARTITION `status` FIRST, `conclusion` SECOND** — `conclusion != success` counts a RUNNING check as a failure. Partition `status` first: running / failed / passed, reconciling to the total. → `docs/canon/20-and-apply-a-new-entry-to-its-own-landing.md`
   - ↳ **3 · A WATCHER MATCHING ON CONTENT SEES ITS OWN AUTHOR** — A watcher matching on content fires on your OWN activity. Read every event for who filed it. → `docs/canon/20-and-apply-a-new-entry-to-its-own-landing.md`
 - **A TASK'S EXIT CODE DESCRIBES ITS LAST COMMAND, NOT THE WORK** — "VERIFY THE WORK, NOT THE WRAPPER." Read the outcome from the system that owns it, and never re-run an irreversible act on a wrapper's say-so. → `docs/canon/22-a-task-s-exit-code-describes-its-last-command-not-the-work.md`
+  - ↳ **⚠️ AND THE WRAPPER CAN BE ONE YOU ADDED — A PIPE REPLACES THE EXIT CODE** — "A PIPELINE'S EXIT STATUS IS ITS LAST COMMAND'S, so every pipe you add is a new wrapper." `| tail` reported exit 0 for a script that had exited 1 after fifty minutes — and it RECURRED ten minutes after the paragraph was written. → `docs/canon/22-a-task-s-exit-code-describes-its-last-command-not-the-work.md`
 - **COUNTING TOKENS INSTEAD OF CLASSIFYING ROWS — AND THE DETECTOR THAT CAUGHT ALL FIVE** — Five instrument defects, one shape: counting TOKENS instead of classifying ROWS, each caught by an incoherent value left loud. Never normalise an impossible value. → `docs/canon/25-counting-tokens-instead-of-classifying-rows-and-the-detect.md`
 - **A DETECTOR CAN BE BLIND TO THE THING IT MOST EXISTS TO WATCH** — "A detector that silently covers half of what its name implies is indistinguishable from one that works. The tell is the count that never moves." → `docs/canon/31-a-detector-can-be-blind-to-the-thing-it-most-exists-to-wat.md`
   - ↳ **⚠️ TWO MORE OF THE SAME FAMILY, FROM ONE RECON — F8, 2026-08-16** — "A grep that resolves a SYMBOL has not found its DATA" (barrel re-export → false zero); ask what SHAPE the data is before asking how much of it there is. → `docs/canon/31-a-detector-can-be-blind-to-the-thing-it-most-exists-to-wat.md`
