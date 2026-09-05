@@ -262,7 +262,8 @@ export function IcdCodingView(props: IcdCodingViewProps) {
     outerTestId?: string,
   ) => {
     const d = detail[code];
-    const reason = projection.decisions[code]?.reason;
+    const decision = projection.decisions[code];
+    const reason = decision?.reason;
     return (
       <div key={code} {...(outerTestId ? { 'data-testid': outerTestId } : {})}>
         <div
@@ -322,11 +323,38 @@ export function IcdCodingView(props: IcdCodingViewProps) {
             {/* State 5 shows an em dash, never a number: the code never reached
                 the note, so a confidence would be a claim about something that
                 did not happen. */}
-            {state === 'not-carried'
-              ? '—'
-              : typeof d?.confidence === 'number'
-                ? `${Math.round(d.confidence * (d.confidence <= 1 ? 100 : 1))}%`
-                : ''}
+            <span className="qm-icd-row-conf">
+              {state === 'not-carried'
+                ? '—'
+                : typeof d?.confidence === 'number'
+                  ? `${Math.round(d.confidence * (d.confidence <= 1 ? 100 : 1))}%`
+                  : ''}
+            </span>
+            {/* ⚠️ THE PROVENANCE WORD — ruling #187(2). VISIBLE TEXT, NEVER A
+                COLOUR. It survives greyscale print and colour-vision
+                deficiency, which is exactly what the hidden accessibility label
+                below cannot do for a sighted reader.
+                ⚠️ AND IT DOES NOT REPLACE THAT HIDDEN LABEL. The ruling keeps
+                both, because they answer different readers: the hidden text
+                restores the parity the pre-conversion section HEADINGS carried
+                for assistive technology, and this word reaches the doctor
+                looking at the screen. Removing either re-opens half the defect.
+
+                ⚠️ IT APPEARS ONLY WHERE A DECISION EXISTS. A HELD row has no
+                provenance to state, and printing `you` on a code nobody has
+                decided would assert an attestation that did not happen — the
+                wrong-field harm, which this arc has already paid for once in
+                the orphaned sentence.
+
+                ⚠️ STACKED UNDER THE CONFIDENCE RATHER THAN BESIDE IT, and that
+                is geometry, not taste: the frames fix this meta column at 60px,
+                and `95%` + a separator + `auto` does not fit. Stacking keeps the
+                frames' column width and adds no new element. */}
+            {decision ? (
+              <span className="qm-icd-row-prov" data-provenance={decision.auto ? 'auto' : 'you'}>
+                {decision.auto ? 'auto' : 'you'}
+              </span>
+            ) : null}
           </span>
         </div>
         {d?.evidenceQuote ? (

@@ -3293,11 +3293,44 @@ body[data-skin='rounds'] {
 }
 
 [data-skin='rounds'] .qm-icd-row-pct {
+  /* ⚠️ A COLUMN, NOT A CELL — ruling #187(2). The frames fix this meta column at
+   * 60px, and `95%` beside a separator beside `auto` does not fit. Stacking is
+   * what keeps the frames' geometry while the provenance word becomes visible
+   * text; it invents no new element. */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
   font-family: var(--rounds-font-mono, var(--font-mono));
   font-size: 12px;
   line-height: 16px;
   text-align: right;
   color: var(--rounds-text-3);
+}
+
+/* The confidence itself, now one line of the stacked meta column. */
+[data-skin='rounds'] .qm-icd-row-conf {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The provenance word — `auto` / `you`. TEXT, never colour: it has to survive a
+ * greyscale print and a colour-vision-deficient reader, which is the whole
+ * reason the ruling refused a tint. */
+[data-skin='rounds'] .qm-icd-row-prov {
+  font-family: var(--rounds-font-ui);
+  font-size: 10px;
+  line-height: 12px;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  color: var(--rounds-text-3);
+}
+
+/* ⚠️ `auto` CARRIES THE ACCENT **TEXT** TOKEN, NOT THE FILL ONE. `--rounds-accent`
+ * measures below AA as text; `--rounds-accent-text` is the variant that exists
+ * for exactly this. And the colour is decoration here — the WORD already
+ * carries the meaning, so losing the colour loses nothing. */
+[data-skin='rounds'] .qm-icd-row-prov[data-provenance='auto'] {
+  color: var(--rounds-accent-text);
 }
 
 /* ── The five states ─────────────────────────────────────────────────────── */
