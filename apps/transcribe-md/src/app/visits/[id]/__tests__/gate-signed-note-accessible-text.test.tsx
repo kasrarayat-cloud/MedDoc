@@ -130,7 +130,26 @@ describe('KNOWN LIMITS of the accessible copy — inherited, pinned, not accepte
     expect(spokenFor('## Subjective\nx\n\n## Assessment\n')).toContain('Not documented');
   });
 
-  it('LIMIT: a table header is deleted, and restored only when its rows are unique', () => {
+  // ⚠️ THIS LIMIT NARROWED, AND THE ARM IS REWRITTEN RATHER THAN DELETED.
+  //
+  // It used to read *"a table header is deleted, and restored only when its
+  // rows are unique"*, and it asserted BOTH halves of that defect:
+  // `not.toContain('Diameter')` and `toContain('|')`. The spoken-pipeline slice
+  // fixed the FIRST half — the header now survives on BOTH of two identical
+  // tables, which is the case that used to lose it — so the old arm became a
+  // FALSE REJECTION: green code, red gate, and the "fix" would have been to
+  // re-break the pipeline.
+  //
+  // The second half is still true and is still a limit, so it stays pinned.
+  // What the listener gets now is the column names followed by a raw pipe row:
+  //
+  //     Columns: Vein, Diameter (mm), Reflux Time (seconds).
+  //     | GSV at the Knee | 6.2 | 1.8 |
+  //
+  // The numbers are recoverable BY POSITION against the header, which is the
+  // clinical harm that mattered — a listener hearing "6.2" with no column
+  // identity cannot tell a diameter in mm from a reflux time in seconds.
+  it('LIMIT NARROWED: the header now survives colliding tables; the ROW is still raw pipes', () => {
     const table = [
       '| Vein | Diameter (mm) | Reflux Time (seconds) |',
       '| --- | --- | --- |',
@@ -138,10 +157,16 @@ describe('KNOWN LIMITS of the accessible copy — inherited, pinned, not accepte
     ].join('\n');
     const collide = ['## Findings', 'Right Leg', '', table, '', 'Left Leg', '', table].join('\n');
     const spoken = spokenFor(collide);
-    // The column names are gone and raw pipes reach the listener: numbers with
-    // no unit and no column identity.
-    expect(spoken).not.toContain('Diameter');
-    expect(spoken).toContain('|');
+
+    // FIXED: the column names reach the listener, on BOTH tables. Counted, not
+    // merely `toContain` — the defect was losing the SECOND one to a collision,
+    // and a presence check cannot see that.
+    expect(spoken.split('Columns: Vein, Diameter (mm), Reflux Time (seconds).').length - 1).toBe(2);
+
+    // STILL A LIMIT: the data rows are passed through as markdown.
+    expect(spoken).toContain('| GSV at the Knee | 6.2 | 1.8 |');
+    // FIXED? Then the row is being spoken as prose — update this arm, and check
+    // the numbers still carry their columns.
   });
 });
 
