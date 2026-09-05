@@ -27,7 +27,7 @@
 
 ## CANON INDEX — every archived entry, one row each
 
-**148 entries live in full at `docs/canon/`.**
+**152 entries live in full at `docs/canon/`.**
 Each row is a **POINTER, never the authority** — the archived body governs, and
 it is verbatim. A row exists so that a grep for an entry's title still lands
 here and tells you where the body went; the tell is that entry's OWN words.
@@ -69,6 +69,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 - **GREEN MUST NOT OUTRUN TRUTH** — "A fix that would turn a PR green while its siblings' promises stay false is WITHHELD." Ask what the green will MEAN once it lands; if you can name anything false, stage it and draft the PR. → `docs/canon/59-green-must-not-outrun-truth.md`
 - **A BRANCH THAT NEVER MET CI CARRIES AN UNMEASURED CLASS** — 46 commits met CI at once and produced ONE red: a gate opened the template by ABSOLUTE HOST PATH, green locally for days because the VPS tree IS `/opt/meddoc-pro`. **Push long branches early as DRAFTS.** → `docs/canon/103-a-branch-that-never-met-ci-carries-an-unmeasured-class.md`
 - **⚠️ AND THE SHELL IS NOT THE ONLY READER — A NEGATED MENTION STILL CLOSES THE ISSUE** — GitHub's linked-issue parser has no concept of negation: "it does not fix #603" closes it. Grep the body file for close/fix/resolve + `#N` before `gh pr create`. → `docs/canon/48-and-the-shell-is-not-the-only-reader-a-negated-mention-sti.md`
+- **THE CHECK AND THE MERGE ARE NOT ATOMIC** — a correct two-view check still cancels somebody's runs: the wrapper reads `main` quiet, then GitHub merges server-side onto whatever the head is by then. ⚠️ Not closable from the client — so PIN A DEPLOY TO A COMMIT rather than chasing `main`, which is a race with no terminating condition. → `docs/canon/109-the-check-and-the-merge-are-not-atomic.md`
 
 ### EVIDENCE, CENSUSES & MEASUREMENT
 
@@ -93,6 +94,8 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 - **A CENSUS PROVES CONTENT, NOT REACHABILITY** — "A census answers *was anything LOST?*. It cannot answer *can anything still be FOUND?*" Every ledger split ships WITH its reader sweep; watched set = **head + archives**. → `docs/canon/60-a-census-proves-content-not-reachability.md`
 - **EVIDENCE IS ONLY EVIDENCE ON THE TREE IT DESCRIBES** — Guard the state transition — rebase/merge exit code, clean `git status` — BEFORE any number counts; withdraw explicitly anything printed from a broken tree. → `docs/canon/36-evidence-is-only-evidence-on-the-tree-it-describes.md`
   - ↳ **A count inherited from another report, then incremented by assumption** — "A count carried forward from another session's report and then incremented by assumption is a fabricated number, however small the increment." → `docs/canon/36-evidence-is-only-evidence-on-the-tree-it-describes.md`
+- **A PROOF-CLASSIFICATION COMMENT DESCRIBES HOW A STATE IS *PROVED*, NOT WHAT THE RENDERER *DOES*** — "Hypothesize from reading. Report only after running." Read the `blank`/`kept_default` commentary to answer a question about bytes and told the owner wrapping would not omit; the renderer DOES bounded-clear nulls. ⚠️ **The trap is that the comment is usually RIGHT** — a right comment answering the wrong question is believed, quoted, and passed upward. → `docs/canon/110-a-proof-classification-comment-describes-how-a-state-is-proved.md`
+- **A CORRECTION INHERITS THE AUTHORITY OF BEING SECOND WITHOUT EARNING IT** — a retraction sounds like the product of scrutiny, so nobody challenges it — least of all its author, because self-criticism reads as rigour. ⚠️ Two instances in one session, the second while correcting the first: *"the document does not move"* was RETRACTED on reading a lens summary when two lenses had MEASURED byte-identity. **Before retracting, ask what MEASUREMENT refutes the original; if the answer is "a report I read", the original stands.** → `docs/canon/111-a-correction-inherits-the-authority-of-being-second.md`
 
 ### INSTRUMENTS, PROBES & ZEROS
 
@@ -119,6 +122,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 - **A NEGATIVE ASSERTION NEEDS A SURVIVOR CONTROL** — "X must be ABSENT" is satisfied perfectly by an instrument producing NOTHING. A redactor's `planted secrets surviving: 0` was a lie — broken awk emitted zero bytes; only `non-secret lines surviving: 0 (must be 3)` exposed it. ⚠️ Absence has no denominator, so supply one from the other side of the same run: positive + **survivor** + arithmetic (10 lines in, 10 out). → `docs/canon/104-a-negative-assertion-needs-a-survivor-control.md`
 - **A POSITIVE CONTROL IS THE ONLY ARM A BROKEN MOCK CANNOT FOOL** — an incomplete `@meddoc/db` mock (missing `update`) made EVERY call take the failure path, so both "cannot tell" arms passed for the wrong reason and read as "the fix works". ⚠️ A broken mock and a working fail-closed guard produce the SAME observable; **the healthy case is the only input whose correct answer differs between them.** Assert it FIRST, and when it fails print what the code actually saw rather than adjusting the assertion. → `docs/canon/105-a-positive-control-is-the-only-arm-a-broken-mock-cannot-fool.md`
 - **And a reassurance check needs a POSITIVE CONTROL like any other** — "A check run to prove nothing happened is the most likely to be believed and the least likely to be controlled." `find -newermt` said 0; `stat` disagreed. → `docs/canon/49-and-a-reassurance-check-needs-a-positive-control-like-any.md`
+- **THE CONTAINER'S `grep` IS NOT YOUR `grep` — AND IT DISAGREES SILENTLY** — busybox `grep` has no `-P`, and a `-P` pattern inside a container exits non-zero with a message nobody reads, so a zero means *the flag was refused*, not *the string is absent*. Run the probe where the file lives, or prove the instrument works there first. → `docs/canon/108-the-container-s-grep-is-not-your-grep.md`
 
 ### GATES, GUARDS, SWEEPS & MUTATION PROOFS
 
