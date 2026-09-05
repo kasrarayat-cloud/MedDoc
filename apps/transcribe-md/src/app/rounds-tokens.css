@@ -3421,3 +3421,265 @@ body[data-skin='rounds'] {
   gap: 8px;
   align-items: center;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * T4 — SIGN & DELIVER. The frames `sign-deliver-pre` (18:5) and
+ * `sign-deliver-post` (18:81), file `Zvgz37i6jVoNYy9BzAAtoQ`.
+ * Spec: docs/design/T4-SIGN-DELIVER-FIGMA-SPEC.md · Ruling #188.
+ * ---------------------------------------------------------------------------
+ * ⚠️ THESE FRAMES ARE ALREADY IN THE ROUNDS PALETTE. Every accent in them is
+ * `#5b5bd6`, which IS `--rounds-accent`, so mapping by role costs almost
+ * nothing here — unlike the Receipt frames, which used the legacy sage.
+ *
+ * ⚠️ AND THE ROW IS APPLIED **PER DESTINATION**, not per drawn row — ruling
+ * #188(1). The frames draw four rows; the product has eight destinations, five
+ * of them EHR clipboard formats. The frames' ROW is the design and the four
+ * drawn are examples, so collapsing them would be an accepted-capability loss:
+ * a doctor on Epic picks the Epic format and one row cannot express which.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* THE CARD. 496 wide in the frames; `min()` keeps it inside a narrow viewport
+ * rather than overflowing, which the geometry e2e would catch at 640px. */
+[data-skin='rounds'] .qm-t4-card {
+  width: min(94vw, 496px);
+  background: var(--rounds-surface-2);
+  border: 1px solid var(--rounds-line-1);
+  border-radius: 12px;
+}
+
+/* Head — gap 8 in the frames. */
+[data-skin='rounds'] .qm-t4-head {
+  padding: 24px 24px 8px;
+}
+[data-skin='rounds'] .qm-t4-title {
+  margin: 0;
+  font-family: var(--rounds-font-ui);
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--rounds-text-1);
+}
+[data-skin='rounds'] .qm-t4-sub {
+  margin: 8px 0 0;
+  font-family: var(--rounds-font-ui);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--rounds-text-2);
+}
+
+/* `DELIVER TO` and the group labels beneath it. Uppercased by CSS so the DOM
+ * keeps the readable form for assistive technology — the same rule the Receipt
+ * section labels follow. */
+
+/* ⚠️ THE FAINTEST TIER IS LIFTED BECAUSE THIS CARD REPAINTS ITS GROUND.
+ * `docs/design-tokens.md:299` states the rule this class was the exception to:
+ * a surface that changes what is UNDER the text is a contrast change even when
+ * no colour is edited. `--rounds-text-3` is 4.68:1 on surface-1 and 4.18:1 one
+ * step lighter — and `.qm-t4-card` repaints to surface-2.
+ *
+ * MEASURED, and the adversarial pass measured it independently in Chromium with
+ * axe-core agreeing at 4.17 and calling it SERIOUS, on six nodes:
+ *
+ *     #7c8694 on #1e2530 = 4.180  FAIL   (text-3, what this was)
+ *     #98a2b1 on #1e2530 = 5.973  PASS   (text-2, what it is now)
+ *
+ * ⚠️ AND THE WORST NODE WAS THE EMAIL SAFETY CAPTION — the sentence this whole
+ * change exists to preserve was made the least readable text in the modal. */
+[data-skin='rounds'] .qm-t4-section-label {
+  padding: 8px 0;
+  font-family: var(--rounds-font-ui);
+  font-size: 12px;
+  line-height: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--rounds-text-2);
+}
+
+/* ⚠️ THE GROUP CAPTION — RULING #188(2), AND IT IS A SAFETY SURFACE.
+ * The email group's caption reads "Don't use for patient communication." The
+ * frames' flat DELIVER TO list had no slot for it, and building them literally
+ * would have deleted the one line that stops a doctor mailing a note to a
+ * patient. A LITERAL FRAME THAT DELETES A SAFETY INSTRUCTION IS NOT THE SPEC. */
+[data-skin='rounds'] .qm-t4-caption {
+  margin: 0 0 8px;
+  font-family: var(--rounds-font-ui);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--rounds-text-2);
+}
+
+/* A group and its rows, so the last-row rule can be scoped to the group. */
+[data-skin='rounds'] .qm-t4-group-wrap {
+  padding: 4px 0 8px;
+}
+
+/* THE ROW — 44px, gap 12, pad 12 l/r, a 1px bottom rule, none on the last. */
+[data-skin='rounds'] .qm-t4-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--rounds-line-1);
+  color: var(--rounds-text-1);
+  transition: background-color 150ms ease-out;
+}
+[data-skin='rounds'] .qm-t4-group > .qm-t4-row:last-child {
+  border-bottom: 0;
+}
+[data-skin='rounds'] .qm-t4-row:hover {
+  background: var(--rounds-surface-1);
+}
+/* ⚠️ THE FOCUS RING USES THE `-text` VARIANT, because this card's ground broke
+ * the skin-wide one. SC 1.4.11 wants 3:1 for a non-text indicator:
+ *
+ *     #5b5bd6 on #1e2530 = 2.871  FAIL   (--rounds-accent, the shared rule)
+ *     #a5a5f0 on #1e2530 = 6.782  PASS   (--rounds-accent-text)
+ *
+ * The shared rule at the top of this file is correct on the skin's usual dark
+ * ground — 3.598 there — and this card is what moved the ground out from under
+ * it. Scoped here rather than changed globally for that reason. */
+[data-skin='rounds'] .qm-t4-card :focus-visible {
+  outline: 2px solid var(--rounds-accent-text);
+  outline-offset: -2px;
+}
+
+/* The checkbox — 20 × 20, radius 4. Unchecked is a 1.5px stroke and no fill;
+ * checked fills with the accent and carries the tick. */
+[data-skin='rounds'] .qm-t4-box {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1.5px solid var(--rounds-text-3);
+  background: transparent;
+  color: var(--rounds-on-accent);
+}
+[data-skin='rounds'] .qm-t4-row[data-checked='true'] .qm-t4-box {
+  border-color: var(--rounds-accent);
+  background: var(--rounds-accent);
+}
+
+[data-skin='rounds'] .qm-t4-row-label {
+  flex: 1;
+  font-family: var(--rounds-font-ui);
+  font-size: 14px;
+  line-height: 17px;
+  color: var(--rounds-text-1);
+}
+
+/* The attestation, below a full-width divider. */
+[data-skin='rounds'] .qm-t4-divider {
+  height: 1px;
+  margin: 8px 0;
+  background: var(--rounds-line-1);
+  border: 0;
+}
+[data-skin='rounds'] .qm-t4-attest-text {
+  font-family: var(--rounds-font-ui);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--rounds-text-2);
+}
+
+/* The delivery summary — the frames' one place that names quantities. */
+[data-skin='rounds'] .qm-t4-summary {
+  /* ⚠️ ONE LINE, ELLIPSISED. A wrapping summary grew the `flex-none` footer and
+   * took every pixel out of the scrolling destination list. */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+  padding: 0;
+  font-family: var(--rounds-font-ui);
+  font-size: 12px;
+  line-height: 15px;
+  color: var(--rounds-text-2);
+}
+
+/* Actions — right-aligned, gap 12. */
+/* ⚠️ NO PADDING OF ITS OWN. This sits INSIDE a footer that already carries
+ * `padding: 12px 24px`, and the two nested paddings added 40px to a `flex-none`
+ * row — every pixel of which came out of the scrolling destination list. */
+[data-skin='rounds'] .qm-t4-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+}
+/* ⚠️ `display` IS NOT OPTIONAL HERE, AND OMITTING IT COST THE SUBMIT ITS SHAPE.
+ * The class this replaced opened with `inline-flex/align/justify/gap` and closed
+ * with `white-space: nowrap`. None carried over, so Tailwind preflight's
+ * `svg { display: block }` put the lock icon on its OWN LINE inside a
+ * non-flex button and the label wrapped:
+ *
+ *     measured 80 x 68, a three-line stack   (the frames say 129 x 37)
+ *
+ * The pass proved it by adding back exactly these five properties and nothing
+ * else: 143.6 x 37, one line, icon beside the label. */
+[data-skin='rounds'] .qm-t4-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 6px;
+  font-family: var(--rounds-font-ui);
+  font-size: 14px;
+  line-height: 17px;
+}
+[data-skin='rounds'] .qm-t4-btn:disabled {
+  cursor: not-allowed;
+}
+/* The 44px tap floor the replaced classes carried at this breakpoint. Losing it
+ * put both footer buttons at 39px on a 390px-wide phone. */
+@media (max-width: 639px) {
+  [data-skin='rounds'] .qm-t4-btn {
+    min-height: 44px;
+  }
+}
+[data-skin='rounds'] .qm-t4-btn-cancel {
+  padding: 10px 16px;
+  font-weight: 500;
+  border: 1px solid var(--rounds-line-2);
+  background: transparent;
+  color: var(--rounds-text-2);
+}
+[data-skin='rounds'] .qm-t4-btn-primary {
+  padding: 10px 18px;
+  font-weight: 600;
+  border: 0;
+  background: var(--rounds-accent);
+  color: var(--rounds-on-accent);
+}
+[data-skin='rounds'] .qm-t4-btn-primary:disabled {
+  opacity: 0.45;
+}
+
+/* POST-SIGN — the DOCUMENT SIGNED badge. The rows themselves become actions in
+ * a LATER change; this is the badge only, so the skin and the behaviour shift
+ * stay two separate diffs. */
+[data-skin='rounds'] .qm-t4-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--rounds-font-ui);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  /* ⚠️ `--rounds-accent-text`, never `--rounds-accent`: the fill token measures
+   * below AA as text, and this badge IS text. */
+  color: var(--rounds-accent-text);
+}
