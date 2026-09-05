@@ -10,7 +10,14 @@ describe('varicose-vein symptomatic ICD codes (I83.8x)', () => {
     }
   });
   it('accepts the "with pain" family incl. unspecified LE', () => {
-    for (const c of ['I83.810', 'I83.811', 'I83.812', 'I83.813']) {
+    // ⚠️ WAS ['I83.810', …]. `I83.810` IS NOT AN ICD-10-CM CODE — measured
+    // absent from the FY2026 release in every form. The "with pain" family is
+    // 811/812/813 plus **819** for the unspecified limb, which is the code this
+    // test's own name ("incl. unspecified LE") was reaching for. The block
+    // below already asserted the rule — "only its 6-char children bill" — so
+    // the principle was understood and a sibling was assumed into existence
+    // anyway. Corrected by T8 against the official file.
+    for (const c of ['I83.811', 'I83.812', 'I83.813', 'I83.819']) {
       expect(isValidIcd10(c), c).toBe(true);
     }
   });

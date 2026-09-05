@@ -478,7 +478,34 @@ describe('the narrowers are EXHAUSTIVE at runtime, not only at compile time', ()
   // old one could not express: that `reason` is genuinely ABSENT, not merely
   // undefined, which is the half of #154's biconditional a stored
   // `{state:'accepted', reason:'…'}` would violate.
-  it('⚠️ readIcdDecisions emits exactly ICD_DECISION_RECORD_KEYS on a REJECTED record', () => {
+  // ⚠️ AND THE SIGN-TIME AUTO-ACCEPT SPLIT IT AGAIN, ON A SECOND AXIS.
+  //
+  // `reason` is optional by STATE — present on `rejected`, absent on
+  // `accepted`. `auto` is optional by PROVENANCE — present on a record this
+  // system wrote at signature, absent on every decision a doctor made. The two
+  // axes are independent, so the arm that keeps the ORIGINAL guarantee (a field
+  // added to the interface and forgotten in the narrower is caught) needs the
+  // record that carries BOTH optional keys at once.
+  //
+  // ⚠️ AND THAT RECORD IS `rejected` + `auto`, WHICH NOTHING WRITES TODAY —
+  // deliberately. The narrower CAN read it, because dropping a key it is able
+  // to read is the exact defect `ICD_DECISION_RECORD_KEYS` exists to prevent;
+  // so the exhaustiveness proof is taken against the widest record the narrower
+  // can emit, not against the widest one currently produced.
+  it('⚠️ readIcdDecisions emits exactly ICD_DECISION_RECORD_KEYS on the WIDEST record', () => {
+    const m = readIcdDecisions({
+      'K21.00': {
+        state: 'rejected',
+        at: '2026-08-25T00:00:00.000Z',
+        byUserId: 'u1',
+        reason: 'not_supported_by_note',
+        auto: true,
+      },
+    });
+    expect(Object.keys(m['K21.00']).sort()).toEqual([...ICD_DECISION_RECORD_KEYS].sort());
+  });
+
+  it('⚠️ a REJECTED record with no `auto` carries every key EXCEPT it', () => {
     const m = readIcdDecisions({
       'K21.00': {
         state: 'rejected',
@@ -487,18 +514,36 @@ describe('the narrowers are EXHAUSTIVE at runtime, not only at compile time', ()
         reason: 'not_supported_by_note',
       },
     });
-    expect(Object.keys(m['K21.00']).sort()).toEqual([...ICD_DECISION_RECORD_KEYS].sort());
+    expect(Object.keys(m['K21.00']).sort()).toEqual(
+      [...ICD_DECISION_RECORD_KEYS].filter((k) => k !== 'auto').sort(),
+    );
+    expect('auto' in m['K21.00']).toBe(false);
   });
 
   it('⚠️ an ACCEPTED record emits the required keys and NO `reason` key at all', () => {
     const m = readIcdDecisions({
       'K21.00': { state: 'accepted', at: '2026-08-25T00:00:00.000Z', byUserId: 'u1' },
     });
-    const required = [...ICD_DECISION_RECORD_KEYS].filter((k) => k !== 'reason');
+    const required = [...ICD_DECISION_RECORD_KEYS].filter((k) => k !== 'reason' && k !== 'auto');
     expect(Object.keys(m['K21.00']).sort()).toEqual(required.sort());
     // `in`, not `=== undefined`: a present-but-undefined key serialises into
     // JSONB as `"reason": null` and would be a state-contradicting artefact.
     expect('reason' in m['K21.00']).toBe(false);
+    // ⚠️ THE SAME TEST FOR `auto`, AND IT IS THE MORE IMPORTANT ONE. A
+    // present-but-undefined `auto` serialises as `"auto": null`, and a later
+    // reader asking "was this machine-written?" of a key that EXISTS is one
+    // truthiness bug away from marking a doctor's own decision as automatic.
+    expect('auto' in m['K21.00']).toBe(false);
+  });
+
+  it('⚠️ an AUTO-ACCEPTED record carries `auto` and still no `reason`', () => {
+    const m = readIcdDecisions({
+      'K21.00': { state: 'accepted', at: '2026-08-25T00:00:00.000Z', byUserId: 'u1', auto: true },
+    });
+    expect(Object.keys(m['K21.00']).sort()).toEqual(
+      [...ICD_DECISION_RECORD_KEYS].filter((k) => k !== 'reason').sort(),
+    );
+    expect(m['K21.00']?.auto).toBe(true);
   });
 
   it('⚠️ a stray `reason` on an ACCEPTED record is STRIPPED, and the decision SURVIVES', () => {
