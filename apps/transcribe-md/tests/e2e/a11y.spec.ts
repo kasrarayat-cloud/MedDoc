@@ -97,7 +97,16 @@ interface RouteSpec {
    * `/visits/:READY` was structurally incapable of seeing either. They were
    * caught by an adversarial pass running axe by hand.
    */
-  open?: (page: Page) => Promise<void>;
+  /** Opens the dialog-hosted surface.
+   *
+   *  ⚠️ MAY RETURN `{ skip }` FOR A DATA CONDITION IT CAN ONLY SEE ONCE IT HAS
+   *  STARTED. `requiresPresent` runs BEFORE this and can therefore only guard
+   *  on what the page shows at rest — but a control that appears two clicks in
+   *  (the Receipt's Reject button, which exists only when the visit HAS
+   *  suggested codes) is invisible to it. Without this the opener times out and
+   *  reports a 15s click failure, which reads as a broken selector rather than
+   *  as "this seeded visit has nothing to reject". */
+  open?: (page: Page) => Promise<void | { skip: string }>;
 
   /**
    * ⚠️ THE NON-VACUITY GUARD, AND IT IS THE POINT OF THE WHOLE FEATURE.
@@ -229,7 +238,23 @@ const ROUTES: RouteSpec[] = [
     requiresPresent: 'visit-view-tab-coding',
     open: async (page) => {
       await page.getByTestId('visit-view-tab-coding').click();
-      await page.locator('[data-testid^="icd-reject-"]').first().click();
+      // ⚠️ THE DATA CONDITION IS CHECKED HERE, NOT IN `requiresPresent`, AND
+      // THE FIRST VERSION GOT THAT WRONG. The comment above already said "a
+      // seeded visit with no suggested ICD codes has no Reject button at all;
+      // that is a data condition and it SKIPS with a reason" — and then the
+      // guard checked for the TAB, which is always there. The Reject button
+      // exists only AFTER this click, so no pre-open check can see it, and the
+      // row died on a 15s click timeout that read like a broken selector.
+      const reject = page.locator('[data-testid^="icd-reject-"]');
+      await reject.first().waitFor({ state: 'visible', timeout: 5_000 }).catch(() => {});
+      if ((await reject.count()) === 0) {
+        return {
+          skip:
+            'the seeded READY visit has no suggested ICD codes, so there is ' +
+            'nothing to reject and the picker cannot be reached from it',
+        };
+      }
+      await reject.first().click();
     },
     opened: 'icd-reason-picker-',
     openedIsPrefix: true,
@@ -543,7 +568,14 @@ for (const viewport of VIEWPORTS) {
             }
           }
 
-          await route.open(page);
+          const opened = await route.open(page);
+          if (opened && 'skip' in opened) {
+            // ⚠️ A SKIP THAT NAMES ITS REASON, never a silent pass. The scan
+            // below would run on a page with no dialog and go green under a
+            // label claiming the dialog was covered.
+            test.skip(true, `[a11y] ${route.label} skipped — ${opened.skip}`);
+            return;
+          }
           await page.waitForTimeout(400);
 
           // ⚠️ THE GUARD THAT MAKES THE WHOLE ROW MEAN ANYTHING.
