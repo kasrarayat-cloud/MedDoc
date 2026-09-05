@@ -22,6 +22,33 @@ export interface SoapSection {
    *  string when the SOAP is missing this section entirely (e.g. an
    *  early draft). */
   body: string;
+  /** ⚠️ ADDITIVE, 2026-09-04 — `body: ''` CANNOT TELL "the doctor wrote a
+   *  Plan heading and left it blank" from "there is no Plan heading at all",
+   *  and the two must be spoken differently: the export prints
+   *  "Not documented." only under a heading that EXISTS, so announcing it for
+   *  an absent one asserts something the signed record does not.
+   *
+   *  Every existing consumer ignores this field, which is why it is a new
+   *  field rather than a change to `body`. `parseSoapSections` feeds the E/M
+   *  scorers (`em-coding/score.ts`, `em-coding/deterministic.ts`), the SOAP
+   *  editor and the status route — changing an existing output would move
+   *  clinical scoring, and nothing here is worth that. */
+  present: boolean;
+}
+
+/** What `parseSoapSections` found, plus the text it has always discarded. */
+export interface SoapSplit {
+  sections: SoapSection[];
+  /** ⚠️ CONTENT ABOVE THE FIRST SOAP HEADING, which `parseSoapSections` drops
+   *  and has always dropped — its own docstring says so. That is correct for
+   *  the four-pane display it was written for, and WRONG for any consumer
+   *  claiming to reproduce the note: an addendum carrying an allergy, written
+   *  above the first heading, reaches the drawn document and not the listener.
+   *
+   *  This file already applies the opposite principle to the TAIL — trailing
+   *  text is appended to Plan "so doctor-added freeform notes don't disappear
+   *  silently". The head simply never got the same treatment. */
+  preamble: string;
 }
 
 const ORDER: { key: SoapSectionKey; label: SoapSection['label']; alts: string[] }[] = [
@@ -43,12 +70,15 @@ const ORDER: { key: SoapSectionKey; label: SoapSection['label']; alts: string[] 
  *  freeform notes don't disappear silently. */
 export function parseSoapSections(markdown: string): SoapSection[] {
   const sections: Record<SoapSectionKey, string> = { S: '', O: '', A: '', P: '' };
+  const seen: Record<SoapSectionKey, boolean> = { S: false, O: false, A: false, P: false };
+  const pre: string[] = [];
   if (!markdown || markdown.trim() === '') {
     return ORDER.map((o) => ({
       key: o.key,
       letter: o.key,
       label: o.label,
       body: '',
+      present: false,
     }));
   }
   const lines = markdown.split('\n');
@@ -60,11 +90,17 @@ export function parseSoapSections(markdown: string): SoapSection[] {
       const found = ORDER.find((o) => o.alts.includes(heading));
       if (found) {
         current = found.key;
+        seen[found.key] = true;
         continue;
       }
     }
     if (current !== null) {
       sections[current] = sections[current] + (sections[current] ? '\n' : '') + raw;
+    } else {
+      // Before the first recognised heading. Kept rather than discarded — see
+      // `SoapSplit.preamble`. The four-section return below is UNCHANGED, so
+      // no existing consumer sees any difference.
+      pre.push(raw);
     }
   }
   return ORDER.map((o) => ({
@@ -72,5 +108,32 @@ export function parseSoapSections(markdown: string): SoapSection[] {
     letter: o.key,
     label: o.label,
     body: (sections[o.key] || '').replace(/\s+$/, ''),
+    present: seen[o.key],
   }));
+}
+
+/** `parseSoapSections`, plus the preamble it discards.
+ *
+ *  A separate entry point rather than a changed return type, so the FIVE
+ *  existing call sites — the two E/M scorers, the SOAP editor, the status route
+ *  and `parseNoteSections` — keep the exact array they have always received.
+ *
+ *  ⚠️ The count read "twelve" until the adversarial pass checked it: measured,
+ *  it is five. A number nobody verified, overstating the blast radius this
+ *  design avoids, is the kind of detail that gets cited later as if it were
+ *  measured. */
+export function parseSoapSplit(markdown: string): SoapSplit {
+  const sections = parseSoapSections(markdown);
+  if (!markdown || markdown.trim() === '') return { sections, preamble: '' };
+  const lines = markdown.split('\n');
+  const out: string[] = [];
+  for (const raw of lines) {
+    const m = /^\s{0,3}#{1,3}\s+(.+?)\s*$/.exec(raw);
+    if (m) {
+      const heading = m[1].toLowerCase().replace(/[^a-z]/g, '');
+      if (ORDER.some((o) => o.alts.includes(heading))) break;
+    }
+    out.push(raw);
+  }
+  return { sections, preamble: out.join('\n').replace(/\s+$/, '') };
 }

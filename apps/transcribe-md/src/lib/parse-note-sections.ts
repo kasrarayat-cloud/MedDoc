@@ -83,7 +83,12 @@ function slug(label: string, i: number): string {
  *  headings keep their soapKey; all content renders), but the screen
  *  re-groups. Deliberate: generic mode is the only shape that can render
  *  every note faithfully once non-SOAP headings exist. */
-function isClassicSoap(markdown: string): boolean {
+// Exported 2026-09-04 so `spoken-sections.ts` can branch on the SAME predicate
+// this file already uses to choose its parser. ⚠️ Re-deriving it there would be
+// two descriptions of one thing: the spoken copy would take the SOAP branch
+// while the display took the generic one (or the reverse) on any note where the
+// two implementations disagreed, and nothing would say so.
+export function isClassicSoap(markdown: string): boolean {
   if (!markdown || markdown.trim() === '') return true;
   let sawHeading = false;
   for (const raw of markdown.split('\n')) {
