@@ -303,3 +303,48 @@ them were delivered.
 4. **Attestation unchecked.** The frame only draws it checked.
 5. **The mock EHR behind the scrim is not our surface** — confirmed as scaffolding.
 6. **1440 is the only breakpoint drawn**, for a 496-wide modal.
+
+### F-T4-2 · A download reports no error, so the row cannot claim delivery
+
+**Filed by the post-state action shift (ruling #188(4)): the honest fix changes
+the download MECHANISM, which is a capability change and not part of a re-skin.**
+
+`pdf` and `docx` are delivered by firing an `<a download>`:
+
+```ts
+function triggerDownload(href: string, kind: 'pdf' | 'docx') { … }
+```
+
+`prepareDeliverOnly` makes **no request at all** for those two — it only builds
+the URL. An anchor has **no error channel**, so every one of these is silently
+indistinguishable from success:
+
+| what happens | what the doctor is told |
+|---|---|
+| `503` from `/export/pdf` (Gotenberg down) | nothing |
+| `401` on an expired session | nothing |
+| `500` from the export route | nothing |
+
+The route returns JSON in each case and the browser discards it.
+
+⚠️ **THE POST STATE NO LONGER OVERCLAIMS**, which is what the shift was allowed
+to change: a download row says **"Download started"**, never *"Delivered"*.
+Saying delivered asserts something this code cannot observe. Clipboard and email
+still say "Delivered", because those are observed — one resolves a promise, the
+other gets a server response.
+
+**The honest fix, and why it is not in that change:** `fetch` the export, check
+`res.ok`, read the blob, then download it — and report the failure when it
+fails. That replaces the anchor with a fetched-blob download, which changes
+memory behaviour for large exports, changes how the filename is set, and needs
+its own proof that a big PDF still downloads on mobile Safari. **A re-skin does
+not get to rewrite the delivery mechanism**, so the row was made to say only
+what it knows and the mechanism was filed here.
+
+⚠️ **AND THE PRE-SIGN PATH HAS THE SAME BLINDNESS**, unmentioned by the post
+state's fix: the sign submit's `deliveryErrors` covers the SERVER-side channels
+only, so a failed PDF download is invisible there too. The difference is that
+the pre-sign path never claimed per-destination success in the first place.
+
+**Found by** the post-state adversarial pass (F-D3), which caught the new
+per-row toast asserting a delivery for a destination the code never observed.
