@@ -300,8 +300,16 @@ function missingResolution(
   // Both are false statements about what happened, and the adversarial pass
   // measured that 779 tests could not tell the corrected code from the shipped
   // code. Sharing the predicate is what makes that undrift-able.
+  // ⚠️ `field.scaffolded === true`, NOT `!== false`. The flag is OPTIONAL and
+  // absent means the compiler that produced this IR predates it and CANNOT SAY
+  // — every compiled version already in the database is in that state. Absent
+  // must therefore behave exactly as today (no kept default), which is what an
+  // explicit `=== true` gives and what `!== false` would silently invert.
   const unmentionedScaffold =
-    conceptUnmatched && reason === undefined && facts.length > 0;
+    field.scaffolded === true &&
+    conceptUnmatched &&
+    reason === undefined &&
+    facts.length > 0;
 
   if (unmentionedScaffold && !requiresInput && mapping.unmentionedPolicy !== 'omit') {
     return makeResolution(

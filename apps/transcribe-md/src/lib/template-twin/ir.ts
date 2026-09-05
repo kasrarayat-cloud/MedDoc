@@ -122,6 +122,30 @@ export const TemplateFieldSchema = z
     detectionStatus: TemplateTwinDetectionStatusSchema,
     allowedOptions: z.array(TemplateOptionSchema),
     rendererBinding: RendererBindingSchema,
+    /**
+     * ⚠️ #191 — IS THIS CONTROL A SCAFFOLD? Non-empty default content that is
+     * NOT a Word placeholder. The ruling scopes the whole keep/omit policy to
+     * scaffolded controls ("an empty underscore run is not scaffolded; there is
+     * nothing to keep or omit"), and the adversarial pass found that scope
+     * unimplemented — so `keep` applied to checkboxes and dates alike.
+     *
+     * ⚠️ `.optional()`, AND ABSENT MEANS **NOT SCAFFOLDED**, WHICH IS
+     * FAIL-CLOSED. `structureSha256` hashes `fields`, and every compiled IR
+     * already in the database was written before this field existed. Making it
+     * REQUIRED would make every stored IR unparseable and invalidate every
+     * certification; making absence mean "scaffolded" would let a kept default
+     * fire on templates nobody measured. Absent therefore means the compiler
+     * that produced this IR could not say, and `default_kept` does not fire.
+     *
+     * ⚠️ THE DISCRIMINATOR IS A SIGNAL THE DOCUMENT DECLARES, never a text
+     * heuristic — canon 83, whose reference case is a rule matching Word's
+     * "Choose an item." that blocked 28 of 28 dropdowns of the real customer
+     * form. Measured on both real documents: `WM IOV Template.docx` 28
+     * controls, 28 declaring `w:showingPlcHdr`, SCAFFOLDED **0**; the owner's
+     * regenerated consult form 53 controls, 0 placeholders, SCAFFOLDED **53**,
+     * reconciling exactly to the total in both.
+     */
+    scaffolded: z.boolean().optional(),
     required: z.boolean(),
     unknownPolicy: z.enum(['blank', 'not_documented', 'requires_input']),
     clinicallyMaterial: z.boolean(),

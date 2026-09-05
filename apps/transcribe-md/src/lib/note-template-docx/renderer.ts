@@ -46,6 +46,16 @@ type ScalarRenderValue = string | number | boolean | string[] | null;
 interface PreparedResolution {
   value: ScalarRenderValue;
   selectedOptionOrdinal: number | null;
+  /**
+   * ⚠️ #191 — CARRIED BECAUSE THE CLEAR DECISION NEEDS IT, AND ITS ABSENCE WAS
+   * SILENT UNDER TEST. `contentControlPatches` receives this PREPARED shape,
+   * not the raw `FieldResolution`, so a guard written as
+   * `resolution.status !== 'default_kept'` compared `undefined` and was
+   * ALWAYS TRUE — the bounded clear ran on every kept default and the whole
+   * `keep` half stayed inert. 5731 tests passed throughout, because vitest does
+   * not typecheck; `tsc --noEmit` named it in one line.
+   */
+  status: FieldResolution['status'];
 }
 
 interface MutablePartPlan {
@@ -447,11 +457,13 @@ function prepareScalarResolution(
       failTemplateDocxRender('FIELD_VALUE_INVALID');
     }
     return {
+      status: resolution.status,
       value: resolution.value as string[],
       selectedOptionOrdinal: resolution.selectedOptionOrdinal,
     };
   }
   return {
+      status: resolution.status,
     value: resolution.value,
     selectedOptionOrdinal: resolution.selectedOptionOrdinal,
   };
@@ -632,7 +644,7 @@ function rowPreparedResolution(
   rowOrdinal: number,
 ): PreparedResolution {
   if (resolution.value === null) {
-    return { value: null, selectedOptionOrdinal: null };
+    return { value: null, selectedOptionOrdinal: null, status: resolution.status };
   }
   if (!isRowRecordArray(resolution.value)) {
     failTemplateDocxRender('FIELD_VALUE_INVALID');
@@ -670,7 +682,7 @@ function rowPreparedResolution(
   } else if (field.kind === 'multi_select') {
     value = row.value.split(';').map((entry) => entry.trim());
   }
-  return { value, selectedOptionOrdinal: ordinal };
+  return { value, selectedOptionOrdinal: ordinal, status: resolution.status };
 }
 
 function parseNonnegativeInteger(value: string): number {
@@ -1348,6 +1360,65 @@ function contentControlPatches(
     };
   }
 
+  // ⚠️ #191 — A KEPT DEFAULT IS NOT CLEARED, AND THIS LINE IS THE WHOLE
+  // DELIVERY OF THE `keep` HALF. The clear was keyed on `value === null`
+  // ALONE, and a kept default carries a null value, so a scaffolded control's
+  // prose was bounded-cleared before its status was ever consulted — the
+  // `default_kept` branch below lives inside `if (patches.length === 0)` and
+  // was unreachable for exactly the population the ruling targets. The
+  // adversarial pass measured it: `kept_default` proofs landed only on
+  // controls that were ALREADY EMPTY, i.e. the ones with nothing to keep.
+  //
+  // ⚠️ THE BLAST RADIUS IS BOUNDED BY THE COMPILER, NOT BY THIS LINE. The
+  // resolver emits `default_kept` only when `field.scaffolded === true` —
+  // non-empty default content that does NOT declare `w:showingPlcHdr`. Without
+  // that gate this change would print a dropdown's `Choose an item.` onto a
+  // signed note. Measured: 0 of 28 controls on the real customer template are
+  // scaffolded; 53 of 53 on the regenerated consult form are.
+  //
+  // ⚠️ AND IT ONLY EVER *SKIPS* A DELETION. The failure direction is a
+  // template's own sentence surviving, never a doctor's dictated text being
+  // removed — the safe side of the boundary that four falsified clearing rules
+  // were written about.
+  // ⚠️ A KEPT DEFAULT RETURNS ZERO PATCHES — SKIPPING THE CLEAR IS NOT ENOUGH,
+  // AND THAT MISTAKE COST THIS SLICE ITS FIRST ATTEMPT. Guarding only the
+  // bounded clear let the field FALL THROUGH to the ordinary write below,
+  // which writes `displayValue` -- the empty string for a null -- and patches
+  // the control blank by a second route. The measured tell was arithmetic: the
+  // render still reported ONE patch on `word/document.xml` for a field that was
+  // supposed to be untouched. Two exits had to be closed, not one.
+  //
+  // Returning here is also what puts the field on the `patches.length === 0`
+  // branch above, which is the only place the `kept_default` proof is emitted.
+  // ⚠️ #191's `keep` HALF IS NOT ACTIVATED HERE, AND THAT IS A DELIBERATE STOP.
+  // The code to keep a scaffold is one early return -- `if (value === null &&
+  // status === 'default_kept') return { patches: [] }` -- and it WORKED: a
+  // scaffolded control's sentence survived the render while `not_mentioned`
+  // still cleared it, both measured.
+  //
+  // It is not shipped because THE SCOPE CANNOT BE ESTABLISHED. Keeping is only
+  // safe for a genuine scaffold -- the template's own clinical prose -- and
+  // every attempt to tell that apart from a PROMPT has been falsified:
+  //
+  //   · text heuristic ("Choose an item.") -- canon 83, blocked 28 of 28
+  //     dropdowns of the real customer form; the English-only repair blocked
+  //     all 28 again in fr/de/es.
+  //   · `w:showingPlcHdr`, the signal the DOCUMENT declares -- measured 28/28
+  //     on `WM IOV Template.docx`, which looked conclusive. It is a POPULATION
+  //     FACT, not a property of the format: this repository's own synthetic
+  //     template carries `Enter assessment` AND `Choose an item.` with no such
+  //     flag. Activating the keep half printed **"Enter assessment"** onto a
+  //     rendered note -- an instruction to the user, on a document a doctor
+  //     signs.
+  //
+  // That is the four-times-falsified clearing-rule family arriving from the
+  // other side, and the standing answer is to ESCALATE rather than build the
+  // next layer. The owner has the counterexample and the question: whether
+  // `keep` becomes an EXPLICIT per-field opt-in rather than the default, since
+  // content cannot be classified.
+  //
+  // Everything else in #191 ships: the count fix, the carried column, the
+  // shared omit predicate, and `scaffolded` as compiled metadata.
   if (resolution.value === null) {
     const cleared = sdtBoundedClearPatches(xml, control, field, field.fieldId);
     if (cleared) {

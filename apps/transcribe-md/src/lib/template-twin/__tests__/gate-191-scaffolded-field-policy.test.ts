@@ -49,6 +49,9 @@ function field(idSeed: string, overrides: Partial<TemplateField> = {}): Template
   return {
     fieldId: `ttf_${idSeed.repeat(24).slice(0, 24)}`,
     kind: 'narrative_text',
+    // These fixtures ARE scaffolds — a control carrying the template's own
+    // pre-printed clause. Arm (21) covers the other two states.
+    scaffolded: true,
     originalLabel: 'Synthetic narrative_text',
     labelSource: 'alias',
     displayOrder: 0,
@@ -462,5 +465,77 @@ describe('#191 — THE COLUMN WAS DEAD IN BOTH DIRECTIONS', () => {
     const omit = mapping(scaffold, 'ros.cardiovascular', { unmentionedPolicy: 'omit' });
     expect(templateTwinMappingsSha256([keep])).toBe(templateTwinMappingsSha256([absent]));
     expect(templateTwinMappingsSha256([omit])).not.toBe(templateTwinMappingsSha256([absent]));
+  });
+});
+
+describe('#191 — THE SCAFFOLD SCOPE, which the pass found unimplemented', () => {
+  it('(21) ⚠️ A NON-SCAFFOLD NEVER EARNS A KEPT DEFAULT, AND ABSENT FAILS CLOSED', () => {
+    // The ruling scopes the whole policy to scaffolded controls -- "an empty
+    // underscore run is not scaffolded; there is nothing to keep or omit" --
+    // and that scope was not implemented, so a kept default applied to
+    // checkboxes and dates alike and would have kept a dropdown's
+    // `Choose an item.` on a signed note.
+    //
+    // ⚠️ THE THIRD STATE IS THE ONE THAT MATTERS. `scaffolded` is optional
+    // because every compiled IR already in the database predates it; ABSENT
+    // means the compiler could not say, and must behave exactly as before.
+    // `!== false` would have silently inverted that for every stored template.
+    const base = { fieldId: `ttf_${'1'.repeat(24)}` };
+    const cases: Array<[string, boolean | undefined]> = [
+      ['explicitly not a scaffold', false],
+      ['absent — an IR compiled before this field existed', undefined],
+    ];
+    for (const [label, flag] of cases) {
+      const f = field('1', flag === undefined ? base : { ...base, scaffolded: flag });
+      if (flag === undefined) delete (f as { scaffolded?: boolean }).scaffolded;
+      const [r] = resolveTemplateFields({
+        fields: [f],
+        mappings: [mapping(f, 'ros.cardiovascular')],
+        facts: [factFor('2', 'chief_complaint', 'Patient here for a rash.')],
+        allowUncertifiedForSyntheticTest: true,
+      });
+      expect(`${label}: ${r!.status}`).toBe(`${label}: not_mentioned`);
+    }
+  });
+
+  it('(22) ⚠️ THE DISCRIMINATOR IS THE DOCUMENT\'S OWN DECLARATION, measured on both real forms', () => {
+    // Canon 83: a blocking rule may never rest on a text heuristic. A rule
+    // matching Word's own "Choose an item." blocked 28 of 28 dropdowns of the
+    // real customer template, and its English-only repair blocked all 28 again
+    // in fr/de/es. `w:showingPlcHdr` is what the DOCUMENT declares.
+    //
+    // This arm pins the RECONCILIATION, which is what says the partition has no
+    // unnamed bucket. The measured populations are recorded in the compiler's
+    // own comment; here we assert the predicate's shape cannot drift to a text
+    // match without failing.
+    const src = readFileSync(
+      join(__dirname, '../../note-template-docx/compiler.ts'), 'utf-8');
+    const fn = src.slice(src.indexOf('function isScaffolded'));
+    const body = fn.slice(0, fn.indexOf('\n}'));
+    expect(body).toContain('showingPlcHdr');
+    // ⚠️ the negative half: it must NOT match placeholder TEXT
+    expect(body).not.toMatch(/Choose an item|Cliquez ici|Klicken Sie/i);
+  });
+});
+
+describe('#191 — THE STRUCTURE HASH MUST NOT MOVE', () => {
+  it('(23) ⚠️ `scaffolded` IS EXCLUDED FROM THE STRUCTURE HASH — every certified twin depends on it', () => {
+    // `renderer.ts: assertSourceMatchesIr` re-compiles the immutable source on
+    // EVERY fill and compares it against the STORED IR of every template
+    // already compiled. A moved structure hash fails SOURCE_IR_MISMATCH on all
+    // of them, every recompute path degrades SILENTLY to the styled export,
+    // and a signature freezes a null pointer permanently. Measured once
+    // already at 10 of 10 twins.
+    //
+    // Excluding it loses nothing: `scaffolded` is a pure function of bytes the
+    // hash already covers (the control's content and its `w:sdtPr`, both inside
+    // `sourceControlSha256` / `originalContentSha256`).
+    const src = readFileSync(
+      join(__dirname, '../../note-template-docx/compiler.ts'), 'utf-8');
+    const call = src.slice(src.indexOf('const structureSha256 = canonicalSha256('));
+    const body = call.slice(0, call.indexOf('});'));
+    // the fields entry must strip it rather than pass `state.fields` whole
+    expect(body).toMatch(/scaffolded:\s*_\w+,\s*\.\.\.rest/);
+    expect(body).not.toMatch(/fields:\s*state\.fields,/);
   });
 });

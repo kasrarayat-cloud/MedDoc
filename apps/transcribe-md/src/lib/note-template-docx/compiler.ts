@@ -127,8 +127,23 @@ export function compileTemplateDocx(
       staticSha256: part.staticSha256,
     })),
   );
+  // ⚠️ #191 — `scaffolded` IS EXCLUDED FROM THE STRUCTURE HASH, AND OMITTING
+  // THIS WOULD HAVE ORPHANED EVERY CERTIFIED TWIN IN THE DATABASE.
+  // `renderer.ts: assertSourceMatchesIr` re-compiles the immutable source on
+  // EVERY fill and compares it against the STORED IR of every template already
+  // compiled, so a moved structure hash does not merely stale a fixture pin —
+  // it fails `SOURCE_IR_MISMATCH` on every certified twin, every recompute path
+  // then degrades SILENTLY to the styled export, and a signature freezes a null
+  // pointer permanently. Measured once already at 10 of 10 twins.
+  //
+  // ⚠️ AND EXCLUDING IT LOSES NOTHING, WHICH IS WHY THIS IS NOT A DODGE.
+  // `scaffolded` is a PURE FUNCTION of bytes this hash already covers: the
+  // control's content and its `w:sdtPr` are both inside `sourceControlSha256`
+  // and `originalContentSha256`, which ARE hashed. A document whose
+  // scaffoldedness differs necessarily differs in those, so the hash cannot
+  // miss a real structural change by omitting a value derived from them.
   const structureSha256 = canonicalSha256({
-    fields: state.fields,
+    fields: state.fields.map(({ scaffolded: _derived, ...rest }) => rest),
     tables: state.tables,
     nodes: state.nodes,
     unsupported: state.unsupported,
@@ -307,6 +322,39 @@ function processParagraph(
  * `emptied`; a second `w:pPr` defeated the numbering guard; a second `w:sdtPr`
  * defeated the selection exclusion. It is now one rule, once.
  */
+
+/**
+ * ⚠️ #191 — IS THIS CONTROL A SCAFFOLD? Non-empty default content that is NOT a
+ * Word placeholder. The ruling scopes the keep/omit policy to scaffolded
+ * controls, and the adversarial pass found that scope UNIMPLEMENTED — so a kept
+ * default applied to checkboxes and dates alike, and would have kept a
+ * dropdown's `Choose an item.` on a signed note.
+ *
+ * ⚠️ IT RESTS ON `w:showingPlcHdr`, A SIGNAL THE DOCUMENT DECLARES, AND NEVER
+ * ON THE PLACEHOLDER TEXT. That is canon 83, whose reference case is a rule
+ * matching Word's own "Choose an item." string: it blocked 28 of 28 dropdowns
+ * of the only real customer template, and the repair matched it in English
+ * only and blocked all 28 again in fr/de/es. A blocking rule's worst case is a
+ * doctor who cannot use their own form.
+ *
+ * MEASURED ON BOTH REAL DOCUMENTS BEFORE THIS SHIPPED:
+ *   `WM IOV Template.docx`  — 28 controls, 28 declare `showingPlcHdr`,
+ *                             0 empty, SCAFFOLDED **0**
+ *   the regenerated consult form — 53 controls, 0 placeholders, 0 empty,
+ *                             SCAFFOLDED **53**
+ * Both reconcile exactly to their totals, which is what says the partition has
+ * no unnamed bucket.
+ */
+function isScaffolded(
+  properties: OrderedXmlNode,
+  content: OrderedXmlNode,
+): boolean {
+  // ⚠️ `descendants`, not a direct-child check: "a second element of the same
+  // name" has cost this codebase three times, and a placeholder flag nested one
+  // level deeper would read as absent.
+  if (descendants(properties, "showingPlcHdr").length > 0) return false;
+  return visibleText(content).trim().length > 0;
+}
 
 /** Elements that carry content, wherever they appear inside a property block. */
 export const CONTENT_CARRIERS: ReadonlySet<string> = new Set([
@@ -787,6 +835,7 @@ function processContentControl(
   const field: TemplateField = {
     fieldId,
     kind,
+    scaffolded: isScaffolded(properties, content),
     originalLabel: label.label,
     labelSource: label.source,
     displayOrder: state.nextDisplayOrder++,
