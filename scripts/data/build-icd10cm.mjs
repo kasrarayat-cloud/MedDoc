@@ -331,6 +331,40 @@ const provFile = join(OUT_DIR, `icd10cm-${editionKey}-provenance.json`);
 const BILLABLE_SYM = `ICD10CM_${EDITION_UC}_BILLABLE_RAW`;
 const HEADERS_SYM = `ICD10CM_${EDITION_UC}_HEADERS_RAW`;
 
+// ── THE DESTINATION ARM ────────────────────────────────────────────────────
+// ⚠️ THE ARM THAT WOULD HAVE CAUGHT THE 2026-09-05 DEFECT, AND THE REASON IT
+// IS SEPARATE FROM EVERY OTHER ASSERTION IN THIS FILE. The other 29 all ask
+// "is the DATA right?" — measured against CMS's own published counts. Every one
+// of them passed while this script wrote FY2027's 74,879 codes into
+// icd10cm-fy2026-*.generated.ts under the symbol ICD10CM_FY2026_BILLABLE_RAW.
+//
+// A green run and a destroyed dataset were the same output, because nothing
+// asked "is it going where this edition says?"
+for (const [label, target] of [
+  ['billable', billableFile],
+  ['headers', headersFile],
+  ['provenance', provFile],
+]) {
+  const base = target.split('/').pop();
+  const m = base.match(/^icd10cm-(fy\d{4})-/);
+  if (!m) {
+    die(`DESTINATION arm — ${label} path "${base}" does not name an edition at all`);
+  }
+  if (m[1] !== editionKey) {
+    die(
+      `DESTINATION arm — --edition ${editionKey} would write ${label} to "${base}", ` +
+        `which belongs to ${m[1]}. Refusing: this is how ${m[1]}'s dataset gets ` +
+        `overwritten by another edition's data under its own name.`,
+    );
+  }
+}
+for (const [label, sym] of [['billable', BILLABLE_SYM], ['headers', HEADERS_SYM]]) {
+  if (!sym.includes(EDITION_UC)) {
+    die(`DESTINATION arm — ${label} symbol "${sym}" does not name edition ${EDITION_UC}`);
+  }
+}
+console.log(`  ok   destination arm: every output names ${editionKey}`);
+
 const billableOut =
   banner('BILLABLE / valid-for-submission codes', EXPECT.billable, BILLABLE_SYM) +
   billablePayload + '`;\n';
