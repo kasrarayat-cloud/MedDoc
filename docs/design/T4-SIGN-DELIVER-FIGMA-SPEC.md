@@ -114,6 +114,108 @@ post state — every row is its own commit, and `Export again` reopens it.
 
 ---
 
+## ⚠️ WHERE THE FRAMES AND THE SHIPPED SURFACE DISAGREE — MEASURED 2026-09-05
+
+**The frames are complete as drawn.** These are not missing states; they are
+three places where the surface the frames describe is **not the surface that
+exists**, found by reading the component and the schema rather than by
+comparing screenshots. Each is recorded with what was measured, because
+building the frames literally would lose something real.
+
+### 1 · The frames draw ONE clipboard row. The product has FIVE.
+
+`sign-and-send-modal.tsx` — `DESTINATIONS`, all five live and rendered as a
+group today:
+
+| key | label |
+|---|---|
+| `clipboard_epic` | Copy for Epic |
+| `clipboard_athena` | Copy for Athena |
+| `clipboard_cerner` | Copy for Cerner |
+| `clipboard_eclinicalworks` | Copy for eClinicalWorks |
+| `clipboard_generic` | Copy as plain text |
+
+The frames' single *"Copy note to clipboard"* row has no way to express which
+EHR's format a doctor wants. Collapsing five to one is an **accepted-capability
+loss**, not a re-skin.
+
+### 2 · `Email to referring physician` is not what the shipped email does.
+
+The frames say *"Email to referring physician"* (pre) and *"Send email to Dr.
+Nair"* (post). The shipped destination is labelled **"Email to me"** and
+`sendVisitPdfEmail` sends:
+
+- **to** `props.doctorEmail` — the signing doctor, not a third party
+- subject `Your signed note is ready in QuillMD`, identical for every visit
+  *"A subject that varies with the note is a subject that leaks"*
+- a **link**, deliberately not an attachment, and deliberately not
+  `/visits/<id>` — the file's own header explains the PHI minimisation
+
+⚠️ **AND THERE IS NO REFERRING-PHYSICIAN FIELD IN THE SCHEMA.** A grep of
+`schema.prisma` for `referring` returns **zero**. The row as drawn has no data
+behind it and cannot be built; sending to a referring physician is a different
+**recipient** and a different **disclosure**, not a label change.
+
+### 3 · The flat `DELIVER TO` list has nowhere for the email safety warning.
+
+The shipped email group carries this hint, rendered to the doctor:
+
+> Send a PDF to `<doctorEmail>` for your records. **Don't use for patient
+> communication.**
+
+The frames replace three titled groups with one `DELIVER TO` label and four
+undecorated rows. There is no slot in that geometry for a per-group warning, so
+a literal build **deletes a PHI-safety instruction** — the one that stops a
+doctor mailing a note to a patient.
+
+### ✅ ALL THREE RULED — ruling #188, 2026-09-05
+
+**The frames' ROW and CARD are the design; the four rows drawn are examples.**
+
+| # | ruled |
+|---|---|
+| 1 | **The five EHR formats survive.** The row is applied PER FORMAT — a `Copy to clipboard` group in the row skin with the EHR picker inside it. **Nothing collapses.** |
+| 2 | **Email ships as `Email to me`** — the shipped link-never-attachment behaviour, in the frames' skin — and *"Don't use for patient communication"* **stays, as the row's caption.** |
+| 3 | **`Send to referring physician` is its own product item**, filed right after ADMIN. Not a T4 rider. |
+
+> ⚠️ **A LITERAL FRAME THAT DELETES A SAFETY INSTRUCTION IS NOT THE SPEC.**
+>
+> That is the generalisable half of #188(2), and it is worth carrying past this
+> file. The frames' flat `DELIVER TO` list had no slot for a per-group warning,
+> so building them literally would have removed the one line that stops a doctor
+> mailing a note to a patient. Fidelity to a mockup does not outrank a safety
+> instruction the mockup did not know about.
+
+**What #3 actually requires**, so nobody re-scopes it as a label change: a
+`referringPhysician` field on the visit (name + secure contact), populated from
+the dictated **Referring MD** fact the custom-file batch already maps (row 7);
+an explicit **recipient confirmation** by the signing doctor; delivery as an
+**authenticated secure link, never an attachment**; and an audit row naming
+**recipient and purpose** (treatment disclosure). Design pending the owner's
+frame for the recipient step.
+
+## THE BUILD CONSTRAINTS, MEASURED FROM THE SHIPPED COMPONENT
+
+Recorded so the build starts from the surface as it is, not from a memory of it.
+
+| what | where | why it constrains T4 |
+|---|---|---|
+| `29-sign-modal-geometry.spec.ts` | e2e | pins that **`Sign & Deliver` is fully inside the viewport** at every tested breakpoint. It exists because a required attestation once pushed that button off-screen at 720px and three specs failed on a control they could not reach. The card's `flex max-h-[76vh] flex-col` + scrolling body + pinned footer is load-bearing, not decoration |
+| exactly ONE attestation | same spec | `sign-attestation` in the modal **or** `rounds-gate-attest` in Gate 3 — never zero (a server-enforced gate with no UI is a bypass) and never two |
+| the scroll region | same spec | must keep `overflow-y: auto \| scroll \| overlay` |
+| submit label | `sign-and-send-modal.tsx` | `Sign & Deliver` (pre) / **`Deliver`** (post). The e2e matches `/sign & deliver/i`, case-insensitively, so the frames' `Sign & deliver` casing is safe |
+| ⚠️ the post state HAS a primary button today | same file | the frames have **none** — every row is its own commit and `Export again` reopens the modal. That is a BEHAVIOUR change, drawn deliberately, and it is the part of T4 that is not a re-skin |
+| `signOnSubmit` | prop | the pre/post discriminator. `true` → `sign-deliver-pre`; `false` → `sign-deliver-post` |
+
+### The order the build takes
+
+1. **The card and the row** — ground, border, radius, spacing, typography, the
+   section label, the 20×20 checkbox, the 44px row with its bottom rule. Pure
+   skin over unchanged behaviour, and it is the bulk of the frames.
+2. **The post state's checkbox → action shift** — a behaviour change, its own
+   change, with its own proofs. Not folded into the skin, because a re-skin that
+   also changes what a click DOES is two claims wearing one diff.
+
 ## Still on the batched request list, for T4
 
 1. **Row states.** No hover, focus-visible, disabled, pending or error state is
