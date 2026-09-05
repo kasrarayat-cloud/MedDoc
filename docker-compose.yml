@@ -376,6 +376,9 @@ services:
     build:
       context: .
       dockerfile: apps/transcribe-md/Dockerfile.worker
+      args:
+        # ⚠️ ruling #181/1 — the shipped commit, readable off the image.
+        GIT_REVISION: ${GIT_REVISION:-unknown}
     restart: unless-stopped
     # Phase 19 — h16-cap-drop. BullMQ worker; outbound HTTPS only;
     # no privileged port; no host filesystem writes (logs go to
@@ -531,6 +534,11 @@ services:
       # T-M19.2: mirror of the marketing build.args — see the comment
       # on that block for the rationale.
       args:
+        # ⚠️ ruling #181/1 — the shipped commit, readable off the image, so a
+        # judgement can verify the payload structurally instead of arguing a
+        # chain. Defaults to `unknown` so a local build never silently claims
+        # to be a commit it is not.
+        GIT_REVISION: ${GIT_REVISION:-unknown}
         NEXT_PUBLIC_TRANSCRIBE_MD_APP_URL: ${TRANSCRIBE_MD_AUTH_URL:-http://5.231.107.93:9020}
         NEXT_PUBLIC_MARKETING_URL: ${MARKETING_URL:-http://5.231.107.93:9010}
         # T-M20.3: Pipeline tab gate. Build-time default is "false"

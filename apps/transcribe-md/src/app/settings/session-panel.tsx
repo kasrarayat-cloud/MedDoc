@@ -26,14 +26,27 @@ export function SessionPanel(props: SessionPanelProps) {
   const router = useRouter();
 
   async function doSignOut() {
-    await signOutAction();
+    // ⚠️ #181 — THE RESULT IS CHECKED. This used to call the action and then
+    // announce "Signed out" unconditionally, which is a success message
+    // asserted rather than observed. The action now fails closed on a revoke
+    // it could not perform, and a toast that contradicts it would be worse
+    // than no toast at all.
+    const result = await signOutAction();
+    if (!result.ok) {
+      toast.error('Sign-out failed', { description: result.reason });
+      return;
+    }
     toast.success('Signed out');
     router.push('/login');
     router.refresh();
   }
 
   async function doSignOutAll() {
-    await signOutAllDevicesAction();
+    const result = await signOutAllDevicesAction();
+    if (!result.ok) {
+      toast.error('Sign-out failed', { description: result.reason });
+      return;
+    }
     toast.success('Signed out from all devices', {
       description: 'Every active session has been revoked.',
     });

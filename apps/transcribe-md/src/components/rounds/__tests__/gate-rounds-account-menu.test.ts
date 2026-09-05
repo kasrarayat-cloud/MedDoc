@@ -114,7 +114,32 @@ describe('the menu contains the two items, and keeps its accessible name', () =>
   it('Settings and Sign out are both present', () => {
     expect(MENU_CODE).toMatch(/href="\/settings"/);
     expect(MENU_CODE).toContain('Sign out');
-    expect(MENU_CODE).toMatch(/signOut\(\{ callbackUrl: '\/login' \}\)/);
+
+    // ⚠️ THE PROPERTY, NOT THE SPELLING — AND THE OLD SPELLING PINNED A DEFECT.
+    // This line used to read:
+    //
+    //     expect(MENU_CODE).toMatch(/signOut\(\{ callbackUrl: '\/login' \}\)/);
+    //
+    // which required the EXACT client call that #181 removed:
+    // `signOut()` from `next-auth/react` POSTs to /api/auth/signout, and
+    // `events.signOut` — holding the UserSession revoke AND the LOGOUT audit
+    // row — runs strictly AFTER @auth/core's CSRF gate. A CSRF blip therefore
+    // answered 200 having revoked nothing, and the session stayed live.
+    //
+    // So this gate demanded the broken call and would have RED-FLAGGED the
+    // fix. Asking "if somebody improved this code, would my gate fail?" gets
+    // the answer "yes" — which is the tell that a gate is pinning a spelling
+    // rather than a property.
+    //
+    // The property it was reaching for is that the control actually signs the
+    // doctor out. That is now asserted as: it invokes a sign-out, and it does
+    // NOT do so through the CSRF-gated client path.
+    expect(MENU_CODE, 'the sign-out control invokes no sign-out at all').toMatch(
+      /signOutAction\s*\(/,
+    );
+    expect(MENU_CODE, 'back on the CSRF-gated client POST').not.toContain(
+      "from 'next-auth/react'",
+    );
   });
 
   it('the trigger is a real button with the label the E2E helper searches by', () => {

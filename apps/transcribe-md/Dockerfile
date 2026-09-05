@@ -201,6 +201,17 @@ RUN npm run build -w transcribe-md
 
 # ── Stage 3: Production Runner ──
 FROM ${NODE_BASE} AS runner
+
+# ⚠️ THE SHIPPED COMMIT, STAMPED INTO THE IMAGE — ruling #181/1.
+# A deploy judgement could previously establish only a CHAIN: the tree was at X
+# before the script ran, the script deploys its tree's HEAD, the image id moved.
+# It could not read the commit back OFF the running container, so "the doctor-
+# facing change is in this image" stayed an inference. A bundle grep was tried
+# and failed to discriminate — the tokens existed in the previous image too.
+# One label turns that whole argument into one command.
+ARG GIT_REVISION=unknown
+LABEL org.opencontainers.image.revision="${GIT_REVISION}"
+ENV APP_GIT_REVISION="${GIT_REVISION}"
 WORKDIR /app
 
 ENV NODE_ENV=production
