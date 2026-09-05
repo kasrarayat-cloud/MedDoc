@@ -44,6 +44,12 @@ import type { BrowserContext, Page } from '@playwright/test';
 import { cleanupTestUsers } from './helpers/cleanup';
 import { seedVisitStates, type SeededVisitIds } from './helpers/seedVisitStates';
 import { signupFreshUser } from './helpers/signup';
+// ⚠️ STATIC, NOT `await import()`. A dynamic import of a relative path is
+// resolved by NODE at runtime, which bypasses Playwright's TS transform: CI
+// died with `SyntaxError: Cannot use import statement outside a module` and
+// **27 tests did not run**, so the dialogs this PR exists to scan were never
+// scanned. The failure looked like the opener; it was the loader.
+import { openSignFlow } from './helpers/sign';
 
 // ----- viewport matrix ------------------------------------------------------
 
@@ -166,7 +172,6 @@ const ROUTES: RouteSpec[] = [
     // second copy of the gate walk — one opener, so this cannot drift from
     // what the scenario packs drive.
     open: async (page) => {
-      const { openSignFlow } = await import('./helpers/sign');
       await openSignFlow(page);
     },
     opened: 'sign-attestation-toggle',
@@ -182,7 +187,16 @@ const ROUTES: RouteSpec[] = [
     open: async (page) => {
       await page.getByRole('button', { name: /export again/i }).first().click();
     },
-    opened: 't4-delivery-summary',
+    // ⚠️ NOT `t4-delivery-summary`, AND THE REASON IS A MERGE, NOT A TASTE.
+    // That summary is the sentinel this row first used — and `feat/t4-post-state`
+    // GATES IT TO PRE-SIGN, because after signing it named a set nobody
+    // submits. Each PR is green alone; the union would leave this row watching
+    // for an element that no longer renders in the state it opens.
+    //
+    // `t4-group-download` is unconditional in BOTH states and BOTH branches —
+    // it is gated on neither `signOnSubmit` nor `emailEnabled` — so the
+    // sentinel does not depend on which of the two lands first.
+    opened: 't4-group-download',
   },
   {
     path: '/visits/:READY',
