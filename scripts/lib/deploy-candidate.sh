@@ -27,6 +27,24 @@
 # DECLARATION already IS the tracked, reviewed, committed statement that a
 # specific tree is about to ship. Candidacy is read from it.
 #
+# ⚠️ THE HONEST LIMIT, FOUND WHILE SHIPPING THIS AND STATED RATHER THAN LEFT
+# FOR SOMEBODY TO DISCOVER. Candidacy is read from a declaration that is
+# ALREADY ON THE BASE BRANCH. So there is a window — between "I have decided to
+# deploy this commit" and "the declaration PR has merged" — in which the base is
+# genuinely about to ship and this signal reads NOT.
+#
+# It was live for THIS very deploy: `b13f3caa` was the declared commit, its e2e
+# was in flight, and the declaration naming it was still sitting in an unmerged
+# PR, so the base read NOT while carrying exactly the citation worth protecting.
+#
+# ⚠️ THAT WINDOW IS NOT CLOSED BY THIS FILE, AND IT IS NOT CLOSED BY A SECOND
+# MARKER EITHER — a marker written before the declaration is the same statement
+# made twice, and the second copy is the one nobody updates. The real closure is
+# ORDERING: land the declaration BEFORE the runs you want protected, which is
+# what the printed advice says and what §2.5 already requires. Until then the
+# cost is bounded and one-directional: the wrapper is merely as permissive as it
+# is today, on a window measured in one PR's latency.
+#
 #   CANDIDATE := a declaration in the BASE BRANCH's tree governs that branch's
 #                head — it names the head, or an ancestor with ZERO runtime
 #                drift — AND it has no `-JUDGED` companion.
