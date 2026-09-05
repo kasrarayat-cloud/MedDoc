@@ -77,6 +77,46 @@ interface RouteSpec {
   /** Skip the test on root because it's a 307 redirect — there's
    *  nothing to scan in the response body. */
   navigateOnly?: boolean;
+
+  /**
+   * ⚠️ OPEN A DIALOG-HOSTED SURFACE BEFORE SCANNING.
+   *
+   * A sweep that only visits routes gates the HALLWAY, NOT THE ROOM. Every
+   * dialog in this app is portalled to `document.body` and rendered only after
+   * an interaction, so a route-only scan cannot see one — and the surface a
+   * doctor SIGNS on is a dialog.
+   *
+   * This is not hypothetical: T4's re-skin introduced six nodes at 4.180:1 and
+   * a 2.871:1 focus ring INSIDE the sign modal, and the route sweep over
+   * `/visits/:READY` was structurally incapable of seeing either. They were
+   * caught by an adversarial pass running axe by hand.
+   */
+  open?: (page: Page) => Promise<void>;
+
+  /**
+   * ⚠️ THE NON-VACUITY GUARD, AND IT IS THE POINT OF THE WHOLE FEATURE.
+   *
+   * A testid that MUST be present after `open` ran. Without it an opener that
+   * silently does nothing leaves axe scanning the page WITHOUT the dialog —
+   * which passes, and is indistinguishable from a real green. The sweep would
+   * then claim coverage it does not have, under a route label that says it
+   * does. Absence here is a FAILURE, never a skip.
+   */
+  opened?: string;
+
+  /** When the `opened` marker is a PREFIX (`icd-reason-picker-<code>`), match
+   *  on it instead of exactly. `getByTestId` is EXACT — a per-code testid
+   *  would never match, and the guard would fail on correct code. */
+  openedIsPrefix?: boolean;
+
+  /**
+   * A testid whose ABSENCE means the seeded data cannot reach this surface
+   * (e.g. a visit with no suggested ICD codes has no Reject button to click).
+   * Checked BEFORE `open`. Absence here SKIPS with a named reason — a data
+   * condition is not a defect, and a skip that says why beats a green that
+   * does not.
+   */
+  requiresPresent?: string;
 }
 
 const ROUTES: RouteSpec[] = [
@@ -110,6 +150,66 @@ const ROUTES: RouteSpec[] = [
     auth: 'user', requiresVisit: 'SIGNED' },
   { path: '/visits/:PROCESSING',     label: 'visit-detail-processing',
     auth: 'user', requiresVisit: 'PROCESSING' },
+
+  // ── ⚠️ DIALOG-HOSTED SURFACES — the rooms, not the hallway ──────────────
+  //
+  // Each of these re-visits a route already in the matrix and then OPENS the
+  // dialog before scanning. The duplication is the feature: the route rows
+  // prove the page, these prove the surface a doctor actually acts on.
+
+  {
+    path: '/visits/:READY',
+    label: 'sign-modal (dialog)',
+    auth: 'user',
+    requiresVisit: 'READY',
+    // The signing surface. Opened through the SHIPPED opener rather than a
+    // second copy of the gate walk — one opener, so this cannot drift from
+    // what the scenario packs drive.
+    open: async (page) => {
+      const { openSignFlow } = await import('./helpers/sign');
+      await openSignFlow(page);
+    },
+    opened: 'sign-attestation-toggle',
+  },
+  {
+    path: '/visits/:SIGNED',
+    label: 'export-modal (dialog, post-sign)',
+    auth: 'user',
+    requiresVisit: 'SIGNED',
+    // The post-sign deliver state — a DIFFERENT tree from the pre-sign modal:
+    // no attestation block, a DOCUMENT SIGNED badge, and (after the action
+    // shift lands) rows that commit individually.
+    open: async (page) => {
+      await page.getByRole('button', { name: /export again/i }).first().click();
+    },
+    opened: 't4-delivery-summary',
+  },
+  {
+    path: '/visits/:READY',
+    label: 'icd-reason-picker (dialog-hosted control)',
+    auth: 'user',
+    requiresVisit: 'READY',
+    // The Receipt's rejection reason picker — five buttons that only exist
+    // after a Reject click, so no route scan has ever seen them.
+    //
+    // ⚠️ GUARDED ON THE DATA, NOT ON THE OUTCOME. A seeded visit with no
+    // suggested ICD codes has no Reject button at all; that is a data
+    // condition and it SKIPS with a reason. What must never happen is a
+    // silent pass over a page whose picker never opened.
+    // ⚠️ THE REAL TESTIDS, CHECKED AGAINST THE SOURCE. My first draft used
+    // `icd-coding-tab`, which does not exist (0 hits) — the tab is
+    // `visit-view-tab-coding` — and `icd-reason-picker`, which is per-code
+    // (`icd-reason-picker-<code>`) and so never matches an EXACT getByTestId.
+    // A guard keyed on a name that is not there fails on correct code, which
+    // is the false-rejection half of the same defect.
+    requiresPresent: 'visit-view-tab-coding',
+    open: async (page) => {
+      await page.getByTestId('visit-view-tab-coding').click();
+      await page.locator('[data-testid^="icd-reject-"]').first().click();
+    },
+    opened: 'icd-reason-picker-',
+    openedIsPrefix: true,
+  },
 
   // Recording surface (uses the READY visit — recording UI doesn't care
   // about visit status, only about visit existence).
@@ -396,6 +496,51 @@ for (const viewport of VIEWPORTS) {
         // runner found a 500ms wait was sufficient against the same
         // pages.
         await page.waitForTimeout(500);
+
+        // ── ⚠️ OPEN THE DIALOG, THEN PROVE IT OPENED ────────────────────────
+        if (route.open) {
+          // A data precondition is checked FIRST and skips with a reason. A
+          // visit that cannot reach this surface is not a defect; a green that
+          // pretends it did is.
+          if (route.requiresPresent) {
+            const present = await page
+              .getByTestId(route.requiresPresent)
+              .count()
+              .catch(() => 0);
+            if (present === 0) {
+              test.skip(
+                true,
+                `[a11y] ${route.label} skipped — the seeded visit has no ` +
+                  `\`${route.requiresPresent}\`, so this surface is unreachable ` +
+                  `from it. A skip that names the reason beats a pass that ` +
+                  `scanned the page WITHOUT the dialog.`
+              );
+              return;
+            }
+          }
+
+          await route.open(page);
+          await page.waitForTimeout(400);
+
+          // ⚠️ THE GUARD THAT MAKES THE WHOLE ROW MEAN ANYTHING.
+          //
+          // An opener that silently does nothing leaves axe scanning the page
+          // WITHOUT the dialog — which passes, and looks exactly like a real
+          // green under a label claiming the dialog was covered. That is the
+          // absent-check shape this row exists to close, wearing a new name.
+          //
+          // So the opened marker is REQUIRED, and its absence FAILS.
+          const openedLocator = route.openedIsPrefix
+            ? page.locator(`[data-testid^="${route.opened}"]`)
+            : page.getByTestId(route.opened!);
+          await expect(
+            openedLocator.first(),
+            `[a11y] ${route.label}: \`open()\` ran but ` +
+              `\`${route.opened}\` never appeared — the scan below would have ` +
+              `run on the page WITHOUT the dialog and PASSED, gating the ` +
+              `hallway and not the room. Failing here instead.`
+          ).toBeVisible({ timeout: 15_000 });
+        }
 
         let violations: AxeViolation[];
         try {
