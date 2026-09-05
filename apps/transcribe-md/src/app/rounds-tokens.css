@@ -3349,3 +3349,42 @@ body[data-skin='rounds'] {
   text-align: center;
   color: var(--rounds-text-3);
 }
+
+/* The evidence quote sits under its row, indented to the description column so
+ * it reads as belonging to that code rather than to the section. */
+[data-skin='rounds'] .qm-icd-row-evidence {
+  margin: 0 0 0 96px;
+  padding: 6px 0 0;
+  font-family: var(--rounds-font-ui);
+  font-size: 12px;
+  line-height: 16px;
+  font-style: italic;
+  color: var(--rounds-text-3);
+}
+
+/* The note beneath a row that is not awaiting a decision — the orphaned
+ * explanation and the amber label. Same left inset as the row's description
+ * column (96px code + 16px gap) so the prose hangs off the description rather
+ * than off the card edge.
+ *
+ * ⚠️ `--rounds-text-3`, the same token the pre-ledger prose carried. The amber
+ * caller overrides it to `--rounds-em-text` inline; `--rounds-em` itself is a
+ * FILL token and fails AA as text. */
+[data-skin='rounds'] .qm-icd-row-note {
+  margin: 2px 0 0 112px;
+  font-family: var(--rounds-font-ui);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--rounds-text-3);
+}
+
+/* The controls a HELD row offers, beneath it — the ruled Accept / Reject /
+ * reason-picker flow, unchanged in behaviour and re-skinned to the card. */
+[data-skin='rounds'] .qm-icd-row-actions {
+  margin: 0 0 0 96px;
+  padding: 8px 0 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}

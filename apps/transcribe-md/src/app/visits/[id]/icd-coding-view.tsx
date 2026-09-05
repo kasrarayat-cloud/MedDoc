@@ -56,6 +56,8 @@
 
 import { useCallback, useMemo, useState } from 'react';
 
+import { ledgerSections } from '@/lib/icd-ledger-sections';
+import { icdRowState, type IcdRowState } from '@/lib/icd-row-state';
 import {
   ICD_REJECTION_REASONS,
   icdDecisionSummary,
@@ -239,59 +241,68 @@ export function IcdCodingView(props: IcdCodingViewProps) {
 
   const kicker = 'qm-rounds-kicker'; // the DARK-surface kicker. See the design contract.
 
-  const card = (code: string, body: React.ReactNode) => (
-    <div
-      key={code}
-      data-testid={`icd-card-${code}`}
-      data-code={code}
-      className="mb-2 rounded-lg px-3 py-2.5"
-      style={{
-        background: 'var(--rounds-surface-1)',
-        border: '1px solid var(--rounds-line-1)',
-      }}
-    >
-      {body}
-    </div>
-  );
-
-  const codeLine = (code: string) => {
+  // ── THE LEDGER ROW — the frames' unit, in all five states ────────────────
+  // `icd-code-row-states` (24:2): identical geometry in every state, only the
+  // colour and the one tint change, which is what makes them read as one
+  // object. The grid is 96 / 1fr / 60 — the frames' 96 / 484 / 60 summing to the
+  // card's 720 less its 40px side padding.
+  //
+  // ⚠️ THE TESTID STAYS `icd-card-${code}`. The card became a row, but the
+  // suites address it by that name and renaming it would break them for a
+  // cosmetic reason. What the element IS changed; what it is CALLED did not.
+  const ledgerRow = (
+    code: string,
+    state: IcdRowState,
+    below?: React.ReactNode,
+    // ⚠️ AN OUTER TESTID, NOT A REPLACEMENT FOR THE INNER ONE. The amber
+    // section's suite reads `icd-drop-<code>`.textContent for the label and
+    // counts buttons INSIDE it, so that name has to sit on the wrapper that
+    // CONTAINS the label — putting it on the row itself would leave the label
+    // a sibling and turn a true assertion false for a cosmetic reason.
+    outerTestId?: string,
+  ) => {
     const d = detail[code];
+    const reason = projection.decisions[code]?.reason;
     return (
-      <>
-        <div className="flex items-baseline gap-2">
-          <span
-            className="font-mono text-[14px] font-semibold"
-            style={{ color: 'var(--rounds-text-1)' }}
-          >
-            {code}
+      <div key={code} {...(outerTestId ? { 'data-testid': outerTestId } : {})}>
+        <div
+          className="qm-icd-row"
+          data-state={state}
+          data-testid={`icd-card-${code}`}
+          data-code={code}
+        >
+          <span className="qm-icd-row-code">{code}</span>
+          <span className="qm-icd-row-desc">
+            {d?.description ?? ''}
+            {/* State 3 carries the doctor's reason as a second line — the frame
+                draws the description and the reason stacked in one cell. */}
+            {state === 'rejected' && reason ? (
+              <span className="qm-icd-row-reason" data-testid={`icd-rejected-reason-${code}`}>
+                {REJECTION_REASON_LABEL[reason]}
+              </span>
+            ) : null}
           </span>
-          {d?.description ? (
-            <span className="text-[13px]" style={{ color: 'var(--rounds-text-2)' }}>
-              {d.description}
-            </span>
-          ) : null}
-          {typeof d?.confidence === 'number' ? (
-            <span
-              className="ml-auto text-[12px] tabular-nums"
-              // `--rounds-ready-text`, never `--rounds-ready`: the design
-              // contract measures the fill token at 3.392:1 / 3.233:1 / 2.661:1
-              // and it FAILS AA as text. The `-text` variant exists for this.
-              style={{ color: 'var(--rounds-ready-text)' }}
-            >
-              {Math.round(d.confidence * (d.confidence <= 1 ? 100 : 1))}%
-            </span>
-          ) : null}
+          <span className="qm-icd-row-pct">
+            {/* State 5 shows an em dash, never a number: the code never reached
+                the note, so a confidence would be a claim about something that
+                did not happen. */}
+            {state === 'not-carried'
+              ? '—'
+              : typeof d?.confidence === 'number'
+                ? `${Math.round(d.confidence * (d.confidence <= 1 ? 100 : 1))}%`
+                : ''}
+          </span>
         </div>
         {d?.evidenceQuote ? (
           <p
-            className="mt-1 text-[12px] italic"
-            style={{ color: 'var(--rounds-text-3)' }}
+            className="qm-icd-row-evidence"
             data-testid={`icd-evidence-${code}`}
           >
             “{d.evidenceQuote}”
           </p>
         ) : null}
-      </>
+        {below}
+      </div>
     );
   };
 
@@ -367,101 +378,101 @@ export function IcdCodingView(props: IcdCodingViewProps) {
         </div>
         <hr className="qm-icd-ledger-rule" />
 
-      {projection.undecided.length > 0 &&
-        section(
-          'Needs review',
-          projection.undecided.length,
-          projection.undecided.map((code) =>
-            card(
+      {/* ── THE LEDGER, GROUPED BY CLINICAL CATEGORY ──────────────────────
+          The frames group by category — DIAGNOSES / HISTORY & SCREENING — where
+          this surface grouped by decision state. The five STATES did not go
+          away: they moved onto the row, which is what `icd-code-row-states`
+          approves, so the same five distinctions survive on a denser surface.
+
+          ⚠️ ORPHANED AND NOT-CARRIED KEEP THEIR OWN SECTIONS BELOW, and that is
+          not an inconsistency: neither is a SUGGESTED code, so neither belongs
+          under a heading that partitions the suggestions. */}
+      {ledgerSections(projection.suggested).map((sec) => (
+        <section key={sec.id} data-testid={`icd-section-${sec.id}`}>
+          <div className="qm-icd-section-label">{sec.label}</div>
+          {sec.codes.map((code) => {
+            const state = icdRowState(code, projection);
+            return ledgerRow(
               code,
-              <>
-                {codeLine(code)}
-                {!props.readonly ? (
-                  rejecting === code ? (
-                    <div className="mt-2" data-testid={`icd-reason-picker-${code}`}>
-                      <p className={kicker} style={{ color: 'var(--rounds-text-3)' }}>
-                        Why is this code wrong?
-                      </p>
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {ICD_REJECTION_REASONS.map((r) => (
-                          <button
-                            key={r}
-                            type="button"
-                            data-testid={`icd-reason-${code}-${r}`}
-                            disabled={pending !== null}
-                            onClick={() => void send(code, 'rejected', r)}
-                            className="rounded-md px-2 py-1 text-[12px]"
-                            style={{
-                              border: '1px solid var(--rounds-line-2)',
-                              color: 'var(--rounds-text-2)',
-                            }}
-                          >
-                            {REJECTION_REASON_LABEL[r]}
-                          </button>
-                        ))}
-                        <button
-                          type="button"
-                          data-testid={`icd-reason-cancel-${code}`}
-                          onClick={() => setRejecting(null)}
-                          className="rounded-md px-2 py-1 text-[12px]"
-                          style={{ color: 'var(--rounds-text-3)' }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-2 flex gap-2">
+              state,
+              // ⚠️ THE RULED CONTROLS, UNCHANGED IN BEHAVIOUR. Only a HELD row
+              // offers them, and only when the caller is not readonly — the
+              // three independent `!props.readonly` gates and the frozen notice
+              // stay exactly as #153(e) requires: the surface must not offer an
+              // action the server will refuse.
+              state === 'held' && !props.readonly ? (
+                rejecting === code ? (
+                  <div className="qm-icd-row-actions" data-testid={`icd-reason-picker-${code}`}>
+                    <span className={kicker} style={{ color: 'var(--rounds-text-3)' }}>
+                      Why is this code wrong?
+                    </span>
+                    {ICD_REJECTION_REASONS.map((r) => (
                       <button
+                        key={r}
                         type="button"
-                        data-testid={`icd-accept-${code}`}
+                        data-testid={`icd-reason-${code}-${r}`}
                         disabled={pending !== null}
-                        onClick={() => void send(code, 'accepted')}
-                        className="rounded-md px-2.5 py-1 text-[12px] font-medium"
-                        style={{
-                          background: 'var(--rounds-accent)',
-                          color: 'var(--rounds-on-accent)',
-                        }}
-                      >
-                        Accept
-                      </button>
-                      <button
-                        type="button"
-                        data-testid={`icd-reject-${code}`}
-                        disabled={pending !== null}
-                        onClick={() => setRejecting(code)}
-                        className="rounded-md px-2.5 py-1 text-[12px]"
+                        onClick={() => void send(code, 'rejected', r)}
+                        className="rounded-md px-2 py-1 text-[12px]"
                         style={{
                           border: '1px solid var(--rounds-line-2)',
                           color: 'var(--rounds-text-2)',
                         }}
                       >
-                        Reject
+                        {REJECTION_REASON_LABEL[r]}
                       </button>
-                    </div>
-                  )
-                ) : null}
-              </>,
-            ),
-          ),
-        )}
-
-      {projection.accepted.length > 0 &&
-        section(
-          'Accepted',
-          projection.accepted.length,
-          projection.accepted.map((code) =>
-            card(
-              code,
-              <>
-                {codeLine(code)}
-                {!props.readonly ? (
+                    ))}
+                    <button
+                      type="button"
+                      data-testid={`icd-reason-cancel-${code}`}
+                      onClick={() => setRejecting(null)}
+                      className="rounded-md px-2 py-1 text-[12px]"
+                      style={{ color: 'var(--rounds-text-3)' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="qm-icd-row-actions">
+                    <button
+                      type="button"
+                      data-testid={`icd-accept-${code}`}
+                      disabled={pending !== null}
+                      onClick={() => void send(code, 'accepted')}
+                      className="rounded-md px-2.5 py-1 text-[12px] font-medium"
+                      style={{
+                        background: 'var(--rounds-accent)',
+                        color: 'var(--rounds-on-accent)',
+                      }}
+                    >
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`icd-reject-${code}`}
+                      disabled={pending !== null}
+                      onClick={() => setRejecting(code)}
+                      className="rounded-md px-2.5 py-1 text-[12px]"
+                      style={{
+                        border: '1px solid var(--rounds-line-2)',
+                        color: 'var(--rounds-text-2)',
+                      }}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                )
+              ) : // A DECIDED row keeps its Undo — the same control the two
+              // decision-state sections carried, on the same testid, emitted
+              // from ONE branch now instead of two.
+              (state === 'pre-accepted' || state === 'rejected') && !props.readonly ? (
+                <div className="qm-icd-row-actions">
                   <button
                     type="button"
                     data-testid={`icd-undo-${code}`}
                     disabled={pending !== null}
                     onClick={() => void send(code, 'cleared')}
-                    className="mt-2 rounded-md px-2.5 py-1 text-[12px]"
+                    className="rounded-md px-2.5 py-1 text-[12px]"
                     style={{
                       border: '1px solid var(--rounds-line-2)',
                       color: 'var(--rounds-text-2)',
@@ -469,78 +480,29 @@ export function IcdCodingView(props: IcdCodingViewProps) {
                   >
                     Undo
                   </button>
-                ) : null}
-              </>,
-            ),
-          ),
-        )}
+                </div>
+              ) : null,
+            );
+          })}
+        </section>
+      ))}
 
-      {projection.rejected.length > 0 &&
-        section(
-          'Rejected',
-          projection.rejected.length,
-          projection.rejected.map((code) =>
-            card(
-              code,
-              <>
-                {codeLine(code)}
-                <p
-                  className="mt-1 text-[12px]"
-                  data-testid={`icd-rejected-reason-${code}`}
-                  style={{ color: 'var(--rounds-signed-text)' }}
-                >
-                  {/* The stored token, rendered through the label map. The
-                      column holds the token; the prose lives in this file. */}
-                  {projection.decisions[code]?.reason
-                    ? REJECTION_REASON_LABEL[projection.decisions[code].reason!]
-                    : null}
-                </p>
-                {!props.readonly ? (
-                  <button
-                    type="button"
-                    data-testid={`icd-undo-${code}`}
-                    disabled={pending !== null}
-                    onClick={() => void send(code, 'cleared')}
-                    className="mt-2 rounded-md px-2.5 py-1 text-[12px]"
-                    style={{
-                      border: '1px solid var(--rounds-line-2)',
-                      color: 'var(--rounds-text-2)',
-                    }}
-                  >
-                    Undo
-                  </button>
-                ) : null}
-              </>,
-            ),
-          ),
-        )}
-
-      {/* ⚠️ ORPHANED IS SURFACED AND IS NOBODY'S DEFAULT.
-          A decision whose code is no longer suggested is neither accepted nor
-          undecided — it is a decision about a code this note no longer carries.
-          It must not flow into the record and must not be silently discarded
-          either, because the doctor made it. UNREACHABLE TODAY by measurement
-          (`icdCodes` has one writer and `layer-skip.ts:101` skips L7a whenever
-          it has content), kept because it costs nothing while the path is shut
-          and because its absence would be invisible if the path re-opened. */}
+      {/* ⚠️ ORPHANED KEEPS ITS OWN SECTION, and that is not a departure from
+          the frames' category grouping. An orphaned code is NOT in
+          `projection.suggested` — the suggester no longer proposes it — so it
+          cannot be filed under a heading that partitions the suggestions. The
+          section title is load-bearing: `icd-section-no-longer-suggested`. */}
       {projection.orphaned.length > 0 &&
         section(
           'No longer suggested',
           projection.orphaned.length,
           projection.orphaned.map((code) =>
-            card(
+            ledgerRow(
               code,
-              <>
-                <span
-                  className="font-mono text-[14px] font-semibold"
-                  style={{ color: 'var(--rounds-text-1)' }}
-                >
-                  {code}
-                </span>
-                <p className="mt-1 text-[12px]" style={{ color: 'var(--rounds-text-3)' }}>
-                  You decided this code, and the suggester no longer proposes it for this note.
-                </p>
-              </>,
+              'orphaned',
+              <p className="qm-icd-row-note">
+                You decided this code, and the suggester no longer proposes it for this note.
+              </p>,
             ),
           ),
         )}
@@ -552,32 +514,21 @@ export function IcdCodingView(props: IcdCodingViewProps) {
         section(
           'Suggested but not carried',
           drops.length,
-          drops.map((d) => (
-            <div
-              key={d.code}
-              data-testid={`icd-drop-${d.code}`}
-              className="mb-2 rounded-lg px-3 py-2.5"
-              style={{
-                background: 'var(--rounds-surface-1)',
-                border: '1px solid var(--rounds-em)',
-              }}
-            >
-              <span
-                className="font-mono text-[14px] font-semibold"
-                style={{ color: 'var(--rounds-text-1)' }}
-              >
-                {d.code}
-              </span>
+          drops.map((d) =>
+            ledgerRow(
+              d.code,
+              'not-carried',
               <p
-                className="mt-1 text-[12px]"
+                className="qm-icd-row-note"
                 // `--rounds-em-text`, never `--rounds-em` — the fill token
-                // fails AA as text and the border above is where it belongs.
+                // fails AA as text and the row's tint is where it belongs.
                 style={{ color: 'var(--rounds-em-text)' }}
               >
                 {AMBER_DROP_LABEL}
-              </p>
-            </div>
-          )),
+              </p>,
+              `icd-drop-${d.code}`,
+            ),
+          ),
         )}
 
       </div>

@@ -345,6 +345,93 @@ describe('F8-S2 — the coding view', () => {
     })['K21.00']?.reason).toBe('wrong_specificity');
   });
 
+  // -------------------------------------------------------------------------
+  // 4 · THE LEDGER — three properties the T2 conversion left unguarded
+  // -------------------------------------------------------------------------
+  // ⚠️ FOUND BY MUTATION, NOT BY REVIEW. The conversion from decision-state
+  // SECTIONS to category sections with per-row states passed all sixteen arms
+  // above unchanged — and then three separate mutations passed them too:
+  //
+  //   deleting the Undo branch outright        → 16 passed
+  //   offering Accept/Reject on a DECIDED row  → 16 passed
+  //   rendering one flat list, ungrouped       → 16 passed
+  //
+  // The Undo one is the finding. Before this block, the ONLY reference to
+  // `icd-undo-*` in the entire repository asserted that it is ABSENT when the
+  // note is signed. A suite that names a control exactly once, to require its
+  // absence, is satisfied by deleting the feature — so a doctor losing the
+  // ability to take back a mis-click would have shipped green.
+
+  it('⚠️ UNDO IS OFFERED ON A DECIDED ROW — the only reference to it asserted its ABSENCE', () => {
+    // The biconditional, both directions, because presence alone is satisfied
+    // by a control rendered on every row and absence alone by no control at all.
+    // ⚠️ SCOPED TO EACH RENDER'S OWN CONTAINER. `screen` queries
+    // `document.body`, which holds BOTH renders — the second would satisfy an
+    // absence assertion written about the first.
+    const a = view({ icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } } });
+    expect(a.getByTestId('icd-undo-K21.00')).toBeTruthy();
+    expect(a.queryByTestId('icd-undo-E11.9'), 'a HELD row must not offer Undo').toBeNull();
+
+    // A REJECTED row is the other decided state and reaches the branch by a
+    // different arm of the same condition — deleting either half must red.
+    const b = view({
+      icdDecisions: { 'E11.9': { state: 'rejected', at: AT, byUserId: USER, reason: 'not_supported_by_note' } },
+    });
+    expect(b.getByTestId('icd-undo-E11.9')).toBeTruthy();
+  });
+
+  it('⚠️ Undo actually sends `cleared` — a button that renders is not a button that works', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, changed: true, projection: projectIcdDecisions(BLOB, null) }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    view({ icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } } });
+    fireEvent.click(screen.getByTestId('icd-undo-K21.00'));
+    const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
+    // ⚠️ THE WIRE FIELD IS `decision`. This arm first asserted `body.state`
+    // and went red against working code — the row's five STATES and the
+    // request's three DECISIONS are different vocabularies, and only the
+    // component is authoritative about which one goes on the wire.
+    expect(body.decision).toBe('cleared');
+    expect(body.code).toBe('K21.00');
+  });
+
+  it('⚠️ a DECIDED row offers NO Accept and NO Reject — it is changed by Undo alone', () => {
+    // Re-deciding a decided code would write a second record over the first
+    // with no trace that the doctor had changed their mind; the surface offers
+    // exactly one way back, and it is the one that clears.
+    view({ icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } } });
+    expect(screen.queryByTestId('icd-accept-K21.00')).toBeNull();
+    expect(screen.queryByTestId('icd-reject-K21.00')).toBeNull();
+    // The HELD row beside it still offers both — otherwise this passes by the
+    // surface offering nothing to anyone.
+    expect(screen.getByTestId('icd-accept-E11.9')).toBeTruthy();
+    expect(screen.getByTestId('icd-reject-E11.9')).toBeTruthy();
+  });
+
+  it('⚠️ the rows are GROUPED BY CATEGORY in the DOM, not merely in the helper', () => {
+    // `gate-icd-ledger-sections` pins the pure function. Nothing pinned that
+    // the VIEW calls it: replacing the grouping with one flat "Diagnoses"
+    // section left all sixteen arms green.
+    view({
+      icdCodes: {
+        codes: [
+          { code: 'K21.00', description: 'GERD without esophagitis', confidence: 0.92 },
+          { code: 'Z13.220', description: 'Encounter for screening for lipoid disorders', confidence: 0.7 },
+        ],
+        dropped: [],
+      },
+    });
+    const dx = screen.getByTestId('icd-section-diagnoses');
+    const hx = screen.getByTestId('icd-section-history-screening');
+    expect(dx.textContent).toContain('K21.00');
+    expect(dx.textContent, 'a Z code is not a diagnosis').not.toContain('Z13.220');
+    expect(hx.textContent).toContain('Z13.220');
+    expect(hx.textContent, 'a diagnosis is not history or screening').not.toContain('K21.00');
+  });
+
   it('an ORPHANED decision is surfaced and is nobody’s default', () => {
     view({
       icdDecisions: { 'Z00.00': { state: 'accepted', at: AT, byUserId: USER } },
