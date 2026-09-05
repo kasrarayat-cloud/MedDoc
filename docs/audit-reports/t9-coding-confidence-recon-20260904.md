@@ -39,6 +39,35 @@ distribution alone would be a policy choice wearing a measurement's clothes: the
 distribution says how *often* the model claims confidence, and nothing whatever
 about how often it is *right*.
 
+### ⚠️ ADDENDUM 2026-09-05 — RULING #185 SETTLED IT, AND IT AGREES WITH THIS REFUSAL
+
+**#185 (T2) rules the threshold at `0.90`, labelled SPECIFICATION-DERIVED, and
+refuses `0.80` BY NAME.** Read quickly, that looks like it overrides this
+section. It does not — **it is this section's conclusion, acted on.**
+
+The number does not come from the distribution below. It comes from the L7a
+prompt's own clause, `≥0.9 = explicit diagnosis statement` — *a statement about
+what the model was ASKED to mean, never a measurement of how often it is right.*
+That is exactly the distinction this recon refused to blur, and #185 makes it
+explicit in the ruling's own words rather than leaving a policy choice wearing a
+measurement's clothes.
+
+⚠️ **SO THE TITLE OF THIS DOCUMENT STAYS TRUE AND MUST BE READ PRECISELY.** The
+number that does not exist is the **data-derived** one. A specification-derived
+number exists, is ruled, and is being built to. Anyone citing this recon as
+*"no threshold is ruled"* is citing it wrongly.
+
+**#185 requires re-derivation after 50 real doctor decisions, and this recon is
+the instrument for it** — the probe table above is the re-run, and its control
+row (57 visits with non-null `icdCodes`) is what distinguishes *no decisions
+yet* from *a broken query*. Today's count is **0 of 58**; the re-derivation
+becomes possible, and owed, at 50.
+
+**The operational consequence of 0.90, measured on today's corpus:** 150 of 212
+proposals auto-accept, 62 remain reviewed — **70.8 %**. ⚠️ That is a POPULATION
+FACT about proposals that exist now, not a property of the threshold; it moves
+with the corpus and must be re-measured, not remembered.
+
 ---
 
 ## What IS measured, and it answers the design question underneath
