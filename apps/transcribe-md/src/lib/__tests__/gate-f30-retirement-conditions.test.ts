@@ -52,14 +52,54 @@ const REPO_ROOT = join(__dirname, '../../../../..');
 const SCRIPT = join(REPO_ROOT, 'scripts/check-retirement-conditions.sh');
 const INBOX = join(REPO_ROOT, 'docs/foundation/INBOX.md');
 
-function run(cwd: string = REPO_ROOT): { code: number; out: string } {
+// ⚠️ `Record<string, string>`, NOT `NodeJS.ProcessEnv`. That type REQUIRES
+// `NODE_ENV`, so `{ RETIREMENT_SWEEP_OFFLINE: '1' }` does not satisfy it, and
+// CI's typecheck said so.
+//
+// ⚠️ AND THE HONEST REASON IT REACHED CI: I never ran `tsc` on this branch. The
+// suite was green and I took that as sufficient — but vitest transpiles without
+// typechecking, so a green suite says nothing about types. Not an instrument
+// that lied; a check that was skipped. CI runs
+// `npx tsc --noEmit -p apps/transcribe-md/tsconfig.json`, and running exactly
+// that afterwards reproduces green.
+function run(cwd: string = REPO_ROOT, env: Record<string, string> = {}): { code: number; out: string } {
   try {
-    const out = execFileSync('bash', [SCRIPT], { cwd, encoding: 'utf8', stdio: 'pipe' });
+    const out = execFileSync('bash', [SCRIPT], {
+      cwd,
+      encoding: 'utf8',
+      stdio: 'pipe',
+      env: { ...process.env, ...env },
+    });
     return { code: 0, out };
   } catch (e) {
     const err = e as { status?: number; stdout?: string; stderr?: string };
     return { code: err.status ?? -1, out: `${err.stdout ?? ''}${err.stderr ?? ''}` };
   }
+}
+
+/**
+ * A real line diff, for the one arm that compares two whole outputs.
+ *
+ * ⚠️ WRITTEN BECAUSE THE FAILURE WAS UNDIAGNOSABLE. `toBe` on two multi-KB
+ * strings prints both truncated to the same visible prefix — literally
+ * `expected 'retirement-condition sweep — docs/fou…' to be
+ * 'retirement-condition sweep — docs/fou…'` — so the CI red said two identical
+ * things differed and named nothing. A failure that cannot be read is a failure
+ * nobody fixes; it took a separate reproduction to find the cause.
+ */
+function firstDifference(a: string, b: string): string {
+  const la = a.split('\n');
+  const lb = b.split('\n');
+  for (let i = 0; i < Math.max(la.length, lb.length); i += 1) {
+    if (la[i] !== lb[i]) {
+      return [
+        `first difference at line ${i + 1} of ${Math.max(la.length, lb.length)}:`,
+        `  from repo root : ${JSON.stringify(la[i] ?? '<absent>')}`,
+        `  from foreign cwd: ${JSON.stringify(lb[i] ?? '<absent>')}`,
+      ].join('\n');
+    }
+  }
+  return 'no line differs — the strings differ only in trailing whitespace';
 }
 
 /** Everything printed under one bucket heading, up to the blank line. */
@@ -191,13 +231,47 @@ describe('F30 · retirement conditions are tested, not remembered', () => {
   }, TIMEOUT_MS);
 
   // ── F28's OWN LESSON, APPLIED TO THIS SCRIPT ────────────────────────────
+  // ⚠️ THIS ARM VARIES **ONE** THING, AND IT USED NOT TO.
+  //
+  // It compares two whole outputs to prove the sweep is CWD-independent. But
+  // the sweep makes LIVE `git ls-remote` calls whose result reaches stdout
+  // twice — on the controls line, and through the bucket assignment, because an
+  // unreachable origin moves `merged:` entries into cannot-tell. So the arm was
+  // comparing the NETWORK as much as the cwd, and a blip between the two runs
+  // read as a cwd defect.
+  //
+  // MEASURED, not theorised: 8 of 8 passing in isolation, roughly 1 in 4 failing
+  // in a loaded batch, and one CI red on PR #952 — a change that touches none
+  // of this. The enumeration inside the script is already `| sort`, so ordering
+  // was never the cause.
+  //
+  // `RETIREMENT_SWEEP_OFFLINE=1` pins the network observation for BOTH runs, so
+  // the only variable left is the one under test. The override can only force
+  // the sweep OFFLINE — there is deliberately no way to assert the network is
+  // fine when it is not, because that could manufacture a DUE.
   it('gives the SAME answer from a foreign cwd as from the repo root', () => {
-    const fromRoot = run(REPO_ROOT);
-    const fromForeign = run(join(REPO_ROOT, 'apps/transcribe-md'));
+    const OFFLINE = { RETIREMENT_SWEEP_OFFLINE: '1' };
+    const fromRoot = run(REPO_ROOT, OFFLINE);
+    const fromForeign = run(join(REPO_ROOT, 'apps/transcribe-md'), OFFLINE);
+
     expect(fromForeign.code).toBe(fromRoot.code);
-    expect(fromForeign.out).toBe(fromRoot.out);
+    expect(fromForeign.out, firstDifference(fromRoot.out, fromForeign.out)).toBe(fromRoot.out);
     expect(fromRoot.out).toMatch(/retirement-condition sweep/);
+    // Non-vacuity: the pin actually took, in both runs. Without this the arm
+    // passes just as happily if the env never reached the script and both runs
+    // simply happened to agree.
+    expect(fromRoot.out).toContain('OFFLINE FORCED');
+    expect(fromForeign.out).toContain('OFFLINE FORCED');
   }, TIMEOUT_MS);
+
+  // ⚠️ AND THE ONLINE PATH IS STILL EXERCISED, so pinning the network above does
+  // not quietly retire the code it pins. `SHARED` is a real, un-overridden run;
+  // this asserts it took the LIVE branch, which is the half the arm above can no
+  // longer see.
+  it('the un-overridden sweep still makes its own network observation', () => {
+    expect(SHARED.out).toMatch(/· controls: origin reachable=[01] /);
+    expect(SHARED.out).not.toContain('OFFLINE FORCED');
+  });
 
   // ── EXIT CODE IS A CLAIM, AND IT MUST MATCH THE BUCKETS ─────────────────
   // 0 = nothing due · 1 = a finding · 2 = can't tell. A green with a populated
