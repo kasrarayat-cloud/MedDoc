@@ -1,5 +1,5 @@
 /**
- * RULING #188 — THE CONFIGURED MODEL ID IS VALIDATED AT STARTUP.
+ * RULING #189 — THE CONFIGURED MODEL ID IS VALIDATED AT STARTUP.
  *
  * ⚠️ WHAT THIS FIXES IS TIMING, NOT POLICY. The per-request refusal in
  * `shouldOmitTemperature` is right and is untouched: a wrong guess is a 400 on
@@ -20,7 +20,7 @@ import {
   UnknownTemperaturePolicyError,
 } from '../anthropic';
 
-describe('#188 — temperaturePolicyFor is the single table, asked without throwing', () => {
+describe('#189 — temperaturePolicyFor is the single table, asked without throwing', () => {
   it('NON-VACUITY: it classifies both real families', () => {
     // Without this every `null` below is consistent with a predicate that
     // always returns null, which would refuse every boot.
@@ -38,7 +38,7 @@ describe('#188 — temperaturePolicyFor is the single table, asked without throw
   });
 });
 
-describe('#188 — assertClinicalModelEnv refuses a typo, by name', () => {
+describe('#189 — assertClinicalModelEnv refuses a typo, by name', () => {
   it('⚠️ the exact reported typo is refused: claude-sonnet5', () => {
     // One character off the real `claude-sonnet-5`.
     expect(() =>

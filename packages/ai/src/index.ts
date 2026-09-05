@@ -7,7 +7,7 @@
 // Editor + Clinical Notes.
 // ============================================================================
 
-// ── RULING #188 — THE CONFIGURED MODEL ID IS VALIDATED AT STARTUP ──────────
+// ── RULING #189 — THE CONFIGURED MODEL ID IS VALIDATED AT STARTUP ──────────
 //
 // ⚠️ HERE, AND NOT IN THE APP AND THE WORKER SEPARATELY. Both import this
 // package — 112 files and 53 files respectively — so one call covers both

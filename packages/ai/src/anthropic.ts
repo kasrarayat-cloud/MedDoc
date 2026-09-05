@@ -225,7 +225,7 @@ export class UnknownTemperaturePolicyError extends Error {
 }
 
 /**
- * RULING #188 — THE SAME QUESTION, ASKED WITHOUT THROWING.
+ * RULING #189 — THE SAME QUESTION, ASKED WITHOUT THROWING.
  *
  * The refusal below is right and stays. But a STARTUP check cannot be built on
  * a function whose only way of saying "no policy" is to throw on the clinical
@@ -244,7 +244,7 @@ export function temperaturePolicyFor(model: string): 'strip' | 'accept' | null {
 }
 
 /**
- * RULING #188 — THE CONFIGURED MODEL ID IS VALIDATED AT STARTUP.
+ * RULING #189 — THE CONFIGURED MODEL ID IS VALIDATED AT STARTUP.
  *
  * ⚠️ THE FAIL-CLOSED REFUSAL IS KEPT; ITS TIMING MOVES. Every clinical layer
  * passes a temperature — L2 `0`, L4 `0.2`, L6 `0.1`, L7a `0`, L7b `0`, L7e
