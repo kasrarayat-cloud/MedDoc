@@ -10,7 +10,12 @@
 
 import { auth } from '@/lib/nextauth';
 import prisma from '@meddoc/db';
-import { AuthError, type Session, type UserRole } from '@meddoc/auth';
+import {
+  AuthError,
+  SessionUnverifiableError,
+  type Session,
+  type UserRole,
+} from '@meddoc/auth';
 
 import { asPracticeId, asUserId, type PracticeId, type UserId } from '@/lib/practice-scope';
 
@@ -49,45 +54,48 @@ export async function getSession(): Promise<ScopedSession | null> {
     let role = nextAuthSession.user.role as UserRole | undefined;
     let practiceId = nextAuthSession.user.practiceId as string | undefined;
 
+    // ⚠️ RULING #182(1) — THE TOKEN MAY SAY "I COULD NOT BE VERIFIED".
+    // `packages/auth`'s jwt callback marks a token whose `validateSession`
+    // lookup THREW, rather than returning null (which would clear the cookie
+    // and eject a working doctor over a blip). Reading such a token as a
+    // session is exactly the fail-open this ruling ends.
+    if ((nextAuthSession.user as { sessionVerifyFailed?: boolean }).sessionVerifyFailed) {
+      throw new SessionUnverifiableError('validateSession could not reach the database');
+    }
+
     try {
       const dbUser = await prisma.user.findUnique({
         where: { id: nextAuthSession.user.id },
         select: { role: true, isActive: true, practiceId: true },
       });
+      // ⚠️ A DEFINITIVE ANSWER. The database replied and the account is gone or
+      // deactivated: the session is invalid, full stop.
       if (!dbUser || !dbUser.isActive) return null;
       if (!role && dbUser.role) role = dbUser.role as UserRole;
       if (dbUser.practiceId) practiceId = dbUser.practiceId;
     } catch (err) {
-      // ⚠️ THIS IS A FAIL-OPEN, AND IT USED TO BE COMPLETELY SILENT.
+      // ⚠️ THE RESERVED FAIL-OPEN IS SETTLED — RULING #182(1) RULES IT THE SAME
+      // WAY AS ITS SIBLING. The comment that stood here said the trade-off was
+      // "a war-room ruling, not a code decision — it is pending". The ruling
+      // came, and it is: a lookup that CANNOT ANSWER refuses the request.
       //
-      // The line above — `if (!dbUser || !dbUser.isActive) return null` — is the
-      // ONLY `isActive` check on this path. When the lookup throws, it never
-      // executes, and the session is rebuilt from JWT-claimed `role` and
-      // `practiceId`. So a DEACTIVATED, suspended, soft-deleted or
-      // force-logged-out account continues to be served, bounded only by the
-      // JWT's 8-hour maxAge.
+      // What that comment got exactly right, and what this fix keeps: this does
+      // NOT require the database to be down. `PRISMA_POOL_MAX=10` with a 20s
+      // pool timeout makes failures PER-QUERY under load, so this lookup can
+      // time out while the clinical queries after it succeed. That is the shape
+      // that ADMITS a request rather than breaking it — which is why serving
+      // from JWT claims was never safe, and equally why ejecting the doctor
+      // would be wrong. The answer is neither: refuse THIS request, keep the
+      // session, let the next one re-validate.
       //
-      // It does NOT require the database to be down. `PRISMA_POOL_MAX=10` with a
-      // 20s pool timeout makes failures PER-QUERY under load — this lookup can
-      // time out while the clinical queries that follow it succeed, which is
-      // exactly the shape that admits a request rather than breaking it.
-      //
-      // ⚠️ THE BEHAVIOUR IS DELIBERATELY UNCHANGED HERE. Failing closed would
-      // sign a clinician out mid-dictation on a transient blip, and that
-      // trade-off is a war-room ruling, not a code decision — it is pending.
-      // What ships now is the ability to KNOW. Previously this was `catch {}`
-      // with a comment: if it had ever fired, in production, for any account, no
-      // artefact anywhere would show it.
-      //
-      // ⚠️ AND IT IS A LOG, NOT AN AUDIT ROW, ON PURPOSE. An audit row writes to
-      // the same database that just failed, so the one condition it exists to
-      // record is the condition in which it is least likely to land. A row that
-      // reliably fails to write during the event it describes is worse than a
-      // log — it reads as coverage. `SESSION_FAILOPEN` is greppable; alert on it.
+      // The log is kept verbatim in spirit — it is what made the ruling
+      // possible — with the consequence line corrected, because it now
+      // describes a refusal rather than an admission.
       console.error(
-        '[auth] SESSION_FAILOPEN: user lookup failed — isActive/role/practiceId ' +
-          'NOT verified against the database; serving JWT-claimed values. ' +
-          'A revoked or deactivated account is admitted while this persists.',
+        '[auth] SESSION_UNVERIFIABLE: user lookup failed — isActive/role/' +
+          'practiceId could NOT be verified against the database. The request ' +
+          'is REFUSED (503) and no JWT-claimed values are served. The session ' +
+          'is NOT ended and the cookie is NOT cleared.',
         {
           userId: nextAuthSession.user.id,
           hadRoleClaim: Boolean(role),
@@ -95,6 +103,7 @@ export async function getSession(): Promise<ScopedSession | null> {
           error: err instanceof Error ? err.message : String(err),
         }
       );
+      throw new SessionUnverifiableError('the user lookup could not reach the database');
     }
 
     if (!role || !practiceId) return null;
@@ -112,7 +121,20 @@ export async function getSession(): Promise<ScopedSession | null> {
         practiceId: asPracticeId(practiceId),
       },
     };
-  } catch {
+  } catch (err) {
+    // ⚠️ #182(1) — THE UNVERIFIABLE REFUSAL MUST ESCAPE, AND THIS CATCH ATE IT.
+    //
+    // The inner handler throws `SessionUnverifiableError` when the database
+    // could not answer. This outer `catch { return null }` swallowed it and
+    // returned "no session" — which every caller reads as SIGNED OUT and
+    // bounces to /login. That is EJECTION ON A BLIP: precisely the defect
+    // #181(d) introduced and #182(1) exists to end, silently reintroduced by a
+    // catch three lines below the fix.
+    //
+    // A fix whose throw cannot escape its own function is not a fix. Caught by
+    // the arm in `auth-failopen-observability`, which asserted a rejection and
+    // got `null`.
+    if (err instanceof SessionUnverifiableError) throw err;
     return null;
   }
 }

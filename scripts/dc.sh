@@ -136,6 +136,38 @@ if [ "$TARGET_REAL" = "$COMPOSE_REAL" ]; then
   done
 fi
 
+# ============================================================================
+# `config` IS REDACTED. THIRD SURFACING — BUILT RATHER THAN REMEMBERED.
+# ----------------------------------------------------------------------------
+# ⚠️ `docker compose config` RESOLVES EVERY VARIABLE AND PRINTS THE RESULT.
+# That is its whole job, and it means the plaintext of MINIO_ROOT_PASSWORD,
+# MINIO_KMS_SECRET_KEY, POSTGRES_PASSWORD, ANTHROPIC_API_KEY and every other
+# credential lands in whatever is reading — a terminal, a transcript, a log.
+# It has burned credentials in this programme twice, and was reached for a
+# third time by a session that had just written about the first two. A rule
+# that keeps being broken by people who know it is a rule needs to stop being
+# a rule.
+#
+# ⚠️ REDACTION IS BY KEY SHAPE AND FAILS TOWARD MASKING. An enumerated list of
+# secret NAMES would leak the day someone adds a name nobody listed, and the
+# leak is silent. So anything whose key merely LOOKS like a credential is
+# masked, and so is any URL carrying `user:pass@` — over-masking costs a second
+# command with an explicit key name, under-masking costs a rotation.
+redact_config() {
+  awk -f "$SHARED/scripts/lib/redact-compose.awk"
+}
+
+if [ "$SUB" = "config" ]; then
+  echo "   dc: \`config\` output is REDACTED — credential-shaped keys are masked." >&2
+  echo "   To read ONE value deliberately, name it: dc.sh exec <svc> printenv KEY" >&2
+  if [ -n "$CALLER_FILE" ]; then
+    docker compose "$@" | redact_config
+  else
+    docker compose -f "$COMPOSE" "$@" | redact_config
+  fi
+  exit "${PIPESTATUS[0]}"
+fi
+
 if [ -n "$CALLER_FILE" ]; then
   echo "   dc: caller supplied its own compose file — honouring it, from $SHARED."
   exec docker compose "$@"

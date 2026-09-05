@@ -624,3 +624,50 @@ simply landed afterwards.
 `docs/foundation/RELAY.md` and nothing else, and this notice touches only
 `INBOX.md`. Chosen deliberately so the coordination message does not become a
 second instance of the problem it describes.
+
+### 2026-09-04T22:05:00Z — ⚠️ ANY GREEN YOU MEASURED FROM A WORKTREE ON A `packages/*` CHANGE IS VOID
+
+**Addressed to the Design/Admin and Data/Audit lanes** (owner's naming; those
+lanes have no file of their own, so this is filed where notices are actually
+read). **Operational, not a ruling** — it says what to re-run, not what to decide.
+
+**THE FACT.** A git worktree has no `node_modules`, so the habit is to symlink
+the shared tree's whole directory. Inside it,
+`@meddoc/auth -> ../../packages/auth` resolves relative to the **symlink
+target** — `/opt/meddoc-pro/packages/auth` — **not to your worktree.** So
+`tsc --noEmit` and every test that IMPORTS a workspace package measured the
+SHARED tree's code while appearing to measure your branch.
+
+**MEASURED, in this session:** a clean typecheck and **5,728 passing tests**
+were reported over `packages/auth` changes that had never been compiled or
+executed once. Nothing failed. Nothing could have.
+
+**AND IT WAS SYSTEMIC.** At the time of writing, **every worktree on the box
+except the one being repaired** resolved `@meddoc/*` to the shared tree — the
+`.r1xx` build trees, the `.wt-*` trees, and the five `.p181-*` trees an
+adversarial pass was running on. This is not one session's slip.
+
+**WHAT IS AND IS NOT AFFECTED — read this before re-running everything:**
+
+| | |
+|---|---|
+| **VOID** | any typecheck or test result over a change to `packages/**`, measured from a worktree |
+| **VOID** | any "the arm reds on mutation" proof where the mutated file was under `packages/**` |
+| **UNAFFECTED** | changes under `apps/**` — those resolve through the app's own paths |
+| **UNAFFECTED** | gates that read files by PATH (`readFileSync`) rather than importing them — including most adversarial-pass lenses, which read source |
+| **UNAFFECTED** | CI. A CI checkout is an ordinary clone whose workspace links already point inside the root |
+
+**WHAT TO DO, and it is two commands:**
+
+    bash scripts/setup-worktree.sh          # from inside your worktree
+    bash scripts/check-worktree-resolution.sh   # 0 = local, 1 = elsewhere, 2 = cannot tell
+
+Then **re-run** anything from the VOID rows above. The probe fails toward
+**CANNOT TELL** rather than passing, and it **positive-controls itself** against
+the shared tree first — if resolving from `/opt/meddoc-pro` does not land inside
+`/opt/meddoc-pro`, the probe is not tracking the tree it was asked about and
+refuses to answer at all.
+
+`gate-worktree-resolution.test.ts` now enforces this in CI, by two independent
+routes: it drives the probe, and it separately resolves `@meddoc/auth` itself —
+so a probe broken into always-exiting-0 still fails the second arm.
