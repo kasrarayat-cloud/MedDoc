@@ -218,6 +218,80 @@ else
 fi
 
 # ============================================================================
+# STEP 0-ICD — THE SHIPPED ICD-10 EDITION HAS AN EXPIRY DATE. PR #993's ROW.
+# ----------------------------------------------------------------------------
+# CMS publishes ICD-10-CM by fiscal year and FY2026 is effective until
+# 2026-09-30. On 2026-10-01 every code in the allowlist becomes a previous-year
+# code.
+#
+# ⚠️ NOTHING BREAKS LOUDLY, WHICH IS THE HAZARD. The ingestion gates assert
+# FY2026's counts against FY2026's data, so a stale set is indistinguishable
+# from a correct one to everything that currently runs. The cost lands on a
+# BILLING surface: deleted codes still accepted, added codes still refused, and
+# a doctor told to bill a child that no longer exists.
+#
+# ⚠️ REPORTING, NOT BLOCKING — AND THAT IS PR #993's OWN RECOMMENDATION, KEPT.
+# Wiring it as a hard gate would red every PR from every lane starting today,
+# because it already reports DUE at 25 days. A deploy is where a human is
+# already reading output and the blast radius is one lane, so the row prints
+# here and the deploy proceeds.
+#
+# ⚠️ THE PASSENGER CLAUSE, AND IT IS THE HALF THAT CAN REFUSE. A stale edition
+# is a warning on its own. A deploy that SHIPS ICD CHANGES while the edition
+# under them is expiring is a different thing: it is new billing behaviour built
+# on a set that is about to stop being current, which is exactly the conflict
+# this watcher exists to catch. So if the deploy range touches the ICD data and
+# the edition is not current, the deploy REFUSES and names both halves.
+ICD_EDITION_CHECK="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/check-icd-edition-current.sh"
+if [ -r "$ICD_EDITION_CHECK" ]; then
+  echo "=== 0-ICD. THE SHIPPED ICD-10 EDITION (PR #993) ==="
+  bash "$ICD_EDITION_CHECK"; ICD_EDITION_RC=$?
+
+  # Does THIS deploy carry ICD changes? The base is what production is actually
+  # RUNNING, read from the container's own revision stamp — not an assumed base
+  # and not a remembered sha.
+  #
+  # ⚠️ THE FIRST VERSION OF THIS BLOCK REFERENCED A VARIABLE I INVENTED
+  # (`DEPLOYED_SHA_BEFORE`). Under this script's `set -euo pipefail` an unbound
+  # variable ABORTS, so it would have broken EVERY deploy — including one
+  # carrying no ICD changes at all, which is the opposite of a watcher.
+  ICD_BASE="$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
+      meddoc-pro-transcribe-md-1 2>/dev/null || true)"
+  ICD_PASSENGER=""
+  if [ -n "$ICD_BASE" ] && git rev-parse --verify --quiet "${ICD_BASE}^{commit}" >/dev/null 2>&1; then
+    ICD_PASSENGER=$(git diff --name-only "$ICD_BASE" HEAD -- \
+        'packages/ai/src/data/icd10*' \
+        'apps/transcribe-md/src/worker/layers/07a-icd-coding.ts' 2>/dev/null | wc -l)
+  fi
+
+  # The DECISION lives in the library so an arm can drive it; only the two
+  # inputs above are gathered here.
+  # shellcheck source=lib/icd-staleness-row.sh
+  . "$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" && pwd)/icd-staleness-row.sh"
+  ICD_VERDICT=$(icd_staleness_verdict "$ICD_EDITION_RC" "$ICD_PASSENGER")
+  case "${ICD_VERDICT%%|*}" in
+    pass)   echo "   🟢 ${ICD_VERDICT#*|}" ;;
+    report) echo "   🟡 ${ICD_VERDICT#*|}"
+            echo "      Record this row in the declaration — PR #993's FY2027 backlog names the six-step job." ;;
+    refuse)
+      echo ""
+      echo "🔴 REFUSING — ${ICD_VERDICT#*|}."
+      echo ""
+      echo "   Either half is survivable alone. Together they are new billing"
+      echo "   behaviour built on a set that is about to stop being current, and"
+      echo "   the doctor is the one who finds out."
+      echo ""
+      echo "   Re-derive the edition first, or ship the ICD changes separately and"
+      echo "   say why in the declaration."
+      echo "   Nothing has been built, migrated or recreated. Production is untouched."
+      exit 1 ;;
+  esac
+else
+  echo "🟡 0-ICD: scripts/check-icd-edition-current.sh not present — cannot tell."
+  echo "   Recorded as a gap rather than assumed clear."
+fi
+
+# ============================================================================
 # STEP 0a — THE CITATION GATE. OWNER-RULED 2026-08-20, AND IT IS FAIL-CLOSED.
 # ----------------------------------------------------------------------------
 # ⚠️ ON 2026-08-20 THIS SCRIPT DEPLOYED A COMMIT FOUR SECONDS AFTER THE ONLY
