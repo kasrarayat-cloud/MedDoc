@@ -43,15 +43,33 @@ was not entitled to.
    co-tenants. This programme's standing rule is *never touch co-tenant vhosts*;
    the reasoning does not stop at vhosts, and a host-wide memory operation is a
    larger reach than a vhost edit.
-3. **It is not a quiet window.** `Runner.Listener` processes are live ON THIS
-   BOX, five of my own PRs are gating, and `voiceassistmain` is running
-   Playwright chrome at ~46% CPU. F20's own condition is not met.
+3. **It is not a quiet window.** Five of my own PRs are gating and
+   `voiceassistmain` is running Playwright chrome at ~46% CPU on this host.
+   F20's own condition is not met.
+
+   ⚠️ **CORRECTED: an earlier version of this line said `Runner.Listener`
+   processes were live ON THIS BOX. THAT IS FALSE.** The light lane runs on the
+   CI box; this host has **no runner** — install dirs `0`, exact `comm` match
+   `0`, runner services `0`. The count came from
+   `pgrep -af 'Runner.Listener|actions-runner'`, and **pgrep takes an ERE**, so
+   that alternation matched MY OWN SHELL, whose arguments contained the pattern
+   text. A probe whose pattern appears in the searcher cannot return false — and
+   this one then got quoted as a fact about the host in two places.
 
 ## What the swap pressure DID explain, which stands
 
 It is the measured cause of background pollers being reaped during this
 session — three watchers killed mid-watch, each of which read at the time like
 an unexplained harness quirk.
+
+⚠️ **BUT IT IS NOT THE CAUSE OF EVERYTHING I REACHED FOR IT TO EXPLAIN.** This
+session also attributed a `gate-f30` CI failure to "a load-induced transient
+read", hypothesis flagged as unproven. **It was wrong.** The real defect is that
+the gate's cwd arm was COMPARING THE NETWORK — output that legitimately differs
+between two runs — and PR #975 fixes it. Swap pressure was a true finding that
+made a convenient second suspect, which is the shape of *a documented defect is
+the most convenient suspect*: a real, measured problem nearby will absorb an
+unrelated symptom if nobody insists on a mechanism.
 
 > **A FULL SWAP IS NOT A CAPACITY PROBLEM, IT IS AN EVIDENCE PROBLEM.** It does
 > not stop the work; it silently selects which of your processes survive. A
