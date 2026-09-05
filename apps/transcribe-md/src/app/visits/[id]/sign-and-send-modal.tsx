@@ -162,6 +162,31 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
     });
   }, []);
 
+  // ⚠️ THE SUMMARY IS DERIVED FROM WHAT THE DELIVERY CODE ACTUALLY DOES.
+  //
+  // `applyBrowserSideDeliveries` copies exactly ONE clipboard format — the LAST
+  // selected — and discards the rest. Listing every ticked clipboard row told
+  // the doctor that all of them were delivered, which is false, and the winner
+  // depends on Set insertion order that a list ordered by DESTINATIONS cannot
+  // express. So the clipboard contributes at most ONE entry here, and it is the
+  // one that wins.
+  const deliverySummary = (() => {
+    const picked = DESTINATIONS.filter((d) => selected.has(d.key));
+    if (picked.length === 0) return 'No destinations selected.';
+    const clip = [...selected].filter((k) => k.startsWith('clipboard_'));
+    const winner = clip.length > 0 ? clip[clip.length - 1] : null;
+    const parts = picked
+      .filter((d) => !d.key.startsWith('clipboard_') || d.key === winner)
+      .map((d) => d.label);
+    const dropped = clip.length - (winner ? 1 : 0);
+    return (
+      `Delivery: ${parts.join(' • ')}` +
+      (dropped > 0
+        ? ` — only one clipboard format is copied, so ${dropped} other${dropped > 1 ? 's are' : ' is'} skipped.`
+        : '')
+    );
+  })();
+
   const submit = useCallback(() => {
     // Strip 'email' defensively — if emailEnabled flips off between
     // renders, or a stale entry somehow lingers in `selected`, don't
@@ -377,10 +402,25 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                   ? 'Sign and deliver your note'
                   : 'Export signed note'}
               </Dialog.Title>
+              {/* ⚠️ "THE NOTE LOCKS AFTER SIGNING" IS RESTORED, AND DELETING IT
+                  WAS THE SAME DEFECT RULING #188(2) EXISTS TO PREVENT — one line
+                  over from the caption that ruling protects.
+
+                  The frames' sub-copy replaced the flat slot that carried it, so
+                  the warning went with the words around it. Signing really is
+                  terminal for editing (`soap-editor.tsx`: `isSigned` forces
+                  `isReadonly`), and the adversarial pass measured that no other
+                  string in the modal — or near the trigger — says so. The doctor
+                  was left to be told about the lock only AFTER it happened.
+
+                  ⚠️ AND "required destinations" IS NOT RESTORED, IT IS DROPPED:
+                  no destination is required and none is marked so; the only
+                  rule is at least one. A frame's copy does not get to invent a
+                  constraint the product does not have. */}
               <p className="qm-t4-sub">
                 {props.signOnSubmit
-                  ? 'Confirm destination settings and sign off this progress note.'
-                  : 'The progress note has been successfully locked. Deliver to required destinations.'}
+                  ? 'Confirm destination settings and sign off this progress note. The note locks after signing.'
+                  : 'The progress note has been locked. Choose where to deliver it.'}
               </p>
             </div>
             <Dialog.Close asChild>
@@ -417,7 +457,16 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
             {props.emailEnabled && (
               <Group
                 title="Email"
-                hint={`Send a PDF to ${props.doctorEmail} for your records. Don't use for patient communication.`}
+                /* ⚠️ "A LINK", NOT "A PDF" — AND THE OLD WORDING WAS FALSE.
+                   `sendVisitPdfEmail` sends NO attachment ("NO attachments.
+                   Deliberately absent, not empty") and its own body tells the
+                   doctor "We don't send notes or patient details by email".
+                   The caption promised the opposite, directly above the
+                   sentence that exists to stop a doctor forwarding it.
+                   The string predates this change; promoting it to a gated
+                   safety surface is what made it worth fixing rather than
+                   inheriting. */
+                hint={`Send a secure link to ${props.doctorEmail} for your records — the note itself is never attached. Don't use for patient communication.`}
                 groupKey="email"
               items={DESTINATIONS.filter((d) => d.group === 'email')}
                 selected={selected}
@@ -575,13 +624,30 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                 are explicit that it mirrors the ticked rows, so it is COMPUTED
                 and never written down. A summary that can disagree with the
                 checkboxes above it is worse than no summary. */}
+            {/* ⚠️ THE SUMMARY NAMES ONLY WHAT ACTUALLY HAPPENS.
+                Its first version listed every checked destination — but
+                `applyBrowserSideDeliveries` copies ONE clipboard format, the
+                LAST selected (`clipboardChoices[length - 1]`), and discards the
+                others. So a doctor who ticked Epic and Athena was told both were
+                delivered while only one reached the clipboard, and which one won
+                depended on Set insertion order the summary could not express.
+                Found by the adversarial pass.
+
+                ⚠️ THE UNDERLYING BEHAVIOUR IS NOT CHANGED HERE — that is a
+                capability question, filed rather than fixed inside a re-skin.
+                What is fixed is the surface CLAIMING something untrue. */}
             <p className="qm-t4-summary" data-testid="t4-delivery-summary">
-              {selected.size === 0
-                ? 'No destinations selected.'
-                : `Delivery summary: ${DESTINATIONS.filter((d) => selected.has(d.key))
-                    .map((d) => d.label)
-                    .join(' • ')}`}
+              {deliverySummary}
             </p>
+            {/* "Locked notes can still be re-exported later" was the answer to
+                *if I sign now, can I still get the PDF?* — and it was deleted
+                with the footer copy it lived in. The pass caught the doctor
+                losing the warning AND its mitigation in one diff. */}
+            {props.signOnSubmit && (
+              <p className="qm-t4-summary" data-testid="t4-reexport-note">
+                Locked notes can still be re-exported later.
+              </p>
+            )}
             <div className="qm-t4-actions">
               <Dialog.Close asChild>
                 <button type="button" className="qm-t4-btn qm-t4-btn-cancel">
