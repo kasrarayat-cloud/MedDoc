@@ -119,3 +119,56 @@ describe('#191 — a kept default survives the render', () => {
     expect(xml).not.toContain(SENTENCE);
   });
 });
+
+describe('#192 — A STORED IR MUST NOT ORPHAN', () => {
+  it('⚠️ AN IR COMPILED BEFORE `scaffolded`/`scaffoldText` EXISTED STILL RENDERS', async () => {
+    // ⚠️ THE ARM THAT WAS MISSING, AND ITS ABSENCE COST THE 10-OF-10 HARM ONCE
+    // ALREADY. `assertSourceMatchesIr` recompiles the immutable source on EVERY
+    // fill and compares it against the STORED IR. Stripping the derived fields
+    // from `structureSha256` was correct and INSUFFICIENT: that function also
+    // performs an INDEPENDENT raw comparison over the field arrays, which the
+    // strip never reached. Measured before the fix -- structure hash EQUAL,
+    // fields hash NOT equal, `SOURCE_IR_MISMATCH` -- and `native-export.ts`
+    // catches that and returns the generic STYLED export, so a doctor silently
+    // loses their own form with a `console.warn` as the only trace.
+    //
+    // ⚠️ AND THE GUARD THAT EXISTED WATCHED THE WRONG SET: it asserted the strip
+    // was present in `structureSha256`, which was true and blind to the other
+    // comparison. This arm watches the OUTCOME -- does a stored IR still render
+    // -- which no rewording of a source assertion can fake.
+    const source = await buildSyntheticDocx();
+    const { compileTemplateDocx } = await import('../compiler');
+    const head = compileTemplateDocx(source);
+
+    // exactly what sits in `template_twin_compiled_versions.compiledDocumentIr`
+    // today: identical, minus the two keys that did not exist when it was written
+    const stored = JSON.parse(JSON.stringify(head)) as typeof head;
+    (stored as { fields: unknown[] }).fields = head.fields.map((f) => {
+      const { scaffolded: _a, scaffoldText: _b, ...rest } = f;
+      return rest;
+    });
+
+    // non-vacuity: the stored shape really is missing them
+    expect(head.fields.some((f) => f.scaffolded !== undefined)).toBe(true);
+    expect(
+      (stored.fields as ReadonlyArray<{ scaffolded?: boolean }>).every(
+        (f) => f.scaffolded === undefined,
+      ),
+    ).toBe(true);
+
+    await expect(
+      renderTemplateDocx({
+        source,
+        ir: stored,
+        resolutions: stored.fields.map((f) =>
+          FieldResolutionSchema.parse({
+            fieldId: f.fieldId, status: 'not_mentioned', value: null,
+            sourceFactIds: [], evidenceAnchorIds: [], selectedOptionOrdinal: null,
+            reasonCode: 'fact_not_mentioned', clinicianReviewed: false,
+          }),
+        ),
+        validation: VALIDATION,
+      }),
+    ).resolves.toBeDefined();
+  });
+});

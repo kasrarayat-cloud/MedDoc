@@ -3210,11 +3210,18 @@ model TemplateTwinSemanticMapping {
   required         Boolean                     @default(false)
   blankPolicy      String
   unknownPolicy    String
-  /// #191 — for a SCAFFOLDED control (non-empty default content at compile),
-  /// what happens when NO fact matches. `keep` leaves the doctor's own clause
-  /// standing and earns `default_kept` (which requires a citation); `omit`
-  /// clears it through the proven bounded clear. Defaults to `keep` so no
-  /// existing mapping changes behaviour.
+  /// #192 — an EXPLICIT per-field declaration of what happens when NO fact
+  /// matches. `keep` leaves the doctor's own clause standing and earns
+  /// `default_kept` (which requires a citation); `omit` clears it through the
+  /// proven bounded clear.
+  ///
+  /// ⚠️ NULLABLE WITH NO DEFAULT, AND NULL IS A MEANING. Absence is today's
+  /// bounded clear — fail-closed, so a control nobody ruled on can never print
+  /// its content onto a note. #191 shipped this `NOT NULL DEFAULT 'keep'`,
+  /// which was right while `keep` and absent were identical; #192 makes them
+  /// OPPOSITES, and that default would have opted EVERY EXISTING MAPPING into
+  /// keeping. It is also what holds every certified sha still: pre-existing
+  /// rows are NULL and contribute nothing to the attestation hash.
   unmentionedPolicy String?
   practiceDefault  String?
   mappingStatus    TemplateTwinDetectionStatus @default(NEEDS_CONFIRMATION)

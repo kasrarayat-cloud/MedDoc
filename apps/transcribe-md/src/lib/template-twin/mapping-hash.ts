@@ -2,28 +2,28 @@ import type { SemanticMapping } from './ir';
 import { canonicalSha256 } from './canonical';
 
 /**
- * ⚠️ #191 — A POLICY EQUAL TO THE DEFAULT CONTRIBUTES NOTHING TO THE
- * ATTESTATION, AND THAT IS CONSISTENCY RATHER THAN CONVENIENCE.
+ * ⚠️ ONLY AN UNSET POLICY IS ELIDED. `null`/absent means NO ONE DECLARED, which
+ * is the state every pre-existing row is in and the state that must contribute
+ * nothing — that is what holds every certified `approvedMappingsSha256` still
+ * when the column arrives. `fill-engine` compares this sha against the
+ * certification and throws `TEMPLATE_PROVENANCE_MISMATCH` on a mismatch, so a
+ * moved hash refuses a doctor's fill.
  *
- * `unmentionedPolicy` is `.optional()` in `ir.ts` PRECISELY BECAUSE absent and
- * `'keep'` are the same thing — both readers in the resolver test only for
- * `'omit'`, so neither can tell them apart. This normalisation makes the
- * certified hash agree with the schema's own semantics.
+ * ⚠️ AND `'keep'` MUST *NOT* BE ELIDED, WHICH IS THE OPPOSITE OF WHAT THIS
+ * COMMENT SAID UNDER #191. Then, `keep` and absent were semantically identical
+ * — both readers tested only for `'omit'` — so collapsing them was consistency.
+ * #192 makes them OPPOSITES: absent clears, `keep` keeps. Eliding `'keep'`
+ * would let a doctor's DECLARED keep be removed from a certified mapping
+ * WITHOUT MOVING THE ATTESTATION, so the certificate would attest to behaviour
+ * it never saw. Both explicit values move the sha, and that is correct: each is
+ * a declaration that changes what the document says, and changing it is exactly
+ * what should demand re-certification.
  *
- * ⚠️ WITHOUT IT, CARRYING THE COLUMN IS A PRODUCTION OUTAGE. `fill-engine`
- * compares this sha against `certification.approvedMappingsSha256` and throws
- * `TEMPLATE_PROVENANCE_MISMATCH` on a mismatch. Every row in production holds
- * the DB default `'keep'` — nothing could write anything else until this
- * commit — so simply projecting the new column would have moved every sha and
- * REFUSED EVERY CERTIFIED TEMPLATE, including the one active form this
- * programme exists to serve. Measured before the fix: the same mapping hashed
- * `a8267455…` without the key and `bb8b8bb7…` with it.
- *
- * ⚠️ AND `'omit'` DELIBERATELY DOES MOVE THE SHA. A doctor changing a
- * scaffolded field from "keep my sentence" to "clear it" has changed what the
- * document says, and a certification that did not notice would be attesting to
- * behaviour it never saw. Re-certification is the correct cost there; it is
- * not a cost anyone should pay for a value identical to the default.
+ * ⚠️ THE STALE VERSION OF THIS PARAGRAPH WAS FOUND BY THE ADVERSARIAL PASS,
+ * NOT BY A TEST. The code was already right; its stated reason was not, and a
+ * maintainer following the reason would have widened the elision to `'keep'`
+ * and silently broken the attestation. An exemption's justification decays
+ * separately from the code it justifies.
  */
 function forAttestation(mapping: SemanticMapping): SemanticMapping {
   if (mapping.unmentionedPolicy == null) {

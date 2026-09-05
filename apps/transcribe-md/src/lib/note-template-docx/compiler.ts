@@ -143,9 +143,7 @@ export function compileTemplateDocx(
   // scaffoldedness differs necessarily differs in those, so the hash cannot
   // miss a real structural change by omitting a value derived from them.
   const structureSha256 = canonicalSha256({
-    fields: state.fields.map(
-      ({ scaffolded: _derived, scaffoldText: _text, ...rest }) => rest,
-    ),
+    fields: state.fields.map(fieldForStructuralIdentity),
     tables: state.tables,
     nodes: state.nodes,
     unsupported: state.unsupported,
@@ -356,6 +354,37 @@ function isScaffolded(
   // level deeper would read as absent.
   if (descendants(properties, "showingPlcHdr").length > 0) return false;
   return visibleText(content).trim().length > 0;
+}
+
+/**
+ * ⚠️ THE ONE NORMALISER FOR STRUCTURAL IDENTITY, AND IT IS EXPORTED BECAUSE THE
+ * SECOND CALLER IS IN ANOTHER FILE.
+ *
+ * `scaffolded` and `scaffoldText` are DERIVED metadata (#191/#192): pure
+ * functions of bytes that `sourceControlSha256` and `originalContentSha256`
+ * already cover. They must not participate in any comparison that asks
+ * "is this the same document as the one we compiled before?", because every IR
+ * already in the database was written before they existed.
+ *
+ * ⚠️ TWO PLACES ASK THAT QUESTION AND THE FIRST FIX ONLY REACHED ONE. Stripping
+ * them from `structureSha256` was correct and MEASURABLY INSUFFICIENT:
+ * `renderer.ts: assertSourceMatchesIr` performs an INDEPENDENT raw comparison
+ * over the field arrays, which the strip never reached. Measured against a
+ * stored pre-#191 IR: `structureSha256` EQUAL, `canonicalSha256(fields)` NOT
+ * equal, render threw `SOURCE_IR_MISMATCH` -- and `native-export.ts` catches
+ * that and returns the generic STYLED export, so the doctor silently loses
+ * their own form with a `console.warn` as the only trace. That is the 10-of-10
+ * orphaning this metadata was designed to avoid, arriving through the door
+ * nobody watched.
+ *
+ * ⚠️ AND THE ARM THAT WAS SUPPOSED TO GUARD IT WATCHED THE WRONG SET. It
+ * asserted the strip was present in `structureSha256` -- true, and blind to the
+ * other comparison. Hence ONE function, exported, with both callers named here:
+ * a second copy would drift from this one the day either is fixed.
+ */
+export function fieldForStructuralIdentity(field: TemplateField): TemplateField {
+  const { scaffolded: _derived, scaffoldText: _text, ...rest } = field;
+  return rest as TemplateField;
 }
 
 /** Elements that carry content, wherever they appear inside a property block. */

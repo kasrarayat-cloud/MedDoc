@@ -549,28 +549,34 @@ describe('#191 — THE SCAFFOLD SCOPE, which the pass found unimplemented', () =
 });
 
 describe('#191 — THE STRUCTURE HASH MUST NOT MOVE', () => {
-  it('(23) ⚠️ `scaffolded` IS EXCLUDED FROM THE STRUCTURE HASH — every certified twin depends on it', () => {
-    // `renderer.ts: assertSourceMatchesIr` re-compiles the immutable source on
-    // EVERY fill and compares it against the STORED IR of every template
-    // already compiled. A moved structure hash fails SOURCE_IR_MISMATCH on all
-    // of them, every recompute path degrades SILENTLY to the styled export,
-    // and a signature freezes a null pointer permanently. Measured once
-    // already at 10 of 10 twins.
+  it('(23) ⚠️ THE DERIVED METADATA IS EXCLUDED FROM STRUCTURAL IDENTITY — every certified twin depends on it', async () => {
+    // ⚠️ REWRITTEN TO ASSERT THE PROPERTY, NOT THE SPELLING. Its first form
+    // matched the inline destructuring by regex, so extracting that strip into
+    // a shared function — an unambiguous IMPROVEMENT, made because a SECOND
+    // comparison needed the identical logic — redded this arm. A source-text
+    // gate that fails when somebody improves the code is measuring the wrong
+    // thing; worse, it said nothing about that second caller, which is exactly
+    // where the real defect lived: `assertSourceMatchesIr` compared the RAW
+    // field arrays and orphaned every stored IR.
     //
-    // Excluding it loses nothing: `scaffolded` is a pure function of bytes the
-    // hash already covers (the control's content and its `w:sdtPr`, both inside
-    // `sourceControlSha256` / `originalContentSha256`).
-    const src = readFileSync(
-      join(__dirname, '../../note-template-docx/compiler.ts'), 'utf-8');
-    const call = src.slice(src.indexOf('const structureSha256 = canonicalSha256('));
-    const body = call.slice(0, call.indexOf('});'));
-    // the fields entry must strip it rather than pass `state.fields` whole
-    // BOTH derived members are excluded — `scaffoldText` was added by #192 and
-    // this arm caught its omission from the strip on the first run.
-    expect(body).toMatch(/scaffolded:\s*_\w+/);
-    expect(body).toMatch(/scaffoldText:\s*_\w+/);
-    expect(body).toMatch(/\.\.\.rest/);
-    expect(body).not.toMatch(/fields:\s*state\.fields,/);
+    // The property, which holds however the strip is written: the derived
+    // members are removed and NOTHING ELSE is.
+    const { fieldForStructuralIdentity } = await import(
+      '../../note-template-docx/compiler'
+    );
+    const withMeta = field('1', { fieldId: `ttf_${'1'.repeat(24)}` });
+    (withMeta as { scaffoldText?: string }).scaffoldText = 'The patient denies chest pain.';
+    const withoutMeta = fieldForStructuralIdentity(withMeta);
+    expect(withMeta.scaffolded).toBe(true);
+    expect((withoutMeta as { scaffolded?: boolean }).scaffolded).toBeUndefined();
+    expect((withoutMeta as { scaffoldText?: string }).scaffoldText).toBeUndefined();
+    // ⚠️ AND NOTHING ELSE WAS DROPPED. A strip that removed too much would pass
+    // a naive "the keys are gone" check and quietly weaken structural identity.
+    expect(Object.keys(withoutMeta).sort()).toEqual(
+      Object.keys(withMeta)
+        .filter((k) => k !== 'scaffolded' && k !== 'scaffoldText')
+        .sort(),
+    );
   });
 });
 

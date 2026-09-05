@@ -387,12 +387,16 @@ export const SemanticMappingSchema = z
     blankPolicy: z.enum(['blank', 'not_documented', 'requires_input']),
     unknownPolicy: z.enum(['blank', 'not_documented', 'requires_input']),
     /**
-     * ⚠️ `.optional()`, NOT `.default('keep')`. `z.infer` gives the OUTPUT type,
+     * ⚠️ `.nullish()`, NEVER `.default(...)`. `z.infer` gives the OUTPUT type,
      * where a defaulted field is REQUIRED — which made every hand-built
      * `SemanticMapping` fixture in the suite a type error, for a field none of
-     * them care about. Optional says the same thing where it matters: ABSENCE
-     * MEANS KEEP, and the column's own `DEFAULT 'keep'` carries it in the
-     * database.
+     * them care about.
+     *
+     * ⚠️ AND ABSENCE MEANS THE BOUNDED CLEAR, NOT KEEP — #192. The #191 wording
+     * here said the opposite, because `keep` was then the column's default and
+     * the two were interchangeable. They are opposites now: the resolver
+     * requires `=== 'keep'`, and a column that is NULL is a control nobody
+     * ruled on, which must never print.
      */
     unmentionedPolicy: z.enum(['keep', 'omit']).nullish(),
     practiceDefault: z.string().max(500).nullable(),

@@ -14,7 +14,7 @@ import {
   type TemplateTwinValidationResult,
 } from '../template-twin/ir';
 import { isPrintableDenial } from '../template-twin/denial-contract';
-import { compileTemplateDocx } from './compiler';
+import { compileTemplateDocx, fieldForStructuralIdentity } from './compiler';
 import { STRUCTURE_KEEP_WHOLE } from './structure-keep';
 import type { TemplateDocxLimits } from './limits';
 import { inspectDocxPackage } from './package-security';
@@ -357,7 +357,13 @@ function assertSourceMatchesIr(
     compiled.structureSha256 !== ir.structureSha256 ||
     compiled.staticContentSha256 !== ir.staticContentSha256 ||
     canonicalSha256(compiled.parts) !== canonicalSha256(ir.parts) ||
-    canonicalSha256(compiled.fields) !== canonicalSha256(ir.fields) ||
+    // ⚠️ NORMALISED BY THE SAME FUNCTION `structureSha256` USES. Comparing the
+    // RAW field arrays orphaned every IR compiled before `scaffolded` /
+    // `scaffoldText` existed -- measured: structure hash EQUAL, this comparison
+    // NOT equal, `SOURCE_IR_MISMATCH`, and `native-export` then hands the doctor
+    // the generic styled export with only a `console.warn` to say so.
+    canonicalSha256(compiled.fields.map(fieldForStructuralIdentity)) !==
+      canonicalSha256(ir.fields.map(fieldForStructuralIdentity)) ||
     canonicalSha256(compiled.tables) !== canonicalSha256(ir.tables)
   ) {
     failTemplateDocxRender('SOURCE_IR_MISMATCH');
