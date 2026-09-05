@@ -231,3 +231,80 @@ describe('⚠️ the names the e2e pack pins are still here', () => {
     expect((submit as HTMLButtonElement).disabled).toBe(true);
   });
 });
+
+// ============================================================================
+// ⚠️ #188(4) — THE POST-SIGN ROWS ARE ACTIONS, NOT CHECKBOXES.
+// ----------------------------------------------------------------------------
+// Before signing a destination is a CHOICE you accumulate and then commit;
+// after signing it is a THING YOU DO NOW, repeatedly. This is the half that is
+// BEHAVIOUR rather than skin, which is why it landed as its own change — a
+// re-skin that also changes what a click DOES is two claims wearing one diff.
+// ============================================================================
+
+describe('⚠️ #188(4) — after signing, every row commits itself', () => {
+  const post = (over: Partial<Props> = {}) =>
+    open({ signOnSubmit: false, triggerLabel: 'Export again', ...over });
+
+  it('the rows are ACTIONS — no aria-pressed, because there is no state to press', () => {
+    post();
+    const row = screen.getByTestId('t4-action-pdf');
+    expect(row).toBeTruthy();
+    // ⚠️ A checkbox wearing different paint would still carry `aria-pressed`,
+    // and a screen reader would announce a togglable state that does not
+    // exist. The absence IS the claim here.
+    expect(row.getAttribute('aria-pressed')).toBeNull();
+  });
+
+  it('every destination gets its own action row — all eight, per #188(1)', () => {
+    post();
+    for (const k of [
+      'clipboard_epic', 'clipboard_athena', 'clipboard_cerner',
+      'clipboard_eclinicalworks', 'clipboard_generic', 'pdf', 'docx', 'email',
+    ]) {
+      expect(screen.getByTestId(`t4-action-${k}`), `${k} has no action row`).toBeTruthy();
+    }
+  });
+
+  it('⚠️ NO Cancel and NO primary button — there is nothing left to confirm', () => {
+    post();
+    expect(screen.queryByTestId('t4-submit'), 'a primary button would re-deliver a selection nobody can see').toBeNull();
+    expect(screen.queryByRole('button', { name: /^cancel$/i })).toBeNull();
+    // Non-vacuity: the PRE-sign state still has both.
+    open();
+    expect(screen.getByTestId('t4-submit')).toBeTruthy();
+  });
+
+  it('the PRE-sign state still uses checkboxes — the shift is post-only', () => {
+    open();
+    expect(screen.queryByTestId('t4-action-pdf')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Download PDF' }).getAttribute('aria-pressed'),
+    ).toBeTruthy();
+  });
+
+  it('⚠️ one delivery at a time — a click disables every row while it runs', async () => {
+    // Two concurrent clipboard writes race, and the second silently wins. The
+    // pre-sign state has the same rule for the same reason.
+    let release: (v: Response) => void = () => {};
+    vi.spyOn(globalThis, 'fetch').mockReturnValue(
+      new Promise<Response>((res) => { release = res; }),
+    );
+    post();
+    fireEvent.click(screen.getByTestId('t4-action-clipboard_epic'));
+    await Promise.resolve();
+    expect(
+      (screen.getByTestId('t4-action-docx') as HTMLButtonElement).disabled,
+      'a second delivery could start while the first was in flight',
+    ).toBe(true);
+    expect(screen.getByTestId('t4-action-clipboard_epic').getAttribute('data-pending')).toBe('true');
+    release(new Response(JSON.stringify({ text: 'x' }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  });
+
+  it('the safety caption survives into the post state too', () => {
+    // #188(2) is not a pre-sign-only rule.
+    post();
+    expect(screen.getByTestId('t4-caption-email').textContent).toContain(
+      "Don't use for patient communication",
+    );
+  });
+});

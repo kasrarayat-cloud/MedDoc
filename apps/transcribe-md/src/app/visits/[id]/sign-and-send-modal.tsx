@@ -14,7 +14,16 @@
 import { useCallback, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Check, Loader2, Lock, Send, ShieldCheck, TrendingUp, X } from 'lucide-react';
+import {
+  Check,
+  ChevronRight,
+  Loader2,
+  Lock,
+  Send,
+  ShieldCheck,
+  TrendingUp,
+  X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
@@ -170,6 +179,48 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
   // depends on Set insertion order that a list ordered by DESTINATIONS cannot
   // express. So the clipboard contributes at most ONE entry here, and it is the
   // one that wins.
+  // ── THE POST-SIGN ACTION — ruling #188(4) ────────────────────────────────
+  //
+  // Before signing a destination is a CHOICE you accumulate and then commit;
+  // after signing it is a THING YOU DO NOW, repeatedly. The frames draw that
+  // difference and it is the reason this landed as its own change rather than
+  // inside the skin — a re-skin that also changes what a click DOES is two
+  // claims wearing one diff.
+  //
+  // ⚠️ AND IT DISSOLVES F-T4-1 FOR THIS STATE, WHICH IS NOT A COINCIDENCE.
+  // The filed defect is that `applyBrowserSideDeliveries` copies only the LAST
+  // selected clipboard format and discards the rest — a consequence of
+  // committing a SET. One destination per click means there is never a set to
+  // discard, so the post state cannot exhibit it. The PRE-sign state still
+  // can, and F-T4-1 stays open for it.
+  const [rowPending, setRowPending] = useState<Destination | null>(null);
+
+  const deliverOne = useCallback(
+    async (dest: Destination) => {
+      if (rowPending !== null) return;
+      setRowPending(dest);
+      try {
+        const res = await prepareDeliverOnly(props.visitId, [dest]);
+        await applyBrowserSideDeliveries(res, [dest]);
+        toast.success('Delivered', {
+          description: DESTINATIONS.find((d) => d.key === dest)?.label ?? dest,
+        });
+      } catch (err) {
+        // ⚠️ A FAILED DELIVERY IS SAID OUT LOUD. The frames draw no error state
+        // for these rows — that is item 1 on T4's batched request list — so
+        // rather than invent one, the failure uses the toast this modal
+        // already uses for exactly this. Silence would teach the doctor the
+        // row is decorative.
+        toast.error('That delivery failed', {
+          description: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        setRowPending(null);
+      }
+    },
+    [props.visitId, rowPending],
+  );
+
   const deliverySummary = (() => {
     const picked = DESTINATIONS.filter((d) => selected.has(d.key));
     if (picked.length === 0) return 'No destinations selected.';
@@ -445,6 +496,9 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               items={DESTINATIONS.filter((d) => d.group === 'clipboard')}
               selected={selected}
               onToggle={toggle}
+              mode={props.signOnSubmit ? 'checkbox' : 'action'}
+              pendingRow={rowPending}
+              onRun={deliverOne}
             />
             <Group
               title="Download"
@@ -453,6 +507,9 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               items={DESTINATIONS.filter((d) => d.group === 'download')}
               selected={selected}
               onToggle={toggle}
+              mode={props.signOnSubmit ? 'checkbox' : 'action'}
+              pendingRow={rowPending}
+              onRun={deliverOne}
             />
             {props.emailEnabled && (
               <Group
@@ -471,6 +528,9 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               items={DESTINATIONS.filter((d) => d.group === 'email')}
                 selected={selected}
                 onToggle={toggle}
+                mode={props.signOnSubmit ? 'checkbox' : 'action'}
+                pendingRow={rowPending}
+                onRun={deliverOne}
               />
             )}
           </div>
@@ -643,17 +703,38 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                 *if I sign now, can I still get the PDF?* — and it was deleted
                 with the footer copy it lived in. The pass caught the doctor
                 losing the warning AND its mitigation in one diff. */}
-            {props.signOnSubmit && (
+            {props.signOnSubmit ? (
               <p className="qm-t4-summary" data-testid="t4-reexport-note">
                 Locked notes can still be re-exported later.
               </p>
+            ) : (
+              /* The frames' post-sign footer line. It replaces the delivery
+                 summary, which described a SET nobody accumulates any more. */
+              <p className="qm-t4-summary" data-testid="t4-post-footer">
+                Each destination delivers on its own. Close when you are done.
+              </p>
             )}
+            {/* ⚠️ NO CANCEL AND NO PRIMARY BUTTON AFTER SIGNING — the frames
+                are explicit, and the reason is the behaviour, not the paint:
+                every row is its own commit, so there is nothing left to
+                confirm and nothing to cancel. `Export again` reopens the
+                modal; the doctor closes it with Esc or the X, which Radix
+                already provides and which `aria-label="Close"` already
+                names. */}
             <div className="qm-t4-actions">
-              <Dialog.Close asChild>
-                <button type="button" className="qm-t4-btn qm-t4-btn-cancel">
-                  Cancel
-                </button>
-              </Dialog.Close>
+              {props.signOnSubmit && (
+                <Dialog.Close asChild>
+                  <button type="button" className="qm-t4-btn qm-t4-btn-cancel">
+                    Cancel
+                  </button>
+                </Dialog.Close>
+              )}
+              {/* ⚠️ THE PRIMARY BUTTON IS PRE-SIGN ONLY. After signing there is
+                  no set to commit — each row committed itself — so a
+                  "Deliver" button would either do nothing or re-deliver a
+                  selection the doctor can no longer see. The frames draw
+                  none, and the behaviour is why. */}
+              {props.signOnSubmit && (
               <button
                 type="button"
                 className="qm-t4-btn qm-t4-btn-primary"
@@ -684,6 +765,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                   </>
                 )}
               </button>
+              )}
             </div>
           </div>
         </Dialog.Content>
@@ -703,10 +785,17 @@ function Group({
   items,
   selected,
   onToggle,
+  mode = 'checkbox',
+  pendingRow = null,
+  onRun,
 }: {
   title: string;
   hint: string;
   groupKey: string;
+  /** `checkbox` before signing, `action` after — ruling #188(4). */
+  mode?: 'checkbox' | 'action';
+  pendingRow?: Destination | null;
+  onRun?: (k: Destination) => void;
   items: { key: Destination; label: string }[];
   selected: Set<Destination>;
   onToggle: (k: Destination) => void;
@@ -728,16 +817,72 @@ function Group({
           frames' ROW is the design; the four drawn are examples. Collapsing
           them would mean a doctor on Epic could not pick the Epic format. */}
       <div className="qm-t4-group" data-testid={`t4-group-${groupKey}`}>
-        {items.map((it) => (
-          <CheckboxRow
-            key={it.key}
-            label={it.label}
-            checked={selected.has(it.key)}
-            onToggle={() => onToggle(it.key)}
-          />
-        ))}
+        {items.map((it) =>
+          mode === 'action' ? (
+            <ActionRow
+              key={it.key}
+              label={it.label}
+              destination={it.key}
+              pending={pendingRow === it.key}
+              disabled={pendingRow !== null}
+              onRun={() => onRun?.(it.key)}
+            />
+          ) : (
+            <CheckboxRow
+              key={it.key}
+              label={it.label}
+              checked={selected.has(it.key)}
+              onToggle={() => onToggle(it.key)}
+            />
+          ),
+        )}
       </div>
     </div>
+  );
+}
+
+/**
+ * ⚠️ A ROW THAT COMMITS ON ITS OWN CLICK — the post-sign shape.
+ *
+ * It is deliberately NOT a checkbox wearing different paint: no `aria-pressed`,
+ * because there is no state to press into. It performs I/O and returns.
+ *
+ * ⚠️ THE PENDING LOOK REUSES `Loader2`, AND THAT IS A LIMIT, NOT A DESIGN. The
+ * frames draw no hover, focus, disabled, pending or error state for these rows
+ * — item 1 on T4's batched request list. Rather than invent five, this borrows
+ * the spinner the submit button already uses and says failures through the
+ * toast this modal already uses. A button that performs I/O with NO feedback
+ * teaches the doctor it is decorative, which is worse than borrowed vocabulary.
+ */
+function ActionRow({
+  label,
+  destination,
+  pending,
+  disabled,
+  onRun,
+}: {
+  label: string;
+  destination: Destination;
+  pending: boolean;
+  disabled: boolean;
+  onRun: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onRun}
+      disabled={disabled}
+      data-testid={`t4-action-${destination}`}
+      data-pending={pending ? 'true' : 'false'}
+      className="qm-t4-row qm-t4-row-action"
+    >
+      <span className="qm-t4-row-label">{label}</span>
+      {pending ? (
+        <Loader2 className="h-4 w-4 flex-none animate-spin" aria-hidden />
+      ) : (
+        <ChevronRight className="h-4 w-4 flex-none" aria-hidden />
+      )}
+    </button>
   );
 }
 
