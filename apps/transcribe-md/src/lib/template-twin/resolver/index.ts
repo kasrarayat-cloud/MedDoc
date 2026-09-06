@@ -246,6 +246,10 @@ function missingResolution(
    *  specific than "nothing was said" — the reason must survive, the false
    *  evidence trail must not. */
   reason?: { unfilled: string; required: string },
+  /** TRUE at exactly one call site: the one reached because NO fact carries
+   *  this field's approved concept. That is the only site where "the encounter
+   *  said nothing about this" is a true statement rather than a deferral. */
+  conceptUnmatched = false,
 ): FieldResolution {
   const practiceDefault = practiceDefaultResolution(field, mapping, facts);
   if (practiceDefault) return practiceDefault;
@@ -255,6 +259,22 @@ function missingResolution(
     field.unknownPolicy === 'requires_input' ||
     mapping.unknownPolicy === 'requires_input' ||
     mapping.blankPolicy === 'requires_input';
+  const unmentionedScaffold =
+    conceptUnmatched && reason === undefined && facts.length > 0;
+
+  // ⚠️ #194 — THE KEEP BRANCH IS DELETED. It used to return `default_kept`
+  // here. Its premise was refuted, not merely its mechanism: it fired when
+  // `conceptCandidates.length === 0` -- when NO fact carried the field's
+  // concept -- and concept equality is the only test performed anywhere, so
+  // "nothing dictated contradicted this clause" was always a claim about the
+  // EMPTY SET. A scaffold reading "no varicosities, no oedema and no
+  // ulceration" was kept on a visit dictated as a large weeping ulcer with
+  // oedema and varicosities, because that fact carried `chief_complaint`.
+  //
+  // The machine never prints an undictated default. A doctor's own default is
+  // now a HUMAN act at review (REVIEW-DEFAULTS), where the click is their
+  // assertion and it fills through the normal human-typed path.
+
   return makeResolution(
     field.fieldId,
     requiresInput ? 'needs_clinician_input' : 'not_mentioned',
@@ -262,7 +282,14 @@ function missingResolution(
     [],
     requiresInput
       ? (reason?.required ?? 'required_fact_not_mentioned')
-      : (reason?.unfilled ?? 'fact_not_mentioned'),
+      : unmentionedScaffold && mapping.unmentionedPolicy === 'omit'
+        // #191 — the scaffold was cleared ON PURPOSE and the reason says so.
+        // `fact_not_mentioned` would read as "nobody looked".
+        // ⚠️ GATED ON THE SHARED PREDICATE, not on the policy alone: a named
+        // reason must survive, and a clearing nothing evaluated is not
+        // deliberate.
+        ? 'omitted_unsupported_default'
+        : (reason?.unfilled ?? 'fact_not_mentioned'),
   );
 }
 
@@ -446,7 +473,13 @@ function resolveOne(
       approvedConcepts.has(normalizeConcept(fact.concept)),
   );
   if (conceptCandidates.length === 0) {
-    return missingResolution(field, mapping, allFacts);
+    // The ONLY site that earns #191's kept default: no fact in the encounter
+    // carries this field's approved concept, so the template's own sentence
+    // stands uncontradicted. The three other `missingResolution` sites are
+    // DEFERRALS with facts in hand — a grid row the resolver cannot address, a
+    // temporality the mapping did not approve — and a kept default there would
+    // answer a question that was actually asked.
+    return missingResolution(field, mapping, allFacts, undefined, true);
   }
 
   // A FIXED-GRID TABLE CELL IS ADDRESSED BY ITS ROW, AND THE RESOLVER CANNOT

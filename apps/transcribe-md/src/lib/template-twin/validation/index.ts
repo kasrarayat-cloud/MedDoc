@@ -502,6 +502,10 @@ export function validateTemplateTwin(
     ) {
       add('NOT_MENTIONED_HAS_EVIDENCE', 'blocking', 'A not-mentioned field unexpectedly retains clinical evidence.', field.fieldId);
     }
+    // ⚠️ #194 — THE `default_kept` EXEMPTION IS GONE WITH THE STATUS. It
+    // existed because that one status cited the facts it EXAMINED rather than
+    // the facts that SUPPORTED a value. No status does that any more, so the
+    // check is unconditional again.
     if (citedFacts.some((fact) => !factMatchesMapping(fact, mapping))) {
       add('SOURCE_FACT_CONCEPT_MISMATCH', 'blocking', 'A cited fact does not match the approved semantic mapping.', field.fieldId);
     }

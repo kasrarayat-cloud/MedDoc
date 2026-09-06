@@ -1692,3 +1692,63 @@ describe('#175 — every keep-list member SURVIVES a clear, in the rendered docu
     expect(outputXml).toContain('<w:bookmarkStart');
   });
 });
+
+describe('#194 round four — `w:showingPlcHdr` is removed on the FILLED path too', () => {
+  it('⚠️ A DICTATED VALUE MUST NOT DISPLAY AS THE TEMPLATE PROMPT', async () => {
+    // ⚠️ PRE-EXISTING, FOUND BY THE ADVERSARIAL PASS, AND THE FAILURE DIRECTION
+    // WAS THE DOCTOR'S OWN WORDS. The flag asserts "what you are looking at IS
+    // the placeholder", and Word acts on it by re-displaying the template's
+    // prompt. The removal lived inside `sdtBoundedClearPatches`, which only the
+    // `value === null` branches call — so every FILLED control kept it.
+    //
+    // MEASURED ON `WM IOV Template.docx`, the real customer form: 28 source
+    // flags, 28 fields filled, **28 flags surviving** — a dictated
+    // `Bilateral Detailed` displaying as `Choose an item.` Verification passed
+    // and no warning fired, because every check compares the CONTENT and this
+    // is a property beside it.
+    //
+    // ⚠️ AND THE GATE NAMING THIS INVARIANT WATCHED HALF OF IT. The arm above
+    // is titled "`w:showingPlcHdr` is removed with the content, so Word cannot
+    // re-show the prompt" and asserts it only on the blank narrative path. The
+    // title states the invariant; the arm stated one branch.
+    const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+<w:p><w:sdt><w:sdtPr><w:alias w:val="Side"/><w:id w:val="950"/><w:showingPlcHdr/>
+<w:dropDownList><w:listItem w:displayText="Left" w:value="Left"/>
+<w:listItem w:displayText="Bilateral Detailed" w:value="Bilateral Detailed"/></w:dropDownList></w:sdtPr>
+<w:sdtContent><w:r><w:t>Choose an item.</w:t></w:r></w:sdtContent></w:sdt></w:p>
+</w:body></w:document>`;
+    const source = await buildSyntheticDocx({ documentXml: doc });
+    const { compileTemplateDocx } = await import('../compiler');
+    const ir = compileTemplateDocx(source);
+    const target = ir.fields.find((f) => f.originalLabel === 'Side')!;
+    const opt = target.allowedOptions.find((o) => o.value === 'Bilateral Detailed')!;
+    const rendered = await renderTemplateDocx({
+      source, ir,
+      resolutions: ir.fields.map((f) =>
+        FieldResolutionSchema.parse(
+          f.fieldId === target.fieldId
+            ? { fieldId: f.fieldId, status: 'supported', value: opt.value,
+                sourceFactIds: [`ttfact_${'a'.repeat(24)}`], evidenceAnchorIds: ['a1'],
+                selectedOptionOrdinal: opt.ordinal,
+                reasonCode: 'direct_evidence_supported', clinicianReviewed: false }
+            : { fieldId: f.fieldId, status: 'not_mentioned', value: null,
+                sourceFactIds: [], evidenceAnchorIds: [], selectedOptionOrdinal: null,
+                reasonCode: 'fact_not_mentioned', clinicianReviewed: false },
+        ),
+      ),
+      validation: {
+        valid: true, issues: [], checkedAt: '2026-01-01T00:00:00.000Z',
+        validatorVersion: 'template-field-validator/1.0.0',
+      },
+    });
+    const JSZip = (await import('jszip')).default;
+    const xml = await (await JSZip.loadAsync(rendered.document))
+      .file('word/document.xml')!.async('string');
+    // non-vacuity: the source really carried the flag, and the value really landed
+    expect(doc).toContain('showingPlcHdr');
+    expect(xml).toContain('Bilateral Detailed');
+    // the flag must be gone — the content is no longer the placeholder
+    expect(xml).not.toContain('showingPlcHdr');
+  });
+});

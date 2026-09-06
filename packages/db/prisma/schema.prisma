@@ -131,6 +131,16 @@ enum AuditAction {
   CREATED_TASK
   CREATED_BILLING_EVENT
 
+  // ADMIN-1 — practice administration. A DIFFERENT AXIS from the system role
+  // below: `USER_ROLE_CHANGED` is the meddoc-pro system-admin app's label for
+  // SUPER_ADMIN grants. Conflating the two would make a practice demotion and a
+  // super-admin grant indistinguishable in an append-only trail.
+  PRACTICE_SEAT_INVITED
+  PRACTICE_ROLE_CHANGED
+  /// The administration guard refused a caller. A gate nothing records is one
+  /// path away from not existing — the sign route's own reasoning.
+  PRACTICE_ADMIN_REFUSED
+
   // Admin
   USER_CREATED
   USER_UPDATED
@@ -3210,6 +3220,21 @@ model TemplateTwinSemanticMapping {
   required         Boolean                     @default(false)
   blankPolicy      String
   unknownPolicy    String
+  /// #194 — what happens when NO fact matches. NULL is the bounded clear,
+  /// COUNTED as still blank so the doctor is told; 'omit' is the bounded clear,
+  /// NOT counted and with no prompt — a control the doctor RULED blank, such as
+  /// a telehealth consent line on an in-person visit.
+  ///
+  /// ⚠️ NULLABLE WITH NO DEFAULT, AND NULL IS A MEANING. Any default would opt
+  /// every existing mapping into a policy nobody chose. It is also what holds
+  /// every certified sha still: pre-existing rows are NULL and contribute
+  /// nothing to the attestation hash.
+  ///
+  /// ⚠️ THERE IS NO 'keep'. That half was built, adversarially tested across
+  /// three rounds and DELETED — its premise was refuted, not merely its
+  /// mechanism. This text is emitted into the generated client, so it is the
+  /// hover a future developer gets; it said the opposite until #194.
+  unmentionedPolicy String?
   practiceDefault  String?
   mappingStatus    TemplateTwinDetectionStatus @default(NEEDS_CONFIRMATION)
   proposedByModel  String?

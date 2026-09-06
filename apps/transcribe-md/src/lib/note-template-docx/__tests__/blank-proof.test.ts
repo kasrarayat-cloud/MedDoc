@@ -204,3 +204,14 @@ describe('blank verification mode', () => {
     ).toBeGreaterThan(0);
   });
 });
+
+// ============================================================================
+// ⚠️ THE kept_default EMISSION AND ITS VERIFICATION, DRIVEN THROUGH A REAL
+// RENDER — because the schema and read-path arms did NOT reach them.
+// ----------------------------------------------------------------------------
+// The first mutation matrix for `kept_default` redded four of seven. The three
+// that redded ZERO were exactly the ones no arm drove: emit `blank` instead of
+// `kept_default`; stop carrying `blankEligible`; stop requiring
+// `evaluatedFactIds` at verification. A guard nothing exercises is a comment,
+// and these three are the guards that make the stronger word honest.
+// ============================================================================
