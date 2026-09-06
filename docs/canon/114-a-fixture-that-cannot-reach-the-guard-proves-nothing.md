@@ -158,6 +158,52 @@ instrument was wrong, and show the reading that establishes it.** "I was wrong,
 the tool says X" is not a correction — it is a second unverified reading with
 more confidence attached.
 
+## ⚠️ TWO SPECIMENS FROM HUNTING THIS CLASS, BOTH FROM THE HUNT ITSELF
+
+**A ledger guard tests `grep -F "#NNN"` — a plain substring — so a ruling counts
+as recorded when its own AMENDMENT exists.** Measured, with controls:
+
+```
+#162   guard-substring=FOUND    exact-base-row=0    <- matches only its own #162(c)
+#179   guard-substring=FOUND    exact-base-row=0    <- matches a prose mention
+#194   guard-substring=FOUND    exact-base-row=1    <- control
+#195   guard-substring=FOUND    exact-base-row=1    <- control
+```
+
+**1 · THE PROBE FOR A SUBSTRING BUG SUBSTRING-MATCHED.** The first attempt to
+demonstrate it used `grep -cE '^\| [0-9-]+ \| #162\b'` and returned **1** —
+reporting the ruling as correctly recorded. **`\b` is a word boundary and there
+is one between `2` and `(`**, so `#162\b` matches `#162(c)`. The form that
+discriminates is the whole cell: `grep -F -- "| #162 |"` returns **0**, while the
+controls return 1.
+
+> **An instrument built to detect substring-matching, substring-matched.**
+
+It was caught by the *shape* of the output looking wrong beside a neighbouring
+line — not by the check itself.
+
+**2 · THE GUARD ANNOUNCED ITSELF IN GREEN AND BOTH OF US READ IT AS NOISE.**
+That guard prints `🟢 rulings: N cited in staged source, all recorded.` on every
+commit that cites one. It printed on **three** of mine and **two** of a peer's
+that day. We then independently told our owners that no such discriminator
+existed and that the convention was *prospective*. **It had been enforced for
+over a day, in green, in both our terminals.**
+
+> **A control's PASSING output is evidence too, and it is the evidence nobody
+> reads.** A green line that never varies stops being information and becomes
+> chrome — so the one time it is telling you something, it looks like the other
+> times.
+
+⚠️ **AND THE SHARPEST FORM OF THIS ENTRY'S RULE CAME OUT OF THAT HUNT:**
+
+> **A mutation that reds the WRONG arm is the same information as one that reds
+> nothing.**
+
+Proved here: orphaning a ruling's base row in the *head* alone redded a
+neighbouring reconciliation arm while the arm under test stayed green, because
+the archive still carried the row. Only orphaning it in head **and** archives
+redded the right arm, by name.
+
 ## THE UNCOMFORTABLE PART
 
 Every one of these was written by somebody who had, in the same session, written
