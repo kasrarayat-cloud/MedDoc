@@ -59,6 +59,25 @@ export const REGISTRY_PATTERNS: readonly RegExp[] = [
   /^test\.[a-z0-9_]+\.result$/,
   /^exam\.[a-z0-9_.]+$/,
   /^hpi\.[a-z0-9_]+$/,
+  // ⚠️ `ros.*` WAS MISSING, AND THE ASYMMETRY WITH `exam.*` IS THE WHOLE BUG.
+  //
+  // The proposer's allowed-concept list offers the model `'ros.<system>'` one
+  // line above `'exam.<system>'` (semantic-mapping/index.ts). Both are offered
+  // identically; only `exam.*` was registered — so EVERY `ros.*` proposal was
+  // nulled at the `isRegisteredConcept(candidate) ? candidate : null` guard,
+  // silently, for every doctor. The model was instructed to propose a concept
+  // the code then discarded without a word.
+  //
+  // The FACTS were never the problem: `entities.ros[]` is populated and
+  // `encounter-facts` projects it as `ros.${conceptSegment(system)}`. Only the
+  // validator refused, which is why this is one line and not a feature.
+  //
+  // ⚠️ THE CHARACTER CLASS IS MEASURED FROM THE PRODUCER, NOT COPIED FROM THE
+  // NEIGHBOUR. `conceptSegment` collapses every non-`[a-z0-9]` run to `_`, so a
+  // segment can never contain a dot. Mirroring `exam.*`'s `[a-z0-9_.]+` would
+  // admit `ros.a.b`, which nothing can emit — wider than the producer, for no
+  // reason. This matches `hpi.*`, which shares the same segment function.
+  /^ros\.[a-z0-9_]+$/,
 ];
 
 /**
