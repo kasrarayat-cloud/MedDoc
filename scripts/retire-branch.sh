@@ -74,9 +74,52 @@ if [ "$remote_exists" -gt 0 ]; then
     echo "   ahead by: $(git rev-list --count origin/main..origin/"$BR" 2>/dev/null) commit(s)"
     exit 1
   fi
-  git push origin --delete "$BR" >/dev/null 2>&1
+  # ── RULING #186(2): NEVER DELETE THE BASE OF AN OPEN PR ────────────────────
+  #
+  # ⚠️ DELETING A BASE BRANCH DESTROYS THE PR THAT SITS ON IT. GitHub closes a
+  # pull request whose base ref disappears, and the diff it was carrying goes
+  # with it. The merged-into-main gate above does NOT catch this: a stacked
+  # branch can be fully merged into `main` while another PR is still open
+  # against it — which is exactly the shape this repo produced in PR #951
+  # (`feat/t8b-billable-descendants` -> `feat/t8-icd10-fy2026-full`).
+  #
+  # ⚠️ FAIL-CLOSED ON CANNOT-TELL, like every other gate here. No `gh`, an
+  # unauthenticated `gh`, or a query that errors all REFUSE. A branch with no
+  # dependants and a branch nobody could ask about produce the same empty list,
+  # and only one of them is safe to delete.
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "🟡 retire-branch: no 'gh' — cannot establish whether '$BR' is the base"
+    echo "   of an open PR. REFUSING rather than guessing. (#186(2))"; exit 2
+  fi
+  if ! dependants=$(gh pr list --state open --base "$BR" --json number,headRefName \
+                      --jq '.[]|"#\(.number) (\(.headRefName))"' 2>&1); then
+    echo "🟡 retire-branch: the open-PR query FAILED for '$BR' — cannot tell. REFUSING."
+    echo "   $dependants"; exit 2
+  fi
+  if [ -n "$dependants" ]; then
+    echo "🔴 retire-branch: REFUSED — '$BR' is the BASE of open pull request(s):"
+    echo "$dependants" | sed 's/^/     /'
+    echo "   Deleting it would CLOSE them and discard the diffs they carry."
+    echo "   Retarget them onto another base first, then re-run. (#186(2))"
+    exit 1
+  fi
+
+  # ⚠️ THE ERROR IS CAPTURED, NOT SWALLOWED. This line read
+  # `git push origin --delete "$BR" >/dev/null 2>&1`, so when the delete failed
+  # the script correctly refused to claim success — and said nothing whatever
+  # about WHY. Measured 2026-09-05 on `fix/passenger-503-and-audit-outcome`:
+  # the refusal was right, the cause was invisible, and the next actor had to
+  # re-diagnose from zero. A gate that fails honestly and mutely still costs
+  # somebody the whole investigation.
+  push_err=$(git push origin --delete "$BR" 2>&1) || true
   if [ "$(git ls-remote --heads origin "$BR" 2>/dev/null | wc -l)" -ne 0 ]; then
-    echo "🔴 retire-branch: the remote delete did not take — '$BR' is still on origin."; exit 1
+    echo "🔴 retire-branch: the remote delete did not take — '$BR' is still on origin."
+    if [ -n "$push_err" ]; then
+      echo "   git said:"; echo "$push_err" | sed 's/^/     /'
+    else
+      echo "   git printed nothing — the push itself may have been denied by policy."
+    fi
+    exit 1
   fi
   echo "   · remote  $BR — retired"
 fi
