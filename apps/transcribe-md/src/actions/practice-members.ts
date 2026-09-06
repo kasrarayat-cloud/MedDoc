@@ -161,7 +161,16 @@ export async function changeMemberRoleAction(
     // ⚠️ SCOPED IN THE QUERY, NOT AFTER IT. `findUnique` by id and then
     // comparing practiceId in JS is the same check written so that forgetting
     // one line reads any user in the system.
-    where: { id: parsed.data.userId, practiceId: guard.practiceId },
+    //
+    // ⚠️ AND `deactivatedAt: null` IS A CONJUNCT HERE FOR THE SAME REASON THE
+    // LISTING HAS IT. Deactivation writes `{isActive:false, deactivatedAt}` and
+    // leaves `practiceId`/`practiceRole` intact, so a deactivated member is
+    // still findable by id+practice. Without this the action could write OWNER
+    // onto a row `listPracticeMembers` does not render — and once written,
+    // `CANNOT_CHANGE_AN_OWNER` below refuses to ever move it again, because
+    // this is the ONLY `practiceRole` write in application code. An invisible
+    // owner nobody can revoke.
+    where: { id: parsed.data.userId, practiceId: guard.practiceId, deactivatedAt: null },
     select: { id: true, practiceRole: true },
   });
   if (!target) {
@@ -172,11 +181,26 @@ export async function changeMemberRoleAction(
     };
   }
 
-  // ⚠️ AN OWNER IS NOT EDITABLE HERE, AND THAT IS WHAT KEEPS THE INVARIANT.
-  // Every practice starts with exactly one OWNER (a solo signup's fallback) and
-  // invites can only mint CLINICIAN or TECH, so refusing to move an OWNER means
-  // "a practice always has at least one owner" holds STRUCTURALLY rather than
-  // by a last-owner count that would have to be right under concurrency.
+  // ⚠️ AN OWNER IS NOT EDITABLE HERE, AND THAT IS HALF OF WHAT KEEPS THE
+  // INVARIANT. Every practice starts with at least one OWNER (a solo signup's
+  // fallback), and since ruling #195 an OWNER may also be minted or promoted —
+  // so this refusal is what makes "a practice always has at least one owner"
+  // hold STRUCTURALLY rather than by a last-owner count.
+  //
+  // ⚠️ THIS READ IS A SNAPSHOT, AND UNTIL RULING #195 THAT DID NOT MATTER.
+  // While `ASSIGNABLE_ROLES` was `['CLINICIAN','TECH']`, no in-app path could
+  // turn a target INTO an owner, so the row could never become OWNER between
+  // this read and the write below — the read-then-write shape was incidentally
+  // safe. Widening the vocabulary is exactly what made that window reachable:
+  // two concurrent requests, one promoting B to OWNER and one demoting B, both
+  // read B as CLINICIAN, both pass this guard, and the demotion lands on an
+  // OWNER. Demonstrated by an adversarial pass on this branch, with a
+  // sequential control that is correctly refused and a base-tree control that
+  // cannot reach the state at all.
+  //
+  // So the guard below is kept AND the write is made a COMPARE-AND-SET. Do not
+  // remove either: this one refuses fast and speaks the doctor-facing reason;
+  // the CAS is what makes the refusal true under concurrency.
   if (target.practiceRole === 'OWNER') {
     return {
       ok: false,
@@ -191,10 +215,38 @@ export async function changeMemberRoleAction(
     return { ok: true, changedAt: Date.now() };
   }
 
-  await prisma.user.update({
-    where: { id: target.id },
+  // ⚠️ COMPARE-AND-SET ON THE EXACT ROLE THAT WAS READ — one statement, no
+  // transaction, no isolation-level dependency. `updateMany` takes a full
+  // predicate where `update` takes only a unique key, and re-asserting
+  // `practiceRole: target.practiceRole` in the WHERE is what makes the write
+  // conditional on nothing having moved underneath it.
+  //
+  // ⚠️ AND IT IS ALSO WHAT MAKES THE AUDIT ROW TRUE. `from` is read from the
+  // snapshot; if the row had changed under us, `from` would name a value the
+  // row did not hold when the UPDATE ran — a false entry in an append-only
+  // trail, which is worse than a missing one. Count 0 means the row moved, so
+  // we refuse rather than write, and the trail says nothing rather than
+  // something wrong.
+  const { count } = await prisma.user.updateMany({
+    where: {
+      id: target.id,
+      practiceId: guard.practiceId,
+      deactivatedAt: null,
+      practiceRole: target.practiceRole,
+    },
     data: { practiceRole: parsed.data.role },
   });
+
+  if (count === 0) {
+    // The row changed between the read and the write. We cannot know it is
+    // still safe to demote, so we refuse — fail-closed, and the doctor is told
+    // to look again rather than being shown a success that did not happen.
+    return {
+      ok: false,
+      reason: 'ROLE_CHANGED_UNDER_YOU',
+      message: ADMIN_REFUSAL_MESSAGE.ROLE_CHANGED_UNDER_YOU,
+    };
+  }
 
   await logAudit({
     action: 'PRACTICE_ROLE_CHANGED',

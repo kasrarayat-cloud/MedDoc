@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 
 import { LocalTime } from '@/components/ui/local-time';
 import { SpecularButton } from '@/components/specular-button';
+import { ASSIGNABLE_ROLES } from '@/lib/practice-roles';
 import {
   changeMemberRoleAction,
   mintSeatInviteAction,
@@ -51,6 +52,22 @@ const ROLE_HINT: Record<string, string> = {
   CLINICIAN: 'Signs notes.',
   TECH: 'Prepares and delivers notes. Cannot sign.',
 };
+
+/**
+ * ⚠️ THE OPTIONS ARE DERIVED FROM THE SERVER'S OWN LIST, NEVER RETYPED.
+ *
+ * Both selects used to hardcode `CLINICIAN`/`TECH`. That is a silent-drift
+ * shape, and the OWNER-not-exclusive ruling is exactly the change that would
+ * have exposed it: widening `ASSIGNABLE_ROLES` on the server would have passed
+ * every server test while the page kept offering the old two, so the feature
+ * would have shipped invisible with a green suite. Derived here, the constant
+ * and the control cannot disagree.
+ */
+const ROLE_OPTIONS = ASSIGNABLE_ROLES.map((value) => ({
+  value,
+  label: ROLE_LABEL[value] ?? value,
+  hint: ROLE_HINT[value] ?? '',
+}));
 
 export interface MemberRow {
   id: string;
@@ -90,6 +107,19 @@ export function PracticeMembersPanel({
       <MemberList members={members} canAdminister={canAdminister} />
       {canAdminister ? (
         <>
+          {/* ⚠️ THE HALF THAT IS NOT BUILT IS SAID OUT LOUD, NOT HIDDEN. An owner
+              can now be created — that is the ruling. Taking it away is filed as
+              its own item because it needs a last-owner guard that is correct
+              under concurrency. A page that silently omits the control teaches
+              the doctor the capability is missing by accident; saying so tells
+              them it is deliberate and that support can act today. */}
+          <p
+            data-testid="members-owner-note"
+            style={{ marginTop: 12, fontSize: 13, color: 'var(--color-linear-text-3)' }}
+          >
+            You can make another member an owner. Owners cannot be demoted or removed here
+            yet — ask support if a partner is leaving the practice.
+          </p>
           <InviteList invites={invites} />
           <MintSeat />
         </>
@@ -187,7 +217,31 @@ function RoleCell({
   }
 
   return (
-    <form action={action} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <form
+      action={action}
+      style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+      // ⚠️ PROMOTION TO OWNER IS IRREVERSIBLE UNTIL ADMIN-5 SHIPS, AND IT SITS
+      // ONE ARROW-KEY FROM THE CURRENT SELECTION. The options derive from
+      // ASSIGNABLE_ROLES, where OWNER is first, so a CLINICIAN row opens with
+      // OWNER directly above the selected item. There is no undo: the server
+      // refuses every subsequent change to an owner, by design. An adversarial
+      // pass reached it by one keystroke with nothing in the way.
+      //
+      // ⚠️ THE CONFIRM IS ON THE IRREVERSIBLE VALUE ONLY. Confirming every role
+      // change would train the doctor to dismiss it, which is how a confirm
+      // stops being a control.
+      onSubmit={(e) => {
+        const chosen = new FormData(e.currentTarget).get('role');
+        if (chosen !== 'OWNER') return;
+        const who = member.name?.trim() || member.email;
+        const ok = window.confirm(
+          `Make ${who} an owner of this practice?\n\n` +
+            'Owners can manage members and invite people. This cannot be undone here — ' +
+            'owners cannot be demoted or removed yet.',
+        );
+        if (!ok) e.preventDefault();
+      }}
+    >
       <input type="hidden" name="userId" value={member.id} />
       <label className="qm-sr-only" htmlFor={`role-${member.id}`}>
         Role for {member.name?.trim() || member.email}
@@ -201,8 +255,11 @@ function RoleCell({
         className="qm-lin-btn qm-tap-44"
         style={{ fontSize: 13, padding: '6px 10px' }}
       >
-        <option value="CLINICIAN">Clinician</option>
-        <option value="TECH">Tech</option>
+        {ROLE_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
       </select>
       <SpecularButton type="submit" disabled={pending} data-testid={`member-role-save-${member.id}`}>
         {pending ? 'Saving…' : 'Save'}
@@ -316,8 +373,11 @@ function MintSeat() {
             className="qm-lin-btn qm-tap-44"
             style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px' }}
           >
-            <option value="CLINICIAN">Clinician — signs notes</option>
-            <option value="TECH">Tech — prepares and delivers, cannot sign</option>
+            {ROLE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.hint ? `${o.label} — ${o.hint.replace(/\.$/, '').toLowerCase()}` : o.label}
+              </option>
+            ))}
           </select>
         </label>
 
