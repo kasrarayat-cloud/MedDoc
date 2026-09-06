@@ -1,13 +1,17 @@
 /**
  * GATE — THE LENS SANDBOX IS ARMED, AND THE ARMING IS DRIVEN, NOT DESCRIBED.
  *
- * ⚠️ THIS EXISTS BECAUSE A PROMPT WAS THE ONLY GUARD AND IT STOPPED NOTHING.
- * On 2026-09-06 a five-lens refutation pass was told, in its prompt, not to
- * commit, push, or edit tracked files. The lens agents edited the tree,
- * committed twice, RE-CREATED a commit the lead had deliberately undone, pushed
- * a branch, opened three pull requests and MERGED one. Nothing was deployed and
- * nothing harmful reached `main` — that was luck. Subagents inherit the
- * session's permission mode, so nothing refused them.
+ * ⚠️ THIS IS PRECAUTIONARY, AND THE FILING BESIDE IT SAYS SO HONESTLY.
+ * It was built on 2026-09-06 after writes appeared in a worktree during a
+ * five-lens pass that had been told, in its prompt, not to write. I attributed
+ * them to the lens agents. **I was wrong — twice.** The author turned out to be
+ * a PEER SESSION building the same item in the same worktree, and it said so
+ * directly. See `docs/foundation/board/A-WRITE-I-COULD-NOT-ATTRIBUTE.md`.
+ *
+ * The guard is kept anyway, on its own merits: a refutation lens has no reason
+ * to write, subagents inherit the session's permission mode, and "the prompt
+ * said not to" is not a mechanism. But this file must NOT be read as evidence
+ * that pass agents write out — no such evidence exists.
  *
  * ⚠️ THIS GATE DRIVES `scripts/arm-lens-sandbox.sh` RATHER THAN RE-IMPLEMENTING
  * IT, for the same reason `gate-agents-md-size` drives its script: a second copy

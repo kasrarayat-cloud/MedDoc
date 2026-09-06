@@ -1,4 +1,9 @@
-# ⚠️ THE PASS AGENTS WROTE OUT — AND THE ONLY GUARD WAS A SENTENCE IN A PROMPT
+# ⚠️ A WRITE I COULD NOT ATTRIBUTE — AND I NAMED THE WRONG ACTOR TWICE
+
+> **THE TITLE OF THIS FILE WAS "THE PASS AGENTS WROTE OUT". THAT WAS FALSE, AND
+> SO WAS THE CORRECTION UNDER IT.** Renamed 2026-09-06 when the actual author
+> told me directly. The original body is kept below with both corrections in
+> place, because the sequence of wrong answers is the finding — not the write.
 
 **Filed 2026-09-06, by the session that wrote the prompt.** Owner ruling the
 same day: **lens agents operate only in throwaway worktrees that cannot write
@@ -26,7 +31,44 @@ line, in every one of its five lens prompts and in every verification prompt:
 | 8 | opened **PR #1019** | *"The JUDGEMENT for the deploy that is running right now"*, 17:54:47Z |
 | 9 | **merged PR #1016** to `main` | `mergedAt 17:37:53Z`, `mergedBy kasrarayat-cloud` |
 
-## ⚠️ CORRECTION, SAME HOUR — ATTRIBUTION. I NAMED AN ACTOR I HAD NOT IDENTIFIED.
+## ⚠️ SECOND CORRECTION — THE ACTOR IDENTIFIED HIMSELF, AND IT WAS NEITHER GUESS
+
+**Resolved 2026-09-06 by a message from the session that did it.** Peer session
+`meddoc-pro-a5` states it made commits `564c95b5` and `263e1b09`: *"we both built
+REVIEW-DEFAULTS item 2… I stood down and ran the gate instead."*
+
+**So the lens agents wrote nothing.** Rows 1–5 below were a PEER SESSION doing
+legitimate work on the same item, in the same worktree, at the same time.
+
+⚠️ **AND THE `reset` I RECORDED AS AN AGENT UNDOING MY UNDO WAS THE TWO OF US
+FIGHTING OVER ONE REF.** My `reset --soft HEAD~1` destroyed *their* commit; they
+reset it back; I read the reflog and inferred an agent had re-created a commit I
+had deliberately undone. Their own note names the mechanism I had missed:
+
+> **`git worktree` isolates the CHECKOUT, never `refs/heads`.**
+
+Two worktrees on one branch share the branch pointer. I reasoned "separate
+worktree, separate everything" and never asked what that implies for refs.
+
+**WHAT SURVIVES, AND IT IS NOT NOTHING.** The sandbox is still right — a lens
+agent has no reason to write and the environment should say so. But it is now
+*precautionary*, not a response to a demonstrated breach, and this file must not
+be read as evidence that pass agents write out. **No such evidence exists.**
+
+⚠️ **THE REAL FINDING IS THE ONE I KEPT WALKING PAST.** Three unattended sessions
+shared one working directory, one GitHub account and one `main`. `mergedBy` reads
+`kasrarayat-cloud` for all of us, so **the audit trail cannot resolve authorship
+after the fact** — which is why I could reach for "the agents did it" twice and
+have nothing contradict me. The sandbox does not touch this. It is filed as its
+own item and it is the more dangerous of the two.
+
+⚠️ **AND THE SHAPE OF MY ERROR IS WORTH MORE THAN THE INCIDENT.** I had a
+documented, freshly-written suspect — *agents ignore prompts* — and an
+observation that fit it. Canon already names this: **a documented defect is the
+most convenient suspect.** I did not check `ps` until forty minutes in, and I
+never asked the obvious question: *who else is on this box?*
+
+## ⚠️ FIRST CORRECTION, SUPERSEDED BY THE ABOVE — kept because it was also wrong
 
 **The table above says "the lens agents" did all nine things. That is more than
 the evidence supports, and I wrote it before checking.**
