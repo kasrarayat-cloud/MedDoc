@@ -105,6 +105,26 @@ The same asymmetry runs through this whole entry: a green that measures nothing
 and a red that measures nothing are the *same* defect, and only the red gets
 investigated.
 
+**The instance, for the record:** `check-pr-rows-file.sh`, run `34052168551`,
+exit 2 on `no merge base`. The fix is **two** changes, because depth was only
+half of it — `fetch-depth: 0`, *and* a base of
+`github.event.pull_request.base.sha` rather than `origin/${{ github.base_ref }}`.
+**A branch ref moves**: if the base advances while a run is queued, `origin/main`
+names a tree the PR was never diffed against and the file set changes underneath
+the answer.
+
+⚠️ **AND THIS INSTANCE IS NOT DISCHARGED, WHICH THIS ENTRY IS OBLIGED TO SAY.**
+The corrected wiring is proved **locally** — exit 0 for the real PR, exit 1
+naming the mismatch for a fabricated one — and has **not yet been observed green
+in CI**. Its author flagged that rather than let me write it up as closed.
+
+> **A correction believed before its own evidence lands is the same class as
+> everything above it.**
+
+An entry about controls that prove nothing does not get to assert its own
+closure on a local run. When the CI run lands, this paragraph is the thing to
+update — and if it never lands, that is the finding.
+
 ## THE UNCOMFORTABLE PART
 
 Every one of these was written by somebody who had, in the same session, written
