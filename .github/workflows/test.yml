@@ -120,6 +120,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ⚠️ §2.5 ROWS AT PR-OPEN — THE GATE FOR A RULE THAT DID NOT WORK TWICE.
+      # A deployer can measure what a change TOUCHES. Only its author can say
+      # what it is SUPPOSED to do, and therefore what would be a FINDING.
+      # Measured: b54a3b3a shipped 8 passengers with 0 rows; 832f8e81 shipped 16
+      # with 1 — and one of the unrowed ones was an IRREVERSIBLE enum migration.
+      # The rule was written after the first and had not changed behaviour by the
+      # second, so it becomes mechanism.
+      #
+      # Placed EARLY and read-only: it costs seconds and fails before the heavy
+      # work, so an author learns on the PR rather than at a deploy.
+      - name: §2.5 rows are authored at PR-open (runtime PRs only)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=200 origin "${{ github.base_ref }}" || true
+          PR_NUMBER="${{ github.event.pull_request.number }}" \
+            bash scripts/check-pr-rows-file.sh "origin/${{ github.base_ref }}" HEAD
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
