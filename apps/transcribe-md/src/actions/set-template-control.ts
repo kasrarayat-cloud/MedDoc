@@ -390,7 +390,10 @@ export async function insertScaffoldDefaultAction(
     where: {
       compiledVersionId_fieldId: { compiledVersionId: resolved.compiledVersionId, fieldId },
     },
-    select: { mapping: { select: { clinicalConcept: true, unmentionedPolicy: true } } },
+    // ⚠️ `clinicalConcept` ONLY — `unmentionedPolicy` was fetched for the
+    // static refusal removed below, and a column fetched for a decision nobody
+    // makes is how the offer side's dead guard went unnoticed for a commit.
+    select: { mapping: { select: { clinicalConcept: true } } },
   });
   if (!definition?.mapping?.clinicalConcept) {
     return {
@@ -399,20 +402,36 @@ export async function insertScaffoldDefaultAction(
       label: field.originalLabel,
     };
   }
-  // ⚠️ THE DOOR AGREES WITH THE OFFER, WHICH IS THIS BRANCH'S STANDING RULE.
-  // `scaffoldDefaultOfferable` withdraws the offer for an `omit` field, so the
-  // panel no longer lists one. This is the WRITER saying the same thing, so a
-  // stale client, a replayed request, or a second surface cannot insert into a
-  // field the doctor declared expected-blank. The refusal is SPOKEN — the
-  // panel surfaces `error` verbatim — because a silent decline on a redrawn
-  // document reads as "it worked, subtly".
-  if (definition.mapping.unmentionedPolicy === 'omit') {
-    return {
-      ok: false,
-      error: `You marked ${field.originalLabel} as expected blank, so nothing is inserted for it. Untick that in your form settings if you want its default back.`,
-      label: field.originalLabel,
-    };
-  }
+  // ⚠️ THE STATIC-POLICY REFUSAL WAS REMOVED HERE, AND REMOVING IT IS WHAT
+  // KEEPS THE DOOR AGREEING WITH THE OFFER.
+  //
+  // It read `definition.mapping.unmentionedPolicy === 'omit'` and refused. Its
+  // comment justified that by saying `scaffoldDefaultOfferable` withdraws the
+  // offer for an `omit` field — TRUE WHEN IT WAS WRITTEN, AND FALSE NOW. The
+  // offer withdraws on the PER-VISIT outcome (`reasonCode ===
+  // 'omitted_unsupported_default'`), because a confirm-time property cannot
+  // answer a per-visit question. So on a visit where the omit did NOT fire the
+  // panel lists the field — correctly, it is blank and the doctor is being
+  // asked about it — and this branch then refused the click.
+  //
+  // ⚠️ THAT IS THIS BRANCH'S OWN THESIS INVERTED: "a surface must never offer an
+  // act its writer would refuse." Reachable from the ordinary client —
+  // `your-blanks-panel.tsx:133` calls this action on whatever the offer listed
+  // — so the doctor gets a button that errors. Found by the adversarial pass
+  // over the finished diff, by three lenses.
+  //
+  // WHY NOT NARROW IT INSTEAD OF REMOVING IT: this action holds `visitId` and
+  // `fieldId` and no resolution. Recomputing one field's resolution here to
+  // recover `reasonCode` is the only sound way to key on the same signal, and a
+  // cached fill is not a gate. The offer IS the per-visit gate.
+  //
+  // WHY REMOVING IT IS SAFE, and this is ruling #194's own principle: an insert
+  // is a HUMAN ACT. #194 deleted the machine's ability to print an undictated
+  // default precisely so the click would carry the claim, and it is audited as
+  // `DEFAULT_INSERTED_BY_DOCTOR`. A doctor who ticked "expected blank" and then
+  // clicks "Insert my default" on a visit where the omit did not take effect is
+  // changing their mind for that visit, which is theirs to do. What #194
+  // forbids is the MACHINE doing it unasked, and nothing here does.
 
   await prisma.templateTwinFieldOverride.upsert({
     where: { visitId_fieldId: { visitId, fieldId } },

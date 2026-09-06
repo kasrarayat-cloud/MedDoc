@@ -787,18 +787,63 @@ describe('item 2 — an omitted field is not put back in front of the doctor', (
     );
   });
 
-  it('⚠️ THE WRITER REFUSES TOO — the offer and the door agree', () => {
-    // `insertScaffoldDefaultAction` is a server action wrapped in auth and
-    // prisma; driving it here would test the mocks. What is asserted is that
-    // the refusal EXISTS and that it reads the column it refuses on — the same
-    // source-level check, for the same reason, as the arm above.
-    const src = readFileSync(
+  it('⚠️ THE DOOR DOES NOT REFUSE ON THE STATIC POLICY — and this arm reads CODE, not prose', () => {
+    // ⚠️ THE ARM THIS REPLACES WAS VACUOUS AND WAS CAUGHT BEING VACUOUS. It did
+    // `expect(src).toMatch(/unmentionedPolicy === 'omit'/)` over the WHOLE FILE.
+    // The static refusal was then deleted and this arm STAYED GREEN, because
+    // the only remaining occurrence of that string is inside the comment
+    // explaining the deletion. A substring assertion over a whole source file
+    // is satisfied by the paragraph describing the thing it claims to check.
+    //
+    // So: comments are stripped before anything is asserted, and the arm proves
+    // its own non-vacuity by requiring the stripped source to still contain the
+    // symbols it reasons about.
+    const raw = readFileSync(
       join(__dirname, '..', '..', '..', 'actions', 'set-template-control.ts'),
       'utf-8',
     );
-    expect(src).toContain("unmentionedPolicy: true");
-    expect(src).toMatch(/unmentionedPolicy === 'omit'/);
+    const code = raw
+      .split('\n')
+      .filter((l) => {
+        const t2 = l.trim();
+        return !t2.startsWith('//') && !t2.startsWith('*') && !t2.startsWith('/*');
+      })
+      .join('\n');
+
+    // NON-VACUITY: the stripped source must still be the file we mean.
+    expect(code).toContain('insertScaffoldDefaultAction');
+    expect(code).toContain('undoScaffoldDefaultAction');
+
+    // The door must NOT gate on a confirm-time property of the mapping. The
+    // offer gates per visit; a static refusal here produced a button that
+    // errored for the doctor on every visit the omit did not fire on.
+    expect(
+      code,
+      'the insert door is refusing on the static policy again — it will refuse clicks the panel offers',
+    ).not.toMatch(/unmentionedPolicy\s*===\s*'omit'/);
+
+    // ...and it must not fetch the column for a decision it no longer makes.
+    expect(code, 'a column fetched for a decision nobody makes').not.toContain(
+      'unmentionedPolicy: true',
+    );
   });
+
+  it('⚠️ THE PER-VISIT GATE LIVES IN THE OFFER, and the two agree by construction', () => {
+    // The offer and the door agreed before by both consulting the mapping. They
+    // agree now by the door consulting NOTHING and the offer consulting the
+    // resolution — which is the only place the per-visit answer exists.
+    const offer = readFileSync(join(__dirname, '..', 'clinician-override.ts'), 'utf-8');
+    expect(offer).toContain("current?.reasonCode === 'omitted_unsupported_default'");
+
+    // An insert remains a HUMAN act and is audited as one — ruling #194's
+    // principle, and the reason removing the door's refusal is safe.
+    const door = readFileSync(
+      join(__dirname, '..', '..', '..', 'actions', 'set-template-control.ts'),
+      'utf-8',
+    );
+    expect(door).toContain('DEFAULT_INSERTED_BY_DOCTOR');
+  });
+
 });
 
 // ============================================================================
