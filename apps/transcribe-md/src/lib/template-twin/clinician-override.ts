@@ -229,7 +229,11 @@ export const SCAFFOLD_INSERTABLE_KINDS: ReadonlySet<string> = new Set(['narrativ
  */
 export function scaffoldDefaultOfferable(input: {
   field: { kind?: string; scaffolded?: boolean; scaffoldText?: string | null };
-  mapping: { clinicalConcept?: string | null } | null | undefined;
+  // ⚠️ `string | null`, NOT `'omit' | null`. This is read straight off Prisma,
+  // where the column is a plain nullable string — narrowing the parameter would
+  // force a cast at the call site, and a cast is how a column that later holds
+  // an unexpected value stops being checked. The comparison below is exact.
+  mapping: { clinicalConcept?: string | null; unmentionedPolicy?: string | null } | null | undefined;
   /** The field's CURRENT resolution, or null when none has been computed. */
   current: { status?: string; value?: unknown } | null | undefined;
 }): boolean {
@@ -239,6 +243,23 @@ export function scaffoldDefaultOfferable(input: {
   if (!SCAFFOLD_INSERTABLE_KINDS.has(field.kind ?? '')) return false;
   // The fill declines forever without a concept — see the overlay's own note.
   if (!mapping?.clinicalConcept) return false;
+  // ⚠️ THE DOCTOR ALREADY RULED THIS BLANK, AND THE OFFER MUST HONOUR THAT.
+  //
+  // REVIEW-DEFAULTS item 2's control says, in the doctor's own words,
+  // "Expected blank — do not ask me about this". Without this clause the field
+  // is still listed in the "Your blanks" panel under the heading "Nothing was
+  // dictated for these" — because an `omit` resolution is `not_mentioned` with
+  // `value: null`, and `scaffoldTargetIsBlank` is true for exactly that shape.
+  // So the control's label was false: the doctor ticked it and was asked again
+  // on the very next visit.
+  //
+  // ⚠️ IT IS THE **OFFER** THAT IS WITHDRAWN, NOT AN APPLIED DEFAULT. The
+  // caller keeps an ALREADY-INSERTED default listed (`inserted ||` in
+  // `preview-visit-document.ts`) so Undo stays reachable for a doctor who
+  // inserted before setting the policy, and `applyClinicianOverrides` is
+  // deliberately NOT given this clause — a stored override the doctor did
+  // assert must still apply, or the fill silently drops their own words.
+  if (mapping.unmentionedPolicy === 'omit') return false;
   return scaffoldTargetIsBlank(current);
 }
 

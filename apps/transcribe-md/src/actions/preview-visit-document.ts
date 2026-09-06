@@ -394,7 +394,13 @@ export async function previewVisitDocumentAction(
     // reads them too — the manifest does not carry mappings.
     const defs = await prisma.templateTwinFieldDefinition.findMany({
       where: { compiledVersionId: compiled.id },
-      select: { fieldId: true, mapping: { select: { clinicalConcept: true } } },
+      // ⚠️ `unmentionedPolicy` IS SELECTED BECAUSE THE PREDICATE READS IT. An
+      // unselected column arrives `undefined`, which is not `'omit'`, so the
+      // guard in `scaffoldDefaultOfferable` would be dead code that looks live.
+      select: {
+        fieldId: true,
+        mapping: { select: { clinicalConcept: true, unmentionedPolicy: true } },
+      },
     });
     const mappingByFieldId = new Map(
       defs.map((d) => [d.fieldId, d.mapping ?? null] as const),

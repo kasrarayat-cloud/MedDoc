@@ -390,12 +390,26 @@ export async function insertScaffoldDefaultAction(
     where: {
       compiledVersionId_fieldId: { compiledVersionId: resolved.compiledVersionId, fieldId },
     },
-    select: { mapping: { select: { clinicalConcept: true } } },
+    select: { mapping: { select: { clinicalConcept: true, unmentionedPolicy: true } } },
   });
   if (!definition?.mapping?.clinicalConcept) {
     return {
       ok: false,
       error: `${field.originalLabel} is filled in by hand on this form, so a default cannot be inserted for it.`,
+      label: field.originalLabel,
+    };
+  }
+  // ⚠️ THE DOOR AGREES WITH THE OFFER, WHICH IS THIS BRANCH'S STANDING RULE.
+  // `scaffoldDefaultOfferable` withdraws the offer for an `omit` field, so the
+  // panel no longer lists one. This is the WRITER saying the same thing, so a
+  // stale client, a replayed request, or a second surface cannot insert into a
+  // field the doctor declared expected-blank. The refusal is SPOKEN — the
+  // panel surfaces `error` verbatim — because a silent decline on a redrawn
+  // document reads as "it worked, subtly".
+  if (definition.mapping.unmentionedPolicy === 'omit') {
+    return {
+      ok: false,
+      error: `You marked ${field.originalLabel} as expected blank, so nothing is inserted for it. Untick that in your form settings if you want its default back.`,
       label: field.originalLabel,
     };
   }

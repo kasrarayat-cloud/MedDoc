@@ -733,3 +733,45 @@ export function templateTwinCounts(
     ).length,
   };
 }
+
+// ============================================================================
+// ⚠️ MOVED HERE FROM `semantic-mapping/index.ts` — FOR THE CLIENT BOUNDARY.
+// ----------------------------------------------------------------------------
+// This is a pure kind -> expected-type switch with no dependencies, and it is
+// the ONE definition of that mapping. It lived beside `isMappingTypeCompatible`
+// until `unmentioned-policy.ts` needed it: that module is imported as a VALUE
+// by the `'use client'` confirm surface, and `semantic-mapping/index.ts` pulls
+// `@meddoc/ai` (`modelClient`) — so importing it there would have dragged the
+// AI client into the browser graph to ask a question about a switch statement.
+//
+// `ir.ts` imports zod and nothing else, so it is safe from the client.
+// `semantic-mapping/index.ts` RE-EXPORTS it, so every existing caller — four
+// in that file, four in tests — resolves unchanged. One copy, two addresses.
+// ============================================================================
+export function expectedDataTypeForFieldKind(
+  kind: TemplateTwinFieldKind,
+): SemanticMapping['expectedDataType'] | null {
+  switch (kind) {
+    case 'narrative_text':
+      return 'text';
+    case 'single_select':
+      return 'single_select';
+    case 'multi_select':
+      return 'multi_select';
+    case 'checkbox':
+      return 'boolean';
+    case 'date':
+      return 'date';
+    case 'number':
+      return 'number';
+    case 'measurement':
+      return 'measurement';
+    case 'fixed_table':
+    case 'repeating_table':
+      return 'table';
+    case 'static':
+    case 'conditional_block':
+    case 'unsupported':
+      return null;
+  }
+}

@@ -22,6 +22,12 @@ import {
 } from '@/actions/template-twin-mappings';
 import type { TemplateTwinWorkspace } from '@/lib/template-twin/client-types';
 import { REGISTRY_CONCEPTS } from '@/lib/template-twin/concept-registry';
+import {
+  canOmitWhenUnmentioned,
+  OMIT_CONTROL_LABEL,
+  OMIT_CONTROL_HINT,
+  OMIT_INERT_LABEL,
+} from '@/lib/template-twin/unmentioned-policy';
 import type { SemanticMapping } from '@/lib/template-twin/ir';
 
 export interface NativeTemplateListItem {
@@ -667,6 +673,113 @@ function ReviewWorkspace({
                       ? ` → ${m.clinicalConcept}`
                       : ' · no concept yet'}
                 </div>
+
+                {/* ⚠️ REVIEW-DEFAULTS item 2 — THE `omit` DOOR.
+                    Offered ONLY where `canOmitWhenUnmentioned` says the
+                    resolver would honour it. That predicate is IMPORTED from
+                    the module the resolver itself calls, not restated here:
+                    a surface must never offer an act its writer would refuse,
+                    and a required field returns `needs_clinician_input` before
+                    the policy is ever consulted.
+
+                    ⚠️ AND THE WORDS ARE NOT "OMIT THIS LINE". Both a null
+                    policy and an `omit` take the same bounded clear, so the
+                    PAGE is identical; the only difference is whether the
+                    doctor is counted and prompted. The copy says that, and
+                    an arm pins it. */}
+                {!readOnly && canOmitWhenUnmentioned(f.field, m) && (
+                  <label
+                    htmlFor={`twin-omit-${m.fieldId}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 6,
+                      marginTop: 6,
+                      cursor: saving ? 'default' : 'pointer',
+                    }}
+                  >
+                    <input
+                      id={`twin-omit-${m.fieldId}`}
+                      type="checkbox"
+                      data-testid={`twin-omit-toggle-${m.fieldId}`}
+                      disabled={saving}
+                      checked={m.unmentionedPolicy === 'omit'}
+                      onChange={(e) => {
+                        // ⚠️ NULL, NOT `undefined` AND NOT `'keep'`. The column
+                        // is nullable and NULL is the fail-closed state: a
+                        // field nobody ruled on stays counted as blank and the
+                        // doctor keeps being told about it. `'keep'` does not
+                        // exist — #194 deleted it, and the schema refuses it.
+                        setMapping(m.fieldId, {
+                          ...m,
+                          unmentionedPolicy: e.target.checked ? 'omit' : null,
+                        });
+                      }}
+                      style={{ marginTop: 2, flexShrink: 0 }}
+                    />
+                    <span style={{ minWidth: 0 }}>
+                      <span
+                        style={{
+                          fontFamily: sans,
+                          fontSize: 11.5,
+                          color: 'var(--color-linear-text-2)',
+                        }}
+                      >
+                        {OMIT_CONTROL_LABEL}
+                      </span>
+                      <span
+                        style={{
+                          display: 'block',
+                          fontFamily: sans,
+                          fontSize: 10.5,
+                          color: 'var(--color-linear-text-3)',
+                          marginTop: 1,
+                        }}
+                      >
+                        {OMIT_CONTROL_HINT}
+                      </span>
+                    </span>
+                  </label>
+                )}
+
+                {/* A certified version is IMMUTABLE, so the choice cannot be
+                    changed here — but it must still be VISIBLE, or a doctor
+                    cannot tell why a field stopped being counted.
+
+                    ⚠️ AND IT SAYS **WHICH** OF THE TWO STATES IT IS IN. The
+                    first cut rendered the label whenever the policy was
+                    `'omit'`, while the editable control one block up was gated
+                    by `canOmitWhenUnmentioned` — so the two arms of one feature
+                    disagreed about the predicate, and a stored `omit` on a
+                    field the resolver refuses would have asserted "do not ask
+                    me about this" on a version nobody can correct.
+
+                    The writer now refuses to persist that state at all
+                    (`certification-lifecycle.ts`), so this branch should be
+                    unreachable. It is rendered HONESTLY rather than hidden
+                    anyway: hiding it would trade a false statement for an
+                    unreadable one, and a doctor looking at an immutable version
+                    is entitled to see what is actually stored on it. If the
+                    inert variant ever appears, it names itself. */}
+                {readOnly && m.unmentionedPolicy === 'omit' && (
+                  <div
+                    data-testid={
+                      canOmitWhenUnmentioned(f.field, m)
+                        ? `twin-omit-readonly-${m.fieldId}`
+                        : `twin-omit-readonly-inert-${m.fieldId}`
+                    }
+                    style={{
+                      fontFamily: sans,
+                      fontSize: 10.5,
+                      color: 'var(--color-linear-text-3)',
+                      marginTop: 4,
+                    }}
+                  >
+                    {canOmitWhenUnmentioned(f.field, m)
+                      ? OMIT_CONTROL_LABEL
+                      : OMIT_INERT_LABEL}
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>

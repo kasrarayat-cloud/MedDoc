@@ -190,6 +190,31 @@ async function main() {
       required: m.required,
       blankPolicy: m.blankPolicy,
       unknownPolicy: m.unknownPolicy,
+      // ⚠️ CARRIED THROUGH AS DEFENCE-IN-DEPTH — AND THE CLAIM THAT USED TO
+      // STAND HERE WAS FALSE. It said re-running this script "would have wiped
+      // every `omit` a doctor had set". The adversarial pass refuted it and the
+      // refutation is worth keeping, because a comment that overstates a danger
+      // teaches the next reader a wrong model of this file.
+      //
+      // What is TRUE: the writer coerces `mapping.unmentionedPolicy ?? null`
+      // (`certification-lifecycle.ts:521`), so a payload that omits the field
+      // does write NULL over it. What is FALSE is that this script could ever
+      // get that far — the `expectedSha` comparison below aborts on CONFLICT
+      // before the update loop, and a literal re-run also trips the
+      // already-approved and CERTIFIED row guards at :153-154. MEASURED: zero
+      // `templateTwinSemanticMapping.update` calls in the omit case.
+      //
+      // So the field is carried here so that FIXING `expectedSha` — which this
+      // change also does — cannot quietly turn this script into the erasing
+      // caller the old comment imagined.
+      //
+      // ⚠️ AND THE CAST BELOW IS WHY NOTHING CAUGHT IT. `as unknown as
+      // SemanticMapping` makes a missing field a compile-time non-event, so the
+      // one instrument that would have named this stayed silent. The field is
+      // added here rather than the cast removed because the cast also absorbs
+      // the `sourceType`/`expectedDataType` widening this script relies on —
+      // removing it is a separate change with its own blast radius.
+      unmentionedPolicy: m.unmentionedPolicy,
       practiceDefault: null,
       status: 'certified',
     } as unknown as SemanticMapping;
@@ -247,6 +272,22 @@ async function main() {
       required: m.required,
       blankPolicy: m.blankPolicy,
       unknownPolicy: m.unknownPolicy,
+      // ⚠️ THE SECOND BUILDER, AND THE FIRST PASS PATCHED ONLY THE OTHER ONE.
+      // This projection feeds `templateTwinMappingsSha256` to produce the
+      // `expectedSha` the writer compares against its own `beforeHash`. The
+      // hash ELIDES a null (`mapping-hash.ts:22`) but carries an explicit
+      // `'omit'`, so the moment any field on the target template has one, the
+      // two hashes diverge and `updateTemplateTwinMappings` throws
+      // `CONFLICT — 'This mapping draft changed in another tab.'` before
+      // writing anything. MEASURED: server `dee7e99f…` vs script `21bd6434…`
+      // with an omit present; identical without one.
+      //
+      // ⚠️ THE FAILURE IS FAIL-CLOSED AND STILL WORTH FIXING, because the error
+      // NAMES THE WRONG CAUSE. It says another tab changed the draft, so the
+      // operator reloads — and the reload never helps, because the divergence
+      // is in this file. A refusal that misdirects costs more than one that
+      // just says no.
+      unmentionedPolicy: m.unmentionedPolicy,
       practiceDefault: m.practiceDefault,
       status: m.mappingStatus === 'CERTIFIED' ? 'certified'
         : m.mappingStatus === 'RECOGNIZED' ? 'recognized' : 'needs_confirmation',

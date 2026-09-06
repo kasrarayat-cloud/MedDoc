@@ -21,6 +21,7 @@ import {
 import { withoutPlaceholderOptions } from '../../note-template-docx/placeholder-option';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
 import { isMappingTypeCompatible } from '../semantic-mapping';
+import { requiresClinicianInput } from '../unmentioned-policy';
 import {
   approvedPracticeDefaultAnchorId,
   approvedPracticeDefaultFactId,
@@ -253,12 +254,11 @@ function missingResolution(
 ): FieldResolution {
   const practiceDefault = practiceDefaultResolution(field, mapping, facts);
   if (practiceDefault) return practiceDefault;
-  const requiresInput =
-    field.required ||
-    mapping.required ||
-    field.unknownPolicy === 'requires_input' ||
-    mapping.unknownPolicy === 'requires_input' ||
-    mapping.blankPolicy === 'requires_input';
+  // ⚠️ THE PREDICATE IS IMPORTED, NOT WRITTEN HERE — and that is the point.
+  // The confirm surface must decide whether to OFFER `omit` using the SAME
+  // test this branch uses to honour it. Two spellings of one rule is how a
+  // control ships that looks like it works and does nothing.
+  const requiresInput = requiresClinicianInput(field, mapping);
   const unmentionedScaffold =
     conceptUnmatched && reason === undefined && facts.length > 0;
 
