@@ -23,6 +23,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import { YourBlanksPanel } from './your-blanks-panel';
+
 import {
   previewVisitDocumentAction,
   type PreviewFormat,
@@ -77,6 +79,11 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
   /** PDF is the faithful page; Word shows the file as Word will open it. Same
    *  bytes underneath — only the engine that draws them differs. */
   const [format, setFormat] = useState<PreviewFormat>('pdf');
+  /** Bumped when the doctor inserts or undoes one of their own defaults. The
+   *  fetch effect already keys on `revision`; this is the same mechanism for a
+   *  change this surface made itself, so the document is redrawn from the new
+   *  fill rather than showing the page they just changed. */
+  const [localRevision, setLocalRevision] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,7 +105,7 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
     return () => {
       cancelled = true;
     };
-  }, [visitId, revision, format, onOutcome, onUnavailable]);
+  }, [visitId, revision, localRevision, format, onOutcome, onUnavailable]);
 
   const handleDrawFailed = useCallback(() => {
     setDrawFailed(true);
@@ -204,6 +211,13 @@ export function VisitDocumentSurface(props: VisitDocumentSurfaceProps) {
             : ''}
           {result.counts.needsReview > 0 ? ` · ${result.counts.needsReview} to check` : ''}
         </p>
+      )}
+      {result.insertableDefaults && result.insertableDefaults.length > 0 && (
+        <YourBlanksPanel
+          visitId={visitId}
+          defaults={result.insertableDefaults}
+          onChanged={() => setLocalRevision((n) => n + 1)}
+        />
       )}
       <DocumentPages
         data={result.data}

@@ -123,6 +123,17 @@ export interface CachedFill {
     needsReview: number;
     notMentioned: number;
   } | null;
+  /** REVIEW-DEFAULTS item 1 — the blank scaffolded controls this fill found a
+   *  doctor default for. OPTIONAL, because an entry cached before this field
+   *  existed carries none and `undefined` is the honest answer: *we did not
+   *  compute it*, which is different from *there are none*. The surface renders
+   *  nothing rather than an empty panel. */
+  insertableDefaults?: {
+    fieldId: string;
+    label: string;
+    scaffoldText: string;
+    inserted: boolean;
+  }[] | null;
   fillSha: string;
   /** The named reason the PDF path was missed, when it was. */
   reason: string | null;

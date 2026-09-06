@@ -87,7 +87,13 @@ export function manifestMatchesNote(
  */
 export interface OverrideIdentityMember {
   fieldId: string;
-  selectedOptionOrdinal: number;
+  /** NULL for a `scaffold_default` row — the ordinal only names a value on the
+   *  `option` arm. */
+  selectedOptionOrdinal: number | null;
+  /** Absent on rows selected before REVIEW-DEFAULTS widened the table; treated
+   *  as `'option'`, which is what every such row was. */
+  overrideKind?: string | null;
+  insertedText?: string | null;
 }
 
 /**
@@ -100,8 +106,24 @@ export interface OverrideIdentityMember {
 export function overridesIdentity(
   overrides: readonly OverrideIdentityMember[],
 ): string {
+  // ⚠️ THE KIND AND THE INSERTED TEXT ARE PART OF THE IDENTITY, AND OMITTING
+  // THEM WOULD MAKE REVIEW-DEFAULTS SILENTLY DO NOTHING. This hash is what tells
+  // the manifest it is stale. A scaffold-default insert carries a NULL ordinal,
+  // so a tuple of (fieldId, ordinal) would be byte-identical before and after
+  // the click: the manifest would read FRESH, no recompute would run, and the
+  // doctor's inserted default would never reach the document — while every
+  // gate reported success. That is the F24-S5 defect exactly, which is why its
+  // header says being an input is not enough on its own.
   const canonical = [...overrides]
-    .map((o) => [o.fieldId, o.selectedOptionOrdinal] as const)
+    .map(
+      (o) =>
+        [
+          o.fieldId,
+          o.selectedOptionOrdinal ?? null,
+          o.overrideKind ?? 'option',
+          o.insertedText ?? null,
+        ] as const,
+    )
     .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   return createHash('sha256')
     .update(JSON.stringify(canonical), 'utf8')

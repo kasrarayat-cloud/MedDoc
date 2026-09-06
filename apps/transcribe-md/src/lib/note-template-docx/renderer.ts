@@ -207,7 +207,21 @@ export async function renderTemplateDocx(
             expectedEmptiedSpanSha256(part.scan, field, patches),
             blankEligible,
           )
-        : fieldProof(field, resolution.value, 1),
+        : fieldProof(
+            field,
+            resolution.value,
+            1,
+            // ⚠️ THE EMITTER FOR `clinician_default`, AND IT LIVES HERE RATHER
+            // THAN IN A NEW BRANCH ON PURPOSE. This field was patched exactly
+            // like any other filled field — same bytes, same occurrence count,
+            // same byte-equality obligations. The ONLY thing that differs is
+            // provenance, so the only thing that changes is the word. Reading
+            // the reason code off the resolution keeps the writer, the overlay
+            // and the proof naming one event with one string.
+            resolution.reasonCode === 'clinician_scaffold_default'
+              ? 'clinician_default'
+              : 'filled',
+          ),
     );
   }
 
@@ -1972,7 +1986,7 @@ function fieldProof(
   field: TemplateField,
   value: FieldResolution['value'],
   occurrences: number,
-  kind: 'filled' | 'blank' = 'filled',
+  kind: 'filled' | 'blank' | 'clinician_default' = 'filled',
 ): RenderedFieldProof {
   return {
     kind,

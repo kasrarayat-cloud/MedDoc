@@ -319,6 +319,12 @@ export type AuditAction =
   /// acts — no runtime writer, by design — so the append-only trail never claims
   /// 29 deletions happened on the day they were merely annotated.
   | 'TEMPLATE_PROVENANCE_LOST'
+  // ⚠️ MIRRORED BY HAND FROM THE PRISMA ENUM, AND THE MIRROR IS THE HAZARD.
+  // A label present ONLY here makes Postgres reject the row; logAudit catches
+  // that into one console.error and returns void, so tsc is green, the unit
+  // suite is green (logAudit is mocked), and the audit row simply never
+  // exists. The migration is what makes this line true.
+  | 'DEFAULT_INSERTED_BY_DOCTOR'
   /// ADMIN-1 — an OWNER minted a seat invite. Carries the practice and the role
   /// the redeemer will join with; NEVER the raw code, which exists only in
   /// memory and in the operator's hands.

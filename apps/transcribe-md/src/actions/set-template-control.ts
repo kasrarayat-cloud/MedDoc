@@ -27,9 +27,9 @@ import prisma from '@meddoc/db';
 
 import { requireSession } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
-import { visitByIdScope } from '@/lib/practice-scope';
+import { visitByIdScope, type PracticeId } from '@/lib/practice-scope';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
-import { TemplateDocIRSchema } from '@/lib/template-twin/ir';
+import { TemplateDocIRSchema, type TemplateDocIR } from '@/lib/template-twin/ir';
 import { isWordPlaceholderOption } from '@/lib/note-template-docx/placeholder-option';
 
 export interface SetTemplateControlResult {
@@ -51,21 +51,32 @@ function fold(s: string): string {
   return s.trim().toLowerCase();
 }
 
-export async function setTemplateControlAction(
+/** What both doors need before they can decide anything: the visit, the
+ *  certified twin, and the one field being addressed.
+ *
+ *  ⚠️ EXTRACTED SO THE TWO DOORS CANNOT DRIFT APART ON THE GUARDS THEY SHARE.
+ *  REVIEW-DEFAULTS added a second writer to this table, and the shared half —
+ *  practice scope, the sign-freeze, template binding, certification, field
+ *  existence — is exactly the half where a second copy would eventually differ
+ *  from the first by one line and nobody would notice which. The guards that
+ *  are NOT shared stay in their own door, where the difference is visible.
+ */
+async function resolveCertifiedTwinField(
   visitId: string,
-  /** The twin's own addressing. NEVER a label: 18 of this form's 28 content
-   *  controls share a label with at least one other (re-measured on production
-   *  2026-08-24 — 28 controls, 14 distinct labels, groups of 8/6/2/2), so a
-   *  label cannot identify a control and never could. */
   fieldId: string,
-  /** What the doctor said. Matched against the control's compiled options. */
-  requestedValue: string,
-): Promise<SetTemplateControlResult> {
-  const session = await requireSession();
-
+  practiceId: PracticeId,
+): Promise<
+  | { ok: false; error: string }
+  | {
+      ok: true;
+      practiceId: string;
+      compiledVersionId: string;
+      field: TemplateDocIR['fields'][number];
+    }
+> {
   const visit = await prisma.transcribeVisit.findFirst({
     where: {
-      ...visitByIdScope(visitId, session.user.practiceId),
+      ...visitByIdScope(visitId, practiceId),
       deletedAt: null,
       archivedAt: null,
     },
@@ -121,6 +132,36 @@ export async function setTemplateControlAction(
   const ir = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
   const field = ir.fields.find((f) => f.fieldId === fieldId);
   if (!field) return { ok: false, error: 'That control is not part of this form.' };
+
+  return {
+    ok: true,
+    practiceId: visit.user.practiceId,
+    compiledVersionId: compiled.id,
+    field,
+  };
+}
+
+export async function setTemplateControlAction(
+  visitId: string,
+  /** The twin's own addressing. NEVER a label: 18 of this form's 28 content
+   *  controls share a label with at least one other (re-measured on production
+   *  2026-08-24 — 28 controls, 14 distinct labels, groups of 8/6/2/2), so a
+   *  label cannot identify a control and never could. */
+  fieldId: string,
+  /** What the doctor said. Matched against the control's compiled options. */
+  requestedValue: string,
+): Promise<SetTemplateControlResult> {
+  const session = await requireSession();
+
+  const resolved = await resolveCertifiedTwinField(
+    visitId,
+    fieldId,
+    session.user.practiceId,
+  );
+  if (!resolved.ok) return resolved;
+  const { field, compiledVersionId } = resolved;
+  const compiled = { id: compiledVersionId };
+  const visit = { user: { practiceId: resolved.practiceId } };
 
   // ⚠️ THE DOOR'S ADMISSION SET MUST MIRROR THE FILL'S, OR SUCCESS IS A LIE.
   //
@@ -221,13 +262,23 @@ export async function setTemplateControlAction(
       practiceId: visit.user.practiceId,
       visitId,
       fieldId,
+      overrideKind: 'option',
       selectedOptionOrdinal: option.ordinal,
       optionValue: option.value,
       overriddenBy: session.user.id,
     },
+    // ⚠️ THE UPDATE ARM CLEARS `insertedText`, AND IT MUST. There is ONE row per
+    // (visitId, fieldId) — the unique index says so — so correcting a control
+    // that previously held a scaffold-default insert REPLACES that row rather
+    // than adding one. Leaving `insertedText` populated would leave both arms of
+    // the kind-shape CHECK unsatisfied and the database would refuse the write:
+    // a doctor's dropdown correction failing with a constraint error because of
+    // a click they made ten minutes earlier.
     update: {
+      overrideKind: 'option',
       selectedOptionOrdinal: option.ordinal,
       optionValue: option.value,
+      insertedText: null,
       overriddenBy: session.user.id,
     },
   });
@@ -253,4 +304,165 @@ export async function setTemplateControlAction(
   });
 
   return { ok: true, label: field.originalLabel, value: option.displayText };
+}
+
+// ============================================================================
+// REVIEW-DEFAULTS item 1 — the doctor asserts THEIR OWN compiled default.
+// ----------------------------------------------------------------------------
+// Ruling #194 deleted the `keep` half: the machine never prints an undictated
+// default. The doctor's defaults did not disappear — they became a HUMAN ACT AT
+// REVIEW, and this is that act's writer.
+//
+// ⚠️ THE CLIENT NEVER SUPPLIES THE TEXT, AND THAT IS THE POINT OF THE SIGNATURE.
+// This takes (visitId, fieldId) and NOTHING ELSE. The value written is read
+// server-side from the compiled IR's own `scaffoldText`. A door that accepted
+// the string from the caller would be a free-text writer into a clinical
+// document wearing an "insert my default" label — one bug or one tampered
+// request away from putting arbitrary prose into a note. The doctor is saying
+// YES to a specific compiled string; they are not typing.
+//
+// ⚠️ AND IT IS REVERSIBLE, DELIBERATELY. `undoScaffoldDefaultAction` deletes the
+// row. An irreversible one-click write into a document somebody is about to
+// sign is the shape that has already cost this programme once — a promotion
+// that could not be undone, found by an adversarial pass on the branch before
+// this one. Reversibility here is cheap: the override is an INPUT to the fill,
+// so removing it restores the blank exactly.
+// ============================================================================
+
+export interface InsertScaffoldDefaultResult {
+  ok: boolean;
+  /** Doctor-facing. PHI-free — the label and the default are the doctor's own
+   *  form, never the patient's record. */
+  error?: string;
+  label?: string;
+  /** What was written, so the caller can show it without re-reading the IR. */
+  inserted?: string;
+}
+
+export async function insertScaffoldDefaultAction(
+  visitId: string,
+  fieldId: string,
+): Promise<InsertScaffoldDefaultResult> {
+  const session = await requireSession();
+
+  const resolved = await resolveCertifiedTwinField(
+    visitId,
+    fieldId,
+    session.user.practiceId,
+  );
+  if (!resolved.ok) return resolved;
+  const { field, practiceId } = resolved;
+
+  // ⚠️ SCAFFOLDED IS A COMPILED FACT, NOT A GUESS, AND IT IS CHECKED HERE RATHER
+  // THAN TRUSTED FROM THE PANEL. `scaffolded` is set by the compiler from the
+  // document's own bytes (ruling #192 falsified three attempts to INFER it from
+  // content, one of which printed "Enter assessment" onto a rendered note). A
+  // door that accepted the panel's word for which fields are scaffolded would
+  // re-open exactly that hole from the other side.
+  if (field.scaffolded !== true) {
+    return {
+      ok: false,
+      error: `${field.originalLabel} has no default of yours to insert.`,
+      label: field.originalLabel,
+    };
+  }
+
+  const text = (field.scaffoldText ?? '').trim();
+  if (!text) {
+    // Compiled as scaffolded but carrying nothing. Inserting an empty string
+    // would write a proof that a human filled a field with nothing — a lie in
+    // the trail — so refuse rather than record it.
+    return {
+      ok: false,
+      error: `${field.originalLabel} has no default text on this form.`,
+      label: field.originalLabel,
+    };
+  }
+
+  await prisma.templateTwinFieldOverride.upsert({
+    where: { visitId_fieldId: { visitId, fieldId } },
+    create: {
+      practiceId,
+      visitId,
+      fieldId,
+      overrideKind: 'scaffold_default',
+      insertedText: text,
+      overriddenBy: session.user.id,
+    },
+    // ⚠️ CLEARS THE OPTION ARM FOR THE SAME REASON THE OPTION DOOR CLEARS THIS
+    // ONE: one row per (visitId, fieldId), and a row satisfying neither arm of
+    // the kind-shape CHECK is refused by the database.
+    update: {
+      overrideKind: 'scaffold_default',
+      insertedText: text,
+      selectedOptionOrdinal: null,
+      optionValue: null,
+      overriddenBy: session.user.id,
+    },
+  });
+
+  await invalidateVisitFills(visitId);
+
+  // ⚠️ ITS OWN ACTION, NOT `EDITED_NOTE`. The whole product claim of #194 is
+  // that a default reaching a note is a HUMAN act; a trail that cannot tell
+  // that act apart from any other edit cannot evidence the claim. The metadata
+  // carries the field id and the LENGTH of what was inserted — never the text,
+  // which is the doctor's form and does not belong in an audit row.
+  void logAudit({
+    action: 'DEFAULT_INSERTED_BY_DOCTOR',
+    targetId: visitId,
+    targetType: 'TranscribeVisit',
+    metadata: {
+      surface: 'review_defaults_panel',
+      fieldId,
+      insertedLength: text.length,
+    },
+    success: true,
+  });
+
+  return { ok: true, label: field.originalLabel, inserted: text };
+}
+
+/** Undo one inserted default. Deletes the override row, which restores the
+ *  blank exactly — the override is an INPUT to the fill, never a mutation of
+ *  the note. */
+export async function undoScaffoldDefaultAction(
+  visitId: string,
+  fieldId: string,
+): Promise<InsertScaffoldDefaultResult> {
+  const session = await requireSession();
+
+  const resolved = await resolveCertifiedTwinField(
+    visitId,
+    fieldId,
+    session.user.practiceId,
+  );
+  if (!resolved.ok) return resolved;
+
+  // ⚠️ SCOPED BY KIND AS WELL AS BY KEY, so an undo cannot silently delete a
+  // DROPDOWN correction that happens to share the field. `deleteMany` takes the
+  // predicate; `delete` would take only the unique key and would not be able to
+  // say "only if it is mine".
+  const { count } = await prisma.templateTwinFieldOverride.deleteMany({
+    where: { visitId, fieldId, overrideKind: 'scaffold_default' },
+  });
+  if (count === 0) {
+    return {
+      ok: false,
+      error: 'That default is not currently inserted.',
+      label: resolved.field.originalLabel,
+    };
+  }
+
+  await invalidateVisitFills(visitId);
+
+  void logAudit({
+    action: 'DEFAULT_INSERTED_BY_DOCTOR',
+    targetId: visitId,
+    targetType: 'TranscribeVisit',
+    metadata: { surface: 'review_defaults_panel', fieldId, undone: true },
+    success: true,
+  });
+
+  return { ok: true, label: resolved.field.originalLabel };
 }

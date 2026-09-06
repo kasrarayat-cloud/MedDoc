@@ -145,12 +145,12 @@ describe('0 · the fixture is the form these claims are about', () => {
 // 1 · THE BOUND IDENTITY — the root fix. Behavioural, on the real functions.
 // ───────────────────────────────────────────────────────────────────────────
 describe('1 · the bound identity is (note, overrides)', () => {
-  const OV = [{ fieldId: 'ttf_a', selectedOptionOrdinal: 2 }];
+  const OV = [{ kind: 'option' as const, fieldId: 'ttf_a', selectedOptionOrdinal: 2 }];
 
   it('is CANONICAL — row order cannot move it', () => {
     const a = [
-      { fieldId: 'ttf_b', selectedOptionOrdinal: 1 },
-      { fieldId: 'ttf_a', selectedOptionOrdinal: 2 },
+      { kind: 'option' as const, fieldId: 'ttf_b', selectedOptionOrdinal: 1 },
+      { kind: 'option' as const, fieldId: 'ttf_a', selectedOptionOrdinal: 2 },
     ];
     expect(overridesIdentity(a)).toBe(overridesIdentity([...a].reverse()));
   });
@@ -335,7 +335,7 @@ describe('2 · the clinician beats the resolver', () => {
         value: a.value,
         ordinal: a.ordinal,
       }),
-      overrides: [{ fieldId: field.fieldId, selectedOptionOrdinal: b!.ordinal }],
+      overrides: [{ kind: 'option' as const, fieldId: field.fieldId, selectedOptionOrdinal: b!.ordinal }],
       mappings: mappingsFor(ir.fields),
       noteSha256: noteIdentity(NOTE)!,
     });
@@ -358,7 +358,7 @@ describe('2 · the clinician beats the resolver', () => {
         value: a.value,
         ordinal: a.ordinal,
       }),
-      overrides: [{ fieldId: field.fieldId, selectedOptionOrdinal: 9999 }],
+      overrides: [{ kind: 'option' as const, fieldId: field.fieldId, selectedOptionOrdinal: 9999 }],
       mappings: mappingsFor(ir.fields),
       noteSha256: noteIdentity(NOTE)!,
     });
@@ -398,7 +398,7 @@ describe('2 · the clinician beats the resolver', () => {
     const out = applyClinicianOverrides({
       ir,
       resolutions: resolutionsWith(ir.fields, null),
-      overrides: [{ fieldId: field.fieldId, selectedOptionOrdinal: 0 }],
+      overrides: [{ kind: 'option' as const, fieldId: field.fieldId, selectedOptionOrdinal: 0 }],
       mappings: mappingsFor(ir.fields),
       noteSha256: noteIdentity(NOTE)!,
     });
@@ -412,7 +412,7 @@ describe('2 · the clinician beats the resolver', () => {
     const out = applyClinicianOverrides({
       ir,
       resolutions: resolutionsWith(ir.fields, null),
-      overrides: [{ fieldId: 'ttf_' + 'f'.repeat(24), selectedOptionOrdinal: 1 }],
+      overrides: [{ kind: 'option' as const, fieldId: 'ttf_' + 'f'.repeat(24), selectedOptionOrdinal: 1 }],
       mappings: mappingsFor(ir.fields),
       noteSha256: noteIdentity(NOTE)!,
     });
@@ -423,7 +423,7 @@ describe('2 · the clinician beats the resolver', () => {
     const out = applyClinicianOverrides({
       ir,
       resolutions: resolutionsWith(ir.fields, null),
-      overrides: [{ fieldId: selects[0].fieldId, selectedOptionOrdinal: selects[0].allowedOptions[0].ordinal }],
+      overrides: [{ kind: 'option' as const, fieldId: selects[0].fieldId, selectedOptionOrdinal: selects[0].allowedOptions[0].ordinal }],
       mappings: mappingsFor(ir.fields),
       noteSha256: noteIdentity(NOTE)!,
     });
@@ -439,7 +439,7 @@ describe('2 · the clinician beats the resolver', () => {
       const out = applyClinicianOverrides({
         ir,
         resolutions: resolutionsWith(ir.fields, null),
-        overrides: [{ fieldId: field.fieldId, selectedOptionOrdinal: opt.ordinal }],
+        overrides: [{ kind: 'option' as const, fieldId: field.fieldId, selectedOptionOrdinal: opt.ordinal }],
         mappings: mappingsFor(ir.fields),
         noteSha256: noteIdentity(NOTE)!,
       });
@@ -471,7 +471,7 @@ describe('3 · the fill actually applies the correction', () => {
       markerText: undefined,
       generatedNote: opts.withNote ? NOTE : undefined,
       clinicianOverrides: opts.withOverride
-        ? [{ fieldId: field.fieldId, selectedOptionOrdinal: opt.ordinal }]
+        ? [{ kind: 'option' as const, fieldId: field.fieldId, selectedOptionOrdinal: opt.ordinal }]
         : [],
     });
     return {
@@ -516,7 +516,7 @@ describe('3 · the fill actually applies the correction', () => {
       visitDate: new Date('2026-08-24T00:00:00.000Z'),
       markerText: undefined,
       generatedNote: NOTE,
-      clinicianOverrides: [{ fieldId: field.fieldId, selectedOptionOrdinal: 9999 }],
+      clinicianOverrides: [{ kind: 'option' as const, fieldId: field.fieldId, selectedOptionOrdinal: 9999 }],
     });
     const issues = prepared.manifest.validation.issues.filter(
       (i) => i.code === 'CLINICIAN_OVERRIDE_DECLINED',

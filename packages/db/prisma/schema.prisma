@@ -594,6 +594,13 @@ enum AuditAction {
   /// the first. That satisfies the label-nothing-writes rule rather than excusing
   /// it — the ruled act IS the writer, and the deploy declaration says so.
   TEMPLATE_PROVENANCE_LOST
+
+  // REVIEW-DEFAULTS item 1 (ruling #194's doctor-facing half).
+  /// The doctor asserted their OWN compiled scaffold default into a blank
+  /// field at review. ⚠️ This is the opposite of the deleted `default_kept`:
+  /// the machine never prints an undictated default, so the CLICK is the
+  /// assertion and this row is the evidence that a human made it.
+  DEFAULT_INSERTED_BY_DOCTOR
 }
 
 /// Document lifecycle status
@@ -3416,13 +3423,41 @@ model TemplateTwinFieldOverride {
   /// arc has already paid for twice — and would also corrupt legacy `w:ddList`
   /// renders, where the ordinal is written as `w:result val` and indexes the
   /// DOCUMENT's own untouched list.
-  selectedOptionOrdinal Int
+  /// ⚠️ NULLABLE SINCE REVIEW-DEFAULTS ITEM 1 — a scaffold-default insert has no
+  /// ordinal to name. It stays REQUIRED for the `option` kind, enforced by the
+  /// CHECK declared at the bottom of this model rather than by the column type.
+  selectedOptionOrdinal Int?
 
   /// The option's text, verbatim, as it stood when the doctor chose it.
   /// DENORMALISED FOR AUDIT ONLY — never read back into a fill. If the template
   /// is recompiled and the ordinal no longer resolves, the override is DROPPED
   /// fail-closed rather than matched by this text.
-  optionValue String
+  ///
+  /// ⚠️ NULLABLE FOR THE SAME REASON, AND ITS AUDIT-ONLY STATUS IS UNCHANGED.
+  /// Do not reach for this column to carry a scaffold default — `insertedText`
+  /// exists precisely so that "the value the renderer reads" and "the text we
+  /// kept for the audit trail" are different columns with different rules.
+  optionValue String?
+
+  /// ⚠️ WHICH KIND OF CORRECTION THIS ROW IS, AND IT IS A DISCRIMINATOR, NOT A
+  /// LABEL. `option` is F24-S5's dropdown correction: the ordinal IS the value.
+  /// `scaffold_default` is REVIEW-DEFAULTS item 1: the doctor asserted their own
+  /// compiled `scaffoldText` into a blank narrative field, and `insertedText` is
+  /// what the renderer writes.
+  ///
+  /// Kept as a string rather than a Prisma enum deliberately: an enum add is an
+  /// irreversible `ALTER TYPE` (Postgres has no DROP VALUE), and this axis is
+  /// young enough that it may still gain or lose an arm.
+  overrideKind String @default("option")
+
+  /// ⚠️ THE ONLY COLUMN ON THIS TABLE THAT IS READ BACK INTO A FILL, and it is
+  /// only read for `overrideKind = 'scaffold_default'`.
+  ///
+  /// This is the doctor's OWN default text, asserted by a click at review. It is
+  /// NOT a machine default: ruling #194 deleted that, and the whole point of
+  /// REVIEW-DEFAULTS is that the click is the assertion. A row here means a
+  /// human looked at a blank field, saw their own scaffold text, and said yes.
+  insertedText String?
 
   /// Who made the correction. A clinical write is attributable or it is not made.
   overriddenBy String
@@ -3446,6 +3481,34 @@ model TemplateTwinFieldOverride {
   /// A negative ordinal cannot address an option in `allowedOptions`. Do not
   /// "close" this drift by deleting the constraint — the schema is the weaker
   /// statement here, and `Int` admits negatives that the database refuses.
+  ///
+  /// ⚠️ THAT CONSTRAINT SURVIVES THE NULLABILITY CHANGE UNTOUCHED, and the
+  /// reason is a SQL property worth stating rather than rediscovering:
+  /// `CHECK (x >= 0)` evaluates to NULL — not false — when x IS NULL, and a
+  /// CHECK passes on NULL. So a `scaffold_default` row with no ordinal does not
+  /// violate it. Nothing had to be relaxed.
+  ///
+  /// ⚠️ AND REVIEW-DEFAULTS ITEM 1 ADDS THE ONE THAT REPLACES THE COLUMN TYPE'S
+  /// LOST GUARANTEE. Making `selectedOptionOrdinal` nullable would otherwise let
+  /// an `option` row exist with no ordinal — a correction that names nothing:
+  ///
+  ///   ALTER TABLE template_twin_field_overrides
+  ///     ADD CONSTRAINT template_twin_field_overrides_kind_shape
+  ///     CHECK (
+  ///       ("overrideKind" = 'option'
+  ///          AND "selectedOptionOrdinal" IS NOT NULL
+  ///          AND "optionValue" IS NOT NULL
+  ///          AND "insertedText" IS NULL)
+  ///       OR
+  ///       ("overrideKind" = 'scaffold_default'
+  ///          AND "insertedText" IS NOT NULL
+  ///          AND "selectedOptionOrdinal" IS NULL)
+  ///     );
+  ///
+  /// It is written as a total partition on purpose: an unrecognised
+  /// `overrideKind` satisfies NEITHER arm and is REFUSED by the database. A
+  /// third kind added to the application without touching this constraint fails
+  /// loudly at the write instead of storing a row nothing knows how to read.
 }
 
 // ---------------------------------------------------------------------------

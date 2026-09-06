@@ -31,6 +31,7 @@ import {
 } from '@/lib/docx-preview/fill-cache';
 import { generateVisitDocx } from '@/lib/docx-generator';
 import { readAndPrepareTemplateTwinFill } from '@/lib/template-twin/fill-engine';
+import { TemplateDocIRSchema } from '@/lib/template-twin/ir';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { loadNativeTemplateDocxForVisit } from '@/lib/template-twin/native-export';
 import type { NativePreviewResult } from './preview-native-document';
@@ -58,6 +59,31 @@ export interface VisitPreviewResult extends Omit<NativePreviewResult, 'reason'> 
   /** Changes whenever the underlying fill changes. The client uses it to tell
    *  a genuine update from a re-fetch that produced the same document. */
   fillSha: string | null;
+  /**
+   * REVIEW-DEFAULTS item 1 — the blank scaffolded controls the doctor has a
+   * default for, so the review surface can offer to insert them.
+   *
+   * ⚠️ THIS EXISTS BECAUSE THE DOCUMENT IS A CANVAS BITMAP. `DocumentPages`
+   * renders each page into a `<canvas role="img">`; there is no element for a
+   * field, no fieldId in the DOM and no hit-testing, so an in-place control has
+   * nowhere to attach. The list travels beside the page instead.
+   *
+   * ⚠️ PHI-FREE BY CONSTRUCTION, AND IT IS WORTH SAYING WHY IT IS SAFE. Both
+   * strings come from the doctor's OWN UPLOADED FORM — `originalLabel` is the
+   * control's caption and `scaffoldText` is the wording their template shipped
+   * with. Neither is derived from the transcript, the note or the patient. The
+   * resolved VALUE of a field is never included here.
+   */
+  insertableDefaults: {
+    fieldId: string;
+    /** The control's caption on the doctor's own form. */
+    label: string;
+    /** The wording their template ships with, compiled. */
+    scaffoldText: string;
+    /** True when this default is already inserted, so the surface offers UNDO
+     *  rather than a second insert. */
+    inserted: boolean;
+  }[] | null;
 }
 
 /**
@@ -92,6 +118,10 @@ async function styledDocument(
         data: hit.data,
         reason: hit.reason as VisitPreviewResult['reason'],
         counts: hit.counts,
+        // A cache entry written before this field existed carries no list, and
+        // null is the honest answer: 'we did not compute it', not 'there are
+        // none'. The surface renders nothing rather than an empty panel.
+        insertableDefaults: hit.insertableDefaults ?? null,
         fillSha: hit.fillSha,
       };
     }
@@ -114,6 +144,7 @@ async function styledDocument(
         data: Buffer.from(converted.pdf).toString('base64'),
         reason: note,
         counts: null,
+        insertableDefaults: null,
         fillSha: `styled:${soapVersion}`,
       }
     : {
@@ -121,14 +152,28 @@ async function styledDocument(
         data: docx.toString('base64'),
         reason: converted.reason,
         counts: null,
+        insertableDefaults: null,
         fillSha: `styled:${soapVersion}`,
       };
   if (format === 'pdf' && cacheable) await writeCachedFill(visitId, soapVersion, result, 'styled');
-  return { ok: true, ...result, reason: result.reason as VisitPreviewResult['reason'] };
+  return {
+    ok: true,
+    ...result,
+    insertableDefaults: result.insertableDefaults ?? null,
+    reason: result.reason as VisitPreviewResult['reason'],
+  };
 }
 
 function miss(reason: VisitPreviewResult['reason']): VisitPreviewResult {
-  return { ok: false, kind: null, data: null, reason, counts: null, fillSha: null };
+  return {
+    ok: false,
+    kind: null,
+    data: null,
+    reason,
+    counts: null,
+    insertableDefaults: null,
+    fillSha: null,
+  };
 }
 
 /** Which rendering the doctor asked for. 'word' hands over the true DOCX for
@@ -211,6 +256,7 @@ export async function previewVisitDocumentAction(
           data: Buffer.from(conv.pdf).toString('base64'),
           reason: null,
           counts: null,
+          insertableDefaults: null,
           fillSha: stored.outputSha256,
         }
       : {
@@ -219,6 +265,7 @@ export async function previewVisitDocumentAction(
           data: stored.bytes.toString('base64'),
           reason: conv.reason,
           counts: null,
+          insertableDefaults: null,
           fillSha: stored.outputSha256,
         };
   }
@@ -242,7 +289,7 @@ export async function previewVisitDocumentAction(
   const compiled = visit.noteTemplateId && visit.noteTemplateVersion != null
     ? await prisma.templateTwinCompiledVersion.findUnique({
         where: { noteTemplateId: visit.noteTemplateId },
-        select: { certificationStatus: true },
+        select: { certificationStatus: true, compiledDocumentIr: true },
       })
     : null;
 
@@ -259,6 +306,7 @@ export async function previewVisitDocumentAction(
 
   let docx: Buffer;
   let counts: VisitPreviewResult['counts'] = null;
+  let insertableDefaults: VisitPreviewResult['insertableDefaults'] = null;
   let fillSha: string;
 
   // The cache holds ONE rendering per note version; a Word request must not be
@@ -271,6 +319,7 @@ export async function previewVisitDocumentAction(
       data: cached.data,
       reason: cached.reason as VisitPreviewResult['reason'],
       counts: cached.counts,
+      insertableDefaults: cached.insertableDefaults ?? null,
       fillSha: cached.fillSha,
     };
   }
@@ -321,6 +370,30 @@ export async function previewVisitDocumentAction(
       notMentioned: prepared.manifest.counts.notMentioned,
     };
     fillSha = prepared.manifestSha256;
+
+    // ⚠️ DERIVED FROM THE COMPILED IR AND THE MANIFEST, NEVER FROM THE CLIENT.
+    // A field qualifies when the COMPILER marked it scaffolded and it carries
+    // text — `scaffolded` is a fact about the document's bytes, and ruling #192
+    // falsified three attempts to infer it from content, one of which printed
+    // "Enter assessment" onto a rendered note.
+    //
+    // The list keeps a field while it is still BLANK (there is something to
+    // insert) or while this doctor's default is ALREADY INSERTED (there is
+    // something to undo). A field filled from dictation drops off it entirely,
+    // which is the same blank-only rule the overlay enforces server-side —
+    // stated in two places because the surface must not offer an act the writer
+    // would decline.
+    const irForDefaults = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
+    const byFieldId = new Map(prepared.manifest.fields.map((f) => [f.fieldId, f]));
+    insertableDefaults = irForDefaults.fields.flatMap((f) => {
+      const text = (f.scaffoldText ?? '').trim();
+      if (f.scaffolded !== true || !text) return [];
+      const r = byFieldId.get(f.fieldId);
+      const inserted = r?.reasonCode === 'clinician_scaffold_default';
+      const blank = r == null || r.value === null || r.value === '';
+      if (!blank && !inserted) return [];
+      return [{ fieldId: f.fieldId, label: f.originalLabel, scaffoldText: text, inserted }];
+    });
   } catch (err) {
     const cls = err instanceof Error ? err.constructor.name : 'Unknown';
     console.warn(
@@ -336,6 +409,7 @@ export async function previewVisitDocumentAction(
         data: Buffer.from(converted.pdf).toString('base64'),
         reason: null,
         counts,
+        insertableDefaults,
         fillSha,
       }
     : {
@@ -346,8 +420,14 @@ export async function previewVisitDocumentAction(
         data: Buffer.from(docx).toString('base64'),
         reason: converted.reason,
         counts,
+        insertableDefaults,
         fillSha,
       };
   if (format === 'pdf') await writeCachedFill(visitId, visit.soapVersion, result, 'twin');
-  return { ok: true, ...result, reason: result.reason as VisitPreviewResult['reason'] };
+  return {
+    ok: true,
+    ...result,
+    insertableDefaults: result.insertableDefaults ?? null,
+    reason: result.reason as VisitPreviewResult['reason'],
+  };
 }
