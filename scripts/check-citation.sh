@@ -68,6 +68,29 @@
 set -uo pipefail
 
 REQUIRED=(CI e2e a11y-ci secrets-scan)
+
+# ⚠️ ARRAY MEMBERSHIP, NOT `printf '%s\n' "${REQUIRED[@]}" | grep -qxF`.
+# `grep -q` exits 0 the instant it matches and CLOSES the pipe; `printf` then
+# dies of SIGPIPE (141); `set -o pipefail` (line 68) promotes the PIPELINE's
+# status to that 141 — so a MATCH is reported as a MISS. Measured on the exact
+# construct at 21 false misses in 54,000 certain matches (~1 in 2,500).
+#
+# ⚠️ THIS IS THE INSTRUMENT THAT GATES DEPLOYS, so the failure direction was
+# checked at every site rather than assumed: all five degrade to a REFUSAL, not
+# to a false citation. That is the safe direction and it is still not
+# acceptable — a spurious refusal at deploy time sends the operator to
+# re-derive a SHA that was already right, inflates the EXTRA bucket with a run
+# that IS required, and drops that run from the tally, manufacturing an
+# arithmetic finding out of nothing.
+#
+# ⚠️ AND IT IS MEMBERSHIP, NOT A SUBSTRING TEST. `grep -xF` matches a WHOLE
+# LINE; `[[ "$blob" == *"$needle"* ]]` would match any substring and would
+# silently WIDEN what counts as a required workflow. A loop is exact.
+in_required() {
+  local needle="$1" e
+  for e in "${REQUIRED[@]}"; do [ "$e" = "$needle" ] && return 0; done
+  return 1
+}
 REPO=""; SHA=""; EXPECT_RAW=""
 PROPAGATION_SECS=300      # a commit pushed seconds ago legitimately has no runs
 STALE_PENDING_SECS=10800  # 3h: past this, "in progress" is a zombie, not a wait
@@ -130,8 +153,11 @@ done
 
 # ── ARM 0 — THE ABBREVIATION REFUSAL. Defect (b). ──────────────────────────
 [ -n "$SHA" ] || die2 "no commit given. Usage: check-citation.sh <FULL-40-CHAR-SHA> [--expect ids]"
-if ! printf '%s' "$SHA" | grep -qE '^[0-9a-f]{40}$'; then
-  if printf '%s' "$SHA" | grep -qiE '^[0-9a-f]{40}$'; then
+if ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+  # ⚠️ THE CASE-INSENSITIVE ARM SPELLS THE CLASS OUT rather than relying on
+  # `nocasematch`. `grep -qi` was case-insensitive; bash `=~` is NOT, and a
+  # shell option is state a caller can change out from under this file.
+  if [[ "$SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
     die2 "NOT A FULL SHA — '$SHA' is 40 hex characters but not all lowercase.
      GitHub's APIs are case-sensitive here. Lowercase it:  git rev-parse ${SHA}"
   fi
@@ -208,7 +234,7 @@ if [ -n "$EXPECT_RAW" ]; then
     if [ $r -ne 0 ]; then UNSURE+=("$cid"); continue; fi
     c_hs="${META%%|*}"; c_wf="${META#*|}"
     if [ "$c_hs" != "$SHA" ]; then SUBS+=("$cid ($c_wf) belongs to $c_hs"); continue; fi
-    if printf '%s\n' "${REQUIRED[@]}" | grep -qxF "$c_wf"; then CLAIM_WF["$c_wf"]="$cid"
+    if in_required "$c_wf"; then CLAIM_WF["$c_wf"]="$cid"
     else NOTREQ+=("$cid ($c_wf is not a required workflow)"); fi
   done
 fi
@@ -252,7 +278,7 @@ while IFS='|' read -r id wf st cc hs ev created; do
   if [ -z "${wf:-}" ]; then
     UNREADC=$((UNREADC+1)); UNREADS+=("$id (no workflow name; conclusion=${cc:-none}, event=${ev:-none})"); continue
   fi
-  if ! printf '%s\n' "${REQUIRED[@]}" | grep -qxF "$wf"; then
+  if ! in_required "$wf"; then
     EXTRAC=$((EXTRAC+1)); EXTRA+=("$wf $id ($st/${cc:-none}, event=$ev)"); continue
   fi
   if [ "$hs" != "$SHA" ]; then FOREIGNC=$((FOREIGNC+1)); FOREIGNS+=("$wf $id head=$hs"); continue; fi
@@ -381,7 +407,7 @@ for wf in "${REQUIRED[@]}"; do
   # ⚠️ `gh api --jq` does NOT apply the filter to an error body, so a failed
   # call yields non-empty JSON garbage. An emptiness test would pass it straight
   # into the ledger row as `a{"message":...}` and silently disable defect (c).
-  if [ $r -ne 0 ] || ! printf '%s' "$at" | grep -qE '^[0-9]+$'; then
+  if [ $r -ne 0 ] || ! [[ "$at" =~ ^[0-9]+$ ]]; then
     echo "   · \`$wf\` $id a? — ATTEMPT UNREADABLE"
     cant "the attempt number could not be read; this is not a citation yet."
     continue
