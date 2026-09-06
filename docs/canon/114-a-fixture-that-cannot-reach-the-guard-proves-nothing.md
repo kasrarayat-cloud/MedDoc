@@ -125,6 +125,39 @@ An entry about controls that prove nothing does not get to assert its own
 closure on a local run. When the CI run lands, this paragraph is the thing to
 update — and if it never lands, that is the finding.
 
+## ⚠️ AND WHEN YOU CORRECT A READING, NAME **WHICH** INSTRUMENT WAS BROKEN
+
+**Added after a peer tried to refute the instance below and could not — but
+found a hazard in how it was nearly written up.**
+
+Checking my own PRs I ran a `jq` filter meant to exclude unfinished checks, got
+`×7 SUCCESS×1 pending=0`, and reported both PRs healthy. **They were pending.**
+The filter grouped `null` conclusions into an empty-labelled bucket and I read
+the *shape* of the output instead of its values. `gh pr checks` then said
+`pending` on eight of nine, and I corrected myself.
+
+⚠️ **THAT CORRECTION WAS ONE QUERY AWAY FROM BEING THE FALSE ONE.**
+`AGENTS.md` records `gh pr checks` as lying **in exactly that direction** —
+*"reports `pending` for a run already `completed/success`"*. So "the tool said
+pending, therefore pending" is not sound: it is the tool's own documented
+failure mode, and a canon entry that read *"`gh pr checks` corrected me"* would
+teach the opposite of what canon already says about it.
+
+**What settles it is the SECOND VIEW.** The runs API, queried by full SHA,
+agreed — `a11y-ci in_progress`, the rest `queued`, on both PRs. Two independent
+views concurring is what identifies the broken instrument, and here the broken
+one was **my filter**, not `gh pr checks`.
+
+> **AN INSTRUMENT WITH A DOCUMENTED LIE IS NOT LYING EVERY TIME.** Its record
+> makes it a *suspect*, not a verdict — the same trap as
+> [a documented defect is the most convenient suspect](61-a-documented-defect-is-the-most-convenient-suspect.md),
+> pointed at the tool instead of the code.
+
+So a correction carries the same burden as the claim it replaces: **say which
+instrument was wrong, and show the reading that establishes it.** "I was wrong,
+the tool says X" is not a correction — it is a second unverified reading with
+more confidence attached.
+
 ## THE UNCOMFORTABLE PART
 
 Every one of these was written by somebody who had, in the same session, written
