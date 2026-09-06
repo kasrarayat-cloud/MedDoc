@@ -114,6 +114,182 @@ post state — every row is its own commit, and `Export again` reopens it.
 
 ---
 
+## ⚠️ WHERE THE FRAMES AND THE SHIPPED SURFACE DISAGREE — MEASURED 2026-09-05
+
+**The frames are complete as drawn.** These are not missing states; they are
+three places where the surface the frames describe is **not the surface that
+exists**, found by reading the component and the schema rather than by
+comparing screenshots. Each is recorded with what was measured, because
+building the frames literally would lose something real.
+
+### 1 · The frames draw ONE clipboard row. The product has FIVE.
+
+`sign-and-send-modal.tsx` — `DESTINATIONS`, all five live and rendered as a
+group today:
+
+| key | label |
+|---|---|
+| `clipboard_epic` | Copy for Epic |
+| `clipboard_athena` | Copy for Athena |
+| `clipboard_cerner` | Copy for Cerner |
+| `clipboard_eclinicalworks` | Copy for eClinicalWorks |
+| `clipboard_generic` | Copy as plain text |
+
+The frames' single *"Copy note to clipboard"* row has no way to express which
+EHR's format a doctor wants. Collapsing five to one is an **accepted-capability
+loss**, not a re-skin.
+
+### 2 · `Email to referring physician` is not what the shipped email does.
+
+The frames say *"Email to referring physician"* (pre) and *"Send email to Dr.
+Nair"* (post). The shipped destination is labelled **"Email to me"** and
+`sendVisitPdfEmail` sends:
+
+- **to** `props.doctorEmail` — the signing doctor, not a third party
+- subject `Your signed note is ready in QuillMD`, identical for every visit
+  *"A subject that varies with the note is a subject that leaks"*
+- a **link**, deliberately not an attachment, and deliberately not
+  `/visits/<id>` — the file's own header explains the PHI minimisation
+
+⚠️ **AND THERE IS NO REFERRING-PHYSICIAN FIELD IN THE SCHEMA.** A grep of
+`schema.prisma` for `referring` returns **zero**. The row as drawn has no data
+behind it and cannot be built; sending to a referring physician is a different
+**recipient** and a different **disclosure**, not a label change.
+
+### 3 · The flat `DELIVER TO` list has nowhere for the email safety warning.
+
+The shipped email group carries this hint, rendered to the doctor:
+
+> Send a PDF to `<doctorEmail>` for your records. **Don't use for patient
+> communication.**
+
+The frames replace three titled groups with one `DELIVER TO` label and four
+undecorated rows. There is no slot in that geometry for a per-group warning, so
+a literal build **deletes a PHI-safety instruction** — the one that stops a
+doctor mailing a note to a patient.
+
+### ✅ ALL THREE RULED — ruling #188, 2026-09-05
+
+**The frames' ROW and CARD are the design; the four rows drawn are examples.**
+
+| # | ruled |
+|---|---|
+| 1 | **The five EHR formats survive.** The row is applied PER FORMAT — a `Copy to clipboard` group in the row skin with the EHR picker inside it. **Nothing collapses.** |
+| 2 | **Email ships as `Email to me`** — the shipped link-never-attachment behaviour, in the frames' skin — and *"Don't use for patient communication"* **stays, as the row's caption.** |
+| 3 | **`Send to referring physician` is its own product item**, filed right after ADMIN. Not a T4 rider. |
+
+> ⚠️ **A LITERAL FRAME THAT DELETES A SAFETY INSTRUCTION IS NOT THE SPEC.**
+>
+> That is the generalisable half of #188(2), and it is worth carrying past this
+> file. The frames' flat `DELIVER TO` list had no slot for a per-group warning,
+> so building them literally would have removed the one line that stops a doctor
+> mailing a note to a patient. Fidelity to a mockup does not outrank a safety
+> instruction the mockup did not know about.
+
+**What #3 actually requires**, so nobody re-scopes it as a label change: a
+`referringPhysician` field on the visit (name + secure contact), populated from
+the dictated **Referring MD** fact the custom-file batch already maps (row 7);
+an explicit **recipient confirmation** by the signing doctor; delivery as an
+**authenticated secure link, never an attachment**; and an audit row naming
+**recipient and purpose** (treatment disclosure). Design pending the owner's
+frame for the recipient step.
+
+## THE BUILD CONSTRAINTS, MEASURED FROM THE SHIPPED COMPONENT
+
+Recorded so the build starts from the surface as it is, not from a memory of it.
+
+| what | where | why it constrains T4 |
+|---|---|---|
+| `29-sign-modal-geometry.spec.ts` | e2e | pins that **`Sign & Deliver` is fully inside the viewport** at every tested breakpoint. It exists because a required attestation once pushed that button off-screen at 720px and three specs failed on a control they could not reach. The card's `flex max-h-[76vh] flex-col` + scrolling body + pinned footer is load-bearing, not decoration |
+| exactly ONE attestation | same spec | `sign-attestation` in the modal **or** `rounds-gate-attest` in Gate 3 — never zero (a server-enforced gate with no UI is a bypass) and never two |
+| the scroll region | same spec | must keep `overflow-y: auto \| scroll \| overlay` |
+| submit label | `sign-and-send-modal.tsx` | `Sign & Deliver` (pre) / **`Deliver`** (post). The e2e matches `/sign & deliver/i`, case-insensitively, so the frames' `Sign & deliver` casing is safe |
+| ⚠️ the post state HAS a primary button today | same file | the frames have **none** — every row is its own commit and `Export again` reopens the modal. That is a BEHAVIOUR change, drawn deliberately, and it is the part of T4 that is not a re-skin |
+| `signOnSubmit` | prop | the pre/post discriminator. `true` → `sign-deliver-pre`; `false` → `sign-deliver-post` |
+
+### The order the build takes
+
+1. **The card and the row** — ground, border, radius, spacing, typography, the
+   section label, the 20×20 checkbox, the 44px row with its bottom rule. Pure
+   skin over unchanged behaviour, and it is the bulk of the frames.
+2. **The post state's checkbox → action shift** — a behaviour change, its own
+   change, with its own proofs. Not folded into the skin, because a re-skin that
+   also changes what a click DOES is two claims wearing one diff.
+
+## ⚠️ THE ONE DEPARTURE THE SKIN TAKES — the card's TITLE
+
+**The frames title the pre-sign card `Sign & deliver`. The build keeps
+`Sign and deliver your note`.**
+
+`29-sign-modal-geometry.spec.ts:123-130` matches that heading with
+**`exact: true`** — no substring tolerance — and so do
+`1-audio-upload-full.spec.ts:103` and `3-text-to-soap.spec.ts:90`. That spec
+exists because a required attestation once pushed the submit off-screen at
+720px and three signing specs failed on a control they could not reach.
+
+> **A geometry gate on the surface that signs a clinical record outranks a card
+> name.** The frames' title is a NAME for the card, not a claim about
+> behaviour, so keeping the tested string costs nothing a doctor can see.
+
+Retire this departure by changing the string in all four places at once — the
+component and the three specs — as its own change, not as a rider.
+
+### What the skin did NOT touch, and why each one is load-bearing
+
+Measured from the specs before the first edit, not remembered:
+
+| kept | why |
+|---|---|
+| `top-[12vh]`, `max-h-[76vh]`, `flex-col` | the height bound. The submit's in-viewport assertion holds **by construction**: a card capped at 76vh from a 12vh offset ends at 88vh, whatever the padding inside it |
+| the footer's `flex-none` | it must never scroll away — that is the 2026-08-02 regression |
+| `min-h-0 flex-1 overflow-y-auto` on the body | the only scrolling region |
+| `qm-lin-spotlight-panel` | shared with four other dialogs, and `10-visit-lifecycle.spec.ts:147` matches it **by class name** |
+| `aria-pressed` on every row | six specs read it; the visual checkbox is `aria-hidden` decoration, so the state lives on the button |
+| `sign-attestation`, `sign-attestation-toggle`, `em-change-confirm-toggle` | asserted by the geometry spec and the sign helper |
+| `Download PDF`, `Download DOCX`, `Copy for Epic` | matched `exact: true` by name in four specs |
+| `role="dialog"` on `Dialog.Content` | `rounds-gates.spec.ts:426` is the one spec that scopes by it |
+
+⚠️ **AND ONE NEGATIVE CONSTRAINT, WHICH IS EASY TO BREAK BY BEING TIDY:**
+`Sign & Deliver` must **not** become the pending label, and `/sign & deliver/i`
+must **not** match the post-sign `Deliver`. Two specs anchor "did the modal
+close?" on the TITLE precisely because the submit relabels to `Signing…` while
+pending.
+
+## T4 FOLLOW-UPS — capability items, filed not fixed
+
+### F-T4-1 · Only ONE clipboard format is ever copied
+
+**Filed by ruling #188's board filing: a capability question, not a re-skin fix.**
+
+`applyBrowserSideDeliveries` in `sign-and-send-modal.tsx` copies exactly one
+clipboard format — the **last selected** — and discards the rest:
+
+```ts
+const lastKey = clipboardChoices[clipboardChoices.length - 1];
+const text = res.clipboardTexts[lastKey];
+```
+
+So a doctor who ticks **Copy for Epic** and **Copy for Athena** gets Athena's
+text only, and which one wins depends on `Set` insertion order — re-tick Epic
+last and the winner flips. The server returns text for **all** selected formats;
+the browser throws the others away.
+
+⚠️ **The surface no longer LIES about it** — the delivery summary names only the
+format that wins and says how many are skipped, which is what a re-skin is
+allowed to change. **The behaviour is untouched**, because "should selecting two
+clipboard formats be possible at all, and if so what should happen" is a product
+question:
+
+- one clipboard write is a browser constraint, not a bug — a second
+  `writeText` overwrites the first;
+- so the honest options are **make the group single-select**, **offer the others
+  as a follow-up action**, or **keep last-wins and say so** (what ships today);
+- the function's own comment already claims a toast offering the other formats,
+  and **there is no such toast** — so the code's stated design was never built.
+
+**Found by** T4's adversarial pass, which caught the new summary asserting all of
+them were delivered.
+
 ## Still on the batched request list, for T4
 
 1. **Row states.** No hover, focus-visible, disabled, pending or error state is
@@ -127,3 +303,48 @@ post state — every row is its own commit, and `Export again` reopens it.
 4. **Attestation unchecked.** The frame only draws it checked.
 5. **The mock EHR behind the scrim is not our surface** — confirmed as scaffolding.
 6. **1440 is the only breakpoint drawn**, for a 496-wide modal.
+
+### F-T4-2 · A download reports no error, so the row cannot claim delivery
+
+**Filed by the post-state action shift (ruling #188(4)): the honest fix changes
+the download MECHANISM, which is a capability change and not part of a re-skin.**
+
+`pdf` and `docx` are delivered by firing an `<a download>`:
+
+```ts
+function triggerDownload(href: string, kind: 'pdf' | 'docx') { … }
+```
+
+`prepareDeliverOnly` makes **no request at all** for those two — it only builds
+the URL. An anchor has **no error channel**, so every one of these is silently
+indistinguishable from success:
+
+| what happens | what the doctor is told |
+|---|---|
+| `503` from `/export/pdf` (Gotenberg down) | nothing |
+| `401` on an expired session | nothing |
+| `500` from the export route | nothing |
+
+The route returns JSON in each case and the browser discards it.
+
+⚠️ **THE POST STATE NO LONGER OVERCLAIMS**, which is what the shift was allowed
+to change: a download row says **"Download started"**, never *"Delivered"*.
+Saying delivered asserts something this code cannot observe. Clipboard and email
+still say "Delivered", because those are observed — one resolves a promise, the
+other gets a server response.
+
+**The honest fix, and why it is not in that change:** `fetch` the export, check
+`res.ok`, read the blob, then download it — and report the failure when it
+fails. That replaces the anchor with a fetched-blob download, which changes
+memory behaviour for large exports, changes how the filename is set, and needs
+its own proof that a big PDF still downloads on mobile Safari. **A re-skin does
+not get to rewrite the delivery mechanism**, so the row was made to say only
+what it knows and the mechanism was filed here.
+
+⚠️ **AND THE PRE-SIGN PATH HAS THE SAME BLINDNESS**, unmentioned by the post
+state's fix: the sign submit's `deliveryErrors` covers the SERVER-side channels
+only, so a failed PDF download is invisible there too. The difference is that
+the pre-sign path never claimed per-destination success in the first place.
+
+**Found by** the post-state adversarial pass (F-D3), which caught the new
+per-row toast asserting a delivery for a destination the code never observed.

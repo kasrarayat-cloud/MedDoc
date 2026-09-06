@@ -118,7 +118,11 @@ export interface CachedFill {
   kind: 'pdf' | 'docx_fallback';
   /** base64 */
   data: string;
-  counts: { filled: number; needsReview: number; notMentioned: number } | null;
+  counts: {
+    filled: number;
+    needsReview: number;
+    notMentioned: number;
+  } | null;
   fillSha: string;
   /** The named reason the PDF path was missed, when it was. */
   reason: string | null;

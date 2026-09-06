@@ -554,6 +554,71 @@ describe('F8-S2 — the coding view', () => {
     expect(human.getByTestId('icd-card-K21.00').textContent).not.toContain('automatically');
   });
 
+  it('⚠️ THE PROVENANCE WORD IS VISIBLE TEXT — `auto` vs `you` — ruling #187(2)', () => {
+    // Ruled visible AS TEXT and never as colour, because a tint does not survive
+    // a greyscale print or a colour-vision-deficient reader. The hidden
+    // accessibility label answers assistive technology; this answers the doctor
+    // looking at the screen. They are not alternatives.
+    const machine = within(
+      view({
+        readonly: true,
+        icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER, auto: true } },
+      }).container,
+    );
+    const mRow = machine.getByTestId('icd-card-K21.00');
+    expect(mRow.querySelector('.qm-icd-row-prov')?.textContent).toBe('auto');
+
+    const human = within(
+      view({
+        readonly: true,
+        icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } },
+      }).container,
+    );
+    const hRow = human.getByTestId('icd-card-K21.00');
+    expect(hRow.querySelector('.qm-icd-row-prov')?.textContent).toBe('you');
+  });
+
+  it('⚠️ the word does NOT replace the hidden label — the ruling keeps BOTH', () => {
+    // The obvious "simplification" is to drop the visually-hidden text now that
+    // a visible word exists. That re-opens half the defect: the hidden text
+    // carries the STATE, which the provenance word does not, and it is what
+    // restores the parity the pre-conversion section headings gave assistive
+    // technology.
+    const v = within(
+      view({
+        readonly: true,
+        icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER, auto: true } },
+      }).container,
+    );
+    const row = v.getByTestId('icd-card-K21.00');
+    expect(row.querySelector('.qm-sr-only')?.textContent).toContain('Pre-accepted');
+    expect(row.querySelector('.qm-icd-row-prov')?.textContent).toBe('auto');
+  });
+
+  it('⚠️ a HELD row states NO provenance — there is no decision to attribute', () => {
+    // Printing `you` on a code nobody has decided would assert an attestation
+    // that did not happen. That is the wrong-field harm, and this arc has
+    // already paid for it once in the orphaned sentence.
+    const v = within(view().container);
+    expect(v.getByTestId('icd-card-E11.9').querySelector('.qm-icd-row-prov')).toBeNull();
+    // Non-vacuity: a decided row in the SAME render does carry one.
+    const w = within(
+      view({ icdDecisions: { 'K21.00': { state: 'accepted', at: AT, byUserId: USER } } }).container,
+    );
+    expect(w.getByTestId('icd-card-K21.00').querySelector('.qm-icd-row-prov')?.textContent).toBe('you');
+  });
+
+  it('a REJECTED row is the doctor’s too — `you`, not blank', () => {
+    const v = within(
+      view({
+        icdDecisions: {
+          'K21.00': { state: 'rejected', at: AT, byUserId: USER, reason: 'wrong_specificity' },
+        },
+      }).container,
+    );
+    expect(v.getByTestId('icd-card-K21.00').querySelector('.qm-icd-row-prov')?.textContent).toBe('you');
+  });
+
   it('⚠️ an ORPHANED AUTO-ACCEPT is not described as the doctor’s decision', () => {
     // An auto-accepted code becomes an orphan when `icdCodes` is rewritten on a
     // visit that already has content. Saying "You decided this code" to a
