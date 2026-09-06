@@ -23,8 +23,11 @@
 //     writer PERSISTS `unmentionedPolicy` is `certification-lifecycle.ts:521`
 //     and is pinned by gate-194's projection arm, not by this file.
 //   · THE RESOLVER. Whether `omit` is honoured is the engine gate's property.
-//   · ANY AUDIT ROW. Mapping edits are not audited today; this change adds no
-//     audit action. Raised in the PR body rather than implied as covered here.
+//   · ANY AUDIT ROW. Mapping edits ARE audited — production holds 93
+//     `TEMPLATE_TWIN_MAPPING_UPDATED` rows, and my first note here said they
+//     were not. What that row does NOT record is WHICH policy was chosen, so an
+//     auditor sees the edit and not the decision. This change adds no new audit
+//     action; the limit is named in the PR body.
 // ============================================================================
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -315,5 +318,62 @@ describe('item 2 — a certified version is immutable, and says so', () => {
     expect(screen.queryByTestId(`twin-omit-readonly-${OFFERABLE}`)).not.toBeNull();
     // And NOT on a field that never carried the policy.
     expect(screen.queryByTestId(`twin-omit-readonly-${REQUIRED_BY_MAPPING}`)).toBeNull();
+  });
+});
+
+// ============================================================================
+// WITHDRAWING THE OFFER WITHDRAWS THE VALUE — the save a doctor could not leave.
+// ----------------------------------------------------------------------------
+// ⚠️ FOUND BY A PEER SESSION'S INDEPENDENT PASS. Tick "expected blank", set the
+// concept picker back to "— choose a concept —", Save: the checkbox disappears
+// (the offer is gated on `canOmitWhenUnmentioned`, which a null concept makes
+// false) but `unmentionedPolicy` stayed `'omit'` and was still SENT. The writer
+// refused the whole batch with an opaque MAPPING_INVALID, and the only control
+// that could clear it was hidden by the same now-false predicate causing the
+// refusal. A dead end with no exit and no explanation.
+//
+// One normalisation in `setMapping` closes three findings: this trap, a ticked
+// omit surviving a concept re-map, and two clicks persisting an omit the
+// resolver refuses.
+// ============================================================================
+describe('item 2 — a withdrawn offer withdraws the stored value', () => {
+  // ⚠️ FOUND BY A PEER SESSION'S INDEPENDENT PASS, AND IT WAS A DEAD END WITH NO
+  // EXIT. Tick "expected blank", set the concept picker back to "— choose a
+  // concept —", Save: the checkbox disappears (the offer is gated on
+  // `canOmitWhenUnmentioned`, which a null concept makes false) but the stored
+  // `unmentionedPolicy` stayed `'omit'` and was still SENT. The writer refused
+  // the WHOLE batch with an opaque MAPPING_INVALID, nothing named the field, and
+  // the only control that could clear it was hidden by the same now-false
+  // predicate causing the refusal.
+  //
+  // One normalisation in `setMapping` closes three findings: this trap, a ticked
+  // omit surviving a concept RE-MAP, and two clicks persisting an omit the
+  // resolver refuses with the control hidden.
+  it('clearing the concept on an omitted field does NOT send an omit', async () => {
+    await openWorkspace();
+
+    fireEvent.click(screen.getByTestId(`twin-omit-toggle-${OFFERABLE}`));
+    expect(
+      (screen.getByTestId(`twin-omit-toggle-${OFFERABLE}`) as HTMLInputElement).checked,
+      'the fixture is not actually offerable — this arm would prove nothing',
+    ).toBe(true);
+
+    fireEvent.change(screen.getByTestId(`twin-concept-select-${OFFERABLE}`), {
+      target: { value: '' },
+    });
+    expect(
+      screen.queryByTestId(`twin-omit-toggle-${OFFERABLE}`),
+      'the offer should be withdrawn once the concept is gone',
+    ).toBeNull();
+
+    fireEvent.click(screen.getByTestId('twin-save-mappings'));
+    const sent = sentMappings();
+    const row = sent.find((m) => m.fieldId === OFFERABLE)!;
+    expect(row.clinicalConcept ?? null).toBeNull();
+    expect(
+      row.unmentionedPolicy ?? null,
+      'the offer was withdrawn but the VALUE was still sent — the writer refuses ' +
+        'the whole batch and the control that would clear it is hidden',
+    ).toBeNull();
   });
 });

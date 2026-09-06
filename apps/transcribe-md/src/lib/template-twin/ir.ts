@@ -747,31 +747,8 @@ export function templateTwinCounts(
 // `ir.ts` imports zod and nothing else, so it is safe from the client.
 // `semantic-mapping/index.ts` RE-EXPORTS it, so every existing caller — four
 // in that file, four in tests — resolves unchanged. One copy, two addresses.
-// ============================================================================
-export function expectedDataTypeForFieldKind(
-  kind: TemplateTwinFieldKind,
-): SemanticMapping['expectedDataType'] | null {
-  switch (kind) {
-    case 'narrative_text':
-      return 'text';
-    case 'single_select':
-      return 'single_select';
-    case 'multi_select':
-      return 'multi_select';
-    case 'checkbox':
-      return 'boolean';
-    case 'date':
-      return 'date';
-    case 'number':
-      return 'number';
-    case 'measurement':
-      return 'measurement';
-    case 'fixed_table':
-    case 'repeating_table':
-      return 'table';
-    case 'static':
-    case 'conditional_block':
-    case 'unsupported':
-      return null;
-  }
-}
+
+// ⚠️ RE-EXPORTED, NOT REDEFINED. The body lives in `field-kind-data-type.ts`, a
+// true leaf with no value imports, because this file value-imports zod and a
+// `'use client'` module needs that switch without the 105 schemas. One copy.
+export { expectedDataTypeForFieldKind } from './field-kind-data-type';

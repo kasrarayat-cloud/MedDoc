@@ -465,10 +465,42 @@ function ReviewWorkspace({
   );
   const [saving, startSave] = useTransition();
   const draftById = new Map(draft.map((m) => [m.fieldId, m]));
+  // The field definition beside its mapping — `setMapping` needs it to decide
+  // whether an `omit` is still offerable after the edit it is applying.
+  const fieldsById = new Map(fields.map((f) => [f.field.fieldId, f.field]));
   const readOnly = !workspace.canEdit || workspace.template.certificationStatus === 'certified';
 
   function setMapping(fieldId: string, next: SemanticMapping) {
-    setDraft((prev) => prev.map((m) => (m.fieldId === fieldId ? next : m)));
+    // ⚠️ WITHDRAWING THE OFFER MUST WITHDRAW THE VALUE. Found by a peer
+    // session's independent pass, and it produced a state a doctor could not
+    // leave:
+    //
+    //   tick "expected blank" -> set the concept picker back to "— choose a
+    //   concept —" -> Save.
+    //
+    // The offer is gated on `canOmitWhenUnmentioned`, which a null concept makes
+    // false, so the checkbox DISAPPEARS — but the stored `unmentionedPolicy`
+    // stayed `'omit'` and was still sent. The writer then refuses the WHOLE
+    // batch with `MAPPING_INVALID` ("The approved mapping for field 1 is
+    // incomplete or incompatible"), nothing on the page names the field or the
+    // cause, and the only control that could clear it is hidden by the same
+    // now-false predicate that is causing the refusal.
+    //
+    // ⚠️ AND IT IS THE ROOT OF TWO MORE: a ticked omit silently SURVIVING a
+    // concept re-map (so a field the doctor never ruled on stops being counted),
+    // and two clicks persisting an omit the resolver refuses with the control
+    // hidden. One funnel, one normalisation, three findings closed.
+    //
+    // The value is cleared HERE rather than at each call site because there are
+    // three call sites today and a fourth would not think to do it.
+    const fieldDef = fieldsById.get(fieldId);
+    const normalised: SemanticMapping =
+      next.unmentionedPolicy != null &&
+      fieldDef !== undefined &&
+      !canOmitWhenUnmentioned(fieldDef, next)
+        ? { ...next, unmentionedPolicy: null }
+        : next;
+    setDraft((prev) => prev.map((m) => (m.fieldId === fieldId ? normalised : m)));
   }
 
   // ⚠️ THE WRITER DEMANDS THE EXACT COMPILER FIELD SET (`FIELD_SET_MISMATCH`,

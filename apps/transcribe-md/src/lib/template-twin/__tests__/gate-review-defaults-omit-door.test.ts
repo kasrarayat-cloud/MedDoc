@@ -63,12 +63,15 @@
 //   · THE CLIENT CONTROL'S DOM. The panel arms live beside the panel, in
 //     `app/settings/note-format/__tests__`. What is proved HERE is the predicate
 //     the panel is required to call.
-//   · ANY AUDIT ROW. Mapping edits are not audited today and this change adds no
-//     audit action — see the PR body, where that is raised rather than assumed.
+//   · ANY AUDIT ROW. Mapping edits ARE audited (93 production
+//     `TEMPLATE_TWIN_MAPPING_UPDATED` rows — my first note here claimed the
+//     opposite and was wrong). The row does not record WHICH policy was chosen.
+//     This change adds no new audit action.
 // ============================================================================
 
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
 import { resolveTemplateFields } from '../resolver';
@@ -308,9 +311,24 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
     // incompatible partner. Measured before the fix: offered=true while the
     // resolver returned `semantic_mapping_type_mismatch`.
     const dataTypes = ['text', 'number'] as const;
+    // ⚠️ THE SEVENTH GUARD'S INPUTS. Added after a peer session found that the
+    // fixed-grid `table_cell` call site was unmirrored — the third time this
+    // matrix has been widened because it held constant the very input a guard
+    // reads. The arm below now DERIVES the required dimensions from the mirror's
+    // own source, so a fourth time reds instead of passing.
+    const bindings = ['content_control', 'table_cell'] as const;
+    // ⚠️ CAUGHT BY THE DERIVED-DIMENSION ARM, ON ITS FIRST RUN. The mirror
+    // reads `mapping.status` and this matrix had never varied it — a FOURTH
+    // instance of the same blindness, found by the arm written to close the
+    // class rather than by another pass.
+    const statuses = ['certified', 'unsupported'] as const;
 
+    // The ONLY guards permitted to withhold an offer the resolver would honour.
+    // Adding to this set is a product decision, not a test fix.
+    const CONSERVATIVE_GUARDS = new Set(['fixed_grid_cell_deferred']);
     let offeredAndHonoured = 0;
     let refusedAndNotHonoured = 0;
+    let conservativeWithholds = 0;
     const disagreements: string[] = [];
     const tokenMismatches: string[] = [];
 
@@ -322,8 +340,17 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
               for (const detectionStatus of detections)
                 for (const clinicalConcept of concepts)
                   for (const practiceDefault of defaults)
-                    for (const expectedDataType of dataTypes) {
-                    const fieldOverrides = { required: fReq, unknownPolicy: fUnknown, detectionStatus };
+                    for (const expectedDataType of dataTypes)
+                    for (const bindingType of bindings)
+                    for (const status of statuses) {
+                    const fieldOverrides = {
+                      required: fReq,
+                      unknownPolicy: fUnknown,
+                      detectionStatus,
+                      rendererBinding: { ...field('1').rendererBinding, bindingType },
+                      // a fixed grid cell is table_cell AND not a prototype
+                      rowPrototype: false,
+                    };
                     const mappingOverrides = {
                       required: mReq,
                       blankPolicy: mBlank,
@@ -331,6 +358,7 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
                       clinicalConcept,
                       practiceDefault,
                       expectedDataType,
+                      status,
                       unmentionedPolicy: 'omit' as const,
                     };
 
@@ -347,13 +375,38 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
                     const shape =
                       `fReq=${fReq} mReq=${mReq} fUnknown=${fUnknown} mBlank=${mBlank} ` +
                       `src=${sourceType} det=${detectionStatus} concept=${clinicalConcept ?? 'NONE'} ` +
-                      `default=${practiceDefault === null ? 'null' : 'set'} type=${expectedDataType}`;
+                      `default=${practiceDefault === null ? 'null' : 'set'} type=${expectedDataType} bind=${bindingType} status=${status}`;
 
-                    if (offered !== honoured) {
+                    // ⚠️ THE TWO DIRECTIONS ARE NOT SYMMETRIC, AND CONFLATING
+                    // THEM WOULD FORCE THE WRONG FIX.
+                    //
+                    // `offered && !honoured` is THE LIE — the control promises
+                    // something the resolver will not do. Never acceptable.
+                    //
+                    // `!offered && honoured` is CONSERVATIVE — withheld where it
+                    // would have worked. That is a real cost, taken deliberately
+                    // in exactly one place: a fixed-grid cell on a visit where
+                    // NOTHING in the grid was dictated does reach the omit
+                    // branch, but any visit dictating one measurement sends all
+                    // 52 cells (one shared concept) down a route that cannot
+                    // honour it. Better no control than one false on the
+                    // ordinary visit. Every such case must be attributable to a
+                    // NAMED guard, or it is an accident wearing a policy.
+                    if (offered && !honoured) {
                       disagreements.push(
-                        `${shape} -> offered=${offered} honoured=${honoured} ` +
+                        `${shape} -> OFFERED BUT NOT HONOURED ` +
                           `(resolver said ${resolution.reasonCode})`,
                       );
+                    } else if (!offered && honoured) {
+                      const guard = omitBranchUnreachable(f, m);
+                      if (guard === null || !CONSERVATIVE_GUARDS.has(guard)) {
+                        disagreements.push(
+                          `${shape} -> withheld but HONOURABLE, and guard ` +
+                            `'${guard}' is not a declared conservative narrowing`,
+                        );
+                      } else {
+                        conservativeWithholds += 1;
+                      }
                     }
                     if (offered && honoured) offeredAndHonoured += 1;
                     if (!offered && !honoured) refusedAndNotHonoured += 1;
@@ -385,6 +438,13 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
     // all-refused passes trivially and proves nothing.
     expect(offeredAndHonoured).toBeGreaterThan(0);
     expect(refusedAndNotHonoured).toBeGreaterThan(0);
+    // ⚠️ AND THE CONSERVATIVE SET IS NOT A LOOPHOLE. If it stops witnessing
+    // anything, the exemption is dead weight and should be deleted rather than
+    // left standing as a permission nobody uses.
+    expect(
+      conservativeWithholds,
+      'no conservative withhold witnessed — CONSERVATIVE_GUARDS is dead weight',
+    ).toBeGreaterThan(0);
   });
 
   // ==========================================================================
@@ -422,6 +482,58 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
       unmentionedPolicy: 'omit',
     });
     expect(resolution.reasonCode).not.toBe('omitted_unsupported_default');
+  });
+
+  it('⚠️ THE MATRIX VARIES EVERY INPUT THE MIRROR READS — the class, not the instance', () => {
+    // ⚠️ THIS ARM EXISTS BECAUSE THE SAME FAILURE HAPPENED THREE TIMES.
+    // The biconditional is only as good as its cross-product, and three separate
+    // guards were invisible to it because it held their input constant:
+    //   · `requiresClinicianInput` — the original arm varied only its five inputs
+    //   · `isMappingTypeCompatible` — `expectedDataType` was constant (I found it)
+    //   · the fixed-grid `table_cell` route — `bindingType` was constant (a peer found it)
+    //
+    // Widening the matrix a fourth time by hand would fix the instance and leave
+    // the class open. So the REQUIRED DIMENSIONS ARE DERIVED FROM THE MIRROR'S
+    // OWN SOURCE: every `field.X` / `mapping.X` the guard ladder reads must
+    // appear as a varied dimension in this file. A guard added without its
+    // dimension reds HERE, naming the property, instead of passing silently.
+    const src = readFileSync(join(__dirname, '..', 'unmentioned-policy.ts'), 'utf-8');
+    const body = src.slice(
+      src.indexOf('export function omitBranchUnreachable'),
+      src.indexOf('export const OMIT_GUARD_TOKEN_PREFIXES'),
+    );
+    // strip comments — the prose names properties it does not read
+    const code = body
+      .split('\n')
+      .filter((l) => !l.trimStart().startsWith('//') && !l.trimStart().startsWith('*'))
+      .join('\n');
+    const reads = new Set(
+      [...code.matchAll(/\b(?:field|mapping)\.([A-Za-z][A-Za-z0-9]*)/g)].map((m) => m[1]!),
+    );
+    // `requiresClinicianInput` is called from the ladder, so its reads count too.
+    const helper = src.slice(
+      src.indexOf('export function requiresClinicianInput'),
+      src.indexOf('export const RESOLVER_SHORT_CIRCUIT_SOURCE_TYPES') > 0
+        ? src.indexOf('export const RESOLVER_SHORT_CIRCUIT_SOURCE_TYPES')
+        : src.indexOf('export function omitBranchUnreachable'),
+    );
+    for (const m of helper.matchAll(/\b(?:field|mapping)\.([A-Za-z][A-Za-z0-9]*)/g)) reads.add(m[1]!);
+
+    // NON-VACUITY: an empty or tiny set would make the loop below prove nothing.
+    expect(reads.size, `parsed only ${reads.size} reads from the mirror`).toBeGreaterThanOrEqual(8);
+
+    // The matrix's own source is the authority on what it varies.
+    const thisFile = readFileSync(__filename, 'utf-8');
+    const matrix = thisFile.slice(thisFile.indexOf('OFFERED  ⟺  HONOURED'));
+    const varied = matrix.slice(0, matrix.indexOf('expect(disagreements)'));
+    const missing = [...reads].filter((r) => !varied.includes(r));
+    expect(
+      missing,
+      `the mirror reads [${missing.join(', ')}] and the biconditional never varies ` +
+        `${missing.length === 1 ? 'it' : 'them'} — so a guard keyed on ` +
+        `${missing.length === 1 ? 'that input' : 'those inputs'} is invisible to this matrix, ` +
+        `which is exactly how the last three were missed.`,
+    ).toEqual([]);
   });
 
   it('⚠️ EVERY guard the module can return DECLARES its tokens — no silent skips', () => {
@@ -666,5 +778,69 @@ describe('item 2 — an unreachable omit cannot be persisted', () => {
     // decorative.
     expect(OMIT_INERT_LABEL).not.toBe(OMIT_CONTROL_LABEL);
     expect(OMIT_INERT_LABEL.toLowerCase()).toContain('no effect');
+  });
+});
+
+// ============================================================================
+// THE CLIENT BUNDLE — MEASURED, BECAUSE THE COMMENT THAT PROMISED IT WAS FALSE.
+// ----------------------------------------------------------------------------
+// ⚠️ FOUND BY A PEER SESSION'S INDEPENDENT PASS, AND IT WAS MY OWN FIX THAT
+// CAUSED IT. `unmentioned-policy.ts` is value-imported by a `'use client'`
+// component, so its transitive VALUE imports land in the browser. Moving
+// `expectedDataTypeForFieldKind` out of `semantic-mapping/index.ts` (which
+// pulls `@meddoc/ai`) into `ir.ts` looked like the safe home — and `ir.ts`
+// value-imports zod and builds ~105 schemas at module scope.
+//
+//     746 bytes  ->  320,991 bytes, zod present     (429x)
+//
+// while the module header three lines above the import still read
+// "NO RUNTIME IMPORTS — TYPES ONLY". A reader checks the comment, not the
+// bundler.
+//
+// ⚠️ SO THIS ARM BUNDLES THE MODULE FOR REAL. A source-level assertion ("no
+// import from ir") would have passed at 320KB the day somebody added a value
+// import to the leaf instead. The property is the BYTES, so the bytes are what
+// is measured — and the threshold is generous, because the failure it guards is
+// three orders of magnitude, not a few hundred bytes.
+// ============================================================================
+describe('item 2 — the confirm surface does not pay for the engine', () => {
+  it('⚠️ the client-imported module bundles small, with NO zod runtime', () => {
+    // ⚠️ IN A CHILD PROCESS, DELIBERATELY. esbuild refuses to run inside
+    // vitest's DOM-ish environment ("new TextEncoder().encode('') instanceof
+    // Uint8Array is incorrectly false"), so an in-process attempt fails for a
+    // reason that has nothing to do with the bundle. Driving the real bundler
+    // out-of-process is the same shape this repo already uses for shell gates.
+    const appRoot = join(__dirname, '..', '..', '..', '..');
+    const modulePath = join(__dirname, '..', 'unmentioned-policy.ts');
+    const script = `
+      const { buildSync } = require('esbuild');
+      const r = buildSync({
+        stdin: {
+          contents: ${JSON.stringify(
+            'import { canOmitWhenUnmentioned, OMIT_CONTROL_LABEL, OMIT_CONTROL_HINT, OMIT_INERT_LABEL } from ',
+          )} + ${JSON.stringify(JSON.stringify(modulePath))} + ';console.log(canOmitWhenUnmentioned,OMIT_CONTROL_LABEL,OMIT_CONTROL_HINT,OMIT_INERT_LABEL);',
+          resolveDir: ${JSON.stringify(appRoot)},
+          loader: 'ts',
+        },
+        bundle: true, platform: 'browser', format: 'esm', minify: true, write: false, logLevel: 'silent',
+      });
+      process.stdout.write(r.outputFiles[0].text);
+    `;
+    const out = execFileSync('node', ['-e', script], {
+      encoding: 'utf8',
+      cwd: appRoot,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+
+    // ⚠️ POSITIVE CONTROL FIRST. A bundle that resolved nothing would be tiny
+    // and zod-free, and would satisfy both assertions below while proving
+    // nothing at all.
+    expect(out, 'the bundle does not contain the predicate').toContain('expectedDataType');
+    expect(out.length, 'implausibly small — did it resolve?').toBeGreaterThan(300);
+
+    expect(out.length, `client bundle is ${out.length} bytes — the engine leaked in`).toBeLessThan(
+      20_000,
+    );
+    expect(/\bzod\b|ZodType|\$ZodError/i.test(out), 'zod reached the client bundle').toBe(false);
   });
 });

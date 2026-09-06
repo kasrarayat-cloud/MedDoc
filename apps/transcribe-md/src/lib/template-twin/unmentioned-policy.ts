@@ -15,18 +15,25 @@
 // happen. A doctor who ticks "do not ask me about this again" and is asked
 // again every visit has been told something false by the interface.
 //
-// ⚠️ NO RUNTIME IMPORTS — TYPES ONLY. The confirm surface is a `'use client'`
+// ⚠️ ONE RUNTIME IMPORT, AND IT IS A LEAF WITH NO VALUE IMPORTS OF ITS OWN. The confirm surface is a `'use client'`
 // component. `import type` is erased at compile time, so naming the IR types
 // here costs the client bundle nothing, while a value import from the resolver
 // would pull Prisma and the extraction engine into the browser graph. Same
 // boundary, and the same reasoning, as `lib/practice-roles.ts`.
 // ============================================================================
 
-import { expectedDataTypeForFieldKind } from './ir';
+// ⚠️ FROM THE LEAF, NOT FROM `./ir`. `ir.ts` value-imports zod and builds ~105
+// schemas at module scope; importing the switch from there put 320,991 bytes
+// of zod into this client-imported module — 429x — while the header below
+// still promised the opposite. See `field-kind-data-type.ts` for the numbers.
+import { expectedDataTypeForFieldKind } from './field-kind-data-type';
 import type { SemanticMapping, TemplateField } from './ir';
 
 /** The field/mapping shape the reachability test reads. Narrow on purpose. */
-export type OmitFieldView = Pick<TemplateField, 'required' | 'unknownPolicy' | 'detectionStatus' | 'kind'>;
+export type OmitFieldView = Pick<
+  TemplateField,
+  'required' | 'unknownPolicy' | 'detectionStatus' | 'kind' | 'rowPrototype'
+> & { rendererBinding?: { bindingType?: string } | null };
 export type OmitMappingView = Pick<
   SemanticMapping,
   | 'required'
@@ -139,6 +146,41 @@ export function omitBranchUnreachable(
   if (mapping.practiceDefault !== null) return 'approved_practice_default';
   // `missingResolution`'s own short-circuit, the one clause that was here first.
   if (requiresClinicianInput(field, mapping)) return 'required_fact_not_mentioned';
+  // ⚠️ ORDERED **AFTER** requires-input, AND THE MATRIX CAUGHT THE MIS-ORDER.
+  // Placing it before produced `fixed_grid_cell_deferred` for a grid cell that
+  // also requires input, while the resolver returned
+  // `required_fact_not_mentioned` — the mirror refusing for the RIGHT field on
+  // the WRONG grounds, which the token arm exists to catch. requires-input is
+  // evaluated INSIDE `missingResolution`, so it wins whichever call site
+  // arrived there.
+  // ⚠️ THE FIXED GRID — AND THIS IS THE **SEVENTH** GUARD, FOUND BY A PEER
+  // SESSION'S INDEPENDENT PASS AFTER I HAD ALREADY FOUND THE SIXTH.
+  //
+  // `resolver/index.ts:503` routes a fixed-grid `table_cell` to
+  // `missingResolution` WITHOUT `conceptUnmatched`, so `unmentionedScaffold` is
+  // false and the policy is never read. It is not one of the guards ABOVE — it
+  // is a different CALL SITE of the same function, and the mirror was built by
+  // walking the guard ladder rather than the call sites. `:475`'s own comment
+  // says it plainly: *"The three other `missingResolution` sites are DEFERRALS
+  // with facts in hand."* Three of the four cannot honour an omit.
+  //
+  // ⚠️ MEASURED ON THE LIVE PRODUCTION TEMPLATE, and the ordinary case is the
+  // bad one: every cell of the venous grid shares ONE concept
+  // (`measurement.reflux_time` x26, `measurement.diameter` x26), so a single
+  // dictated reflux time makes `conceptCandidates` non-empty for ALL 52 and
+  // sends every one of them to `:503`. Reported: 20 ticked cells, **0 of 20
+  // honoured**. Change only the fact's concept and it is 20 of 20.
+  //
+  // ⚠️ THE ACCEPTED LOSS, NAMED. A grid cell on a visit where NOTHING in the
+  // grid was dictated *does* reach the omit branch via `:475`, so withdrawing
+  // the offer costs that narrow case. It is withdrawn anyway: a control whose
+  // promise holds only on visits where the doctor dictated nothing in the grid
+  // is not one they can reason about, and the hint says flatly "this only stops
+  // it being counted as an unanswered blank". Better no control than a control
+  // that is false on the ordinary visit.
+  if (field.rendererBinding?.bindingType === 'table_cell' && field.rowPrototype !== true) {
+    return 'fixed_grid_cell_deferred';
+  }
   return null;
 }
 
@@ -180,6 +222,10 @@ export function canOmitWhenUnmentioned(
  */
 export const OMIT_GUARD_TOKEN_PREFIXES: Readonly<Record<string, readonly string[]>> = {
   semantic_mapping_type_mismatch: ['semantic_mapping_type_mismatch'],
+  // A deferred grid cell can surface under several reason tokens depending on
+  // what the row-level resolver later does with it, so the family is listed
+  // rather than a single token.
+  fixed_grid_cell_deferred: ['fact_not_mentioned', 'table_', 'row_', 'measurement_'],
   field_or_mapping_unsupported: ['field_or_mapping_unsupported'],
   manual_source_not_filled: ['manual_source_not_filled'],
   awaiting_note_selection: ['awaiting_note_selection'],
