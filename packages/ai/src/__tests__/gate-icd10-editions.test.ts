@@ -8,7 +8,10 @@
 //
 // ⚠️ WHAT WOULD MAKE THIS FILE FAIL:
 //   · a year-derived URL replacing the literal per-edition one -> the URL block
-//   · fy2027 acquiring guessed digests or counts               -> the unpinned block
+//   · an edition pinned HALF-WAY, or carrying another's digests -> the all-or-nothing
+//     and forward-fill blocks (these REPLACED an arm that asserted fy2027 was
+//     null — a current state written down as an invariant, which went red at
+//     the first person to do the right thing)
 //   · the shipped data drifting from fy2026's pinned digests   -> the identity block
 //   · the edition table losing fy2027 before it is ingested    -> the presence block
 // ============================================================================
@@ -41,19 +44,99 @@ describe('the generator is parameterised by fiscal year', () => {
     expect(GENERATOR).not.toMatch(/cms\.gov[^\n'"`]*\$\{/);
   });
 
-  it('⚠️ fy2027 is UNPINNED, and the generator refuses it', () => {
-    // The block must both exist and be null-valued. If somebody guesses digits
-    // in here, this fails — which is the point: provenance is pinned from an
-    // archive somebody actually downloaded, never forward-filled.
-    const fy27 = GENERATOR.slice(GENERATOR.indexOf('fy2027: {'));
-    const body = fy27.slice(0, fy27.indexOf('\n  },'));
-    for (const field of ['retrieved', 'zipSha256', 'zipBytes', 'codesSha256', 'orderSha256']) {
-      expect(body, `${field} must still be null for fy2027`).toMatch(
-        new RegExp(`${field}:\\s*null`),
+  // ==========================================================================
+  // ⚠️ THIS ARM REPLACED ONE THAT ASSERTED "fy2027 IS UNPINNED", AND THE
+  // REPLACEMENT IS THE POINT.
+  // --------------------------------------------------------------------------
+  // The old arm required every fy2027 provenance field to be literally `null`.
+  // That was TRUE when it was written and it was never the property being
+  // protected — it encoded a CURRENT STATE as an INVARIANT. The moment somebody
+  // did the right thing and pinned FY2027 from an archive they had actually
+  // downloaded, the gate went red at them for it.
+  //
+  // The property this file wants is: **provenance is never FORWARD-FILLED.**
+  // Nobody carries FY2026's digits forward, nobody guesses, and nobody pins
+  // half an edition. That property survives an edition being pinned, and it
+  // keeps applying to fy2028 without anyone editing this file again.
+  //
+  // ⚠️ AND IT IS STRICTLY STRONGER THAN WHAT IT REPLACED. "fy2027 is null"
+  // said nothing about fy2026, said nothing about a partial pin, and expired on
+  // first contact with the work it was guarding. Verified against the real
+  // table: the pin is present, complete, and distinct from FY2026's.
+  // ==========================================================================
+  const editionBody = (fy) => {
+    const at = GENERATOR.indexOf(`${fy}: {`);
+    expect(at, `${fy} is missing from the EDITIONS table`).toBeGreaterThan(0);
+    const rest = GENERATOR.slice(at);
+    const end = rest.indexOf('\n  },');
+    expect(end, `${fy}'s block is unterminated`).toBeGreaterThan(0);
+    return rest.slice(0, end);
+  };
+  const PINNED_FIELDS = ['retrieved', 'zipSha256', 'zipBytes', 'codesSha256', 'orderSha256'];
+
+  it('⚠️ every edition is pinned ALL-OR-NOTHING — a PARTIAL pin is a forward-fill', () => {
+    for (const fy of ['fy2026', 'fy2027']) {
+      const body = editionBody(fy);
+      const nulls = PINNED_FIELDS.filter((f) => new RegExp(`${f}:\\s*null`).test(body));
+      const filled = PINNED_FIELDS.filter((f) =>
+        new RegExp(`${f}:\\s*(?!null)['\\d]`).test(body),
       );
+      // Every field accounted for — a field that is neither is a parse failure,
+      // and a parse failure that silently yields an empty set would make this
+      // whole arm vacuous.
+      expect(
+        nulls.length + filled.length,
+        `${fy}: ${PINNED_FIELDS.length - nulls.length - filled.length} field(s) parsed as neither null nor filled`,
+      ).toBe(PINNED_FIELDS.length);
+      expect(
+        nulls.length === 0 || filled.length === 0,
+        `${fy} is HALF pinned — filled [${filled}] and null [${nulls}]. ` +
+          `A partial pin is exactly the forward-fill this gate exists to refuse.`,
+      ).toBe(true);
     }
-    expect(body).toMatch(/expect:\s*null/);
-    // and the refusal exists, naming what to do
+  });
+
+  it('⚠️ NO EDITION CARRIES ANOTHER EDITION\'S DIGESTS — the forward-fill signature', () => {
+    // The cheapest possible tell for the failure actually being guarded against:
+    // somebody copies the previous edition's block and edits the year. Distinct
+    // archives cannot share a sha256.
+    const digestsOf = (fy) => {
+      const body = editionBody(fy);
+      return ['zipSha256', 'codesSha256', 'orderSha256'].map((f) => {
+        const m = body.match(new RegExp(`${f}:\\s*'([0-9a-f]{64})'`));
+        return m ? m[1] : null;
+      });
+    };
+    const a = digestsOf('fy2026');
+    const b = digestsOf('fy2027');
+    // NON-VACUITY: if neither edition is pinned there is nothing to compare and
+    // this arm must say so rather than pass.
+    expect(a.filter(Boolean).length, 'fy2026 carries no digests to compare').toBe(3);
+    if (b.filter(Boolean).length === 0) return; // legitimately unpinned
+    expect(b.filter(Boolean).length, 'fy2027 is partially pinned').toBe(3);
+    for (const d of b) {
+      expect(a, `a FY2026 digest was carried forward into fy2027: ${d}`).not.toContain(d);
+    }
+  });
+
+  it('⚠️ A PINNED EDITION IS NOT AN ACTIVE ONE — the switch is a separate act', () => {
+    // This is the row that actually protects a patient. FY2027 may be pinned and
+    // HELD; what must not happen is the shipped dataset moving without the
+    // dated, declared switch. The identity block below pins the payload; this
+    // arm pins the INTENT, so a future reader cannot mistake "pinned" for "live".
+    const body = editionBody('fy2027');
+    expect(body).toContain("effectiveFrom: '2026-10-01'");
+    expect(body, 'a pinned-but-inactive edition must say so in words').toMatch(
+      /HELD, NOT\s*\n?\s*\/\/\s*ACTIVE|HELD, NOT ACTIVE/,
+    );
+    // and the shipped provenance is still the PREVIOUS edition's
+    expect(PROVENANCE.effectiveTo).toBe('2026-09-30');
+  });
+
+  it('the generator still REFUSES to run an unpinned edition', () => {
+    // Unchanged, and it is the original safety property: an edition whose bytes
+    // were never pinned must abort rather than run against whatever the network
+    // returns today.
     expect(GENERATOR).toMatch(/has no pinned \$\{?field\}?|has no pinned/);
     expect(GENERATOR).toMatch(/Provenance is pinned BEFORE the act/);
   });
