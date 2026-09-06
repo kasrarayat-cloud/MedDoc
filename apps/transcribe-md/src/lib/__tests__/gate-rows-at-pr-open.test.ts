@@ -85,6 +85,14 @@ describe('§2.5 rows-at-PR-open gate', () => {
     expect(line!).not.toMatch(/\|\|\s*true/);
   });
 
+  it('⚠️ THIS PR CARRIES ITS OWN ROWS — the gate is not exempt from itself', () => {
+    // The number is this PR's real one, claimed from the opened PR rather than
+    // guessed. The earlier draft of this branch hardcoded `PR-1008.md`, which
+    // names ANOTHER LANE'S PR — see `scripts/lib/rows.sh` for why that would
+    // have exempted the real #1008 from this gate forever.
+    expect(existsSync(join(REPO, 'docs/foundation/deploys/rows/PR-1022.md'))).toBe(true);
+  });
+
   it('⚠️ IT SOURCES THE ROWS-IDENTITY LIB, it does not inline a second copy', () => {
     const body = readFileSync(SCRIPT, 'utf8');
     expect(body).toContain('scripts/lib/rows.sh');
