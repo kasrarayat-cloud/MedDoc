@@ -49,7 +49,6 @@ import {
   type ClinicianFieldOverride,
 } from '../clinician-override';
 import { overridesIdentity } from '../note-identity';
-import type { OmitFieldView, OmitMappingView } from '../unmentioned-policy';
 
 const FIELD_ID = 'ttf_aaaaaaaaaaaaaaaaaaaaaaaa';
 const OTHER_ID = 'ttf_bbbbbbbbbbbbbbbbbbbbbbbb';
@@ -67,12 +66,6 @@ function field(id: string, over: Record<string, unknown> = {}) {
     clinicallyMaterial: false,
     scaffolded: true,
     scaffoldText: 'No acute findings.',
-    // ⚠️ THE OMIT PREDICATE READS THESE THREE AND THIS HELPER DID NOT SUPPLY
-    // THEM. A fixture thinner than the real shape makes the predicate false for
-    // the WRONG reason, and the arm then passes while proving nothing.
-    unknownPolicy: 'blank',
-    detectionStatus: 'certified',
-    rowPrototype: false,
     ...over,
   };
 }
@@ -89,13 +82,6 @@ function mapping(id: string, over: Record<string, unknown> = {}) {
     required: false,
     unmentionedPolicy: null,
     practiceDefault: null,
-    // ⚠️ SAME REASON. `expectedDataType` in particular is guard ONE of the
-    // reachability ladder — `expectedDataTypeForFieldKind('narrative_text')` is
-    // `'text'`, and anything else here (including `undefined`) short-circuits
-    // the whole ladder before any of the interesting guards run.
-    expectedDataType: 'text',
-    blankPolicy: 'blank',
-    unknownPolicy: 'blank',
     ...over,
   };
 }
@@ -254,20 +240,14 @@ describe('⚠️ THE OFFER AND THE WRITE ASK THE SAME QUESTION', () => {
     // ⚠️ ONE PREDICATE, THREE CALLERS. The pass found the panel, the door and
     // the overlay asking three different questions — so the surface offered
     // acts the writer refused and the fill declined forever.
-    // ⚠️ BUILT FROM THE HELPERS, NOT BY HAND. These two used to be three- and
-    // one-key literals; the predicate reads six field properties and eight
-    // mapping properties, so a hand-written stub cannot exercise it.
-    const ok = field('F1', { kind: 'narrative_text', scaffoldText: 'x' }) as unknown as
-      OmitFieldView & { scaffolded: boolean; scaffoldText: string };
-    const concept = mapping('F1', {
-      clinicalConcept: 'exam.impression',
-    }) as unknown as OmitMappingView & { unmentionedPolicy: string | null };
+    const ok = { kind: 'narrative_text', scaffolded: true, scaffoldText: 'x' };
+    const concept = { clinicalConcept: 'exam.impression' };
     expect(scaffoldDefaultOfferable({ field: ok, mapping: concept, current: null })).toBe(true);
     // each refusal, one at a time
     expect(scaffoldDefaultOfferable({ field: { ...ok, scaffolded: false }, mapping: concept, current: null })).toBe(false);
     expect(scaffoldDefaultOfferable({ field: { ...ok, scaffoldText: '  ' }, mapping: concept, current: null })).toBe(false);
     expect(scaffoldDefaultOfferable({ field: { ...ok, kind: 'single_select' }, mapping: concept, current: null })).toBe(false);
-    expect(scaffoldDefaultOfferable({ field: ok, mapping: { ...concept, clinicalConcept: null }, current: null })).toBe(false);
+    expect(scaffoldDefaultOfferable({ field: ok, mapping: { clinicalConcept: null }, current: null })).toBe(false);
     expect(scaffoldDefaultOfferable({ field: ok, mapping: null, current: null })).toBe(false);
     expect(scaffoldDefaultOfferable({ field: ok, mapping: concept, current: { status: 'denial_withheld', value: null } })).toBe(false);
     expect(scaffoldDefaultOfferable({ field: ok, mapping: concept, current: { status: 'supported', value: 'dictated' } })).toBe(false);

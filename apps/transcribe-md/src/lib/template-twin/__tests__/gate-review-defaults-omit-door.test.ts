@@ -87,12 +87,6 @@ import {
   OMIT_INERT_LABEL,
 } from '../unmentioned-policy';
 import type { EncounterFact, SemanticMapping, TemplateField } from '../ir';
-import type { OmitMappingView } from '../unmentioned-policy';
-import {
-  OMIT_MAPPING_COLUMN,
-  OMIT_MAPPING_SELECT,
-  toOmitMappingView,
-} from '../unmentioned-policy';
 
 const SHA = 'a'.repeat(64);
 
@@ -703,173 +697,94 @@ describe('item 2 — the omitted field is counted exactly once', () => {
 // was being asked.
 // ============================================================================
 describe('item 2 — an omitted field is not put back in front of the doctor', () => {
-  // ⚠️ A FULL MAPPING, NOT A TWO-KEY STUB. `scaffoldDefaultOfferable` now
-  // consults `canOmitWhenUnmentioned`, which reads six more properties — a thin
-  // fixture makes the predicate false for the WRONG reason (a missing
-  // `expectedDataType` trips the type-compat guard) and the arm then passes
-  // while proving nothing. Built from the same `mapping()` helper the rest of
-  // this file uses, so it cannot drift from the real shape.
-  // ⚠️ TYPED AS THE REAL VIEW, NOT `Record<string, unknown>`. The loose cast
-  // was the fixture-side twin of the `as never` at the production call site:
-  // it let a fixture of any shape stand in for the predicate's inputs. With
-  // the real type, a fixture that stops matching the view fails to compile.
-  const base = mapping(field('1'), 'ros.cardiovascular') as unknown as OmitMappingView;
-  const blankNow = { status: 'not_mentioned', value: null };
-
-  it('⚠️ scaffoldDefaultOfferable WITHDRAWS the offer for an omit field', () => {
-    const f = field('1');
-    expect(
-      scaffoldDefaultOfferable({
-        field: f,
-        mapping: { ...base, unmentionedPolicy: 'omit' },
-        current: blankNow,
-      }),
-    ).toBe(false);
-  });
-
-  it('⚠️ AN OMIT THE RESOLVER WOULD NOT HONOUR DOES NOT TAKE THE REMEDY AWAY', () => {
-    // Found by a peer session and reproduced here before fixing. On a field the
-    // resolver refuses the omit for, the count does NOT move — the blank stays
-    // in `notMentioned` and the doctor is still prompted — so withdrawing their
-    // "Insert my default" button as well leaves them strictly worse off than not
-    // ticking at all. The first cut of that clause tested `=== 'omit'` alone.
-    const f = field('1');
-    const refused = { ...base, unmentionedPolicy: 'omit', sourceType: 'manual' as const };
-    // the resolver would NOT honour it...
-    expect(canOmitWhenUnmentioned(f, refused)).toBe(false);
-    // ...so the remedy stays.
-    expect(scaffoldDefaultOfferable({ field: f, mapping: refused, current: blankNow })).toBe(true);
-  });
-
-  it('⚠️ NON-VACUITY — the identical field with a NULL policy IS offered', () => {
-    // Without this, the arm above passes against a predicate that refuses
-    // everything, which is a different bug wearing the same green.
-    const f = field('1');
-    expect(
-      scaffoldDefaultOfferable({
-        field: f,
-        mapping: { ...base, unmentionedPolicy: null },
-        current: blankNow,
-      }),
-    ).toBe(true);
-  });
-
-  it('an UNSET policy is treated as null, not as omit', () => {
-    const f = field('1');
-    expect(
-      scaffoldDefaultOfferable({ field: f, mapping: base, current: blankNow }),
-    ).toBe(true);
-  });
-
-  // ⚠️ THIS ARM REPLACES ONE THAT ASSERTED A SINGLE COLUMN BY REGEX, AND THE
-  // REPLACEMENT IS THE POINT. The old form matched `unmentionedPolicy: true`
-  // inside a literal select. The predicate reads EIGHT mapping properties, so
-  // that arm was green while the guard it protects was dead code — and worse,
-  // it PINNED the broken shape: fixing the select made the old arm RED. An arm
-  // that must be deleted to fix a bug was testing the bug.
+  // ⚠️ THE DECIDING INPUT IS THE RESOLUTION'S `reasonCode`, AND THE PREVIOUS
+  // VERSION OF THIS BLOCK HELD IT CONSTANT. Every arm below used one shared
+  // `blankNow = { status: 'not_mentioned', value: null }`, and BOTH universes
+  // this feature must tell apart project onto exactly that shape:
   //
-  // Widening it to eight hard-coded names would close this instance. Deriving
-  // it closes the class: the map below is the SAME OBJECT production selects
-  // from, so a ninth property cannot appear in the view without appearing here.
-  it('⚠️ THE SELECT IS DERIVED FROM THE PREDICATE, not hand-listed beside it', () => {
-    const src = readFileSync(
-      join(__dirname, '..', '..', '..', 'actions', 'preview-visit-document.ts'),
-      'utf-8',
-    );
-    // the call site names the derived constant...
-    expect(src).toMatch(/mapping:\s*\{\s*select:\s*OMIT_MAPPING_SELECT\s*\}/);
-    // ...and does NOT hand-list columns beside it, which is how it drifted.
-    expect(src).not.toMatch(/mapping:\s*\{\s*select:\s*\{/);
+  //   HONOURED : { status:'not_mentioned', value:null, reasonCode:'omitted_unsupported_default' }
+  //   REFUSED  : { status:'not_mentioned', value:null, reasonCode:'temporality_not_approved' }
+  //
+  // With `reasonCode` dropped they are byte-identical, so an arm asserting
+  // `=== false` was satisfied by both and could never witness an
+  // over-withdrawal. That is this file's own catalogued failure — a control
+  // that holds constant the one input deciding the answer — and it PINNED the
+  // bug: the correct fix turns the old green arm red.
+  const base = mapping(field('1'), 'ros.cardiovascular') as Record<string, unknown>;
+  const omitted = { status: 'not_mentioned', value: null, reasonCode: 'omitted_unsupported_default' };
+  const refusedVisit = { status: 'not_mentioned', value: null, reasonCode: 'temporality_not_approved' };
+  const noFacts = { status: 'not_mentioned', value: null, reasonCode: 'fact_not_mentioned' };
+
+  it('⚠️ the offer is WITHDRAWN when the resolver ACTUALLY honoured the omit', () => {
+    expect(
+      scaffoldDefaultOfferable({ field: field('1'), mapping: base, current: omitted }),
+    ).toBe(false);
   });
 
-  it('⚠️ THE MAP COVERS EVERY PROPERTY THE VIEW DECLARES — read from source', () => {
-    // The view's own `Pick<>` list is the authority. Parsing it means adding a
-    // property to `OmitMappingView` reds this arm until its column is named,
-    // WITHOUT this test having its own copy of the list to fall out of step.
-    const policySrc = readFileSync(join(__dirname, '..', 'unmentioned-policy.ts'), 'utf-8');
-    const pick = policySrc.match(
-      /export type OmitMappingView = Pick<\s*SemanticMapping,([\s\S]*?)>;/,
-    );
-    expect(pick, 'the OmitMappingView Pick<> block did not parse').not.toBeNull();
-    const declared = [...(pick as RegExpMatchArray)[1].matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]);
-    // NON-VACUITY: an empty parse would satisfy every assertion below.
-    expect(declared.length).toBeGreaterThanOrEqual(8);
-    expect([...declared].sort()).toEqual(Object.keys(OMIT_MAPPING_COLUMN).sort());
-    // and every declared column reaches the select
-    for (const k of declared) {
-      expect(
-        OMIT_MAPPING_SELECT[OMIT_MAPPING_COLUMN[k as keyof typeof OMIT_MAPPING_COLUMN]],
-        `${k} is declared on the view but its column is not selected`,
-      ).toBe(true);
-    }
-  });
-
-  it('⚠️ THE PROJECTION SURVIVES THE RENAME AND THE CASE — both, or a guard dies', () => {
-    // Three things differ between a Prisma row and this view, and each one
-    // alone silently disables a guard. This drives the real projection.
-    const row = {
-      required: false,
-      unknownPolicy: 'blank',
-      blankPolicy: 'blank',
-      mappingStatus: 'UNSUPPORTED', // ⚠️ renamed AND upper-cased
-      sourceType: 'extraction',
-      clinicalConcept: 'ros.cardiovascular',
-      practiceDefault: null,
-      expectedDataType: 'text',
-    };
-    const view = toOmitMappingView(row);
-    expect(view.status, 'the column is mappingStatus and the vocabulary is lower snake').toBe(
-      'unsupported',
-    );
-    expect(view.expectedDataType).toBe('text');
-    // NEGATIVE CONTROL — the raw row is NOT the view, which is why the cast hurt.
-    expect((row as Record<string, unknown>).status).toBeUndefined();
-  });
-
-  it('⚠️ THE PREDICATE IS REACHABLE ON A ROW SHAPED LIKE PRODUCTION FETCHES IT', () => {
-    // THE ARM THAT WOULD HAVE CAUGHT THE ORIGINAL DEFECT. Every other arm in
-    // this describe builds its mapping from a fixture; production builds it
-    // from a Prisma select. Those were different shapes, so the fixtures were
-    // green while the production path never reached the omit clause at all.
+  it('⚠️ THE ARM THAT WOULD HAVE CAUGHT THE REGRESSION — a visit the omit did NOT fire on keeps the remedy', () => {
+    // The doctor ticked "expected blank"; on THIS visit they dictated the
+    // field's own concept at a temporality the mapping does not approve, so the
+    // resolver returned `temporality_not_approved`, the field stayed in
+    // `notMentioned`, and the surface says "1 still blank". Withdrawing the
+    // remedy here leaves them strictly worse off than not ticking at all.
     //
-    // The row below carries EXACTLY the keys `OMIT_MAPPING_SELECT` fetches —
-    // derived, so it cannot drift from what production asks Prisma for.
-    const value: Record<string, unknown> = {
-      required: false,
-      unknownPolicy: 'blank',
-      blankPolicy: 'blank',
-      mappingStatus: 'CERTIFIED',
-      sourceType: 'extraction',
-      clinicalConcept: 'ros.cardiovascular',
-      practiceDefault: null,
-      expectedDataType: 'text',
-      unmentionedPolicy: 'omit',
-    };
-    const row = Object.fromEntries(
-      Object.keys(OMIT_MAPPING_SELECT).map((k) => [k, value[k]]),
-    );
-    // the fetched key set IS the selected key set — no more, no less
-    expect(Object.keys(row).sort()).toEqual(Object.keys(OMIT_MAPPING_SELECT).sort());
-
-    const asProduction = {
-      ...toOmitMappingView(row),
-      unmentionedPolicy: (row.unmentionedPolicy ?? null) as string | null,
-    };
+    // The withdrawal used to be decided by `canOmitWhenUnmentioned`, a CONFIRM-
+    // time property of the mapping — true for this field on EVERY visit. So it
+    // withdrew here too. Measured over 7 visit shapes: 5 false rejections.
     const f = field('1');
     expect(
-      scaffoldDefaultOfferable({ field: f, mapping: asProduction, current: blankNow }),
-      'an omitted field is put back in front of the doctor',
-    ).toBe(false);
-
-    // NON-VACUITY — the identical production-shaped row with a null policy IS
-    // offered, so the arm above cannot pass against a predicate refusing all.
-    expect(
-      scaffoldDefaultOfferable({
-        field: f,
-        mapping: { ...asProduction, unmentionedPolicy: null },
-        current: blankNow,
-      }),
+      scaffoldDefaultOfferable({ field: f, mapping: base, current: refusedVisit }),
+      'a visit where the omit did not fire must keep "Insert my default"',
     ).toBe(true);
+    expect(
+      scaffoldDefaultOfferable({ field: f, mapping: base, current: noFacts }),
+      'a visit that extracted no facts at all must keep it too',
+    ).toBe(true);
+  });
+
+  it('⚠️ NON-VACUITY — the SAME field and SAME mapping differ ONLY by reasonCode', () => {
+    // The two inputs below are identical except for the one property that
+    // decides the answer, and they must give OPPOSITE answers. An arm that
+    // varies nothing is satisfied by a predicate that always returns the same
+    // thing, which is a different bug wearing this arm's green.
+    const f = field('1');
+    const withdrawn = scaffoldDefaultOfferable({ field: f, mapping: base, current: omitted });
+    const kept = scaffoldDefaultOfferable({ field: f, mapping: base, current: refusedVisit });
+    expect({ ...omitted, reasonCode: 'X' }).toEqual({ ...refusedVisit, reasonCode: 'X' });
+    expect(withdrawn).toBe(false);
+    expect(kept).toBe(true);
+    expect(withdrawn).not.toBe(kept);
+  });
+
+  it('⚠️ THE TOKEN IS THE RESOLVER\'S OWN, not a string this test invented', () => {
+    // A proof that retypes what it checks agrees with whichever copy its author
+    // read last. The token is read from the emitter.
+    const src = readFileSync(join(__dirname, '..', 'resolver', 'index.ts'), 'utf-8');
+    expect(src, 'the resolver no longer emits the token this gate keys on').toContain(
+      "'omitted_unsupported_default'",
+    );
+    // and the consumer keys on the same literal
+    const consumer = readFileSync(join(__dirname, '..', 'clinician-override.ts'), 'utf-8');
+    expect(consumer).toContain("current?.reasonCode === 'omitted_unsupported_default'");
+  });
+
+  it('⚠️ THE DECISION IS NOT TAKEN FROM THE MAPPING — that is what made it wrong', () => {
+    // `unmentionedPolicy` and `canOmitWhenUnmentioned` are static properties of
+    // the mapping: true on every visit or none. Neither may decide a per-visit
+    // question, and the previous version used both.
+    const consumer = readFileSync(join(__dirname, '..', 'clinician-override.ts'), 'utf-8');
+    const fn = consumer.slice(consumer.indexOf('export function scaffoldDefaultOfferable'));
+    const body = fn.slice(0, fn.indexOf('\n}'));
+    const code = body
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*'))
+      .join('\n');
+    // NON-VACUITY: the slice must actually contain the clause under test.
+    expect(code).toContain('reasonCode');
+    expect(code, 'the mapping policy is being consulted again').not.toContain('unmentionedPolicy');
+    expect(code, 'a confirm-time predicate is deciding a per-visit question').not.toContain(
+      'canOmitWhenUnmentioned',
+    );
   });
 
   it('⚠️ THE WRITER REFUSES TOO — the offer and the door agree', () => {

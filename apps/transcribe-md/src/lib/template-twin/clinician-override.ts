@@ -37,8 +37,6 @@
 // identity, the manifest reads STALE, and the recompute actually happens.
 // ============================================================================
 
-import { canOmitWhenUnmentioned } from './unmentioned-policy';
-import type { OmitFieldView, OmitMappingView } from './unmentioned-policy';
 import { isWordPlaceholderOption } from '../note-template-docx/placeholder-option';
 import { canonicalSha256 } from './canonical';
 import {
@@ -230,26 +228,23 @@ export const SCAFFOLD_INSERTABLE_KINDS: ReadonlySet<string> = new Set(['narrativ
  * A surface must never offer an act its writer would refuse.
  */
 export function scaffoldDefaultOfferable(input: {
-  // ⚠️ `OmitFieldView`, NOT a three-property structural shape. The omit clause
-  // below calls the resolver's own reachability predicate, which reads SIX
-  // field properties; typing this loosely is what let a cast stand in for them.
-  field: OmitFieldView & { scaffolded?: boolean; scaffoldText?: string | null };
-  // ⚠️ `string | null` for `unmentionedPolicy`, NOT `'omit' | null`. That column
-  // is read straight off Prisma as a plain nullable string, and narrowing it
-  // would force a cast at the call site — a cast is how a column that later
-  // holds an unexpected value stops being checked. The comparison below is exact.
-  //
-  // ⚠️ AND THE REST OF THE SHAPE IS `OmitMappingView`, WHICH IS THE FIX. The
-  // previous type named TWO properties and the predicate reads EIGHT, so the
-  // call below cast with `as never` and every missing property arrived
-  // `undefined`. `toOmitMappingView` in `unmentioned-policy.ts` is how a Prisma
-  // row becomes this — it is not the same shape and never was.
-  mapping:
-    | (OmitMappingView & { unmentionedPolicy?: string | null })
-    | null
-    | undefined;
-  /** The field's CURRENT resolution, or null when none has been computed. */
-  current: { status?: string; value?: unknown } | null | undefined;
+  field: { kind?: string; scaffolded?: boolean; scaffoldText?: string | null };
+  // ⚠️ `clinicalConcept` ONLY. This used to also carry `unmentionedPolicy`,
+  // because the omit decision was taken from the MAPPING — a static property,
+  // true on every visit or none, deciding a per-visit question. It is taken
+  // from the resolution's `reasonCode` now, so advertising the policy here
+  // would invite the same mistake back and would be a column the caller
+  // fetches for a decision nobody makes.
+  mapping: { clinicalConcept?: string | null } | null | undefined;
+  /**
+   * The field's CURRENT resolution, or null when none has been computed.
+   *
+   * ⚠️ `reasonCode` IS THE POINT OF THIS PARAMETER NOW. The call site already
+   * passed this exact object and already read `r.reasonCode` one line above;
+   * the type simply did not name it, so the callee could not see the only
+   * input that answers the question it was asking.
+   */
+  current: { status?: string; value?: unknown; reasonCode?: string | null } | null | undefined;
 }): boolean {
   const { field, mapping, current } = input;
   if (field.scaffolded !== true) return false;
@@ -288,12 +283,30 @@ export function scaffoldDefaultOfferable(input: {
   // inserted before setting the policy, and `applyClinicianOverrides` is
   // deliberately NOT given this clause — a stored override the doctor did
   // assert must still apply, or the fill silently drops their own words.
-  // ⚠️ NO CAST. The two `as never`s that used to be here were load-bearing in
-  // the worst sense: they existed so a two-column Prisma row could be passed to
-  // an eight-property view, and they simultaneously switched off the only thing
-  // that would have objected. `tsc` was silent while this clause was dead.
-  if (mapping.unmentionedPolicy === 'omit' && canOmitWhenUnmentioned(field, mapping))
-    return false;
+  // ⚠️ THE PER-VISIT OUTCOME, NOT THE CONFIRM-TIME CAPABILITY. This clause first
+  // read `mapping.unmentionedPolicy === 'omit' && canOmitWhenUnmentioned(...)`.
+  // Both halves are STATIC properties of the mapping, and an adversarial pass
+  // measured what that costs: the resolver honours an omit only when
+  // `conceptUnmatched && reason === undefined && facts.length > 0`
+  // (`resolver/index.ts:262`), all three per-VISIT. So on a visit where the
+  // omit does NOT fire — no facts extracted, or the concept dictated at a
+  // temporality the mapping does not approve — the field stays in
+  // `notMentioned`, the surface says "1 still blank", AND the offer was
+  // withdrawn anyway.
+  //
+  // ⚠️ THAT IS VERBATIM THE STATE THE PARAGRAPH ABOVE CALLS "STRICTLY WORSE
+  // THAN NOT TICKING AT ALL". The previous commit closed the STATIC half of it
+  // (a `manual` source, a fixed-grid cell) and left the per-visit half open —
+  // and because the guard had been dead code until that commit, fixing the
+  // dead code is what made the remaining half reachable. Measured over 7 visit
+  // shapes for one omit-ticked field: 5 were false rejections, 1 was correct.
+  //
+  // `unmentionedPolicy` and `canOmitWhenUnmentioned` are NOT consulted here.
+  // `omitted_unsupported_default` is emitted only on the branch that honours
+  // the omit, so it already implies both — and unlike them it is true of THIS
+  // visit. The predicate keeps its confirm-time callers, where the question
+  // genuinely is "can this choice ever matter?".
+  if (current?.reasonCode === 'omitted_unsupported_default') return false;
   return scaffoldTargetIsBlank(current);
 }
 
