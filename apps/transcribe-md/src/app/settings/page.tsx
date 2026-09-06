@@ -46,6 +46,12 @@ import {
   NativeTemplateManager,
   type NativeTemplateListItem,
 } from './note-format/native-template-manager';
+import { PracticeMembersPanel } from './practice-members-panel';
+import {
+  listOutstandingInvites,
+  listPracticeMembers,
+  PRACTICE_ADMIN_ROLE,
+} from '@/lib/practice-admin';
 import { isSettingsSimpleRow } from '@/config/settings-simple-row';
 import { templateNativeDocxEnabled } from '@/config/template-native-docx';
 import { templateNativePdfEnabled } from '@/config/template-native-pdf';
@@ -57,6 +63,7 @@ export const metadata: Metadata = { title: 'Settings' };
 
 const SECTIONS = [
   { id: 'profile', label: 'Profile' },
+  { id: 'members', label: 'Members' },
   { id: 'note-format', label: 'My Note Format' },
   { id: 'security', label: 'Security' },
   { id: 'sessions', label: 'Active sessions' },
@@ -220,6 +227,8 @@ export default async function SettingsPage({
     clinicName: string | null;
     timeZone: string | null;
     mfaEnabled: boolean;
+    practiceId: string | null;
+    practiceRole: string | null;
   };
 
   const [user, sessionId] = (await Promise.all([
@@ -234,6 +243,11 @@ export default async function SettingsPage({
         clinicName: true,
         timeZone: true,
         mfaEnabled: true,
+        // ADMIN-1 — the practice axis. Read here rather than from the session
+        // because a JWT is minted at sign-in: a member demoted five minutes ago
+        // still carries the old role in their token.
+        practiceId: true,
+        practiceRole: true,
       },
     }),
     getCurrentSessionId(),
@@ -290,6 +304,41 @@ export default async function SettingsPage({
 
   // Which upload formats can this image actually extract (see getUploadCaps).
   const uploadCaps = await getUploadCaps();
+
+  // ── ADMIN-1 — the members panel's data ──────────────────────────────────
+  // ⚠️ `canAdminister` DECIDES WHAT IS DRAWN AND NOTHING ELSE. Every action
+  // re-reads the role in `requirePracticeAdmin`, because a boolean that has
+  // travelled to the client is a claim the client makes about itself.
+  const canAdminister = user.practiceRole === PRACTICE_ADMIN_ROLE;
+  const [practiceMembers, practiceInvites] = user.practiceId
+    ? await Promise.all([
+        listPracticeMembers(user.practiceId, session.user.id),
+        // ⚠️ ONLY AN ADMIN READS THE INVITE LIST. Membership is practice-uniform
+        // (SPEC §4.1b) and outstanding seats are not membership — they are the
+        // administration queue, and a clinician has nothing to do with one.
+        canAdminister ? listOutstandingInvites(user.practiceId) : Promise.resolve([]),
+      ])
+    : [[], []];
+
+  const membersPanel = (
+    <PracticeMembersPanel
+      canAdminister={canAdminister}
+      members={practiceMembers.map((m) => ({
+        id: m.id,
+        name: m.name,
+        email: m.email,
+        practiceRole: m.practiceRole,
+        isSelf: m.isSelf,
+      }))}
+      invites={practiceInvites.map((i) => ({
+        id: i.id,
+        label: i.label,
+        practiceRole: i.practiceRole,
+        expiresAt: i.expiresAt?.toISOString() ?? null,
+        createdAt: i.createdAt.toISOString(),
+      }))}
+    />
+  );
 
   // Native-DOCX certify-once workspace (flag-gated). Flag OFF → nativeSlot is
   // null and the note-format section renders byte-identical to today.
@@ -361,6 +410,14 @@ export default async function SettingsPage({
             </div>
           </>
         ),
+      },
+      {
+        id: 'members',
+        label: 'Members',
+        title: 'Members',
+        subtitle:
+          'Everyone in your practice. Signing is the only thing a role changes — a tech prepares and delivers notes, and cannot sign them.',
+        content: membersPanel,
       },
       {
         id: 'note-format',
@@ -798,8 +855,17 @@ export default async function SettingsPage({
           </Section>
 
           <Section
+            id="members"
+            eyebrow="02 / Members"
+            title="Members"
+            subtitle="Everyone in your practice. Signing is the only thing a role changes — a tech prepares and delivers notes, and cannot sign them."
+          >
+            {membersPanel}
+          </Section>
+
+          <Section
             id="note-format"
-            eyebrow="02 / Note format"
+            eyebrow="03 / Note format"
             title="My Note Format"
           >
             <NoteFormatManager templates={noteTemplates} uploadCaps={uploadCaps} nativePdfEnabled={nativePdfEnabled} />
@@ -808,7 +874,7 @@ export default async function SettingsPage({
 
           <Section
             id="security"
-            eyebrow="03 / Security"
+            eyebrow="04 / Security"
             title="Security"
             subtitle="Change your password. Other devices are signed out; this one stays."
           >
@@ -885,7 +951,7 @@ export default async function SettingsPage({
 
           <Section
             id="sessions"
-            eyebrow="04 / Sessions"
+            eyebrow="05 / Sessions"
             title="Active session"
             subtitle="One device at a time. Signing in elsewhere revokes this session automatically."
           >
@@ -916,7 +982,7 @@ export default async function SettingsPage({
           {isDataExportEnabled() && (
             <Section
               id="data"
-              eyebrow="05 / Data"
+              eyebrow="06 / Data"
               title="Your data"
               subtitle="Download a ZIP containing every visit, transcript, SOAP note, audio file, and signed PDF."
             >
@@ -958,7 +1024,7 @@ export default async function SettingsPage({
 
           <Section
             id="billing"
-            eyebrow="06 / Billing"
+            eyebrow="07 / Billing"
             title="Billing"
             subtitle="Manage your subscription and payment method."
           >
@@ -1005,7 +1071,7 @@ export default async function SettingsPage({
 
           <Section
             id="danger"
-            eyebrow="07 / Danger"
+            eyebrow="08 / Danger"
             title="Danger zone"
             subtitle="Delete your account. Every visit, transcript, and exported file gets erased."
             danger

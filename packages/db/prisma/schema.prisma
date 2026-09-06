@@ -131,6 +131,16 @@ enum AuditAction {
   CREATED_TASK
   CREATED_BILLING_EVENT
 
+  // ADMIN-1 — practice administration. A DIFFERENT AXIS from the system role
+  // below: `USER_ROLE_CHANGED` is the meddoc-pro system-admin app's label for
+  // SUPER_ADMIN grants. Conflating the two would make a practice demotion and a
+  // super-admin grant indistinguishable in an append-only trail.
+  PRACTICE_SEAT_INVITED
+  PRACTICE_ROLE_CHANGED
+  /// The administration guard refused a caller. A gate nothing records is one
+  /// path away from not existing — the sign route's own reasoning.
+  PRACTICE_ADMIN_REFUSED
+
   // Admin
   USER_CREATED
   USER_UPDATED
