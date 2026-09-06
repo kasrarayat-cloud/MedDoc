@@ -23,6 +23,27 @@
 # ============================================================================
 set -uo pipefail
 
+# ⚠️ ANCHORED FOR WHAT IS ITS OWN, AND DELIBERATELY *NOT* cd-ing — F28.
+#
+# The rule exists because a granted script that resolves repo paths from `pwd`
+# reads whatever tree the caller stood in; that family has bitten this house
+# three times, and the quiet failure is a confident answer about a DIFFERENT
+# REAL TREE.
+#
+# ⚠️ BUT THIS SCRIPT'S TARGET IS AN ARGUMENT, NOT AN ASSUMPTION. It is handed a
+# RANGE and asked to run every gate that range touches, and its arms point it at
+# throwaway probe repositories on purpose. A `cd` to its own root would make it
+# certify THIS tree while being asked about another — the exact confusion F28
+# forbids, arriving from the opposite direction. So the target repo stays the
+# caller's, and what gets anchored is the thing that genuinely belongs to this
+# script: where it finds its own library.
+#
+# ⚠️ AND THE IRONY IS THE POINT EITHER WAY. This script exists to run every
+# passenger's gates ON THE MERGED TREE; a version pointed at the wrong tree
+# would certify the wrong union and print a green tick for it.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || {
+  echo "🔴 union-gate: cannot resolve my own directory."; exit 2; }
+
 BASE="${1:?usage: union-gate.sh <base-sha> [head]}"
 HEAD_REF="${2:-HEAD}"
 
