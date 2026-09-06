@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 
 import { LocalTime } from '@/components/ui/local-time';
 import { SpecularButton } from '@/components/specular-button';
+import { ASSIGNABLE_ROLES } from '@/lib/practice-roles';
 import {
   changeMemberRoleAction,
   mintSeatInviteAction,
@@ -51,6 +52,22 @@ const ROLE_HINT: Record<string, string> = {
   CLINICIAN: 'Signs notes.',
   TECH: 'Prepares and delivers notes. Cannot sign.',
 };
+
+/**
+ * ⚠️ THE OPTIONS ARE DERIVED FROM THE SERVER'S OWN LIST, NEVER RETYPED.
+ *
+ * Both selects used to hardcode `CLINICIAN`/`TECH`. That is a silent-drift
+ * shape, and the OWNER-not-exclusive ruling is exactly the change that would
+ * have exposed it: widening `ASSIGNABLE_ROLES` on the server would have passed
+ * every server test while the page kept offering the old two, so the feature
+ * would have shipped invisible with a green suite. Derived here, the constant
+ * and the control cannot disagree.
+ */
+const ROLE_OPTIONS = ASSIGNABLE_ROLES.map((value) => ({
+  value,
+  label: ROLE_LABEL[value] ?? value,
+  hint: ROLE_HINT[value] ?? '',
+}));
 
 export interface MemberRow {
   id: string;
@@ -90,6 +107,19 @@ export function PracticeMembersPanel({
       <MemberList members={members} canAdminister={canAdminister} />
       {canAdminister ? (
         <>
+          {/* ⚠️ THE HALF THAT IS NOT BUILT IS SAID OUT LOUD, NOT HIDDEN. An owner
+              can now be created — that is the ruling. Taking it away is filed as
+              its own item because it needs a last-owner guard that is correct
+              under concurrency. A page that silently omits the control teaches
+              the doctor the capability is missing by accident; saying so tells
+              them it is deliberate and that support can act today. */}
+          <p
+            data-testid="members-owner-note"
+            style={{ marginTop: 12, fontSize: 13, color: 'var(--color-linear-text-3)' }}
+          >
+            You can make another member an owner. Owners cannot be demoted or removed here
+            yet — ask support if a partner is leaving the practice.
+          </p>
           <InviteList invites={invites} />
           <MintSeat />
         </>
@@ -201,8 +231,11 @@ function RoleCell({
         className="qm-lin-btn qm-tap-44"
         style={{ fontSize: 13, padding: '6px 10px' }}
       >
-        <option value="CLINICIAN">Clinician</option>
-        <option value="TECH">Tech</option>
+        {ROLE_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
       </select>
       <SpecularButton type="submit" disabled={pending} data-testid={`member-role-save-${member.id}`}>
         {pending ? 'Saving…' : 'Save'}
@@ -316,8 +349,11 @@ function MintSeat() {
             className="qm-lin-btn qm-tap-44"
             style={{ display: 'block', width: '100%', marginTop: 4, padding: '8px 10px' }}
           >
-            <option value="CLINICIAN">Clinician — signs notes</option>
-            <option value="TECH">Tech — prepares and delivers, cannot sign</option>
+            {ROLE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.hint ? `${o.label} — ${o.hint.replace(/\.$/, '').toLowerCase()}` : o.label}
+              </option>
+            ))}
           </select>
         </label>
 

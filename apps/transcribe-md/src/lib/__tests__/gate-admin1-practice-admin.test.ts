@@ -2,7 +2,8 @@
 // GATE — ADMIN-1: WHO MAY ADMINISTER A PRACTICE, AND WHAT THAT PERMITS.
 // ----------------------------------------------------------------------------
 // ⚠️ WHAT WOULD MAKE THIS FILE FAIL, stated first:
-//   · OWNER becomes assignable from the page   -> the fail-closed block
+//   · OWNER stops being assignable             -> the not-exclusive block
+//   · the assignable enum stops constraining   -> the not-exclusive block
 //   · the guard reads the SESSION's role       -> the staleness block
 //   · a refusal stops being audited            -> the audit block
 //   · the self-demotion guard is removed       -> the role-change block
@@ -10,6 +11,13 @@
 //   · a mint sets practiceId without the role  -> the mint block
 //   · the raw code or its hash reaches an audit row -> the mint block
 //   · a cross-practice target becomes reachable -> the scope block
+//
+// ⚠️ THE TWO SIDES ARE INDEPENDENT AND THIS FILE PROVES BOTH SEPARATELY. The
+// OWNER-not-exclusive decision (branch `feat/ruling-195-owner-not-exclusive`)
+// opened PROMOTION only. Demotion and removal stay refused, which is what keeps
+// "every practice has at least one OWNER" STRUCTURAL — no count, no
+// read-then-write race. Deleting the demotion arms because "owners are
+// assignable now" is the exact misreading this note exists to stop.
 // ============================================================================
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -33,6 +41,7 @@ vi.mock('@/lib/auth', () => ({ getSession }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import {
+  ADMIN_REFUSAL_MESSAGE,
   ASSIGNABLE_ROLES,
   PRACTICE_ADMIN_ROLE,
   generateInviteCode,
@@ -61,27 +70,58 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('⚠️ the unruled half FAILS CLOSED — OWNER is not assignable', () => {
-  it('OWNER is absent from the assignable set', () => {
-    // Whether one owner may create another is a PRODUCT decision with no ruled
-    // precedent — the ADMIN-1 row flags it as such. A refusal is recoverable by
-    // a ruling; an accidental second owner is somebody else's clinic.
-    expect([...ASSIGNABLE_ROLES]).toEqual(['CLINICIAN', 'TECH']);
-    expect(isAssignableRole('OWNER')).toBe(false);
+describe('⚠️ OWNER IS NOT EXCLUSIVE — the promotion side is now open', () => {
+  it('OWNER is in the assignable set', () => {
+    // The OWNER-not-exclusive decision (branch
+    // `feat/ruling-195-owner-not-exclusive`) settles what ADMIN-1 shipped
+    // fail-closed on: a practice may have more than one owner, and an owner may
+    // create another. Administration can be handed on.
+    expect([...ASSIGNABLE_ROLES]).toEqual(['OWNER', 'CLINICIAN', 'TECH']);
+    expect(isAssignableRole('OWNER')).toBe(true);
   });
 
   it('and the administering role is still OWNER — the two are not the same list', () => {
-    // ⚠️ NON-VACUITY. "OWNER is not assignable" would also be satisfied by a
-    // build where OWNER means nothing at all. It administers; it just cannot be
-    // handed out from this surface.
+    // ⚠️ NON-VACUITY, KEPT. The lists now overlap, so "OWNER is assignable"
+    // could be satisfied by a build that collapsed the two concepts. It still
+    // administers, and that is a separate fact from being handed out.
     expect(PRACTICE_ADMIN_ROLE).toBe('OWNER');
   });
 
-  it('a mint refuses OWNER even when the form asks for it', async () => {
+  it('a mint may now issue an OWNER seat, and the row carries that role', async () => {
     asOwner();
+    prisma.inviteCode.create.mockResolvedValue({ id: 'inv-1' });
     const res = await mintSeatInviteAction(null, form({ role: 'OWNER', label: 'A partner' }));
-    expect(res?.ok).toBe(false);
-    expect(prisma.inviteCode.create).not.toHaveBeenCalled();
+    expect(res?.ok).toBe(true);
+    expect(prisma.inviteCode.create).toHaveBeenCalledOnce();
+    // ⚠️ THE ROLE REACHES THE ROW. "ok:true" alone would also be returned by a
+    // build that accepted OWNER and then silently minted a CLINICIAN seat —
+    // which is the failure that looks like success.
+    expect(prisma.inviteCode.create.mock.calls[0][0].data).toMatchObject({
+      practiceRole: 'OWNER',
+      practiceId: 'p-1',
+    });
+  });
+
+  it('an existing member can be PROMOTED to OWNER, and it audits from -> to', async () => {
+    asOwner();
+    prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'CLINICIAN' });
+    const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'OWNER' }));
+    expect(res?.ok).toBe(true);
+    expect(prisma.user.update).toHaveBeenCalledOnce();
+    expect(prisma.user.update.mock.calls[0][0].data).toMatchObject({ practiceRole: 'OWNER' });
+    expect(logAudit.mock.calls.at(-1)?.[0].metadata).toMatchObject({
+      from: 'CLINICIAN',
+      to: 'OWNER',
+    });
+  });
+
+  it('⚠️ a role OUTSIDE the set is still refused — widening is not opening', () => {
+    // ⚠️ THE CONTROL FOR THE ARM ABOVE. `isAssignableRole('OWNER') === true`
+    // would also hold in a build where the enum stopped constraining anything
+    // at all, and that build would accept 'SUPER_ADMIN' from a form post.
+    expect(isAssignableRole('SUPER_ADMIN')).toBe(false);
+    expect(isAssignableRole('ADMIN')).toBe(false);
+    expect(isAssignableRole('')).toBe(false);
   });
 });
 
@@ -163,6 +203,29 @@ describe('⚠️ role changes — the guards that keep a practice administrable'
     const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }));
     expect(res && !res.ok && res.reason).toBe('CANNOT_CHANGE_AN_OWNER');
     expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ the OWNER refusal is UNCONDITIONAL — it does not depend on the target role being outside the set', async () => {
+    // ⚠️ THIS IS THE ARM THE WIDENING MADE NECESSARY, AND IT IS THE ONE A
+    // CARELESS REFACTOR DELETES. Before the ruling, "you cannot demote an
+    // owner" was ALSO enforced incidentally by `RoleSchema`, because every
+    // reachable target role was CLINICIAN or TECH. Now OWNER is a legal target,
+    // so the only thing standing between an owner and a role write is the
+    // explicit `CANNOT_CHANGE_AN_OWNER` branch. Asking for OWNER -> OWNER is
+    // the case that isolates it: the schema accepts it, and the guard must
+    // still refuse BEFORE any update.
+    asOwner();
+    prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'OWNER' });
+    const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'OWNER' }));
+    expect(res && !res.ok && res.reason).toBe('CANNOT_CHANGE_AN_OWNER');
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ the refusal message no longer says the question is unsettled — promotion IS settled', () => {
+    // A message that still read "who may promote and demote an owner is not
+    // settled" would be false in the doctor's face the day promotion shipped.
+    expect(ADMIN_REFUSAL_MESSAGE.CANNOT_CHANGE_AN_OWNER).not.toMatch(/not settled/i);
+    expect(ADMIN_REFUSAL_MESSAGE.CANNOT_CHANGE_AN_OWNER).toMatch(/demot|remov/i);
   });
 
   it('a target in ANOTHER practice is not found — scoped in the WHERE, not after it', async () => {
