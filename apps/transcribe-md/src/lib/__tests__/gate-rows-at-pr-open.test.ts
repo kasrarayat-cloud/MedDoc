@@ -95,7 +95,12 @@ describe('§2.5 rows-at-PR-open gate', () => {
     // a second, shallower spelling was written one file over anyway.
     const wf = readFileSync(WORKFLOW, 'utf8');
     const job = wf.slice(0, wf.indexOf('check-pr-rows-file.sh'));
-    const checkout = job.lastIndexOf('actions/checkout');
+    // ⚠️ ANCHOR ON THE YAML STEP FORM, NOT THE BARE STRING. The first spelling
+    // was `lastIndexOf('actions/checkout')`, and the moment a COMMENT in this
+    // same job mentioned `actions/checkout` the probe locked onto the prose
+    // instead of the step and reported the checkout as shallow. A probe that
+    // can match its own documentation is measuring the wrong thing.
+    const checkout = job.lastIndexOf('- uses: actions/checkout');
     expect(checkout, 'the gate must be preceded by a checkout').toBeGreaterThan(-1);
     expect(
       job.slice(checkout),
@@ -108,8 +113,25 @@ describe('§2.5 rows-at-PR-open gate', () => {
     const line = wf.split('\n').find((l) => l.includes('check-pr-rows-file.sh') && !l.trimStart().startsWith('#'));
     expect(line).toBeDefined();
     const invocation = wf.slice(wf.indexOf('check-pr-rows-file.sh'));
-    expect(invocation.slice(0, 200)).toContain('pull_request.base.sha');
-    expect(invocation.slice(0, 200)).not.toMatch(/origin\/\$\{\{\s*github\.base_ref/);
+    expect(invocation.slice(0, 300)).toContain('pull_request.base.sha');
+    expect(invocation.slice(0, 300)).not.toMatch(/origin\/\$\{\{\s*github\.base_ref/);
+
+    // ⚠️ AND THE HEAD MUST BE head.sha, NOT the bare `HEAD` the checkout gives.
+    // On a `pull_request` event `actions/checkout` checks out the MERGE REF —
+    // the branch already merged into CURRENT main — while `base.sha` is main as
+    // it stood at PR-open. The span between them therefore contains every
+    // commit main gained WHILE THE PR WAITED, and the gate bills this author
+    // for other people's merged files.
+    //
+    // MEASURED on run 34055449559: 9 runtime files reported against 4 actually
+    // touched; the extra five came from PR #989 and PR #1009 landing mid-queue.
+    // ⚠️ The error GROWS with queue latency, so it is largest exactly when the
+    // author has least context to dispute it.
+    expect(invocation.slice(0, 300)).toContain('pull_request.head.sha');
+    expect(
+      invocation.slice(0, 300),
+      'a bare HEAD is the merge ref and spans other people\'s commits',
+    ).not.toMatch(/\.sh"?\s*\\?\s*\n?\s*"?HEAD"?\s*$/m);
   });
 
   it('⚠️ THIS PR CARRIES ITS OWN ROWS — the gate is not exempt from itself', () => {

@@ -148,9 +148,24 @@ jobs:
           # while this run is queued, `origin/main` names a tree the PR was
           # never diffed against, and the runtime file set changes underneath
           # the answer. A sha cannot drift.
+          # ⚠️ AND THE HEAD IS THE PR'S OWN head.sha, NOT `HEAD`. On a
+          # `pull_request` event `actions/checkout` checks out the MERGE REF
+          # (`refs/pull/N/merge`) — my branch already merged into CURRENT main.
+          # `base.sha` is main as it stood when the PR was opened. So
+          # `base.sha..HEAD` spans BOTH my commits AND every commit main gained
+          # while the PR waited, and the gate bills this PR for other people's
+          # merged files.
+          #
+          # MEASURED on this PR's own run 34055449559: it reported **9** runtime
+          # files where the branch touches **4**. The other five
+          # (`deploy-prod.sh`, `lib/declaration.sh`, `reap-session-scratch.sh`
+          # and two gates) arrived on main from PR #989 and PR #1009 while this
+          # one sat in the queue. ⚠️ **The error GROWS the longer a PR waits**,
+          # which is exactly when an author is least able to explain it.
           PR_NUMBER="${{ github.event.pull_request.number }}" \
             bash scripts/check-pr-rows-file.sh \
-              "${{ github.event.pull_request.base.sha }}" HEAD
+              "${{ github.event.pull_request.base.sha }}" \
+              "${{ github.event.pull_request.head.sha }}"
 
       - uses: actions/setup-node@v4
         with:
