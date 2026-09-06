@@ -87,6 +87,12 @@ import {
   OMIT_INERT_LABEL,
 } from '../unmentioned-policy';
 import type { EncounterFact, SemanticMapping, TemplateField } from '../ir';
+import type { OmitMappingView } from '../unmentioned-policy';
+import {
+  OMIT_MAPPING_COLUMN,
+  OMIT_MAPPING_SELECT,
+  toOmitMappingView,
+} from '../unmentioned-policy';
 
 const SHA = 'a'.repeat(64);
 
@@ -703,7 +709,11 @@ describe('item 2 — an omitted field is not put back in front of the doctor', (
   // `expectedDataType` trips the type-compat guard) and the arm then passes
   // while proving nothing. Built from the same `mapping()` helper the rest of
   // this file uses, so it cannot drift from the real shape.
-  const base = { ...mapping(field('1'), 'ros.cardiovascular') } as Record<string, unknown>;
+  // ⚠️ TYPED AS THE REAL VIEW, NOT `Record<string, unknown>`. The loose cast
+  // was the fixture-side twin of the `as never` at the production call site:
+  // it let a fixture of any shape stand in for the predicate's inputs. With
+  // the real type, a fixture that stops matching the view fails to compile.
+  const base = mapping(field('1'), 'ros.cardiovascular') as unknown as OmitMappingView;
   const blankNow = { status: 'not_mentioned', value: null };
 
   it('⚠️ scaffoldDefaultOfferable WITHDRAWS the offer for an omit field', () => {
@@ -726,7 +736,7 @@ describe('item 2 — an omitted field is not put back in front of the doctor', (
     const f = field('1');
     const refused = { ...base, unmentionedPolicy: 'omit', sourceType: 'manual' as const };
     // the resolver would NOT honour it...
-    expect(canOmitWhenUnmentioned(f, refused as never)).toBe(false);
+    expect(canOmitWhenUnmentioned(f, refused)).toBe(false);
     // ...so the remedy stays.
     expect(scaffoldDefaultOfferable({ field: f, mapping: refused, current: blankNow })).toBe(true);
   });
@@ -751,15 +761,115 @@ describe('item 2 — an omitted field is not put back in front of the doctor', (
     ).toBe(true);
   });
 
-  it('⚠️ THE COLUMN IS SELECTED, or the guard above is dead code that looks live', () => {
-    // An unselected Prisma column arrives `undefined`, which is not `'omit'`,
-    // so the predicate would never fire and every arm here would still pass.
-    // This is the one thing those arms cannot see, so it is read from source.
+  // ⚠️ THIS ARM REPLACES ONE THAT ASSERTED A SINGLE COLUMN BY REGEX, AND THE
+  // REPLACEMENT IS THE POINT. The old form matched `unmentionedPolicy: true`
+  // inside a literal select. The predicate reads EIGHT mapping properties, so
+  // that arm was green while the guard it protects was dead code — and worse,
+  // it PINNED the broken shape: fixing the select made the old arm RED. An arm
+  // that must be deleted to fix a bug was testing the bug.
+  //
+  // Widening it to eight hard-coded names would close this instance. Deriving
+  // it closes the class: the map below is the SAME OBJECT production selects
+  // from, so a ninth property cannot appear in the view without appearing here.
+  it('⚠️ THE SELECT IS DERIVED FROM THE PREDICATE, not hand-listed beside it', () => {
     const src = readFileSync(
       join(__dirname, '..', '..', '..', 'actions', 'preview-visit-document.ts'),
       'utf-8',
     );
-    expect(src).toMatch(/mapping:\s*\{\s*select:\s*\{[^}]*unmentionedPolicy:\s*true/);
+    // the call site names the derived constant...
+    expect(src).toMatch(/mapping:\s*\{\s*select:\s*OMIT_MAPPING_SELECT\s*\}/);
+    // ...and does NOT hand-list columns beside it, which is how it drifted.
+    expect(src).not.toMatch(/mapping:\s*\{\s*select:\s*\{/);
+  });
+
+  it('⚠️ THE MAP COVERS EVERY PROPERTY THE VIEW DECLARES — read from source', () => {
+    // The view's own `Pick<>` list is the authority. Parsing it means adding a
+    // property to `OmitMappingView` reds this arm until its column is named,
+    // WITHOUT this test having its own copy of the list to fall out of step.
+    const policySrc = readFileSync(join(__dirname, '..', 'unmentioned-policy.ts'), 'utf-8');
+    const pick = policySrc.match(
+      /export type OmitMappingView = Pick<\s*SemanticMapping,([\s\S]*?)>;/,
+    );
+    expect(pick, 'the OmitMappingView Pick<> block did not parse').not.toBeNull();
+    const declared = [...(pick as RegExpMatchArray)[1].matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]);
+    // NON-VACUITY: an empty parse would satisfy every assertion below.
+    expect(declared.length).toBeGreaterThanOrEqual(8);
+    expect([...declared].sort()).toEqual(Object.keys(OMIT_MAPPING_COLUMN).sort());
+    // and every declared column reaches the select
+    for (const k of declared) {
+      expect(
+        OMIT_MAPPING_SELECT[OMIT_MAPPING_COLUMN[k as keyof typeof OMIT_MAPPING_COLUMN]],
+        `${k} is declared on the view but its column is not selected`,
+      ).toBe(true);
+    }
+  });
+
+  it('⚠️ THE PROJECTION SURVIVES THE RENAME AND THE CASE — both, or a guard dies', () => {
+    // Three things differ between a Prisma row and this view, and each one
+    // alone silently disables a guard. This drives the real projection.
+    const row = {
+      required: false,
+      unknownPolicy: 'blank',
+      blankPolicy: 'blank',
+      mappingStatus: 'UNSUPPORTED', // ⚠️ renamed AND upper-cased
+      sourceType: 'extraction',
+      clinicalConcept: 'ros.cardiovascular',
+      practiceDefault: null,
+      expectedDataType: 'text',
+    };
+    const view = toOmitMappingView(row);
+    expect(view.status, 'the column is mappingStatus and the vocabulary is lower snake').toBe(
+      'unsupported',
+    );
+    expect(view.expectedDataType).toBe('text');
+    // NEGATIVE CONTROL — the raw row is NOT the view, which is why the cast hurt.
+    expect((row as Record<string, unknown>).status).toBeUndefined();
+  });
+
+  it('⚠️ THE PREDICATE IS REACHABLE ON A ROW SHAPED LIKE PRODUCTION FETCHES IT', () => {
+    // THE ARM THAT WOULD HAVE CAUGHT THE ORIGINAL DEFECT. Every other arm in
+    // this describe builds its mapping from a fixture; production builds it
+    // from a Prisma select. Those were different shapes, so the fixtures were
+    // green while the production path never reached the omit clause at all.
+    //
+    // The row below carries EXACTLY the keys `OMIT_MAPPING_SELECT` fetches —
+    // derived, so it cannot drift from what production asks Prisma for.
+    const value: Record<string, unknown> = {
+      required: false,
+      unknownPolicy: 'blank',
+      blankPolicy: 'blank',
+      mappingStatus: 'CERTIFIED',
+      sourceType: 'extraction',
+      clinicalConcept: 'ros.cardiovascular',
+      practiceDefault: null,
+      expectedDataType: 'text',
+      unmentionedPolicy: 'omit',
+    };
+    const row = Object.fromEntries(
+      Object.keys(OMIT_MAPPING_SELECT).map((k) => [k, value[k]]),
+    );
+    // the fetched key set IS the selected key set — no more, no less
+    expect(Object.keys(row).sort()).toEqual(Object.keys(OMIT_MAPPING_SELECT).sort());
+
+    const asProduction = {
+      ...toOmitMappingView(row),
+      unmentionedPolicy: (row.unmentionedPolicy ?? null) as string | null,
+    };
+    const f = field('1');
+    expect(
+      scaffoldDefaultOfferable({ field: f, mapping: asProduction, current: blankNow }),
+      'an omitted field is put back in front of the doctor',
+    ).toBe(false);
+
+    // NON-VACUITY — the identical production-shaped row with a null policy IS
+    // offered, so the arm above cannot pass against a predicate refusing all.
+    expect(
+      scaffoldDefaultOfferable({
+        field: f,
+        mapping: { ...asProduction, unmentionedPolicy: null },
+        current: blankNow,
+      }),
+    ).toBe(true);
   });
 
   it('⚠️ THE WRITER REFUSES TOO — the offer and the door agree', () => {

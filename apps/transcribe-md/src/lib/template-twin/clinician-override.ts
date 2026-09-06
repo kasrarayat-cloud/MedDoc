@@ -38,6 +38,7 @@
 // ============================================================================
 
 import { canOmitWhenUnmentioned } from './unmentioned-policy';
+import type { OmitFieldView, OmitMappingView } from './unmentioned-policy';
 import { isWordPlaceholderOption } from '../note-template-docx/placeholder-option';
 import { canonicalSha256 } from './canonical';
 import {
@@ -229,12 +230,24 @@ export const SCAFFOLD_INSERTABLE_KINDS: ReadonlySet<string> = new Set(['narrativ
  * A surface must never offer an act its writer would refuse.
  */
 export function scaffoldDefaultOfferable(input: {
-  field: { kind?: string; scaffolded?: boolean; scaffoldText?: string | null };
-  // ⚠️ `string | null`, NOT `'omit' | null`. This is read straight off Prisma,
-  // where the column is a plain nullable string — narrowing the parameter would
-  // force a cast at the call site, and a cast is how a column that later holds
-  // an unexpected value stops being checked. The comparison below is exact.
-  mapping: { clinicalConcept?: string | null; unmentionedPolicy?: string | null } | null | undefined;
+  // ⚠️ `OmitFieldView`, NOT a three-property structural shape. The omit clause
+  // below calls the resolver's own reachability predicate, which reads SIX
+  // field properties; typing this loosely is what let a cast stand in for them.
+  field: OmitFieldView & { scaffolded?: boolean; scaffoldText?: string | null };
+  // ⚠️ `string | null` for `unmentionedPolicy`, NOT `'omit' | null`. That column
+  // is read straight off Prisma as a plain nullable string, and narrowing it
+  // would force a cast at the call site — a cast is how a column that later
+  // holds an unexpected value stops being checked. The comparison below is exact.
+  //
+  // ⚠️ AND THE REST OF THE SHAPE IS `OmitMappingView`, WHICH IS THE FIX. The
+  // previous type named TWO properties and the predicate reads EIGHT, so the
+  // call below cast with `as never` and every missing property arrived
+  // `undefined`. `toOmitMappingView` in `unmentioned-policy.ts` is how a Prisma
+  // row becomes this — it is not the same shape and never was.
+  mapping:
+    | (OmitMappingView & { unmentionedPolicy?: string | null })
+    | null
+    | undefined;
   /** The field's CURRENT resolution, or null when none has been computed. */
   current: { status?: string; value?: unknown } | null | undefined;
 }): boolean {
@@ -275,7 +288,11 @@ export function scaffoldDefaultOfferable(input: {
   // inserted before setting the policy, and `applyClinicianOverrides` is
   // deliberately NOT given this clause — a stored override the doctor did
   // assert must still apply, or the fill silently drops their own words.
-  if (mapping.unmentionedPolicy === 'omit' && canOmitWhenUnmentioned(field as never, mapping as never))
+  // ⚠️ NO CAST. The two `as never`s that used to be here were load-bearing in
+  // the worst sense: they existed so a two-column Prisma row could be passed to
+  // an eight-property view, and they simultaneously switched off the only thing
+  // that would have objected. `tsc` was silent while this clause was dead.
+  if (mapping.unmentionedPolicy === 'omit' && canOmitWhenUnmentioned(field, mapping))
     return false;
   return scaffoldTargetIsBlank(current);
 }

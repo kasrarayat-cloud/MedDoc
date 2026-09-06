@@ -47,6 +47,90 @@ export type OmitMappingView = Pick<
 >;
 
 /**
+ * ⚠️ A PRISMA `TemplateTwinSemanticMapping` ROW IS **NOT** AN `OmitMappingView`,
+ * AND THREE SEPARATE THINGS DIFFER. Any one of them silently disables a guard.
+ *
+ *   1 · the ROW is a SUBSET — an unselected column arrives `undefined`, and
+ *       `expectedDataTypeForFieldKind(kind) !== undefined` is TRUE for every
+ *       kind, so guard 1 fires and the whole ladder short-circuits;
+ *   2 · the COLUMN IS NAMED DIFFERENTLY — the database calls it
+ *       `mappingStatus`, this view calls it `status`, so `mapping.status` is
+ *       `undefined` even on a complete select;
+ *   3 · the VALUES ARE CASED DIFFERENTLY — the database enum is `UNSUPPORTED`,
+ *       this vocabulary is `'unsupported'`, so guard 2 never matches.
+ *
+ * ⚠️ **AND ALL THREE WERE HIDDEN BY ONE `as never` AT THE CALL SITE.** The cast
+ * was there so a two-column Prisma row could be passed to an eight-property
+ * view; it also switched off the only thing that would have objected. The
+ * predicate's caller now takes the real types and there is no cast.
+ *
+ * ⚠️ **THE MAP IS `Record<keyof OmitMappingView, …>` ON PURPOSE — IT IS
+ * EXHAUSTIVE BY CONSTRUCTION.** Adding a ninth property to the view makes
+ * `tsc` red here until the column is named, and the select and the projection
+ * are both derived from this one object. A hand-widened select closes ONE
+ * instance; deriving it closes the CLASS, which is the whole reason this is a
+ * map and not a longer list.
+ */
+export const OMIT_MAPPING_COLUMN: Readonly<Record<keyof OmitMappingView, string>> = {
+  required: 'required',
+  unknownPolicy: 'unknownPolicy',
+  blankPolicy: 'blankPolicy',
+  status: 'mappingStatus', // ⚠️ RENAMED — see 2 above
+  sourceType: 'sourceType',
+  clinicalConcept: 'clinicalConcept',
+  practiceDefault: 'practiceDefault',
+  expectedDataType: 'expectedDataType',
+};
+
+/**
+ * The Prisma `select` the omit predicate needs — DERIVED from the map above,
+ * never hand-listed.
+ *
+ * `unmentionedPolicy` is added because the CALLER's own guard reads it
+ * (`scaffoldDefaultOfferable`), not because the ladder does. It is named here
+ * rather than at the call site so one object describes everything that seam
+ * must fetch.
+ */
+export const OMIT_MAPPING_SELECT: Readonly<Record<string, true>> = Object.freeze(
+  Object.fromEntries(
+    [...Object.values(OMIT_MAPPING_COLUMN), 'unmentionedPolicy'].map(
+      (c) => [c, true] as const,
+    ),
+  ) as Record<string, true>,
+);
+
+/** A row fetched with `OMIT_MAPPING_SELECT`. Values stay `unknown` deliberately. */
+export type OmitMappingRow = Readonly<Record<string, unknown>>;
+
+/**
+ * Project a Prisma row into the view the ladder reads.
+ *
+ * ⚠️ THIS IS THE FIFTH COPY OF `status: row.mappingStatus.toLowerCase()` IN THIS
+ * DIRECTORY — `certification-lifecycle.ts:117`, `workspace-read.ts:66`,
+ * `fill-engine.ts:314` and `synthetic-test.ts:117` each carry their own. Those
+ * four are CORRECT; the fifth call site did it by hand and got all three
+ * differences above wrong at once. Collapsing the other four onto this function
+ * is a separate change with its own proof — noted, not smuggled in here.
+ */
+export function toOmitMappingView(row: OmitMappingRow): OmitMappingView {
+  const at = (k: keyof OmitMappingView): unknown => row[OMIT_MAPPING_COLUMN[k]];
+  const status = at('status');
+  return {
+    required: at('required') as OmitMappingView['required'],
+    unknownPolicy: at('unknownPolicy') as OmitMappingView['unknownPolicy'],
+    blankPolicy: at('blankPolicy') as OmitMappingView['blankPolicy'],
+    // ⚠️ LOWERCASED — the column is a SCREAMING_SNAKE enum and this vocabulary
+    // is lower snake. Without it guard 2 compares 'UNSUPPORTED' to 'unsupported'
+    // and never fires.
+    status: (typeof status === 'string' ? status.toLowerCase() : status) as OmitMappingView['status'],
+    sourceType: at('sourceType') as OmitMappingView['sourceType'],
+    clinicalConcept: at('clinicalConcept') as OmitMappingView['clinicalConcept'],
+    practiceDefault: at('practiceDefault') as OmitMappingView['practiceDefault'],
+    expectedDataType: at('expectedDataType') as OmitMappingView['expectedDataType'],
+  };
+}
+
+/**
  * TRUE when the field must be put to the clinician rather than left blank.
  *
  * ⚠️ THIS IS THE RESOLVER'S OWN PREDICATE, LIFTED — not a re-statement of it.

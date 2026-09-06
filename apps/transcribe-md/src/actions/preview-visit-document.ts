@@ -33,6 +33,11 @@ import { generateVisitDocx } from '@/lib/docx-generator';
 import { readAndPrepareTemplateTwinFill } from '@/lib/template-twin/fill-engine';
 import { TemplateDocIRSchema } from '@/lib/template-twin/ir';
 import { scaffoldDefaultOfferable } from '@/lib/template-twin/clinician-override';
+import {
+  OMIT_MAPPING_SELECT,
+  toOmitMappingView,
+} from '@/lib/template-twin/unmentioned-policy';
+import type { OmitMappingRow } from '@/lib/template-twin/unmentioned-policy';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { loadNativeTemplateDocxForVisit } from '@/lib/template-twin/native-export';
 import type { NativePreviewResult } from './preview-native-document';
@@ -394,16 +399,40 @@ export async function previewVisitDocumentAction(
     // reads them too — the manifest does not carry mappings.
     const defs = await prisma.templateTwinFieldDefinition.findMany({
       where: { compiledVersionId: compiled.id },
-      // ⚠️ `unmentionedPolicy` IS SELECTED BECAUSE THE PREDICATE READS IT. An
-      // unselected column arrives `undefined`, which is not `'omit'`, so the
-      // guard in `scaffoldDefaultOfferable` would be dead code that looks live.
+      // ⚠️ THE SELECT IS **DERIVED**, NOT LISTED. It comes from
+      // `OMIT_MAPPING_SELECT`, which is built from a
+      // `Record<keyof OmitMappingView, column>` — so adding a property to the
+      // view makes `tsc` red until its column is named here too.
+      //
+      // ⚠️ THE HAND-WRITTEN VERSION OF THIS SELECT NAMED TWO COLUMNS AND THE
+      // PREDICATE READS EIGHT, and the comment above it correctly described the
+      // exact hazard it was falling into — *"an unselected column arrives
+      // `undefined` … the guard would be dead code that looks live"*. It
+      // guarded the one column its author had reasoned about. A hand-widened
+      // list would close this instance; deriving it closes the class.
       select: {
         fieldId: true,
-        mapping: { select: { clinicalConcept: true, unmentionedPolicy: true } },
+        mapping: { select: OMIT_MAPPING_SELECT },
       },
     });
+    // ⚠️ PROJECTED, NOT PASSED THROUGH. A Prisma row is not an `OmitMappingView`
+    // — the column is `mappingStatus` where the view says `status`, and its
+    // values are `UNSUPPORTED` where the vocabulary says `'unsupported'`.
+    // Handing the raw row over used to compile only because the callee cast it
+    // away with `as never`.
     const mappingByFieldId = new Map(
-      defs.map((d) => [d.fieldId, d.mapping ?? null] as const),
+      defs.map((d) => {
+        const row = d.mapping as OmitMappingRow | null;
+        return [
+          d.fieldId,
+          row
+            ? {
+                ...toOmitMappingView(row),
+                unmentionedPolicy: (row.unmentionedPolicy ?? null) as string | null,
+              }
+            : null,
+        ] as const;
+      }),
     );
     insertableDefaults = irForDefaults.fields.flatMap((f) => {
       const text = (f.scaffoldText ?? '').trim();
