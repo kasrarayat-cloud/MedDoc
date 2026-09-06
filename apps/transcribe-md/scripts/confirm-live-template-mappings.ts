@@ -190,6 +190,20 @@ async function main() {
       required: m.required,
       blankPolicy: m.blankPolicy,
       unknownPolicy: m.unknownPolicy,
+      // ⚠️ CARRIED THROUGH, AND OMITTING IT SILENTLY ERASED A DOCTOR'S CHOICE.
+      // The writer coerces `mapping.unmentionedPolicy ?? null`
+      // (`certification-lifecycle.ts:521`) — deliberately, because #192 forbids
+      // inferring a policy nobody declared. So a payload that simply does not
+      // MENTION the field does not leave it alone: it writes NULL over it.
+      // Re-running this script would have wiped every `omit` a doctor had set.
+      //
+      // ⚠️ AND THE CAST BELOW IS WHY NOTHING CAUGHT IT. `as unknown as
+      // SemanticMapping` makes a missing field a compile-time non-event, so the
+      // one instrument that would have named this stayed silent. The field is
+      // added here rather than the cast removed because the cast also absorbs
+      // the `sourceType`/`expectedDataType` widening this script relies on —
+      // removing it is a separate change with its own blast radius.
+      unmentionedPolicy: m.unmentionedPolicy,
       practiceDefault: null,
       status: 'certified',
     } as unknown as SemanticMapping;
