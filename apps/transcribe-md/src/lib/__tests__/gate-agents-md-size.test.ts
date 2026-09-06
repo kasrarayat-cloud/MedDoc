@@ -77,7 +77,12 @@ describe('AGENTS.md size budget', () => {
 
   // the split's own invariant: an archived body is reachable from this file.
   it('every CANON INDEX row points at a docs/canon file that exists', () => {
-    const agents = readFileSync(join(REPO, 'AGENTS.md'), 'utf8');
+    // ⚠️ RULING #183 — the index moved to docs/canon/INDEX.md. The SIZE arm
+    // above still reads AGENTS.md, because that is what the budget is about;
+    // these two arms are about the INDEX, so they follow it. Repointing one
+    // file's arms and not the other's is how a split leaves a reader behind —
+    // this gate was in #183's own sweep and was missed on the first pass.
+    const agents = readFileSync(join(REPO, 'docs', 'canon', 'INDEX.md'), 'utf8');
     const pointers = [...agents.matchAll(/→ `(docs\/canon\/[^`]+\.md)`/g)].map((m) => m[1]);
     expect(pointers.length).toBeGreaterThan(50); // non-vacuity: the index is populated
     const missing = pointers.filter((p) => {
@@ -102,12 +107,16 @@ describe('AGENTS.md size budget', () => {
   // reintroduced one file at a time.
   // ==========================================================================
   it('every docs/canon body is reachable FROM the index — no orphans', () => {
-    const agents = readFileSync(join(REPO, 'AGENTS.md'), 'utf8');
+    const agents = readFileSync(join(REPO, 'docs', 'canon', 'INDEX.md'), 'utf8');
     const indexed = new Set(
       [...agents.matchAll(/→ `docs\/canon\/([^`]+\.md)`/g)].map((m) => m[1]),
     );
     const onDisk = readdirSync(join(REPO, 'docs', 'canon'))
-      .filter((f) => f.endsWith('.md') && f !== 'README.md');
+      // ⚠️ INDEX.md is excluded alongside README.md — ruling #183 moved the
+      // index INTO this directory, and the index is not an entry. Without this
+      // it reports itself as an orphaned body: a file nothing points at,
+      // because nothing should.
+      .filter((f) => f.endsWith('.md') && f !== 'README.md' && f !== 'INDEX.md');
 
     expect(onDisk.length).toBeGreaterThan(50); // non-vacuity: we actually read the directory
     const orphaned = onDisk.filter((f) => !indexed.has(f));
@@ -152,7 +161,7 @@ describe('AGENTS.md size budget', () => {
   });
 
   it('no two index rows point at different files with the same number', () => {
-    const agents = readFileSync(join(REPO, 'AGENTS.md'), 'utf8');
+    const agents = readFileSync(join(REPO, 'docs', 'canon', 'INDEX.md'), 'utf8');
     const pointers = [...agents.matchAll(/→ `docs\/canon\/(\d+)-([^`]+\.md)`/g)];
     expect(pointers.length).toBeGreaterThan(50); // non-vacuity
     const byNumber = new Map<string, Set<string>>();
@@ -169,7 +178,7 @@ describe('AGENTS.md size budget', () => {
   });
 
   it('the stated entry count reconciles with the rows actually in the index', () => {
-    const agents = readFileSync(join(REPO, 'AGENTS.md'), 'utf8');
+    const agents = readFileSync(join(REPO, 'docs', 'canon', 'INDEX.md'), 'utf8');
 
     const claim = agents.match(/\*\*(\d+) entries live in full at `docs\/canon\/`\.\*\*/);
     expect(claim, 'the CANON INDEX header must state an entry count').not.toBeNull();

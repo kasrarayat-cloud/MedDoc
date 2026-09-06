@@ -153,6 +153,75 @@ Card height 559 → **612** (the badge row and the archive footer).
 
 ---
 
+## ✅ RULED 2026-09-05 — THE PROVENANCE WORD, ruling #187(2)
+
+**An auto-accepted row is visibly distinct from a doctor-accepted one, AS TEXT.**
+A word in the frames' own right-aligned meta column — `auto` / `you` — beside
+the confidence. The frames' existing vocabulary and geometry; no new visual
+element.
+
+**Never a colour.** A tint does not survive a greyscale print, a PDF of the tab,
+or a colour-vision-deficient physician — and this is the surface a doctor
+attests from.
+
+⚠️ **THE HIDDEN ACCESSIBILITY TEXT STAYS.** The two are not alternatives and the
+obvious simplification — drop the hidden label now that a visible word exists —
+re-opens half the defect. The hidden text carries the STATE, which the
+provenance word does not, and it is what restores the parity the pre-conversion
+section HEADINGS gave assistive technology. Both are pinned.
+
+⚠️ **STACKED, NOT INLINE — GEOMETRY, NOT TASTE.** The frames fix this meta
+column at **60px**, and `95%` + a separator + `auto` does not fit. Stacking the
+word under the confidence keeps the frames' column width. Recorded here so the
+next reader does not "fix" it back to one line.
+
+**Its origin is a finding.** The T2 conversion moved the decision state out of
+section headings onto the row, where it became `data-state` plus a CSS tint —
+and `ICD_ROW_STATE_LABEL`, added in the same slice, was rendered nowhere.
+Measured on a signed visit: an accepted row and a held row were **byte-identical
+in text**, accessible name `null`.
+
+## ⚠️ THE ONE DEPARTURE FROM THE FRAMES — ruling #187(3), APPROVED
+
+**The section holding the suggester's FIRST code leads.** The frames draw
+`Diagnoses` first and then `History & Screening`; the shipped ledger orders the
+two sections by where the suggester's first code falls.
+
+**Everything else follows the frames**, and within a section the order is the
+suggester's own, untouched. This is the ONLY place the build knowingly differs.
+
+### Why
+
+`icd-ledger-sections.ts`'s own header already forbade the alternative, in bold:
+
+> ORDER IS PRESERVED, NEVER SORTED. The suggester emits codes in an order that
+> carries meaning — the primary diagnosis leads — and a display that re-sorts
+> them would silently re-rank a claim.
+
+A FIXED section order does exactly that, and the counterexample is this
+product's commonest encounter:
+
+| | |
+|---|---|
+| suggester emits | `Z12.11`, `D12.5`, `K64.8` |
+| fixed section order renders | `D12.5`, `K64.8`, **`Z12.11`** |
+
+For a screening colonoscopy `Z12.11` **is** the first-listed diagnosis and the
+reason for the encounter; the polyp is secondary. The fixed order demotes it to
+last, under a heading that reads like an aside.
+
+### The standing of this departure
+
+⚠️ **The frames do not RULE on it — they do not cover the case.** Neither frame
+draws a Z-code primary, so a fixed order is what the frames happen to show
+rather than a decision they record. That is why this is filed as a departure and
+not as a defect in the frames.
+
+Owner-approved in **ruling #187(3)**, on the precedent this arc already set with
+the counts chip: *a tested clinical claim outranks a mockup.* Pinned by
+`gate-icd-ledger-sections`, which asserts the suggester's first code is the
+first code the doctor reads, whichever section leads.
+
 ## ⚠️ BATCHED FIGMA REQUEST LIST — states no frame covers
 
 Per the standing rule, **none of this is invented**. Each item is a state the

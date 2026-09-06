@@ -24,6 +24,24 @@ const NON_PHI_ALLOWLIST = [
   // data. Copying them is a security event, not a PHI disclosure, and it is
   // deliberately out of EXPORT_* scope.
   'settings/security/mfa/mfa-enrollment-panel.tsx',
+  // ADMIN-1 — a practice SEAT INVITE CODE. Adjudicated 2026-09-05 by reading
+  // what is copied, not the filename: `state.code`, the value
+  // `generateInviteCode()` just produced. It is a credential the OWNER is
+  // handing to a colleague — the same class as the MFA row above, and the same
+  // reasoning: a security event, not a PHI disclosure.
+  //
+  // ⚠️ AND THE SECURITY EVENT ALREADY HAS ITS ROW, one step earlier and on the
+  // server: `PRACTICE_SEAT_INVITED` is written when the invite is MINTED, with
+  // the practice and the role and deliberately WITHOUT the code or its hash. By
+  // the time this copy happens the value is already on the owner's screen, so
+  // the clipboard write discloses nothing the mint did not.
+  //
+  // ⚠️ ROUTING IT THROUGH `reportClipboardCopy()` WOULD BE WRONG, not merely
+  // unnecessary: that reporter records a PHI DISCLOSURE, and a credential copy
+  // filed as one makes a practice-administration act indistinguishable from a
+  // patient-data egress in an append-only trail. Axis-conflation is the
+  // specific mistake ADMIN-1's own row warns about.
+  'settings/practice-members-panel.tsx',
 ];
 
 /** Files that audit via a different, already-audited server route. */
