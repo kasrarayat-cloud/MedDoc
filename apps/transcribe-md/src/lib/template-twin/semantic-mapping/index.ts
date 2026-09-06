@@ -42,7 +42,30 @@ const ModelSemanticMappingSchema = SemanticMappingSchema.extend({
   practiceDefault: z.null(),
   // Certification is a separate authenticated physician action.
   status: z.enum(['recognized', 'needs_confirmation']),
-}).strict();
+  // ⚠️ #192 — THE MODEL MAY NOT AUTHOR A RENDER POLICY, FOR THE SAME REASON IT
+  // MAY NOT AUTHOR A `practiceDefault` TWO LINES ABOVE.
+  //
+  // This schema EXTENDS `SemanticMappingSchema`, and `anthropic.ts` turns it
+  // into the tool's `input_schema`, so ANY field added there is silently handed
+  // to the model as settable. `unmentionedPolicy` arrived that way: an enum the
+  // model could set, with no mention in the system prompt, deciding whether a
+  // template's own sentence prints on a signed note. Measured end to end with
+  // no human anywhere and validation GREEN: 11 of 11 proposals came back
+  // `keep`, and a control containing `Enter assessment` rendered that string
+  // into the note -- the exact harm #192 exists to prevent, arriving through
+  // the one channel the ruling never considered, because "never inferred from
+  // content" was aimed at the RENDERER and the model infers from content too.
+  //
+  // ⚠️ AND NOTHING DOWNSTREAM WOULD HAVE CAUGHT IT: `planAutoConfirm` spreads
+  // the whole mapping into `status: 'certified'`, so the default path
+  // certifies a model-authored policy with no physician present.
+  //
+  // ⚠️ OMITTED RATHER THAN FORCED TO NULL, which is stronger than the
+  // `practiceDefault` treatment beside it: the field never appears in the tool
+  // schema at all, so there is no value for the model to choose and nothing to
+  // re-assert after parsing. Forcing `z.null()` would still SHOW it, and would
+  // make the model's omission a parse error rather than a non-event.
+}).omit({ unmentionedPolicy: true }).strict();
 
 const ModelSemanticMappingProposalSchema = z
   .object({ mappings: z.array(ModelSemanticMappingSchema) })

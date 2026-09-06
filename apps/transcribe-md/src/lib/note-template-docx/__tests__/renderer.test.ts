@@ -331,3 +331,47 @@ describe('Template Twin exact DOCX renderer', () => {
     ).rejects.toMatchObject({ code: 'TABLE_ROW_LIMIT_EXCEEDED' });
   });
 });
+
+describe('⚠️ REVIEW-DEFAULTS — the clinician_default proof kind has an EMITTER', () => {
+  // ⚠️ THIS BLOCK EXISTS BECAUSE AN ADVERSARIAL PASS PROVED ITS ABSENCE. The
+  // proof kind shipped with an emitter and NOTHING PINNED IT: deleting the
+  // ternary in `renderer.ts` left the full suite and `tsc` byte-identically
+  // green. A proof kind with no emitter is #170's defect — `default_kept`
+  // shipped that way and cost three adversarial rounds — and a proof kind whose
+  // emitter nothing tests is that defect one step later.
+  //
+  // It lives HERE, on the renderer's own harness, because this is the only
+  // fixture that produces a fully renderable resolution set.
+  async function renderNarrativeWithReason(reasonCode: string) {
+    const input = await setup();
+    const narrative = input.ir.fields.find(
+      (field) => field.originalLabel === 'Assessment narrative',
+    )!;
+    const resolutions = input.resolutions.map((item) =>
+      item.fieldId === narrative.fieldId
+        ? FieldResolutionSchema.parse({ ...item, reasonCode })
+        : item,
+    );
+    const rendered = await renderTemplateDocx({ ...input, resolutions });
+    const mine = rendered.verification.fields.filter((p) => p.fieldId === narrative.fieldId);
+    return { rendered, mine };
+  }
+
+  it('a field carrying clinician_scaffold_default renders as kind clinician_default', async () => {
+    const { rendered, mine } = await renderNarrativeWithReason('clinician_scaffold_default');
+    expect(mine).toHaveLength(1);
+    expect(mine[0].kind).toBe('clinician_default');
+    // ⚠️ AND THE ARITHMETIC IS UNCHANGED — the claim the kind was added under.
+    // It IS a patched field, so it must verify exactly like a fill.
+    expect(rendered.verification.verified).toBe(true);
+    expect(rendered.verification.fieldCheck).toBe('verified');
+  });
+
+  it('⚠️ NON-VACUITY: the identical render with any other reason code is `filled`', async () => {
+    // Without this, the arm above would also pass on a build that labelled
+    // EVERY patched field clinician_default.
+    const { mine } = await renderNarrativeWithReason('synthetic_direct_evidence');
+    expect(mine).toHaveLength(1);
+    expect(mine[0].kind).toBe('filled');
+  });
+});

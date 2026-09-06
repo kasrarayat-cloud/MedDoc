@@ -174,6 +174,7 @@ describe('evidence contract', () => {
     expect(templateTwinCounts(fields, definitions)).toEqual({
       filled: 0,
       needsReview: 1,
+      omitted: 0,
       notMentioned: 0,
       conflicts: 1,
       criticalUnresolved: 1,

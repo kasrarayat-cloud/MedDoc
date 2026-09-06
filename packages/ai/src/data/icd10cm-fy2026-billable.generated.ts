@@ -8,6 +8,7 @@
 //   listed on   https://www.cms.gov/medicare/coding-billing/icd-10-codes
 //   retrieved   2026-09-04
 //   zip sha256  55a9124a27ca78a4a5c41e1101eda064ec2e08d105ff9e78d1fbd1a83298ef11
+//   edition     fy2026
 //   effective   2025-10-01 .. 2026-09-30
 //   count       74719
 //

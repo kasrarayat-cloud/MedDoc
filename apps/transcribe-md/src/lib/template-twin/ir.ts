@@ -10,7 +10,19 @@ import { z } from 'zod';
 
 export const TEMPLATE_TWIN_IR_SCHEMA_VERSION = 1 as const;
 export const TEMPLATE_TWIN_COMPILER_VERSION = 'template-docx-compiler/1.0.0';
-export const TEMPLATE_TWIN_RESOLVER_VERSION = 'template-field-resolver/1.0.0';
+// ⚠️ BUMPED FOR #191. The resolver's output changed for IDENTICAL input
+// (`not_mentioned` -> `default_kept`), and `certification-lifecycle` compares
+// this string exactly to invalidate stale manifests. Left at 1.0.0 it could not
+// see the change, so a manifest produced by the old resolver would have been
+// accepted as current. Found by the adversarial pass, not by any arm.
+// ⚠️ BUMPED AGAIN. The narrowing changed the resolver's output for IDENTICAL
+// input in the other direction (`default_kept` -> `not_mentioned` for every
+// non-narrative scaffold), and `certification-lifecycle` compares this string
+// exactly to invalidate stale manifests. Leaving it meant every template
+// certified before the narrowing kept a certification whose stored manifest no
+// longer describes what the resolver produces — this file's own recorded
+// failure mode, re-armed by the commit that cites it.
+export const TEMPLATE_TWIN_RESOLVER_VERSION = 'template-field-resolver/2.0.0';
 export const TEMPLATE_TWIN_RENDERER_VERSION = 'template-docx-renderer/1.0.0';
 
 export const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -117,6 +129,42 @@ export const TemplateFieldSchema = z
     detectionStatus: TemplateTwinDetectionStatusSchema,
     allowedOptions: z.array(TemplateOptionSchema),
     rendererBinding: RendererBindingSchema,
+    /**
+     * ⚠️ #191 — IS THIS CONTROL A SCAFFOLD? Non-empty default content that is
+     * NOT a Word placeholder. The ruling scopes the whole keep/omit policy to
+     * scaffolded controls ("an empty underscore run is not scaffolded; there is
+     * nothing to keep or omit"), and the adversarial pass found that scope
+     * unimplemented — so `keep` applied to checkboxes and dates alike.
+     *
+     * ⚠️ `.optional()`, AND ABSENT MEANS **NOT SCAFFOLDED**, WHICH IS
+     * FAIL-CLOSED. `structureSha256` hashes `fields`, and every compiled IR
+     * already in the database was written before this field existed. Making it
+     * REQUIRED would make every stored IR unparseable and invalidate every
+     * certification; making absence mean "scaffolded" would let a kept default
+     * fire on templates nobody measured. Absent therefore means the compiler
+     * that produced this IR could not say, and `default_kept` does not fire.
+     *
+     * ⚠️ THE DISCRIMINATOR IS A SIGNAL THE DOCUMENT DECLARES, never a text
+     * heuristic — canon 83, whose reference case is a rule matching Word's
+     * "Choose an item." that blocked 28 of 28 dropdowns of the real customer
+     * form. Measured on both real documents: `WM IOV Template.docx` 28
+     * controls, 28 declaring `w:showingPlcHdr`, SCAFFOLDED **0**; the owner's
+     * regenerated consult form 53 controls, 0 placeholders, SCAFFOLDED **53**,
+     * reconciling exactly to the total in both.
+     */
+    scaffolded: z.boolean().optional(),
+    /**
+     * ⚠️ #192 — THE SENTENCE THE PROPOSER SHOWS AS ITS REASON. A doctor
+     * confirming `keep` is agreeing that this exact text prints when the
+     * encounter says nothing, so they must SEE it. Without this the proposal
+     * would be "keep this control's content" about content nobody displayed.
+     *
+     * Blank-template prose, never patient data — the same class as the tracked
+     * blank fixtures. Capped, and EXCLUDED from `structureSha256` with
+     * `scaffolded`, because both are pure functions of bytes that hash already
+     * covers.
+     */
+    scaffoldText: z.string().max(2000).optional(),
     required: z.boolean(),
     unknownPolicy: z.enum(['blank', 'not_documented', 'requires_input']),
     clinicallyMaterial: z.boolean(),
@@ -373,6 +421,32 @@ export const SemanticMappingSchema = z
     required: z.boolean(),
     blankPolicy: z.enum(['blank', 'not_documented', 'requires_input']),
     unknownPolicy: z.enum(['blank', 'not_documented', 'requires_input']),
+    /**
+     * ⚠️ `.nullish()`, NEVER `.default(...)`. `z.infer` gives the OUTPUT type,
+     * where a defaulted field is REQUIRED — which made every hand-built
+     * `SemanticMapping` fixture in the suite a type error, for a field none of
+     * them care about.
+     *
+     * ⚠️ AND ABSENCE MEANS THE BOUNDED CLEAR, NOT KEEP — #192. The #191 wording
+     * here said the opposite, because `keep` was then the column's default and
+     * the two were interchangeable. They are opposites now: the resolver
+     * requires `=== 'keep'`, and a column that is NULL is a control nobody
+     * ruled on, which must never print.
+     */
+    /**
+     * ⚠️ #194 — THERE IS NO `'keep'`. NULL is the bounded clear COUNTED as
+     * still blank (the doctor is told); `'omit'` is the bounded clear NOT
+     * counted and with no prompt (the telehealth consent line).
+     *
+     * The keep half was deleted after its PREMISE was refuted, not merely its
+     * mechanism: it fired when NO fact carried the field's concept, and concept
+     * equality is the only test performed anywhere, so "nothing contradicted
+     * this" was always a claim about the empty set. Measured — a scaffold
+     * reading "no varicosities, no oedema and no ulceration" was kept on a
+     * visit dictated as a large weeping ulcer with oedema and varicosities.
+     * The machine never prints an undictated default.
+     */
+    unmentionedPolicy: z.literal('omit').nullish(),
     practiceDefault: z.string().max(500).nullable(),
     status: TemplateTwinDetectionStatusSchema,
   })
@@ -484,6 +558,37 @@ export const FieldResolutionStatusSchema = z.enum([
    * document; loud everywhere a human or a gate can read it.
    */
   'denial_withheld',
+  /**
+   * THE SCAFFOLD'S OWN SENTENCE WAS EVALUATED AND KEPT, RATHER THAN NEVER
+   * LOOKED AT.
+   *
+   * ⚠️ A NEW STATUS WAS REQUIRED, AND THE ENUM ABOVE ALREADY SAYS WHY. The
+   * distinguishing fact is that this field CARRIES EVIDENCE and is still blank:
+   * the encounter was searched, nothing contradicted the template's pre-printed
+   * clause, so the doctor's own default stands. Measured against every existing
+   * member:
+   *   not_mentioned            `NOT_MENTIONED_HAS_EVIDENCE` is BLOCKING the
+   *                            moment `sourceFactIds` is non-empty — which is
+   *                            exactly the state this status describes. Reusing
+   *                            it means discarding the citation, and the
+   *                            citation IS the claim.
+   *   approved_practice_default a PRACTICE-wide policy default, chosen by the
+   *                            practice. This is the TEMPLATE's own printed
+   *                            text, chosen by the doctor who authored the
+   *                            form. Different author, different audit trail.
+   *   denial_withheld          the encounter DENIED the thing. Here nothing
+   *                            denied and nothing affirmed; the default was
+   *                            simply not contradicted.
+   *   supported                would demand a value and a patch. There is no
+   *                            value — the point is that nothing was written.
+   *
+   * ⚠️ AND THE DISTINCTION IS THE WHOLE CLINICAL CLAIM. "The patient denies
+   * chest pain" and "nobody asked about chest pain" must not produce the same
+   * proof. Today both render as an untouched scaffold and both earn `blank`,
+   * which asserts only that the field was not patched. This status, and the
+   * `kept_default` proof kind it drives, separate them — evaluated-and-kept
+   * from never-looked-at.
+   */
 ]);
 export type FieldResolutionStatus = z.infer<typeof FieldResolutionStatusSchema>;
 
@@ -581,6 +686,12 @@ export const TemplateTwinFillManifestSchema = z
         filled: z.number().int().nonnegative(),
         needsReview: z.number().int().nonnegative(),
         notMentioned: z.number().int().nonnegative(),
+        /**
+         * ⚠️ #194 — RULED-BLANK FIELDS, COUNTED SEPARATELY SO THEY ARE NEITHER
+         * REPORTED AS UNDICTATED NOR SILENTLY UNCOUNTED. `.optional()` so every
+         * manifest already persisted still parses.
+         */
+        omitted: z.number().int().nonnegative().optional(),
         conflicts: z.number().int().nonnegative(),
         criticalUnresolved: z.number().int().nonnegative(),
       })
@@ -609,7 +720,38 @@ export function templateTwinCounts(
   return {
     filled: fields.filter((field) => field.value !== null).length,
     needsReview: fields.filter((field) => unresolved.has(field.status)).length,
-    notMentioned: fields.filter((field) => field.status === 'not_mentioned').length,
+    // ⚠️ #194 — AN `omit` IS NOT COUNTED, AND A NULL POLICY IS. Both take the
+    // bounded clear, so the PAGE is identical; the difference is what the doctor
+    // is told. A NULL policy is a field nobody ruled on, and it must appear in
+    // "N still blank — nothing dictated for those yet" so the blank is visible.
+    // An `omit` was RULED blank — the telehealth consent line on an in-person
+    // visit — so prompting about it every time is noise about a decision
+    // already made.
+    //
+    // ⚠️ THE COUNT MUST NOT SILENTLY SWALLOW EITHER. `default_kept` fell into no
+    // bucket once and one unrelated dictated sentence collapsed a form's blank
+    // count 11 -> 0; the reconciliation arm exists because of that.
+    // ⚠️ #194 — A RULED `omit` IS NOT COUNTED; EVERY OTHER BLANK IS. Both take
+    // the bounded clear, so the PAGE is identical and the difference is only
+    // what the doctor is told. A NULL policy is a field nobody ruled on and
+    // must appear in "N still blank — nothing dictated for those yet", so the
+    // blank stays visible. An `omit` was RULED blank — the telehealth consent
+    // line on an in-person visit — and prompting about it every visit is noise
+    // about a decision already made.
+    //
+    // ⚠️ NOTHING MAY FALL INTO NO BUCKET. `default_kept` did exactly that once,
+    // and one unrelated dictated sentence collapsed a form's blank count from
+    // 11 to 0 with the document byte-identical. The reconciliation arm exists
+    // because of that, and it counts the omitted set explicitly rather than
+    // letting it vanish.
+    notMentioned: fields.filter(
+      (field) =>
+        field.status === 'not_mentioned' &&
+        field.reasonCode !== 'omitted_unsupported_default',
+    ).length,
+    omitted: fields.filter(
+      (field) => field.reasonCode === 'omitted_unsupported_default',
+    ).length,
     conflicts: fields.filter((field) => field.status === 'conflict').length,
     criticalUnresolved: fields.filter(
       (field) =>

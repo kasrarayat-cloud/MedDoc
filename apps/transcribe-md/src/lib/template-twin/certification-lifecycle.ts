@@ -79,6 +79,7 @@ interface PersistedMappingRow {
   approvedSynonyms: unknown;
   required: boolean;
   blankPolicy: string;
+  unmentionedPolicy: string | null;
   unknownPolicy: string;
   practiceDefault: string | null;
   mappingStatus: string;
@@ -102,6 +103,14 @@ function fromPersistedMapping(
       : [],
     required: row.required,
     blankPolicy: row.blankPolicy,
+    // ⚠️ THE KEY IS OMITTED, NOT SET TO `undefined`. An explicit undefined
+    // survives the Zod parse and `canonicalSha256` refuses it outright
+    // ("Canonical JSON does not support undefined object values"), which broke
+    // six certification arms.
+    // ⚠️ #194 — AN EXPLICIT `'omit'` SURVIVES THE ROUND TRIP; NULL IS ELIDED.
+    // Eliding a ruled `omit` would read the doctor's decision back as "nobody
+    // ruled", which is a different behaviour and a different count.
+    ...(row.unmentionedPolicy ? { unmentionedPolicy: row.unmentionedPolicy } : {}),
     unknownPolicy: row.unknownPolicy,
     practiceDefault: row.practiceDefault,
     status: row.mappingStatus.toLowerCase(),
@@ -207,6 +216,7 @@ async function loadOwnedCompilation(
                   approvedSynonyms: true,
                   required: true,
                   blankPolicy: true,
+                  unmentionedPolicy: true,
                   unknownPolicy: true,
                   practiceDefault: true,
                   mappingStatus: true,
@@ -505,6 +515,10 @@ export async function updateTemplateTwinMappings(input: {
             approvedSynonyms: asJson(mapping.approvedSynonyms),
             required: mapping.required,
             blankPolicy: mapping.blankPolicy,
+            // ⚠️ #192 — NO COERCION. `?? 'keep'` would have opted every mapping
+            // nobody ruled on into keeping, which is exactly the inference this
+            // ruling forbids. Absent stays absent, and absent is fail-closed.
+            unmentionedPolicy: mapping.unmentionedPolicy ?? null,
             unknownPolicy: mapping.unknownPolicy,
             practiceDefault: mapping.practiceDefault,
             mappingStatus: dbStatus(mapping.status),

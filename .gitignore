@@ -235,3 +235,9 @@ docs/foundation/STOP
 # python bytecode from ad-hoc imports of scripts/lib/*.py
 __pycache__/
 *.pyc
+
+# Lens sandboxes — throwaway worktrees an adversarial-pass agent cannot write
+# out of. Created by scripts/make-lens-sandbox.sh, reaped by its sibling. They
+# live INSIDE whichever tree builds them, so without this a pass would dirty the
+# very tree whose cleanliness a deploy checks.
+.lens-*/

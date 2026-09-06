@@ -963,6 +963,14 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     // asserts EXACTLY this same rendering. That is what makes "a withheld
     // denial is a blank" a claim about the document rather than about a status.
     const { resolution: unmapped } = affirmed.byLabel('Assessment narrative');
+    // ⚠️ #192 RETURNED THIS ARM TO ITS ORIGINAL FORM, AND THAT IS THE RULING
+    // WORKING. #191 briefly made this `default_kept`, on the theory that a
+    // scaffold could be recognised from its content. It cannot -- the falsifying
+    // case is pinned in `gate-191-kept-default-survives-render`. Under #192 a
+    // kept default requires an EXPLICIT `unmentionedPolicy: 'keep'` on the
+    // mapping, this fixture declares none, and so the field behaves exactly as
+    // it did before the slice began. An undeclared control is unchanged by all
+    // of #191/#192, which is the fail-closed property the ruling buys.
     expect(unmapped.status).toBe('not_mentioned');
     expect(unmapped.value).toBeNull();
     expect(renderedTextOf(controlById(xml, '102'))).toBe(BLANK);
@@ -1467,6 +1475,14 @@ describe('#157(d) — the denial contract, FINAL, end to end', () => {
     //     predicate could not tell them apart.
     expect(side.resolution.status).toBe('denial_withheld');
     expect(side.resolution.value).toBeNull();
+    // ⚠️ #192 RETURNED THIS ARM TO ITS ORIGINAL FORM, AND THAT IS THE RULING
+    // WORKING. #191 briefly made this `default_kept`, on the theory that a
+    // scaffold could be recognised from its content. It cannot -- the falsifying
+    // case is pinned in `gate-191-kept-default-survives-render`. Under #192 a
+    // kept default requires an EXPLICIT `unmentionedPolicy: 'keep'` on the
+    // mapping, this fixture declares none, and so the field behaves exactly as
+    // it did before the slice began. An undeclared control is unchanged by all
+    // of #191/#192, which is the fail-closed property the ruling buys.
     expect(category.resolution.status).toBe('not_mentioned');
     expect(category.resolution.value).toBeNull();
 
