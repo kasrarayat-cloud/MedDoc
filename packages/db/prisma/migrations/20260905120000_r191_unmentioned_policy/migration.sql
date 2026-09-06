@@ -1,0 +1,26 @@
+-- RULING #194 — `unmentionedPolicy` is NULL | 'omit'. THERE IS NO 'keep'.
+--
+--   NULL    the bounded clear, COUNTED as still blank — the doctor is told.
+--   'omit'  the bounded clear, NOT counted and with no prompt — a field the
+--           doctor RULED blank, such as a telehealth consent line on an
+--           in-person visit.
+--
+-- ⚠️ NULLABLE WITH NO DEFAULT, AND NULL IS A MEANING. A default of any kind
+-- would opt every existing mapping into a policy nobody chose. It is also what
+-- holds every certified sha still: pre-existing rows are NULL and contribute
+-- nothing to the attestation hash, while an explicit 'omit' correctly moves it,
+-- because it changes what the document says.
+--
+-- ⚠️ THE 'keep' VALUE WAS DESIGNED, BUILT, ADVERSARIALLY TESTED THREE ROUNDS,
+-- AND DELETED. Six formulations of the mechanism were falsified; then the
+-- premise itself. Keep fired when NO fact carried the field's concept, and
+-- concept equality is the only test this pipeline performs, so "nothing
+-- dictated contradicted this clause" was always a claim about the empty set.
+-- Measured: a scaffold reading "no varicosities, no oedema and no ulceration"
+-- was kept on a visit dictated as a large weeping ulcer with gross bilateral
+-- oedema and prominent varicosities. The machine never prints an undictated
+-- default; a doctor's own default is a human act at review.
+--
+-- No form of this migration was ever applied in any environment.
+ALTER TABLE "template_twin_semantic_mappings"
+  ADD COLUMN "unmentionedPolicy" TEXT;

@@ -52,14 +52,54 @@ const REPO_ROOT = join(__dirname, '../../../../..');
 const SCRIPT = join(REPO_ROOT, 'scripts/check-retirement-conditions.sh');
 const INBOX = join(REPO_ROOT, 'docs/foundation/INBOX.md');
 
-function run(cwd: string = REPO_ROOT): { code: number; out: string } {
+// ⚠️ `Record<string, string>`, NOT `NodeJS.ProcessEnv`. That type REQUIRES
+// `NODE_ENV`, so `{ RETIREMENT_SWEEP_OFFLINE: '1' }` does not satisfy it, and
+// CI's typecheck said so.
+//
+// ⚠️ AND THE HONEST REASON IT REACHED CI: I never ran `tsc` on this branch. The
+// suite was green and I took that as sufficient — but vitest transpiles without
+// typechecking, so a green suite says nothing about types. Not an instrument
+// that lied; a check that was skipped. CI runs
+// `npx tsc --noEmit -p apps/transcribe-md/tsconfig.json`, and running exactly
+// that afterwards reproduces green.
+function run(cwd: string = REPO_ROOT, env: Record<string, string> = {}): { code: number; out: string } {
   try {
-    const out = execFileSync('bash', [SCRIPT], { cwd, encoding: 'utf8', stdio: 'pipe' });
+    const out = execFileSync('bash', [SCRIPT], {
+      cwd,
+      encoding: 'utf8',
+      stdio: 'pipe',
+      env: { ...process.env, ...env },
+    });
     return { code: 0, out };
   } catch (e) {
     const err = e as { status?: number; stdout?: string; stderr?: string };
     return { code: err.status ?? -1, out: `${err.stdout ?? ''}${err.stderr ?? ''}` };
   }
+}
+
+/**
+ * A real line diff, for the one arm that compares two whole outputs.
+ *
+ * ⚠️ WRITTEN BECAUSE THE FAILURE WAS UNDIAGNOSABLE. `toBe` on two multi-KB
+ * strings prints both truncated to the same visible prefix — literally
+ * `expected 'retirement-condition sweep — docs/fou…' to be
+ * 'retirement-condition sweep — docs/fou…'` — so the CI red said two identical
+ * things differed and named nothing. A failure that cannot be read is a failure
+ * nobody fixes; it took a separate reproduction to find the cause.
+ */
+function firstDifference(a: string, b: string): string {
+  const la = a.split('\n');
+  const lb = b.split('\n');
+  for (let i = 0; i < Math.max(la.length, lb.length); i += 1) {
+    if (la[i] !== lb[i]) {
+      return [
+        `first difference at line ${i + 1} of ${Math.max(la.length, lb.length)}:`,
+        `  from repo root : ${JSON.stringify(la[i] ?? '<absent>')}`,
+        `  from foreign cwd: ${JSON.stringify(lb[i] ?? '<absent>')}`,
+      ].join('\n');
+    }
+  }
+  return 'no line differs — the strings differ only in trailing whitespace';
 }
 
 /** Everything printed under one bucket heading, up to the blank line. */
@@ -191,13 +231,47 @@ describe('F30 · retirement conditions are tested, not remembered', () => {
   }, TIMEOUT_MS);
 
   // ── F28's OWN LESSON, APPLIED TO THIS SCRIPT ────────────────────────────
+  // ⚠️ THIS ARM VARIES **ONE** THING, AND IT USED NOT TO.
+  //
+  // It compares two whole outputs to prove the sweep is CWD-independent. But
+  // the sweep makes LIVE `git ls-remote` calls whose result reaches stdout
+  // twice — on the controls line, and through the bucket assignment, because an
+  // unreachable origin moves `merged:` entries into cannot-tell. So the arm was
+  // comparing the NETWORK as much as the cwd, and a blip between the two runs
+  // read as a cwd defect.
+  //
+  // MEASURED, not theorised: 8 of 8 passing in isolation, roughly 1 in 4 failing
+  // in a loaded batch, and one CI red on PR #952 — a change that touches none
+  // of this. The enumeration inside the script is already `| sort`, so ordering
+  // was never the cause.
+  //
+  // `RETIREMENT_SWEEP_OFFLINE=1` pins the network observation for BOTH runs, so
+  // the only variable left is the one under test. The override can only force
+  // the sweep OFFLINE — there is deliberately no way to assert the network is
+  // fine when it is not, because that could manufacture a DUE.
   it('gives the SAME answer from a foreign cwd as from the repo root', () => {
-    const fromRoot = run(REPO_ROOT);
-    const fromForeign = run(join(REPO_ROOT, 'apps/transcribe-md'));
+    const OFFLINE = { RETIREMENT_SWEEP_OFFLINE: '1' };
+    const fromRoot = run(REPO_ROOT, OFFLINE);
+    const fromForeign = run(join(REPO_ROOT, 'apps/transcribe-md'), OFFLINE);
+
     expect(fromForeign.code).toBe(fromRoot.code);
-    expect(fromForeign.out).toBe(fromRoot.out);
+    expect(fromForeign.out, firstDifference(fromRoot.out, fromForeign.out)).toBe(fromRoot.out);
     expect(fromRoot.out).toMatch(/retirement-condition sweep/);
+    // Non-vacuity: the pin actually took, in both runs. Without this the arm
+    // passes just as happily if the env never reached the script and both runs
+    // simply happened to agree.
+    expect(fromRoot.out).toContain('OFFLINE FORCED');
+    expect(fromForeign.out).toContain('OFFLINE FORCED');
   }, TIMEOUT_MS);
+
+  // ⚠️ AND THE ONLINE PATH IS STILL EXERCISED, so pinning the network above does
+  // not quietly retire the code it pins. `SHARED` is a real, un-overridden run;
+  // this asserts it took the LIVE branch, which is the half the arm above can no
+  // longer see.
+  it('the un-overridden sweep still makes its own network observation', () => {
+    expect(SHARED.out).toMatch(/· controls: origin reachable=[01] /);
+    expect(SHARED.out).not.toContain('OFFLINE FORCED');
+  });
 
   // ── EXIT CODE IS A CLAIM, AND IT MUST MATCH THE BUCKETS ─────────────────
   // 0 = nothing due · 1 = a finding · 2 = can't tell. A green with a populated
@@ -211,5 +285,82 @@ describe('F30 · retirement conditions are tested, not remembered', () => {
     if (cantCount > 0) expect(code).toBe(2);
     else if (dueCount > 0 || unregCount > 0) expect(code).toBe(1);
     else expect(code).toBe(0);
+  });
+});
+
+// ============================================================================
+// ⚠️ THE ROOT CAUSE OF THIS GATE'S OWN RECURRING FLAKE.
+// ----------------------------------------------------------------------------
+// The census line above was added because this arm went RED in CI on unchanged
+// trees, naming a DIFFERENT entry each time, while every local reproduction was
+// clean. It printed what the sweep READ — and the answer settled it: the census
+// and the registry held the SAME 18 timestamps, and one of them was still being
+// called an orphan. A set that equals itself cannot have an orphan, so the
+// defect was never in the data.
+//
+// It was in the pipeline:
+//
+//     printf '%s\n' "${HEADINGS[@]}" | grep -qF "### $rts" || ORPHANS+=("$rts")
+//
+// `grep -q` exits 0 the instant it matches and closes the pipe. `printf` then
+// dies of SIGPIPE (141). `set -o pipefail` promotes the PIPELINE's status to
+// that 141 — so a MATCH is reported as a MISS and the `||` fires.
+//
+// MEASURED, as a controlled A/B on the exact construct, same loop and data:
+//     printf | grep -q          21 false misses / 54,000 certain matches
+//     [[ blob == *needle* ]]     0 false misses / 54,000
+//
+// ~1 in 2,500 per probe × 18 rows ≈ 0.7% per run — which is exactly why 25
+// consecutive clean local runs never refuted it, and why CI, which runs it far
+// more often and under more scheduling pressure, saw it repeatedly.
+//
+// ⚠️ WHAT IS AND IS NOT PROVED. The MECHANISM is measured and the fix is an A/B.
+// The CI red itself was not reproduced on demand — a 0.7% event is not
+// reproducible on demand, which is the whole reason it survived this long. What
+// ties them is the signature: identical sets, a different victim each time, and
+// a census that matches this tree's byte for byte.
+// ============================================================================
+
+describe('⚠️ no early-exit pipeline can misreport a match as a miss', () => {
+  const PIPE_INTO_GREP_Q = /\|\s*grep\s+-[a-zA-Z]*q/;
+
+  it('the sweep contains no pipeline into `grep -q`', () => {
+    const body = readFileSync(SCRIPT, 'utf8');
+    // Comments are stripped first, or this gate reports its OWN documentation.
+    const code = body
+      .split('\n')
+      .filter((l) => !l.trimStart().startsWith('#'))
+      .join('\n');
+    const offenders = code
+      .split('\n')
+      .filter((l) => PIPE_INTO_GREP_Q.test(l));
+    expect(
+      offenders,
+      'each of these can report a MATCH as a MISS under `pipefail`; use ' +
+        '`[[ "$blob" == *"$needle"* ]]`, or capture then match',
+    ).toEqual([]);
+  });
+
+  it('CONTROL — the check SEES a planted offender in a real file', () => {
+    // ⚠️ A CONTROL THAT NEVER TOUCHES A FILE CANNOT GUARD FILES. The arm above
+    // reads from disk, so this one plants the offending line into the real
+    // text and confirms the same predicate reds on it — otherwise a typo in
+    // the regex would leave a permanently green no-op.
+    const body = readFileSync(SCRIPT, 'utf8');
+    const planted = `${body}\nprintf '%s\\n' "\${X[@]}" | grep -qF "needle"\n`;
+    const offenders = planted
+      .split('\n')
+      .filter((l) => !l.trimStart().startsWith('#'))
+      .filter((l) => PIPE_INTO_GREP_Q.test(l));
+    expect(offenders.length).toBeGreaterThan(0);
+  });
+
+  it('and `pipefail` is still ON — the hazard only exists because it is', () => {
+    // ⚠️ THE FIX IS NOT "TURN OFF pipefail". `pipefail` is what makes every
+    // OTHER pipeline in this script honest; the repair is to stop piping into
+    // a command that exits early, not to stop noticing when a pipeline fails.
+    // Asserting it stays on is what keeps a future reader from "fixing" this
+    // the cheap way.
+    expect(readFileSync(SCRIPT, 'utf8')).toMatch(/^set -[a-z]*o pipefail/m);
   });
 });

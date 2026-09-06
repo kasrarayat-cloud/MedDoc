@@ -586,6 +586,11 @@ export function verifyRenderedTemplateDocx(
     // it must satisfy the filled-proof equality below — the patched field set
     // and the proof set must be exactly equal. Filing it with the blanks would
     // exempt it from the one check that actually verifies it.
+    //
+    // ⚠️ #194 — THE `kept_default` ARM IS GONE WITH THE STATUS. It filed here
+    // too, making the same structural claim (nothing was written) with a
+    // stronger word: that the template's clause had been found not to
+    // contradict the encounter. That check never existed.
     if (field.kind === 'blank') blankProofs.push(field);
     else {
       // `emptied` IS patched, so it joins the patched-set equality like a fill
