@@ -24,7 +24,7 @@
 // declaring services. A `ubuntu-latest` job gets its own ephemeral VM, so two
 // hosted service-declaring jobs cannot collide on 5432 — they are different
 // machines. The original third arm nonetheless matched on `services` ALONE, so
-// moving the heavy lane to GitHub-hosted runners (#955) failed it with
+// moving the heavy lane to GitHub-hosted runners (PR #955) failed it with
 // `a11y.yml:axe` and `test.yml:test`, both of which are now inherently isolated.
 //
 // Narrowing the arm to self-hosted lanes is therefore a correction to the WATCHED

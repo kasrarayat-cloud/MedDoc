@@ -1,5 +1,5 @@
 /**
- * RULING #188 — A MIGRATION-CARRYING DEPLOY REQUIRES THE `strict` DECLARATION.
+ * RULING #198 — A MIGRATION-CARRYING DEPLOY REQUIRES THE `strict` DECLARATION.
  *
  * ⚠️ #96(b) IS APPLIED ONE LEVEL FINER, NOT OVERTURNED. Strictness is
  * proportional to reversibility. A code-only deploy is answerable by an image
@@ -36,7 +36,7 @@ function decide(repo: string, applied: string): { mode: string; why: string } {
   return { mode: out.slice(0, i), why: out.slice(i + 1) };
 }
 
-describe('#188 — migration-carrying deploys are strict, code-only stays present', () => {
+describe('#198 — migration-carrying deploys are strict, code-only stays present', () => {
   it('POSITIVE CONTROL: the library loads and the function answers', () => {
     // Without this, every `strict` below could be an empty string from a
     // failed source, and "" !== "present" would pass the refusal arms.
@@ -46,7 +46,7 @@ describe('#188 — migration-carrying deploys are strict, code-only stays presen
   });
 
   it('code-only stays `present` — the #96(b) case, and it must NOT tighten', () => {
-    // This is the arm that stops #188 from becoming "strict for everything".
+    // This is the arm that stops #198 from becoming "strict for everything".
     // Today's production shape: 111 in the repo, 111 applied.
     expect(decide('111', '111').mode).toBe('present');
     expect(decide('5', '5').mode).toBe('present');

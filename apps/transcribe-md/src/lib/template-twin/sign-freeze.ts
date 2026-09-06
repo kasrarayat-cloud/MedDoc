@@ -95,7 +95,12 @@ export async function freezeNativeManifestForSigning(input: {
   // change to signing behaviour. Pointer semantics are untouched.
   const currentOverrides = await prisma.templateTwinFieldOverride.findMany({
     where: { visitId, practiceId },
-    select: { fieldId: true, selectedOptionOrdinal: true },
+    select: {
+        fieldId: true,
+        selectedOptionOrdinal: true,
+        overrideKind: true,
+        insertedText: true,
+      },
   });
   if (
     manifestMatchesDocument({
@@ -204,7 +209,12 @@ export async function freezeNativeManifestForSigning(input: {
   // than freezing a document that is already stale.
   const overridesAfter = await prisma.templateTwinFieldOverride.findMany({
     where: { visitId, practiceId },
-    select: { fieldId: true, selectedOptionOrdinal: true },
+    select: {
+        fieldId: true,
+        selectedOptionOrdinal: true,
+        overrideKind: true,
+        insertedText: true,
+      },
   });
   if (
     !after ||
@@ -248,7 +258,12 @@ export async function resolveFrozenPointer(
   // stop, re-entering one layer down.
   const currentOverrides = await prisma.templateTwinFieldOverride.findMany({
     where: { visitId, practiceId },
-    select: { fieldId: true, selectedOptionOrdinal: true },
+    select: {
+        fieldId: true,
+        selectedOptionOrdinal: true,
+        overrideKind: true,
+        insertedText: true,
+      },
   });
   const wantedOverrides = overridesIdentity(currentOverrides);
   const m = await prisma.templateTwinFillManifest.findFirst({

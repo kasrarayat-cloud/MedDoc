@@ -11,10 +11,19 @@
 // browser delivery semantics are unchanged from Phase 2.
 // ============================================================================
 
-import { useCallback, useState, useTransition } from 'react';
+import { useCallback, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Check, Loader2, Lock, Send, TrendingUp, X } from 'lucide-react';
+import {
+  Check,
+  ChevronRight,
+  Loader2,
+  Lock,
+  Send,
+  ShieldCheck,
+  TrendingUp,
+  X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
@@ -161,6 +170,105 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
       return next;
     });
   }, []);
+
+  // ⚠️ THE SUMMARY IS DERIVED FROM WHAT THE DELIVERY CODE ACTUALLY DOES.
+  //
+  // `applyBrowserSideDeliveries` copies exactly ONE clipboard format — the LAST
+  // selected — and discards the rest. Listing every ticked clipboard row told
+  // the doctor that all of them were delivered, which is false, and the winner
+  // depends on Set insertion order that a list ordered by DESTINATIONS cannot
+  // express. So the clipboard contributes at most ONE entry here, and it is the
+  // one that wins.
+  // ── THE POST-SIGN ACTION — ruling #188(4) ────────────────────────────────
+  //
+  // Before signing a destination is a CHOICE you accumulate and then commit;
+  // after signing it is a THING YOU DO NOW, repeatedly. The frames draw that
+  // difference and it is the reason this landed as its own change rather than
+  // inside the skin — a re-skin that also changes what a click DOES is two
+  // claims wearing one diff.
+  //
+  // ⚠️ AND IT DISSOLVES F-T4-1 FOR THIS STATE, WHICH IS NOT A COINCIDENCE.
+  // The filed defect is that `applyBrowserSideDeliveries` copies only the LAST
+  // selected clipboard format and discards the rest — a consequence of
+  // committing a SET. One destination per click means there is never a set to
+  // discard, so the post state cannot exhibit it. The PRE-sign state still
+  // can, and F-T4-1 stays open for it.
+  const [rowPending, setRowPending] = useState<Destination | null>(null);
+  /** The synchronous half of the one-at-a-time guard — see `deliverOne`. */
+  const deliveringRef = useRef<Destination | null>(null);
+
+  const deliverOne = useCallback(
+    async (dest: Destination) => {
+      // ⚠️ A REF, NOT THE STATE VALUE — the state read is a STALE CLOSURE.
+      // `rowPending` here is whatever it was when this callback was last
+      // memoised, so two clicks dispatched inside ONE React batch both saw
+      // `null` and both proceeded: measured as two anchor clicks and two
+      // "Delivered" toasts. The rendered `disabled` attribute is the guard a
+      // real user hits; this is the guard for everything faster than a render.
+      //
+      // This codebase has shipped the same shape before — a memoised submit
+      // missing a gate from its dep array lit up and did nothing.
+      if (deliveringRef.current) return;
+      deliveringRef.current = dest;
+      setRowPending(dest);
+      try {
+        const res = await prepareDeliverOnly(props.visitId, [dest]);
+        const failed = await applyBrowserSideDeliveries(res, [dest]);
+        const label = DESTINATIONS.find((d) => d.key === dest)?.label ?? dest;
+
+        // ⚠️ A BROWSER-SIDE FAILURE IS NOT A DELIVERY. `applyBrowserSideDeliveries`
+        // reports a blocked clipboard by toast and does not throw, so without
+        // this the row said "Delivered" immediately after "Copy blocked".
+        if (failed.length > 0) return;
+
+        // ⚠️ AND A DOWNLOAD IS NOT OBSERVED, SO IT IS NOT CLAIMED.
+        // `pdf`/`docx` fire an `<a download>` which has NO error channel:
+        // `prepareDeliverOnly` makes no request for them, and a 503 from the
+        // PDF route (Gotenberg down), a 401 on an expired session or a 500 all
+        // return JSON that the anchor quietly discards. Saying "Delivered"
+        // there asserts something this code cannot see.
+        //
+        // Fixing it properly means fetching the export, checking `res.ok` and
+        // downloading the blob — a change to the download mechanism, filed as
+        // F-T4-2 rather than smuggled into this one. Until then the row says
+        // only what it knows.
+        const observed = dest !== 'pdf' && dest !== 'docx';
+        toast.success(observed ? 'Delivered' : 'Download started', {
+          description: label,
+        });
+      } catch (err) {
+        // ⚠️ A FAILED DELIVERY IS SAID OUT LOUD. The frames draw no error state
+        // for these rows — that is item 1 on T4's batched request list — so
+        // rather than invent one, the failure uses the toast this modal
+        // already uses for exactly this. Silence would teach the doctor the
+        // row is decorative.
+        toast.error('That delivery failed', {
+          description: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        deliveringRef.current = null;
+        setRowPending(null);
+      }
+    },
+    [props.visitId, rowPending],
+  );
+
+  const deliverySummary = (() => {
+    const picked = DESTINATIONS.filter((d) => selected.has(d.key));
+    if (picked.length === 0) return 'No destinations selected.';
+    const clip = [...selected].filter((k) => k.startsWith('clipboard_'));
+    const winner = clip.length > 0 ? clip[clip.length - 1] : null;
+    const parts = picked
+      .filter((d) => !d.key.startsWith('clipboard_') || d.key === winner)
+      .map((d) => d.label);
+    const dropped = clip.length - (winner ? 1 : 0);
+    return (
+      `Delivery: ${parts.join(' • ')}` +
+      (dropped > 0
+        ? ` — only one clipboard format is copied, so ${dropped} other${dropped > 1 ? 's are' : ' is'} skipped.`
+        : '')
+    );
+  })();
 
   const submit = useCallback(() => {
     // Strip 'email' defensively — if emailEnabled flips off between
@@ -333,41 +441,69 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
             // and three signing specs failed on a button they could not reach.
             // Bounded here, body flexes, footer never scrolls away.
             'flex max-h-[76vh] flex-col',
+            // ⚠️ THE BOUNDED FLEX COLUMN IS LOAD-BEARING, NOT DECORATION, and
+            // `29-sign-modal-geometry.spec.ts` is why: it asserts the submit's
+            // bottom edge is inside a 640px viewport with NO scrolling. The T4
+            // skin adds ground, border and radius; it must not touch the
+            // height bound or the column.
+            'qm-t4-card',
             'focus:outline-none qm-lin-blur-in',
             'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
             'data-[state=closed]:zoom-out-95'
           )}
-          style={{ width: 'min(94vw, 560px)' }}
+          /* width now comes from `.qm-t4-card` — the frames' 496. */
         >
-          <div
-            className="flex flex-none items-start justify-between gap-4"
-            style={{ padding: '20px 24px 12px' }}
-          >
+          <div className="qm-t4-head flex flex-none items-start justify-between gap-4">
             <div>
-              <Dialog.Title
-                style={{
-                  margin: 0,
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 16,
-                  fontWeight: 500,
-                  letterSpacing: '-0.01em',
-                  color: 'var(--color-linear-text)',
-                }}
-              >
+              {/* ⚠️ THE POST-SIGN BADGE — `sign-deliver-post`'s 16×16
+                  shield-check + "DOCUMENT SIGNED". The rows do NOT become
+                  actions in this change; that shift is its own diff, per
+                  ruling #188(4). */}
+              {!props.signOnSubmit && (
+                <div className="qm-t4-badge" data-testid="t4-signed-badge">
+                  <ShieldCheck className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  Document signed
+                </div>
+              )}
+              <Dialog.Title className="qm-t4-title">
+                {/* ⚠️ THE PRE-SIGN TITLE STAYS "Sign and deliver your note",
+                    AND THAT IS A DELIBERATE DEPARTURE FROM THE FRAMES, which
+                    title the card "Sign & deliver".
+
+                    `29-sign-modal-geometry.spec.ts:123-130` matches this
+                    heading with `exact: true` — no substring tolerance — and
+                    that spec exists because a required attestation once pushed
+                    the submit off-screen at 720px. Changing the copy here
+                    would red a geometry gate over a word, on the surface that
+                    signs a clinical record.
+
+                    The frames' title is a NAME for the card, not a claim about
+                    behaviour, so keeping the tested string costs nothing a
+                    doctor can see. Recorded in the T4 spec as a departure
+                    rather than taken silently. */}
                 {props.signOnSubmit
                   ? 'Sign and deliver your note'
                   : 'Export signed note'}
               </Dialog.Title>
-              <p
-                style={{
-                  marginTop: 6,
-                  marginBottom: 0,
-                  fontSize: 13,
-                  color: 'var(--color-linear-text-2)',
-                }}
-              >
-                Pick one or more destinations.{' '}
-                {props.signOnSubmit && 'The note locks after signing.'}
+              {/* ⚠️ "THE NOTE LOCKS AFTER SIGNING" IS RESTORED, AND DELETING IT
+                  WAS THE SAME DEFECT RULING #188(2) EXISTS TO PREVENT — one line
+                  over from the caption that ruling protects.
+
+                  The frames' sub-copy replaced the flat slot that carried it, so
+                  the warning went with the words around it. Signing really is
+                  terminal for editing (`soap-editor.tsx`: `isSigned` forces
+                  `isReadonly`), and the adversarial pass measured that no other
+                  string in the modal — or near the trigger — says so. The doctor
+                  was left to be told about the lock only AFTER it happened.
+
+                  ⚠️ AND "required destinations" IS NOT RESTORED, IT IS DROPPED:
+                  no destination is required and none is marked so; the only
+                  rule is at least one. A frame's copy does not get to invent a
+                  constraint the product does not have. */}
+              <p className="qm-t4-sub">
+                {props.signOnSubmit
+                  ? 'Confirm destination settings and sign off this progress note. The note locks after signing.'
+                  : 'The progress note has been locked. Choose where to deliver it.'}
               </p>
             </div>
             <Dialog.Close asChild>
@@ -388,24 +524,45 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
             <Group
               title="Copy to clipboard"
               hint="Paste the formatted note into your EHR's note field."
+              groupKey="clipboard"
               items={DESTINATIONS.filter((d) => d.group === 'clipboard')}
               selected={selected}
               onToggle={toggle}
+              mode={props.signOnSubmit ? 'checkbox' : 'action'}
+              pendingRow={rowPending}
+              onRun={deliverOne}
             />
             <Group
               title="Download"
               hint="Save a PDF for records or a DOCX to edit in Word."
+              groupKey="download"
               items={DESTINATIONS.filter((d) => d.group === 'download')}
               selected={selected}
               onToggle={toggle}
+              mode={props.signOnSubmit ? 'checkbox' : 'action'}
+              pendingRow={rowPending}
+              onRun={deliverOne}
             />
             {props.emailEnabled && (
               <Group
                 title="Email"
-                hint={`Send a PDF to ${props.doctorEmail} for your records. Don't use for patient communication.`}
-                items={DESTINATIONS.filter((d) => d.group === 'email')}
+                /* ⚠️ "A LINK", NOT "A PDF" — AND THE OLD WORDING WAS FALSE.
+                   `sendVisitPdfEmail` sends NO attachment ("NO attachments.
+                   Deliberately absent, not empty") and its own body tells the
+                   doctor "We don't send notes or patient details by email".
+                   The caption promised the opposite, directly above the
+                   sentence that exists to stop a doctor forwarding it.
+                   The string predates this change; promoting it to a gated
+                   safety surface is what made it worth fixing rather than
+                   inheriting. */
+                hint={`Send a secure link to ${props.doctorEmail} for your records — the note itself is never attached. Don't use for patient communication.`}
+                groupKey="email"
+              items={DESTINATIONS.filter((d) => d.group === 'email')}
                 selected={selected}
                 onToggle={toggle}
+                mode={props.signOnSubmit ? 'checkbox' : 'action'}
+                pendingRow={rowPending}
+                onRun={deliverOne}
               />
             )}
           </div>
@@ -436,22 +593,26 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                 Signing is an attestation. Confirm that you have reviewed this
                 note and that it reflects the encounter.
               </p>
+              <hr className="qm-t4-divider" />
+              {/* The frames draw the attestation as a checkbox row, not a
+                  bordered card — the same row unit as a destination, so it
+                  reads as one more thing you tick. `sign-attestation-toggle`
+                  and `aria-pressed` are unchanged: the geometry gate and the
+                  accessible state both key on them. */}
               <button
                 type="button"
                 onClick={() => setModalAttested((a) => !a)}
                 aria-pressed={modalAttested}
+                data-checked={modalAttested ? 'true' : 'false'}
                 data-testid="sign-attestation-toggle"
-                className="mt-2 flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left"
-                style={{
-                  borderColor: modalAttested
-                    ? 'color-mix(in srgb, var(--color-linear-sage) 45%, transparent)'
-                    : 'var(--color-linear-border)',
-                  background: modalAttested
-                    ? 'color-mix(in srgb, var(--color-linear-sage) 14%, transparent)'
-                    : 'transparent',
-                }}
+                className="qm-t4-row"
               >
-                <span className="text-[13px]">
+                <span aria-hidden className="qm-t4-box">
+                  {modalAttested && (
+                    <Check className="h-3 w-3" strokeWidth={3} aria-hidden />
+                  )}
+                </span>
+                <span className="qm-t4-attest-text">
                   I have reviewed this note and attest to it
                 </span>
               </button>
@@ -551,26 +712,75 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               padding: '12px 24px',
             }}
           >
-            <p
-              style={{
-                margin: 0,
-                fontSize: 11,
-                color: 'var(--color-linear-text-3)',
-              }}
-            >
-              {props.signOnSubmit
-                ? 'Locked notes can still be re-exported later.'
-                : 'This visit is already signed.'}
-            </p>
-            <div className="flex items-center gap-2">
-              <Dialog.Close asChild>
-                <button type="button" className="qm-lin-btn">
-                  Cancel
-                </button>
-              </Dialog.Close>
+            {/* ⚠️ THE DELIVERY SUMMARY REFLECTS THE CHECKED SET — the frames
+                are explicit that it mirrors the ticked rows, so it is COMPUTED
+                and never written down. A summary that can disagree with the
+                checkboxes above it is worse than no summary. */}
+            {/* ⚠️ THE SUMMARY NAMES ONLY WHAT ACTUALLY HAPPENS.
+                Its first version listed every checked destination — but
+                `applyBrowserSideDeliveries` copies ONE clipboard format, the
+                LAST selected (`clipboardChoices[length - 1]`), and discards the
+                others. So a doctor who ticked Epic and Athena was told both were
+                delivered while only one reached the clipboard, and which one won
+                depended on Set insertion order the summary could not express.
+                Found by the adversarial pass.
+
+                ⚠️ THE UNDERLYING BEHAVIOUR IS NOT CHANGED HERE — that is a
+                capability question, filed rather than fixed inside a re-skin.
+                What is fixed is the surface CLAIMING something untrue. */}
+            {/* ⚠️ PRE-SIGN ONLY, AND MY COMMENT BELOW USED TO CLAIM THIS AND
+                BE FALSE. This element was ungated while only the line under it
+                was gated, so a signed visit showed "Delivery: Copy for Epic •
+                Download PDF" — the DEFAULT set — permanently, naming two
+                destinations that received nothing and omitting whichever one
+                the doctor had just clicked. `selected` cannot move after
+                signing because the checkboxes are gone, so it was a CONSTANT
+                false claim on every signed note, not a stale one. */}
+            {props.signOnSubmit && (
+              <p className="qm-t4-summary" data-testid="t4-delivery-summary">
+                {deliverySummary}
+              </p>
+            )}
+            {/* "Locked notes can still be re-exported later" was the answer to
+                *if I sign now, can I still get the PDF?* — and it was deleted
+                with the footer copy it lived in. The pass caught the doctor
+                losing the warning AND its mitigation in one diff. */}
+            {props.signOnSubmit ? (
+              <p className="qm-t4-summary" data-testid="t4-reexport-note">
+                Locked notes can still be re-exported later.
+              </p>
+            ) : (
+              /* The frames' post-sign footer line. It replaces the delivery
+                 summary, which described a SET nobody accumulates any more. */
+              <p className="qm-t4-summary" data-testid="t4-post-footer">
+                Each destination delivers on its own. Close when you are done.
+              </p>
+            )}
+            {/* ⚠️ NO CANCEL AND NO PRIMARY BUTTON AFTER SIGNING — the frames
+                are explicit, and the reason is the behaviour, not the paint:
+                every row is its own commit, so there is nothing left to
+                confirm and nothing to cancel. `Export again` reopens the
+                modal; the doctor closes it with Esc or the X, which Radix
+                already provides and which `aria-label="Close"` already
+                names. */}
+            <div className="qm-t4-actions">
+              {props.signOnSubmit && (
+                <Dialog.Close asChild>
+                  <button type="button" className="qm-t4-btn qm-t4-btn-cancel">
+                    Cancel
+                  </button>
+                </Dialog.Close>
+              )}
+              {/* ⚠️ THE PRIMARY BUTTON IS PRE-SIGN ONLY. After signing there is
+                  no set to commit — each row committed itself — so a
+                  "Deliver" button would either do nothing or re-deliver a
+                  selection the doctor can no longer see. The frames draw
+                  none, and the behaviour is why. */}
+              {props.signOnSubmit && (
               <button
                 type="button"
-                className="qm-lin-btn-primary"
+                className="qm-t4-btn qm-t4-btn-primary"
+                data-testid="t4-submit"
                 onClick={submit}
                 // E/M visible-confirm: the sign CTA stays disabled until
                 // the doctor explicitly confirms a recorded level change.
@@ -597,6 +807,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                   </>
                 )}
               </button>
+              )}
             </div>
           </div>
         </Dialog.Content>
@@ -612,33 +823,108 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
 function Group({
   title,
   hint,
+  groupKey,
   items,
   selected,
   onToggle,
+  mode = 'checkbox',
+  pendingRow = null,
+  onRun,
 }: {
   title: string;
   hint: string;
+  groupKey: string;
+  /** `checkbox` before signing, `action` after — ruling #188(4). */
+  mode?: 'checkbox' | 'action';
+  pendingRow?: Destination | null;
+  onRun?: (k: Destination) => void;
   items: { key: Destination; label: string }[];
   selected: Set<Destination>;
   onToggle: (k: Destination) => void;
 }) {
   return (
-    <div className="py-3">
-      <div className="mb-1 font-mono text-[10.5px] font-medium uppercase tracking-[0.07em] text-linear-text-3">
-        {title}
-      </div>
-      <div className="mb-2 text-[12px] text-linear-text-3">{hint}</div>
-      <div className="space-y-1.5">
-        {items.map((it) => (
-          <CheckboxRow
-            key={it.key}
-            label={it.label}
-            checked={selected.has(it.key)}
-            onToggle={() => onToggle(it.key)}
-          />
-        ))}
+    <div className="qm-t4-group-wrap">
+      <div className="qm-t4-section-label">{title}</div>
+      {/* ⚠️ THE CAPTION IS A SAFETY SURFACE — RULING #188(2).
+          The email group's reads "Don't use for patient communication." The
+          frames' flat DELIVER TO list has no slot for a per-group line, and
+          building them literally would have deleted the one instruction that
+          stops a doctor mailing a note to a patient.
+          A LITERAL FRAME THAT DELETES A SAFETY INSTRUCTION IS NOT THE SPEC. */}
+      <p className="qm-t4-caption" data-testid={`t4-caption-${groupKey}`}>
+        {hint}
+      </p>
+      {/* ⚠️ ONE ROW PER DESTINATION — ruling #188(1). The frames draw four rows
+          and the product has eight, five of them EHR clipboard formats. The
+          frames' ROW is the design; the four drawn are examples. Collapsing
+          them would mean a doctor on Epic could not pick the Epic format. */}
+      <div className="qm-t4-group" data-testid={`t4-group-${groupKey}`}>
+        {items.map((it) =>
+          mode === 'action' ? (
+            <ActionRow
+              key={it.key}
+              label={it.label}
+              destination={it.key}
+              pending={pendingRow === it.key}
+              disabled={pendingRow !== null}
+              onRun={() => onRun?.(it.key)}
+            />
+          ) : (
+            <CheckboxRow
+              key={it.key}
+              label={it.label}
+              checked={selected.has(it.key)}
+              onToggle={() => onToggle(it.key)}
+            />
+          ),
+        )}
       </div>
     </div>
+  );
+}
+
+/**
+ * ⚠️ A ROW THAT COMMITS ON ITS OWN CLICK — the post-sign shape.
+ *
+ * It is deliberately NOT a checkbox wearing different paint: no `aria-pressed`,
+ * because there is no state to press into. It performs I/O and returns.
+ *
+ * ⚠️ THE PENDING LOOK REUSES `Loader2`, AND THAT IS A LIMIT, NOT A DESIGN. The
+ * frames draw no hover, focus, disabled, pending or error state for these rows
+ * — item 1 on T4's batched request list. Rather than invent five, this borrows
+ * the spinner the submit button already uses and says failures through the
+ * toast this modal already uses. A button that performs I/O with NO feedback
+ * teaches the doctor it is decorative, which is worse than borrowed vocabulary.
+ */
+function ActionRow({
+  label,
+  destination,
+  pending,
+  disabled,
+  onRun,
+}: {
+  label: string;
+  destination: Destination;
+  pending: boolean;
+  disabled: boolean;
+  onRun: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onRun}
+      disabled={disabled}
+      data-testid={`t4-action-${destination}`}
+      data-pending={pending ? 'true' : 'false'}
+      className="qm-t4-row qm-t4-row-action"
+    >
+      <span className="qm-t4-row-label">{label}</span>
+      {pending ? (
+        <Loader2 className="h-4 w-4 flex-none animate-spin" aria-hidden />
+      ) : (
+        <ChevronRight className="h-4 w-4 flex-none" aria-hidden />
+      )}
+    </button>
   );
 }
 
@@ -652,31 +938,20 @@ function CheckboxRow({
   onToggle: () => void;
 }) {
   return (
+    // ⚠️ `aria-pressed` STAYS. It is what makes this a checkable control to a
+    // screen reader, and the frames' visual checkbox is `aria-hidden` — the
+    // state lives on the button, not on the decoration.
     <button
       type="button"
       onClick={onToggle}
       aria-pressed={checked}
-      className={cn(
-        'flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left',
-        'transition-colors duration-150 ease-out',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-linear-sage focus-visible:ring-offset-2 focus-visible:ring-offset-linear-bg',
-        checked
-          ? 'border-[rgba(122,166,140,0.34)] bg-linear-sage-tint text-linear-text'
-          : 'border-linear-border bg-linear-surface-2 text-linear-text-2 hover:border-linear-border-strong hover:text-linear-text'
-      )}
+      data-checked={checked ? 'true' : 'false'}
+      className="qm-t4-row"
     >
-      <span
-        aria-hidden
-        className={cn(
-          'flex h-4 w-4 flex-none items-center justify-center rounded-[4px] border',
-          checked
-            ? 'border-linear-sage bg-linear-sage text-[#0d1611]'
-            : 'border-linear-border-strong bg-transparent'
-        )}
-      >
+      <span aria-hidden className="qm-t4-box">
         {checked && <Check className="h-3 w-3" strokeWidth={3} aria-hidden />}
       </span>
-      <span className="flex-1 text-[13px]">{label}</span>
+      <span className="qm-t4-row-label">{label}</span>
     </button>
   );
 }
@@ -770,10 +1045,24 @@ async function prepareDeliverOnly(
   };
 }
 
+/**
+ * ⚠️ RETURNS WHAT FAILED. It used to return `void`, and the browser-side
+ * failures it handles — a blocked clipboard, a lapsed user activation — were
+ * REPORTED to the doctor by toast and then INVISIBLE to the caller.
+ *
+ * That was harmless while the only caller was the sign submit, which
+ * deliberately does not fail a signature over a clipboard block and whose own
+ * toast fired BEFORE this ran, leaving the failure as the last word. The
+ * per-row action inverted that: its success toast fires AFTER, so the doctor
+ * saw "Copy blocked" and then "Delivered — Copy for Epic".
+ *
+ * The list is advisory: the sign path still ignores it and still does not fail.
+ */
 async function applyBrowserSideDeliveries(
   res: SignResponse,
   destinations: Destination[]
-): Promise<void> {
+): Promise<Destination[]> {
+  const failed: Destination[] = [];
   // 1. Download URLs fire FIRST — so if the clipboard write fails the
   //    doctor has already gotten the file as a fallback. When both PDF
   //    and DOCX are selected we gap them: Chrome drops the second
@@ -815,6 +1104,13 @@ async function applyBrowserSideDeliveries(
           description:
             'Your browser blocked clipboard access. Re-open the export modal and try again.',
         });
+        // ⚠️ REPORTED, NOT RETHROWN — and the caller must be able to SEE it.
+        // Swallowing here is right for the SIGN path: a blocked clipboard must
+        // not fail a signature that already happened. But the per-row action
+        // then toasted "Delivered" straight after "Copy blocked", with the
+        // success emitted LAST, while the clipboard still held whatever it held
+        // before — plausibly the previous patient's note.
+        failed.push(lastKey);
       }
     }
   }
@@ -825,6 +1121,7 @@ async function applyBrowserSideDeliveries(
     // accepted-for-delivery at this point.
     toast.success('Email sent');
   }
+  return failed;
 }
 
 function triggerDownload(href: string, kind: 'pdf' | 'docx') {

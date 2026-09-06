@@ -108,7 +108,12 @@ export type FillVariant = 'twin' | 'styled';
  *  A warning that has to be obeyed by hand is obeyed until somebody is tired;
  *  there is nothing to keep in step here any more. Bump `KEY_VERSION`, and the
  *  writer and the SCAN move by construction. */
-const KEY_VERSION = 'v5';
+// ⚠️ v6 — REVIEW-DEFAULTS widened `CachedFill` with `insertableDefaults`.
+// A pre-deploy v5 entry carries none, and the panel treats an absent list as
+// "we did not compute it" and renders NOTHING — so every visit with a warm
+// cache would silently have no "Your blanks" panel until its note changed.
+// Found by an adversarial pass; the shape changed and the key did not.
+const KEY_VERSION = 'v6';
 
 function key(visitId: string, soapVersion: number, variant: FillVariant): string {
   return `visitdoc:${KEY_VERSION}:${variant}:${visitId}:${soapVersion}`;
@@ -118,7 +123,22 @@ export interface CachedFill {
   kind: 'pdf' | 'docx_fallback';
   /** base64 */
   data: string;
-  counts: { filled: number; needsReview: number; notMentioned: number } | null;
+  counts: {
+    filled: number;
+    needsReview: number;
+    notMentioned: number;
+  } | null;
+  /** REVIEW-DEFAULTS item 1 — the blank scaffolded controls this fill found a
+   *  doctor default for. OPTIONAL, because an entry cached before this field
+   *  existed carries none and `undefined` is the honest answer: *we did not
+   *  compute it*, which is different from *there are none*. The surface renders
+   *  nothing rather than an empty panel. */
+  insertableDefaults?: {
+    fieldId: string;
+    label: string;
+    scaffoldText: string;
+    inserted: boolean;
+  }[] | null;
   fillSha: string;
   /** The named reason the PDF path was missed, when it was. */
   reason: string | null;

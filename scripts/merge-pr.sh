@@ -82,11 +82,47 @@ if [ "${INFLIGHT_DEGRADED:-0}" = "1" ]; then
   echo "             $base @ ${base_sha:0:8} — --commit $INFLIGHT_BY_COMMIT, --branch $INFLIGHT_BY_BRANCH" >&2
 fi
 
+# ── RULING #186(3): in-flight runs on the base block a merge only when that
+# base is a DECLARED DEPLOY CANDIDATE ──────────────────────────────────────
+#
+# ⚠️ ONE-DIRECTIONAL BY CONSTRUCTION. This can only make the wrapper MORE
+# permissive when it POSITIVELY establishes NOT. CANDIDATE and UNKNOWN both
+# keep today's behaviour exactly, so a broken signal costs latency and never
+# safety — which is the only acceptable shape for narrowing a guard on the door
+# that has already produced a 3-of-4 citation on a deployed commit.
+CAND_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/lib" 2>/dev/null && pwd)/deploy-candidate.sh"
+if [ -r "$CAND_LIB" ]; then
+  # shellcheck source=lib/deploy-candidate.sh
+  . "$CAND_LIB"
+  cand_state=$(deploy_candidate_state "$base" "$base_sha" 2>/dev/null || echo UNKNOWN)
+else
+  # ⚠️ A MISSING LIBRARY IS NOT PERMISSION. Absent signal = today's behaviour.
+  cand_state=UNKNOWN
+fi
+
+if [ "$busy" -gt 0 ] && [ "$cand_state" = "NOT" ]; then
+  {
+    echo ""
+    echo "🟡 merge-pr: '$base' has $busy run(s) in flight, and they are NOT protecting"
+    echo "   a deploy — no unjudged §2.5 declaration governs ${base_sha:0:8}. (#186(3))"
+    echo ""
+    echo "   Proceeding. Those runs will be cancelled by this merge, and the"
+    echo "   merge commit gets its own citation, which is the one that counts."
+    echo ""
+    echo "   ⚠️ If you are about to deploy ${base_sha:0:8}, STOP: land its"
+    echo "      declaration first. Candidacy is read from the declaration, so an"
+    echo "      undeclared deploy is also an unprotected one."
+    echo ""
+  } >&2
+  busy=0
+fi
+
 if [ "$busy" -gt 0 ]; then
   if [ -z "$DECL" ]; then
     {
       echo ""
       echo "🔴 merge-pr REFUSED — merging #$PR would cancel runs in flight on '$base'."
+      echo "    deploy-candidate state: $cand_state  (#186(3) — only NOT lets a merge through)"
       echo ""
       echo "    · $base @ ${base_sha:0:8} — in flight: --commit $INFLIGHT_BY_COMMIT, --branch $INFLIGHT_BY_BRANCH"
       echo ""
