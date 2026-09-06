@@ -11,13 +11,24 @@
 //   · a mint sets practiceId without the role  -> the mint block
 //   · the raw code or its hash reaches an audit row -> the mint block
 //   · a cross-practice target becomes reachable -> the scope block
+//   · the CAS predicate leaves the WHERE clause -> the not-exclusive block
+//   · a count-0 CAS writes an audit row anyway  -> the not-exclusive block
+//   · a deactivated member becomes promotable   -> the not-exclusive block
 //
 // ⚠️ THE TWO SIDES ARE INDEPENDENT AND THIS FILE PROVES BOTH SEPARATELY. The
 // OWNER-not-exclusive decision (branch `feat/ruling-195-owner-not-exclusive`)
 // opened PROMOTION only. Demotion and removal stay refused, which is what keeps
-// "every practice has at least one OWNER" STRUCTURAL — no count, no
-// read-then-write race. Deleting the demotion arms because "owners are
-// assignable now" is the exact misreading this note exists to stop.
+// "every practice has at least one OWNER" STRUCTURAL — no owner COUNT is ever
+// read. Deleting the demotion arms because "owners are assignable now" is the
+// exact misreading this note exists to stop.
+//
+// ⚠️ AND THE ROLE WRITE *IS* A READ-THEN-WRITE, WHICH THIS FILE ONCE DENIED.
+// An earlier version of this header claimed "no read-then-write race". That was
+// false and an adversarial pass reproduced the counterexample: the widening made
+// a previously-unreachable window reachable, because until then nothing could
+// turn a target INTO an owner between the read and the write. The window is
+// closed by a COMPARE-AND-SET in the WHERE clause, not by the guard above, and
+// the two arms that pin it are the ones a refactor will be tempted to delete.
 // ============================================================================
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -28,7 +39,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // which vitest reports as "no tests" rather than as a failure in any arm.
 const { prisma, logAudit, getSession } = vi.hoisted(() => ({
   prisma: {
-    user: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn(), findMany: vi.fn() },
+    user: {
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      findMany: vi.fn(),
+    },
     inviteCode: { create: vi.fn(), updateMany: vi.fn(), findMany: vi.fn() },
   },
   logAudit: vi.fn(),
@@ -68,6 +85,10 @@ function form(entries: Record<string, string>): FormData {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // ⚠️ THE CAS DEFAULT IS "IT MATCHED", so an arm that does not care about the
+  // race is not silently exercising the count-0 refusal path. The two arms that
+  // DO care set it explicitly.
+  prisma.user.updateMany.mockResolvedValue({ count: 1 });
 });
 
 describe('⚠️ OWNER IS NOT EXCLUSIVE — the promotion side is now open', () => {
@@ -107,12 +128,64 @@ describe('⚠️ OWNER IS NOT EXCLUSIVE — the promotion side is now open', () 
     prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'CLINICIAN' });
     const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'OWNER' }));
     expect(res?.ok).toBe(true);
-    expect(prisma.user.update).toHaveBeenCalledOnce();
-    expect(prisma.user.update.mock.calls[0][0].data).toMatchObject({ practiceRole: 'OWNER' });
+    expect(prisma.user.updateMany).toHaveBeenCalledOnce();
+    expect(prisma.user.updateMany.mock.calls[0][0].data).toMatchObject({ practiceRole: 'OWNER' });
     expect(logAudit.mock.calls.at(-1)?.[0].metadata).toMatchObject({
       from: 'CLINICIAN',
       to: 'OWNER',
     });
+  });
+
+  it('⚠️ THE WRITE IS A COMPARE-AND-SET ON THE ROLE THAT WAS READ — the race the widening opened', async () => {
+    // ⚠️ FOUND BY THE ADVERSARIAL PASS ON THIS BRANCH, NOT BY THE AUTHOR, AND
+    // REPRODUCED: two concurrent requests, one promoting B to OWNER and one
+    // demoting B, both read B as CLINICIAN, both clear the guard above, and the
+    // demotion lands on an OWNER. Until this ruling the shape was INCIDENTALLY
+    // safe — no in-app path could turn a target into an owner, so the row could
+    // never become OWNER between the read and the write. Widening the
+    // vocabulary is precisely what made the window reachable.
+    //
+    // The fix is one statement, not a transaction: `updateMany` re-asserts the
+    // role that was read, so a row that moved matches zero rows.
+    asOwner();
+    prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'CLINICIAN' });
+    prisma.user.updateMany.mockResolvedValue({ count: 1 });
+    await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }));
+    const where = prisma.user.updateMany.mock.calls[0][0].where;
+    expect(where).toMatchObject({
+      id: 'u-2',
+      practiceId: 'p-1',
+      practiceRole: 'CLINICIAN', // ← the CAS predicate. Without it the write is unconditional.
+      deactivatedAt: null,
+    });
+  });
+
+  it('⚠️ and a CAS that matches nothing REFUSES rather than writing a false audit row', async () => {
+    // count 0 means the row moved under us. The old code would have written the
+    // audit row from its stale snapshot — `from: CLINICIAN` for a row that was
+    // OWNER when the UPDATE ran. A false entry in an append-only trail is worse
+    // than a missing one, so we refuse and record nothing.
+    asOwner();
+    prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'CLINICIAN' });
+    prisma.user.updateMany.mockResolvedValue({ count: 0 });
+    const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }));
+    expect(res && !res.ok && res.reason).toBe('ROLE_CHANGED_UNDER_YOU');
+    expect(logAudit).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ a DEACTIVATED member is not a promotion target — an invisible owner could never be revoked', async () => {
+    // Deactivation writes {isActive:false, deactivatedAt} and leaves practiceId
+    // and practiceRole intact, so a deactivated member stays findable by
+    // id+practice. Writing OWNER onto such a row produces an owner the members
+    // page does not render — and CANNOT_CHANGE_AN_OWNER then refuses to ever
+    // move it, because this action is the only practiceRole write in the app.
+    // The listing already filters; the target lookup did not.
+    asOwner();
+    prisma.user.findFirst.mockResolvedValue(null); // the filter excludes them
+    const res = await changeMemberRoleAction(null, form({ userId: 'u-gone', role: 'OWNER' }));
+    expect(res && !res.ok && res.reason).toBe('TARGET_NOT_IN_PRACTICE');
+    expect(prisma.user.findFirst.mock.calls[0][0].where).toMatchObject({ deactivatedAt: null });
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
   });
 
   it('⚠️ a role OUTSIDE the set is still refused — widening is not opening', () => {
@@ -242,7 +315,7 @@ describe('⚠️ role changes — the guards that keep a practice administrable'
     prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'CLINICIAN' });
     const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }));
     expect(res?.ok).toBe(true);
-    expect(prisma.user.update).toHaveBeenCalledOnce();
+    expect(prisma.user.updateMany).toHaveBeenCalledOnce();
     const audit = logAudit.mock.calls.at(-1)?.[0];
     expect(audit.action).toBe('PRACTICE_ROLE_CHANGED');
     expect(audit.metadata).toMatchObject({ from: 'CLINICIAN', to: 'TECH' });

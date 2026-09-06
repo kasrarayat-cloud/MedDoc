@@ -20,7 +20,7 @@
 // ============================================================================
 
 import { describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 vi.mock('sonner', () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), warning: vi.fn() }),
@@ -117,18 +117,55 @@ describe('⚠️ the two rows an owner may NOT change are not drawn as changeabl
     expect(mintValues).toEqual([...ASSIGNABLE_ROLES]);
   });
 
-  it('⚠️ and the half that is NOT built is stated on the surface, not silently absent', () => {
+  it('⚠️ and the half that is NOT built is stated on the surface, with the right POLARITY', () => {
     // A missing control reads as an oversight. The note is what tells the
     // doctor the refusal is deliberate and that there is a route today.
+    //
+    // ⚠️ THIS ARM USED TO ASSERT VOCABULARY, NOT POLARITY, AND AN ADVERSARIAL
+    // PASS SHOWED IT PASSING ON A NOTE THAT SAID THE EXACT OPPOSITE. `/owner/i`
+    // plus `/demoted or removed/i` is satisfied by "Owners can be demoted or
+    // removed at any time" — the inverse of what the server does. Matching a
+    // NEGATION is what makes it a test of meaning rather than of keywords.
     render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister />);
-    const note = screen.getByTestId('members-owner-note').textContent ?? '';
-    expect(note).toMatch(/owner/i);
-    expect(note).toMatch(/demoted or removed/i);
+    const note = (screen.getByTestId('members-owner-note').textContent ?? '').replace(/\s+/g, ' ');
+    expect(note).toMatch(/cannot be demoted or removed/i);
+    expect(note).not.toMatch(/can be demoted or removed/i);
+    // and it must still say the thing that IS possible, or it reads as a wall
+    expect(note).toMatch(/make another member an owner/i);
+
     // Non-vacuity: a non-administering view does not get it, so this is not a
     // string that is simply always on the page.
     cleanup();
     render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister={false} />);
     expect(screen.queryByTestId('members-owner-note')).toBeNull();
+  });
+
+  it('⚠️ promoting to OWNER asks for confirmation, and a refusal does NOT submit', () => {
+    // Promotion is irreversible until ADMIN-5 ships and OWNER is the option
+    // directly above the current selection. An adversarial pass reached it in
+    // one keystroke with nothing in the way.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const submitSpy = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister />);
+
+    const select = screen.getByTestId('member-role-select-u-clin') as HTMLSelectElement;
+    const formEl = select.closest('form') as HTMLFormElement;
+    formEl.addEventListener('submit', submitSpy as unknown as EventListener);
+
+    fireEvent.change(select, { target: { value: 'OWNER' } });
+    fireEvent.submit(formEl);
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(confirmSpy.mock.calls[0][0]).toMatch(/cannot be undone/i);
+
+    // ⚠️ THE NON-VACUITY THAT MATTERS: a NON-owner role must not be confirmed at
+    // all. An arm that only proves "confirm was called" would also pass on a
+    // build that confirms every change — which trains the doctor to dismiss it.
+    confirmSpy.mockClear();
+    fireEvent.change(select, { target: { value: 'TECH' } });
+    fireEvent.submit(formEl);
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
   });
 });
 

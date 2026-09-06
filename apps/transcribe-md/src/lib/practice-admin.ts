@@ -68,6 +68,7 @@ export type AdminRefusal =
   | 'TARGET_NOT_IN_PRACTICE'
   | 'CANNOT_CHANGE_OWN_ROLE'
   | 'CANNOT_CHANGE_AN_OWNER'
+  | 'ROLE_CHANGED_UNDER_YOU'
   | 'ROLE_NOT_ASSIGNABLE';
 
 export type AdminGuardResult =
@@ -88,6 +89,11 @@ export const ADMIN_REFUSAL_MESSAGE: Record<AdminRefusal, string> = {
   // away, and saying "not settled" here would be false in the doctor's face.
   CANNOT_CHANGE_AN_OWNER:
     "An owner's role cannot be changed. Removing or demoting an owner isn't available yet — ask support if a partner is leaving the practice.",
+  // The compare-and-set found the row had moved since it was read. Refusing is
+  // fail-closed: we cannot know the demotion is still safe, so the doctor is
+  // told to look again rather than shown a success that did not happen.
+  ROLE_CHANGED_UNDER_YOU:
+    "That member's role was changed by someone else a moment ago. Nothing was saved — reload the page and check before trying again.",
   ROLE_NOT_ASSIGNABLE: 'That role cannot be assigned from this page.',
 };
 

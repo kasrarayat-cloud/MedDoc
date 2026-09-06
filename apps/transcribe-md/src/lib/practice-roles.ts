@@ -35,10 +35,23 @@ export const PRACTICE_ADMIN_ROLE = 'OWNER' as const satisfies PracticeRole;
  *
  * ⚠️ **THIS LIST IS THE PROMOTION SIDE ONLY, AND THE TWO SIDES ARE
  * INDEPENDENT.** Widening it does NOT make an OWNER demotable: that is refused
- * unconditionally in `changeMemberRoleAction` by `CANNOT_CHANGE_AN_OWNER`,
- * whatever role is asked for. So "every practice has at least one OWNER" still
- * holds STRUCTURALLY — no count, no read-then-write race — exactly as it did
- * before, and for the same reason.
+ * in `changeMemberRoleAction` by `CANNOT_CHANGE_AN_OWNER`, whatever role is
+ * asked for. So "every practice has at least one OWNER" still holds
+ * STRUCTURALLY — **no owner COUNT is ever read** — exactly as it did before.
+ *
+ * ⚠️ **BUT WIDENING THIS LIST DID OPEN A RACE, AND AN EARLIER VERSION OF THIS
+ * COMMENT DENIED IT.** It claimed "no read-then-write race". That was false and
+ * an adversarial pass reproduced the counterexample. `changeMemberRoleAction`
+ * reads the target's role, checks it, then writes — and while this list held
+ * only `CLINICIAN`/`TECH`, **nothing could turn a target INTO an owner between
+ * those two steps**, so the shape was incidentally safe. Adding `OWNER` is
+ * exactly what made the window reachable: two concurrent requests, one
+ * promoting B and one demoting B, both read B as `CLINICIAN`, both clear the
+ * guard, and the demotion lands on an owner.
+ *
+ * It is closed by a **compare-and-set** in that action's `updateMany` WHERE
+ * clause, not by the guard. If you widen this list again, that is the line to
+ * re-read.
  *
  * ⚠️ **DEMOTION AND REMOVAL ARE FILED, NOT FORGOTTEN.** Partners do leave
  * practices, so the capability is needed; it is a separate ADMIN row because it

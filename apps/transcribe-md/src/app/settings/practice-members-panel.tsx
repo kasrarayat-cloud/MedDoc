@@ -217,7 +217,31 @@ function RoleCell({
   }
 
   return (
-    <form action={action} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <form
+      action={action}
+      style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+      // ⚠️ PROMOTION TO OWNER IS IRREVERSIBLE UNTIL ADMIN-5 SHIPS, AND IT SITS
+      // ONE ARROW-KEY FROM THE CURRENT SELECTION. The options derive from
+      // ASSIGNABLE_ROLES, where OWNER is first, so a CLINICIAN row opens with
+      // OWNER directly above the selected item. There is no undo: the server
+      // refuses every subsequent change to an owner, by design. An adversarial
+      // pass reached it by one keystroke with nothing in the way.
+      //
+      // ⚠️ THE CONFIRM IS ON THE IRREVERSIBLE VALUE ONLY. Confirming every role
+      // change would train the doctor to dismiss it, which is how a confirm
+      // stops being a control.
+      onSubmit={(e) => {
+        const chosen = new FormData(e.currentTarget).get('role');
+        if (chosen !== 'OWNER') return;
+        const who = member.name?.trim() || member.email;
+        const ok = window.confirm(
+          `Make ${who} an owner of this practice?\n\n` +
+            'Owners can manage members and invite people. This cannot be undone here — ' +
+            'owners cannot be demoted or removed yet.',
+        );
+        if (!ok) e.preventDefault();
+      }}
+    >
       <input type="hidden" name="userId" value={member.id} />
       <label className="qm-sr-only" htmlFor={`role-${member.id}`}>
         Role for {member.name?.trim() || member.email}
