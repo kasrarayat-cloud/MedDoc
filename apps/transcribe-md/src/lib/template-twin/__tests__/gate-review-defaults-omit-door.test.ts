@@ -697,7 +697,13 @@ describe('item 2 — the omitted field is counted exactly once', () => {
 // was being asked.
 // ============================================================================
 describe('item 2 — an omitted field is not put back in front of the doctor', () => {
-  const base = { clinicalConcept: 'ros.cardiovascular' as string | null };
+  // ⚠️ A FULL MAPPING, NOT A TWO-KEY STUB. `scaffoldDefaultOfferable` now
+  // consults `canOmitWhenUnmentioned`, which reads six more properties — a thin
+  // fixture makes the predicate false for the WRONG reason (a missing
+  // `expectedDataType` trips the type-compat guard) and the arm then passes
+  // while proving nothing. Built from the same `mapping()` helper the rest of
+  // this file uses, so it cannot drift from the real shape.
+  const base = { ...mapping(field('1'), 'ros.cardiovascular') } as Record<string, unknown>;
   const blankNow = { status: 'not_mentioned', value: null };
 
   it('⚠️ scaffoldDefaultOfferable WITHDRAWS the offer for an omit field', () => {
@@ -709,6 +715,20 @@ describe('item 2 — an omitted field is not put back in front of the doctor', (
         current: blankNow,
       }),
     ).toBe(false);
+  });
+
+  it('⚠️ AN OMIT THE RESOLVER WOULD NOT HONOUR DOES NOT TAKE THE REMEDY AWAY', () => {
+    // Found by a peer session and reproduced here before fixing. On a field the
+    // resolver refuses the omit for, the count does NOT move — the blank stays
+    // in `notMentioned` and the doctor is still prompted — so withdrawing their
+    // "Insert my default" button as well leaves them strictly worse off than not
+    // ticking at all. The first cut of that clause tested `=== 'omit'` alone.
+    const f = field('1');
+    const refused = { ...base, unmentionedPolicy: 'omit', sourceType: 'manual' as const };
+    // the resolver would NOT honour it...
+    expect(canOmitWhenUnmentioned(f, refused as never)).toBe(false);
+    // ...so the remedy stays.
+    expect(scaffoldDefaultOfferable({ field: f, mapping: refused, current: blankNow })).toBe(true);
   });
 
   it('⚠️ NON-VACUITY — the identical field with a NULL policy IS offered', () => {

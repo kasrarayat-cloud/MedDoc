@@ -37,6 +37,7 @@
 // identity, the manifest reads STALE, and the recompute actually happens.
 // ============================================================================
 
+import { canOmitWhenUnmentioned } from './unmentioned-policy';
 import { isWordPlaceholderOption } from '../note-template-docx/placeholder-option';
 import { canonicalSha256 } from './canonical';
 import {
@@ -243,7 +244,22 @@ export function scaffoldDefaultOfferable(input: {
   if (!SCAFFOLD_INSERTABLE_KINDS.has(field.kind ?? '')) return false;
   // The fill declines forever without a concept — see the overlay's own note.
   if (!mapping?.clinicalConcept) return false;
-  // ⚠️ THE DOCTOR ALREADY RULED THIS BLANK, AND THE OFFER MUST HONOUR THAT.
+  // ⚠️ ONLY WHEN THE RESOLVER WOULD ACTUALLY HONOUR IT — AND THE FIRST CUT OF
+  // THIS CLAUSE DID NOT ASK. A peer session measured the consequence and it is
+  // strictly worse than not ticking at all: on a field the resolver refuses the
+  // omit for (a `manual` source, a fixed-grid cell), the count does NOT move —
+  // the blank stays in `notMentioned` and the doctor is still prompted — while
+  // this clause removed their remedy anyway. Reproduced before fixing:
+  //
+  //   MANUAL field, stored omit:   canOmitWhenUnmentioned false
+  //                                scaffoldDefaultOfferable false   <- remedy gone
+  //   EXTRACTION control:          canOmitWhenUnmentioned true
+  //
+  // ⚠️ AND IT WAS A FOURTH SPELLING OF THE RULE. This file's own header says
+  // ONE DEFINITION, THREE CALLERS; I added a bare `=== 'omit'` test beside a
+  // shared predicate written precisely so nobody would. The predicate is called
+  // instead — one definition, one more caller.
+  
   //
   // REVIEW-DEFAULTS item 2's control says, in the doctor's own words,
   // "Expected blank — do not ask me about this". Without this clause the field
@@ -259,7 +275,8 @@ export function scaffoldDefaultOfferable(input: {
   // inserted before setting the policy, and `applyClinicianOverrides` is
   // deliberately NOT given this clause — a stored override the doctor did
   // assert must still apply, or the fill silently drops their own words.
-  if (mapping.unmentionedPolicy === 'omit') return false;
+  if (mapping.unmentionedPolicy === 'omit' && canOmitWhenUnmentioned(field as never, mapping as never))
+    return false;
   return scaffoldTargetIsBlank(current);
 }
 
