@@ -11,10 +11,19 @@
 // browser delivery semantics are unchanged from Phase 2.
 // ============================================================================
 
-import { useCallback, useState, useTransition } from 'react';
+import { useCallback, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Check, Loader2, Lock, Send, ShieldCheck, TrendingUp, X } from 'lucide-react';
+import {
+  Check,
+  ChevronRight,
+  Loader2,
+  Lock,
+  Send,
+  ShieldCheck,
+  TrendingUp,
+  X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/cn';
@@ -170,6 +179,80 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
   // depends on Set insertion order that a list ordered by DESTINATIONS cannot
   // express. So the clipboard contributes at most ONE entry here, and it is the
   // one that wins.
+  // ── THE POST-SIGN ACTION — ruling #188(4) ────────────────────────────────
+  //
+  // Before signing a destination is a CHOICE you accumulate and then commit;
+  // after signing it is a THING YOU DO NOW, repeatedly. The frames draw that
+  // difference and it is the reason this landed as its own change rather than
+  // inside the skin — a re-skin that also changes what a click DOES is two
+  // claims wearing one diff.
+  //
+  // ⚠️ AND IT DISSOLVES F-T4-1 FOR THIS STATE, WHICH IS NOT A COINCIDENCE.
+  // The filed defect is that `applyBrowserSideDeliveries` copies only the LAST
+  // selected clipboard format and discards the rest — a consequence of
+  // committing a SET. One destination per click means there is never a set to
+  // discard, so the post state cannot exhibit it. The PRE-sign state still
+  // can, and F-T4-1 stays open for it.
+  const [rowPending, setRowPending] = useState<Destination | null>(null);
+  /** The synchronous half of the one-at-a-time guard — see `deliverOne`. */
+  const deliveringRef = useRef<Destination | null>(null);
+
+  const deliverOne = useCallback(
+    async (dest: Destination) => {
+      // ⚠️ A REF, NOT THE STATE VALUE — the state read is a STALE CLOSURE.
+      // `rowPending` here is whatever it was when this callback was last
+      // memoised, so two clicks dispatched inside ONE React batch both saw
+      // `null` and both proceeded: measured as two anchor clicks and two
+      // "Delivered" toasts. The rendered `disabled` attribute is the guard a
+      // real user hits; this is the guard for everything faster than a render.
+      //
+      // This codebase has shipped the same shape before — a memoised submit
+      // missing a gate from its dep array lit up and did nothing.
+      if (deliveringRef.current) return;
+      deliveringRef.current = dest;
+      setRowPending(dest);
+      try {
+        const res = await prepareDeliverOnly(props.visitId, [dest]);
+        const failed = await applyBrowserSideDeliveries(res, [dest]);
+        const label = DESTINATIONS.find((d) => d.key === dest)?.label ?? dest;
+
+        // ⚠️ A BROWSER-SIDE FAILURE IS NOT A DELIVERY. `applyBrowserSideDeliveries`
+        // reports a blocked clipboard by toast and does not throw, so without
+        // this the row said "Delivered" immediately after "Copy blocked".
+        if (failed.length > 0) return;
+
+        // ⚠️ AND A DOWNLOAD IS NOT OBSERVED, SO IT IS NOT CLAIMED.
+        // `pdf`/`docx` fire an `<a download>` which has NO error channel:
+        // `prepareDeliverOnly` makes no request for them, and a 503 from the
+        // PDF route (Gotenberg down), a 401 on an expired session or a 500 all
+        // return JSON that the anchor quietly discards. Saying "Delivered"
+        // there asserts something this code cannot see.
+        //
+        // Fixing it properly means fetching the export, checking `res.ok` and
+        // downloading the blob — a change to the download mechanism, filed as
+        // F-T4-2 rather than smuggled into this one. Until then the row says
+        // only what it knows.
+        const observed = dest !== 'pdf' && dest !== 'docx';
+        toast.success(observed ? 'Delivered' : 'Download started', {
+          description: label,
+        });
+      } catch (err) {
+        // ⚠️ A FAILED DELIVERY IS SAID OUT LOUD. The frames draw no error state
+        // for these rows — that is item 1 on T4's batched request list — so
+        // rather than invent one, the failure uses the toast this modal
+        // already uses for exactly this. Silence would teach the doctor the
+        // row is decorative.
+        toast.error('That delivery failed', {
+          description: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        deliveringRef.current = null;
+        setRowPending(null);
+      }
+    },
+    [props.visitId, rowPending],
+  );
+
   const deliverySummary = (() => {
     const picked = DESTINATIONS.filter((d) => selected.has(d.key));
     if (picked.length === 0) return 'No destinations selected.';
@@ -445,6 +528,9 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               items={DESTINATIONS.filter((d) => d.group === 'clipboard')}
               selected={selected}
               onToggle={toggle}
+              mode={props.signOnSubmit ? 'checkbox' : 'action'}
+              pendingRow={rowPending}
+              onRun={deliverOne}
             />
             <Group
               title="Download"
@@ -453,6 +539,9 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               items={DESTINATIONS.filter((d) => d.group === 'download')}
               selected={selected}
               onToggle={toggle}
+              mode={props.signOnSubmit ? 'checkbox' : 'action'}
+              pendingRow={rowPending}
+              onRun={deliverOne}
             />
             {props.emailEnabled && (
               <Group
@@ -471,6 +560,9 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
               items={DESTINATIONS.filter((d) => d.group === 'email')}
                 selected={selected}
                 onToggle={toggle}
+                mode={props.signOnSubmit ? 'checkbox' : 'action'}
+                pendingRow={rowPending}
+                onRun={deliverOne}
               />
             )}
           </div>
@@ -636,24 +728,55 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                 ⚠️ THE UNDERLYING BEHAVIOUR IS NOT CHANGED HERE — that is a
                 capability question, filed rather than fixed inside a re-skin.
                 What is fixed is the surface CLAIMING something untrue. */}
-            <p className="qm-t4-summary" data-testid="t4-delivery-summary">
-              {deliverySummary}
-            </p>
+            {/* ⚠️ PRE-SIGN ONLY, AND MY COMMENT BELOW USED TO CLAIM THIS AND
+                BE FALSE. This element was ungated while only the line under it
+                was gated, so a signed visit showed "Delivery: Copy for Epic •
+                Download PDF" — the DEFAULT set — permanently, naming two
+                destinations that received nothing and omitting whichever one
+                the doctor had just clicked. `selected` cannot move after
+                signing because the checkboxes are gone, so it was a CONSTANT
+                false claim on every signed note, not a stale one. */}
+            {props.signOnSubmit && (
+              <p className="qm-t4-summary" data-testid="t4-delivery-summary">
+                {deliverySummary}
+              </p>
+            )}
             {/* "Locked notes can still be re-exported later" was the answer to
                 *if I sign now, can I still get the PDF?* — and it was deleted
                 with the footer copy it lived in. The pass caught the doctor
                 losing the warning AND its mitigation in one diff. */}
-            {props.signOnSubmit && (
+            {props.signOnSubmit ? (
               <p className="qm-t4-summary" data-testid="t4-reexport-note">
                 Locked notes can still be re-exported later.
               </p>
+            ) : (
+              /* The frames' post-sign footer line. It replaces the delivery
+                 summary, which described a SET nobody accumulates any more. */
+              <p className="qm-t4-summary" data-testid="t4-post-footer">
+                Each destination delivers on its own. Close when you are done.
+              </p>
             )}
+            {/* ⚠️ NO CANCEL AND NO PRIMARY BUTTON AFTER SIGNING — the frames
+                are explicit, and the reason is the behaviour, not the paint:
+                every row is its own commit, so there is nothing left to
+                confirm and nothing to cancel. `Export again` reopens the
+                modal; the doctor closes it with Esc or the X, which Radix
+                already provides and which `aria-label="Close"` already
+                names. */}
             <div className="qm-t4-actions">
-              <Dialog.Close asChild>
-                <button type="button" className="qm-t4-btn qm-t4-btn-cancel">
-                  Cancel
-                </button>
-              </Dialog.Close>
+              {props.signOnSubmit && (
+                <Dialog.Close asChild>
+                  <button type="button" className="qm-t4-btn qm-t4-btn-cancel">
+                    Cancel
+                  </button>
+                </Dialog.Close>
+              )}
+              {/* ⚠️ THE PRIMARY BUTTON IS PRE-SIGN ONLY. After signing there is
+                  no set to commit — each row committed itself — so a
+                  "Deliver" button would either do nothing or re-deliver a
+                  selection the doctor can no longer see. The frames draw
+                  none, and the behaviour is why. */}
+              {props.signOnSubmit && (
               <button
                 type="button"
                 className="qm-t4-btn qm-t4-btn-primary"
@@ -684,6 +807,7 @@ export function SignAndSendModal(props: SignAndSendModalProps) {
                   </>
                 )}
               </button>
+              )}
             </div>
           </div>
         </Dialog.Content>
@@ -703,10 +827,17 @@ function Group({
   items,
   selected,
   onToggle,
+  mode = 'checkbox',
+  pendingRow = null,
+  onRun,
 }: {
   title: string;
   hint: string;
   groupKey: string;
+  /** `checkbox` before signing, `action` after — ruling #188(4). */
+  mode?: 'checkbox' | 'action';
+  pendingRow?: Destination | null;
+  onRun?: (k: Destination) => void;
   items: { key: Destination; label: string }[];
   selected: Set<Destination>;
   onToggle: (k: Destination) => void;
@@ -728,16 +859,72 @@ function Group({
           frames' ROW is the design; the four drawn are examples. Collapsing
           them would mean a doctor on Epic could not pick the Epic format. */}
       <div className="qm-t4-group" data-testid={`t4-group-${groupKey}`}>
-        {items.map((it) => (
-          <CheckboxRow
-            key={it.key}
-            label={it.label}
-            checked={selected.has(it.key)}
-            onToggle={() => onToggle(it.key)}
-          />
-        ))}
+        {items.map((it) =>
+          mode === 'action' ? (
+            <ActionRow
+              key={it.key}
+              label={it.label}
+              destination={it.key}
+              pending={pendingRow === it.key}
+              disabled={pendingRow !== null}
+              onRun={() => onRun?.(it.key)}
+            />
+          ) : (
+            <CheckboxRow
+              key={it.key}
+              label={it.label}
+              checked={selected.has(it.key)}
+              onToggle={() => onToggle(it.key)}
+            />
+          ),
+        )}
       </div>
     </div>
+  );
+}
+
+/**
+ * ⚠️ A ROW THAT COMMITS ON ITS OWN CLICK — the post-sign shape.
+ *
+ * It is deliberately NOT a checkbox wearing different paint: no `aria-pressed`,
+ * because there is no state to press into. It performs I/O and returns.
+ *
+ * ⚠️ THE PENDING LOOK REUSES `Loader2`, AND THAT IS A LIMIT, NOT A DESIGN. The
+ * frames draw no hover, focus, disabled, pending or error state for these rows
+ * — item 1 on T4's batched request list. Rather than invent five, this borrows
+ * the spinner the submit button already uses and says failures through the
+ * toast this modal already uses. A button that performs I/O with NO feedback
+ * teaches the doctor it is decorative, which is worse than borrowed vocabulary.
+ */
+function ActionRow({
+  label,
+  destination,
+  pending,
+  disabled,
+  onRun,
+}: {
+  label: string;
+  destination: Destination;
+  pending: boolean;
+  disabled: boolean;
+  onRun: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onRun}
+      disabled={disabled}
+      data-testid={`t4-action-${destination}`}
+      data-pending={pending ? 'true' : 'false'}
+      className="qm-t4-row qm-t4-row-action"
+    >
+      <span className="qm-t4-row-label">{label}</span>
+      {pending ? (
+        <Loader2 className="h-4 w-4 flex-none animate-spin" aria-hidden />
+      ) : (
+        <ChevronRight className="h-4 w-4 flex-none" aria-hidden />
+      )}
+    </button>
   );
 }
 
@@ -858,10 +1045,24 @@ async function prepareDeliverOnly(
   };
 }
 
+/**
+ * ⚠️ RETURNS WHAT FAILED. It used to return `void`, and the browser-side
+ * failures it handles — a blocked clipboard, a lapsed user activation — were
+ * REPORTED to the doctor by toast and then INVISIBLE to the caller.
+ *
+ * That was harmless while the only caller was the sign submit, which
+ * deliberately does not fail a signature over a clipboard block and whose own
+ * toast fired BEFORE this ran, leaving the failure as the last word. The
+ * per-row action inverted that: its success toast fires AFTER, so the doctor
+ * saw "Copy blocked" and then "Delivered — Copy for Epic".
+ *
+ * The list is advisory: the sign path still ignores it and still does not fail.
+ */
 async function applyBrowserSideDeliveries(
   res: SignResponse,
   destinations: Destination[]
-): Promise<void> {
+): Promise<Destination[]> {
+  const failed: Destination[] = [];
   // 1. Download URLs fire FIRST — so if the clipboard write fails the
   //    doctor has already gotten the file as a fallback. When both PDF
   //    and DOCX are selected we gap them: Chrome drops the second
@@ -903,6 +1104,13 @@ async function applyBrowserSideDeliveries(
           description:
             'Your browser blocked clipboard access. Re-open the export modal and try again.',
         });
+        // ⚠️ REPORTED, NOT RETHROWN — and the caller must be able to SEE it.
+        // Swallowing here is right for the SIGN path: a blocked clipboard must
+        // not fail a signature that already happened. But the per-row action
+        // then toasted "Delivered" straight after "Copy blocked", with the
+        // success emitted LAST, while the clipboard still held whatever it held
+        // before — plausibly the previous patient's note.
+        failed.push(lastKey);
       }
     }
   }
@@ -913,6 +1121,7 @@ async function applyBrowserSideDeliveries(
     // accepted-for-delivery at this point.
     toast.success('Email sent');
   }
+  return failed;
 }
 
 function triggerDownload(href: string, kind: 'pdf' | 'docx') {

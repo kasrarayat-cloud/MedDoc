@@ -3683,3 +3683,31 @@ body[data-skin='rounds'] {
    * below AA as text, and this badge IS text. */
   color: var(--rounds-accent-text);
 }
+
+/* ── T4 POST-SIGN — the row as an ACTION, ruling #188(4) ──────────────────
+ * `sign-deliver-post` draws 42px rows with a trailing 18px icon. The row
+ * geometry is otherwise the pre-sign row's, deliberately: it is the same
+ * object doing a different thing, not a second design.
+ *
+ * ⚠️ THE TRAILING ICON SITS WHERE THE CHECKBOX DID NOT. A checkbox leads the
+ * row because it is state you set; an action's affordance trails it because it
+ * is a thing you do. That is the frames' own distinction and it is the only
+ * reason the two rows differ at all. */
+[data-skin='rounds'] .qm-t4-row-action {
+  justify-content: space-between;
+  min-height: 42px;
+  color: var(--rounds-text-1);
+}
+[data-skin='rounds'] .qm-t4-row-action > svg {
+  color: var(--rounds-text-2);
+}
+/* ⚠️ THE DISABLED LOOK IS SHARED WITH THE BUTTONS, NOT INVENTED. While one row
+ * is delivering, every row is disabled — one delivery at a time, because two
+ * concurrent clipboard writes would race and the second would silently win. */
+[data-skin='rounds'] .qm-t4-row-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+[data-skin='rounds'] .qm-t4-row-action[data-pending='true'] {
+  opacity: 1;
+}
