@@ -85,6 +85,33 @@ describe('§2.5 rows-at-PR-open gate', () => {
     expect(line!).not.toMatch(/\|\|\s*true/);
   });
 
+  it('⚠️ THE CHECKOUT IS DEEP AND THE BASE IS A SHA — a shallow clone fails CLOSED', () => {
+    // MEASURED on this gate's own first CI run (34052168551): a default depth-1
+    // checkout plus `git fetch --depth=200` of the base still shares NO common
+    // ancestor, so `git merge-base` found none and the gate exited 2 — CANNOT
+    // TELL. That is the fail-closed arm working, and it is also a permanently
+    // red gate, which is the state somebody eventually "fixes" by deleting the
+    // step. ⚠️ `e2e.yml:65` had already solved this and said why in a comment;
+    // a second, shallower spelling was written one file over anyway.
+    const wf = readFileSync(WORKFLOW, 'utf8');
+    const job = wf.slice(0, wf.indexOf('check-pr-rows-file.sh'));
+    const checkout = job.lastIndexOf('actions/checkout');
+    expect(checkout, 'the gate must be preceded by a checkout').toBeGreaterThan(-1);
+    expect(
+      job.slice(checkout),
+      'the checkout before the rows gate must be fetch-depth: 0',
+    ).toMatch(/fetch-depth:\s*0/);
+
+    // …and the base must be a SHA, not a branch ref. A ref moves: if the base
+    // advances while the run is queued, it names a tree the PR was never
+    // diffed against and the runtime file set changes under the answer.
+    const line = wf.split('\n').find((l) => l.includes('check-pr-rows-file.sh') && !l.trimStart().startsWith('#'));
+    expect(line).toBeDefined();
+    const invocation = wf.slice(wf.indexOf('check-pr-rows-file.sh'));
+    expect(invocation.slice(0, 200)).toContain('pull_request.base.sha');
+    expect(invocation.slice(0, 200)).not.toMatch(/origin\/\$\{\{\s*github\.base_ref/);
+  });
+
   it('⚠️ THIS PR CARRIES ITS OWN ROWS — the gate is not exempt from itself', () => {
     // The number is this PR's real one, claimed from the opened PR rather than
     // guessed. The earlier draft of this branch hardcoded `PR-1008.md`, which

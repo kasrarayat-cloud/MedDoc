@@ -119,6 +119,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # ⚠️ THE ROWS GATE DIFFS base...HEAD, AND A SHALLOW CLONE FAILS CLOSED.
+          # Measured on this gate's own first CI run (34052168551): the default
+          # depth-1 checkout plus a `--depth=200` fetch of the base still shares
+          # no common ancestor, so `git merge-base` found none and the gate
+          # exited 2 — CANNOT TELL, correctly refusing to pass on a broken
+          # instrument. ⚠️ `e2e.yml:65` had already solved this and left the
+          # reason in a comment ("a shallow clone would fail CLOSED"); I wired a
+          # second, shallower spelling one file over rather than reading it.
+          fetch-depth: 0
 
       # ⚠️ §2.5 ROWS AT PR-OPEN — THE GATE FOR A RULE THAT DID NOT WORK TWICE.
       # A deployer can measure what a change TOUCHES. Only its author can say
@@ -133,9 +143,14 @@ jobs:
       - name: §2.5 rows are authored at PR-open (runtime PRs only)
         if: github.event_name == 'pull_request'
         run: |
-          git fetch --no-tags --depth=200 origin "${{ github.base_ref }}" || true
+          # ⚠️ THE BASE IS THE PR'S OWN base.sha, NOT `origin/<base_ref>` — the
+          # same source `e2e.yml` uses. A branch ref moves: if `main` advances
+          # while this run is queued, `origin/main` names a tree the PR was
+          # never diffed against, and the runtime file set changes underneath
+          # the answer. A sha cannot drift.
           PR_NUMBER="${{ github.event.pull_request.number }}" \
-            bash scripts/check-pr-rows-file.sh "origin/${{ github.base_ref }}" HEAD
+            bash scripts/check-pr-rows-file.sh \
+              "${{ github.event.pull_request.base.sha }}" HEAD
 
       - uses: actions/setup-node@v4
         with:
