@@ -370,6 +370,32 @@ export type RenderedFieldProof =
       readonly valueSha256: string;
       readonly occurrences: number;
     }
+  /**
+   * REVIEW-DEFAULTS item 1 — a value a HUMAN asserted, not one the evidence
+   * produced.
+   *
+   * ⚠️ IT SHIPS WITH ITS EMITTER, IN THIS COMMIT, AND THAT IS A RULE RATHER
+   * THAN A HABIT. A proof kind with no emitter is #170's defect: `default_kept`
+   * shipped that way and cost three adversarial rounds. The emitter is in
+   * `renderer.ts`, at the same site that emits `filled`, keyed on the
+   * resolution's `clinician_scaffold_default` reason code.
+   *
+   * ⚠️ STRUCTURALLY IDENTICAL TO `filled`, DELIBERATELY. It IS a patched field:
+   * the verifier's else-branch adds it to `filledFieldIds` so the patched-set
+   * equality holds unchanged, and `countsAsBlankProof` refuses it blank credit
+   * because it is not blank. Nothing about the existing arithmetic moves. What
+   * it adds is the one thing the proof set could not previously say — WHO put
+   * this text here — which is the entire product claim of #194's doctor-facing
+   * half.
+   */
+  | {
+      readonly kind: 'clinician_default';
+      readonly fieldId: string;
+      readonly partName: string;
+      readonly bindingPath: string;
+      readonly valueSha256: string;
+      readonly occurrences: number;
+    }
   | {
       readonly kind: 'blank';
       /**
@@ -470,8 +496,14 @@ export interface RenderVerificationPlan {
 export interface VerifiedRenderedField {
   /** Which contract this entry attests — a fill, or a proven-blank. Persisted
    *  into the roundtrip proof so the certification gate can require at least
-   *  one blank-verified field. */
-  readonly kind: 'filled' | 'blank' | 'emptied';
+   *  one blank-verified field.
+   *
+   *  ⚠️ `clinician_default` IS A FILL FOR EVERY ARITHMETIC PURPOSE and differs
+   *  only in provenance — see the arm on `RenderedFieldProof`. A gate that
+   *  wants "was anything filled?" must test `!== 'blank' && !== 'emptied'`
+   *  rather than `=== 'filled'`, or it will silently stop counting the fields a
+   *  doctor asserted themselves. */
+  readonly kind: 'filled' | 'blank' | 'emptied' | 'clinician_default';
   readonly fieldId: string;
   readonly partName: string;
   readonly bindingPath: string;

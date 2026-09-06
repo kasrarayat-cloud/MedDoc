@@ -145,7 +145,12 @@ export async function loadNativeTemplateDocxForVisit(
     ? []
     : await prisma.templateTwinFieldOverride.findMany({
         where: { visitId, practiceId },
-        select: { fieldId: true, selectedOptionOrdinal: true },
+        select: {
+        fieldId: true,
+        selectedOptionOrdinal: true,
+        overrideKind: true,
+        insertedText: true,
+      },
       });
   const freshness = isSigned
     ? ({ ok: true, reason: 'match' } as const)
