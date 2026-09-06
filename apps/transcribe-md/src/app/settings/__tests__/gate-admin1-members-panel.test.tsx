@@ -14,11 +14,13 @@
 //   · the member LIST is hidden from non-owners -> the visibility block
 //   · an OWNER row becomes editable             -> the owner block
 //   · your own row becomes editable             -> the owner block
+//   · a select stops deriving from ASSIGNABLE_ROLES -> the owner block
+//   · the not-built half stops being stated     -> the owner block
 //   · the panel implies a tech is broadly gated -> the vocabulary block
 // ============================================================================
 
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 vi.mock('sonner', () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), warning: vi.fn() }),
@@ -30,6 +32,7 @@ vi.mock('@/actions/practice-members', () => ({
 }));
 
 import { PracticeMembersPanel } from '../practice-members-panel';
+import { ASSIGNABLE_ROLES } from '@/lib/practice-roles';
 
 const MEMBERS = [
   { id: 'u-owner', name: 'Dr Owner', email: 'o@x.test', practiceRole: 'OWNER', isSelf: true },
@@ -92,15 +95,77 @@ describe('⚠️ the two rows an owner may NOT change are not drawn as changeabl
     expect(screen.getByTestId('member-role-select-u-tech')).toBeTruthy();
   });
 
-  it('the OWNER option is not offered anywhere in the panel', () => {
-    // The unruled half, fail-closed at the surface as well as the server.
+  it('the OWNER option IS offered now, and both selects are DERIVED from the server list', () => {
+    // The OWNER-not-exclusive decision (branch
+    // `feat/ruling-195-owner-not-exclusive`) opened promotion, so the control
+    // that hands the role out must exist.
+    //
+    // ⚠️ ASSERTED AGAINST `ASSIGNABLE_ROLES` ITSELF, NOT AGAINST A RETYPED
+    // LITERAL. Both selects previously hardcoded their options, which means
+    // widening the server constant would have passed every server test while
+    // this page kept offering the old two — the feature shipping invisible
+    // under a green suite. Comparing to the imported constant is what makes
+    // that drift impossible rather than merely unlikely.
     render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister />);
     const select = screen.getByTestId('member-role-select-u-tech');
     const values = within(select).getAllByRole('option').map((o) => (o as HTMLOptionElement).value);
-    expect(values).toEqual(['CLINICIAN', 'TECH']);
-    expect(
-      (screen.getByTestId('mint-role') as HTMLSelectElement).innerHTML,
-    ).not.toContain('OWNER');
+    expect(values).toEqual([...ASSIGNABLE_ROLES]);
+    expect(values).toContain('OWNER');
+
+    const mint = screen.getByTestId('mint-role') as HTMLSelectElement;
+    const mintValues = within(mint).getAllByRole('option').map((o) => (o as HTMLOptionElement).value);
+    expect(mintValues).toEqual([...ASSIGNABLE_ROLES]);
+  });
+
+  it('⚠️ and the half that is NOT built is stated on the surface, with the right POLARITY', () => {
+    // A missing control reads as an oversight. The note is what tells the
+    // doctor the refusal is deliberate and that there is a route today.
+    //
+    // ⚠️ THIS ARM USED TO ASSERT VOCABULARY, NOT POLARITY, AND AN ADVERSARIAL
+    // PASS SHOWED IT PASSING ON A NOTE THAT SAID THE EXACT OPPOSITE. `/owner/i`
+    // plus `/demoted or removed/i` is satisfied by "Owners can be demoted or
+    // removed at any time" — the inverse of what the server does. Matching a
+    // NEGATION is what makes it a test of meaning rather than of keywords.
+    render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister />);
+    const note = (screen.getByTestId('members-owner-note').textContent ?? '').replace(/\s+/g, ' ');
+    expect(note).toMatch(/cannot be demoted or removed/i);
+    expect(note).not.toMatch(/can be demoted or removed/i);
+    // and it must still say the thing that IS possible, or it reads as a wall
+    expect(note).toMatch(/make another member an owner/i);
+
+    // Non-vacuity: a non-administering view does not get it, so this is not a
+    // string that is simply always on the page.
+    cleanup();
+    render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister={false} />);
+    expect(screen.queryByTestId('members-owner-note')).toBeNull();
+  });
+
+  it('⚠️ promoting to OWNER asks for confirmation, and a refusal does NOT submit', () => {
+    // Promotion is irreversible until ADMIN-5 ships and OWNER is the option
+    // directly above the current selection. An adversarial pass reached it in
+    // one keystroke with nothing in the way.
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const submitSpy = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister />);
+
+    const select = screen.getByTestId('member-role-select-u-clin') as HTMLSelectElement;
+    const formEl = select.closest('form') as HTMLFormElement;
+    formEl.addEventListener('submit', submitSpy as unknown as EventListener);
+
+    fireEvent.change(select, { target: { value: 'OWNER' } });
+    fireEvent.submit(formEl);
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(confirmSpy.mock.calls[0][0]).toMatch(/cannot be undone/i);
+
+    // ⚠️ THE NON-VACUITY THAT MATTERS: a NON-owner role must not be confirmed at
+    // all. An arm that only proves "confirm was called" would also pass on a
+    // build that confirms every change — which trains the doctor to dismiss it.
+    confirmSpy.mockClear();
+    fireEvent.change(select, { target: { value: 'TECH' } });
+    fireEvent.submit(formEl);
+    expect(confirmSpy).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
   });
 });
 

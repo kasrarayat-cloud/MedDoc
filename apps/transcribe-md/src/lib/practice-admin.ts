@@ -37,26 +37,30 @@ import { logAudit } from '@/lib/audit';
  * the practice."* The constant names it so the guard and the schema cannot
  * drift, and so a reader can find the authority in one hop.
  */
-export const PRACTICE_ADMIN_ROLE = 'OWNER' as const satisfies PracticeRole;
+// ⚠️ THE ROLE VOCABULARY LIVES IN `practice-roles.ts` AND IS RE-EXPORTED HERE.
+// This module is server-only — `node:crypto`, Prisma, the audit logger — and
+// the members panel is a client component that needs the assignable list to
+// draw its selects. Re-exporting keeps every existing import of
+// `@/lib/practice-admin` resolving unchanged while giving the client a door
+// that does not drag the server graph with it.
+//
+// ⚠️ IMPORTED **AND** RE-EXPORTED, NOT `export … from`. A bare
+// `export { PRACTICE_ADMIN_ROLE } from '…'` forwards the name to importers and
+// does NOT create a binding in THIS module's scope — so `requirePracticeAdmin`
+// below, which compares against it, threw `PRACTICE_ADMIN_ROLE is not defined`
+// at runtime while `tsc` and every importer stayed happy. The guard would have
+// failed OPEN-shaped (it throws rather than admits, so it fails closed in
+// effect) on the one surface that hands out seats. Caught by the gate suite,
+// not by review.
+import {
+  ASSIGNABLE_ROLES,
+  PRACTICE_ADMIN_ROLE,
+  isAssignableRole,
+  type AssignableRole,
+} from '@/lib/practice-roles';
 
-/**
- * The roles a seat may be minted with, and the roles a member may be moved to.
- *
- * ⚠️ `OWNER` IS DELIBERATELY ABSENT, AND ITS ABSENCE IS AN OPEN QUESTION RATHER
- * THAN A RULING. Whether one OWNER may create another — whether OWNER is
- * exclusive at all — is a product decision with no ruled precedent, and the
- * ADMIN-1 row flags it as such ("who may invite and promote?"). Until it is
- * ruled, this surface FAILS CLOSED: it can hand out the two roles whose
- * semantics SPEC §4.1a/§4.1b already fix, and refuses the one that would let a
- * practice's administration be handed on. A refusal is recoverable by a ruling;
- * an accidental second OWNER is somebody else's clinic.
- */
-export const ASSIGNABLE_ROLES = ['CLINICIAN', 'TECH'] as const;
-export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
-
-export function isAssignableRole(v: unknown): v is AssignableRole {
-  return typeof v === 'string' && (ASSIGNABLE_ROLES as readonly string[]).includes(v);
-}
+export { ASSIGNABLE_ROLES, PRACTICE_ADMIN_ROLE, isAssignableRole };
+export type { AssignableRole };
 
 export type AdminRefusal =
   | 'UNAUTHENTICATED'
@@ -64,6 +68,7 @@ export type AdminRefusal =
   | 'TARGET_NOT_IN_PRACTICE'
   | 'CANNOT_CHANGE_OWN_ROLE'
   | 'CANNOT_CHANGE_AN_OWNER'
+  | 'ROLE_CHANGED_UNDER_YOU'
   | 'ROLE_NOT_ASSIGNABLE';
 
 export type AdminGuardResult =
@@ -79,8 +84,16 @@ export const ADMIN_REFUSAL_MESSAGE: Record<AdminRefusal, string> = {
   TARGET_NOT_IN_PRACTICE: 'That member is not in your practice.',
   CANNOT_CHANGE_OWN_ROLE:
     'You cannot change your own role. Ask another owner in your practice.',
+  // ⚠️ THE REASON CHANGED WITH THE RULING, SO THE WORDS DID TOO. Promotion IS
+  // settled now — you can make someone an owner. What is not built is taking it
+  // away, and saying "not settled" here would be false in the doctor's face.
   CANNOT_CHANGE_AN_OWNER:
-    "An owner's role cannot be changed here yet — who may promote and demote an owner is not settled.",
+    "An owner's role cannot be changed. Removing or demoting an owner isn't available yet — ask support if a partner is leaving the practice.",
+  // The compare-and-set found the row had moved since it was read. Refusing is
+  // fail-closed: we cannot know the demotion is still safe, so the doctor is
+  // told to look again rather than shown a success that did not happen.
+  ROLE_CHANGED_UNDER_YOU:
+    "That member's role was changed by someone else a moment ago. Nothing was saved — reload the page and check before trying again.",
   ROLE_NOT_ASSIGNABLE: 'That role cannot be assigned from this page.',
 };
 
