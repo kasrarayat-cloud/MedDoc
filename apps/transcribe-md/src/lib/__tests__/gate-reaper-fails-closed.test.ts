@@ -131,13 +131,35 @@ describe('the pre-existing guards are untouched', () => {
     // different guards, one word apart in the report. This file's own header
     // warns about that, and the arm still walked into it.
     //
-    // The SHARED tree is genuinely outside the sandbox, so only the boundary
-    // check can refuse it.
-    const outside = '/opt/meddoc-pro/README.md';
+    // ⚠️ AND THE SECOND DRAFT USED `/opt/meddoc-pro/README.md`, WHICH RED THE
+    // ARM IN CI FOR A THIRD WRONG REASON — the arm was measuring a file that
+    // was never there. The shared tree is genuinely outside the sandbox on THIS
+    // box; on the CI runner `/opt/meddoc-pro` does not exist at all. So
+    // `REFUSED (outside` matched (a non-existent path outside the sandbox is
+    // still outside) and then `existsSync` was false — not because the reaper
+    // shredded it, but because there had never been a file to shred. **The arm
+    // could not tell "protected" from "never existed", which is the exact
+    // vacuity this file was written to hunt, arriving inside the hunt.**
+    //
+    // The fixture is therefore CREATED, outside the sandbox, by this arm — so
+    // it exists in every environment — and its existence is asserted BEFORE the
+    // run. That pre-assertion is the whole repair: without it, `toBe(true)`
+    // afterwards is a claim about a file whose prior state nobody measured.
+    const outsideDir = mkdtempSync(join(tmpdir(), 'reapgate-outside-'));
+    const outside = join(outsideDir, 'must-survive.txt');
+    writeFileSync(outside, 'this file is outside the sandbox and must be refused, not reaped\n');
+
+    // THE CONTROL: it is here before the reaper runs.
+    expect(existsSync(outside), 'the fixture was never created').toBe(true);
+    // ...and it is genuinely outside, or this arm proves nothing.
+    expect(outside.startsWith(SANDBOX), 'the fixture is INSIDE the sandbox').toBe(false);
+
     const r = run([outside]);
     expect(r.out, 'refused, but not by the boundary check').toMatch(/REFUSED \(outside/);
     expect(r.code).toBe(1);
-    expect(existsSync(outside)).toBe(true);
+    expect(existsSync(outside), 'the reaper crossed its own boundary').toBe(true);
+
+    try { execSync(`rm -rf ${JSON.stringify(outsideDir)}`); } catch { /* best effort */ }
   });
 
   it('an absent target is skipped, not treated as success-by-destruction', () => {
