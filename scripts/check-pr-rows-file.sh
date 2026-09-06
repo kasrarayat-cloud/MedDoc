@@ -39,10 +39,20 @@ PR_NUMBER="${PR_NUMBER:-}"
 git rev-parse --verify "$BASE" >/dev/null 2>&1 || { echo "🔴 cannot resolve base '$BASE'"; exit 2; }
 MB="$(git merge-base "$BASE" "$HEAD_REF" 2>/dev/null)" || { echo "🔴 no merge base"; exit 2; }
 
-# ⚠️ THE SAME REGEX THE DEPLOY GATE USES. A second definition of "runtime"
-# would drift from the first the day either is fixed, and what drifts is what
-# decides whether a change needs rows.
-NONRUNTIME_RE='^(docs/|[^/]+\.md$)'
+# ⚠️ SOURCED, NOT COPIED. `DECLARATION_NONRUNTIME_RE` is the deploy gate's own
+# definition of "runtime", and this check must use THAT ONE — a second copy
+# drifts from the first the day either is fixed, and what drifts here decides
+# whether a change needs rows at all.
+#
+# ⚠️ I WROTE A SECOND COPY FIRST, hours after recording "one normaliser, two
+# callers" as canon from a defect of exactly this shape. The arm caught it.
+DECL_LIB="$REPO_DIR/scripts/lib/declaration.sh"
+[ -r "$DECL_LIB" ] || { echo "🔴 rows-gate: $DECL_LIB unreadable — cannot tell."; exit 2; }
+# shellcheck source=lib/declaration.sh
+. "$DECL_LIB"
+[ -n "${DECLARATION_NONRUNTIME_RE:-}" ] || {
+  echo "🔴 rows-gate: DECLARATION_NONRUNTIME_RE is unset — cannot tell."; exit 2; }
+NONRUNTIME_RE="$DECLARATION_NONRUNTIME_RE"
 
 CHANGED="$(git diff --name-only "$MB..$HEAD_REF" 2>/dev/null)" || exit 2
 RUNTIME="$(printf '%s\n' "$CHANGED" | grep -vE "$NONRUNTIME_RE" || true)"
