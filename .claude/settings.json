@@ -97,6 +97,7 @@
       "Bash(bash scripts/notify-heartbeat.sh:*)",
       "Bash(bash scripts/notify.sh:*)",
       "Bash(bash scripts/retire-branch.sh:*)",
+      "Bash(bash scripts/create-pr.sh:*)",
       "Bash(bash scripts/merge-pr.sh:*)",
       "Bash(bash scripts/run-ruled-mutation.sh:*)",
       "Bash(bash scripts/deploy-prod.sh:*)",
