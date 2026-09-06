@@ -23,6 +23,7 @@ import {
   requirePracticeAdmin,
   type AdminRefusal,
 } from '@/lib/practice-admin';
+import { changeRoleGuarded, removeMemberGuarded } from '@/lib/practice-owner-guard';
 import { hashInviteCode, normalizeInviteCode } from '@/lib/signup-invite';
 
 const MEMBERS_PATH = '/settings/members';
@@ -51,6 +52,13 @@ const MintSchema = z.object({
 const RoleSchema = z.object({
   userId: z.string().trim().min(1),
   role: z.enum(ASSIGNABLE_ROLES),
+});
+
+/** Removal takes an id and NOTHING else. There is no role to choose and no
+ *  free text to carry — the act is fully described by who is being removed, and
+ *  a parameter nobody needs is a parameter somebody can abuse. */
+const RemoveSchema = z.object({
+  userId: z.string().trim().min(1),
 });
 
 /** ⚠️ THE SAME REFUSAL THE SHIPPED SCRIPT MAKES, AND FOR THE SAME REASON: a
@@ -163,13 +171,34 @@ export async function changeMemberRoleAction(
     // one line reads any user in the system.
     //
     // ⚠️ AND `deactivatedAt: null` IS A CONJUNCT HERE FOR THE SAME REASON THE
-    // LISTING HAS IT. Deactivation writes `{isActive:false, deactivatedAt}` and
-    // leaves `practiceId`/`practiceRole` intact, so a deactivated member is
-    // still findable by id+practice. Without this the action could write OWNER
-    // onto a row `listPracticeMembers` does not render — and once written,
-    // `CANNOT_CHANGE_AN_OWNER` below refuses to ever move it again, because
-    // this is the ONLY `practiceRole` write in application code. An invisible
-    // owner nobody can revoke.
+    // LISTING HAS IT. A removed member keeps their `practiceId`, so the row is
+    // still findable by id+practice; without this conjunct the action could
+    // write a role onto somebody `listPracticeMembers` does not render.
+    //
+    // ⚠️ THIS COMMENT PREVIOUSLY CARRIED THREE CLAIMS THAT ARE NOW FALSE, AND
+    // THEY ARE NAMED RATHER THAN QUIETLY DELETED, because each was load-bearing
+    // for somebody's reasoning:
+    //
+    //   1. "deactivation leaves practiceRole intact" — `removeMemberAction`
+    //      sets it to NULL, which the column's own doc requires of a
+    //      deactivated row ("a sentinel there would be a claim nobody made").
+    //   2. "`CANNOT_CHANGE_AN_OWNER` refuses to ever move it again" — that
+    //      refusal is retired; an owner is movable now, subject to the
+    //      last-owner guard.
+    //   3. "this is the ONLY `practiceRole` write in application code" — FALSE
+    //      WHEN IT WAS WRITTEN, not merely outdated. The legacy app's
+    //      `activateUserAction` (apps/meddoc-pro/src/app/system-admin/
+    //      actions.ts:109-119) writes `practiceRole: 'OWNER'` on an existing
+    //      user whose role is NULL. That app is decommissioned and its
+    //      container is not running, but it is not architecturally removed and
+    //      `docker compose up` restores it.
+    //
+    // ⚠️ AND (3) HAS A LIVE CONSEQUENCE FOR THIS FEATURE, RECORDED SO IT IS NOT
+    // MET BY SURPRISE: because removal NULLs the role, that legacy reactivation
+    // path would restore a removed TECH as an OWNER. It is not fixed here —
+    // fixing a decommissioned app is a different change — but the guard's own
+    // count reads `deactivatedAt IS NULL`, so a removed row can never be
+    // counted as an owner while it is removed.
     where: { id: parsed.data.userId, practiceId: guard.practiceId, deactivatedAt: null },
     select: { id: true, practiceRole: true },
   });
@@ -181,66 +210,57 @@ export async function changeMemberRoleAction(
     };
   }
 
-  // ⚠️ AN OWNER IS NOT EDITABLE HERE, AND THAT IS HALF OF WHAT KEEPS THE
-  // INVARIANT. Every practice starts with at least one OWNER (a solo signup's
-  // fallback), and since ruling #195 an OWNER may also be minted or promoted —
-  // so this refusal is what makes "a practice always has at least one owner"
-  // hold STRUCTURALLY rather than by a last-owner count.
+  // ⚠️ AN OWNER IS NOW EDITABLE, AND THE INVARIANT MOVED RATHER THAN LAPSED.
+  // Until ADMIN-5 this branch refused every change to an owner unconditionally,
+  // and that refusal was what made "a practice always has at least one owner"
+  // hold STRUCTURALLY — no count was ever read, so no count could be read
+  // wrongly. Opening demotion is exactly what destroys that, so the structural
+  // guarantee is replaced by a database-enforced one, not by a weaker version
+  // of itself.
   //
-  // ⚠️ THIS READ IS A SNAPSHOT, AND UNTIL RULING #195 THAT DID NOT MATTER.
-  // While `ASSIGNABLE_ROLES` was `['CLINICIAN','TECH']`, no in-app path could
-  // turn a target INTO an owner, so the row could never become OWNER between
-  // this read and the write below — the read-then-write shape was incidentally
-  // safe. Widening the vocabulary is exactly what made that window reachable:
-  // two concurrent requests, one promoting B to OWNER and one demoting B, both
-  // read B as CLINICIAN, both pass this guard, and the demotion lands on an
-  // OWNER. Demonstrated by an adversarial pass on this branch, with a
-  // sequential control that is correctly refused and a base-tree control that
-  // cannot reach the state at all.
+  // ⚠️ AND THE REPLACEMENT IS NOT A COUNT READ HERE. `changeRoleGuarded` takes
+  // the practice's row lock and puts the owner count INSIDE the UPDATE's own
+  // WHERE clause, so Postgres decides and writes in one statement. There is no
+  // number in this file to get wrong. See `lib/practice-owner-guard.ts` for the
+  // interleaving it survives and for why the two shapes the ADMIN-5 row names
+  // were measured and set aside.
   //
-  // So the guard below is kept AND the write is made a COMPARE-AND-SET. Do not
-  // remove either: this one refuses fast and speaks the doctor-facing reason;
-  // the CAS is what makes the refusal true under concurrency.
-  if (target.practiceRole === 'OWNER') {
-    return {
-      ok: false,
-      reason: 'CANNOT_CHANGE_AN_OWNER',
-      message: ADMIN_REFUSAL_MESSAGE.CANNOT_CHANGE_AN_OWNER,
-    };
-  }
-
+  // ⚠️ THE NO-OP ARM STAYS ABOVE THE GUARD, DELIBERATELY. An append-only trail
+  // that records changes which did not happen is worse than one that misses
+  // none — and a lateral OWNER -> OWNER must not be refused for want of a
+  // second owner, which is the one case the guard's clause cannot distinguish
+  // from a demotion.
   if (target.practiceRole === parsed.data.role) {
-    // A no-op writes no row. An append-only trail that records changes which
-    // did not happen is worse than one that misses none.
     return { ok: true, changedAt: Date.now() };
   }
 
-  // ⚠️ COMPARE-AND-SET ON THE EXACT ROLE THAT WAS READ — one statement, no
-  // transaction, no isolation-level dependency. `updateMany` takes a full
-  // predicate where `update` takes only a unique key, and re-asserting
-  // `practiceRole: target.practiceRole` in the WHERE is what makes the write
-  // conditional on nothing having moved underneath it.
-  //
-  // ⚠️ AND IT IS ALSO WHAT MAKES THE AUDIT ROW TRUE. `from` is read from the
-  // snapshot; if the row had changed under us, `from` would name a value the
-  // row did not hold when the UPDATE ran — a false entry in an append-only
-  // trail, which is worse than a missing one. Count 0 means the row moved, so
-  // we refuse rather than write, and the trail says nothing rather than
-  // something wrong.
-  const { count } = await prisma.user.updateMany({
-    where: {
-      id: target.id,
-      practiceId: guard.practiceId,
-      deactivatedAt: null,
-      practiceRole: target.practiceRole,
-    },
-    data: { practiceRole: parsed.data.role },
+  const guarded = await changeRoleGuarded({
+    practiceId: guard.practiceId,
+    userId: target.id,
+    toRole: parsed.data.role,
   });
 
-  if (count === 0) {
-    // The row changed between the read and the write. We cannot know it is
-    // still safe to demote, so we refuse — fail-closed, and the doctor is told
-    // to look again rather than being shown a success that did not happen.
+  if (guarded.outcome === 'LAST_OWNER') {
+    // ⚠️ AUDITED, BECAUSE A REFUSED ADMINISTRATIVE ACT IS AN EVENT. Somebody
+    // tried to leave a practice with no owner; that it failed is exactly what
+    // the trail should be able to show later.
+    await logAudit({
+      action: 'PRACTICE_ADMIN_REFUSED',
+      targetType: 'User',
+      targetId: target.id,
+      metadata: {
+        refusal: 'LAST_OWNER',
+        attempted: 'ROLE_CHANGE',
+        to: parsed.data.role,
+        practiceId: guard.practiceId,
+      },
+    });
+    return { ok: false, reason: 'LAST_OWNER', message: ADMIN_REFUSAL_MESSAGE.LAST_OWNER };
+  }
+
+  if (guarded.outcome === 'TARGET_MOVED') {
+    // The row moved between the read and the guarded write, or is no longer in
+    // this practice. Fail closed: we cannot know the change is still safe.
     return {
       ok: false,
       reason: 'ROLE_CHANGED_UNDER_YOU',
@@ -253,8 +273,97 @@ export async function changeMemberRoleAction(
     targetType: 'User',
     targetId: target.id,
     metadata: {
-      from: target.practiceRole ?? null,
+      // ⚠️ READ UNDER THE LOCK, NOT FROM THE PRE-LOCK SNAPSHOT. `target` was
+      // read before the practice was locked, so it can name a role the row no
+      // longer held when the UPDATE ran — a false entry in an append-only
+      // trail, which is worse than a missing one. The guard returns what it
+      // saw inside the transaction it wrote in.
+      from: guarded.from ?? null,
       to: parsed.data.role,
+      practiceId: guard.practiceId,
+    },
+  });
+
+  revalidatePath(MEMBERS_PATH);
+  return { ok: true, changedAt: Date.now() };
+}
+
+export async function removeMemberAction(
+  _prev: RoleState,
+  formData: FormData,
+): Promise<RoleState> {
+  const guard = await requirePracticeAdmin(await getSession());
+  if (!guard.ok) return { ok: false, reason: guard.reason, message: guard.message };
+
+  const parsed = RemoveSchema.safeParse({ userId: formData.get('userId') });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      reason: 'TARGET_NOT_IN_PRACTICE',
+      message: ADMIN_REFUSAL_MESSAGE.TARGET_NOT_IN_PRACTICE,
+    };
+  }
+
+  // ⚠️ SELF-REMOVAL IS REFUSED, AND IT IS A DIFFERENT REFUSAL FROM THE ROLE
+  // ONE. `CANNOT_CHANGE_OWN_ROLE` names a role change; a doctor who has just
+  // clicked "Remove" needs to be told about removal. Same reasoning, and the
+  // last-owner guard would NOT catch this on its own: a practice with two
+  // owners lets either remove themselves, and both could leave.
+  if (parsed.data.userId === guard.actorId) {
+    return {
+      ok: false,
+      reason: 'CANNOT_REMOVE_YOURSELF',
+      message: ADMIN_REFUSAL_MESSAGE.CANNOT_REMOVE_YOURSELF,
+    };
+  }
+
+  // ⚠️ REMOVAL GOES THROUGH THE SAME GUARD AS DEMOTION, AND THAT IS THE POINT.
+  // Removing the last owner destroys "every practice has at least one owner"
+  // exactly as demoting them does — it is the SECOND DOOR to one invariant, and
+  // a guard fitted to only the first door is a guard that looks complete.
+  const guarded = await removeMemberGuarded({
+    practiceId: guard.practiceId,
+    userId: parsed.data.userId,
+    actorId: guard.actorId,
+  });
+
+  if (guarded.outcome === 'LAST_OWNER') {
+    await logAudit({
+      action: 'PRACTICE_ADMIN_REFUSED',
+      targetType: 'User',
+      targetId: parsed.data.userId,
+      metadata: {
+        refusal: 'LAST_OWNER',
+        attempted: 'REMOVE',
+        practiceId: guard.practiceId,
+      },
+    });
+    return { ok: false, reason: 'LAST_OWNER', message: ADMIN_REFUSAL_MESSAGE.LAST_OWNER };
+  }
+
+  if (guarded.outcome === 'TARGET_MOVED') {
+    return {
+      ok: false,
+      reason: 'TARGET_NOT_IN_PRACTICE',
+      message: ADMIN_REFUSAL_MESSAGE.TARGET_NOT_IN_PRACTICE,
+    };
+  }
+
+  await logAudit({
+    // ⚠️ ITS OWN LABEL, NOT `USER_DEACTIVATED`. The mechanism is shared with
+    // the platform's account deactivation; the ACT is not. A practice owner
+    // removing a colleague and a super-admin disabling an account are different
+    // events with different actors, and an action-level rollup that cannot tell
+    // them apart is the reason ADMIN-1 declined to reuse `USER_ROLE_CHANGED`
+    // for practice roles. Same axis argument, one migration later.
+    action: 'PRACTICE_MEMBER_REMOVED',
+    targetType: 'User',
+    targetId: parsed.data.userId,
+    metadata: {
+      // ⚠️ THE ROLE THEY HELD, CAPTURED UNDER THE LOCK BEFORE IT WAS NULLED.
+      // The row no longer carries it, so this entry is the only record of what
+      // was removed — and re-adding somebody needs to know.
+      removedRole: guarded.from ?? null,
       practiceId: guard.practiceId,
     },
   });

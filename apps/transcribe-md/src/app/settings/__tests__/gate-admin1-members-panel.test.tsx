@@ -28,6 +28,7 @@ vi.mock('sonner', () => ({
 vi.mock('@/actions/practice-members', () => ({
   mintSeatInviteAction: vi.fn(),
   changeMemberRoleAction: vi.fn(),
+  removeMemberAction: vi.fn(),
   revokeSeatInviteAction: vi.fn(),
 }));
 
@@ -65,26 +66,42 @@ describe('⚠️ the list is practice-uniform; the CONTROLS are not', () => {
 });
 
 describe('⚠️ the two rows an owner may NOT change are not drawn as changeable', () => {
-  it('an OWNER row is text, never a control — even one that is NOT you', () => {
-    // ⚠️ THE FIRST VERSION OF THIS ARM WAS VACUOUS, AND THE MUTATION SAID SO.
-    // It asserted only against `u-owner`, whose fixture is ALSO `isSelf`, so
-    // the `isSelf` term satisfied it and deleting the OWNER term from
-    // `editable` redded NOTHING. A guard tested only where another guard
-    // already answers is not tested.
-    //
-    // The second owner is not self, so this row can ONLY be text because of
-    // the OWNER term.
-    const withSecondOwner = [
+  it('⚠️ ADMIN-5 — an OWNER row IS a control now, and only YOURSELF stays text', async () => {
+    // ⚠️ THIS ARM ASSERTED THE EXACT OPPOSITE AND IS INVERTED DELIBERATELY. It
+    // read "an OWNER row is text, never a control — even one that is NOT you",
+    // and the rule behind it is unchanged and still right: a control that is
+    // drawn and then refused teaches the doctor the page lies. What changed is
+    // which rows the server refuses. It refuses YOU; it no longer refuses an
+    // owner.
+    // ⚠️ A LOCAL FIXTURE WITH A SECOND OWNER, NOT AN EDIT TO `MEMBERS`. The
+    // shared list has exactly one owner, and that owner is `isSelf` — so
+    // against it, "an owner row is editable" and "your own row is not" are the
+    // SAME row, and the arm could pass while testing only one of them. #195
+    // made two owners a real shape; this is where the panel has to meet it.
+    const TWO_OWNERS = [
       ...MEMBERS,
-      { id: 'u-owner2', name: 'Dr Two', email: 'o2@x.test', practiceRole: 'OWNER', isSelf: false },
+      { id: 'u-owner2', name: 'Dr Partner', email: 'p@x.test', practiceRole: 'OWNER', isSelf: false },
     ];
-    render(<PracticeMembersPanel members={withSecondOwner} invites={[]} canAdminister />);
-    expect(screen.queryByTestId('member-role-select-u-owner2')).toBeNull();
-    expect(screen.getByTestId('member-role-u-owner2').textContent).toContain('Owner');
-    // And your own owner row too, for the same reason by a different term.
+    render(<PracticeMembersPanel members={TWO_OWNERS} invites={[]} canAdminister />);
+
+    // another owner: editable, and removable
+    expect(screen.queryByTestId('member-role-select-u-owner2')).not.toBeNull();
+    expect(screen.queryByTestId('member-remove-u-owner2')).not.toBeNull();
+
+    // ⚠️ YOURSELF: NEITHER CONTROL, AND THE REMOVE ONE MATTERS MORE. The server
+    // refuses both, but self-removal is the click that would strand a practice
+    // fastest, and a disabled-looking button is not the same as no button.
     expect(screen.queryByTestId('member-role-select-u-owner')).toBeNull();
-    // Non-vacuity: a row that SHOULD be editable in this same render is.
-    expect(screen.getByTestId('member-role-select-u-tech')).toBeTruthy();
+    expect(screen.queryByTestId('member-remove-u-owner')).toBeNull();
+
+    // ⚠️ NON-VACUITY: a viewer who may not administer sees NO controls at all,
+    // so the assertions above are about the owner's view rather than about
+    // whether the testids exist anywhere on the page.
+    cleanup();
+    render(<PracticeMembersPanel members={TWO_OWNERS} invites={[]} canAdminister={false} />);
+    expect(screen.queryByTestId('member-role-select-u-owner2')).toBeNull();
+    expect(screen.queryByTestId('member-remove-u-owner2')).toBeNull();
+    expect(screen.queryByTestId('member-remove-u-clin')).toBeNull();
   });
 
   it('and neither is your own row', () => {
@@ -126,24 +143,38 @@ describe('⚠️ the two rows an owner may NOT change are not drawn as changeabl
     // plus `/demoted or removed/i` is satisfied by "Owners can be demoted or
     // removed at any time" — the inverse of what the server does. Matching a
     // NEGATION is what makes it a test of meaning rather than of keywords.
+    // ⚠️ ADMIN-5 INVERTED WHAT THIS ARM GUARDS, AND THE POLARITY DISCIPLINE IS
+    // WHAT SURVIVED. The old note said owners "cannot be demoted or removed …
+    // ask support", and this arm matched that NEGATION on purpose, because an
+    // earlier version passed on a note asserting the exact opposite. Both
+    // halves are now false, so `members-owner-note` is GONE — asserting its
+    // absence is what proves the stale sentence cannot come back.
     render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister />);
-    const note = (screen.getByTestId('members-owner-note').textContent ?? '').replace(/\s+/g, ' ');
-    expect(note).toMatch(/cannot be demoted or removed/i);
-    expect(note).not.toMatch(/can be demoted or removed/i);
-    // and it must still say the thing that IS possible, or it reads as a wall
-    expect(note).toMatch(/make another member an owner/i);
+    expect(screen.queryByTestId('members-owner-note')).toBeNull();
+
+    const help = (screen.getByTestId('members-owner-help').textContent ?? '').replace(/\s+/g, ' ');
+    // The polarity is now the other way, and it is matched the same way.
+    expect(help).toMatch(/remove them from the practice/i);
+    expect(help).not.toMatch(/cannot be demoted or removed/i);
+    expect(help).not.toMatch(/ask support/i);
+    // It must still name the constraint that IS real, or a doctor meets it as
+    // a surprise refusal instead of as a rule.
+    expect(help).toMatch(/at least one owner/i);
 
     // Non-vacuity: a non-administering view does not get it, so this is not a
     // string that is simply always on the page.
     cleanup();
     render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister={false} />);
-    expect(screen.queryByTestId('members-owner-note')).toBeNull();
+    expect(screen.queryByTestId('members-owner-help')).toBeNull();
   });
 
   it('⚠️ promoting to OWNER asks for confirmation, and a refusal does NOT submit', () => {
-    // Promotion is irreversible until ADMIN-5 ships and OWNER is the option
-    // directly above the current selection. An adversarial pass reached it in
-    // one keystroke with nothing in the way.
+    // ⚠️ THE CONFIRM OUTLIVED ITS ORIGINAL REASON, AND THAT IS DELIBERATE.
+    // It was justified by promotion being IRREVERSIBLE until ADMIN-5 shipped;
+    // ADMIN-5 has shipped, so that justification is gone. What has not gone is
+    // that OWNER is the option directly above the current selection — an
+    // adversarial pass reached it in one keystroke — and that handing somebody
+    // administrative control of a clinic deserves a second deliberate act.
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const submitSpy = vi.fn((e: React.FormEvent) => e.preventDefault());
     render(<PracticeMembersPanel members={MEMBERS} invites={[]} canAdminister />);
@@ -155,7 +186,12 @@ describe('⚠️ the two rows an owner may NOT change are not drawn as changeabl
     fireEvent.change(select, { target: { value: 'OWNER' } });
     fireEvent.submit(formEl);
     expect(confirmSpy).toHaveBeenCalledOnce();
-    expect(confirmSpy.mock.calls[0][0]).toMatch(/cannot be undone/i);
+    // ⚠️ THE COPY MUST NOT PROMISE IRREVERSIBILITY THAT ADMIN-5 REMOVED. It used
+    // to be pinned against /cannot be undone/i; that sentence is now false, and
+    // a confirm that overstates a consequence is how a doctor learns to
+    // disbelieve confirms. What it must still do is name the constraint.
+    expect(confirmSpy.mock.calls[0][0]).not.toMatch(/cannot be undone/i);
+    expect(confirmSpy.mock.calls[0][0]).toMatch(/keeps one owner/i);
 
     // ⚠️ THE NON-VACUITY THAT MATTERS: a NON-owner role must not be confirmed at
     // all. An arm that only proves "confirm was called" would also pass on a

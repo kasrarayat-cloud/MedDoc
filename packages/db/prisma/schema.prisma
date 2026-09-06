@@ -140,6 +140,11 @@ enum AuditAction {
   /// The administration guard refused a caller. A gate nothing records is one
   /// path away from not existing — the sign route's own reasoning.
   PRACTICE_ADMIN_REFUSED
+  /// ADMIN-5 — a practice owner removed a member (deactivated their seat).
+  /// ⚠️ NOT `USER_DEACTIVATED`, which is the platform's label for a super-admin
+  /// disabling an account. Same MECHANISM, different ACT and different actor;
+  /// one label for both cannot answer "who did my practice remove".
+  PRACTICE_MEMBER_REMOVED
 
   // Admin
   USER_CREATED

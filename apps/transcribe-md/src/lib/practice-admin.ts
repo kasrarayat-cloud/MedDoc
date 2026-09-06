@@ -67,7 +67,8 @@ export type AdminRefusal =
   | 'ROLE_MAY_NOT_ADMINISTER'
   | 'TARGET_NOT_IN_PRACTICE'
   | 'CANNOT_CHANGE_OWN_ROLE'
-  | 'CANNOT_CHANGE_AN_OWNER'
+  | 'CANNOT_REMOVE_YOURSELF'
+  | 'LAST_OWNER'
   | 'ROLE_CHANGED_UNDER_YOU'
   | 'ROLE_NOT_ASSIGNABLE';
 
@@ -84,11 +85,18 @@ export const ADMIN_REFUSAL_MESSAGE: Record<AdminRefusal, string> = {
   TARGET_NOT_IN_PRACTICE: 'That member is not in your practice.',
   CANNOT_CHANGE_OWN_ROLE:
     'You cannot change your own role. Ask another owner in your practice.',
-  // ⚠️ THE REASON CHANGED WITH THE RULING, SO THE WORDS DID TOO. Promotion IS
-  // settled now — you can make someone an owner. What is not built is taking it
-  // away, and saying "not settled" here would be false in the doctor's face.
-  CANNOT_CHANGE_AN_OWNER:
-    "An owner's role cannot be changed. Removing or demoting an owner isn't available yet — ask support if a partner is leaving the practice.",
+  // ⚠️ REMOVED WITH THE CAPABILITY IT DESCRIBED. `CANNOT_CHANGE_AN_OWNER` said
+  // an owner's role could never be changed here; ADMIN-5 makes that false, and
+  // a refusal string that outlives its refusal is how a page starts lying. Its
+  // arms moved to LAST_OWNER, which refuses the one case that is still refused.
+  CANNOT_REMOVE_YOURSELF:
+    'You cannot remove yourself from the practice. Ask another owner.',
+  // ⚠️ THE ONLY REFUSAL LEFT ON THE OWNER PATH, AND IT IS ABOUT THE PRACTICE,
+  // NOT ABOUT THE PERSON. The database refused because this member is the last
+  // owner — demoting or removing them would leave nobody able to administer the
+  // practice. Promote someone else first and the same action succeeds.
+  LAST_OWNER:
+    'This is the last owner of the practice. Make someone else an owner first, then try again — a practice cannot be left with no owner.',
   // The compare-and-set found the row had moved since it was read. Refusing is
   // fail-closed: we cannot know the demotion is still safe, so the doctor is
   // told to look again rather than shown a success that did not happen.

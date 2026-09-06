@@ -1,0 +1,37 @@
+-- ============================================================================
+-- ADMIN-5 — the audit label for a practice owner removing a member.
+-- ----------------------------------------------------------------------------
+-- ⚠️ PERMANENTLY IRREVERSIBLE. Postgres has no `ALTER TYPE … DROP VALUE`. Once
+-- applied, this value exists for the life of the database. It is added anyway,
+-- and the reasoning is the same one ADMIN-1's migration recorded for its three:
+--
+--   `USER_DEACTIVATED` already exists and shares this label's MECHANISM — both
+--   end at `{isActive:false, deactivatedAt}`. They do not share the ACT. A
+--   super-admin disabling an account and a practice owner removing a colleague
+--   are different events, by different actors, answerable to different people.
+--   An action-level rollup that cannot tell them apart cannot answer "who did
+--   my practice remove last quarter", which is the question this label exists
+--   to make answerable.
+--
+--   ADMIN-1 declined to reuse `USER_ROLE_CHANGED` for practice roles on exactly
+--   this reasoning — practice role and system role are different axes. This is
+--   the same argument one migration later, and it is written down here so the
+--   next reader does not have to reconstruct it from the diff.
+--
+-- ⚠️ ONE VALUE, NOT TWO. Demotion needs no new label: `PRACTICE_ROLE_CHANGED`
+-- already carries `from`/`to`, and a demotion is a role change in every sense
+-- that matters to a reader. Refusals reuse `PRACTICE_ADMIN_REFUSED` with a
+-- `refusal` discriminator in the metadata. An irreversible addition is bought
+-- only where a rollup would otherwise be wrong.
+--
+-- ⚠️ NO INDEX IS ADDED, AND THAT IS MEASURED RATHER THAN ASSUMED. The guard's
+-- owner-count subquery filters ("practiceId", "practiceRole") and
+-- `users_practiceId_practiceRole_idx` already covers it
+-- (20260806220000_practice_role). The guard does NOT depend on the plan: its
+-- correctness comes from the practice row lock, not from index granularity —
+-- which is precisely what the SERIALIZABLE route could not say, since there the
+-- plan decided whether unrelated practices falsely conflicted. Evidence:
+-- docs/foundation/evidence/admin5-last-owner-guard-probes.md
+-- ============================================================================
+
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'PRACTICE_MEMBER_REMOVED';

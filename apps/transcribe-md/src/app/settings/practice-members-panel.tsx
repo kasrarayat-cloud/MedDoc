@@ -32,6 +32,7 @@ import { ASSIGNABLE_ROLES } from '@/lib/practice-roles';
 import {
   changeMemberRoleAction,
   mintSeatInviteAction,
+  removeMemberAction,
   revokeSeatInviteAction,
   type RoleState,
   type SeatState,
@@ -107,18 +108,20 @@ export function PracticeMembersPanel({
       <MemberList members={members} canAdminister={canAdminister} />
       {canAdminister ? (
         <>
-          {/* ⚠️ THE HALF THAT IS NOT BUILT IS SAID OUT LOUD, NOT HIDDEN. An owner
-              can now be created — that is the ruling. Taking it away is filed as
-              its own item because it needs a last-owner guard that is correct
-              under concurrency. A page that silently omits the control teaches
-              the doctor the capability is missing by accident; saying so tells
-              them it is deliberate and that support can act today. */}
+          {/* ⚠️ `members-owner-note` WAS DELETED HERE, IN THE COMMIT THAT MADE IT
+              FALSE. It told the doctor that owners "cannot be demoted or removed
+              here yet — ask support". ADMIN-5 ships both, so leaving the
+              sentence would send a practice owner to support for something the
+              page in front of them now does. The ADMIN-5 row required its
+              removal in the same commit for exactly that reason; a disclosure
+              that outlives its refusal is worse than none, because the doctor
+              has no way to tell it is stale. */}
           <p
-            data-testid="members-owner-note"
+            data-testid="members-owner-help"
             style={{ marginTop: 12, fontSize: 13, color: 'var(--color-linear-text-3)' }}
           >
-            You can make another member an owner. Owners cannot be demoted or removed here
-            yet — ask support if a partner is leaving the practice.
+            You can make another member an owner, change a member&rsquo;s role, or remove
+            them from the practice. A practice must always keep at least one owner.
           </p>
           <InviteList invites={invites} />
           <MintSeat />
@@ -169,6 +172,7 @@ function MemberList({
             </div>
           </div>
           <RoleCell member={m} canAdminister={canAdminister} />
+          <RemoveCell member={m} canAdminister={canAdminister} />
         </div>
       ))}
     </div>
@@ -200,9 +204,19 @@ function RoleCell({
   const role = member.practiceRole ?? '—';
   const label = ROLE_LABEL[role] ?? role;
 
-  // An OWNER, and yourself, are shown as text — the server refuses both, and a
-  // control that is drawn and then refused teaches the doctor the page lies.
-  const editable = canAdminister && !member.isSelf && member.practiceRole !== 'OWNER';
+  // ⚠️ ONLY YOURSELF IS TEXT NOW. An OWNER used to be shown as text too, because
+  // the server refused every change to one — "a control that is drawn and then
+  // refused teaches the doctor the page lies" is still the rule, and it is why
+  // this predicate moved the moment the server stopped refusing.
+  //
+  // ⚠️ THE LAST OWNER IS DELIBERATELY *NOT* EXCLUDED HERE, AND THAT IS NOT AN
+  // OVERSIGHT. Whether a member is the last owner is a fact about the practice
+  // at the instant of the write, not a property of the row this component was
+  // rendered from — a page rendered when there were two owners is stale the
+  // moment the other one is removed in another tab. Disabling the control on a
+  // stale count would refuse changes that are safe and permit ones that are
+  // not. The database decides, and the refusal is spoken.
+  const editable = canAdminister && !member.isSelf;
 
   if (!editable) {
     return (
@@ -220,24 +234,28 @@ function RoleCell({
     <form
       action={action}
       style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-      // ⚠️ PROMOTION TO OWNER IS IRREVERSIBLE UNTIL ADMIN-5 SHIPS, AND IT SITS
-      // ONE ARROW-KEY FROM THE CURRENT SELECTION. The options derive from
-      // ASSIGNABLE_ROLES, where OWNER is first, so a CLINICIAN row opens with
-      // OWNER directly above the selected item. There is no undo: the server
-      // refuses every subsequent change to an owner, by design. An adversarial
-      // pass reached it by one keystroke with nothing in the way.
+      // ⚠️ THE CONFIRM STAYS, AND ITS REASON CHANGED. Promotion to OWNER is no
+      // longer irreversible — ADMIN-5 ships the demotion — so the old wording
+      // ("this cannot be undone here") is retired with the refusal it described.
+      // What has not changed is that OWNER sits ONE ARROW-KEY from the current
+      // selection: the options derive from ASSIGNABLE_ROLES, where OWNER is
+      // first, so a CLINICIAN row opens with OWNER directly above the selected
+      // item, and an adversarial pass reached it by one keystroke.
       //
-      // ⚠️ THE CONFIRM IS ON THE IRREVERSIBLE VALUE ONLY. Confirming every role
-      // change would train the doctor to dismiss it, which is how a confirm
-      // stops being a control.
+      // Handing somebody administrative control of a clinic is worth a
+      // deliberate second act even when it can be undone.
+      //
+      // ⚠️ THE CONFIRM IS ON THAT ONE VALUE ONLY. Confirming every role change
+      // would train the doctor to dismiss it, which is how a confirm stops
+      // being a control.
       onSubmit={(e) => {
         const chosen = new FormData(e.currentTarget).get('role');
         if (chosen !== 'OWNER') return;
         const who = member.name?.trim() || member.email;
         const ok = window.confirm(
           `Make ${who} an owner of this practice?\n\n` +
-            'Owners can manage members and invite people. This cannot be undone here — ' +
-            'owners cannot be demoted or removed yet.',
+            'Owners can manage members, invite people, and remove them. ' +
+            'You can change this later, as long as the practice keeps one owner.',
         );
         if (!ok) e.preventDefault();
       }}
@@ -264,6 +282,75 @@ function RoleCell({
       <SpecularButton type="submit" disabled={pending} data-testid={`member-role-save-${member.id}`}>
         {pending ? 'Saving…' : 'Save'}
       </SpecularButton>
+    </form>
+  );
+}
+
+function RemoveCell({
+  member,
+  canAdminister,
+}: {
+  member: MemberRow;
+  canAdminister: boolean;
+}) {
+  const [state, action, pending] = useActionState<RoleState, FormData>(
+    removeMemberAction,
+    null,
+  );
+  const seen = useRef<RoleState>(null);
+
+  useEffect(() => {
+    if (state === seen.current) return;
+    seen.current = state;
+    if (state?.ok === true) toast.success('Member removed');
+    // ⚠️ THE REFUSAL IS SPOKEN, and the LAST_OWNER one is the whole reason this
+    // matters: the doctor is told the practice would be left with no owner and
+    // what to do about it, rather than watching a button do nothing.
+    else if (state?.ok === false) toast.error(state.message);
+  }, [state]);
+
+  // ⚠️ NO CONTROL AT ALL FOR YOURSELF. The server refuses self-removal, and
+  // drawing a button that is always refused teaches the doctor the page lies —
+  // the same rule the role cell follows. Rendering nothing is also what keeps
+  // "remove" from being the misclick that empties a practice.
+  if (!canAdminister || member.isSelf) return null;
+
+  const who = member.name?.trim() || member.email;
+
+  return (
+    <form
+      action={action}
+      style={{ display: 'flex', alignItems: 'center' }}
+      // ⚠️ CONFIRMED, AND UNLIKE THE ROLE CONTROL IT IS CONFIRMED ALWAYS.
+      // Removal ends somebody's access to a clinical system in one click and
+      // there is no undo on this page at any role — so the "confirm only the
+      // irreversible value" reasoning that keeps the role confirm rare argues
+      // the opposite way here. Every removal is the irreversible value.
+      onSubmit={(e) => {
+        const ok = window.confirm(
+          `Remove ${who} from this practice?\n\n` +
+            'They will lose access immediately. Their visits, patients and audit ' +
+            'history stay exactly as they are.',
+        );
+        if (!ok) e.preventDefault();
+      }}
+    >
+      <input type="hidden" name="userId" value={member.id} />
+      <button
+        type="submit"
+        disabled={pending}
+        data-testid={`member-remove-${member.id}`}
+        className="qm-lin-btn qm-tap-44"
+        style={{ fontSize: 13, padding: '6px 10px', color: 'var(--color-linear-text-2)' }}
+      >
+        {pending ? 'Removing…' : 'Remove'}
+      </button>
+      {/* ⚠️ A PLAIN <button>, NOT `SpecularButton`. That component enumerates
+          its props and never spreads, so `data-testid` is silently DROPPED —
+          measured on this very file, where `member-role-save-*`, `mint-submit`
+          and `mint-result` never reach the DOM. Widening a shared component is
+          its own change; using a plain button here means this control is
+          actually reachable by the gate that claims to drive it. */}
     </form>
   );
 }

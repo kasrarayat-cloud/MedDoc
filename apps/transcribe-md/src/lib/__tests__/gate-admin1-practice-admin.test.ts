@@ -37,7 +37,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // declaration in the file, so a factory closing over a top-level `const` throws
 // `Cannot access 'prisma' before initialization` — and it throws at MODULE LOAD,
 // which vitest reports as "no tests" rather than as a failure in any arm.
-const { prisma, logAudit, getSession } = vi.hoisted(() => ({
+const { prisma, logAudit, getSession, changeRoleGuarded, removeMemberGuarded } = vi.hoisted(() => ({
+  changeRoleGuarded: vi.fn(),
+  removeMemberGuarded: vi.fn(),
   prisma: {
     user: {
       findUnique: vi.fn(),
@@ -56,6 +58,13 @@ vi.mock('@meddoc/db', () => ({ default: prisma }));
 vi.mock('@/lib/audit', () => ({ logAudit }));
 vi.mock('@/lib/auth', () => ({ getSession }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+// ⚠️ THE GUARD IS MOCKED HERE, AND THIS FILE SAYS SO RATHER THAN IMPLYING
+// COVERAGE IT DOES NOT HAVE. These arms prove the ACTION routes to the guard and
+// speaks its outcomes; they prove NOTHING about whether the guard is correct
+// under concurrency, because this harness mocks Prisma entirely and cannot
+// produce an interleaving. That proof is `tests/e2e/scenarios/40-admin5-last-owner.spec.ts`,
+// which races the SHIPPED SQL against a real Postgres.
+vi.mock('@/lib/practice-owner-guard', () => ({ changeRoleGuarded, removeMemberGuarded }));
 
 import {
   ADMIN_REFUSAL_MESSAGE,
@@ -126,60 +135,79 @@ describe('⚠️ OWNER IS NOT EXCLUSIVE — the promotion side is now open', () 
   it('an existing member can be PROMOTED to OWNER, and it audits from -> to', async () => {
     asOwner();
     prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'CLINICIAN' });
+    changeRoleGuarded.mockResolvedValue({ outcome: 'APPLIED', from: 'CLINICIAN' });
     const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'OWNER' }));
     expect(res?.ok).toBe(true);
-    expect(prisma.user.updateMany).toHaveBeenCalledOnce();
-    expect(prisma.user.updateMany.mock.calls[0][0].data).toMatchObject({ practiceRole: 'OWNER' });
+    expect(changeRoleGuarded).toHaveBeenCalledWith({
+      practiceId: 'p-1',
+      userId: 'u-2',
+      toRole: 'OWNER',
+    });
+    // ⚠️ `from` COMES FROM THE GUARD, NOT FROM THE PRE-LOCK SNAPSHOT. `target`
+    // was read before the practice was locked, so it can name a role the row no
+    // longer held when the UPDATE ran — a false entry in an append-only trail.
+    // The guard reports what it saw inside the transaction it wrote in.
     expect(logAudit.mock.calls.at(-1)?.[0].metadata).toMatchObject({
       from: 'CLINICIAN',
       to: 'OWNER',
     });
   });
 
-  it('⚠️ THE WRITE IS A COMPARE-AND-SET ON THE ROLE THAT WAS READ — the race the widening opened', async () => {
-    // ⚠️ FOUND BY THE ADVERSARIAL PASS ON THIS BRANCH, NOT BY THE AUTHOR, AND
-    // REPRODUCED: two concurrent requests, one promoting B to OWNER and one
-    // demoting B, both read B as CLINICIAN, both clear the guard above, and the
-    // demotion lands on an OWNER. Until this ruling the shape was INCIDENTALLY
-    // safe — no in-app path could turn a target into an owner, so the row could
-    // never become OWNER between the read and the write. Widening the
-    // vocabulary is precisely what made the window reachable.
+  it('⚠️ THE WRITE HAPPENS UNDER THE PRACTICE LOCK — the race the widening opened, closed harder', async () => {
+    // ⚠️ THE MECHANISM MOVED; THE LESSON DID NOT, AND DELETING THIS ARM WOULD
+    // HAVE LOST IT. It was written when the fix was a COMPARE-AND-SET: an
+    // adversarial pass on the #195 branch reproduced two concurrent requests,
+    // one promoting B to OWNER and one demoting B, both reading B as CLINICIAN,
+    // both clearing the guard, and the demotion landing on an OWNER. Until that
+    // ruling the shape was INCIDENTALLY safe, because no in-app path could turn
+    // a target into an owner between the read and the write.
     //
-    // The fix is one statement, not a transaction: `updateMany` re-asserts the
-    // role that was read, so a row that moved matches zero rows.
+    // ADMIN-5 replaces the CAS with a practice-scoped row lock plus a single
+    // conditional statement, which closes that race STRICTLY MORE than the CAS
+    // did — the CAS could only refuse a row that had already moved, whereas the
+    // lock prevents the other actor from moving it at all. So the arm asserts
+    // what it can still see from here: that this action performs NO role write
+    // of its own, and hands the whole decision to the guard.
+    //
+    // ⚠️ AND IT SAYS WHAT IT CANNOT SEE. This harness mocks Prisma, so it cannot
+    // produce an interleaving and cannot prove the lock works. That proof races
+    // the SHIPPED SQL against a real Postgres in
+    // `tests/e2e/scenarios/40-admin5-last-owner.spec.ts`; here, a second write
+    // path appearing beside the guard is the thing being prevented.
     asOwner();
     prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'CLINICIAN' });
-    prisma.user.updateMany.mockResolvedValue({ count: 1 });
+    changeRoleGuarded.mockResolvedValue({ outcome: 'APPLIED', from: 'CLINICIAN' });
     await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }));
-    const where = prisma.user.updateMany.mock.calls[0][0].where;
-    expect(where).toMatchObject({
-      id: 'u-2',
-      practiceId: 'p-1',
-      practiceRole: 'CLINICIAN', // ← the CAS predicate. Without it the write is unconditional.
-      deactivatedAt: null,
-    });
+    expect(changeRoleGuarded).toHaveBeenCalledOnce();
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
-  it('⚠️ and a CAS that matches nothing REFUSES rather than writing a false audit row', async () => {
-    // count 0 means the row moved under us. The old code would have written the
-    // audit row from its stale snapshot — `from: CLINICIAN` for a row that was
-    // OWNER when the UPDATE ran. A false entry in an append-only trail is worse
-    // than a missing one, so we refuse and record nothing.
+  it('⚠️ and a guard that wrote NOTHING refuses rather than writing a false audit row', async () => {
+    // The row moved under us. The pre-guard code would have written the audit
+    // row from its stale snapshot — `from: CLINICIAN` for a row that was OWNER
+    // when the UPDATE ran. A false entry in an append-only trail is worse than
+    // a missing one, so the refusal writes nothing at all.
     asOwner();
     prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'CLINICIAN' });
-    prisma.user.updateMany.mockResolvedValue({ count: 0 });
+    changeRoleGuarded.mockResolvedValue({ outcome: 'TARGET_MOVED' });
     const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }));
     expect(res && !res.ok && res.reason).toBe('ROLE_CHANGED_UNDER_YOU');
     expect(logAudit).not.toHaveBeenCalled();
   });
 
   it('⚠️ a DEACTIVATED member is not a promotion target — an invisible owner could never be revoked', async () => {
-    // Deactivation writes {isActive:false, deactivatedAt} and leaves practiceId
-    // and practiceRole intact, so a deactivated member stays findable by
+    // A removed member keeps their practiceId, so the row stays findable by
     // id+practice. Writing OWNER onto such a row produces an owner the members
-    // page does not render — and CANNOT_CHANGE_AN_OWNER then refuses to ever
-    // move it, because this action is the only practiceRole write in the app.
-    // The listing already filters; the target lookup did not.
+    // page does not render. The listing already filters; the target lookup did
+    // not.
+    //
+    // ⚠️ THE OLD JUSTIFICATION HERE WAS FALSE IN TWO WAYS AND IS REPLACED, NOT
+    // TRIMMED: removal now NULLs practiceRole (it does not "leave it intact"),
+    // and `changeMemberRoleAction` was never "the only practiceRole write in
+    // the app" — the legacy system-admin app's `activateUserAction` writes
+    // OWNER onto a NULL-role user. The arm itself is unchanged and still
+    // valuable; only its reasoning was wrong.
     asOwner();
     prisma.user.findFirst.mockResolvedValue(null); // the filter excludes them
     const res = await changeMemberRoleAction(null, form({ userId: 'u-gone', role: 'OWNER' }));
@@ -270,35 +298,97 @@ describe('⚠️ role changes — the guards that keep a practice administrable'
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
-  it("an OWNER's role cannot be changed — which is what keeps 'every practice has an owner' structural", async () => {
+  it("⚠️ ADMIN-5 — an OWNER's role CAN be changed now, and the invariant moved to the database", async () => {
+    // ⚠️ THIS ARM USED TO ASSERT THE OPPOSITE, AND THE INVERSION IS THE POINT.
+    // It read "an OWNER's role cannot be changed — which is what keeps 'every
+    // practice has an owner' structural". That refusal was the invariant. It is
+    // now enforced by `changeRoleGuarded`, so the arm asserts the ROUTING: the
+    // action must hand the decision to the guard rather than make it here.
     asOwner();
     prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'OWNER' });
+    changeRoleGuarded.mockResolvedValue({ outcome: 'APPLIED', from: 'OWNER' });
     const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }));
-    expect(res && !res.ok && res.reason).toBe('CANNOT_CHANGE_AN_OWNER');
+    expect(res?.ok).toBe(true);
+    expect(changeRoleGuarded).toHaveBeenCalledWith({
+      practiceId: 'p-1',
+      userId: 'u-2',
+      toRole: 'TECH',
+    });
+    // ⚠️ AND THE ACTION MUST NOT WRITE THE ROW ITSELF. A second write path
+    // beside the guard is a second door to the invariant, which is the exact
+    // defect removal nearly shipped with.
     expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
   });
 
-  it('⚠️ the OWNER refusal is UNCONDITIONAL — it does not depend on the target role being outside the set', async () => {
-    // ⚠️ THIS IS THE ARM THE WIDENING MADE NECESSARY, AND IT IS THE ONE A
-    // CARELESS REFACTOR DELETES. Before the ruling, "you cannot demote an
-    // owner" was ALSO enforced incidentally by `RoleSchema`, because every
-    // reachable target role was CLINICIAN or TECH. Now OWNER is a legal target,
-    // so the only thing standing between an owner and a role write is the
-    // explicit `CANNOT_CHANGE_AN_OWNER` branch. Asking for OWNER -> OWNER is
-    // the case that isolates it: the schema accepts it, and the guard must
-    // still refuse BEFORE any update.
+  it('⚠️ the LAST OWNER is refused, the refusal is AUDITED, and the doctor is told what to do', async () => {
+    asOwner();
+    prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'OWNER' });
+    changeRoleGuarded.mockResolvedValue({ outcome: 'LAST_OWNER' });
+    const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }));
+    expect(res && !res.ok && res.reason).toBe('LAST_OWNER');
+    // ⚠️ THE MESSAGE MUST SAY WHAT TO DO NEXT. "Refused" alone leaves a doctor
+    // with a partner leaving and no route; the recovery is one sentence and it
+    // is the difference between a guard and a wall.
+    expect(res && !res.ok && res.message).toMatch(/make someone else an owner/i);
+    expect(logAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'PRACTICE_ADMIN_REFUSED',
+        metadata: expect.objectContaining({ refusal: 'LAST_OWNER', attempted: 'ROLE_CHANGE' }),
+      }),
+    );
+  });
+
+  it('⚠️ a row that moved under the guard fails CLOSED, and writes NO audit row', async () => {
+    asOwner();
+    prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'CLINICIAN' });
+    changeRoleGuarded.mockResolvedValue({ outcome: 'TARGET_MOVED' });
+    const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }));
+    expect(res && !res.ok && res.reason).toBe('ROLE_CHANGED_UNDER_YOU');
+    // An append-only trail that records changes which did not happen is worse
+    // than one that misses none.
+    expect(logAudit).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ OWNER -> OWNER is a NO-OP and never reaches the guard — the arm #195 said not to delete', async () => {
+    // ⚠️ KEPT, RE-AIMED, NOT DELETED. Ruling #195 recorded this arm with the
+    // instruction "do not delete it as redundant — it stopped being redundant
+    // the moment the list widened", and ADMIN-5 is exactly the refactor that
+    // would have deleted it. What it isolates has changed, and the new target
+    // is sharper than the old one:
+    //
+    // the last-owner clause cannot tell a lateral OWNER -> OWNER from a
+    // demotion — both have a current role of OWNER — so if this reached the
+    // guard, a SOLO owner re-asserting their own role would be REFUSED for want
+    // of a second owner. The no-op arm above the guard is what prevents that,
+    // and this is the only test that can see it.
     asOwner();
     prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'OWNER' });
     const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'OWNER' }));
-    expect(res && !res.ok && res.reason).toBe('CANNOT_CHANGE_AN_OWNER');
+    expect(res?.ok).toBe(true);
+    expect(changeRoleGuarded).not.toHaveBeenCalled();
     expect(prisma.user.update).not.toHaveBeenCalled();
+    // A no-op writes no row: the trail records changes that happened.
+    expect(logAudit).not.toHaveBeenCalled();
   });
 
-  it('⚠️ the refusal message no longer says the question is unsettled — promotion IS settled', () => {
-    // A message that still read "who may promote and demote an owner is not
-    // settled" would be false in the doctor's face the day promotion shipped.
-    expect(ADMIN_REFUSAL_MESSAGE.CANNOT_CHANGE_AN_OWNER).not.toMatch(/not settled/i);
-    expect(ADMIN_REFUSAL_MESSAGE.CANNOT_CHANGE_AN_OWNER).toMatch(/demot|remov/i);
+  it('⚠️ no refusal message promises a capability that now exists', () => {
+    // ⚠️ THIS ARM TRACKED A MESSAGE THAT NO LONGER EXISTS, AND ITS SUBJECT MOVED
+    // RATHER THAN VANISHING. It used to pin `CANNOT_CHANGE_AN_OWNER` — first
+    // against "not settled", then against naming demotion. ADMIN-5 retires that
+    // refusal, so the arm now pins the CLASS: a message that tells the doctor to
+    // ask support for something the page in front of them does is the defect,
+    // whichever string carries it.
+    for (const [reason, message] of Object.entries(ADMIN_REFUSAL_MESSAGE)) {
+      expect(message, `${reason} still sends the doctor to support`).not.toMatch(
+        /ask support/i,
+      );
+      expect(message, `${reason} still claims a capability is unbuilt`).not.toMatch(
+        /isn't available yet|not available yet|yet\b.*demot/i,
+      );
+    }
+    // And the refusal that IS still real says the recoverable thing.
+    expect(ADMIN_REFUSAL_MESSAGE.LAST_OWNER).toMatch(/make someone else an owner/i);
   });
 
   it('a target in ANOTHER practice is not found — scoped in the WHERE, not after it', async () => {
@@ -313,9 +403,10 @@ describe('⚠️ role changes — the guards that keep a practice administrable'
   it('a real change writes the row AND audits from -> to', async () => {
     asOwner();
     prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'CLINICIAN' });
+    changeRoleGuarded.mockResolvedValue({ outcome: 'APPLIED', from: 'CLINICIAN' });
     const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }));
     expect(res?.ok).toBe(true);
-    expect(prisma.user.updateMany).toHaveBeenCalledOnce();
+    expect(changeRoleGuarded).toHaveBeenCalledOnce();
     const audit = logAudit.mock.calls.at(-1)?.[0];
     expect(audit.action).toBe('PRACTICE_ROLE_CHANGED');
     expect(audit.metadata).toMatchObject({ from: 'CLINICIAN', to: 'TECH' });

@@ -337,7 +337,12 @@ export type AuditAction =
   | 'PRACTICE_ROLE_CHANGED'
   /// ADMIN-1 — the administration guard refused a caller. The sign route's own
   /// reasoning: a gate nothing records is one path away from not existing.
-  | 'PRACTICE_ADMIN_REFUSED';
+  | 'PRACTICE_ADMIN_REFUSED'
+  /// ADMIN-5 — a practice owner removed a member (deactivated their seat).
+  /// ⚠️ NOT `USER_DEACTIVATED`: same mechanism, different act and actor. The
+  /// metadata carries `removedRole`, which is the ONLY surviving record of what
+  /// the person held — removal NULLs the column.
+  | 'PRACTICE_MEMBER_REMOVED';
 
 export interface AuditLogInput {
   action: AuditAction;
