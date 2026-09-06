@@ -72,6 +72,39 @@ that reds *the wrong arm* — both say the control is not about what you think.
 zero for the same reason as its subject proves nothing twice. Pick a control
 that is *known present* on the tree you are measuring, not one you assume is.
 
+## ⚠️ AND A CONTROL DRAWN FROM THE SUBJECT'S OWN CHANGE-WINDOW IS NOT A CONTROL
+
+**Added the same day, from two instances — one mine, one a peer's, hours apart.**
+
+Asking *"is `conceptScope` plumbed through?"* I used **`unmentionedPolicy`** as
+the positive control. It scored **0 in `schema.prisma`** — the same zero as the
+subject — because the branch under test **predates the migration that added it**.
+
+> **The control shared the very property being measured.** That is the one thing
+> a control may not do, and it produced two zeroes that looked like agreement.
+
+The re-control is the shape to copy: three siblings from a **different era** —
+`blankPolicy`, `practiceDefault`, `clinicalConcept` — scoring **1 / 4-7 / 3**
+across schema, writer and reader while the subject scored **0 / 0 / 0**. The
+discrimination is *visible in the table* rather than asserted in prose.
+
+**The habit: pick the control from a DIFFERENT ERA than the subject.** A control
+introduced by the same change, on the same branch, in the same week, is liable to
+be absent, empty or unplumbed for exactly the reason the subject is.
+
+⚠️ **THE PEER'S INSTANCE IS THE SAME FAMILY WITH A SHARPER EDGE, AND IT IS ABOUT
+READING A COLOUR AS A VERDICT.** Their new gate's §2.5 row predicted the gate
+would go **RED**. It went red — on `no merge base`, because `actions/checkout@v4`
+defaults to depth 1 and the gate never ran at all. **Exit 2 is CANNOT-TELL, not
+refusal.**
+
+> **A row that predicts RED and gets RED is not thereby satisfied.**
+
+They scored their own row a FINDING rather than letting the colour vindicate it.
+The same asymmetry runs through this whole entry: a green that measures nothing
+and a red that measures nothing are the *same* defect, and only the red gets
+investigated.
+
 ## THE UNCOMFORTABLE PART
 
 Every one of these was written by somebody who had, in the same session, written
@@ -82,3 +115,12 @@ constant.
 
 **Naming a class is not enumerating it.** That sentence is already canon; this
 entry is its sixth receipt.
+
+⚠️ **AND THE HOUSE OFTEN ALREADY HAS THE ANSWER.** The peer's shallow-clone
+failure was solved one file over — `e2e.yml:65` carries
+`fetch-depth: 0  # the predicate diffs base...HEAD; a shallow clone would fail
+CLOSED`, a comment naming their exact failure mode. They had written a second,
+shallower spelling. **The fix was to read, not to invent** — the same
+one-definition lesson that produced instance 6 above, where a bare `=== 'omit'`
+test was added three lines below a header reading *"ONE DEFINITION, THREE
+CALLERS"*.
