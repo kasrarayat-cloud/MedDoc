@@ -14,7 +14,7 @@
 // then reasons about it as though it were the only one" — and there is no
 // runtime observable for it. A lint is the right instrument for a lint.
 // ============================================================================
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import ts from 'typescript';
@@ -409,12 +409,32 @@ describe('#172(5) — every canon BODY has its INDEX ROW', () => {
     // quoted in the LIVE-RULES section — stayed green with BOTH of its index
     // rows deleted. The arm's own message claims to be checking the index, and
     // it was not.
+    // ⚠️ RULING #183 — THE INDEX MOVED OUT OF `AGENTS.md`. It was 46% of that
+    // file, which sat ~220 characters under its size budget, so the next canon
+    // entry anybody wrote would have failed the gate. This arm reads the index
+    // wherever it lives, and #183's reader sweep is what repointed it: a split
+    // that leaves its readers behind produces a gate that greps an empty region
+    // and reports every entry missing — or, worse, one that finds nothing to
+    // check and passes.
+    const indexPath = join(REPO, 'docs', 'canon', 'INDEX.md');
+    expect(
+      existsSync(indexPath),
+      'docs/canon/INDEX.md is gone — the canon index has no home and no grep resolves',
+    ).toBe(true);
+    const index = readFileSync(indexPath, 'utf8');
+    expect(
+      index.indexOf('## CANON INDEX'),
+      'the CANON INDEX heading moved — this arm is anchored on it',
+    ).toBeGreaterThan(0);
+
+    // ⚠️ AND `AGENTS.md` MUST STILL POINT AT IT. A reader who greps the old
+    // location gets zero rather than a redirection, which is precisely the
+    // failure the 2026-08-26 rulings split produced.
     const agents = readFileSync(join(REPO, 'AGENTS.md'), 'utf8');
-    const marker = '## CANON INDEX';
-    const at = agents.indexOf(marker);
-    expect(at, 'the CANON INDEX heading moved — this arm is anchored on it').
-      toBeGreaterThan(0);
-    const index = agents.slice(at);
+    expect(
+      agents,
+      'AGENTS.md no longer points at the moved index — a citation there dead-ends',
+    ).toContain('docs/canon/INDEX.md');
     const bodies = readdirSync(join(REPO, 'docs', 'canon'))
       .filter((n) => /^\d+-.*\.md$/.test(n))
       .sort();

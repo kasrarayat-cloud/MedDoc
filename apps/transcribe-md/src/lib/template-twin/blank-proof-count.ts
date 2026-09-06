@@ -117,7 +117,12 @@ export function countsAsBlankProof(
   ctx: BlankProofContext,
 ): boolean {
   const { bindingOf, resolvedNull, kindOf } = ctx;
-  if (entry.kind !== 'blank' && entry.kind !== 'emptied') return false;
+  // ⚠️ #194 — `kept_default` IS GONE FROM THIS SET WITH THE STATUS THAT FED
+  // IT. It claimed a field's clause had been "found not to contradict" the
+  // encounter, and no such check ever existed.
+  if (entry.kind !== 'blank' && entry.kind !== 'emptied') {
+    return false;
+  }
   if (typeof entry.fieldId !== 'string') return false;
 
   // ⚠️ THE KIND CHECK APPLIES TO **BOTH** LABELS, and it did not before.

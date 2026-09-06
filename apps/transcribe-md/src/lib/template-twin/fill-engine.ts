@@ -282,6 +282,7 @@ interface PersistedMappingRow {
   approvedSynonyms: unknown;
   required: boolean;
   blankPolicy: string;
+  unmentionedPolicy: string | null;
   unknownPolicy: string;
   practiceDefault: string | null;
   mappingStatus: string;
@@ -300,6 +301,14 @@ function mappingFromRow(fieldId: string, row: PersistedMappingRow): SemanticMapp
     approvedSynonyms: Array.isArray(row.approvedSynonyms) ? row.approvedSynonyms : [],
     required: row.required,
     blankPolicy: row.blankPolicy,
+    // ⚠️ THE KEY IS OMITTED, NOT SET TO `undefined`. An explicit undefined
+    // survives the Zod parse and `canonicalSha256` refuses it outright
+    // ("Canonical JSON does not support undefined object values"), which broke
+    // six certification arms.
+    // ⚠️ #194 — AN EXPLICIT `'omit'` SURVIVES THE ROUND TRIP; NULL IS ELIDED.
+    // Eliding a ruled `omit` would read the doctor's decision back as "nobody
+    // ruled", which is a different behaviour and a different count.
+    ...(row.unmentionedPolicy ? { unmentionedPolicy: row.unmentionedPolicy } : {}),
     unknownPolicy: row.unknownPolicy,
     practiceDefault: row.practiceDefault,
     status: row.mappingStatus.toLowerCase(),
@@ -402,6 +411,7 @@ export async function readAndPrepareTemplateTwinFill(
                     approvedSynonyms: true,
                     required: true,
                     blankPolicy: true,
+                    unmentionedPolicy: true,
                     unknownPolicy: true,
                     practiceDefault: true,
                     mappingStatus: true,
@@ -496,7 +506,12 @@ export async function readAndPrepareTemplateTwinFill(
     const clinicianOverrides = await prisma.templateTwinFieldOverride.findMany({
       where: { visitId: input.visitId, practiceId: input.practiceId },
       orderBy: { fieldId: 'asc' },
-      select: { fieldId: true, selectedOptionOrdinal: true },
+      select: {
+        fieldId: true,
+        selectedOptionOrdinal: true,
+        overrideKind: true,
+        insertedText: true,
+      },
     });
     const prepared = await prepareTemplateTwinFill({
       compiledVersionId: compiled.id,
@@ -512,7 +527,24 @@ export async function readAndPrepareTemplateTwinFill(
       visitDate: input.visitDate,
       markerText,
       generatedNote: input.generatedNote,
-      clinicianOverrides,
+      // ⚠️ THE DATABASE ROW IS NOT THE DOMAIN TYPE, AND THE NARROWING HAPPENS
+      // HERE RATHER THAN INSIDE THE OVERLAY. A row whose columns do not satisfy
+      // either arm — a `scaffold_default` with no text, an `option` with no
+      // ordinal — is DROPPED here rather than passed on as a half-shaped
+      // object. The database CHECK makes both cases unreachable; this is the
+      // second layer, because a constraint added in a migration protects rows
+      // written after it and this code also runs against whatever is already
+      // stored.
+      clinicianOverrides: clinicianOverrides.flatMap((o): ClinicianFieldOverride[] => {
+        if (o.overrideKind === 'scaffold_default') {
+          return o.insertedText
+            ? [{ kind: 'scaffold_default' as const, fieldId: o.fieldId, insertedText: o.insertedText }]
+            : [];
+        }
+        return typeof o.selectedOptionOrdinal === 'number'
+          ? [{ kind: 'option' as const, fieldId: o.fieldId, selectedOptionOrdinal: o.selectedOptionOrdinal }]
+          : [];
+      }),
     });
 
   return { prepared, row, compiled, ir, storage, clinicianOverrides };
