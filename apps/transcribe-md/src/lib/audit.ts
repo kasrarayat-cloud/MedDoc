@@ -325,6 +325,7 @@ export type AuditAction =
   // suite is green (logAudit is mocked), and the audit row simply never
   // exists. The migration is what makes this line true.
   | 'DEFAULT_INSERTED_BY_DOCTOR'
+  | 'DEFAULT_INSERT_UNDONE'
   /// ADMIN-1 — an OWNER minted a seat invite. Carries the practice and the role
   /// the redeemer will join with; NEVER the raw code, which exists only in
   /// memory and in the operator's hands.

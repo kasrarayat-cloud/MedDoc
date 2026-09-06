@@ -32,6 +32,7 @@ import {
 import { generateVisitDocx } from '@/lib/docx-generator';
 import { readAndPrepareTemplateTwinFill } from '@/lib/template-twin/fill-engine';
 import { TemplateDocIRSchema } from '@/lib/template-twin/ir';
+import { scaffoldDefaultOfferable } from '@/lib/template-twin/clinician-override';
 import { loadVisitExportData } from '@/lib/visit-export-server';
 import { loadNativeTemplateDocxForVisit } from '@/lib/template-twin/native-export';
 import type { NativePreviewResult } from './preview-native-document';
@@ -289,7 +290,7 @@ export async function previewVisitDocumentAction(
   const compiled = visit.noteTemplateId && visit.noteTemplateVersion != null
     ? await prisma.templateTwinCompiledVersion.findUnique({
         where: { noteTemplateId: visit.noteTemplateId },
-        select: { certificationStatus: true, compiledDocumentIr: true },
+        select: { id: true, certificationStatus: true, compiledDocumentIr: true },
       })
     : null;
 
@@ -385,13 +386,33 @@ export async function previewVisitDocumentAction(
     // would decline.
     const irForDefaults = TemplateDocIRSchema.parse(compiled.compiledDocumentIr);
     const byFieldId = new Map(prepared.manifest.fields.map((f) => [f.fieldId, f]));
+    // ⚠️ ONE PREDICATE, SHARED WITH THE DOOR AND THE OVERLAY. An adversarial
+    // pass found three different tests here and offered acts the writer would
+    // refuse — including on fields the encounter had DENIED, under the caption
+    // "Nothing was dictated for these".
+    // The concepts come from the field DEFINITIONS, which is where the door
+    // reads them too — the manifest does not carry mappings.
+    const defs = await prisma.templateTwinFieldDefinition.findMany({
+      where: { compiledVersionId: compiled.id },
+      select: { fieldId: true, mapping: { select: { clinicalConcept: true } } },
+    });
+    const mappingByFieldId = new Map(
+      defs.map((d) => [d.fieldId, d.mapping ?? null] as const),
+    );
     insertableDefaults = irForDefaults.fields.flatMap((f) => {
       const text = (f.scaffoldText ?? '').trim();
-      if (f.scaffolded !== true || !text) return [];
       const r = byFieldId.get(f.fieldId);
       const inserted = r?.reasonCode === 'clinician_scaffold_default';
-      const blank = r == null || r.value === null || r.value === '';
-      if (!blank && !inserted) return [];
+      // An already-inserted default stays listed so the doctor can UNDO it;
+      // everything else must pass the same test the writer applies.
+      const offerable =
+        inserted ||
+        scaffoldDefaultOfferable({
+          field: f,
+          mapping: mappingByFieldId.get(f.fieldId) ?? null,
+          current: r ?? null,
+        });
+      if (!offerable || !text) return [];
       return [{ fieldId: f.fieldId, label: f.originalLabel, scaffoldText: text, inserted }];
     });
   } catch (err) {

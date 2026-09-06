@@ -14,6 +14,9 @@
 //   · an already-inserted default offers INSERT
 //     instead of UNDO                             -> the row block
 //   · the compiled scaffold text stops being shown -> the row block
+//   · a row's button sends the WRONG field id     -> the row block
+//   · Undo calls INSERT instead of undo           -> the undo block
+//   · a refusal still refetches the document      -> the refetch block
 // ============================================================================
 
 import { describe, expect, it, vi } from 'vitest';
@@ -71,6 +74,20 @@ describe('⚠️ each row shows the compiled wording the doctor is being asked t
     expect(screen.getByTestId(`your-blanks-insert-${A.fieldId}`)).toBeTruthy();
   });
 
+  it('⚠️ the per-row button sends THAT row id and THIS visit id', async () => {
+    // ⚠️ THE ARGUMENTS WERE UNASSERTED AND AN ADVERSARIAL PASS SAID SO: the
+    // handler could send a fixed wrong fieldId — the FIRST row's, say — and
+    // every arm here stayed green while the doctor's click landed on somebody
+    // else's field. A per-field feature whose per-field argument is untested
+    // is not a per-field feature.
+    insertAction.mockClear();
+    cleanup();
+    render(<YourBlanksPanel visitId="v-42" defaults={[A, B]} onChanged={() => {}} />);
+    fireEvent.click(screen.getByTestId(`your-blanks-insert-${B.fieldId}`));
+    await waitFor(() => expect(insertAction).toHaveBeenCalledOnce());
+    expect(insertAction.mock.calls[0]).toEqual(['v-42', B.fieldId]);
+  });
+
   it('⚠️ an ALREADY-INSERTED default offers UNDO, never a second insert', () => {
     // The write is idempotent, so a second insert would not corrupt anything —
     // but offering it says the click did not land, and the doctor's next move
@@ -123,6 +140,31 @@ describe('⚠️ INSERT ALL IS A LOOP OVER PER-FIELD INSERTS, NOT A BULK WRITE',
       />,
     );
     expect(screen.getByTestId('your-blanks-insert-all').textContent).toContain('2');
+  });
+});
+
+describe('⚠️ UNDO — it calls the UNDO action, with the right arguments', () => {
+  // ⚠️ THIS BLOCK EXISTS BECAUSE AN ADVERSARIAL PASS FOUND THE UNDO HAD ZERO
+  // EXECUTABLE COVERAGE, CLIENT OR SERVER, while this file's own header
+  // advertised an "undo block". Both gate files stayed green while the Undo
+  // button silently re-asserted the default instead of removing it.
+  it('sends visitId and the row fieldId to undoScaffoldDefaultAction', async () => {
+    undoAction.mockClear();
+    insertAction.mockClear();
+    cleanup();
+    render(
+      <YourBlanksPanel
+        visitId="v-99"
+        defaults={[{ ...A, inserted: true }]}
+        onChanged={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByTestId(`your-blanks-undo-${A.fieldId}`));
+    await waitFor(() => expect(undoAction).toHaveBeenCalledOnce());
+    expect(undoAction.mock.calls[0]).toEqual(['v-99', A.fieldId]);
+    // ⚠️ AND IT IS NOT THE INSERT. The two actions differ by one word at the
+    // call site, and the failure mode is an Undo button that re-asserts.
+    expect(insertAction).not.toHaveBeenCalled();
   });
 });
 

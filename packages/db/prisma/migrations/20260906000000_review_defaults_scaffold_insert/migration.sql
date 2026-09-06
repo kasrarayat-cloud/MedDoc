@@ -7,8 +7,15 @@
 -- default reaching a note is a HUMAN act; an audit trail that cannot
 -- distinguish that act from a machine fill cannot evidence the claim.
 --
--- Cardinality: 156 -> 157.
 ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'DEFAULT_INSERTED_BY_DOCTOR';
+
+-- ⚠️ THE UNDO GETS ITS OWN LABEL, AND THAT IS THE POINT OF ADDING TWO. Emitting
+-- the insert's label for a removal makes every action-level rollup count a
+-- reverted assertion as an assertion — defeating the only thing this
+-- irreversible enum add was bought for. Found by an adversarial pass.
+--
+-- Cardinality: 156 -> 158.
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'DEFAULT_INSERT_UNDONE';
 
 -- ---------------------------------------------------------------------------
 -- template_twin_field_overrides gains a second KIND.

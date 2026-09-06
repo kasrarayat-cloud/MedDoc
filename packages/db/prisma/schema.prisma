@@ -601,6 +601,12 @@ enum AuditAction {
   /// the machine never prints an undictated default, so the CLICK is the
   /// assertion and this row is the evidence that a human made it.
   DEFAULT_INSERTED_BY_DOCTOR
+
+  /// The doctor REMOVED a default they had inserted. ⚠️ ITS OWN LABEL, because
+  /// an undo emitted under the insert's label makes every action-level rollup
+  /// count a reverted assertion as an assertion — which defeats the only thing
+  /// the irreversible enum add was bought for.
+  DEFAULT_INSERT_UNDONE
 }
 
 /// Document lifecycle status

@@ -31,6 +31,7 @@ import { visitByIdScope, type PracticeId } from '@/lib/practice-scope';
 import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 import { TemplateDocIRSchema, type TemplateDocIR } from '@/lib/template-twin/ir';
 import { isWordPlaceholderOption } from '@/lib/note-template-docx/placeholder-option';
+import { SCAFFOLD_INSERTABLE_KINDS } from '@/lib/template-twin/clinician-override';
 
 export interface SetTemplateControlResult {
   ok: boolean;
@@ -359,7 +360,8 @@ export async function insertScaffoldDefaultAction(
   // content, one of which printed "Enter assessment" onto a rendered note). A
   // door that accepted the panel's word for which fields are scaffolded would
   // re-open exactly that hole from the other side.
-  if (field.scaffolded !== true) {
+  const text = (field.scaffoldText ?? '').trim();
+  if (field.scaffolded !== true || !text) {
     return {
       ok: false,
       error: `${field.originalLabel} has no default of yours to insert.`,
@@ -367,14 +369,33 @@ export async function insertScaffoldDefaultAction(
     };
   }
 
-  const text = (field.scaffoldText ?? '').trim();
-  if (!text) {
-    // Compiled as scaffolded but carrying nothing. Inserting an empty string
-    // would write a proof that a human filled a field with nothing — a lie in
-    // the trail — so refuse rather than record it.
+  // ⚠️ THE DOOR MIRRORS THE FILL'S STATIC DECLINES, OR SUCCESS IS A LIE — the
+  // same rule the option door above already follows, in its own words: "an
+  // unchecked static decline is not a race: it fails identically forever."
+  //
+  // An adversarial pass found this door checking neither. The sequence was:
+  // store the row, return ok:true, write a DEFAULT_INSERTED_BY_DOCTOR audit row
+  // claiming the doctor asserted something, re-render — and then every fill
+  // declines it, on this run and on every future one. Worse for a constrained
+  // control: the fill does not decline, it BLOCKS the whole document.
+  if (!SCAFFOLD_INSERTABLE_KINDS.has(field.kind)) {
     return {
       ok: false,
-      error: `${field.originalLabel} has no default text on this form.`,
+      error: `${field.originalLabel} is a fixed control on this form, so a written default cannot go in it.`,
+      label: field.originalLabel,
+    };
+  }
+
+  const definition = await prisma.templateTwinFieldDefinition.findUnique({
+    where: {
+      compiledVersionId_fieldId: { compiledVersionId: resolved.compiledVersionId, fieldId },
+    },
+    select: { mapping: { select: { clinicalConcept: true } } },
+  });
+  if (!definition?.mapping?.clinicalConcept) {
+    return {
+      ok: false,
+      error: `${field.originalLabel} is filled in by hand on this form, so a default cannot be inserted for it.`,
       label: field.originalLabel,
     };
   }
@@ -456,11 +477,16 @@ export async function undoScaffoldDefaultAction(
 
   await invalidateVisitFills(visitId);
 
+  // ⚠️ ITS OWN ACTION, NOT THE INSERT'S WITH A FLAG. An adversarial pass
+  // measured the consequence of the flag: `DEFAULT_INSERTED_BY_DOCTOR` counts 2
+  // for one insert that was reverted, and no action-level rollup can tell an
+  // assertion from its own withdrawal. A metadata key is not a discriminator
+  // for anything that groups by action.
   void logAudit({
-    action: 'DEFAULT_INSERTED_BY_DOCTOR',
+    action: 'DEFAULT_INSERT_UNDONE',
     targetId: visitId,
     targetType: 'TranscribeVisit',
-    metadata: { surface: 'review_defaults_panel', fieldId, undone: true },
+    metadata: { surface: 'review_defaults_panel', fieldId },
     success: true,
   });
 

@@ -6,15 +6,28 @@
 // proves the four properties that act must have.
 //
 // ⚠️ WHAT WOULD MAKE THIS FILE FAIL, stated first:
-//   · an insert stops being PER-FIELD          -> the writer block
-//   · the client can supply the TEXT           -> the writer block
-//   · an insert stops being AUDITED, or is
-//     audited as an ordinary note edit         -> the audit block
-//   · an insert stops being UNDOABLE           -> the undo block
 //   · a stored default OVERWRITES later
 //     dictation                                -> the blank-only block
-//   · the proof kind loses its emitter         -> the proof block
-//   · the override identity stops moving       -> the identity block
+//   · a WITHHELD DENIAL is treated as blank    -> the denial block
+//   · free text enters a constrained control   -> the field-kind block
+//   · the offer and the write disagree         -> the shared-predicate block
+//   · an insert stops being PER-FIELD          -> the per-field block
+//   · a recompiled template stops failing closed -> the fail-closed block
+//   · the minted fact stops carrying the mapping -> the fact block
+//   · the override identity stops moving, or
+//     starts moving for legacy option rows     -> the identity block
+//
+// ⚠️ AND WHAT THIS FILE DOES *NOT* MEASURE, SAID PLAINLY BECAUSE AN EARLIER
+// HEADER CLAIMED OTHERWISE AND AN ADVERSARIAL PASS CAUGHT IT:
+//   · THE AUDIT ROW. `logAudit` is not exercised here at all. That the insert
+//     writes DEFAULT_INSERTED_BY_DOCTOR and the undo writes
+//     DEFAULT_INSERT_UNDONE is asserted NOWHERE executable — the enum values
+//     are pinned only by the Prisma enum, the TS union and the migration
+//     agreeing. Named as a gap rather than implied as covered.
+//   · THE UNDO's server half. Its CLIENT half is measured in the panel gate.
+//   · "the client cannot supply the TEXT" is a STRUCTURAL guarantee, not a
+//     tested one: `insertScaffoldDefaultAction(visitId, fieldId)` takes no text
+//     parameter, so the type system forbids it and there is no input to test.
 //
 // ⚠️ AND THE BLANK-ONLY BLOCK IS THE ONE THAT KEEPS #194 TRUE. Everything else
 // here is hygiene; that block is the ruling. An override row persists across
@@ -25,11 +38,14 @@
 // content, re-entering through the door built to honour the ruling.
 // ============================================================================
 
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 
 import {
   applyClinicianOverrides,
   buildScaffoldDefaultFact,
+  scaffoldDefaultOfferable,
   type ClinicianFieldOverride,
 } from '../clinician-override';
 import { overridesIdentity } from '../note-identity';
@@ -149,6 +165,92 @@ describe('⚠️ BLANK-ONLY — a stored default never overwrites later dictatio
     );
     expect(out.declined).toEqual([]);
     expect(out.resolutions[0].value).toBe('No acute findings.');
+  });
+});
+
+describe('⚠️ A WITHHELD DENIAL IS NOT BLANK — the defect the pass reproduced', () => {
+  it('⚠️ DECLINES on denial_withheld, where the encounter said the OPPOSITE', () => {
+    // ⚠️ THIS ARM EXISTS BECAUSE THE FIRST VERSION SHIPPED WITHOUT IT AND WAS
+    // WRONG. `isBlank` tested `value === null` BEFORE the status allow-list,
+    // and FieldResolutionSchema's superRefine FORCES value === null on every
+    // denial_withheld resolution — so the allow-list never ran.
+    //
+    // Measured consequence: an encounter dictated "There are no varicose veins"
+    // resolved denial_withheld; the stored default applied; the document
+    // asserted "Varicosities present in the great saphenous distribution"; the
+    // FIELD_DENIAL_WITHHELD warning vanished; needsReview went 1 -> 0;
+    // validation returned CLEAN; and sign-freeze would have frozen it in.
+    //
+    // WITHHOLDING IS A DECISION; ABSENCE IS NOT.
+    const denied = resolution(FIELD_ID, {
+      status: 'denial_withheld',
+      value: null, // forced by the schema — which is exactly why it fooled the test
+      sourceFactIds: ['ttfact_denied'],
+      evidenceAnchorIds: ['tta_denied'],
+      reasonCode: 'denial_withheld_value_only',
+    });
+    const out = apply([insert()], [denied]);
+    expect(out.declined).toEqual([
+      { fieldId: FIELD_ID, reason: 'field_already_filled' },
+    ]);
+    expect(out.resolutions[0].value).toBeNull();
+    expect(out.resolutions[0].status).toBe('denial_withheld');
+    expect(out.resolutions[0].reasonCode).toBe('denial_withheld_value_only');
+    expect(out.facts).toEqual([]);
+  });
+
+  it('⚠️ and NON-VACUITY: a not_mentioned field with the SAME null value DOES apply', () => {
+    // The two differ only by status. Without this, the arm above would also
+    // pass on a build that declined every null-valued field — which would break
+    // the feature entirely while looking like a safety fix.
+    const out = apply([insert()], [resolution(FIELD_ID, { value: null })]);
+    expect(out.declined).toEqual([]);
+    expect(out.resolutions[0].value).toBe('No acute findings.');
+  });
+});
+
+describe('⚠️ FREE TEXT NEVER ENTERS A CONSTRAINED CONTROL', () => {
+  it.each(['single_select', 'multi_select', 'checkbox', 'date', 'number', 'measurement'])(
+    'declines on a scaffolded %s — writing one BLOCKS the whole document',
+    (kind) => {
+      // ⚠️ `isScaffolded` in the compiler is "no showingPlcHdr && visible text"
+      // and never reads `kind`, so a dropdown shipping with default content
+      // compiles as scaffolded exactly like a paragraph. Write a sentence into
+      // one and validation raises a BLOCKING per-kind issue, fill-engine returns
+      // render: null for the ENTIRE fill, the surface unmounts — and the panel
+      // holding the UNDO button goes with it. For a date or checkbox there is
+      // then no product path left to remove the row.
+      const out = apply([insert()], [resolution(FIELD_ID)], [field(FIELD_ID, { kind })]);
+      expect(out.declined).toEqual([
+        { fieldId: FIELD_ID, reason: 'field_kind_not_insertable' },
+      ]);
+      expect(out.resolutions[0].value).toBeNull();
+    },
+  );
+
+  it('⚠️ and narrative_text — the same fixture, the only kind that IS allowed', () => {
+    const out = apply([insert()], [resolution(FIELD_ID)], [field(FIELD_ID, { kind: 'narrative_text' })]);
+    expect(out.declined).toEqual([]);
+    expect(out.resolutions[0].value).toBe('No acute findings.');
+  });
+});
+
+describe('⚠️ THE OFFER AND THE WRITE ASK THE SAME QUESTION', () => {
+  it('scaffoldDefaultOfferable refuses every case the overlay declines', () => {
+    // ⚠️ ONE PREDICATE, THREE CALLERS. The pass found the panel, the door and
+    // the overlay asking three different questions — so the surface offered
+    // acts the writer refused and the fill declined forever.
+    const ok = { kind: 'narrative_text', scaffolded: true, scaffoldText: 'x' };
+    const concept = { clinicalConcept: 'exam.impression' };
+    expect(scaffoldDefaultOfferable({ field: ok, mapping: concept, current: null })).toBe(true);
+    // each refusal, one at a time
+    expect(scaffoldDefaultOfferable({ field: { ...ok, scaffolded: false }, mapping: concept, current: null })).toBe(false);
+    expect(scaffoldDefaultOfferable({ field: { ...ok, scaffoldText: '  ' }, mapping: concept, current: null })).toBe(false);
+    expect(scaffoldDefaultOfferable({ field: { ...ok, kind: 'single_select' }, mapping: concept, current: null })).toBe(false);
+    expect(scaffoldDefaultOfferable({ field: ok, mapping: { clinicalConcept: null }, current: null })).toBe(false);
+    expect(scaffoldDefaultOfferable({ field: ok, mapping: null, current: null })).toBe(false);
+    expect(scaffoldDefaultOfferable({ field: ok, mapping: concept, current: { status: 'denial_withheld', value: null } })).toBe(false);
+    expect(scaffoldDefaultOfferable({ field: ok, mapping: concept, current: { status: 'supported', value: 'dictated' } })).toBe(false);
   });
 });
 
@@ -275,13 +377,23 @@ describe('⚠️ THE OVERRIDE IDENTITY MOVES, or the feature silently does nothi
     expect(one).not.toBe(two);
   });
 
-  it('⚠️ and a legacy option row hashes as it always did — no silent re-fill', () => {
-    // ⚠️ THE CONTROL FOR THE TWO ARMS ABOVE. Widening the identity must not
-    // move the hash of rows that already exist, or every stored correction
-    // would read stale at once and force a re-fill of every open visit.
+  it('⚠️ and a legacy option row hashes BYTE-IDENTICALLY to the pre-diff formula', () => {
+    // ⚠️ THIS ARM WAS VACUOUS AND AN ADVERSARIAL PASS SAID SO. It used to
+    // compare `overridesIdentity` against ITSELF with the two spellings of an
+    // option row — which proves the defaulting works and says NOTHING about
+    // whether the hash still matches what is already stored in the database.
+    // Reverting the implementation to the old 2-tuple left it green.
+    //
+    // The real control recomputes the PRE-DIFF formula here, independently, and
+    // demands equality. If the canonical tuple ever changes shape for an
+    // `option` row again, every stored overridesSha256 goes stale on deploy and
+    // this arm is what says so.
+    const legacy = createHash('sha256')
+      .update(JSON.stringify([[FIELD_ID, 3]]), 'utf8')
+      .digest('hex');
+
+    expect(overridesIdentity([{ fieldId: FIELD_ID, selectedOptionOrdinal: 3 }])).toBe(legacy);
     expect(
-      overridesIdentity([{ fieldId: FIELD_ID, selectedOptionOrdinal: 3 }]),
-    ).toBe(
       overridesIdentity([
         {
           fieldId: FIELD_ID,
@@ -290,6 +402,6 @@ describe('⚠️ THE OVERRIDE IDENTITY MOVES, or the feature silently does nothi
           insertedText: null,
         },
       ]),
-    );
+    ).toBe(legacy);
   });
 });

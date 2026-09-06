@@ -114,16 +114,25 @@ export function overridesIdentity(
   // doctor's inserted default would never reach the document — while every
   // gate reported success. That is the F24-S5 defect exactly, which is why its
   // header says being an input is not enough on its own.
+  // ⚠️ AN `option` ROW HASHES EXACTLY AS IT ALWAYS DID — BYTE-IDENTICALLY — AND
+  // THAT IS A COMPATIBILITY REQUIREMENT, NOT A STYLE CHOICE.
+  //
+  // The first version of this widening emitted a 4-tuple for EVERY row. An
+  // adversarial pass measured the consequence: every `overridesSha256` already
+  // stored for a non-empty override set becomes wrong on deploy, so every visit
+  // carrying a dropdown correction reads STALE at once and re-fills. The
+  // migration ships columns and migrates no data, so nothing would have
+  // repaired them.
+  //
+  // So the legacy shape is preserved for the legacy kind, and only a row that
+  // could not have existed before this change gets the longer tuple.
   const canonical = [...overrides]
-    .map(
-      (o) =>
-        [
-          o.fieldId,
-          o.selectedOptionOrdinal ?? null,
-          o.overrideKind ?? 'option',
-          o.insertedText ?? null,
-        ] as const,
-    )
+    .map((o) => {
+      const kind = o.overrideKind ?? 'option';
+      return kind === 'option'
+        ? ([o.fieldId, o.selectedOptionOrdinal] as const)
+        : ([o.fieldId, o.selectedOptionOrdinal ?? null, kind, o.insertedText ?? null] as const);
+    })
     .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   return createHash('sha256')
     .update(JSON.stringify(canonical), 'utf8')

@@ -140,7 +140,11 @@ export type ClinicianOverrideDeclineReason =
    * dictated content — the exact thing ruling #194 deleted, re-entering through
    * the door built to honour it.
    */
-  | 'field_already_filled';
+  | 'field_already_filled'
+  /** A scaffold default addressed a control that cannot hold free text — a
+   *  dropdown, date, checkbox, table. Writing one BLOCKS THE WHOLE DOCUMENT at
+   *  validation, so this refuses rather than letting the fill fail. */
+  | 'field_kind_not_insertable';
 
 /** Stable provenance identity for one clinician correction.
  *
@@ -192,6 +196,82 @@ const SCAFFOLD_INSERTABLE_STATUSES: ReadonlySet<string> = new Set([
   'needs_clinician_input',
   'ambiguous',
 ]);
+
+/**
+ * The field KINDS a scaffold default may be written into.
+ *
+ * ⚠️ FREE TEXT INTO A CONSTRAINED CONTROL BREAKS THE WHOLE DOCUMENT, NOT ONE
+ * FIELD. `isScaffolded` in the compiler is `no showingPlcHdr && visible text`
+ * and never reads `kind`, so a dropdown, date or checkbox shipping with default
+ * content compiles as scaffolded exactly like a narrative paragraph does. Write
+ * a sentence into one and `validation/index.ts` raises a BLOCKING per-kind
+ * issue (DROPDOWN_NOT_EXACT_OPTION, a date type error, …); `fill-engine`
+ * returns `render: null` for the entire fill; the preview returns `no_render`;
+ * and the surface unmounts — taking the panel, and therefore the UNDO button,
+ * with it. For a date or checkbox there is then no product path left to delete
+ * the row.
+ *
+ * So the kinds are named POSITIVELY and everything else is refused. A new kind
+ * added to the vocabulary is excluded until somebody decides otherwise, which
+ * is the direction that fails safe.
+ */
+export const SCAFFOLD_INSERTABLE_KINDS: ReadonlySet<string> = new Set(['narrative_text']);
+
+/**
+ * Is this field one the doctor may insert their own default into, RIGHT NOW?
+ *
+ * ⚠️ ONE DEFINITION, THREE CALLERS, AND THAT IS THE POINT. The panel decides
+ * what to OFFER, the server action decides what to ACCEPT, and this overlay
+ * decides what to APPLY. An adversarial pass found all three asking different
+ * questions: the panel offered fields the door accepted and the fill then
+ * declined forever, and offered constrained controls that broke the document.
+ * A surface must never offer an act its writer would refuse.
+ */
+export function scaffoldDefaultOfferable(input: {
+  field: { kind?: string; scaffolded?: boolean; scaffoldText?: string | null };
+  mapping: { clinicalConcept?: string | null } | null | undefined;
+  /** The field's CURRENT resolution, or null when none has been computed. */
+  current: { status?: string; value?: unknown } | null | undefined;
+}): boolean {
+  const { field, mapping, current } = input;
+  if (field.scaffolded !== true) return false;
+  if (!(field.scaffoldText ?? '').trim()) return false;
+  if (!SCAFFOLD_INSERTABLE_KINDS.has(field.kind ?? '')) return false;
+  // The fill declines forever without a concept — see the overlay's own note.
+  if (!mapping?.clinicalConcept) return false;
+  return scaffoldTargetIsBlank(current);
+}
+
+/**
+ * ⚠️ A WITHHELD DENIAL IS NULL BY CONSTRUCTION, AND IT IS NOT BLANK.
+ *
+ * This clause is copied from `bridge-fill.ts`, which learned it the expensive
+ * way, and its absence here was found by an adversarial pass with a full
+ * reproduction: `FieldResolutionSchema`'s superRefine FORCES `value === null`
+ * on every `denial_withheld` resolution, so a `value === null` test is true for
+ * 100% of them and any status allow-list placed after it never runs.
+ *
+ * The measured consequence: an encounter dictated as *"There are no varicose
+ * veins"* resolved `denial_withheld`; the stored default then applied, the
+ * document asserted *"Varicosities present in the great saphenous
+ * distribution"*, the FIELD_DENIAL_WITHHELD warning vanished, `needsReview`
+ * went 1 → 0, validation returned CLEAN — and sign-freeze would have frozen it
+ * into the signed record.
+ *
+ * **Withholding is a DECISION; absence is not.**
+ */
+export function scaffoldTargetIsBlank(
+  current: { status?: string; value?: unknown } | null | undefined,
+): boolean {
+  if (current == null) return true;
+  if (current.status === 'denial_withheld') return false;
+  return (
+    current.value === null ||
+    current.value === undefined ||
+    current.value === '' ||
+    SCAFFOLD_INSERTABLE_STATUSES.has(current.status ?? '')
+  );
+}
 
 /** Stable provenance identity for one inserted default.
  *
@@ -411,13 +491,12 @@ export function applyClinicianOverrides(
       // persists across every later fill, so an unconditional apply would let a
       // default the doctor inserted into an empty field later OVERWRITE the
       // dictation that filled it.
-      const current = byId.get(field.fieldId);
-      const isBlank =
-        current == null ||
-        current.value === null ||
-        current.value === '' ||
-        SCAFFOLD_INSERTABLE_STATUSES.has(current.status);
-      if (!isBlank) {
+      if (!SCAFFOLD_INSERTABLE_KINDS.has(field.kind)) {
+        decline(override.fieldId, 'field_kind_not_insertable');
+        continue;
+      }
+
+      if (!scaffoldTargetIsBlank(byId.get(field.fieldId))) {
         decline(override.fieldId, 'field_already_filled');
         continue;
       }
