@@ -23,6 +23,15 @@
 # ============================================================================
 set -uo pipefail
 
+# ⚠️ ANCHORED TO ITS OWN LOCATION, NEVER THE CWD — F28. A granted script that
+# resolves repo paths from `pwd` reads whatever tree the caller happened to be
+# standing in. That family has bitten this house three times, and the LOUD
+# failure (a script that vanishes, exit 127) is the lucky one: the quiet failure
+# is a confident answer about a DIFFERENT REAL TREE.
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || {
+  echo "🔴 rows-gate: cannot resolve repo root from \$BASH_SOURCE."; exit 2; }
+cd "$REPO_DIR" || { echo "🔴 rows-gate: cannot enter $REPO_DIR."; exit 2; }
+
 BASE="${1:-origin/main}"
 HEAD_REF="${2:-HEAD}"
 PR_NUMBER="${PR_NUMBER:-}"
