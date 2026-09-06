@@ -19,8 +19,29 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
-import yaml from 'js-yaml';
+
+/** ⚠️ RESOLVED AT RUNTIME, AND MISSING IS A FAILURE — NEVER A SKIP.
+ *  `js-yaml` reaches this tree TRANSITIVELY via eslint and ships no types, so a
+ *  bare `import yaml from 'js-yaml'` fails `tsc --noEmit` — which is exactly how
+ *  CI caught this branch. A `try { … } catch { return }` would be worse than the
+ *  type error: it would make this guard VANISH on an unrelated lockfile change,
+ *  and a guard that silently stops running is the defect class this file exists
+ *  to catch. Same doctrine as `gate-f27` and `gate-workflows-parse`.
+ */
+const req = createRequire(__filename);
+function loadYaml(): (src: string) => unknown {
+  try {
+    return (req('js-yaml') as { load: (s: string) => unknown }).load;
+  } catch {
+    throw new Error(
+      'the YAML parser is not installed, so this guard cannot check anything. ' +
+        'js-yaml reaches this tree transitively via eslint; if that changed, ' +
+        'add it as an explicit devDependency rather than deleting this test.',
+    );
+  }
+}
 
 const WF = resolve(__dirname, '../../../../../.github/workflows');
 
@@ -33,7 +54,7 @@ function triggers(doc: any) {
 }
 /** Returns the base filter, or null when the workflow accepts any base. */
 function prBaseFilter(file: string): string[] | null {
-  const doc = yaml.load(readFileSync(resolve(WF, file), 'utf8')) as any;
+  const doc = loadYaml()(readFileSync(resolve(WF, file), 'utf8')) as any;
   const on = triggers(doc);
   if (!on || !('pull_request' in on)) return ['<NO pull_request TRIGGER AT ALL>'];
   const pr = on.pull_request ?? {};
@@ -46,7 +67,7 @@ describe('#186(1) — required workflows run on every PR, whatever the base', ()
     // undefined — a green that means the reader found nothing.
     for (const f of REQUIRED) {
       expect(existsSync(resolve(WF, f)), `${f} must exist`).toBe(true);
-      const doc = yaml.load(readFileSync(resolve(WF, f), 'utf8')) as any;
+      const doc = loadYaml()(readFileSync(resolve(WF, f), 'utf8')) as any;
       const on = triggers(doc);
       expect(on, `${f}: 'on:' block must parse`).toBeTruthy();
       expect('pull_request' in on, `${f}: must have a pull_request trigger`).toBe(true);
@@ -57,7 +78,7 @@ describe('#186(1) — required workflows run on every PR, whatever the base', ()
     // Aimed where the answer is NOT predetermined: a synthetic workflow that
     // genuinely carries the defect. If this passed, the check below would be
     // measuring nothing.
-    const bad = yaml.load('on:\n  pull_request:\n    branches: [main]\n') as any;
+    const bad = loadYaml()('on:\n  pull_request:\n    branches: [main]\n') as any;
     const on = triggers(bad);
     expect(on.pull_request.branches).toEqual(['main']);
   });
@@ -75,7 +96,7 @@ describe('#186(1) — required workflows run on every PR, whatever the base', ()
   it('push stays main-only — this widens PRs, it does not widen pushes', () => {
     // The fix must not silently turn every branch push into four CI runs.
     for (const f of REQUIRED) {
-      const on = triggers(yaml.load(readFileSync(resolve(WF, f), 'utf8')) as any);
+      const on = triggers(loadYaml()(readFileSync(resolve(WF, f), 'utf8')) as any);
       if (on.push) expect(on.push.branches, `${f} push`).toEqual(['main']);
     }
   });
