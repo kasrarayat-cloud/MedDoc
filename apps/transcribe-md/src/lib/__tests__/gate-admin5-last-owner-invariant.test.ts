@@ -25,7 +25,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { ACTIVE_OWNER_WHERE } from '../last-owner-invariant';
+import { ACTIVE_OWNER_WHERE, activeOwnerSql } from '../last-owner-invariant';
 
 const REPO = join(__dirname, '..', '..', '..', '..', '..');
 const MIGRATION = join(
@@ -50,7 +50,7 @@ function activeOwnerSqlBody(): string {
   return sql
     .slice(start, end)
     .split('\n')
-    .filter((l) => !l.trimStart().startsWith('--'))
+    .map(stripComment)
     .join('\n');
 }
 
@@ -63,7 +63,7 @@ function fnBody(name: string, terminator: string): string {
   return sql
     .slice(start, end)
     .split('\n')
-    .filter((l) => !l.trimStart().startsWith('--'))
+    .map(stripComment)
     .join('\n');
 }
 
@@ -76,8 +76,22 @@ function statement(opening: string): string {
   return sql
     .slice(start, end)
     .split('\n')
-    .filter((l) => !l.trimStart().startsWith('--'))
+    .map(stripComment)
     .join('\n');
+}
+
+/**
+ * Remove a `--` comment from a line — TRAILING as well as whole-line.
+ *
+ * ⚠️ THE FIRST VERSION DROPPED ONLY LINES THAT *START* WITH `--`, and the
+ * adversarial pass found the gap: a column deleted from the predicate and left
+ * in a TRAILING comment on a live line survived the strip, so the column-name
+ * arm still saw it. The clause-set arm catches that case, but a defence that
+ * relies on its sibling is one edit from being no defence.
+ */
+function stripComment(line: string): string {
+  const i = line.indexOf('--');
+  return i === -1 ? line : line.slice(0, i);
 }
 
 /** Quoted identifiers the SQL predicate actually reads, e.g. `"isActive"`. */
@@ -134,6 +148,25 @@ describe('ruling #210 — one definition of an active practice OWNER', () => {
     expect(actual).toEqual(expected);
   });
 
+  it('ruling #221 — the SQL GENERATOR emits exactly the migration\'s predicate', () => {
+    // This is what makes "one constant, three readers" real rather than stated.
+    // #1026 writes raw SQL; without a generator its only options were to restate
+    // the rule or to widen its subquery by hand — the second copy #221 forbids.
+    // Compared as CLAUSE SETS, so whitespace and ordering are free and MEANING
+    // is not: an inverted or widened generator cannot pass this.
+    const generated = new Set(
+      activeOwnerSql('u').split(/\bAND\b/i).map((c) => c.replace(/\s+/g, ' ').trim())
+    );
+    const migration = new Set(
+      activeOwnerSqlBody()
+        .replace(/^[\s\S]*?\bSELECT\b/, '')
+        .replace(/;\s*$/, '')
+        .split(/\bAND\b/i)
+        .map((c) => c.replace(/\s+/g, ' ').trim())
+    );
+    expect(generated).toEqual(migration);
+  });
+
   it('the LIVE-MEMBER predicate is a conjunction of IS NULL / isActive too', () => {
     const body = fnBody('users_is_live_member', '$fn$ LANGUAGE sql IMMUTABLE;')
       .replace(/^[\s\S]*?\bSELECT\b/, '')
@@ -188,10 +221,7 @@ describe('ruling #210 — one definition of an active practice OWNER', () => {
       .toContain('DEFERRABLE INITIALLY IMMEDIATE');
 
     // and no BEFORE row trigger on users survives anywhere in the migration
-    const code = sql
-      .split('\n')
-      .filter((l) => !l.trimStart().startsWith('--'))
-      .join('\n');
+    const code = sql.split('\n').map(stripComment).join('\n');
     expect(code).not.toMatch(/BEFORE\s+(INSERT\s+OR\s+)?UPDATE(\s+OR\s+DELETE)?\s+ON\s+"users"/);
   });
 

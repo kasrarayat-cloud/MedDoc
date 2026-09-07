@@ -27,7 +27,19 @@
 # Target: the ISOLATED meddoc-qa stack. NEVER production.
 # ============================================================================
 set -uo pipefail
-PGC=meddoc-qa-postgres-1; DB=meddoc_qa_test; U=meddoc
+# ⚠️ THE CONTAINER IS RESOLVED, NOT ASSUMED, AND THE LOOKUP IS THE POSITIVE
+# CONTROL ON THE INSTRUMENT. `docker-compose.qa.yml` pins `name: meddoc-qa`, so
+# the literal happens to be right here and on a runner — but a name that is
+# right by coincidence is one rename from a harness that silently measures
+# nothing. Derive it, then assert it answers.
+DB=meddoc_qa_test; U=meddoc
+PGC="${PGC:-$(docker compose -f "$(dirname "${BASH_SOURCE[0]}")/../../../../docker-compose.qa.yml" ps -q postgres 2>/dev/null | head -1)}"
+[ -n "$PGC" ] || PGC=meddoc-qa-postgres-1
+if ! docker exec -i "$PGC" psql -U "$U" -d "$DB" -Atqc 'SELECT 1' >/dev/null 2>&1; then
+  echo "🔴 race harness: cannot reach postgres as '$PGC'. Refusing — a harness that cannot" >&2
+  echo "   query the database would report 0 violations for both arms and read as a clean run." >&2
+  exit 1
+fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 MIGRATION="$HERE/../migrations/20260907040000_admin5_last_owner_trigger/migration.sql"
 OUT="$(mktemp -d "${TMPDIR:-/tmp}/t210-race-XXXXXX")"
@@ -104,7 +116,8 @@ fixture() {
 }
 owners_left() { q "SELECT count(*) FROM users u WHERE u.\"practiceId\"='t210r_p' AND users_is_active_owner(u)"; }
 
-q "CREATE TABLE IF NOT EXISTS t210_sample(at timestamptz, n_open int, racers text);" >/dev/null
+q "CREATE TABLE IF NOT EXISTS t210_sample(at timestamptz, n_open int, racers text);
+     CREATE TABLE IF NOT EXISTS t210_window(who text primary key, t0 timestamptz, t1 timestamptz);" >/dev/null
 
 cat > "$OUT/racer-a.sql" <<'SQL'
 \set ON_ERROR_STOP 0
@@ -202,6 +215,7 @@ echo "    that makes the two mutually exclusive."
 race_b() {   # $1 = removal-guard fn, $2 = orphan-guard fn
   q_ "$1" ; q_ "$2"
   q "DELETE FROM users WHERE \"practiceId\"='ir_p'; DELETE FROM practices WHERE id='ir_p';
+     TRUNCATE t210_window;
      INSERT INTO practices(id,name,slug,\"updatedAt\") VALUES ('ir_p','I','ir-p',now());
      INSERT INTO users(id,email,\"passwordHash\",\"updatedAt\",\"practiceId\",\"practiceRole\",\"isActive\")
        VALUES ('ir_o','iro@x.test','x',now(),'ir_p','OWNER',true);" >/dev/null
@@ -210,22 +224,33 @@ race_b() {   # $1 = removal-guard fn, $2 = orphan-guard fn
   docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -q < "$OUT/rb-a.run" >/dev/null 2>&1 &
   docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -q < "$OUT/rb-b.run" >/dev/null 2>&1 &
   wait
-  q "SELECT CASE WHEN count(*) FILTER (WHERE users_is_active_owner(u))=0
-                  AND count(*) FILTER (WHERE users_is_live_member(u))>0 THEN 'V' ELSE '.' END
+  # ⚠️ THE VERDICT AND THE WITNESS TOGETHER. "No violation" is ambiguous on its
+  # own — it means the guard worked OR the two never overlapped — and those are
+  # different facts. The window rows come from the racers' own transactions, so
+  # overlap is MEASURED rather than inferred from the fact that we launched two
+  # processes.
+  q "SELECT (CASE WHEN count(*) FILTER (WHERE users_is_active_owner(u))=0
+                   AND count(*) FILTER (WHERE users_is_live_member(u))>0 THEN 'V' ELSE '.' END)
+         || (SELECT CASE WHEN count(*)=2 AND max(t0) < min(COALESCE(t1,'infinity'::timestamptz))
+                         THEN 'o' ELSE '-' END FROM t210_window)
        FROM users u WHERE u.\"practiceId\"='ir_p'"
 }
 q_() { docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -q < "$1" >/dev/null 2>&1; }
 cat > "$OUT/rb-a.sql" <<'SQL'
 BEGIN;
 SELECT pg_sleep(GREATEST(0, EXTRACT(EPOCH FROM (TIMESTAMPTZ 'SENTINEL' - clock_timestamp()))));
+INSERT INTO t210_window(who, t0) VALUES ('A', clock_timestamp());
 UPDATE users SET "suspendedAt"=now() WHERE id='ir_o';
+UPDATE t210_window SET t1 = clock_timestamp() WHERE who='A';
 COMMIT;
 SQL
 cat > "$OUT/rb-b.sql" <<'SQL'
 BEGIN;
 SELECT pg_sleep(GREATEST(0, EXTRACT(EPOCH FROM (TIMESTAMPTZ 'SENTINEL' - clock_timestamp()))));
+INSERT INTO t210_window(who, t0) VALUES ('B', clock_timestamp());
 INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive")
   VALUES ('ir_new','irn@x.test','x',now(),'ir_p','CLINICIAN',true);
+UPDATE t210_window SET t1 = clock_timestamp() WHERE who='B';
 COMMIT;
 SQL
 sed -n '/CREATE OR REPLACE FUNCTION users_last_owner_guard()/,/^\$fn\$ LANGUAGE plpgsql;/p' "$MIGRATION" > "$OUT/g1.sql"
@@ -240,11 +265,15 @@ echo "    mutation applied: advisory-lock occurrences $before -> $after"
 [ "$before" = 2 ] && [ "$after" = 0 ] || { echo "🔴 MUTATION DID NOT APPLY — every result below would be meaningless."; exit 1; }
 N=12
 printf "    WITHOUT the lock (%d runs): " "$N"; V=0
-for _ in $(seq $N); do r=$(race_b "$OUT/g1n.sql" "$OUT/g2n.sql"); printf '%s' "$r"; [ "$r" = V ] && V=$((V+1)); done
-echo "   -> $V/$N VIOLATIONS"
+OV=0
+for _ in $(seq $N); do r=$(race_b "$OUT/g1n.sql" "$OUT/g2n.sql"); printf '%s' "$r"
+  case "$r" in V*) V=$((V+1));; esac; case "$r" in *o) OV=$((OV+1));; esac; done
+echo "   -> $V/$N VIOLATIONS, $OV/$N overlapped"
 printf "    WITH    the lock (%d runs): " "$N"; W=0
-for _ in $(seq $N); do r=$(race_b "$OUT/g1.sql" "$OUT/g2.sql"); printf '%s' "$r"; [ "$r" = V ] && W=$((W+1)); done
-echo "   -> $W/$N VIOLATIONS"
+OW=0
+for _ in $(seq $N); do r=$(race_b "$OUT/g1.sql" "$OUT/g2.sql"); printf '%s' "$r"
+  case "$r" in V*) W=$((W+1));; esac; case "$r" in *o) OW=$((OW+1));; esac; done
+echo "   -> $W/$N VIOLATIONS, $OW/$N overlapped"
 echo
 echo "=== VERDICT ==="
 echo "raceA subject   : $S"
@@ -258,6 +287,7 @@ echo "raceB           : without lock $V/$N violations, with lock $W/$N"
 # is a harness that will be read quickly at 01:00. Every row below is a
 # prediction made before the run, and a miss is a FAILURE.
 fail=0
+cannot_tell=0
 say() { echo "   $1"; }
 case "$S" in
   *owners_left=1*refusals=1*) say "🟢 raceA subject held the invariant and refused once" ;;
@@ -273,15 +303,30 @@ case "$C1" in
 esac
 if [ "$W" -eq 0 ]; then say "🟢 raceB: 0 violations WITH the advisory lock"
 else say "🔴 raceB: $W/$N violations WITH the lock — the invariant does not hold"; fail=1; fi
-if [ "$V" -gt 0 ]; then say "🟢 raceB control: $V/$N violations WITHOUT the lock — the lock is load-bearing"
-else say "🔴 raceB CONTROL DID NOT FIRE: 0/$N violations without the advisory lock. Either the lock is now redundant or this control has stopped discriminating. Canon 121: delete the mechanism or delete the control — do not keep both."; fail=1; fi
+# ⚠️ THREE STATES, BECAUSE "THE CONTROL DID NOT FIRE" HAS TWO CAUSES AND THEY
+# ARE NOT THE SAME FINDING. Exit 2 is CANNOT-TELL, not refusal — the house
+# convention, and the distinction canon 119 demands: a probe that answers
+# correctly about the wrong universe is not a probe that answers.
+if [ "$V" -gt 0 ]; then
+  say "🟢 raceB control: $V/$N violations WITHOUT the lock — the lock is load-bearing"
+elif [ "$OV" -eq 0 ]; then
+  say "🟡 raceB INCONCLUSIVE: 0/$N violations AND 0/$N overlapped — the two transactions never met on this machine, so the control was never given the chance to fire. This is NOT evidence the lock is redundant; it is evidence the race did not happen here. Re-run, or widen the sentinel delay."
+  cannot_tell=1
+else
+  say "🔴 raceB CONTROL DID NOT FIRE: 0/$N violations WITHOUT the lock, but $OV/$N runs DID overlap — so the race happened and the invariant held anyway. Either the lock is now redundant or this control has stopped discriminating. Canon 121: delete the mechanism or delete the control — do not keep both."
+  fail=1
+fi
 
 if [ "$fail" -ne 0 ]; then
   echo "🔴 RACE HARNESS FAILED — a prediction above did not hold." >&2
   exit 1
 fi
+if [ "$cannot_tell" -ne 0 ]; then
+  echo "🟡 RACE HARNESS CANNOT TELL — the race did not occur on this machine. Exit 2 is not a pass and not a refutation." >&2
+  exit 2
+fi
 echo "🟢 RACE HARNESS PASSED — every predicted cell held."
 q "DELETE FROM users WHERE \"practiceId\"='ir_p'; DELETE FROM practices WHERE id='ir_p';" >/dev/null
 teardown
-q "DROP TABLE IF EXISTS t210_sample;" >/dev/null
+q "DROP TABLE IF EXISTS t210_sample; DROP TABLE IF EXISTS t210_window;" >/dev/null
 # the EXIT trap restores the armed guard and removes $OUT

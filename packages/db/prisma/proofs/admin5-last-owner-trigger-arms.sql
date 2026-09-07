@@ -46,12 +46,21 @@ UPDATE "users" SET "suspendedAt" = now() WHERE id = 't210_s';
 -- ⚠️ POSITIVE CONTROL ON THE FIXTURE ITSELF. If this row is not 2/1 the whole
 -- file is measuring something other than what it claims, and every arm below
 -- would pass or fail for the wrong reason.
+-- ⚠️ AND IT IS A REAL ARM, NOT A PRINT. The first version recorded this row
+-- with a NULL verdict and printed it separately, so a fixture that had drifted
+-- would show the wrong numbers in a table nobody's exit code depended on. The
+-- adversarial pass called that out: a control whose result is only displayed is
+-- a control that is only read when someone is already suspicious.
 INSERT INTO arm_result
-SELECT 'FIXTURE-CONTROL: #1026 predicate sees 2, this trigger sees 1', '2|1',
-       (SELECT count(*) FROM users WHERE "practiceId"='t210_pmulti' AND "practiceRole"='OWNER' AND "deactivatedAt" IS NULL)::text
-       ||'|'||
-       (SELECT count(*) FROM users u WHERE u."practiceId"='t210_pmulti' AND users_is_active_owner(u))::text,
-       NULL;
+SELECT 'FIXTURE-CONTROL: #1026 predicate sees 2, this trigger sees 1',
+       '2|1',
+       got,
+       CASE WHEN got = '2|1' THEN 'PASS' ELSE 'FAIL' END
+  FROM (
+    SELECT (SELECT count(*) FROM users WHERE "practiceId"='t210_pmulti' AND "practiceRole"='OWNER' AND "deactivatedAt" IS NULL)::text
+           ||'|'||
+           (SELECT count(*) FROM users u WHERE u."practiceId"='t210_pmulti' AND users_is_active_owner(u))::text AS got
+  ) z;
 
 -- ── Helper: run a statement, record whether it RAISED ───────────────────────
 -- ⚠️ THE UNDO IS INSIDE THE HELPER, AND THE RECORD IS OUTSIDE IT. The first
@@ -111,10 +120,24 @@ SELECT t210_try('5  DELETE the LAST able owner (members remain)','REFUSED',
 SELECT t210_try('6  move the LAST able owner to another practice','REFUSED',
   $$UPDATE users SET "practiceId"='t210_pother' WHERE id='t210_a'$$);
 
--- ⚠️ ARM 7 IS THE ONE THAT SAYS THE TRIGGER IS NOT A COUNT-READ-AND-ACT.
--- One STATEMENT demoting BOTH owner rows. A row trigger that could not see its
--- siblings' in-statement changes would allow this and leave zero owners.
-SELECT t210_try('7  ONE statement demoting BOTH owners','REFUSED',
+-- ⚠️ ARM 7'S ORIGINAL JUSTIFICATION IS OBSOLETE, AND SAYING SO IS THE POINT.
+-- It was written to prove a BEFORE row trigger could see its siblings'
+-- in-statement changes. The shape is now a CONSTRAINT trigger evaluated at
+-- statement end, where that is true by construction — so on its own this arm no
+-- longer discriminates between the two shapes, and the adversarial pass was
+-- right to call it "arm 1 in disguise".
+--
+-- IT IS KEPT AS THE REFUSAL HALF OF A PAIR WITH ARM 27, and the pair is what
+-- carries the meaning: both are MULTI-ROW statements over the same practice,
+-- and they must come out DIFFERENTLY.
+--
+--     arm 7   demote BOTH owners            -> REFUSED   (result: zero owners)
+--     arm 27  demote one, promote another   -> ALLOWED   (result: one owner)
+--
+-- A guard that judged rows instead of the statement's RESULT cannot produce
+-- that asymmetry — it refuses both. Neither arm alone says anything; the
+-- difference between them is the assertion.
+SELECT t210_try('7  ONE statement demoting BOTH owners (pairs with 27)','REFUSED',
   $$UPDATE users SET "practiceRole"='CLINICIAN' WHERE "practiceId"='t210_pmulti' AND "practiceRole"='OWNER'$$);
 
 -- ══ THE ALLOW ARMS — a guard that refuses everything is not a guard ═════════
@@ -263,6 +286,34 @@ SELECT t210_try('27 atomic ownership transfer in ONE statement','ALLOWED',
       ('t210_x_own','txo@x.test','x',now(),'t210_pxfer','OWNER',true),
       ('t210_x_cli','txc@x.test','x',now(),'t210_pxfer','CLINICIAN',true)$$);
 
+-- ══ ARMS 28-32 — RULING #222: A ZERO-OWNER PRACTICE STAYS WRITABLE ═════════
+-- The invariant is about a write that reduces a practice from ONE able owner to
+-- NONE. A practice already at zero cannot be reduced by any write, so refusing
+-- there would be a lockout created by the guard against lockout — and it would
+-- fall on SIX REAL PRACTICES holding SEVEN REAL USERS in production today.
+--
+-- Exemption 1 implements it. These arms are what keep it true: one per write
+-- shape, because "it works" was measured on one shape and the ruling binds all
+-- of them. `t210_pdead` has two members and zero active owners by construction.
+
+SELECT t210_try('28 zero-owner practice: an unrelated write to a member','ALLOWED',
+  $$UPDATE users SET "forceLogoutAt"=now() WHERE id='t210_d1'$$);
+
+SELECT t210_try('29 zero-owner practice: change a member''s ROLE','ALLOWED',
+  $$UPDATE users SET "practiceRole"='TECH' WHERE id='t210_d2'$$);
+
+SELECT t210_try('30 zero-owner practice: DELETE a member','ALLOWED',
+  $$DELETE FROM users WHERE id='t210_d2'$$);
+
+SELECT t210_try('31 zero-owner practice: suspend a member','ALLOWED',
+  $$UPDATE users SET "suspendedAt"=now() WHERE id='t210_d1'$$);
+
+-- ⚠️ THE ONE THAT MATTERS MOST, AND IT IS THE RESCUE PATH. If this were
+-- refused, a zero-owner practice could never be repaired and the data-hygiene
+-- half of #222 would be unexecutable.
+SELECT t210_try('32 zero-owner practice: PROMOTE a member to OWNER — the repair','ALLOWED',
+  $$UPDATE users SET "practiceRole"='OWNER', "isActive"=true WHERE id='t210_d1'$$);
+
 \pset format aligned
 \echo ''
 \echo '=== RULING #210 — DETERMINISTIC ARMS ==='
@@ -278,8 +329,8 @@ SELECT count(*) FILTER (WHERE verdict='PASS')            AS pass,
        count(*) FILTER (WHERE verdict='FAIL')            AS fail,
        count(*) FILTER (WHERE got = 'MATCHED-NOTHING')   AS vacuous,
        count(*)                                          AS arms_run,
-       27                                                AS arms_expected,
-       CASE WHEN count(*) = 27 AND count(*) FILTER (WHERE verdict='FAIL') = 0
+       33                                                AS arms_expected,
+       CASE WHEN count(*) = 33 AND count(*) FILTER (WHERE verdict='FAIL') = 0
             THEN '🟢 all arms ran and passed'
             ELSE '🔴 ARM COUNT OR VERDICT MISMATCH' END  AS verdict
   FROM arm_result WHERE verdict IS NOT NULL;

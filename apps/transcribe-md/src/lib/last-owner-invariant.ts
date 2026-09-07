@@ -49,6 +49,34 @@ export const ACTIVE_OWNER_WHERE = {
   softDeletedAt: null,
 } as const;
 
+/**
+ * The SAME predicate as raw SQL, for callers that write SQL rather than Prisma.
+ *
+ * ⚠️ RULING #221 — THE TRIGGER, THIS FILE, AND #1026'S GUARD ALL DERIVE FROM
+ * `ACTIVE_OWNER_WHERE`. #1026 writes a raw `LAST_OWNER_CLAUSE`, so without a
+ * generator its only options were to import nothing and restate the rule, or to
+ * "add four conditions to that subquery" — which authors the second copy the
+ * ruling exists to prevent. This is the third reader's door in.
+ *
+ * ⚠️ AND THE DIVERGENCE IS NOT HYPOTHETICAL. Measured against production:
+ * #1026's clause counts `deactivatedAt IS NULL` alone, so SIX owner rows count
+ * as owners while unable to sign in, and one practice with ELEVEN members reads
+ * two owners against ONE who can actually administer it.
+ *
+ * `gate-admin5-last-owner-invariant.test.ts` asserts this generator's output is
+ * clause-for-clause the migration's `users_is_active_owner` body, so the SQL
+ * side cannot drift from the TypeScript side without something going red.
+ */
+export function activeOwnerSql(alias: string): string {
+  return (Object.entries(ACTIVE_OWNER_WHERE) as [string, unknown][])
+    .map(([column, value]) => {
+      if (value === null) return `${alias}."${column}" IS NULL`;
+      if (value === true) return `${alias}."${column}"`;
+      return `${alias}."${column}" = '${String(value)}'::"PracticeRole"`;
+    })
+    .join('\n       AND ');
+}
+
 export const LAST_OWNER_REFUSAL =
   'This is the practice’s last active owner. Transfer ownership to another member first.';
 
