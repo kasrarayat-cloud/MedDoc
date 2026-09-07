@@ -112,7 +112,19 @@ describe('#179(1) — the ROS lexicon is closed and per-system', () => {
       const item = r.success ? r.data.ros[0] : null;
       expect(item?.system, s).toBe(s);
       expect(item?.finding, s).toBe(ROS_OTHER);
-      expect(item?.finding_verbatim, s).toBe('definitely_not_a_symptom');
+      // ⚠️ #218 — DE-SLUGGED, AND THE WORDS ARE STILL ALL THERE. This used to
+      // assert `definitely_not_a_symptom` verbatim. The ruling is that
+      // `finding_verbatim` is the doctor's words or nothing and NEVER an
+      // identifier, because it is the field a document prints from — and an
+      // underscored token landing here is exactly how `weight_loss` reached a
+      // signed note. Every word this test cares about survives; only the
+      // separator moves, which is what this arm's own title asks for.
+      //
+      // The DISCRIMINATION is the sibling arm above: an off-lexicon symptom the
+      // doctor actually says — `heartburn` — has no underscore and comes back
+      // byte-identical. If de-slugging were doing anything to the clinical word,
+      // that assertion would move too, and it does not.
+      expect(item?.finding_verbatim, s).toBe('definitely not a symptom');
     }
   });
 

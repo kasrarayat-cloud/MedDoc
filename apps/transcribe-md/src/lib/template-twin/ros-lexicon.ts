@@ -57,6 +57,25 @@ export const ROS_LEXICON: Readonly<Record<string, readonly string[]>> = Object.f
 /** The catch-all every system admits. Never addressable by a specific clause. */
 export const ROS_OTHER = 'other';
 
+/**
+ * A lexicon token as ordinary words: `early_satiety` -> `early satiety`.
+ *
+ * ⚠️ ONE IMPLEMENTATION, HERE, BECAUSE IT HAS MORE THAN ONE READER. Ruling
+ * #218: the de-slug must happen at emission AND the L3 verbatim must never
+ * receive an identifier, which are two different files. A second copy would
+ * drift from the first the day either is fixed, and this house has paid for
+ * that shape repeatedly — so both import this. `ros-lexicon` is the lowest
+ * layer both already depend on, so there is no cycle.
+ *
+ * ⚠️ DE-SLUGGING ONLY, AND THE LIMIT IS THE POINT. It restores the spaces the
+ * identifier form removed and changes nothing else — no synonym, no expansion,
+ * no clinical rewording. `dyspnea` stays `dyspnea`, because deciding it should
+ * read "shortness of breath" on a doctor's form is the owner's call.
+ */
+export function readableRosToken(token: string): string {
+  return token.replace(/_/g, ' ');
+}
+
 export const ROS_SYSTEMS: readonly string[] = Object.freeze(Object.keys(ROS_LEXICON));
 
 /** Every symptom token a system admits, including `other`. */

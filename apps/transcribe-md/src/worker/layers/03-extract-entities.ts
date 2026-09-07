@@ -20,6 +20,7 @@ import {
   resolveRosFinding,
   resolveRosSystem,
   symptomsFor,
+  readableRosToken,
 } from '@/lib/template-twin/ros-lexicon';
 import {
   modelClient,
@@ -305,8 +306,20 @@ export const ExtractedEntities = z.object({
           ...item,
           system,
           finding,
+          // ⚠️ #218 — THE VERBATIM IS THE DOCTOR'S WORDS OR NOTHING, NEVER AN
+          // IDENTIFIER. The fallback below is legitimate and must stay: when
+          // the resolver coerces an off-lexicon symptom to `other`, the model's
+          // own word (`belching`) IS the doctor's word and is the only place it
+          // survives. What was wrong is that the same fallback ALSO fires when
+          // the model emitted a real lexicon token under a system that does not
+          // carry it (`endocrine` / `weight_loss`) — and then the thing landing
+          // in the doctor's-words field is a machine identifier. De-slugging the
+          // fallback keeps `belching` exactly as it was and turns `weight_loss`
+          // into `weight loss`, so no branch can seat an identifier here.
           finding_verbatim:
-            finding === item.finding ? item.finding_verbatim : (item.finding_verbatim ?? item.finding),
+            finding === item.finding
+              ? item.finding_verbatim
+              : (item.finding_verbatim ?? readableRosToken(item.finding)),
           system_verbatim:
             system === item.system ? item.system_verbatim : (item.system_verbatim ?? item.system),
         };

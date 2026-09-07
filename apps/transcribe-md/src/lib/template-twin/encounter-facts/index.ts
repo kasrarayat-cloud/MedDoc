@@ -10,7 +10,7 @@
 import { createHash } from 'node:crypto';
 
 import { conceptSegment } from '../concept-segment';
-import { rosConcept } from '../ros-lexicon';
+import { ROS_OTHER, readableRosToken, rosConcept } from '../ros-lexicon';
 
 import {
   EncounterFactSchema,
@@ -268,7 +268,35 @@ export { conceptSegment } from '../concept-segment';
  * function's.
  */
 export function readableFinding(finding: string): string {
-  return finding.replace(/_/g, ' ');
+  return readableRosToken(finding);
+}
+
+/**
+ * The value a ROS fact contributes to a document — ruling #218.
+ *
+ * ⚠️ THE DE-SLUG IS AT EMISSION, NOT ON ONE BRANCH OF A `??`. The previous form
+ * was `item.finding_verbatim ?? readableFinding(item.finding)`, which de-slugged
+ * ONLY the fallback. `03-extract-entities` fills `finding_verbatim` with the
+ * MODEL'S OWN TOKEN whenever the resolver changed the finding, so the raw
+ * identifier took the left branch and skipped the de-slugger entirely: a real
+ * token filed under a system the lexicon does not carry it under (`endocrine` /
+ * `weight_loss`) printed `weight_loss` into a signed document with
+ * `status=supported` and zero issues. De-slugging whichever branch wins closes
+ * that by construction rather than by remembering.
+ *
+ * ⚠️ AND THE BARE ESCAPE HATCH IS NOT A CLINICAL WORD. `other` exists so a
+ * symptom outside the lexicon can still be carried IN the doctor's words; with
+ * no words there is nothing to say, and the previous form said "other". The
+ * value is BLANKED rather than the fact DROPPED, deliberately: the checkbox arm
+ * reads `fact.polarity` and discards the finding, so dropping the fact would
+ * silently delete a denial a box depends on, while blanking leaves every
+ * select/narrative arm to refuse a value it cannot support.
+ */
+function rosDocumentValue(item: { finding: string; finding_verbatim?: string | null }): string {
+  const spoken = item.finding_verbatim?.trim();
+  const raw = spoken && spoken.length > 0 ? spoken : item.finding;
+  if (raw === ROS_OTHER) return '';
+  return readableRosToken(raw);
 }
 
 /**
@@ -742,7 +770,7 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
       // for him and NOT decided here. Replacing underscores with spaces is not
       // that judgement; it is identifier de-slugging, and it leaves every
       // clinical word exactly as the lexicon chose it.
-      value: item.finding_verbatim ?? readableFinding(item.finding),
+      value: rosDocumentValue(item),
       evidence: item,
       defaultTemporality: 'current',
       // Q1 audit §02.9 — L3 states these now, so stop guessing them back out of

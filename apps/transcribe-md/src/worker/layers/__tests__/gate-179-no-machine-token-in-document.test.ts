@@ -32,6 +32,10 @@ vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }));
 import { ExtractedEntities } from '../03-extract-entities';
 import { projectEncounterFacts } from '@/lib/template-twin/encounter-facts';
 import { ROS_SYSTEMS, symptomsFor, ROS_OTHER } from '@/lib/template-twin/ros-lexicon';
+import {
+  SAMPLE_PREVIEW_ENTITIES,
+  SAMPLE_PREVIEW_TRANSCRIPT,
+} from '@/worker/note-templates/sample-preview-transcript';
 
 /** The value that would reach the document, driven through the SHIPPED chain. */
 function valueFor(system: string, finding: string): string {
@@ -65,9 +69,21 @@ describe('a ROS fact never carries a raw snake_case identifier into the document
     const offenders: string[] = [];
     for (const system of ROS_SYSTEMS) {
       for (const token of symptomsFor(system)) {
-        if (token === ROS_OTHER) continue;
+        // ⚠️ #218 — `other` IS NO LONGER SKIPPED. It used to `continue` here,
+        // and that one line is why the literal word "other" reached a document
+        // for a year: the sweep that claimed to stop machine tokens excluded
+        // the only token that is PURELY a machine token. A guard that skips its
+        // own hardest case is not a guard.
         const value = valueFor(system, token);
         if (value.includes('_')) offenders.push(`${system}.${token} -> ${value}`);
+        // ⚠️ NARROWED, AND THE FIRST FORM OF THIS LINE WAS WRONG. It read
+        // `value === token`, which flags `dizziness -> dizziness` — a token with
+        // no underscore correctly printing itself. The identity check only means
+        // anything for the escape hatch, which is a PURE machine token and must
+        // never appear at all.
+        if (token === ROS_OTHER && value !== '') {
+          offenders.push(`${system}.${token} -> printed the escape hatch as "${value}"`);
+        }
       }
     }
     expect(
@@ -92,5 +108,63 @@ describe('a ROS fact never carries a raw snake_case identifier into the document
     // constant, or blanked. These say the clinical word survives intact.
     expect(valueFor('respiratory', 'dyspnea')).toBe('dyspnea');
     expect(valueFor('gastrointestinal', 'early_satiety')).toBe('early satiety');
+  });
+
+  it('⚠️ #218 — the BARE escape hatch prints NOTHING, not the word "other"', () => {
+    // With no doctor-supplied words there is no finding to state. Saying
+    // "other" is not a weaker answer than saying nothing; it is a wrong one,
+    // and it arrives with status=supported and zero issues.
+    expect(valueFor('neurologic', ROS_OTHER)).toBe('');
+    expect(valueFor('gastrointestinal', ROS_OTHER)).toBe('');
+  });
+
+  it('⚠️ #218 — a REAL token filed under the WRONG system still de-slugs', () => {
+    // The shape the previous arm could not construct: it swept
+    // `system x symptomsFor(system)` only, so a token paired with a system that
+    // does not carry it was outside the watched set entirely. The resolver
+    // coerces the finding to `other` and seats the MODEL'S OWN TOKEN in
+    // `finding_verbatim`, which then took the left branch of the `??` and
+    // skipped the de-slugger.
+    expect(valueFor('endocrine', 'weight_loss')).toBe('weight loss');
+    expect(valueFor('general', 'night_sweats')).toBe('night sweats');
+    expect(valueFor('ent', 'sore_throat')).toBe('sore throat');
+  });
+
+  it('⚠️ #218 — CROSS-SYSTEM SWEEP: no pairing of any system with any token prints an identifier', () => {
+    const offenders: string[] = [];
+    for (const system of ROS_SYSTEMS) {
+      for (const other of ROS_SYSTEMS) {
+        if (other === system) continue;
+        for (const token of symptomsFor(other)) {
+          if (!token.includes('_')) continue; // only underscored tokens can expose the defect
+          const value = valueFor(system, token);
+          if (value.includes('_')) offenders.push(`${system}/${token} -> ${value}`);
+        }
+      }
+    }
+    expect(
+      offenders,
+      `cross-system machine tokens reaching the document: ${offenders.slice(0, 5).join('; ')}`,
+    ).toEqual([]);
+  });
+
+  it('⚠️ #218 — THE SHIPPED FIXTURE\'S OWN ROW: the sample preview carries no machine token', () => {
+    // ⚠️ THE ARM HAS A REAL INPUT AND DID NOT NEED AN INVENTED ONE. The repo's
+    // own demo data emits `{ system: 'neurologic', finding: 'other',
+    // polarity: 'denied' }` with no `finding_verbatim` — the exact defect —
+    // and this is the preview a doctor is shown in Settings.
+    const facts = projectEncounterFacts({
+      mode: 'dictation',
+      contextText: SAMPLE_PREVIEW_TRANSCRIPT,
+      entities: SAMPLE_PREVIEW_ENTITIES as unknown as Parameters<
+        typeof projectEncounterFacts
+      >[0]['entities'],
+    });
+    const ros = facts.filter((f) => f.concept.startsWith('ros.'));
+    expect(ros.length, 'the fixture projected no ROS facts — the arm is vacuous').toBeGreaterThan(0);
+    const bad = ros
+      .map((f) => String(f.value))
+      .filter((v) => v.includes('_') || v === ROS_OTHER);
+    expect(bad, `machine tokens in the shipped sample preview: ${bad.join('; ')}`).toEqual([]);
   });
 });
