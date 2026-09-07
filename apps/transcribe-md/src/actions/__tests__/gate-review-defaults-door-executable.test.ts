@@ -98,6 +98,10 @@ const BASE_IR = compileTemplateDocx(
 const NARRATIVE = BASE_IR.fields.find((f) => f.kind === 'narrative_text')!;
 const SELECT = BASE_IR.fields.find((f) => f.kind === 'single_select')!;
 const FIELD = NARRATIVE.fieldId as string;
+/** A DIFFERENT field, placed FIRST in every manifest — see `manifest()`. */
+const DECOY = BASE_IR.fields.find((f) => f.fieldId !== FIELD)!.fieldId as string;
+/** Distinctive on purpose: an empty object would match a blanked argument. */
+const ENTITIES = { probe: 'entities-fixture', findings: ['x'] };
 
 /** The compiled IR with ONE field overridden — everything else stays real. */
 function irWith(over: Record<string, unknown>, targetId: string = FIELD) {
@@ -111,6 +115,36 @@ function irWith(over: Record<string, unknown>, targetId: string = FIELD) {
 
 /** The default under test: the compiler marked it scaffolded and it has text. */
 const SCAFFOLDED = { scaffolded: true, scaffoldText: 'No acute findings.' };
+
+/**
+ * A manifest whose FIRST entry is a DECOY for a different field.
+ *
+ * ⚠️ ROUND THREE FOUND THIS. Every manifest here used to carry exactly ONE
+ * field, so `fields.find(f => f.fieldId === fieldId)` and `fields[0]` were
+ * indistinguishable: replacing the lookup with `[0]` stayed green on the gate
+ * suite, on all 5812 tests, and under tsc. In production that gates every
+ * insert on whichever field is first in the manifest — on the tracked fixture
+ * an administrative header that resolves `not_mentioned` on essentially every
+ * visit — so the door would admit an insert on ANY field, including one whose
+ * omit fired.
+ *
+ * The decoy is deliberately ADMISSIBLE-looking, so a door reading the wrong
+ * entry gets a permissive answer and the arm reds.
+ *
+ * ⚠️ IT ALSO CARRIES `render`, WHICH IS NOT DECORATION. The door refuses when
+ * the fill produced no document; a mock without it tests the refusal, not the
+ * path.
+ */
+function manifest(target: Record<string, unknown>) {
+  return {
+    prepared: {
+      render: { document: new Uint8Array([1, 2, 3]) },
+      manifest: {
+        fields: [{ ...resolution({}), fieldId: DECOY }, target],
+      },
+    },
+  };
+}
 
 /** One per-field resolution, as `prepared.manifest.fields` carries it. */
 function resolution(over: Record<string, unknown> = {}) {
@@ -136,7 +170,7 @@ function primeVisit(over: Record<string, unknown> = {}) {
     userId: 'author-1',
     inputMode: 'voice_dictation',
     transcriptText: 'transcript',
-    entities: {},
+    entities: ENTITIES,
     soapFinal: 'A note.',
     createdAt: new Date('2026-09-06T00:00:00Z'),
     user: { practiceId: 'prac-1' },
@@ -164,9 +198,7 @@ beforeEach(() => {
   primeVisit();
   primeTemplate();
   defFindUnique.mockResolvedValue({ mapping: { clinicalConcept: 'assessment' } });
-  readAndPrepare.mockResolvedValue({
-    prepared: { manifest: { fields: [resolution()] } },
-  });
+  readAndPrepare.mockResolvedValue(manifest(resolution()));
   overrideUpsert.mockResolvedValue({});
 });
 
@@ -180,12 +212,74 @@ describe('#204 — the door consults the PER-VISIT resolution', () => {
     );
   });
 
-  it('⚠️ THE RULED CASE — the omit FIRED on this visit, so the door REFUSES', async () => {
-    readAndPrepare.mockResolvedValue({
-      prepared: {
-        manifest: { fields: [resolution({ reasonCode: 'omitted_unsupported_default' })] },
-      },
+  it('⚠️ THE WRITE PAYLOAD IS ASSERTED — not merely that a write happened', async () => {
+    // ⚠️ ROUND THREE: the door's upsert payload was never checked, so
+    // `overrideKind: 'scaffold_default'` -> `'option_choice'` stayed GREEN — and
+    // undo's deleteMany filters on that exact kind, so the doctor could not
+    // remove a default they had just inserted and the row stayed an input to
+    // every future fill. `insertedText -> ''` and a constant `overriddenBy`
+    // were green too.
+    await insert();
+    expect(overrideUpsert).toHaveBeenCalledTimes(1);
+    const arg = overrideUpsert.mock.calls[0][0] as {
+      where: unknown;
+      create: Record<string, unknown>;
+      update: Record<string, unknown>;
+    };
+    expect(arg.where).toEqual({ visitId_fieldId: { visitId: VISIT, fieldId: FIELD } });
+    expect(arg.create).toMatchObject({
+      visitId: VISIT,
+      fieldId: FIELD,
+      overrideKind: 'scaffold_default',
+      insertedText: 'No acute findings.',
+      overriddenBy: 'requester-1',
     });
+    // The UPDATE arm must clear the option columns, or the row satisfies
+    // neither arm of the kind-shape CHECK and the database refuses it.
+    expect(arg.update).toMatchObject({
+      overrideKind: 'scaffold_default',
+      insertedText: 'No acute findings.',
+      selectedOptionOrdinal: null,
+      optionValue: null,
+    });
+  });
+
+  it('⚠️ INSERT THEN UNDO — the round trip the two doors must agree on', async () => {
+    // ⚠️ ROUND THREE: `undoScaffoldDefaultAction` had ZERO executable coverage
+    // anywhere in the repo, which made C3 ("undo needs no gate") unfalsifiable.
+    // This drives the real pair against a store that honours the where clause,
+    // so a mismatched `overrideKind` on either side reds here.
+    const rows: Array<Record<string, unknown>> = [];
+    overrideUpsert.mockImplementation(async (a: {
+      where: { visitId_fieldId: { visitId: string; fieldId: string } };
+      create: Record<string, unknown>;
+    }) => {
+      rows.push({ ...a.create, ...a.where.visitId_fieldId });
+      return a.create;
+    });
+    overrideDeleteMany.mockImplementation(async (a: { where: Record<string, unknown> }) => {
+      const before = rows.length;
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if (Object.entries(a.where).every(([k, v]) => rows[i][k] === v)) rows.splice(i, 1);
+      }
+      return { count: before - rows.length };
+    });
+
+    const ins = await insert();
+    expect(ins.ok, ins.error).toBe(true);
+    expect(rows).toHaveLength(1);
+
+    const mod = await import('../set-template-control');
+    const undone = await mod.undoScaffoldDefaultAction(VISIT, FIELD);
+    expect(
+      undone.ok,
+      `undo could not find the row the insert wrote: ${undone.error}`,
+    ).toBe(true);
+    expect(rows, 'the row survived the undo').toHaveLength(0);
+  });
+
+  it('⚠️ THE RULED CASE — the omit FIRED on this visit, so the door REFUSES', async () => {
+    readAndPrepare.mockResolvedValue(manifest(resolution({ reasonCode: 'omitted_unsupported_default' })));
     const res = await insert();
     expect(res.ok).toBe(false);
     expect(overrideUpsert, 'the door wrote an override the offer would not have shown').not.toHaveBeenCalled();
@@ -196,41 +290,23 @@ describe('#204 — the door consults the PER-VISIT resolution', () => {
     // The pair is the point: identical field, identical mapping, differing ONLY
     // by the per-visit reasonCode. Round one refused BOTH (a confirm-time
     // property answering a per-visit question); round two admitted both.
-    readAndPrepare.mockResolvedValue({
-      prepared: { manifest: { fields: [resolution({ reasonCode: 'no_supporting_evidence' })] } },
-    });
+    readAndPrepare.mockResolvedValue(manifest(resolution({ reasonCode: 'no_supporting_evidence' })));
     await expect(insert()).resolves.toMatchObject({ ok: true });
   });
 
   it('⚠️ A RE-INSERT OVER THIS DOCTOR’S OWN DEFAULT IS STILL ADMITTED', async () => {
     // The offer keeps such a field listed via `inserted ||`, so a door gating on
     // `scaffoldDefaultOfferable` alone would refuse a state the panel offers.
-    readAndPrepare.mockResolvedValue({
-      prepared: {
-        manifest: {
-          fields: [
-            resolution({
+    readAndPrepare.mockResolvedValue(manifest(resolution({
               status: 'supported',
               value: 'No acute findings.',
               reasonCode: 'clinician_scaffold_default',
-            }),
-          ],
-        },
-      },
-    });
+            })));
     await expect(insert()).resolves.toMatchObject({ ok: true });
   });
 
   it('⚠️ A DICTATED FIELD IS NOT BLANK, so the door refuses', async () => {
-    readAndPrepare.mockResolvedValue({
-      prepared: {
-        manifest: {
-          fields: [
-            resolution({ status: 'supported', value: 'Dictated text.', reasonCode: 'evidence_supported' }),
-          ],
-        },
-      },
-    });
+    readAndPrepare.mockResolvedValue(manifest(resolution({ status: 'supported', value: 'Dictated text.', reasonCode: 'evidence_supported' })));
     const res = await insert();
     expect(res.ok).toBe(false);
     expect(overrideUpsert).not.toHaveBeenCalled();
@@ -241,14 +317,40 @@ describe('#204 — the fill is asked the SAME question the preview asks', () => 
   it('⚠️ THE VISIT’S OWN DOCTOR, not the requester', async () => {
     await insert();
     expect(readAndPrepare).toHaveBeenCalledTimes(1);
-    expect(readAndPrepare.mock.calls[0][0]).toMatchObject({
+    // ⚠️ EVERY ARGUMENT THAT DECIDES THE ANSWER, NOT A CONVENIENT SUBSET.
+    // Round three: this block checked 6 of 12 and none of the four that move
+    // the outcome. Blanking `contextText`, `entities`, the `inputMode` ternary
+    // or `visitDate` each stayed GREEN across all 5812 tests and tsc — while in
+    // production an empty transcript yields no facts, so
+    // `unmentionedScaffold = conceptUnmatched && reason === undefined &&
+    // facts.length > 0` is false and `omitted_unsupported_default` is NEVER
+    // emitted. The door would then admit every omit field it exists to refuse,
+    // silently, because it asked a different question from the preview.
+    const call = readAndPrepare.mock.calls[0][0] as Record<string, unknown>;
+    expect(call).toMatchObject({
       visitId: VISIT,
       doctorId: 'author-1',
       practiceId: 'prac-1',
       noteTemplateId: 'tpl-1',
       noteTemplateVersion: 3,
       generatedNote: 'A note.',
+      inputMode: 'dictation',
+      contextText: 'transcript',
+      resolverModelVersion: null,
     });
+    // ⚠️ THIS ASSERTION WAS VACUOUS ON ITS FIRST WRITING —
+    // `toBe(x ?? call.entities)` is trivially true whenever `x` is undefined,
+    // and blanking `entities` in the door stayed GREEN. It now compares against
+    // the distinctive object the fixture primed.
+    expect(call.entities, 'the resolver was fed a different entity set').toEqual(ENTITIES);
+    expect(call.visitDate, 'visitDate must be the ENCOUNTER date, not now').toEqual(
+      new Date('2026-09-06T00:00:00Z'),
+    );
+    expect(call.validationNow, 'validationNow must be supplied').toBeInstanceOf(Date);
+    // The door must not silently stop passing one of these.
+    for (const k of ['inputMode', 'contextText', 'entities', 'visitDate', 'validationNow']) {
+      expect(Object.keys(call), `${k} is no longer passed to the fill`).toContain(k);
+    }
   });
 
   it('⚠️ FAIL-CLOSED — a throwing fill REFUSES rather than writing', async () => {
@@ -257,6 +359,41 @@ describe('#204 — the fill is asked the SAME question the preview asks', () => 
     expect(res.ok).toBe(false);
     expect(overrideUpsert, 'a write went through on a resolution nobody obtained').not.toHaveBeenCalled();
     expect(audit).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ NO DOCUMENT, NO WRITE — a fill that rendered nothing is refused', async () => {
+    // Round three, two lenses: one blocking validation issue anywhere in the
+    // fill makes `render` null for the WHOLE document. The offer then shows no
+    // panel at all — so there is no offer, no field, and no Undo button — while
+    // the door wrote the row and the audit claim anyway.
+    readAndPrepare.mockResolvedValue({
+      prepared: { render: null, manifest: { fields: [resolution()] } },
+    });
+    const res = await insert();
+    expect(res.ok).toBe(false);
+    expect(overrideUpsert, 'a row was written for a document that does not render').not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ NOT READY, NOT WRITABLE — the eight in-flight statuses are refused', async () => {
+    // The offer refuses every status but READY (and signed, which the door
+    // refuses outright). Reachable in ordinary use: the manual retry route
+    // sets a READY visit back to QUEUED and LEAVES soapFinal in place, so the
+    // door's fill would resolve against a stale note.
+    for (const status of [
+      'QUEUED', 'TRANSCRIBING', 'EXTRACTING', 'DRAFTING',
+      'CRITIQUING', 'POLISHING', 'AUTOMATING', 'FAILED',
+    ]) {
+      vi.clearAllMocks();
+      primeVisit({ status });
+      primeTemplate();
+      defFindUnique.mockResolvedValue({ mapping: { clinicalConcept: 'assessment' } });
+      readAndPrepare.mockResolvedValue(manifest(resolution()));
+      const res = await insert();
+      expect(res.ok, `status ${status} was admitted`).toBe(false);
+      expect(overrideUpsert, `status ${status} wrote an override row`).not.toHaveBeenCalled();
+      expect(audit, `status ${status} emitted an audit claim`).not.toHaveBeenCalled();
+    }
   });
 
   it('⚠️ NO NOTE, NO FILL — the door refuses before paying for one', async () => {
@@ -327,15 +464,7 @@ describe('the static guards — each REFUSES, and each is now driven', () => {
     primeVisit();
     primeTemplate();
     defFindUnique.mockResolvedValue({ mapping: { clinicalConcept: 'assessment' } });
-    readAndPrepare.mockResolvedValue({
-      prepared: {
-        manifest: {
-          fields: [
-            resolution({ status: 'supported', value: 'Dictated.', reasonCode: 'evidence_supported' }),
-          ],
-        },
-      },
-    });
+    readAndPrepare.mockResolvedValue(manifest(resolution({ status: 'supported', value: 'Dictated.', reasonCode: 'evidence_supported' })));
     const notBlank = await insert();
 
     expect(notScaffolded.ok).toBe(false);
@@ -354,15 +483,7 @@ describe('the static guards — each REFUSES, and each is now driven', () => {
     primeVisit();
     primeTemplate();
     defFindUnique.mockResolvedValue({ mapping: { clinicalConcept: 'assessment' } });
-    readAndPrepare.mockResolvedValue({
-      prepared: {
-        manifest: {
-          fields: [
-            resolution({ status: 'supported', value: 'Dictated.', reasonCode: 'evidence_supported' }),
-          ],
-        },
-      },
-    });
+    readAndPrepare.mockResolvedValue(manifest(resolution({ status: 'supported', value: 'Dictated.', reasonCode: 'evidence_supported' })));
     const notBlank = await insert();
 
     expect(constrained.ok).toBe(false);

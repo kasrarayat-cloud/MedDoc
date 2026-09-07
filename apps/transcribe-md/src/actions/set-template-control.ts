@@ -94,6 +94,7 @@ async function resolveCertifiedTwinField(
       field: TemplateDocIR['fields'][number];
       /** The visit row this function already read — see the select's note. */
       visit: {
+        status: string;
         userId: string;
         inputMode: string | null;
         transcriptText: string | null;
@@ -413,6 +414,7 @@ async function scaffoldDefaultAdmissible(input: {
     practiceId: string;
     compiledVersionId: string;
     visit: {
+      status: string;
       userId: string;
       inputMode: string | null;
       transcriptText: string | null;
@@ -427,6 +429,29 @@ async function scaffoldDefaultAdmissible(input: {
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const { visitId, fieldId, field, resolved } = input;
   const { visit } = resolved;
+
+  // ⚠️ READY, NOT MERELY UNSIGNED — FOUND BY ROUND THREE, BY TWO LENSES.
+  // The door's only status gate was `SIGNED`. The offer's is
+  // `status !== 'READY' && !signedAt -> miss('not_template_visit')`
+  // (preview-visit-document.ts:286), and its comment says exactly why: "A visit
+  // still processing (or failed) may carry a stale note from a previous run; it
+  // does not get a document."
+  //
+  // That window is REACHABLE IN ORDINARY USE, not theoretical: the manual retry
+  // route sets a READY visit back to QUEUED and leaves `soapFinal` in place. So
+  // on eight statuses — QUEUED, TRANSCRIBING, EXTRACTING, DRAFTING, CRITIQUING,
+  // POLISHING, AUTOMATING, FAILED — the offer showed the doctor nothing at all
+  // while the door wrote the override row and a DEFAULT_INSERTED_BY_DOCTOR
+  // audit row, against a resolution computed on the STALE note. Measured on all
+  // eight: ok=true, upsert=1, audit=1.
+  //
+  // SIGNED is refused earlier, so requiring READY here is the whole remainder.
+  if (visit.status !== 'READY') {
+    return {
+      ok: false,
+      error: `${field.originalLabel} cannot take a default while this visit is still being prepared.`,
+    };
+  }
 
   // The preview never offers this panel before the note exists, so refusing
   // here is AGREEMENT with the offer rather than a tightening of it.
@@ -460,6 +485,21 @@ async function scaffoldDefaultAdmissible(input: {
       visitDate: visit.createdAt,
       resolverModelVersion: null,
     });
+    // ⚠️ THE WHOLE-DOCUMENT REFUSAL — FOUND BY ROUND THREE, BY TWO LENSES.
+    // One blocking validation issue on ANY field makes `finalizeTemplateTwinFill`
+    // return `render: null` for the ENTIRE fill. The offer then returns
+    // `miss('no_render')` (preview-visit-document.ts:366), the surface says it
+    // could not draw the form, and NO panel is shown — so there is no offer, no
+    // field, and no Undo button. The door read only `manifest.fields` and wrote
+    // anyway, which is verbatim the state clinician-override.ts:203-216 calls
+    // fatal: for a date or checkbox there is then no product path left to
+    // delete the row.
+    if (!prepared.render?.document) {
+      return {
+        ok: false,
+        error: `${field.originalLabel} could not be placed on your form for this visit, so nothing was inserted.`,
+      };
+    }
     current = prepared.manifest.fields.find((f) => f.fieldId === fieldId) ?? null;
   } catch (err) {
     // Constructor name only — never the message, which can carry document text.
