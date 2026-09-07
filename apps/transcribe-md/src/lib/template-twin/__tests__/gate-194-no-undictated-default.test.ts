@@ -310,12 +310,30 @@ describe('#194 — the column, the hash, and the projections still hold', () => 
       .map((m) => m[1]!)
       .filter((n) => !['id','fieldDefinitionId','approvedById','approvedAt','createdAt','updatedAt','proposedByModel'].includes(n));
     expect(scalars).toContain('unmentionedPolicy');
+    expect(scalars).toContain('conceptScope');
     expect(scalars.length).toBeGreaterThan(8);
+
+    // ⚠️ #217 — THIS LOOP USED TO CHECK ONE COLUMN AND ITS TITLE CLAIMED ALL OF
+    // THEM. It derived every scalar from the schema and then asserted only
+    // `unmentionedPolicy`, so `conceptScope` could be added to the model, the
+    // writer and the read-back and still be missing from all five projections —
+    // which is precisely how that field ended up with four readers and no
+    // writer. Deriving the inputs closes the CLASS; asserting one name closes an
+    // instance and reads identically.
+    //
+    // `practiceId` is excluded because it is the tenancy column and is never
+    // projected into a SemanticMapping.
+    const projected = scalars.filter((n) => n !== 'practiceId');
     for (const rel of ['fill-engine.ts','certification-lifecycle.ts','workspace-read.ts','synthetic-test.ts']) {
       const src = readFileSync(join(__dirname, '..', rel), 'utf-8');
       const selects = src.split('blankPolicy: true,').length - 1;
-      expect(selects).toBeGreaterThan(0);
-      expect(src.split('unmentionedPolicy: true,').length - 1).toBe(selects);
+      expect(selects, `${rel} has no mapping projection at all`).toBeGreaterThan(0);
+      for (const col of projected) {
+        expect(
+          src.split(`${col}: true,`).length - 1,
+          `${rel} projects ${selects} mapping(s) but does not select "${col}" in all of them`,
+        ).toBe(selects);
+      }
     }
   });
 

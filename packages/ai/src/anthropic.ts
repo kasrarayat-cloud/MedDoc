@@ -175,8 +175,59 @@ function logFailedAnthropicUsage(
  *  families; pass through for everything else. Layer source files keep
  *  their `temperature: 0.x` lines as documentation of intent — the
  *  library honors the wire contract. */
+/**
+ * ⚠️ #179(7) — A PER-FAMILY DECISION TABLE, FAIL-CLOSED ON THE UNKNOWN.
+ *
+ * Opus 4.7 returns `400 invalid_request_error` when the body carries
+ * `temperature`, so the Opus 4.x family is stripped — that behaviour and its
+ * arm are UNCHANGED and the family prefix is kept deliberately: it is
+ * forward-compat WITHIN a family that is known to reject the parameter, and
+ * `claude-opus-4-6` is armed precisely to hold that.
+ *
+ * ⚠️ WHAT THE PREFIX COULD NOT DO IS CROSS A FAMILY BOUNDARY. `claude-opus-5`
+ * does not match `claude-opus-4`, so a model switch would have changed the
+ * WIRE SHAPE and the MODEL in the same act — temperature suddenly sent to a
+ * model nobody had tested it against, discovered in production by a request
+ * that fails.
+ *
+ * OPUS 5 STRIPS, AND THE REASON IS NOT THAT IT REJECTS TEMPERATURE — that is
+ * unmeasured. It strips because production 4.8 already runs stripped, and ONE
+ * VARIABLE PER CHANGE: a switch must move the model and nothing else.
+ *
+ * ⚠️ AND AN UNLISTED MODEL IS A NAMED REFUSAL, NEVER A SILENT PASS-THROUGH. A
+ * model this table has never heard of is a model nobody measured, and guessing
+ * either way is a guess about a clinical request. The refusal is loud, instant
+ * and free; a wrong guess is a 400 in production or a sampling change nobody
+ * declared.
+ */
+const TEMPERATURE_STRIPPED = [
+  /^claude-opus-4/, // rejects the param outright (4.7 measured; family armed at 4.6)
+  /^claude-opus-5/, // parity with production's wire shape — one variable per change
+  /^claude-fable/, // rejects forced tool_choice together with temperature
+  /^claude-mythos/, // same family, same restriction
+] as const;
+
+const TEMPERATURE_ACCEPTED = [
+  /^claude-sonnet-/, //
+  /^claude-haiku-/, //
+] as const;
+
+export class UnknownTemperaturePolicyError extends Error {
+  constructor(model: string) {
+    super(
+      `no temperature policy for model "${model}". Add it to TEMPERATURE_STRIPPED or ` +
+        'TEMPERATURE_ACCEPTED in anthropic.ts after MEASURING which the vendor wants. ' +
+        'Refusing rather than guessing: a wrong guess is a 400 on the clinical path or an ' +
+        'undeclared change to sampling.',
+    );
+    this.name = 'UnknownTemperaturePolicyError';
+  }
+}
+
 function shouldOmitTemperature(model: string): boolean {
-  return model.startsWith('claude-opus-4') || model.startsWith('claude-fable');
+  if (TEMPERATURE_STRIPPED.some((re) => re.test(model))) return true;
+  if (TEMPERATURE_ACCEPTED.some((re) => re.test(model))) return false;
+  throw new UnknownTemperaturePolicyError(model);
 }
 
 /** Q2 follow-up — when an Anthropic SDK call throws (network blip,

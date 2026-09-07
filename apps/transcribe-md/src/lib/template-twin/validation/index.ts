@@ -25,6 +25,7 @@ import {
   type TemplateTwinValidationResult,
 } from '../ir';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
+import { factMatchesMapping, normalizeConcept } from '../fact-mapping-match';
 import {
   deriveFieldValueFromFact,
   exactOption,
@@ -73,10 +74,6 @@ interface RowValue {
   sourceFactId: string;
   evidenceAnchorId: string | null;
   optionOrdinal: string | null;
-}
-
-function normalizeConcept(value: string): string {
-  return value.normalize('NFKC').trim().toLocaleLowerCase('en-US');
 }
 
 function isRowValueArray(value: FieldResolution['value']): value is Array<Record<string, string | null>> {
@@ -181,24 +178,13 @@ function practiceDefaultMatches(
   }
 }
 
-function factMatchesMapping(
-  fact: EncounterFact,
-  mapping: SemanticMapping,
-): boolean {
-  if (!mapping.clinicalConcept) return false;
-  const concepts = new Set(
-    [mapping.clinicalConcept, ...mapping.approvedSynonyms].map(normalizeConcept),
-  );
-  if (!concepts.has(normalizeConcept(fact.concept))) return false;
-  if (
-    mapping.temporality !== null &&
-    mapping.temporality !== 'any' &&
-    fact.temporality !== mapping.temporality
-  ) {
-    return false;
-  }
-  return true;
-}
+/**
+ * ⚠️ EXPORTED SO AN ARM CAN DRIVE IT RATHER THAN RE-IMPLEMENT IT. It is a pure
+ * predicate over a fact and a mapping; exporting changes no behaviour. The
+ * alternative was an arm that reproduced this rule inline, which is a control
+ * that reimplements its subject — it passes whatever the shipped matcher does.
+ */
+export { factMatchesMapping };
 
 /** Returns true only when the output can be re-derived from cited facts. */
 function assertionSupported(
