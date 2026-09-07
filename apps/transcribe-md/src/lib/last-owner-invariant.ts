@@ -67,16 +67,20 @@ export type LastOwnerVerdict =
  *      being torn down, which is the self-service deletion path
  */
 export async function wouldStrandPractice(userId: string): Promise<LastOwnerVerdict> {
+  // ⚠️ THE SELECT IS DERIVED FROM THE PREDICATE, NOT RETYPED BESIDE IT.
+  // The adversarial pass found this list was a THIRD uncoupled restatement of
+  // the column set: adding a column to `ACTIVE_OWNER_WHERE` and forgetting it
+  // here makes the field arrive `undefined`, `undefined === null` is false, and
+  // the row silently stops counting as an active owner — no error, no red test.
+  // Derived, a forgotten column is impossible by construction.
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
       id: true,
       practiceId: true,
-      practiceRole: true,
-      isActive: true,
-      deactivatedAt: true,
-      suspendedAt: true,
-      softDeletedAt: true,
+      ...(Object.fromEntries(
+        Object.keys(ACTIVE_OWNER_WHERE).map((c) => [c, true])
+      ) as Record<keyof typeof ACTIVE_OWNER_WHERE, true>),
     },
   });
   if (!user) return { wouldStrand: false };

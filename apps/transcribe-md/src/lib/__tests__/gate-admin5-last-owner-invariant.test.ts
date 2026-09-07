@@ -246,6 +246,22 @@ describe('ruling #210 — one definition of an active practice OWNER', () => {
       .toMatch(/AFTER\s+INSERT\s+OR\s+UPDATE\s+ON\s+"users"/);
   });
 
+  it('the friendly refusal SELECTS every column its predicate reads', () => {
+    // ⚠️ A FORGOTTEN COLUMN HERE IS SILENT, WHICH IS WHY IT IS AN ARM.
+    // Prisma returns only what is selected; a missing field arrives `undefined`,
+    // `undefined === null` is false, and the row quietly stops counting as an
+    // active owner. No error, no red test, and the friendly refusal starts
+    // disagreeing with the trigger. The source must DERIVE the select from
+    // ACTIVE_OWNER_WHERE rather than restate it.
+    const src = readFileSync(join(__dirname, '..', 'last-owner-invariant.ts'), 'utf8');
+    const call = src.slice(src.indexOf('prisma.user.findUnique'), src.indexOf('const isActiveOwner'));
+    expect(call).toContain('Object.keys(ACTIVE_OWNER_WHERE)');
+    // and no hand-written restatement of a predicate column in that select
+    for (const col of Object.keys(ACTIVE_OWNER_WHERE)) {
+      expect(call, `${col} is restated by hand in the select`).not.toContain(`${col}: true`);
+    }
+  });
+
   it('both doors ruling #210 names in scope call the friendly refusal', () => {
     for (const route of ['suspend', 'soft-delete']) {
       const src = readFileSync(
