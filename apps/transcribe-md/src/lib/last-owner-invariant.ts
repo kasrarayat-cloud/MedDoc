@@ -35,14 +35,14 @@ import prisma from '@meddoc/db';
  * ⚠️ THE COLUMN LIST IS NOT ARBITRARY AND IT IS NOT `deactivatedAt` ALONE.
  * `users` carries five independent expressions of "no longer active", and the
  * choice among them changes the answer on real data. Measured on production
- * 2026-09-07, re-measured with a positive control under ruling #248: **ONE**
+ * 2026-09-07, re-measured with a positive control under ruling #253: **ONE**
  * OWNER row passes `deactivatedAt IS NULL` while being unable to sign in, in
  * **ONE** practice — and that practice has ELEVEN members, two rows the loose
  * predicate counts as owners, and exactly ONE owner who can actually administer
  * it. A predicate that counts an owner who cannot authenticate implements a
  * proxy for the invariant, not the invariant.
  *
- * ⚠️ THIS SAID "SIX" UNTIL #248, AND SIX IS A DIFFERENT CLAIM'S NUMBER — it is
+ * ⚠️ THIS SAID "SIX" UNTIL #253, AND SIX IS A DIFFERENT CLAIM'S NUMBER — it is
  * the count of zero-owner PRACTICES, and the two predicates agree on every one
  * of those. One eleven-member practice with a single able owner is the whole
  * case, and it is enough; quoting six weakened it.
@@ -68,7 +68,7 @@ export const ACTIVE_OWNER_WHERE = {
  * #1026's clause counts `deactivatedAt IS NULL` alone, so ONE owner row counts
  * as an owner while unable to sign in — in the practice with ELEVEN members,
  * which reads two owners against ONE who can actually administer it. (This read
- * "SIX" until #248; see the correction above.)
+ * "SIX" until #253; see the correction above.)
  *
  * `gate-admin5-last-owner-invariant.test.ts` asserts this generator's output is
  * clause-for-clause the migration's `users_is_active_owner` body, so the SQL

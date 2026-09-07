@@ -263,7 +263,7 @@ describe('ruling #210 — one definition of an active practice OWNER', () => {
   });
 
   it('the guard SERIALIZES before it counts — ORDERING ONLY; the AUTHORITY is pg_locks', () => {
-    // ⚠️ THIS ARM IS DEMOTED — RULING #246. IT IS NOT THE PROOF THAT THE LOCK
+    // ⚠️ THIS ARM IS DEMOTED — RULING #251. IT IS NOT THE PROOF THAT THE LOCK
     // EXISTS, AND IT MUST NEVER AGAIN BE CITED AS ONE.
     //
     // It has been defeated by a comment TWICE. First by a `--` line, which was
@@ -273,7 +273,7 @@ describe('ruling #210 — one definition of an active practice OWNER', () => {
     // running function held NO LOCK AT ALL.
     //
     // ⚠️ THE SECOND FIX WAS WRITTEN BY SOMEBODY WHO HAD JUST READ THE FIRST.
-    // That is the argument for #246: the defect is not any particular regex, it
+    // That is the argument for #251: the defect is not any particular regex, it
     // is asking a question about TEXT when the claim is about BEHAVIOUR.
     //
     // THE AUTHORITY IS NOW `LOCK-CONTROL (pg_locks)` in

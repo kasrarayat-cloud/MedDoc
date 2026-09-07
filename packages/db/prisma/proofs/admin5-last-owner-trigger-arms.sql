@@ -423,7 +423,7 @@ SELECT t210_try('35 legacy ownerless practice WITH a live member: a benign write
 -- REFUSED. ⚠️ IT IS A TEST OF THE INSTRUMENT, NOT OF THE TRIGGER — the statement
 -- is never reached, and that is what is being asserted.
 -- ══════════════════════════════════════════════════════════════════════════
--- RULING #248 — EMPTYING A PRACTICE IS NOT STRANDING ANYBODY, HOWEVER IT EMPTIES.
+-- RULING #253 — EMPTYING A PRACTICE IS NOT STRANDING ANYBODY, HOWEVER IT EMPTIES.
 --
 -- #238 added the `practiceId` comparison to the ORPHAN arm and not to the
 -- removal guard's `members_left := members_left + 1`, which adds the row back
@@ -456,7 +456,7 @@ SELECT t210_try('36 HARNESS SELF-TEST: a refusal raised by the SETUP is not cred
   $$UPDATE users SET "practiceRole"='CLINICIAN' WHERE id='t210_a'$$);
 
 -- ══════════════════════════════════════════════════════════════════════════
--- ⚠️ THE LOCK IS ASSERTED FROM `pg_locks`, NOT FROM THE SOURCE — RULING #246.
+-- ⚠️ THE LOCK IS ASSERTED FROM `pg_locks`, NOT FROM THE SOURCE — RULING #251.
 --
 -- The textual arm ("does the function body contain pg_advisory_xact_lock, and
 -- before the count?") has now been defeated TWICE by comments: first by a `--`

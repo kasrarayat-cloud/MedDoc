@@ -50,7 +50,7 @@ OUT="$(mktemp -d "${TMPDIR:-/tmp}/t210-race-XXXXXX")"
 # any early return left that mutant installed — so the next person to use the QA
 # stack would be running against a guard with its serialization removed, and
 # nothing would say so. The trap runs before the failure is reported.
-# ⚠️ THE FIXTURE IS REAPED ON **EVERY** EXIT PATH — RULING #248.
+# ⚠️ THE FIXTURE IS REAPED ON **EVERY** EXIT PATH — RULING #253.
 #
 # This ran only after `🟢 RACE HARNESS PASSED`, at the very bottom of the script.
 # Every other exit left `ir_p`, `t210r_p` and the two scratch tables behind: a
@@ -299,7 +299,7 @@ race_b() {   # $1 = removal-guard fn, $2 = orphan-guard fn
   printf '%s%s' "$v" "$ov"
 }
 q_() { docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -q < "$1" >/dev/null 2>&1; }
-# ⚠️ THE WITNESS IS AUTONOMOUS — RULING #247. TWO PREDECESSORS FAILED HERE, IN
+# ⚠️ THE WITNESS IS AUTONOMOUS — RULING #252. TWO PREDECESSORS FAILED HERE, IN
 # OPPOSITE DIRECTIONS, AND BOTH FAILURES WERE INVISIBLE UNTIL SOMEBODY KILLED
 # THE INSTRUMENT.
 #
@@ -351,7 +351,7 @@ after=$(grep -c  pg_advisory_xact_lock "$OUT/g1n.sql" "$OUT/g2n.sql" | awk -F: '
 echo "    mutation applied: advisory-lock occurrences $before -> $after"
 [ "$before" = 2 ] && [ "$after" = 0 ] || { echo "🔴 MUTATION DID NOT APPLY — every result below would be meaningless."; exit 1; }
 N=12
-# ⚠️ THREE OUTCOMES PER RUN, NOT TWO — RULING #247. A run whose markers did not
+# ⚠️ THREE OUTCOMES PER RUN, NOT TWO — RULING #252. A run whose markers did not
 # both arrive is '?', and '?' is counted SEPARATELY. Folding it into "did not
 # overlap" would make a dead witness look like a clean sequential control; folding
 # it into "overlapped" would make it look like a valid cell. Neither is true.
@@ -406,7 +406,7 @@ esac
 if [ "$W" -gt 0 ]; then
   say "🔴 raceB: $W/$N violations WITH the lock — the invariant does not hold"; fail=1
 elif [ "$QW" -gt 0 ]; then
-  # ⚠️ A DEAD WITNESS IS A FAILURE, NOT A CANNOT-TELL — RULING #247. "The race
+  # ⚠️ A DEAD WITNESS IS A FAILURE, NOT A CANNOT-TELL — RULING #252. "The race
   # did not happen" is survivable; "my instrument lost a marker" is not, and
   # collapsing the two is exactly how a broken harness rides a CI pass.
   say "🔴 raceB: $QW/$N runs produced NO WITNESS — the instrument is broken, not the race. Refusing to report this cell either way."; fail=1

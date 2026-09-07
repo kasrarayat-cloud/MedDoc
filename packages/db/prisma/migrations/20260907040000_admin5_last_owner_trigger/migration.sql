@@ -60,7 +60,7 @@
 --   ⚠️ that ONE practice has ELEVEN members, two rows that `deactivatedAt IS
 --      NULL` counts as owners, and exactly ONE owner who can administer it
 --
--- ⚠️ THESE READ `6` UNTIL RULING #248, AND `6` WAS A DIFFERENT CLAIM'S NUMBER.
+-- ⚠️ THESE READ `6` UNTIL RULING #253, AND `6` WAS A DIFFERENT CLAIM'S NUMBER.
 -- Six is the count of ZERO-OWNER PRACTICES. The count of owner rows the loose
 -- predicate over-counts is ONE, and the six zero-owner practices are not among
 -- them: the two predicates AGREE on every one of those six. Re-measured with a
@@ -236,7 +236,7 @@ BEGIN
     -- The set is small (a practice's owner rows), it is taken while already
     -- holding the per-practice advisory lock, and the lock order is therefore
     -- the same for every writer -- so this does not introduce a deadlock.
-    -- ⚠️ EVERY OTHER ROW IN THE PRACTICE, NOT ONLY THE OWNERS — RULING #248.
+    -- ⚠️ EVERY OTHER ROW IN THE PRACTICE, NOT ONLY THE OWNERS — RULING #253.
     -- This locked `practiceRole = 'OWNER'` only, and then counted TWO things:
     -- `owners_left` (owners) and `members_left` (LIVE MEMBERS). The second count
     -- read rows nothing had locked, so a concurrent write to a non-owner member
@@ -247,7 +247,7 @@ BEGIN
     -- ⚠️ AND ITS REMOVAL REDDENED NOTHING. Round three measured it: the row set
     -- could be emptied entirely with the arms 38/38, the gate 23/23 and the race
     -- harness green, because a single-transaction proof cannot see a lock at all.
-    -- That is why #246 replaces the textual lock arm with a `pg_locks` assertion.
+    -- That is why #251 replaces the textual lock arm with a `pg_locks` assertion.
     --
     -- The predicate is now the WHOLE practice minus the row being written: both
     -- counts read subsets of it, so locking their union is the only form that
@@ -284,7 +284,7 @@ BEGIN
        AND u."id" <> OLD."id"
        AND users_is_live_member(u);
 
-    -- ⚠️ AND `practiceId` IS COMPARED HERE TOO — RULING #248, AND #238 LANDED IN
+    -- ⚠️ AND `practiceId` IS COMPARED HERE TOO — RULING #253, AND #238 LANDED IN
     -- ONLY ONE OF THE TWO PLACES THAT NEEDED IT.
     --
     -- This clause adds the row ITSELF back when the write leaves it behind as a
