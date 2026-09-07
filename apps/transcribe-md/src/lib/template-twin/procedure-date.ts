@@ -22,13 +22,10 @@ import {
   type SemanticMapping,
   type TemplateField,
 } from './ir';
+import { normalizeConcept, requiredFactTemporality } from './fact-mapping-match';
 
 const DATE_OF_PROCEDURE_LABEL_RE = /\bdate\s+of\s+procedure\b/i;
 const METADATA_ANCHOR = 'procedure-date-metadata';
-
-function normalizeConcept(value: string): string {
-  return value.normalize('NFKC').trim().toLocaleLowerCase('en-US');
-}
 
 /** ISO YYYY-MM-DD (UTC) from a Date or ISO-ish string; null when not an
  *  unambiguous calendar date (leave the control blank rather than guess). */
@@ -80,10 +77,7 @@ export function withProcedureDateFact(input: {
     // A 24-hex fact id derived from the field id (which is `ttf_<24hex>`) — a
     // stable, real (in-set) fact id, so the resolution is traceable.
     const factId = `ttfact_${field.fieldId.replace(/^ttf_/, '').slice(0, 24)}`;
-    const temporality =
-      mapping.temporality && mapping.temporality !== 'any'
-        ? mapping.temporality
-        : 'current';
+    const temporality = requiredFactTemporality(mapping);
     facts.push(
       EncounterFactSchema.parse({
         factId,

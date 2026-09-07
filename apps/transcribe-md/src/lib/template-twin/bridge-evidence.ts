@@ -22,38 +22,23 @@
 // ============================================================================
 
 import type { EncounterFact, SemanticMapping } from './ir';
+import { factMatchesMapping } from './fact-mapping-match';
 
-/** Same normalisation validation/index.ts uses — a citation this module makes
- *  must satisfy the check the validator will later apply, or the bridge is just
- *  producing a different flavour of unsupported assertion. */
-function normalizeConcept(value: string): string {
-  // Byte-for-byte the validator's normalisation. If these ever diverge the
-  // bridge starts citing facts the validator rejects.
-  return value.normalize('NFKC').trim().toLocaleLowerCase('en-US');
-}
-
-/**
- * The validator's own rule (factMatchesMapping): the fact's concept must BE the
- * mapping's concept or an approved synonym, and temporality must agree. The
- * bridge applies it up front so it can only ever cite a fact the validator will
- * accept — otherwise a "real" citation still fails as
- * SOURCE_FACT_CONCEPT_MISMATCH, which is exactly what the first matcher run hit.
- */
-function factSatisfiesMapping(fact: EncounterFact, mapping: SemanticMapping): boolean {
-  if (!mapping.clinicalConcept) return false;
-  const concepts = new Set(
-    [mapping.clinicalConcept, ...mapping.approvedSynonyms].map(normalizeConcept),
-  );
-  if (!concepts.has(normalizeConcept(fact.concept))) return false;
-  if (
-    mapping.temporality !== null &&
-    mapping.temporality !== 'any' &&
-    fact.temporality !== mapping.temporality
-  ) {
-    return false;
-  }
-  return true;
-}
+// ⚠️ THIS FILE USED TO CARRY ITS OWN COPY OF THE VALIDATOR'S RULE, AND THE COPY
+// IS WHY THIS COMMENT EXISTS. Its header claimed to apply "the validator's own
+// rule (factMatchesMapping) ... so it can only ever cite a fact the validator
+// will accept — otherwise a 'real' citation still fails as
+// SOURCE_FACT_CONCEPT_MISMATCH". #179 then changed the validator and not this
+// file, so the copy meant the opposite of what it promised: measured over the
+// full temporality matrix, the two disagreed in exactly 3 cells, and the
+// failure mode was the SOURCE_FACT_CONCEPT_MISMATCH the comment names.
+//
+// The rule now lives in `fact-mapping-match.ts` and is IMPORTED, so the promise
+// is kept by construction rather than by two files agreeing to.
+//
+// ⚠️ `norm` and `foldAnatomy` below are NOT this rule and are deliberately left
+// alone — they are ADDRESSING (which row a fact is offered to), a different
+// concern this file's own comment distinguishes.
 
 /** Why a candidate produced no citation. Named, never silent. */
 export type BridgeMatchFailure =
@@ -91,7 +76,8 @@ const norm = (s: string) =>
  *
  * This is ADDRESSING: it decides which row a fact is offered to. It does not
  * decide whether the value is written — that still requires the fact to satisfy
- * factSatisfiesMapping and to match numerically, both untouched.
+ * `factMatchesMapping` (the shared rule in `fact-mapping-match.ts`) and to
+ * match numerically, both untouched.
  *
  * Code-defined and enumerated on purpose: a fuzzy matcher here would quietly
  * align "SSV" with "GSV" one day.
@@ -223,7 +209,7 @@ export function matchMeasurementFact(input: {
       typeof f.number === 'number' &&
       numbersEqual(f.number, n) &&
       segmentCongruent(input.segmentLabel, f) &&
-      (!input.mapping || factSatisfiesMapping(f, input.mapping)),
+      (!input.mapping || factMatchesMapping(f, input.mapping)),
   );
   if (candidates.length === 0) return { ok: false, reason: 'no_supporting_fact' };
 
@@ -286,7 +272,7 @@ export function matchPickFact(input: {
 
   const candidates = input.facts.filter((f) => {
     if (f.polarity !== 'affirmed') return false;
-    if (input.mapping && !factSatisfiesMapping(f, input.mapping)) return false;
+    if (input.mapping && !factMatchesMapping(f, input.mapping)) return false;
     const hay = `${norm(String(f.value ?? ''))} ${norm(f.concept)}`;
     // Forward containment only: the FACT must carry the option, never the
     // reverse. Accepting `want.includes(factValue)` would let a vaguer fact

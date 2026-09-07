@@ -1,0 +1,17 @@
+-- #217 — `conceptScope` gets its column.
+--
+-- The field had FOUR readers and NO writer: parsed and validated at the model
+-- boundary, read by the fact/mapping matcher, the resolver, the value deriver
+-- and the auto-confirm gate, rendered by the confirm surface — and then dropped
+-- on write, because nothing persisted it. Measured on production before this
+-- migration: absent from the schema, absent from this table, and 0 of 185
+-- mappings carried it in any form.
+--
+-- ⚠️ NULLABLE, NO DEFAULT, AND THAT IS THE WHOLE MIGRATION'S SAFETY ARGUMENT.
+-- Certification is attested by `canonicalSha256` over each mapping, which
+-- hashes `[]` as a value and refuses `undefined` outright. A DEFAULT of '[]'
+-- would therefore move every existing mapping's sha and DE-CERTIFY all 185
+-- production rows in one statement. NULL contributes nothing: the read-back
+-- OMITS the key when the column is null, so a pre-existing row hashes exactly
+-- as it did before this column existed.
+ALTER TABLE "template_twin_semantic_mappings" ADD COLUMN "conceptScope" JSONB;

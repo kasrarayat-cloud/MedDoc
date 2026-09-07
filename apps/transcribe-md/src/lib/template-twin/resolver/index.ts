@@ -20,6 +20,12 @@ import {
 } from '../ir';
 import { withoutPlaceholderOptions } from '../../note-template-docx/placeholder-option';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
+import {
+  conceptMatches,
+  normalizeConcept,
+  requiredFactTemporality,
+  temporalityMatches,
+} from '../fact-mapping-match';
 import { isMappingTypeCompatible } from '../semantic-mapping';
 import { requiresClinicianInput } from '../unmentioned-policy';
 import {
@@ -27,6 +33,7 @@ import {
   approvedPracticeDefaultFactId,
 } from '../practice-default';
 import {
+  isEmptyText,
   isListValuedNarrative,
   joinListValuedNarrative,
 } from '../field-value-derivation';
@@ -53,10 +60,6 @@ interface ConversionFailure {
 }
 
 type ConversionResult = ConvertedValue | ConversionFailure;
-
-function normalizeConcept(value: string): string {
-  return value.normalize('NFKC').trim().toLocaleLowerCase('en-US');
-}
 
 function unique<T>(values: ReadonlyArray<T>): T[] {
   return [...new Set(values)];
@@ -134,9 +137,18 @@ function convertValue(
 ): ConversionResult {
   switch (field.kind) {
     case 'narrative_text':
-      return typeof rawValue === 'string'
-        ? { value: rawValue, optionOrdinal: null }
-        : { code: 'text_value_not_string' };
+      // ⚠️ #218 — AN EMPTY STRING IS NOT A VALUE. Without this the blanked
+      // escape hatch resolves `supported` over an emptied control and the whole
+      // chain reports success: validator VALID with zero issues, renderer a
+      // `filled` proof, `counts.filled > 0` satisfied. Refusing here makes it a
+      // bounded clear that is COUNTED as blank, which is the honest outcome.
+      // The predicate is IMPORTED, not re-derived — this arm and
+      // `deriveFieldValueFromFact` are two implementations of one decision, and
+      // they have disagreed before.
+      if (typeof rawValue !== 'string') return { code: 'text_value_not_string' };
+      return isEmptyText(rawValue)
+        ? { code: 'text_value_empty' }
+        : { value: rawValue, optionOrdinal: null };
 
     case 'single_select': {
       if (typeof rawValue !== 'string') return { code: 'select_value_not_string' };
@@ -347,12 +359,7 @@ export function withApprovedPracticeDefaultFacts(input: {
         concept: mapping.clinicalConcept,
         value: raw,
         polarity: denied ? 'denied' : 'affirmed',
-        temporality:
-          mapping.temporality === 'historical' ||
-          mapping.temporality === 'planned' ||
-          mapping.temporality === 'current'
-            ? mapping.temporality
-            : 'current',
+        temporality: requiredFactTemporality(mapping),
         experiencer: 'patient',
         laterality:
           mapping.laterality === 'not_applicable'
@@ -464,13 +471,14 @@ function resolveOne(
     );
   }
 
-  const approvedConcepts = new Set(
-    [mapping.clinicalConcept, ...mapping.approvedSynonyms].map(normalizeConcept),
-  );
+  // ⚠️ THE SHARED CONCEPT HALF, NOT A FOURTH OPEN-CODED COPY. This filter used
+  // to build its own approved-concept set, which meant #179(3)'s declared
+  // scope — checked by the validator — was invisible here. The resolver filled
+  // a field the validator then refused, and `fill-engine` turned that into a
+  // WITHHELD DOCUMENT rather than a wrong value.
   const conceptCandidates = allFacts.filter(
     (fact) =>
-      fact.sourceType !== 'approved_practice_default' &&
-      approvedConcepts.has(normalizeConcept(fact.concept)),
+      fact.sourceType !== 'approved_practice_default' && conceptMatches(fact, mapping),
   );
   if (conceptCandidates.length === 0) {
     // The ONLY site that earns #191's kept default: no fact in the encounter
@@ -480,6 +488,33 @@ function resolveOne(
     // temporality the mapping did not approve — and a kept default there would
     // answer a question that was actually asked.
     return missingResolution(field, mapping, allFacts, undefined, true);
+  }
+
+  // ⚠️ #179(5) — A CHECKBOX ANSWERS FOR EXACTLY ONE SYMPTOM, AND THE REFUSAL
+  // HAS TO LIVE HERE BECAUSE THE FILL PATH NEVER REACHED THE OTHER ONE.
+  //
+  // `deriveFieldValueFromFact` already refuses a multi-scope tick, and the
+  // validator and the bridge both call it. The RESOLVER does not — it carries
+  // its own inline `case 'checkbox'` which reads ONLY `fact.polarity` and
+  // discards the finding. So the ruled refusal existed, was commented, was
+  // tested against the derivation helper, and had no effect whatever on the
+  // value actually written to the document.
+  //
+  // A box whose declared scope covers several symptoms cannot be answered by
+  // one fact: "affirmed" is ambiguous between them. Refused rather than
+  // guessed — an unticked box a clinician can tick is recoverable, a wrongly
+  // ticked one is not.
+  //
+  // ⚠️ A DEFERRAL, NOT A KEPT DEFAULT. Facts ARE in hand here, so #191's
+  // `conceptUnmatched` flag is deliberately not passed — the same reasoning as
+  // the fixed-grid cell below. The encounter DID speak to this field; the
+  // resolver simply cannot say which symptom it spoke about.
+  if (
+    field.kind === 'checkbox' &&
+    mapping.conceptScope &&
+    mapping.conceptScope.length > 1
+  ) {
+    return missingResolution(field, mapping, allFacts);
   }
 
   // A FIXED-GRID TABLE CELL IS ADDRESSED BY ITS ROW, AND THE RESOLVER CANNOT
@@ -526,11 +561,13 @@ function resolveOne(
         )
       : conceptCandidates;
 
-  const expectedTemporality = mapping.temporality;
-  const temporalCandidates =
-    expectedTemporality === null || expectedTemporality === 'any'
-      ? conceptCandidates
-      : conceptCandidates.filter((fact) => fact.temporality === expectedTemporality);
+  // ⚠️ SEPARATE FROM THE CONCEPT STAGE ON PURPOSE, AND THE TWO MUST NOT MERGE.
+  // `conceptCandidates.length === 0` is the ONE site that earns #191's kept
+  // practice default; this stage is a DEFERRAL that must not. A single combined
+  // predicate cannot tell them apart and would silently re-route kept defaults.
+  const temporalCandidates = conceptCandidates.filter((fact) =>
+    temporalityMatches(fact, mapping),
+  );
   if (temporalCandidates.length === 0) {
     // NOT ambiguous, and NOT cited. The mapping approves one temporality and no
     // fact carries it, so nothing was said about this field in the sense the

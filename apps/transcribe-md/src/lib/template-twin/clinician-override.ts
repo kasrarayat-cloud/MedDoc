@@ -39,6 +39,7 @@
 
 import { isWordPlaceholderOption } from '../note-template-docx/placeholder-option';
 import { canonicalSha256 } from './canonical';
+import { requiredFactTemporality } from './fact-mapping-match';
 import {
   EncounterFactSchema,
   FieldResolutionSchema,
@@ -406,12 +407,7 @@ export function buildScaffoldDefaultFact(input: {
     // ⚠️ MIRRORS THE OPTION ARM RATHER THAN HARDCODING. `factMatchesMapping`
     // checks a declared temporality, so a fact that ignores the declaration
     // blocks the whole document.
-    temporality:
-      input.mapping.temporality === 'historical' ||
-      input.mapping.temporality === 'planned' ||
-      input.mapping.temporality === 'current'
-        ? input.mapping.temporality
-        : 'current',
+    temporality: requiredFactTemporality(input.mapping),
     experiencer: 'patient',
     laterality:
       input.mapping.laterality === 'not_applicable' ? 'not_applicable' : 'unknown',
@@ -455,12 +451,7 @@ export function buildClinicianOverrideFact(input: {
     concept: input.mapping.clinicalConcept,
     value: input.optionValue,
     polarity: 'affirmed',
-    temporality:
-      input.mapping.temporality === 'historical' ||
-      input.mapping.temporality === 'planned' ||
-      input.mapping.temporality === 'current'
-        ? input.mapping.temporality
-        : 'current',
+    temporality: requiredFactTemporality(input.mapping),
     experiencer: 'patient',
     laterality:
       input.fieldLaterality !== 'unknown'

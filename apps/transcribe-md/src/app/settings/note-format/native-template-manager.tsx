@@ -812,6 +812,30 @@ function ReviewWorkspace({
                       : OMIT_INERT_LABEL}
                   </div>
                 )}
+                {/* ⚠️ #208 — THE DECLARED SCOPE IS SHOWN, BECAUSE A SCOPE IS A
+                    CLAIM ABOUT COVERAGE AND THE DOCTOR IS CONFIRMING IT.
+
+                    A scaffolded clause covering several symptoms carries a
+                    `conceptScope`, and the model may PROPOSE it exactly as it
+                    proposes the concept above. Before this line the proposal
+                    was invisible here and `planAutoConfirm` certified it
+                    unread — the "silently accepted" the ruling forbids. What a
+                    clause claims to cover decides which dictated findings can
+                    contradict the template's own sentence, so it is the part a
+                    physician most needs to see. */}
+                {m.conceptScope && m.conceptScope.length > 0 && (
+                  <div
+                    data-testid={`twin-concept-scope-${m.fieldId}`}
+                    style={{
+                      fontFamily: mono,
+                      fontSize: 10.5,
+                      color: 'var(--color-linear-text-3)',
+                      marginTop: 2,
+                    }}
+                  >
+                    {`covers ${m.conceptScope.length} ${m.conceptScope.length === 1 ? 'concept' : 'concepts'}: ${m.conceptScope.join(', ')}`}
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>

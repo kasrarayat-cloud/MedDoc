@@ -292,6 +292,55 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
   // every input that can reach the branch — and requires BOTH directions to
   // be witnessed, so neither half can pass by being empty.
   // ==========================================================================
+/**
+ * ⚠️ OWNER RULING #227 — THE MATRIX'S INTENTIONAL CONSTANTS, DECLARED.
+ *
+ * Every property the mirror reads must be either VARIED across the
+ * cross-product or named here with the reason it is held constant. The
+ * derived-dimension arm reds on anything that is neither.
+ *
+ * This exists because the arm previously checked *mentioned in code* rather
+ * than *varied*, so a property written once at a constant satisfied it —
+ * measured, with a guard keyed on `field.rowPrototype` passing while the matrix
+ * never varied it. Deciding which constants are deliberate is a product
+ * judgement; a declaration is how a product judgement gets written down instead
+ * of inferred.
+ *
+ * ⚠️ ADDING A LINE HERE IS A CLAIM, NOT A TEST FIX. It says: this input cannot
+ * change the answer, and here is why. If you cannot write the reason in one
+ * line, the honest move is to vary it.
+ *
+ * ⚠️ BOTH HALVES OF THE ARM FIRED ON THIS TABLE'S OWN FIRST DRAFT, which is the
+ * best evidence it discriminates. It contained a second entry —
+ * `unmentionedPolicy`, "the policy is pinned to 'omit'" — and the stale-
+ * declaration arm rejected it: the mirror does not read that property, so the
+ * exemption covered nothing and would have sat here looking load-bearing. A
+ * declaration that has outlived its constant exempts nothing and hides the next
+ * one.
+ */
+/**
+ * Every property of `field` / `mapping` the mirror READS — including through a
+ * TYPE CAST.
+ *
+ * ⚠️ THE CAST ARM EXISTS BECAUSE A PROBE OF MINE WALKED PAST THE PLAIN ONE.
+ * Testing the new RED state, I injected a guard written
+ * `(field as { criticality?: string }).criticality === 'high'` — and the arm
+ * stayed 37/37 green, because `field.` never appears literally in that text so
+ * the property was never counted as read. Not a defect in the guard; a defect
+ * in the instrument watching it, and it is the SAME SHAPE as the six admin
+ * doors this programme found written `(prisma.user as any).update` and
+ * invisible to the obvious grep.
+ *
+ * Two alternatives, because a cast is how the first form is spelled when the
+ * property is not on the declared type — which is exactly when a new,
+ * unwatched input arrives.
+ */
+const READS_RE = /\b(?:field|mapping)\.([A-Za-z][A-Za-z0-9]*)|\(\s*(?:field|mapping)\s+as\s+[^)]*\)\.([A-Za-z][A-Za-z0-9]*)/g;
+
+const INTENTIONAL_CONSTANTS: Record<string, string> = {
+  rowPrototype: 'prototypes never offer — a fixed grid cell is table_cell AND not a prototype, and the prototype case is the OTHER branch this matrix is not about',
+};
+
   it('⚠️ OFFERED  ⟺  HONOURED — the predicate matches the REAL resolver, both ways', () => {
     const bools = [false, true];
     const policies = ['blank', 'not_documented', 'requires_input'] as const;
@@ -523,7 +572,7 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
       .filter((l) => !l.trimStart().startsWith('//') && !l.trimStart().startsWith('*'))
       .join('\n');
     const reads = new Set(
-      [...code.matchAll(/\b(?:field|mapping)\.([A-Za-z][A-Za-z0-9]*)/g)].map((m) => m[1]!),
+      [...code.matchAll(READS_RE)].map((m) => m[1] ?? m[2]!),
     );
     // `requiresClinicianInput` is called from the ladder, so its reads count too.
     const helper = src.slice(
@@ -532,7 +581,7 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
         ? src.indexOf('export const RESOLVER_SHORT_CIRCUIT_SOURCE_TYPES')
         : src.indexOf('export function omitBranchUnreachable'),
     );
-    for (const m of helper.matchAll(/\b(?:field|mapping)\.([A-Za-z][A-Za-z0-9]*)/g)) reads.add(m[1]!);
+    for (const m of helper.matchAll(READS_RE)) reads.add(m[1] ?? m[2]!);
 
     // NON-VACUITY: an empty or tiny set would make the loop below prove nothing.
     expect(reads.size, `parsed only ${reads.size} reads from the mirror`).toBeGreaterThanOrEqual(8);
@@ -552,17 +601,26 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
     // code. Anything that only ever appears in prose is, by construction, not
     // varied.
     //
-    // ⚠️ AND THE RESIDUAL IS NAMED RATHER THAN LEFT FOR THE NEXT PASS TO FIND:
-    // THIS ARM CHECKS *MENTIONED IN CODE*, NOT *VARIED*. A property written
-    // once at a constant value — `rowPrototype: false` below is exactly that,
-    // and deliberately so — satisfies it. Measured: a guard keyed on
-    // `field.rowPrototype`, with its token declared, passes this arm today.
+    // ⚠️ OWNER RULING #227 — THE RESIDUAL CLOSES BY DECLARATION, NOT JUDGEMENT.
     //
-    // Closing that gap means deciding which constants are DELIBERATE (a fixed
-    // grid cell is not a prototype; holding it constant is the point) and which
-    // are oversights, and that is a product judgement rather than a test fix.
-    // Stated here so the next reader knows the guarantee's edge instead of
-    // inferring a stronger one from the arm's name.
+    // This arm used to check *MENTIONED IN CODE*, not *VARIED*: a property
+    // written once at a constant satisfied it. Measured — a guard keyed on
+    // `field.rowPrototype`, its token declared, passed. I named that residual
+    // and left it open, on the ground that deciding which constants are
+    // deliberate is a product judgement rather than a test fix.
+    //
+    // It IS a product judgement. A DECLARATION is how a product judgement gets
+    // written down instead of inferred. `INTENTIONAL_CONSTANTS` above carries
+    // one line of reason per held-constant property, and this arm now has
+    // THREE states and none of them is silent:
+    //
+    //     varied across the cross-product        -> pass
+    //     declared constant, with its reason     -> pass, reason on the record
+    //     neither                                -> RED
+    //
+    // An allowlist entry is a claim somebody made on purpose. An undeclared
+    // constant is an oversight wearing the same clothes, and the difference is
+    // exactly what this arm could not see before.
     const thisFile = readFileSync(__filename, 'utf-8');
     const matrix = thisFile.slice(thisFile.indexOf('OFFERED  ⟺  HONOURED'));
     const varied = matrix
@@ -573,13 +631,60 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
         return !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*');
       })
       .join('\n');
-    const missing = [...reads].filter((r) => !varied.includes(r));
+
+    // ⚠️ A DIMENSION IS *VARIED* ONLY IF IT IS DRIVEN BY A LOOP VARIABLE.
+    // `varied.includes(r)` was the old, weaker test and it is what let a
+    // constant pass. A property is varied here when the matrix declares a
+    // dimension list for it AND iterates that list — both, because a declared
+    // list nobody loops over varies nothing.
+    const loopVars = new Set(
+      [...matrix.matchAll(/for \(const (\w+) of (\w+)\)/g)].map((m) => m[1]!),
+    );
+    const isVaried = (prop: string) => {
+      // driven directly — `for (const kind of kinds)` plus `kind,` in the fixture
+      if (loopVars.has(prop)) return true;
+      // ⚠️ …OR VARIED THROUGH A NESTED VALUE, WHICH THE FIRST VERSION OF THIS
+      // HELPER MISSED AND THE ARM CAUGHT IMMEDIATELY. The fixture writes
+      // `rendererBinding: { ...field('1').rendererBinding, bindingType }` — the
+      // property IS varied, by a loop variable one level in. A narrow
+      // `prop: <identifier>` match returns null there and would have reported a
+      // varied dimension as undeclared. Declaring it to silence that would have
+      // been a FALSE claim on the allowlist, which is the one thing the
+      // allowlist must never carry. So: any assignment whose right-hand side
+      // mentions a loop variable counts as varied.
+      for (const line of varied.split('\n')) {
+        const m = line.match(new RegExp(`\\b${prop}\\s*:(.*)$`));
+        if (!m) continue;
+        if ([...loopVars].some((v) => new RegExp(`\\b${v}\\b`).test(m[1]!))) return true;
+      }
+      return false;
+    };
+
+    const undeclared = [...reads].filter(
+      (r) => !isVaried(r) && !(r in INTENTIONAL_CONSTANTS),
+    );
     expect(
-      missing,
-      `the mirror reads [${missing.join(', ')}] and the biconditional never varies ` +
-        `${missing.length === 1 ? 'it' : 'them'} — so a guard keyed on ` +
-        `${missing.length === 1 ? 'that input' : 'those inputs'} is invisible to this matrix, ` +
-        `which is exactly how the last three were missed.`,
+      undeclared,
+      `the mirror reads [${undeclared.join(', ')}] and the biconditional neither ` +
+        `VARIES ${undeclared.length === 1 ? 'it' : 'them'} nor DECLARES ` +
+        `${undeclared.length === 1 ? 'it' : 'them'} in INTENTIONAL_CONSTANTS — so a ` +
+        `guard keyed on ${undeclared.length === 1 ? 'that input' : 'those inputs'} is ` +
+        `invisible to this matrix. Vary it, or declare it with the reason it is ` +
+        `held constant. Ruling #227: an undeclared constant is an oversight ` +
+        `wearing an intentional one's clothes.`,
+    ).toEqual([]);
+
+    // ⚠️ AND THE ALLOWLIST IS NOT A DUMPING GROUND — it may not name a property
+    // the mirror does not read, or one the matrix already varies. Both would be
+    // a stale declaration quietly widening the exemption.
+    const staleDeclarations = Object.keys(INTENTIONAL_CONSTANTS).filter(
+      (k) => !reads.has(k) || isVaried(k),
+    );
+    expect(
+      staleDeclarations,
+      `INTENTIONAL_CONSTANTS declares [${staleDeclarations.join(', ')}] which the ` +
+        `mirror does not read, or which the matrix now varies. A declaration that ` +
+        `has outlived its constant exempts nothing and hides the next one.`,
     ).toEqual([]);
   });
 
