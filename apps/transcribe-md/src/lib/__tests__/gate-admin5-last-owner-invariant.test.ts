@@ -262,16 +262,36 @@ describe('ruling #210 — one definition of an active practice OWNER', () => {
     expect(code).not.toMatch(/BEFORE\s+(INSERT\s+OR\s+)?UPDATE(\s+OR\s+DELETE)?\s+ON\s+"users"/);
   });
 
-  it('the guard SERIALIZES before it counts — a count read and then acted on is forbidden', () => {
-    // ⚠️ COMMENTS STRIPPED, AND THAT IS THE WHOLE ARM. Reading the raw slice let
-    // the lock be DELETED and replaced by a comment mentioning it — measured
-    // 12/12 green. The migration explains the lock at length in prose directly
-    // above it, so a whole-body search is satisfied by the explanation.
+  it('the guard SERIALIZES before it counts — ORDERING ONLY; the AUTHORITY is pg_locks', () => {
+    // ⚠️ THIS ARM IS DEMOTED — RULING #246. IT IS NOT THE PROOF THAT THE LOCK
+    // EXISTS, AND IT MUST NEVER AGAIN BE CITED AS ONE.
+    //
+    // It has been defeated by a comment TWICE. First by a `--` line, which was
+    // fixed by stripping `--`. Then, in the very next round, by a NESTED block
+    // comment — SQL block comments nest and a non-greedy stripper stops at the
+    // first terminator — with the gate 23/23 and all SQL arms green while the
+    // running function held NO LOCK AT ALL.
+    //
+    // ⚠️ THE SECOND FIX WAS WRITTEN BY SOMEBODY WHO HAD JUST READ THE FIRST.
+    // That is the argument for #246: the defect is not any particular regex, it
+    // is asking a question about TEXT when the claim is about BEHAVIOUR.
+    //
+    // THE AUTHORITY IS NOW `LOCK-CONTROL (pg_locks)` in
+    // `admin5-last-owner-trigger-arms.sql`: it takes a write that reaches the
+    // counting path and asks the SERVER whether the lock is held, keyed on the
+    // exact pair the guard computes, with a BEFORE reading so the AFTER means
+    // something. A commented-out lock holds no lock and it reads 0|0.
+    //
+    // What survives here is the one thing pg_locks cannot see: the ORDER of the
+    // statements in the source. A lock taken after the count guards nothing, and
+    // both would be present either way — so this stays, as a cheap secondary.
     const guard = fnBody('users_last_owner_guard()', '$fn$ LANGUAGE plpgsql;');
     const lock = guard.indexOf('pg_advisory_xact_lock');
     const count = guard.indexOf('SELECT count(*) INTO owners_left');
     const forUpdate = guard.indexOf('FOR UPDATE');
-    expect(lock, 'the guard takes no advisory lock (in CODE, not in a comment)').toBeGreaterThan(-1);
+    // ⚠️ NOT EVIDENCE THE LOCK EXISTS — see the header. `LOCK-CONTROL (pg_locks)`
+    // is what proves that; this only pins the ORDER of what is written.
+    expect(lock, 'the guard names no advisory lock in its source ORDER').toBeGreaterThan(-1);
     expect(forUpdate, 'the guard takes no row lock — REPEATABLE READ would skew').toBeGreaterThan(-1);
     // ORDER is the assertion. A lock taken after the count guards nothing, and
     // both would be present either way.

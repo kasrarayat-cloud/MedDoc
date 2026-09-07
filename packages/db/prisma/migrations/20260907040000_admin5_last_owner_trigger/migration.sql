@@ -55,10 +55,22 @@
 --
 -- Measured on production, 2026-09-07:
 --
---   owners counted by `deactivatedAt IS NULL` alone who CANNOT sign in ....  6
---   practices where the two predicates disagree ..........................  6
---   ⚠️ one of them has ELEVEN members, two rows that `deactivatedAt IS NULL`
---      counts as owners, and exactly ONE owner who can actually administer it
+--   owners counted by `deactivatedAt IS NULL` alone who CANNOT sign in ....  1
+--   practices where the two predicates disagree ..........................  1
+--   ⚠️ that ONE practice has ELEVEN members, two rows that `deactivatedAt IS
+--      NULL` counts as owners, and exactly ONE owner who can administer it
+--
+-- ⚠️ THESE READ `6` UNTIL RULING #248, AND `6` WAS A DIFFERENT CLAIM'S NUMBER.
+-- Six is the count of ZERO-OWNER PRACTICES. The count of owner rows the loose
+-- predicate over-counts is ONE, and the six zero-owner practices are not among
+-- them: the two predicates AGREE on every one of those six. Re-measured with a
+-- positive control 2026-09-07.
+--
+-- ⚠️ AND IT IS CANON 124 A THIRD TIME, IN THE FILE THAT RECORDS IT: one
+-- alarming number reused for a claim it does not support. The divergence is
+-- real and it is worth the predicate — ONE practice with eleven members and a
+-- single able owner is exactly the case that matters — but the argument is
+-- weakened, not strengthened, by quoting a number six times too large.
 --
 -- A predicate that counts an owner who cannot authenticate does not implement
 -- "somebody can administer this practice"; it implements a proxy that diverges
@@ -224,11 +236,26 @@ BEGIN
     -- The set is small (a practice's owner rows), it is taken while already
     -- holding the per-practice advisory lock, and the lock order is therefore
     -- the same for every writer -- so this does not introduce a deadlock.
+    -- ⚠️ EVERY OTHER ROW IN THE PRACTICE, NOT ONLY THE OWNERS — RULING #248.
+    -- This locked `practiceRole = 'OWNER'` only, and then counted TWO things:
+    -- `owners_left` (owners) and `members_left` (LIVE MEMBERS). The second count
+    -- read rows nothing had locked, so a concurrent write to a non-owner member
+    -- could change `members_left` between this lock and that count — the
+    -- read-then-act the lock exists to prevent, surviving in the half nobody
+    -- locked.
+    --
+    -- ⚠️ AND ITS REMOVAL REDDENED NOTHING. Round three measured it: the row set
+    -- could be emptied entirely with the arms 38/38, the gate 23/23 and the race
+    -- harness green, because a single-transaction proof cannot see a lock at all.
+    -- That is why #246 replaces the textual lock arm with a `pg_locks` assertion.
+    --
+    -- The predicate is now the WHOLE practice minus the row being written: both
+    -- counts read subsets of it, so locking their union is the only form that
+    -- cannot drift when either count's definition changes.
     PERFORM 1
        FROM "users" u
       WHERE u."practiceId" = OLD."practiceId"
         AND u."id" <> OLD."id"
-        AND u."practiceRole" = 'OWNER'::"PracticeRole"
         FOR UPDATE;
 
     SELECT count(*) INTO owners_left
@@ -257,7 +284,31 @@ BEGIN
        AND u."id" <> OLD."id"
        AND users_is_live_member(u);
 
-    IF TG_OP = 'UPDATE' AND users_is_live_member(NEW) THEN
+    -- ⚠️ AND `practiceId` IS COMPARED HERE TOO — RULING #248, AND #238 LANDED IN
+    -- ONLY ONE OF THE TWO PLACES THAT NEEDED IT.
+    --
+    -- This clause adds the row ITSELF back when the write leaves it behind as a
+    -- live member. That is right when the row STAYS. When the row MOVES to
+    -- another practice it is no longer in `OLD."practiceId"` at all, and
+    -- counting it there invents a member who is not present:
+    --
+    --   move a SOLO OWNER into a real practice -> the old practice ends EMPTY,
+    --   `members_left` is computed as 0 + 1 = 1, and the write is REFUSED with
+    --   "while 1 other member(s) remain. Transfer ownership first." There is
+    --   nobody to transfer to. ⚠️ THE REFUSAL NAMES AN IMPOSSIBLE REMEDY — the
+    --   exact defect recorded at :129-136 for the bare row count, in the other
+    --   direction.
+    --
+    -- ⚠️ AND IT IS THE ASYMMETRY #238 WAS WRITTEN TO REMOVE, SURVIVING IN THE
+    -- SIBLING FUNCTION: emptying a practice by DELETING its solo owner is
+    -- ALLOWED (arm 9), emptying it by MOVING the same owner was REFUSED.
+    -- Identical end state, opposite verdicts, decided only by how it emptied.
+    --
+    -- ⚠️ THIS IS THE DOOR THE SCHEMA NAMES. `schema.prisma`: "When a solo doctor
+    -- later wants to work with colleagues, migrate them to a real Practice."
+    IF TG_OP = 'UPDATE'
+       AND NEW."practiceId" = OLD."practiceId"
+       AND users_is_live_member(NEW) THEN
         members_left := members_left + 1;
     END IF;
 

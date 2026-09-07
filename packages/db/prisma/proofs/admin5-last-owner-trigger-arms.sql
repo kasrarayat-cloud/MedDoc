@@ -422,10 +422,96 @@ SELECT t210_try('35 legacy ownerless practice WITH a live member: a benign write
 -- the guard deliberately; the harness must call that SETUP-FAILED and not
 -- REFUSED. ⚠️ IT IS A TEST OF THE INSTRUMENT, NOT OF THE TRIGGER — the statement
 -- is never reached, and that is what is being asserted.
+-- ══════════════════════════════════════════════════════════════════════════
+-- RULING #248 — EMPTYING A PRACTICE IS NOT STRANDING ANYBODY, HOWEVER IT EMPTIES.
+--
+-- #238 added the `practiceId` comparison to the ORPHAN arm and not to the
+-- removal guard's `members_left := members_left + 1`, which adds the row back
+-- into the practice it just LEFT. So moving a SOLO owner out computed
+-- `members_left` as 0 + 1 = 1 and REFUSED with "while 1 other member(s) remain.
+-- Transfer ownership first" — ⚠️ NAMING A REMEDY WITH NOBODY TO PERFORM IT ON,
+-- which is the defect recorded at :129-136 pointing the other way.
+--
+-- ⚠️ ARM 37 IS THE MIRROR OF ARM 6, AND THE PAIR IS THE POINT: the SAME
+-- operation — move the last able owner to another practice — REFUSES when
+-- members remain (arm 6) and ALLOWS when the practice ends empty (arm 37).
+-- Arm 6 alone reads as "moving the last owner is forbidden", which is not the
+-- rule. And ⚠️ the shipped 38-arm pack scored 38/38 both WITH and WITHOUT this
+-- defect, so nothing here could see it.
+--
+-- ⚠️ THIS IS THE DOOR `schema.prisma` NAMES BY NAME: "When a solo doctor later
+-- wants to work with colleagues, migrate them to a real Practice."
+SELECT t210_try('37 move a SOLO owner out — the practice ends EMPTY, nobody is stranded','ALLOWED',
+  $$UPDATE users SET "practiceId"='t210_pother' WHERE id='t210_o'$$);
+
+-- The multi-row form of the same fact: a whole roster merged into another
+-- practice in ONE statement. The source ends empty; the destination gains an
+-- able owner. Both halves are improvements and the write must not be refused.
+SELECT t210_try('38 merge a WHOLE roster into another practice in one statement','ALLOWED',
+  $$UPDATE users SET "practiceId"='t210_pother' WHERE "practiceId"='t210_pmulti'$$);
+
 SELECT t210_try('36 HARNESS SELF-TEST: a refusal raised by the SETUP is not credited to the arm',
   'SETUP-FAILED',
   $$UPDATE users SET "forceLogoutAt"=now() WHERE id='t210_c'$$,
   $$UPDATE users SET "practiceRole"='CLINICIAN' WHERE id='t210_a'$$);
+
+-- ══════════════════════════════════════════════════════════════════════════
+-- ⚠️ THE LOCK IS ASSERTED FROM `pg_locks`, NOT FROM THE SOURCE — RULING #246.
+--
+-- The textual arm ("does the function body contain pg_advisory_xact_lock, and
+-- before the count?") has now been defeated TWICE by comments: first by a `--`
+-- line, and then — after the fix that stripped `--` — by a NESTED block comment,
+-- because SQL block comments nest and a non-greedy stripper stops at the first
+-- terminator. Both times the lock could be DELETED with every arm green.
+--
+-- ⚠️ NO SPELLING SURVIVES THIS ARM, BECAUSE IT CONSULTS NO TEXT. It performs a
+-- write that reaches the counting path and then asks the SERVER whether the
+-- advisory lock is held, keyed on the exact pair the guard computes:
+-- `hashtext('users_last_owner_guard')` and `hashtext(<practiceId>)`, masked to
+-- 32 bits because `pg_locks` exposes them as `oid`. A commented-out lock holds
+-- no lock and this reads 0.
+CREATE OR REPLACE FUNCTION t210_lock_probe() RETURNS text AS $$
+DECLARE before_n int; after_n int; k_class oid; k_obj oid;
+BEGIN
+    k_class := (hashtext('users_last_owner_guard')::bigint & 4294967295)::oid;
+    k_obj   := (hashtext('t210_plock')::bigint & 4294967295)::oid;
+
+    -- ⚠️ ITS OWN PRACTICE, AND ITS OWN KEY. The first version of this probe used
+    -- `t210_pmulti` and PASSED WITH THE LOCK DELETED — because an advisory xact
+    -- lock is released only at TRANSACTION end, not at subtransaction rollback,
+    -- and an earlier arm inserting into that practice had already taken a lock
+    -- on the same key. The probe was reading somebody else's lock.
+    --
+    -- ⚠️ CAUGHT BY ITS OWN CONTROL, which is the only reason it is not shipping
+    -- as the third defeated lock arm in this file.
+    INSERT INTO practices(id,name,slug,"updatedAt") VALUES ('t210_plock','T210 Lock','t210-lock',now());
+    INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive") VALUES
+      ('t210_lk1','tlk1@x.test','x',now(),'t210_plock','OWNER',true),
+      ('t210_lk2','tlk2@x.test','x',now(),'t210_plock','OWNER',true);
+
+    -- BEFORE: nothing may hold this key yet, or the "after" reading proves nothing.
+    SELECT count(*) INTO before_n FROM pg_locks
+     WHERE locktype='advisory' AND pid=pg_backend_pid()
+       AND classid=k_class AND objid=k_obj;
+
+    -- A demotion that is ALLOWED (a second able owner remains) and therefore
+    -- reaches the lock and the count instead of short-circuiting.
+    UPDATE users SET "practiceRole"='CLINICIAN' WHERE id='t210_lk1';
+
+    SELECT count(*) INTO after_n FROM pg_locks
+     WHERE locktype='advisory' AND pid=pg_backend_pid()
+       AND classid=k_class AND objid=k_obj;
+
+    RAISE EXCEPTION 'T210_LOCK_UNDO:%|%', before_n, after_n;
+EXCEPTION WHEN others THEN
+    IF SQLERRM LIKE 'T210_LOCK_UNDO:%' THEN RETURN split_part(SQLERRM, ':', 2); END IF;
+    RETURN 'ERR: ' || SQLERRM;
+END $$ LANGUAGE plpgsql;
+
+INSERT INTO arm_result
+SELECT 'LOCK-CONTROL (pg_locks): 0 held before the counted write, 1 held after',
+       '0|1', got, CASE WHEN got = '0|1' THEN 'PASS' ELSE 'FAIL' END
+  FROM (SELECT t210_lock_probe() AS got) q;
 
 \pset format aligned
 \echo ''
@@ -442,8 +528,8 @@ SELECT count(*) FILTER (WHERE verdict='PASS')            AS pass,
        count(*) FILTER (WHERE verdict='FAIL')            AS fail,
        count(*) FILTER (WHERE got = 'MATCHED-NOTHING')   AS vacuous,
        count(*)                                          AS arms_run,
-       38                                                AS arms_expected,
-       CASE WHEN count(*) = 38 AND count(*) FILTER (WHERE verdict='FAIL') = 0
+       41                                                AS arms_expected,
+       CASE WHEN count(*) = 41 AND count(*) FILTER (WHERE verdict='FAIL') = 0
             THEN '🟢 all arms ran and passed'
             ELSE '🔴 ARM COUNT OR VERDICT MISMATCH' END  AS verdict
   FROM arm_result WHERE verdict IS NOT NULL;

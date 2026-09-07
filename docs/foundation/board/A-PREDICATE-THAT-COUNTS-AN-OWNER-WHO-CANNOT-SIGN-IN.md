@@ -22,12 +22,27 @@ remaining owners with **one** activity condition:
 
 | | |
 |---|---|
-| OWNER rows passing `deactivatedAt IS NULL` that **cannot sign in** | **6** |
-| practices where this predicate and "can actually administer" disagree | **6** |
+| OWNER rows passing `deactivatedAt IS NULL` that **cannot sign in** | **1** |
+| practices where this predicate and "can actually administer" disagree | **1** |
+
+⚠️ **BOTH ROWS READ `6` UNTIL RULING #248, AND `6` IS A DIFFERENT CLAIM'S
+NUMBER.** Six is the count of **zero-owner practices** — the subject of the
+sibling board filing. The count of owner rows the loose predicate over-counts is
+**ONE**, and the six zero-owner practices are **not among them**: the two
+predicates agree on every one of those six. Re-measured against production with
+a positive control, 2026-09-07.
+
+⚠️ **AND THIS IS CANON 124 FOR A THIRD TIME IN THIS FILE FAMILY** — *an alarming
+count without its second query is not a finding.* The sibling filing gets it
+right on its first page and this one reused its headline number for a claim it
+does not support. **The case here does not need six.** One eleven-member
+practice, two rows the loose predicate counts as owners, and exactly one owner
+who can administer it, is the entire argument for the wider predicate — and
+quoting a number six times too large weakens it rather than strengthening it.
 
 ### ⚠️ THE ELEVEN-MEMBER PRACTICE
 
-One of those six has **11 members**:
+That one practice has **11 members**:
 
 | user | practiceRole | isActive | deactivatedAt IS NULL | suspendedAt |
 |---|---|---|---|---|

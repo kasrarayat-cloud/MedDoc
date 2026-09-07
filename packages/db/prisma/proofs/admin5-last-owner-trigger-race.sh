@@ -50,6 +50,31 @@ OUT="$(mktemp -d "${TMPDIR:-/tmp}/t210-race-XXXXXX")"
 # any early return left that mutant installed — so the next person to use the QA
 # stack would be running against a guard with its serialization removed, and
 # nothing would say so. The trap runs before the failure is reported.
+# ⚠️ THE FIXTURE IS REAPED ON **EVERY** EXIT PATH — RULING #248.
+#
+# This ran only after `🟢 RACE HARNESS PASSED`, at the very bottom of the script.
+# Every other exit left `ir_p`, `t210r_p` and the two scratch tables behind: a
+# refuted prediction (exit 1), a Ctrl-C, a failed docker exec — and **exit 2,
+# which CI treats as a PASSING step** and which is followed in the same job by
+# the guarded seed and the entire E2E suite, against a database now holding a
+# practice whose only member is a suspended owner.
+#
+# ⚠️ THE SUCCESS PATH IS THE ONE PATH THAT DID NOT NEED IT. Cleanup written at
+# the end of the happy path is cleanup that runs exactly when nothing went wrong.
+reap_fixture() {
+  docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -Atq >/dev/null 2>&1 <<'REAP'
+DELETE FROM users u WHERE u."practiceId" IN ('t210r_p','ir_p') AND NOT users_is_active_owner(u);
+DELETE FROM users WHERE "practiceId" IN ('t210r_p','ir_p');
+DELETE FROM practices WHERE id IN ('t210r_p','ir_p');
+DROP TABLE IF EXISTS t210_sample;
+DROP TABLE IF EXISTS t210_window;
+REAP
+  docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -Atqc \
+    "SELECT (SELECT count(*) FROM users WHERE \"practiceId\" IN ('t210r_p','ir_p'))
+          + (SELECT count(*) FROM practices WHERE id IN ('t210r_p','ir_p'))
+          + (SELECT count(*) FROM pg_tables WHERE tablename IN ('t210_sample','t210_window'))" 2>/dev/null
+}
+
 restore_guard() {
   local rc=$?
   if [ -f "$OUT/fn-shipped.sql" ]; then
@@ -65,6 +90,16 @@ restore_guard() {
     echo "🟢 guard restored (both functions armed)" >&2
   else
     echo "🔴 GUARD NOT RESTORED — $DB may still hold a DISARMED guard. Re-apply the migration by hand." >&2
+    rc=1
+  fi
+  # ⚠️ REAPED HERE, AND THE REAP ASSERTS ITSELF. A cleanup that reports nothing
+  # is a claim; the count is what makes it evidence.
+  local left
+  left=$(reap_fixture)
+  if [ "${left:-1}" = "0" ]; then
+    echo "🟢 fixture reaped (0 rows, 0 scratch tables)" >&2
+  else
+    echo "🔴 FIXTURE NOT REAPED — ${left:-?} artifact(s) survive in $DB, which the seed and the E2E suite use next." >&2
     rc=1
   fi
   rm -rf "$OUT"
@@ -235,38 +270,74 @@ race_b() {   # $1 = removal-guard fn, $2 = orphan-guard fn
   # THE ANSWER MATTERS. Race A already had the cure — a THIRD connection sampling
   # `pg_stat_activity` — and race B simply never used it. Its racers were not even
   # given an application_name, so the sampler could not have seen them.
-  witness 400 & local WB=$!
-  docker exec -i -e PGAPPNAME=t210-racer-a "$PGC" psql -U "$U" -d "$DB" -X -q < "$OUT/rb-a.run" >/dev/null 2>&1 &
-  docker exec -i -e PGAPPNAME=t210-racer-b "$PGC" psql -U "$U" -d "$DB" -X -q < "$OUT/rb-b.run" >/dev/null 2>&1 &
-  wait $! 2>/dev/null
-  wait $WB 2>/dev/null
+  docker exec -i -e PGAPPNAME=t210-racer-a "$PGC" psql -U "$U" -d "$DB" -X -At < "$OUT/rb-a.run" > "$OUT/a.marks" 2>&1 &
+  local PA=$!
+  docker exec -i -e PGAPPNAME=t210-racer-b "$PGC" psql -U "$U" -d "$DB" -X -At < "$OUT/rb-b.run" > "$OUT/b.marks" 2>&1 &
+  local PB=$!
+  wait $PA; wait $PB
   # ⚠️ THE VERDICT AND THE WITNESS TOGETHER. "No violation" is ambiguous on its
   # own — it means the guard worked OR the two never overlapped — and those are
   # different facts. The window rows come from the racers' own transactions, so
   # overlap is MEASURED rather than inferred from the fact that we launched two
   # processes.
-  q "SELECT (CASE WHEN count(*) FILTER (WHERE users_is_active_owner(u))=0
-                   AND count(*) FILTER (WHERE users_is_live_member(u))>0 THEN 'V' ELSE '.' END)
-         || (SELECT CASE WHEN count(*) FILTER (WHERE racers LIKE '%,%') > 0
-                         THEN 'o' ELSE '-' END FROM t210_sample)
-       FROM users u WHERE u.\"practiceId\"='ir_p'"
+  local v ov
+  v=$(q "SELECT CASE WHEN count(*) FILTER (WHERE users_is_active_owner(u))=0
+                      AND count(*) FILTER (WHERE users_is_live_member(u))>0 THEN 'V' ELSE '.' END
+           FROM users u WHERE u.\"practiceId\"='ir_p'")
+  # ⚠️ OVERLAP FROM THE MARKERS, and CANNOT-TELL when a marker is missing.
+  # Four numbers or nothing: a witness that lost a mark must say so, never
+  # default to 'no overlap' (which reads as a clean control) or to 'overlap'
+  # (which reads as a valid cell). '?' is neither.
+  ov=$(awk '
+    /T210MARK/ { split($0,f," "); m[f[2] "_" f[3]] = f[4]+0 }
+    END {
+      if (!("A_ENTRY" in m) || !("A_EXIT" in m) || !("B_ENTRY" in m) || !("B_EXIT" in m)) { print "?"; exit }
+      ae=m["A_ENTRY"]; ax=m["A_EXIT"]; be=m["B_ENTRY"]; bx=m["B_EXIT"];
+      lo = (ae>be)?ae:be; hi = (ax<bx)?ax:bx;
+      print (lo < hi) ? "o" : "-"
+    }' "$OUT/a.marks" "$OUT/b.marks")
+  printf '%s%s' "$v" "$ov"
 }
 q_() { docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -q < "$1" >/dev/null 2>&1; }
+# ⚠️ THE WITNESS IS AUTONOMOUS — RULING #247. TWO PREDECESSORS FAILED HERE, IN
+# OPPOSITE DIRECTIONS, AND BOTH FAILURES WERE INVISIBLE UNTIL SOMEBODY KILLED
+# THE INSTRUMENT.
+#
+#   1. `t210_window` wrote each racer's interval INSIDE its own transaction. When
+#      the lock works the guard REFUSES B and B's marker rolls back with it, so
+#      the WITH-lock cell could never report an overlap — 0/12, structurally.
+#   2. The `pg_stat_activity` sampler that replaced it counted the `pg_sleep`
+#      SYNCHRONISATION WAIT as overlap: 4091 of 4209 sampled instants were both
+#      racers ASLEEP and 16 had both inside the conflicting statement. A sampler
+#      killed 1.4s BEFORE either racer executed still reported 12/12.
+#
+# So the markers now travel on **stdout**, which no rollback can reach, and they
+# bracket the CONFLICTING STATEMENT ONLY — the sleep finishes before the ENTRY
+# mark is printed, so the starting gun cannot contribute a single microsecond.
+#
+# ⚠️ `ON_ERROR_ROLLBACK` IS A STATED APPROXIMATION AND IT IS LOAD-BEARING. It
+# wraps each statement in an implicit SAVEPOINT so the EXIT mark still prints
+# after a REFUSED statement — without it the refusal aborts the transaction and
+# the losing racer, the one whose timing matters most, reports nothing.
+# `pg_advisory_xact_lock` and the row locks are TRANSACTION-scoped, so a
+# savepoint does not release them and the race under test is unchanged.
 cat > "$OUT/rb-a.sql" <<'SQL'
+\set ON_ERROR_ROLLBACK on
 BEGIN;
 SELECT pg_sleep(GREATEST(0, EXTRACT(EPOCH FROM (TIMESTAMPTZ 'SENTINEL' - clock_timestamp()))));
-INSERT INTO t210_window(who, t0) VALUES ('A', clock_timestamp());
+SELECT 'T210MARK A ENTRY ' || extract(epoch from clock_timestamp());
 UPDATE users SET "suspendedAt"=now() WHERE id='ir_o';
-UPDATE t210_window SET t1 = clock_timestamp() WHERE who='A';
+SELECT 'T210MARK A EXIT ' || extract(epoch from clock_timestamp());
 COMMIT;
 SQL
 cat > "$OUT/rb-b.sql" <<'SQL'
+\set ON_ERROR_ROLLBACK on
 BEGIN;
 SELECT pg_sleep(GREATEST(0, EXTRACT(EPOCH FROM (TIMESTAMPTZ 'SENTINEL' - clock_timestamp()))));
-INSERT INTO t210_window(who, t0) VALUES ('B', clock_timestamp());
+SELECT 'T210MARK B ENTRY ' || extract(epoch from clock_timestamp());
 INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive")
   VALUES ('ir_new','irn@x.test','x',now(),'ir_p','CLINICIAN',true);
-UPDATE t210_window SET t1 = clock_timestamp() WHERE who='B';
+SELECT 'T210MARK B EXIT ' || extract(epoch from clock_timestamp());
 COMMIT;
 SQL
 sed -n '/CREATE OR REPLACE FUNCTION users_last_owner_guard()/,/^\$fn\$ LANGUAGE plpgsql;/p' "$MIGRATION" > "$OUT/g1.sql"
@@ -280,16 +351,20 @@ after=$(grep -c  pg_advisory_xact_lock "$OUT/g1n.sql" "$OUT/g2n.sql" | awk -F: '
 echo "    mutation applied: advisory-lock occurrences $before -> $after"
 [ "$before" = 2 ] && [ "$after" = 0 ] || { echo "🔴 MUTATION DID NOT APPLY — every result below would be meaningless."; exit 1; }
 N=12
-printf "    WITHOUT the lock (%d runs): " "$N"; V=0
-OV=0
+# ⚠️ THREE OUTCOMES PER RUN, NOT TWO — RULING #247. A run whose markers did not
+# both arrive is '?', and '?' is counted SEPARATELY. Folding it into "did not
+# overlap" would make a dead witness look like a clean sequential control; folding
+# it into "overlapped" would make it look like a valid cell. Neither is true.
+printf "    WITHOUT the lock (%d runs): " "$N"; V=0; OV=0; QV=0
 for _ in $(seq $N); do r=$(race_b "$OUT/g1n.sql" "$OUT/g2n.sql"); printf '%s' "$r"
-  case "$r" in V*) V=$((V+1));; esac; case "$r" in *o) OV=$((OV+1));; esac; done
-echo "   -> $V/$N VIOLATIONS, $OV/$N overlapped"
-printf "    WITH    the lock (%d runs): " "$N"; W=0
-OW=0
+  case "$r" in V*) V=$((V+1));; esac
+  case "$r" in *o) OV=$((OV+1));; *\?) QV=$((QV+1));; esac; done
+echo "   -> $V/$N VIOLATIONS, $OV/$N overlapped, $QV/$N no-witness"
+printf "    WITH    the lock (%d runs): " "$N"; W=0; OW=0; QW=0
 for _ in $(seq $N); do r=$(race_b "$OUT/g1.sql" "$OUT/g2.sql"); printf '%s' "$r"
-  case "$r" in V*) W=$((W+1));; esac; case "$r" in *o) OW=$((OW+1));; esac; done
-echo "   -> $W/$N VIOLATIONS, $OW/$N overlapped"
+  case "$r" in V*) W=$((W+1));; esac
+  case "$r" in *o) OW=$((OW+1));; *\?) QW=$((QW+1));; esac; done
+echo "   -> $W/$N VIOLATIONS, $OW/$N overlapped, $QW/$N no-witness"
 echo
 echo "=== VERDICT ==="
 echo "raceA subject   : $S"
@@ -330,17 +405,24 @@ esac
 # that matters did not.
 if [ "$W" -gt 0 ]; then
   say "🔴 raceB: $W/$N violations WITH the lock — the invariant does not hold"; fail=1
+elif [ "$QW" -gt 0 ]; then
+  # ⚠️ A DEAD WITNESS IS A FAILURE, NOT A CANNOT-TELL — RULING #247. "The race
+  # did not happen" is survivable; "my instrument lost a marker" is not, and
+  # collapsing the two is exactly how a broken harness rides a CI pass.
+  say "🔴 raceB: $QW/$N runs produced NO WITNESS — the instrument is broken, not the race. Refusing to report this cell either way."; fail=1
 elif [ "$OW" -eq 0 ]; then
-  say "🟡 raceB WITH-LOCK CELL CANNOT TELL: 0/$N violations but 0/$N overlapped — the cell #220 rests on was never given the chance to fail."
+  say "🟡 raceB WITH-LOCK CELL CANNOT TELL: 0/$N violations, 0/$N overlapped and every witness reported — the two transactions genuinely did not meet."
   cannot_tell=1
 else
-  say "🟢 raceB: 0 violations WITH the advisory lock, and $OW/$N runs genuinely overlapped"
+  say "🟢 raceB: 0 violations WITH the advisory lock, and $OW/$N runs genuinely overlapped INSIDE the conflicting statement"
 fi
 # ⚠️ THREE STATES, BECAUSE "THE CONTROL DID NOT FIRE" HAS TWO CAUSES AND THEY
 # ARE NOT THE SAME FINDING. Exit 2 is CANNOT-TELL, not refusal — the house
 # convention, and the distinction canon 119 demands: a probe that answers
 # correctly about the wrong universe is not a probe that answers.
-if [ "$V" -gt 0 ]; then
+if [ "$QV" -gt 0 ]; then
+  say "🔴 raceB control: $QV/$N runs produced NO WITNESS — the control cannot be read."; fail=1
+elif [ "$V" -gt 0 ]; then
   say "🟢 raceB control: $V/$N violations WITHOUT the lock — the lock is load-bearing"
 elif [ "$OV" -eq 0 ]; then
   say "🟡 raceB INCONCLUSIVE: 0/$N violations AND 0/$N overlapped — the two transactions never met on this machine, so the control was never given the chance to fire. This is NOT evidence the lock is redundant; it is evidence the race did not happen here. Re-run, or widen the sentinel delay."
@@ -371,7 +453,7 @@ if [ "$cannot_tell" -ne 0 ]; then
   exit 2
 fi
 echo "🟢 RACE HARNESS PASSED — every predicted cell held."
-q "DELETE FROM users WHERE \"practiceId\"='ir_p'; DELETE FROM practices WHERE id='ir_p';" >/dev/null
-teardown
-q "DROP TABLE IF EXISTS t210_sample; DROP TABLE IF EXISTS t210_window;" >/dev/null
-# the EXIT trap restores the armed guard and removes $OUT
+# ⚠️ NO CLEANUP HERE ANY MORE — the EXIT trap reaps the fixture and restores the
+# armed guard on EVERY path, including this one. Duplicating it here would make
+# the success path the only tested one, which is how it came to be the only
+# path that had it.exit
