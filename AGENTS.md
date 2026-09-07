@@ -1080,9 +1080,40 @@ Before a session ends, destroy the scratch:
   in scope forever. Reap them at the end of the session that made them.
 - Repo root — `twin-*.docx`, `diag-*`, `visit-*.pdf|docx`.
 
-Use `shred -u -n 3 -z`, not `rm`. Root-owned artifacts need the documented
-root-via-docker path; a silent "Permission denied" from `shred` leaves the file
-exactly where it was.
+⚠️ **THE GRANTED DOOR IS THE WRAPPER, AND THIS PARAGRAPH USED TO NAME THE
+DENIED INSTRUMENT INSTEAD:**
+
+    bash scripts/reap-session-scratch.sh <file>...
+
+`Bash(shred:*)` is in the **DENY** list, deliberately. Ruling #166 granted
+`shred` and the grant was written twice, wrongly, both times — because **a
+permission entry is a COMMAND-TEXT PREFIX**, so
+`Bash(shred -u -n 3 -z /tmp/claude-1000/:*)` looks scoped and is not: it admits
+`… /tmp/claude-1000/../../opt/meddoc-pro/.env`, which normalises to a path the
+same settings file DENIES READING, and `shred` takes `FILE...` so a second
+operand goes anywhere. **No prefix pattern can fix that**, because the hole is
+in what comes AFTER the prefix and the matcher does not parse paths. The scope
+therefore moved into a script that resolves a path and refuses — fail-closed on
+an unresolvable path, a symlink leaving the sandbox, or a missing `shred`.
+
+⚠️ **AND THE OLD WORDING WAS A TRAP WITH NO EXIT, WHICH IS WHY IT IS CORRECTED
+RATHER THAN ANNOTATED.** It said *"Use `shred -u -n 3 -z`, not `rm`"* — and a
+session following it literally hits the deny, while the very next paragraph
+forbids the `rm` fallback. Measured 2026-09-07: a session reported its scratch
+as unreapable and stopped, on a correct reading of a rule that named an
+instrument it could not run. The wrapper existed and was granted the whole time;
+it was named nowhere in the canon. **That is the "an entry that names an
+instrument verifies that instrument's GRANT" rule, arriving from the other
+direction — the instrument was denied AFTER the entry was written, and nothing
+re-checked the entry.**
+
+⚠️ **AND THE VOLUME IS LARGER THAN A SESSION EXPECTS.** That same reap shredded
+**1174 files in one call**, because adversarial LENS AGENTS copy repo snapshots
+into scratch — the `mainsrc/`-shaped *"directory SNAPSHOTS of the repo"* class
+named above. Enumerate with `find … -print0 | xargs -0`, do not list by hand.
+
+Root-owned artifacts still need the documented root-via-docker path; a silent
+"Permission denied" leaves the file exactly where it was.
 
 **Shred, then CHECK EXIT CODES, then escalate the failures — and only then
 remove the directory.** Unlinking before the failures are resolved converts a
