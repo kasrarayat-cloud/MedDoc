@@ -212,6 +212,69 @@ beforeEach(() => {
   lockedVisit.mockResolvedValue([{ status: 'READY', signedAt: null }]);
 });
 
+describe('ROUND FOUR — the four guards nothing was watching', () => {
+  // Each of these was reported by round four as "deleting it leaves the suite
+  // green". Each arm below is paired with a mutation in the commit message
+  // showing it now REDS. #204's clause: deleting a guard must red.
+
+  it('the insert INVALIDATES the fill cache — or the doctor cannot see their own insert', async () => {
+    // ⚠️ WITHOUT THIS THE INSERT IS INVISIBLE FOR UP TO THE 30-MINUTE TTL.
+    // `insertableDefaults` lives inside the cached payload, so a warm entry
+    // serves the pre-insert list — the doctor clicks, the row lands, and the
+    // form does not change. Ruling #203 is about the same cache and the same
+    // failure mode one layer up.
+    await insert();
+    expect(invalidate).toHaveBeenCalledWith(VISIT);
+  });
+
+  it('the UNDO invalidates it too — the same defect in the other direction', async () => {
+    const mod = await import('../set-template-control');
+    overrideDeleteMany.mockResolvedValue({ count: 1 });
+    await mod.undoScaffoldDefaultAction(VISIT, FIELD);
+    expect(invalidate).toHaveBeenCalledWith(VISIT);
+  });
+
+  it("UNDO deletes ONLY the scaffold_default row — a dropdown correction is not collateral", async () => {
+    // ⚠️ THE KIND SCOPE IS THE WHOLE ARM. One row per (visitId, fieldId), and a
+    // doctor may have made a DROPDOWN correction on the same field. An undo that
+    // dropped the kind predicate would delete the clinician's own choice while
+    // reporting that it undid an inserted default.
+    const mod = await import('../set-template-control');
+    overrideDeleteMany.mockResolvedValue({ count: 1 });
+    await mod.undoScaffoldDefaultAction(VISIT, FIELD);
+    expect(overrideDeleteMany).toHaveBeenCalledWith({
+      where: { visitId: VISIT, fieldId: FIELD, overrideKind: 'scaffold_default' },
+    });
+  });
+
+  it('UNDO writes its OWN audit action, not the insert one', async () => {
+    // #194's product claim is that a default reaching a note is a HUMAN act. A
+    // trail that cannot tell an insert from its reversal counts a retracted
+    // assertion as an assertion, which is what the second enum value was bought
+    // for. `gate-review-defaults-insert.test.ts:24` still says these rows are
+    // "asserted NOWHERE executable" — they are now.
+    const mod = await import('../set-template-control');
+    overrideDeleteMany.mockResolvedValue({ count: 1 });
+    await mod.undoScaffoldDefaultAction(VISIT, FIELD);
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'DEFAULT_INSERT_UNDONE' }),
+    );
+    expect(audit).not.toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'DEFAULT_INSERTED_BY_DOCTOR' }),
+    );
+  });
+
+  it('the door REFUSES a soft-deleted or archived visit — asserted on the query', async () => {
+    // ⚠️ REPORTED AS "removing it leaves 133/133 green". Asserted on the WHERE
+    // the door issues rather than on an outcome, because a deleted visit is not
+    // reachable through the mocked findFirst — the filter is the guard, and the
+    // filter is what must not disappear.
+    await insert();
+    const w = (visitFindFirst.mock.calls[0][0] as { where: Record<string, unknown> }).where;
+    expect(w).toMatchObject({ deletedAt: null, archivedAt: null });
+  });
+});
+
 describe("ROUND FOUR — round one's defect cannot come back, asserted as BEHAVIOUR", () => {
   // ⚠️ #204's CLAUSE ASKED FOR EXECUTABLE COVERAGE AND THIS IS THE MISSING HALF.
   // Round four demonstrated that round one's defect — a STATIC refusal on
