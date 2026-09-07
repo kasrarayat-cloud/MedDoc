@@ -249,7 +249,7 @@ describe('F5-i part 1a — a second SHAPE reaches a named refusal from real .doc
     expect(shape(fromDisk).length).toBe(fromDisk.fields.length);
   });
 
-  it('HONEST LIMIT, as an assertion — the fallback path can decide only THREE concepts', async () => {
+  it('HONEST LIMIT, as an assertion — the fallback path can decide only SIX concepts', async () => {
     // ⚠️ STATED AS AN ARM RATHER THAN A COMMENT, because it bounds every claim
     // above. On the deterministic fallback path a concept can only come from
     // `compilerDecidedConcept`, whose entire range is the vein-grid pair plus
@@ -260,10 +260,21 @@ describe('F5-i part 1a — a second SHAPE reaches a named refusal from real .doc
     //
     // If that range ever widens, this arm reddens and whoever widens it has to
     // come back and re-read what this gate is entitled to conclude.
+    //
+    // ⚠️ IT WIDENED, AND THIS IS THAT RE-READ. #247 added three label overrides
+    // (`Patient` / `Age` / `Referring MD`), so the fallback path can now decide
+    // six concepts rather than three. What the gate CONCLUDES is unchanged: all
+    // three additions are header metadata, none of them is a measurement, so
+    // "no measurement rows on this path" still means what it meant. The arm is
+    // updated with the reason rather than re-baselined, because the next widen
+    // may not be so harmless.
     expect([...compilerDecidableConcepts()].sort()).toEqual([
       'measurement.diameter',
       'measurement.reflux_time',
       'test.name',
+      'visit_metadata.patient_age',
+      'visit_metadata.patient_name',
+      'visit_metadata.referring_physician',
     ]);
   });
 });

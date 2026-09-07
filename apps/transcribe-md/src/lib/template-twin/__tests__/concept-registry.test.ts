@@ -75,9 +75,20 @@ describe('proposer wiring', () => {
     // Whatever the concept's origin — model proposal or compiler override — it
     // reaches the mapping only through the registry check.
     expect(src()).toMatch(
-      /const proposedConcept = candidate && isRegisteredConcept\(candidate\) \? candidate : null/,
+      /const registered = candidate && isRegisteredConcept\(candidate\) \? candidate : null/,
     );
     expect(src()).toMatch(/clinicalConcept: proposedConcept,/);
+  });
+
+  it('⚠️ #247 — and a RECORD-DERIVED concept passes a second gate after the registry', () => {
+    // The registry check alone admits `visit_metadata.patient_name`, which is
+    // registered. A refutation lens measured what that costs: a model proposing
+    // it on an HPI control produced a mapping that auto-confirmed and printed
+    // the patient's name into a clinical narrative box. The registry answers
+    // "can any fact carry this"; it does not answer "may THIS field".
+    expect(src()).toMatch(
+      /const proposedConcept = refuseRecordDerivedOnNonMetadata\(registered, sourceType\)/,
+    );
   });
 
   it('an off-registry mapping cannot come back as recognised', () => {

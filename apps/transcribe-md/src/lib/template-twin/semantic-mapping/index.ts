@@ -14,7 +14,9 @@ import {
   isRegisteredConcept,
   synonymsFor,
   REGISTRY_CONCEPTS,
+  type MappingSourceType,
 } from '../concept-registry';
+import { RECORD_DERIVED_CONCEPTS } from '../visit-metadata';
 import { isUnnamedRosConcept, ROS_SYSTEMS, symptomsFor } from '../ros-lexicon';
 import { withoutPlaceholderOptions } from '../../note-template-docx/placeholder-option';
 import { z } from 'zod';
@@ -150,6 +152,7 @@ export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = [
   'hpi.modifying_factors',
   'hpi.associated_symptoms',
   'past_medical_history',
+  'past_surgical_history',
   'medication.name',
   'medication.dose',
   'medication.route',
@@ -161,7 +164,43 @@ export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = [
   'social_history.smoking',
   'social_history.alcohol',
   'social_history.drugs',
+  'social_history.marital_status',
+  // #246 family 4 — registered AND offered. The pass found it in
+  // REGISTRY_CONCEPTS but not here, so the proposer would never have suggested
+  // it and a "Total minutes" control could only ever be mapped by hand.
+  'total_time_minutes',
   'social_history.occupation',
+  // #247 family 3 — THE DICTATED MEMBER, AND ONLY THE DICTATED MEMBER.
+  //
+  // ⚠️ `visit_metadata.patient_name` AND `.patient_age` ARE DELIBERATELY ABSENT
+  // FROM THIS LIST. Their concept is decided by the COMPILER from the label
+  // (`CONCEPT_LABEL_OVERRIDES`), which also decides
+  // `sourceType: 'visit_metadata'`, so the proposer is not the route by which
+  // they are mapped. Canon 136 says an unoffered registered concept is
+  // unmappable; these two are mapped without the proposer, so it does not bite.
+  //
+  // ⚠️ AND THE FIRST VERSION OF THIS COMMENT CALLED THE OMISSION "THE SAFETY
+  // PROPERTY", WHICH WAS FALSE — a refutation lens demonstrated it. It argued
+  // that a model proposing a record concept on some other field would produce
+  // "a mapping whose concept is record-derived and whose sourceType is
+  // `extraction`, which no fact can ever satisfy: a permanently blank control".
+  // The resolver never compares a MAPPING's sourceType to a FACT's. Measured,
+  // with one legitimate `Patient` control present to mint the fact and one
+  // mis-proposed `extraction` mapping on an HPI control: BOTH resolved
+  // `record_derived` with value "Jane Alvarez", valid, zero issues — **the
+  // patient's name printed into a clinical narrative control on the signed
+  // form.** Prompt omission is a nudge, not a gate; the gate is
+  // `isRegisteredConcept`, and this arc made it return true for both.
+  //
+  // The real gate is now `refuseRecordDerivedOnNonMetadata` below, which nulls
+  // a record-derived concept on any mapping the compiler did not classify
+  // `visit_metadata`. The omission stays because offering them is still
+  // pointless, but it is no longer load-bearing.
+  //
+  // The referrer is different in kind: it is an ordinary L3 extraction, and a
+  // form that says "Referred by" rather than "Referring MD" should still be
+  // mappable. So it IS offered.
+  'visit_metadata.referring_physician',
   // ⚠️ THREE PARTS, NOT TWO — AND THE TWO-PART FORM WAS THE ONLY THING THIS
   // COMPONENT EVER TAUGHT. #179(2) moved the projector to
   // `ros.<system>.<symptom>` and narrowed the registry pattern to match, so
@@ -180,6 +219,41 @@ export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = [
   'assessment',
   'plan',
 ] as const;
+
+/**
+ * #247 — A RECORD-DERIVED CONCEPT ON A MAPPING THE COMPILER DID NOT CLASSIFY
+ * `visit_metadata` IS REFUSED, AND THIS IS THE GATE THE PROMPT WAS PRETENDING
+ * TO BE.
+ *
+ * ⚠️ FOUND BY A REFUTATION LENS, WHICH MEASURED THE HARM. `visit_metadata.
+ * patient_name` and `.patient_age` are registered, so `isRegisteredConcept`
+ * admits them; the resolver never compares a MAPPING's `sourceType` to a
+ * FACT's; and `decideAutoConfirm` only refuses `sourceType === 'visit_metadata'`.
+ * So a model proposing `visit_metadata.patient_name` for, say, an HPI control
+ * produced a mapping that auto-confirmed as `{provenance: 'model'}` and then
+ * **printed the patient's name into a clinical narrative box** — measured,
+ * `record_derived`, valid, zero issues. Leaving those two concepts off the
+ * proposer's guidance list was a nudge, not a gate.
+ *
+ * The compiler decides `visit_metadata` from the LABEL and from the field's
+ * KIND, so a field it did not so classify has no business carrying an identity
+ * concept, whoever proposed it. Nulling here leaves the mapping visibly
+ * `needs_confirmation` — the same treatment an off-registry proposal gets —
+ * rather than certifying a control that prints a name nobody asked it to.
+ *
+ * EXPORTED for its own arm: this is the kind of guard whose absence is
+ * invisible, because a model rarely proposes it and the suite never does.
+ */
+export function refuseRecordDerivedOnNonMetadata(
+  concept: string | null,
+  sourceType: MappingSourceType,
+): string | null {
+  if (concept === null || sourceType === 'visit_metadata') return concept;
+  const c = concept.trim().toLowerCase();
+  return c === RECORD_DERIVED_CONCEPTS.name || c === RECORD_DERIVED_CONCEPTS.age
+    ? null
+    : concept;
+}
 
 export interface ProposeSemanticMappingsContext {
   practiceId: string;
@@ -578,7 +652,9 @@ export async function proposeSemanticMappings(
     const rowCells = cellsByRow.get(rowKey) ?? [];
     const candidate =
       compilerDecidedConcept(field, rowCells) ?? mapping.clinicalConcept;
-    const proposedConcept = candidate && isRegisteredConcept(candidate) ? candidate : null;
+    const registered = candidate && isRegisteredConcept(candidate) ? candidate : null;
+    const sourceType = classifyFieldSource(field.originalLabel, field);
+    const proposedConcept = refuseRecordDerivedOnNonMetadata(registered, sourceType);
 
     // Compiler uncertainty always wins over a model's optimistic recognition.
     // Nothing from this helper can become certified or carry a default.
@@ -586,8 +662,10 @@ export async function proposeSemanticMappings(
       ...mapping,
       expectedDataType: compilerDataType,
       // Classification is the COMPILER's label talking, not the model's guess —
-      // the same doctrine as expectedDataType above.
-      sourceType: classifyFieldSource(field.originalLabel, field),
+      // the same doctrine as expectedDataType above. Read ONCE above, because
+      // `refuseRecordDerivedOnNonMetadata` needs the same answer and two calls
+      // are two readers of one rule.
+      sourceType,
       // REGISTRY CONSTRAINT. A concept the extractor never emits can never be
       // matched by any fact, so the field would be permanently unfillable —
       // this is exactly how `filledCount=0` survived four sessions of fixes

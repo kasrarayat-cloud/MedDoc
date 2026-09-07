@@ -66,8 +66,57 @@ which could be read.** This is that queue, rebuilt from what is actually open.
 **F5-i-2 LEADS THE QUEUE** — owner ruling **#156**, class (a)/(b), 2026-08-28.
 It displaced F8, which **CLOSED 2026-08-27** on the judged deploy of `eec8685b`
 (ruling #147's *"F24 CLOSES → F8 opens"* is therefore discharged, and F24 closed
-2026-08-25 at 75 of 80). **Canon and process items ride along; they are not the
+2026-08-25 at 75 of 80, **amended below to 76 of 80**). **Canon and process
+items ride along; they are not the
 work.** The morning report's `### THROUGHPUT` line exists to keep that visible.
+
+### AMENDMENT 2026-09-07 — F24's RESIDUAL MOVED. THE CENSUS IS **76 of 80**.
+
+**Ruling #147(2) asked for exactly this entry.** It made the residual a SET
+EQUALITY rather than a threshold, and named the direction a threshold cannot
+see: *"a manual field GAINS a concept -> the set SHRANK -> red ... the direction
+that means the wall legitimately shrank and this file's story has gone stale."*
+It reddened on the run that landed ruling #247's Stage B, and that ruling's own
+instruction — *re-read #147 and update RELAY* — is discharged here.
+
+| | 2026-08-25 | 2026-09-07 |
+|---|---|---|
+| table cells addressable | 52 | 52 |
+| content controls addressable | 23 | **24** |
+| **joint** | **75 of 80** | **76 of 80** |
+| residual, refusing by design | 5 | **4** |
+
+**WHAT MOVED, AND ONLY THIS:** `REFERRING PHYSICIAN` left
+`F24_RESIDUAL_MANUAL`. Ruling #247 un-pinned `classifyFieldSource`'s
+referring-physician pattern from `manual` and pinned the concept
+`visit_metadata.referring_physician` at the label instead, because **a clinician
+SAYS who referred the patient**. On WM_IOV that control is an enumerated
+dropdown, so it classifies `verified_note_selection` and the doctor's own
+adopted pick answers it; on the owner's GI consult letter the same label is free
+text, so it classifies `extraction` and the dictated fact fills it.
+
+⚠️ **THE ARGUMENT FOR THE ORIGINAL FIVE IS WHAT FAILED, AND IT FAILED HONESTLY.**
+That set was justified by *"every one is CLERICAL, none is clinical — nothing in
+the dictation dictates who the technologist on shift was."* That sentence is
+still true of the four that remain (an address, a technologist, a machine, a
+room) and it was never true of the referring clinician. The set did not shrink
+because a wall was lowered; it shrank because one member had been misfiled from
+the start.
+
+⚠️ **AND THE LIVE TWIN HAS NOT MOVED.** These figures are the CLASSIFIER's, run
+over the compiled fixture. Production's certified mappings are immutable, so the
+live twin still reads 75/80 with 5 residual until that template is re-certified.
+The census gate now asserts the DELTA against the recorded 2026-08-24 database
+measurement rather than equality with it, so a SECOND field moving — or one
+moving the other way — still reddens.
+
+⚠️ **RECORDED HERE AND NOT IN `relay/2026-08-25-part1.md`, WHICH WAS THE FIRST
+ATTEMPT.** An archive's `pre-split lines` span addresses the FROZEN pre-split
+file, and `gate-ledger-reachability.test.ts` asserts that span's line count
+equals the archive's body. **An archive cannot grow.** Appending there reddened
+that gate immediately — the split contract working exactly as its own header
+promises (*"which can never grow again, so they cannot go stale"*), caught
+before the commit rather than by a stale citation months later.
 
 | Item | State | What it is | Blocked on / Done when |
 |---|---|---|---|

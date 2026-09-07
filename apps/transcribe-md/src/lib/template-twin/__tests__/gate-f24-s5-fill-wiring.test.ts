@@ -30,11 +30,20 @@ import { compileTemplateDocx } from '@/lib/note-template-docx';
 
 const noteTemplateFindFirst = vi.fn();
 const overrideFindMany = vi.fn();
+// #247 — the shared reader now also loads the visit's PATIENT RECORD, for the
+// same reason it loads the overrides: five call sites, four of which never
+// touched a patient. Mocked to return no patient by default, which is the
+// pre-#247 behaviour exactly — nothing is injected and this file's subject is
+// unchanged. `visitPatientFindFirst` is asserted on directly by
+// `gate-247-visit-metadata.test.ts`; here it only has to exist, because an
+// unmocked model on the shipped default export throws before the subject runs.
+const visitPatientFindFirst = vi.fn().mockResolvedValue({ patient: null });
 
 vi.mock('@meddoc/db', () => ({
   default: {
     noteTemplate: { findFirst: (...a: unknown[]) => noteTemplateFindFirst(...a) },
     templateTwinFieldOverride: { findMany: (...a: unknown[]) => overrideFindMany(...a) },
+    transcribeVisit: { findFirst: (...a: unknown[]) => visitPatientFindFirst(...a) },
   },
 }));
 vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }));

@@ -87,7 +87,14 @@ describe('sourceType is classified, never defaulted, at every constructing site'
         const code = site.body
           .replace(/\/\*[\s\S]*?\*\//g, ' ')
           .replace(/^\s*\/\/.*$/gm, ' ');
-        if (!/\bsourceType\s*:/.test(code)) {
+        // ⚠️ `[:,]` ADMITS THE ES6 SHORTHAND, AND THAT IS NOT A LOOSENING.
+        // The claim is that the constructing site NAMES `sourceType` rather
+        // than letting the schema default supply it. `{ sourceType }` names it
+        // exactly as `{ sourceType: x }` does, and #247's proposer uses the
+        // shorthand because the value is read once above and consumed twice —
+        // reading it a second time would be two callers of one classifier.
+        // Comments are already stripped, so prose still cannot satisfy this.
+        if (!/\bsourceType\s*[:,]/.test(code)) {
           offenders.push(`${rel} :: constructing site #${n + 1}`);
         }
       });

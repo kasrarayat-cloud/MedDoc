@@ -425,11 +425,47 @@ type ConfirmClass = 'attest' | 'confirm' | 'choose';
 // UNOBSERVABLE. Testing the pure function directly is what makes it fire.
 export function confirmClassOf(mapping: SemanticMapping): ConfirmClass {
   if (mapping.sourceType === 'manual') return 'attest';
+  // ⚠️ #247 — `visit_metadata` IS NOT A FOURTH CLASS, AND THIS LINE IS WHY IT
+  // ISN'T ONE. The ruling declined a fourth confirm act, so a record-derived
+  // control confirms through the ordinary `confirm` row, with the same button,
+  // the same picker and the same code path. What it does NOT do is ride the
+  // BULK shortcut — see `bulkConfirmable` below, which is a different question
+  // from what class the row is.
+  if (mapping.sourceType === 'visit_metadata') return 'confirm';
   // ⚠️ STRUCTURAL, AND IT OUTRANKS CONCEPT PRESENCE. An enumerated pick stays
   // the doctor's to answer even when the model proposer has already put a
   // concept in the box.
   if (mapping.sourceType === 'verified_note_selection') return 'choose';
   return mapping.clinicalConcept ? 'confirm' : 'choose';
+}
+
+/**
+ * MAY THE BULK BUTTON SWEEP THIS ROW?
+ *
+ * ⚠️ A NARROWER QUESTION THAN `confirmClassOf`, AND #247 IS WHY THE TWO ARE NOW
+ * DIFFERENT FUNCTIONS. The class answers *which act does this row take*; this
+ * answers *may that act be performed on a row nobody scrolled to*.
+ *
+ * The owner's ruling says a `visit_metadata` mapping never auto-confirms,
+ * because "a control that prints a patient's NAME requires a human to have seen
+ * it". `planAutoConfirm` honours that. "Confirm all N proposed" is a HUMAN act
+ * and would defeat the same requirement through a different door: it certifies
+ * every row of the class at once, including ones below the fold of a scrolling
+ * list. Same outcome, different costume.
+ *
+ * ⚠️ EXCLUDING IT IS NOT THE FOURTH CONFIRM ACT THE RULING DECLINED. The row
+ * keeps the ordinary `confirm` class, the ordinary button, the ordinary picker
+ * and the ordinary writer — nothing new to learn and nothing new to click. It
+ * simply is not included in a shortcut whose entire purpose is not reading the
+ * rows. The cost is one click on the one or two controls that print a patient's
+ * identity.
+ *
+ * ⚠️ AND IT IS A CALL, NOT A QUOTE — recorded here so it can be overruled by
+ * reading one function. The ruling states (1) never auto-confirm and (2) no
+ * fourth act; it does not name the bulk button, which sits between them.
+ */
+export function bulkConfirmable(mapping: SemanticMapping): boolean {
+  return confirmClassOf(mapping) === 'confirm' && mapping.sourceType !== 'visit_metadata';
 }
 
 /** The doctor's confirmation, applied. Mirrors `fieldsReady`'s two demands:
@@ -556,7 +592,7 @@ function ReviewWorkspace({
     (m) => m.status === 'certified' && !m.clinicalConcept && m.sourceType !== 'manual',
   );
   const dirty = draft.some((m, i) => m !== fields[i]?.mapping);
-  const proposedPending = unconfirmed.filter((m) => confirmClassOf(m) === 'confirm');
+  const proposedPending = unconfirmed.filter(bulkConfirmable);
   const byStatus = fields.reduce<Record<string, number>>((acc, f) => {
     const s = f.field.detectionStatus;
     acc[s] = (acc[s] ?? 0) + 1;
@@ -678,7 +714,7 @@ function ReviewWorkspace({
             onClick={() =>
               setDraft((prev) =>
                 prev.map((m) =>
-                  m.status !== 'certified' && confirmClassOf(m) === 'confirm'
+                  m.status !== 'certified' && bulkConfirmable(m)
                     ? confirmed(m, m.clinicalConcept)
                     : m,
                 ),
@@ -735,6 +771,7 @@ function ReviewWorkspace({
                       ? ` → ${m.clinicalConcept}`
                       : ' · no concept yet'}
                 </div>
+<<<<<<< HEAD
 
                 {/* ⚠️ REVIEW-DEFAULTS item 2 — THE `omit` DOOR.
                     Offered ONLY where `canOmitWhenUnmentioned` says the
@@ -840,6 +877,33 @@ function ReviewWorkspace({
                     {canOmitWhenUnmentioned(f.field, m)
                       ? OMIT_CONTROL_LABEL
                       : OMIT_INERT_LABEL}
+=======
+                {/* ⚠️ #247 — WHERE THE VALUE COMES FROM, IN WORDS, ON THE ROW
+                    THE DOCTOR IS AGREEING TO.
+
+                    The ruling declined a FOURTH confirm act: this is not its
+                    own class, it is an ordinary `confirm` row. What makes the
+                    click meaningful is that the row says what it will print
+                    and where that comes from — a value read out of the chart,
+                    not something the clinician dictated. The concept line
+                    above says `visit_metadata.patient_name`, which is precise
+                    and says nothing at all to a doctor.
+
+                    Keyed on `sourceType`, the same structural discriminator
+                    `confirmClassOf` uses, so the caption cannot disagree with
+                    the class. */}
+                {m.sourceType === 'visit_metadata' && (
+                  <div
+                    data-testid={`twin-record-provenance-${m.fieldId}`}
+                    style={{
+                      fontFamily: mono,
+                      fontSize: 10.5,
+                      color: 'var(--color-linear-text-3)',
+                      marginTop: 2,
+                    }}
+                  >
+                    from the patient record — not dictated
+>>>>>>> origin/docs/rulings-258-260
                   </div>
                 )}
                 {/* ⚠️ #208 — THE DECLARED SCOPE IS SHOWN, BECAUSE A SCOPE IS A

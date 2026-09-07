@@ -1,7 +1,30 @@
 // ============================================================================
+// ⛔ SPENT 2026-09-07 — THIS SCRIPT MUST NOT RUN AGAIN. See `assertNotSpent()`.
+// ----------------------------------------------------------------------------
+// It ran twice against production and its PLAN is now WRONG on four of its
+// eleven rows. Rulings #246 and #247 gave `Referring MD`, `Patient`, `Age` and
+// `Total minutes` real concepts; this file still pins all four to
+// `manual`/NULL, which is the state those rulings exist to end. Re-running it —
+// after a re-upload, say, when re-confirming a fresh compiled version looks like
+// the obvious move — would SILENTLY REVERT them, under a ruled-mutation
+// declaration that reads like authority.
+//
+// Found by a refutation lens on #247's own diff, which also noted the sharper
+// half: THIS FILE IS CITED AS EVIDENCE BY THE CHANGE THAT CONTRADICTS IT.
+// `concept-registry.ts` and `gate-247-visit-metadata.test.ts` both quote its
+// `/^patient$/i` and `/^age$/i` rules as the measurement of the owner's LABELS,
+// and neither noticed the same table now disagrees about the ANSWER. A file can
+// be right about the question and wrong about the answer, and quoting half of
+// it is how that survives.
+//
+// ⚠️ IT IS REFUSED RATHER THAN CORRECTED, DELIBERATELY. Updating the PLAN would
+// make it a live re-confirmation tool, and re-confirming a template is exactly
+// what the CERTIFY path is for. A one-shot ruled mutation whose act is done is
+// history, and history that can still be executed is not history.
+// ----------------------------------------------------------------------------
 // (c) — THE LIVE-TEMPLATE CONFIRMATIONS. Ruling #158, as amended 2026-08-31.
 // ----------------------------------------------------------------------------
-// A RULED MUTATION. The only door is:
+// A RULED MUTATION. The only door WAS:
 //
 //   bash scripts/run-ruled-mutation.sh --declaration <path> -- \
 //     npx tsx apps/transcribe-md/scripts/confirm-live-template-mappings.ts --commit
@@ -120,7 +143,29 @@ function decide(label: string, current: { concept: string | null; sourceType: st
   };
 }
 
+/**
+ * ⛔ The refusal. Exported so an arm can drive it rather than re-stating it.
+ *
+ * There is no override token on purpose: a bypass here is indistinguishable
+ * from the mistake it exists to prevent, and the legitimate route — re-certify
+ * the template through the certify path — is the one already built.
+ */
+// ⚠️ TYPED `void`, NOT `never`, AND THAT IS NOT SLOPPINESS. A `never` return
+// makes every statement after the call unreachable, so `tsc` narrows the whole
+// body to `never` and reports ten errors in code that is deliberately being
+// KEPT — the point of this refusal is that the historical act stays readable.
+export function assertNotSpent(): void {
+  throw new Error(
+    'REFUSED: confirm-live-template-mappings is SPENT. It ran against production ' +
+      'on 2026-09-01 and 2026-09-03, and rulings #246/#247 have since given ' +
+      'Referring MD / Patient / Age / Total minutes real concepts. This PLAN still ' +
+      'pins all four to manual/NULL, so re-running it would silently revert them. ' +
+      'To re-confirm a template, use the certify path.',
+  );
+}
+
 async function main() {
+  assertNotSpent();
   // ⚠️ NAME THE TARGET OUT LOUD. A ruled mutation that cannot say which
   // database it is about is not auditable.
   const dbHost = new URL(process.env.DATABASE_URL ?? 'postgres://unknown/unknown').hostname;

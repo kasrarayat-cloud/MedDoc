@@ -227,6 +227,71 @@ describe('1 · the bound identity is (note, overrides)', () => {
     expect(r.reason).toBe('overrides_changed');
   });
 
+  it('⚠️ #247 — A PATIENT-RECORD EDIT AFTER THE FILL MAKES THE MANIFEST STALE', () => {
+    // Found by a refutation lens on #247's own diff. The patient record became
+    // a FILL INPUT with family 3 and was not in this key, so: the worker fills
+    // at T1 carrying the chart's name; the front desk corrects a misspelling;
+    // the doctor opens the pre-sign preview, which RECOMPUTES and shows the
+    // corrected name; the doctor signs; this predicate saw an unchanged note
+    // and unchanged overrides, answered `match`, and the signature pinned the
+    // manifest carrying the OLD name. The document reviewed is not the document
+    // signed.
+    const r = manifestMatchesDocument({
+      manifestNoteSha256: noteIdentity(NOTE),
+      manifestOverridesSha256: EMPTY_OVERRIDES_SHA256,
+      soapFinal: NOTE,
+      currentOverrides: [],
+      manifestUpdatedAt: '2026-09-07T10:00:00.000Z',
+      patientUpdatedAt: '2026-09-07T10:05:00.000Z',
+    });
+    expect(r).toEqual({ ok: false, reason: 'patient_record_changed' });
+  });
+
+  it('a record written BEFORE the fill is fresh — it is the one the fill read', () => {
+    const r = manifestMatchesDocument({
+      manifestNoteSha256: noteIdentity(NOTE),
+      manifestOverridesSha256: EMPTY_OVERRIDES_SHA256,
+      soapFinal: NOTE,
+      currentOverrides: [],
+      manifestUpdatedAt: '2026-09-07T10:05:00.000Z',
+      patientUpdatedAt: '2026-09-07T10:00:00.000Z',
+    });
+    expect(r).toEqual({ ok: true, reason: 'match' });
+  });
+
+  it('⚠️ ABSENT INPUTS MEAN "NOT ASKED" — every existing caller is unchanged', () => {
+    // Both members are optional so that adding them could not silently make
+    // every legacy manifest stale. A caller that does not supply them gets
+    // exactly the pre-#247 answer.
+    const r = manifestMatchesDocument({
+      manifestNoteSha256: noteIdentity(NOTE),
+      manifestOverridesSha256: EMPTY_OVERRIDES_SHA256,
+      soapFinal: NOTE,
+      currentOverrides: [],
+    });
+    expect(r).toEqual({ ok: true, reason: 'match' });
+  });
+
+  it('⚠️ AND A CANNOT-TELL IS A RE-FILL, not a pass', () => {
+    // An unparseable timestamp on either side is a question about whose name is
+    // on a signed document, and the honest answer to that is to fill again.
+    for (const [m, p] of [
+      ['not a date', '2026-09-07T10:00:00.000Z'],
+      ['2026-09-07T10:00:00.000Z', 'not a date'],
+    ] as const) {
+      expect(
+        manifestMatchesDocument({
+          manifestNoteSha256: noteIdentity(NOTE),
+          manifestOverridesSha256: EMPTY_OVERRIDES_SHA256,
+          soapFinal: NOTE,
+          currentOverrides: [],
+          manifestUpdatedAt: m,
+          patientUpdatedAt: p,
+        }).reason,
+      ).toBe('patient_record_changed');
+    }
+  });
+
   it('the NOTE is still checked first, and its unprovable cases still decline', () => {
     expect(
       manifestMatchesDocument({
