@@ -748,11 +748,36 @@ describe('the static guards — each REFUSES, and each is now driven', () => {
     ).not.toBe(reason(notBlank));
   });
 
-  it('a SIGNED visit is refused before anything else', async () => {
+  it('a SIGNED visit is refused before anything else — BY THE SIGN-FREEZE GUARD', async () => {
+    // ⚠️ THIS ARM USED TO PASS WITH THE SIGN-FREEZE GUARD DELETED, and round
+    // four caught it. It asserted only that the door refused and did no fill —
+    // which the READY guard, added a commit later and sitting BEFORE the fill,
+    // satisfies on its own. Measured: deleting `if (visit.status === 'SIGNED')`
+    // left the file 37/37 GREEN. The arm named one guard and watched another.
+    //
+    // The two produce DIFFERENT messages, and that is the discriminator:
+    //   sign-freeze  "This visit is signed — its document is frozen…"
+    //   READY        "<label> cannot take a default while this visit is still
+    //                 being prepared."
+    // A doctor told the wrong one of those is told something false about their
+    // own record, so the message is worth asserting for its own sake as well.
     primeVisit({ status: 'SIGNED' });
     const res = await insert();
     expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/signed .* frozen/);
+    expect(res.error).not.toMatch(/still being prepared/);
     expect(readAndPrepare).not.toHaveBeenCalled();
     expect(overrideUpsert).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ THE CONTROL — a NON-signed, non-READY visit gets the OTHER message', async () => {
+    // Without this the arm above passes for a door that emits the sign-freeze
+    // message for every non-READY state, which would be the same defect
+    // pointing the other way.
+    primeVisit({ status: 'PROCESSING' });
+    const res = await insert();
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/still being prepared/);
+    expect(res.error).not.toMatch(/signed .* frozen/);
   });
 });
