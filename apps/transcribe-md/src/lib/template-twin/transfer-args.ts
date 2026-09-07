@@ -71,11 +71,11 @@ export type ParseResult =
   | { ok: false; reason: string };
 
 const USAGE =
-  "usage: transfer-certification-to-active.ts --source <compiledVersionId> " +
-  "--target <compiledVersionId> --expect-fields <n> --target-status <draft|active> " +
-  "--transfer-source-types <all|type[,type...]> --expect-transfer <n> [--commit]";
+  'usage: transfer-certification-to-active.ts --source <compiledVersionId> ' +
+  '--target <compiledVersionId> --expect-fields <n> --target-status <draft|active> ' +
+  '--transfer-source-types <all|type[,type...]> --expect-transfer <n> [--commit]';
 
-const TARGET_STATUSES = ["draft", "active"];
+const TARGET_STATUSES = ['draft', 'active'];
 
 /**
  * Parse the tool's argv (already sliced past node and the script path).
@@ -100,19 +100,19 @@ export function parseTransferArgs(argv: string[]): ParseResult {
   // report "missing --target" — a refusal that names the wrong argument and
   // sends the reader to fix something that is not broken.
   const takeValue = (flag: string, next: string | undefined): string | null => {
-    if (next === undefined || next.startsWith("--")) return null;
+    if (next === undefined || next.startsWith('--')) return null;
     return next;
   };
 
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i]!;
     switch (a) {
-      case "--commit":
+      case '--commit':
         commit = true;
         break;
-      case "--source": {
+      case '--source': {
         if (source !== undefined)
-          return { ok: false, reason: "--source given more than once." };
+          return { ok: false, reason: '--source given more than once.' };
         const v = takeValue(a, argv[i + 1]);
         if (v === null)
           return { ok: false, reason: `--source needs a value.\n${USAGE}` };
@@ -120,9 +120,9 @@ export function parseTransferArgs(argv: string[]): ParseResult {
         i += 1;
         break;
       }
-      case "--target": {
+      case '--target': {
         if (target !== undefined)
-          return { ok: false, reason: "--target given more than once." };
+          return { ok: false, reason: '--target given more than once.' };
         const v = takeValue(a, argv[i + 1]);
         if (v === null)
           return { ok: false, reason: `--target needs a value.\n${USAGE}` };
@@ -130,9 +130,9 @@ export function parseTransferArgs(argv: string[]): ParseResult {
         i += 1;
         break;
       }
-      case "--expect-fields": {
+      case '--expect-fields': {
         if (expectRaw !== undefined)
-          return { ok: false, reason: "--expect-fields given more than once." };
+          return { ok: false, reason: '--expect-fields given more than once.' };
         const v = takeValue(a, argv[i + 1]);
         if (v === null)
           return {
@@ -143,9 +143,9 @@ export function parseTransferArgs(argv: string[]): ParseResult {
         i += 1;
         break;
       }
-      case "--target-status": {
+      case '--target-status': {
         if (targetStatus !== undefined)
-          return { ok: false, reason: "--target-status given more than once." };
+          return { ok: false, reason: '--target-status given more than once.' };
         const v = takeValue(a, argv[i + 1]);
         if (v === null)
           return {
@@ -156,11 +156,11 @@ export function parseTransferArgs(argv: string[]): ParseResult {
         i += 1;
         break;
       }
-      case "--transfer-source-types": {
+      case '--transfer-source-types': {
         if (transferRaw !== undefined)
           return {
             ok: false,
-            reason: "--transfer-source-types given more than once.",
+            reason: '--transfer-source-types given more than once.',
           };
         const v = takeValue(a, argv[i + 1]);
         if (v === null)
@@ -172,11 +172,11 @@ export function parseTransferArgs(argv: string[]): ParseResult {
         i += 1;
         break;
       }
-      case "--expect-transfer": {
+      case '--expect-transfer': {
         if (expectTransferRaw !== undefined)
           return {
             ok: false,
-            reason: "--expect-transfer given more than once.",
+            reason: '--expect-transfer given more than once.',
           };
         const v = takeValue(a, argv[i + 1]);
         if (v === null)
@@ -193,27 +193,34 @@ export function parseTransferArgs(argv: string[]): ParseResult {
           ok: false,
           reason:
             `unrecognised argument '${a}'.\n${USAGE}\n` +
-            "   Refusing rather than ignoring it: an argument this tool does not " +
-            "understand\n   is an instruction it was given and did not carry out.",
+            '   Refusing rather than ignoring it: an argument this tool does not ' +
+            'understand\n   is an instruction it was given and did not carry out.',
         };
     }
   }
 
+  // ⚠️ `=== undefined` IS NOT `IS MISSING`. An empty string is a supplied value
+  // that names nothing, and it used to sail through here — the refusal then
+  // arrived from the DATABASE as "source version  not found", which is the exact
+  // confusion this module's header promises to prevent. Blank counts as absent.
+  if (source !== undefined && source.trim() === '') source = undefined;
+  if (target !== undefined && target.trim() === '') target = undefined;
+
   const missing = [
-    source === undefined ? "--source" : null,
-    target === undefined ? "--target" : null,
-    expectRaw === undefined ? "--expect-fields" : null,
-    targetStatus === undefined ? "--target-status" : null,
-    transferRaw === undefined ? "--transfer-source-types" : null,
-    expectTransferRaw === undefined ? "--expect-transfer" : null,
+    source === undefined ? '--source' : null,
+    target === undefined ? '--target' : null,
+    expectRaw === undefined ? '--expect-fields' : null,
+    targetStatus === undefined ? '--target-status' : null,
+    transferRaw === undefined ? '--transfer-source-types' : null,
+    expectTransferRaw === undefined ? '--expect-transfer' : null,
   ].filter(Boolean);
   if (missing.length > 0) {
     return {
       ok: false,
       reason:
-        `missing required argument(s): ${missing.join(", ")}.\n${USAGE}\n` +
+        `missing required argument(s): ${missing.join(', ')}.\n${USAGE}\n` +
         "   These used to be file constants naming one doctor's stranded template.\n" +
-        "   They are required so this tool can never act on a target nobody named.",
+        '   They are required so this tool can never act on a target nobody named.',
     };
   }
 
@@ -224,9 +231,9 @@ export function parseTransferArgs(argv: string[]): ParseResult {
       ok: false,
       reason:
         `--expect-fields '${expectRaw}' is not a plain non-negative integer.\n` +
-        "   Not parsed leniently on purpose: a partially-read count is compared\n" +
-        "   faithfully by every guard below it, and the mismatch it causes points\n" +
-        "   at the database rather than at the typo.",
+        '   Not parsed leniently on purpose: a partially-read count is compared\n' +
+        '   faithfully by every guard below it, and the mismatch it causes points\n' +
+        '   at the database rather than at the typo.',
     };
   }
   const expectFields = Number(expectRaw);
@@ -235,11 +242,11 @@ export function parseTransferArgs(argv: string[]): ParseResult {
     return {
       ok: false,
       reason:
-        "--expect-fields 0 is REFUSED.\n" +
-        "   Zero is not a smaller version of this act, it is the absence of it:\n" +
-        "   every count guard would read 0 === 0 against an empty field set and\n" +
-        "   PASS VACUOUSLY, and the end-state assertion would agree. The tool\n" +
-        "   would print a full set of green guards having transferred nothing.",
+        '--expect-fields 0 is REFUSED.\n' +
+        '   Zero is not a smaller version of this act, it is the absence of it:\n' +
+        '   every count guard would read 0 === 0 against an empty field set and\n' +
+        '   PASS VACUOUSLY, and the end-state assertion would agree. The tool\n' +
+        '   would print a full set of green guards having transferred nothing.',
     };
   }
 
@@ -248,9 +255,9 @@ export function parseTransferArgs(argv: string[]): ParseResult {
       ok: false,
       reason:
         `--source and --target are the same compiled version (${source}).\n` +
-        "   A self-transfer writes every mapping back onto itself, and each\n" +
+        '   A self-transfer writes every mapping back onto itself, and each\n' +
         '   "identical" guard passes BECAUSE it is the same row rather than\n' +
-        "   because two versions agree. That is a guard measuring itself.",
+        '   because two versions agree. That is a guard measuring itself.',
     };
   }
 
@@ -266,10 +273,10 @@ export function parseTransferArgs(argv: string[]): ParseResult {
     return {
       ok: false,
       reason:
-        `--target-status '${targetStatus}' is not one of: ${TARGET_STATUSES.join(", ")}.\n` +
-        "   Guard 10 asserts the target template is in this state. A value outside\n" +
-        "   the set is a premise no row can satisfy, so it would refuse later and\n" +
-        "   blame the database.",
+        `--target-status '${targetStatus}' is not one of: ${TARGET_STATUSES.join(', ')}.\n` +
+        '   Guard 10 asserts the target template is in this state. A value outside\n' +
+        '   the set is a premise no row can satisfy, so it would refuse later and\n' +
+        '   blame the database.',
     };
   }
 
@@ -278,12 +285,19 @@ export function parseTransferArgs(argv: string[]): ParseResult {
   // field and that is a legitimate mode; making it the DEFAULT would mean the
   // 53-control act copies its ten re-proposals over by omission. An explicit
   // word costs one argument and removes a silent wrong answer.
+  // ⚠️ THE SENTINEL IS NORMALISED THE SAME WAY THE LIST IS. It used to be
+  // compared raw and case-sensitively while the list branch trimmed, so `"all "`
+  // and `"ALL"` fell through to the list branch as a one-element set matching no
+  // sourceType — selecting ZERO of 53. It failed closed, which is the only
+  // reason it was merely confusing rather than destructive: the refusal blamed
+  // the count instead of the typo.
   let transferSourceTypes: Set<string> | null;
-  if (transferRaw === "all") {
+  const transferNorm = transferRaw!.trim().toLowerCase();
+  if (transferNorm === 'all') {
     transferSourceTypes = null;
   } else {
     const parts = transferRaw!
-      .split(",")
+      .split(',')
       .map((x) => x.trim())
       .filter((x) => x.length > 0);
     if (parts.length === 0) {
@@ -313,8 +327,8 @@ export function parseTransferArgs(argv: string[]): ParseResult {
     return {
       ok: false,
       reason:
-        "--expect-transfer 0 is REFUSED — a transfer that moves nothing is not a\n" +
-        "   smaller transfer, it is the absence of one, and it would report success.",
+        '--expect-transfer 0 is REFUSED — a transfer that moves nothing is not a\n' +
+        '   smaller transfer, it is the absence of one, and it would report success.',
     };
   }
   if (expectTransfer > expectFields) {
@@ -322,7 +336,7 @@ export function parseTransferArgs(argv: string[]): ParseResult {
       ok: false,
       reason:
         `--expect-transfer ${expectTransfer} exceeds --expect-fields ${expectFields}.\n` +
-        "   The transferred set is a subset of the field set; it cannot be larger.",
+        '   The transferred set is a subset of the field set; it cannot be larger.',
     };
   }
 
@@ -348,23 +362,33 @@ export function parseTransferArgs(argv: string[]): ParseResult {
  * premises still matter. `EXPECT_FIELDS` is now `expectFields`, and that is the
  * only change to any of them.
  *
- * ⚠️ FOUR MORE ARE ADDED, BECAUSE PARAMETERISATION MADE AN EXISTING WEAKNESS
- * REACHABLE. Four of the original ten are equality tests over NULLABLE columns:
+ * ⚠️ FOUR MORE ARE ADDED — AND ONLY TWO OF THEM ARE REACHABLE TODAY. The claim
+ * is stated at its true size, because an adversarial pass measured it and the
+ * first version of this comment was wrong.
  *
- *     structureSha256 identical      null === null  ->  true
- *     staticContentSha256 identical  null === null  ->  true
- *     same owning doctor             null === null  ->  true
- *     same practice                  null === null  ->  true
+ * Four of the original ten are equality tests, and `null === null` is `true`, so
+ * two rows that record NOTHING about a property agree perfectly about it — a
+ * guard passing because the evidence is ABSENT, the same shape as
+ * `--expect-fields 0` and the same direction: it looks exactly like a pass.
  *
- * Two rows that record NOTHING about their structure agree perfectly about it.
- * That is a guard passing because the evidence is ABSENT — the same shape as
- * `--expect-fields 0`, and the same direction: it looks exactly like a pass.
+ * But the columns differ in whether that is reachable:
  *
- * With two hardcoded ids naming two rows the author had read, it could not
- * happen. With a caller supplying the ids it can, so the presence of each value
- * is now asserted BESIDE the equality rather than assumed by it. Four added
- * guards is a wider net, never a looser one: nothing that passed the original
- * ten and carries real values fails here.
+ *     same owning doctor      noteTemplate.doctorId    String?   -> REACHABLE
+ *     same practice           noteTemplate.practiceId  String?   -> REACHABLE
+ *     structureSha256         String @db.Char(64)      NOT NULL  -> unreachable
+ *     staticContentSha256     String @db.Char(64)      NOT NULL  -> unreachable
+ *
+ * (`schema.prisma:3134-3135`, on `TemplateTwinCompiledVersion`. A different
+ * model at :3352 has a NULLABLE `staticContentSha256`, which is where the
+ * confusion came from.)
+ *
+ * ⚠️ THE TWO UNREACHABLE GUARDS ARE KEPT, DELIBERATELY, AND LABELLED. A guard
+ * that cannot fail is normally a smell in this house. These are kept because
+ * this module's own `TransferSide` types both columns `string | null` — the
+ * shape a caller can construct — and because a NOT NULL constraint is one
+ * migration away from not being one. What is NOT acceptable is claiming they
+ * catch something they cannot, so the count is four and the reachable count is
+ * two, and both numbers are written down.
  */
 export function buildTransferGuards(
   source: TransferSide,
@@ -376,40 +400,40 @@ export function buildTransferGuards(
     expectTransfer?: number;
   },
 ): Array<[string, unknown, unknown]> {
-  const targetStatus = opts?.targetStatus ?? "active";
+  const targetStatus = opts?.targetStatus ?? 'active';
   const srcCertified = source.fields.filter(
-    (f) => f.mappingStatus === "CERTIFIED",
+    (f) => f.mappingStatus === 'CERTIFIED',
   ).length;
   const tgtCertified = target.fields.filter(
-    (f) => f.mappingStatus === "CERTIFIED",
+    (f) => f.mappingStatus === 'CERTIFIED',
   ).length;
   const srcIds = source.fields.map((f) => f.fieldId).sort();
   const tgtIds = target.fields.map((f) => f.fieldId).sort();
 
-  const present = (v: unknown) => typeof v === "string" && v.length > 0;
+  const present = (v: unknown) => typeof v === 'string' && v.length > 0;
 
   return [
-    ["source field count", source.fields.length, expectFields],
-    ["target field count", target.fields.length, expectFields],
-    ["source CERTIFIED mappings", srcCertified, expectFields],
-    ["target CERTIFIED mappings (must be none)", tgtCertified, 0],
+    ['source field count', source.fields.length, expectFields],
+    ['target field count', target.fields.length, expectFields],
+    ['source CERTIFIED mappings', srcCertified, expectFields],
+    ['target CERTIFIED mappings (must be none)', tgtCertified, 0],
     [
-      "fieldId sets identical",
+      'fieldId sets identical',
       JSON.stringify(srcIds) === JSON.stringify(tgtIds),
       true,
     ],
     [
-      "structureSha256 identical",
+      'structureSha256 identical',
       source.structureSha256 === target.structureSha256,
       true,
     ],
     [
-      "staticContentSha256 identical",
+      'staticContentSha256 identical',
       source.staticContentSha256 === target.staticContentSha256,
       true,
     ],
-    ["same owning doctor", source.doctorId === target.doctorId, true],
-    ["same practice", source.practiceId === target.practiceId, true],
+    ['same owning doctor', source.doctorId === target.doctorId, true],
+    ['same practice', source.practiceId === target.practiceId, true],
     [
       `target template is ${targetStatus.toUpperCase()}`,
       target.templateStatus,
@@ -418,37 +442,75 @@ export function buildTransferGuards(
 
     // ── the four added presence guards; see the note above ──
     [
-      "structureSha256 PRESENT on both (not two nulls agreeing)",
+      'structureSha256 PRESENT on both (not two nulls agreeing)',
       present(source.structureSha256) && present(target.structureSha256),
       true,
     ],
     [
-      "staticContentSha256 PRESENT on both (not two nulls agreeing)",
+      'staticContentSha256 PRESENT on both (not two nulls agreeing)',
       present(source.staticContentSha256) &&
         present(target.staticContentSha256),
       true,
     ],
     [
-      "owning doctor PRESENT on both (not two nulls agreeing)",
+      'owning doctor PRESENT on both (not two nulls agreeing)',
       present(source.doctorId) && present(target.doctorId),
       true,
     ],
     [
-      "practice PRESENT on both (not two nulls agreeing)",
+      'practice PRESENT on both (not two nulls agreeing)',
       present(source.practiceId) && present(target.practiceId),
       true,
     ],
+
+    // ── A NAMED SOURCE TYPE THAT SELECTS NOTHING IS A REFUSAL ──
+    // ⚠️ THE CARDINALITY COUNT DOES NOT PIN *WHICH* FIELDS. Two disjoint sets of
+    // equal size both satisfy `--expect-transfer 43`, so a caller who names the
+    // wrong sourceType and happens to guess a matching count transfers the wrong
+    // 43 with every guard green.
+    //
+    // ⚠️ AND IT IS DATA-DRIVEN, NOT AN ENUM COPY. The valid sourceTypes live in
+    // one place — the Zod enum in `ir.ts` — and it is not exported as a value.
+    // Re-typing the five names here would make this the SECOND reader of that
+    // rule, and a second reader drifts: a type added to `ir.ts` tomorrow would
+    // be refused here with nothing saying why. Asking the DATA whether the named
+    // type exists on this source cannot drift, and it also catches the case an
+    // enum check would miss — a type that is perfectly valid and simply absent
+    // from the version being transferred, which is the wrong-universe error.
+    ...(opts?.transferSourceTypes
+      ? ([
+          [
+            'every named source type is present on the source',
+            [...opts.transferSourceTypes]
+              .filter((t) => !source.fields.some((f) => f.sourceType === t))
+              .sort(),
+            [],
+          ],
+        ] as Array<[string, unknown, unknown]>)
+      : []),
 
     // ── the SELECTION guard, emitted ONLY when the caller declared a count ──
     // ⚠️ A guard appended unconditionally as `expectTransfer ?? <measured>`
     // would compare the measurement against itself and pass forever — the exact
     // vacuity this module refuses `--expect-fields 0` for. No declared count,
     // no guard.
+    //
+    // ⚠️ AND ITS STRENGTH IS NOT UNIFORM — said here rather than left for a
+    // reader to assume, because an adversarial pass measured it. With an
+    // explicit type list this is a real measurement of the partition. With
+    // `all` it DEGENERATES: guard 1 has already pinned
+    // `source.fields.length === expectFields`, and the parser has already
+    // refused `expectTransfer > expectFields`, so it passes iff the caller wrote
+    // two equal numbers — which is true for every possible distribution of
+    // source types. The guard above it, "every named source type is present on
+    // the source", is what carries the weight in the selective case; `all` has
+    // nothing to name, and its safety comes from transferring everything rather
+    // than from this count.
     ...(opts?.expectTransfer === undefined
       ? []
       : ([
           [
-            "fields selected for transfer",
+            'fields selected for transfer',
             selectTransferFieldIds(source, opts.transferSourceTypes ?? null)
               .length,
             opts.expectTransfer,
