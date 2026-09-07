@@ -24,6 +24,10 @@ import {
   updateTemplateTwinMappings,
   certifyAndActivateTemplateTwin,
 } from '../src/lib/template-twin/certification-lifecycle';
+import { runTemplateTwinSyntheticTest } from '../src/lib/template-twin/synthetic-test';
+import { deriveVerificationEncounter } from '../src/lib/template-twin/verification-encounter';
+import { extractTemplateTwinEntities } from '../src/worker/layers/03-extract-entities';
+import { createEphemeralVisitNoteGenerator } from '../src/worker/template-twin-note-generator';
 import type { SemanticMapping } from '../src/lib/template-twin/ir';
 
 const NOTE_TEMPLATE_ID = '939aa9ea-2f03-41d5-881f-026445e959c1';
@@ -107,18 +111,50 @@ async function main() {
     return;
   }
 
-  const afterUpdate = await updateTemplateTwinMappings({
+  // ⚠️ IDEMPOTENT. The first --commit run confirmed the mappings and then
+  // blocked at certification because no synthetic proof existed for that set.
+  // Re-confirming would move the sha again and invalidate a proof we are about
+  // to spend a model generation on, so this skips when the set is already ours.
+  const allCertified = rows.every((r) => r.mapping.status === 'certified');
+  let sha = ws.mappingsSha256;
+  if (allCertified) {
+    console.log('\n↷ mappings already confirmed by an earlier run — not rewriting them.');
+  } else {
+    const afterUpdate = await updateTemplateTwinMappings({
+      noteTemplateId: NOTE_TEMPLATE_ID,
+      actor: OWNER,
+      expectedMappingsSha256: ws.mappingsSha256,
+      mappings: next,
+    });
+    sha = afterUpdate.mappingsSha256;
+    console.log(`\n✅ mappings confirmed. new mappingsSha=${sha}`);
+  }
+
+  // ── THE PROOF THE CERTIFICATION BINDS — one REAL model generation ────────
+  // compile -> derive -> REAL fill -> CERTIFIED, through the production wiring
+  // verbatim. This is also the evidence for ruling #225's judgement row.
+  console.log('\n── RUNNING THE REAL CHAIN (one model generation) ──');
+  await runTemplateTwinSyntheticTest({
     noteTemplateId: NOTE_TEMPLATE_ID,
     actor: OWNER,
-    expectedMappingsSha256: ws.mappingsSha256,
-    mappings: next,
+    expectedMappingsSha256: sha,
+    deriveEncounter: () =>
+      deriveVerificationEncounter(
+        rows.map((r) => ({
+          originalLabel: r.field.originalLabel,
+          clinicalConcept: r.mapping.clinicalConcept ?? null,
+        })),
+      ),
+    encounterMode: 'dictation',
+    extractEntities: extractTemplateTwinEntities,
+    generateNote: createEphemeralVisitNoteGenerator({ specialty: 'Gastroenterology' }),
   });
-  console.log(`\n✅ mappings confirmed. new mappingsSha=${afterUpdate.mappingsSha256}`);
+  console.log('  synthetic test: COMPLETE');
 
   const certified = await certifyAndActivateTemplateTwin({
     noteTemplateId: NOTE_TEMPLATE_ID,
     actor: OWNER,
-    expectedMappingsSha256: afterUpdate.mappingsSha256,
+    expectedMappingsSha256: sha,
   });
   console.log(`✅ CERTIFIED and ACTIVATED. status=${certified.certificationStatus}`);
 }
