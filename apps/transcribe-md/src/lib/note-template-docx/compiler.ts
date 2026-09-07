@@ -807,7 +807,36 @@ function processContentControl(
     kind = "date";
   } else if (plainText || childrenOf(content).length > 0) {
     // Rich-text content controls have no dedicated type child in w:sdtPr.
-    kind = inferTextKind(identity.label ?? context.containerText ?? "");
+    //
+    // ⚠️ #216 — A SCAFFOLDED CONTROL IS ALWAYS `narrative_text`.
+    //
+    // `inferTextKind` is a CONTENT-CLASSIFYING HEURISTIC over a label, and it is
+    // sound for the short furniture labels it was written for ("Weight", "Temp",
+    // "Height"). It is not sound where the label IS the sentence: a scaffolded
+    // control's alias is its own default prose, so any clinical word the regex
+    // happens to list re-types the whole clause.
+    //
+    // MEASURED, and it is why this exists: control #13 of the regenerated
+    // consult form, alias "The patient denies unintentional weight loss or
+    // change in appetite", compiled `measurement` on the strength of the word
+    // "weight" — while the other five GI-ROS clauses (heartburn, nausea,
+    // abdominal pain, bowel, bleeding) correctly compiled `narrative_text`.
+    // The one clause that carries the GI ALARM FEATURE was the one mis-typed.
+    //
+    // ⚠️ SCOPED, DELIBERATELY, AND THE BLAST RADIUS IS MEASURED NOT ASSUMED.
+    // This branch is the ONLY one whose kind comes from a label regex — selects,
+    // checkboxes and dates are typed structurally from their own `w:sdtPr`
+    // child and are untouched. And `scaffolded` is assigned in exactly ONE place
+    // in this file (the field literal below), so this is the only site that can
+    // ever see a scaffolded control. Production carries ZERO scaffolded
+    // controls across all four compiled versions, so no existing template's
+    // kinds move — see `gate-216-scaffolded-is-narrative.test.ts`, which pins
+    // both the change and its non-effect on unscaffolded labels.
+    const textLabel = identity.label ?? context.containerText ?? "";
+    kind =
+      isScaffolded(properties, content) && isProseLabel(textLabel)
+        ? "narrative_text"
+        : inferTextKind(textLabel);
   } else {
     addUnsupportedContentControl(
       state,
@@ -1577,6 +1606,38 @@ function chooseFieldLabel(
     return { label: normalizedContainer, source: "same_container" };
   }
   return { label: `Field ${generatedOrdinal}`, source: "generated" };
+}
+
+/**
+ * Is this label PROSE rather than a field name? — ruling #216.
+ *
+ * ⚠️ THE RULING'S OWN WORDS ARE THE DISCRIMINATOR: kind inference "applies to
+ * short furniture labels, never to a control whose default content is prose
+ * (the alias IS the sentence)". So the test is the LABEL's shape, and a word
+ * count is the honest way to measure it.
+ *
+ * ⚠️ AND THE THRESHOLD IS MEASURED, NOT CHOSEN. Across all three real documents
+ * — the customer's 35-control GI form, the 80-control ultrasound report and the
+ * regenerated 53-control form — every label that reaches `inferTextKind`'s
+ * keyword lists is either ONE word or EIGHT-plus:
+ *
+ *     "Age"                                                         1 word
+ *     "{patient} is a pleasant {age}-year-old presenting for ..."    8 words
+ *     "The patient denies unintentional weight loss or change ..."  10 words
+ *
+ * There is nothing between 1 and 8, so 5 sits in the middle of a real gap with
+ * margin on both sides — and the longest legitimate FIELD NAME in these
+ * documents ("Total minutes spent with patient") is 5 words and stays
+ * classifiable. A threshold picked off a gap this wide is not a tuned constant.
+ *
+ * ⚠️ IT IS AND-ED WITH `isScaffolded` DELIBERATELY, WHICH IS STRICTLY MORE
+ * CONSERVATIVE THAN EITHER ALONE. A control with no default prose is not what
+ * this rule is about, and narrowing the blast radius is worth more here than
+ * elegance: a compiler change that re-types an existing template DE-CERTIFIES
+ * it.
+ */
+function isProseLabel(label: string): boolean {
+  return normalizeLabel(label).split(/\s+/).filter(Boolean).length > 5;
 }
 
 function inferTextKind(label: string): TemplateField["kind"] {
