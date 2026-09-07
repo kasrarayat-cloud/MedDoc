@@ -1,0 +1,146 @@
+-- ============================================================================
+-- RULING #210 — DETERMINISTIC ARMS FOR THE LAST-OWNER TRIGGER
+-- ----------------------------------------------------------------------------
+-- Run against an ISOLATED database that has the migration applied. Everything
+-- happens inside ONE transaction that ROLLS BACK, so the target database is
+-- byte-unchanged; the concurrency proof is a separate harness, because a race
+-- cannot be staged inside a single transaction.
+--
+--   docker exec -i meddoc-qa-postgres-1 psql -U meddoc -d meddoc_qa_test \
+--     -X -v ON_ERROR_STOP=0 -f - < this-file
+--
+-- ⚠️ EVERY ARM STATES WHAT WOULD MAKE IT FAIL, AND THE REFUSAL ARMS ARE READ
+-- OFF THE ERROR, NOT OFF AN ABSENCE. An arm that "passes" because nothing
+-- happened is the vacuous-control defect this programme keeps meeting.
+-- ============================================================================
+\set ON_ERROR_STOP 0
+\set QUIET 1
+\pset pager off
+BEGIN;
+
+CREATE TEMP TABLE arm_result(arm text, expected text, got text, verdict text);
+
+-- ── Fixtures ───────────────────────────────────────────────────────────────
+-- P_MULTI : 3 members — able owner A, SUSPENDED owner S, clinician C
+--           (S is the shape PR #1026's predicate miscounts as a second owner)
+-- P_SOLO  : 1 member — able owner O
+-- P_DEAD  : 2 members — both inactive, so ZERO active owners already
+-- P_OTHER : 1 member — able owner, the destination for the move arm
+INSERT INTO "practices"(id,name,slug,"updatedAt") VALUES
+  ('t210_pmulti','T210 Multi','t210-multi',now()),
+  ('t210_psolo','T210 Solo','t210-solo',now()),
+  ('t210_pdead','T210 Dead','t210-dead',now()),
+  ('t210_pother','T210 Other','t210-other',now());
+
+INSERT INTO "users"(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive") VALUES
+  ('t210_a','t210a@x.test','x',now(),'t210_pmulti','OWNER',     true),
+  ('t210_s','t210s@x.test','x',now(),'t210_pmulti','OWNER',     true),
+  ('t210_c','t210c@x.test','x',now(),'t210_pmulti','CLINICIAN', true),
+  ('t210_o','t210o@x.test','x',now(),'t210_psolo', 'OWNER',     true),
+  ('t210_d1','t210d1@x.test','x',now(),'t210_pdead','OWNER',    false),
+  ('t210_d2','t210d2@x.test','x',now(),'t210_pdead','CLINICIAN',false),
+  ('t210_z','t210z@x.test','x',now(),'t210_pother','OWNER',     true);
+-- S is an OWNER row that `deactivatedAt IS NULL` counts and this trigger does not.
+UPDATE "users" SET "suspendedAt" = now() WHERE id = 't210_s';
+
+-- ⚠️ POSITIVE CONTROL ON THE FIXTURE ITSELF. If this row is not 2/1 the whole
+-- file is measuring something other than what it claims, and every arm below
+-- would pass or fail for the wrong reason.
+INSERT INTO arm_result
+SELECT 'FIXTURE-CONTROL: #1026 predicate sees 2, this trigger sees 1', '2|1',
+       (SELECT count(*) FROM users WHERE "practiceId"='t210_pmulti' AND "practiceRole"='OWNER' AND "deactivatedAt" IS NULL)::text
+       ||'|'||
+       (SELECT count(*) FROM users u WHERE u."practiceId"='t210_pmulti' AND users_is_active_owner(u))::text,
+       NULL;
+
+-- ── Helper: run a statement, record whether it RAISED ───────────────────────
+-- ⚠️ THE UNDO IS INSIDE THE HELPER, AND THE RECORD IS OUTSIDE IT. The first
+-- version of this file wrapped each arm in SAVEPOINT/ROLLBACK TO — which also
+-- rolled back the INSERT of its own result, so the summary printed
+-- "pass 0 | fail 0" and read exactly like a clean run. The fixture control is
+-- the only reason that was caught: it printed while the arms did not.
+--
+-- The shape below cannot do that. The inner BEGIN...EXCEPTION is a
+-- subtransaction; raising T210_UNDO after a SUCCESSFUL statement forces that
+-- subtransaction to roll back, so an allowed write is undone exactly like a
+-- refused one — and the INSERT that records the outcome happens AFTER the
+-- block, where nothing rolls it back.
+CREATE OR REPLACE FUNCTION t210_try(arm text, expected text, stmt text, setup text DEFAULT NULL)
+RETURNS void AS $$
+DECLARE got text;
+BEGIN
+    BEGIN
+        IF setup IS NOT NULL THEN EXECUTE setup; END IF;
+        EXECUTE stmt;
+        RAISE EXCEPTION 'T210_UNDO';       -- the statement was ALLOWED; undo it
+    EXCEPTION WHEN others THEN
+        IF    SQLERRM = 'T210_UNDO'                     THEN got := 'ALLOWED';
+        -- The refusal is identified BY ITS OWN MESSAGE, never by "something threw".
+        ELSIF SQLERRM LIKE 'users_last_owner_guard:%'   THEN got := 'REFUSED';
+        ELSE  got := 'OTHER-ERROR: ' || SQLERRM;
+        END IF;
+    END;
+    INSERT INTO arm_result VALUES (arm, expected, got, CASE WHEN got = expected THEN 'PASS' ELSE 'FAIL' END);
+END $$ LANGUAGE plpgsql;
+
+-- ══ THE ARMS ═══════════════════════════════════════════════════════════════
+-- Each runs in its own SAVEPOINT so one refusal does not poison the next.
+
+SELECT t210_try('1  demote the LAST able owner (multi-member)','REFUSED',
+  $$UPDATE users SET "practiceRole"='CLINICIAN' WHERE id='t210_a'$$);
+
+SELECT t210_try('2  suspend the LAST able owner','REFUSED',
+  $$UPDATE users SET "suspendedAt"=now() WHERE id='t210_a'$$);
+
+SELECT t210_try('3  soft-delete the LAST able owner','REFUSED',
+  $$UPDATE users SET "softDeletedAt"=now() WHERE id='t210_a'$$);
+
+SELECT t210_try('4  deactivate (isActive=false) the LAST able owner','REFUSED',
+  $$UPDATE users SET "isActive"=false, "practiceRole"=NULL WHERE id='t210_a'$$);
+
+SELECT t210_try('5  DELETE the LAST able owner (members remain)','REFUSED',
+  $$DELETE FROM users WHERE id='t210_a'$$);
+
+SELECT t210_try('6  move the LAST able owner to another practice','REFUSED',
+  $$UPDATE users SET "practiceId"='t210_pother' WHERE id='t210_a'$$);
+
+-- ⚠️ ARM 7 IS THE ONE THAT SAYS THE TRIGGER IS NOT A COUNT-READ-AND-ACT.
+-- One STATEMENT demoting BOTH owner rows. A row trigger that could not see its
+-- siblings' in-statement changes would allow this and leave zero owners.
+SELECT t210_try('7  ONE statement demoting BOTH owners','REFUSED',
+  $$UPDATE users SET "practiceRole"='CLINICIAN' WHERE "practiceId"='t210_pmulti' AND "practiceRole"='OWNER'$$);
+
+-- ══ THE ALLOW ARMS — a guard that refuses everything is not a guard ═════════
+
+SELECT t210_try('8  demote the SUSPENDED owner (not the last ABLE one)','ALLOWED',
+  $$UPDATE users SET "practiceRole"='CLINICIAN' WHERE id='t210_s'$$);
+
+SELECT t210_try('9  DELETE the solo owner (practice torn down) — exemption 2','ALLOWED',
+  $$DELETE FROM users WHERE id='t210_o'$$);
+
+SELECT t210_try('10 demote an owner where ZERO are already active — exemption 1','ALLOWED',
+  $$UPDATE users SET "practiceRole"='CLINICIAN' WHERE id='t210_d1'$$);
+
+SELECT t210_try('11 unrelated write to the last able owner','ALLOWED',
+  $$UPDATE users SET "forceLogoutAt"=now() WHERE id='t210_a'$$);
+
+SELECT t210_try('12 demote a CLINICIAN (never an owner)','ALLOWED',
+  $$UPDATE users SET "practiceRole"='TECH' WHERE id='t210_c'$$);
+
+-- Two able owners: demoting one is fine, and it is the direct control for arm 1.
+SELECT t210_try('13 demote one of TWO able owners — the control for arm 1','ALLOWED',
+  $$UPDATE users SET "practiceRole"='CLINICIAN' WHERE id='t210_a'$$,
+  $$UPDATE users SET "suspendedAt"=NULL WHERE id='t210_s'$$);   -- S becomes able: 2 able owners
+
+\pset format aligned
+\echo ''
+\echo '=== RULING #210 — DETERMINISTIC ARMS ==='
+SELECT arm, expected, got, verdict FROM arm_result WHERE verdict IS NOT NULL ORDER BY arm;
+\echo ''
+SELECT arm, expected AS must_be, got FROM arm_result WHERE verdict IS NULL;
+\echo ''
+SELECT count(*) FILTER (WHERE verdict='PASS') AS pass,
+       count(*) FILTER (WHERE verdict='FAIL') AS fail
+  FROM arm_result WHERE verdict IS NOT NULL;
+
+ROLLBACK;

@@ -17,6 +17,7 @@ import prisma from '@meddoc/db';
 
 import { adminApi } from '@/lib/admin-api-gate';
 import { logAudit } from '@/lib/audit';
+import { wouldStrandPractice } from '@/lib/last-owner-invariant';
 
 const Body = z.object({ confirmEmail: z.string().email().max(254) });
 
@@ -57,6 +58,18 @@ export const POST = adminApi('users:soft-delete', async (req, ctx) => {
     return NextResponse.json(
       { error: 'confirmEmail does not match user.email' },
       { status: 400 }
+    );
+  }
+
+  // ── RULING #210 — the FRIENDLY REFUSAL. ────────────────────────────────────
+  // Enforcement is the `users_last_owner_guard` trigger; without this block the
+  // write still cannot strand the practice, but the caller gets a 500 carrying
+  // a Postgres error instead of a sentence naming the remedy.
+  const lastOwner = await wouldStrandPractice(id);
+  if (lastOwner.wouldStrand) {
+    return NextResponse.json(
+      { error: lastOwner.reason, reason: 'LAST_OWNER', membersLeft: lastOwner.membersLeft },
+      { status: 409 }
     );
   }
 
