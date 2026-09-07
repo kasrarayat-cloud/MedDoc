@@ -259,6 +259,19 @@ function digest(value: string): string {
 export { conceptSegment } from '../concept-segment';
 
 /**
+ * A lexicon token as ordinary words: `early_satiety` -> `early satiety`.
+ *
+ * ⚠️ DE-SLUGGING ONLY, AND THE LIMIT IS THE POINT. It restores the spaces the
+ * identifier form removed and changes nothing else — no synonym, no expansion,
+ * no clinical rewording. `dyspnea` stays `dyspnea`, because deciding it should
+ * read "shortness of breath" on a doctor's form is his call and not this
+ * function's.
+ */
+export function readableFinding(finding: string): string {
+  return finding.replace(/_/g, ' ');
+}
+
+/**
  * Case-INSENSITIVE offset of the value inside its own evidence quote, or -1.
  *
  * ⚠️ CASE-INSENSITIVITY IS LOAD-BEARING, NOT POLITENESS. L3 CAPITALISES the
@@ -703,14 +716,33 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
       // Both halves come from the CLOSED lexicon the L3 schema enforces, so
       // this cannot produce a concept the registry will refuse.
       concept: rosConcept(conceptSegment(item.system), conceptSegment(item.finding)),
-      // ⚠️ THE DOCTOR'S OWN WORDS, WHEN THE LEXICON COULD NOT HOLD THEM.
+      // ⚠️ THE DOCTOR'S OWN WORDS FIRST, AND A READABLE TOKEN OTHERWISE —
+      // NEVER THE RAW IDENTIFIER.
+      //
       // `finding` is a machine token from a CLOSED set, so it is what the
-      // CONCEPT is built from — but it is not what a document should print.
-      // When L3's resolver coerced an off-lexicon symptom to `other` it kept
-      // the original in `finding_verbatim`, and that is the value a note or a
-      // form must carry. Without this a form renders the literal word `other`
-      // where the doctor said "belching".
-      value: item.finding_verbatim ?? item.finding,
+      // CONCEPT is built from; it is not what a document should print. Two
+      // things can go wrong and both were measured:
+      //
+      //   · a symptom outside the lexicon becomes `other`, and a form rendered
+      //     the literal word "other" where the doctor said "belching";
+      //   · a symptom INSIDE the lexicon is a snake_case identifier — 25 of the
+      //     72 tokens carry an underscore — so `early_satiety`,
+      //     `night_sweats` and `suicidal_ideation` printed verbatim into a
+      //     signed document, with `status=supported`, `valid=true` and zero
+      //     issues.
+      //
+      // The second is the one the L3 prompt made MORE likely, not less: it now
+      // instructs the model to emit the identifier exactly, so a compliant
+      // model leaves nothing in `finding_verbatim` at all.
+      //
+      // ⚠️ AND THE FIX IS DELIBERATELY NOT A DISPLAY MAP. A token-to-prose
+      // table is a second vocabulary to maintain, and choosing that a doctor's
+      // form should say "shortness of breath" where the lexicon says `dyspnea`
+      // is a clinical wording judgement that belongs to the owner — it is filed
+      // for him and NOT decided here. Replacing underscores with spaces is not
+      // that judgement; it is identifier de-slugging, and it leaves every
+      // clinical word exactly as the lexicon chose it.
+      value: item.finding_verbatim ?? readableFinding(item.finding),
       evidence: item,
       defaultTemporality: 'current',
       // Q1 audit §02.9 — L3 states these now, so stop guessing them back out of

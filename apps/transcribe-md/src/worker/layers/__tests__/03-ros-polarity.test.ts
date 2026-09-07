@@ -121,8 +121,16 @@ describe('L3 states ROS polarity rather than implying it', () => {
 // The projection — where the guessing actually happened
 // ---------------------------------------------------------------------------
 
+// ⚠️ BY CONCEPT, NOT BY VALUE. This helper used to find a fact by searching its
+// VALUE for the token — `String(f.value).includes('chest_pain')`. That coupled
+// every arm in this file to the value being the raw machine identifier, which
+// is precisely the thing a document must never print: once the projector
+// de-slugged it for display, the value read "chest pain" and the lookup
+// silently found NOTHING, surfacing as `Cannot read properties of undefined`
+// rather than as a wrong polarity. The CONCEPT is the stable identifier; the
+// value is display text and is allowed to change.
 const rosFact = (facts: ReturnType<typeof projectEncounterFacts>, needle: string) =>
-  facts.find((f) => f.concept.startsWith('ros.') && String(f.value).includes(needle))!;
+  facts.find((f) => f.concept.startsWith('ros.') && f.concept.endsWith(`.${needle}`))!;
 
 describe('the projection uses the stated polarity, not a regex over the prose', () => {
   it('OVER-FIRE: an affirmed symptom sharing a quote with a denial stays affirmed', () => {
