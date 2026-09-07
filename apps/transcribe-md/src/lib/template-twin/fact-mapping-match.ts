@@ -34,6 +34,11 @@
 // ============================================================================
 
 import type { EncounterFact, SemanticMapping } from './ir';
+// ⚠️ THE ONE RUNTIME IMPORT, AND THE LEAF PROPERTY SURVIVES IT. `ros-lexicon`
+// imports only `concept-segment`, which imports nothing — both are pure data
+// and string work, no zod, no db, no framework. `bridge-evidence` therefore
+// still pulls in no graph of consequence.
+import { isUnnamedRosConcept } from './ros-lexicon';
 
 /**
  * NFKC, trimmed, lower-cased — the one spelling comparison for concepts.
@@ -143,15 +148,38 @@ export function temporalityMatches(
  * exists to end.
  */
 export function conceptMatches(fact: EncounterFact, mapping: SemanticMapping): boolean {
+  const factConcept = normalizeConcept(fact.concept);
+
+  // ⚠️ #179(1) — AN UNNAMED ROS CONCEPT CANNOT ANSWER A CLAUSE THAT NAMES
+  // SYMPTOMS. `ros.<system>.other` carries a real finding the doctor stated, so
+  // it must reach the note somewhere — but it names a symptom outside the
+  // lexicon, and letting it satisfy a specific clause asserts that "the patient
+  // denies heartburn, dysphagia, odynophagia" was contradicted by a finding
+  // none of those three words name. #179's own body rules this; nothing
+  // implemented it until now.
+  const unnamed = isUnnamedRosConcept(fact.concept);
+
   if (mapping.conceptScope && mapping.conceptScope.length > 0) {
+    // A declared scope is a list of NAMED symptoms by definition, so an unnamed
+    // concept is excluded from it — the ruling's literal words.
+    if (unnamed) return false;
     const scope = new Set(mapping.conceptScope.map(normalizeConcept));
-    return scope.has(normalizeConcept(fact.concept));
+    return scope.has(factConcept);
   }
+
   if (!mapping.clinicalConcept) return false;
+
+  // ⚠️ AND THE LIVE ROUTE WAS `approvedSynonyms`, NOT `conceptScope` — a guard
+  // aimed only at scope would have landed entirely in dark code and changed
+  // nothing observable. An unnamed concept matches ONLY a mapping whose own
+  // concept IS that concept (a form's literal "Other:" row); a synonym list is
+  // exactly how a specific-symptom clause silently acquired `other`.
+  if (unnamed) return normalizeConcept(mapping.clinicalConcept) === factConcept;
+
   const concepts = new Set(
     [mapping.clinicalConcept, ...mapping.approvedSynonyms].map(normalizeConcept),
   );
-  return concepts.has(normalizeConcept(fact.concept));
+  return concepts.has(factConcept);
 }
 
 /**

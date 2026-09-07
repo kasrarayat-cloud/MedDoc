@@ -139,6 +139,28 @@ export function resolveRosFinding(system: string, raw: string): string {
   return symptomsFor(system).includes(seg) ? seg : ROS_OTHER;
 }
 
+/**
+ * A ROS concept that names NO specific symptom — `ros.<system>.other`, or
+ * anything under a system the lexicon does not carry.
+ *
+ * ⚠️ THIS IS `isAddressable`'s FIRST CALLER, AND UNTIL IT EXISTED THE HEADER OF
+ * THIS FILE WAS FALSE. That header said `ros.<system>.other` "is excluded from
+ * every declared scope by construction — see `isAddressable`". Measured:
+ * `isAddressable` had TWO references in the whole tree — its own definition and
+ * that comment. ZERO callers, production or test. So nothing implemented the
+ * exclusion, and the property the file advertised was enforced by nobody.
+ *
+ * ⚠️ AND THE HARM WAS A FALSE CLINICAL ASSERTION, NOT AN ABSTRACTION. Measured
+ * end to end: a patient who explicitly DENIED heartburn, and separately
+ * reported belching, produced `ros.gastrointestinal.other`; a heartburn
+ * checkbox carrying that concept as an APPROVED SYNONYM matched it and was
+ * ticked `true` — `valid=true`, zero blocking issues. The document asserted a
+ * symptom the patient had denied in the same breath.
+ */
+export function isUnnamedRosConcept(concept: string): boolean {
+  return concept.startsWith('ros.') && !isAddressable(concept);
+}
+
 /** Every system a resolved item may carry, including the unresolved bucket. */
 export const ROS_SYSTEMS_RESOLVED: readonly string[] = Object.freeze([
   ...ROS_SYSTEMS,

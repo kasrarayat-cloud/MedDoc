@@ -363,6 +363,67 @@ describe('#179(6a) — NARRATIVE_SENTENCES is bound to the registry and covers t
       concept: 'ros.gastrointestinal.other',
     });
     expect(factMatchesMapping(otherFact, scoped)).toBe(false);
+
+    // ⚠️ THIS ARM WAS VACUOUS UNTIL THIS LINE. `other` is not in that scope
+    // list, so plain set membership already returned false and the assertion
+    // above was satisfied by the ordinary path — it never measured the
+    // exclusion it claims to. The DISCRIMINATING control: a NAMED symptom that
+    // is also outside the scope must be false for the SAME ordinary reason, so
+    // the two together say the first result is about set membership...
+    const namedButOutOfScope = EncounterFactSchema.parse({
+      ...fact('current'),
+      concept: 'ros.gastrointestinal.nausea',
+    });
+    expect(factMatchesMapping(namedButOutOfScope, scoped)).toBe(false);
+    // ...and this is the exclusion itself: `other` INSIDE its own scope list is
+    // STILL refused, where a named symptom in the same position is accepted.
+    // Only the second pair can tell the two rules apart.
+    const scopeIncludingOther = mapping({ conceptScope: ['ros.gastrointestinal.other'] });
+    expect(factMatchesMapping(otherFact, scopeIncludingOther)).toBe(false);
+    const scopeIncludingNausea = mapping({ conceptScope: ['ros.gastrointestinal.nausea'] });
+    expect(factMatchesMapping(namedButOutOfScope, scopeIncludingNausea)).toBe(true);
+  });
+
+  it('⚠️ THE LIVE ROUTE: `other` cannot reach a named clause through approvedSynonyms', () => {
+    // ⚠️ AND THIS IS WHERE THE HARM ACTUALLY WAS. `conceptScope` has no
+    // producer, so a guard aimed only at scope lands in dark code and changes
+    // nothing a doctor could ever see. The reachable path is the ordinary
+    // concept + synonym match, and it was measured end to end: a patient who
+    // explicitly DENIED heartburn and separately reported belching produced
+    // `ros.gastrointestinal.other`, a heartburn checkbox carrying that concept
+    // as an APPROVED SYNONYM matched it, and the box was ticked `true` with
+    // `valid=true` and zero blocking issues.
+    const otherFact = EncounterFactSchema.parse({
+      ...fact('current'),
+      concept: 'ros.gastrointestinal.other',
+    });
+    const heartburnWithOtherAsSynonym = mapping({
+      clinicalConcept: 'ros.gastrointestinal.heartburn',
+      approvedSynonyms: ['ros.gastrointestinal.other'],
+    });
+    expect(factMatchesMapping(otherFact, heartburnWithOtherAsSynonym)).toBe(false);
+
+    // NON-VACUITY, three ways — without these the assertion above is satisfied
+    // by a matcher that refuses synonyms, or refuses ros, or refuses everything.
+    const realSynonym = mapping({
+      clinicalConcept: 'ros.gastrointestinal.heartburn',
+      approvedSynonyms: ['ros.gastrointestinal.dysphagia'],
+    });
+    const dysphagiaFact = EncounterFactSchema.parse({
+      ...fact('current'),
+      concept: 'ros.gastrointestinal.dysphagia',
+    });
+    expect(factMatchesMapping(dysphagiaFact, realSynonym), 'a NAMED synonym must still match').toBe(true);
+    expect(
+      factMatchesMapping(fact('current'), mapping({})),
+      'the plain concept match must still work',
+    ).toBe(true);
+
+    // AND THE LEGITIMATE CASE SURVIVES: a form's literal "Other:" row, whose
+    // OWN concept is the unnamed one, still fills. Refusing this would delete
+    // the doctor's finding, which #179 forbids in the same breath.
+    const otherRow = mapping({ clinicalConcept: 'ros.gastrointestinal.other', approvedSynonyms: [] });
+    expect(factMatchesMapping(otherFact, otherRow), 'an "Other:" row must still fill').toBe(true);
   });
 
   it('a concept OUTSIDE the registry entirely has no sentence', () => {
