@@ -1,10 +1,10 @@
 // ============================================================================
-// #233 REGISTRY-1, families 1 / 2 / 4 — the concepts the acceptance needs.
+// #246 REGISTRY-1, families 1 / 2 / 4 — the concepts the acceptance needs.
 // ----------------------------------------------------------------------------
 // The eleven-row acceptance came back 🟡 with four rows blocked by one cause:
 // the closed registry had no term for them. Three of the four are here
 // (`past_surgical_history`, `social_history.marital_status`,
-// `total_time_minutes`); the fourth, `visit_metadata.*`, is ruling #234's own
+// `total_time_minutes`); the fourth, `visit_metadata.*`, is ruling #247's own
 // change and is asserted REFUSED below so this file records which half shipped.
 //
 // ⚠️ THE DEFECT THIS CLOSES IS NOT "A MISSING CONCEPT". It is that the proposer
@@ -40,7 +40,7 @@ function project(entities: Record<string, unknown>) {
 }
 const conceptOf = (facts: ReturnType<typeof project>, c: string) => facts.filter((f) => f.concept === c);
 
-describe('#233 — the three families are REGISTERED', () => {
+describe('#246 — the three families are REGISTERED', () => {
   it('all three are admitted', () => {
     expect(isRegisteredConcept('past_surgical_history')).toBe(true);
     expect(isRegisteredConcept('social_history.marital_status')).toBe(true);
@@ -55,7 +55,7 @@ describe('#233 — the three families are REGISTERED', () => {
   });
 
   it('⚠️ family 3 is NOT shipped here, and this file says so', () => {
-    // #234 is its own change. If these ever pass without that change landing,
+    // #247 is its own change. If these ever pass without that change landing,
     // something registered them without their record-derived fact class.
     expect(isRegisteredConcept('visit_metadata.patient_name')).toBe(false);
     expect(isRegisteredConcept('visit_metadata.patient_age')).toBe(false);
@@ -68,7 +68,7 @@ describe('#233 — the three families are REGISTERED', () => {
   });
 });
 
-describe('#233 — the projector emits them, and DISCRIMINATES', () => {
+describe('#246 — the projector emits them, and DISCRIMINATES', () => {
   it('a surgical history projects `past_surgical_history`, NOT `past_medical_history`', () => {
     const facts = project({
       past_surgical_history: [{ procedure: 'laparoscopic cholecystectomy', evidence_quote: QUOTE }],
@@ -98,7 +98,7 @@ describe('#233 — the projector emits them, and DISCRIMINATES', () => {
   });
 
   it('⚠️ total_time_minutes carries NO UNIT in its value, and the number beside it', () => {
-    // canon 131's trap: the resolver's number arm refuses a value carrying a
+    // canon 134's trap: the resolver's number arm refuses a value carrying a
     // unit, so "45 minutes" would fail where "45" resolves.
     const facts = project({
       total_time_minutes: { minutes: 45, evidence_quote: QUOTE },
@@ -151,7 +151,7 @@ describe('#233 — the projector emits them, and DISCRIMINATES', () => {
   });
 });
 
-describe('#233 — the downstream lists moved with the registry', () => {
+describe('#246 — the downstream lists moved with the registry', () => {
   it('a surgical history ACCUMULATES, like the medical one', () => {
     // A form with three "Past Surgical History" bullets must get three
     // procedures, not one procedure and two blanks.

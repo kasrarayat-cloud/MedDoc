@@ -317,14 +317,14 @@ const NARRATIVE_SENTENCES: ReadonlyMap<string, string> = new Map([
     'social_history',
     'Social history: never smoker, occasional alcohol, sedentary office occupation, married.',
   ],
-  // #233 family 2 — its OWN sentence, because the family sentence above is
+  // #246 family 2 — its OWN sentence, because the family sentence above is
   // matched only for a field mapped to bare `social_history`. A control mapped
   // to the sub-concept looks itself up first and would otherwise find nothing.
   [
     'social_history.marital_status',
     'Social history, marital status: married.',
   ],
-  // #233 family 4 — the total is SAID, because the extractor is forbidden from
+  // #246 family 4 — the total is SAID, because the extractor is forbidden from
   // computing one. A self-test that never states it would leave the control
   // not_mentioned and prove nothing about the concept.
   [

@@ -57,7 +57,7 @@ export interface EncounterEntitySnapshot {
   past_medical_history?: ReadonlyArray<
     EvidenceSnapshot & { condition: string }
   >;
-  /** #233 family 1. ⚠️ OPTIONAL, per canon 130 — every existing caller and
+  /** #246 family 1. ⚠️ OPTIONAL, per canon 133 — every existing caller and
    *  every fixture builds this snapshot without the key. */
   past_surgical_history?: ReadonlyArray<
     EvidenceSnapshot & { procedure: string }
@@ -86,12 +86,12 @@ export interface EncounterEntitySnapshot {
     alcohol?: (EvidenceSnapshot & { status: string }) | null;
     drugs?: (EvidenceSnapshot & { status: string }) | null;
     occupation?: (EvidenceSnapshot & { value: string }) | null;
-    /** #233 family 2 — keyed `status`, matching the three status-shaped
+    /** #246 family 2 — keyed `status`, matching the three status-shaped
      *  siblings rather than occupation's `value`. The projector reads this
      *  key literally; there is no shared constant binding the two. */
     marital_status?: (EvidenceSnapshot & { status: string }) | null;
   };
-  /** #233 family 4 — a NUMBER on the extraction axis (canon 131). */
+  /** #246 family 4 — a NUMBER on the extraction axis (canon 134). */
   total_time_minutes?: (EvidenceSnapshot & { minutes: number }) | null;
   ros?: ReadonlyArray<
     EvidenceSnapshot & {
@@ -666,7 +666,7 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
     });
   }
 
-  // #233 family 1 — the same shape and the same temporality as the block
+  // #246 family 1 — the same shape and the same temporality as the block
   // above, and deliberately SEPARATE. A form asking for surgeries on their own
   // must not be filled from the medical history, which is exactly what the
   // proposer did on the owner's form before this existed.
@@ -763,12 +763,12 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
   if (social?.occupation) {
     add({ path: 'social_history.occupation', concept: 'social_history.occupation', value: social.occupation.value, evidence: social.occupation, defaultTemporality: 'current' });
   }
-  // #233 family 2 — reads `.status`, matching the L3 key chosen above.
+  // #246 family 2 — reads `.status`, matching the L3 key chosen above.
   if (social?.marital_status) {
     add({ path: 'social_history.marital_status', concept: 'social_history.marital_status', value: social.marital_status.status, evidence: social.marital_status, defaultTemporality: 'current' });
   }
 
-  // #233 family 4 — TOTAL ENCOUNTER TIME.
+  // #246 family 4 — TOTAL ENCOUNTER TIME.
   //
   // ⚠️ THE VALUE IS A STRING AND THE NUMBER TRAVELS BESIDE IT. `add()` accepts
   // string | number | boolean, but the controls this fills compile
@@ -778,7 +778,7 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
   //
   // ⚠️ AND IT CARRIES NO UNIT, DELIBERATELY. The resolver's number arm refuses
   // a value with an unapproved unit, so "45 minutes" would fail where "45"
-  // resolves — canon 131's trap, avoided at the source rather than patched at
+  // resolves — canon 134's trap, avoided at the source rather than patched at
   // the reader.
   if (entities.total_time_minutes) {
     add({

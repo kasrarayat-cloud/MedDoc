@@ -3,7 +3,7 @@
 **Ratified 2026-09-07.** A near-miss worth writing down, because the two words
 that describe them sound like the same word.
 
-Ruling #233 specifies `total_time_minutes` as **"an L3 field, number"**. The
+Ruling #246 specifies `total_time_minutes` as **"an L3 field, number"**. The
 controls it must fill — *"Total minutes spent with patient"* and *"Total time
 minutes"* — compile to **`narrative_text`**, `expectedDataType: 'text'`. That
 looks like a contradiction and is not.

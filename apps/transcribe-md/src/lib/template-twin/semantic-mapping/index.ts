@@ -162,7 +162,7 @@ export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = [
   'social_history.alcohol',
   'social_history.drugs',
   'social_history.marital_status',
-  // #233 family 4 — registered AND offered. The pass found it in
+  // #246 family 4 — registered AND offered. The pass found it in
   // REGISTRY_CONCEPTS but not here, so the proposer would never have suggested
   // it and a "Total minutes" control could only ever be mapped by hand.
   'total_time_minutes',
