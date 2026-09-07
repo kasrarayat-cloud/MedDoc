@@ -40,126 +40,8 @@ import { randomUUID } from 'node:crypto';
 
 import { extractTemplateTwinEntities } from '../../src/worker/layers/03-extract-entities';
 
-interface Expected {
-  ros: ReadonlyArray<{ system: string; findingLike: string; polarity: 'affirmed' | 'denied' }>;
-  exam: ReadonlyArray<{ system: string; findingLike: string }>;
-  minEntities: number;
-}
+import { CASES, type Case, type Expected } from './l3-model-parity-cases';
 
-interface Case {
-  readonly name: string;
-  readonly text: string;
-  readonly expected: Expected;
-}
-
-/**
- * ⚠️ GROUND TRUTH IS WRITTEN, NOT INFERRED. Each case states what a correct
- * extraction contains, so "coverage" is measured against an answer fixed before
- * either model ran — the same discipline as a §2.5 declaration.
- *
- * ⚠️ AND THE POLARITY CASES ARE DELIBERATELY MIXED. A denial-only corpus lets a
- * model that always answers "denied" score perfectly. Three cases affirm, three
- * deny, and one does both in a single sentence — the shape §02.9's comment
- * names as where a regex "over-fires when one quote carries two findings".
- */
-const CASES: readonly Case[] = [
-  {
-    name: 'GI denial, plain',
-    text: [
-      'Doctor: This is a gastroenterology consultation.',
-      'Doctor: The patient denies heartburn, difficulty swallowing, and painful swallowing.',
-      'Doctor: He denies nausea or vomiting.',
-    ].join('\n'),
-    expected: {
-      ros: [
-        { system: 'gastrointestinal', findingLike: 'heartburn', polarity: 'denied' },
-        { system: 'gastrointestinal', findingLike: 'nausea', polarity: 'denied' },
-      ],
-      exam: [],
-      minEntities: 2,
-    },
-  },
-  {
-    name: 'GI affirmation — must NOT be read as a denial',
-    text: [
-      'Doctor: Gastroenterology consultation.',
-      'Doctor: The patient reports heartburn three times a week for two months.',
-      'Doctor: He also reports early satiety.',
-    ].join('\n'),
-    expected: {
-      ros: [
-        { system: 'gastrointestinal', findingLike: 'heartburn', polarity: 'affirmed' },
-        { system: 'gastrointestinal', findingLike: 'satiety', polarity: 'affirmed' },
-      ],
-      exam: [],
-      minEntities: 2,
-    },
-  },
-  {
-    name: 'MIXED polarity in one sentence — the regex trap §02.9 names',
-    text: [
-      'Doctor: Consultation note.',
-      'Doctor: She denies chest pain but does get short of breath climbing stairs.',
-    ].join('\n'),
-    expected: {
-      ros: [
-        { system: 'cardiovascular', findingLike: 'chest pain', polarity: 'denied' },
-        { system: 'respiratory', findingLike: 'breath', polarity: 'affirmed' },
-      ],
-      exam: [],
-      minEntities: 2,
-    },
-  },
-  {
-    name: 'Colloquial denial — no charting token present',
-    text: [
-      'Doctor: Follow-up visit.',
-      'Doctor: I asked about blood in the stool and he said none at all.',
-    ].join('\n'),
-    expected: {
-      ros: [{ system: 'gastrointestinal', findingLike: 'blood', polarity: 'denied' }],
-      exam: [],
-      minEntities: 1,
-    },
-  },
-  {
-    name: 'Exam findings, abnormal and normal',
-    text: [
-      'Doctor: On examination the abdomen is tender in the right upper quadrant.',
-      'Doctor: Lungs are clear to auscultation bilaterally.',
-      'Doctor: The patient is alert and oriented, in no acute distress.',
-    ].join('\n'),
-    expected: {
-      ros: [],
-      exam: [
-        { system: 'abdomen', findingLike: 'tender' },
-        { system: 'lungs', findingLike: 'clear' },
-      ],
-      minEntities: 2,
-    },
-  },
-  {
-    name: 'Full consult — the 19-concept vocabulary in one pass',
-    text: [
-      'Doctor: Gastroenterology consultation for a fifty-two year old.',
-      'Doctor: Chief complaint is abdominal bloating for three months.',
-      'Doctor: Past medical history includes hypertension and type two diabetes.',
-      'Doctor: He takes lisinopril ten milligrams daily.',
-      'Doctor: He is allergic to penicillin, which causes a rash.',
-      'Doctor: Father had colon cancer.',
-      'Doctor: He is a former smoker, drinks socially, works as an accountant.',
-      'Doctor: The patient denies weight loss.',
-      'Doctor: Abdomen is soft and non-tender on exam.',
-      'Doctor: Impression is functional bloating.',
-      'Doctor: Plan is a trial of dietary modification and follow up in six weeks.',
-    ].join('\n'),
-    expected: {
-      ros: [{ system: 'constitutional', findingLike: 'weight', polarity: 'denied' }],
-      exam: [{ system: 'abdomen', findingLike: 'non-tender' }],
-      minEntities: 10,
-    },
-  },
-];
 
 /**
  * Normalised containment.
@@ -285,16 +167,17 @@ async function scoreModel(model: string): Promise<Score> {
 
     const ros = (entities.ros ?? []) as Array<Record<string, unknown>>;
     for (const want of c.expected.ros) {
-      const hit = ros.find((r) =>
-        String(r.finding ?? '').toLowerCase().includes(want.findingLike.toLowerCase()),
-      );
+      // ⚠️ EXACT, NOT SUBSTRING. `finding` is a closed-lexicon token since
+      // #179; a substring match against it made 3 of 8 rows unscoreable on any
+      // model and let a fourth score on the wrong token.
+      const hit = ros.find((r) => String(r.finding ?? '') === want.finding);
       if (!hit) continue;
       s.rosFound += 1;
       if (typeof hit.polarity === 'string') s.rosPolarityStated += 1;
       if (hit.polarity === want.polarity) s.rosPolarityCorrect += 1;
       else {
         console.error(
-          `  [${model}] ${c.name}: POLARITY WRONG for "${want.findingLike}" — ` +
+          `  [${model}] ${c.name}: POLARITY WRONG for "${want.finding}" — ` +
             `stated ${String(hit.polarity)}, truth ${want.polarity}`,
         );
       }
