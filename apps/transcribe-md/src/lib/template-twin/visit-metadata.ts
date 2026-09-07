@@ -77,27 +77,80 @@ export interface VisitPatientRecord {
  * a visit at 2026-06-13 19:00 America/Los_Angeles = `2026-06-14T02:00Z` — this
  * returns **68** where the patient is 67 on the local day of the encounter.
  *
- * ⚠️ IT IS NOT FIXED HERE BECAUSE THE INPUT TO FIX IT WITH DOES NOT EXIST. A
- * practice has no timezone column (the same measurement ADMIN-2 records for
- * hostnames), so "the local calendar date of the visit" is not computable from
- * anything this function is given. Guessing a zone would replace a bounded,
- * stated error with an unbounded unstated one. The residual is: an evening
- * encounter west of UTC on the day before a birthday prints an age one year
- * high. Recorded rather than hidden, and it closes when a practice timezone
- * exists.
+ * ⚠️ THE RESIDUAL IS NO LONGER ACCEPTED — RULING #264, "AGE NEVER GUESSES".
+ * A practice still has no timezone column (measured: `practices` has ten
+ * columns and none of them is one), so "the local calendar date of the visit"
+ * remains uncomputable. What changed is the ANSWER to that: the previous
+ * paragraph said the error was "recorded rather than hidden" and left a wrong
+ * number in a consult letter. A one-year-high age is a CLINICAL ERROR, not a
+ * documented quirk, and a doctor does not read the comment.
+ *
+ * ⚠️ AND THE OLD PARAGRAPH WAS HALF-RIGHT IN A WAY THAT MATTERS: it named only
+ * the "one year HIGH" direction. The error runs BOTH ways, because the local
+ * date can be either side of the UTC date:
+ *
+ *     DOB 1958-06-14, visit 2026-06-13 19:00 America/Los_Angeles (= 06-14T02:00Z)
+ *         UTC says the birthday has passed -> 68.  Locally it is the 13th -> 67.
+ *     DOB 1958-06-14, visit 2026-06-14 09:00 Pacific/Auckland   (= 06-13T21:00Z)
+ *         UTC says it has not -> 67.  Locally it is the 14th -> 68.
+ *
+ * `ageAtDateResolved` therefore REFUSES, with a named reason, whenever the age
+ * would differ anywhere in the UTC-12..UTC+14 window of the visit instant —
+ * a total predicate that needs no practice timezone, which is exactly why the
+ * ruling picked it.
+ *
+ * ⚠️ WHAT IT COSTS, SO NOBODY HAS TO GUESS: the window is 26 hours wide, so it
+ * fires only for a patient whose birthday boundary falls inside it — of the
+ * order of 26/24 days a year, ~0.3% of visits. Those are precisely the visits
+ * where the old answer was a coin flip. Every other visit is unaffected.
  *
  * Returns null — never 0, never a guess — for an unparseable date, a birth date
  * in the future, or an implausible result. `0` is a legitimate age (an infant),
  * so it cannot double as the failure value.
  */
-export function ageAtDate(
+/** Why an age could not be stated. A refusal is never silent — #264. */
+export type AgeRefusal =
+  | 'age_input_absent'
+  | 'age_unparseable'
+  | 'age_implausible'
+  | 'age_timezone_ambiguous';
+
+export type AgeResolution =
+  | { ok: true; years: number }
+  | { ok: false; reason: AgeRefusal };
+
+/** UTC-12..UTC+14 — the real span of civil offsets, and the whole predicate. */
+const TZ_MIN_MS = -12 * 60 * 60 * 1000;
+const TZ_MAX_MS = 14 * 60 * 60 * 1000;
+
+/**
+ * The age, or a NAMED reason there isn't one. `ageAtDate` is the thin
+ * `number | null` wrapper over this, kept so existing callers are undisturbed.
+ */
+export function ageAtDateResolved(
   dateOfBirth: Date | string | null | undefined,
   at: Date | string | null | undefined,
-): number | null {
-  if (dateOfBirth == null || at == null) return null;
+): AgeResolution {
+  if (dateOfBirth == null || at == null) return { ok: false, reason: 'age_input_absent' };
   const dob = dateOfBirth instanceof Date ? dateOfBirth : new Date(dateOfBirth);
   const on = at instanceof Date ? at : new Date(at);
-  if (Number.isNaN(dob.getTime()) || Number.isNaN(on.getTime())) return null;
+  if (Number.isNaN(dob.getTime()) || Number.isNaN(on.getTime())) {
+    return { ok: false, reason: 'age_unparseable' };
+  }
+
+  // ⚠️ THE ENDPOINTS SUFFICE, AND THAT IS NOT AN APPROXIMATION. The local
+  // calendar date at offset `o` is the UTC date of `instant + o`, and age is
+  // monotonic in date — so if the two extremes agree, every offset between them
+  // agrees too. Checking the endpoints is the whole window, not a sample of it.
+  const low = ageOnUtcDate(dob, new Date(on.getTime() + TZ_MIN_MS));
+  const high = ageOnUtcDate(dob, new Date(on.getTime() + TZ_MAX_MS));
+  if (low === null || high === null) return { ok: false, reason: 'age_implausible' };
+  if (low !== high) return { ok: false, reason: 'age_timezone_ambiguous' };
+  return { ok: true, years: low };
+}
+
+/** The UTC-calendar age. Null for a negative or superhuman result. */
+function ageOnUtcDate(dob: Date, on: Date): number | null {
   let years = on.getUTCFullYear() - dob.getUTCFullYear();
   const monthDelta = on.getUTCMonth() - dob.getUTCMonth();
   if (monthDelta < 0 || (monthDelta === 0 && on.getUTCDate() < dob.getUTCDate())) {
@@ -108,6 +161,26 @@ export function ageAtDate(
   // not this patient's birth date. Both are refusals, not clamps.
   if (years < 0 || years > 130) return null;
   return years;
+}
+
+/**
+ * The age, or null.
+ *
+ * ⚠️ A THIN WRAPPER, NEVER A SECOND IMPLEMENTATION. It delegates to
+ * `ageAtDateResolved` and throws the reason away. Two functions computing an
+ * age two ways is the "one rule, many readers" failure this repository has a
+ * canon entry for — and the reader that drifted would be the one a document
+ * prints. There is no production caller of this wrapper outside this module
+ * (measured: every other reference is in `gate-247-visit-metadata.test.ts`);
+ * it is kept because a `number | null` reads better at a call site that does
+ * not need the reason.
+ */
+export function ageAtDate(
+  dateOfBirth: Date | string | null | undefined,
+  at: Date | string | null | undefined,
+): number | null {
+  const resolved = ageAtDateResolved(dateOfBirth, at);
+  return resolved.ok ? resolved.years : null;
 }
 
 /**
@@ -154,6 +227,18 @@ export function withVisitMetadataFacts(input: {
   facts: ReadonlyArray<EncounterFact>;
   patient: VisitPatientRecord | null | undefined;
   visitDate: Date | string | null | undefined;
+  /**
+   * ⚠️ #264 — AN OUT-PARAMETER, AND THE SHAPE IS DELIBERATE. This function
+   * composes by NESTING in `fill-engine.ts` (`withProcedureDateFact({ facts:
+   * withVisitMetadataFacts({ facts: withApprovedPracticeDefaultFacts(...) }) })`),
+   * so returning `{ facts, refusals }` would have to be unwrapped at every
+   * layer and would change three signatures to carry information only one of
+   * them produces. A collector the caller owns keeps the composition intact.
+   *
+   * Optional, so every existing caller — the certification path included — is
+   * undisturbed and simply does not learn the reason.
+   */
+  refusals?: Array<{ fieldId: string; unfilled: string; required: string }>;
 }): EncounterFact[] {
   const facts = [...input.facts];
   const patient = input.patient;
@@ -227,7 +312,13 @@ export function withVisitMetadataFacts(input: {
   if (wanted.size === 0) return facts;
 
   const patientName = patient.name?.trim();
-  const age = ageAtDate(patient.dateOfBirth, input.visitDate);
+  // ⚠️ RESOLVED, NOT COERCED — the reason has to survive to the manifest.
+  // A refusal that reaches the resolver as "no fact carried this concept" is
+  // reported as `fact_not_mentioned`, i.e. "nobody said it" — and here somebody
+  // DID say it: the patient record carries a date of birth and this code
+  // declined to turn it into a number. #264 requires the blank to be NAMED.
+  const ageResolved = ageAtDateResolved(patient.dateOfBirth, input.visitDate);
+  const age = ageResolved.ok ? ageResolved.years : null;
   // Both quotes are written to be TRUE OF THE ACT and to carry no identifier of
   // their own. The value carries the name; the evidence line says where it came
   // from, and that sentence is what a doctor reads in the manifest.
@@ -250,7 +341,27 @@ export function withVisitMetadataFacts(input: {
   for (const { mapping, concept, temporality } of wanted.values()) {
     const value = byConcept.get(concept) ?? null;
     const quote = quoteFor.get(concept)!;
-    if (value === null) continue;
+    if (value === null) {
+      // ⚠️ #264 — THE BLANK IS NAMED. Skipping silently was the whole defect:
+      // the resolver would go on to report `fact_not_mentioned`, which reads as
+      // "nobody said it" when the record said it and this code declined to
+      // answer. Only the AGE carries a structured reason today, because it is
+      // the only value here that can be refused for a reason other than
+      // absence — a missing name is simply missing.
+      if (
+        input.refusals &&
+        concept === RECORD_DERIVED_CONCEPTS.age &&
+        !ageResolved.ok &&
+        !alreadySpokenTo(mapping)
+      ) {
+        input.refusals.push({
+          fieldId: mapping.fieldId,
+          unfilled: ageResolved.reason,
+          required: `required_${ageResolved.reason}`,
+        });
+      }
+      continue;
+    }
     if (alreadySpokenTo(mapping)) continue;
     facts.push(
       EncounterFactSchema.parse({

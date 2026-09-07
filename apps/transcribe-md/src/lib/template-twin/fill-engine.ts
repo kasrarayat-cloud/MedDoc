@@ -228,6 +228,12 @@ export async function prepareTemplateTwinFill(
   // BEFORE THE DATE, so the two metadata injectors compose in one direction and
   // each still sees any real dictated fact that would outrank it. A no-op when
   // no record was threaded through, which is exactly the certification path.
+  // ⚠️ #264 — the collector the metadata injector names its refusals into, so a
+  // blank it produced arrives at the resolver labelled with WHY rather than as
+  // "nobody said it". Declared here because this is the only layer that both
+  // calls the injector and calls the resolver.
+  const injectorRefusals: Array<{ fieldId: string; unfilled: string; required: string }> = [];
+
   const facts = withProcedureDateFact({
     fields: ir.fields,
     mappings,
@@ -237,6 +243,7 @@ export async function prepareTemplateTwinFill(
       mappings,
       patient: input.patient,
       visitDate: input.visitDate,
+      refusals: injectorRefusals,
       facts: withApprovedPracticeDefaultFacts({
         fields: ir.fields,
         mappings,
@@ -250,6 +257,7 @@ export async function prepareTemplateTwinFill(
     facts,
     certifiedFieldIds: input.certifiedFieldIds,
     allowUncertifiedForSyntheticTest: input.allowUncertifiedForSyntheticTest,
+    refusals: injectorRefusals,
   });
   // Overlay the LIVE brain's CHOICE_SLOT picks + dictated table measurements onto
   // the evidence baseline. Real evidence always wins (bridge fills only where the

@@ -47,6 +47,21 @@ export interface ResolveTemplateFieldsInput {
   certifiedFieldIds?: ReadonlyArray<string>;
   /** Certification tests may opt in; production resolution stays strict. */
   allowUncertifiedForSyntheticTest?: boolean;
+  /**
+   * ⚠️ #264 — FIELDS AN INJECTOR DECLINED TO ANSWER, WITH THE REASON.
+   *
+   * An injector that cannot compute a value today simply mints no fact, and the
+   * resolver then reaches its "no fact carries this concept" arm and reports
+   * `fact_not_mentioned` — *"nobody said it"*. For a record-derived value that
+   * is FALSE and it is the misleading direction: the patient record DID carry a
+   * date of birth, and the code declined to turn it into a number because the
+   * answer depended on a timezone nobody has recorded.
+   *
+   * A blank is the right output. A blank labelled "nobody mentioned it" is a
+   * blank the doctor cannot act on — they would look for the dictation. So the
+   * refusal travels with its reason and lands in `reasonCode`.
+   */
+  refusals?: ReadonlyArray<{ fieldId: string; unfilled: string; required: string }>;
 }
 
 interface ConvertedValue {
@@ -433,6 +448,7 @@ function resolveOne(
   allFacts: ReadonlyArray<EncounterFact>,
   allowUncertified: boolean,
   certifiedFieldIds: ReadonlySet<string>,
+  refusal?: { unfilled: string; required: string },
 ): FieldResolution {
   if (!mapping) {
     return makeResolution(
@@ -514,6 +530,19 @@ function resolveOne(
     (fact) =>
       fact.sourceType !== 'approved_practice_default' && conceptMatches(fact, mapping),
   );
+  // ⚠️ #264 — A NAMED REFUSAL OUTRANKS "NOBODY SAID IT", AND IT IS CHECKED
+  // BEFORE the concept search rather than after. An injector that declined to
+  // compute a value mints no fact, so the concept search finds nothing and the
+  // arm below would report `fact_not_mentioned` — a true statement about the
+  // FACTS and a false one about the ENCOUNTER. The refusal is the more specific
+  // reason and the more specific reason wins.
+  //
+  // The value is still null and the field is still blank: this changes the
+  // LABEL on the blank, not the blank.
+  if (refusal) {
+    return missingResolution(field, mapping, allFacts, refusal);
+  }
+
   if (conceptCandidates.length === 0) {
     // The ONLY site that earns #191's kept default: no fact in the encounter
     // carries this field's approved concept, so the template's own sentence
@@ -963,6 +992,9 @@ export function resolveTemplateFields(
   const facts = input.facts.map((fact) => EncounterFactSchema.parse(fact));
   const mappingById = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
   const certifiedFieldIds = new Set(input.certifiedFieldIds ?? []);
+  const refusalByFieldId = new Map(
+    (input.refusals ?? []).map((r) => [r.fieldId, { unfilled: r.unfilled, required: r.required }]),
+  );
 
   return [...fields]
     .sort((a, b) => a.displayOrder - b.displayOrder || a.fieldId.localeCompare(b.fieldId))
@@ -973,6 +1005,7 @@ export function resolveTemplateFields(
         facts,
         input.allowUncertifiedForSyntheticTest === true,
         certifiedFieldIds,
+        refusalByFieldId.get(field.fieldId),
       ),
     );
 }

@@ -28,6 +28,7 @@ import {
 } from '../concept-registry';
 import {
   ageAtDate,
+  ageAtDateResolved,
   withVisitMetadataFacts,
   RECORD_DERIVED_CONCEPTS,
 } from '../visit-metadata';
@@ -286,22 +287,78 @@ describe('#247 Stage B — the label decides, and the labels are HIS', () => {
 // 2 · THE AGE — calendar arithmetic, and its refusals.
 // ---------------------------------------------------------------------------
 describe('#247 Stage B — age at the VISIT date, in whole years', () => {
-  it('counts whole years, and the birthday is the boundary', () => {
-    expect(ageAtDate('1958-06-14', '2026-06-13T23:00:00Z')).toBe(67);
-    expect(ageAtDate('1958-06-14', '2026-06-14T00:00:00Z')).toBe(68);
-    expect(ageAtDate('1958-06-14', '2026-06-15T00:00:00Z')).toBe(68);
+  // ⚠️ THESE THREE ARMS WERE REWRITTEN BY RULING #264, AND WHAT THEY PROTECT IS
+  // UNCHANGED. Each used to assert a value on a date sitting ON the birthday
+  // boundary — which is exactly the case where the UTC answer and the doctor's
+  // local answer disagree, so each was pinning one of the two possible answers
+  // as if it were the only one. The arithmetic they were really about (the
+  // birthday is a boundary; 364 days is not a year; a leap-day birth invents no
+  // birthday) is asserted on dates CLEAR of the ±26h window, where there is
+  // exactly one right answer, and the boundary cases now assert the REFUSAL.
+  it('counts whole years — asserted clear of the ambiguous window', () => {
+    expect(ageAtDate('1958-06-14', '2026-06-11T12:00:00Z')).toBe(67);
+    expect(ageAtDate('1958-06-14', '2026-06-16T12:00:00Z')).toBe(68);
+    expect(ageAtDate('1958-06-14', '2027-01-01T00:00:00Z')).toBe(68);
   });
 
   it('⚠️ THE DAY BEFORE A BIRTHDAY IS NOT A ROUNDING ERROR — division by 365.25 gets this wrong', () => {
     // 24 years and 364 days is 24, and any average-year scheme says 24.997 and
-    // then rounds. The patient is 24 until the day they are 25.
-    expect(ageAtDate('2001-03-02', '2026-03-01')).toBe(24);
-    expect(ageAtDate('2001-03-02', '2026-03-02')).toBe(25);
+    // then rounds. The patient is 24 until the day they are 25. Asserted two
+    // days either side, so the claim is about the ARITHMETIC and not about
+    // which timezone the reader is in.
+    expect(ageAtDate('2001-03-02', '2026-02-27T12:00:00Z')).toBe(24);
+    expect(ageAtDate('2001-03-02', '2026-03-04T12:00:00Z')).toBe(25);
   });
 
   it('handles a leap-day birth without inventing a birthday', () => {
-    expect(ageAtDate('2000-02-29', '2026-02-28')).toBe(25);
-    expect(ageAtDate('2000-02-29', '2026-03-01')).toBe(26);
+    // 2026 is not a leap year: the patient turns 26 on 1 March, not 28 February.
+    expect(ageAtDate('2000-02-29', '2026-02-26T12:00:00Z')).toBe(25);
+    expect(ageAtDate('2000-02-29', '2026-03-03T12:00:00Z')).toBe(26);
+  });
+
+  it('⚠️ #264 — REFUSES on the boundary, in BOTH directions, and names the reason', () => {
+    // The instants the three arms above used to assert a number on. Each is
+    // within ±26h of the birthday boundary, so a doctor west of UTC and a doctor
+    // east of UTC would read different ages off the SAME visit.
+    for (const at of [
+      '2026-06-13T23:00:00Z', // was asserted 67 — but 68 for a doctor east of UTC
+      '2026-06-14T00:00:00Z', // was asserted 68 — but 67 for a doctor west of UTC
+    ]) {
+      const r = ageAtDateResolved('1958-06-14', at);
+      expect(r.ok, `${at} must refuse`).toBe(false);
+      if (!r.ok) expect(r.reason).toBe('age_timezone_ambiguous');
+      expect(ageAtDate('1958-06-14', at)).toBeNull();
+    }
+    expect(ageAtDateResolved('2001-03-02', '2026-03-02').ok).toBe(false);
+    expect(ageAtDateResolved('2000-02-29', '2026-03-01').ok).toBe(false);
+  });
+
+  it('⚠️ the REAL-WORLD case, both directions, computed rather than asserted', () => {
+    // DOB 1958-06-14.
+    //   2026-06-13 19:00 America/Los_Angeles = 2026-06-14T02:00Z
+    //     UTC says the birthday passed -> 68. Locally it is the 13th -> 67.
+    //   2026-06-14 09:00 Pacific/Auckland   = 2026-06-13T21:00Z
+    //     UTC says it has not -> 67. Locally it is the 14th -> 68.
+    // ⚠️ THE OLD COMMENT IN visit-metadata.ts NAMED ONLY THE FIRST. The error
+    // runs both ways, and a fix aimed at one direction would have shipped.
+    expect(ageAtDate('1958-06-14', '2026-06-14T02:00:00Z')).toBeNull();
+    expect(ageAtDate('1958-06-14', '2026-06-13T21:00:00Z')).toBeNull();
+  });
+
+  it('⚠️ NON-VACUITY — the refusal is NARROW, not a blanket', () => {
+    // A guard that refused everything would pass every arm above and destroy the
+    // feature. Measured over a full year of visit instants against one DOB:
+    // only the days adjacent to the birthday refuse.
+    let refused = 0;
+    let answered = 0;
+    for (let d = 0; d < 365; d += 1) {
+      const at = new Date(Date.UTC(2026, 0, 1, 12) + d * 86_400_000);
+      if (ageAtDateResolved('1958-06-14', at).ok) answered += 1;
+      else refused += 1;
+    }
+    expect(answered).toBeGreaterThan(360);
+    expect(refused).toBeGreaterThan(0);
+    expect(refused).toBeLessThanOrEqual(2);
   });
 
   it('an infant is 0, and 0 is an ANSWER rather than the failure value', () => {
@@ -321,7 +378,26 @@ describe('#247 Stage B — age at the VISIT date, in whole years', () => {
   });
 
   it('accepts a Date as readily as a string, since the column is a Date', () => {
-    expect(ageAtDate(new Date('1958-06-14T00:00:00Z'), new Date(VISIT))).toBe(68);
+    expect(ageAtDate(new Date('1958-06-14T00:00:00Z'), new Date(VISIT))).toBe(
+      ageAtDate('1958-06-14', VISIT),
+    );
+    expect(ageAtDate(new Date('1958-06-14T00:00:00Z'), new Date(VISIT))).not.toBeNull();
+  });
+
+  it('the named reasons are distinct — a refusal says WHICH refusal', () => {
+    expect(ageAtDateResolved(null, VISIT)).toEqual({ ok: false, reason: 'age_input_absent' });
+    expect(ageAtDateResolved('not a date', VISIT)).toEqual({
+      ok: false,
+      reason: 'age_unparseable',
+    });
+    expect(ageAtDateResolved('2030-01-01', VISIT)).toEqual({
+      ok: false,
+      reason: 'age_implausible',
+    });
+    expect(ageAtDateResolved('1820-01-01', VISIT)).toEqual({
+      ok: false,
+      reason: 'age_implausible',
+    });
   });
 });
 
@@ -834,5 +910,124 @@ describe('#247 Stage B — the certification artifact still never holds a record
 
   it('⚠️ NON-VACUITY: an ordinary dictated fact set passes', () => {
     expect(() => assertNoRecordDerivedFacts([fact()])).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6 · RULING #264 — THE BLANK IS NAMED, ALL THE WAY TO THE MANIFEST.
+// ---------------------------------------------------------------------------
+describe('#264 — a refused age reaches the resolver as a NAMED reason', () => {
+  const fields = [field(NAME_ID, 'Patient'), field(AGE_ID, 'Age')];
+  const mappings = [
+    mapping(NAME_ID, RECORD_DERIVED_CONCEPTS.name),
+    mapping(AGE_ID, RECORD_DERIVED_CONCEPTS.age),
+  ];
+  /** DOB 1958-06-14 against an instant inside the ±26h birthday window. */
+  const AMBIGUOUS_VISIT = '2026-06-14T02:00:00Z';
+
+  it('the injector NAMES the refusal instead of skipping silently', () => {
+    const refusals: Array<{ fieldId: string; unfilled: string; required: string }> = [];
+    const out = withVisitMetadataFacts({
+      fields,
+      mappings,
+      facts: [],
+      patient: PATIENT,
+      visitDate: AMBIGUOUS_VISIT,
+      refusals,
+    });
+
+    // the NAME still fills — the refusal is narrow, not a blanket
+    expect(out.map((f) => f.concept)).toEqual([RECORD_DERIVED_CONCEPTS.name]);
+    expect(refusals).toEqual([
+      {
+        fieldId: AGE_ID,
+        unfilled: 'age_timezone_ambiguous',
+        required: 'required_age_timezone_ambiguous',
+      },
+    ]);
+  });
+
+  it('names NOTHING when the age is unambiguous — the collector is not noise', () => {
+    const refusals: Array<{ fieldId: string; unfilled: string; required: string }> = [];
+    const out = withVisitMetadataFacts({
+      fields,
+      mappings,
+      facts: [],
+      patient: PATIENT,
+      visitDate: VISIT,
+      refusals,
+    });
+    expect(out).toHaveLength(2);
+    expect(refusals).toEqual([]);
+  });
+
+  it('⚠️ THE WHOLE POINT — the manifest says WHY, not "nobody said it"', () => {
+    const refusals: Array<{ fieldId: string; unfilled: string; required: string }> = [];
+    const facts = withVisitMetadataFacts({
+      fields,
+      mappings,
+      facts: [],
+      patient: PATIENT,
+      visitDate: AMBIGUOUS_VISIT,
+      refusals,
+    });
+
+    const withReason = resolveTemplateFields({ fields, mappings, facts, refusals });
+    const age = withReason.find((f) => f.fieldId === AGE_ID)!;
+
+    // BLANK — unchanged, and that half was already true
+    expect(age.value).toBeNull();
+    // and NAMED — this is what #264 adds
+    expect(age.reasonCode).toBe('age_timezone_ambiguous');
+
+    // ⚠️ THE CONTROL THAT MAKES THE ARM MEAN SOMETHING: the SAME facts without
+    // the refusals threaded through report `fact_not_mentioned` — "nobody said
+    // it" — which is the misleading label this ruling exists to remove. If the
+    // plumbing were inert, both branches would read the same and the arm above
+    // would pass for the wrong reason.
+    const withoutReason = resolveTemplateFields({ fields, mappings, facts });
+    const ageBefore = withoutReason.find((f) => f.fieldId === AGE_ID)!;
+    expect(ageBefore.value).toBeNull();
+    expect(ageBefore.reasonCode).toBe('fact_not_mentioned');
+    expect(ageBefore.reasonCode).not.toBe(age.reasonCode);
+  });
+
+  it('the refusal does NOT change the counts — only the label on the blank', () => {
+    // ⚠️ A new reason token that moved a bucket would be a silent behavioural
+    // change riding along with a labelling fix. `templateTwinCounts` keys on
+    // STATUS, and this introduces no new status: a refused age is
+    // `not_mentioned`/`needs_clinician_input` exactly as a silently-skipped one
+    // was. Asserted rather than argued.
+    const refusals: Array<{ fieldId: string; unfilled: string; required: string }> = [];
+    const facts = withVisitMetadataFacts({
+      fields,
+      mappings,
+      facts: [],
+      patient: PATIENT,
+      visitDate: AMBIGUOUS_VISIT,
+      refusals,
+    });
+    const a = resolveTemplateFields({ fields, mappings, facts, refusals });
+    const b = resolveTemplateFields({ fields, mappings, facts });
+    expect(templateTwinCounts(a, fields)).toEqual(templateTwinCounts(b, fields));
+  });
+
+  it('a refusal for a field nobody asked about is inert', () => {
+    // Fail-safe: a stale or wrong fieldId in the collector must not blank a
+    // field that resolved perfectly well from real evidence.
+    const facts = withVisitMetadataFacts({
+      fields,
+      mappings,
+      facts: [],
+      patient: PATIENT,
+      visitDate: VISIT,
+    });
+    const out = resolveTemplateFields({
+      fields,
+      mappings,
+      facts,
+      refusals: [{ fieldId: `ttf_${'f'.repeat(24)}`, unfilled: 'x', required: 'y' }],
+    });
+    expect(out.find((f) => f.fieldId === AGE_ID)!.value).toBe('68');
   });
 });
