@@ -671,7 +671,18 @@ describe('THE PAYLOAD IS PROJECTED, NEVER HAND-ROLLED — the column-drop class'
     // ⚠️ The script's own `statusOf` helper mapped anything not CERTIFIED and not
     // RECOGNIZED to 'needs_confirmation' — so an UNSUPPORTED row came back as
     // needing confirmation, which is a different clinical state and a different
-    // count. `create-draft.ts` writes UNSUPPORTED routinely.
+    // count.
+    //
+    // ⚠️ LATENT, NOT LIVE — AND THE CORRECTION IS RECORDED BECAUSE THE FIRST
+    // WRITE-UP OVERSTATED IT. The lens said `create-draft.ts` "writes
+    // UNSUPPORTED routinely"; a verifier disputed the reachability, and
+    // production settles it: 238 mappings, ALL `CERTIFIED`, zero `UNSUPPORTED`.
+    // The enum arm exists (`create-draft.ts:93-104`) and the column admits the
+    // value, so the divergence is armed rather than firing.
+    //
+    // The fix does not depend on that either way, which is the point of fixing
+    // the CLASS: `fromPersistedMapping` is the right reader whether or not this
+    // particular row shape is reachable today.
     const projected = fromPersistedMapping(FIELD_ID, {
       ...ROW,
       mappingStatus: 'UNSUPPORTED',
