@@ -319,6 +319,19 @@ function asJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }
 
+/**
+ * The STORED shape of a clinician override row, as read from
+ * `templateTwinFieldOverride`. Distinct from `ClinicianFieldOverride`, which is
+ * the DOMAIN shape the fill consumes — the read path converts one to the other,
+ * so a simulated row must be in THIS shape to merge before that conversion.
+ */
+export type TemplateTwinOverrideRow = {
+  fieldId: string;
+  selectedOptionOrdinal: number | null;
+  overrideKind: string;
+  insertedText: string | null;
+};
+
 export interface ProcessTemplateTwinVisitInput {
   visitId: string;
   practiceId: string;
@@ -342,6 +355,24 @@ export interface ProcessTemplateTwinVisitInput {
   visitDate?: Date | string | null;
   resolverModelVersion: string | null;
   storage?: TemplateTwinArtifactStore;
+  /**
+   * SIMULATION ONLY — override rows that are NOT yet in the database, merged
+   * over the ones that are, so a caller can ask *"what would this fill look
+   * like if I wrote this?"* BEFORE it writes.
+   *
+   * ⚠️ THIS EXISTS BECAUSE A GUARD THAT READS THE PRE-WRITE STATE CANNOT SEE A
+   * WRITE THAT BREAKS THE DOCUMENT. Round four of #1018's pass found it twice,
+   * from two independent lenses: an insert onto a `rowPrototype` narrative_text
+   * field, and one onto a `laterality: 'required'` mapping. Either makes
+   * `finalizeTemplateTwinFill` return `render: null` for the WHOLE fill; the
+   * offer then returns `miss('no_render')` and the surface draws no panel — and
+   * with no panel there is no Undo button, so the row is permanent and the
+   * doctor's document never renders again.
+   *
+   * Nothing is persisted by passing this: it changes what the fill is computed
+   * FROM, never what is stored. `processTemplateTwinVisit` REFUSES it outright.
+   */
+  simulateOverrides?: readonly TemplateTwinOverrideRow[];
 }
 
 /** What the read+prepare phase produces. The persistence phase needs the rows
@@ -513,6 +544,19 @@ export async function readAndPrepareTemplateTwinFill(
         insertedText: true,
       },
     });
+    // ⚠️ SIMULATED ROWS ARE MERGED BY `fieldId`, NOT APPENDED. The unique index
+    // is on (visitId, fieldId), so appending would hand the fill two rows for
+    // one field — a state the database cannot hold, which would make the
+    // simulation answer about a universe that cannot exist.
+    const effectiveOverrides = input.simulateOverrides?.length
+      ? [
+          ...clinicianOverrides.filter(
+            (o) => !input.simulateOverrides!.some((p) => p.fieldId === o.fieldId),
+          ),
+          ...input.simulateOverrides,
+        ].sort((a, b) => a.fieldId.localeCompare(b.fieldId))
+      : clinicianOverrides;
+
     const prepared = await prepareTemplateTwinFill({
       compiledVersionId: compiled.id,
       noteTemplateId: row.id,
@@ -535,7 +579,7 @@ export async function readAndPrepareTemplateTwinFill(
       // second layer, because a constraint added in a migration protects rows
       // written after it and this code also runs against whatever is already
       // stored.
-      clinicianOverrides: clinicianOverrides.flatMap((o): ClinicianFieldOverride[] => {
+      clinicianOverrides: effectiveOverrides.flatMap((o): ClinicianFieldOverride[] => {
         if (o.overrideKind === 'scaffold_default') {
           return o.insertedText
             ? [{ kind: 'scaffold_default' as const, fieldId: o.fieldId, insertedText: o.insertedText }]
@@ -555,6 +599,21 @@ export async function readAndPrepareTemplateTwinFill(
 export async function processTemplateTwinVisit(
   input: ProcessTemplateTwinVisitInput,
 ): Promise<PreparedTemplateTwinFill> {
+  // ⚠️ A SIMULATED FILL MUST NEVER BE PERSISTED, AND THIS IS THE MECHANISM
+  // RATHER THAN THE CONVENTION. This function passes its input straight down to
+  // `readAndPrepareTemplateTwinFill`, so `simulateOverrides` would reach the
+  // fill — and the manifest is then stamped `overridesIdentity(clinicianOverrides)`
+  // from the rows that ARE stored, producing a manifest asserting an identity
+  // the rendered document does not correspond to. That is verbatim the drift
+  // this file's own comment says `note-identity.ts` exists to prevent.
+  //
+  // Simulation is a READ-side capability. The writer refuses it.
+  if (input.simulateOverrides?.length) {
+    throw new Error(
+      'processTemplateTwinVisit: refusing a simulated fill. `simulateOverrides` is read-side only — persisting it would stamp a manifest identity the document does not correspond to.',
+    );
+  }
+
   // Persist the first selected version before source I/O, resolution, model-
   // derived evidence processing, or rendering. A retry must never switch to a
   // newly activated template after partial work against this version.

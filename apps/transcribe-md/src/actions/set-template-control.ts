@@ -33,6 +33,7 @@ import { TemplateDocIRSchema, type TemplateDocIR } from '@/lib/template-twin/ir'
 import { isWordPlaceholderOption } from '@/lib/note-template-docx/placeholder-option';
 import { SCAFFOLD_INSERTABLE_KINDS } from '@/lib/template-twin/clinician-override';
 import { scaffoldDefaultOfferable } from '@/lib/template-twin/clinician-override';
+import type { ProcessTemplateTwinVisitInput } from '@/lib/template-twin/fill-engine';
 import { readAndPrepareTemplateTwinFill } from '@/lib/template-twin/fill-engine';
 
 export interface SetTemplateControlResult {
@@ -409,6 +410,16 @@ export interface InsertScaffoldDefaultResult {
 async function scaffoldDefaultAdmissible(input: {
   visitId: string;
   fieldId: string;
+  /**
+   * The text the caller is ABOUT TO WRITE. Present for an insert, absent for a
+   * read-only admissibility question.
+   *
+   * ⚠️ ROUND FOUR FOUND THAT THE GUARD BELOW COULD NOT SEE ITS OWN WRITE, and
+   * two independent lenses reached it by different routes. Without this the
+   * gate answers *"does the document render today?"* — which is not the
+   * question. The question is *"will it render after I write this?"*
+   */
+  pendingText?: string;
   field: TemplateDocIR['fields'][number];
   resolved: {
     practiceId: string;
@@ -464,7 +475,11 @@ async function scaffoldDefaultAdmissible(input: {
 
   let current: { status?: string; value?: unknown; reasonCode?: string | null } | null = null;
   try {
-    const { prepared } = await readAndPrepareTemplateTwinFill({
+    // ⚠️ ONE ARGUMENT OBJECT, SHARED BY BOTH FILLS. The post-write simulation
+    // below must differ from this call in EXACTLY ONE WAY — the pending row —
+    // and a second hand-written copy of fifteen fields would drift from this
+    // one the day either is edited, while every arm stayed green.
+    const fillInput: ProcessTemplateTwinVisitInput = {
       visitId,
       practiceId: visit.user.practiceId,
       // THE VISIT'S OWN DOCTOR, NOT THE REQUESTER — the same actor rule the
@@ -484,7 +499,8 @@ async function scaffoldDefaultAdmissible(input: {
       validationNow: new Date(),
       visitDate: visit.createdAt,
       resolverModelVersion: null,
-    });
+    };
+    const { prepared } = await readAndPrepareTemplateTwinFill(fillInput);
     // ⚠️ THE WHOLE-DOCUMENT REFUSAL — FOUND BY ROUND THREE, BY TWO LENSES.
     // One blocking validation issue on ANY field makes `finalizeTemplateTwinFill`
     // return `render: null` for the ENTIRE fill. The offer then returns
@@ -499,6 +515,53 @@ async function scaffoldDefaultAdmissible(input: {
         ok: false,
         error: `${field.originalLabel} could not be placed on your form for this visit, so nothing was inserted.`,
       };
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // ⚠️ AND NOW THE SAME QUESTION ABOUT THE POST-WRITE STATE. ROUND FOUR.
+    //
+    // The check above proves the document renders TODAY. That is not the
+    // question the door is asking. Two independent lenses reached the same
+    // defect by different routes:
+    //
+    //   · an insert onto a `rowPrototype` narrative_text field — the writer
+    //     stores a SCALAR, `validation/index.ts` demands a ROW ARRAY, and it
+    //     raises ASSERTION_NOT_SUPPORTED + REPEATING_ROW_SHAPE_INVALID;
+    //   · an insert onto a `laterality: 'required'` mapping.
+    //
+    // Either makes `finalizeTemplateTwinFill` return `render: null` for the
+    // WHOLE fill. The offer then returns `miss('no_render')`, the surface draws
+    // no panel — and WITH NO PANEL THERE IS NO UNDO BUTTON. The row is
+    // permanent and the doctor's document never renders again.
+    //
+    // The pre-write fill cannot see this BY CONSTRUCTION: it is computed from
+    // the rows in the database, and the row that breaks it is the one we have
+    // not written yet. So the fill is re-driven WITH the pending row merged in.
+    // Canon 120: after a fix, re-drive the WHOLE chain.
+    //
+    // ⚠️ THE COST IS A SECOND FULL FILL — an object-storage read, a
+    // docx-to-text pass and a render. It runs ONLY on the write path, only
+    // after admissibility has already passed, and only for an explicit doctor
+    // action. A permanently unrenderable document is not a price worth paying
+    // for one avoided render.
+    if (input.pendingText !== undefined) {
+      const { prepared: after } = await readAndPrepareTemplateTwinFill({
+        ...fillInput,
+        simulateOverrides: [
+          {
+            fieldId,
+            overrideKind: 'scaffold_default',
+            insertedText: input.pendingText,
+            selectedOptionOrdinal: null,
+          },
+        ],
+      });
+      if (!after.render?.document) {
+        return {
+          ok: false,
+          error: `${field.originalLabel} cannot take a default on this visit — inserting it would stop your form from being produced, so nothing was inserted.`,
+        };
+      }
     }
     current = prepared.manifest.fields.find((f) => f.fieldId === fieldId) ?? null;
   } catch (err) {
@@ -615,30 +678,71 @@ export async function insertScaffoldDefaultAction(
   // `DEFAULT_INSERTED_BY_DOCTOR` audit row asserting a claim the doctor was
   // never shown. A door wrong in both directions does not need a third static
   // rule — it needs the per-visit answer.
-  const gate = await scaffoldDefaultAdmissible({ visitId, fieldId, field, resolved });
+  const gate = await scaffoldDefaultAdmissible({ visitId, fieldId, field, resolved, pendingText: text });
   if (!gate.ok) return { ok: false, error: gate.error, label: field.originalLabel };
 
-  await prisma.templateTwinFieldOverride.upsert({
-    where: { visitId_fieldId: { visitId, fieldId } },
-    create: {
-      practiceId,
-      visitId,
-      fieldId,
-      overrideKind: 'scaffold_default',
-      insertedText: text,
-      overriddenBy: session.user.id,
-    },
-    // ⚠️ CLEARS THE OPTION ARM FOR THE SAME REASON THE OPTION DOOR CLEARS THIS
-    // ONE: one row per (visitId, fieldId), and a row satisfying neither arm of
-    // the kind-shape CHECK is refused by the database.
-    update: {
-      overrideKind: 'scaffold_default',
-      insertedText: text,
-      selectedOptionOrdinal: null,
-      optionValue: null,
-      overriddenBy: session.user.id,
-    },
+  // ══════════════════════════════════════════════════════════════════════════
+  // ⚠️ THE STATUS IS RE-ASSERTED AT THE WRITE, UNDER A LOCK ON THE VISIT ROW.
+  //
+  // `visit.status` was read at the top of this action. Between that read and
+  // this write the door performs TWO full fills — each an object-storage read,
+  // a docx-to-text pass and a render — so the window is seconds wide, not
+  // microseconds. Round four found the door never re-checked; and the
+  // post-write simulation added by this very change WIDENED that window from
+  // one fill to two, which makes fixing it part of the same change rather than
+  // a follow-up.
+  //
+  // What lands in the window is a SIGN. `POST /api/visits/[id]/sign` is the
+  // sole SIGNED-writer and it updates this visit row, so `FOR UPDATE` here
+  // makes the two mutually exclusive: either the sign commits first and the
+  // re-read below sees SIGNED, or this transaction holds the row and the sign
+  // waits. Without it an insert lands on a SIGNED visit — and a signed visit
+  // shows no panel, so there is no Undo button and the row is permanent.
+  //
+  // A read-then-act check cannot see this by construction, which is the same
+  // sentence the ADMIN-5 guard carries one lane over.
+  const wrote = await prisma.$transaction(async (tx) => {
+    const [locked] = await tx.$queryRaw<{ status: string; signedAt: Date | null }[]>`
+      SELECT "status", "signedAt" FROM "transcribe_visits" WHERE "id" = ${visitId} FOR UPDATE`;
+    // ⚠️ BOTH SPELLINGS, BECAUSE THE TWO SURFACES USE DIFFERENT ONES. The door
+    // says `status === 'SIGNED'`, the offer says `signedAt` — round four filed
+    // that divergence separately. They agree in production today and the sign
+    // route sets both atomically, but a guard that trusts that is a guard
+    // resting on a coincidence it does not assert.
+    if (!locked || locked.status === 'SIGNED' || locked.signedAt !== null) return false;
+    if (locked.status !== 'READY') return false;
+
+    await tx.templateTwinFieldOverride.upsert({
+      where: { visitId_fieldId: { visitId, fieldId } },
+      create: {
+        practiceId,
+        visitId,
+        fieldId,
+        overrideKind: 'scaffold_default',
+        insertedText: text,
+        overriddenBy: session.user.id,
+      },
+      // ⚠️ CLEARS THE OPTION ARM FOR THE SAME REASON THE OPTION DOOR CLEARS
+      // THIS ONE: one row per (visitId, fieldId), and a row satisfying neither
+      // arm of the kind-shape CHECK is refused by the database.
+      update: {
+        overrideKind: 'scaffold_default',
+        insertedText: text,
+        selectedOptionOrdinal: null,
+        optionValue: null,
+        overriddenBy: session.user.id,
+      },
+    });
+    return true;
   });
+
+  if (!wrote) {
+    return {
+      ok: false,
+      error: `${field.originalLabel} was not inserted — this visit was signed while your form was being checked.`,
+      label: field.originalLabel,
+    };
+  }
 
   await invalidateVisitFills(visitId);
 

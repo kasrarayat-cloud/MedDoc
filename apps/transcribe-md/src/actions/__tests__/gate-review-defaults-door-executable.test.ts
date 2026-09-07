@@ -48,18 +48,27 @@ const defFindUnique = vi.fn();
 const invalidate = vi.fn();
 const audit = vi.fn();
 const readAndPrepare = vi.fn();
+const lockedVisit = vi.fn();
 
-vi.mock('@meddoc/db', () => ({
-  default: {
-    transcribeVisit: { findFirst: (...a: unknown[]) => visitFindFirst(...a) },
-    noteTemplate: { findFirst: (...a: unknown[]) => templateFindFirst(...a) },
-    templateTwinFieldOverride: {
-      upsert: (...a: unknown[]) => overrideUpsert(...a),
-      deleteMany: (...a: unknown[]) => overrideDeleteMany(...a),
-    },
-    templateTwinFieldDefinition: { findUnique: (...a: unknown[]) => defFindUnique(...a) },
+// ⚠️ `$transaction` RUNS THE REAL CALLBACK, and `$queryRaw` answers the
+// FOR UPDATE re-read. The door now re-asserts the visit's status at the write,
+// under a lock, because it performs two full fills between reading the status
+// and writing — so a sign can land in the window. A mock that stubbed the
+// transaction away would make every arm below pass without the re-check ever
+// running, which is the vacuity this file exists to avoid.
+const db = {
+  transcribeVisit: { findFirst: (...a: unknown[]) => visitFindFirst(...a) },
+  noteTemplate: { findFirst: (...a: unknown[]) => templateFindFirst(...a) },
+  templateTwinFieldOverride: {
+    upsert: (...a: unknown[]) => overrideUpsert(...a),
+    deleteMany: (...a: unknown[]) => overrideDeleteMany(...a),
   },
-}));
+  templateTwinFieldDefinition: { findUnique: (...a: unknown[]) => defFindUnique(...a) },
+  $queryRaw: (...a: unknown[]) => lockedVisit(...a),
+  $transaction: (fn: (tx: unknown) => unknown) => fn(db),
+};
+
+vi.mock('@meddoc/db', () => ({ default: db }));
 vi.mock('@/lib/auth', () => ({
   requireSession: async () => ({ user: { id: 'requester-1', practiceId: 'prac-1' } }),
 }));
@@ -200,6 +209,122 @@ beforeEach(() => {
   defFindUnique.mockResolvedValue({ mapping: { clinicalConcept: 'assessment' } });
   readAndPrepare.mockResolvedValue(manifest(resolution()));
   overrideUpsert.mockResolvedValue({});
+  lockedVisit.mockResolvedValue([{ status: 'READY', signedAt: null }]);
+});
+
+describe('ROUND FOUR — a sign landing in the window cannot be written over', () => {
+  // ⚠️ THE WINDOW IS SECONDS WIDE AND THIS CHANGE MADE IT WIDER. The status is
+  // read at the top of the action; the write happens after TWO full fills (each
+  // an object-storage read, a docx-to-text pass and a render) — the second added
+  // by the post-write simulation above. Round four found the door never
+  // re-checked. What lands in that window is a SIGN, and a signed visit shows no
+  // panel: no panel, no Undo button, and the row is permanent.
+
+  it('⚠️ NON-VACUITY — the re-read really happens, and it takes the row LOCK', async () => {
+    await insert();
+    expect(lockedVisit, 'the door never re-read the visit at the write').toHaveBeenCalledTimes(1);
+    const sql = String((lockedVisit.mock.calls[0][0] as { join?: unknown; raw?: unknown[] } & TemplateStringsArray).raw?.join('') ?? '');
+    expect(sql).toMatch(/FOR UPDATE/);
+    expect(sql).toMatch(/transcribe_visits/);
+  });
+
+  it('REFUSES when the visit was SIGNED while the form was being checked', async () => {
+    lockedVisit.mockResolvedValue([{ status: 'SIGNED', signedAt: new Date() }]);
+    const res = await insert();
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/signed while your form was being checked/);
+    expect(overrideUpsert, 'a row was written onto a signed visit').not.toHaveBeenCalled();
+    expect(audit, 'an audit row claims a doctor act on a signed record').not.toHaveBeenCalled();
+  });
+
+  it('⚠️ BOTH SPELLINGS — `signedAt` alone is enough, even with status still READY', async () => {
+    // The door says `status === 'SIGNED'`, the offer says `signedAt`. They agree
+    // in production today and the sign route sets both atomically — but a guard
+    // that trusts that is resting on a coincidence it does not assert.
+    lockedVisit.mockResolvedValue([{ status: 'READY', signedAt: new Date() }]);
+    const res = await insert();
+    expect(res.ok).toBe(false);
+    expect(overrideUpsert).not.toHaveBeenCalled();
+  });
+
+  it('REFUSES when the visit left READY in the window (e.g. back to PROCESSING)', async () => {
+    lockedVisit.mockResolvedValue([{ status: 'PROCESSING', signedAt: null }]);
+    const res = await insert();
+    expect(res.ok).toBe(false);
+    expect(overrideUpsert).not.toHaveBeenCalled();
+  });
+
+  it('REFUSES when the visit vanished in the window — the lock returned no row', async () => {
+    lockedVisit.mockResolvedValue([]);
+    const res = await insert();
+    expect(res.ok).toBe(false);
+    expect(overrideUpsert).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ THE CONTROL — still READY at the write, so it WRITES', async () => {
+    // Without this the four arms above pass for a door that refuses everything.
+    lockedVisit.mockResolvedValue([{ status: 'READY', signedAt: null }]);
+    const res = await insert();
+    expect(res.ok, res.error).toBe(true);
+    expect(overrideUpsert).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ROUND FOUR — the door judges the POST-write fill, not the pre-write one', () => {
+  // ⚠️ THE DEFECT THIS CLOSES WAS FOUND BY TWO INDEPENDENT LENSES, AND IT IS
+  // CLINICAL-HARM. The pre-write fill is computed from the rows in the database,
+  // so it cannot see the row the door is about to add. An insert onto a
+  // `rowPrototype` narrative_text field (writer stores a SCALAR, the validator
+  // demands a ROW ARRAY) or onto a `laterality: 'required'` mapping makes
+  // `finalizeTemplateTwinFill` return `render: null` for the WHOLE fill — the
+  // offer returns `miss('no_render')`, the surface draws no panel, and WITH NO
+  // PANEL THERE IS NO UNDO BUTTON. The row is permanent and the document never
+  // renders again.
+  //
+  // These arms drive the REAL action and separate the two fills by the one
+  // thing that differs between them: whether `simulateOverrides` is present.
+
+  it('⚠️ NON-VACUITY — the door really does drive a SECOND fill, carrying the pending row', async () => {
+    await insert();
+    const calls = readAndPrepare.mock.calls.map((c) => c[0] as Record<string, unknown>);
+    expect(calls.length, 'the door drove only one fill — the post-write check is absent').toBe(2);
+    expect(calls[0].simulateOverrides, 'the FIRST fill must be the real, pre-write state').toBeUndefined();
+    expect(calls[1].simulateOverrides).toEqual([
+      { fieldId: FIELD, overrideKind: 'scaffold_default', insertedText: expect.any(String), selectedOptionOrdinal: null },
+    ]);
+  });
+
+  it('the two fills differ ONLY by the pending row — a drifted second copy would show here', async () => {
+    await insert();
+    const [a, b] = readAndPrepare.mock.calls.map((c) => ({ ...(c[0] as Record<string, unknown>) }));
+    delete (b as Record<string, unknown>).simulateOverrides;
+    expect(b).toEqual(a);
+  });
+
+  it('REFUSES when the write would make the document unrenderable — and writes NOTHING', async () => {
+    // renders today; would not render with the pending row
+    readAndPrepare.mockImplementation((input: Record<string, unknown>) =>
+      Promise.resolve(
+        input.simulateOverrides
+          ? { prepared: { render: null, manifest: { fields: [resolution()] } } }
+          : manifest(resolution()),
+      ),
+    );
+    const res = await insert();
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/would stop your form from being produced/);
+    expect(overrideUpsert, 'a row was written for an insert that breaks the document').not.toHaveBeenCalled();
+    expect(audit, 'an audit row asserts a doctor act that did not happen').not.toHaveBeenCalled();
+  });
+
+  it('⚠️ THE CONTROL — the SAME refusal path admits when the post-write fill DOES render', async () => {
+    // Identical wiring, opposite answer. Without this the arm above passes for
+    // any door that refuses everything.
+    readAndPrepare.mockImplementation(() => Promise.resolve(manifest(resolution())));
+    const res = await insert();
+    expect(res.ok, res.error).toBe(true);
+    expect(overrideUpsert).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('#204 — the door consults the PER-VISIT resolution', () => {
@@ -316,7 +441,14 @@ describe('#204 — the door consults the PER-VISIT resolution', () => {
 describe('#204 — the fill is asked the SAME question the preview asks', () => {
   it('⚠️ THE VISIT’S OWN DOCTOR, not the requester', async () => {
     await insert();
-    expect(readAndPrepare).toHaveBeenCalledTimes(1);
+    // ⚠️ TWO FILLS NOW, NOT ONE — AND THE COUNT IS STILL ASSERTED. Round four
+    // added a POST-write simulation, so the door drives the fill twice: once on
+    // the real state, once with the pending row merged in. This arm was written
+    // when there was one, and it is CORRECTED rather than loosened: a bare
+    // `toHaveBeenCalled()` would stop noticing a third fill appearing, and the
+    // whole point of the original assertion was that the door asks the preview's
+    // question exactly once per state.
+    expect(readAndPrepare).toHaveBeenCalledTimes(2);
     // ⚠️ EVERY ARGUMENT THAT DECIDES THE ANSWER, NOT A CONVENIENT SUBSET.
     // Round three: this block checked 6 of 12 and none of the four that move
     // the outcome. Blanking `contextText`, `entities`, the `inputMode` ternary
