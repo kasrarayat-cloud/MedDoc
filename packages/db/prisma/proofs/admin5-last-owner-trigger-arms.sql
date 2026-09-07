@@ -132,6 +132,97 @@ SELECT t210_try('13 demote one of TWO able owners — the control for arm 1','AL
   $$UPDATE users SET "practiceRole"='CLINICIAN' WHERE id='t210_a'$$,
   $$UPDATE users SET "suspendedAt"=NULL WHERE id='t210_s'$$);   -- S becomes able: 2 able owners
 
+-- ══ ARMS 14-19 — ONE PER DEFECT THE ADVERSARIAL PASS FOUND ═════════════════
+-- Every one of these was a demonstrated BYPASS or LOCKOUT before the fix. They
+-- are arms rather than notes because a fix without an arm is a fix until the
+-- next edit.
+
+-- The pass's finding #1: the forbidden state was reachable in TWO permitted
+-- writes — suspend a solo owner (legitimately allowed), then let a clinician
+-- redeem an invite. There was no INSERT arm at all.
+SELECT t210_try('14 INSERT a live member into a practice with NO active owner','REFUSED',
+  $$INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive")
+      VALUES ('t210_ins','t210ins@x.test','x',now(),'t210_pdead','CLINICIAN',true)$$);
+
+SELECT t210_try('15 INSERT a live member where an owner IS active — must not be refused','ALLOWED',
+  $$INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive")
+      VALUES ('t210_ins2','t210ins2@x.test','x',now(),'t210_pmulti','CLINICIAN',true)$$);
+
+-- The rescue path must stay open, or a practice with no owner could never get one.
+SELECT t210_try('16 INSERT an OWNER into a practice with no active owner — the rescue','ALLOWED',
+  $$INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive")
+      VALUES ('t210_res','t210res@x.test','x',now(),'t210_pdead','OWNER',true)$$);
+
+SELECT t210_try('17 INSERT an INACTIVE member into an ownerless practice — cannot be stranded','ALLOWED',
+  $$INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive")
+      VALUES ('t210_ins3','t210ins3@x.test','x',now(),'t210_pdead','CLINICIAN',false)$$);
+
+-- The pass's finding #3: a SOFT-DELETED ex-employee counted as a "member", so a
+-- solo owner could never delete their own account — and the refusal named a
+-- remedy (transfer ownership) that a soft-deleted row cannot receive.
+SELECT t210_try('18 DELETE a solo owner whose only co-row is SOFT-DELETED','ALLOWED',
+  $$DELETE FROM users WHERE id='t210_ghost_o'$$,
+  $$INSERT INTO practices(id,name,slug,"updatedAt") VALUES ('t210_pghost','G','t210-g',now());
+    INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive") VALUES
+      ('t210_ghost_o','tgo@x.test','x',now(),'t210_pghost','OWNER',true),
+      ('t210_ghost_x','tgx@x.test','x',now(),'t210_pghost','CLINICIAN',true);
+    UPDATE users SET "softDeletedAt"=now(), "isActive"=false WHERE id='t210_ghost_x'$$);
+
+-- ...but a LIVE co-worker still holds the practice. The direct control for 18.
+SELECT t210_try('19 DELETE a solo owner whose co-row is LIVE — the control for 18','REFUSED',
+  $$DELETE FROM users WHERE id='t210_live_o'$$,
+  $$INSERT INTO practices(id,name,slug,"updatedAt") VALUES ('t210_plive','L','t210-l',now());
+    INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive") VALUES
+      ('t210_live_o','tlo@x.test','x',now(),'t210_plive','OWNER',true),
+      ('t210_live_x','tlx@x.test','x',now(),'t210_plive','CLINICIAN',true)$$);
+
+-- The E2E suite's own teardown (tests/e2e/helpers/cleanup.ts:99) deletes a whole
+-- synthetic practice in ONE statement. The BEFORE row trigger REFUSED this, so
+-- this arm is the regression test for the shape change to a constraint trigger.
+SELECT t210_try('20 tear a whole practice down in ONE statement (the E2E cleanup shape)','ALLOWED',
+  $$DELETE FROM users WHERE "practiceId"='t210_pteardown'$$,
+  $$INSERT INTO practices(id,name,slug,"updatedAt") VALUES ('t210_pteardown','T','t210-t',now());
+    INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive") VALUES
+      ('t210_td_o','tdo@x.test','x',now(),'t210_pteardown','OWNER',true),
+      ('t210_td_1','td1@x.test','x',now(),'t210_pteardown','CLINICIAN',true),
+      ('t210_td_2','td2@x.test','x',now(),'t210_pteardown','TECH',true)$$);
+
+-- ══ ARMS 21-24 — THE SECOND ROUND OF FINDINGS ══════════════════════════════
+-- Exemption 2 originally counted only OTHER rows. On a DELETE that is right (the
+-- row is going); on an UPDATE the row STAYS and is one of the people left
+-- behind. 2 of 5 race runs ended with a solo owner demoted to CLINICIAN: able to
+-- log in, unable to administer, with nobody left who could promote them.
+
+SELECT t210_try('21 a SOLO owner demotes THEMSELVES — they are the stranded member','REFUSED',
+  $$UPDATE users SET "practiceRole"='CLINICIAN' WHERE id='t210_o'$$);
+
+-- ...but suspending that same solo owner must stay legal. A suspended person
+-- cannot act, so they are not a member left behind, and suspension is a real
+-- operations action (non-payment, abuse). This is the direct control for 21:
+-- same practice, same row, opposite verdict.
+SELECT t210_try('22 the SAME solo owner is SUSPENDED — the control for 21','ALLOWED',
+  $$UPDATE users SET "suspendedAt"=now() WHERE id='t210_o'$$);
+
+-- An INSERT is not the only way to add a live member to an ownerless practice.
+SELECT t210_try('23 UNSUSPEND a member into a practice with no active owner','REFUSED',
+  $$UPDATE users SET "suspendedAt"=NULL WHERE id='t210_sus_m'$$,
+  $$INSERT INTO practices(id,name,slug,"updatedAt") VALUES ('t210_pusp','U','t210-u',now());
+    INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive") VALUES
+      ('t210_sus_o','tso@x.test','x',now(),'t210_pusp','OWNER',true),
+      ('t210_sus_m','tsm@x.test','x',now(),'t210_pusp','CLINICIAN',true);
+    UPDATE users SET "suspendedAt"=now() WHERE id='t210_sus_m';
+    UPDATE users SET "suspendedAt"=now() WHERE id='t210_sus_o'$$);
+
+-- ...and the rescue must stay open, or an ownerless practice could never recover.
+SELECT t210_try('24 UNSUSPEND the OWNER of that practice — the rescue path','ALLOWED',
+  $$UPDATE users SET "suspendedAt"=NULL WHERE id='t210_sus_o2'$$,
+  $$INSERT INTO practices(id,name,slug,"updatedAt") VALUES ('t210_pusp2','U2','t210-u2',now());
+    INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive") VALUES
+      ('t210_sus_o2','tso2@x.test','x',now(),'t210_pusp2','OWNER',true),
+      ('t210_sus_m2','tsm2@x.test','x',now(),'t210_pusp2','CLINICIAN',true);
+    UPDATE users SET "suspendedAt"=now() WHERE id='t210_sus_m2';
+    UPDATE users SET "suspendedAt"=now() WHERE id='t210_sus_o2'$$);
+
 \pset format aligned
 \echo ''
 \echo '=== RULING #210 — DETERMINISTIC ARMS ==='

@@ -54,6 +54,19 @@ function activeOwnerSqlBody(): string {
     .join('\n');
 }
 
+/** A named function's body, COMMENTS STRIPPED — never a whole-file read. */
+function fnBody(name: string, terminator: string): string {
+  const start = sql.indexOf(`CREATE OR REPLACE FUNCTION ${name}`);
+  expect(start, `${name} is not defined in the migration`).toBeGreaterThan(-1);
+  const end = sql.indexOf(terminator, start);
+  expect(end, `${name} has no terminator`).toBeGreaterThan(start);
+  return sql
+    .slice(start, end)
+    .split('\n')
+    .filter((l) => !l.trimStart().startsWith('--'))
+    .join('\n');
+}
+
 /** Quoted identifiers the SQL predicate actually reads, e.g. `"isActive"`. */
 function sqlColumns(): string[] {
   const body = activeOwnerSqlBody();
@@ -88,9 +101,36 @@ describe('ruling #210 — one definition of an active practice OWNER', () => {
   });
 
   it('the trigger covers BOTH operations that can remove a seat', () => {
-    const trigger = sql.slice(sql.indexOf('CREATE TRIGGER "users_last_owner_guard_before_write"'));
-    expect(trigger).toMatch(/BEFORE\s+UPDATE\s+OR\s+DELETE\s+ON\s+"users"/);
+    const i = sql.indexOf('CREATE CONSTRAINT TRIGGER "users_last_owner_guard_after_write"');
+    expect(i, 'the constraint trigger is not created').toBeGreaterThan(-1);
+    const trigger = sql.slice(i);
+    expect(trigger).toMatch(/AFTER\s+UPDATE\s+OR\s+DELETE\s+ON\s+"users"/);
     expect(trigger).toContain('FOR EACH ROW');
+  });
+
+  it('it is a CONSTRAINT trigger deferred to the END of the statement — not a BEFORE row trigger', () => {
+    // ⚠️ THIS ARM EXISTS BECAUSE THE BEFORE FORM WAS BUILT FIRST AND WAS WRONG.
+    // A BEFORE row trigger judges each row before the statement's OTHER rows are
+    // applied, so tearing a whole practice down in one DELETE — which is exactly
+    // what the E2E suite's own cleanup does (tests/e2e/helpers/cleanup.ts:99) —
+    // is refused, because the members being deleted alongside the owner still
+    // look like survivors. Worse, it is ORDER-DEPENDENT: whether the owner's row
+    // is reached first decides whether a legitimate teardown succeeds.
+    //
+    // The invariant is a property of the statement's RESULT, so the check has to
+    // run once the statement has produced it. Reverting to `BEFORE ... FOR EACH
+    // ROW` would re-break the E2E teardown intermittently, and nothing else here
+    // would notice — so this arm names the shape rather than the behaviour.
+    const i = sql.indexOf('CREATE CONSTRAINT TRIGGER');
+    const trigger = sql.slice(i, sql.indexOf(';', i));
+    expect(trigger).toContain('DEFERRABLE INITIALLY IMMEDIATE');
+
+    // and no BEFORE row trigger on users survives anywhere in the migration
+    const code = sql
+      .split('\n')
+      .filter((l) => !l.trimStart().startsWith('--'))
+      .join('\n');
+    expect(code).not.toMatch(/BEFORE\s+(INSERT\s+OR\s+)?UPDATE(\s+OR\s+DELETE)?\s+ON\s+"users"/);
   });
 
   it('the guard SERIALIZES before it counts — a count read and then acted on is forbidden', () => {
@@ -104,6 +144,41 @@ describe('ruling #210 — one definition of an active practice OWNER', () => {
     // ORDER is the assertion. A lock taken after the count guards nothing, and
     // both would be present either way.
     expect(lock).toBeLessThan(count);
+  });
+
+  it('there is a LIVE-MEMBER definition too, and it excludes suspension', () => {
+    // ⚠️ BOTH HALVES WERE DEFECTS FOUND BY THE ADVERSARIAL PASS.
+    // Counting a SOFT-DELETED ex-employee as a member made a solo owner's own
+    // account deletion permanently impossible, and the refusal named a remedy
+    // ("transfer ownership") that a soft-deleted row cannot receive. Counting a
+    // SUSPENDED person as a member would block suspending a solo practice
+    // owner, which is a legitimate operations action.
+    const body = fnBody('users_is_live_member', '$fn$ LANGUAGE sql IMMUTABLE;');
+    for (const col of ['isActive', 'deactivatedAt', 'softDeletedAt', 'suspendedAt']) {
+      expect(body, `users_is_live_member ignores ${col}`).toContain(col);
+    }
+  });
+
+  it('exemption 2 counts the row ITSELF when the write leaves it behind', () => {
+    // On a DELETE the row is going, so only other members can be stranded. On an
+    // UPDATE the row STAYS — and a solo owner demoting themselves is the person
+    // stranded. The first version counted only other rows and allowed it; 2 of 5
+    // race runs ended in exactly that state.
+    const guard = fnBody('users_last_owner_guard()', '$fn$ LANGUAGE plpgsql;');
+    const count = guard.indexOf('INTO members_left');
+    const self = guard.indexOf('members_left := members_left + 1');
+    expect(self, 'nothing adds the surviving row to the member count').toBeGreaterThan(-1);
+    expect(self, 'the self-count runs before the count it adjusts').toBeGreaterThan(count);
+    expect(guard.slice(count, self)).toMatch(/TG_OP\s*=\s*'UPDATE'|users_is_live_member\(NEW\)/);
+  });
+
+  it('the orphan arm fires on INSERT **and** UPDATE — an unsuspend adds a member too', () => {
+    // An INSERT is not the only way to put a live member into an ownerless
+    // practice: unsuspending or reactivating one does it as an UPDATE whose OLD
+    // row is not an active owner, which the removal guard returns early on.
+    const i = sql.indexOf('CREATE CONSTRAINT TRIGGER "users_no_orphan_member_after_insert"');
+    expect(i, 'the orphan-member trigger is not created').toBeGreaterThan(-1);
+    expect(sql.slice(i, sql.indexOf(';', i))).toMatch(/AFTER\s+INSERT\s+OR\s+UPDATE\s+ON\s+"users"/);
   });
 
   it('both doors ruling #210 names in scope call the friendly refusal', () => {

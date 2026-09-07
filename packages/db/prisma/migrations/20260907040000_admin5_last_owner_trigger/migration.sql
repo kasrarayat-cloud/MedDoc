@@ -19,9 +19,22 @@
 -- ⚠️ WHY NOT A CHECK CONSTRAINT: a CHECK sees one row. This invariant is about
 -- the SET of a practice's owners, which no row-local expression can express.
 --
--- ⚠️ WHY NOT REVOKE: this database has ONE login role and it is SUPERUSER. A
--- superuser bypasses table privileges. It does NOT bypass triggers. That is
--- the same reasoning `20260811070000_b5_ledger_entries` records.
+-- ⚠️ WHY NOT REVOKE: this database has ONE login role and it is SUPERUSER, so a
+-- superuser bypasses table privileges. A trigger is a stronger guard than a
+-- grant here -- but NOT an absolute one, and the earlier wording of this
+-- paragraph ("a superuser does NOT bypass triggers") was FALSE. It was refuted
+-- in this change's own adversarial pass, twice, in one statement each:
+--
+--     SET LOCAL session_replication_role = 'replica';   -- superuser-only
+--     ALTER TABLE "users" DISABLE TRIGGER "users_last_owner_guard_after_write";
+--
+-- Both let the forbidden write through. **A superuser does not bypass triggers
+-- BY DEFAULT, and can choose to.** So the honest claim is narrower than the one
+-- inherited from `20260811070000_b5_ledger_entries`: this stops every write the
+-- APPLICATION can make, through any door, and it does not stop a person at a
+-- psql prompt who has decided to turn it off. That is the right guarantee for
+-- the threat this ruling names -- a door somebody forgot -- and it is stated
+-- here rather than overclaimed.
 --
 -- ⚠️ AND THE FK-RESTRICT ACCIDENT STOPS BEING LOAD-BEARING. Part of what has
 -- been holding this invariant up is `users_practiceId_fkey ... ON DELETE
@@ -113,6 +126,28 @@ CREATE OR REPLACE FUNCTION users_is_active_owner(u "users") RETURNS boolean AS $
        AND u."softDeletedAt"  IS NULL;
 $fn$ LANGUAGE sql IMMUTABLE;
 
+-- ⚠️ AND "MEMBER" NEEDS ITS OWN DEFINITION, FOR THE SAME REASON.
+-- Exemption 2 asks "is anyone left to strand?", and the first version answered
+-- it with a bare row count. Refuted in this change's adversarial pass: a
+-- practice whose only other row was a SOFT-DELETED ex-employee could no longer
+-- delete its own owner -- and the refusal named a remedy ("transfer ownership
+-- first") that is unreachable, because a soft-deleted account cannot receive
+-- ownership. A permanent refusal naming an impossible cure is worse than no
+-- guard.
+--
+-- A row that cannot be stranded does not count. Suspension DOES count: a
+-- suspended member still has an account and can be restored, so they are a
+-- person left behind. Deactivated and soft-deleted rows are not.
+CREATE OR REPLACE FUNCTION users_is_live_member(u "users") RETURNS boolean AS $fn$
+    SELECT u."isActive"
+       AND u."deactivatedAt" IS NULL
+       AND u."softDeletedAt" IS NULL
+       AND u."suspendedAt"   IS NULL;
+$fn$ LANGUAGE sql IMMUTABLE;
+
+COMMENT ON FUNCTION users_is_live_member("users") IS
+    'Ruling #210. A member who could actually be stranded by losing the practice''s last owner. A soft-deleted or deactivated row cannot be stranded and cannot receive ownership, so it must not keep a practice hostage.';
+
 COMMENT ON FUNCTION users_is_active_owner("users") IS
     'Ruling #210. The ONE definition of an active practice OWNER: a seat whose holder can actually administer the practice. Counting an owner who cannot authenticate implements a proxy for the invariant rather than the invariant.';
 
@@ -122,6 +157,10 @@ DECLARE
     owners_left  BIGINT;
     members_left BIGINT;
 BEGIN
+    -- ⚠️ THE RETURN VALUES BELOW ARE IGNORED. This runs as an AFTER constraint
+    -- trigger, where the result is discarded; they are kept because plpgsql
+    -- requires a trigger function to return, and because the function must stay
+    -- readable as "allow" vs "RAISE". Nothing downstream depends on them.
     -- EXEMPTION 1 — the row was not an active owner, so nothing can be lost.
     IF NOT users_is_active_owner(OLD) THEN
         IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
@@ -144,6 +183,31 @@ BEGIN
         hashtext(OLD."practiceId")
     );
 
+    -- ⚠️ LOCK THE SIBLING OWNER ROWS BEFORE COUNTING THEM, AND THE ADVISORY
+    -- LOCK IS NOT ENOUGH ON ITS OWN. Refuted in this change's adversarial pass:
+    -- under REPEATABLE READ the advisory lock serializes correctly and the
+    -- invariant STILL breaks, because the second transaction's snapshot predates
+    -- the first one's commit, so the count it takes after acquiring the lock
+    -- still sees a demoted owner as active. Classic write skew, and the lock is
+    -- innocent -- what made the READ COMMITTED case safe was the per-statement
+    -- snapshot, not the lock.
+    --
+    -- `FOR UPDATE` on those rows makes the same case RAISE instead: under
+    -- REPEATABLE READ, locking a row a concurrent transaction has already
+    -- committed a change to reports "could not serialize access". SERIALIZABLE
+    -- already refused it. So all three isolation levels are now safe, and the
+    -- two that are not READ COMMITTED fail LOUDLY rather than silently.
+    --
+    -- The set is small (a practice's owner rows), it is taken while already
+    -- holding the per-practice advisory lock, and the lock order is therefore
+    -- the same for every writer -- so this does not introduce a deadlock.
+    PERFORM 1
+       FROM "users" u
+      WHERE u."practiceId" = OLD."practiceId"
+        AND u."id" <> OLD."id"
+        AND u."practiceRole" = 'OWNER'::"PracticeRole"
+        FOR UPDATE;
+
     SELECT count(*) INTO owners_left
       FROM "users" u
      WHERE u."practiceId" = OLD."practiceId"
@@ -156,10 +220,23 @@ BEGIN
     END IF;
 
     -- EXEMPTION 2 — nobody is left to strand.
+    --
+    -- ⚠️ AND ON AN UPDATE THE ROW ITSELF IS ONE OF THE PEOPLE LEFT BEHIND.
+    -- The first version counted only OTHER rows, which is right for a DELETE
+    -- (the row is going) and WRONG for an UPDATE (the row stays). Measured in
+    -- this change's adversarial follow-up: a SOLO owner demoting themselves to
+    -- CLINICIAN was ALLOWED, leaving a practice with one live member who can log
+    -- in, cannot administer, and has nobody left to promote them. 2 of 5 race
+    -- runs ended in exactly that state.
     SELECT count(*) INTO members_left
       FROM "users" u
      WHERE u."practiceId" = OLD."practiceId"
-       AND u."id" <> OLD."id";
+       AND u."id" <> OLD."id"
+       AND users_is_live_member(u);
+
+    IF TG_OP = 'UPDATE' AND users_is_live_member(NEW) THEN
+        members_left := members_left + 1;
+    END IF;
 
     IF members_left = 0 THEN
         IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
@@ -176,11 +253,39 @@ $fn$ LANGUAGE plpgsql;
 COMMENT ON FUNCTION users_last_owner_guard() IS
     'Ruling #210. Refuses any UPDATE or DELETE that would leave a practice with members but no active OWNER. Enforcement lives here because five application doors reduce the count and the set is open.';
 
--- ⚠️ ONE trigger for BOTH operations, not two. The decision is identical for a
--- demotion, a suspension, a soft-delete and a hard delete -- they differ only
--- in which columns move -- and two triggers would be two places to forget.
-CREATE TRIGGER "users_last_owner_guard_before_write"
-    BEFORE UPDATE OR DELETE ON "users"
+-- ⚠️ A **CONSTRAINT** TRIGGER, AND THE REASON IS A DEFECT THIS FOUND IN ITSELF.
+--
+-- The first version of this migration was a plain `BEFORE UPDATE OR DELETE ...
+-- FOR EACH ROW` trigger, exactly as ruling #210 words it. It was measured
+-- against the E2E suite's own teardown and REFUSED IT:
+--
+--   cleanup.ts:99 -- DELETE FROM users WHERE id IN (SELECT id FROM target)
+--   -> users_last_owner_guard: refusing to leave practice e2e_p with zero
+--      active OWNERs while 3 other member(s) remain.
+--
+-- A BEFORE row trigger fires BEFORE the statement's other rows are applied, so
+-- when the owner's row is processed the three members it is being deleted
+-- ALONGSIDE are still present, and the guard reads a practice that is losing
+-- its owner and keeping its members. It is not: the whole practice is going.
+--
+-- ⚠️ AND IT IS ORDER-DEPENDENT, WHICH IS WORSE THAN WRONG. Whether the owner
+-- row happens to be processed first decides whether a legitimate teardown
+-- succeeds. That is canon 121's intermittent guard, in a guard written to
+-- illustrate canon 121.
+--
+-- THE INVARIANT IS A PROPERTY OF THE STATEMENT'S RESULT, SO THE CHECK BELONGS
+-- AT THE END OF THE STATEMENT. A CONSTRAINT TRIGGER with `DEFERRABLE INITIALLY
+-- IMMEDIATE` is queued and fired once the statement has completed, so the count
+-- is taken over the state the statement actually produced.
+--
+-- ⚠️ THIS DEPARTS FROM #210'S LITERAL WORDING ("a BEFORE UPDATE/DELETE
+-- trigger") AND NOT FROM ITS INVARIANT, per #200 -- a ruling binds the
+-- invariant and the proof, never the mechanism. Everything the BEFORE form
+-- refused that it SHOULD refuse, this form still refuses; the arms and the
+-- race harness are the evidence, and both are run against this shape.
+CREATE CONSTRAINT TRIGGER "users_last_owner_guard_after_write"
+    AFTER UPDATE OR DELETE ON "users"
+    DEFERRABLE INITIALLY IMMEDIATE
     FOR EACH ROW EXECUTE FUNCTION users_last_owner_guard();
 
 -- ⚠️ NO `BEFORE TRUNCATE` ARM, AND THE ABSENCE IS DELIBERATE. Row-level
@@ -189,6 +294,81 @@ CREATE TRIGGER "users_last_owner_guard_before_write"
 -- conditional on members remaining: `TRUNCATE users` removes every member of
 -- every practice, so it strands nobody and violates nothing. An arm that
 -- refused it would be guarding a different invariant than the one ruled.
+
+-- ============================================================================
+-- THE INSERT ARM — BECAUSE THE FORBIDDEN STATE HAS TWO WAYS IN, NOT ONE
+-- ----------------------------------------------------------------------------
+-- ⚠️ THIS EXISTS BECAUSE THE GUARD ABOVE WAS BYPASSED IN TWO PERMITTED WRITES,
+-- demonstrated in this change's own adversarial pass:
+--
+--   1. suspend the SOLE owner of a practice   -> ALLOWED (exemption 2: nobody
+--                                                to strand, and correctly so)
+--   2. a CLINICIAN redeems an invite into it  -> ALLOWED (no INSERT arm)
+--   => live_members = 1, active_owners = 0. Measured, not argued.
+--
+-- The second member is stranded on arrival and cannot even be promoted, because
+-- `changeMemberRoleAction` requires an OWNER caller and there is none.
+--
+-- ⚠️ AND THE FIX IS NOT "REMOVE EXEMPTION 2 FOR UPDATES". Suspending a solo
+-- practice owner is a legitimate operations action (non-payment, abuse), and
+-- refusing it would be a worse product than the hole. The invariant is about
+-- MEMBERS AND OWNERS TOGETHER, so the write that completes the violation is the
+-- one that must be refused: you may suspend a solo owner, and you may not then
+-- add a live member to a practice that has nobody to administer it.
+CREATE OR REPLACE FUNCTION users_no_orphan_member() RETURNS trigger AS $fn$
+DECLARE
+    owners_now BIGINT;
+BEGIN
+    -- An owner cannot strand themselves, and a row that cannot be stranded
+    -- (inactive, deactivated, soft-deleted) is not a member for this purpose.
+    IF users_is_active_owner(NEW) OR NOT users_is_live_member(NEW) THEN
+        RETURN NEW;
+    END IF;
+
+    -- ⚠️ AN INSERT IS NOT THE ONLY WAY TO ADD A LIVE MEMBER. Unsuspending or
+    -- reactivating somebody into an ownerless practice strands them just as
+    -- surely, and it is an UPDATE whose OLD row is not an active owner -- so the
+    -- removal guard returns early on it and never looks. This arm covers the
+    -- write that CREATES a live member; when the row was ALREADY one, the
+    -- removal guard owns the question and this one must not double-refuse.
+    IF TG_OP = 'UPDATE' AND users_is_live_member(OLD) THEN
+        RETURN NEW;
+    END IF;
+
+    -- Same lock, same key as the removal guard: an INSERT racing a demotion
+    -- must not be able to slip between the demotion's count and its commit.
+    PERFORM pg_advisory_xact_lock(
+        hashtext('users_last_owner_guard'),
+        hashtext(NEW."practiceId")
+    );
+
+    SELECT count(*) INTO owners_now
+      FROM "users" u
+     WHERE u."practiceId" = NEW."practiceId"
+       AND u."id" <> NEW."id"
+       AND users_is_active_owner(u);
+
+    IF owners_now = 0 THEN
+        RAISE EXCEPTION
+            'users_last_owner_guard: refusing to place a live member in practice %, which has no active OWNER. Restore or appoint an owner first.',
+            NEW."practiceId"
+            USING ERRCODE = '23514';
+    END IF;
+
+    RETURN NEW;
+END;
+$fn$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION users_no_orphan_member() IS
+    'Ruling #210. The other half of the invariant: a live member may not be added to a practice that has no active OWNER. Without it the forbidden state is reachable in two individually-permitted writes.';
+
+-- Deferred to statement end for the same reason as the removal guard: a single
+-- INSERT that creates a practice''s owner AND its members must be judged on what
+-- the statement produced, not on the order rows happen to be visited in.
+CREATE CONSTRAINT TRIGGER "users_no_orphan_member_after_insert"
+    AFTER INSERT OR UPDATE ON "users"
+    DEFERRABLE INITIALLY IMMEDIATE
+    FOR EACH ROW EXECUTE FUNCTION users_no_orphan_member();
 
 -- ============================================================================
 -- SELF-VERIFICATION — the migration asserts its own effect before committing.
@@ -202,15 +382,16 @@ BEGIN
     SELECT count(*) INTO n_trigger
       FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
      WHERE NOT t.tgisinternal AND c.relname = 'users'
-       AND t.tgname = 'users_last_owner_guard_before_write';
-    IF n_trigger <> 1 THEN
-        RAISE EXCEPTION 'admin5_last_owner_trigger: expected 1 trigger on users, found %', n_trigger;
+       AND t.tgname IN ('users_last_owner_guard_after_write', 'users_no_orphan_member_after_insert');
+    IF n_trigger <> 2 THEN
+        RAISE EXCEPTION 'admin5_last_owner_trigger: expected 2 triggers on users, found %', n_trigger;
     END IF;
 
     SELECT count(*) INTO n_function
-      FROM pg_proc WHERE proname IN ('users_last_owner_guard', 'users_is_active_owner');
-    IF n_function <> 2 THEN
-        RAISE EXCEPTION 'admin5_last_owner_trigger: expected 2 functions, found %', n_function;
+      FROM pg_proc WHERE proname IN ('users_last_owner_guard', 'users_is_active_owner',
+                                     'users_is_live_member', 'users_no_orphan_member');
+    IF n_function <> 4 THEN
+        RAISE EXCEPTION 'admin5_last_owner_trigger: expected 4 functions, found %', n_function;
     END IF;
 
     -- ⚠️ NOT AN ASSERTION THAT THE DATA IS CLEAN -- it is NOT. This records

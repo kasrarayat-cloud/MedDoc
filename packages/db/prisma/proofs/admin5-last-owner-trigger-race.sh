@@ -32,6 +32,34 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 MIGRATION="$HERE/../migrations/20260907040000_admin5_last_owner_trigger/migration.sql"
 OUT="$(mktemp -d "${TMPDIR:-/tmp}/t210-race-XXXXXX")"
 
+# ⚠️ RESTORE THE ARMED GUARD ON **ANY** EXIT, NOT JUST THE HAPPY ONE.
+# This script installs a DISARMED mutant into a SHARED database as its negative
+# control. Its own adversarial pass found that a Ctrl-C, a failed docker exec or
+# any early return left that mutant installed — so the next person to use the QA
+# stack would be running against a guard with its serialization removed, and
+# nothing would say so. The trap runs before the failure is reported.
+restore_guard() {
+  local rc=$?
+  if [ -f "$OUT/fn-shipped.sql" ]; then
+    docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -q < "$OUT/fn-shipped.sql" >/dev/null 2>&1
+  fi
+  if [ -f "$OUT/g2.sql" ]; then
+    docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -q < "$OUT/g2.sql" >/dev/null 2>&1
+  fi
+  local state
+  state=$(docker exec -i "$PGC" psql -U "$U" -d "$DB" -Atqc \
+    "SELECT count(*) FROM pg_proc WHERE proname IN ('users_last_owner_guard','users_no_orphan_member') AND prosrc LIKE '%pg_advisory_xact_lock%'" 2>/dev/null)
+  if [ "$state" = "2" ]; then
+    echo "🟢 guard restored (both functions armed)" >&2
+  else
+    echo "🔴 GUARD NOT RESTORED — $DB may still hold a DISARMED guard. Re-apply the migration by hand." >&2
+    rc=1
+  fi
+  rm -rf "$OUT"
+  exit $rc
+}
+trap restore_guard EXIT INT TERM
+
 q()  { docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -Atq -c "$1"; }
 qf() { docker exec -i -e PGAPPNAME="$1" "$PGC" psql -U "$U" -d "$DB" -X < "$2"; }
 
@@ -150,32 +178,79 @@ run_pair() {  # $1 = parallel|sequential
 
 echo "=== RULING #210 — RACE HARNESS (target: meddoc-qa, NEVER production) ==="
 echo
+echo "############ RACE A — THE REMOVAL GUARD UNDER CONCURRENCY ############"
 install_shipped; echo "trigger function: advisory lock $(lock_state)"
-echo "--- SUBJECT: parallel, trigger AS SHIPPED ---"
+echo "--- SUBJECT: parallel, AS SHIPPED ---"
 S=$(run_pair parallel); echo "$S"
-echo "    expect: owners_left=1  refusals=1  B blocked ~2s  concurrency>=2"
-echo
-echo "--- CONTROL 1 (#205): the SAME scripts run SEQUENTIALLY ---"
+echo "--- CONTROL A1 (#205): the SAME scripts run SEQUENTIALLY ---"
 C1=$(run_pair sequential); echo "$C1"
-echo "    expect: owners_left=1 (IDENTICAL final state) but B_blocked ~0s and concurrency=1"
-echo "    ⚠️ this is why the final state is not the proof — sequential reaches it too"
+echo "    ⚠️ IDENTICAL final state, zero overlap — this is why ruling #205 says"
+echo "    the final state is not the proof. The discriminator is the witness."
 echo
-install_mutant; echo "trigger function: advisory lock $(lock_state)"
-echo "--- CONTROL 2 (canon 121): parallel, ADVISORY LOCK DELETED ---"
-C2=$(run_pair parallel); echo "$C2"
-echo "    expect: owners_left=0  refusals=0  — the invariant BREAKS without the lock"
+echo "⚠️  NOTE ON RACE A AND THE ADVISORY LOCK, STATED SO IT IS NOT MISREAD."
+echo "    Deleting the advisory lock does NOT break Race A any more, because the"
+echo "    guard now also takes FOR UPDATE on the sibling owner rows and THAT"
+echo "    serializes this case. The lock's own control lives in Race B; a control"
+echo "    that has stopped discriminating must be replaced, not quietly kept."
 echo
-echo "--- CONTROL 3: SEQUENTIAL with the lock STILL DELETED — completes the 2x2 ---"
-C3=$(run_pair sequential); echo "$C3"
-echo "    expect: owners_left=1 — WITHOUT concurrency the missing lock costs nothing,"
-echo "    because B's fresh snapshot sees A's COMMITTED demotion unaided."
-echo "    ⚠️ THIS IS WHAT MAKES CONTROL 2 A PROOF RATHER THAN A SAMPLE. owners_left=0"
-echo "    requires BOTH the missing lock AND real concurrency; three of the four cells"
-echo "    hold the invariant and only the two-fault cell breaks it. The overlap column"
-echo "    is uninformative in controls 2/3 — an UNBLOCKED transaction is open for"
-echo "    milliseconds — so the 2x2 carries the argument, not the sampler."
+echo "############ RACE B — WHAT THE ADVISORY LOCK IS ACTUALLY FOR ############"
+echo "    Suspending a SOLO owner is legal (nobody to strand) and INSERTing a live"
+echo "    member is legal (an owner exists). Run them at the same instant and the"
+echo "    practice ends with a live member and NO active owner. The INSERT guard"
+echo "    has no row to FOR UPDATE, so the shared advisory lock is the only thing"
+echo "    that makes the two mutually exclusive."
+race_b() {   # $1 = removal-guard fn, $2 = orphan-guard fn
+  q_ "$1" ; q_ "$2"
+  q "DELETE FROM users WHERE \"practiceId\"='ir_p'; DELETE FROM practices WHERE id='ir_p';
+     INSERT INTO practices(id,name,slug,\"updatedAt\") VALUES ('ir_p','I','ir-p',now());
+     INSERT INTO users(id,email,\"passwordHash\",\"updatedAt\",\"practiceId\",\"practiceRole\",\"isActive\")
+       VALUES ('ir_o','iro@x.test','x',now(),'ir_p','OWNER',true);" >/dev/null
+  local T; T=$(date -u -d '+2 seconds' +%Y-%m-%dT%H:%M:%S.%3NZ)
+  sed "s/SENTINEL/$T/" "$OUT/rb-a.sql" > "$OUT/rb-a.run"; sed "s/SENTINEL/$T/" "$OUT/rb-b.sql" > "$OUT/rb-b.run"
+  docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -q < "$OUT/rb-a.run" >/dev/null 2>&1 &
+  docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -q < "$OUT/rb-b.run" >/dev/null 2>&1 &
+  wait
+  q "SELECT CASE WHEN count(*) FILTER (WHERE users_is_active_owner(u))=0
+                  AND count(*) FILTER (WHERE users_is_live_member(u))>0 THEN 'V' ELSE '.' END
+       FROM users u WHERE u.\"practiceId\"='ir_p'"
+}
+q_() { docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -q < "$1" >/dev/null 2>&1; }
+cat > "$OUT/rb-a.sql" <<'SQL'
+BEGIN;
+SELECT pg_sleep(GREATEST(0, EXTRACT(EPOCH FROM (TIMESTAMPTZ 'SENTINEL' - clock_timestamp()))));
+UPDATE users SET "suspendedAt"=now() WHERE id='ir_o';
+COMMIT;
+SQL
+cat > "$OUT/rb-b.sql" <<'SQL'
+BEGIN;
+SELECT pg_sleep(GREATEST(0, EXTRACT(EPOCH FROM (TIMESTAMPTZ 'SENTINEL' - clock_timestamp()))));
+INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive")
+  VALUES ('ir_new','irn@x.test','x',now(),'ir_p','CLINICIAN',true);
+COMMIT;
+SQL
+sed -n '/CREATE OR REPLACE FUNCTION users_last_owner_guard()/,/^\$fn\$ LANGUAGE plpgsql;/p' "$MIGRATION" > "$OUT/g1.sql"
+sed -n '/CREATE OR REPLACE FUNCTION users_no_orphan_member()/,/^\$fn\$ LANGUAGE plpgsql;/p'  "$MIGRATION" > "$OUT/g2.sql"
+awk '/PERFORM pg_advisory_xact_lock\(/{skip=4} skip>0{skip--; next} {print}' "$OUT/g1.sql" > "$OUT/g1n.sql"
+awk '/PERFORM pg_advisory_xact_lock\(/{skip=4} skip>0{skip--; next} {print}' "$OUT/g2.sql" > "$OUT/g2n.sql"
+# ⚠️ ASSERT THE MUTATION APPLIED. An unapplied mutation yields a green that
+# proves nothing and is indistinguishable from a guard that works.
+before=$(grep -c pg_advisory_xact_lock "$OUT/g1.sql" "$OUT/g2.sql" | awk -F: '{s+=$2} END{print s}')
+after=$(grep -c  pg_advisory_xact_lock "$OUT/g1n.sql" "$OUT/g2n.sql" | awk -F: '{s+=$2} END{print s}')
+echo "    mutation applied: advisory-lock occurrences $before -> $after"
+[ "$before" = 2 ] && [ "$after" = 0 ] || { echo "🔴 MUTATION DID NOT APPLY — every result below would be meaningless."; exit 1; }
+N=12
+printf "    WITHOUT the lock (%d runs): " "$N"; V=0
+for _ in $(seq $N); do r=$(race_b "$OUT/g1n.sql" "$OUT/g2n.sql"); printf '%s' "$r"; [ "$r" = V ] && V=$((V+1)); done
+echo "   -> $V/$N VIOLATIONS"
+printf "    WITH    the lock (%d runs): " "$N"; W=0
+for _ in $(seq $N); do r=$(race_b "$OUT/g1.sql" "$OUT/g2.sql"); printf '%s' "$r"; [ "$r" = V ] && W=$((W+1)); done
+echo "   -> $W/$N VIOLATIONS"
 echo
-install_shipped; echo "restored: advisory lock $(lock_state)"
+echo "=== VERDICT ==="
+echo "raceA subject   : $S"
+echo "raceA control#1 : $C1"
+echo "raceB           : without lock $V/$N violations, with lock $W/$N"
+q "DELETE FROM users WHERE \"practiceId\"='ir_p'; DELETE FROM practices WHERE id='ir_p';" >/dev/null
 teardown
 q "DROP TABLE IF EXISTS t210_sample;" >/dev/null
-rm -rf "$OUT"
+# the EXIT trap restores the armed guard and removes $OUT
