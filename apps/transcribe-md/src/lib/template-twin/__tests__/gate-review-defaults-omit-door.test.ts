@@ -322,6 +322,19 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
     // instance of the same blindness, found by the arm written to close the
     // class rather than by another pass.
     const statuses = ['certified', 'unsupported'] as const;
+    // ⚠️ THE FIFTH INSTANCE OF THE SAME BLINDNESS, AND THE FIRST FOUND BY THE
+    // ARM ITSELF RATHER THAN BY A PASS. The mirror reads `field.kind`, and this
+    // matrix held it constant at `narrative_text` — so a guard keyed on the
+    // kind was invisible here. It had been "satisfied" only because the word
+    // `kind` appeared in a COMMENT inside the matrix region and the derived-
+    // dimension arm read the region as raw source. Comments are now stripped
+    // there, which turned a passing arm into the failing one that produced this
+    // line. Canon 117 names this exact instance as an open example.
+    //
+    // `date` is the partner: a real kind the compiler emits, whose compatible
+    // `expectedDataType` differs from `narrative_text`'s, so the cross-product
+    // now contains rows where the kind alone decides type-compatibility.
+    const kinds = ['narrative_text', 'date'] as const;
 
     // The ONLY guards permitted to withhold an offer the resolver would honour.
     // Adding to this set is a product decision, not a test fix.
@@ -342,7 +355,8 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
                   for (const practiceDefault of defaults)
                     for (const expectedDataType of dataTypes)
                     for (const bindingType of bindings)
-                    for (const status of statuses) {
+                    for (const status of statuses)
+                    for (const kind of kinds) {
                     const fieldOverrides = {
                       required: fReq,
                       unknownPolicy: fUnknown,
@@ -350,6 +364,7 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
                       rendererBinding: { ...field('1').rendererBinding, bindingType },
                       // a fixed grid cell is table_cell AND not a prototype
                       rowPrototype: false,
+                      kind,
                     };
                     const mappingOverrides = {
                       required: mReq,
@@ -375,7 +390,7 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
                     const shape =
                       `fReq=${fReq} mReq=${mReq} fUnknown=${fUnknown} mBlank=${mBlank} ` +
                       `src=${sourceType} det=${detectionStatus} concept=${clinicalConcept ?? 'NONE'} ` +
-                      `default=${practiceDefault === null ? 'null' : 'set'} type=${expectedDataType} bind=${bindingType} status=${status}`;
+                      `default=${practiceDefault === null ? 'null' : 'set'} type=${expectedDataType} bind=${bindingType} status=${status} kind=${kind}`;
 
                     // ⚠️ THE TWO DIRECTIONS ARE NOT SYMMETRIC, AND CONFLATING
                     // THEM WOULD FORCE THE WRONG FIX.
@@ -523,9 +538,41 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
     expect(reads.size, `parsed only ${reads.size} reads from the mirror`).toBeGreaterThanOrEqual(8);
 
     // The matrix's own source is the authority on what it varies.
+    //
+    // ⚠️ COMMENTS STRIPPED, AND THAT IS THE ARM. Round four found this satisfied
+    // by PROSE: the region is read as raw source, so a property discussed in a
+    // comment counted as "varied". Demonstrated — a guard keyed on
+    // `field.rowPrototype`, its token duly declared, with the word appearing
+    // only in a comment here, scored 37/37 GREEN while the matrix never varied
+    // it once. That is the exact failure this arm was written to prevent,
+    // living inside the arm itself.
+    //
+    // The strip is deliberately crude (whole-line `//` and block-comment lines):
+    // a matrix VARIES a property by writing it in a fixture, and fixtures are
+    // code. Anything that only ever appears in prose is, by construction, not
+    // varied.
+    //
+    // ⚠️ AND THE RESIDUAL IS NAMED RATHER THAN LEFT FOR THE NEXT PASS TO FIND:
+    // THIS ARM CHECKS *MENTIONED IN CODE*, NOT *VARIED*. A property written
+    // once at a constant value — `rowPrototype: false` below is exactly that,
+    // and deliberately so — satisfies it. Measured: a guard keyed on
+    // `field.rowPrototype`, with its token declared, passes this arm today.
+    //
+    // Closing that gap means deciding which constants are DELIBERATE (a fixed
+    // grid cell is not a prototype; holding it constant is the point) and which
+    // are oversights, and that is a product judgement rather than a test fix.
+    // Stated here so the next reader knows the guarantee's edge instead of
+    // inferring a stronger one from the arm's name.
     const thisFile = readFileSync(__filename, 'utf-8');
     const matrix = thisFile.slice(thisFile.indexOf('OFFERED  ⟺  HONOURED'));
-    const varied = matrix.slice(0, matrix.indexOf('expect(disagreements)'));
+    const varied = matrix
+      .slice(0, matrix.indexOf('expect(disagreements)'))
+      .split('\n')
+      .filter((l) => {
+        const t = l.trimStart();
+        return !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*');
+      })
+      .join('\n');
     const missing = [...reads].filter((r) => !varied.includes(r));
     expect(
       missing,
