@@ -56,7 +56,21 @@ const lockedVisit = vi.fn();
 // and writing — so a sign can land in the window. A mock that stubbed the
 // transaction away would make every arm below pass without the re-check ever
 // running, which is the vacuity this file exists to avoid.
-const db = {
+//
+// ⚠️ AND THE TRANSACTIONAL CLIENT IS A **DIFFERENT OBJECT** — ROUND FIVE.
+// This read `$transaction: (fn) => fn(db)`, handing the callback the SAME
+// client. `tx.templateTwinFieldOverride.upsert` and
+// `prisma.templateTwinFieldOverride.upsert` were then literally the same
+// function, so rewriting `tx.` to `prisma.` — which takes the write OUT of the
+// transaction and out from under the `FOR UPDATE` — was **97/97 green**. The
+// lock would still be taken, still block, and protect nothing, because the
+// write it is supposed to serialise would be on another connection.
+//
+// A harness whose two clients are one object cannot see the only mistake that
+// matters here.
+const onTx = { upsert: false, deleteMany: false, queryRaw: false };
+
+const db: Record<string, unknown> = {
   transcribeVisit: { findFirst: (...a: unknown[]) => visitFindFirst(...a) },
   noteTemplate: { findFirst: (...a: unknown[]) => templateFindFirst(...a) },
   templateTwinFieldOverride: {
@@ -65,8 +79,27 @@ const db = {
   },
   templateTwinFieldDefinition: { findUnique: (...a: unknown[]) => defFindUnique(...a) },
   $queryRaw: (...a: unknown[]) => lockedVisit(...a),
-  $transaction: (fn: (tx: unknown) => unknown) => fn(db),
 };
+
+/** The client the callback is handed. Same behaviour, different identity. */
+const tx: Record<string, unknown> = {
+  ...db,
+  templateTwinFieldOverride: {
+    upsert: (...a: unknown[]) => {
+      onTx.upsert = true;
+      return overrideUpsert(...a);
+    },
+    deleteMany: (...a: unknown[]) => {
+      onTx.deleteMany = true;
+      return overrideDeleteMany(...a);
+    },
+  },
+  $queryRaw: (...a: unknown[]) => {
+    onTx.queryRaw = true;
+    return lockedVisit(...a);
+  },
+};
+db.$transaction = (fn: (client: unknown) => unknown) => fn(tx);
 
 vi.mock('@meddoc/db', () => ({ default: db }));
 vi.mock('@/lib/auth', () => ({
@@ -203,6 +236,9 @@ async function insert(fieldId: string = FIELD) {
 }
 
 beforeEach(() => {
+  onTx.upsert = false;
+  onTx.deleteMany = false;
+  onTx.queryRaw = false;
   vi.clearAllMocks();
   primeVisit();
   primeTemplate();
@@ -342,6 +378,29 @@ describe('ROUND FOUR — a sign landing in the window cannot be written over', (
     expect(sql).toMatch(/transcribe_visits/);
   });
 
+  it('⚠️ THE WRITE HAPPENS ON THE **LOCKED** CONNECTION — kills `tx.` -> `prisma.`', async () => {
+    // ROUND FIVE, AND IT WAS A FALSE GREEN OF THE HARNESS, NOT OF THE DOOR.
+    // `$transaction` used to hand the callback the same client object, so
+    // rewriting `tx.templateTwinFieldOverride.upsert` to
+    // `prisma.templateTwinFieldOverride.upsert` was 97/97 green — a change that
+    // takes the write out of the transaction and out from under the lock, while
+    // every existing arm (including the two above, which only read the SQL
+    // text) keeps passing. The lock would still be taken, still block, and
+    // guard nothing.
+    //
+    // ⚠️ THE SQL-TEXT ARMS ABOVE CANNOT SEE THIS BY CONSTRUCTION. They assert
+    // the statement SAYS `FOR UPDATE`; this asserts the statement and the write
+    // are on ONE connection, which is the only thing that makes it a lock.
+    const res = await insert();
+    expect(res.ok).toBe(true);
+    expect(onTx.queryRaw, 'the FOR UPDATE re-read ran OUTSIDE the transaction').toBe(true);
+    expect(
+      onTx.upsert,
+      'the override was written on the top-level client, NOT the transactional ' +
+        'one — the FOR UPDATE above locks a row this write never touches',
+    ).toBe(true);
+  });
+
   it('REFUSES when the visit was SIGNED while the form was being checked', async () => {
     lockedVisit.mockResolvedValue([{ status: 'SIGNED', signedAt: new Date() }]);
     const res = await insert();
@@ -361,18 +420,51 @@ describe('ROUND FOUR — a sign landing in the window cannot be written over', (
     expect(overrideUpsert).not.toHaveBeenCalled();
   });
 
-  it('REFUSES when the visit left READY in the window (e.g. back to PROCESSING)', async () => {
+  // ⚠️ THE REFUSAL NAMES ITS OWN CAUSE — ROUND FIVE.
+  // These two arms asserted only `ok === false`, so the door could give ALL of
+  // its refusals one message and stay green. It did: a re-queued or deleted
+  // visit was told "this visit was signed while your form was being checked",
+  // which is FALSE, and false in the actionable direction — the doctor goes
+  // looking for a signature that does not exist.
+  //
+  // ⚠️ A refusal that names the WRONG cause is worse than a vague one.
+  it('REFUSES when the visit left READY in the window — and does NOT claim it was signed', async () => {
     lockedVisit.mockResolvedValue([{ status: 'PROCESSING', signedAt: null }]);
     const res = await insert();
     expect(res.ok).toBe(false);
     expect(overrideUpsert).not.toHaveBeenCalled();
+    expect(res.error).toMatch(/back into processing/);
+    expect(
+      res.error,
+      'a re-queued visit was reported to the doctor as SIGNED',
+    ).not.toMatch(/signed/i);
   });
 
-  it('REFUSES when the visit vanished in the window — the lock returned no row', async () => {
+  it('REFUSES when the visit vanished in the window — and does NOT claim it was signed', async () => {
     lockedVisit.mockResolvedValue([]);
     const res = await insert();
     expect(res.ok).toBe(false);
     expect(overrideUpsert).not.toHaveBeenCalled();
+    expect(res.error).toMatch(/no longer available/);
+    expect(
+      res.error,
+      'a deleted visit was reported to the doctor as SIGNED',
+    ).not.toMatch(/signed/i);
+  });
+
+  it('⚠️ THE THREE CAUSES GIVE THREE DIFFERENT MESSAGES — no two collide', async () => {
+    const seen = new Map<string, string>();
+    for (const [cause, row] of [
+      ['signed', [{ status: 'SIGNED', signedAt: new Date() }]],
+      ['not_ready', [{ status: 'PROCESSING', signedAt: null }]],
+      ['gone', []],
+    ] as const) {
+      lockedVisit.mockResolvedValue(row);
+      const res = await insert();
+      expect(res.ok).toBe(false);
+      seen.set(cause, res.error!);
+    }
+    expect(new Set(seen.values()).size, `two causes share one message: ${[...seen].map(([k, v]) => `${k}=${v}`).join(' | ')}`).toBe(3);
   });
 
   it('⚠️ THE CONTROL — still READY at the write, so it WRITES', async () => {
@@ -403,9 +495,34 @@ describe('ROUND FOUR — the door judges the POST-write fill, not the pre-write 
     const calls = readAndPrepare.mock.calls.map((c) => c[0] as Record<string, unknown>);
     expect(calls.length, 'the door drove only one fill — the post-write check is absent').toBe(2);
     expect(calls[0].simulateOverrides, 'the FIRST fill must be the real, pre-write state').toBeUndefined();
+    // ⚠️ `expect.any(String)` WAS THE HOLE — ROUND FIVE.
+    //
+    // The simulated row's text was pinned only as "a string", so the door could
+    // VALIDATE one text and WRITE another with every gate green. The second
+    // fill is the thing that decides whether the row is admissible; if it judges
+    // text A and the upsert stores text B, the whole post-write simulation is
+    // answering about a document that will never exist.
+    //
+    // So it is pinned three ways: to the field's OWN scaffoldText, to the exact
+    // value the door actually upserts, and by requiring the two to be equal.
     expect(calls[1].simulateOverrides).toEqual([
-      { fieldId: FIELD, overrideKind: 'scaffold_default', insertedText: expect.any(String), selectedOptionOrdinal: null },
+      {
+        fieldId: FIELD,
+        overrideKind: 'scaffold_default',
+        insertedText: SCAFFOLDED.scaffoldText,
+        selectedOptionOrdinal: null,
+      },
     ]);
+
+    const written = (overrideUpsert.mock.calls[0][0] as {
+      create: { insertedText: string };
+    }).create.insertedText;
+    expect(
+      (calls[1].simulateOverrides as { insertedText: string }[])[0].insertedText,
+      'the door validated one text and wrote another — the simulation judged a ' +
+        'document that will never exist',
+    ).toBe(written);
+    expect(written).toBe(SCAFFOLDED.scaffoldText);
   });
 
   it('the two fills differ ONLY by the pending row — a drifted second copy would show here', async () => {
@@ -779,5 +896,52 @@ describe('the static guards — each REFUSES, and each is now driven', () => {
     expect(res.ok).toBe(false);
     expect(res.error).toMatch(/still being prepared/);
     expect(res.error).not.toMatch(/signed .* frozen/);
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ROUND FIVE — THE UNDO DOOR WAS THE THIRD WRITER, AND IT HAD NO LOCK AT ALL.
+  // Round four closed the sign window on the INSERT door. The undo door stayed
+  // a bare `deleteMany` reached after a status read, a second query and a full
+  // IR parse — a window seconds wide, on a delete.
+  // ══════════════════════════════════════════════════════════════════════════
+  it('⚠️ UNDO WRITES ON THE **LOCKED** CONNECTION', async () => {
+    const mod = await import('../set-template-control');
+    overrideDeleteMany.mockResolvedValue({ count: 1 });
+    const res = await mod.undoScaffoldDefaultAction(VISIT, FIELD);
+    expect(res.ok).toBe(true);
+    expect(onTx.queryRaw, 'the FOR UPDATE re-read ran OUTSIDE the transaction').toBe(true);
+    expect(onTx.deleteMany, 'the delete ran on the top-level client, not the locked one').toBe(true);
+  });
+
+  it('⚠️ UNDO REFUSES when the visit was SIGNED in its window', async () => {
+    lockedVisit.mockResolvedValue([{ status: 'SIGNED', signedAt: new Date() }]);
+    overrideDeleteMany.mockResolvedValue({ count: 1 });
+    const mod = await import('../set-template-control');
+    const res = await mod.undoScaffoldDefaultAction(VISIT, FIELD);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/signed while your form was being checked/);
+    expect(
+      overrideDeleteMany,
+      'the doctor\'s row was deleted against a record that had just been signed',
+    ).not.toHaveBeenCalled();
+  });
+
+  it('⚠️ …and a REFUSED undo is distinguishable from "nothing was inserted"', async () => {
+    // Two different facts, and conflating them tells the doctor the wrong thing:
+    // `count === 0` means there was no row; the lock's refusal means there WAS
+    // one and the visit moved underneath. Round five filed the sibling of this
+    // as its own finding — four causes behind one message.
+    lockedVisit.mockResolvedValue([{ status: 'SIGNED', signedAt: new Date() }]);
+    const mod = await import('../set-template-control');
+    const refused = await mod.undoScaffoldDefaultAction(VISIT, FIELD);
+
+    lockedVisit.mockResolvedValue([{ status: 'READY', signedAt: null }]);
+    overrideDeleteMany.mockResolvedValue({ count: 0 });
+    const absent = await mod.undoScaffoldDefaultAction(VISIT, FIELD);
+
+    expect(refused.ok).toBe(false);
+    expect(absent.ok).toBe(false);
+    expect(refused.error).not.toBe(absent.error);
+    expect(absent.error).toMatch(/not currently inserted/);
   });
 });

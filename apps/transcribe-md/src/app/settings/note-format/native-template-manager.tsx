@@ -489,18 +489,48 @@ function ReviewWorkspace({
     // ⚠️ AND IT IS THE ROOT OF TWO MORE: a ticked omit silently SURVIVING a
     // concept re-map (so a field the doctor never ruled on stops being counted),
     // and two clicks persisting an omit the resolver refuses with the control
-    // hidden. One funnel, one normalisation, three findings closed.
+    // hidden. One funnel, one normalisation.
+    //
+    // ⚠️ THE CLAIM THAT ONCE STOOD HERE — "three findings closed" — WAS FALSE
+    // FOR THE RE-MAP, and it was repeated verbatim in the panel gate's header
+    // and in this change's own commit message. Three places asserting a closure
+    // that one condition did not deliver. Round five measured it; clause (2)
+    // below is what actually closes it.
     //
     // The value is cleared HERE rather than at each call site because there are
     // three call sites today and a fourth would not think to do it.
     const fieldDef = fieldsById.get(fieldId);
-    const normalised: SemanticMapping =
-      next.unmentionedPolicy != null &&
-      fieldDef !== undefined &&
-      !canOmitWhenUnmentioned(fieldDef, next)
-        ? { ...next, unmentionedPolicy: null }
-        : next;
-    setDraft((prev) => prev.map((m) => (m.fieldId === fieldId ? normalised : m)));
+    setDraft((prev) =>
+      prev.map((m) => {
+        if (m.fieldId !== fieldId) return m;
+
+        // (1) the offer is no longer available at all — A -> null
+        const unofferable =
+          next.unmentionedPolicy != null &&
+          fieldDef !== undefined &&
+          !canOmitWhenUnmentioned(fieldDef, next);
+
+        // (2) ⚠️ THE CONCEPT MOVED — A -> B. ROUND FIVE.
+        //
+        // The comment above claimed this case closed and it was NOT: the
+        // normalisation fires only when the offer becomes UNAVAILABLE, and
+        // re-mapping `ros.cardiovascular` to `exam.vascular` leaves
+        // `canOmitWhenUnmentioned` TRUE. So the checkbox stayed rendered, stayed
+        // TICKED, and the payload carried the doctor's "do not ask me about
+        // this" judgement — made about a concept they are no longer mapping —
+        // onto one they never ruled on. The row was simultaneously dropped to
+        // `needs_confirmation`, so the CONCEPT had to be re-confirmed while the
+        // OMIT was not re-asked.
+        //
+        // ⚠️ THE JUDGEMENT IS ABOUT A CONCEPT, SO IT DOES NOT SURVIVE THE
+        // CONCEPT. Any move — A -> B or A -> null — re-asks.
+        const reMapped =
+          next.unmentionedPolicy != null &&
+          m.clinicalConcept !== next.clinicalConcept;
+
+        return unofferable || reMapped ? { ...next, unmentionedPolicy: null } : next;
+      }),
+    );
   }
 
   // ⚠️ THE WRITER DEMANDS THE EXACT COMPILER FIELD SET (`FIELD_SET_MISMATCH`,

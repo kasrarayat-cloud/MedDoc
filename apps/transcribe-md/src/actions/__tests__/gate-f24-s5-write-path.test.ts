@@ -27,15 +27,50 @@ const visitFindFirst = vi.fn();
 const templateFindFirst = vi.fn();
 const overrideUpsert = vi.fn();
 const defFindUnique = vi.fn();
+const lockedVisit = vi.fn();
 const invalidate = vi.fn();
 const audit = vi.fn();
 
+// ⚠️ THE DROPDOWN DOOR NOW WRITES UNDER A LOCK — ROUND FIVE.
+// It used to be a bare upsert: the status was read at the top of the action and
+// never re-asserted, so a sign landing in the window wrote a correction onto a
+// SIGNED visit, where there is no panel and therefore no Undo. Round four fixed
+// exactly this on the INSERT door and left this one; the fix now lives in one
+// `underVisitLock` helper that all three writers call.
+//
+// ⚠️ THE TRANSACTIONAL CLIENT IS A **DIFFERENT OBJECT** from the top-level one,
+// deliberately. A mock that returns the same client makes `tx.` and `prisma.`
+// the same function, and the one mistake that matters here — taking the write
+// out of the transaction, so the lock guards a row the write never touches —
+// becomes invisible.
+const onTx = { upsert: false, queryRaw: false };
+
+const dbRoot = {
+  transcribeVisit: { findFirst: (...a: unknown[]) => visitFindFirst(...a) },
+  noteTemplate: { findFirst: (...a: unknown[]) => templateFindFirst(...a) },
+  templateTwinFieldOverride: { upsert: (...a: unknown[]) => overrideUpsert(...a) },
+  templateTwinFieldDefinition: { findUnique: (...a: unknown[]) => defFindUnique(...a) },
+  $queryRaw: (...a: unknown[]) => lockedVisit(...a),
+};
+
+const dbTx = {
+  ...dbRoot,
+  templateTwinFieldOverride: {
+    upsert: (...a: unknown[]) => {
+      onTx.upsert = true;
+      return overrideUpsert(...a);
+    },
+  },
+  $queryRaw: (...a: unknown[]) => {
+    onTx.queryRaw = true;
+    return lockedVisit(...a);
+  },
+};
+
 vi.mock('@meddoc/db', () => ({
   default: {
-    transcribeVisit: { findFirst: (...a: unknown[]) => visitFindFirst(...a) },
-    noteTemplate: { findFirst: (...a: unknown[]) => templateFindFirst(...a) },
-    templateTwinFieldOverride: { upsert: (...a: unknown[]) => overrideUpsert(...a) },
-    templateTwinFieldDefinition: { findUnique: (...a: unknown[]) => defFindUnique(...a) },
+    ...dbRoot,
+    $transaction: (fn: (client: unknown) => unknown) => fn(dbTx),
   },
 }));
 vi.mock('@/lib/auth', () => ({
@@ -81,6 +116,10 @@ const UNSIGNED = {
 };
 
 beforeEach(() => {
+  onTx.upsert = false;
+  onTx.queryRaw = false;
+  // The visit is READY unless an arm says otherwise — the lock's happy path.
+  lockedVisit.mockResolvedValue([{ status: 'READY', signedAt: null }]);
   visitFindFirst.mockReset();
   templateFindFirst.mockReset();
   overrideUpsert.mockReset();
@@ -306,5 +345,48 @@ describe('F24-S5 write path — the correction reaches the database', () => {
       expect(out.ok, `${field.fieldId} could not be set`).toBe(true);
       expect(overrideUpsert).toHaveBeenCalledTimes(1);
     }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ROUND FIVE — THE SIGN WINDOW, ON THIS DOOR TOO.
+  // Round four closed it on the INSERT door and left the other two writers in
+  // the same file read-then-act. These arms are the ones that were missing.
+  // ══════════════════════════════════════════════════════════════════════════
+  it('⚠️ THE WRITE HAPPENS ON THE **LOCKED** CONNECTION — kills `tx.` -> `prisma.`', async () => {
+    const f = selects[0];
+    const res = await run(f.fieldId, selectableOf(f)[0].displayText);
+    expect(res.ok).toBe(true);
+    expect(onTx.queryRaw, 'the FOR UPDATE re-read ran OUTSIDE the transaction').toBe(true);
+    expect(
+      onTx.upsert,
+      'the correction was written on the top-level client, NOT the transactional ' +
+        'one — the lock then guards a row this write never touches',
+    ).toBe(true);
+  });
+
+  it('⚠️ THE RE-READ IS A REAL `FOR UPDATE` ON THE VISIT ROW', async () => {
+    const f = selects[0];
+    await run(f.fieldId, selectableOf(f)[0].displayText);
+    const sql = String((lockedVisit.mock.calls[0][0] as { strings?: string[] }).strings?.join('?') ?? lockedVisit.mock.calls[0][0]);
+    expect(sql).toMatch(/FOR UPDATE/);
+    expect(sql).toMatch(/transcribe_visits/);
+  });
+
+  it('⚠️ REFUSES when the visit was SIGNED while the form was being checked', async () => {
+    lockedVisit.mockResolvedValue([{ status: 'SIGNED', signedAt: new Date() }]);
+    const f = selects[0];
+    const res = await run(f.fieldId, selectableOf(f)[0].displayText);
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/signed while your form was being checked/);
+    expect(overrideUpsert, 'a correction was written onto a signed visit').not.toHaveBeenCalled();
+    expect(audit, 'an audit row claims a doctor act on a signed record').not.toHaveBeenCalled();
+  });
+
+  it('⚠️ BOTH SPELLINGS — `signedAt` alone refuses, even with status still READY', async () => {
+    lockedVisit.mockResolvedValue([{ status: 'READY', signedAt: new Date() }]);
+    const f = selects[0];
+    const res = await run(f.fieldId, selectableOf(f)[0].displayText);
+    expect(res.ok).toBe(false);
+    expect(overrideUpsert).not.toHaveBeenCalled();
   });
 });

@@ -46,7 +46,7 @@ vi.mock('../mapping-hash', () => ({
   templateTwinMappingsSha256: () => 'MAPPINGS_SHA',
 }));
 
-import { readAndPrepareTemplateTwinFill } from '../fill-engine';
+import { processTemplateTwinVisit, readAndPrepareTemplateTwinFill } from '../fill-engine';
 
 const WM_IOV_PATH = path.resolve(process.cwd(), '../../WM IOV Template.docx');
 const wmIovBytes = new Uint8Array(readFileSync(WM_IOV_PATH));
@@ -111,9 +111,18 @@ beforeEach(() => {
   });
 });
 
-async function run(overrides: { fieldId: string; selectedOptionOrdinal: number }[]) {
+async function run(
+  overrides: { fieldId: string; selectedOptionOrdinal: number }[],
+  simulateOverrides?: readonly {
+    fieldId: string;
+    overrideKind: string;
+    selectedOptionOrdinal?: number | null;
+    insertedText?: string | null;
+  }[],
+) {
   overrideFindMany.mockResolvedValue(overrides);
   return readAndPrepareTemplateTwinFill({
+    ...(simulateOverrides ? { simulateOverrides } : {}),
     visitId: 'v1',
     practiceId: 'prac-1',
     doctorId: 'doc-1',
@@ -164,6 +173,127 @@ describe('F24-S5 — the READ PATH carries the correction into the fill', () => 
     expect(after.value).toBe(opt.value);
     expect(after.reasonCode).toBe('clinician_override');
     expect(after.clinicianReviewed).toBe(true);
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ROUND FIVE — THE POST-WRITE SIMULATION'S MERGE HAD **ZERO EXECUTABLE
+  // COVERAGE ANYWHERE IN THE REPO**, and that is what these arms close.
+  //
+  // Measured by the pass: collapse the merge to
+  // `const effectiveOverrides = clinicianOverrides;` and `simulateOverrides` is
+  // accepted, typed, documented, passed by the door — and SILENTLY DISCARDED.
+  // tsc exit 0; 450 files / 6269 tests green. The door's refusal at
+  // set-template-control.ts:564 becomes unreachable and the door admits exactly
+  // the inserts the whole fix exists to stop.
+  //
+  // ⚠️ IT WAS INVISIBLE FOR A GEOMETRIC REASON, WHICH IS THIS FILE'S OWN THESIS
+  // ONE TURN LATER: every `simulateOverrides` assertion in the repo lived in the
+  // DOOR's gate, which mocks `readAndPrepareTemplateTwinFill` outright — so it
+  // could only prove the door PASSES the argument, never that the fill USES it.
+  // The door proving it passes an argument nobody reads is the same shape as
+  // "all 16 arms call the overlay directly" at the top of this file.
+  // ══════════════════════════════════════════════════════════════════════════
+  it('⚠️ A SIMULATED ROW REACHES THE FILL — kills "collapse the merge to clinicianOverrides"', async () => {
+    const field = selects[0];
+    const opt = field.allowedOptions[field.allowedOptions.length - 1];
+
+    const withoutAnything = await run([]);
+    const simulatedOnly = await run([], [
+      { fieldId: field.fieldId, overrideKind: 'option', selectedOptionOrdinal: opt.ordinal },
+    ]);
+
+    const before = withoutAnything.prepared.manifest.fields.find(
+      (f) => f.fieldId === field.fieldId,
+    )!;
+    const after = simulatedOnly.prepared.manifest.fields.find(
+      (f) => f.fieldId === field.fieldId,
+    )!;
+
+    // NON-VACUITY FIRST — the two runs must genuinely differ, or the assertion
+    // below is satisfied by a document that never changed.
+    expect(before.value).not.toBe(opt.value);
+    expect(after.value).toBe(opt.value);
+    expect(after.reasonCode).toBe('clinician_override');
+  });
+
+  it('⚠️ MERGED BY fieldId — a simulated row REPLACES the stored row for that field', async () => {
+    const field = selects[0];
+    const stored = field.allowedOptions[0];
+    const pending = field.allowedOptions[field.allowedOptions.length - 1];
+    expect(stored.ordinal, 'fixture needs two distinct options').not.toBe(pending.ordinal);
+
+    const merged = await run(
+      [{ fieldId: field.fieldId, selectedOptionOrdinal: stored.ordinal }],
+      [{ fieldId: field.fieldId, overrideKind: 'option', selectedOptionOrdinal: pending.ordinal }],
+    );
+
+    const got = merged.prepared.manifest.fields.find((f) => f.fieldId === field.fieldId)!;
+    // The PENDING value wins. Collapsing the merge yields the STORED one, which
+    // is a different, non-vacuous value — so this arm reds on that mutation
+    // rather than on an absence.
+    expect(got.value).toBe(pending.value);
+    expect(got.value).not.toBe(stored.value);
+  });
+
+  it('⚠️ …and the OTHER stored rows survive the merge — it replaces one field, not the list', async () => {
+    const [a, b] = selects;
+    expect(b, 'fixture needs two override-able selects').toBeDefined();
+    const aStored = a.allowedOptions[0];
+    const aPending = a.allowedOptions[a.allowedOptions.length - 1];
+    const bStored = b.allowedOptions[b.allowedOptions.length - 1];
+
+    const out = await run(
+      [
+        { fieldId: a.fieldId, selectedOptionOrdinal: aStored.ordinal },
+        { fieldId: b.fieldId, selectedOptionOrdinal: bStored.ordinal },
+      ],
+      [{ fieldId: a.fieldId, overrideKind: 'option', selectedOptionOrdinal: aPending.ordinal }],
+    );
+
+    const gotA = out.prepared.manifest.fields.find((f) => f.fieldId === a.fieldId)!;
+    const gotB = out.prepared.manifest.fields.find((f) => f.fieldId === b.fieldId)!;
+    expect(gotA.value).toBe(aPending.value);
+    // ⚠️ THE HALF A NAIVE "REPLACE THE LIST" WOULD BREAK. If the merge dropped
+    // the unsimulated rows instead of filtering only the simulated fieldIds, B
+    // would silently lose the doctor's stored correction.
+    expect(gotB.value).toBe(bStored.value);
+    expect(gotB.reasonCode).toBe('clinician_override');
+  });
+
+  it('⚠️ THE RETURNED LIST IS THE STORED ONE — the stamp must NOT include the simulation', async () => {
+    // The manifest is stamped `overridesIdentity(<stored>)`. If the simulated
+    // row leaked into the returned list, a read-only simulation would move the
+    // identity of a document nobody wrote — the exact drift the writer-side
+    // refusal exists to prevent, arriving on the read side instead.
+    const field = selects[0];
+    const out = await run([], [
+      { fieldId: field.fieldId, overrideKind: 'option', selectedOptionOrdinal: field.allowedOptions[0].ordinal },
+    ]);
+    expect(out.clinicianOverrides).toEqual([]);
+  });
+
+  it('⚠️ THE WRITER REFUSES A SIMULATED FILL — and the refusal was uncovered too', async () => {
+    // The other half of the same round-five finding: deleting this `throw` left
+    // 102 files / 1233 tests green. Simulation is a READ-side capability —
+    // persisting it would stamp `overridesIdentity(<stored>)` onto a document
+    // rendered from stored PLUS pending, i.e. a manifest asserting an identity
+    // the bytes do not correspond to.
+    //
+    // ⚠️ THE REFUSAL IS THE FIRST STATEMENT IN THE FUNCTION, WHICH IS WHY THIS
+    // ARM NEEDS NO WRITE MOCKS AT ALL. If it ever moves below the first prisma
+    // call this arm fails with a DIFFERENT error, and that is the correct
+    // outcome: a guard that has drifted below a write is not the guard the
+    // comment describes.
+    await expect(
+      processTemplateTwinVisit({
+        visitId: 'v1',
+        practiceId: 'prac-1',
+        doctorId: 'doc-1',
+        simulateOverrides: [
+          { fieldId: selects[0].fieldId, overrideKind: 'option', selectedOptionOrdinal: 0 },
+        ],
+      } as never),
+    ).rejects.toThrow(/refusing a simulated fill/);
   });
 
   it('⚠️ THE NO-OP SHORT-CIRCUIT COMPARES THE OVERRIDE HALF, NOT ONLY THE MANIFEST SHA', async () => {

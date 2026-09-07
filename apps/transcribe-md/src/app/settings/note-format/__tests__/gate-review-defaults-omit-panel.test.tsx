@@ -79,6 +79,8 @@ const NO_CONCEPT = FID(6);
 const HAS_PRACTICE_DEFAULT = FID(7);
 /** Not offerable: `field.detectionStatus === 'unsupported'`. */
 const UNSUPPORTED_FIELD = FID(8);
+/** Carries a proposed `conceptScope` — the #208 half of the merged surface. */
+const SCOPED = FID(9);
 
 function mapping(over: Partial<SemanticMapping> & { fieldId: string }): SemanticMapping {
   return {
@@ -108,6 +110,13 @@ const MAPPINGS: SemanticMapping[] = [
   mapping({ fieldId: NO_CONCEPT, clinicalConcept: null }),
   mapping({ fieldId: HAS_PRACTICE_DEFAULT, practiceDefault: 'The patient consents.' }),
   mapping({ fieldId: UNSUPPORTED_FIELD }),
+  // ⚠️ THE #208 SURFACE. A scaffolded clause covering several symptoms carries a
+  // `conceptScope` the model may PROPOSE, and the whole point of rendering it is
+  // that `planAutoConfirm` must not certify it unread.
+  mapping({
+    fieldId: SCOPED,
+    conceptScope: ['ros.cardiovascular', 'ros.respiratory', 'ros.gi'],
+  } as Partial<SemanticMapping> & { fieldId: string }),
 ];
 
 /** Every field that must NOT carry the control, with the guard that withholds it. */
@@ -133,6 +142,7 @@ const FIELD_OVERRIDES: Record<string, { required: boolean; detectionStatus: stri
   [NO_CONCEPT]: { required: false, detectionStatus: 'needs_confirmation' },
   [HAS_PRACTICE_DEFAULT]: { required: false, detectionStatus: 'needs_confirmation' },
   [UNSUPPORTED_FIELD]: { required: false, detectionStatus: 'unsupported' },
+  [SCOPED]: { required: false, detectionStatus: 'needs_confirmation' },
 };
 
 function workspace(over: Partial<TemplateTwinWorkspace> = {}): TemplateTwinWorkspace {
@@ -375,5 +385,99 @@ describe('item 2 — a withdrawn offer withdraws the stored value', () => {
       'the offer was withdrawn but the VALUE was still sent — the writer refuses ' +
         'the whole batch and the control that would clear it is hidden',
     ).toBeNull();
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ⚠️ ROUND FIVE — A -> B, THE CASE THE ARM ABOVE DOES NOT COVER.
+  //
+  // The arm above closes A -> null: the offer disappears, so the normalisation
+  // fires. It does NOT close a re-map to another OFFERABLE concept, where
+  // `canOmitWhenUnmentioned` stays TRUE and nothing clears. Three places
+  // asserted that case was closed — the `setMapping` comment, this file's own
+  // header, and the commit message — and it was not.
+  //
+  // ⚠️ THE HARM IS THAT THE JUDGEMENT SURVIVES ITS SUBJECT. "Do not ask me
+  // about this" was said about concept A. After the re-map it is in force
+  // against concept B, which the doctor never ruled on — and the same edit
+  // drops the row to `needs_confirmation`, so the CONCEPT must be re-confirmed
+  // while the OMIT is not re-asked.
+  // ══════════════════════════════════════════════════════════════════════════
+  it('⚠️ RE-MAPPING the concept A -> B does NOT carry the omit across', async () => {
+    await openWorkspace();
+
+    fireEvent.click(screen.getByTestId(`twin-omit-toggle-${OFFERABLE}`));
+    const box = () => screen.queryByTestId(`twin-omit-toggle-${OFFERABLE}`) as HTMLInputElement | null;
+    expect(box()?.checked, 'the fixture is not offerable — this arm would prove nothing').toBe(true);
+
+    // A DIFFERENT, still-offerable concept — NOT '— choose a concept —'.
+    const select = screen.getByTestId(`twin-concept-select-${OFFERABLE}`) as HTMLSelectElement;
+    const other = [...select.options]
+      .map((o) => o.value)
+      .find((v) => v !== '' && v !== 'ros.cardiovascular');
+    expect(other, 'the registry offers only one concept — cannot drive a re-map').toBeDefined();
+
+    fireEvent.change(select, { target: { value: other } });
+
+    // ⚠️ THE OFFER IS STILL AVAILABLE — that is exactly why the A -> null
+    // normalisation cannot see this case, and why the checkbox must come back
+    // UNTICKED rather than disappear.
+    expect(box(), 'the offer should still be available on an offerable concept').not.toBeNull();
+    expect(
+      box()?.checked,
+      'the omit survived a concept re-map — a judgement made about one concept ' +
+        'is now in force against another the doctor never ruled on',
+    ).toBe(false);
+
+    fireEvent.click(screen.getByTestId('twin-save-mappings'));
+    const row = sentMappings().find((m) => m.fieldId === OFFERABLE)!;
+    expect(row.clinicalConcept).toBe(other);
+    expect(
+      row.unmentionedPolicy ?? null,
+      'the payload carried the omit onto the NEW concept',
+    ).toBeNull();
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ⚠️ ROUND FIVE — THE #208 HALF OF THE UNION HAD **ZERO ARMS**.
+  //
+  // The whole `conceptScope` block deleted clean and every suite stayed green,
+  // while the merge that brought it in silently moved it below the omit
+  // control. Its own comment states the claim it was built to keep: the
+  // proposal must be VISIBLE, because `planAutoConfirm` would otherwise certify
+  // it unread — "silently accepted", which the ruling forbids. A surface whose
+  // entire purpose is to be READ, with nothing asserting it renders, is the
+  // same false green as a guard nobody drives.
+  // ══════════════════════════════════════════════════════════════════════════
+  it('⚠️ A PROPOSED conceptScope IS RENDERED — deleting the block must not stay green', async () => {
+    await openWorkspace();
+    const el = screen.queryByTestId(`twin-concept-scope-${SCOPED}`);
+    expect(el, 'the proposed conceptScope is invisible — planAutoConfirm would certify it unread').not.toBeNull();
+  });
+
+  it('⚠️ …AND IT NAMES EVERY CONCEPT, not just how many', async () => {
+    await openWorkspace();
+    const text = screen.getByTestId(`twin-concept-scope-${SCOPED}`).textContent ?? '';
+    // What a clause claims to cover decides which dictated findings can
+    // contradict the template's own sentence. A count the doctor cannot expand
+    // is not something they can disagree with.
+    for (const c of ['ros.cardiovascular', 'ros.respiratory', 'ros.gi']) {
+      expect(text, `the scope omits ${c}`).toContain(c);
+    }
+  });
+
+  it('⚠️ THE COUNT AND THE LIST AGREE — a block that miscounts is worse than none', async () => {
+    await openWorkspace();
+    const text = screen.getByTestId(`twin-concept-scope-${SCOPED}`).textContent ?? '';
+    const claimed = Number(/covers (\d+)/.exec(text)?.[1]);
+    const listed = text.slice(text.indexOf(':') + 1).split(',').filter((p) => p.trim()).length;
+    expect(claimed, 'the rendered count is not a number').not.toBeNaN();
+    expect(listed, 'the count and the enumerated list disagree').toBe(claimed);
+    expect(claimed).toBe(3);
+  });
+
+  it('NON-VACUITY — a field with NO conceptScope renders no scope line', async () => {
+    // Without this the three arms above pass on a block that always renders.
+    await openWorkspace();
+    expect(screen.queryByTestId(`twin-concept-scope-${OFFERABLE}`)).toBeNull();
   });
 });

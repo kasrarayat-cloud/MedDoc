@@ -187,6 +187,77 @@ async function resolveCertifiedTwinField(
   };
 }
 
+/** The transactional client `prisma.$transaction` hands its callback. */
+type Tx = Omit<typeof prisma, '$transaction' | '$connect' | '$disconnect' | '$on' | '$use' | '$extends'>;
+
+/**
+ * Run `write` with the visit row LOCKED and its status RE-ASSERTED under that
+ * lock. Resolves to `null` when the visit is no longer writable.
+ *
+ * ⚠️ ONE COPY, THREE DOORS — AND THE THIRD IS WHY THIS IS A FUNCTION.
+ * Round four found the insert door never re-checked the status it had read
+ * seconds earlier, and the fix was written inline, there, only. Round five then
+ * measured the obvious consequence: **the sign-window fix reached ONE of the
+ * three writers in this file.** The shipped dropdown door and the undo door
+ * were still read-then-act with no lock at all — the exact defect, in the exact
+ * file, twice more.
+ *
+ * A rule with several readers is how this house gets bitten: change one and the
+ * system contradicts itself while every arm stays green, because each arm points
+ * at one reader. So the lock is a function and the doors call it.
+ *
+ * ⚠️ BOTH SPELLINGS ARE CHECKED. The door says `status === 'SIGNED'`, the offer
+ * says `signedAt`. They agree in production today and the sign route sets both
+ * atomically — but a guard that trusts that is resting on a coincidence it does
+ * not assert.
+ *
+ * ⚠️ WHAT THIS DOES **NOT** CLOSE, stated so the comment cannot be read wider
+ * than it is: it protects the visit's SIGNED **status**, not the signature's
+ * frozen **pointer**. The sign path decides which document it freezes OUTSIDE
+ * the transaction this lock contends with, so a correction committing in that
+ * window is not visible to the manifest the signature pins. That is filed
+ * separately as SIGN-PTR-1, it is pre-existing on `main`, and it is a PAIRED
+ * fix that does not belong to this door alone.
+ */
+type LockRefusal = 'signed' | 'gone' | 'not_ready';
+type Locked<T> = { ok: true; value: T } | { ok: false; reason: LockRefusal };
+
+async function underVisitLock<T>(
+  visitId: string,
+  write: (tx: Tx) => Promise<T>,
+): Promise<Locked<T>> {
+  return prisma.$transaction(async (tx): Promise<Locked<T>> => {
+    const [locked] = await tx.$queryRaw<{ status: string; signedAt: Date | null }[]>`
+      SELECT "status", "signedAt" FROM "transcribe_visits" WHERE "id" = ${visitId} FOR UPDATE`;
+    // ⚠️ THREE CAUSES, THREE ANSWERS — ROUND FIVE.
+    // The first version of this returned a bare `null` and every caller said
+    // "this visit was signed while your form was being checked". That sentence
+    // is FALSE for two of the three exits: a visit that was re-queued (status
+    // left READY) or deleted in the window was never signed, and telling a
+    // doctor it was sends them looking for a signature that does not exist.
+    // ⚠️ A refusal that names the wrong cause is worse than a vague one,
+    // because it is actionable and wrong.
+    if (!locked) return { ok: false, reason: 'gone' };
+    if (locked.status === 'SIGNED' || locked.signedAt !== null) {
+      return { ok: false, reason: 'signed' };
+    }
+    if (locked.status !== 'READY') return { ok: false, reason: 'not_ready' };
+    return { ok: true, value: await write(tx as Tx) };
+  });
+}
+
+/** What the doctor is told, per cause. Doctor-facing, PHI-free. */
+function lockRefusalMessage(label: string, reason: LockRefusal): string {
+  switch (reason) {
+    case 'signed':
+      return `${label} was not saved — this visit was signed while your form was being checked.`;
+    case 'not_ready':
+      return `${label} was not saved — this visit went back into processing while your form was being checked. Try again once the note is ready.`;
+    case 'gone':
+      return `${label} was not saved — this visit is no longer available.`;
+  }
+}
+
 export async function setTemplateControlAction(
   visitId: string,
   /** The twin's own addressing. NEVER a label: 18 of this form's 28 content
@@ -302,7 +373,12 @@ export async function setTemplateControlAction(
   }
   const option = hits[0];
 
-  await prisma.templateTwinFieldOverride.upsert({
+  // ⚠️ UNDER THE LOCK — ROUND FIVE. This was a bare upsert: the status was read
+  // at the top of the action and never re-asserted, so a sign landing in the
+  // window wrote a dropdown correction onto a SIGNED visit. A signed visit shows
+  // no panel, so there is no Undo and the row is permanent.
+  const wroteOption = await underVisitLock(visitId, async (tx) => {
+    await tx.templateTwinFieldOverride.upsert({
     where: { visitId_fieldId: { visitId, fieldId } },
     create: {
       practiceId: visit.user.practiceId,
@@ -327,7 +403,17 @@ export async function setTemplateControlAction(
       insertedText: null,
       overriddenBy: session.user.id,
     },
+    });
+    return true;
   });
+
+  if (!wroteOption.ok) {
+    return {
+      ok: false,
+      error: lockRefusalMessage(field.originalLabel, wroteOption.reason),
+      label: field.originalLabel,
+    };
+  }
 
   // The document must not keep showing the value they just replaced. Same
   // reason `saveNoteSectionAction` does it: the preview and the export both
@@ -701,17 +787,11 @@ export async function insertScaffoldDefaultAction(
   //
   // A read-then-act check cannot see this by construction, which is the same
   // sentence the ADMIN-5 guard carries one lane over.
-  const wrote = await prisma.$transaction(async (tx) => {
-    const [locked] = await tx.$queryRaw<{ status: string; signedAt: Date | null }[]>`
-      SELECT "status", "signedAt" FROM "transcribe_visits" WHERE "id" = ${visitId} FOR UPDATE`;
-    // ⚠️ BOTH SPELLINGS, BECAUSE THE TWO SURFACES USE DIFFERENT ONES. The door
-    // says `status === 'SIGNED'`, the offer says `signedAt` — round four filed
-    // that divergence separately. They agree in production today and the sign
-    // route sets both atomically, but a guard that trusts that is a guard
-    // resting on a coincidence it does not assert.
-    if (!locked || locked.status === 'SIGNED' || locked.signedAt !== null) return false;
-    if (locked.status !== 'READY') return false;
-
+  // ⚠️ THE SAME LOCK THE OTHER TWO DOORS TAKE — one function, three callers.
+  // Round four wrote this inline here and round five measured the cost: the fix
+  // reached ONE of the three writers in this file. `underVisitLock` is that
+  // fix, hoisted, so the next writer added to this file cannot be the fourth.
+  const wrote = await underVisitLock(visitId, async (tx) => {
     await tx.templateTwinFieldOverride.upsert({
       where: { visitId_fieldId: { visitId, fieldId } },
       create: {
@@ -736,10 +816,10 @@ export async function insertScaffoldDefaultAction(
     return true;
   });
 
-  if (!wrote) {
+  if (!wrote.ok) {
     return {
       ok: false,
-      error: `${field.originalLabel} was not inserted — this visit was signed while your form was being checked.`,
+      error: lockRefusalMessage(field.originalLabel, wrote.reason),
       label: field.originalLabel,
     };
   }
@@ -786,9 +866,24 @@ export async function undoScaffoldDefaultAction(
   // DROPDOWN correction that happens to share the field. `deleteMany` takes the
   // predicate; `delete` would take only the unique key and would not be able to
   // say "only if it is mine".
-  const { count } = await prisma.templateTwinFieldOverride.deleteMany({
-    where: { visitId, fieldId, overrideKind: 'scaffold_default' },
-  });
+  // ⚠️ UNDER THE LOCK — ROUND FIVE. Round four locked the INSERT and left the
+  // UNDO read-then-act, so a sign landing in this window deleted the doctor's
+  // row against a record that was, by then, signed.
+  const deleted = await underVisitLock(visitId, async (tx) =>
+    (
+      await tx.templateTwinFieldOverride.deleteMany({
+        where: { visitId, fieldId, overrideKind: 'scaffold_default' },
+      })
+    ).count,
+  );
+  if (!deleted.ok) {
+    return {
+      ok: false,
+      error: lockRefusalMessage(resolved.field.originalLabel, deleted.reason),
+      label: resolved.field.originalLabel,
+    };
+  }
+  const count = deleted.value;
   if (count === 0) {
     return {
       ok: false,
