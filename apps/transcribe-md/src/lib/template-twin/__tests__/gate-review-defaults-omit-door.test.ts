@@ -828,6 +828,31 @@ describe('item 2 — an omitted field is not put back in front of the doctor', (
     );
   });
 
+  it('⚠️ RULING #203 — THE CACHE KEY MOVED WITH THE FIX, or a warm entry serves the OLD offer list', () => {
+    // `insertableDefaults` lives INSIDE the cached payload (`CachedFill`, TTL 30
+    // minutes). This fix changes which fields that list CONTAINS and not its
+    // SHAPE, so a pre-deploy entry deserialises perfectly and serves the
+    // pre-fix offer list — a default offered on every omit field — for up to the
+    // TTL. No schema check can see a contents-only change.
+    const cache = readFileSync(join(__dirname, '..', '..', 'docx-preview', 'fill-cache.ts'), 'utf-8');
+    const m = cache.match(/const KEY_VERSION = 'v(\d+)';/);
+    // NON-VACUITY: a failed parse would make every assertion below trivially true.
+    expect(m, 'KEY_VERSION did not parse — this arm proves nothing until it does').not.toBeNull();
+    const v = Number((m as RegExpMatchArray)[1]);
+    expect(v, 'KEY_VERSION must be at least v7 — ruling #203').toBeGreaterThanOrEqual(7);
+
+    // ...and it is bound to THIS fix, not merely bumped at some point: the
+    // per-visit gate and the key move together or the pairing is a coincidence.
+    const offer = readFileSync(join(__dirname, '..', 'clinician-override.ts'), 'utf-8');
+    expect(offer).toContain("current?.reasonCode === 'omitted_unsupported_default'");
+
+    // The writer and the invalidation scan share ONE constant, by construction —
+    // the v4->v5 bump moved the writer and not the scan. Divergence must stay
+    // unrepresentable.
+    expect(cache.match(/const KEY_VERSION/g) ?? []).toHaveLength(1);
+    expect(cache.match(/\$\{KEY_VERSION\}/g) ?? []).toHaveLength(2);
+  });
+
   it('⚠️ THE PER-VISIT GATE LIVES IN THE OFFER, and the two agree by construction', () => {
     // The offer and the door agreed before by both consulting the mapping. They
     // agree now by the door consulting NOTHING and the offer consulting the

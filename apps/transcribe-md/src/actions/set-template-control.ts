@@ -32,6 +32,8 @@ import { invalidateVisitFills } from '@/lib/docx-preview/fill-cache';
 import { TemplateDocIRSchema, type TemplateDocIR } from '@/lib/template-twin/ir';
 import { isWordPlaceholderOption } from '@/lib/note-template-docx/placeholder-option';
 import { SCAFFOLD_INSERTABLE_KINDS } from '@/lib/template-twin/clinician-override';
+import { scaffoldDefaultOfferable } from '@/lib/template-twin/clinician-override';
+import { readAndPrepareTemplateTwinFill } from '@/lib/template-twin/fill-engine';
 
 export interface SetTemplateControlResult {
   ok: boolean;
@@ -62,6 +64,23 @@ function fold(s: string): string {
  *  from the first by one line and nobody would notice which. The guards that
  *  are NOT shared stay in their own door, where the difference is visible.
  */
+/**
+ * ⚠️ THE VISIT SELECT CARRIES SIX COLUMNS FOR ONE CALLER —
+ * `insertScaffoldDefaultAction`, which under ruling #204 must resolve the SAME
+ * per-visit answer the preview does, through the SAME entry. They are the exact
+ * inputs `preview-visit-document.ts` feeds `readAndPrepareTemplateTwinFill`;
+ * fetching fewer would make the door ask a different question and agree with the
+ * offer only by luck.
+ *
+ * ⚠️ AND THE EXPLANATION LIVES HERE RATHER THAN INSIDE THE SELECT FOR A REASON
+ * WORTH KNOWING. `gate-practice-scope`'s ratchet decides a read is scoped by
+ * looking back FORTY LINES for a scope accessor. Six columns plus a six-line
+ * comment pushed `visitByIdScope` (line ~94) to 43 lines above the
+ * `noteTemplate` read, and the gate reported a new UNSCOPED clinical read —
+ * on a query whose text had not changed at all. Reddened by prose: the same
+ * defect canon 117 records in the other direction, met here in a gate that
+ * measures distance rather than meaning.
+ */
 async function resolveCertifiedTwinField(
   visitId: string,
   fieldId: string,
@@ -73,6 +92,18 @@ async function resolveCertifiedTwinField(
       practiceId: string;
       compiledVersionId: string;
       field: TemplateDocIR['fields'][number];
+      /** The visit row this function already read — see the select's note. */
+      visit: {
+        userId: string;
+        inputMode: string | null;
+        transcriptText: string | null;
+        entities: unknown;
+        soapFinal: string | null;
+        createdAt: Date;
+        user: { practiceId: string };
+      };
+      noteTemplateId: string;
+      noteTemplateVersion: number;
     }
 > {
   const visit = await prisma.transcribeVisit.findFirst({
@@ -86,6 +117,13 @@ async function resolveCertifiedTwinField(
       status: true,
       noteTemplateId: true,
       noteTemplateVersion: true,
+      // The six below serve insertScaffoldDefaultAction — see the note above.
+      userId: true,
+      inputMode: true,
+      transcriptText: true,
+      entities: true,
+      soapFinal: true,
+      createdAt: true,
       user: { select: { practiceId: true } },
     },
   });
@@ -139,6 +177,11 @@ async function resolveCertifiedTwinField(
     practiceId: visit.user.practiceId,
     compiledVersionId: compiled.id,
     field,
+    // Returned rather than re-read: the fill needs the same row this function
+    // already fetched, and a second read is a second chance to diverge.
+    visit,
+    noteTemplateId: visit.noteTemplateId,
+    noteTemplateVersion: visit.noteTemplateVersion,
   };
 }
 
@@ -340,6 +383,120 @@ export interface InsertScaffoldDefaultResult {
   inserted?: string;
 }
 
+/**
+ * Is this field one the doctor may insert their default into ON THIS VISIT?
+ *
+ * ⚠️ IT RESOLVES THE FILL RATHER THAN READING A CACHED ONE. Ruling #204 forbids
+ * a cache here for a reason this branch already paid for once: the offer list
+ * lives inside a cached preview payload, so a gate keyed on that would admit
+ * whatever the doctor last SAW rather than what is true now.
+ *
+ * ⚠️ FAIL-CLOSED ON EVERY THROW, AND THE ASYMMETRY WITH THE PREVIEW IS
+ * DELIBERATE. The preview degrades to a styled document when the fill throws,
+ * because it WRITES NOTHING. This door writes a clinical override row and an
+ * audit row claiming the doctor asserted something; it cannot degrade, so it
+ * refuses. The catch is broad on purpose — `TemplateTwinFillError` is not the
+ * only escape (Zod parse failures and the storage errors reach here too), and a
+ * narrow `instanceof` would let those through into a write.
+ *
+ * ⚠️ COST, STATED RATHER THAN HIDDEN: one insert is now one full fill, render
+ * included, and the panel's "insert all" is N of them in sequence. There is no
+ * public entry that computes the manifest and skips the render. Adding a
+ * `skipRender` seam is a production change that owes its own adversarial pass;
+ * a cache is what #204 forbids, so the honest options are this or that seam.
+ */
+async function scaffoldDefaultAdmissible(input: {
+  visitId: string;
+  fieldId: string;
+  field: TemplateDocIR['fields'][number];
+  resolved: {
+    practiceId: string;
+    compiledVersionId: string;
+    visit: {
+      userId: string;
+      inputMode: string | null;
+      transcriptText: string | null;
+      entities: unknown;
+      soapFinal: string | null;
+      createdAt: Date;
+      user: { practiceId: string };
+    };
+    noteTemplateId: string;
+    noteTemplateVersion: number;
+  };
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { visitId, fieldId, field, resolved } = input;
+  const { visit } = resolved;
+
+  // The preview never offers this panel before the note exists, so refusing
+  // here is AGREEMENT with the offer rather than a tightening of it.
+  if (typeof visit.soapFinal !== 'string' || !visit.soapFinal) {
+    return {
+      ok: false,
+      error: `${field.originalLabel} cannot take a default until this visit has a note.`,
+    };
+  }
+
+  let current: { status?: string; value?: unknown; reasonCode?: string | null } | null = null;
+  try {
+    const { prepared } = await readAndPrepareTemplateTwinFill({
+      visitId,
+      practiceId: visit.user.practiceId,
+      // THE VISIT'S OWN DOCTOR, NOT THE REQUESTER — the same actor rule the
+      // preview states: a colleague acting on the record must not restamp it.
+      doctorId: visit.userId,
+      noteTemplateId: resolved.noteTemplateId,
+      noteTemplateVersion: resolved.noteTemplateVersion,
+      inputMode:
+        visit.inputMode === 'voice_dictation'
+          ? 'dictation'
+          : visit.inputMode === 'text_notes'
+            ? 'text'
+            : 'conversation',
+      contextText: visit.transcriptText ?? '',
+      entities: visit.entities,
+      generatedNote: visit.soapFinal,
+      validationNow: new Date(),
+      visitDate: visit.createdAt,
+      resolverModelVersion: null,
+    });
+    current = prepared.manifest.fields.find((f) => f.fieldId === fieldId) ?? null;
+  } catch (err) {
+    // Constructor name only — never the message, which can carry document text.
+    const cls = err instanceof Error ? err.constructor.name : 'Unknown';
+    console.warn(`[insert-default] visit=${visitId} field=${fieldId} fill failed (${cls})`);
+    return {
+      ok: false,
+      error: `${field.originalLabel} could not be checked against this visit just now, so nothing was inserted. Try again in a moment.`,
+    };
+  }
+
+  // ⚠️ THE CALLER'S WHOLE DISJUNCTION, NOT JUST `scaffoldDefaultOfferable`.
+  // `preview-visit-document.ts` offers a field when `inserted || offerable`,
+  // where `inserted` means the resolution is already this doctor's applied
+  // default. Gating on `offerable` alone would refuse a RE-INSERT over an
+  // existing row — a state the panel can reach — so the two surfaces would
+  // disagree again, in the opposite direction from the one #204 is about.
+  const inserted = current?.reasonCode === 'clinician_scaffold_default';
+  const admissible =
+    inserted ||
+    scaffoldDefaultOfferable({
+      field,
+      // The concept was already proved present by the caller's own guard, which
+      // reads the same column off the same compiled version. Passing a sentinel
+      // rather than re-fetching keeps ONE fetch and one decision.
+      mapping: { clinicalConcept: 'checked-by-the-callers-own-guard' },
+      current,
+    });
+  if (!admissible) {
+    return {
+      ok: false,
+      error: `${field.originalLabel} is not blank on this visit, so your default was not inserted.`,
+    };
+  }
+  return { ok: true };
+}
+
 export async function insertScaffoldDefaultAction(
   visitId: string,
   fieldId: string,
@@ -402,36 +559,24 @@ export async function insertScaffoldDefaultAction(
       label: field.originalLabel,
     };
   }
-  // ⚠️ THE STATIC-POLICY REFUSAL WAS REMOVED HERE, AND REMOVING IT IS WHAT
-  // KEEPS THE DOOR AGREEING WITH THE OFFER.
+  // ══════════════════════════════════════════════════════════════════════════
+  // ⚠️ THE PER-VISIT GATE — OWNER RULING #204.
   //
-  // It read `definition.mapping.unmentionedPolicy === 'omit'` and refused. Its
-  // comment justified that by saying `scaffoldDefaultOfferable` withdraws the
-  // offer for an `omit` field — TRUE WHEN IT WAS WRITTEN, AND FALSE NOW. The
-  // offer withdraws on the PER-VISIT outcome (`reasonCode ===
-  // 'omitted_unsupported_default'`), because a confirm-time property cannot
-  // answer a per-visit question. So on a visit where the omit did NOT fire the
-  // panel lists the field — correctly, it is blank and the doctor is being
-  // asked about it — and this branch then refused the click.
+  // The door and the offer now share ONE answer, obtained through the SAME
+  // entry the preview uses. Not a static mapping property, and NOT A CACHE.
   //
-  // ⚠️ THAT IS THIS BRANCH'S OWN THESIS INVERTED: "a surface must never offer an
-  // act its writer would refuse." Reachable from the ordinary client —
-  // `your-blanks-panel.tsx:133` calls this action on whatever the offer listed
-  // — so the doctor gets a button that errors. Found by the adversarial pass
-  // over the finished diff, by three lenses.
-  //
-  // WHY NOT NARROW IT INSTEAD OF REMOVING IT: this action holds `visitId` and
-  // `fieldId` and no resolution. Recomputing one field's resolution here to
-  // recover `reasonCode` is the only sound way to key on the same signal, and a
-  // cached fill is not a gate. The offer IS the per-visit gate.
-  //
-  // WHY REMOVING IT IS SAFE, and this is ruling #194's own principle: an insert
-  // is a HUMAN ACT. #194 deleted the machine's ability to print an undictated
-  // default precisely so the click would carry the claim, and it is audited as
-  // `DEFAULT_INSERTED_BY_DOCTOR`. A doctor who ticked "expected blank" and then
-  // clicks "Insert my default" on a visit where the omit did not take effect is
-  // changing their mind for that visit, which is theirs to do. What #194
-  // forbids is the MACHINE doing it unasked, and nothing here does.
+  // WHAT THIS REPLACES, AND WHY BOTH EARLIER SHAPES WERE WRONG. Round one
+  // refused on `mapping.unmentionedPolicy === 'omit'` — a CONFIRM-TIME property
+  // deciding a PER-VISIT question, so on a visit where the omit did not fire the
+  // panel listed the field and this branch refused the click. Round two deleted
+  // the refusal outright and justified it on #194 (an insert is a human act,
+  // audited). The second adversarial pass falsified that too: with no gate at
+  // all the door ADMITS acts the offer REFUSES, writing an override row and a
+  // `DEFAULT_INSERTED_BY_DOCTOR` audit row asserting a claim the doctor was
+  // never shown. A door wrong in both directions does not need a third static
+  // rule — it needs the per-visit answer.
+  const gate = await scaffoldDefaultAdmissible({ visitId, fieldId, field, resolved });
+  if (!gate.ok) return { ok: false, error: gate.error, label: field.originalLabel };
 
   await prisma.templateTwinFieldOverride.upsert({
     where: { visitId_fieldId: { visitId, fieldId } },
