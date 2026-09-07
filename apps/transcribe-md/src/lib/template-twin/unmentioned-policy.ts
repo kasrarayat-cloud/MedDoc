@@ -232,6 +232,35 @@ export const OMIT_LADDER_PRE_CONCEPT: readonly OmitLadderGuard[] = [
  */
 export const OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS = 'semantic_mapping_type_mismatch';
 
+/**
+ * ⚠️ AND IT FAILS **CLOSED**, AT MODULE LOAD, BECAUSE THE ALTERNATIVE FAILS
+ * OPEN ON A CLINICAL GATE.
+ *
+ * The resolver runs its certification check inside the table walk, gated on
+ * `guard.guard === OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS`. If that string
+ * ever stops naming a row — a guard renamed, the row deleted, this constant
+ * edited — the `if` simply never matches and **the certification check is
+ * skipped entirely**, with no error and no red. An uncertified mapping would
+ * then fall through to the facts and resolve as though it had been confirmed.
+ *
+ * ⚠️ NO MATRIX ROW CAN CATCH IT, WHICH IS WHY THE CHECK IS HERE AND NOT THERE.
+ * Every row of the biconditional passes `allowUncertifiedForSyntheticTest`, so
+ * the guarded branch never executes in the arm that exists to compare the two
+ * sides. A test-only assertion would also leave PRODUCTION unprotected; this
+ * one is a pure function of two constants in this file, so it either always
+ * throws or never does — it cannot surprise a doctor at runtime, and it stops
+ * the build the moment the anchor stops resolving.
+ */
+if (!OMIT_LADDER_PRE_CONCEPT.some((g) => g.guard === OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS)) {
+  throw new Error(
+    `unmentioned-policy: OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS names ` +
+      `'${OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS}', which is not a row of ` +
+      `OMIT_LADDER_PRE_CONCEPT. The resolver's certification check hangs off ` +
+      `that name and would be SKIPPED — an uncertified mapping would resolve ` +
+      `as though it had been confirmed.`,
+  );
+}
+
 /** Reached inside `missingResolution`, ahead of the policy. */
 const PRACTICE_DEFAULT_GUARD = 'approved_practice_default';
 /** `missingResolution`'s own short-circuit. */
@@ -429,23 +458,6 @@ export function canOmitWhenUnmentioned(
 }
 
 /**
- * The resolver reason tokens each guard above can actually emit, as PREFIXES.
- *
- * ⚠️ IT IS EXPORTED SO THE GATE COMPARES AGAINST A DECLARATION RATHER THAN A
- * LIST A TEST INVENTED. A test that writes its own expected tokens is a third
- * copy of the rule, and it agrees with whichever copy its author read last.
- *
- * ⚠️ AND ONE GUARD HAS THREE EXITS, WHICH IS WHY THIS IS PREFIXES AND NOT
- * VALUES. `practiceDefaultResolution` returns `approved_practice_default` on
- * success, `approved_practice_default_evidence_missing` when the synthetic fact
- * is absent, and `invalid_practice_default_<code>` when the stored default will
- * not convert. Naming any single one of those would have been a guess — and the
- * first draft of this file guessed, naming `approved_practice_default` while the
- * resolver returned `..._evidence_missing`. The matrix arm caught it before a
- * line of it shipped, which is the entire argument for comparing the TOKEN and
- * not only the boolean.
- */
-/**
  * Every guard name `omitBranchUnreachable` can return, DERIVED from the table
  * and the constants the clauses actually return.
  *
@@ -464,6 +476,23 @@ export const OMIT_GUARD_NAMES: readonly string[] = [
   ...OMIT_DEFERRAL_GUARDS,
 ];
 
+/**
+ * The resolver reason tokens each guard above can actually emit, as PREFIXES.
+ *
+ * ⚠️ IT IS EXPORTED SO THE GATE COMPARES AGAINST A DECLARATION RATHER THAN A
+ * LIST A TEST INVENTED. A test that writes its own expected tokens is a third
+ * copy of the rule, and it agrees with whichever copy its author read last.
+ *
+ * ⚠️ AND ONE GUARD HAS THREE EXITS, WHICH IS WHY THIS IS PREFIXES AND NOT
+ * VALUES. `practiceDefaultResolution` returns `approved_practice_default` on
+ * success, `approved_practice_default_evidence_missing` when the synthetic fact
+ * is absent, and `invalid_practice_default_<code>` when the stored default will
+ * not convert. Naming any single one of those would have been a guess — and the
+ * first draft of this file guessed, naming `approved_practice_default` while the
+ * resolver returned `..._evidence_missing`. The matrix arm caught it before a
+ * line of it shipped, which is the entire argument for comparing the TOKEN and
+ * not only the boolean.
+ */
 export const OMIT_GUARD_TOKEN_PREFIXES: Readonly<Record<string, readonly string[]>> = {
   semantic_mapping_type_mismatch: ['semantic_mapping_type_mismatch'],
   // A deferred grid cell can surface under several reason tokens depending on
@@ -476,9 +505,6 @@ export const OMIT_GUARD_TOKEN_PREFIXES: Readonly<Record<string, readonly string[
   clinical_concept_unmapped: ['clinical_concept_unmapped'],
   approved_practice_default: ['approved_practice_default', 'invalid_practice_default_'],
   required_fact_not_mentioned: ['required_fact_not_mentioned'],
-  // ⚠️ A CONSERVATIVE WITHHOLD, so the token is what the resolver WOULD have
-  // emitted had the control been offered and ticked — measured, not assumed:
-  // a prototype reaches the omit branch and is honoured.
   // ⚠️ THE EIGHTH GUARD. Same family as the fixed grid: the resolver routes a
   // multi-scope checkbox to `missingResolution` with facts in hand, so the token
   // is whatever that call returns — `required_fact_not_mentioned` when the field

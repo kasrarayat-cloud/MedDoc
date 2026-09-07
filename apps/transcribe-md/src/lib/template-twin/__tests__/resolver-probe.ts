@@ -158,3 +158,25 @@ export function resolveOneDictated(
   });
   return { field: f, mapping: m, resolution: resolutions[0]! };
 }
+
+/**
+ * The same probe with the synthetic-certification escape hatch OFF.
+ *
+ * ⚠️ EVERY OTHER PROBE HERE PASSES `allowUncertifiedForSyntheticTest: true`,
+ * which SKIPS the resolver's certification guard entirely — so the 870,912-row
+ * biconditional never executes that branch, and a control for it written on
+ * `resolveOne` would witness the guard it is named for exactly never.
+ */
+export function resolveOneCertifying(
+  fieldOverrides: Partial<TemplateField> = {},
+  mappingOverrides: Partial<SemanticMapping> = {},
+) {
+  const f = field('1', fieldOverrides);
+  const m = mapping(f, 'ros.cardiovascular', mappingOverrides);
+  const resolutions = resolveTemplateFields({
+    fields: [f],
+    mappings: [m],
+    facts: [factFor('2', 'chief_complaint', 'Patient here for a rash.')],
+  });
+  return { field: f, mapping: m, resolution: resolutions[0]! };
+}

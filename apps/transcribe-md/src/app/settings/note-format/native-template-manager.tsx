@@ -771,7 +771,6 @@ function ReviewWorkspace({
                       ? ` → ${m.clinicalConcept}`
                       : ' · no concept yet'}
                 </div>
-<<<<<<< HEAD
 
                 {/* ⚠️ REVIEW-DEFAULTS item 2 — THE `omit` DOOR.
                     Offered ONLY where `canOmitWhenUnmentioned` says the
@@ -877,7 +876,8 @@ function ReviewWorkspace({
                     {canOmitWhenUnmentioned(f.field, m)
                       ? OMIT_CONTROL_LABEL
                       : OMIT_INERT_LABEL}
-=======
+                  </div>
+                )}
                 {/* ⚠️ #247 — WHERE THE VALUE COMES FROM, IN WORDS, ON THE ROW
                     THE DOCTOR IS AGREEING TO.
 
@@ -903,7 +903,6 @@ function ReviewWorkspace({
                     }}
                   >
                     from the patient record — not dictated
->>>>>>> origin/docs/rulings-258-260
                   </div>
                 )}
                 {/* ⚠️ #208 — THE DECLARED SCOPE IS SHOWN, BECAUSE A SCOPE IS A

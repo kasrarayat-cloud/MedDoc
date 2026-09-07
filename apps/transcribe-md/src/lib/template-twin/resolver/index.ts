@@ -623,16 +623,11 @@ function resolveOne(
   // non-select this is every temporal candidate, exactly as before.
   const judged = temporalCandidates.filter((fact) => conflictCandidates.includes(fact));
 
-<<<<<<< HEAD
   // ⚠️ NON-NULL BY THE PRE-CONCEPT TABLE'S `clinical_concept_unmapped` ROW,
   // which returned above. TypeScript cannot see through the table walk, and a
   // second `if` here would be exactly the duplicate decision ruling #258 just
   // removed — so the guarantee is named and asserted, not re-tested.
-  const permitsFamily = normalizeConcept(mapping.clinicalConcept!).startsWith(
-    'family_history.',
-  );
-=======
-  const normalizedConcept = normalizeConcept(mapping.clinicalConcept);
+  const normalizedConcept = normalizeConcept(mapping.clinicalConcept!);
   const permitsFamily = normalizedConcept.startsWith('family_history.');
   /**
    * ⚠️ #247 — THE REFERRING CLINICIAN IS THE ONE CONCEPT WHOSE SUBJECT IS NOT
@@ -656,7 +651,6 @@ function resolveOne(
    */
   const permitsOtherClinician =
     normalizedConcept === 'visit_metadata.referring_physician';
->>>>>>> origin/docs/rulings-258-260
   if (
     temporalCandidates.some(
       (fact) =>

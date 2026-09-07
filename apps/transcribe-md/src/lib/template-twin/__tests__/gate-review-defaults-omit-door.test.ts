@@ -77,7 +77,14 @@ import { join } from 'node:path';
 import { templateTwinCounts } from '../ir';
 // ⚠️ THE PROBE IS SHARED, NOT COPIED — see `resolver-probe.ts` for why two other
 // files had been reading the resolver's SOURCE for want of it.
-import { field, mapping, factFor, resolveOne, resolveOneDictated } from './resolver-probe';
+import {
+  field,
+  mapping,
+  factFor,
+  resolveOne,
+  resolveOneDictated,
+  resolveOneCertifying,
+} from './resolver-probe';
 import { scaffoldDefaultOfferable } from '../clinician-override';
 import { expectedDataTypeForFieldKind } from '../field-kind-data-type';
 import {
@@ -939,9 +946,23 @@ const WITNESSED_GUARDS = new Set<string>();
       ['no concept', {}, { clinicalConcept: null }, 'clinical_concept_unmapped'],
       ['a practice default', {}, { practiceDefault: 'The patient consents.' }, 'approved_practice_default'],
       ['requires input', { required: true }, {}, 'required_fact_not_mentioned'],
+      // ⚠️ THE NINTH ROW, AND ITS ABSENCE WAS A REAL GAP — found by a round-eight
+      // lens. This table claims to enumerate the ladder, and every guard had a
+      // behavioural row EXCEPT the certification guard, whose coverage lived in
+      // `resolver.test.ts` instead. A table that says "one control per known
+      // guard" and skips one is a claim about itself that is false.
+      //
+      // It needs the production flag, so it does not use `resolveOne`.
+      ['UNCERTIFIED', { detectionStatus: 'recognized' as const }, { status: 'recognized' as const }, 'field_or_mapping_not_certified'],
     ];
     for (const [name, fo, mo, token] of CONTROLS) {
-      const { resolution } = resolveOne(fo, { ...mo, unmentionedPolicy: 'omit' });
+      // ⚠️ THE CERTIFICATION ROW NEEDS THE PRODUCTION FLAG. Every other row runs
+      // under `allowUncertifiedForSyntheticTest`, which SKIPS the very guard that
+      // row exists to witness — so it is driven certified-for-real instead.
+      const { resolution } =
+        token === 'field_or_mapping_not_certified'
+          ? resolveOneCertifying(fo, { ...mo, unmentionedPolicy: 'omit' })
+          : resolveOne(fo, { ...mo, unmentionedPolicy: 'omit' });
       expect(
         resolution.reasonCode.startsWith(token),
         `${name}: the resolver returned '${resolution.reasonCode}', not '${token}' — ` +
