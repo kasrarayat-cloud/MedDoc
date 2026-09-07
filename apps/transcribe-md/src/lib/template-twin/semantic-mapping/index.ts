@@ -15,7 +15,7 @@ import {
   synonymsFor,
   REGISTRY_CONCEPTS,
 } from '../concept-registry';
-import { ROS_SYSTEMS, symptomsFor } from '../ros-lexicon';
+import { isUnnamedRosConcept, ROS_SYSTEMS, symptomsFor } from '../ros-lexicon';
 import { withoutPlaceholderOptions } from '../../note-template-docx/placeholder-option';
 import { z } from 'zod';
 
@@ -66,7 +66,72 @@ const ModelSemanticMappingSchema = SemanticMappingSchema.extend({
   // schema at all, so there is no value for the model to choose and nothing to
   // re-assert after parsing. Forcing `z.null()` would still SHOW it, and would
   // make the model's omission a parse error rather than a non-event.
-}).omit({ unmentionedPolicy: true }).strict();
+})
+  .omit({ unmentionedPolicy: true })
+  .strict()
+  /**
+   * ⚠️ #208 — `conceptScope` IS A MAPPING, NOT A RENDER POLICY, SO THE MODEL MAY
+   * PROPOSE IT — AND IT IS VALIDATED HERE RATHER THAN OMITTED ABOVE.
+   *
+   * The distinction is the whole ruling, and this file already embodies both
+   * halves of it: `unmentionedPolicy` is a RENDER POLICY — what the machine does
+   * when nothing was dictated — and is `omit`ted two lines up, because the model
+   * may never author one. `clinicalConcept` and `conceptScope` are MAPPINGS —
+   * which concept a field MEANS, which concepts a clause COVERS — and the model
+   * proposes those, under validation and a human confirmation.
+   *
+   * A session read the two as colliding (#192/#193 forbid the model a policy;
+   * #179(3) hands it a scope to propose) and escalated it as undecidable. There
+   * is no collision; there is a category it had not separated.
+   *
+   * ⚠️ REFUSED AT PARSE, NOT DROPPED TO NULL — and that is deliberately UNLIKE
+   * the `clinicalConcept` treatment in the reconciler below, which silently
+   * nulls an off-registry proposal and leaves the field `needs_confirmation`.
+   * A scope is a CLAIM ABOUT COVERAGE: silently shrinking it would leave a
+   * clause asserting it covers fewer symptoms than the doctor will read on the
+   * confirm list, and silently keeping it would let an unmatchable token sit in
+   * a certified mapping. Neither is honest, so the proposal is rejected and the
+   * model retries with the error — which is a MAPPING proposal, regenerable and
+   * carrying no clinical content.
+   *
+   * ⚠️ AND THAT IS WHY THIS IS NOT THE L3 MISTAKE, WHICH LOOKS IDENTICAL. An
+   * array-level refusal at L3 discarded a whole VISIT — chief complaint,
+   * medications, allergies — because the payload was the patient's encounter and
+   * the loss was clinical. Here the payload is a template's proposed mappings:
+   * a refusal costs a retry, and the terminal fallback is
+   * `fallbackSemanticMappings`, every row `needs_confirmation`. Refusing is
+   * fail-closed on this seam and was fail-OPEN on that one.
+   */
+  .superRefine((mapping, ctx) => {
+    const scope = mapping.conceptScope;
+    if (!scope || scope.length === 0) return;
+    scope.forEach((concept, index) => {
+      if (!isRegisteredConcept(concept)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['conceptScope', index],
+          message:
+            `conceptScope entry "${concept}" is not a registered concept; ` +
+            `a clause cannot declare coverage of something no fact can carry`,
+        });
+        return;
+      }
+      // ⚠️ AND AN UNNAMED ROS CONCEPT CANNOT BE IN A SCOPE, WHICH #179's OWN
+      // BODY RULES: `ros.<system>.other` is "excluded from every declared scope
+      // by construction". `conceptMatches` already refuses it at MATCH time, so
+      // refusing it here makes the two readers agree instead of leaving a token
+      // that parses, certifies, and can never match anything.
+      if (isUnnamedRosConcept(concept)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['conceptScope', index],
+          message:
+            `conceptScope entry "${concept}" names no specific symptom; ` +
+            `a scope is a list of named symptoms and the matcher refuses this`,
+        });
+      }
+    });
+  });
 
 const ModelSemanticMappingProposalSchema = z
   .object({ mappings: z.array(ModelSemanticMappingSchema) })
