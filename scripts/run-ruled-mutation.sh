@@ -208,7 +208,26 @@ fi
 echo "═══════════════════════════════════════════════════════════════════"
 echo "RULED MUTATION — FINISHED at $(date -u +%Y-%m-%dT%H:%M:%SZ), exit $rc"
 echo "  declaration : $DECL @ ${DECL_COMMIT:0:12}"
-if [ "$rc" -ne 0 ]; then
+# ⚠️ EXIT 2 IS "REFUSED BEFORE ACTING", AND CONFLATING IT WITH A PARTIAL FAILURE
+# IS A REAL COST. The warning below tells an operator that an irreversible act
+# may have landed halfway and must be reconciled by hand before anything is
+# re-run. Printing it for a child that refused its own ARGUMENTS — having opened
+# no connection and written no byte — sends somebody to audit a database that
+# was never touched, and it teaches them to discount the warning next time.
+#
+# The convention this file already documents for ITSELF is `1 = REFUSED
+# (nothing ran)`. It is extended to the CHILD: a child may say the same thing
+# with 2, which is the conventional "usage / bad arguments" code and is what
+# `transfer-certification-to-active.ts` uses for a parse refusal.
+#
+# ⚠️ FAIL-CLOSED ON EVERYTHING ELSE. Only 0 and 2 are treated as "nothing
+# landed". Every other non-zero keeps the full warning, because a child that
+# died at an unknown point is exactly the case the warning exists for.
+if [ "$rc" -eq 2 ]; then
+  echo "  ℹ️  EXIT 2 — the command REFUSED before acting (usage / bad arguments)."
+  echo "     Nothing was opened and nothing was written. Fix the invocation and"
+  echo "     re-run; there is no partial state to reconcile."
+elif [ "$rc" -ne 0 ]; then
   echo "  ⚠️ NON-ZERO EXIT. Do not re-run until you know what landed — an"
   echo "     irreversible act that failed partway is not the same as one that"
   echo "     did not run. Verify against the declaration before deciding."
