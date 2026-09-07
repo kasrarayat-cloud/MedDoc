@@ -25,7 +25,7 @@ remaining owners with **one** activity condition:
 | OWNER rows passing `deactivatedAt IS NULL` that **cannot sign in** | **1** |
 | practices where this predicate and "can actually administer" disagree | **1** |
 
-⚠️ **BOTH ROWS READ `6` UNTIL RULING #248, AND `6` IS A DIFFERENT CLAIM'S
+⚠️ **BOTH ROWS READ `6` UNTIL RULING #253, AND `6` IS A DIFFERENT CLAIM'S
 NUMBER.** Six is the count of **zero-owner practices** — the subject of the
 sibling board filing. The count of owner rows the loose predicate over-counts is
 **ONE**, and the six zero-owner practices are **not among them**: the two

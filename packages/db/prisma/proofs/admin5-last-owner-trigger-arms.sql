@@ -508,6 +508,91 @@ EXCEPTION WHEN others THEN
     RETURN 'ERR: ' || SQLERRM;
 END $$ LANGUAGE plpgsql;
 
+-- ══════════════════════════════════════════════════════════════════════════
+-- ⚠️ THE **ROW** LOCK GETS ITS OWN DETECTOR — RULING #251, GAP (1).
+--
+-- `LOCK-CONTROL` below asks `pg_locks WHERE locktype='advisory'`. A `FOR UPDATE`
+-- never takes an advisory lock, so that arm is STRUCTURALLY BLIND to the row
+-- set — and round four measured the consequence: #253's widening of the
+-- `FOR UPDATE` from owners-only to every member could be REVERTED, or the whole
+-- statement DELETED, with all 41 arms, the gate and the race harness green.
+--
+-- ⚠️ AND THE MIGRATION'S OWN COMMENT POINTED AT `LOCK-CONTROL` AS THE ANSWER FOR
+-- THIS CLAUSE. It asks about a different lock. A citation to an instrument that
+-- measures something else is the same defect as a citation to a ruling that does
+-- not exist.
+--
+-- THE DETECTOR IS `xmax`, MEASURED NOT ASSUMED: a row locked by the current
+-- transaction carries a non-zero `xmax`. Owner-only locks 2 of the 3 rows in the
+-- fixture below; the shipped predicate locks all 3. The two are distinguishable,
+-- which is the entire requirement.
+CREATE OR REPLACE FUNCTION t210_rowlock_probe() RETURNS text AS $$
+DECLARE others_total int; others_locked int;
+BEGIN
+    INSERT INTO practices(id,name,slug,"updatedAt") VALUES ('t210_prow','T210 Row','t210-row',now());
+    INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive") VALUES
+      ('t210_rw1','trw1@x.test','x',now(),'t210_prow','OWNER',true),
+      ('t210_rw2','trw2@x.test','x',now(),'t210_prow','OWNER',true),
+      ('t210_rwc','trwc@x.test','x',now(),'t210_prow','CLINICIAN',true);
+
+    -- An ALLOWED demotion (a second able owner remains), so the guard reaches the
+    -- lock and the counts rather than short-circuiting.
+    UPDATE users SET "practiceRole"='CLINICIAN' WHERE id='t210_rw1';
+
+    SELECT count(*) INTO others_total
+      FROM users WHERE "practiceId"='t210_prow' AND id <> 't210_rw1';
+    SELECT count(*) INTO others_locked
+      FROM users WHERE "practiceId"='t210_prow' AND id <> 't210_rw1' AND xmax <> '0';
+
+    RAISE EXCEPTION 'T210_ROWLOCK:%|%', others_locked, others_total;
+EXCEPTION WHEN others THEN
+    IF SQLERRM LIKE 'T210_ROWLOCK:%' THEN RETURN split_part(SQLERRM, ':', 2); END IF;
+    RETURN 'ERR: ' || SQLERRM;
+END $$ LANGUAGE plpgsql;
+
+INSERT INTO arm_result
+SELECT 'ROW-LOCK-CONTROL (xmax): EVERY other member row is locked, not only the owners',
+       '2|2', got, CASE WHEN got = '2|2' THEN 'PASS' ELSE 'FAIL' END
+  FROM (SELECT t210_rowlock_probe() AS got) q;
+
+-- ⚠️ THE ORPHAN GUARD'S ADVISORY LOCK GETS ITS OWN ARM TOO — GAP (2).
+-- `LOCK-CONTROL` asserted ONE of the guard pair's TWO advisory locks, so
+-- `users_no_orphan_member`'s could be deleted outright with every arm green.
+-- Each must be independently detectable, or "the lock is load-bearing" is a
+-- claim about whichever one somebody happened to measure.
+CREATE OR REPLACE FUNCTION t210_orphan_lock_probe() RETURNS text AS $$
+DECLARE before_n int; after_n int; k_class oid; k_obj oid;
+BEGIN
+    k_class := (hashtext('users_last_owner_guard')::bigint & 4294967295)::oid;
+    k_obj   := (hashtext('t210_porph')::bigint & 4294967295)::oid;
+
+    INSERT INTO practices(id,name,slug,"updatedAt") VALUES ('t210_porph','T210 Orph','t210-orph',now());
+    INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive")
+      VALUES ('t210_op_o','top@x.test','x',now(),'t210_porph','OWNER',true);
+
+    SELECT count(*) INTO before_n FROM pg_locks
+     WHERE locktype='advisory' AND pid=pg_backend_pid() AND classid=k_class AND objid=k_obj;
+
+    -- An INSERT of a LIVE non-owner: the orphan arm cannot early-return on it, so
+    -- it reaches ITS advisory lock. The practice has an able owner, so the write
+    -- is ALLOWED and the lock is the only thing being measured.
+    INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive")
+      VALUES ('t210_op_c','topc@x.test','x',now(),'t210_porph','CLINICIAN',true);
+
+    SELECT count(*) INTO after_n FROM pg_locks
+     WHERE locktype='advisory' AND pid=pg_backend_pid() AND classid=k_class AND objid=k_obj;
+
+    RAISE EXCEPTION 'T210_ORPHLOCK:%|%', before_n, after_n;
+EXCEPTION WHEN others THEN
+    IF SQLERRM LIKE 'T210_ORPHLOCK:%' THEN RETURN split_part(SQLERRM, ':', 2); END IF;
+    RETURN 'ERR: ' || SQLERRM;
+END $$ LANGUAGE plpgsql;
+
+INSERT INTO arm_result
+SELECT 'LOCK-CONTROL (pg_locks): the ORPHAN guard holds its own advisory lock',
+       '0|1', got, CASE WHEN got = '0|1' THEN 'PASS' ELSE 'FAIL' END
+  FROM (SELECT t210_orphan_lock_probe() AS got) q;
+
 INSERT INTO arm_result
 SELECT 'LOCK-CONTROL (pg_locks): 0 held before the counted write, 1 held after',
        '0|1', got, CASE WHEN got = '0|1' THEN 'PASS' ELSE 'FAIL' END
@@ -591,8 +676,8 @@ SELECT count(*) FILTER (WHERE verdict='PASS')            AS pass,
        count(*) FILTER (WHERE verdict='FAIL')            AS fail,
        count(*) FILTER (WHERE got = 'MATCHED-NOTHING')   AS vacuous,
        count(*)                                          AS arms_run,
-       43                                                AS arms_expected,
-       CASE WHEN count(*) = 43 AND count(*) FILTER (WHERE verdict='FAIL') = 0
+       45                                                AS arms_expected,
+       CASE WHEN count(*) = 45 AND count(*) FILTER (WHERE verdict='FAIL') = 0
             THEN '🟢 all arms ran and passed'
             ELSE '🔴 ARM COUNT OR VERDICT MISMATCH' END  AS verdict
   FROM arm_result WHERE verdict IS NOT NULL;

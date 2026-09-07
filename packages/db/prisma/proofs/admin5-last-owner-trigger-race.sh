@@ -77,6 +77,11 @@ REAP
 
 restore_guard() {
   local rc=$?
+  if [ "${t210_signalled:-0}" = "1" ]; then
+    echo "RACE_CANNOT_TELL_REASON=terminated"
+    echo "🟡 RACE HARNESS TERMINATED MID-RUN — it never reached its verdict. Exit 2 is CANNOT-TELL, and the reason is not 'no_overlap', so CI must fail this." >&2
+    rc=2
+  fi
   if [ -f "$OUT/fn-shipped.sql" ]; then
     docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -q < "$OUT/fn-shipped.sql" >/dev/null 2>&1
   fi
@@ -105,7 +110,21 @@ restore_guard() {
   rm -rf "$OUT"
   exit $rc
 }
-trap restore_guard EXIT INT TERM
+# ⚠️ A TERMINATION IS NOT A PASS — RULING #251, GAP (4).
+#
+# `restore_guard` opens with `local rc=$?`, and when a trap fires on a SIGNAL
+# bash reports the LAST COMMAND's status, not the signal. So a SIGTERM arriving
+# after any successful command produced `rc=0` and the harness exited **0** —
+# and CI's own `case` then printed "race harness PASSED — every predicted cell
+# held" for a run that never reached its verdict.
+#
+# ⚠️ EXIT 2 RATHER THAN 1, AND THAT IS DELIBERATE: a termination is a
+# CANNOT-TELL, not a refutation. But the reason it prints is `terminated`, NOT
+# `no_overlap` — and the CI step greps for `no_overlap` specifically, so this
+# path FAILS the job. Cannot-tell for an unstated reason is a failure (#240e).
+t210_signalled=0
+trap 't210_signalled=1' INT TERM
+trap restore_guard EXIT
 
 q()  { docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -Atq -c "$1"; }
 qf() { docker exec -i -e PGAPPNAME="$1" "$PGC" psql -U "$U" -d "$DB" -X < "$2"; }
@@ -319,8 +338,56 @@ q_() { docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -q < "$1" >/dev/null 2>&1;
 # wraps each statement in an implicit SAVEPOINT so the EXIT mark still prints
 # after a REFUSED statement — without it the refusal aborts the transaction and
 # the losing racer, the one whose timing matters most, reports nothing.
-# `pg_advisory_xact_lock` and the row locks are TRANSACTION-scoped, so a
-# savepoint does not release them and the race under test is unchanged.
+#
+# ⚠️ THE JUSTIFICATION THAT STOOD HERE WAS FALSE, AND IT WAS FALSE ABOUT
+# POSTGRES ITSELF. It read: "`pg_advisory_xact_lock` and the row locks are
+# TRANSACTION-scoped, so a savepoint does not release them". **A savepoint
+# rollback DOES release an advisory xact lock.** Measured, twice, two ways:
+#
+#     BEGIN; SAVEPOINT s1;
+#     SELECT pg_advisory_xact_lock(424242,1);
+#     SELECT count(*) FROM pg_locks WHERE locktype='advisory'
+#       AND pid=pg_backend_pid() AND classid=424242;      -->  1
+#     ROLLBACK TO SAVEPOINT s1;
+#     SELECT count(*) FROM pg_locks WHERE ... classid=424242;  -->  0
+#
+#   and inside a plpgsql BEGIN…EXCEPTION block, which is what ON_ERROR_ROLLBACK
+#   models: "inside the block, after taking it: 1" / "after the block aborted: 0".
+#
+# ⚠️ THE CONCLUSION SURVIVES AND THE REASON DID NOT, WHICH IS THE WORSE OF THE
+# TWO WAYS TO BE RIGHT. The race is still unchanged, for a reason that has to be
+# stated properly:
+#
+#   · the lock is released only AFTER the guard has already refused, i.e. after
+#     serialization has done the whole of its work — the losing racer blocked on
+#     the winner's lock, waited, acquired, and was refused, all before its
+#     statement's savepoint unwinds;
+#   · and a rollback releases only THAT racer's own lock, never the other's, so
+#     no racer can be let past by the other's unwinding.
+#
+# The check below is here so the claim is measured on every run rather than
+# believed: it is the same probe, inline, and it FAILS THE HARNESS if Postgres
+# ever behaves differently than this comment says.
+assert_savepoint_semantics() {
+  local got
+  got=$(docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -Atq <<'PROBE'
+BEGIN;
+SAVEPOINT s1;
+SELECT pg_advisory_xact_lock(424242, 1);
+ROLLBACK TO SAVEPOINT s1;
+SELECT count(*) FROM pg_locks
+ WHERE locktype='advisory' AND pid=pg_backend_pid() AND classid=424242;
+ROLLBACK;
+PROBE
+)
+  got=$(printf '%s' "$got" | tr -d '[:space:]' | tail -c 1)
+  if [ "$got" != "0" ]; then
+    echo "🔴 SAVEPOINT SEMANTICS CHANGED — a savepoint rollback no longer releases the advisory lock (read '$got', expected 0). The comment above and the ON_ERROR_ROLLBACK approximation must both be re-derived before this harness is trusted." >&2
+    return 1
+  fi
+  echo "   savepoint probe: a savepoint rollback RELEASES the advisory lock (0 held) — as documented above" >&2
+  return 0
+}
 cat > "$OUT/rb-a.sql" <<'SQL'
 \set ON_ERROR_ROLLBACK on
 BEGIN;
@@ -350,6 +417,13 @@ before=$(grep -c pg_advisory_xact_lock "$OUT/g1.sql" "$OUT/g2.sql" | awk -F: '{s
 after=$(grep -c  pg_advisory_xact_lock "$OUT/g1n.sql" "$OUT/g2n.sql" | awk -F: '{s+=$2} END{print s}')
 echo "    mutation applied: advisory-lock occurrences $before -> $after"
 [ "$before" = 2 ] && [ "$after" = 0 ] || { echo "🔴 MUTATION DID NOT APPLY — every result below would be meaningless."; exit 1; }
+
+# ⚠️ THE SAVEPOINT CLAIM IS MEASURED ON EVERY RUN, NOT BELIEVED. The comment
+# above race B's scripts documents what a savepoint rollback does to an advisory
+# lock — because the previous version of that comment said the OPPOSITE and was
+# wrong about Postgres. A documented fact nobody re-measures is the next stale
+# comment.
+assert_savepoint_semantics || { echo "🔴 refusing to report a race whose stated semantics no longer hold." >&2; exit 1; }
 N=12
 # ⚠️ THREE OUTCOMES PER RUN, NOT TWO — RULING #252. A run whose markers did not
 # both arrive is '?', and '?' is counted SEPARATELY. Folding it into "did not

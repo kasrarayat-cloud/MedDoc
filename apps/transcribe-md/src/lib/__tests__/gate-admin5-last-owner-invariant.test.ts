@@ -7,7 +7,7 @@
 // declares no `services:` and leaves DATABASE_URL unset, so there is no
 // Postgres here to install a trigger into. Behaviour is proven where a real
 // database exists — `packages/db/prisma/proofs/admin5-last-owner-trigger-arms.sql`
-// (13 arms, each flipping when the trigger is dropped) and
+// (23 arms, each flipping when the trigger is dropped) and
 // `...-race.sh` (a 2x2 in which only the no-lock-and-concurrent cell breaks
 // the invariant). Pretending to prove behaviour here would be worse than not
 // trying, because it would look like coverage.

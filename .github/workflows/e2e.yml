@@ -354,7 +354,7 @@ jobs:
       # here is unambiguous: the migration ran and the trigger does not behave.
       # Every arm creates and rolls back its own fixture, so the database is
       # byte-unchanged and the seeds that follow are unaffected.
-      - name: Prove the last-owner trigger (ruling #210 — 33 deterministic arms)
+      - name: Prove the last-owner trigger (ruling #210 — 45 deterministic arms)
         run: >
           docker compose -f docker-compose.qa.yml exec -T postgres
           psql -U meddoc -d meddoc_qa_test -X -v ON_ERROR_STOP=1
