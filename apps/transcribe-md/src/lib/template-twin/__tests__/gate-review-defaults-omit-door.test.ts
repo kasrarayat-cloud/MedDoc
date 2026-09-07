@@ -198,6 +198,79 @@ function resolveOne(
 // THE FIVE CLAUSES ARE EACH LOAD-BEARING — one arm per clause, so dropping ANY
 // ONE of them reds EXACTLY ONE arm and names it.
 // ============================================================================
+/**
+ * ⚠️ EVERY SPELLING THE EXTRACTOR CAN NAME — RULING #234.
+ *
+ * The previous form was a single regex with TWO alternatives (`field.p` and
+ * `(field as X).p`) capturing only the PROPERTY. Round five demonstrated three
+ * consequences, and all three were false greens:
+ *
+ *   · **destructuring**, **bracket access** and a **nested binding read** were
+ *     invisible, so *"a guard added without its dimension reds HERE"* was false
+ *     for four shapes;
+ *   · the property alone is not an identity — `mapping.unknownPolicy` was
+ *     constant in all rows and reported VARIED because `field.unknownPolicy`
+ *     shares its name;
+ *   · a helper whose parameters are not literally named `field`/`mapping` read
+ *     as nothing at all.
+ *
+ * So this returns `"field.prop"` / `"mapping.prop"` PAIRS, and takes an alias
+ * map so a helper's own parameter names resolve to the right role.
+ */
+type Role = 'field' | 'mapping';
+const IDENT = '[A-Za-z_$][\\w$]*';
+
+function readsIn(
+  code: string,
+  alias: Readonly<Record<string, Role>> = { field: 'field', mapping: 'mapping' },
+): Set<string> {
+  const names = Object.keys(alias);
+  const out = new Set<string>();
+  if (names.length === 0) return out;
+  const N = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const add = (obj: string, path: string) => out.add(`${alias[obj]}.${path}`);
+
+  // 1 · dotted, with optional chaining and the cast form:
+  //     field.p   field?.p   (field as X).p
+  for (const m of code.matchAll(
+    new RegExp(`(?:\\(\\s*(${N})\\s+as\\s+[^)]*\\)|\\b(${N})\\b)\\s*\\??\\.\\s*(${IDENT})`, 'g'),
+  )) add((m[1] ?? m[2])!, m[3]!);
+
+  // 2 · NESTED — `field.rendererBinding?.bindingType`. Recorded as the full
+  //     path as well as its head, because the matrix varies the LEAF.
+  for (const m of code.matchAll(
+    new RegExp(`\\b(${N})\\b\\s*\\??\\.\\s*(${IDENT})\\s*\\??\\.\\s*(${IDENT})`, 'g'),
+  )) add(m[1]!, `${m[2]}.${m[3]}`);
+
+  // 3 · bracket access — `field['p']`, `mapping["p"]`.
+  for (const m of code.matchAll(
+    new RegExp(`\\b(${N})\\b\\s*\\??\\[\\s*['"]([^'"]+)['"]\\s*\\]`, 'g'),
+  )) add(m[1]!, m[2]!);
+
+  // 4 · destructuring — `const { a, b: c, d = e, ...rest } = field`.
+  for (const m of code.matchAll(new RegExp(`\\{([^{}]*)\\}\\s*=\\s*(${N})\\b`, 'g'))) {
+    for (const part of m[1]!.split(',')) {
+      const key = part.split(':')[0]!.split('=')[0]!.trim();
+      if (new RegExp(`^${IDENT}$`).test(key)) add(m[2]!, key);
+    }
+  }
+  return out;
+}
+
+/** The parameter names a module-local helper binds to `field` / `mapping`. */
+function aliasesOf(signature: string): Record<string, Role> {
+  const out: Record<string, Role> = {};
+  const params = signature.slice(signature.indexOf('(') + 1).split(')')[0] ?? '';
+  for (const part of params.split(',')) {
+    const name = part.split(':')[0]!.trim();
+    const type = (part.split(':')[1] ?? '').trim();
+    if (!new RegExp(`^${IDENT}$`).test(name)) continue;
+    if (/Field/i.test(type) || name === 'field') out[name] = 'field';
+    else if (/Mapping/i.test(type) || name === 'mapping') out[name] = 'mapping';
+  }
+  return out;
+}
+
 describe('item 2 — every requires-input clause is guarded', () => {
   it('CONTROL — with no requires-input signal at all, the field is left blank', () => {
     const { resolution } = resolveOne();
@@ -335,11 +408,20 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
  * property is not on the declared type — which is exactly when a new,
  * unwatched input arrives.
  */
-const READS_RE = /\b(?:field|mapping)\.([A-Za-z][A-Za-z0-9]*)|\(\s*(?:field|mapping)\s+as\s+[^)]*\)\.([A-Za-z][A-Za-z0-9]*)/g;
-
-const INTENTIONAL_CONSTANTS: Record<string, string> = {
-  rowPrototype: 'prototypes never offer — a fixed grid cell is table_cell AND not a prototype, and the prototype case is the OTHER branch this matrix is not about',
-};
+// ⚠️ EMPTY, AND DELIBERATELY KEPT — RULING #234.
+//
+// Its only entry was `rowPrototype: 'prototypes never offer …'`, and that claim
+// was FALSE: measured, a prototype was offered under both binding types and
+// resolved through the very branch the entry said it did not. The false
+// declaration bought a 37/37 green over a planted offered-but-not-honoured lie,
+// and deleting only the entry would have left the next author the same trap.
+//
+// ⚠️ THE MECHANISM IS NOT AT FAULT AND IS NOT WEAKENED. #227's three states —
+// varied, declared, or RED — are right. What failed is that a declaration is
+// only as good as the claim inside it, and this house measures claims. The
+// allowlist stays so a genuinely intentional constant has somewhere to go; it
+// simply must never again carry a claim nobody checked.
+const INTENTIONAL_CONSTANTS: Record<string, string> = {};
 
   it('⚠️ OFFERED  ⟺  HONOURED — the predicate matches the REAL resolver, both ways', () => {
     const bools = [false, true];
@@ -387,7 +469,15 @@ const INTENTIONAL_CONSTANTS: Record<string, string> = {
 
     // The ONLY guards permitted to withhold an offer the resolver would honour.
     // Adding to this set is a product decision, not a test fix.
-    const CONSERVATIVE_GUARDS = new Set(['fixed_grid_cell_deferred']);
+    // ⚠️ `row_prototype_not_offerable` JOINS IT UNDER RULING #234, and it is a
+    // real accepted cost: a prototype DOES reach the omit branch and IS
+    // honoured. It is withheld anyway, because a judgement recorded against a
+    // prototype binds every row stamped from it — including rows that do not
+    // exist yet and that the doctor has never seen. #192's rule, one surface on.
+    const CONSERVATIVE_GUARDS = new Set([
+      'fixed_grid_cell_deferred',
+      'row_prototype_not_offerable',
+    ]);
     let offeredAndHonoured = 0;
     let refusedAndNotHonoured = 0;
     let conservativeWithholds = 0;
@@ -397,6 +487,14 @@ const INTENTIONAL_CONSTANTS: Record<string, string> = {
     for (const fReq of bools)
       for (const mReq of bools)
         for (const fUnknown of policies)
+          // ⚠️ `mUnknown` IS NOT DECORATION — RULING #234 UNCOVERED IT.
+          // `requiresClinicianInput` reads BOTH `field.unknownPolicy` and
+          // `mapping.unknownPolicy` (unmentioned-policy.ts:67-68). The matrix
+          // varied only the field's, and the old name-keyed `isVaried` reported
+          // the mapping's as varied because the two share a name. A guard keyed
+          // on the mapping's copy was invisible. A property name is not an
+          // identity.
+          for (const mUnknown of policies)
           for (const mBlank of policies)
             for (const sourceType of sourceTypes)
               for (const detectionStatus of detections)
@@ -405,18 +503,26 @@ const INTENTIONAL_CONSTANTS: Record<string, string> = {
                     for (const expectedDataType of dataTypes)
                     for (const bindingType of bindings)
                     for (const status of statuses)
-                    for (const kind of kinds) {
+                    for (const kind of kinds)
+                    for (const rowPrototype of bools) {
                     const fieldOverrides = {
                       required: fReq,
                       unknownPolicy: fUnknown,
                       detectionStatus,
                       rendererBinding: { ...field('1').rendererBinding, bindingType },
-                      // a fixed grid cell is table_cell AND not a prototype
-                      rowPrototype: false,
+                      // ⚠️ VARIED, NOT PINNED — ruling #234. This read
+                      // `rowPrototype: false` with the constant DECLARED on the
+                      // allowlist as "prototypes never offer". The claim was
+                      // false: a prototype was offered under both binding
+                      // types, and the declaration bought a 37/37 green over a
+                      // planted offered-but-not-honoured lie. A dimension the
+                      // mirror reads is varied or it is not covered.
+                      rowPrototype,
                       kind,
                     };
                     const mappingOverrides = {
                       required: mReq,
+                      unknownPolicy: mUnknown,
                       blankPolicy: mBlank,
                       sourceType,
                       clinicalConcept,
@@ -438,8 +544,8 @@ const INTENTIONAL_CONSTANTS: Record<string, string> = {
 
                     const shape =
                       `fReq=${fReq} mReq=${mReq} fUnknown=${fUnknown} mBlank=${mBlank} ` +
-                      `src=${sourceType} det=${detectionStatus} concept=${clinicalConcept ?? 'NONE'} ` +
-                      `default=${practiceDefault === null ? 'null' : 'set'} type=${expectedDataType} bind=${bindingType} status=${status} kind=${kind}`;
+                      `mUnknown=${mUnknown} src=${sourceType} det=${detectionStatus} concept=${clinicalConcept ?? 'NONE'} ` +
+                      `default=${practiceDefault === null ? 'null' : 'set'} type=${expectedDataType} bind=${bindingType} status=${status} kind=${kind} proto=${rowPrototype}`;
 
                     // ⚠️ THE TWO DIRECTIONS ARE NOT SYMMETRIC, AND CONFLATING
                     // THEM WOULD FORCE THE WRONG FIX.
@@ -571,9 +677,7 @@ const INTENTIONAL_CONSTANTS: Record<string, string> = {
       .split('\n')
       .filter((l) => !l.trimStart().startsWith('//') && !l.trimStart().startsWith('*'))
       .join('\n');
-    const reads = new Set(
-      [...code.matchAll(READS_RE)].map((m) => m[1] ?? m[2]!),
-    );
+    const reads = readsIn(code);
     // `requiresClinicianInput` is called from the ladder, so its reads count too.
     const helper = src.slice(
       src.indexOf('export function requiresClinicianInput'),
@@ -581,7 +685,10 @@ const INTENTIONAL_CONSTANTS: Record<string, string> = {
         ? src.indexOf('export const RESOLVER_SHORT_CIRCUIT_SOURCE_TYPES')
         : src.indexOf('export function omitBranchUnreachable'),
     );
-    for (const m of helper.matchAll(READS_RE)) reads.add(m[1] ?? m[2]!);
+    // ⚠️ RESOLVED THROUGH THE HELPER'S OWN PARAMETER NAMES, not by assuming it
+    // spells them `field`/`mapping`. It does today; a helper that did not would
+    // have contributed ZERO reads and widened this arm's blind spot silently.
+    for (const r of readsIn(helper, aliasesOf(helper))) reads.add(r);
 
     // NON-VACUITY: an empty or tiny set would make the loop below prove nothing.
     expect(reads.size, `parsed only ${reads.size} reads from the mirror`).toBeGreaterThanOrEqual(8);
@@ -632,32 +739,84 @@ const INTENTIONAL_CONSTANTS: Record<string, string> = {
       })
       .join('\n');
 
-    // ⚠️ A DIMENSION IS *VARIED* ONLY IF IT IS DRIVEN BY A LOOP VARIABLE.
-    // `varied.includes(r)` was the old, weaker test and it is what let a
-    // constant pass. A property is varied here when the matrix declares a
-    // dimension list for it AND iterates that list — both, because a declared
-    // list nobody loops over varies nothing.
+    // ⚠️ A DIMENSION IS *VARIED* ONLY IF IT IS DRIVEN BY A LOOP VARIABLE,
+    // AND IT IS KEYED ON THE (OBJECT, PROPERTY) PAIR — RULING #234.
+    //
+    // Keying on the property NAME alone reported `mapping.unknownPolicy` as
+    // varied on the strength of `field.unknownPolicy` being varied. They share
+    // a name and nothing else: the mapping's copy was constant across all rows
+    // and a guard reading it was invisible. **A property name is not an
+    // identity.** So the matrix's two override literals are searched
+    // SEPARATELY, and a pair is varied only inside its own object.
     const loopVars = new Set(
       [...matrix.matchAll(/for \(const (\w+) of (\w+)\)/g)].map((m) => m[1]!),
     );
-    const isVaried = (prop: string) => {
-      // driven directly — `for (const kind of kinds)` plus `kind,` in the fixture
-      if (loopVars.has(prop)) return true;
-      // ⚠️ …OR VARIED THROUGH A NESTED VALUE, WHICH THE FIRST VERSION OF THIS
-      // HELPER MISSED AND THE ARM CAUGHT IMMEDIATELY. The fixture writes
-      // `rendererBinding: { ...field('1').rendererBinding, bindingType }` — the
-      // property IS varied, by a loop variable one level in. A narrow
-      // `prop: <identifier>` match returns null there and would have reported a
-      // varied dimension as undeclared. Declaring it to silence that would have
-      // been a FALSE claim on the allowlist, which is the one thing the
-      // allowlist must never carry. So: any assignment whose right-hand side
-      // mentions a loop variable counts as varied.
-      for (const line of varied.split('\n')) {
-        const m = line.match(new RegExp(`\\b${prop}\\s*:(.*)$`));
-        if (!m) continue;
-        if ([...loopVars].some((v) => new RegExp(`\\b${v}\\b`).test(m[1]!))) return true;
+
+    /** The object literal assigned to `<name>`, braces included. */
+    const blockOf = (name: string): string => {
+      const i = varied.indexOf(`const ${name} = {`);
+      if (i < 0) return '';
+      const open = varied.indexOf('{', i);
+      let depth = 0;
+      for (let k = open; k < varied.length; k += 1) {
+        if (varied[k] === '{') depth += 1;
+        else if (varied[k] === '}') {
+          depth -= 1;
+          if (depth === 0) return varied.slice(open, k + 1);
+        }
       }
-      return false;
+      return '';
+    };
+    const BLOCK: Record<Role, string> = {
+      field: blockOf('fieldOverrides'),
+      mapping: blockOf('mappingOverrides'),
+    };
+    expect(BLOCK.field, 'the fieldOverrides literal moved — this arm reads nothing').not.toBe('');
+    expect(BLOCK.mapping, 'the mappingOverrides literal moved — this arm reads nothing').not.toBe('');
+
+    /**
+     * `null` when the key is absent; `''` when written as SHORTHAND (`kind,`);
+     * otherwise the value text, to the entry's own comma at depth zero.
+     */
+    const entryFor = (text: string, key: string): string | null => {
+      const m = new RegExp(`\\b${key}\\b\\s*(:)?`).exec(text);
+      if (!m) return null;
+      if (!m[1]) return '';
+      const start = m.index + m[0].length;
+      let depth = 0;
+      for (let k = start; k < text.length; k += 1) {
+        const c = text[k];
+        if (c === '{' || c === '[' || c === '(') depth += 1;
+        else if (c === '}' || c === ']' || c === ')') {
+          if (depth === 0) return text.slice(start, k);
+          depth -= 1;
+        } else if (c === ',' && depth === 0) return text.slice(start, k);
+      }
+      return text.slice(start);
+    };
+
+    const mentionsLoopVar = (text: string) =>
+      [...loopVars].some((v) => new RegExp(`\\b${v}\\b`).test(text));
+
+    const isVaried = (pair: string) => {
+      const [role, head, leaf] = pair.split('.') as [Role, string, string?];
+      const block = BLOCK[role];
+      if (!block) return false;
+      const entry = entryFor(block, head);
+      if (entry === null) return false;
+      if (leaf === undefined) {
+        // shorthand (`rowPrototype,`) is varied exactly when the key IS a loop
+        // variable; `head: <value>` is varied when the value mentions one.
+        return entry === '' ? loopVars.has(head) : mentionsLoopVar(entry);
+      }
+      // ⚠️ NESTED — `field.rendererBinding.bindingType`. The matrix writes
+      // `rendererBinding: { ...field('1').rendererBinding, bindingType }`, so
+      // the LEAF is what varies and the head is a spread of constants. Checking
+      // the head alone would call the whole binding varied and hide a second,
+      // constant property sitting beside `bindingType`.
+      const inner = entryFor(entry, leaf);
+      if (inner === null) return false;
+      return inner === '' ? loopVars.has(leaf) : mentionsLoopVar(inner);
     };
 
     const undeclared = [...reads].filter(
@@ -715,6 +874,104 @@ const INTENTIONAL_CONSTANTS: Record<string, string> = {
     // The inline chain that used to live here must not come back. Matching the
     // SPELLING is deliberate: a second copy is only dangerous if it is a copy.
     expect(src).not.toMatch(/field\.required\s*\|\|\s*\n?\s*mapping\.required/);
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // RULING #234 — THE PROPERTY THE FALSE DECLARATION WAS REACHING FOR.
+  //
+  // #227's allowlist asserted "prototypes never offer" and nobody measured it.
+  // The cure is not a better sentence: it is this arm plus the varied
+  // dimension. #192 says a prototype must not clone its text into every row;
+  // that bound the KEEP and it binds the OFFER, because a judgement recorded
+  // against a prototype is recorded against every row stamped from it —
+  // including rows that do not exist yet and the doctor has never seen.
+  // ══════════════════════════════════════════════════════════════════════════
+  it.each([['content_control'], ['table_cell']] as const)(
+    '⚠️ a repeating-section PROTOTYPE is never offered — %s binding',
+    (bindingType) => {
+      const f = field('1', {
+        rowPrototype: true,
+        rendererBinding: { ...field('1').rendererBinding, bindingType },
+      });
+      const m = mapping(f, 'ros.cardiovascular');
+
+      expect(canOmitWhenUnmentioned(f, m)).toBe(false);
+      expect(omitBranchUnreachable(f, m)).toBe('row_prototype_not_offerable');
+      expect(OMIT_GUARD_TOKEN_PREFIXES['row_prototype_not_offerable']).toBeDefined();
+    },
+  );
+
+  it('⚠️ …and the withhold is CONSERVATIVE, stated as one — the resolver WOULD have honoured it', () => {
+    // The non-vacuity half. If a prototype were refused by the resolver anyway,
+    // this guard would be free and the arm above would prove nothing about the
+    // cost being accepted. It is not free: measured, the omit IS honoured.
+    const { resolution } = resolveOne(
+      { rowPrototype: true },
+      { unmentionedPolicy: 'omit' },
+    );
+    expect(resolution.reasonCode).toBe('omitted_unsupported_default');
+  });
+
+  it('⚠️ the non-prototype grid cell still routes to its OWN guard, not the new one', () => {
+    // The guard above returns first for every prototype, so the `table_cell`
+    // ladder below it must still be reachable — otherwise this change silently
+    // swallowed `fixed_grid_cell_deferred`.
+    const f = field('1', {
+      rowPrototype: false,
+      rendererBinding: { ...field('1').rendererBinding, bindingType: 'table_cell' },
+    });
+    expect(omitBranchUnreachable(f, mapping(f, 'ros.cardiovascular')))
+      .toBe('fixed_grid_cell_deferred');
+  });
+});
+
+// ============================================================================
+// RULING #234 — THE EXTRACTOR ITSELF IS TESTED, because the arm that uses it is
+// only as good as what it can SEE. Round five demonstrated four blind spots and
+// each one made "a guard added without its dimension reds HERE" false.
+// ============================================================================
+describe('readsIn — every spelling the extractor can name', () => {
+  it('the dotted form, with optional chaining and the cast', () => {
+    expect(readsIn('field.required')).toContain('field.required');
+    expect(readsIn('mapping?.sourceType')).toContain('mapping.sourceType');
+    expect(readsIn('(field as { x: 1 }).criticality')).toContain('field.criticality');
+  });
+
+  it('⚠️ DESTRUCTURING — invisible before, and it is how a helper usually reads', () => {
+    expect(readsIn('const { required, kind } = field;')).toContain('field.kind');
+    expect(readsIn('const { sourceType: s } = mapping;')).toContain('mapping.sourceType');
+    expect(readsIn('const { practiceDefault = null } = mapping;'))
+      .toContain('mapping.practiceDefault');
+  });
+
+  it('⚠️ BRACKET ACCESS — invisible before', () => {
+    expect(readsIn("field['rowPrototype']")).toContain('field.rowPrototype');
+    expect(readsIn('mapping["blankPolicy"]')).toContain('mapping.blankPolicy');
+  });
+
+  it('⚠️ THE NESTED BINDING READ — the leaf is the dimension, not the head', () => {
+    const r = readsIn('field.rendererBinding?.bindingType === "table_cell"');
+    expect(r).toContain('field.rendererBinding');
+    expect(r).toContain('field.rendererBinding.bindingType');
+  });
+
+  it('⚠️ THE PAIR IS THE IDENTITY — the same property on two objects is two reads', () => {
+    const r = readsIn('field.unknownPolicy === mapping.unknownPolicy');
+    expect(r).toContain('field.unknownPolicy');
+    expect(r).toContain('mapping.unknownPolicy');
+    expect(r.size).toBe(2);
+  });
+
+  it('⚠️ A MODULE-LOCAL HELPER RESOLVES THROUGH ITS OWN PARAMETER NAMES', () => {
+    const sig = 'function g(f: Pick<TemplateField, "kind">, m: SemanticMapping)';
+    const alias = aliasesOf(sig);
+    expect(alias).toEqual({ f: 'field', m: 'mapping' });
+    expect(readsIn('f.kind || m.sourceType', alias))
+      .toEqual(new Set(['field.kind', 'mapping.sourceType']));
+  });
+
+  it('does NOT invent reads from unrelated identifiers', () => {
+    expect(readsIn('shielding.required || remapping.kind')).toEqual(new Set());
   });
 });
 

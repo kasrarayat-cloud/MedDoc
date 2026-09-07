@@ -178,7 +178,38 @@ export function omitBranchUnreachable(
   // is not one they can reason about, and the hint says flatly "this only stops
   // it being counted as an unanswered blank". Better no control than a control
   // that is false on the ordinary visit.
-  if (field.rendererBinding?.bindingType === 'table_cell' && field.rowPrototype !== true) {
+  // ⚠️ A REPEATING-SECTION PROTOTYPE IS NEVER OFFERED — RULING #234, WHICH IS
+  // #192's RULE ARRIVING ONE SURFACE LATER.
+  //
+  // #192 says a prototype must not clone its text into every row. That bound
+  // the KEEP; it binds the OFFER for the same reason. A prototype is not a
+  // field a clinician answers — it is the TEMPLATE the rows are stamped from,
+  // so a judgement recorded against it is a judgement recorded against every
+  // row that will ever be generated from it, including rows that do not exist
+  // yet and that the doctor has therefore never seen.
+  //
+  // ⚠️ AND IT IS A CONSERVATIVE WITHHOLD, NAMED AS ONE. Measured: a prototype
+  // DOES reach the omit branch and the resolver DOES honour it
+  // (`omitted_unsupported_default`). So this costs a case that would have
+  // worked — exactly like `fixed_grid_cell_deferred` one line below, and taken
+  // for the same reason: a control whose promise silently binds unseen rows is
+  // not one the doctor can reason about.
+  //
+  // ⚠️ THIS GUARD EXISTS BECAUSE ITS ABSENCE WAS DECLARED RATHER THAN MEASURED.
+  // Ruling #227's allowlist carried `rowPrototype: 'prototypes never offer'` —
+  // a claim nobody checked, and false: a prototype was offered under BOTH
+  // binding types. The declaration bought a 37/37 green over a planted
+  // offered-but-not-honoured lie. #234's cure is to VARY the dimension and
+  // assert the property, never to re-word the claim.
+  if (field.rowPrototype === true) {
+    return 'row_prototype_not_offerable';
+  }
+  // ⚠️ NO `rowPrototype !== true` CLAUSE HERE ANY MORE. It used to read
+  // `bindingType === 'table_cell' && field.rowPrototype !== true`, and that
+  // second half was the exclusion that let a prototype through. The guard above
+  // now returns first for every prototype, so repeating it here would be a dead
+  // condition that reads like a live one.
+  if (field.rendererBinding?.bindingType === 'table_cell') {
     return 'fixed_grid_cell_deferred';
   }
   return null;
@@ -232,6 +263,10 @@ export const OMIT_GUARD_TOKEN_PREFIXES: Readonly<Record<string, readonly string[
   clinical_concept_unmapped: ['clinical_concept_unmapped'],
   approved_practice_default: ['approved_practice_default', 'invalid_practice_default_'],
   required_fact_not_mentioned: ['required_fact_not_mentioned'],
+  // ⚠️ A CONSERVATIVE WITHHOLD, so the token is what the resolver WOULD have
+  // emitted had the control been offered and ticked — measured, not assumed:
+  // a prototype reaches the omit branch and is honoured.
+  row_prototype_not_offerable: ['omitted_unsupported_default'],
 };
 
 export const OMIT_CONTROL_LABEL = 'Expected blank — do not ask me about this';
