@@ -821,7 +821,30 @@ export async function insertScaffoldDefaultAction(
   // Round four wrote this inline here and round five measured the cost: the fix
   // reached ONE of the three writers in this file. `underVisitLock` is that
   // fix, hoisted, so the next writer added to this file cannot be the fourth.
-  const wrote = await underVisitLock(visitId, practiceId, async (tx) => {
+  // ⚠️ `session.user.practiceId`, NOT the resolver's RETURNED `practiceId` — and
+  // I passed the wrong one here for an hour. The two are DIFFERENT COLUMNS:
+  //
+  //   · the resolver FILTERS `transcribe_visits."practiceId"` — via
+  //     `visitByIdScope(visitId, practiceId)` — with the value it was CALLED
+  //     with, which is `session.user.practiceId` at all three doors;
+  //   · the resolver RETURNS `practiceId: visit.user.practiceId`, the visit
+  //     AUTHOR's user record's practice, which is a different column entirely.
+  //
+  // This door destructures the RETURNED one and handed it to a lock that filters
+  // the FILTERED one. The other two doors pass the session's value, so two of
+  // three agreed and the odd one out was the one this fix had a local variable
+  // conveniently in scope for.
+  //
+  // ⚠️ THE LOCK MUST RE-ASSERT THE SAME PREDICATE THE RESOLVER APPLIED, WITH THE
+  // SAME VALUE. Re-asserting the right column with the wrong value is not a
+  // narrower check, it is a different one — and it fails CLOSED into the `gone`
+  // cause, telling a doctor their visit "is no longer available".
+  //
+  // Latent today: measured read-only against production, 58 of 58 visits have
+  // `transcribe_visits."practiceId"` equal to their author's, so the two values
+  // never diverge on current data. That is a property of the data, not of the
+  // code, and it is exactly the kind of coincidence a guard must not rest on.
+  const wrote = await underVisitLock(visitId, session.user.practiceId, async (tx) => {
     await tx.templateTwinFieldOverride.upsert({
       where: { visitId_fieldId: { visitId, fieldId } },
       create: {

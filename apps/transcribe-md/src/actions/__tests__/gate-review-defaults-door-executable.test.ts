@@ -215,7 +215,18 @@ function primeVisit(over: Record<string, unknown> = {}) {
     entities: ENTITIES,
     soapFinal: 'A note.',
     createdAt: new Date('2026-09-06T00:00:00Z'),
-    user: { practiceId: 'prac-1' },
+    // ⚠️ DELIBERATELY DIFFERENT FROM THE SESSION'S `prac-1`.
+    //
+    // `resolveCertifiedTwinField` FILTERS `transcribe_visits."practiceId"` with
+    // the SESSION's practice and RETURNS `visit.user.practiceId` — two different
+    // columns. While the fixture used one value for both, an arm asserting the
+    // lock's bound parameter could not tell them apart, and the insert door
+    // shipped for an hour passing the RETURNED one into a lock that filters the
+    // FILTERED one.
+    //
+    // A fixture that gives two distinct things the same value cannot witness
+    // them being confused.
+    user: { practiceId: 'author-practice-9' },
     ...over,
   });
 }
@@ -401,7 +412,21 @@ describe('ROUND FOUR — a sign landing in the window cannot be written over', (
     expect(sql, 'the locked read does not re-assert the archive').toMatch(/"archivedAt"\s+IS NULL/);
     // ⚠️ AND THE PRACTICE IS BOUND, not interpolated or defaulted — a predicate
     // naming the column while binding nothing would satisfy the three above.
-    expect(params, 'the visit id and the practice are not both bound').toEqual([VISIT, 'prac-1']);
+    // ⚠️ THE SESSION'S PRACTICE, NOT THE VISIT AUTHOR'S. The fixture's visit is
+    // authored by `author-practice-9`; the session is `prac-1`; and the resolver
+    // filtered on the SESSION's. Binding the author's would re-assert the right
+    // column with the wrong value — not a narrower check, a different one — and
+    // it fails CLOSED, telling the doctor their visit is no longer available.
+    expect(
+      params,
+      'the locked read did not bind the visit id and the SESSION practice the ' +
+        'resolver filtered with',
+    ).toEqual([VISIT, 'prac-1']);
+    expect(
+      params,
+      'the lock bound the visit AUTHOR practice — a different column from the ' +
+        'one it filters',
+    ).not.toContain('author-practice-9');
   });
 
   it('⚠️ THE WRITE HAPPENS ON THE **LOCKED** CONNECTION — kills `tx.` -> `prisma.`', async () => {
@@ -719,7 +744,19 @@ describe('#204 — the fill is asked the SAME question the preview asks', () => 
     expect(call).toMatchObject({
       visitId: VISIT,
       doctorId: 'author-1',
-      practiceId: 'prac-1',
+      // ⚠️ THE VISIT AUTHOR'S PRACTICE, AND THIS ARM COULD NOT SAY SO UNTIL THE
+      // FIXTURE SPLIT THEM. Its title has always been "the visit's OWN doctor,
+      // not the requester" — but the session and the visit author both read
+      // `prac-1`, so the assertion held whichever value the door passed. Now the
+      // author is `author-practice-9` and the requester is `prac-1`, and the arm
+      // finally distinguishes what it claims to.
+      //
+      // ⚠️ AND THE FILL AND THE LOCK WANT DIFFERENT ONES, WHICH IS THE WHOLE
+      // TRAP: the FILL runs as the visit's own doctor (`author-practice-9`),
+      // while the LOCK re-asserts the tenancy the resolver filtered on
+      // (`prac-1`). Two correct answers to two different questions, and an hour
+      // ago the insert door gave the fill's answer to the lock.
+      practiceId: 'author-practice-9',
       noteTemplateId: 'tpl-1',
       noteTemplateVersion: 3,
       generatedNote: 'A note.',
