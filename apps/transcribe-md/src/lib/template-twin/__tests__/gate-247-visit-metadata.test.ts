@@ -29,6 +29,7 @@ import {
 import {
   ageAtDate,
   ageAtDateResolved,
+  rawYearsOnUtcDate,
   withVisitMetadataFacts,
   RECORD_DERIVED_CONCEPTS,
 } from '../visit-metadata';
@@ -52,6 +53,8 @@ import { assertNoRecordDerivedFacts } from '../synthetic-test';
 // FIXTURES — a two-control header, exactly the shape the owner's letter has.
 // ---------------------------------------------------------------------------
 const NAME_ID = `ttf_${'a'.repeat(24)}`;
+/** #264 — a SECOND age control, the module's own documented two-control shape. */
+const AGE2_ID = `ttf_${'c'.repeat(24)}`;
 const AGE_ID = `ttf_${'b'.repeat(24)}`;
 const REFERRER_ID = `ttf_${'d'.repeat(24)}`;
 
@@ -287,14 +290,22 @@ describe('#247 Stage B — the label decides, and the labels are HIS', () => {
 // 2 · THE AGE — calendar arithmetic, and its refusals.
 // ---------------------------------------------------------------------------
 describe('#247 Stage B — age at the VISIT date, in whole years', () => {
-  // ⚠️ THESE THREE ARMS WERE REWRITTEN BY RULING #264, AND WHAT THEY PROTECT IS
-  // UNCHANGED. Each used to assert a value on a date sitting ON the birthday
-  // boundary — which is exactly the case where the UTC answer and the doctor's
-  // local answer disagree, so each was pinning one of the two possible answers
-  // as if it were the only one. The arithmetic they were really about (the
-  // birthday is a boundary; 364 days is not a year; a leap-day birth invents no
-  // birthday) is asserted on dates CLEAR of the ±26h window, where there is
-  // exactly one right answer, and the boundary cases now assert the REFUSAL.
+  // ⚠️ THESE THREE ARMS WERE REWRITTEN BY #264 — AND THE FIRST REWRITE SILENTLY
+  // REMOVED THEIR TEETH. A refutation pass measured it: with the assertions moved
+  // CLEAR of the ±26h window, all four of them still PASS against an
+  // `(at - dob) / 365.25` implementation — the exact scheme the middle arm's own
+  // title says it exists to catch. `origin/main`'s originals red on that
+  // mutation; the rewrite's do not.
+  //
+  //     MOVING AN ASSERTION AWAY FROM THE AMBIGUITY MOVED IT AWAY FROM THE
+  //     DISCRIMINATION. 365.25-division only diverges AT the birthday boundary,
+  //     and the boundary is precisely what the window now refuses.
+  //
+  // So the boundary arithmetic is pinned on the exported, UNCLAMPED
+  // `rawYearsOnUtcDate`, where no timezone question arises — see the block after
+  // these three. Two concerns, two arms; neither borrows the other's coverage.
+  // What remains here is the ordinary-date behaviour, which is worth an arm and
+  // is not the arm that was lost.
   it('counts whole years — asserted clear of the ambiguous window', () => {
     expect(ageAtDate('1958-06-14', '2026-06-11T12:00:00Z')).toBe(67);
     expect(ageAtDate('1958-06-14', '2026-06-16T12:00:00Z')).toBe(68);
@@ -343,6 +354,45 @@ describe('#247 Stage B — age at the VISIT date, in whole years', () => {
     // runs both ways, and a fix aimed at one direction would have shipped.
     expect(ageAtDate('1958-06-14', '2026-06-14T02:00:00Z')).toBeNull();
     expect(ageAtDate('1958-06-14', '2026-06-13T21:00:00Z')).toBeNull();
+  });
+
+  it('⚠️ THE BOUNDARY ARITHMETIC, PINNED WHERE THE WINDOW CANNOT HIDE IT', () => {
+    // ⚠️ THIS ARM IS THE ONE THE REWRITE LOST, RESTORED ON THE UNCLAMPED
+    // FUNCTION. It drives `rawYearsOnUtcDate` directly, so the ±26h refusal is
+    // out of the way and the day-boundary is testable again.
+    const on = (iso: string) => new Date(iso);
+    const dob = (iso: string) => new Date(`${iso}T00:00:00Z`);
+
+    // the birthday IS the boundary — 364 days is not a year
+    expect(rawYearsOnUtcDate(dob('2001-03-02'), on('2026-03-01T00:00:00Z'))).toBe(24);
+    expect(rawYearsOnUtcDate(dob('2001-03-02'), on('2026-03-02T00:00:00Z'))).toBe(25);
+    // a leap-day birth invents no birthday: 2026 is not a leap year, so 1 March
+    expect(rawYearsOnUtcDate(dob('2000-02-29'), on('2026-02-28T00:00:00Z'))).toBe(25);
+    expect(rawYearsOnUtcDate(dob('2000-02-29'), on('2026-03-01T00:00:00Z'))).toBe(26);
+    // the day before a birthday
+    expect(rawYearsOnUtcDate(dob('1958-06-14'), on('2026-06-13T23:00:00Z'))).toBe(67);
+    expect(rawYearsOnUtcDate(dob('1958-06-14'), on('2026-06-14T00:00:00Z'))).toBe(68);
+  });
+
+  it('⚠️ AND IT REDS ON THE 365.25 SCHEME — the mutation the rewrite stopped catching', () => {
+    // ⚠️ THE ARM ABOVE IS ONLY WORTH HAVING IF IT DISCRIMINATES. Rather than
+    // assert that in prose, run the wrong implementation and show the exact
+    // inputs where it diverges. If this ever stops finding a divergence, the arm
+    // above has gone blind again and this one says so.
+    const div36525 = (dobS: string, atS: string) =>
+      Math.floor(
+        (new Date(atS).getTime() - new Date(`${dobS}T00:00:00Z`).getTime()) / (365.25 * 86_400_000),
+      );
+    const cases: Array<[string, string, number]> = [
+      ['2001-03-02', '2026-03-02T00:00:00Z', 25],
+      ['2000-02-29', '2026-03-01T00:00:00Z', 26],
+      ['1958-06-14', '2026-06-14T00:00:00Z', 68],
+    ];
+    const diverged = cases.filter(([d, a, want]) => {
+      expect(rawYearsOnUtcDate(new Date(`${d}T00:00:00Z`), new Date(a))).toBe(want);
+      return div36525(d, a) !== want;
+    });
+    expect(diverged.length, 'no input discriminates — the arm above is blind').toBeGreaterThan(0);
   });
 
   it('⚠️ NON-VACUITY — the refusal is NARROW, not a blanket', () => {
@@ -992,24 +1042,54 @@ describe('#264 — a refused age reaches the resolver as a NAMED reason', () => 
     expect(ageBefore.reasonCode).not.toBe(age.reasonCode);
   });
 
-  it('the refusal does NOT change the counts — only the label on the blank', () => {
-    // ⚠️ A new reason token that moved a bucket would be a silent behavioural
-    // change riding along with a labelling fix. `templateTwinCounts` keys on
-    // STATUS, and this introduces no new status: a refused age is
-    // `not_mentioned`/`needs_clinician_input` exactly as a silently-skipped one
-    // was. Asserted rather than argued.
+  it('⚠️ THE COUNTS *DO* MOVE FOR AN `omit`-POLICY CONTROL — and the movement is correct', () => {
+    // ⚠️ THIS ARM ASSERTED THE OPPOSITE AND PASSED VACUOUSLY. The claim was
+    // "the counts do not move, because `templateTwinCounts` keys on STATUS".
+    // A refutation pass measured it and the claim is FALSE:
+    //
+    //     notMentioned: status === 'not_mentioned' && reasonCode !== 'omitted_unsupported_default'
+    //     omitted:      reasonCode === 'omitted_unsupported_default'
+    //                                                            (ir.ts:813-821)
+    //
+    // Both bucket on **reasonCode**. The original arm passed only because its
+    // fixture carried no `unmentionedPolicy: 'omit'`, so neither run could reach
+    // the `omitted` bucket and two identical count objects proved nothing.
+    //
+    // THE MOVEMENT IS THE RIGHT ONE, which is why this arm now pins it rather
+    // than preventing it: a refused age is not "the scaffold was deliberately
+    // cleared" (#191's `omitted_unsupported_default`), it is "we declined to
+    // compute it". `notMentioned` is the truthful bucket, and a doctor reading
+    // the omitted count should not be told a refusal was a deliberate clearing.
+    const omitMappings = [
+      mapping(NAME_ID, RECORD_DERIVED_CONCEPTS.name),
+      { ...mapping(AGE_ID, RECORD_DERIVED_CONCEPTS.age), unmentionedPolicy: 'omit' },
+    ] as typeof mappings;
+
     const refusals: Array<{ fieldId: string; unfilled: string; required: string }> = [];
     const facts = withVisitMetadataFacts({
       fields,
-      mappings,
+      mappings: omitMappings,
       facts: [],
       patient: PATIENT,
       visitDate: AMBIGUOUS_VISIT,
       refusals,
     });
-    const a = resolveTemplateFields({ fields, mappings, facts, refusals });
-    const b = resolveTemplateFields({ fields, mappings, facts });
-    expect(templateTwinCounts(a, fields)).toEqual(templateTwinCounts(b, fields));
+    const withRef = resolveTemplateFields({ fields, mappings: omitMappings, facts, refusals });
+    const without = resolveTemplateFields({ fields, mappings: omitMappings, facts });
+
+    const cWith = templateTwinCounts(withRef, fields);
+    const cWithout = templateTwinCounts(without, fields);
+
+    // the control: without the refusal the field lands in `omitted`
+    expect(cWithout.omitted).toBe(1);
+    expect(cWithout.notMentioned).toBe(0);
+    // and with it, in `notMentioned` — named, not silently cleared
+    expect(cWith.omitted).toBe(0);
+    expect(cWith.notMentioned).toBe(1);
+    // the TOTAL unresolved is unchanged; only which bucket it sits in moves
+    expect((cWith.omitted ?? 0) + cWith.notMentioned).toBe(
+      (cWithout.omitted ?? 0) + cWithout.notMentioned,
+    );
   });
 
   it('a refusal for a field nobody asked about is inert', () => {
@@ -1029,5 +1109,64 @@ describe('#264 — a refused age reaches the resolver as a NAMED reason', () => 
       refusals: [{ fieldId: `ttf_${'f'.repeat(24)}`, unfilled: 'x', required: 'y' }],
     });
     expect(out.find((f) => f.fieldId === AGE_ID)!.value).toBe('68');
+  });
+});
+
+describe('#264 — TWO age controls, and the capability change stated at its true size', () => {
+  const twoFields = [field(NAME_ID, 'Patient'), field(AGE_ID, 'Age'), field(AGE2_ID, 'Age (header)')];
+  const twoMappings = [
+    mapping(NAME_ID, RECORD_DERIVED_CONCEPTS.name),
+    mapping(AGE_ID, RECORD_DERIVED_CONCEPTS.age),
+    mapping(AGE2_ID, RECORD_DERIVED_CONCEPTS.age),
+  ];
+
+  it('⚠️ EVERY age control gets the named reason — not just the first', () => {
+    // ⚠️ THE FIRST VERSION NAMED ONLY ONE. `wanted` is keyed by
+    // concept|temporality because ONE fact serves every control that wants it,
+    // which is right for fact-minting and wrong for refusals: a refusal is
+    // per-FIELD. A document with two Age controls got `age_timezone_ambiguous`
+    // on one and `fact_not_mentioned` — "nobody said it" — on the other.
+    //
+    //   ONE MANIFEST CONTRADICTING ITSELF ABOUT THE SAME VALUE IS WORSE THAN
+    //   EITHER LABEL ALONE.
+    //
+    // Found by a refutation pass, on the module's own documented two-control
+    // shape — the header control and the letter's opening line.
+    const refusals: Array<{ fieldId: string; unfilled: string; required: string }> = [];
+    const facts = withVisitMetadataFacts({
+      fields: twoFields,
+      mappings: twoMappings,
+      facts: [],
+      patient: PATIENT,
+      visitDate: '2026-06-14T02:00:00Z',
+      refusals,
+    });
+    expect(refusals.map((r) => r.fieldId).sort()).toEqual([AGE_ID, AGE2_ID].sort());
+
+    const out = resolveTemplateFields({
+      fields: twoFields,
+      mappings: twoMappings,
+      facts,
+      refusals,
+    });
+    const codes = out
+      .filter((f) => f.fieldId === AGE_ID || f.fieldId === AGE2_ID)
+      .map((f) => f.reasonCode);
+    expect(codes).toEqual(['age_timezone_ambiguous', 'age_timezone_ambiguous']);
+    // and neither is the misleading label
+    expect(codes).not.toContain('fact_not_mentioned');
+  });
+
+  it('⚠️ ONE fact still serves both when the age IS computable — no regression', () => {
+    // The control for the arm above: collecting every field for refusals must
+    // not make the injector mint a fact per field.
+    const facts = withVisitMetadataFacts({
+      fields: twoFields,
+      mappings: twoMappings,
+      facts: [],
+      patient: PATIENT,
+      visitDate: VISIT,
+    });
+    expect(facts.filter((f) => f.concept === RECORD_DERIVED_CONCEPTS.age)).toHaveLength(1);
   });
 });

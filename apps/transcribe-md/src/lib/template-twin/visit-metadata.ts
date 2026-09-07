@@ -142,24 +142,57 @@ export function ageAtDateResolved(
   // calendar date at offset `o` is the UTC date of `instant + o`, and age is
   // monotonic in date — so if the two extremes agree, every offset between them
   // agrees too. Checking the endpoints is the whole window, not a sample of it.
-  const low = ageOnUtcDate(dob, new Date(on.getTime() + TZ_MIN_MS));
-  const high = ageOnUtcDate(dob, new Date(on.getTime() + TZ_MAX_MS));
-  if (low === null || high === null) return { ok: false, reason: 'age_implausible' };
-  if (low !== high) return { ok: false, reason: 'age_timezone_ambiguous' };
-  return { ok: true, years: low };
+  //
+  // ⚠️ THE RAW DELTA IS TAKEN FIRST AND THE PLAUSIBILITY CLAMP SECOND, AND THE
+  // FIRST DRAFT HAD IT THE OTHER WAY ROUND — a refutation pass caught it.
+  // Clamping inside the endpoint probe made a NEGATIVE low endpoint (a zone in
+  // which the encounter precedes the birth date) indistinguishable from a
+  // superhuman one, so both came back `age_implausible` — the token whose own
+  // meaning is "the column holds something that is not this patient's birth
+  // date". **The manifest accused the patient record for a newborn.**
+  const low = rawYearsOnUtcDate(dob, new Date(on.getTime() + TZ_MIN_MS));
+  const high = rawYearsOnUtcDate(dob, new Date(on.getTime() + TZ_MAX_MS));
+
+  // ⚠️ AND A NEGATIVE LOW ENDPOINT BESIDE A ZERO HIGH IS NOT AMBIGUOUS — IT IS
+  // ZERO. `-1` there means "in that timezone the encounter is the day before the
+  // recorded birth date", which is not an age; the patient is a newborn and the
+  // answer is 0 in every zone where the encounter can exist at all. Flooring is
+  // the correct reading, and `origin/main` returned 0 here. Refusing would have
+  // been a capability loss dressed as caution, on the one visit where the age is
+  // least in doubt.
+  const lowFloored = low < 0 && high === 0 ? 0 : low;
+
+  if (lowFloored !== high) return { ok: false, reason: 'age_timezone_ambiguous' };
+  // Only once the window AGREES is the agreed value judged. A negative age means
+  // the record and the visit disagree about time; one past the verified human
+  // maximum means the column holds something that is not a birth date.
+  if (high < 0 || high > 130) return { ok: false, reason: 'age_implausible' };
+  return { ok: true, years: high };
 }
 
-/** The UTC-calendar age. Null for a negative or superhuman result. */
-function ageOnUtcDate(dob: Date, on: Date): number | null {
+/**
+ * The UTC-calendar age in whole years — UNCLAMPED, and exported for its gate.
+ *
+ * ⚠️ EXPORTED BECAUSE THE BOUNDARY ARITHMETIC IS NOW UNREACHABLE THROUGH
+ * `ageAtDateResolved`, WHICH REFUSES THERE. A refutation pass proved the cost:
+ * the three rewritten arms in `gate-247` assert on dates CLEAR of the ±26h
+ * window, and measured against a `(at - dob) / 365.25` implementation **all
+ * four assertions still pass** — because 365.25-division only diverges AT the
+ * birthday boundary, and the boundary is exactly what the window now refuses.
+ *
+ *     MOVING AN ASSERTION AWAY FROM THE AMBIGUITY MOVED IT AWAY FROM THE
+ *     DISCRIMINATION. The arms kept their sentences and lost their teeth.
+ *
+ * So the boundary arithmetic is pinned HERE, on the unclamped function, where
+ * no timezone question arises — and `ageAtDateResolved` keeps its refusal. Two
+ * concerns, two arms, one implementation each.
+ */
+export function rawYearsOnUtcDate(dob: Date, on: Date): number {
   let years = on.getUTCFullYear() - dob.getUTCFullYear();
   const monthDelta = on.getUTCMonth() - dob.getUTCMonth();
   if (monthDelta < 0 || (monthDelta === 0 && on.getUTCDate() < dob.getUTCDate())) {
     years -= 1;
   }
-  // A negative age means the record and the visit disagree about time; an age
-  // past the verified human maximum means the column holds something that is
-  // not this patient's birth date. Both are refusals, not clamps.
-  if (years < 0 || years > 130) return null;
   return years;
 }
 
@@ -286,6 +319,8 @@ export function withVisitMetadataFacts(input: {
   // tense and this is still exactly one fact — the module header's claim about
   // the header control and the letter's opening line is unchanged.
   const wanted = new Map<string, { mapping: SemanticMapping; concept: string; temporality: EncounterFact['temporality'] }>();
+  /** #264 — per-CONCEPT list of EVERY mapping that wants it, for refusals. */
+  const wantedFieldIds = new Map<string, SemanticMapping[]>();
   for (const mapping of input.mappings) {
     if (!fieldIds.has(mapping.fieldId)) continue;
     if (mapping.sourceType !== 'visit_metadata') continue;
@@ -308,6 +343,17 @@ export function withVisitMetadataFacts(input: {
     const temporality = requiredFactTemporality(mapping);
     const key = `${normalized}|${temporality}`;
     if (!wanted.has(key)) wanted.set(key, { mapping, concept: normalized, temporality });
+    // ⚠️ EVERY FIELD THAT WANTS THIS CONCEPT IS REMEMBERED, NOT JUST THE FIRST.
+    // `wanted` is keyed by concept|temporality because ONE fact serves them all,
+    // and that is right for fact-minting. It is WRONG for refusals: a refusal is
+    // per-FIELD, and a document with two Age controls got the named reason on
+    // one and `fact_not_mentioned` — "nobody said it" — on the other. One
+    // manifest contradicting itself about the same value is worse than either
+    // label alone. Found by a refutation pass; the module's own fixture has
+    // exactly this two-control shape.
+    (wantedFieldIds.get(normalized) ?? wantedFieldIds.set(normalized, []).get(normalized)!).push(
+      mapping,
+    );
   }
   if (wanted.size === 0) return facts;
 
@@ -348,17 +394,16 @@ export function withVisitMetadataFacts(input: {
       // answer. Only the AGE carries a structured reason today, because it is
       // the only value here that can be refused for a reason other than
       // absence — a missing name is simply missing.
-      if (
-        input.refusals &&
-        concept === RECORD_DERIVED_CONCEPTS.age &&
-        !ageResolved.ok &&
-        !alreadySpokenTo(mapping)
-      ) {
-        input.refusals.push({
-          fieldId: mapping.fieldId,
-          unfilled: ageResolved.reason,
-          required: `required_${ageResolved.reason}`,
-        });
+      if (input.refusals && concept === RECORD_DERIVED_CONCEPTS.age && !ageResolved.ok) {
+        // EVERY field that wanted this concept, not just the representative one.
+        for (const m of wantedFieldIds.get(concept) ?? [mapping]) {
+          if (alreadySpokenTo(m)) continue;
+          input.refusals.push({
+            fieldId: m.fieldId,
+            unfilled: ageResolved.reason,
+            required: `required_${ageResolved.reason}`,
+          });
+        }
       }
       continue;
     }
