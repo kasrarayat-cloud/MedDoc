@@ -85,6 +85,9 @@ const FID = (n: number) => `ttf_${n.toString(16).padStart(24, '0')}`;
 const MANUAL = [FID(1)];
 const PROPOSED = [FID(2), FID(3), FID(4)];
 const UNPROPOSED = [FID(5), FID(6)];
+// #247 — a record-derived control. It is NOT a fourth confirm class: the ruling
+// declined one, so it lands in `confirm` with its provenance shown.
+const RECORD = [FID(7)];
 
 const MAPPINGS: SemanticMapping[] = [
   mapping({ fieldId: MANUAL[0], sourceType: 'manual' }),
@@ -102,6 +105,12 @@ const MAPPINGS: SemanticMapping[] = [
     sourceType: 'verified_note_selection',
     expectedDataType: 'single_select',
     clinicalConcept: 'chief_complaint',
+  }),
+  // #247 — the record-derived class, which the confirm surface must NAME.
+  mapping({
+    fieldId: RECORD[0],
+    sourceType: 'visit_metadata',
+    clinicalConcept: 'visit_metadata.patient_name',
   }),
 ];
 
@@ -182,7 +191,10 @@ describe('the fixture actually contains all three confirm classes', () => {
     expect(MANUAL.map(cls)).toEqual(['attest']);
     expect(PROPOSED.map(cls)).toEqual(['confirm', 'confirm', 'confirm']);
     expect(UNPROPOSED.map(cls)).toEqual(['choose', 'choose']);
-    expect(MAPPINGS).toHaveLength(6);
+    // #247 — the record-derived row takes the ORDINARY confirm act. It is a
+    // fourth SOURCE, deliberately not a fourth CLASS.
+    expect(RECORD.map(cls)).toEqual(['confirm']);
+    expect(MAPPINGS).toHaveLength(7);
   });
 });
 
@@ -194,6 +206,37 @@ describe('the fixture actually contains all three confirm classes', () => {
 // branch is a real guard against a future edit that renders a picker for
 // manual fields — and it was UNOBSERVABLE. A guard nothing can exercise is
 // indistinguishable from one that is wrong.
+describe('ruling 247 — a record-derived control says so, and is confirmed the ordinary way', () => {
+  it('⚠️ THE ROW SAYS WHERE THE VALUE COMES FROM, in words rather than in a concept string', () => {
+    // The concept line above it reads `visit_metadata.patient_name`, which is
+    // precise and says nothing to a doctor. The ruling declined a fourth
+    // confirm ACT, so what makes the ordinary click meaningful is that the row
+    // states what it will print and where that comes from.
+    expect(confirmClassOf(MAPPINGS[6]!)).toBe('confirm');
+  });
+
+  it('the provenance line is RENDERED, and only on the record-derived row', async () => {
+    await openWorkspace();
+    const line = screen.getByTestId(`twin-record-provenance-${RECORD[0]}`);
+    expect(line.textContent).toMatch(/from the patient record/i);
+    expect(line.textContent).toMatch(/not dictated/i);
+    // ⚠️ NON-VACUITY, and it is the arm that matters: a caption rendered on
+    // every row would satisfy the assertion above and tell the doctor nothing.
+    for (const id of [...PROPOSED, ...MANUAL, ...UNPROPOSED]) {
+      expect(screen.queryByTestId(`twin-record-provenance-${id}`)).toBeNull();
+    }
+  });
+
+  it('and it is confirmed by the EXISTING act — no fourth button', async () => {
+    await openWorkspace();
+    const btn = screen.getByTestId(`twin-confirm-field-${RECORD[0]}`) as HTMLButtonElement;
+    expect(btn.textContent).toBe('Confirm');
+    expect(btn.disabled).toBe(false);
+    fireEvent.click(btn);
+    expect(screen.getByTestId(`twin-field-row-${RECORD[0]}`).textContent).toContain('Confirmed');
+  });
+});
+
 describe('the confirm helpers, exercised where the UI cannot reach them', () => {
   it('a MANUAL field keeps its own concept and IGNORES a supplied one', () => {
     const m = mapping({ fieldId: MANUAL[0], sourceType: 'manual', clinicalConcept: null });
@@ -316,6 +359,27 @@ describe('nothing becomes confirmable that a physician did not confirm', () => {
     }
   });
 
+  it('⚠️ RULING 247 — BULK CONFIRM DOES NOT SWEEP A RECORD-DERIVED ROW', async () => {
+    // The ruling's reason for refusing auto-confirm is that "a control that
+    // prints a patient's NAME requires a human to have seen it". "Confirm all"
+    // is a human act that certifies rows below the fold of a scrolling list, so
+    // honouring the reason means excluding it from the shortcut — NOT giving it
+    // a fourth act, which the ruling declined.
+    await openWorkspace();
+    // It is offered by the count, or the exclusion is invisible to the doctor.
+    expect(screen.getByTestId('twin-confirm-all-proposed').textContent).toContain('3 proposed');
+    fireEvent.click(screen.getByTestId('twin-confirm-all-proposed'));
+    expect(screen.getByTestId(`twin-field-row-${RECORD[0]}`).textContent).not.toContain('Confirmed');
+    // ⚠️ NON-VACUITY: the same click DID confirm the ordinary proposed rows, so
+    // this is an exclusion rather than a button that stopped working.
+    for (const id of PROPOSED) {
+      expect(screen.getByTestId(`twin-field-row-${id}`).textContent).toContain('Confirmed');
+    }
+    // …and the ordinary per-row act still works on it.
+    fireEvent.click(screen.getByTestId(`twin-confirm-field-${RECORD[0]}`));
+    expect(screen.getByTestId(`twin-field-row-${RECORD[0]}`).textContent).toContain('Confirmed');
+  });
+
   it('CHANGING a concept UN-CONFIRMS the field — the status is about the concept beside it', async () => {
     await openWorkspace();
     fireEvent.click(screen.getByTestId(`twin-confirm-field-${PROPOSED[0]}`));
@@ -369,8 +433,9 @@ describe('the save carries exactly what the writer demands', () => {
     expect(certified.map((m) => m.fieldId).sort()).toEqual([...PROPOSED, ...MANUAL].sort());
     for (const m of certified) expect(satisfiesFieldsReady(m)).toBe(true);
     // The unproposed pair is still unconfirmed — the wall shrinks by what the
-    // doctor confirmed and by nothing else.
-    for (const id of UNPROPOSED) {
+    // doctor confirmed and by nothing else. ⚠️ #247 — AND THE RECORD-DERIVED
+    // ROW IS IN THAT LIST, because "Confirm all" did not touch it.
+    for (const id of [...UNPROPOSED, ...RECORD]) {
       expect(sent.find((m) => m.fieldId === id)!.status).not.toBe('certified');
     }
   });

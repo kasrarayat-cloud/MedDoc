@@ -153,7 +153,23 @@ const SYSTEM_ALLOWLIST: Record<string, number> = {
   // — and the classifier still counts it, exactly as the note above predicts:
   // the whole `template-twin/` directory is bucketed as system before scoping
   // is considered. A declared line is the cost of the conservative direction.
-  'src/lib/template-twin/fill-engine.ts': 2,
+  // ⚠️ 2 -> 3 on 2026-09-07, #247 STAGE B, DECLARED. The third is the visit's
+  // PATIENT RECORD, read once in `readAndPrepareTemplateTwinFill` so that a
+  // control mapped `visit_metadata` can print the patient's name and age. It is
+  // the reason this whole family exists, so it is also the read that most
+  // deserves a line somebody has to look at.
+  //
+  // ⚠️ IT IS PRACTICE-BOUND IN THE QUERY, NOT BY CONVENTION: the `where` is
+  // `{ id: input.visitId, practiceId: input.practiceId }`, so a visit id from
+  // another tenant returns null rather than a patient. The classifier counts it
+  // regardless, because `template-twin/` is bucketed as system before scoping is
+  // considered — the same conservative direction every entry above records.
+  //
+  // ⚠️ AND THE SELECT IS THE OTHER HALF OF THE DECLARATION. Two columns, `name`
+  // and `dateOfBirth`, because those are the only values any downstream
+  // consumer may print. Widening that select is a PHI decision and belongs in a
+  // diff someone reads — which is exactly what this allowlist is for.
+  'src/lib/template-twin/fill-engine.ts': 3,
   // ⚠️ 1 -> 2 on 2026-08-21, DECLARED. The second is the FROZEN-POINTER read
   // added by ruling 2(b): a SIGNED record resolves its document by the id the
   // signature stamped, never by lookup, so a manifest landing afterwards is
@@ -645,6 +661,23 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
     const p1 = asPracticeId('prac_1');
     expect(visitScope(p1)).toEqual({ practiceId: 'prac_1' });
     expect(visitByIdScope('v1', p1)).toEqual({ id: 'v1', practiceId: 'prac_1' });
+  });
+
+  it('⚠️ #247 — THE PATIENT SELECT IS TWO COLUMNS, and this asserts it', () => {
+    // ⚠️ THE ALLOWLIST COMMENT CLAIMED THIS AND NOTHING ENFORCED IT — found by
+    // a refutation lens. The allowlist is a Record<file, count> and the scanner
+    // matches `prisma.<model>.<readMethod>(`; it counts CALL SITES and cannot
+    // see a `select`. Widening the patient read to `mrn`, `insurance` or
+    // `problemList` leaves the count at 3 and every gate green, while the
+    // comment two lines above says such a widening "belongs in a diff someone
+    // reads". A control that describes a guarantee it does not provide is worse
+    // than no control: it is what the next reader checks INSTEAD of the code.
+    const src = readFileSync(join(process.cwd(), 'src/lib/template-twin/fill-engine.ts'), 'utf8');
+    const read = /prisma\.transcribeVisit\.findFirst\(\{[\s\S]{0,400}?\}\);/.exec(src)?.[0];
+    expect(read, 'the patient read moved or was renamed — re-read #247 before editing this').toBeTruthy();
+    const selected = [...read!.matchAll(/\b(\w+):\s*true\b/g)].map((m) => m[1]).sort();
+    expect(selected, 'the patient select changed shape — a PHI decision, not a refactor')
+      .toEqual(['dateOfBirth', 'name']);
   });
 
   it('⚠️ the BRAND is not cast away outside the session boundary', () => {

@@ -62,6 +62,10 @@ vi.mock('@meddoc/db', () => ({
   default: {
     noteTemplate: { findFirst: (...a: unknown[]) => noteTemplateFindFirst(...a) },
     templateTwinFieldOverride: { findMany: (...a: unknown[]) => overrideFindMany(...a) },
+    // #247 — the shared reader also loads the visit's patient record now. No
+    // patient here, which is byte-identical to the pre-#247 fill and keeps this
+    // census about the thing it is about.
+    transcribeVisit: { findFirst: async () => ({ patient: null }) },
   },
 }));
 vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }));
@@ -108,10 +112,26 @@ const DERIVED_BY_ID = new Map(DERIVED.map((m) => [m.fieldId, m]));
  *
  * PRODUCTION READS 4 OF THESE 5: a physician has confirmed a concept for one, so
  * the fixture is CONSERVATIVE by exactly one control, in the safe direction.
+ *
+ * ⚠️ THE SET SHRANK TO FOUR ON 2026-09-07, AND RULING #147(2) IS WHY THIS
+ * PARAGRAPH EXISTS RATHER THAN A SILENT EDIT. That ruling made the residual a
+ * SET EQUALITY precisely so that a manual field GAINING a concept reddens —
+ * "the direction that means the wall legitimately shrank and this file's story
+ * has gone stale" — and it did redden, on the run that landed #247 Stage B.
+ * Flipped here by the session that looked, with the reason recorded:
+ *
+ *   REFERRING PHYSICIAN left the residual. It was never clerical in the way the
+ *   other four are: a clinician SAYS who referred the patient, so it now
+ *   carries `visit_metadata.referring_physician` from the label and is answered
+ *   by the doctor's own adopted pick on this form. The paragraph above says
+ *   "every one is CLERICAL, none is clinical" — that sentence was the argument
+ *   for the set, and it stopped being true of this member first.
+ *
+ * The four that remain are the four nobody speaks aloud: an address, a
+ * technologist on shift, a machine, a room. F24 therefore closes at 76 of 80.
  */
 const F24_RESIDUAL_MANUAL = [
   'ttf_e3e4a4d7ecc6ecde78991e57', // Address
-  'ttf_b4e30cd696689beb73b7fc63', // REFERRING PHYSICIAN
   'ttf_5d84f80e2fec3d0085ad6b33', // ULTRASOUND TECHNOLOGIST
   'ttf_c884422f3a745f4eaa53c22d', // MACHINE
   'ttf_7e45028e2b601ba0e4b0bd5c', // LOCATION
@@ -295,11 +315,42 @@ describe('F24-S5 control census — the universe is pinned by content', () => {
     // usable as a stand-in for the certified twin at all. If this ever diverges,
     // the fixture and the certified twin are no longer the same form and every
     // number below is about something else.
+    // ⚠️ #247 — THE TWO ROUTES NO LONGER RECONCILE EXACTLY, AND SAYING SO IS
+    // THE POINT OF LEAVING THIS ARM STANDING.
+    //
+    // `classifyFieldSource` now reads `REFERRING PHYSICIAN` as an enumerated
+    // pick rather than a manual blank, so the FIXTURE route gives
+    // 52 / 24 / 4. The DATABASE route still gives 52 / 23 / 5, and will keep
+    // giving it: those mappings are CERTIFIED and certified mappings are
+    // immutable — the twin re-classifies only when it is re-certified.
+    //
+    // ⚠️ SO THE CLAIM IS RESTATED AS THE DELTA RATHER THAN AS EQUALITY. What
+    // makes the fixture usable as a stand-in is no longer "identical", it is
+    // "identical except for a change this branch made ON PURPOSE, in one named
+    // field, in one named direction". That is checkable; "close enough" is not.
+    // If a SECOND field ever moves, or one moves the other way, this reddens.
+    const PRODUCTION_2026_08_24 = { extraction: 52, verified_note_selection: 23, manual: 5 };
     const tally: Record<string, number> = {};
     for (const m of DERIVED) tally[m.sourceType] = (tally[m.sourceType] ?? 0) + 1;
-    expect(tally).toEqual({ extraction: 52, verified_note_selection: 23, manual: 5 });
-    // And all five manual fields are content controls — which is why the
-    // residual this census reports is entirely inside the 28.
+    expect(tally).toEqual({ extraction: 52, verified_note_selection: 24, manual: 4 });
+    expect(Object.values(tally).reduce((a, b) => a + b, 0)).toBe(80);
+    // The delta, stated as arithmetic over the recorded measurement.
+    expect({
+      extraction: tally.extraction - PRODUCTION_2026_08_24.extraction,
+      verified_note_selection:
+        tally.verified_note_selection - PRODUCTION_2026_08_24.verified_note_selection,
+      manual: tally.manual - PRODUCTION_2026_08_24.manual,
+    }).toEqual({ extraction: 0, verified_note_selection: +1, manual: -1 });
+    // And the one that moved is NAMED. A delta arm that only counts is
+    // satisfied by any manual field becoming a pick.
+    const moved = DERIVED.filter(
+      (m) =>
+        m.sourceType === 'verified_note_selection' &&
+        m.clinicalConcept === 'visit_metadata.referring_physician',
+    );
+    expect(moved.length).toBe(1);
+    // And all four remaining manual fields are content controls — which is why
+    // the residual this census reports is entirely inside the 28.
     const controlIds = new Set(ir.fields.filter(isContentControl).map((f) => f.fieldId));
     expect(DERIVED.filter((m) => m.sourceType === 'manual').every((m) => controlIds.has(m.fieldId)))
       .toBe(true);
@@ -315,15 +366,21 @@ describe('F24-S5 control census — the universe is pinned by content', () => {
     );
     expect(touched.every((m) => m.clinicalConcept === null)).toBe(true);
     expect(touched.every((m) => m.sourceType !== 'manual')).toBe(true);
-    // 28 = 1 already-decided + 22 substituted + 5 manual. The arithmetic is the
+    // 28 = 2 already-decided + 22 substituted + 4 manual. The arithmetic is the
     // check: a partition that does not add up has an unnamed bucket in it.
+    //
+    // ⚠️ 1 -> 2 DECIDED AND 5 -> 4 MANUAL, BOTH BY THE SAME ONE FIELD. #247
+    // pins `visit_metadata.referring_physician` at the label, so the referring
+    // control arrives already carrying a concept instead of arriving manual and
+    // concept-less. The 22 substituted are untouched, which is the number this
+    // census is actually about.
     const controls = ir.fields.filter(isContentControl).map((f) => DERIVED_BY_ID.get(f.fieldId)!);
     const decided = controls.filter((m) => m.clinicalConcept !== null).length;
     const substituted = controls.filter(
       (m) => m.clinicalConcept === null && m.sourceType !== 'manual',
     ).length;
     const manual = controls.filter((m) => m.sourceType === 'manual').length;
-    expect({ decided, substituted, manual }).toEqual({ decided: 1, substituted: 22, manual: 5 });
+    expect({ decided, substituted, manual }).toEqual({ decided: 2, substituted: 22, manual: 4 });
     expect(decided + substituted + manual).toBe(28);
   });
 });
@@ -541,20 +598,26 @@ describe('F24-S5 control census — replay, over both mapping universes', () => 
     // ⚠️ THE TWO UNIVERSES DISAGREE, AND THE DISAGREEMENT IS THE MEASUREMENT.
     // A census that produced the same number either way would be reporting a
     // property of its own harness.
-    expect(results['document-decided'].addressable).toBe(1);
-    expect(results['document-decided'].declined_no_approved_concept).toBe(27);
-    expect(results['certified-shaped'].addressable).toBe(23);
-    expect(results['certified-shaped'].declined_no_approved_concept).toBe(5);
+    // ⚠️ #247 MOVED ALL FOUR BY EXACTLY ONE CONTROL, IN THE SAME DIRECTION.
+    // REFERRING PHYSICIAN arrives carrying a concept now, so it is addressable
+    // in BOTH universes instead of neither/one — 1->2 document-decided,
+    // 23->24 certified-shaped, and the two decline buckets fall by one each.
+    // The disagreement between the universes is unchanged in KIND, which is
+    // what this arm is for.
+    expect(results['document-decided'].addressable).toBe(2);
+    expect(results['document-decided'].declined_no_approved_concept).toBe(26);
+    expect(results['certified-shaped'].addressable).toBe(24);
+    expect(results['certified-shaped'].declined_no_approved_concept).toBe(4);
   }, 180_000);
 
   // -------------------------------------------------------------------------
   // (b) RED IN BOTH DIRECTIONS
   // -------------------------------------------------------------------------
-  it('⚠️ (b) DISABLING THE INTENT TAKES IT BACK DOWN — 23 becomes 0', async () => {
+  it('⚠️ (b) DISABLING THE INTENT TAKES IT BACK DOWN — 24 becomes 0', async () => {
     // The mutation is run rather than written: an empty override set is exactly
     // what the pre-S5 world produced for every visit, and it is also what a
     // regression that stops reading the override rows would produce. If this
-    // ever stays at 23, the census is reporting something other than the
+    // ever stays at 24, the census is reporting something other than the
     // correction — a ratchet that does not move when the fix is removed is a
     // decoration.
     const base = await fill('certified-shaped', []);
@@ -578,8 +641,9 @@ describe('F24-S5 control census — replay, over both mapping universes', () => 
     // decline bucket and NONE may be counted addressable — the direction a
     // census written to agree with its author would get wrong.
     const { buckets } = await census('document-decided');
-    expect(buckets.declined_no_approved_concept).toBe(27);
-    expect(buckets.addressable).toBe(1);
+    // #247 — 27/1 became 26/2: the referring control is the one that moved.
+    expect(buckets.declined_no_approved_concept).toBe(26);
+    expect(buckets.addressable).toBe(2);
     expect(buckets.wrote_wrong_value ?? 0).toBe(0);
   }, 180_000);
 
@@ -598,7 +662,7 @@ describe('F24-S5 control census — replay, over both mapping universes', () => 
       'document-decided',
       plan.map((p) => ({ fieldId: p.fieldId, selectedOptionOrdinal: p.selectedOptionOrdinal })),
     );
-    expect(after.declines).toEqual({ no_approved_concept: 27 });
+    expect(after.declines).toEqual({ no_approved_concept: 26 });
     expect(after.declines.UNPARSEABLE_DECLINE_MESSAGE ?? 0).toBe(0);
   }, 180_000);
 });
@@ -614,14 +678,14 @@ describe('F24-S5 control census — the ratchet, and what it does NOT claim', ()
     overrideFindMany.mockResolvedValue([]);
   });
 
-  it('⚠️ (c) THE RESIDUAL IS 5, AND IT IS A PRODUCT QUESTION RATHER THAN AN EDITOR GAP', async () => {
+  it('⚠️ (c) THE RESIDUAL IS 4, AND IT IS A PRODUCT QUESTION RATHER THAN AN EDITOR GAP', async () => {
     // ITEM B(c) says the deliberate `toBeGreaterThan(0)` becomes the zero
     // assertion ONLY IF the replay earns it. IT DOES NOT, and saying so is the
     // point of the clause.
     //
-    // On the universe production is actually in, 23 of 28 controls are
-    // addressable end to end. The other 5 are the `manual` fields — Address,
-    // REFERRING PHYSICIAN, ULTRASOUND TECHNOLOGIST, LOCATION and one more —
+    // On the universe production is actually in, 24 of 28 controls are
+    // addressable end to end. The other 4 are the `manual` fields — Address,
+    // ULTRASOUND TECHNOLOGIST, MACHINE and LOCATION —
     // which `mappings-readiness.ts` CERTIFIES with a null concept on purpose
     // ("nothing dictates who the technologist on shift was"), and which both
     // the door and the overlay refuse in the TIGHTEN-ONLY direction.
@@ -632,15 +696,20 @@ describe('F24-S5 control census — the ratchet, and what it does NOT claim', ()
     // has nothing to check a citation against. That is a loosening of a clinical
     // validation path and is not this layer's call.
     //
-    // ⚠️ AND PRODUCTION READS 4, NOT 5 — A DIFFERENCE THIS FILE CANNOT SEE.
-    // `set-template-control.ts` records 4 of the 5 manual mappings carrying a
-    // null concept on the live certified twin, so a physician has confirmed a
-    // concept for one of them. That is DATABASE state; the fixture-derived
-    // universe leaves all 5 null. The census is therefore CONSERVATIVE by
+    // ⚠️ AND PRODUCTION READS ONE FEWER STILL — A DIFFERENCE THIS FILE CANNOT
+    // SEE. `set-template-control.ts` records one of the manual mappings on the
+    // live certified twin already carrying a concept a physician confirmed.
+    // That is DATABASE state; the fixture-derived universe leaves every
+    // remaining manual field null. The census is therefore CONSERVATIVE by
     // exactly one control, and the direction is the safe one: it under-reports
     // addressability rather than claiming a control works that does not.
+    //
+    // ⚠️ AND THE LIVE TWIN HAS NOT MOVED WITH THIS BRANCH. #247 changes what a
+    // FRESH classification produces; the certified mappings in production are
+    // immutable and still read REFERRING PHYSICIAN as manual. They converge
+    // when that template is re-certified, and not before.
     const { buckets, declinedIds } = await census2();
-    expect(buckets.addressable).toBe(23);
+    expect(buckets.addressable).toBe(24);
 
     // ⚠️ RULING #147(2) — SET-EQUALITY, NOT A THRESHOLD. Flipped 2026-08-25 by the
     // session that ran the census, per the ruling's requirement that the flipper
