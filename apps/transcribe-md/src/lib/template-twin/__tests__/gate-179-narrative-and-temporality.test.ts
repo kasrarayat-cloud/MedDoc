@@ -211,6 +211,70 @@ describe('#179(6b) — REVERSED: a null mapping temporality means `any`', () => 
  * 0 after the consolidation — so it discriminates, and it is not asserting a
  * property that was already true.
  */
+/**
+ * ⚠️ #179(3) HAD THE IDENTICAL VALIDATOR-ONLY DEFECT, AND ITS FAILURE MODE WAS
+ * THE WORSE ONE: A DESTROYED DOCUMENT RATHER THAN A WRONG TICK.
+ *
+ * `conceptScope` was read by the validator and by `field-value-derivation`, and
+ * NOT by the resolver — whose candidate universe was its own
+ * `new Set([clinicalConcept, ...approvedSynonyms])`. So a fact OUTSIDE a
+ * declared scope was selected by the resolver, written as the field's value and
+ * CITED; the validator then refused that citation and `fill-engine` withheld the
+ * whole package.
+ *
+ * MEASURED, same harness, both trees — a scope that EXCLUDES the fact's concept:
+ *   before   validator=false   resolver=supported/true, 1 cited   -> document withheld
+ *   after    validator=false   resolver=not_mentioned/null, 0 cited -> document renders
+ * The other three rows (scope includes, multi-scope, no scope) are unchanged in
+ * both trees, so the harness is measuring the scope branch and not a resolver
+ * that stopped filling.
+ *
+ * ⚠️ WHAT THIS DOES NOT CLOSE, SAID PLAINLY: #179(5)'s MULTI-SCOPE CHECKBOX
+ * REFUSAL. `deriveFieldValueFromFact` refuses to tick a box whose scope covers
+ * more than one symptom, and the resolver still does not call it — it has its
+ * own inline `case 'checkbox'`. A multi-scope box is therefore still ticked from
+ * one fact. That is a separate fix and it is NOT claimed here.
+ */
+describe('#179(3) — a declared conceptScope is enforced where the value is WRITTEN', () => {
+  const IN_SCOPE = CONCEPT;
+  const OUT_OF_SCOPE = 'ros.gastrointestinal.dysphagia';
+
+  function resolveWithScope(scope: string[] | undefined, factConcept: string) {
+    const m = mapping(scope ? { conceptScope: scope } : {});
+    const f = EncounterFactSchema.parse({ ...fact('current'), concept: factConcept });
+    const [resolution] = resolveTemplateFields({
+      fields: [narrativeField()],
+      mappings: [m],
+      facts: [f],
+      certifiedFieldIds: [FIELD_ID],
+    });
+    return { validator: factMatchesMapping(f, m), resolution };
+  }
+
+  it('⚠️ a fact OUTSIDE the declared scope is not written and not cited', () => {
+    const { validator, resolution } = resolveWithScope([OUT_OF_SCOPE], IN_SCOPE);
+    expect(validator).toBe(false);
+    // The whole point: the resolver AGREES rather than filling something the
+    // validator will then refuse. A cited fact here is a withheld document.
+    expect(resolution.sourceFactIds).toEqual([]);
+    expect(resolution.value).toBeNull();
+  });
+
+  it('NON-VACUITY: a fact INSIDE the declared scope still fills the field', () => {
+    // Without this the arm above is satisfied by a resolver that stopped
+    // filling scoped mappings altogether, which would blank every clause.
+    const { validator, resolution } = resolveWithScope([IN_SCOPE], IN_SCOPE);
+    expect(validator).toBe(true);
+    expect(resolution.sourceFactIds.length).toBeGreaterThan(0);
+  });
+
+  it('CONTROL: an unscoped mapping is unaffected', () => {
+    const { validator, resolution } = resolveWithScope(undefined, IN_SCOPE);
+    expect(validator).toBe(true);
+    expect(resolution.sourceFactIds.length).toBeGreaterThan(0);
+  });
+});
+
 describe('the validator and the resolver answer the temporality question identically', () => {
   const MAPPING_TENSES = [null, 'any', 'current', 'historical', 'planned'] as const;
   const FACT_TENSES = ['current', 'historical', 'planned', 'unknown'] as const;
