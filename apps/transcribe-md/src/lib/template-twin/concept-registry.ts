@@ -39,6 +39,9 @@ export const REGISTRY_CONCEPTS: readonly string[] = [
   'assessment',
   'chief_complaint',
   'past_medical_history',
+  // #233 family 1 — its own concept, because a surgery is not a condition and
+  // the proposer's nearest match would otherwise be past_medical_history.
+  'past_surgical_history',
   'family_history',
   'social_history',
   'exam.vascular',
@@ -47,6 +50,11 @@ export const REGISTRY_CONCEPTS: readonly string[] = [
   'plan',
   'medication',
   'allergy',
+  // #233 family 4 — total encounter time. A scalar quantity rather than a
+  // narrative section, and the only such member here; it is a NAME and not a
+  // pattern because there is exactly one of it. Canon 131: "number" describes
+  // the L3 extraction, not the control's expectedDataType.
+  'total_time_minutes',
 ];
 
 /**
@@ -152,6 +160,10 @@ export const REGISTRY_SUBCONCEPTS: Readonly<Record<string, readonly string[]>> =
     'social_history.alcohol',
     'social_history.drugs',
     'social_history.occupation',
+    // #233 family 2 — a sub-concept, so it does NOT fold into the family the
+    // way a synonym would. A form asking for marital status must not be
+    // filled from occupation, which is what the proposer did before this.
+    'social_history.marital_status',
   ],
 };
 

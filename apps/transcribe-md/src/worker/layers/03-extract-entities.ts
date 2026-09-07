@@ -116,6 +116,21 @@ export const ExtractedEntities = z.object({
     .nullable(),
   hpi: HpiDimensions.nullable(),
   past_medical_history: z.array(factWithEvidence('condition')).default([]),
+  /**
+   * #233 family 1 — SURGERIES ARE NOT CONDITIONS.
+   *
+   * Its own concept because a form asks for them separately, and because the
+   * proposer's nearest match is `past_medical_history` — which is how the
+   * owner's `Past Surgical History` controls came to be proposed onto the
+   * MEDICAL history concept. Certifying that would have printed the patient's
+   * conditions into a surgical field.
+   *
+   * ⚠️ `.default([])` IS LOAD-BEARING — canon 130. Without it this becomes a
+   * REQUIRED key and breaks the MOCK_AI fixture, the module-load parse in
+   * `sample-preview-transcript.ts`, and every resumed job (which CASTS rather
+   * than parses), all at once.
+   */
+  past_surgical_history: z.array(factWithEvidence('procedure')).default([]),
   medications: z
     .array(
       z.object({
@@ -175,6 +190,16 @@ export const ExtractedEntities = z.object({
       alcohol: liftStringToFact('status'),
       drugs: liftStringToFact('status'),
       occupation: liftStringToFact('value'),
+      /**
+       * #233 family 2 — a sub-concept beside `occupation`, not a new family.
+       *
+       * ⚠️ THE INNER KEY IS LOAD-BEARING AND THERE IS NO SHARED CONSTANT
+       * BINDING IT TO THE PROJECTOR. `smoking`/`alcohol`/`drugs` use `status`
+       * and `occupation` uses `value`; the projector reads each key LITERALLY.
+       * `status` is chosen to match the three status-shaped siblings, and the
+       * projector line below must read `social.marital_status.status`.
+       */
+      marital_status: liftStringToFact('status'),
     })
     .default({}),
   ros: z
@@ -423,6 +448,36 @@ export const ExtractedEntities = z.object({
       })
     )
     .default([]),
+  /**
+   * #233 family 4 — TOTAL ENCOUNTER TIME, AS A NUMBER.
+   *
+   * ⚠️ "A NUMBER" IS ABOUT THE EXTRACTION AXIS, NOT THE CONTROL — canon 131.
+   * The controls this fills (`Total minutes spent with patient`, `Total time
+   * minutes`) compile `narrative_text`, and `expectedDataTypeForFieldKind`
+   * reads the compiler's KIND and never the concept. The two are independent,
+   * so a number extracted here fills a prose control as a string.
+   *
+   * ⚠️ A SECOND PRODUCER OF THIS NUMBER ALREADY EXISTS, AND IT IS NOT
+   * RECONCILED HERE. `detectTimeBasedHints` (em-coding/deterministic.ts) reads
+   * total minutes by regex over the FINISHED NOTE, and its patterns all require
+   * a colon (`total time: 25 minutes`), so it misses prose like "approximately
+   * 25 minutes face-to-face" that this field catches. They have different
+   * reach. This field feeds the TWIN fill; the E/M time band still reads the
+   * regex, and which one wins is deliberately left to its own change rather
+   * than settled silently here.
+   *
+   * The bound matches the E/M scorer's own accepted range (0 < mins < 600).
+   * `.default(null)` for the same reason as every other optional family.
+   */
+  total_time_minutes: z
+    .object({
+      minutes: z.number().int().positive().max(599),
+      evidence_quote: z.string().min(1),
+      speaker: z.string().optional(),
+      timestamp: z.number().nonnegative().optional(),
+    })
+    .nullable()
+    .default(null),
 });
 export type ExtractedEntities = z.infer<typeof ExtractedEntities>;
 
@@ -513,6 +568,15 @@ export const COMMON_CATEGORIES = [
   '  speaker?, timestamp?} or null — each sub-field is a string; all',
   '  sub-fields are optional; one evidence_quote covers the paragraph.',
   '- past_medical_history: list of {condition, evidence_quote, ...}',
+  '- past_surgical_history: list of {procedure, evidence_quote, ...}',
+  '',
+  '  SURGERIES ARE NOT CONDITIONS. A prior OPERATION goes in',
+  '  past_surgical_history; a DIAGNOSIS or ongoing illness goes in',
+  '  past_medical_history. Put each item in exactly ONE of the two — never',
+  '  both. "cholecystectomy in 2019" is surgical; "gallstones" is medical.',
+  '  If the doctor names a condition AND the operation that treated it, that',
+  '  is two items, one in each list.',
+  '',
   '- medications: list of {name, dose?, route?, frequency?, evidence_quote, ...}',
   '- allergies: list of {substance, reaction?, evidence_quote,',
   '  superseded?, conflict_note?, ...}',
@@ -551,6 +615,7 @@ export const COMMON_CATEGORIES = [
   '    alcohol:    {status, evidence_quote, speaker?, timestamp?}',
   '    drugs:      {status, evidence_quote, speaker?, timestamp?}',
   '    occupation: {value,  evidence_quote, speaker?, timestamp?}',
+  '    marital_status: {status, evidence_quote, speaker?, timestamp?}',
   '  If you have no evidence quote for a sub-field, OMIT that sub-field',
   '  entirely — do not emit it as a bare string.',
   '  CORRECT:  "social_history": { "occupation": { "value": "factory',
@@ -638,6 +703,14 @@ export const COMMON_CATEGORIES = [
   '      do not supply one from your own knowledge.',
   '  A visit with no spoken code yields an EMPTY list, which is the normal',
   '  case for almost every visit.',
+  '',
+  '- total_time_minutes: {minutes, evidence_quote, speaker?, timestamp?}',
+  '    or null. The TOTAL time spent on this encounter, as an INTEGER number',
+  '    of minutes — "minutes": 45, never "45 minutes" and never a range.',
+  '    Emit it ONLY if the clinician states a total aloud. Do NOT compute it,',
+  '    do not sum separate durations, and do not infer it from timestamps:',
+  '    an unstated total is null, and a guessed one is a billing figure',
+  '    nobody said.',
 ].join('\n');
 
 function buildConversationPrompt(): { system: string; userPrefix: string } {

@@ -308,10 +308,28 @@ const NARRATIVE_SENTENCES: ReadonlyMap<string, string> = new Map([
     'past_medical_history',
     'Past medical history: hypertension and type 2 diabetes mellitus, both longstanding.',
   ],
+  [
+    'past_surgical_history',
+    'Past surgical history: laparoscopic cholecystectomy in twenty nineteen and an appendicectomy in childhood.',
+  ],
   ['family_history', 'Family history: hypertension in one parent; no other significant family history.'],
   [
     'social_history',
-    'Social history: never smoker, occasional alcohol, sedentary office occupation.',
+    'Social history: never smoker, occasional alcohol, sedentary office occupation, married.',
+  ],
+  // #233 family 2 — its OWN sentence, because the family sentence above is
+  // matched only for a field mapped to bare `social_history`. A control mapped
+  // to the sub-concept looks itself up first and would otherwise find nothing.
+  [
+    'social_history.marital_status',
+    'Social history, marital status: married.',
+  ],
+  // #233 family 4 — the total is SAID, because the extractor is forbidden from
+  // computing one. A self-test that never states it would leave the control
+  // not_mentioned and prove nothing about the concept.
+  [
+    'total_time_minutes',
+    'A total time of forty five minutes was spent on this encounter, including counselling and coordination of care.',
   ],
   ['medication', 'Medications: lisinopril ten milligrams daily and metformin five hundred milligrams twice daily.'],
   ['allergy', 'Allergies: no known drug allergies.'],

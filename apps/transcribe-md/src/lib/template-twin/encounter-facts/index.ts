@@ -57,6 +57,11 @@ export interface EncounterEntitySnapshot {
   past_medical_history?: ReadonlyArray<
     EvidenceSnapshot & { condition: string }
   >;
+  /** #233 family 1. ⚠️ OPTIONAL, per canon 130 — every existing caller and
+   *  every fixture builds this snapshot without the key. */
+  past_surgical_history?: ReadonlyArray<
+    EvidenceSnapshot & { procedure: string }
+  >;
   medications?: ReadonlyArray<
     EvidenceSnapshot & {
       name: string;
@@ -81,7 +86,13 @@ export interface EncounterEntitySnapshot {
     alcohol?: (EvidenceSnapshot & { status: string }) | null;
     drugs?: (EvidenceSnapshot & { status: string }) | null;
     occupation?: (EvidenceSnapshot & { value: string }) | null;
+    /** #233 family 2 — keyed `status`, matching the three status-shaped
+     *  siblings rather than occupation's `value`. The projector reads this
+     *  key literally; there is no shared constant binding the two. */
+    marital_status?: (EvidenceSnapshot & { status: string }) | null;
   };
+  /** #233 family 4 — a NUMBER on the extraction axis (canon 131). */
+  total_time_minutes?: (EvidenceSnapshot & { minutes: number }) | null;
   ros?: ReadonlyArray<
     EvidenceSnapshot & {
       system: string;
@@ -655,6 +666,26 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
     });
   }
 
+  // #233 family 1 — the same shape and the same temporality as the block
+  // above, and deliberately SEPARATE. A form asking for surgeries on their own
+  // must not be filled from the medical history, which is exactly what the
+  // proposer did on the owner's form before this existed.
+  //
+  // ⚠️ THE WORDING HERE IS DELIBERATE. An earlier version of this comment used
+  // the two words the (2a) census greps for, and reddened that arm from PROSE —
+  // canon 117's reddened-by-prose, the same defect as greened-by-prose and it
+  // travels with it. The arm was right: a form it cannot read would be silently
+  // unwatched.
+  for (const [index, item] of (entities.past_surgical_history ?? []).entries()) {
+    add({
+      path: `past_surgical_history.${index}.procedure`,
+      concept: 'past_surgical_history',
+      value: item.procedure,
+      evidence: item,
+      defaultTemporality: 'historical',
+    });
+  }
+
   for (const [index, item] of (entities.medications ?? []).entries()) {
     const fields: ReadonlyArray<[string, string | null | undefined]> = [
       ['name', item.name],
@@ -731,6 +762,33 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
   }
   if (social?.occupation) {
     add({ path: 'social_history.occupation', concept: 'social_history.occupation', value: social.occupation.value, evidence: social.occupation, defaultTemporality: 'current' });
+  }
+  // #233 family 2 — reads `.status`, matching the L3 key chosen above.
+  if (social?.marital_status) {
+    add({ path: 'social_history.marital_status', concept: 'social_history.marital_status', value: social.marital_status.status, evidence: social.marital_status, defaultTemporality: 'current' });
+  }
+
+  // #233 family 4 — TOTAL ENCOUNTER TIME.
+  //
+  // ⚠️ THE VALUE IS A STRING AND THE NUMBER TRAVELS BESIDE IT. `add()` accepts
+  // string | number | boolean, but the controls this fills compile
+  // `narrative_text`, and the narrative deriver returns `fact.value` only when
+  // it is a string. `String(minutes)` is what reaches the document; `number`
+  // carries the machine-readable quantity for any numeric control.
+  //
+  // ⚠️ AND IT CARRIES NO UNIT, DELIBERATELY. The resolver's number arm refuses
+  // a value with an unapproved unit, so "45 minutes" would fail where "45"
+  // resolves — canon 131's trap, avoided at the source rather than patched at
+  // the reader.
+  if (entities.total_time_minutes) {
+    add({
+      path: 'total_time_minutes.minutes',
+      concept: 'total_time_minutes',
+      value: String(entities.total_time_minutes.minutes),
+      number: entities.total_time_minutes.minutes,
+      evidence: entities.total_time_minutes,
+      defaultTemporality: 'current',
+    });
   }
 
   for (const [index, item] of (entities.ros ?? []).entries()) {

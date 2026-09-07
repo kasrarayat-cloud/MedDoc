@@ -149,6 +149,7 @@ export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = [
   'hpi.modifying_factors',
   'hpi.associated_symptoms',
   'past_medical_history',
+  'past_surgical_history',
   'medication.name',
   'medication.dose',
   'medication.route',
@@ -160,6 +161,7 @@ export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = [
   'social_history.smoking',
   'social_history.alcohol',
   'social_history.drugs',
+  'social_history.marital_status',
   'social_history.occupation',
   // ⚠️ THREE PARTS, NOT TWO — AND THE TWO-PART FORM WAS THE ONLY THING THIS
   // COMPONENT EVER TAUGHT. #179(2) moved the projector to

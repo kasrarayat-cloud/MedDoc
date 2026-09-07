@@ -289,6 +289,10 @@ export const ACCUMULATING_NARRATIVE_CONCEPTS: ReadonlySet<string> = new Set([
   'assessment',
   'chief_complaint',
   'past_medical_history',
+  // #233 family 1 — a surgical history is a LIST, exactly as the medical one
+  // is. Without this a form with three "Past Surgical History" bullets takes
+  // one procedure and drops the rest.
+  'past_surgical_history',
   'family_history',
   'social_history',
   'plan',
