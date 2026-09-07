@@ -472,6 +472,20 @@ export const EncounterFactSchema = z
         // fact, so it carries its own identity and anchor.
         'verified_note_selection',
         'clinician_correction',
+        /**
+         * #234 — A VALUE TAKEN FROM THE PATIENT RECORD, NOT FROM THE DICTATION.
+         *
+         * Its own class rather than a reuse, and per-visit by construction:
+         * `approved_practice_default` is PRACTICE-wide, and a patient's name is
+         * not a property of a practice.
+         *
+         * ⚠️ PROVENANCE IS THE WHOLE POINT. The fill path is built on cited
+         * evidence, so a record value that borrowed `encounter_evidence` would
+         * make the frozen manifest say the doctor SAID it. That is not
+         * hypothetical — `withProcedureDateFact` did exactly that until this
+         * value existed, and the manifest recorded the visit date as dictated.
+         */
+        'visit_record',
       ])
       .default('encounter_evidence'),
     concept: z.string().min(1).max(160),

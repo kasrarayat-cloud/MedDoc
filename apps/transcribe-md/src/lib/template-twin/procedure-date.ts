@@ -81,7 +81,13 @@ export function withProcedureDateFact(input: {
     facts.push(
       EncounterFactSchema.parse({
         factId,
-        sourceType: 'encounter_evidence',
+        // ⚠️ #234 — WAS `encounter_evidence`, AND THAT WAS A LIE ABOUT
+        // PROVENANCE. This value is the visit's own encounter date read off the
+        // record; nobody said it. The frozen manifest recorded it as dictated
+        // for as long as this line read otherwise, which is the defect the
+        // `visit_record` class exists to prevent — so its one existing
+        // precedent moves onto it rather than being grandfathered.
+        sourceType: 'visit_record',
         concept,
         value: iso,
         polarity: 'affirmed',

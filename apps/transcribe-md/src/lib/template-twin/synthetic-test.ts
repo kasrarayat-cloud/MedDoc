@@ -17,7 +17,12 @@ import {
   projectEncounterFacts,
   type EncounterEntitySnapshot,
 } from './encounter-facts';
-import { SemanticMappingSchema, TemplateDocIRSchema, type SemanticMapping } from './ir';
+import {
+  SemanticMappingSchema,
+  TemplateDocIRSchema,
+  type EncounterFact,
+  type SemanticMapping,
+} from './ir';
 import { templateTwinMappingsSha256 } from './mapping-hash';
 import {
   createTemplateTwinArtifactStore,
@@ -128,6 +133,41 @@ function mapping(fieldId: string, row: MappingRow): SemanticMapping {
 
 function asJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
+}
+
+/**
+ * ⚠️ #234 — A `visit_record` FACT CAN NEVER REACH A CERTIFICATION MANIFEST.
+ *
+ * The certification artifact is retained, re-verified and shown; the ruling is
+ * that it NEVER contains a real name. A `visit_record` fact is by definition a
+ * value read off the patient record, so its presence would mean a real
+ * identifier had entered the one artifact that must stay synthetic.
+ *
+ * ⚠️ DETERMINISTIC, AND DELIBERATELY NOT LEFT TO THE PHI SCAN. That scan is a
+ * conservative MODEL judgement over evidence TEXT; this is a structural fact
+ * about provenance that needs no judgement and cannot be talked out of. They
+ * answer different questions, and the cheap one is the reliable one.
+ *
+ * ⚠️ AND IT IS A GUARD RATHER THAN A COMMENT BECAUSE TODAY'S SAFETY IS
+ * INCIDENTAL: this path simply passes no visit record, so nothing injects. The
+ * day somebody threads one through for a good reason, this refuses instead of
+ * silently certifying against a real patient's name.
+ *
+ * EXPORTED so its arm can drive the shipped predicate rather than restate it —
+ * a control that re-implements the thing under test measures itself.
+ */
+export function assertNoRecordDerivedFacts(
+  facts: ReadonlyArray<EncounterFact>,
+): void {
+  const recordDerived = facts.filter((f) => f.sourceType === 'visit_record');
+  if (recordDerived.length === 0) return;
+  throw new TemplateTwinSyntheticTestError(
+    'SYNTHETIC_EVIDENCE_REJECTED',
+    'A record-derived fact reached the certification test. The certification artifact must never contain patient-record values.',
+    // `blocking` is the existing detail channel. It names WHICH facts arrived
+    // and never copies a value, so the refusal itself cannot leak one.
+    { blocking: recordDerived.map((f) => `${f.factId}:${f.concept}`) },
+  );
 }
 
 export async function runTemplateTwinSyntheticTest(input: {
@@ -567,6 +607,24 @@ export async function runTemplateTwinSyntheticTest(input: {
         `templateSha=${String(templateSha256).slice(0, 12)}`,
     );
   }
+  // ⚠️ #234 — A `visit_record` FACT CAN NEVER REACH A CERTIFICATION MANIFEST.
+  //
+  // The certification artifact is retained, shown and re-verified; the ruling is
+  // that it NEVER contains a real name. A `visit_record` fact is by definition a
+  // value read off the patient record, so its presence here would mean a real
+  // identifier had entered the one artifact that must stay synthetic.
+  //
+  // ⚠️ DETERMINISTIC, AND DELIBERATELY NOT LEFT TO THE PHI SCAN. The scan above
+  // is a conservative MODEL judgement over evidence TEXT; this is a structural
+  // fact about provenance that needs no judgement and cannot be talked out of.
+  // The two answer different questions and the cheap one is the reliable one.
+  //
+  // It is a guard rather than a comment because the current safety is
+  // incidental: this path simply passes no visit record today, so nothing
+  // injects. The day someone threads one through for a good reason, this
+  // refuses instead of silently certifying against a real patient's name.
+  assertNoRecordDerivedFacts(facts);
+
   const prepared = await prepareTemplateTwinFill({
     compiledVersionId: compiled.id,
     noteTemplateId: row.id,
