@@ -788,6 +788,38 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
       number: entities.total_time_minutes.minutes,
       evidence: entities.total_time_minutes,
       defaultTemporality: 'current',
+      // ⚠️ POLARITY IS STATED, NOT INFERRED, AND THE ADVERSARIAL PASS IS WHY.
+      //
+      // A TOTAL TIME IS A QUANTITY. There is no such thing as a denied total —
+      // the prompt only permits this field when the clinician states one aloud,
+      // so it is affirmed by construction.
+      //
+      // Left to `inferPolarity` it was DENIED on plainly affirmative dictation,
+      // by two measured routes, because this is the only concept whose value is
+      // a RENDERING of a number rather than the spoken text:
+      //
+      //   "No fever, total time 25 minutes."                    -> denied
+      //        the digits ARE locatable, but `CLAUSE_BREAK` is /[.;\n]/ and a
+      //        COMMA is not one, so an unrelated ROS denial governs the number
+      //
+      //   "Total time of forty minutes spent, no separate ..."  -> denied
+      //        the quote SPELLS the number, so `String(40)` is unlocatable and
+      //        polarity falls back to the UNSCOPED whole-quote denial test —
+      //        the very form the scoping arms exist to narrow
+      //
+      // A denied fact is then withheld by `denialOutcome` for every kind except
+      // checkbox, so the doctor's own billing figure renders BLANK; on a
+      // narrative control the reason is certification-exempt, so it blanks
+      // SILENTLY and the template still certifies green.
+      //
+      // ⚠️ AND THE SELF-TEST WOULD NOT HAVE CAUGHT IT. Its sentence spells
+      // "forty five minutes" against a projected "45", so it takes the
+      // unlocatable route too — and passed only because that one sentence
+      // happens to contain no denial token.
+      //
+      // Same doctrine as the ROS block above (Q1 §02.9): where the layer KNOWS
+      // the polarity, it states it and stops guessing it back out of the prose.
+      polarity: 'affirmed',
     });
   }
 

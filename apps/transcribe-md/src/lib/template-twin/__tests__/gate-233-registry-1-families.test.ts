@@ -22,8 +22,10 @@ vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }));
 
 import {
   isRegisteredConcept,
+  REGISTRY_CONCEPTS,
   REGISTRY_SUBCONCEPTS,
 } from '../concept-registry';
+import { TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE } from '../semantic-mapping';
 import { projectEncounterFacts } from '../encounter-facts';
 import { narrativeSentence } from '../verification-encounter';
 import { isListValuedNarrative } from '../field-value-derivation';
@@ -108,6 +110,39 @@ describe('#233 — the projector emits them, and DISCRIMINATES', () => {
     expect(fact!.number).toBe(45);
   });
 
+  it('⚠️ a TOTAL TIME is a QUANTITY — its polarity is STATED, never inferred from the prose', () => {
+    // The adversarial pass demonstrated both routes by which `inferPolarity`
+    // denied a plainly affirmative total. A denied fact is then WITHHELD for
+    // every kind except checkbox, so the doctor's own billing figure renders
+    // blank — and on a narrative control the reason is certification-exempt,
+    // so it blanks SILENTLY and still certifies green.
+    const polarityOf = (quote: string, minutes: number) => {
+      const f = project({ total_time_minutes: { minutes, evidence_quote: quote } });
+      return conceptOf(f, 'total_time_minutes')[0]?.polarity;
+    };
+
+    // Route 1 — the digits ARE locatable, but CLAUSE_BREAK is /[.;\n]/ and a
+    // COMMA is not one, so an unrelated ROS denial used to govern the number.
+    expect(polarityOf('No fever, total time 25 minutes.', 25)).toBe('affirmed');
+    // Route 2 — the quote SPELLS the number, so String(40) is unlocatable and
+    // polarity fell back to the UNSCOPED whole-quote denial test.
+    expect(polarityOf('Total time of forty minutes spent, no separate procedure performed.', 40)).toBe('affirmed');
+    // And a clean quote was always fine — this is the control that says the
+    // arms above are about the denial routes, not about polarity in general.
+    expect(polarityOf('Total time 25 minutes.', 25)).toBe('affirmed');
+  });
+
+  it('⚠️ DISCRIMINATION: polarity inference still WORKS everywhere else', () => {
+    // Without this, the arm above is satisfied by having disabled inference
+    // globally. A denied ROS finding must still come back denied.
+    const facts = project({
+      ros: [{ system: 'constitutional', finding: 'fever', polarity: 'denied', evidence_quote: 'Denies fever.' }],
+    });
+    const ros = facts.filter((f) => f.concept.startsWith('ros.'));
+    expect(ros.length).toBeGreaterThan(0);
+    expect(ros[0]!.polarity).toBe('denied');
+  });
+
   it('an absent family projects nothing — no phantom facts', () => {
     const facts = project({});
     for (const c of ['past_surgical_history', 'social_history.marital_status', 'total_time_minutes']) {
@@ -144,6 +179,22 @@ describe('#233 — the downstream lists moved with the registry', () => {
     // leaves not_mentioned — it would prove nothing about the new concept.
     for (const c of ['past_surgical_history', 'social_history.marital_status', 'total_time_minutes']) {
       expect(narrativeSentence(c), c).toBeTruthy();
+    }
+  });
+
+  it('⚠️ REGISTERED **AND** OFFERED — a concept the proposer is never told about is unmappable', () => {
+    // The pass found `total_time_minutes` in REGISTRY_CONCEPTS but NOT in the
+    // guidance list that reaches the proposer's prompt, so a "Total minutes"
+    // control could only ever have been mapped by hand.
+    //
+    // ⚠️ SCOPED TO THE THREE THIS CHANGE ADDED, DELIBERATELY. Guidance is
+    // partial BY DESIGN — it lists sub-concepts (`medication.name`) rather than
+    // families (`medication`), and omits the measurement kinds — so a
+    // "every registry concept appears here" arm would red on arrival. Measured
+    // before writing this: 11 registry concepts are legitimately absent.
+    for (const c of ['past_surgical_history', 'social_history.marital_status', 'total_time_minutes']) {
+      expect(REGISTRY_CONCEPTS.includes(c) || Object.values(REGISTRY_SUBCONCEPTS).flat().includes(c), `${c} registered`).toBe(true);
+      expect(TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE, `${c} offered to the proposer`).toContain(c);
     }
   });
 

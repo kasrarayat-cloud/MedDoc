@@ -162,6 +162,10 @@ export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = [
   'social_history.alcohol',
   'social_history.drugs',
   'social_history.marital_status',
+  // #233 family 4 — registered AND offered. The pass found it in
+  // REGISTRY_CONCEPTS but not here, so the proposer would never have suggested
+  // it and a "Total minutes" control could only ever be mapped by hand.
+  'total_time_minutes',
   'social_history.occupation',
   // ⚠️ THREE PARTS, NOT TWO — AND THE TWO-PART FORM WAS THE ONLY THING THIS
   // COMPONENT EVER TAUGHT. #179(2) moved the projector to
