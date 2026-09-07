@@ -142,13 +142,14 @@ SQL
 #    that reads like a count. The loop now runs SERVER-SIDE in one session at
 #    10ms, and records the transaction INTERVALS so overlap is computed from
 #    endpoints rather than from whether a sample happened to land.
-witness() {
+witness() {   # $1 = samples at 10ms (default 600)
+  local budget="${1:-600}"
   docker exec -i -e PGAPPNAME=t210-witness "$PGC" psql -U "$U" -d "$DB" -X -q -Atc "
     TRUNCATE t210_sample;
     DO \$\$
     DECLARE i int := 0;
     BEGIN
-      WHILE i < 600 LOOP
+      WHILE i < $budget LOOP
         PERFORM pg_stat_clear_snapshot();
         INSERT INTO t210_sample(at, n_open, racers)
         SELECT clock_timestamp(), count(*), coalesce(string_agg(application_name, ',' ORDER BY application_name), '')
@@ -221,9 +222,24 @@ race_b() {   # $1 = removal-guard fn, $2 = orphan-guard fn
        VALUES ('ir_o','iro@x.test','x',now(),'ir_p','OWNER',true);" >/dev/null
   local T; T=$(date -u -d '+2 seconds' +%Y-%m-%dT%H:%M:%S.%3NZ)
   sed "s/SENTINEL/$T/" "$OUT/rb-a.sql" > "$OUT/rb-a.run"; sed "s/SENTINEL/$T/" "$OUT/rb-b.sql" > "$OUT/rb-b.run"
-  docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -q < "$OUT/rb-a.run" >/dev/null 2>&1 &
-  docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -q < "$OUT/rb-b.run" >/dev/null 2>&1 &
-  wait
+  # ⚠️ THE SAME INDEPENDENT WITNESS RACE A USES — RULING #240d.
+  #
+  # Race B used to time itself with `t210_window`, a table each racer wrote
+  # INSIDE its own transaction. When the lock does its job the guard REFUSES B,
+  # B's transaction rolls back — AND ITS WITNESS ROW ROLLS BACK WITH IT. So the
+  # WITH-lock arm could never report an overlap: `count(*)=2` was unreachable by
+  # construction, and the cell ruling #220 rests on was structurally unable to
+  # show that its two transactions had ever met.
+  #
+  # ⚠️ A WITNESS THAT LIVES INSIDE THE THING IT WITNESSES DISAPPEARS EXACTLY WHEN
+  # THE ANSWER MATTERS. Race A already had the cure — a THIRD connection sampling
+  # `pg_stat_activity` — and race B simply never used it. Its racers were not even
+  # given an application_name, so the sampler could not have seen them.
+  witness 400 & local WB=$!
+  docker exec -i -e PGAPPNAME=t210-racer-a "$PGC" psql -U "$U" -d "$DB" -X -q < "$OUT/rb-a.run" >/dev/null 2>&1 &
+  docker exec -i -e PGAPPNAME=t210-racer-b "$PGC" psql -U "$U" -d "$DB" -X -q < "$OUT/rb-b.run" >/dev/null 2>&1 &
+  wait $! 2>/dev/null
+  wait $WB 2>/dev/null
   # ⚠️ THE VERDICT AND THE WITNESS TOGETHER. "No violation" is ambiguous on its
   # own — it means the guard worked OR the two never overlapped — and those are
   # different facts. The window rows come from the racers' own transactions, so
@@ -231,8 +247,8 @@ race_b() {   # $1 = removal-guard fn, $2 = orphan-guard fn
   # processes.
   q "SELECT (CASE WHEN count(*) FILTER (WHERE users_is_active_owner(u))=0
                    AND count(*) FILTER (WHERE users_is_live_member(u))>0 THEN 'V' ELSE '.' END)
-         || (SELECT CASE WHEN count(*)=2 AND max(t0) < min(COALESCE(t1,'infinity'::timestamptz))
-                         THEN 'o' ELSE '-' END FROM t210_window)
+         || (SELECT CASE WHEN count(*) FILTER (WHERE racers LIKE '%,%') > 0
+                         THEN 'o' ELSE '-' END FROM t210_sample)
        FROM users u WHERE u.\"practiceId\"='ir_p'"
 }
 q_() { docker exec -i "$PGC" psql -U "$U" -d "$DB" -X -q < "$1" >/dev/null 2>&1; }
@@ -301,8 +317,25 @@ case "$C1" in
   *"overlap[max_open/samples_with_BOTH]=1/0"*) say "🟢 raceA control#1 was genuinely sequential" ;;
   *) say "🔴 raceA CONTROL#1: expected NO overlap — got: $C1"; fail=1 ;;
 esac
-if [ "$W" -eq 0 ]; then say "🟢 raceB: 0 violations WITH the advisory lock"
-else say "🔴 raceB: $W/$N violations WITH the lock — the invariant does not hold"; fail=1; fi
+# ⚠️ THE WITH-LOCK CELL READS ITS OWN WITNESS — RULING #240d.
+#
+# This was `if [ "$W" -eq 0 ]` and nothing else. `OW` — the count of WITH-lock
+# runs that genuinely overlapped — was computed, printed, and NEVER READ. So the
+# one cell ruling #220 rests on ("0/12 violations WITH the lock") passed on a
+# machine where the two transactions never met, which is not evidence the lock
+# works: it is evidence the lock was never asked.
+#
+# ⚠️ AND IT IS THE CELL WHERE A VACUOUS PASS IS MOST EXPENSIVE, because it is the
+# one quoted as proof. The WITHOUT-lock cell already had this check; the cell
+# that matters did not.
+if [ "$W" -gt 0 ]; then
+  say "🔴 raceB: $W/$N violations WITH the lock — the invariant does not hold"; fail=1
+elif [ "$OW" -eq 0 ]; then
+  say "🟡 raceB WITH-LOCK CELL CANNOT TELL: 0/$N violations but 0/$N overlapped — the cell #220 rests on was never given the chance to fail."
+  cannot_tell=1
+else
+  say "🟢 raceB: 0 violations WITH the advisory lock, and $OW/$N runs genuinely overlapped"
+fi
 # ⚠️ THREE STATES, BECAUSE "THE CONTROL DID NOT FIRE" HAS TWO CAUSES AND THEY
 # ARE NOT THE SAME FINDING. Exit 2 is CANNOT-TELL, not refusal — the house
 # convention, and the distinction canon 119 demands: a probe that answers
@@ -322,6 +355,18 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 if [ "$cannot_tell" -ne 0 ]; then
+  # ⚠️ A MACHINE-READABLE REASON, AND CI IS REQUIRED TO SEE IT — RULING #240e.
+  #
+  # Exit 2 means CANNOT-TELL. CI may treat that as a pass ONLY when the reason is
+  # that the two transactions genuinely never met — never as a catch-all. Every
+  # OTHER way of not being able to tell (a dead control, a refuted prediction, a
+  # missing container, a mutation that did not apply) exits 1 above and stays a
+  # failure.
+  #
+  # ⚠️ WITHOUT THIS LINE THE EXIT CODE IS AMBIGUOUS IN THE DIRECTION THAT COSTS:
+  # "cannot tell because they did not overlap" and "cannot tell because my
+  # instrument is dead" are different facts, and only the first is survivable.
+  echo "RACE_CANNOT_TELL_REASON=no_overlap"
   echo "🟡 RACE HARNESS CANNOT TELL — the race did not occur on this machine. Exit 2 is not a pass and not a refutation." >&2
   exit 2
 fi

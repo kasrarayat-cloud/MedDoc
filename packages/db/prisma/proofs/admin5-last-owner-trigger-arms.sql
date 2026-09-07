@@ -43,6 +43,52 @@ INSERT INTO "users"(id,email,"passwordHash","updatedAt","practiceId","practiceRo
 -- S is an OWNER row that `deactivatedAt IS NULL` counts and this trigger does not.
 UPDATE "users" SET "suspendedAt" = now() WHERE id = 't210_s';
 
+-- ══════════════════════════════════════════════════════════════════════════
+-- P_LEGACY — ZERO active owners AND a LIVE member. RULING #240a.
+--
+-- ⚠️ THIS IS THE ONLY SHAPE THAT REACHES EXEMPTION 1, AND NOTHING REACHED IT.
+-- Round two measured the consequence: **delete exemption 1 entirely and all 35
+-- arms stay green** — including arms 28-32, the five written to protect it.
+-- They run against P_DEAD, whose two members are BOTH `isActive=false`, so
+-- `members_left` is 0 and **exemption 2** returns before exemption 1 is ever
+-- load-bearing. Five arms pointing at a clause none of them can see.
+--
+-- ⚠️ AND THE FIXTURE MUST BE SEEDED WITH THE TRIGGER DISARMED, WHICH IS THE
+-- POINT RATHER THAN A WORKAROUND. This state can no longer be CREATED — arms 14
+-- and 33 refuse both doors into it — but it EXISTS: the migration's own install
+-- NOTICE counts the practices already in it and says "these stay writable via
+-- exemption 1". A guard for legacy data needs legacy data, and legacy data by
+-- definition predates the guard.
+-- ⚠️ NO NESTED `BEGIN; … COMMIT;` HERE, AND THE FIRST DRAFT HAD ONE.
+-- This whole file is ONE transaction (line 19) that ends in `ROLLBACK` so it
+-- leaves the database exactly as it found it. A nested `COMMIT` does not close
+-- an inner block — Postgres has no nested transactions — it **ENDS THE OUTER
+-- ONE**, committing every fixture row written so far and leaving them behind
+-- forever. In CI that database is the one the seed and the whole E2E suite then
+-- use. `SET LOCAL` is transaction-scoped, so the disarm reverts at the outer
+-- ROLLBACK with the rows.
+SET LOCAL session_replication_role = 'replica';
+INSERT INTO "practices"(id,name,slug,"updatedAt") VALUES
+  ('t210_plegacy','T210 Legacy','t210-legacy',now());
+INSERT INTO "users"(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive") VALUES
+  ('t210_lg_own','t210lgo@x.test','x',now(),'t210_plegacy','OWNER',     false),
+  ('t210_lg_mem','t210lgm@x.test','x',now(),'t210_plegacy','CLINICIAN', true);
+-- ⚠️ RE-ARM IMMEDIATELY. Every arm below must run against a LIVE trigger; a
+-- disarm left in place would make all 38 of them measure nothing at all.
+SET LOCAL session_replication_role = 'origin';
+
+-- ⚠️ POSITIVE CONTROL ON THAT FIXTURE. If it is not 0 active owners / 1 LIVE
+-- member then arm 36 below is exercising exemption 2 like its five
+-- predecessors, and would pass for the same wrong reason they do.
+INSERT INTO arm_result
+SELECT 'FIXTURE-CONTROL: P_LEGACY has 0 able owners and 1 LIVE member',
+       '0|1', got, CASE WHEN got = '0|1' THEN 'PASS' ELSE 'FAIL' END
+  FROM (
+    SELECT (SELECT count(*) FROM users u WHERE u."practiceId"='t210_plegacy' AND users_is_active_owner(u))::text
+           || '|' ||
+           (SELECT count(*) FROM users u WHERE u."practiceId"='t210_plegacy' AND users_is_live_member(u))::text AS got
+  ) q;
+
 -- ⚠️ POSITIVE CONTROL ON THE FIXTURE ITSELF. If this row is not 2/1 the whole
 -- file is measuring something other than what it claims, and every arm below
 -- would pass or fail for the wrong reason.
@@ -79,7 +125,25 @@ RETURNS void AS $$
 DECLARE got text; n_rows bigint := 0;
 BEGIN
     BEGIN
-        IF setup IS NOT NULL THEN EXECUTE setup; END IF;
+        -- ⚠️ A REFUSAL RAISED BY THE **SETUP** IS NOT THE ARM'S RESULT --
+        -- RULING #240b. Setup and statement shared one handler, so a setup
+        -- that hit the guard produced `SQLERRM LIKE 'users_last_owner_guard:%'`
+        -- and a REFUSED-expecting arm PASSED with its statement never executed
+        -- -- and reported 0 vacuous while doing it, because MATCHED-NOTHING is
+        -- the only vacuity this harness could previously see.
+        --
+        -- ⚠️ THE SETUP STAYS INSIDE THIS SUBTRANSACTION ON PURPOSE. Moving it
+        -- to its own block would classify the error correctly and LEAK the
+        -- setup's writes into every later arm, because it is `T210_UNDO`
+        -- unwinding this block that rolls the fixture back. So the inner block
+        -- re-raises with a distinguishable prefix instead of relocating the work.
+        IF setup IS NOT NULL THEN
+            BEGIN
+                EXECUTE setup;
+            EXCEPTION WHEN others THEN
+                RAISE EXCEPTION 'T210_SETUP_FAILED: %', SQLERRM;
+            END;
+        END IF;
         EXECUTE stmt;
         -- ⚠️ AN ALLOW ARM MUST DISTINGUISH "THE GUARD ALLOWED IT" FROM "THE
         -- STATEMENT MATCHED NOTHING". Both complete without raising, and the
@@ -91,6 +155,12 @@ BEGIN
     EXCEPTION WHEN others THEN
         IF    SQLERRM = 'T210_UNDO' AND n_rows > 0      THEN got := 'ALLOWED';
         ELSIF SQLERRM = 'T210_UNDO'                     THEN got := 'MATCHED-NOTHING';
+        -- ⚠️ TESTED BEFORE THE GUARD CLAUSE, AND THE ORDER IS THE WHOLE FIX.
+        -- A setup that trips the guard raises the guard's own message; checked
+        -- after, it would still read as REFUSED.
+        ELSIF SQLERRM LIKE 'T210_SETUP_FAILED:%'        THEN
+              got := 'SETUP-FAILED';
+              RAISE NOTICE '%: %', arm, SQLERRM;   -- the detail survives, in the log
         -- The refusal is identified BY ITS OWN MESSAGE, never by "something threw".
         ELSIF SQLERRM LIKE 'users_last_owner_guard:%'   THEN got := 'REFUSED';
         ELSE  got := 'OTHER-ERROR: ' || SQLERRM;
@@ -314,6 +384,49 @@ SELECT t210_try('31 zero-owner practice: suspend a member','ALLOWED',
 SELECT t210_try('32 zero-owner practice: PROMOTE a member to OWNER — the repair','ALLOWED',
   $$UPDATE users SET "practiceRole"='OWNER', "isActive"=true WHERE id='t210_d1'$$);
 
+-- ══════════════════════════════════════════════════════════════════════════
+-- RULING #238 — THE THIRD WAY IN, AND IT WAS THE LAST REMAINING DOOR.
+--
+-- A live member ARRIVING by an UPDATE of `practiceId` reached the exact state
+-- arm 14 refuses on INSERT, and both guards stood down: the removal guard by
+-- exemption 1 (a CLINICIAN was never an active owner) and the orphan arm by its
+-- UPDATE early return (the row was already a live member). Neither counted;
+-- neither took the advisory lock.
+--
+-- ⚠️ IDENTICAL END STATE, OPPOSITE VERDICTS, DECIDED ONLY BY HOW THE MEMBER
+-- ARRIVED. Arm 14 covers the INSERT; nothing covered the MOVE. Arm 6 covers
+-- moving an owner OUT — the mirror image — which is exactly why the omission
+-- reads as an oversight rather than a policy.
+SELECT t210_try('33 MOVE a live member INTO a zero-owner practice','REFUSED',
+  $$UPDATE users SET "practiceId"='t210_pdead' WHERE id='t210_c'$$);
+
+-- ⚠️ AND THE OTHER DIRECTION MUST STAY OPEN, or #238 has bought the invariant
+-- by making the zero-owner practices unrepairable — the same lockout exemption
+-- 1 exists to prevent, re-entering through the fix for a different hole.
+SELECT t210_try('34 MOVE a member OUT of a zero-owner practice — the rescue','ALLOWED',
+  $$UPDATE users SET "practiceId"='t210_pmulti' WHERE id='t210_d1'$$);
+
+-- ⚠️ EXEMPTION 1, AT LAST REACHABLE — RULING #240a. Deleting
+-- `IF NOT users_is_active_owner(OLD) THEN RETURN` makes this arm RED, and made
+-- nothing red before. The write is benign, the row is not an active owner, and
+-- the practice is ALREADY ownerless with somebody live in it: without the
+-- exemption the guard counts 0 owners and 1 member and REFUSES — locking a real
+-- production practice out of every write, which is the lockout the guard against
+-- lockout would itself have created.
+SELECT t210_try('35 legacy ownerless practice WITH a live member: a benign write','ALLOWED',
+  $$UPDATE users SET "forceLogoutAt"=now() WHERE id='t210_lg_mem'$$);
+
+-- ⚠️ HARNESS SELF-TEST — RULING #240b. `t210_try` credited a refusal raised by
+-- an arm's own SETUP to the arm, so a REFUSED-expecting arm whose fixture never
+-- built PASSED, and reported 0 vacuous while doing it. This arm's setup trips
+-- the guard deliberately; the harness must call that SETUP-FAILED and not
+-- REFUSED. ⚠️ IT IS A TEST OF THE INSTRUMENT, NOT OF THE TRIGGER — the statement
+-- is never reached, and that is what is being asserted.
+SELECT t210_try('36 HARNESS SELF-TEST: a refusal raised by the SETUP is not credited to the arm',
+  'SETUP-FAILED',
+  $$UPDATE users SET "forceLogoutAt"=now() WHERE id='t210_c'$$,
+  $$UPDATE users SET "practiceRole"='CLINICIAN' WHERE id='t210_a'$$);
+
 \pset format aligned
 \echo ''
 \echo '=== RULING #210 — DETERMINISTIC ARMS ==='
@@ -329,8 +442,8 @@ SELECT count(*) FILTER (WHERE verdict='PASS')            AS pass,
        count(*) FILTER (WHERE verdict='FAIL')            AS fail,
        count(*) FILTER (WHERE got = 'MATCHED-NOTHING')   AS vacuous,
        count(*)                                          AS arms_run,
-       33                                                AS arms_expected,
-       CASE WHEN count(*) = 33 AND count(*) FILTER (WHERE verdict='FAIL') = 0
+       38                                                AS arms_expected,
+       CASE WHEN count(*) = 38 AND count(*) FILTER (WHERE verdict='FAIL') = 0
             THEN '🟢 all arms ran and passed'
             ELSE '🔴 ARM COUNT OR VERDICT MISMATCH' END  AS verdict
   FROM arm_result WHERE verdict IS NOT NULL;

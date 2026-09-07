@@ -376,12 +376,29 @@ jobs:
       - name: Prove the advisory lock races (ruling #210 — 2x2 with its control)
         run: |
           set +e
-          bash packages/db/prisma/proofs/admin5-last-owner-trigger-race.sh
-          rc=$?
+          bash packages/db/prisma/proofs/admin5-last-owner-trigger-race.sh 2>&1 | tee race.log
+          rc=${PIPESTATUS[0]}
           set -e
+          # ⚠️ EXIT 2 IS A PASS ONLY WHEN THE WITNESS SAYS THE RACE GENUINELY DID
+          # NOT OCCUR — RULING #240(e). It used to be a catch-all: ANY exit 2
+          # became a ::warning and a passing job, so a harness that could not tell
+          # for a BAD reason rode green. A dead control is a FAILURE.
+          #
+          # The harness prints RACE_CANNOT_TELL_REASON=no_overlap on exactly the
+          # one survivable path. Requiring it here means a future exit 2 added for
+          # some other reason FAILS this step until somebody decides otherwise —
+          # which is the right default for a step whose green is otherwise
+          # compatible with "cannot tell".
           case "$rc" in
             0) echo "::notice::race harness PASSED — every predicted cell held" ;;
-            2) echo "::warning::race harness CANNOT TELL — the transactions never overlapped on this runner. Not a pass and not a refutation; re-run or widen the sentinel." ;;
+            2)
+              if grep -q '^RACE_CANNOT_TELL_REASON=no_overlap$' race.log; then
+                echo "::warning::race harness CANNOT TELL — the transactions never overlapped on this runner. Not a pass and not a refutation; re-run or widen the sentinel."
+              else
+                echo "::error::race harness exited 2 WITHOUT the no-overlap witness — cannot-tell for an unstated reason is a failure, not a warning"
+                exit 1
+              fi
+              ;;
             *) echo "::error::race harness REFUTED a prediction — see the log above"; exit 1 ;;
           esac
 

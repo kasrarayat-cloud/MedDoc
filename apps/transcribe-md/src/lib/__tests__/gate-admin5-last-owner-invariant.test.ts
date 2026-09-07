@@ -23,9 +23,30 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ACTIVE_OWNER_WHERE, activeOwnerSql } from '../last-owner-invariant';
+// ⚠️ THE MOCK EXISTS BECAUSE EVERY ARM IN THIS FILE READ SOURCE AND NONE DROVE
+// THE FUNCTION — round two measured it: `wouldStrandPractice` reduced to
+// `return { wouldStrand: false }` kept all fourteen arms GREEN. A gate that can
+// only read the guard cannot tell you the guard still runs.
+const userFindUnique = vi.fn();
+const userCount = vi.fn();
+vi.mock('@meddoc/db', () => ({
+  default: {
+    user: {
+      findUnique: (...a: unknown[]) => userFindUnique(...a),
+      count: (...a: unknown[]) => userCount(...a),
+    },
+  },
+}));
+
+import {
+  ACTIVE_OWNER_WHERE,
+  LIVE_MEMBER_WHERE,
+  activeOwnerSql,
+  liveMemberSql,
+  wouldStrandPractice,
+} from '../last-owner-invariant';
 
 const REPO = join(__dirname, '..', '..', '..', '..', '..');
 const MIGRATION = join(
@@ -47,11 +68,7 @@ function activeOwnerSqlBody(): string {
   expect(start, 'users_is_active_owner is not defined in the migration').toBeGreaterThan(-1);
   const end = sql.indexOf('$fn$ LANGUAGE sql IMMUTABLE;', start);
   expect(end, 'users_is_active_owner has no terminator').toBeGreaterThan(start);
-  return sql
-    .slice(start, end)
-    .split('\n')
-    .map(stripComment)
-    .join('\n');
+  return stripSqlComments(sql.slice(start, end));
 }
 
 /** A named function's body, COMMENTS STRIPPED — never a whole-file read. */
@@ -60,11 +77,7 @@ function fnBody(name: string, terminator: string): string {
   expect(start, `${name} is not defined in the migration`).toBeGreaterThan(-1);
   const end = sql.indexOf(terminator, start);
   expect(end, `${name} has no terminator`).toBeGreaterThan(start);
-  return sql
-    .slice(start, end)
-    .split('\n')
-    .map(stripComment)
-    .join('\n');
+  return stripSqlComments(sql.slice(start, end));
 }
 
 /** One SQL statement, from its opening keyword to its `;`, COMMENTS STRIPPED. */
@@ -92,6 +105,30 @@ function statement(opening: string): string {
 function stripComment(line: string): string {
   const i = line.indexOf('--');
   return i === -1 ? line : line.slice(0, i);
+}
+
+/**
+ * ⚠️ BLOCK COMMENTS TOO — RULING #240c.
+ *
+ * `stripComment` removes `--` to end-of-line and nothing else, so a SQL BLOCK
+ * comment (slash-star … star-slash) survived every "is it in the CODE" arm. Measured in round two: the
+ * advisory lock — the one #220 ratified *because it was proven load-bearing* —
+ * could be DELETED and replaced by a block comment naming it, with the gate
+ * 14/14 and all arms green.
+ *
+ * ⚠️ THIS IS THE SECOND TIME THE SAME ARM HAS BEEN DEFEATED BY A COMMENT. The
+ * arm's own header records the first: *"Reading the raw slice let the lock be
+ * DELETED and replaced by a comment mentioning it — measured 12/12 green."* The
+ * fix then was to strip comments; it stripped one of the two kinds SQL has.
+ * **Closing an instance is not closing the class**, and the second instance
+ * arrived in the same arm.
+ */
+function stripSqlComments(text: string): string {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .split('\n')
+    .map(stripComment)
+    .join('\n');
 }
 
 /** Quoted identifiers the SQL predicate actually reads, e.g. `"isActive"`. */
@@ -304,6 +341,118 @@ describe('ruling #210 — one definition of an active practice OWNER', () => {
       const write = src.indexOf('.update({');
       expect(call, `${route} does not call wouldStrandPractice`).toBeGreaterThan(-1);
       expect(call, `${route} calls it AFTER the write`).toBeLessThan(write);
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // RULING #239 — "LIVE MEMBER" GETS ONE PREDICATE, AS "ABLE OWNER" DID.
+  // ══════════════════════════════════════════════════════════════════════════
+  it('ruling #239 — `liveMemberSql` emits exactly the migration\'s live-member predicate', () => {
+    // Same normalisation the #221 arm uses: drop everything up to SELECT and the
+    // trailing `;`, then compare as CLAUSE SETS so whitespace and ordering are
+    // free and MEANING is not.
+    const body = fnBody('users_is_live_member', '$fn$ LANGUAGE sql IMMUTABLE;')
+      .replace(/^[\s\S]*?\bSELECT\b/, '')
+      .replace(/;\s*$/, '');
+    const generated = new Set(
+      liveMemberSql('u').split(/\bAND\b/i).map((c) => c.replace(/\s+/g, ' ').trim()),
+    );
+    const migration = new Set(
+      body.split(/\bAND\b/i).map((c) => c.replace(/\s+/g, ' ').trim()),
+    );
+    expect(generated, 'the generator and the migration disagree clause-for-clause').toEqual(migration);
+    expect(generated.size, 'the live-member predicate collapsed to nothing').toBe(4);
+  });
+
+  it('ruling #239 — the TS filter names the same columns as the SQL', () => {
+    const cols = new Set(
+      [...fnBody('users_is_live_member', '$fn$ LANGUAGE sql IMMUTABLE;')
+        .replace(/^[\s\S]*?\bSELECT\b/, '')
+        .matchAll(/u\."([A-Za-z]+)"/g)].map((m) => m[1]!),
+    );
+    expect(new Set(Object.keys(LIVE_MEMBER_WHERE))).toEqual(cols);
+  });
+});
+
+// ============================================================================
+// ⚠️ BEHAVIOURAL COVERAGE — ROUND TWO FOUND THIS FILE HAD NONE.
+//
+// Every arm above reads SOURCE. That is the right instrument for "the two
+// copies of a predicate agree", and it is the wrong instrument for "the guard
+// still runs": `wouldStrandPractice` reduced to `return { wouldStrand: false }`
+// kept 14 of 14 green. These arms DRIVE it.
+// ============================================================================
+describe('ruling #239 — the friendly refusal counts LIVE members, not rows', () => {
+  const OWNER = {
+    id: 'u1',
+    practiceId: 'p1',
+    practiceRole: 'OWNER',
+    isActive: true,
+    deactivatedAt: null,
+    suspendedAt: null,
+    softDeletedAt: null,
+  };
+
+  beforeEach(() => {
+    userFindUnique.mockReset();
+    userCount.mockReset();
+    userFindUnique.mockResolvedValue(OWNER);
+  });
+
+  /** `count` is called twice: [0] able owners left, [1] live members left. */
+  const counts = (ownersLeft: number, membersLeft: number) => {
+    userCount.mockResolvedValueOnce(ownersLeft).mockResolvedValueOnce(membersLeft);
+  };
+
+  it('⚠️ NON-VACUITY — the last able owner WITH a live member DOES strand', async () => {
+    counts(0, 1);
+    const v = await wouldStrandPractice('u1');
+    expect(v.wouldStrand, 'the guard no longer refuses anything — every arm below is vacuous').toBe(true);
+  });
+
+  it('exemption 1 — not an active owner, so nothing is lost', async () => {
+    userFindUnique.mockResolvedValue({ ...OWNER, practiceRole: 'CLINICIAN' });
+    expect((await wouldStrandPractice('u1')).wouldStrand).toBe(false);
+    expect(userCount, 'it counted before deciding the row was exempt').not.toHaveBeenCalled();
+  });
+
+  it('another able owner remains — nothing is lost', async () => {
+    counts(1, 5);
+    expect((await wouldStrandPractice('u1')).wouldStrand).toBe(false);
+  });
+
+  it('exemption 2 — nobody left to strand', async () => {
+    counts(0, 0);
+    expect((await wouldStrandPractice('u1')).wouldStrand).toBe(false);
+  });
+
+  it('⚠️ THE MEMBER COUNT IS FILTERED BY `LIVE_MEMBER_WHERE` — kills the bare row count', async () => {
+    counts(0, 0);
+    await wouldStrandPractice('u1');
+    const memberQuery = userCount.mock.calls[1][0] as { where: Record<string, unknown> };
+    for (const [column, value] of Object.entries(LIVE_MEMBER_WHERE)) {
+      expect(
+        memberQuery.where[column],
+        `the member count does not filter on ${column} — it counts rows the ` +
+          `trigger does not count, so this file refuses a write the database allows`,
+      ).toBe(value);
+    }
+  });
+
+  it('⚠️ …AND THE OWNER COUNT IS FILTERED BY `ACTIVE_OWNER_WHERE`', async () => {
+    counts(0, 0);
+    await wouldStrandPractice('u1');
+    const ownerQuery = userCount.mock.calls[0][0] as { where: Record<string, unknown> };
+    for (const [column, value] of Object.entries(ACTIVE_OWNER_WHERE)) {
+      expect(ownerQuery.where[column], `the owner count does not filter on ${column}`).toBe(value);
+    }
+  });
+
+  it('⚠️ BOTH COUNTS EXCLUDE THE ROW BEING WRITTEN', async () => {
+    counts(0, 0);
+    await wouldStrandPractice('u1');
+    for (const call of userCount.mock.calls) {
+      expect((call[0] as { where: { id?: unknown } }).where.id).toEqual({ not: 'u1' });
     }
   });
 });

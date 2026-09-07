@@ -67,14 +67,50 @@ export const ACTIVE_OWNER_WHERE = {
  * clause-for-clause the migration's `users_is_active_owner` body, so the SQL
  * side cannot drift from the TypeScript side without something going red.
  */
-export function activeOwnerSql(alias: string): string {
-  return (Object.entries(ACTIVE_OWNER_WHERE) as [string, unknown][])
+function whereToSql(where: Readonly<Record<string, unknown>>, alias: string): string {
+  return (Object.entries(where) as [string, unknown][])
     .map(([column, value]) => {
       if (value === null) return `${alias}."${column}" IS NULL`;
       if (value === true) return `${alias}."${column}"`;
       return `${alias}."${column}" = '${String(value)}'::"PracticeRole"`;
     })
     .join('\n       AND ');
+}
+
+export function activeOwnerSql(alias: string): string {
+  return whereToSql(ACTIVE_OWNER_WHERE, alias);
+}
+
+/**
+ * The ONE definition of a member who could actually be STRANDED — ruling #239.
+ *
+ * ⚠️ THIS EXISTS BECAUSE THE FIX WAS APPLIED TO ONE READER AND NOT THE OTHER.
+ * The migration's own comment beside `users_is_live_member` records it:
+ * *"Exemption 2 asks 'is anyone left to strand?', and the first version answered
+ * it with a bare row count. Refuted in this change's adversarial pass."* The
+ * trigger was corrected. `wouldStrandPractice` below still counted rows, so the
+ * two layers disagreed on real production practices — **and the disagreement
+ * runs in the harmful direction**: the app refuses a write the trigger ALLOWS,
+ * and the refusal tells the doctor to *"transfer ownership to another member"*
+ * when the only other member is a soft-deleted ex-employee who cannot receive
+ * it.
+ *
+ * ⚠️ A REFUSAL NAMING A REMEDY THAT CANNOT BE PERFORMED IS WORSE THAN NO
+ * REFUSAL, because the doctor spends the afternoon trying to perform it.
+ *
+ * #221 gave "able owner" one predicate. This is the same rule for the other
+ * half, and the same gate reads both against the migration's SQL.
+ */
+export const LIVE_MEMBER_WHERE = {
+  isActive: true,
+  deactivatedAt: null,
+  softDeletedAt: null,
+  suspendedAt: null,
+} as const;
+
+/** The SAME predicate as raw SQL, for callers that write SQL rather than Prisma. */
+export function liveMemberSql(alias: string): string {
+  return whereToSql(LIVE_MEMBER_WHERE, alias);
 }
 
 export const LAST_OWNER_REFUSAL =
@@ -126,7 +162,15 @@ export async function wouldStrandPractice(userId: string): Promise<LastOwnerVerd
     prisma.user.count({
       where: { practiceId: user.practiceId, id: { not: user.id }, ...ACTIVE_OWNER_WHERE },
     }),
-    prisma.user.count({ where: { practiceId: user.practiceId, id: { not: user.id } } }),
+    // ⚠️ LIVE MEMBERS, NOT ROWS — RULING #239. This was
+    // `count({ where: { practiceId, id: { not } } })`: a bare row count, while
+    // the trigger asks `users_is_live_member`. A practice whose only other row
+    // is soft-deleted or deactivated reads `membersLeft > 0` here and `0` at the
+    // trigger, so this file refused a write the database permits — and named a
+    // remedy nobody can perform.
+    prisma.user.count({
+      where: { practiceId: user.practiceId, id: { not: user.id }, ...LIVE_MEMBER_WHERE },
+    }),
   ]);
 
   if (ownersLeft > 0) return { wouldStrand: false };

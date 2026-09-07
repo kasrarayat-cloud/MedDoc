@@ -135,9 +135,32 @@ $fn$ LANGUAGE sql IMMUTABLE;
 -- ownership. A permanent refusal naming an impossible cure is worse than no
 -- guard.
 --
--- A row that cannot be stranded does not count. Suspension DOES count: a
--- suspended member still has an account and can be restored, so they are a
--- person left behind. Deactivated and soft-deleted rows are not.
+-- A row that cannot be stranded does not count.
+--
+-- ⚠️ SUSPENSION IS **EXCLUDED**, AND THE SENTENCE HERE USED TO SAY THE OPPOSITE
+-- OF THE FUNCTION THREE LINES BELOW IT -- RULING #241a. It read "Suspension
+-- DOES count: a suspended member still has an account and can be restored, so
+-- they are a person left behind", while the predicate carries
+-- `AND u."suspendedAt" IS NULL`.
+--
+-- THE CODE IS RIGHT, AND THE REASON IS MEASURED: counting a suspended person as
+-- a member would make SUSPENDING A SOLO PRACTICE OWNER IMPOSSIBLE -- suspend the
+-- owner and the practice has zero able owners with one "member" (the owner's own
+-- suspended row, or a suspended colleague) still counted, so the guard refuses a
+-- legitimate operations action forever. `gate-admin5-last-owner-invariant.test.ts`
+-- pins the exclusion by name, with two independent assertions that go red if
+-- `suspendedAt` is removed from the predicate.
+--
+-- ⚠️ AND AN ADVERSARIAL LENS GOT THIS BACKWARDS, WHICH IS WHY THE SENTENCE IS
+-- CORRECTED RATHER THAN THE FUNCTION. It reproduced the behaviour exactly and
+-- then named the WRONG artifact defective; acting on its diagnosis would have
+-- broken solo-owner suspension. **A correct observation with an inverted
+-- diagnosis is the most expensive kind of finding**, and a comment that
+-- contradicts the code three lines below it is how one gets invited -- in a file
+-- that spends 150 lines warning that a rule with two readers drifts.
+--
+-- So: deactivated, soft-deleted and SUSPENDED rows are all excluded. What counts
+-- is a member who is live TODAY and would be left with nobody to administer them.
 CREATE OR REPLACE FUNCTION users_is_live_member(u "users") RETURNS boolean AS $fn$
     SELECT u."isActive"
        AND u."deactivatedAt" IS NULL
@@ -331,7 +354,33 @@ BEGIN
     -- removal guard returns early on it and never looks. This arm covers the
     -- write that CREATES a live member; when the row was ALREADY one, the
     -- removal guard owns the question and this one must not double-refuse.
-    IF TG_OP = 'UPDATE' AND users_is_live_member(OLD) THEN
+    -- ⚠️ AND `practiceId` IS COMPARED, EXACTLY AS THE REMOVAL GUARD COMPARES IT
+    -- ONE FUNCTION UP -- RULING #238. Without it this early return was the LAST
+    -- REMAINING DOOR into the forbidden state.
+    --
+    -- "The removal guard owns the question" is true only while the member stays
+    -- in the same practice. MOVE a live CLINICIAN into an ownerless practice and
+    -- BOTH guards stand down: the removal guard exempts the row because a
+    -- CLINICIAN was never an active owner (exemption 1), and this arm exempted
+    -- it because it was already a live member. Neither counts, neither takes the
+    -- advisory lock, and the end state is the one arm 14 REFUSES on INSERT.
+    --
+    -- ⚠️ IDENTICAL END STATE, OPPOSITE VERDICTS, DECIDED ONLY BY HOW THE MEMBER
+    -- ARRIVED. That is not a policy anybody chose; it is an omission, and the
+    -- sibling guard's own comment at :172-173 already says why the comparison
+    -- belongs here -- "moving an owner to another practice removes a seat from
+    -- the OLD one just as surely as demoting them". Arriving is the same fact
+    -- pointed the other way.
+    --
+    -- ⚠️ NO RUNTIME WRITER OF `users."practiceId"` EXISTS TODAY, and this is
+    -- fixed anyway. #210's whole premise is enforcement that does not depend on
+    -- remembering doors -- "the sixth is written by whoever adds the next admin
+    -- surface, and they will not read this file" -- and the schema comment on
+    -- that column names the future door by name: "When a solo doctor later wants
+    -- to work with colleagues, migrate them to a real Practice."
+    IF TG_OP = 'UPDATE'
+       AND NEW."practiceId" = OLD."practiceId"
+       AND users_is_live_member(OLD) THEN
         RETURN NEW;
     END IF;
 
