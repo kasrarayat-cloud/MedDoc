@@ -3,14 +3,45 @@
  *
  * (a) NARRATIVE_SENTENCES may only carry concepts the extractor actually
  *     emits, and must cover the ROS lexicon it claims to serve.
- * (b) A NULL mapping temporality means `current`, NEVER `any`.
+ * (b) ⚠️ REVERSED 2026-09-07 — A NULL MAPPING TEMPORALITY MEANS `any` AGAIN,
+ *     AND THE REASON IS THAT (6) HAS NO RECORDED CONTENT.
  *
- * ⚠️ (b) IS THE CLINICALLY SHARP ONE, AND IT REDDED NOTHING. Mutating "null
- * means current" into "null means any" passed **674 of 674** twin tests. The
- * shipped compiler emits null for scaffolded clauses, and the code's own
- * comment records what that cost: a refutation pass demonstrated a HISTORICAL,
- * resolved symptom matching a present-tense sentence — *"The patient denies
- * chest pain"* contradicted by chest pain the patient had in 2019.
+ * ⚠️ THE ORIGINAL WORDING IS KEPT HERE BECAUSE THE CORRECTION IS THE POINT:
+ * "(b) A NULL mapping temporality means `current`, NEVER `any`. ⚠️ (b) IS THE
+ * CLINICALLY SHARP ONE, AND IT REDDED NOTHING. Mutating 'null means current'
+ * into 'null means any' passed 674 of 674 twin tests."
+ *
+ * That observation was TRUE and the arm was right to exist. What was missing
+ * is that the rule it armed cannot be produced. Measured across the ledger head
+ * and every archive, with controls that discriminate — `laterality` 17 hits in
+ * 3 files, `scaffolded` 36, `unmentionedPolicy` 11, `conceptScope` 3 —
+ * **`temporality` scores ZERO, in any ruling, ever.** And #179's own body says
+ * so: "Parts 4 and 6 are not described here because this session was not given
+ * their content. An empty row is honest; a plausible one written to make the
+ * table look complete would be a fabrication wearing a ledger's authority."
+ *
+ * ⚠️ AND THE RULE WAS APPLIED IN ONE OF THREE READERS, WHICH IS WHAT MADE IT
+ * HARMFUL RATHER THAN MERELY UNSUPPORTED. The resolver and `bridge-evidence`
+ * still read null as `any`, so the resolver FILLED a field and CITED its fact
+ * and the validator then rejected that same citation as
+ * SOURCE_FACT_CONCEPT_MISMATCH — and `fill-engine` turns a blocking issue into
+ * `render: null`. The failure was not a wrong value; it was the doctor's WHOLE
+ * DOCUMENT not being produced. Measured over the (mapping.temporality x
+ * fact.temporality) matrix: 3 disagreeing cells before, 0 after, and every one
+ * of the three sat at `mapping.temporality === null`.
+ *
+ * ⚠️ THE CLINICAL INTENT IS NOT ABANDONED, IT IS RE-AIMED. "The patient denies
+ * chest pain must not be contradicted by chest pain the patient had in 2019" is
+ * a claim about ROS SCAFFOLD CLAUSES, and it is delivered by declaring
+ * `temporality: 'current'` ON THOSE MAPPINGS — explicit, narrow, and visible in
+ * the mapping a doctor confirms. Redefining null globally reached every field
+ * of every template instead, including Past Medical History and Family History,
+ * whose facts are `historical` BY CONSTRUCTION.
+ *
+ * The question is filed for the owner at
+ * `docs/foundation/board/179-REPAIR-OWNER-QUESTIONS.md`. If he confirms he
+ * ruled (6), the edit is ONE constant in `fact-mapping-match.ts` and these arms
+ * inverting with it.
  *
  * ⚠️ AND (a)'s SOURCE COMMENT CLAIMED AN ARM THAT DID NOT EXIST. It named
  * `gate-f5i2-narrative-encounter.test.ts` as asserting the table "with a
@@ -21,15 +52,58 @@
  */
 import { describe, it, expect } from 'vitest';
 import { factMatchesMapping } from '../validation/index';
+import { resolveTemplateFields } from '../resolver/index';
 import { narrativeSentence } from '../verification-encounter';
 import { isRegisteredConcept } from '../concept-registry';
 import { ROS_SYSTEMS, symptomsFor, rosConcept, ROS_OTHER } from '../ros-lexicon';
 import {
   SemanticMappingSchema,
   EncounterFactSchema,
+  TemplateFieldSchema,
   type SemanticMapping,
   type EncounterFact,
+  type TemplateField,
 } from '../ir';
+
+const SHA = 'a'.repeat(64);
+
+/** A narrative field the resolver will actually fill — the agreement arm needs
+ *  a real resolution, not a predicate call. Mirrors the shipped factory in
+ *  `gate-179-checkbox-scope.test.ts`. */
+function narrativeField(): TemplateField {
+  return TemplateFieldSchema.parse({
+    fieldId: FIELD_ID,
+    kind: 'narrative_text',
+    originalLabel: 'Past Medical History',
+    labelSource: 'left_cell',
+    displayOrder: 0,
+    detectionStatus: 'certified',
+    allowedOptions: [],
+    rendererBinding: {
+      partName: 'word/document.xml',
+      bindingType: 'content_control',
+      path: '/document/pmh',
+      ordinal: 0,
+      sdtId: '1',
+      tag: 'synthetic',
+      alias: null,
+      legacyName: null,
+      rowLaterality: 'unknown',
+      tableIndex: null,
+      rowIndex: null,
+      cellIndex: null,
+      repeatAncestorPath: null,
+      sourceControlSha256: SHA,
+      originalContentSha256: SHA,
+    },
+    required: false,
+    unknownPolicy: 'blank',
+    clinicallyMaterial: false,
+    criticality: 'routine',
+    tableId: null,
+    rowPrototype: false,
+  });
+}
 
 const FIELD_ID = 'ttf_0123456789abcdef01234567';
 const CONCEPT = 'ros.gastrointestinal.heartburn';
@@ -76,32 +150,41 @@ function fact(temporality: EncounterFact['temporality']): EncounterFact {
   });
 }
 
-describe('#179(6b) — a NULL mapping temporality means `current`, never `any`', () => {
-  it('NON-VACUITY: a null-temporality mapping still matches a CURRENT fact', () => {
-    // Without this the refusals below are consistent with a matcher that
-    // rejects every null-temporality mapping, which would blank scaffolded
-    // clauses entirely.
+describe('#179(6b) — REVERSED: a null mapping temporality means `any`', () => {
+  it('NON-VACUITY: a null-temporality mapping matches a CURRENT fact', () => {
+    // Kept from the original arms. Without it every assertion below is
+    // consistent with a matcher that accepts everything unconditionally.
     expect(factMatchesMapping(fact('current'), mapping({ temporality: null }))).toBe(true);
   });
 
-  it('⚠️ a HISTORICAL fact does NOT satisfy a null-temporality clause', () => {
-    // The 2019 chest pain case. The compiler emits null for scaffolded
-    // clauses, so this is the DEFAULT path, not an edge case.
-    expect(factMatchesMapping(fact('historical'), mapping({ temporality: null }))).toBe(false);
+  it('a HISTORICAL fact DOES satisfy a null-temporality clause — `main`\'s meaning', () => {
+    // ⚠️ THIS ARM IS INVERTED FROM ITS ORIGINAL FORM, deliberately. It is the
+    // Past Medical History case: `encounter-facts` stamps `historical` on every
+    // PMH and family-history item BY CONSTRUCTION, so under the branch's rule
+    // those fields were filled by the resolver and then refused by the
+    // validator — costing the whole document, on every visit, for any template
+    // carrying one.
+    expect(factMatchesMapping(fact('historical'), mapping({ temporality: null }))).toBe(true);
   });
 
-  it('⚠️ nor does a PLANNED fact — a symptom to watch for is not one reported', () => {
-    expect(factMatchesMapping(fact('planned'), mapping({ temporality: null }))).toBe(false);
+  it('so does a PLANNED fact', () => {
+    expect(factMatchesMapping(fact('planned'), mapping({ temporality: null }))).toBe(true);
   });
 
-  it('nor an UNKNOWN-temporality fact', () => {
-    expect(factMatchesMapping(fact('unknown'), mapping({ temporality: null }))).toBe(false);
+  it('and an UNKNOWN-temporality fact', () => {
+    expect(factMatchesMapping(fact('unknown'), mapping({ temporality: null }))).toBe(true);
   });
 
-  it('an EXPLICIT `any` still matches everything — null and `any` are different', () => {
-    // This is the distinction the ruling turns on: `any` is a decision somebody
-    // made; null is the absence of one, and absence must not be read as
-    // permission.
+  it('⚠️ DISCRIMINATION: a null mapping is not a matcher that accepts everything', () => {
+    // The arms above would all pass against a `factMatchesMapping` that
+    // returned true unconditionally. This is what says it does not: an
+    // EXPLICIT tense still refuses a fact in another tense, so the null arms
+    // are measuring the null branch and not a broken predicate.
+    expect(factMatchesMapping(fact('historical'), mapping({ temporality: 'current' }))).toBe(false);
+    expect(factMatchesMapping(fact('current'), mapping({ temporality: 'historical' }))).toBe(false);
+  });
+
+  it('an EXPLICIT `any` still matches everything', () => {
     for (const t of ['current', 'historical', 'planned', 'unknown'] as const) {
       expect(factMatchesMapping(fact(t), mapping({ temporality: 'any' })), t).toBe(true);
     }
@@ -110,6 +193,61 @@ describe('#179(6b) — a NULL mapping temporality means `current`, never `any`',
   it('an EXPLICIT `historical` matches historical and not current', () => {
     expect(factMatchesMapping(fact('historical'), mapping({ temporality: 'historical' }))).toBe(true);
     expect(factMatchesMapping(fact('current'), mapping({ temporality: 'historical' }))).toBe(false);
+  });
+});
+
+/**
+ * ⚠️ THE ARM THAT WOULD HAVE CAUGHT THE ORIGINAL DEFECT, AND THE ONE THAT KEEPS
+ * IT SHUT. Its subject is the AGREEMENT of the readers, not any one reader.
+ *
+ * Three modules answered "does this fact satisfy this mapping" — the validator,
+ * the resolver, and `bridge-evidence` — and #179 changed one. Every arm in this
+ * repository pointed at ONE of them, so all three could be green while the
+ * system contradicted itself. The rule now lives in `fact-mapping-match.ts` and
+ * is imported, but a future edit can re-open the gap by open-coding a filter
+ * again; this arm is what fails when it does.
+ *
+ * MEASURED, same harness, two trees: 3 disagreements on the unmodified branch,
+ * 0 after the consolidation — so it discriminates, and it is not asserting a
+ * property that was already true.
+ */
+describe('the validator and the resolver answer the temporality question identically', () => {
+  const MAPPING_TENSES = [null, 'any', 'current', 'historical', 'planned'] as const;
+  const FACT_TENSES = ['current', 'historical', 'planned', 'unknown'] as const;
+
+  it('agrees on every cell of the (mapping x fact) temporality matrix', () => {
+    const disagreements: string[] = [];
+    let matched = 0;
+    for (const mt of MAPPING_TENSES) {
+      for (const ft of FACT_TENSES) {
+        const m = mapping({ temporality: mt });
+        const validatorSays = factMatchesMapping(fact(ft), m);
+        const [resolution] = resolveTemplateFields({
+          fields: [narrativeField()],
+          mappings: [m],
+          facts: [fact(ft)],
+          certifiedFieldIds: [FIELD_ID],
+        });
+        // ⚠️ `sourceFactIds`, and the name matters. My first harness read
+        // `citedFactIds` — a field that does not exist — and still printed the
+        // right answer, because it fell through to a `status === 'supported'`
+        // alternative. A probe that is right for the wrong reason is the thing
+        // this whole arm exists to prevent, so it is read directly here with
+        // no fallback to hide a typo.
+        const resolverCites = resolution.sourceFactIds.length > 0;
+        if (validatorSays !== resolverCites) {
+          disagreements.push(`mapping=${String(mt)} fact=${ft}: validator=${validatorSays} resolver=${resolverCites}`);
+        }
+        if (validatorSays) matched += 1;
+      }
+    }
+    // NON-VACUITY: the matrix must contain both answers, or "they agree" is a
+    // statement about a predicate that never fired.
+    expect(matched, 'no cell matched — the harness is not exercising the matcher').toBeGreaterThan(0);
+    expect(matched, 'every cell matched — the harness cannot see a refusal').toBeLessThan(
+      MAPPING_TENSES.length * FACT_TENSES.length,
+    );
+    expect(disagreements).toEqual([]);
   });
 });
 

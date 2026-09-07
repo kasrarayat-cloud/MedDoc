@@ -20,6 +20,12 @@ import {
 } from '../ir';
 import { withoutPlaceholderOptions } from '../../note-template-docx/placeholder-option';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
+import {
+  conceptMatches,
+  normalizeConcept,
+  requiredFactTemporality,
+  temporalityMatches,
+} from '../fact-mapping-match';
 import { isMappingTypeCompatible } from '../semantic-mapping';
 import {
   approvedPracticeDefaultAnchorId,
@@ -52,10 +58,6 @@ interface ConversionFailure {
 }
 
 type ConversionResult = ConvertedValue | ConversionFailure;
-
-function normalizeConcept(value: string): string {
-  return value.normalize('NFKC').trim().toLocaleLowerCase('en-US');
-}
 
 function unique<T>(values: ReadonlyArray<T>): T[] {
   return [...new Set(values)];
@@ -347,12 +349,7 @@ export function withApprovedPracticeDefaultFacts(input: {
         concept: mapping.clinicalConcept,
         value: raw,
         polarity: denied ? 'denied' : 'affirmed',
-        temporality:
-          mapping.temporality === 'historical' ||
-          mapping.temporality === 'planned' ||
-          mapping.temporality === 'current'
-            ? mapping.temporality
-            : 'current',
+        temporality: requiredFactTemporality(mapping),
         experiencer: 'patient',
         laterality:
           mapping.laterality === 'not_applicable'
@@ -464,13 +461,14 @@ function resolveOne(
     );
   }
 
-  const approvedConcepts = new Set(
-    [mapping.clinicalConcept, ...mapping.approvedSynonyms].map(normalizeConcept),
-  );
+  // ⚠️ THE SHARED CONCEPT HALF, NOT A FOURTH OPEN-CODED COPY. This filter used
+  // to build its own approved-concept set, which meant #179(3)'s declared
+  // scope — checked by the validator — was invisible here. The resolver filled
+  // a field the validator then refused, and `fill-engine` turned that into a
+  // WITHHELD DOCUMENT rather than a wrong value.
   const conceptCandidates = allFacts.filter(
     (fact) =>
-      fact.sourceType !== 'approved_practice_default' &&
-      approvedConcepts.has(normalizeConcept(fact.concept)),
+      fact.sourceType !== 'approved_practice_default' && conceptMatches(fact, mapping),
   );
   if (conceptCandidates.length === 0) {
     // The ONLY site that earns #191's kept default: no fact in the encounter
@@ -526,11 +524,13 @@ function resolveOne(
         )
       : conceptCandidates;
 
-  const expectedTemporality = mapping.temporality;
-  const temporalCandidates =
-    expectedTemporality === null || expectedTemporality === 'any'
-      ? conceptCandidates
-      : conceptCandidates.filter((fact) => fact.temporality === expectedTemporality);
+  // ⚠️ SEPARATE FROM THE CONCEPT STAGE ON PURPOSE, AND THE TWO MUST NOT MERGE.
+  // `conceptCandidates.length === 0` is the ONE site that earns #191's kept
+  // practice default; this stage is a DEFERRAL that must not. A single combined
+  // predicate cannot tell them apart and would silently re-route kept defaults.
+  const temporalCandidates = conceptCandidates.filter((fact) =>
+    temporalityMatches(fact, mapping),
+  );
   if (temporalCandidates.length === 0) {
     // NOT ambiguous, and NOT cited. The mapping approves one temporality and no
     // fact carries it, so nothing was said about this field in the sense the
