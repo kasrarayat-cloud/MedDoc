@@ -74,125 +74,23 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
-import { resolveTemplateFields } from '../resolver';
 import { templateTwinCounts } from '../ir';
+// ⚠️ THE PROBE IS SHARED, NOT COPIED — see `resolver-probe.ts` for why two other
+// files had been reading the resolver's SOURCE for want of it.
+import { field, mapping, factFor, resolveOne, resolveOneDictated } from './resolver-probe';
 import { scaffoldDefaultOfferable } from '../clinician-override';
+import { expectedDataTypeForFieldKind } from '../field-kind-data-type';
 import {
   requiresClinicianInput,
   canOmitWhenUnmentioned,
   omitBranchUnreachable,
+  OMIT_GUARD_NAMES,
   OMIT_GUARD_TOKEN_PREFIXES,
   OMIT_CONTROL_LABEL,
   OMIT_CONTROL_HINT,
   OMIT_INERT_LABEL,
 } from '../unmentioned-policy';
 import type { EncounterFact, SemanticMapping, TemplateField } from '../ir';
-
-const SHA = 'a'.repeat(64);
-
-function field(idSeed: string, overrides: Partial<TemplateField> = {}): TemplateField {
-  return {
-    fieldId: `ttf_${idSeed.repeat(24).slice(0, 24)}`,
-    kind: 'narrative_text',
-    scaffolded: true,
-    scaffoldText: 'The patient consents to a telehealth consultation.',
-    originalLabel: 'Telehealth consent',
-    labelSource: 'alias',
-    displayOrder: 0,
-    detectionStatus: 'certified',
-    allowedOptions: [],
-    rendererBinding: {
-      partName: 'word/document.xml',
-      bindingType: 'content_control',
-      path: `/synthetic/${idSeed}`,
-      ordinal: 0,
-      sdtId: '1',
-      tag: null,
-      alias: null,
-      legacyName: null,
-      rowLaterality: 'unknown' as const,
-      tableIndex: null,
-      rowIndex: null,
-      cellIndex: null,
-      repeatAncestorPath: null,
-      sourceControlSha256: SHA,
-      originalContentSha256: SHA,
-    },
-    required: false,
-    unknownPolicy: 'blank',
-    clinicallyMaterial: false,
-    criticality: 'routine',
-    tableId: null,
-    rowPrototype: false,
-    ...overrides,
-  };
-}
-
-function mapping(
-  definition: TemplateField,
-  concept: string,
-  overrides: Partial<SemanticMapping> = {},
-): SemanticMapping {
-  return {
-    fieldId: definition.fieldId,
-    sourceType: 'extraction' as const,
-    clinicalConcept: concept,
-    expectedDataType: 'text',
-    polarityBehavior: 'value_only',
-    temporality: 'current',
-    laterality: 'optional',
-    unitPolicy: 'not_applicable',
-    approvedSynonyms: [],
-    required: false,
-    blankPolicy: 'blank',
-    unknownPolicy: 'blank',
-    practiceDefault: null,
-    status: 'certified',
-    ...overrides,
-  };
-}
-
-function factFor(seed: string, concept: string, sentence: string): EncounterFact {
-  return {
-    factId: `ttfact_${seed.repeat(24).slice(0, 24)}`,
-    sourceType: 'encounter_evidence',
-    concept,
-    value: sentence,
-    polarity: 'affirmed',
-    temporality: 'current',
-    experiencer: 'patient',
-    laterality: 'not_applicable',
-    number: null,
-    unit: null,
-    speaker: 'Doctor',
-    sourceTranscriptOffsets: { start: 0, end: 10 },
-    audioTimestampSeconds: null,
-    evidenceAnchorIds: [`anchor-${seed}`],
-    evidenceQuote: sentence,
-    segment: null,
-    quality: { asr: 'high', evidence: 'direct' },
-  };
-}
-
-/**
- * One field the encounter never speaks to, on a visit that said something REAL
- * about a DIFFERENT concept — which is the only shape where `conceptUnmatched`,
- * `reason === undefined` and `facts.length > 0` all hold.
- */
-function resolveOne(
-  fieldOverrides: Partial<TemplateField> = {},
-  mappingOverrides: Partial<SemanticMapping> = {},
-) {
-  const f = field('1', fieldOverrides);
-  const m = mapping(f, 'ros.cardiovascular', mappingOverrides);
-  const resolutions = resolveTemplateFields({
-    fields: [f],
-    mappings: [m],
-    facts: [factFor('2', 'chief_complaint', 'Patient here for a rash.')],
-    allowUncertifiedForSyntheticTest: true,
-  });
-  return { field: f, mapping: m, resolution: resolutions[0]!, resolutions };
-}
 
 // ============================================================================
 // THE FIVE CLAUSES ARE EACH LOAD-BEARING — one arm per clause, so dropping ANY
@@ -504,7 +402,60 @@ describe('item 2 — the offer and the honouring are one predicate', () => {
 // simply must never again carry a claim nobody checked.
 const INTENTIONAL_CONSTANTS: Record<string, string> = {};
 
+/**
+ * Every guard the matrix actually WITNESSED firing, filled as it runs.
+ *
+ * ⚠️ THE DECLARATION ARM CONSUMES THIS INSTEAD OF READING SOURCE — RULING #258.
+ * Its predecessor regexed `return '(\w+)'` out of `unmentioned-policy.ts`
+ * between two anchors. That is a proof about spelling: it found six guards while
+ * the module had eight decisions, and the moment the ladder became a table it
+ * would have found ZERO and passed its `>= 6` floor only by failing louder
+ * elsewhere. A guard is witnessed here because a row reached it.
+ */
+const WITNESSED_GUARDS = new Set<string>();
+
   it('⚠️ OFFERED  ⟺  HONOURED — the predicate matches the REAL resolver, both ways', () => {
+    // ════════════════════════════════════════════════════════════════════════
+    // ⚠️ REDESIGNED, NOT RE-SEEDED — RULING #259.
+    //
+    // The seeded sample this replaces failed in FOUR ways at once, and every one
+    // of them survives a change of seed:
+    //
+    //   1 · Its first guard killed **2,935 of 4,000 rows**. `dataTypes` was the
+    //       hand-written pair `['text','number']` against `kinds =
+    //       ['narrative_text','date']`, so `'date'` had NO compatible partner in
+    //       the list at all and every date row died at
+    //       `semantic_mapping_type_mismatch` by construction. All 1,065
+    //       survivors carried `narrative_text` AND `text` — **the two inputs the
+    //       matrix had just been widened to watch were constant everywhere the
+    //       other seven guards live.**
+    //   2 · 4,000 draws over an 82,944-row product saturates at **6.42%**,
+    //       forever, however long it runs.
+    //   3 · Its coverage assertion was a tautology: the first pass walked each
+    //       dimension in order, so `seen[k].size === d.length` held **by
+    //       construction** at any `SAMPLES >= max(|d|)`. It passes at
+    //       `SAMPLES = 3`.
+    //   4 · Its green was a property of the seed LITERAL. Measured: 1 of 6
+    //       seeds RED on unmutated code.
+    //
+    // What replaces it, clause by clause:
+    //
+    //   · the dimensions ARE the read set the Proxy tracer records — not a list
+    //     somebody maintained beside it;
+    //   · `(kind, expectedDataType)` pairs come from the COMPILER'S OWN TABLE
+    //     (`expectedDataTypeForFieldKind`), never a guessed type list. That is
+    //     the direct cure for (1);
+    //   · coverage is asserted over **GUARD BRANCHES**, not rows or dimension
+    //     values. A row that exits at guard k witnesses guard k TRUE and guards
+    //     1..k-1 FALSE, so stratifying by EXIT POINT is exactly branch coverage
+    //     and needs no inversion of any guard's closure;
+    //   · a stratum witnessed zero times **FAILS**. It does not warn;
+    //   · the product is enumerated EXHAUSTIVELY when it fits a STATED budget,
+    //     and sampled only when it does not — stratified, with a per-stratum
+    //     floor.
+    // ════════════════════════════════════════════════════════════════════════
+
+    // ── the read set, as the tracer records it ──────────────────────────────
     const bools = [false, true];
     const policies = ['blank', 'not_documented', 'requires_input'] as const;
     const sourceTypes = ['extraction', 'manual', 'verified_note_selection'] as const;
@@ -514,217 +465,277 @@ const INTENTIONAL_CONSTANTS: Record<string, string> = {};
     // `null` is the value the confirm surface renders as '· no concept yet'.
     const concepts = ['ros.cardiovascular', null] as const;
     const defaults = [null, 'The patient consents.'] as const;
-    // ⚠️ THE DIMENSION THIS MATRIX SHIPPED WITHOUT, AND ITS ABSENCE HID A REAL
-    // GUARD. `isMappingTypeCompatible` is the resolver's FIRST exit; holding
-    // `expectedDataType` constant at the compatible value made every row of the
-    // cross-product type-compatible, so the biconditional could not witness the
-    // one case where the offer outruns the honouring. The base field kind is
-    // `narrative_text`, whose compatible type is `text`; `number` is the
-    // incompatible partner. Measured before the fix: offered=true while the
-    // resolver returned `semantic_mapping_type_mismatch`.
-    const dataTypes = ['text', 'number'] as const;
-    // ⚠️ THE SEVENTH GUARD'S INPUTS. Added after a peer session found that the
-    // fixed-grid `table_cell` call site was unmirrored — the third time this
-    // matrix has been widened because it held constant the very input a guard
-    // reads. The arm below now DERIVES the required dimensions from the mirror's
-    // own source, so a fourth time reds instead of passing.
     const bindings = ['content_control', 'table_cell'] as const;
-    // ⚠️ CAUGHT BY THE DERIVED-DIMENSION ARM, ON ITS FIRST RUN. The mirror
-    // reads `mapping.status` and this matrix had never varied it — a FOURTH
-    // instance of the same blindness, found by the arm written to close the
-    // class rather than by another pass.
     const statuses = ['certified', 'unsupported'] as const;
-    // ⚠️ THE FIFTH INSTANCE OF THE SAME BLINDNESS, AND THE FIRST FOUND BY THE
-    // ARM ITSELF RATHER THAN BY A PASS. The mirror reads `field.kind`, and this
-    // matrix held it constant at `narrative_text` — so a guard keyed on the
-    // kind was invisible here. It had been "satisfied" only because the word
-    // `kind` appeared in a COMMENT inside the matrix region and the derived-
-    // dimension arm read the region as raw source. Comments are now stripped
-    // there, which turned a passing arm into the failing one that produced this
-    // line. Canon 117 names this exact instance as an open example.
-    //
-    // `date` is the partner: a real kind the compiler emits, whose compatible
-    // `expectedDataType` differs from `narrative_text`'s, so the cross-product
-    // now contains rows where the kind alone decides type-compatibility.
-    const kinds = ['narrative_text', 'date'] as const;
+    // ⚠️ THE DIMENSION THE EIGHTH DIVERGENCE READ AND THIS MATRIX HAD NEVER
+    // NAMED. `resolver/index.ts` refuses a checkbox whose `conceptScope` covers
+    // several symptoms — "affirmed" is ambiguous between them — and routes it to
+    // a `missingResolution` call site that cannot honour an omit. With the scope
+    // held absent, no row could witness it.
+    const scopes: readonly (string[] | undefined)[] = [
+      undefined,
+      ['ros.palpitations'],
+      ['ros.palpitations', 'ros.chest_pain'],
+    ];
 
-    // The ONLY guards permitted to withhold an offer the resolver would honour.
-    // Adding to this set is a product decision, not a test fix.
-    // ⚠️ `row_prototype_not_offerable` JOINS IT UNDER RULING #234, and it is a
-    // real accepted cost: a prototype DOES reach the omit branch and IS
-    // honoured. It is withheld anyway, because a judgement recorded against a
-    // prototype binds every row stamped from it — including rows that do not
-    // exist yet and that the doctor has never seen. #192's rule, one surface on.
+    // ⚠️ PAIRS FROM THE COMPILER'S OWN TABLE — RULING #259, CLAUSE 2.
+    //
+    // Each kind is paired with the type `expectedDataTypeForFieldKind` says is
+    // compatible, and with ONE deliberately incompatible partner so the first
+    // guard's TRUE branch is witnessed by every kind rather than by a type list
+    // that happened to contain a mismatch. The kinds are the ones the IR schema
+    // ACCEPTS: `fixed_table` and `repeating_table` have a compatible type in the
+    // table but are refused by `TemplateFieldSchema`, and the schema's refusal
+    // is the authority on what the compiler can emit — not this file's opinion.
+    const KINDS = [
+      'narrative_text', 'date', 'checkbox', 'number',
+      'measurement', 'single_select', 'multi_select',
+    ] as const;
+    const pairs: { kind: (typeof KINDS)[number]; dataType: SemanticMapping['expectedDataType'] }[] = [];
+    for (const kind of KINDS) {
+      const compatible = expectedDataTypeForFieldKind(kind);
+      expect(compatible, `the compiler's table has no type for '${kind}'`).not.toBeNull();
+      pairs.push({ kind, dataType: compatible! });
+      // The incompatible partner is drawn from the table too — any OTHER kind's
+      // type — so it cannot become stale if the vocabulary changes.
+      const other = KINDS.map((k) => expectedDataTypeForFieldKind(k)).find(
+        (t) => t !== null && t !== compatible,
+      );
+      pairs.push({ kind, dataType: other! });
+    }
+    expect(pairs.length).toBe(KINDS.length * 2);
+    // ⚠️ NON-VACUITY OF THE PAIR TABLE ITSELF: both directions must be present,
+    // or clause 2 has produced a list as blind as the one it replaced.
+    expect(
+      pairs.filter((p) => expectedDataTypeForFieldKind(p.kind) === p.dataType).length,
+    ).toBe(KINDS.length);
+    expect(
+      pairs.filter((p) => expectedDataTypeForFieldKind(p.kind) !== p.dataType).length,
+    ).toBe(KINDS.length);
+
+    const DIMS: readonly (readonly unknown[])[] = [
+      bools, bools, policies, policies, policies, sourceTypes, detections,
+      concepts, defaults, bindings, statuses, bools, pairs, scopes,
+    ];
+
+    // ── the exact product, and the budget the RESOLVER gets ────────────────
+    // ⚠️ THERE IS NO SAMPLE AND NO SEED. The product over the traced read set is
+    // 870,912 rows, and classifying every one of them — building the two objects
+    // and walking the guards — was MEASURED at 724 ms. So the enumeration is
+    // exhaustive and failure mode (4) is gone by construction: there is no seed
+    // literal left for a green to be a property of.
+    //
+    // ⚠️ THE BUDGET MOVED TO WHERE THE COST ACTUALLY IS. Driving the REAL
+    // resolver costs ~160 µs a row (three zod parses), so 870,912 of those is
+    // ~70 s. The resolver therefore sees at most `RESOLVE_CAP` rows PER STRATUM,
+    // spread evenly through the enumeration rather than taken from the front —
+    // a contiguous prefix correlates with the low-order dimensions, which is a
+    // smaller version of the same blindness this redesign exists to end.
+    const RESOLVE_CAP = 300;
+    // ⚠️ THE PER-STRATUM FLOOR — #259, CLAUSE 5. The cap bounds what a LARGE
+    // stratum costs; the floor is what a SMALL one is owed. A stratum smaller
+    // than the floor is resolved entirely, which is how the 16-row eighth guard
+    // gets checked at all. Stated separately from the cap because they answer
+    // opposite questions, and the arm that preceded this one had neither.
+    const MIN_PER_STRATUM = 100;
+    // ⚠️ THE KNOB THE COVERAGE ASSERTION MUST BE SENSITIVE TO. `ROW_LIMIT` bounds
+    // the enumeration, and the control arm below proves this arm REDS at
+    // `ROW_LIMIT = 3` — the acceptance test ruling #259 sets for the arm itself,
+    // because its predecessor PASSED at three samples.
+    const ROW_LIMIT = Number(process.env.OMIT_MATRIX_ROW_LIMIT ?? '0') || Infinity;
+    const exact = DIMS.reduce((n, d) => n * d.length, 1);
+    const total = Math.min(exact, ROW_LIMIT);
+
+    const decode = (n: number): number[] => {
+      const row: number[] = [];
+      let rest = n;
+      for (const d of DIMS) {
+        row.push(rest % d.length);
+        rest = Math.floor(rest / d.length);
+      }
+      return row;
+    };
+    const build = (row: number[]) => {
+      const { kind, dataType } = pairs[row[12]!]!;
+      const conceptScope = scopes[row[13]!];
+      const fieldOverrides = {
+        required: bools[row[0]!]!,
+        unknownPolicy: policies[row[2]!]!,
+        detectionStatus: detections[row[6]!]!,
+        rendererBinding: { ...field('1').rendererBinding, bindingType: bindings[row[9]!]! },
+        rowPrototype: bools[row[11]!]!,
+        kind,
+      };
+      const mappingOverrides = {
+        required: bools[row[1]!]!,
+        unknownPolicy: policies[row[3]!]!,
+        blankPolicy: policies[row[4]!]!,
+        sourceType: sourceTypes[row[5]!]!,
+        clinicalConcept: concepts[row[7]!]!,
+        practiceDefault: defaults[row[8]!]!,
+        expectedDataType: dataType,
+        status: statuses[row[10]!]!,
+        conceptScope: conceptScope === undefined ? undefined : [...conceptScope],
+        unmentionedPolicy: 'omit' as const,
+      };
+      const f = field('1', fieldOverrides);
+      const m = mapping(f, mappingOverrides.clinicalConcept ?? 'unused', mappingOverrides);
+      return { f, m, fieldOverrides, mappingOverrides };
+    };
+
+    // PASS 1 — classify every row. Cheap, exhaustive, and it is what makes the
+    // coverage claim a fact about the whole product rather than about a draw.
+    const strataSize = new Map<string, number>();
+    for (let n = 0; n < total; n += 1) {
+      const { f, m } = build(decode(n));
+      const g = omitBranchUnreachable(f, m) ?? 'REACHABLE';
+      strataSize.set(g, (strataSize.get(g) ?? 0) + 1);
+    }
+
+    // PASS 2 — resolve an evenly-spread subset of each stratum.
+    const stride = new Map<string, number>();
+    for (const [g, n] of strataSize) stride.set(g, Math.max(1, Math.ceil(n / RESOLVE_CAP)));
+    const seenInStratum = new Map<string, number>();
+    const rows: number[][] = [];
+    for (let n = 0; n < total; n += 1) {
+      const row = decode(n);
+      const { f, m } = build(row);
+      const g = omitBranchUnreachable(f, m) ?? 'REACHABLE';
+      const seen = seenInStratum.get(g) ?? 0;
+      seenInStratum.set(g, seen + 1);
+      if (seen % stride.get(g)! === 0) rows.push(row);
+    }
+
+    // ── strata: the guard branches ─────────────────────────────────────────
+    // ⚠️ THE EXIT POINT **IS** THE BRANCH, AND THAT IS WHY NO GUARD HAS TO BE
+    // INVERTED. `omitBranchUnreachable` walks the guards in order and returns
+    // the first that fires, so a row exiting at guard k witnesses k TRUE and
+    // every earlier guard FALSE. Cover every exit — including `null`, the row
+    // where they are ALL false — and every guard has been seen both ways.
     const CONSERVATIVE_GUARDS = new Set([
       'fixed_grid_cell_deferred',
       'row_prototype_not_offerable',
+      // ⚠️ THE EIGHTH, AND IT IS THE SAME SHAPE AS THE FIXED GRID. A multi-scope
+      // checkbox on a visit where nothing in scope was dictated DOES reach the
+      // omit branch and IS honoured; the moment anything in scope is dictated,
+      // the resolver refuses. Withheld for the fixed grid's reason.
+      'multi_concept_checkbox_deferred',
     ]);
+    const resolvedPerStratum = new Map<string, number>();
     let offeredAndHonoured = 0;
     let refusedAndNotHonoured = 0;
     let conservativeWithholds = 0;
     const disagreements: string[] = [];
     const tokenMismatches: string[] = [];
 
-    // ══════════════════════════════════════════════════════════════════════
-    // ⚠️ SAMPLED WITH A FIXED SEED, UNDER AN EXPLICIT TIMEOUT — RULING #251.
-    //
-    // The #234 widening added two dimensions and took the cross-product to
-    // 82,944 rows with NO timeout, sitting at 40-60% of vitest's 5000 ms
-    // default. Round six observed it TIME OUT on an unmutated tree. **An arm
-    // that flakes is an arm whose green nobody can rely on**, and the fix is not
-    // a bigger timeout: an exhaustive cross-product is not what this arm needs.
-    //
-    // The biconditional is a property that must hold for EVERY row, so any
-    // sample reaching a counterexample finds it — and a FIXED SEED makes the
-    // failure reproducible rather than a story about one unlucky run.
-    //
-    // ⚠️ AND THE SAMPLE ASSERTS ITS OWN COVERAGE. A sample that happened to hold
-    // a dimension constant would recreate the exact defect this arm exists to
-    // prevent. Every value of every dimension must appear, and that is CHECKED.
-    const DIMS: readonly (readonly unknown[])[] = [
-      bools, bools, policies, policies, policies, sourceTypes, detections,
-      concepts, defaults, dataTypes, bindings, statuses, kinds, bools,
-    ];
-    let rng = 0x5EEDBEEF;
-    const next = () => (rng = (rng * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
-    const SAMPLES = 4000;
-    const seen = DIMS.map(() => new Set<number>());
-    const rows: number[][] = [];
-    for (let n = 0; n < SAMPLES; n += 1) {
-      rows.push(DIMS.map((d, k) => {
-        // The first pass walks each dimension in order, so coverage is guaranteed
-        // by construction rather than by luck; after that it samples.
-        const v = n < d.length ? n % d.length : Math.floor(next() * d.length);
-        seen[k]!.add(v);
-        return v;
-      }));
-    }
-    DIMS.forEach((d, k) => {
-      expect(
-        seen[k]!.size,
-        `dimension ${k} was held CONSTANT by the sample — a matrix blind to an ` +
-          `input is the defect this arm exists to prevent`,
-      ).toBe(d.length);
-    });
-
-
     for (const row of rows) {
-                    const fReq = bools[row[0]!]!;
-                    const mReq = bools[row[1]!]!;
-                    const fUnknown = policies[row[2]!]!;
-                    const mUnknown = policies[row[3]!]!;
-                    const mBlank = policies[row[4]!]!;
-                    const sourceType = sourceTypes[row[5]!]!;
-                    const detectionStatus = detections[row[6]!]!;
-                    const clinicalConcept = concepts[row[7]!]!;
-                    const practiceDefault = defaults[row[8]!]!;
-                    const expectedDataType = dataTypes[row[9]!]!;
-                    const bindingType = bindings[row[10]!]!;
-                    const status = statuses[row[11]!]!;
-                    const kind = kinds[row[12]!]!;
-                    const rowPrototype = bools[row[13]!]!;
-                    {
-                    const fieldOverrides = {
-                      required: fReq,
-                      unknownPolicy: fUnknown,
-                      detectionStatus,
-                      rendererBinding: { ...field('1').rendererBinding, bindingType },
-                      // ⚠️ VARIED, NOT PINNED — ruling #234. This read
-                      // `rowPrototype: false` with the constant DECLARED on the
-                      // allowlist as "prototypes never offer". The claim was
-                      // false: a prototype was offered under both binding
-                      // types, and the declaration bought a 37/37 green over a
-                      // planted offered-but-not-honoured lie. A dimension the
-                      // mirror reads is varied or it is not covered.
-                      rowPrototype,
-                      kind,
-                    };
-                    const mappingOverrides = {
-                      required: mReq,
-                      unknownPolicy: mUnknown,
-                      blankPolicy: mBlank,
-                      sourceType,
-                      clinicalConcept,
-                      practiceDefault,
-                      expectedDataType,
-                      status,
-                      unmentionedPolicy: 'omit' as const,
-                    };
+      const { f, m, fieldOverrides, mappingOverrides } = build(row);
+      const { kind, dataType } = pairs[row[12]!]!;
+      const offered = canOmitWhenUnmentioned(f, m);
+      tracedReads(f, m, TRACED_READS);
+      observeValues(f, m);
 
-                    const f = field('1', fieldOverrides);
-                    const m = mapping(f, clinicalConcept ?? 'unused', mappingOverrides);
-                    const offered = canOmitWhenUnmentioned(f, m);
-                    tracedReads(f, m, TRACED_READS);
-                    observeValues(f, m);
+      const stated = omitBranchUnreachable(f, m);
+      const stratum = stated ?? 'REACHABLE';
+      WITNESSED_GUARDS.add(stratum);
+      resolvedPerStratum.set(stratum, (resolvedPerStratum.get(stratum) ?? 0) + 1);
 
-                    // Drive the ACTUAL resolver on the one encounter shape where
-                    // `conceptUnmatched && reason === undefined && facts.length > 0`
-                    // all hold, with the policy set to `omit`.
-                    const { resolution } = resolveOne(fieldOverrides, mappingOverrides);
-                    const honoured = resolution.reasonCode === 'omitted_unsupported_default';
+      // Drive the ACTUAL resolver on the one encounter shape where
+      // `conceptUnmatched && reason === undefined && facts.length > 0` all hold,
+      // with the policy set to `omit`.
+      const { resolution } = resolveOne(fieldOverrides, mappingOverrides);
+      const honoured = resolution.reasonCode === 'omitted_unsupported_default';
 
-                    const shape =
-                      `fReq=${fReq} mReq=${mReq} fUnknown=${fUnknown} mBlank=${mBlank} ` +
-                      `mUnknown=${mUnknown} src=${sourceType} det=${detectionStatus} concept=${clinicalConcept ?? 'NONE'} ` +
-                      `default=${practiceDefault === null ? 'null' : 'set'} type=${expectedDataType} bind=${bindingType} status=${status} kind=${kind} proto=${rowPrototype}`;
+      const shape =
+        `fReq=${fieldOverrides.required} mReq=${mappingOverrides.required} ` +
+        `fUnknown=${fieldOverrides.unknownPolicy} mBlank=${mappingOverrides.blankPolicy} ` +
+        `mUnknown=${mappingOverrides.unknownPolicy} src=${mappingOverrides.sourceType} ` +
+        `det=${fieldOverrides.detectionStatus} concept=${mappingOverrides.clinicalConcept ?? 'NONE'} ` +
+        `default=${mappingOverrides.practiceDefault === null ? 'null' : 'set'} type=${dataType} ` +
+        `bind=${fieldOverrides.rendererBinding.bindingType} status=${mappingOverrides.status} ` +
+        `kind=${kind} proto=${fieldOverrides.rowPrototype} ` +
+        `scope=${mappingOverrides.conceptScope?.length ?? 0}`;
 
-                    // ⚠️ THE TWO DIRECTIONS ARE NOT SYMMETRIC, AND CONFLATING
-                    // THEM WOULD FORCE THE WRONG FIX.
-                    //
-                    // `offered && !honoured` is THE LIE — the control promises
-                    // something the resolver will not do. Never acceptable.
-                    //
-                    // `!offered && honoured` is CONSERVATIVE — withheld where it
-                    // would have worked. That is a real cost, taken deliberately
-                    // in exactly one place: a fixed-grid cell on a visit where
-                    // NOTHING in the grid was dictated does reach the omit
-                    // branch, but any visit dictating one measurement sends all
-                    // 52 cells (one shared concept) down a route that cannot
-                    // honour it. Better no control than one false on the
-                    // ordinary visit. Every such case must be attributable to a
-                    // NAMED guard, or it is an accident wearing a policy.
-                    if (offered && !honoured) {
-                      disagreements.push(
-                        `${shape} -> OFFERED BUT NOT HONOURED ` +
-                          `(resolver said ${resolution.reasonCode})`,
-                      );
-                    } else if (!offered && honoured) {
-                      const guard = omitBranchUnreachable(f, m);
-                      if (guard === null || !CONSERVATIVE_GUARDS.has(guard)) {
-                        disagreements.push(
-                          `${shape} -> withheld but HONOURABLE, and guard ` +
-                            `'${guard}' is not a declared conservative narrowing`,
-                        );
-                      } else {
-                        conservativeWithholds += 1;
-                      }
-                    }
-                    if (offered && honoured) offeredAndHonoured += 1;
-                    if (!offered && !honoured) refusedAndNotHonoured += 1;
+      // ⚠️ THE TWO DIRECTIONS ARE NOT SYMMETRIC, AND CONFLATING THEM WOULD FORCE
+      // THE WRONG FIX.
+      //
+      // `offered && !honoured` is THE LIE — the control promises something the
+      // resolver will not do. Never acceptable.
+      //
+      // `!offered && honoured` is CONSERVATIVE — withheld where it would have
+      // worked. That is a real cost, taken deliberately, and every such case must
+      // be attributable to a NAMED guard or it is an accident wearing a policy.
+      if (offered && !honoured) {
+        disagreements.push(
+          `${shape} -> OFFERED BUT NOT HONOURED (resolver said ${resolution.reasonCode})`,
+        );
+      } else if (!offered && honoured) {
+        if (stated === null || !CONSERVATIVE_GUARDS.has(stated)) {
+          disagreements.push(
+            `${shape} -> withheld but HONOURABLE, and guard '${stated}' is not a ` +
+              `declared conservative narrowing`,
+          );
+        } else {
+          conservativeWithholds += 1;
+        }
+      }
+      if (offered && honoured) offeredAndHonoured += 1;
+      if (!offered && !honoured) refusedAndNotHonoured += 1;
 
-                    // ⚠️ AND THE STATED REASON MUST BE THE RESOLVER'S OWN. A
-                    // mirror that refuses for the RIGHT field on the WRONG
-                    // grounds is one refactor away from refusing the wrong
-                    // field — so the token is compared, not just the boolean.
-                    const stated = omitBranchUnreachable(f, m);
-                    if (stated !== null && !honoured) {
-                      const prefixes = OMIT_GUARD_TOKEN_PREFIXES[stated];
-                      // A guard the module names but never declares tokens for
-                      // is itself the defect — fail loudly rather than skip.
-                      if (!prefixes) {
-                        tokenMismatches.push(`${shape} -> guard '${stated}' declares NO tokens`);
-                      } else if (!prefixes.some((prefix) => resolution.reasonCode.startsWith(prefix))) {
-                        tokenMismatches.push(
-                          `${shape} -> guard '${stated}' declares [${prefixes.join(', ')}], ` +
-                            `resolver returned '${resolution.reasonCode}'`,
-                        );
-                      }
-                    }
-                  }
+      // ⚠️ AND THE STATED REASON MUST BE THE RESOLVER'S OWN. A withhold on the
+      // RIGHT field for the WRONG grounds is one refactor away from withholding
+      // the wrong field — so the token is compared, not just the boolean.
+      if (stated !== null && !honoured) {
+        const prefixes = OMIT_GUARD_TOKEN_PREFIXES[stated];
+        if (!prefixes) {
+          tokenMismatches.push(`${shape} -> guard '${stated}' declares NO tokens`);
+        } else if (!prefixes.some((prefix) => resolution.reasonCode.startsWith(prefix))) {
+          tokenMismatches.push(
+            `${shape} -> guard '${stated}' declares [${prefixes.join(', ')}], ` +
+              `resolver returned '${resolution.reasonCode}'`,
+          );
+        }
+      }
     }
 
     expect(disagreements).toEqual([]);
     expect(tokenMismatches).toEqual([]);
+
+    // ══════════════════════════════════════════════════════════════════════
+    // ⚠️ BRANCH COVERAGE, AND A ZERO-WITNESSED STRATUM **FAILS** — #259.
+    //
+    // Every guard the module can return must be witnessed firing, and
+    // `REACHABLE` — the row where they are all false — must be witnessed too, or
+    // the biconditional held over a table that never reached the branch it
+    // exists to check. The floor is per-stratum: one lucky row is not coverage.
+    // ══════════════════════════════════════════════════════════════════════
+    const expectedStrata = [...OMIT_GUARD_NAMES, 'REACHABLE'];
+    const empty = expectedStrata.filter((g) => (strataSize.get(g) ?? 0) === 0);
+    expect(
+      empty,
+      `these guard branches were witnessed ZERO times over ${total} rows (exact ` +
+        `product ${exact}). A branch nobody reached is a branch this arm did not ` +
+        `check — and it FAILS rather than warning, because the previous form of ` +
+        `this assertion was satisfiable by construction at three samples.`,
+    ).toEqual([]);
+    // ⚠️ AND EVERY ROW OF A SMALL STRATUM IS RESOLVED, NOT JUST COUNTED. The
+    // rarest exit here is `multi_concept_checkbox_deferred` at **16 rows in
+    // 870,912** — 1 in 54,432, which is why no uniform sample of any practical
+    // size could reach it and why the previous arm never witnessed the eighth
+    // guard at all. Classification is exhaustive; the cap only bounds how many
+    // of a LARGE stratum reach the resolver.
+    for (const g of expectedStrata) {
+      const n = strataSize.get(g) ?? 0;
+      const resolved = resolvedPerStratum.get(g) ?? 0;
+      expect(
+        resolved,
+        `stratum '${g}' holds ${n} rows and only ${resolved} of them reached the ` +
+          `resolver — below the per-stratum floor of ${MIN_PER_STRATUM}`,
+      ).toBeGreaterThanOrEqual(Math.min(n, MIN_PER_STRATUM));
+      expect(resolved, `stratum '${g}' exceeded the resolver budget`).toBeLessThanOrEqual(
+        RESOLVE_CAP,
+      );
+    }
 
     // ⚠️ NON-VACUITY, BOTH DIRECTIONS. A biconditional over a table that is
     // all-refused passes trivially and proves nothing.
@@ -741,8 +752,7 @@ const INTENTIONAL_CONSTANTS: Record<string, string> = {};
   // ⚠️ AN EXPLICIT TIMEOUT — RULING #251. This arm ran under vitest's 5000 ms
   // DEFAULT at 40-60% of it, and round six observed it TIME OUT on an unmutated
   // tree. A default nobody chose is not a budget; it is the number that happened
-  // to be there. 20 s is roughly 40x the sampled arm's measured cost, so a
-  // failure here means something changed, not that the runner was busy.
+  // to be there.
   20_000);
 
   // ==========================================================================
@@ -851,23 +861,143 @@ const INTENTIONAL_CONSTANTS: Record<string, string> = {};
   });
 
   it('⚠️ EVERY guard the module can return DECLARES its tokens — no silent skips', () => {
-    // Read the guard names out of the SOURCE, so a seventh guard added without
-    // a token declaration reds here instead of being skipped by the matrix.
-    const src = readFileSync(join(__dirname, '..', 'unmentioned-policy.ts'), 'utf-8');
-    const body = src.slice(
-      src.indexOf('export function omitBranchUnreachable'),
-      src.indexOf('export const OMIT_GUARD_TOKEN_PREFIXES'),
-    );
-    const returned = [...body.matchAll(/return '([a-z_]+)'/g)].map((match) => match[1]!);
+    // ⚠️ THIS ARM USED TO READ SOURCE, AND RULING #258 SHOWED WHY THAT WAS
+    // ALWAYS WRONG. It regexed `return '([a-z_]+)'` out of this file's text
+    // between two anchors and asserted `returned.length >= 6`. Two failures were
+    // latent in that the whole time: it could only ever find guards written as
+    // bare string returns (the module had eight decisions and it saw six), and
+    // when the ladder became a TABLE it found zero — the `>= 6` floor is what
+    // reds, and a floor is not a description.
+    //
+    // Three real sets are compared instead, all of them derived:
+    //   · `OMIT_GUARD_NAMES` — built from the table and the returned constants;
+    //   · `OMIT_GUARD_TOKEN_PREFIXES` — the declaration;
+    //   · `WITNESSED_GUARDS` — what the matrix actually reached.
+    const declared = new Set(Object.keys(OMIT_GUARD_TOKEN_PREFIXES));
+    const names = new Set(OMIT_GUARD_NAMES);
 
-    expect(returned.length).toBeGreaterThanOrEqual(6);
-    for (const guard of returned) {
-      expect(OMIT_GUARD_TOKEN_PREFIXES[guard], `guard '${guard}' declares no tokens`).toBeDefined();
+    expect(OMIT_GUARD_NAMES.length, 'the guard set collapsed — the table is empty')
+      .toBeGreaterThanOrEqual(8);
+    expect([...names].length, 'a guard name is duplicated').toBe(OMIT_GUARD_NAMES.length);
+
+    // 1 · every guard the code can return declares its tokens…
+    expect(
+      OMIT_GUARD_NAMES.filter((g) => !declared.has(g)),
+      'these guards can be returned and declare no resolver tokens',
+    ).toEqual([]);
+    // 2 · …and nothing is declared that the code cannot return.
+    expect(
+      [...declared].filter((g) => !names.has(g)),
+      'these tokens are declared for a guard that no longer exists',
+    ).toEqual([]);
+    // 3 · ⚠️ AND EVERY ONE OF THEM WAS ACTUALLY REACHED. Sets 1 and 2 agree
+    // trivially if both are wrong in the same way; only the matrix can say a
+    // guard is real. This is the same check the strata floor makes, asserted
+    // here as an identity so a guard that stops being reachable reds under its
+    // own name rather than as a count.
+    expect(
+      OMIT_GUARD_NAMES.filter((g) => !WITNESSED_GUARDS.has(g)),
+      'the matrix never reached these guards — they are declared, and dead',
+    ).toEqual([]);
+  });
+
+  it('⚠️ THE OFFER DELEGATES — it holds no opinion the resolver does not — #258', () => {
+    // ⚠️ THE IDENTITY CHECK THAT REPLACES A MIRROR. Ruling #258 ended the class
+    // by making `resolver/index.ts` WALK this module's table rather than carry
+    // its own copy of it, so the arm's job is no longer to hunt for divergence —
+    // there is nothing left to diverge. It is to assert the delegation is real.
+    const src = readFileSync(join(__dirname, '..', 'resolver', 'index.ts'), 'utf-8');
+
+    // 1 · the resolver imports the shared decisions, by name…
+    for (const symbol of [
+      'OMIT_LADDER_PRE_CONCEPT',
+      'OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS',
+      'omitDeferralGuard',
+      'practiceDefaultPreempts',
+      'requiresClinicianInput',
+    ]) {
+      expect(src, `the resolver stopped importing '${symbol}'`).toContain(symbol);
     }
-    // …and nothing is declared that the function cannot return.
-    for (const declared of Object.keys(OMIT_GUARD_TOKEN_PREFIXES)) {
-      expect(returned, `'${declared}' is declared but unreachable`).toContain(declared);
+
+    // 2 · …and the inline ladder does not come back. Matching the SPELLING is
+    // deliberate: a second copy is only dangerous if it is a copy.
+    expect(src).not.toMatch(/if \(!isMappingTypeCompatible\(field, mapping\)\) \{/);
+    expect(src).not.toMatch(/if \(mapping\.sourceType === 'manual'\) \{/);
+    expect(src).not.toMatch(/if \(mapping\.sourceType === 'verified_note_selection'\) \{/);
+    expect(src).not.toMatch(/field\.required\s*\|\|\s*\n?\s*mapping\.required/);
+
+    // 3 · ⚠️ AND ONE BEHAVIOURAL CONTROL PER KNOWN GUARD, because (1) and (2)
+    // are both statements about text. Delegating to the wrong function, or to a
+    // stub that returns null, satisfies every import assertion above and reds
+    // here. Each row drives the REAL resolver and names the token it must emit.
+    const CONTROLS: [string, Partial<TemplateField>, Partial<SemanticMapping>, string][] = [
+      ['type mismatch', { kind: 'date' }, { expectedDataType: 'text' }, 'semantic_mapping_type_mismatch'],
+      ['unsupported field', { detectionStatus: 'unsupported' }, {}, 'field_or_mapping_unsupported'],
+      ['unsupported mapping', {}, { status: 'unsupported' }, 'field_or_mapping_unsupported'],
+      ['manual source', {}, { sourceType: 'manual' }, 'manual_source_not_filled'],
+      ['note selection', {}, { sourceType: 'verified_note_selection' }, 'awaiting_note_selection'],
+      ['no concept', {}, { clinicalConcept: null }, 'clinical_concept_unmapped'],
+      ['a practice default', {}, { practiceDefault: 'The patient consents.' }, 'approved_practice_default'],
+      ['requires input', { required: true }, {}, 'required_fact_not_mentioned'],
+    ];
+    for (const [name, fo, mo, token] of CONTROLS) {
+      const { resolution } = resolveOne(fo, { ...mo, unmentionedPolicy: 'omit' });
+      expect(
+        resolution.reasonCode.startsWith(token),
+        `${name}: the resolver returned '${resolution.reasonCode}', not '${token}' — ` +
+          `the delegation is nominal`,
+      ).toBe(true);
     }
+    // ⚠️ AND THE CONTROLS ARE NOT ALL THE SAME ANSWER. Rows that agree on one
+    // token would pass a stub; the set must discriminate.
+    expect(new Set(CONTROLS.map((c) => c[3])).size).toBeGreaterThanOrEqual(7);
+
+    // ⚠️ THE DEFERRALS NEED THE OTHER ENCOUNTER, AND THE FIRST DRAFT OF THIS ARM
+    // GOT IT WRONG. Under `resolveOne` — whose fact carries a DIFFERENT concept —
+    // a multi-scope checkbox and a fixed-grid cell both route to the omit branch
+    // and ARE honoured, so a control asserting that passes against a stubbed
+    // `omitDeferralGuard`. The deferral is only reachable with facts in hand.
+    const DEFERRALS: [string, Partial<TemplateField>, Partial<SemanticMapping>][] = [
+      [
+        'a multi-scope checkbox',
+        { kind: 'checkbox' },
+        {
+          expectedDataType: 'boolean' as const,
+          // ⚠️ A **NAMED** ROS CONCEPT, AND THE FIRST TWO DRAFTS OF THIS ROW WERE
+          // WRONG IN TWO DIFFERENT WAYS. The scope must contain the dictated
+          // concept or the fact does not match at all — but `ros.cardiovascular`
+          // is an UNNAMED ROS concept (`isUnnamedRosConcept` -> true), and
+          // `conceptMatches` refuses those against ANY scoped mapping outright
+          // (#179(1): a system-level finding cannot answer a clause that names
+          // symptoms). So a scoped control built on the probe's default concept
+          // can never reach the deferral, and passes because the row fell through
+          // to the omit branch — the exact false green this arm exists to catch.
+          clinicalConcept: 'ros.cardiovascular.palpitations',
+          conceptScope: ['ros.cardiovascular.palpitations', 'ros.cardiovascular.chest_pain'],
+        },
+      ],
+      [
+        'a fixed-grid cell',
+        { rendererBinding: { ...field('1').rendererBinding, bindingType: 'table_cell' } },
+        {},
+      ],
+    ];
+    for (const [name, fo, mo] of DEFERRALS) {
+      const { resolution } = resolveOneDictated(fo, { ...mo, unmentionedPolicy: 'omit' });
+      expect(
+        resolution.status,
+        `${name}: the resolver answered it from raw facts — the deferral is gone`,
+      ).toBe('not_mentioned');
+      expect(resolution.sourceFactIds).toEqual([]);
+      expect(resolution.reasonCode).toBe('fact_not_mentioned');
+    }
+    // ⚠️ AND THE DEFERRAL IS NOT UNIVERSAL. A guard that defers EVERYTHING would
+    // satisfy the two rows above; the ordinary field must still resolve.
+    const ordinary = resolveOneDictated({}, { unmentionedPolicy: 'omit' });
+    expect(
+      ordinary.resolution.sourceFactIds,
+      'every field deferred — `omitDeferralGuard` is returning a guard for all input',
+    ).not.toEqual([]);
   });
 
   it('⚠️ THERE IS EXACTLY ONE COPY — the resolver IMPORTS the predicate', () => {

@@ -21,6 +21,12 @@ import { describe, expect, it } from 'vitest';
 import { EMPTY_SECTION_PLACEHOLDER } from '@/lib/soap-format';
 
 import { bridgeChoiceSlotPicks } from '../picks-bridge';
+import { resolveTemplateFields } from '../resolver';
+import {
+  field as probeField,
+  mapping as probeMapping,
+  factFor as probeFact,
+} from './resolver-probe';
 import {
   buildVerifiedNoteSelectionFact,
   fieldLateralityFromLabel,
@@ -240,10 +246,24 @@ describe('the side comes from the document', () => {
 
 describe('the resolver defers to the note', () => {
   it('a verified_note_selection field is not resolved from raw facts', () => {
-    const { readFileSync } = require('node:fs') as typeof import('node:fs');
-    const { join } = require('node:path') as typeof import('node:path');
-    const src = readFileSync(join(__dirname, '..', 'resolver', 'index.ts'), 'utf-8');
-    expect(src).toContain("if (mapping.sourceType === 'verified_note_selection')");
-    expect(src).toContain('awaiting_note_selection');
+    // ⚠️ THIS ARM USED TO READ THE RESOLVER'S SOURCE for the literal `if`.
+    // Ruling #258 moved that guard into a shared table and the arm reds while
+    // the behaviour is unchanged — #237's retired class, found one file over.
+    //
+    // The fact carries the field's own concept, so raw-fact resolution is
+    // genuinely available here: the point is that the resolver declines it and
+    // leaves the answer to the picks bridge.
+    const f = probeField('b');
+    const out = resolveTemplateFields({
+      fields: [f],
+      mappings: [
+        probeMapping(f, 'ros.cardiovascular', { sourceType: 'verified_note_selection' }),
+      ],
+      facts: [probeFact('c', 'ros.cardiovascular', 'The patient reports palpitations.')],
+      allowUncertifiedForSyntheticTest: true,
+    })[0]!;
+    expect(out.status).toBe('not_mentioned');
+    expect(out.reasonCode).toBe('awaiting_note_selection');
+    expect(out.value, 'the resolver filled a note-selection field from raw facts').toBeNull();
   });
 });

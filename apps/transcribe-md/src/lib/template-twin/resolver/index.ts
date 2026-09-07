@@ -27,7 +27,13 @@ import {
   temporalityMatches,
 } from '../fact-mapping-match';
 import { isMappingTypeCompatible } from '../semantic-mapping';
-import { requiresClinicianInput } from '../unmentioned-policy';
+import {
+  OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS,
+  OMIT_LADDER_PRE_CONCEPT,
+  omitDeferralGuard,
+  practiceDefaultPreempts,
+  requiresClinicianInput,
+} from '../unmentioned-policy';
 import {
   approvedPracticeDefaultAnchorId,
   approvedPracticeDefaultFactId,
@@ -204,7 +210,14 @@ function practiceDefaultResolution(
   mapping: SemanticMapping,
   facts: ReadonlyArray<EncounterFact>,
 ): FieldResolution | null {
-  if (mapping.practiceDefault === null || mapping.status !== 'certified') {
+  // ⚠️ ONE PROPERTY, ONE READER — RULING #258. The confirm surface asks the same
+  // question ("does a default answer this before the policy is read?") and used
+  // to answer it with its own `!== null`. The `status` half stays HERE: in
+  // production it is unreachable (an uncertified mapping exits at the
+  // certification guard far above) and it matters only on the synthetic-test
+  // path, whereas at confirm time the mapping is being certified — so sharing it
+  // would offer a control that stops working the moment the doctor certifies.
+  if (!practiceDefaultPreempts(mapping) || mapping.status !== 'certified') {
     return null;
   }
   const parsed = parseExplicitNumberAndUnit(mapping.practiceDefault);
@@ -409,66 +422,46 @@ function resolveOne(
       'semantic_mapping_missing',
     );
   }
-  if (!isMappingTypeCompatible(field, mapping)) {
-    return makeResolution(
-      field.fieldId,
-      'needs_clinician_input',
-      null,
-      [],
-      'semantic_mapping_type_mismatch',
-    );
-  }
-  if (
-    !allowUncertified &&
-    (mapping.status !== 'certified' ||
-      (field.detectionStatus !== 'certified' &&
-        !certifiedFieldIds.has(field.fieldId)))
-  ) {
-    return makeResolution(
-      field.fieldId,
-      'needs_clinician_input',
-      null,
-      [],
-      'field_or_mapping_not_certified',
-    );
-  }
-  if (mapping.status === 'unsupported' || field.detectionStatus === 'unsupported') {
-    return makeResolution(
-      field.fieldId,
-      'needs_clinician_input',
-      null,
-      [],
-      'field_or_mapping_unsupported',
-    );
-  }
-  // A MANUAL field carries no concept BY CONSTRUCTION — nothing in any encounter
-  // can say who the technologist on shift was — and the certificate attests that
-  // it renders blank. Reporting it as an unmapped field turned a designed state
-  // into a configuration error, and at visit time that error is BLOCKING: four
-  // such fields refused the native document on every visit, forever, and the
-  // export fell back to the styled path. Nothing was made safer by that — the
-  // fields are blank in both documents — so the only effect was that the doctor
-  // never got their own form back.
-  if (mapping.sourceType === 'manual') {
-    return makeResolution(field.fieldId, 'not_mentioned', null, [], 'manual_source_not_filled');
-  }
-  // A VERIFIED NOTE SELECTION is answered by the adopted note's own pick, which
-  // only the picks bridge can read. Resolving it here from raw facts produced
-  // `select_value_not_exact_option` — needs-clinician-input, and BLOCKING at
-  // visit time — for fourteen dropdowns the note had already answered. Same
-  // shape as the fixed-grid rule: the component that can address it, addresses
-  // it; the baseline is honestly blank.
-  if (mapping.sourceType === 'verified_note_selection') {
-    return makeResolution(field.fieldId, 'not_mentioned', null, [], 'awaiting_note_selection');
-  }
-  if (!mapping.clinicalConcept) {
-    return makeResolution(
-      field.fieldId,
-      'needs_clinician_input',
-      null,
-      [],
-      'clinical_concept_unmapped',
-    );
+  // ⚠️ THE LADDER IS WALKED, NOT WRITTEN HERE — RULING #258, NO MIRROR.
+  //
+  // These five guards used to be five inline `if`s, and the confirm surface
+  // carried a hand-maintained copy of them so it could decide what to OFFER.
+  // That copy shipped EIGHT divergences in seven rounds; every repair widened a
+  // matrix so the copy's CURRENT divergences became visible, and none made the
+  // next one impossible. There is one copy now, it lives in `unmentioned-policy`
+  // (the leaf, because that module is value-imported by a `'use client'`
+  // component and this one value-imports zod), and both sides walk it.
+  //
+  // ⚠️ EACH ROW CARRIES ITS OWN `status` AND `reasonCode`, so nothing about the
+  // resolutions below changed — the same tokens, in the same order, from a table
+  // instead of from a sequence of statements.
+  for (const guard of OMIT_LADDER_PRE_CONCEPT) {
+    if (guard.test(field, mapping)) {
+      return makeResolution(field.fieldId, guard.status, null, [], guard.reasonCode);
+    }
+    // ⚠️ NOT A ROW, AND ITS POSITION IS BEHAVIOUR. This reads
+    // `allowUncertifiedForSyntheticTest` and the caller's certified-field set,
+    // neither of which is knowable from `(field, mapping)`, so it cannot live in
+    // the shared table. A field that is both uncertified and unsupported returns
+    // `field_or_mapping_not_certified` only because this runs first — so the
+    // table names the row it follows rather than leaving the ordering to
+    // whoever next edits this loop.
+    if (guard.guard === OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS) {
+      if (
+        !allowUncertified &&
+        (mapping.status !== 'certified' ||
+          (field.detectionStatus !== 'certified' &&
+            !certifiedFieldIds.has(field.fieldId)))
+      ) {
+        return makeResolution(
+          field.fieldId,
+          'needs_clinician_input',
+          null,
+          [],
+          'field_or_mapping_not_certified',
+        );
+      }
+    }
   }
 
   // ⚠️ THE SHARED CONCEPT HALF, NOT A FOURTH OPEN-CODED COPY. This filter used
@@ -509,14 +502,6 @@ function resolveOne(
   // `conceptUnmatched` flag is deliberately not passed — the same reasoning as
   // the fixed-grid cell below. The encounter DID speak to this field; the
   // resolver simply cannot say which symptom it spoke about.
-  if (
-    field.kind === 'checkbox' &&
-    mapping.conceptScope &&
-    mapping.conceptScope.length > 1
-  ) {
-    return missingResolution(field, mapping, allFacts);
-  }
-
   // A FIXED-GRID TABLE CELL IS ADDRESSED BY ITS ROW, AND THE RESOLVER CANNOT
   // SEE ROWS.
   // Its only inputs are the field's concept and the fact set. In a 26-row vein
@@ -535,7 +520,24 @@ function resolveOne(
   // A repeating-row PROTOTYPE is the opposite case and keeps resolving here: it
   // expands one row per fact, so there is no row to address and no ambiguity to
   // resolve. Only the fixed grid — many rows, one shared concept — defers.
-  if (field.rendererBinding.bindingType === 'table_cell' && !field.rowPrototype) {
+  // ⚠️ BOTH DEFERRALS ARE ONE SHARED CALL NOW — RULING #258, NO MIRROR.
+  //
+  // These two were separate `if`s, and the confirm surface's copy of the ladder
+  // knew about NEITHER of them for most of its life: the fixed grid was the
+  // seventh divergence, found by a peer session's independent pass, and the
+  // multi-scope checkbox was the EIGHTH, found by round seven after the matrix
+  // had already been widened three times.
+  //
+  // ⚠️ THEY WERE INVISIBLE FOR A STRUCTURAL REASON, NOT A CARELESS ONE. The copy
+  // was built by walking the GUARD LADDER above, and these are not guards in that
+  // ladder — they are different CALL SITES of `missingResolution`, reached only
+  // once facts carry the field's concept. `:490`'s own comment says it: "The
+  // three other `missingResolution` sites are DEFERRALS with facts in hand."
+  // Three of the four cannot honour an omit, and the copy walked past all of
+  // them.
+  //
+  // A ninth deferral is added to `omitDeferralGuard` and both sides get it.
+  if (omitDeferralGuard(field, mapping) !== null) {
     return missingResolution(field, mapping, allFacts);
   }
 
@@ -587,7 +589,11 @@ function resolveOne(
   // non-select this is every temporal candidate, exactly as before.
   const judged = temporalCandidates.filter((fact) => conflictCandidates.includes(fact));
 
-  const permitsFamily = normalizeConcept(mapping.clinicalConcept).startsWith(
+  // ⚠️ NON-NULL BY THE PRE-CONCEPT TABLE'S `clinical_concept_unmapped` ROW,
+  // which returned above. TypeScript cannot see through the table walk, and a
+  // second `if` here would be exactly the duplicate decision ruling #258 just
+  // removed — so the guarantee is named and asserted, not re-tested.
+  const permitsFamily = normalizeConcept(mapping.clinicalConcept!).startsWith(
     'family_history.',
   );
   if (
