@@ -26,7 +26,6 @@ import {
   requiredFactTemporality,
   temporalityMatches,
 } from '../fact-mapping-match';
-import { isMappingTypeCompatible } from '../semantic-mapping';
 import {
   OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS,
   OMIT_LADDER_PRE_CONCEPT,

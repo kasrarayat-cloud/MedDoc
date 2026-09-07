@@ -593,24 +593,63 @@ const WITNESSED_GUARDS = new Set<string>();
     // PASS 1 — classify every row. Cheap, exhaustive, and it is what makes the
     // coverage claim a fact about the whole product rather than about a draw.
     const strataSize = new Map<string, number>();
+    // ⚠️ AND WHAT EACH STRATUM'S DIMENSIONS ACTUALLY SPAN, which is what makes
+    // the sampling assertion below derivable instead of hand-listed. A guard
+    // ENTAILS some of its dimensions — every row of `manual_source_not_filled`
+    // has `sourceType: 'manual'`, necessarily — and a dimension constant for
+    // that reason is not a sampling defect. Only a dimension that varies across
+    // the whole stratum and NOT across the resolved subset is one.
+    const strataSpan = new Map<string, Set<number>[]>();
+    const classOf: string[] = [];
     for (let n = 0; n < total; n += 1) {
-      const { f, m } = build(decode(n));
+      const row = decode(n);
+      const { f, m } = build(row);
       const g = omitBranchUnreachable(f, m) ?? 'REACHABLE';
+      classOf.push(g);
       strataSize.set(g, (strataSize.get(g) ?? 0) + 1);
+      if (!strataSpan.has(g)) strataSpan.set(g, DIMS.map(() => new Set<number>()));
+      strataSpan.get(g)!.forEach((seen, k) => seen.add(row[k]!));
     }
 
     // PASS 2 — resolve an evenly-spread subset of each stratum.
     const stride = new Map<string, number>();
     for (const [g, n] of strataSize) stride.set(g, Math.max(1, Math.ceil(n / RESOLVE_CAP)));
-    const seenInStratum = new Map<string, number>();
+
+    // ⚠️ SELECTED BY A MIXED HASH OF THE INDEX, NOT BY ITS RESIDUE — and the
+    // first cut of this arm got it wrong in exactly the way it was written to
+    // prevent. `seen % stride === 0` looks unbiased and is not: the enumeration
+    // is mixed-radix, so a stratum's stride shares factors with the dimension
+    // periods. MEASURED on the largest stratum: stride 1452 = 12 x 121, and 12
+    // is precisely the period of the three lowest-order dimensions, so
+    // `field.required`, `mapping.required` and `field.unknownPolicy` were held
+    // CONSTANT across all 300 resolved rows — 217,728 rows of the product could
+    // never reach the resolver at all. A mutation keyed on `field.required`
+    // survived the whole arm.
+    //
+    // That is failure mode (1) of the seeded matrix — "the inputs the matrix was
+    // widened to watch, constant everywhere the guards live" — recurring one
+    // layer down, in the redesign that diagnosed it.
+    //
+    // A multiplicative hash alone does NOT fix it (low bits stay correlated;
+    // measured: two dimensions still collapsed). This is a murmur3 finalizer,
+    // and it takes every stratum to ZERO collapsed dimensions.
+    const mix = (n: number): number => {
+      let h = n >>> 0;
+      h ^= h >>> 16;
+      h = Math.imul(h, 2246822507);
+      h ^= h >>> 13;
+      h = Math.imul(h, 3266489909);
+      return (h ^ (h >>> 16)) >>> 0;
+    };
     const rows: number[][] = [];
+    const takenPerStratum = new Map<string, number>();
     for (let n = 0; n < total; n += 1) {
-      const row = decode(n);
-      const { f, m } = build(row);
-      const g = omitBranchUnreachable(f, m) ?? 'REACHABLE';
-      const seen = seenInStratum.get(g) ?? 0;
-      seenInStratum.set(g, seen + 1);
-      if (seen % stride.get(g)! === 0) rows.push(row);
+      const g = classOf[n]!;
+      if (mix(n) % stride.get(g)! !== 0) continue;
+      const taken = takenPerStratum.get(g) ?? 0;
+      if (taken >= RESOLVE_CAP) continue;
+      takenPerStratum.set(g, taken + 1);
+      rows.push(decode(n));
     }
 
     // ── strata: the guard branches ─────────────────────────────────────────
@@ -731,6 +770,43 @@ const WITNESSED_GUARDS = new Set<string>();
     // size could reach it and why the previous arm never witnessed the eighth
     // guard at all. Classification is exhaustive; the cap only bounds how many
     // of a LARGE stratum reach the resolver.
+    // ══════════════════════════════════════════════════════════════════════
+    // ⚠️ AND THE RESOLVED SUBSET MUST NOT HOLD A DIMENSION CONSTANT THAT THE
+    // STRATUM ITSELF VARIES. This is the assertion the stride defect needed and
+    // did not have: coverage of a BRANCH is not coverage of the branch's INPUTS,
+    // and a selector correlated with the enumeration can satisfy every count
+    // above while resolving one corner of every stratum.
+    //
+    // Derived, never listed: a dimension a guard ENTAILS is constant across the
+    // whole stratum too, so comparing the two spans distinguishes "necessarily
+    // constant" from "constant because of how we sampled" without anybody
+    // deciding which is which.
+    // ══════════════════════════════════════════════════════════════════════
+    const resolvedSpan = new Map<string, Set<number>[]>();
+    for (const row of rows) {
+      const { f, m } = build(row);
+      const g = omitBranchUnreachable(f, m) ?? 'REACHABLE';
+      if (!resolvedSpan.has(g)) resolvedSpan.set(g, DIMS.map(() => new Set<number>()));
+      resolvedSpan.get(g)!.forEach((seen, k) => seen.add(row[k]!));
+    }
+    const collapsed: string[] = [];
+    for (const g of expectedStrata) {
+      const whole = strataSpan.get(g);
+      const sample = resolvedSpan.get(g);
+      if (!whole || !sample) continue;
+      whole.forEach((span, k) => {
+        if (span.size > 1 && (sample[k]?.size ?? 0) <= 1) {
+          collapsed.push(`${g}[dim ${k}]`);
+        }
+      });
+    }
+    expect(
+      collapsed,
+      `the resolver-visible sample holds these dimensions CONSTANT inside a ` +
+        `stratum that varies them — the selector is correlated with the ` +
+        `enumeration, so a mutation keyed on one of them can never be witnessed`,
+    ).toEqual([]);
+
     for (const g of expectedStrata) {
       const n = strataSize.get(g) ?? 0;
       const resolved = resolvedPerStratum.get(g) ?? 0;
@@ -864,6 +940,97 @@ const WITNESSED_GUARDS = new Set<string>();
       `INTENTIONAL_CONSTANTS declares [${stale.join(', ')}] which the mirror does ` +
         `not read, or which the matrix now varies. A declaration that has ` +
         `outlived its constant exempts nothing and hides the next one.`,
+    ).toEqual([]);
+  });
+
+  it('⚠️ THE **RESOLVER** SIDE\'S OWN READS ARE VARIED OR DECLARED — the other half of the biconditional', () => {
+    // ⚠️ FOUND BY A ROUND-EIGHT LENS, AND IT IS THE SAME CLASS ONE SIDE OVER.
+    //
+    // The Proxy tracer watches `omitBranchUnreachable` — the OFFER. The property
+    // this arm asserts is `offer ⟺ resolver`, and nothing anywhere looked at
+    // what the RESOLVER reads. A guard added there, keyed on a property the
+    // matrix pins, is invisible: the lens planted
+    // `&& !field.clinicallyMaterial` inside `missingResolution`'s omit branch —
+    // a property the production compiler emits `true` at 12 sites and `false` at
+    // 0, while this matrix pins it `false` — and the planted
+    // offered-but-not-honoured lie survived **49/49 here and 891/891** across
+    // every template-twin file.
+    //
+    // ⚠️ A PROXY CANNOT DO THIS JOB, WHICH IS WHY THIS ONE READS SOURCE.
+    // `resolveTemplateFields` begins by `TemplateFieldSchema.parse(field)`, and
+    // zod returns a NEW object — so a Proxy on the input observes zod touching
+    // every property and the resolver touching none of them. Tracing would
+    // report "everything read" and mean nothing.
+    //
+    // ⚠️ AND READING SOURCE HERE IS NOT THE RETIRED CLASS (#237). This does not
+    // prove any BEHAVIOUR. It DERIVES the dimension list, exactly as the
+    // mirror-side arm above does; the behaviour is still proved by driving the
+    // real resolver over the product. A scanner choosing inputs is a different
+    // animal from a scanner asserting an outcome.
+    const src = readFileSync(join(__dirname, '..', 'resolver', 'index.ts'), 'utf-8');
+    const from = src.indexOf('  // ⚠️ THE LADDER IS WALKED, NOT WRITTEN HERE');
+    const to = src.indexOf('  const conflictCandidates =');
+    const mFrom = src.indexOf('function missingResolution(');
+    const mTo = src.indexOf('function defaultLaterality(');
+    expect(
+      Math.min(from, to, mFrom, mTo),
+      'the anchors no longer locate the resolver region — this arm is reading nothing',
+    ).toBeGreaterThan(-1);
+    expect(from).toBeLessThan(to);
+    expect(mFrom).toBeLessThan(mTo);
+
+    // Comments are stripped: a property NAMED in prose is not a property READ,
+    // and the mirror-side arm was once "satisfied" by exactly that mistake.
+    const region = (src.slice(from, to) + src.slice(mFrom, mTo))
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    const reads = new Set<string>();
+    for (const match of region.matchAll(/\b(field|mapping)\b\s*\??\.\s*([A-Za-z_$][\w$]*)/g)) {
+      reads.add(`${match[1]}.${match[2]}`);
+    }
+
+    // ⚠️ NON-VACUITY: if the region stops yielding reads, this arm passes for
+    // free. The guards themselves moved to `unmentioned-policy.ts` under #258,
+    // so the count here is SMALL by design — but it is not zero.
+    expect(reads.size, 'the resolver region yielded no reads — the anchors drifted')
+      .toBeGreaterThanOrEqual(3);
+
+    // Varied by the matrix, or declared here with the reason it cannot be.
+    const RESOLVER_CONSTANTS: Record<string, string> = {
+      // Identity, not a decision — it selects nothing and gates nothing.
+      'field.fieldId': 'the field identity, echoed into every resolution',
+      // Pinned to `omit` on purpose: this arm is ABOUT the omit branch, and a
+      // row with any other policy could not reach the honouring it compares.
+      'mapping.unmentionedPolicy': 'pinned to omit — the branch under test',
+    };
+    const isVariedRead = (read: string) => {
+      if ((OBSERVED_VALUES.get(read)?.size ?? 0) > 1) return true;
+      for (const [key, vals] of OBSERVED_VALUES) {
+        if (key.startsWith(`${read}.`) && vals.size > 1) return true;
+      }
+      return false;
+    };
+    const unwatched = [...reads].filter(
+      (r) => !isVariedRead(r) && !(r in RESOLVER_CONSTANTS),
+    );
+    expect(
+      unwatched,
+      `the RESOLVER reads [${unwatched.join(', ')}] on the path this arm compares, ` +
+        `and the matrix presents only one value for ${unwatched.length === 1 ? 'it' : 'them'}. ` +
+        `A guard keyed on one of those is invisible to the biconditional — which ` +
+        `is how a planted offered-but-not-honoured lie survived 891 tests. Vary ` +
+        `it, or declare it in RESOLVER_CONSTANTS with the reason it cannot vary.`,
+    ).toEqual([]);
+
+    // ⚠️ AND THE DECLARATION IS NOT A DUMPING GROUND: it may not name a property
+    // the resolver does not read, or one the matrix already varies.
+    const stale = Object.keys(RESOLVER_CONSTANTS).filter(
+      (k) => !reads.has(k) || isVariedRead(k),
+    );
+    expect(
+      stale,
+      `RESOLVER_CONSTANTS declares [${stale.join(', ')}] which the resolver does ` +
+        `not read, or which the matrix now varies.`,
     ).toEqual([]);
   });
 
