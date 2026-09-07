@@ -77,7 +77,25 @@ describe('schema', () => {
 describe('classification', () => {
   it.each([
     ['ULTRASOUND TECHNOLOGIST: Choose an item.', 'manual'],
-    ['REFERRING PHYSICIAN: Choose an item.', 'manual'],
+    // ⚠️ #247 — WAS 'manual', AND THE CHANGE IS THE RULING. The referring
+    // clinician is DICTATED ("referred by Dr. Ramirez"), so it is an ordinary
+    // extraction with an L3 concept behind it rather than a blank a human
+    // types. `MANUAL_LABEL_PATTERNS` keeps machine / location / address, which
+    // nobody says aloud.
+    ['REFERRING PHYSICIAN: Choose an item.', 'extraction'],
+    // The owner's ACTUAL label, which the old `/referring\s+physician/i`
+    // pattern never matched — the rule missed the one field it was written for.
+    ['Referring MD', 'extraction'],
+    // #247 — record-derived, and the KIND decides as much as the label. These
+    // rows pass no field, so they exercise the fail-closed answer: a
+    // record-derived classification without a kind to check is a guess about a
+    // control that prints a patient's identity. The positive case is driven
+    // with a real field in `gate-247-visit-metadata.test.ts`.
+    ['Patient', 'extraction'],
+    ['Age', 'extraction'],
+    // ⚠️ NON-VACUITY for the two above: neither pattern may reach into prose.
+    ['Age of onset', 'extraction'],
+    ['Patient reports intermittent heartburn', 'extraction'],
     ['MACHINE: Choose an item.', 'manual'],
     ['LOCATION: Choose an item.', 'manual'],
     ['Address', 'manual'],

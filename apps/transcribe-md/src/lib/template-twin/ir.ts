@@ -472,6 +472,20 @@ export const EncounterFactSchema = z
         // fact, so it carries its own identity and anchor.
         'verified_note_selection',
         'clinician_correction',
+        /**
+         * #247 — A VALUE TAKEN FROM THE PATIENT RECORD, NOT FROM THE DICTATION.
+         *
+         * Its own class rather than a reuse, and per-visit by construction:
+         * `approved_practice_default` is PRACTICE-wide, and a patient's name is
+         * not a property of a practice.
+         *
+         * ⚠️ PROVENANCE IS THE WHOLE POINT. The fill path is built on cited
+         * evidence, so a record value that borrowed `encounter_evidence` would
+         * make the frozen manifest say the doctor SAID it. That is not
+         * hypothetical — `withProcedureDateFact` did exactly that until this
+         * value existed, and the manifest recorded the visit date as dictated.
+         */
+        'visit_record',
       ])
       .default('encounter_evidence'),
     concept: z.string().min(1).max(160),
@@ -589,6 +603,36 @@ export const FieldResolutionStatusSchema = z.enum([
    * `kept_default` proof kind it drives, separate them — evaluated-and-kept
    * from never-looked-at.
    */
+  /**
+   * #247 — THE VALUE CAME OFF THE PATIENT RECORD, AND THE RESOLUTION SAYS SO.
+   *
+   * ⚠️ IT IS POPULATED, LIKE `supported`, AND IT IS NOT `supported`. Both put a
+   * value on the document and both cite facts. What separates them is the only
+   * question a reader of a signed note actually asks: *did the clinician say
+   * this?* A patient's name printed on a consult letter was read out of the
+   * chart, and a manifest reporting it as `supported` beside a dictated
+   * assessment makes those two indistinguishable at the one place the
+   * distinction is recoverable.
+   *
+   * Measured against every existing member before it was added:
+   *   supported                 asserts DICTATED support. That is the claim
+   *                             being corrected, so it cannot be the carrier.
+   *   approved_practice_default a PRACTICE-wide policy value the practice
+   *                             approved once. This is PER-VISIT and belongs to
+   *                             one patient — `approved_practice_default` is
+   *                             refused for family 3 in the ruling itself, for
+   *                             exactly that reason.
+   *   not_mentioned             NOT_MENTIONED_HAS_EVIDENCE is blocking the
+   *                             moment a citation exists, and this citation is
+   *                             the point.
+   *
+   * ⚠️ AND THE SOURCE OF TRUTH IS THE FACT, NEVER THIS STATUS. The resolver
+   * derives it from `sourceType === 'visit_record'` on the cited facts and the
+   * validator re-derives it independently, in both directions — so a
+   * `record_derived` resolution citing dictation, and a `supported` resolution
+   * citing the record, are both BLOCKING. A label nothing checks is decoration.
+   */
+  'record_derived',
 ]);
 export type FieldResolutionStatus = z.infer<typeof FieldResolutionStatusSchema>;
 
@@ -692,6 +736,22 @@ export const TemplateTwinFillManifestSchema = z
          * manifest already persisted still parses.
          */
         omitted: z.number().int().nonnegative().optional(),
+        /**
+         * ⚠️ #247 — RECORD-DERIVED FILLS, COUNTED SEPARATELY BECAUSE `filled`
+         * CANNOT TELL THE DOCTOR WHICH ONES HE SAID. They are a SUBSET of
+         * `filled`, not a sibling bucket, so nothing double-counts and nothing
+         * falls into no bucket.
+         *
+         * ⚠️ `.optional()` AND EMITTED ONLY WHEN NON-ZERO — a deliberate
+         * departure from `omitted`, which is always emitted. The sign gate
+         * re-verifies a STORED manifest by recomputing these counts and
+         * comparing shas (`certification-lifecycle.ts`), so a key that appears
+         * unconditionally changes the recomputed sha of every manifest already
+         * on disk and fails a document nobody touched. Zero record-derived
+         * fills therefore produces byte-identical counts to before this
+         * existed.
+         */
+        recordDerived: z.number().int().nonnegative().optional(),
         conflicts: z.number().int().nonnegative(),
         criticalUnresolved: z.number().int().nonnegative(),
       })
@@ -717,8 +777,14 @@ export function templateTwinCounts(
     'needs_clinician_input',
     'denial_withheld',
   ]);
+  // #247 — see the schema comment: PRESENT ONLY WHEN NON-ZERO, so a manifest
+  // stored before this status existed recomputes to the same sha.
+  const recordDerived = fields.filter(
+    (field) => field.status === 'record_derived',
+  ).length;
   return {
     filled: fields.filter((field) => field.value !== null).length,
+    ...(recordDerived > 0 ? { recordDerived } : {}),
     needsReview: fields.filter((field) => unresolved.has(field.status)).length,
     // ⚠️ #194 — AN `omit` IS NOT COUNTED, AND A NULL POLICY IS. Both take the
     // bounded clear, so the PAGE is identical; the difference is what the doctor

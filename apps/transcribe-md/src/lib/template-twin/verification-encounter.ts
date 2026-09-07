@@ -308,10 +308,46 @@ const NARRATIVE_SENTENCES: ReadonlyMap<string, string> = new Map([
     'past_medical_history',
     'Past medical history: hypertension and type 2 diabetes mellitus, both longstanding.',
   ],
+  [
+    'past_surgical_history',
+    'Past surgical history: laparoscopic cholecystectomy in twenty nineteen and an appendicectomy in childhood.',
+  ],
   ['family_history', 'Family history: hypertension in one parent; no other significant family history.'],
   [
     'social_history',
-    'Social history: never smoker, occasional alcohol, sedentary office occupation.',
+    'Social history: never smoker, occasional alcohol, sedentary office occupation, married.',
+  ],
+  // #246 family 2 — its OWN sentence, because the family sentence above is
+  // matched only for a field mapped to bare `social_history`. A control mapped
+  // to the sub-concept looks itself up first and would otherwise find nothing.
+  [
+    'social_history.marital_status',
+    'Social history, marital status: married.',
+  ],
+  // #246 family 4 — the total is SAID, because the extractor is forbidden from
+  // computing one. A self-test that never states it would leave the control
+  // not_mentioned and prove nothing about the concept.
+  [
+    'total_time_minutes',
+    'A total time of forty five minutes was spent on this encounter, including counselling and coordination of care.',
+  ],
+  // #247 family 3 — the DICTATED member of `visit_metadata.*`, and the only one
+  // that may appear here.
+  //
+  // ⚠️ `visit_metadata.patient_name` AND `.patient_age` HAVE NO SENTENCE AND
+  // MUST NOT ACQUIRE ONE. A sentence here becomes an `encounter_evidence` fact
+  // in the CERTIFICATION manifest — the artifact ruling #247 says never carries
+  // a real name — and, worse than the PHI question, it would certify the claim
+  // that a patient's name is DICTATED, which is the misattribution this whole
+  // family exists to end. Those two controls are honestly blank at
+  // certification, exactly as DATE OF PROCEDURE has always been, and they fill
+  // at visit time from the record.
+  //
+  // The referrer is a synthetic name in a synthetic encounter, the same class
+  // as every other value in this table.
+  [
+    'visit_metadata.referring_physician',
+    'The patient was referred by Dr. Alan Whitfield for further evaluation.',
   ],
   ['medication', 'Medications: lisinopril ten milligrams daily and metformin five hundred milligrams twice daily.'],
   ['allergy', 'Allergies: no known drug allergies.'],

@@ -88,6 +88,7 @@ function makeInput(
       chief_complaint: null,
       hpi: null,
       past_medical_history: [],
+  past_surgical_history: [],
       medications: [],
       allergies: [],
       family_history: [],
@@ -100,6 +101,7 @@ function makeInput(
       // Additive L3 slot; a SOAP fixture has none.
       measurements: [],
   spoken_procedure_codes: [],
+  total_time_minutes: null,
     },
     audioConfidenceStats: null,
     ...overrides,

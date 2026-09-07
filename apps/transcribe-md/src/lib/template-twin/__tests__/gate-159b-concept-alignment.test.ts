@@ -46,6 +46,7 @@ const CONTEXT_TEXT = [
   'Impression: syntheticcondition.',
   'Plan: follow up in two weeks.',
   'Great saphenous vein diameter 5.2 mm on the right.',
+  'Referred by Dr. Alan Whitfield for evaluation.',
 ].join('\n');
 
 const FULL_ENTITIES = {
@@ -62,6 +63,22 @@ const FULL_ENTITIES = {
   past_medical_history: [
     { condition: 'Hypertension', evidence_quote: 'History of hypertension.' },
   ],
+  // #246 family 1 — the census asserts the fixture reaches EVERY emission
+  // site, so a new site without a fixture row is an unwatched emitter.
+  past_surgical_history: [
+    { procedure: 'Appendicectomy', evidence_quote: 'Appendicectomy in childhood.' },
+  ],
+  // #246 family 4 — value is the de-unit'd string, number rides beside it.
+  total_time_minutes: { minutes: 45, evidence_quote: 'Total time forty five minutes.' },
+  // #247 family 3 — THE DICTATED member. Present here for the same reason
+  // family 1 and 4 are: this file asserts the fixture reaches EVERY emission
+  // site, so a new site with no fixture row is an emitter nothing watches.
+  //
+  // ⚠️ THE OTHER TWO MEMBERS OF `visit_metadata.*` ARE NOT AND CANNOT BE HERE.
+  // `patient_name` and `patient_age` are not projected from L3 at all — they
+  // are injected by `withVisitMetadataFacts` as `visit_record` facts, so they
+  // have no emission site in the projector for this census to reach.
+  referring_physician: { name: 'Dr. Alan Whitfield', evidence_quote: 'Referred by Dr. Alan Whitfield for evaluation.' },
   medications: [
     {
       name: 'syntheticmed',
@@ -90,6 +107,7 @@ const FULL_ENTITIES = {
     alcohol: { status: 'Occasional', evidence_quote: 'Never smoker. Occasional alcohol. No recreational drugs. Works as an accountant.' },
     drugs: { status: 'None', evidence_quote: 'Never smoker. Occasional alcohol. No recreational drugs. Works as an accountant.' },
     occupation: { value: 'Accountant', evidence_quote: 'Never smoker. Occasional alcohol. No recreational drugs. Works as an accountant.' },
+    marital_status: { status: 'Married', evidence_quote: 'Never smoker. Occasional alcohol. No recreational drugs. Works as an accountant. Married.' },
   },
   ros: [
     { system: 'constitutional', finding: 'Fever', polarity: 'denied' as const, evidence_quote: 'Denies fever.' },
@@ -401,12 +419,19 @@ describe('#159(b) — concept alignment: the emitter and the registry agree', ()
       'social_history.alcohol',
       'social_history.drugs',
       'social_history.occupation',
+      // #246 family 2 — an ATTRIBUTE, not a list. A person has ONE marital
+      // status, so joining several would be as wrong as "10 mg; 20 mg" on a
+      // dose. It sits beside occupation for the same reason.
+      'social_history.marital_status',
     ];
 
     // The partition must cover every member exactly once — no unnamed bucket.
     const all = Object.values(REGISTRY_SUBCONCEPTS).flat().sort();
     expect([...ACCUMULATES, ...SINGLE].sort()).toEqual(all);
-    expect(all.length).toBe(12);
+    // #246 family 2 — 12 -> 13. This count is deliberately hardcoded so that
+    // adding a sub-concept forces a reader to decide whether it ACCUMULATES or
+    // is SINGLE, which is the whole point of the partition above.
+    expect(all.length).toBe(13);
 
     for (const c of ACCUMULATES) {
       expect([c, isRegisteredConcept(c)]).toEqual([c, true]);
