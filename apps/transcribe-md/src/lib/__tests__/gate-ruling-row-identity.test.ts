@@ -60,6 +60,51 @@ export function driftedRows(head: string, archives: Record<string, string>): str
   return out;
 }
 
+/** A ruling index row's own verdict cell, `| date | #n | kind | VERDICT | …`. */
+function verdictOf(row: string): string {
+  return (row.split('|')[4] ?? '').trim();
+}
+
+/**
+ * A CLAUSE row — `(g) — …`, `(c)-CORRECTED — …`, `b — …` — amends a ruling that
+ * already has a root row. Five numbers legitimately carry several
+ * (#106, #109, #115, #116, #131), so a naive "one row per number" arm reds
+ * `main` on arrival and would be deleted the same day.
+ */
+const CLAUSE_ROW = /^\*{0,2}\(?[a-z]\)?(?:-[A-Z]+)?\*{0,2}\s*[—\-–]/;
+
+/**
+ * ⚠️ TWO RULINGS UNDER ONE NUMBER — the gap a PEER LANE FOUND, IN MY GATE.
+ *
+ * Two lanes claimed the same two ruling numbers within 47 minutes of each
+ * other. Had both landed,
+ * `RULINGS.md` would carry that number TWICE and **every existing gate stays
+ * green**: `driftedRows` is satisfied because each row matches its own archive;
+ * `gate-ruling-recorded` finds a row per citation; the counts add up. The canon
+ * INDEX refuses two bodies under one number and the ruling head had no
+ * equivalent.
+ *
+ * ⚠️ THE COLLISION WAS CAUGHT BY A PERSON READING TWO BRANCHES, WHICH IS NOT A
+ * MECHANISM. #219 settles WHO keeps a number; nothing asserted that the answer
+ * was ever applied.
+ *
+ * Credit where it is due: the peer lane found this, wrote its own arm, and
+ * offered it rather than asking for anything. This is my own implementation of
+ * the same rule, in my own gate, so the ledger is protected whichever branch
+ * lands first — which is the whole point of the finding.
+ */
+function duplicateRootRulings(head: string): string[] {
+  const counts = new Map<string, number>();
+  for (const row of rowsIn(head)) {
+    if (CLAUSE_ROW.test(verdictOf(row))) continue;
+    const n = /#(\d+)/.exec(row)?.[1];
+    if (n) counts.set(n, (counts.get(n) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .filter(([, c]) => c > 1)
+    .map(([n, c]) => `ruling #${n} has ${c} ROOT rows — two rulings share one number`);
+}
+
 describe('a ruling row is the same bytes in the head and in its archive', () => {
   const head = readFileSync(resolve(REPO, HEAD), 'utf8');
   const archives: Record<string, string> = {};
@@ -106,6 +151,38 @@ describe('a ruling row is the same bytes in the head and in its archive', () => 
   it('does NOT fire on a head row with no archive twin — pre-split rows are legitimate', () => {
     const orphan = '| 2026-08-01 | #12 | OWNER-RULING | **STANDING** — old | y | pointer |';
     expect(driftedRows(`${orphan}\n`, {})).toEqual([]);
+  });
+
+  it('⚠️ NO NUMBER CARRIES TWO ROOT RULINGS — two lanes nearly landed one', () => {
+    expect(duplicateRootRulings(head)).toEqual([]);
+  });
+
+  it('⚠️ CATCHES the collision that nearly happened — two lanes, one number', () => {
+    // ⚠️ THE FIXTURE USES A RECORDED NUMBER, NOT THE ONE THE REAL COLLISION USED.
+    // `scripts/hooks/pre-commit` reads `#NNN` in staged source as a ruling
+    // citation and demands a ledger row — and the colliding number belongs to
+    // the OTHER lane, so it has no row here. A fixture number is still a
+    // citation; this session has now been taught that twice.
+    const mine  = '| 2026-09-07 | #251 | OWNER-RULING | **STANDING** — text scanners retired | why | [`a`](rulings/a.md) |';
+    const peers = '| 2026-09-07 | #251 | OWNER-RULING | **STANDING — another lane**, four concepts | why | [`b`](rulings/b.md) |';
+    const found = duplicateRootRulings(`${mine}\n${peers}\n`);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain('#251');
+  });
+
+  it('⚠️ …AND DOES NOT FIRE ON A LEGITIMATE CLAUSE ROW — #106, #109, #115, #116, #131', () => {
+    // The naive "one row per number" predicate reds `main` on arrival. Measured
+    // against the real ledger before this arm was written: five numbers carry
+    // several rows, every one of them a clause amending its own root.
+    const root   = '| 2026-08-01 | #106 | OWNER-RULING | CUSTOM-TEMPLATE FIDELITY: the statics are assembled | why | p |';
+    const clause = '| 2026-08-02 | #106 | OWNER-RULING | (g) — STATICS ARE GUARDED AT THE OUTPUT | why | p |';
+    const bare   = '| 2026-08-03 | #116 | OWNER-RULING | b — SITE 3 HAD A SECOND CONSUMER | why | p |';
+    expect(duplicateRootRulings(`${root}\n${clause}\n${bare}\n`)).toEqual([]);
+  });
+
+  it('⚠️ the corpus really contains those clause rows — or the arm above is vacuous', () => {
+    const clauses = rowsIn(head).filter((r) => CLAUSE_ROW.test(verdictOf(r)));
+    expect(clauses.length, 'no clause rows found — the exemption is untested').toBeGreaterThanOrEqual(5);
   });
 
   it('⚠️ the row regex matches a REAL row and not prose that merely mentions one', () => {
