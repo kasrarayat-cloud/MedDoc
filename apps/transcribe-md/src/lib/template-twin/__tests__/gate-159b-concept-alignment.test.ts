@@ -46,6 +46,7 @@ const CONTEXT_TEXT = [
   'Impression: syntheticcondition.',
   'Plan: follow up in two weeks.',
   'Great saphenous vein diameter 5.2 mm on the right.',
+  'Referred by Dr. Alan Whitfield for evaluation.',
 ].join('\n');
 
 const FULL_ENTITIES = {
@@ -69,6 +70,15 @@ const FULL_ENTITIES = {
   ],
   // #246 family 4 — value is the de-unit'd string, number rides beside it.
   total_time_minutes: { minutes: 45, evidence_quote: 'Total time forty five minutes.' },
+  // #247 family 3 — THE DICTATED member. Present here for the same reason
+  // family 1 and 4 are: this file asserts the fixture reaches EVERY emission
+  // site, so a new site with no fixture row is an emitter nothing watches.
+  //
+  // ⚠️ THE OTHER TWO MEMBERS OF `visit_metadata.*` ARE NOT AND CANNOT BE HERE.
+  // `patient_name` and `patient_age` are not projected from L3 at all — they
+  // are injected by `withVisitMetadataFacts` as `visit_record` facts, so they
+  // have no emission site in the projector for this census to reach.
+  referring_physician: { name: 'Dr. Alan Whitfield', evidence_quote: 'Referred by Dr. Alan Whitfield for evaluation.' },
   medications: [
     {
       name: 'syntheticmed',

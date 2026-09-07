@@ -387,6 +387,12 @@ function assertResolutionStatus(
     'supported',
     'explicitly_denied',
     'approved_practice_default',
+    // #247 — a record-derived value IS a value and must be renderable. Without
+    // this entry the wall refuses every fill carrying a patient name or age
+    // (`FIELD_RESOLUTION_INVALID`), which reads as a corrupt manifest rather
+    // than as a missing allow-list row — the whole document is refused and
+    // nothing says why.
+    'record_derived',
   ]);
   if (resolution.value === null) {
     if (

@@ -29,6 +29,7 @@ import { TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE } from '../semantic-mapping';
 import { projectEncounterFacts } from '../encounter-facts';
 import { narrativeSentence } from '../verification-encounter';
 import { isListValuedNarrative } from '../field-value-derivation';
+import { EncounterFactSchema } from '../ir';
 
 const QUOTE = 'the doctor said so';
 function project(entities: Record<string, unknown>) {
@@ -54,12 +55,24 @@ describe('#246 — the three families are REGISTERED', () => {
     expect(isRegisteredConcept('social_history.favourite_colour')).toBe(false);
   });
 
-  it('⚠️ family 3 is NOT shipped here, and this file says so', () => {
-    // #247 is its own change. If these ever pass without that change landing,
-    // something registered them without their record-derived fact class.
-    expect(isRegisteredConcept('visit_metadata.patient_name')).toBe(false);
-    expect(isRegisteredConcept('visit_metadata.patient_age')).toBe(false);
-    expect(isRegisteredConcept('visit_metadata.referring_physician')).toBe(false);
+  it('⚠️ family 3 SHIPPED SEPARATELY, and the sentinel flipped WITH its fact class', () => {
+    // This arm used to assert all three were ABSENT. That was correct while
+    // #246 was the only change on the branch: registering a record-derived
+    // concept without `sourceType: 'visit_record'` behind it would have let a
+    // patient's name be filled and reported as dictation.
+    //
+    // ⚠️ IT IS INVERTED RATHER THAN DELETED, AND THE CONDITION IT GUARDED IS
+    // RE-STATED AS THE THING THAT MUST NOW BE TRUE. The sentinel's real claim
+    // was never "these are unregistered" — it was "these are never registered
+    // WITHOUT their fact class". So the class is asserted here too, and a
+    // future edit that drops `visit_record` while leaving the concepts
+    // registered reddens exactly this arm.
+    expect(isRegisteredConcept('visit_metadata.patient_name')).toBe(true);
+    expect(isRegisteredConcept('visit_metadata.patient_age')).toBe(true);
+    expect(isRegisteredConcept('visit_metadata.referring_physician')).toBe(true);
+    expect(EncounterFactSchema.shape.sourceType.unwrap().options).toContain(
+      'visit_record',
+    );
   });
 
   it('marital_status is a SUB-CONCEPT of social_history, beside occupation', () => {

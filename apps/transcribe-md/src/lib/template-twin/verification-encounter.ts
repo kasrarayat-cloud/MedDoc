@@ -331,6 +331,24 @@ const NARRATIVE_SENTENCES: ReadonlyMap<string, string> = new Map([
     'total_time_minutes',
     'A total time of forty five minutes was spent on this encounter, including counselling and coordination of care.',
   ],
+  // #247 family 3 — the DICTATED member of `visit_metadata.*`, and the only one
+  // that may appear here.
+  //
+  // ⚠️ `visit_metadata.patient_name` AND `.patient_age` HAVE NO SENTENCE AND
+  // MUST NOT ACQUIRE ONE. A sentence here becomes an `encounter_evidence` fact
+  // in the CERTIFICATION manifest — the artifact ruling #247 says never carries
+  // a real name — and, worse than the PHI question, it would certify the claim
+  // that a patient's name is DICTATED, which is the misattribution this whole
+  // family exists to end. Those two controls are honestly blank at
+  // certification, exactly as DATE OF PROCEDURE has always been, and they fill
+  // at visit time from the record.
+  //
+  // The referrer is a synthetic name in a synthetic encounter, the same class
+  // as every other value in this table.
+  [
+    'visit_metadata.referring_physician',
+    'The patient was referred by Dr. Alan Whitfield for further evaluation.',
+  ],
   ['medication', 'Medications: lisinopril ten milligrams daily and metformin five hundred milligrams twice daily.'],
   ['allergy', 'Allergies: no known drug allergies.'],
   [

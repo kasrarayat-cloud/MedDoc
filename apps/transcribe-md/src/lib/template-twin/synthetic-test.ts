@@ -640,6 +640,24 @@ export async function runTemplateTwinSyntheticTest(input: {
     validationNow: new Date(),
     allowUncertifiedForSyntheticTest: true,
   });
+  // ⚠️ #247 STAGE B — AND THE CHECK ABOVE WAS ON THE WRONG SIDE OF THE CALL.
+  //
+  // `assertNoRecordDerivedFacts(facts)` guards this function's INPUT, which is
+  // where a record fact could arrive from a caller. It cannot see a fact
+  // `prepareTemplateTwinFill` INJECTS — and injection is precisely what family
+  // 3 added: `withVisitMetadataFacts` mints `visit_record` facts inside that
+  // call, one layer below this one. Stage A's guard was true and was measuring
+  // the half that was never going to break.
+  //
+  // The ruling's words are "a `visit_record` fact can never reach a
+  // CERTIFICATION MANIFEST", so the manifest is what gets asserted. Today this
+  // passes because no patient record is threaded here; the guard exists for the
+  // day somebody threads one, and it is the artifact — not the argument about
+  // the artifact — that it reads.
+  //
+  // Both are kept. The input check fails EARLY and names the caller's fault;
+  // this one is the invariant the ruling actually stated.
+  assertNoRecordDerivedFacts(prepared.manifest.facts);
   if (!prepared.render) {
     const blocking = prepared.manifest.validation.issues.filter(
       (issue) => issue.severity === 'blocking',

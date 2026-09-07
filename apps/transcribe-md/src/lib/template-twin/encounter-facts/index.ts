@@ -93,6 +93,9 @@ export interface EncounterEntitySnapshot {
   };
   /** #246 family 4 — a NUMBER on the extraction axis (canon 134). */
   total_time_minutes?: (EvidenceSnapshot & { minutes: number }) | null;
+  /** #247 family 3 — the DICTATED referrer. Keyed `name`, matching the L3
+   *  field; optional for canon 133's hand-mirrored-interface reason. */
+  referring_physician?: (EvidenceSnapshot & { name: string }) | null;
   ros?: ReadonlyArray<
     EvidenceSnapshot & {
       system: string;
@@ -766,6 +769,36 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
   // #246 family 2 — reads `.status`, matching the L3 key chosen above.
   if (social?.marital_status) {
     add({ path: 'social_history.marital_status', concept: 'social_history.marital_status', value: social.marital_status.status, evidence: social.marital_status, defaultTemporality: 'current' });
+  }
+
+  // #247 family 3 — THE DICTATED REFERRING CLINICIAN.
+  //
+  // ⚠️ AN ORDINARY `encounter_evidence` FACT, AND ITS NEIGHBOURS IN THE
+  // `visit_metadata.*` REGISTRY FAMILY ARE NOT. `add()` stamps
+  // `sourceType: 'encounter_evidence'` on everything it emits, and that is
+  // CORRECT here and only here: the clinician said this. Patient name and age
+  // share the concept prefix and are injected somewhere else entirely
+  // (`withVisitMetadataFacts`, `sourceType: 'visit_record'`) precisely so the
+  // manifest never has to guess which of the three it is looking at.
+  //
+  // ⚠️ POLARITY IS LEFT TO INFERENCE HERE, UNLIKE FAMILY 4, AND THAT IS A
+  // MEASURED DIFFERENCE RATHER THAN AN OVERSIGHT. Canon 135 is about a
+  // RENDERED QUANTITY: `String(45)` is not locatable in "forty five", so the
+  // denial scan ran against the whole quote. This value is the spoken name
+  // itself, so it is locatable, and the ordinary clause-scoped inference
+  // applies — which matters, because "she was NOT referred by anyone" is a
+  // sentence a clinician can say and a denial that must survive.
+  if (entities.referring_physician) {
+    add({
+      path: 'referring_physician.name',
+      concept: 'visit_metadata.referring_physician',
+      value: entities.referring_physician.name,
+      evidence: entities.referring_physician,
+      defaultTemporality: 'current',
+      // The referrer is another clinician, not the patient. `experiencer`
+      // exists for exactly this: a fact ABOUT someone other than the subject.
+      experiencer: 'other',
+    });
   }
 
   // #246 family 4 — TOTAL ENCOUNTER TIME.

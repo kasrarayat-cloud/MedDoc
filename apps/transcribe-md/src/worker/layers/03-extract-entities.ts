@@ -449,6 +449,28 @@ export const ExtractedEntities = z.object({
     )
     .default([]),
   /**
+   * #247 family 3 — THE REFERRING CLINICIAN, **DICTATED ONLY**.
+   *
+   * ⚠️ THE ONE MEMBER OF `visit_metadata.*` THAT IS NOT READ OFF THE RECORD,
+   * AND THE RULING TURNS ON THAT. Patient name and age are injected as
+   * `visit_record` facts by `withVisitMetadataFacts`; this one is an ORDINARY
+   * L3 extraction that becomes an ordinary `encounter_evidence` fact, because
+   * the clinician says it out loud — "she was referred by Dr. Ramirez" — and
+   * the record this product holds has no referring-physician column to read
+   * (grep of `schema.prisma` = 0; ruling #188 files adding one as its own
+   * product item).
+   *
+   * So: an unstated referrer is `null`, exactly like an unstated total time.
+   * Nothing here computes, remembers across visits, or carries a value forward
+   * from the practice — those are the three ways a "helpful" default would put
+   * a physician's name onto a letter nobody dictated.
+   *
+   * `liftStringToFact` for the same reason `marital_status` uses it: the model
+   * occasionally shortcuts a single-value field to a bare string, and losing
+   * the whole extraction call over that is worse than lifting it.
+   */
+  referring_physician: liftStringToFact('name'),
+  /**
    * #246 family 4 — TOTAL ENCOUNTER TIME, AS A NUMBER.
    *
    * ⚠️ "A NUMBER" IS ABOUT THE EXTRACTION AXIS, NOT THE CONTROL — canon 134.
@@ -703,6 +725,15 @@ export const COMMON_CATEGORIES = [
   '      do not supply one from your own knowledge.',
   '  A visit with no spoken code yields an EMPTY list, which is the normal',
   '  case for almost every visit.',
+  '',
+  '- referring_physician: {name, evidence_quote, speaker?, timestamp?} or null.',
+  '    The clinician who REFERRED this patient, only when the dictation names',
+  '    them — "referred by Dr. Ramirez", "sent over by her primary care',
+  '    physician Dr. Lee". Emit the name as spoken, with the title if it was',
+  '    said. This is the REFERRER, never the clinician dictating the note and',
+  '    never a colleague merely mentioned in passing ("I discussed it with',
+  '    Dr. Osei") — if the transcript does not say who referred the patient,',
+  '    the answer is null. Do not carry one over from context you were given.',
   '',
   '- total_time_minutes: {minutes, evidence_quote, speaker?, timestamp?}',
   '    or null. The TOTAL time spent on this encounter, as an INTEGER number',

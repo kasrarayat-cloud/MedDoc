@@ -167,6 +167,23 @@ export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = [
   // it and a "Total minutes" control could only ever be mapped by hand.
   'total_time_minutes',
   'social_history.occupation',
+  // #247 family 3 — THE DICTATED MEMBER, AND ONLY THE DICTATED MEMBER.
+  //
+  // ⚠️ `visit_metadata.patient_name` AND `.patient_age` ARE DELIBERATELY ABSENT
+  // FROM THIS LIST, AND THE OMISSION IS THE SAFETY PROPERTY. Their concept is
+  // decided by the COMPILER from the label (`CONCEPT_LABEL_OVERRIDES`), which
+  // also decides `sourceType: 'visit_metadata'`, and the injector fills only
+  // what that sourceType asked for. Offering them to the model would let it
+  // propose one on a field the label rule did not match — producing a mapping
+  // whose concept is record-derived and whose sourceType is `extraction`,
+  // which no fact can ever satisfy: a permanently blank control wearing a
+  // confident label. Canon 136 says an unoffered registered concept is
+  // unmappable; these two are mapped without the proposer, so it does not bite.
+  //
+  // The referrer is different in kind: it is an ordinary L3 extraction, and a
+  // form that says "Referred by" rather than "Referring MD" should still be
+  // mappable. So it IS offered.
+  'visit_metadata.referring_physician',
   // ⚠️ THREE PARTS, NOT TWO — AND THE TWO-PART FORM WAS THE ONLY THING THIS
   // COMPONENT EVER TAUGHT. #179(2) moved the projector to
   // `ros.<system>.<symptom>` and narrowed the registry pattern to match, so
