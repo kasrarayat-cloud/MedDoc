@@ -89,6 +89,55 @@ describe('ruling #210 — one definition of an active practice OWNER', () => {
     expect(sqlColumns()).toEqual(Object.keys(ACTIVE_OWNER_WHERE).sort());
   });
 
+  it('...and the SAME MEANING — a fully inverted predicate must NOT pass', () => {
+    // ⚠️ THIS ARM EXISTS BECAUSE THE ONE ABOVE WAS NOT ENOUGH, AND THE PASS
+    // PROVED IT: replacing the predicate with its exact negation — `<> 'OWNER'`,
+    // `NOT u."isActive"`, three `IS NOT NULL`, joined by OR — keeps the same
+    // five column NAMES and scored 10/10 green. A guard that admits exactly the
+    // users it should refuse, with every arm passing. Canon 117's class, in a
+    // gate written this session to illustrate canon 121.
+    //
+    // The cure is to DERIVE the expected SQL from the TypeScript constant and
+    // compare CLAUSES, not names. A column list can be satisfied by any
+    // arrangement of those columns; a clause set cannot.
+    const expected = new Set(
+      Object.entries(ACTIVE_OWNER_WHERE).map(([col, val]) => {
+        if (val === null) return `u."${col}" IS NULL`;
+        if (val === true) return `u."${col}"`;
+        return `u."${col}" = '${String(val)}'::"PracticeRole"`;
+      })
+    );
+    const body = activeOwnerSqlBody()
+      .replace(/^[\s\S]*?\bSELECT\b/, '')
+      .replace(/;\s*$/, '')
+      .trim();
+
+    // No disjunction and no negation: their presence alone changes the meaning
+    // while leaving every column name in place.
+    expect(body, 'the predicate contains OR — it is no longer a conjunction').not.toMatch(/\bOR\b/i);
+    expect(body, 'the predicate contains NOT').not.toMatch(/\bNOT\b/i);
+
+    const actual = new Set(body.split(/\bAND\b/i).map((c) => c.replace(/\s+/g, ' ').trim()));
+    expect(actual).toEqual(expected);
+  });
+
+  it('the LIVE-MEMBER predicate is a conjunction of IS NULL / isActive too', () => {
+    const body = fnBody('users_is_live_member', '$fn$ LANGUAGE sql IMMUTABLE;')
+      .replace(/^[\s\S]*?\bSELECT\b/, '')
+      .replace(/;\s*$/, '')
+      .trim();
+    expect(body).not.toMatch(/\bOR\b/i);
+    expect(body).not.toMatch(/\bNOT\b/i);
+    expect(new Set(body.split(/\bAND\b/i).map((c) => c.replace(/\s+/g, ' ').trim()))).toEqual(
+      new Set([
+        'u."isActive"',
+        'u."deactivatedAt" IS NULL',
+        'u."softDeletedAt" IS NULL',
+        'u."suspendedAt" IS NULL',
+      ])
+    );
+  });
+
   it('the predicate is the CONJUNCTION, not `deactivatedAt` alone', () => {
     // The measured reason, kept next to the arm: on production 2026-09-07 six
     // OWNER rows pass `deactivatedAt IS NULL` while unable to sign in, and an
