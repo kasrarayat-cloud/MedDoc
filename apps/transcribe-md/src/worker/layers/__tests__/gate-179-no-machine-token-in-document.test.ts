@@ -110,6 +110,31 @@ describe('a ROS fact never carries a raw snake_case identifier into the document
     expect(valueFor('gastrointestinal', 'early_satiety')).toBe('early satiety');
   });
 
+  it('⚠️ #218 — AND NOTHING IS REFUSED, NOT FILLED. The blank must never read as a value.', async () => {
+    // ⚠️ THIS ARM EXISTS BECAUSE THE FIRST FIX OPENED THE DEFECT BESIDE THE ONE
+    // IT CLOSED. Blanking stopped the token printing — and `''` then flowed
+    // through as an ordinary string: the resolver minted `supported`, the
+    // validator computed `populated = value !== null` and returned VALID with
+    // zero issues, and the renderer emitted a **`filled`** proof over a control
+    // it had just emptied, destroying the template's own placeholder prose.
+    //
+    // That is strictly worse than what it replaced. Printing `other` was wrong
+    // and VISIBLE; a silent blank attested as filled is wrong and invisible, and
+    // it also satisfies `fill-engine`'s `counts.filled > 0` — the only check
+    // between a doctor and an empty document.
+    const { deriveFieldValueFromFact } = await import('@/lib/template-twin/field-value-derivation');
+    const field = { kind: 'narrative_text', allowedOptions: [] } as unknown as Parameters<
+      typeof deriveFieldValueFromFact
+    >[0];
+    const factWith = (value: string) => ({ value }) as unknown as Parameters<typeof deriveFieldValueFromFact>[2];
+
+    expect(deriveFieldValueFromFact(field, undefined, factWith(''))).toBeNull();
+    expect(deriveFieldValueFromFact(field, undefined, factWith('   '))).toBeNull();
+    // NON-VACUITY: a real value still derives, so the refusal is about emptiness
+    // and not about narrative fields having stopped working.
+    expect(deriveFieldValueFromFact(field, undefined, factWith('belching'))).toBe('belching');
+  });
+
   it('⚠️ #218 — the BARE escape hatch prints NOTHING, not the word "other"', () => {
     // With no doctor-supplied words there is no finding to state. Saying
     // "other" is not a weaker answer than saying nothing; it is a wrong one,

@@ -86,6 +86,8 @@ interface MappingRow {
   required: boolean;
   blankPolicy: string;
   unmentionedPolicy: string | null;
+  /** #217 — JSONB, so `unknown` until shape-checked on read. */
+  conceptScope: unknown;
   unknownPolicy: string;
   practiceDefault: string | null;
   mappingStatus: string;
@@ -112,6 +114,12 @@ function mapping(fieldId: string, row: MappingRow): SemanticMapping {
     // Eliding a ruled `omit` would read the doctor's decision back as "nobody
     // ruled", which is a different behaviour and a different count.
     ...(row.unmentionedPolicy ? { unmentionedPolicy: row.unmentionedPolicy } : {}),
+    // ⚠️ #217 — OMITTED WHEN ABSENT, exactly as the policy above. Reading a
+    // NULL column back as `[]` would move every pre-existing mapping's
+    // attestation sha and de-certify all 185 production rows at once.
+    ...(Array.isArray(row.conceptScope) && row.conceptScope.length > 0
+      ? { conceptScope: row.conceptScope }
+      : {}),
     unknownPolicy: row.unknownPolicy,
     practiceDefault: row.practiceDefault,
     status: row.mappingStatus.toLowerCase(),
@@ -207,6 +215,7 @@ export async function runTemplateTwinSyntheticTest(input: {
                   required: true,
                   blankPolicy: true,
                   unmentionedPolicy: true,
+                  conceptScope: true,
                   unknownPolicy: true,
                   practiceDefault: true,
                   mappingStatus: true,
@@ -625,6 +634,7 @@ export async function runTemplateTwinSyntheticTest(input: {
                   required: true,
                   blankPolicy: true,
                   unmentionedPolicy: true,
+                  conceptScope: true,
                   unknownPolicy: true,
                   practiceDefault: true,
                   mappingStatus: true,
