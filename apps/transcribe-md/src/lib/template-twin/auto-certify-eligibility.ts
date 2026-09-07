@@ -93,6 +93,16 @@ export interface AutoConfirmCandidate {
   sourceType: string | null;
   /** Whether a clinical concept is present. Required for non-manual fields. */
   hasClinicalConcept: boolean;
+  /**
+   * ⚠️ #208 — THE DECLARED SCOPE, BECAUSE AUTO-CONFIRM USED TO CERTIFY ONE IT
+   * HAD NEVER LOOKED AT. `planAutoConfirm` spreads the whole mapping into
+   * `status: 'certified'`, so a model-proposed `conceptScope` was carried
+   * through by a decision function that could not see it — silently accepted,
+   * which is exactly what the ruling forbids. A scope is a MAPPING the model
+   * may propose, so it travels the same route as `clinicalConcept`: proposed,
+   * validated, SURFACED, confirmed.
+   */
+  conceptScope?: readonly string[] | undefined;
   /** Nearest enclosing sided heading, when the compiler supplies one. */
   sectionHeading?: string | null;
 }
@@ -118,6 +128,32 @@ export function decideAutoConfirm(c: AutoConfirmCandidate): AutoConfirmDecision 
       confirm: false,
       provenance: null,
       reason: 'no clinical concept was proposed for this field',
+    };
+  }
+
+  // ⚠️ #208 — A DECLARED SCOPE IS CONFIRMED, NEVER SILENTLY ACCEPTED.
+  //
+  // The model may PROPOSE a scope; it may not have one certified on its own
+  // say-so. The parse layer refuses unregistered and unnamed tokens, so a scope
+  // arriving here through the model path is already well-formed — but a mapping
+  // can also be hand-built or restored, and this is the seam that decides
+  // whether a human ever saw it. An entry that cannot satisfy any fact would
+  // otherwise certify a clause whose coverage claim is undeliverable.
+  //
+  // ⚠️ IT DECLINES RATHER THAN REPAIRS, and the reason is #208's own shape:
+  // shrinking a scope here would change what a clause CLAIMS TO COVER without
+  // the doctor seeing it — the confirm list shows the scope precisely so the
+  // claim is read before it is agreed to.
+  const badScope = (c.conceptScope ?? []).filter(
+    (concept) => !isRegisteredConcept(concept) || isUnnamedRosConcept(concept),
+  );
+  if (badScope.length > 0) {
+    return {
+      confirm: false,
+      provenance: null,
+      reason:
+        `the declared scope names ${badScope.length === 1 ? 'a concept' : 'concepts'} ` +
+        `no fact can carry (${badScope.slice(0, 3).join(', ')}) — confirm it by hand`,
     };
   }
 
@@ -164,6 +200,8 @@ export function decideAutoConfirm(c: AutoConfirmCandidate): AutoConfirmDecision 
  * whole Next runtime, into a unit test. The audit writer lives next door in
  * auto-certify.ts, which does the I/O.
  * ────────────────────────────────────────────────────────────────────────── */
+import { isRegisteredConcept } from './concept-registry';
+import { isUnnamedRosConcept } from './ros-lexicon';
 import type { TemplateTwinWorkspace } from './client-types';
 import type { SemanticMapping } from './ir';
 
@@ -200,6 +238,8 @@ export function planAutoConfirm(workspace: TemplateTwinWorkspace): AutoConfirmOu
       criticality: field.criticality ?? null,
       sourceType: mapping.sourceType ?? null,
       hasClinicalConcept: Boolean(mapping.clinicalConcept),
+      // #208 — the decision cannot judge what it is not given.
+      conceptScope: mapping.conceptScope,
     });
 
     if (!decision.confirm) {

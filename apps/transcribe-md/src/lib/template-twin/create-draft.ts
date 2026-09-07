@@ -7,7 +7,7 @@
 // ============================================================================
 import { createHash, randomUUID } from 'node:crypto';
 
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import prisma from '@meddoc/db';
 import { asPracticeId, templateScope } from '@/lib/practice-scope';
 import { extractNoteTextFromUpload } from '@/lib/note-template-parse/extract-note-text';
@@ -202,6 +202,21 @@ function fieldCreateInput(
           // nobody ruled on into keeping, which is exactly the inference this
           // ruling forbids. Absent stays absent, and absent is fail-closed.
           unmentionedPolicy: mapping.unmentionedPolicy ?? null,
+          // ⚠️ #217 — THIS IS THE TABLE'S ONLY INSERT, AND IT IS WHERE THE
+          // COLUMN ACTUALLY GETS ITS VALUE. The certification writer is an
+          // UPDATE; it can only change a row this statement already created. A
+          // first version of #217 added the column, the UPDATE and the five
+          // read-back projections and left this line out — so `conceptScope`
+          // would have been NULL for the entire life of every row, and every
+          // reader the ruling set out to revive would have stayed dead code
+          // behind a migration that looked like it had fixed them.
+          //
+          // NULL when absent, never `[]`: an empty array is a value and would
+          // move the attestation sha of every mapping.
+          conceptScope:
+            mapping.conceptScope && mapping.conceptScope.length > 0
+              ? asJson(mapping.conceptScope)
+              : Prisma.DbNull,
           unknownPolicy: mapping.unknownPolicy,
           practiceDefault: null,
           mappingStatus: enumStatus(mapping.status),

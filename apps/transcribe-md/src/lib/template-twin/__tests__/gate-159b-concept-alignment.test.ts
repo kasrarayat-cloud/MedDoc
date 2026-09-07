@@ -128,16 +128,23 @@ const emittedFacts = (): EncounterFact[] =>
 
 /** The four families #159(b) adds, and the shape it deliberately does NOT. */
 const ADDED_FAMILIES = ['allergy', 'medication', 'family_history', 'social_history'] as const;
-const FILED_NOT_BUILT = ['ros'] as const;
+// ⚠️ THE `ros` EXEMPTION IS GONE, AND ITS RETIREMENT CONDITION IS WHY.
+// It read "emitted and unregistered by decision" — true only while the concept
+// was the system-level `ros.<system>`, which the registry refused. Ruling #179
+// made the concept `ros.<system>.<symptom>` and REGISTERED it, so the condition
+// that justified the exemption no longer holds and the exemption is deleted
+// rather than widened. ros is now in scope and must pass like everything else.
+const FILED_NOT_BUILT: readonly string[] = [];
 
 describe('#159(b) — concept alignment: the emitter and the registry agree', () => {
   it('(1a) DRIVEN — every concept the REAL projection emits is registered', () => {
     const facts = emittedFacts();
     const concepts = [...new Set(facts.map((f) => f.concept))].sort();
 
-    // ⚠️ FILED, NOT BUILT — named here so the omission is a recorded choice.
-    // `ros.<system>` is emitted and unregistered, and it is NOT #159(b)'s shape:
-    // there is no bare `ros` to fold to. Removing this filter must RED this arm.
+    // ⚠️ THE FILTER IS KEPT THOUGH THE LIST IS EMPTY, DELIBERATELY. It is the
+    // mechanism a future filed-not-built concept would use, and an empty list
+    // makes the arithmetic below assert that NOTHING is currently exempt —
+    // which is a stronger statement than deleting the partition outright.
     const filed = concepts.filter((c) => FILED_NOT_BUILT.some((f) => c.startsWith(`${f}.`)));
     const inScope = concepts.filter((c) => !filed.includes(c));
 
@@ -149,7 +156,14 @@ describe('#159(b) — concept alignment: the emitter and the registry agree', ()
 
     // ARITHMETIC THAT MUST RECONCILE — a partition with no unnamed bucket.
     expect(inScope.length + filed.length).toBe(concepts.length);
-    expect(filed).toEqual(['ros.constitutional']);
+    expect(filed).toEqual([]);
+    // ⚠️ AND ros IS NOW POSITIVELY IN SCOPE, not merely un-exempted. Without
+    // this the arm would pass just as happily if the projector stopped emitting
+    // ROS altogether — an empty `filed` and an absent concept look identical.
+    expect(
+      inScope.some((c) => c.startsWith('ros.')),
+      'no ros.* concept was emitted at all — the arm is vacuous, not passing',
+    ).toBe(true);
   });
 
   it('(1b) NON-VACUITY — the census is non-empty and reaches all four added families', () => {
@@ -183,12 +197,70 @@ describe('#159(b) — concept alignment: the emitter and the registry agree', ()
     // reports "covered" for a site the fixture never reached is the exact
     // defect this arm exists to prevent, one level up.
     const composed = [...src.matchAll(/concept: `([^`]+)`/g)].map((m) => m[1]!);
-    const sites = [...new Set([...literals, ...composed])].sort();
+    // ⚠️ FUNCTION-CALL SITES, AND THIS SCAN WAS BLIND TO THEM UNTIL #179.
+    // `concept: rosConcept(a, b)` is neither a literal nor a template literal,
+    // so BOTH scans above miss it entirely and the ROS emission site simply
+    // vanished from this census — the arm stayed green while no longer watching
+    // the thing it was built to watch. A composed identifier has no literal in
+    // source; the site must be reconstructed from the helper's own shape.
+    const calls = [...src.matchAll(/concept: rosConcept\(/g)].map(
+      () => 'ros.${system}.${symptom}',
+    );
+    const sites = [...new Set([...literals, ...composed, ...calls])].sort();
 
     // POSITIVE CONTROL for the scan — a regex that stopped matching would make
     // this arm vacuous rather than red.
     expect(sites.length).toBeGreaterThan(12);
     expect(composed.length).toBeGreaterThan(3);
+    // the call-site scan needs its own control, or its silence reads as absence
+    expect(calls.length, 'the rosConcept emission site was not found').toBeGreaterThan(0);
+
+    // ⚠️ ARITHMETIC THAT MUST RECONCILE — AND IT CLOSES THE CLASS THE THREE
+    // SCANS ABOVE ONLY CLOSED ONE INSTANCE OF AT A TIME.
+    //
+    // Each scan above learned about ONE emission form after that form had
+    // already gone unwatched: composed sites after a prefix collapse, function
+    // calls after `rosConcept` vanished from the census entirely. Every one of
+    // those was found by an adversarial pass rather than by this arm, because
+    // an unreadable form contributes NOTHING and silence reads as absence.
+    //
+    // So instead of adding a fourth scan the next time, every `concept:` in the
+    // file is CLAIMED by exactly one reader, and anything unclaimed is a
+    // finding that names its own line. A new helper — `concept: examConcept(a)`
+    // — or a ternary, or a bare identifier, reds here on the day it lands.
+    //
+    // MEASURED when this was written: 22 occurrences = 13 literal + 5 composed
+    // + 1 call + 3 declared non-sites, and the three non-sites are the
+    // `concept: string;` type field and the `add()` helper's two
+    // `concept: options.concept` pass-throughs — plumbing that RECEIVES a
+    // concept from the real sites rather than naming one.
+    const NON_SITE_FORMS = [
+      /concept: string;/g,           // the snapshot type's own field
+      /concept: options\.concept,/g,  // `add()` forwarding a caller's concept
+    ];
+    const claimed = new Set<number>();
+    for (const pattern of [
+      /concept: '[^']+'/g,
+      /concept: `[^`]+`/g,
+      /concept: [a-zA-Z_]+\(/g,
+      ...NON_SITE_FORMS,
+    ]) {
+      for (const m of src.matchAll(pattern)) claimed.add(m.index!);
+    }
+    const unreadable = [...src.matchAll(/\bconcept:/g)]
+      .filter((m) => !claimed.has(m.index!))
+      .map((m) => {
+        const line = src.slice(0, m.index!).split('\n').length;
+        return `${line}: ${src.split('\n')[line - 1]!.trim().slice(0, 90)}`;
+      });
+    expect(
+      unreadable,
+      'a `concept:` form this census cannot read — it would be silently ' +
+        `unwatched:\n  ${unreadable.join('\n  ')}`,
+    ).toEqual([]);
+    // NON-VACUITY for the arithmetic itself: if the total scan ever stopped
+    // matching, `unreadable` would be empty for the wrong reason.
+    expect([...src.matchAll(/\bconcept:/g)].length).toBeGreaterThan(sites.length);
 
     const emitted = [...new Set(emittedFacts().map((f) => f.concept))];
     const covered = (site: string): boolean => {
@@ -200,10 +272,10 @@ describe('#159(b) — concept alignment: the emitter and the registry agree', ()
       return emitted.some((c) => rx.test(c));
     };
 
-    // FILED, NOT BUILT — `ros.<system>` is emitted and unregistered by
-    // decision, so it is named rather than silently passing.
-    const FILED_SITES = sites.filter((s) => s.startsWith('ros.'));
-    expect(FILED_SITES).toHaveLength(1);
+    // ⚠️ NOTHING IS FILED ANY MORE — #179 registered ros, so the ROS site is
+    // held to the same completeness bar as every other emission site and must
+    // be REACHED by the fixture rather than excused from it.
+    const FILED_SITES: string[] = [];
     const inScope = sites.filter((s) => !FILED_SITES.includes(s));
 
     const missed = inScope.filter((s) => !covered(s));

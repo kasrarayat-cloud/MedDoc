@@ -61,7 +61,7 @@ describe('L3 states ROS polarity rather than implying it', () => {
       ros: [
         {
           system: 'cardiovascular',
-          finding: 'chest pain',
+          finding: 'chest_pain',
           evidence_quote: 'some chest pain',
         },
       ],
@@ -75,13 +75,13 @@ describe('L3 states ROS polarity rather than implying it', () => {
       ros: [
         {
           system: 'cardiovascular',
-          finding: 'chest pain',
+          finding: 'chest_pain',
           evidence_quote: 'no chest pain at all',
           polarity: 'denied',
         },
         {
           system: 'respiratory',
-          finding: 'shortness of breath on exertion',
+          finding: 'dyspnea',
           evidence_quote: 'short of breath climbing stairs',
           polarity: 'affirmed',
         },
@@ -95,8 +95,8 @@ describe('L3 states ROS polarity rather than implying it', () => {
       ...MINIMAL,
       ros: [
         {
-          system: 'neurological',
-          finding: 'numbness in the hand',
+          system: 'neurologic',
+          finding: 'numbness',
           evidence_quote: 'numbness in the right hand, left hand is fine',
           polarity: 'affirmed',
           laterality: 'right',
@@ -121,8 +121,16 @@ describe('L3 states ROS polarity rather than implying it', () => {
 // The projection — where the guessing actually happened
 // ---------------------------------------------------------------------------
 
+// ⚠️ BY CONCEPT, NOT BY VALUE. This helper used to find a fact by searching its
+// VALUE for the token — `String(f.value).includes('chest_pain')`. That coupled
+// every arm in this file to the value being the raw machine identifier, which
+// is precisely the thing a document must never print: once the projector
+// de-slugged it for display, the value read "chest pain" and the lookup
+// silently found NOTHING, surfacing as `Cannot read properties of undefined`
+// rather than as a wrong polarity. The CONCEPT is the stable identifier; the
+// value is display text and is allowed to change.
 const rosFact = (facts: ReturnType<typeof projectEncounterFacts>, needle: string) =>
-  facts.find((f) => f.concept.startsWith('ros.') && String(f.value).includes(needle))!;
+  facts.find((f) => f.concept.startsWith('ros.') && f.concept.endsWith(`.${needle}`))!;
 
 describe('the projection uses the stated polarity, not a regex over the prose', () => {
   it('OVER-FIRE: an affirmed symptom sharing a quote with a denial stays affirmed', () => {
@@ -138,21 +146,21 @@ describe('the projection uses the stated polarity, not a regex over the prose', 
         ros: [
           {
             system: 'cardiovascular',
-            finding: 'chest pain',
+            finding: 'chest_pain',
             evidence_quote: contextText,
             polarity: 'denied',
           },
           {
             system: 'respiratory',
-            finding: 'shortness of breath on exertion',
+            finding: 'dyspnea',
             evidence_quote: contextText,
             polarity: 'affirmed',
           },
         ],
       },
     });
-    expect(rosFact(facts, 'chest pain').polarity).toBe('denied');
-    expect(rosFact(facts, 'shortness of breath').polarity).toBe('affirmed');
+    expect(rosFact(facts, 'chest_pain').polarity).toBe('denied');
+    expect(rosFact(facts, 'dyspnea').polarity).toBe('affirmed');
   });
 
   it('UNDER-FIRE: a denial in plain speech is still a denial', () => {
@@ -166,14 +174,14 @@ describe('the projection uses the stated polarity, not a regex over the prose', 
         ros: [
           {
             system: 'cardiovascular',
-            finding: 'chest pain',
+            finding: 'chest_pain',
             evidence_quote: 'None at all.',
             polarity: 'denied',
           },
         ],
       },
     });
-    expect(rosFact(facts, 'chest pain').polarity).toBe('denied');
+    expect(rosFact(facts, 'chest_pain').polarity).toBe('denied');
   });
 
   it('SIDE: a one-sided complaint that names both sides does not become bilateral', () => {
@@ -185,8 +193,8 @@ describe('the projection uses the stated polarity, not a regex over the prose', 
         ...MINIMAL,
         ros: [
           {
-            system: 'neurological',
-            finding: 'numbness in the hand',
+            system: 'neurologic',
+            finding: 'numbness',
             evidence_quote: contextText,
             polarity: 'affirmed',
             laterality: 'right',
@@ -216,14 +224,14 @@ describe('the projection uses the stated polarity, not a regex over the prose', 
         ros: [
           {
             system: 'cardiovascular',
-            finding: 'chest pain',
+            finding: 'chest_pain',
             evidence_quote: contextText,
             // no polarity, no laterality — a pre-2026-07-28 row
           },
         ],
       },
     });
-    expect(rosFact(facts, 'chest pain').polarity).toBe('denied');
+    expect(rosFact(facts, 'chest_pain').polarity).toBe('denied');
   });
 
   it('and every OTHER fact path still infers, byte-identically', () => {
