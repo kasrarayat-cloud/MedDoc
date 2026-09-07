@@ -230,6 +230,39 @@ SELECT t210_try('24 UNSUSPEND the OWNER of that practice — the rescue path','A
     UPDATE users SET "suspendedAt"=now() WHERE id='t210_sus_m2';
     UPDATE users SET "suspendedAt"=now() WHERE id='t210_sus_o2'$$);
 
+-- ══ ARMS 25-27 — ORDER-INDEPENDENCE, THE PASS'S TOP SURVIVING FINDING ══════
+-- Against the BEFORE row trigger, two practices of IDENTICAL logical shape that
+-- differed only in physical INSERT order got OPPOSITE verdicts on the SAME
+-- teardown statement — refused or allowed by heap order. Under the constraint
+-- trigger the whole statement is judged once, on the state it produced, so both
+-- orders agree. 25 and 26 are each other's control: if they ever disagree, the
+-- trigger has drifted back to a per-row view.
+
+SELECT t210_try('25 tear down a practice, OWNER row physically FIRST','ALLOWED',
+  $$DELETE FROM users WHERE "practiceId"='t210_pord1'$$,
+  $$INSERT INTO practices(id,name,slug,"updatedAt") VALUES ('t210_pord1','O1','t210-o1',now());
+    INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive") VALUES
+      ('t210_o1_own','to1o@x.test','x',now(),'t210_pord1','OWNER',true),
+      ('t210_o1_cli','to1c@x.test','x',now(),'t210_pord1','CLINICIAN',true)$$);
+
+SELECT t210_try('26 the SAME teardown, CLINICIAN row first — control for 25','ALLOWED',
+  $$DELETE FROM users WHERE "practiceId"='t210_pord2'$$,
+  $$INSERT INTO practices(id,name,slug,"updatedAt") VALUES ('t210_pord2','O2','t210-o2',now());
+    INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive") VALUES
+      ('t210_o2_cli','to2c@x.test','x',now(),'t210_pord2','CLINICIAN',true),
+      ('t210_o2_own','to2o@x.test','x',now(),'t210_pord2','OWNER',true)$$);
+
+-- An ATOMIC ownership transfer — demote one owner and promote another in ONE
+-- statement — is the shape a real transfer feature would use. A per-row view
+-- refuses it whenever the outgoing owner is reached first.
+SELECT t210_try('27 atomic ownership transfer in ONE statement','ALLOWED',
+  $$UPDATE users SET "practiceRole" = (CASE WHEN id='t210_x_own' THEN 'CLINICIAN' ELSE 'OWNER' END)::"PracticeRole"
+     WHERE "practiceId"='t210_pxfer'$$,
+  $$INSERT INTO practices(id,name,slug,"updatedAt") VALUES ('t210_pxfer','X','t210-x',now());
+    INSERT INTO users(id,email,"passwordHash","updatedAt","practiceId","practiceRole","isActive") VALUES
+      ('t210_x_own','txo@x.test','x',now(),'t210_pxfer','OWNER',true),
+      ('t210_x_cli','txc@x.test','x',now(),'t210_pxfer','CLINICIAN',true)$$);
+
 \pset format aligned
 \echo ''
 \echo '=== RULING #210 — DETERMINISTIC ARMS ==='
@@ -245,8 +278,8 @@ SELECT count(*) FILTER (WHERE verdict='PASS')            AS pass,
        count(*) FILTER (WHERE verdict='FAIL')            AS fail,
        count(*) FILTER (WHERE got = 'MATCHED-NOTHING')   AS vacuous,
        count(*)                                          AS arms_run,
-       24                                                AS arms_expected,
-       CASE WHEN count(*) = 24 AND count(*) FILTER (WHERE verdict='FAIL') = 0
+       27                                                AS arms_expected,
+       CASE WHEN count(*) = 27 AND count(*) FILTER (WHERE verdict='FAIL') = 0
             THEN '🟢 all arms ran and passed'
             ELSE '🔴 ARM COUNT OR VERDICT MISMATCH' END  AS verdict
   FROM arm_result WHERE verdict IS NOT NULL;
