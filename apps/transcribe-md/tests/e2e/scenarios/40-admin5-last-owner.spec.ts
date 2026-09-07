@@ -195,6 +195,42 @@ function sequential(pathA: string, pathB: string): RaceResult {
   };
 }
 
+/**
+ * Were the two CRITICAL SECTIONS mutually exclusive?
+ *
+ * ⚠️ THIS EXISTS BECAUSE THE OUTCOME ASSERTION IS FLAKY AND I MEASURED IT.
+ * Deleting `EXECUTE lock_practice` from both racers and re-running THE GUARD
+ * caught it in only **1 of 3 runs** (2 of 4 including a first, luckier one).
+ * Without the lock the two guarded UPDATEs still race, and whether both
+ * evaluate their count subquery before either commits is decided by
+ * sub-millisecond scheduling — so `ownersLeft() === 1` passes about half the
+ * time on a build with NO LOCK AT ALL.
+ *
+ * ⚠️ AN INTERMITTENT GUARD IS WORSE THAN AN ABSENT ONE: it goes green in CI,
+ * and the reader concludes the lock is proven when what was proven is that
+ * Postgres happened to serialise two statements this time.
+ *
+ * So the lock is witnessed STRUCTURALLY instead. Each racer stamps the moment
+ * it holds the lock and the moment it is about to release it; mutual exclusion
+ * means those two windows CANNOT overlap. With the lock, B blocks in
+ * `lock_practice` until A commits, so B's window starts after A's ends. Without
+ * it, both enter immediately and the windows overlap — every time, not half the
+ * time.
+ */
+function criticalSectionsDisjoint(): { disjoint: boolean; rows: string } {
+  const overlap = psql(
+    `SELECT (SELECT min(at) FROM admin5_overlap_probe WHERE marker='A' AND phase='locked')
+          < (SELECT max(at) FROM admin5_overlap_probe WHERE marker='B' AND phase='releasing')
+        AND (SELECT min(at) FROM admin5_overlap_probe WHERE marker='B' AND phase='locked')
+          < (SELECT max(at) FROM admin5_overlap_probe WHERE marker='A' AND phase='releasing');`,
+  );
+  const rows = psql(
+    `SELECT marker||' '||phase||' '||to_char(at,'HH24:MI:SS.MS')
+       FROM admin5_overlap_probe WHERE phase IN ('locked','releasing') ORDER BY at;`,
+  );
+  return { disjoint: overlap !== 't', rows };
+}
+
 /** Did two DISTINCT backends hold overlapping windows? Read from the probe. */
 function overlapWitness(): { backends: number; overlapped: boolean; rows: string } {
   const backends = Number(psql(`SELECT count(DISTINCT pid) FROM admin5_overlap_probe;`));
@@ -252,12 +288,14 @@ COMMIT;`;
 
   /** ⚠️ THE SHIPPED STATEMENTS, PREPAREd VERBATIM. If `practice-owner-guard-sql`
    *  changes, this changes with it; nothing here restates the guard. */
-  const guardedBody = (target: string, role: string) => `PREPARE lock_practice AS ${PRACTICE_LOCK_SQL};
+  const guardedBody = (marker: string, target: string, role: string) => `PREPARE lock_practice AS ${PRACTICE_LOCK_SQL};
 PREPARE change_role AS ${CHANGE_ROLE_GUARDED_SQL};
 BEGIN;
   EXECUTE lock_practice('${P}');
+  INSERT INTO admin5_overlap_probe VALUES ('${marker}', pg_backend_pid(), 'locked', clock_timestamp());
   SELECT pg_sleep(0.6);
   EXECUTE change_role('${target}', '${P}', '${role}');
+  INSERT INTO admin5_overlap_probe VALUES ('${marker}', pg_backend_pid(), 'releasing', clock_timestamp());
 COMMIT;`;
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -318,8 +356,8 @@ COMMIT;`;
     expect(ownersLeft()).toBe(2);
 
     const { a, b, rcA, rcB } = race(
-      script('A', 'B', guardedBody(A, 'CLINICIAN')),
-      script('B', 'A', guardedBody(B, 'CLINICIAN')),
+      script('A', 'B', guardedBody('A', A, 'CLINICIAN')),
+      script('B', 'A', guardedBody('B', B, 'CLINICIAN')),
     );
     expect(rcA).toBe(0);
     expect(rcB).toBe(0);
@@ -327,6 +365,15 @@ COMMIT;`;
     const w = overlapWitness();
     expect(w.backends, `two distinct backends required; probe:\n${w.rows}`).toBe(2);
     expect(w.overlapped, `the two windows did not overlap; probe:\n${w.rows}`).toBe(true);
+
+    // ⚠️ THE LOCK IS WITNESSED STRUCTURALLY, NOT INFERRED FROM THE OUTCOME.
+    // Deleting the lock and asserting only `ownersLeft() === 1` caught it in
+    // 1 of 3 runs; this catches it every time.
+    const cs = criticalSectionsDisjoint();
+    expect(
+      cs.disjoint,
+      `the two critical sections OVERLAPPED — the practice lock is not excluding them:\n${cs.rows}`,
+    ).toBe(true);
 
     // ⚠️ THE INVARIANT IS THE ASSERTION. Which of the two won is a race and must
     // not be asserted; that exactly one did is the property.
