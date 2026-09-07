@@ -54,6 +54,26 @@ export function isWordPlaceholderOption(
 }
 
 /**
+ * A control's compiled LABEL with Word's placeholder removed from the END.
+ *
+ * ⚠️ #247 — THE PLACEHOLDER IS PART OF THE LABEL, NOT ONLY OF THE OPTIONS, AND
+ * A LABEL RULE ANCHORED AT THE END CANNOT SEE PAST IT. The owner's ultrasound
+ * form compiles `REFERRING PHYSICIAN: Choose an item.` as the ORIGINAL LABEL —
+ * so a pattern written to refuse `Referring Physician Fax` by anchoring at the
+ * end also refuses the real control, and the field silently loses its concept.
+ * Measured: the F24 census moved by one control the moment the anchor landed.
+ *
+ * ⚠️ IT LIVES HERE BECAUSE THIS MODULE OWNS THE STRING. `isWordPlaceholderOption`
+ * already encodes what the placeholder is and why the trailing period is
+ * optional; a second copy of `/choose an item/` in the concept registry is the
+ * two-readers-of-one-rule shape this house has a scar from. Same source string,
+ * anchored at the other end.
+ */
+export function withoutTrailingPlaceholder(label: string): string {
+  return label.replace(/[\s:.\-–—]*choose an item\.?\s*$/i, '').trim();
+}
+
+/**
  * Drop placeholder options while LEAVING EVERY SURVIVING ORDINAL UNCHANGED.
  *
  * ⚠️ THE ORDINALS ARE NOT RENUMBERED, AND THAT IS THE WHOLE POINT OF THIS

@@ -27,6 +27,8 @@
 // twenty-six template rows.
 // ============================================================================
 
+import { withoutTrailingPlaceholder } from '../note-template-docx/placeholder-option';
+
 /** Concepts the extractor emits verbatim. */
 export const REGISTRY_CONCEPTS: readonly string[] = [
   // Measurements — the metric enum from L3's schema, one concept per KIND.
@@ -390,14 +392,54 @@ export const VISIT_METADATA_LABEL_CONCEPTS: ReadonlyArray<readonly [RegExp, stri
  * supposedly governing it — it fell through to `extraction`, got a concept the
  * registry refused, and landed `clinicalConcept: null`. A rule that misses the
  * one label it was written for is worse than no rule: it reads as coverage.
+ *
+ * ⚠️ ANCHORED AT BOTH ENDS, AND THE FIRST DRAFT WAS NOT — THE ADVERSARIAL PASS
+ * FOUND IT TWICE, INDEPENDENTLY, WITH MEASURED OUTPUT. It read
+ * `…(?:physician|…)\b` with no trailing anchor, so it claimed every CONTACT
+ * control that begins with the same words:
+ *
+ *   "Referring Physician Fax"     -> supported, "Dr. Alan Whitfield", valid, auto-confirmed
+ *   "Referring MD NPI"            -> the physician's NAME in an identifier box
+ *   "Referring Physician Address" -> the name in an address box
+ *   "Referring MD signature"      -> the name in a signature box
+ *
+ * A REGRESSION, not merely a gap: those labels matched the old unanchored
+ * manual pattern and rendered an honest blank. And the same commit anchored the
+ * OTHER two patterns at both ends with an explicit argument about `Age of
+ * onset` — the rule was written, stated, and applied to two of three.
+ *
+ * ⚠️ WHAT IT MUST STILL CLAIM is the label whose WHOLE meaning is the referrer's
+ * name, in the spellings a real consult form uses. A qualifier after the name —
+ * fax, phone, NPI, address, signature, office — makes it a different field, and
+ * the trailing anchor is what makes that structural rather than a deny-list
+ * somebody has to keep complete.
  */
 export const REFERRING_PHYSICIAN_LABEL_RE =
-  /^\s*referring\s+(?:m\.?d\.?|physician|provider|doctor|dr\.?)\b/i;
+  /^\s*(?:name\s+of\s+)?referring\s+(?:m\.?\s*d\.?|physician|provider|doctor|dr\.?)(?:'s)?(?:\s+name)?\s*:?\s*$/i;
 
-/** The record-derived concept this label means, or null. */
+/**
+ * The control kinds a record-derived value may legitimately fill.
+ *
+ * `narrative_text` prints the string; `number` is the age's other legitimate
+ * shape (canon 134 — on the owner's form `Age` compiles `kind: number`, and a
+ * bare `68` resolves there). Nothing else: a checkbox cannot carry a name, a
+ * date cannot, and an enumerated pick is the physician's to answer.
+ */
+const RECORD_DERIVABLE_KINDS: ReadonlySet<string> = new Set(['narrative_text', 'number']);
+
+/**
+ * The record-derived concept this label means, or null.
+ *
+ * ⚠️ THE WORD PLACEHOLDER IS STRIPPED FIRST, AND WITHOUT THAT THE ANCHORS BELOW
+ * REFUSE THE REAL CONTROLS. A compiled label is `REFERRING PHYSICIAN: Choose an
+ * item.`, not `REFERRING PHYSICIAN` — so an end-anchored pattern matches
+ * nothing on the very forms it was written for. Stripped through the module
+ * that OWNS that string rather than by a second copy of the regex.
+ */
 export function visitMetadataConceptFor(originalLabel: string): string | null {
+  const label = withoutTrailingPlaceholder(originalLabel);
   for (const [pattern, concept] of VISIT_METADATA_LABEL_CONCEPTS) {
-    if (pattern.test(originalLabel)) return concept;
+    if (pattern.test(label)) return concept;
   }
   return null;
 }
@@ -467,8 +509,12 @@ export function compilerDecidableConcepts(): readonly string[] {
 
 /** The compiler's concept for this label, or null to let the model propose. */
 export function conceptOverrideFor(originalLabel: string): string | null {
+  // Same reason as `visitMetadataConceptFor` — an end-anchored entry in this
+  // table cannot see past Word's placeholder. Prefix-anchored entries are
+  // unaffected either way.
+  const label = withoutTrailingPlaceholder(originalLabel);
   for (const [pattern, concept] of CONCEPT_LABEL_OVERRIDES) {
-    if (pattern.test(originalLabel)) return concept;
+    if (pattern.test(label)) return concept;
   }
   return null;
 }
@@ -538,13 +584,43 @@ export function classifyFieldSource(
   // silently take the field away from the only source that can fill it.
   // Deciding it first makes those outcomes unreachable rather than unlikely.
   //
+  // ⚠️ AND IT LOOKS AT THE FIELD'S **KIND**, WHICH THE FIRST DRAFT DID NOT —
+  // THE ADVERSARIAL PASS DEMONSTRATED THE HARM WITH THE SHIPPED CHAIN. A
+  // CHECKBOX labelled `Patient` is ordinary on a consult form ("History
+  // provided by: ☐ Patient ☐ Family", "Consent by: ☐ Patient ☐ Guardian").
+  // Classified `visit_metadata`, it got `visit_metadata.patient_name`, the
+  // injector minted a fact with `polarity: 'affirmed'` — stated, per canon
+  // 135 — and the resolver's checkbox arm reads ONLY polarity and discards the
+  // value. Measured: `status: record_derived, value: true`, valid, zero
+  // issues, `filled: 1`. **The box is TICKED because the chart has a name in
+  // it**, and the row's own caption tells the doctor the tick came from the
+  // record. That is the misattribution this ruling exists to end, wearing a
+  // new costume.
+  //
+  // Only a control that can CARRY the value may be record-derived: prose, or a
+  // number for the age. Everything else falls through to the ordinary arms —
+  // which is exactly where those fields were before this ruling, so the
+  // narrowing restores the previous behaviour rather than inventing a third
+  // one. (`single_select`/`date` fail closed on the VALUE rather than on the
+  // kind; `checkbox` is the one that fails OPEN, because its arm never looks.)
+  //
+  // ⚠️ AND A MISSING `field` MEANS NO. Some callers classify from a label
+  // alone; a record-derived answer without a kind to check is a guess about a
+  // control that prints a patient's identity, so the honest answer is the
+  // ordinary one.
+  //
   // ⚠️ THE REFERRING PHYSICIAN IS NOT HERE, AND ITS ABSENCE IS DELIBERATE. It
   // gets its CONCEPT from `CONCEPT_LABEL_OVERRIDES` and its SOURCE from the
   // ordinary fall-through, because it is dictated. Putting it in this arm
   // would mark a spoken value as read off the record — the exact
   // misattribution the `visit_record` class was created to stop, pointed the
   // other way.
-  if (visitMetadataConceptFor(originalLabel) !== null) return 'visit_metadata';
+  if (
+    visitMetadataConceptFor(originalLabel) !== null &&
+    RECORD_DERIVABLE_KINDS.has(field?.kind ?? '')
+  ) {
+    return 'visit_metadata';
+  }
   if (MANUAL_LABEL_PATTERNS.some((p) => p.test(originalLabel))) return 'manual';
   const enumerated =
     (field?.kind === 'single_select' || field?.kind === 'multi_select') &&

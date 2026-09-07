@@ -663,6 +663,23 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
     expect(visitByIdScope('v1', p1)).toEqual({ id: 'v1', practiceId: 'prac_1' });
   });
 
+  it('⚠️ #247 — THE PATIENT SELECT IS TWO COLUMNS, and this asserts it', () => {
+    // ⚠️ THE ALLOWLIST COMMENT CLAIMED THIS AND NOTHING ENFORCED IT — found by
+    // a refutation lens. The allowlist is a Record<file, count> and the scanner
+    // matches `prisma.<model>.<readMethod>(`; it counts CALL SITES and cannot
+    // see a `select`. Widening the patient read to `mrn`, `insurance` or
+    // `problemList` leaves the count at 3 and every gate green, while the
+    // comment two lines above says such a widening "belongs in a diff someone
+    // reads". A control that describes a guarantee it does not provide is worse
+    // than no control: it is what the next reader checks INSTEAD of the code.
+    const src = readFileSync(join(process.cwd(), 'src/lib/template-twin/fill-engine.ts'), 'utf8');
+    const read = /prisma\.transcribeVisit\.findFirst\(\{[\s\S]{0,400}?\}\);/.exec(src)?.[0];
+    expect(read, 'the patient read moved or was renamed — re-read #247 before editing this').toBeTruthy();
+    const selected = [...read!.matchAll(/\b(\w+):\s*true\b/g)].map((m) => m[1]).sort();
+    expect(selected, 'the patient select changed shape — a PHI decision, not a refactor')
+      .toEqual(['dateOfBirth', 'name']);
+  });
+
   it('⚠️ the BRAND is not cast away outside the session boundary', () => {
     // ⚠️ THIS REPLACES THE ARGUMENT-SHAPE GUARD, which is retired with this
     // commit. That guard read every accessor call and required the practice

@@ -43,6 +43,7 @@ import {
 import { resolveTemplateFields } from '../resolver';
 import { validateTemplateTwin } from '../validation';
 import { decideAutoConfirm } from '../auto-certify-eligibility';
+import { refuseRecordDerivedOnNonMetadata } from '../semantic-mapping';
 import { projectEncounterFacts } from '../encounter-facts';
 import { assertNoRecordDerivedFacts } from '../synthetic-test';
 
@@ -148,10 +149,72 @@ describe('#247 Stage B — the label decides, and the labels are HIS', () => {
     // transcript of the 35 labels. A pattern written from the phrase "Patient
     // Name" would have matched none of them, which is how the old
     // `/referring\s+physician/i` rule missed "Referring MD".
-    expect(classifyFieldSource('Patient')).toBe('visit_metadata');
-    expect(classifyFieldSource('Age')).toBe('visit_metadata');
+    expect(classifyFieldSource('Patient', field(NAME_ID, 'Patient'))).toBe('visit_metadata');
+    expect(classifyFieldSource('Age', field(AGE_ID, 'Age'))).toBe('visit_metadata');
     expect(visitMetadataConceptFor('Patient')).toBe(RECORD_DERIVED_CONCEPTS.name);
     expect(visitMetadataConceptFor('Age')).toBe(RECORD_DERIVED_CONCEPTS.age);
+  });
+
+  it('⚠️ AND WORD\'S PLACEHOLDER IS PART OF THE LABEL — an end anchor cannot see past it', () => {
+    // The compiled label is `REFERRING PHYSICIAN: Choose an item.`, not
+    // `REFERRING PHYSICIAN`. The first end-anchored draft of these patterns
+    // silently refused the real controls on the owner's own form, and the F24
+    // census moved by one the moment it landed.
+    expect(conceptOverrideFor('REFERRING PHYSICIAN: Choose an item.')).toBe(
+      'visit_metadata.referring_physician',
+    );
+    expect(visitMetadataConceptFor('Patient: Choose an item.')).toBe(RECORD_DERIVED_CONCEPTS.name);
+    expect(visitMetadataConceptFor('Age Choose an item')).toBe(RECORD_DERIVED_CONCEPTS.age);
+  });
+
+  it('⚠️ A CONTROL THAT CANNOT CARRY A NAME IS NOT RECORD-DERIVED — the checkbox tick', () => {
+    // A refutation lens drove this through the shipped chain: a CHECKBOX
+    // labelled `Patient` ("History provided by: ☐ Patient ☐ Family") classified
+    // `visit_metadata`, the injector minted an `affirmed` fact, and the
+    // resolver's checkbox arm — which reads polarity and DISCARDS the value —
+    // resolved `record_derived / value: true`, valid, zero issues. The box is
+    // ticked because the chart has a name in it.
+    for (const kind of ['checkbox', 'date', 'measurement']) {
+      expect([kind, classifyFieldSource('Patient', { kind, allowedOptions: [] })])
+        .toEqual([kind, 'extraction']);
+    }
+    // An enumerated pick stays the physician's to answer, as it was before.
+    for (const kind of ['single_select', 'multi_select']) {
+      expect([kind, classifyFieldSource('Patient', { kind, allowedOptions: [{ ordinal: 1 }] })])
+        .toEqual([kind, 'verified_note_selection']);
+    }
+    // ⚠️ NON-VACUITY: the two kinds that CAN carry it still do.
+    for (const kind of ['narrative_text', 'number']) {
+      expect([kind, classifyFieldSource('Age', { kind, allowedOptions: [] })])
+        .toEqual([kind, 'visit_metadata']);
+    }
+    // ⚠️ AND A LABEL WITH NO FIELD AT ALL IS NOT RECORD-DERIVED EITHER.
+    expect(classifyFieldSource('Patient')).toBe('extraction');
+  });
+
+  it('⚠️ THE REFERRING PATTERN IS ANCHORED AT BOTH ENDS — a qualifier makes it a different field', () => {
+    // The first draft was a prefix match, and two lenses independently measured
+    // the referrer's NAME rendering into the fax box: `supported`,
+    // "Dr. Alan Whitfield", valid, auto-confirmed. A REGRESSION — those labels
+    // matched the old unanchored manual pattern and rendered an honest blank.
+    for (const label of [
+      'Referring Physician Fax',
+      'Referring MD NPI',
+      'Referring Physician Address',
+      'Referring MD Phone',
+      'Referring MD signature',
+      'Referring provider NPI number',
+      "Referring Physician's Office",
+    ]) {
+      expect([label, conceptOverrideFor(label)]).toEqual([label, null]);
+    }
+    // ⚠️ NON-VACUITY: the name-shaped spellings still resolve.
+    for (const label of ['Referring MD', 'Name of Referring Physician', 'Referring Physician Name']) {
+      expect([label, conceptOverrideFor(label)]).toEqual([
+        label,
+        'visit_metadata.referring_physician',
+      ]);
+    }
   });
 
   it('and the spellings a different form would use', () => {
@@ -565,6 +628,190 @@ describe('#247 Stage B — a `visit_metadata` mapping NEVER auto-confirms', () =
     expect(decideAutoConfirm({
       ...candidate, originalLabel: 'Referring MD', sourceType: 'extraction',
     }).confirm).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6b · WHAT THE ADVERSARIAL PASS FOUND, EACH WITH ITS OWN ARM.
+// ---------------------------------------------------------------------------
+describe('#247 Stage B — a record-derived fact matches by EXACT concept only', () => {
+  const f = field(NAME_ID, 'Patient');
+
+  it('⚠️ a SYNONYM cannot carry it — the route that withheld a whole document', () => {
+    // Measured by a lens: mapping `visit_metadata.patient_name` with
+    // `approvedSynonyms: ['chief_complaint']` plus a dictated chief-complaint
+    // fact of the same value resolved `supported` over BOTH facts, which the
+    // validator's own arm then refuses as BLOCKING -> `render: null` -> the
+    // doctor loses the entire native document.
+    const m = mapping(NAME_ID, RECORD_DERIVED_CONCEPTS.name, {
+      approvedSynonyms: ['chief_complaint'],
+    });
+    // ⚠️ THE PROJECTED FACTS GO IN, exactly as `prepareTemplateTwinFill` feeds
+    // them — the injector's "real evidence wins" test cannot see a fact handed
+    // to it after the fact, and neither can the shipped pipeline.
+    const spoken = fact({ concept: 'chief_complaint', value: 'Jane Alvarez' });
+    const facts = withVisitMetadataFacts({
+      fields: [f], mappings: [m], facts: [spoken], patient: PATIENT, visitDate: VISIT,
+    });
+    // Nothing was injected: the dictated fact already satisfies this mapping,
+    // which is the question the RESOLVER asks and which this guard now asks too.
+    expect(facts).toHaveLength(1);
+    const res = resolveTemplateFields({
+      fields: [f], mappings: [m], facts, certifiedFieldIds: [NAME_ID],
+    });
+    expect(res[0]!.sourceFactIds).toHaveLength(1);
+    expect(res[0]!.status).toBe('supported');
+    const v = validateTemplateTwin({
+      fields: [f], mappings: [m], facts, resolutions: res,
+      tables: [], unsupported: [], certifiedFieldIds: [NAME_ID],
+      allowUncertifiedForSyntheticTest: false, now: VISIT,
+    });
+    expect(v.issues.filter((i) => i.severity === 'blocking')).toEqual([]);
+  });
+
+  it('⚠️ a DECLARED SCOPE cannot carry it either', () => {
+    const m = mapping(NAME_ID, 'chief_complaint', {
+      conceptScope: [RECORD_DERIVED_CONCEPTS.name],
+    });
+    const record = fact({
+      concept: RECORD_DERIVED_CONCEPTS.name, value: 'Jane Alvarez', sourceType: 'visit_record',
+    });
+    const res = resolveTemplateFields({
+      fields: [f], mappings: [m], facts: [record], certifiedFieldIds: [NAME_ID],
+    });
+    expect(res[0]!.value).toBeNull();
+  });
+
+  it('⚠️ NON-VACUITY: a DICTATED fact still reaches a mapping through its synonym', () => {
+    // Without this, the arms above are satisfied by a matcher that stopped
+    // honouring `approvedSynonyms` at all — which would blank a great many
+    // legitimately-mapped controls.
+    const m = mapping(NAME_ID, 'assessment', { approvedSynonyms: ['impression'], sourceType: 'extraction' });
+    const spoken = fact({ concept: 'impression', value: 'reflux' });
+    const res = resolveTemplateFields({
+      fields: [f], mappings: [m], facts: [spoken], certifiedFieldIds: [NAME_ID],
+    });
+    expect([res[0]!.status, res[0]!.value]).toEqual(['supported', 'reflux']);
+  });
+});
+
+describe('#247 Stage B — a record concept on a non-metadata mapping is REFUSED at proposal', () => {
+  it('nulls it, so nothing can auto-confirm a control that would print a name', () => {
+    expect(refuseRecordDerivedOnNonMetadata(RECORD_DERIVED_CONCEPTS.name, 'extraction')).toBeNull();
+    expect(refuseRecordDerivedOnNonMetadata(RECORD_DERIVED_CONCEPTS.age, 'verified_note_selection')).toBeNull();
+    expect(refuseRecordDerivedOnNonMetadata(RECORD_DERIVED_CONCEPTS.name, 'manual')).toBeNull();
+  });
+
+  it('⚠️ NON-VACUITY: it passes everything else through untouched', () => {
+    expect(refuseRecordDerivedOnNonMetadata(RECORD_DERIVED_CONCEPTS.name, 'visit_metadata'))
+      .toBe(RECORD_DERIVED_CONCEPTS.name);
+    expect(refuseRecordDerivedOnNonMetadata('chief_complaint', 'extraction')).toBe('chief_complaint');
+    // The DICTATED member is not record-derived and must not be caught.
+    expect(refuseRecordDerivedOnNonMetadata('visit_metadata.referring_physician', 'extraction'))
+      .toBe('visit_metadata.referring_physician');
+    expect(refuseRecordDerivedOnNonMetadata(null, 'extraction')).toBeNull();
+  });
+});
+
+describe('#247 Stage B — the referrer states its polarity and its tense', () => {
+  const project = (text: string) =>
+    projectEncounterFacts({
+      mode: 'dictation', contextText: text, asrQuality: 'high',
+      entities: { referring_physician: { name: 'Dr. Lee', evidence_quote: text } } as never,
+    }).filter((f) => f.concept === 'visit_metadata.referring_physician')[0]!;
+
+  it('⚠️ A HEDGED DIAGNOSIS DOES NOT MAKE THE REFERRAL UNCERTAIN', () => {
+    // Every one of these came back `uncertain` -> `ambiguous` -> FIELD_AMBIGUOUS
+    // -> blocking -> `render: null`, because `clinicallyMaterial: true` is
+    // hard-coded at all twelve compiler emission sites. The hedge is about the
+    // DIAGNOSIS; the referral is not in doubt.
+    for (const text of [
+      'Referred by Dr. Lee for possible inflammatory bowel disease.',
+      'Dr. Osei referred her for suspected celiac disease.',
+      'She was referred by Dr. Lee in May for evaluation.',
+      'Dr. Lee referred her; she may need an upper endoscopy.',
+    ]) {
+      expect([text, project(text).polarity]).toEqual([text, 'affirmed']);
+    }
+  });
+
+  it('⚠️ AND THE WORD "REFERRED" DOES NOT MAKE THE REFERRAL A PLAN', () => {
+    // `PLANNED` is /plan|will|schedule|refer(red|ral)?|start|follow-up/, so the
+    // very word that identifies a referral sentence stamped every one of these
+    // `planned`. Against a mapping declaring `current` that is
+    // `temporality_not_approved`: a permanently blank control, validation green.
+    for (const text of [
+      'She was referred by Dr. Ramirez for further evaluation.',
+      'The patient was referred by Dr. Alan Whitfield for further evaluation.',
+      'Referral from Dr. Lee for evaluation of dysphagia.',
+    ]) {
+      expect([text, project(text).temporality]).toEqual([text, 'current']);
+    }
+  });
+
+  it('⚠️ NON-VACUITY: inference still governs a concept that did NOT state them', () => {
+    // Without this the arms above are satisfied by hard-wiring every fact to
+    // affirmed/current, which would destroy ROS polarity.
+    const denied = projectEncounterFacts({
+      mode: 'dictation', contextText: 'No fever.', asrQuality: 'high',
+      entities: { ros: [{ system: 'constitutional', finding: 'fever', polarity: 'denied', evidence_quote: 'No fever.' }] } as never,
+    });
+    expect(denied.some((f) => f.polarity === 'denied')).toBe(true);
+  });
+});
+
+describe('#247 Stage B — one fact per concept AND per approved tense', () => {
+  it('⚠️ two controls demanding different tenses BOTH fill', () => {
+    // The first draft kept the first mapping per concept: control 2 came back
+    // `not_mentioned / temporality_not_approved` — silently blank — and with
+    // `required: true` it was `needs_clinician_input`, blocking, whole document
+    // withheld. The outcome depended on the order of the mappings array.
+    const fields = [field(NAME_ID, 'Patient'), field(REFERRER_ID, 'Patient Name')];
+    const mappings = [
+      mapping(NAME_ID, RECORD_DERIVED_CONCEPTS.name, { temporality: 'current' }),
+      mapping(REFERRER_ID, RECORD_DERIVED_CONCEPTS.name, { temporality: 'historical' }),
+    ];
+    const facts = withVisitMetadataFacts({ fields, mappings, facts: [], patient: PATIENT, visitDate: VISIT });
+    expect(facts).toHaveLength(2);
+    expect(facts.map((f) => f.temporality).sort()).toEqual(['current', 'historical']);
+    const res = resolveTemplateFields({ fields, mappings, facts, certifiedFieldIds: [NAME_ID, REFERRER_ID] });
+    expect(res.map((r) => r.value)).toEqual(['Jane Alvarez', 'Jane Alvarez']);
+  });
+
+  it('⚠️ NON-VACUITY: agreeing mappings still mint exactly ONE fact', () => {
+    const fields = [field(NAME_ID, 'Patient'), field(REFERRER_ID, 'Patient Name')];
+    const mappings = [
+      mapping(NAME_ID, RECORD_DERIVED_CONCEPTS.name),
+      mapping(REFERRER_ID, RECORD_DERIVED_CONCEPTS.name),
+    ];
+    expect(withVisitMetadataFacts({ fields, mappings, facts: [], patient: PATIENT, visitDate: VISIT }))
+      .toHaveLength(1);
+  });
+});
+
+describe('#247 Stage B — the injector will not fill a shape that cannot carry the value', () => {
+  it('⚠️ a BOOLEAN mapping gets nothing, however it came to exist', () => {
+    // The classifier now refuses to call a checkbox `visit_metadata` — but a
+    // certified mapping is DATA, restored and hand-editable, and the classifier
+    // does not run again at fill time. This is the second wall.
+    const f = field(NAME_ID, 'Patient');
+    const m = mapping(NAME_ID, RECORD_DERIVED_CONCEPTS.name, { expectedDataType: 'boolean' });
+    expect(withVisitMetadataFacts({ fields: [f], mappings: [m], facts: [], patient: PATIENT, visitDate: VISIT }))
+      .toHaveLength(0);
+    for (const t of ['date', 'single_select', 'multi_select', 'measurement']) {
+      const bad = mapping(NAME_ID, RECORD_DERIVED_CONCEPTS.name, { expectedDataType: t });
+      expect([t, withVisitMetadataFacts({ fields: [f], mappings: [bad], facts: [], patient: PATIENT, visitDate: VISIT }).length])
+        .toEqual([t, 0]);
+    }
+  });
+
+  it('⚠️ NON-VACUITY: text and number still fill', () => {
+    const f = field(NAME_ID, 'Patient');
+    for (const t of ['text', 'number']) {
+      const m = mapping(NAME_ID, RECORD_DERIVED_CONCEPTS.name, { expectedDataType: t });
+      expect([t, withVisitMetadataFacts({ fields: [f], mappings: [m], facts: [], patient: PATIENT, visitDate: VISIT }).length])
+        .toEqual([t, 1]);
+    }
   });
 });
 

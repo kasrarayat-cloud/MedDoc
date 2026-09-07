@@ -147,6 +147,16 @@ interface AddFactOptions {
   /** Structured overrides. Prose paths leave these unset and keep the inferred
    *  values, so every existing fact is byte-identical. */
   polarity?: EncounterFact['polarity'];
+  /**
+   * A STATED tense, the sibling of the stated polarity above.
+   *
+   * ⚠️ #247 — IT EXISTS BECAUSE `defaultTemporality` IS NOT A DEFAULT. It is
+   * the value `inferTemporality` falls back to when its regexes match nothing,
+   * so a concept whose own evidence quote contains a tense keyword can never
+   * reach it. That is canon 135's shape on the other axis: where the layer
+   * KNOWS the answer it states it, rather than passing a hint to a guesser.
+   */
+  temporality?: EncounterFact['temporality'];
   laterality?: EncounterFact['laterality'];
   number?: number;
   unit?: string;
@@ -599,11 +609,9 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
         concept: options.concept,
         value: options.value,
         polarity,
-        temporality: inferTemporality(
-          options.value,
-          quote,
-          options.defaultTemporality,
-        ),
+        temporality:
+          options.temporality ??
+          inferTemporality(options.value, quote, options.defaultTemporality),
         experiencer: options.experiencer ?? 'patient',
         laterality: options.laterality ?? inferLaterality(options.value, quote),
         number: options.number ?? numberAndUnit.number,
@@ -781,13 +789,39 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
   // (`withVisitMetadataFacts`, `sourceType: 'visit_record'`) precisely so the
   // manifest never has to guess which of the three it is looking at.
   //
-  // ⚠️ POLARITY IS LEFT TO INFERENCE HERE, UNLIKE FAMILY 4, AND THAT IS A
-  // MEASURED DIFFERENCE RATHER THAN AN OVERSIGHT. Canon 135 is about a
-  // RENDERED QUANTITY: `String(45)` is not locatable in "forty five", so the
-  // denial scan ran against the whole quote. This value is the spoken name
-  // itself, so it is locatable, and the ordinary clause-scoped inference
-  // applies — which matters, because "she was NOT referred by anyone" is a
-  // sentence a clinician can say and a denial that must survive.
+  // ⚠️ BOTH POLARITY AND TENSE ARE **STATED**, AND THE FIRST DRAFT STATED
+  // NEITHER. It argued that this value is the spoken name, therefore locatable,
+  // therefore safe for the ordinary inference. Two refutation lenses measured
+  // what the inference actually does to a referral sentence, and it is wrong on
+  // both axes for the same reason: the inference reads the words AROUND the
+  // value, and a referral sentence is made of exactly those words.
+  //
+  //   POLARITY. `UNCERTAINTY` is /possible|possibly|maybe|may|might|uncertain|
+  //   unclear|suspected|question of/ over value + quote. Measured:
+  //     "Referred by Dr. Lee for POSSIBLE inflammatory bowel disease."
+  //     "Dr. Osei referred her for SUSPECTED celiac disease."
+  //     "She was referred by Dr. Lee in MAY for evaluation."
+  //   -> polarity `uncertain` -> resolution `ambiguous` -> `FIELD_AMBIGUOUS`,
+  //   which is BLOCKING because `clinicallyMaterial: true` is hard-coded at all
+  //   twelve compiler emission sites -> `render: null` -> **the doctor loses
+  //   the whole native document**. The hedge is about the DIAGNOSIS; the
+  //   referral is not in doubt. And the prompt only permits this field when the
+  //   dictation names a referrer, so an unstated one is `null` rather than a
+  //   denial — there is no denial for the inference to protect.
+  //
+  //   TENSE. `PLANNED` is /plan|will|schedule|REFER(RED|RAL)?|start|follow-up/,
+  //   so **the very word that identifies a referral sentence** stamps the fact
+  //   `planned`. Measured: "She was referred by Dr. Ramirez for further
+  //   evaluation." -> `planned`, and so did this file's own certification
+  //   sentence. Against a mapping declaring `temporality: 'current'` — which
+  //   the proposer explicitly invites the model to propose — that is
+  //   `temporality_not_approved`: a permanently blank control with validation
+  //   green. And the frozen manifest records a referral that HAPPENED as
+  //   planned, which is the same "the manifest says something untrue" class
+  //   #247 exists to end.
+  //
+  // `defaultTemporality` cannot fix the second: it is the fallback used when
+  // the regexes match NOTHING, and here one of them always matches.
   if (entities.referring_physician) {
     add({
       path: 'referring_physician.name',
@@ -795,6 +829,8 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
       value: entities.referring_physician.name,
       evidence: entities.referring_physician,
       defaultTemporality: 'current',
+      polarity: 'affirmed',
+      temporality: 'current',
       // The referrer is another clinician, not the patient. `experiencer`
       // exists for exactly this: a fact ABOUT someone other than the subject.
       experiencer: 'other',

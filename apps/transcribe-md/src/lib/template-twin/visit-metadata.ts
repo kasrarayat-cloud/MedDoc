@@ -40,7 +40,11 @@ import {
   type SemanticMapping,
   type TemplateField,
 } from './ir';
-import { normalizeConcept, requiredFactTemporality } from './fact-mapping-match';
+import {
+  conceptMatches,
+  normalizeConcept,
+  requiredFactTemporality,
+} from './fact-mapping-match';
 
 /** The two concepts this module may inject. Referring physician is NOT here. */
 export const RECORD_DERIVED_CONCEPTS = {
@@ -63,8 +67,24 @@ export interface VisitPatientRecord {
  * constant and the answer is read by a human as a fact about a person: the
  * patient whose birthday is tomorrow is not yet a year older, and a rounding
  * scheme that says otherwise puts a wrong age on a clinical letter roughly one
- * day in three hundred and sixty five. Compared on UTC calendar parts, so a
- * server timezone cannot move a birthday across midnight.
+ * day in three hundred and sixty five.
+ *
+ * ⚠️ COMPARED ON UTC CALENDAR PARTS, AND THAT IS HONEST ONLY ABOUT ONE SIDE.
+ * The first version of this paragraph claimed "so a server timezone cannot move
+ * a birthday across midnight", and a refutation lens showed the claim is true of
+ * the DOB (a `@db.Date`, stored at UTC midnight) and FALSE of the visit: the
+ * caller passes `visit.createdAt`, a `timestamptz`. Measured — DOB 1958-06-14,
+ * a visit at 2026-06-13 19:00 America/Los_Angeles = `2026-06-14T02:00Z` — this
+ * returns **68** where the patient is 67 on the local day of the encounter.
+ *
+ * ⚠️ IT IS NOT FIXED HERE BECAUSE THE INPUT TO FIX IT WITH DOES NOT EXIST. A
+ * practice has no timezone column (the same measurement ADMIN-2 records for
+ * hostnames), so "the local calendar date of the visit" is not computable from
+ * anything this function is given. Guessing a zone would replace a bounded,
+ * stated error with an unbounded unstated one. The residual is: an evening
+ * encounter west of UTC on the day before a birthday prints an age one year
+ * high. Recorded rather than hidden, and it closes when a practice timezone
+ * exists.
  *
  * Returns null — never 0, never a guess — for an unparseable date, a birth date
  * in the future, or an implausible result. `0` is a legitimate age (an infant),
@@ -90,10 +110,28 @@ export function ageAtDate(
   return years;
 }
 
+/**
+ * The `expectedDataType`s a record-derived value may legitimately fill.
+ *
+ * ⚠️ THE SECOND WALL, AND THE FIRST ONE IS `classifyFieldSource`'s KIND CHECK.
+ * A refutation lens ticked a CHECKBOX labelled `Patient` by putting a
+ * record-derived fact against a `boolean` mapping: the resolver's checkbox arm
+ * reads polarity and discards the value, so a chart with a name in it renders
+ * ☒ on a signed form. The classifier now refuses to call such a control
+ * `visit_metadata` at all — but a certified mapping is DATA, restored and
+ * hand-editable, and the classifier does not run again at fill time. So the
+ * injector checks the shape it is actually filling.
+ */
+const RECORD_DERIVABLE_DATA_TYPES: ReadonlySet<string> = new Set(['text', 'number']);
+
 /** A stable 24-hex fact id for one record-derived value. */
-function recordFactId(concept: string, value: string): string {
+function recordFactId(
+  concept: string,
+  value: string,
+  temporality: EncounterFact['temporality'],
+): string {
   return `ttfact_${createHash('sha256')
-    .update(`visit_record ${concept} ${value}`, 'utf8')
+    .update(`visit_record ${concept} ${temporality} ${value}`, 'utf8')
     .digest('hex')
     .slice(0, 24)}`;
 }
@@ -122,16 +160,54 @@ export function withVisitMetadataFacts(input: {
   if (!patient) return facts;
 
   const fieldIds = new Set(input.fields.map((field) => field.fieldId));
-  const existingConcepts = new Set(facts.map((f) => normalizeConcept(f.concept)));
 
-  // The concepts this template ASKS FOR, with the mapping that asked, so the
-  // injected fact can inherit that mapping's approved temporality rather than
-  // guessing one the resolver will then refuse.
-  const wanted = new Map<string, SemanticMapping>();
+  /**
+   * REAL EVIDENCE WINS — and "real evidence" is whatever the RESOLVER would
+   * accept for this mapping, not whatever shares its concept string.
+   *
+   * ⚠️ THE FIRST DRAFT COMPARED CONCEPT STRINGS AND THE RESOLVER DID NOT, SO
+   * THE TWO WERE ANSWERING DIFFERENT QUESTIONS ABOUT THE SAME PAIR. A
+   * refutation lens built the gap: a mapping citing `visit_metadata.patient_name`
+   * with `approvedSynonyms: ['chief_complaint']`, plus a dictated
+   * chief-complaint fact. The concept strings differ, so this injected anyway;
+   * the resolver then matched BOTH and produced one `supported` resolution
+   * citing a dictated fact AND a record fact — which the validator's own
+   * provenance arm refuses as BLOCKING, and a blocking issue is `render: null`.
+   * **The doctor loses the whole native document** because two guards read the
+   * same relation differently.
+   *
+   * Asking `conceptMatches` makes them one question. It reads the PRE-EXISTING
+   * facts only, and is never mutated as this function injects — see the
+   * per-tense loop below, where two facts for one concept are legitimate.
+   */
+  const alreadySpokenTo = (mapping: SemanticMapping): boolean =>
+    input.facts.some((f) => conceptMatches(f, mapping));
+
+  // What this template ASKS FOR, keyed by CONCEPT **and the tense that concept's
+  // mappings approve**, so the injected fact can satisfy the mapping that asked
+  // rather than one the resolver will then refuse.
+  //
+  // ⚠️ ONE FACT PER CONCEPT WAS NOT ENOUGH, AND A REFUTATION LENS MEASURED WHY.
+  // The first draft kept the FIRST mapping per concept and inherited its
+  // `requiredFactTemporality`. Two `visit_metadata.patient_name` controls whose
+  // mappings declare different tenses — legal, and the model may propose a
+  // tense — gave: control 1 `record_derived`, control 2 `not_mentioned /
+  // temporality_not_approved`, silently blank; and with `required: true` on the
+  // second, `needs_clinician_input` -> BLOCKING -> the whole document withheld.
+  // The outcome depended on the order of the `mappings` array.
+  //
+  // Keying on the tense as well makes each demanded tense its own fact, so
+  // every control is answered. In the ordinary case both mappings want the same
+  // tense and this is still exactly one fact — the module header's claim about
+  // the header control and the letter's opening line is unchanged.
+  const wanted = new Map<string, { mapping: SemanticMapping; concept: string; temporality: EncounterFact['temporality'] }>();
   for (const mapping of input.mappings) {
     if (!fieldIds.has(mapping.fieldId)) continue;
     if (mapping.sourceType !== 'visit_metadata') continue;
     if (mapping.status !== 'certified') continue;
+    // ⚠️ THE SECOND WALL — see `RECORD_DERIVABLE_DATA_TYPES`. A `boolean`
+    // mapping here means a checkbox, and a checkbox cannot carry a name.
+    if (!RECORD_DERIVABLE_DATA_TYPES.has(mapping.expectedDataType)) continue;
     const concept = mapping.clinicalConcept;
     if (!concept) continue;
     const normalized = normalizeConcept(concept);
@@ -144,7 +220,9 @@ export function withVisitMetadataFacts(input: {
       // three, and the third member is dictated.
       continue;
     }
-    if (!wanted.has(normalized)) wanted.set(normalized, mapping);
+    const temporality = requiredFactTemporality(mapping);
+    const key = `${normalized}|${temporality}`;
+    if (!wanted.has(key)) wanted.set(key, { mapping, concept: normalized, temporality });
   }
   if (wanted.size === 0) return facts;
 
@@ -166,14 +244,17 @@ export function withVisitMetadataFacts(input: {
     ],
   ];
 
-  for (const [concept, value, quote] of values) {
-    const mapping = wanted.get(concept);
-    if (!mapping || value === null) continue;
-    // Real evidence wins — never inject when a fact already speaks to it.
-    if (existingConcepts.has(concept)) continue;
+  const byConcept = new Map<string, string | null>(values.map(([c, v]) => [c, v]));
+  const quoteFor = new Map<string, string>(values.map(([c, , q]) => [c, q]));
+
+  for (const { mapping, concept, temporality } of wanted.values()) {
+    const value = byConcept.get(concept) ?? null;
+    const quote = quoteFor.get(concept)!;
+    if (value === null) continue;
+    if (alreadySpokenTo(mapping)) continue;
     facts.push(
       EncounterFactSchema.parse({
-        factId: recordFactId(concept, value),
+        factId: recordFactId(concept, value, temporality),
         // ⚠️ #247 — THE CLASS, AND THE ONLY REASON THIS MODULE EXISTS.
         sourceType: 'visit_record',
         concept,
@@ -183,7 +264,7 @@ export function withVisitMetadataFacts(input: {
         // a name or an evidence sentence would blank the control on a document
         // with nothing wrong with it.
         polarity: 'affirmed',
-        temporality: requiredFactTemporality(mapping),
+        temporality,
         // The subject IS the patient. (The referring physician, the one member
         // of this family that is not, is emitted by the projector with
         // `experiencer: 'other'` and is not injected here at all.)
@@ -204,7 +285,6 @@ export function withVisitMetadataFacts(input: {
         quality: { asr: 'unknown', evidence: 'direct' },
       }),
     );
-    existingConcepts.add(concept);
   }
   return facts;
 }

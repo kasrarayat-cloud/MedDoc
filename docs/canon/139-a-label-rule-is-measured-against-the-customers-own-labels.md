@@ -52,3 +52,27 @@ data**, not a statement about the code. It is verified the way every other claim
 here is verified: by looking at the data. A pattern's own comment naming the
 field it cannot match is the tell, and it is a tell you can only see by reading
 the population rather than the rule.
+
+---
+
+## APPENDED 2026-09-07 — AND THE LABEL YOU MEASURED IS NOT THE LABEL THE COMPILER STORES
+
+The rule above sent me to read the population, and I read it — `Patient`, `Age`,
+`Referring MD` — and then anchored the patterns at both ends, correctly, against
+those strings.
+
+**The compiled `originalLabel` is `REFERRING PHYSICIAN: Choose an item.`** Word's
+placeholder is part of the label, not only of the option list, so an
+end-anchored pattern matches *nothing* on the very form it was written for. It
+cost one control in the F24 census the moment the anchor landed, and the census
+is the only reason it was visible at all.
+
+> **A measurement taken from a `.docx`, a spec, or a person is a measurement of
+> the SOURCE. The rule runs against the COMPILED artifact, and the compiler is
+> entitled to add to it.** Take the measurement from the thing the code will
+> actually see.
+
+The fix is not a looser anchor — that reopens `Referring Physician Fax`. It is to
+normalise the label through the module that OWNS the placeholder string
+(`withoutTrailingPlaceholder`, beside `isWordPlaceholderOption`) before matching,
+so there is still exactly one place that knows what the placeholder is.
