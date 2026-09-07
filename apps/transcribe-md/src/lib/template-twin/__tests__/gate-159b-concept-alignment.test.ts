@@ -215,6 +215,53 @@ describe('#159(b) — concept alignment: the emitter and the registry agree', ()
     // the call-site scan needs its own control, or its silence reads as absence
     expect(calls.length, 'the rosConcept emission site was not found').toBeGreaterThan(0);
 
+    // ⚠️ ARITHMETIC THAT MUST RECONCILE — AND IT CLOSES THE CLASS THE THREE
+    // SCANS ABOVE ONLY CLOSED ONE INSTANCE OF AT A TIME.
+    //
+    // Each scan above learned about ONE emission form after that form had
+    // already gone unwatched: composed sites after a prefix collapse, function
+    // calls after `rosConcept` vanished from the census entirely. Every one of
+    // those was found by an adversarial pass rather than by this arm, because
+    // an unreadable form contributes NOTHING and silence reads as absence.
+    //
+    // So instead of adding a fourth scan the next time, every `concept:` in the
+    // file is CLAIMED by exactly one reader, and anything unclaimed is a
+    // finding that names its own line. A new helper — `concept: examConcept(a)`
+    // — or a ternary, or a bare identifier, reds here on the day it lands.
+    //
+    // MEASURED when this was written: 22 occurrences = 13 literal + 5 composed
+    // + 1 call + 3 declared non-sites, and the three non-sites are the
+    // `concept: string;` type field and the `add()` helper's two
+    // `concept: options.concept` pass-throughs — plumbing that RECEIVES a
+    // concept from the real sites rather than naming one.
+    const NON_SITE_FORMS = [
+      /concept: string;/g,           // the snapshot type's own field
+      /concept: options\.concept,/g,  // `add()` forwarding a caller's concept
+    ];
+    const claimed = new Set<number>();
+    for (const pattern of [
+      /concept: '[^']+'/g,
+      /concept: `[^`]+`/g,
+      /concept: [a-zA-Z_]+\(/g,
+      ...NON_SITE_FORMS,
+    ]) {
+      for (const m of src.matchAll(pattern)) claimed.add(m.index!);
+    }
+    const unreadable = [...src.matchAll(/\bconcept:/g)]
+      .filter((m) => !claimed.has(m.index!))
+      .map((m) => {
+        const line = src.slice(0, m.index!).split('\n').length;
+        return `${line}: ${src.split('\n')[line - 1]!.trim().slice(0, 90)}`;
+      });
+    expect(
+      unreadable,
+      'a `concept:` form this census cannot read — it would be silently ' +
+        `unwatched:\n  ${unreadable.join('\n  ')}`,
+    ).toEqual([]);
+    // NON-VACUITY for the arithmetic itself: if the total scan ever stopped
+    // matching, `unreadable` would be empty for the wrong reason.
+    expect([...src.matchAll(/\bconcept:/g)].length).toBeGreaterThan(sites.length);
+
     const emitted = [...new Set(emittedFacts().map((f) => f.concept))];
     const covered = (site: string): boolean => {
       if (!site.includes('${')) return emitted.includes(site);
