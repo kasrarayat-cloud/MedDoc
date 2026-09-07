@@ -250,6 +250,37 @@ echo "=== VERDICT ==="
 echo "raceA subject   : $S"
 echo "raceA control#1 : $C1"
 echo "raceB           : without lock $V/$N violations, with lock $W/$N"
+
+# ⚠️ THE HARNESS ASSERTS ITS OWN 2x2 AND EXITS NON-ZERO IF IT DOES NOT HOLD.
+# Its adversarial pass found it PRINTED the numbers and asserted nothing, so it
+# exited 0 even when its own negative control REFUTED the claim it exists to
+# prove. A harness whose output has to be read by a human to notice a refutation
+# is a harness that will be read quickly at 01:00. Every row below is a
+# prediction made before the run, and a miss is a FAILURE.
+fail=0
+say() { echo "   $1"; }
+case "$S" in
+  *owners_left=1*refusals=1*) say "🟢 raceA subject held the invariant and refused once" ;;
+  *) say "🔴 raceA SUBJECT: expected owners_left=1 with 1 refusal — got: $S"; fail=1 ;;
+esac
+case "$S" in
+  *"overlap[max_open/samples_with_BOTH]=2/"*) say "🟢 raceA witnessed a real overlap" ;;
+  *) say "🔴 raceA SUBJECT: no overlap witnessed — it did not actually race, so its green means nothing"; fail=1 ;;
+esac
+case "$C1" in
+  *"overlap[max_open/samples_with_BOTH]=1/0"*) say "🟢 raceA control#1 was genuinely sequential" ;;
+  *) say "🔴 raceA CONTROL#1: expected NO overlap — got: $C1"; fail=1 ;;
+esac
+if [ "$W" -eq 0 ]; then say "🟢 raceB: 0 violations WITH the advisory lock"
+else say "🔴 raceB: $W/$N violations WITH the lock — the invariant does not hold"; fail=1; fi
+if [ "$V" -gt 0 ]; then say "🟢 raceB control: $V/$N violations WITHOUT the lock — the lock is load-bearing"
+else say "🔴 raceB CONTROL DID NOT FIRE: 0/$N violations without the advisory lock. Either the lock is now redundant or this control has stopped discriminating. Canon 121: delete the mechanism or delete the control — do not keep both."; fail=1; fi
+
+if [ "$fail" -ne 0 ]; then
+  echo "🔴 RACE HARNESS FAILED — a prediction above did not hold." >&2
+  exit 1
+fi
+echo "🟢 RACE HARNESS PASSED — every predicted cell held."
 q "DELETE FROM users WHERE \"practiceId\"='ir_p'; DELETE FROM practices WHERE id='ir_p';" >/dev/null
 teardown
 q "DROP TABLE IF EXISTS t210_sample;" >/dev/null
