@@ -212,6 +212,57 @@ beforeEach(() => {
   lockedVisit.mockResolvedValue([{ status: 'READY', signedAt: null }]);
 });
 
+describe("ROUND FOUR — round one's defect cannot come back, asserted as BEHAVIOUR", () => {
+  // ⚠️ #204's CLAUSE ASKED FOR EXECUTABLE COVERAGE AND THIS IS THE MISSING HALF.
+  // Round four demonstrated that round one's defect — a STATIC refusal on
+  // `mapping.unmentionedPolicy === 'omit'`, a CONFIRM-TIME property deciding a
+  // PER-VISIT question — could be re-introduced with the gate files green.
+  //
+  // The arm that exists in `gate-review-defaults-omit-door.test.ts` is a
+  // whole-file `not.toContain('unmentionedPolicy: true')`. It happens to red
+  // when the defect is re-introduced by widening THAT select with THAT spelling
+  // — measured — but it is a string read standing in for behaviour, and any
+  // other route to the property (a second query, a join, reading it off the IR)
+  // walks past it.
+  //
+  // This arm drives the REAL action with a field whose mapping carries
+  // `unmentionedPolicy: 'omit'` and asserts the door ADMITS it, because the
+  // per-visit resolution says the field is blank. Spelling-independent: it fails
+  // for any door that consults the static policy, however it obtains it.
+
+  it('a field whose mapping says `omit` is still ADMITTED when the visit leaves it blank', async () => {
+    defFindUnique.mockResolvedValue({
+      mapping: { clinicalConcept: 'assessment', unmentionedPolicy: 'omit' },
+    });
+    readAndPrepare.mockResolvedValue(manifest(resolution({ reasonCode: 'no_supporting_evidence' })));
+    const res = await insert();
+    expect(res.ok, res.error).toBe(true);
+    expect(overrideUpsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('⚠️ THE CONTROL — the SAME omit mapping is REFUSED when the visit actually omitted it', async () => {
+    // Without this, the arm above passes for a door that admits everything. The
+    // per-visit answer is what decides, and here it says the field WAS omitted.
+    defFindUnique.mockResolvedValue({
+      mapping: { clinicalConcept: 'assessment', unmentionedPolicy: 'omit' },
+    });
+    readAndPrepare.mockResolvedValue(
+      manifest(resolution({ reasonCode: 'omitted_unsupported_default' })),
+    );
+    const res = await insert();
+    expect(res.ok).toBe(false);
+    expect(overrideUpsert).not.toHaveBeenCalled();
+  });
+
+  it('the door never READS the static policy — asserted on the query it issues', async () => {
+    // Complements the two behavioural arms: the door must not even fetch the
+    // column, so a future edit cannot quietly start consulting it.
+    await insert();
+    const sel = defFindUnique.mock.calls[0][0] as { select?: { mapping?: { select?: object } } };
+    expect(Object.keys(sel.select?.mapping?.select ?? {})).toEqual(['clinicalConcept']);
+  });
+});
+
 describe('ROUND FOUR — a sign landing in the window cannot be written over', () => {
   // ⚠️ THE WINDOW IS SECONDS WIDE AND THIS CHANGE MADE IT WIDER. The status is
   // read at the top of the action; the write happens after TWO full fills (each
