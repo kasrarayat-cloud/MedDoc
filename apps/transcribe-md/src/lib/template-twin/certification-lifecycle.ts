@@ -68,7 +68,7 @@ export interface TemplateTwinActor {
   practiceId: string;
 }
 
-interface PersistedMappingRow {
+export interface PersistedMappingRow {
   sourceType: string;
   clinicalConcept: string | null;
   expectedDataType: string;
@@ -80,12 +80,21 @@ interface PersistedMappingRow {
   required: boolean;
   blankPolicy: string;
   unmentionedPolicy: string | null;
+  /** #217 — JSONB, so `unknown` until it is shape-checked on read. */
+  conceptScope: unknown;
   unknownPolicy: string;
   practiceDefault: string | null;
   mappingStatus: string;
 }
 
-function fromPersistedMapping(
+/**
+ * ⚠️ EXPORTED FOR ITS GATE, DELIBERATELY. `gate-217`'s first form re-implemented
+ * this function's omit-when-absent rule inside the test file, so the two moved
+ * together and the arm could never fail — the exact vacuity this house has a
+ * canon entry for. A test that re-derives the thing under test is measuring
+ * itself. Sharing the symbol is the fix.
+ */
+export function fromPersistedMapping(
   fieldId: string,
   row: PersistedMappingRow,
 ): SemanticMapping {
@@ -111,6 +120,15 @@ function fromPersistedMapping(
     // Eliding a ruled `omit` would read the doctor's decision back as "nobody
     // ruled", which is a different behaviour and a different count.
     ...(row.unmentionedPolicy ? { unmentionedPolicy: row.unmentionedPolicy } : {}),
+    // ⚠️ #217 — OMITTED WHEN ABSENT, FOR THE SAME REASON AS THE LINE ABOVE, AND
+    // THE STAKES HERE ARE ALL 185 PRODUCTION MAPPINGS. `canonicalSha256`
+    // hashes `[]` as a value, so reading a NULL column back as an empty array
+    // would move every pre-existing mapping's attestation sha and de-certify
+    // every template at once. A row that predates this column must hash exactly
+    // as it did before the column existed, and omission is what guarantees it.
+    ...(Array.isArray(row.conceptScope) && row.conceptScope.length > 0
+      ? { conceptScope: row.conceptScope }
+      : {}),
     unknownPolicy: row.unknownPolicy,
     practiceDefault: row.practiceDefault,
     status: row.mappingStatus.toLowerCase(),
@@ -217,6 +235,7 @@ async function loadOwnedCompilation(
                   required: true,
                   blankPolicy: true,
                   unmentionedPolicy: true,
+                  conceptScope: true,
                   unknownPolicy: true,
                   practiceDefault: true,
                   mappingStatus: true,
@@ -519,6 +538,15 @@ export async function updateTemplateTwinMappings(input: {
             // nobody ruled on into keeping, which is exactly the inference this
             // ruling forbids. Absent stays absent, and absent is fail-closed.
             unmentionedPolicy: mapping.unmentionedPolicy ?? null,
+            // ⚠️ #217 — THE WRITER THIS FIELD NEVER HAD. Four readers, a
+            // validator and a confirm surface all consumed `conceptScope`, and
+            // this line's absence is why every one of them was dead code in
+            // production. NULL when absent, never `[]`: an empty array is a
+            // value and would move the attestation sha of all 185 rows.
+            conceptScope:
+              mapping.conceptScope && mapping.conceptScope.length > 0
+                ? asJson(mapping.conceptScope)
+                : Prisma.DbNull,
             unknownPolicy: mapping.unknownPolicy,
             practiceDefault: mapping.practiceDefault,
             mappingStatus: dbStatus(mapping.status),

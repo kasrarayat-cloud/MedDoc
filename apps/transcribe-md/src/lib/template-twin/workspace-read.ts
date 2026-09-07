@@ -22,6 +22,8 @@ interface WorkspaceMappingRow {
   required: boolean;
   blankPolicy: string;
   unmentionedPolicy: string | null;
+  /** #217 — JSONB, so `unknown` until shape-checked on read. */
+  conceptScope: unknown;
   unknownPolicy: string;
   practiceDefault: string | null;
   sourceType: string;
@@ -60,6 +62,12 @@ function parseMapping(row: WorkspaceMappingRow, fieldId: string): SemanticMappin
     // Eliding a ruled `omit` would read the doctor's decision back as "nobody
     // ruled", which is a different behaviour and a different count.
     ...(row.unmentionedPolicy ? { unmentionedPolicy: row.unmentionedPolicy } : {}),
+    // ⚠️ #217 — OMITTED WHEN ABSENT, exactly as the policy above. Reading a
+    // NULL column back as `[]` would move every pre-existing mapping's
+    // attestation sha and de-certify all 185 production rows at once.
+    ...(Array.isArray(row.conceptScope) && row.conceptScope.length > 0
+      ? { conceptScope: row.conceptScope }
+      : {}),
     unknownPolicy: row.unknownPolicy,
     practiceDefault: row.practiceDefault,
     sourceType: row.sourceType,
@@ -121,6 +129,7 @@ export async function readTemplateTwinWorkspace(input: {
                   required: true,
                   blankPolicy: true,
                   unmentionedPolicy: true,
+                  conceptScope: true,
                   unknownPolicy: true,
                   practiceDefault: true,
                   sourceType: true,

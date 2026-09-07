@@ -9,6 +9,9 @@
 
 import { createHash } from 'node:crypto';
 
+import { conceptSegment } from '../concept-segment';
+import { ROS_OTHER, readableRosToken, rosConcept } from '../ros-lexicon';
+
 import {
   EncounterFactSchema,
   type EncounterFact,
@@ -88,6 +91,12 @@ export interface EncounterEntitySnapshot {
        *  still projects, falling back to the inference it always used. */
       polarity?: 'affirmed' | 'denied';
       laterality?: 'left' | 'right' | 'bilateral';
+      /** The doctor's own words, set by L3's resolver ONLY when an
+       *  off-lexicon symptom was coerced to `other`. Optional here (not in the
+       *  L3 schema) so a snapshot captured before the field existed still
+       *  projects, byte-identically. */
+      finding_verbatim?: string;
+      system_verbatim?: string;
     }
   >;
   exam_findings?: ReadonlyArray<
@@ -247,15 +256,47 @@ function digest(value: string): string {
  * Stable concept segment used for source-exposed system/test names. This is
  * identifier normalization only; it does not change the clinical meaning.
  */
-export function conceptSegment(value: string): string {
-  const segment = value
-    .normalize('NFKC')
-    .trim()
-    .toLocaleLowerCase('en-US')
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 80);
-  return segment || 'unspecified';
+export { conceptSegment } from '../concept-segment';
+
+/**
+ * A lexicon token as ordinary words: `early_satiety` -> `early satiety`.
+ *
+ * ⚠️ DE-SLUGGING ONLY, AND THE LIMIT IS THE POINT. It restores the spaces the
+ * identifier form removed and changes nothing else — no synonym, no expansion,
+ * no clinical rewording. `dyspnea` stays `dyspnea`, because deciding it should
+ * read "shortness of breath" on a doctor's form is his call and not this
+ * function's.
+ */
+export function readableFinding(finding: string): string {
+  return readableRosToken(finding);
+}
+
+/**
+ * The value a ROS fact contributes to a document — ruling #218.
+ *
+ * ⚠️ THE DE-SLUG IS AT EMISSION, NOT ON ONE BRANCH OF A `??`. The previous form
+ * was `item.finding_verbatim ?? readableFinding(item.finding)`, which de-slugged
+ * ONLY the fallback. `03-extract-entities` fills `finding_verbatim` with the
+ * MODEL'S OWN TOKEN whenever the resolver changed the finding, so the raw
+ * identifier took the left branch and skipped the de-slugger entirely: a real
+ * token filed under a system the lexicon does not carry it under (`endocrine` /
+ * `weight_loss`) printed `weight_loss` into a signed document with
+ * `status=supported` and zero issues. De-slugging whichever branch wins closes
+ * that by construction rather than by remembering.
+ *
+ * ⚠️ AND THE BARE ESCAPE HATCH IS NOT A CLINICAL WORD. `other` exists so a
+ * symptom outside the lexicon can still be carried IN the doctor's words; with
+ * no words there is nothing to say, and the previous form said "other". The
+ * value is BLANKED rather than the fact DROPPED, deliberately: the checkbox arm
+ * reads `fact.polarity` and discards the finding, so dropping the fact would
+ * silently delete a denial a box depends on, while blanking leaves every
+ * select/narrative arm to refuse a value it cannot support.
+ */
+function rosDocumentValue(item: { finding: string; finding_verbatim?: string | null }): string {
+  const spoken = item.finding_verbatim?.trim();
+  const raw = spoken && spoken.length > 0 ? spoken : item.finding;
+  if (raw === ROS_OTHER) return '';
+  return readableRosToken(raw);
 }
 
 /**
@@ -695,8 +736,41 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
   for (const [index, item] of (entities.ros ?? []).entries()) {
     add({
       path: `ros.${index}.finding`,
-      concept: `ros.${conceptSegment(item.system)}`,
-      value: item.finding,
+      // ⚠️ #179(2) — SYMPTOM GRANULARITY. This emitted `ros.<system>` and every
+      // clause in a system shared one concept, so the checkbox arm (which reads
+      // polarity and discards the finding) ticked all of them from one fact,
+      // and a second affirmed symptom conflicted the export. The symptom now
+      // travels IN the concept, so a clause can address exactly what it covers.
+      // Both halves come from the CLOSED lexicon the L3 schema enforces, so
+      // this cannot produce a concept the registry will refuse.
+      concept: rosConcept(conceptSegment(item.system), conceptSegment(item.finding)),
+      // ⚠️ THE DOCTOR'S OWN WORDS FIRST, AND A READABLE TOKEN OTHERWISE —
+      // NEVER THE RAW IDENTIFIER.
+      //
+      // `finding` is a machine token from a CLOSED set, so it is what the
+      // CONCEPT is built from; it is not what a document should print. Two
+      // things can go wrong and both were measured:
+      //
+      //   · a symptom outside the lexicon becomes `other`, and a form rendered
+      //     the literal word "other" where the doctor said "belching";
+      //   · a symptom INSIDE the lexicon is a snake_case identifier — 25 of the
+      //     72 tokens carry an underscore — so `early_satiety`,
+      //     `night_sweats` and `suicidal_ideation` printed verbatim into a
+      //     signed document, with `status=supported`, `valid=true` and zero
+      //     issues.
+      //
+      // The second is the one the L3 prompt made MORE likely, not less: it now
+      // instructs the model to emit the identifier exactly, so a compliant
+      // model leaves nothing in `finding_verbatim` at all.
+      //
+      // ⚠️ AND THE FIX IS DELIBERATELY NOT A DISPLAY MAP. A token-to-prose
+      // table is a second vocabulary to maintain, and choosing that a doctor's
+      // form should say "shortness of breath" where the lexicon says `dyspnea`
+      // is a clinical wording judgement that belongs to the owner — it is filed
+      // for him and NOT decided here. Replacing underscores with spaces is not
+      // that judgement; it is identifier de-slugging, and it leaves every
+      // clinical word exactly as the lexicon chose it.
+      value: rosDocumentValue(item),
       evidence: item,
       defaultTemporality: 'current',
       // Q1 audit §02.9 — L3 states these now, so stop guessing them back out of
