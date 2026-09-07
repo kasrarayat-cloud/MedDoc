@@ -15,6 +15,7 @@ import {
   synonymsFor,
   REGISTRY_CONCEPTS,
 } from '../concept-registry';
+import { ROS_SYSTEMS, symptomsFor } from '../ros-lexicon';
 import { withoutPlaceholderOptions } from '../../note-template-docx/placeholder-option';
 import { z } from 'zod';
 
@@ -95,7 +96,18 @@ export const TEMPLATE_TWIN_CANONICAL_CONCEPT_GUIDANCE = [
   'social_history.alcohol',
   'social_history.drugs',
   'social_history.occupation',
-  'ros.<system>',
+  // ⚠️ THREE PARTS, NOT TWO — AND THE TWO-PART FORM WAS THE ONLY THING THIS
+  // COMPONENT EVER TAUGHT. #179(2) moved the projector to
+  // `ros.<system>.<symptom>` and narrowed the registry pattern to match, so
+  // the string below used to instantiate to a concept the registry REFUSES:
+  // measured, `isRegisteredConcept('ros.gastrointestinal')` is FALSE while
+  // `isRegisteredConcept('ros.gastrointestinal.heartburn')` is true. Every ROS
+  // form field therefore landed `clinicalConcept: null`, which is why a
+  // per-clause ROS control could never be certified at all.
+  // ⚠️ `exam.<system>` is CORRECT and is deliberately left alone —
+  // `isRegisteredConcept('exam.abdomen')` is true. Only ros went three-part,
+  // so this is a one-line asymmetry and not a family-wide break.
+  'ros.<system>.<symptom>',
   'exam.<system>',
   'test.name',
   'test.<test_name>.result',
@@ -369,6 +381,14 @@ const SYSTEM_PROMPT = [
   'outside it is rejected and the field becomes permanently unfillable.',
   `  exact: ${REGISTRY_CONCEPTS.join(', ')}`,
   '  patterns: test.<snake_case_study>.result | exam.<snake_case_thing> | hpi.<snake_case_thing>',
+  '            | ros.<system>.<symptom>',
+  // ⚠️ GENERATED FROM THE SHIPPED LEXICON, NEVER HAND-COPIED. The model is
+  // asked for a concept whose legal set is defined in `ros-lexicon.ts`; a
+  // second hand-written list here is how the proposer and the registry drifted
+  // apart in the first place. `symptomsFor` appends `other`, so the escape
+  // hatch is taught by construction.
+  `  ros systems: ${ROS_SYSTEMS.join(', ')}`,
+  ...ROS_SYSTEMS.map((system) => `    ${system}: ${symptomsFor(system).join(', ')}`),
   'NEVER put anatomy, laterality, a segment name or a unit in the concept: a',
   'measurement concept is its KIND (measurement.diameter, measurement.reflux_time)',
   'and the vein, side and segment travel as structured data. One concept must be',
