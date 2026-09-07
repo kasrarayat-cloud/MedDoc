@@ -20,9 +20,17 @@
 // because nothing would throw. The arms below pin both directions: absent must
 // not move the sha, and present MUST.
 // ============================================================================
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { SemanticMappingSchema, type SemanticMapping } from '../ir';
+// ⚠️ THE SAME TWO MOCKS THE SIBLING GATES CARRY. `certification-lifecycle`
+// imports `@meddoc/db` and `@/lib/audit`, whose graph reaches next-auth and
+// fails to resolve `next/server` under vitest. Without these the file does not
+// IMPORT — and vitest reports "no tests", which is not a pass.
+vi.mock('@meddoc/db', () => ({ default: {} }));
+vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }));
+
+import { type SemanticMapping } from '../ir';
+import { fromPersistedMapping } from '../certification-lifecycle';
 import { templateTwinMappingsSha256 } from '../mapping-hash';
 
 const FIELD_ID = `ttf_${'a'.repeat(24)}`;
@@ -47,11 +55,32 @@ function base(overrides: Partial<SemanticMapping> = {}): SemanticMapping {
   } as SemanticMapping;
 }
 
-/** The read-back, replicated exactly as the four loaders implement it. */
+/**
+ * The read-back, THROUGH THE SHIPPED FUNCTION.
+ *
+ * ⚠️ THIS USED TO BE A COPY OF THE LOADER'S OMIT RULE, AND THAT MADE EVERY ARM
+ * BELOW VACUOUS: the test and the code would have moved together, so deleting
+ * the omit from `certification-lifecycle` would have left this file green.
+ * `fromPersistedMapping` is exported for exactly this reason.
+ */
 function readBack(column: unknown): SemanticMapping {
-  return SemanticMappingSchema.parse({
-    ...base(),
-    ...(Array.isArray(column) && column.length > 0 ? { conceptScope: column } : {}),
+  const b = base();
+  return fromPersistedMapping(FIELD_ID, {
+    sourceType: b.sourceType,
+    clinicalConcept: b.clinicalConcept ?? null,
+    expectedDataType: b.expectedDataType,
+    polarityBehavior: b.polarityBehavior,
+    temporality: b.temporality ?? null,
+    laterality: b.laterality ?? null,
+    unitPolicy: b.unitPolicy ?? null,
+    approvedSynonyms: b.approvedSynonyms,
+    required: b.required,
+    blankPolicy: b.blankPolicy,
+    unmentionedPolicy: null,
+    conceptScope: column,
+    unknownPolicy: b.unknownPolicy,
+    practiceDefault: b.practiceDefault ?? null,
+    mappingStatus: 'CERTIFIED',
   });
 }
 
@@ -103,6 +132,22 @@ describe('#217 — the column, the round trip, and the attestation', () => {
     expect('conceptScope' in readBack(null)).toBe(false);
     expect('conceptScope' in readBack([])).toBe(false);
     expect('conceptScope' in readBack(['ros.gastrointestinal.heartburn'])).toBe(true);
+  });
+
+  it('⚠️ THE INSERT WRITES IT, NOT ONLY THE UPDATE — the column is useless without this', async () => {
+    // ⚠️ THE FIRST FORM OF #217 ADDED THE COLUMN, THE UPDATE AND THE FIVE
+    // READ-BACKS AND LEFT THE INSERT OUT. `create-draft`'s nested
+    // `mapping: { create: … }` is the table's ONLY INSERT; the certification
+    // writer is an UPDATE and can only change a row that already exists. Without
+    // this line `conceptScope` would be NULL for the entire life of every row —
+    // a migration that looks like it revived four readers and revived none.
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const src = readFileSync(join(__dirname, '../create-draft.ts'), 'utf-8');
+    const createBlock = src.slice(src.indexOf('mapping: {'));
+    expect(createBlock).toContain('conceptScope');
+    // and NULL when absent, never [] — the attestation argument again
+    expect(createBlock).toMatch(/conceptScope:[\s\S]{0,200}Prisma\.DbNull/);
   });
 
   it('the Prisma model and the migration both carry the column', async () => {

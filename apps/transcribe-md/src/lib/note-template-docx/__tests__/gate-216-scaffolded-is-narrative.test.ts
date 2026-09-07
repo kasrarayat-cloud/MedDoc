@@ -66,7 +66,44 @@ async function kindOf(alias: string, scaffolded: boolean): Promise<string> {
   return field!.kind;
 }
 
+/**
+ * A control with NO alias and NO tag, sitting in a paragraph whose prose the
+ * control does not own. The label then falls back to the container text.
+ */
+async function kindOfUnnamed(paragraph: string, inner: string): Promise<{ kind: string; scaffolded: boolean }> {
+  const documentXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W}><w:body><w:p>` +
+    `<w:r><w:t>${paragraph}</w:t></w:r>` +
+    `<w:sdt><w:sdtPr><w:id w:val="1751"/><w:text/></w:sdtPr>` +
+    `<w:sdtContent><w:r><w:t>${inner}</w:t></w:r></w:sdtContent></w:sdt>` +
+    `</w:p></w:body></w:document>`;
+  const source = await buildSyntheticDocx({ documentXml });
+  const { compileTemplateDocx } = await import('../compiler');
+  const ir = compileTemplateDocx(source);
+  const f = ir.fields[0];
+  expect(f, 'no field compiled').toBeTruthy();
+  return { kind: f!.kind, scaffolded: Boolean(f!.scaffolded) };
+}
+
 describe('#216 — a scaffolded PROSE control is always narrative_text', () => {
+  it('⚠️ AN UNNAMED CONTROL IS TYPED BY ITS OWN IDENTITY, NEVER BY THE PARAGRAPH', async () => {
+    // ⚠️ THIS ARM EXISTS BECAUSE THE FIRST FIX MEASURED THE WRONG STRING. It read
+    // `identity.label ?? context.containerText`, and the container fallback is
+    // the PARAGRAPH — which already contains the control's own scaffold text. So
+    // an unnamed scaffolded control had its word count taken from a sentence it
+    // does not own, and a measurement field re-typed to narrative_text on the
+    // strength of somebody else's prose.
+    //
+    // The ruling says "the ALIAS is the sentence". A control with no identity of
+    // its own is not one this rule can speak about.
+    const r = await kindOfUnnamed(
+      'The patient is measured at each visit and the weight recorded below',
+      '72 kg',
+    );
+    expect(r.scaffolded, 'the fixture is not the scaffolded universe it claims').toBe(true);
+    expect(r.kind).toBe('measurement');
+  });
+
   it('⚠️ NON-VACUITY: the heuristic really does fire on this label', async () => {
     // Without this, every arm below is satisfied by a regex that never matched
     // anything — the fix would "pass" because there was nothing to fix.

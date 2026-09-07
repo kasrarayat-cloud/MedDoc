@@ -68,7 +68,7 @@ export interface TemplateTwinActor {
   practiceId: string;
 }
 
-interface PersistedMappingRow {
+export interface PersistedMappingRow {
   sourceType: string;
   clinicalConcept: string | null;
   expectedDataType: string;
@@ -87,7 +87,14 @@ interface PersistedMappingRow {
   mappingStatus: string;
 }
 
-function fromPersistedMapping(
+/**
+ * ⚠️ EXPORTED FOR ITS GATE, DELIBERATELY. `gate-217`'s first form re-implemented
+ * this function's omit-when-absent rule inside the test file, so the two moved
+ * together and the arm could never fail — the exact vacuity this house has a
+ * canon entry for. A test that re-derives the thing under test is measuring
+ * itself. Sharing the symbol is the fix.
+ */
+export function fromPersistedMapping(
   fieldId: string,
   row: PersistedMappingRow,
 ): SemanticMapping {

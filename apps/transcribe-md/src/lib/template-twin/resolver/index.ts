@@ -32,6 +32,7 @@ import {
   approvedPracticeDefaultFactId,
 } from '../practice-default';
 import {
+  isEmptyText,
   isListValuedNarrative,
   joinListValuedNarrative,
 } from '../field-value-derivation';
@@ -135,9 +136,18 @@ function convertValue(
 ): ConversionResult {
   switch (field.kind) {
     case 'narrative_text':
-      return typeof rawValue === 'string'
-        ? { value: rawValue, optionOrdinal: null }
-        : { code: 'text_value_not_string' };
+      // ⚠️ #218 — AN EMPTY STRING IS NOT A VALUE. Without this the blanked
+      // escape hatch resolves `supported` over an emptied control and the whole
+      // chain reports success: validator VALID with zero issues, renderer a
+      // `filled` proof, `counts.filled > 0` satisfied. Refusing here makes it a
+      // bounded clear that is COUNTED as blank, which is the honest outcome.
+      // The predicate is IMPORTED, not re-derived — this arm and
+      // `deriveFieldValueFromFact` are two implementations of one decision, and
+      // they have disagreed before.
+      if (typeof rawValue !== 'string') return { code: 'text_value_not_string' };
+      return isEmptyText(rawValue)
+        ? { code: 'text_value_empty' }
+        : { value: rawValue, optionOrdinal: null };
 
     case 'single_select': {
       if (typeof rawValue !== 'string') return { code: 'select_value_not_string' };

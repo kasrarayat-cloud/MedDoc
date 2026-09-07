@@ -140,6 +140,35 @@ export function exactOption(
  * lives on the CALLER today, which is the weaker place for it — recorded as a
  * known limit rather than claimed as a design.
  */
+/**
+ * Is this text nothing at all? — ruling #218's second half.
+ *
+ * ⚠️ AN EMPTY STRING IS NOT A VALUE, AND TREATING IT AS ONE IS WORSE THAN THE
+ * DEFECT IT CAME FROM. #218 blanks the bare `other` escape hatch so a machine
+ * token cannot print. But `''` then flowed through as an ordinary string: the
+ * resolver minted `supported` / `direct_evidence_supported`, the validator
+ * computed `populated = value !== null` and returned VALID with zero issues,
+ * and the renderer emitted a **`filled`** proof over a control it had just
+ * emptied — destroying the template's own placeholder prose and putting nothing
+ * in its place.
+ *
+ * That is strictly worse than what it replaced. Printing `other` was wrong and
+ * VISIBLE; a silent blank attested as filled is wrong and invisible, and it
+ * also satisfies `fill-engine`'s `counts.filled > 0` — the only check standing
+ * between a doctor and an empty document.
+ *
+ * ⚠️ ONE PREDICATE, IMPORTED BY BOTH DERIVERS. The resolver is a SECOND
+ * implementation of this decision by design, and this house has already paid
+ * for the two disagreeing about what a null means. They must not now disagree
+ * about what an empty string means.
+ *
+ * The refusal is a `null`, which is the bounded clear: the field is COUNTED as
+ * blank and the doctor is told, rather than being told it was filled.
+ */
+export function isEmptyText(value: string): boolean {
+  return value.trim().length === 0;
+}
+
 export function deriveFieldValueFromFact(
   field: TemplateField,
   mapping: SemanticMapping | undefined,
@@ -147,7 +176,9 @@ export function deriveFieldValueFromFact(
 ): string | number | boolean | null {
   switch (field.kind) {
     case 'narrative_text':
-      return typeof fact.value === 'string' ? fact.value : null;
+      return typeof fact.value === 'string' && !isEmptyText(fact.value)
+        ? fact.value
+        : null;
     case 'single_select': {
       if (typeof fact.value !== 'string') return null;
       return exactOption(field, fact.value)?.value ?? null;

@@ -828,15 +828,35 @@ function processContentControl(
     // checkboxes and dates are typed structurally from their own `w:sdtPr`
     // child and are untouched. And `scaffolded` is assigned in exactly ONE place
     // in this file (the field literal below), so this is the only site that can
-    // ever see a scaffolded control. Production carries ZERO scaffolded
-    // controls across all four compiled versions, so no existing template's
-    // kinds move — see `gate-216-scaffolded-is-narrative.test.ts`, which pins
-    // both the change and its non-effect on unscaffolded labels.
-    const textLabel = identity.label ?? context.containerText ?? "";
+    // ever see a scaffolded control.
+    //
+    // ⚠️ THE PROSE TEST READS THE CONTROL'S OWN IDENTITY, NEVER THE PARAGRAPH.
+    // Its first form measured `identity.label ?? context.containerText`, and the
+    // container fallback is the PARAGRAPH — which already contains the control's
+    // own scaffold text. So an UNNAMED scaffolded control (no alias, no tag) had
+    // its word count taken from the surrounding sentence and re-typed to
+    // narrative_text on the strength of prose it did not own. The ruling's words
+    // are "the ALIAS is the sentence", and the alias is `identity.label`.
+    // A control with no identity of its own is not one this rule can speak about.
+    //
+    // ⚠️ AND THE JUSTIFICATION THIS COMMENT USED TO CARRY WAS FALSE. It read
+    // "production carries ZERO scaffolded controls, so no existing template's
+    // kinds move". That is a fact about the STORED IR, which predates
+    // `isScaffolded` — but `renderer.ts:assertSourceMatchesIr` RE-COMPILES the
+    // immutable source on EVERY fill and compares `structureSha256`. Measured:
+    // the owner's GI source compiles to `e9acc158…` before this change (exactly
+    // what production stores) and `169fdf2d…` after, so all three GI compiled
+    // versions — one of them ACTIVE and CERTIFIED — would begin failing
+    // `SOURCE_IR_MISMATCH` and degrade silently to the styled export. The
+    // 80-control ultrasound is byte-identical (`37813a60…`) and is unaffected.
+    // That trade is recorded as an accepted-capability loss, not assumed away.
+    const identityLabel = identity.label ?? null;
     kind =
-      isScaffolded(properties, content) && isProseLabel(textLabel)
+      identityLabel !== null &&
+      isScaffolded(properties, content) &&
+      isProseLabel(identityLabel)
         ? "narrative_text"
-        : inferTextKind(textLabel);
+        : inferTextKind(identityLabel ?? context.containerText ?? "");
   } else {
     addUnsupportedContentControl(
       state,
