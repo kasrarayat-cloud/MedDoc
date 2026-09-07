@@ -31,6 +31,8 @@
 // excluded from every declared scope by construction — see `isAddressable`.
 // ============================================================================
 
+import { conceptSegment } from './concept-segment';
+
 /** The standard review-of-systems list, per system. */
 export const ROS_LEXICON: Readonly<Record<string, readonly string[]>> = Object.freeze({
   constitutional: ['fever', 'chills', 'fatigue', 'weight_loss', 'weight_gain', 'appetite_change', 'night_sweats'],
@@ -84,7 +86,61 @@ export function isAddressable(concept: string): boolean {
   return (ROS_LEXICON[parts[1]!] ?? []).includes(parts[2]!);
 }
 
-/** Total addressable symptoms — used to keep guards tied to the real corpus. */
-export function lexiconSize(): number {
-  return Object.values(ROS_LEXICON).reduce((n, list) => n + list.length, 0);
+/**
+ * ⚠️ THE SYSTEM A MODEL NAMED, RESOLVED TO A LEXICON KEY — OR `unspecified`.
+ *
+ * Normalisation first, alias second, and the ORDER IS LOAD-BEARING: normalising
+ * turns `Cardiovascular` and `GI ` into `cardiovascular` and `gi`, and only
+ * then is an alias consulted. Reversing it would let an alias shadow a real key.
+ *
+ * ⚠️ ORTHOGRAPHY AND UNAMBIGUOUS INITIALISMS ONLY. Every entry below is the
+ * SAME organ system spelled differently. CROSS-WORD mappings a reader will
+ * expect to find here — `ent` -> `heent`, `pulmonary` -> `respiratory`,
+ * `dermatologic` -> `skin`, `general` -> `constitutional`, `cardiac` ->
+ * `cardiovascular` — are DELIBERATELY ABSENT: each WIDENS or MOVES what the
+ * system covers (ENT excludes the eyes; heent does not), which is a clinical
+ * taxonomy judgement and not a spelling one. They fall to `unspecified` +
+ * `other`, which is lossless-with-evidence rather than confidently wrong.
+ */
+export const ROS_UNSPECIFIED_SYSTEM = 'unspecified';
+
+const ROS_SYSTEM_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  neurological: 'neurologic',
+  neurology: 'neurologic',
+  psychiatry: 'psychiatric',
+  psych: 'psychiatric',
+  hematology: 'hematologic',
+  hematological: 'hematologic',
+  heme: 'hematologic',
+  endocrinology: 'endocrine',
+  gi: 'gastrointestinal',
+  gu: 'genitourinary',
+  cv: 'cardiovascular',
+  msk: 'musculoskeletal',
+  resp: 'respiratory',
+});
+
+export function resolveRosSystem(raw: string): string {
+  const seg = conceptSegment(raw);
+  if (ROS_LEXICON[seg]) return seg;
+  const alias = ROS_SYSTEM_ALIASES[seg];
+  return alias && ROS_LEXICON[alias] ? alias : ROS_UNSPECIFIED_SYSTEM;
 }
+
+/**
+ * The symptom a model named, resolved WITHIN its system — or `other`.
+ *
+ * `other` is not a failure: it is how a symptom outside the list reaches the
+ * note without being silently dropped and without claiming to answer a clause
+ * that names specific symptoms. The caller keeps the original words.
+ */
+export function resolveRosFinding(system: string, raw: string): string {
+  const seg = conceptSegment(raw);
+  return symptomsFor(system).includes(seg) ? seg : ROS_OTHER;
+}
+
+/** Every system a resolved item may carry, including the unresolved bucket. */
+export const ROS_SYSTEMS_RESOLVED: readonly string[] = Object.freeze([
+  ...ROS_SYSTEMS,
+  ROS_UNSPECIFIED_SYSTEM,
+]);

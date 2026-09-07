@@ -14,7 +14,13 @@
 
 import { z } from 'zod';
 
-import { ROS_SYSTEMS, symptomsFor } from '@/lib/template-twin/ros-lexicon';
+import {
+  ROS_SYSTEMS,
+  ROS_SYSTEMS_RESOLVED,
+  resolveRosFinding,
+  resolveRosSystem,
+  symptomsFor,
+} from '@/lib/template-twin/ros-lexicon';
 import {
   modelClient,
   type DeepgramUtterance,
@@ -179,7 +185,7 @@ export const ExtractedEntities = z.object({
          * must be one the lexicon names; the SYMPTOM below is meaningless
          * without it.
          */
-        system: z.enum(ROS_SYSTEMS as [string, ...string[]]),
+        system: z.string().min(1),
         /**
          * ⚠️ THE MODEL PICKS FROM A LIST AND THE SCHEMA ENFORCES IT. Free text
          * here was the root of two MEASURED defects, both of them the same
@@ -222,28 +228,90 @@ export const ExtractedEntities = z.object({
         evidence_quote: z.string().min(1),
         speaker: z.string().optional(),
         timestamp: z.number().nonnegative().optional(),
+        /**
+         * ⚠️ THE DOCTOR'S OWN WORDS, KEPT ONLY WHEN THE LEXICON COULD NOT HOLD
+         * THEM. Set by the resolver below, never by the model. Without it a
+         * coerced symptom reaches the note and the document as the literal
+         * string `other`, and the doctor's "belching" is gone.
+         */
+        finding_verbatim: z.string().min(1).optional(),
+        /** Likewise for a system name the lexicon does not recognise. */
+        system_verbatim: z.string().min(1).optional(),
       })
     )
-    .superRefine((items, ctx) => {
-      // ⚠️ #179(1) — THE SYMPTOM MUST BELONG TO ITS OWN SYSTEM. A per-field
-      // enum cannot express this (the legal set DEPENDS on `system`), so it is
-      // a refinement rather than a type. Without it the schema would admit
-      // `{ system: 'cardiovascular', finding: 'heartburn' }` and the projector
-      // would emit `ros.cardiovascular.heartburn` — a concept the registry
-      // admits and no clause can honestly cover.
-      items.forEach((item, index) => {
-        const allowed = symptomsFor(item.system);
-        if (!allowed.includes(item.finding)) {
+    /**
+     * ⚠️ #179(1) RESOLVES TO THE CLOSED SET. IT USED TO REFUSE INTO IT, AND THE
+     * REFUSAL DISCARDED THE WHOLE VISIT.
+     *
+     * The membership check was a `.superRefine` over the ARRAY, so one
+     * off-lexicon token failed the parse of the entire `ExtractedEntities`
+     * object — 13 other top-level clinical fields with it. MEASURED, against
+     * the shipped schema:
+     *
+     *   lowercase "heartburn"        PARSE OK   cc kept, meds 1, allergies 1
+     *   capitalised "Heartburn"      PARSE FAIL chief_complaint, medications
+     *                                           AND ALLERGIES all discarded
+     *   off-lexicon "burping"        PARSE FAIL  (same)
+     *   1 good + 1 capitalised       PARSE FAIL  (same)
+     *
+     * ⚠️ AND THE CAPITALISED ROW IS NOT A CURIOSITY: this repository's own
+     * comment records that L3 capitalises the finding habitually. Nothing on
+     * the model's side was ever told the lexicon either (see the prompt below),
+     * so attempt 1 of every call was blind to all 72 tokens.
+     *
+     * ⚠️ THE FILE'S OWN ALLERGIES FIELD CARRIES THE SENTENCE THIS VIOLATED:
+     * "SAFETY INVARIANT: `superseded` is a doctor-review hint ONLY — it must
+     * NEVER remove an allergy from a safety check." One capitalised ROS token
+     * removed every allergy on the visit.
+     *
+     * SO THE VERB CHANGES FROM REFUSE-THE-OBJECT TO RESOLVE-THE-ITEM, at the
+     * same seam and with the same authority. Normalise first (the projector's
+     * OWN normaliser, imported — `Heartburn` was already becoming `heartburn`
+     * one layer down), then coerce what remains to `other`, keeping the
+     * doctor's words. ORDER IS LOAD-BEARING: coerce-first would demote a real
+     * lexicon symptom that merely had a capital letter.
+     *
+     * ⚠️ IDEMPOTENT ON PURPOSE — the `??` preserves an existing verbatim. This
+     * schema is parsed a SECOND time at `sample-preview-transcript.ts`, at
+     * module load, and a transform that overwrote on re-parse would lose the
+     * original words on the second pass.
+     */
+    .transform((items, ctx) =>
+      items.map((item, index) => {
+        const system = resolveRosSystem(item.system);
+        const finding = resolveRosFinding(system, item.finding);
+        // ⚠️ ENFORCEMENT SURVIVES THE CHANGE — it just judges the RESOLVER's
+        // output instead of the model's, and it is INSIDE the transform
+        // because that is where `ctx` exists. If a future edit to
+        // `resolveRosSystem` or `resolveRosFinding` can emit something outside
+        // the closed set, this reds rather than letting an unregistered
+        // concept reach the projector. It cannot fire on model input: every
+        // value here has already been through a resolver whose range IS the
+        // closed set, which is exactly the property being asserted.
+        if (!ROS_SYSTEMS_RESOLVED.includes(system)) {
           ctx.addIssue({
             code: 'custom',
-            message:
-              `finding "${item.finding}" is not in the ${item.system} review-of-systems ` +
-              `lexicon; use one of ${allowed.join(', ')}`,
+            path: [index, 'system'],
+            message: `resolver emitted unknown system "${system}"`,
+          });
+        } else if (!symptomsFor(system).includes(finding)) {
+          ctx.addIssue({
+            code: 'custom',
             path: [index, 'finding'],
+            message: `resolver emitted off-lexicon finding "${finding}" for ${system}`,
           });
         }
-      });
-    })
+        return {
+          ...item,
+          system,
+          finding,
+          finding_verbatim:
+            finding === item.finding ? item.finding_verbatim : (item.finding_verbatim ?? item.finding),
+          system_verbatim:
+            system === item.system ? item.system_verbatim : (item.system_verbatim ?? item.system),
+        };
+      }),
+    )
     .default([]),
   exam_findings: z
     .array(
@@ -424,7 +492,7 @@ export interface Layer3Output {
 // surface is testable + easy to eyeball.
 // ---------------------------------------------------------------------------
 
-const COMMON_CATEGORIES = [
+export const COMMON_CATEGORIES = [
   'Categories:',
   '- chief_complaint: {statement, evidence_quote, speaker?, timestamp?} or null',
   '- hpi: {onset?, duration?, quality?, severity?, location?, timing?,',
@@ -478,14 +546,35 @@ const COMMON_CATEGORIES = [
   '  WRONG:    "social_history": { "occupation": "factory operative" }',
   '- ros: list of {system, finding, polarity, evidence_quote,',
   '  laterality?, ...} (review of systems).',
+  // ⚠️ GENERATED FROM `ROS_LEXICON`, NEVER HAND-COPIED. The schema enforces
+  // this vocabulary; before this block nothing ever SHOWED it to the model.
+  // Measured on the assembled prompt: 1 of 72 symptom tokens and 0 of 13
+  // system names appeared, and the single hit was a false positive (the word
+  // "frequency" in the medications bullet). The model's only exposure to the
+  // list was the Zod error replayed AFTER a rejection — so on attempt 1 of
+  // every call it was guessing, and one wrong guess used to discard the whole
+  // extraction. One definition, interpolated: a second hand-written copy is
+  // how the prompt and the schema would drift apart again.
+  '    * system MUST be one of these, and finding MUST come from that',
+  '      system\'s list:',
+  ...ROS_SYSTEMS.map(
+    (system) => `        ${system}: ${symptomsFor(system).join(', ')}`,
+  ),
+  '    * These are snake_case identifiers, not prose. Use the identifier',
+  '      exactly as written above — lower case, underscores.',
+  '    * If the patient reports a symptom that is NOT in its system\'s',
+  '      list, use finding "other" and put the words the doctor actually',
+  '      used in finding_verbatim. Never invent a token, and never drop',
+  '      the symptom.',
   '    * polarity: REQUIRED, "affirmed" (the patient HAS it) or "denied"',
   '      (the patient does NOT). Never omit it and never guess it from the',
   '      shape of the sentence.',
   '    * Record the polarity of THIS finding, not of the sentence it came',
   '      from — one sentence can carry BOTH. "She denies chest pain but',
-  '      does get short of breath" is TWO entries: chest pain denied, AND',
-  '      shortness of breath affirmed. Do not let the denial swallow the',
-  '      rest of the sentence.',
+  '      does get short of breath" is TWO entries:',
+  '      {system: cardiovascular, finding: chest_pain, polarity: denied}',
+  '      AND {system: respiratory, finding: dyspnea, polarity: affirmed}.',
+  '      Do not let the denial swallow the rest of the sentence.',
   '    * Patients do not speak in charting language. "Any chest pain?" —',
   '      "None at all" is polarity "denied". So are "nope", "nothing like',
   '      that", "never had it". Absence of the word "no" is not absence of',
@@ -495,7 +584,8 @@ const COMMON_CATEGORIES = [
   '    * laterality: include it whenever a side was stated, and use the',
   '      side of THIS finding — never widen one side to bilateral because',
   '      the other was mentioned. "Numbness in the right hand, left hand is',
-  '      fine" is laterality "right". Omit the field when no side was',
+  '      fine" is {system: neurologic, finding: numbness, polarity:',
+  '      affirmed, laterality: right}. Omit laterality when no side was',
   '      stated; do not guess one.',
   '- exam_findings: list of {system, finding, evidence_quote, ...} — only',
   '  what the doctor stated/observed',

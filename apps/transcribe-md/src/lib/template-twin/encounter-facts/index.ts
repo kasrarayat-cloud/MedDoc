@@ -9,6 +9,7 @@
 
 import { createHash } from 'node:crypto';
 
+import { conceptSegment } from '../concept-segment';
 import { rosConcept } from '../ros-lexicon';
 
 import {
@@ -90,6 +91,12 @@ export interface EncounterEntitySnapshot {
        *  still projects, falling back to the inference it always used. */
       polarity?: 'affirmed' | 'denied';
       laterality?: 'left' | 'right' | 'bilateral';
+      /** The doctor's own words, set by L3's resolver ONLY when an
+       *  off-lexicon symptom was coerced to `other`. Optional here (not in the
+       *  L3 schema) so a snapshot captured before the field existed still
+       *  projects, byte-identically. */
+      finding_verbatim?: string;
+      system_verbatim?: string;
     }
   >;
   exam_findings?: ReadonlyArray<
@@ -249,16 +256,7 @@ function digest(value: string): string {
  * Stable concept segment used for source-exposed system/test names. This is
  * identifier normalization only; it does not change the clinical meaning.
  */
-export function conceptSegment(value: string): string {
-  const segment = value
-    .normalize('NFKC')
-    .trim()
-    .toLocaleLowerCase('en-US')
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 80);
-  return segment || 'unspecified';
-}
+export { conceptSegment } from '../concept-segment';
 
 /**
  * Case-INSENSITIVE offset of the value inside its own evidence quote, or -1.
@@ -705,7 +703,14 @@ export function projectEncounterFacts(input: ProjectEncounterFactsInput): Encoun
       // Both halves come from the CLOSED lexicon the L3 schema enforces, so
       // this cannot produce a concept the registry will refuse.
       concept: rosConcept(conceptSegment(item.system), conceptSegment(item.finding)),
-      value: item.finding,
+      // ⚠️ THE DOCTOR'S OWN WORDS, WHEN THE LEXICON COULD NOT HOLD THEM.
+      // `finding` is a machine token from a CLOSED set, so it is what the
+      // CONCEPT is built from — but it is not what a document should print.
+      // When L3's resolver coerced an off-lexicon symptom to `other` it kept
+      // the original in `finding_verbatim`, and that is the value a note or a
+      // form must carry. Without this a form renders the literal word `other`
+      // where the doctor said "belching".
+      value: item.finding_verbatim ?? item.finding,
       evidence: item,
       defaultTemporality: 'current',
       // Q1 audit §02.9 — L3 states these now, so stop guessing them back out of
