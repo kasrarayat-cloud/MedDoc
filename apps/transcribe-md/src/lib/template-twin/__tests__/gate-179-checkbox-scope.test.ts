@@ -21,6 +21,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { deriveFieldValueFromFact } from '../field-value-derivation';
+import { resolveTemplateFields } from '../resolver/index';
 import {
   TemplateFieldSchema,
   SemanticMappingSchema,
@@ -157,5 +158,59 @@ describe('#179(5) — a checkbox with a multi-symptom scope is REFUSED', () => {
   it('a TWO-symptom scope is already multi — the boundary is >1, not >2', () => {
     const two = mapping(['ros.gastrointestinal.heartburn', 'ros.gastrointestinal.nausea']);
     expect(deriveFieldValueFromFact(checkbox(), two, fact('affirmed'))).toBeNull();
+  });
+});
+
+/**
+ * ⚠️ AND THE REFUSAL MUST HOLD WHERE THE VALUE IS ACTUALLY WRITTEN.
+ *
+ * Every arm above drives `deriveFieldValueFromFact`, which honours the
+ * multi-scope refusal correctly and always did. The RESOLVER does not call it —
+ * it carries its own inline `case 'checkbox'` reading only `fact.polarity`, the
+ * finding discarded. So #179(5) was implemented, commented, and tested against
+ * a helper the fill path never reaches.
+ *
+ * MEASURED, both trees, one multi-scope mapping and one affirmed fact:
+ *   before   resolver value=true  status=supported     | helper=null
+ *   after    resolver value=null  status=not_mentioned | helper=null
+ * The single-scope control ticks in BOTH trees, so this measures the refusal
+ * and not a resolver that stopped filling checkboxes.
+ */
+describe('#179(5) — the multi-scope refusal reaches the RESOLVER, not just the helper', () => {
+  const HEARTBURN = 'ros.gastrointestinal.heartburn';
+  const MULTI = [HEARTBURN, 'ros.gastrointestinal.nausea'];
+
+  function resolveWith(scope: string[]) {
+    const [resolution] = resolveTemplateFields({
+      fields: [checkbox()],
+      mappings: [mapping(scope)],
+      facts: [fact('affirmed')],
+      certifiedFieldIds: [FIELD_ID],
+    });
+    return resolution;
+  }
+
+  it('⚠️ a multi-scope box is NOT ticked by one affirmed fact', () => {
+    const r = resolveWith(MULTI);
+    expect(r.value).toBeNull();
+    expect(r.status).not.toBe('supported');
+  });
+
+  it('NON-VACUITY: a SINGLE-scope box IS still ticked by the same fact', () => {
+    // Without this the arm above passes against a resolver that stopped
+    // filling checkboxes altogether, which would blank every ROS clause.
+    const r = resolveWith([HEARTBURN]);
+    expect(r.value).toBe(true);
+    expect(r.status).toBe('supported');
+  });
+
+  it('AGREEMENT: the resolver and the derivation helper now give the same answer', () => {
+    // The defect was not that either was wrong on its own — the helper was
+    // right all along. It was that they disagreed and the resolver won.
+    for (const scope of [MULTI, [HEARTBURN]]) {
+      const viaResolver = resolveWith(scope).value;
+      const viaHelper = deriveFieldValueFromFact(checkbox(), mapping(scope), fact('affirmed'));
+      expect(viaResolver, `scope=${scope.join('|')}`).toBe(viaHelper);
+    }
   });
 });

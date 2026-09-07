@@ -480,6 +480,33 @@ function resolveOne(
     return missingResolution(field, mapping, allFacts, undefined, true);
   }
 
+  // ⚠️ #179(5) — A CHECKBOX ANSWERS FOR EXACTLY ONE SYMPTOM, AND THE REFUSAL
+  // HAS TO LIVE HERE BECAUSE THE FILL PATH NEVER REACHED THE OTHER ONE.
+  //
+  // `deriveFieldValueFromFact` already refuses a multi-scope tick, and the
+  // validator and the bridge both call it. The RESOLVER does not — it carries
+  // its own inline `case 'checkbox'` which reads ONLY `fact.polarity` and
+  // discards the finding. So the ruled refusal existed, was commented, was
+  // tested against the derivation helper, and had no effect whatever on the
+  // value actually written to the document.
+  //
+  // A box whose declared scope covers several symptoms cannot be answered by
+  // one fact: "affirmed" is ambiguous between them. Refused rather than
+  // guessed — an unticked box a clinician can tick is recoverable, a wrongly
+  // ticked one is not.
+  //
+  // ⚠️ A DEFERRAL, NOT A KEPT DEFAULT. Facts ARE in hand here, so #191's
+  // `conceptUnmatched` flag is deliberately not passed — the same reasoning as
+  // the fixed-grid cell below. The encounter DID speak to this field; the
+  // resolver simply cannot say which symptom it spoke about.
+  if (
+    field.kind === 'checkbox' &&
+    mapping.conceptScope &&
+    mapping.conceptScope.length > 1
+  ) {
+    return missingResolution(field, mapping, allFacts);
+  }
+
   // A FIXED-GRID TABLE CELL IS ADDRESSED BY ITS ROW, AND THE RESOLVER CANNOT
   // SEE ROWS.
   // Its only inputs are the field's concept and the fact set. In a 26-row vein
