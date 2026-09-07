@@ -513,6 +513,69 @@ SELECT 'LOCK-CONTROL (pg_locks): 0 held before the counted write, 1 held after',
        '0|1', got, CASE WHEN got = '0|1' THEN 'PASS' ELSE 'FAIL' END
   FROM (SELECT t210_lock_probe() AS got) q;
 
+-- ══════════════════════════════════════════════════════════════════════════
+-- ⚠️ THE REFUSAL'S SENTENCE IS READ — RULING #256. NO ARM COULD READ IT BEFORE.
+--
+-- `t210_try` reduces every outcome to ALLOWED / REFUSED / MATCHED-NOTHING /
+-- SETUP-FAILED by prefix-matching `users_last_owner_guard:%`. That is the right
+-- shape for asking WHETHER a write was refused, and it is structurally blind to
+-- WHAT the doctor was told — so all 41 arms passed over a refusal that called
+-- the caller an "other member" and told a solo owner to transfer ownership to
+-- nobody.
+--
+-- ⚠️ THE MIGRATION NAMES THAT EXACT CLASS TWICE AS "WORSE THAN NO GUARD" AND
+-- THEN SHIPPED IT IN ITS OWN RAISE. A message is a product surface; a pack that
+-- cannot see one cannot certify it.
+CREATE OR REPLACE FUNCTION t210_message(stmt text) RETURNS text AS $$
+BEGIN
+    BEGIN
+        EXECUTE stmt;
+        RETURN 'NOT-REFUSED';
+    EXCEPTION WHEN others THEN
+        RETURN SQLERRM;
+    END;
+END $$ LANGUAGE plpgsql;
+
+-- A SOLO owner demoting themselves: refused correctly (arm 21), and the sentence
+-- must not invent a member or prescribe an impossible remedy.
+INSERT INTO arm_result
+SELECT 'MESSAGE-CONTROL: a solo owner is not told to transfer ownership to nobody',
+       'names-no-other-member', got,
+       CASE WHEN got = 'names-no-other-member' THEN 'PASS' ELSE 'FAIL' END
+  FROM (
+    SELECT CASE
+             WHEN msg LIKE '%other member(s) remain%' OR msg LIKE '%Transfer ownership first%'
+               THEN 'FALSE-SENTENCE: ' || msg
+             WHEN msg LIKE '%no one to transfer ownership to%' THEN 'names-no-other-member'
+             ELSE 'UNEXPECTED: ' || msg
+           END AS got
+      FROM (SELECT t210_message(
+              $$UPDATE users SET "practiceRole"='CLINICIAN' WHERE id='t210_o'$$) AS msg) m
+  ) q;
+
+-- ⚠️ THE OTHER HALF, OR THE ARM ABOVE IS SATISFIED BY DELETING BOTH SENTENCES.
+-- When OTHER members really do remain, the doctor must still be told to transfer
+-- ownership — and the COUNT must be of other people, not of the caller.
+INSERT INTO arm_result
+SELECT 'MESSAGE-CONTROL: with real others remaining, the count excludes the caller',
+       'transfer-1', got,
+       CASE WHEN got = 'transfer-1' THEN 'PASS' ELSE 'FAIL' END
+  FROM (
+    -- ⚠️ ONE, NOT TWO — AND MY FIRST DRAFT OF THIS ARM EXPECTED TWO AND FAILED.
+    -- `t210_pmulti` holds three rows: an able OWNER, a SUSPENDED owner and a live
+    -- CLINICIAN. Only the clinician is a LIVE MEMBER, so demoting the able owner
+    -- genuinely leaves ONE other person behind. The arm was wrong and the code
+    -- was right — which is the arm doing its job in the direction nobody plans
+    -- for, and the reason the expectation is spelled out here rather than
+    -- computed from the same predicate the guard uses.
+    SELECT CASE
+             WHEN msg LIKE '%while 1 other member(s) remain%' THEN 'transfer-1'
+             ELSE 'WRONG-COUNT-OR-SENTENCE: ' || msg
+           END AS got
+      FROM (SELECT t210_message(
+              $$UPDATE users SET "practiceRole"='CLINICIAN' WHERE id='t210_a'$$) AS msg) m
+  ) q;
+
 \pset format aligned
 \echo ''
 \echo '=== RULING #210 — DETERMINISTIC ARMS ==='
@@ -528,8 +591,8 @@ SELECT count(*) FILTER (WHERE verdict='PASS')            AS pass,
        count(*) FILTER (WHERE verdict='FAIL')            AS fail,
        count(*) FILTER (WHERE got = 'MATCHED-NOTHING')   AS vacuous,
        count(*)                                          AS arms_run,
-       41                                                AS arms_expected,
-       CASE WHEN count(*) = 41 AND count(*) FILTER (WHERE verdict='FAIL') = 0
+       43                                                AS arms_expected,
+       CASE WHEN count(*) = 43 AND count(*) FILTER (WHERE verdict='FAIL') = 0
             THEN '🟢 all arms ran and passed'
             ELSE '🔴 ARM COUNT OR VERDICT MISMATCH' END  AS verdict
   FROM arm_result WHERE verdict IS NOT NULL;

@@ -191,6 +191,7 @@ CREATE OR REPLACE FUNCTION users_last_owner_guard() RETURNS trigger AS $fn$
 DECLARE
     owners_left  BIGINT;
     members_left BIGINT;
+    self_remains BOOLEAN;
 BEGIN
     -- ⚠️ THE RETURN VALUES BELOW ARE IGNORED. This runs as an AFTER constraint
     -- trigger, where the result is discarded; they are kept because plpgsql
@@ -306,9 +307,15 @@ BEGIN
     --
     -- ⚠️ THIS IS THE DOOR THE SCHEMA NAMES. `schema.prisma`: "When a solo doctor
     -- later wants to work with colleagues, migrate them to a real Practice."
-    IF TG_OP = 'UPDATE'
-       AND NEW."practiceId" = OLD."practiceId"
-       AND users_is_live_member(NEW) THEN
+    -- ⚠️ `self_remains` IS TRACKED SEPARATELY FROM THE COUNT, AND THAT IS THE
+    -- WHOLE OF THE #256 REPAIR. `members_left` was one number carrying two
+    -- facts — how many OTHER people are left, and whether the row being written
+    -- is one of the people left behind — and the refusal then reported the sum
+    -- as though it were the first.
+    self_remains := TG_OP = 'UPDATE'
+                    AND NEW."practiceId" = OLD."practiceId"
+                    AND users_is_live_member(NEW);
+    IF self_remains THEN
         members_left := members_left + 1;
     END IF;
 
@@ -317,9 +324,34 @@ BEGIN
         RETURN NEW;
     END IF;
 
+    -- ⚠️ TWO SENTENCES, BECAUSE THERE ARE TWO SITUATIONS AND THE OLD ONE
+    -- DESCRIBED ONLY THE OTHER — RULING #256.
+    --
+    -- A SOLO owner demoting themselves is refused correctly (they are the person
+    -- stranded — arm 21, ruling #222). But the message read "while 1 other
+    -- member(s) remain. Transfer ownership first", and BOTH HALVES WERE FALSE:
+    -- the "1" was the caller's OWN ROW, counted by the clause above, and there
+    -- was nobody to transfer ownership TO.
+    --
+    -- ⚠️ THIS FILE NAMES THAT DEFECT CLASS TWICE AS "WORSE THAN NO GUARD" —
+    -- at :129-136 for the bare row count, and again for the app layer — and then
+    -- shipped it in its own RAISE. A refusal naming an impossible remedy sends a
+    -- doctor looking for a member who does not exist.
+    --
+    -- ⚠️ AND ALL 41 ARMS WERE BLIND TO IT BY CONSTRUCTION: `t210_try` reduces
+    -- every outcome to ALLOWED / REFUSED / MATCHED-NOTHING / SETUP-FAILED by
+    -- prefix-matching `users_last_owner_guard:%`, so no arm in the pack ever
+    -- READS the sentence. `MESSAGE-CONTROL` in the proofs closes that.
+    IF self_remains AND members_left = 1 THEN
+        RAISE EXCEPTION
+            'users_last_owner_guard: refusing to leave practice % unadministered. You are its only active OWNER and its only member, so there is no one to transfer ownership to — appoint another owner first, or delete the practice.',
+            OLD."practiceId"
+            USING ERRCODE = '23514';
+    END IF;
+
     RAISE EXCEPTION
         'users_last_owner_guard: refusing to leave practice % with zero active OWNERs while % other member(s) remain. Transfer ownership first.',
-        OLD."practiceId", members_left
+        OLD."practiceId", members_left - (CASE WHEN self_remains THEN 1 ELSE 0 END)
         USING ERRCODE = '23514';
 END;
 $fn$ LANGUAGE plpgsql;
