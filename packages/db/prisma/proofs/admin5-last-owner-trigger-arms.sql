@@ -67,14 +67,21 @@ SELECT 'FIXTURE-CONTROL: #1026 predicate sees 2, this trigger sees 1', '2|1',
 -- block, where nothing rolls it back.
 CREATE OR REPLACE FUNCTION t210_try(arm text, expected text, stmt text, setup text DEFAULT NULL)
 RETURNS void AS $$
-DECLARE got text;
+DECLARE got text; n_rows bigint := 0;
 BEGIN
     BEGIN
         IF setup IS NOT NULL THEN EXECUTE setup; END IF;
         EXECUTE stmt;
+        -- ⚠️ AN ALLOW ARM MUST DISTINGUISH "THE GUARD ALLOWED IT" FROM "THE
+        -- STATEMENT MATCHED NOTHING". Both complete without raising, and the
+        -- first version called both ALLOWED — so an arm whose fixture drifted
+        -- out from under it would go on passing while testing nothing. The
+        -- adversarial pass found this across five arms at once.
+        GET DIAGNOSTICS n_rows = ROW_COUNT;
         RAISE EXCEPTION 'T210_UNDO';       -- the statement was ALLOWED; undo it
     EXCEPTION WHEN others THEN
-        IF    SQLERRM = 'T210_UNDO'                     THEN got := 'ALLOWED';
+        IF    SQLERRM = 'T210_UNDO' AND n_rows > 0      THEN got := 'ALLOWED';
+        ELSIF SQLERRM = 'T210_UNDO'                     THEN got := 'MATCHED-NOTHING';
         -- The refusal is identified BY ITS OWN MESSAGE, never by "something threw".
         ELSIF SQLERRM LIKE 'users_last_owner_guard:%'   THEN got := 'REFUSED';
         ELSE  got := 'OTHER-ERROR: ' || SQLERRM;
@@ -230,8 +237,18 @@ SELECT arm, expected, got, verdict FROM arm_result WHERE verdict IS NOT NULL ORD
 \echo ''
 SELECT arm, expected AS must_be, got FROM arm_result WHERE verdict IS NULL;
 \echo ''
-SELECT count(*) FILTER (WHERE verdict='PASS') AS pass,
-       count(*) FILTER (WHERE verdict='FAIL') AS fail
+-- ⚠️ THE SUMMARY ASSERTS ITS OWN POPULATION. Counting only the rows that
+-- happen to be present lets a silently-dropped arm read as a clean run — the
+-- check whose passing condition is an empty set passes hardest when pointed at
+-- nothing. EXPECTED_ARMS is stated here and compared.
+SELECT count(*) FILTER (WHERE verdict='PASS')            AS pass,
+       count(*) FILTER (WHERE verdict='FAIL')            AS fail,
+       count(*) FILTER (WHERE got = 'MATCHED-NOTHING')   AS vacuous,
+       count(*)                                          AS arms_run,
+       24                                                AS arms_expected,
+       CASE WHEN count(*) = 24 AND count(*) FILTER (WHERE verdict='FAIL') = 0
+            THEN '🟢 all arms ran and passed'
+            ELSE '🔴 ARM COUNT OR VERDICT MISMATCH' END  AS verdict
   FROM arm_result WHERE verdict IS NOT NULL;
 
 ROLLBACK;

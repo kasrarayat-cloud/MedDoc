@@ -67,6 +67,19 @@ function fnBody(name: string, terminator: string): string {
     .join('\n');
 }
 
+/** One SQL statement, from its opening keyword to its `;`, COMMENTS STRIPPED. */
+function statement(opening: string): string {
+  const start = sql.indexOf(opening);
+  expect(start, `${opening} is not in the migration`).toBeGreaterThan(-1);
+  const end = sql.indexOf(';', start);
+  expect(end, `${opening} has no terminator`).toBeGreaterThan(start);
+  return sql
+    .slice(start, end)
+    .split('\n')
+    .filter((l) => !l.trimStart().startsWith('--'))
+    .join('\n');
+}
+
 /** Quoted identifiers the SQL predicate actually reads, e.g. `"isActive"`. */
 function sqlColumns(): string[] {
   const body = activeOwnerSqlBody();
@@ -150,9 +163,10 @@ describe('ruling #210 — one definition of an active practice OWNER', () => {
   });
 
   it('the trigger covers BOTH operations that can remove a seat', () => {
-    const i = sql.indexOf('CREATE CONSTRAINT TRIGGER "users_last_owner_guard_after_write"');
-    expect(i, 'the constraint trigger is not created').toBeGreaterThan(-1);
-    const trigger = sql.slice(i);
+    // Sliced to the statement's own terminator and comment-stripped: the raw
+    // slice ran to end-of-file, so any later comment naming the operations
+    // satisfied it.
+    const trigger = statement('CREATE CONSTRAINT TRIGGER "users_last_owner_guard_after_write"');
     expect(trigger).toMatch(/AFTER\s+UPDATE\s+OR\s+DELETE\s+ON\s+"users"/);
     expect(trigger).toContain('FOR EACH ROW');
   });
@@ -170,9 +184,8 @@ describe('ruling #210 — one definition of an active practice OWNER', () => {
     // run once the statement has produced it. Reverting to `BEFORE ... FOR EACH
     // ROW` would re-break the E2E teardown intermittently, and nothing else here
     // would notice — so this arm names the shape rather than the behaviour.
-    const i = sql.indexOf('CREATE CONSTRAINT TRIGGER');
-    const trigger = sql.slice(i, sql.indexOf(';', i));
-    expect(trigger).toContain('DEFERRABLE INITIALLY IMMEDIATE');
+    expect(statement('CREATE CONSTRAINT TRIGGER "users_last_owner_guard_after_write"'))
+      .toContain('DEFERRABLE INITIALLY IMMEDIATE');
 
     // and no BEFORE row trigger on users survives anywhere in the migration
     const code = sql
@@ -183,16 +196,20 @@ describe('ruling #210 — one definition of an active practice OWNER', () => {
   });
 
   it('the guard SERIALIZES before it counts — a count read and then acted on is forbidden', () => {
-    const guard = sql.slice(
-      sql.indexOf('CREATE OR REPLACE FUNCTION users_last_owner_guard()'),
-      sql.indexOf('$fn$ LANGUAGE plpgsql;')
-    );
+    // ⚠️ COMMENTS STRIPPED, AND THAT IS THE WHOLE ARM. Reading the raw slice let
+    // the lock be DELETED and replaced by a comment mentioning it — measured
+    // 12/12 green. The migration explains the lock at length in prose directly
+    // above it, so a whole-body search is satisfied by the explanation.
+    const guard = fnBody('users_last_owner_guard()', '$fn$ LANGUAGE plpgsql;');
     const lock = guard.indexOf('pg_advisory_xact_lock');
     const count = guard.indexOf('SELECT count(*) INTO owners_left');
-    expect(lock, 'the guard takes no lock').toBeGreaterThan(-1);
+    const forUpdate = guard.indexOf('FOR UPDATE');
+    expect(lock, 'the guard takes no advisory lock (in CODE, not in a comment)').toBeGreaterThan(-1);
+    expect(forUpdate, 'the guard takes no row lock — REPEATABLE READ would skew').toBeGreaterThan(-1);
     // ORDER is the assertion. A lock taken after the count guards nothing, and
     // both would be present either way.
     expect(lock).toBeLessThan(count);
+    expect(forUpdate).toBeLessThan(count);
   });
 
   it('there is a LIVE-MEMBER definition too, and it excludes suspension', () => {
@@ -225,9 +242,8 @@ describe('ruling #210 — one definition of an active practice OWNER', () => {
     // An INSERT is not the only way to put a live member into an ownerless
     // practice: unsuspending or reactivating one does it as an UPDATE whose OLD
     // row is not an active owner, which the removal guard returns early on.
-    const i = sql.indexOf('CREATE CONSTRAINT TRIGGER "users_no_orphan_member_after_insert"');
-    expect(i, 'the orphan-member trigger is not created').toBeGreaterThan(-1);
-    expect(sql.slice(i, sql.indexOf(';', i))).toMatch(/AFTER\s+INSERT\s+OR\s+UPDATE\s+ON\s+"users"/);
+    expect(statement('CREATE CONSTRAINT TRIGGER "users_no_orphan_member_after_insert"'))
+      .toMatch(/AFTER\s+INSERT\s+OR\s+UPDATE\s+ON\s+"users"/);
   });
 
   it('both doors ruling #210 names in scope call the friendly refusal', () => {
