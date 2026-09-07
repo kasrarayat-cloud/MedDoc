@@ -473,7 +473,7 @@ export const EncounterFactSchema = z
         'verified_note_selection',
         'clinician_correction',
         /**
-         * #234 — A VALUE TAKEN FROM THE PATIENT RECORD, NOT FROM THE DICTATION.
+         * #247 — A VALUE TAKEN FROM THE PATIENT RECORD, NOT FROM THE DICTATION.
          *
          * Its own class rather than a reuse, and per-visit by construction:
          * `approved_practice_default` is PRACTICE-wide, and a patient's name is

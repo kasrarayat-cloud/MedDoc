@@ -136,7 +136,7 @@ function asJson(value: unknown): Prisma.InputJsonValue {
 }
 
 /**
- * ⚠️ #234 — A `visit_record` FACT CAN NEVER REACH A CERTIFICATION MANIFEST.
+ * ⚠️ #247 — A `visit_record` FACT CAN NEVER REACH A CERTIFICATION MANIFEST.
  *
  * The certification artifact is retained, re-verified and shown; the ruling is
  * that it NEVER contains a real name. A `visit_record` fact is by definition a
@@ -607,7 +607,7 @@ export async function runTemplateTwinSyntheticTest(input: {
         `templateSha=${String(templateSha256).slice(0, 12)}`,
     );
   }
-  // ⚠️ #234 — A `visit_record` FACT CAN NEVER REACH A CERTIFICATION MANIFEST.
+  // ⚠️ #247 — A `visit_record` FACT CAN NEVER REACH A CERTIFICATION MANIFEST.
   //
   // The certification artifact is retained, shown and re-verified; the ruling is
   // that it NEVER contains a real name. A `visit_record` fact is by definition a

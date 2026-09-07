@@ -1,5 +1,5 @@
 // ============================================================================
-// #234 — THE `visit_record` FACT CLASS.
+// #247 — THE `visit_record` FACT CLASS.
 // ----------------------------------------------------------------------------
 // A value taken from the patient record did not come out of the doctor's mouth.
 // The whole fill path is built on cited EncounterFacts carrying an evidence
@@ -44,7 +44,7 @@ function fact(overrides: Record<string, unknown> = {}) {
   });
 }
 
-describe('#234 — the class exists and is distinct', () => {
+describe('#247 — the class exists and is distinct', () => {
   it('the fact schema admits `visit_record`', () => {
     expect(fact({ sourceType: 'visit_record' }).sourceType).toBe('visit_record');
   });
@@ -59,7 +59,7 @@ describe('#234 — the class exists and is distinct', () => {
   });
 });
 
-describe('#234 — the one existing record-derived fill stops claiming it was dictated', () => {
+describe('#247 — the one existing record-derived fill stops claiming it was dictated', () => {
   const field = {
     fieldId: FIELD_ID,
     kind: 'date',
@@ -112,7 +112,7 @@ describe('#234 — the one existing record-derived fill stops claiming it was di
   });
 });
 
-describe('#234 — a record-derived fact can never reach a CERTIFICATION manifest', () => {
+describe('#247 — a record-derived fact can never reach a CERTIFICATION manifest', () => {
   it('the guard refuses one, and names it without copying its value', () => {
     let caught: unknown;
     try {

@@ -117,7 +117,7 @@ export const ExtractedEntities = z.object({
   hpi: HpiDimensions.nullable(),
   past_medical_history: z.array(factWithEvidence('condition')).default([]),
   /**
-   * #233 family 1 — SURGERIES ARE NOT CONDITIONS.
+   * #246 family 1 — SURGERIES ARE NOT CONDITIONS.
    *
    * Its own concept because a form asks for them separately, and because the
    * proposer's nearest match is `past_medical_history` — which is how the
@@ -125,7 +125,7 @@ export const ExtractedEntities = z.object({
    * MEDICAL history concept. Certifying that would have printed the patient's
    * conditions into a surgical field.
    *
-   * ⚠️ `.default([])` IS LOAD-BEARING — canon 130. Without it this becomes a
+   * ⚠️ `.default([])` IS LOAD-BEARING — canon 133. Without it this becomes a
    * REQUIRED key and breaks the MOCK_AI fixture, the module-load parse in
    * `sample-preview-transcript.ts`, and every resumed job (which CASTS rather
    * than parses), all at once.
@@ -191,7 +191,7 @@ export const ExtractedEntities = z.object({
       drugs: liftStringToFact('status'),
       occupation: liftStringToFact('value'),
       /**
-       * #233 family 2 — a sub-concept beside `occupation`, not a new family.
+       * #246 family 2 — a sub-concept beside `occupation`, not a new family.
        *
        * ⚠️ THE INNER KEY IS LOAD-BEARING AND THERE IS NO SHARED CONSTANT
        * BINDING IT TO THE PROJECTOR. `smoking`/`alcohol`/`drugs` use `status`
@@ -449,9 +449,9 @@ export const ExtractedEntities = z.object({
     )
     .default([]),
   /**
-   * #233 family 4 — TOTAL ENCOUNTER TIME, AS A NUMBER.
+   * #246 family 4 — TOTAL ENCOUNTER TIME, AS A NUMBER.
    *
-   * ⚠️ "A NUMBER" IS ABOUT THE EXTRACTION AXIS, NOT THE CONTROL — canon 131.
+   * ⚠️ "A NUMBER" IS ABOUT THE EXTRACTION AXIS, NOT THE CONTROL — canon 134.
    * The controls this fills (`Total minutes spent with patient`, `Total time
    * minutes`) compile `narrative_text`, and `expectedDataTypeForFieldKind`
    * reads the compiler's KIND and never the concept. The two are independent,

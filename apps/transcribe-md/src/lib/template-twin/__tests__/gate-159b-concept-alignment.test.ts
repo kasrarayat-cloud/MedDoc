@@ -62,12 +62,12 @@ const FULL_ENTITIES = {
   past_medical_history: [
     { condition: 'Hypertension', evidence_quote: 'History of hypertension.' },
   ],
-  // #233 family 1 — the census asserts the fixture reaches EVERY emission
+  // #246 family 1 — the census asserts the fixture reaches EVERY emission
   // site, so a new site without a fixture row is an unwatched emitter.
   past_surgical_history: [
     { procedure: 'Appendicectomy', evidence_quote: 'Appendicectomy in childhood.' },
   ],
-  // #233 family 4 — value is the de-unit'd string, number rides beside it.
+  // #246 family 4 — value is the de-unit'd string, number rides beside it.
   total_time_minutes: { minutes: 45, evidence_quote: 'Total time forty five minutes.' },
   medications: [
     {
@@ -409,7 +409,7 @@ describe('#159(b) — concept alignment: the emitter and the registry agree', ()
       'social_history.alcohol',
       'social_history.drugs',
       'social_history.occupation',
-      // #233 family 2 — an ATTRIBUTE, not a list. A person has ONE marital
+      // #246 family 2 — an ATTRIBUTE, not a list. A person has ONE marital
       // status, so joining several would be as wrong as "10 mg; 20 mg" on a
       // dose. It sits beside occupation for the same reason.
       'social_history.marital_status',
@@ -418,7 +418,7 @@ describe('#159(b) — concept alignment: the emitter and the registry agree', ()
     // The partition must cover every member exactly once — no unnamed bucket.
     const all = Object.values(REGISTRY_SUBCONCEPTS).flat().sort();
     expect([...ACCUMULATES, ...SINGLE].sort()).toEqual(all);
-    // #233 family 2 — 12 -> 13. This count is deliberately hardcoded so that
+    // #246 family 2 — 12 -> 13. This count is deliberately hardcoded so that
     // adding a sub-concept forces a reader to decide whether it ACCUMULATES or
     // is SINGLE, which is the whole point of the partition above.
     expect(all.length).toBe(13);
