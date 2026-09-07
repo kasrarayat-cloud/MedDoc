@@ -136,6 +136,9 @@ else
   [ -r "$REVLIB" ] || {
     echo "🔴 run-ruled-mutation: $REVLIB missing or unreadable. REFUSING."
     echo "   Nothing has been run."; exit 1; }
+  # ⚠️ `declaration.sh` IS ALREADY SOURCED ABOVE, AND THAT IS NOT INCIDENTAL:
+  # the carry-forward test below reads its `DECLARATION_NONRUNTIME_RE`. The
+  # library refuses loudly if it is not in scope rather than measuring nothing.
   # shellcheck source=lib/container-revision.sh
   . "$REVLIB"
 

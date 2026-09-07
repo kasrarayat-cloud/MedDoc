@@ -74,11 +74,65 @@ container_revision_verdict() {
     echo "refuse|no commit was given to compare the label against."
     return 0
   fi
-  if [ "$label" != "$head" ]; then
-    echo "refuse|the running container is at ${label:0:12} and this tree is at ${head:0:12}. They are DIFFERENT PROGRAMS: a container carries the tree as of its BUILD, so the code that would run is not the code that was read."
+  if [ "$label" = "$head" ]; then
+    echo "ok|the running container's revision ${label:0:12} equals this tree's HEAD"
     return 0
   fi
-  echo "ok|the running container's revision ${label:0:12} equals this tree's HEAD"
+
+  # ── THE CARRY-FORWARD, AND IT IS THE SAME MOVE `declaration_resolve` MAKES ──
+  # ⚠️ WITHOUT IT THIS GUARD FALSELY REFUSES THE NORMAL CADENCE. Deploy, then
+  # land a docs PR — `main` has moved, the container has not, and the SCRIPT
+  # about to run is byte-identical. A guard that refuses legitimate work does not
+  # stay a guard: it gets worked around, and then it protects nothing.
+  #
+  # So the exact-match test is widened by PROOF, never by tolerance. The
+  # container's revision is accepted for a different HEAD only when:
+  #
+  #     (i)  it is an ANCESTOR of HEAD, and
+  #     (ii) the diff between them touches ZERO runtime paths.
+  #
+  # (ii) is what makes the two the same PROGRAM rather than merely two commits
+  # somebody is relaxed about — and it is measured with `DECLARATION_NONRUNTIME_RE`,
+  # the allowlist `declaration.sh` already defines, NOT a second regex. A second
+  # copy would drift from the first the day either is fixed, and this one decides
+  # whether an irreversible act runs.
+  #
+  # ⚠️ DIRECTION IS LOAD-BEARING. Ancestor-of-HEAD only. A container NEWER than
+  # the tree means the tree is stale, which is a different fault with a different
+  # remedy, and it must not be waved through by a symmetric test.
+  if ! git rev-parse --verify --quiet "${label}^{commit}" >/dev/null 2>&1; then
+    echo "refuse|the container's revision ${label:0:12} is not a commit in THIS repository. It was built from a different tree, so nothing here can say what it is running."
+    return 0
+  fi
+  if ! git merge-base --is-ancestor "$label" "$head" 2>/dev/null; then
+    echo "refuse|the container is at ${label:0:12}, which is NOT an ancestor of this tree's ${head:0:12}. Either the container is newer than this tree, or the two are on divergent histories — both are faults, and neither is answered by running the act."
+    return 0
+  fi
+
+  local nonruntime_re runtime
+  # shellcheck disable=SC2154
+  nonruntime_re="${DECLARATION_NONRUNTIME_RE:-}"
+  if [ -z "$nonruntime_re" ]; then
+    # ⚠️ FAIL-CLOSED, LOUDLY. If the shared allowlist is not in scope this
+    # cannot measure "zero runtime files" at all, and cannot-tell must never
+    # resolve to the weaker answer.
+    echo "refuse|the container is at ${label:0:12} and this tree at ${head:0:12}, and DECLARATION_NONRUNTIME_RE is not in scope, so whether any runtime file moved between them could not be measured. Source scripts/lib/declaration.sh before this library."
+    return 0
+  fi
+
+  runtime=$(git diff --name-only "$label" "$head" -- 2>/dev/null | grep -Ecv "$nonruntime_re" || true)
+  case "$runtime" in
+    ''|*[!0-9]*)
+      echo "refuse|could not count the runtime files that moved between ${label:0:12} and ${head:0:12} (git answered '${runtime}')."
+      return 0
+      ;;
+  esac
+  if [ "$runtime" -ne 0 ]; then
+    echo "refuse|the running container is at ${label:0:12} and this tree is at ${head:0:12}, and ${runtime} RUNTIME file(s) moved in between. They are DIFFERENT PROGRAMS: a container carries the tree as of its BUILD, so the code that would run is not the code that was read."
+    return 0
+  fi
+
+  echo "ok|the container is at ${label:0:12}, an ancestor of ${head:0:12}, and ZERO runtime files moved between them — the same program, carried forward"
 }
 
 # ── the I/O half ────────────────────────────────────────────────────────────

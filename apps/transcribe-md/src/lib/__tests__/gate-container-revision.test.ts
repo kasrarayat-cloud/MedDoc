@@ -47,7 +47,13 @@ import { join, resolve } from 'node:path';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
-const LIB = resolve(__dirname, '../../../../../scripts/lib/container-revision.sh');
+const REPO = resolve(__dirname, '../../../../..');
+const LIB = resolve(REPO, 'scripts/lib/container-revision.sh');
+// ⚠️ SOURCED TOO, BECAUSE THE CARRY-FORWARD READS ITS ALLOWLIST. The library
+// refuses loudly when DECLARATION_NONRUNTIME_RE is absent — there is an arm for
+// exactly that below — so the arms that exercise the carry-forward must reproduce
+// the caller's real scope rather than a convenient subset of it.
+const DECL_LIB = resolve(REPO, 'scripts/lib/declaration.sh');
 const SHELLS = ['set -uo pipefail', 'set -euo pipefail'] as const;
 
 const tmps: string[] = [];
@@ -75,8 +81,8 @@ function sh(snippet: string, opts: string, fakeDocker?: string): string {
   try {
     return execFileSync(
       'bash',
-      ['-c', `${opts}\n${env}. ${JSON.stringify(LIB)}\n${snippet}`],
-      { encoding: 'utf8', timeout: 20_000 },
+      ['-c', `${opts}\n${env}. ${JSON.stringify(DECL_LIB)}\n. ${JSON.stringify(LIB)}\n${snippet}`],
+      { encoding: 'utf8', timeout: 20_000, cwd: REPO },
     ).trim();
   } catch (e) {
     const err = e as { stdout?: string; stderr?: string; message: string };
@@ -97,14 +103,18 @@ describe.each(SHELLS)('container_revision_verdict — under `%s`', (opts) => {
     expect(out).toContain(HEAD.slice(0, 12));
   });
 
-  it('REFUSES when the container is at a DIFFERENT commit — the whole point', () => {
+  it('REFUSES a 40-hex sha this repository does not contain', () => {
+    // ⚠️ WRITTEN WITH A FABRICATED SHA ON PURPOSE, AND ASSERTING THE *RIGHT*
+    // REFUSAL. This arm originally expected the mismatch message, and it passed
+    // for the wrong reason: the instrument was answering correctly about a
+    // commit that does not exist. The programme has paid for that confusion
+    // once already (canon 61). The mismatch path has its own arms below, driven
+    // by REAL commits from this repository's history.
     const other = 'b'.repeat(40);
     const out = sh(`container_revision_verdict "${other}" "${HEAD}"`, opts);
     expect(out.startsWith('refuse|')).toBe(true);
-    expect(out).toContain('DIFFERENT PROGRAMS');
-    // and it names BOTH, so the reader is not sent to guess which is stale
+    expect(out).toContain('not a commit in THIS repository');
     expect(out).toContain(other.slice(0, 12));
-    expect(out).toContain(HEAD.slice(0, 12));
   });
 
   it("REFUSES the literal 'unknown' — the Dockerfile ARG default", () => {
@@ -145,6 +155,13 @@ describe.each(SHELLS)('container_revision_verdict — under `%s`', (opts) => {
     expect(out.startsWith('refuse|')).toBe(true);
   });
 
+  it('the happy path is an EQUALITY, not a resemblance', () => {
+    // One character apart, both 40 hex, neither in this repo -> still refuses.
+    const almost = 'a'.repeat(39) + 'b';
+    const out = sh(`container_revision_verdict "${almost}" "${HEAD}"`, opts);
+    expect(out.startsWith('refuse|')).toBe(true);
+  });
+
   it('NEVER echoes an empty verdict — every path answers', () => {
     // A caller splits on '|'; a silent path would give V_MODE='' which is
     // neither 'ok' nor a refusal, and the caller's `!= ok` test would then
@@ -154,6 +171,8 @@ describe.each(SHELLS)('container_revision_verdict — under `%s`', (opts) => {
       ['unknown', ''],
       [HEAD, HEAD],
       ['zz', HEAD],
+      ['b'.repeat(40), HEAD],
+      [HEAD, 'c'.repeat(40)],
     ]) {
       const out = sh(`container_revision_verdict ${JSON.stringify(a)} ${JSON.stringify(b)}`, opts);
       expect(out.length, `verdict for (${a || '<empty>'}, ${b || '<empty>'})`).toBeGreaterThan(3);
@@ -232,5 +251,108 @@ describe('container_revision_of', () => {
   it('asks for the RIGHT label key', () => {
     const out = sh('container_revision_of abc123', opts, 'echo "$@"');
     expect(out).toContain('org.opencontainers.image.revision');
+  });
+});
+
+describe('the CARRY-FORWARD — widened by PROOF, never by tolerance', () => {
+  const opts = 'set -uo pipefail';
+
+  // ⚠️ WHY THIS EXISTS AT ALL, said where the next reader will meet it: the
+  // exact-match test alone FALSELY REFUSES THE NORMAL CADENCE. Deploy, then land
+  // a docs PR — `main` has moved, the container has not, and the script about to
+  // run is byte-identical. A guard that refuses legitimate work does not stay a
+  // guard; it gets worked around, and then it protects nothing.
+
+  /** Two real commits from this repository's own history, N apart. */
+  function headAnd(n: number): { head: string; older: string } {
+    const out = execFileSync('git', ['rev-list', '-n', String(n + 1), 'HEAD'], {
+      cwd: REPO,
+      encoding: 'utf8',
+    })
+      .trim()
+      .split('\n');
+    return { head: out[0]!, older: out[out.length - 1]! };
+  }
+
+  it('ACCEPTS an ancestor when ZERO runtime files moved — and says WHY it accepted', () => {
+    const { head } = headAnd(0);
+    // HEAD against itself is the degenerate case; use the real docs-only pair:
+    // this branch's own rulings commit changed only docs/, so its child carries
+    // zero runtime movement from it... unless it does not, in which case this
+    // arm must not silently pass. So assert the PREMISE first.
+    const rulings = execFileSync(
+      'git',
+      ['log', '--format=%H', '-n', '1', '--', 'docs/foundation/rulings/2026-09-07-261-266.md'],
+      { cwd: REPO, encoding: 'utf8' },
+    ).trim();
+    const moved = execFileSync('git', ['diff', '--name-only', rulings, head], {
+      cwd: REPO,
+      encoding: 'utf8',
+    })
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+    const runtimeMoved = moved.filter((f) => !/^(docs\/|[^/]+\.md$)/.test(f));
+
+    const out = sh(`container_revision_verdict "${rulings}" "${head}"`, opts);
+    if (runtimeMoved.length === 0) {
+      expect(out.startsWith('ok|'), out).toBe(true);
+      expect(out).toContain('ZERO runtime files moved');
+    } else {
+      // ⚠️ THE ARM STILL ASSERTS SOMETHING when the premise does not hold —
+      // it must REFUSE, and name the count. A test that quietly skips is a test
+      // that reports success for a run it never made.
+      expect(out.startsWith('refuse|'), out).toBe(true);
+      expect(out).toContain('RUNTIME file(s) moved');
+    }
+  });
+
+  it('REFUSES an ancestor when a RUNTIME file moved — the discriminating case', () => {
+    // This branch's own HEAD is a source commit, so HEAD's PARENT -> HEAD moved
+    // runtime files by construction. If that ever stops being true the arm reds,
+    // which is correct: it would no longer be testing what it claims to.
+    const { head, older } = headAnd(1);
+    const moved = execFileSync('git', ['diff', '--name-only', older, head], {
+      cwd: REPO,
+      encoding: 'utf8',
+    })
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+    const runtimeMoved = moved.filter((f) => !/^(docs\/|[^/]+\.md$)/.test(f));
+    expect(runtimeMoved.length, `premise: ${older.slice(0, 8)}..${head.slice(0, 8)} must move runtime files`).toBeGreaterThan(0);
+
+    const out = sh(`container_revision_verdict "${older}" "${head}"`, opts);
+    expect(out.startsWith('refuse|'), out).toBe(true);
+    expect(out).toContain('DIFFERENT PROGRAMS');
+  });
+
+  it('REFUSES a commit this repository does not contain', () => {
+    const out = sh(`container_revision_verdict "${'d'.repeat(40)}" "$(git rev-parse HEAD)"`, opts);
+    expect(out.startsWith('refuse|')).toBe(true);
+    expect(out).toContain('not a commit in THIS repository');
+  });
+
+  it('REFUSES when the container is NEWER than the tree — direction is load-bearing', () => {
+    // ⚠️ A SYMMETRIC TEST WOULD WAVE THIS THROUGH. The container being ahead of
+    // the tree is a different fault with a different remedy, and it is not
+    // answered by running the act.
+    const { head, older } = headAnd(1);
+    const out = sh(`container_revision_verdict "${head}" "${older}"`, opts);
+    expect(out.startsWith('refuse|'), out).toBe(true);
+    expect(out).toContain('NOT an ancestor');
+  });
+
+  it('REFUSES, loudly, when the shared allowlist is not in scope — fail-closed', () => {
+    // The one arm that must NOT source declaration.sh: it is testing what
+    // happens when nobody did.
+    const { head, older } = headAnd(1);
+    const out = execFileSync(
+      'bash',
+      ['-c', `set -uo pipefail\n. ${JSON.stringify(LIB)}\ncontainer_revision_verdict "${older}" "${head}"`],
+      { encoding: 'utf8', cwd: REPO, timeout: 20_000 },
+    ).trim();
+    expect(out.startsWith('refuse|'), out).toBe(true);
+    expect(out).toContain('DECLARATION_NONRUNTIME_RE is not in scope');
   });
 });
