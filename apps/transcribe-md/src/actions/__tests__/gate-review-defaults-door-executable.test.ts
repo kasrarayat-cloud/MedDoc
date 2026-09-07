@@ -378,6 +378,32 @@ describe('ROUND FOUR — a sign landing in the window cannot be written over', (
     expect(sql).toMatch(/transcribe_visits/);
   });
 
+  it('⚠️ THE LOCKED RE-READ CARRIES THE RESOLVER\'S WHOLE PREDICATE — not just the id', async () => {
+    // RULING #253. It was `WHERE "id" = $1` and nothing else, while every caller
+    // reached it through a resolver scoped on `practiceId`, `deletedAt IS NULL`
+    // and `archivedAt IS NULL`. So the guard re-asserted `status` on a row whose
+    // TENANCY and LIFECYCLE it had not re-asserted: a visit soft-deleted or
+    // archived inside the very window this lock exists for was still written to.
+    //
+    // ⚠️ A LOCK THAT RE-CHECKS ONE OF THREE PREDICATES IS NOT A RE-CHECK.
+    //
+    // Asserted on the QUERY ACTUALLY SENT and its bound parameters — not on the
+    // source text. Ruling #251 retires source reading as proof of behaviour, and
+    // what a caller hands the driver is behaviour.
+    await insert();
+    const call = lockedVisit.mock.calls[0];
+    const sql = String((call[0] as { strings?: string[] }).strings?.join('?') ?? call[0]);
+    const params = call.slice(1);
+
+    expect(sql).toMatch(/FOR UPDATE/);
+    expect(sql, 'the locked read does not re-assert tenancy').toMatch(/"practiceId"/);
+    expect(sql, 'the locked read does not re-assert the soft-delete').toMatch(/"deletedAt"\s+IS NULL/);
+    expect(sql, 'the locked read does not re-assert the archive').toMatch(/"archivedAt"\s+IS NULL/);
+    // ⚠️ AND THE PRACTICE IS BOUND, not interpolated or defaulted — a predicate
+    // naming the column while binding nothing would satisfy the three above.
+    expect(params, 'the visit id and the practice are not both bound').toEqual([VISIT, 'prac-1']);
+  });
+
   it('⚠️ THE WRITE HAPPENS ON THE **LOCKED** CONNECTION — kills `tx.` -> `prisma.`', async () => {
     // ROUND FIVE, AND IT WAS A FALSE GREEN OF THE HARNESS, NOT OF THE DOOR.
     // `$transaction` used to hand the callback the same client object, so

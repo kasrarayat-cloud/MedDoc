@@ -224,11 +224,41 @@ type Locked<T> = { ok: true; value: T } | { ok: false; reason: LockRefusal };
 
 async function underVisitLock<T>(
   visitId: string,
+  // ⚠️ `string`, NOT the branded `PracticeId`, and deliberately. The brand
+  // exists to force callers of the PRISMA scope helper through `asPracticeId`;
+  // this is a raw-SQL binding, and every caller passes the very value its own
+  // resolver was scoped with a few lines earlier. Widening the brand here would
+  // be worse than not having it — it would let a NEW caller mint one.
+  practiceId: string,
   write: (tx: Tx) => Promise<T>,
 ): Promise<Locked<T>> {
   return prisma.$transaction(async (tx): Promise<Locked<T>> => {
+    // ⚠️ THE LOCKED RE-READ CARRIES THE SAME PREDICATE THE RESOLVER APPLIED —
+    // RULING #253. It read `WHERE "id" = $1` and nothing else, while every
+    // caller had reached this point through a resolver scoped on
+    // `practiceId`, `deletedAt IS NULL` and `archivedAt IS NULL`.
+    //
+    // So the guard re-asserted `status` on a row it had not re-asserted the
+    // TENANCY or the LIFECYCLE of: a visit soft-deleted or archived in the
+    // window — the window this lock exists because it is seconds wide — was
+    // still written to, and a visit belonging to ANOTHER PRACTICE would have
+    // been locked and accepted had the id ever been guessed or reused.
+    //
+    // ⚠️ A LOCK THAT RE-CHECKS ONE OF THREE PREDICATES IS NOT A RE-CHECK. The
+    // whole point of re-reading under the lock is that the earlier read is
+    // stale; that applies to every term of it, not to the one that prompted
+    // the fix.
+    //
+    // A row that fails any of them yields NO ROW, which is already the `gone`
+    // cause — "this visit is no longer available" is the true sentence for a
+    // soft-delete, an archive, and a tenancy miss alike.
     const [locked] = await tx.$queryRaw<{ status: string; signedAt: Date | null }[]>`
-      SELECT "status", "signedAt" FROM "transcribe_visits" WHERE "id" = ${visitId} FOR UPDATE`;
+      SELECT "status", "signedAt" FROM "transcribe_visits"
+       WHERE "id" = ${visitId}
+         AND "practiceId" = ${practiceId}
+         AND "deletedAt" IS NULL
+         AND "archivedAt" IS NULL
+       FOR UPDATE`;
     // ⚠️ THREE CAUSES, THREE ANSWERS — ROUND FIVE.
     // The first version of this returned a bare `null` and every caller said
     // "this visit was signed while your form was being checked". That sentence
@@ -377,7 +407,7 @@ export async function setTemplateControlAction(
   // at the top of the action and never re-asserted, so a sign landing in the
   // window wrote a dropdown correction onto a SIGNED visit. A signed visit shows
   // no panel, so there is no Undo and the row is permanent.
-  const wroteOption = await underVisitLock(visitId, async (tx) => {
+  const wroteOption = await underVisitLock(visitId, session.user.practiceId, async (tx) => {
     await tx.templateTwinFieldOverride.upsert({
     where: { visitId_fieldId: { visitId, fieldId } },
     create: {
@@ -791,7 +821,7 @@ export async function insertScaffoldDefaultAction(
   // Round four wrote this inline here and round five measured the cost: the fix
   // reached ONE of the three writers in this file. `underVisitLock` is that
   // fix, hoisted, so the next writer added to this file cannot be the fourth.
-  const wrote = await underVisitLock(visitId, async (tx) => {
+  const wrote = await underVisitLock(visitId, practiceId, async (tx) => {
     await tx.templateTwinFieldOverride.upsert({
       where: { visitId_fieldId: { visitId, fieldId } },
       create: {
@@ -869,7 +899,7 @@ export async function undoScaffoldDefaultAction(
   // ⚠️ UNDER THE LOCK — ROUND FIVE. Round four locked the INSERT and left the
   // UNDO read-then-act, so a sign landing in this window deleted the doctor's
   // row against a record that was, by then, signed.
-  const deleted = await underVisitLock(visitId, async (tx) =>
+  const deleted = await underVisitLock(visitId, session.user.practiceId, async (tx) =>
     (
       await tx.templateTwinFieldOverride.deleteMany({
         where: { visitId, fieldId, overrideKind: 'scaffold_default' },

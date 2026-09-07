@@ -257,6 +257,87 @@ function readsIn(
   return out;
 }
 
+/**
+ * ⚠️ THE READ SET, OBSERVED AT RUNTIME — RULING #251. THIS IS THE AUTHORITY.
+ *
+ * `readsIn()` below is a TEXT scanner and it has been defeated four times: a
+ * mid-chain cast erases the read; a destructured helper parameter drops two; a
+ * guard delegated to a helper outside the two hardcoded source regions is
+ * invisible; and — the sharpest, found by a verifier rather than a lens — a pure
+ * REFACTOR of an existing guard into an imported helper, which is this module's
+ * own idiom, silently dropped `field.kind` and `mapping.expectedDataType` from
+ * the watched set at 48/48 green. Those are precisely the two inputs whose
+ * constancy caused the historical false green the arm exists to prevent.
+ *
+ * **Each fix closed a spelling and left the class open.** So the question stops
+ * being asked of the SOURCE: the inputs are wrapped in Proxies and the mirror is
+ * CALLED, and what it reads is recorded as it reads it. No regex, no source
+ * slice, no alias resolution — and it **follows helpers by construction**,
+ * imported ones included, because a helper reading `f.kind` reads it off the
+ * same proxied object.
+ *
+ * ⚠️ ITS OWN HONEST LIMIT, STATED SO IT IS NOT THE FIFTH INSTRUMENT NOBODY
+ * QUESTIONED: a tracer records reads that HAPPEN. A guard sitting behind an
+ * early return is not exercised by an input that returns early, so the set must
+ * be accumulated across the WHOLE matrix — which is what the arm does — and a
+ * guard no matrix row ever reaches contributes nothing. That is a real blind
+ * spot, and it is strictly smaller than the regex's: a guard no row reaches also
+ * cannot affect the biconditional it is being checked against.
+ */
+/**
+ * Filled by the biconditional arm as it runs — RULING #251.
+ *
+ * `TRACED_READS` is what the mirror ACTUALLY read, recorded by Proxy.
+ * `OBSERVED_VALUES` is what the fixtures actually varied, recorded by walking
+ * each row's inputs. Both are runtime facts. Neither is parsed from source, and
+ * neither can be satisfied by a comment, a cast, a refactor into a helper, or a
+ * dimension list nobody loops over — the four ways the regex version was beaten.
+ */
+const TRACED_READS = new Set<string>();
+const OBSERVED_VALUES = new Map<string, Set<string>>();
+
+/** Record every (object, property) -> value this row actually presents. */
+function observeValues(field: TemplateField, mapping: SemanticMapping): void {
+  const walk = (obj: Record<string, unknown>, path: string, depth: number) => {
+    for (const [k, v] of Object.entries(obj)) {
+      const key = `${path}.${k}`;
+      if (v !== null && typeof v === 'object' && !Array.isArray(v) && depth > 0) {
+        walk(v as Record<string, unknown>, key, depth - 1);
+        continue;
+      }
+      let seenSet = OBSERVED_VALUES.get(key);
+      if (!seenSet) OBSERVED_VALUES.set(key, (seenSet = new Set<string>()));
+      seenSet.add(JSON.stringify(v ?? null));
+    }
+  };
+  walk(field as unknown as Record<string, unknown>, 'field', 1);
+  walk(mapping as unknown as Record<string, unknown>, 'mapping', 1);
+}
+
+function tracedReads(
+  field: TemplateField,
+  mapping: SemanticMapping,
+  into: Set<string>,
+): void {
+  const wrap = (target: object, path: string): object =>
+    new Proxy(target, {
+      get(t, prop, recv) {
+        if (typeof prop === 'string') into.add(`${path}.${prop}`);
+        const v = Reflect.get(t, prop, recv);
+        // Nested objects are wrapped too, so `field.rendererBinding.bindingType`
+        // records the LEAF — the thing the matrix actually varies.
+        return v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)
+          ? wrap(v as object, `${path}.${String(prop)}`)
+          : v;
+      },
+    });
+  // The return value is discarded: this call exists for its READS.
+  omitBranchUnreachable(
+    wrap(field, 'field') as TemplateField,
+    wrap(mapping, 'mapping') as SemanticMapping,
+  );
+}
+
 /** The parameter names a module-local helper binds to `field` / `mapping`. */
 function aliasesOf(signature: string): Record<string, Role> {
   const out: Record<string, Role> = {};
@@ -484,27 +565,65 @@ const INTENTIONAL_CONSTANTS: Record<string, string> = {};
     const disagreements: string[] = [];
     const tokenMismatches: string[] = [];
 
-    for (const fReq of bools)
-      for (const mReq of bools)
-        for (const fUnknown of policies)
-          // ⚠️ `mUnknown` IS NOT DECORATION — RULING #234 UNCOVERED IT.
-          // `requiresClinicianInput` reads BOTH `field.unknownPolicy` and
-          // `mapping.unknownPolicy` (unmentioned-policy.ts:67-68). The matrix
-          // varied only the field's, and the old name-keyed `isVaried` reported
-          // the mapping's as varied because the two share a name. A guard keyed
-          // on the mapping's copy was invisible. A property name is not an
-          // identity.
-          for (const mUnknown of policies)
-          for (const mBlank of policies)
-            for (const sourceType of sourceTypes)
-              for (const detectionStatus of detections)
-                for (const clinicalConcept of concepts)
-                  for (const practiceDefault of defaults)
-                    for (const expectedDataType of dataTypes)
-                    for (const bindingType of bindings)
-                    for (const status of statuses)
-                    for (const kind of kinds)
-                    for (const rowPrototype of bools) {
+    // ══════════════════════════════════════════════════════════════════════
+    // ⚠️ SAMPLED WITH A FIXED SEED, UNDER AN EXPLICIT TIMEOUT — RULING #251.
+    //
+    // The #234 widening added two dimensions and took the cross-product to
+    // 82,944 rows with NO timeout, sitting at 40-60% of vitest's 5000 ms
+    // default. Round six observed it TIME OUT on an unmutated tree. **An arm
+    // that flakes is an arm whose green nobody can rely on**, and the fix is not
+    // a bigger timeout: an exhaustive cross-product is not what this arm needs.
+    //
+    // The biconditional is a property that must hold for EVERY row, so any
+    // sample reaching a counterexample finds it — and a FIXED SEED makes the
+    // failure reproducible rather than a story about one unlucky run.
+    //
+    // ⚠️ AND THE SAMPLE ASSERTS ITS OWN COVERAGE. A sample that happened to hold
+    // a dimension constant would recreate the exact defect this arm exists to
+    // prevent. Every value of every dimension must appear, and that is CHECKED.
+    const DIMS: readonly (readonly unknown[])[] = [
+      bools, bools, policies, policies, policies, sourceTypes, detections,
+      concepts, defaults, dataTypes, bindings, statuses, kinds, bools,
+    ];
+    let rng = 0x5EEDBEEF;
+    const next = () => (rng = (rng * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    const SAMPLES = 4000;
+    const seen = DIMS.map(() => new Set<number>());
+    const rows: number[][] = [];
+    for (let n = 0; n < SAMPLES; n += 1) {
+      rows.push(DIMS.map((d, k) => {
+        // The first pass walks each dimension in order, so coverage is guaranteed
+        // by construction rather than by luck; after that it samples.
+        const v = n < d.length ? n % d.length : Math.floor(next() * d.length);
+        seen[k]!.add(v);
+        return v;
+      }));
+    }
+    DIMS.forEach((d, k) => {
+      expect(
+        seen[k]!.size,
+        `dimension ${k} was held CONSTANT by the sample — a matrix blind to an ` +
+          `input is the defect this arm exists to prevent`,
+      ).toBe(d.length);
+    });
+
+
+    for (const row of rows) {
+                    const fReq = bools[row[0]!]!;
+                    const mReq = bools[row[1]!]!;
+                    const fUnknown = policies[row[2]!]!;
+                    const mUnknown = policies[row[3]!]!;
+                    const mBlank = policies[row[4]!]!;
+                    const sourceType = sourceTypes[row[5]!]!;
+                    const detectionStatus = detections[row[6]!]!;
+                    const clinicalConcept = concepts[row[7]!]!;
+                    const practiceDefault = defaults[row[8]!]!;
+                    const expectedDataType = dataTypes[row[9]!]!;
+                    const bindingType = bindings[row[10]!]!;
+                    const status = statuses[row[11]!]!;
+                    const kind = kinds[row[12]!]!;
+                    const rowPrototype = bools[row[13]!]!;
+                    {
                     const fieldOverrides = {
                       required: fReq,
                       unknownPolicy: fUnknown,
@@ -535,6 +654,8 @@ const INTENTIONAL_CONSTANTS: Record<string, string> = {};
                     const f = field('1', fieldOverrides);
                     const m = mapping(f, clinicalConcept ?? 'unused', mappingOverrides);
                     const offered = canOmitWhenUnmentioned(f, m);
+                    tracedReads(f, m, TRACED_READS);
+                    observeValues(f, m);
 
                     // Drive the ACTUAL resolver on the one encounter shape where
                     // `conceptUnmatched && reason === undefined && facts.length > 0`
@@ -600,6 +721,7 @@ const INTENTIONAL_CONSTANTS: Record<string, string> = {};
                       }
                     }
                   }
+    }
 
     expect(disagreements).toEqual([]);
     expect(tokenMismatches).toEqual([]);
@@ -615,7 +737,13 @@ const INTENTIONAL_CONSTANTS: Record<string, string> = {};
       conservativeWithholds,
       'no conservative withhold witnessed — CONSERVATIVE_GUARDS is dead weight',
     ).toBeGreaterThan(0);
-  });
+  },
+  // ⚠️ AN EXPLICIT TIMEOUT — RULING #251. This arm ran under vitest's 5000 ms
+  // DEFAULT at 40-60% of it, and round six observed it TIME OUT on an unmutated
+  // tree. A default nobody chose is not a budget; it is the number that happened
+  // to be there. 20 s is roughly 40x the sampled arm's measured cost, so a
+  // failure here means something changed, not that the runner was busy.
+  20_000);
 
   // ==========================================================================
   // The named short-circuits get one arm each, so a dropped clause reds a test
@@ -655,195 +783,70 @@ const INTENTIONAL_CONSTANTS: Record<string, string> = {};
   });
 
   it('⚠️ THE MATRIX VARIES EVERY INPUT THE MIRROR READS — the class, not the instance', () => {
-    // ⚠️ THIS ARM EXISTS BECAUSE THE SAME FAILURE HAPPENED THREE TIMES.
-    // The biconditional is only as good as its cross-product, and three separate
-    // guards were invisible to it because it held their input constant:
-    //   · `requiresClinicianInput` — the original arm varied only its five inputs
-    //   · `isMappingTypeCompatible` — `expectedDataType` was constant (I found it)
-    //   · the fixed-grid `table_cell` route — `bindingType` was constant (a peer found it)
+    // ══════════════════════════════════════════════════════════════════════
+    // ⚠️ REBUILT ON RUNTIME FACTS — RULING #251. NOTHING HERE READS SOURCE.
     //
-    // Widening the matrix a fourth time by hand would fix the instance and leave
-    // the class open. So the REQUIRED DIMENSIONS ARE DERIVED FROM THE MIRROR'S
-    // OWN SOURCE: every `field.X` / `mapping.X` the guard ladder reads must
-    // appear as a varied dimension in this file. A guard added without its
-    // dimension reds HERE, naming the property, instead of passing silently.
-    const src = readFileSync(join(__dirname, '..', 'unmentioned-policy.ts'), 'utf-8');
-    const body = src.slice(
-      src.indexOf('export function omitBranchUnreachable'),
-      src.indexOf('export const OMIT_GUARD_TOKEN_PREFIXES'),
-    );
-    // strip comments — the prose names properties it does not read
-    const code = body
-      .split('\n')
-      .filter((l) => !l.trimStart().startsWith('//') && !l.trimStart().startsWith('*'))
-      .join('\n');
-    const reads = readsIn(code);
-    // `requiresClinicianInput` is called from the ladder, so its reads count too.
-    const helper = src.slice(
-      src.indexOf('export function requiresClinicianInput'),
-      src.indexOf('export const RESOLVER_SHORT_CIRCUIT_SOURCE_TYPES') > 0
-        ? src.indexOf('export const RESOLVER_SHORT_CIRCUIT_SOURCE_TYPES')
-        : src.indexOf('export function omitBranchUnreachable'),
-    );
-    // ⚠️ RESOLVED THROUGH THE HELPER'S OWN PARAMETER NAMES, not by assuming it
-    // spells them `field`/`mapping`. It does today; a helper that did not would
-    // have contributed ZERO reads and widened this arm's blind spot silently.
-    for (const r of readsIn(helper, aliasesOf(helper))) reads.add(r);
+    // This arm existed because the same failure happened three times: a guard
+    // was invisible to the biconditional because the matrix held its input
+    // constant. It was implemented as a REGEX over two hardcoded source regions,
+    // and it was then defeated four more times — by a mid-chain cast, by a
+    // destructured helper parameter, by a guard delegated outside those regions,
+    // and (the sharpest, found by a verifier rather than a lens) by a pure
+    // REFACTOR of an existing guard into an imported helper, which silently
+    // dropped `field.kind` and `mapping.expectedDataType` at 48/48 green.
+    //
+    // Each fix closed a spelling and left the class open. So both halves are now
+    // observed while the matrix runs:
+    //   · what the mirror READ  — by Proxy, which follows helpers by
+    //     construction because a helper reads off the same proxied object;
+    //   · what the fixtures VARIED — by walking each row's actual values.
+    //
+    // A read the fixtures never varied is invisible to the biconditional, and
+    // that is the finding, whatever spelling the guard used to make it.
+    // ══════════════════════════════════════════════════════════════════════
+    expect(
+      TRACED_READS.size,
+      'the tracer recorded nothing — the biconditional arm did not run, so this ' +
+        'arm is measuring an empty set and would pass over anything',
+    ).toBeGreaterThanOrEqual(8);
 
-    // NON-VACUITY: an empty or tiny set would make the loop below prove nothing.
-    expect(reads.size, `parsed only ${reads.size} reads from the mirror`).toBeGreaterThanOrEqual(8);
-
-    // The matrix's own source is the authority on what it varies.
-    //
-    // ⚠️ COMMENTS STRIPPED, AND THAT IS THE ARM. Round four found this satisfied
-    // by PROSE: the region is read as raw source, so a property discussed in a
-    // comment counted as "varied". Demonstrated — a guard keyed on
-    // `field.rowPrototype`, its token duly declared, with the word appearing
-    // only in a comment here, scored 37/37 GREEN while the matrix never varied
-    // it once. That is the exact failure this arm was written to prevent,
-    // living inside the arm itself.
-    //
-    // The strip is deliberately crude (whole-line `//` and block-comment lines):
-    // a matrix VARIES a property by writing it in a fixture, and fixtures are
-    // code. Anything that only ever appears in prose is, by construction, not
-    // varied.
-    //
-    // ⚠️ OWNER RULING #227 — THE RESIDUAL CLOSES BY DECLARATION, NOT JUDGEMENT.
-    //
-    // This arm used to check *MENTIONED IN CODE*, not *VARIED*: a property
-    // written once at a constant satisfied it. Measured — a guard keyed on
-    // `field.rowPrototype`, its token declared, passed. I named that residual
-    // and left it open, on the ground that deciding which constants are
-    // deliberate is a product judgement rather than a test fix.
-    //
-    // It IS a product judgement. A DECLARATION is how a product judgement gets
-    // written down instead of inferred. `INTENTIONAL_CONSTANTS` above carries
-    // one line of reason per held-constant property, and this arm now has
-    // THREE states and none of them is silent:
-    //
-    //     varied across the cross-product        -> pass
-    //     declared constant, with its reason     -> pass, reason on the record
-    //     neither                                -> RED
-    //
-    // An allowlist entry is a claim somebody made on purpose. An undeclared
-    // constant is an oversight wearing the same clothes, and the difference is
-    // exactly what this arm could not see before.
-    const thisFile = readFileSync(__filename, 'utf-8');
-    const matrix = thisFile.slice(thisFile.indexOf('OFFERED  ⟺  HONOURED'));
-    const varied = matrix
-      .slice(0, matrix.indexOf('expect(disagreements)'))
-      .split('\n')
-      .filter((l) => {
-        const t = l.trimStart();
-        return !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*');
-      })
-      .join('\n');
-
-    // ⚠️ A DIMENSION IS *VARIED* ONLY IF IT IS DRIVEN BY A LOOP VARIABLE,
-    // AND IT IS KEYED ON THE (OBJECT, PROPERTY) PAIR — RULING #234.
-    //
-    // Keying on the property NAME alone reported `mapping.unknownPolicy` as
-    // varied on the strength of `field.unknownPolicy` being varied. They share
-    // a name and nothing else: the mapping's copy was constant across all rows
-    // and a guard reading it was invisible. **A property name is not an
-    // identity.** So the matrix's two override literals are searched
-    // SEPARATELY, and a pair is varied only inside its own object.
-    const loopVars = new Set(
-      [...matrix.matchAll(/for \(const (\w+) of (\w+)\)/g)].map((m) => m[1]!),
-    );
-
-    /** The object literal assigned to `<name>`, braces included. */
-    const blockOf = (name: string): string => {
-      const i = varied.indexOf(`const ${name} = {`);
-      if (i < 0) return '';
-      const open = varied.indexOf('{', i);
-      let depth = 0;
-      for (let k = open; k < varied.length; k += 1) {
-        if (varied[k] === '{') depth += 1;
-        else if (varied[k] === '}') {
-          depth -= 1;
-          if (depth === 0) return varied.slice(open, k + 1);
-        }
+    // ⚠️ AN INTERMEDIATE OBJECT COUNTS AS VARIED WHEN A LEAF UNDER IT DOES.
+    // `field.rendererBinding` is read only as a PATH to `…​.bindingType`, and the
+    // binding object itself is never the thing a guard branches on. Requiring the
+    // container to vary would force a declaration for a dimension the matrix
+    // genuinely does exercise — a false entry on the allowlist, which is the one
+    // thing #234 established the allowlist must never carry.
+    const isVaried = (read: string) => {
+      if ((OBSERVED_VALUES.get(read)?.size ?? 0) > 1) return true;
+      for (const [key, vals] of OBSERVED_VALUES) {
+        if (key.startsWith(`${read}.`) && vals.size > 1) return true;
       }
-      return '';
-    };
-    const BLOCK: Record<Role, string> = {
-      field: blockOf('fieldOverrides'),
-      mapping: blockOf('mappingOverrides'),
-    };
-    expect(BLOCK.field, 'the fieldOverrides literal moved — this arm reads nothing').not.toBe('');
-    expect(BLOCK.mapping, 'the mappingOverrides literal moved — this arm reads nothing').not.toBe('');
-
-    /**
-     * `null` when the key is absent; `''` when written as SHORTHAND (`kind,`);
-     * otherwise the value text, to the entry's own comma at depth zero.
-     */
-    const entryFor = (text: string, key: string): string | null => {
-      const m = new RegExp(`\\b${key}\\b\\s*(:)?`).exec(text);
-      if (!m) return null;
-      if (!m[1]) return '';
-      const start = m.index + m[0].length;
-      let depth = 0;
-      for (let k = start; k < text.length; k += 1) {
-        const c = text[k];
-        if (c === '{' || c === '[' || c === '(') depth += 1;
-        else if (c === '}' || c === ']' || c === ')') {
-          if (depth === 0) return text.slice(start, k);
-          depth -= 1;
-        } else if (c === ',' && depth === 0) return text.slice(start, k);
-      }
-      return text.slice(start);
+      return false;
     };
 
-    const mentionsLoopVar = (text: string) =>
-      [...loopVars].some((v) => new RegExp(`\\b${v}\\b`).test(text));
-
-    const isVaried = (pair: string) => {
-      const [role, head, leaf] = pair.split('.') as [Role, string, string?];
-      const block = BLOCK[role];
-      if (!block) return false;
-      const entry = entryFor(block, head);
-      if (entry === null) return false;
-      if (leaf === undefined) {
-        // shorthand (`rowPrototype,`) is varied exactly when the key IS a loop
-        // variable; `head: <value>` is varied when the value mentions one.
-        return entry === '' ? loopVars.has(head) : mentionsLoopVar(entry);
-      }
-      // ⚠️ NESTED — `field.rendererBinding.bindingType`. The matrix writes
-      // `rendererBinding: { ...field('1').rendererBinding, bindingType }`, so
-      // the LEAF is what varies and the head is a spread of constants. Checking
-      // the head alone would call the whole binding varied and hide a second,
-      // constant property sitting beside `bindingType`.
-      const inner = entryFor(entry, leaf);
-      if (inner === null) return false;
-      return inner === '' ? loopVars.has(leaf) : mentionsLoopVar(inner);
-    };
-
-    const undeclared = [...reads].filter(
+    const undeclared = [...TRACED_READS].filter(
       (r) => !isVaried(r) && !(r in INTENTIONAL_CONSTANTS),
     );
     expect(
       undeclared,
-      `the mirror reads [${undeclared.join(', ')}] and the biconditional neither ` +
-        `VARIES ${undeclared.length === 1 ? 'it' : 'them'} nor DECLARES ` +
-        `${undeclared.length === 1 ? 'it' : 'them'} in INTENTIONAL_CONSTANTS — so a ` +
-        `guard keyed on ${undeclared.length === 1 ? 'that input' : 'those inputs'} is ` +
-        `invisible to this matrix. Vary it, or declare it with the reason it is ` +
-        `held constant. Ruling #227: an undeclared constant is an oversight ` +
-        `wearing an intentional one's clothes.`,
+      `the mirror READ [${undeclared.join(', ')}] and the matrix presented only ` +
+        `ONE value for ${undeclared.length === 1 ? 'it' : 'them'} — so a guard ` +
+        `keyed on ${undeclared.length === 1 ? 'that input' : 'those inputs'} is ` +
+        `invisible to the biconditional. Vary it, or declare it in ` +
+        `INTENTIONAL_CONSTANTS with the reason. Ruling #227: an undeclared ` +
+        `constant is an oversight wearing an intentional one's clothes.`,
     ).toEqual([]);
 
-    // ⚠️ AND THE ALLOWLIST IS NOT A DUMPING GROUND — it may not name a property
-    // the mirror does not read, or one the matrix already varies. Both would be
-    // a stale declaration quietly widening the exemption.
-    const staleDeclarations = Object.keys(INTENTIONAL_CONSTANTS).filter(
-      (k) => !reads.has(k) || isVaried(k),
+    // ⚠️ AND THE ALLOWLIST IS NOT A DUMPING GROUND — it may not name an input the
+    // mirror never reads, or one the matrix already varies.
+    const stale = Object.keys(INTENTIONAL_CONSTANTS).filter(
+      (k) => !TRACED_READS.has(k) || isVaried(k),
     );
     expect(
-      staleDeclarations,
-      `INTENTIONAL_CONSTANTS declares [${staleDeclarations.join(', ')}] which the ` +
-        `mirror does not read, or which the matrix now varies. A declaration that ` +
-        `has outlived its constant exempts nothing and hides the next one.`,
+      stale,
+      `INTENTIONAL_CONSTANTS declares [${stale.join(', ')}] which the mirror does ` +
+        `not read, or which the matrix now varies. A declaration that has ` +
+        `outlived its constant exempts nothing and hides the next one.`,
     ).toEqual([]);
   });
 
