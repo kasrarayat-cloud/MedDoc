@@ -27,7 +27,7 @@
 
 ## CANON INDEX — every archived entry, one row each
 
-**183 entries live in full at `docs/canon/`.**
+**184 entries live in full at `docs/canon/`.**
 Each row is a **POINTER, never the authority** — the archived body governs, and
 it is verbatim. A row exists so that a grep for an entry's title still lands
 here and tells you where the body went; the tell is that entry's OWN words.
@@ -178,6 +178,7 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 - **CORRECT BY ACCIDENT IS A DEFECT WAITING FOR A TIDY-UP** — a middleware gate read `!!auth?.user`, which is truthy for an IDENTITY-LESS user object, so an unverifiable session was correctly let through to the page that refuses it 503. Entirely unintentional — and tightening it to `?.user?.id`, an obvious-looking improvement, would have redirected the doctor to `/login` and reintroduced eject-on-a-blip one layer above the code forbidding it. ⚠️ **Name the accident in a comment and make the MUTATION be the tidy-up.** Prefer REMOVING the accident to documenting it. → `docs/canon/106-correct-by-accident-is-a-defect-waiting-for-a-tidy-up.md`
 - **FINDING THE READERS IS NOT REPOINTING THEM** — canon 60's failure one step later: #183's sweep ran, returned seven readers, and the split shipped with `gate-agents-md-size` still slicing a region of `AGENTS.md` that no longer existed. Four arms reported **zero rows**. ⚠️ It was loud ONLY because those arms carried non-vacuity floors — without them, zero rows means zero bad rows and the gate passes. Re-run the enumeration afterwards and require it EMPTY. → `docs/canon/107-finding-the-readers-is-not-repointing-them.md`
 - **PIN PROPERTIES, NOT SPELLINGS** — "A source-text gate that asserts an exact SPELLING can lock a defect in place." Three same-week specimens; the middle one **demanded the unscoped cross-tenant read** and reported green for it, while `gate-practice-scope`'s ratchet caught it in CI. ⚠️ The leaked count was **spoken to the doctor** in a refusal string — cross-tenant data in a UI string is the weight. The tell: *if somebody IMPROVED this code, would my gate fail?* → `docs/canon/72-pin-properties-not-spellings.md`
+- **A REPO-WIDE SWEEP HAS NO PER-BRANCH TRUTH** — a gate whose input is `git ls-files` measures a TREE, and on a feature branch that tree is one that will never exist. `gate-265-shellout-budgets` fired twice in two batches: once on a REBASE (#1058, four violations) and once on the MERGE (#1072, two more) — and the second put **main red while all three merged PRs were each 4 of 4**. ⚠️ **A per-PR citation cannot see a cross-file sweep's result BY CONSTRUCTION**, since no branch holds the union. What catches it is the discharge citation on the FINAL merge commit with the batch failing as a UNIT. Say so AT the gate when its input is the repository rather than the diff, and make the failure name the contract it offers. → `docs/canon/144-a-repo-wide-sweep-has-no-per-branch-truth.md`
 
 ### WRITE PATHS, MIGRATIONS & CONSTRAINTS
 
