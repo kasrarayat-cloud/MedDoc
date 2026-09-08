@@ -23,6 +23,8 @@ import {
   type TemplateTable,
   type UnsupportedElement,
   type TemplateTwinValidationResult,
+  fieldDemandsInput,
+  isRecordDerivedRefusal,
 } from '../ir';
 import { parseExplicitNumberAndUnit } from '../encounter-facts';
 import { factMatchesMapping, normalizeConcept } from '../fact-mapping-match';
@@ -627,10 +629,44 @@ export function validateTemplateTwin(
         // saying something the evidence does not.
         add('DENIAL_WITHHELD_WITHOUT_DENIAL', 'blocking', 'A withheld denial does not cite denied evidence.', field.fieldId);
       }
-    } else if (
-      resolution.status === 'not_mentioned' &&
-      (field.required || mapping.required || mapping.unknownPolicy === 'requires_input')
-    ) {
+    } else if (isRecordDerivedRefusal(resolution.reasonCode)) {
+      // ══ #272 — A RECORD-DERIVED REFUSAL NEVER WITHHOLDS A DOCUMENT ════════
+      //
+      // ⚠️ THIS IS THE **SECOND** BLOCKING ROUTE, AND CLOSING ONLY THE FIRST
+      // CHANGED NOTHING. The resolver stops escalating a record-derived refusal
+      // to `needs_clinician_input` — and a required field left `not_mentioned`
+      // then lands HERE instead, blocks unconditionally, and
+      // `fill-engine.ts:198` still returns `render: null`. The status moved; the
+      // outcome did not.
+      //
+      //   TWO READERS OF "A REQUIRED FIELD IS BLANK", AND FIXING ONE IS A FIX
+      //   THAT MEASURES ITSELF.
+      //
+      // Same shape and same reason as `denial_withheld` directly above, which
+      // #157(b) makes a warning UNCONDITIONALLY: *"refusing the OTHER hundred
+      // and forty-nine fields does not fill it."* A record that cannot answer
+      // is not a reason to withhold the doctor's whole form: the blank is
+      // NAMED, it is counted, and the doctor fills it by hand.
+      //
+      // ⚠️ THE PREDICATE IS SHARED WITH THE INJECTOR'S VOCABULARY (`ir.ts`) and
+      // NOT re-listed here — severity is decided from a reasonCode alone at this
+      // seam, so a fifth refusal token added to the injector and missed here
+      // would block the document again with nothing saying so. An arm asserts
+      // every emittable reason is a member.
+      add(
+        'RECORD_DERIVED_REFUSAL',
+        'warning',
+        'The patient record could not supply this value; it is blank for a named reason.',
+        field.fieldId,
+      );
+      // ⚠️ THE SAME PREDICATE THE RESOLVER ASKS, IMPORTED RATHER THAN RETYPED.
+      // #275's re-pass measured this list at THREE disjuncts against the
+      // resolver's FIVE — `field.unknownPolicy` and `mapping.blankPolicy` were
+      // missing — so a blank the resolver would have escalated could reach here
+      // and produce `valid: true` with ZERO issues. Reachable only because
+      // `semantic-mapping` happens to couple the policies today; that coupling
+      // is incidental, and this seam is where the two readers must not differ.
+    } else if (resolution.status === 'not_mentioned' && fieldDemandsInput(field, mapping)) {
       add('REQUIRED_FIELD_NOT_MENTIONED', 'blocking', 'A required field was not mentioned.', field.fieldId);
     }
 

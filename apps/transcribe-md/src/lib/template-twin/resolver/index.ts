@@ -15,6 +15,8 @@ import {
   type EncounterFact,
   type FieldResolution,
   type FieldResolutionStatus,
+  fieldDemandsInput,
+  type RecordDerivedRefusal,
   type SemanticMapping,
   type TemplateField,
 } from '../ir';
@@ -47,6 +49,27 @@ export interface ResolveTemplateFieldsInput {
   certifiedFieldIds?: ReadonlyArray<string>;
   /** Certification tests may opt in; production resolution stays strict. */
   allowUncertifiedForSyntheticTest?: boolean;
+  /**
+   * ⚠️ #264 — FIELDS AN INJECTOR DECLINED TO ANSWER, WITH THE REASON.
+   *
+   * An injector that cannot compute a value today simply mints no fact, and the
+   * resolver then reaches its "no fact carries this concept" arm and reports
+   * `fact_not_mentioned` — *"nobody said it"*. For a record-derived value that
+   * is FALSE and it is the misleading direction: the patient record DID carry a
+   * date of birth, and the code declined to turn it into a number because the
+   * answer depended on a timezone nobody has recorded.
+   *
+   * A blank is the right output. A blank labelled "nobody mentioned it" is a
+   * blank the doctor cannot act on — they would look for the dictation. So the
+   * refusal travels with its reason and lands in `reasonCode`.
+   */
+  /**
+   * ⚠️ SAME TYPE AS THE INJECTOR WRITES, DERIVED FROM `ir.ts` — see the note on
+   * `withVisitMetadataFacts`'s own `refusals`. Two ends of one channel, one
+   * vocabulary; `string` here would let an unregistered token in through the
+   * READING end even with the writing end tightened.
+   */
+  refusals?: ReadonlyArray<RecordDerivedRefusal>;
 }
 
 interface ConvertedValue {
@@ -291,7 +314,16 @@ function missingResolution(
   /** Overrides the reason when the field is unfilled for a NAMED reason more
    *  specific than "nothing was said" — the reason must survive, the false
    *  evidence trail must not. */
-  reason?: { unfilled: string; required: string },
+  /**
+   * ⚠️ DELIBERATELY WIDER THAN `RecordDerivedRefusal`, AND #275's RE-PASS PROVED
+   * WHY. Tightening this to the record-derived vocabulary looked right and
+   * failed the typecheck at :685, where the TEMPORALITY path passes
+   * `temporality_not_approved` through the same parameter. This parameter is
+   * "a named reason a field is blank" in general; the record-derived CHANNEL —
+   * `ResolveTemplateFieldsInput.refusals` — is the narrow one, and it is the
+   * only one that carries `neverBlocks`.
+   */
+  reason?: { unfilled: string; required: string; neverBlocks?: boolean },
   /** TRUE at exactly one call site: the one reached because NO fact carries
    *  this field's approved concept. That is the only site where "the encounter
    *  said nothing about this" is a true statement rather than a deferral. */
@@ -299,12 +331,41 @@ function missingResolution(
 ): FieldResolution {
   const practiceDefault = practiceDefaultResolution(field, mapping, facts);
   if (practiceDefault) return practiceDefault;
-  const requiresInput =
-    field.required ||
-    mapping.required ||
-    field.unknownPolicy === 'requires_input' ||
-    mapping.unknownPolicy === 'requires_input' ||
-    mapping.blankPolicy === 'requires_input';
+  // ══ #272 — A RECORD-DERIVED REFUSAL NEVER WITHHOLDS A DOCUMENT ═══════════
+  //
+  // `requiresInput` turns a blank into `needs_clinician_input`;
+  // `validation/index.ts:583-586` makes that BLOCKING; `fill-engine.ts:198`
+  // turns any blocking issue into `render: null`. So this path did not blank a
+  // field — it withheld the doctor's whole form.
+  //
+  //   A WITHHELD CONSULT OVER ONE AMBIGUOUS AGE IS THE WRONG TRADE.
+  //   A DOCTOR TYPING "61" IS THE RIGHT ONE.
+  //
+  // ⚠️ AND IT IS NOT SCOPED TO REQUIRED CONTROLS THE WAY THE READING SUGGESTS.
+  // `needsInputBlocks` is `critical || field.required || mapping.required`, and
+  // `critical` is `field.criticality !== 'routine' || field.clinicallyMaterial`
+  // — with `clinicallyMaterial` hard-coded TRUE at all twelve compiler sites.
+  // Measured in production: **238 of 238 rows carry `clinicallyMaterial = t`
+  // and `required = f`.** So `critical` is a CONSTANT TRUE, the `required`
+  // disjuncts are dead weight, and EVERY field reaching this status takes the
+  // document down. (Ruling #157(d) already filed that separately — *"a
+  // qualifier that is always true is a comment"*.)
+  //
+  // ⚠️ THE CODEBASE ALREADY ARGUES THE FIX, IN ITS OWN WORDS:
+  //   · `manual_source_not_filled` (:486) returns `not_mentioned`, and records
+  //     what the alternative cost — "four such fields refused the native
+  //     document on every visit, forever … the only effect was that the doctor
+  //     never got their own form back."
+  //   · `denial_withheld` is a warning UNCONDITIONALLY under #157(b) —
+  //     "refusing the OTHER hundred and forty-nine fields does not fill it."
+  //
+  // This does NOT weaken `needs_clinician_input` in general: the escalation
+  // stands for every other route in, and `neverBlocks` is set ONLY by the
+  // injector-refusal channel, whose members are record-derived by construction.
+  // ⚠️ THE DISJUNCTION MOVED TO `ir.ts` AND IS NOT RESTATED HERE — #275's
+  // re-pass found the validator asking a NARROWER version of this same
+  // question. One predicate, two readers.
+  const requiresInput = !reason?.neverBlocks && fieldDemandsInput(field, mapping);
   const unmentionedScaffold =
     conceptUnmatched && reason === undefined && facts.length > 0;
 
@@ -433,6 +494,7 @@ function resolveOne(
   allFacts: ReadonlyArray<EncounterFact>,
   allowUncertified: boolean,
   certifiedFieldIds: ReadonlySet<string>,
+  refusal?: { unfilled: string; required: string },
 ): FieldResolution {
   if (!mapping) {
     return makeResolution(
@@ -514,6 +576,22 @@ function resolveOne(
     (fact) =>
       fact.sourceType !== 'approved_practice_default' && conceptMatches(fact, mapping),
   );
+  // ⚠️ #264 — A NAMED REFUSAL OUTRANKS "NOBODY SAID IT", AND IT IS CHECKED
+  // BEFORE the concept search rather than after. An injector that declined to
+  // compute a value mints no fact, so the concept search finds nothing and the
+  // arm below would report `fact_not_mentioned` — a true statement about the
+  // FACTS and a false one about the ENCOUNTER. The refusal is the more specific
+  // reason and the more specific reason wins.
+  //
+  // The value is still null and the field is still blank: this changes the
+  // LABEL on the blank, not the blank.
+  if (refusal) {
+    // ⚠️ `neverBlocks` — #272. The blank is NAMED and the document still
+    // renders. The opt-out is a property of the CHANNEL, not a token list
+    // somebody has to keep in step: only `withVisitMetadataFacts` writes here.
+    return missingResolution(field, mapping, allFacts, { ...refusal, neverBlocks: true });
+  }
+
   if (conceptCandidates.length === 0) {
     // The ONLY site that earns #191's kept default: no fact in the encounter
     // carries this field's approved concept, so the template's own sentence
@@ -963,6 +1041,9 @@ export function resolveTemplateFields(
   const facts = input.facts.map((fact) => EncounterFactSchema.parse(fact));
   const mappingById = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
   const certifiedFieldIds = new Set(input.certifiedFieldIds ?? []);
+  const refusalByFieldId = new Map(
+    (input.refusals ?? []).map((r) => [r.fieldId, { unfilled: r.unfilled, required: r.required }]),
+  );
 
   return [...fields]
     .sort((a, b) => a.displayOrder - b.displayOrder || a.fieldId.localeCompare(b.fieldId))
@@ -973,6 +1054,7 @@ export function resolveTemplateFields(
         facts,
         input.allowUncertifiedForSyntheticTest === true,
         certifiedFieldIds,
+        refusalByFieldId.get(field.fieldId),
       ),
     );
 }
