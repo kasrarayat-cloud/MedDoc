@@ -91,6 +91,7 @@ import {
   requiresClinicianInput,
   canOmitWhenUnmentioned,
   omitBranchUnreachable,
+  OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS,
   OMIT_LADDER_PRE_CONCEPT,
   OMIT_GUARD_NAMES,
   OMIT_GUARD_TOKEN_PREFIXES,
@@ -1227,6 +1228,60 @@ const WITNESSED_GUARDS = new Set<string>();
         `the resolver did not honour ${guard.guard}'s declared status`,
       ).toBe(EXPECTED[guard.guard]!.status);
     }
+  });
+
+  it('⚠️ THE CERTIFICATION ANCHOR NAMES **WHICH** ROW — position, not membership', () => {
+    // ⚠️ ROUND EIGHT, `FG-3`. `unmentioned-policy.ts` asserts at module scope
+    // that `OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS` names A ROW of the ladder.
+    // It never asserts WHICH — and the resolver runs its certification check
+    // AFTER the row of that name, so the constant is a POSITION.
+    //
+    // Repoint it from the first row to the last and the module check still
+    // passes: every earlier guard now returns before certification is consulted,
+    // so an UNCERTIFIED mapping that also trips one of them resolves as that
+    // guard's benign outcome instead of `field_or_mapping_not_certified`. For
+    // `manual_source_not_filled` that is `not_mentioned` — a blank the
+    // certificate attests to — on a mapping nobody ever certified.
+    //
+    // ⚠️ MEMBERSHIP AND POSITION ARE DIFFERENT CLAIMS, and only one of them was
+    // being checked.
+    expect(OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS).toBe('semantic_mapping_type_mismatch');
+    expect(
+      OMIT_LADDER_PRE_CONCEPT.findIndex(
+        (g) => g.guard === OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS,
+      ),
+      'the certification check no longer runs after the FIRST ladder row',
+    ).toBe(0);
+
+    // ⚠️ AND THE BEHAVIOURAL HALF, because the two literals above are a text
+    // claim and #251 retires those as proofs of behaviour. An uncertified
+    // mapping that ALSO trips a later guard must still be refused for being
+    // uncertified — that is what "the check runs first" MEANS.
+    // ⚠️ UNCERTIFIED IS SET EXPLICITLY, AND MY FIRST ATTEMPT DID NOT — the
+    // probe's defaults are `status: 'certified'` and
+    // `detectionStatus: 'certified'`, so the "uncertified" case was certified
+    // and the arm measured the manual row. The arm said so, which is the only
+    // reason it was caught. `needs_confirmation` rather than `unsupported`,
+    // because `unsupported` trips ladder row 2 and would answer before either
+    // thing this arm is about.
+    const { resolution } = resolveOneCertifying(
+      { detectionStatus: 'needs_confirmation' },
+      { sourceType: 'manual' },
+    );
+    expect(
+      resolution.reasonCode,
+      'an UNCERTIFIED manual mapping resolved as a designed blank — the ' +
+        'certification check was consulted after the row that answered first',
+    ).toBe('field_or_mapping_not_certified');
+    expect(resolution.status).toBe('needs_clinician_input');
+
+    // POSITIVE CONTROL: the same mapping CERTIFIED resolves as the manual blank,
+    // so the arm above is about certification and not about `manual` per se.
+    const certified = resolveOneCertifying({}, { sourceType: 'manual' });
+    expect(
+      certified.resolution.reasonCode,
+      'the control never reaches the manual row, so the arm above proves nothing',
+    ).toBe('manual_source_not_filled');
   });
 
   it('⚠️ THE OFFER DELEGATES — it holds no opinion the resolver does not — #258', () => {
