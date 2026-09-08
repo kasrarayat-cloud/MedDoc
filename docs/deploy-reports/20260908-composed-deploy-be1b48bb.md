@@ -1,4 +1,4 @@
-# §2.5 DECLARATION — the composed deploy of `8cd1705f`
+# §2.5 DECLARATION — the composed deploy of `be1b48bb`
 
 **Written and committed BEFORE the deploy. Owner-ruled STRICT**, above what the
 script's own logic would require: it is code-only (repo migrations 115 = applied
@@ -18,8 +18,19 @@ a rollback tag's name, and not typed. `git merge-base --is-ancestor` confirms it
 is an ancestor of the head, so the range is a well-formed fast-forward.
 
 ```
-HEAD = 8cd1705f2bb57426c324119cb3c0bac179971749   (52 commits)
+HEAD = be1b48bb45ed12645f231e41a36b8c9f3076f6c0
 ```
+
+⚠️ **AMENDED BEFORE THE DEPLOY, NOT AFTER — TWICE.** The first version named
+`8cd1705f`. That commit's `CI` came back RED (`gate-265-shellout-budgets`, two
+violations only visible once the merges put the files in one tree), the batch
+failed as a unit exactly as its own declaration required, and the fix plus the
+act's entry point moved the head twice more.
+
+**A declaration naming the wrong commit is worse than no declaration, because it
+looks like evidence.** Both amendments are corrections to a PREDICTION made
+before the act, which is legitimate; a number adjusted once the outcome is known
+is not, and none of the rows below has moved.
 
 ⚠️ **THE PAYLOAD IS STRICTLY LARGER THAN THE ITEM THAT PROMPTED THE DEPLOY.**
 `main` carries the earlier batch (#1055–#1058) as well as #1066/#1067/#1064. A
@@ -43,7 +54,16 @@ a row per runtime passenger below.
 | `template-twin/create-draft.ts` | `fieldCreateInput` exported | the shared column writer changing behaviour |
 | `template-twin/fill-engine.ts` | typed refusal collector | a refusal not reaching the resolver |
 | `scripts/regenerate-consult-form.ts` | constants exported; `main()` guarded | the script running on import |
-| `.claude/settings.json` | grants for `prove-mutation.sh` | not runtime; recorded for completeness |
+| `scripts/re-issue-form.ts` | **the ruled act's entry point** — #274 shipped the seam without the door | it performs the act; a defect here is the act misfiring |
+
+⚠️ **AND ROOT `scripts/` IS NOT A PASSENGER — MEASURED, NOT ASSUMED.** The range
+also moves `scripts/prove-mutation.sh`, `scripts/make-lens-sandbox.sh`,
+`scripts/run-ruled-mutation.sh`, `scripts/lib/*` and `.claude/settings.json`.
+`docker exec … ls /app` shows the image contains `apps`, `packages`,
+`node_modules` and the two manifests — **there is no `/app/scripts`**. Those are
+host-side tooling and reach production in no form. Listing them as passengers
+would pad the declaration with rows no post-deploy check could ever move, which
+is how a declaration stops being read.
 
 ⚠️ **NONE OF THESE HAS A LIVE CALLER FOR #274.** `ingestTemplateTwin` is not
 invoked anywhere in the tree yet — it is reached only by the ruled act, through
