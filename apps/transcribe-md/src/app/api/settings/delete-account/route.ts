@@ -36,6 +36,7 @@ import prisma from '@meddoc/db';
 
 import type { TransactionClient } from '@meddoc/db';
 import { apiError, withApiHandler } from '@/lib/api-error';
+import { withPracticeLock } from '@/lib/last-owner-invariant';
 import { auth } from '@/lib/nextauth';
 import { RATE_LIMITS, rateLimitOr429 } from '@/lib/rate-limit';
 import { deleteAudioObjectsByPrefix } from '@/lib/minio';
@@ -162,6 +163,14 @@ export const POST = withApiHandler('api:settings:delete-account', async (req) =>
   // ── Atomic destructive path ─────────────────────────────────────
   try {
     await prisma.$transaction(async (tx: TransactionClient) => {
+      // ⚠️ RULING #268 — THE PRACTICE LOCK BEFORE THE USER-ROW WRITE, AND THIS
+      // DOOR IS A DELETE. Self-service deletion removes an active-owner seat
+      // like any other removal, so it reaches the guard's locking path and can
+      // be one half of the measured deadlock. Taken here, at the TOP of the
+      // transaction, so it precedes every write below rather than only the
+      // `user.delete` — a lock taken after an earlier row write would order
+      // nothing.
+      await withPracticeLock(tx, user.practiceId, async () => {});
       await tx.accountDeletion.create({
         data: {
           userId: user.id,

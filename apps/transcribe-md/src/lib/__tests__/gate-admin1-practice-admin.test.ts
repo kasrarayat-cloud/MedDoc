@@ -37,20 +37,40 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // declaration in the file, so a factory closing over a top-level `const` throws
 // `Cannot access 'prisma' before initialization` — and it throws at MODULE LOAD,
 // which vitest reports as "no tests" rather than as a failure in any arm.
-const { prisma, logAudit, getSession } = vi.hoisted(() => ({
-  prisma: {
-    user: {
-      findUnique: vi.fn(),
-      findFirst: vi.fn(),
-      update: vi.fn(),
-      updateMany: vi.fn(),
-      findMany: vi.fn(),
-    },
+const { prisma, logAudit, getSession, queryRaw } = vi.hoisted(() => {
+  // ⚠️ RULING #268 — THE ROLE CHANGE NOW RUNS INSIDE A TRANSACTION, because the
+  // practice advisory lock must be taken BEFORE the row write or two concurrent
+  // demotions deadlock (measured 10 of 10). So this mock grew a `$transaction`.
+  //
+  // ⚠️ IT HANDS THE CALLBACK **THE SAME `user` MOCKS**, deliberately. Every arm
+  // below asserts on `prisma.user.updateMany`, and a `tx` carrying fresh spies
+  // would make all of them pass vacuously — the write would happen on an object
+  // nothing inspects. One set of spies, reachable both ways.
+  //
+  // ⚠️ AND `$queryRaw` ANSWERS `read committed`, WHICH IS A MODELLING CHOICE
+  // AND NOT A CONVENIENCE. `withPracticeLock` refuses any other level (#269);
+  // answering anything else here would make every arm in this file fail for a
+  // reason that has nothing to do with what they test. The REFUSAL itself is
+  // proved in `gate-admin5-last-owner-invariant.test.ts`, against a tx that
+  // reports the elevated levels — not here.
+  const queryRaw = vi.fn(async () => [{ level: 'read committed' }]);
+  const user = {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    update: vi.fn(),
+    updateMany: vi.fn(),
+    findMany: vi.fn(),
+  };
+  const prisma = {
+    user,
     inviteCode: { create: vi.fn(), updateMany: vi.fn(), findMany: vi.fn() },
-  },
-  logAudit: vi.fn(),
-  getSession: vi.fn(),
-}));
+    $queryRaw: queryRaw,
+    $transaction: vi.fn(async (fn: (tx: unknown) => unknown) =>
+      fn({ user, $queryRaw: queryRaw })
+    ),
+  };
+  return { prisma, logAudit: vi.fn(), getSession: vi.fn(), queryRaw };
+});
 
 vi.mock('@meddoc/db', () => ({ default: prisma }));
 vi.mock('@/lib/audit', () => ({ logAudit }));
@@ -319,6 +339,44 @@ describe('⚠️ role changes — the guards that keep a practice administrable'
     const audit = logAudit.mock.calls.at(-1)?.[0];
     expect(audit.action).toBe('PRACTICE_ROLE_CHANGED');
     expect(audit.metadata).toMatchObject({ from: 'CLINICIAN', to: 'TECH' });
+  });
+
+  it('⚠️ #268 BEHAVIOURAL — the practice lock is taken, and taken BEFORE the write', async () => {
+    // ⚠️ THIS IS THE BEHAVIOURAL HALF, AND RULING #251 IS WHY IT EXISTS.
+    // `gate-admin5` asserts the lock's position by READING THE SOURCE, which
+    // #251 retires as a proof of behaviour: a text scan cannot tell a call from
+    // a comment, and it survives any refactor that moves the call into a helper
+    // it does not know to read. This arm asserts what actually RAN, by
+    // invocation order, on the same spies every other arm here inspects.
+    // ⚠️ A NON-OWNER TARGET, AND THE REASON IS A REAL PROPERTY OF THIS DOOR.
+    // `CANNOT_CHANGE_AN_OWNER` (practice-members.ts) refuses to move an OWNER
+    // row AT ALL, so an owner DEMOTION is unreachable from here — it lives on
+    // ADMIN-5's door (PR #1026). Writing this arm against an OWNER target
+    // measures the refusal, not the lock, and it did on its first run.
+    // The lock wraps EVERY role change regardless, which is the conservative
+    // choice: the next door added to this file inherits it.
+    asOwner();
+    prisma.user.findFirst.mockResolvedValue({ id: 'u-2', practiceRole: 'CLINICIAN' });
+    const res = await changeMemberRoleAction(null, form({ userId: 'u-2', role: 'TECH' }));
+    expect(res?.ok).toBe(true);
+
+    // The lock query ran, and it is the advisory lock rather than the level probe.
+    const lockCalls = queryRaw.mock.calls.filter((c) =>
+      String(c[0]).includes('pg_advisory_xact_lock')
+    );
+    expect(lockCalls.length, 'the demotion never took the practice lock').toBe(1);
+
+    // ⚠️ ORDER, BY INVOCATION INDEX — the property the deadlock turns on.
+    // `invocationCallOrder` is vitest's global monotonic counter, so it orders
+    // calls ACROSS two different spies, which is exactly what is needed here:
+    // the lock is on `$queryRaw` and the write is on `user.updateMany`.
+    const lockAt = Math.min(...queryRaw.mock.invocationCallOrder);
+    const writeAt = Math.min(...prisma.user.updateMany.mock.invocationCallOrder);
+    expect(prisma.user.updateMany).toHaveBeenCalledOnce();
+    expect(
+      lockAt,
+      'the row was written before the practice lock was taken — the shape that deadlocked 10 of 10',
+    ).toBeLessThan(writeAt);
   });
 
   it('a no-op writes NOTHING — an append-only trail must not record changes that did not happen', async () => {

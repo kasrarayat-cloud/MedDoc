@@ -137,6 +137,90 @@ export type LastOwnerVerdict =
  *   2. no other member remains          -> nobody is stranded; the practice is
  *      being torn down, which is the self-service deletion path
  */
+/**
+ * ⚠️ RULING #268 — TAKE THE PRACTICE LOCK **BEFORE** ANY USER-ROW WRITE.
+ *
+ * THE DEADLOCK THIS EXISTS FOR WAS MEASURED, 10 OF 10, AT THE **DEFAULT**
+ * ISOLATION LEVEL, ON TWO WRITES THAT ARE BOTH ENTIRELY LEGAL. Practice with
+ * three active owners; two admins each demote a different one; the invariant is
+ * nowhere near being touched. Every trial, one of them died with
+ * `ERROR: deadlock detected` and its demotion silently did not happen.
+ *
+ * THE CYCLE, because the fix only makes sense once it is written down:
+ *
+ *   T1  UPDATE user A      -> row lock A
+ *       trigger fires      -> pg_advisory_xact_lock(guard, practice)   ACQUIRED
+ *       guard counts       -> SELECT siblings ... FOR UPDATE           WANTS B
+ *   T2  UPDATE user B      -> row lock B
+ *       trigger fires      -> pg_advisory_xact_lock(guard, practice)   WANTS T1's
+ *
+ * T1 holds the advisory lock and wants row B; T2 holds row B and wants the
+ * advisory lock. The observed error is `ShareLock on transaction` — a ROW wait,
+ * not a lock-key wait — which is what pins this shape rather than a guess.
+ *
+ * ⚠️ **NO TRIGGER-SIDE FIX CAN CLOSE IT, AND THAT IS THE WHOLE POINT.** By the
+ * time the trigger runs, its transaction is ALREADY holding a row lock it did
+ * not choose the order of. The lock must be taken before the statement, which
+ * only the caller can do. Widening the trigger, reordering its counts, or
+ * changing its lock strength all leave the row lock exactly where it was.
+ *
+ * ⚠️ **THE TRIGGER KEEPS ITS OWN LOCK.** This helper is application code, and
+ * the next writer somebody adds will not call it — the same argument this
+ * file's header already makes about enforcement. Same key
+ * (`hashtext('users_last_owner_guard')`, `hashtext(practiceId)`), same session,
+ * so the trigger's acquisition is a re-entry and not a second lock: Postgres
+ * advisory locks are re-entrant within a session and `pg_advisory_xact_lock`
+ * releases on COMMIT or ROLLBACK whatever the nesting depth.
+ *
+ * ⚠️ **AND IT ASSERTS `READ COMMITTED` — RULING #269.** The guard cannot be
+ * correct above it: a snapshot taken before the lock never refreshes, so a
+ * transaction waits its turn correctly and then counts owners on a view of the
+ * world from before the other writer committed. No amount of locking repairs a
+ * stale snapshot, so the honest thing is to refuse rather than to serialize
+ * something into a wrong answer. The trigger refuses too; this is the friendly
+ * half, and it names the level it saw.
+ */
+export const PRACTICE_LOCK_KEY = 'users_last_owner_guard';
+
+export class IsolationLevelUnsupportedError extends Error {
+  constructor(public readonly level: string) {
+    super(
+      `The last-owner guard requires READ COMMITTED and this transaction is ${level}. ` +
+        'A snapshot taken before the practice lock never refreshes, so the owner count ' +
+        'would be read from before the competing write committed.'
+    );
+    this.name = 'IsolationLevelUnsupportedError';
+  }
+}
+
+export async function withPracticeLock<T>(
+  tx: {
+    $queryRaw: <R = unknown>(q: TemplateStringsArray, ...v: unknown[]) => Promise<R>;
+  },
+  practiceId: string,
+  write: () => Promise<T>,
+): Promise<T> {
+  // ⚠️ THE ASSERTION COMES FIRST, AND IT IS NOT A FORMALITY. Taking the lock
+  // inside a REPEATABLE READ transaction would produce the most expensive
+  // outcome available here: a write that waits politely, passes every guard,
+  // and commits the forbidden state. Refusing before the lock means the
+  // transaction has changed nothing when it aborts.
+  const [{ level }] = await tx.$queryRaw<{ level: string }[]>`
+    SELECT current_setting('transaction_isolation') AS level`;
+  if (level.toLowerCase() !== 'read committed') {
+    throw new IsolationLevelUnsupportedError(level);
+  }
+
+  // ⚠️ THE KEY PAIR IS THE TRIGGER'S, COMPUTED BY POSTGRES' OWN `hashtext` —
+  // never re-implemented here. A second hash function is a second reader of the
+  // rule, and the two would take DIFFERENT locks while looking identical,
+  // which is precisely the failure this helper exists to end.
+  await tx.$queryRaw`
+    SELECT pg_advisory_xact_lock(hashtext(${PRACTICE_LOCK_KEY}), hashtext(${practiceId}))`;
+
+  return write();
+}
+
 export async function wouldStrandPractice(userId: string): Promise<LastOwnerVerdict> {
   // ⚠️ THE SELECT IS DERIVED FROM THE PREDICATE, NOT RETYPED BESIDE IT.
   // The adversarial pass found this list was a THIRD uncoupled restatement of

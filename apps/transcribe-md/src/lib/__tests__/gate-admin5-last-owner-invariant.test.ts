@@ -42,13 +42,19 @@ vi.mock('@meddoc/db', () => ({
 
 import {
   ACTIVE_OWNER_WHERE,
+  IsolationLevelUnsupportedError,
   LIVE_MEMBER_WHERE,
+  PRACTICE_LOCK_KEY,
   activeOwnerSql,
   liveMemberSql,
+  withPracticeLock,
   wouldStrandPractice,
 } from '../last-owner-invariant';
 
 const REPO = join(__dirname, '..', '..', '..', '..', '..');
+// The app's own `src`, for the door-order arms (#268) and the Serializable
+// audit (#269). Derived from __dirname so it is right in a worktree too.
+const SRC = join(__dirname, '..', '..');
 const MIGRATION = join(
   REPO, 'packages', 'db', 'prisma', 'migrations',
   '20260907040000_admin5_last_owner_trigger', 'migration.sql'
@@ -473,6 +479,167 @@ describe('ruling #239 — the friendly refusal counts LIVE members, not rows', (
     await wouldStrandPractice('u1');
     for (const call of userCount.mock.calls) {
       expect((call[0] as { where: { id?: unknown } }).where.id).toEqual({ not: 'u1' });
+    }
+  });
+});
+
+// ============================================================================
+// RULINGS #268 / #269 — THE LOCK IS TAKEN BEFORE THE WRITE, AND THE LEVEL IS
+// ASSERTED.
+// ----------------------------------------------------------------------------
+// ⚠️ WHAT MAKES THESE ARMS NECESSARY: the deadlock they close is INVISIBLE to
+// every other arm in this file. It needs two concurrent connections, so a
+// single-threaded unit suite cannot reach it — the shipped code passed 23 of 23
+// here while deadlocking 10 times out of 10 against a real Postgres.
+//
+// So these arms do NOT try to reproduce the race. They assert the two
+// STRUCTURAL properties the race proof depends on, which a unit suite CAN see:
+// that the lock is taken BEFORE the write at every door, and that the helper
+// refuses a level it cannot be correct at. The race itself is proved in
+// `prisma/proofs/`, and the numbers live in the §2.5 rows file.
+// ============================================================================
+describe('#268 — the practice lock is taken BEFORE any user-row write', () => {
+  const DOORS: ReadonlyArray<readonly [string, string]> = [
+    ['the role-change door', join(SRC, 'actions', 'practice-members.ts')],
+    ['the admin suspend route', join(SRC, 'app', 'api', 'admin', 'users', '[id]', 'suspend', 'route.ts')],
+    ['the admin soft-delete route', join(SRC, 'app', 'api', 'admin', 'users', '[id]', 'soft-delete', 'route.ts')],
+    ['the self-service delete door', join(SRC, 'app', 'api', 'settings', 'delete-account', 'route.ts')],
+  ];
+
+  it.each(DOORS)('%s calls withPracticeLock', (_name, file) => {
+    const src = readFileSync(file, 'utf8');
+    expect(src, `${file} does not import withPracticeLock`).toContain('withPracticeLock');
+  });
+
+  it.each(DOORS)('%s takes the lock BEFORE its write, not after', (_name, file) => {
+    const src = readFileSync(file, 'utf8');
+    const lockAt = src.indexOf('withPracticeLock(');
+    expect(lockAt, 'no withPracticeLock call').toBeGreaterThan(-1);
+
+    // ⚠️ ORDER IS THE ENTIRE POINT — A LOCK TAKEN AFTER THE ROW WRITE ORDERS
+    // NOTHING, and it is the shape that deadlocked. Measured on this branch:
+    // lock-after 10/10 deadlocks, lock-before 0/10.
+    // The write is found by the FIRST user-row mutation in the file.
+    const writeAt = [
+      /\btx\.user\.(?:update|updateMany|delete|deleteMany|create)\b/,
+      /\(tx\.user as any\)\.update\b/,
+      /\bprisma\.user\.(?:update|updateMany|delete|deleteMany)\b/,
+    ]
+      .map((re) => src.search(re))
+      .filter((i) => i > -1)
+      .sort((a, b) => a - b)[0];
+
+    // POSITIVE CONTROL: a door with no user-row write at all would pass
+    // vacuously, and three of these four would have.
+    expect(writeAt, `${file} has no user-row write — this arm would be vacuous`).toBeGreaterThan(-1);
+    expect(
+      lockAt,
+      `${file} writes a user row at ${writeAt} before taking the lock at ${lockAt} — ` +
+        'that is the shape that deadlocked 10 of 10',
+    ).toBeLessThan(writeAt as number);
+  });
+
+  it('⚠️ the helper uses the TRIGGER\'s key, and does not re-implement hashtext', () => {
+    const src = readFileSync(join(SRC, 'lib', 'last-owner-invariant.ts'), 'utf8');
+    // The same literal the migration passes to hashtext. A second key would
+    // take a DIFFERENT lock while looking identical.
+    expect(PRACTICE_LOCK_KEY).toBe('users_last_owner_guard');
+    expect(sql, 'the migration no longer locks on this key').toContain(
+      `hashtext('${PRACTICE_LOCK_KEY}')`,
+    );
+    expect(src, 'the helper computes its own hash instead of using hashtext').toContain(
+      'hashtext(${PRACTICE_LOCK_KEY})',
+    );
+  });
+
+  it('⚠️ the TRIGGER KEEPS its own lock — the helper does not replace it', () => {
+    // A helper is application code and the next writer will not call it. If
+    // this arm reds because the trigger's lock was removed "now that the
+    // application takes it", that is the defect, not the test.
+    // ⚠️ THE CALL FORM, NOT THE BARE NAME — AND THIS ARM CAUGHT ITSELF.
+    // Its first version counted /pg_advisory_xact_lock/, which is a SUBSTRING
+    // of any renaming: a mutation that replaced every call with
+    // `pg_advisory_xact_lock_REMOVED_BY_MUTATION` left all three matches
+    // standing and the arm passed 38 of 38 with the trigger's lock gone.
+    // Matching the open paren means the identifier has to END there.
+    const calls = (sql.match(/pg_advisory_xact_lock\s*\(/g) ?? []).length;
+    expect(calls, 'the trigger stopped taking its own advisory lock').toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('#269 — the guard refuses above READ COMMITTED', () => {
+  const txAt = (level: string) => ({
+    $queryRaw: vi.fn(async () => [{ level }]) as unknown as <R>(
+      q: TemplateStringsArray,
+      ...v: unknown[]
+    ) => Promise<R>,
+  });
+
+  it('READ COMMITTED is accepted, and the lock is actually taken', async () => {
+    const tx = txAt('read committed');
+    const write = vi.fn(async () => 'wrote');
+    await expect(withPracticeLock(tx, 'prac-1', write)).resolves.toBe('wrote');
+    // ⚠️ NOT JUST "IT RESOLVED" — the lock query must have run. A helper that
+    // checked the level and forgot the lock would satisfy a bare resolve.
+    const queries = (tx.$queryRaw as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    expect(queries.length, 'the lock query was never issued').toBe(2);
+    expect(String(queries[1][0]), 'the second query is not the advisory lock').toContain(
+      'pg_advisory_xact_lock',
+    );
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['repeatable read', 'serializable'])(
+    '⚠️ %s is REFUSED — and refused BEFORE the write runs',
+    async (level) => {
+      const tx = txAt(level);
+      const write = vi.fn(async () => 'wrote');
+      await expect(withPracticeLock(tx, 'prac-1', write)).rejects.toBeInstanceOf(
+        IsolationLevelUnsupportedError,
+      );
+      // ⚠️ THE ORDER IS THE SAFETY PROPERTY. Refusing after the write would
+      // leave the forbidden state committed and then complain about it.
+      expect(write, 'the write ran before the refusal').not.toHaveBeenCalled();
+      // and the lock was never taken either — one query, the level probe.
+      expect(
+        (tx.$queryRaw as unknown as { mock: { calls: unknown[][] } }).mock.calls.length,
+        'the lock was taken inside a level that cannot be correct',
+      ).toBe(1);
+    },
+  );
+
+  it('⚠️ the refusal NAMES the level it saw — a bare "unsupported" is unactionable', () => {
+    expect(new IsolationLevelUnsupportedError('serializable').message).toContain('serializable');
+  });
+
+  it('⚠️ NO Serializable transaction writes a user row — the audit #269 requires', () => {
+    // ⚠️ THIS AUDIT PRECEDES THE REFUSAL, AND THE ORDER IS THE RULING'S. If a
+    // shipped Serializable transaction legitimately wrote a user row, the
+    // refusal above would convert this guard into an outage. Measured: none do.
+    const files = [
+      join(SRC, 'lib', 'template-twin', 'fill-engine.ts'),
+      join(SRC, 'lib', 'template-twin', 'certification-lifecycle.ts'),
+      join(SRC, 'lib', 'template-twin', 'synthetic-test.ts'),
+      join(SRC, 'app', 'api', 'visits', '[id]', 'sign', 'route.ts'),
+    ];
+    const WRITE = /\btx\.user\.(?:update|updateMany|delete|deleteMany|create)\b|\(tx\.user as any\)\.update\b/;
+
+    // POSITIVE CONTROL FIRST, from a DIFFERENT era than the subject: the same
+    // pattern must FIND the writes that do exist, or an empty result below
+    // means only that the regex is broken.
+    const control = join(SRC, 'app', 'api', 'settings', 'change-password', 'route.ts');
+    expect(
+      WRITE.test(readFileSync(control, 'utf8')),
+      'the user-write pattern no longer matches a known user write — the audit below is void',
+    ).toBe(true);
+
+    for (const f of files) {
+      const src = readFileSync(f, 'utf8');
+      if (!src.includes('isolationLevel')) continue;
+      expect(
+        WRITE.test(src),
+        `${f} runs Serializable AND writes a user row — #269's refusal would make it a 500`,
+      ).toBe(false);
     }
   });
 });

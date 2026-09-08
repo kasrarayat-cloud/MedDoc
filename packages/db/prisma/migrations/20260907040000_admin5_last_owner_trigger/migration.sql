@@ -214,6 +214,18 @@ BEGIN
 
     -- From here the write REMOVES an active-owner seat from OLD."practiceId".
     -- Serialize before counting -- see the note above.
+    -- ⚠️ RULING #269 — REFUSE ABOVE READ COMMITTED, BY NAME. A snapshot taken
+    -- before the lock never refreshes, so serializing the writers here would
+    -- produce the most expensive outcome available: a write that waits
+    -- politely, passes every count, and commits the forbidden state. Refusing
+    -- is the honest answer, and naming the level is what makes it actionable.
+    IF current_setting('transaction_isolation') <> 'read committed' THEN
+        RAISE EXCEPTION
+            'users_last_owner_guard: cannot enforce the last-owner invariant at isolation level %. This transaction must run at READ COMMITTED -- a snapshot taken before the practice lock never refreshes, so the owner count would be read from before the competing write committed.',
+            current_setting('transaction_isolation')
+            USING ERRCODE = '0A000';
+    END IF;
+
     PERFORM pg_advisory_xact_lock(
         hashtext('users_last_owner_guard'),
         hashtext(OLD."practiceId")
@@ -230,13 +242,37 @@ BEGIN
     --
     -- `FOR UPDATE` on those rows makes the same case RAISE instead: under
     -- REPEATABLE READ, locking a row a concurrent transaction has already
-    -- committed a change to reports "could not serialize access". SERIALIZABLE
-    -- already refused it. So all three isolation levels are now safe, and the
-    -- two that are not READ COMMITTED fail LOUDLY rather than silently.
+    -- committed a change to reports "could not serialize access".
     --
-    -- The set is small (a practice's owner rows), it is taken while already
-    -- holding the per-practice advisory lock, and the lock order is therefore
-    -- the same for every writer -- so this does not introduce a deadlock.
+    -- ⚠️ THIS BLOCK USED TO END: "So all three isolation levels are now safe,
+    -- and the two that are not READ COMMITTED fail LOUDLY rather than
+    -- silently." THAT SENTENCE WAS NEVER MEASURED AND IT IS NOW REPLACED --
+    -- ruling #269. Round five established that NO proof anywhere ran a
+    -- transaction above READ COMMITTED, so the claim rested on reasoning alone,
+    -- and five findings contradicted it. The guard cannot be correct above READ
+    -- COMMITTED for a structural reason no locking repairs: a snapshot taken
+    -- before the lock NEVER REFRESHES, so a transaction waits its turn
+    -- correctly and then counts owners on a view of the world from before the
+    -- other writer committed. So the guard REFUSES there, by name, below.
+    --
+    -- ⚠️ AND THE NEXT SENTENCE WAS FALSE TOO: "the lock order is therefore the
+    -- same for every writer -- so this does not introduce a deadlock." IT DOES,
+    -- AND IT WAS MEASURED 10 TIMES OUT OF 10 AT THE DEFAULT ISOLATION LEVEL on
+    -- two entirely legal concurrent demotions. The lock order is NOT the same
+    -- for every writer, because the trigger is not the first thing to take a
+    -- lock: the UPDATE has already taken a ROW lock before this function runs.
+    --
+    --   T1  UPDATE user A -> row lock A ; advisory lock ACQUIRED ; wants row B
+    --   T2  UPDATE user B -> row lock B ; wants the advisory lock
+    --
+    -- Postgres reported exactly that shape: "waits for ShareLock on
+    -- transaction ... while locking tuple in relation users" on one side and
+    -- "waits for ExclusiveLock on advisory lock" on the other. The fix cannot
+    -- live here -- by the time this function runs its transaction is already
+    -- holding a row lock it did not choose the order of -- so it lives at the
+    -- WRITERS, in `withPracticeLock` (ruling #268), which takes this same key
+    -- BEFORE the statement. This lock is KEPT as re-entrant defence: a helper
+    -- is application code and the next writer added will not call it.
     -- ⚠️ EVERY OTHER ROW IN THE PRACTICE, NOT ONLY THE OWNERS — RULING #253.
     -- This locked `practiceRole = 'OWNER'` only, and then counted TWO things:
     -- `owners_left` (owners) and `members_left` (LIVE MEMBERS). The second count
@@ -469,6 +505,18 @@ BEGIN
 
     -- Same lock, same key as the removal guard: an INSERT racing a demotion
     -- must not be able to slip between the demotion's count and its commit.
+    -- ⚠️ RULING #269 — REFUSE ABOVE READ COMMITTED, BY NAME. A snapshot taken
+    -- before the lock never refreshes, so serializing the writers here would
+    -- produce the most expensive outcome available: a write that waits
+    -- politely, passes every count, and commits the forbidden state. Refusing
+    -- is the honest answer, and naming the level is what makes it actionable.
+    IF current_setting('transaction_isolation') <> 'read committed' THEN
+        RAISE EXCEPTION
+            'users_last_owner_guard: cannot enforce the last-owner invariant at isolation level %. This transaction must run at READ COMMITTED -- a snapshot taken before the practice lock never refreshes, so the owner count would be read from before the competing write committed.',
+            current_setting('transaction_isolation')
+            USING ERRCODE = '0A000';
+    END IF;
+
     PERFORM pg_advisory_xact_lock(
         hashtext('users_last_owner_guard'),
         hashtext(NEW."practiceId")
