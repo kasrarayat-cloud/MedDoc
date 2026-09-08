@@ -187,3 +187,83 @@ different contents, so it is class **(a)** under STANDING AUTHORITY.
   not the merge result. It must be merged forward and re-verified before judgement.
 - The two failed verifier calls were on `TRACER-2` and `V5`; both still had two
   voters and neither was decided by a single voice.
+
+
+---
+
+# WHAT THE OWNER RULED, AND WHAT IT CLOSED — 2026-09-08
+
+Rulings **#267–#271** (recorded at claim time, PR #1059). The block is #267–#271
+because #261–#266 were already claimed by `feat/ruled-mutation-in-container`,
+found by enumerating every remote branch rather than reading the ledger head —
+⚠️ **a head-only read would have returned `#248` and collided with two lanes.**
+
+## The eight CODE findings
+
+| finding | state |
+|---|---|
+| `R5-RACE-1` deadlock 10/10 at DEFAULT isolation | **CLOSED** — `withPracticeLock` before every user-row write (#268). Measured **10/10 → 0/10** |
+| `MIG-1` `MIG-2` `R5-RACE-2` `DOOR-1` `DOOR-2` — the REPEATABLE READ family | **CLOSED** — the guard now REFUSES above READ COMMITTED (#269). The attack that reached the forbidden state now refuses both transactions BY NAME and ends at `active_owners=1` |
+| `R5-RACE-3` the harness's stagger hides the deadlock | **CLOSED by the fix** — with the lock taken first there is no deadlock to hide, proven on the harness's own fixture shape |
+| `SF-1` the row stamped with one practice, the freeze reading another | **CLOSED** — the chart owns the note (#267); one derivation from `transcribe_visits."practiceId"` |
+
+**The full proof table for #268**, both fixtures, ten trials each:
+
+| fixture | shape | deadlocks | outcome |
+|---|---|---|---|
+| 3 owners, both demotions legal | shipped | **10/10** | one demotion silently lost |
+| 3 owners | **#268** | **0/10** | both landed 10/10 |
+| 2 owners, one must be refused | shipped | **10/10** | invariant held **BY DEADLOCK** — a raw 500, never the sentence |
+| 2 owners | **#268** | **0/10** | refused BY NAME 10/10, one owner survives 10/10 |
+
+⚠️ **The third row is the one to remember.** The invariant *held*, and it held by
+crashing. `wouldStrandPractice` exists to produce a sentence naming the remedy,
+and the shipped shape never let it.
+
+## Instrument survivors closed
+
+`FG-1` `FG-2` (#1036) — the route arms proved only that `wouldStrandPractice` is
+CALLED. Replaced by a gate that **drives both doors**. Measured contrast, twice:
+**text arm 38/38 green, driven arm reds** — for passing the wrong user, and for
+deleting the refusal branch. · `FG-2` (#1018) — the ladder's `status` column was
+behaviourally live and unasserted; a flip survived **893/893**. Now pinned by
+literals. · `MIG-3` — closed by running the proof at all three isolation levels.
+· `SF-2` — the sibling door's fixture now carries three distinct identities.
+
+## Three defects I introduced and CI caught
+
+⚠️ **Recorded because the round is about proof honesty, and these are mine.**
+
+1. **The `$queryRaw` 500.** `pg_advisory_xact_lock` returns `void`; `$queryRaw`
+   must deserialize the row and cannot. Every unit arm was green because **the
+   test double offered `$queryRaw` and nothing else** — a double with fewer
+   methods than the client makes the wrong choice the only choice. `e2e` caught
+   it on the ordinary suspend of a solo owner. `billing-charge.ts:453` had used
+   `$executeRaw` all along.
+2. **A type error shipped to CI** because I grepped `tsc` output for the files I
+   had touched instead of reading its exit code.
+3. **A vacuous arm.** My first `status` arm asserted `resolution.status ===
+   guard.status` — and the resolver READS `guard.status`, so both sides moved
+   together and both flips passed 52/52. Caught by running the mutation, not by
+   reading the arm.
+
+## Two hazards found in the instruments themselves
+
+- ⚠️ **`scripts/rotate-ledger.sh --apply` half-applies and reports success.** Its
+  RULINGS pass REFUSED *after* wiping the archive index (4 archives → 0); its
+  RELAY pass printed **✔** and did the same. Both reverted. **Not fixed** — the
+  refusal is a real structural limit (too many STANDING rows for any cutoff) and
+  the ledger's shape is the owner's. Do not run it and trust the tick.
+- ⚠️ **`RULINGS.md` crossed the 150,000-character tool read limit** (150,343).
+  Fixed the way canon prescribes — *an index row is a pointer, never the rule* —
+  by compressing the five new rows to pointers. **148,656** now.
+- ⚠️ **QA postgres has no host port**, so `127.0.0.1:5432` is **PRODUCTION**. A
+  diagnostic probe reached it and was stopped only by wrong credentials. Nothing
+  was read or written; the probe was re-run inside the QA network.
+
+## Still open
+
+The remaining #1018 instrument survivors — `F1`/`TRACER-1`/`FG-1` (the resolver
+half is a source regex, not a Proxy), `F2` (hand-written `KINDS`), `FG-3` (the
+certification anchor names *a* row, not *which*), `TRACER-2`, `BB-1` — and
+#1036's `V1`–`V6`, `R5-RACE-4`. They are recorded above with their measurements.
