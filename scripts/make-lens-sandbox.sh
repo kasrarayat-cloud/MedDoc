@@ -51,6 +51,46 @@ DIR="$SHARED/.lens-$NAME"
 # ── The worktree, DETACHED. No branch exists to be pushed or moved. ──────────
 git -C "$SHARED" worktree add --detach "$DIR" "$REF" >/dev/null 2>&1
 
+# ── THE MARKER — #206 as amended by #213 ────────────────────────────────────
+#
+# ⚠️ WRITTEN IMMEDIATELY AFTER THE WORKTREE EXISTS, AND BEFORE ANYTHING THAT CAN
+# FAIL. The `setup-worktree.sh` block below is explicitly non-fatal, so a sandbox
+# whose install failed must still be attributable — an unmarked tree is exactly
+# the state that makes twenty of them un-reapable by anyone.
+#
+# ⚠️ `CLAUDE_PID`, NEVER `$$` — #213, and measured first-hand in this shell:
+#
+#     CLAUDE_PID = 2204890        $$ = 3555429
+#
+# `$$` in a tool shell is a FRESH SUBSHELL. The pid it records belongs to a
+# process that was already dead when the file was written, so an aliveness check
+# against it answers "dead" — the direction that costs somebody their tree.
+#
+# ⚠️ AND THE START-TIME BINDS THE PID TO AN IDENTITY. Three sessions share one
+# account on this box; a bare pid is reused, and a reused pid reads as ALIVE for
+# a session that ended hours ago. Field 22 of /proc/<pid>/stat is the process's
+# own start tick — it cannot be inherited by a later process wearing the same
+# number.
+_marker_pid="${CLAUDE_PID:-}"
+_marker_start=""
+if [ -n "$_marker_pid" ] && [ -r "/proc/$_marker_pid/stat" ]; then
+  _marker_start="$(awk '{print $22}' "/proc/$_marker_pid/stat" 2>/dev/null || true)"
+fi
+_marker_sha="$(git -C "$SHARED" rev-parse --verify --quiet "${REF}^{commit}" 2>/dev/null || true)"
+_marker_now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+cat > "$DIR/.lens-marker" <<MARKER
+# A LENS SANDBOX'S PROVENANCE — #206, as amended by #213.
+# Read by scripts/reap-lens-sandbox.sh. Machine-readable: key=value, one per line.
+owner_session=${CLAUDE_CODE_SESSION_ID:-unknown}
+owner_pid=${_marker_pid:-unknown}
+owner_starttime=${_marker_start:-unknown}
+created_utc=$_marker_now
+heartbeat_utc=$_marker_now
+ref_under_test=$REF
+ref_sha=${_marker_sha:-unknown}
+MARKER
+
 # ── Worktree-scoped config. `--worktree` needs the extension; enabling it is a
 #    documented, reversible git feature and it is what keeps the next line from
 #    landing in the SHARED config and breaking real pushes. ───────────────────

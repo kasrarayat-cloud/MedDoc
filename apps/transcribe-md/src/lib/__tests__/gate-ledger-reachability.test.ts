@@ -247,161 +247,31 @@ describe('the standing instructions name the archive directories', () => {
   }, 20_000);
 });
 
-describe('RULINGS — one number, one ruling', () => {
-  // The canon half of this lives in gate-agents-md-size. Rulings need their own
-  // arm because their collision has ALREADY happened: RULINGS.md's own preamble
-  // records that "the loop and a supervised session collided on #124, then on
-  // #125". Two actors, one counter, no lock.
-  //
-  // ⚠️ A NUMBER MAY LEGITIMATELY CARRY SEVERAL ROWS, and a naive
-  // no-duplicate-numbers arm would red main on arrival — measured: five numbers
-  // (#106 #109 #115 #116 #131) hold multiple rows, and every one is a lawful
-  // multi-part ruling. An amendment is a NEW ROW under the SAME number with a
-  // part marker in its title. So the invariant is narrower than "unique", and
-  // getting that wrong would have meant shipping a gate that had to be disabled.
-  //
-  // ⚠️ THE MARKER'S FORMAT VARIES IN PRACTICE — `(g) —`, `b —`, `(c)-CORRECTED —`
-  // are all in use. The first pattern written here matched only the parenthesised
-  // form and reported #115/#116 as violations. They were not; the probe was.
-  const PART = /^\(?([a-z0-9]{1,2})\)?[-\s)]*(?:—|-)/;
+// ══ RETIRED BY RULING #273 — ONE GUARD ══════════════════════════════════════
+//
+// The `RULINGS — one number, one ruling` describe lived here. It duplicated a
+// property `gate-ruling-row-identity.test.ts` also guards, and **two guards for
+// one property drift the day either is fixed.**
+//
+// ⚠️ IT WAS NOT SIMPLY DELETED. Its six arms were read one at a time against the
+// surviving file, and FOUR were unique and are now folded in there:
+//
+//   base-row uniqueness            -> already covered
+//   every AMENDMENT has a base row -> FOLDED  (with both positive controls)
+//   its non-vacuity companion      -> FOLDED
+//   a part letter is never reused  -> FOLDED  (needed a CAPTURING pattern)
+//   base + parts === rows.length   -> TAUTOLOGICAL, dropped and said so
+//   parts > 0                      -> FOLDED
+//
+// ⚠️ AND THE LARGEST DIFFERENCE WAS NOT AN ARM. This file's row regex saw **170**
+// rows; the surviving file's saw **169**, silently dropping `#162(c)` — a real
+// row on `main`. No arm on either side would have reported that. It is why #273
+// requires the unique set to be ENUMERATED before anything is deleted, and why
+// the enumeration is the evidence rather than a courtesy.
+//
+// `PART` and `rulingRows()` were declared inside that describe and used nowhere
+// else in this file, so nothing here is left dangling.
 
-  function rulingRows(): { num: string; title: string }[] {
-    const src = readFileSync(join(REPO, 'docs/foundation/RULINGS.md'), 'utf8');
-    return src
-      .split('\n')
-      .filter((l) => /^\| [0-9-]+ \| #\d+/.test(l))
-      .map((l) => {
-        const c = l.split('|').map((x) => x.trim());
-        return { num: c[2], title: c[4] ?? '' };
-      });
-  }
-
-  it('reads a populated table — the arm is not vacuous', () => {
-    expect(rulingRows().length).toBeGreaterThan(40);
-  });
-
-  it('every ruling number has exactly ONE base row', () => {
-    const base = new Map<string, number>();
-    for (const r of rulingRows()) {
-      if (PART.test(r.title)) continue;
-      base.set(r.num, (base.get(r.num) ?? 0) + 1);
-    }
-    const dupes = [...base.entries()].filter(([, c]) => c !== 1);
-    expect(
-      dupes.map(([n, c]) => `${n}: ${c} base rows`),
-      'two rulings claim the same number — an amendment carries a part marker, a collision does not',
-    ).toEqual([]);
-  });
-
-  // ==========================================================================
-  // ⚠️ AN AMENDMENT IMPLIES A BASE ROW — and `#N(x)` is a STRUCTURAL
-  // discriminator, which is why this arm exists and a broader one does not.
-  // --------------------------------------------------------------------------
-  // THE HOLE THIS CLOSES, measured 2026-09-06: `#162` and `#162(b)` are cited on
-  // `main` and have NO base row anywhere — head or archive. Their record lives
-  // on a branch that was never pushed, so the receiving session obeyed
-  // "record the ruling in your FIRST commit" exactly and the commit never left
-  // the machine. A session doing the prescribed two-path grep gets zero and
-  // cannot tell "no such ruling" from "the ruling is on somebody's laptop".
-  //
-  // ⚠️ THE BROADER ARM WAS ATTEMPTED AND REJECTED, WHICH IS WHY THIS ONE IS
-  // NARROW. "Every cited ruling number has a base row" returns 45 violations —
-  // almost all PR numbers, because rulings and PRs SHARE THE `#` SIGIL. The
-  // tempting fix is a range (rulings 93..198, PRs in the three-hundreds and up, disjoint today);
-  // that gate becomes a FALSE ACCUSER the day rulings reach three hundred, and it would
-  // land looking correct. A discriminator that works on the current population
-  // encodes an accident as a rule.
-  //
-  // A PART LETTER IS DIFFERENT: it is structure, not range. Measured across all
-  // of `docs/`, the form `PR #N(x)` occurs **ZERO** times — a part marker never
-  // marks a pull request. So `#N(x)` identifies a ruling by construction, and
-  // stays correct at three hundred and three thousand.
-  //
-  // ⚠️ AND THE HONEST COST, SAID HERE RATHER THAN DISCOVERED LATER: THIS ARM
-  // FIRES NOTHING TODAY. 24 distinct amended numbers, 0 violations. Its value is
-  // PROSPECTIVE — it catches an amendment landing while its base does not, which
-  // is exactly the `#162(b)` shape. A reader must not take its green as evidence
-  // that the ledger has no missing rulings; it cannot see `#179`, which is cited
-  // four times on `main` today with no base row, because nothing cites it with a
-  // part letter. The non-vacuity arm below is what stops this being decorative.
-  // ==========================================================================
-  it('⚠️ every AMENDMENT cited has a base row — structure, not range', () => {
-    // Head + EVERY archive — an amendment may be cited in either, and reading
-    // only the head is the 2026-08-26 split's own failure mode.
-    const archiveDir = join(REPO, 'docs/foundation/rulings');
-    const corpus = [
-      R(RULINGS),
-      ...readdirSync(archiveDir)
-        .filter((f) => f.endsWith('.md'))
-        .map((f) => readFileSync(join(archiveDir, f), 'utf8')),
-    ].join('\n');
-    const amended = new Set([...corpus.matchAll(/#(\d+)\s*\([a-z]\)/g)].map((m) => m[1]!));
-    // ⚠️ BASE ROWS SPAN HEAD **AND** ARCHIVES, and the first draft of this arm
-    // read the head alone. `rulingRows()` is head-only — correct for the
-    // one-row-per-number arm, wrong here — so every ruling whose base row was
-    // ARCHIVED read as orphaned: 24 false accusations, including #100, #103,
-    // #106 and #109. Exactly the thing this arm's own comment says it refuses to
-    // ship, caught only by running it. The 2026-08-26 split moved those bodies;
-    // an instrument that reads one path answers about one path.
-    const base = new Set([
-      ...rulingRows().filter((r) => !PART.test(r.title)).map((r) => r.num),
-      ...[...corpus.matchAll(/^\|\s*[0-9]{4}-[0-9]{2}-[0-9]{2}\s*\|\s*\*?\*?#(\d+)/gm)].map(
-        (m) => m[1]!,
-      ),
-    ]);
-
-    // POSITIVE CONTROL — the extraction must actually find amendments, or the
-    // set difference below is empty for the wrong reason and the arm is green
-    // because it looked at nothing.
-    expect(
-      amended.size,
-      'no amendments extracted — the pattern found nothing, so this arm proves nothing',
-    ).toBeGreaterThanOrEqual(20);
-    expect(base.size, 'no base rows extracted').toBeGreaterThanOrEqual(50);
-
-    const orphaned = [...amended].filter((n) => !base.has(n)).sort();
-    expect(
-      orphaned,
-      'these amendments are cited with no base ruling row — an amendment landed ' +
-        'while its base did not, which is the #162(b) shape: the amendment is ' +
-        'readable and the thing it amends is not',
-    ).toEqual([]);
-  });
-
-  it('⚠️ NON-VACUITY — the arm above CAN fail, proved on a synthetic corpus', () => {
-    // Without this, "0 violations" is indistinguishable from "the check does
-    // nothing". A real amendment number, with its base row withheld.
-    const amended = new Set(['162']);
-    const base = new Set(['163', '164']);
-    const orphaned = [...amended].filter((n) => !base.has(n));
-    expect(orphaned).toEqual(['162']);
-    // ...and it passes when the base IS present, so it is not always-red either.
-    expect([...amended].filter((n) => new Set(['162', '163']).has(n) === false)).toEqual([]);
-  });
-
-  it('a part letter is never reused within one ruling number', () => {
-    const seen = new Map<string, string[]>();
-    for (const r of rulingRows()) {
-      const m = PART.exec(r.title);
-      if (!m) continue;
-      seen.set(r.num, [...(seen.get(r.num) ?? []), m[1]]);
-    }
-    const dupes = [...seen.entries()]
-      .map(([n, v]) => [n, v.filter((p, i) => v.indexOf(p) !== i)] as const)
-      .filter(([, v]) => v.length > 0);
-    expect(dupes.map(([n, v]) => `${n}: ${v.join(',')}`)).toEqual([]);
-  });
-
-  it('base + part rows reconcile against the total', () => {
-    // Arithmetic that does not reconcile is a finding: a row landing in neither
-    // bucket means the parser stopped describing the file.
-    const rows = rulingRows();
-    const parts = rows.filter((r) => PART.test(r.title)).length;
-    const base = rows.length - parts;
-    expect(base + parts).toBe(rows.length);
-    expect(parts).toBeGreaterThan(0); // the multi-part shape really is in use
-  });
-});
 
 describe('RELAY canon links — the label agrees with the path', () => {
   // ⚠️ FOUND IN THE QUEUE-HEAD ROW ITSELF, one step before the loop was relit to
