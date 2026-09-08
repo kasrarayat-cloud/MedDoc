@@ -1211,7 +1211,29 @@ describe('#264 — the refusal survives `prepareTemplateTwinFill`, which is the 
   const WM_IOV = path.resolve(process.cwd(), '../../WM IOV Template.docx');
   const bytes = new Uint8Array(readFileSync(WM_IOV));
   const ir = compileTemplateDocx(bytes);
-  const AGE_FIELD = ir.fields.find((f) => f.kind === 'narrative_text')!;
+  /**
+   * ⚠️ `filter` + AN EXPLICIT COUNT, IN THIS SCOPE, BEFORE THE TAKE.
+   * `gate-172-arm-hygiene` flagged the first two spellings and was right both
+   * times: `.find((f) => f.kind === …)` picks one of FIFTY-TWO narrative
+   * controls and then reasons about it as the only one, and moving to `filter`
+   * changed nothing while the count lived in a different function.
+   *
+   * The lint's escape is deliberately the one spelling that cannot mean anything
+   * else — `expect(<bound>.length` in the SAME enclosing function, textually
+   * BEFORE the element is taken — because the semantic version of this question
+   * was falsified five times (see its own header). `theOnlyMatch` is the other
+   * sanctioned form and is the WRONG tool here: it refuses ambiguity, and this
+   * genuinely is one of many.
+   *
+   * The count is also the fixture assertion — if the template changes, this reds
+   * rather than silently re-pointing every arm below at a different control.
+   */
+  function ageField() {
+    const narrative = ir.fields.filter((f) => f.kind === 'narrative_text');
+    expect(narrative.length, 'the WM IOV fixture changed shape').toBe(52);
+    return narrative[0]!;
+  }
+  const AGE_FIELD = ageField();
 
   /** Bind ONE narrative control to the age concept; every other field is inert. */
   const irMappings = ir.fields.map((f) =>
@@ -1256,6 +1278,10 @@ describe('#264 — the refusal survives `prepareTemplateTwinFill`, which is the 
   // The DIFFERENTIAL is what makes that sufficient. Cut the wire and BOTH visits
   // read `fact_not_mentioned`; with it live they differ, and only one input can
   // produce the named token.
+  it('the fixture is the shape this block assumes — one of 52 narrative controls', () => {
+    expect(AGE_FIELD.kind).toBe('narrative_text');
+  });
+
   it('⚠️ NON-VACUITY CONTROL FIRST — the token is NOT what this path says about every visit', async () => {
     const age = await ageFieldFor(VISIT);
     expect(
