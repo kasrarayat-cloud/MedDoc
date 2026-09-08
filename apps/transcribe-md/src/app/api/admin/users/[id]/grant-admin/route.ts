@@ -14,6 +14,7 @@ import { Product } from '@prisma/client';
 
 import { adminApi } from '@/lib/admin-api-gate';
 import { logAudit } from '@/lib/audit';
+import { withPracticeLock } from '@/lib/last-owner-invariant';
 
 const Body = z.object({ confirmEmail: z.string().email().max(254) });
 
@@ -64,11 +65,19 @@ export const POST = adminApi('users:grant-admin', async (req, ctx) => {
   }
   const next = [...current, Product.SUPER_ADMIN];
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (prisma.user as any).update({
-    where: { id },
-    data: { products: next },
-  });
+  // ⚠️ RULING #289 — SAME REASONING AS `force-logout`. `products` is in
+  // neither trigger predicate, so this write exits at an exemption today and
+  // takes no advisory lock. The lock costs one acquisition on a rare admin
+  // action and removes the dependence on that fact staying true.
+  await prisma.$transaction((tx) =>
+    withPracticeLock(tx, user.practiceId, async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (tx.user as any).update({
+        where: { id },
+        data: { products: next },
+      });
+    }),
+  );
 
   await logAudit({
     action: 'USER_GRANTED_SUPER_ADMIN',

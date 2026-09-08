@@ -17,6 +17,7 @@ import { Product } from '@prisma/client';
 
 import { adminApi } from '@/lib/admin-api-gate';
 import { logAudit } from '@/lib/audit';
+import { withPracticeLock } from '@/lib/last-owner-invariant';
 
 const Body = z.object({ confirmEmail: z.string().email().max(254) });
 
@@ -61,11 +62,20 @@ export const POST = adminApi('users:revoke-admin', async (req, ctx) => {
   const next = current.filter((p) => p !== Product.SUPER_ADMIN);
 
   const now = new Date();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (prisma.user as any).update({
-    where: { id },
-    data: { products: next, forceLogoutAt: now },
-  });
+  // ⚠️ RULING #289 — SAME REASONING AS `force-logout`. `products` and
+  // `forceLogoutAt` are in neither trigger predicate, so this exits at an
+  // exemption today. Locked anyway: revoking SUPER_ADMIN is exactly the write
+  // that acquires a new column the day app-admin becomes part of the
+  // ownership question.
+  await prisma.$transaction((tx) =>
+    withPracticeLock(tx, user.practiceId, async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (tx.user as any).update({
+        where: { id },
+        data: { products: next, forceLogoutAt: now },
+      });
+    }),
+  );
 
   await logAudit({
     action: 'USER_REVOKED_SUPER_ADMIN',

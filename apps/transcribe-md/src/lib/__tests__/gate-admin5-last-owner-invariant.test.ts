@@ -499,45 +499,21 @@ describe('ruling #239 — the friendly refusal counts LIVE members, not rows', (
 // `prisma/proofs/`, and the numbers live in the §2.5 rows file.
 // ============================================================================
 describe('#268 — the practice lock is taken BEFORE any user-row write', () => {
-  const DOORS: ReadonlyArray<readonly [string, string]> = [
-    ['the role-change door', join(SRC, 'actions', 'practice-members.ts')],
-    ['the admin suspend route', join(SRC, 'app', 'api', 'admin', 'users', '[id]', 'suspend', 'route.ts')],
-    ['the admin soft-delete route', join(SRC, 'app', 'api', 'admin', 'users', '[id]', 'soft-delete', 'route.ts')],
-    ['the self-service delete door', join(SRC, 'app', 'api', 'settings', 'delete-account', 'route.ts')],
-  ];
-
-  it.each(DOORS)('%s calls withPracticeLock', (_name, file) => {
-    const src = readFileSync(file, 'utf8');
-    expect(src, `${file} does not import withPracticeLock`).toContain('withPracticeLock');
-  });
-
-  it.each(DOORS)('%s takes the lock BEFORE its write, not after', (_name, file) => {
-    const src = readFileSync(file, 'utf8');
-    const lockAt = src.indexOf('withPracticeLock(');
-    expect(lockAt, 'no withPracticeLock call').toBeGreaterThan(-1);
-
-    // ⚠️ ORDER IS THE ENTIRE POINT — A LOCK TAKEN AFTER THE ROW WRITE ORDERS
-    // NOTHING, and it is the shape that deadlocked. Measured on this branch:
-    // lock-after 10/10 deadlocks, lock-before 0/10.
-    // The write is found by the FIRST user-row mutation in the file.
-    const writeAt = [
-      /\btx\.user\.(?:update|updateMany|delete|deleteMany|create)\b/,
-      /\(tx\.user as any\)\.update\b/,
-      /\bprisma\.user\.(?:update|updateMany|delete|deleteMany)\b/,
-    ]
-      .map((re) => src.search(re))
-      .filter((i) => i > -1)
-      .sort((a, b) => a - b)[0];
-
-    // POSITIVE CONTROL: a door with no user-row write at all would pass
-    // vacuously, and three of these four would have.
-    expect(writeAt, `${file} has no user-row write — this arm would be vacuous`).toBeGreaterThan(-1);
-    expect(
-      lockAt,
-      `${file} writes a user row at ${writeAt} before taking the lock at ${lockAt} — ` +
-        'that is the shape that deadlocked 10 of 10',
-    ).toBeLessThan(writeAt as number);
-  });
+  // ⚠️ RULING #289 — THE ENUMERATED `DOORS` LIST LIVED HERE AND IS GONE.
+  //
+  // It named four files by hand. Four OTHERS — `unsuspend`, `force-logout`,
+  // `grant-admin`, `revoke-admin` — wrote a `users` row and were in neither the
+  // list nor the write regex, because they use `(prisma.user as any).update`
+  // and the regex matched only the `tx` spelling of that cast. A hand-kept list
+  // and a partial matcher agreed with each other and were both wrong.
+  //
+  // The lock-before-write arm now lives in `gate-289-derived-door-list`, over a
+  // set READ FROM THE FILESYSTEM, so it covers those four and any ninth door
+  // without anybody editing a list. Restating it here would make TWO readers of
+  // one rule — change one and the suite contradicts itself while every arm stays
+  // green, which is the failure this house keeps paying for.
+  //
+  // What stays below is what is genuinely local: the helper's own contract.
 
   it('⚠️ the helper uses the TRIGGER\'s key, and does not re-implement hashtext', () => {
     const src = readFileSync(join(SRC, 'lib', 'last-owner-invariant.ts'), 'utf8');

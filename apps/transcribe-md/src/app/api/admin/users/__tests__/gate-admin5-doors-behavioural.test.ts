@@ -56,6 +56,10 @@ vi.mock('@/lib/last-owner-invariant', () => ({
 
 import { POST as SUSPEND } from '../[id]/suspend/route';
 import { POST as SOFT_DELETE } from '../[id]/soft-delete/route';
+import { POST as UNSUSPEND } from '../[id]/unsuspend/route';
+import { POST as FORCE_LOGOUT } from '../[id]/force-logout/route';
+import { POST as GRANT_ADMIN } from '../[id]/grant-admin/route';
+import { POST as REVOKE_ADMIN } from '../[id]/revoke-admin/route';
 
 const TARGET = 'target-9';
 const TARGET_EMAIL = 't@x.com';
@@ -69,6 +73,29 @@ const TARGET_EMAIL = 't@x.com';
 const DOORS = [
   ['suspend', SUSPEND, {}] as const,
   ['soft-delete', SOFT_DELETE, { confirmEmail: TARGET_EMAIL }] as const,
+];
+
+// ⚠️ RULING #289 — THE OTHER FOUR DOORS, DRIVEN FOR THE LOCK AND NOTHING ELSE.
+// They are a SEPARATE list because they do not answer the strand question and
+// must not be given its arms: none of them removes an owner seat, so
+// `wouldStrandPractice` is not theirs to call and an arm demanding it would be
+// asserting a requirement nobody made. What they DO share with the two above is
+// the write, and therefore the lock.
+//
+// ⚠️ AND ONLY ONE OF THE FOUR CAN REACH THE TRIGGER'S LOCK TODAY — SAID HERE SO
+// THE ARM IS NOT READ AS PROVING MORE THAN IT DOES. `unsuspend` clears
+// `suspendedAt`, which makes a live member of a row that was not one, so
+// `users_no_orphan_member` fails both exemptions and takes
+// `pg_advisory_xact_lock`. `products` and `forceLogoutAt` are in NEITHER
+// predicate, so the other three exit at an exemption and take no lock at all.
+// They are locked because that safety is a property of a COLUMN LIST — #241a
+// moved the member predicate once already — and the migration's own header says
+// the door set is OPEN.
+const LOCK_ONLY_DOORS = [
+  ['unsuspend', UNSUSPEND, {}] as const,
+  ['force-logout', FORCE_LOGOUT, {}] as const,
+  ['grant-admin', GRANT_ADMIN, { confirmEmail: TARGET_EMAIL }] as const,
+  ['revoke-admin', REVOKE_ADMIN, { confirmEmail: TARGET_EMAIL }] as const,
 ];
 
 const req = (body: unknown) =>
@@ -159,5 +186,45 @@ describe('#251 — the doors are driven, so the refusal cannot be faked', () => 
         'the lock was taken on the wrong practice, so it serializes nothing',
       ).toBe('prac-7');
     }
+  );
+});
+
+describe('#289 — every writer is DRIVEN, not read', () => {
+  it.each(LOCK_ONLY_DOORS)(
+    '⚠️ %s takes the practice lock, on the TARGET practice',
+    async (_name, POST, body) => {
+      const res = (await POST(req(body) as never)) as Response;
+
+      // POSITIVE CONTROL FIRST. Every assertion below is satisfied by a door
+      // that returned 400 without doing anything, and three of these four parse
+      // a body — driving them with the wrong one measures a rejected request.
+      expect(res.status, 'the door refused the request, so nothing below is about the write').toBe(200);
+
+      expect(withPracticeLock, 'the door writes outside the lock').toHaveBeenCalledTimes(1);
+      expect(
+        withPracticeLock.mock.calls[0][1],
+        'the lock was taken on the wrong practice, so it serializes nothing',
+      ).toBe('prac-7');
+    },
+  );
+
+  it.each(LOCK_ONLY_DOORS)(
+    '⚠️ %s writes INSIDE the lock, never beside it',
+    async (_name, POST, body) => {
+      // ⚠️ THE ARM ABOVE PASSES ON A DOOR THAT TAKES THE LOCK AND THEN WRITES
+      // OUTSIDE IT — call present, practice right, ordering wrong. So this one
+      // makes the lock a no-op and asserts the write does not happen: if the
+      // write is inside, an unrun callback means an unwritten row.
+      withPracticeLock.mockImplementation(async () => undefined);
+      prisma.user.update.mockClear();
+
+      await POST(req(body) as never);
+
+      expect(
+        prisma.user.update,
+        'the row was written even though the lock never ran its callback — ' +
+          'the write is beside the lock, not inside it',
+      ).not.toHaveBeenCalled();
+    },
   );
 });
