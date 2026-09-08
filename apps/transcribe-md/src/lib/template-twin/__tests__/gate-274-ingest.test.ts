@@ -108,16 +108,16 @@ function recompiledWithRotatedIds(source: TemplateDocIR): TemplateDocIR {
         kind: f.kind,
         label: f.originalLabel,
         displayOrder: f.displayOrder,
-        sdtId: f.rendererBinding.sdtId,
+        tag: f.rendererBinding.tag,
       }),
     ),
   );
 }
 
 const SOURCE = ir([
-  field({ fieldId: 'ttf_' + 'a'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'Chief complaint', sdtId: '1001' }),
-  field({ fieldId: 'ttf_' + 'c'.repeat(24), path: '/doc/sdt[2]', ordinal: 1, label: 'Age', sdtId: '1002' }),
-  field({ fieldId: 'ttf_' + 'd'.repeat(24), path: '/doc/sdt[3]', ordinal: 2, label: 'Plan', sdtId: '1003' }),
+  field({ fieldId: 'ttf_' + 'a'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'Chief complaint', tag: 't_chief' }),
+  field({ fieldId: 'ttf_' + 'c'.repeat(24), path: '/doc/sdt[2]', ordinal: 1, label: 'Age', tag: 't_age' }),
+  field({ fieldId: 'ttf_' + 'd'.repeat(24), path: '/doc/sdt[3]', ordinal: 2, label: 'Plan', tag: 't_plan' }),
 ]);
 
 const CERTIFIED = new Map<string, SemanticMapping>([
@@ -203,10 +203,10 @@ describe('#274 · ⚠️ AN INSERT MUST NOT RE-PAIR EVERY DOWNSTREAM CONTROL', (
   // ══════════════════════════════════════════════════════════════════════════
   const AFTER_INSERT = ir([
     // the new control takes slot 1 and pushes everything down
-    field({ fieldId: 'ttf_' + 'n'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'NEW question', sdtId: '9999' }),
-    field({ fieldId: 'ttf_' + 'p'.repeat(24), path: '/doc/sdt[2]', ordinal: 1, label: 'Chief complaint', sdtId: '1001' }),
-    field({ fieldId: 'ttf_' + 'q'.repeat(24), path: '/doc/sdt[3]', ordinal: 2, label: 'Age', sdtId: '1002' }),
-    field({ fieldId: 'ttf_' + 'r'.repeat(24), path: '/doc/sdt[4]', ordinal: 3, label: 'Plan', sdtId: '1003' }),
+    field({ fieldId: 'ttf_' + 'n'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'NEW question', tag: 't_new' }),
+    field({ fieldId: 'ttf_' + 'p'.repeat(24), path: '/doc/sdt[2]', ordinal: 1, label: 'Chief complaint', tag: 't_chief' }),
+    field({ fieldId: 'ttf_' + 'q'.repeat(24), path: '/doc/sdt[3]', ordinal: 2, label: 'Age', tag: 't_age' }),
+    field({ fieldId: 'ttf_' + 'r'.repeat(24), path: '/doc/sdt[4]', ordinal: 3, label: 'Plan', tag: 't_plan' }),
   ]);
 
   it('POSITIVE CONTROL — every position really did shift, and every id rotated', () => {
@@ -233,7 +233,7 @@ describe('#274 · ⚠️ AN INSERT MUST NOT RE-PAIR EVERY DOWNSTREAM CONTROL', (
     ).toEqual([]);
   });
 
-  it('the three surviving controls DO keep their own dispositions, via sdtId', () => {
+  it('the three surviving controls DO keep their own dispositions, via their TAG', () => {
     // ⚠️ THE OTHER HALF, AND IT MUST PULL THE OPPOSITE WAY. An implementation
     // that transfers NOTHING also has zero mis-pairs, so the arm above alone is
     // bought by refusing everything.
@@ -253,8 +253,8 @@ describe('#274 · ⚠️ AN INSERT MUST NOT RE-PAIR EVERY DOWNSTREAM CONTROL', (
 
   it('a DELETION is symmetric — nothing shifts up into a neighbour\'s certification', () => {
     const afterDelete = ir([
-      field({ fieldId: 'ttf_' + 's'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'Age', sdtId: '1002' }),
-      field({ fieldId: 'ttf_' + 't'.repeat(24), path: '/doc/sdt[2]', ordinal: 1, label: 'Plan', sdtId: '1003' }),
+      field({ fieldId: 'ttf_' + 's'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'Age', tag: 't_age' }),
+      field({ fieldId: 'ttf_' + 't'.repeat(24), path: '/doc/sdt[2]', ordinal: 1, label: 'Plan', tag: 't_plan' }),
     ]);
     const plan = planTransfer({ target: afterDelete, sourceIr: SOURCE, certifiedByFieldId: CERTIFIED });
     const byLabel = new Map(
@@ -267,22 +267,22 @@ describe('#274 · ⚠️ AN INSERT MUST NOT RE-PAIR EVERY DOWNSTREAM CONTROL', (
     expect(byLabel.get('Plan')).toBe('plan');
   });
 
-  it('⚠️ a control with NO sdtId re-proposes rather than guessing', () => {
+  it('⚠️ a control with NO tag re-proposes rather than guessing', () => {
     // 52 of the reference document's 80 controls carry no sdtId. They lose
     // their certification on an edit, and that is the RULED-SAFE direction: a
     // re-proposal is a question to the doctor, a mis-transfer is a wrong answer
     // presented as certified.
-    const noIdSource = ir([field({ fieldId: 'ttf_' + 'u'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'X', sdtId: null })]);
-    const noIdTarget = ir([field({ fieldId: 'ttf_' + 'v'.repeat(24), path: '/doc/sdt[2]', ordinal: 1, label: 'X', sdtId: null })]);
+    const noIdSource = ir([field({ fieldId: 'ttf_' + 'u'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'X', tag: null })]);
+    const noIdTarget = ir([field({ fieldId: 'ttf_' + 'v'.repeat(24), path: '/doc/sdt[2]', ordinal: 1, label: 'X', tag: null })]);
     const certs = new Map([['ttf_' + 'u'.repeat(24), certified('ttf_' + 'u'.repeat(24), 'some_concept')]]);
     const plan = planTransfer({ target: noIdTarget, sourceIr: noIdSource, certifiedByFieldId: certs });
     expect(plan.transferred).toEqual([]);
     expect(plan.reproposed).toEqual(['ttf_' + 'v'.repeat(24)]);
   });
 
-  it('⚠️ a kind CHANGE on the same sdtId does not inherit — same name, different question', () => {
+  it('⚠️ a kind CHANGE on the same TAG does not inherit — same name, different question', () => {
     const changed = ir([
-      field({ fieldId: 'ttf_' + 'w'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'Age', sdtId: '1002', kind: 'single_select' }),
+      field({ fieldId: 'ttf_' + 'w'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'Age', tag: 't_age', kind: 'single_select' }),
     ]);
     const plan = planTransfer({ target: changed, sourceIr: SOURCE, certifiedByFieldId: CERTIFIED });
     expect(plan.transferred).toEqual([]);
@@ -322,15 +322,15 @@ describe('#274 · the identity keys themselves', () => {
     }
   });
 
-  it('a field WITH an sdtId offers a second, edit-surviving identity', () => {
+  it('a field WITH a TAG offers a second, edit-surviving identity', () => {
     expect(identityKeys(SOURCE.fields[0]!)).toHaveLength(2);
   });
 
-  it('a field WITHOUT one offers only the fieldId — no positional fallback', () => {
+  it('a field WITHOUT a tag offers only the fieldId — no id and no positional fallback', () => {
     // ⚠️ THE ABSENCE IS THE POINT. A fallback to position is what mis-paired 3
     // of 3 controls on the real document; there is deliberately nothing here to
     // fall back to.
-    const anon = field({ fieldId: 'ttf_' + 'x'.repeat(24), sdtId: null });
+    const anon = field({ fieldId: 'ttf_' + 'x'.repeat(24), tag: null });
     expect(identityKeys(anon)).toHaveLength(1);
   });
 
@@ -358,10 +358,15 @@ describe('#274 · ⚠️ AN AMBIGUOUS KEY TRANSFERS TO NOBODY — the bijection'
   //
   // A left-leg finding certified to print the right leg's concept.
   // ══════════════════════════════════════════════════════════════════════════
-  const dup = (fieldId: string, sdtId: string, label: string, partName?: string) =>
-    field({ fieldId, sdtId, label, ...(partName ? { partName } : {}) });
+  // ⚠️ `dup` NOW STAMPS A TAG, NOT AN ID. Round four deleted the sdtId path
+  // entirely: on the real document only 10 of 80 controls carry an id AND a
+  // unique label, and a renumber landing on a same-label neighbour mis-paired
+  // 14 of 14. These arms were written to exercise "an identity that survives an
+  // edit", and that is now the semantic tag.
+  const dup = (fieldId: string, tag: string, label: string, partName?: string) =>
+    field({ fieldId, tag, label, ...(partName ? { partName } : {}) });
 
-  it('⚠️ two controls sharing a w:id in the SAME part: NEITHER inherits', () => {
+  it('⚠️ two controls sharing a TAG in the SAME part: NEITHER inherits', () => {
     // ⚠️ SAME LABEL AS WELL AS SAME id — a real copy-paste, which is what
     // actually collides now that the label is part of the identity. An earlier
     // version of this fixture gave the two halves DIFFERENT labels, and the
@@ -385,7 +390,7 @@ describe('#274 · ⚠️ AN AMBIGUOUS KEY TRANSFERS TO NOBODY — the bijection'
     expect(plan.reproposed).toHaveLength(2);
   });
 
-  it('⚠️ a BODY control and a LETTERHEAD control sharing a w:id: neither inherits', () => {
+  it('⚠️ a BODY control and a LETTERHEAD control sharing a TAG: neither inherits', () => {
     // `w:id` is unique within a PART, not across the package, and the compiler
     // walks body then headers then footers into one field list.
     const src = ir([
@@ -410,7 +415,7 @@ describe('#274 · ⚠️ AN AMBIGUOUS KEY TRANSFERS TO NOBODY — the bijection'
     expect(wrong.map((t) => `${labelOf.get(t.fieldId)} <- ${t.mapping.clinicalConcept}`)).toEqual([]);
   });
 
-  it('POSITIVE CONTROL — DISTINCT ids in the same two parts DO transfer', () => {
+  it('POSITIVE CONTROL — DISTINCT tags in the same two parts DO transfer', () => {
     // ⚠️ Without this, the two arms above are bought by an implementation that
     // transfers nothing at all whenever a header exists.
     const src = ir([
@@ -500,42 +505,64 @@ describe('#274 · ⚠️ AN AMBIGUOUS KEY TRANSFERS TO NOBODY — the bijection'
     expect(wrong, 'a disposition crossed between the body and the letterhead').toEqual([]);
   });
 
-  it('⚠️ ROUND THREE — a POSITIONAL sdtId renumber must not walk the document sideways', () => {
+  it('⚠️ ROUND THREE/FOUR — a POSITIONAL id renumber transfers NOTHING without a tag', () => {
     // ══════════════════════════════════════════════════════════════════════════
-    // THE OWNER'S OWN 53-CONTROL FORM ASSIGNS `sdtId` POSITIONALLY:
-    // `regenerate-consult-form.ts` runs `let nextId = 900_036` and `nextId += 1`
-    // per control IN DOCUMENT ORDER. Drop one ROS clause and every downstream id
-    // shifts by one — a CLEAN renumber, so the key stays unique on both sides and
-    // every source row is consumed once. All three bijection guards pass, and the
-    // exam narrative walks one organ system sideways:
+    // The owner's form assigns `sdtId` with `nextId += 1` per control IN
+    // DOCUMENT ORDER, so a dropped clause renumbers everything. Round three
+    // mis-paired fifteen certified concepts that way; round four then showed
+    // that pairing the id with the LABEL does not save it, because the real
+    // document has FOURTEEN ADJACENT PAIRS SHARING A LABEL and only 10 of 80
+    // controls carry an id AND a unique label.
     //
-    //     exam_lungs <- exam_neck,  exam_cv <- exam_lungs,  … 15 rows, certified
-    //
-    // Only pairing the id with the LABEL refuses it: control N inherits N-1's id,
-    // and N-1's label is a different question.
+    // The id path is therefore GONE. These controls carry no tag, so the ONLY
+    // correct outcome is that every one re-proposes.
     // ══════════════════════════════════════════════════════════════════════════
+    const withId = (fieldId: string, sdtId: string, label: string) =>
+      field({ fieldId, sdtId, label });
     const src = ir([
-      dup('ttf_' + '1'.repeat(24), '900037', 'exam_neck'),
-      dup('ttf_' + '2'.repeat(24), '900038', 'exam_lungs'),
-      dup('ttf_' + '3'.repeat(24), '900039', 'exam_cv'),
+      withId('ttf_' + '1'.repeat(24), '900037', 'exam_neck'),
+      withId('ttf_' + '2'.repeat(24), '900038', 'exam_lungs'),
+      withId('ttf_' + '3'.repeat(24), '900039', 'exam_cv'),
     ]);
     const certs = new Map([
       ['ttf_' + '1'.repeat(24), certified('ttf_' + '1'.repeat(24), 'CONCEPT::exam_neck')],
       ['ttf_' + '2'.repeat(24), certified('ttf_' + '2'.repeat(24), 'CONCEPT::exam_lungs')],
       ['ttf_' + '3'.repeat(24), certified('ttf_' + '3'.repeat(24), 'CONCEPT::exam_cv')],
     ]);
-    // one earlier control was deleted, so every id shifted down by one
     const tgt = ir([
-      dup('ttf_' + '4'.repeat(24), '900036', 'exam_neck'),
-      dup('ttf_' + '5'.repeat(24), '900037', 'exam_lungs'),
-      dup('ttf_' + '6'.repeat(24), '900038', 'exam_cv'),
+      withId('ttf_' + '4'.repeat(24), '900036', 'exam_neck'),
+      withId('ttf_' + '5'.repeat(24), '900037', 'exam_lungs'),
+      withId('ttf_' + '6'.repeat(24), '900038', 'exam_cv'),
     ]);
     const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
-    const labelOf = new Map(tgt.fields.map((f) => [f.fieldId, f.originalLabel]));
-    const wrong = plan.transferred
-      .filter((t) => t.mapping.clinicalConcept !== `CONCEPT::${labelOf.get(t.fieldId)}`)
-      .map((t) => `${labelOf.get(t.fieldId)} <- ${t.mapping.clinicalConcept}`);
-    expect(wrong, 'a positional id renumber walked a certified concept sideways').toEqual([]);
+    expect(plan.transferred, 'an id-only match carried a certified disposition').toEqual([]);
+    expect(plan.reproposed).toHaveLength(3);
+  });
+
+  it('⚠️ AND THE SAME-LABEL NEIGHBOUR CASE — round four, stated directly', () => {
+    // Six consecutive controls on the real form read "CLINICAL INDICATIONS:
+    // Choose an item.…". Under a renumber, target #2 inherits source #1's id AND
+    // its label, so an id+label key matched and mis-paired. With no tag there is
+    // now nothing to match on.
+    const same = (fieldId: string, sdtId: string) =>
+      field({ fieldId, sdtId, label: 'CLINICAL INDICATIONS: Choose an item.' });
+    const src = ir([
+      same('ttf_' + 'a'.repeat(24), '900007'),
+      same('ttf_' + 'b'.repeat(24), '900008'),
+    ]);
+    const certs = new Map([
+      ['ttf_' + 'a'.repeat(24), certified('ttf_' + 'a'.repeat(24), 'aortic_reflux')],
+      ['ttf_' + 'b'.repeat(24), certified('ttf_' + 'b'.repeat(24), 'venous_stasis')],
+    ]);
+    const tgt = ir([
+      same('ttf_' + 'c'.repeat(24), '900006'),
+      same('ttf_' + 'd'.repeat(24), '900007'),
+    ]);
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(
+      plan.transferred.map((t) => t.mapping.clinicalConcept),
+      'a same-label neighbour inherited a certified clinical concept',
+    ).toEqual([]);
   });
 
   it('⚠️ a SEMANTIC TAG survives a renumber AND a rename — the strongest identity', () => {
