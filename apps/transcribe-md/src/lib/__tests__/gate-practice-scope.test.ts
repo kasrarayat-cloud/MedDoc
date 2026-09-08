@@ -515,6 +515,25 @@ function isScoped(code: string, at: number): boolean {
   const argEnd = code.indexOf(')', at);
   const own = code.slice(at, argEnd > at ? Math.min(argEnd + 400, code.length) : at + 400);
   if (ACCESSORS.test(own)) return true;
+  // ⚠️ AN EXPLICIT `practiceId:` IN THE CALL'S OWN `where` IS SCOPING, and the
+  // WRITE scanner twenty lines up has always said so (`ACCESSORS.test(body) ||
+  // /practiceId/.test(body)`). The read side did not, and the inconsistency had
+  // a cost: a read scoped by the visit's TENANT — `templateTwinCompiledVersion:
+  // { practiceId: visit.practiceId }`, which is what #287 requires — counted as
+  // UNSCOPED, while the same predicate on a write counted as scoped.
+  //
+  // ⚠️ AND IT WAS ONLY PASSING BY PROXIMITY. The 40-line lookback below found a
+  // `visitByIdScope` in a NEARBY call, so the read's "scoped" status was an
+  // accident of layout: adding a comment above it pushed the accessor out of the
+  // window and the ratchet went red on a change that scoped it BETTER. A
+  // classification that moves when you write a comment is measuring the wrong
+  // thing.
+  //
+  // ⚠️ NOT `templateScope` FOR THIS ONE, DELIBERATELY: that accessor scopes via
+  // `doctor: { practiceId }` — the AUTHOR's practice — which is exactly the axis
+  // #287 removed from template selection. Using it here would have re-created
+  // the defect while turning this gate green.
+  if (/\bpracticeId\s*:/.test(own)) return true;
   const before = code.slice(Math.max(0, at - 2000), at).split('\n').slice(-40).join('\n');
   return ACCESSORS.test(before);
 }

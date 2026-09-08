@@ -53,25 +53,49 @@ export type OmitMappingView = Pick<
 /**
  * TRUE when the field must be put to the clinician rather than left blank.
  *
- * ⚠️ THIS IS THE RESOLVER'S OWN PREDICATE, LIFTED — not a re-statement of it.
- * `missingResolution` in `resolver/index.ts` imports this function; there is no
- * second copy to fall out of step. If a sixth input is ever added, it is added
- * HERE and both sides get it in the same commit.
+ * ⚠️ IT DELEGATES. THE PREVIOUS VERSION OF THIS COMMENT WAS FALSE, AND THE
+ * REFUTATION PASS CAUGHT IT. It said: *"THIS IS THE RESOLVER'S OWN PREDICATE,
+ * LIFTED — `missingResolution` in `resolver/index.ts` imports this function;
+ * there is no second copy to fall out of step."* Measured: `requiresClinicianInput`
+ * appeared in `resolver/index.ts` exactly ONCE, in the import list, with ZERO
+ * call sites. `missingResolution` called `fieldDemandsInput` from `ir.ts` — a
+ * second, byte-identical statement of the same five disjuncts in the same order.
+ *
+ * Behaviour was correct because the two bodies agreed. The exposure was that
+ * this copy had two live consumers on the DECISION side (`omitBranchUnreachable`
+ * → the confirm panel, and `certification-lifecycle.ts`'s `MAPPING_INVALID`
+ * writer) while the HONOURING side read the other — so editing either one moved
+ * the offer without moving the resolver, or the reverse. That is verbatim the
+ * drift #258 ends and this module was created to make impossible, and it was
+ * carried by a symbol nothing called.
+ *
+ * ⚠️ ONE IMPLEMENTATION, EITHER DIRECTION — #270, AND THE DIRECTION IS FORCED.
+ * The body stays HERE and `ir.ts::fieldDemandsInput` delegates to it, because
+ * this module is CLIENT-IMPORTED and may not value-import `ir.ts`: that import
+ * puts 320,991 bytes of zod into the client bundle (429x), which the header
+ * above records as a measured regression. Delegating the other way would have
+ * fixed the duplication by re-creating the bundle defect.
+ *
+ * A sixth input is added HERE and both sides get it, because there is only one.
  *
  * Five inputs, and every one of them is known at CONFIRM time — which is what
  * makes the offer decidable before a single visit exists.
  */
 export function requiresClinicianInput(
   field: Pick<TemplateField, 'required' | 'unknownPolicy'>,
-  mapping: Pick<SemanticMapping, 'required' | 'unknownPolicy' | 'blankPolicy'>,
+  // ⚠️ OPTIONAL, SO ONE BODY SERVES BOTH CALLERS. `ir.ts::fieldDemandsInput`
+  // took `| undefined`; this took it required. Widening here is what lets that
+  // one delegate instead of restating.
+  mapping: Pick<SemanticMapping, 'required' | 'unknownPolicy' | 'blankPolicy'> | undefined,
 ): boolean {
-  return (
+  return Boolean(
     field.required ||
-    mapping.required ||
-    field.unknownPolicy === 'requires_input' ||
-    mapping.unknownPolicy === 'requires_input' ||
-    mapping.blankPolicy === 'requires_input'
+      mapping?.required ||
+      field.unknownPolicy === 'requires_input' ||
+      mapping?.unknownPolicy === 'requires_input' ||
+      mapping?.blankPolicy === 'requires_input',
   );
+
 }
 
 /**

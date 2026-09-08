@@ -102,10 +102,12 @@ async function resolveCertifiedTwinField(
         entities: unknown;
         soapFinal: string | null;
         createdAt: Date;
-        // ⚠️ #267 — the VISIT'S OWN tenant, beside the author's practice.
-        // Two different columns; the stored rows carry this one.
+        // ⚠️ #267 — the VISIT'S OWN tenant. `user.practiceId` used to sit
+        // beside it here and is GONE (#287): nothing reads the author's
+        // practice on this path any more, and leaving it in the shape kept it
+        // available to the next reader who needed "a practice" — which is how
+        // the template select stayed on the author while everything else moved.
         practiceId: string;
-        user: { practiceId: string };
       };
       noteTemplateId: string;
       noteTemplateVersion: number;
@@ -130,7 +132,13 @@ async function resolveCertifiedTwinField(
       soapFinal: true,
       createdAt: true,
       practiceId: true, // #267 — the VISIT'S tenant; `user.practiceId` is the AUTHOR'S.
-      user: { select: { practiceId: true } },
+      // ⚠️ `user: { select: { practiceId: true } }` WAS HERE AND IS GONE — #287.
+      // Nothing reads it any more, and a selected field holding the value this
+      // ruling exists to stop using is an invitation: the next person needing
+      // "a practice" finds one already in scope. That is precisely how the
+      // template select below stayed on the author while everything around it
+      // moved to the tenant. A site that genuinely means the AUTHOR re-adds
+      // this select by name, with its reason.
     },
   });
   if (!visit) return { ok: false, error: 'Visit not found.' };
@@ -156,10 +164,28 @@ async function resolveCertifiedTwinField(
     where: {
       id: visit.noteTemplateId,
       version: visit.noteTemplateVersion,
-      // PRACTICE-SCOPED like every other clinical read. Derived from the
-      // compiled version rather than threaded, so it cannot drift from the
-      // visit's own scope.
-      templateTwinCompiledVersion: { practiceId: visit.user.practiceId },
+      // ⚠️ THE VISIT'S TENANT — #287, AND THIS LINE WAS THE ONE THAT DID NOT MOVE.
+      //
+      // The comment here used to say "it cannot drift from the visit's own
+      // scope", and it had. On `main` this select and the returned `practiceId`
+      // BOTH read `visit.user.practiceId`, so they agreed. #267 moved the
+      // return to `visit.practiceId` and #287 moved the fill to
+      // `tenantPracticeId: visit.practiceId` — and left this read on the AUTHOR.
+      //
+      // For the locum case the ruling exists for — tenant A owns the certified
+      // twin, the author belongs to B — this row came back null and the door
+      // answered "This visit's form is not certified, so its controls cannot be
+      // set here." That sentence is FALSE: the form is certified and is on the
+      // doctor's screen. And it is not cosmetic. This file's own header records
+      // that the dropdown door is the ONLY surface that can reach an enumerated
+      // content control, so a wrong laterality or finding printed into the form
+      // would have had no remedy and would have travelled to signature.
+      // `undoScaffoldDefaultAction` reads through here too, so an inserted
+      // default could not have been withdrawn either.
+      //
+      // Latent on today's data — production is 58/58 author-practice == tenant —
+      // and reachable exactly in the scenario #287 was written for.
+      templateTwinCompiledVersion: { practiceId: visit.practiceId },
     },
     select: {
       templateTwinCompiledVersion: {
@@ -603,7 +629,6 @@ async function scaffoldDefaultAdmissible(input: {
       createdAt: Date;
       // ⚠️ #267 — the VISIT'S OWN tenant, beside the author's practice.
       practiceId: string;
-      user: { practiceId: string };
     };
     noteTemplateId: string;
     noteTemplateVersion: number;
@@ -884,8 +909,11 @@ export async function insertScaffoldDefaultAction(
   //   · the resolver FILTERS `transcribe_visits."practiceId"` — via
   //     `visitByIdScope(visitId, practiceId)` — with the value it was CALLED
   //     with, which is `session.user.practiceId` at all three doors;
-  //   · the resolver RETURNS `practiceId: visit.user.practiceId`, the visit
-  //     AUTHOR's user record's practice, which is a different column entirely.
+  //   · the resolver RETURNS `practiceId: visit.practiceId` — the visit's own
+  //     TENANT column. ⚠️ THIS SAID `visit.user.practiceId` UNTIL #287, and it
+  //     was true when written: #267 moved the return to the tenant and this
+  //     paragraph was not updated with it. The two are still DIFFERENT COLUMNS
+  //     and the warning stands; only the name of the second one changed.
   //
   // This door destructures the RETURNED one and handed it to a lock that filters
   // the FILTERED one. The other two doors pass the session's value, so two of

@@ -40,25 +40,8 @@ import { loadNativeTemplateDocxForVisit } from '@/lib/template-twin/native-expor
 import type { NativePreviewResult } from './preview-native-document';
 
 /** Why there is no document to show. Every one is surfaced, and none is fatal. */
-export type VisitPreviewMiss =
-  /** Neither a certified twin NOR a styled document could be produced. */
-  | 'not_template_visit'
-  /** Template uploaded and compiled, but never certified. */
-  | 'not_certified'
-  /** The fill ran and produced no document (nothing renderable yet). */
-  | 'no_render'
-  /** The fill itself failed. Named, so it is never a blank screen. */
-  | 'fill_failed'
-  /**
-   * ⚠️ RULING #287 — THE TENANT PRACTICE HAS NO ACTIVE CERTIFIED TEMPLATE.
-   *
-   * A visit is documented in the TENANT's format, so a locum from B seeing A's
-   * patient fills A's template. When A has none, the honest outcome is "this
-   * practice has no form yet" — a styled export with a NAMED reason — and NOT a
-   * provenance error. The old shape reported `TEMPLATE_PROVENANCE_MISMATCH` for
-   * a state that is entirely ordinary, which reads to a reader as corruption.
-   */
-  | 'no_tenant_template';
+export { VISIT_PREVIEW_MISSES, type VisitPreviewMiss } from '@/lib/visit-preview-misses';
+import type { VisitPreviewMiss } from '@/lib/visit-preview-misses';
 
 export interface VisitPreviewResult extends Omit<NativePreviewResult, 'reason'> {
   reason: NativePreviewResult['reason'] | VisitPreviewMiss | null;

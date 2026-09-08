@@ -159,3 +159,49 @@ describe('#288 — the validator calls the shared predicate', () => {
     ).toEqual([]);
   });
 });
+
+describe('#258/#270 — the input predicate has ONE body, and the leaf stays a leaf', () => {
+  const read = (rel: string) =>
+    readFileSync(join(__dirname, '..', rel), 'utf8')
+      .split('\n')
+      .filter((l) => !l.trimStart().startsWith('//') && !l.trimStart().startsWith('*'))
+      .join('\n');
+
+  it('⚠️ `fieldDemandsInput` DELEGATES — it does not restate the five disjuncts', () => {
+    // ⚠️ THE REFUTATION PASS FOUND THIS AS A FALSE CLAIM, NOT A FALSE BEHAVIOUR.
+    // `unmentioned-policy.ts` said "the resolver imports this function; there is
+    // no second copy to fall out of step" while `resolver/index.ts` imported it
+    // ZERO times and called `ir.ts::fieldDemandsInput`, a byte-identical second
+    // statement. Identical bodies meant the behaviour was right and the
+    // invariant was not established.
+    const ir = read('ir.ts');
+    const body = ir.slice(ir.indexOf('export function fieldDemandsInput'));
+    const decl = body.slice(0, body.indexOf('\n}'));
+    expect(decl, 'fieldDemandsInput does not delegate').toContain(
+      'return requiresClinicianInput(field, mapping)',
+    );
+    // and it must not carry the disjuncts itself
+    for (const token of ["unknownPolicy === 'requires_input'", "blankPolicy === 'requires_input'"]) {
+      expect(decl, `fieldDemandsInput restates \`${token}\``).not.toContain(token);
+    }
+    // NON-VACUITY: the one body still exists, in the module that owns it.
+    expect(read('unmentioned-policy.ts')).toContain("blankPolicy === 'requires_input'");
+  });
+
+  it('⚠️ AND THE FIX DID NOT RE-CREATE THE BUNDLE DEFECT — no value import of `ir`', () => {
+    // The obvious repair is to move the body to `ir.ts` and import it here.
+    // That is FORBIDDEN and measured: `unmentioned-policy.ts` is client-imported
+    // and a value import from `ir.ts` puts 320,991 bytes of zod into the client
+    // bundle (429x), which this module's own header records. The delegation
+    // therefore runs ir -> policy, never policy -> ir.
+    const policy = read('unmentioned-policy.ts');
+    const irImports = [...policy.matchAll(/^import\s+(type\s+)?\{[^}]*\}\s+from\s+'\.\/ir';/gm)];
+    expect(irImports.length, 'no ./ir import at all — this arm is vacuous').toBeGreaterThan(0);
+    for (const m of irImports) {
+      expect(
+        m[1],
+        `a VALUE import from ./ir: ${m[0].slice(0, 70)} — that is the 429x bundle regression`,
+      ).toBeTruthy();
+    }
+  });
+});

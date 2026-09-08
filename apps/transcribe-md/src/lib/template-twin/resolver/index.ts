@@ -31,7 +31,6 @@ import {
 import {
   omitDeferralGuard,
   practiceDefaultPreempts,
-  requiresClinicianInput,
   resolverLadderExit,
 } from '../unmentioned-policy';
 import {

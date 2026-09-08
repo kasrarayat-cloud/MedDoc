@@ -123,6 +123,10 @@ const UNSIGNED = {
   //   · `visit-tenant-7`    the VISIT'S tenant       — what owns this chart?
   //   · `author-practice-9` the AUTHOR's practice    — whose form fills it?
   //
+  // ⚠️ AND THE THIRD ANSWER CHANGED UNDER #287: the AUTHOR's practice fills
+  // nothing. The tenant owns the chart, the document AND the template. This
+  // value is kept in the fixture ONLY so a read that still reaches for it can
+  // be caught — see the read arm below.
   practiceId: 'visit-tenant-7',
   user: { practiceId: 'author-practice-9' },
 };
@@ -403,5 +407,37 @@ describe('F24-S5 write path — the correction reaches the database', () => {
     const res = await run(f.fieldId, selectableOf(f)[0].displayText);
     expect(res.ok).toBe(false);
     expect(overrideUpsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('#287 — the READ is scoped by the tenant, not only the write', () => {
+  it('⚠️ THE TEMPLATE SELECT ASKS FOR THE TENANT — the arm that was missing', async () => {
+    // ⚠️ THIS FIXTURE ALREADY SPLIT THE THREE IDENTITIES AND ONLY THE WRITE WAS
+    // CHECKED. `templateFindFirst` was `mockResolvedValue`d and its ARGUMENT
+    // never inspected, so the mock handed back the template whichever practice
+    // the predicate named — and the select sat on `visit.user.practiceId` while
+    // #267 moved the return and #287 moved the fill to the tenant. On `main`
+    // both read the author and AGREED; the branch made them disagree, and for a
+    // locum visit this door answered "This visit's form is not certified" about
+    // a form that IS certified and on the doctor's screen.
+    //
+    // That door is the ONLY surface that can reach an enumerated content
+    // control, so the failure has no remedy and travels to signature.
+    const field = selects[0];
+    await run(field.fieldId, selectableOf(field)[0].displayText);
+
+    // POSITIVE CONTROL: an arm that never reached the select proves nothing.
+    expect(templateFindFirst, 'the door never selected a template').toHaveBeenCalled();
+    for (const call of templateFindFirst.mock.calls) {
+      const seen = JSON.stringify((call[0] as { where?: unknown })?.where ?? {});
+      expect(
+        seen.includes('author-practice-9'),
+        `the template select reached for the AUTHOR's practice: ${seen}`,
+      ).toBe(false);
+      expect(
+        seen.includes('visit-tenant-7'),
+        `the template select named no tenant at all: ${seen}`,
+      ).toBe(true);
+    }
   });
 });

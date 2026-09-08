@@ -1421,14 +1421,33 @@ const WITNESSED_GUARDS = new Set<string>();
     // leaving a second loop to drift. It now calls `resolverLadderExit`, the
     // walk itself, so the table and its anchor are consumed one module over and
     // the resolver cannot re-order them.
-    for (const symbol of [
-      'resolverLadderExit',
-      'omitDeferralGuard',
-      'practiceDefaultPreempts',
-      'requiresClinicianInput',
-    ]) {
+    // ⚠️ `requiresClinicianInput` IS NO LONGER IN THIS LIST, AND ITS REMOVAL IS
+    // THE FINDING. This arm asserted the resolver CONTAINED that name — and the
+    // refutation pass measured the name appearing exactly once, in the import
+    // list, with ZERO call sites. `missingResolution` called
+    // `ir.ts::fieldDemandsInput`, a byte-identical second statement of the same
+    // five disjuncts. The gate was green on a MENTION while the invariant it
+    // names was carried by a symbol nothing called.
+    //
+    // Containment is not use. The delegation is asserted below by the CALL
+    // CHAIN, and the one-body property by `gate-288`'s own arms.
+    for (const symbol of ['resolverLadderExit', 'omitDeferralGuard', 'practiceDefaultPreempts']) {
       expect(src, `the resolver stopped importing '${symbol}'`).toContain(symbol);
     }
+
+    // …and the input predicate is REACHED, not merely named: the resolver calls
+    // `fieldDemandsInput`, which delegates to the single body in
+    // `unmentioned-policy.ts`. Asserting the call, not the import, is what makes
+    // a dead symbol impossible to mistake for a live one.
+    const code = src
+      .split('\n')
+      .filter((l) => !l.trimStart().startsWith('//') && !l.trimStart().startsWith('*'))
+      .join('\n');
+    expect(
+      code,
+      'the resolver no longer CALLS the shared input predicate — a dead import ' +
+        'would satisfy any containment check',
+    ).toMatch(/fieldDemandsInput\(/);
     // …and no longer carries its own copy of the walk. A `for` over the table
     // here would be the second implementation this ruling exists to forbid.
     expect(
