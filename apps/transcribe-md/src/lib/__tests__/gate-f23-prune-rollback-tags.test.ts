@@ -605,3 +605,114 @@ describe('F23 — the reconciliation is observed, not derived', () => {
     expect(r.out).toContain('co-tenant pre-*   : 1');
   });
 });
+
+// ============================================================================
+// ⚠️ NO EARLY-EXIT PIPELINE — THE F30 CLASS, IN THE SCRIPT THIS GATE DRIVES.
+// ----------------------------------------------------------------------------
+// `grep -q` exits 0 the instant it matches and CLOSES the pipe. `printf` then
+// dies of SIGPIPE (141), and `set -o pipefail` (line 93) promotes the
+// PIPELINE's status to that 141 — so a MATCH is reported as a MISS.
+//
+// THREE SITES CARRIED IT, and they fail in two different directions:
+//
+//   the HELD checks — a false miss leaves `held=0` on an image a container is
+//   USING, so the tag joins DELETE_REFS. That is a rollback tag deleted while
+//   in use: the artifact ruling #137 exists to protect, unrebuildable from
+//   `main` once the tree has moved.
+//
+//   the reconciliation — a false miss puts a reftag in BOTH buckets, so
+//   `KEPT + DEL` exceeds `CAND_ROWS`, the script refuses with "the buckets do
+//   not reconcile" and exits 2 BEFORE any removal.
+//
+// ⚠️ WHAT IS AND IS NOT PROVED, STATED PLAINLY.
+//
+// MEASURED as a controlled A/B on this construct, `set -uo pipefail`, the
+// needle at line 1 so `grep` exits while `printf` still has the rest to write:
+//
+//     printf | grep -qxF       2582 false misses / 3000 certain matches
+//     [[ blob == *needle* ]]      0 false misses / 3000
+//
+// The bash-native arm IS the control: it cannot take SIGPIPE, so its 0 proves
+// the needle was present and every miss on the other arm is the construct.
+//
+// ⚠️ AND THE RATE COLLAPSES WITH BLOB SIZE. At 10 / 30 / 72 / 200 / 1000 lines
+// it measured 0 of 2000 every time — the whole blob fits the pipe buffer, so
+// `printf` finishes before `grep` exits and there is nothing to signal. This
+// script's blobs are that size, and 12 consecutive isolated runs of this gate
+// passed 36/36.
+//
+// ⚠️ SO THE CI RED IS **NOT** REPRODUCED ON DEMAND, and this comment does not
+// claim it. What is claimed: the construct is a known-defective one, it sat in
+// the exact loop whose count came back wrong, its failure direction matches the
+// observed symptom exactly, and CI runs this file inside a 16-worker suite —
+// the scheduling pressure F30's own entry names as why CI saw what local runs
+// did not. The fix is free and the construct has no defenders.
+// ============================================================================
+describe('⚠️ F30 — no early-exit pipeline can misreport a match as a miss', () => {
+  const PIPE_INTO_GREP_Q = /\|\s*grep\s+-[a-zA-Z]*q/;
+
+  const codeOf = (path: string) =>
+    readFileSync(path, 'utf8')
+      .split('\n')
+      .filter((l) => !l.trimStart().startsWith('#'))
+      .join('\n');
+
+  it('the pruner contains no pipeline into `grep -q`', () => {
+    const offenders = codeOf(SCRIPT)
+      .split('\n')
+      .filter((l) => PIPE_INTO_GREP_Q.test(l));
+    expect(
+      offenders,
+      'each of these can report a MATCH as a MISS under `pipefail` — and in this ' +
+        'script that means either deleting a rollback tag a container is using, ' +
+        'or refusing the whole run on a reconciliation that cannot add up. Use ' +
+        '`[[ "$blob" == *"$needle"* ]]`, newline-wrapped where `-x` was meant.',
+    ).toEqual([]);
+  });
+
+  it('CONTROL — the check SEES a planted offender in a real file', () => {
+    // ⚠️ A CONTROL THAT NEVER TOUCHES A FILE CANNOT GUARD FILES. The arm above
+    // reads bytes from disk, so its control must too — asserting the regex
+    // against a string literal would prove only that the regex compiles.
+    const dir = mkdtempSync(join(tmpdir(), 'f30-'));
+    const planted = join(dir, 'planted.sh');
+    writeFileSync(
+      planted,
+      ['#!/usr/bin/env bash', 'set -uo pipefail', 'printf \'%s\\n\' "$B" | grep -qxF -- "$N" && echo hit', ''].join('\n'),
+    );
+    const offenders = codeOf(planted)
+      .split('\n')
+      .filter((l) => PIPE_INTO_GREP_Q.test(l));
+    expect(offenders.length, 'the check cannot see a planted offender').toBe(1);
+  });
+
+  it('CONTROL — comments are stripped, so the doctrine above does not red its own gate', () => {
+    // This file's own header quotes `printf | grep -qxF` while explaining it.
+    // A checker that read comments would report itself, which is the shape that
+    // makes a guard get deleted rather than fixed.
+    const dir = mkdtempSync(join(tmpdir(), 'f30c-'));
+    const commented = join(dir, 'commented.sh');
+    writeFileSync(
+      commented,
+      ['#!/usr/bin/env bash', '# printf \'%s\\n\' "$B" | grep -qxF -- "$N"', 'echo ok', ''].join('\n'),
+    );
+    expect(
+      codeOf(commented).split('\n').filter((l) => PIPE_INTO_GREP_Q.test(l)),
+      'a MENTION in a comment was counted as an occurrence',
+    ).toEqual([]);
+  });
+
+  it('the line-exact matches kept their `-x` semantics as newline wrapping', () => {
+    // `grep -qxF` is LINE-exact. `[[ blob == *needle* ]]` is a substring test
+    // and would match a longer tag containing the shorter one — so the two
+    // replacements wrap the needle in newlines on both sides. Dropping that is
+    // a silent widening, not a refactor.
+    const code = codeOf(SCRIPT);
+    const wrapped = code.split('\n').filter((l) => /\$'\\n'"\$\w+"\$'\\n' == \*\$'\\n'/.test(l));
+    expect(
+      wrapped.length,
+      'the newline-wrapped (line-exact) comparisons are gone — a bare substring ' +
+        'test would match a longer tag that contains this one',
+    ).toBeGreaterThanOrEqual(2);
+  });
+});
