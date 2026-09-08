@@ -39,6 +39,7 @@ import {
   type EncounterFact,
   type SemanticMapping,
   type TemplateField,
+  type RecordDerivedRefusalReason,
 } from './ir';
 import {
   conceptMatches,
@@ -108,12 +109,17 @@ export interface VisitPatientRecord {
  * in the future, or an implausible result. `0` is a legitimate age (an infant),
  * so it cannot double as the failure value.
  */
-/** Why an age could not be stated. A refusal is never silent — #264. */
-export type AgeRefusal =
-  | 'age_input_absent'
-  | 'age_unparseable'
-  | 'age_implausible'
-  | 'age_timezone_ambiguous';
+/**
+ * Why an age could not be stated. A refusal is never silent — #264.
+ *
+ * ⚠️ DERIVED FROM `ir.ts`'s SHARED LIST, NOT RE-DECLARED — #272. Three readers
+ * need this vocabulary: this injector mints the tokens, the resolver routes them,
+ * and `validation/index.ts` must reach the same verdict from a reasonCode alone.
+ * A second declaration here would compile perfectly and drift the day anybody
+ * added a fifth reason, and the failure mode is a blank that silently blocks the
+ * whole document again.
+ */
+export type AgeRefusal = RecordDerivedRefusalReason;
 
 export type AgeResolution =
   | { ok: true; years: number }

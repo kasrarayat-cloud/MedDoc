@@ -306,7 +306,7 @@ function missingResolution(
   /** Overrides the reason when the field is unfilled for a NAMED reason more
    *  specific than "nothing was said" — the reason must survive, the false
    *  evidence trail must not. */
-  reason?: { unfilled: string; required: string },
+  reason?: { unfilled: string; required: string; neverBlocks?: boolean },
   /** TRUE at exactly one call site: the one reached because NO fact carries
    *  this field's approved concept. That is the only site where "the encounter
    *  said nothing about this" is a true statement rather than a deferral. */
@@ -314,12 +314,44 @@ function missingResolution(
 ): FieldResolution {
   const practiceDefault = practiceDefaultResolution(field, mapping, facts);
   if (practiceDefault) return practiceDefault;
+  // ══ #272 — A RECORD-DERIVED REFUSAL NEVER WITHHOLDS A DOCUMENT ═══════════
+  //
+  // `requiresInput` turns a blank into `needs_clinician_input`;
+  // `validation/index.ts:583-586` makes that BLOCKING; `fill-engine.ts:198`
+  // turns any blocking issue into `render: null`. So this path did not blank a
+  // field — it withheld the doctor's whole form.
+  //
+  //   A WITHHELD CONSULT OVER ONE AMBIGUOUS AGE IS THE WRONG TRADE.
+  //   A DOCTOR TYPING "61" IS THE RIGHT ONE.
+  //
+  // ⚠️ AND IT IS NOT SCOPED TO REQUIRED CONTROLS THE WAY THE READING SUGGESTS.
+  // `needsInputBlocks` is `critical || field.required || mapping.required`, and
+  // `critical` is `field.criticality !== 'routine' || field.clinicallyMaterial`
+  // — with `clinicallyMaterial` hard-coded TRUE at all twelve compiler sites.
+  // Measured in production: **238 of 238 rows carry `clinicallyMaterial = t`
+  // and `required = f`.** So `critical` is a CONSTANT TRUE, the `required`
+  // disjuncts are dead weight, and EVERY field reaching this status takes the
+  // document down. (Ruling #157(d) already filed that separately — *"a
+  // qualifier that is always true is a comment"*.)
+  //
+  // ⚠️ THE CODEBASE ALREADY ARGUES THE FIX, IN ITS OWN WORDS:
+  //   · `manual_source_not_filled` (:486) returns `not_mentioned`, and records
+  //     what the alternative cost — "four such fields refused the native
+  //     document on every visit, forever … the only effect was that the doctor
+  //     never got their own form back."
+  //   · `denial_withheld` is a warning UNCONDITIONALLY under #157(b) —
+  //     "refusing the OTHER hundred and forty-nine fields does not fill it."
+  //
+  // This does NOT weaken `needs_clinician_input` in general: the escalation
+  // stands for every other route in, and `neverBlocks` is set ONLY by the
+  // injector-refusal channel, whose members are record-derived by construction.
   const requiresInput =
-    field.required ||
-    mapping.required ||
-    field.unknownPolicy === 'requires_input' ||
-    mapping.unknownPolicy === 'requires_input' ||
-    mapping.blankPolicy === 'requires_input';
+    !reason?.neverBlocks &&
+    (field.required ||
+      mapping.required ||
+      field.unknownPolicy === 'requires_input' ||
+      mapping.unknownPolicy === 'requires_input' ||
+      mapping.blankPolicy === 'requires_input');
   const unmentionedScaffold =
     conceptUnmatched && reason === undefined && facts.length > 0;
 
@@ -540,7 +572,10 @@ function resolveOne(
   // The value is still null and the field is still blank: this changes the
   // LABEL on the blank, not the blank.
   if (refusal) {
-    return missingResolution(field, mapping, allFacts, refusal);
+    // ⚠️ `neverBlocks` — #272. The blank is NAMED and the document still
+    // renders. The opt-out is a property of the CHANNEL, not a token list
+    // somebody has to keep in step: only `withVisitMetadataFacts` writes here.
+    return missingResolution(field, mapping, allFacts, { ...refusal, neverBlocks: true });
   }
 
   if (conceptCandidates.length === 0) {

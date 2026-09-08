@@ -37,6 +37,8 @@ import {
   RECORD_DERIVED_CONCEPTS,
 } from '../visit-metadata';
 import {
+  RECORD_DERIVED_REFUSAL_REASONS,
+  isRecordDerivedRefusal,
   EncounterFactSchema,
   SemanticMappingSchema,
   TemplateFieldSchema,
@@ -1270,5 +1272,179 @@ describe('#264 — the refusal survives `prepareTemplateTwinFill`, which is the 
     // threading removed this reads `fact_not_mentioned`, and before this block
     // existed no arm in the file noticed.
     expect(age.reasonCode).toBe('age_timezone_ambiguous');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8 · RULING #272 — A RECORD-DERIVED REFUSAL NEVER WITHHOLDS A DOCUMENT.
+// ---------------------------------------------------------------------------
+describe('#272 — a REQUIRED control with an ambiguous age still RENDERS', () => {
+  // ⚠️ THIS IS THE OWNER-CLASS (b) QUESTION #1057 SURFACED, NOW DECIDED.
+  // `requiresInput` turns a blank into `needs_clinician_input`;
+  // `validation/index.ts:583-586` makes that BLOCKING on
+  // `critical || field.required || mapping.required`; `fill-engine.ts:198` turns
+  // a blocking issue into `render: null`. So on a required control the refusal
+  // did not blank a field — it withheld the whole document.
+  //
+  //   A WITHHELD CONSULT OVER ONE AMBIGUOUS AGE IS THE WRONG TRADE.
+  //   A DOCTOR TYPING "61" IS THE RIGHT ONE.
+  //
+  // ⚠️ AND THE TARGET BEHAVIOUR IS NOT INVENTED HERE — IT IS THE MANUAL FIELD'S,
+  // which the ruling names: `manual_source_not_filled` returns `not_mentioned`,
+  // renders blank, and goes to the doctor. Its own comment records the cost of
+  // the alternative: "four such fields refused the native document on every
+  // visit, forever … the only effect was that the doctor never got their own
+  // form back."
+  const REQUIRED_AGE = { ...mapping(AGE_ID, RECORD_DERIVED_CONCEPTS.age), required: true } as ReturnType<typeof mapping>;
+  const fields = [field(NAME_ID, 'Patient'), field(AGE_ID, 'Age')];
+  const mappings = [mapping(NAME_ID, RECORD_DERIVED_CONCEPTS.name), REQUIRED_AGE];
+  const AMBIGUOUS = '2026-06-14T02:00:00.000Z';
+
+  function resolve(visitDate: string) {
+    const refusals: Array<{ fieldId: string; unfilled: string; required: string }> = [];
+    const facts = withVisitMetadataFacts({
+      fields,
+      mappings,
+      facts: [],
+      patient: PATIENT,
+      visitDate,
+      refusals,
+    });
+    // ⚠️ THE SAME FACTS GO TO BOTH. The first draft passed `facts: []` to the
+    // validator while the resolutions cited facts the injector had minted, and
+    // the validator correctly reported SOURCE_FACT_MISSING /
+    // EVIDENCE_ANCHOR_UNTRACEABLE / ASSERTION_NOT_SUPPORTED on the NAME field.
+    // Those were my fixture, not the product — and they would have masked the
+    // one blocking issue this block is actually about.
+    return { resolutions: resolveTemplateFields({ fields, mappings, facts, refusals }), facts };
+  }
+
+  it('⚠️ THE ARM THE RULING NAMES — blank, NAMED, and NOT needs_clinician_input', () => {
+    const age = resolve(AMBIGUOUS).resolutions.find((f) => f.fieldId === AGE_ID)!;
+    expect(age.value).toBeNull();
+    expect(age.reasonCode).toBe('age_timezone_ambiguous');
+    // the whole point: NOT the status that blocks
+    expect(age.status).toBe('not_mentioned');
+    expect(age.status).not.toBe('needs_clinician_input');
+  });
+
+  it('and validation does NOT block — so the document is not withheld', () => {
+    const { resolutions, facts } = resolve(AMBIGUOUS);
+    const v = validateTemplateTwin({
+      fields,
+      mappings,
+      resolutions,
+      facts,
+    } as never) as { valid: boolean; issues: Array<{ code: string; severity: string }> };
+    expect(v.valid, JSON.stringify(v.issues)).toBe(true);
+    expect(v.issues.filter((i) => i.severity === 'blocking')).toEqual([]);
+  });
+
+  it('⚠️ NON-VACUITY — the SAME required control DOES block for an unrelated reason', () => {
+    // Without this the arms above could pass because validation blocks nothing
+    // for this fixture at all, and the ruling would be "proved" by a fixture
+    // that cannot block. `clinical_concept_unmapped` is a different route into
+    // `needs_clinician_input` — one #272 deliberately does NOT touch.
+    const unmapped = [
+      mapping(NAME_ID, RECORD_DERIVED_CONCEPTS.name),
+      { ...mapping(AGE_ID, null), required: true },
+    ] as typeof mappings;
+    const resolutions = resolveTemplateFields({ fields, mappings: unmapped, facts: [] });
+    const age = resolutions.find((f) => f.fieldId === AGE_ID)!;
+    expect(age.status).toBe('needs_clinician_input');
+    const v = validateTemplateTwin({
+      fields,
+      mappings: unmapped,
+      resolutions,
+      facts: [],
+    } as never) as { valid: boolean };
+    expect(v.valid, 'the escalation must still work for every OTHER route').toBe(false);
+  });
+
+  it('the unambiguous visit is unaffected — it still FILLS', () => {
+    const age = resolve(VISIT).resolutions.find((f) => f.fieldId === AGE_ID)!;
+    expect(age.value).toBe(String(ageAtDate(PATIENT.dateOfBirth, VISIT)));
+  });
+});
+
+describe('#272 — the three readers of the refusal vocabulary cannot drift', () => {
+  // ⚠️ THIS IS THE ARM THE COMMENTS PROMISE, AND WITHOUT IT THEY ARE A WISH.
+  // The vocabulary has THREE readers: the injector mints the tokens, the
+  // resolver routes them by CHANNEL, and `validation/index.ts` must reach the
+  // same verdict from a reasonCode ALONE. A fifth reason added to the injector
+  // and not to `ir.ts`'s list would compile, resolve, and then BLOCK the
+  // document — the exact regression #272 ends, through the one door nobody
+  // watches.
+
+  it('every reason the injector can EMIT is a member of the shared list', () => {
+    // Drive the real function across inputs chosen to reach each arm, and
+    // collect what it actually returns rather than restating the list.
+    const probes: Array<[string | null, string | null]> = [
+      [null, VISIT], // age_input_absent
+      ['not a date', VISIT], // age_unparseable
+      ['1820-01-01', VISIT], // age_implausible
+      ['1958-06-14', '2026-06-14T02:00:00.000Z'], // age_timezone_ambiguous
+    ];
+    const emitted = new Set<string>();
+    for (const [dob, at] of probes) {
+      const r = ageAtDateResolved(dob, at);
+      if (!r.ok) emitted.add(r.reason);
+    }
+
+    // ⚠️ NON-VACUITY: the probe set must reach EVERY reason, or a subset would
+    // satisfy the membership test while a missing token went unchecked.
+    expect(
+      [...emitted].sort(),
+      'the probes no longer reach every refusal arm — widen them, do not weaken this',
+    ).toEqual([...RECORD_DERIVED_REFUSAL_REASONS].sort());
+
+    for (const reason of emitted) {
+      expect(isRecordDerivedRefusal(reason), `${reason} is not in the shared list`).toBe(true);
+    }
+  });
+
+  it('the predicate REFUSES a non-member — it is not just "any truthy string"', () => {
+    for (const other of [
+      'fact_not_mentioned',
+      'manual_source_not_filled',
+      'temporality_not_approved',
+      'omitted_unsupported_default',
+      '',
+      null,
+      undefined,
+    ]) {
+      expect(isRecordDerivedRefusal(other), `${other} must NOT be a record-derived refusal`).toBe(
+        false,
+      );
+    }
+  });
+
+  it('⚠️ and the list is what VALIDATION reads — not a copy of it', () => {
+    // The membership test above proves the injector agrees with the list. This
+    // proves the list is load-bearing at the validator: a reason IN the list
+    // produces a warning, one OUTSIDE it produces the blocking arm.
+    const fields = [field(AGE_ID, 'Age')];
+    const mappings = [{ ...mapping(AGE_ID, RECORD_DERIVED_CONCEPTS.age), required: true }] as ReturnType<typeof mapping>[];
+    const judge = (reasonCode: string) => {
+      const resolutions = resolveTemplateFields({
+        fields,
+        mappings,
+        facts: [],
+        refusals: [{ fieldId: AGE_ID, unfilled: reasonCode, required: `required_${reasonCode}` }],
+      });
+      const v = validateTemplateTwin({ fields, mappings, resolutions, facts: [] } as never) as {
+        valid: boolean;
+        issues: Array<{ code: string; severity: string }>;
+      };
+      return v;
+    };
+
+    const member = judge('age_timezone_ambiguous');
+    expect(member.valid, JSON.stringify(member.issues)).toBe(true);
+    expect(member.issues.some((i) => i.code === 'RECORD_DERIVED_REFUSAL')).toBe(true);
+
+    const stranger = judge('some_reason_nobody_registered');
+    expect(stranger.valid, 'an UNREGISTERED reason must still block — fail-closed').toBe(false);
+    expect(stranger.issues.some((i) => i.code === 'REQUIRED_FIELD_NOT_MENTIONED')).toBe(true);
   });
 });

@@ -760,6 +760,42 @@ export const TemplateTwinFillManifestSchema = z
   .strict();
 export type TemplateTwinFillManifest = z.infer<typeof TemplateTwinFillManifestSchema>;
 
+// ══ #272 — THE RECORD-DERIVED REFUSAL VOCABULARY, IN ONE PLACE ═════════════
+//
+// A record-derived value is one the PATIENT RECORD supplies — a name, an age.
+// When the record cannot supply it, the field is blank for a NAMED reason, and
+// ruling #272 says that blank must never withhold the document:
+//
+//   A WITHHELD CONSULT OVER ONE AMBIGUOUS AGE IS THE WRONG TRADE.
+//   A DOCTOR TYPING "61" IS THE RIGHT ONE.
+//
+// ⚠️ IT LIVES HERE, AND NOT BESIDE THE INJECTOR, BECAUSE IT HAS THREE READERS
+// AND A RULE WITH THREE READERS DRIFTS. The resolver knows a refusal by the
+// CHANNEL it arrived on; `validation/index.ts` sees only a status and a
+// reasonCode and must reach the same verdict; and the injector is where the
+// tokens are minted. `ir.ts` is the module all three already import, so the
+// list is shared rather than copied.
+//
+// ⚠️ AND THE DRIFT IS ARMED, NOT TRUSTED: `gate-272` asserts that every reason
+// the injector can emit is a member of this set. Adding a refusal reason
+// without adding it here would otherwise produce a blank that silently blocks
+// the document again — the exact regression #272 exists to end, arriving
+// through the one door nobody watches.
+export const RECORD_DERIVED_REFUSAL_REASONS = [
+  'age_input_absent',
+  'age_unparseable',
+  'age_implausible',
+  'age_timezone_ambiguous',
+] as const;
+
+export type RecordDerivedRefusalReason = (typeof RECORD_DERIVED_REFUSAL_REASONS)[number];
+
+/** Is this reasonCode a record-derived refusal? The ONE reader of the list. */
+export function isRecordDerivedRefusal(reasonCode: string | null | undefined): boolean {
+  if (!reasonCode) return false;
+  return (RECORD_DERIVED_REFUSAL_REASONS as readonly string[]).includes(reasonCode);
+}
+
 export function templateTwinCounts(
   fields: readonly FieldResolution[],
   definitions: readonly TemplateField[],
