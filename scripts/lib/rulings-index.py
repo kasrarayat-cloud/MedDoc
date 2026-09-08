@@ -210,12 +210,23 @@ def main():
                    ["OWNER-RULING", "RATIFIED", "PROVISIONAL", "SUPERSEDED", "RECORDED"]
                    if k in counts)))
     out.append("")
-    out.append("| date | # | status | ruling | verdict, in one line | full body |")
-    out.append("|---|---|---|---|---|---|")
+    # ⚠️ RULING #278 — THE ROW IS A POINTER: date, number, status, title, body.
+    # The "verdict, in one line" column is GONE. It was 82% of the head — 85,519
+    # characters across 220 rows — and it is what made the head unable to hold a
+    # STANDING rule without archiving it. Rotation could only move whole arcs
+    # out, and a standing rule has to stay where sessions look for it, so the
+    # head was stuck oversize by construction.
+    #
+    # Measured on the conversion: 139,166 -> 51,668 characters, all 220 rows
+    # kept, nothing archived. Every row's pointer was verified to resolve, and
+    # every body was verified to cover its own ruling — the prose was a SUMMARY
+    # of what lives in full in docs/foundation/rulings/, not a second source.
+    out.append("| date | # | status | ruling — the POINTER, never the prose | full body |")
+    out.append("|---|---|---|---|---|")
     for r in rows:
-        out.append("| %s | %s | %s | %s | %s | [`%s`](rulings/%s) |" % (
+        out.append("| %s | %s | %s | %s | [`%s`](rulings/%s) |" % (
             r["date"], r["num"], r["status"], r["title"],
-            r["verdict"].replace("|", "\\|"), r["archive"], r["archive"]))
+            r["archive"], r["archive"]))
     out += ["", END]
     block = "\n".join(out)
 

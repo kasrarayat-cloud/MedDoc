@@ -104,6 +104,41 @@ else
   say "         hooksPath $before_hooks -> $after_hooks"; fail=1
 fi
 
+# ── ARM 6 · THE SANDBOX MEASURES ITSELF, NOT THE SHARED TREE ────────────────
+#
+# ⚠️ THIS ARM IS NOT ABOUT TESTS RUNNING. It is about WHICH TREE a green
+# describes. A worktree with a raw `node_modules` symlink resolves `@meddoc/*`
+# to the SHARED tree, so a lens can run a suite, watch it pass, and have proved
+# something about code its sandbox does not contain — while every guard above
+# this line is still 🟢. The sandbox was sealed and pointed at the wrong
+# repository.
+#
+# Observed 2026-09-07: a round-eight lens reported ~24 files failing with
+# `Failed to resolve import "react/jsx-dev-runtime"` and `@meddoc/auth resolves
+# to /opt/meddoc-pro/packages/auth/src/index.ts, outside this worktree`. It
+# caught that itself and discarded every claim resting on those files — but a
+# lens that has to notice its own harness is broken is a lens spending its
+# budget on the harness, and the QUIET half of that failure (a green about the
+# wrong tree) produces no error message at all.
+#
+# The POSITIVE CONTROL is the first clause: the package must exist in the SHARED
+# tree too. Without it this arm passes in a checkout that has no workspace
+# packages at all — the vacuity this house keeps finding one input over.
+if [ ! -d "$SHARED/packages/auth" ]; then
+  say "🔴 ARM 6  no packages/auth in the shared tree — this arm cannot mean anything here"; fail=1
+else
+  resolved="$(readlink -f "$DIR/node_modules/@meddoc/auth" 2>/dev/null || echo MISSING)"
+  case "$resolved" in
+    "$DIR"/*)
+      say "🟢 ARM 6  @meddoc/auth resolves INSIDE the sandbox: $resolved" ;;
+    MISSING)
+      say "🔴 ARM 6  @meddoc/auth does not resolve at all — a suite run here proves nothing"; fail=1 ;;
+    *)
+      say "🔴 ARM 6  @meddoc/auth resolves OUTSIDE the sandbox: $resolved"
+      say "         a green in this sandbox would be a green about ANOTHER TREE'S CODE"; fail=1 ;;
+  esac
+fi
+
 bash "$SHARED/scripts/reap-lens-sandbox.sh" "$DIR" >/dev/null 2>&1 || say "⚠️  could not reap $DIR"
 
 say ""
