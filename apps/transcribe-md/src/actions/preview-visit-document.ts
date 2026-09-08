@@ -40,8 +40,24 @@ import { loadNativeTemplateDocxForVisit } from '@/lib/template-twin/native-expor
 import type { NativePreviewResult } from './preview-native-document';
 
 /** Why there is no document to show. Every one is surfaced, and none is fatal. */
-export { VISIT_PREVIEW_MISSES, type VisitPreviewMiss } from '@/lib/visit-preview-misses';
+// ⚠️ NO VALUE RE-EXPORT FROM THIS FILE. It is `'use server'`, and SWC refuses:
+// "Only async functions are allowed to be exported in a `use server` file."
+// A `export { X } from './y'` re-export is refused even when the binding is a
+// plain const, because the compiler cannot know what it is — measured against
+// this repo's own Next 16.2.11 binding, with three controls: removing the line
+// clears it, a plain `export const` in a use-server file is FINE, and a clean
+// use-server file is fine. So it is the RE-EXPORT form specifically.
+//
+// ⚠️ AND IT BROKE THE BUILD WITHOUT BREAKING A SINGLE TEST. vitest transpiles
+// with esbuild, which does not implement the restriction — 6564 arms green on a
+// tree that `next build` refuses. Worse, the one gate that would have loaded
+// this module was re-pointed at the leaf by the SAME commit that added this
+// line, so the fix removed its own witness.
+//
+// Consumers import the leaf directly. Nothing needed this.
 import type { VisitPreviewMiss } from '@/lib/visit-preview-misses';
+
+export type { VisitPreviewMiss };
 
 export interface VisitPreviewResult extends Omit<NativePreviewResult, 'reason'> {
   reason: NativePreviewResult['reason'] | VisitPreviewMiss | null;

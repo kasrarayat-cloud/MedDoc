@@ -64,6 +64,16 @@ import { loadOrComputeNativeTemplateDocxForVisit } from '../native-export';
 
 // ── THE LOCUM, WITH THREE DISTINCT IDENTITIES ───────────────────────────────
 const TENANT = 'practice-A-owns-the-chart';
+// ⚠️ THE TEMPLATE IDENTITY NEEDED TWO VALUES TOO, AND HAD ONE. The header below
+// claims three identities are split so a confusion can be witnessed — and then
+// `tpl-A` was simultaneously "the id the visit is bound to" and "the tenant's
+// certified template", so an arm could not tell "the tenant's template was
+// selected" from "the mock returned it for any query". `worker.ts` binds the id
+// from the AUTHOR (`resolveActiveTemplate({ doctorId: visit.userId })`), so the
+// id reaching the engine on a locum visit is the AUTHOR'S — the case the fixture
+// could not express.
+const TPL_TENANT = 'tpl-A-owned-by-the-tenant';
+const TPL_AUTHOR = 'tpl-B-owned-by-the-locums-practice';
 const AUTHOR = 'user-locum-visiting-from-B';
 const AUTHOR_PRACTICE = 'practice-B-the-locums-own';
 
@@ -98,7 +108,7 @@ const storage = {
  *  can hand the same tenant a template owned by somebody else. */
 function templateRow(artifactPractice: string) {
   return {
-    id: 'tpl-A',
+    id: TPL_TENANT,
     version: 1,
     templateTwinCompiledVersion: {
       id: 'cv-A',
@@ -126,7 +136,7 @@ const input = {
   visitId: 'visit-of-A-patient',
   tenantPracticeId: TENANT,
   authorUserId: AUTHOR,
-  noteTemplateId: 'tpl-A',
+  noteTemplateId: TPL_TENANT,
   noteTemplateVersion: 1,
   inputMode: 'dictation',
   contextText: 'right GSV incompetent',
@@ -158,7 +168,7 @@ describe("#287 — the locum's visit renders A's form", () => {
 
     // The decision, observed as the query the engine actually issues.
     expect(where.practiceId).toBe(TENANT);
-    expect(where.id).toBe('tpl-A');
+    expect(where.id).toBe(TPL_TENANT);
     expect(where.version).toBe(1);
 
     // ⚠️ KILLS THE SHAPE THAT SHIPPED — `doctorId: input.doctorId`. Under it a
@@ -275,4 +285,53 @@ describe('#287 — the EXPORT door asked the same question a different way', () 
     // author's practice, which for a locum is not the chart's.
     expect(where.user, 'the visit is scoped through the AUTHOR relation again').toBeUndefined();
   });
+});
+
+describe("#296 — the id the WORKER produces, not the one the fixture hands in", () => {
+  it('⚠️ A TEMPLATE THE TENANT DOES NOT OWN IS REFUSED **BEFORE** ANYTHING IS PINNED', async () => {
+    // ⚠️ THE DEFECT THIS ARM EXISTS FOR. `worker.ts` selects by
+    // `doctorId: visit.userId` — the AUTHOR — and hands that id here beside the
+    // TENANT's practice. The claim `updateMany` used to run FIRST, so the visit
+    // was pinned to a template it can never fill, and the `OR` makes that
+    // permanent: every later run throws TEMPLATE_PROVENANCE_MISMATCH.
+    //
+    // On `main` both ends were the author's and agreed — the wrong form
+    // rendered, which is wrong but recoverable. Splitting the axes turned it
+    // into no document plus an irreversible pin.
+    noteTemplateFindFirst.mockImplementation(async (args: unknown) => {
+      const w = (args as { where?: Record<string, unknown> }).where ?? {};
+      // an HONEST mock: it answers the predicate instead of returning a row
+      // whatever is asked. A `mockResolvedValue` here is what hid the defect.
+      return w.id === TPL_TENANT && w.practiceId === TENANT ? templateRow(TENANT) : null;
+    });
+
+    await expect(
+      processTemplateTwinVisit({ ...input, noteTemplateId: TPL_AUTHOR } as never),
+    ).rejects.toMatchObject({ code: 'CERTIFIED_TEMPLATE_NOT_FOUND' });
+
+    // ⚠️ AND NOTHING WAS WRITTEN. This is the whole arm: a refusal that pins is
+    // not a refusal, it is damage with an error message.
+    expect(
+      visitUpdateMany,
+      'the visit was PINNED to a template the tenant does not own, and the OR ' +
+        'clause makes that permanent',
+    ).not.toHaveBeenCalled();
+  }, 60_000);
+
+  it('POSITIVE CONTROL — the TENANT’s own template is not refused', async () => {
+    // Without this the arm above passes on an engine that refuses everything.
+    noteTemplateFindFirst.mockImplementation(async (args: unknown) => {
+      const w = (args as { where?: Record<string, unknown> }).where ?? {};
+      return w.id === TPL_TENANT && w.practiceId === TENANT ? templateRow(TENANT) : null;
+    });
+    visitUpdateMany.mockResolvedValue({ count: 1 });
+
+    await processTemplateTwinVisit({ ...input, noteTemplateId: TPL_TENANT } as never).catch(
+      () => undefined,
+    );
+    expect(
+      visitUpdateMany,
+      'the tenant’s own template was refused before the claim — the guard is too tight',
+    ).toHaveBeenCalled();
+  }, 60_000);
 });

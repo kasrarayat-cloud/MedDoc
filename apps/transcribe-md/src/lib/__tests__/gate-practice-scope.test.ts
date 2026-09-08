@@ -169,7 +169,14 @@ const SYSTEM_ALLOWLIST: Record<string, number> = {
   // and `dateOfBirth`, because those are the only values any downstream
   // consumer may print. Widening that select is a PHI decision and belongs in a
   // diff someone reads — which is exactly what this allowlist is for.
-  'src/lib/template-twin/fill-engine.ts': 3,
+  // 3 -> 4 on 2026-09-08, DELIBERATELY. #296's round found that the claim
+  // `updateMany` PINNED `noteTemplateId` onto the visit before anything checked
+  // the tenant owned that template — and the claim's `OR` makes the pin sticky,
+  // so a visit could be bound permanently to a template that can never fill it.
+  // The new read is a tenant-scoped `noteTemplate.findFirst` run FIRST and
+  // read-only, so a refusal leaves the row untouched. System context: the worker
+  // has no request and no session practice; the tenant comes from the visit row.
+  'src/lib/template-twin/fill-engine.ts': 4,
   // ⚠️ 1 -> 2 on 2026-08-21, DECLARED. The second is the FROZEN-POINTER read
   // added by ruling 2(b): a SIGNED record resolves its document by the id the
   // signature stamped, never by lookup, so a manifest landing afterwards is
@@ -515,25 +522,42 @@ function isScoped(code: string, at: number): boolean {
   const argEnd = code.indexOf(')', at);
   const own = code.slice(at, argEnd > at ? Math.min(argEnd + 400, code.length) : at + 400);
   if (ACCESSORS.test(own)) return true;
-  // ⚠️ AN EXPLICIT `practiceId:` IN THE CALL'S OWN `where` IS SCOPING, and the
-  // WRITE scanner twenty lines up has always said so (`ACCESSORS.test(body) ||
-  // /practiceId/.test(body)`). The read side did not, and the inconsistency had
-  // a cost: a read scoped by the visit's TENANT — `templateTwinCompiledVersion:
-  // { practiceId: visit.practiceId }`, which is what #287 requires — counted as
-  // UNSCOPED, while the same predicate on a write counted as scoped.
+  // ⚠️ AN EXPLICIT `practiceId:` IN THE CALL'S OWN `where` IS SCOPING — and the
+  // WRITE scanner has always said so. The read side did not, and a read scoped
+  // by the visit's TENANT counted as UNSCOPED while the same predicate on a
+  // write counted as scoped.
   //
-  // ⚠️ AND IT WAS ONLY PASSING BY PROXIMITY. The 40-line lookback below found a
-  // `visitByIdScope` in a NEARBY call, so the read's "scoped" status was an
-  // accident of layout: adding a comment above it pushed the accessor out of the
-  // window and the ratchet went red on a change that scoped it BETTER. A
-  // classification that moves when you write a comment is measuring the wrong
-  // thing.
+  // ⚠️ BUT IT IS TESTED AGAINST THE **BALANCED ARGUMENT'S `where`**, NOT AGAINST
+  // `own`. The first version of this clause reused `own` — `indexOf(')') + 400`
+  // — which overruns the first close-paren by four hundred characters and so
+  // reaches into a nested `select: { practiceId: true }` AND into the NEXT
+  // statement. Measured over the real tree, that flipped TEN reads from
+  // unscoped to scoped, three of them `where: { id, doctorId }` reads whose only
+  // `practiceId` is in a select or in a following `create({ data: … })`.
   //
-  // ⚠️ NOT `templateScope` FOR THIS ONE, DELIBERATELY: that accessor scopes via
-  // `doctor: { practiceId }` — the AUTHOR's practice — which is exactly the axis
-  // #287 removed from template selection. Using it here would have re-created
-  // the defect while turning this gate green.
-  if (/\bpracticeId\s*:/.test(own)) return true;
+  // That is the exact leak this function's own docblock forbids: "a false
+  // 'scoped' is a leak the ratchet would report as progress." With
+  // MAX_UNSCOPED_REQUEST_READS = 0 the ratchet's whole job is to red on the
+  // FIRST new unscoped clinical read, and a `findFirst({ where: { id },
+  // select: { practiceId: true } })` — a cross-tenant read of any practice's
+  // visit by id — would have scored 0 and shipped green.
+  //
+  // `callArg` is the balanced reader the write side already uses; it cannot
+  // spill. A `practiceId` in a SELECT is not a scope, so only the `where` counts.
+  const arg = callArg(code, code.lastIndexOf('(', at));
+  const whereAt = arg.search(/\bwhere\s*:/);
+  if (whereAt > -1) {
+    const braceAt = arg.indexOf('{', whereAt);
+    if (braceAt > -1) {
+      let depth = 0;
+      let end = braceAt;
+      for (; end < arg.length; end += 1) {
+        if (arg[end] === '{') depth += 1;
+        else if (arg[end] === '}' && (depth -= 1) === 0) break;
+      }
+      if (/\bpracticeId\s*:/.test(arg.slice(braceAt, end + 1))) return true;
+    }
+  }
   const before = code.slice(Math.max(0, at - 2000), at).split('\n').slice(-40).join('\n');
   return ACCESSORS.test(before);
 }
@@ -614,6 +638,41 @@ describe('T5 — clinical reads go through the practice-scoped accessor', () => 
     expect(system.length, 'no system-context reads found — the worker paths moved').toBeGreaterThan(
       0,
     );
+  });
+
+  it('⚠️ THE SCOPE TEST READS THE `where`, NOT A 400-CHAR OVERRUN', () => {
+    // ⚠️ THE ARM THAT WOULD HAVE CAUGHT THE WIDENING. The first version of the
+    // `practiceId` clause tested `own` — `indexOf(')') + 400` — so a nested
+    // `select: { practiceId: true }`, or the NEXT statement's `create({ data:
+    // { practiceId } })`, made an unscoped read count as scoped. This function's
+    // docblock forbids exactly that: "a false 'scoped' is a leak the ratchet
+    // would report as progress."
+    //
+    // Driven on synthetic snippets, because the real tree cannot witness a
+    // classification that is wrong only for shapes it does not yet contain —
+    // which is what made the widening invisible.
+    const at = (snippet: string) => snippet.indexOf('({') + 1;
+
+    const inSelect = `prisma.transcribeVisit.findFirst({ where: { id: visitId }, select: { practiceId: true, soapFinal: true } })`;
+    expect(
+      isScoped(inSelect, at(inSelect)),
+      'a practiceId in the SELECT counted as a SCOPE — that is a cross-tenant ' +
+        'read of any practice’s visit by id, scoring 0 on a ratchet whose limit is 0',
+    ).toBe(false);
+
+    const nextStatement = `prisma.transcribeVisit.findFirst({ where: { id: visitId } });\n  await prisma.templateTwinFillManifest.create({ data: { practiceId, visitId } });`;
+    expect(
+      isScoped(nextStatement, at(nextStatement)),
+      'a practiceId in the FOLLOWING statement counted as this read’s scope',
+    ).toBe(false);
+
+    // POSITIVE CONTROL — the shape the clause exists to accept must still pass,
+    // or the two arms above are satisfied by a clause that accepts nothing.
+    const inWhere = `prisma.noteTemplate.findFirst({ where: { id, templateTwinCompiledVersion: { practiceId: visit.practiceId } } })`;
+    expect(
+      isScoped(inWhere, at(inWhere)),
+      'a practiceId inside the WHERE is a scope and must be accepted',
+    ).toBe(true);
   });
 
   it('⚠️ THE RATCHET — unscoped request-context reads never increase', () => {

@@ -717,6 +717,42 @@ export async function processTemplateTwinVisit(
     );
   }
 
+  // ⚠️ THE TENANT MUST OWN THIS TEMPLATE **BEFORE** ANYTHING IS PINNED.
+  //
+  // The claim below writes `noteTemplateId` onto the visit and its `OR` makes
+  // that write STICKY: once a visit carries an id, only that id can ever claim
+  // it again. Validation used to happen AFTER, inside
+  // `readAndPrepareTemplateTwinFill` — so a template the tenant does not own was
+  // pinned first and rejected second, and the visit was left permanently bound
+  // to a template that can never fill it. Every later run, with any id, throws
+  // `TEMPLATE_PROVENANCE_MISMATCH`.
+  //
+  // ⚠️ IT IS REACHABLE, AND THIS BRANCH IS WHAT MADE IT SO. `worker.ts` selects
+  // the template by `doctorId: visit.userId` — the AUTHOR — while this function
+  // now validates against `tenantPracticeId`. On `main` both ends sat on the
+  // author's axis and agreed, so a locum's visit rendered the wrong practice's
+  // form: wrong, but recoverable. Splitting the axes turned that into NO
+  // document, a false explanation, and an irreversible pin. A regression is not
+  // excused by the defect it replaced.
+  //
+  // This read is the same predicate `readAndPrepareTemplateTwinFill` applies a
+  // few lines later, run first and read-only, so a refusal costs one query and
+  // leaves the row untouched.
+  const tenantOwnsTemplate = await prisma.noteTemplate.findFirst({
+    where: {
+      id: input.noteTemplateId,
+      practiceId: input.tenantPracticeId,
+      version: input.noteTemplateVersion,
+    },
+    select: { id: true },
+  });
+  if (!tenantOwnsTemplate) {
+    throw new TemplateTwinFillError(
+      'CERTIFIED_TEMPLATE_NOT_FOUND',
+      'The selected Template Twin version is not this practice\'s, and nothing has been pinned.',
+    );
+  }
+
   // Persist the first selected version before source I/O, resolution, model-
   // derived evidence processing, or rendering. A retry must never switch to a
   // newly activated template after partial work against this version.
