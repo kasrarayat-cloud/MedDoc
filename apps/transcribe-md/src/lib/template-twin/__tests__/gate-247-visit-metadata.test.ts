@@ -14,6 +14,9 @@
 // defect pointed in opposite directions, and both are invisible on the rendered
 // page — the document is identical and only the manifest is wrong.
 // ============================================================================
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@meddoc/db', () => ({ default: {} }));
@@ -28,10 +31,16 @@ import {
 } from '../concept-registry';
 import {
   ageAtDate,
+  ageAtDateResolved,
+  rawYearsOnUtcDate,
   withVisitMetadataFacts,
   RECORD_DERIVED_CONCEPTS,
 } from '../visit-metadata';
 import {
+  RECORD_DERIVED_REFUSAL_REASONS,
+  fieldDemandsInput,
+  isRecordDerivedRefusal,
+  type RecordDerivedRefusal,
   EncounterFactSchema,
   SemanticMappingSchema,
   TemplateFieldSchema,
@@ -40,6 +49,8 @@ import {
   type SemanticMapping,
   type TemplateField,
 } from '../ir';
+import { compileTemplateDocx } from '@/lib/note-template-docx';
+import { prepareTemplateTwinFill } from '../fill-engine';
 import { resolveTemplateFields } from '../resolver';
 import { validateTemplateTwin } from '../validation';
 import { decideAutoConfirm } from '../auto-certify-eligibility';
@@ -51,6 +62,8 @@ import { assertNoRecordDerivedFacts } from '../synthetic-test';
 // FIXTURES — a two-control header, exactly the shape the owner's letter has.
 // ---------------------------------------------------------------------------
 const NAME_ID = `ttf_${'a'.repeat(24)}`;
+/** #264 — a SECOND age control, the module's own documented two-control shape. */
+const AGE2_ID = `ttf_${'c'.repeat(24)}`;
 const AGE_ID = `ttf_${'b'.repeat(24)}`;
 const REFERRER_ID = `ttf_${'d'.repeat(24)}`;
 
@@ -286,22 +299,135 @@ describe('#247 Stage B — the label decides, and the labels are HIS', () => {
 // 2 · THE AGE — calendar arithmetic, and its refusals.
 // ---------------------------------------------------------------------------
 describe('#247 Stage B — age at the VISIT date, in whole years', () => {
-  it('counts whole years, and the birthday is the boundary', () => {
-    expect(ageAtDate('1958-06-14', '2026-06-13T23:00:00Z')).toBe(67);
-    expect(ageAtDate('1958-06-14', '2026-06-14T00:00:00Z')).toBe(68);
-    expect(ageAtDate('1958-06-14', '2026-06-15T00:00:00Z')).toBe(68);
+  // ⚠️ THESE THREE ARMS WERE REWRITTEN BY #264 — AND THE REWRITE SILENTLY REMOVED
+  // THE TEETH OF ONE OF THEM. A refutation pass measured it: with the assertions
+  // moved CLEAR of the ±26h window, all of them PASS against an
+  // `(at - dob) / 365.25` implementation — including the middle arm, whose own
+  // title says it exists to catch exactly that scheme.
+  //
+  // ⚠️ SCOPE CORRECTED, BECAUSE THE FIRST WRITE-UP OVERSTATED IT. "origin/main's
+  // originals red on that mutation" is FALSE for two of the three. Measured
+  // against a floor-based 365.25 scheme:
+  //
+  //     arm 1 (counts whole years)          main: does NOT catch it
+  //     arm 2 (names the 365.25 scheme)     main: CATCHES it  (25 -> 24)
+  //     arm 3 (leap-day)                    main: does NOT catch it
+  //
+  // So ONE arm lost real protection, not three — and a finding that is REAL can
+  // still carry a wrong scope, which is what a reader acts on.
+  //
+  //     MOVING AN ASSERTION AWAY FROM THE AMBIGUITY MOVED IT AWAY FROM THE
+  //     DISCRIMINATION. 365.25-division only diverges AT the birthday boundary,
+  //     and the boundary is precisely what the window now refuses.
+  //
+  // So the boundary arithmetic is pinned on the exported, UNCLAMPED
+  // `rawYearsOnUtcDate`, where no timezone question arises — see the block after
+  // these three. Two concerns, two arms; neither borrows the other's coverage.
+  // What remains here is the ordinary-date behaviour, which is worth an arm and
+  // is not the arm that was lost.
+  it('counts whole years — asserted clear of the ambiguous window', () => {
+    expect(ageAtDate('1958-06-14', '2026-06-11T12:00:00Z')).toBe(67);
+    expect(ageAtDate('1958-06-14', '2026-06-16T12:00:00Z')).toBe(68);
+    expect(ageAtDate('1958-06-14', '2027-01-01T00:00:00Z')).toBe(68);
   });
 
   it('⚠️ THE DAY BEFORE A BIRTHDAY IS NOT A ROUNDING ERROR — division by 365.25 gets this wrong', () => {
     // 24 years and 364 days is 24, and any average-year scheme says 24.997 and
-    // then rounds. The patient is 24 until the day they are 25.
-    expect(ageAtDate('2001-03-02', '2026-03-01')).toBe(24);
-    expect(ageAtDate('2001-03-02', '2026-03-02')).toBe(25);
+    // then rounds. The patient is 24 until the day they are 25. Asserted two
+    // days either side, so the claim is about the ARITHMETIC and not about
+    // which timezone the reader is in.
+    expect(ageAtDate('2001-03-02', '2026-02-27T12:00:00Z')).toBe(24);
+    expect(ageAtDate('2001-03-02', '2026-03-04T12:00:00Z')).toBe(25);
   });
 
   it('handles a leap-day birth without inventing a birthday', () => {
-    expect(ageAtDate('2000-02-29', '2026-02-28')).toBe(25);
-    expect(ageAtDate('2000-02-29', '2026-03-01')).toBe(26);
+    // 2026 is not a leap year: the patient turns 26 on 1 March, not 28 February.
+    expect(ageAtDate('2000-02-29', '2026-02-26T12:00:00Z')).toBe(25);
+    expect(ageAtDate('2000-02-29', '2026-03-03T12:00:00Z')).toBe(26);
+  });
+
+  it('⚠️ #264 — REFUSES on the boundary, in BOTH directions, and names the reason', () => {
+    // The instants the three arms above used to assert a number on. Each is
+    // within ±26h of the birthday boundary, so a doctor west of UTC and a doctor
+    // east of UTC would read different ages off the SAME visit.
+    for (const at of [
+      '2026-06-13T23:00:00Z', // was asserted 67 — but 68 for a doctor east of UTC
+      '2026-06-14T00:00:00Z', // was asserted 68 — but 67 for a doctor west of UTC
+    ]) {
+      const r = ageAtDateResolved('1958-06-14', at);
+      expect(r.ok, `${at} must refuse`).toBe(false);
+      if (!r.ok) expect(r.reason).toBe('age_timezone_ambiguous');
+      expect(ageAtDate('1958-06-14', at)).toBeNull();
+    }
+    expect(ageAtDateResolved('2001-03-02', '2026-03-02').ok).toBe(false);
+    expect(ageAtDateResolved('2000-02-29', '2026-03-01').ok).toBe(false);
+  });
+
+  it('⚠️ the REAL-WORLD case, both directions, computed rather than asserted', () => {
+    // DOB 1958-06-14.
+    //   2026-06-13 19:00 America/Los_Angeles = 2026-06-14T02:00Z
+    //     UTC says the birthday passed -> 68. Locally it is the 13th -> 67.
+    //   2026-06-14 09:00 Pacific/Auckland   = 2026-06-13T21:00Z
+    //     UTC says it has not -> 67. Locally it is the 14th -> 68.
+    // ⚠️ THE OLD COMMENT IN visit-metadata.ts NAMED ONLY THE FIRST. The error
+    // runs both ways, and a fix aimed at one direction would have shipped.
+    expect(ageAtDate('1958-06-14', '2026-06-14T02:00:00Z')).toBeNull();
+    expect(ageAtDate('1958-06-14', '2026-06-13T21:00:00Z')).toBeNull();
+  });
+
+  it('⚠️ THE BOUNDARY ARITHMETIC, PINNED WHERE THE WINDOW CANNOT HIDE IT', () => {
+    // ⚠️ THIS ARM IS THE ONE THE REWRITE LOST, RESTORED ON THE UNCLAMPED
+    // FUNCTION. It drives `rawYearsOnUtcDate` directly, so the ±26h refusal is
+    // out of the way and the day-boundary is testable again.
+    const on = (iso: string) => new Date(iso);
+    const dob = (iso: string) => new Date(`${iso}T00:00:00Z`);
+
+    // the birthday IS the boundary — 364 days is not a year
+    expect(rawYearsOnUtcDate(dob('2001-03-02'), on('2026-03-01T00:00:00Z'))).toBe(24);
+    expect(rawYearsOnUtcDate(dob('2001-03-02'), on('2026-03-02T00:00:00Z'))).toBe(25);
+    // a leap-day birth invents no birthday: 2026 is not a leap year, so 1 March
+    expect(rawYearsOnUtcDate(dob('2000-02-29'), on('2026-02-28T00:00:00Z'))).toBe(25);
+    expect(rawYearsOnUtcDate(dob('2000-02-29'), on('2026-03-01T00:00:00Z'))).toBe(26);
+    // the day before a birthday
+    expect(rawYearsOnUtcDate(dob('1958-06-14'), on('2026-06-13T23:00:00Z'))).toBe(67);
+    expect(rawYearsOnUtcDate(dob('1958-06-14'), on('2026-06-14T00:00:00Z'))).toBe(68);
+  });
+
+  it('⚠️ AND IT REDS ON THE 365.25 SCHEME — the mutation the rewrite stopped catching', () => {
+    // ⚠️ THE ARM ABOVE IS ONLY WORTH HAVING IF IT DISCRIMINATES. Rather than
+    // assert that in prose, run the wrong implementation and show the exact
+    // inputs where it diverges. If this ever stops finding a divergence, the arm
+    // above has gone blind again and this one says so.
+    const div36525 = (dobS: string, atS: string) =>
+      Math.floor(
+        (new Date(atS).getTime() - new Date(`${dobS}T00:00:00Z`).getTime()) / (365.25 * 86_400_000),
+      );
+    const cases: Array<[string, string, number]> = [
+      ['2001-03-02', '2026-03-02T00:00:00Z', 25],
+      ['2000-02-29', '2026-03-01T00:00:00Z', 26],
+      ['1958-06-14', '2026-06-14T00:00:00Z', 68],
+    ];
+    const diverged = cases.filter(([d, a, want]) => {
+      expect(rawYearsOnUtcDate(new Date(`${d}T00:00:00Z`), new Date(a))).toBe(want);
+      return div36525(d, a) !== want;
+    });
+    expect(diverged.length, 'no input discriminates — the arm above is blind').toBeGreaterThan(0);
+  });
+
+  it('⚠️ NON-VACUITY — the refusal is NARROW, not a blanket', () => {
+    // A guard that refused everything would pass every arm above and destroy the
+    // feature. Measured over a full year of visit instants against one DOB:
+    // only the days adjacent to the birthday refuse.
+    let refused = 0;
+    let answered = 0;
+    for (let d = 0; d < 365; d += 1) {
+      const at = new Date(Date.UTC(2026, 0, 1, 12) + d * 86_400_000);
+      if (ageAtDateResolved('1958-06-14', at).ok) answered += 1;
+      else refused += 1;
+    }
+    expect(answered).toBeGreaterThan(360);
+    expect(refused).toBeGreaterThan(0);
+    expect(refused).toBeLessThanOrEqual(2);
   });
 
   it('an infant is 0, and 0 is an ANSWER rather than the failure value', () => {
@@ -321,7 +447,122 @@ describe('#247 Stage B — age at the VISIT date, in whole years', () => {
   });
 
   it('accepts a Date as readily as a string, since the column is a Date', () => {
-    expect(ageAtDate(new Date('1958-06-14T00:00:00Z'), new Date(VISIT))).toBe(68);
+    expect(ageAtDate(new Date('1958-06-14T00:00:00Z'), new Date(VISIT))).toBe(
+      ageAtDate('1958-06-14', VISIT),
+    );
+    expect(ageAtDate(new Date('1958-06-14T00:00:00Z'), new Date(VISIT))).not.toBeNull();
+  });
+
+  it('the named reasons are distinct — a refusal says WHICH refusal', () => {
+    expect(ageAtDateResolved(null, VISIT)).toEqual({ ok: false, reason: 'age_input_absent' });
+    expect(ageAtDateResolved('not a date', VISIT)).toEqual({
+      ok: false,
+      reason: 'age_unparseable',
+    });
+    expect(ageAtDateResolved('2030-01-01', VISIT)).toEqual({
+      ok: false,
+      reason: 'age_implausible',
+    });
+    expect(ageAtDateResolved('1820-01-01', VISIT)).toEqual({
+      ok: false,
+      reason: 'age_implausible',
+    });
+  });
+
+  // ==========================================================================
+  // ⚠️ THE ARM ABOVE PICKED ITS FUTURE DATE FOUR YEARS OUT, AND THAT IS WHY IT
+  // DID NOT CATCH THE DEFECT A REFUTATION PASS FOUND.
+  //
+  // The newborn floor fires only when `high === 0` — a DOB within about a day
+  // AFTER the visit. `2030-01-01` lands `high < 0`, refuses on the plausibility
+  // clamp, and never reaches the floor at all. So an arm that reads
+  // *"REFUSES rather than guesses ... a birth date after the visit"* was green
+  // throughout, on a build that answered **`Age: 0` for a patient born
+  // tomorrow.** Measured on the finished diff: 14 of 336 grid inputs answered
+  // where `origin/main` refused, all of them DOB = visit + 1 day.
+  //
+  //     THE ASSERTION NAMED THE RIGHT PROPERTY AND SAMPLED THE WRONG REGION.
+  //     A future date FAR from the boundary is a different universe from a
+  //     future date AT it — the same shape as `rawYearsOnUtcDate`'s own note
+  //     above, mirrored.
+  //
+  // So the property is swept across the ONLY region where the floor can act,
+  // rather than asserted on a fixture chosen for how obviously wrong it looks.
+  // ==========================================================================
+  describe('AGE NEVER GUESSES — swept where the floor actually fires', () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const visitDay = Date.UTC(2026, 8, 8); // 2026-09-08
+
+    /** Every hour of the visit day, against DOBs from two days before to two after. */
+    const grid: Array<{ dob: string; at: string; dobMs: number; atMs: number }> = [];
+    for (let offsetDays = -2; offsetDays <= 2; offsetDays += 1) {
+      const dobMs = visitDay + offsetDays * DAY;
+      const dob = new Date(dobMs).toISOString().slice(0, 10);
+      for (let hour = 0; hour < 24; hour += 1) {
+        const atMs = visitDay + hour * 60 * 60 * 1000;
+        grid.push({ dob, at: new Date(atMs).toISOString(), dobMs, atMs });
+      }
+    }
+
+    it('NEVER states an age for a patient not yet born — the whole grid', () => {
+      const answered = grid
+        .filter((g) => g.dobMs > g.atMs)
+        .filter((g) => ageAtDateResolved(g.dob, g.at).ok);
+      // Named individually, because "0 answered" is the kind of pass that is
+      // also what a broken filter prints.
+      expect(
+        answered.map((g) => `${g.dob} @ ${g.at}`),
+        'an age was stated for a birth date that had not happened yet',
+      ).toEqual([]);
+    });
+
+    it('POSITIVE CONTROL — the grid genuinely contains both kinds of case', () => {
+      // ⚠️ Without this the arm above passes just as well on a grid that holds
+      // no future DOBs at all, or on a build that refuses everything.
+      expect(grid.filter((g) => g.dobMs > g.atMs).length).toBeGreaterThan(0);
+      expect(grid.filter((g) => ageAtDateResolved(g.dob, g.at).ok).length).toBeGreaterThan(0);
+    });
+
+    it('and the same-day newborn is still ANSWERED — 0, not a refusal', () => {
+      // ⚠️ THE CAPABILITY THE FLOOR EXISTS FOR, PINNED SO THE NEXT FIX CANNOT
+      // BUY THE ARM ABOVE BY DELETING IT. Without the floor this refuses with
+      // `age_timezone_ambiguous`, where `origin/main` answered 0.
+      expect(ageAtDateResolved('2026-09-08', '2026-09-08T02:00:00.000Z')).toEqual({
+        ok: true,
+        years: 0,
+      });
+      expect(ageAtDateResolved('2026-09-08', '2026-09-08T00:00:00.000Z')).toEqual({
+        ok: true,
+        years: 0,
+      });
+      expect(ageAtDateResolved('2026-09-08', '2026-09-08T23:00:00.000Z')).toEqual({
+        ok: true,
+        years: 0,
+      });
+    });
+
+    it('a window that is ENTIRELY out of human range says so, and does not blame a timezone', () => {
+      // ⚠️ `age_timezone_ambiguous` sends whoever reads the manifest looking for
+      // a practice timezone. For 205-vs-206 no timezone would have helped, and
+      // the honest token names the column. Both ends of the clamp, because the
+      // first fix covered only the negative one.
+      expect(ageAtDateResolved('1820-09-09', '2026-09-08T15:00:00.000Z')).toEqual({
+        ok: false,
+        reason: 'age_implausible',
+      });
+      expect(ageAtDateResolved('2027-09-08', '2026-09-08T12:00:00.000Z')).toEqual({
+        ok: false,
+        reason: 'age_implausible',
+      });
+      // ⚠️ AND THE STRADDLING CASE IS STILL AMBIGUOUS, NOT IMPLAUSIBLE — a DOB
+      // one day after the visit spans -1..0, which a known timezone WOULD
+      // resolve. Widening `age_implausible` to swallow it would be the mirror
+      // mislabel.
+      expect(ageAtDateResolved('2026-09-09', '2026-09-08T12:00:00.000Z')).toEqual({
+        ok: false,
+        reason: 'age_timezone_ambiguous',
+      });
+    });
   });
 });
 
@@ -834,5 +1075,598 @@ describe('#247 Stage B — the certification artifact still never holds a record
 
   it('⚠️ NON-VACUITY: an ordinary dictated fact set passes', () => {
     expect(() => assertNoRecordDerivedFacts([fact()])).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6 · RULING #264 — THE BLANK IS NAMED, ALL THE WAY TO THE MANIFEST.
+// ---------------------------------------------------------------------------
+describe('#264 — a refused age reaches the resolver as a NAMED reason', () => {
+  const fields = [field(NAME_ID, 'Patient'), field(AGE_ID, 'Age')];
+  const mappings = [
+    mapping(NAME_ID, RECORD_DERIVED_CONCEPTS.name),
+    mapping(AGE_ID, RECORD_DERIVED_CONCEPTS.age),
+  ];
+  /** DOB 1958-06-14 against an instant inside the ±26h birthday window. */
+  const AMBIGUOUS_VISIT = '2026-06-14T02:00:00Z';
+
+  it('the injector NAMES the refusal instead of skipping silently', () => {
+    const refusals: RecordDerivedRefusal[] = [];
+    const out = withVisitMetadataFacts({
+      fields,
+      mappings,
+      facts: [],
+      patient: PATIENT,
+      visitDate: AMBIGUOUS_VISIT,
+      refusals,
+    });
+
+    // the NAME still fills — the refusal is narrow, not a blanket
+    expect(out.map((f) => f.concept)).toEqual([RECORD_DERIVED_CONCEPTS.name]);
+    expect(refusals).toEqual([
+      {
+        fieldId: AGE_ID,
+        unfilled: 'age_timezone_ambiguous',
+        required: 'required_age_timezone_ambiguous',
+      },
+    ]);
+  });
+
+  it('names NOTHING when the age is unambiguous — the collector is not noise', () => {
+    const refusals: RecordDerivedRefusal[] = [];
+    const out = withVisitMetadataFacts({
+      fields,
+      mappings,
+      facts: [],
+      patient: PATIENT,
+      visitDate: VISIT,
+      refusals,
+    });
+    expect(out).toHaveLength(2);
+    expect(refusals).toEqual([]);
+  });
+
+  it('⚠️ THE WHOLE POINT — the manifest says WHY, not "nobody said it"', () => {
+    const refusals: RecordDerivedRefusal[] = [];
+    const facts = withVisitMetadataFacts({
+      fields,
+      mappings,
+      facts: [],
+      patient: PATIENT,
+      visitDate: AMBIGUOUS_VISIT,
+      refusals,
+    });
+
+    const withReason = resolveTemplateFields({ fields, mappings, facts, refusals });
+    const age = withReason.find((f) => f.fieldId === AGE_ID)!;
+
+    // BLANK — unchanged, and that half was already true
+    expect(age.value).toBeNull();
+    // and NAMED — this is what #264 adds
+    expect(age.reasonCode).toBe('age_timezone_ambiguous');
+
+    // ⚠️ THE CONTROL THAT MAKES THE ARM MEAN SOMETHING: the SAME facts without
+    // the refusals threaded through report `fact_not_mentioned` — "nobody said
+    // it" — which is the misleading label this ruling exists to remove. If the
+    // plumbing were inert, both branches would read the same and the arm above
+    // would pass for the wrong reason.
+    const withoutReason = resolveTemplateFields({ fields, mappings, facts });
+    const ageBefore = withoutReason.find((f) => f.fieldId === AGE_ID)!;
+    expect(ageBefore.value).toBeNull();
+    expect(ageBefore.reasonCode).toBe('fact_not_mentioned');
+    expect(ageBefore.reasonCode).not.toBe(age.reasonCode);
+  });
+
+  it('⚠️ THE COUNTS *DO* MOVE FOR AN `omit`-POLICY CONTROL — and the movement is correct', () => {
+    // ⚠️ THIS ARM ASSERTED THE OPPOSITE AND PASSED VACUOUSLY. The claim was
+    // "the counts do not move, because `templateTwinCounts` keys on STATUS".
+    // A refutation pass measured it and the claim is FALSE:
+    //
+    //     notMentioned: status === 'not_mentioned' && reasonCode !== 'omitted_unsupported_default'
+    //     omitted:      reasonCode === 'omitted_unsupported_default'
+    //                                                            (ir.ts:813-821)
+    //
+    // Both bucket on **reasonCode**. The original arm passed only because its
+    // fixture carried no `unmentionedPolicy: 'omit'`, so neither run could reach
+    // the `omitted` bucket and two identical count objects proved nothing.
+    //
+    // THE MOVEMENT IS THE RIGHT ONE, which is why this arm now pins it rather
+    // than preventing it: a refused age is not "the scaffold was deliberately
+    // cleared" (#191's `omitted_unsupported_default`), it is "we declined to
+    // compute it". `notMentioned` is the truthful bucket, and a doctor reading
+    // the omitted count should not be told a refusal was a deliberate clearing.
+    const omitMappings = [
+      mapping(NAME_ID, RECORD_DERIVED_CONCEPTS.name),
+      { ...mapping(AGE_ID, RECORD_DERIVED_CONCEPTS.age), unmentionedPolicy: 'omit' },
+    ] as typeof mappings;
+
+    const refusals: RecordDerivedRefusal[] = [];
+    const facts = withVisitMetadataFacts({
+      fields,
+      mappings: omitMappings,
+      facts: [],
+      patient: PATIENT,
+      visitDate: AMBIGUOUS_VISIT,
+      refusals,
+    });
+    const withRef = resolveTemplateFields({ fields, mappings: omitMappings, facts, refusals });
+    const without = resolveTemplateFields({ fields, mappings: omitMappings, facts });
+
+    const cWith = templateTwinCounts(withRef, fields);
+    const cWithout = templateTwinCounts(without, fields);
+
+    // the control: without the refusal the field lands in `omitted`
+    expect(cWithout.omitted).toBe(1);
+    expect(cWithout.notMentioned).toBe(0);
+    // and with it, in `notMentioned` — named, not silently cleared
+    expect(cWith.omitted).toBe(0);
+    expect(cWith.notMentioned).toBe(1);
+    // the TOTAL unresolved is unchanged; only which bucket it sits in moves
+    expect((cWith.omitted ?? 0) + cWith.notMentioned).toBe(
+      (cWithout.omitted ?? 0) + cWithout.notMentioned,
+    );
+  });
+
+  it('a refusal for a field nobody asked about is inert', () => {
+    // Fail-safe: a stale or wrong fieldId in the collector must not blank a
+    // field that resolved perfectly well from real evidence.
+    const facts = withVisitMetadataFacts({
+      fields,
+      mappings,
+      facts: [],
+      patient: PATIENT,
+      visitDate: VISIT,
+    });
+    const out = resolveTemplateFields({
+      fields,
+      mappings,
+      facts,
+      // ⚠️ `@ts-expect-error` IS THE ARM, NOT A SUPPRESSION — #275's re-pass.
+      // The channel is typed `RecordDerivedRefusal` precisely so an unregistered
+      // token cannot be written; this arm needs to write one anyway, to prove
+      // the RUNTIME still fails safe. An expect-error that stops erroring is
+      // itself a tsc failure, so if the type is ever widened back to `string`
+      // this line goes red — which is the guard the membership arm could not be.
+      // @ts-expect-error — deliberately unregistered; the type now forbids it
+      refusals: [{ fieldId: `ttf_${'f'.repeat(24)}`, unfilled: 'x', required: 'y' }],
+    });
+    expect(out.find((f) => f.fieldId === AGE_ID)!.value).toBe('68');
+  });
+});
+
+describe('#264 — TWO age controls, and the capability change stated at its true size', () => {
+  const twoFields = [field(NAME_ID, 'Patient'), field(AGE_ID, 'Age'), field(AGE2_ID, 'Age (header)')];
+  const twoMappings = [
+    mapping(NAME_ID, RECORD_DERIVED_CONCEPTS.name),
+    mapping(AGE_ID, RECORD_DERIVED_CONCEPTS.age),
+    mapping(AGE2_ID, RECORD_DERIVED_CONCEPTS.age),
+  ];
+
+  it('⚠️ EVERY age control gets the named reason — not just the first', () => {
+    // ⚠️ THE FIRST VERSION NAMED ONLY ONE. `wanted` is keyed by
+    // concept|temporality because ONE fact serves every control that wants it,
+    // which is right for fact-minting and wrong for refusals: a refusal is
+    // per-FIELD. A document with two Age controls got `age_timezone_ambiguous`
+    // on one and `fact_not_mentioned` — "nobody said it" — on the other.
+    //
+    //   ONE MANIFEST CONTRADICTING ITSELF ABOUT THE SAME VALUE IS WORSE THAN
+    //   EITHER LABEL ALONE.
+    //
+    // Found by a refutation pass, on the module's own documented two-control
+    // shape — the header control and the letter's opening line.
+    const refusals: RecordDerivedRefusal[] = [];
+    const facts = withVisitMetadataFacts({
+      fields: twoFields,
+      mappings: twoMappings,
+      facts: [],
+      patient: PATIENT,
+      visitDate: '2026-06-14T02:00:00Z',
+      refusals,
+    });
+    expect(refusals.map((r) => r.fieldId).sort()).toEqual([AGE_ID, AGE2_ID].sort());
+
+    const out = resolveTemplateFields({
+      fields: twoFields,
+      mappings: twoMappings,
+      facts,
+      refusals,
+    });
+    const codes = out
+      .filter((f) => f.fieldId === AGE_ID || f.fieldId === AGE2_ID)
+      .map((f) => f.reasonCode);
+    expect(codes).toEqual(['age_timezone_ambiguous', 'age_timezone_ambiguous']);
+    // and neither is the misleading label
+    expect(codes).not.toContain('fact_not_mentioned');
+  });
+
+  it('⚠️ ONE fact still serves both when the age IS computable — no regression', () => {
+    // The control for the arm above: collecting every field for refusals must
+    // not make the injector mint a fact per field.
+    const facts = withVisitMetadataFacts({
+      fields: twoFields,
+      mappings: twoMappings,
+      facts: [],
+      patient: PATIENT,
+      visitDate: VISIT,
+    });
+    expect(facts.filter((f) => f.concept === RECORD_DERIVED_CONCEPTS.age)).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7 · #264 THROUGH THE PRODUCTION ENTRY POINT — the wire, not its two ends.
+// ---------------------------------------------------------------------------
+describe('#264 — the refusal survives `prepareTemplateTwinFill`, which is the only path production has', () => {
+  // ⚠️ THIS BLOCK EXISTS BECAUSE THE REFUTATION PASS PROVED THE OTHER ARMS
+  // CANNOT SEE THE WIRE. Every arm in section 6 hand-constructs the `refusals`
+  // array and hands it to `withVisitMetadataFacts` and `resolveTemplateFields`
+  // directly — so they prove the INJECTOR and the RESOLVER in isolation and
+  // never the thing between them. Measured on this branch: deleting BOTH
+  // `refusals: injectorRefusals` lines from `fill-engine.ts` left **850 of 850
+  // green**.
+  //
+  //     TWO ENDS PROVEN AND THE WIRE UNPROVEN IS A GREEN THAT MEANS NOTHING,
+  //     BECAUSE THE WIRE IS THE ONLY PART PRODUCTION RUNS.
+  //
+  // ⚠️ AND THE NON-VACUITY CONTROL EARNED ITS KEEP IMMEDIATELY. The first draft
+  // bound the age onto a control and the AMBIGUOUS arm passed while the control
+  // FAILED — the field was blank on the unambiguous visit too, for an unrelated
+  // reason. Without the control this block would have shipped green and proved
+  // nothing.
+  const WM_IOV = path.resolve(process.cwd(), '../../WM IOV Template.docx');
+  const bytes = new Uint8Array(readFileSync(WM_IOV));
+  const ir = compileTemplateDocx(bytes);
+  /**
+   * ⚠️ `filter` + AN EXPLICIT COUNT, IN THIS SCOPE, BEFORE THE TAKE.
+   * `gate-172-arm-hygiene` flagged the first two spellings and was right both
+   * times: `.find((f) => f.kind === …)` picks one of FIFTY-TWO narrative
+   * controls and then reasons about it as the only one, and moving to `filter`
+   * changed nothing while the count lived in a different function.
+   *
+   * The lint's escape is deliberately the one spelling that cannot mean anything
+   * else — `expect(<bound>.length` in the SAME enclosing function, textually
+   * BEFORE the element is taken — because the semantic version of this question
+   * was falsified five times (see its own header). `theOnlyMatch` is the other
+   * sanctioned form and is the WRONG tool here: it refuses ambiguity, and this
+   * genuinely is one of many.
+   *
+   * The count is also the fixture assertion — if the template changes, this reds
+   * rather than silently re-pointing every arm below at a different control.
+   */
+  function ageField() {
+    const narrative = ir.fields.filter((f) => f.kind === 'narrative_text');
+    expect(narrative.length, 'the WM IOV fixture changed shape').toBe(52);
+    return narrative[0]!;
+  }
+  const AGE_FIELD = ageField();
+
+  /** Bind ONE narrative control to the age concept; every other field is inert. */
+  const irMappings = ir.fields.map((f) =>
+    f.fieldId === AGE_FIELD.fieldId
+      ? mapping(f.fieldId, RECORD_DERIVED_CONCEPTS.age)
+      : mapping(f.fieldId, null, {
+          sourceType: 'manual',
+          expectedDataType: f.kind === 'single_select' ? 'single_select' : 'text',
+        }),
+  );
+
+  async function ageFieldFor(visitDate: string) {
+    const prepared = await prepareTemplateTwinFill({
+      compiledVersionId: 'cv-264',
+      noteTemplateId: 'tpl-264',
+      noteTemplateVersion: 1,
+      ir,
+      mappings: irMappings,
+      facts: [],
+      certifiedFieldIds: ir.fields.map((f) => f.fieldId),
+      source: bytes,
+      resolverModelVersion: null,
+      validationNow: new Date(visitDate),
+      visitDate: new Date(visitDate),
+      patient: PATIENT,
+      clinicianOverrides: [],
+    } as never);
+    const m = (prepared as { manifest: { fields: Array<{ fieldId: string; value: string | null; reasonCode: string }> } })
+      .manifest;
+    return m.fields.find((f) => f.fieldId === AGE_FIELD.fieldId)!;
+  }
+
+  // ⚠️ AN HONEST LIMIT, NAMED RATHER THAN GLOSSED. This harness does NOT achieve
+  // a FILL: on the unambiguous visit the injector mints the age fact (proved
+  // separately in section 3) and the resolver still declines it, for a binding
+  // reason particular to this synthetic mapping set and NOT to the product. So
+  // these arms prove the WIRE — that a refusal named by the injector survives
+  // `prepareTemplateTwinFill` into the manifest — and they do not prove the fill.
+  // Saying which half is proved is the whole discipline; an unverified step named
+  // honestly is worth more than a green tick.
+  //
+  // The DIFFERENTIAL is what makes that sufficient. Cut the wire and BOTH visits
+  // read `fact_not_mentioned`; with it live they differ, and only one input can
+  // produce the named token.
+  it('the fixture is the shape this block assumes — one of 52 narrative controls', () => {
+    expect(AGE_FIELD.kind).toBe('narrative_text');
+  });
+
+  it('⚠️ NON-VACUITY CONTROL FIRST — the token is NOT what this path says about every visit', async () => {
+    const age = await ageFieldFor(VISIT);
+    expect(
+      age.reasonCode,
+      'an unambiguous visit must NOT carry the ambiguity token — else the arm below is vacuous',
+    ).not.toBe('age_timezone_ambiguous');
+    expect(age.reasonCode).toBe('fact_not_mentioned');
+  });
+
+  it('an AMBIGUOUS visit arrives in the manifest NAMED, not as "nobody said it"', async () => {
+    const age = await ageFieldFor('2026-06-14T02:00:00.000Z');
+    expect(age.value).toBeNull();
+    // ⚠️ THE ASSERTION THAT DIES IF THE WIRE IS CUT. With the fill-engine
+    // threading removed this reads `fact_not_mentioned`, and before this block
+    // existed no arm in the file noticed.
+    expect(age.reasonCode).toBe('age_timezone_ambiguous');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8 · RULING #272 — A RECORD-DERIVED REFUSAL NEVER WITHHOLDS A DOCUMENT.
+// ---------------------------------------------------------------------------
+describe('#272 — a REQUIRED control with an ambiguous age still RENDERS', () => {
+  // ⚠️ THIS IS THE OWNER-CLASS (b) QUESTION #1057 SURFACED, NOW DECIDED.
+  // `requiresInput` turns a blank into `needs_clinician_input`;
+  // `validation/index.ts:583-586` makes that BLOCKING on
+  // `critical || field.required || mapping.required`; `fill-engine.ts:198` turns
+  // a blocking issue into `render: null`. So on a required control the refusal
+  // did not blank a field — it withheld the whole document.
+  //
+  //   A WITHHELD CONSULT OVER ONE AMBIGUOUS AGE IS THE WRONG TRADE.
+  //   A DOCTOR TYPING "61" IS THE RIGHT ONE.
+  //
+  // ⚠️ AND THE TARGET BEHAVIOUR IS NOT INVENTED HERE — IT IS THE MANUAL FIELD'S,
+  // which the ruling names: `manual_source_not_filled` returns `not_mentioned`,
+  // renders blank, and goes to the doctor. Its own comment records the cost of
+  // the alternative: "four such fields refused the native document on every
+  // visit, forever … the only effect was that the doctor never got their own
+  // form back."
+  const REQUIRED_AGE = { ...mapping(AGE_ID, RECORD_DERIVED_CONCEPTS.age), required: true } as ReturnType<typeof mapping>;
+  const fields = [field(NAME_ID, 'Patient'), field(AGE_ID, 'Age')];
+  const mappings = [mapping(NAME_ID, RECORD_DERIVED_CONCEPTS.name), REQUIRED_AGE];
+  const AMBIGUOUS = '2026-06-14T02:00:00.000Z';
+
+  function resolve(visitDate: string) {
+    const refusals: RecordDerivedRefusal[] = [];
+    const facts = withVisitMetadataFacts({
+      fields,
+      mappings,
+      facts: [],
+      patient: PATIENT,
+      visitDate,
+      refusals,
+    });
+    // ⚠️ THE SAME FACTS GO TO BOTH. The first draft passed `facts: []` to the
+    // validator while the resolutions cited facts the injector had minted, and
+    // the validator correctly reported SOURCE_FACT_MISSING /
+    // EVIDENCE_ANCHOR_UNTRACEABLE / ASSERTION_NOT_SUPPORTED on the NAME field.
+    // Those were my fixture, not the product — and they would have masked the
+    // one blocking issue this block is actually about.
+    return { resolutions: resolveTemplateFields({ fields, mappings, facts, refusals }), facts };
+  }
+
+  it('⚠️ THE ARM THE RULING NAMES — blank, NAMED, and NOT needs_clinician_input', () => {
+    const age = resolve(AMBIGUOUS).resolutions.find((f) => f.fieldId === AGE_ID)!;
+    expect(age.value).toBeNull();
+    expect(age.reasonCode).toBe('age_timezone_ambiguous');
+    // the whole point: NOT the status that blocks
+    expect(age.status).toBe('not_mentioned');
+    expect(age.status).not.toBe('needs_clinician_input');
+  });
+
+  it('and validation does NOT block — so the document is not withheld', () => {
+    const { resolutions, facts } = resolve(AMBIGUOUS);
+    const v = validateTemplateTwin({
+      fields,
+      mappings,
+      resolutions,
+      facts,
+    } as never) as { valid: boolean; issues: Array<{ code: string; severity: string }> };
+    expect(v.valid, JSON.stringify(v.issues)).toBe(true);
+    expect(v.issues.filter((i) => i.severity === 'blocking')).toEqual([]);
+  });
+
+  it('⚠️ NON-VACUITY — the SAME required control DOES block for an unrelated reason', () => {
+    // Without this the arms above could pass because validation blocks nothing
+    // for this fixture at all, and the ruling would be "proved" by a fixture
+    // that cannot block. `clinical_concept_unmapped` is a different route into
+    // `needs_clinician_input` — one #272 deliberately does NOT touch.
+    const unmapped = [
+      mapping(NAME_ID, RECORD_DERIVED_CONCEPTS.name),
+      { ...mapping(AGE_ID, null), required: true },
+    ] as typeof mappings;
+    const resolutions = resolveTemplateFields({ fields, mappings: unmapped, facts: [] });
+    const age = resolutions.find((f) => f.fieldId === AGE_ID)!;
+    expect(age.status).toBe('needs_clinician_input');
+    const v = validateTemplateTwin({
+      fields,
+      mappings: unmapped,
+      resolutions,
+      facts: [],
+    } as never) as { valid: boolean };
+    expect(v.valid, 'the escalation must still work for every OTHER route').toBe(false);
+  });
+
+  it('the unambiguous visit is unaffected — it still FILLS', () => {
+    const age = resolve(VISIT).resolutions.find((f) => f.fieldId === AGE_ID)!;
+    expect(age.value).toBe(String(ageAtDate(PATIENT.dateOfBirth, VISIT)));
+  });
+});
+
+describe('#272 — the three readers of the refusal vocabulary cannot drift', () => {
+  // ⚠️ THIS IS THE ARM THE COMMENTS PROMISE, AND WITHOUT IT THEY ARE A WISH.
+  // The vocabulary has THREE readers: the injector mints the tokens, the
+  // resolver routes them by CHANNEL, and `validation/index.ts` must reach the
+  // same verdict from a reasonCode ALONE. A fifth reason added to the injector
+  // and not to `ir.ts`'s list would compile, resolve, and then BLOCK the
+  // document — the exact regression #272 ends, through the one door nobody
+  // watches.
+
+  it('every reason the injector can EMIT is a member of the shared list', () => {
+    // Drive the real function across inputs chosen to reach each arm, and
+    // collect what it actually returns rather than restating the list.
+    const probes: Array<[string | null, string | null]> = [
+      [null, VISIT], // age_input_absent
+      ['not a date', VISIT], // age_unparseable
+      ['1820-01-01', VISIT], // age_implausible
+      ['1958-06-14', '2026-06-14T02:00:00.000Z'], // age_timezone_ambiguous
+    ];
+    const emitted = new Set<string>();
+    for (const [dob, at] of probes) {
+      const r = ageAtDateResolved(dob, at);
+      if (!r.ok) emitted.add(r.reason);
+    }
+
+    // ⚠️ NON-VACUITY: the probe set must reach EVERY reason, or a subset would
+    // satisfy the membership test while a missing token went unchecked.
+    expect(
+      [...emitted].sort(),
+      'the probes no longer reach every refusal arm — widen them, do not weaken this',
+    ).toEqual([...RECORD_DERIVED_REFUSAL_REASONS].sort());
+
+    for (const reason of emitted) {
+      expect(isRecordDerivedRefusal(reason), `${reason} is not in the shared list`).toBe(true);
+    }
+  });
+
+  it('the predicate REFUSES a non-member — it is not just "any truthy string"', () => {
+    for (const other of [
+      'fact_not_mentioned',
+      'manual_source_not_filled',
+      'temporality_not_approved',
+      'omitted_unsupported_default',
+      '',
+      null,
+      undefined,
+    ]) {
+      expect(isRecordDerivedRefusal(other), `${other} must NOT be a record-derived refusal`).toBe(
+        false,
+      );
+    }
+  });
+
+  it('⚠️ and the list is what VALIDATION reads — not a copy of it', () => {
+    // The membership test above proves the injector agrees with the list. This
+    // proves the list is load-bearing at the validator: a reason IN the list
+    // produces a warning, one OUTSIDE it produces the blocking arm.
+    const fields = [field(AGE_ID, 'Age')];
+    const mappings = [{ ...mapping(AGE_ID, RECORD_DERIVED_CONCEPTS.age), required: true }] as ReturnType<typeof mapping>[];
+    const judge = (reasonCode: string) => {
+      const resolutions = resolveTemplateFields({
+        fields,
+        mappings,
+        facts: [],
+        // @ts-expect-error — `judge` takes an arbitrary string ON PURPOSE: the
+        // whole point is to drive a token the vocabulary does NOT contain and
+        // watch the validator fail closed. See the note on the arm above; if
+        // the channel type is widened back this stops erroring and tsc fails.
+        refusals: [{ fieldId: AGE_ID, unfilled: reasonCode, required: `required_${reasonCode}` }],
+      });
+      const v = validateTemplateTwin({ fields, mappings, resolutions, facts: [] } as never) as {
+        valid: boolean;
+        issues: Array<{ code: string; severity: string }>;
+      };
+      return v;
+    };
+
+    const member = judge('age_timezone_ambiguous');
+    expect(member.valid, JSON.stringify(member.issues)).toBe(true);
+    expect(member.issues.some((i) => i.code === 'RECORD_DERIVED_REFUSAL')).toBe(true);
+
+    const stranger = judge('some_reason_nobody_registered');
+    expect(stranger.valid, 'an UNREGISTERED reason must still block — fail-closed').toBe(false);
+    expect(stranger.issues.some((i) => i.code === 'REQUIRED_FIELD_NOT_MENTIONED')).toBe(true);
+  });
+
+  // ==========================================================================
+  // ⚠️ THE ARM ABOVE PROVED FAIL-CLOSED FOR **ONE** OF THE FIVE WAYS A FIELD
+  // CAN DEMAND INPUT, AND #275's RE-PASS MEASURED THE OTHER FOUR.
+  //
+  // The resolver asked FIVE disjuncts; the validator asked THREE. On the two
+  // shapes only the resolver knew about — `field.unknownPolicy` and
+  // `mapping.blankPolicy` — an unregistered token produced `valid: true` with
+  // ZERO issues: no block, no warning, nothing. The single fixture picked
+  // `mapping.required`, which both readers happened to share.
+  //
+  //     TWO READERS OF ONE PROPERTY, ONE ARM POINTED AT EACH — the failure
+  //     class this repository already has `fromPersistedMapping` and
+  //     `narrativeSentence` exported for.
+  //
+  // ⚠️ AND THE DRIFT WAS MASKED, WHICH IS WHY IT SURVIVED. `semantic-mapping`
+  // derives blankPolicy, unknownPolicy and required from the same field, so the
+  // two "silent" shapes can only arise alongside one the validator has. That
+  // coupling is incidental — one refactor from gone — so this sweeps the shapes
+  // DIRECTLY rather than through the producer that currently hides them.
+  // ==========================================================================
+  describe('#272 — fail-closed on EVERY shape that demands input, not just the one', () => {
+    const SHAPES: Array<{ name: string; field: Record<string, unknown>; mapping: Record<string, unknown> }> = [
+      { name: 'field.required',                 field: { required: true },                      mapping: {} },
+      { name: 'mapping.required',               field: {},                                      mapping: { required: true } },
+      { name: "field.unknownPolicy",            field: { unknownPolicy: 'requires_input' },     mapping: {} },
+      { name: "mapping.unknownPolicy",          field: {},                                      mapping: { unknownPolicy: 'requires_input' } },
+      { name: "mapping.blankPolicy",            field: {},                                      mapping: { blankPolicy: 'requires_input' } },
+    ];
+
+    const judgeShape = (shape: (typeof SHAPES)[number], reasonCode: string) => {
+      const fields = [{ ...field(AGE_ID, 'Age'), ...shape.field }] as ReturnType<typeof field>[];
+      const mappings = [
+        { ...mapping(AGE_ID, RECORD_DERIVED_CONCEPTS.age), ...shape.mapping },
+      ] as ReturnType<typeof mapping>[];
+      const resolutions = resolveTemplateFields({
+        fields,
+        mappings,
+        facts: [],
+        // @ts-expect-error — an unregistered token is the point; see the note
+        // on the arm above. The channel type forbids it, the runtime must not.
+        refusals: [{ fieldId: AGE_ID, unfilled: reasonCode, required: `required_${reasonCode}` }],
+      });
+      return validateTemplateTwin({ fields, mappings, resolutions, facts: [] } as never) as {
+        valid: boolean;
+        issues: Array<{ code: string; severity: string }>;
+      };
+    };
+
+    it('an UNREGISTERED reason blocks on all five — none of them renders silently', () => {
+      const silent = SHAPES.filter((shape) => {
+        const v = judgeShape(shape, 'some_reason_nobody_registered');
+        return v.valid && v.issues.length === 0;
+      }).map((s) => s.name);
+      expect(silent, 'these shapes produced valid:true with ZERO issues').toEqual([]);
+    });
+
+    it('and a REGISTERED reason renders on all five — the ruling, not merely fail-closed', () => {
+      // ⚠️ WITHOUT THIS THE ARM ABOVE IS BOUGHT BY BLOCKING EVERYTHING. #272's
+      // whole product is that the registered refusal does NOT withhold, so the
+      // two arms have to pull in opposite directions.
+      const withheld = SHAPES.filter((shape) => !judgeShape(shape, 'age_timezone_ambiguous').valid)
+        .map((s) => s.name);
+      expect(withheld, 'a record-derived refusal withheld the document').toEqual([]);
+    });
+
+    it('POSITIVE CONTROL — the five shapes really are five distinct predicates', () => {
+      // ⚠️ A sweep over shapes that all reduce to the same thing is one fixture
+      // wearing five names. Each must make `fieldDemandsInput` true ON ITS OWN.
+      for (const shape of SHAPES) {
+        expect(
+          fieldDemandsInput(
+            { required: false, unknownPolicy: 'blank', ...shape.field } as never,
+            { required: false, unknownPolicy: 'blank', blankPolicy: 'blank', ...shape.mapping } as never,
+          ),
+          `${shape.name} does not demand input on its own`,
+        ).toBe(true);
+      }
+      expect(
+        fieldDemandsInput(
+          { required: false, unknownPolicy: 'blank' } as never,
+          { required: false, unknownPolicy: 'blank', blankPolicy: 'blank' } as never,
+        ),
+        'the baseline shape must NOT demand input, or every arm above is vacuous',
+      ).toBe(false);
+    });
   });
 });
