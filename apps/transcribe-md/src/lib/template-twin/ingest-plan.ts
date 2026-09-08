@@ -70,31 +70,79 @@ import {
   type TemplateField,
 } from './ir';
 
-/** A field's position in the document, independent of the package's bytes. */
-export type StructuralKey = string & { readonly __brand: 'StructuralKey' };
+/**
+ * A field's IDENTITY — never its position.
+ *
+ * ⚠️ THE FIRST VERSION OF THIS KEY WAS `partName + path + ordinal + kind`, AND
+ * A REFUTATION PASS PROVED IT CLINICALLY UNSAFE. Measured, by execution, on the
+ * real 80-control document: insert ONE control at the top of the body and
+ *
+ *     transferred = 3,  paired with the same control = 0,  MIS-PAIRED = 3
+ *
+ * with every mis-paired row carrying `status: 'certified'`:
+ *
+ *     "ULTRASOUND TECHNOLOGIST"  <-  the certified concept of  "MACHINE"
+ *     "MACHINE"                  <-  the certified concept of  "LOCATION"
+ *     "LOCATION"                 <-  the certified concept of  "CLINICAL INDICATIONS"
+ *
+ * The cause is that BOTH components shift together: `path` is a SIBLING-INDEX
+ * XPath (`compiler.ts:1742`) and `ordinal` is a DOCUMENT-WIDE counter
+ * (`compiler.ts:103, 902, 1058, 1311`). So control N in the edited document
+ * inherits exactly the key of control N-1 in the original, and the deletion
+ * direction is symmetric.
+ *
+ * ⚠️ AND NOTHING DOWNSTREAM WOULD HAVE CAUGHT IT. The count is right — only the
+ * pairing is wrong — so `expectTransferCount` passes. The row lands `CERTIFIED`,
+ * so it never reaches a confirmation list. That is a control the doctor has
+ * never seen, certified to print a different question's clinical value.
+ *
+ * ── SO POSITION IS GONE, AND ONLY TRUE IDENTITIES REMAIN ────────────────────
+ * Measured on the same document, one control inserted:
+ *
+ *   key           usable   distinct   matched after insert
+ *   sdtId         28/80    28/28      28    <- Word's own control id: STABLE
+ *   tag            1/80     1/1        1
+ *   alias          1/80     1/1        1
+ *   label|kind    80/80    26/80      80    <- ⚠️ matches everything, pairs nothing
+ *
+ * `label|kind` is the trap twice over: it appears to match 80/80 while carrying
+ * 26 distinct values, and this document's labels are mostly the literal
+ * placeholder "Choose an item." — so two controls with the same label can mean
+ * entirely different things, and a shifted neighbour matches just as well as the
+ * real counterpart.
+ *
+ * **There is no key that is both universal and stable.** So the honest rule is:
+ * transfer ONLY on a true identity, and re-propose everything else.
+ *
+ *   1. the same `fieldId`  — identical bytes, which is the re-issue act exactly
+ *   2. the same `sdtId`    — Word persists it across edits; unique where present
+ *
+ * A field with neither re-proposes. That is a smaller transfer than a positional
+ * key would claim, and it is the only version that cannot hand one control's
+ * clinical meaning to another.
+ */
+export type IdentityKey = string & { readonly __brand: 'IdentityKey' };
 
 /**
- * The structural identity of a control: where it sits and what it is.
+ * The identities this field can be recognised by, strongest first. A field may
+ * offer more than one; a match on ANY of them is a match.
  *
- * ⚠️ THIS IS `stableId`'s INPUT LIST MINUS `sourceSha256`, DELIBERATELY. The
- * compiler salts `fieldId` with the whole-package sha so that a re-uploaded
- * document can never silently inherit another's identity. That is right for
- * IDENTITY and wrong for CORRESPONDENCE, which is what a transfer needs — the
- * same control, in the same place, in a document the doctor edited.
- *
- * `ordinal` is included because `path` alone is not unique when a part holds
- * repeated controls; it is what took the key from ambiguous to 80/80 distinct.
+ * ⚠️ IT RETURNS A LIST RATHER THAN ONE STRING BECAUSE THE TWO IDENTITIES HAVE
+ * DIFFERENT COVERAGE — `fieldId` is universal but survives only identical bytes,
+ * `sdtId` survives edits but exists on 28 of 80. Collapsing them into a single
+ * key would mean choosing which case to serve, and the ruling asks for both.
  */
-export function structuralKey(field: TemplateField): StructuralKey {
-  const b = field.rendererBinding;
-  // ⚠️ `\u0000` WRITTEN AS AN ESCAPE, NOT AS A LITERAL NUL. The first version
-  // of this line carried three RAW NUL bytes — invisible in every editor, in
-  // every diff, and in `grep`. It is the correct separator (it cannot occur in
-  // a part name, a path or a kind, and `stableId` itself joins on it), but an
-  // invisible control character in source is a trap: it silently broke a
-  // mutation proof's anchor, and the proof then reported the ARM as vacuous
-  // rather than the mutation as a no-op.
-  return `${b.partName}\u0000${b.path}\u0000${b.ordinal}\u0000${field.kind}` as StructuralKey;
+export function identityKeys(field: TemplateField): IdentityKey[] {
+  const keys: IdentityKey[] = [`fid\u0000${field.fieldId}` as IdentityKey];
+  const sdtId = field.rendererBinding.sdtId;
+  // ⚠️ `kind` RIDES ALONG WITH `sdtId`. A content control that Word kept the id
+  // of but the doctor changed from a text box to a dropdown is a different
+  // question with the same name, and its certified disposition — expectedDataType,
+  // allowedOptions, polarity — no longer describes it.
+  if (sdtId !== null && sdtId !== '') {
+    keys.push(`sdt\u0000${sdtId}\u0000${field.kind}` as IdentityKey);
+  }
+  return keys;
 }
 
 export type IngestGuardFailure =
@@ -189,20 +237,19 @@ export function planTransfer(input: {
 }): TransferPlan {
   const { target, sourceIr, certifiedByFieldId } = input;
 
-  // structural key -> the OLD field id that occupied that position
-  const oldByKey = new Map<StructuralKey, string>();
+  // identity -> the OLD field that carried it
+  const oldByIdentity = new Map<IdentityKey, string>();
   if (sourceIr) {
     for (const field of sourceIr.fields) {
-      const key = structuralKey(field);
-      // ⚠️ FIRST WINS, AND A COLLISION IS NOT SILENT. The key measured 80/80
-      // distinct on the reference document, but a document this function has
-      // never seen could repeat one. Overwriting would make the winner depend
-      // on array order — the same order-dependence the injector's own
-      // per-tense bug was made of. Keeping the first is arbitrary but STABLE,
-      // and the collision surfaces as a re-proposal rather than as a
-      // mis-transfer: a control that must be re-confirmed, never one that
-      // silently inherits the wrong clinical meaning.
-      if (!oldByKey.has(key)) oldByKey.set(key, field.fieldId);
+      for (const key of identityKeys(field)) {
+        // ⚠️ FIRST WINS, AND A COLLISION NEVER MIS-TRANSFERS. Both identities
+        // measured unique on the reference document, but this function will
+        // meet documents it has never seen. Last-wins would make the winner
+        // depend on array order; first-wins is arbitrary but STABLE, and the
+        // loser surfaces as a re-proposal — a control the doctor re-confirms —
+        // rather than as a silent mis-transfer.
+        if (!oldByIdentity.has(key)) oldByIdentity.set(key, field.fieldId);
+      }
     }
   }
 
@@ -210,8 +257,20 @@ export function planTransfer(input: {
   const reproposed: string[] = [];
 
   for (const field of target.fields) {
-    const fromFieldId = oldByKey.get(structuralKey(field));
-    const mapping = fromFieldId ? certifiedByFieldId.get(fromFieldId) : undefined;
+    let fromFieldId: string | undefined;
+    let mapping: SemanticMapping | undefined;
+    // strongest identity first; a field offering several takes the first that
+    // resolves to a CERTIFIED disposition.
+    for (const key of identityKeys(field)) {
+      const candidate = oldByIdentity.get(key);
+      if (candidate === undefined) continue;
+      const found = certifiedByFieldId.get(candidate);
+      if (found) {
+        fromFieldId = candidate;
+        mapping = found;
+        break;
+      }
+    }
     if (!fromFieldId || !mapping) {
       reproposed.push(field.fieldId);
       continue;

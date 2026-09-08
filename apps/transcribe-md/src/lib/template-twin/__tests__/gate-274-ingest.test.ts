@@ -31,7 +31,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { type SemanticMapping, type TemplateDocIR, type TemplateField } from '../ir';
-import { planTransfer, structuralKey } from '../ingest-plan';
+import { identityKeys, planTransfer } from '../ingest-plan';
 
 /** A compiled field, shaped as the compiler emits it. */
 function field(over: {
@@ -42,6 +42,7 @@ function field(over: {
   kind?: string;
   label?: string;
   displayOrder?: number;
+  sdtId?: string | null;
 }): TemplateField {
   return {
     fieldId: over.fieldId,
@@ -60,7 +61,7 @@ function field(over: {
       bindingType: 'sdt',
       path: over.path ?? '/w:document[1]/w:body[1]/w:sdt[1]',
       ordinal: over.ordinal ?? 0,
-      sdtId: null,
+      sdtId: over.sdtId ?? null,
       tag: null,
       alias: null,
       legacyName: null,
@@ -106,15 +107,16 @@ function recompiledWithRotatedIds(source: TemplateDocIR): TemplateDocIR {
         kind: f.kind,
         label: f.originalLabel,
         displayOrder: f.displayOrder,
+        sdtId: f.rendererBinding.sdtId,
       }),
     ),
   );
 }
 
 const SOURCE = ir([
-  field({ fieldId: 'ttf_' + 'a'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'Chief complaint' }),
-  field({ fieldId: 'ttf_' + 'c'.repeat(24), path: '/doc/sdt[2]', ordinal: 1, label: 'Age' }),
-  field({ fieldId: 'ttf_' + 'd'.repeat(24), path: '/doc/sdt[3]', ordinal: 2, label: 'Plan' }),
+  field({ fieldId: 'ttf_' + 'a'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'Chief complaint', sdtId: '1001' }),
+  field({ fieldId: 'ttf_' + 'c'.repeat(24), path: '/doc/sdt[2]', ordinal: 1, label: 'Age', sdtId: '1002' }),
+  field({ fieldId: 'ttf_' + 'd'.repeat(24), path: '/doc/sdt[3]', ordinal: 2, label: 'Plan', sdtId: '1003' }),
 ]);
 
 const CERTIFIED = new Map<string, SemanticMapping>([
@@ -181,40 +183,109 @@ describe('#274 · CHANGED bytes — every fieldId rotates, and the transfer stil
   });
 });
 
-describe('#274 · a MOVED or ADDED control re-proposes rather than inheriting', () => {
-  it('a control at a NEW position re-proposes', () => {
-    const target = ir([
-      ...recompiledWithRotatedIds(SOURCE).fields,
-      field({ fieldId: 'ttf_' + 'e'.repeat(24), path: '/doc/sdt[4]', ordinal: 3, label: 'New question' }),
-    ]);
-    const plan = planTransfer({ target, sourceIr: SOURCE, certifiedByFieldId: CERTIFIED });
-    expect(plan.transferred).toHaveLength(3);
-    expect(plan.reproposed).toEqual(['ttf_' + 'e'.repeat(24)]);
+describe('#274 · ⚠️ AN INSERT MUST NOT RE-PAIR EVERY DOWNSTREAM CONTROL', () => {
+  // ══════════════════════════════════════════════════════════════════════════
+  // THIS IS THE ARM THE FIRST DESIGN DID NOT HAVE, AND ITS ABSENCE IS WHY A
+  // POSITIONAL KEY SHIPPED THROUGH 16 GREEN ARMS.
+  //
+  // The old fixtures hand-wrote `/doc/sdt[1..4]` as fixed literals with a fixed
+  // slot count, so they could express a REORDER and never a SHIFT. Measured on
+  // the real 80-control document, inserting one control at the top:
+  //
+  //     transferred = 3,  same control = 0,  MIS-PAIRED = 3,  status certified
+  //
+  // Every component of the old key shifts in lockstep on an insert — `path` is
+  // a sibling index, `ordinal` is a document-wide counter — so control N takes
+  // control N-1's identity. The fixture below reproduces that shift EXACTLY:
+  // positions renumber, ids rotate, and only `sdtId` survives, which is what a
+  // real Word edit does.
+  // ══════════════════════════════════════════════════════════════════════════
+  const AFTER_INSERT = ir([
+    // the new control takes slot 1 and pushes everything down
+    field({ fieldId: 'ttf_' + 'n'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'NEW question', sdtId: '9999' }),
+    field({ fieldId: 'ttf_' + 'p'.repeat(24), path: '/doc/sdt[2]', ordinal: 1, label: 'Chief complaint', sdtId: '1001' }),
+    field({ fieldId: 'ttf_' + 'q'.repeat(24), path: '/doc/sdt[3]', ordinal: 2, label: 'Age', sdtId: '1002' }),
+    field({ fieldId: 'ttf_' + 'r'.repeat(24), path: '/doc/sdt[4]', ordinal: 3, label: 'Plan', sdtId: '1003' }),
+  ]);
+
+  it('POSITIVE CONTROL — every position really did shift, and every id rotated', () => {
+    // Without this the arm below could pass on a fixture where nothing moved.
+    const oldPaths = SOURCE.fields.map((f) => f.rendererBinding.path);
+    const shifted = AFTER_INSERT.fields.filter((f) => oldPaths.includes(f.rendererBinding.path));
+    expect(shifted.length, 'the fixture must REUSE the old paths at new controls').toBeGreaterThan(0);
+    const oldIds = new Set(SOURCE.fields.map((f) => f.fieldId));
+    expect(AFTER_INSERT.fields.filter((f) => oldIds.has(f.fieldId))).toEqual([]);
   });
 
-  it('a control that MOVED does not drag its certification to whatever now sits there', () => {
-    // ⚠️ THE DANGEROUS DIRECTION, AND THE REASON THE KEY MUST BE POSITIONAL
-    // RATHER THAN LABEL-BASED. "Age" moves from slot 2 to slot 4 and something
-    // else takes slot 2. Nothing may inherit the age disposition by sitting
-    // where age used to be — that is a control silently certified to print a
-    // patient's age while asking a different question.
-    const target = ir([
-      field({ fieldId: 'ttf_' + 'f'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'Chief complaint' }),
-      field({ fieldId: 'ttf_' + 'g'.repeat(24), path: '/doc/sdt[2]', ordinal: 1, label: 'Smoking status' }),
-      field({ fieldId: 'ttf_' + 'h'.repeat(24), path: '/doc/sdt[3]', ordinal: 2, label: 'Plan' }),
-      field({ fieldId: 'ttf_' + 'i'.repeat(24), path: '/doc/sdt[4]', ordinal: 3, label: 'Age' }),
-    ]);
-    const plan = planTransfer({ target, sourceIr: SOURCE, certifiedByFieldId: CERTIFIED });
-    const byId = new Map(plan.transferred.map((t) => [t.fieldId, t.mapping.clinicalConcept]));
+  it('⚠️ NO control inherits a disposition belonging to a DIFFERENT control', () => {
+    const plan = planTransfer({ target: AFTER_INSERT, sourceIr: SOURCE, certifiedByFieldId: CERTIFIED });
+    const conceptOfLabel = new Map(
+      SOURCE.fields.map((f) => [f.originalLabel, CERTIFIED.get(f.fieldId)!.clinicalConcept]),
+    );
+    const labelOfNew = new Map(AFTER_INSERT.fields.map((f) => [f.fieldId, f.originalLabel]));
+    const misPaired = plan.transferred.filter(
+      (t) => t.mapping.clinicalConcept !== conceptOfLabel.get(labelOfNew.get(t.fieldId)!),
+    );
+    expect(
+      misPaired.map((t) => `${labelOfNew.get(t.fieldId)} <- ${t.mapping.clinicalConcept}`),
+      'a control inherited another control\'s CERTIFIED clinical disposition',
+    ).toEqual([]);
+  });
 
-    // slot 2 now holds a DIFFERENT question, and it inherits age's disposition
-    // because that is what "same position" means. This is the ACCEPTED
-    // behaviour of a positional key, and it is exactly why the doctor
-    // re-confirms before certification — recorded here so the trade is
-    // explicit rather than discovered.
-    expect(byId.get('ttf_' + 'g'.repeat(24))).toBe('visit_metadata.patient_age');
-    // and the control that MOVED does not carry its own disposition with it
-    expect(plan.reproposed).toContain('ttf_' + 'i'.repeat(24));
+  it('the three surviving controls DO keep their own dispositions, via sdtId', () => {
+    // ⚠️ THE OTHER HALF, AND IT MUST PULL THE OPPOSITE WAY. An implementation
+    // that transfers NOTHING also has zero mis-pairs, so the arm above alone is
+    // bought by refusing everything.
+    const plan = planTransfer({ target: AFTER_INSERT, sourceIr: SOURCE, certifiedByFieldId: CERTIFIED });
+    expect(plan.transferred).toHaveLength(3);
+    const byLabel = new Map(
+      plan.transferred.map((t) => [
+        AFTER_INSERT.fields.find((f) => f.fieldId === t.fieldId)!.originalLabel,
+        t.mapping.clinicalConcept,
+      ]),
+    );
+    expect(byLabel.get('Chief complaint')).toBe('chief_complaint');
+    expect(byLabel.get('Age')).toBe('visit_metadata.patient_age');
+    expect(byLabel.get('Plan')).toBe('plan');
+    expect(plan.reproposed).toEqual(['ttf_' + 'n'.repeat(24)]);
+  });
+
+  it('a DELETION is symmetric — nothing shifts up into a neighbour\'s certification', () => {
+    const afterDelete = ir([
+      field({ fieldId: 'ttf_' + 's'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'Age', sdtId: '1002' }),
+      field({ fieldId: 'ttf_' + 't'.repeat(24), path: '/doc/sdt[2]', ordinal: 1, label: 'Plan', sdtId: '1003' }),
+    ]);
+    const plan = planTransfer({ target: afterDelete, sourceIr: SOURCE, certifiedByFieldId: CERTIFIED });
+    const byLabel = new Map(
+      plan.transferred.map((t) => [
+        afterDelete.fields.find((f) => f.fieldId === t.fieldId)!.originalLabel,
+        t.mapping.clinicalConcept,
+      ]),
+    );
+    expect(byLabel.get('Age')).toBe('visit_metadata.patient_age');
+    expect(byLabel.get('Plan')).toBe('plan');
+  });
+
+  it('⚠️ a control with NO sdtId re-proposes rather than guessing', () => {
+    // 52 of the reference document's 80 controls carry no sdtId. They lose
+    // their certification on an edit, and that is the RULED-SAFE direction: a
+    // re-proposal is a question to the doctor, a mis-transfer is a wrong answer
+    // presented as certified.
+    const noIdSource = ir([field({ fieldId: 'ttf_' + 'u'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'X', sdtId: null })]);
+    const noIdTarget = ir([field({ fieldId: 'ttf_' + 'v'.repeat(24), path: '/doc/sdt[2]', ordinal: 1, label: 'X', sdtId: null })]);
+    const certs = new Map([['ttf_' + 'u'.repeat(24), certified('ttf_' + 'u'.repeat(24), 'some_concept')]]);
+    const plan = planTransfer({ target: noIdTarget, sourceIr: noIdSource, certifiedByFieldId: certs });
+    expect(plan.transferred).toEqual([]);
+    expect(plan.reproposed).toEqual(['ttf_' + 'v'.repeat(24)]);
+  });
+
+  it('⚠️ a kind CHANGE on the same sdtId does not inherit — same name, different question', () => {
+    const changed = ir([
+      field({ fieldId: 'ttf_' + 'w'.repeat(24), path: '/doc/sdt[1]', ordinal: 0, label: 'Age', sdtId: '1002', kind: 'single_select' }),
+    ]);
+    const plan = planTransfer({ target: changed, sourceIr: SOURCE, certifiedByFieldId: CERTIFIED });
+    expect(plan.transferred).toEqual([]);
+    expect(plan.reproposed).toHaveLength(1);
   });
 });
 
@@ -243,53 +314,47 @@ describe('#274 · nothing certified means nothing transfers', () => {
   });
 });
 
-describe('#274 · the structural key itself', () => {
-  it('is UNIQUE across distinct positions, which is what makes it a pairing', () => {
-    const keys = SOURCE.fields.map(structuralKey);
-    expect(new Set(keys).size).toBe(keys.length);
+describe('#274 · the identity keys themselves', () => {
+  it('every field offers its fieldId — universal, and exact for identical bytes', () => {
+    for (const f of SOURCE.fields) {
+      expect(identityKeys(f).some((k) => k.includes(f.fieldId))).toBe(true);
+    }
   });
 
-  it('⚠️ ignores the LABEL — a doctor re-wording a question keeps its certification', () => {
-    const renamed = field({
-      fieldId: 'ttf_' + 'z'.repeat(24),
-      path: '/doc/sdt[1]',
-      ordinal: 0,
-      label: 'Presenting complaint (reworded)',
-    });
-    expect(structuralKey(renamed)).toBe(structuralKey(SOURCE.fields[0]!));
+  it('a field WITH an sdtId offers a second, edit-surviving identity', () => {
+    expect(identityKeys(SOURCE.fields[0]!)).toHaveLength(2);
   });
 
-  it('⚠️ distinguishes ORDINAL — repeated controls in one part are not interchangeable', () => {
-    // Without `ordinal` the key collapses for repeated controls sharing a path,
-    // and two rows of the same table would pair arbitrarily.
-    const a = field({ fieldId: 'ttf_' + '1'.repeat(24), path: '/doc/tbl[1]/tr[1]', ordinal: 0 });
-    const b = field({ fieldId: 'ttf_' + '2'.repeat(24), path: '/doc/tbl[1]/tr[1]', ordinal: 1 });
-    expect(structuralKey(a)).not.toBe(structuralKey(b));
+  it('a field WITHOUT one offers only the fieldId — no positional fallback', () => {
+    // ⚠️ THE ABSENCE IS THE POINT. A fallback to position is what mis-paired 3
+    // of 3 controls on the real document; there is deliberately nothing here to
+    // fall back to.
+    const anon = field({ fieldId: 'ttf_' + 'x'.repeat(24), sdtId: null });
+    expect(identityKeys(anon)).toHaveLength(1);
   });
 
-  it('⚠️ distinguishes KIND — a text box that became a dropdown is a different control', () => {
-    const asText = field({ fieldId: 'ttf_' + '3'.repeat(24), path: '/doc/sdt[9]', kind: 'short_text' });
-    const asSelect = field({ fieldId: 'ttf_' + '4'.repeat(24), path: '/doc/sdt[9]', kind: 'single_select' });
-    expect(structuralKey(asText)).not.toBe(structuralKey(asSelect));
+  it('⚠️ no identity key mentions path or ordinal', () => {
+    // The regression guard, stated as the property rather than as a fixture:
+    // if either ever returns, an insert re-pairs the document again.
+    const f = field({ fieldId: 'ttf_' + 'y'.repeat(24), path: '/doc/UNIQUEPATH[7]', ordinal: 4242, sdtId: '55' });
+    for (const key of identityKeys(f)) {
+      expect(key, 'an identity key leaked a POSITION').not.toContain('UNIQUEPATH');
+      expect(key, 'an identity key leaked an ORDINAL').not.toContain('4242');
+    }
   });
 });
 
 describe('#274 · a key COLLISION re-proposes; it never mis-transfers', () => {
-  it('two source fields sharing a key: the second does not overwrite the first', () => {
-    // ⚠️ THE KEY MEASURED 80/80 DISTINCT ON THE REFERENCE DOCUMENT, AND THIS
-    // FUNCTION WILL MEET DOCUMENTS IT HAS NEVER SEEN. Last-wins would make the
-    // winner depend on array order; first-wins is arbitrary but STABLE, and the
-    // loser surfaces as a re-proposal — a control the doctor re-confirms —
-    // rather than as a silent mis-transfer.
+  it('two source fields sharing an sdtId: the second does not overwrite the first', () => {
     const dupSource = ir([
-      field({ fieldId: 'ttf_' + '5'.repeat(24), path: '/same', ordinal: 0, label: 'First' }),
-      field({ fieldId: 'ttf_' + '6'.repeat(24), path: '/same', ordinal: 0, label: 'Second' }),
+      field({ fieldId: 'ttf_' + '5'.repeat(24), sdtId: '777', label: 'First' }),
+      field({ fieldId: 'ttf_' + '6'.repeat(24), sdtId: '777', label: 'Second' }),
     ]);
     const certs = new Map([
       ['ttf_' + '5'.repeat(24), certified('ttf_' + '5'.repeat(24), 'first_concept')],
       ['ttf_' + '6'.repeat(24), certified('ttf_' + '6'.repeat(24), 'second_concept')],
     ]);
-    const target = ir([field({ fieldId: 'ttf_' + '7'.repeat(24), path: '/same', ordinal: 0 })]);
+    const target = ir([field({ fieldId: 'ttf_' + '7'.repeat(24), sdtId: '777' })]);
     const plan = planTransfer({ target, sourceIr: dupSource, certifiedByFieldId: certs });
     expect(plan.transferred).toHaveLength(1);
     expect(plan.transferred[0]!.mapping.clinicalConcept).toBe('first_concept');
