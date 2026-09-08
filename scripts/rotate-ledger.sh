@@ -175,6 +175,35 @@ for f in $NEEDED; do
   before_chars="$(wc -m < "$f" | tr -d ' ')"
   before_archives=$(ls -1 "$outdir" 2>/dev/null | wc -l | tr -d ' ')
 
+  # ══ RULING #278 — ATOMIC. THE REAL FILES ARE NOT TOUCHED UNTIL EVERY CHECK
+  #    BELOW HAS PASSED ON A COPY. ═══════════════════════════════════════════
+  #
+  # ⚠️ THIS SCRIPT USED TO MUTATE AND **THEN** REFUSE, AND BOTH LEDGERS WERE
+  # DAMAGED BY IT IN ONE RUN. Its RULINGS pass aborted with "the new head is
+  # 149903 chars, over the 120000 budget" — AFTER the splitter had already
+  # rewritten the head and wiped the archive index from 4 archives / 369,216
+  # chars to "0 archives · 0 chars". Its RELAY pass printed ✔ SUCCESS and did
+  # the same thing; `gate-ledger-reachability` went red with "expected 0 to be
+  # greater than or equal to 20". Both files had to be reverted by hand.
+  #
+  # ⚠️ AND THE REFUSAL ITSELF CLAIMED OTHERWISE — "Nothing was written for this
+  # file. This is CANNOT TELL, not success." That sentence was FALSE at the
+  # moment it printed, because `WRITE_HEAD=1` had already run.
+  #
+  # A script that half-applies is not fixed by making the failure rarer. It is
+  # fixed by making the failure incapable of reaching the file: everything
+  # happens in $STAGE, and the only write to the repository is the swap at the
+  # very end, after the post-conditions AND the ledger gates have passed there.
+  STAGE="$(mktemp -d)"
+  trap 'rm -rf "$STAGE"' EXIT
+  stage_head="$STAGE/$(basename "$f")"
+  stage_out="$STAGE/archives"
+  cp "$f" "$stage_head"
+  mkdir -p "$stage_out"
+  if [ -d "$outdir" ]; then cp -a "$outdir/." "$stage_out/" 2>/dev/null || true; fi
+  real_f="$f"; real_outdir="$outdir"
+  f="$stage_head"; outdir="$stage_out"
+
   dates=$(grep -oE '^#{1,2} .*(20[0-9]{2}-[0-9]{2}-[0-9]{2})' "$f" \
           | grep -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}' | sort -u)
   chosen=""
@@ -191,6 +220,7 @@ except Exception: print(10**9)' 2>/dev/null)
     LIFT="$lift_json" KEEP_SINCE="$chosen" WRITE_HEAD=1 python3 "$SPLITTER" "$f" "$outdir" || {
       echo "🔴 rotate-ledger: the splitter REFUSED on $f. Its five proofs are mandatory."
       echo "   Nothing was written for this file. This is CANNOT TELL, not success."
+      echo "   (TRUE since #278: the splitter ran against a staging copy.)"
       exit 2; }
   else
     LIFT="$lift_json" WRITE_HEAD=1 python3 "$SPLITTER" "$f" "$outdir" || {
@@ -262,6 +292,27 @@ except Exception: print(10**9)' 2>/dev/null)
       echo "   could not be regenerated. The head now points at archives that have"
       echo "   moved. Fix the generator before landing this."
       exit 2; }
+  fi
+
+  # ══ THE SWAP — THE ONLY WRITE TO THE REPOSITORY IN THIS WHOLE LOOP. ═══════
+  # Reached only if every post-condition above passed on the staged copy. Until
+  # this line runs, `git status` is clean and a `kill -9` costs nothing.
+  mkdir -p "$real_outdir"
+  cp "$f" "$real_f"
+  cp -a "$outdir/." "$real_outdir/"
+  staged_chars="$after_chars"
+  f="$real_f"; outdir="$real_outdir"
+  rm -rf "$STAGE"; trap - EXIT
+
+  # ⚠️ AND THE SWAP IS VERIFIED, not assumed. `cp` can fail on a full disk or a
+  # read-only tree and this script has already been burned once by trusting a
+  # write it did not check.
+  landed_chars="$(wc -m < "$f" | tr -d ' ')"
+  if [ "$landed_chars" != "$staged_chars" ]; then
+    echo "🔴 rotate-ledger: THE SWAP DID NOT LAND — $f is $landed_chars chars, staged was $staged_chars."
+    echo "   The rotation was computed and proved on a copy and the copy did not"
+    echo "   reach the repository. Nothing here is trustworthy; investigate before rerunning."
+    exit 2
   fi
 
   echo "   ✔ $f: $before_chars → $after_chars chars, $before_archives → $(ls -1 "$outdir" 2>/dev/null | wc -l | tr -d ' ') archive files, no duplication"

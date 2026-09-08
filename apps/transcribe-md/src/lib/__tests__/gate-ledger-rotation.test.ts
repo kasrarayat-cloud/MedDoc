@@ -270,6 +270,78 @@ describe('rotation — banner-triggered, delegating, fail-closed', () => {
     expect(r.stdout + r.stderr).toContain('CANNOT TELL');
   });
 
+  it('⚠️ #278 ATOMIC — a mid-run refusal leaves the ledger BYTE-UNTOUCHED', () => {
+    // ⚠️ THIS ARM EXISTS BECAUSE THE SCRIPT DAMAGED BOTH LEDGERS IN ONE RUN.
+    // `--apply` used to mutate the file and THEN refuse. Its RULINGS pass
+    // aborted with "the new head is 149903 chars, over the 120000 budget" —
+    // after the splitter had already rewritten the head and wiped the archive
+    // index from "4 archives · 369,216 chars" to "0 archives · 0 chars". Its
+    // RELAY pass printed ✔ SUCCESS and did the same;
+    // `gate-ledger-reachability` went red with "expected 0 to be greater than
+    // or equal to 20". Both files were reverted by hand.
+    //
+    // ⚠️ AND THE REFUSAL LIED WHILE IT DID SO: "Nothing was written for this
+    // file. This is CANNOT TELL, not success." The write had already happened.
+    //
+    // The control plants a refusal the script CANNOT survive — a splitter that
+    // exits non-zero — and asserts the ledger's bytes are identical afterwards.
+    const dir = mkdtempSync(join(tmpdir(), 'rot-atomic-'));
+    mkdirSync(join(dir, 'scripts', 'lib'), { recursive: true });
+    mkdirSync(join(dir, 'docs', 'foundation', 'rulings'), { recursive: true });
+    copyFileSync(ROTATE, join(dir, 'scripts', 'rotate-ledger.sh'));
+    copyFileSync(join(REPO, 'scripts', 'check-read-budget.sh'), join(dir, 'scripts', 'check-read-budget.sh'));
+
+    // ⚠️ A SPLITTER THAT **WRITES AND THEN** REFUSES — and the first version of
+    // this control did not, which made it VACUOUS. A plant that exits before
+    // touching anything leaves the file untouched under the OLD script too, so
+    // the arm passed 22/22 against the very code it was written to catch.
+    //
+    // That is the real shape: the shipped splitter rewrote the head and wiped
+    // the archive index, and THEN printed "FATAL: the new head is 149903 chars,
+    // over the 120000 budget" and exited non-zero. The damage is done before
+    // the refusal, which is exactly why the caller must stage.
+    writeFileSync(
+      join(dir, 'scripts', 'lib', 'split-ledger.py'),
+      [
+        'import sys',
+        'open(sys.argv[1], "w").write("WIPED BY THE PLANTED SPLITTER\\n")',
+        'sys.stderr.write("planted refusal, AFTER writing\\n")',
+        'sys.exit(3)',
+        '',
+      ].join('\n'),
+    );
+
+    // A real, oversize ledger so the script actually reaches STEP 3.
+    const led = join(dir, 'docs', 'foundation', 'RULINGS.md');
+    copyFileSync(join(REPO, 'docs', 'foundation', 'RULINGS.md'), led);
+    const padded = readFileSync(led, 'utf8') + '\n' + 'x'.repeat(200_000);
+    writeFileSync(led, padded);
+
+    const before = readFileSync(led);
+    const r = spawnSync('bash', [join(dir, 'scripts', 'rotate-ledger.sh'), '--apply'], {
+      cwd: dir,
+      encoding: 'utf8',
+    });
+    const after = readFileSync(led);
+
+    // POSITIVE CONTROL: the run must have REACHED the rotation and refused
+    // there. A script that exited early — bad mode, missing delegate, nothing
+    // over budget — would leave the file untouched for reasons that have
+    // nothing to do with atomicity, and this arm would pass vacuously.
+    expect(
+      r.stdout + r.stderr,
+      `the run never reached the splitter, so byte-equality proves nothing:\n${r.stdout}${r.stderr}`,
+    ).toMatch(/splitter REFUSED|rotation NEEDED/);
+    expect(r.status, 'a planted refusal did not fail the run').not.toBe(0);
+
+    // THE ASSERTION: byte-identical, not merely "still valid".
+    expect(
+      after.equals(before),
+      `the ledger was MUTATED by a run that refused — ${before.length} → ${after.length} bytes. ` +
+        'That is the half-apply #278 exists to end.',
+    ).toBe(true);
+  });
+
   it('refuses an unknown mode rather than guessing', () => {
     const r = spawnSync('bash', [ROTATE, '--wat'], { encoding: 'utf8' });
     expect(r.status).not.toBe(0);
