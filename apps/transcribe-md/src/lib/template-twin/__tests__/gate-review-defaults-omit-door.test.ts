@@ -1230,6 +1230,91 @@ const WITNESSED_GUARDS = new Set<string>();
     }
   });
 
+  it('⚠️ `conceptScope` IS AN UNBOUNDED DIMENSION — three values are exhaustive ONLY because the code reads its LENGTH', () => {
+    // ⚠️ ROUND EIGHT, `TRACER-2`. The matrix varies `conceptScope` over three
+    // hand-picked values — absent, one concept, two concepts — and calls the
+    // dimension "varied". But an array is UNBOUNDED: no finite sample is
+    // exhaustive over it, so a guard keyed on its CONTENTS (a particular
+    // concept, a third element) would be invisible to the biconditional and to
+    // the resolver-reads arm alike.
+    //
+    // ⚠️ WIDENING THE SAMPLE WOULD CLOSE THE INSTANCE AND NOT THE CLASS — the
+    // shape #259 was written to end. Three values are exhaustive if and only if
+    // the code reads nothing but the LENGTH, so THAT is what this arm pins.
+    //
+    // BEHAVIOURAL HALF FIRST: scopes of the SAME LENGTH and completely
+    // different contents must be indistinguishable to both sides.
+    //
+    // ⚠️ AT EVERY SAMPLED LENGTH, NOT JUST THE LONGEST — AND MY FIRST VERSION
+    // COMPARED ONLY LENGTH 2, WHERE IT PROVED NOTHING. The live guard is
+    // `length > 1`, so at length 2 it fires for both contents and the pair is
+    // trivially equal. A planted read that made ONE concept trip the guard at
+    // LENGTH 1 passed 54 of 54. The pairs are per-length now, so a content read
+    // is visible at the length where the length test does not already answer.
+    const PAIRS: ReadonlyArray<readonly [string[], string[]]> = [
+      [['ros.palpitations'], ['gi.nausea']],
+      [['ros.palpitations', 'ros.chest_pain'], ['gi.nausea', 'derm.pruritus']],
+      [
+        ['ros.palpitations', 'ros.chest_pain', 'ros.dyspnoea'],
+        ['gi.nausea', 'derm.pruritus', 'msk.arthralgia'],
+      ],
+    ];
+    for (const kind of ['checkbox', 'narrative_text'] as const) {
+      // ⚠️ THE PAIR MUST REACH THE GUARD, AND MY FIRST TWO VERSIONS DID NOT.
+      // With the probe's default `expectedDataType`, a `checkbox` trips ladder
+      // row 1 (`semantic_mapping_type_mismatch`) and the deferral guard that
+      // reads `conceptScope` is never consulted — so the pairs compared two
+      // identical refusals and a planted content read passed 54 of 54, twice.
+      // The compatible type comes from the compiler's own table, as #259
+      // clause 2 requires of everything else in this file.
+      const dataType = expectedDataTypeForFieldKind(kind) ?? undefined;
+      for (const [A, B] of PAIRS) {
+        const a = resolveOne({ kind }, { conceptScope: A, expectedDataType: dataType });
+        const b = resolveOne({ kind }, { conceptScope: B, expectedDataType: dataType });
+        // REACHABILITY CONTROL: neither side may exit at the type guard, or the
+        // comparison below is between two answers that have nothing to do with
+        // `conceptScope`.
+        expect(
+          a.resolution.reasonCode,
+          `${kind}: the pair exits at the type guard and never reaches the scope read`,
+        ).not.toBe('semantic_mapping_type_mismatch');
+        expect(
+          b.resolution.reasonCode,
+          `${kind}: the resolver distinguished two scopes of equal length (${A.length}) — ` +
+            'the matrix samples contents and cannot cover them',
+        ).toBe(a.resolution.reasonCode);
+        expect(
+          canOmitWhenUnmentioned(b.field, b.mapping),
+          `${kind}: the OFFER distinguished two scopes of equal length (${A.length})`,
+        ).toBe(canOmitWhenUnmentioned(a.field, a.mapping));
+      }
+    }
+
+    // STRUCTURAL HALF: every production read of `conceptScope` on the compared
+    // path is a LENGTH read. This one is deliberately a source scan and it is
+    // NOT a proof of behaviour — #251 retires those — it is a proof about the
+    // MATRIX's coverage: it says the enumeration above is exhaustive by
+    // construction rather than by luck, and it reds the day somebody adds a
+    // content-sensitive read, which is exactly when the matrix must widen.
+    const policy = readFileSync(join(__dirname, '..', 'unmentioned-policy.ts'), 'utf8');
+    const code = policy
+      .split('\n')
+      .filter((l) => !l.trimStart().startsWith('*') && !l.trimStart().startsWith('//'))
+      .join('\n');
+    const reads = [...code.matchAll(/conceptScope[^\n]*/g)].map((m) => m[0]);
+    // POSITIVE CONTROL: the read this arm is about must actually be found, or
+    // an empty result would satisfy every assertion below.
+    expect(reads.length, 'no conceptScope read found — this arm is vacuous').toBeGreaterThan(0);
+    for (const r of reads) {
+      expect(
+        /conceptScope\?\.length|conceptScope'|conceptScope\b\s*$|conceptScope:/.test(r),
+        `a conceptScope read that is not a length read: "${r.trim()}" — the ` +
+          'matrix samples three values and cannot cover an unbounded dimension ' +
+          'whose CONTENTS are read',
+      ).toBe(true);
+    }
+  });
+
   it('⚠️ THE CERTIFICATION ANCHOR NAMES **WHICH** ROW — position, not membership', () => {
     // ⚠️ ROUND EIGHT, `FG-3`. `unmentioned-policy.ts` asserts at module scope
     // that `OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS` names A ROW of the ladder.
