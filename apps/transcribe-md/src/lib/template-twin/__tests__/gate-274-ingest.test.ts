@@ -43,6 +43,7 @@ function field(over: {
   label?: string;
   displayOrder?: number;
   sdtId?: string | null;
+  partName?: string;
 }): TemplateField {
   return {
     fieldId: over.fieldId,
@@ -344,19 +345,98 @@ describe('#274 · the identity keys themselves', () => {
   });
 });
 
-describe('#274 · a key COLLISION re-proposes; it never mis-transfers', () => {
-  it('two source fields sharing an sdtId: the second does not overwrite the first', () => {
-    const dupSource = ir([
-      field({ fieldId: 'ttf_' + '5'.repeat(24), sdtId: '777', label: 'First' }),
-      field({ fieldId: 'ttf_' + '6'.repeat(24), sdtId: '777', label: 'Second' }),
+describe('#274 · ⚠️ AN AMBIGUOUS KEY TRANSFERS TO NOBODY — the bijection', () => {
+  // ══════════════════════════════════════════════════════════════════════════
+  // THE FIRST VERSION ASSERTED THIS PROPERTY IN A COMMENT AND DID NOT HAVE IT.
+  // "First wins, and a collision never mis-transfers" guarded the SOURCE map;
+  // nothing guarded the TARGET side, so two controls sharing a key both claimed
+  // the same certified row. Measured before the fix:
+  //
+  //     "Right leg findings"  <-  venous.reflux.RIGHT
+  //     "Left leg findings"   <-  venous.reflux.RIGHT
+  //     transferred = 2, distinct source rows consumed = 1
+  //
+  // A left-leg finding certified to print the right leg's concept.
+  // ══════════════════════════════════════════════════════════════════════════
+  const dup = (fieldId: string, sdtId: string, label: string, partName?: string) =>
+    field({ fieldId, sdtId, label, ...(partName ? { partName } : {}) });
+
+  it('⚠️ two controls sharing a w:id in the SAME part: NEITHER inherits', () => {
+    const src = ir([
+      dup('ttf_' + 'a'.repeat(24), '500', 'Right leg findings'),
+      dup('ttf_' + 'b'.repeat(24), '500', 'Left leg findings'),
     ]);
     const certs = new Map([
-      ['ttf_' + '5'.repeat(24), certified('ttf_' + '5'.repeat(24), 'first_concept')],
-      ['ttf_' + '6'.repeat(24), certified('ttf_' + '6'.repeat(24), 'second_concept')],
+      ['ttf_' + 'a'.repeat(24), certified('ttf_' + 'a'.repeat(24), 'venous.reflux.RIGHT')],
+      ['ttf_' + 'b'.repeat(24), certified('ttf_' + 'b'.repeat(24), 'venous.reflux.LEFT')],
     ]);
-    const target = ir([field({ fieldId: 'ttf_' + '7'.repeat(24), sdtId: '777' })]);
-    const plan = planTransfer({ target, sourceIr: dupSource, certifiedByFieldId: certs });
-    expect(plan.transferred).toHaveLength(1);
-    expect(plan.transferred[0]!.mapping.clinicalConcept).toBe('first_concept');
+    // bytes changed, so every fieldId rotated and only the sdt key could match
+    const tgt = ir([
+      dup('ttf_' + 'c'.repeat(24), '500', 'Right leg findings'),
+      dup('ttf_' + 'd'.repeat(24), '500', 'Left leg findings'),
+    ]);
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(plan.transferred, 'an ambiguous key carried a clinical disposition').toEqual([]);
+    expect(plan.reproposed).toHaveLength(2);
+  });
+
+  it('⚠️ a BODY control and a LETTERHEAD control sharing a w:id: neither inherits', () => {
+    // `w:id` is unique within a PART, not across the package, and the compiler
+    // walks body then headers then footers into one field list.
+    const src = ir([
+      dup('ttf_' + 'e'.repeat(24), '201', 'Clinical impression'),
+      dup('ttf_' + 'g'.repeat(24), '201', 'Practice display name', 'word/header1.xml'),
+    ]);
+    const certs = new Map([
+      ['ttf_' + 'e'.repeat(24), certified('ttf_' + 'e'.repeat(24), 'clinical.impression')],
+      ['ttf_' + 'g'.repeat(24), certified('ttf_' + 'g'.repeat(24), 'practice.display_name')],
+    ]);
+    const tgt = ir([
+      dup('ttf_' + 'h'.repeat(24), '201', 'Clinical impression'),
+      dup('ttf_' + 'i'.repeat(24), '201', 'Practice display name', 'word/header1.xml'),
+    ]);
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    const labelOf = new Map(tgt.fields.map((f) => [f.fieldId, f.originalLabel]));
+    const wrong = plan.transferred.filter((t) => {
+      const l = labelOf.get(t.fieldId);
+      return (l === 'Practice display name' && t.mapping.clinicalConcept !== 'practice.display_name')
+        || (l === 'Clinical impression' && t.mapping.clinicalConcept !== 'clinical.impression');
+    });
+    expect(wrong.map((t) => `${labelOf.get(t.fieldId)} <- ${t.mapping.clinicalConcept}`)).toEqual([]);
+  });
+
+  it('POSITIVE CONTROL — DISTINCT ids in the same two parts DO transfer', () => {
+    // ⚠️ Without this, the two arms above are bought by an implementation that
+    // transfers nothing at all whenever a header exists.
+    const src = ir([
+      dup('ttf_' + 'j'.repeat(24), '201', 'Clinical impression'),
+      dup('ttf_' + 'k'.repeat(24), '900', 'Practice display name', 'word/header1.xml'),
+    ]);
+    const certs = new Map([
+      ['ttf_' + 'j'.repeat(24), certified('ttf_' + 'j'.repeat(24), 'clinical.impression')],
+      ['ttf_' + 'k'.repeat(24), certified('ttf_' + 'k'.repeat(24), 'practice.display_name')],
+    ]);
+    const tgt = ir([
+      dup('ttf_' + 'l'.repeat(24), '201', 'Clinical impression'),
+      dup('ttf_' + 'm'.repeat(24), '900', 'Practice display name', 'word/header1.xml'),
+    ]);
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(plan.transferred).toHaveLength(2);
+    const byLabel = new Map(
+      plan.transferred.map((t) => [tgt.fields.find((f) => f.fieldId === t.fieldId)!.originalLabel, t.mapping.clinicalConcept]),
+    );
+    expect(byLabel.get('Clinical impression')).toBe('clinical.impression');
+    expect(byLabel.get('Practice display name')).toBe('practice.display_name');
+  });
+
+  it('⚠️ ONE certified row is consumed by AT MOST ONE control', () => {
+    // The property stated directly, rather than through a fixture: no two
+    // transferred rows may cite the same source.
+    const src = ir([dup('ttf_' + 'n'.repeat(24), '700', 'Only one')]);
+    const certs = new Map([['ttf_' + 'n'.repeat(24), certified('ttf_' + 'n'.repeat(24), 'the_concept')]]);
+    const tgt = ir([dup('ttf_' + 'o'.repeat(24), '700', 'Only one'), dup('ttf_' + 'p'.repeat(24), '700', 'Copy')]);
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    const sources = plan.transferred.map((t) => t.fromFieldId);
+    expect(new Set(sources).size, 'a certified row was consumed twice').toBe(sources.length);
   });
 });

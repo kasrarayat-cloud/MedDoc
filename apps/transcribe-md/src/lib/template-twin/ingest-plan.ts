@@ -140,7 +140,16 @@ export function identityKeys(field: TemplateField): IdentityKey[] {
   // question with the same name, and its certified disposition — expectedDataType,
   // allowedOptions, polarity — no longer describes it.
   if (sdtId !== null && sdtId !== '') {
-    keys.push(`sdt\u0000${sdtId}\u0000${field.kind}` as IdentityKey);
+    // ⚠️ `partName` IS PART OF THE IDENTITY, AND LEAVING IT OUT WAS A DEFECT.
+    // The compiler walks the body, then every header, then every footer into
+    // ONE field list with no id-uniqueness check across parts, and `w:id` is
+    // only unique within a part. Measured: a body control and a letterhead
+    // control sharing `w:id 201` produced ONE identity, and the letterhead
+    // inherited the body's certified CLINICAL concept — with nothing inserted,
+    // deleted, moved or reordered. `partName` is already an input to `fieldId`'s
+    // own hash (compiler.ts:885); dropping it from the key that has to survive a
+    // byte change was the asymmetry.
+    keys.push(`sdt\u0000${field.rendererBinding.partName}\u0000${sdtId}\u0000${field.kind}` as IdentityKey);
   }
   return keys;
 }
@@ -239,33 +248,73 @@ export function planTransfer(input: {
 }): TransferPlan {
   const { target, sourceIr, certifiedByFieldId } = input;
 
-  // identity -> the OLD field that carried it
+  // ══════════════════════════════════════════════════════════════════════════
+  // ⚠️ A TRANSFER REQUIRES A BIJECTION. AN AMBIGUOUS KEY TRANSFERS TO NOBODY.
+  // --------------------------------------------------------------------------
+  // The first version of this function asserted, in its own comment, that
+  // "first wins, and a collision NEVER mis-transfers — the loser surfaces as a
+  // re-proposal". THAT CLAIM WAS FALSE, and a refutation pass proved it.
+  //
+  // First-wins guarded the SOURCE map. Nothing guarded the TARGET side, so two
+  // target fields sharing one key BOTH looked it up and BOTH transferred from
+  // the same row. Measured, on a section the doctor copy-pasted so Word kept
+  // the `w:id` on both halves:
+  //
+  //     "Right leg findings"  <-  venous.reflux.RIGHT
+  //     "Left leg findings"   <-  venous.reflux.RIGHT      <- laterality swapped
+  //     transferred = 2, distinct source rows consumed = 1
+  //
+  // A left-leg finding certified to print the right leg's concept, arriving
+  // `CERTIFIED` so it never reaches a confirmation list. Nothing downstream
+  // could catch it: the COUNT is 2, which is what a correct run also returns,
+  // so `expectTransferCount` passes; both fields exist, so `TRANSFER_PLAN_STALE`
+  // does not fire.
+  //
+  // So the rule is now structural rather than asserted: a key must appear
+  // EXACTLY ONCE on each side to carry a disposition. Ambiguity on either side
+  // re-proposes, which is a question to the doctor rather than a wrong answer
+  // presented as certified.
+  // ══════════════════════════════════════════════════════════════════════════
+  const countKeys = (fields: ReadonlyArray<TemplateField>): Map<IdentityKey, number> => {
+    const counts = new Map<IdentityKey, number>();
+    for (const field of fields) {
+      for (const key of identityKeys(field)) counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  };
+
+  const sourceCounts = sourceIr ? countKeys(sourceIr.fields) : new Map<IdentityKey, number>();
+  const targetCounts = countKeys(target.fields);
+
   const oldByIdentity = new Map<IdentityKey, string>();
   if (sourceIr) {
     for (const field of sourceIr.fields) {
       for (const key of identityKeys(field)) {
-        // ⚠️ FIRST WINS, AND A COLLISION NEVER MIS-TRANSFERS. Both identities
-        // measured unique on the reference document, but this function will
-        // meet documents it has never seen. Last-wins would make the winner
-        // depend on array order; first-wins is arbitrary but STABLE, and the
-        // loser surfaces as a re-proposal — a control the doctor re-confirms —
-        // rather than as a silent mis-transfer.
-        if (!oldByIdentity.has(key)) oldByIdentity.set(key, field.fieldId);
+        // ambiguous on the source side: two old controls answer to this key, so
+        // it names no one control and must carry nothing.
+        if (sourceCounts.get(key) !== 1) continue;
+        oldByIdentity.set(key, field.fieldId);
       }
     }
   }
 
   const transferred: Array<{ fieldId: string; fromFieldId: string; mapping: SemanticMapping }> = [];
   const reproposed: string[] = [];
+  // ⚠️ CONSUMED ONCE. Belt to the braces above: even if both uniqueness checks
+  // were somehow satisfied, one certified disposition can be claimed by exactly
+  // one control. Two controls wearing one clinical meaning is the failure this
+  // whole guard exists to prevent, and it costs one Set to make impossible.
+  const consumed = new Set<string>();
 
   for (const field of target.fields) {
     let fromFieldId: string | undefined;
     let mapping: SemanticMapping | undefined;
-    // strongest identity first; a field offering several takes the first that
-    // resolves to a CERTIFIED disposition.
     for (const key of identityKeys(field)) {
+      // ambiguous on the target side: this control is one of several answering
+      // to the key, so it cannot claim the disposition.
+      if (targetCounts.get(key) !== 1) continue;
       const candidate = oldByIdentity.get(key);
-      if (candidate === undefined) continue;
+      if (candidate === undefined || consumed.has(candidate)) continue;
       const found = certifiedByFieldId.get(candidate);
       if (found) {
         fromFieldId = candidate;
@@ -277,6 +326,7 @@ export function planTransfer(input: {
       reproposed.push(field.fieldId);
       continue;
     }
+    consumed.add(fromFieldId);
     // ⚠️ THE DISPOSITION IS RE-KEYED TO THE NEW FIELD ID AND OTHERWISE CARRIED
     // WHOLE. Every column moves — `conceptScope` and `unmentionedPolicy`
     // included — because a hand-rolled subset already erased a ruled `omit` on
