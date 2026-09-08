@@ -32,16 +32,31 @@ def resolve(path):
     for x, y, z in zip(a, m, b):
         out += lines[prev:x]
         ours, theirs = lines[x+1:y], lines[y+1:z]
-        o = {num(l): l for l in ours if num(l) is not None}
-        t = {num(l): l for l in theirs if num(l) is not None}
-        seen_o |= set(o); seen_t |= set(t)
+        # ⚠️ KEYED ON (NUMBER, RULING TEXT), NOT ON THE NUMBER ALONE — AND THE
+        # ARM THAT FOUND THIS WAS ABOUT DELETING AMENDMENTS. The ledger records
+        # a ruling's own clauses as their own rows under one number: `#116` has
+        # three, `#131` has three. Keying on the number collapsed them to one, so
+        # two clause rows arriving on OPPOSITE sides of a conflict lost one —
+        # silently, and a lost amendment reads exactly like a ruling that never
+        # had one.
+        #
+        # The ruling TEXT is cell 4 and is identical between a POINTER row and
+        # its PROSE twin (the prose sits in an extra column), so the same ruling
+        # still collapses to one row while different clauses stay apart.
+        def key(l):
+            c = cells(l)
+            return (num(l), c[3].strip() if len(c) > 3 else '')
+
+        o = {key(l): l for l in ours if num(l) is not None}
+        t = {key(l): l for l in theirs if num(l) is not None}
+        seen_o |= {k[0] for k in o}; seen_t |= {k[0] for k in t}
         merged = []
-        for n in sorted(set(o) | set(t)):
-            if n in o and n in t:
+        for k in sorted(set(o) | set(t), key=lambda k: (k[0], k[1])):
+            if k in o and k in t:
                 # POINTER FORM WINS: fewer cells is the pointer row.
-                merged.append(t[n] if len(cells(t[n])) <= len(cells(o[n])) else o[n])
+                merged.append(t[k] if len(cells(t[k])) <= len(cells(o[k])) else o[k])
             else:
-                merged.append(t.get(n, o.get(n)))
+                merged.append(t.get(k, o.get(k)))
         # un-numbered rows (legacy `| date | — | RECORDED |`) are a union too
         un_o = [l for l in ours if num(l) is None and ANYROW.match(l)]
         un_t = [l for l in theirs if num(l) is None and ANYROW.match(l)]
@@ -69,6 +84,54 @@ USAGE = (
 )
 
 
+def dedupe(path):
+    """⚠️ THE WHOLE FILE, NOT JUST THE CONFLICT REGION — AND THIS GAP COST TWICE.
+
+    `resolve()` unions the rows INSIDE the markers. git will have auto-merged
+    identical or non-overlapping rows OUTSIDE them, so where one side's PROSE
+    row auto-merged and this script emitted the POINTER row for the same ruling,
+    BOTH landed. Measured twice on one branch: 18 duplicate rows the first time,
+    18 again after the next merge, each caught only by `gate-ruling-row-identity`
+    downstream.
+
+    Two shapes, and the second is the one the first pass missed:
+      · POINTER + PROSE — different cell counts, same leading cells;
+      · the SAME row twice — identical cell count AND identical text.
+
+    ⚠️ AND THE CLAUSE ROWS ARE NOT DUPLICATES. `#106`, `#109`, `#115`, `#116`
+    (x3) and `#131` (x3) legitimately share a number: the ledger records a
+    ruling's own clauses and corrections as their own rows. They have the same
+    shape and DIFFERENT text, so the text comparison is what keeps a dedupe from
+    deleting recorded amendments.
+    """
+    lines = open(path).read().split('\n')
+    cells = lambda l: l.split('|')[1:-1]
+    groups = {}
+    for i, l in enumerate(lines):
+        m = ROW.match(l)
+        if m:
+            groups.setdefault(int(m.group(1)), []).append(i)
+    drop = set()
+    for _, idxs in groups.items():
+        if len(idxs) < 2:
+            continue
+        for a in idxs:
+            for b in idxs:
+                if a >= b or a in drop or b in drop:
+                    continue
+                ca, cb = cells(lines[a]), cells(lines[b])
+                lead = lambda c: [x.strip() for x in c[:3]]
+                if len(ca) == len(cb):
+                    if [x.strip() for x in ca[:4]] == [x.strip() for x in cb[:4]]:
+                        drop.add(b)          # the same row twice
+                elif lead(ca) == lead(cb):
+                    drop.add(a if len(ca) > len(cb) else b)   # keep the POINTER
+    if drop:
+        open(path, 'w').write('\n'.join(l for i, l in enumerate(lines) if i not in drop))
+        print(f'  deduped {len(drop)} row(s) that auto-merged OUTSIDE the conflict region')
+    return len(drop)
+
+
 def main():
     if len(sys.argv) < 2:
         sys.stderr.write(USAGE)
@@ -79,6 +142,7 @@ def main():
         sys.exit(2)
     refs = sys.argv[2:]          # extra refs to check membership against
     o, t = resolve(path)
+    dedupe(path)
     after_txt = open(path).read()
     after = nums_of(after_txt)
     left = sum(1 for l in after_txt.split('\n')

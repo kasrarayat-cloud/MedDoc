@@ -146,3 +146,43 @@ describe('union-ledger-conflict — THE REFUSAL, which is the product', () => {
     expect(out, 'a traceback is not a refusal').not.toContain('Traceback');
   });
 });
+
+describe('union-ledger-conflict — the dedupe that the conflict region cannot see', () => {
+  it('⚠️ DROPS A ROW THAT AUTO-MERGED OUTSIDE THE MARKERS — the gap that cost twice', () => {
+    // git auto-merges rows it can reconcile, so a PROSE row can survive outside
+    // the markers while this script emits the POINTER row for the same ruling
+    // inside them. Both land, and only a downstream ledger gate notices.
+    const body = [
+      '# L',
+      '',
+      row(9, 5), // the prose row, auto-merged outside the conflict
+      '',
+      '<<<<<<< HEAD',
+      row(1),
+      '=======',
+      row(9), // the pointer row for the SAME ruling
+      '>>>>>>> other',
+      '',
+    ].join('\n');
+    const r = run(body);
+    expect(r.code).toBe(0);
+    const nine = r.text.split('\n').filter((l) => /^\|\s*2026-09-08\s*\|\s*#9\s*\|/.test(l));
+    expect(nine, 'the same ruling landed twice').toHaveLength(1);
+    expect(nine[0], 'the PROSE row survived instead of the pointer').toBe(row(9));
+  });
+
+  it('⚠️ AND IT DOES NOT EAT CLAUSE ROWS — #116 and #131 share a number legitimately', () => {
+    // POSITIVE CONTROL, and the one that matters: the ledger records a ruling's
+    // own clauses as their own rows under one number. A dedupe keying on the
+    // number alone would delete recorded amendments — which is a worse failure
+    // than the duplicate it fixes.
+    const a = `| 2026-09-08 | #116 | OWNER-RULING | (a) the first clause | [\`x.md\`](rulings/x.md) |`;
+    const b = `| 2026-09-08 | #116 | OWNER-RULING | (c) a LATER correction | [\`x.md\`](rulings/x.md) |`;
+    const r = run(conflict([a], [b]));
+    expect(r.code).toBe(0);
+    expect(r.text).toContain('(a) the first clause');
+    expect(r.text, 'a recorded amendment was deleted as a duplicate').toContain(
+      '(c) a LATER correction',
+    );
+  });
+});
