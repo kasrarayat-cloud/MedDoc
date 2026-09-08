@@ -130,6 +130,46 @@ import {
  */
 export type IdentityKey = string & { readonly __brand: 'IdentityKey' };
 
+/**
+ * The key AMBIGUITY is counted on — deliberately WITHOUT `kind`.
+ *
+ * ⚠️ ROUND FIVE: `kind` IN THE COUNTED KEY DEFEATED THE BIJECTION. It is
+ * CONTENT-DERIVED and MUTABLE — `compiler.ts:854-858` computes it from
+ * `isScaffolded(properties, content)` and a label heuristic, so clearing a
+ * control's pre-filled sentence, or adding `w:showingPlcHdr`, re-types it.
+ *
+ * So two controls sharing ONE tag but differing in kind produced two DISTINCT
+ * keys, each unique, and "a key non-unique on either side carries nothing"
+ * never fired. Measured on real bytes with the shipped generator's own tag
+ * `ros_gi_weight`: the ROS alarm-feature clause inherited a DELETED weight
+ * MEASUREMENT control's certified disposition, arriving `certified`, while its
+ * own was discarded. The transfer count was 2 where a correct run returns 1 —
+ * and the upload path passes no `expectTransferCount`.
+ *
+ *     A TAG THAT NAMES TWO CONTROLS IS AMBIGUOUS. Whether those controls
+ *     currently look like prose or like a measurement is not the question, and
+ *     letting a MUTABLE attribute answer it re-opened the hole four rounds of
+ *     deletion had closed.
+ *
+ * ⚠️ AND THE FIX IS A NARROW, NOT A DELETE — dropping `kind` from the match as
+ * well would red a deliberate arm: *"a kind CHANGE on the same TAG does not
+ * inherit — same name, different question"*. A text box the doctor turned into
+ * a dropdown genuinely is a different question, and its certified
+ * `expectedDataType` and `allowedOptions` no longer describe it.
+ *
+ * Two questions, two keys: **AMBIGUITY is counted without `kind`; MATCHING
+ * still requires it.**
+ */
+export function ambiguityKeys(field: TemplateField): IdentityKey[] {
+  const b = field.rendererBinding;
+  const keys: IdentityKey[] = [`fid\u0000${field.fieldId}` as IdentityKey];
+  const tag = (b.tag ?? '').trim();
+  if (tag !== '') {
+    keys.push(`tag\u0000${b.partName}\u0000${tag}` as IdentityKey);
+  }
+  return keys;
+}
+
 export function identityKeys(field: TemplateField): IdentityKey[] {
   const b = field.rendererBinding;
   const keys: IdentityKey[] = [`fid\u0000${field.fieldId}` as IdentityKey];
@@ -265,13 +305,20 @@ export function planTransfer(input: {
   // re-proposes, which is a question to the doctor rather than a wrong answer
   // presented as certified.
   // ══════════════════════════════════════════════════════════════════════════
+  // ⚠️ COUNTED ON `ambiguityKeys` (no `kind`), MATCHED ON `identityKeys` (with
+  // it). See the note on `ambiguityKeys`: counting with a MUTABLE attribute let
+  // one tag name two controls without ever reading as ambiguous.
   const countKeys = (fields: ReadonlyArray<TemplateField>): Map<IdentityKey, number> => {
     const counts = new Map<IdentityKey, number>();
     for (const field of fields) {
-      for (const key of identityKeys(field)) counts.set(key, (counts.get(key) ?? 0) + 1);
+      for (const key of ambiguityKeys(field)) counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return counts;
   };
+
+  /** Is EVERY ambiguity key this field answers to unique in that document? */
+  const unambiguous = (field: TemplateField, counts: Map<IdentityKey, number>): boolean =>
+    ambiguityKeys(field).every((k) => counts.get(k) === 1);
 
   const sourceCounts = sourceIr ? countKeys(sourceIr.fields) : new Map<IdentityKey, number>();
   const targetCounts = countKeys(target.fields);
@@ -279,12 +326,10 @@ export function planTransfer(input: {
   const oldByIdentity = new Map<IdentityKey, string>();
   if (sourceIr) {
     for (const field of sourceIr.fields) {
-      for (const key of identityKeys(field)) {
-        // ambiguous on the source side: two old controls answer to this key, so
-        // it names no one control and must carry nothing.
-        if (sourceCounts.get(key) !== 1) continue;
-        oldByIdentity.set(key, field.fieldId);
-      }
+      // a source control any of whose ambiguity keys is shared names no one
+      // control, so it carries nothing at all.
+      if (!unambiguous(field, sourceCounts)) continue;
+      for (const key of identityKeys(field)) oldByIdentity.set(key, field.fieldId);
     }
   }
 
@@ -299,10 +344,13 @@ export function planTransfer(input: {
   for (const field of target.fields) {
     let fromFieldId: string | undefined;
     let mapping: SemanticMapping | undefined;
+    // ambiguous on the target side: this control is one of several answering to
+    // the same tag, so it cannot claim a disposition whatever its current kind.
+    if (!unambiguous(field, targetCounts)) {
+      reproposed.push(field.fieldId);
+      continue;
+    }
     for (const key of identityKeys(field)) {
-      // ambiguous on the target side: this control is one of several answering
-      // to the key, so it cannot claim the disposition.
-      if (targetCounts.get(key) !== 1) continue;
       const candidate = oldByIdentity.get(key);
       if (candidate === undefined || consumed.has(candidate)) continue;
       const found = certifiedByFieldId.get(candidate);

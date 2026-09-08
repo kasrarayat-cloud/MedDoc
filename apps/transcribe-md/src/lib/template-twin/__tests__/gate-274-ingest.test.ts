@@ -591,6 +591,57 @@ describe('#274 · ⚠️ AN AMBIGUOUS KEY TRANSFERS TO NOBODY — the bijection'
     expect(plan.transferred[0]!.mapping.clinicalConcept).toBe('device.machine');
   });
 
+  it('⚠️ ROUND FIVE — a repeated TAG is ambiguous even when the two KINDS differ', () => {
+    // ══════════════════════════════════════════════════════════════════════════
+    // `kind` is CONTENT-DERIVED and MUTABLE (compiler.ts:854-858 reads
+    // `isScaffolded(properties, content)` and a label heuristic), so clearing a
+    // control's pre-filled sentence re-types it. While `kind` was part of the
+    // COUNTED key, two controls sharing one tag produced two DISTINCT keys —
+    // each unique — and the bijection never fired.
+    //
+    // Measured on real bytes with the shipped generator's own `ros_gi_weight`:
+    // a ROS alarm-feature clause inherited a DELETED weight MEASUREMENT
+    // control's certified disposition, arriving `certified`, while its own was
+    // discarded. transferred = 2 where a correct run returns 1.
+    // ══════════════════════════════════════════════════════════════════════════
+    const tagged = (fieldId: string, tag: string, label: string, kind: string) =>
+      field({ fieldId, tag, label, kind });
+    const src = ir([
+      tagged('ttf_' + 'k'.repeat(24), 'ros_gi_weight', 'The patient denies weight loss', 'narrative_text'),
+      tagged('ttf_' + 'l'.repeat(24), 'ros_gi_weight', 'Weight', 'measurement'),
+    ]);
+    const certs = new Map([
+      ['ttf_' + 'k'.repeat(24), certified('ttf_' + 'k'.repeat(24), 'ros.weight_change')],
+      ['ttf_' + 'l'.repeat(24), certified('ttf_' + 'l'.repeat(24), 'vitals.body_weight_kg')],
+    ]);
+    // the doctor deletes the weight field and clears the clause, which re-types
+    // the survivor to `measurement` — the shape that used to collide
+    const tgt = ir([
+      tagged('ttf_' + 'm'.repeat(24), 'ros_gi_weight', 'The patient denies weight loss', 'measurement'),
+    ]);
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(
+      plan.transferred.map((t) => t.mapping.clinicalConcept),
+      'a repeated tag carried a disposition because the two KINDS differed',
+    ).toEqual([]);
+  });
+
+  it('POSITIVE CONTROL — a UNIQUE tag whose kind is unchanged still transfers', () => {
+    // ⚠️ Without this, the arm above is bought by an implementation that stops
+    // transferring on tags altogether — which is the only identity left.
+    const one = (fieldId: string) =>
+      field({ fieldId, tag: 'exam_lungs', label: 'Lungs', kind: 'narrative_text' });
+    const src = ir([one('ttf_' + 'n'.repeat(24))]);
+    const certs = new Map([['ttf_' + 'n'.repeat(24), certified('ttf_' + 'n'.repeat(24), 'exam.lungs')]]);
+    const plan = planTransfer({
+      target: ir([one('ttf_' + 'o'.repeat(24))]),
+      sourceIr: src,
+      certifiedByFieldId: certs,
+    });
+    expect(plan.transferred).toHaveLength(1);
+    expect(plan.transferred[0]!.mapping.clinicalConcept).toBe('exam.lungs');
+  });
+
   it('⚠️ ONE certified row is consumed by AT MOST ONE control', () => {
     // The property stated directly, rather than through a fixture: no two
     // transferred rows may cite the same source.
