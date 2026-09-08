@@ -1,5 +1,13 @@
 # A TWO-VIEW CHECK AGAINST A NEVER-PUSHED BRANCH QUERIES AN EMPTY SHA
 
+> ⚠️ **NUMBERED 143, NOT 142 — A CROSS-BRANCH COLLISION, CAUGHT BY THE GATE.**
+> This was written as 142 against `main`, where 141 was the highest. An unmerged
+> lane already held `142-a-ruling-number-is-a-token-not-a-key.md`, so two bodies
+> claimed one number the moment the two branches met. Neither had landed, so
+> #219's "the number belongs to whoever merges first" does not settle it — the
+> discovering side renumbers and moves on, which is cheaper than a race. Both
+> index rows survived; nothing was lost.
+
 **Standing 2026-09-08.** The in-flight check before a push is
 `gh run list --commit <FULL sha>` **and** `--branch <name>`, and both must be
 empty before you believe the branch is quiet. That rule assumes there IS a
