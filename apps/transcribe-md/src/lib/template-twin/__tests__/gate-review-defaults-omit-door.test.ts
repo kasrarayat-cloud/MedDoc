@@ -74,7 +74,7 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
-import { templateTwinCounts } from '../ir';
+import { TemplateFieldSchema, templateTwinCounts } from '../ir';
 // ⚠️ THE PROBE IS SHARED, NOT COPIED — see `resolver-probe.ts` for why two other
 // files had been reading the resolver's SOURCE for want of it.
 import {
@@ -496,10 +496,28 @@ const WITNESSED_GUARDS = new Set<string>();
     // ACCEPTS: `fixed_table` and `repeating_table` have a compatible type in the
     // table but are refused by `TemplateFieldSchema`, and the schema's refusal
     // is the authority on what the compiler can emit — not this file's opinion.
-    const KINDS = [
-      'narrative_text', 'date', 'checkbox', 'number',
-      'measurement', 'single_select', 'multi_select',
-    ] as const;
+    // ⚠️ DERIVED FROM THE SCHEMA, NOT LISTED — ROUND EIGHT, `F2`. #259 clause 2
+    // says the (kind, dataType) pairs come from the compiler's own table and
+    // never from a hand-written list, "because the hand-written list is what
+    // killed 73.4% of the rows". The dataTypes obeyed that; the KINDS did not.
+    // This was a literal whose comment CLAIMED to be "the kinds the IR schema
+    // accepts" with nothing deriving or checking it, so dropping two accepted
+    // kinds would narrow the matrix silently and every arm would stay green.
+    //
+    // `TemplateFieldSchema` is the authority on what the compiler can emit, and
+    // it states its own exclusions, so the accepted set is a property of the
+    // schema rather than of this file's opinion of it.
+    const KINDS = TemplateFieldSchema.shape.kind.options as readonly TemplateField['kind'][];
+    // POSITIVE CONTROL: the derivation must actually produce a set, and one
+    // that excludes what the schema excludes — an empty or unfiltered result
+    // would satisfy every assertion below while covering nothing.
+    expect(KINDS.length, 'no field kinds derived — the matrix would be empty').toBeGreaterThan(3);
+    for (const excluded of ['fixed_table', 'repeating_table', 'unsupported', 'static'] as const) {
+      expect(
+        KINDS as readonly string[],
+        `${excluded} is not emittable by the compiler and must not be in the matrix`,
+      ).not.toContain(excluded);
+    }
     const pairs: { kind: (typeof KINDS)[number]; dataType: SemanticMapping['expectedDataType'] }[] = [];
     for (const kind of KINDS) {
       const compatible = expectedDataTypeForFieldKind(kind);
