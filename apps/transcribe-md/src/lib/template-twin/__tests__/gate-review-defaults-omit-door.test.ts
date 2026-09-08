@@ -91,6 +91,7 @@ import {
   requiresClinicianInput,
   canOmitWhenUnmentioned,
   omitBranchUnreachable,
+  resolverLadderExit,
   OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS,
   OMIT_LADDER_PRE_CONCEPT,
   OMIT_GUARD_NAMES,
@@ -201,6 +202,26 @@ function readsIn(
  * dimension list nobody loops over — the four ways the regex version was beaten.
  */
 const TRACED_READS = new Set<string>();
+/**
+ * The RESOLVER's own reads, recorded by the SAME Proxy over `resolverLadderExit`
+ * — ruling #280. It sits beside `TRACED_READS` because it is the same
+ * instrument on the other half of the biconditional; the arm that consumes it
+ * used to derive this set with a regex over two byte ranges of a source file.
+ */
+const RESOLVER_READS = new Set<string>();
+
+/** The same Proxy, wrapping whatever it is handed. One tracer, two subjects. */
+function traceInto(into: Set<string>, target: object, path: string): object {
+  return new Proxy(target, {
+    get(t, prop, recv) {
+      if (typeof prop === 'string') into.add(`${path}.${prop}`);
+      const v = Reflect.get(t, prop, recv);
+      return v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)
+        ? traceInto(into, v as object, `${path}.${String(prop)}`)
+        : v;
+    },
+  });
+}
 const OBSERVED_VALUES = new Map<string, Set<string>>();
 
 /** Record every (object, property) -> value this row actually presents. */
@@ -705,6 +726,16 @@ const WITNESSED_GUARDS = new Set<string>();
       const { kind, dataType } = pairs[row[12]!]!;
       const offered = canOmitWhenUnmentioned(f, m);
       tracedReads(f, m, TRACED_READS);
+      // ⚠️ #280 — THE RESOLVER'S LADDER, TRACED OVER THE SAME PRODUCT. Both
+      // certification universes, because the clause's position is behaviour and
+      // its reads differ between them.
+      for (const allowUncertified of [true, false]) {
+        resolverLadderExit(
+          traceInto(RESOLVER_READS, f, 'field') as typeof f,
+          traceInto(RESOLVER_READS, m, 'mapping') as typeof m,
+          { allowUncertified, certifiedFieldIds: new Set<string>() },
+        );
+      }
       observeValues(f, m);
 
       const stated = omitBranchUnreachable(f, m);
@@ -969,65 +1000,52 @@ const WITNESSED_GUARDS = new Set<string>();
     ).toEqual([]);
   });
 
-  it('⚠️ THE **RESOLVER** SIDE\'S OWN READS ARE VARIED OR DECLARED — the other half of the biconditional', () => {
-    // ⚠️ FOUND BY A ROUND-EIGHT LENS, AND IT IS THE SAME CLASS ONE SIDE OVER.
+  it("⚠️ THE **RESOLVER** SIDE'S OWN READS ARE TRACED — the regex is gone (#280)", () => {
+    // ⚠️ THIS ARM USED TO READ SOURCE, AND #280 DELETED THAT RATHER THAN
+    // IMPROVING IT. It derived the resolver's read set with a member-expression
+    // REGEX over two `indexOf`-anchored byte ranges of `resolver/index.ts`.
+    // Ruling #251 retires text scanning as a proof of behaviour, and this was a
+    // survivor of that class living beside the arm that cured the OTHER side
+    // with a Proxy.
     //
-    // The Proxy tracer watches `omitBranchUnreachable` — the OFFER. The property
-    // this arm asserts is `offer ⟺ resolver`, and nothing anywhere looked at
-    // what the RESOLVER reads. A guard added there, keyed on a property the
-    // matrix pins, is invisible: the lens planted
-    // `&& !field.clinicallyMaterial` inside `missingResolution`'s omit branch —
-    // a property the production compiler emits `true` at 12 sites and `false` at
-    // 0, while this matrix pins it `false` — and the planted
-    // offered-but-not-honoured lie survived **49/49 here and 891/891** across
-    // every template-twin file.
+    // ⚠️ THE MEASUREMENT THAT CONDEMNED IT. On the shipped file, 4 reads fell
+    // inside the anchored regions and EIGHT MORE sat in the same file outside
+    // them — `practiceDefaultResolution` is called from inside a region and
+    // lives wholly outside both. A paired control settled it: the same guard
+    // written INLINE reddened the arm, and one function call away — a pure
+    // refactor into an imported helper, this module's own idiom — it passed
+    // 50/50 here and 892/892 across the suite with a live
+    // offered-but-not-honoured divergence.
     //
-    // ⚠️ A PROXY CANNOT DO THIS JOB, WHICH IS WHY THIS ONE READS SOURCE.
-    // `resolveTemplateFields` begins by `TemplateFieldSchema.parse(field)`, and
-    // zod returns a NEW object — so a Proxy on the input observes zod touching
-    // every property and the resolver touching none of them. Tracing would
-    // report "everything read" and mean nothing.
+    // ⚠️ A BETTER REGEX WOULD NOT HAVE HELPED, which is why the ruling says
+    // DELETE. The next refactor defeats the next regex the same way.
     //
-    // ⚠️ AND READING SOURCE HERE IS NOT THE RETIRED CLASS (#237). This does not
-    // prove any BEHAVIOUR. It DERIVES the dimension list, exactly as the
-    // mirror-side arm above does; the behaviour is still proved by driving the
-    // real resolver over the product. A scanner choosing inputs is a different
-    // animal from a scanner asserting an outcome.
-    const src = readFileSync(join(__dirname, '..', 'resolver', 'index.ts'), 'utf-8');
-    const from = src.indexOf('  // ⚠️ THE LADDER IS WALKED, NOT WRITTEN HERE');
-    const to = src.indexOf('  const conflictCandidates =');
-    const mFrom = src.indexOf('function missingResolution(');
-    const mTo = src.indexOf('function defaultLaterality(');
+    // ⚠️ WHAT MADE THE PROXY POSSIBLE. The old comment here said "a Proxy cannot
+    // do this job", and it was right about the code as it then stood:
+    // `resolveTemplateFields` zod-parses its inputs and `parse` returns a NEW
+    // object, so a Proxy on what the caller passes records ZOD touching every
+    // key. The answer was not a cleverer tracer but a smaller subject —
+    // `resolverLadderExit` is the resolver's ladder lifted to a pure function of
+    // `(field, mapping, cert)`, called by the resolver and wrappable here, on
+    // the far side of the parse.
+    // Recorded by the matrix arm over the SAME product the biconditional uses,
+    // exactly as `TRACED_READS` is for the mirror — so this is what the resolver
+    // touches across every row, not on one hand-picked input.
+    const reads = RESOLVER_READS;
+
+    // ⚠️ NON-VACUITY, AND IT IS HIGHER THAN THE REGEX'S FLOOR WAS. The old arm
+    // accepted 3 reads against an actual 4 — one refactor of margin. A Proxy
+    // over the real ladder sees every guard's inputs, so the floor can be the
+    // number of dimensions the guards genuinely key on.
     expect(
-      Math.min(from, to, mFrom, mTo),
-      'the anchors no longer locate the resolver region — this arm is reading nothing',
-    ).toBeGreaterThan(-1);
-    expect(from).toBeLessThan(to);
-    expect(mFrom).toBeLessThan(mTo);
+      reads.size,
+      `the tracer recorded ${reads.size} reads — the ladder was not driven`,
+    ).toBeGreaterThanOrEqual(6);
 
-    // Comments are stripped: a property NAMED in prose is not a property READ,
-    // and the mirror-side arm was once "satisfied" by exactly that mistake.
-    const region = (src.slice(from, to) + src.slice(mFrom, mTo))
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/^\s*\/\/.*$/gm, '');
-    const reads = new Set<string>();
-    for (const match of region.matchAll(/\b(field|mapping)\b\s*\??\.\s*([A-Za-z_$][\w$]*)/g)) {
-      reads.add(`${match[1]}.${match[2]}`);
-    }
-
-    // ⚠️ NON-VACUITY: if the region stops yielding reads, this arm passes for
-    // free. The guards themselves moved to `unmentioned-policy.ts` under #258,
-    // so the count here is SMALL by design — but it is not zero.
-    expect(reads.size, 'the resolver region yielded no reads — the anchors drifted')
-      .toBeGreaterThanOrEqual(3);
-
-    // Varied by the matrix, or declared here with the reason it cannot be.
     const RESOLVER_CONSTANTS: Record<string, string> = {
-      // Identity, not a decision — it selects nothing and gates nothing.
+      // Identity, not a decision — it selects nothing and gates nothing. Read by
+      // the certification clause to consult the caller's certified-field set.
       'field.fieldId': 'the field identity, echoed into every resolution',
-      // Pinned to `omit` on purpose: this arm is ABOUT the omit branch, and a
-      // row with any other policy could not reach the honouring it compares.
-      'mapping.unmentionedPolicy': 'pinned to omit — the branch under test',
     };
     const isVariedRead = (read: string) => {
       if ((OBSERVED_VALUES.get(read)?.size ?? 0) > 1) return true;
@@ -1395,15 +1413,28 @@ const WITNESSED_GUARDS = new Set<string>();
     const src = readFileSync(join(__dirname, '..', 'resolver', 'index.ts'), 'utf-8');
 
     // 1 · the resolver imports the shared decisions, by name…
+    //
+    // ⚠️ THE LIST CHANGED WITH #280 AND THE INVARIANT GOT STRONGER, NOT WEAKER.
+    // It used to name `OMIT_LADDER_PRE_CONCEPT` and
+    // `OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS`, because the resolver WALKED the
+    // table itself — two walks of one table, which satisfied #258's letter while
+    // leaving a second loop to drift. It now calls `resolverLadderExit`, the
+    // walk itself, so the table and its anchor are consumed one module over and
+    // the resolver cannot re-order them.
     for (const symbol of [
-      'OMIT_LADDER_PRE_CONCEPT',
-      'OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS',
+      'resolverLadderExit',
       'omitDeferralGuard',
       'practiceDefaultPreempts',
       'requiresClinicianInput',
     ]) {
       expect(src, `the resolver stopped importing '${symbol}'`).toContain(symbol);
     }
+    // …and no longer carries its own copy of the walk. A `for` over the table
+    // here would be the second implementation this ruling exists to forbid.
+    expect(
+      src,
+      'the resolver walks the ladder itself again — that is the mirror returning',
+    ).not.toMatch(/for \(const guard of OMIT_LADDER_PRE_CONCEPT\)/);
 
     // 2 · …and the inline ladder does not come back. Matching the SPELLING is
     // deliberate: a second copy is only dangerous if it is a copy.

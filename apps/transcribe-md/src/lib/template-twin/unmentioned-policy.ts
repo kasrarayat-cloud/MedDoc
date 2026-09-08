@@ -233,6 +233,72 @@ export const OMIT_LADDER_PRE_CONCEPT: readonly OmitLadderGuard[] = [
 export const OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS = 'semantic_mapping_type_mismatch';
 
 /**
+ * The RESOLVER's ladder, as one function — ruling #280.
+ *
+ * ⚠️ IT EXISTS SO THE PROXY TRACER CAN WATCH THE RESOLVER THE WAY IT ALREADY
+ * WATCHES THE OFFER. Before this, the resolver-side read set was derived by a
+ * MEMBER-EXPRESSION REGEX over two `indexOf`-anchored byte ranges of
+ * `resolver/index.ts`. Ruling #251 retires text scanning as a proof of
+ * behaviour, and this was a survivor of that class: measured on the shipped
+ * file, **4 reads fell inside the anchored regions and 8 more sat in the same
+ * file outside them**, so a guard extracted into a helper — this module's own
+ * idiom — was invisible. A paired control proved it: the same guard written
+ * INLINE reddened the arm, and one function call away it passed 50/50 here and
+ * 892/892 across the suite with a live offered-but-not-honoured divergence.
+ *
+ * ⚠️ AND A BETTER REGEX WOULD NOT HAVE HELPED, WHICH IS WHY #280 SAYS DELETE
+ * RATHER THAN UPGRADE. The next refactor defeats the next regex the same way.
+ *
+ * ⚠️ WHY THE RESOLVER COULD NOT SIMPLY BE PROXIED. `resolveTemplateFields`
+ * zod-parses its inputs, and `parse` returns a NEW object — so a Proxy on what
+ * the caller passes records ZOD touching every key, not the resolver's own
+ * reads. Lifting the ladder to a pure function of `(field, mapping, cert)`
+ * gives the tracer something it can wrap directly, on the far side of the parse.
+ *
+ * The certification check is INCLUDED because its POSITION is behaviour: it runs
+ * immediately after the row named by `OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS`,
+ * and a field that is both uncertified and unsupported returns
+ * `field_or_mapping_not_certified` only because of that ordering. It takes the
+ * two inputs no `(field, mapping)` can carry — the caller's synthetic-test
+ * escape and its certified-field set.
+ */
+export interface LadderCertContext {
+  readonly allowUncertified: boolean;
+  readonly certifiedFieldIds: ReadonlySet<string>;
+}
+
+export interface LadderExit {
+  readonly status: 'needs_clinician_input' | 'not_mentioned';
+  readonly reasonCode: string;
+}
+
+export function resolverLadderExit(
+  field: OmitFieldView & { fieldId: string },
+  mapping: OmitMappingView,
+  cert: LadderCertContext,
+): LadderExit | null {
+  for (const guard of OMIT_LADDER_PRE_CONCEPT) {
+    if (guard.test(field, mapping)) {
+      return { status: guard.status, reasonCode: guard.reasonCode };
+    }
+    if (guard.guard === OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS) {
+      if (
+        !cert.allowUncertified &&
+        (mapping.status !== 'certified' ||
+          (field.detectionStatus !== 'certified' &&
+            !cert.certifiedFieldIds.has(field.fieldId)))
+      ) {
+        return {
+          status: 'needs_clinician_input',
+          reasonCode: 'field_or_mapping_not_certified',
+        };
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * ⚠️ AND IT FAILS **CLOSED**, AT MODULE LOAD, BECAUSE THE ALTERNATIVE FAILS
  * OPEN ON A CLINICAL GATE.
  *

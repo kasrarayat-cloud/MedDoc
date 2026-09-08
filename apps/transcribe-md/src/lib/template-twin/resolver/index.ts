@@ -27,11 +27,10 @@ import {
   temporalityMatches,
 } from '../fact-mapping-match';
 import {
-  OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS,
-  OMIT_LADDER_PRE_CONCEPT,
   omitDeferralGuard,
   practiceDefaultPreempts,
   requiresClinicianInput,
+  resolverLadderExit,
 } from '../unmentioned-policy';
 import {
   approvedPracticeDefaultAnchorId,
@@ -468,33 +467,30 @@ function resolveOne(
   // ⚠️ EACH ROW CARRIES ITS OWN `status` AND `reasonCode`, so nothing about the
   // resolutions below changed — the same tokens, in the same order, from a table
   // instead of from a sequence of statements.
-  for (const guard of OMIT_LADDER_PRE_CONCEPT) {
-    if (guard.test(field, mapping)) {
-      return makeResolution(field.fieldId, guard.status, null, [], guard.reasonCode);
-    }
-    // ⚠️ NOT A ROW, AND ITS POSITION IS BEHAVIOUR. This reads
-    // `allowUncertifiedForSyntheticTest` and the caller's certified-field set,
-    // neither of which is knowable from `(field, mapping)`, so it cannot live in
-    // the shared table. A field that is both uncertified and unsupported returns
-    // `field_or_mapping_not_certified` only because this runs first — so the
-    // table names the row it follows rather than leaving the ordering to
-    // whoever next edits this loop.
-    if (guard.guard === OMIT_LADDER_CERTIFICATION_GUARD_FOLLOWS) {
-      if (
-        !allowUncertified &&
-        (mapping.status !== 'certified' ||
-          (field.detectionStatus !== 'certified' &&
-            !certifiedFieldIds.has(field.fieldId)))
-      ) {
-        return makeResolution(
-          field.fieldId,
-          'needs_clinician_input',
-          null,
-          [],
-          'field_or_mapping_not_certified',
-        );
-      }
-    }
+  // ⚠️ AND THE WALK ITSELF IS THE SHARED FUNCTION NOW — RULING #280. The loop
+  // that used to live here (the table walk plus the interleaved certification
+  // check, whose POSITION is behaviour) is `resolverLadderExit`, beside the
+  // table it walks. Two reasons, and the second is the one that forced it:
+  //
+  //   · #258's invariant is ONE implementation, and a loop here plus a loop in
+  //     `omitBranchUnreachable` was two walks of one table;
+  //   · the read set on this path could not be TRACED while it lived here.
+  //     `resolveTemplateFields` zod-parses its inputs and `parse` returns a NEW
+  //     object, so a Proxy on what the caller passes records zod touching every
+  //     key rather than this function's own reads. The arm therefore derived the
+  //     read set with a member-expression REGEX over two anchored byte ranges of
+  //     this file — and #251 retires text scanning as a proof of behaviour.
+  //     Measured: 4 reads inside the regions, 8 more outside them in this same
+  //     file, so a guard one function call away was invisible.
+  //
+  // Lifting it gives the tracer something it can wrap directly, on the far side
+  // of the parse.
+  const ladder = resolverLadderExit(field, mapping, {
+    allowUncertified,
+    certifiedFieldIds,
+  });
+  if (ladder) {
+    return makeResolution(field.fieldId, ladder.status, null, [], ladder.reasonCode);
   }
 
   // ⚠️ THE SHARED CONCEPT HALF, NOT A FOURTH OPEN-CODED COPY. This filter used
