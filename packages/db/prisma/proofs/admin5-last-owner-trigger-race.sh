@@ -455,16 +455,40 @@ awk '/PERFORM pg_advisory_xact_lock\(/{skip=4} skip>0{skip--; next} {print}' "$O
 # INSERT creates a row no `FOR UPDATE` can lock, because a phantom cannot be
 # locked. Where the row locks have nothing to grip, the advisory lock is the
 # ONLY ordering that exists — so this is the one race whose outcome its position
-# can change. Measured before this arm was written: MOVED 10/12, SHIPPED 0/12.
+# can change.
+#
+# ⚠️ THE PREVIOUSLY RECORDED "MOVED 10/12, SHIPPED 0/12" IS WITHDRAWN —
+# RULING #291. It was measured against a mutant that ran LOCKLESS on the
+# common path (see `mk_moved` below), so it did not measure the lock's
+# POSITION; it measured a mixture of position and absence. The number this
+# run prints is the re-derivation, and it is left to the run rather than
+# repeated here — a figure quoted in a comment is the next stale claim.
+# ⚠️ RULING #291 — THE RELOCATED LOCK LANDS AFTER **EVERY** COUNT, ON EVERY PATH.
+#
+# The first version inserted it ONCE, after the first `members_left`/`owners_now`
+# statement it met. `users_last_owner_guard` counts `owners_left` FIRST and then
+# RETURNS EARLY when that count is above zero — the common case, a practice that
+# still has other owners — so `members_left` is never reached on that path and
+# the mutant ran there with NO LOCK AT ALL.
+#
+# That makes it the DELETE mutant wearing the MOVE mutant's name on the majority
+# of executions, and the two arms are supposed to measure different things. The
+# recorded 10/12 was taken from that mutant and is WITHDRAWN; the number below is
+# re-derived from this one.
+#
+# Inserting after every count is idempotent inside one transaction —
+# `pg_advisory_xact_lock` re-acquired by the same backend is a no-op — so the
+# shape it produces is exactly "the lock is taken AFTER this path's counts",
+# which is the thing being measured.
 mk_moved() {  # $1 = source fn, $2 = destination, $3 = practice key expression
   awk -v KEY="$3" '
     /PERFORM pg_advisory_xact_lock\(/ {skip=4}
     skip>0 {skip--; next}
     {print}
-    /INTO members_left|INTO owners_now/ {pend=1}
-    pend && /;[[:space:]]*$/ && !done {
+    /INTO owners_left|INTO members_left|INTO owners_now/ {pend=1}
+    pend && /;[[:space:]]*$/ {
       print "    PERFORM pg_advisory_xact_lock(hashtext(\x27users_last_owner_guard\x27), hashtext(" KEY "));";
-      done=1; pend=0 }
+      pend=0 }
   ' "$1" > "$2"
 }
 mk_moved "$OUT/g1.sql" "$OUT/g1m.sql" 'OLD."practiceId"'
@@ -479,7 +503,15 @@ echo "    mutation applied: advisory-lock occurrences $before -> $after (deleted
 [ "$before" = 2 ] && [ "$after" = 0 ] || { echo "🔴 MUTATION DID NOT APPLY — every result below would be meaningless."; exit 1; }
 # ⚠️ THE MOVED MUTANT MUST STILL CONTAIN THE LOCK, or it is the DELETE mutation
 # wearing a different name and this arm measures nothing new.
-[ "$moved" = 2 ] || { echo "🔴 THE MOVED MUTANT LOST ITS LOCK ($moved of 2) — it would be a duplicate of the delete arm."; exit 1; }
+# ⚠️ #291 — ONE RELOCATED LOCK PER COUNT, NOT ONE PER FUNCTION. `g1` counts
+# twice (`owners_left`, `members_left`) and `g2` once (`owners_now`), so three is
+# the number that means "no path is lockless". Two would mean the early-return
+# path lost its lock and this arm is measuring the delete mutant again.
+[ "$moved" = 3 ] || { echo "🔴 THE MOVED MUTANT HAS $moved LOCKS, EXPECTED 3 (one after each count)."; echo "   Fewer means a path runs lockless and this arm duplicates the delete arm."; exit 1; }
+# ⚠️ AND EVERY COUNT IS FOLLOWED BY ONE — asserted per file, because 3 in total
+# is also what "all three in g1, none in g2" looks like.
+m1=$(grep -c pg_advisory_xact_lock "$OUT/g1m.sql"); m2=$(grep -c pg_advisory_xact_lock "$OUT/g2m.sql")
+[ "$m1" = 2 ] && [ "$m2" = 1 ] || { echo "🔴 THE MOVED LOCKS ARE MISPLACED — g1=$m1 (want 2), g2=$m2 (want 1)."; exit 1; }
 
 # ⚠️ THE SAVEPOINT CLAIM IS MEASURED ON EVERY RUN, NOT BELIEVED. The comment
 # above race B's scripts documents what a savepoint rollback does to an advisory
@@ -502,17 +534,40 @@ for _ in $(seq $N); do r=$(race_b "$OUT/g1.sql" "$OUT/g2.sql"); printf '%s' "$r"
   case "$r" in V*) W=$((W+1));; esac
   case "$r" in *o) OW=$((OW+1));; *\?) QW=$((QW+1));; esac; done
 echo "   -> $W/$N VIOLATIONS, $OW/$N overlapped, $QW/$N no-witness"
-printf "    LOCK MOVED after the count (%d runs): " "$N"; M=0; OM=0; QM=0
-for _ in $(seq $N); do r=$(race_b "$OUT/g1m.sql" "$OUT/g2m.sql"); printf '%s' "$r"
+# ⚠️ RULING #291 — THE ORDER ARM GETS ITS **OWN N**, AND THE REASON IS ARITHMETIC.
+#
+# With `mk_moved` corrected so no path runs lockless, the moved arm's signal is
+# far weaker than the withdrawn 10/12 suggested. Re-derived on meddoc-qa,
+# 2026-09-08, three consecutive runs: **6/12, 2/12, 2/12** — while the no-lock
+# control held at 9-10/12 and the shipped lock at 0/12 every time.
+#
+# The arm fails the whole proof when it returns ZERO while runs overlapped
+# (canon 121: a control that stopped discriminating must be replaced, not kept).
+# At the observed p ~ 0.17 that is `0.83^12 ~ 0.11` — about one run in nine would
+# RED a correct guard. A gate that reds one time in nine is a gate people re-run
+# instead of reading.
+#
+# `0.83^40 ~ 0.0006` is the same claim with a margin, so the order arm runs 40.
+# First reading at that N, same box, same session: **15/40**. The rate is
+# genuinely variable — 0.17 to 0.5 across four samples — and the arithmetic
+# above deliberately uses the WORST observed rate, because the run that reds a
+# correct guard is the unlucky one, not the average one.
+# ⚠️ THE WEAKER SIGNAL IS THE FINDING, NOT A PROBLEM WITH THE ARM: the lock's
+# POSITION still matters (2-6 violations against 0 with it in place), and the
+# earlier number was large because that mutant had no lock at all on the common
+# path. Re-measuring made the effect smaller and the claim true.
+NM=40
+printf "    LOCK MOVED after the count (%d runs): " "$NM"; M=0; OM=0; QM=0
+for _ in $(seq $NM); do r=$(race_b "$OUT/g1m.sql" "$OUT/g2m.sql"); printf '%s' "$r"
   case "$r" in V*) M=$((M+1));; esac
   case "$r" in *o) OM=$((OM+1));; *\?) QM=$((QM+1));; esac; done
-echo "   -> $M/$N VIOLATIONS, $OM/$N overlapped, $QM/$N no-witness"
+echo "   -> $M/$NM VIOLATIONS, $OM/$NM overlapped, $QM/$NM no-witness"
 echo
 echo "=== VERDICT ==="
 echo "raceA subject   : $S"
 echo "raceA control#1 : $C1"
 echo "raceB           : without lock $V/$N violations, with lock $W/$N"
-echo "raceB order arm : lock MOVED after the count $M/$N violations (#279)"
+echo "raceB order arm : lock MOVED after the count $M/$NM violations (#279)"
 
 # ⚠️ THE HARNESS ASSERTS ITS OWN 2x2 AND EXITS NON-ZERO IF IT DOES NOT HOLD.
 # Its adversarial pass found it PRINTED the numbers and asserted nothing, so it
@@ -565,14 +620,14 @@ fi
 # harness that only ever deleted the lock could say the first and the third and
 # was silent on the second, which is `V3`.
 if [ "$QM" -gt 0 ]; then
-  say "🔴 raceB order arm: $QM/$N runs produced NO WITNESS — the arm cannot be read."; fail=1
+  say "🔴 raceB order arm: $QM/$NM runs produced NO WITNESS — the arm cannot be read."; fail=1
 elif [ "$M" -gt 0 ]; then
-  say "🟢 raceB order arm: $M/$N violations with the lock MOVED after the count — its POSITION is load-bearing, not merely its presence (#279)"
+  say "🟢 raceB order arm: $M/$NM violations with the lock MOVED after the count — its POSITION is load-bearing, not merely its presence (#279)"
 elif [ "$OM" -eq 0 ]; then
-  say "🟡 raceB ORDER ARM INCONCLUSIVE: 0/$N violations AND 0/$N overlapped — the racers never met, so the arm was never given the chance to fire. Not evidence that order is irrelevant."
+  say "🟡 raceB ORDER ARM INCONCLUSIVE: 0/$NM violations AND 0/$NM overlapped — the racers never met, so the arm was never given the chance to fire. Not evidence that order is irrelevant."
   cannot_tell=1
 else
-  say "🔴 raceB ORDER ARM DID NOT FIRE: 0/$N violations with the lock MOVED, but $OM/$N runs DID overlap. Either the guard no longer depends on the lock's position — in which case the advisory lock in the INSERT path is redundant and should go — or this arm has stopped discriminating. Canon 121: delete the mechanism or delete the control, never keep both."
+  say "🔴 raceB ORDER ARM DID NOT FIRE: 0/$NM violations with the lock MOVED, but $OM/$NM runs DID overlap. Either the guard no longer depends on the lock's position — in which case the advisory lock in the INSERT path is redundant and should go — or this arm has stopped discriminating. Canon 121: delete the mechanism or delete the control, never keep both."
   fail=1
 fi
 # ⚠️ THREE STATES, BECAUSE "THE CONTROL DID NOT FIRE" HAS TWO CAUSES AND THEY
