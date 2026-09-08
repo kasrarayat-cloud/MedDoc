@@ -41,7 +41,7 @@
 // on which caller sources it.
 // ============================================================================
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -263,68 +263,76 @@ describe('the CARRY-FORWARD — widened by PROOF, never by tolerance', () => {
   // run is byte-identical. A guard that refuses legitimate work does not stay a
   // guard; it gets worked around, and then it protects nothing.
 
-  /** Two real commits from this repository's own history, N apart. */
-  function headAnd(n: number): { head: string; older: string } {
-    const out = execFileSync('git', ['rev-list', '-n', String(n + 1), 'HEAD'], {
-      cwd: REPO,
-      encoding: 'utf8',
-    })
-      .trim()
-      .split('\n');
-    return { head: out[0]!, older: out[out.length - 1]! };
+  /**
+   * A THROWAWAY REPOSITORY WITH A KNOWN SHAPE.
+   *
+   * ⚠️ THE FIRST VERSION OF THESE TWO ARMS READ THIS REPOSITORY'S OWN HISTORY —
+   * "the last commit touching the rulings file" versus HEAD — AND IT FAILED IN
+   * CI WHILE PASSING HERE. CI checks out a different ref, so that lookup
+   * returned HEAD itself, the library took its EXACT-MATCH branch, and the arm
+   * asserted a carry-forward message that was never going to appear.
+   *
+   *   AN ARM WHOSE FIXTURE IS "WHATEVER THIS BRANCH'S HISTORY HAPPENS TO LOOK
+   *   LIKE" IS AN ARM THAT MEASURES THE CHECKOUT, NOT THE CODE.
+   *
+   * So the pair is CONSTRUCTED. Two commits, one docs-only apart, in a temp
+   * repository — deterministic, and identical on every machine and every runner.
+   */
+  function scratchRepo(secondCommitPath: string): { older: string; head: string; dir: string } {
+    const dir = mkdtempSync(join(tmpdir(), 'ctrrev-repo-'));
+    tmps.push(dir);
+    const git = (...args: string[]) =>
+      execFileSync('git', args, { cwd: dir, encoding: 'utf8', timeout: 20_000 }).trim();
+    git('init', '-q', '-b', 'main');
+    git('config', 'user.email', 'gate@example.invalid');
+    git('config', 'user.name', 'gate');
+    mkdirSync(join(dir, 'apps'), { recursive: true });
+    writeFileSync(join(dir, 'apps/runtime.ts'), 'export const a = 1;\n');
+    git('add', '-A');
+    git('commit', '-q', '-m', 'base');
+    const older = git('rev-parse', 'HEAD');
+
+    const full = join(dir, secondCommitPath);
+    mkdirSync(join(full, '..'), { recursive: true });
+    writeFileSync(full, 'second\n');
+    git('add', '-A');
+    git('commit', '-q', '-m', 'second');
+    const head = git('rev-parse', 'HEAD');
+    return { older, head, dir };
+  }
+
+  /** Run the verdict INSIDE a given repo, with declaration.sh in scope. */
+  function shIn(dir: string, snippet: string, opts: string): string {
+    try {
+      return execFileSync(
+        'bash',
+        ['-c', `${opts}\n. ${JSON.stringify(DECL_LIB)}\n. ${JSON.stringify(LIB)}\n${snippet}`],
+        { encoding: 'utf8', timeout: 20_000, cwd: dir },
+      ).trim();
+    } catch (e) {
+      const err = e as { stdout?: string; stderr?: string; message: string };
+      return `EXIT-NONZERO\n${err.stdout ?? ''}${err.stderr ?? ''}${err.message}`.trim();
+    }
   }
 
   it('ACCEPTS an ancestor when ZERO runtime files moved — and says WHY it accepted', () => {
-    const { head } = headAnd(0);
-    // HEAD against itself is the degenerate case; use the real docs-only pair:
-    // this branch's own rulings commit changed only docs/, so its child carries
-    // zero runtime movement from it... unless it does not, in which case this
-    // arm must not silently pass. So assert the PREMISE first.
-    const rulings = execFileSync(
-      'git',
-      ['log', '--format=%H', '-n', '1', '--', 'docs/foundation/rulings/2026-09-07-261-266.md'],
-      { cwd: REPO, encoding: 'utf8' },
-    ).trim();
-    const moved = execFileSync('git', ['diff', '--name-only', rulings, head], {
-      cwd: REPO,
-      encoding: 'utf8',
-    })
-      .trim()
-      .split('\n')
-      .filter(Boolean);
-    const runtimeMoved = moved.filter((f) => !/^(docs\/|[^/]+\.md$)/.test(f));
-
-    const out = sh(`container_revision_verdict "${rulings}" "${head}"`, opts);
-    if (runtimeMoved.length === 0) {
-      expect(out.startsWith('ok|'), out).toBe(true);
-      expect(out).toContain('ZERO runtime files moved');
-    } else {
-      // ⚠️ THE ARM STILL ASSERTS SOMETHING when the premise does not hold —
-      // it must REFUSE, and name the count. A test that quietly skips is a test
-      // that reports success for a run it never made.
-      expect(out.startsWith('refuse|'), out).toBe(true);
-      expect(out).toContain('RUNTIME file(s) moved');
-    }
+    // docs-only second commit -> carry-forward
+    const { older, head, dir } = scratchRepo('docs/note.md');
+    const out = shIn(dir, `container_revision_verdict "${older}" "${head}"`, opts);
+    expect(out.startsWith('ok|'), out).toBe(true);
+    expect(out).toContain('ZERO runtime files moved');
+    expect(out).toContain('an ancestor of');
   });
 
   it('REFUSES an ancestor when a RUNTIME file moved — the discriminating case', () => {
-    // This branch's own HEAD is a source commit, so HEAD's PARENT -> HEAD moved
-    // runtime files by construction. If that ever stops being true the arm reds,
-    // which is correct: it would no longer be testing what it claims to.
-    const { head, older } = headAnd(1);
-    const moved = execFileSync('git', ['diff', '--name-only', older, head], {
-      cwd: REPO,
-      encoding: 'utf8',
-    })
-      .trim()
-      .split('\n')
-      .filter(Boolean);
-    const runtimeMoved = moved.filter((f) => !/^(docs\/|[^/]+\.md$)/.test(f));
-    expect(runtimeMoved.length, `premise: ${older.slice(0, 8)}..${head.slice(0, 8)} must move runtime files`).toBeGreaterThan(0);
-
-    const out = sh(`container_revision_verdict "${older}" "${head}"`, opts);
+    // ⚠️ THE SAME PAIR, ONE FILE DIFFERENT. Only the PATH of the second commit
+    // changes between this arm and the one above — so the thing under test is
+    // the runtime/non-runtime decision and nothing else about the history.
+    const { older, head, dir } = scratchRepo('apps/added.ts');
+    const out = shIn(dir, `container_revision_verdict "${older}" "${head}"`, opts);
     expect(out.startsWith('refuse|'), out).toBe(true);
     expect(out).toContain('DIFFERENT PROGRAMS');
+    expect(out).toContain('RUNTIME file(s) moved');
   });
 
   it('REFUSES a commit this repository does not contain', () => {
@@ -336,9 +344,9 @@ describe('the CARRY-FORWARD — widened by PROOF, never by tolerance', () => {
   it('REFUSES when the container is NEWER than the tree — direction is load-bearing', () => {
     // ⚠️ A SYMMETRIC TEST WOULD WAVE THIS THROUGH. The container being ahead of
     // the tree is a different fault with a different remedy, and it is not
-    // answered by running the act.
-    const { head, older } = headAnd(1);
-    const out = sh(`container_revision_verdict "${head}" "${older}"`, opts);
+    // answered by running the act. Same constructed pair, arguments swapped.
+    const { older, head, dir } = scratchRepo('docs/note.md');
+    const out = shIn(dir, `container_revision_verdict "${head}" "${older}"`, opts);
     expect(out.startsWith('refuse|'), out).toBe(true);
     expect(out).toContain('NOT an ancestor');
   });
@@ -346,11 +354,11 @@ describe('the CARRY-FORWARD — widened by PROOF, never by tolerance', () => {
   it('REFUSES, loudly, when the shared allowlist is not in scope — fail-closed', () => {
     // The one arm that must NOT source declaration.sh: it is testing what
     // happens when nobody did.
-    const { head, older } = headAnd(1);
+    const { older, head, dir } = scratchRepo('docs/note.md');
     const out = execFileSync(
       'bash',
       ['-c', `set -uo pipefail\n. ${JSON.stringify(LIB)}\ncontainer_revision_verdict "${older}" "${head}"`],
-      { encoding: 'utf8', cwd: REPO, timeout: 20_000 },
+      { encoding: 'utf8', cwd: dir, timeout: 20_000 },
     ).trim();
     expect(out.startsWith('refuse|'), out).toBe(true);
     expect(out).toContain('DECLARATION_NONRUNTIME_RE is not in scope');
