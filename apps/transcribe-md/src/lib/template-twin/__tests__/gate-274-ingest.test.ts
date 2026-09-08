@@ -429,6 +429,72 @@ describe('#274 · ⚠️ AN AMBIGUOUS KEY TRANSFERS TO NOBODY — the bijection'
     expect(byLabel.get('Practice display name')).toBe('practice.display_name');
   });
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // ⚠️ THE THREE GUARDS OVERLAP, SO THE ARMS ABOVE PROVE THE OUTCOME AND NOT
+  // EACH MECHANISM — a mutation proof said so, and it was right.
+  //
+  // Removing target-uniqueness, and separately removing `partName` from the
+  // key, each left every arm above GREEN, because source-uniqueness caught the
+  // fixtures on its own. Defence in depth is good; arms that cannot tell the
+  // layers apart are not, because the next reader deletes one as redundant and
+  // nothing goes red.
+  //
+  // These two arms are constructed so exactly ONE guard stands between them and
+  // a mis-transfer.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  it('⚠️ ISOLATES TARGET-UNIQUENESS — source unique, target duplicated: NEITHER inherits', () => {
+    // The doctor copy-pasted a certified control, so the NEW document has two
+    // controls wearing one w:id while the old document had one. Source-
+    // uniqueness cannot see this; only the target-side count can.
+    const src = ir([dup('ttf_' + 'q'.repeat(24), '800', 'Findings')]);
+    const certs = new Map([['ttf_' + 'q'.repeat(24), certified('ttf_' + 'q'.repeat(24), 'the_findings')]]);
+    const tgt = ir([
+      dup('ttf_' + 'r'.repeat(24), '800', 'Findings'),
+      dup('ttf_' + 's'.repeat(24), '800', 'Findings (copy)'),
+    ]);
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    // ⚠️ NEITHER, not "one of them". Consumed-once alone would let the FIRST in
+    // array order inherit and the second re-propose — a clinical disposition
+    // assigned by array order is not a decision anybody made.
+    expect(
+      plan.transferred.map((t) => t.mapping.clinicalConcept),
+      'a duplicated control inherited by array order',
+    ).toEqual([]);
+    expect(plan.reproposed).toHaveLength(2);
+  });
+
+  it('⚠️ ISOLATES partName — ids SWAPPED between body and header must not cross', () => {
+    // Every key is unique on BOTH sides here, so neither uniqueness guard fires
+    // and consumed-once is satisfied. Only `partName` in the key stops the body
+    // control inheriting the letterhead's disposition and vice versa.
+    const src = ir([
+      dup('ttf_' + 't'.repeat(24), '201', 'Clinical impression'),
+      dup('ttf_' + 'u'.repeat(24), '999', 'Practice display name', 'word/header1.xml'),
+    ]);
+    const certs = new Map([
+      ['ttf_' + 't'.repeat(24), certified('ttf_' + 't'.repeat(24), 'clinical.impression')],
+      ['ttf_' + 'u'.repeat(24), certified('ttf_' + 'u'.repeat(24), 'practice.display_name')],
+    ]);
+    // the doctor rebuilt the form; Word handed the ids out the other way round
+    const tgt = ir([
+      dup('ttf_' + 'v'.repeat(24), '999', 'Clinical impression'),
+      dup('ttf_' + 'w'.repeat(24), '201', 'Practice display name', 'word/header1.xml'),
+    ]);
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    const labelOf = new Map(tgt.fields.map((f) => [f.fieldId, f.originalLabel]));
+    const wrong = plan.transferred
+      .filter((t) => {
+        const l = labelOf.get(t.fieldId);
+        return (
+          (l === 'Clinical impression' && t.mapping.clinicalConcept !== 'clinical.impression') ||
+          (l === 'Practice display name' && t.mapping.clinicalConcept !== 'practice.display_name')
+        );
+      })
+      .map((t) => `${labelOf.get(t.fieldId)} <- ${t.mapping.clinicalConcept}`);
+    expect(wrong, 'a disposition crossed between the body and the letterhead').toEqual([]);
+  });
+
   it('⚠️ ONE certified row is consumed by AT MOST ONE control', () => {
     // The property stated directly, rather than through a fixture: no two
     // transferred rows may cite the same source.
