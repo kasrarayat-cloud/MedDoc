@@ -47,6 +47,27 @@ import { join, resolve } from 'node:path';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
+/**
+ * ⚠️ ONE BUDGET, NAMED, USED AT BOTH ENDS — #265(c), and this file was CAUGHT BY
+ * THAT GATE rather than by review, on the rebase that put the two branches in
+ * one tree for the first time.
+ *
+ * Every `execFileSync` here carried a 20s subprocess timeout while its `it`
+ * declared none — so each ran under vitest's DEFAULT 5s. The subprocess budget
+ * could never be reached: the arm dies on `Test timed out in 5000ms` and the
+ * subprocess's own message, which is the thing being measured, is unreachable.
+ *
+ * ⚠️ AND THE SHELL-OUTS ARE INSIDE HELPERS (`sh`, `scratchRepo`, `shIn`), NOT
+ * INSIDE THE `it`s — which is exactly why reading an arm does not reveal its
+ * budget, and why this is a gate rather than a habit. The `it` budget must
+ * therefore be set on EVERY arm that reaches a helper, not on the few whose own
+ * body shows a timeout.
+ *
+ * A budget that cannot be reached is not a budget; it is a comment.
+ */
+const ARM_BUDGET_MS = 30_000;
+const SHELL_BUDGET_MS = 20_000;
+
 const REPO = resolve(__dirname, '../../../../..');
 const LIB = resolve(REPO, 'scripts/lib/container-revision.sh');
 // ⚠️ SOURCED TOO, BECAUSE THE CARRY-FORWARD READS ITS ALLOWLIST. The library
@@ -68,6 +89,7 @@ afterAll(() => {
 });
 
 /** Run a snippet with the real library sourced, under the given shell options. */
+// shell-budget-governed-by: ARM_BUDGET_MS
 function sh(snippet: string, opts: string, fakeDocker?: string): string {
   let env = '';
   if (fakeDocker !== undefined) {
@@ -82,7 +104,7 @@ function sh(snippet: string, opts: string, fakeDocker?: string): string {
     return execFileSync(
       'bash',
       ['-c', `${opts}\n${env}. ${JSON.stringify(DECL_LIB)}\n. ${JSON.stringify(LIB)}\n${snippet}`],
-      { encoding: 'utf8', timeout: 20_000, cwd: REPO },
+      { encoding: 'utf8', timeout: SHELL_BUDGET_MS, cwd: REPO },
     ).trim();
   } catch (e) {
     const err = e as { stdout?: string; stderr?: string; message: string };
@@ -101,7 +123,7 @@ describe.each(SHELLS)('container_revision_verdict — under `%s`', (opts) => {
     const out = sh(`container_revision_verdict "${HEAD}" "${HEAD}"`, opts);
     expect(out.startsWith('ok|')).toBe(true);
     expect(out).toContain(HEAD.slice(0, 12));
-  });
+  }, ARM_BUDGET_MS);
 
   it('REFUSES a 40-hex sha this repository does not contain', () => {
     // ⚠️ WRITTEN WITH A FABRICATED SHA ON PURPOSE, AND ASSERTING THE *RIGHT*
@@ -115,7 +137,7 @@ describe.each(SHELLS)('container_revision_verdict — under `%s`', (opts) => {
     expect(out.startsWith('refuse|')).toBe(true);
     expect(out).toContain('not a commit in THIS repository');
     expect(out).toContain(other.slice(0, 12));
-  });
+  }, ARM_BUDGET_MS);
 
   it("REFUSES the literal 'unknown' — the Dockerfile ARG default", () => {
     // ⚠️ THIS IS THE REACHABLE ONE. `Dockerfile:212` is `ARG GIT_REVISION=unknown`
@@ -125,20 +147,20 @@ describe.each(SHELLS)('container_revision_verdict — under `%s`', (opts) => {
     const out = sh(`container_revision_verdict "unknown" "${HEAD}"`, opts);
     expect(out.startsWith('refuse|')).toBe(true);
     expect(out).toContain('never recorded');
-  });
+  }, ARM_BUDGET_MS);
 
   it('REFUSES an EMPTY label — an image with no such label at all', () => {
     const out = sh(`container_revision_verdict "" "${HEAD}"`, opts);
     expect(out.startsWith('refuse|')).toBe(true);
     expect(out).toContain('no org.opencontainers.image.revision label');
-  });
+  }, ARM_BUDGET_MS);
 
   it('REFUSES a non-hex label', () => {
     for (const bad of ['not-a-sha', 'HEAD', 'deadbeefzz', '../../etc']) {
       const out = sh(`container_revision_verdict ${JSON.stringify(bad)} "${HEAD}"`, opts);
       expect(out.startsWith('refuse|'), `'${bad}' must refuse`).toBe(true);
     }
-  });
+  }, ARM_BUDGET_MS);
 
   it('REFUSES an ABBREVIATION, even a correct one — it never completes an identifier', () => {
     // ⚠️ A 12-char prefix of HEAD is hex, is a real prefix of the right commit,
@@ -148,19 +170,19 @@ describe.each(SHELLS)('container_revision_verdict — under `%s`', (opts) => {
     const out = sh(`container_revision_verdict "${HEAD.slice(0, 12)}" "${HEAD}"`, opts);
     expect(out.startsWith('refuse|')).toBe(true);
     expect(out).toContain('not 40');
-  });
+  }, ARM_BUDGET_MS);
 
   it('REFUSES when there is no HEAD to compare against', () => {
     const out = sh(`container_revision_verdict "${HEAD}" ""`, opts);
     expect(out.startsWith('refuse|')).toBe(true);
-  });
+  }, ARM_BUDGET_MS);
 
   it('the happy path is an EQUALITY, not a resemblance', () => {
     // One character apart, both 40 hex, neither in this repo -> still refuses.
     const almost = 'a'.repeat(39) + 'b';
     const out = sh(`container_revision_verdict "${almost}" "${HEAD}"`, opts);
     expect(out.startsWith('refuse|')).toBe(true);
-  });
+  }, ARM_BUDGET_MS);
 
   it('NEVER echoes an empty verdict — every path answers', () => {
     // A caller splits on '|'; a silent path would give V_MODE='' which is
@@ -178,7 +200,7 @@ describe.each(SHELLS)('container_revision_verdict — under `%s`', (opts) => {
       expect(out.length, `verdict for (${a || '<empty>'}, ${b || '<empty>'})`).toBeGreaterThan(3);
       expect(out.includes('|')).toBe(true);
     }
-  });
+  }, ARM_BUDGET_MS);
 });
 
 describe('container_id_for_service — ambiguity is a refusal, not a head -1', () => {
@@ -191,7 +213,7 @@ describe('container_id_for_service — ambiguity is a refusal, not a head -1', (
       'if [ "$1" = "compose" ]; then echo c0ffee; fi',
     );
     expect(out).toBe('c0ffee');
-  });
+  }, ARM_BUDGET_MS);
 
   it('returns EMPTY when the service is scaled to more than one', () => {
     // ⚠️ THE FAILURE THIS EXCLUDES: silently tagging whichever sorted first.
@@ -203,12 +225,12 @@ describe('container_id_for_service — ambiguity is a refusal, not a head -1', (
       'if [ "$1" = "compose" ]; then printf "aaa\\nbbb\\n"; fi',
     );
     expect(out).toBe('');
-  });
+  }, ARM_BUDGET_MS);
 
   it('returns EMPTY when nothing is running', () => {
     const out = sh('container_id_for_service /tmp/compose.yml worker', opts, 'exit 0');
     expect(out).toBe('');
-  });
+  }, ARM_BUDGET_MS);
 
   it('returns EMPTY when docker itself FAILS — cannot-tell is not all-clear', () => {
     const out = sh(
@@ -217,7 +239,7 @@ describe('container_id_for_service — ambiguity is a refusal, not a head -1', (
       'echo "Cannot connect to the Docker daemon" >&2; exit 1',
     );
     expect(out).toBe('');
-  });
+  }, ARM_BUDGET_MS);
 
   it('passes the compose file EXPLICITLY, so cwd cannot select a different stack', () => {
     // ⚠️ `docker-compose.yml` carries RELATIVE bind mounts; resolving it from a
@@ -230,7 +252,7 @@ describe('container_id_for_service — ambiguity is a refusal, not a head -1', (
     );
     expect(out).toContain('-f /opt/meddoc-pro/docker-compose.yml');
     expect(out).toContain('ps -q worker');
-  });
+  }, ARM_BUDGET_MS);
 });
 
 describe('container_revision_of', () => {
@@ -239,19 +261,19 @@ describe('container_revision_of', () => {
   it('reads the label through docker inspect', () => {
     const out = sh('container_revision_of abc123', opts, `echo ${HEAD}`);
     expect(out).toBe(HEAD);
-  });
+  }, ARM_BUDGET_MS);
 
   it('is EMPTY when inspect fails, rather than propagating a failure', () => {
     // Empty is the value `container_revision_verdict` refuses on, so the two
     // halves compose into a refusal instead of into an unhandled error.
     const out = sh('container_revision_of abc123', opts, 'exit 1');
     expect(out).toBe('');
-  });
+  }, ARM_BUDGET_MS);
 
   it('asks for the RIGHT label key', () => {
     const out = sh('container_revision_of abc123', opts, 'echo "$@"');
     expect(out).toContain('org.opencontainers.image.revision');
-  });
+  }, ARM_BUDGET_MS);
 });
 
 describe('the CARRY-FORWARD — widened by PROOF, never by tolerance', () => {
@@ -278,11 +300,12 @@ describe('the CARRY-FORWARD — widened by PROOF, never by tolerance', () => {
    * So the pair is CONSTRUCTED. Two commits, one docs-only apart, in a temp
    * repository — deterministic, and identical on every machine and every runner.
    */
+  // shell-budget-governed-by: ARM_BUDGET_MS
   function scratchRepo(secondCommitPath: string): { older: string; head: string; dir: string } {
     const dir = mkdtempSync(join(tmpdir(), 'ctrrev-repo-'));
     tmps.push(dir);
     const git = (...args: string[]) =>
-      execFileSync('git', args, { cwd: dir, encoding: 'utf8', timeout: 20_000 }).trim();
+      execFileSync('git', args, { cwd: dir, encoding: 'utf8', timeout: SHELL_BUDGET_MS }).trim();
     git('init', '-q', '-b', 'main');
     git('config', 'user.email', 'gate@example.invalid');
     git('config', 'user.name', 'gate');
@@ -302,12 +325,13 @@ describe('the CARRY-FORWARD — widened by PROOF, never by tolerance', () => {
   }
 
   /** Run the verdict INSIDE a given repo, with declaration.sh in scope. */
+  // shell-budget-governed-by: ARM_BUDGET_MS
   function shIn(dir: string, snippet: string, opts: string): string {
     try {
       return execFileSync(
         'bash',
         ['-c', `${opts}\n. ${JSON.stringify(DECL_LIB)}\n. ${JSON.stringify(LIB)}\n${snippet}`],
-        { encoding: 'utf8', timeout: 20_000, cwd: dir },
+        { encoding: 'utf8', timeout: SHELL_BUDGET_MS, cwd: dir },
       ).trim();
     } catch (e) {
       const err = e as { stdout?: string; stderr?: string; message: string };
@@ -322,7 +346,7 @@ describe('the CARRY-FORWARD — widened by PROOF, never by tolerance', () => {
     expect(out.startsWith('ok|'), out).toBe(true);
     expect(out).toContain('ZERO runtime files moved');
     expect(out).toContain('an ancestor of');
-  });
+  }, ARM_BUDGET_MS);
 
   it('REFUSES an ancestor when a RUNTIME file moved — the discriminating case', () => {
     // ⚠️ THE SAME PAIR, ONE FILE DIFFERENT. Only the PATH of the second commit
@@ -333,13 +357,13 @@ describe('the CARRY-FORWARD — widened by PROOF, never by tolerance', () => {
     expect(out.startsWith('refuse|'), out).toBe(true);
     expect(out).toContain('DIFFERENT PROGRAMS');
     expect(out).toContain('RUNTIME file(s) moved');
-  });
+  }, ARM_BUDGET_MS);
 
   it('REFUSES a commit this repository does not contain', () => {
     const out = sh(`container_revision_verdict "${'d'.repeat(40)}" "$(git rev-parse HEAD)"`, opts);
     expect(out.startsWith('refuse|')).toBe(true);
     expect(out).toContain('not a commit in THIS repository');
-  });
+  }, ARM_BUDGET_MS);
 
   it('REFUSES when the container is NEWER than the tree — direction is load-bearing', () => {
     // ⚠️ A SYMMETRIC TEST WOULD WAVE THIS THROUGH. The container being ahead of
@@ -349,7 +373,7 @@ describe('the CARRY-FORWARD — widened by PROOF, never by tolerance', () => {
     const out = shIn(dir, `container_revision_verdict "${head}" "${older}"`, opts);
     expect(out.startsWith('refuse|'), out).toBe(true);
     expect(out).toContain('NOT an ancestor');
-  });
+  }, ARM_BUDGET_MS);
 
   it('REFUSES, loudly, when the shared allowlist is not in scope — fail-closed', () => {
     // The one arm that must NOT source declaration.sh: it is testing what
@@ -358,9 +382,9 @@ describe('the CARRY-FORWARD — widened by PROOF, never by tolerance', () => {
     const out = execFileSync(
       'bash',
       ['-c', `set -uo pipefail\n. ${JSON.stringify(LIB)}\ncontainer_revision_verdict "${older}" "${head}"`],
-      { encoding: 'utf8', cwd: dir, timeout: 20_000 },
+      { encoding: 'utf8', cwd: dir, timeout: SHELL_BUDGET_MS },
     ).trim();
     expect(out.startsWith('refuse|'), out).toBe(true);
     expect(out).toContain('DECLARATION_NONRUNTIME_RE is not in scope');
-  });
+  }, ARM_BUDGET_MS);
 });

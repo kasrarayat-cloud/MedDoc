@@ -139,9 +139,63 @@ function collectSites(): Site[] {
       // belt: a bare `$` can only come from an interpolation the guard missed
       if (inner === '$') return;
 
+      // ⚠️ A SHELL-OUT INSIDE A HELPER HAS NO SINGLE ENCLOSING `it`, AND THE
+      // FORWARD SCAN CANNOT INVENT ONE. `gate-container-revision` put all four
+      // of its `execFileSync` calls in helpers (`sh`, `scratchRepo`, `shIn`)
+      // called from twenty-two arms; the scan walks forward, meets the first
+      // `it(`, and correctly reports "no budget".
+      //
+      // Reporting those forever would make the gate un-satisfiable, and a gate
+      // that cannot be satisfied gets deleted. Permitting them silently would
+      // hide the real hazard, since a helper's budget governs EVERY arm that
+      // calls it.
+      //
+      // So the helper declares its own contract, once, beside itself:
+      //
+      //     // shell-budget-governed-by: ARM_BUDGET_MS
+      //
+      // naming the constant every calling arm must carry. The gate then checks
+      // that constant instead of a per-arm one — which is stricter than the
+      // per-arm check, because one wrong arm is caught by the arm sweep below
+      // and a wrong helper contract is caught here for all of them at once.
+      // ⚠️ THE LOOKBACK IS THE ENCLOSING FUNCTION, NOT A FIXED NUMBER OF LINES.
+      // A 12-line window was the first attempt and it MISSED a real contract 15
+      // lines up — a magic distance is a silent false negative the moment a
+      // helper grows a doc comment. Walk back to the function header that
+      // encloses this call, and stop there: a contract further up belongs to a
+      // different helper and must not be borrowed.
+      // ⚠️ READ FROM `lines`, NOT `code`. `code` is the COMMENT-STRIPPED copy —
+      // that stripping is deliberate and is what stops this gate matching its
+      // own prose. The contract IS a comment, so searching `code` for it finds
+      // nothing, always, and reports "no budget" for a helper that declared one.
+      // Cost me three wrong fixes to the scan logic before I measured what the
+      // scan was actually reading: a flawless instrument answering about the
+      // wrong universe.
+      const governed = /\/\/\s*shell-budget-governed-by:\s*([A-Za-z_$][\w$]*)/;
+      let helperContract: string | null = null;
+      for (let j = i; j >= 0; j -= 1) {
+        const g = governed.exec(lines[j] ?? '');
+        if (g) {
+          helperContract = g[1]!;
+          break;
+        }
+        // ⚠️ STOP AT THE ENCLOSING FUNCTION'S HEADER, NOT AT ANY `}`. The first
+        // draft stopped on /^\}/ and that matched the helper's OWN closing
+        // braces on the way up, so the contract three lines further was never
+        // reached — a stop-rule that fires inside the region it is scoping.
+        // The contract sits directly above `function <name>(`, so the header IS
+        // the boundary: read it, then stop.
+        if (/^\s*(export\s+)?(async\s+)?function\s/.test(code[j] ?? '')) {
+          const g2 = governed.exec(lines[j - 1] ?? '');
+          if (g2) helperContract = g2[1]!;
+          break;
+        }
+        if (/^\s*(it|test)\s*\(/.test(code[j] ?? '')) break;
+      }
+
       // the enclosing `it`'s budget: the first `}, X);` at or after this line
-      let outer: string | null = null;
-      for (let j = i; j < lines.length; j += 1) {
+      let outer: string | null = helperContract;
+      for (let j = i; helperContract === null && j < lines.length; j += 1) {
         const close = /^\s*\},\s*([A-Za-z_$][\w$]*|[0-9_]+)\s*\);?\s*$/.exec(code[j]!);
         if (close) {
           outer = close[1]!;
