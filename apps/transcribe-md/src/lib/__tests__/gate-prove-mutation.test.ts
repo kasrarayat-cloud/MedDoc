@@ -49,7 +49,15 @@ afterAll(() => {
   }
 });
 
-/** A throwaway repo with one committed file, and the real script copied in. */
+/**
+ * A throwaway repo with one committed file, and the real script copied in.
+ *
+ * ⚠️ THE CONTRACT BELOW IS LOAD-BEARING — #265(c). Its `execFileSync` sits in a
+ * HELPER, so reading any single arm never reveals its budget, and the sweep
+ * gate cannot resolve an enclosing `it`. The contract declares the budget every
+ * calling arm carries; without it the gate correctly reports "no budget".
+ */
+// shell-budget-governed-by: ARM_BUDGET_MS
 function sandbox(): { dir: string; subject: string } {
   const dir = mkdtempSync(join(tmpdir(), 'provemut-'));
   tmps.push(dir);
@@ -66,6 +74,7 @@ function sandbox(): { dir: string; subject: string } {
   return { dir, subject: 'subject.txt' };
 }
 
+// shell-budget-governed-by: ARM_BUDGET_MS
 function run(dir: string, args: string[]): { rc: number; out: string } {
   const r = spawnSync('bash', ['scripts/prove-mutation.sh', ...args], {
     cwd: dir,
