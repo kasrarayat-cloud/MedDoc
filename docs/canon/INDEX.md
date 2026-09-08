@@ -27,7 +27,7 @@
 
 ## CANON INDEX — every archived entry, one row each
 
-**181 entries live in full at `docs/canon/`.**
+**183 entries live in full at `docs/canon/`.**
 Each row is a **POINTER, never the authority** — the archived body governs, and
 it is verbatim. A row exists so that a grep for an entry's title still lands
 here and tells you where the body went; the tell is that entry's OWN words.
@@ -124,6 +124,8 @@ Rows marked `↳` are subsections filed inside their parent's archive file.
 - **A POSITIVE CONTROL IS THE ONLY ARM A BROKEN MOCK CANNOT FOOL** — an incomplete `@meddoc/db` mock (missing `update`) made EVERY call take the failure path, so both "cannot tell" arms passed for the wrong reason and read as "the fix works". ⚠️ A broken mock and a working fail-closed guard produce the SAME observable; **the healthy case is the only input whose correct answer differs between them.** Assert it FIRST, and when it fails print what the code actually saw rather than adjusting the assertion. → `docs/canon/105-a-positive-control-is-the-only-arm-a-broken-mock-cannot-fool.md`
 - **And a reassurance check needs a POSITIVE CONTROL like any other** — "A check run to prove nothing happened is the most likely to be believed and the least likely to be controlled." `find -newermt` said 0; `stat` disagreed. → `docs/canon/49-and-a-reassurance-check-needs-a-positive-control-like-any.md`
 - **THE CONTAINER'S `grep` IS NOT YOUR `grep` — AND IT DISAGREES SILENTLY** — busybox `grep` has no `-P`, and a `-P` pattern inside a container exits non-zero with a message nobody reads, so a zero means *the flag was refused*, not *the string is absent*. Run the probe where the file lives, or prove the instrument works there first. → `docs/canon/108-the-container-s-grep-is-not-your-grep.md`
+- **A FIX'S TITLE IS NOT ITS SCOPE** — two defects can share one TRUE sentence, and the second is not fixed by the first one's commit. `b69b29ac` landed *"a sealed sandbox pointed at the wrong tree, and every guard said fine"* for a **node_modules** failure; a day later the **REF-resolution** defect wearing that same sentence was still live, and `git log -1` on the file reads as *already handled*. ⚠️ **The generalisation that makes a title useful is the same one that makes it over-claim** — so READ THE DIFF, NOT THE SUBJECT, and a fix whose title already exists names what the earlier one did NOT touch. Blast radius: a lens in the wrong tree sees an EMPTY diff, which reads as *nothing to review*. → `docs/canon/142-a-fixs-title-is-not-its-scope.md`
+- **A GREP THAT CANNOT DISPLAY THE FAILURE LINE IS A GREEN NOBODY READ** — `grep -E "Tests |Test Files"` over vitest output cannot match `     Errors  1 error`, so a module-scope `void main()` executing a production script (one that WRITES A FILE when given a path) reported healthy on every local run for two rounds. ⚠️ **CI caught it; the local reading could not have, however often repeated.** The filter matched correctly and answered *did the tests pass* when the question was *is this run clean* — the watched-set failure in a one-line costume. **Match the FAILURE vocabulary, not the success vocabulary**, and ask: if this broke in a way I am not thinking of, would this pattern show me? → `docs/canon/143-a-grep-that-cannot-display-the-failure-line.md`
 
 ### GATES, GUARDS, SWEEPS & MUTATION PROOFS
 
