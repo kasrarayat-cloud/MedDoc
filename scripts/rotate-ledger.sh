@@ -126,17 +126,40 @@ src/lib/__tests__/gate-ledger-reachability.test.ts"
   # copied by name, so a rename upstream would silently empty this set and every
   # rotation would sail through on an empty suite.
   local out
-  out="$(cd "$REPO_DIR/$APP" && npx vitest run --root "$G/$APP" 2>&1)"
+  out="$(cd "$REPO_DIR/$APP" && npx vitest run --no-color --root "$G/$APP" 2>&1)"
   local rc=$?
   printf '%s\n' "$out" | sed 's/^/     | /'
-  # ⚠️ BASH-NATIVE, NEVER `printf | grep -q` — THE F30 SIGPIPE CLASS, AND THIS
-  # LINE WAS AN INSTANCE OF IT. `grep -q` exits the moment it matches, `printf`
-  # takes SIGPIPE, and `set -o pipefail` (line 28) turns that into a FAILING
-  # pipeline — so a MATCH is reported as a MISS. CI caught it: the staged gates
-  # printed `Tests  43 passed (43)` and this said "ran NO tests". It passed
-  # locally, which is the trap — whether the producer is still writing when the
-  # consumer exits depends on buffering, so a green here is luck, not evidence.
-  if ! [[ "$out" =~ Tests[[:space:]]+[0-9]+[[:space:]]+passed ]]; then
+
+  # ⚠️ THE OUTPUT IS STRIPPED OF ANSI BEFORE IT IS MATCHED, AND THAT — NOT
+  # SIGPIPE — IS WHAT BROKE THIS CHECK TWICE.
+  #
+  # vitest COLOURISES under CI and not on a local non-TTY run, so in GitHub
+  # Actions the summary line arrives as
+  #
+  #     Tests \e[22m \e[1m\e[32m43 passed
+  #
+  # with escape sequences sitting between `Tests` and the count. No pattern
+  # expecting whitespace there can match — `grep -qE 'Tests +[0-9]+ passed'`
+  # could not, and neither could the bash regex that replaced it. The staged
+  # gates printed `43 passed` and this said "ran NO tests", in both versions.
+  #
+  # ⚠️ THE FIRST DIAGNOSIS WAS WRONG AND IS RECORDED HERE BECAUSE IT WAS
+  # PLAUSIBLE. It was read as the F30 `printf | grep -q` SIGPIPE class — a real
+  # class, removed from `prune-rollback-tags.sh` the same day — and the fix for
+  # THAT changed nothing, because the failure was never about the pipe. A
+  # local green and a CI red is an ENVIRONMENT difference; SIGPIPE and colour
+  # both explain one, and only measuring the bytes tells them apart.
+  #
+  # `--no-color` above is the cause removed; the strip below is the belt, so a
+  # future runner that colourises anyway cannot silently re-open this.
+  local clean
+  clean="$(printf '%s' "$out" | sed -e 's/\x1b\[[0-9;]*[a-zA-Z]//g')"
+  # ⚠️ TWO INDEPENDENT PARTS, NOT ONE ADJACENCY. Requiring `Tests` and the count
+  # to sit next to each other is what colour broke, and a strip is only as good
+  # as its regex. Asking for the word and for "<n> passed" SEPARATELY cannot be
+  # broken by anything inserted between them — including an escape this strip
+  # does not know about.
+  if ! { [[ "$clean" == *Tests* ]] && [[ "$clean" =~ [0-9]+[[:space:]]+passed ]]; }; then
     echo "🔴 rotate-ledger: the staged ledger gates ran NO tests. That is CANNOT"
     echo "   TELL, not a pass — an empty suite is green."
     return 2

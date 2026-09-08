@@ -474,7 +474,13 @@ describe('rotation — banner-triggered, delegating, fail-closed', () => {
       encoding: 'utf8',
       timeout: STAGED_GATES_BUDGET_MS,
     });
-    const out = r.stdout + r.stderr;
+    // ⚠️ STRIPPED, FOR THE SAME REASON THE SCRIPT STRIPS. Under CI vitest
+    // colourises, so the child's summary arrives as `Tests \e[22m \e[1m\e[32m43
+    // passed` and every pattern expecting whitespace between them misses. This
+    // arm asserted on the raw bytes and went red in CI while green locally.
+    const raw = r.stdout + r.stderr;
+    // eslint-disable-next-line no-control-regex
+    const out = raw.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, '');
 
     // POSITIVE CONTROL — THE GATES ACTUALLY RAN AND ACTUALLY FAILED. Without
     // this the arm cannot tell "the gate caught the wipe" from "the staging
@@ -565,6 +571,68 @@ describe('rotation — banner-triggered, delegating, fail-closed', () => {
     // matching text. Both outcomes are printed so a future reader sees which
     // one this box gave.
     expect([0, 1, 141]).toContain(viaPipe);
+  });
+
+  it('⚠️ THE STAGED-GATE CHECK SURVIVES COLOUR — the defect that shipped TWICE', () => {
+    // ⚠️ THIS IS THE ARM THAT WOULD HAVE CAUGHT IT, AND IT DID NOT EXIST.
+    //
+    // `rotate-ledger.sh` confirms the staged gates actually RAN by matching
+    // their summary line. vitest COLOURISES under CI and not on a local
+    // non-TTY run, so in GitHub Actions that line is
+    //
+    //     Tests \e[22m \e[1m\e[32m43 passed
+    //
+    // — escape sequences where the pattern expects whitespace. The gates
+    // printed `43 passed` and the script answered "ran NO tests", turning a
+    // PASS into a refusal. Local runs were green throughout.
+    //
+    // ⚠️ AND IT SHIPPED TWICE BECAUSE THE FIRST DIAGNOSIS WAS WRONG. It was read
+    // as the F30 `printf | grep -q` SIGPIPE class — a real class, being removed
+    // from another script the same day — and replacing the pipe with a bash
+    // regex changed nothing, because the pipe was never the problem. A local
+    // green against a CI red is an ENVIRONMENT difference, and SIGPIPE and
+    // colour both explain that shape; only looking at the bytes separates them.
+    const COLOURED =
+      '\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m43 passed\u001b[39m\u001b[22m\u001b[90m (43)\u001b[39m';
+    const probe = (body: string) => {
+      const r = spawnSync('bash', ['-uo', 'pipefail', '-c', `out=$(cat); ${body}`], {
+        encoding: 'utf8',
+        input: COLOURED,
+      });
+      expect(r.status, `the probe did not run: ${r.error?.message ?? 'killed'}`).not.toBeNull();
+      return r.status;
+    };
+    // the two-part form the script uses: the word and the count, independently
+    const MATCH =
+      '{ [[ "$clean" == *Tests* ]] && [[ "$clean" =~ [0-9]+[[:space:]]+passed ]]; }';
+    // the ADJACENCY form that colour broke — kept as the negative control below
+    const ADJACENT = '[[ "$clean" =~ Tests[[:space:]]+[0-9]+[[:space:]]+passed ]]';
+    const STRIP = `clean="$(printf '%s' "$out" | sed -e 's/\\x1b\\[[0-9;]*[a-zA-Z]//g')"`;
+
+    // The shape the script uses now: strip, then match.
+    expect(probe(`${STRIP}; ${MATCH}`), 'the stripped form does not match a coloured summary').toBe(
+      0,
+    );
+
+    // ⚠️ NEGATIVE CONTROL — the same bytes WITHOUT the strip must NOT match.
+    // Without this the arm above passes on any implementation, including one
+    // that never strips, and the defect walks straight back in.
+    expect(
+      probe(`clean="$out"; ${ADJACENT}`),
+      'the UNSTRIPPED ADJACENCY form matched a coloured summary — then this arm ' +
+        'is not measuring the defect and the strip is unproven',
+    ).not.toBe(0);
+
+    // ⚠️ AND THE TWO-PART FORM SURVIVES COLOUR EVEN WITHOUT THE STRIP. That is
+    // the point of splitting it: a strip is only as good as its regex, and this
+    // is what makes the check independent of mine being right.
+    expect(
+      probe(`clean="$out"; ${MATCH}`),
+      'the two-part form still depends on the strip — it was supposed not to',
+    ).toBe(0);
+
+    // and the script asks the child not to colourise in the first place
+    expect(readFileSync(ROTATE, 'utf8')).toContain('npx vitest run --no-color');
   });
 
   it('refuses an unknown mode rather than guessing', () => {
