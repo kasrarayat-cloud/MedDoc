@@ -159,19 +159,47 @@ export function ageAtDateResolved(
   const low = rawYearsOnUtcDate(dob, new Date(on.getTime() + TZ_MIN_MS));
   const high = rawYearsOnUtcDate(dob, new Date(on.getTime() + TZ_MAX_MS));
 
-  // ⚠️ AND A NEGATIVE LOW ENDPOINT BESIDE A ZERO HIGH IS NOT AMBIGUOUS — IT IS
-  // ZERO. `-1` there means "in that timezone the encounter is the day before the
-  // recorded birth date", which is not an age; the patient is a newborn and the
-  // answer is 0 in every zone where the encounter can exist at all. Flooring is
-  // the correct reading, and `origin/main` returned 0 here. Refusing would have
-  // been a capability loss dressed as caution, on the one visit where the age is
-  // least in doubt.
-  const lowFloored = low < 0 && high === 0 ? 0 : low;
+  // ⚠️ IMPLAUSIBLE IS JUDGED ON THE WHOLE WINDOW, AND BEFORE AGREEMENT IS ASKED
+  // FOR. If NO offset in UTC-12..UTC+14 yields a human age, the column does not
+  // hold this patient's birth date and no timezone would rescue it — so the
+  // honest token is `age_implausible`, not "the zones disagree". A refutation
+  // pass measured the mislabel at both ends: a DOB of 1820-09-09 gave 205/206
+  // and came back `age_timezone_ambiguous`, sending an auditor to look for a
+  // practice timezone that could not have helped. `high` is the window's
+  // maximum and `low` its minimum, so "entirely negative" is `high < 0` and
+  // "entirely superhuman" is `low > 130`.
+  //
+  // ⚠️ AND THIS IS NOT THE CLAMP-INSIDE-THE-PROBE BUG RETURNING. That draft
+  // clamped within `rawYearsOnUtcDate`, which made a negative endpoint and a
+  // superhuman one indistinguishable. This reads the RAW endpoints and tells
+  // them apart by sign — which is the whole point of taking the delta first.
+  if (high < 0 || low > 130) return { ok: false, reason: 'age_implausible' };
+
+  // ⚠️ A NEGATIVE LOW ENDPOINT BESIDE A ZERO HIGH IS ZERO **ONLY IF THE PATIENT
+  // WAS ALREADY BORN.** `-1` there means "in that zone the encounter falls the
+  // day before the recorded birth date". For a newborn that is not an age and
+  // the answer is 0 in every zone where the encounter can exist at all.
+  //
+  // ⚠️ BUT A BIRTH DATE IN THE FUTURE PRODUCES THE IDENTICAL (-1, 0) PAIR, AND
+  // THE FIRST DRAFT FLOORED IT TOO — SO A PATIENT BORN TOMORROW PRINTED
+  // "Age: 0". A refutation pass caught it and a grid measured it: 14 of 336
+  // inputs answered where `origin/main` refused, every one a DOB one day after
+  // the visit. **On the ruling named AGE NEVER GUESSES, the floor guessed.**
+  //
+  // ⚠️ AND THE FIRST DRAFT'S JUSTIFICATION WAS HALF TRUE, WHICH IS WHY IT READ
+  // AS SOUND. It said "`origin/main` returned 0 here" as a blanket claim; main
+  // returned 0 for the newborn half and NULL for the future-DOB half. The
+  // `dob <= on` test is exactly that distinction, and it is load-bearing in
+  // both directions: without the floor the legitimate same-day newborn
+  // (DOB 2026-09-08, visit 02:00Z) yields low=-1/high=0 and is REFUSED, where
+  // main answered 0 — a capability loss dressed as caution.
+  const bornBeforeEncounter = dob.getTime() <= on.getTime();
+  const lowFloored = low < 0 && high === 0 && bornBeforeEncounter ? 0 : low;
 
   if (lowFloored !== high) return { ok: false, reason: 'age_timezone_ambiguous' };
-  // Only once the window AGREES is the agreed value judged. A negative age means
-  // the record and the visit disagree about time; one past the verified human
-  // maximum means the column holds something that is not a birth date.
+  // Only once the window AGREES is the agreed value judged. The whole-window
+  // check above already refused the uniformly impossible; this catches the
+  // agreed value landing out of range.
   if (high < 0 || high > 130) return { ok: false, reason: 'age_implausible' };
   return { ok: true, years: high };
 }

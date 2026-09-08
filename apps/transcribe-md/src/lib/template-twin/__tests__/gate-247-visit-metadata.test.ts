@@ -466,6 +466,102 @@ describe('#247 Stage B — age at the VISIT date, in whole years', () => {
       reason: 'age_implausible',
     });
   });
+
+  // ==========================================================================
+  // ⚠️ THE ARM ABOVE PICKED ITS FUTURE DATE FOUR YEARS OUT, AND THAT IS WHY IT
+  // DID NOT CATCH THE DEFECT A REFUTATION PASS FOUND.
+  //
+  // The newborn floor fires only when `high === 0` — a DOB within about a day
+  // AFTER the visit. `2030-01-01` lands `high < 0`, refuses on the plausibility
+  // clamp, and never reaches the floor at all. So an arm that reads
+  // *"REFUSES rather than guesses ... a birth date after the visit"* was green
+  // throughout, on a build that answered **`Age: 0` for a patient born
+  // tomorrow.** Measured on the finished diff: 14 of 336 grid inputs answered
+  // where `origin/main` refused, all of them DOB = visit + 1 day.
+  //
+  //     THE ASSERTION NAMED THE RIGHT PROPERTY AND SAMPLED THE WRONG REGION.
+  //     A future date FAR from the boundary is a different universe from a
+  //     future date AT it — the same shape as `rawYearsOnUtcDate`'s own note
+  //     above, mirrored.
+  //
+  // So the property is swept across the ONLY region where the floor can act,
+  // rather than asserted on a fixture chosen for how obviously wrong it looks.
+  // ==========================================================================
+  describe('AGE NEVER GUESSES — swept where the floor actually fires', () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const visitDay = Date.UTC(2026, 8, 8); // 2026-09-08
+
+    /** Every hour of the visit day, against DOBs from two days before to two after. */
+    const grid: Array<{ dob: string; at: string; dobMs: number; atMs: number }> = [];
+    for (let offsetDays = -2; offsetDays <= 2; offsetDays += 1) {
+      const dobMs = visitDay + offsetDays * DAY;
+      const dob = new Date(dobMs).toISOString().slice(0, 10);
+      for (let hour = 0; hour < 24; hour += 1) {
+        const atMs = visitDay + hour * 60 * 60 * 1000;
+        grid.push({ dob, at: new Date(atMs).toISOString(), dobMs, atMs });
+      }
+    }
+
+    it('NEVER states an age for a patient not yet born — the whole grid', () => {
+      const answered = grid
+        .filter((g) => g.dobMs > g.atMs)
+        .filter((g) => ageAtDateResolved(g.dob, g.at).ok);
+      // Named individually, because "0 answered" is the kind of pass that is
+      // also what a broken filter prints.
+      expect(
+        answered.map((g) => `${g.dob} @ ${g.at}`),
+        'an age was stated for a birth date that had not happened yet',
+      ).toEqual([]);
+    });
+
+    it('POSITIVE CONTROL — the grid genuinely contains both kinds of case', () => {
+      // ⚠️ Without this the arm above passes just as well on a grid that holds
+      // no future DOBs at all, or on a build that refuses everything.
+      expect(grid.filter((g) => g.dobMs > g.atMs).length).toBeGreaterThan(0);
+      expect(grid.filter((g) => ageAtDateResolved(g.dob, g.at).ok).length).toBeGreaterThan(0);
+    });
+
+    it('and the same-day newborn is still ANSWERED — 0, not a refusal', () => {
+      // ⚠️ THE CAPABILITY THE FLOOR EXISTS FOR, PINNED SO THE NEXT FIX CANNOT
+      // BUY THE ARM ABOVE BY DELETING IT. Without the floor this refuses with
+      // `age_timezone_ambiguous`, where `origin/main` answered 0.
+      expect(ageAtDateResolved('2026-09-08', '2026-09-08T02:00:00.000Z')).toEqual({
+        ok: true,
+        years: 0,
+      });
+      expect(ageAtDateResolved('2026-09-08', '2026-09-08T00:00:00.000Z')).toEqual({
+        ok: true,
+        years: 0,
+      });
+      expect(ageAtDateResolved('2026-09-08', '2026-09-08T23:00:00.000Z')).toEqual({
+        ok: true,
+        years: 0,
+      });
+    });
+
+    it('a window that is ENTIRELY out of human range says so, and does not blame a timezone', () => {
+      // ⚠️ `age_timezone_ambiguous` sends whoever reads the manifest looking for
+      // a practice timezone. For 205-vs-206 no timezone would have helped, and
+      // the honest token names the column. Both ends of the clamp, because the
+      // first fix covered only the negative one.
+      expect(ageAtDateResolved('1820-09-09', '2026-09-08T15:00:00.000Z')).toEqual({
+        ok: false,
+        reason: 'age_implausible',
+      });
+      expect(ageAtDateResolved('2027-09-08', '2026-09-08T12:00:00.000Z')).toEqual({
+        ok: false,
+        reason: 'age_implausible',
+      });
+      // ⚠️ AND THE STRADDLING CASE IS STILL AMBIGUOUS, NOT IMPLAUSIBLE — a DOB
+      // one day after the visit spans -1..0, which a known timezone WOULD
+      // resolve. Widening `age_implausible` to swallow it would be the mirror
+      // mislabel.
+      expect(ageAtDateResolved('2026-09-09', '2026-09-08T12:00:00.000Z')).toEqual({
+        ok: false,
+        reason: 'age_timezone_ambiguous',
+      });
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
