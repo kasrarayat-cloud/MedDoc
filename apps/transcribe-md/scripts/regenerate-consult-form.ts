@@ -70,12 +70,15 @@ const EXPECTED_SOURCE_SHA =
  */
 const FIXED_ENTRY_DATE = new Date(Date.UTC(2026, 8, 7, 0, 0, 0));
 
-const EXPECTED_SOURCE_CONTROLS = 35;
-const EXPECTED_ADDED = 18;
-const EXPECTED_TOTAL = 53;
+export const EXPECTED_SOURCE_CONTROLS = 35;
+export const EXPECTED_ADDED = 18;
+export const EXPECTED_TOTAL = 53;
+
+/** ⚠️ THE ID ORIGIN, EXPORTED — it is what makes `sdtId` POSITIONAL here. */
+export const FIRST_ADDED_SDT_ID = 900_036;
 
 /** ⚠️ ONE CONTROL PER CLAUSE — the unit a fact can address (#191(2)). */
-const ROS_CLAUSES: ReadonlyArray<readonly [string, string]> = [
+export const ROS_CLAUSES: ReadonlyArray<readonly [string, string]> = [
   ['ros_gi_heartburn', 'The patient denies heartburn, odynophagia, dysphagia.'],
   ['ros_gi_nausea', 'The patient denies nausea or vomiting.'],
   ['ros_gi_abdo_pain', 'The patient denies abdominal pain.'],
@@ -89,7 +92,7 @@ const ROS_CLAUSES: ReadonlyArray<readonly [string, string]> = [
  * static prose exactly as the doctor authored it, because the label is the
  * clause's name and the value is what a dictated finding can contradict.
  */
-const EXAM_CLAUSES: ReadonlyArray<readonly [string, string, string]> = [
+export const EXAM_CLAUSES: ReadonlyArray<readonly [string, string, string]> = [
   ['exam_general', 'General: ', 'alert, oriented, no acute distress'],
   ['exam_heent', 'HEENT: ', 'normocephalic, atraumatic, pupils equal, anicteric, oropharynx clear'],
   ['exam_neck', 'Neck: ', 'supple'],
@@ -105,8 +108,19 @@ const EXAM_CLAUSES: ReadonlyArray<readonly [string, string, string]> = [
 const TELEHEALTH =
   'Patient verbalized informed consent to proceed with the audio telephone/telehealth visit.';
 
-/** The control template, byte-matched to the 35 already in the document. */
-function sdt(alias: string, tag: string, id: number, inner: string): string {
+/**
+ * The control template, byte-matched to the 35 already in the document.
+ *
+ * ⚠️ EXPORTED FOR THE IDENTITY CORPUS, DELIBERATELY. `gate-274`'s corpus arm has
+ * to exercise the OWNER'S form under renumber and rename, and the owner's blank
+ * source is not in this repository — only production holds those bytes. A
+ * fixture that RETYPED this template, these tags and this id progression would
+ * be measuring the copy, not the rule: the round-three defect was precisely that
+ * `nextId += 1` per control makes `sdtId` positional, and a fixture free to get
+ * that detail wrong could never have caught it. Sharing the symbol is the fix,
+ * the same reason `fromPersistedMapping` and `narrativeSentence` are exported.
+ */
+export function sdt(alias: string, tag: string, id: number, inner: string): string {
   return (
     `<w:sdt><w:sdtPr><w:alias w:val="${alias}"/><w:tag w:val="${tag}"/>` +
     `<w:id w:val="${id}"/><w:text/></w:sdtPr><w:sdtContent>` +
@@ -154,7 +168,7 @@ async function main(): Promise<void> {
   }
 
   let xml = before;
-  let nextId = 900_036; // the shipped ids run 900001..900035
+  let nextId = FIRST_ADDED_SDT_ID; // the shipped ids run 900001..900035
   let added = 0;
 
   // ── the GI-ROS paragraph becomes six clause controls ─────────────────────
