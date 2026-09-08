@@ -43,7 +43,7 @@ function field(over: {
   label?: string;
   displayOrder?: number;
   sdtId?: string | null;
-  partName?: string;
+  tag?: string | null;
 }): TemplateField {
   return {
     fieldId: over.fieldId,
@@ -63,7 +63,7 @@ function field(over: {
       path: over.path ?? '/w:document[1]/w:body[1]/w:sdt[1]',
       ordinal: over.ordinal ?? 0,
       sdtId: over.sdtId ?? null,
-      tag: null,
+      tag: over.tag ?? null,
       alias: null,
       legacyName: null,
       tableIndex: null,
@@ -362,9 +362,14 @@ describe('#274 · ⚠️ AN AMBIGUOUS KEY TRANSFERS TO NOBODY — the bijection'
     field({ fieldId, sdtId, label, ...(partName ? { partName } : {}) });
 
   it('⚠️ two controls sharing a w:id in the SAME part: NEITHER inherits', () => {
+    // ⚠️ SAME LABEL AS WELL AS SAME id — a real copy-paste, which is what
+    // actually collides now that the label is part of the identity. An earlier
+    // version of this fixture gave the two halves DIFFERENT labels, and the
+    // label pairing correctly told them apart; the arm was asserting a
+    // conservatism the code no longer needs.
     const src = ir([
-      dup('ttf_' + 'a'.repeat(24), '500', 'Right leg findings'),
-      dup('ttf_' + 'b'.repeat(24), '500', 'Left leg findings'),
+      dup('ttf_' + 'a'.repeat(24), '500', 'Leg findings'),
+      dup('ttf_' + 'b'.repeat(24), '500', 'Leg findings'),
     ]);
     const certs = new Map([
       ['ttf_' + 'a'.repeat(24), certified('ttf_' + 'a'.repeat(24), 'venous.reflux.RIGHT')],
@@ -372,8 +377,8 @@ describe('#274 · ⚠️ AN AMBIGUOUS KEY TRANSFERS TO NOBODY — the bijection'
     ]);
     // bytes changed, so every fieldId rotated and only the sdt key could match
     const tgt = ir([
-      dup('ttf_' + 'c'.repeat(24), '500', 'Right leg findings'),
-      dup('ttf_' + 'd'.repeat(24), '500', 'Left leg findings'),
+      dup('ttf_' + 'c'.repeat(24), '500', 'Leg findings'),
+      dup('ttf_' + 'd'.repeat(24), '500', 'Leg findings'),
     ]);
     const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
     expect(plan.transferred, 'an ambiguous key carried a clinical disposition').toEqual([]);
@@ -451,7 +456,7 @@ describe('#274 · ⚠️ AN AMBIGUOUS KEY TRANSFERS TO NOBODY — the bijection'
     const certs = new Map([['ttf_' + 'q'.repeat(24), certified('ttf_' + 'q'.repeat(24), 'the_findings')]]);
     const tgt = ir([
       dup('ttf_' + 'r'.repeat(24), '800', 'Findings'),
-      dup('ttf_' + 's'.repeat(24), '800', 'Findings (copy)'),
+      dup('ttf_' + 's'.repeat(24), '800', 'Findings'),
     ]);
     const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
     // ⚠️ NEITHER, not "one of them". Consumed-once alone would let the FIRST in
@@ -493,6 +498,70 @@ describe('#274 · ⚠️ AN AMBIGUOUS KEY TRANSFERS TO NOBODY — the bijection'
       })
       .map((t) => `${labelOf.get(t.fieldId)} <- ${t.mapping.clinicalConcept}`);
     expect(wrong, 'a disposition crossed between the body and the letterhead').toEqual([]);
+  });
+
+  it('⚠️ ROUND THREE — a POSITIONAL sdtId renumber must not walk the document sideways', () => {
+    // ══════════════════════════════════════════════════════════════════════════
+    // THE OWNER'S OWN 53-CONTROL FORM ASSIGNS `sdtId` POSITIONALLY:
+    // `regenerate-consult-form.ts` runs `let nextId = 900_036` and `nextId += 1`
+    // per control IN DOCUMENT ORDER. Drop one ROS clause and every downstream id
+    // shifts by one — a CLEAN renumber, so the key stays unique on both sides and
+    // every source row is consumed once. All three bijection guards pass, and the
+    // exam narrative walks one organ system sideways:
+    //
+    //     exam_lungs <- exam_neck,  exam_cv <- exam_lungs,  … 15 rows, certified
+    //
+    // Only pairing the id with the LABEL refuses it: control N inherits N-1's id,
+    // and N-1's label is a different question.
+    // ══════════════════════════════════════════════════════════════════════════
+    const src = ir([
+      dup('ttf_' + '1'.repeat(24), '900037', 'exam_neck'),
+      dup('ttf_' + '2'.repeat(24), '900038', 'exam_lungs'),
+      dup('ttf_' + '3'.repeat(24), '900039', 'exam_cv'),
+    ]);
+    const certs = new Map([
+      ['ttf_' + '1'.repeat(24), certified('ttf_' + '1'.repeat(24), 'CONCEPT::exam_neck')],
+      ['ttf_' + '2'.repeat(24), certified('ttf_' + '2'.repeat(24), 'CONCEPT::exam_lungs')],
+      ['ttf_' + '3'.repeat(24), certified('ttf_' + '3'.repeat(24), 'CONCEPT::exam_cv')],
+    ]);
+    // one earlier control was deleted, so every id shifted down by one
+    const tgt = ir([
+      dup('ttf_' + '4'.repeat(24), '900036', 'exam_neck'),
+      dup('ttf_' + '5'.repeat(24), '900037', 'exam_lungs'),
+      dup('ttf_' + '6'.repeat(24), '900038', 'exam_cv'),
+    ]);
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    const labelOf = new Map(tgt.fields.map((f) => [f.fieldId, f.originalLabel]));
+    const wrong = plan.transferred
+      .filter((t) => t.mapping.clinicalConcept !== `CONCEPT::${labelOf.get(t.fieldId)}`)
+      .map((t) => `${labelOf.get(t.fieldId)} <- ${t.mapping.clinicalConcept}`);
+    expect(wrong, 'a positional id renumber walked a certified concept sideways').toEqual([]);
+  });
+
+  it('⚠️ a SEMANTIC TAG survives a renumber AND a rename — the strongest identity', () => {
+    // The owner's generator emits `<w:tag w:val="exam_lungs"/>` for every control
+    // it adds, and the compiler extracts it. It was available in round two and
+    // DISCARDED on a `tag 1/80` measurement taken from a different document.
+    const src = ir([{ ...dup('ttf_' + '7'.repeat(24), '900037', 'Lungs'), rendererBinding: { ...dup('ttf_' + '7'.repeat(24), '900037', 'Lungs').rendererBinding, tag: 'exam_lungs' } } as TemplateField]);
+    const certs = new Map([['ttf_' + '7'.repeat(24), certified('ttf_' + '7'.repeat(24), 'CONCEPT::exam_lungs')]]);
+    // renumbered AND renamed by the doctor — only the tag still names it
+    const tgt = ir([{ ...dup('ttf_' + '8'.repeat(24), '900099', 'Chest examination'), rendererBinding: { ...dup('ttf_' + '8'.repeat(24), '900099', 'Chest examination').rendererBinding, tag: 'exam_lungs' } } as TemplateField]);
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(plan.transferred).toHaveLength(1);
+    expect(plan.transferred[0]!.mapping.clinicalConcept).toBe('CONCEPT::exam_lungs');
+  });
+
+  it('POSITIVE CONTROL — a stable RANDOM id with a stable label still transfers', () => {
+    // ⚠️ Without this, every arm above is bought by an implementation that
+    // refuses all sdtId matching outright. `WM IOV Template.docx` carries
+    // Word-generated random ids on 28 of 80 controls, and those must keep
+    // working across an edit.
+    const src = ir([dup('ttf_' + '9'.repeat(24), '1519045110', 'MACHINE')]);
+    const certs = new Map([['ttf_' + '9'.repeat(24), certified('ttf_' + '9'.repeat(24), 'device.machine')]]);
+    const tgt = ir([dup('ttf_' + 'A'.repeat(24), '1519045110', 'MACHINE')]);
+    const plan = planTransfer({ target: tgt, sourceIr: src, certifiedByFieldId: certs });
+    expect(plan.transferred).toHaveLength(1);
+    expect(plan.transferred[0]!.mapping.clinicalConcept).toBe('device.machine');
   });
 
   it('⚠️ ONE certified row is consumed by AT MOST ONE control', () => {

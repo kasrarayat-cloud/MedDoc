@@ -71,85 +71,96 @@ import {
 } from './ir';
 
 /**
- * A field's IDENTITY — never its position.
+ * A field's IDENTITY — never its position, and never a bare opaque number.
  *
- * ⚠️ THE FIRST VERSION OF THIS KEY WAS `partName + path + ordinal + kind`, AND
- * A REFUTATION PASS PROVED IT CLINICALLY UNSAFE. Measured, by execution, on the
- * real 80-control document: insert ONE control at the top of the body and
+ * ══ THREE ROUNDS OF REFUTATION SHAPED THIS, AND EACH FOUND THE SAME ERROR ══
  *
- *     transferred = 3,  paired with the same control = 0,  MIS-PAIRED = 3
+ * ROUND 1 · the key was `partName + path + ordinal + kind`. `path` is a
+ *   sibling-index XPath and `ordinal` a document-wide counter, so both shift in
+ *   lockstep: inserting one control at the top of the real 80-control form
+ *   mis-paired 3 of 3 certified dispositions.
  *
- * with every mis-paired row carrying `status: 'certified'`:
+ * ROUND 2 · the replacement asserted "a collision never mis-transfers". FALSE —
+ *   first-wins guarded the SOURCE map and nothing guarded the TARGET side, so
+ *   two controls sharing a key both claimed one certified row and a LEFT leg
+ *   finding was certified to print the RIGHT leg's concept.
  *
- *     "ULTRASOUND TECHNOLOGIST"  <-  the certified concept of  "MACHINE"
- *     "MACHINE"                  <-  the certified concept of  "LOCATION"
- *     "LOCATION"                 <-  the certified concept of  "CLINICAL INDICATIONS"
+ * ROUND 3 · `sdtId` was called "Word's own control id: STABLE", measured
+ *   `28/80, 28 distinct, 28 matched`. That measurement was taken on ONE
+ *   document — `WM IOV Template.docx`, whose ids are Word-generated 32-bit
+ *   randoms (1519045110, -1477830258, …).
  *
- * The cause is that BOTH components shift together: `path` is a SIBLING-INDEX
- * XPath (`compiler.ts:1742`) and `ordinal` is a DOCUMENT-WIDE counter
- * (`compiler.ts:103, 902, 1058, 1311`). So control N in the edited document
- * inherits exactly the key of control N-1 in the original, and the deletion
- * direction is symmetric.
+ *   ⚠️ IT IS FALSE FOR THE DOCUMENT THIS PRIMITIVE EXISTS TO SERVE. The owner's
+ *   53-control consult form is emitted by `regenerate-consult-form.ts` with
+ *   `let nextId = 900_036` and `nextId += 1` per control IN DOCUMENT ORDER
+ *   (:157, :165, :187, :199). Its `sdtId` IS A POSITIONAL COUNTER. Drop one ROS
+ *   clause and every downstream id shifts by one — a clean renumber, so the key
+ *   stays unique on both sides and every source row is consumed once. All three
+ *   bijection guards are SATISFIED and the exam narrative walks one organ system
+ *   sideways:
  *
- * ⚠️ AND NOTHING DOWNSTREAM WOULD HAVE CAUGHT IT. The count is right — only the
- * pairing is wrong — so `expectTransferCount` passes. The row lands `CERTIFIED`,
- * so it never reaches a confirmation list. That is a control the doctor has
- * never seen, certified to print a different question's clinical value.
+ *       exam_lungs   <- the certified concept of exam_neck
+ *       exam_cv      <- exam_lungs
+ *       exam_abdomen <- exam_cv        … 15 rows, every one `certified`
  *
- * ── SO POSITION IS GONE, AND ONLY TRUE IDENTITIES REMAIN ────────────────────
- * Measured on the same document, one control inserted:
+ *   That is round one's defect wearing a different attribute's clothes.
  *
- *   key           usable   distinct   matched after insert
- *   sdtId         28/80    28/28      28    <- Word's own control id: STABLE
- *   tag            1/80     1/1        1
- *   alias          1/80     1/1        1
- *   label|kind    80/80    26/80      80    <- ⚠️ matches everything, pairs nothing
+ * ⚠️ THE ERROR IS THE SAME ONE THREE TIMES: A PROPERTY MEASURED ON ONE DOCUMENT
+ * AND STATED AS UNIVERSAL. OOXML's `CT_SdtId` guarantees neither uniqueness nor
+ * stability; "Word persists it" is one authoring tool's behaviour, and this
+ * repository holds two files that contradict it — the owner's form, and
+ * `sample-operative-note.docx` (hand-assigned 101-112, 201, 301…).
  *
- * `label|kind` is the trap twice over: it appears to match 80/80 while carrying
- * 26 distinct values, and this document's labels are mostly the literal
- * placeholder "Choose an item." — so two controls with the same label can mean
- * entirely different things, and a shifted neighbour matches just as well as the
- * real counterpart.
+ * ══ SO AN IDENTITY IS A CONJUNCTION THAT CANNOT SHIFT AS A UNIT ═════════════
  *
- * **There is no key that is both universal and stable.** So the honest rule is:
- * transfer ONLY on a true identity, and re-propose everything else.
+ *   1. `fieldId` — universal, exact, and true only for IDENTICAL bytes. This is
+ *      the re-issue act's whole case, and it needs nothing else.
  *
- *   1. the same `fieldId`  — identical bytes, which is the re-issue act exactly
- *   2. the same `sdtId`    — Word persists it across edits; unique where present
+ *   2. `tag` — the author's SEMANTIC name (`exam_lungs`, `telehealth_consent`),
+ *      emitted by the generator at :111 and already extracted by the compiler at
+ *      `compiler.ts:904`. It was available in round two and DISCARDED on the
+ *      strength of `tag 1/80` — measured, again, only on WM IOV. A semantic name
+ *      means the same control wherever it moves and whatever it is renamed to.
  *
- * A field with neither re-proposes. That is a smaller transfer than a positional
- * key would claim, and it is the only version that cannot hand one control's
- * clinical meaning to another.
+ *   3. `sdtId` **paired with the LABEL** — never alone. A positional renumber
+ *      hands control N the id of control N-1, whose label is different; so
+ *      requiring both to agree refuses exactly the shift that defeated round
+ *      one and round three, while keeping the 28 WM IOV controls whose random
+ *      ids and stable labels both survive an edit.
+ *
+ * Every key carries `partName` (a `w:id` is unique within a PART, not across the
+ * package — the compiler walks body, headers and footers into ONE list) and
+ * `kind` (a control Word kept the id of but the doctor turned from a text box
+ * into a dropdown is a different question with the same name).
+ *
+ * A field offering none of these re-proposes. That is a smaller transfer than
+ * any of the three earlier keys claimed, and it is the only one that has
+ * survived being attacked.
  */
 export type IdentityKey = string & { readonly __brand: 'IdentityKey' };
 
 /**
  * The identities this field can be recognised by, strongest first. A field may
- * offer more than one; a match on ANY of them is a match.
- *
- * ⚠️ IT RETURNS A LIST RATHER THAN ONE STRING BECAUSE THE TWO IDENTITIES HAVE
- * DIFFERENT COVERAGE — `fieldId` is universal but survives only identical bytes,
- * `sdtId` survives edits but exists on 28 of 80. Collapsing them into a single
- * key would mean choosing which case to serve, and the ruling asks for both.
+ * offer several; a match on any of them is a match, and `planTransfer` requires
+ * whichever one resolves to be unique on BOTH sides.
  */
 export function identityKeys(field: TemplateField): IdentityKey[] {
+  const b = field.rendererBinding;
+  const part = b.partName;
   const keys: IdentityKey[] = [`fid\u0000${field.fieldId}` as IdentityKey];
-  const sdtId = field.rendererBinding.sdtId;
-  // ⚠️ `kind` RIDES ALONG WITH `sdtId`. A content control that Word kept the id
-  // of but the doctor changed from a text box to a dropdown is a different
-  // question with the same name, and its certified disposition — expectedDataType,
-  // allowedOptions, polarity — no longer describes it.
+
+  const tag = b.tag;
+  if (tag !== null && tag !== '') {
+    keys.push(`tag\u0000${part}\u0000${tag}\u0000${field.kind}` as IdentityKey);
+  }
+
+  // ⚠️ THE LABEL IS LOAD-BEARING HERE, NOT DECORATION. `sdtId` alone is what
+  // mis-paired fifteen certified clinical concepts on the owner's own form.
+  const sdtId = b.sdtId;
   if (sdtId !== null && sdtId !== '') {
-    // ⚠️ `partName` IS PART OF THE IDENTITY, AND LEAVING IT OUT WAS A DEFECT.
-    // The compiler walks the body, then every header, then every footer into
-    // ONE field list with no id-uniqueness check across parts, and `w:id` is
-    // only unique within a part. Measured: a body control and a letterhead
-    // control sharing `w:id 201` produced ONE identity, and the letterhead
-    // inherited the body's certified CLINICAL concept — with nothing inserted,
-    // deleted, moved or reordered. `partName` is already an input to `fieldId`'s
-    // own hash (compiler.ts:885); dropping it from the key that has to survive a
-    // byte change was the asymmetry.
-    keys.push(`sdt\u0000${field.rendererBinding.partName}\u0000${sdtId}\u0000${field.kind}` as IdentityKey);
+    keys.push(
+      `sdt\u0000${part}\u0000${sdtId}\u0000${field.originalLabel}\u0000${field.kind}` as IdentityKey,
+    );
   }
   return keys;
 }
