@@ -74,7 +74,11 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
-import { TemplateFieldSchema, templateTwinCounts } from '../ir';
+import {
+  TemplateFieldSchema,
+  TemplateTwinDetectionStatusSchema,
+  templateTwinCounts,
+} from '../ir';
 // ⚠️ THE PROBE IS SHARED, NOT COPIED — see `resolver-probe.ts` for why two other
 // files had been reading the resolver's SOURCE for want of it.
 import {
@@ -489,14 +493,38 @@ const WITNESSED_GUARDS = new Set<string>();
     const bools = [false, true];
     const policies = ['blank', 'not_documented', 'requires_input'] as const;
     const sourceTypes = ['extraction', 'manual', 'verified_note_selection'] as const;
-    const detections = ['certified', 'unsupported'] as const;
+    // ⚠️ DERIVED FROM THE ENUM, NOT LISTED — RULING #303, AND IT IS #259
+    // CLAUSE 2 POINTED AT THE COLUMN THAT STILL DISOBEYED IT.
+    //
+    // `TemplateTwinDetectionStatusSchema` has FOUR members. This literal named
+    // TWO, so `recognized` and `needs_confirmation` were absent from every row
+    // of an 870,912-row matrix that describes itself as exhaustive — the same
+    // shape as the hand-written dataType list that "killed 73.4% of the rows",
+    // and invisible for exactly the same reason: nothing compared the literal
+    // to its source. A value the compiler can emit and the matrix never varies
+    // is a dimension held constant while the arm reports full coverage.
+    const detections = TemplateTwinDetectionStatusSchema.options;
     // ⚠️ `null`, NOT `''`. `ir.ts:372` is `z.string().min(1).max(160).nullable()`,
     // so an empty string is REFUSED by the schema and never reaches the resolver.
     // `null` is the value the confirm surface renders as '· no concept yet'.
     const concepts = ['ros.cardiovascular', null] as const;
     const defaults = [null, 'The patient consents.'] as const;
     const bindings = ['content_control', 'table_cell'] as const;
-    const statuses = ['certified', 'unsupported'] as const;
+    // ⚠️ THE SAME ENUM, ON THE MAPPING — `ir.ts:452` is the same schema as
+    // `ir.ts:130`. Derived from the one source so the two columns cannot drift
+    // apart, which a second literal would eventually let them do.
+    const statuses = TemplateTwinDetectionStatusSchema.options;
+    // POSITIVE CONTROL, in `KINDS`' shape: a derivation that yields the old
+    // two-member set, or an empty one, satisfies every assertion below while
+    // covering strictly less than the literal it replaced.
+    expect(detections.length, 'detection statuses not derived from the enum').toBe(4);
+    for (const missed of ['recognized', 'needs_confirmation'] as const) {
+      expect(
+        detections as readonly string[],
+        `${missed} is emittable by the compiler and the matrix must vary it`,
+      ).toContain(missed);
+    }
+    expect(statuses, 'both columns must read ONE enum').toBe(detections);
     // ⚠️ THE DIMENSION THE EIGHTH DIVERGENCE READ AND THIS MATRIX HAD NEVER
     // NAMED. `resolver/index.ts` refuses a checkbox whose `conceptScope` covers
     // several symptoms — "affirmed" is ambiguous between them — and routes it to
@@ -720,6 +748,35 @@ const WITNESSED_GUARDS = new Set<string>();
     let conservativeWithholds = 0;
     const disagreements: string[] = [];
     const tokenMismatches: string[] = [];
+    // ⚠️ #303 — THE THIRD VERDICT, AND IT IS PROVEN PER ROW RATHER THAN LISTED.
+    //
+    // Deriving `detections`/`statuses` from the enum admitted `recognized` and
+    // `needs_confirmation` for the first time, and they produce rows where the
+    // offer withholds on `approved_practice_default` while `resolveOne` honours
+    // the omit. That is NOT a mirror divergence: `practiceDefaultResolution`
+    // requires `mapping.status === 'certified'` and the offer's guard does not,
+    // a split the resolver states at the line and declines to share — "at
+    // confirm time the mapping is being certified, so sharing it would offer a
+    // control that stops working the moment the doctor certifies."
+    //
+    // ⚠️ THE ROWS ARE AN INSTRUMENT ARTIFACT, AND THE INSTRUMENT IS NAMED:
+    // every probe here passes `allowUncertifiedForSyntheticTest: true`, which
+    // SKIPS the certification guard. In production that guard fires first and
+    // the row never reaches the omit branch at all.
+    //
+    // ⚠️ SO IT IS DEMONSTRATED, NOT ASSUMED — #303 FORBIDS A SILENT ALLOWLIST.
+    // The question asked is the RESOLVER'S OWN, through the real exported
+    // ladder in the production universe, and a row is set aside only when that
+    // ladder actually refuses it. Nothing here reads the `status` column: if the
+    // certification guard is ever reordered or weakened, these rows stop being
+    // refused and come straight back as disagreements.
+    const certificationUnreachable: string[] = [];
+    const certificationTokenUnreachable: string[] = [];
+    const refusedByCertification = (f: TemplateField, m: SemanticMapping) =>
+      resolverLadderExit(f, m, {
+        allowUncertified: false,
+        certifiedFieldIds: new Set<string>(),
+      })?.reasonCode === 'field_or_mapping_not_certified';
 
     for (const row of rows) {
       const { f, m, fieldOverrides, mappingOverrides } = build(row);
@@ -773,13 +830,17 @@ const WITNESSED_GUARDS = new Set<string>();
           `${shape} -> OFFERED BUT NOT HONOURED (resolver said ${resolution.reasonCode})`,
         );
       } else if (!offered && honoured) {
-        if (stated === null || !CONSERVATIVE_GUARDS.has(stated)) {
+        if (stated !== null && CONSERVATIVE_GUARDS.has(stated)) {
+          conservativeWithholds += 1;
+        } else if (refusedByCertification(f, m)) {
+          // Production never reaches the omit branch for this row — proven just
+          // now, by the resolver's own ladder, with certification ON.
+          certificationUnreachable.push(shape);
+        } else {
           disagreements.push(
             `${shape} -> withheld but HONOURABLE, and guard '${stated}' is not a ` +
               `declared conservative narrowing`,
           );
-        } else {
-          conservativeWithholds += 1;
         }
       }
       if (offered && honoured) offeredAndHonoured += 1;
@@ -793,16 +854,21 @@ const WITNESSED_GUARDS = new Set<string>();
         if (!prefixes) {
           tokenMismatches.push(`${shape} -> guard '${stated}' declares NO tokens`);
         } else if (!prefixes.some((prefix) => resolution.reasonCode.startsWith(prefix))) {
-          tokenMismatches.push(
-            `${shape} -> guard '${stated}' declares [${prefixes.join(', ')}], ` +
-              `resolver returned '${resolution.reasonCode}'`,
-          );
+          if (refusedByCertification(f, m)) {
+            certificationTokenUnreachable.push(shape);
+          } else {
+            tokenMismatches.push(
+              `${shape} -> guard '${stated}' declares [${prefixes.join(', ')}], ` +
+                `resolver returned '${resolution.reasonCode}'`,
+            );
+          }
         }
       }
     }
 
     expect(disagreements).toEqual([]);
     expect(tokenMismatches).toEqual([]);
+
 
     // ══════════════════════════════════════════════════════════════════════
     // ⚠️ BRANCH COVERAGE, AND A ZERO-WITNESSED STRATUM **FAILS** — #259.
@@ -821,6 +887,59 @@ const WITNESSED_GUARDS = new Set<string>();
         `check — and it FAILS rather than warning, because the previous form of ` +
         `this assertion was satisfiable by construction at three samples.`,
     ).toEqual([]);
+
+    // ⚠️ PLACED **AFTER** THE ZERO-WITNESS CHECK, AND THAT ORDER IS LOAD-BEARING.
+    // #259's acceptance control drives this arm at `ROW_LIMIT = 3` and asserts
+    // the ZERO-WITNESS message comes back. Asserted earlier, the check below
+    // throws first at three rows and the control reds against its own arm —
+    // which is how it was found: a correct assertion in the wrong position
+    // silently changed what a different control was measuring.
+    // ══════════════════════════════════════════════════════════════════════
+    // ⚠️ #303 — THE ADJUDICATION IS CONTROLLED IN BOTH DIRECTIONS, BECAUSE A
+    // CATEGORY THAT CANNOT SAY "NO" IS AN ALLOWLIST WEARING A PREDICATE'S NAME.
+    // ══════════════════════════════════════════════════════════════════════
+    //
+    // (1) IT MUST STILL SAY "YES" TO SOMETHING. If the enum derivation is
+    //     reverted, or the two new members stop reaching this branch, the
+    //     category is dead code that would go on excusing rows nobody produces.
+    //     It fails rather than warns, for the reason #259 gives about strata.
+    expect(
+      certificationUnreachable.length + certificationTokenUnreachable.length,
+      'the certification-unreachable category adjudicated NOTHING. Either the ' +
+        'status dimensions stopped being derived from the enum, or the rows it ' +
+        'explains are gone — in which case DELETE it rather than leave an ' +
+        'unexercised excuse standing.',
+    ).toBeGreaterThan(0);
+    //
+    // (2) AND IT MUST BE ABLE TO SAY "NO", WHICH IS THE CONTROL THAT MATTERS.
+    //     The obvious probe for this — `resolveOneCertifying` — refuses a row
+    //     whose mapping is `certified` when the FIELD is not, so a check written
+    //     against status alone would have been CONSTANT TRUE and would have
+    //     excused every disagreement this arm exists to find, silently. Measured
+    //     over the 4x4 of (detectionStatus, status): exactly ONE combination
+    //     passes the guard, and it is the one where both columns certify.
+    {
+      const certifiedField = field('1', { detectionStatus: 'certified' });
+      const bothCertified = mapping(certifiedField, 'ros.cardiovascular', {
+        status: 'certified',
+        unmentionedPolicy: 'omit',
+      });
+      expect(
+        refusedByCertification(certifiedField, bothCertified),
+        'refusedByCertification is CONSTANT TRUE — it would set aside every ' +
+          'disagreement, including a real one. A fully certified field and ' +
+          'mapping must pass the certification guard.',
+      ).toBe(false);
+      const uncertifiedMapping = mapping(certifiedField, 'ros.cardiovascular', {
+        status: 'recognized',
+        unmentionedPolicy: 'omit',
+      });
+      expect(
+        refusedByCertification(certifiedField, uncertifiedMapping),
+        'refusedByCertification is CONSTANT FALSE — it would adjudicate nothing ' +
+          'and the category above could never be reached.',
+      ).toBe(true);
+    }
     // ⚠️ AND EVERY ROW OF A SMALL STRATUM IS RESOLVED, NOT JUST COUNTED. The
     // rarest exit here is `multi_concept_checkbox_deferred` at **16 rows in
     // 870,912** — 1 in 54,432, which is why no uniform sample of any practical
