@@ -761,14 +761,24 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
     let templateResolutionFailed = false;
     try {
       // Honor an explicit per-visit pick (chosen on the new-visit form) over
-      // active-template resolution. Scoped: the row must be the doctor's own or
-      // the shared system default. A stale/invalid pick falls through to the
+      // active-template resolution. A stale/invalid pick falls through to the
       // normal active resolution so generation never breaks on a bad id.
+      //
+      // ⚠️ #302 — THE TENANT'S TEMPLATES ARE IN SCOPE HERE TOO, AND FORGETTING
+      // THIS LOOKUP IS HOW THE FIX WOULD HALF-APPLY. It is the door a per-visit
+      // pick comes through; leaving it keyed on `doctorId` alone would mean the
+      // resolver honoured the chart's format while an explicit pick still could
+      // not name it, and the failure would appear only for visits that used the
+      // new-visit form — the shape #287's own defect had.
       const picked = visit.noteTemplateId
         ? await prisma.noteTemplate.findFirst({
             where: {
               id: visit.noteTemplateId,
-              OR: [{ doctorId: visit.userId ?? '' }, { isSystemDefault: true }],
+              OR: [
+                { doctorId: visit.userId ?? '' },
+                { practiceId: visit.practiceId },
+                { isSystemDefault: true },
+              ],
             },
           })
         : null;
@@ -776,6 +786,10 @@ async function processVisit(job: Job<ProcessVisitPayload>): Promise<void> {
         picked ??
           (await resolveActiveTemplate({
             doctorId: visit.userId ?? '',
+            // ⚠️ #302 — THE CHART'S PRACTICE SELECTS THE FORMAT. `doctorId`
+            // above is attribution and a preference; this is the scope. A
+            // locum from B documenting A's patient fills A's format.
+            tenantPracticeId: visit.practiceId,
             encounterType: visit.specialty,
           }))
       );
