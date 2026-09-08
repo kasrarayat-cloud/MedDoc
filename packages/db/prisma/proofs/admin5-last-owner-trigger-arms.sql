@@ -593,6 +593,35 @@ SELECT 'LOCK-CONTROL (pg_locks): the ORPHAN guard holds its own advisory lock',
        '0|1', got, CASE WHEN got = '0|1' THEN 'PASS' ELSE 'FAIL' END
   FROM (SELECT t210_orphan_lock_probe() AS got) q;
 
+-- ⚠️ `V3` IS OPEN AND NARROWED, NOT CLOSED — AND THE ATTEMPT IS WORTH RECORDING.
+--
+-- Round five's `V3`: this arm and its sibling assert the advisory lock's
+-- PRESENCE, never its ORDER, so the lock could be moved AFTER its own count and
+-- both stay green. That is a true statement about the arms, and #268 makes lock
+-- ORDER the thing that matters, so it looked like the next defect to close.
+--
+-- ⚠️ THE EXPERIMENT REFUSED TO PRODUCE THE FAILURE. The removal guard was
+-- reinstalled with the `PERFORM pg_advisory_xact_lock(...)` MOVED to after
+-- `members_left` is counted — `prosrc` still reads PRESENT, so every presence
+-- arm is satisfied — and the demotion race was run 12 times against it:
+--
+--     MOVED LOCK: 0/12 runs left the practice with ZERO active owners
+--
+-- against `raceB`'s 11/12 when the lock is DELETED. The two mutations are not
+-- equivalent, and the reason is in this file already: the guard takes
+-- `FOR UPDATE` on every other row in the practice BEFORE it counts (#253). On
+-- the demotion path those row locks are what serialise the writers; the advisory
+-- lock's position relative to the counts does not change the outcome.
+--
+-- ⚠️ SO THE HONEST STATE IS: no arm asserts the order, and no failing input has
+-- been found for the removal guard's demotion path. That is NOT the same as "the
+-- order does not matter" — the INSERT path has no `FOR UPDATE` to fall back on,
+-- because a phantom cannot be locked (`MIG-2`, `DOOR-2`), and that path was not
+-- exercised by this experiment. Whoever closes `V3` should start there.
+--
+-- Recorded rather than left as a green, because the next session to read `V3`
+-- would otherwise repeat this and reach the same 0/12 without knowing why.
+
 INSERT INTO arm_result
 SELECT 'LOCK-CONTROL (pg_locks): 0 held before the counted write, 1 held after',
        '0|1', got, CASE WHEN got = '0|1' THEN 'PASS' ELSE 'FAIL' END
