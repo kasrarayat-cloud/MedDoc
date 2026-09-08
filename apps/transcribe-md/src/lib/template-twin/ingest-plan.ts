@@ -151,7 +151,9 @@ export type IngestGuardFailure =
   | { code: 'TRANSFER_SOURCE_NOT_FOUND'; compiledVersionId: string }
   | { code: 'TRANSFER_SOURCE_WRONG_PRACTICE'; compiledVersionId: string }
   | { code: 'NO_FILLABLE_FIELDS' }
-  | { code: 'TRANSFER_COUNT_MISMATCH'; expected: number; actual: number };
+  | { code: 'TRANSFER_COUNT_MISMATCH'; expected: number; actual: number }
+  | { code: 'TRANSFER_TARGET_ALREADY_CERTIFIED'; compiledVersionId: string }
+  | { code: 'TRANSFER_PLAN_STALE'; fieldId: string };
 
 export class TemplateTwinIngestRefused extends Error {
   constructor(readonly failure: IngestGuardFailure) {

@@ -1,48 +1,144 @@
 // ============================================================================
-// RULING #274 — THE INGEST ENTRY POINT: the I/O half.
+// RULING #274 — THE INGEST ENTRY POINT: the I/O half, DELEGATED.
 // ----------------------------------------------------------------------------
-// The PURE half — `structuralKey`, `planTransfer`, and the reasoning that
+// The PURE half — `identityKeys`, `planTransfer`, and the measurement that
 // decided them — lives in `./ingest-plan`, so its arms need no database.
+//
+// ══ WHY THIS IS FOUR STEPS AND NOT ONE TRANSACTION ═════════════════════════
+//
+// The first version of this file did the whole thing itself in a single
+// `$transaction`. A refutation pass found EIGHT defects in that half, and the
+// shape of them is the argument: every one was a job `createTemplateTwinDraft`
+// already does correctly and this file re-did badly.
+//
+//   · the bytes were NEVER STORED — the artifact row pointed at an object that
+//     did not exist, under a key the ownership parser cannot even read
+//   · no PHI gate, where the upload path enforces one
+//   · zero audit rows, for an act that mints a template and copies certified
+//     clinical dispositions across
+//   · `sections: []`, re-opening a documented 2026-07-25 generation defect
+//   · a demotion that was REPORTED and never performed
+//
+// Owner ruling: DELEGATE, and re-scope atomicity to the act that matters.
+//
+//   (1) PURE GUARDS      — artifact sha, and the identity plan. No writes.
+//   (2) MINT             — through `createTemplateTwinDraft`: storage, PHI
+//                          gate, audit rows, sections bridge, and the ONE
+//                          column writer. Produces a DRAFT, inactive, exactly
+//                          what any upload produces today.
+//   (3) APPLY TRANSFER   — idempotent and resumable, its own guards.
+//   ... the owner confirms, then certification runs ...
+//   (4) ACTIVATE         — THE one atomic transaction: demote the old template
+//                          and activate the new, together or not at all.
+//
+// ⚠️ EVERY STATE BETWEEN THE STEPS IS INERT. A failure anywhere before (4)
+// leaves a draft nobody can fill from — no visit resolves against it, nothing
+// was demoted, nothing activated. That is strictly safer than one transaction
+// that got storage, audit and demotion wrong, which is what the single-
+// transaction version actually was.
 // ============================================================================
 import { createHash } from 'node:crypto';
 
-import { prisma, type Prisma } from '@meddoc/db';
+import { prisma } from '@meddoc/db';
 
 import { compileTemplateDocx } from '../note-template-docx';
 
 import { fromPersistedMapping } from './certification-lifecycle';
-import { fieldCreateInput } from './create-draft';
-import {
-  planTransfer,
-  TemplateTwinIngestRefused,
-  type IngestTemplateTwinInput,
-  type IngestTemplateTwinResult,
-} from './ingest-plan';
+import { createTemplateTwinDraft } from './create-draft';
+import { planTransfer, TemplateTwinIngestRefused, type TransferPlan } from './ingest-plan';
 import { type SemanticMapping, type TemplateDocIR } from './ir';
-import { fallbackSemanticMappings, proposeSemanticMappings } from './semantic-mapping';
 
 export * from './ingest-plan';
+
+export interface IngestTemplateTwinInput {
+  /** The stored artifact's bytes. Read back, never re-derived. */
+  source: Uint8Array;
+  actor: { userId: string; userEmail: string; practiceId: string };
+
+  /**
+   * The compiled version whose CERTIFIED dispositions are carried across. Its
+   * IR supplies the identities; its mappings supply the dispositions.
+   */
+  transferFrom?: string;
+
+  /**
+   * ⚠️ PRE-GUARDS, ALL CHECKED BEFORE STEP (2) WRITES ANYTHING. The compile is
+   * pure — `compiler.ts` holds no `prisma` and no `await` — which is what makes
+   * that possible.
+   *
+   * OPTIONAL because the primitive serves two callers with different
+   * strictness, and conflating them breaks one of them:
+   *
+   *   · THE RE-ISSUE ACT passes both. Its bytes are the pinned artifact, so the
+   *     field ids must come back identical; anything else means the compiler
+   *     moved under us and the act must not proceed.
+   *   · THE UPLOAD PATH passes neither. Its bytes are new by definition, so a
+   *     set-equality guard would refuse every legitimate re-upload.
+   */
+  guards?: {
+    expectSourceSha256?: string;
+    expectFieldIds?: readonly string[];
+    expectTransferCount?: number;
+  };
+}
+
+export interface IngestTemplateTwinResult {
+  noteTemplateId: string;
+  sourceSha256: string;
+  fieldCount: number;
+  transferred: number;
+  reproposed: number;
+}
 
 function sha256(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
+/** Read a compiled version's certified dispositions, keyed by field id. */
+async function readCertified(
+  compiledVersionId: string,
+  practiceId: string,
+): Promise<{ ir: TemplateDocIR; certified: Map<string, SemanticMapping> }> {
+  const from = await prisma.templateTwinCompiledVersion.findUnique({
+    where: { id: compiledVersionId },
+    include: { fields: { include: { mapping: true } } },
+  });
+  if (!from) {
+    throw new TemplateTwinIngestRefused({ code: 'TRANSFER_SOURCE_NOT_FOUND', compiledVersionId });
+  }
+  // ⚠️ TENANCY ON THE READ, NOT ON THE WRITE. Reading another practice's
+  // dispositions and copying them into this one is a disclosure even if every
+  // subsequent write is scoped correctly — the data has already crossed.
+  if (from.practiceId !== practiceId) {
+    throw new TemplateTwinIngestRefused({
+      code: 'TRANSFER_SOURCE_WRONG_PRACTICE',
+      compiledVersionId,
+    });
+  }
+  return {
+    ir: from.compiledDocumentIr as unknown as TemplateDocIR,
+    certified: new Map(
+      from.fields
+        .filter((f) => f.mapping !== null && f.mapping.mappingStatus === 'CERTIFIED')
+        .map((f) => [
+          f.fieldId,
+          fromPersistedMapping(f.fieldId, f.mapping as Parameters<typeof fromPersistedMapping>[1]),
+        ]),
+    ),
+  };
+}
+
 /**
- * Ingest stored bytes into a NEW note template + compiled version, carrying
- * certified dispositions across by structural correspondence.
+ * STEPS (1)–(3). Guards, mint through the proven path, then apply the transfer.
  *
- * ⚠️ ATOMIC BY CONSTRUCTION: template, compiled version, field definitions,
- * transferred mappings and the demotion all land in ONE transaction. A partial
- * apply here is a template that exists and cannot be filled, or a demotion with
- * nothing promoted in its place — and the doctor meets both as "my form is
- * gone".
+ * ⚠️ IT DOES NOT ACTIVATE, AND IT DOES NOT CERTIFY. The result is a draft the
+ * owner confirms; activation is step (4) and is a separate ruled act.
  */
 export async function ingestTemplateTwin(
   input: IngestTemplateTwinInput,
 ): Promise<IngestTemplateTwinResult> {
+  // ── (1) PURE GUARDS ───────────────────────────────────────────────────────
   const actualSha = sha256(input.source);
-
-  // ── PRE-GUARD 1 · the bytes are the ones the record pins ──────────────────
   const expectedSha = input.guards?.expectSourceSha256;
   if (expectedSha !== undefined && expectedSha !== actualSha) {
     throw new TemplateTwinIngestRefused({
@@ -52,15 +148,11 @@ export async function ingestTemplateTwin(
     });
   }
 
-  // ⚠️ THE COMPILE IS PURE — `compiler.ts` holds no `prisma` and no `await` —
-  // which is what lets both remaining guards run before any write. A guard
-  // after a write is not a guard; it is a cleanup obligation.
   const ir = compileTemplateDocx(input.source);
   if (ir.fields.length === 0) {
     throw new TemplateTwinIngestRefused({ code: 'NO_FILLABLE_FIELDS' });
   }
 
-  // ── PRE-GUARD 2 · the field ids are exactly the ones expected ─────────────
   const expectIds = input.guards?.expectFieldIds;
   if (expectIds !== undefined) {
     const got = new Set(ir.fields.map((f) => f.fieldId));
@@ -68,59 +160,16 @@ export async function ingestTemplateTwin(
     const missing = [...want].filter((id) => !got.has(id)).sort();
     const unexpected = [...got].filter((id) => !want.has(id)).sort();
     if (missing.length > 0 || unexpected.length > 0) {
-      throw new TemplateTwinIngestRefused({
-        code: 'FIELD_IDS_NOT_SET_EQUAL',
-        missing,
-        unexpected,
-      });
+      throw new TemplateTwinIngestRefused({ code: 'FIELD_IDS_NOT_SET_EQUAL', missing, unexpected });
     }
   }
 
-  // ── the transfer source, read before anything is written ─────────────────
-  let sourceIr: TemplateDocIR | null = null;
-  let certifiedByFieldId = new Map<string, SemanticMapping>();
-  let demotedNoteTemplateId: string | null = null;
-
+  let plan: TransferPlan = { transferred: [], reproposed: ir.fields.map((f) => f.fieldId) };
   if (input.transferFrom) {
-    const from = await prisma.templateTwinCompiledVersion.findUnique({
-      where: { id: input.transferFrom },
-      include: { fields: { include: { mapping: true } } },
-    });
-    if (!from) {
-      throw new TemplateTwinIngestRefused({
-        code: 'TRANSFER_SOURCE_NOT_FOUND',
-        compiledVersionId: input.transferFrom,
-      });
-    }
-    // ⚠️ TENANCY IS CHECKED ON THE READ, NOT ON THE WRITE. Reading another
-    // practice's dispositions and copying them into this one is a
-    // cross-practice disclosure even if every subsequent write is scoped
-    // correctly — the data has already crossed by then.
-    if (from.practiceId !== input.actor.practiceId) {
-      throw new TemplateTwinIngestRefused({
-        code: 'TRANSFER_SOURCE_WRONG_PRACTICE',
-        compiledVersionId: input.transferFrom,
-      });
-    }
-    sourceIr = from.compiledDocumentIr as unknown as TemplateDocIR;
-    demotedNoteTemplateId = from.noteTemplateId;
-    certifiedByFieldId = new Map(
-      from.fields
-        .filter((f) => f.mapping !== null && f.mapping.mappingStatus === 'CERTIFIED')
-        .map((f) => [
-          f.fieldId,
-          fromPersistedMapping(f.fieldId, f.mapping as Parameters<typeof fromPersistedMapping>[1]),
-        ]),
-    );
+    const source = await readCertified(input.transferFrom, input.actor.practiceId);
+    plan = planTransfer({ target: ir, sourceIr: source.ir, certifiedByFieldId: source.certified });
   }
 
-  const plan = planTransfer({ target: ir, sourceIr, certifiedByFieldId });
-
-  // ── PRE-GUARD 3 · the transfer moved what the caller declared ─────────────
-  // ⚠️ CHECKED HERE, STILL BEFORE ANY WRITE. A declared count that does not
-  // match means the correspondence did something other than what the
-  // declaration described, and #2.5's whole product is that the answer was
-  // fixed before the evidence existed.
   const expectTransfer = input.guards?.expectTransferCount;
   if (expectTransfer !== undefined && expectTransfer !== plan.transferred.length) {
     throw new TemplateTwinIngestRefused({
@@ -130,122 +179,169 @@ export async function ingestTemplateTwin(
     });
   }
 
-  // ── the re-proposal, for every field with no certified counterpart ───────
-  // ⚠️ OUTSIDE THE TRANSACTION, DELIBERATELY. This is a model call; holding a
-  // database transaction open across a network round-trip to a third party is
-  // how a pool gets exhausted by one slow provider.
-  let proposedByModel: string | null = null;
-  let proposedForRest: SemanticMapping[] = [];
-  if (plan.reproposed.length > 0) {
-    const needsProposal = {
-      ...ir,
-      fields: ir.fields.filter((f) => plan.reproposed.includes(f.fieldId)),
-    } as TemplateDocIR;
-    try {
-      proposedForRest = await proposeSemanticMappings(needsProposal, {
-        practiceId: input.actor.practiceId,
-        userId: input.actor.userId,
-      });
-      proposedByModel = process.env.TRANSCRIBE_MD_CLINICAL_MODEL || 'claude-sonnet-4-6';
-    } catch {
-      // Structure stays useful when the provider is unavailable; the fallback
-      // is visibly unconfirmed and cannot be certified until a physician rules.
-      proposedForRest = fallbackSemanticMappings(needsProposal);
-      proposedByModel = null;
-    }
-  }
+  // ── (2) MINT, through the proven path ─────────────────────────────────────
+  // ⚠️ NOT RE-IMPLEMENTED HERE, AND THAT IS THE RULING. This call carries the
+  // artifact store's put-once content-addressed write, the PHI gate, both audit
+  // rows, the sections bridge and `fieldCreateInput`. Re-ingesting identical
+  // bytes REUSES the stored object rather than colliding with it — the store is
+  // content-addressed and put-once, which is the design and not an accident.
+  const minted = await createTemplateTwinDraft({
+    source: input.source,
+    actor: input.actor,
+  });
 
-  // ⚠️ TRANSFERRED FIRST, THEN PROPOSED — and `fieldCreateInput` demands EXACTLY
-  // one mapping per compiled field, throwing otherwise. That is the arithmetic
-  // check this function would otherwise have to write for itself.
-  const allMappings: SemanticMapping[] = [
-    ...plan.transferred.map((t) => t.mapping),
-    ...proposedForRest,
-  ];
-
-  const result = await prisma.$transaction(async (tx) => {
-    const noteTemplate = await tx.noteTemplate.create({
-      data: {
-        practiceId: input.actor.practiceId,
-        // ⚠️ `doctorId`, NOT `createdById` — and the biconditional
-        // `note_templates_practice_iff_doctor` pairs it with `practiceId`, so
-        // the two move together or the constraint refuses the row. tsc caught
-        // the wrong name here; it cannot catch the pairing, because the shared
-        // prisma client is `any`.
-        doctorId: input.actor.userId,
-        name: input.templateName,
-        encounterType: null,
-        sections: [] as unknown as Prisma.InputJsonValue,
-        version: 1,
-        // ⚠️ DRAFT, AND ACTIVATION IS A SEPARATE RULED STEP. This function
-        // mints and transfers; it does NOT promote. The owner confirms the
-        // rows, then certification and activation run as their own acts —
-        // which is what keeps "ingest" reusable by the upload path, where
-        // nothing should be activated on the doctor's behalf at all.
-        status: 'draft',
-        isSystemDefault: false,
-      },
-      select: { id: true },
-    });
-
-    const artifact = await tx.templateTwinSourceArtifact.create({
-      data: {
-        practiceId: input.actor.practiceId,
-        createdById: input.actor.userId,
-        lineageId: noteTemplate.id,
-        lineageVersion: 1,
-        objectKey: `ingest/${input.actor.practiceId}/${actualSha}`,
-        sha256: actualSha,
-        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        sizeBytes: input.source.byteLength,
-        validationStatus: 'accepted',
-        rejectionCodes: [],
-      },
-      select: { id: true },
-    });
-
-    const compiled = await tx.templateTwinCompiledVersion.create({
-      data: {
-        sourceArtifactId: artifact.id,
-        noteTemplateId: noteTemplate.id,
-        practiceId: input.actor.practiceId,
-        compilerVersion: ir.compilerVersion,
-        irSchemaVersion: ir.irSchemaVersion,
-        compiledDocumentIr: ir as unknown as Prisma.InputJsonValue,
-        unsupportedElements: ir.unsupported as unknown as Prisma.InputJsonValue,
-        structureSha256: ir.structureSha256,
-        staticContentSha256: ir.staticContentSha256,
-        blockingUnsupportedCount: ir.stats.blockingUnsupported,
-      },
-      select: { id: true },
-    });
-
-    // ⚠️ THE COLUMN LIST IS `create-draft.ts`'s, IMPORTED — NEVER RETYPED.
-    // The first draft of this function hand-rolled it and wrote
-    // `conceptScope: []` where the rule is `Prisma.DbNull`. That is not a
-    // cosmetic difference: `[]` is a VALUE, it moves the attestation sha of
-    // every mapping, and every template silently stops being certified. The
-    // rule is documented at the writer, and the copy did not carry the comment
-    // with it — which is how these copies always fail.
-    await tx.templateTwinCompiledVersion.update({
-      where: { id: compiled.id },
-      data: {
-        fields: {
-          create: fieldCreateInput(ir, allMappings, proposedByModel, input.actor.practiceId),
-        },
-      },
-    });
-
-    return { noteTemplateId: noteTemplate.id, compiledVersionId: compiled.id };
+  // ── (3) APPLY THE TRANSFER — idempotent and resumable ─────────────────────
+  const applied = await applyCertifiedTransfer({
+    noteTemplateId: minted.noteTemplateId,
+    practiceId: input.actor.practiceId,
+    plan,
   });
 
   return {
-    noteTemplateId: result.noteTemplateId,
-    compiledVersionId: result.compiledVersionId,
-    sourceSha256: actualSha,
-    fieldCount: ir.fields.length,
-    transferred: plan.transferred.length,
+    noteTemplateId: minted.noteTemplateId,
+    sourceSha256: minted.sourceSha256,
+    fieldCount: minted.fieldCount,
+    transferred: applied,
     reproposed: plan.reproposed.length,
-    demotedNoteTemplateId,
   };
+}
+
+/**
+ * STEP (3), separately callable so a half-finished ingest can be RESUMED rather
+ * than restarted — restarting would mint a second template beside the first.
+ *
+ * ⚠️ IDEMPOTENT: re-running it over the same target writes the same values and
+ * returns the same count. The guards below are what make that safe rather than
+ * merely tolerable.
+ */
+export async function applyCertifiedTransfer(input: {
+  noteTemplateId: string;
+  practiceId: string;
+  plan: TransferPlan;
+}): Promise<number> {
+  const target = await prisma.templateTwinCompiledVersion.findUnique({
+    where: { noteTemplateId: input.noteTemplateId },
+    include: { fields: { select: { id: true, fieldId: true, mapping: { select: { id: true } } } } },
+  });
+  if (!target) {
+    throw new TemplateTwinIngestRefused({
+      code: 'TRANSFER_SOURCE_NOT_FOUND',
+      compiledVersionId: input.noteTemplateId,
+    });
+  }
+  if (target.practiceId !== input.practiceId) {
+    throw new TemplateTwinIngestRefused({
+      code: 'TRANSFER_SOURCE_WRONG_PRACTICE',
+      compiledVersionId: target.id,
+    });
+  }
+  // ⚠️ THE TARGET MUST STILL BE AN UNCERTIFIED DRAFT. Applying a transfer over
+  // a version already CERTIFIED would overwrite a physician's ruled
+  // dispositions with an older document's — the exact loss this primitive
+  // exists to prevent, arriving from the other direction.
+  if (target.certificationStatus === 'CERTIFIED') {
+    throw new TemplateTwinIngestRefused({
+      code: 'TRANSFER_TARGET_ALREADY_CERTIFIED',
+      compiledVersionId: target.id,
+    });
+  }
+
+  const definitionByFieldId = new Map(target.fields.map((f) => [f.fieldId, f]));
+  let written = 0;
+
+  await prisma.$transaction(async (tx) => {
+    for (const t of input.plan.transferred) {
+      const definition = definitionByFieldId.get(t.fieldId);
+      // ⚠️ A PLAN ROW WITH NO FIELD IN THE TARGET IS A REFUSAL, NOT A SKIP. It
+      // means the plan was derived against a different compile than the one
+      // that landed, and transferring the rest would produce a partially
+      // certified template nobody declared.
+      if (!definition || !definition.mapping) {
+        throw new TemplateTwinIngestRefused({ code: 'TRANSFER_PLAN_STALE', fieldId: t.fieldId });
+      }
+      await tx.templateTwinSemanticMapping.update({
+        where: { id: definition.mapping.id },
+        data: {
+          sourceType: t.mapping.sourceType,
+          clinicalConcept: t.mapping.clinicalConcept,
+          expectedDataType: t.mapping.expectedDataType,
+          polarityBehavior: t.mapping.polarityBehavior,
+          temporality: t.mapping.temporality,
+          laterality: t.mapping.laterality,
+          unitPolicy: t.mapping.unitPolicy,
+          approvedSynonyms: t.mapping.approvedSynonyms ?? [],
+          required: t.mapping.required,
+          blankPolicy: t.mapping.blankPolicy,
+          unknownPolicy: t.mapping.unknownPolicy,
+          // ⚠️ #192 / #217 — CARRIED, NEVER COERCED. `unmentionedPolicy` absent
+          // stays absent (a ruled `omit` read back as "nobody ruled" is a
+          // different behaviour), and `conceptScope` is left NULL when absent
+          // rather than `[]`, because `[]` is a VALUE and would move the
+          // attestation sha of every mapping.
+          unmentionedPolicy: t.mapping.unmentionedPolicy ?? null,
+          ...(t.mapping.conceptScope && t.mapping.conceptScope.length > 0
+            ? { conceptScope: t.mapping.conceptScope }
+            : {}),
+          // ⚠️ practiceDefault TRANSFERS — owner-ruled. The shared create-time
+          // writer hard-codes it to null, which is right at PROPOSAL time (a
+          // proposal has no practice default) and silently drops physician-
+          // approved clinical content on a TRANSFER.
+          ...(t.mapping.practiceDefault !== undefined && t.mapping.practiceDefault !== null
+            ? { practiceDefault: t.mapping.practiceDefault }
+            : {}),
+          mappingStatus: 'CERTIFIED',
+        },
+      });
+      written += 1;
+    }
+  });
+
+  return written;
+}
+
+/**
+ * STEP (4) — THE ONE ATOMIC TRANSACTION. Demote the old template and activate
+ * the new, together or not at all.
+ *
+ * ⚠️ THIS IS THE ACT ATOMICITY WAS RE-SCOPED TO. Every earlier step leaves an
+ * inert state; this is the only moment where a partial apply is visible to a
+ * doctor — two active templates, or none. Both are met as "my form is gone".
+ *
+ * ⚠️ DEMOTED, NEVER DELETED. The frozen per-visit fill manifests keep pointing
+ * at whatever they were filled against, and deletion would break every one of
+ * them. The active-template id ROTATING is the established shape — it rotated
+ * on the 2026-09-03 transfer and again when `939aa9ea` replaced the 35-control
+ * form. Anything holding a template id by literal is a defect, not a constraint
+ * on this function.
+ */
+export async function activateIngestedTemplate(input: {
+  noteTemplateId: string;
+  demoteNoteTemplateId: string | null;
+  practiceId: string;
+}): Promise<{ activated: string; demoted: string | null }> {
+  return prisma.$transaction(async (tx) => {
+    const target = await tx.noteTemplate.findUnique({
+      where: { id: input.noteTemplateId },
+      select: { id: true, practiceId: true },
+    });
+    if (!target || target.practiceId !== input.practiceId) {
+      throw new TemplateTwinIngestRefused({
+        code: 'TRANSFER_SOURCE_WRONG_PRACTICE',
+        compiledVersionId: input.noteTemplateId,
+      });
+    }
+
+    if (input.demoteNoteTemplateId) {
+      await tx.noteTemplate.update({
+        where: { id: input.demoteNoteTemplateId },
+        data: { status: 'archived' },
+      });
+    }
+    await tx.noteTemplate.update({
+      where: { id: input.noteTemplateId },
+      data: { status: 'active' },
+    });
+
+    return { activated: input.noteTemplateId, demoted: input.demoteNoteTemplateId };
+  });
 }
