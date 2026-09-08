@@ -525,6 +525,36 @@ export function validateTemplateTwin(
       add('ASSERTION_NOT_SUPPORTED', 'blocking', 'The populated value cannot be re-derived from its cited facts.', field.fieldId);
     }
 
+    // ══ #247 — PROVENANCE IS CHECKED IN BOTH DIRECTIONS, INDEPENDENTLY OF THE
+    // RESOLVER THAT SET THE STATUS. ═══════════════════════════════════════════
+    //
+    // `record_derived` is derived in `resolver/index.ts` from the cited facts.
+    // Re-deriving it here is not redundancy: this validator runs again over a
+    // STORED manifest at the sign gate and at certification re-verification,
+    // against facts the resolver is no longer present to vouch for. A status
+    // nothing re-checks is a label, and the label is the entire product of the
+    // `visit_record` class.
+    //
+    // ⚠️ THE SECOND ARM IS THE CLINICALLY IMPORTANT ONE. A `record_derived`
+    // resolution that cites dictation overstates the record and understates the
+    // clinician — bad, and visible. A `supported` resolution that cites the
+    // RECORD is the failure #247 exists to prevent: the manifest asserting, in
+    // the doctor's voice, something he never said. That is the exact shape
+    // `withProcedureDateFact` shipped with for months, and it was invisible
+    // because every count, every render and every gate was green.
+    const recordFacts = citedFacts.filter(
+      (fact) => fact.sourceType === 'visit_record',
+    );
+    if (
+      resolution.status === 'record_derived' &&
+      (citedFacts.length === 0 || recordFacts.length !== citedFacts.length)
+    ) {
+      add('RECORD_DERIVED_WITHOUT_RECORD_EVIDENCE', 'blocking', 'A record-derived field does not cite patient-record evidence.', field.fieldId);
+    }
+    if (resolution.status === 'supported' && recordFacts.length > 0) {
+      add('SUPPORTED_STATUS_CITES_RECORD_EVIDENCE', 'blocking', 'A field reported as dictated is supported by a patient-record value.', field.fieldId);
+    }
+
     if (
       resolution.status === 'supported' &&
       citedFacts.some((fact) => fact.quality.evidence !== 'direct')

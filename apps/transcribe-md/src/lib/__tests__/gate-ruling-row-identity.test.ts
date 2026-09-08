@@ -34,6 +34,68 @@ const ARCHIVE_DIR = 'docs/foundation/rulings';
 /** A ruling index row: `| <date> | #<n> | …`. */
 const ROW_RE = /^\|\s*\d{4}-\d{2}-\d{2}\s*\|\s*#\d+\s*\|/;
 
+/**
+ * ⚠️ TWO ROWS UNDER ONE RULING NUMBER — THE COLLISION NOTHING WAS WATCHING.
+ *
+ * Ruling #219 settles WHO KEEPS a contested number: *a branch is a claim, a
+ * merged row is a fact*, so the row that LANDS FIRST wins and the loser
+ * renumbers. What #219 does not do — what no rule can do — is notice when both
+ * land.
+ *
+ * ⚠️ AND THAT IS CANON 73's SHAPE, ONE LEDGER OVER. The canon index already has
+ * this guard (`gate-agents-md-size` refuses two bodies under one number); the
+ * RULINGS head did not. Two lanes numbering independently BOTH reconcile
+ * individually, git merges the two rows cleanly because they are different
+ * lines, and the ledger silently carries `#246` twice. Every existing gate stays
+ * green: `driftedRows` is satisfied (each row matches its own archive),
+ * `gate-ruling-recorded` finds a row for every citation, and the counts add up.
+ * **The number simply stops identifying a ruling** — and a session grepping for
+ * one gets whichever it reads first.
+ *
+ * ⚠️ IT IS NOT HYPOTHETICAL. Measured 2026-09-07: this lane pushed its claim of
+ * `#246`/`#247` to origin at 17:24:41Z; a peer lane claimed the same `#246` —
+ * and the four numbers after it — at 18:12:10Z, 47m29s later, in a branch that
+ * is clean and mergeable. Both are legitimate claims by #219's own rule and
+ * neither has landed. This arm is what makes the second landing LOUD instead of
+ * silent.
+ *
+ * ⚠️ IT COUNTS **ROOT** ROWS, NOT ROWS, AND THE NAIVE VERSION REDS `main` ON
+ * ARRIVAL. Measured before this predicate was written: FIVE numbers already
+ * carry more than one row — #106, #109, #115, #116 (three), #131 (three) — and
+ * every one of them is legitimate. The ledger records a ruling's own CLAUSES
+ * and CORRECTIONS as their own rows under the same number: `(g) — STATICS ARE
+ * GUARDED AT THE OUTPUT`, `(a) — #109's SCOPE IS AMENDED`, `b — DD: AND DT:
+ * ARE DICTATION AND TRANSCRIPTION DATES`. That is the ledger working, and a
+ * gate forbidding it would have to be weakened within a day — canon 114.
+ *
+ * So the invariant is narrower and is the one that actually matters: **at most
+ * ONE ROOT row per number.** A clause row announces itself in the verdict cell;
+ * a second ROOT row is two different rulings wearing one number.
+ *
+ * Returns one message per colliding number; empty means clean.
+ */
+/** `(g) — …`, `(a) — …`, `b — …`, `(c)-CORRECTED — …`: a clause of an existing
+ *  ruling rather than a ruling of its own. */
+const CLAUSE_MARKER = /^\(?[a-z]\)?\s*[—-]/i;
+
+export function duplicateRulingNumbers(head: string): string[] {
+  const roots = new Map<string, number>();
+  for (const row of rowsIn(head)) {
+    const cells = row.split('|').map((c) => c.trim());
+    // `| <date> | #<n> | <status> | <verdict> | …` -> cells[1..4] after the
+    // leading empty cell the pipe produces.
+    const n = /^#(\d+)$/.exec(cells[2] ?? '')?.[1];
+    const verdict = cells[4] ?? '';
+    if (!n) continue;
+    if (CLAUSE_MARKER.test(verdict)) continue;
+    roots.set(n, (roots.get(n) ?? 0) + 1);
+  }
+  return [...roots.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([n, count]) => `ruling #${n} has ${count} ROOT rows in ${HEAD} — two lanes landed the same number; ruling #219 says the FIRST to land keeps it and the other renumbers`)
+    .sort();
+}
+
 export function rowsIn(text: string): string[] {
   return text.split('\n').filter((l) => ROW_RE.test(l));
 }
@@ -113,6 +175,52 @@ describe('a ruling row is the same bytes in the head and in its archive', () => 
     expect(rowsIn(real)).toHaveLength(1);
     expect(rowsIn('see ruling #233 for the reasoning, and | a | pipe | table |')).toEqual([]);
     expect(rowsIn('| not-a-date | #233 | x |')).toEqual([]);
+  });
+});
+
+describe('⚠️ ONE NUMBER, ONE RULING — the collision two lanes can create and neither can see', () => {
+  it('the SHIPPED head carries no duplicate ruling number', () => {
+    expect(duplicateRulingNumbers(readFileSync(resolve(REPO, HEAD), 'utf8'))).toEqual([]);
+  });
+
+  it('CATCHES two rows under one number — the merge outcome #219 cannot prevent', () => {
+    // Different dates, different verdicts, different pointers: git merges these
+    // cleanly because they are different LINES, and every other ledger gate
+    // stays green because each row matches its own archive.
+    const a = '| 2026-09-07 | #246 | OWNER-RULING | **STANDING** — registry | x | [`a`](rulings/a.md) |';
+    const b = '| 2026-09-07 | #246 | OWNER-RULING | **STANDING** — scanners | y | [`b`](rulings/b.md) |';
+    const found = duplicateRulingNumbers(`${a}\n${b}\n`);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain('#246');
+    expect(found[0]).toContain('2 ROOT rows');
+  });
+
+  it('⚠️ NON-VACUITY: two DIFFERENT numbers are not a collision', () => {
+    // Without this the arm above is satisfied by a predicate that flags any
+    // ledger with more than one row in it, which is every ledger.
+    const a = '| 2026-09-07 | #246 | OWNER-RULING | **STANDING** — x | x | [`a`](rulings/a.md) |';
+    const b = '| 2026-09-07 | #247 | OWNER-RULING | **STANDING** — y | y | [`b`](rulings/b.md) |';
+    expect(duplicateRulingNumbers(`${a}\n${b}\n`)).toEqual([]);
+  });
+
+  it('⚠️ prose that mentions a number twice is NOT a collision — it reads ROWS', () => {
+    expect(duplicateRulingNumbers('see #246 and also #246 in the discussion above\n')).toEqual([]);
+  });
+
+  it('⚠️ A CLAUSE ROW IS NOT A COLLISION — and five real numbers depend on that', () => {
+    // #106(g), #109(a), #115(b), #116(b)/(c), #131(b)/(c) are all legitimate
+    // second and third rows under one number. A predicate that counted ROWS
+    // would red `main` on arrival, so it counts ROOT rows and the clause marker
+    // in the verdict cell is what distinguishes them.
+    const root = '| 2026-08-13 | #106 | OWNER-RULING | CUSTOM-TEMPLATE FIDELITY | x | [`a`](rulings/a.md) |';
+    for (const clause of [
+      '| 2026-08-13 | #106 | OWNER-RULING | (g) — STATICS ARE GUARDED AT THE OUTPUT | y | [`a`](rulings/a.md) |',
+      '| 2026-08-14 | #106 | OWNER-RULING | (a) — SCOPE IS AMENDED | y | [`a`](rulings/a.md) |',
+      '| 2026-08-15 | #106 | PROVISIONAL | b — DD: AND DT: ARE DICTATION DATES | y | [`a`](rulings/a.md) |',
+      '| 2026-08-15 | #106 | RECORDED | (c)-CORRECTED — THE GOTENBERG COST | y | [`a`](rulings/a.md) |',
+    ]) {
+      expect(duplicateRulingNumbers(`${root}\n${clause}\n`), clause.slice(40, 70)).toEqual([]);
+    }
   });
 });
 

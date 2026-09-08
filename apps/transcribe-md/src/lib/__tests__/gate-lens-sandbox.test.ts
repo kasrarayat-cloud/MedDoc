@@ -33,6 +33,35 @@ const ROOT = resolve(__dirname, '../../../../..');
 const ARM = resolve(ROOT, 'scripts/arm-lens-sandbox.sh');
 const MAKE = resolve(ROOT, 'scripts/make-lens-sandbox.sh');
 
+/**
+ * ⚠️ ONE BUDGET, USED TWICE, BECAUSE TWO OF THEM DISAGREED BY 24× AND THE
+ * SMALLER ONE WAS INVISIBLE.
+ *
+ * This arm handed `execFileSync` a `timeout: 120_000` and then ran under
+ * vitest's DEFAULT test timeout of 5_000. The inner number could never be
+ * reached: whatever the subprocess was doing, vitest killed the test first. So
+ * the 120s described an intention nothing enforced — the *"a script that prints
+ * a number it does not act on"* family, with the number that actually governs
+ * not written down anywhere.
+ *
+ * ⚠️ AND IT FAILED IN CI ON EXACTLY THAT. `Error: Test timed out in 5000ms`,
+ * on a run whose only changes were elsewhere. Measured on this box: the script
+ * completes in **5.19s**, exit 0, all seven arms green (it was 2.13s and six
+ * arms before ARM 6; the builder now installs the workspace, and a measurement
+ * left stale is the same defect as a number nobody acts on) — a 2.3× margin for a test
+ * that shells out to `git worktree add` while 450 other test files run beside
+ * it. That is not a passing test, it is a coin flip; canon 121 — an intermittent
+ * guard is worse than none, because a red is read as a flake and a flake is
+ * read as a red.
+ *
+ * ⚠️ THE SECOND COST IS THE DIAGNOSTIC, AND IT IS THE WORSE ONE. A vitest
+ * timeout reports `Test timed out in 5000ms` and NOTHING ELSE — the script's own
+ * output, which every assertion below is written to quote, is discarded. So a
+ * genuine hang and a busy runner produce byte-identical evidence. Aligning the
+ * budgets means a real failure comes back as the script's own words.
+ */
+const ARM_BUDGET_MS = 120_000;
+
 describe('the lens sandbox is armed', () => {
   it('POSITIVE CONTROL — the scripts exist and are executable', () => {
     expect(existsSync(ARM), 'scripts/arm-lens-sandbox.sh is missing').toBe(true);
@@ -43,7 +72,7 @@ describe('the lens sandbox is armed', () => {
     let out = '';
     let code = 0;
     try {
-      out = execFileSync('bash', [ARM], { encoding: 'utf8', stdio: 'pipe', timeout: 120_000 });
+      out = execFileSync('bash', [ARM], { encoding: 'utf8', stdio: 'pipe', timeout: ARM_BUDGET_MS });
     } catch (e) {
       const err = e as { status?: number; stdout?: string; stderr?: string };
       code = err.status ?? -1;
@@ -52,7 +81,7 @@ describe('the lens sandbox is armed', () => {
     // The verdict, and the arms behind it, so a failure names itself in CI.
     expect(out, `arming output:\n${out}`).toContain('LENS SANDBOX ARMED');
     expect(code, `arm-lens-sandbox.sh exited ${code}:\n${out}`).toBe(0);
-    for (const arm of ['ARM 0', 'ARM 1', 'ARM 2', 'ARM 3', 'ARM 4', 'ARM 5']) {
+    for (const arm of ['ARM 0', 'ARM 1', 'ARM 2', 'ARM 3', 'ARM 4', 'ARM 5', 'ARM 6']) {
       expect(out, `${arm} did not report`).toContain(arm);
     }
     // ⚠️ ON THE **VERDICT LINES**, NOT THE WHOLE OUTPUT. A passing ARM 1 quotes
@@ -64,7 +93,9 @@ describe('the lens sandbox is armed', () => {
       .split('\n')
       .filter((line) => line.trimStart().startsWith('🔴'));
     expect(redArms, `red arms:\n${redArms.join('\n')}`).toEqual([]);
-  });
+    // ⚠️ THE TEST BUDGET IS THE SUBPROCESS BUDGET. Passed explicitly rather
+    // than left to vitest's default, so the two numbers cannot disagree again.
+  }, ARM_BUDGET_MS);
 
   it('⚠️ ARM 2 names WHICH guard refused the push — found by mutation', () => {
     // With both guards removed, the push still failed — on "could not read
@@ -95,6 +126,37 @@ describe('the lens sandbox is armed', () => {
         'rev-parse --show-toplevel',
       );
     }
+  });
+
+  it('⚠️ ARM 6 — the sandbox measures ITSELF, and arms 1-5 cannot tell', () => {
+    // ⚠️ THE FAILURE THIS ARM EXISTS FOR IS NOT "TESTS DO NOT RUN". It is a
+    // GREEN ABOUT ANOTHER TREE'S CODE. A worktree with a raw `node_modules`
+    // symlink resolves `@meddoc/*` to the SHARED tree, so a lens can run a
+    // suite, watch it pass, and have proved nothing about its own sandbox —
+    // while every seal above it is still 🟢.
+    //
+    // MEASURED, not asserted: with the builder's install step disabled
+    // (`if false && [ -f ... ]`), ARM 6 reported "@meddoc/auth does not resolve
+    // at all" and ARMS 1, 2, 3, 4 and 5 ALL STAYED GREEN. That is the whole
+    // argument for a sixth arm rather than a stronger fifth one.
+    const make = readFileSync(MAKE, 'utf-8');
+    expect(make, 'the builder no longer makes the sandbox runnable').toContain(
+      'setup-worktree.sh',
+    );
+    const armSrc = readFileSync(ARM, 'utf-8');
+    // The DISCRIMINATION is the arm, exactly as ARM 2's own test says: three
+    // outcomes that must not collapse into each other — inside, outside, and
+    // absent. An arm that only checked "resolves" would pass on the shared tree.
+    expect(armSrc, 'ARM 6 no longer distinguishes inside from outside').toContain(
+      'resolves OUTSIDE the sandbox',
+    );
+    expect(armSrc).toContain('does not resolve at all');
+    // ⚠️ AND ITS OWN POSITIVE CONTROL, or the arm passes in a checkout with no
+    // workspace packages at all — the vacuity this file keeps finding one input
+    // over.
+    expect(armSrc, 'ARM 6 has no positive control').toContain(
+      'this arm cannot mean anything here',
+    );
   });
 
   it('.gitignore covers the sandboxes, or a pass dirties the tree that built it', () => {

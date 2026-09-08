@@ -86,13 +86,47 @@ function makeResolution(
 ): FieldResolution {
   return FieldResolutionSchema.parse({
     fieldId,
-    status,
+    status: recordDerivedIfFromTheRecord(status, facts),
     value,
     ...evidenceFor(facts),
     selectedOptionOrdinal,
     reasonCode,
     clinicianReviewed: false,
   });
+}
+
+/**
+ * #247 — A SUPPORTED RESOLUTION WHOSE EVIDENCE IS THE PATIENT RECORD IS
+ * `record_derived`, NOT `supported`.
+ *
+ * ⚠️ ONE PROMOTION POINT, INSIDE `makeResolution`, AND NOT FIVE BRANCHES AT THE
+ * FIVE `'supported'` CALL SITES. This file mints `supported` in five places
+ * (direct evidence, exact options, multi-select, repeating rows, mixed-polarity
+ * narrative) and a sixth will be added by somebody who has never read this
+ * comment. A rule applied at every producer is a rule that will one day be
+ * applied at all but one of them — canon's partial-application family — and the
+ * failure mode here is silent: the document is identical and the manifest
+ * claims a record value was dictated.
+ *
+ * ⚠️ EVERY cited fact, not SOME. A field supported jointly by a dictated
+ * sentence and a record value is genuinely dictated in part, and calling the
+ * whole resolution record-derived would understate what the clinician said. The
+ * `visit_metadata` injector cannot produce that shape today — it refuses to
+ * inject when any fact already speaks to the concept — so this arm is
+ * conservative about a case that does not currently arise, which is the right
+ * direction for a claim about provenance.
+ *
+ * Only `supported` is promoted. A conflict is still a conflict, and a blank is
+ * still blank, whoever the evidence came from.
+ */
+function recordDerivedIfFromTheRecord(
+  status: FieldResolutionStatus,
+  facts: ReadonlyArray<EncounterFact>,
+): FieldResolutionStatus {
+  if (status !== 'supported' || facts.length === 0) return status;
+  return facts.every((fact) => fact.sourceType === 'visit_record')
+    ? 'record_derived'
+    : status;
 }
 
 export function isStrictIsoDate(value: string): boolean {
@@ -587,14 +621,36 @@ function resolveOne(
   // non-select this is every temporal candidate, exactly as before.
   const judged = temporalCandidates.filter((fact) => conflictCandidates.includes(fact));
 
-  const permitsFamily = normalizeConcept(mapping.clinicalConcept).startsWith(
-    'family_history.',
-  );
+  const normalizedConcept = normalizeConcept(mapping.clinicalConcept);
+  const permitsFamily = normalizedConcept.startsWith('family_history.');
+  /**
+   * ⚠️ #247 — THE REFERRING CLINICIAN IS THE ONE CONCEPT WHOSE SUBJECT IS NOT
+   * THE PATIENT, AND WITHOUT THIS LINE IT COULD NEVER RESOLVE AT ALL.
+   *
+   * `experiencer` answers "who is this fact ABOUT", and the projector emits
+   * `other` for the referrer because that is true — the fact is about a second
+   * physician. Every other concept in the registry describes the patient, so
+   * this gate is a correct default and a total refusal here: the field would
+   * come back `ambiguous / experiencer_not_approved` on every visit that
+   * dictated a referrer, which is precisely the visits it exists for.
+   *
+   * ⚠️ AND THE ALTERNATIVE WAS TO LIE IN THE PROJECTOR. Stamping the referrer
+   * `experiencer: 'patient'` would have made this arm pass with no change
+   * here — and written into the frozen manifest that a named outside physician
+   * is the patient. Same shape as the `encounter_evidence` misattribution that
+   * created the `visit_record` class: the cheap fix corrupts the audit trail
+   * rather than the render, so nothing fails and the record is wrong.
+   *
+   * Named by CONCEPT and by exactly one, like `permitsFamily` above.
+   */
+  const permitsOtherClinician =
+    normalizedConcept === 'visit_metadata.referring_physician';
   if (
     temporalCandidates.some(
       (fact) =>
         fact.experiencer !== 'patient' &&
-        !(permitsFamily && fact.experiencer === 'family'),
+        !(permitsFamily && fact.experiencer === 'family') &&
+        !(permitsOtherClinician && fact.experiencer === 'other'),
     )
   ) {
     return makeResolution(

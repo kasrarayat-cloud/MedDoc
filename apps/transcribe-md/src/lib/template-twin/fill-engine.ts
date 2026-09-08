@@ -47,6 +47,10 @@ import {
 } from './clinician-override';
 import { withProcedureDateFact } from './procedure-date';
 import {
+  withVisitMetadataFacts,
+  type VisitPatientRecord,
+} from './visit-metadata';
+import {
   resolveTemplateFields,
   withApprovedPracticeDefaultFacts,
 } from './resolver';
@@ -94,6 +98,19 @@ export interface PrepareTemplateTwinFillInput {
   /** The visit (encounter) date — deterministically fills a DATE OF PROCEDURE
    *  content control as metadata (never AI). Absent → the control is left blank. */
   visitDate?: Date | string | null;
+  /**
+   * #247 — THE PATIENT RECORD, NARROWED TO THE TWO COLUMNS THAT MAY BE PRINTED.
+   *
+   * ⚠️ OPTIONAL HERE AND LOADED BY THE SHARED READER, NOT BY FIVE CALLERS. The
+   * certification self-test constructs this input directly and must NEVER pass
+   * one (`assertNoRecordDerivedFacts` refuses if it does), so the parameter
+   * cannot be required. Every REAL fill goes through
+   * `readAndPrepareTemplateTwinFill`, which loads it from the visit — the same
+   * shape, and for the same reason, as F24-S5's clinician overrides: behaviour
+   * on the shared function beats four caller-side checklists kept complete by
+   * hand.
+   */
+  patient?: VisitPatientRecord | null;
   /** The LIVE brain's generated note — its picks + table measurements are bridged
    *  onto the resolver baseline. When absent, only the evidence resolver runs
    *  (behaviour-identical to the pre-bridge fill path). */
@@ -207,14 +224,24 @@ export async function prepareTemplateTwinFill(
   // (deterministic metadata, never AI), then let the evidence resolver fill it —
   // so the resolution is independently validated like any other, never a bare
   // overlay. No-op when there is no such control / no visit date.
+  // #247 — THE PATIENT RECORD'S OWN VALUES, INJECTED AS `visit_record` FACTS
+  // BEFORE THE DATE, so the two metadata injectors compose in one direction and
+  // each still sees any real dictated fact that would outrank it. A no-op when
+  // no record was threaded through, which is exactly the certification path.
   const facts = withProcedureDateFact({
     fields: ir.fields,
     mappings,
     visitDate: input.visitDate,
-    facts: withApprovedPracticeDefaultFacts({
+    facts: withVisitMetadataFacts({
       fields: ir.fields,
       mappings,
-      facts: input.facts,
+      patient: input.patient,
+      visitDate: input.visitDate,
+      facts: withApprovedPracticeDefaultFacts({
+        fields: ir.fields,
+        mappings,
+        facts: input.facts,
+      }),
     }),
   });
   const baseline = resolveTemplateFields({
@@ -512,6 +539,23 @@ export async function readAndPrepareTemplateTwinFill(
     //
     // Ordered for determinism; the unique index on (visitId, fieldId) means
     // there is at most one row per field, and `overridesIdentity` sorts anyway.
+    // #247 — THE PATIENT RECORD, READ HERE FOR THE SAME REASON THE OVERRIDES
+    // ARE. Five call sites reach this function (the worker's fill step, the
+    // native export, the sign freeze, the pre-sign preview and the worker's own
+    // inline step) and FOUR of them never loaded a patient. Threading a
+    // parameter through all five would have made "did you remember the patient
+    // record?" a per-caller checklist item — and a control that prints a
+    // patient's NAME is the last place to rely on remembering. Loading it in
+    // the one shared reader makes every path carry it by construction.
+    //
+    // ⚠️ TWO COLUMNS, PRACTICE-SCOPED. `name` and `dateOfBirth` are the only
+    // fields anything downstream may print, and the `where` names the practice
+    // as well as the visit so a cross-tenant id cannot return a record at all.
+    // Widening this select is a PHI decision, not a convenience.
+    const visitPatient = await prisma.transcribeVisit.findFirst({
+      where: { id: input.visitId, practiceId: input.practiceId },
+      select: { patient: { select: { name: true, dateOfBirth: true } } },
+    });
     const clinicianOverrides = await prisma.templateTwinFieldOverride.findMany({
       where: { visitId: input.visitId, practiceId: input.practiceId },
       orderBy: { fieldId: 'asc' },
@@ -534,6 +578,7 @@ export async function readAndPrepareTemplateTwinFill(
       resolverModelVersion: input.resolverModelVersion,
       validationNow: input.validationNow,
       visitDate: input.visitDate,
+      patient: visitPatient?.patient ?? null,
       markerText,
       generatedNote: input.generatedNote,
       // ⚠️ THE DATABASE ROW IS NOT THE DOMAIN TYPE, AND THE NARROWING HAPPENS
