@@ -149,7 +149,20 @@ async function quarantineRejectedSource(input: {
   }
 }
 
-function fieldCreateInput(
+/**
+ * ⚠️ EXPORTED FOR `ingest.ts`, AND THAT IS THE POINT — #274.
+ *
+ * The ingest entry point creates the same three rows this function does, and a
+ * second copy of this column list is exactly the failure this repository keeps
+ * paying for. The first draft of `ingest.ts` DID hand-roll it and got
+ * `conceptScope` wrong in the one way the comment below warns about — writing
+ * `[]` where the rule is `Prisma.DbNull`, which moves the attestation sha of
+ * every mapping and de-certifies every template. Nothing would have failed
+ * loudly; the templates would simply have stopped being certified.
+ *
+ * One writer for these columns. There is no second.
+ */
+export function fieldCreateInput(
   ir: TemplateDocIR,
   mappings: readonly SemanticMapping[],
   proposedByModel: string | null,
