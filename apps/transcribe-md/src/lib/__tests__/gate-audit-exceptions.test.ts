@@ -21,6 +21,14 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+// ⚠️ #265(c) — ONE BUDGET PER ARM, USED TWICE. These were four bare literals in
+// two places each: `timeout: 120_000` beside `}, 120_000)`. They agreed today,
+// and two literals that agree today are two numbers that drift tomorrow —
+// silently, which is exactly how `c4e778a2`'s 120s-under-5s pair came to exist.
+// A shared identifier cannot drift.
+const RETRY_BUDGET_MS = 120_000;
+const OUTAGE_BUDGET_MS = 180_000;
+
 const gate = await import(
   /* @vite-ignore */ resolve(process.cwd(), '../../scripts/audit-gate.mjs')
 );
@@ -213,7 +221,7 @@ describe('the audit gate survives a registry blip without going blind', () => {
     const r = spawnSync('node', [resolve(process.cwd(), '../../scripts/audit-gate.mjs')], {
       env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
       encoding: 'utf8',
-      timeout: 120_000,
+      timeout: RETRY_BUDGET_MS,
     });
     // THE PROPERTY: a transient outage is RETRIED, and the second answer is
     // then JUDGED rather than discarded.
@@ -230,7 +238,7 @@ describe('the audit gate survives a registry blip without going blind', () => {
     ).not.toBe(2);
     expect(r.stdout + r.stderr, 'it never reached a verdict').toMatch(/audit-gate: (PASS|BLOCKED)/);
     rmSync(dir, { recursive: true, force: true });
-  }, 120_000);
+  }, RETRY_BUDGET_MS);
 
   it('⚠️ FAILS CLOSED (2) when every attempt is unusable — an outage still blocks', () => {
     const dir = mkdtempSync(join(tmpdir(), 'auditgate-'));
@@ -242,14 +250,14 @@ describe('the audit gate survives a registry blip without going blind', () => {
     const r = spawnSync('node', [resolve(process.cwd(), '../../scripts/audit-gate.mjs')], {
       env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
       encoding: 'utf8',
-      timeout: 180_000,
+      timeout: OUTAGE_BUDGET_MS,
     });
     // ⚠️ 2, NOT 0 AND NOT 1. A registry outage is CANNOT TELL, never an
     // all-clear and never a finding.
     expect(r.status, `expected CANNOT TELL; stdout: ${r.stdout}`).toBe(2);
     expect(r.stderr + r.stdout).toMatch(/CANNOT TELL/);
     rmSync(dir, { recursive: true, force: true });
-  }, 180_000);
+  }, OUTAGE_BUDGET_MS);
 
   // ⚠️ THERE ARE TWO CANNOT-TELL EXITS AND THEY NEED SEPARATE ARMS. The arm
   // above drives `judgeAudit`'s code 2 (parseable JSON, no findings object).
@@ -266,10 +274,10 @@ describe('the audit gate survives a registry blip without going blind', () => {
     const r = spawnSync('node', [resolve(process.cwd(), '../../scripts/audit-gate.mjs')], {
       env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
       encoding: 'utf8',
-      timeout: 180_000,
+      timeout: OUTAGE_BUDGET_MS,
     });
     expect(r.status, `expected CANNOT TELL; stdout: ${r.stdout}`).toBe(2);
     expect(r.stderr + r.stdout).toMatch(/CANNOT TELL/);
     rmSync(dir, { recursive: true, force: true });
-  }, 180_000);
+  }, OUTAGE_BUDGET_MS);
 });
