@@ -549,6 +549,12 @@ const WITNESSED_GUARDS = new Set<string>();
     // the enumeration, and the control arm below proves this arm REDS at
     // `ROW_LIMIT = 3` — the acceptance test ruling #259 sets for the arm itself,
     // because its predecessor PASSED at three samples.
+    //
+    // ⚠️ AND THAT SENTENCE WAS FALSE WHEN IT WAS WRITTEN — recorded here rather
+    // than quietly corrected. There was no control arm below. This name appeared
+    // exactly ONCE in the repository, at the read on the next line, so nothing
+    // ever set it: the acceptance test was performed by hand, passed, and was
+    // then guarded by a claim that it had been guarded.
     const ROW_LIMIT = Number(process.env.OMIT_MATRIX_ROW_LIMIT ?? '0') || Infinity;
     const exact = DIMS.reduce((n, d) => n * d.length, 1);
     const total = Math.min(exact, ROW_LIMIT);
@@ -1074,6 +1080,81 @@ const WITNESSED_GUARDS = new Set<string>();
       'the matrix never reached these guards — they are declared, and dead',
     ).toEqual([]);
   });
+
+  /**
+   * ⚠️ ONE BUDGET, USED TWICE — the `gate-lens-sandbox` lesson, which cost a CI
+   * red when an inner 120s sat under vitest's default 5s and the inner number
+   * could never be reached. Measured on this box: the child completes in 1.93s.
+   */
+  const ROW_LIMIT_CONTROL_BUDGET_MS = 180_000;
+
+  it(
+    '⚠️ CONTROL — the coverage arms RED at ROW_LIMIT = 3 (#259\'s acceptance test for the ARM)',
+    () => {
+      // ⚠️ THIS ARM EXISTS BECAUSE ITS COMMENT ALREADY CLAIMED IT DID.
+      // `ROW_LIMIT`'s declaration said "the control arm below proves this arm
+      // REDS at ROW_LIMIT = 3" and NO SUCH ARM EXISTED. `OMIT_MATRIX_ROW_LIMIT`
+      // appeared exactly ONCE in the whole repository — the read itself — so
+      // nothing set it, and the behaviour ruling #259 makes the acceptance test
+      // for this entire redesign was verified once by hand and then guarded by a
+      // sentence. That is the #260 failure exactly, and one turn worse than the
+      // version it names: a comment that reaches the right answer by a false
+      // route will be trusted by the next reader FOR THE ROUTE — and a reader
+      // who greps for this control and finds nothing cannot tell whether it was
+      // deleted or never written.
+      //
+      // ⚠️ RECURSION GUARD. The child runs this same FILE, so this arm must not
+      // spawn a grandchild. When the knob is set we are the child; skip.
+      if (process.env.OMIT_MATRIX_ROW_LIMIT) return;
+
+      let out = '';
+      let code = 0;
+      try {
+        out = execFileSync(
+          'npx',
+          ['vitest', 'run', __filename, '--no-color'],
+          {
+            encoding: 'utf8',
+            stdio: 'pipe',
+            cwd: join(__dirname, '..', '..', '..', '..'),
+            timeout: ROW_LIMIT_CONTROL_BUDGET_MS,
+            env: { ...process.env, OMIT_MATRIX_ROW_LIMIT: '3', CI: '1' },
+          },
+        );
+      } catch (e) {
+        const err = e as { status?: number; stdout?: string; stderr?: string };
+        code = err.status ?? -1;
+        out = `${err.stdout ?? ''}${err.stderr ?? ''}`;
+      }
+
+      // ⚠️ POSITIVE CONTROL FIRST, AND IT IS THE WHOLE DIFFICULTY OF THIS ARM.
+      // A non-zero exit is ALSO what a child that died at import produces, or a
+      // missing `npx`, or a syntax error — and every one of those would satisfy
+      // "the arm red at three rows" while proving the opposite of it. So the
+      // child must be shown to have RUN the matrix before its failure means
+      // anything.
+      expect(out, `the child never ran the suite:\n${out.slice(0, 4000)}`).toContain(
+        'gate-review-defaults-omit-door.test.ts',
+      );
+      expect(out, `the child ran no tests:\n${out.slice(0, 4000)}`).toMatch(/Tests\s+\d+\s+failed/);
+
+      expect(code, `the arm PASSED at three rows — it is a tautology:\n${out.slice(0, 4000)}`)
+        .not.toBe(0);
+
+      // ⚠️ AND IT NAMES **WHICH** ARM FIRED, for `ARM 2`'s reason in the lens
+      // gate: two refusals that read identically in a report and mean different
+      // things prove nothing. Ruling #259's clause 4 is that a stratum witnessed
+      // ZERO times FAILS rather than warns, so that is the sentence asserted —
+      // not a bare red.
+      expect(out, 'the zero-witness stratum check did not fire').toContain(
+        'witnessed ZERO times over 3 rows',
+      );
+      expect(out, 'the dead-guard coverage check did not fire').toContain(
+        'the matrix never reached these guards',
+      );
+    },
+    ROW_LIMIT_CONTROL_BUDGET_MS,
+  );
 
   it('⚠️ THE OFFER DELEGATES — it holds no opinion the resolver does not — #258', () => {
     // ⚠️ THE IDENTITY CHECK THAT REPLACES A MIRROR. Ruling #258 ended the class
