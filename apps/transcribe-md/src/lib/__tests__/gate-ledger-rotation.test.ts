@@ -495,6 +495,78 @@ describe('rotation — banner-triggered, delegating, fail-closed', () => {
     ).toBe(true);
   }, STAGED_GATES_BUDGET_MS);
 
+  it('⚠️ F30 — NO CONDITIONAL IN THIS SCRIPT DECIDES ON A `| grep -q` EXIT STATUS', () => {
+    // ⚠️ THIS ARM EXISTS BECAUSE CI CAUGHT THE DEFECT AND THE LOCAL RUN DID NOT.
+    // `#290`'s own positive control was written as
+    //
+    //     if ! printf '%s' "$out" | grep -qE 'Tests +[0-9]+ passed'; then
+    //
+    // `grep -q` exits the instant it matches, `printf` takes SIGPIPE, and this
+    // script runs under `set -o pipefail` — so the pipeline FAILS on a match and
+    // a match is reported as a miss. In CI the staged gates printed
+    // `Tests  43 passed (43)` and the script said "ran NO tests"; locally the
+    // same code was green. Whether the producer is still writing when the
+    // consumer exits depends on buffering, so the green was luck.
+    //
+    // It is the F30 class, and it was re-introduced in new code on the same day
+    // the older instances of it were being removed from
+    // `scripts/ops/prune-rollback-tags.sh`. Naming a class is not enumerating
+    // it — which is why this is a gate and not a note.
+    const src = readFileSync(ROTATE, 'utf8');
+
+    // POSITIVE CONTROL: the hazard only exists under pipefail, so if that ever
+    // goes away this arm is guarding nothing and should be re-thought rather
+    // than silently passing.
+    expect(src, 'the script no longer sets pipefail — re-read this arm').toMatch(
+      /set -[a-z]*o pipefail|set -o pipefail/,
+    );
+
+    const offenders = src
+      .split('\n')
+      .map((l, i) => [i + 1, l] as const)
+      .filter(([, l]) => /^\s*(if|while|until)\s.*\|\s*grep\b[^|]*-[a-zA-Z]*q/.test(l))
+      .map(([n, l]) => `${n}: ${l.trim().slice(0, 90)}`);
+
+    expect(
+      offenders,
+      'a conditional decides on the exit status of a pipeline into `grep -q` — ' +
+        'under pipefail that reports a MATCH as a MISS. Use bash-native matching ' +
+        '([[ "$x" == *sub* ]] or [[ "$x" =~ re ]]) instead.',
+    ).toEqual([]);
+  });
+
+  it('⚠️ AND THE FAILURE MODE IS REAL — proved, not asserted', () => {
+    // A ban nobody demonstrates is a style rule. This runs both forms under the
+    // script's own shell options against text that DOES contain the pattern.
+    // ⚠️ THE HAYSTACK ARRIVES ON STDIN, NOT IN ARGV. Passing 200KB as a `bash -c`
+    // argument blew the argv limit and `spawnSync` returned status `null` — a
+    // probe that never ran, which is the quietest way for this arm to pass.
+    const HAYSTACK = 'x'.repeat(200_000) + '\nTests  43 passed (43)\n';
+    const probe = (body: string) => {
+      const r = spawnSync('bash', ['-uo', 'pipefail', '-c', `out=$(cat); ${body}`], {
+        encoding: 'utf8',
+        input: HAYSTACK,
+        maxBuffer: 32 * 1024 * 1024,
+      });
+      expect(r.status, `the probe did not run: ${r.error?.message ?? 'killed'}`).not.toBeNull();
+      return r.status;
+    };
+
+    const viaPipe = probe(`printf '%s' "$out" | grep -qE 'Tests +[0-9]+ passed'`);
+    const viaBash = probe(`[[ "$out" =~ Tests[[:space:]]+[0-9]+[[:space:]]+passed ]]`);
+
+    // The bash-native form is the one this script now uses, and it must say
+    // MATCH (0) on text that plainly contains the pattern.
+    expect(viaBash, 'the replacement does not match text that contains the pattern').toBe(0);
+    // ⚠️ THE PIPED FORM IS NOT ASSERTED TO FAIL. It is intermittent by nature —
+    // it depends on whether `printf` is still writing when `grep` exits — and an
+    // arm demanding a specific answer from a race would itself be flaky. What is
+    // recorded is the observation: on the CI runner it returned non-zero on
+    // matching text. Both outcomes are printed so a future reader sees which
+    // one this box gave.
+    expect([0, 1, 141]).toContain(viaPipe);
+  });
+
   it('refuses an unknown mode rather than guessing', () => {
     const r = spawnSync('bash', [ROTATE, '--wat'], { encoding: 'utf8' });
     expect(r.status).not.toBe(0);

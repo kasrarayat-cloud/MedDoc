@@ -129,7 +129,14 @@ src/lib/__tests__/gate-ledger-reachability.test.ts"
   out="$(cd "$REPO_DIR/$APP" && npx vitest run --root "$G/$APP" 2>&1)"
   local rc=$?
   printf '%s\n' "$out" | sed 's/^/     | /'
-  if ! printf '%s' "$out" | grep -qE 'Tests +[0-9]+ passed'; then
+  # ⚠️ BASH-NATIVE, NEVER `printf | grep -q` — THE F30 SIGPIPE CLASS, AND THIS
+  # LINE WAS AN INSTANCE OF IT. `grep -q` exits the moment it matches, `printf`
+  # takes SIGPIPE, and `set -o pipefail` (line 28) turns that into a FAILING
+  # pipeline — so a MATCH is reported as a MISS. CI caught it: the staged gates
+  # printed `Tests  43 passed (43)` and this said "ran NO tests". It passed
+  # locally, which is the trap — whether the producer is still writing when the
+  # consumer exits depends on buffering, so a green here is luck, not evidence.
+  if ! [[ "$out" =~ Tests[[:space:]]+[0-9]+[[:space:]]+passed ]]; then
     echo "🔴 rotate-ledger: the staged ledger gates ran NO tests. That is CANNOT"
     echo "   TELL, not a pass — an empty suite is green."
     return 2
@@ -224,7 +231,9 @@ fi
 
 # POSITIVE CONTROL: the delegate must actually name files. A budget check that
 # names nothing is a broken instrument, and its silence reads exactly like health.
-if ! printf '%s' "$BUDGET_OUT" | grep -q 'RELAY\.md'; then
+# ⚠️ SAME CLASS, AND THIS ONE PREDATES #290 — a false MISS here reports the
+# budget delegate as not watching RELAY.md when it is.
+if ! [[ "$BUDGET_OUT" == *'RELAY.md'* ]]; then
   echo "🔴 rotate-ledger: CANNOT TELL — the budget check named no ledger."
   echo "   Positive control failed: its output does not mention RELAY.md at all."
   exit 2
